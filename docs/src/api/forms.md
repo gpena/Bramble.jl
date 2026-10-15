@@ -119,8 +119,8 @@ ast_sparsity_detector
 
 Time integration, differentiable linear solves, and the sparse/iterative solver backends
 move to their own [scientific computing reference](../api_sciml.md): the SciML stack
-(`semidiscretize`, `ode_problem`, `linear_problem`, `nonlinear_problem`, ...), second-order
-wave problems, `pde_solve`'s adjoint rule, AMG preconditioning, the SuiteSparse/Apple
+(`semidiscretize`, `ode_problem`, `linear_problem`, `nonlinear_problem`, ...),
+`pde_solve`'s adjoint rule, AMG preconditioning, the SuiteSparse/Apple
 Accelerate/MUMPS direct solvers, and `type_cached_assemble!`.
 
 ## Dirichlet conditions

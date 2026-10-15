@@ -197,11 +197,11 @@ measured.
 
 ## A hyperbolic system: the acoustic wave equation
 
-The [wave equation example](../examples/wave_equation_2d.md) semidiscretizes
-`∂ₜₜu - c²Δu = 0` into `M ü_h + K u_h = F(t)` and hands `K` to `OrdinaryDiffEq` through
-[`semidiscretize_second_order`](@ref). On a tensor-product mesh `K` comes from
-`inner₊(∇ₕ(u), ∇ₕ(v))`, a separable form, so it can also be built matrix-free with
-[`kronecker_operator`](@ref):
+The [wave equation example](../examples/wave_equation_2d.md) writes
+`∂ₜₜu - c²Δu = 0` as a first-order system for the pair `(u, u̇)` and hands it to
+[`semidiscretize`](@ref), with the stiffness form `K` as one of its blocks. On a
+tensor-product mesh `K` comes from `inner₊(∇ₕ(u), ∇ₕ(v))`, a separable form, so it can
+also be built matrix-free with [`kronecker_operator`](@ref):
 
 ```@example byproblem
 Ω_wave = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
@@ -232,7 +232,7 @@ norm(Kw_assembled * xrand - Kw_kron * xrand) / norm(Kw_assembled * xrand)
     factor near four, the Kronecker factors by a factor near two.
 
 The Kronecker operator has no boundary handling, so the wave example's own
-`semidiscretize_second_order` call, which needs a boundary-constrained `K`, stays on the
+`semidiscretize` call, which needs a boundary-constrained `K`, stays on the
 assembled path. The comparison above is about the interior operator only. The
 [memory scaling example](../examples/memory_scaling.md) goes further with the operator and
 states its limits. No timing comparison is made here, and no mesh size at which one

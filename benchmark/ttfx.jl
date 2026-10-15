@@ -127,15 +127,6 @@ const CASES = TTFXCase[
         "pde_solve(A, F)"
     ),
     TTFXCase(
-        "sd2(dv, v, u, nothing, 0.0)",
-        :core,
-        String[],
-        120.0,
-        "sd2 = semidiscretize_second_order(a, l; dirichlet = :boundary)\n" *
-        "n = ndofs(Wₕ)\ndv = zeros(n)\nv = zeros(n)\nu = zeros(n)",
-        "sd2(dv, v, u, nothing, 0.0)"
-    ),
-    TTFXCase(
         "assemble_add!(A, a, 0.5)",
         :core,
         String[],

@@ -105,9 +105,8 @@ export expression
 export is_separable, kronecker_operator
 export matrix_free_operator
 export pde_solve
-export semidiscretize, semidiscretize_second_order
+export semidiscretize
 export ode_problem, linear_problem, nonlinear_problem
-export second_order_ode_problem
 export amg_preconditioner
 export ilu_preconditioner
 export jacobi_preconditioner
@@ -117,7 +116,7 @@ export prolongate!, coarsen!
 export jacobi_smoother, chebyshev_smoother, red_black_gauss_seidel, smooth!
 export gmg_preconditioner, gmg_solve
 
-public KroneckerLinearOperator, MatrixFreeOperator, ode_function, second_order_ode_function
+public KroneckerLinearOperator, MatrixFreeOperator, ode_function
 public AbstractMatrixFreePreconditioner, JacobiPreconditioner, ChebyshevPreconditioner
 public FDMPreconditioner
 public max_eigenvalue_estimate
@@ -126,8 +125,8 @@ public GMGPreconditioner, v_cycle!, w_cycle!, fmg!
 public jacobian!, jacobian_prototype, jacobian_pattern, ast_sparsity_detector
 public reaction, reaction_density, reaction!, reaction_density!
 public allocate_system_matrix, type_cached_assemble!, evaluate!, assemble_parallel!
-public Semidiscretization, SemidiscretizeRHS, SecondOrderSemidiscretization
-public mass_matrix, operator_matrix, damping_matrix, stiffness_matrix, block_mass_matrix
+public Semidiscretization, SemidiscretizeRHS
+public mass_matrix, operator_matrix
 public SuiteSparseFactorization, suitesparse_factorize
 public AccelerateFactorization
 public MUMPSFactorization

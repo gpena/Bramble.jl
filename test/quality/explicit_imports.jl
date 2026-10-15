@@ -314,12 +314,11 @@ using Kronecker: Kronecker
     #   reasoning). Its core fallback still gives the same helpful error the `_`-prefixed ones
     #   below do.
     # - `_ast_sparsity_detector` (BrambleSparseADExt), `_ode_function`/`_ode_problem`/
-    #   `_linear_problem`/`_nonlinear_problem`/`_second_order_ode_function`/
-    #   `_second_order_ode_problem` (BrambleSciMLExt), `_export_vtk` (BrambleVTKExt): the
-    #   `_`-prefixed fallback idiom every weak-dependency entry point uses (`ast_sparsity_
-    #   detector`, `ode_function`, `export_vtk`, ...): a helpful error by default in
-    #   `Bramble`, overridden by a strict specialisation in the extension so loading it never
-    #   tries to replace a method during precompilation.
+    #   `_linear_problem`/`_nonlinear_problem` (BrambleSciMLExt), `_export_vtk`
+    #   (BrambleVTKExt): the `_`-prefixed fallback idiom every weak-dependency entry point
+    #   uses (`ast_sparsity_detector`, `ode_function`, `export_vtk`, ...): a helpful error by
+    #   default in `Bramble`, overridden by a strict specialisation in the extension so
+    #   loading it never tries to replace a method during precompilation.
     # - `AbstractSpaceType` (BrambleSciMLExt): narrows the `element`/`VectorElement` unwrap
     #   methods for a `LinearSolution`, the same reason the doctring next to them gives.
     # - `_amg_operator` (BrambleAlgebraicMultigridExt), `_ilu_operator` (BrambleILUZeroExt):
@@ -537,8 +536,6 @@ using Kronecker: Kronecker
                 :_ode_problem,
                 :_ode_storage,
                 :_nonlinear_problem,
-                :_second_order_ode_function,
-                :_second_order_ode_problem,
                 :_export_vtk,
                 :AbstractSpaceType,
                 :_amg_operator,

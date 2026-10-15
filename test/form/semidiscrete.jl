@@ -580,25 +580,18 @@ end
     end
 end
 
-# Pin `sd2 = semidiscretize_second_order(...)`, `rhs =
-# semidiscretize_rhs(...)` and their residual calls as inferred and allocation-free -- the
-# calls a time-stepping loop makes every step. Allocation checks go behind a function
+# Pin `rhs = semidiscretize_rhs(...)` and its residual call as inferred and
+# allocation-free -- the call a time-stepping loop makes every step. Allocation checks go behind a function
 # barrier (bramble-verification §1); `@inferred` reads no global binding here, so it is
 # left in the barrier alongside the warm-up rather than pulled out to top level.
-@testset "sd2 and rhs: inferred, no allocs (#283)" begin
-    function _sd2_alloc(sd2, dv, v, u, t)
-        sd2(dv, v, u, nothing, t)             # cold: records
-        @inferred sd2(dv, v, u, nothing, t)
-        return @allocated sd2(dv, v, u, nothing, t)
-    end
-
+@testset "rhs: inferred, no allocs (#283)" begin
     function _rhs_alloc(rhs, du, u, t)
         rhs(du, u, nothing, t)                # cold: records
         @inferred rhs(du, u, nothing, t)
         return @allocated rhs(du, u, nothing, t)
     end
 
-    function _sd2_problem(dims)
+    function _rhs_problem(dims)
         Ωₕ = dims == 1 ?
              Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 21) :
              Bramble.mesh(
@@ -616,18 +609,8 @@ end
 
     for (lbl, dims) in (("1D", 1), ("2D", 2))
         @testset "$lbl" begin
-            Wₕ, K, l = _sd2_problem(dims)
+            Wₕ, K, l = _rhs_problem(dims)
             n = ndofs(Wₕ)
-
-            @testset "second order, dirichlet = $(repr(dirichlet))" for dirichlet in (
-                :boundary, nothing
-            )
-                sd2 = semidiscretize_second_order(K, l; dirichlet = dirichlet)
-                dv = zeros(n)
-                v = collect(range(0.1, 0.9; length = n))
-                u = collect(range(0.25, 1.75; length = n))
-                @test _sd2_alloc(sd2, dv, v, u, 0.0) == 0
-            end
 
             @testset "semidiscretize_rhs" begin
                 rhs = semidiscretize_rhs(semidiscretize(K, l))
@@ -679,8 +662,8 @@ end
     end
 end
 
-# Every form handed to `semidiscretize` is posed on `l`'s space: `mass` and `damping` of
-# another size (#705), and `a` or `mass` on another mesh with as many points (#706), are
+# Every form handed to `semidiscretize` is posed on `l`'s space: `mass` of another
+# size (#705), and `a` or `mass` on another mesh with as many points (#706), are
 # refused at construction, while two `gridspace` calls over one mesh still pass.
 @testset "forms on other spaces (#705, #706)" begin
     D = Bramble.domain(Bramble.interval(0.0, 1.0))
@@ -702,13 +685,9 @@ end
             err isa ArgumentError ? sprint(showerror, err) : rethrow()
         end
 
-    @testset "mass and damping of another size" begin
+    @testset "mass of another size" begin
         msg = errmsg(() -> semidiscretize(a, l; mass = mass(W₇)))
         @test occursin("`mass`", msg) && occursin("7×7", msg) && occursin("11", msg)
-        msg = errmsg(() -> semidiscretize_second_order(a, l; damping = mass(W₇)))
-        @test occursin("`damping`", msg) && occursin("7×7", msg)
-        msg = errmsg(() -> semidiscretize_second_order(a, l; mass = mass(W₇)))
-        @test occursin("`mass`", msg)
         build(t) = (a, _ -> nothing)
         msg = errmsg(() -> semidiscretize(build, l; mass = mass(W₇)))
         @test occursin("`mass`", msg)
@@ -718,9 +697,6 @@ end
         @test_throws ArgumentError semidiscretize(stiff(Wᵤ), l)
         @test occursin("mesh", errmsg(() -> semidiscretize(stiff(Wᵤ), l)))
         @test occursin("`mass`", errmsg(() -> semidiscretize(a, l; mass = mass(Wᵤ))))
-        @test_throws ArgumentError semidiscretize_second_order(stiff(Wᵤ), l)
-        @test occursin("`damping`",
-            errmsg(() -> semidiscretize_second_order(a, l; damping = mass(Wᵤ))))
         buildᵤ(t) = (stiff(Wᵤ), _ -> nothing)
         @test_throws ArgumentError semidiscretize(buildᵤ, l)
         # trial space alone on the other mesh
@@ -748,8 +724,6 @@ end
         Wᵣ = gridspace(Bramble.mesh(D, 11, true))
         @test semidiscretize(stiff(Wᵣ), form(Wᵤ, v -> innerₕ(x -> 1.0, v))) isa
               Bramble.Semidiscretization
-        @test semidiscretize_second_order(a, l; mass = mass(W), damping = mass(W)) isa
-              Bramble.SecondOrderSemidiscretization
     end
 end
 
@@ -850,11 +824,11 @@ end
     end
 end
 
-# The dense-backend paths of the second-order semidiscretisation and of `semidiscretize_rhs`
-# (`_block_diag_with_identity` and `_diagonal_or_throw` on a plain `Matrix`), the compact
-# display, and `(x, t, p)` initial constraints, on a smoothly graded non-uniform mesh. The
-# oracle for the mass block is the space's own `L²` weight vector, not the assembled matrix.
-@testset "second order and rhs on a dense backend" begin
+# The dense-backend paths of `semidiscretize_rhs` (`_diagonal_or_throw` on a plain
+# `Matrix`) and `(x, t, p)` initial constraints, on a smoothly graded non-uniform mesh. The
+# oracle for the mass diagonal is the space's own `L²` weight vector, not the assembled
+# matrix.
+@testset "rhs on a dense backend" begin
     I = Bramble.interval(0.0, 1.0)
     Ωd = Bramble.mesh(
         Bramble.domain(I), 13, false; backend = backend(matrix_type = Matrix{Float64})
@@ -868,44 +842,17 @@ end
 
     fₕ = Rₕ(Wd, x -> 1.0)
     K = form(Wd, Wd, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-    C = form(Wd, Wd, (u, v) -> innerₕ(u, v))
     l = form(Wd, v -> innerₕ(fₕ, v))
     bcs = dirichlet_constraints(Ωd, I, :boundary => (x, t, p) -> p[1] * t + x[1])
 
-    sd2 = semidiscretize_second_order(K, l; damping = C, dirichlet = bcs)
-    @test sd2.constraints isa Bramble.TimeParamDependentConstraints
-
-    @testset "block mass matrix: blockdiag(M, I)" begin
-        B = Bramble.block_mass_matrix(sd2)
-        @test B isa Matrix{Float64}
-        expected = zeros(2n, 2n)
-        for i in 2:(n - 1)
-            expected[i, i] = w[i]
-        end
-        for i in 1:n
-            expected[n + i, n + i] = 1.0
-        end
-        @test B≈expected atol=1e-14
-    end
+    sd_bc = semidiscretize(K, l; dirichlet = bcs)
+    @test sd_bc.constraints isa Bramble.TimeParamDependentConstraints
 
     @testset "dirichlet_bc!: (x, t, p) gets p" begin
         u = fill(-1.0, n)
-        @test dirichlet_bc!(u, sd2, 0.5, [3.0]) === u
+        @test dirichlet_bc!(u, sd_bc, 0.5, [3.0]) === u
         @test u[1] ≈ 1.5 && u[n] ≈ 2.5
         @test all(==(-1.0), u[2:(n - 1)])
-    end
-
-    @testset "display" begin
-        compact = sprint(show, sd2)
-        @test compact == "SecondOrderSemidiscretization{$n dofs, 1 constrained label}"
-        @test summary(sd2) == compact
-        block = sprint(show, MIME"text/plain"(), sd2)
-        @test occursin("g(x, t, p) on :boundary", block)
-        @test !occursin("Damping: none", block)
-        undamped = semidiscretize_second_order(K, l)
-        @test sprint(show, undamped) ==
-              "SecondOrderSemidiscretization{$n dofs, 0 constrained labels}"
-        @test occursin("Damping: none", sprint(show, MIME"text/plain"(), undamped))
     end
 
     @testset "semidiscretize_rhs: dense mass" begin
@@ -941,7 +888,6 @@ end
     a = Bramble.form(W, W, (u, v) -> Bramble.inner₊(Bramble.∇ₕ(u), Bramble.∇ₕ(v)))
     l = Bramble.form(W, v -> Bramble.innerₕ(Bramble.Rₕ(W, x -> 1.0), v))
     sd = Bramble.semidiscretize(a, l)
-    sd2 = Bramble.semidiscretize_second_order(a, l)
     u0 = zeros(Bramble.ndofs(W))
     calls = (
         () -> Bramble.ode_function(sd),
@@ -949,9 +895,6 @@ end
         () -> Bramble.linear_problem(a, l),
         () -> Bramble.nonlinear_problem((r, u, p) -> r, u0),
         () -> Bramble.adjoint_sensitivities(nothing, nothing),
-        () -> Bramble.second_order_ode_function(sd2),
-        () -> Bramble.second_order_ode_function(a, l),
-        () -> Bramble.second_order_ode_problem(sd2, u0, u0, (0.0, 1.0)),
     )
     for f in calls
         try
@@ -967,10 +910,7 @@ end
         "ode_problem requires SciMLBase",
         "linear_problem requires SciMLBase",
         "nonlinear_problem requires SciMLBase",
-        "adjoint_sensitivities requires SciMLSensitivity",
-        "second_order_ode_function requires SciMLBase",
-        "second_order_ode_function requires SciMLBase",
-        "second_order_ode_problem requires SciMLBase"
+        "adjoint_sensitivities requires SciMLSensitivity"
     ]
 end
 

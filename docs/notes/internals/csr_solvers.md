@@ -126,8 +126,7 @@ CSR `jac_prototype` is converted the same way, so `f.jac_prototype !== proto` on
 per stored entry, O(nnz), with no allocation, for either index base and index type. An
 entry of `A` that `J` does not store falls back to the generic copy, as the CSC/CSC method
 does. `mass_matrix(sd)` and `jacobian_prototype(sd)` stay `SparseMatrixCSR`, and the
-adjoint reads `mass_matrix(sd)`, so it is untouched. `second_order_ode_function` is not
-converted.
+adjoint reads `mass_matrix(sd)`, so it is untouched.
 
 Covered by the three testsets tagged `(#677)` in `test/ext/sparse_csr_ext.jl`. On the heat
 problem with `FBDF` and `Rodas5P`, the solver's `J`, `W` and `f.mass_matrix` are

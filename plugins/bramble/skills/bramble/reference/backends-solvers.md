@@ -43,10 +43,6 @@ sd = semidiscretize(a, l; dirichlet = bcs)   # M uₕ' = F(t) - A uₕ  (needs S
 Bramble.mass_matrix(sd), Bramble.operator_matrix(sd), Bramble.jacobian_prototype(sd)
 prob = ode_problem(sd, u₀, tspan), fn = Bramble.ode_function(sd)   # hand off to OrdinaryDiffEq; ode_function public only
 
-sd2 = semidiscretize_second_order(k, l; dirichlet = bcs)   # M üₕ + C u̇ₕ + K uₕ = F(t)
-Bramble.mass_matrix(sd2), Bramble.damping_matrix(sd2), Bramble.stiffness_matrix(sd2), Bramble.block_mass_matrix(sd2)
-prob2 = second_order_ode_problem(sd2, v₀, u₀, tspan)   # velocity, then displacement
-
 linear_problem(a, l; kwargs...)              # steady linear system, to LinearSolve
 nonlinear_problem(residual, u0; kwargs...)   # steady nonlinear residual, to NonlinearSolve
 ```

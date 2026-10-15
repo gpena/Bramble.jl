@@ -1,8 +1,7 @@
 # semidiscrete_constraints.jl: how a semidiscretization's Dirichlet boundary values are
 # carried and applied. `AbstractSemidiscretization` is the shared supertype this all
-# dispatches on, so that `Semidiscretization` (`semidiscrete.jl`) and
-# `SecondOrderSemidiscretization` (`second_order_semidiscrete.jl`) reuse it instead of
-# each carrying their own copy -- see its own docstring below for why it lives here.
+# dispatches on, so that `Semidiscretization` (`semidiscrete.jl`) reuses it instead of
+# carrying its own copy -- see its own docstring below for why it lives here.
 
 # --- How the source's boundary values are reached at each step ---------------------- #
 #
@@ -117,16 +116,15 @@ end
 """
     AbstractSemidiscretization
 
-Common supertype for [`Semidiscretization`](@ref) (first-order, `M u_h' = F(t) - A u_h`) and
-[`SecondOrderSemidiscretization`](@ref) (second-order, `M ü_h + C u̇_h + K u_h = F(t)`).
+Common supertype of the semidiscretisations: [`Semidiscretization`](@ref)
+(`M u_h' = F(t) - A u_h`) is its only subtype.
 
 Everything about how the source's boundary values are reached at each step --
 [`NoConstraints`](@ref)/[`LabelsOnly`](@ref)/[`StaticConstraints`](@ref)/
 [`TimeDependentConstraints`](@ref)/[`TimeParamDependentConstraints`](@ref),
 `_source_constraints`, `_assemble_source!`, `_apply_initial_constraints!` -- only ever
-touches `space`/`labels`/`components`/`constraints`/`source`, never the order-specific
-operator matrices, so it is shared here
-rather than duplicated for the second-order struct.
+touches `space`/`labels`/`components`/`constraints`/`source`, never the operator matrices,
+so it lives apart from the concrete type.
 """
 abstract type AbstractSemidiscretization end
 
@@ -148,8 +146,8 @@ parameter `p`) into `u` and return it.
 An index-1 differential-algebraic system needs its initial condition to satisfy the
 algebraic rows already: a `u` disagreeing with `g(x, 0)` on the boundary is inconsistent,
 and a stiff solver either rejects it or absorbs it into the first step.
-[`ode_problem`](@ref)/[`second_order_ode_problem`](@ref) apply this to a copy of the initial
-condition they are handed, forwarding whatever `p` the caller gave the `ODEProblem`.
+[`ode_problem`](@ref) applies this to a copy of the initial condition it is handed,
+forwarding whatever `p` the caller gave the `ODEProblem`.
 """
 function dirichlet_bc!(u::AbstractVector, sd::AbstractSemidiscretization, t::Number, p = nothing)
     return _apply_initial_constraints!(u, sd, sd.constraints, p, t)
