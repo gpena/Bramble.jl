@@ -30,8 +30,8 @@ padded sizes and `G(i)` the padded axis submesh; the labels and facet queries
 (`boundary_indices`, `index_in_marker`, the surface weights) name the physical nodes. The
 ghosts are numbered `1:nghosts(G)`: facets in the order `xmin, xmax, ymin, ymax, zmin,
 zmax` (named ones only), each facet's ghosts in the column-major order of its nodes. A
-padded point outside along two or more axes is absent ([`is_absent`](@ref)) and has no
-ghost number. [`ghost_index`](@ref) and [`boundary_node`](@ref) map in `O(1)` between a
+padded point outside along two or more axes is absent (`Bramble.is_absent`) and has no
+ghost number. `Bramble.ghost_index` and `Bramble.boundary_node` map in `O(1)` between a
 facet node and its ghost.
 
 After `iterative_refinement!` of `Ωₕ` the ghost mesh is stale and every access throws an
@@ -284,7 +284,7 @@ end
 
 The number `g ∈ 1:nghosts(G)` of the ghost beyond the node `I` (a tuple or a
 `CartesianIndex` of the physical mesh) of facet `(d, side)`, with `side` `:min` or `:max`.
-`O(1)`; the inverse of [`boundary_node`](@ref).
+`O(1)`; the inverse of `Bramble.boundary_node`.
 
 Throws an `ArgumentError` when the facet carries no ghosts, or `I` is not on it.
 """
@@ -317,7 +317,7 @@ end
     boundary_node(G::GhostMesh, g::Int) -> (I::CartesianIndex, d::Int, side::Symbol)
 
 The facet node, the axis of its facet and the side (`:min` or `:max`) whose ghost is number
-`g`; the inverse of [`ghost_index`](@ref). `I` is an index of the physical mesh.
+`g`; the inverse of `Bramble.ghost_index`. `I` is an index of the physical mesh.
 """
 @inline function boundary_node(G::GhostMesh{D}, g::Int) where {D}
     1 <= g <= G.nghosts || _throw_ghost_out_of_range(g, G.nghosts)

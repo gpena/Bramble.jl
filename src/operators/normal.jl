@@ -657,7 +657,7 @@ end
 
 The quadrature weight of one facet: the transverse measure `∏_{e ≠ DIM} ĥ_e` at the nodes of
 the facet of normal axis `DIM`, side `SIDE` (1 the minimum, 2 the maximum), when `MASK`
-selects it, and zero anywhere else. Unsigned, since a [`FacetOperator`](@ref) carries its
+selects it, and zero anywhere else. Unsigned, since a `FacetOperator` carries its
 outward sign. `G[e]` says whether the term reads the ghosts along axis `e` (the facet's own
 for `e == DIM`, both `e` facets' at its corners otherwise), which `form` checks.
 """
