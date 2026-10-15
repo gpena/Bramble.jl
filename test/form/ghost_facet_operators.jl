@@ -173,6 +173,69 @@ relerr(A, R) = norm(A - R) / norm(R)
         @test relerr(Ai, sparse(Ri)) <= tol
     end
 
+    @testset "Conormal at one ghosted facet's corners" begin
+        # `u = y` on the padded grid: every centred difference is exact, so the conormal flux
+        # at a node of xmin is `η · (K ∇u)_1 = -K[1, 2]`, and the row sum `-ω K[1, 2]`.
+        Ωₕ = random_mesh((6, 7))
+        ns = ON.sizes(Ωₕ)
+        y = ON.axis_points(Ωₕ)[2]
+        K = [2.0 0.7; 0.4 1.5]
+        markers = (:xmin,)
+        # the corners of xmin read the ymin and ymax ghosts through K[1, 2]
+        Px = padded(Ωₕ; ghosts = (:xmin,))
+        err = try
+            form(Px, Px, (u, v) -> inner_Γ(∂ₙ(u; K), v; markers))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin(":ymin", msg) && occursin("K[1, 2]", msg)
+        Pxy = padded(Ωₕ; ghosts = (:xmin, :ymin))
+        @test_throws ArgumentError form(Pxy, Pxy, (u, v) -> inner_Γ(∂ₙ(u; K), v; markers))
+        # no tangential coupling on xmin: one ghosted facet is enough, diagonal K or not
+        for Kd in ([2.0 0.0; 0.0 1.5], [2.0 0.0; 0.4 1.5])
+            Ad = assemble(form(Px, Px, (u, v) -> inner_Γ(∂ₙ(u; K = Kd), v; markers)))
+            uy = [yj for _ in 1:(ns[1] + 1), yj in y][:]
+            @test norm(Ad * uy) <= tol
+            x = ON.axis_points(Ωₕ)[1]
+            ux = [xi for xi in [2x[1] - x[2]; x], _ in y][:]
+            LP = LinearIndices((ns[1] + 1, ns[2]))
+            rows = [LP[2, j] for j in 1:ns[2]]
+            ω = [ON.facet_weight(Ωₕ, 1, CartesianIndex(1, j)) for j in 1:ns[2]]
+            @test (Ad * ux)[rows] ≈ -2.0 .* ω   # `u = x`, its ghost mirrored: Dc_x(u) = 1
+        end
+        # with both y facets ghosted, the corner rows are the exact conormal flux
+        P3 = padded(Ωₕ; ghosts = (:xmin, :ymin, :ymax))
+        A = assemble(form(P3, P3, (u, v) -> inner_Γ(∂ₙ(u; K), v; markers)))
+        py = [2y[1] - y[2]; y; 2y[end] - y[end - 1]]
+        r = A * [yj for _ in 1:(ns[1] + 1), yj in py][:]
+        LP = LinearIndices((ns[1] + 1, ns[2] + 2))
+        for j in (1, 4, ns[2])
+            @test r[LP[2, j + 1]] ≈ -ON.facet_weight(Ωₕ, 1, CartesianIndex(1, j)) * K[1, 2]
+        end
+    end
+
+    @testset "Facet scalars and the element type" begin
+        Ωₕ = random_mesh((6, 7))
+        P = padded(Ωₕ)
+        A2 = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u) / 2, v)))
+        @test relerr(A2, sparse(0.5 * trial_rows(Ωₕ, FACETS[1:4]))) <= tol
+        @test A2 ≈ assemble(form(P, P, (u, v) -> inner_Γ(0.5 * ∂ₙ(u), v)))
+        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(u, ∂ₙ(v) / 4.0))),
+            sparse(0.25 * trial_rows(Ωₕ, FACETS[1:4])')) <= tol
+
+        Ω32 = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (6, 7),
+            (true, true))
+        P32 = padded(Ω32)
+        for t in ((u, v) -> inner_Γ(2 * ∂ₙ(u), v),
+            (u, v) -> inner_Γ(∂ₙ(u; K = [2 0; 0 1]), v),
+            (u, v) -> inner_Γ(∂ₙ(u) / 2, v))
+            @test eltype(assemble(form(P32, P32, t))) == Float32
+        end
+    end
+
     @testset "Linear form with ∂ₙ(v)" begin
         Ωₕ = random_mesh((6, 7))
         P = padded(Ωₕ)
