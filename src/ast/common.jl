@@ -397,6 +397,7 @@ end
     as = map(_shift_delta, ataps)
     bs = map(_shift_delta, btaps)
     for a in as, b in bs
+
         J = CartesianIndex(ntuple(k -> k == Dim ? I[k] + a : (k == E ? I[k] + b : I[k]), Val(D)))
         checkbounds(Bool, indices(G), J) && is_absent(G, J) && return true
     end

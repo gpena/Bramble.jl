@@ -161,20 +161,23 @@ end
 
 # --- The corner rule of a ghost mesh (#218, design note "Corner policy") ------------ #
 #
-# A mixed difference `A_d(B_e(w))` (two first differences along different axes, any
-# constant or grid-function scales between them) at a 2D corner node, or a 3D edge node,
-# of a ghost mesh reads the padded corner beyond it: `A`'s tap to the facet ghost along `d`
-# re-evaluates `B` there, and `B`'s tap along `e` lands outside along both axes, a point
-# that is no node and no ghost (`is_absent`). At such a node the whole mixed difference is
-# the inward one-sided one along both axes, `D_{s_d,d}(D_{s_e,e}(w))` with `s = +1` (`D₊`)
-# at a first node and `-1` (`D₋`) at a last, which reads physical nodes only. Elsewhere,
-# and on any mesh that is not a ghost mesh, nothing changes: the predicate is a constant
-# `false` there (`_reads_absent`, `ast/common.jl`).
+# A mixed difference `A_d(B_e(w))` (two first differences along different axes, `w` a trial
+# or test function under any constant or grid-function scales) at a 2D corner node, or a 3D
+# edge node, of a ghost mesh reads the padded corner beyond it. `A`'s tap to the facet ghost
+# along `d` re-evaluates `B` there, and `B`'s tap along `e` lands outside along both axes, a
+# point that is no node and no ghost (`is_absent`). At such a node the mixed difference is
+# the inward one-sided one along both axes, `D_{s_d,d}(D_{s_e,e}(w))` with `s = +1` (`D₊`) at
+# a first node and `-1` (`D₋`) at a last, which reads physical nodes only. `A`'s operand may
+# be a linear combination of such terms and others, and the rule distributes over it
+# (`_rule_terms`): each mixed term that reads the corner takes the one-sided difference and
+# every other term `A`'s own taps. Elsewhere, and on any mesh that is not a ghost mesh,
+# nothing changes: the predicate is a constant `false` there. Any other nesting that would
+# read an absent point is refused by the product that weighs it (`_check_absent_reads`).
 #
-# The one-sided stencil keeps the node's own stencil type: `A`'s taps past the two it uses
-# and `B`'s likewise carry a zero weight on `I`'s own offsets, and each weight is converted
-# to the type of the entry it replaces (`_like_entries`), so the walk sees one type at
-# every point.
+# The one-sided stencil keeps the node's own stencil type: entry for entry in the order of
+# `A`'s taps and, within each, of the terms, `A`'s taps past the two it uses and `B`'s
+# likewise carry a zero weight on `I`'s own offsets, and each weight is converted to the
+# type of the entry it replaces (`_like_entries`), so the walk sees one type at every point.
 const _FirstDifference{D, Dim} = Union{
     BackwardDifference{D, Dim},
     ForwardDifference{D, Dim},
@@ -183,25 +186,54 @@ const _FirstDifference{D, Dim} = Union{
     CrossWeightedDifference{D, Dim}
 }
 
-# The first difference under a chain of scales, or `nothing`; decided by type.
-@inline _mixed_inner(op::_FirstDifference) = op
-@inline _mixed_inner(op::Union{OperatorScale, GridFunctionScale}) = _mixed_inner(op.inner_op)
-@inline _mixed_inner(::Any) = nothing
+const _Scale = Union{OperatorScale, GridFunctionScale}
 
-@inline _mixed_axis(::_FirstDifference{D, E}) where {D, E} = E
-@inline _mixed_axis(::Nothing) = 0
-@inline _mixed_taps(op::_FirstDifference) = _stencil_taps(op)
-@inline _mixed_taps(::Nothing) = ()
+# The terms of a difference's operand, in the order its stencil concatenates them: sums
+# flattened, and a scale over a sum distributed over the summands.
+@inline _rule_terms(op::OperatorAdd) = (_rule_terms(op.left_op)..., _rule_terms(op.right_op)...)
+@inline _rule_terms(op::_Scale) = map(t -> _rewrap_inner(op, t), _rule_terms(op.inner_op))
+@inline _rule_terms(op) = (op,)
+
+# The axis of a term that is a first difference of a scaled trial or test function, under
+# any scales; `0` for any other term. Decided by type.
+@inline _cross_axis(op::_FirstDifference{D, E}) where {D, E} = _scaled_leaf(op.inner_op) ? E : 0
+@inline _cross_axis(op::_Scale) = _cross_axis(op.inner_op)
+@inline _cross_axis(::Any) = 0
+
+@inline _scaled_leaf(::_BareLeaf) = true
+@inline _scaled_leaf(op::_Scale) = _scaled_leaf(op.inner_op)
+@inline _scaled_leaf(::Any) = false
+
+@inline _under_scales(op::_Scale) = _under_scales(op.inner_op)
+@inline _under_scales(op) = op
+
+# Whether a first difference along `Dim` has a mixed term across another axis to rewrite.
+@inline _rule_applies(op::_FirstDifference{D, Dim}) where {D, Dim} = _has_relative_offsets(op) &&
+                                                                     !_holds_restriction(op) &&
+                                                                     any(
+                                                                         t -> _cross_axis(t) ∉ (0, Dim), _rule_terms(op.inner_op))
+
+# Whether the term `t` of a difference along `Dim` with taps `ataps` reads an absent point
+# at `I` (`_reads_absent`, `ast/common.jl`).
+@inline _term_reads_absent(t, G, I, vdim, ataps) = _cross_reads_absent(
+    _under_scales(t), Val(_cross_axis(t)), G, I, vdim, ataps)
+@inline _cross_reads_absent(B, ::Val{0}, G, I, ::Val, ataps) = false
+@inline _cross_reads_absent(B, ::Val{E}, G, I, ::Val{Dim}, ataps) where {E, Dim} = E != Dim &&
+                                                                                   _reads_absent(
+    G, I, Val(Dim), ataps, Val(E), _stencil_taps(B))
+
+@inline _any_reads_absent(::Tuple{}, G, I, vdim, ataps) = false
+@inline _any_reads_absent(ts::Tuple, G, I, vdim, ataps) = _term_reads_absent(
+    first(ts), G, I, vdim, ataps) || _any_reads_absent(Base.tail(ts), G, I, vdim, ataps)
 
 @inline _needs_onesided(op, m, I::CartesianIndex) = false
 
 @inline function _needs_onesided(
-        op::_FirstDifference{D, Dim}, m::GhostMesh{D}, I::CartesianIndex{D}
+        op::_FirstDifference{D, Dim}, G::GhostMesh{D}, I::CartesianIndex{D}
 ) where {D, Dim}
-    B = _mixed_inner(op.inner_op)
-    E = _mixed_axis(B)
-    (E == 0 || E == Dim || !_has_relative_offsets(op) || _fixes_restriction(op)) && return false
-    return _reads_absent(m, I, Val(Dim), _stencil_taps(op), Val(E), _mixed_taps(B))
+    _rule_applies(op) || return false
+    I in physical_indices(G) || return false
+    return _any_reads_absent(_rule_terms(op.inner_op), G, I, Val(Dim), _stencil_taps(op))
 end
 
 # The one-sided taps of a node of `N` taps along `d` at `I`, step `s`: `D_s` on taps `0` and
@@ -217,38 +249,78 @@ end
 @noinline function _onesided_mixed(
         op::TappedNode{D, Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D, Dim}
-    m = mesh(space)
-    B = _mixed_inner(op.inner_op)
-    E = _mixed_axis(B)
-    as, αs = _onesided_taps(m, I, Dim, _inward_step(m, I, Dim), Val(length(_stencil_taps(op))))
-    bs, βs = _onesided_taps(m, I, E, _inward_step(m, I, E), Val(length(_stencil_taps(B))))
-    lins = LinearIndices(indices(m))
-    O = _flatten_tuples(ntuple(Val(length(as))) do k
-        P = CartesianIndex(ntuple(i -> i == Dim ? I[i] + as[k] : I[i], Val(D)))
-        inner = _onesided_operand(op.inner_op, space, P, markers, lins, Val(E), bs, βs)
-        return scale_stencil(shift_stencil(inner, Val(Dim), as[k]), αs[k])
-    end)
-    return _like_entries(_tapped_stencil(op, space, I, markers, lin_idx), O)
+    G = mesh(space)
+    terms = _rule_terms(op.inner_op)
+    taps = _stencil_taps(op)
+    hits = map(t -> _term_reads_absent(t, G, I, Val(Dim), taps), terms)
+    as, αs = _onesided_taps(G, I, Dim, _inward_step(G, I, Dim), Val(length(taps)))
+    at = (space, I, markers, LinearIndices(indices(G)))
+    return _rule_fold(op, terms, hits, at, taps, _stencil_weights(op, space, I), as, αs)
+end
+
+# `A`'s taps in order, each the concatenation of the terms' contributions to it.
+@inline _rule_fold(op, terms, hits, at, taps::Tuple{Any}, ws, as, αs) = _rule_tap(
+    op, terms, hits, at, taps[1], ws[1], as[1], αs[1])
+@inline _rule_fold(op, terms, hits, at, taps::Tuple, ws, as, αs) = concatenate_stencils(
+    _rule_tap(op, terms, hits, at, taps[1], ws[1], as[1], αs[1]),
+    _rule_fold(op, terms, hits, at, Base.tail(taps), Base.tail(ws), Base.tail(as),
+        Base.tail(αs)))
+
+@inline _rule_tap(op, terms::Tuple{Any}, hits, at, tap, w, a, α) = _term_tap(
+    op, terms[1], hits[1], at, tap, w, a, α)
+@inline _rule_tap(op, terms::Tuple, hits, at, tap, w, a, α) = concatenate_stencils(
+    _term_tap(op, terms[1], hits[1], at, tap, w, a, α),
+    _rule_tap(op, Base.tail(terms), Base.tail(hits), at, tap, w, a, α))
+
+# One term's contribution to one tap of `A`: `A`'s own tap over the term (`_tap_stencil`),
+# or, for a mixed term that reads the corner, the one-sided tap `a` (weight `α`) over the
+# term's one-sided difference, with the entry types of the tap it replaces (whose values,
+# read through the corner, are discarded).
+@inline function _term_tap(
+        op::TappedNode{D, Dim}, t, hit::Bool, at, tap, w, a::Int, α
+) where {D, Dim}
+    space, I, markers, lins = at
+    S = _tap_stencil(_rewrap_inner(op, t), local_stencil(t, space, I, markers, lins[I]),
+        space, I, markers, Val(Dim), tap, w)
+    (_cross_axis(t) ∈ (0, Dim) || !hit) && return S
+    return _like_entries(S, _onesided_term(t, space, I, markers, lins, Val(Dim), a, α))
+end
+
+@inline function _onesided_term(
+        t, space, I::CartesianIndex{D}, markers, lins, ::Val{Dim}, a::Int, α
+) where {D, Dim}
+    G = mesh(space)
+    B = _under_scales(t)
+    E = _cross_axis(t)
+    bs, βs = _onesided_taps(G, I, E, _inward_step(G, I, E), Val(length(_stencil_taps(B))))
+    P = CartesianIndex(ntuple(k -> k == Dim ? I[k] + a : I[k], Val(D)))
+    inner = _onesided_operand(t, space, P, markers, lins, Val(E), bs, βs)
+    return scale_stencil(shift_stencil(inner, Val(Dim), a), α)
 end
 
 # `B`'s one-sided stencil at `P` (taps `bs`, weights `βs` along `E`), its offsets from `P`,
 # with the scales above it read at `P`.
-@inline _onesided_operand(op::Union{OperatorScale, GridFunctionScale}, space, P, markers,
-    lins, vE, bs, βs) = scale_stencil(
+@inline _onesided_operand(op::_Scale, space, P, markers, lins, vE, bs, βs) = scale_stencil(
     _onesided_operand(op.inner_op, space, P, markers, lins, vE, bs, βs),
     _scale_value(op, lins[P]))
 
-@inline function _onesided_operand(
-        op::_FirstDifference{D}, space, P::CartesianIndex{D}, markers, lins, ::Val{E}, bs, βs
+@inline _onesided_operand(op::_FirstDifference, space, P, markers, lins, vE, bs, βs) = _onesided_fold(
+    op.inner_op, space, P, markers, lins, vE, bs, βs)
+
+@inline _onesided_fold(w, space, P, markers, lins, vE, bs::Tuple{Any}, βs) = _onesided_leaf(
+    w, space, P, markers, lins, vE, bs[1], βs[1])
+@inline _onesided_fold(w, space, P, markers, lins, vE, bs::Tuple, βs) = concatenate_stencils(
+    _onesided_leaf(w, space, P, markers, lins, vE, bs[1], βs[1]),
+    _onesided_fold(w, space, P, markers, lins, vE, Base.tail(bs), Base.tail(βs)))
+
+@inline function _onesided_leaf(
+        w, space, P::CartesianIndex{D}, markers, lins, ::Val{E}, b::Int, β
 ) where {D, E}
-    return _flatten_tuples(ntuple(Val(length(bs))) do l
-        J = CartesianIndex(ntuple(i -> i == E ? P[i] + bs[l] : P[i], Val(D)))
-        w = local_stencil(op.inner_op, space, J, markers, lins[J])
-        return scale_stencil(shift_stencil(w, Val(E), bs[l]), βs[l])
-    end)
+    J = CartesianIndex(ntuple(i -> i == E ? P[i] + b : P[i], Val(D)))
+    return scale_stencil(shift_stencil(local_stencil(w, space, J, markers, lins[J]), Val(E), b), β)
 end
 
-# `O`'s offsets with the entry types of `S`, the node's stencil at the same point.
+# `O`'s offsets with the entry types of `S`, the regular stencil of the same term and tap.
 @inline function _like_entries(S::Tuple, O::Tuple)
     length(S) == length(O) || _throw_onesided_length(length(S), length(O))
     return ntuple(k -> (O[k][1], convert(typeof(S[k][2]), O[k][2])), Val(length(S)))
@@ -262,6 +334,169 @@ end
     ),
     )
 end
+
+# --- The refusal: any other read of a point the padded grid lacks -------------------- #
+#
+# A nesting the corner rule does not cover (an average, jump or shift of a cross difference,
+# a difference around a second difference, three levels deep, ...) may still read a point
+# the padded grid lacks: an absent one near a 2D corner or 3D edge, a nested operand's taps
+# reaching on from a ghost; or, under a facet product, one outside the grid, beyond the one
+# ghost layer or across a facet without ghosts, where a stencil reads a truncation and not
+# the point. A product
+# (`innerₕ`, `inner_Γ`, ...) on a ghost space asks, at every node of the boundary band where
+# its weight is not zero, whether either operand reads one, and throws an `ArgumentError`
+# naming it: a read a zero weight multiplies (a facet operator's component off its facet) is
+# no read, as is one a zero scale multiplies. The walk follows the evaluation, the corner
+# rule included, through every tap whose own weight is not zero. A volume product's operand
+# truncated at the edge of the padded grid is the plain mesh's closure there and stands. The
+# products are the
+# stock `local_stencil` methods (`operators/inner.jl`) after the check; off a ghost space
+# they are the only methods, so a plain mesh compiles exactly as before.
+const _GhostSpace{D} = ScalarGridSpace{D, <:Any, <:Any, <:GhostMesh}
+
+@inline function local_stencil(
+        op::BilinearProduct{D, InnerType}, space::_GhostSpace{D}, I::CartesianIndex{D},
+        markers, lin_idx::Int
+) where {D, InnerType}
+    _near_edge(mesh(space), I, _stencil_margin(op)) && _check_absent_reads(op, space, I, lin_idx)
+    return @invoke local_stencil(op::BilinearProduct{D, InnerType}, space::Any,
+        I::CartesianIndex{D}, markers::Any, lin_idx::Int)
+end
+
+@inline function local_stencil(
+        op::LinearProduct{D, InnerType}, space::_GhostSpace{D}, I::CartesianIndex{D},
+        markers, lin_idx::Int
+) where {D, InnerType}
+    _near_edge(mesh(space), I, _stencil_margin(op.right_op)) &&
+        _check_absent_reads(op, space, I, lin_idx)
+    return @invoke local_stencil(op::LinearProduct{D, InnerType}, space::Any,
+        I::CartesianIndex{D}, markers::Any, lin_idx::Int)
+end
+
+# Whether `I` lies within `margin` steps of the edge of the padded grid.
+@inline function _near_edge(G::GhostMesh{D}, I::CartesianIndex{D}, margin::Int) where {D}
+    n = size(indices(G))
+    near = false
+    for d in 1:D
+        near |= (I[d] - 1 <= margin) | (n[d] - I[d] <= margin)
+    end
+    return near
+end
+
+# The facet products, whose operands are meant to read ghosts at the node.
+@inline _facet_inner(::Union{InnerGamma, InnerGammaNormal, InnerGammaFacet}) = true
+@inline _facet_inner(::Any) = false
+
+@noinline function _check_absent_reads(
+        op::BilinearProduct{D, InnerType}, space, I::CartesianIndex{D}, lin_idx::Int
+) where {D, InnerType}
+    iszero(compute_weight(InnerType(), space, I, lin_idx)) && return false
+    facet = _facet_inner(InnerType())
+    (_reads_at(op.left_op, space, I, facet) || _reads_at(op.right_op, space, I, facet)) &&
+        _throw_absent_read(op, I - CartesianIndex(mesh(space).lo))
+    return false
+end
+
+@noinline function _check_absent_reads(
+        op::LinearProduct{D, InnerType}, space, I::CartesianIndex{D}, lin_idx::Int
+) where {D, InnerType}
+    _is_dirac(op.left_op) || iszero(compute_weight(InnerType(), space, I, lin_idx)) &&
+                             return false
+    _reads_at(op.right_op, space, I, _facet_inner(InnerType())) &&
+        _throw_absent_read(op, I - CartesianIndex(mesh(space).lo))
+    return false
+end
+
+@noinline function _throw_absent_read(op, I::CartesianIndex)
+    throw(
+        ArgumentError(
+        "on a ghost space, `$(expression(op))` reads, at the physical node $(Tuple(I)), a " *
+        "padded point that does not exist: absent (beyond a 2D corner or a 3D edge, no " *
+        "node and no ghost), or outside the padded grid (beyond the one ghost layer, or on " *
+        "a facet without ghosts). Only a first difference of first differences of `u` " *
+        "across two axes, or a sum or scale of them, has a corner rule (the inward " *
+        "one-sided difference); write the term with no nesting that reaches past the " *
+        "ghosts, give the space ghosts on the facets it reads, or assemble it on a space " *
+        "without ghosts.",
+    ),
+    )
+end
+
+# Whether `op`, evaluated at the padded point `J`, reads a point the grid lacks: at an
+# absent one any operand of a trial or test function has no value, and under a facet product
+# (`facet`) a node whose taps leave the grid reads past it. One method per node,
+# as `local_stencil` has, and the taps a loop over their steps: a recursion through one
+# shared helper fails inference's recursion limit and dispatched at run time on every
+# refill.
+@inline _at_absent(op, space, J) = is_absent(mesh(space), J) && _has_relative_offsets(op)
+
+# Whether a step `delta` along `Dim` from `J` leaves the grid where that counts as a read:
+# under a facet product only, as a volume product keeps the plain mesh's truncation.
+@inline function _leaves_grid(
+        space, J::CartesianIndex, ::Val{Dim}, delta::Int, facet::Bool
+) where {Dim}
+    facet || return false
+    return !(1 <= J[Dim] + delta <= size(indices(mesh(space)), Dim))
+end
+
+@inline _reads_at(op, space, J::CartesianIndex, facet::Bool) = _at_absent(op, space, J)
+@inline _reads_at(op::RegionRestriction, space, J::CartesianIndex, facet::Bool) = _at_absent(
+    op, space, J) || _reads_at(op.inner_op, space, J, facet)
+# A zero scale is a zero weight: what it multiplies is no read.
+@inline _reads_at(op::_Scale, space, J::CartesianIndex, facet::Bool) = _at_absent(
+    op, space, J) ||
+                                                                       !iszero(_scale_value(op, LinearIndices(indices(mesh(space)))[J])) &&
+                                                                       _reads_at(op.inner_op, space, J, facet)
+@inline _reads_at(op::OperatorAdd, space, J::CartesianIndex, facet::Bool) = _at_absent(
+                                                                                op, space, J) ||
+                                                                            _reads_at(op.left_op, space, J, facet) ||
+                                                                            _reads_at(
+                                                                                op.right_op, space, J, facet)
+
+@inline function _reads_at(
+        op::ShiftNode{D, Dim}, space, J::CartesianIndex{D}, facet::Bool
+) where {D, Dim}
+    _at_absent(op, space, J) && return true
+    _leaves_grid(space, J, Val(Dim), op.shift_amount, facet) && return true
+    K = CartesianIndex(ntuple(k -> k == Dim ? J[k] + op.shift_amount : J[k], Val(D)))
+    return checkbounds(Bool, indices(mesh(space)), K) && _reads_at(op.inner_op, space, K, facet)
+end
+
+@inline function _reads_at(
+        op::TappedNode{D, Dim}, space, J::CartesianIndex{D}, facet::Bool
+) where {D, Dim}
+    _at_absent(op, space, J) && return true
+    G = mesh(space)
+    taps = _stencil_taps(op)
+    ds = map(_shift_delta, taps)
+    for k in eachindex(ds)
+        _leaves_grid(space, J, Val(Dim), ds[k], facet) && return true
+    end
+    ws = _stencil_weights(op, space, J)
+    # The corner rule: a mixed term that reads the corner takes the one-sided difference,
+    # which reads physical nodes only; every other term `A`'s own taps.
+    rule = _needs_onesided(op, G, J)
+    terms = _rule_terms(op.inner_op)
+    for k in eachindex(ds)
+        iszero(ws[k]) && continue
+        K = CartesianIndex(ntuple(i -> i == Dim ? J[i] + ds[k] : J[i], Val(D)))
+        checkbounds(Bool, indices(G), K) || continue
+        if rule
+            _terms_read(terms, space, J, K, Val(Dim), taps, facet) && return true
+        else
+            _reads_at(op.inner_op, space, K, facet) && return true
+        end
+    end
+    return false
+end
+
+# The terms at `K` that the corner rule leaves to `A`'s taps at `J`.
+@inline _terms_read(::Tuple{}, space, J, K, vdim, taps, facet) = false
+@inline _terms_read(ts::Tuple, space, J, K, vdim, taps, facet) = (
+    !_term_reads_absent(first(ts), mesh(space), J, vdim, taps) &&
+    _reads_at(first(ts), space, K, facet)) ||
+                                                                 _terms_read(
+    Base.tail(ts), space, J, K, vdim, taps, facet)
 
 # A tap reaching a tapped node over a restriction (`D̽ₓ(D̽ᵧ(restrict_to(:l, v)))`) re-evaluated
 # it at the neighbour, where the restriction's own tap 0 answers `()` or a full tuple by the
