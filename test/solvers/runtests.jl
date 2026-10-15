@@ -8,4 +8,6 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("preconditioners.jl")
     # Geometric multigrid: nested hierarchies.
     include("multigrid.jl")
+    # The mean-zero constraint on a singular (pure Neumann) solve.
+    include("mean_zero.jl")
 end

@@ -35,18 +35,19 @@ public half_spacing, spacings, cell_measure, half_point, half_points
 public indices, boundary_indices, interior_indices, is_boundary_index, index_in_marker
 
 # --- Spaces & Grid Functions ---
-export gridspace, vector_gridspace, space, spaces
+export gridspace, vector_gridspace, space, spaces, constrained
 export ndofs, ncomponents
 export element, components
 export Rₕ, Rₕ!, avgₕ, avgₕ!
 export interpolate_at, πₕ, πₕ!
 
 export innerₕ, inner_Γ, dirac
-export η
+export η, ∂ₙ, ∂ₙₙ, jumpₙ
 export inner₊
 export norm, snorm₁ₕ, norm₁ₕ, normₕ, norminf
 
 public ScalarGridSpace, CompositeGridSpace, VectorGridSpace, VectorElement
+public lift, GhostGridSpace, GhostMesh
 public component_range, component_ranges, skew_symmetric
 public inner₊ₓ, inner₊ᵧ, inner₊₂
 public norm₊

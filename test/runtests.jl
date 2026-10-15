@@ -126,6 +126,7 @@ if __bramble_with_unit_tests
                 include("space/weights_staleness.jl")
                 include("space/vector_elements.jl")
                 include("space/backend_profile.jl")
+                include("space/ghost_gridspace.jl")
             end
 
             @testset "Operators" begin
@@ -172,6 +173,7 @@ if __bramble_with_unit_tests
         end
 
         if TestUtils.in_shard("rest")
+            include("ghost/runtests.jl")
             include("solvers/runtests.jl")
             include("exporters/runtests.jl")
 
