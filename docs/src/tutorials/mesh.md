@@ -4,7 +4,7 @@ CurrentModule = Bramble
 
 # [Mesh tutorial](@id tutorial_mesh)
 
-**What you will learn.** How a domain becomes a mesh, how to make the points non-uniform, and what the spacings, half points and cell measures that difference operators read mean.
+**What you will learn.** How a domain becomes a mesh, how to make the points non-uniform, what the spacings, half points and cell measures that difference operators read mean, and how a ghost mesh pads the boundary.
 
 **What you need first.** The [geometry tutorial](@ref tutorial_geometry), for sets, markers and domains.
 
@@ -292,6 +292,89 @@ sum(index_in_marker(Ωₕ_marked, :walls)), sum(index_in_marker(Ωₕ_marked, :o
 
 !!! tip "Try this"
     Change the radius `0.15` to `0.3` and rebuild. The obstacle count grows roughly fourfold, with the disc area.
+
+---
+
+## [Ghost points beyond the boundary](@id mesh_ghost)
+
+A second-order Neumann or Robin condition needs the solution one point past the boundary, and every stencil stops at the last point. A [`Bramble.GhostMesh`](@ref) adds that point. It wraps a mesh and pads it with one ghost point beyond each node of the facets you name, either `:boundary` or a tuple such as `(:xmin, :ymax)`. `GhostMesh` is `public`, not exported.
+
+```@example mesh
+Gₕ = Bramble.GhostMesh(Ωₕ_graded; ghosts = :boundary)
+
+npoints(Gₕ), Bramble.nghosts(Gₕ)
+```
+
+The mesh `Ωₕ_graded` has 11 points, so the padded mesh has 13 and two of them are ghosts. A ghost sits one spacing outside its facet node, using the spacings the mesh already holds: ``x_1 - h_2`` below and ``x_n + h_n`` above. On a graded mesh the two distances differ, so the ghosts do not mirror each other:
+
+```@example mesh
+x = collect(points(Ωₕ_graded))
+xg = collect(points(Gₕ))
+
+@assert xg[1] ≈ x[1] - (x[2] - x[1])
+@assert xg[end] ≈ x[end] + (x[end] - x[end-1])
+@assert xg[2:(end-1)] == x      # the physical points are untouched
+
+xg[1] - x[1], xg[end] - x[end]
+```
+
+The left ghost is ``h_2 = 0.01`` below the boundary and the right one ``h_n = 0.19`` above it.
+
+In two dimensions only the facet nodes get ghosts. The padded mesh is a tensor product, so it also has points outside along two axes at once, the four corners here. Those points are *absent*: they are not nodes, carry no degree of freedom and are never read as a value.
+
+```@example mesh
+G₂ = Bramble.GhostMesh(Ωₕ_prod; ghosts = :boundary)
+
+npoints(G₂, Tuple), Bramble.nghosts(G₂), points(G₂)
+```
+
+The padded size is ``(4 + 2) \times (3 + 2)``. The ghosts are ``2 \cdot 3 + 2 \cdot 4 = 14``, one per facet node, and counting the padded grid's four corners separately leaves exactly those:
+
+```@example mesh
+absent = [Bramble.is_absent(G₂, I) for I in CartesianIndices(npoints(G₂, Tuple))]
+
+@assert sum(absent) == 4 && all(absent[[1, end], [1, end]])
+@assert prod(npoints(G₂, Tuple)) - sum(absent) == prod(npoints(Ωₕ_prod, Tuple)) + Bramble.nghosts(G₂)
+
+sum(absent)
+```
+
+Naming fewer facets pads fewer:
+
+```@example mesh
+G_part = Bramble.GhostMesh(Ωₕ_prod; ghosts = (:xmin, :ymax))
+
+@assert npoints(G_part, Tuple) == (5, 4) && Bramble.nghosts(G_part) == 3 + 4
+
+npoints(G_part, Tuple), Bramble.nghosts(G_part)
+```
+
+A facet the dimension does not have, such as `:ymin` on an interval, is an `ArgumentError`:
+
+```@example mesh
+try
+    Bramble.GhostMesh(Ωₕ; ghosts = (:ymin,))
+catch e
+    @assert e isa ArgumentError
+    showerror(stdout, e)
+end
+```
+
+A ghost mesh follows its physical mesh. After `change_points!` the ghosts move with the facet spacings, and after `iterative_refinement!` the point count changes, which a ghost mesh cannot follow: build a new one.
+
+```@example mesh
+Ωₕ_move = mesh(Ω, 5)
+G_move = Bramble.GhostMesh(Ωₕ_move; ghosts = :boundary)
+before = collect(points(G_move))[[1, end]]
+change_points!(Ωₕ_move, [0.0, 0.1, 0.3, 0.6, 1.0])
+after = collect(points(G_move))[[1, end]]
+
+@assert before ≈ [-0.25, 1.25] && after ≈ [-0.1, 1.4]
+
+before, after
+```
+
+You rarely build a `GhostMesh` yourself. [`gridspace`](@ref)`(Ωₕ; ghosts = ...)` builds one and a space on top of it, which the [space tutorial](space.md) describes.
 
 ---
 
