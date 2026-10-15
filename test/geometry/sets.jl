@@ -573,6 +573,9 @@ end
 
     @test_allocs contains(0.5, X1)
     @test_allocs contains((0.5, 1.0), X2)
+    @test_allocs contains((1.0, 2.0), X2)
+    @test contains((1.0, 2.0), X2)
+    @test contains((0.0, 0.0), X2)
     @test_allocs contains((0.5, 0.5, 0.5), X3)
     @test_allocs contains(v2, X2)
     @test_allocs contains(v3, X3)
