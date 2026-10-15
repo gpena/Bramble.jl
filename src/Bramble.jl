@@ -3,8 +3,7 @@ module Bramble
 import Base: eltype, length
 import Base: show, first, last, getindex, setindex!, iterate, size, firstindex, lastindex, axes, eachindex
 
-using SparseArrays: SparseArrays, SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!,
-                    blockdiag
+using SparseArrays: SparseArrays, SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!
 
 using LinearAlgebra: I, Diagonal
 import LinearAlgebra: mul!, issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot, lu, cholesky, ⋅, norm
@@ -315,7 +314,6 @@ include("problems/semidiscrete_constraints.jl")
 include("problems/semidiscrete.jl")
 include("problems/semidiscrete_rhs.jl")
 include("problems/semidiscrete_problems.jl")
-include("problems/second_order_semidiscrete.jl")
 include("problems/nonlinear_problem.jl")
 include("solvers/amg_preconditioner.jl")
 include("solvers/ilu_preconditioner.jl")

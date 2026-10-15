@@ -40,10 +40,6 @@ Nothing on this page needs SciMLBase: a [`Semidiscretization`](@ref) is a callab
 `ODEFunction`/`ODEProblem`. Keeping the logic here means the main test suite covers it
 without the weak dependency loaded, and only the wrapper is gated.
 
-Second-order systems `M ü_h + C u̇_h + K u_h = F(t)` -- wave equations, elastodynamics -- are
-[`SecondOrderSemidiscretization`](@ref) (`second_order_semidiscrete.jl`), built by
-[`semidiscretize_second_order`](@ref).
-
 The Dirichlet constraint carriers (`NoConstraints`/`LabelsOnly`/`StaticConstraints`/...),
 `AbstractSemidiscretization` and their application to a vector live in
 `semidiscrete_constraints.jl`, included just before this file. The matrix-free explicit
@@ -340,16 +336,15 @@ end
 
 @inline _default_mass_form(sp) = form(sp, sp, (u, v) -> innerₕ(u, v))
 
-# `a`, `mass` and `damping` must be posed on `l`'s space: the same `ndofs` on both sides, and
+# `a` and `mass` must be posed on `l`'s space: the same `ndofs` on both sides, and
 # leaf by leaf the same mesh (`_same_mesh`: the same object, or one with the same points), so
 # two `gridspace` calls over one mesh pass but same-sized meshes with other points do not.
 function _validate_semidiscrete_spaces(
-        a::BilinearForm, l::LinearForm; mass = nothing, damping = nothing, name = "a"
+        a::BilinearForm, l::LinearForm; mass = nothing, name = "a"
 )
     sp = test_space(l)
     _validate_form_space(a, name, sp)
     mass === nothing || _validate_form_space(mass, "mass", sp)
-    damping === nothing || _validate_form_space(damping, "damping", sp)
     return nothing
 end
 

@@ -82,7 +82,7 @@ end
 # An order far *above* the promise is not reassuring: it means the finest error has reached
 # roundoff and the ratio no longer measures the scheme. Bracketed on both sides so that case
 # fails loudly rather than passing as an excellent result.
-_asymptotically_second_order(p, lower) = lower < p < 3.0
+_has_quadratic_order(p, lower) = lower < p < 3.0
 
 @testset "Variable-coefficient Poisson" begin
     # -∇·(κ(x)∇u) = f with κ(x) = 1 + 0.5sin(πx₁) > 0. Same manufactured solution the
@@ -110,10 +110,10 @@ _asymptotically_second_order(p, lower) = lower < p < 3.0
         (x, D) -> -(dκ(x) + D * κ(x)) * exp(sum(x))
     )
 
-    @test _asymptotically_second_order(ps[1], 1.9)
-    @test _asymptotically_second_order(ps[2], 1.9)
+    @test _has_quadratic_order(ps[1], 1.9)
+    @test _has_quadratic_order(ps[2], 1.9)
     # The 3D series runs nightly: `unit` builds no 3D mesh.
-    WITH_3D_TESTS && @test _asymptotically_second_order(ps[3], 1.8)
+    WITH_3D_TESTS && @test _has_quadratic_order(ps[3], 1.8)
 end
 
 end # module DriversVariableCoefficientPoissonTests

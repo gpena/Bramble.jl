@@ -399,6 +399,8 @@ end
         @test err_bool isa ArgumentError
         @test occursin("label :num", sprint(showerror, err_bool))
         @test occursin("Float64", sprint(showerror, err_bool))
+        # The non-Bool refusal, not the `hasmethod` one: both are ArgumentErrors.
+        @test occursin("expected a Bool", sprint(showerror, err_bool))
     end
 end
 

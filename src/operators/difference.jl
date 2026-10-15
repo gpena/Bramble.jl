@@ -1394,7 +1394,7 @@ const ExtendedDifferenceNode{D, Dim} = Union{
 }
 
 # ==============================================================================
-# Composite trial/test functions: ∇ₕ, ∇₊ₕ, εₕ, divₕ over several leaves at once
+# Composite trial/test functions: ∇ₕ, ∇₊ₕ, εₕ, divₕ, divₘₕ over several leaves at once
 # ==============================================================================
 #
 # `form(Wₕ, Vₕ, f)` (bilinear.jl) already hands `f` the space's own `TrialFunction{D,N}`/
@@ -1447,27 +1447,29 @@ The forward twin of [`∇ₕ`](@ref)`(u::Union{TrialFunction,TestFunction})`.
     return _∇₊ₕ_noncomposite(op)
 end
 
-# --- εₕ, divₕ: symmetric strain and staggered divergence over composite functions ---- #
+# --- εₕ, divₕ, divₘₕ: strain and divergences over composite functions ------------------ #
 #
 # Placement (gpena/Bramble.jl#234): ε_ii on the face
 # centre normal to axis `i` (a bare backward difference, no averaging), ε_ij for `i != j` on
 # the edge centre the pair `{i,j}` shares (each side's cross difference averaged once, onto
-# that edge), and div u on the cell centre every axis shares. No collocation choice is
-# exposed: these are the only placements `εₕ`/`divₕ` build.
+# that edge), and the staggered div u (`divₘₕ`) on the cell centre every axis shares. No
+# collocation choice is exposed: these are the only placements `εₕ`/`divₘₕ` build. `divₕ(u)`
+# is the unstaggered sum D₋ᵢ(uᵢ) of the runtime `divₕ`, placed where that one is.
 #
-# Both are builder-only: `εₕ(u)`/`divₕ(u)` return a small struct holding the `D`-many (or
-# `D×D`-many) `LazyOp`s the formula above names, and the *only* thing that consumes it is
-# the `inner₊` method beside each struct, which expands immediately -- inside the closure
-# `form` resolves, before `simplify_ast` ever runs -- into the sum of ordinary single-block
-# `BilinearProduct`s a user would write by hand (`test/form/vector_calculus.jl`'s hand-
-# expanded reference is exactly that sum). Nothing here is a `LazyOp`, so nothing here ever
-# reaches assembly, `local_stencil` or `block_of` directly: the architecture stays "every
-# `LazyOp` is scalar-valued, expansion happens at the builder" (gpena/Bramble.jl#234).
+# All three are builder-only: `εₕ(u)`/`divₕ(u)`/`divₘₕ(u)` return a small struct holding the
+# `D`-many (or `D×D`-many) `LazyOp`s the formula above names, and the *only* thing that
+# consumes it is the `inner₊` method beside each struct, which expands immediately -- inside
+# the closure `form` resolves, before `simplify_ast` ever runs -- into the sum of ordinary
+# single-block `BilinearProduct`s a user would write by hand
+# (`test/form/vector_calculus.jl`'s hand-expanded reference is exactly that sum). Nothing
+# here is a `LazyOp`, so nothing here ever reaches assembly, `local_stencil` or `block_of`
+# directly: the architecture stays "every `LazyOp` is scalar-valued, expansion happens at
+# the builder" (gpena/Bramble.jl#234).
 #
-# `εₕ`/`divₕ` differ from `operators/vector_calculus.jl`'s *runtime* `divₕ`
-# (gpena/Bramble.jl#158) the way every symbolic/numeric pair in this package can (CONTEXT.md).
-# The runtime `divₕ` (vector_calculus.jl) shares the name; the two are never mixed in one
-# expression.
+# `divₕ(u)` of a trial or test function is the symbolic twin of the *runtime* `divₕ` of
+# `operators/vector_calculus.jl` (gpena/Bramble.jl#158): the same formula, so `inner₊(divₕ(u),
+# divₕ(v))` assembles `inner₊(divₕ(w), divₕ(w), Val(S))` of the runtime operator
+# (gpena/Bramble.jl#694). The staggered divergence has no runtime twin, hence its own name.
 
 @inline function _vc_bwd(op, d::Int)
     d == 1 && return D₋ₓ(op)
@@ -1499,9 +1501,9 @@ end
     return ((1 // 2) * _vc_avg(_vc_bwd(u(i), j), i), (1 // 2) * _vc_avg(_vc_bwd(u(j), i), j))
 end
 
-# One term of the divergence: D_{-i}(u_i), averaged onto the shared cell centre by every
-# other axis. `foldl` over a runtime-filtered range, not `ntuple`: this runs once per
-# `εₕ`/`divₕ` call (builder time, not per grid point), the same footing
+# One term of the staggered divergence: D_{-i}(u_i), averaged onto the shared cell centre by
+# every other axis. `foldl` over a runtime-filtered range, not `ntuple`: this runs once per
+# `εₕ`/`divₘₕ` call (builder time, not per grid point), the same footing
 # `docs/src/examples/elasticity_3d.jl`'s `divₜ` already stands on.
 @inline _div_term(u, i::Int, ::Val{D}) where {D} = foldl(
     (op, d) -> _vc_avg(op, d), Iterators.filter(!=(i), 1:D); init = _vc_bwd(u(i), i)
@@ -1535,7 +1537,7 @@ The only supported use is `inner₊(εₕ(u), εₕ(v))`, which expands to
 ``S_{ii} = \\{i\\}`` and ``S_{ij} = \\{i,j\\}`` for `i != j`, through
 [`inner₊`](@ref)`(left, right, Val(S))`.
 
-See also: [`divₕ`](@ref), [`∇ₕ`](@ref).
+See also: [`divₘₕ`](@ref), [`∇ₕ`](@ref).
 """
 function εₕ(u::LazyOp{D}) where {D}
     entries = ntuple(Val(D)) do i
@@ -1572,7 +1574,8 @@ end
 """
     Bramble._DivergenceTerms{D}
 
-Builder-only container for [`divₕ`](@ref)'s `D` per-component terms: the symbolic twin of
+Builder-only container for the `D` per-component terms of [`divₕ`](@ref) and
+[`divₘₕ`](@ref): the symbolic twin of
 [`Bramble._StrainTensor`](@ref) for the divergence, and with the same lifetime -- consumed
 immediately by [`inner₊`](@ref), never part of an assembled AST.
 """
@@ -1583,21 +1586,40 @@ end
 """
     divₕ(u) -> Bramble._DivergenceTerms
 
+The symbolic divergence of a composite trial or test function `u` with one component per
+spatial dimension: term `i` is ``D_{-,i}(u_i)``, with no averaging. It is the symbolic twin
+of the *runtime* [`divₕ`](@ref) over grid functions (`operators/vector_calculus.jl`,
+gpena/Bramble.jl#158), so `inner₊(divₕ(u), divₕ(v))` assembles the runtime
+`inner₊(divₕ(w), divₕ(w), Val(S))`, and `∇ₕ ⋅ u` inside a form is this operator.
+
+The only supported use is `inner₊(divₕ(u), divₕ(v))`, which expands to
+``\\sum_{i,j} (D_{-,i}(u_i), D_{-,j}(v_j))_{\\{1,\\dots,D\\}}``
+through [`inner₊`](@ref)`(left, right, Val(S))`.
+
+See also: [`divₘₕ`](@ref), [`εₕ`](@ref).
+"""
+function divₕ(u::LazyOp{D}) where {D}
+    terms = ntuple(i -> _vc_bwd(u(i), i), Val(D))
+    return _DivergenceTerms{D, typeof(terms)}(terms)
+end
+
+"""
+    divₘₕ(u) -> Bramble._DivergenceTerms
+
 The symbolic staggered divergence of a composite trial or test function `u` with one
 component per spatial dimension, placed at the cell centre every axis shares: term `i` is
 ``D_{-,i}(u_i)`` averaged onto that centre by every axis other than `i`.
 
-Shares its name with the *runtime* [`divₕ`](@ref) over grid functions
-(`operators/vector_calculus.jl`, gpena/Bramble.jl#158); see this section's header
-comment for how and why the two differ.
+It is form-only: it has no runtime twin, so no operator over grid functions computes it.
+Use [`divₕ`](@ref) where the form must match the runtime divergence.
 
-The only supported use is `inner₊(divₕ(u), divₕ(v))`, which expands to
+The only supported use is `inner₊(divₘₕ(u), divₘₕ(v))`, which expands to
 ``\\sum_{i,j} (\\mathrm{div}_h^{(i)}(u), \\mathrm{div}_h^{(j)}(v))_{\\{1,\\dots,D\\}}``
 through [`inner₊`](@ref)`(left, right, Val(S))`.
 
-See also: [`εₕ`](@ref).
+See also: [`divₕ`](@ref), [`εₕ`](@ref).
 """
-function divₕ(u::LazyOp{D}) where {D}
+function divₘₕ(u::LazyOp{D}) where {D}
     terms = ntuple(i -> _div_term(u, i, Val(D)), Val(D))
     return _DivergenceTerms{D, typeof(terms)}(terms)
 end

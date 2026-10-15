@@ -86,13 +86,13 @@
 # and ``\mathrm{div}_h`` need are the rest of the same [`inner₊`](@ref)`(u, v, Val(S))` family
 # ([#234](https://github.com/gpena/Bramble.jl/issues/234)); the transverse-factor bug that used to
 # make the singletons wrong on a free surface is fixed too
-# ([#236](https://github.com/gpena/Bramble.jl/issues/236)). [`εₕ`](@ref) and [`divₕ`](@ref) build
+# ([#236](https://github.com/gpena/Bramble.jl/issues/236)). [`εₕ`](@ref) and [`divₘₕ`](@ref) build
 # the placements above directly from a composite trial or test function (one call each, over
 # ``u`` as a whole rather than component by component), placing ``\varepsilon^{ii}_h`` on the face
 # centre normal to ``i``, ``\varepsilon^{ij}_h`` on the edge centre the pair ``\{i,j\}`` shares,
 # and ``\mathrm{div}_h\,u_h`` on the cell centre every axis shares, and handing each term to
 # `inner₊` with the ``S`` it needs. The discrete form is exactly `a_h` above, spelled
-# `2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₕ(u), divₕ(v))`.
+# `2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₘₕ(u), divₘₕ(v))`.
 
 using Bramble
 using Bramble: half_spacing
@@ -100,7 +100,7 @@ using ForwardDiff
 using Random
 
 elasticity_form(Vₕ, μ, λ) = form(
-    Vₕ, Vₕ, (u, v) -> 2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₕ(u), divₕ(v)))
+    Vₕ, Vₕ, (u, v) -> 2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₘₕ(u), divₘₕ(v)))
 
 # The compact form above must assemble to exactly the matrix the 27-term hand expansion it       #src
 # replaces would (`test/form/vector_calculus.jl` checks the same equality independently, from     #src
@@ -206,7 +206,7 @@ order_1h = log(err_1h[end - 1] / err_1h[end]) / log(hs[end - 1] / hs[end])
 # pattern the [linear Poisson example](poisson_linear.md) uses and for the same reason: a
 # uniform grid can make a manufactured solution far more accurate than the scheme deserves, and
 # independently drawn random grids give an ``h`` sequence too erratic to read a rate from. A
-# non-uniform grid also makes the staggered weights `inner₊` reads for `εₕ`/`divₕ` non-trivial,
+# non-uniform grid also makes the staggered weights `inner₊` reads for `εₕ`/`divₘₕ` non-trivial,
 # rather than the trivial case a uniform mesh would exercise.
 #
 # Bracketed above as well as below, for the reason poisson_linear.jl gives. The ``H^1``    #src
@@ -260,7 +260,7 @@ end
 round.(tips ./ (-δ_eb), digits = 3)
 
 # Converging on beam theory from below. Write the shear terms with `∇̽ₕ` and `innerₕ` instead of
-# `εₕ`/`divₕ`'s staggered placements (collocating everything at the nodes rather than the
+# `εₕ`/`divₘₕ`'s staggered placements (collocating everything at the nodes rather than the
 # face/edge/cell centres the discrete strain and divergence actually live on) and the same beam
 # on these same three grids gives `+0.00011`, `-0.00005` and `+0.00009`: three to four orders of
 # magnitude too small, and on two of the three deflecting *upward* under a downward load. That is
@@ -355,5 +355,5 @@ deformed_plot(uₕ, vm; label = "von Mises σ", scale = 1.0,
 #   - The [coupled systems tutorial](@ref tutorial_coupled) and the
 #     [space tutorial](@ref space_composite) for the composite space that carries the three
 #     displacement components.
-#   - [`εₕ`](@ref) and [`divₕ`](@ref) in the [API reference](../api.md) for the staggered
+#   - [`εₕ`](@ref) and [`divₘₕ`](@ref) in the [API reference](../api.md) for the staggered
 #     strain and divergence used here.

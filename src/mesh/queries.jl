@@ -293,36 +293,27 @@ See also: [`boundary_symbols`](@ref).
     return map(eltype(Ωₕ), normal_vector(Val(D), symbol))
 end
 
-@inline function normal_vector(::Val{1}, symbol::Symbol)
-    (symbol === :xmin || symbol === :left) && return (-1.0,)
-    (symbol === :xmax || symbol === :right) && return (1.0,)
-    throw(ArgumentError("Unknown 1D boundary symbol: :$symbol. Expected :xmin/:left or :xmax/:right."))
+# One method per dimension, its body one `return` of a literal tuple per row of the table,
+# written when the module loads. A loop over the rows (what `_face_of_symbol` does) gives the
+# same values, but it boxes a computed tuple, and so allocates, when the call is dispatched at
+# run time (a `Val(D)` built from a variable); a literal is a preallocated constant. Nor does a
+# `@generated` method do: its specialisations box their result as well.
+for D in 1:3
+    checks = map(_boundary_faces(Val(D))) do (canonical, alias, axis, side)
+        direction = ntuple(d -> d == axis ? (side == 1 ? -1.0 : 1.0) : 0.0, D)
+        test = :(symbol === $(QuoteNode(canonical)) || symbol === $(QuoteNode(alias)))
+        :($test && return $direction)
+    end
+    @eval @inline function normal_vector(::Val{$D}, symbol::Symbol)
+        $(checks...)
+        return _throw_unknown_boundary_symbol(Val($D), symbol)
+    end
 end
 
-@inline function normal_vector(::Val{2}, symbol::Symbol)
-    (symbol === :xmin || symbol === :left) && return (-1.0, 0.0)
-    (symbol === :xmax || symbol === :right) && return (1.0, 0.0)
-    (symbol === :ymin || symbol === :bottom) && return (0.0, -1.0)
-    (symbol === :ymax || symbol === :top) && return (0.0, 1.0)
-    throw(
-        ArgumentError(
-        "Unknown 2D boundary symbol: :$symbol. Expected :xmin/:left, :xmax/:right, :ymin/:bottom, or :ymax/:top.",
-    ),
-    )
-end
-
-@inline function normal_vector(::Val{3}, symbol::Symbol)
-    (symbol === :xmin || symbol === :back) && return (-1.0, 0.0, 0.0)
-    (symbol === :xmax || symbol === :front) && return (1.0, 0.0, 0.0)
-    (symbol === :ymin || symbol === :left) && return (0.0, -1.0, 0.0)
-    (symbol === :ymax || symbol === :right) && return (0.0, 1.0, 0.0)
-    (symbol === :zmin || symbol === :bottom) && return (0.0, 0.0, -1.0)
-    (symbol === :zmax || symbol === :top) && return (0.0, 0.0, 1.0)
-    throw(
-        ArgumentError(
-        "Unknown 3D boundary symbol: :$symbol. Expected :xmin/:back, :xmax/:front, :ymin/:left, :ymax/:right, :zmin/:bottom, or :zmax/:top.",
-    ),
-    )
+# One line per face, from the table: `:xmin/:left, :xmax/:right, ...`.
+@noinline function _throw_unknown_boundary_symbol(::Val{D}, symbol::Symbol) where {D}
+    expected = join((":$c/:$a" for (c, a, _, _) in _boundary_faces(Val(D))), ", ")
+    throw(ArgumentError("Unknown $(D)D boundary symbol: :$symbol. Expected $expected."))
 end
 
 ################################################################################
@@ -363,31 +354,19 @@ weight is type-stable and allocation-free whether the mask is a runtime value (t
 `inner_Γ`) or a type parameter (the symbolic `InnerGamma`, operators/inner.jl).
 =#
 
-# Canonical symbols and the legacy viewpoint aliases, per dimension. The 3D aliases are not
-# the 2D ones extended: there `:left`/`:right` name the y faces and `:front`/`:back` the x
-# ones (mesh/marker.jl, `boundary_symbol_to_cartesian`). Read from there rather than guessed.
-@inline function _face_of_symbol(::Val{1}, s::Symbol)
-    (s === :xmin || s === :left) && return (1, 1)
-    (s === :xmax || s === :right) && return (1, 2)
-    return _throw_not_a_face(s, 1)
+# The `(axis, side)` of the face `s` names, canonical symbol or alias, or `nothing`. Read from
+# the table of `_BOUNDARY_FACES` (geometry/set.jl), where the 3D aliases are not the 2D ones.
+@inline function _find_face(::Val{D}, s::Symbol) where {D}
+    for (canonical, alias, axis, side) in _boundary_faces(Val(D))
+        (s === canonical || s === alias) && return (axis, side)
+    end
+    return nothing
 end
 
-@inline function _face_of_symbol(::Val{2}, s::Symbol)
-    (s === :xmin || s === :left) && return (1, 1)
-    (s === :xmax || s === :right) && return (1, 2)
-    (s === :ymin || s === :bottom) && return (2, 1)
-    (s === :ymax || s === :top) && return (2, 2)
-    return _throw_not_a_face(s, 2)
-end
-
-@inline function _face_of_symbol(::Val{3}, s::Symbol)
-    (s === :xmin || s === :back) && return (1, 1)
-    (s === :xmax || s === :front) && return (1, 2)
-    (s === :ymin || s === :left) && return (2, 1)
-    (s === :ymax || s === :right) && return (2, 2)
-    (s === :zmin || s === :bottom) && return (3, 1)
-    (s === :zmax || s === :top) && return (3, 2)
-    return _throw_not_a_face(s, 3)
+@inline function _face_of_symbol(::Val{D}, s::Symbol) where {D}
+    face = _find_face(Val(D), s)
+    face === nothing && _throw_not_a_face(s, D)
+    return face
 end
 
 @noinline function _throw_not_a_face(s::Symbol, D::Int)

@@ -141,11 +141,10 @@ end
 _full_prototype(jp::Matrix) = fill!(similar(jp), true)
 _full_prototype(jp) = jp
 
-# A problem with no `p` (`NullParameters`, on every p-less `ode_problem` and
-# `second_order_ode_problem`) gets the quadrature adjoint: on one with a singular mass
-# matrix, every `InterpolatingAdjoint` variant and `BacksolveAdjoint` hit SciMLSensitivity's
-# `adjoint(::Nothing)` (SciML/SciMLSensitivity.jl#1703), and `GaussAdjoint` throws
-# `length(::NullParameters)`.
+# A problem with no `p` (`NullParameters`, on every p-less `ode_problem`) gets the
+# quadrature adjoint: on one with a singular mass matrix, every `InterpolatingAdjoint`
+# variant and `BacksolveAdjoint` hit SciMLSensitivity's `adjoint(::Nothing)`
+# (SciML/SciMLSensitivity.jl#1703), and `GaussAdjoint` throws `length(::NullParameters)`.
 # With a `p` the interpolating adjoint stays, the path gpena/Bramble.jl#239 validated.
 _default_sensealg(::SciMLBase.NullParameters) = QuadratureAdjoint(autojacvec = false)
 _default_sensealg(::Any) = InterpolatingAdjoint(autojacvec = false)

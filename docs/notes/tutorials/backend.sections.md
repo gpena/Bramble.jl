@@ -73,7 +73,7 @@ ExecutionPolicy
 
 ## Policy hierarchy: GpuKernel
 
-[`GpuKernel`](@ref) runs on a device and needs a GPU backend, described in the reference below. The older names `CpuBatch` and `GpuAsync` remain as deprecated aliases of `CpuPolyester` and `GpuKernel`.
+[`GpuKernel`](@ref) runs on a device and needs a GPU backend, described in the reference below.
 
 ## Locality and strategy
 

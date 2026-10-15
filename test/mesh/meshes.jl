@@ -439,6 +439,59 @@ import Bramble:
             @test locate_cell(M3, (0.1, 0.3, 0.8)) == CartesianIndex(1, 2, 4)
         end
     end
+
+    # Every symbol and alias per dimension, as literals. No mesh is built here, so the 3D
+    # cases are not behind the 3D gate: the unit group runs them.
+    @testset "Boundary normals and face masks" begin
+        @testset "normal_vector" begin
+            for (sym, n) in ((:xmin, (-1.0,)), (:left, (-1.0,)), (:xmax, (1.0,)), (:right, (1.0,)))
+                @test normal_vector(Val(1), sym) == n
+            end
+            for (sym, n) in ((:xmin, (-1.0, 0.0)), (:left, (-1.0, 0.0)), (:xmax, (1.0, 0.0)),
+                (:right, (1.0, 0.0)), (:ymin, (0.0, -1.0)), (:bottom, (0.0, -1.0)),
+                (:ymax, (0.0, 1.0)), (:top, (0.0, 1.0)))
+                @test normal_vector(Val(2), sym) == n
+            end
+            for (sym, n) in ((:xmin, (-1.0, 0.0, 0.0)), (:back, (-1.0, 0.0, 0.0)),
+                (:xmax, (1.0, 0.0, 0.0)), (:front, (1.0, 0.0, 0.0)),
+                (:ymin, (0.0, -1.0, 0.0)), (:left, (0.0, -1.0, 0.0)),
+                (:ymax, (0.0, 1.0, 0.0)), (:right, (0.0, 1.0, 0.0)),
+                (:zmin, (0.0, 0.0, -1.0)), (:bottom, (0.0, 0.0, -1.0)),
+                (:zmax, (0.0, 0.0, 1.0)), (:top, (0.0, 0.0, 1.0)))
+                @test normal_vector(Val(3), sym) == n
+            end
+            @test_throws ArgumentError normal_vector(Val(3), :inlet)
+        end
+
+        @testset "face masks" begin
+            for (sym, m) in ((:xmin, ((true, false),)), (:left, ((true, false),)),
+                (:xmax, ((false, true),)), (:right, ((false, true),)))
+                @test Bramble._face_mask(Val(1), (sym,)) == m
+            end
+            for (sym, m) in ((:xmin, ((true, false), (false, false))),
+                (:left, ((true, false), (false, false))),
+                (:xmax, ((false, true), (false, false))),
+                (:right, ((false, true), (false, false))),
+                (:ymin, ((false, false), (true, false))),
+                (:bottom, ((false, false), (true, false))),
+                (:ymax, ((false, false), (false, true))),
+                (:top, ((false, false), (false, true))))
+                @test Bramble._face_mask(Val(2), (sym,)) == m
+            end
+            x0 = ((true, false), (false, false), (false, false))
+            x1 = ((false, true), (false, false), (false, false))
+            y0 = ((false, false), (true, false), (false, false))
+            y1 = ((false, false), (false, true), (false, false))
+            z0 = ((false, false), (false, false), (true, false))
+            z1 = ((false, false), (false, false), (false, true))
+            for (sym, m) in ((:xmin, x0), (:back, x0), (:xmax, x1), (:front, x1),
+                (:ymin, y0), (:left, y0), (:ymax, y1), (:right, y1),
+                (:zmin, z0), (:bottom, z0), (:zmax, z1), (:top, z1))
+                @test Bramble._face_mask(Val(3), (sym,)) == m
+            end
+            @test Bramble._face_mask(Val(3), (:boundary,)) == ((true, true), (true, true), (true, true))
+        end
+    end
 end
 
 # A mesh type that implements nothing, used to reach the interface fallbacks.

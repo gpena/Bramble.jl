@@ -664,12 +664,11 @@ end
         end
     end
 
-    # The deprecated `ast` keyword assembles the AST it is handed; handing it the form's
-    # own gives what the form assembles without it, and the deprecation is announced
-    # (when `--depwarn` is on; `@test_deprecated` passes the value through otherwise).
-    @testset "Deprecated ast keyword" begin
-        b = @test_deprecated r"`ast` keyword" assemble(l; ast = l.ast)
-        @test b == assemble(l)
+    # The `ast` keyword was removed: a form assembles against its own resolved tree, so
+    # passing one is no longer accepted.
+    @testset "Removed ast keyword" begin
+        @test_throws MethodError assemble(l; ast = l.ast)
+        @test assemble(l) isa AbstractVector
     end
 
     # Distinct trial and test spaces.

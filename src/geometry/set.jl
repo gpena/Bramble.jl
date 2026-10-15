@@ -251,16 +251,18 @@ Return the coordinate point representation type for a point in `X`.
 
 Query whether point `x` is contained in the closed set `X`.
 """
-@inline Base.in(x::Number, X::CartesianProduct{1}) = (X.box[1][1] <= x <= X.box[1][2])
-@inline Base.in(x::Tuple{Vararg{Number, D}}, X::CartesianProduct{D}) where {D} = all(
-    i -> (X.box[i][1] <= x[i] <=
-          X.box[i][2]), 1:D)
-
 # Unrolled over `Val(D)` rather than reduced over `1:D` to prevent heap allocations
 # when testing containment of an AbstractVector.
+@inline _in_box(x, X::CartesianProduct{D}) where {D} = all(
+    ntuple(i -> (X.box[i][1] <= x[i] <= X.box[i][2]), Val(D))
+)
+
+@inline Base.in(x::Number, X::CartesianProduct{1}) = (X.box[1][1] <= x <= X.box[1][2])
+@inline Base.in(x::Tuple{Vararg{Number, D}}, X::CartesianProduct{D}) where {D} = _in_box(x, X)
+
 @inline function Base.in(x::AbstractVector{<:Number}, X::CartesianProduct{D}) where {D}
     length(x) == D || return false
-    return all(ntuple(i -> (X.box[i][1] <= x[i] <= X.box[i][2]), Val(D)))
+    return _in_box(x, X)
 end
 @inline Base.in(x, X::CartesianProduct) = false
 
@@ -362,46 +364,50 @@ Return the canonical coordinate-aligned boundary symbols for dimension `D` or se
 Legacy viewpoint symbols (`:left`, `:right`, `:bottom`, `:top`, `:front`, `:back`) remain
 supported as backward-compatible aliases across the boundary marker interface.
 """
-@inline boundary_symbols(::CartesianProduct{1}) = (:xmin, :xmax)
-@inline boundary_symbols(::CartesianProduct{2}) = (:xmin, :xmax, :ymin, :ymax)
-@inline boundary_symbols(::CartesianProduct{3}) = (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
-@inline boundary_symbols(::Type{<:CartesianProduct{1}}) = (:xmin, :xmax)
-@inline boundary_symbols(::Type{<:CartesianProduct{2}}) = (:xmin, :xmax, :ymin, :ymax)
-@inline boundary_symbols(::Type{<:CartesianProduct{3}}) = (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
+@inline boundary_symbols(::CartesianProduct{D}) where {D} = _canonical_boundary_symbols(Val(D))
+@inline boundary_symbols(::Type{<:CartesianProduct{D}}) where {D} = _canonical_boundary_symbols(Val(D))
+# A runtime integer chooses among literal dimensions: `Val(D)` of a runtime `D` builds a type.
 function boundary_symbols(D::Integer)
-    D == 1 && return (:xmin, :xmax)
-    D == 2 && return (:xmin, :xmax, :ymin, :ymax)
-    D == 3 && return (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
-    return error(
-        "boundary_symbols is not defined for $(D)D domains. " *
-        "Provide explicit boundary names via the markers() interface.",
-    )
+    D == 1 && return _canonical_boundary_symbols(Val(1))
+    D == 2 && return _canonical_boundary_symbols(Val(2))
+    D == 3 && return _canonical_boundary_symbols(Val(3))
+    return _no_boundary_symbols(D)
 end
-@noinline function boundary_symbols(::Type{<:CartesianProduct{D}}) where {D}
+
+# The boundary faces of each dimension, one row per face: `(canonical, alias, axis, side)`,
+# with `side` 1 for the minimum and 2 for the maximum. `boundary_symbols`,
+# `_all_boundary_symbols`, `_boundary_symbol_alias`, `_face_of_symbol` (mesh/queries.jl) and
+# the directions of `normal_vector` are all read from these rows. The aliases are per
+# dimension because they are viewpoint names, not the 2D ones extended: in 3D `:left` and
+# `:right` name the y faces and `:back` and `:front` the x ones. `boundary_symbol_to_cartesian`
+# (mesh/marker.jl) is a further table, written by hand.
+const _BOUNDARY_FACES = (
+    ((:xmin, :left, 1, 1), (:xmax, :right, 1, 2)),
+    ((:xmin, :left, 1, 1), (:xmax, :right, 1, 2), (:ymin, :bottom, 2, 1), (:ymax, :top, 2, 2)),
+    ((:xmin, :back, 1, 1), (:xmax, :front, 1, 2), (:ymin, :left, 2, 1),
+        (:ymax, :right, 2, 2), (:zmin, :bottom, 3, 1), (:zmax, :top, 3, 2))
+)
+
+# The rows of dimension `D`; empty beyond 3D. `D` is a type parameter and `_BOUNDARY_FACES` a
+# constant, so the lookup folds to the row tuple at compile time.
+@inline _boundary_faces(::Val{D}) where {D} = D in 1:3 ? _BOUNDARY_FACES[D] : ()
+
+@noinline function _no_boundary_symbols(D::Integer)
     error(
         "boundary_symbols is not defined for $(D)D domains. " *
         "Provide explicit boundary names via the markers() interface.",
     )
 end
 
+@inline function _canonical_boundary_symbols(v::Val{D}) where {D}
+    faces = _boundary_faces(v)
+    isempty(faces) && _no_boundary_symbols(D)
+    return map(first, faces)
+end
+
 # All recognized boundary symbols (canonical + legacy aliases) for validation
-@inline _all_boundary_symbols(::CartesianProduct{1}) = (:xmin, :xmax, :left, :right)
-@inline function _all_boundary_symbols(::CartesianProduct{2})
-    return (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)
+@inline function _all_boundary_symbols(::Type{<:CartesianProduct{D}}) where {D}
+    faces = _boundary_faces(Val(D))
+    return (map(first, faces)..., map(f -> f[2], faces)...)
 end
-@inline function _all_boundary_symbols(::CartesianProduct{3})
-    return (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :front, :left, :right, :bottom, :top)
-end
-@inline _all_boundary_symbols(::Type{<:CartesianProduct{1}}) = (:xmin, :xmax, :left, :right)
-@inline function _all_boundary_symbols(::Type{<:CartesianProduct{2}})
-    return (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)
-end
-@inline function _all_boundary_symbols(::Type{<:CartesianProduct{3}})
-    return (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :front, :left, :right, :bottom, :top)
-end
-@inline function _all_boundary_symbols(D::Integer)
-    D == 1 && return (:xmin, :xmax, :left, :right)
-    D == 2 && return (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)
-    D == 3 && return (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :front, :left, :right, :bottom, :top)
-    return ()
-end
+@inline _all_boundary_symbols(::CartesianProduct{D}) where {D} = _all_boundary_symbols(CartesianProduct{D})

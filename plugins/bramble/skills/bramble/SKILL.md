@@ -25,8 +25,8 @@ Start from the closest one:
 | nonlinear Poisson, 1D | `examples/poisson_nonlinear.jl` | Picard with in-place reassembly; Newton with a sparse AD Jacobian |
 | convection-diffusion, 2D | `examples/convection_diffusion.jl` | a first-order term, `Mₕ(u)` paired with `∇ₕ(v)` |
 | heat equation, 1D | `examples/heat.jl` | `semidiscretize`, a time-dependent source, OrdinaryDiffEq |
-| wave equation, 2D | `examples/wave.jl` | second-order semidiscretisation, energy conservation |
-| linear elasticity, 2D | `examples/elasticity.jl` | a vector field in `Wₕ^Val(2)`, `εₕ`, `divₕ` |
+| wave equation, 2D | `examples/wave.jl` | the 2D wave page through `ode_problem`, energy conservation |
+| linear elasticity, 2D | `examples/elasticity.jl` | a vector field in `Wₕ^Val(2)`, `εₕ`, `divₘₕ` |
 | coupled reaction-diffusion | `examples/coupled_reaction_diffusion.jl` | two unknowns in one composite space, Newton |
 | point sources | `examples/point_source.jl` | `dirac`, boundary flux with `Bramble.reaction` |
 

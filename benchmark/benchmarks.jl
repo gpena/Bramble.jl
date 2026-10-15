@@ -356,12 +356,8 @@ let W1 = gridspace(_mesh1()), f1 = Rₕ(W1, sin), v1 = Rₕ(W1, cos), l1 = Bramb
 
     # filling a vector that already exists, which is the time-loop call.
     #
-    # None of these pass an `ast`. The keyword (and `assemble_parallel!`'s positional
-    # equivalent) is deprecated because it brings no benefit, and passing
-    # it routes through `_warn_ast_keyword`, whose `Base.depwarn` costs 272 B in 2
-    # allocations on *every* call, a fixed cost independent of grid size. That is what the
-    # `ALLOCATION_BOUNDS` entries below are guarding: a form assembles against its own
-    # resolved AST at zero allocations, and passing the deprecated keyword is what breaks it.
+    # None of these pass an `ast`: a form assembles against its own resolved AST, at zero
+    # allocations, which is what the `ALLOCATION_BOUNDS` entries below are guarding.
     g["assemble! 1D"] = @benchmarkable Bramble.assemble!($b1, $l1)
     g["assemble_parallel! 1D"] = @benchmarkable Bramble.assemble_parallel!($b1, $l1)
     g["assemble! 2D"] = @benchmarkable Bramble.assemble!($b2, $l2)

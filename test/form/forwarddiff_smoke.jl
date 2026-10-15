@@ -7,7 +7,7 @@ module FormForwarddiffSmokeTests
 
 using Test
 using Bramble
-using Bramble: semidiscretize, semidiscretize_second_order
+using Bramble: semidiscretize
 using ForwardDiff
 using LinearAlgebra: Diagonal
 
@@ -77,13 +77,6 @@ end
                 ForwardDiff.Dual.(u, 0.0), nothing, 0.0)
             @test ForwardDiff.value.(du) ≈ du1 rtol = 1e-12
             @test map(d -> ForwardDiff.partials(d)[1], du) ≈ dA rtol = 1e-12
-
-            sd2 = semidiscretize_second_order(aκ, l; dirichlet = :boundary)
-            @test eltype(Bramble.mass_matrix(sd2)) === Float64
-            dv = sd2(zeros(eltype(Bramble.stiffness_matrix(sd2)), n), zeros(n),
-                ForwardDiff.Dual.(u, 0.0), nothing, 0.0)
-            @test ForwardDiff.value.(dv) ≈ du1 rtol = 1e-12
-            @test map(d -> ForwardDiff.partials(d)[1], dv) ≈ dA rtol = 1e-12
         end
     end
 end

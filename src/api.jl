@@ -5,8 +5,8 @@
 export backend, gpu_backend, metal_backend, csr_backend
 export Serial, Parallel
 
-public ExecutionPolicy, CpuPolicy, CpuSerial, CpuThreaded, CpuPolyester, CpuBatch, GpuOffload
-public GpuPolicy, GpuKernel, GpuAsync
+public ExecutionPolicy, CpuPolicy, CpuSerial, CpuThreaded, CpuPolyester, GpuOffload
+public GpuPolicy, GpuKernel
 public locality, Locality, HostLocality, DeviceLocality
 public vector, matrix, metal_sparse_csr, metal_sparse_csc
 public vector_type, matrix_type, backend_types, execution_policy
@@ -54,7 +54,7 @@ public weights, interpolation_matrix
 
 # --- Discrete Differential & Difference Operators ---
 export ∇ₕ
-export divₕ, curlₕ, Δₕ, εₕ
+export divₕ, divₘₕ, curlₕ, Δₕ, εₕ
 export ∇̃ₕ, diṽₕ, curl̃ₕ
 export ∇cₕ, divcₕ, curlcₕ, εcₕ
 export ∇̽ₕ, div̽ₕ, curl̽ₕ, ε̽ₕ
@@ -105,9 +105,8 @@ export expression
 export is_separable, kronecker_operator
 export matrix_free_operator
 export pde_solve
-export semidiscretize, semidiscretize_second_order
+export semidiscretize
 export ode_problem, linear_problem, nonlinear_problem
-export second_order_ode_problem
 export amg_preconditioner
 export ilu_preconditioner
 export jacobi_preconditioner
@@ -117,7 +116,7 @@ export prolongate!, coarsen!
 export jacobi_smoother, chebyshev_smoother, red_black_gauss_seidel, smooth!
 export gmg_preconditioner, gmg_solve
 
-public KroneckerLinearOperator, MatrixFreeOperator, ode_function, second_order_ode_function
+public KroneckerLinearOperator, MatrixFreeOperator, ode_function
 public AbstractMatrixFreePreconditioner, JacobiPreconditioner, ChebyshevPreconditioner
 public FDMPreconditioner
 public max_eigenvalue_estimate
@@ -126,8 +125,8 @@ public GMGPreconditioner, v_cycle!, w_cycle!, fmg!
 public jacobian!, jacobian_prototype, jacobian_pattern, ast_sparsity_detector
 public reaction, reaction_density, reaction!, reaction_density!
 public allocate_system_matrix, type_cached_assemble!, evaluate!, assemble_parallel!
-public Semidiscretization, SemidiscretizeRHS, SecondOrderSemidiscretization
-public mass_matrix, operator_matrix, damping_matrix, stiffness_matrix, block_mass_matrix
+public Semidiscretization, SemidiscretizeRHS
+public mass_matrix, operator_matrix
 public SuiteSparseFactorization, suitesparse_factorize
 public AccelerateFactorization
 public MUMPSFactorization

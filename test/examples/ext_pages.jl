@@ -53,12 +53,13 @@ using ..TestUtils: _run_example_page
         _run_example_page(:amg_preconditioning)
     end
 
-    # The second-order (wave) counterpart of the heat-equation page: it steps a
-    # `SecondOrderODEProblem` with `Rodas5P`, so it needs `OrdinaryDiffEqRosenbrock` rather
-    # than the BDF stepper above. Its assertions pin the error at `t = 1` against the exact
-    # standing wave, bracketed away from zero so a solution reproduced by construction would
-    # fail; the relative energy drift the page reports; and the second-order spatial rate
-    # over three meshes.
+    # The wave counterpart of the heat-equation page: it writes the wave as a first-order
+    # system for `(u, u̇)` on a two-leaf space, hands it to `semidiscretize` and
+    # `ode_problem`, and steps it with `Rodas5P`, so it needs `OrdinaryDiffEqRosenbrock`
+    # rather than the BDF stepper above. Its assertions pin the stacked mass matrix, the
+    # error at `t = 1` against the exact standing wave, bracketed away from zero so a
+    # solution reproduced by construction would fail; the relative energy drift the page
+    # reports; and the second-order spatial rate over three meshes.
     @testset "2D wave equation page" begin
         _run_example_page(:wave_equation_2d)
     end

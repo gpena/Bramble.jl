@@ -82,10 +82,9 @@ end
 ```
 """
 @inline function evaluate!(
-        scratch::AbstractVector, form::LinearForm, vₕ::VectorElement; ast = nothing
+        scratch::AbstractVector, form::LinearForm, vₕ::VectorElement
 )
-    resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:evaluate!); ast)
-    _assemble_linear!(scratch, form, resolved_ast, nothing, nothing)
+    _assemble_linear!(scratch, form, form.ast, nothing, nothing)
     return _contract_values(scratch, parent(vₕ))
 end
 
@@ -102,7 +101,7 @@ function _contract_values(a::AbstractVector, b::AbstractVector)
     return acc
 end
 
-@noinline function evaluate!(::AbstractVector, ::LinearForm, v::AbstractVector; kwargs...)
+@noinline function evaluate!(::AbstractVector, ::LinearForm, v::AbstractVector)
     throw(
         ArgumentError(
         "a linear form contracts against an element of its test space, not a bare vector: " *
@@ -639,13 +638,12 @@ Runs serially or across threads following `test_space(form)`'s backend
 [`assemble_parallel!`](@ref) always threads regardless of the backend policy.
 """
 function assemble(
-        form::LinearForm; dirichlet = nothing, dirichlet_components = nothing, ast = nothing
+        form::LinearForm; dirichlet = nothing, dirichlet_components = nothing
 )
-    resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble); ast)
     space = test_space(form)
     # `parent(element(space, T))` reuses the space's backend container type.
-    b = parent(element(space, _assembled_eltype(resolved_ast, space)))
-    return _assemble_linear!(b, form, resolved_ast, dirichlet, dirichlet_components)
+    b = parent(element(space, _assembled_eltype(form.ast, space)))
+    return _assemble_linear!(b, form, form.ast, dirichlet, dirichlet_components)
 end
 
 # The element type of the assembled vector is the one the form's own weights have, promoted
@@ -1384,19 +1382,16 @@ function assemble!(
         b::AbstractVector,
         form::LinearForm;
         dirichlet = nothing,
-        dirichlet_components = nothing,
-        ast = nothing
+        dirichlet_components = nothing
 )
-    resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble!); ast)
-    return _assemble_linear!(b, form, resolved_ast, dirichlet, dirichlet_components)
+    return _assemble_linear!(b, form, form.ast, dirichlet, dirichlet_components)
 end
 
-# The shared core behind `assemble!` and `assemble`: takes its `ast` positionally, already
-# resolved and already past the deprecation check, so neither public entry point warns twice
-# calling into the other. Split on where the test space lives, a type-level choice the
-# compiler folds away: a host space sweeps `b` directly, a device one goes through a host
-# buffer (`_assemble_linear_device!`, below). The length check comes first, before any write
-# and before the device path builds its buffer.
+# The shared core behind `assemble!` and `assemble`: takes the form's resolved `ast`
+# positionally, so both public entry points hand it the same tree. Split on where the test
+# space lives, a type-level choice the compiler folds away: a host space sweeps `b`
+# directly, a device one goes through a host buffer (`_assemble_linear_device!`, below). The
+# length check comes first, before any write and before the device path builds its buffer.
 @inline function _assemble_linear!(
         b::AbstractVector, form::LinearForm, ast, dirichlet, dirichlet_components
 )
@@ -1561,11 +1556,10 @@ can differ from the serial sweep in the last bits; repeated threaded calls agree
 On a device test space the threaded sweep runs on a host
 mirror into a host buffer, uploaded to `b` in one `copyto!`, as in [`assemble!`](@ref).
 """
-function assemble_parallel!(b::AbstractVector, form::LinearForm, ast = nothing)
-    resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)
+function assemble_parallel!(b::AbstractVector, form::LinearForm)
     _check_linear_length(b, form.test_space)
     return _assemble_linear_parallel!(
-        locality(backend(form.test_space)), b, form.test_space, resolved_ast)
+        locality(backend(form.test_space)), b, form.test_space, form.ast)
 end
 
 function _assemble_linear_parallel!(::HostLocality, b::AbstractVector, space, ast)

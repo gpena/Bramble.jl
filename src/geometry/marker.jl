@@ -84,46 +84,6 @@ Return the tuple of predicate condition markers configured in `domain_markers`.
 @inline conditions(domain_markers::DomainMarkers) = domain_markers.conditions
 
 """
-    label_identifiers(domain_markers::DomainMarkers)
-    labels(domain_markers::DomainMarkers)
-
-Return a tuple of the `Symbol` label of every marker in `domain_markers`.
-
-Concatenates the per-category labels of `symbols`, `tuples`, and `conditions` as a single
-compile-time-unrolled tuple build, so this allocates 0 bytes. For the labels of one
-category alone, [`label_symbols`](@ref), [`label_tuples`](@ref), or
-[`label_conditions`](@ref) are equally zero-allocation.
-"""
-@inline function label_identifiers(domain_markers::DomainMarkers)
-    (; symbols, tuples, conditions) = domain_markers
-    return (map(label, symbols)..., map(label, tuples)..., map(label, conditions)...)
-end
-
-@inline labels(domain_markers::DomainMarkers) = label_identifiers(domain_markers)
-
-"""
-    label_symbols(domain_markers::DomainMarkers)
-
-Return an iterator yielding labels of all single-symbol markers.
-"""
-@inline label_symbols(domain_markers::DomainMarkers) = (label(marker)::Symbol for marker in symbols(domain_markers))
-
-"""
-    label_tuples(domain_markers::DomainMarkers)
-
-Return an iterator yielding labels of all multi-symbol markers.
-"""
-@inline label_tuples(domain_markers::DomainMarkers) = (label(marker)::Symbol for marker in tuples(domain_markers))
-
-"""
-    label_conditions(domain_markers::DomainMarkers)
-
-Return an iterator yielding labels of all condition predicate markers.
-"""
-@inline label_conditions(domain_markers::DomainMarkers) = (label(marker)::Symbol
-for marker in conditions(domain_markers))
-
-"""
     markers(space_set::CartesianProduct, pairs::Pair...) -> DomainMarkers
     markers(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair...) -> DomainMarkers
 
@@ -173,6 +133,20 @@ end
 # Identifier kinds that name several boundary symbols; stored as `Marker{Set{Symbol}}`.
 const _SymbolCollection = Union{NTuple{N, Symbol} where {N}, AbstractVector{Symbol}, AbstractSet{Symbol}}
 
+# The point a predicate is probed at: the centre of the space set, a scalar in 1D.
+_marker_probe_point(space_set::CartesianProduct{D}) where {D} = D == 1 ? center(space_set)[1] : center(space_set)
+
+# Call predicate `f` on the probe arguments and require a `Bool` back.
+function _check_marker_predicate(lbl::Symbol, D::Integer, f, args...)
+    res = try
+        f(args...)
+    catch err
+        _throw_invalid_marker_predicate_call(lbl, D, err)
+    end
+    res isa Bool || _throw_non_bool_marker_predicate(lbl, res)
+    return nothing
+end
+
 function _validate_marker_pair(space_set::CartesianProduct{D}, p::Pair) where {D}
     lbl = p.first
     ident = p.second
@@ -187,15 +161,7 @@ function _validate_marker_pair(space_set::CartesianProduct{D}, p::Pair) where {D
             end
         end
     elseif ident isa Function
-        probe = D == 1 ? center(space_set)[1] : center(space_set)
-        res = try
-            ident(probe)
-        catch err
-            _throw_invalid_marker_predicate_call(lbl, D, err)
-        end
-        if !(res isa Bool)
-            _throw_non_bool_marker_predicate(lbl, res)
-        end
+        _check_marker_predicate(lbl, D, ident, _marker_probe_point(space_set))
     else
         _throw_unsupported_marker_identifier(lbl, ident)
     end
@@ -210,18 +176,11 @@ function _validate_marker_pair(
     if ident isa Symbol || ident isa _SymbolCollection
         _validate_marker_pair(space_set, p)
     elseif ident isa Function
-        probe_x = D == 1 ? center(space_set)[1] : center(space_set)
+        probe_x = _marker_probe_point(space_set)
         probe_t = first(extrema(time_set))
         hasmethod(ident, Tuple{typeof(probe_x), typeof(probe_t)}) ||
             _throw_time_marker_needs_xt(lbl)
-        res = try
-            ident(probe_x, probe_t)
-        catch err
-            _throw_invalid_marker_predicate_call(lbl, D, err)
-        end
-        if !(res isa Bool)
-            _throw_non_bool_marker_predicate(lbl, res)
-        end
+        _check_marker_predicate(lbl, D, ident, probe_x, probe_t)
     else
         _throw_unsupported_marker_identifier(lbl, ident)
     end
@@ -309,10 +268,6 @@ end
     return map(p -> Marker(p.first, p.second), fn_pairs)
 end
 
-@inline process_identifier(::CartesianProduct, identifier::Symbol) = identifier
-@inline process_identifier(::CartesianProduct, identifier::NTuple{N, Symbol}) where {N} = Set(identifier)
-@inline process_identifier(::CartesianProduct, identifier::AbstractVector{Symbol}) = Set(identifier)
-
 """
     EvaluatedDomainMarkers(original_markers::DomainMarkers, evaluation_time::Number)
 
@@ -328,20 +283,6 @@ struct EvaluatedDomainMarkers{M <: DomainMarkers, T <: Number}
     original_markers::M
     evaluation_time::T
 end
-
-"""
-    symbols(edm::EvaluatedDomainMarkers) -> Tuple
-
-Return single-symbol markers from the underlying domain markers.
-"""
-@inline symbols(edm::EvaluatedDomainMarkers) = symbols(edm.original_markers)
-
-"""
-    tuples(edm::EvaluatedDomainMarkers) -> Tuple
-
-Return multi-symbol markers from the underlying domain markers.
-"""
-@inline tuples(edm::EvaluatedDomainMarkers) = tuples(edm.original_markers)
 
 """
     conditions(edm::EvaluatedDomainMarkers) -> Tuple
@@ -406,31 +347,6 @@ end
 end
 
 """
-    label_identifiers(edm::EvaluatedDomainMarkers)
-    labels(edm::EvaluatedDomainMarkers)
-
-Return a tuple of the `Symbol` label of every marker in evaluated marker collection `edm`.
-
-Zero-allocation, like [`label_identifiers`](@ref label_identifiers(::DomainMarkers)).
-"""
-@inline label_identifiers(edm::EvaluatedDomainMarkers) = (
-    map(label, symbols(edm))...,
-    map(label, tuples(edm))...,
-    map(label, conditions(edm))...
-)
-
-@inline labels(edm::EvaluatedDomainMarkers) = label_identifiers(edm)
-
-@inline label_symbols(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in symbols(edm))
-
-@inline label_tuples(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in tuples(edm))
-
-@inline label_conditions(edm::EvaluatedDomainMarkers) = (label(m)::Symbol for m in conditions(edm))
-
-@inline Base.length(edm::EvaluatedDomainMarkers) = length(edm.original_markers)
-@inline Base.isempty(edm::EvaluatedDomainMarkers) = isempty(edm.original_markers)
-
-"""
     (dm::DomainMarkers)(t::Number) -> EvaluatedDomainMarkers
 
 Evaluate the condition markers of `dm` at timestamp `t`. Each `(x, t)` predicate is fixed at
@@ -450,8 +366,8 @@ Kept separate from [`EvaluatedDomainMarkers`](@ref) rather than adding a `p` fie
 two-argument `Base.Fix2(identifier(m), t)` this file already builds for the `(x, t)` case
 would otherwise need a runtime branch on whether `p` is present, and this exact kind of
 branch-carrying `Union`/optional field is what made Enzyme's strict-aliasing type analysis
-reject `AnySegment{D}` (gpena/Bramble.jl#240) -- a fresh concrete type costs a few duplicated
-one-line accessors instead, and keeps every existing `EvaluatedDomainMarkers` call site
+reject `AnySegment{D}` (gpena/Bramble.jl#240) -- a fresh concrete type costs only the two
+`conditions` bodies, which differ, and keeps every existing `EvaluatedDomainMarkers` call site
 untouched.
 
 # Fields
@@ -473,9 +389,6 @@ predicate is fixed at `(t, p)` and each spatial `x` predicate is kept as it is; 
 [`conditions`](@ref conditions(::EvaluatedParametricDomainMarkers)).
 """
 (dm::DomainMarkers)(t::Number, p) = EvaluatedParametricDomainMarkers(dm, t, p)
-
-@inline symbols(edm::EvaluatedParametricDomainMarkers) = symbols(edm.original_markers)
-@inline tuples(edm::EvaluatedParametricDomainMarkers) = tuples(edm.original_markers)
 
 """
     conditions(edm::EvaluatedParametricDomainMarkers) -> Tuple
@@ -511,20 +424,68 @@ function conditions(edm::EvaluatedParametricDomainMarkers)
     )
 end
 
-@inline label_identifiers(edm::EvaluatedParametricDomainMarkers) = (
-    map(label, symbols(edm))...,
-    map(label, tuples(edm))...,
-    map(label, conditions(edm))...
+# The accessors the two evaluated types share are written once over their union, and the
+# label functions once over that union plus `DomainMarkers`.
+const _EvaluatedMarkers = Union{EvaluatedDomainMarkers, EvaluatedParametricDomainMarkers}
+const _MarkerCollection = Union{DomainMarkers, _EvaluatedMarkers}
+
+"""
+    symbols(edm::Union{EvaluatedDomainMarkers, EvaluatedParametricDomainMarkers}) -> Tuple
+
+Return single-symbol markers from the underlying domain markers.
+"""
+@inline symbols(edm::_EvaluatedMarkers) = symbols(edm.original_markers)
+
+"""
+    tuples(edm::Union{EvaluatedDomainMarkers, EvaluatedParametricDomainMarkers}) -> Tuple
+
+Return multi-symbol markers from the underlying domain markers.
+"""
+@inline tuples(edm::_EvaluatedMarkers) = tuples(edm.original_markers)
+
+@inline Base.length(edm::_EvaluatedMarkers) = length(edm.original_markers)
+@inline Base.isempty(edm::_EvaluatedMarkers) = isempty(edm.original_markers)
+
+"""
+    label_identifiers(markers)
+    labels(markers)
+
+Return a tuple of the `Symbol` label of every marker in `markers`, a [`DomainMarkers`](@ref),
+an [`EvaluatedDomainMarkers`](@ref) or an [`EvaluatedParametricDomainMarkers`](@ref).
+
+Concatenates the per-category labels of `symbols`, `tuples`, and `conditions` as a single
+compile-time-unrolled tuple build, so this allocates 0 bytes. For the labels of one
+category alone, [`label_symbols`](@ref), [`label_tuples`](@ref), or
+[`label_conditions`](@ref) are equally zero-allocation.
+"""
+@inline label_identifiers(markers::_MarkerCollection) = (
+    map(label, symbols(markers))...,
+    map(label, tuples(markers))...,
+    map(label, conditions(markers))...
 )
 
-@inline labels(edm::EvaluatedParametricDomainMarkers) = label_identifiers(edm)
+@inline labels(markers::_MarkerCollection) = label_identifiers(markers)
 
-@inline label_symbols(edm::EvaluatedParametricDomainMarkers) = (label(m)::Symbol for m in symbols(edm))
-@inline label_tuples(edm::EvaluatedParametricDomainMarkers) = (label(m)::Symbol for m in tuples(edm))
-@inline label_conditions(edm::EvaluatedParametricDomainMarkers) = (label(m)::Symbol for m in conditions(edm))
+"""
+    label_symbols(markers)
 
-@inline Base.length(edm::EvaluatedParametricDomainMarkers) = length(edm.original_markers)
-@inline Base.isempty(edm::EvaluatedParametricDomainMarkers) = isempty(edm.original_markers)
+Return an iterator yielding labels of all single-symbol markers.
+"""
+@inline label_symbols(markers::_MarkerCollection) = (label(m)::Symbol for m in symbols(markers))
+
+"""
+    label_tuples(markers)
+
+Return an iterator yielding labels of all multi-symbol markers.
+"""
+@inline label_tuples(markers::_MarkerCollection) = (label(m)::Symbol for m in tuples(markers))
+
+"""
+    label_conditions(markers)
+
+Return an iterator yielding labels of all condition predicate markers.
+"""
+@inline label_conditions(markers::_MarkerCollection) = (label(m)::Symbol for m in conditions(markers))
 
 function Base.show(io::IO, m::Marker{F}) where {F}
     if F <: Symbol
@@ -538,7 +499,7 @@ function Base.show(io::IO, m::Marker{F}) where {F}
 end
 
 function Base.show(io::IO, dm::DomainMarkers)
-    total = length(dm.symbols) + length(dm.tuples) + length(dm.conditions)
+    total = length(dm)
     print(io, "DomainMarkers($total total)")
     return nothing
 end

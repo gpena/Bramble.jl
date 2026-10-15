@@ -32,7 +32,7 @@ Problems are written as bilinear and linear forms built from discrete operators,
 - **Forms and assembly.** `form` and `assemble` build sparse matrices and load vectors directly. Separable operators assemble as Kronecker products, and `matrix_free_operator` applies a form without storing its matrix.
 - **Boundary conditions.** Dirichlet constraints by marker (`dirichlet_constraints`), restricted to chosen components of a system, with `symmetrize!` to keep symmetric problems symmetric.
 - **Coupled systems.** Composite spaces (`Wₕ^Val(N)`) and vector spaces, with block assembly addressed by component.
-- **Time-dependent problems.** `semidiscretize`, `ode_problem` and `second_order_ode_problem` hand first- and second-order systems to OrdinaryDiffEq and the rest of SciML.
+- **Time-dependent problems.** `semidiscretize` and `ode_problem` hand a first-order system `M u' = F(t) - A u` to OrdinaryDiffEq and the rest of SciML; a wave equation is written as one for the pair `(u, u̇)`.
 - **Solvers.** `pde_solve` with sparse direct factorizations (SuiteSparse, Apple Accelerate, MUMPS, Sparspak), preconditioners (algebraic multigrid, ILU(0), Jacobi, Chebyshev) and geometric multigrid (`gmg_solve`).
 - **Automatic differentiation.** Forward-mode differentiation (ForwardDiff) through operators, assembly and nonlinear residuals. Reverse-mode (ReverseDiff, Enzyme, ChainRules), sparse Jacobians and SciMLSensitivity adjoints ship as extensions whose tests are off until v4.3.0.
 - **Backends.** Serial, threaded (Polyester) and experimental GPU (Metal) execution, with CSC or CSR storage chosen through `backend`. The GPU tests are off until v4.4.0.

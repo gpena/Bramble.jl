@@ -103,9 +103,9 @@ end
 # Enzyme's tape for the ones that did.
 #
 # The parameter costs nothing to supply: `BilinearForm` already carries `AST`, and `form`
-# builds the cache where `typeof(ast)` is known. It also sharpens the guard -- a foreign AST
-# of a different type now folds `cache.ast === ast` to `false` at compile time instead of
-# comparing at run time.
+# builds the cache where `typeof(ast)` is known. It also sharpens the guard -- an AST of a
+# different type folds `cache.ast === ast` to `false` at compile time instead of comparing
+# at run time.
 #
 # `stamp` is the recording's `_pattern_stamp`: `markers!` redraws a mesh's marker stamp, so
 # a recording made before it no longer matches and the next fill re-records
@@ -934,16 +934,13 @@ function assemble!(
         A::AbstractMatrix,
         form::BilinearForm;
         dirichlet = nothing,
-        dirichlet_components = nothing,
-        ast = nothing
+        dirichlet_components = nothing
 )
-    resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble!); ast)
-    return _assemble_bilinear!(A, form, resolved_ast, dirichlet, dirichlet_components)
+    return _assemble_bilinear!(A, form, form.ast, dirichlet, dirichlet_components)
 end
 
-# The shared core behind `assemble!` and `assemble`: takes its `ast` positionally, already
-# resolved and already past the deprecation check, so neither public entry point warns twice
-# calling into the other.
+# The shared core behind `assemble!` and `assemble`: takes the form's resolved `ast`
+# positionally, so both public entry points hand it the same tree.
 function _assemble_bilinear!(
         A::AbstractMatrix, form::BilinearForm, ast, dirichlet, dirichlet_components
 )
@@ -985,12 +982,11 @@ The first fill into any other matrix object records once, serially, then replays
 threads. A device-resident matrix replays too, through positions recorded against its
 host mirror, so only its recording fill searches (gpena/Bramble.jl#318).
 """
-function assemble_parallel!(A::AbstractMatrix, form::BilinearForm, ast = nothing)
-    resolved_ast = ast === nothing ? form.ast : (_warn_ast_keyword(:assemble_parallel!); ast)
+function assemble_parallel!(A::AbstractMatrix, form::BilinearForm)
     _zero_stored!(A)
 
     _assemble_bilinear_parallel_cached!(
-        A, form.trial_space, form.test_space, resolved_ast, form.cache
+        A, form.trial_space, form.test_space, form.ast, form.cache
     )
 
     return A

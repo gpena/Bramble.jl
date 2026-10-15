@@ -227,49 +227,18 @@ Return the canonical coordinate-aligned boundary symbols for domain `Ω`.
 @inline _all_boundary_symbols(::Type{<:Domain{SetType}}) where {SetType} = _all_boundary_symbols(SetType)
 
 # Mapping between canonical coordinate-aligned symbols and legacy viewpoint aliases
-@inline function _boundary_symbol_alias(::Val{1}, sym::Symbol)
-    sym === :xmin && return :left
-    sym === :left && return :xmin
-    sym === :xmax && return :right
-    sym === :right && return :xmax
+# `nothing` when `sym` is no face symbol of dimension `D`.
+@inline function _boundary_symbol_alias(::Val{D}, sym::Symbol) where {D}
+    for (canonical, alias, _, _) in _boundary_faces(Val(D))
+        sym === canonical && return alias
+        sym === alias && return canonical
+    end
     return nothing
 end
-
-@inline function _boundary_symbol_alias(::Val{2}, sym::Symbol)
-    sym === :xmin && return :left
-    sym === :left && return :xmin
-    sym === :xmax && return :right
-    sym === :right && return :xmax
-    sym === :ymin && return :bottom
-    sym === :bottom && return :ymin
-    sym === :ymax && return :top
-    sym === :top && return :ymax
-    return nothing
-end
-
-@inline function _boundary_symbol_alias(::Val{3}, sym::Symbol)
-    sym === :xmin && return :back
-    sym === :back && return :xmin
-    sym === :xmax && return :front
-    sym === :front && return :xmax
-    sym === :ymin && return :left
-    sym === :left && return :ymin
-    sym === :ymax && return :right
-    sym === :right && return :ymax
-    sym === :zmin && return :bottom
-    sym === :bottom && return :zmin
-    sym === :zmax && return :top
-    sym === :top && return :zmax
-    return nothing
-end
-
-@inline _boundary_symbol_alias(::Val{D}, ::Symbol) where {D} = nothing
 
 # The compact, embeddable form: dimension, eltype, set and marker count (#45).
 function Base.show(io::IO, Ω::Domain)
-    # Counted from the three marker collections rather than `length(labels(Ω))`: `labels`
-    # returns a lazy `Iterators.Flatten`, which has no length.
-    n = length(symbols(Ω)) + length(tuples(Ω)) + length(conditions(Ω))
+    n = length(Ω)
     print(io, "Domain{$(dim(Ω))D, $(eltype(Ω))}(")
     show(io, set(Ω))
     print(io, ", ", n, " marker", n == 1 ? "" : "s", ")")

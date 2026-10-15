@@ -134,7 +134,7 @@ ExecutionPolicy
     └── CpuPolyester                -- Polyester.jl's @batch
 ```
 
-Both spellings work everywhere. [`CpuPolyester`](@ref) is a threaded policy with a lower per-call overhead, and it crosses over at smaller sizes (see Crossovers above). It needs `using Polyester` before its first sweep, or the call errors and names `Polyester.jl`. The older name `CpuBatch` remains as a deprecated alias of `CpuPolyester`.
+Both spellings work everywhere. [`CpuPolyester`](@ref) is a threaded policy with a lower per-call overhead, and it crosses over at smaller sizes (see Crossovers above). It needs `using Polyester` before its first sweep, or the call errors and names `Polyester.jl`.
 
 ---
 

@@ -14,7 +14,7 @@ using Bramble:
                labels,
                CartesianProduct
 using Bramble: boundary_symbols, label, identifier, domain, symbols, tuples, conditions
-using Bramble: marker_identifiers, process_identifier
+using Bramble: marker_identifiers
 using Bramble:
                label_identifiers,
                label_symbols,
@@ -88,6 +88,19 @@ struct NotAFunctionPredicate end
         @test boundary_symbols(typeof(Ω2)) == (:xmin, :xmax, :ymin, :ymax)
     end
 
+    # The full symbol tables, pinned as literals: a test that compares the type form with
+    # the instance form would pass on any reordering of both.
+    @testset "All boundary symbols per dimension" begin
+        @test Bramble._all_boundary_symbols(I1D) == (:xmin, :xmax, :left, :right)
+        @test Bramble._all_boundary_symbols(typeof(I1D)) == (:xmin, :xmax, :left, :right)
+        @test Bramble._all_boundary_symbols(I2D) == (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)
+        @test Bramble._all_boundary_symbols(typeof(I2D)) == (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)
+        @test Bramble._all_boundary_symbols(I3D) ==
+              (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :front, :left, :right, :bottom, :top)
+        @test Bramble._all_boundary_symbols(typeof(I3D)) ==
+              (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :front, :left, :right, :bottom, :top)
+    end
+
     # The viewpoint aliases name different faces per dimension: `:left` is the `x` minimum
     # in 1D and 2D, the `y` minimum in 3D.
     @testset "Viewpoint aliases per dimension" begin
@@ -99,16 +112,50 @@ struct NotAFunctionPredicate end
         @test Bramble._boundary_symbol_alias(Val(3), :top) === :zmax
     end
 
-    # Invariant: `process_identifier` normalizes symbols, tuples, and vectors
-    # of symbols into canonical boundary representations. Function-valued pairs
-    # are stored directly as closures and are not routed through `process_identifier`.
-    @testset "Identifier processing" begin
-        @test process_identifier(I1D, :left) === :left
-        @test process_identifier(I2D, (:top, :right)) == Set((:top, :right))
-        # A vector of symbols normalizes to the same Set as the tuple form.
-        @test process_identifier(I2D, [:top, :right]) == Set((:top, :right))
-        @test process_identifier(I2D, [:top, :right]) ==
-              process_identifier(I2D, (:top, :right))
+    # Every alias of every dimension, pinned both ways: alias to canonical name and back.
+    @testset "Alias round trip per dimension" begin
+        for (alias, canonical) in ((:left, :xmin), (:right, :xmax))
+            @test Bramble._boundary_symbol_alias(Val(1), alias) === canonical
+            @test Bramble._boundary_symbol_alias(Val(1), canonical) === alias
+        end
+        for (alias, canonical) in ((:left, :xmin), (:right, :xmax), (:bottom, :ymin), (:top, :ymax))
+            @test Bramble._boundary_symbol_alias(Val(2), alias) === canonical
+            @test Bramble._boundary_symbol_alias(Val(2), canonical) === alias
+        end
+        @test Bramble._boundary_symbol_alias(Val(3), :back) === :xmin
+        @test Bramble._boundary_symbol_alias(Val(3), :front) === :xmax
+        @test Bramble._boundary_symbol_alias(Val(3), :left) === :ymin
+        @test Bramble._boundary_symbol_alias(Val(3), :right) === :ymax
+        @test Bramble._boundary_symbol_alias(Val(3), :bottom) === :zmin
+        @test Bramble._boundary_symbol_alias(Val(3), :top) === :zmax
+        for (alias, canonical) in ((:back, :xmin), (:front, :xmax), (:left, :ymin),
+            (:right, :ymax), (:bottom, :zmin), (:top, :zmax))
+            @test Bramble._boundary_symbol_alias(Val(3), canonical) === alias
+        end
+    end
+
+    # A symbol the dimension does not know has no alias: the callers branch on `nothing`.
+    @testset "Alias lookup misses" begin
+        @test Bramble._boundary_symbol_alias(Val(1), :ymin) === nothing
+        @test Bramble._boundary_symbol_alias(Val(2), :zmin) === nothing
+        @test Bramble._boundary_symbol_alias(Val(3), :inlet) === nothing
+        @test Bramble._boundary_symbol_alias(Val(4), :xmin) === nothing
+    end
+
+    # An unknown face is an `ArgumentError` naming the symbol, not the `inner_Γ` message that
+    # `_throw_not_a_face` raises: `normal_vector(Wₕ, marker)` (operators/normal.jl) relies on it.
+    @testset "normal_vector unknown faces" begin
+        @test_throws ArgumentError Bramble.normal_vector(Val(1), :ymin)
+        @test_throws ArgumentError Bramble.normal_vector(Val(2), :zmin)
+        @test_throws ArgumentError Bramble.normal_vector(Val(2), :inlet)
+        err = try
+            Bramble.normal_vector(Val(2), :zmin)
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin(":zmin", err.msg)
+        @test !occursin("inner_Γ", err.msg)
     end
 
     # Invariant: `DomainMarkers` correctly partitions boundary symbols, boundary tuples and
@@ -469,9 +516,11 @@ struct NotAFunctionPredicate end
         @test occursin("Tuple markers", str_dm)
         @test occursin("Function markers", str_dm)
 
-        # DomainMarkers compact and empty display.
+        # DomainMarkers compact and empty display. The endings are exact: a changed count
+        # or closing line is a failure, not a match on a substring.
         show(io, dm)
-        @test occursin("DomainMarkers(3 total)", String(take!(io)))
+        @test endswith(String(take!(io)), "DomainMarkers(3 total)")
+        @test endswith(sprint(show, MIME"text/plain"(), dm), "Function markers (1):\n    :fn => <function>")
 
         show(io, MIME"text/plain"(), markers(I1D))
         @test occursin("(empty)", String(take!(io)))
@@ -494,6 +543,11 @@ struct NotAFunctionPredicate end
         @test occursin("marker", str_c1)
         @test !occursin("}:", str_c1)
         @test !occursin('\n', str_c1)
+
+        # The compact ending for one and for two markers: the count, then the plural `s`.
+        @test endswith(str_c1, "[0.0, 1.0], 1 marker)")
+        Ω_two = domain(I1D, :a => :xmin, :b => :xmax)
+        @test endswith(sprint(show, Ω_two), "[0.0, 1.0], 2 markers)")
 
         # 2D domain with empty markers.
         Ω_empty = domain(I2D, markers(I2D))
@@ -703,6 +757,7 @@ end
         @test dim(X4) == 4
         @test_throws ErrorException boundary_symbols(4)
         @test_throws ErrorException boundary_symbols(typeof(X4))
+        @test_throws ErrorException boundary_symbols(X4)
 
         # Supported dimensions resolve identically across value and type queries.
         @test boundary_symbols(1) == (:xmin, :xmax)
