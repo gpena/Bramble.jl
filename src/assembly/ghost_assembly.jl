@@ -77,6 +77,7 @@ end
 function form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, f)
     _check_ghost_host(Wₕ)
     _check_ghost_host(Vₕ)
+    _check_same_ghosts(Wₕ, Vₕ)
     a = form(padded_space(Wₕ), padded_space(Vₕ), f)
     _check_ghost_eltype(_matrix_eltype(a, a.ast))
     A_pad = allocate_system_matrix(a)::SparseMatrixCSC  # `_check_ghost_host`
@@ -118,6 +119,25 @@ first_space(::GhostGridSpace) = _throw_ghost_composite()
     )
 end
 
+# Padded index `k` names the same point on both sides only when both pad the same facets:
+# `(:ymin,)` and `(:ymax,)` pad grids of one size whose rows are shifted by one node.
+function _check_same_ghosts(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace)
+    Gw, Gv = mesh(padded_space(Wₕ)), mesh(padded_space(Vₕ))
+    Gw === Gv || Gw.active == Gv.active || _throw_ghost_sets(Gw.active, Gv.active)
+    return nothing
+end
+
+@noinline function _throw_ghost_sets(aw, av)
+    throw(
+        ArgumentError(
+        "the trial and test ghost spaces ghost different facets ($aw and $av as per-axis " *
+        "(min, max) flags), so a padded index names different points on each side. " *
+        "Forms coupling different ghost sets are not supported: build both spaces with " *
+        "the same `ghosts`.",
+    ),
+    )
+end
+
 function _check_ghost_host(Wₕ::GhostGridSpace)
     P = padded_space(Wₕ)
     (locality(backend(P)) isa DeviceLocality || execution_policy(P) isa GpuPolicy) &&
@@ -138,11 +158,14 @@ end
 # The map of `A = E_vᵀ A_pad E_u`: `A[r, c] = Σ E_v[i, r] A_pad[i, j] E_u[j, c]`, one
 # contribution per stored `(i, j)` of `A_pad` and pair of stored entries in rows `i` of
 # `E_v` and `j` of `E_u`. The reduced pattern holds every such `(r, c)`.
-function _ghost_reduction_map(A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC{T},
-        Eu::SparseMatrixCSC{T}) where {T}
+# Closures of different element types (a Float32 and a Float64 space) give weights of the
+# promoted type.
+function _ghost_reduction_map(A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
+        Eu::SparseMatrixCSC)
     Evt = sparse(transpose(Ev))
     Eut = sparse(transpose(Eu))
-    src, rs, cs, coef = Int[], Int[], Int[], T[]
+    src, rs, cs = Int[], Int[], Int[]
+    coef = promote_type(eltype(Ev), eltype(Eu))[]
     rv, ev, eu = rowvals(A_pad), nonzeros(Evt), nonzeros(Eut)
     for j in axes(A_pad, 2), k in nzrange(A_pad, j)
 
@@ -172,10 +195,12 @@ function assemble(a::GhostBilinearForm; dirichlet = nothing, dirichlet_component
     return _assemble_ghost!(_reduced_matrix(a.A_pad, a), a)
 end
 
-# A matrix of the reduced pattern, of `A_pad`'s element type; `_assemble_ghost!` zeroes it.
+# A matrix of the reduced pattern, of the type of `A_pad`'s entries times the closure
+# weights; `_assemble_ghost!` zeroes it.
 function _reduced_matrix(A_pad::SparseMatrixCSC, a::GhostBilinearForm)
+    T = promote_type(eltype(A_pad), eltype(a.coef))
     return SparseMatrixCSC(ndofs(a.test_space), ndofs(a.trial_space), copy(a.colptr),
-        copy(a.rowval), similar(nonzeros(A_pad), length(a.rowval)))
+        copy(a.rowval), Vector{T}(undef, length(a.rowval)))
 end
 
 function assemble!(A::AbstractMatrix, a::GhostBilinearForm; dirichlet = nothing,
@@ -251,13 +276,25 @@ function assemble(a::GhostBilinearForm, l::GhostLinearForm; dirichlet = nothing,
     return A, _assemble_ghost_load!(F, a, l)
 end
 
-# `E_vᵀ (F_pad − A_pad d_u)`, `A_pad` as the last assembly of `a` left it.
+# `E_vᵀ (F_pad − A_pad d_u)`, `A_pad` as the last assembly of `a` left it. The lift goes
+# into `F_pad` in place when its type holds `A_pad d_u`, and into a promoted copy otherwise
+# (a complex form with a real load).
 function _assemble_ghost_load!(F::AbstractVector, a::GhostBilinearForm, l::GhostLinearForm)
     assemble!(l.F_pad, l.padded)
     d = a.trial_space.d
-    any(!iszero, d) && mul!(l.F_pad, a.A_pad, d, -1, 1)
-    mul!(F, transpose(l.test_space.E), l.F_pad)
+    Eᵀ = transpose(l.test_space.E)
+    if any(!iszero, d)
+        mul!(F, Eᵀ, _subtract_lift(l.F_pad, a.A_pad, d))
+    else
+        mul!(F, Eᵀ, l.F_pad)
+    end
     return F
+end
+
+function _subtract_lift(F_pad::AbstractVector, A_pad::SparseMatrixCSC, d::AbstractVector)
+    T = promote_type(eltype(F_pad), eltype(A_pad), eltype(d))
+    Fp = T === eltype(F_pad) ? F_pad : copyto!(similar(F_pad, T), F_pad)
+    return mul!(Fp, A_pad, d, -1, 1)
 end
 
 # --- Refused paths ------------------------------------------------------------------- #

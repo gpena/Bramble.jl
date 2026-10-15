@@ -253,6 +253,68 @@ end
     @test relerr(F, transpose(E) * (Fp - Ap * d)) <= tol
 end
 
+@testset "Rectangular forms need one ghost set" begin
+    Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 7), (false, false))
+    f = (u, v) -> innerₕ(u, v) + innerₕ(D₊ᵧ(u), v)
+    # equal padded sizes, rows shifted by one node: a silent misalignment before
+    for (gw, gv) in (((:ymin,), (:ymax,)), ((:xmin,), (:xmax,)), ((:xmin,), :boundary))
+        @test_throws ArgumentError form(gridspace(Ω; ghosts = gw), gridspace(Ω; ghosts = gv), f)
+    end
+    # the same ghost set on two spaces, one with another closure: E_vᵀ A_pad E_u
+    W = gridspace(Ω; ghosts = (:ymin,))
+    V = gridspace(Ω; ghosts = (:ymin,))
+    P = Bramble.padded_space(W)
+    Ev, _ = Bramble.closure(V)
+    Eu = Ev[:, 1:(Bramble.ndofs(V) - 2)]
+    U = Bramble.GhostGridSpace(P, Eu, zeros(size(Eu, 1)))
+    Ap = assemble(form(P, Bramble.padded_space(V), f))
+    for (Wt, E) in ((W, Ev), (U, Eu))
+        A = assemble(form(Wt, V, f))
+        @test size(A) == (Bramble.ndofs(V), size(E, 2))
+        @test relerr(A, transpose(Ev) * Ap * E) <= 1e-13
+    end
+    B = assemble(form(gridspace(Ω), gridspace(Ω), (u, v) -> innerₕ(u, v)))
+    @test relerr(assemble(form(W, V, (u, v) -> innerₕ(u, v)))[1:35, 1:35], B) <= 1e-13
+end
+
+@testset "Complex form with a real load and a lift" begin
+    Ω = O1.make_mesh(:graded, 0)
+    _, P, E, d = reflected_space(Ω, 0.3, -0.7)
+    d[2] = 0.5     # a lift on a physical point, where the complex mass term reads it
+    W = Bramble.GhostGridSpace(P, E, d)
+    fa = (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ((1.0im) * u, v)
+    fl = v -> innerₕ(x -> 1.0 + x[1], v)
+    a, l = form(W, W, fa), form(W, fl)
+    A, F = assemble(a, l)
+    Ap = assemble(form(P, P, fa))
+    Fp = assemble(form(P, fl))
+    @test eltype(A) == ComplexF64 && eltype(F) == ComplexF64
+    @test relerr(F, transpose(E) * (Fp - Ap * d)) <= tol
+    @test norm(imag(F)) > 1e-6 * norm(F)   # the complex lift reaches the load
+    # the real case still lifts in place
+    ar, lr = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))), form(W, fl)
+    _, Fr = assemble(ar, lr)
+    Bramble._assemble_ghost_load!(Fr, ar, lr)
+    @test (@allocated Bramble._assemble_ghost_load!(Fr, ar, lr)) == 0
+end
+
+@testset "Mixed-precision trial and test spaces" begin
+    Ω64 = mesh(domain(interval(0.0, 1.0)), 9, false)
+    Ω32 = mesh(domain(interval(0.0f0, 1.0f0)), 9, false)
+    f = (u, v) -> innerₕ(u, v) + innerₕ(D₋ₓ(u), v)
+    W = gridspace(Ω64; ghosts = :boundary)
+    V = gridspace(Ω32; ghosts = :boundary)
+    a = form(W, V, f)
+    A = assemble(a)
+    Ap = assemble(form(Bramble.padded_space(W), Bramble.padded_space(V), f))
+    Ev, _ = Bramble.closure(V)
+    Eu, _ = Bramble.closure(W)
+    @test size(A) == (11, 11)
+    @test relerr(A, transpose(Ev) * Ap * Eu) <= 1e-6
+    assemble!(A, a)
+    @test (@allocated assemble!(A, a)) == 0
+end
+
 @testset "Refusals" begin
     Ω = O.make_mesh(:random, 0)
     Wg = gridspace(Ω; ghosts = (:xmin, :ymax))
