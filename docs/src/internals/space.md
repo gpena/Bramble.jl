@@ -17,11 +17,10 @@ and reduced afterwards.
 
 ### DOF order
 
-The degrees of freedom are the physical nodes in the mesh's linear order, then the facet
-ghosts: the facets `xmin, xmax, ymin, ymax, zmin, zmax` (named ones only), each facet's
-ghosts in the column-major order of its nodes. Absent padded points (2D corners, 3D edges
-and corners) are never degrees of freedom. The first entries of a vector of the space are
-therefore the values at the physical nodes, as on `gridspace(Ωₕ)`.
+The degrees of freedom are the physical nodes in the mesh's linear order, then the ghosts in
+the numbering of the [ghost mesh](mesh.md), whose absent points are never degrees of
+freedom. The first entries of a vector of the space are therefore the values at the physical
+nodes, as on `gridspace(Ωₕ)`.
 
 ### Weights
 
@@ -44,9 +43,8 @@ eliminated ghosts. Assembly fills `A_pad` on the padded space and returns
 bilinear form, and `assemble(l)` alone throws an `ArgumentError`. The reduction is a sparse
 map from the stored values of `A_pad` to those of the reduced matrix, computed once with the
 form, so a warm `assemble!` allocates nothing. It is symmetric whenever `A_pad` and the two
-closures are. Substituting `E` at each stencil tap was not done: it would rewrite the guarded
-walk, the pattern recorder and the replay of the assembly, and the reduction gives the same
-matrix.
+closures are. Substituting `E` at each stencil tap instead would rewrite the guarded walk,
+the pattern recorder and the replay of the assembly, for the same matrix.
 
 `dirichlet` and `symmetrize` replace rows of the reduced system when its unknowns are the
 physical nodes in mesh order (every ghost eliminated, no node fixed by a Dirichlet
@@ -78,13 +76,10 @@ that leaves the padded grid (past the one ghost layer, or across a facet without
 refused too. A volume product's operand at the edge of the padded grid truncates, as on a
 plain mesh, and that is allowed.
 
-Nested mixed differences on a ghost space are assembled as forms, where the rule applies.
-The runtime operators are eager: `Dcᵧ(uₕ)` returns a finished grid function, which cannot
-apply the rule element by element, so composing mixed differences at runtime on a grid
-function with ghosts reads the inner result's truncated ghost values and is not claimed to
-equal the form at the ghosts next to a corner. Likewise `avgₕ` has no method on a ghost
-space and must not be used on a padded space: it averages over cells past the physical
-facet.
+Nested mixed differences on a ghost space are assembled as forms, where the rule applies;
+the runtime operators are eager and cannot apply it (see the
+[operators tutorial](@ref operators_ghost)). `avgₕ` has no method on a ghost space and must
+not be used on a padded space: it averages over cells past the physical facet.
 
 ### Relations
 
@@ -103,16 +98,15 @@ ghosts as unknowns.
 
 A grid function on a ghost space is a padded `VectorElement`: `lift(Cₕ, u)` returns
 `E u + d` on the padded space, ghosts filled and absent points 0, and the existing runtime
-operators read the ghosts there. This layout was chosen because assembly already needs the
-padded mesh, so the padded layout adds no second code path. It is not the only candidate.
-A facet-only layout keeps the solver's own `Vector` as the physical part and stores the
-ghosts in a facet buffer. Measured on 2D and 3D grids, neither layout pays a SIMD or
-latency penalty for a row-wise stencil kernel, but the padded layout costs a copy in and out
-of about two stencil applications when the solver keeps its own contiguous vector, and a
-stock `mul!` on its physical view falls back to a generic quadratic method, while the
-facet-only layout needs neither. The layout of grid functions with ghosts is revisited when
-runtime ghost-aware operators are added; the DOF order above is the same for both, the
-padded layout appending the absent points as a suffix that is dropped.
+operators read the ghosts there. Assembly already needs the padded mesh, so this layout adds no second code path. The
+alternative, a facet-only layout, keeps the solver's own `Vector` as the physical part and
+stores the ghosts in a facet buffer. Neither layout pays a SIMD or latency penalty for a
+row-wise stencil kernel, but the padded one costs a copy in and out of about two stencil
+applications when the solver keeps its own contiguous vector, and a stock `mul!` on its
+physical view falls back to a generic quadratic method; the facet-only layout needs
+neither. The layout is revisited when runtime ghost-aware operators are added. The DOF order
+above is the same for both, the padded layout appending the absent points as a suffix that
+is dropped.
 
 ## Operator matrices: stencil_matrix versus the Kronecker construction
 

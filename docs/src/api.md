@@ -17,11 +17,12 @@ up a signature or an option.
 - [Geometry](api/geometry.md): sets, intervals, markers and domains, which describe where a
   problem lives and how its boundary is labelled.
 - [Meshes](api/meshes.md): mesh types and constructors, points and spacings, indexing and
-  boundaries, and adaptation.
+  boundaries, adaptation, and ghost meshes.
 - [Grid spaces](api/spaces.md): function spaces on a mesh, their degrees of freedom, grid
-  functions, restriction and averaging, and interpolation between spaces.
+  functions, restriction and averaging, interpolation between spaces, and spaces with ghost
+  points and boundary relations.
 - [Difference, jump and average operators](api/operators.md): the discrete derivatives and
-  related operators that act on grid functions.
+  related operators that act on grid functions, and the normal derivatives of a facet.
 - [Inner products and norms](api/inner_products.md): discrete inner products and the norms
   built from them.
 - [Forms](api/forms.md): building, assembling and solving bilinear and linear forms,

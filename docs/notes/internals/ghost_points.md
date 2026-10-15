@@ -4,10 +4,41 @@ Design history for milestone v4.0.0 (gpena/Bramble.jl#218, #205; #774 for the fo
 `Δₕ`). Nothing here is published, and no issue has been edited: the acceptance-criteria
 edits below are proposals for the maintainer to read first.
 
+## Status: what the implementation decided differently
+
+The design below is kept as written; the implementation (`src/mesh/ghost_mesh.jl`,
+`src/space/ghost_gridspace.jl`, `src/assembly/ghost_assembly.jl`,
+`src/assembly/ghost_relations.jl`) follows it except in five places. The published account
+of what was built is `docs/src/internals/mesh.md` and `docs/src/internals/space.md`.
+
+- **Grid functions with ghosts are padded `VectorElement`s, not a facet-only `GhostVector`.**
+  Decision 4 and the layout section chose the facet-only layout. The implementation assembles
+  on the padded mesh anyway, so `lift(Cₕ, u)` returns the padded grid function and the
+  existing runtime operators read its ghosts. `GhostVector`, `update_ghosts!`, the
+  ghost-aware runtime kernels and time-dependent relation data are deferred to follow-up
+  work, and `semidiscretize` on a ghost space refuses. As a consequence, mixed differences
+  composed at runtime on a grid function with ghosts cannot apply the corner rule, which
+  lives in the stencil engine: nested mixed differences on a ghost space are assembled as
+  forms.
+- **The reduction replaces the per-tap substitution, and one space type replaces two.** The
+  proposal substituted the closure at each stencil tap and kept a `ConstrainedGridSpace`.
+  The implementation assembles on the padded space and reduces the result once per form,
+  `Eᵀ A_pad E`, with the load `Eᵀ(F_pad − A_pad d)`, which leaves the guarded walk, the
+  pattern recorder and the replay untouched. `GhostGridSpace` carries the closure `(E, d)`
+  for both `gridspace(Ωₕ; ghosts)` and `constrained`.
+- **No pure-Neumann compatibility diagnostic.** The criterion that a violation is reported is
+  not implemented: no single-mesh threshold separates a quadrature defect of order `h²` from
+  an incompatibility. `mean_zero` solves the bordered system whatever the data.
+- **`lift` is `public`, not exported.** Makie exports a `lift` of its own, so an export would
+  make both unusable after `using Bramble, GLMakie`: write `Bramble.lift`.
+- **Out of scope, refused with an `ArgumentError`:** matrix-free and Kronecker operators,
+  composite spaces with ghosts, device backends, automatic differentiation through ghost
+  spaces, a grid-function `K` in `∂ₙ(u; K)`, and elasticity tractions.
+
 The evidence is a set of throwaway prototypes. The three plain-matrix oracles and their
 tests are merged and run in the test tree under `test/ghost/`. The others stay on the local
-branch `proto/v4-ghost-points`, under `test/prototypes/ghost/`. Nothing under `src/`,
-`ext/` or `docs/src/` changed. Every claim below cites a prototype test file and testset,
+branch `proto/v4-ghost-points`, under `test/prototypes/ghost/`. At the time of writing
+nothing under `src/`, `ext/` or `docs/src/` had changed. Every claim below cites a prototype test file and testset,
 or a figure printed by one. Files and what they pin:
 
 | file | where | pins |
