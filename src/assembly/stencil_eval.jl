@@ -168,10 +168,10 @@ end
 # point that is no node and no ghost (`is_absent`). At such a node the mixed difference is
 # the inward one-sided one along both axes, `D_{s_d,d}(D_{s_e,e}(w))` with `s = +1` (`D₊`) at
 # a first node and `-1` (`D₋`) at a last, which reads physical nodes only. `A`'s operand may
-# be a linear combination of such terms and others, and the rule distributes over it
-# (`_rule_terms`): each mixed term that reads the corner takes the one-sided difference and
-# every other term `A`'s own taps. Elsewhere, and on any mesh that is not a ghost mesh, the
-# predicate is a constant `false` and nothing changes.
+# be a linear combination of such terms and others. The rule distributes over it
+# (`_rule_terms`): each mixed term that reads the corner takes the one-sided difference, and
+# every other term `A`'s own taps. Nothing changes elsewhere. Off a ghost mesh the predicate
+# is a constant `false`.
 #
 # The one-sided stencil keeps the node's own stencil type: entry for entry in the order of
 # `A`'s taps and, within each, of the terms, `A`'s taps past the two it uses and `B`'s
