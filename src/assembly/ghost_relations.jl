@@ -14,10 +14,11 @@
 # A Dirichlet relation `u => g` eliminates the physical nodes of its facet instead: their
 # rows of `E` are empty and `d` holds `g` there, and a relation row reading such a node
 # moves its term into the data. A facet takes one Dirichlet relation and one that reads its
-# ghost.
+# ghost; a ghosted facet with a Dirichlet relation needs the second, since no equation
+# would read its ghosts otherwise.
 #
 # The closure `(E, d)` of the result keeps the DOF order of the ghost space: the physical
-# nodes no Dirichlet relation eliminates, then the ghosts of the facets that carry no ghost
+# nodes no Dirichlet relation eliminates, then the ghosts of the facets that carry no
 # relation, which stay unknowns.
 #
 # See also: `GhostGridSpace`, `FacetOperator`, `GhostBilinearForm`
@@ -40,8 +41,8 @@ combinations with `u`. The data is a number or a function of the point. At each 
 facet, a ghost relation is solved for the node's ghost; at a 2D corner where two conormal
 relations read each other's ghost, the two are solved together. A Dirichlet relation
 `:F => u => g` removes the nodes of `F` from the unknowns and fixes them to `g`; its facet
-needs no ghosts, and may carry one ghost relation besides. A ghosted facet without a ghost
-relation keeps its ghosts as unknowns.
+needs no ghosts, and if it has them it needs one ghost relation besides, which solves for
+them. A ghosted facet without any relation keeps its ghosts as unknowns.
 
 The degrees of freedom of the result are the physical nodes no Dirichlet relation fixes, in
 the mesh's linear order, then the ghosts that remain unknowns, in the order of `Wₕ`. Its
@@ -53,9 +54,9 @@ by `u => g`: its unknowns are then the physical nodes, as on `gridspace(Ωₕ)`.
 
 Refused with an `ArgumentError`: a space without ghosts, an already constrained space, a
 facet with two Dirichlet or two ghost relations, a ghost relation on a facet that carries
-no ghosts, a relation that does not read its facet's ghost (`β = 0`, or a `jumpₙ` alone),
-two Dirichlet relations disagreeing at a shared node, and a singular block at a corner (a
-singular `K`).
+no ghosts, a ghosted facet with `u => g` and no ghost relation, a relation that does not
+read its facet's ghost (`β = 0`, or a `jumpₙ` alone), two Dirichlet relations disagreeing
+at a shared node, and a singular block at a corner (a singular `K`).
 
 # Examples
 
@@ -261,6 +262,10 @@ end
 function _constrained_space(Wₕ::GhostGridSpace, rels, drels)
     P = padded_space(Wₕ)
     G = mesh(P)
+    for r in drels
+        has_ghosts(G, r.d, _GHOST_SIDES[r.s]) || continue
+        any(q -> q.d == r.d && q.s == r.s, rels) || _throw_dirichlet_orphan_ghosts(r.name)
+    end
     R, b, ghosts = _relation_rows(P, rels)
     fixed, g = _dirichlet_values(G, drels, eltype(P))
     keep = _kept_points(G, ghosts, fixed)
@@ -272,7 +277,7 @@ end
 # The padded points the Dirichlet relations fix, as a mask over the padded grid, and their
 # values: the data at each physical node of the facet, `data(point(Ωₕ, I))` as `dirichlet`
 # evaluates it. A node of two such facets (a corner) takes the first value, and the second
-# must agree with it to a relative `√eps` of the largest datum.
+# must agree with it to a relative `√eps` of the larger of the two.
 function _dirichlet_values(G::GhostMesh{D}, drels, ::Type{T}) where {D, T}
     Ωₕ = physical_mesh(G)
     plin = LinearIndices(npoints(G, Tuple))
@@ -290,16 +295,28 @@ function _dirichlet_values(G::GhostMesh{D}, drels, ::Type{T}) where {D, T}
     fixed = falses(length(plin))
     g = zeros(S, length(plin))
     first_name = Vector{Symbol}(undef, length(plin))
-    scale = isempty(vals) ? zero(real(S)) : maximum(abs, vals)
     for (p, v, name) in zip(pts, vals, names)
         if fixed[p]
-            abs(g[p] - v) <= sqrt(eps(real(S))) * scale ||
+            abs(g[p] - v) <= sqrt(eps(real(S))) * max(abs(g[p]), abs(v)) ||
                 _throw_dirichlet_disagree(first_name[p], name, g[p], v)
         else
             fixed[p], g[p], first_name[p] = true, v, name
         end
     end
     return fixed, g
+end
+
+# The ghosts of a ghosted facet whose nodes `u => g` fixes would be unknowns that no
+# equation reads: the fixed nodes' rows are gone and no relation solves for them.
+@noinline function _throw_dirichlet_orphan_ghosts(name::Symbol)
+    throw(
+        ArgumentError(
+        "the facet :$name carries ghosts and only the Dirichlet relation `u => g`, so its " *
+        "ghosts would be unknowns that no equation reads (a singular system). Drop :$name " *
+        "from `gridspace(Ωₕ; ghosts = ...)`, or give it a ghost relation as well, such as " *
+        "`:$name => ∂ₙ(u) => h` or `:$name => ∂ₙₙ(u) => h`.",
+    ),
+    )
 end
 
 @noinline function _throw_dirichlet_disagree(a::Symbol, b::Symbol, ga, gb)

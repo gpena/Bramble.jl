@@ -23,6 +23,20 @@
 #
 # See also: `GhostGridSpace`, `BilinearForm`, `LinearForm`
 
+# Row replacement (`dirichlet`) on a form's spaces, worked out once with the form: whether
+# the reduced rows of every space are its physical nodes in mesh order, and the physical
+# nodes of each facet (facet `(d, s)` at `2(d - 1) + s`), so that a warm `assemble!` with
+# `dirichlet` allocates nothing.
+struct _RowsDirichlet
+    physical::Bool
+    facets::Vector{BitVector}
+end
+
+function _RowsDirichlet(spaces::GhostGridSpace...)
+    Ωₕ = physical_mesh(mesh(first(spaces)))
+    return _RowsDirichlet(all(_rows_are_physical, spaces), _facet_masks(Ωₕ, Val(dim(Ωₕ))))
+end
+
 """
     GhostBilinearForm
 
@@ -47,6 +61,8 @@ struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
     "the reduced pattern."
     colptr::Vector{Int}
     rowval::Vector{Int}
+    "row replacement on the spaces, for `dirichlet`."
+    rows::_RowsDirichlet
 end
 
 """
@@ -61,6 +77,8 @@ struct GhostLinearForm{D, F <: LinearForm{D}, VT <: GhostGridSpace, BT <: Abstra
     test_space::VT
     "the padded load vector, filled by every assembly."
     F_pad::BT
+    "row replacement on the space, for `dirichlet`."
+    rows::_RowsDirichlet
 end
 
 trial_space(a::GhostBilinearForm) = a.trial_space
@@ -87,7 +105,8 @@ function form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, f)
     _check_ghost_eltype(_matrix_eltype(a, a.ast))
     A_pad = allocate_system_matrix(a)::SparseMatrixCSC  # `_check_ghost_host`
     src, dst, coef, colptr, rowval = _ghost_reduction_map(A_pad, Vₕ.E, Wₕ.E)
-    return GhostBilinearForm(a, Wₕ, Vₕ, A_pad, src, dst, coef, colptr, rowval)
+    return GhostBilinearForm(a, Wₕ, Vₕ, A_pad, src, dst, coef, colptr, rowval,
+        _RowsDirichlet(Vₕ, Wₕ))
 end
 
 function form(Vₕ::GhostGridSpace, f)
@@ -95,7 +114,8 @@ function form(Vₕ::GhostGridSpace, f)
     l = form(padded_space(Vₕ), f)
     T = _assembled_eltype(l.ast, padded_space(Vₕ))
     _check_ghost_eltype(T)
-    return GhostLinearForm(l, Vₕ, Vector{T}(undef, ndofs(padded_space(Vₕ))))
+    return GhostLinearForm(l, Vₕ, Vector{T}(undef, ndofs(padded_space(Vₕ))),
+        _RowsDirichlet(Vₕ))
 end
 
 form(::GhostGridSpace, Vₕ, f) = _throw_ghost_mixed()
@@ -197,9 +217,9 @@ end
 
 function assemble(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing)
     labels, _ = _normalize_dirichlet(dirichlet)
-    _check_rows_dirichlet(a, labels)
+    _check_rows(a, labels)
     A = _assemble_ghost!(_reduced_matrix(a.A_pad, a), a)
-    return _apply_rows_dirichlet!(A, a.test_space, labels, dirichlet_components)
+    return _form_rows!(A, a, labels, dirichlet_components)
 end
 
 # A matrix of the reduced pattern, of the type of `A_pad`'s entries times the closure
@@ -213,12 +233,12 @@ end
 function assemble!(A::AbstractMatrix, a::GhostBilinearForm; dirichlet = nothing,
         dirichlet_components = nothing)
     labels, _ = _normalize_dirichlet(dirichlet)
-    _check_rows_dirichlet(a, labels)
+    _check_rows(a, labels)
     A isa SparseMatrixCSC && size(A) == (ndofs(a.test_space), ndofs(a.trial_space)) &&
     SparseArrays.getcolptr(A) == a.colptr && rowvals(A) == a.rowval ||
         _throw_ghost_pattern()
     _assemble_ghost!(A, a)
-    return _apply_rows_dirichlet!(A, a.test_space, labels, dirichlet_components)
+    return _form_rows!(A, a, labels, dirichlet_components)
 end
 
 function _assemble_ghost!(A::SparseMatrixCSC, a::GhostBilinearForm)
@@ -259,29 +279,58 @@ function _rows_are_physical(Wₕ::GhostGridSpace)
     return true
 end
 
-_check_rows_dirichlet(a::GhostBilinearForm, labels) = _check_rows_dirichlet(
-    (a.test_space, a.trial_space), labels)
-_check_rows_dirichlet(l::GhostLinearForm, labels) = _check_rows_dirichlet((l.test_space,), labels)
-_check_rows_dirichlet(Wₕ::GhostGridSpace, labels) = _check_rows_dirichlet((Wₕ,), labels)
-_check_rows_dirichlet(::Tuple, ::Nothing) = nothing
-function _check_rows_dirichlet(spaces::Tuple, labels::Tuple)
-    isempty(labels) && return nothing
-    for Wₕ in spaces
-        _rows_are_physical(Wₕ) || _throw_rows_dirichlet(Wₕ, labels)
+# The physical nodes of each facet, as masks over the physical mesh's linear order.
+function _facet_masks(Ωₕ::AbstractMeshType, ::Val{D}) where {D}
+    n = npoints(Ωₕ, Tuple)
+    lin = LinearIndices(n)
+    masks = BitVector[]
+    for d in 1:D, s in 1:2
+
+        mask = falses(length(lin))
+        k = s == 1 ? 1 : n[d]
+        for I in CartesianIndices(ntuple(e -> e == d ? (k:k) : (1:n[e]), Val(D)))
+            mask[lin[I]] = true
+        end
+        push!(masks, mask)
     end
+    return masks
+end
+
+# The nodes of a label on the physical mesh: its marker, or else the nodes of the facet it
+# names (canonical or alias), which `constrained` and `inner_Γ` accept as labels too.
+@inline function _label_mask(Ωₕ::AbstractMeshType, rows::_RowsDirichlet, label::Symbol)
+    haskey(markers(Ωₕ), label) && return index_in_marker(Ωₕ, label)
+    face = _find_face(Val(dim(Ωₕ)), label)
+    face === nothing && return index_in_marker(Ωₕ, label)   # its error lists the labels
+    d, s = face
+    return rows.facets[2(d - 1) + s]
+end
+
+_check_rows(a::GhostBilinearForm, labels) = _check_rows(a.rows, (a.test_space, a.trial_space),
+    labels)
+_check_rows(l::GhostLinearForm, labels) = _check_rows(l.rows, (l.test_space,), labels)
+@inline _check_rows(::_RowsDirichlet, ::Tuple, ::Nothing) = nothing
+@inline function _check_rows(rows::_RowsDirichlet, spaces::Tuple, labels::Tuple)
+    isempty(labels) || rows.physical || _throw_rows_dirichlet(spaces, labels)
     return nothing
 end
 
 # Why the rows are not the physical nodes: a label's node fixed by `u => g` (the label
 # given both ways), another node fixed by `u => g`, or ghosts left unknown.
-@noinline function _throw_rows_dirichlet(Wₕ::GhostGridSpace, labels::Tuple)
+@noinline function _throw_rows_dirichlet(spaces::Tuple, labels::Tuple)
+    Wₕ = first(spaces)
+    for W in spaces                 # the first whose rows are not its physical nodes
+        _rows_are_physical(W) || (Wₕ = W; break)
+    end
     G = mesh(Wₕ)
+    Ωₕ = physical_mesh(G)
     plin = LinearIndices(npoints(G, Tuple))
     held = falses(length(plin))
     held[rowvals(Wₕ.E)] .= true
     fixed = vec([!held[plin[J]] for J in physical_indices(G)])
+    rows = _RowsDirichlet(false, _facet_masks(Ωₕ, Val(dim(Ωₕ))))
     for label in labels
-        any(fixed .& _ghost_label_mask(physical_mesh(G), label)) || continue
+        any(fixed .& _label_mask(Ωₕ, rows, label)) || continue
         throw(
             ArgumentError(
             "the Dirichlet condition on :$label is given both ways: `dirichlet` replaces " *
@@ -307,69 +356,76 @@ end
     )
 end
 
-@inline _apply_rows_dirichlet!(A, Wₕ, ::Nothing, components) = A
-@inline function _apply_rows_dirichlet!(A, Wₕ, labels::Tuple, components)
-    isempty(labels) && return A
-    return dirichlet_bc!(A, Wₕ, labels...; components = components)
-end
-
-# The nodes of a label on the physical mesh: its marker, or else the nodes of the facet it
-# names (canonical or alias), which `constrained` and `inner_Γ` accept as labels too.
-function _ghost_label_mask(Ωₕ::AbstractMeshType, label::Symbol)
-    haskey(markers(Ωₕ), label) && return index_in_marker(Ωₕ, label)
-    face = _find_face(Val(dim(Ωₕ)), label)
-    face === nothing && return index_in_marker(Ωₕ, label)   # its error lists the labels
-    d, s = face
-    n = npoints(Ωₕ, Tuple)
-    k = s == 1 ? 1 : n[d]
-    return BitVector(vec([I[d] == k for I in CartesianIndices(n)]))
-end
-
-function _ghost_labels_mask(Ωₕ::AbstractMeshType, labels::Tuple)
-    mask = falses(npoints(Ωₕ))
-    for label in labels
-        mask .|= _ghost_label_mask(Ωₕ, label)
+# The row replacements of `gridspace(Ωₕ)` through the masks of the physical mesh, on
+# reduced rows that are the physical nodes (checked by the caller).
+function _rows_dirichlet!(A::AbstractMatrix, Ωₕ, rows::_RowsDirichlet, labels::Tuple)
+    for lbl in labels
+        _dirichlet_bc_indices!(A, _label_mask(Ωₕ, rows, lbl))
     end
-    return mask
+    return A
 end
 
-# The row replacements of `gridspace(Ωₕ)` on a ghost space whose unknowns are its physical
-# nodes (`_rows_are_physical`), through the masks of the physical mesh.
+# The values of `bcs` at the nodes of `labels`; unrolled over the conditions, as
+# `_apply_conditions!` is, so a warm call allocates nothing.
+@inline _rows_conditions!(::Tuple{}, v, Ωₕ, rows, labels) = v
+@inline function _rows_conditions!(ms::Tuple, v, Ωₕ, rows, labels)
+    m = first(ms)
+    label(m) in labels &&
+        _dirichlet_bc_indices!(v, Ωₕ, _label_mask(Ωₕ, rows, label(m)), identifier(m), 0)
+    return _rows_conditions!(Base.tail(ms), v, Ωₕ, rows, labels)
+end
+
+function _rows_symmetrize!(A::AbstractMatrix, F::AbstractVector, Ωₕ, rows::_RowsDirichlet,
+        labels::Tuple)
+    _check_symmetrize_square(A)
+    for lbl in labels
+        symmetrize!(A, F, _label_mask(Ωₕ, rows, lbl), 0)
+    end
+    return nothing
+end
+
+@inline _form_rows!(A, a, ::Nothing, components) = A
+function _form_rows!(A::AbstractMatrix, a::GhostBilinearForm, labels::Tuple, components)
+    _validate_scalar_components(components)
+    return _rows_dirichlet!(A, physical_mesh(mesh(a.test_space)), a.rows, labels)
+end
+
+@inline _form_rows!(b, l, ::Nothing, bcs, components) = b
+function _form_rows!(b::AbstractVector, l::GhostLinearForm, labels::Tuple, bcs, components)
+    isempty(labels) && return b
+    bcs === nothing && _throw_labels_without_conditions(labels)
+    _validate_scalar_components(components)
+    _check_labels_have_conditions(conditions(bcs), labels)
+    return _rows_conditions!(conditions(bcs), b, physical_mesh(mesh(l.test_space)), l.rows,
+        labels)
+end
+
+# `dirichlet_bc!` and `symmetrize!` by hand on a ghost space whose reduced rows are its
+# physical nodes, as on `gridspace(Ωₕ)`.
 function dirichlet_bc!(A::AbstractMatrix, Wₕ::GhostGridSpace, labels::Symbol...;
         components = nothing)
     _validate_scalar_components(components)
-    _check_rows_dirichlet(Wₕ, labels)
-    isempty(labels) && return A
-    _dirichlet_bc_indices!(A, _ghost_labels_mask(physical_mesh(mesh(Wₕ)), labels))
-    return A
+    rows = _RowsDirichlet(Wₕ)
+    _check_rows(rows, (Wₕ,), labels)
+    return _rows_dirichlet!(A, physical_mesh(mesh(Wₕ)), rows, labels)
 end
 
 function dirichlet_bc!(v::AbstractVector, Wₕ::GhostGridSpace,
         bcs::Union{ConstraintMarkers, EvaluatedParametricDomainMarkers}, labels::Symbol...;
         components = nothing)
     _validate_scalar_components(components)
-    _check_rows_dirichlet(Wₕ, labels)
-    isempty(labels) && return v
+    rows = _RowsDirichlet(Wₕ)
+    _check_rows(rows, (Wₕ,), labels)
     _check_labels_have_conditions(conditions(bcs), labels)
-    Ωₕ = physical_mesh(mesh(Wₕ))
-    for marker in conditions(bcs)
-        label(marker) in labels || continue
-        _dirichlet_bc_indices!(v, Ωₕ, _ghost_label_mask(Ωₕ, label(marker)),
-            identifier(marker), 0)
-    end
-    return v
+    return _rows_conditions!(conditions(bcs), v, physical_mesh(mesh(Wₕ)), rows, labels)
 end
 
 function symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::GhostGridSpace,
         labels::Symbol...; components = nothing)
     _validate_scalar_components(components)
-    _check_rows_dirichlet(Wₕ, labels)
-    _check_symmetrize_square(A)
-    Ωₕ = physical_mesh(mesh(Wₕ))
-    for label in labels
-        symmetrize!(A, F, _ghost_label_mask(Ωₕ, label), 0)
-    end
-    return nothing
+    rows = _RowsDirichlet(Wₕ)
+    _check_rows(rows, (Wₕ,), labels)
+    return _rows_symmetrize!(A, F, physical_mesh(mesh(Wₕ)), rows, labels)
 end
 
 # --- Linear assembly ----------------------------------------------------------------- #
@@ -381,20 +437,13 @@ end
 
 function assemble!(b::AbstractVector, l::GhostLinearForm; dirichlet = nothing,
         dirichlet_components = nothing)
-    labels, conditions = _normalize_dirichlet(dirichlet)
-    _check_rows_dirichlet(l, labels)
+    labels, bcs = _normalize_dirichlet(dirichlet)
+    _check_rows(l, labels)
     any(!iszero, l.test_space.d) && _throw_ghost_lift()
     _check_linear_length(b, l.test_space)
     assemble!(l.F_pad, l.padded)
     mul!(b, transpose(l.test_space.E), l.F_pad)
-    return _apply_rows_dirichlet!(b, l.test_space, labels, conditions, dirichlet_components)
-end
-
-@inline _apply_rows_dirichlet!(b, Wₕ, ::Nothing, conditions, components) = b
-@inline function _apply_rows_dirichlet!(b, Wₕ, labels::Tuple, conditions, components)
-    isempty(labels) && return b
-    conditions === nothing && _throw_labels_without_conditions(labels)
-    return dirichlet_bc!(b, Wₕ, conditions, labels...; components = components)
+    return _form_rows!(b, l, labels, bcs, dirichlet_components)
 end
 
 @noinline function _throw_ghost_lift()
@@ -408,9 +457,9 @@ end
 
 function assemble(a::GhostBilinearForm, l::GhostLinearForm; dirichlet = nothing,
         dirichlet_components = nothing, symmetrize::Bool = false)
-    labels, conditions = _normalize_dirichlet(dirichlet)
+    labels, bcs = _normalize_dirichlet(dirichlet)
     symmetrize && labels === nothing && _throw_symmetrize_without_dirichlet()
-    _check_rows_dirichlet(a, labels)
+    _check_rows(a, labels)
     size(l.F_pad, 1) == size(a.A_pad, 1) && ndofs(l.test_space) == ndofs(a.test_space) ||
         throw(DimensionMismatch("the forms' test spaces differ: $(a.test_space) and " *
                                 "$(l.test_space)"))
@@ -418,9 +467,9 @@ function assemble(a::GhostBilinearForm, l::GhostLinearForm; dirichlet = nothing,
     F = similar(l.F_pad, promote_type(eltype(l.F_pad), eltype(A)), ndofs(l.test_space))
     _assemble_ghost_load!(F, a, l)
     # The load is built before the rows are replaced: its lift reads `A_pad`, not `A`.
-    _apply_rows_dirichlet!(A, a.test_space, labels, dirichlet_components)
-    _apply_rows_dirichlet!(F, l.test_space, labels, conditions, dirichlet_components)
-    symmetrize && symmetrize!(A, F, a.test_space, labels...; components = dirichlet_components)
+    _form_rows!(A, a, labels, dirichlet_components)
+    _form_rows!(F, l, labels, bcs, dirichlet_components)
+    symmetrize && _rows_symmetrize!(A, F, physical_mesh(mesh(a.test_space)), a.rows, labels)
     return A, F
 end
 

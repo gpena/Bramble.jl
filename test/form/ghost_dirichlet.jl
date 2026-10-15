@@ -114,12 +114,32 @@ end
         uext = vcat(0.0, E * z + d)                   # no xmin ghost: 0, never read
         @test dot(rel, uext) ≈ h rtol = 1e-13
     end
-    # A ghosted facet with only `u => g` keeps its ghost as an unknown.
+    # A ghosted facet with only `u => g` would keep a ghost no equation reads: refused.
     Wb = gridspace(Ω; ghosts = :boundary)
-    Cg = constrained(Wb, u -> (:xmin => u => 1.0, :xmax => ∂ₙ(u) => 0.0))
-    @test Bramble.ndofs(Cg) == n                       # n - 1 nodes and the xmin ghost
-    Eg, _ = Bramble.closure(Cg)
-    @test rowvals(Eg[:, end]) == [1]
+    rels = u -> (:xmin => u => 1.0, :xmax => ∂ₙ(u) => 0.0)
+    @test_throws ArgumentError constrained(Wb, rels)
+    @test refuses(() -> constrained(Wb, rels), "Drop :xmin")
+end
+
+# Warm `assemble!` with `dirichlet`, in a function so that only the calls are measured.
+function warm_bytes(A, F, a, l, label, pair)
+    assemble!(A, a; dirichlet = label)
+    assemble!(F, l; dirichlet = pair)
+    return (@allocated assemble!(A, a; dirichlet = label)),
+    (@allocated assemble!(F, l; dirichlet = pair))
+end
+
+@testset "Warm dirichlet assemble! is 0 B" begin
+    Ω = ON.make_mesh(:graded, 0; n0 = 9)
+    g = x -> x[1]
+    C = constrained(gridspace(Ω; ghosts = :boundary),
+        u -> map(F -> F => ∂ₙ(u) => 0.0, (:xmin, :xmax, :ymin, :ymax)))
+    a, l = form(C, C, lap), form(C, v -> innerₕ(x -> 1.0, v))
+    A, F = assemble(a, l; dirichlet = :boundary => g)
+    @test warm_bytes(A, F, a, l, :boundary, :boundary => g) == (0, 0)   # a marker
+    @test warm_bytes(A, F, a, l, :xmin, :xmin => g) == (0, 0)           # a facet name
+    A2, F2 = assemble(a, l; dirichlet = :xmin => g)
+    @test A == A2 && F == F2
 end
 
 # −Δu = f with u fixed to `g` on the facets `fixed` and the relations `rels` on the others:
@@ -240,6 +260,13 @@ end
     # disagreeing at a corner node
     @test refuses(() -> constrained(W, u -> (:xmin => u => 0.0, :ymax => u => 1.0)),
         "values")
+    # agreement is judged on the two values at the node, not on the largest datum
+    @test refuses(() -> constrained(W, u -> (:xmin => u => (x -> 1.0 + 1e6 * x[2]),
+            :ymin => u => 1.001)), "values")
+    @test refuses(() -> constrained(W, u -> (:xmin => u => 1e-20, :ymin => u => 0.0)),
+        "values")
+    @test Bramble.ndofs(constrained(W, u -> (:xmin => u => 1e-20, :ymin => u => 1e-20))) ==
+          Bramble.ndofs(W) - (sum(ON.sizes(Ω)) - 1)
     @test refuses(() -> constrained(W, u -> (:xmin => u => 0.0, :left => u => 0.0)),
         "two Dirichlet relations")
     @test refuses(() -> constrained(W, u -> (:xmax => rob(u) => 0.0, :xmax => ∂ₙ(u) => 0.0)),
