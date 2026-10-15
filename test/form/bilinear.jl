@@ -970,9 +970,10 @@ using Bramble:
         end
         # Scales joining to a type that is not bits are left mixed: every product with a
         # BigFloat allocates, and converting the Int or Float64 to one took the refill from
-        # 56688 and 63744 B to 106368 B.
+        # 56688 and 63744 B to 106368 B. A BigFloat allocates differently on x64: the second
+        # form took 65760 B on Linux, so its cap leaves room and stays well under 106368 B.
         for (f, cap) in (((u, v) -> innerₕ(u, big(0.1) * v + 3 * D₋ₓ(v)), 56688),
-            ((u, v) -> innerₕ(u, big(3) * v + 0.5 * D₋ₓ(v)), 63744))
+            ((u, v) -> innerₕ(u, big(3) * v + 0.5 * D₋ₓ(v)), 72000))
             ast = _built(W, f)
             @test Bramble._split_restricted_products(ast, Float64) === ast
             a = form(W, W, f)
