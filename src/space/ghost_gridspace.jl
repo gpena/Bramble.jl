@@ -162,3 +162,73 @@ function Base.show(io::IO, Wₕ::GhostGridSpace{D, T}) where {D, T}
 end
 
 Base.summary(Wₕ::GhostGridSpace) = sprint(show, Wₕ)
+
+"""
+    lift(Wₕ::GhostGridSpace) -> VectorElement
+    lift(Wₕ::GhostGridSpace, u::AbstractVector) -> VectorElement
+
+Grid functions on the padded space of `Wₕ` (`Bramble.padded_space(Wₕ)`) from its closure
+`(E, d)` (`Bramble.closure(Wₕ)`).
+
+`lift(Wₕ)` is the data `d`: on a space built by [`constrained`](@ref), the ghost values the
+relations' data give when every degree of freedom is 0, and 0 everywhere else.
+`lift(Wₕ, u)` is `E u + d`, the grid function of the degrees of freedom `u` (a solution of a
+system assembled on `Wₕ`) with its eliminated ghosts filled in by the relations. The runtime
+operators read the ghosts of the result, and both are data in forms on `Wₕ`, so a linear
+form can name, say, the full `Δₕ` of the lifting at the facet nodes. Absent padded points
+(corners beyond two ghosted facets) hold 0.
+
+`lift` is public, not exported: write `Bramble.lift` or `using Bramble: lift`.
+
+# Examples
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+Cₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
+                 u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => 2.0))
+a = form(Cₕ, Cₕ, (u, v) -> innerₕ(-1.0 * Bramble.D̃ₓ(Bramble.D₋ₓ(u)), v))
+l = form(Cₕ, v -> innerₕ(x -> 1.0, v))
+A, F = assemble(a, l)
+uₕ = Bramble.lift(Cₕ, A \\ F)          # 11 padded values, ghosts included
+Δₕ(uₕ)                                 # reads the ghosts at the facet nodes
+```
+"""
+@inline lift(Wₕ::GhostGridSpace) = VectorElement(copy(Wₕ.d), Wₕ.padded)
+
+function lift(Wₕ::GhostGridSpace, u::AbstractVector)
+    length(u) == ndofs(Wₕ) || _throw_lift_length(Wₕ, u)
+    E, d = closure(Wₕ)
+    U = similar(d, promote_type(eltype(u), eltype(d)))
+    copyto!(U, d)
+    mul!(U, E, u, true, true)
+    return VectorElement(U, Wₕ.padded)
+end
+
+@noinline function lift(Wₕ, u...)
+    throw(
+        ArgumentError(
+        "lift takes a space with ghosts, built by gridspace(Ωₕ; ghosts = ...) or " *
+        "constrained, and optionally a vector of its degrees of freedom; got " *
+        "$(nameof(typeof(Wₕ))). Build the space with ghosts first.",
+    ),
+    )
+end
+
+@noinline function lift(Wₕ::GhostGridSpace, u)
+    throw(
+        ArgumentError(
+        "lift(Wₕ, u) takes a vector of the degrees of freedom of $(Wₕ); got a " *
+        "$(nameof(typeof(u))). Pass the solution vector of a system assembled on Wₕ.",
+    ),
+    )
+end
+
+@noinline function _throw_lift_length(Wₕ::GhostGridSpace, u)
+    throw(
+        ArgumentError(
+        "lift(Wₕ, u) takes one value per degree of freedom of $(Wₕ), $(ndofs(Wₕ)) of " *
+        "them; got $(length(u)). Pass the solution of a system assembled on Wₕ, not a " *
+        "padded or physical-mesh vector.",
+    ),
+    )
+end
