@@ -294,7 +294,7 @@ function _dirichlet_values(G::GhostMesh{D}, drels, ::Type{T}) where {D, T}
     end
     S = mapreduce(typeof, promote_type, vals; init = T)
     fixed = falses(length(plin))
-    g = zeros(S, length(plin))
+    g = zeros(S, length(plin))::Vector{S}
     first_name = Vector{Symbol}(undef, length(plin))
     floor = isempty(vals) ? zero(real(S)) : 10 * eps(real(S)) * maximum(abs, vals)
     for (p, v, name) in zip(pts, vals, names)
