@@ -1,18 +1,11 @@
 # ghost_mesh.jl: `GhostMesh`, a mesh together with the ghost points that extend it past
-# its boundary facets, for the finite-difference relations of the ghost-point plan
-# (v4.0.0).
+# its boundary facets.
 #
-# A `GhostMesh` wraps the physical `Mesh1D`/`MeshnD` and a padded one of the same kind
-# with a layer of ghost points beyond each named facet, placed at `x₁ - h₂` and `xₙ + hₙ`
-# (the cached `spacing(Ωₕ, 2)` and `forward_spacing(Ωₕ, n)`). The padded mesh is a real
-# mesh with submeshes of its own, so every operator and the assembly walk read ghosts with
-# no change; the wrapper forwards the mesh accessors to it, and answers the face queries
-# (`boundary_indices`, the surface weight and mask, the geometric markers) about the
-# physical facets, as index-derived stored markers, never as predicates of position.
-#
-# Ghost DOF order: the named facets in the order `xmin, xmax, ymin, ymax, zmin, zmax`, each
-# facet's ghosts in the column-major order of its nodes. A padded point outside along two
-# or more axes (a 2D corner, a 3D edge or corner) is absent and is never a ghost.
+# The padded mesh is a real mesh with submeshes of its own, so every operator and the
+# assembly walk read ghosts with no change; the wrapper forwards the mesh accessors to it
+# and answers the face queries (`boundary_indices`, the surface weight and mask, the
+# geometric markers) about the physical facets, as index-derived stored markers, never as
+# predicates of position.
 #
 # The padded points follow `change_points!` of the physical mesh through the version stamp
 # of its submeshes (the pattern of `SpaceWeights.built_version`): the padded mesh is

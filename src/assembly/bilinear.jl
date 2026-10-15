@@ -119,7 +119,7 @@ end
 # `m`, `colptr` and `rowval` are a private copy of the recorded `SparseMatrixCSC`'s pattern,
 # kept by `assemble` (`_keep_pattern!`, bilinear_pattern.jl) and valid only while
 # `has_pattern`: a repeated `assemble` builds its new matrix from them and replays the
-# recording into it, since the positions depend only on the pattern (gpena/Bramble.jl#774).
+# recording into it, since the positions depend only on the pattern.
 # A copy, never `A`'s own vectors: the caller owns `A` and may change its pattern. Every
 # recording (`_store_recording!`) clears `has_pattern`, as it may be against another pattern.
 mutable struct _AssemblyCache{D, AST}

@@ -308,14 +308,13 @@ end
 
 # --- A repeated `assemble`: the recorded pattern, copied ----------------------------- #
 #
-# `assemble` returns a new matrix every call, so it cannot allocate less than that matrix;
-# re-recording for it, as every call once did, allocated ~37× the matrix it returned
-# (3D `c * jumpₓ(Δ(u))`, 990 unknowns: 24 MB for 0.63 MB), growing with the stencil's reach
-# (gpena/Bramble.jl#774). Once a fill has recorded into a `SparseMatrixCSC` `assemble` made,
-# the form keeps a copy of that matrix's pattern (`_keep_pattern!`); a later `assemble`
-# builds its matrix from a copy of it and moves the recording over to the new matrix
-# (`cache.A_id`), whose fill then replays. The recording's positions index the pattern
-# alone, so they hold in any matrix with the same `colptr` and `rowval`.
+# `assemble` returns a new matrix every call, so it cannot allocate less than that matrix,
+# but re-recording for it allocated many times the matrix, growing with the stencil's reach.
+# Once a fill has recorded into a `SparseMatrixCSC` `assemble` made, the form keeps a copy of
+# that matrix's pattern (`_keep_pattern!`); a later `assemble` builds its matrix from a copy
+# of it and moves the recording over to the new matrix (`cache.A_id`), whose fill then
+# replays. The recording's positions index the pattern alone, so they hold in any matrix with
+# the same `colptr` and `rowval`.
 
 # The matrix `assemble` fills: the kept pattern while it is valid, else a fresh one.
 _allocate_assembled(form::BilinearForm) = _allocate_assembled(

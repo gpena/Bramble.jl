@@ -76,14 +76,14 @@ chain differentiable.
 - `mean_zero`: a weight vector `w` (for instance the assembled `innerₕ(1, v)`), or `nothing`
   (default). With `w`, `pde_solve` solves the bordered system `[A w; wᵀ 0] [u; λ] = [F; 0]`
   and returns `u`, the solution with discrete zero average ``w^T u = 0`` of a pure-Neumann
-  system whose `A` annihilates constants, of the promoted float type of `A`, `F` and `w`.
+  system whose `A` annihilates constants, of the promoted float type of `A`, `F` and `w`;
   `A` is not modified. The bordered matrix is indefinite, so `sym` is not used: for a real
-  symmetric `A` (and real `w`), `:default` factors it by LU (or by Accelerate's pivoting
-  ``LDL^T``) and `:accelerate` and `:mumps` by ``LDL^T``; for any other `A` all three use LU.
-  `:suitesparse` uses UMFPACK LU and `:sparspak` its LU. `:spqr` throws an `ArgumentError`, and a `w`, `F` or `A` of mismatched
-  size a `DimensionMismatch`. Without `mean_zero`, a square `A` with
-  `‖A 1‖∞ ≤ 1e-10 ‖A‖∞` (constants in its kernel) logs a warning naming `mean_zero`, and the
-  solve proceeds.
+  symmetric `A` and real `w`, `:default` factors it by LU (or by Accelerate's pivoting
+  ``LDL^T``) and `:accelerate` and `:mumps` by ``LDL^T``; for any other `A` they use LU, as
+  do `:suitesparse` (UMFPACK) and `:sparspak`. `:spqr` throws an `ArgumentError`, and a `w`,
+  `F` or `A` of mismatched size a `DimensionMismatch`. Without `mean_zero`, a square `A`
+  with `‖A 1‖∞ ≤ 1e-10 ‖A‖∞` (constants in its kernel) logs a warning naming `mean_zero`,
+  and the solve proceeds.
 
 # Returns
 - `Vector`: the solution, of the promoted element type of `A` and `F`.

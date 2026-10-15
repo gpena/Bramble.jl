@@ -8,8 +8,8 @@
 # is `E_vᵀ (F_pad − A_pad d_u)`, so it needs the bilinear form and `assemble(l)` alone
 # refuses a closure with `d ≠ 0`. A map from `A_pad`'s stored values to the reduced
 # matrix's, built once with the form, does the reduction, so a warm `assemble!` allocates
-# nothing at all. Why not substitute `E` at each stencil tap? It would rewrite the guarded
-# walk, the pattern recorder and the replay for no measured gain (design D1).
+# nothing at all. Substituting `E` at each stencil tap instead would rewrite the guarded
+# walk, the pattern recorder and the replay.
 #
 # `dirichlet` and `symmetrize` replace rows of the reduced system, through the masks of the
 # physical mesh, when its unknowns are the physical nodes in mesh order: every ghost

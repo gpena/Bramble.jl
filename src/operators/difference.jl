@@ -1397,7 +1397,7 @@ An AST node for the second difference along `Dim`, the composition
 Zero at the last point of `Dim`, where `D̃` is truncated, and without the backward tap at the
 first, where `D₋` is: entry for entry the composition `D̃ₓ(D₋ₓ(u))`, built by
 [`Δₕ`](@ref) once per axis. One node, so its operand is evaluated once per tap rather than
-once per tap of a nested inner stencil (gpena/Bramble.jl#774).
+once per tap of a nested inner stencil.
 """
 struct SecondDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
     inner_op::OpType

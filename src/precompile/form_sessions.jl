@@ -469,7 +469,7 @@ function _pc_form_session(
     return nothing
 end
 
-# --- The nested forms the ghost relations and `Δₕ` need (gpena/Bramble.jl#205, #774) ----- #
+# --- The nested forms the ghost relations and `Δₕ` need ------------------------------ #
 #
 # A nested form is a type of its own: the resolved node types and the space type are the
 # cache key, so each spelling of the same form hits the instance warmed here, and a form

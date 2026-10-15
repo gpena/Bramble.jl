@@ -12,10 +12,10 @@
 # recorded `nzval` positions, one `Segment` per (term, block) unit, and `_replay_segment!`
 # reads them back instead of searching. `allocate_system_matrix` stores that recording for
 # the matrix it builds; `_assemble_bilinear_core_cached!` records afresh when `A` is not the
-# exact matrix object the form's cache was last built against (gpena/Bramble.jl#26).
+# exact matrix object the form's cache was last built against.
 #
 # The threaded refill (`assemble!` under `Parallel()`, and `assemble_parallel!` from any
-# policy) reads the same recording (gpena/Bramble.jl#338). Recording is one serial pass over
+# policy) reads the same recording. Recording is one serial pass over
 # the coordinates, done once per matrix object; every fill after it, the recording one
 # included, sweeps bands and colours and writes through the recorded positions. One shared recording serves every band because `ReplaySink`
 # addresses each point through `point_ptr[lin_idx]`, not a running counter, and colouring
@@ -37,13 +37,12 @@ struct _ThreadedReplay <: _ReplayMode end
 @inline _diagonal_replay(::Val) = false
 
 # Attempts to repackage a unit's flat positions as a diagonal `Segment`, restricted to the
-# unit's own interior/boundary split (gpena/Bramble.jl#160): the coordinate walk visits the
+# unit's own interior/boundary split: the coordinate walk visits the
 # interior box before any boundary slab, pushing every interior point's `P` entries in
 # `LinearIndices(interior)` order, so `positions[1:n_interior*P]` already *is* the interior
 # in that order, with no need to touch `point_ptr` to find it.
 #
-# Validated against the actual positions, not assumed from the term's own margin
-# (gpena/Bramble.jl#161): a form summing terms of different margins into the same block
+# Validated against the actual positions, not assumed from the term's own margin: a form summing terms of different margins into the same block
 # records one segment per summand, and a narrower term's own "interior" can still include
 # columns whose true `nzval` footprint -- set by every segment sharing that column, not just
 # this one -- varies where a wider-margin sibling still adds taps. That shows up here as a
@@ -52,7 +51,7 @@ struct _ThreadedReplay <: _ReplayMode end
 #
 # Every early return builds a `Segment{D}` via `_flat_segment`, never a bare tuple: the
 # return type must stay the single concrete `Segment{D}` on every path, not a `Union` with
-# some other flat representation -- that Union is exactly what gpena/Bramble.jl#240 removed.
+# some other flat representation.
 function _try_diagonal_segment(
         margin::Int, grid_inds::CartesianIndices, point_ptr::Vector{Int}, positions::Vector{Int}
 )
@@ -129,8 +128,7 @@ end
 # `point_ptr[lin_idx]` addresses each point's own slice of `positions` directly, so this
 # stays correct regardless of what order grid points are visited in.
 #
-# One method branching on `segment.is_diagonal`, not two dispatching on the segment's type
-# (gpena/Bramble.jl#240): both branches are fully concrete (`Segment{D}` has one shape, not
+# One method branching on `segment.is_diagonal`, not two dispatching on the segment's type: both branches are fully concrete (`Segment{D}` has one shape, not
 # a Union). Flat replays through `ReplaySink`; diagonal (1D only,
 # `_diagonal_replay`) replays the interior core through `DiagonalReplaySink`'s stride
 # arithmetic and the boundary shell through an ordinary `ReplaySink`, the two-sink form of
@@ -168,7 +166,7 @@ function _replay_segment!(
 end
 
 # `segments::Vector{Segment{D}}` throughout this file: `D` is fixed per call (the form's own
-# dimension) and, since gpena/Bramble.jl#240, `Segment{D}` is the single concrete element
+# dimension) and `Segment{D}` is the single concrete element
 # type regardless of whether a given element is flat or diagonal (`is_diagonal` selects the
 # shape at the value level, not the type level).
 #
@@ -216,7 +214,7 @@ function _replay_bilinear_core!(
     _check_block_meshes(bound, trial_space, test_space)
     # `host_weights` once per fill for every summand, never once per unit: on a device leaf
     # it rebuilds a host mesh and weights, which per unit made a multi-term refill slower than
-    # the search it replaces (gpena/Bramble.jl#318). A no-op on a host leaf.
+    # the search it replaces. A no-op on a host leaf.
     sp = host_weights(_walked_leaf(bound, trial_space, test_space))
     _replay_summands!(mode, A, bound, sp, segments, 0, α)
     return nothing
@@ -644,7 +642,7 @@ const _ReplayTarget = Union{ReplaySink, _PairReplaySink, _DiagonalReplayTarget}
 Replay one grid point `I` of one unit: evaluate `term`'s stencil there (weights are live)
 and add each entry at the position `target`'s recording holds for it, with no search.
 
-The per-point step of the threaded replay (gpena/Bramble.jl#338), which a threaded sweep
+The per-point step of the threaded replay, which a threaded sweep
 calls once per point of its band or colour. Correct in any visit order and from any thread,
 since the recording is addressed by `lin_indices[I]`, and race-free under the caller's
 colouring, which keeps two concurrently-replayed points off the same entry. The guarded
@@ -871,8 +869,7 @@ end
 # One colour, threaded, writing through `A` (a `_ReplayTarget` or an action target, see
 # `_sweep_point!`). Dispatches on the *effective* execution policy (`_sweep_bilinear!`
 # computes it): `CpuThreaded` runs the shared `Threads.@threads` loop; `CpuPolyester`
-# reaches its own hook instead, so it never silently threads with the wrong mechanism
-# (gpena/Bramble.jl#190). `CpuSerial` never reaches this function --
+# reaches its own hook instead, so it never silently threads with the wrong mechanism. `CpuSerial` never reaches this function --
 # `_effective_parallel_policy` only ever hands it `CpuThreaded` or `CpuPolyester`.
 @noinline function _sweep_bilinear_colour!(
         ::CpuThreaded,
@@ -912,12 +909,12 @@ end
     _batch_bilinear_colour_replay!(target, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset) -> Nothing
 
 [`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in
-`_sweep_bilinear_colour!` when it replays (gpena/Bramble.jl#338): the same loop over `idxs`,
+`_sweep_bilinear_colour!` when it replays: the same loop over `idxs`,
 calling [`_replay_point!`](@ref)`(target, term, sp, I, lin_indices, mesh_markers, row_offset,
 col_offset)` per point. `target` is a [`_ReplayTarget`](@ref) or an action target. The
 loop captures none of them whole: the target's storage vector (`nzval`, or `y` and `x`)
 crosses as a top-level argument, the rest of `target`, `sp`, `term` and `mesh_markers` as one
-[`_batch_split`](@ref), rebuilt in each task (gpena/Bramble.jl#437). The only `src/`
+[`_batch_split`](@ref), rebuilt in each task. The only `src/`
 method errors naming Polyester.
 """
 @noinline function _batch_bilinear_colour_replay!(
@@ -930,7 +927,7 @@ end
     _sweep_band_colour!(policy, A, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset, α) -> Nothing
 
 Scatter one band colour of `term` into `A` across threads. `A` is a [`_ReplayTarget`](@ref),
-whose recorded positions are written (gpena/Bramble.jl#338), or an action target.
+whose recorded positions are written, or an action target.
 
 Each thread takes one slab of the last axis and walks it whole. Two grid points can only
 reach the same matrix entry when they are closer than `strides[D]` along that axis -- their
@@ -984,7 +981,7 @@ end
     _batch_bilinear_band_replay!(target, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset) -> Nothing
 
 [`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in
-[`_sweep_band_colour!`](@ref) when it replays (gpena/Bramble.jl#338): for each band `b` in
+[`_sweep_band_colour!`](@ref) when it replays: for each band `b` in
 `bidx`, every `I` in `CartesianIndices((rest..., _band_range(ax, nbands, b)))` gets
 [`_replay_point!`](@ref)`(target, term, sp, I, lin_indices, mesh_markers, row_offset,
 col_offset)`. `target` is a [`_ReplayTarget`](@ref) or an action target, crossing `@batch`
@@ -1003,7 +1000,7 @@ end
 #
 # Colouring keeps two concurrently-swept points from writing the same row, and it decides
 # which points may run together from the term's own offsets (`_colour_strides` over
-# `stencil_offsets`). A test-side interpolation (gpena/Bramble.jl#263) names its rows
+# `stencil_offsets`). A test-side interpolation names its rows
 # absolutely, through `locate_cell`, so no offset set describes them and two points in
 # different colours can land on the same row. The term is swept on one thread instead, which
 # is correct at the cost of the threading, and `_has_test_interp` decides it from the type,
@@ -1029,8 +1026,7 @@ end
 # `CpuThreaded` since every call into this function is already on the forced-threaded path
 # (`_assemble_bilinear_parallel_cached!`, always entered from a non-`CpuSerial` branch, or
 # from `assemble_parallel!`'s own "regardless of policy" contract); `CpuPolyester` passes through
-# unchanged so the colour/band sweeps reach their own hook instead of `Threads.@threads`
-# (gpena/Bramble.jl#190).
+# unchanged so the colour/band sweeps reach their own hook instead of `Threads.@threads`.
 function _sweep_bilinear!(
         A, sp, term::TERM, strides, row_offset::Int, col_offset::Int, α = true
 ) where {TERM}
@@ -1046,8 +1042,8 @@ end
 # `assemble_parallel!` from any policy). Replays the form's recording across threads,
 # recording first when `cache` does not hold one for this exact `A` and `ast` (the recording
 # is serial; its own first fill already replays threaded). Under `CpuPolyester` without
-# Polyester loaded the replay hooks throw naming it. A device matrix replays too
-# (gpena/Bramble.jl#318): its recording holds positions in its own `mirror`'s CSR layout, so
+# Polyester loaded the replay hooks throw naming it. A device matrix replays too:
+# its recording holds positions in its own `mirror`'s CSR layout, so
 # only the recording fill searches the mirror, and each fill ends in one bulk flush of the
 # mirror to the device.
 function _assemble_bilinear_parallel_cached!(

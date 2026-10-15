@@ -9,17 +9,7 @@
 # and the weight cancels when the row is solved for the ghost. A ghost's row reads its own
 # ghost, physical nodes and, at a corner of the conormal `∂ₙ(u; K)`, the ghost of the other
 # facet there: the eliminated ghosts couple in blocks (one entry per ghost, a 2×2 block at a
-# 2D corner), each solved on its own, so the whole closure stays sparse (design D7).
-#
-# A Dirichlet relation `u => g` eliminates the physical nodes of its facet instead: their
-# rows of `E` are empty and `d` holds `g` there, and a relation row reading such a node
-# moves its term into the data. A facet takes one Dirichlet relation and one that reads its
-# ghost; a ghosted facet with a Dirichlet relation needs the second, since no equation
-# would read its ghosts otherwise.
-#
-# The closure `(E, d)` of the result keeps the DOF order of the ghost space: the physical
-# nodes no Dirichlet relation eliminates, then the ghosts of the facets that carry no
-# relation, which stay unknowns.
+# 2D corner), each solved on its own, so the whole closure stays sparse.
 #
 # See also: `GhostGridSpace`, `FacetOperator`, `GhostBilinearForm`
 

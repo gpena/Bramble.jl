@@ -159,7 +159,7 @@ end
     )
 end
 
-# --- The corner rule of a ghost mesh (#218, design note "Corner policy") ------------ #
+# --- The corner rule of a ghost mesh ------------------------------------------------- #
 #
 # A mixed difference `A_d(B_e(w))` (two first differences along different axes, `w` a trial
 # or test function under any constant or grid-function scales) at a 2D corner node, or a 3D
@@ -170,9 +170,8 @@ end
 # a first node and `-1` (`D₋`) at a last, which reads physical nodes only. `A`'s operand may
 # be a linear combination of such terms and others, and the rule distributes over it
 # (`_rule_terms`): each mixed term that reads the corner takes the one-sided difference and
-# every other term `A`'s own taps. Elsewhere, and on any mesh that is not a ghost mesh,
-# nothing changes: the predicate is a constant `false` there. Any other nesting that would
-# read an absent point is refused by the product that weighs it (`_check_absent_reads`).
+# every other term `A`'s own taps. Elsewhere, and on any mesh that is not a ghost mesh, the
+# predicate is a constant `false` and nothing changes.
 #
 # The one-sided stencil keeps the node's own stencil type: entry for entry in the order of
 # `A`'s taps and, within each, of the terms, `A`'s taps past the two it uses and `B`'s
@@ -339,19 +338,19 @@ end
 #
 # A nesting the corner rule does not cover (an average, jump or shift of a cross difference,
 # a difference around a second difference, three levels deep, ...) may still read a point
-# the padded grid lacks: an absent one near a 2D corner or 3D edge, a nested operand's taps
-# reaching on from a ghost; or, under a facet product, one outside the grid, beyond the one
-# ghost layer or across a facet without ghosts, where a stencil reads a truncation and not
-# the point. A product
-# (`innerₕ`, `inner_Γ`, ...) on a ghost space asks, at every node of the boundary band where
-# its weight is not zero, whether either operand reads one, and throws an `ArgumentError`
-# naming it: a read a zero weight multiplies (a facet operator's component off its facet) is
-# no read, as is one a zero scale multiplies. The walk follows the evaluation, the corner
-# rule included, through every tap whose own weight is not zero. A volume product's operand
-# truncated at the edge of the padded grid is the plain mesh's closure there and stands. The
-# products are the
-# stock `local_stencil` methods (`operators/inner.jl`) after the check; off a ghost space
-# they are the only methods, so a plain mesh compiles exactly as before.
+# the padded grid lacks: an absent one near a 2D corner or 3D edge, or a nested operand's
+# taps reaching on from a ghost. Under a facet product that includes a point outside the
+# grid, beyond the one ghost layer or across a facet without ghosts, where a stencil reads a
+# truncation and not the point.
+#
+# A product (`innerₕ`, `inner_Γ`, ...) on a ghost space asks, at every node of the boundary
+# band where its weight is not zero, whether either operand reads one, and throws an
+# `ArgumentError` naming it. A read that a zero weight multiplies (a facet operator's
+# component off its facet) or a zero scale multiplies is no read. The walk follows the
+# evaluation, the corner rule included, through every tap whose own weight is not zero. A
+# volume product's operand truncated at the edge of the padded grid is the plain mesh's
+# closure there and stands. Off a ghost space the stock `local_stencil` methods
+# (`operators/inner.jl`) are the only ones, so a plain mesh compiles as before.
 const _GhostSpace{D} = ScalarGridSpace{D, <:Any, <:Any, <:GhostMesh}
 
 @inline function local_stencil(
