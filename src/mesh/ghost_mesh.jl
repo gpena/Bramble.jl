@@ -361,6 +361,10 @@ ghost.
     return out >= 2
 end
 
+# The step into the mesh along axis `d` from the physical node `J` (a padded index) of a
+# facet normal to `d`: `+1` from the first physical node, `-1` from the last.
+@inline _inward_step(G::GhostMesh, J::CartesianIndex, d::Int) = J[d] == G.lo[d] + 1 ? 1 : -1
+
 #------------------------------------------------------------------------------------------#
 # Mesh accessors, forwarded to the padded mesh
 #------------------------------------------------------------------------------------------#

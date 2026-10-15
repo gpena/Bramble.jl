@@ -133,6 +133,15 @@ const TappedNode{D, Dim} = Union{
 @inline function local_stencil(
         op::TappedNode{D, Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D, Dim}
+    # The corner rule of a ghost mesh (`_needs_onesided` below); `false` off a ghost mesh.
+    _needs_onesided(op, mesh(space), I) &&
+        return @noinline _onesided_mixed(op, space, I, markers, lin_idx)
+    return _tapped_stencil(op, space, I, markers, lin_idx)
+end
+
+@inline function _tapped_stencil(
+        op::TappedNode{D, Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D, Dim}
     # A tapped operand over a restriction answers with one length (`_fixed_stencil` below).
     inner = _nests_fixed(op.inner_op) ?
             _fixed_operand(op.inner_op, space, I, markers, lin_idx, Val(Dim),
@@ -147,6 +156,110 @@ const TappedNode{D, Dim} = Union{
         Val(Dim),
         _stencil_taps(op),
         _stencil_weights(op, space, I)
+    )
+end
+
+# --- The corner rule of a ghost mesh (#218, design note "Corner policy") ------------ #
+#
+# A mixed difference `A_d(B_e(w))` (two first differences along different axes, any
+# constant or grid-function scales between them) at a 2D corner node, or a 3D edge node,
+# of a ghost mesh reads the padded corner beyond it: `A`'s tap to the facet ghost along `d`
+# re-evaluates `B` there, and `B`'s tap along `e` lands outside along both axes, a point
+# that is no node and no ghost (`is_absent`). At such a node the whole mixed difference is
+# the inward one-sided one along both axes, `D_{s_d,d}(D_{s_e,e}(w))` with `s = +1` (`D₊`)
+# at a first node and `-1` (`D₋`) at a last, which reads physical nodes only. Elsewhere,
+# and on any mesh that is not a ghost mesh, nothing changes: the predicate is a constant
+# `false` there (`_reads_absent`, `ast/common.jl`).
+#
+# The one-sided stencil keeps the node's own stencil type: `A`'s taps past the two it uses
+# and `B`'s likewise carry a zero weight on `I`'s own offsets, and each weight is converted
+# to the type of the entry it replaces (`_like_entries`), so the walk sees one type at
+# every point.
+const _FirstDifference{D, Dim} = Union{
+    BackwardDifference{D, Dim},
+    ForwardDifference{D, Dim},
+    CenteredDifference{D, Dim},
+    StarDifference{D, Dim},
+    CrossWeightedDifference{D, Dim}
+}
+
+# The first difference under a chain of scales, or `nothing`; decided by type.
+@inline _mixed_inner(op::_FirstDifference) = op
+@inline _mixed_inner(op::Union{OperatorScale, GridFunctionScale}) = _mixed_inner(op.inner_op)
+@inline _mixed_inner(::Any) = nothing
+
+@inline _mixed_axis(::_FirstDifference{D, E}) where {D, E} = E
+@inline _mixed_axis(::Nothing) = 0
+@inline _mixed_taps(op::_FirstDifference) = _stencil_taps(op)
+@inline _mixed_taps(::Nothing) = ()
+
+@inline _needs_onesided(op, m, I::CartesianIndex) = false
+
+@inline function _needs_onesided(
+        op::_FirstDifference{D, Dim}, m::GhostMesh{D}, I::CartesianIndex{D}
+) where {D, Dim}
+    B = _mixed_inner(op.inner_op)
+    E = _mixed_axis(B)
+    (E == 0 || E == Dim || !_has_relative_offsets(op) || _fixes_restriction(op)) && return false
+    return _reads_absent(m, I, Val(Dim), _stencil_taps(op), Val(E), _mixed_taps(B))
+end
+
+# The one-sided taps of a node of `N` taps along `d` at `I`, step `s`: `D_s` on taps `0` and
+# `s`, `(u_{I+s} - u_I) / (x_{I+s} - x_I)`, and a zero weight on tap `0` for the rest.
+@inline function _onesided_taps(m, I::CartesianIndex, d::Int, s::Int, ::Val{N}) where {N}
+    h = s == 1 ? forward_spacing(m, I, d) : spacing(m, I, d)
+    c = s / h
+    taps = ntuple(k -> k == 2 ? s : 0, Val(N))
+    ws = ntuple(k -> k == 1 ? -c : (k == 2 ? c : zero(c)), Val(N))
+    return taps, ws
+end
+
+@noinline function _onesided_mixed(
+        op::TappedNode{D, Dim}, space, I::CartesianIndex{D}, markers, lin_idx::Int
+) where {D, Dim}
+    m = mesh(space)
+    B = _mixed_inner(op.inner_op)
+    E = _mixed_axis(B)
+    as, αs = _onesided_taps(m, I, Dim, _inward_step(m, I, Dim), Val(length(_stencil_taps(op))))
+    bs, βs = _onesided_taps(m, I, E, _inward_step(m, I, E), Val(length(_stencil_taps(B))))
+    lins = LinearIndices(indices(m))
+    O = _flatten_tuples(ntuple(Val(length(as))) do k
+        P = CartesianIndex(ntuple(i -> i == Dim ? I[i] + as[k] : I[i], Val(D)))
+        inner = _onesided_operand(op.inner_op, space, P, markers, lins, Val(E), bs, βs)
+        return scale_stencil(shift_stencil(inner, Val(Dim), as[k]), αs[k])
+    end)
+    return _like_entries(_tapped_stencil(op, space, I, markers, lin_idx), O)
+end
+
+# `B`'s one-sided stencil at `P` (taps `bs`, weights `βs` along `E`), its offsets from `P`,
+# with the scales above it read at `P`.
+@inline _onesided_operand(op::Union{OperatorScale, GridFunctionScale}, space, P, markers,
+    lins, vE, bs, βs) = scale_stencil(
+    _onesided_operand(op.inner_op, space, P, markers, lins, vE, bs, βs),
+    _scale_value(op, lins[P]))
+
+@inline function _onesided_operand(
+        op::_FirstDifference{D}, space, P::CartesianIndex{D}, markers, lins, ::Val{E}, bs, βs
+) where {D, E}
+    return _flatten_tuples(ntuple(Val(length(bs))) do l
+        J = CartesianIndex(ntuple(i -> i == E ? P[i] + bs[l] : P[i], Val(D)))
+        w = local_stencil(op.inner_op, space, J, markers, lins[J])
+        return scale_stencil(shift_stencil(w, Val(E), bs[l]), βs[l])
+    end)
+end
+
+# `O`'s offsets with the entry types of `S`, the node's stencil at the same point.
+@inline function _like_entries(S::Tuple, O::Tuple)
+    length(S) == length(O) || _throw_onesided_length(length(S), length(O))
+    return ntuple(k -> (O[k][1], convert(typeof(S[k][2]), O[k][2])), Val(length(S)))
+end
+
+@noinline function _throw_onesided_length(n::Int, m::Int)
+    throw(
+        ArgumentError(
+        "the one-sided corner stencil has $m entries where the mixed difference has $n. " *
+        "This is a bug in Bramble's corner rule; please report it with the form.",
+    ),
     )
 end
 
