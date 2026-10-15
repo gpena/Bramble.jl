@@ -146,6 +146,7 @@ different subtrees as equal would silently change what the assembled form comput
 is the one thing this pass may never do.
 """
 @inline _ast_equal(::LazyOp, ::LazyOp) = false
+@inline _ast_equal(::T, ::T) where {T <: Union{TrialFunction, TestFunction}} = true
 @inline function _ast_equal(a::T, b::T) where {T <: LazyOp}
     for name in fieldnames(T)
         fa = getfield(a, name)
@@ -609,6 +610,7 @@ const _LinearWrapper = Union{
     CenteredDifference,
     StarDifference,
     CrossWeightedDifference,
+    SecondDifference,
     JumpNode,
     BackwardAverage,
     ForwardAverage,

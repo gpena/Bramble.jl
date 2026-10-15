@@ -78,3 +78,16 @@ interpolate_at
 πₕ
 interpolation_matrix
 ```
+
+## Ghost spaces
+
+A grid space with ghost nodes beyond named facets, built by
+[`gridspace`](@ref)`(Ωₕ; ghosts = ...)`. `constrained` turns boundary relations on it into
+a space of unknowns, and is exported. `lift` and `GhostGridSpace` are `public`, not
+exported (`lift` is also a Makie name): write `Bramble.lift`.
+
+```@docs
+GhostGridSpace
+constrained
+lift
+```

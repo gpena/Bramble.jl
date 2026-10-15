@@ -210,10 +210,15 @@ struct ScalarGridSpace{
 end
 
 """
-    gridspace(Ωₕ::AbstractMeshType{D}) -> ScalarGridSpace{D}
+    gridspace(Ωₕ::AbstractMeshType{D}; ghosts = ()) -> ScalarGridSpace{D}
 
 Constructs a [`ScalarGridSpace`](@ref) defined on the mesh `Ωₕ`, precomputing the inner product
 weights listed in [`ScalarGridSpace`](@ref).
+
+With `ghosts = :boundary` (every boundary facet) or a tuple of facet names such as
+`(:xmin, :ymax)`, it returns a [`GhostGridSpace`](@ref) instead: the physical nodes of `Ωₕ`
+and one ghost beyond each node of the named facets, with inner products that weigh the
+physical nodes, cells and facets only. The default `ghosts = ()` is the space above.
 
 Scratch memory is supplied explicitly by callers through in-place mutating operators
 (such as `D₋ₓ!(vₕ, uₕ)`), avoiding hidden internal vector buffers.
@@ -237,7 +242,11 @@ ndofs(Wₕ) == 11 && sum(weights(Wₕ, Bramble.Innerh())) ≈ 1.0
 true
 ```
 """
-function gridspace(Ωₕ::AbstractMeshType{D}) where {D}
+gridspace(Ωₕ::AbstractMeshType; ghosts = ()) = _gridspace_ghosts(Ωₕ, ghosts)
+
+# `ghosts = ()` is the space without ghosts; a facet name or a tuple of them dispatches to
+# the ghost space (`space/ghost_gridspace.jl`), so each return type stays inferable.
+function _gridspace_ghosts(Ωₕ::AbstractMeshType, ::Tuple{})
     _check_submesh_sizes(Ωₕ)
     return _gridspace(Ωₕ, space_weights(Ωₕ))
 end
@@ -456,10 +465,16 @@ end
         "$(summary(Wₕ))'s weights were computed from its mesh before an in-place " *
         "mutation (set_points!, change_points!, or iterative_refinement!) changed it -- " *
         "innerₕ/inner₊*/every norm through this space would silently use weights for a " *
-        "mesh that no longer exists. Call gridspace(mesh(Wₕ)) again to get a space that " *
-        "reads the mutated mesh.",
+        "mesh that no longer exists. " * _stale_weights_remedy(mesh(Wₕ)),
     ),
     )
+end
+
+# The call that rebuilds a stale space; a padded ghost mesh names its own
+# (`space/ghost_gridspace.jl`).
+function _stale_weights_remedy(::AbstractMeshType)
+    "Call gridspace(mesh(Wₕ)) again to get a space " *
+    "that reads the mutated mesh."
 end
 
 # --- Host mirror for the form assembly pattern walk (gpena/Bramble.jl#94) ------- #

@@ -462,9 +462,107 @@ function _pc_form_session(
     _pc_form_dirichlet(Ωₕ, Wₕ, Vₕ, be, label, f, ft, I_time)
     _pc_form_assembly(Ωₕ, Wₕ, Vₕ, label, f, dim_val)
     _pc_form_reaction(dim_val)
+    _pc_form_nested(dim_val)
 
     # the composite space reaches the same nodes through a different space type
     _pc_form_ast(Vₕ, dim_val)
+    return nothing
+end
+
+# --- The nested forms the ghost relations and `Δₕ` need ------------------------------ #
+#
+# A nested form is a type of its own: the resolved node types and the space type are the
+# cache key, so each spelling of the same form hits the instance warmed here, and a form
+# with another nesting, or on another space, compiles from scratch on the caller's first
+# `assemble`. These are the forms warmed, each with its dimension and the side it acts on.
+#
+#   plain space, 1D and 2D
+#     - `Δₕ(u)` trial side, `Δₕ(v)` test side in a bilinear form, `Δₕ(v)` in a linear one
+#     - `Δₕ(Δₕ(u))` trial side
+#     - in 2D the mixed `Dcₓ(Dcᵧ(u))` and `D̽ₓ(D̽ᵧ(u))`, trial side
+#   plain space, 3D (src/precompile.jl), the Laplacian `Δₕ(u)`, trial side
+#   ghost space (`gridspace(Ωₕ; ghosts = ...)`), 1D and 2D
+#     - the relation rows `constrained(W, u -> F => α * u + ∂ₙ(u) => g)`, which `constrained`
+#       builds as forms of the facet operator `∂ₙ` on each axis (depth 1, trial side); 2D
+#       adds the conormal `∂ₙ(u; K)`, whose rows read every axis, and 1D adds `u => g` and `∂ₙₙ`
+#     - on the constrained space, `-Δₕ(u)` trial side, `Δₕ(v)` test side, `∂ₙ(v)` inside
+#       `inner_Γ` (test side, with the lifted solution as data), `∂ₙ(u)` and `jumpₙ(Δₕ(u))`
+#       inside `inner_Γ` (trial side), and the joint assembly `assemble(a, l)`
+#     - in 2D the mixed `Dcₓ(Dcᵧ(u))` and `D̽ₓ(D̽ᵧ(u))` on the constrained space, trial side
+#
+# Not warmed: `Δₕ(Δₕ(u))` on a ghost space (the second Laplacian reads past the one ghost
+# layer, so the form is refused), and 3D ghost spaces. Float64 only. The meshes are
+# non-uniform, built here with one `:boundary` marker like `_pc_form_reaction`'s.
+function _pc_form_nested(::Val{1})
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+    return _pc_form_nested(Ωₕ, Val(1))
+end
+
+function _pc_form_nested(::Val{2})
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
+    return _pc_form_nested(Ωₕ, Val(2))
+end
+
+function _pc_form_nested(Ωₕ::AbstractMeshType, dim_val::Val)
+    _pc_nested_plain(gridspace(Ωₕ), dim_val)
+    _pc_nested_relations(gridspace(Ωₕ; ghosts = :boundary), dim_val)
+    return nothing
+end
+
+function _pc_nested_plain(Wₕ::ScalarGridSpace, dim_val::Val)
+    fₕ = Rₕ(Wₕ, x -> 1.0)
+    assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Δₕ(u), v)))
+    assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, Δₕ(v))))
+    assemble(form(Wₕ, v -> innerₕ(fₕ, Δₕ(v))))
+    assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Δₕ(Δₕ(u)), v)))
+    _pc_nested_mixed(Wₕ, dim_val)
+    return nothing
+end
+
+# The mixed second differences need two directions.
+_pc_nested_mixed(Wₕ, ::Val{1}) = nothing
+
+function _pc_nested_mixed(Wₕ, ::Val{2})
+    assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Dcₓ(Dcᵧ(u)), v)))
+    assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D̽ₓ(D̽ᵧ(u)), v)))
+    return nothing
+end
+
+# Each `constrained` call builds its relation rows, and its space is then assembled on
+# through the same body: the space type is part of the key.
+function _pc_nested_relations(W::GhostGridSpace, ::Val{1})
+    robin = constrained(W, u -> (:xmin => 2.0 * u + ∂ₙ(u) => 0.5, :xmax => ∂ₙ(u) => x -> x[1]))
+    _pc_nested_constrained(robin)
+    mixed = constrained(
+        W, u -> (:xmin => u => 0.0, :xmin => ∂ₙ(u) => 1.0, :xmax => 1.5 * u + ∂ₙₙ(u) => 1.0)
+    )
+    a = form(mixed, mixed, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
+    l = form(mixed, v -> innerₕ(x -> 1.0, v))
+    assemble(a, l)
+    return nothing
+end
+
+function _pc_nested_relations(W::GhostGridSpace, ::Val{2})
+    facets = (:xmin, :xmax, :ymin, :ymax)
+    robin = constrained(W, u -> map(F -> F => 2.0 * u + ∂ₙ(u) => 0.5, facets))
+    _pc_nested_constrained(robin)
+    K = [2.0 0.5; 0.5 1.0]
+    conormal = constrained(W, u -> map(F -> F => 2.0 * u + ∂ₙ(u; K) => 1.0, facets))
+    a = form(conormal, conormal, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
+    l = form(conormal, v -> innerₕ(x -> 1.0, v))
+    assemble(a, l)
+    assemble(form(robin, robin, (u, v) -> innerₕ(Dcₓ(Dcᵧ(u)), v)))
+    assemble(form(robin, robin, (u, v) -> innerₕ(D̽ₓ(D̽ᵧ(u)), v)))
+    return nothing
+end
+
+function _pc_nested_constrained(C)
+    a = form(C, C, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
+    assemble(a, form(C, v -> innerₕ(x -> 1.0, v)))
+    assemble(a, form(C, v -> inner_Γ(Δₕ(lift(C)), ∂ₙ(v))))
+    assemble(form(C, C, (u, v) -> innerₕ(u, Δₕ(v))))
+    assemble(form(C, C, (u, v) -> inner_Γ(∂ₙ(u), v)))
+    assemble(form(C, C, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v)))
     return nothing
 end
 

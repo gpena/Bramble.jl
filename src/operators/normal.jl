@@ -50,7 +50,7 @@ function normal_vector(Wₕ::ScalarGridSpace{D}, marker::Symbol) where {D}
     Ωₕ = mesh(Wₕ)
     face = _normal_face_name(Ωₕ, marker)
     ν = normal_vector(Ωₕ, face)  # throws the ArgumentError for an unknown face name
-    facet = boundary_symbol_to_cartesian(indices(Ωₕ))[face]
+    facet = boundary_symbol_to_cartesian(_facet_indices(Ωₕ))[face]
     lin = LinearIndices(indices(Ωₕ))
 
     T = eltype(Wₕ)
@@ -58,6 +58,11 @@ function normal_vector(Wₕ::ScalarGridSpace{D}, marker::Symbol) where {D}
     _fill_normal!(locality(backend(Wₕ)), nₕ, facet, ν, lin, Val(D))
     return nₕ
 end
+
+# The indices whose faces are the facets: a ghost mesh's physical nodes, in its padded
+# index space, so its facets are the physical ones and not the ghost layer.
+@inline _facet_indices(Ωₕ::AbstractMeshType) = indices(Ωₕ)
+@inline _facet_indices(G::GhostMesh) = physical_indices(G)
 
 # The face name `marker` resolves to under `inner_Γ`'s rule (`_surface_mask`,
 # mesh/queries.jl): a marker the mesh holds is read off its points, which must make up exactly
@@ -150,10 +155,9 @@ be normal to.
 l = form(Wₕ, v -> inner_Γ(dot(Fₕ, η), v; markers = (:xmax,)))
 ```
 
-The normal *derivative* of an unknown is not built on this yet; see the note below the
-`NormalContraction` definition for why it waits for ghost points.
+The normal *derivative* of an unknown is [`∂ₙ`](@ref), which needs ghost points.
 
-See also: [`inner_Γ`](@ref), [`normal_vector`](@ref)
+See also: [`inner_Γ`](@ref), [`normal_vector`](@ref), [`∂ₙ`](@ref)
 """
 const η = NormalSymbol()
 
@@ -170,19 +174,9 @@ end
 @inline dot(F::NTuple{D, Any}, ::NormalSymbol) where {D} = NormalContraction{D, typeof(F)}(F)
 @inline dot(::NormalSymbol, F::NTuple{D, Any}) where {D} = dot(F, η)
 
-# The normal *derivative* is not here yet, deliberately.
-#
-# `∂ₙ(u) = ∇u · η` needs a gradient that still has a stencil on a boundary face. `∇ₕ` has
-# none there (it is the backward one, truncated on the first slice of each axis) and `Dcₕ`,
-# the centered one this should be built on, is truncated to zero on both end slices. What
-# makes a centered difference meaningful at a boundary point is a ghost point beyond it, and
-# Bramble has no ghost meshes yet -- they are milestone v4.0.0's subject, and the normal
-# derivative belongs with the Neumann and Robin assembly that milestone builds
-# (gpena/Bramble.jl#27, #30). Defining `∂ₙ` on a one-sided stand-in now would fix the wrong
-# convention in the API before the right one exists.
-#
-# `dot(F, η)` below is a different question and is well defined today: `F` is a field whose
-# values are already known at every point, so nothing has to be differenced at the face.
+# `dot(F, η)` needs no ghosts: `F` is a field whose values are already known at every point,
+# so nothing has to be differenced at the face. The normal *derivative* of an unknown does,
+# and is the facet operator `∂ₙ` further down.
 
 """
     InnerGammaNormal{MASK, DIM} <: AbstractInnerProduct
@@ -200,11 +194,28 @@ struct InnerGammaNormal{MASK, DIM} <: AbstractInnerProduct end
         ::InnerGammaNormal{MASK, DIM}, space, I::CartesianIndex{D}, lin_idx::Int
 ) where {MASK, DIM, D}
     Ωₕ = mesh(space)
-    np = npoints(Ωₕ, Tuple)
-    m = _transverse_measure(Ωₕ, I, Val(DIM), Val(D))
-    MASK[DIM][1] && I[DIM] == 1 && return -m
-    MASK[DIM][2] && I[DIM] == np[DIM] && return m
-    return zero(m)
+    MASK[DIM][1] && _on_facet(Ωₕ, I, DIM, 1) && return -_facet_measure(Ωₕ, I, Val(DIM))
+    MASK[DIM][2] && _on_facet(Ωₕ, I, DIM, 2) && return _facet_measure(Ωₕ, I, Val(DIM))
+    return zero(eltype(Ωₕ))
+end
+
+# Whether the point `I` of the walked mesh is a node of facet `(d, s)`, `s` 1 for the
+# minimum and 2 for the maximum, and the facet's transverse measure there. On a ghost mesh
+# the facet is the physical one, inside the padded index space: a ghost is on no facet, and
+# the measure is the physical mesh's (the padded mesh gives the end node a whole cell).
+@inline function _on_facet(Ωₕ::AbstractMeshType, I::CartesianIndex, d::Int, s::Int)
+    return I[d] == (s == 1 ? 1 : npoints(Ωₕ, Tuple)[d])
+end
+@inline function _on_facet(G::GhostMesh, J::CartesianIndex, d::Int, s::Int)
+    J in physical_indices(G) || return false
+    return _on_facet(G.physical, J - CartesianIndex(G.lo), d, s)
+end
+
+@inline function _facet_measure(Ωₕ::AbstractMeshType{D}, I, ::Val{d}) where {D, d}
+    return _transverse_measure(Ωₕ, I, Val(d), Val(D))
+end
+@inline function _facet_measure(G::GhostMesh{D}, J, ::Val{d}) where {D, d}
+    return _transverse_measure(G.physical, J - CartesianIndex(G.lo), Val(d), Val(D))
 end
 
 """
@@ -454,8 +465,340 @@ for op in (:+, :-)
     @eval Base.$op(::LazyOp, ::AbstractNormalTerm) = _throw_normal_outside_gamma()
 end
 
+# --- Facet operators: the normal derivative ------------------------------------------- #
+#
+# `∂ₙ(u)` is `η_F Dc_d(u)` on each facet `F` with normal axis `d`: a value per facet, not per
+# node, so a corner node has one for each facet it lies on. It is not a `LazyOp` for that
+# reason. It holds one `LazyOp` per (axis, side), already carrying its outward sign, and
+# `inner_Γ` expands it into one product per facet, each weighted by that facet's measure
+# alone (`InnerGammaFacet`), as it expands `dot(F, η)`; with a facet operator on both sides
+# the products pair facet with facet. Nothing downstream of `form` sees a new node. Other
+# facet operators are other (axis, side) tuples of `LazyOp`s.
+
+"""
+    FacetOperator{D, G, T}
+
+A quantity with one value per boundary facet: `ops[d][s]` is the `LazyOp` it is on the facet
+of normal axis `d`, side `s` (1 the minimum, 2 the maximum), outward sign included. `G[d][e]`
+says whether the operator of a facet of axis `d` reads the ghosts along axis `e`: beyond its
+own facet for `e == d`, beyond both `e` facets at its corners otherwise. [`inner_Γ`](@ref)
+refuses it, at `form`, where those ghosts are missing. Built by [`∂ₙ`](@ref), [`∂ₙₙ`](@ref)
+and [`jumpₙ`](@ref), and meaningful only inside `inner_Γ`; not a `LazyOp`, since a node of a
+corner has a value for each facet it lies on.
+"""
+struct FacetOperator{D, G, T <: Tuple}
+    ops::T
+end
+
+@inline function _facet_operator(::Val{G}, ops::NTuple{D, Tuple{Any, Any}}) where {G, D}
+    return FacetOperator{D, G, typeof(ops)}(ops)
+end
+
+# The operator of facet `(d, s)`, `s` 1 for the minimum and 2 for the maximum.
+@inline _facet_component(F::FacetOperator, d::Int, s::Int) = F.ops[d][s]
+
+@inline _reads_ghosts(::FacetOperator{D, G}) where {D, G} = G
+
+# The axes each facet reads ghosts along, merged: what a sum or a pair of operators reads.
+@inline _merge_reach(G, H) = map((g, h) -> map(|, g, h), G, H)
+
+@inline function _map_facets(f::F, op::FacetOperator{D, G}) where {F, D, G}
+    return _facet_operator(Val(G), map(p -> (f(p[1]), f(p[2])), op.ops))
+end
+
+"""
+    ∂ₙ(u; K = nothing)
+
+The outward normal derivative of `u` at the boundary facets, `η_F Dc_d(u)` on the facet `F`
+of normal axis `d`, with `Dc_d` the centred difference across the facet. It reads the ghost
+beyond the facet, so the space must have ghosts there: build it with
+`gridspace(Ωₕ; ghosts = ...)`.
+
+A node on several facets (a 2D corner) has one value per facet. Meaningful inside
+[`inner_Γ`](@ref), on either side or both, where each facet's term carries that facet's
+weight and `markers` selects the facets (all of them by default); so
+`inner_Γ(∂ₙ(u), v; markers = (:xmin,))` gives a corner only its `xmin` term, and per-facet
+coefficients are sums over `markers`. With `∂ₙ` on both sides, facet pairs with facet.
+
+With a constant `D × D` matrix `K`, it is the conormal derivative `η_F · (K Dc u)`, the
+centred difference along every axis. A `K` that varies in space is refused with an
+`ArgumentError`, as is a facet without ghosts, or a space without any, when `form` is called.
+So is a nonzero `K[d, e]`, `e ≠ d`, on a facet of axis `d` whose corners lack the ghosts of
+the two `e` facets: the tangential difference there reads them.
+
+# Examples
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmin, :ymax)))
+K = [2.0 0.5; 0.5 1.0]
+b = form(Wₕ, Wₕ, (u, v) -> inner_Γ(∂ₙ(u; K), v))
+```
+
+See also: [`inner_Γ`](@ref), [`η`](@ref)
+"""
+function ∂ₙ(u::LazyOp{D}; K = nothing) where {D}
+    _check_conormal(K, Val(D))
+    ops = ntuple(d -> _outward(_normal_flux(u, K, d)), Val(D))
+    return _facet_operator(Val(_normal_reach(K, Val(D))), ops)
+end
+
+# A facet of axis `d` reads along `d`, and along each `e` with `K[d, e] ≠ 0`.
+@inline function _normal_reach(::Nothing, ::Val{D}) where {D}
+    return ntuple(d -> ntuple(==(d), Val(D)), Val(D))
+end
+@inline function _normal_reach(K::AbstractMatrix, ::Val{D}) where {D}
+    return ntuple(d -> ntuple(e -> e == d || !iszero(K[d, e]), Val(D)), Val(D))
+end
+
+@inline _outward(op::LazyOp) = (-op, op)
+
+@inline _normal_flux(u::LazyOp, ::Nothing, d::Int) = Dc(u, Val(d))
+@inline function _normal_flux(u::LazyOp{D}, K::AbstractMatrix{<:Number}, d::Int) where {D}
+    return sum(ntuple(e -> K[d, e] * Dc(u, Val(e)), Val(D)))
+end
+
+@inline _check_conormal(::Nothing, ::Val{D}) where {D} = nothing
+@inline function _check_conormal(K::AbstractMatrix{<:Number}, ::Val{D}) where {D}
+    size(K) == (D, D) || _throw_conormal_tensor(K, D)
+    return nothing
+end
+@noinline _check_conormal(K, ::Val{D}) where {D} = _throw_conormal_tensor(K, D)
+
+@noinline function _throw_conormal_tensor(K, D::Int)
+    throw(
+        ArgumentError(
+        "∂ₙ(u; K) takes a constant $D×$D matrix of numbers, got $(summary(K)). A tensor " *
+        "varying in space is not supported: write the conormal flux out per facet.",
+    ),
+    )
+end
+
+"""
+    ∂ₙₙ(u)
+
+The second normal derivative of `u` at the boundary facets: on the facet `F` of normal axis
+`d`, the second difference `D̃_d D₋_d u` along `d` alone (the per-axis term of
+[`Δₕ`](@ref)), the same on both sides since `η_F² = 1`. It reads the ghost beyond the facet,
+whose spacing is the first interior one, so the space must have ghosts there: build it with
+`gridspace(Ωₕ; ghosts = ...)`.
+
+A node on several facets (a 2D corner) has one value per facet, each reading only the
+ghost of its own facet. Meaningful inside [`inner_Γ`](@ref), on either side or both, with
+`markers` selecting the facets as for [`∂ₙ`](@ref); a facet without ghosts, or a space
+without any, is refused with an `ArgumentError` when `form` is called.
+
+# Examples
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:xmin,)))
+```
+
+See also: [`∂ₙ`](@ref), [`jumpₙ`](@ref), [`inner_Γ`](@ref)
+"""
+function ∂ₙₙ(u::LazyOp{D}) where {D}
+    ops = ntuple(d -> (s = _second_difference(u, Val(d)); (s, s)), Val(D))
+    return _facet_operator(Val(_normal_reach(nothing, Val(D))), ops)
+end
+
+"""
+    jumpₙ(w)
+
+The inward jump of `w` at the boundary facets, `w_{I − η_F e_d} − w_I` at the node `I` of
+the facet `F` of normal axis `d`: the forward jump `w_{I + e_d} − w_I` on a minimum facet,
+the backward one `w_{I − e_d} − w_I` on a maximum facet. Both read only the facet node and
+its interior neighbour, so `jumpₙ` needs no ghosts of its own and works on any space; an
+operand that reads ghosts (`jumpₙ(Δₕ(u))`) needs the space to have them.
+
+A node on several facets (a 2D corner) has one value per facet. Meaningful inside
+[`inner_Γ`](@ref), on either side or both, with `markers` selecting the facets as for
+[`∂ₙ`](@ref), so per-facet coefficients are sums over `markers`.
+
+# Examples
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(2.0 * jumpₙ(u), jumpₙ(v); markers = (:xmin,)))
+b = form(Wₕ, Wₕ, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v))
+```
+
+See also: [`∂ₙ`](@ref), [`∂ₙₙ`](@ref), [`inner_Γ`](@ref)
+"""
+function jumpₙ(w::LazyOp{D}) where {D}
+    ops = ntuple(d -> (jump(w, Val(d)), backward_shift(w, Val(d)) - w), Val(D))
+    return _facet_operator(Val(ntuple(_ -> ntuple(_ -> false, Val(D)), Val(D))), ops)
+end
+
+# Scalars and sums, facet by facet: `α * u + β * ∂ₙ(u)` is `α u + β η_F Dc_d(u)` on each
+# facet, and `c * ∂ₙ(u)` scales every facet's operator.
+const _FacetScalar = Union{Number, Base.RefValue{<:Number}}
+
+@inline Base.:*(c::_FacetScalar, F::FacetOperator) = _map_facets(op -> c * op, F)
+@inline Base.:*(F::FacetOperator, c::_FacetScalar) = c * F
+@inline Base.:/(F::FacetOperator, c::Number) = _map_facets(op -> op / c, F)
+@inline Base.:-(F::FacetOperator) = _map_facets(-, F)
+
+@inline function Base.:+(F::FacetOperator{D, G1}, H::FacetOperator{D, G2}) where {D, G1, G2}
+    ops = ntuple(d -> (F.ops[d][1] + H.ops[d][1], F.ops[d][2] + H.ops[d][2]), Val(D))
+    return _facet_operator(Val(_merge_reach(G1, G2)), ops)
+end
+@inline Base.:-(F::FacetOperator, H::FacetOperator) = F + (-H)
+@inline Base.:+(F::FacetOperator{D}, u::LazyOp{D}) where {D} = _map_facets(op -> op + u, F)
+@inline Base.:+(u::LazyOp{D}, F::FacetOperator{D}) where {D} = _map_facets(op -> u + op, F)
+@inline Base.:-(F::FacetOperator{D}, u::LazyOp{D}) where {D} = _map_facets(op -> op - u, F)
+@inline Base.:-(u::LazyOp{D}, F::FacetOperator{D}) where {D} = _map_facets(op -> u - op, F)
+
+"""
+    InnerGammaFacet{MASK, DIM, SIDE, G} <: AbstractInnerProduct
+
+The quadrature weight of one facet: the transverse measure `∏_{e ≠ DIM} ĥ_e` at the nodes of
+the facet of normal axis `DIM`, side `SIDE` (1 the minimum, 2 the maximum), when `MASK`
+selects it, and zero anywhere else. Unsigned, since a `FacetOperator` carries its
+outward sign. `G[e]` says whether the term reads the ghosts along axis `e` (the facet's own
+for `e == DIM`, both `e` facets' at its corners otherwise), which `form` checks.
+"""
+struct InnerGammaFacet{MASK, DIM, SIDE, G} <: AbstractInnerProduct end
+
+@inline function compute_weight(
+        ::InnerGammaFacet{MASK, DIM, SIDE}, space, I::CartesianIndex{D}, lin_idx::Int
+) where {MASK, DIM, SIDE, D}
+    Ωₕ = mesh(space)
+    MASK[DIM][SIDE] && _on_facet(Ωₕ, I, DIM, SIDE) && return _facet_measure(Ωₕ, I, Val(DIM))
+    return zero(eltype(Ωₕ))
+end
+
+function _resolved_inner(
+        ::Type{InnerGammaFacet{_SurfaceLabels{L}, DIM, SIDE, G}}, Ωₕ) where {L, DIM, SIDE, G}
+    mask = _surface_mask(Ωₕ, L)
+    mask[DIM][SIDE] && _check_facet_reach(Ωₕ, G, DIM, SIDE)
+    return InnerGammaFacet{mask, DIM, SIDE, G}
+end
+function _surface_labels(
+        ::Type{InnerGammaFacet{_SurfaceLabels{L}, DIM, SIDE, G}}) where {L, DIM, SIDE, G}
+    return L
+end
+
+# The facet's own ghosts first, then, for each other axis `e` the term reads along, the
+# ghosts of both `e` facets, which the tangential difference reads at the facet's corners.
+function _check_facet_reach(Ωₕ, G::Tuple, DIM::Int, SIDE::Int)
+    G[DIM] && _check_facet_ghosts(Ωₕ, DIM, SIDE)
+    for e in eachindex(G), s in 1:2
+
+        e != DIM && G[e] && _check_transverse_ghosts(Ωₕ, DIM, SIDE, e, s)
+    end
+    return nothing
+end
+
+@inline function _check_transverse_ghosts(G::GhostMesh, d::Int, s::Int, e::Int, t::Int)
+    has_ghosts(G, e, _GHOST_SIDES[t]) || _throw_conormal_unghosted(d, s, e, t)
+    return nothing
+end
+@inline function _check_transverse_ghosts(Ωₕ, d::Int, s::Int, ::Int, ::Int)
+    return _check_facet_ghosts(Ωₕ, d, s)
+end
+
+@inline _facet_name(d::Int, s::Int) = (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)[2d - 2 + s]
+
+@noinline function _throw_conormal_unghosted(d::Int, s::Int, e::Int, t::Int)
+    facet, other = _facet_name(d, s), _facet_name(e, t)
+    throw(
+        ArgumentError(
+        "∂ₙ(u; K) on :$facet reads, at its corner on :$other, the ghost beyond :$other " *
+        "through K[$d, $e] ≠ 0, and :$other carries no ghosts on this space. Ghost :$other " *
+        "too (or use `ghosts = :boundary`), or leave :$facet out of `markers`.",
+    ),
+    )
+end
+
+@inline function _check_facet_ghosts(G::GhostMesh, d::Int, s::Int)
+    has_ghosts(G, d, _GHOST_SIDES[s]) || _throw_facet_operator_unghosted(d, s, true)
+    return nothing
+end
+@inline _check_facet_ghosts(Ωₕ, d::Int, s::Int) = _throw_facet_operator_unghosted(d, s, false)
+
+@noinline function _throw_facet_operator_unghosted(d::Int, s::Int, ghost_space::Bool)
+    facet = _facet_name(d, s)
+    where_ = ghost_space ? "the facet :$facet carries no ghosts on this space" :
+             "the space has no ghosts"
+    throw(
+        ArgumentError(
+        "∂ₙ and ∂ₙₙ read the ghost beyond each facet they are integrated on, and $where_. " *
+        "Ghost the facet, with `gridspace(Ωₕ; ghosts = ...)` naming :$facet (or " *
+        "`ghosts = :boundary`), or leave :$facet out of `markers`.",
+    ),
+    )
+end
+
+"""
+    inner_Γ(F::FacetOperator, v; markers = :boundary) -> LazyOp
+    inner_Γ(u, F::FacetOperator; markers = :boundary) -> LazyOp
+
+The surface integral of a facet operator such as [`∂ₙ`](@ref)`(u)`, facet by facet: one
+product per facet `markers` selects, weighted by that facet's measure, so a corner node gets
+a term from each selected facet it lies on. With a facet operator on both sides, the
+products pair the two on the same facet. `markers` defaults to every facet.
+"""
+function inner_Γ(F::FacetOperator{D}, right::LazyOp{D}; markers = :boundary) where {D}
+    return _facet_terms(Val(_normal_mask(Val(D), markers)), Val(_reads_ghosts(F)), Val(D),
+        (d, s) -> F.ops[d][s], (d, s) -> right)
+end
+
+function inner_Γ(left::LazyOp{D}, F::FacetOperator{D}; markers = :boundary) where {D}
+    return _facet_terms(Val(_normal_mask(Val(D), markers)), Val(_reads_ghosts(F)), Val(D),
+        (d, s) -> left, (d, s) -> F.ops[d][s])
+end
+
+function inner_Γ(F::FacetOperator{D}, H::FacetOperator{D}; markers = :boundary) where {D}
+    G = _merge_reach(_reads_ghosts(F), _reads_ghosts(H))
+    return _facet_terms(Val(_normal_mask(Val(D), markers)), Val(G), Val(D),
+        (d, s) -> F.ops[d][s], (d, s) -> H.ops[d][s])
+end
+
+for S in (Function, Number, VectorElement)
+    @eval function inner_Γ(g::$S, F::FacetOperator{D}; markers = :boundary) where {D}
+        return _facet_terms(Val(_normal_mask(Val(D), markers)), Val(_reads_ghosts(F)),
+            Val(D), (d, s) -> g, (d, s) -> F.ops[d][s])
+    end
+end
+
+# One term per facet, `ntuple(Val(D))` over the axes so each weight is a type.
+@inline function _facet_terms(
+        ::Val{MASK}, ::Val{G}, ::Val{D}, left::L, right::R) where {MASK, G, D, L, R}
+    return sum(
+        ntuple(Val(D)) do d
+        _normal_term(InnerGammaFacet{MASK, d, 1, G[d]}(), left(d, 1), right(d, 1)) +
+        _normal_term(InnerGammaFacet{MASK, d, 2, G[d]}(), left(d, 2), right(d, 2))
+    end
+    )
+end
+
+# A facet operator has a facet only inside `inner_Γ`.
+@noinline function _throw_facet_operator_outside_gamma()
+    throw(
+        ArgumentError(
+        "a facet operator such as ∂ₙ(u) has one value per boundary facet: use it inside " *
+        "inner_Γ(∂ₙ(u), v; markers = ...), not in innerₕ or inner₊",
+    ),
+    )
+end
+
+for f in (:innerₕ, :inner₊)
+    @eval $f(::FacetOperator, ::LazyOp; markers = ()) = _throw_facet_operator_outside_gamma()
+    @eval $f(::LazyOp, ::FacetOperator; markers = ()) = _throw_facet_operator_outside_gamma()
+    @eval $f(::FacetOperator, ::FacetOperator; markers = ()) = _throw_facet_operator_outside_gamma()
+end
+
 # --- Expression rendering (gpena/Bramble.jl#274) ----------------------------------- #
 
 # `InnerGammaNormal`'s case of `_inner_name` (operators/inner.jl): `inner_Γ` plus the
 # direction subscript, as `InnerPlus{Dim}` gets.
 _inner_name(::InnerGammaNormal{MASK, DIM}) where {MASK, DIM} = "inner_Γ" * _BRAMBLE_var2symbol[DIM]
+
+# `InnerGammaFacet`'s: `inner_Γ` plus the facet's name.
+function _inner_name(::InnerGammaFacet{MASK, DIM, SIDE}) where {MASK, DIM, SIDE}
+    return "inner_Γ" * _BRAMBLE_var2symbol[DIM] * (SIDE == 1 ? "⁻" : "⁺")
+end

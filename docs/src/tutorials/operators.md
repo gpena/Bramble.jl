@@ -4,7 +4,7 @@ CurrentModule = Bramble
 
 # [Difference, jump and average operators](@id tutorial_operators)
 
-**What you will learn.** How to apply a difference, a jump or an average to a discrete function, what each does at the edge of the grid, and how to get the same operator as a matrix.
+**What you will learn.** How to apply a difference, a jump or an average to a discrete function, what each does at the edge of the grid, and how to get the same operator as a matrix, and how the normal derivative and the Laplacian read ghost points.
 
 **What you need first.** The [mesh tutorial](@ref tutorial_mesh) and the [space tutorial](@ref tutorial_space), for meshes, grid spaces and discrete functions.
 
@@ -273,6 +273,192 @@ parent(∇ₕ ⋅ uv) == parent(divₕ(uv)), parent(∇ₕ × uv) == parent(curl
 ```
 
 The next page, the [form tutorial](form.md), assembles these operators into linear systems.
+
+---
+
+## [Operators at a ghost boundary](@id operators_ghost)
+
+A difference at the first point has no neighbour, so it is truncated. A second-order Neumann or Robin condition needs that neighbour, and a [ghost space](@ref space_ghost) supplies it. This section reads the operators on a ghost space through the matrices of forms, which the [form tutorial](form.md) introduces: `form(Wₕ, Wₕ, (u, v) -> ...)` takes the unknown `u` and a test function `v` symbolically, and `assemble` returns the matrix. The running example is a graded interval with six points and ghosts on both ends. Its degrees of freedom are the six nodes, then the `xmin` ghost (7), then the `xmax` ghost (8):
+
+```@example operators
+import Bramble: change_points!, Dcₓ, Dcᵧ, D₋ₓ, D̃ₓ, D̃ᵧ, D₋ᵧ
+using LinearAlgebra: norm
+
+Ω₁ = mesh(domain(interval(0.0, 1.0)), 6)
+change_points!(Ω₁, collect(range(0.0, 1.0, length = 6) .^ 2))
+W₁ = gridspace(Ω₁; ghosts = :boundary)
+
+x₁ = collect(points(Ω₁))
+h₂, hₙ = x₁[2] - x₁[1], x₁[6] - x₁[5]       # the spacings the ghosts copy
+row(f, i) = Matrix(assemble(form(W₁, W₁, f)))[i, :]
+
+ndofs(W₁), h₂, hₙ
+```
+
+### How differences read the ghost
+
+At a ghosted facet the stencil of every operator reads the ghost as if it were a neighbour, with the boundary spacing repeated beyond it: ``h_1 := h_2`` at the first point and ``h_{n+1} := h_n`` at the last. In 1D an `inner_Γ` term has weight ``1`` at the facet node, so its row is the stencil itself. The backward difference at the first node is ``(u_1 - u_0)/h_2``:
+
+```@example operators
+r = row((u, v) -> inner_Γ(D₋ₓ(u), v; markers = (:xmin,)), 1)
+
+@assert r[[1, 7]] ≈ [1 / h₂, -1 / h₂] && count(!iszero, r) == 2
+
+r
+```
+
+Entry 1 is the node, entry 7 the ghost, and no other point is read. A facet without ghosts is truncated as in the first sections of this page. With a ghost on `xmin` only, the centred difference of a volume term is zero at the last node and reads the ghost at the first:
+
+```@example operators
+W_left = gridspace(Ω₁; ghosts = (:xmin,))
+A_dc = Matrix(assemble(form(W_left, W_left, (u, v) -> innerₕ(Dcₓ(u), v))))
+
+@assert all(iszero, A_dc[6, :])             # truncated at xmax, as without ghosts
+@assert !iszero(A_dc[1, 7])                 # reads the xmin ghost (degree of freedom 7)
+
+A_dc[1, :], A_dc[6, :]
+```
+
+A boundary term that needs a point beyond a facet without ghosts is refused rather than truncated: `inner_Γ(Dcₓ(u), v; markers = (:xmax,))` on this space throws an `ArgumentError` that asks for ghosts on that facet.
+
+### The normal derivative and the facet operators
+
+Three operators serve the boundary conditions that name a normal direction. They act at the nodes of a facet with outward normal ``\eta``, and they are only meaningful inside [`inner_Γ`](@ref) or a [`constrained`](@ref) relation: they are not grid functions.
+
+| Operator | Meaning at a facet node, axis ``d`` |
+|:--|:--|
+| `∂ₙ(u)` | ``\eta\, D_{c,d} u``: the centred difference reading the ghost, times the outward sign |
+| `∂ₙₙ(u)` | ``\tilde D_d D_{-d}\, u``: the second difference along the normal, reading the ghost |
+| `jumpₙ(w)` | ``w_{I - \eta e_d} - w_I``: the inward jump, which reads no ghost |
+
+On the six-point mesh the stencils are explicit, at both ends:
+
+```@example operators
+r∂ₙ_min = row((u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmin,)), 1)
+r∂ₙ_max = row((u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmax,)), 6)
+
+@assert r∂ₙ_min[[2, 7]] ≈ [-1 / (2h₂), 1 / (2h₂)]     # -(u₂ - u₀) / (2h₂)
+@assert r∂ₙ_max[[5, 8]] ≈ [-1 / (2hₙ), 1 / (2hₙ)]     # (u₇ - u₅) / (2hₙ)
+
+r∂ₙ_min, r∂ₙ_max
+```
+
+```@example operators
+r∂ₙₙ_min = row((u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:xmin,)), 1)
+r∂ₙₙ_max = row((u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:xmax,)), 6)
+rjump_min = row((u, v) -> inner_Γ(jumpₙ(u), v; markers = (:xmin,)), 1)
+rjump_max = row((u, v) -> inner_Γ(jumpₙ(u), v; markers = (:xmax,)), 6)
+
+@assert r∂ₙₙ_min[[1, 2, 7]] ≈ [-2, 1, 1] ./ h₂^2      # (u₂ - 2u₁ + u₀) / h₂²
+@assert r∂ₙₙ_max[[5, 6, 8]] ≈ [1, -2, 1] ./ hₙ^2      # (u₅ - 2u₆ + u₇) / hₙ²
+@assert rjump_min[[1, 2]] == [-1.0, 1.0] && rjump_min[[7, 8]] == [0.0, 0.0]
+@assert rjump_max[[5, 6]] == [1.0, -1.0] && rjump_max[[7, 8]] == [0.0, 0.0]
+
+r∂ₙₙ_min, rjump_max
+```
+
+The jump is the inward one at both ends, ``u_2 - u_1`` at the left and ``u_{n-1} - u_n`` at the right, which is why it needs no ghost of its own. The plain forward `jumpₓ` would read across the ghost cell at the right end. A facet operator takes scalars and sums, so `α * u + β * ∂ₙ(u)` is the Robin combination. It is not a grid function: `jumpₙ(∂ₙ(u))` and a function coefficient times a facet operator are errors, and the function belongs in the data of `inner_Γ` or of a relation.
+
+A facet whose ghosts are missing is refused when the form is built, never read as zero:
+
+```@example operators
+try
+    form(W_left, W_left, (u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmax,)))
+catch e
+    @assert e isa ArgumentError
+    first(split(sprint(showerror, e), ". "))
+end
+```
+
+### One value per incident facet
+
+A corner lies on two facets. A node there has two normal derivatives, one per facet. Inside `inner_Γ`, a facet operator expands into one product per facet, each with its own facet weight and its own ghost; `markers` chooses the facets. Take the corner node of the non-uniform grid of the [space tutorial](@ref space_ghost), degree of freedom 1. The `xmin` ghost of its row is degree of freedom 13 and the `ymin` ghost of its column is 19:
+
+```@example operators
+Ω_c = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+Ωₕ_c = mesh(Ω_c, (4, 3), (true, true))
+change_points!(Ωₕ_c, markers(Ω_c), ([0.0, 0.2, 0.6, 1.0], [0.0, 0.5, 1.0]))
+W_c = gridspace(Ωₕ_c; ghosts = :boundary)
+
+row_c(f) = Matrix(assemble(form(W_c, W_c, f)))[1, :]
+r_x = row_c((u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmin,)))
+r_y = row_c((u, v) -> inner_Γ(∂ₙ(u), v; markers = (:ymin,)))
+r_xy = row_c((u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmin, :ymin)))
+
+@assert r_x[13] != 0 && r_x[19] == 0         # the xmin term reads only the xmin ghost
+@assert r_y[19] != 0 && r_y[13] == 0
+@assert r_xy ≈ r_x + r_y
+
+r_x[13], r_y[19]
+```
+
+The two entries differ, ``0.625`` and ``0.1``, because each facet term carries its facet's weight, and at the corner that weight is a half cell. A coefficient per facet is a sum over `markers`, one `inner_Γ` per facet, and the corner row follows:
+
+```@example operators
+r_c = row_c((u, v) -> inner_Γ(2.0 * ∂ₙ(u), v; markers = (:xmin,)) +
+                      inner_Γ(5.0 * ∂ₙ(u), v; markers = (:ymin,)))
+
+@assert r_c ≈ 2.0 * r_x + 5.0 * r_y
+
+r_c[13], r_c[19]
+```
+
+The same holds for `∂ₙₙ` and `jumpₙ`. The conormal derivative of a constant tensor ``K``, `∂ₙ(u; K = K)`, is ``\eta_F\,(K\, D_c u)`` per facet. With a mixed entry ``K_{12}`` the `xmin` term also differences along ``y``, so at the corner it reads the `ymin` ghost too:
+
+```@example operators
+K = [1.0 0.5; 0.5 2.0]
+r_K = row_c((u, v) -> inner_Γ(∂ₙ(u; K = K), v; markers = (:xmin,)))
+
+@assert r_K[19] != 0 && r_K[13] != 0
+
+r_K[13], r_K[19]
+```
+
+Two relations that couple two ghosts at a corner are what [`constrained`](@ref) solves as a ``2 \times 2`` block. A conormal term is refused where the ghosts of the neighbouring facet at the corner are missing, and ``K`` must be a constant matrix of numbers.
+
+### The Laplacian inside a form
+
+On trial and test functions, [`Δₕ`](@ref) is one operator: the sum over the axes of the second difference ``\tilde D_d D_{-d}``. It assembles to the matrix of the spelled-out sum, on a space without ghosts and on a ghost space:
+
+```@example operators
+W_p = gridspace(Ωₕ_c)
+lap(W) = assemble(form(W, W, (u, v) -> innerₕ(Δₕ(u), v)))
+spelled(W) = assemble(form(W, W, (u, v) -> innerₕ(D̃ₓ(D₋ₓ(u)) + D̃ᵧ(D₋ᵧ(u)), v)))
+
+@assert norm(lap(W_p) - spelled(W_p)) <= 1e-13 * norm(lap(W_p))
+@assert norm(lap(W_c) - spelled(W_c)) <= 1e-13 * norm(lap(W_c))
+@assert norm(lap(W_c)) > 0
+
+norm(lap(W_c) - spelled(W_c)) / norm(lap(W_c))
+```
+
+`Δₕ` is cheaper to build than the nested pair, because the form compiles one three-point stencil per axis. At a facet node on a ghost space it is the ordinary three-point stencil with the ghost as a neighbour. On `W₁`, the row of the first node is the cell weight times ``(u_2 - 2u_1 + u_0)/h_2^2``:
+
+```@example operators
+r_lap = row((u, v) -> innerₕ(Δₕ(u), v), 1)
+ĥ₁ = h₂ / 2
+
+@assert r_lap[[1, 2, 7]] ≈ ĥ₁ .* [-2, 1, 1] ./ h₂^2
+
+r_lap
+```
+
+It nests with the other operators, `jumpₓ(Δₕ(u))` or `Dcₓ(Δₕ(u))`, and with itself.
+
+### Mixed differences at a corner
+
+The mixed difference ``D_{c,x} D_{c,y}`` at a corner node would read the padded corner point, which is absent. On a ghost space the stencil there is the inward one-sided difference along both axes, which is second order and reads only nodes. At the corner node of the grid above, with ``h_x = 0.2`` and ``h_y = 0.5``, the row is the cell weight ``h_x h_y / 4`` over ``h_x h_y`` times ``+1, -1, -1, +1`` on the nodes ``(1,1), (2,1), (1,2), (2,2)``:
+
+```@example operators
+r_mixed = row_c((u, v) -> innerₕ(Dcₓ(Dcᵧ(u)), v))
+
+@assert r_mixed[[1, 2, 5, 6]] ≈ 0.25 .* [1, -1, -1, 1]
+@assert count(!iszero, r_mixed) == 4
+
+r_mixed[[1, 2, 5, 6]]
+```
+
+Every other mixed difference that would read an absent point is refused with an `ArgumentError`. Nested mixed differences on a ghost space are assembled as forms, as here. The runtime operators of the sections above are eager: `Dcᵧ(uₕ)` returns a finished grid function before `Dcₓ` sees it, so on a lifted grid function the composition at the ghosts next to a corner is not claimed to equal the form.
 
 ---
 

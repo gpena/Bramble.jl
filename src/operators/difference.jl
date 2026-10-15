@@ -1380,6 +1380,67 @@ end
     end
 end
 
+# --- The second difference ---------------------------------------------------------- #
+
+"""
+    SecondDifference{D,Dim,OpType<:LazyOp{D}} <: LazyOp{D}
+
+An AST node for the second difference along `Dim`, the composition
+``\\tilde{D}_{+}(D_{-}(u))`` as one three-point stencil,
+
+```math
+\\frac{2}{(h_i + h_{i+1}) h_{i+1}} u_{i+1}
+    - \\frac{2}{h_i h_{i+1}} u_i
+    + \\frac{2}{(h_i + h_{i+1}) h_i} u_{i-1}
+```
+
+Zero at the last point of `Dim`, where `D̃` is truncated, and without the backward tap at the
+first, where `D₋` is: entry for entry the composition `D̃ₓ(D₋ₓ(u))`, built by
+[`Δₕ`](@ref) once per axis. One node, so its operand is evaluated once per tap rather than
+once per tap of a nested inner stencil.
+"""
+struct SecondDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+    inner_op::OpType
+end
+
+# The per-axis node `Δₕ` sums, and the one a facet operator along one axis is built from.
+@inline function _second_difference(op::LazyOp{D}, ::Val{Dim}) where {D, Dim}
+    _check_stencil_dim(Dim, D)
+    return SecondDifference{D, Int(Dim), typeof(op)}(op)
+end
+
+function resolve_ast(op::SecondDifference{D, Dim}) where {D, Dim}
+    inner = resolve_ast(op.inner_op)
+    return SecondDifference{D, Dim, typeof(inner)}(inner)
+end
+
+function _bind_interp_spaces(op::SecondDifference{D, Dim}, trial_leaf, test_leaf) where {D, Dim}
+    inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
+    return SecondDifference{D, Dim, typeof(inner)}(inner)
+end
+
+@inline _stencil_taps(::SecondDifference) = (Val(1), Val(0), Val(-1))
+
+# `a` and `b` are the two fluxes' weights, `2/(S hf)` and `2/(S h)` with S = h + hf; the
+# backward flux is absent at the first point (D₋ is zero there) and the whole stencil at the
+# last (D̃ is). On a padded axis those end points are ghosts, so every physical point reads
+# both neighbours.
+@inline function _stencil_weights(
+        op::SecondDifference{D, Dim}, space, I::CartesianIndex{D}
+) where {D, Dim}
+    m = mesh(space)
+    h = spacing(m, I, Dim)
+    hf = forward_spacing(m, I, Dim)
+    c = 2 / (h + hf)
+    a = c / hf
+    if I[Dim] == npoints(m, Tuple)[Dim]
+        z = zero(a)
+        return (z, z, z)
+    end
+    b = I[Dim] == 1 ? zero(a) : c / h
+    return (a, -(a + b), b)
+end
+
 # --- Traits ----------------------------------------------------------------------- #
 
 """
@@ -1806,4 +1867,8 @@ expression(op::CenteredDifference{D, Dim}) where {D, Dim} = "Dc$(_BRAMBLE_var2sy
 expression(op::StarDifference{D, Dim}) where {D, Dim} = "D̃$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 function expression(op::CrossWeightedDifference{D, Dim}) where {D, Dim}
     "D̽$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+end
+function expression(op::SecondDifference{D, Dim}) where {D, Dim}
+    s = _BRAMBLE_var2symbol[Dim]
+    "D̃$(s)(D₋$(s)($(expression(op.inner_op))))"
 end

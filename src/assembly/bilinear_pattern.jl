@@ -305,3 +305,47 @@ function allocate_system_matrix(form::BilinearForm{D}, ast = form.ast) where {D}
         _pattern_stamp(form.trial_space, form.test_space))
     return A
 end
+
+# --- A repeated `assemble`: the recorded pattern, copied ----------------------------- #
+#
+# `assemble` returns a new matrix every call, so it cannot allocate less than that matrix,
+# but re-recording for it allocated many times the matrix, growing with the stencil's reach.
+# Once a fill has recorded into a `SparseMatrixCSC` `assemble` made, the form keeps a copy of
+# that matrix's pattern (`_keep_pattern!`); a later `assemble` builds its matrix from a copy
+# of it and moves the recording over to the new matrix (`cache.A_id`), whose fill then
+# replays. The recording's positions index the pattern alone, so they hold in any matrix with
+# the same `colptr` and `rowval`.
+
+# The matrix `assemble` fills: the kept pattern while it is valid, else a fresh one.
+_allocate_assembled(form::BilinearForm) = _allocate_assembled(
+    matrix_type(backend(form.test_space)), form)
+
+_allocate_assembled(::Type, form::BilinearForm) = allocate_system_matrix(form, form.ast)
+
+function _allocate_assembled(::Type{MT}, form::BilinearForm) where {MT <: SparseMatrixCSC}
+    cache = form.cache
+    reusable = cache.has_pattern && cache.valid && cache.ast === form.ast &&
+               cache.stamp === _pattern_stamp(form.trial_space, form.test_space)
+    reusable || return allocate_system_matrix(form, form.ast)
+    Tv = _matrix_eltype(form, form.ast)
+    nnz = length(cache.rowval)
+    A = SparseMatrixCSC{Tv, Int}(cache.m, length(cache.colptr) - 1, copy(cache.colptr),
+        copy(cache.rowval), Vector{Tv}(undef, nnz))
+    cache.A_id = objectid(A)
+    return A
+end
+
+# After `assemble`'s fill: keeps `A`'s pattern if the form's recording is against `A` as it
+# now is (a Dirichlet row that inserted a diagonal moved its stored count, so it is not).
+# Kept once per recording: `_store_recording!` clears `has_pattern`.
+_keep_pattern!(::_AssemblyCache, ::AbstractMatrix) = nothing
+
+function _keep_pattern!(cache::_AssemblyCache, A::SparseMatrixCSC{<:Any, Int})
+    cache.has_pattern && return nothing
+    (cache.valid && cache.A_id === objectid(A) && cache.stored == _pattern_length(A)) || return nothing
+    cache.m = size(A, 1)
+    cache.colptr = copy(SparseArrays.getcolptr(A))
+    cache.rowval = copy(rowvals(A))
+    cache.has_pattern = true
+    return nothing
+end

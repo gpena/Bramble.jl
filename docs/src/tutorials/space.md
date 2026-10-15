@@ -4,7 +4,7 @@ CurrentModule = Bramble
 
 # [Grid spaces and discrete functions](@id tutorial_space)
 
-**What you will learn.** How to put a function on a mesh, measure it, and stack copies into a composite space with vector elements.
+**What you will learn.** How to put a function on a mesh, measure it, stack copies into a composite space with vector elements, and add ghost points beyond named facets.
 
 **What you need first.** The [mesh tutorial](mesh.md), for building a mesh; the [geometry tutorial](geometry.md), for the domain it sits on.
 
@@ -142,6 +142,74 @@ normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2
 !!! tip "Try this"
     Replace `Val(2)` with `Val(3)` and add a third function to the tuple. `ncomponents` and
     `ndofs` follow, and every other line of this section stays the same.
+
+## [Ghost spaces](@id space_ghost)
+
+A grid space can carry the ghost points of the [mesh tutorial](@ref mesh_ghost). The keyword `ghosts` of [`gridspace`](@ref) names the facets that get them: `:boundary` for every facet, or a tuple such as `(:xmin, :ymax)`. The default `ghosts = ()` returns the space of the sections above, unchanged. The running example is a small non-uniform grid in the unit square:
+
+```@example space
+import Bramble: change_points!, indices, point
+using LinearAlgebra: diag
+
+Ω_g = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+Ωₕ_g = mesh(Ω_g, (4, 3), (true, true))
+change_points!(Ωₕ_g, markers(Ω_g), ([0.0, 0.2, 0.6, 1.0], [0.0, 0.5, 1.0]))
+
+W_plain = gridspace(Ωₕ_g)
+W_ghost = gridspace(Ωₕ_g; ghosts = :boundary)
+W_part = gridspace(Ωₕ_g; ghosts = (:xmin, :ymax))
+
+@assert typeof(gridspace(Ωₕ_g; ghosts = ())) == typeof(W_plain)
+
+ndofs(W_plain), ndofs(W_ghost), ndofs(W_part)
+```
+
+The degrees of freedom of a ghost space are the physical nodes plus the ghosts. Here ``12`` nodes plus ``2 \cdot 3 + 2 \cdot 4 = 14`` ghosts give 26, and the two named facets give ``12 + 3 + 4 = 19``. The padded corners are not degrees of freedom.
+
+### The order of the degrees of freedom
+
+The order is fixed. The physical nodes come first, in the mesh's linear order. The ghosts follow, facet by facet in the order `xmin, xmax, ymin, ymax, zmin, zmax` (only the named ones), each facet's ghosts in the column-major order of its nodes. A system assembled on a ghost space is indexed this way, so its first rows and columns are the physical nodes.
+
+Each degree of freedom is one point of the padded mesh. `Bramble.padded_space` is the internal space on that mesh, and `Bramble.closure` returns the sparse matrix `E` that sends the degrees of freedom to padded values, one entry ``1`` per column. This reads off where each one sits:
+
+```@example space
+E, _ = Bramble.closure(W_ghost)
+Pₕ = Bramble.padded_space(W_ghost)
+padded = CartesianIndices(npoints(mesh(Pₕ), Tuple))
+
+dof_point(j) = point(mesh(Pₕ), padded[findfirst(!iszero, E[:, j])])
+
+@assert [dof_point(j) for j in 1:12] == vec([point(Ωₕ_g, I) for I in indices(Ωₕ_g)])
+@assert all(dof_point(j)[1] < 0.0 for j in 13:15)        # xmin ghosts, at x = -h₂
+@assert all(dof_point(j)[1] > 1.0 for j in 16:18)        # xmax ghosts, at x = 1 + hₙ
+@assert all(dof_point(j)[2] < 0.0 for j in 19:22)        # ymin ghosts
+@assert all(dof_point(j)[2] > 1.0 for j in 23:26)        # ymax ghosts
+
+[dof_point(j) for j in (1, 12, 13, 15, 16, 18, 19, 22, 23, 26)]
+```
+
+The first two entries are the first and last physical node. The next four are the `xmin` and `xmax` ghosts: ``x = -0.2`` and ``x = 1.4``, the distances ``h_2 = 0.2`` and ``h_n = 0.4`` from the facet. The last four are the `ymin` and `ymax` ghosts at ``y = -0.5`` and ``y = 1.5``. The spacings differ at the two ends of each axis, so a ghost is not a mirror image: its coordinate is read from the mesh.
+
+### Physical-only weights
+
+A ghost carries no quadrature weight. The inner products `innerₕ`, `inner₊` and `inner_Γ` weigh the physical nodes, cells and facets exactly as on the space without ghosts, and give zero weight to every ghost. A form is assembled on the ghost space, so its mass matrix shows this:
+
+```@example space
+M_plain = assemble(form(W_plain, W_plain, (u, v) -> innerₕ(u, v)))
+M_ghost = assemble(form(W_ghost, W_ghost, (u, v) -> innerₕ(u, v)))
+
+@assert diag(M_ghost)[1:12] == diag(M_plain)
+@assert all(iszero, diag(M_ghost)[13:end])
+@assert sum(diag(M_ghost)) ≈ 1.0       # the physical cells tile the unit square
+
+sum(diag(M_ghost)[1:12]), sum(diag(M_ghost)[13:end])
+```
+
+The weights of `inner_Γ` are facet weights: the transverse measure at each facet node, a half cell at the facet's ends. The markers `:xmin` to `:zmax` name the physical facet nodes, never the ghosts. `gridspace` of a bare `GhostMesh` is refused, since its weights would count the ghosts: build the space from the physical mesh with `ghosts`.
+
+### What to do with a ghost space
+
+A ghost space is a space of unknowns for forms. [`form`](@ref) builds on it as on any space, and [`constrained`](@ref) ties its ghosts to boundary relations, which the [form tutorial](@ref form_ghost) shows. The solution vector comes back in the order above, and `Bramble.lift` turns it into a grid function with its ghosts filled in. That grid function lives on the padded space, one point longer at each ghosted end.
 
 ## Reference
 

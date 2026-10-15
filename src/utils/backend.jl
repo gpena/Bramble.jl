@@ -6,9 +6,9 @@ CPU loop can index element by element, [`DeviceLocality`](@ref) for memory an ac
 schedules against instead.
 
 Never declared directly -- [`locality`](@ref) derives it from an array type, an
-[`ExecutionPolicy`](@ref), or a [`Backend`](@ref). Introduced by gpena/Bramble.jl#298 so a
-`Backend`'s storage and its execution policy answer the same question and can be checked
-against each other, rather than each independently claiming a locality that need not agree.
+[`ExecutionPolicy`](@ref), or a [`Backend`](@ref). So a `Backend`'s storage and its
+execution policy answer the same question and can be checked against each other, rather
+than each independently claiming a locality that need not agree.
 
 See also: [`locality`](@ref), [`HostLocality`](@ref), [`DeviceLocality`](@ref).
 """
@@ -29,7 +29,7 @@ struct HostLocality <: Locality end
 
 Storage an accelerator schedules against rather than a CPU loop indexing it directly:
 `MtlVector`/`MtlMatrix` and any future GPU array type. Scalar indexing such storage from a
-host loop is the failure this trait exists to catch before it happens (gpena/Bramble.jl#298).
+host loop is the failure this trait exists to catch before it happens.
 
 See also: [`Locality`](@ref), [`HostLocality`](@ref), [`locality`](@ref).
 """
@@ -44,8 +44,8 @@ Return the [`Locality`](@ref) of `x` -- an array type, an [`ExecutionPolicy`](@r
 Locality is derived from storage, never declared. The fallback method,
 `locality(::Type{<:AbstractArray}) = HostLocality()`, treats any array type this package has
 not been taught otherwise about as host memory. Any array type subtyping
-`GPUArraysCore.AbstractGPUArray` answers `DeviceLocality()` generically (gpena/Bramble.jl#321),
-so a GPU package extension no longer has to add its own method for that to hold -- Metal's
+`GPUArraysCore.AbstractGPUArray` answers `DeviceLocality()` generically, so a
+GPU package extension need not add its own method for that to hold -- Metal's
 `MtlVector`/`MtlMatrix` already subtype it, and any future CUDA/ROCm/oneAPI array type gets
 the right answer the same way, for free. `BrambleMetalExt` keeps its own
 `MtlVector`/`MtlMatrix`/sparse-matrix methods regardless: Julia dispatches to the more
@@ -56,8 +56,7 @@ For an [`ExecutionPolicy`](@ref), `locality` answers what the policy claims: a
 [`CpuPolicy`](@ref) claims [`HostLocality`](@ref), a [`GpuPolicy`](@ref) claims
 [`DeviceLocality`](@ref). For a [`Backend`](@ref), it answers the locality of the backend's
 vector type `VT` alone: `VT` is the storage a sweep actually indexes, so that is the
-locality that matters for legality. The matrix type `MT` is not consulted
-(gpena/Bramble.jl#298), so a device `MT` paired with a host `VT` goes unchecked.
+locality that matters for legality. The matrix type `MT` is not consulted, so a device `MT` paired with a host `VT` goes unchecked.
 
 # Examples
 ```jldoctest
@@ -78,7 +77,7 @@ function locality end
 
 @inline locality(::Type{<:AbstractArray}) = HostLocality()
 
-# GPUArraysCore is a direct dependency for exactly this (gpena/Bramble.jl#321): its
+# GPUArraysCore is a direct dependency for exactly this: its
 # `AbstractGPUArray` is the abstract supertype every GPU array type subtypes -- Metal.jl's
 # `MtlArray` among them -- so this one generic method answers `DeviceLocality()` for any
 # device array type without that backend's extension needing to redeclare it. Kept more
@@ -93,7 +92,7 @@ function locality end
 
 Abstract supertype for backend execution policies.
 
-Two regimes sit under it, and the split is the point (gpena/Bramble.jl#191): [`CpuPolicy`](@ref)
+Two regimes sit under it, and the split is the point: [`CpuPolicy`](@ref)
 for work a CPU loop drives, [`GpuPolicy`](@ref) for work a device schedules. Before the split
 there was only "serial or threaded", which had no way to say *where*: a GPU backend was
 constructed with `Serial()`, a policy that says a single CPU thread walks the array element by
@@ -112,7 +111,7 @@ one is a method error with a message rather than a scalar-indexing failure sever
 """
 abstract type CpuPolicy <: ExecutionPolicy end
 
-# The policy half of the locality trait (gpena/Bramble.jl#298): every `CpuPolicy` claims
+# The policy half of the locality trait: every `CpuPolicy` claims
 # host memory, checked against what the backend's vector type actually is.
 @inline locality(::CpuPolicy) = HostLocality()
 
@@ -151,7 +150,7 @@ executes serially on the calling task instead of throwing, and returns exactly w
 call returns at top level.
 
 `Base.Threads.@threads` is the primitive, and naming it that way leaves room for the others
-that are not this one -- Polyester's `@batch` (gpena/Bramble.jl#190) and MPI. [`CpuPolyester`](@ref)
+that are not this one -- Polyester's `@batch` and MPI. [`CpuPolyester`](@ref)
 is that Polyester-backed sibling: the policy type ships here, but the sweeps it selects live
 in the `BramblePolyesterExt` package extension, and requesting one without `using Polyester`
 errors the way [`metal_backend`](@ref) does without `using Metal`.
@@ -161,7 +160,7 @@ Where "small" ends differs widely between workloads (restriction, cell averaging
 another, and it depends on the machine. `benchmark/policy_crossover.jl` measures it per
 workload. `innerₕ`/`normₕ` (`_dot`/`_dot_masked`, `src/utils/linear_algebra.jl`), `D₋ₓ!` and
 the warmed broadcast axpy `vₕ .= a .* uₕ .+ wₕ` into a `VectorElement` thread under this
-policy (gpena/Bramble.jl#301, #356, #357).
+policy.
 
 See also: [`CpuSerial`](@ref), [`CpuPolyester`](@ref), [`ExecutionPolicy`](@ref).
 """
@@ -172,22 +171,20 @@ struct CpuThreaded <: CpuPolicy end
 
 Polyester-batched execution policy.
 
-Named for the provider, matching [`CpuSerial`](@ref) and [`CpuThreaded`](@ref): the name makes
-the `using Polyester` requirement self-evident, where the name it replaced spelled the
-`Polyester.@batch` primitive instead and gave no hint that a weak dependency was involved
-(gpena/Bramble.jl#300).
+Named for the provider, matching [`CpuSerial`](@ref) and [`CpuThreaded`](@ref), so the name
+makes the `using Polyester` requirement self-evident.
 
 Directs grid operations and form assembly through `Polyester.jl`'s `@batch`, a primitive
 whose per-call overhead is low enough to pay off on grids where [`CpuThreaded`](@ref)'s
-`Threads.@threads` does not (gpena/Bramble.jl#190). The sweeps this policy selects are
+`Threads.@threads` does not. The sweeps this policy selects are
 implemented in the `BramblePolyesterExt` package extension, not here: `using Polyester` must
 be loaded before this policy reaches one of them, or the call errors naming the package,
 matching [`metal_backend`](@ref)'s precedent. `Parallel()` is untouched and keeps meaning
 `Threads.@threads`.
 
-Its crossover against `CpuSerial` (gpena/Bramble.jl#299) falls at smaller sizes than
-[`CpuThreaded`](@ref)'s for every workload measured, `D₋ₓ!` and the warmed broadcast axpy
-`vₕ .= a .* uₕ .+ wₕ` included (gpena/Bramble.jl#356, #357). `benchmark/policy_crossover.jl`
+Its crossover against `CpuSerial` falls at smaller sizes than [`CpuThreaded`](@ref)'s for
+every workload measured, `D₋ₓ!` and the warmed broadcast axpy `vₕ .= a .* uₕ .+ wₕ`
+included. `benchmark/policy_crossover.jl`
 measures both on your machine.
 
 Its reductions, `innerₕ`, `normₕ` and `inner₊` with or without `markers`, split the sum
@@ -233,8 +230,7 @@ See also: [`CpuPolicy`](@ref), [`ExecutionPolicy`](@ref).
 """
 abstract type GpuPolicy <: ExecutionPolicy end
 
-# The other half of the locality trait (gpena/Bramble.jl#298): every `GpuPolicy` claims
-# device memory, checked against what the backend's vector type actually is.
+# The other half of the locality trait: every `GpuPolicy` claims device memory, checked against what the backend's vector type actually is.
 @inline locality(::GpuPolicy) = DeviceLocality()
 
 """
@@ -243,18 +239,15 @@ abstract type GpuPolicy <: ExecutionPolicy end
 Device execution policy: work is dispatched to the accelerator rather than to a host loop.
 
 What [`metal_backend`](@ref) carries by default. A GPU is massively parallel and cannot execute
-serially, so the old default of `Serial()` was not a conservative choice but a false statement
-about the hardware, and it sent CPU assembly loops at device arrays.
+serially, so `Serial()` would be a false statement about the hardware and would send CPU
+assembly loops at device arrays.
 
-The name states the launch mechanism only: work is dispatched to a device kernel. It replaces
-a name that claimed a scheduling property the API does not have. A kernel launch only
-enqueues onto the device's queue; a host read of the result, or
-[`ka_synchronize`](@ref), is the barrier. Kernels on one queue run in its order, so a chain of
-operators needs no synchronise between its steps. `Async` named a scheduling interface the
-package does not offer (no handle to wait on), which is why it was replaced rather than kept
-(gpena/Bramble.jl#300); the memory locality the old name also carried now lives in the
-`Locality` trait (gpena/Bramble.jl#298), which this policy claims through [`locality`](@ref)
-instead.
+The name states the launch mechanism only: work is dispatched to a device kernel. A kernel
+launch only enqueues onto the device's queue; a host read of the result, or
+[`ka_synchronize`](@ref), is the barrier. There is no handle to wait on. Kernels on one queue
+run in its order, so a chain of operators needs no synchronise between its steps. The memory
+locality lives in the `Locality` trait, which this policy claims through
+[`locality`](@ref).
 
 See also: [`GpuPolicy`](@ref), [`ExecutionPolicy`](@ref).
 """
@@ -263,21 +256,20 @@ struct GpuKernel <: GpuPolicy end
 """
     Serial
 
-Alias for [`CpuSerial`](@ref). The spelling this package used before the CPU/GPU split
-(gpena/Bramble.jl#191), and the one its call sites, tests and benchmark baseline keys use.
+Alias for [`CpuSerial`](@ref), the spelling the package's call sites, tests and benchmark
+baseline keys use.
 """
 const Serial = CpuSerial
 
 """
     Parallel
 
-Alias for [`CpuThreaded`](@ref). The spelling this package used before the CPU/GPU split
-(gpena/Bramble.jl#191).
+Alias for [`CpuThreaded`](@ref).
 """
 const Parallel = CpuThreaded
 
-# The one message a Backend gives when its storage locality and its policy locality disagree
-# (gpena/Bramble.jl#298, #296): device storage under a CpuPolicy is memory a CPU loop cannot
+# The one message a Backend gives when its storage locality and its policy locality disagree:
+# device storage under a CpuPolicy is memory a CPU loop cannot
 # index element by element, and host storage under a GpuPolicy has no device to schedule
 # against, so neither combination can execute anything. Lives in the inner constructor below
 # rather than in `backend`'s keyword functions, so a direct `Backend{VT, MT, EP}()` spelling
@@ -294,8 +286,8 @@ const Parallel = CpuThreaded
     )
 end
 
-# The one message a Backend gives when its vector and matrix storage disagree on locality
-# (gpena/Bramble.jl#298, #296): a backend is meant to be wholly host or wholly device, and a
+# The one message a Backend gives when its vector and matrix storage disagree on locality:
+# a backend is meant to be wholly host or wholly device, and a
 # device VT with a host MT (or the reverse) is not a configuration anyone means to build.
 # Kept as its own helper rather than folded into `_throw_backend_locality_mismatch` above --
 # that message is already VERIFIED and asserted on by a test, and this one names a different
@@ -345,7 +337,7 @@ a `Vector` alongside a CPU sparse or dense matrix, run under a [`CpuPolicy`](@re
 device -- once a vendor is chosen, `VT`, `MT` and the policy are all that vendor's. Any other
 combination (a device `VT` with a host `MT`, a device `VT` with a `CpuPolicy`, or a host `VT`
 with a `GpuPolicy`) is rejected at construction rather than accepted and left to fail on first
-use (gpena/Bramble.jl#298, #296).
+use.
 
 # Throws
 - `ArgumentError`: `locality(VT) != locality(EP())`.
@@ -374,7 +366,7 @@ Return the vector type `VT` configured for `backend`.
 @inline vector_type(::Backend{VT, MT, EP}) where {VT, MT, EP} = VT
 @inline vector_type(::Type{<:Backend{VT, MT, EP}}) where {VT, MT, EP} = VT
 
-# `Backend`'s half of the locality trait (gpena/Bramble.jl#298): reads `VT` alone, since `VT`
+# `Backend`'s half of the locality trait: reads `VT` alone, since `VT`
 # is the storage a sweep actually indexes. `MT` is not consulted, so a device `MT` paired
 # with a host `VT` is not caught by this method.
 @inline locality(be::Backend) = locality(vector_type(be))
@@ -467,7 +459,7 @@ true
 
 A [`CpuPolicy`](@ref) that wraps a host `inner` policy alongside a device [`Backend`](@ref)
 `device_backend`, for host-side [`Backend`](@ref)s that offload individual calls (`Rₕ!`,
-`avgₕ!`) to the device rather than running them on the host (gpena/Bramble.jl#324).
+`avgₕ!`) to the device rather than running them on the host.
 
 Carries no runtime fields: `I` and `DB` are type parameters only, so a
 `Backend{VT, MT, GpuOffload{I, DB}}` still rebuilds `EP()` the way every other
@@ -510,13 +502,13 @@ end
 
 # `GpuOffload`'s half of the `execution_policy` contract: a `Backend` configured with a
 # `GpuOffload` policy hands every concrete-policy dispatch site the wrapped inner policy
-# instance instead of the `GpuOffload` wrapper itself (gpena/Bramble.jl#324).
+# instance instead of the `GpuOffload` wrapper itself.
 @inline execution_policy(::Backend{VT, MT, GpuOffload{I, DB}}) where {VT, MT, I, DB} = I()
 @inline execution_policy(::Type{<:Backend{VT, MT, GpuOffload{I, DB}}}) where {VT, MT, I, DB} = I()
 
 # The `GpuOffload` half of the eltype check declared as a no-op above: refuses at `Backend`
 # construction when the requested vector eltype cannot be represented by the wrapped device
-# backend's own vector eltype (gpena/Bramble.jl#324).
+# backend's own vector eltype.
 @inline function _check_gpu_offload_eltype(::Type{VT}, ::Type{GpuOffload{I, DB}}) where {
         VT, I, DB}
     requested = eltype(VT)
@@ -549,14 +541,10 @@ declares otherwise:
 Bramble.supports_undef_construction(::Type{<:MySizedArray}) = false
 ```
 
-Read at compile time from the type, so the branch it guards folds away
-(gpena/Bramble.jl#100). This replaced a `try`/`catch` that called the `undef` constructor
-and caught its failure to decide the same question: exceptions as a dispatch mechanism,
-which blocks the compiler from seeing through the allocation path, and which reported a
-genuinely broken array type as "tried both, both failed" rather than as the one thing that
-was wrong. The three shipped backends never reached it either way -- `Vector`,
-`DenseMatrix` and `SparseMatrixCSC` each have their own `@inline` method below -- so what
-this buys is a stated contract for the types that do.
+Read at compile time from the type, so the branch it guards folds away and the compiler sees
+through the allocation path. The three shipped backends never reach it -- `Vector`,
+`DenseMatrix` and `SparseMatrixCSC` each have their own `@inline` method below -- so it is
+the stated contract for the types that do.
 """
 supports_undef_construction(::Type{<:AbstractArray}) = true
 
@@ -719,8 +707,7 @@ not, and fails at compile time with a dynamic-invocation error rather than at th
 - `policy`: Execution policy instance (default: [`GpuKernel`](@ref)). A [`CpuPolicy`](@ref) is
   rejected at construction, not accepted and left to fail on first use: Metal's device arrays
   answer [`DeviceLocality`](@ref) to [`locality`](@ref), a `CpuPolicy` answers
-  [`HostLocality`](@ref), and [`Backend`](@ref)'s inner constructor requires the two to agree
-  (gpena/Bramble.jl#298, #296).
+  [`HostLocality`](@ref), and [`Backend`](@ref)'s inner constructor requires the two to agree.
 
 # Throws
 - `ErrorException`: If `Metal.jl` is not loaded.
@@ -740,7 +727,7 @@ end
     metal_sparse_csr(A::SparseMatrixCSC) -> MetalSparseMatrixCSR
 
 Convert a host `SparseMatrixCSC` to a sparse matrix in compressed sparse row (CSR) format,
-stored in Metal device memory (gpena/Bramble.jl#250).
+stored in Metal device memory.
 
 Requires `using Metal` in the caller environment. The conversion is sparse-to-sparse
 throughout -- `A` is never densified.
@@ -761,7 +748,7 @@ end
     metal_sparse_csc(A::SparseMatrixCSC) -> MetalSparseMatrixCSC
 
 Convert a host `SparseMatrixCSC` to a sparse matrix in compressed sparse column (CSC) format,
-stored in Metal device memory (gpena/Bramble.jl#250).
+stored in Metal device memory.
 
 Requires `using Metal` in the caller environment. `SparseMatrixCSC`'s own storage already is
 CSC, so no format conversion happens -- its fields are placed in device memory as-is.
@@ -792,8 +779,8 @@ Defaults to `false` for every name: loading a GPU package extension (`using Meta
 in future `using CUDA`/`using AMDGPU`) succeeds on any platform, whether or not that
 host actually has the accelerator's hardware and drivers -- it degrades gracefully
 rather than erroring. `ext/BrambleMetalExt.jl` overrides this for `Val(:metal)` with
-`Metal.functional()`, the one call that actually probes the device
-(gpena/Bramble.jl#192). [`gpu_backend`](@ref) requires both this and the extension being
+`Metal.functional()`, the one call that actually probes the device.
+[`gpu_backend`](@ref) requires both this and the extension being
 loaded.
 
 It is declared with the generic `::Val` signature (rather than `::Val{:metal}` itself) so that
@@ -816,7 +803,7 @@ has a functional device.
 Detects a loaded GPU package extension with `Base.get_extension`, checks
 `_gpu_functional` for that device, and forwards to the backend's own constructor:
 currently [`metal_backend`](@ref), under `using Metal` with `Metal.functional()` true. A
-CUDA or AMDGPU extension joins this dispatch once it exists (gpena/Bramble.jl#11, v3.5.0).
+CUDA or AMDGPU extension joins this dispatch once it exists.
 
 # Arguments
 - `T`: Floating-point element type (default: `Float32`).
@@ -843,7 +830,7 @@ function gpu_backend(T::Type = Float32; policy::ExecutionPolicy = GpuKernel())
     return _throw_no_gpu_backend()
 end
 
-# Kept distinct from `_throw_no_gpu_backend` below on purpose (gpena/Bramble.jl#192):
+# Kept distinct from `_throw_no_gpu_backend` below on purpose:
 # a functional-device failure is a driver, hardware or virtualisation problem, which no
 # `using` statement fixes, so it must not share a message with the "nothing loaded" case.
 @noinline function _throw_metal_not_functional()
@@ -856,8 +843,8 @@ end
 
 # `BrambleMetalExt` is the only GPU extension this package has today; a `BrambleCUDAExt`/
 # `BrambleAMDGPUExt` check joins the chain above the same way once those extensions and
-# their own `cuda_backend`/`amdgpu_backend` constructors exist (gpena/Bramble.jl#11,
-# v3.5.0). `Base.get_extension` on a name nothing declares simply never returns non-`nothing`,
+# their own `cuda_backend`/`amdgpu_backend` constructors exist.
+# `Base.get_extension` on a name nothing declares simply never returns non-`nothing`,
 # so there is nowhere to hook a check in today without calling a constructor this package
 # does not yet define.
 @noinline function _throw_no_gpu_backend()
@@ -886,7 +873,7 @@ Construct a `SparseMatrixCSR` [`Backend`](@ref) backed by `SparseMatricesCSR.jl`
 
 Requires `using SparseMatricesCSR` in the caller environment. A finite-difference stencil
 is assembled row by row, which compressed sparse row storage reaches without the column
-scatter a `SparseMatrixCSC` assembly needs (gpena/Bramble.jl#214).
+scatter a `SparseMatrixCSC` assembly needs.
 
 # Arguments
 - `T`: Coordinate and scalar element type (default: `Float64`).

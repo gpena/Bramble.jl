@@ -4,7 +4,7 @@ CurrentModule = Bramble
 
 # [Linear and bilinear forms](@id tutorial_form)
 
-**What you will learn.** How to write a linear or bilinear form, assemble it into a vector or a matrix, impose Dirichlet conditions and solve a Poisson problem.
+**What you will learn.** How to write a linear or bilinear form, assemble it into a vector or a matrix, impose Dirichlet conditions and solve a Poisson problem, and impose Neumann and Robin conditions through ghost points.
 
 **What you need first.** The [mesh tutorial](mesh.md), the [space tutorial](space.md) for grid spaces and elements, and the [operators tutorial](operators.md) for `D₋ₓ`, `innerₕ` and `inner₊`.
 
@@ -240,6 +240,363 @@ source ``(f_h, 1)_h`` to round-off at any resolution, which approaches ``2\pi`` 
 (``6.2781`` here). The sign
 convention is in the docstring of [`reaction`](@ref); [`reaction_density`](@ref) gives the
 pointwise quantity, suitable for [`export_vtk`](@ref).
+
+## [Neumann and Robin conditions with ghost points](@id form_ghost)
+
+A Dirichlet condition fixes a value, and the rows above replace it. A Neumann or Robin condition fixes a normal derivative, and a second-order scheme needs the solution one point past the boundary to write it. This section solves three problems: Neumann and Robin on an interval, Dirichlet beside Robin by two routes, and Neumann on a square. All use non-uniform meshes. The model problem on the interval is
+
+```math
+-u'' = f \text{ on } (0, 1), \qquad \partial_\eta u = g_0 \text{ at } 0, \qquad
+\alpha u + \partial_\eta u = g_1 \text{ at } 1,
+```
+
+where ``\partial_\eta`` is the derivative along the outward normal, ``-u'`` at the left end and ``u'`` at the right. The exact solution is ``u = \cos \pi x + x``, and the data come from it:
+
+```@example forms
+import Bramble: change_points!
+using LinearAlgebra: norm, dot
+
+function graded_interval(n)
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), n)
+    change_points!(Ωₕ, collect(range(0.0, 1.0, length = n) .^ 2))
+    return Ωₕ
+end
+
+u_exact(x) = cos(π * x[1]) + x[1]
+du_exact(x) = -π * sin(π * x[1]) + 1
+f_src(x) = π^2 * cos(π * x[1])
+robin_α = 2.0
+g_left(x) = -du_exact(x)                         # ∂ₙu = -u' at x = 0
+g_right(x) = robin_α * u_exact(x) + du_exact(x)  # αu + u' at x = 1
+
+Ω_gh = graded_interval(33)
+x_gh = collect(points(Ω_gh))
+extrema(diff(x_gh))
+```
+
+The spacings run from ``10^{-3}`` to ``0.06``.
+
+### Without ghosts: the forms you already have
+
+The weak form of the problem is ``(D_{-}u, D_{-}v)_+`` plus a boundary term per facet, and [`inner_Γ`](@ref) writes both. The Robin coefficient multiplies `u` inside the matrix and the data go on the right:
+
+```@example forms
+Wₕ_gh = gridspace(Ω_gh)
+a_modeA = form(Wₕ_gh, Wₕ_gh, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) +
+    inner_Γ(robin_α * u, v; markers = (:xmax,)))
+l_modeA = form(Wₕ_gh, v -> innerₕ(f_src, v) +
+    inner_Γ(g_left, v; markers = (:xmin,)) + inner_Γ(g_right, v; markers = (:xmax,)))
+
+A_modeA, F_modeA = assemble(a_modeA, l_modeA)
+u_modeA = pde_solve(A_modeA, F_modeA)
+
+err_modeA = maximum(abs, u_modeA - u_exact.(x_gh))
+@assert err_modeA < 2e-2
+
+err_modeA
+```
+
+Nothing here needs a ghost: a ghost-eliminated Neumann or Robin condition is this system. Ghosts matter when the scheme differentiates the unknown at the boundary, for instance the collocation form ``(-\Delta_h u, v)_h``, a conormal condition with a mixed derivative, or a condition on a second normal derivative. No spelling of those exists on a space without ghosts, because every operator is truncated on the end slices.
+
+### Relations and `constrained`
+
+Give the space ghosts on the facets that carry such a condition, and tie each facet's ghosts to a *relation*, written `operator => data`. [`constrained`](@ref) takes a function of the unknown `u` that returns one `facet => relation` pair per facet:
+
+```@example forms
+W_ghosts = gridspace(Ω_gh; ghosts = :boundary)
+C_gh = constrained(W_ghosts, u -> (
+    :xmin => ∂ₙ(u) => g_left,
+    :xmax => robin_α * u + ∂ₙ(u) => g_right))
+
+ndofs(W_ghosts), ndofs(C_gh)
+```
+
+`=>` binds looser than `+` and `*` and is right-associative, so the second line reads `:xmax => ((robin_α * u + ∂ₙ(u)) => g_right)`. The data is a number or a function of the point tuple, as for [`dirichlet_constraints`](@ref). `constrained` solves each ghost's relation for the ghost, and its unknowns are the 33 physical nodes again: the 2 ghosts were eliminated.
+
+The form below is the collocation Laplacian at every node, the boundary ones included, with the cell weight as the test weight. Assemble both forms together with `assemble(a, l)`: the data move the ghosts, so the load is ``E^T (F - A d)`` and needs the matrix.
+
+```@example forms
+a_gh = form(C_gh, C_gh, (u, v) -> innerₕ(-Δₕ(u), v))
+l_gh = form(C_gh, v -> innerₕ(f_src, v))
+A_gh, F_gh = assemble(a_gh, l_gh)
+u_gh = pde_solve(A_gh, F_gh)
+
+@assert norm(A_gh - A_modeA) <= 1e-12 * norm(A_modeA)
+@assert norm(F_gh - F_modeA) <= 1e-12 * norm(F_modeA)
+@assert maximum(abs, u_gh - u_modeA) <= 1e-10
+
+norm(A_gh - A_modeA) / norm(A_modeA), maximum(abs, u_gh - u_exact.(x_gh))
+```
+
+The ghost-eliminated matrix and load equal those of the forms of the previous section to rounding. The two spellings are the same scheme, and the ghost one extends to what the first cannot say. The error decreases at second order on this graded mesh: it falls by a factor of four when the number of points doubles.
+
+```@example forms
+function ghost_error(n)
+    Ωₕ = graded_interval(n)
+    C = constrained(gridspace(Ωₕ; ghosts = :boundary), u -> (
+        :xmin => ∂ₙ(u) => g_left, :xmax => robin_α * u + ∂ₙ(u) => g_right))
+    A, F = assemble(form(C, C, (u, v) -> innerₕ(-Δₕ(u), v)),
+        form(C, v -> innerₕ(f_src, v)))
+    return maximum(abs, pde_solve(A, F) - u_exact.(points(Ωₕ)))
+end
+
+ratio = ghost_error(33) / ghost_error(65)
+@assert 3.5 < ratio < 4.5
+
+ratio
+```
+
+The relations a facet takes:
+
+| Relation | Condition |
+|:--|:--|
+| `∂ₙ(u) => g` | Neumann |
+| `α * u + β * ∂ₙ(u) => g` | Robin, with ``\beta \neq 0`` |
+| `∂ₙ(u; K = K) => g` | conormal, ``\eta \cdot (K \nabla u)``, with a constant matrix `K` |
+| `∂ₙₙ(u) => g` | second normal difference, ``(\tilde D D_{-} u)`` at the facet node |
+| `u => g` | Dirichlet, see below |
+
+Each relation of a ghosted facet must read that facet's ghost: `β = 0` or a lone `jumpₙ` is an `ArgumentError`. At a 2D corner two conormal relations that read each other's ghost are solved together as a ``2 \times 2`` block, and a singular `K` is refused. A ghosted facet with no relation keeps its ghosts as unknowns.
+
+```@example forms
+try
+    constrained(W_ghosts, u -> (:xmin => jumpₙ(u) => 0.0, :xmax => ∂ₙ(u) => 0.0))
+catch e
+    @assert e isa ArgumentError
+    first(split(sprint(showerror, e), ". "))
+end
+```
+
+### Dirichlet conditions beside ghost relations
+
+Keep the Robin condition at ``x = 1`` and impose ``u(0) = 1`` instead, so only `xmax` needs a ghost. There are two routes, and they give the same solution.
+
+**Route (a), row replacement, as above.** `constrained` receives only the ghost relation. The unknowns are the physical nodes, as on a space without ghosts, so the `dirichlet` keyword of `assemble` replaces the rows of `:xmin` and `symmetrize` restores symmetry, exactly as in the [Dirichlet section](@ref form_dirichlet). Every existing program keeps working:
+
+```@example forms
+W_right = gridspace(Ω_gh; ghosts = (:xmax,))
+C_a = constrained(W_right, u -> (:xmax => robin_α * u + ∂ₙ(u) => g_right,))
+a_a = form(C_a, C_a, (u, v) -> innerₕ(-Δₕ(u), v))
+l_a = form(C_a, v -> innerₕ(f_src, v))
+A_a, F_a = assemble(a_a, l_a; dirichlet = :xmin => u_exact, symmetrize = true)
+u_a = pde_solve(A_a, F_a)
+
+@assert length(u_a) == 33 && u_a[1] ≈ u_exact(x_gh[1])
+@assert norm(A_a - A_a') <= 1e-12 * norm(A_a)
+
+ndofs(C_a), maximum(abs, u_a - u_exact.(x_gh))
+```
+
+**Route (b), `u => g` in the relations.** The Dirichlet node leaves the unknowns: its column is removed and its value goes into the data. The matrix is ``E^T A E``, symmetric by construction, and it has one row less:
+
+```@example forms
+C_b = constrained(W_right, u -> (
+    :xmin => u => u_exact,
+    :xmax => robin_α * u + ∂ₙ(u) => g_right))
+a_b = form(C_b, C_b, (u, v) -> innerₕ(-Δₕ(u), v))
+l_b = form(C_b, v -> innerₕ(f_src, v))
+A_b, F_b = assemble(a_b, l_b)
+u_b = pde_solve(A_b, F_b)
+
+@assert ndofs(C_b) == 32 && size(A_b) == (32, 32)
+@assert norm(A_b - A_b') <= 1e-12 * norm(A_b)
+@assert maximum(abs, [u_exact(x_gh[1]); u_b] - u_a) <= 1e-10
+
+ndofs(C_b), maximum(abs, [u_exact(x_gh[1]); u_b] - u_exact.(x_gh))
+```
+
+The solution vector of route (b) has one entry per kept node, so the Dirichlet value is prepended above; `Bramble.lift(C_b, u_b)` below gives the grid function. The two routes compare as follows:
+
+| | (a) row replacement | (b) `u => g` in `constrained` |
+|:--|:--|:--|
+| unknowns | all physical nodes | physical nodes minus the Dirichlet nodes |
+| solution vector | one entry per node, a grid function as today | one entry per kept node; `Bramble.lift(Cₕ, u)` is the grid function |
+| symmetry of a self-adjoint form | after `symmetrize`, as today | by construction |
+| data | `dirichlet`, `dirichlet_constraints`, time-dependent as today | the relation's `g`, a number or a function |
+| existing programs | unchanged | new route, nothing depends on it |
+
+Route (a) is the one every earlier program uses; route (b) is the symmetric alternative when the vector should carry only unknowns. Give each facet's condition once. The same label given both ways, `u => g` in `constrained` and `dirichlet` in `assemble`, is an `ArgumentError`, since the value would be imposed twice. A ghosted facet that carries only `u => g` is refused too, since its ghosts would be unknowns no equation reads: give it a ghost relation as well, or drop it from `ghosts`.
+
+```@example forms
+refusals = String[]
+for thunk in (
+    () -> assemble(a_b, l_b; dirichlet = :xmin => u_exact),
+    () -> constrained(W_ghosts, u -> (:xmin => u => u_exact, :xmax => ∂ₙ(u) => g_right)),
+)
+    try
+        thunk()
+    catch e
+        @assert e isa ArgumentError
+        push!(refusals, first(split(sprint(showerror, e), ". ")))
+    end
+end
+
+@assert length(refusals) == 2
+
+refusals
+```
+
+### Solutions as grid functions: `lift`
+
+A solution of `assemble(a, l)` is a vector of unknowns. `Bramble.lift(Cₕ, u)` is the grid function it describes, with the eliminated ghosts filled in by the relations. It lives on the padded space, one point longer at each ghosted end, so the runtime operators read its ghosts. `lift` is `public`, not exported, because it is also a Makie name: write `Bramble.lift`.
+
+```@example forms
+U = Bramble.lift(C_gh, u_gh)
+
+@assert length(U) == 35
+
+points(space(U))[[1, 2, end - 1, end]]
+```
+
+The solution of route (b) above lifts the same way, and the lifted function holds the Dirichlet value at its first node:
+
+```@example forms
+U_b = Bramble.lift(C_b, u_b)
+
+@assert length(U_b) == 34 && U_b[1] ≈ u_exact(x_gh[1])
+@assert U_b[1:33] ≈ [u_exact(x_gh[1]); u_b]
+
+U_b[1], u_exact(x_gh[1])
+```
+
+The relations hold on the lifted function. The runtime centred difference at the first and last nodes gives the data, and the collocation equation ``-\Delta_h u = f`` holds at every node, the two boundary nodes included:
+
+```@example forms
+import Bramble: Dcₓ
+
+@assert -Dcₓ(U)[2] ≈ g_left(x_gh[1])
+@assert robin_α * U[end - 1] + Dcₓ(U)[end - 1] ≈ g_right(x_gh[end])
+@assert maximum(abs, [(-Δₕ(U))[i + 1] - f_src(x_gh[i]) for i in 1:33]) < 1e-6
+
+(-Dcₓ(U)[2], g_left(x_gh[1])), (robin_α * U[end - 1] + Dcₓ(U)[end - 1], g_right(x_gh[end]))
+```
+
+`Bramble.lift(Cₕ)` alone is the data ``d``: the ghost values of the zero function. For the Neumann relation at the left, ``-(u_2 - u_0)/(2 h_2) = g_0`` with ``u_2 = 0`` gives ``u_0 = 2 h_2 g_0``:
+
+```@example forms
+d_gh = Bramble.lift(C_gh)
+h₂ = x_gh[2] - x_gh[1]
+
+@assert d_gh[1] ≈ 2h₂ * g_left(x_gh[1])
+@assert iszero(d_gh[2:(end - 1)])
+
+d_gh[1], 2h₂ * g_left(x_gh[1])
+```
+
+Both are data in forms on `Cₕ`, so a linear form can name the full `Δₕ` of the lifted function at a facet node. A relation on the second normal difference puts its data into the same ghost:
+
+```@example forms
+C_nn = constrained(W_ghosts, u -> (:xmin => ∂ₙₙ(u) => 3.0, :xmax => u + ∂ₙ(u) => 1.0))
+d_nn = Bramble.lift(C_nn)
+
+@assert d_nn[1] ≈ 3.0 * h₂^2          # (u₂ - 2u₁ + u₀) / h₂² = 3 with u = 0
+
+d_nn[1]
+```
+
+A system whose ghost data are nonzero needs the matrix to build its load. Assembling the linear form alone is an `ArgumentError`, and the message names the fix:
+
+```@example forms
+try
+    assemble(l_gh)
+catch e
+    @assert e isa ArgumentError
+    sprint(showerror, e)
+end
+```
+
+### Pure Neumann and `mean_zero`
+
+With Neumann conditions on every facet the solution is defined up to a constant. The matrix annihilates constants and is singular. Fix the constant by a discrete mean-zero condition: [`pde_solve`](@ref) takes `mean_zero = w`, a weight vector, and returns the solution with ``w^T u = 0``. Internally it solves the bordered system
+
+```math
+\begin{pmatrix} A & w \\ w^T & 0 \end{pmatrix}
+\begin{pmatrix} u \\ \lambda \end{pmatrix} =
+\begin{pmatrix} F \\ 0 \end{pmatrix}
+```
+
+with a symmetric or LU factorization, never Cholesky, since the border makes it indefinite. `A` is not modified and stays sparse. A matrix that annihilates constants, passed without `mean_zero`, produces a warning that names the keyword.
+
+The problem is ``-\Delta u = f`` on a graded square with the normal derivative given on each facet. Each facet carries its own datum, so a corner node takes two values, one per facet:
+
+```@example forms
+Ω_sq = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+Ωₕ_sq = mesh(Ω_sq, (17, 17), (true, true))
+grid = collect(range(0.0, 1.0, length = 17) .^ 2)
+change_points!(Ωₕ_sq, markers(Ω_sq), (grid, grid))
+
+u_sq(p) = cos(π * p[1]) * cos(π * p[2]) + p[1] * p[2] / 2
+grad_sq(p) = (-π * sin(π * p[1]) * cos(π * p[2]) + p[2] / 2,
+    -π * cos(π * p[1]) * sin(π * p[2]) + p[1] / 2)
+f_sq(p) = 2π^2 * cos(π * p[1]) * cos(π * p[2])
+
+W_sq = gridspace(Ωₕ_sq; ghosts = :boundary)
+C_sq = constrained(W_sq, u -> (
+    :xmin => ∂ₙ(u) => (p -> -grad_sq(p)[1]), :xmax => ∂ₙ(u) => (p -> grad_sq(p)[1]),
+    :ymin => ∂ₙ(u) => (p -> -grad_sq(p)[2]), :ymax => ∂ₙ(u) => (p -> grad_sq(p)[2])))
+A_sq, F_sq = assemble(form(C_sq, C_sq, (u, v) -> innerₕ(-Δₕ(u), v)),
+    form(C_sq, v -> innerₕ(f_sq, v)))
+
+@assert norm(A_sq * ones(size(A_sq, 1)), Inf) <= 1e-10 * norm(A_sq, Inf)
+
+ndofs(C_sq), norm(A_sq * ones(size(A_sq, 1)), Inf)
+```
+
+The matrix has 289 unknowns, one per node, and ``A \mathbf{1} = 0`` to rounding. The weight vector is the cell measure, the linear form of the constant function ``1`` on the space without ghosts:
+
+```@example forms
+W_plain_sq = gridspace(Ωₕ_sq)
+w_sq = assemble(form(W_plain_sq, v -> innerₕ(x -> 1.0, v)))
+u_sol = pde_solve(A_sq, F_sq; mean_zero = w_sq)
+
+# the defining equations of the bordered system
+λ = sum(F_sq) / sum(w_sq)
+@assert abs(dot(w_sq, u_sol)) <= 1e-12
+@assert norm(A_sq * u_sol - (F_sq - λ * w_sq)) <= 1e-9 * norm(F_sq)
+
+# against the exact solution shifted to discrete mean zero
+u_ex = parent(Rₕ(W_plain_sq, u_sq))
+u_ex .-= dot(w_sq, u_ex) / sum(w_sq)
+err_sq = maximum(abs, u_sol - u_ex)
+@assert err_sq < 2e-2
+
+abs(dot(w_sq, u_sol)), err_sq
+```
+
+The residual of the system is ``F - \lambda w`` with ``\lambda = \sum F / \sum w``, because ``\mathbf{1}^T A = 0``. The compatibility of the data holds only to the quadrature error, so ``\lambda`` is small, not zero. The error is the discrete difference to the exact solution shifted to the same mean.
+
+### Data per facet
+
+A scalar datum on `:boundary` gives one value per node. A corner node lies on two facets, though. When the data differ from facet to facet, give each facet its own `inner_Γ` term or, as above, its own relation. A facet's term carries that facet's weight, which is a half cell at the corner. With the same function on every facet, the two spellings agree:
+
+```@example forms
+q(p) = 1 + p[1] + 2p[2]
+l_all = assemble(form(W_plain_sq, v -> inner_Γ(q, v; markers = (:boundary,))))
+l_each = assemble(form(W_plain_sq, v -> inner_Γ(q, v; markers = (:xmin,)) +
+    inner_Γ(q, v; markers = (:xmax,)) + inner_Γ(q, v; markers = (:ymin,)) +
+    inner_Γ(q, v; markers = (:ymax,))))
+
+@assert l_all ≈ l_each
+
+norm(l_all - l_each)
+```
+
+With different data the corner entry is the sum of the facet terms, each at its own weight:
+
+```@example forms
+data_x(p) = 10.0 + p[2]
+data_y(p) = -3.0 + p[1]
+l_corner = assemble(form(W_plain_sq, v -> inner_Γ(data_x, v; markers = (:xmin,)) +
+    inner_Γ(data_y, v; markers = (:ymin,))))
+
+hx, hy = grid[2] - grid[1], grid[2] - grid[1]
+expected = (hy / 2) * data_x((0.0, 0.0)) + (hx / 2) * data_y((0.0, 0.0))
+@assert l_corner[1] ≈ expected
+
+l_corner[1], expected
+```
+
+Ghost spaces are for `assemble`. `semidiscretize`, `ode_problem`, `matrix_free_operator`, `kronecker_operator` and the device backends refuse them with an `ArgumentError`, and a composite space cannot hold one.
 
 ## Threading
 

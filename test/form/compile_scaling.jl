@@ -3,6 +3,7 @@ module FormCompileScalingTests
 using Test
 using Bramble
 using Random
+using LinearAlgebra: dot
 import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D₋ᵧ, D₊ᵧ, Dcᵧ, D₋₂, D₊₂, Dc₂
 
 # S3 (gpena/Bramble.jl, this milestone) fixed a compile blow-up in `resolve_ast`. Each
@@ -50,6 +51,32 @@ import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D₋ᵧ, D₊ᵧ, Dcᵧ, D₋₂, D₊�
     # happens to compile fast but silently drops or double-counts a term.
     singles = [assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(p[1](u), p[2](v)))) for p in PAIRS[1:27]]
     @test isapprox(Matrix(A27), sum(Matrix.(singles)))
+end
+
+# The Laplacian `Δₕ` (gpena/Bramble.jl#774) nests as a node of its own, so `Δₕ(Δₕ(Δₕ(u)))`
+# is a sum of 2^3 = 8 three-deep products in 2D and 3^3 = 27 in 3D. Wall time of the first
+# `assemble` of `innerₕ(Δₕ^k(u), v)` at 1 thread in a fresh session, with depths 1 and 2 in
+# 2D already warm from the precompile workload:
+#   2D  k=3   4.4 s   k=4  78.8 s
+#   3D  k=2   2.6 s   k=3  41.5 s
+# Each level multiplies the compile time by about 16, more than its term count (2 in 2D, 3
+# in 3D) accounts for, and this case records that cost. Depth 3 in 2D must stay within a
+# bound loose enough for machine noise (about 14 times the figure above), so a blow-up of
+# the kind the N-term case guards against fails it. The matrix is also compared with the
+# runtime composition, so a fast compile that drops a term fails too.
+@testset "Δₕ to depth 3 compiles in a bound" begin
+    Random.seed!(774)
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))))
+
+    a = form(Wₕ, Wₕ, (u, v) -> innerₕ(Δₕ(Δₕ(Δₕ(u))), v))
+    t = @elapsed A = assemble(a)
+    @test t <= 60
+
+    u = element(Wₕ, rand(ndofs(Wₕ)))
+    w = element(Wₕ, rand(ndofs(Wₕ)))
+    @test dot(parent(w), A*parent(u))≈innerₕ(Δₕ(Δₕ(Δₕ(u))), w) rtol=1e-10 atol=1e-12
 end
 
 end # module FormCompileScalingTests

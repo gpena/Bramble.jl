@@ -142,11 +142,13 @@ if PRECOMPILE_WORKLOAD
             )
 
             # The 3D scalar Laplacian, non-uniform, in both spellings a caller writes:
-            # `inner₊(∇ₕ(u), ∇ₕ(v))` (the tutorials') and the summed one-sided-difference form.
+            # `inner₊(∇ₕ(u), ∇ₕ(v))` (the tutorials') and the summed one-sided-difference form, and
+            # the Laplacian written `innerₕ(Δₕ(u), v)`.
             Ωₕ3n = mesh(Ω3, (3, 3, 3), (false, false, false); backend = be)
             W3n = gridspace(Ωₕ3n)
             for f3 in (
                 form(W3n, W3n, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))),
+                form(W3n, W3n, (u, v) -> innerₕ(Δₕ(u), v)),
                 form(
                 W3n, W3n,
                 (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(D₋ᵧ(u), D₋ᵧ(v)) +
@@ -165,6 +167,26 @@ if PRECOMPILE_WORKLOAD
             jacobian_pattern(form(W2v, W2v, (U, V) -> inner₊(Mₕ(c2v) * ∇ₕ(U), ∇ₕ(V))), U -> Mₕ(U))
             c3v = element(W3n, 1.0)
             assemble(form(W3n, W3n, (u, v) -> inner₊(c3v * ∇ₕ(u), ∇ₕ(v))); dirichlet = :boundary)
+
+            # The 3D nests of #774's table on the same plain space: the c-scaled `jumpₓ(Δₕ)`
+            # and `D₋ₓ(Δₕ)` pairs and the facet row, each a first call of seconds when left
+            # to the caller. The coefficient is a Float64 grid element, as the benchmark's.
+            for f3 in (
+                form(
+                W3n, W3n,
+                (u, v) -> innerₕ(c3v * jumpₓ(Δₕ(u)), jumpₓ(Δₕ(v)))
+            ),
+                form(
+                W3n, W3n,
+                (u, v) -> innerₕ(c3v * D₋ₓ(Δₕ(u)), D₋ₓ(Δₕ(v)))
+            ),
+                form(
+                W3n, W3n,
+                (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = (:xmin,))
+            )
+            )
+                assemble(f3)
+            end
 
             # Jacobian sparsity from the AST, scalar and composite, and the per-element-type
             # assembly cache (gpena/Bramble.jl#21/#95/#20). Kept to 1D, the same economy the

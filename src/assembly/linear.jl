@@ -704,8 +704,8 @@ end
 # One operand, and nothing of its own that is not already in `T` (the space's spacings).
 const _ELTYPE_WRAPPERS = Union{
     ShiftNode, InterpolationNode, BackwardDifference, ForwardDifference,
-    CenteredDifference, StarDifference, CrossWeightedDifference, BackwardAverage,
-    ForwardAverage, CenteredAverage, JumpNode}
+    CenteredDifference, StarDifference, CrossWeightedDifference, SecondDifference,
+    BackwardAverage, ForwardAverage, CenteredAverage, JumpNode}
 
 @inline _leaf_eltype(T, op::_ELTYPE_WRAPPERS, sp) = _leaf_eltype(T, op.inner_op, sp)
 
@@ -1542,7 +1542,8 @@ end
 # (`operators/node_family.jl`), each rebuilt around the walked operand by `_rewrap_inner`.
 function _host_sources(op::Union{OperatorScale, ShiftNode, RegionRestriction,
         BackwardDifference, ForwardDifference, CenteredDifference, StarDifference,
-        CrossWeightedDifference, BackwardAverage, ForwardAverage, CenteredAverage, JumpNode})
+        CrossWeightedDifference, SecondDifference, BackwardAverage, ForwardAverage,
+        CenteredAverage, JumpNode})
     return _rewrap_inner(op, _host_sources(op.inner_op))
 end
 

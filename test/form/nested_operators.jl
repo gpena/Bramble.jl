@@ -5,7 +5,8 @@ using Bramble
 using Random
 using LinearAlgebra: dot
 using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, _random_element
-import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, Mₓ, M₊ₓ, Mcₓ, jumpₓ, D₋ᵧ, Mcᵧ, D̽ᵧ, restrict_to
+import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, Mₓ, M₊ₓ, Mcₓ, jumpₓ, D₋ᵧ, Mcᵧ, D̽ᵧ, restrict_to,
+                jumpₙ
 
 # A random non-uniform mesh on the unit square (or interval): the relabelling bug this file
 # guards against is invisible on a uniform one.
@@ -92,6 +93,87 @@ end
         assemble!(B, a)
         @test A ≈ B
         @test_allocs assemble!(B, a)
+    end
+end
+
+# The Laplacian `Δₕ` (gpena/Bramble.jl#774) nested with every operator, as the outer one and
+# as the inner one, and with itself: the same `_check_pair` oracle, the runtime composition
+# on grid functions. The default is a cover (each operator once either side, plus the
+# direction and the centred average of the second axis); the full list is in `slow`.
+function _laplacian_pairs(D, full_grid)
+    ops = full_grid ? (D == 1 ? XOPS : (XOPS..., YOPS...)) :
+          D == 1 ? (XOPS[1], XOPS[3], XOPS[6], XOPS[9]) :
+          (XOPS[1], XOPS[3], XOPS[6], XOPS[9], YOPS[1], YOPS[2])
+    lap = ("Δₕ", Δₕ)
+    pairs = Tuple{Tuple{String, Function}, Tuple{String, Function}}[(lap, lap)]
+    for op in ops
+        push!(pairs, (lap, op), (op, lap))
+    end
+    return pairs
+end
+
+# `jumpₙ(op(u))` in `inner_Γ` on a plain space: the inward jump of the runtime `op(u)` along
+# the facet's axis, zero elsewhere (the facet weight selects the nodes on the facet).
+function _inward_jump(g, d, side)
+    G = zeros(eltype(g), size(g))
+    n = size(g, d)
+    if side == 1
+        selectdim(G, d, 1:(n - 1)) .= selectdim(g, d, 2:n) .- selectdim(g, d, 1:(n - 1))
+    else
+        selectdim(G, d, 2:n) .= selectdim(g, d, 1:(n - 1)) .- selectdim(g, d, 2:n)
+    end
+    return G
+end
+
+const FACET_NAMES = ((:xmin, 1, 1), (:xmax, 1, 2), (:ymin, 2, 1), (:ymax, 2, 2))
+
+# `jumpₙ(op(u))` on each facet, trial and test side, against the same jump applied to the
+# runtime `op(u)` and weighed by `inner_Γ` on a grid function.
+function _check_jump(Wₕ, dims, u, w, name, op)
+    D = length(dims)
+    jump_data(x, d, s) = element(Wₕ, vec(_inward_jump(reshape(parent(op(x)), dims), d, s)))
+    for (F, d, s) in FACET_NAMES[1:(2D)]
+        A = assemble(form(Wₕ, Wₕ, (p, q) -> inner_Γ(jumpₙ(op(p)), q; markers = (F,))))
+        Gu = jump_data(u, d, s)
+        l = assemble(form(Wₕ, q -> inner_Γ(Gu, q; markers = (F,))))
+        @test dot(parent(w), A*parent(u))≈dot(l, parent(w)) rtol=1e-10 atol=1e-12
+        B = assemble(form(Wₕ, Wₕ, (p, q) -> inner_Γ(p, jumpₙ(op(q)); markers = (F,))))
+        Gw = jump_data(w, d, s)
+        m = assemble(form(Wₕ, q -> inner_Γ(Gw, q; markers = (F,))))
+        @test dot(parent(w), B*parent(u))≈dot(m, parent(u)) rtol=1e-10 atol=1e-12
+    end
+end
+
+@testset "Δₕ nested in forms (#774)" begin
+    Random.seed!(7741)
+    for D in (1, 2)
+        Wₕ = _nonuniform_space(D)
+        u, w, f = _random_element(Wₕ), _random_element(Wₕ), _random_element(Wₕ)
+        @testset "$(D)D" begin
+            for ((n1, o1), (n2, o2)) in _laplacian_pairs(D, WITH_SLOW_TESTS)
+                @testset "$n1($n2(u))" begin
+                    _check_pair(Wₕ, u, w, f, o1, o2)
+                end
+            end
+        end
+    end
+end
+
+@testset "jumpₙ nested in inner_Γ (#205)" begin
+    Random.seed!(2057)
+    for D in (1, 2)
+        Wₕ = _nonuniform_space(D)
+        dims = D == 1 ? (11,) : (11, 9)
+        u, w = _random_element(Wₕ), _random_element(Wₕ)
+        # A cover by default (each facet form is two fresh compilations); `slow` adds the rest.
+        ops = D == 1 ? (("Δₕ", Δₕ), ("Dcₓ", Dcₓ)) : (("Δₕ", Δₕ), ("D̽ᵧ", D̽ᵧ))
+        if WITH_SLOW_TESTS
+            ops = D == 1 ? (ops..., ("D₋ₓ", D₋ₓ)) :
+                  (ops..., ("D₋ₓ", D₋ₓ), ("Dcₓ", Dcₓ), ("D₋ᵧ", D₋ᵧ))
+        end
+        @testset "$(D)D jumpₙ($name(u))" for (name, op) in ops
+            _check_jump(Wₕ, dims, u, w, name, op)
+        end
     end
 end
 

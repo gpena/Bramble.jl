@@ -211,3 +211,16 @@ S₋ₕ
 S₋
 backward_shift
 ```
+
+## Facet operators
+
+Operators for the facets of a space with ghost nodes (see
+[`gridspace`](@ref)`(Ωₕ; ghosts = ...)`): the outward normal derivative, the second normal
+derivative and the normal jump, read in the integrals over a facet
+([`inner_Γ`](@ref)) and in the relations of [`constrained`](@ref).
+
+```@docs
+∂ₙ
+∂ₙₙ
+jumpₙ
+```

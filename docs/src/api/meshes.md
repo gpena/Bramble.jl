@@ -76,3 +76,12 @@ iterative_refinement!
 change_points!
 set_points!
 ```
+
+## Ghost meshes
+
+`GhostMesh` is `public`, not exported: write `Bramble.GhostMesh`. A space built with
+`ghosts` holds one; see [Grid spaces](spaces.md).
+
+```@docs
+GhostMesh
+```

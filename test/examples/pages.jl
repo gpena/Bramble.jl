@@ -57,6 +57,14 @@ using ..TestUtils: _run_example_page
         _run_example_page(:boundary_layer_graded)
     end
 
+    # Poisson with Neumann and Robin relations through the ghost layer, on a random
+    # non-uniform grid: its assertions pin the order of the error at second, for a mixed
+    # Robin and Neumann boundary, a Robin one on every side and a pure Neumann one solved
+    # with `mean_zero`, and that the pure Neumann solution has discrete mean zero.
+    @testset "Neumann and Robin boundaries" begin
+        _run_example_page(:neumann_robin_poisson)
+    end
+
     # The matrix-free Kronecker operator worked example.
     # It needs `using Kronecker`, but that is a lightweight, pure-Julia weak dependency --
     # unlike the stiff DAE solver, `NonlinearSolve` and `AlgebraicMultigrid` that justify

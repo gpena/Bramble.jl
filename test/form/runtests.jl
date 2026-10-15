@@ -52,6 +52,12 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("centered_average.jl")
         include("nested_operators.jl")
         include("centered_vector_calculus.jl")
+        # The ghost-point plan (v4.0.0): its files are split between the two shards by cost.
+        include("laplacian_form.jl")
+        include("repeated_assemble.jl")
+        include("ghost_mode_a.jl")
+        include("ghost_corners.jl")
+        include("ghost_constrained.jl")
     end
 
     if TestUtils.in_shard("forms-2")
@@ -94,5 +100,11 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         # waiting for a SIGKILLed CI job. Behind `slow`, like the files above: it catches a
         # regression that moves with the simplifier/assembly pipeline, not with a per-push change.
         TestUtils.WITH_SLOW_TESTS && include("compile_scaling.jl")
+        # The ghost-point plan (v4.0.0): the rest of its files.
+        include("ghost_facet_operators.jl")
+        include("ghost_assembly.jl")
+        include("ghost_dirichlet.jl")
+        include("ghost_lift.jl")
+        include("ghost_convergence.jl")
     end
 end

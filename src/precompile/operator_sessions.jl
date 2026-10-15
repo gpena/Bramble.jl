@@ -95,7 +95,7 @@ _pc_vectorial_ops(uₕ) = _pc_apply_each(_PC_OPS_ALL, uₕ)
 # The vector calculus operators. Each recurses over directions, so a
 # session per dimension is what caches the recursion's own specializations; the gradient is
 # the field they are most often applied to.
-function _pc_vector_calculus(uₕ, ::Val{D}) where {D}
+function _pc_vector_calculus(uₕ::VectorElement, ::Val{D}) where {D}
     gₕ = ∇ₕ(uₕ)
     Δₕ(uₕ)
     Δₕ!(similar(uₕ), uₕ)

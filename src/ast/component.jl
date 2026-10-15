@@ -90,6 +90,7 @@ for T in (
     :CenteredDifference,
     :StarDifference,
     :CrossWeightedDifference,
+    :SecondDifference,
     :JumpNode,
     :BackwardAverage,
     :ForwardAverage,
