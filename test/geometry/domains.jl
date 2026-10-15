@@ -132,6 +132,30 @@ struct NotAFunctionPredicate end
         end
     end
 
+    # A symbol the dimension does not know has no alias: the callers branch on `nothing`.
+    @testset "Alias lookup misses" begin
+        @test Bramble._boundary_symbol_alias(Val(1), :ymin) === nothing
+        @test Bramble._boundary_symbol_alias(Val(2), :zmin) === nothing
+        @test Bramble._boundary_symbol_alias(Val(3), :inlet) === nothing
+        @test Bramble._boundary_symbol_alias(Val(4), :xmin) === nothing
+    end
+
+    # An unknown face is an `ArgumentError` naming the symbol, not the `inner_Γ` message that
+    # `_throw_not_a_face` raises: `normal_vector(Wₕ, marker)` (operators/normal.jl) relies on it.
+    @testset "normal_vector unknown faces" begin
+        @test_throws ArgumentError Bramble.normal_vector(Val(1), :ymin)
+        @test_throws ArgumentError Bramble.normal_vector(Val(2), :zmin)
+        @test_throws ArgumentError Bramble.normal_vector(Val(2), :inlet)
+        err = try
+            Bramble.normal_vector(Val(2), :zmin)
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin(":zmin", err.msg)
+        @test !occursin("inner_Γ", err.msg)
+    end
+
     # Invariant: `process_identifier` normalizes symbols, tuples, and vectors
     # of symbols into canonical boundary representations. Function-valued pairs
     # are stored directly as closures and are not routed through `process_identifier`.
@@ -743,6 +767,7 @@ end
         @test dim(X4) == 4
         @test_throws ErrorException boundary_symbols(4)
         @test_throws ErrorException boundary_symbols(typeof(X4))
+        @test_throws ErrorException boundary_symbols(X4)
 
         # Supported dimensions resolve identically across value and type queries.
         @test boundary_symbols(1) == (:xmin, :xmax)
