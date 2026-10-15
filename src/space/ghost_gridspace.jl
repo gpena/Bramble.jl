@@ -251,3 +251,28 @@ end
     ),
     )
 end
+
+# The restriction and cell-average operators have no meaning on a ghost space yet: whether a
+# restriction holds values at the physical nodes only or at the ghost coordinates too is
+# decided by the standard-space audit (#781). Without these methods `Rₕ!` falls to its
+# general keyword method, which calls itself until the stack overflows, and `avgₕ!` reaches
+# a `project!` with no method for the space. Each operator refuses, space and element form.
+Rₕ(Wₕ::GhostGridSpace, f; kwargs...) = _throw_projection_on_ghost_space(:Rₕ, Wₕ)
+function Rₕ!(uₕ::VectorElement{<:GhostGridSpace}, f; kwargs...)
+    return _throw_projection_on_ghost_space(:Rₕ!, uₕ.space)
+end
+avgₕ(Wₕ::GhostGridSpace, f; kwargs...) = _throw_projection_on_ghost_space(:avgₕ, Wₕ)
+function avgₕ!(uₕ::VectorElement{<:GhostGridSpace}, f, rest...; kwargs...)
+    return _throw_projection_on_ghost_space(:avgₕ!, uₕ.space)
+end
+
+@noinline function _throw_projection_on_ghost_space(op::Symbol, Wₕ::GhostGridSpace)
+    throw(
+        ArgumentError(
+        "$op is not defined on a ghost space, $(Wₕ): what a restriction holds at the " *
+        "ghost points is not decided yet. For the values of a function at the physical " *
+        "nodes, apply $op on the plain space `gridspace(Ωₕ)`; for the values of a " *
+        "constrained solution at the ghosts, use `Bramble.lift(Wₕ, u)`.",
+    ),
+    )
+end

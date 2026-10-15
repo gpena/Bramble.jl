@@ -168,6 +168,40 @@ mass(u, v) = innerₕ(u, v)
         @test_throws ArgumentError gridspace(G; ghosts = :boundary)
     end
 
+    @testset "Restriction and cell average refuse" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 7), (false, false))
+        Wg = gridspace(Ωₕ; ghosts = :boundary)
+        uₕ = element(Wg)
+        f = x -> x[1]
+        for (op, call) in (
+            (:Rₕ, () -> Rₕ(Wg, f)),
+            (:Rₕ, () -> Rₕ(Wg, f; markers = (:boundary,))),
+            (:Rₕ, () -> Rₕ(Wg, (f,))),
+            (:Rₕ!, () -> Rₕ!(uₕ, f)),
+            (:Rₕ!, () -> Rₕ!(uₕ, f; markers = (:boundary,))),
+            (:avgₕ, () -> avgₕ(Wg, f)),
+            (:avgₕ, () -> avgₕ(Wg, f; quad_points = 3)),
+            (:avgₕ!, () -> avgₕ!(uₕ, f)),
+            (:avgₕ!, () -> avgₕ!(uₕ, f, Val(3))),
+            (:avgₕ!, () -> avgₕ!(uₕ, f; markers = (:boundary,)))
+        )
+            e = try
+                call()
+                nothing
+            catch err
+                err
+            end
+            @test e isa ArgumentError
+            msg = e isa ArgumentError ? sprint(showerror, e) : ""
+            @test occursin(string(op), msg)
+            @test occursin("gridspace(Ωₕ)", msg)
+            @test occursin("Bramble.lift", msg)
+        end
+        # The plain space is untouched.
+        @test Rₕ(gridspace(Ωₕ), f) isa Bramble.VectorElement
+        @test avgₕ(gridspace(Ωₕ), f) isa Bramble.VectorElement
+    end
+
     @testset "element and its method guard" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 7), (false, false))
         Wg = gridspace(Ωₕ; ghosts = :boundary)
