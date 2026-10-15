@@ -1,5 +1,5 @@
 # Linear elasticity in 2D, -div σ(u) = f with σ = 2μ ε(u) + λ (div u) I, on a random
-# non-uniform mesh. The displacement lives in the composite space Wₕ^Val(2); εₕ and divₕ act
+# non-uniform mesh. The displacement lives in the composite space Wₕ^Val(2); εₕ and divₘₕ act
 # on its trial and test functions directly. The manufactured forcing comes from ForwardDiff.
 using Bramble
 using ForwardDiff
@@ -9,7 +9,7 @@ lame(E, ν) = (E / (2 * (1 + ν)), E * ν / ((1 + ν) * (1 - 2ν)))
 const μ, λ = lame(1.0, 0.3)
 
 elasticity_form(Vₕ) = form(Vₕ, Vₕ,
-    (u, v) -> 2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₕ(u), divₕ(v)))
+    (u, v) -> 2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₘₕ(u), divₘₕ(v)))
 
 u₁(x) = sin(π * x[1]) * sin(π * x[2])
 u₂(x) = sin(2π * x[1]) * sin(π * x[2])               # differs from u₁: a mixed-up component shows

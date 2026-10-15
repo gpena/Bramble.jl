@@ -667,8 +667,8 @@ end
 #
 # `εₕ(uₕ) = (∇ₕuₕ + ∇ₕuₕᵀ)/2`, with each shear half averaged onto the edge centre the two
 # share: `ε_ii = D₋ᵢ(uᵢ)`, `ε_ij = (M₋ᵢ(D₋ⱼ(uᵢ)) + M₋ⱼ(D₋ᵢ(uⱼ)))/2`. The form-level `divₕ(u)`
-# (difference.jl) is the staggered divergence, a different operator from `divₕ` above (see the
-# design issue).
+# (difference.jl) is the same operator as `divₕ` above; the staggered divergence of a form
+# is `divₘₕ(u)`, which has no runtime twin (gpena/Bramble.jl#694).
 
 # The backward average, in place: `out[I] = (out[I] + out[I - eᵢ]) / 2` along `DIM`, zero on
 # the first slice, exactly `_average_engine!`'s `Backward()` case (operators/average.jl)

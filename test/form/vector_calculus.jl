@@ -6,17 +6,17 @@ using Bramble: divₕ!, curlₕ!
 using Bramble: OperatorAdd, block_of, resolve_form_ast
 using Bramble: D₋ᵧ, D₋₂, D₋ₓ, Mᵧ, M₂, Mₓ, half_spacing
 using Bramble: ∇₊ₕ, div₊ₕ, curl₊ₕ
-using LinearAlgebra: dot, ⋅, ×
+using LinearAlgebra: dot, ⋅, ×, norm
 using Random: Random
 
-# `∇ₕ`/`∇₊ₕ`/`εₕ`/`divₕ` accept a composite trial or
+# `∇ₕ`/`∇₊ₕ`/`εₕ`/`divₕ`/`divₘₕ` accept a composite trial or
 # test function and expand, at the builder, into the same single-block products a user would
 # otherwise write by hand. This file checks that expansion two ways:
 #
-#   1. the compact 3D elasticity form `2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₕ(u), divₕ(v))`
+#   1. the compact 3D elasticity form `2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₘₕ(u), divₘₕ(v))`
 #      assembles to the same matrix, entry for entry, as the hand-expanded form
 #      `docs/src/examples/elasticity_3d.jl` uses (transcribed below under different names, so
-#      as not to shadow the package's own `εₕ`/`divₕ`); same in 2D.
+#      as not to shadow the package's own `εₕ`/`divₘₕ`); same in 2D.
 #   2. `inner₊(∇ₕ(u), ∇ₕ(v))` over a composite trial/test function agrees with the same sum
 #      written out term by term.
 #
@@ -88,7 +88,7 @@ end
 
 # The compact form the issue asks for.
 compact_elasticity_form(Vₕ, μ, λ) = form(
-    Vₕ, Vₕ, (u, v) -> 2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₕ(u), divₕ(v))
+    Vₕ, Vₕ, (u, v) -> 2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₘₕ(u), divₘₕ(v))
 )
 
 # The gradient-tensor inner product, hand-expanded as a plain double sum over component and
@@ -121,7 +121,7 @@ function check_single_block_leaves(a, D::Int)
     return nothing
 end
 
-@testset "Composite ∇ₕ, εₕ, divₕ (S6.5)" begin
+@testset "Composite ∇ₕ, εₕ, divₘₕ (S6.5)" begin
     # Compact spelling equals the hand-expanded one.
     @testset "3D elasticity: compact = expanded" begin
         # Seeded: some non-uniform draws push compact-vs-expanded rounding past atol.
@@ -182,6 +182,54 @@ end
             @test A_compact == A_hand
 
             check_single_block_leaves(a_compact, D)
+        end
+    end
+end
+
+# A form's `divₕ(u)` is the runtime `divₕ`, and the staggered form-only divergence is
+# `divₘₕ` (#694). The quadratic form of a grid function equals the runtime
+# `inner₊(divₕ(w), divₕ(w), Val(S))` on a non-uniform mesh in every dimension; the staggered
+# one differs from it and equals the hand-expanded staggered sum.
+@testset "form divₕ and divₘₕ (#694)" begin
+    Random.seed!(694)
+    cases = (
+        (
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false),
+            (x -> sin(x[1]) * x[2]^2, x -> x[1]^3 + cos(x[2])), 2, _Dm2, _Mm2,
+        ),
+        (
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)), (4, 3, 5),
+            (false, false, false),
+            (x -> sin(x[1]) * x[2], x -> x[3]^2 + x[1], x -> cos(x[2]) * x[3]), 3,
+            _Dm3, _Mm3,
+        ),
+    )
+    for (dom, npts, periodic, fs, D, Dm, Mm) in cases
+        Ωₕ = mesh(dom, npts, periodic)
+        Vₕ = gridspace(Ωₕ)^Val(D)
+        wₕ = Rₕ(Vₕ, fs)
+        S = Val(ntuple(identity, Val(D)))
+
+        A = assemble(form(Vₕ, Vₕ, (u, v) -> inner₊(divₕ(u), divₕ(v))))
+        B = assemble(form(Vₕ, Vₕ, (u, v) -> inner₊(divₘₕ(u), divₘₕ(v))))
+        C = assemble(form(Vₕ, Vₕ, (u, v) -> inner₊(∇ₕ ⋅ u, ∇ₕ ⋅ v)))
+        r = inner₊(divₕ(wₕ), divₕ(wₕ), S)
+        @testset "$(D)D: form divₕ is the runtime divₕ" begin
+            @test dot(parent(wₕ), A * parent(wₕ)) ≈ r rtol = 1.0e-10
+            @test C == A
+        end
+
+        # The hand-expanded staggered sum: term i is D₋ᵢ(uᵢ) averaged over every other axis.
+        @testset "$(D)D: divₘₕ is the staggered divergence" begin
+            term(u, i) = hand_div_term(u, Dm, Mm, i, Val(D))
+            H = assemble(
+                form(
+                    Vₕ, Vₕ,
+                    (u, v) -> sum(inner₊(term(u, i), term(v, j), S) for i in 1:D, j in 1:D)
+                )
+            )
+            @test norm(B - H) <= 1.0e-12 * norm(H)
+            @test norm(B - A) > 1.0e-3 * norm(A)
         end
     end
 end
@@ -250,8 +298,8 @@ end
     @testset "forms: ∇ₕ ⋅ u, composite bilinear" begin
         # Only the backward, centered and cross-weighted families have a *symbolic* `div`
         # over a trial/test function (src/operators/difference.jl); the refusals of the
-        # rest are tested below. The staggered `divₕ` builds an `inner₊`-only container;
-        # the collocated `divcₕ`/`div̽ₕ` are plain operator sums that `innerₕ` accepts.
+        # rest are tested below. `divₕ` builds an `inner₊`-only container; the collocated
+        # `divcₕ`/`div̽ₕ` are plain operator sums that `innerₕ` accepts.
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false))
         Vₕ = gridspace(Ωₕ)^Val(2)
 
@@ -294,7 +342,7 @@ end
         end
     end
 
-    # The staggered `divₕ` pairs only with another `divₕ` under `inner₊`.
+    # `divₕ` pairs only with another `divₕ` under `inner₊`.
     @testset "∇ₕ, ∇cₕ, ∇̽ₕ ⋅ u assemble" begin
         a1 = assemble(form(Vₕ, Vₕ, (u, v) -> inner₊(∇ₕ ⋅ u, ∇ₕ ⋅ v)))
         a2 = assemble(form(Vₕ, Vₕ, (u, v) -> inner₊(divₕ(u), divₕ(v))))

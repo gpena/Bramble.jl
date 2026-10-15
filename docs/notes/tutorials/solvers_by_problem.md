@@ -138,7 +138,7 @@ elliptic, symmetric systems of the previous section.
 ## A coupled system: elasticity
 
 The previous systems come from one scalar grid space. Elasticity couples the three
-components of a vector unknown through [`εₕ`](@ref) and [`divₕ`](@ref); the
+components of a vector unknown through [`εₕ`](@ref) and [`divₘₕ`](@ref); the
 [elasticity example](../examples/elasticity_3d.md) derives the form, and the
 [coupled systems tutorial](@ref tutorial_coupled) shows how one form addresses several
 unknowns. The solver question is whether the coupling changes the advice. The matrix is an
@@ -152,7 +152,7 @@ Emod, νmod = 1.0, 0.3
 μe, λe = lame(Emod, νmod)
 
 elasticity_form_el(Vₕ) = form(
-    Vₕ, Vₕ, (u, v) -> 2μe * inner₊(εₕ(u), εₕ(v)) + λe * inner₊(divₕ(u), divₕ(v)))
+    Vₕ, Vₕ, (u, v) -> 2μe * inner₊(εₕ(u), εₕ(v)) + λe * inner₊(divₘₕ(u), divₘₕ(v)))
 
 function body_force_el(Vₕ, f)
     fₕ = element(Vₕ)

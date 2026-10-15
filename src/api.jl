@@ -54,7 +54,7 @@ public weights, interpolation_matrix
 
 # --- Discrete Differential & Difference Operators ---
 export ∇ₕ
-export divₕ, curlₕ, Δₕ, εₕ
+export divₕ, divₘₕ, curlₕ, Δₕ, εₕ
 export ∇̃ₕ, diṽₕ, curl̃ₕ
 export ∇cₕ, divcₕ, curlcₕ, εcₕ
 export ∇̽ₕ, div̽ₕ, curl̽ₕ, ε̽ₕ
