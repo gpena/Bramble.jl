@@ -195,14 +195,14 @@ end
     cases = (
         (
             domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false),
-            (x -> sin(x[1]) * x[2]^2, x -> x[1]^3 + cos(x[2])), 2, _Dm2, _Mm2,
+            (x -> sin(x[1]) * x[2]^2, x -> x[1]^3 + cos(x[2])), 2, _Dm2, _Mm2
         ),
         (
             domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)), (4, 3, 5),
             (false, false, false),
             (x -> sin(x[1]) * x[2], x -> x[3]^2 + x[1], x -> cos(x[2]) * x[3]), 3,
-            _Dm3, _Mm3,
-        ),
+            _Dm3, _Mm3
+        )
     )
     for (dom, npts, periodic, fs, D, Dm, Mm) in cases
         Ωₕ = mesh(dom, npts, periodic)
@@ -224,9 +224,9 @@ end
             term(u, i) = hand_div_term(u, Dm, Mm, i, Val(D))
             H = assemble(
                 form(
-                    Vₕ, Vₕ,
-                    (u, v) -> sum(inner₊(term(u, i), term(v, j), S) for i in 1:D, j in 1:D)
-                )
+                Vₕ, Vₕ,
+                (u, v) -> sum(inner₊(term(u, i), term(v, j), S) for i in 1:D, j in 1:D)
+            )
             )
             @test norm(B - H) <= 1.0e-12 * norm(H)
             @test norm(B - A) > 1.0e-3 * norm(A)

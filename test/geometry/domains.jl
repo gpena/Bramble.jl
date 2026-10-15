@@ -95,8 +95,10 @@ struct NotAFunctionPredicate end
         @test Bramble._all_boundary_symbols(typeof(I1D)) == (:xmin, :xmax, :left, :right)
         @test Bramble._all_boundary_symbols(I2D) == (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)
         @test Bramble._all_boundary_symbols(typeof(I2D)) == (:xmin, :xmax, :ymin, :ymax, :left, :right, :bottom, :top)
-        @test Bramble._all_boundary_symbols(I3D) == (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :front, :left, :right, :bottom, :top)
-        @test Bramble._all_boundary_symbols(typeof(I3D)) == (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :front, :left, :right, :bottom, :top)
+        @test Bramble._all_boundary_symbols(I3D) ==
+              (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :front, :left, :right, :bottom, :top)
+        @test Bramble._all_boundary_symbols(typeof(I3D)) ==
+              (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax, :back, :front, :left, :right, :bottom, :top)
     end
 
     # The viewpoint aliases name different faces per dimension: `:left` is the `x` minimum

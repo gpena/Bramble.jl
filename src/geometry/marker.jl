@@ -134,8 +134,7 @@ end
 const _SymbolCollection = Union{NTuple{N, Symbol} where {N}, AbstractVector{Symbol}, AbstractSet{Symbol}}
 
 # The point a predicate is probed at: the centre of the space set, a scalar in 1D.
-_marker_probe_point(space_set::CartesianProduct{D}) where {D} =
-    D == 1 ? center(space_set)[1] : center(space_set)
+_marker_probe_point(space_set::CartesianProduct{D}) where {D} = D == 1 ? center(space_set)[1] : center(space_set)
 
 # Call predicate `f` on the probe arguments and require a `Bool` back.
 function _check_marker_predicate(lbl::Symbol, D::Integer, f, args...)
