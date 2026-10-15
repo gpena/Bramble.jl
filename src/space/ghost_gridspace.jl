@@ -176,7 +176,8 @@ relations' data give when every degree of freedom is 0, and 0 everywhere else.
 system assembled on `Wₕ`) with its eliminated ghosts filled in by the relations. The runtime
 operators read the ghosts of the result, and both are data in forms on `Wₕ`, so a linear
 form can name, say, the full `Δₕ` of the lifting at the facet nodes. Absent padded points
-(corners beyond two ghosted facets) hold 0.
+(corners beyond two ghosted facets) hold 0. After `change_points!` of the mesh, `lift`
+throws as the space's weights do: build the space again.
 
 `lift` is public, not exported: write `Bramble.lift` or `using Bramble: lift`.
 
@@ -193,15 +194,33 @@ uₕ = Bramble.lift(Cₕ, A \\ F)          # 11 padded values, ghosts included
 Δₕ(uₕ)                                 # reads the ghosts at the facet nodes
 ```
 """
-@inline lift(Wₕ::GhostGridSpace) = VectorElement(copy(Wₕ.d), Wₕ.padded)
+function lift(Wₕ::GhostGridSpace)
+    _check_lift_fresh(Wₕ)
+    return VectorElement(copy(Wₕ.d), Wₕ.padded)
+end
 
 function lift(Wₕ::GhostGridSpace, u::AbstractVector)
+    _check_lift_fresh(Wₕ)
     length(u) == ndofs(Wₕ) || _throw_lift_length(Wₕ, u)
     E, d = closure(Wₕ)
     U = similar(d, promote_type(eltype(u), eltype(d)))
     copyto!(U, d)
     mul!(U, E, u, true, true)
     return VectorElement(U, Wₕ.padded)
+end
+
+# The closure was built from the mesh `Wₕ`'s weights were: after `change_points!` its ghost
+# values solve the relations on a mesh that no longer exists, so `lift` refuses as the
+# space's weights do, with the same remedy.
+@inline _check_lift_fresh(Wₕ::GhostGridSpace) = (weights(Wₕ.padded); nothing)
+
+@noinline function lift(Wₕ::GhostGridSpace, u, rest...)
+    throw(
+        ArgumentError(
+        "lift takes the space and at most one vector, lift(Wₕ) or lift(Wₕ, u); got " *
+        "$(1 + length(rest)) arguments after $(Wₕ). Drop the extra arguments.",
+    ),
+    )
 end
 
 @noinline function lift(Wₕ, u...)

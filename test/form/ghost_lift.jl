@@ -97,6 +97,23 @@ end
     @test refuses(() -> Bramble.lift(gridspace(Ω), ones(length(points(Ω)))), "with ghosts")
 end
 
+@testset "1D lift refuses a stale space" begin
+    Ω = O1.make_mesh(:random, 1)
+    rels = O1.problem_relations(:robin_a, Ω)
+    C = constrained(gridspace(Ω; ghosts = :boundary), u -> robin_pairs(u, rels))
+    u = ones(Bramble.ndofs(C))
+    Bramble.change_points!(Ω, collect(points(Ω)) .^ 1.5)
+    @test refuses(() -> Bramble.lift(C, u), "gridspace(Ωₕ; ghosts = ...) again")
+    @test refuses(() -> Bramble.lift(C), "gridspace(Ωₕ; ghosts = ...) again")
+end
+
+@testset "1D lift refuses extra arguments" begin
+    W = gridspace(O1.make_mesh(:random, 1); ghosts = :boundary)
+    u = zeros(Bramble.ndofs(W))
+    @test refuses(() -> Bramble.lift(W, u, 1), "at most one vector")
+    @test !refuses(() -> Bramble.lift(W, u, 1), "with ghosts")
+end
+
 @testset "1D lift of an unconstrained space" begin
     Ω = O1.make_mesh(:random, 1)
     W = gridspace(Ω; ghosts = :boundary)
