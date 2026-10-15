@@ -575,6 +575,7 @@ end
 """
     Δₕ(uₕ::VectorElement) -> VectorElement
     Δₕ!(vₕ::VectorElement, uₕ::VectorElement) -> vₕ
+    Δₕ(u::LazyOp{D}) -> LazyOp{D}
 
 Returns the conservative discrete Laplacian of the grid function `uₕ`, matrix-free:
 
@@ -602,9 +603,19 @@ Evaluated in a single traversal per direction rather than as two nested operator
 
 On a composite element `Δₕ` is the Laplacian of each component, each on its own mesh.
 
+In a form, `Δₕ(u)` of a trial or test function, or of any operator over one, builds the
+same operator as nodes: the sum over the `D` axes of one three-point second difference
+each, entry for entry `D̃ₓ(D₋ₓ(u)) + D̃ᵧ(D₋ᵧ(u)) + …`, so the identity above reads
+`innerₕ(Δₕ(u), v) = -inner₊(∇ₕ(u), ∇ₕ(v))` in a bilinear form on functions vanishing on
+the boundary. One node per axis, not the nested pair: the pair evaluates its inner
+difference again at each outer tap.
+
 See also: [`divₕ`](@ref), [`∇ₕ`](@ref), [`D̃ₓ`](@ref)
 """
 @inline Δₕ(uₕ::VectorElement) = Δₕ!(similar(uₕ), uₕ)
+
+@inline Δₕ(op::LazyOp{1}) = _second_difference(op, Val(1))
+@inline Δₕ(op::LazyOp{D}) where {D} = +(ntuple(d -> _second_difference(op, Val(d)), Val(D))...)
 
 # The engine walks each parent as one grid, so on composite elements the totals agreeing is
 # not enough: a destination whose leaves sit on a permuted grid has the same length. Each

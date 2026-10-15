@@ -609,6 +609,7 @@ const _LinearWrapper = Union{
     CenteredDifference,
     StarDifference,
     CrossWeightedDifference,
+    SecondDifference,
     JumpNode,
     BackwardAverage,
     ForwardAverage,

@@ -605,7 +605,7 @@ end
 # `Mₓ(D₊ᵧ(Rₕ(:l, v))) + Mₓ(D₊ᵧ(Rₕ(:r, v)))` (gpena/Bramble.jl#759). An operand with no
 # restriction is left whole, so an unrestricted one compiles nothing new.
 const _DifferenceNode = Union{BackwardDifference, ForwardDifference, CenteredDifference,
-    StarDifference, CrossWeightedDifference}
+    StarDifference, CrossWeightedDifference, SecondDifference}
 const _AverageNode = Union{JumpNode, BackwardAverage, ForwardAverage, CenteredAverage}
 const _StencilNode = Union{_DifferenceNode, _AverageNode}
 @inline function _summands_of(op::_StencilNode, paired)
