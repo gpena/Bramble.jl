@@ -482,9 +482,9 @@ A quantity with one value per boundary facet: `ops[d][s]` is the `LazyOp` it is 
 of normal axis `d`, side `s` (1 the minimum, 2 the maximum), outward sign included. `G[d][e]`
 says whether the operator of a facet of axis `d` reads the ghosts along axis `e`: beyond its
 own facet for `e == d`, beyond both `e` facets at its corners otherwise. [`inner_Γ`](@ref)
-refuses it, at `form`, where those ghosts are missing. Built by [`∂ₙ`](@ref) and meaningful
-only inside `inner_Γ`; not a `LazyOp`, since a node of a corner has a value for each facet it
-lies on.
+refuses it, at `form`, where those ghosts are missing. Built by [`∂ₙ`](@ref), [`∂ₙₙ`](@ref)
+and [`jumpₙ`](@ref), and meaningful only inside `inner_Γ`; not a `LazyOp`, since a node of a
+corner has a value for each facet it lies on.
 """
 struct FacetOperator{D, G, T <: Tuple}
     ops::T
@@ -573,6 +573,64 @@ end
         "varying in space is not supported: write the conormal flux out per facet.",
     ),
     )
+end
+
+"""
+    ∂ₙₙ(u)
+
+The second normal derivative of `u` at the boundary facets: on the facet `F` of normal axis
+`d`, the second difference `D̃_d D₋_d u` along `d` alone (the per-axis term of
+[`Δₕ`](@ref)), the same on both sides since `η_F² = 1`. It reads the ghost beyond the facet,
+whose spacing is the first interior one, so the space must have ghosts there: build it with
+`gridspace(Ωₕ; ghosts = ...)` and assemble on its padded space.
+
+A node on several facets (a 2D corner) has one value per facet, each reading only the
+ghost of its own facet. Meaningful inside [`inner_Γ`](@ref), on either side or both, with
+`markers` selecting the facets as for [`∂ₙ`](@ref); a facet without ghosts, or a space
+without any, is refused with an `ArgumentError` when `form` is called.
+
+# Examples
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
+Pₕ = Bramble.padded_space(gridspace(Ωₕ; ghosts = :boundary))
+a = form(Pₕ, Pₕ, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:xmin,)))
+```
+
+See also: [`∂ₙ`](@ref), [`jumpₙ`](@ref), [`inner_Γ`](@ref)
+"""
+function ∂ₙₙ(u::LazyOp{D}) where {D}
+    ops = ntuple(d -> (s = _second_difference(u, Val(d)); (s, s)), Val(D))
+    return _facet_operator(Val(_normal_reach(nothing, Val(D))), ops)
+end
+
+"""
+    jumpₙ(w)
+
+The inward jump of `w` at the boundary facets, `w_{I − η_F e_d} − w_I` at the node `I` of
+the facet `F` of normal axis `d`: the forward jump `w_{I + e_d} − w_I` on a minimum facet,
+the backward one `w_{I − e_d} − w_I` on a maximum facet. Both read only the facet node and
+its interior neighbour, so `jumpₙ` needs no ghosts of its own and works on any space; an
+operand that reads ghosts (`jumpₙ(Δₕ(u))`) needs the space to have them.
+
+A node on several facets (a 2D corner) has one value per facet. Meaningful inside
+[`inner_Γ`](@ref), on either side or both, with `markers` selecting the facets as for
+[`∂ₙ`](@ref), so per-facet coefficients are sums over `markers`.
+
+# Examples
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
+Pₕ = Bramble.padded_space(gridspace(Ωₕ; ghosts = :boundary))
+a = form(Pₕ, Pₕ, (u, v) -> inner_Γ(2.0 * jumpₙ(u), jumpₙ(v); markers = (:xmin,)))
+b = form(Pₕ, Pₕ, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v))
+```
+
+See also: [`∂ₙ`](@ref), [`∂ₙₙ`](@ref), [`inner_Γ`](@ref)
+"""
+function jumpₙ(w::LazyOp{D}) where {D}
+    ops = ntuple(d -> (jump(w, Val(d)), backward_shift(w, Val(d)) - w), Val(D))
+    return _facet_operator(Val(ntuple(_ -> ntuple(_ -> false, Val(D)), Val(D))), ops)
 end
 
 # Scalars and sums, facet by facet: `α * u + β * ∂ₙ(u)` is `α u + β η_F Dc_d(u)` on each
@@ -667,9 +725,10 @@ end
              "the space has no ghosts"
     throw(
         ArgumentError(
-        "∂ₙ reads the ghost beyond each facet it is integrated on, and $where_. Build the " *
-        "space with `gridspace(Ωₕ; ghosts = ...)` naming :$facet (or `ghosts = :boundary`) " *
-        "and assemble on its `Bramble.padded_space`, or leave :$facet out of `markers`.",
+        "∂ₙ and ∂ₙₙ read the ghost beyond each facet they are integrated on, and $where_. " *
+        "Build the space with `gridspace(Ωₕ; ghosts = ...)` naming :$facet (or " *
+        "`ghosts = :boundary`) and assemble on its `Bramble.padded_space`, or leave " *
+        ":$facet out of `markers`.",
     ),
     )
 end

@@ -1,7 +1,7 @@
 module FormGhostFacetOperatorsTests
 
-# The facet operator `∂ₙ` (gpena/Bramble.jl#218, #205) inside `inner_Γ` on a ghost space,
-# against the plain-matrix oracles' centred differences on the padded grid.
+# The facet operators `∂ₙ`, `∂ₙₙ` and `jumpₙ` (gpena/Bramble.jl#218, #205) inside `inner_Γ`
+# on a ghost space, against the plain-matrix oracles' differences on the padded grid.
 #
 # Every expected matrix is built from the oracle alone: `Dc_d` lifted to the padded grid,
 # and per facet `F = (d, s)` the diagonal `W_F` of facet weights `ω_F(I)` at its physical
@@ -303,6 +303,229 @@ relerr(A, R) = norm(A - R) / norm(R)
         @test_throws ArgumentError form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = x -> 1.0), v))
         @test_throws ArgumentError form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = ones(3, 3)), v))
         @test_throws ArgumentError form(P, P, (u, v) -> innerₕ(∂ₙ(u), v))
+    end
+end
+
+# `J_F`: the inward difference `w_{I − η_F e_d} − w_I` at every padded point that has the
+# inward neighbour, built entry by entry; `W_F` keeps only the facet's rows.
+function inward_jump(Ωₕ, d, s)
+    (; ps) = oracle_ops(Ωₕ)
+    LP = LinearIndices(ps)
+    step = CartesianIndex(ntuple(e -> e == d ? (s == 1 ? 1 : -1) : 0, length(ps)))
+    rows, cols, vals = Int[], Int[], Float64[]
+    for I in CartesianIndices(ps)
+        J = I + step
+        checkbounds(Bool, LP, J) || continue
+        append!(rows, (LP[I], LP[I]))
+        append!(cols, (LP[J], LP[I]))
+        append!(vals, (1.0, -1.0))
+    end
+    return sparse(rows, cols, vals, prod(ps), prod(ps))
+end
+
+laps(Ωₕ) = Bramble.dim(Ωₕ) == 1 ? (O1.operators(Ωₕ).Lap,) : ON.operators(Ωₕ).Laps
+
+# `Σ_F c_F W_F N_F` over the facets named, `N_F` the facet's operator matrix.
+function facet_rows(Ωₕ, facets, N; c = f -> 1.0)
+    return sum(facets) do f
+        d, s = facet_axis_side(f)
+        c(f) * facet_weights(Ωₕ, d, s) * N(d, s)
+    end
+end
+
+@testset "∂ₙₙ and jumpₙ as facet operators" begin
+    @testset "1D rows" begin
+        Ωₕ = random_mesh((19,))
+        P = padded(Ωₕ)
+        n = length(points(Ωₕ))
+        L = laps(Ωₕ)[1]
+        A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v)))
+        R = spzeros(n + 2, n + 2)
+        R[2, :] = L[2, :]
+        R[n + 1, :] = L[n + 1, :]
+        @test relerr(A, R) <= tol
+        # the facet node's row reads the ghost, with the first interior spacing for it
+        h2 = points(Ωₕ)[2] - points(Ωₕ)[1]
+        @test A[2, 1] ≈ 1 / h2^2 && A[2, 3] ≈ 1 / h2^2
+        J = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), v)))
+        Rj = sparse([2, 2, n + 1, n + 1], [2, 3, n + 1, n], [-1.0, 1.0, -1.0, 1.0],
+            n + 2, n + 2)
+        @test norm(J - Rj) <= tol
+        @test norm(assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), jumpₙ(v)))) -
+                   Rj' * Rj) <= tol
+    end
+
+    @testset "2D ∂ₙₙ: trial, test, both sides" begin
+        Ωₕ = random_mesh((6, 7))
+        P = padded(Ωₕ)
+        Ls = laps(Ωₕ)
+        N = (d, s) -> Ls[d]
+        R = facet_rows(Ωₕ, FACETS[1:4], N)
+        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v))), sparse(R)) <= tol
+        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(u, ∂ₙₙ(v)))), sparse(R')) <= tol
+        C = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), ∂ₙₙ(v))))
+        RC = sum(f -> (d = facet_axis_side(f)[1]; Ls[d]' * facet_rows(Ωₕ, (f,), N)),
+            FACETS[1:4])
+        @test relerr(C, sparse(RC)) <= tol
+        for f in FACETS[1:4]
+            Af = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (f,))))
+            @test relerr(Af, sparse(facet_rows(Ωₕ, (f,), N))) <= tol
+        end
+    end
+
+    @testset "2D corner: each facet its own ghost" begin
+        Ωₕ = random_mesh((6, 7))
+        P = padded(Ωₕ)
+        (; ps) = oracle_ops(Ωₕ)
+        LP = LinearIndices(ps)
+        corner = LP[2, 2]   # physical node (1, 1)
+        Ax = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:xmin,))))
+        @test Ax[corner, LP[1, 2]] != 0 && Ax[corner, LP[2, 1]] == 0
+        Ay = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:ymin,))))
+        @test Ay[corner, LP[2, 1]] != 0 && Ay[corner, LP[1, 2]] == 0
+        Ab = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v)))
+        @test Ab[corner, :] ≈ Ax[corner, :] + Ay[corner, :]
+        @test Ab[corner, LP[1, 1]] == 0
+
+        J = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), v)))
+        I = CartesianIndex(1, 1)
+        ωx, ωy = ON.facet_weight(Ωₕ, 1, I), ON.facet_weight(Ωₕ, 2, I)
+        @test ωx != ωy
+        @test J[corner, LP[3, 2]] ≈ ωx && J[corner, LP[2, 3]] ≈ ωy
+        @test J[corner, corner] ≈ -(ωx + ωy)
+        @test count(!iszero, J[corner, :]) == 3   # no ghost read
+    end
+
+    @testset "2D jumpₙ: trial, test, both sides" begin
+        Ωₕ = random_mesh((6, 7))
+        P = padded(Ωₕ)
+        N = (d, s) -> inward_jump(Ωₕ, d, s)
+        R = facet_rows(Ωₕ, FACETS[1:4], N)
+        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), v))), sparse(R)) <= tol
+        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(u, jumpₙ(v)))), sparse(R')) <= tol
+        # a max facet reads inward, never the ghost a forward jump would cross to
+        Rx = facet_rows(Ωₕ, (:xmax,), N)
+        Ax = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), v; markers = (:xmax,))))
+        @test relerr(Ax, sparse(Rx)) <= tol
+        @test relerr(Ax, assemble(form(P, P, (u, v) -> inner_Γ(Bramble.jumpₓ(u), v;
+            markers = (:xmax,))))) > 0.1
+    end
+
+    @testset "jumpₙ with c differing per facet" begin
+        Ωₕ = random_mesh((6, 7))
+        P = padded(Ωₕ)
+        c = (xmin = 2.0, xmax = 0.5, ymin = 3.0, ymax = 1.5)
+        a = form(P, P, (u, v) -> inner_Γ(c.xmin * jumpₙ(u), jumpₙ(v); markers = (:xmin,)) +
+                                inner_Γ(c.xmax * jumpₙ(u), jumpₙ(v); markers = (:xmax,)) +
+                                inner_Γ(c.ymin * jumpₙ(u), jumpₙ(v); markers = (:ymin,)) +
+                                inner_Γ(c.ymax * jumpₙ(u), jumpₙ(v); markers = (:ymax,)))
+        R = sum(FACETS[1:4]) do f
+            d, s = facet_axis_side(f)
+            J = inward_jump(Ωₕ, d, s)
+            getfield(c, f) * J' * facet_weights(Ωₕ, d, s) * J
+        end
+        @test relerr(assemble(a), sparse(R)) <= tol
+        Ax = assemble(form(P, P, (u, v) -> inner_Γ(c.xmin * jumpₙ(u), jumpₙ(v);
+            markers = (:xmin,))))
+        J1 = inward_jump(Ωₕ, 1, 1)
+        @test relerr(Ax, sparse(c.xmin * J1' * facet_weights(Ωₕ, 1, 1) * J1)) <= tol
+    end
+
+    @testset "jumpₙ(Δₕ(u)) is the nesting" begin
+        Ωₕ = random_mesh((6, 7))
+        P = padded(Ωₕ)
+        Lap = sum(laps(Ωₕ))
+        R = facet_rows(Ωₕ, FACETS[1:4], (d, s) -> inward_jump(Ωₕ, d, s) * Lap)
+        A = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v)))
+        @test relerr(A, sparse(R)) <= tol
+        S(u) = Bramble.D̃ₓ(Bramble.D₋ₓ(u)) + Bramble.D̃ᵧ(Bramble.D₋ᵧ(u))
+        @test relerr(A, assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(S(u)), v)))) <= tol
+        # a max facet's row is `S₋(Δₕ u) − Δₕ u`, spelled out with the shift
+        Ax = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = (:xmax,))))
+        Sx = assemble(form(P, P, (u, v) -> inner_Γ(Bramble.S₋ₓ(Δₕ(u)) - Δₕ(u), v;
+            markers = (:xmax,))))
+        @test relerr(Ax, Sx) <= tol
+        B = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), jumpₙ(Δₕ(v)))))
+        RB = sum(FACETS[1:4]) do f
+            d, s = facet_axis_side(f)
+            N = inward_jump(Ωₕ, d, s) * Lap
+            N' * facet_weights(Ωₕ, d, s) * N
+        end
+        @test relerr(B, sparse(RB)) <= tol
+    end
+
+    @testset "Linear forms and Float32" begin
+        Ωₕ = random_mesh((6, 7))
+        P = padded(Ωₕ)
+        g(x) = 1.0 + x[1] + 2x[2]^2
+        (; ns, ps) = oracle_ops(Ωₕ)
+        xs = ON.axis_points(Ωₕ)
+        gv = zeros(prod(ps))
+        LP = LinearIndices(ps)
+        for I in CartesianIndices(ns)
+            gv[LP[I + oneunit(I)]] = g(ON.node_point(xs, I))
+        end
+        markers = (:xmin, :ymax)
+        F = assemble(form(P, v -> inner_Γ(g, jumpₙ(v); markers)))
+        RF = facet_rows(Ωₕ, markers, (d, s) -> inward_jump(Ωₕ, d, s))' * gv
+        @test norm(F - RF) <= tol * norm(RF)
+        G = assemble(form(P, v -> inner_Γ(g, ∂ₙₙ(v); markers)))
+        RG = facet_rows(Ωₕ, markers, (d, s) -> laps(Ωₕ)[d])' * gv
+        @test norm(G - RG) <= tol * norm(RG)
+
+        Ω32 = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (6, 7),
+            (true, true))
+        P32 = padded(Ω32)
+        for t in ((u, v) -> inner_Γ(2 * ∂ₙₙ(u), v), (u, v) -> inner_Γ(jumpₙ(u), 3 * jumpₙ(v)))
+            @test eltype(assemble(form(P32, P32, t))) == Float32
+        end
+    end
+
+    if WITH_3D_TESTS
+        @testset "3D rows" begin
+            Ωₕ = random_mesh((4, 5, 6))
+            P = padded(Ωₕ)
+            Ls = laps(Ωₕ)
+            A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v)))
+            @test relerr(A, sparse(facet_rows(Ωₕ, FACETS, (d, s) -> Ls[d]))) <= tol
+            J = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = (:zmax, :xmin))))
+            RJ = facet_rows(Ωₕ, (:zmax, :xmin), (d, s) -> inward_jump(Ωₕ, d, s) * sum(Ls))
+            @test relerr(J, sparse(RJ)) <= tol
+        end
+    end
+
+    @testset "∂ₙₙ and jumpₙ refusals" begin
+        Ω1 = random_mesh((19,))
+        Px = padded(Ω1; ghosts = (:xmin,))
+        err = try
+            form(Px, Px, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:xmax,)))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("∂ₙₙ", sprint(showerror, err)) && occursin(":xmax", sprint(showerror, err))
+        @test form(Px, Px, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:xmin,))) isa
+              Bramble.BilinearForm
+        W = gridspace(Ω1)
+        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(∂ₙₙ(u), v))
+        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(u, ∂ₙₙ(v)))
+        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(jumpₙ(u), ∂ₙₙ(v)))
+        # jumpₙ reads no ghost, so a space without any takes it
+        n = length(points(Ω1))
+        Jw = assemble(form(W, W, (u, v) -> inner_Γ(jumpₙ(u), v)))
+        @test Jw == sparse([1, 1, n, n], [1, 2, n, n - 1], [-1.0, 1.0, -1.0, 1.0], n, n)
+
+        Ω2 = random_mesh((6, 7))
+        P2 = padded(Ω2; ghosts = (:xmin, :ymin))
+        @test_throws ArgumentError form(P2, P2, (u, v) -> inner_Γ(∂ₙₙ(u), v))
+        @test_throws ArgumentError form(P2, P2,
+            (u, v) -> inner_Γ(∂ₙₙ(u), jumpₙ(v); markers = (:xmax,)))
+        P = padded(Ω2)
+        for f in (innerₕ, inner₊)
+            @test_throws ArgumentError form(P, P, (u, v) -> f(∂ₙₙ(u), v))
+            @test_throws ArgumentError form(P, P, (u, v) -> f(u, jumpₙ(v)))
+        end
     end
 end
 
