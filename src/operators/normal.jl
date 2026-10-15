@@ -174,9 +174,9 @@ end
 @inline dot(F::NTuple{D, Any}, ::NormalSymbol) where {D} = NormalContraction{D, typeof(F)}(F)
 @inline dot(::NormalSymbol, F::NTuple{D, Any}) where {D} = dot(F, η)
 
-# `dot(F, η)` is well defined on any space: `F` is a field whose values are already known at
-# every point, so nothing has to be differenced at the face. The normal *derivative* of an
-# unknown is, and is the facet operator `∂ₙ` further down.
+# `dot(F, η)` needs no ghosts: `F` is a field whose values are already known at every point,
+# so nothing has to be differenced at the face. The normal *derivative* of an unknown does,
+# and is the facet operator `∂ₙ` further down.
 
 """
     InnerGammaNormal{MASK, DIM} <: AbstractInnerProduct
@@ -465,7 +465,7 @@ for op in (:+, :-)
     @eval Base.$op(::LazyOp, ::AbstractNormalTerm) = _throw_normal_outside_gamma()
 end
 
-# --- Facet operators: the normal derivative (gpena/Bramble.jl#218, #205) ------------ #
+# --- Facet operators: the normal derivative ------------------------------------------- #
 #
 # `∂ₙ(u)` is `η_F Dc_d(u)` on each facet `F` with normal axis `d`: a value per facet, not per
 # node, so a corner node has one for each facet it lies on. It is not a `LazyOp` for that
@@ -512,7 +512,7 @@ end
 The outward normal derivative of `u` at the boundary facets, `η_F Dc_d(u)` on the facet `F`
 of normal axis `d`, with `Dc_d` the centred difference across the facet. It reads the ghost
 beyond the facet, so the space must have ghosts there: build it with
-`gridspace(Ωₕ; ghosts = ...)` and assemble on its padded space.
+`gridspace(Ωₕ; ghosts = ...)`.
 
 A node on several facets (a 2D corner) has one value per facet. Meaningful inside
 [`inner_Γ`](@ref), on either side or both, where each facet's term carries that facet's
@@ -530,10 +530,10 @@ the two `e` facets: the tangential difference there reads them.
 
 ```julia
 Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
-Pₕ = Bramble.padded_space(gridspace(Ωₕ; ghosts = :boundary))
-a = form(Pₕ, Pₕ, (u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmin, :ymax)))
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmin, :ymax)))
 K = [2.0 0.5; 0.5 1.0]
-b = form(Pₕ, Pₕ, (u, v) -> inner_Γ(∂ₙ(u; K), v))
+b = form(Wₕ, Wₕ, (u, v) -> inner_Γ(∂ₙ(u; K), v))
 ```
 
 See also: [`inner_Γ`](@ref), [`η`](@ref)
@@ -582,7 +582,7 @@ The second normal derivative of `u` at the boundary facets: on the facet `F` of 
 `d`, the second difference `D̃_d D₋_d u` along `d` alone (the per-axis term of
 [`Δₕ`](@ref)), the same on both sides since `η_F² = 1`. It reads the ghost beyond the facet,
 whose spacing is the first interior one, so the space must have ghosts there: build it with
-`gridspace(Ωₕ; ghosts = ...)` and assemble on its padded space.
+`gridspace(Ωₕ; ghosts = ...)`.
 
 A node on several facets (a 2D corner) has one value per facet, each reading only the
 ghost of its own facet. Meaningful inside [`inner_Γ`](@ref), on either side or both, with
@@ -593,8 +593,8 @@ without any, is refused with an `ArgumentError` when `form` is called.
 
 ```julia
 Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
-Pₕ = Bramble.padded_space(gridspace(Ωₕ; ghosts = :boundary))
-a = form(Pₕ, Pₕ, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:xmin,)))
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:xmin,)))
 ```
 
 See also: [`∂ₙ`](@ref), [`jumpₙ`](@ref), [`inner_Γ`](@ref)
@@ -621,9 +621,9 @@ A node on several facets (a 2D corner) has one value per facet. Meaningful insid
 
 ```julia
 Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
-Pₕ = Bramble.padded_space(gridspace(Ωₕ; ghosts = :boundary))
-a = form(Pₕ, Pₕ, (u, v) -> inner_Γ(2.0 * jumpₙ(u), jumpₙ(v); markers = (:xmin,)))
-b = form(Pₕ, Pₕ, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v))
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(2.0 * jumpₙ(u), jumpₙ(v); markers = (:xmin,)))
+b = form(Wₕ, Wₕ, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v))
 ```
 
 See also: [`∂ₙ`](@ref), [`∂ₙₙ`](@ref), [`inner_Γ`](@ref)
@@ -687,6 +687,7 @@ end
 function _check_facet_reach(Ωₕ, G::Tuple, DIM::Int, SIDE::Int)
     G[DIM] && _check_facet_ghosts(Ωₕ, DIM, SIDE)
     for e in eachindex(G), s in 1:2
+
         e != DIM && G[e] && _check_transverse_ghosts(Ωₕ, DIM, SIDE, e, s)
     end
     return nothing
@@ -726,9 +727,8 @@ end
     throw(
         ArgumentError(
         "∂ₙ and ∂ₙₙ read the ghost beyond each facet they are integrated on, and $where_. " *
-        "Build the space with `gridspace(Ωₕ; ghosts = ...)` naming :$facet (or " *
-        "`ghosts = :boundary`) and assemble on its `Bramble.padded_space`, or leave " *
-        ":$facet out of `markers`.",
+        "Ghost the facet, with `gridspace(Ωₕ; ghosts = ...)` naming :$facet (or " *
+        "`ghosts = :boundary`), or leave :$facet out of `markers`.",
     ),
     )
 end

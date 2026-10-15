@@ -105,6 +105,10 @@ end
     Bramble.change_points!(Ω, collect(points(Ω)) .^ 1.5)
     @test refuses(() -> Bramble.lift(C, u), "gridspace(Ωₕ; ghosts = ...) again")
     @test refuses(() -> Bramble.lift(C), "gridspace(Ωₕ; ghosts = ...) again")
+    # The remedy names lift and constrained, not the padded space lift refuses.
+    @test refuses(() -> Bramble.lift(C, u), "lift refuses")
+    @test refuses(() -> Bramble.lift(C, u), "constrained(gridspace(Ωₕ; ghosts = ...), relations)")
+    @test !refuses(() -> Bramble.lift(C, u), "padded_space")
 end
 
 @testset "1D lift refuses extra arguments" begin

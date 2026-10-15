@@ -7,10 +7,6 @@
 # (`E` picks each degree of freedom's padded point, `d = 0`); a constrained space keeps the
 # same fields with the relations' `E` and `d`.
 #
-# DOF order: the physical nodes in the mesh's linear order, then the ghosts in the order of
-# `GhostMesh` (facets `xmin, xmax, ymin, ymax, zmin, zmax`, named ones only, each facet's
-# ghosts column-major). An absent padded point is never a degree of freedom.
-#
 # See also: `GhostMesh`, `ScalarGridSpace`, `SpaceWeights`
 
 """
@@ -85,8 +81,10 @@ end
 
 # The remedy of the stale-weights error of a padded space: rebuild the ghost space from the
 # physical mesh, not a space on the ghost mesh.
-_stale_weights_remedy(::GhostMesh) = "Call gridspace(Ωₕ; ghosts = ...) again on the " *
-                                     "physical mesh `Ωₕ` and take its padded_space."
+function _stale_weights_remedy(::GhostMesh)
+    "Call gridspace(Ωₕ; ghosts = ...) again on the " *
+    "physical mesh `Ωₕ` and take its padded_space."
+end
 
 # A per-axis factor of the physical mesh on the padded axis: 0 at the ghost end points.
 function _pad_factor(f::AbstractVector, G::GhostMesh, d::Int)
@@ -210,9 +208,24 @@ function lift(Wₕ::GhostGridSpace, u::AbstractVector)
 end
 
 # The closure was built from the mesh `Wₕ`'s weights were: after `change_points!` its ghost
-# values solve the relations on a mesh that no longer exists, so `lift` refuses as the
-# space's weights do, with the same remedy.
-@inline _check_lift_fresh(Wₕ::GhostGridSpace) = (weights(Wₕ.padded); nothing)
+# values solve the relations on a mesh that no longer exists. The padded space's own stale
+# message would send the user to `padded_space`, which `lift` refuses.
+@inline function _check_lift_fresh(Wₕ::GhostGridSpace)
+    Wₕ.padded.weights.built_version == _mesh_version(mesh(Wₕ)) || _throw_lift_stale(Wₕ)
+    return nothing
+end
+
+@noinline function _throw_lift_stale(Wₕ::GhostGridSpace)
+    throw(
+        ArgumentError(
+        "lift refuses $(Wₕ): its mesh was changed in place (set_points!, change_points!, " *
+        "or iterative_refinement!) after the space was built, so its ghost values would " *
+        "solve the relations on a mesh that no longer exists. Call " *
+        "gridspace(Ωₕ; ghosts = ...) again, and " *
+        "constrained(gridspace(Ωₕ; ghosts = ...), relations) again for a constrained space.",
+    ),
+    )
+end
 
 @noinline function lift(Wₕ::GhostGridSpace, u, rest...)
     throw(
@@ -252,11 +265,11 @@ end
     )
 end
 
-# The restriction and cell-average operators have no meaning on a ghost space yet: whether a
-# restriction holds values at the physical nodes only or at the ghost coordinates too is
-# decided by the standard-space audit (#781). Without these methods `Rₕ!` falls to its
-# general keyword method, which calls itself until the stack overflows, and `avgₕ!` reaches
-# a `project!` with no method for the space. Each operator refuses, space and element form.
+# The restriction and cell-average operators refuse on a ghost space, in space and element
+# form: whether a restriction holds values at the physical nodes only or at the ghost
+# coordinates too is not decided. Without these methods `Rₕ!` falls to its general keyword
+# method, which calls itself until the stack overflows, and `avgₕ!` reaches a `project!`
+# with no method for the space.
 Rₕ(Wₕ::GhostGridSpace, f; kwargs...) = _throw_projection_on_ghost_space(:Rₕ, Wₕ)
 function Rₕ!(uₕ::VectorElement{<:GhostGridSpace}, f; kwargs...)
     return _throw_projection_on_ghost_space(:Rₕ!, uₕ.space)
