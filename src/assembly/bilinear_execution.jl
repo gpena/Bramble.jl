@@ -509,8 +509,7 @@ end
     )::Int
 end
 
-# Picks recording (cache miss: a fresh `A`, a changed `ast` -- e.g. `assemble!(A, form;
-# ast = ...)` given something other than `form.ast` -- or the first call ever) or replay
+# Picks recording (cache miss: a fresh `A`, a changed `ast`, or the first call ever) or replay
 # (cache hit) and keeps `cache` in step with whichever one ran. `ast` is checked as well as
 # `A`: the cache's positions are only valid for the exact stencil shape they were recorded
 # against, and a different `ast` can visit a different number of entries per point.
@@ -570,16 +569,6 @@ end
     cache.valid = true
     return nothing
 end
-
-# A differently-typed `ast` records and scatters, then stores nothing. This is the deprecated
-# `assemble!(A, form; ast = <another form's tree>)` keyword (gpena/Bramble.jl#105, removed in
-# v3.0.0): the cache's `AST` parameter belongs to `form.ast`, so there is nothing to store it
-# in. Dropping the write also leaves whatever `form.ast` recording the cache already holds
-# intact and still correct -- `nzval` positions depend on `A`'s sparsity pattern, which a
-# scatter does not change -- so the next ordinary `assemble!` still replays instead of paying
-# for a re-record. Before the cache carried its AST as a type parameter this case overwrote
-# the cache with the substitute tree; now it cannot, and need not.
-@inline _store_recording!(::_AssemblyCache, _ast, _segments, _A, _stamp) = nothing
 
 # --- Threaded: band-coloured sweeps ------------------------------------------------ #
 #

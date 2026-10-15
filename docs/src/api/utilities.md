@@ -45,10 +45,3 @@ BackendProfile
 sparse_refactor!
 PRECOMPILE_WORKLOAD
 ```
-
-### Deprecated
-
-```@docs
-CpuBatch
-GpuAsync
-```

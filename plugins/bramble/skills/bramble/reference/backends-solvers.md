@@ -15,8 +15,8 @@ Bramble.locality(b)                            # HostLocality() or DeviceLocalit
 
 `ExecutionPolicy` (`public`, like every policy type here except the exported `Serial` and
 `Parallel`) splits into `CpuPolicy` (`CpuSerial`, `CpuThreaded`, and `CpuPolyester`, which
-needs `using Polyester`; `CpuBatch` is its deprecated alias) and `GpuPolicy` (`GpuKernel`;
-`GpuAsync` is its deprecated alias). `Serial`/`Parallel` alias `CpuSerial`/`CpuThreaded`.
+needs `using Polyester`) and `GpuPolicy` (`GpuKernel`). `Serial`/`Parallel` alias
+`CpuSerial`/`CpuThreaded`.
 `GpuOffload(device_backend, inner)` is a `CpuPolicy` for a host backend that sends `Rₕ!` and
 `avgₕ!` to `device_backend`. `metal_backend`/`gpu_backend` build a device backend (need
 `using Metal`); `csr_backend` selects a CSR sparse matrix type.

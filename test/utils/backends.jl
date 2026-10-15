@@ -21,7 +21,6 @@ using Bramble:
                CpuSerial,
                CpuThreaded,
                ExecutionPolicy,
-               GpuAsync,
                GpuKernel,
                GpuOffload,
                GpuPolicy
@@ -81,7 +80,7 @@ end
 
         be_device = backend(
             vector_type = MockDeviceVector{Float32}, matrix_type = MockDeviceMatrix{Float32},
-            policy = GpuAsync()
+            policy = GpuKernel()
         )
         @test Bramble.locality(be_device) === Bramble.DeviceLocality()
         @test Bramble.locality(typeof(be_device)) === Bramble.DeviceLocality()
@@ -859,9 +858,10 @@ end
     end
 end
 
-@testset "Deprecated policy aliases (#300)" begin
-    @test Bramble.CpuBatch === Bramble.CpuPolyester
-    @test Bramble.GpuAsync === Bramble.GpuKernel
+@testset "Removed policy aliases (#353)" begin
+    @test !isdefined(Bramble, :CpuBatch)
+    @test !isdefined(Bramble, :GpuAsync)
+    @test !isdefined(Bramble, :_warn_ast_keyword)
 end
 
 end # module UtilsBackendsTests

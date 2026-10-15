@@ -1247,8 +1247,7 @@ using Bramble:
             # Each form keeps its own `_AssemblyCache` (keyed on the exact matrix object it
             # last assembled into), so assembling a second, same-reach form into `a`'s matrix
             # records fresh under *its own* cache rather than touching `a`'s -- `a`'s own
-            # cache is still valid afterwards and replays correctly. Assembling the
-            # other form directly demonstrates this without the deprecated `ast` keyword.
+            # cache is still valid afterwards and replays correctly.
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
             A = assemble(a)                                   # records under a's own cache
             alt = form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v))  # same reach, different form
@@ -1271,9 +1270,7 @@ using Bramble:
         wide = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))    # reaches a neighbour too
 
         # Serial: the recording pass searches and reports. `wide` is assembled directly
-        # into a matrix built for `narrow`'s (narrower) pattern, rather than overriding
-        # `narrow`'s own `ast` keyword -- the two are equivalent, and only the latter is
-        # deprecated.
+        # into a matrix built for `narrow`'s (narrower) pattern.
         A = allocate_system_matrix(narrow, resolve_form_ast(narrow))
         @test_throws ArgumentError assemble!(A, wide)
 
@@ -1846,25 +1843,6 @@ end
     @test nnz(F) == 4
     @test all(iszero, nonzeros(F))
     @test rowvals(F) == rowvals(A)
-end
-
-@testset "foreign tree via the deprecated keyword" begin
-    # `assemble!(A, a; ast = other)` with a tree of another type records and fills, then
-    # stores nothing: the cache's AST type is `a.ast`'s, and `a`'s own recording stays valid.
-    Random.seed!(105)
-    W = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false)))
-    H = Matrix(Diagonal(collect(weights(W, Innerh()))))
-    a = form(W, W, (u, v) -> innerₕ(u, v))
-    alt = form(W, W, (u, v) -> 2.0 * innerₕ(u, v))
-    @test typeof(alt.ast) != typeof(a.ast)
-    A = assemble(a)
-    B = copy(A)
-    @test_deprecated r"`ast` keyword" assemble!(B, a; ast = alt.ast)
-    @test Matrix(B) ≈ 2 * H
-    @test a.cache.valid && a.cache.A_id == objectid(A) && a.cache.ast === a.ast
-    fill!(nonzeros(A), NaN)
-    assemble!(A, a)
-    @test Matrix(A) ≈ H
 end
 
 struct _PlainSink end

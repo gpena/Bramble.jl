@@ -5,8 +5,8 @@
 export backend, gpu_backend, metal_backend, csr_backend
 export Serial, Parallel
 
-public ExecutionPolicy, CpuPolicy, CpuSerial, CpuThreaded, CpuPolyester, CpuBatch, GpuOffload
-public GpuPolicy, GpuKernel, GpuAsync
+public ExecutionPolicy, CpuPolicy, CpuSerial, CpuThreaded, CpuPolyester, GpuOffload
+public GpuPolicy, GpuKernel
 public locality, Locality, HostLocality, DeviceLocality
 public vector, matrix, metal_sparse_csr, metal_sparse_csc
 public vector_type, matrix_type, backend_types, execution_policy

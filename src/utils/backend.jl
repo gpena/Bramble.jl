@@ -173,9 +173,9 @@ struct CpuThreaded <: CpuPolicy end
 Polyester-batched execution policy.
 
 Named for the provider, matching [`CpuSerial`](@ref) and [`CpuThreaded`](@ref): the name makes
-the `using Polyester` requirement self-evident, where the previous name (`CpuBatch`, now a
-deprecated alias) named the `Polyester.@batch` primitive instead and gave no hint that a weak
-dependency was involved (gpena/Bramble.jl#300).
+the `using Polyester` requirement self-evident, where the name it replaced spelled the
+`Polyester.@batch` primitive instead and gave no hint that a weak dependency was involved
+(gpena/Bramble.jl#300).
 
 Directs grid operations and form assembly through `Polyester.jl`'s `@batch`, a primitive
 whose per-call overhead is low enough to pay off on grids where [`CpuThreaded`](@ref)'s
@@ -247,11 +247,11 @@ serially, so the old default of `Serial()` was not a conservative choice but a f
 about the hardware, and it sent CPU assembly loops at device arrays.
 
 The name states the launch mechanism only: work is dispatched to a device kernel. It replaces
-the previous name, `GpuAsync` (now a deprecated alias), which claimed a scheduling property the
-API does not have. A kernel launch only enqueues onto the device's queue; a host read of the
-result, or [`ka_synchronize`](@ref), is the barrier. Kernels on one queue run in its order, so a
-chain of operators needs no synchronise between its steps. `Async` named a scheduling interface
-the package does not offer (no handle to wait on), which is why it was replaced rather than kept
+a name that claimed a scheduling property the API does not have. A kernel launch only
+enqueues onto the device's queue; a host read of the result, or
+[`ka_synchronize`](@ref), is the barrier. Kernels on one queue run in its order, so a chain of
+operators needs no synchronise between its steps. `Async` named a scheduling interface the
+package does not offer (no handle to wait on), which is why it was replaced rather than kept
 (gpena/Bramble.jl#300); the memory locality the old name also carried now lives in the
 `Locality` trait (gpena/Bramble.jl#298), which this policy claims through [`locality`](@ref)
 instead.
@@ -275,28 +275,6 @@ Alias for [`CpuThreaded`](@ref). The spelling this package used before the CPU/G
 (gpena/Bramble.jl#191).
 """
 const Parallel = CpuThreaded
-
-"""
-    CpuBatch
-
-Deprecated alias for [`CpuPolyester`](@ref). Will be removed in the next major release.
-
-The old name spelled the `Polyester.@batch` primitive rather than the provider, unlike
-`CpuSerial` and `CpuThreaded`, and gave no hint that `using Polyester` is required before a
-sweep under this policy runs (gpena/Bramble.jl#300).
-"""
-const CpuBatch = CpuPolyester
-
-"""
-    GpuAsync
-
-Deprecated alias for [`GpuKernel`](@ref). Will be removed in the next major release.
-
-The old name claimed a scheduling property the API does not have: a kernel launch only
-enqueues onto the device's queue, and a host read of the result, or
-[`ka_synchronize`](@ref), is the barrier, with no handle to wait on (gpena/Bramble.jl#300).
-"""
-const GpuAsync = GpuKernel
 
 # The one message a Backend gives when its storage locality and its policy locality disagree
 # (gpena/Bramble.jl#298, #296): device storage under a CpuPolicy is memory a CPU loop cannot

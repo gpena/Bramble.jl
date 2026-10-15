@@ -1183,9 +1183,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
     @testset "Allocation contract" begin
         # This is what a time loop calls every step. The assembly kernel itself is
         # allocation free -- `form.ast` is a field read, not a resolution, so there is
-        # nothing left to hoist out of the call the way the deprecated `ast` keyword
-        # claimed to: both `assemble!(b, lf)` and the equivalent with the keyword measure
-        # 0 bytes.
+        # nothing left to hoist out of the call: `assemble!(b, lf)` measures 0 bytes.
         #
         # Measured inside a function on concrete locals: read from a non-const global, the
         # arguments box at the call boundary and the reading is of the box.
