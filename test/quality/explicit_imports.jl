@@ -321,6 +321,11 @@ using Kronecker: Kronecker
     #   loading it never tries to replace a method during precompilation.
     # - `AbstractSpaceType` (BrambleSciMLExt): narrows the `element`/`VectorElement` unwrap
     #   methods for a `LinearSolution`, the same reason the doctring next to them gives.
+    # - `PkgId`, `loaded_modules` (BrambleSciMLExt): `Base`'s package registry, searched by
+    #   `Base.PkgId` to find LinearSolve in `Base.loaded_modules` without importing it.
+    # - `_element_coefficients`, `_as_csc` (BrambleSciMLExt): `_`-prefixed Bramble internals
+    #   the extension extends for a `LinearSolution` and calls to get a CSC matrix, neither
+    #   of them public.
     # - `_amg_operator` (BrambleAlgebraicMultigridExt), `_ilu_operator` (BrambleILUZeroExt):
     #   the preconditioner-building hooks `solve`'s `preconditioner = :amg`/`:ilu0` keywords
     #   reach.
@@ -538,6 +543,10 @@ using Kronecker: Kronecker
                 :_nonlinear_problem,
                 :_export_vtk,
                 :AbstractSpaceType,
+                :PkgId,
+                :loaded_modules,
+                :_element_coefficients,
+                :_as_csc,
                 :_amg_operator,
                 :_amg_preconditioner,
                 :_ilu_operator,
