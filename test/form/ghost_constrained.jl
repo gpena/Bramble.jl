@@ -46,12 +46,13 @@ end
 # `-Δₕ u = f`, row-scaled by the cell measure, as the oracles' eliminated systems are.
 poisson(C, f) = (form(C, C, (u, v) -> innerₕ(-1.0 * Δₕ(u), v)), form(C, v -> innerₕ(f, v)))
 
-refusal(f) = try
-    f()
-    nothing
-catch err
-    err
-end
+refusal(f) =
+    try
+        f()
+        nothing
+    catch err
+        err
+    end
 
 # Whether `f()` throws an `ArgumentError` whose message holds `words`.
 function refuses(f, words)
@@ -61,6 +62,7 @@ end
 
 @testset "1D Robin and Neumann vs oracle" begin
     for kind in (:random, :graded), problem in (:robin_a, :neumann_a)
+
         Ω = O1.make_mesh(kind, 0)
         rels = O1.problem_relations(problem, Ω)
         C = constrained(gridspace(Ω; ghosts = :boundary), u -> Tuple(robin_pairs(u, rels)))
@@ -107,6 +109,7 @@ end
 
 @testset "2D Robin and Neumann vs ND oracle" begin
     for kind in (:random, :graded), problem in (:robin_a, :neumann_a)
+
         Ω = ON.make_mesh(kind, 0; n0 = 6)
         W = gridspace(Ω; ghosts = :boundary)
         rels = ON.problem_relations(problem, Ω)
@@ -212,6 +215,24 @@ end
     @test all(isfinite, nonzeros(first(Bramble.closure(C32))))
 end
 
+@testset "Near-singular corner blocks solved" begin
+    # K = [1 1; 1 1 + 1e-12] passes the scale-free pivot test with corner blocks of
+    # condition near 1e12. Solved by their LU, the closure meets every relation row to
+    # rounding; multiplied by the inverse, it missed them by about 1e-3.
+    Ω = OC.make_mesh(:random, 0; n0 = 7)
+    K = [1.0 1.0; 1.0 1.0+1e-12]
+    W = gridspace(Ω; ghosts = :boundary)
+    rel = u -> map(F -> F => ∂ₙ(u; K) => 1.0, (:xmin, :xmax, :ymin, :ymax))
+    E, d = Bramble.closure(constrained(W, rel))
+    P = Bramble.padded_space(W)
+    rels = Bramble._facet_relations(Bramble.mesh(P), rel(Bramble.trial_function(P)))
+    R, b, _ = Bramble._relation_rows(P, rels)
+    for z in (ones(size(E, 2)), collect(range(-1.0, 2.0; length = size(E, 2))))
+        u = E * z + d
+        @test maximum(abs.(R * u - b) ./ (abs.(R) * abs.(u) + abs.(b))) <= 1e-12
+    end
+end
+
 @testset "Float32 spaces keep their element type" begin
     Ω = mesh(domain(interval(0.0f0, 1.0f0)), 9, false)
     C = constrained(gridspace(Ω; ghosts = :boundary),
@@ -243,7 +264,8 @@ end
     @test refuses(() -> constrained(W, u -> ()), "at least one relation")
     @test refuses(() -> constrained(W, u -> :xmin => ∂ₙ(u)), "pairs")
     Ks = [1.0 1.0; 1.0 1.0]
-    @test refuses(() -> constrained(W, u -> map(F -> F => ∂ₙ(u; K = Ks) => 0.0,
+    @test refuses(
+        () -> constrained(W, u -> map(F -> F => ∂ₙ(u; K = Ks) => 0.0,
             (:xmin, :xmax, :ymin, :ymax))), "singular")
     @test_throws ArgumentError constrained(Wx, u -> :xmin => ∂ₙ(u; K = Ks) => 0.0)
 end

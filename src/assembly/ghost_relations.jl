@@ -11,8 +11,14 @@
 # facet there: the eliminated ghosts couple in blocks (one entry per ghost, a 2×2 block at a
 # 2D corner), each solved on its own, so the whole closure stays sparse (design D7).
 #
+# A Dirichlet relation `u => g` eliminates the physical nodes of its facet instead: their
+# rows of `E` are empty and `d` holds `g` there, and a relation row reading such a node
+# moves its term into the data. A facet takes one Dirichlet relation and one that reads its
+# ghost.
+#
 # The closure `(E, d)` of the result keeps the DOF order of the ghost space: the physical
-# nodes, then the ghosts of the facets that carry no relation, which stay unknowns.
+# nodes no Dirichlet relation eliminates, then the ghosts of the facets that carry no ghost
+# relation, which stay unknowns.
 #
 # See also: `GhostGridSpace`, `FacetOperator`, `GhostBilinearForm`
 
@@ -28,20 +34,28 @@ Cₕ = constrained(Wₕ, u -> (:xmin => ∂ₙ(u) => 0.0,
     :xmax => 2.0 * u + 0.5 * ∂ₙ(u) => x -> exp(x[1])))
 ```
 
-The operator is a facet operator that reads the facet's ghost: [`∂ₙ`](@ref) (conormal
-`∂ₙ(u; K)` included), [`∂ₙₙ`](@ref), and their linear combinations with `u`. The data is a
-number or a function of the point. At each node of the facet, the relation is solved for
-the node's ghost; at a 2D corner where two conormal relations read each other's ghost, the
-two are solved together. A ghosted facet without a relation keeps its ghosts as unknowns.
+The operator is either `u` itself, a Dirichlet relation, or a facet operator that reads the
+facet's ghost: [`∂ₙ`](@ref) (conormal `∂ₙ(u; K)` included), [`∂ₙₙ`](@ref), and their linear
+combinations with `u`. The data is a number or a function of the point. At each node of the
+facet, a ghost relation is solved for the node's ghost; at a 2D corner where two conormal
+relations read each other's ghost, the two are solved together. A Dirichlet relation
+`:F => u => g` removes the nodes of `F` from the unknowns and fixes them to `g`; its facet
+needs no ghosts, and may carry one ghost relation besides. A ghosted facet without a ghost
+relation keeps its ghosts as unknowns.
 
-The degrees of freedom of the result are the physical nodes, in the mesh's linear order,
-then the ghosts that remain unknowns, in the order of `Wₕ`. Its closure `(E, d)` maps them
-to the padded values `E u + d`, where `d` carries the data; so a load needs the bilinear
-form, `assemble(a, l)`.
+The degrees of freedom of the result are the physical nodes no Dirichlet relation fixes, in
+the mesh's linear order, then the ghosts that remain unknowns, in the order of `Wₕ`. Its
+closure `(E, d)` maps them to the padded values `E u + d`, where `d` carries the data; so a
+load needs the bilinear form, `assemble(a, l)`, whose matrix `Eᵀ A E` stays symmetric when
+`A` is. Dirichlet conditions can instead replace rows, `assemble(a, l; dirichlet,
+symmetrize)`, on a space whose ghosts are all eliminated and none of whose nodes are fixed
+by `u => g`: its unknowns are then the physical nodes, as on `gridspace(Ωₕ)`.
 
 Refused with an `ArgumentError`: a space without ghosts, an already constrained space, a
-facet named twice or that carries no ghosts, a relation that does not read its facet's
-ghost (`β = 0`, or a `jumpₙ` alone), and a singular block at a corner (a singular `K`).
+facet with two Dirichlet or two ghost relations, a ghost relation on a facet that carries
+no ghosts, a relation that does not read its facet's ghost (`β = 0`, or a `jumpₙ` alone),
+two Dirichlet relations disagreeing at a shared node, and a singular block at a corner (a
+singular `K`).
 
 # Examples
 
@@ -52,6 +66,9 @@ Cₕ = constrained(Wₕ, u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u)
 a = form(Cₕ, Cₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
 l = form(Cₕ, v -> innerₕ(x -> 1.0, v))
 A, F = assemble(a, l)
+
+Dₕ = constrained(gridspace(Ωₕ; ghosts = (:xmax,)), u -> (:xmin => u => 0.0,
+    :xmax => ∂ₙ(u) => x -> x[1]))  # 10 unknowns: the node at xmin is fixed
 ```
 
 See also: [`gridspace`](@ref), [`∂ₙ`](@ref), [`∂ₙₙ`](@ref)
@@ -60,7 +77,7 @@ function constrained(Wₕ::GhostGridSpace, relations)
     _check_unconstrained(Wₕ)
     P = padded_space(Wₕ)
     rels = _facet_relations(mesh(P), relations(trial_function(P)))
-    return _constrained_space(Wₕ, rels)
+    return _constrained_space(Wₕ, filter(!_is_dirichlet, rels), filter(_is_dirichlet, rels))
 end
 
 @noinline function constrained(Wₕ, relations)
@@ -88,7 +105,7 @@ end
 # --- Parsing the relations ----------------------------------------------------------- #
 
 # One parsed relation: the facet `(d, s)` (`s` 1 the minimum, 2 the maximum), its
-# canonical name, the facet operator and the data.
+# canonical name, the facet operator (the trial function itself for `u => g`) and the data.
 struct _FacetRelation{O, T}
     d::Int
     s::Int
@@ -107,32 +124,37 @@ function _facet_relations(G::GhostMesh{D}, out) where {D}
     rels = Any[]
     for p in pairs
         r = _facet_relation(G, p)
-        any(q -> q.d == r.d && q.s == r.s, rels) && _throw_facet_twice(r.name)
+        any(q -> q.d == r.d && q.s == r.s && _is_dirichlet(q) == _is_dirichlet(r), rels) &&
+            _throw_facet_twice(r.name, _is_dirichlet(r))
         push!(rels, r)
     end
     return rels
 end
+
+@inline _is_dirichlet(r::_FacetRelation) = r.op isa TrialFunction
 
 function _facet_relation(G::GhostMesh{D}, p::Pair{Symbol, <:Pair}) where {D}
     face = _find_face(Val(D), first(p))
     face === nothing && _throw_not_a_relation_facet(first(p), D)
     d, s = face
     name = _facet_name(d, s)
-    has_ghosts(G, d, _GHOST_SIDES[s]) || _throw_relation_unghosted(name)
     op, data = last(p)
     _check_relation_operator(op, name)
+    op isa TrialFunction || has_ghosts(G, d, _GHOST_SIDES[s]) || _throw_relation_unghosted(name)
     _check_relation_data(data, name)
     return _FacetRelation(d, s, name, op, data)
 end
 _facet_relation(G::GhostMesh, p) = _throw_relation_shape(p)
 
 _check_relation_operator(::FacetOperator, name::Symbol) = nothing
+_check_relation_operator(::TrialFunction, name::Symbol) = nothing   # Dirichlet, `u => g`
 @noinline function _check_relation_operator(op, name::Symbol)
     throw(
         ArgumentError(
         "the relation on :$name has the operator $(summary(op)), which reads no ghost, so " *
         "it cannot be solved for the ghosts of :$name. Write a facet operator that reads " *
-        "the facet's ghost, such as ∂ₙ(u), α * u + β * ∂ₙ(u) with β ≠ 0, or ∂ₙₙ(u).",
+        "the facet's ghost, such as ∂ₙ(u), α * u + β * ∂ₙ(u) with β ≠ 0, or ∂ₙₙ(u); or " *
+        "`u` alone, as in `:$name => u => g`, for a Dirichlet condition.",
     ),
     )
 end
@@ -168,11 +190,12 @@ end
     )
 end
 
-@noinline function _throw_facet_twice(name::Symbol)
+@noinline function _throw_facet_twice(name::Symbol, dirichlet::Bool)
+    what = dirichlet ? "two Dirichlet relations `u => g`" : "two relations reading its ghost"
     throw(
         ArgumentError(
-        "the facet :$name has two relations; give one per facet, summing the operators " *
-        "into one relation if both hold.",
+        "the facet :$name has $what; give at most one of each kind per facet, summing " *
+        "the operators into one relation if both hold.",
     ),
     )
 end
@@ -201,6 +224,7 @@ end
 function _relation_rows(P::ScalarGridSpace, rels)
     G = mesh(P)
     plin = LinearIndices(npoints(G, Tuple))
+    isempty(rels) && return spzeros(eltype(P), 0, length(plin)), eltype(P)[], Int[]
     facet = zeros(Int, nghosts(G))            # the relation of each ghost, 0 if none
     for g in 1:nghosts(G)
         _, d, side = boundary_node(G, g)
@@ -234,21 +258,64 @@ end
 
 # --- The closure --------------------------------------------------------------------- #
 
-function _constrained_space(Wₕ::GhostGridSpace, rels)
+function _constrained_space(Wₕ::GhostGridSpace, rels, drels)
     P = padded_space(Wₕ)
     G = mesh(P)
     R, b, ghosts = _relation_rows(P, rels)
-    keep = _kept_points(G, ghosts)
-    E, d = _relation_closure(G, R, b, ghosts, keep, rels)::Tuple{SparseMatrixCSC, Vector}
+    fixed, g = _dirichlet_values(G, drels, eltype(P))
+    keep = _kept_points(G, ghosts, fixed)
+    E, d = _relation_closure(G, R, b, ghosts, keep, fixed, g)::Tuple{SparseMatrixCSC, Vector}
     T = eltype(P)
     return GhostGridSpace(P, SparseMatrixCSC{T, Int}(E), Vector{T}(d))
 end
 
-# The padded points of the degrees of freedom that remain: the physical nodes, then the
-# ghosts no relation eliminates, in the order of the ghost space.
-function _kept_points(G::GhostMesh{D}, ghosts::Vector{Int}) where {D}
+# The padded points the Dirichlet relations fix, as a mask over the padded grid, and their
+# values: the data at each physical node of the facet, `data(point(Ωₕ, I))` as `dirichlet`
+# evaluates it. A node of two such facets (a corner) takes the first value, and the second
+# must agree with it to a relative `√eps` of the largest datum.
+function _dirichlet_values(G::GhostMesh{D}, drels, ::Type{T}) where {D, T}
+    Ωₕ = physical_mesh(G)
     plin = LinearIndices(npoints(G, Tuple))
-    keep = vec([plin[J] for J in physical_indices(G)])
+    n = npoints(Ωₕ, Tuple)
+    pts, vals, names = Int[], Any[], Symbol[]
+    for r in drels
+        k = r.s == 1 ? 1 : n[r.d]
+        for I in CartesianIndices(ntuple(e -> e == r.d ? (k:k) : (1:n[e]), Val(D)))
+            push!(pts, plin[padded_index(G, I)])
+            push!(vals, r.data isa Number ? r.data : r.data(point(Ωₕ, I)))
+            push!(names, r.name)
+        end
+    end
+    S = mapreduce(typeof, promote_type, vals; init = T)
+    fixed = falses(length(plin))
+    g = zeros(S, length(plin))
+    first_name = Vector{Symbol}(undef, length(plin))
+    scale = isempty(vals) ? zero(real(S)) : maximum(abs, vals)
+    for (p, v, name) in zip(pts, vals, names)
+        if fixed[p]
+            abs(g[p] - v) <= sqrt(eps(real(S))) * scale ||
+                _throw_dirichlet_disagree(first_name[p], name, g[p], v)
+        else
+            fixed[p], g[p], first_name[p] = true, v, name
+        end
+    end
+    return fixed, g
+end
+
+@noinline function _throw_dirichlet_disagree(a::Symbol, b::Symbol, ga, gb)
+    throw(
+        ArgumentError(
+        "the Dirichlet relations on :$a and :$b give a node they share (a corner) the " *
+        "values $ga and $gb. Give data that agree where the facets meet.",
+    ),
+    )
+end
+
+# The padded points of the degrees of freedom that remain: the physical nodes no Dirichlet
+# relation fixes, then the ghosts no relation eliminates, in the order of the ghost space.
+function _kept_points(G::GhostMesh{D}, ghosts::Vector{Int}, fixed::BitVector) where {D}
+    plin = LinearIndices(npoints(G, Tuple))
+    keep = Int[plin[J] for J in physical_indices(G) if !fixed[plin[J]]]
     eliminated = falses(nghosts(G))
     eliminated[ghosts] .= true
     for g in 1:nghosts(G)
@@ -263,20 +330,24 @@ end
     return padded_index(G, I) + CartesianIndex(ntuple(e -> e == d ? step : 0, Val(D)))
 end
 
-# `u_pad = E u + d`: a kept point copies its degree of freedom; the eliminated ghosts solve
-# `C u_g = b − B u`, `C` their columns of the rows and `B` the kept ones. `C` couples only
-# the ghosts of one node, so it is solved block by block into a sparse inverse.
-function _relation_closure(G::GhostMesh, R::SparseMatrixCSC, b, ghosts, keep, rels)
+# `u_pad = E u + d`: a kept point copies its degree of freedom, a fixed point holds its
+# Dirichlet value `g`, and the eliminated ghosts solve `C u_g = b − B u − R_fixed g`, `C`
+# their columns of the rows and `B` the kept ones. `C` couples only the ghosts of one node,
+# so it is solved block by block, each block's rows of `B` with its own LU.
+function _relation_closure(G::GhostMesh, R::SparseMatrixCSC, b, ghosts, keep,
+        fixed::BitVector, g::AbstractVector)
     Npad = size(R, 2)
     m, n = length(ghosts), length(keep)
     gpos = zeros(Int, Npad)
     kpos = zeros(Int, Npad)
-    gpts = [LinearIndices(npoints(G, Tuple))[_ghost_point(G, g)] for g in ghosts]
+    gpts = [LinearIndices(npoints(G, Tuple))[_ghost_point(G, k)] for k in ghosts]
     gpos[gpts] .= 1:m
     kpos[keep] .= 1:n
+    bg = Vector{promote_type(eltype(b), eltype(R), eltype(g))}(b)
     Ci, Cj, Cv = Int[], Int[], eltype(R)[]
     Bi, Bj, Bv = Int[], Int[], eltype(R)[]
     for p in 1:Npad, q in nzrange(R, p)
+
         v = nonzeros(R)[q]
         iszero(v) && continue
         k = rowvals(R)[q]
@@ -284,6 +355,8 @@ function _relation_closure(G::GhostMesh, R::SparseMatrixCSC, b, ghosts, keep, re
             push!(Ci, k), push!(Cj, gpos[p]), push!(Cv, v)
         elseif kpos[p] != 0
             push!(Bi, k), push!(Bj, kpos[p]), push!(Bv, -v)
+        elseif fixed[p]
+            bg[k] -= v * g[p]
         else
             _throw_relation_reads_absent(_relation_name(G, ghosts[k]))
         end
@@ -292,15 +365,14 @@ function _relation_closure(G::GhostMesh, R::SparseMatrixCSC, b, ghosts, keep, re
     for k in 1:m
         iszero(C[k, k]) && _throw_relation_misses_ghost(_relation_name(G, ghosts[k]))
     end
-    Cinv = _block_inverse(G, C, ghosts)
-    Eg = Cinv * sparse(Bi, Bj, Bv, m, n)
-    dg = Cinv * b
-    rows, cols, vals = collect(keep), collect(1:n), ones(eltype(Eg), n)
-    for j in 1:n, q in nzrange(Eg, j)
-        push!(rows, gpts[rowvals(Eg)[q]]), push!(cols, j), push!(vals, nonzeros(Eg)[q])
-    end
-    d = zeros(eltype(dg), Npad)
+    Bt = sparse(Bj, Bi, Bv, n, m)            # the rows of `B` as columns
+    Ei, Ej, Ev, dg = _block_solve(G, C, Bt, bg, ghosts)
+    rows = vcat(keep, gpts[Ei])
+    cols = vcat(1:n, Ej)
+    vals = vcat(ones(eltype(Ev), n), Ev)
+    d = zeros(promote_type(eltype(dg), eltype(g)), Npad)
     d[gpts] .= dg
+    d[fixed] .= g[fixed]
     return sparse(rows, cols, vals, Npad, n), d
 end
 
@@ -309,16 +381,20 @@ end
     return _facet_name(d, _ghost_side(side))
 end
 
-# The inverse of `C`, block by block: the blocks are the connected sets of ghosts the rows
-# couple, at most one per node of the mesh, so each is a small dense solve.
-function _block_inverse(G::GhostMesh, C::SparseMatrixCSC, ghosts)
+# `C \ B` and `C \ b`, block by block: the blocks are the connected sets of ghosts the rows
+# couple, at most one per node of the mesh, so each is a small dense LU solve on the
+# columns its rows of `B` touch. The result is the triplets `(k, j, v)` of the ghosts' rows
+# of `E` and the ghosts' `d`. A solve, not a multiplication by an inverse: on a block near
+# singularity (a nearly singular `K`) the inverse leaves the relations unsatisfied.
+function _block_solve(G::GhostMesh, C::SparseMatrixCSC, Bt::SparseMatrixCSC, b, ghosts)
     m = size(C, 1)
     root = collect(1:m)
     find(k) = (while root[k] != k
-        root[k] = root[root[k]]
-        k = root[k]
-    end; k)
+            root[k] = root[root[k]]
+            k = root[k]
+        end; k)
     for j in 1:m, q in nzrange(C, j)
+
         a, c = find(rowvals(C)[q]), find(j)
         a == c || (root[max(a, c)] = min(a, c))
     end
@@ -326,23 +402,37 @@ function _block_inverse(G::GhostMesh, C::SparseMatrixCSC, ghosts)
     for k in 1:m
         push!(get!(members, find(k), Int[]), k)
     end
-    rows, cols, vals = Int[], Int[], eltype(C)[]
+    T = promote_type(eltype(C), eltype(Bt))
+    rows, cols, vals = Int[], Int[], T[]
+    dg = zeros(promote_type(eltype(C), eltype(b)), m)
     for idx in values(members)
         if length(idx) == 1
             k = only(idx)
-            push!(rows, k), push!(cols, k), push!(vals, inv(C[k, k]))
+            c = C[k, k]
+            for q in nzrange(Bt, k)
+                push!(rows, k), push!(cols, rowvals(Bt)[q]), push!(vals, nonzeros(Bt)[q] / c)
+            end
+            dg[k] = b[k] / c
             continue
         end
         Cb = Matrix(C[idx, idx])
         F = lu(Cb; check = false)
         _nonsingular(F, Cb) ||
             _throw_singular_corner(map(k -> _relation_name(G, ghosts[k]), idx))
-        Ib = inv(F)
-        for (a, ka) in enumerate(idx), (c, kc) in enumerate(idx)
-            push!(rows, ka), push!(cols, kc), push!(vals, Ib[a, c])
+        js = sort!(unique!(reduce(vcat, (rowvals(Bt)[nzrange(Bt, k)] for k in idx))))
+        Bb = zeros(T, length(idx), length(js))
+        for (a, k) in enumerate(idx), q in nzrange(Bt, k)
+
+            Bb[a, searchsortedfirst(js, rowvals(Bt)[q])] = nonzeros(Bt)[q]
         end
+        X = F \ Bb
+        for (c, j) in enumerate(js), (a, k) in enumerate(idx)
+
+            push!(rows, k), push!(cols, j), push!(vals, X[a, c])
+        end
+        dg[idx] .= F \ b[idx]
     end
-    return sparse(rows, cols, vals, m, m)
+    return rows, cols, vals, dg
 end
 
 # A block whose smallest pivot is at the level of rounding is singular: a singular `K`
