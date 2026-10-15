@@ -168,6 +168,26 @@ if PRECOMPILE_WORKLOAD
             c3v = element(W3n, 1.0)
             assemble(form(W3n, W3n, (u, v) -> inner₊(c3v * ∇ₕ(u), ∇ₕ(v))); dirichlet = :boundary)
 
+            # The 3D nests of #774's table on the same plain space: the c-scaled `jumpₓ(Δₕ)`
+            # and `D₋ₓ(Δₕ)` pairs and the facet row, each a first call of seconds when left
+            # to the caller. The coefficient is a Float64 grid element, as the benchmark's.
+            for f3 in (
+                form(
+                    W3n, W3n,
+                    (u, v) -> innerₕ(c3v * jumpₓ(Δₕ(u)), jumpₓ(Δₕ(v)))
+                ),
+                form(
+                    W3n, W3n,
+                    (u, v) -> innerₕ(c3v * D₋ₓ(Δₕ(u)), D₋ₓ(Δₕ(v)))
+                ),
+                form(
+                    W3n, W3n,
+                    (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = (:xmin,))
+                )
+            )
+                assemble(f3)
+            end
+
             # Jacobian sparsity from the AST, scalar and composite, and the per-element-type
             # assembly cache (gpena/Bramble.jl#21/#95/#20). Kept to 1D, the same economy the
             # sessions above already apply.
