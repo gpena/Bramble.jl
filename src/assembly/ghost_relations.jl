@@ -102,8 +102,10 @@ _relation_pairs(t::Tuple) = t
 _relation_pairs(x) = _throw_relation_shape(x)
 
 function _facet_relations(G::GhostMesh{D}, out) where {D}
+    pairs = _relation_pairs(out)
+    isempty(pairs) && _throw_relation_shape(out)
     rels = Any[]
-    for p in _relation_pairs(out)
+    for p in pairs
         r = _facet_relation(G, p)
         any(q -> q.d == r.d && q.s == r.s, rels) && _throw_facet_twice(r.name)
         push!(rels, r)
@@ -149,7 +151,8 @@ end
     throw(
         ArgumentError(
         "constrained(Wₕ, relations) expects `relations(u)` to return pairs " *
-        "`facet => operator => data`, or a tuple of them, such as " *
+        "`facet => operator => data`, or a nonempty tuple of them (at least one " *
+        "relation), such as " *
         "`u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => ∂ₙ(u) => 1.0)`; got $(summary(x)).",
     ),
     )
@@ -343,11 +346,17 @@ function _block_inverse(G::GhostMesh, C::SparseMatrixCSC, ghosts)
 end
 
 # A block whose smallest pivot is at the level of rounding is singular: a singular `K`
-# leaves one of that size rather than an exact zero.
+# leaves one of that size rather than an exact zero. The pivots are judged on the block
+# with each row, then each column, scaled to a largest entry of one, since the facet
+# weights and spacings scale rows and columns by the mesh's aspect alone.
 function _nonsingular(F, Cb::AbstractMatrix)
     F.info == 0 || return false
-    tol = 1000 * size(Cb, 1) * eps(real(eltype(Cb))) * maximum(abs, Cb)
-    return all(i -> abs(F.U[i, i]) > tol, axes(Cb, 1))
+    S = Cb ./ maximum(abs, Cb; dims = 2)
+    S = S ./ maximum(abs, S; dims = 1)
+    Fs = lu(S; check = false)
+    Fs.info == 0 || return false
+    tol = 1000 * size(S, 1) * eps(real(eltype(S)))
+    return all(i -> abs(Fs.U[i, i]) > tol, axes(S, 1))
 end
 
 @noinline function _throw_relation_misses_ghost(name::Symbol)

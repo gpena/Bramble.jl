@@ -15,7 +15,7 @@ using Test
 using Bramble
 import Bramble
 using LinearAlgebra: det, dot, norm, ×
-using SparseArrays: SparseMatrixCSC, rowvals, sparse
+using SparseArrays: SparseMatrixCSC, nonzeros, rowvals, sparse
 
 using ..TestUtils: WITH_3D_TESTS
 
@@ -193,6 +193,25 @@ end
     end
 end
 
+@testset "Corner blocks judged scale-free" begin
+    # A boundary layer along x and coarse cells along y scale the two rows and columns of
+    # each corner block very differently; K is well conditioned, so the block solves.
+    K = [2.0 1.0; 1.0 2.0]
+    Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true))
+    Bramble.change_points!(Ω, ([0.0, 1e-7, 2e-7, 0.3, 0.6, 1.0], [0.0, 0.2, 0.45, 0.7, 1.0]))
+    C = constrained(gridspace(Ω; ghosts = :boundary), u -> conormal_pairs(u, K))
+    E, d = Bramble.closure(C)
+    E0, d0 = OC.ghost_closure(Ω; closure = :facet_onesided, K)
+    @test relerr(E, E0) <= 1e-9
+    @test relerr(d, d0) <= 1e-9
+    # Float32 cells of aspect 50: accepted, every eliminated ghost finite.
+    Ω32 = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (201, 3), (true, true))
+    C32 = constrained(gridspace(Ω32; ghosts = :boundary),
+        u -> map(F -> F => ∂ₙ(u; K = Float32.(K)) => 1.0f0, (:xmin, :xmax, :ymin, :ymax)))
+    @test Bramble.ndofs(C32) == 201 * 3
+    @test all(isfinite, nonzeros(first(Bramble.closure(C32))))
+end
+
 @testset "Float32 spaces keep their element type" begin
     Ω = mesh(domain(interval(0.0f0, 1.0f0)), 9, false)
     C = constrained(gridspace(Ω; ghosts = :boundary),
@@ -221,6 +240,7 @@ end
     @test refuses(() -> constrained(W, u -> :xmin => 2.0 * u => 1.0), "reads no ghost")
     @test refuses(() -> constrained(W, u -> :xmin => ∂ₙ(u) => [1.0, 2.0]), "number or a function")
     @test refuses(() -> constrained(W, u -> 1.0), "pairs")
+    @test refuses(() -> constrained(W, u -> ()), "at least one relation")
     @test refuses(() -> constrained(W, u -> :xmin => ∂ₙ(u)), "pairs")
     Ks = [1.0 1.0; 1.0 1.0]
     @test refuses(() -> constrained(W, u -> map(F -> F => ∂ₙ(u; K = Ks) => 0.0,
