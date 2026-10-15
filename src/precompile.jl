@@ -142,11 +142,13 @@ if PRECOMPILE_WORKLOAD
             )
 
             # The 3D scalar Laplacian, non-uniform, in both spellings a caller writes:
-            # `inner₊(∇ₕ(u), ∇ₕ(v))` (the tutorials') and the summed one-sided-difference form.
+            # `inner₊(∇ₕ(u), ∇ₕ(v))` (the tutorials') and the summed one-sided-difference form, and
+            # the Laplacian written `innerₕ(Δₕ(u), v)`.
             Ωₕ3n = mesh(Ω3, (3, 3, 3), (false, false, false); backend = be)
             W3n = gridspace(Ωₕ3n)
             for f3 in (
                 form(W3n, W3n, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))),
+                form(W3n, W3n, (u, v) -> innerₕ(Δₕ(u), v)),
                 form(
                 W3n, W3n,
                 (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(D₋ᵧ(u), D₋ᵧ(v)) +
