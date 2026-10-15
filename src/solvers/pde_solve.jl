@@ -55,7 +55,7 @@ chain differentiable.
   default), or trusted outright from an explicit `sym = :spd`/`:definite`/`:symmetric` (and
   conversely `:unsymmetric` skips straight to `A \\ F`) -- the caller has already asserted the
   property, so it is not checked again. The narrowing exists because Accelerate is only a win
-  on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ): on forms assembled on 2D
+  on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ). On forms assembled on 2D
   grid spaces it won on a symmetric Poisson-plus-mass system and lost on an unsymmetric
   convection-diffusion one. This only ever narrows which solver runs on macOS; Linux and
   Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws
