@@ -95,7 +95,7 @@ relerr(A, R) = norm(A - R) / norm(R)
         @test relerr(B, sparse(R')) <= tol
         C = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), ∂ₙ(v))))
         @test relerr(C, sparse(Dc' * (facet_weights(Ωₕ, 1, 1) + facet_weights(Ωₕ, 1, 2)) *
-                                   Dc)) <= tol
+                               Dc)) <= tol
     end
 
     @testset "2D trial side against the oracle" begin
@@ -145,10 +145,12 @@ relerr(A, R) = norm(A - R) / norm(R)
         Ωₕ = random_mesh((6, 7))
         P = padded(Ωₕ)
         c = (xmin = 2.0, xmax = 0.5, ymin = 3.0, ymax = 1.5)
-        a = form(P, P, (u, v) -> inner_Γ(c.xmin * ∂ₙ(u), v; markers = (:xmin,)) +
-                                inner_Γ(c.xmax * ∂ₙ(u), v; markers = (:xmax,)) +
-                                inner_Γ(c.ymin * ∂ₙ(u), v; markers = (:ymin,)) +
-                                inner_Γ(c.ymax * ∂ₙ(u), v; markers = (:ymax,)))
+        a = form(P,
+            P,
+            (u, v) -> inner_Γ(c.xmin * ∂ₙ(u), v; markers = (:xmin,)) +
+                      inner_Γ(c.xmax * ∂ₙ(u), v; markers = (:xmax,)) +
+                      inner_Γ(c.ymin * ∂ₙ(u), v; markers = (:ymin,)) +
+                      inner_Γ(c.ymax * ∂ₙ(u), v; markers = (:ymax,)))
         R = sparse(trial_rows(Ωₕ, FACETS[1:4]; c = f -> getfield(c, f)))
         @test relerr(assemble(a), R) <= tol
 
@@ -415,10 +417,12 @@ end
         Ωₕ = random_mesh((6, 7))
         P = padded(Ωₕ)
         c = (xmin = 2.0, xmax = 0.5, ymin = 3.0, ymax = 1.5)
-        a = form(P, P, (u, v) -> inner_Γ(c.xmin * jumpₙ(u), jumpₙ(v); markers = (:xmin,)) +
-                                inner_Γ(c.xmax * jumpₙ(u), jumpₙ(v); markers = (:xmax,)) +
-                                inner_Γ(c.ymin * jumpₙ(u), jumpₙ(v); markers = (:ymin,)) +
-                                inner_Γ(c.ymax * jumpₙ(u), jumpₙ(v); markers = (:ymax,)))
+        a = form(P,
+            P,
+            (u, v) -> inner_Γ(c.xmin * jumpₙ(u), jumpₙ(v); markers = (:xmin,)) +
+                      inner_Γ(c.xmax * jumpₙ(u), jumpₙ(v); markers = (:xmax,)) +
+                      inner_Γ(c.ymin * jumpₙ(u), jumpₙ(v); markers = (:ymin,)) +
+                      inner_Γ(c.ymax * jumpₙ(u), jumpₙ(v); markers = (:ymax,)))
         R = sum(FACETS[1:4]) do f
             d, s = facet_axis_side(f)
             J = inward_jump(Ωₕ, d, s)

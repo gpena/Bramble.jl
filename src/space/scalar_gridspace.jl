@@ -472,8 +472,10 @@ end
 
 # The call that rebuilds a stale space; a padded ghost mesh names its own
 # (`space/ghost_gridspace.jl`).
-_stale_weights_remedy(::AbstractMeshType) = "Call gridspace(mesh(Wₕ)) again to get a space " *
-                                            "that reads the mutated mesh."
+function _stale_weights_remedy(::AbstractMeshType)
+    "Call gridspace(mesh(Wₕ)) again to get a space " *
+    "that reads the mutated mesh."
+end
 
 # --- Host mirror for the form assembly pattern walk (gpena/Bramble.jl#94) ------- #
 #

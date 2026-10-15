@@ -68,7 +68,7 @@ function check_linear(W)
     for (f, g) in (
         (v -> innerₕ(x -> x[1]^2 + x[D], Δₕ(v)), v -> innerₕ(x -> x[1]^2 + x[D], spelled(v))),
         (v -> innerₕ(x -> exp(x[1]), Bramble.D₋ₓ(Δₕ(v))),
-            v -> innerₕ(x -> exp(x[1]), Bramble.D₋ₓ(spelled(v)))))
+        v -> innerₕ(x -> exp(x[1]), Bramble.D₋ₓ(spelled(v)))))
         l1 = assemble(form(W, f))
         l2 = assemble(form(W, g))
         @test norm(l2) > 0

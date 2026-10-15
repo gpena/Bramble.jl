@@ -142,7 +142,8 @@ end                                                                             
 # dashed line has slope 2 and is anchored at the finest point of the first curve.
 
 include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
-convergence_plot([(hs_mixed, errs_mixed, "Robin and Neumann", "#5B5FC7"),
+convergence_plot(
+    [(hs_mixed, errs_mixed, "Robin and Neumann", "#5B5FC7"),
         (hs_robin, errs_robin, "Robin", "#0E7C86"),
         (hs_neumann, errs_neumann, "pure Neumann", "#B26A00")];
     title = "Neumann and Robin Poisson, ‖·‖₁ₕ") # hide

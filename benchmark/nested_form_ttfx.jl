@@ -294,6 +294,7 @@ function jobs_of(o)
         row.deep && !o[:deep] && continue
         o[:rows] !== nothing && !(row.id in o[:rows]) && row.id != "base" && continue
         for dim in o[:dims], variant in spellings(row, o[:variants])
+
             dim in row.dims && push!(jobs, (; row, dim, variant))
         end
     end
@@ -335,6 +336,7 @@ function table_mode(o)
     loads = Float64[]
     out = o[:out] === nothing ? nothing : open(o[:out], "w")
     for rep in 1:o[:repeats], j in jobs
+
         push!(loads, Sys.loadavg()[1])
         text = read(pipeline(cmd_of(j); stderr = devnull), String)
         lines = filter(startswith("NFB\t"), split(text, '\n'))
@@ -426,6 +428,7 @@ function report_table(o, tree, jobs, results, loads)
     end
     println("\nSplit of the ghost row (`constrained`, `form`, `assemble`), median seconds:")
     for dim in o[:dims], f in [ok(("ghost", dim, "-"))]
+
         isempty(f) && continue
         parts = [median_of([parse(Float64, g[k]) for g in f]) for k in ("pre", "form", "asm")]
         println("  $(dim)D: ", join(sec.(parts), ", "))
@@ -442,6 +445,7 @@ function image_mode(o)
     times = Dict(t => Float64[] for t in trees)
     loads = Float64[]
     for rep in 1:o[:repeats], t in trees
+
         push!(loads, Sys.loadavg()[1])
         cmd = setenv(
             `$jl --project=$t --threads=$(o[:threads]) --startup-file=no -e "using Bramble"`,
@@ -492,6 +496,7 @@ function gate_mode(o)
     end
     o[:dry_run] && return nothing
     for rep in 1:o[:repeats], t in trees
+
         script = joinpath(t, "test", "quality", "invalidations_snoop.jl")
         out = read(setenv(`$jl --project=$(projects[t]) --threads=$(o[:threads])
             --startup-file=no $script`, env), String)

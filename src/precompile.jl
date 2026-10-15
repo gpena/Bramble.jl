@@ -173,17 +173,17 @@ if PRECOMPILE_WORKLOAD
             # to the caller. The coefficient is a Float64 grid element, as the benchmark's.
             for f3 in (
                 form(
-                    W3n, W3n,
-                    (u, v) -> innerₕ(c3v * jumpₓ(Δₕ(u)), jumpₓ(Δₕ(v)))
-                ),
+                W3n, W3n,
+                (u, v) -> innerₕ(c3v * jumpₓ(Δₕ(u)), jumpₓ(Δₕ(v)))
+            ),
                 form(
-                    W3n, W3n,
-                    (u, v) -> innerₕ(c3v * D₋ₓ(Δₕ(u)), D₋ₓ(Δₕ(v)))
-                ),
+                W3n, W3n,
+                (u, v) -> innerₕ(c3v * D₋ₓ(Δₕ(u)), D₋ₓ(Δₕ(v)))
+            ),
                 form(
-                    W3n, W3n,
-                    (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = (:xmin,))
-                )
+                W3n, W3n,
+                (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = (:xmin,))
+            )
             )
                 assemble(f3)
             end
