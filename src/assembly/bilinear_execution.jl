@@ -567,6 +567,8 @@ end
     cache.stored = _pattern_length(A)
     cache.ast = ast
     cache.valid = true
+    # The recording may be against another pattern than the one `assemble` kept.
+    cache.has_pattern = false
     return nothing
 end
 

@@ -115,6 +115,13 @@ end
 # `stored` is `A`'s stored-entry count at the recording (`_pattern_length`): a
 # `dirichlet_bc!` that inserts a missing diagonal shifts every later `nzval` position while
 # `A` keeps its identity, so a grown count re-records (gpena/Bramble.jl#534).
+#
+# `m`, `colptr` and `rowval` are a private copy of the recorded `SparseMatrixCSC`'s pattern,
+# kept by `assemble` (`_keep_pattern!`, bilinear_pattern.jl) and valid only while
+# `has_pattern`: a repeated `assemble` builds its new matrix from them and replays the
+# recording into it, since the positions depend only on the pattern (gpena/Bramble.jl#774).
+# A copy, never `A`'s own vectors: the caller owns `A` and may change its pattern. Every
+# recording (`_store_recording!`) clears `has_pattern`, as it may be against another pattern.
 mutable struct _AssemblyCache{D, AST}
     valid::Bool
     A_id::UInt
@@ -122,6 +129,10 @@ mutable struct _AssemblyCache{D, AST}
     segments::Vector{Segment{D}}
     stamp::UInt64
     stored::Int
+    has_pattern::Bool
+    m::Int
+    colptr::Vector{Int}
+    rowval::Vector{Int}
 end
 
 # The stored-entry count a recording's positions index into. A `SparseMatrixCSC` can grow
@@ -159,6 +170,10 @@ _no_segments(::Val{D}) where {D} = Segment{D}[]
 _no_segments(::Val{1}) = _NO_SEGMENTS_1
 _no_segments(::Val{2}) = _NO_SEGMENTS_2
 _no_segments(::Val{3}) = _NO_SEGMENTS_3
+
+# The pattern a fresh cache holds: shared and never written through, as `_NO_SEGMENTS_D` is;
+# `_keep_pattern!` assigns its own copies.
+const _NO_PATTERN = Int[]
 
 """
     _zero_stored!(A::AbstractMatrix) -> AbstractMatrix
@@ -199,7 +214,9 @@ end
 # same expression tree `BilinearForm` stores -- never `nothing`, which would have made the
 # parameter a lie on the first cache miss.
 function _AssemblyCache{D}(ast::AST) where {D, AST}
-    return _AssemblyCache{D, AST}(false, UInt(0), ast, _no_segments(Val(D)), UInt64(0), 0)
+    return _AssemblyCache{D, AST}(
+        false, UInt(0), ast, _no_segments(Val(D)), UInt64(0), 0, false, 0, _NO_PATTERN,
+        _NO_PATTERN)
 end
 
 """
@@ -883,9 +900,10 @@ Allocate a matrix with the form's sparsity pattern and assemble into it. The mat
 `matrix_type(backend(test_space(form)))` -- `SparseMatrixCSC{Float64,Int}` by default, or
 whatever [`backend`](@ref) the space's mesh was built with.
 
-**Call this once, then assemble into what it returns.** Building the sparsity pattern is the
-larger part of the work (a refill allocates nothing), and the pattern does not change between
-assemblies.
+**Call this once, then assemble into what it returns.** The first call builds the sparsity
+pattern, the larger part of the work. A repeated call copies the pattern the form recorded
+and allocates about the matrix it returns, re-recording only after the mesh markers change
+or another matrix is filled; a refill allocates nothing.
 A time loop or Newton iteration benefits from preallocating the pattern once:
 
 ```julia
@@ -905,8 +923,9 @@ form. `dirichlet_components` restricts which leaf components of a composite test
 they bind to (see [`dirichlet_bc!`](@ref)).
 """
 function assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing)
-    A = allocate_system_matrix(form, form.ast)
+    A = _allocate_assembled(form)
     _assemble_bilinear!(A, form, form.ast, dirichlet, dirichlet_components)
+    _keep_pattern!(form.cache, A)
     return A
 end
 
