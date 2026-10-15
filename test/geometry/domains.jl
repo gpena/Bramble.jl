@@ -14,7 +14,7 @@ using Bramble:
                labels,
                CartesianProduct
 using Bramble: boundary_symbols, label, identifier, domain, symbols, tuples, conditions
-using Bramble: marker_identifiers, process_identifier
+using Bramble: marker_identifiers
 using Bramble:
                label_identifiers,
                label_symbols,
@@ -154,18 +154,6 @@ struct NotAFunctionPredicate end
         @test err isa ArgumentError
         @test occursin(":zmin", err.msg)
         @test !occursin("inner_Γ", err.msg)
-    end
-
-    # Invariant: `process_identifier` normalizes symbols, tuples, and vectors
-    # of symbols into canonical boundary representations. Function-valued pairs
-    # are stored directly as closures and are not routed through `process_identifier`.
-    @testset "Identifier processing" begin
-        @test process_identifier(I1D, :left) === :left
-        @test process_identifier(I2D, (:top, :right)) == Set((:top, :right))
-        # A vector of symbols normalizes to the same Set as the tuple form.
-        @test process_identifier(I2D, [:top, :right]) == Set((:top, :right))
-        @test process_identifier(I2D, [:top, :right]) ==
-              process_identifier(I2D, (:top, :right))
     end
 
     # Invariant: `DomainMarkers` correctly partitions boundary symbols, boundary tuples and

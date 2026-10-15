@@ -238,9 +238,7 @@ end
 
 # The compact, embeddable form: dimension, eltype, set and marker count (#45).
 function Base.show(io::IO, Ω::Domain)
-    # Counted from the three marker collections rather than `length(labels(Ω))`: `labels`
-    # returns a lazy `Iterators.Flatten`, which has no length.
-    n = length(symbols(Ω)) + length(tuples(Ω)) + length(conditions(Ω))
+    n = length(Ω)
     print(io, "Domain{$(dim(Ω))D, $(eltype(Ω))}(")
     show(io, set(Ω))
     print(io, ", ", n, " marker", n == 1 ? "" : "s", ")")

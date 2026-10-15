@@ -251,16 +251,18 @@ Return the coordinate point representation type for a point in `X`.
 
 Query whether point `x` is contained in the closed set `X`.
 """
-@inline Base.in(x::Number, X::CartesianProduct{1}) = (X.box[1][1] <= x <= X.box[1][2])
-@inline Base.in(x::Tuple{Vararg{Number, D}}, X::CartesianProduct{D}) where {D} = all(
-    i -> (X.box[i][1] <= x[i] <=
-          X.box[i][2]), 1:D)
-
 # Unrolled over `Val(D)` rather than reduced over `1:D` to prevent heap allocations
 # when testing containment of an AbstractVector.
+@inline _in_box(x, X::CartesianProduct{D}) where {D} = all(
+    ntuple(i -> (X.box[i][1] <= x[i] <= X.box[i][2]), Val(D))
+)
+
+@inline Base.in(x::Number, X::CartesianProduct{1}) = (X.box[1][1] <= x <= X.box[1][2])
+@inline Base.in(x::Tuple{Vararg{Number, D}}, X::CartesianProduct{D}) where {D} = _in_box(x, X)
+
 @inline function Base.in(x::AbstractVector{<:Number}, X::CartesianProduct{D}) where {D}
     length(x) == D || return false
-    return all(ntuple(i -> (X.box[i][1] <= x[i] <= X.box[i][2]), Val(D)))
+    return _in_box(x, X)
 end
 @inline Base.in(x, X::CartesianProduct) = false
 
