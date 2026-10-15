@@ -1,8 +1,8 @@
-# Wave equation u_tt = c²Δu on (0,1)², a standing wave, through the second-order
-# semidiscretisation M ü + C u̇ + K u = F. Checks second-order convergence in space and that
-# the discrete energy is conserved.
+# Wave equation u_tt = c²Δu on (0,1)², a standing wave, as the first-order system
+# u' = v, v' = c²Δu on a two-leaf space and `M y' = F - A y` through `semidiscretize`.
+# Checks second-order convergence in space and that the discrete energy is conserved.
 using Bramble
-using Bramble: mass_matrix, stiffness_matrix
+using Bramble: mass_matrix, operator_matrix
 using OrdinaryDiffEqRosenbrock
 using LinearAlgebra: dot
 
@@ -15,16 +15,17 @@ function wave_solve(n)
     Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
     Ωₕ = mesh(Ω, (n, n), (true, true))
     Wₕ = gridspace(Ωₕ)
+    Vₕ = Wₕ × Wₕ                                     # the state (u, v)
     I = interval(0.0, 1.0)
     fₕ = element(Wₕ, 0.0)                            # no forcing
-    K = form(Wₕ, Wₕ, (u, v) -> c^2 * inner₊(∇ₕ(u), ∇ₕ(v)))
-    l = form(Wₕ, v -> innerₕ(fₕ, v))
+    # A₁₂ = -M puts v into the first equation, A₂₁ = c²K puts c²Δu into the second
+    a = form(Vₕ, Vₕ, (y, w) -> -innerₕ(y(2), w(1)) + c^2 * inner₊(∇ₕ(y(1)), ∇ₕ(w(2))))
+    l = form(Vₕ, w -> innerₕ(fₕ, w(1)) + innerₕ(fₕ, w(2)))
     bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
-    sd = semidiscretize_second_order(K, l; dirichlet = bcs)
-    prob = second_order_ode_problem(sd, Rₕ(Wₕ, x -> duexact(x, 0.0)),
-        Rₕ(Wₕ, x -> uexact(x, 0.0)), I)              # velocity first, then displacement
-    sol = solve(prob, Rodas5P(); reltol = 1.0e-8, abstol = 1.0e-10)
-    uT = element(Wₕ, sol.u[end].x[2])
+    sd = semidiscretize(a, l; dirichlet = bcs, dirichlet_components = (1, 2))
+    y₀ = vcat(parent(Rₕ(Wₕ, x -> uexact(x, 0.0))), parent(Rₕ(Wₕ, x -> duexact(x, 0.0))))
+    sol = solve(ode_problem(sd, y₀, I), Rodas5P(); reltol = 1.0e-8, abstol = 1.0e-10)
+    uT = element(Wₕ, sol.u[end][1:ndofs(Wₕ)])
     return Ωₕ, sd, sol, normₕ(uT - Rₕ(Wₕ, x -> uexact(x, 1.0)))
 end
 
@@ -32,8 +33,10 @@ end
 Ωₕ₂, sd, sol, e₂ = wave_solve(25)
 order = log(e₁ / e₂) / log(hₘₐₓ(Ωₕ₁) / hₘₐₓ(Ωₕ₂))
 
-M, K = mass_matrix(sd), stiffness_matrix(sd)
-energy(s) = 0.5 * dot(s.x[1], M * s.x[1]) + 0.5 * dot(s.x[2], K * s.x[2])
+n = size(mass_matrix(sd), 1) ÷ 2
+M = mass_matrix(sd)[(n + 1):(2n), (n + 1):(2n)]
+Kc = operator_matrix(sd)[(n + 1):(2n), 1:n]          # c²K
+energy(y) = 0.5 * dot(y[(n + 1):(2n)], M * y[(n + 1):(2n)]) + 0.5 * dot(y[1:n], Kc * y[1:n])
 E = energy.(sol.u)
 drift = maximum(abs, E .- E[1]) / E[1]
 
