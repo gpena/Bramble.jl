@@ -49,6 +49,32 @@ relerr(X, Y) = norm(X - Y, Inf) / norm(Y, Inf)
 laplacian(u, v) = innerₕ(-Δₕ(u), v)
 source(v) = innerₕ(x -> 1.0 + x[1], v)
 
+# A vector that marks, per thread, every task that reads or writes it: a band function that
+# runs on more than one thread marks more than one, a path left serial marks one.
+struct ThreadMarks{T, V <: AbstractVector{T}} <: AbstractVector{T}
+    data::V
+    seen::Vector{Bool}
+end
+ThreadMarks(v::AbstractVector) = ThreadMarks(v, fill(false, Threads.maxthreadid()))
+Base.size(r::ThreadMarks) = size(r.data)
+Base.IndexStyle(::Type{<:ThreadMarks}) = IndexLinear()
+@inline function Base.getindex(r::ThreadMarks, i::Int)
+    @inbounds r.seen[Threads.threadid()] = true
+    return r.data[i]
+end
+@inline function Base.setindex!(r::ThreadMarks, x, i::Int)
+    @inbounds r.seen[Threads.threadid()] = true
+    return setindex!(r.data, x, i)
+end
+nthreads_seen(r::ThreadMarks) = count(r.seen)
+
+# The form `a` with its map's arrays marked, so that each path's band function reads one.
+function marked_form(a)
+    marks = (k, v) -> v isa AbstractVector && k !== :A_pad ? ThreadMarks(v) : v
+    fields = map(k -> marks(k, getfield(a, k)), fieldnames(typeof(a)))
+    return Bramble.GhostBilinearForm(fields...)
+end
+
 @testset "Ghost forms on CpuPolyester (#785)" begin
     @test Threads.nthreads() >= 2
 
@@ -165,6 +191,32 @@ source(v) = innerₕ(x -> 1.0 + x[1], v)
                 @test r2[k] == r1[k]
             end
         end
+    end
+
+    # A path that ignores the mesh's policy runs on the calling thread alone.
+    @testset "Each path runs on several threads" begin
+        rel = u -> map(F -> F => ∂ₙ(u; K) => 1.0, (:xmin, :xmax, :ymin, :ymax))
+        C = constrained(gridspace(ghost_mesh(CpuPolyester(), (9, 11)); ghosts = :boundary),
+            rel)
+        a, l = form(C, C, laplacian), form(C, source)
+        A, F = assemble(a, l)
+        @test Bramble._ghost_policy(C) isa CpuPolyester
+        am = marked_form(a)
+        Am = copy(A)
+        fill!(nonzeros(Am), 0.0)
+        Bramble._assemble_ghost!(Am, am)
+        Fm = ThreadMarks(zeros(length(F)))
+        Bramble._assemble_ghost_load!(Fm, am, l)
+        u = A \ F
+        um = ThreadMarks(copy(u))
+        U = parent(Bramble.lift(C, um))
+        @test Am == A
+        @test Fm.data == F
+        @test U == parent(Bramble.lift(C, u))
+        @test nthreads_seen(am.coef) >= 2         # the reduction
+        @test nthreads_seen(am.liftcol) >= 2      # `F_pad − A_pad d`
+        @test nthreads_seen(Fm) >= 2              # `E_vᵀ w`
+        @test nthreads_seen(um) >= 2              # `lift`
     end
 
     WITH_3D_TESTS && @testset "3D Laplacian, Dirichlet relation" begin

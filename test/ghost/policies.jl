@@ -58,6 +58,55 @@ function same_as_serial(ns, space; kwargs...)
     return r0
 end
 
+# A vector that marks, per thread, every task that reads or writes it: a band function that
+# runs on more than one thread marks more than one, a path left serial marks one.
+struct ThreadMarks{T, V <: AbstractVector{T}} <: AbstractVector{T}
+    data::V
+    seen::Vector{Bool}
+end
+ThreadMarks(v::AbstractVector) = ThreadMarks(v, fill(false, Threads.maxthreadid()))
+Base.size(r::ThreadMarks) = size(r.data)
+Base.IndexStyle(::Type{<:ThreadMarks}) = IndexLinear()
+@inline function Base.getindex(r::ThreadMarks, i::Int)
+    @inbounds r.seen[Threads.threadid()] = true
+    return r.data[i]
+end
+@inline function Base.setindex!(r::ThreadMarks, x, i::Int)
+    @inbounds r.seen[Threads.threadid()] = true
+    return setindex!(r.data, x, i)
+end
+nthreads_seen(r::ThreadMarks) = count(r.seen)
+
+# The form `a` with its map's arrays marked, so that each path's band function reads one.
+function marked_form(a)
+    marks = (k, v) -> v isa AbstractVector && k !== :A_pad ? ThreadMarks(v) : v
+    fields = map(k -> marks(k, getfield(a, k)), fieldnames(typeof(a)))
+    return Bramble.GhostBilinearForm(fields...)
+end
+
+# The threads that ran the reduction, the two passes of the load and `lift` under `pol`,
+# their values checked against the unmarked paths'.
+function band_threads(pol)
+    C = constrained(gridspace(policy_mesh(pol, (9, 11)); ghosts = :boundary), robin_conormal)
+    a, l = form(C, C, laplacian), form(C, source)
+    A, F = assemble(a, l)
+    am = marked_form(a)
+    Am = copy(A)
+    fill!(nonzeros(Am), 0.0)
+    Bramble._assemble_ghost!(Am, am)
+    Fm = ThreadMarks(zeros(length(F)))
+    Bramble._assemble_ghost_load!(Fm, am, l)
+    u = A \ F
+    um = ThreadMarks(copy(u))
+    U = parent(Bramble.lift(C, um))
+    @test Am == A
+    @test Fm.data == F
+    @test U == parent(Bramble.lift(C, u))
+    return (policy = Bramble._ghost_policy(C), reduction = nthreads_seen(am.coef),
+        lift_load = nthreads_seen(am.liftcol), load = nthreads_seen(Fm),
+        lift = nthreads_seen(um))
+end
+
 robin_conormal(u) = (:xmin => ∂ₙ(u; K) => 1.0, :xmax => u + ∂ₙ(u; K) => x -> x[2],
     :ymin => ∂ₙ(u; K) => 0.0, :ymax => 2.0 * u + ∂ₙ(u; K) => 1.0)
 named_dirichlet(u) = (:xmin => ∂ₙ(u) => 1.0, :xmax => ∂ₙₙ(u) => x -> x[1],
@@ -125,6 +174,19 @@ named_dirichlet(u) = (:xmin => ∂ₙ(u) => 1.0, :xmax => ∂ₙₙ(u) => x -> x
             @test r.A2 == r0.A2
             @test r.U == r0.U
         end
+    end
+
+    # A path that ignores the mesh's policy runs on the calling thread alone.
+    @testset "Each path runs on several threads" begin
+        r = band_threads(CpuSerial())
+        @test r.policy isa CpuSerial
+        @test (r.reduction, r.lift_load, r.load, r.lift) == (1, 1, 1, 1)
+        r = band_threads(CpuThreaded())
+        @test r.policy isa CpuThreaded
+        @test r.reduction >= 2
+        @test r.lift_load >= 2
+        @test r.load >= 2
+        @test r.lift >= 2
     end
 
     @testset "Every band count covers every entry once" begin
