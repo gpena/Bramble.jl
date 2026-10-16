@@ -705,6 +705,8 @@ size(Z_rect), norm(A_rect * Z_rect, Inf)
 The kernel has 4 columns, each supported on the two ghosts of a corner, and `A * Z` vanishes to rounding. The physical values come first in the vector of unknowns, then the ghosts. To check the solve, choose a physical vector, set the ghosts to zero, and form the load `F = A x`. The gauged solve returns the physical values of `x`, and the load of a vector shifted by any combination of the kernel columns gives the same answer:
 
 ```@example forms
+using Random
+
 Random.seed!(7)
 x_phys = rand(n_phys)
 x_ghost0 = [x_phys; zeros(ndofs(W_rect) - n_phys)]
@@ -729,7 +731,6 @@ The Neumann data of ``-\Delta u = f`` must satisfy ``\int f = -\oint \partial_\e
 
 ```@example forms
 using Logging
-using Random
 
 struct WarningLog <: Logging.AbstractLogger
     messages::Vector{String}
