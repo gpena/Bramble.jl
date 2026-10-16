@@ -31,8 +31,9 @@ const VECTORIAL = (
 const DISPATCH = ("diff₋", "diff₊", "D₋", "D₊", "jump", "D̃", "Dc", "S₊", "S₋")
 
 # The scalar `!` method each family applies a grid function through; it carries the family's
-# own docstring for the three centred families and none for the rest, and both cases are
-# worth freezing.
+# own docstring for the three centred families, `jump!` and `backward_finite_difference!`
+# (the `GhostVector` one) carry their own, and the rest carry none; both cases are worth
+# freezing.
 const BASE_BANGS = (
     "backward_difference!", "forward_difference!", "backward_finite_difference!",
     "forward_finite_difference!", "forward_star_difference!", "centered_difference!",
@@ -88,7 +89,7 @@ end
         for name in documented_names()
             @test isdefined(Bramble, Symbol(name))
         end
-        # The base `!` methods are exempt: nine of them carry no docstring of their own. Every
+        # The base `!` methods are exempt: eight of them carry no docstring of their own. Every
         # other name (directional aliases with and without `!`, the vectorial aliases and the
         # dimensional entry points) must carry prose, so that a template dropping one is caught
         # even when the snapshot below has just been regenerated and compares with itself.

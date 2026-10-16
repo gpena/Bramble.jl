@@ -403,7 +403,7 @@ end
         @test @inferred(GhostMesh(Ωₕ; ghosts = (:xmin,))) isa GhostMesh
         @test typeof(GhostMesh(Ωₕ; ghosts = :boundary)) == typeof(GhostMesh(Ωₕ; ghosts = (:xmin,)))
         @test @inferred(boundary_indices(G)) isa NTuple{4, CartesianIndices{2}}
-        @test @inferred(_walk_mesh(G)) isa Bramble.MeshnDState
+        @test @inferred(_walk_mesh(G)) isa Bramble.GhostMeshState
         @test @inferred(_surface_weight(G, ((true, true), (true, true)), J)) isa Float64
         @test @inferred(half_spacing(G, (3, 3))) isa NTuple{2, Float64}
         @test @inferred(Bramble.point(G, J)) isa NTuple{2, Float64}
