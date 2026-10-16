@@ -4,7 +4,7 @@
 #
 # Run from a worktree root, alone on a quiet machine:
 #
-#     julia --project=test --threads=4 --optimize=1 benchmark/ghost_vector_kernels.jl
+#     julia --project=test --threads=4 benchmark/ghost_vector_kernels.jl
 #
 # For each size (2D 256² and 1024², 3D 64³) it builds a seeded non-uniform mesh with ghosts
 # on every facet and times, behind a function barrier, `op!(out, v::GhostVector)` against
@@ -28,6 +28,9 @@ using Random: MersenneTwister
 using SparseArrays: SparseMatrixCSC
 
 const SMOKE = get(ENV, "GHOST_KERNELS_SMOKE", "") == "1"
+# -O1 (the suite's level) changes which loops vectorise, so a timing run refuses it.
+SMOKE || Base.JLOptions().opt_level >= 2 ||
+    throw(ArgumentError("run without --optimize=1: timings below the default level are not figures"))
 const SIZES = SMOKE ? [(16, 16), (8, 8, 8)] : [(256, 256), (1024, 1024), (64, 64, 64)]
 const LAYOUTS = SMOKE ? 2 : 5
 const MIN_SAMPLES = SMOKE ? 2 : 20
