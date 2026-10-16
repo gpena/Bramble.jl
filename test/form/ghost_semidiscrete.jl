@@ -273,6 +273,30 @@ end
         @test f1.ghost == f2.ghost
         @test f1.ghost <= f1.plain + 4 * f1.spawn
     end
+
+    # The residual refreshes the operator before the source, so a `build` whose `refill!`
+    # sets a coefficient the source also reads gives `F(t)` at `t`, not at the previous
+    # call's time; `semidiscretize_rhs` keeps the same order and agrees with it.
+    @testset "semidiscretize_rhs after another t" begin
+        P = gridspace(smesh((9, 8)))
+        αₕ = element(P)
+        mk(t) = (form(P, P, (u, v) -> laplacian(u, v) + innerₕ(αₕ * u, v)),
+            t -> (Rₕ!(αₕ, x -> 1 + t * x[1]); nothing))
+        l = form(P, v -> innerₕ(αₕ, v))
+        sd = semidiscretize(mk, l)
+        rhs = Bramble.semidiscretize_rhs(sd)
+        M = Bramble.mass_matrix(sd)
+        n = Bramble.ndofs(P)
+        u = sin.(1:n)
+        sd(zeros(n), u, nothing, 0.0)
+        a = sd(zeros(n), u, nothing, 0.9)
+        sd(zeros(n), u, nothing, 0.0)
+        b = M * rhs(zeros(n), u, nothing, 0.9)
+        Rₕ!(αₕ, x -> 1 + 0.9 * x[1])
+        r = assemble(l) - assemble(mk(0.9)[1]) * u
+        @test relerr(a, r) <= 1e-12
+        @test relerr(b, r) <= 1e-12
+    end
 end
 
 end

@@ -222,10 +222,13 @@ function (rhs::SemidiscretizeRHS)(du::AbstractVector, u::AbstractVector, p, t)
     _sync_state!(sd.state, u)
     _update_coefficients!(sd.update_coefficients, p, t)
 
+    # The operator before the source, as in the `Semidiscretization` residual: a `build`
+    # whose `refill!` also sets data the source reads would otherwise leave `F` at the
+    # previous call's `t`.
+    A = _refresh_operator!(sd, sd.reassemble, du, t)
+
     F = _source_buffer(sd, du, t)
     _assemble_source!(F, sd, sd.constraints, p, t)
-
-    A = _refresh_operator!(sd, sd.reassemble, du, t)
 
     copyto!(du, F)
     _rhs_spmv!(du, A, rhs.csr, u)

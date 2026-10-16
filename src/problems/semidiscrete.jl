@@ -427,7 +427,9 @@ function (sd::Semidiscretization)(du::AbstractVector, u::AbstractVector, p, t)
     _update_coefficients!(sd.update_coefficients, p, t)
 
     # The operator before the source: on a ghost space the source reads the padded matrix
-    # the operator's assembly fills (`ghost_semidiscrete.jl`).
+    # the operator's assembly fills (`ghost_semidiscrete.jl`), and a `build` whose
+    # `refill!` also sets data the source reads would otherwise leave `F` at the previous
+    # call's `t`. The order changes values, so `SemidiscretizeRHS` keeps the same one.
     A = _refresh_operator!(sd, sd.reassemble, du, t)
 
     F = _source_buffer(sd, du, t)
