@@ -10,8 +10,6 @@
 #
 # See also: `GhostGridSpace`, `constrained`
 
-using LinearAlgebra: svd
-
 """
     ghost_kernel(A, Wₕ::GhostGridSpace; rtol = 64 eps) -> SparseMatrixCSC
 

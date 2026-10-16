@@ -302,12 +302,20 @@ end
 
 function _assemble_ghost!(A::SparseMatrixCSC, a::GhostBilinearForm)
     assemble!(a.A_pad, a.padded)
-    _run_bands!(_ghost_policy(a.test_space), _reduce_band!, nonzeros(A), nonzeros(a.A_pad),
+    _run_bands!(_ghost_policy(a), _reduce_band!, nonzeros(A), nonzeros(a.A_pad),
         a.dst, a.src, a.coef)
     return A
 end
 
+# The policy of a ghost space, and of a ghost form read from its padded form, which the
+# form's banded passes use: that form's type is concrete wherever the form's is, while a
+# caller that infers the ghost space only partly (the workload's `constrained` spaces)
+# leaves `test_space` abstract. Its policy then infers as `Any`, inference visits all three
+# `_run_bands!` methods with the band's concrete arrays, and the `CpuPolyester` one records
+# an edge into the `_batch_run_bands!` stub that `BramblePolyesterExt` invalidates
+# (gpena/Bramble.jl#414).
 @inline _ghost_policy(Wₕ::GhostGridSpace) = execution_policy(padded_space(Wₕ))
+@inline _ghost_policy(a::Union{GhostBilinearForm, GhostLinearForm}) = execution_policy(test_space(a.padded))
 
 # The reduced entries of band `b` of `nbands`: entry `e` sums its contributions in order.
 @noinline function _reduce_band!(nz, pv, ptr, src, coef, nbands::Int, b::Int)
@@ -508,7 +516,7 @@ function assemble!(b::AbstractVector, l::GhostLinearForm; dirichlet = nothing,
     any(!iszero, l.test_space.d) && _throw_ghost_lift()
     _check_linear_length(b, l.test_space)
     assemble!(l.F_pad, l.padded)
-    _closure_transpose_mul!(b, l.test_space, l.F_pad)
+    _closure_transpose_mul!(b, l, l.F_pad)
     return _form_rows!(b, l, labels, bcs, dirichlet_components)
 end
 
@@ -617,10 +625,10 @@ end
 function _assemble_ghost_load!(F::AbstractVector, a::GhostBilinearForm, l::GhostLinearForm,
         d::AbstractVector = a.trial_space.d)
     assemble!(l.F_pad, l.padded)
-    isempty(a.liftsrc) && return _closure_transpose_mul!(F, l.test_space, l.F_pad)
+    isempty(a.liftsrc) && return _closure_transpose_mul!(F, l, l.F_pad)
     E = l.test_space.E
     z = zero(promote_type(eltype(l.F_pad), eltype(a.A_pad), eltype(d)))
-    _run_bands!(_ghost_policy(l.test_space), _lifted_load_band!, F,
+    _run_bands!(_ghost_policy(l), _lifted_load_band!, F,
         SparseArrays.getcolptr(E), rowvals(E), nonzeros(E), l.F_pad, nonzeros(a.A_pad),
         a.liftptr, a.liftsrc, a.liftcol, d, z)
     return F
@@ -648,10 +656,10 @@ end
     return nothing
 end
 
-# `y = Eᵀ x` for the closure `E` of `Wₕ`, entry `r` from column `r` of `E`.
-function _closure_transpose_mul!(y::AbstractVector, Wₕ::GhostGridSpace, x::AbstractVector)
-    E = Wₕ.E
-    _run_bands!(_ghost_policy(Wₕ), _csc_columns_band!, y, SparseArrays.getcolptr(E),
+# `y = Eᵀ x` for the closure `E` of the test space of `l`, entry `r` from column `r` of `E`.
+function _closure_transpose_mul!(y::AbstractVector, l::GhostLinearForm, x::AbstractVector)
+    E = l.test_space.E
+    _run_bands!(_ghost_policy(l), _csc_columns_band!, y, SparseArrays.getcolptr(E),
         rowvals(E), nonzeros(E), x)
     return y
 end
