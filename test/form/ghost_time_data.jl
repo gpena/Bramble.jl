@@ -13,6 +13,7 @@ import Bramble
 using Bramble: CpuSerial, CpuThreaded
 using LinearAlgebra: norm
 using SparseArrays: SparseMatrixCSC, nonzeros
+using ForwardDiff: ForwardDiff
 
 using ..TestUtils: WITH_3D_TESTS
 
@@ -238,6 +239,83 @@ end
         @test alloc(() -> Bramble.lift!(U, C, u, 0.4)) == 0
     end
     @test_throws DimensionMismatch Bramble._lift_affine!(zeros(3), C, 0.4)
+end
+
+@testset "A Dual time gives ∂d/∂t" begin
+    # `d` is linear in the data, so `∂d/∂t` is the `d` of the space whose data are `∂ₜg`
+    # and whose static data are 0: the frozen reference of the derivative.
+    W = gridspace(tmesh((6, 7)); ghosts = (:xmin, :xmax, :ymax))
+    rels(g, h, k) = u -> (:xmin => ∂ₙ(u) => g, :xmax => u + ∂ₙ(u) => h,
+        :ymin => u => k, :ymax => ∂ₙ(u) => 0.0)
+    C = constrained(W, rels((x, t) -> sin(t) * (1 + x[2]), (x, t) -> t^2 * x[2],
+        (x, t) -> exp(-t) * x[1]))
+    t0 = 0.7
+    ref = Bramble.closure(constrained(W, rels(x -> cos(t0) * (1 + x[2]),
+        x -> 2t0 * x[2], x -> -exp(-t0) * x[1])))[2]
+    u = collect(range(-1.0, 1.0; length = Bramble.ndofs(C)))
+    dlift = ForwardDiff.derivative(t -> parent(Bramble.lift(C, u, t)), t0)
+    @test relerr(dlift, ref) <= 1e-12
+    daff = ForwardDiff.derivative(t -> Bramble._lift_affine!(similar(C.d, typeof(t)), C, t),
+        t0)
+    @test relerr(daff, ref) <= 1e-12
+    # The stored buffer still serves a plain time afterwards.
+    @test relerr(Bramble._lift_affine!(similar(C.d), C, t0),
+        parent(Bramble.lift(C, zeros(Bramble.ndofs(C)), t0))) == 0
+end
+
+@testset "Concurrent lifts at two times" begin
+    W = gridspace(tmesh((30, 33)); ghosts = (:xmin, :xmax, :ymax))
+    C = constrained(W, u -> (:xmin => ∂ₙ(u) => (x, t) -> t * (1 + x[2]),
+        :xmax => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => (x, t) -> t * x[1]))
+    u = zeros(Bramble.ndofs(C))
+    refs = map(t -> parent(Bramble.lift(C, u, t)), (1.0, 2.0))
+    @test refs[1] != refs[2]
+    bad = Threads.Atomic{Int}(0)
+    @sync for k in 1:2
+        Threads.@spawn begin
+            t = Float64(k)
+            U = Bramble.lift(C, u, t)
+            g = Bramble._affine_buffer(C)
+            for _ in 1:300
+                parent(Bramble.lift(C, u, t)) == refs[k] || Threads.atomic_add!(bad, 1)
+                Bramble.lift!(U, C, u, t, g)
+                parent(U) == refs[k] || Threads.atomic_add!(bad, 1)
+            end
+        end
+    end
+    @test bad[] == 0
+    # A caller's buffer of the wrong length is refused.
+    @test_throws DimensionMismatch Bramble._lift_affine!(similar(C.d), C, 1.0, zeros(2))
+end
+
+@testset "Data not finite at t = 0" begin
+    W = gridspace(tmesh((6, 7)); ghosts = (:xmin, :xmax, :ymax))
+    # The same datum on two facets meeting at a corner agrees there, `Inf` at `t = 0` too.
+    rels(t) = u -> (:xmin => u => at((x, s) -> 1 / s, t),
+        :ymin => u => at((x, s) -> 1 / s, t),
+        :xmin => ∂ₙ(u) => 0.0, :xmax => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0)
+    C, Cfix = spaces(W, rels)
+    u = ones(Bramble.ndofs(C))
+    U, Ut = parent(Bramble.lift(C, u, 1.5)), parent(Bramble.lift(Cfix(1.5), u))
+    @test relerr(U, Ut) <= 1e-13
+    # A datum not finite where it meets a finite one is named, not called a disagreement.
+    msg = try
+        constrained(W,
+            u -> (:xmin => u => (x, s) -> 1 / s, :ymin => u => (x, s) -> s,
+                :xmin => ∂ₙ(u) => 0.0, :xmax => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0))
+        ""
+    catch e
+        e isa ArgumentError ? sprint(showerror, e) : "other"
+    end
+    @test occursin("on :xmin is not finite at t = 0", msg)
+    # A datum of the wrong kind names the forms data take, `(x, t)` among them.
+    msg = try
+        constrained(W, u -> (:xmin => ∂ₙ(u) => "g",))
+        ""
+    catch e
+        e isa ArgumentError ? sprint(showerror, e) : "other"
+    end
+    @test occursin("(x, t) ->", msg)
 end
 
 # 3D, nightly.

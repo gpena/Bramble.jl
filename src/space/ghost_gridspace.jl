@@ -74,8 +74,9 @@ end
 # The affine part of a closure whose relation data depend on time: `d(t) = L g(t)`, `g` one
 # value per eliminated ghost (the facet-weighted datum at its node, or the weight of a datum
 # depending on time) and per point a Dirichlet relation fixes, `L` the closure's block solve
-# applied to each. `L` is stored transposed, so column `i` holds the terms of `d[i]`; `g`
-# holds the static values from construction on, and each group refills its own range with
+# applied to each. `L` is stored transposed, so column `i` holds the terms of `d[i]`. `g0`
+# holds the static values (0 at the sources in time) and is never written; `g` is the
+# stored buffer, and a call copies `g0` into its buffer and refills each group's range with
 # a datum `f(x, t)` at its points, `f` a type parameter so that the evaluation infers.
 struct _TimeGroup{F, PV <: AbstractArray{<:Any, 1}}
     f::F
@@ -89,6 +90,7 @@ struct _TimeData{G <: Tuple, IV <: AbstractArray{Int, 1}, LV <: AbstractArray{<:
     colptr::IV
     rowval::IV
     nz::LV
+    g0::GV
     g::GV
 end
 
@@ -101,27 +103,75 @@ _affine_support(Wₕ::GhostGridSpace, ::Nothing) = map(!iszero, Array(Wₕ.d))
 _affine_support(::GhostGridSpace, td::_TimeData) = map(>(0), diff(Array(td.colptr)))
 
 """
-    _lift_affine!(d, Wₕ::GhostGridSpace, t) -> d
+    _lift_affine!(d, Wₕ::GhostGridSpace, t[, g]) -> d
 
 Write the affine part of the closure of `Wₕ` at time `t` into the padded vector `d`: on a
 space whose relation data depend on time, the data at `t` at their points and `d = L g(t)`,
-in the bands of the mesh's policy, with no allocation and no block solve; on any other
-space, its `d`.
+in the bands of the mesh's policy, with no block solve; on any other space, its `d`.
+
+The data go into the buffer `g`, by default the one the space stores, which makes the call
+allocate nothing but also makes it unsafe to call concurrently on one space. A time whose
+type the stored buffer cannot hold (a `ForwardDiff.Dual`) gets a buffer of its own. Pass
+`g = _affine_buffer(Wₕ, S)`, of an element type `S` that holds the data at `t`, for a call
+that touches no stored state.
 """
 function _lift_affine!(d::AbstractVector, Wₕ::GhostGridSpace, t::Number)
-    length(d) == length(Wₕ.d) || _throw_affine_length(Wₕ, d)
-    return _lift_affine!(d, Wₕ, Wₕ.td, t)
+    return _lift_affine!(d, Wₕ, t, _stored_buffer(Wₕ.td, t))
 end
 
-@inline function _lift_affine!(d::AbstractVector, Wₕ::GhostGridSpace, ::Nothing, t)
+function _lift_affine!(d::AbstractVector, Wₕ::GhostGridSpace, t::Number, g)
+    length(d) == length(Wₕ.d) || _throw_affine_length(Wₕ, d)
+    return _lift_affine!(d, Wₕ, Wₕ.td, t, g)
+end
+
+@inline function _lift_affine!(d::AbstractVector, Wₕ::GhostGridSpace, ::Nothing, t, g)
     return copyto!(d, Wₕ.d)
 end
 
-function _lift_affine!(d::AbstractVector, Wₕ::GhostGridSpace, td::_TimeData, t)
+function _lift_affine!(d::AbstractVector, Wₕ::GhostGridSpace, td::_TimeData, t,
+        g::AbstractVector)
+    length(g) == length(td.g0) || _throw_affine_buffer(td, g)
     pol = execution_policy(Wₕ.padded)
-    _time_data!(pol, td.g, td.groups, t)
-    _run_bands!(pol, _csc_columns_band!, d, td.colptr, td.rowval, td.nz, td.g)
+    copyto!(g, td.g0)
+    _time_data!(pol, g, td.groups, t)
+    _run_bands!(pol, _csc_columns_band!, d, td.colptr, td.rowval, td.nz, g)
     return d
+end
+
+# The element type that holds the affine part at `t`: the space's, for a time of a plain
+# number type, and promoted with the time's type otherwise (a `ForwardDiff.Dual`), whose
+# data carry it. A static space's `d` does not depend on `t`.
+@inline _affine_eltype(Wₕ::GhostGridSpace, t) = _affine_eltype(eltype(Wₕ.d), Wₕ.td, t)
+@inline _affine_eltype(::Type{T}, ::Nothing, t) where {T} = T
+@inline _affine_eltype(::Type{T}, ::_TimeData,
+    ::Union{AbstractFloat, Integer, Rational}) where {T} = T
+@inline _affine_eltype(::Type{T}, ::_TimeData, t) where {T} = promote_type(T, typeof(t))
+
+"""
+    _affine_buffer(Wₕ::GhostGridSpace, S = eltype(Wₕ)) -> g
+
+A buffer for the data of `Wₕ` at a time, of element type `S`, to pass to `_lift_affine!`
+and `lift!` so that they touch no stored state; `nothing` on a static space.
+"""
+_affine_buffer(Wₕ::GhostGridSpace, ::Type{S} = eltype(Wₕ.d)) where {S} = _affine_buffer(
+    Wₕ.td, S)
+_affine_buffer(::Nothing, ::Type) = nothing
+_affine_buffer(td::_TimeData, ::Type{S}) where {S} = similar(td.g0, S)
+
+# The stored buffer when it holds the data at `t`, else one of their type.
+@inline _stored_buffer(::Nothing, t) = nothing
+@inline function _stored_buffer(td::_TimeData, t)
+    S = _affine_eltype(eltype(td.g), td, t)
+    return S === eltype(td.g) ? td.g : _affine_buffer(td, S)
+end
+
+@noinline function _throw_affine_buffer(td::_TimeData, g)
+    throw(
+        DimensionMismatch(
+        "the data buffer of this space has $(length(td.g0)) entries; got a vector of " *
+        "length $(length(g)). Build it with Bramble._affine_buffer(Wₕ, S).",
+    ),
+    )
 end
 
 # Each group's data at `t`, unrolled over the groups so that each datum's type is known.
@@ -308,9 +358,12 @@ throws as the space's weights do: build the space again.
 
 `lift(Wₕ, u, t)` is `E u + d(t)`, for a space whose relation data depend on time,
 `(x, t) -> …` (see [`constrained`](@ref)): `d(t)` comes from the data at `t`, and `E` is the
-same at every `t`. On a static space it is `lift(Wₕ, u)`. On a space with time-dependent
-data, `lift(Wₕ)` and `lift(Wₕ, u)` refuse with an `ArgumentError`, as there is no single
-`d`: give the time, `lift(Wₕ, u, t)`, or pose the problem in time through `semidiscretize`.
+same at every `t`. On a static space it is `lift(Wₕ, u)`. It evaluates the data into a
+buffer of its own, so it may be called concurrently on one space, and a time of a
+non-float type, such as a `ForwardDiff.Dual`, gives values of that type. On a space with
+time-dependent data, `lift(Wₕ)` and `lift(Wₕ, u)` refuse with an `ArgumentError`, as there
+is no single `d`: give the time, `lift(Wₕ, u, t)`, or pose the problem in time through
+`semidiscretize`.
 
 `lift(Wₕ, u)` runs in the bands of the mesh's execution policy, each padded point summed by
 one band, so it gives the same values on every CPU policy. `Bramble.lift!(uₕ, Wₕ, u)` and
@@ -352,20 +405,23 @@ end
 function lift(Wₕ::GhostGridSpace, u::AbstractVector, t::Number)
     _check_lift_fresh(Wₕ)
     length(u) == ndofs(Wₕ) || _throw_lift_length(:lift, Wₕ, u)
-    U = similar(Wₕ.d, promote_type(eltype(u), eltype(Wₕ.d)))
-    return VectorElement(_lift_values!(U, Wₕ, u, t), Wₕ.padded)
+    S = _affine_eltype(Wₕ, t)
+    U = similar(Wₕ.d, promote_type(eltype(u), S))
+    return VectorElement(_lift_values!(U, Wₕ, u, t, _affine_buffer(Wₕ, S)), Wₕ.padded)
 end
 
 """
     lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector) -> uₕ
-    lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector, t::Number) -> uₕ
+    lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector, t::Number[, g]) -> uₕ
 
 Write `E u + d` into the grid function `uₕ`, the in-place form of
 [`lift`](@ref)`(Wₕ, u)`: `uₕ` lives on the padded space of `Wₕ`, as the result of `lift`
 does, so a solve loop lifts each new solution without allocating. The values are those of
 `lift(Wₕ, u)`, bit for bit, on every CPU policy. With `t`, it writes `E u + d(t)`, the
 values of `lift(Wₕ, u, t)`; on a space whose relation data depend on time, the form
-without `t` refuses, as `lift(Wₕ, u)` does.
+without `t` refuses, as `lift(Wₕ, u)` does. The data at `t` go into a buffer the space
+stores, so `lift!(uₕ, Wₕ, u, t)` is not safe to call concurrently on one space; each
+concurrent caller passes its own buffer `g = Bramble._affine_buffer(Wₕ)` instead.
 
 `lift!` refuses a grid function on another space, or of an element type that cannot hold
 the values (a real `uₕ` for a complex `u`), with an `ArgumentError`. It is public, not
@@ -392,17 +448,19 @@ function lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector)
     return uₕ
 end
 
-function lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector, t::Number)
-    _check_lift_into(uₕ, Wₕ, u)
-    _lift_values!(uₕ.data, Wₕ, u, t)
+function lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector, t::Number,
+        g = _stored_buffer(Wₕ.td, t))
+    _check_lift_into(uₕ, Wₕ, u, _affine_eltype(Wₕ, t))
+    _lift_values!(uₕ.data, Wₕ, u, t, g)
     return uₕ
 end
 
-@inline function _check_lift_into(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector)
+@inline function _check_lift_into(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector,
+        ::Type{S} = eltype(Wₕ.d)) where {S}
     _check_lift_fresh(Wₕ)
     length(u) == ndofs(Wₕ) || _throw_lift_length(:lift!, Wₕ, u)
     uₕ.space === Wₕ.padded || _throw_lift_target(Wₕ)
-    T = promote_type(eltype(u), eltype(Wₕ.d))
+    T = promote_type(eltype(u), S)
     promote_type(eltype(uₕ), T) === eltype(uₕ) || _throw_lift_eltype(uₕ, T)
     return nothing
 end
@@ -417,9 +475,11 @@ function _lift_values!(U::AbstractVector, Wₕ::GhostGridSpace, u::AbstractVecto
     return U
 end
 
-# `U = E u + d(t)`: `d(t)` written into `U` first, then read back in place.
-function _lift_values!(U::AbstractVector, Wₕ::GhostGridSpace, u::AbstractVector, t::Number)
-    _lift_affine!(U, Wₕ, t)
+# `U = E u + d(t)`: `d(t)` written into `U` first, through the data buffer `g`, then read
+# back in place.
+function _lift_values!(U::AbstractVector, Wₕ::GhostGridSpace, u::AbstractVector, t::Number,
+        g)
+    _lift_affine!(U, Wₕ, t, g)
     return _lift_values!(U, Wₕ, u, U)
 end
 

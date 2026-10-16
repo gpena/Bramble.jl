@@ -52,7 +52,8 @@ When some data depend on time, `E` stays the same and only `d` depends on time, 
 [`lift`](@ref)`(Cₕ, u, t)` gives `E u + d(t)`; `lift(Cₕ, u)`, `lift(Cₕ)` and
 `assemble(a, l)` refuse with an `ArgumentError`, as there is no single `d`, while `form`
 and `assemble(a)`, which read `E` only, work as on a static space. A time-dependent problem
-on such a space is posed through `semidiscretize`. `closure(Cₕ)` gives `d(0)` as its `d`.
+on such a space is posed through `semidiscretize`. `constrained` evaluates the data at
+`t = 0`, so they must be defined there, and `closure(Cₕ)` gives `d(0)` as its `d`.
 Dirichlet data in time that meet at a corner are checked to agree at `t = 0` only; the
 corner then takes the first facet's datum at every `t`. Under `CpuPolyester` a datum that
 closes over an array crosses each task whole and allocates on every evaluation; one that
@@ -184,7 +185,8 @@ _check_relation_data(::Union{Number, Function}, ::Symbol) = nothing
     throw(
         ArgumentError(
         "the data of the relation on :$name is $(summary(data)); give a number or a " *
-        "function of the point, as in `:$name => ∂ₙ(u) => x -> x[1]`.",
+        "function of the point, as in `:$name => ∂ₙ(u) => x -> x[1]`, or of the point " *
+        "and the time, as in `:$name => ∂ₙ(u) => (x, t) -> t * x[1]`.",
     ),
     )
 end
@@ -344,7 +346,7 @@ function _time_data(be, ::Type{T}, G::GhostMesh, L::SparseMatrixCSC, rels, drels
     Lt = sparse(transpose(SparseMatrixCSC{T, Int}(L)))
     stored(x) = copyto!(_backend_vector(be, eltype(x), length(x)), x)
     return _TimeData(Tuple(groups), stored(SparseArrays.getcolptr(Lt)), stored(rowvals(Lt)),
-        stored(nonzeros(Lt)), stored(g))
+        stored(nonzeros(Lt)), stored(g), stored(g))
 end
 
 function _time_group(be, f, pts::Vector, first::Int)
@@ -377,18 +379,35 @@ function _dirichlet_values(G::GhostMesh{D}, drels, ::Type{T}) where {D, T}
     fixed = falses(length(plin))
     g = zeros(S, length(plin))::Vector{S}
     first_name = Vector{Symbol}(undef, length(plin))
-    floor = isempty(vals) ? zero(real(S)) : 10 * eps(real(S)) * maximum(abs, vals)
-    order, owner = Int[], Int[]
+    floor = 10 * eps(real(S)) * maximum(abs, Iterators.filter(isfinite, vals);
+        init = zero(real(S)))
+    order, owner, first_rel = Int[], Int[], zeros(Int, length(plin))
     for (p, v, name, i) in zip(pts, vals, names, rids)
         if fixed[p]
+            isequal(g[p], v) && continue
+            isfinite(g[p]) || _throw_dirichlet_not_finite(drels[first_rel[p]], g[p])
+            isfinite(v) || _throw_dirichlet_not_finite(drels[i], v)
             abs(g[p] - v) <= sqrt(eps(real(S))) * max(abs(g[p]), abs(v)) + floor ||
                 _throw_dirichlet_disagree(first_name[p], name, g[p], v)
         else
-            fixed[p], g[p], first_name[p] = true, v, name
+            fixed[p], g[p], first_name[p], first_rel[p] = true, v, name, i
             push!(order, p), push!(owner, i)
         end
     end
     return fixed, g, order, owner
+end
+
+# Two equal values agree, `Inf` included; a value that is not finite and differs from the
+# other cannot be compared, so the datum itself is named.
+@noinline function _throw_dirichlet_not_finite(r::_FacetRelation, v)
+    when = _is_time_relation(r) ? " at t = 0, where constrained evaluates it" : ""
+    throw(
+        ArgumentError(
+        "the Dirichlet datum on :$(r.name) is not finite$when ($v) at a node it shares " *
+        "with another Dirichlet facet, so the two cannot be checked to agree there. Give " *
+        "data that are finite at the corners of their facets.",
+    ),
+    )
 end
 
 # The ghosts of a ghosted facet whose nodes `u => g` fixes would be unknowns that no
