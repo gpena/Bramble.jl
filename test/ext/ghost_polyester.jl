@@ -8,8 +8,8 @@
 #     include("test/ext/ghost_polyester.jl")'
 #
 # A `@batch` sweep passes the padded space as `_batch_split` gives it, and each task
-# rebuilds a `GhostMesh` over its meshes' walk states (src/utils/batch_split.jl), so the
-# ghost methods (the corner rule, the physical facets) still apply there. The mixed and
+# rebuilds a `GhostMeshState` over its meshes' walk states (src/utils/batch_split.jl), so
+# the ghost methods (the corner rule, the physical facets) still apply there. The mixed and
 # facet forms below change value where those methods are lost. At one thread `@batch` runs
 # one chunk inline, so the split bites at 2 or more.
 module GhostPolyesterTests
@@ -60,7 +60,7 @@ source(v) = innerₕ(x -> 1.0 + x[1], v)
         skeleton, arrays = Bramble._batch_split(P)
         @test isbits(skeleton)
         R = mesh(Bramble._batch_rebuild(skeleton, arrays))
-        @test R isa Bramble.GhostMesh
+        @test R isa Bramble.GhostMeshState
         @test (R.n, R.lo, R.active, R.offset) == (G.n, G.lo, G.active, G.offset)
         @test Bramble.nghosts(R) == Bramble.nghosts(G)
         @test Bramble.physical_indices(R) == Bramble.physical_indices(G)
