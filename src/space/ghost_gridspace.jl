@@ -21,7 +21,7 @@ struct _RowsDirichlet
 end
 
 """
-    GhostGridSpace{D, T, S, ET, DT, TD} <: AbstractSpaceType{1}
+    GhostGridSpace{D, T, S, ET, DT, TD, GU} <: AbstractSpaceType{1}
 
 A scalar grid space with ghost points beyond the named facets of its mesh, built by
 [`gridspace`](@ref)`(Ωₕ; ghosts = :boundary)` or `gridspace(Ωₕ; ghosts = (:xmin, ...))`.
@@ -48,7 +48,7 @@ E, d = Bramble.closure(Wₕ)    # E is 63 × 59, d = 0
 ```
 """
 struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix{T},
-    DT <: AbstractArray{T, 1}, TD} <: AbstractSpaceType{1}
+    DT <: AbstractArray{T, 1}, TD, GU} <: AbstractSpaceType{1}
     "the space on the padded mesh, with physical-only weights."
     padded::S
     "the `N_pad × ndofs` closure matrix: the padded values are `E * u + d`."
@@ -61,6 +61,8 @@ struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix{T},
     rows::_RowsDirichlet
     "the map `d(t) = L g(t)` of data depending on time (a `_TimeData`), or `nothing`."
     td::TD
+    "the eliminated ghosts' rows of `E` in the order of a `GhostVector` (a `_GhostUpdate`)."
+    gu::GU
 end
 
 function GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector,
@@ -68,7 +70,72 @@ function GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector
     G = mesh(P)
     Ωₕ = physical_mesh(G)
     rows = _RowsDirichlet(_rows_are_physical(G, E), _facet_masks(Ωₕ, Val(dim(Ωₕ))))
-    return GhostGridSpace(P, E, d, _closure_transpose(E), rows, td)
+    Et = _closure_transpose(E)
+    return GhostGridSpace(P, E, d, Et, rows, td, _ghost_update(backend(P), G, Et, d))
+end
+
+# What `update_ghosts!` reads: the rows of `E` of the ghosts the relations eliminate,
+# re-indexed to a `GhostVector`'s order (physical node `k` at `k`, ghost `g` at `np + g`) and
+# stored transposed. Column `r` holds the terms of eliminated ghost `slot[r]`, at padded
+# point `prow[r]`.
+#
+# With `m` eliminated ghosts, `nz` starts with the static affine part `d` of ghost `slot[r]`
+# at `r`; entry `k` of `rowval` has its coefficient at `nz[m + k]`. That saves the band pass
+# one array, and `CpuThreaded` pays per argument.
+#
+# A degree of freedom is the point whose row of `E` is that degree of freedom alone, with
+# coefficient 1: a physical node first, then the ghosts in order. Every other ghost is
+# eliminated. `complete` is `false` when some degree of freedom is no such point (a closure
+# built by hand), and `update_ghosts!` refuses the space.
+struct _GhostUpdate{IV <: AbstractArray{Int, 1}, NV <: AbstractArray{<:Any, 1}}
+    np::Int
+    ng::Int
+    complete::Bool
+    slot::IV
+    prow::IV
+    colptr::IV
+    rowval::IV
+    nz::NV
+end
+
+function _ghost_update(be, G::GhostMesh{D}, Et::SparseMatrixCSC, d::AbstractVector) where {D}
+    plin = LinearIndices(npoints(G, Tuple))
+    phys = physical_indices(G)
+    np, ng = length(phys), nghosts(G)
+    cp, rv, nzv = SparseArrays.getcolptr(Et), rowvals(Et), nonzeros(Et)
+    dh = Array(d)
+    own = zeros(Int, size(Et, 1))           # the vector index of each degree of freedom
+    alone(i) = cp[i + 1] - cp[i] == 1 && isone(nzv[cp[i]]) ? rv[cp[i]] : 0
+    for (k, J) in enumerate(phys)
+        j = alone(plin[J])
+        (j != 0 && own[j] == 0) && (own[j] = k)
+    end
+    gpts = [plin[_ghost_point(G, g)] for g in 1:ng]
+    eliminated = Int[]
+    for g in 1:ng
+        j = alone(gpts[g])
+        if j != 0 && own[j] == 0 && iszero(dh[gpts[g]])
+            own[j] = np + g
+        else
+            push!(eliminated, g)
+        end
+    end
+    complete = all(!iszero, own)
+    prow = gpts[eliminated]
+    m = length(eliminated)
+    colptr = ones(Int, m + 1)
+    rowval = Int[]
+    nz = Vector{promote_type(eltype(nzv), eltype(dh))}(dh[prow])
+    for (r, g) in enumerate(eliminated)
+        for q in cp[gpts[g]]:(cp[gpts[g] + 1] - 1)
+            push!(rowval, complete ? own[rv[q]] : 0)
+            push!(nz, nzv[q])
+        end
+        colptr[r + 1] = length(rowval) + 1
+    end
+    stored(x) = copyto!(_backend_vector(be, eltype(x), length(x)), x)
+    return _GhostUpdate(np, ng, complete, stored(eliminated), stored(prow), stored(colptr),
+        stored(rowval), stored(nz))
 end
 
 # The affine part of a closure whose relation data depend on time: `d(t) = L g(t)`, `g` one
