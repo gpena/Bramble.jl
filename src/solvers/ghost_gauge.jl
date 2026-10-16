@@ -23,17 +23,24 @@ degree of freedom.
 The kernel is computed one physical node at a time. The ghosts at a node that remain
 unknowns, one for each ghosted facet through it without a relation, give `m` columns of
 `A`; restricted to their nonzero rows they form a small dense block, and each of its right
-singular vectors whose singular value is at most `rtol` times the largest (all of them, if
-the block is zero) becomes a column of the result, with at most `m` entries. The columns
-have unit 2-norm and their first nonzero entry is positive; the nodes come in the mesh's
-linear order, so the result depends on `A` and `Wₕ` only.
+singular vectors whose singular value is at most `rtol` times the larger of the block's
+largest one and the largest column 2-norm of `A` becomes a column of the result, with at
+most `m` entries. The second scale makes a ghost column that is zero only to rounding (a
+conormal `K` that cancels a coefficient) a kernel vector, as the dense spectrum calls it.
+The columns have unit 2-norm and their first nonzero entry is real and positive; the nodes
+come in the mesh's linear order, so the result depends on `A` and `Wₕ` only.
 
 For a form that reads the ghosts at a corner through `Δₕ` alone, such as
 `innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)`, the corner's ghost columns are parallel, so each 2D
 corner gives one column and each 3D corner two, and each node inside a 3D edge one: `k = 4`
 in 2D, `k = 4 Σₑ (nₑ - 2) + 16` in 3D, with `nₑ` the points along axis `e`. With a single
-ghosted facet no node carries two ghosts, and `k = 0` for that form. Ghost combinations
-spread over several nodes are not searched for.
+ghosted facet no node carries two ghosts, and `k = 0` for that form. A form that never
+reads a ghost leaves it in the kernel, one column each.
+
+A kernel vector spread over the ghosts of several nodes is not found. Such vectors arise
+when the form differences the ghosts along their own facet: with `ghosts = (:xmin,)`,
+`innerₕ(∇ₕ(Δₕ(u))[2], v)` annihilates the vector that is constant on the `:xmin` ghosts,
+and `ghost_kernel` returns no column for it. A gauged solve with such a `Z` stays singular.
 
 `ghost_kernel` is public, not exported: write `Bramble.ghost_kernel`.
 
@@ -58,6 +65,7 @@ function ghost_kernel(A::AbstractMatrix, Wₕ::GhostGridSpace;
     Tv = float(eltype(S))
     nodes, dofs = _ghost_dofs_by_node(Wₕ)
     Zi, Zj, Zv = Int[], Int[], Tv[]
+    scale = _max_column_norm(S)
     k = 0
     lo = 1
     while lo <= length(nodes)
@@ -65,7 +73,7 @@ function ghost_kernel(A::AbstractMatrix, Wₕ::GhostGridSpace;
         while hi < length(nodes) && nodes[hi + 1] == nodes[lo]
             hi += 1
         end
-        k = _node_kernel!(Zi, Zj, Zv, k, S, view(dofs, lo:hi), rtol)
+        k = _node_kernel!(Zi, Zj, Zv, k, S, view(dofs, lo:hi), rtol * scale, rtol)
         lo = hi + 1
     end
     return sparse(Zi, Zj, Zv, n, k)
@@ -139,10 +147,22 @@ end
     )
 end
 
+# The largest 2-norm of a column of `S`, the scale of `A` the local blocks are judged by:
+# within a factor `√n` of its largest singular value, and `O(nnz)`.
+function _max_column_norm(S::SparseMatrixCSC)
+    c = zero(real(float(eltype(S))))
+    for j in axes(S, 2)
+        c = max(c, norm(view(nonzeros(S), nzrange(S, j))))
+    end
+    return c
+end
+
 # The null vectors of the columns `dofs` of `S` (the ghosts of one node), restricted to
 # their nonzero rows, appended as columns `k + 1, …` of the triplets; returns the new count.
+# A singular value is null when at most `atol` (`rtol` times the scale of `A`) or `rtol`
+# times the block's largest, so a column that is zero only to rounding is null too.
 function _node_kernel!(Zi::Vector{Int}, Zj::Vector{Int}, Zv::Vector{T}, k::Int,
-        S::SparseMatrixCSC, dofs, rtol::Real) where {T}
+        S::SparseMatrixCSC, dofs, atol::Real, rtol::Real) where {T}
     m = length(dofs)
     rows = Int[]
     for j in dofs, q in nzrange(S, j)
@@ -161,11 +181,14 @@ function _node_kernel!(Zi::Vector{Int}, Zj::Vector{Int}, Zv::Vector{T}, k::Int,
            (F = svd(B; full = true); (F.S, F.V))
     σ₁ = isempty(σ) ? zero(real(T)) : first(σ)
     for i in 1:m
-        i <= length(σ) && σ[i] > rtol * σ₁ && continue
+        i <= length(σ) && σ[i] > max(atol, rtol * σ₁) && continue
         z = V[:, i]
         z ./= norm(z)
         s = findfirst(!iszero, z)
-        s !== nothing && z[s] < 0 && (z .= .-z)
+        if s !== nothing                         # the first nonzero entry real positive
+            z .*= abs(z[s]) / z[s]
+            z[s] = abs(z[s])
+        end
         k += 1
         for (c, j) in enumerate(dofs)
             iszero(z[c]) && continue

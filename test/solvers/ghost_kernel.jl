@@ -9,7 +9,7 @@ module GhostKernelTests
 using Test
 using Bramble
 import Bramble
-using LinearAlgebra: norm, rank, svdvals
+using LinearAlgebra: norm, opnorm, rank, svdvals
 using SparseArrays: SparseMatrixCSC, nnz, rowvals, nzrange
 using ..TestUtils: WITH_3D_TESTS
 
@@ -18,6 +18,23 @@ const Δform = (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)
 function reference_nullity(A)
     s = svdvals(Matrix(A))
     return count(<(1e-14 * s[1]), s)
+end
+
+# The ghost-only nullity: the singular values of the ghost columns of `A` below 1e-14
+# ‖A‖₂, the ghost degrees of freedom read off the closure as the columns with no entry at
+# a physical point.
+function ghost_only_nullity(A, Wₕ)
+    G = mesh(Wₕ)
+    E, _ = Bramble.closure(Wₕ)
+    plin = LinearIndices(npoints(G, Tuple))
+    phys = falses(size(E, 1))
+    for J in Bramble.physical_indices(G)
+        phys[plin[J]] = true
+    end
+    gd = [j for j in axes(E, 2) if !any(q -> phys[rowvals(E)[q]], nzrange(E, j))]
+    isempty(gd) && return 0
+    s = svdvals(Matrix(A[:, gd]))
+    return length(gd) - count(>(1e-14 * opnorm(Matrix(A))), s)
 end
 
 function random_mesh(seed, ranges, n)
@@ -163,6 +180,61 @@ end
     B = assemble(form(V, V, (u, v) -> innerₕ(u, v)))
     @test_throws ArgumentError Bramble.ghost_kernel(B, V)
     @test_throws ArgumentError Bramble.ghost_kernel(B, gridspace(Ω; ghosts = ()))
+end
+
+# A conormal `K = [1 t; t 1]` on the xmin facet whose `t` cancels a corner ghost's column
+# to rounding (its norm over σ₁ is 1e-17 and 1e-21), so that ghost is kernel by the dense
+# count, and a block judged by its own scale alone would miss it. `t (1 + 1e-12)` lifts
+# the first above the threshold and keeps the second below; `t (1 + 1e-9)` lifts both.
+@testset "Ghost kernel: rounding-zero ghost column" begin
+    Ω = random_mesh(11, (interval(0.0, 1.0), interval(0.0, 2.0)), (6, 7))
+    W = gridspace(Ω; ghosts = :boundary)
+    np = npoints(Ω)
+    for (t, kref) in ((22.302129588748148, 3), (22.302129588748148 * (1 + 1e-12), 2),
+        (-3.6200664666930011, 3), (-3.6200664666930011 * (1 + 1e-12), 3),
+        (-3.6200664666930011 * (1 + 1e-9), 2))
+        C = constrained(W, u -> (:xmin => ∂ₙ(u; K = [1.0 t; t 1.0]) => 0.0,))
+        A = assemble(form(C, C, Δform))
+        @test ghost_only_nullity(A, C) == kref
+        @test is_ghost_kernel_basis(A, Bramble.ghost_kernel(A, C), np, kref)
+    end
+end
+
+# Strong grading, spacing ratios up to 1.6e4 (`x^p`, p = 4, 4.5, 5): the live singular
+# values of the corner blocks come within a factor 3 of the threshold at p = 5.
+@testset "Ghost kernel: strong grading" begin
+    for p in (4.0, 4.5, 5.0)
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (9, 11), (true, true))
+        Bramble.change_points!(Ω, (collect(range(0.0, 1.0; length = 9)) .^ p,
+            2 .* collect(range(0.0, 1.0; length = 11)) .^ p))
+        W = gridspace(Ω; ghosts = :boundary)
+        A = assemble(form(W, W, Δform))
+        @test ghost_only_nullity(A, W) == 4
+        @test is_ghost_kernel_basis(A, Bramble.ghost_kernel(A, W), npoints(Ω), 4)
+    end
+end
+
+# A complex form: the corner columns stay parallel, so the basis is the real form's with
+# each column's first entry real and positive.
+@testset "Ghost kernel: complex matrix" begin
+    Ω = random_mesh(11, (interval(0.0, 1.0), interval(0.0, 2.0)), (6, 7))
+    W = gridspace(Ω; ghosts = :boundary)
+    Ac = assemble(form(W, W, (u, v) -> (1.0 + 2.0im) * innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+    @test eltype(Ac) <: Complex
+    Zc = Bramble.ghost_kernel(Ac, W)
+    @test is_ghost_kernel_basis(Ac, Zc, npoints(Ω), 4)
+    @test all(j -> (z = Zc.nzval[first(nzrange(Zc, j))]; isreal(z) && real(z) > 0), 1:4)
+    @test Zc ≈ Bramble.ghost_kernel(assemble(form(W, W, Δform)), W)
+end
+
+# The documented limit: a kernel vector over the ghosts of several nodes is not found.
+# `D₋ᵧ Δₕ` annihilates the vector constant on the :xmin ghosts; the result has no column.
+@testset "Ghost kernel: multi-node limit" begin
+    Ω = random_mesh(11, (interval(0.0, 1.0), interval(0.0, 2.0)), (6, 7))
+    W = gridspace(Ω; ghosts = (:xmin,))
+    A = assemble(form(W, W, (u, v) -> innerₕ(∇ₕ(Δₕ(u))[2], v)))
+    @test ghost_only_nullity(A, W) == 1
+    @test size(Bramble.ghost_kernel(A, W)) == (size(A, 2), 0)
 end
 
 # 3D runs nightly: the edges carry one column per interior node, the corners two each.
