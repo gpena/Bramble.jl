@@ -66,10 +66,10 @@ chain differentiable.
   `MUMPS.jl`), `:sparspak` (pure Julia, needs `Sparspak.jl`).
 - `kwargs`: passed to the chosen backend (for `:accelerate` and `:mumps` the keywords of
   [`accelerate_solve`](@ref) and [`mumps_solve`](@ref)), which throws on one it does not
-  take. `:default` takes only `kind` and `:sparspak` takes none: both throw an `ArgumentError`
-  on any other keyword. `kind` and `sym` are read only when the Accelerate route runs; on
-  `A \\ F` they are accepted and ignored, so `kind = :bogus` throws only where Accelerate is
-  taken.
+  take. `:default` takes only `kind` and `:sparspak` takes none. Both throw an
+  `ArgumentError` on any other keyword. `kind` and `sym` are read only when the Accelerate
+  route runs. On `A \\ F` they are accepted and ignored, so `kind = :bogus` throws only where
+  Accelerate is taken.
 - `sym`: symmetry hint for `:suitesparse`, `:accelerate` and `:mumps` (and, on macOS, for
   `:default`'s own choice of solver -- see above). `:auto` (default) detects it;
   `:spd`/`:definite`/`1`, `:symmetric`/`2` and `:unsymmetric`/`0` state it.
@@ -77,7 +77,7 @@ chain differentiable.
   (default). With `w`, `pde_solve` solves the bordered system `[A w; wᵀ 0] [u; λ] = [F; 0]`
   and returns `u`, the solution with discrete zero average ``w^T u = 0`` of a pure-Neumann
   system whose `A` annihilates constants, of the promoted float type of `A`, `F` and `w`;
-  `A` is not modified. The bordered matrix is indefinite, so `sym` is not used: for a real
+  `A` is not modified. The bordered matrix is indefinite, so `sym` is not used. For a real
   symmetric `A` and real `w`, `:default` factors it by LU (or by Accelerate's pivoting
   ``LDL^T``) and `:accelerate` and `:mumps` by ``LDL^T``; for any other `A` they use LU, as
   do `:suitesparse` (UMFPACK) and `:sparspak`. `:spqr` throws an `ArgumentError`, and a `w`,

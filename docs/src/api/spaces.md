@@ -86,11 +86,7 @@ A grid space with ghost nodes beyond named facets, built by
 space of unknowns. Exported: `constrained`, `GhostVector` (the grid function of a time loop)
 and `update_ghosts!`, which fills its ghosts. `public` and not exported: `lift`, which is
 also a Makie name, so write `Bramble.lift`, and `lift!`, `physical`, `ghost_values` and
-`GhostGridSpace`.
-
-On a pair of ghost forms, `assemble!(A, F, a, l)` refills the matrix and the load that
-`assemble(a, l)` returns. It is a method of [`assemble!`](@ref) with no docstring of its
-own; the example of [`lift`](@ref) shows it.
+`GhostGridSpace`. `assemble!` also refills a pair of ghost forms.
 
 ```@docs
 GhostGridSpace
@@ -101,4 +97,5 @@ GhostVector
 update_ghosts!
 Bramble.physical
 Bramble.ghost_values
+assemble!(::AbstractMatrix, ::AbstractVector, ::Bramble.GhostBilinearForm, ::Bramble.GhostLinearForm)
 ```

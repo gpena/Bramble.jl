@@ -530,7 +530,25 @@ function assemble(a::GhostBilinearForm, l::GhostLinearForm; dirichlet = nothing,
     return _assemble_pair!(A, F, a, l, labels, bcs, dirichlet_components, symmetrize)
 end
 
-# `A, F` refilled in place, `A` with the pattern and `F` of the type `assemble(a, l)` gives.
+"""
+    assemble!(A, F, a::GhostBilinearForm, l::GhostLinearForm;
+        dirichlet = nothing, dirichlet_components = nothing, symmetrize = false)
+
+Refill `A` and `F` with the matrix and the load that `A, F = assemble(a, l)` returns, and
+return `A, F`. `A` keeps the pattern and `F` the element type that `assemble(a, l)` gave,
+so call that once and refill its two outputs. The call allocates nothing warm.
+
+Both forms are assembled together because, when the closure of the space has an affine part
+`d ≠ 0`, the load is `Eᵀ(F − A d)` and reads the matrix. `assemble!(b, l)` alone refuses
+such a space. `dirichlet`, `dirichlet_components` and `symmetrize` act as in
+`assemble(a, l)`.
+
+It throws an `ArgumentError` for a time-dependent space (pose the problem with
+`semidiscretize`), for `symmetrize = true` without `dirichlet`, for `A` that is not a
+`SparseMatrixCSC` with the reduced pattern of `a`, for a `dirichlet` the rows of the space
+do not allow, and for an `F` whose element type cannot hold the load's. A `DimensionMismatch`
+follows an `F` of the wrong length and forms whose test spaces differ.
+"""
 function assemble!(A::AbstractMatrix, F::AbstractVector, a::GhostBilinearForm,
         l::GhostLinearForm; dirichlet = nothing, dirichlet_components = nothing,
         symmetrize::Bool = false)
