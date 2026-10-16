@@ -6,7 +6,7 @@ using Bramble: MatrixFreeOperator, VectorElement, trial_space, test_space, restr
                D₊ᵧ
 using LinearAlgebra: mul!, norm, dot
 using Random
-using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _graded_mesh
+using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _graded_mesh, _grid_sample
 
 # `matrix_free_operator` applies a bilinear form through the walk the
 # assembly replays, so every check compares it against `assemble(a; dirichlet)` on the same
@@ -166,9 +166,16 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
     @testset "matrix-free: threaded mul! race-free" begin
         # `unit` keeps one case per plan that differs under `Parallel`: Dirichlet rows on a
         # single leaf, a composite on one leaf object, and one on two leaves (the fused sweep
-        # below covers 3D and the other composite). `slow` runs all of them.
+        # below covers 3D and the other composite), built alone so the others are not
+        # compiled for `Parallel`. `slow` adds a random draw from the rest and `grids` runs
+        # all of them (`TestUtils._grid_sample`, gpena/Bramble.jl#789).
         pbe = backend(policy = Parallel())
-        pcases = WITH_SLOW_TESTS ? _mf_cases(pbe) : _mf_threaded_cases(pbe)
+        threaded_names = ("2D diffusion", "composite", "two-leaf pair")
+        pcases = if WITH_SLOW_TESTS
+            _grid_sample("matrix-free threaded", _mf_cases(pbe), c -> c[1] in threaded_names, 3)
+        else
+            _mf_threaded_cases(pbe)
+        end
         for (name, at, dl) in pcases
             a = cases[findfirst(c -> c[1] == name, cases)][2]
             @testset "$name" begin
@@ -446,8 +453,9 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
     # The form call `a(u, v)` sums `vᴴ A u` through the same walk, storing neither `A` nor
     # `A * u`. A complex `v` checks the conjugate; the pairs walk their two terms in turn.
     @testset "form call contracts vᴴAu" begin
-        for (name, a, _) in cases
-            (WITH_SLOW_TESTS || name in ("2D pair", "composite pair", "two-leaf pair")) || continue
+        # `_mf_cases()` afresh: the testsets above rebind `cases` to their own lists.
+        contract_names = ("2D pair", "composite pair", "two-leaf pair")
+        for (name, a, _) in _grid_sample("vᴴAu contract", _mf_cases(), c -> c[1] in contract_names, 3)
             @testset "$name" begin
                 A = assemble(a)
                 u = randn(size(A, 2))
