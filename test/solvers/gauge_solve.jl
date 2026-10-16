@@ -143,6 +143,24 @@ end
     @test relerr(pde_solve(A, A * x; gauge = Z), x) <= 1e-7
 end
 
+# A `Z` spanning half the kernel is not detected: the physical part is still the quotient
+# solution, and only the two gauged components are fixed. Whether the factorisation
+# notices is a matter of rounding (no column at all throws `SingularException` here).
+@testset "Gauged solve: an under-spanning gauge" begin
+    Random.seed!(786)
+    Ω = random_mesh(11, (interval(0.0, 1.0), interval(0.0, 2.0)), (6, 7))
+    W = gridspace(Ω; ghosts = :boundary)
+    A = assemble(form(W, W, Δform))
+    Z = Bramble.ghost_kernel(A, W)
+    np = npoints(Ω)
+    x = rand(size(A, 1))
+    Zp = Z[:, 1:2]
+    u = pde_solve(A, A * x; gauge = Zp)
+    @test all(isfinite, u)
+    @test relerr(u[1:np], x[1:np]) <= 1e-7
+    @test norm(transpose(Zp) * u, Inf) <= 1e-8 * norm(u, Inf)
+end
+
 @testset "Gauged solve: complex A" begin
     Random.seed!(781)
     Ω = random_mesh(11, (interval(0.0, 1.0), interval(0.0, 2.0)), (6, 7))

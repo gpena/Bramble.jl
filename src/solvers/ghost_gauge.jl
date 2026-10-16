@@ -40,7 +40,9 @@ reads a ghost leaves it in the kernel, one column each.
 A kernel vector spread over the ghosts of several nodes is not found. Such vectors arise
 when the form differences the ghosts along their own facet: with `ghosts = (:xmin,)`,
 `innerₕ(∇ₕ(Δₕ(u))[2], v)` annihilates the vector that is constant on the `:xmin` ghosts,
-and `ghost_kernel` returns no column for it. A gauged solve with such a `Z` stays singular.
+and `ghost_kernel` returns no column for it. A gauged solve with such a `Z` is not
+refused and usually factors: the physical part is still right, and the components left out
+are arbitrary.
 
 `ghost_kernel` is public, not exported: write `Bramble.ghost_kernel`.
 

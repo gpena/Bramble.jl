@@ -92,9 +92,12 @@ chain differentiable.
   border is `[w Z]`. The routing, the element type and the refusals are those of
   `mean_zero`, a `Z` whose row count is not that of `A` being a `DimensionMismatch`, except
   that `:sparspak`, which factors without pivoting, throws an `ArgumentError`. A complex `A`
-  or `Z` is accepted; the border is transposed, not conjugated. `Z` is used as given: its
-  columns must be independent and outside the range of `A`, or the bordered system stays
-  singular. The solution is only as accurate as the conditioning of `A` away from its kernel
+  or `Z` is accepted; the border is transposed, not conjugated. `Z` is used as given, and
+  the values in the kernel are deterministic only when its columns span the whole kernel.
+  A `Z` that spans only part of it is not detected: the factorisation usually proceeds (a
+  `SingularException` is a matter of rounding), the physical part is still the solution of
+  the quotient system, and the kernel components `Z` leaves out come back arbitrary and
+  different from one backend to another. The solution is only as accurate as the conditioning of `A` away from its kernel
   allows: on the forms that produce a ghost-only kernel, near `1e-8` relative.
 
 # Returns
