@@ -4,7 +4,7 @@ CurrentModule = Bramble
 
 # [Linear and bilinear forms](@id tutorial_form)
 
-**What you will learn.** How to write a linear or bilinear form, assemble it into a vector or a matrix, impose Dirichlet conditions and solve a Poisson problem, and impose Neumann and Robin conditions through ghost points.
+**What you will learn.** How to write a linear or bilinear form, assemble it into a vector or a matrix, impose Dirichlet conditions and solve a Poisson problem, and impose Neumann and Robin conditions through ghost points, with data that depend on time, a gauge for the ghosts and a check on the compatibility of pure-Neumann data.
 
 **What you need first.** The [mesh tutorial](mesh.md), the [space tutorial](space.md) for grid spaces and elements, and the [operators tutorial](operators.md) for `D₋ₓ`, `innerₕ` and `inner₊`.
 
@@ -505,6 +505,121 @@ catch e
 end
 ```
 
+### Data that depend on time
+
+The data of a relation may take the time as a second argument, `(x, t) -> …`; `constrained` tells it from a datum in `x` alone by the methods the function has. The operators in a relation do not change with time, so the matrix of a form on the space is the same at every `t`, and only the data ``d(t)`` that the relations put into the ghosts move. Take the heat equation ``\partial_t u = \partial_{xx} u`` on the graded interval, with the exact solution ``u = e^{-t} (\cos x + \sin x)`` and the data it gives, a flux at the left end and a Robin condition at the right end:
+
+```@example forms
+using LinearAlgebra: diag
+
+heat_sol(x, t) = exp(-t) * (cos(x[1]) + sin(x[1]))
+heat_dx(x, t) = exp(-t) * (cos(x[1]) - sin(x[1]))
+g_left_t(x, t) = -heat_dx(x, t)
+g_right_t(x, t) = robin_α * heat_sol(x, t) + heat_dx(x, t)
+
+C_t = constrained(gridspace(Ω_gh; ghosts = :boundary), u -> (
+    :xmin => ∂ₙ(u) => g_left_t,
+    :xmax => robin_α * u + ∂ₙ(u) => g_right_t))
+a_t = form(C_t, C_t, (u, v) -> innerₕ(-Δₕ(u), v))
+l_t = form(C_t, v -> innerₕ(x -> 0.0, v))
+
+ndofs(C_t)
+```
+
+`Bramble.lift(Cₕ, u, t)` is the grid function ``E u + d(t)`` at time `t`. The exact solution at the nodes lifts to a padded function whose centred difference at the first node gives the flux datum at that time, and the data at two times give different ghosts:
+
+```@example forms
+u_heat(t) = [heat_sol(x, t) for x in x_gh]
+U_a = Bramble.lift(C_t, u_heat(0.3), 0.3)
+U_b = Bramble.lift(C_t, u_heat(1.0), 1.0)
+
+@assert -Dcₓ(U_a)[2] ≈ g_left_t(x_gh[1], 0.3)
+@assert -Dcₓ(U_b)[2] ≈ g_left_t(x_gh[1], 1.0)
+@assert abs(U_a[1] - U_b[1]) > 0.1
+
+U_a[1], U_b[1]
+```
+
+[`semidiscretize`](@ref) takes the form and the load on this space and returns the `Semidiscretization` of ``M u' = F(t) - A u``, with ``A = E^T A_{pad} E``, the default mass ``M`` diagonal and positive, and ``F(t) = E^T (F_{pad}(t) - A_{pad}\, d(t))``. The residual at a time is the one a space with the data frozen at that time assembles. Here is the comparison at three times:
+
+```@example forms
+sd_t = semidiscretize(a_t, l_t)
+u_probe = collect(range(-1, 2; length = ndofs(C_t)) .^ 2)
+
+residual_gaps = map((0.0, 0.5, 1.0)) do t
+    C_frozen = constrained(gridspace(Ω_gh; ghosts = :boundary), u -> (
+        :xmin => ∂ₙ(u) => (x -> g_left_t(x, t)),
+        :xmax => robin_α * u + ∂ₙ(u) => (x -> g_right_t(x, t))))
+    A_fr, F_fr = assemble(form(C_frozen, C_frozen, (u, v) -> innerₕ(-Δₕ(u), v)),
+        form(C_frozen, v -> innerₕ(x -> 0.0, v)))
+    du = similar(u_probe)
+    sd_t(du, u_probe, nothing, t)
+    norm(du - (F_fr - A_fr * u_probe)) / norm(du)
+end
+
+@assert all(<(1e-12), residual_gaps)
+@assert Bramble.operator_matrix(sd_t) ≈ assemble(a_t)
+@assert all(>(0), diag(Bramble.mass_matrix(sd_t)))
+
+maximum(residual_gaps)
+```
+
+[`ode_problem`](@ref) wraps it for an ODE solver. The initial condition is the exact solution at ``t = 0`` and the solver is `FBDF` from `OrdinaryDiffEqBDF`, with tolerances tight enough that the error left at the final time is the one in space. The solution changes by a factor ``e^{-1}`` over the run and the data change with it, so an error far below that change shows the data in time are followed. The error falls by a factor of four when the number of points doubles:
+
+```@example forms
+using OrdinaryDiffEqBDF
+
+function heat_error(n; T = 1.0)
+    Ωₕ = graded_interval(n)
+    C = constrained(gridspace(Ωₕ; ghosts = :boundary), u -> (
+        :xmin => ∂ₙ(u) => g_left_t, :xmax => robin_α * u + ∂ₙ(u) => g_right_t))
+    a = form(C, C, (u, v) -> innerₕ(-Δₕ(u), v))
+    l = form(C, v -> innerₕ(x -> 0.0, v))
+    xs = collect(points(Ωₕ))
+    prob = ode_problem(a, l, [heat_sol(x, 0.0) for x in xs], (0.0, T))
+    sol = solve(prob, FBDF(); reltol = 1e-10, abstol = 1e-12)
+    return maximum(abs, sol.u[end] - [heat_sol(x, T) for x in xs])
+end
+
+err_heat_33, err_heat_65 = heat_error(33), heat_error(65)
+@assert err_heat_33 < 1e-3
+@assert 3.5 < err_heat_33 / err_heat_65 < 4.5
+
+err_heat_33, err_heat_33 / err_heat_65
+```
+
+The refusals are the same everywhere on a space with data in time, and each is an `ArgumentError` that names what to do. `lift(Cₕ, u)`, `lift(Cₕ)` and `assemble(a, l)` have no single ``d``: give the time through `lift(Cₕ, u, t)`, or pose the problem in time. `form` and `assemble(a)` read `E` only and work. `semidiscretize` takes no `dirichlet` keyword, since a Dirichlet condition on a facet is the relation `:F => u => g(x, t)`. It refuses a space that keeps ghosts as unknowns, since the mass has no row for them. A mass that reads a point where the data depend on time is refused too, because its term ``E^T M_{pad}\, d'(t)`` needs ``\partial_t g``, which no relation carries. The default mass reads the physical nodes only. `semidiscretize_rhs` and `semidiscretize(build, l)` with a ghost load are refused as well.
+
+```@example forms
+W_unknown = gridspace(Ω_gh; ghosts = :boundary)
+C_unknown = constrained(W_unknown, u -> (:xmin => ∂ₙ(u) => g_left_t,))
+
+timed_refusals = String[]
+for thunk in (
+    () -> Bramble.lift(C_t, u_heat(0.0)),
+    () -> assemble(a_t, l_t),
+    () -> semidiscretize(a_t, l_t; dirichlet = :xmin => 0.0),
+    () -> semidiscretize(form(C_unknown, C_unknown, (u, v) -> innerₕ(-Δₕ(u), v)),
+        form(C_unknown, v -> innerₕ(x -> 0.0, v))),
+    () -> semidiscretize(a_t, l_t;
+        mass = form(C_t, C_t, (u, v) -> innerₕ(u, v) + 0.01 * innerₕ(Δₕ(u), v))),
+)
+    try
+        thunk()
+    catch e
+        @assert e isa ArgumentError
+        push!(timed_refusals, first(split(sprint(showerror, e), ". ")))
+    end
+end
+
+@assert length(timed_refusals) == 5
+@assert size(assemble(a_t), 1) == ndofs(C_t)
+
+timed_refusals
+```
+
+A constrained space whose data are all static takes `semidiscretize` and `ode_problem` too.
+
 ### Pure Neumann and `mean_zero`
 
 With Neumann conditions on every facet the solution is defined up to a constant. The matrix annihilates constants and is singular. Fix the constant by a discrete mean-zero condition: [`pde_solve`](@ref) takes `mean_zero = w`, a weight vector, and returns the solution with ``w^T u = 0``. Internally it solves the bordered system
@@ -565,6 +680,106 @@ abs(dot(w_sq, u_sol)), err_sq
 
 The residual of the system is ``F - \lambda w`` with ``\lambda = \sum F / \sum w``, because ``\mathbf{1}^T A = 0``. The compatibility of the data holds only to the quadrature error, so ``\lambda`` is small, not zero. The error is the discrete difference to the exact solution shifted to the same mean.
 
+#### A kernel in the ghosts
+
+`mean_zero` fixes the constant of a pure-Neumann problem. A space that keeps its ghosts as unknowns has a second kind of kernel, in the ghosts themselves. The form `innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)` reads the ghost of a corner node only through `Δₕ`, where the two ghosts of a 2D corner enter in one combination, so the matrix assembled on `gridspace(Ωₕ; ghosts = :boundary)` is singular: a vector that is zero at every physical node and nonzero on the ghosts of a corner solves ``A z = 0``. The physical solution is unique, and the ghost values are not. `Bramble.ghost_kernel(A, Wₕ)` returns a sparse basis of that kernel, one column per corner here, found node by node and never as a dense null space. `pde_solve(A, F; gauge = Z)` solves the bordered system ``[A\ Z; Z^T\ 0]`` and returns the solution with ``Z^T u = 0``:
+
+```@example forms
+Ω_rect = domain(interval(0.0, 1.0) × interval(0.0, 2.0))
+Ωₕ_rect = mesh(Ω_rect, (9, 11), (true, true))
+change_points!(Ωₕ_rect, markers(Ω_rect), (collect(range(0.0, 1.0, length = 9) .^ 1.5),
+    2 .* collect(range(0.0, 1.0, length = 11) .^ 1.5)))
+
+W_rect = gridspace(Ωₕ_rect; ghosts = :boundary)
+A_rect = assemble(form(W_rect, W_rect, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+Z_rect = Bramble.ghost_kernel(A_rect, W_rect)
+
+n_phys = npoints(Ωₕ_rect)
+@assert size(Z_rect) == (ndofs(W_rect), 4)
+@assert all(>(n_phys), rowvals(Z_rect))
+@assert norm(A_rect * Z_rect, Inf) <= 1e-10 * norm(A_rect, Inf)
+
+size(Z_rect), norm(A_rect * Z_rect, Inf)
+```
+
+The kernel has 4 columns, each supported on the two ghosts of a corner, and `A * Z` vanishes to rounding. The physical values come first in the vector of unknowns, then the ghosts. To check the solve, choose a physical vector, set the ghosts to zero, and form the load `F = A x`. The gauged solve returns the physical values of `x`, and the load of a vector shifted by any combination of the kernel columns gives the same answer:
+
+```@example forms
+Random.seed!(7)
+x_phys = rand(n_phys)
+x_ghost0 = [x_phys; zeros(ndofs(W_rect) - n_phys)]
+
+u_gauged = pde_solve(A_rect, A_rect * x_ghost0; gauge = Z_rect)
+u_shifted = pde_solve(A_rect, A_rect * (x_ghost0 + Z_rect * [1.0, -2.0, 3.0, 0.5]);
+    gauge = Z_rect)
+
+@assert maximum(abs, u_gauged[1:n_phys] - x_phys) <= 1e-7
+@assert norm(Z_rect' * u_gauged, Inf) <= 1e-10 * norm(u_gauged, Inf)
+@assert maximum(abs, u_shifted - u_gauged) <= 1e-6
+@assert norm(A_rect * u_gauged - A_rect * x_ghost0, Inf) <= 1e-8 * norm(A_rect, Inf)
+
+maximum(abs, u_gauged[1:n_phys] - x_phys), norm(Z_rect' * u_gauged, Inf)
+```
+
+The physical error is about ``10^{-10}`` here and is only as small as the conditioning of `A` away from its kernel allows: these forms are ill conditioned, and the accuracy of the physical part is near ``10^{-8}`` relative in general. A form that never reads a ghost leaves each ghost in the kernel as one column. With a single ghosted facet no node carries two ghosts and a form that reads them through `Δₕ` alone has no ghost-only kernel. A kernel vector spread over the ghosts of several nodes, which a form that differences the ghosts along their own facet produces, is not found: `ghost_kernel` returns no column for it, and a gauged solve with such a `Z` still gives the right physical part, while the ghost components it leaves out are arbitrary. With `mean_zero = w` as well, the border is `[w Z]`.
+
+#### Checking that the data are compatible
+
+The Neumann data of ``-\Delta u = f`` must satisfy ``\int f = -\oint \partial_\eta u``. A source off by a constant leaves a system with no solution: the bordered solve returns a ``\lambda`` that measures the part of `F` no `u` reaches, and the answer looks plausible. `Bramble.neumann_compatibility(problem, Ωₕ)` checks the data. `problem` is a function of a mesh that returns `(A, F, w)`, the matrix, the load and the weights of the discrete average, because the check builds the problem on `Ωₕ` and on copies of it refined once and twice. For compatible data the removed load is a quadrature error and falls by about four per refinement. For an incompatible datum it tends to a constant, the integral of the discrepancy, and the check logs a warning that reports the relative defects, ``\lambda`` and the ratios. Nothing is thrown, and the result is a `NamedTuple` with `compatible`. The problem below is the square from above on a random non-uniform mesh, once as it is and once with the source shifted by ``0.2``:
+
+```@example forms
+using Logging
+using Random
+
+struct WarningLog <: Logging.AbstractLogger
+    messages::Vector{String}
+end
+Logging.min_enabled_level(::WarningLog) = Logging.Warn
+Logging.shouldlog(::WarningLog, args...) = true
+function Logging.handle_message(log::WarningLog, level, message, args...; kwargs...)
+    push!(log.messages, string(message))
+    return nothing
+end
+
+function neumann_problem(shift)
+    return function (Ωₕ)
+        C = constrained(gridspace(Ωₕ; ghosts = :boundary), u -> (
+            :xmin => ∂ₙ(u) => (p -> -grad_sq(p)[1]), :xmax => ∂ₙ(u) => (p -> grad_sq(p)[1]),
+            :ymin => ∂ₙ(u) => (p -> -grad_sq(p)[2]), :ymax => ∂ₙ(u) => (p -> grad_sq(p)[2])))
+        A, F = assemble(form(C, C, (u, v) -> innerₕ(-Δₕ(u), v)),
+            form(C, v -> innerₕ(p -> f_sq(p) + shift, v)))
+        w = assemble(form(gridspace(Ωₕ), v -> innerₕ(p -> 1.0, v)))
+        return A, F, w
+    end
+end
+
+Random.seed!(20261016)
+Ωₕ_rand = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 17), (false, false))
+
+function check_compatibility(shift)
+    log = WarningLog(String[])
+    result = Logging.with_logger(log) do
+        Bramble.neumann_compatibility(neumann_problem(shift), Ωₕ_rand)
+    end
+    return result, log.messages
+end
+
+ok, ok_warnings = check_compatibility(0.0)
+bad, bad_warnings = check_compatibility(0.2)
+
+@assert ok.compatible && isempty(ok_warnings)
+@assert ok.defect < 1e-4
+@assert !bad.compatible && length(bad_warnings) == 1
+@assert occursin("incompatible", only(bad_warnings))
+@assert isapprox(bad.λ, 0.2; atol = 1e-3) && isapprox(bad.second_ratio, 1.0; atol = 0.1)
+
+(ok.compatible, ok.defect), (bad.compatible, bad.λ, bad.second_ratio)
+```
+
+The compatible problem raises no warning and its relative defect is below ``10^{-4}``. The shifted one warns once. Its ``\lambda`` is ``0.2``, the shift, on the mesh and on both refinements, so the ratio of the removed loads is ``1`` where a quadrature error would give about ``4``. The mesh `Ωₕ` is not modified, and a mesh that carries markers of its own needs the domain's `markers(Ω)` as a third argument so that the refinement can evaluate them again.
+
+The check has limits. A defect on the refined mesh below `5e-3` counts as rounding, so a small incompatibility is not detected. Compatible data with a singular flux at a boundary point, whose quadrature error falls slower than the factor of four, can be reported incompatible. When the defect is above the floor the problem is built on a mesh with 16 times the points of `Ωₕ`.
+
 ### Data per facet
 
 A scalar datum on `:boundary` gives one value per node. A corner node lies on two facets, though. When the data differ from facet to facet, give each facet its own `inner_Γ` term or, as above, its own relation. A facet's term carries that facet's weight, which is a half cell at the corner. With the same function on every facet, the two spellings agree:
@@ -596,7 +811,7 @@ expected = (hy / 2) * data_x((0.0, 0.0)) + (hx / 2) * data_y((0.0, 0.0))
 l_corner[1], expected
 ```
 
-Ghost spaces are for `assemble`. `semidiscretize`, `ode_problem`, `matrix_free_operator`, `kronecker_operator` and the device backends refuse them with an `ArgumentError`, and a composite space cannot hold one.
+Ghost spaces are for `assemble`, and for `semidiscretize` and `ode_problem` once `constrained` has eliminated every ghost. `matrix_free_operator`, `kronecker_operator` and the device backends refuse them with an `ArgumentError`, and a composite space cannot hold one.
 
 ## Threading
 
