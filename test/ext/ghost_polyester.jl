@@ -132,6 +132,41 @@ source(v) = innerₕ(x -> 1.0 + x[1], v)
         @test relerr(F1, F0) <= 1e-13
     end
 
+    # The reduction, the load and `lift` run in `@batch` bands that each own whole output
+    # entries, so they give the serial values bit for bit, and a repeated run the same bits.
+    @testset "Bands give the serial values bitwise" begin
+        Kc = [2.0 1.0; 1.0 2.0]
+        cases = (
+            ((9, 11), :boundary,
+                u -> (:xmin => ∂ₙ(u; K = Kc) => 1.0, :xmax => u + ∂ₙ(u; K = Kc) => x -> x[2],
+                    :ymin => ∂ₙ(u; K = Kc) => 0.0, :ymax => 2.0 * u + ∂ₙ(u; K = Kc) => 1.0)),
+            ((9, 11), (:xmin, :xmax, :ymax),
+                u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => ∂ₙₙ(u) => x -> x[1],
+                    :ymin => u => x -> x[1], :ymax => ∂ₙ(u) => 1.0)),
+            ((17,), :xmin, u -> (:xmin => u + ∂ₙ(u) => 2.0, :xmax => u => 1.0)))
+        case3 = ((5, 6, 4), (:xmin, :xmax, :ymin, :ymax, :zmax),
+            u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[3],
+                :ymin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0, :zmin => u => x -> x[1],
+                :zmax => ∂ₙ(u) => 1.0))
+        for (ns, ghosts, rel) in (WITH_3D_TESTS ? (cases..., case3) : cases)
+            r0, r1, r2 = map((CpuSerial(), CpuPolyester(), CpuPolyester())) do pol
+                C = constrained(gridspace(ghost_mesh(pol, ns); ghosts), rel)
+                a, l = form(C, C, laplacian), form(C, source)
+                A, F = assemble(a, l)
+                A2 = copy(A)
+                fill!(nonzeros(A2), 0.0)
+                assemble!(A2, a)
+                u = pde_solve(A, F)
+                return (A, F, A2, u, parent(Bramble.lift(C, u)), C)
+            end
+            @test any(!iszero, last(Bramble.closure(r0[6])))
+            for k in 1:5
+                @test r1[k] == r0[k]
+                @test r2[k] == r1[k]
+            end
+        end
+    end
+
     WITH_3D_TESTS && @testset "3D Laplacian, Dirichlet relation" begin
         rel = u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[3],
             :ymin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0, :zmin => u => x -> x[1],

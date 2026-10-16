@@ -43,7 +43,14 @@ struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix{T},
     E::ET
     "the affine part of the closure, one entry per padded point."
     d::DT
+    "the transpose of `E`, whose columns give `lift` its padded rows."
+    Et::ET
 end
+
+GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector) = GhostGridSpace(P,
+    E, d, _closure_transpose(E))
+
+@inline _closure_transpose(E::SparseMatrixCSC) = copy(transpose(E))
 
 function _gridspace_ghosts(Ωₕ::Union{Mesh1D, MeshnD},
         ghosts::Union{Symbol, Tuple{Symbol, Vararg{Symbol}}})
@@ -191,6 +198,9 @@ form can name, say, the full `Δₕ` of the lifting at the facet nodes. Absent p
 (corners beyond two ghosted facets) hold 0. After `change_points!` of the mesh, `lift`
 throws as the space's weights do: build the space again.
 
+`lift(Wₕ, u)` runs in the bands of the mesh's execution policy, each padded point summed by
+one band, so it gives the same values on every CPU policy.
+
 `lift` is public, not exported: write `Bramble.lift` or `using Bramble: lift`.
 
 # Examples
@@ -214,11 +224,39 @@ end
 function lift(Wₕ::GhostGridSpace, u::AbstractVector)
     _check_lift_fresh(Wₕ)
     length(u) == ndofs(Wₕ) || _throw_lift_length(Wₕ, u)
-    E, d = closure(Wₕ)
+    d, Et = Wₕ.d, Wₕ.Et
     U = similar(d, promote_type(eltype(u), eltype(d)))
-    copyto!(U, d)
-    mul!(U, E, u, true, true)
+    _run_bands!(execution_policy(Wₕ.padded), _lift_band!, U, d, SparseArrays.getcolptr(Et),
+        rowvals(Et), nonzeros(Et), u)
     return VectorElement(U, Wₕ.padded)
+end
+
+# Padded points `i` of band `b` of `nbands`: `U[i] = d[i] + Σ E[i, j] u[j]`, from column `i`
+# of `Eᵀ`, in the order of `j`.
+@noinline function _lift_band!(U, d, colptr, rowval, nz, u, nbands::Int, b::Int)
+    T = eltype(U)
+    @inbounds for i in _band_range(1:length(U), nbands, b)
+        s = convert(T, d[i])
+        for k in colptr[i]:(colptr[i + 1] - 1)
+            s = convert(T, s + nz[k] * u[rowval[k]])
+        end
+        U[i] = s
+    end
+    return nothing
+end
+
+# Entries `r` of band `b` of `nbands` of `y = Mᵀ x`, `M` given by its CSC arrays: column `r`
+# of `M` holds the terms of `y[r]`.
+@noinline function _csc_columns_band!(y, colptr, rowval, nz, x, nbands::Int, b::Int)
+    T = eltype(y)
+    @inbounds for r in _band_range(1:length(y), nbands, b)
+        s = zero(T)
+        for k in colptr[r]:(colptr[r + 1] - 1)
+            s = convert(T, s + nz[k] * x[rowval[k]])
+        end
+        y[r] = s
+    end
+    return nothing
 end
 
 # The closure was built from the mesh `Wₕ`'s weights were: after `change_points!` its ghost

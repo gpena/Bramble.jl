@@ -11,6 +11,14 @@
 # nothing at all. Substituting `E` at each stencil tap instead would rewrite the guarded
 # walk, the pattern recorder and the replay.
 #
+# The reduction, the load and `lift` run in the bands of the mesh's policy (`_run_bands!`):
+# each band owns a range of output entries and sums every contribution to them itself, so
+# no two bands write one entry, and every policy adds an entry's terms in the same order and
+# gives the serial result bitwise. The reduction's contributions are grouped by reduced
+# entry, `A_pad d` is stored by padded row over the columns where `d ≠ 0`, `E_vᵀ w` reads
+# the columns of `E_v` and `E u` those of the stored `Eᵀ`. The band functions take arrays
+# only, so that a `CpuPolyester` task boxes nothing.
+#
 # `dirichlet` and `symmetrize` replace rows of the reduced system, through the masks of the
 # physical mesh, when its unknowns are the physical nodes in mesh order: every ghost
 # eliminated by a relation and no node fixed by a Dirichlet relation `u => g`. Any other
@@ -53,15 +61,20 @@ struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
     test_space::VT
     "the padded matrix, filled by every assembly."
     A_pad::MT
-    "the stored position in `A_pad` of each contribution."
+    "the stored position in `A_pad` of each contribution, grouped by reduced entry."
     src::IV
-    "the stored position in the reduced matrix of each contribution."
+    "the contributions `dst[e]:(dst[e + 1] - 1)` that sum into stored reduced entry `e`."
     dst::IV
     "the closure weight `E_v[i, r] E_u[j, c]` of each contribution."
     coef::CV
     "the reduced pattern."
     colptr::IV
     rowval::IV
+    "the terms `liftptr[i]:(liftptr[i + 1] - 1)` of row `i` of `A_pad d_u`."
+    liftptr::IV
+    "the stored position in `A_pad` and the column of each term of `A_pad d_u`."
+    liftsrc::IV
+    liftcol::IV
     "row replacement on the spaces, for `dirichlet`."
     rows::_RowsDirichlet
 end
@@ -107,8 +120,9 @@ function form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, f)
     A_pad = allocate_system_matrix(a)::SparseMatrixCSC  # `_check_ghost_host`
     src, dst, coef, colptr, rowval = _ghost_reduction_map(
         backend(Vₕ), A_pad, Vₕ.E, Wₕ.E)
-    return GhostBilinearForm(a, Wₕ, Vₕ, A_pad, src, dst, coef, colptr, rowval,
-        _RowsDirichlet(Vₕ, Wₕ))
+    liftptr, liftsrc, liftcol = _ghost_lift_map(backend(Vₕ), A_pad, Wₕ.d)
+    return GhostBilinearForm(a, Wₕ, Vₕ, A_pad, src, dst, coef, colptr, rowval, liftptr,
+        liftsrc, liftcol, _RowsDirichlet(Vₕ, Wₕ))
 end
 
 function form(Vₕ::GhostGridSpace, f)
@@ -187,6 +201,8 @@ end
 # `E_v` and `j` of `E_u`. The reduced pattern holds every such `(r, c)`.
 # Closures of different element types (a Float32 and a Float64 space) give weights of the
 # promoted type. The map is built on the host and stored in the backend's vector type.
+# The contributions are then grouped by reduced entry, in the order the walk met them (a
+# stable sort), and `dst` is the pointer over the groups, so a band owns whole entries.
 function _ghost_reduction_map(be, A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
         Eu::SparseMatrixCSC)
     Evt = sparse(transpose(Ev))
@@ -207,13 +223,45 @@ function _ghost_reduction_map(be, A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
     end
     S = sparse(rs, cs, trues(length(rs)), size(Ev, 2), size(Eu, 2), |)
     srv = rowvals(S)
-    dst = similar(src)
-    for t in eachindex(dst)
+    entry = similar(src)
+    for t in eachindex(entry)
         range = nzrange(S, cs[t])
-        dst[t] = first(range) - 1 + searchsortedfirst(view(srv, range), rs[t])
+        entry[t] = first(range) - 1 + searchsortedfirst(view(srv, range), rs[t])
     end
+    p = sortperm(entry)                 # stable
     return map(v -> copyto!(_backend_vector(be, eltype(v), length(v)), v),
-        (src, dst, coef, SparseArrays.getcolptr(S), srv))
+        (src[p], _group_pointer(entry, length(srv)), coef[p], SparseArrays.getcolptr(S),
+            srv))
+end
+
+# The pointer over `n` groups of `keys`, each in `1:n`: group `g` is the entries
+# `ptr[g]:(ptr[g + 1] - 1)` of `keys` once sorted.
+function _group_pointer(keys::Vector{Int}, n::Int)
+    ptr = zeros(Int, n + 1)
+    for g in keys
+        ptr[g + 1] += 1
+    end
+    ptr[1] = 1
+    return cumsum!(ptr, ptr)
+end
+
+# `A_pad d` by padded row, over the columns `j` where `d[j] ≠ 0` only: the stored position
+# of each term and its column, in column order within a row, as `A_pad * d` adds them.
+function _ghost_lift_map(be, A_pad::SparseMatrixCSC, d::AbstractVector)
+    dh = Array(d)
+    rv = rowvals(A_pad)
+    rows, src, cols = Int[], Int[], Int[]
+    for j in axes(A_pad, 2)
+        iszero(dh[j]) && continue
+        for k in nzrange(A_pad, j)
+            push!(rows, rv[k])
+            push!(src, k)
+            push!(cols, j)
+        end
+    end
+    p = sortperm(rows)                  # stable
+    return map(v -> copyto!(_backend_vector(be, eltype(v), length(v)), v),
+        (_group_pointer(rows, size(A_pad, 1)), src[p], cols[p]))
 end
 
 # --- Bilinear assembly --------------------------------------------------------------- #
@@ -246,14 +294,24 @@ end
 
 function _assemble_ghost!(A::SparseMatrixCSC, a::GhostBilinearForm)
     assemble!(a.A_pad, a.padded)
-    nz = nonzeros(A)
-    pv = nonzeros(a.A_pad)
-    fill!(nz, zero(eltype(nz)))
-    src, dst, coef = a.src, a.dst, a.coef
-    @inbounds for t in eachindex(src)
-        nz[dst[t]] += coef[t] * pv[src[t]]
-    end
+    _run_bands!(_ghost_policy(a.test_space), _reduce_band!, nonzeros(A), nonzeros(a.A_pad),
+        a.dst, a.src, a.coef)
     return A
+end
+
+@inline _ghost_policy(Wₕ::GhostGridSpace) = execution_policy(padded_space(Wₕ))
+
+# The reduced entries of band `b` of `nbands`: entry `e` sums its contributions in order.
+@noinline function _reduce_band!(nz, pv, ptr, src, coef, nbands::Int, b::Int)
+    T = eltype(nz)
+    @inbounds for e in _band_range(1:length(nz), nbands, b)
+        s = zero(T)
+        for t in ptr[e]:(ptr[e + 1] - 1)
+            s = convert(T, s + coef[t] * pv[src[t]])
+        end
+        nz[e] = s
+    end
+    return nothing
 end
 
 @noinline function _throw_ghost_pattern()
@@ -445,7 +503,7 @@ function assemble!(b::AbstractVector, l::GhostLinearForm; dirichlet = nothing,
     any(!iszero, l.test_space.d) && _throw_ghost_lift()
     _check_linear_length(b, l.test_space)
     assemble!(l.F_pad, l.padded)
-    mul!(b, transpose(l.test_space.E), l.F_pad)
+    _closure_transpose_mul!(b, l.test_space, l.F_pad)
     return _form_rows!(b, l, labels, bcs, dirichlet_components)
 end
 
@@ -481,20 +539,43 @@ end
 # (a complex form with a real load).
 function _assemble_ghost_load!(F::AbstractVector, a::GhostBilinearForm, l::GhostLinearForm)
     assemble!(l.F_pad, l.padded)
-    d = a.trial_space.d
-    Eᵀ = transpose(l.test_space.E)
-    if any(!iszero, d)
-        mul!(F, Eᵀ, _subtract_lift(l.F_pad, a.A_pad, d))
+    if isempty(a.liftsrc)
+        _closure_transpose_mul!(F, l.test_space, l.F_pad)
     else
-        mul!(F, Eᵀ, l.F_pad)
+        _closure_transpose_mul!(F, l.test_space, _subtract_lift(l.F_pad, a))
     end
     return F
 end
 
-function _subtract_lift(F_pad::AbstractVector, A_pad::SparseMatrixCSC, d::AbstractVector)
-    T = promote_type(eltype(F_pad), eltype(A_pad), eltype(d))
-    Fp = T === eltype(F_pad) ? F_pad : copyto!(similar(F_pad, T), F_pad)
-    return mul!(Fp, A_pad, d, -1, 1)
+function _subtract_lift(F_pad::AbstractVector, a::GhostBilinearForm)
+    d = a.trial_space.d
+    T = promote_type(eltype(F_pad), eltype(a.A_pad), eltype(d))
+    Fp = T === eltype(F_pad) ? F_pad : similar(F_pad, T)
+    _run_bands!(_ghost_policy(a.test_space), _subtract_lift_band!, Fp, F_pad,
+        nonzeros(a.A_pad), a.liftptr, a.liftsrc, a.liftcol, d)
+    return Fp
+end
+
+# Rows `i` of band `b`: `w[i] = F[i] − Σ A_pad[i, j] d[j]` over the stored terms of row `i`.
+# `w` may be `F` itself: row `i` reads `F[i]` before it writes `w[i]`.
+@noinline function _subtract_lift_band!(w, F, pv, ptr, src, col, d, nbands::Int, b::Int)
+    T = eltype(w)
+    @inbounds for i in _band_range(1:length(w), nbands, b)
+        s = convert(T, F[i])
+        for k in ptr[i]:(ptr[i + 1] - 1)
+            s = convert(T, s - pv[src[k]] * d[col[k]])
+        end
+        w[i] = s
+    end
+    return nothing
+end
+
+# `y = Eᵀ x` for the closure `E` of `Wₕ`, entry `r` from column `r` of `E`.
+function _closure_transpose_mul!(y::AbstractVector, Wₕ::GhostGridSpace, x::AbstractVector)
+    E = Wₕ.E
+    _run_bands!(_ghost_policy(Wₕ), _csc_columns_band!, y, SparseArrays.getcolptr(E),
+        rowvals(E), nonzeros(E), x)
+    return y
 end
 
 # --- Refused paths ------------------------------------------------------------------- #
@@ -514,7 +595,16 @@ function matrix_free_operator(::GhostBilinearForm; kwargs...)
 end
 kronecker_operator(::GhostBilinearForm) = _throw_ghost_unsupported("kronecker_operator")
 function assemble_parallel!(::AbstractVecOrMat, ::Union{GhostBilinearForm, GhostLinearForm})
-    _throw_ghost_unsupported("assemble_parallel!")
+    _throw_ghost_assemble_parallel()
+end
+
+@noinline function _throw_ghost_assemble_parallel()
+    throw(
+        ArgumentError(
+        "assemble_parallel! does not take a ghost-space form: call assemble! instead, " *
+        "which runs in parallel under the policy of the mesh's backend.",
+    ),
+    )
 end
 (::GhostLinearForm)(v) = _throw_ghost_unsupported("contracting a linear form")
 function evaluate!(::AbstractVector, ::GhostLinearForm, v)
