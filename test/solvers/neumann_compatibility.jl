@@ -7,8 +7,9 @@ using LinearAlgebra: I
 using ..TestUtils: WITH_SLOW_TESTS
 
 const Ωd = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+const Ωr = domain(interval(0.0, 1.0) × interval(0.0, 2.0))
 
-# `(A, F, w)` for `-Δu = f` with `∂ₙu = ∇g ⋅ n` on every facet of the unit square, on a
+# `(A, F, w)` for `-Δu = f` with `∂ₙu = ∇g ⋅ n` on every facet of a rectangle, on a
 # constrained ghost space; `w` is the assembled `innerₕ(1, v)`.
 function _neumann_problem(Ωₕ, ∇g, f)
     C = constrained(gridspace(Ωₕ; ghosts = :boundary),
@@ -19,37 +20,41 @@ function _neumann_problem(Ωₕ, ∇g, f)
     return A, F, w
 end
 
-# Compatible: `e^{5x} cos 5y` is harmonic, so its fluxes integrate to zero, with large
-# derivatives, whose quadrature error is large on a coarse mesh.
-_harmonic(Ωₕ) = _neumann_problem(Ωₕ,
-    p -> (5exp(5p[1]) * cos(5p[2]), -5exp(5p[1]) * sin(5p[2])), x -> 0.0)
+# Compatible: `e^{kx} cos ky` is harmonic, so its fluxes integrate to zero, with large
+# derivatives, whose quadrature error is large (and pre-asymptotic) on a coarse mesh.
+function _harmonic(k)
+    Ωₕ -> _neumann_problem(Ωₕ,
+        p -> (k * exp(k * p[1]) * cos(k * p[2]), -k * exp(k * p[1]) * sin(k * p[2])), x -> 0.0)
+end
 
 # The form tutorial's `cos πx cos πy + xy/2` with `s` added to the source: compatible for
 # `s = 0`, off by `s` in the mean otherwise.
-_tutorial(s) = Ωₕ -> _neumann_problem(Ωₕ,
-    p -> (-π * sin(π * p[1]) * cos(π * p[2]) + p[2] / 2,
-        -π * cos(π * p[1]) * sin(π * p[2]) + p[1] / 2),
-    p -> 2π^2 * cos(π * p[1]) * cos(π * p[2]) + s)
+function _tutorial(s)
+    Ωₕ -> _neumann_problem(Ωₕ,
+        p -> (-π * sin(π * p[1]) * cos(π * p[2]) + p[2] / 2,
+            -π * cos(π * p[1]) * sin(π * p[2]) + p[1] / 2),
+        p -> 2π^2 * cos(π * p[1]) * cos(π * p[2]) + s)
+end
 
-# `:random` is seeded by `n`; `:graded` puts the points at `(i/(n-1))²`; `:semi` is uniform
-# along x and random (seeded by `n`) along y.
-function _mesh(n, kind)
+# `:random` is seeded by `seed`; `:graded` puts the points at `(i/(n-1))²`; `:semi` is
+# uniform along x and random (seeded by `seed`) along y.
+function _mesh(n, kind; Ω = Ωd, seed = n)
     if kind === :graded
-        Ωₕ = mesh(Ωd, (n, n), (true, true))
+        Ωₕ = mesh(Ω, (n, n), (true, true))
         q = collect(range(0.0, 1.0; length = n)) .^ 2
-        Bramble.change_points!(Ωₕ, markers(Ωd), (q, q))
+        Bramble.change_points!(Ωₕ, markers(Ω), (q, Ω === Ωr ? 2q : q))
         return Ωₕ
     end
-    Bramble._seed_mesh1d_rng!(n)
-    Ωₕ = mesh(Ωd, (n, n), kind === :random ? (false, false) : (true, false))
+    Bramble._seed_mesh1d_rng!(seed)
+    Ωₕ = mesh(Ω, (n, n), kind === :random ? (false, false) : (true, false))
     Bramble._unseed_mesh1d_rng!()
     return Ωₕ
 end
 
 # The result and the warnings `neumann_compatibility` logs.
-function _check(problem, Ωₕ)
+function _check(problem, Ωₕ, args...)
     logger = Test.TestLogger()
-    r = with_logger(() -> Bramble.neumann_compatibility(problem, Ωₕ), logger)
+    r = with_logger(() -> Bramble.neumann_compatibility(problem, Ωₕ, args...), logger)
     return r, filter(l -> l.level == Logging.Warn, logger.logs)
 end
 
@@ -57,25 +62,44 @@ const _NS = WITH_SLOW_TESTS ? (9, 17, 33, 65, 129) : (9, 17, 33)
 
 @testset "Compatible data never warn" begin
     for kind in (:random, :graded, :semi), n in _NS
-        r, logs = _check(_harmonic, _mesh(n, kind))
+
+        r, logs = _check(_harmonic(5), _mesh(n, kind))
         @test isempty(logs)
         @test r.compatible
-        @test r.ratio >= 2 || r.refined_defect <= 5e-3
         r, logs = _check(_tutorial(0.0), _mesh(n, kind))
         @test isempty(logs) && r.compatible
     end
 end
 
+# On [0,1]×[0,2] with k = 8 the first refinement is pre-asymptotic on some coarse meshes:
+# seed 9 at n = 9 has λ = 1082 then -1500 (defects 0.05 and 0.07), and seed 19 on the
+# one-axis-uniform mesh a ratio of 1.63 at a refined defect of 0.036.
+@testset "Pre-asymptotic compatible data" begin
+    r, logs = _check(_harmonic(8), _mesh(9, :random; Ω = Ωr, seed = 9))
+    @test isempty(logs) && r.compatible
+    @test r.refined_defect > 5e-3
+    r, logs = _check(_harmonic(8), _mesh(9, :semi; Ω = Ωr, seed = 19))
+    @test isempty(logs) && r.compatible
+    @test r.refined_defect > 5e-3 && 0.5 <= r.ratio <= 2
+    @test r.second_ratio > 2
+    for kind in (:random, :semi), n in (WITH_SLOW_TESTS ? (9, 17, 33) : (9,)), seed in 1:20
+        r, logs = _check(_harmonic(8), _mesh(n, kind; Ω = Ωr, seed))
+        @test isempty(logs) && r.compatible
+    end
+end
+
 @testset "An O(1) incompatibility warns" begin
-    for kind in (:random, :graded, :semi), n in _NS
-        r, logs = _check(_tutorial(0.2), _mesh(n, kind))
+    # The rectangle stops at n = 33: the second refinement of n = 129 has 513² points.
+    for Ω in (Ωd, Ωr), kind in (:random, :graded, :semi), n in (Ω === Ωd ? _NS : _NS[1:3])
+        r, logs = _check(_tutorial(0.2), _mesh(n, kind; Ω))
         @test !r.compatible
         @test length(logs) == 1
         msg = string(only(logs).message)
         @test occursin("defect", msg) && occursin("ratio", msg) && occursin("λ", msg)
-        # The multiplier tends to the shift, and the defect does not fall.
+        # The multiplier tends to the shift and keeps its sign at both refinements.
         @test r.refined_λ ≈ 0.2 rtol = 0.02
-        @test 0.8 < r.ratio < 1.2
+        @test 0.7 < r.ratio < 1.3
+        @test 0.7 < r.second_ratio < 1.3
     end
 end
 
@@ -91,20 +115,74 @@ end
     iterative_refinement!(R)
     _, Ff, wf = _tutorial(0.2)(R)
     @test r.refined_λ ≈ sum(Ff) / sum(wf) rtol = 1e-8
-    @test r.ratio ≈ r.defect / r.refined_defect
+    @test r.ratio ≈ r.λ / r.refined_λ
+    iterative_refinement!(R)
+    _, Fff, wff = _tutorial(0.2)(R)
+    @test r.second_ratio ≈ r.refined_λ / (sum(Fff) / sum(wff)) rtol = 1e-8
+    # Asymptotic compatible data need no second refinement.
+    r, _ = _check(_harmonic(5), _mesh(33, :graded))
+    @test r.second_ratio === nothing
+end
+
+@testset "Zero data are compatible" begin
+    zero_data(Ωₕ) = _neumann_problem(Ωₕ, p -> (0.0, 0.0), x -> 0.0)
+    r, logs = _check(zero_data, _mesh(9, :random))
+    @test isempty(logs) && r.compatible
+    @test r.defect == 0 && r.refined_defect == 0 && r.λ == 0 && r.refined_λ == 0
+    @test !isnan(r.ratio)
 end
 
 @testset "The mesh is not refined" begin
     Ωₕ = _mesh(9, :random)
     pts = map(collect, points(Ωₕ))
-    Bramble.neumann_compatibility(_harmonic, Ωₕ)
+    _check(_tutorial(0.2), Ωₕ)
     @test npoints(Ωₕ, Tuple) == (9, 9)
     @test map(collect, points(Ωₕ)) == pts
 end
 
+# A domain with a user marker: the copies are refined with the domain's markers, which
+# the one-argument refinement cannot re-evaluate.
+@testset "Domain markers" begin
+    X = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Ωm = domain(X, markers(X, :Wall => :left))
+    Ωₕ = mesh(Ωm, (9, 9), (false, false))
+    @test_throws ArgumentError Bramble.neumann_compatibility(_tutorial(0.2), Ωₕ)
+    seen = Int[]
+    walled(s) = Ωₕ -> (push!(seen, count(markers(Ωₕ)[:Wall])); _tutorial(s)(Ωₕ))
+    r, logs = _check(walled(0.2), Ωₕ, markers(Ωm))
+    @test !r.compatible && length(logs) == 1
+    @test seen == [9, 17, 33]   # the marker is re-evaluated on every refinement
+    r, logs = _check(_tutorial(0.0), Ωₕ, markers(Ωm))
+    @test isempty(logs) && r.compatible
+    @test npoints(Ωₕ, Tuple) == (9, 9)
+end
+
+@testset "Float32" begin
+    X = interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)
+    Ωₕ = mesh(domain(X), (9, 9), (false, false))
+    function problem(s)
+        return function (Ωₕ)
+            C = constrained(gridspace(Ωₕ; ghosts = :boundary),
+                u -> (:xmin => ∂ₙ(u) => 0.0f0, :xmax => ∂ₙ(u) => 0.0f0,
+                    :ymin => ∂ₙ(u) => 0.0f0, :ymax => ∂ₙ(u) => 0.0f0))
+            π₃₂ = Float32(π)
+            f = x -> 2π₃₂^2 * cos(π₃₂ * x[1]) * cos(π₃₂ * x[2]) + s
+            A, F = assemble(form(C, C, (u, v) -> innerₕ(-Δₕ(u), v)),
+                form(C, v -> innerₕ(f, v)))
+            return A, F, assemble(form(gridspace(Ωₕ), v -> innerₕ(x -> 1.0f0, v)))
+        end
+    end
+    @test eltype(first(problem(0.0f0)(Ωₕ))) === Float32
+    r, logs = _check(problem(0.0f0), Ωₕ)
+    @test isempty(logs) && r.compatible
+    r, logs = _check(problem(0.2f0), Ωₕ)
+    @test !r.compatible && length(logs) == 1
+    @test r.refined_λ ≈ 0.2f0 rtol = 0.02
+end
+
 @testset "A non-singular A is refused" begin
     Ωₕ = _mesh(9, :random)
-    regular(Ωₕ) = ((A, F, w) = _harmonic(Ωₕ); (A + I, F, w))
+    regular(Ωₕ) = ((A, F, w) = _harmonic(5)(Ωₕ); (A + I, F, w))
     @test_throws ArgumentError Bramble.neumann_compatibility(regular, Ωₕ)
     err = try
         Bramble.neumann_compatibility(regular, Ωₕ)
