@@ -114,8 +114,8 @@ end
 @testset "1D lift refuses extra arguments" begin
     W = gridspace(O1.make_mesh(:random, 1); ghosts = :boundary)
     u = zeros(Bramble.ndofs(W))
-    @test refuses(() -> Bramble.lift(W, u, 1), "at most one vector")
-    @test !refuses(() -> Bramble.lift(W, u, 1), "with ghosts")
+    @test refuses(() -> Bramble.lift(W, u, 1.0, 2), "at most one vector")
+    @test !refuses(() -> Bramble.lift(W, u, 1.0, 2), "with ghosts")
 end
 
 @testset "1D lift of an unconstrained space" begin

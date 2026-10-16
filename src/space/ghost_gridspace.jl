@@ -5,7 +5,9 @@
 # physical-only) and a closure `(E, d)`: the padded values of a vector `u` of the space's
 # degrees of freedom are `E u + d`. `gridspace(Ωₕ; ghosts)` builds the selection closure
 # (`E` picks each degree of freedom's padded point, `d = 0`); a constrained space keeps the
-# same fields with the relations' `E` and `d`.
+# same fields with the relations' `E` and `d`. When some relation data depend on time, `d`
+# does too, `d(t) = L g(t)`: the space then also stores `L` and the points where `g` is read
+# (`_TimeData`), and `_lift_affine!` evaluates `d(t)` from them; `E` never depends on time.
 #
 # See also: `GhostMesh`, `ScalarGridSpace`, `SpaceWeights`
 
@@ -19,7 +21,7 @@ struct _RowsDirichlet
 end
 
 """
-    GhostGridSpace{D, T, S, ET, DT} <: AbstractSpaceType{1}
+    GhostGridSpace{D, T, S, ET, DT, TD} <: AbstractSpaceType{1}
 
 A scalar grid space with ghost points beyond the named facets of its mesh, built by
 [`gridspace`](@ref)`(Ωₕ; ghosts = :boundary)` or `gridspace(Ωₕ; ghosts = (:xmin, ...))`.
@@ -29,7 +31,8 @@ ghosts in the order of [`GhostMesh`](@ref). `padded_space(Wₕ)` is the `ScalarG
 the padded mesh, the one forms assemble on: its `innerₕ`, `inner₊` and `inner_Γ` weigh the
 physical nodes, cells and facets only, and are 0 at every ghost and absent point, so they
 equal those of `gridspace(Ωₕ)` on the physical nodes. `closure(Wₕ)` is the pair `(E, d)`
-that maps the degrees of freedom `u` to the padded values `E u + d`.
+that maps the degrees of freedom `u` to the padded values `E u + d`; on a space whose
+relations have data depending on time (see [`constrained`](@ref)), `d` depends on time too.
 
 The weights follow the version of the mesh they were built from: after `change_points!` of
 `Ωₕ` the ghost coordinates follow, and the padded space's weights throw as those of any
@@ -45,7 +48,7 @@ E, d = Bramble.closure(Wₕ)    # E is 63 × 59, d = 0
 ```
 """
 struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix{T},
-    DT <: AbstractArray{T, 1}} <: AbstractSpaceType{1}
+    DT <: AbstractArray{T, 1}, TD} <: AbstractSpaceType{1}
     "the space on the padded mesh, with physical-only weights."
     padded::S
     "the `N_pad × ndofs` closure matrix: the padded values are `E * u + d`."
@@ -56,13 +59,100 @@ struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix{T},
     Et::ET
     "row replacement on the space, for `dirichlet`."
     rows::_RowsDirichlet
+    "the map `d(t) = L g(t)` of data depending on time (a `_TimeData`), or `nothing`."
+    td::TD
 end
 
-function GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector)
+function GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector,
+        td = nothing)
     G = mesh(P)
     Ωₕ = physical_mesh(G)
     rows = _RowsDirichlet(_rows_are_physical(G, E), _facet_masks(Ωₕ, Val(dim(Ωₕ))))
-    return GhostGridSpace(P, E, d, _closure_transpose(E), rows)
+    return GhostGridSpace(P, E, d, _closure_transpose(E), rows, td)
+end
+
+# The affine part of a closure whose relation data depend on time: `d(t) = L g(t)`, `g` one
+# value per eliminated ghost (the facet-weighted datum at its node, or the weight of a datum
+# depending on time) and per point a Dirichlet relation fixes, `L` the closure's block solve
+# applied to each. `L` is stored transposed, so column `i` holds the terms of `d[i]`; `g`
+# holds the static values from construction on, and each group refills its own range with
+# a datum `f(x, t)` at its points, `f` a type parameter so that the evaluation infers.
+struct _TimeGroup{F, PV <: AbstractArray{<:Any, 1}}
+    f::F
+    points::PV
+    first::Int
+end
+
+struct _TimeData{G <: Tuple, IV <: AbstractArray{Int, 1}, LV <: AbstractArray{<:Any, 1},
+    GV <: AbstractArray{<:Any, 1}}
+    groups::G
+    colptr::IV
+    rowval::IV
+    nz::LV
+    g::GV
+end
+
+@inline _is_time_dependent(Wₕ::GhostGridSpace) = Wₕ.td !== nothing
+
+# The padded points the affine part can be nonzero at, at any time: those of `d ≠ 0` on a
+# static space, the rows of `L` otherwise.
+_affine_support(Wₕ::GhostGridSpace) = _affine_support(Wₕ, Wₕ.td)
+_affine_support(Wₕ::GhostGridSpace, ::Nothing) = map(!iszero, Array(Wₕ.d))
+_affine_support(::GhostGridSpace, td::_TimeData) = map(>(0), diff(Array(td.colptr)))
+
+"""
+    _lift_affine!(d, Wₕ::GhostGridSpace, t) -> d
+
+Write the affine part of the closure of `Wₕ` at time `t` into the padded vector `d`: on a
+space whose relation data depend on time, the data at `t` at their points and `d = L g(t)`,
+in the bands of the mesh's policy, with no allocation and no block solve; on any other
+space, its `d`.
+"""
+function _lift_affine!(d::AbstractVector, Wₕ::GhostGridSpace, t::Number)
+    length(d) == length(Wₕ.d) || _throw_affine_length(Wₕ, d)
+    return _lift_affine!(d, Wₕ, Wₕ.td, t)
+end
+
+@inline function _lift_affine!(d::AbstractVector, Wₕ::GhostGridSpace, ::Nothing, t)
+    return copyto!(d, Wₕ.d)
+end
+
+function _lift_affine!(d::AbstractVector, Wₕ::GhostGridSpace, td::_TimeData, t)
+    pol = execution_policy(Wₕ.padded)
+    _time_data!(pol, td.g, td.groups, t)
+    _run_bands!(pol, _csc_columns_band!, d, td.colptr, td.rowval, td.nz, td.g)
+    return d
+end
+
+# Each group's data at `t`, unrolled over the groups so that each datum's type is known.
+@inline _time_data!(pol, g, ::Tuple{}, t) = nothing
+@inline function _time_data!(pol, g, groups::Tuple, t)
+    grp = first(groups)
+    _run_bands!(pol, _TimeDatumBand(grp.f), g, grp.points, grp.first, t)
+    return _time_data!(pol, g, Base.tail(groups), t)
+end
+
+# The band function of a datum `f`: points `j` of band `b` of `nbands` give
+# `g[first + j - 1] = f(points[j], t)`. The datum rides in the band function, not among its
+# arguments, where a `CpuPolyester` task would box it.
+struct _TimeDatumBand{F}
+    f::F
+end
+
+@noinline function (k::_TimeDatumBand)(g, pts, first::Int, t, nbands::Int, b::Int)
+    @inbounds for j in _band_range(1:length(pts), nbands, b)
+        g[first + j - 1] = k.f(pts[j], t)
+    end
+    return nothing
+end
+
+@noinline function _throw_affine_length(Wₕ::GhostGridSpace, d)
+    throw(
+        DimensionMismatch(
+        "the affine part of $(Wₕ) has $(length(Wₕ.d)) padded values; got a vector of " *
+        "length $(length(d))",
+    ),
+    )
 end
 
 @inline _closure_transpose(E::SparseMatrixCSC) = copy(transpose(E))
@@ -176,7 +266,9 @@ The space on the padded mesh of `Wₕ`, with physical-only weights: the space fo
     closure(Wₕ::GhostGridSpace) -> (E::SparseMatrixCSC, d::Vector)
 
 The closure of `Wₕ`: the padded values of the degrees of freedom `u` are `E * u + d`, `E`
-of size `npoints(mesh(Wₕ)) × ndofs(Wₕ)` with rows in the padded linear order.
+of size `npoints(mesh(Wₕ)) × ndofs(Wₕ)` with rows in the padded linear order. On a space
+whose relation data depend on time, `d` is its value at `t = 0`, and
+[`lift`](@ref)`(Wₕ, u, t)` gives `E u + d(t)`.
 """
 @inline closure(Wₕ::GhostGridSpace) = (Wₕ.E, Wₕ.d)
 
@@ -200,6 +292,7 @@ Base.summary(Wₕ::GhostGridSpace) = sprint(show, Wₕ)
 """
     lift(Wₕ::GhostGridSpace) -> VectorElement
     lift(Wₕ::GhostGridSpace, u::AbstractVector) -> VectorElement
+    lift(Wₕ::GhostGridSpace, u::AbstractVector, t::Number) -> VectorElement
 
 Grid functions on the padded space of `Wₕ` (`Bramble.padded_space(Wₕ)`) from its closure
 `(E, d)` (`Bramble.closure(Wₕ)`).
@@ -213,9 +306,15 @@ form can name, say, the full `Δₕ` of the lifting at the facet nodes. Absent p
 (corners beyond two ghosted facets) hold 0. After `change_points!` of the mesh, `lift`
 throws as the space's weights do: build the space again.
 
+`lift(Wₕ, u, t)` is `E u + d(t)`, for a space whose relation data depend on time,
+`(x, t) -> …` (see [`constrained`](@ref)): `d(t)` comes from the data at `t`, and `E` is the
+same at every `t`. On a static space it is `lift(Wₕ, u)`. On a space with time-dependent
+data, `lift(Wₕ)` and `lift(Wₕ, u)` refuse with an `ArgumentError`, as there is no single
+`d`: give the time, `lift(Wₕ, u, t)`, or pose the problem in time through `semidiscretize`.
+
 `lift(Wₕ, u)` runs in the bands of the mesh's execution policy, each padded point summed by
-one band, so it gives the same values on every CPU policy. `Bramble.lift!(uₕ, Wₕ, u)`
-refills a grid function `lift` returned, allocating nothing.
+one band, so it gives the same values on every CPU policy. `Bramble.lift!(uₕ, Wₕ, u)` and
+`Bramble.lift!(uₕ, Wₕ, u, t)` refill a grid function `lift` returned, allocating nothing.
 
 `lift` is public, not exported: write `Bramble.lift` or `using Bramble: lift`.
 
@@ -230,27 +329,43 @@ l = form(Cₕ, v -> innerₕ(x -> 1.0, v))
 A, F = assemble(a, l)
 uₕ = Bramble.lift(Cₕ, A \\ F)          # 11 padded values, ghosts included
 Δₕ(uₕ)                                 # reads the ghosts at the facet nodes
+
+Dₜ = constrained(gridspace(Ωₕ; ghosts = :boundary),
+                 u -> (:xmin => ∂ₙ(u) => (x, t) -> sin(t), :xmax => ∂ₙ(u) => 0.0))
+vₕ = Bramble.lift(Dₜ, zeros(Bramble.ndofs(Dₜ)), 0.5)   # the ghosts of the data at t = 0.5
 ```
 """
 function lift(Wₕ::GhostGridSpace)
     _check_lift_fresh(Wₕ)
+    _check_lift_static(Wₕ, "lift(Wₕ)")
     return VectorElement(copy(Wₕ.d), Wₕ.padded)
 end
 
 function lift(Wₕ::GhostGridSpace, u::AbstractVector)
     _check_lift_fresh(Wₕ)
+    _check_lift_static(Wₕ, "lift(Wₕ, u)")
     length(u) == ndofs(Wₕ) || _throw_lift_length(:lift, Wₕ, u)
     U = similar(Wₕ.d, promote_type(eltype(u), eltype(Wₕ.d)))
     return VectorElement(_lift_values!(U, Wₕ, u), Wₕ.padded)
 end
 
+function lift(Wₕ::GhostGridSpace, u::AbstractVector, t::Number)
+    _check_lift_fresh(Wₕ)
+    length(u) == ndofs(Wₕ) || _throw_lift_length(:lift, Wₕ, u)
+    U = similar(Wₕ.d, promote_type(eltype(u), eltype(Wₕ.d)))
+    return VectorElement(_lift_values!(U, Wₕ, u, t), Wₕ.padded)
+end
+
 """
     lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector) -> uₕ
+    lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector, t::Number) -> uₕ
 
 Write `E u + d` into the grid function `uₕ`, the in-place form of
 [`lift`](@ref)`(Wₕ, u)`: `uₕ` lives on the padded space of `Wₕ`, as the result of `lift`
 does, so a solve loop lifts each new solution without allocating. The values are those of
-`lift(Wₕ, u)`, bit for bit, on every CPU policy.
+`lift(Wₕ, u)`, bit for bit, on every CPU policy. With `t`, it writes `E u + d(t)`, the
+values of `lift(Wₕ, u, t)`; on a space whose relation data depend on time, the form
+without `t` refuses, as `lift(Wₕ, u)` does.
 
 `lift!` refuses a grid function on another space, or of an element type that cannot hold
 the values (a real `uₕ` for a complex `u`), with an `ArgumentError`. It is public, not
@@ -271,21 +386,57 @@ Bramble.lift!(uₕ, Cₕ, A \\ F)
 ```
 """
 function lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector)
+    _check_lift_static(Wₕ, "lift!(uₕ, Wₕ, u)")
+    _check_lift_into(uₕ, Wₕ, u)
+    _lift_values!(uₕ.data, Wₕ, u)
+    return uₕ
+end
+
+function lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector, t::Number)
+    _check_lift_into(uₕ, Wₕ, u)
+    _lift_values!(uₕ.data, Wₕ, u, t)
+    return uₕ
+end
+
+@inline function _check_lift_into(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector)
     _check_lift_fresh(Wₕ)
     length(u) == ndofs(Wₕ) || _throw_lift_length(:lift!, Wₕ, u)
     uₕ.space === Wₕ.padded || _throw_lift_target(Wₕ)
     T = promote_type(eltype(u), eltype(Wₕ.d))
     promote_type(eltype(uₕ), T) === eltype(uₕ) || _throw_lift_eltype(uₕ, T)
-    _lift_values!(uₕ.data, Wₕ, u)
-    return uₕ
+    return nothing
 end
 
-# `U = E u + d` in the bands of the mesh's policy.
-function _lift_values!(U::AbstractVector, Wₕ::GhostGridSpace, u::AbstractVector)
-    d, Et = Wₕ.d, Wₕ.Et
+# `U = E u + d` in the bands of the mesh's policy; `d` may be `U` itself, as each padded
+# point reads its own `d[i]` before it writes `U[i]`.
+function _lift_values!(U::AbstractVector, Wₕ::GhostGridSpace, u::AbstractVector,
+        d::AbstractVector = Wₕ.d)
+    Et = Wₕ.Et
     _run_bands!(execution_policy(Wₕ.padded), _lift_band!, U, d, SparseArrays.getcolptr(Et),
         rowvals(Et), nonzeros(Et), u)
     return U
+end
+
+# `U = E u + d(t)`: `d(t)` written into `U` first, then read back in place.
+function _lift_values!(U::AbstractVector, Wₕ::GhostGridSpace, u::AbstractVector, t::Number)
+    _lift_affine!(U, Wₕ, t)
+    return _lift_values!(U, Wₕ, u, U)
+end
+
+# Without a time, a space whose data depend on time has no affine part to lift with.
+@inline function _check_lift_static(Wₕ::GhostGridSpace, call::String)
+    _is_time_dependent(Wₕ) && _throw_time_dependent(Wₕ, call)
+    return nothing
+end
+
+@noinline function _throw_time_dependent(Wₕ::GhostGridSpace, call::AbstractString)
+    throw(
+        ArgumentError(
+        "$call has no time, and the relation data of $(Wₕ) depend on time, so its " *
+        "closure's affine part d(t) does too. Give the time, lift(Cₕ, u, t) or " *
+        "lift!(uₕ, Cₕ, u, t), or pose the problem in time with semidiscretize.",
+    ),
+    )
 end
 
 @noinline function _throw_lift_target(Wₕ::GhostGridSpace)
@@ -357,8 +508,10 @@ end
 @noinline function lift(Wₕ::GhostGridSpace, u, rest...)
     throw(
         ArgumentError(
-        "lift takes the space and at most one vector, lift(Wₕ) or lift(Wₕ, u); got " *
-        "$(1 + length(rest)) arguments after $(Wₕ). Drop the extra arguments.",
+        "lift takes the space, at most one vector and a time, lift(Wₕ), lift(Wₕ, u) or " *
+        "lift(Wₕ, u, t); got $(1 + length(rest)) arguments after $(Wₕ), of types " *
+        "$(join(map(x -> nameof(typeof(x)), (u, rest...)), ", ")). Pass a vector of " *
+        "degrees of freedom and a number for the time, and drop any other argument.",
     ),
     )
 end

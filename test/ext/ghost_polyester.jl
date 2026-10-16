@@ -301,6 +301,33 @@ end
         @test relerr(A1, A0) <= 1e-13
         @test relerr(F1, F0) <= 1e-13
     end
+
+    # Relation data in time (gpena/Bramble.jl#776): `d(t)` and `lift(C, u, t)` equal the
+    # serial ones bitwise, and the warm in-place calls allocate nothing. The data include a
+    # closure over a number, which rides into each task inside its band function.
+    @testset "Relation data in time" begin
+        wave(ω) = (x, s) -> cos(ω * s) + x[2]
+        rel = u -> (:xmin => ∂ₙ(u; K) => (x, s) -> sin(s) * x[2],
+            :xmax => u + ∂ₙ(u; K) => wave(2.0),
+            :ymin => ∂ₙ(u; K) => 0.5,
+            :ymax => u => (x, s) -> s * x[1],
+            :ymax => ∂ₙ(u; K) => (x, s) -> s - x[1])
+        C0, C1 = map(pol -> constrained(gridspace(ghost_mesh(pol, (9, 11));
+                    ghosts = :boundary), rel), POLICIES)
+        @test C1.td isa Bramble._TimeData
+        u = collect(range(0.0, 1.0; length = Bramble.ndofs(C0)))
+        d0, d1 = similar(C0.d), similar(C1.d)
+        for t in (0.0, 0.3, 1.7)
+            @test Bramble._lift_affine!(d1, C1, t) == Bramble._lift_affine!(d0, C0, t)
+            @test parent(Bramble.lift(C1, u, t)) == parent(Bramble.lift(C0, u, t))
+        end
+        d17 = copy(Bramble._lift_affine!(d0, C0, 1.7))
+        @test norm(d17 - Bramble._lift_affine!(d0, C0, 0.0)) > 0.1   # the data move `d`
+        let d1 = d1, C1 = C1, u = u, U = Bramble.lift(C1, u, 0.0)
+            @test alloc(() -> Bramble._lift_affine!(d1, C1, 0.6)) == 0
+            @test alloc(() -> Bramble.lift!(U, C1, u, 0.6)) == 0
+        end
+    end
 end
 
 end

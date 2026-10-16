@@ -16,7 +16,8 @@
 # each band owns a range of output entries and sums every contribution to them itself, so
 # no two bands write one entry, and every policy adds an entry's terms in the same order and
 # gives the serial result bitwise. The reduction's contributions are grouped by reduced
-# entry, `A_pad d` is stored by padded row over the columns where `d ≠ 0`, `E_vᵀ w` reads
+# entry, `A_pad d` is stored by padded row over the columns where `d` can be nonzero (at
+# any time, for data depending on time), `E_vᵀ w` reads
 # the columns of `E_v` and `E u` those of the stored `Eᵀ`. The band functions take arrays
 # and isbits scalars only, so that a `CpuPolyester` task boxes nothing.
 #
@@ -25,6 +26,11 @@
 # eliminated by a relation and no node fixed by a Dirichlet relation `u => g`. Any other
 # ghost space refuses them, naming `u => g` as the route that works there. A label is a
 # marker of the physical mesh or, as in `constrained`, a facet name or its alias.
+#
+# On a space whose relation data depend on time, `assemble(a, l)`, `assemble!(A, F, a, l)`
+# and the load alone refuse, naming `lift(Cₕ, u, t)` and `semidiscretize`, as there is no
+# single `d` to lift with. `form` and `assemble(a)` read `E` only and work as on a static
+# space.
 #
 # Out of scope on a ghost space, and refused with an `ArgumentError`: `semidiscretize`,
 # `ode_problem`, `matrix_free_operator`, `kronecker_operator`, device backends, matrix
@@ -114,7 +120,7 @@ function form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, f)
     A_pad = allocate_system_matrix(a)::SparseMatrixCSC  # `_check_ghost_host`
     src, dst, coef, colptr, rowval = _ghost_reduction_map(
         backend(Vₕ), A_pad, Vₕ.E, Wₕ.E)
-    liftptr, liftsrc, liftcol = _ghost_lift_map(backend(Vₕ), A_pad, Wₕ.d)
+    liftptr, liftsrc, liftcol = _ghost_lift_map(backend(Vₕ), A_pad, _affine_support(Wₕ))
     return GhostBilinearForm(a, Wₕ, Vₕ, A_pad, src, dst, coef, colptr, rowval, liftptr,
         liftsrc, liftcol, _RowsDirichlet(Vₕ, Wₕ))
 end
@@ -239,14 +245,14 @@ function _group_pointer(keys::Vector{Int}, n::Int)
     return cumsum!(ptr, ptr)
 end
 
-# `A_pad d` by padded row, over the columns `j` where `d[j] ≠ 0` only: the stored position
-# of each term and its column, in column order within a row, as `A_pad * d` adds them.
-function _ghost_lift_map(be, A_pad::SparseMatrixCSC, d::AbstractVector)
-    dh = Array(d)
+# `A_pad d` by padded row, over the columns `j` where `d[j]` can be nonzero only (`support`,
+# `_affine_support`): the stored position of each term and its column, in column order
+# within a row, as `A_pad * d` adds them.
+function _ghost_lift_map(be, A_pad::SparseMatrixCSC, support::AbstractVector{Bool})
     rv = rowvals(A_pad)
     rows, src, cols = Int[], Int[], Int[]
     for j in axes(A_pad, 2)
-        iszero(dh[j]) && continue
+        support[j] || continue
         for k in nzrange(A_pad, j)
             push!(rows, rv[k])
             push!(src, k)
@@ -486,6 +492,7 @@ end
 # --- Linear assembly ----------------------------------------------------------------- #
 
 function assemble(l::GhostLinearForm; dirichlet = nothing, dirichlet_components = nothing)
+    _is_time_dependent(l.test_space) && _throw_ghost_time("assemble(l)")
     b = similar(l.F_pad, ndofs(l.test_space))
     return assemble!(b, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
 end
@@ -494,6 +501,7 @@ function assemble!(b::AbstractVector, l::GhostLinearForm; dirichlet = nothing,
         dirichlet_components = nothing)
     labels, bcs = _normalize_dirichlet(dirichlet)
     _check_rows(l, labels)
+    _is_time_dependent(l.test_space) && _throw_ghost_time("assemble!(b, l)")
     any(!iszero, l.test_space.d) && _throw_ghost_lift()
     _check_linear_length(b, l.test_space)
     assemble!(l.F_pad, l.padded)
@@ -524,7 +532,7 @@ function assemble!(A::AbstractMatrix, F::AbstractVector, a::GhostBilinearForm,
         l::GhostLinearForm; dirichlet = nothing, dirichlet_components = nothing,
         symmetrize::Bool = false)
     labels, bcs = _normalize_dirichlet(dirichlet)
-    _check_pair(a, l, labels, symmetrize)
+    _check_pair(a, l, labels, symmetrize, "assemble!(A, F, a, l)")
     _check_reduced_pattern(A, a)
     _check_linear_length(F, l.test_space)
     T = promote_type(eltype(l.F_pad), eltype(A))
@@ -532,7 +540,21 @@ function assemble!(A::AbstractMatrix, F::AbstractVector, a::GhostBilinearForm,
     return _assemble_pair!(A, F, a, l, labels, bcs, dirichlet_components, symmetrize)
 end
 
-function _check_pair(a::GhostBilinearForm, l::GhostLinearForm, labels, symmetrize::Bool)
+# The refusal of a load whose lift depends on time (there is no single `d`).
+@noinline function _throw_ghost_time(call::AbstractString)
+    throw(
+        ArgumentError(
+        "$call has no time, and the relation data of the space depend on time, so the " *
+        "load's lift Eᵀ A d(t) does too. Pose the problem in time with semidiscretize, " *
+        "or lift a solution at a time with lift(Cₕ, u, t); form and assemble(a) work as " *
+        "they are.",
+    ),
+    )
+end
+
+function _check_pair(a::GhostBilinearForm, l::GhostLinearForm, labels, symmetrize::Bool,
+        call::String = "assemble(a, l)")
+    _is_time_dependent(a.trial_space) && _throw_ghost_time(call)
     symmetrize && labels === nothing && _throw_symmetrize_without_dirichlet()
     _check_rows(a, labels)
     size(l.F_pad, 1) == size(a.A_pad, 1) && ndofs(l.test_space) == ndofs(a.test_space) ||
