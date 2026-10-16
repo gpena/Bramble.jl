@@ -18,7 +18,7 @@ using Test
 using Bramble
 using Bramble: CpuPolyester, CpuSerial, Dcₓ, Dcᵧ, D̃ₓ, D₋ₓ, D̃ᵧ, D₋ᵧ
 using LinearAlgebra: norm
-using SparseArrays: nonzeros
+using SparseArrays: SparseMatrixCSC, nonzeros
 using Polyester
 
 using ..TestUtils: WITH_3D_TESTS
@@ -27,11 +27,13 @@ const POLICIES = (CpuSerial(), CpuPolyester())
 const K = [2.0 0.5; 0.5 1.0]
 
 # A seeded non-uniform mesh on [0, 1] × [0, 2] × [0, 3] (its first `D` axes) under `pol`.
-function ghost_mesh(pol, ns::NTuple{D, Int}; seed = 11) where {D}
+function ghost_mesh(pol, ns::NTuple{D, Int}; T = Float64, seed = 11) where {D}
     Bramble._seed_mesh1d_rng!(seed)
-    Ωd = domain(foldl(×, ntuple(d -> interval(0.0, Float64(d)), D)))
+    be = backend(vector_type = Vector{T}, matrix_type = SparseMatrixCSC{T, Int},
+        policy = pol)
+    Ωd = domain(foldl(×, ntuple(d -> interval(T(0), T(d)), D)))
     Ω = mesh(Ωd, D == 1 ? only(ns) : ns, D == 1 ? false : ntuple(_ -> false, D);
-        backend = backend(policy = pol))
+        backend = be)
     Bramble._unseed_mesh1d_rng!()
     return Ω
 end
@@ -49,6 +51,10 @@ relerr(X, Y) = norm(X - Y, Inf) / norm(Y, Inf)
 laplacian(u, v) = innerₕ(-Δₕ(u), v)
 complex_laplacian(u, v) = (1.0 + 0.5im) * innerₕ(-Δₕ(u), v)
 source(v) = innerₕ(x -> 1.0 + x[1], v)
+# Forms and loads whose element types widen each other on a Float32 mesh.
+complex32_laplacian(u, v) = (1.0f0 + 0.5f0im) * innerₕ(-Δₕ(u), v)
+wide_laplacian(u, v) = innerₕ(-2.0 * Δₕ(u), v)
+complex32_source(v) = innerₕ(x -> ComplexF32(1 + x[1], 1), v)
 
 # The bytes of the third call of `f`, the first two compiling and warming it.
 alloc(f::F) where {F} = (f(); f(); @allocated f())
@@ -56,9 +62,9 @@ alloc(f::F) where {F} = (f(); f(); @allocated f())
 # The warm in-place calls on `constrained(gridspace(Ω; ghosts), rel)` under `pol`: the pair
 # refill (its load reads `A_pad d ≠ 0`), `lift!`, the matrix refill, and the values they
 # leave after three calls.
-function warm_calls(pol, ns, ghosts, rel; f = laplacian)
-    C = constrained(gridspace(ghost_mesh(pol, ns); ghosts), rel)
-    a, l = form(C, C, f), form(C, source)
+function warm_calls(pol, ns, ghosts, rel; f = laplacian, g = source, T = Float64)
+    C = constrained(gridspace(ghost_mesh(pol, ns; T); ghosts), rel)
+    a, l = form(C, C, f), form(C, g)
     A, F = assemble(a, l)
     u = A \ F
     U = Bramble.lift(C, zero(u))
@@ -262,13 +268,16 @@ end
         robin = u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[2],
             :ymin => ∂ₙ(u) => 0.0, :ymax => 2.0 * u + ∂ₙ(u) => 1.0)
         rel1 = u -> (:xmin => u + ∂ₙ(u) => 2.0, :xmax => ∂ₙ(u) => x -> x[1])
-        cases = (((9, 11), :boundary, robin, laplacian),
-            ((30, 33), :boundary, robin, laplacian),
-            ((9, 11), :boundary, robin, complex_laplacian),
-            ((17,), :boundary, rel1, laplacian))
-        for (ns, ghosts, rel, f) in cases
+        # The last two on a Float32 mesh, form and load types widening each other.
+        cases = (((9, 11), :boundary, robin, laplacian, source, Float64),
+            ((30, 33), :boundary, robin, laplacian, source, Float64),
+            ((9, 11), :boundary, robin, complex_laplacian, source, Float64),
+            ((17,), :boundary, rel1, laplacian, source, Float64),
+            ((9, 11), :boundary, robin, complex32_laplacian, source, Float32),
+            ((9, 11), :boundary, robin, wide_laplacian, complex32_source, Float32))
+        for (ns, ghosts, rel, f, g, T) in cases
             (b0, v0, lifted), (b1, v1, _) = map(POLICIES) do pol
-                warm_calls(pol, ns, ghosts, rel; f)
+                warm_calls(pol, ns, ghosts, rel; f, g, T)
             end
             @test lifted                        # the load reads `A_pad d`
             @test b1 == (pair = 0, lift = 0, matrix = 0)

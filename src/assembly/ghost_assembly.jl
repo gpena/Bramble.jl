@@ -18,7 +18,7 @@
 # gives the serial result bitwise. The reduction's contributions are grouped by reduced
 # entry, `A_pad d` is stored by padded row over the columns where `d ≠ 0`, `E_vᵀ w` reads
 # the columns of `E_v` and `E u` those of the stored `Eᵀ`. The band functions take arrays
-# only, so that a `CpuPolyester` task boxes nothing.
+# and isbits scalars only, so that a `CpuPolyester` task boxes nothing.
 #
 # `dirichlet` and `symmetrize` replace rows of the reduced system, through the masks of the
 # physical mesh, when its unknowns are the physical nodes in mesh order: every ghost
@@ -48,7 +48,7 @@ their padded spaces, the padded matrix it fills, and the map that reduces that m
 """
 struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
     VT <: GhostGridSpace, MT <: AbstractMatrix, IV <: AbstractArray{Int, 1},
-    CV <: AbstractVector, WV <: AbstractVector}
+    CV <: AbstractVector}
     "the form on the padded spaces."
     padded::F
     trial_space::WT
@@ -69,8 +69,6 @@ struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
     "the stored position in `A_pad` and the column of each term of `A_pad d_u`."
     liftsrc::IV
     liftcol::IV
-    "`F_pad − A_pad d_u` when the load's type cannot hold `A_pad d_u` (empty if `d_u = 0`)."
-    w_pad::WV
     "row replacement on the spaces, for `dirichlet`."
     rows::_RowsDirichlet
 end
@@ -117,10 +115,8 @@ function form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, f)
     src, dst, coef, colptr, rowval = _ghost_reduction_map(
         backend(Vₕ), A_pad, Vₕ.E, Wₕ.E)
     liftptr, liftsrc, liftcol = _ghost_lift_map(backend(Vₕ), A_pad, Wₕ.d)
-    w_pad = _backend_vector(backend(Vₕ), promote_type(eltype(A_pad), eltype(Wₕ.d)),
-        isempty(liftsrc) ? 0 : size(A_pad, 1))
     return GhostBilinearForm(a, Wₕ, Vₕ, A_pad, src, dst, coef, colptr, rowval, liftptr,
-        liftsrc, liftcol, w_pad, _RowsDirichlet(Vₕ, Wₕ))
+        liftsrc, liftcol, _RowsDirichlet(Vₕ, Wₕ))
 end
 
 function form(Vₕ::GhostGridSpace, f)
@@ -571,41 +567,39 @@ function _assemble_pair!(A::SparseMatrixCSC, F::AbstractVector, a::GhostBilinear
     return A, F
 end
 
-# `E_vᵀ (F_pad − A_pad d_u)`, `A_pad` as the last assembly of `a` left it. The lift goes
-# into `F_pad` in place when its type holds `A_pad d_u`, and otherwise (a complex form with
-# a real load) into the form's `w_pad`; `F_pad` is refilled first, so every call starts
-# from the load and not from the last call's `F_pad − A_pad d_u`.
+# `E_vᵀ (F_pad − A_pad d_u)`, `A_pad` as the last assembly of `a` left it, in one banded
+# pass that forms each `w_i = F_pad[i] − (A_pad d_u)[i]` where a column of `E_v` reads it:
+# no padded intermediate, so no buffer whose type would have to hold both forms' types,
+# and `F_pad` stays the load.
 function _assemble_ghost_load!(F::AbstractVector, a::GhostBilinearForm, l::GhostLinearForm)
     assemble!(l.F_pad, l.padded)
-    if isempty(a.liftsrc)
-        _closure_transpose_mul!(F, l.test_space, l.F_pad)
-    else
-        _closure_transpose_mul!(F, l.test_space, _subtract_lift(l.F_pad, a))
-    end
+    isempty(a.liftsrc) && return _closure_transpose_mul!(F, l.test_space, l.F_pad)
+    E, d = l.test_space.E, a.trial_space.d
+    z = zero(promote_type(eltype(l.F_pad), eltype(a.A_pad), eltype(d)))
+    _run_bands!(_ghost_policy(l.test_space), _lifted_load_band!, F,
+        SparseArrays.getcolptr(E), rowvals(E), nonzeros(E), l.F_pad, nonzeros(a.A_pad),
+        a.liftptr, a.liftsrc, a.liftcol, d, z)
     return F
 end
 
-function _subtract_lift(F_pad::AbstractVector, a::GhostBilinearForm)
-    d = a.trial_space.d
-    T = promote_type(eltype(F_pad), eltype(a.A_pad), eltype(d))
-    # A load whose own type also widens `A_pad d_u` (a ComplexF32 load on a Float64 form)
-    # fits neither buffer and takes a copy.
-    Fp = T === eltype(F_pad) ? F_pad : T === eltype(a.w_pad) ? a.w_pad : similar(F_pad, T)
-    _run_bands!(_ghost_policy(a.test_space), _subtract_lift_band!, Fp, F_pad,
-        nonzeros(a.A_pad), a.liftptr, a.liftsrc, a.liftcol, d)
-    return Fp
-end
-
-# Rows `i` of band `b`: `w[i] = F[i] − Σ A_pad[i, j] d[j]` over the stored terms of row `i`.
-# `w` may be `F` itself: row `i` reads `F[i]` before it writes `w[i]`.
-@noinline function _subtract_lift_band!(w, F, pv, ptr, src, col, d, nbands::Int, b::Int)
-    T = eltype(w)
-    @inbounds for i in _band_range(1:length(w), nbands, b)
-        s = convert(T, F[i])
-        for k in ptr[i]:(ptr[i + 1] - 1)
-            s = convert(T, s - pv[src[k]] * d[col[k]])
+# Entries `r` of band `b`: `y[r] = Σ E[i, r] w_i` over column `r` of `E`, with
+# `w_i = F[i] − Σ A_pad[i, j] d[j]` summed over the stored terms of row `i` in the type of
+# `z`. A row read by several columns is summed again for each, in the same order.
+@noinline function _lifted_load_band!(y, colptr, rowval, nz, F, pv, ptr, src, col, d, z,
+        nbands::Int, b::Int)
+    T = eltype(y)
+    S = typeof(z)
+    @inbounds for r in _band_range(1:length(y), nbands, b)
+        acc = zero(T)
+        for k in colptr[r]:(colptr[r + 1] - 1)
+            i = rowval[k]
+            w = convert(S, F[i])
+            for t in ptr[i]:(ptr[i + 1] - 1)
+                w = convert(S, w - pv[src[t]] * d[col[t]])
+            end
+            acc = convert(T, acc + nz[k] * w)
         end
-        w[i] = s
+        y[r] = acc
     end
     return nothing
 end

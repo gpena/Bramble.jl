@@ -239,7 +239,7 @@ end
 
 function lift(Wₕ::GhostGridSpace, u::AbstractVector)
     _check_lift_fresh(Wₕ)
-    length(u) == ndofs(Wₕ) || _throw_lift_length(Wₕ, u)
+    length(u) == ndofs(Wₕ) || _throw_lift_length(:lift, Wₕ, u)
     U = similar(Wₕ.d, promote_type(eltype(u), eltype(Wₕ.d)))
     return VectorElement(_lift_values!(U, Wₕ, u), Wₕ.padded)
 end
@@ -272,7 +272,7 @@ Bramble.lift!(uₕ, Cₕ, A \\ F)
 """
 function lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector)
     _check_lift_fresh(Wₕ)
-    length(u) == ndofs(Wₕ) || _throw_lift_length(Wₕ, u)
+    length(u) == ndofs(Wₕ) || _throw_lift_length(:lift!, Wₕ, u)
     uₕ.space === Wₕ.padded || _throw_lift_target(Wₕ)
     T = promote_type(eltype(u), eltype(Wₕ.d))
     promote_type(eltype(uₕ), T) === eltype(uₕ) || _throw_lift_eltype(uₕ, T)
@@ -382,10 +382,11 @@ end
     )
 end
 
-@noinline function _throw_lift_length(Wₕ::GhostGridSpace, u)
+@noinline function _throw_lift_length(name::Symbol, Wₕ::GhostGridSpace, u)
+    call = name === :lift ? "lift(Wₕ, u)" : "lift!(uₕ, Wₕ, u)"
     throw(
         ArgumentError(
-        "lift(Wₕ, u) takes one value per degree of freedom of $(Wₕ), $(ndofs(Wₕ)) of " *
+        "$call takes one value per degree of freedom of $(Wₕ), $(ndofs(Wₕ)) of " *
         "them; got $(length(u)). Pass the solution of a system assembled on Wₕ, not a " *
         "padded or physical-mesh vector.",
     ),

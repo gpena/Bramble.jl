@@ -38,6 +38,11 @@ end
 laplacian(u, v) = innerₕ(-Δₕ(u), v)
 complex_laplacian(u, v) = (1.0 + 0.5im) * innerₕ(-Δₕ(u), v)
 source(v) = innerₕ(x -> 1 + x[1], v)          # of the mesh's element type
+# Forms and loads whose element types widen each other on a Float32 mesh.
+complex32_laplacian(u, v) = (1.0f0 + 0.5f0im) * innerₕ(-Δₕ(u), v)
+wide_laplacian(u, v) = innerₕ(-2.0 * Δₕ(u), v)
+source64(v) = innerₕ(x -> 1.0 + x[1], v)
+complex32_source(v) = innerₕ(x -> ComplexF32(1 + x[1], 1), v)
 
 robin2(u) = (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[2],
     :ymin => ∂ₙ(u) => 0.0, :ymax => 2.0 * u + ∂ₙ(u) => 1.0)
@@ -53,9 +58,9 @@ robin3(u) = (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[3],
 
 # The pair refill, `lift!` and the matrix refill on `constrained(gridspace(Ω; ghosts),
 # rel)`, warm, with the values each leaves behind and the references they must equal.
-function warm_pair(pol, ns, ghosts, rel; f = laplacian, T = Float64)
+function warm_pair(pol, ns, ghosts, rel; f = laplacian, g = source, T = Float64)
     C = constrained(gridspace(ghost_mesh(pol, ns; T); ghosts), rel)
-    a, l = form(C, C, f), form(C, source)
+    a, l = form(C, C, f), form(C, g)
     A0, F0 = assemble(a, l)
     A, F = copy(A0), copy(F0)
     fill!(nonzeros(A), 0)
@@ -73,11 +78,11 @@ end
 
 # `F = E_vᵀ (F_pad − A_pad d)` and `U = E u + d` from the padded forms assembled on their
 # own and the closure, sharing nothing with the banded passes.
-function closure_reference(r, f)
+function closure_reference(r, f, g)
     E, d = Bramble.closure(r.C)
     P = Bramble.padded_space(r.C)
     Ap = assemble(form(P, P, f))
-    Fp = assemble(form(P, source))
+    Fp = assemble(form(P, g))
     return transpose(E) * (Fp - Ap * d), E * r.u + d
 end
 
@@ -86,14 +91,15 @@ relerr(X, Y) = norm(X - Y, Inf) / norm(Y, Inf)
 # The serial pair refill equals `assemble(a, l)` bit for bit after three refills (a stale
 # `F_pad − A_pad d` in the padded load would subtract the lift twice), the load and the lift
 # equal the closure's own algebra, and every warm call allocates nothing.
-function check_serial(ns, ghosts, rel; f = laplacian, T = Float64, tol = 1e-12)
-    r = warm_pair(CpuSerial(), ns, ghosts, rel; f, T)
+function check_serial(ns, ghosts, rel; f = laplacian, g = source, T = Float64,
+        tol = 1e-12)
+    r = warm_pair(CpuSerial(), ns, ghosts, rel; f, g, T)
     @test any(!iszero, last(Bramble.closure(r.C)))     # the load reads `A_pad d`
     @test r.A == r.A0
     @test r.F == r.F0
     @test r.A2 == r.A0
     @test parent(r.U) == parent(r.U0)
-    Fref, Uref = closure_reference(r, f)
+    Fref, Uref = closure_reference(r, f, g)
     @test relerr(r.F, Fref) <= tol
     @test relerr(parent(r.U), Uref) <= tol
     @test r.pair == 0
@@ -123,15 +129,16 @@ function warm_rows(pol, ns)
     return out, (A2, F2), (A3, F3)
 end
 
-# A band function that does nothing, with as many array arguments as the widest ghost band
-# (`_subtract_lift_band!`): its warm `_run_bands!` is one task spawn of the policy.
+# A band function that does nothing, with as many arguments as the widest ghost band
+# (`_lifted_load_band!`): its warm `_run_bands!` is one task spawn of the policy.
 noop_band!(args...) = nothing
 
 function threaded_figures(ns)
     pol = CpuThreaded()
     r = warm_pair(pol, ns, :boundary, robin2)
     x = zeros(3)
-    spawn = alloc(() -> Bramble._run_bands!(pol, noop_band!, x, x, x, x, x, x, x))
+    spawn = alloc(() -> Bramble._run_bands!(pol, noop_band!, x, x, x, x, x, x, x, x, x, x,
+        x))
     a, l = r.a, r.l
     padded_matrix = alloc(() -> assemble!(a.A_pad, a.padded))
     padded_load = alloc(() -> assemble!(l.F_pad, l.padded))
@@ -170,14 +177,26 @@ end
         @test eltype(r.U) == Float32
     end
 
-    # A complex form with a real load: `F_pad − A_pad d` does not fit the real `F_pad`, so
-    # it goes into the form's own complex buffer, not into a copy per call.
+    # A complex form with a real load: `F_pad − A_pad d` is complex, and the load forms it
+    # inside its single banded pass, with no buffer to allocate.
     @testset "Complex form, real load" begin
         r = check_serial((9, 11), :boundary, robin2; f = complex_laplacian)
         @test eltype(r.F) == ComplexF64
         @test eltype(r.l.F_pad) == Float64
         @test norm(imag(r.F)) > 1e-6 * norm(r.F)          # the complex lift reaches F
         @test eltype(r.U) == ComplexF64
+    end
+
+    # On a Float32 mesh, form and load types that widen each other: a ComplexF32 form
+    # with a Float64 load, and a Float64-coefficient form with a ComplexF32 load, both
+    # giving ComplexF64.
+    @testset "Form and load widen each other" begin
+        for (f, g) in ((complex32_laplacian, source64), (wide_laplacian, complex32_source))
+            r = check_serial((9, 11), :boundary, robin2; f, g, T = Float32, tol = 1e-5)
+            @test eltype(r.F) == ComplexF64
+            @test eltype(r.F) != eltype(r.l.F_pad)
+            @test eltype(r.F) != eltype(r.a.A_pad)
+        end
     end
 
     WITH_3D_TESTS && @testset "3D Robin and Dirichlet relations" begin
@@ -196,8 +215,8 @@ end
     end
 
     # `CpuThreaded` allocates its tasks: each ghost call is bounded by its padded or plain
-    # counterpart plus one spawn per band pass it adds (the reduction 1, the load with
-    # `d ≠ 0` 2, `lift!` 1), and nothing grows with the grid.
+    # counterpart plus one spawn per band pass it adds (the reduction 1, the load 1,
+    # `lift!` 1), and nothing grows with the grid.
     @testset "CpuThreaded bound" begin
         f1 = threaded_figures((9, 11))
         f2 = threaded_figures((30, 33))
@@ -206,7 +225,7 @@ end
         @test f1.matrix <= f1.padded_matrix + s
         @test f1.rows_matrix <= f1.padded_matrix + s
         @test f1.load <= f1.padded_load + s
-        @test f1.pair <= f1.padded_matrix + f1.padded_load + 3s
+        @test f1.pair <= f1.padded_matrix + f1.padded_load + 2s
         @test f1.lift <= s
         @test f1.dirichlet_bc <= f1.plain_bc
         @test f1.marker_bc <= f1.plain_bc
@@ -221,6 +240,12 @@ end
             robin2)
         @test_throws ArgumentError Bramble.lift!(Bramble.lift(C2, u), C, u)
         @test_throws ArgumentError Bramble.lift!(r.U, C, u[1:(end - 1)])
+        msg = try
+            Bramble.lift!(r.U, C, u[1:(end - 1)])
+        catch e
+            sprint(showerror, e)
+        end
+        @test occursin("lift!(uₕ, Wₕ, u)", msg)
         @test_throws ArgumentError Bramble.lift!(r.U, C, complex.(u))
         @test_throws ArgumentError assemble!(A, zeros(Float32, length(F)), a, l)
         @test_throws DimensionMismatch assemble!(A, zeros(length(F) + 1), a, l)
