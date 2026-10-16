@@ -4,7 +4,8 @@ module BackendsTests
 # the ghost mesh, the closure `(E, d)`, the padded matrix, the reduction map and the load
 # vector are all of the backend's vector and matrix types, on every CPU policy, in 1D to
 # 3D, for `Float64` and `Float32`, with every facet or named ones, and the backend survives
-# `constrained`, `change_points!` and `iterative_refinement!`.
+# `constrained`, `change_points!` and `iterative_refinement!`. The walk state of a ghost
+# mesh, the value a `CpuPolyester` task rebuilds, answers as the ghost mesh does.
 
 using Test
 using Bramble
@@ -79,23 +80,17 @@ end
             @test a.rowval isa Vector{Int}
             @test a.coef isa Vector{T}
             @test l.F_pad isa Vector{T}
-            # Assembling a ghost form on `CpuPolyester` waits for the batch state of the
-            # ghost mesh (the ghost-dynamics plan, P2).
-            if !(pol isa Bramble.CpuPolyester)
-                A, F = assemble(a, l)
-                @test A isa SparseMatrixCSC{T, Int}
-                @test F isa Vector{T}
-                # Only the physical nodes weigh: the load sums to the measure of the domain.
-                @test sum(F) ≈ prod(ntuple(d -> T(d), D)) rtol = 100 * eps(T)
-            end
+            A, F = assemble(a, l)
+            @test A isa SparseMatrixCSC{T, Int}
+            @test F isa Vector{T}
+            # Only the physical nodes weigh: the load sums to the measure of the domain.
+            @test sum(F) ≈ prod(ntuple(d -> T(d), D)) rtol = 100 * eps(T)
         end
     end
 end
 
 @testset "constrained keeps the backend" begin
-    # `constrained` on a `CpuPolyester` mesh is checked with the Polyester relation rows.
-    for pol in (Bramble.CpuSerial(), Bramble.CpuThreaded()), T in (Float64, Float32),
-        D in TEST_DIMS
+    for pol in POLICIES, T in (Float64, Float32), D in TEST_DIMS
 
         # 3D relation rows are slow to compile: one element type covers them.
         D == 3 && T === Float32 && continue
@@ -142,6 +137,71 @@ end
         E, d = Bramble.closure(W2)
         @test E isa SparseMatrixCSC{T, Int}
         @test d isa Vector{T}
+    end
+end
+
+# Every facet, or a named pair of them (one in 1D).
+state_ghosts(D) = (:boundary, D == 1 ? (:xmax,) : (:xmin, :ymax))
+
+# Whether the state `s` answers every accessor and ghost query as its ghost mesh `G` does.
+function answers_as(s, G)
+    D = dim(G)
+    P = Bramble._padded(G)
+    same = npoints(s) == npoints(G) && npoints(s, Tuple) == npoints(G, Tuple) &&
+           Bramble.indices(s) == Bramble.indices(G) &&
+           Bramble.physical_indices(s) == Bramble.physical_indices(G) &&
+           Bramble.nghosts(s) == Bramble.nghosts(G) &&
+           Bramble.boundary_indices(s) == Bramble.boundary_indices(G) &&
+           Bramble.interior_indices(s) == Bramble.interior_indices(G) &&
+           backend(s) == backend(G) && eltype(s) === eltype(G) &&
+           Bramble._mesh_version(s) == Bramble._mesh_version(G) &&
+           s.uid == Bramble._walk_mesh(P).uid &&
+           Bramble._marker_words(s) == Bramble._marker_words(P)
+    for d in 1:D
+        same &= collect(points(s(d))) == collect(points(G(d))) &&
+                collect(Bramble.spacings(s(d))) == collect(Bramble.spacings(G(d)))
+        for side in (:min, :max)
+            same &= Bramble.has_ghosts(s, d, side) == Bramble.has_ghosts(G, d, side)
+        end
+    end
+    for g in 1:Bramble.nghosts(G)
+        I, d, side = Bramble.boundary_node(G, g)
+        same &= Bramble.boundary_node(s, g) == (I, d, side) &&
+                Bramble.ghost_index(s, I, d, side) == g &&
+                Bramble.padded_index(s, I) == Bramble.padded_index(G, I)
+        J = Bramble.padded_index(G, I)
+        same &= Bramble._inward_step(s, J, d) == Bramble._inward_step(G, J, d)
+    end
+    for J in Bramble.indices(G)
+        same &= Bramble.is_absent(s, J) == Bramble.is_absent(G, J) && s[J] == G[J]
+    end
+    return same
+end
+
+@testset "A ghost mesh has an immutable walk state" begin
+    for pol in POLICIES, T in (Float64, Float32), D in TEST_DIMS, ghosts in state_ghosts(D)
+        @testset "$(nameof(typeof(pol))) $T $(D)D $ghosts" begin
+            Ω = backend_mesh(make_backend(T, pol), T, D)
+            G = mesh(gridspace(Ω; ghosts = ghosts))
+            s = @inferred Bramble._walk_mesh(G)
+            @test s isa Bramble.GhostMeshState{D}
+            @test !ismutabletype(typeof(s))
+            @test Bramble._walk_mesh(s) === s
+            @test Bramble.physical_mesh(s) == Bramble._walk_mesh(Bramble.physical_mesh(G))
+            # The split's static type of the state is the state's.
+            @test Bramble._batch_state_type(typeof(G)) === typeof(s)
+            @test answers_as(s, G)
+            # A state is taken from the re-padded mesh: moving the physical points, with no
+            # access to `G` in between, moves the state's points and ghosts.
+            ys = move_points!(Ω)
+            s2 = Bramble._walk_mesh(G)
+            lo = Bramble.has_ghosts(G, 1, :min)
+            x = collect(points(s2(1)))
+            @test x[(1 + lo):(lo + length(ys[1]))] == ys[1]
+            lo && @test x[1] ≈ 2ys[1][1] - ys[1][2] rtol = 100 * eps(T)
+            @test Bramble._mesh_version(s2) != Bramble._mesh_version(s)
+            @test answers_as(s2, G)
+        end
     end
 end
 

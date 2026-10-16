@@ -62,7 +62,7 @@ end
 # The indices whose faces are the facets: a ghost mesh's physical nodes, in its padded
 # index space, so its facets are the physical ones and not the ghost layer.
 @inline _facet_indices(Ωₕ::AbstractMeshType) = indices(Ωₕ)
-@inline _facet_indices(G::GhostMesh) = physical_indices(G)
+@inline _facet_indices(G::_GhostMeshLike) = physical_indices(G)
 
 # The face name `marker` resolves to under `inner_Γ`'s rule (`_surface_mask`,
 # mesh/queries.jl): a marker the mesh holds is read off its points, which must make up exactly
@@ -206,7 +206,7 @@ end
 @inline function _on_facet(Ωₕ::AbstractMeshType, I::CartesianIndex, d::Int, s::Int)
     return I[d] == (s == 1 ? 1 : npoints(Ωₕ, Tuple)[d])
 end
-@inline function _on_facet(G::GhostMesh, J::CartesianIndex, d::Int, s::Int)
+@inline function _on_facet(G::_GhostMeshLike, J::CartesianIndex, d::Int, s::Int)
     J in physical_indices(G) || return false
     return _on_facet(G.physical, J - CartesianIndex(G.lo), d, s)
 end
@@ -214,7 +214,7 @@ end
 @inline function _facet_measure(Ωₕ::AbstractMeshType{D}, I, ::Val{d}) where {D, d}
     return _transverse_measure(Ωₕ, I, Val(d), Val(D))
 end
-@inline function _facet_measure(G::GhostMesh{D}, J, ::Val{d}) where {D, d}
+@inline function _facet_measure(G::_GhostMeshLike{D}, J, ::Val{d}) where {D, d}
     return _transverse_measure(G.physical, J - CartesianIndex(G.lo), Val(d), Val(D))
 end
 
@@ -693,7 +693,7 @@ function _check_facet_reach(Ωₕ, G::Tuple, DIM::Int, SIDE::Int)
     return nothing
 end
 
-@inline function _check_transverse_ghosts(G::GhostMesh, d::Int, s::Int, e::Int, t::Int)
+@inline function _check_transverse_ghosts(G::_GhostMeshLike, d::Int, s::Int, e::Int, t::Int)
     has_ghosts(G, e, _GHOST_SIDES[t]) || _throw_conormal_unghosted(d, s, e, t)
     return nothing
 end
@@ -714,7 +714,7 @@ end
     )
 end
 
-@inline function _check_facet_ghosts(G::GhostMesh, d::Int, s::Int)
+@inline function _check_facet_ghosts(G::_GhostMeshLike, d::Int, s::Int)
     has_ghosts(G, d, _GHOST_SIDES[s]) || _throw_facet_operator_unghosted(d, s, true)
     return nothing
 end

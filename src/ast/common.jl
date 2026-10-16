@@ -386,12 +386,12 @@ end
 # (`is_absent`): `I + a e_Dim + b e_E` for a tap `a` of `A` (`ataps`) and `b` of `B`
 # (`btaps`), the point the tap `a` re-evaluates `B` at and `B`'s tap `b` reads there. Only a
 # physical node is asked: at a 2D corner node (a 3D edge node) the tap to the facet ghost
-# reads the padded corner beyond it. Off a `GhostMesh` there is no absent point and the
-# answer is the constant `false`, so a plain mesh compiles the corner branch away.
+# reads the padded corner beyond it. Off a ghost mesh or its state there is no absent point
+# and the answer is the constant `false`, so a plain mesh compiles the corner branch away.
 @inline _reads_absent(m, I::CartesianIndex, ::Val, ataps, ::Val, btaps) = false
 
 @inline function _reads_absent(
-        G::GhostMesh{D}, I::CartesianIndex{D}, ::Val{Dim}, ataps::Tuple, ::Val{E}, btaps::Tuple
+        G::_GhostMeshLike{D}, I::CartesianIndex{D}, ::Val{Dim}, ataps::Tuple, ::Val{E}, btaps::Tuple
 ) where {D, Dim, E}
     I in physical_indices(G) || return false
     as = map(_shift_delta, ataps)

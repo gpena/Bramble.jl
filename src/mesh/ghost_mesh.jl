@@ -12,7 +12,12 @@
 # re-padded on the access that finds it stale. `iterative_refinement!` of the physical
 # mesh changes the point count, which a ghost mesh cannot follow, and throws.
 #
-# See also: `Mesh1D`, `MeshnD`
+# The walk reads a ghost mesh through its immutable `GhostMeshState` (`_walk_mesh`), as it
+# reads a `MeshnD` through a `MeshnDState`: the two answer every accessor and ghost query
+# alike (`_GhostMeshLike`), so a space rebuilt around the state in a `Polyester.@batch`
+# task still takes the ghost methods.
+#
+# See also: `Mesh1D`, `MeshnD`, `MeshnDState`
 
 """
     GhostMesh{D, M, P, CI} <: AbstractMeshType{D}
@@ -69,6 +74,41 @@ mutable struct GhostMesh{D, M <: AbstractMeshType{D}, P <: AbstractMeshType{D},
     "the physical mesh's marker stamp the padded markers were built at."
     marker_stamp::UInt64
 end
+
+"""
+    GhostMeshState{D, M, P, CI} <: AbstractMeshType{D}
+
+The immutable walk state of a [`GhostMesh`](@ref), built on demand by [`_walk_mesh`](@ref)
+once the padded mesh is brought up to date with the physical one, so it is never stale: the
+walk states of the physical and padded meshes, the padded indices and the facet tuples. It
+answers every accessor and ghost query a `GhostMesh` does; its version, identity (`uid`) and
+marker words are the padded state's. The state types `M` and `P` are parameters so a rebuilt
+state can hold other array types ([`_batch_rebuild`](@ref)).
+"""
+struct GhostMeshState{D, M <: AbstractMeshType{D}, P <: AbstractMeshType{D},
+    CI <: CartesianIndices{D}} <: AbstractMeshType{D}
+    "the walk state of the physical mesh."
+    physical::M
+    "the walk state of the padded mesh."
+    padded::P
+    "the `CartesianIndices` of the padded grid."
+    indices::CI
+    "the physical point counts."
+    n::NTuple{D, Int}
+    "the ghost layers below each axis, 0 or 1: the padded index of physical node `I` is `I + lo`."
+    lo::NTuple{D, Int}
+    "`active[d][s]`: facet `(d, s)` carries ghosts (`s` is 1 for the minimum, 2 for the maximum)."
+    active::NTuple{D, NTuple{2, Bool}}
+    "the ghosts of facet `(d, s)` are numbered `offset[d][s] + 1` onwards."
+    offset::NTuple{D, NTuple{2, Int}}
+    "the number of ghosts."
+    nghosts::Int
+    "the identity of the padded mesh."
+    uid::UInt64
+end
+
+# Both a `GhostMesh` and its state answer the accessors and ghost queries below.
+const _GhostMeshLike{D} = Union{GhostMesh{D}, GhostMeshState{D}}
 
 #------------------------------------------------------------------------------------------#
 # Construction
@@ -184,6 +224,15 @@ end
     (_mesh_version(p) == G.version && _marker_stamp(p) == G.marker_stamp) || _refresh!(G)
     return G.padded
 end
+@inline _padded(s::GhostMeshState) = s.padded
+
+# The state of `G`, taken after `_padded` brings the padded mesh up to date.
+@inline function _walk_mesh(G::GhostMesh)
+    p = _walk_mesh(_padded(G))
+    return GhostMeshState(_walk_mesh(G.physical), p, G.indices, G.n, G.lo, G.active,
+        G.offset, G.nghosts, p.uid)
+end
+@inline _walk_mesh(s::GhostMeshState) = s
 
 @noinline function _refresh!(G::GhostMesh{D}) where {D}
     p = G.physical
@@ -242,21 +291,21 @@ end
 
 The number of ghosts of `G`: the nodes of its named facets, one ghost each.
 """
-@inline nghosts(G::GhostMesh) = G.nghosts
+@inline nghosts(G::_GhostMeshLike) = G.nghosts
 
 """
     has_ghosts(G::GhostMesh, d::Int, side::Symbol) -> Bool
 
 Whether facet `(d, side)` (`side` is `:min` or `:max`) carries ghosts.
 """
-@inline has_ghosts(G::GhostMesh, d::Int, side::Symbol) = G.active[d][_ghost_side(side)]
+@inline has_ghosts(G::_GhostMeshLike, d::Int, side::Symbol) = G.active[d][_ghost_side(side)]
 
 """
     physical_mesh(G::GhostMesh) -> Union{Mesh1D, MeshnD}
 
 The physical mesh `G` pads.
 """
-@inline physical_mesh(G::GhostMesh) = G.physical
+@inline physical_mesh(G::_GhostMeshLike) = G.physical
 
 """
     physical_indices(G::GhostMesh) -> CartesianIndices
@@ -264,7 +313,7 @@ The physical mesh `G` pads.
 The padded indices of the physical nodes, `CartesianIndices(npoints(physical_mesh(G), Tuple))`
 shifted past the ghost layers below each axis.
 """
-@inline physical_indices(G::GhostMesh{D}) where {D} = CartesianIndices(
+@inline physical_indices(G::_GhostMeshLike{D}) where {D} = CartesianIndices(
     ntuple(d -> (1 + G.lo[d]):(G.n[d] + G.lo[d]), Val(D)))
 
 """
@@ -272,14 +321,14 @@ shifted past the ghost layers below each axis.
 
 The padded index of the physical node `I`.
 """
-@inline padded_index(G::GhostMesh{D}, I::CartesianIndex{D}) where {D} = I + CartesianIndex(G.lo)
+@inline padded_index(G::_GhostMeshLike{D}, I::CartesianIndex{D}) where {D} = I + CartesianIndex(G.lo)
 
 @inline _ghost_transverse(n::NTuple{D, Int}, d::Int) where {D} = ntuple(
     e -> e == d ? 1 : n[e], Val(D))
 
 # The number of ghost of node `I` on facet `(d, s)`: the position of `I` in the facet's
 # column-major order, after the ghosts of the facets before it.
-@inline function _ghost_number(G::GhostMesh{D}, I, d::Int, s::Int) where {D}
+@inline function _ghost_number(G::_GhostMeshLike{D}, I, d::Int, s::Int) where {D}
     K = CartesianIndex(ntuple(e -> e == d ? 1 : I[e], Val(D)))
     return G.offset[d][s] + LinearIndices(_ghost_transverse(G.n, d))[K]
 end
@@ -293,7 +342,7 @@ The number `g ∈ 1:nghosts(G)` of the ghost beyond the node `I` (a tuple or a
 
 Throws an `ArgumentError` when the facet carries no ghosts, or `I` is not on it.
 """
-@inline function ghost_index(G::GhostMesh, I, d::Int, side::Symbol)
+@inline function ghost_index(G::_GhostMeshLike, I, d::Int, side::Symbol)
     s = _ghost_side(side)
     G.active[d][s] || _throw_facet_without_ghosts(d, side)
     I[d] == (s == 1 ? 1 : G.n[d]) || _throw_node_off_facet(I, d, side)
@@ -324,7 +373,7 @@ end
 The facet node, the axis of its facet and the side (`:min` or `:max`) whose ghost is number
 `g`; the inverse of `Bramble.ghost_index`. `I` is an index of the physical mesh.
 """
-@inline function boundary_node(G::GhostMesh{D}, g::Int) where {D}
+@inline function boundary_node(G::_GhostMeshLike{D}, g::Int) where {D}
     1 <= g <= G.nghosts || _throw_ghost_out_of_range(g, G.nghosts)
     for d in 1:D, s in 1:2
 
@@ -351,7 +400,7 @@ Whether the padded index `J` is an absent point: outside the physical mesh along
 more axes (a 2D corner, a 3D edge or corner of the padded grid), which is no node and no
 ghost.
 """
-@inline function is_absent(G::GhostMesh{D}, J::CartesianIndex{D}) where {D}
+@inline function is_absent(G::_GhostMeshLike{D}, J::CartesianIndex{D}) where {D}
     out = 0
     for d in 1:D
         out += (J[d] <= G.lo[d]) | (J[d] > G.lo[d] + G.n[d])
@@ -361,36 +410,42 @@ end
 
 # The step into the mesh along axis `d` from the physical node `J` (a padded index) of a
 # facet normal to `d`: `+1` from the first physical node, `-1` from the last.
-@inline _inward_step(G::GhostMesh, J::CartesianIndex, d::Int) = J[d] == G.lo[d] + 1 ? 1 : -1
+@inline _inward_step(G::_GhostMeshLike, J::CartesianIndex, d::Int) = J[d] == G.lo[d] + 1 ? 1 : -1
 
 #------------------------------------------------------------------------------------------#
 # Mesh accessors, forwarded to the padded mesh
 #------------------------------------------------------------------------------------------#
 
-@inline (G::GhostMesh)(i) = _padded(G)(i)
+@inline (G::_GhostMeshLike)(i) = _padded(G)(i)
 
-# Every accessor of the mesh interface reads the padded mesh.
+# Every accessor of the mesh interface reads the padded mesh, or the padded state of a
+# `GhostMeshState`; the marker table and stamps a walk state does not keep, the mesh only.
 for f in (:points, :half_points, :spacings, :half_spacings, :forward_spacings, :host_points,
     :host_spacings, :host_half_spacings, :cell_measures, :hₘₐₓ, :hₘᵢₙ, :is_collapsed,
-    :_marker_words, :_marker_ids, :_marker_stamp, :_mesh_version, :_walk_mesh, :markers,
-    :set, :backend, :_predicate_labels, :_parent_predicate_labels, :eltype)
+    :_marker_words, :_mesh_version, :set, :backend, :eltype)
+    @eval @inline $f(G::_GhostMeshLike) = $f(_padded(G))
+end
+
+for f in (:_marker_ids, :_marker_stamp, :markers, :_predicate_labels,
+    :_parent_predicate_labels)
     @eval @inline $f(G::GhostMesh) = $f(_padded(G))
 end
 
 for f in (:point, :half_point, :spacing, :forward_spacing, :half_spacing, :cell_measure,
     :spacing_for_derivative, :forward_spacing_for_derivative)
-    @eval @inline $f(G::GhostMesh, i) = $f(_padded(G), i)
+    @eval @inline $f(G::_GhostMeshLike, i) = $f(_padded(G), i)
 end
 
-@inline spacing(G::GhostMesh, i, dim::Int) = spacing(_padded(G), i, dim)
-@inline forward_spacing(G::GhostMesh, i, dim::Int) = forward_spacing(_padded(G), i, dim)
+@inline spacing(G::_GhostMeshLike, i, dim::Int) = spacing(_padded(G), i, dim)
+@inline forward_spacing(G::_GhostMeshLike, i, dim::Int) = forward_spacing(_padded(G), i, dim)
 
-@inline npoints(G::GhostMesh) = prod(size(G.indices))
-@inline npoints(G::GhostMesh, ::Type{Tuple}) = size(G.indices)
-@inline indices(G::GhostMesh) = G.indices
+@inline npoints(G::_GhostMeshLike) = prod(size(G.indices))
+@inline npoints(G::_GhostMeshLike, ::Type{Tuple}) = size(G.indices)
+@inline indices(G::_GhostMeshLike) = G.indices
 @inline eltype(::Type{<:GhostMesh{D, M}}) where {D, M} = eltype(M)
+@inline eltype(::Type{<:GhostMeshState{D, M}}) where {D, M} = eltype(M)
 
-@inline Base.getindex(G::GhostMesh, idx...) = getindex(_padded(G), idx...)
+@inline Base.getindex(G::_GhostMeshLike, idx...) = getindex(_padded(G), idx...)
 
 # A stored marker is a write into the padded mesh, which the next access reads back.
 @inline _store_markers!(G::GhostMesh, mm, labels = Symbol[]) = _store_markers!(
@@ -400,19 +455,19 @@ end
 # Facet queries: the physical facets, in the padded index space
 #------------------------------------------------------------------------------------------#
 
-@inline boundary_indices(G::GhostMesh) = boundary_indices(physical_indices(G))
+@inline boundary_indices(G::_GhostMeshLike) = boundary_indices(physical_indices(G))
 
-@inline function is_boundary_index(G::GhostMesh{D}, idx) where {D}
+@inline function is_boundary_index(G::_GhostMeshLike{D}, idx) where {D}
     J = CartesianIndex(idx)
     return J in physical_indices(G) && is_boundary_index(physical_indices(G), J)
 end
 
-@inline interior_indices(G::GhostMesh) = interior_indices(physical_indices(G))
+@inline interior_indices(G::_GhostMeshLike) = interior_indices(physical_indices(G))
 
 # `:boundary` is the physical boundary and `:interior` the physical nodes off it: a ghost
 # is neither.
 function _ensure_geometric_markers!(
-        mesh_markers::MeshMarkers, G::GhostMesh; warn_marker_mismatch::Bool = true
+        mesh_markers::MeshMarkers, G::_GhostMeshLike; warn_marker_mismatch::Bool = true
 )
     linear = LinearIndices(size(G.indices))
     boundary_set = falses(length(linear))
@@ -428,7 +483,7 @@ function _ensure_geometric_markers!(
 end
 
 # `_marked_face_mask` of the physical faces, the points numbered in the padded index space.
-@inline function _marked_face_mask(G::GhostMesh{D}, marked_at) where {D}
+@inline function _marked_face_mask(G::_GhostMeshLike{D}, marked_at) where {D}
     idxs = indices(G)
     faces = boundary_indices(G)
     return ntuple(Val(D)) do d
@@ -438,7 +493,7 @@ end
 end
 
 @inline function _check_marked_on_faces(
-        G::GhostMesh{D}, m, labels, mask, caller) where {D}
+        G::_GhostMeshLike{D}, m, labels, mask, caller) where {D}
     cis = indices(G)
     shift = CartesianIndex(G.lo)
     for s in labels
@@ -453,7 +508,7 @@ end
     return nothing
 end
 
-@inline function _check_surface_is_thin(G::GhostMesh{D}, mask) where {D}
+@inline function _check_surface_is_thin(G::_GhostMeshLike{D}, mask) where {D}
     for d in 1:D
         mask[d][1] && mask[d][2] && G.n[d] <= 2 && _throw_surface_not_thin(d, G.n[d])
     end
@@ -463,7 +518,7 @@ end
 # The weight of the physical mesh at the physical node `I` sits at its padded index `J`;
 # a ghost and an absent point weigh nothing.
 @inline function _surface_weight(
-        G::GhostMesh{D}, mask, J::CartesianIndex{D}) where {D}
+        G::_GhostMeshLike{D}, mask, J::CartesianIndex{D}) where {D}
     J in physical_indices(G) || return zero(eltype(G))
     return _surface_weight(G.physical, mask, J - CartesianIndex(G.lo))
 end
@@ -472,7 +527,7 @@ end
 # Display
 #------------------------------------------------------------------------------------------#
 
-function Base.show(io::IO, G::GhostMesh{D}) where {D}
-    print(io, "GhostMesh{$(D)D, ", G.n, " pts + ", G.nghosts, " ghosts}")
+function Base.show(io::IO, G::_GhostMeshLike{D}) where {D}
+    print(io, nameof(typeof(G)), "{$(D)D, ", G.n, " pts + ", G.nghosts, " ghosts}")
     return nothing
 end
