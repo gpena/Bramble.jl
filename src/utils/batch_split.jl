@@ -25,20 +25,32 @@ _BatchNode{T}(fields::F) where {T, F <: Tuple} = _BatchNode{T, F}(fields)
 # A plain array whose elements `@batch` can pass by pointer.
 _batch_is_slot(@nospecialize(T)) = T isa DataType && T <: Array && isbitstype(eltype(T))
 
+# A ghost mesh over its meshes' walk states, the value a `GhostMesh` rebuilds as: its
+# states are snapshots taken on the host, so it is never stale.
+const _GhostWalk{D} = GhostMesh{D, <:Union{Mesh1DState, MeshnDState},
+    <:Union{Mesh1DState, MeshnDState}}
+
+@inline _padded(G::_GhostWalk) = getfield(G, :padded)
+
 # A mesh the walk reads through `_walk_mesh`: an outer, mutable one.
 function _batch_is_mesh(@nospecialize(T))
-    return T isa DataType && T <: AbstractMeshType && ismutabletype(T)
+    T isa DataType && T <: AbstractMeshType && ismutabletype(T) || return false
+    return !(T <: _GhostWalk)
 end
+
+# A `GhostMesh` the split takes apart field by field, its meshes as their walk states.
+_batch_is_ghost(@nospecialize(T)) = T isa DataType && T <: GhostMesh && !(T <: _GhostWalk)
 
 # A `Ref` coefficient, read once at split time.
 function _batch_is_ref(@nospecialize(T))
     return T isa DataType && T <: Base.RefValue && isbitstype(T.parameters[1])
 end
 
-# A value split field by field: a concrete immutable struct or tuple that is not isbits.
+# A value split field by field: a concrete immutable struct or tuple that is not isbits, or
+# a ghost mesh over walk states.
 function _batch_is_node(@nospecialize(T))
     T isa DataType && isconcretetype(T) && isstructtype(T) || return false
-    return !ismutabletype(T) && !isbitstype(T)
+    return (!ismutabletype(T) || T <: _GhostWalk) && !isbitstype(T)
 end
 
 # The type of `_walk_mesh(Ωₕ)` for a mesh `Ωₕ` of type `T`. The `Mesh1D` method names the
@@ -52,6 +64,12 @@ _batch_state_type(::Type{T}) where {T <: Mesh1DState} = T
 function _batch_state_type(::Type{MeshnD{D, BT, CI, SM, T}}) where {D, BT, CI, SM, T}
     SM′ = Tuple{map(_batch_state_type, fieldtypes(SM))...}
     return MeshnDState{D, BT, CI, SM′, T, fieldtype(MeshnD, :words)}
+end
+_batch_state_type(::Type{T}) where {T <: MeshnDState} = T
+# A `GhostMesh` keeps its own type, over its physical and padded meshes' states, so the
+# rebuilt space still takes the ghost methods (the absent-point checks, the physical facets).
+function _batch_state_type(::Type{GhostMesh{D, M, P, CI}}) where {D, M, P, CI}
+    return GhostMesh{D, _batch_state_type(M), _batch_state_type(P), CI}
 end
 
 @noinline function _throw_batch_resistor(T, path::String)
@@ -73,6 +91,17 @@ function _batch_split_expr!(pre::Vector{Any}, leaves::Vector{Any}, @nospecialize
     if _batch_is_slot(T)
         push!(leaves, ex)
         return :(_BatchSlot{$(length(leaves)), $T}())
+    elseif _batch_is_ghost(T)
+        # The padded mesh as `_padded` brings it up to date, as the serial walk reads it.
+        p = gensym(:padded)
+        push!(pre, :($p = _padded($ex)))
+        fs = Any[]
+        for i in 1:fieldcount(T)
+            fex = fieldname(T, i) === :padded ? p : :(getfield($ex, $i))
+            q = string(path, ".", fieldname(T, i))
+            push!(fs, _batch_split_expr!(pre, leaves, fieldtype(T, i), fex, q))
+        end
+        return :(_BatchNode{$(_batch_state_type(T))}(($(fs...),)))
     elseif _batch_is_mesh(T)
         s = gensym(:state)
         push!(pre, :($s = _walk_mesh($ex)))
@@ -106,7 +135,8 @@ takes one rule:
 
   - an `Array` of an isbits element type becomes a slot of `arrays`;
   - a mutable mesh is replaced by its walk state [`_walk_mesh`](@ref), which is split in
-    turn;
+    turn; a [`GhostMesh`](@ref) is split field by field, its physical and padded meshes
+    replaced by their walk states, and rebuilds as a `GhostMesh` over them;
   - a `Base.RefValue` of an isbits value is replaced by that value, read once at split time
     on the host: a `Ref` coefficient is read per call at launch, not per point;
   - an isbits value is kept.
@@ -247,7 +277,8 @@ end
 
 The value [`_batch_split`](@ref)`(x)` split, rebuilt around `arrays`: the same struct types,
 with each array type parameter replaced by the type of the array now in its slot, each mesh
-by its walk state and each `Ref` by its value. `arrays` may hold any array type, such as the
+by its walk state (a `GhostMesh` by a `GhostMesh` over its meshes' walk states) and each
+`Ref` by its value. `arrays` may hold any array type, such as the
 `PtrArray`s `@batch` passes, or the plain arrays it passes a single-iteration loop, provided
 every array split from one original array type arrives as one array type: the type
 parameters are substituted per original type, not per slot. `@batch` converts all arrays of
