@@ -62,13 +62,13 @@ Built by [`semidiscretize`](@ref); read back with [`mass_matrix`](@ref) and
 [`operator_matrix`](@ref).
 
 # Fields
-- `operator`: spatial [`BilinearForm`](@ref), assembled into `A`.
+- `operator`: spatial [`BilinearForm`](@ref) (or a ghost-space form), assembled into `A`.
 - `source`: source [`LinearForm`](@ref), assembled into `F(t)` at each step.
 - `space`: the test space both forms share.
 - `operator_matrix`: `A`, with `eₖ` rows on the constrained degrees of freedom.
 - `mass_matrix`: `M`, with zero rows on the constrained degrees of freedom.
 - `source_vector`: the reusable `F` buffer, refilled in place.
-- `constraints`: how the source's boundary values are reached -- one of `NoConstraints`, `LabelsOnly`, `StaticConstraints`, `TimeDependentConstraints` or `TimeParamDependentConstraints`.
+- `constraints`: how the source's boundary values are reached -- one of `NoConstraints`, `LabelsOnly`, `StaticConstraints`, `TimeDependentConstraints`, `TimeParamDependentConstraints` or, on a ghost space, `GhostConstraints`.
 - `labels`: constrained boundary labels.
 - `components`: leaf components the labels bind to, or `nothing` for all.
 - `state`: [`VectorElement`](@ref) receiving `u` before assembly, or `nothing`.
@@ -149,6 +149,16 @@ bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
 
 sd = semidiscretize(a, l; dirichlet = bcs)
 ```
+
+Forms posed on a constrained ghost space, whose relation data may depend on time
+(`(x, t) -> ...`, see [`constrained`](@ref)), are taken too, by the method
+`semidiscretize(a::GhostBilinearForm, l::GhostLinearForm; mass, state,
+update_coefficients!, reassemble)`: the relations eliminate the ghosts and the Dirichlet
+nodes, so the mass has no zero rows, and the source at `t` carries the lift of the data at
+`t`. That method refuses the `dirichlet` keyword (give `:F => u => g(x, t)` in
+`constrained`), a space keeping ghosts as unknowns, a mass coupling a degree of freedom to a
+point whose data depend on time, `semidiscretize(build, l)` with a ghost load, and
+[`semidiscretize_rhs`](@ref), each with an `ArgumentError` naming the alternative.
 
 See also [`ode_function`](@ref), [`ode_problem`](@ref), [`jacobian!`](@ref).
 """
@@ -413,13 +423,15 @@ it is unused, exactly as before this was possible. See the "`p` reaches only the
 note on [`semidiscretize`](@ref).
 """
 function (sd::Semidiscretization)(du::AbstractVector, u::AbstractVector, p, t)
-    _sync_state!(sd.state, u)
+    _sync_state!(sd.state, u, t)
     _update_coefficients!(sd.update_coefficients, p, t)
+
+    # The operator before the source: on a ghost space the source reads the padded matrix
+    # the operator's assembly fills (`ghost_semidiscrete.jl`).
+    A = _refresh_operator!(sd, sd.reassemble, du, t)
 
     F = _source_buffer(sd, du, t)
     _assemble_source!(F, sd, sd.constraints, p, t)
-
-    A = _refresh_operator!(sd, sd.reassemble, du, t)
 
     # `du = F - A u` via the 5-argument `mul!(C, A, B, α, β) = α A B + β C`: fuses the
     # subtraction into the matrix-vector product itself (`du = -1 * A * u + 1 * du`),
@@ -431,6 +443,8 @@ function (sd::Semidiscretization)(du::AbstractVector, u::AbstractVector, p, t)
     return du
 end
 
+# The state at `t`: a plain state ignores it, a ghost space's lifts `u` at `t`.
+@inline _sync_state!(state, u, t) = _sync_state!(state, u)
 @inline _sync_state!(::Nothing, u) = nothing
 @inline function _sync_state!(state, u)
     copyto!(parent(state), u)
@@ -575,7 +589,7 @@ automatic differentiation instead, seeded from [`jacobian_pattern`](@ref).
 See also [`jacobian_prototype`](@ref).
 """
 function jacobian!(J, sd::Semidiscretization, u, p, t)
-    _sync_state!(sd.state, u)
+    _sync_state!(sd.state, u, t)
     _update_coefficients!(sd.update_coefficients, p, t)
     A = _refresh_operator!(sd, sd.reassemble, u, t)
     return _negate_into!(J, A)

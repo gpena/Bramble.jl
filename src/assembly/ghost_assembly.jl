@@ -32,9 +32,12 @@
 # single `d` to lift with. `form` and `assemble(a)` read `E` only and work as on a static
 # space.
 #
-# Out of scope on a ghost space, and refused with an `ArgumentError`: `semidiscretize`,
-# `ode_problem`, `matrix_free_operator`, `kronecker_operator`, device backends, matrix
-# types other than `SparseMatrixCSC`, composite spaces with a ghost leaf, AD element types.
+# `semidiscretize` and `ode_problem` take ghost forms in `ghost_semidiscrete.jl`, whose load
+# is the one built here with `d(t)` in place of `d`.
+#
+# Out of scope on a ghost space, and refused with an `ArgumentError`: `matrix_free_operator`,
+# `kronecker_operator`, device backends, matrix types other than `SparseMatrixCSC`,
+# composite spaces with a ghost leaf, AD element types.
 #
 # See also: `GhostGridSpace`, `BilinearForm`, `LinearForm`
 
@@ -592,11 +595,12 @@ end
 # `E_vᵀ (F_pad − A_pad d_u)`, `A_pad` as the last assembly of `a` left it, in one banded
 # pass that forms each `w_i = F_pad[i] − (A_pad d_u)[i]` where a column of `E_v` reads it:
 # no padded intermediate, so no buffer whose type would have to hold both forms' types,
-# and `F_pad` stays the load.
-function _assemble_ghost_load!(F::AbstractVector, a::GhostBilinearForm, l::GhostLinearForm)
+# and `F_pad` stays the load. `d` is the trial space's `d`, or `d(t)` for `semidiscretize`.
+function _assemble_ghost_load!(F::AbstractVector, a::GhostBilinearForm, l::GhostLinearForm,
+        d::AbstractVector = a.trial_space.d)
     assemble!(l.F_pad, l.padded)
     isempty(a.liftsrc) && return _closure_transpose_mul!(F, l.test_space, l.F_pad)
-    E, d = l.test_space.E, a.trial_space.d
+    E = l.test_space.E
     z = zero(promote_type(eltype(l.F_pad), eltype(a.A_pad), eltype(d)))
     _run_bands!(_ghost_policy(l.test_space), _lifted_load_band!, F,
         SparseArrays.getcolptr(E), rowvals(E), nonzeros(E), l.F_pad, nonzeros(a.A_pad),
@@ -636,16 +640,6 @@ end
 
 # --- Refused paths ------------------------------------------------------------------- #
 
-semidiscretize(::GhostBilinearForm, l; kwargs...) = _throw_ghost_unsupported("semidiscretize")
-function semidiscretize(::Union{BilinearForm, Function}, ::GhostLinearForm; kwargs...)
-    _throw_ghost_unsupported("semidiscretize")
-end
-function ode_problem(::GhostBilinearForm, l, u₀, tspan; kwargs...)
-    _throw_ghost_unsupported("ode_problem")
-end
-function ode_problem(::BilinearForm, ::GhostLinearForm, u₀, tspan; kwargs...)
-    _throw_ghost_unsupported("ode_problem")
-end
 function matrix_free_operator(::GhostBilinearForm; kwargs...)
     _throw_ghost_unsupported("matrix_free_operator")
 end
