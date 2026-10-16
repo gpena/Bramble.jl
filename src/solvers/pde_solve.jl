@@ -36,7 +36,7 @@ function _default_wants_accelerate(A, sym)
 end
 
 """
-    pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver = :default, sym = :auto, mean_zero = nothing, kwargs...) -> Vector
+    pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver = :default, sym = :auto, mean_zero = nothing, gauge = nothing, kwargs...) -> Vector
     pde_solve(fact::Factorization, F::AbstractVector) -> Vector
 
 Solve `A u = F` (or `fact u = F`) and return `u`.
@@ -81,9 +81,21 @@ chain differentiable.
   symmetric `A` and real `w`, `:default` factors it by LU (or by Accelerate's pivoting
   ``LDL^T``) and `:accelerate` and `:mumps` by ``LDL^T``; for any other `A` they use LU, as
   do `:suitesparse` (UMFPACK) and `:sparspak`. `:spqr` throws an `ArgumentError`, and a `w`,
-  `F` or `A` of mismatched size a `DimensionMismatch`. Without `mean_zero`, a square `A`
-  with `‖A 1‖∞ ≤ 1e-10 ‖A‖∞` (constants in its kernel) logs a warning naming `mean_zero`,
-  and the solve proceeds.
+  `F` or `A` of mismatched size a `DimensionMismatch`. Without `mean_zero` or `gauge`, a
+  square `A` with `‖A 1‖∞ ≤ 1e-10 ‖A‖∞` (constants in its kernel) logs a warning naming
+  `mean_zero`, and the solve proceeds.
+- `gauge`: a matrix `Z` with one column per kernel vector to fix (for instance
+  `Bramble.ghost_kernel(A, Wₕ)`, the ghost-only kernel of a form such as
+  `innerₕ(Δₕ(u), Δₕ(v))` on a ghost space), or `nothing` (default). With `Z`, `pde_solve`
+  solves `[A Z; Zᵀ 0] [u; μ] = [F; 0]` and returns `u`, the solution with ``Z^T u = 0``,
+  which makes its component in the kernel deterministic. With `mean_zero = w` too, the
+  border is `[w Z]`. The routing, the element type and the refusals are those of
+  `mean_zero`, a `Z` whose row count is not that of `A` being a `DimensionMismatch`, except
+  that `:sparspak`, which factors without pivoting, throws an `ArgumentError`. A complex `A`
+  or `Z` is accepted; the border is transposed, not conjugated. `Z` is used as given: its
+  columns must be independent and outside the range of `A`, or the bordered system stays
+  singular. The solution is only as accurate as the conditioning of `A` away from its kernel
+  allows: on the forms that produce a ghost-only kernel, near `1e-8` relative.
 
 # Returns
 - `Vector`: the solution, of the promoted element type of `A` and `F`.
@@ -128,6 +140,11 @@ u_spd = pde_solve(A, F; solver = :suitesparse, sym = :spd)
 # pure Neumann: fix the constant by a discrete zero average
 w = assemble(form(W, v -> innerₕ(x -> 1.0, v)))
 u0 = pde_solve(A_neumann, F_neumann; mean_zero = w)
+
+# a ghost-only kernel: fix the ghost values no row of A sees
+Wg = gridspace(Ωₕ; ghosts = :boundary)
+Ag = assemble(form(Wg, Wg, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+ug = pde_solve(Ag, Fg; gauge = Bramble.ghost_kernel(Ag, Wg))
 ```
 
 See also [`assemble`](@ref), [`sparse_factorize`](@ref), [`suitesparse_solve`](@ref),
@@ -135,8 +152,10 @@ See also [`assemble`](@ref), [`sparse_factorize`](@ref), [`suitesparse_solve`](@
 [`sparspak_solve`](@ref), [`linear_problem`](@ref).
 """
 function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :default, sym = :auto,
-        mean_zero::Union{Nothing, AbstractVector} = nothing, kwargs...)
-    mean_zero === nothing || return _mean_zero_solve(A, F, mean_zero, solver, kwargs)
+        mean_zero::Union{Nothing, AbstractVector} = nothing,
+        gauge::Union{Nothing, AbstractMatrix} = nothing, kwargs...)
+    (mean_zero === nothing && gauge === nothing) ||
+        return _mean_zero_solve(A, F, mean_zero, gauge, solver, kwargs)
     _warn_if_annihilates_constants(A)
     if solver === :default
         _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
@@ -180,42 +199,67 @@ function _warn_if_annihilates_constants(A::SparseMatrixCSC)
     return nothing
 end
 
-# `[A w; wᵀ 0]` is symmetric only for a real symmetric `A` and a real `w` (a ghost-point
-# Neumann `A` is not symmetric); otherwise a symmetric route would read one triangle, or refuse.
-function _bordered_sym(A::SparseMatrixCSC, w::AbstractVector)
-    return eltype(A) <: Real && eltype(w) <: Real && issymmetric(A) ? :symmetric : :unsymmetric
+# `[A C; Cᵀ 0]` is symmetric only for a real symmetric `A` and a real border `C` (a
+# ghost-point Neumann `A` is not symmetric); otherwise a symmetric route would read one
+# triangle, or refuse.
+function _bordered_sym(A::SparseMatrixCSC, C::AbstractVecOrMat)
+    return eltype(A) <: Real && eltype(C) <: Real && issymmetric(A) ? :symmetric : :unsymmetric
 end
 
-# `mean_zero = w` solves the bordered system `[A w; wᵀ 0] [u; λ] = [F; 0]` and returns `u`.
-# The border is never added to `A` as a rank-one term, which would be dense. The bordered
-# matrix is indefinite: a symmetric route that pivots (Accelerate and MUMPS `LDLᵀ`) for a real
+# The border's columns: `w` first, then those of `Z`; an absent keyword gives none.
+_border_eltype(::Nothing) = Union{}
+_border_eltype(C::AbstractVecOrMat) = eltype(C)
+_border_columns(::Type{T}, n, ::Nothing) where {T} = spzeros(T, n, 0)
+_border_columns(::Type{T}, n, w::AbstractVector) where {T} = SparseMatrixCSC{T, Int}(reshape(w, n, 1))
+_border_columns(::Type{T}, n, Z::AbstractMatrix) where {T} = SparseMatrixCSC{T, Int}(Z)
+
+@noinline function _throw_bordered_size(A, F, w, Z)
+    got = "A of size $(size(A)), F of length $(length(F))" *
+          (w === nothing ? "" : ", w of length $(length(w))") *
+          (Z === nothing ? "" : ", Z of size $(size(Z))")
+    throw(DimensionMismatch("pde_solve(mean_zero = w, gauge = Z) needs a square A, and F, w and " *
+                            "the columns of Z of its size; got $got."))
+end
+
+@noinline function _throw_bordered_spqr()
+    throw(ArgumentError("pde_solve(solver = :spqr) does not accept mean_zero or gauge: the " *
+                        "bordered system is square, not a least-squares problem. Use :default, " *
+                        ":suitesparse, :accelerate, :mumps or :sparspak."))
+end
+
+# Sparspak factors without pivoting, and its ordering eliminates a sparse border row (two
+# entries for a corner gauge column) on its zero diagonal: a `SingularException` on the
+# probe's mesh. A dense `w` row is eliminated last, after fill has reached its diagonal.
+@noinline function _throw_gauge_sparspak()
+    throw(ArgumentError("pde_solve(solver = :sparspak) does not accept gauge: Sparspak " *
+                        "factors without pivoting, and the bordered system has a zero block. " *
+                        "Use :default, :suitesparse, :accelerate or :mumps."))
+end
+
+# `mean_zero = w` and `gauge = Z` solve the bordered system `[A C; Cᵀ 0] [u; μ] = [F; 0]`
+# with `C = [w Z]` (either part absent when its keyword is `nothing`) and return `u`. The
+# border is never added to `A` as a low-rank term, which would be dense. The bordered matrix is
+# indefinite: a symmetric route that pivots (Accelerate and MUMPS `LDLᵀ`) for a real
 # symmetric `A`, LU otherwise, never Cholesky; `:default` calls `lu` directly, because `\` on
 # a symmetric matrix tries Cholesky first. The caller's `sym` describes `A`, not the bordered
 # matrix, so it is not used.
-function _mean_zero_solve(A::SparseMatrixCSC, F::AbstractVector, w::AbstractVector, solver::Symbol,
+function _mean_zero_solve(A::SparseMatrixCSC, F::AbstractVector,
+        w::Union{Nothing, AbstractVector}, Z::Union{Nothing, AbstractMatrix}, solver::Symbol,
         kwargs)
     n = size(A, 1)
-    (size(A, 2) == n && length(w) == n && length(F) == n) || throw(
-        DimensionMismatch(
-        "pde_solve(mean_zero = w) needs a square A and F and w of its size; got A of size " *
-        "$(size(A)), F of length $(length(F)) and w of length $(length(w)).",
-    ),
-    )
-    solver === :spqr && throw(
-        ArgumentError(
-        "pde_solve(solver = :spqr) does not accept mean_zero: the bordered system is square, " *
-        "not a least-squares problem. Use :default, :suitesparse, :accelerate, :mumps or :sparspak.",
-    ),
-    )
-    T = promote_type(eltype(A), eltype(w))
+    (size(A, 2) == n && length(F) == n && (w === nothing || length(w) == n) &&
+     (Z === nothing || size(Z, 1) == n)) || _throw_bordered_size(A, F, w, Z)
+    solver === :spqr && _throw_bordered_spqr()
+    solver === :sparspak && Z !== nothing && _throw_gauge_sparspak()
+    T = promote_type(eltype(A), _border_eltype(w), _border_eltype(Z))
     S = float(promote_type(T, eltype(F)))  # an all-`Int` system has a fractional solution
     n == 0 && return S[]
-    ws = SparseMatrixCSC{T, Int}(reshape(w, n, 1))
-    B = [A ws; transpose(ws) spzeros(T, 1, 1)]
-    b = Vector{S}(undef, n + 1)  # dense: the factorisations take no sparse `F`
+    C = hcat(_border_columns(T, n, w), _border_columns(T, n, Z))
+    k = size(C, 2)
+    B = [A C; transpose(C) spzeros(T, k, k)]
+    b = zeros(S, n + k)  # dense: the factorisations take no sparse `F`
     b[1:n] .= F
-    b[n + 1] = zero(S)
-    bsym = _bordered_sym(A, w)
+    bsym = _bordered_sym(A, C)
     if solver === :default
         _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
         x = if bsym === :symmetric && Sys.isapple() &&
