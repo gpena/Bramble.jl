@@ -14,8 +14,9 @@
 # The group is flat, keyed `<policy> <D>D, <case>`, as the printer and `--compare` expect.
 # The timed steps are construction (space, and for the ghost side `constrained`), `form`,
 # `assemble`, the warm refills (`assemble!` of the matrix, of the load, and on the ghost
-# side the pair: a load alone refuses on a closure with data), `lift` (a warm `Bramble.lift!`) and `pde_solve`. The plain side has no
-# lift: its unknowns are the grid function.
+# side the pair: a load alone refuses on a closure with data), `lift` (and a warm
+# `Bramble.lift!`) and `pde_solve`. The plain side has no lift: its unknowns are the grid
+# function.
 #
 # The sizes are small enough for the whole group to take a few minutes. Needs
 # `using Polyester` (loaded by `benchmarks.jl`) for the `CpuPolyester()` rows.
