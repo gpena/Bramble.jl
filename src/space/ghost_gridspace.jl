@@ -9,6 +9,15 @@
 #
 # See also: `GhostMesh`, `ScalarGridSpace`, `SpaceWeights`
 
+# Row replacement (`dirichlet`) on a ghost space, worked out once with the space: whether
+# its reduced rows are its physical nodes in mesh order, and the physical nodes of each
+# facet (facet `(d, s)` at `2(d - 1) + s`), so that a warm `assemble!` with `dirichlet`, and
+# `dirichlet_bc!` and `symmetrize!` on the space, allocate nothing.
+struct _RowsDirichlet
+    physical::Bool
+    facets::Vector{BitVector}
+end
+
 """
     GhostGridSpace{D, T, S, ET, DT} <: AbstractSpaceType{1}
 
@@ -45,10 +54,16 @@ struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix{T},
     d::DT
     "the transpose of `E`, whose columns give `lift` its padded rows."
     Et::ET
+    "row replacement on the space, for `dirichlet`."
+    rows::_RowsDirichlet
 end
 
-GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector) = GhostGridSpace(P,
-    E, d, _closure_transpose(E))
+function GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector)
+    G = mesh(P)
+    Ωₕ = physical_mesh(G)
+    rows = _RowsDirichlet(_rows_are_physical(G, E), _facet_masks(Ωₕ, Val(dim(Ωₕ))))
+    return GhostGridSpace(P, E, d, _closure_transpose(E), rows)
+end
 
 @inline _closure_transpose(E::SparseMatrixCSC) = copy(transpose(E))
 
@@ -199,7 +214,8 @@ form can name, say, the full `Δₕ` of the lifting at the facet nodes. Absent p
 throws as the space's weights do: build the space again.
 
 `lift(Wₕ, u)` runs in the bands of the mesh's execution policy, each padded point summed by
-one band, so it gives the same values on every CPU policy.
+one band, so it gives the same values on every CPU policy. `Bramble.lift!(uₕ, Wₕ, u)`
+refills a grid function `lift` returned, allocating nothing.
 
 `lift` is public, not exported: write `Bramble.lift` or `using Bramble: lift`.
 
@@ -224,11 +240,70 @@ end
 function lift(Wₕ::GhostGridSpace, u::AbstractVector)
     _check_lift_fresh(Wₕ)
     length(u) == ndofs(Wₕ) || _throw_lift_length(Wₕ, u)
+    U = similar(Wₕ.d, promote_type(eltype(u), eltype(Wₕ.d)))
+    return VectorElement(_lift_values!(U, Wₕ, u), Wₕ.padded)
+end
+
+"""
+    lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector) -> uₕ
+
+Write `E u + d` into the grid function `uₕ`, the in-place form of
+[`lift`](@ref)`(Wₕ, u)`: `uₕ` lives on the padded space of `Wₕ`, as the result of `lift`
+does, so a solve loop lifts each new solution without allocating. The values are those of
+`lift(Wₕ, u)`, bit for bit, on every CPU policy.
+
+`lift!` refuses a grid function on another space, or of an element type that cannot hold
+the values (a real `uₕ` for a complex `u`), with an `ArgumentError`. It is public, not
+exported: write `Bramble.lift!`.
+
+# Examples
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+Cₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
+                 u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => 2.0))
+a = form(Cₕ, Cₕ, (u, v) -> innerₕ(-1.0 * Bramble.D̃ₓ(Bramble.D₋ₓ(u)), v))
+l = form(Cₕ, v -> innerₕ(x -> 1.0, v))
+A, F = assemble(a, l)
+uₕ = Bramble.lift(Cₕ, A \\ F)
+assemble!(A, F, a, l)                  # the same system, refilled in place
+Bramble.lift!(uₕ, Cₕ, A \\ F)
+```
+"""
+function lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector)
+    _check_lift_fresh(Wₕ)
+    length(u) == ndofs(Wₕ) || _throw_lift_length(Wₕ, u)
+    uₕ.space === Wₕ.padded || _throw_lift_target(Wₕ)
+    T = promote_type(eltype(u), eltype(Wₕ.d))
+    promote_type(eltype(uₕ), T) === eltype(uₕ) || _throw_lift_eltype(uₕ, T)
+    _lift_values!(uₕ.data, Wₕ, u)
+    return uₕ
+end
+
+# `U = E u + d` in the bands of the mesh's policy.
+function _lift_values!(U::AbstractVector, Wₕ::GhostGridSpace, u::AbstractVector)
     d, Et = Wₕ.d, Wₕ.Et
-    U = similar(d, promote_type(eltype(u), eltype(d)))
     _run_bands!(execution_policy(Wₕ.padded), _lift_band!, U, d, SparseArrays.getcolptr(Et),
         rowvals(Et), nonzeros(Et), u)
-    return VectorElement(U, Wₕ.padded)
+    return U
+end
+
+@noinline function _throw_lift_target(Wₕ::GhostGridSpace)
+    throw(
+        ArgumentError(
+        "lift!(uₕ, Wₕ, u) writes into a grid function on the padded space of $(Wₕ), and " *
+        "uₕ lives on another space. Build it once with uₕ = Bramble.lift(Wₕ, u).",
+    ),
+    )
+end
+
+@noinline function _throw_lift_eltype(uₕ::VectorElement, T::Type)
+    throw(
+        ArgumentError(
+        "lift!(uₕ, Wₕ, u) gives values of type $T, and uₕ holds $(eltype(uₕ)). Build uₕ " *
+        "once with uₕ = Bramble.lift(Wₕ, u).",
+    ),
+    )
 end
 
 # Padded points `i` of band `b` of `nbands`: `U[i] = d[i] + Σ E[i, j] u[j]`, from column `i`

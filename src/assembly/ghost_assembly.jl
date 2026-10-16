@@ -5,11 +5,12 @@
 # A form on ghost spaces is the form on their padded spaces (the same placeholders, the
 # same AST) wrapped with the closures `(E, d)` of both sides. `assemble` fills the padded
 # matrix `A_pad` and reduces it to `E_vᵀ A_pad E_u` in DOF order. The load of a linear form
-# is `E_vᵀ (F_pad − A_pad d_u)`, so it needs the bilinear form and `assemble(l)` alone
-# refuses a closure with `d ≠ 0`. A map from `A_pad`'s stored values to the reduced
-# matrix's, built once with the form, does the reduction, so a warm `assemble!` allocates
-# nothing at all. Substituting `E` at each stencil tap instead would rewrite the guarded
-# walk, the pattern recorder and the replay.
+# is `E_vᵀ (F_pad − A_pad d_u)`, so it needs the bilinear form: `assemble(a, l)` builds it,
+# `assemble!(A, F, a, l)` refills it, and `assemble(l)` alone refuses a closure with
+# `d ≠ 0`. A map from `A_pad`'s stored values to the reduced matrix's, built once with the
+# form, does the reduction, so a warm `assemble!` allocates nothing at all. Substituting `E`
+# at each stencil tap instead would rewrite the guarded walk, the pattern recorder and the
+# replay.
 #
 # The reduction, the load and `lift` run in the bands of the mesh's policy (`_run_bands!`):
 # each band owns a range of output entries and sums every contribution to them itself, so
@@ -31,18 +32,11 @@
 #
 # See also: `GhostGridSpace`, `BilinearForm`, `LinearForm`
 
-# Row replacement (`dirichlet`) on a form's spaces, worked out once with the form: whether
-# the reduced rows of every space are its physical nodes in mesh order, and the physical
-# nodes of each facet (facet `(d, s)` at `2(d - 1) + s`), so that a warm `assemble!` with
-# `dirichlet` allocates nothing.
-struct _RowsDirichlet
-    physical::Bool
-    facets::Vector{BitVector}
-end
-
+# Row replacement on a form's spaces: the rows of each space are its physical nodes, and the
+# facet masks are those of the test space's physical mesh (`_RowsDirichlet`, in
+# ghost_gridspace.jl).
 function _RowsDirichlet(spaces::GhostGridSpace...)
-    Ωₕ = physical_mesh(mesh(first(spaces)))
-    return _RowsDirichlet(all(_rows_are_physical, spaces), _facet_masks(Ωₕ, Val(dim(Ωₕ))))
+    return _RowsDirichlet(all(W -> W.rows.physical, spaces), first(spaces).rows.facets)
 end
 
 """
@@ -54,7 +48,7 @@ their padded spaces, the padded matrix it fills, and the map that reduces that m
 """
 struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
     VT <: GhostGridSpace, MT <: AbstractMatrix, IV <: AbstractArray{Int, 1},
-    CV <: AbstractVector}
+    CV <: AbstractVector, WV <: AbstractVector}
     "the form on the padded spaces."
     padded::F
     trial_space::WT
@@ -75,6 +69,8 @@ struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
     "the stored position in `A_pad` and the column of each term of `A_pad d_u`."
     liftsrc::IV
     liftcol::IV
+    "`F_pad − A_pad d_u` when the load's type cannot hold `A_pad d_u` (empty if `d_u = 0`)."
+    w_pad::WV
     "row replacement on the spaces, for `dirichlet`."
     rows::_RowsDirichlet
 end
@@ -121,8 +117,10 @@ function form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, f)
     src, dst, coef, colptr, rowval = _ghost_reduction_map(
         backend(Vₕ), A_pad, Vₕ.E, Wₕ.E)
     liftptr, liftsrc, liftcol = _ghost_lift_map(backend(Vₕ), A_pad, Wₕ.d)
+    w_pad = _backend_vector(backend(Vₕ), promote_type(eltype(A_pad), eltype(Wₕ.d)),
+        isempty(liftsrc) ? 0 : size(A_pad, 1))
     return GhostBilinearForm(a, Wₕ, Vₕ, A_pad, src, dst, coef, colptr, rowval, liftptr,
-        liftsrc, liftcol, _RowsDirichlet(Vₕ, Wₕ))
+        liftsrc, liftcol, w_pad, _RowsDirichlet(Vₕ, Wₕ))
 end
 
 function form(Vₕ::GhostGridSpace, f)
@@ -285,11 +283,16 @@ function assemble!(A::AbstractMatrix, a::GhostBilinearForm; dirichlet = nothing,
         dirichlet_components = nothing)
     labels, _ = _normalize_dirichlet(dirichlet)
     _check_rows(a, labels)
+    _check_reduced_pattern(A, a)
+    _assemble_ghost!(A, a)
+    return _form_rows!(A, a, labels, dirichlet_components)
+end
+
+@inline function _check_reduced_pattern(A::AbstractMatrix, a::GhostBilinearForm)
     A isa SparseMatrixCSC && size(A) == (ndofs(a.test_space), ndofs(a.trial_space)) &&
     SparseArrays.getcolptr(A) == a.colptr && rowvals(A) == a.rowval ||
         _throw_ghost_pattern()
-    _assemble_ghost!(A, a)
-    return _form_rows!(A, a, labels, dirichlet_components)
+    return nothing
 end
 
 function _assemble_ghost!(A::SparseMatrixCSC, a::GhostBilinearForm)
@@ -328,12 +331,10 @@ end
 # Route (a): the reduced unknowns are the physical nodes in mesh order exactly when there
 # are as many as physical nodes and column `k` of `E` holds the 1 of physical node `k`; then
 # the physical mesh's label masks index the reduced rows and columns unchanged.
-function _rows_are_physical(Wₕ::GhostGridSpace)
-    G = mesh(Wₕ)
+function _rows_are_physical(G::GhostMesh, E::AbstractMatrix)
     phys = physical_indices(G)
-    ndofs(Wₕ) == length(phys) || return false
+    size(E, 2) == length(phys) || return false
     plin = LinearIndices(npoints(G, Tuple))
-    E = Wₕ.E
     for (k, J) in enumerate(phys)
         E[plin[J], k] == 1 || return false
     end
@@ -381,7 +382,7 @@ end
 @noinline function _throw_rows_dirichlet(spaces::Tuple, labels::Tuple)
     Wₕ = first(spaces)
     for W in spaces                 # the first whose rows are not its physical nodes
-        _rows_are_physical(W) || (Wₕ = W; break)
+        W.rows.physical || (Wₕ = W; break)
     end
     G = mesh(Wₕ)
     Ωₕ = physical_mesh(G)
@@ -466,27 +467,24 @@ end
 function dirichlet_bc!(A::AbstractMatrix, Wₕ::GhostGridSpace, labels::Symbol...;
         components = nothing)
     _validate_scalar_components(components)
-    rows = _RowsDirichlet(Wₕ)
-    _check_rows(rows, (Wₕ,), labels)
-    return _rows_dirichlet!(A, physical_mesh(mesh(Wₕ)), rows, labels)
+    _check_rows(Wₕ.rows, (Wₕ,), labels)
+    return _rows_dirichlet!(A, physical_mesh(mesh(Wₕ)), Wₕ.rows, labels)
 end
 
 function dirichlet_bc!(v::AbstractVector, Wₕ::GhostGridSpace,
         bcs::Union{ConstraintMarkers, EvaluatedParametricDomainMarkers}, labels::Symbol...;
         components = nothing)
     _validate_scalar_components(components)
-    rows = _RowsDirichlet(Wₕ)
-    _check_rows(rows, (Wₕ,), labels)
+    _check_rows(Wₕ.rows, (Wₕ,), labels)
     _check_labels_have_conditions(conditions(bcs), labels)
-    return _rows_conditions!(conditions(bcs), v, physical_mesh(mesh(Wₕ)), rows, labels)
+    return _rows_conditions!(conditions(bcs), v, physical_mesh(mesh(Wₕ)), Wₕ.rows, labels)
 end
 
 function symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::GhostGridSpace,
         labels::Symbol...; components = nothing)
     _validate_scalar_components(components)
-    rows = _RowsDirichlet(Wₕ)
-    _check_rows(rows, (Wₕ,), labels)
-    return _rows_symmetrize!(A, F, physical_mesh(mesh(Wₕ)), rows, labels)
+    _check_rows(Wₕ.rows, (Wₕ,), labels)
+    return _rows_symmetrize!(A, F, physical_mesh(mesh(Wₕ)), Wₕ.rows, labels)
 end
 
 # --- Linear assembly ----------------------------------------------------------------- #
@@ -519,24 +517,64 @@ end
 function assemble(a::GhostBilinearForm, l::GhostLinearForm; dirichlet = nothing,
         dirichlet_components = nothing, symmetrize::Bool = false)
     labels, bcs = _normalize_dirichlet(dirichlet)
+    _check_pair(a, l, labels, symmetrize)
+    A = _reduced_matrix(a.A_pad, a)
+    F = similar(l.F_pad, promote_type(eltype(l.F_pad), eltype(A)), ndofs(l.test_space))
+    return _assemble_pair!(A, F, a, l, labels, bcs, dirichlet_components, symmetrize)
+end
+
+# `A, F` refilled in place, `A` with the pattern and `F` of the type `assemble(a, l)` gives.
+function assemble!(A::AbstractMatrix, F::AbstractVector, a::GhostBilinearForm,
+        l::GhostLinearForm; dirichlet = nothing, dirichlet_components = nothing,
+        symmetrize::Bool = false)
+    labels, bcs = _normalize_dirichlet(dirichlet)
+    _check_pair(a, l, labels, symmetrize)
+    _check_reduced_pattern(A, a)
+    _check_linear_length(F, l.test_space)
+    T = promote_type(eltype(l.F_pad), eltype(A))
+    promote_type(eltype(F), T) === eltype(F) || _throw_pair_eltype(F, T)
+    return _assemble_pair!(A, F, a, l, labels, bcs, dirichlet_components, symmetrize)
+end
+
+function _check_pair(a::GhostBilinearForm, l::GhostLinearForm, labels, symmetrize::Bool)
     symmetrize && labels === nothing && _throw_symmetrize_without_dirichlet()
     _check_rows(a, labels)
     size(l.F_pad, 1) == size(a.A_pad, 1) && ndofs(l.test_space) == ndofs(a.test_space) ||
-        throw(DimensionMismatch("the forms' test spaces differ: $(a.test_space) and " *
-                                "$(l.test_space)"))
-    A = assemble(a)
-    F = similar(l.F_pad, promote_type(eltype(l.F_pad), eltype(A)), ndofs(l.test_space))
+        _throw_pair_spaces(a, l)
+    return nothing
+end
+
+@noinline function _throw_pair_spaces(a::GhostBilinearForm, l::GhostLinearForm)
+    throw(DimensionMismatch("the forms' test spaces differ: $(a.test_space) and " *
+                            "$(l.test_space)"))
+end
+
+@noinline function _throw_pair_eltype(F::AbstractVector, T::Type)
+    throw(
+        ArgumentError(
+        "assemble!(A, F, a, l) fills a load of element type $T, and F holds " *
+        "$(eltype(F)); call A, F = assemble(a, l) once and refill those.",
+    ),
+    )
+end
+
+function _assemble_pair!(A::SparseMatrixCSC, F::AbstractVector, a::GhostBilinearForm,
+        l::GhostLinearForm, labels, bcs, components, symmetrize::Bool)
+    _assemble_ghost!(A, a)
     _assemble_ghost_load!(F, a, l)
     # The load is built before the rows are replaced: its lift reads `A_pad`, not `A`.
-    _form_rows!(A, a, labels, dirichlet_components)
-    _form_rows!(F, l, labels, bcs, dirichlet_components)
-    symmetrize && _rows_symmetrize!(A, F, physical_mesh(mesh(a.test_space)), a.rows, labels)
+    _form_rows!(A, a, labels, components)
+    _form_rows!(F, l, labels, bcs, components)
+    # `_check_pair` refused `symmetrize` without labels.
+    symmetrize && labels isa Tuple &&
+        _rows_symmetrize!(A, F, physical_mesh(mesh(a.test_space)), a.rows, labels)
     return A, F
 end
 
 # `E_vᵀ (F_pad − A_pad d_u)`, `A_pad` as the last assembly of `a` left it. The lift goes
-# into `F_pad` in place when its type holds `A_pad d_u`, and into a promoted copy otherwise
-# (a complex form with a real load).
+# into `F_pad` in place when its type holds `A_pad d_u`, and otherwise (a complex form with
+# a real load) into the form's `w_pad`; `F_pad` is refilled first, so every call starts
+# from the load and not from the last call's `F_pad − A_pad d_u`.
 function _assemble_ghost_load!(F::AbstractVector, a::GhostBilinearForm, l::GhostLinearForm)
     assemble!(l.F_pad, l.padded)
     if isempty(a.liftsrc)
@@ -550,7 +588,9 @@ end
 function _subtract_lift(F_pad::AbstractVector, a::GhostBilinearForm)
     d = a.trial_space.d
     T = promote_type(eltype(F_pad), eltype(a.A_pad), eltype(d))
-    Fp = T === eltype(F_pad) ? F_pad : similar(F_pad, T)
+    # A load whose own type also widens `A_pad d_u` (a ComplexF32 load on a Float64 form)
+    # fits neither buffer and takes a copy.
+    Fp = T === eltype(F_pad) ? F_pad : T === eltype(a.w_pad) ? a.w_pad : similar(F_pad, T)
     _run_bands!(_ghost_policy(a.test_space), _subtract_lift_band!, Fp, F_pad,
         nonzeros(a.A_pad), a.liftptr, a.liftsrc, a.liftcol, d)
     return Fp

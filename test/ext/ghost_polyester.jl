@@ -1,5 +1,5 @@
 # test/ext/ghost_polyester.jl: ghost forms assemble on a `CpuPolyester` mesh, to the serial
-# matrix and load (gpena/Bramble.jl#785).
+# matrix and load, and every warm in-place call allocates nothing (gpena/Bramble.jl#785).
 #
 # Gated like every other ext/*.jl file (test/runtests.jl only reaches this group under
 # BRAMBLE_TEST_GROUP=ext or full). Standalone:
@@ -47,7 +47,44 @@ end
 relerr(X, Y) = norm(X - Y, Inf) / norm(Y, Inf)
 
 laplacian(u, v) = innerₕ(-Δₕ(u), v)
+complex_laplacian(u, v) = (1.0 + 0.5im) * innerₕ(-Δₕ(u), v)
 source(v) = innerₕ(x -> 1.0 + x[1], v)
+
+# The bytes of the third call of `f`, the first two compiling and warming it.
+alloc(f::F) where {F} = (f(); f(); @allocated f())
+
+# The warm in-place calls on `constrained(gridspace(Ω; ghosts), rel)` under `pol`: the pair
+# refill (its load reads `A_pad d ≠ 0`), `lift!`, the matrix refill, and the values they
+# leave after three calls.
+function warm_calls(pol, ns, ghosts, rel; f = laplacian)
+    C = constrained(gridspace(ghost_mesh(pol, ns); ghosts), rel)
+    a, l = form(C, C, f), form(C, source)
+    A, F = assemble(a, l)
+    u = A \ F
+    U = Bramble.lift(C, zero(u))
+    A2 = copy(A)
+    bytes = (pair = alloc(() -> assemble!(A, F, a, l)),
+        lift = alloc(() -> Bramble.lift!(U, C, u)),
+        matrix = alloc(() -> assemble!(A2, a)))
+    return bytes, (A, F, A2, parent(U)), any(!iszero, last(Bramble.closure(C)))
+end
+
+# The warm calls on a homogeneous Neumann space, whose rows are the physical nodes.
+function warm_rows(pol, ns)
+    rel = u -> map(F -> F => ∂ₙ(u) => 0.0, (:xmin, :xmax, :ymin, :ymax))
+    C = constrained(gridspace(ghost_mesh(pol, ns); ghosts = :boundary), rel)
+    a, l = form(C, C, laplacian), form(C, source)
+    A, F = assemble(a, l)
+    g = x -> x[2]
+    A2, F2 = copy(A), copy(F)
+    return (matrix = alloc(() -> assemble!(A, a; dirichlet = :xmin)),
+        load = alloc(() -> assemble!(F, l)),
+        load_dirichlet = alloc(() -> assemble!(F, l; dirichlet = :xmin => g)),
+        pair_symmetrize = alloc(() -> assemble!(A2, F2, a, l; dirichlet = :xmin => g,
+            symmetrize = true)),
+        dirichlet_bc = alloc(() -> dirichlet_bc!(A, C, :xmin)),
+        symmetrize = alloc(() -> symmetrize!(A, F, C, :xmin)))
+end
 
 # A vector that marks, per thread, every task that reads or writes it: a band function that
 # runs on more than one thread marks more than one, a path left serial marks one.
@@ -217,6 +254,32 @@ end
         @test nthreads_seen(am.liftcol) >= 2      # `F_pad − A_pad d`
         @test nthreads_seen(Fm) >= 2              # `E_vᵀ w`
         @test nthreads_seen(um) >= 2              # `lift`
+    end
+
+    # Every warm in-place call allocates nothing under `@batch`, its bands taking arrays
+    # only, and leaves the serial values bit for bit.
+    @testset "Warm calls allocate nothing" begin
+        robin = u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[2],
+            :ymin => ∂ₙ(u) => 0.0, :ymax => 2.0 * u + ∂ₙ(u) => 1.0)
+        rel1 = u -> (:xmin => u + ∂ₙ(u) => 2.0, :xmax => ∂ₙ(u) => x -> x[1])
+        cases = (((9, 11), :boundary, robin, laplacian),
+            ((30, 33), :boundary, robin, laplacian),
+            ((9, 11), :boundary, robin, complex_laplacian),
+            ((17,), :boundary, rel1, laplacian))
+        for (ns, ghosts, rel, f) in cases
+            (b0, v0, lifted), (b1, v1, _) = map(POLICIES) do pol
+                warm_calls(pol, ns, ghosts, rel; f)
+            end
+            @test lifted                        # the load reads `A_pad d`
+            @test b1 == (pair = 0, lift = 0, matrix = 0)
+            @test b0 == b1
+            @test v1 == v0
+        end
+        for ns in ((9, 11), (30, 33))
+            for (k, n) in pairs(warm_rows(CpuPolyester(), ns))
+                @test n == 0
+            end
+        end
     end
 
     WITH_3D_TESTS && @testset "3D Laplacian, Dirichlet relation" begin
