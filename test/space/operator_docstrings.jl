@@ -30,10 +30,9 @@ const VECTORIAL = (
 # point's, and `docstring_of` already renders every docstring a name has.
 const DISPATCH = ("diff₋", "diff₊", "D₋", "D₊", "jump", "D̃", "Dc", "S₊", "S₋")
 
-# The scalar `!` method each family applies a grid function through; it carries the family's
-# own docstring for the three centred families, `jump!` and `backward_finite_difference!`
-# (the `GhostVector` one) carry their own, and the rest carry none; both cases are worth
-# freezing.
+# The scalar `!` method each family applies a grid function through. The three centred
+# families, `jump!` and `backward_finite_difference!` (its `GhostVector` methods) carry a
+# docstring of their own; the rest carry none. Both cases are worth freezing.
 const BASE_BANGS = (
     "backward_difference!", "forward_difference!", "backward_finite_difference!",
     "forward_finite_difference!", "forward_star_difference!", "centered_difference!",
