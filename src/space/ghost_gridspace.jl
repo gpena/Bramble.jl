@@ -71,7 +71,7 @@ function GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector
     Ωₕ = physical_mesh(G)
     rows = _RowsDirichlet(_rows_are_physical(G, E), _facet_masks(Ωₕ, Val(dim(Ωₕ))))
     Et = _closure_transpose(E)
-    return GhostGridSpace(P, E, d, Et, rows, td, _ghost_update(backend(P), G, Et, d))
+    return GhostGridSpace(P, E, d, Et, rows, td, _ghost_update(backend(P), G, Et, d, td))
 end
 
 # What `update_ghosts!` reads: the rows of `E` of the ghosts the relations eliminate,
@@ -80,13 +80,15 @@ end
 # point `prow[r]`.
 #
 # With `m` eliminated ghosts, `nz` starts with the static affine part `d` of ghost `slot[r]`
-# at `r`; entry `k` of `rowval` has its coefficient at `nz[m + k]`. That saves the band pass
-# one array, and `CpuThreaded` pays per argument.
+# at `r` (0 on a space with data in time, whose `d` is filled after the constructor and
+# whose band sums `d(t)` instead); entry `k` of `rowval` has its coefficient at `nz[m + k]`.
+# That saves the band pass one array, and `CpuThreaded` pays per argument.
 #
 # A degree of freedom is the point whose row of `E` is that degree of freedom alone, with
 # coefficient 1: a physical node first, then the ghosts in order. Every other ghost is
-# eliminated. `complete` is `false` when some degree of freedom is no such point (a closure
-# built by hand), and `update_ghosts!` refuses the space.
+# eliminated; `E` alone decides. `complete` is `false` when some degree of freedom is no
+# such point, or when the affine part can be nonzero at a kept ghost (a closure built by
+# hand), and `update_ghosts!` refuses the space.
 struct _GhostUpdate{IV <: AbstractArray{Int, 1}, NV <: AbstractArray{<:Any, 1}}
     np::Int
     ng::Int
@@ -98,12 +100,14 @@ struct _GhostUpdate{IV <: AbstractArray{Int, 1}, NV <: AbstractArray{<:Any, 1}}
     nz::NV
 end
 
-function _ghost_update(be, G::GhostMesh{D}, Et::SparseMatrixCSC, d::AbstractVector) where {D}
+function _ghost_update(be, G::GhostMesh{D}, Et::SparseMatrixCSC, d::AbstractVector,
+        td) where {D}
     plin = LinearIndices(npoints(G, Tuple))
     phys = physical_indices(G)
     np, ng = length(phys), nghosts(G)
     cp, rv, nzv = SparseArrays.getcolptr(Et), rowvals(Et), nonzeros(Et)
-    dh = Array(d)
+    dh = td === nothing ? Array(d) : zeros(eltype(d), length(d))
+    affine = td === nothing ? map(!iszero, dh) : map(>(0), diff(Array(td.colptr)))
     own = zeros(Int, size(Et, 1))           # the vector index of each degree of freedom
     alone(i) = cp[i + 1] - cp[i] == 1 && isone(nzv[cp[i]]) ? rv[cp[i]] : 0
     for (k, J) in enumerate(phys)
@@ -112,15 +116,17 @@ function _ghost_update(be, G::GhostMesh{D}, Et::SparseMatrixCSC, d::AbstractVect
     end
     gpts = [plin[_ghost_point(G, g)] for g in 1:ng]
     eliminated = Int[]
+    kept_affine = false
     for g in 1:ng
         j = alone(gpts[g])
-        if j != 0 && own[j] == 0 && iszero(dh[gpts[g]])
+        if j != 0 && own[j] == 0
             own[j] = np + g
+            kept_affine |= affine[gpts[g]]
         else
             push!(eliminated, g)
         end
     end
-    complete = all(!iszero, own)
+    complete = !kept_affine && all(!iszero, own)
     prow = gpts[eliminated]
     m = length(eliminated)
     colptr = ones(Int, m + 1)

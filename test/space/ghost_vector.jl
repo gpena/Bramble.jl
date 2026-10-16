@@ -121,6 +121,16 @@ function time_dirichlet2(u)
         :ymax => ∂ₙₙ(u) => 1.0)
 end
 const TIME_GHOSTS = (:xmin, :xmax, :ymax)
+# Data in time, and `:xmax` ghosted with no relation: its ghosts stay unknowns.
+function time_unrelated2(u)
+    (:xmin => ∂ₙ(u; K) => (x, t) -> 1 + t * x[2], :ymin => ∂ₙ(u; K) => (x, t) -> t * x[1],
+        :ymax => 2.0 * u + ∂ₙ(u; K) => 1.0)
+end
+function time_unrelated3(u)
+    (:xmin => ∂ₙ(u; K = K3) => (x, t) -> 1 + t * x[3], :xmax => u + ∂ₙ(u; K = K3) => 0.0,
+        :ymin => ∂ₙ(u; K = K3) => (x, t) -> t * x[1], :ymax => ∂ₙ(u; K = K3) => 0.0,
+        :zmin => 2.0 * u + ∂ₙ(u; K = K3) => 1.0)
+end
 robin1(u) = (:xmin => u + ∂ₙ(u) => 2.0, :xmax => ∂ₙ(u) => x -> x[1])
 function robin3(u)
     (:xmin => ∂ₙ(u; K = K3) => 1.0, :xmax => u + ∂ₙ(u; K = K3) => x -> x[3],
@@ -236,6 +246,15 @@ end
         @test Bramble.ghost_values(w) == gs
     end
 
+    @testset "2D data in time, a facet unrelated" begin
+        C = constrained_on(pol, (6, 7), :boundary, time_unrelated2)
+        for t in (0.0, 0.3, 1.7)
+            r = check_update(C, t; unrelated = (:xmax,))
+            @test count(r.keep) == 7                 # the :xmax ghosts stay unknowns
+            @test length(C.gu.slot) == Bramble.nghosts(mesh(C)) - 7
+        end
+    end
+
     @testset "1D Robin" begin
         check_update(constrained_on(pol, (17,), :boundary, robin1))
         check_update(constrained_on(pol, (17,), (:xmax,), u -> (:xmax => ∂ₙ(u) => 3.0,)))
@@ -253,6 +272,14 @@ end
         check_update(constrained_on(pol, (5, 6, 4), (:xmin, :ymax, :zmax),
             u -> (:xmin => ∂ₙ(u) => 1.0, :ymax => u + ∂ₙ(u) => x -> x[3],
                 :ymin => u => x -> x[1], :zmax => ∂ₙₙ(u) => 0.0)))
+    end
+
+    WITH_3D_TESTS && @testset "3D data in time, a facet unrelated" begin
+        C = constrained_on(pol, (5, 6, 4), :boundary, time_unrelated3)
+        for t in (0.0, 0.3, 1.7)
+            r = check_update(C, t; unrelated = (:zmax,))
+            @test count(r.keep) == 30                # the :zmax ghosts stay unknowns
+        end
     end
 end
 
