@@ -261,7 +261,8 @@ function _constrained_space(Wₕ::GhostGridSpace, rels, drels)
     keep = _kept_points(G, ghosts, fixed)
     E, d = _relation_closure(G, R, b, ghosts, keep, fixed, g)::Tuple{SparseMatrixCSC, Vector}
     T = eltype(P)
-    return GhostGridSpace(P, SparseMatrixCSC{T, Int}(E), Vector{T}(d))
+    be = backend(P)
+    return GhostGridSpace(P, _closure_matrix(be, T, E), _closure_data(be, T, d))
 end
 
 # The padded points the Dirichlet relations fix, as a mask over the padded grid, and their

@@ -35,8 +35,8 @@ ndofs(Wₕ)                     # 35 physical nodes + 24 ghosts
 E, d = Bramble.closure(Wₕ)    # E is 63 × 59, d = 0
 ```
 """
-struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: SparseMatrixCSC{T, Int},
-    DT <: AbstractVector{T}} <: AbstractSpaceType{1}
+struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix{T},
+    DT <: AbstractArray{T, 1}} <: AbstractSpaceType{1}
     "the space on the padded mesh, with physical-only weights."
     padded::S
     "the `N_pad × ndofs` closure matrix: the padded values are `E * u + d`."
@@ -51,8 +51,22 @@ function _gridspace_ghosts(Ωₕ::Union{Mesh1D, MeshnD},
     G = GhostMesh(Ωₕ; ghosts = ghosts)
     P = _gridspace(G, _ghost_space_weights(G))
     T = eltype(P)
-    return GhostGridSpace(P, _ghost_selection(G, T), zeros(T, npoints(G)))
+    be = backend(Ωₕ)
+    d = fill!(_backend_vector(be, T, npoints(G)), zero(T))
+    return GhostGridSpace(P, _closure_matrix(be, T, _ghost_selection(G, T)), d)
 end
+
+# The closure matrix in the backend's matrix type. A type that is not a `SparseMatrixCSC`
+# is left as built: forms on it are refused by `_check_ghost_host`.
+function _closure_matrix(be, ::Type{T}, E::SparseMatrixCSC) where {T}
+    MT = matrix_type(be)
+    E = SparseMatrixCSC{T, Int}(E)
+    return MT <: SparseMatrixCSC ? convert(MT, E) : E
+end
+
+# The affine part of a closure, in the backend's vector type.
+@inline _closure_data(be, ::Type{T}, d::AbstractVector) where {T} = copyto!(
+    _backend_vector(be, T, length(d)), d)
 
 @noinline function _gridspace_ghosts(Ωₕ::AbstractMeshType, ghosts)
     throw(

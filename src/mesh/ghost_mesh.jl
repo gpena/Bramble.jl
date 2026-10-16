@@ -120,10 +120,15 @@ end
     )
 end
 
-# The coordinates of the padded axis, on the host: a ghost beyond each named end.
+# `n` entries of type `T` in the storage the backend `be` chooses for its vectors (`vector`
+# of length 0, then `similar`: the element type is free, the vector type is the backend's).
+@inline _backend_vector(be, ::Type{T}, n::Integer) where {T} = similar(vector(be, 0), T, n)
+
+# The coordinates of the padded axis, on the host: a ghost beyond each named end, in the
+# vector type of the physical mesh's host points.
 function _padded_axis_points(x::AbstractVector, padlo::Bool, padhi::Bool)
     n = length(x)
-    p = Vector{eltype(x)}(undef, n + padlo + padhi)
+    p = similar(x, n + padlo + padhi)
     copyto!(p, 1 + padlo, x, 1, n)
     padlo && (p[1] = x[1] - (x[2] - x[1]))
     padhi && (p[end] = x[n] + (x[n] - x[n - 1]))

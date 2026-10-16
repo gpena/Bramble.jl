@@ -45,7 +45,8 @@ their padded spaces, the padded matrix it fills, and the map that reduces that m
 `E_vᵀ A_pad E_u`, the matrix on the degrees of freedom.
 """
 struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
-    VT <: GhostGridSpace, MT <: SparseMatrixCSC, CT}
+    VT <: GhostGridSpace, MT <: AbstractMatrix, IV <: AbstractArray{Int, 1},
+    CV <: AbstractVector}
     "the form on the padded spaces."
     padded::F
     trial_space::WT
@@ -53,14 +54,14 @@ struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
     "the padded matrix, filled by every assembly."
     A_pad::MT
     "the stored position in `A_pad` of each contribution."
-    src::Vector{Int}
+    src::IV
     "the stored position in the reduced matrix of each contribution."
-    dst::Vector{Int}
+    dst::IV
     "the closure weight `E_v[i, r] E_u[j, c]` of each contribution."
-    coef::Vector{CT}
+    coef::CV
     "the reduced pattern."
-    colptr::Vector{Int}
-    rowval::Vector{Int}
+    colptr::IV
+    rowval::IV
     "row replacement on the spaces, for `dirichlet`."
     rows::_RowsDirichlet
 end
@@ -104,7 +105,8 @@ function form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, f)
     a = form(padded_space(Wₕ), padded_space(Vₕ), f)
     _check_ghost_eltype(_matrix_eltype(a, a.ast))
     A_pad = allocate_system_matrix(a)::SparseMatrixCSC  # `_check_ghost_host`
-    src, dst, coef, colptr, rowval = _ghost_reduction_map(A_pad, Vₕ.E, Wₕ.E)
+    src, dst, coef, colptr, rowval = _ghost_reduction_map(
+        backend(Vₕ), A_pad, Vₕ.E, Wₕ.E)
     return GhostBilinearForm(a, Wₕ, Vₕ, A_pad, src, dst, coef, colptr, rowval,
         _RowsDirichlet(Vₕ, Wₕ))
 end
@@ -114,8 +116,8 @@ function form(Vₕ::GhostGridSpace, f)
     l = form(padded_space(Vₕ), f)
     T = _assembled_eltype(l.ast, padded_space(Vₕ))
     _check_ghost_eltype(T)
-    return GhostLinearForm(l, Vₕ, Vector{T}(undef, ndofs(padded_space(Vₕ))),
-        _RowsDirichlet(Vₕ))
+    F_pad = _backend_vector(backend(Vₕ), T, ndofs(padded_space(Vₕ)))
+    return GhostLinearForm(l, Vₕ, F_pad, _RowsDirichlet(Vₕ))
 end
 
 form(::GhostGridSpace, Vₕ, f) = _throw_ghost_mixed()
@@ -184,8 +186,8 @@ end
 # contribution per stored `(i, j)` of `A_pad` and pair of stored entries in rows `i` of
 # `E_v` and `j` of `E_u`. The reduced pattern holds every such `(r, c)`.
 # Closures of different element types (a Float32 and a Float64 space) give weights of the
-# promoted type.
-function _ghost_reduction_map(A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
+# promoted type. The map is built on the host and stored in the backend's vector type.
+function _ghost_reduction_map(be, A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
         Eu::SparseMatrixCSC)
     Evt = sparse(transpose(Ev))
     Eut = sparse(transpose(Eu))
@@ -210,7 +212,8 @@ function _ghost_reduction_map(A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
         range = nzrange(S, cs[t])
         dst[t] = first(range) - 1 + searchsortedfirst(view(srv, range), rs[t])
     end
-    return src, dst, coef, copy(SparseArrays.getcolptr(S)), copy(srv)
+    return map(v -> copyto!(_backend_vector(be, eltype(v), length(v)), v),
+        (src, dst, coef, SparseArrays.getcolptr(S), srv))
 end
 
 # --- Bilinear assembly --------------------------------------------------------------- #
@@ -227,7 +230,7 @@ end
 function _reduced_matrix(A_pad::SparseMatrixCSC, a::GhostBilinearForm)
     T = promote_type(eltype(A_pad), eltype(a.coef))
     return SparseMatrixCSC(ndofs(a.test_space), ndofs(a.trial_space), copy(a.colptr),
-        copy(a.rowval), Vector{T}(undef, length(a.rowval)))
+        copy(a.rowval), similar(a.coef, T, length(a.rowval)))
 end
 
 function assemble!(A::AbstractMatrix, a::GhostBilinearForm; dirichlet = nothing,
