@@ -49,12 +49,14 @@ data(g, frozen) = frozen ? x -> g(x, 0.0) : g
 
 # Neumann on `xmin` and `ymax`, Robin on `xmax` and `ymin`, each as `αu + ∂ₙu = g` with the
 # outward normal.
-relations(frozen) = u -> (
-    :xmin => ∂ₙ(u) => data((x, t) -> -∂ₓu(x, t), frozen),
-    :xmax => u + ∂ₙ(u) => data((x, t) -> uexact(x, t) + ∂ₓu(x, t), frozen),
-    :ymin => 2.0 * u + ∂ₙ(u) => data((x, t) -> 2uexact(x, t) - ∂ᵧu(x, t), frozen),
-    :ymax => ∂ₙ(u) => data((x, t) -> ∂ᵧu(x, t), frozen)
-)
+function relations(frozen)
+    u -> (
+        :xmin => ∂ₙ(u) => data((x, t) -> -∂ₓu(x, t), frozen),
+        :xmax => u + ∂ₙ(u) => data((x, t) -> uexact(x, t) + ∂ₓu(x, t), frozen),
+        :ymin => 2.0 * u + ∂ₙ(u) => data((x, t) -> 2uexact(x, t) - ∂ᵧu(x, t), frozen),
+        :ymax => ∂ₙ(u) => data((x, t) -> ∂ᵧu(x, t), frozen)
+    )
+end
 
 #------------------------------------------------------------------------------------------#
 # Meshes: seeded random (a base mesh refined by halving) and graded

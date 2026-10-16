@@ -44,17 +44,23 @@ wide_laplacian(u, v) = innerₕ(-2.0 * Δₕ(u), v)
 source64(v) = innerₕ(x -> 1.0 + x[1], v)
 complex32_source(v) = innerₕ(x -> ComplexF32(1 + x[1], 1), v)
 
-robin2(u) = (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[2],
-    :ymin => ∂ₙ(u) => 0.0, :ymax => 2.0 * u + ∂ₙ(u) => 1.0)
-conormal2(u) = (:xmin => ∂ₙ(u; K) => 1.0, :xmax => u + ∂ₙ(u; K) => x -> x[2],
-    :ymin => ∂ₙ(u; K) => 0.0, :ymax => 2.0 * u + ∂ₙ(u; K) => 1.0)
+function robin2(u)
+    (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[2],
+        :ymin => ∂ₙ(u) => 0.0, :ymax => 2.0 * u + ∂ₙ(u) => 1.0)
+end
+function conormal2(u)
+    (:xmin => ∂ₙ(u; K) => 1.0, :xmax => u + ∂ₙ(u; K) => x -> x[2],
+        :ymin => ∂ₙ(u; K) => 0.0, :ymax => 2.0 * u + ∂ₙ(u; K) => 1.0)
+end
 dirichlet2(u) = (:xmin => ∂ₙ(u) => 1.0, :xmax => ∂ₙₙ(u) => x -> x[1],
     :ymin => u => x -> x[1], :ymax => ∂ₙ(u) => 1.0)
 robin1(u) = (:xmin => u + ∂ₙ(u) => 2.0, :xmax => ∂ₙ(u) => x -> x[1])
 neumann0(u) = map(F -> F => ∂ₙ(u) => 0.0, (:xmin, :xmax, :ymin, :ymax))
-robin3(u) = (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[3],
-    :ymin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0, :zmin => u => x -> x[1],
-    :zmax => ∂ₙ(u) => 1.0)
+function robin3(u)
+    (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[3],
+        :ymin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0, :zmin => u => x -> x[1],
+        :zmax => ∂ₙ(u) => 1.0)
+end
 
 # The pair refill, `lift!` and the matrix refill on `constrained(gridspace(Ω; ghosts),
 # rel)`, warm, with the values each leaves behind and the references they must equal.

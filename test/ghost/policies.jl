@@ -107,10 +107,14 @@ function band_threads(pol)
         lift = nthreads_seen(um))
 end
 
-robin_conormal(u) = (:xmin => ∂ₙ(u; K) => 1.0, :xmax => u + ∂ₙ(u; K) => x -> x[2],
-    :ymin => ∂ₙ(u; K) => 0.0, :ymax => 2.0 * u + ∂ₙ(u; K) => 1.0)
-named_dirichlet(u) = (:xmin => ∂ₙ(u) => 1.0, :xmax => ∂ₙₙ(u) => x -> x[1],
-    :ymin => u => x -> x[1], :ymax => ∂ₙ(u) => 1.0)
+function robin_conormal(u)
+    (:xmin => ∂ₙ(u; K) => 1.0, :xmax => u + ∂ₙ(u; K) => x -> x[2],
+        :ymin => ∂ₙ(u; K) => 0.0, :ymax => 2.0 * u + ∂ₙ(u; K) => 1.0)
+end
+function named_dirichlet(u)
+    (:xmin => ∂ₙ(u) => 1.0, :xmax => ∂ₙₙ(u) => x -> x[1],
+        :ymin => u => x -> x[1], :ymax => ∂ₙ(u) => 1.0)
+end
 
 @testset "Ghost bands under CpuThreaded (#785)" begin
     @test Threads.nthreads() >= 2

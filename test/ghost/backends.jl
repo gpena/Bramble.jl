@@ -36,8 +36,10 @@ function move_points!(Ω)
     return ys
 end
 
-make_backend(::Type{T}, pol) where {T} = backend(
-    vector_type = Vector{T}, matrix_type = SparseMatrixCSC{T, Int}, policy = pol)
+function make_backend(::Type{T}, pol) where {T}
+    backend(
+        vector_type = Vector{T}, matrix_type = SparseMatrixCSC{T, Int}, policy = pol)
+end
 
 # A relation on every facet of the named set, a Neumann one on each.
 function neumann_relations(names)

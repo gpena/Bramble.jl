@@ -55,6 +55,7 @@ _gvp_l(W) = form(W, v -> innerₕ(x -> 1.0, v))
 function _ghost_vs_plain_group()
     g = BenchmarkGroup()
     for (pname, mkpol) in _GVP_POLICIES, D in 1:3
+
         Ωₕ = _gvp_mesh(D, mkpol())
         tag = "$pname $(D)D"
         dir = :boundary => x -> 0.0
