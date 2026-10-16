@@ -20,11 +20,12 @@ function _neumann_problem(Ωₕ, ∇g, f)
     return A, F, w
 end
 
-# Compatible: `e^{kx} cos ky` is harmonic, so its fluxes integrate to zero, with large
-# derivatives, whose quadrature error is large (and pre-asymptotic) on a coarse mesh.
-function _harmonic(k)
+# Compatible for `s = 0`: `e^{kx} cos ky` is harmonic, so its fluxes integrate to zero,
+# with large derivatives, whose quadrature error is large (and pre-asymptotic) on a coarse
+# mesh. A source `s ≠ 0` adds an incompatibility that error can hide on the coarse mesh.
+function _harmonic(k, s = 0.0)
     Ωₕ -> _neumann_problem(Ωₕ,
-        p -> (k * exp(k * p[1]) * cos(k * p[2]), -k * exp(k * p[1]) * sin(k * p[2])), x -> 0.0)
+        p -> (k * exp(k * p[1]) * cos(k * p[2]), -k * exp(k * p[1]) * sin(k * p[2])), x -> s)
 end
 
 # The form tutorial's `cos πx cos πy + xy/2` with `s` added to the source: compatible for
@@ -81,7 +82,7 @@ end
     r, logs = _check(_harmonic(8), _mesh(9, :semi; Ω = Ωr, seed = 19))
     @test isempty(logs) && r.compatible
     @test r.refined_defect > 5e-3 && 0.5 <= r.ratio <= 2
-    @test r.second_ratio > 2
+    @test r.second_ratio > 2.5
     for kind in (:random, :semi), n in (WITH_SLOW_TESTS ? (9, 17, 33) : (9,)), seed in 1:20
         r, logs = _check(_harmonic(8), _mesh(n, kind; Ω = Ωr, seed))
         @test isempty(logs) && r.compatible
@@ -101,6 +102,33 @@ end
         @test 0.7 < r.ratio < 1.3
         @test 0.7 < r.second_ratio < 1.3
     end
+end
+
+# A shifted source whose coarse multiplier the quadrature error of the fluxes swamps:
+# λ = 0.88, -6.9, -2.7 on the coarse meshes against about -15 to -17 on their
+# refinements, and a coarse ratio of -0.54 or 2.55. The refined pair decides.
+@testset "Incompatibility under a large error" begin
+    for (s, n, seed) in ((-20.0, 17, 1), (-20.0, 17, 2), (-20.0, 17, 3), (20.0, 9, 2),
+        (5.0, 17, 2))
+        r, logs = _check(_harmonic(5, s), _mesh(n, :random; seed))
+        @test !r.compatible && length(logs) == 1
+        @test 0.4 <= r.second_ratio <= 2.5
+    end
+end
+
+# The rule reads `λ Σ|w|`, so a weight of another scale or shape decides alike: with
+# `w = 1` the multiplier is about 81 times smaller on a 9×9 mesh and 289 on its refinement.
+@testset "Unit weights" begin
+    ones_w(problem) = Ωₕ -> ((A, F, w) = problem(Ωₕ); (A, F, ones(length(w))))
+    Ωₕ = _mesh(9, :random)
+    r, logs = _check(ones_w(_tutorial(0.2)), Ωₕ)
+    @test !r.compatible && length(logs) == 1
+    @test 0.7 < r.ratio < 1.3 && 0.7 < r.second_ratio < 1.3
+    q, _ = _check(_tutorial(0.2), Ωₕ)
+    @test r.defect ≈ q.defect rtol = 1e-8
+    @test r.refined_defect ≈ q.refined_defect rtol = 1e-8
+    r, logs = _check(ones_w(_tutorial(0.0)), Ωₕ)
+    @test isempty(logs) && r.compatible
 end
 
 # The multiplier against `ΣF / Σw`, which holds because the columns of these `A` sum to

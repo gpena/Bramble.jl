@@ -2,32 +2,33 @@
 # Neumann problem satisfies the compatibility condition, warning on an incompatible datum.
 # Filled in by the ghost-dynamics plan (gpena/Bramble.jl#777).
 #
-# One mesh cannot tell an incompatible datum from a quadrature error: on a coarse random
-# mesh the multiplier of compatible data is as large as an O(1) incompatibility's. The
-# check therefore builds the problem again on a copy of the mesh refined at the midpoints
-# and compares the two multipliers: a quadrature error falls (by about 4 per halving of
-# the spacings), an incompatibility stays. When the first pair looks like an
-# incompatibility, a second refinement confirms it, since a coarse mesh's quadrature error
-# can be pre-asymptotic (seen with a ratio of 1.63 at a defect of 0.036).
+# One mesh cannot tell an incompatible datum from a quadrature error, since on a coarse
+# random mesh the multiplier of compatible data is as large as an O(1) incompatibility's.
+# The check therefore builds the problem again on copies of the mesh refined once and
+# twice at the midpoints and compares the load the multiplier removes on the two refined
+# meshes. A quadrature error falls (by about 4 per halving of the spacings), an
+# incompatibility stays. The coarse mesh does not decide, because its quadrature error can
+# be pre-asymptotic both for compatible data (a ratio of 1.63 at a defect of 0.036) and
+# over an incompatibility (λ = 0.88 against a refined -14.8 for a source shifted by -20).
 #
 # See also: `pde_solve` (its `mean_zero` keyword), `iterative_refinement!`
 
-# The thresholds of the rule, measured on harmonic (e^{kx} cos ky, k = 5, 8) and shifted
-# (tutorial problem, source + 0.2) pure-Neumann data on [0,1]² and [0,1]×[0,2], random and
-# one-axis-uniform meshes, n = 9, 17, 33, seeds 1:20, and the test file's cases up to
-# n = 129. The signed ratio of the multipliers of a mesh and its refinement was 0.74 to 1.24
-# for the shift at both refinements; for compatible data it was 1.33, 1.63 and 1.75 on three
-# meshes, negative or above 2.3 on the rest, and at the second refinement negative or at
-# least 2.1 on every mesh. A refined defect at or below the floor (also rounding) is never
+# The thresholds of the rule, measured on [0,1]² and [0,1]×[0,2], random and
+# one-axis-uniform meshes, n = 9, 17, 33, and the test file's cases up to n = 129. The
+# ratio of the removed loads on the once- and twice-refined meshes, for compatible harmonic
+# data (e^{kx} cos ky, k = 5, 8, seeds 1:20) with a refined defect above the floor, was
+# negative or at least 3.39; with the source shifted by 0.2 (tutorial problem) it was 0.99
+# to 1.01, and with e^{5x} cos 5y fluxes and the source shifted by ±20 or 5 (seeds 1:3 on
+# the square) 0.64 to 1.9. A refined defect at or below the floor (also rounding) is never
 # reported.
-const _NEUMANN_RATIO_WINDOW = (1 / 2, 2)
+const _NEUMANN_RATIO_WINDOW = (0.4, 2.5)
 const _NEUMANN_DEFECT_FLOOR = 5e-3
 
 """
     neumann_compatibility(problem, Ωₕ[, domain_markers]) -> NamedTuple
 
-Check that the data of a pure-Neumann problem are compatible, by comparing the problem on
-the mesh `Ωₕ` with the problem on copies of `Ωₕ` refined at the midpoints. `problem(Ωₕ)`
+Check that the data of a pure-Neumann problem are compatible, by building the problem on
+the mesh `Ωₕ` and on copies of it refined once and twice at the midpoints. `problem(Ωₕ)`
 returns `(A, F, w)`: the assembled matrix `A`, whose kernel holds the constants, the load
 `F` and the weights `w` of the discrete average (for instance the assembled `innerₕ(1, v)`).
 `Ωₕ` itself is not changed. The copies are refined by [`iterative_refinement!`](@ref): pass
@@ -36,34 +37,48 @@ the refinement re-evaluates on the new points; without them such a mesh is refus
 
 On each mesh the system is solved with [`pde_solve`](@ref)`(A, F; mean_zero = w)`, and the
 bordered solve's multiplier ``\\lambda = w^\\top (F - A u) / w^\\top w`` measures the part of
-`F` that no `u` reaches. Its relative defect is
+`F` that no `u` reaches. The signed load it removes and its relative defect are
 
 ```math
-\\delta = \\frac{|\\lambda| \\sum_i |w_i|}{\\sum_i |F_i|},
+\\mu = \\lambda \\sum_i |w_i|, \\qquad \\delta = \\frac{|\\mu|}{\\sum_i |F_i|},
 ```
 
-the fraction of the load the multiplier removes (zero for zero data). For compatible data
-``\\lambda`` is a quadrature error and falls under refinement, by about 4 when the spacings
-halve; an incompatible datum, such as a source with a nonzero mean added to compatible flux
-data, leaves a ``\\lambda`` that tends to the datum's mean and keeps its sign.
+both independent of the scale of `w` (``\\delta`` is zero for zero data). For compatible
+data ``\\mu`` is a quadrature error and falls under refinement, by about 4 when the
+spacings halve; an incompatible datum, such as a source with a nonzero mean added to
+compatible flux data, leaves a ``\\mu`` that tends to the datum's integral and keeps its
+sign.
 
-The data are reported incompatible when the refined defect ``\\delta_f`` is above `5e-3`
-and the signed ratio ``\\lambda / \\lambda_f`` of the multipliers on `Ωₕ` and on its
-refinement lies in ``[1/2, 2]``, and, refining once more, the ratio ``\\lambda_f /
-\\lambda_{ff}`` lies there too. The second refinement is built only when the first ratio is
-in the window. The thresholds come from measurement on random, graded and one-axis-uniform
-2D meshes of the unit square and of ``[0, 1] \\times [0, 2]``, with 9 to 129 points per
-axis: the ratios of an incompatible datum were 0.74 to 1.24; those of compatible data were
-negative or above 2.3 at the first refinement on all but three meshes (1.33, 1.63 and 1.75,
-on meshes of 9 and 17 points) and negative or above 2.1 at the second on every mesh. An
-incompatibility whose relative defect is below `5e-3` is therefore not detected.
+The data are reported incompatible when the defect ``\\delta_f`` on the refined mesh is
+above `5e-3` and the ratio ``\\mu_f / \\mu_{ff}`` of the removed loads on the once- and
+twice-refined meshes lies in ``[0.4, 2.5]``; `Ωₕ` itself does not decide, since its
+quadrature error can be pre-asymptotic. The thresholds come from measurement on random,
+graded and one-axis-uniform 2D meshes of the unit square and of ``[0, 1] \\times [0, 2]``,
+with 9 to 129 points per axis: the ratio was negative or at least 3.39 for compatible
+harmonic data, 0.99 to 1.01 for a source shifted by 0.2, and 0.64 to 1.9 for a shift of 5
+or ±20 against the larger quadrature error of ``e^{5x} \\cos 5y`` fluxes (random meshes
+of the square, 9 to 33 points).
+
+The check has known limits:
+
+- An incompatibility whose refined defect is below `5e-3`, or which is small against the
+  quadrature error of the refined meshes (seen on coarse meshes of the rectangle), is not
+  detected.
+- Compatible data whose flux is singular at a boundary point (as for
+  ``u = \\operatorname{Re} z^{\\alpha}`` near a corner, ``\\alpha < 1``) can be reported
+  incompatible: their quadrature error falls like ``h^{\\alpha}``, a ratio of
+  ``2^{\\alpha} < 2`` per refinement that no ratio of two or three meshes tells from an
+  incompatibility.
+- When ``\\delta_f`` is above `5e-3` the problem is built and solved on the twice-refined
+  mesh, with 16 times the points of `Ωₕ`: at 129 points per axis that took 20.8 s and
+  3.4 GiB, against 1.4 s when the floor decides.
 
 An incompatible datum logs a warning reporting the relative defects, the multipliers and
 the ratios; nothing is thrown. The result is the `NamedTuple`
 `(; defect, refined_defect, λ, refined_λ, ratio, second_ratio, compatible)`, with
-`ratio = λ / refined_λ` (infinite when `refined_λ` is zero), `second_ratio` the second
-refinement's ratio, or `nothing` when it was not built, and `compatible` the negation of
-the rule above.
+`ratio = μ / μ_f`, the removed loads on `Ωₕ` and its refinement (infinite when `μ_f` is
+zero), `second_ratio = μ_f / μ_ff`, which decides, or `nothing` when the floor decided and
+the second refinement was not built, and `compatible` the negation of the rule above.
 
 `neumann_compatibility` is public, not exported: write `Bramble.neumann_compatibility`.
 
@@ -100,40 +115,41 @@ end
 function _neumann_compatibility(problem, Ωₕ, refine!)
     Rₕ = copy(Ωₕ)
     refine!(Rₕ)
-    λ, δ = _neumann_defect(problem(Ωₕ)...)
-    λf, δf = _neumann_defect(problem(Rₕ)...)
-    ratio = _multiplier_ratio(λ, λf)
+    λ, μ, δ = _neumann_defect(problem(Ωₕ)...)
+    λf, μf, δf = _neumann_defect(problem(Rₕ)...)
+    ratio = _removed_load_ratio(μ, μf)
     second_ratio = nothing
-    compatible = δf <= _NEUMANN_DEFECT_FLOOR || !_in_ratio_window(ratio)
+    compatible = δf <= _NEUMANN_DEFECT_FLOOR
     if !compatible
         refine!(Rₕ)
-        λff, _ = _neumann_defect(problem(Rₕ)...)
-        second_ratio = _multiplier_ratio(λf, λff)
+        _, μff, _ = _neumann_defect(problem(Rₕ)...)
+        second_ratio = _removed_load_ratio(μf, μff)
         compatible = !_in_ratio_window(second_ratio)
     end
     if !compatible
         @warn "neumann_compatibility: the pure-Neumann data look incompatible: the relative " *
-              "defect is $δ on the mesh and $δf on its refinement, with λ = $λ and $λf " *
-              "(ratio $ratio, then $second_ratio at a second refinement, both within " *
-              "$(_NEUMANN_RATIO_WINDOW)), where a quadrature error would fall by about 4. " *
-              "Check that the source integrates to the boundary flux."
+              "defect is $δ on the mesh and $δf on its refinement, with λ = $λ and $λf; the " *
+              "removed load λ Σ|w| changes by the ratio $ratio, then $second_ratio at a " *
+              "second refinement, within $(_NEUMANN_RATIO_WINDOW), where a quadrature error " *
+              "would fall by about 4. Check that the source integrates to the boundary flux."
     end
     return (; defect = δ, refined_defect = δf, λ, refined_λ = λf, ratio, second_ratio,
         compatible)
 end
 
-_multiplier_ratio(λ, λf) = iszero(λf) ? oftype(λ, Inf) : λ / λf
+_removed_load_ratio(μ, μf) = iszero(μf) ? oftype(μ, Inf) : μ / μf
 
 _in_ratio_window(ρ) = _NEUMANN_RATIO_WINDOW[1] <= ρ <= _NEUMANN_RATIO_WINDOW[2]
 
-# The bordered solve's multiplier `λ` and the relative defect `|λ| Σ|w| / Σ|F|`, zero for
-# zero data.
+# The bordered solve's multiplier `λ`, the signed load it removes, `μ = λ Σ|w|`, which does
+# not depend on the scale of `w`, and the relative defect `|μ| / Σ|F|`, zero for zero data.
 function _neumann_defect(A, F, w)
     _check_annihilates_constants(A)
     u = pde_solve(A, F; mean_zero = w)
     λ = dot(w, F - A * u) / dot(w, w)
+    μ = λ * sum(abs, w)
     load = sum(abs, F)
-    return λ, iszero(load) ? abs(λ) : abs(λ) * sum(abs, w) / load
+    return λ, μ, iszero(load) ? abs(μ) : abs(μ) / load
 end
 
 function _check_annihilates_constants(A)
