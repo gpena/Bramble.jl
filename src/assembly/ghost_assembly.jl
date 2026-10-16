@@ -5,11 +5,21 @@
 # A form on ghost spaces is the form on their padded spaces (the same placeholders, the
 # same AST) wrapped with the closures `(E, d)` of both sides. `assemble` fills the padded
 # matrix `A_pad` and reduces it to `E_vᵀ A_pad E_u` in DOF order. The load of a linear form
-# is `E_vᵀ (F_pad − A_pad d_u)`, so it needs the bilinear form and `assemble(l)` alone
-# refuses a closure with `d ≠ 0`. A map from `A_pad`'s stored values to the reduced
-# matrix's, built once with the form, does the reduction, so a warm `assemble!` allocates
-# nothing at all. Substituting `E` at each stencil tap instead would rewrite the guarded
-# walk, the pattern recorder and the replay.
+# is `E_vᵀ (F_pad − A_pad d_u)`, so it needs the bilinear form: `assemble(a, l)` builds it,
+# `assemble!(A, F, a, l)` refills it, and `assemble(l)` alone refuses a closure with
+# `d ≠ 0`. A map from `A_pad`'s stored values to the reduced matrix's, built once with the
+# form, does the reduction, so a warm `assemble!` allocates nothing at all. Substituting `E`
+# at each stencil tap instead would rewrite the guarded walk, the pattern recorder and the
+# replay.
+#
+# The reduction, the load and `lift` run in the bands of the mesh's policy (`_run_bands!`):
+# each band owns a range of output entries and sums every contribution to them itself, so
+# no two bands write one entry, and every policy adds an entry's terms in the same order and
+# gives the serial result bitwise. The reduction's contributions are grouped by reduced
+# entry, `A_pad d` is stored by padded row over the columns where `d` can be nonzero (at
+# any time, for data depending on time), `E_vᵀ w` reads
+# the columns of `E_v` and `E u` those of the stored `Eᵀ`. The band functions take arrays
+# and isbits scalars only, so that a `CpuPolyester` task boxes nothing.
 #
 # `dirichlet` and `symmetrize` replace rows of the reduced system, through the masks of the
 # physical mesh, when its unknowns are the physical nodes in mesh order: every ghost
@@ -17,24 +27,25 @@
 # ghost space refuses them, naming `u => g` as the route that works there. A label is a
 # marker of the physical mesh or, as in `constrained`, a facet name or its alias.
 #
-# Out of scope on a ghost space, and refused with an `ArgumentError`: `semidiscretize`,
-# `ode_problem`, `matrix_free_operator`, `kronecker_operator`, device backends, matrix
-# types other than `SparseMatrixCSC`, composite spaces with a ghost leaf, AD element types.
+# On a space whose relation data depend on time, `assemble(a, l)`, `assemble!(A, F, a, l)`
+# and the load alone refuse, naming `lift(Cₕ, u, t)` and `semidiscretize`, as there is no
+# single `d` to lift with. `form` and `assemble(a)` read `E` only and work as on a static
+# space.
+#
+# `semidiscretize` and `ode_problem` take ghost forms in `ghost_semidiscrete.jl`, whose load
+# is the one built here with `d(t)` in place of `d`.
+#
+# Out of scope on a ghost space, and refused with an `ArgumentError`: `matrix_free_operator`,
+# `kronecker_operator`, device backends, matrix types other than `SparseMatrixCSC`,
+# composite spaces with a ghost leaf, AD element types.
 #
 # See also: `GhostGridSpace`, `BilinearForm`, `LinearForm`
 
-# Row replacement (`dirichlet`) on a form's spaces, worked out once with the form: whether
-# the reduced rows of every space are its physical nodes in mesh order, and the physical
-# nodes of each facet (facet `(d, s)` at `2(d - 1) + s`), so that a warm `assemble!` with
-# `dirichlet` allocates nothing.
-struct _RowsDirichlet
-    physical::Bool
-    facets::Vector{BitVector}
-end
-
+# Row replacement on a form's spaces: the rows of each space are its physical nodes, and the
+# facet masks are those of the test space's physical mesh (`_RowsDirichlet`, in
+# ghost_gridspace.jl).
 function _RowsDirichlet(spaces::GhostGridSpace...)
-    Ωₕ = physical_mesh(mesh(first(spaces)))
-    return _RowsDirichlet(all(_rows_are_physical, spaces), _facet_masks(Ωₕ, Val(dim(Ωₕ))))
+    return _RowsDirichlet(all(W -> W.rows.physical, spaces), first(spaces).rows.facets)
 end
 
 """
@@ -45,22 +56,28 @@ their padded spaces, the padded matrix it fills, and the map that reduces that m
 `E_vᵀ A_pad E_u`, the matrix on the degrees of freedom.
 """
 struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
-    VT <: GhostGridSpace, MT <: SparseMatrixCSC, CT}
+    VT <: GhostGridSpace, MT <: AbstractMatrix, IV <: AbstractArray{Int, 1},
+    CV <: AbstractVector}
     "the form on the padded spaces."
     padded::F
     trial_space::WT
     test_space::VT
     "the padded matrix, filled by every assembly."
     A_pad::MT
-    "the stored position in `A_pad` of each contribution."
-    src::Vector{Int}
-    "the stored position in the reduced matrix of each contribution."
-    dst::Vector{Int}
+    "the stored position in `A_pad` of each contribution, grouped by reduced entry."
+    src::IV
+    "the contributions `dst[e]:(dst[e + 1] - 1)` that sum into stored reduced entry `e`."
+    dst::IV
     "the closure weight `E_v[i, r] E_u[j, c]` of each contribution."
-    coef::Vector{CT}
+    coef::CV
     "the reduced pattern."
-    colptr::Vector{Int}
-    rowval::Vector{Int}
+    colptr::IV
+    rowval::IV
+    "the terms `liftptr[i]:(liftptr[i + 1] - 1)` of row `i` of `A_pad d_u`."
+    liftptr::IV
+    "the stored position in `A_pad` and the column of each term of `A_pad d_u`."
+    liftsrc::IV
+    liftcol::IV
     "row replacement on the spaces, for `dirichlet`."
     rows::_RowsDirichlet
 end
@@ -104,9 +121,11 @@ function form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, f)
     a = form(padded_space(Wₕ), padded_space(Vₕ), f)
     _check_ghost_eltype(_matrix_eltype(a, a.ast))
     A_pad = allocate_system_matrix(a)::SparseMatrixCSC  # `_check_ghost_host`
-    src, dst, coef, colptr, rowval = _ghost_reduction_map(A_pad, Vₕ.E, Wₕ.E)
-    return GhostBilinearForm(a, Wₕ, Vₕ, A_pad, src, dst, coef, colptr, rowval,
-        _RowsDirichlet(Vₕ, Wₕ))
+    src, dst, coef, colptr, rowval = _ghost_reduction_map(
+        backend(Vₕ), A_pad, Vₕ.E, Wₕ.E)
+    liftptr, liftsrc, liftcol = _ghost_lift_map(backend(Vₕ), A_pad, _affine_support(Wₕ))
+    return GhostBilinearForm(a, Wₕ, Vₕ, A_pad, src, dst, coef, colptr, rowval, liftptr,
+        liftsrc, liftcol, _RowsDirichlet(Vₕ, Wₕ))
 end
 
 function form(Vₕ::GhostGridSpace, f)
@@ -114,8 +133,8 @@ function form(Vₕ::GhostGridSpace, f)
     l = form(padded_space(Vₕ), f)
     T = _assembled_eltype(l.ast, padded_space(Vₕ))
     _check_ghost_eltype(T)
-    return GhostLinearForm(l, Vₕ, Vector{T}(undef, ndofs(padded_space(Vₕ))),
-        _RowsDirichlet(Vₕ))
+    F_pad = _backend_vector(backend(Vₕ), T, ndofs(padded_space(Vₕ)))
+    return GhostLinearForm(l, Vₕ, F_pad, _RowsDirichlet(Vₕ))
 end
 
 form(::GhostGridSpace, Vₕ, f) = _throw_ghost_mixed()
@@ -184,8 +203,10 @@ end
 # contribution per stored `(i, j)` of `A_pad` and pair of stored entries in rows `i` of
 # `E_v` and `j` of `E_u`. The reduced pattern holds every such `(r, c)`.
 # Closures of different element types (a Float32 and a Float64 space) give weights of the
-# promoted type.
-function _ghost_reduction_map(A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
+# promoted type. The map is built on the host and stored in the backend's vector type.
+# The contributions are then grouped by reduced entry, in the order the walk met them (a
+# stable sort), and `dst` is the pointer over the groups, so a band owns whole entries.
+function _ghost_reduction_map(be, A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
         Eu::SparseMatrixCSC)
     Evt = sparse(transpose(Ev))
     Eut = sparse(transpose(Eu))
@@ -205,12 +226,45 @@ function _ghost_reduction_map(A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
     end
     S = sparse(rs, cs, trues(length(rs)), size(Ev, 2), size(Eu, 2), |)
     srv = rowvals(S)
-    dst = similar(src)
-    for t in eachindex(dst)
+    entry = similar(src)
+    for t in eachindex(entry)
         range = nzrange(S, cs[t])
-        dst[t] = first(range) - 1 + searchsortedfirst(view(srv, range), rs[t])
+        entry[t] = first(range) - 1 + searchsortedfirst(view(srv, range), rs[t])
     end
-    return src, dst, coef, copy(SparseArrays.getcolptr(S)), copy(srv)
+    p = sortperm(entry)                 # stable
+    return map(v -> copyto!(_backend_vector(be, eltype(v), length(v)), v),
+        (src[p], _group_pointer(entry, length(srv)), coef[p], SparseArrays.getcolptr(S),
+            srv))
+end
+
+# The pointer over `n` groups of `keys`, each in `1:n`: group `g` is the entries
+# `ptr[g]:(ptr[g + 1] - 1)` of `keys` once sorted.
+function _group_pointer(keys::Vector{Int}, n::Int)
+    ptr = zeros(Int, n + 1)
+    for g in keys
+        ptr[g + 1] += 1
+    end
+    ptr[1] = 1
+    return cumsum!(ptr, ptr)
+end
+
+# `A_pad d` by padded row, over the columns `j` where `d[j]` can be nonzero only (`support`,
+# `_affine_support`): the stored position of each term and its column, in column order
+# within a row, as `A_pad * d` adds them.
+function _ghost_lift_map(be, A_pad::SparseMatrixCSC, support::AbstractVector{Bool})
+    rv = rowvals(A_pad)
+    rows, src, cols = Int[], Int[], Int[]
+    for j in axes(A_pad, 2)
+        support[j] || continue
+        for k in nzrange(A_pad, j)
+            push!(rows, rv[k])
+            push!(src, k)
+            push!(cols, j)
+        end
+    end
+    p = sortperm(rows)                  # stable
+    return map(v -> copyto!(_backend_vector(be, eltype(v), length(v)), v),
+        (_group_pointer(rows, size(A_pad, 1)), src[p], cols[p]))
 end
 
 # --- Bilinear assembly --------------------------------------------------------------- #
@@ -227,30 +281,53 @@ end
 function _reduced_matrix(A_pad::SparseMatrixCSC, a::GhostBilinearForm)
     T = promote_type(eltype(A_pad), eltype(a.coef))
     return SparseMatrixCSC(ndofs(a.test_space), ndofs(a.trial_space), copy(a.colptr),
-        copy(a.rowval), Vector{T}(undef, length(a.rowval)))
+        copy(a.rowval), similar(a.coef, T, length(a.rowval)))
 end
 
 function assemble!(A::AbstractMatrix, a::GhostBilinearForm; dirichlet = nothing,
         dirichlet_components = nothing)
     labels, _ = _normalize_dirichlet(dirichlet)
     _check_rows(a, labels)
-    A isa SparseMatrixCSC && size(A) == (ndofs(a.test_space), ndofs(a.trial_space)) &&
-    SparseArrays.getcolptr(A) == a.colptr && rowvals(A) == a.rowval ||
-        _throw_ghost_pattern()
+    _check_reduced_pattern(A, a)
     _assemble_ghost!(A, a)
     return _form_rows!(A, a, labels, dirichlet_components)
 end
 
+@inline function _check_reduced_pattern(A::AbstractMatrix, a::GhostBilinearForm)
+    A isa SparseMatrixCSC && size(A) == (ndofs(a.test_space), ndofs(a.trial_space)) &&
+    SparseArrays.getcolptr(A) == a.colptr && rowvals(A) == a.rowval ||
+        _throw_ghost_pattern()
+    return nothing
+end
+
 function _assemble_ghost!(A::SparseMatrixCSC, a::GhostBilinearForm)
     assemble!(a.A_pad, a.padded)
-    nz = nonzeros(A)
-    pv = nonzeros(a.A_pad)
-    fill!(nz, zero(eltype(nz)))
-    src, dst, coef = a.src, a.dst, a.coef
-    @inbounds for t in eachindex(src)
-        nz[dst[t]] += coef[t] * pv[src[t]]
-    end
+    _run_bands!(_ghost_policy(a), _reduce_band!, nonzeros(A), nonzeros(a.A_pad),
+        a.dst, a.src, a.coef)
     return A
+end
+
+# The policy of a ghost space, and of a ghost form read from its padded form, which the
+# form's banded passes use: that form's type is concrete wherever the form's is, while a
+# caller that infers the ghost space only partly (the workload's `constrained` spaces)
+# leaves `test_space` abstract. Its policy then infers as `Any`, inference visits all three
+# `_run_bands!` methods with the band's concrete arrays, and the `CpuPolyester` one records
+# an edge into the `_batch_run_bands!` stub that `BramblePolyesterExt` invalidates
+# (gpena/Bramble.jl#414).
+@inline _ghost_policy(Wₕ::GhostGridSpace) = execution_policy(padded_space(Wₕ))
+@inline _ghost_policy(a::Union{GhostBilinearForm, GhostLinearForm}) = execution_policy(test_space(a.padded))
+
+# The reduced entries of band `b` of `nbands`: entry `e` sums its contributions in order.
+@noinline function _reduce_band!(nz, pv, ptr, src, coef, nbands::Int, b::Int)
+    T = eltype(nz)
+    @inbounds for e in _band_range(1:length(nz), nbands, b)
+        s = zero(T)
+        for t in ptr[e]:(ptr[e + 1] - 1)
+            s = convert(T, s + coef[t] * pv[src[t]])
+        end
+        nz[e] = s
+    end
+    return nothing
 end
 
 @noinline function _throw_ghost_pattern()
@@ -267,12 +344,10 @@ end
 # Route (a): the reduced unknowns are the physical nodes in mesh order exactly when there
 # are as many as physical nodes and column `k` of `E` holds the 1 of physical node `k`; then
 # the physical mesh's label masks index the reduced rows and columns unchanged.
-function _rows_are_physical(Wₕ::GhostGridSpace)
-    G = mesh(Wₕ)
+function _rows_are_physical(G::GhostMesh, E::AbstractMatrix)
     phys = physical_indices(G)
-    ndofs(Wₕ) == length(phys) || return false
+    size(E, 2) == length(phys) || return false
     plin = LinearIndices(npoints(G, Tuple))
-    E = Wₕ.E
     for (k, J) in enumerate(phys)
         E[plin[J], k] == 1 || return false
     end
@@ -320,7 +395,7 @@ end
 @noinline function _throw_rows_dirichlet(spaces::Tuple, labels::Tuple)
     Wₕ = first(spaces)
     for W in spaces                 # the first whose rows are not its physical nodes
-        _rows_are_physical(W) || (Wₕ = W; break)
+        W.rows.physical || (Wₕ = W; break)
     end
     G = mesh(Wₕ)
     Ωₕ = physical_mesh(G)
@@ -405,32 +480,30 @@ end
 function dirichlet_bc!(A::AbstractMatrix, Wₕ::GhostGridSpace, labels::Symbol...;
         components = nothing)
     _validate_scalar_components(components)
-    rows = _RowsDirichlet(Wₕ)
-    _check_rows(rows, (Wₕ,), labels)
-    return _rows_dirichlet!(A, physical_mesh(mesh(Wₕ)), rows, labels)
+    _check_rows(Wₕ.rows, (Wₕ,), labels)
+    return _rows_dirichlet!(A, physical_mesh(mesh(Wₕ)), Wₕ.rows, labels)
 end
 
 function dirichlet_bc!(v::AbstractVector, Wₕ::GhostGridSpace,
         bcs::Union{ConstraintMarkers, EvaluatedParametricDomainMarkers}, labels::Symbol...;
         components = nothing)
     _validate_scalar_components(components)
-    rows = _RowsDirichlet(Wₕ)
-    _check_rows(rows, (Wₕ,), labels)
+    _check_rows(Wₕ.rows, (Wₕ,), labels)
     _check_labels_have_conditions(conditions(bcs), labels)
-    return _rows_conditions!(conditions(bcs), v, physical_mesh(mesh(Wₕ)), rows, labels)
+    return _rows_conditions!(conditions(bcs), v, physical_mesh(mesh(Wₕ)), Wₕ.rows, labels)
 end
 
 function symmetrize!(A::AbstractMatrix, F::AbstractVector, Wₕ::GhostGridSpace,
         labels::Symbol...; components = nothing)
     _validate_scalar_components(components)
-    rows = _RowsDirichlet(Wₕ)
-    _check_rows(rows, (Wₕ,), labels)
-    return _rows_symmetrize!(A, F, physical_mesh(mesh(Wₕ)), rows, labels)
+    _check_rows(Wₕ.rows, (Wₕ,), labels)
+    return _rows_symmetrize!(A, F, physical_mesh(mesh(Wₕ)), Wₕ.rows, labels)
 end
 
 # --- Linear assembly ----------------------------------------------------------------- #
 
 function assemble(l::GhostLinearForm; dirichlet = nothing, dirichlet_components = nothing)
+    _is_time_dependent(l.test_space) && _throw_ghost_time("assemble(l)")
     b = similar(l.F_pad, ndofs(l.test_space))
     return assemble!(b, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
 end
@@ -439,10 +512,11 @@ function assemble!(b::AbstractVector, l::GhostLinearForm; dirichlet = nothing,
         dirichlet_components = nothing)
     labels, bcs = _normalize_dirichlet(dirichlet)
     _check_rows(l, labels)
+    _is_time_dependent(l.test_space) && _throw_ghost_time("assemble!(b, l)")
     any(!iszero, l.test_space.d) && _throw_ghost_lift()
     _check_linear_length(b, l.test_space)
     assemble!(l.F_pad, l.padded)
-    mul!(b, transpose(l.test_space.E), l.F_pad)
+    _closure_transpose_mul!(b, l, l.F_pad)
     return _form_rows!(b, l, labels, bcs, dirichlet_components)
 end
 
@@ -458,60 +532,155 @@ end
 function assemble(a::GhostBilinearForm, l::GhostLinearForm; dirichlet = nothing,
         dirichlet_components = nothing, symmetrize::Bool = false)
     labels, bcs = _normalize_dirichlet(dirichlet)
+    _check_pair(a, l, labels, symmetrize)
+    A = _reduced_matrix(a.A_pad, a)
+    F = similar(l.F_pad, promote_type(eltype(l.F_pad), eltype(A)), ndofs(l.test_space))
+    return _assemble_pair!(A, F, a, l, labels, bcs, dirichlet_components, symmetrize)
+end
+
+"""
+    assemble!(A, F, a::GhostBilinearForm, l::GhostLinearForm;
+        dirichlet = nothing, dirichlet_components = nothing, symmetrize = false)
+
+Refill `A` and `F` with the matrix and the load that `A, F = assemble(a, l)` returns, and
+return `A, F`. `A` keeps the pattern and `F` the element type that `assemble(a, l)` gave,
+so call that once and refill its two outputs. The call allocates nothing warm.
+
+Both forms are assembled together because, when the closure of the space has an affine part
+`d ≠ 0`, the load is `Eᵀ(F − A d)` and reads the matrix. `assemble!(b, l)` alone refuses
+such a space. `dirichlet`, `dirichlet_components` and `symmetrize` act as in
+`assemble(a, l)`.
+
+It throws an `ArgumentError` for a time-dependent space (pose the problem with
+`semidiscretize`), for `symmetrize = true` without `dirichlet`, for `A` that is not a
+`SparseMatrixCSC` with the reduced pattern of `a`, for a `dirichlet` the rows of the space
+do not allow, and for an `F` whose element type cannot hold the load's. A `DimensionMismatch`
+follows an `F` of the wrong length and forms whose test spaces differ.
+"""
+function assemble!(A::AbstractMatrix, F::AbstractVector, a::GhostBilinearForm,
+        l::GhostLinearForm; dirichlet = nothing, dirichlet_components = nothing,
+        symmetrize::Bool = false)
+    labels, bcs = _normalize_dirichlet(dirichlet)
+    _check_pair(a, l, labels, symmetrize, "assemble!(A, F, a, l)")
+    _check_reduced_pattern(A, a)
+    _check_linear_length(F, l.test_space)
+    T = promote_type(eltype(l.F_pad), eltype(A))
+    promote_type(eltype(F), T) === eltype(F) || _throw_pair_eltype(F, T)
+    return _assemble_pair!(A, F, a, l, labels, bcs, dirichlet_components, symmetrize)
+end
+
+# The refusal of a load whose lift depends on time (there is no single `d`).
+@noinline function _throw_ghost_time(call::AbstractString)
+    throw(
+        ArgumentError(
+        "$call has no time, and the relation data of the space depend on time, so the " *
+        "load's lift Eᵀ A d(t) does too. Pose the problem in time with semidiscretize, " *
+        "or lift a solution at a time with lift(Cₕ, u, t); form and assemble(a) work as " *
+        "they are.",
+    ),
+    )
+end
+
+function _check_pair(a::GhostBilinearForm, l::GhostLinearForm, labels, symmetrize::Bool,
+        call::String = "assemble(a, l)")
+    _is_time_dependent(a.trial_space) && _throw_ghost_time(call)
     symmetrize && labels === nothing && _throw_symmetrize_without_dirichlet()
     _check_rows(a, labels)
     size(l.F_pad, 1) == size(a.A_pad, 1) && ndofs(l.test_space) == ndofs(a.test_space) ||
-        throw(DimensionMismatch("the forms' test spaces differ: $(a.test_space) and " *
-                                "$(l.test_space)"))
-    A = assemble(a)
-    F = similar(l.F_pad, promote_type(eltype(l.F_pad), eltype(A)), ndofs(l.test_space))
+        _throw_pair_spaces(a, l)
+    return nothing
+end
+
+@noinline function _throw_pair_spaces(a::GhostBilinearForm, l::GhostLinearForm)
+    throw(DimensionMismatch("the forms' test spaces differ: $(a.test_space) and " *
+                            "$(l.test_space)"))
+end
+
+@noinline function _throw_pair_eltype(F::AbstractVector, T::Type)
+    throw(
+        ArgumentError(
+        "assemble!(A, F, a, l) fills a load of element type $T, and F holds " *
+        "$(eltype(F)); call A, F = assemble(a, l) once and refill those.",
+    ),
+    )
+end
+
+function _assemble_pair!(A::SparseMatrixCSC, F::AbstractVector, a::GhostBilinearForm,
+        l::GhostLinearForm, labels, bcs, components, symmetrize::Bool)
+    _assemble_ghost!(A, a)
     _assemble_ghost_load!(F, a, l)
     # The load is built before the rows are replaced: its lift reads `A_pad`, not `A`.
-    _form_rows!(A, a, labels, dirichlet_components)
-    _form_rows!(F, l, labels, bcs, dirichlet_components)
-    symmetrize && _rows_symmetrize!(A, F, physical_mesh(mesh(a.test_space)), a.rows, labels)
+    _form_rows!(A, a, labels, components)
+    _form_rows!(F, l, labels, bcs, components)
+    # `_check_pair` refused `symmetrize` without labels.
+    symmetrize && labels isa Tuple &&
+        _rows_symmetrize!(A, F, physical_mesh(mesh(a.test_space)), a.rows, labels)
     return A, F
 end
 
-# `E_vᵀ (F_pad − A_pad d_u)`, `A_pad` as the last assembly of `a` left it. The lift goes
-# into `F_pad` in place when its type holds `A_pad d_u`, and into a promoted copy otherwise
-# (a complex form with a real load).
-function _assemble_ghost_load!(F::AbstractVector, a::GhostBilinearForm, l::GhostLinearForm)
+# `E_vᵀ (F_pad − A_pad d_u)`, `A_pad` as the last assembly of `a` left it, in one banded
+# pass that forms each `w_i = F_pad[i] − (A_pad d_u)[i]` where a column of `E_v` reads it:
+# no padded intermediate, so no buffer whose type would have to hold both forms' types,
+# and `F_pad` stays the load. `d` is the trial space's `d`, or `d(t)` for `semidiscretize`.
+function _assemble_ghost_load!(F::AbstractVector, a::GhostBilinearForm, l::GhostLinearForm,
+        d::AbstractVector = a.trial_space.d)
     assemble!(l.F_pad, l.padded)
-    d = a.trial_space.d
-    Eᵀ = transpose(l.test_space.E)
-    if any(!iszero, d)
-        mul!(F, Eᵀ, _subtract_lift(l.F_pad, a.A_pad, d))
-    else
-        mul!(F, Eᵀ, l.F_pad)
-    end
+    isempty(a.liftsrc) && return _closure_transpose_mul!(F, l, l.F_pad)
+    E = l.test_space.E
+    z = zero(promote_type(eltype(l.F_pad), eltype(a.A_pad), eltype(d)))
+    _run_bands!(_ghost_policy(l), _lifted_load_band!, F,
+        SparseArrays.getcolptr(E), rowvals(E), nonzeros(E), l.F_pad, nonzeros(a.A_pad),
+        a.liftptr, a.liftsrc, a.liftcol, d, z)
     return F
 end
 
-function _subtract_lift(F_pad::AbstractVector, A_pad::SparseMatrixCSC, d::AbstractVector)
-    T = promote_type(eltype(F_pad), eltype(A_pad), eltype(d))
-    Fp = T === eltype(F_pad) ? F_pad : copyto!(similar(F_pad, T), F_pad)
-    return mul!(Fp, A_pad, d, -1, 1)
+# Entries `r` of band `b`: `y[r] = Σ E[i, r] w_i` over column `r` of `E`, with
+# `w_i = F[i] − Σ A_pad[i, j] d[j]` summed over the stored terms of row `i` in the type of
+# `z`. A row read by several columns is summed again for each, in the same order.
+@noinline function _lifted_load_band!(y, colptr, rowval, nz, F, pv, ptr, src, col, d, z,
+        nbands::Int, b::Int)
+    T = eltype(y)
+    S = typeof(z)
+    @inbounds for r in _band_range(1:length(y), nbands, b)
+        acc = zero(T)
+        for k in colptr[r]:(colptr[r + 1] - 1)
+            i = rowval[k]
+            w = convert(S, F[i])
+            for t in ptr[i]:(ptr[i + 1] - 1)
+                w = convert(S, w - pv[src[t]] * d[col[t]])
+            end
+            acc = convert(T, acc + nz[k] * w)
+        end
+        y[r] = acc
+    end
+    return nothing
+end
+
+# `y = Eᵀ x` for the closure `E` of the test space of `l`, entry `r` from column `r` of `E`.
+function _closure_transpose_mul!(y::AbstractVector, l::GhostLinearForm, x::AbstractVector)
+    E = l.test_space.E
+    _run_bands!(_ghost_policy(l), _csc_columns_band!, y, SparseArrays.getcolptr(E),
+        rowvals(E), nonzeros(E), x)
+    return y
 end
 
 # --- Refused paths ------------------------------------------------------------------- #
 
-semidiscretize(::GhostBilinearForm, l; kwargs...) = _throw_ghost_unsupported("semidiscretize")
-function semidiscretize(::Union{BilinearForm, Function}, ::GhostLinearForm; kwargs...)
-    _throw_ghost_unsupported("semidiscretize")
-end
-function ode_problem(::GhostBilinearForm, l, u₀, tspan; kwargs...)
-    _throw_ghost_unsupported("ode_problem")
-end
-function ode_problem(::BilinearForm, ::GhostLinearForm, u₀, tspan; kwargs...)
-    _throw_ghost_unsupported("ode_problem")
-end
 function matrix_free_operator(::GhostBilinearForm; kwargs...)
     _throw_ghost_unsupported("matrix_free_operator")
 end
 kronecker_operator(::GhostBilinearForm) = _throw_ghost_unsupported("kronecker_operator")
 function assemble_parallel!(::AbstractVecOrMat, ::Union{GhostBilinearForm, GhostLinearForm})
-    _throw_ghost_unsupported("assemble_parallel!")
+    _throw_ghost_assemble_parallel()
+end
+
+@noinline function _throw_ghost_assemble_parallel()
+    throw(
+        ArgumentError(
+        "assemble_parallel! does not take a ghost-space form: call assemble! instead, " *
+        "which runs in parallel under the policy of the mesh's backend.",
+    ),
+    )
 end
 (::GhostLinearForm)(v) = _throw_ghost_unsupported("contracting a linear form")
 function evaluate!(::AbstractVector, ::GhostLinearForm, v)

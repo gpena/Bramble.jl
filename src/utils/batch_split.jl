@@ -53,6 +53,13 @@ function _batch_state_type(::Type{MeshnD{D, BT, CI, SM, T}}) where {D, BT, CI, S
     SM′ = Tuple{map(_batch_state_type, fieldtypes(SM))...}
     return MeshnDState{D, BT, CI, SM′, T, fieldtype(MeshnD, :words)}
 end
+_batch_state_type(::Type{T}) where {T <: MeshnDState} = T
+# A `GhostMesh`'s state holds its physical and padded meshes' states, so the rebuilt space
+# still takes the ghost methods (the absent-point checks, the physical facets).
+function _batch_state_type(::Type{GhostMesh{D, M, P, CI}}) where {D, M, P, CI}
+    return GhostMeshState{D, _batch_state_type(M), _batch_state_type(P), CI}
+end
+_batch_state_type(::Type{T}) where {T <: GhostMeshState} = T
 
 @noinline function _throw_batch_resistor(T, path::String)
     throw(ArgumentError("_batch_split has no rule for $path::$T: only plain arrays of an " *
@@ -106,7 +113,7 @@ takes one rule:
 
   - an `Array` of an isbits element type becomes a slot of `arrays`;
   - a mutable mesh is replaced by its walk state [`_walk_mesh`](@ref), which is split in
-    turn;
+    turn (a [`GhostMesh`](@ref) by its `GhostMeshState`);
   - a `Base.RefValue` of an isbits value is replaced by that value, read once at split time
     on the host: a `Ref` coefficient is read per call at launch, not per point;
   - an isbits value is kept.

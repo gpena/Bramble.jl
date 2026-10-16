@@ -228,7 +228,7 @@ const _Scale = Union{OperatorScale, GridFunctionScale}
 @inline _needs_onesided(op, m, I::CartesianIndex) = false
 
 @inline function _needs_onesided(
-        op::_FirstDifference{D, Dim}, G::GhostMesh{D}, I::CartesianIndex{D}
+        op::_FirstDifference{D, Dim}, G::_GhostMeshLike{D}, I::CartesianIndex{D}
 ) where {D, Dim}
     _rule_applies(op) || return false
     I in physical_indices(G) || return false
@@ -351,7 +351,7 @@ end
 # volume product's operand truncated at the edge of the padded grid is the plain mesh's
 # closure there and stands. Off a ghost space the stock `local_stencil` methods
 # (`operators/inner.jl`) are the only ones, so a plain mesh compiles as before.
-const _GhostSpace{D} = ScalarGridSpace{D, <:Any, <:Any, <:GhostMesh}
+const _GhostSpace{D} = ScalarGridSpace{D, <:Any, <:Any, <:_GhostMeshLike}
 
 @inline function local_stencil(
         op::BilinearProduct{D, InnerType}, space::_GhostSpace{D}, I::CartesianIndex{D},
@@ -373,7 +373,7 @@ end
 end
 
 # Whether `I` lies within `margin` steps of the edge of the padded grid.
-@inline function _near_edge(G::GhostMesh{D}, I::CartesianIndex{D}, margin::Int) where {D}
+@inline function _near_edge(G::_GhostMeshLike{D}, I::CartesianIndex{D}, margin::Int) where {D}
     n = size(indices(G))
     near = false
     for d in 1:D

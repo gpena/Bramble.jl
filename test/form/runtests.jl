@@ -58,6 +58,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("ghost_mode_a.jl")
         include("ghost_corners.jl")
         include("ghost_constrained.jl")
+        include("ghost_time_data.jl")
+        include("ghost_heat_convergence.jl")
     end
 
     if TestUtils.in_shard("forms-2")
@@ -106,5 +108,6 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("ghost_dirichlet.jl")
         include("ghost_lift.jl")
         include("ghost_convergence.jl")
+        include("ghost_semidiscrete.jl")
     end
 end

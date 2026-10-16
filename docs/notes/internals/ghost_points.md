@@ -8,27 +8,32 @@ edits below are proposals for the maintainer to read first.
 
 The design below is kept as written; the implementation (`src/mesh/ghost_mesh.jl`,
 `src/space/ghost_gridspace.jl`, `src/assembly/ghost_assembly.jl`,
-`src/assembly/ghost_relations.jl`) follows it except in five places. The published account
+`src/assembly/ghost_relations.jl`) follows it except in the places below. The published account
 of what was built is `docs/src/internals/mesh.md` and `docs/src/internals/space.md`.
 
-- **Grid functions with ghosts are padded `VectorElement`s, not a facet-only `GhostVector`.**
+- **Forms use padded `VectorElement`s, time loops use the facet-only `GhostVector`.**
   Decision 4 and the layout section chose the facet-only layout. The implementation assembles
-  on the padded mesh anyway, so `lift(Cₕ, u)` returns the padded grid function and the
-  existing runtime operators read its ghosts. `GhostVector`, `update_ghosts!`, the
-  ghost-aware runtime kernels and time-dependent relation data are deferred to follow-up
-  work, and `semidiscretize` on a ghost space refuses. As a consequence, mixed differences
-  composed at runtime on a grid function with ghosts cannot apply the corner rule, which
-  lives in the stencil engine: nested mixed differences on a ghost space are assembled as
-  forms.
+  on the padded mesh anyway, so `lift(Cₕ, u)` returns the padded grid function for forms, and
+  `GhostVector` with `update_ghosts!` and the ghost-aware runtime operators serves time loops.
+  Runtime operators on a `GhostVector` return the physical values as a plain `Vector`, so
+  mixed differences at ghost corners stay form-only: nested mixed differences on a ghost
+  space are assembled as forms. Time-dependent relation data are supported through
+  `d(t) = L g(t)`, `update_ghosts!(v, Cₕ, t)` and `semidiscretize`. Still refused with an
+  `ArgumentError`: a `semidiscretize` call with the `dirichlet` keyword, on a space keeping
+  ghosts as unknowns, or with a mass that reads a ghost whose data depend on time,
+  `semidiscretize(build, l)` and `semidiscretize_rhs`.
 - **The reduction replaces the per-tap substitution, and one space type replaces two.** The
   proposal substituted the closure at each stencil tap and kept a `ConstrainedGridSpace`.
   The implementation assembles on the padded space and reduces the result once per form,
   `Eᵀ A_pad E`, with the load `Eᵀ(F_pad − A_pad d)`, which leaves the guarded walk, the
   pattern recorder and the replay untouched. `GhostGridSpace` carries the closure `(E, d)`
   for both `gridspace(Ωₕ; ghosts)` and `constrained`.
-- **No pure-Neumann compatibility diagnostic.** The criterion that a violation is reported is
-  not implemented: no single-mesh threshold separates a quadrature defect of order `h²` from
-  an incompatibility. `mean_zero` solves the bordered system whatever the data.
+- **The compatibility diagnostic is a function of a problem builder.** No single-mesh
+  threshold separates a quadrature defect of order `h²` from an incompatibility, so
+  `Bramble.neumann_compatibility(problem, Ωₕ)` builds the problem on `Ωₕ` and on copies
+  refined once and twice, and logs a warning for incompatible data; `pde_solve` itself, which
+  sees one mesh, does not check. `Bramble.ghost_kernel` and `pde_solve(A, F; gauge)` fix the
+  ghost-only kernel that a form reading a corner's ghosts only through `Δₕ` leaves.
 - **`lift` is `public`, not exported.** Makie exports a `lift` of its own, so an export would
   make both unusable after `using Bramble, GLMakie`: write `Bramble.lift`.
 - **Out of scope, refused with an `ArgumentError`:** matrix-free and Kronecker operators,
@@ -810,6 +815,353 @@ Removed from the issue: the form terms `neumann(marker, g_N, v)` and
 `robin(marker, α, β, u, v)` (the same matrices come from `inner_Γ`; relations on a ghost
 space are written `operator => data`), Mode B, and "the constraint is a rank-one
 modification".
+
+## Ghost-only kernels
+
+gpena/Bramble.jl#777 item 1 asks first whether a ghost extension without the ghost-only
+kernel exists. Answer: none exists that keeps the form, keeps every ghost of a ghosted facet
+an unknown and leaves the physical solution unchanged. The kernel belongs to the form, not
+to the ghost storage. A relation tying the ghosts of each multi-facet node removes it
+exactly, but that relation is a gauge: it selects one representative of a set of ghost
+values that no physical value sees. Removing it through the form instead changes the
+physical solution. S7.2 and S7.3 therefore compute the kernel locally and fix it by
+bordering.
+
+### Which forms produce it
+
+Unknowns are the physical nodes, then the facet ghosts. At a node on `m ≥ 2` ghosted facets,
+`Δₕ` reads one ghost per facet, with weight `c_d = 2/((h_1 + h_2) h_2)` on axis `d`
+(`1/h_2²` with the mirrored spacing). A form whose terms read those ghosts only through
+`Δₕ` at that node sees them only through `Σ_d c_d z_d`. The `m` ghost columns of the
+assembled matrix are then parallel (`A e_{g_d} = c_d · (column of Δₕ at the node)`), and
+`m − 1` combinations of those ghosts lie in the kernel. That gives 4 in 2D (one per corner)
+and `4 Σ_e (n_e − 2) + 16` in 3D: `m = 2` at the `n_e − 2` interior nodes of the four edge
+lines along each axis `e`, `m = 3` at the 8 corners. 1D has no such node.
+
+Script `/tmp/s71/ghost_kernels.jl` (listed at the end of this section). The run used one
+thread, `julia --project=. --startup-file=no`, Julia 1.13.2, on the branch
+`v4.0.0/ghost-dynamics` at 9fc39556. The local kernel of a node is `m` minus the rank of its
+`m` ghost columns, normalised, at a 1e-12 relative singular-value threshold. Each node's
+ghosts come from `inner_Γ(∂ₙ(u), v)`, whose ghost columns have one entry each, in the row of
+the facet node.
+
+```
+== A. Forms on gridspace(Ωₕ; ghosts = :boundary), 2D 6×7 random (seed 11)
+  42 physical nodes, 26 ghosts, max h ratio 50; ghosts of the multi-facet nodes [[43, 57], [49, 63], [50, 62], [56, 68]]
+  innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)
+      local kernel 4 (σ_min/σ_max: largest counted 1e-16, smallest not counted none); zero ghost columns 0, rows 0
+  innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v) + inner_Γ(∂ₙ(u), ∂ₙ(v))
+      local kernel 0 (σ_min/σ_max: largest counted 0e+00, smallest not counted 4e-03); zero ghost columns 0, rows 0
+  innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v) + inner_Γ(∂ₙ(u), v)
+      local kernel 4 (σ_min/σ_max: largest counted 2e-16, smallest not counted none); zero ghost columns 0, rows 0
+  innerₕ(Δₕ(u), v) + innerₕ(u, v)
+      local kernel 4 (σ_min/σ_max: largest counted 0e+00, smallest not counted none); zero ghost columns 0, rows 26
+  innerₕ(u, Δₕ(v)) + innerₕ(u, v)
+      local kernel 8 (σ_min/σ_max: largest counted 0e+00, smallest not counted none); zero ghost columns 26, rows 0
+```
+
+- **`innerₕ(Δₕ(u), Δₕ(v))` (+ mass) is the form with this kernel.** `Δₕ` on both sides gives
+  every ghost a row and a column, and the corner columns are parallel to rounding (1e-16).
+  The system is square, symmetric and singular only by the ghost-only kernel.
+- **A trial-side boundary flux keeps the kernel.** With `inner_Γ(∂ₙ(u), v)` added, the
+  columns stay parallel (2e-16). At a facet node, the ghost tap of `∂ₙ` times the facet
+  weight is proportional to the ghost tap of `Δₕ` times the cell weight, with the same factor
+  on every facet: this is the summation by parts of "Form-level `Δₕ`". So the combination
+  the forms see is the node's discrete outward flux, summed over its facets.
+- **A test-side normal derivative per facet removes it.** `inner_Γ(∂ₙ(u), ∂ₙ(v))` gives each
+  ghost its own row (its facet's `∂ₙ(v)`), and the columns separate (`σ_min/σ_max ≥ 4e-3`).
+- **`Δₕ` on one side only does not give a ghost-only kernel; it gives a singular system that
+  needs a relation per ghost.** With `Δₕ(u)` against a plain `v`, every ghost row is zero
+  (26 of 26). With `u` against `Δₕ(v)`, every ghost column is zero, so all 26 ghosts are in
+  the kernel; the "local kernel 8" counts those zero columns at the four corners. These are
+  the Poisson-type forms. They are meant for `constrained`, whose relations remove every
+  ghost.
+
+A facet relation eliminates its own facet's ghost, `z_F = a · (the node's other ghosts) +
+(physical values)`. An axis-aligned relation (`α u + ∂ₙ(u)`, `u`, `∂ₙₙ`) reads one ghost, so
+`a = 0`. A conormal `∂ₙ(u; K)` also reads the ghost of the other facet at a corner (the
+off-diagonal `K` term), so `a ≠ 0`. In both cases, substituting into `Σ_d c_d z_d` leaves the
+node's remaining ghosts inside one combination again. A relation therefore never enlarges
+the count: a node keeps `r − 1` kernel vectors when `r ≥ 1` of its ghosts stay unknowns, and
+none when `r ≤ 1`. The exception is below. Part B (nullity is the count of singular values
+below `1e-14 σ₁`):
+
+```
+== B. Relations or fewer ghosted facets (bilap, same mesh)
+  constrained, ∂ₙ(u) => 0 on (:xmin,)                     (61, 61), nullity 2
+  constrained, ∂ₙ(u) => 0 on (:xmin, :ymin)               (55, 55), nullity 1
+  constrained, ∂ₙ(u) => 0 on (:xmin, :xmax)               (54, 54), nullity 0
+  constrained, ∂ₙ(u) => 0 on (:xmin, :xmax, :ymin, :ymax) (42, 42), nullity 0
+  gridspace(Ωₕ; ghosts = (:xmin,))       (49, 49), nullity 0
+  gridspace(Ωₕ; ghosts = (:xmin, :ymin)) (55, 55), nullity 1
+```
+
+The count follows the corners whose two facets both keep ghosts as unknowns: two corners
+for `(:xmin,)` related (`:xmax` meets `:ymin` and `:ymax`), one for `(:xmin, :ymin)`
+related, none for two opposite facets. A space ghosting only adjacent facets has the kernel
+too, with no relation at all.
+
+The exception: a conormal relation can cancel the remaining ghost's weight. At an `:xmin`
+corner, after the `x`-ghost is eliminated, the `y`-ghost enters with weight `c_y + a c_x`,
+and `a` is proportional to `k₁₂/k₁₁`. The weight vanishes at `k₁₂/k₁₁ = −η_y h_x/h_y`
+(`h_x` the `x` spacing at `:xmin`, `h_y` the `y` spacing at the corner's `y` facet, `η_y`
+that facet's outward sign). No row reads that ghost then. Its column is zero, and the
+node's count rises from 0 to 1.
+
+Script `/tmp/s71/conormal.jl`, same mesh, with `:xmin => ∂ₙ(u; K) => 0.0` as the only
+relation (nullity 2 at `t = 0`, as for `(:xmin,)` in part B). It finds the root from the
+reduced matrix, then checks it with a symmetric positive definite `K` of the same ratio:
+
+```
+reduced ghost column 50: t* = 22.302130 (from 2 affine rows, spread 3.2e-14); ‖column(t*)‖/‖column(0)‖ 4.6e-16, local kernel 1, nullity 3; t = 0: nullity 2
+reduced ghost column 56: t* = -3.620066 (from 2 affine rows, spread 2.2e-15); ‖column(t*)‖/‖column(0)‖ 9.8e-18, local kernel 1, nullity 3; t = 0: nullity 2
+h_x/h_y at (xmin, ymin) 22.302130, at (xmin, ymax) 3.620066
+SPD K = [1 22.3021; 22.3021 498.3850] (eigvals [0.002, 499.0]): nullity 3
+SPD K = [1 -3.6201; -3.6201 14.1049] (eigvals [0.0665, 15.0]): nullity 3
+```
+
+Away from those ratios a conormal relation gives the same count as an axis-aligned one.
+The S7.1 critic's sweep of `K = [1 t; t 1]` (`/tmp/s71-critic/conormal.jl`) gave nullity 2
+for `t` in ±0.5, ±1, ±2, ±5, ±20, as at `t = 0`. The kernel S7.2 has to find is therefore
+the ghost columns of a node that are parallel or zero, and a local test sees both cases.
+
+### The dimension in 3D, and why a global spectrum miscounts it
+
+```
+== C. 3D 4×5×6 random: local count against 4 Σ_e (n_e − 2) + 16 = 52, and the global spectrum
+  seed 7 (h ratio     14): 36 nodes with m=2, 8 with m=3, local kernel 52; count(s < 1e-14 σ₁)  52, next s/σ₁ 9.6e-11, rank() nullity  52
+  seed 1 (h ratio     46): 36 nodes with m=2, 8 with m=3, local kernel 52; count(s < 1e-14 σ₁)  52, next s/σ₁ 4.5e-14, rank() nullity  53
+  seed 2 (h ratio    301): 36 nodes with m=2, 8 with m=3, local kernel 52; count(s < 1e-14 σ₁)  70, next s/σ₁ 3.1e-18, rank() nullity  70
+  seed 3 (h ratio  29560): 36 nodes with m=2, 8 with m=3, local kernel 52; count(s < 1e-14 σ₁) 148, next s/σ₁ 1.8e-26, rank() nullity 148
+  seed 4 (h ratio     13): 36 nodes with m=2, 8 with m=3, local kernel 52; count(s < 1e-14 σ₁)  52, next s/σ₁ 1.2e-11, rank() nullity  52
+  seed 5 (h ratio     42): 36 nodes with m=2, 8 with m=3, local kernel 52; count(s < 1e-14 σ₁)  53, next s/σ₁ 2.8e-15, rank() nullity  57
+```
+
+The local count is 52 = `4 Σ_e (n_e − 2) + 16` on every mesh (36 edge nodes with `m = 2`,
+8 corners with `m = 3`). A count of the global singular values is not. The `Δₕ`-squared
+form scales as `h⁻⁴`, so on random meshes its nonzero singular values reach far below
+`σ₁`. The planning measurement (notes §4, 4×5×6, seed 7) found the 53rd at
+`3.4e-11 σ₁`, and `rank`'s default tolerance `n eps σ₁` gave nullities from 53 to 147 over
+the meshes tried, against 52. This rerun, on `[0, 1] × [0, 2] × [0, 1.5]`, has the 53rd at
+`9.6e-11 σ₁` for seed 7. What decides a count is where the smallest nonzero singular value
+falls against the threshold. `rank`'s default is `n eps σ₁ ≈ 6e-14 σ₁` for `n = 268`:
+
+- Seeds 7 and 4 have it at `9.6e-11` and `1.2e-11 σ₁`. Both counts are right.
+- Seed 1 has it at `4.5e-14 σ₁`, between the two thresholds. `1e-14 σ₁` counts 52, `rank` 53.
+- Seed 5 has it at `2.8e-15 σ₁`, under both: 53 and 57.
+- Seeds 2 and 3 have it at `3.1e-18` and `1.8e-26 σ₁`: 70 and 148 by both.
+
+The mesh's spacing ratio does not order these: seeds 1 and 5 (ratios 46 and 42) miscount,
+and seeds 4 and 7 (13 and 14) do not. Only the two largest ratios (301, 29560) go with the
+worst counts. No fixed relative threshold is safe. Counting per node, from that node's ghost
+columns only, reads the parallelism directly and needs no global threshold: S7.2's
+`ghost_kernel`.
+
+The same spread bounds a gauged solve. On the 2D 6×7 mesh the nonzero part has
+`κ = σ₁/σ_{N−4} = 1.9e12` (part D below), so the physical part of a solve against a
+manufactured `x` is accurate only to about 1e-9 (1.1e-9 here, 9.3e-10 in the planning run),
+and `pinv(rtol = 1e-14)` only to 1.2e-7 (4.9e-8 in planning). #777's flat 1e-10 is below
+rounding on these forms (plan departure 4).
+
+### Extensions tried, and what each costs
+
+```
+== D. Extensions on 2D 6×7 (seed 11), F = A x for a random x
+  κ of the nonzero part σ₁/σ_{N−4} = 1.9e+12
+  pinv(rtol = 1e-14): physical vs x 1.2e-07
+  D1 keep the x-ghost at every corner: nullity 1, κ 1.0e+14, physical vs x 1.1e-09, ‖A u − F‖/‖F‖ 4.7e-16
+  D1' keep the y-ghost instead: nullity 0, κ 1.9e+12, physical vs x 1.1e-09
+  D2 relation z_x = z_y per corner: nullity 0, κ 1.9e+12, physical vs x 1.1e-09, ‖A u − F‖/‖F‖ 3.7e-16
+  D1 against D2: ghosts differ by 9.7e-01, physical parts by 1.1e-10
+  D3 + inner_Γ(∂ₙ(u), ∂ₙ(v)): nullity 0, κ 4.0e+07, physical vs x 3.5e+00
+```
+
+1. **More storage (padded corner and edge points).** No row reads them: `Δₕ` reads one ghost
+   per incident facet and never a corner or edge point (`oracle_nd.jl` "Δ_H never reads
+   absent points"). Each added unknown is a zero column, so padding enlarges the kernel.
+2. **Less storage: one ghost per multi-facet node (D1).** D1 keeps the `x`-ghost at every
+   corner and drops the `y`-ghost, the relation `z_y = 0`; D1' keeps the `y`-ghost instead.
+   Both are structurally nonsingular, and the physical part matches `x` (1.1e-9). Conditioning
+   depends on which axis is kept: D1 has `κ` 1.0e14, enough that the global count reads
+   nullity 1, while D1' keeps the nonzero part's 1.9e12. A rule that keeps a good ghost needs
+   the mesh's weights at each node. The ghost values have no meaning (D1's are 0.97 from
+   D2's), and the choice breaks the symmetry between axes.
+3. **A relation tying the ghosts of each multi-facet node (D2).** `z_x = z_y` at each 2D
+   corner, `z_x = z_y = z_z` at a 3D corner, and pairs along edges. It is transversal to the
+   kernel whenever the weights `c_d` are positive (a kernel vector has `Σ_d c_d z_d = 0`, so
+   it cannot have all its ghosts equal), so it removes the kernel exactly. The reduced matrix
+   keeps the nonzero part's `κ` (1.9e12), and the physical part equals D1's to 1.1e-10.
+   Cost: a new relation kind in `constrained`, one that reads two or three facets' ghosts
+   (the corner-block problem of "Corner policy" item 3, extended to the 3D edge lines). It
+   applies to a mode no physical value sees. Its ghost values are a choice, as D1's are, and
+   are still not extrapolations of `u`. S7.3's bordered gauge `Zᵀu = 0` gives the same
+   physical part without a new relation kind, and its ghost values are the minimum-norm
+   ones.
+4. **A change of form (D3).** Adding `inner_Γ(∂ₙ(u), ∂ₙ(v))` removes the kernel and lowers
+   `κ` to 4.0e7. It is a different problem: the physical part moves by 3.5 (relative) from
+   the original form's. It is admissible only where the boundary term is part of the PDE's
+   weak form, for example a least-squares Neumann penalty. The trial-side
+   `inner_Γ(∂ₙ(u), v)` does not remove the kernel (part A).
+
+So the kernel is removable only by a gauge (items 2, 3, and S7.3's border) or by changing
+the problem (item 4). Of the gauges, the border needs no new relation kind and does not
+depend on an ordering of the ghosts.
+
+The main script:
+
+```julia
+# S7.1 evidence: ghost-only kernels of forms on ghost spaces (gpena/Bramble.jl#777).
+# Run: julia --project=. --startup-file=no /tmp/s71/ghost_kernels.jl
+using Bramble, LinearAlgebra, SparseArrays, Random, Printf
+
+function rmesh(dims, seed)
+    Bramble._seed_mesh1d_rng!(seed)
+    I, J, K = interval(0.0, 1.0), interval(0.0, 2.0), interval(0.0, 1.5)
+    Ω = length(dims) == 2 ? mesh(domain(I × J), dims, (false, false)) :
+        mesh(domain(I × J × K), dims, (false, false, false))
+    Bramble._unseed_mesh1d_rng!()
+    return Ω
+end
+hratio(Ω) = maximum(p -> maximum(diff(p)) / minimum(diff(p)), Bramble.points(Ω))
+gnullity(A; r = 1e-14) = (s = svdvals(Matrix(A)); count(<(r * s[1]), s))
+bilap(u, v) = innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)
+asm(W, f) = sparse(assemble(form(W, W, f)))
+
+# Each ghost column of inner_Γ(∂ₙ(u), v) has one entry, in the row of the ghost's facet node:
+# that maps every ghost to its node. Nodes with m ≥ 2 ghosts are the multi-facet nodes.
+function multifacet(W, np)
+    B = asm(W, (u, v) -> inner_Γ(∂ₙ(u), v))
+    node = Dict{Int, Vector{Int}}()
+    for j in (np + 1):size(B, 2)
+        r = findall(!iszero, B[:, j]); length(r) == 1 || error("ghost $j reads $(r)")
+        push!(get!(node, r[1], Int[]), j)
+    end
+    return sort([g for g in values(node) if length(g) ≥ 2]; by = first)
+end
+# Local kernel count: m − rank of the node's m ghost columns, normalised, at 1e-12.
+function local_kernel(A, groups)
+    k, worst, best = 0, 0.0, Inf
+    for g in groups
+        C = Matrix(A[:, g]); nz = vec(sum(abs2, C; dims = 1)) .> 0
+        k += count(!, nz); count(nz) == 0 && continue
+        C = C[:, nz] ./ sqrt.(sum(abs2, C[:, nz]; dims = 1))
+        s = svdvals(C); d = count(<(1e-12 * s[1]), s); k += d
+        d > 0 ? (worst = max(worst, s[end] / s[1])) : (best = min(best, s[end] / s[1]))
+    end
+    return k, worst, best
+end
+
+println("== A. Forms on gridspace(Ωₕ; ghosts = :boundary), 2D 6×7 random (seed 11)")
+Ω = rmesh((6, 7), 11); W = gridspace(Ω; ghosts = :boundary); np = npoints(Ω)
+G = multifacet(W, np)
+@printf("  %d physical nodes, %d ghosts, max h ratio %.0f; ghosts of the multi-facet nodes %s\n",
+        np, size(asm(W, bilap), 1) - np, hratio(Ω), string(G))
+forms = [
+    "innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)" => bilap,
+    "innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v) + inner_Γ(∂ₙ(u), ∂ₙ(v))" =>
+        (u, v) -> bilap(u, v) + inner_Γ(∂ₙ(u), ∂ₙ(v)),
+    "innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v) + inner_Γ(∂ₙ(u), v)" =>
+        (u, v) -> bilap(u, v) + inner_Γ(∂ₙ(u), v),
+    "innerₕ(Δₕ(u), v) + innerₕ(u, v)" => (u, v) -> innerₕ(Δₕ(u), v) + innerₕ(u, v),
+    "innerₕ(u, Δₕ(v)) + innerₕ(u, v)" => (u, v) -> innerₕ(u, Δₕ(v)) + innerₕ(u, v),
+]
+for (name, f) in forms
+    A = try asm(W, f) catch e; println("  $name: ", typeof(e)); continue end
+    k, worst, best = local_kernel(A, G)
+    zc = count(j -> iszero(A[:, j]), (np + 1):size(A, 2))
+    zr = count(i -> iszero(A[i, :]), (np + 1):size(A, 1))
+    @printf("  %-60s\n      local kernel %d (σ_min/σ_max: largest counted %.0e, smallest not counted %s); zero ghost columns %d, rows %d\n",
+            name, k, worst, isinf(best) ? "none" : @sprintf("%.0e", best), zc, zr)
+end
+
+println("== B. Relations or fewer ghosted facets (bilap, same mesh)")
+for fs in ((:xmin,), (:xmin, :ymin), (:xmin, :xmax), (:xmin, :xmax, :ymin, :ymax))
+    C = constrained(W, u -> map(F -> F => ∂ₙ(u) => 0.0, fs))
+    @printf("  constrained, ∂ₙ(u) => 0 on %-28s %s, nullity %d\n", string(fs),
+            size(asm(C, bilap)), gnullity(asm(C, bilap)))
+end
+for gs in ((:xmin,), (:xmin, :ymin))
+    Wg = gridspace(Ω; ghosts = gs)
+    @printf("  gridspace(Ωₕ; ghosts = %-15s %s, nullity %d\n", string(gs) * ")",
+            size(asm(Wg, bilap)), gnullity(asm(Wg, bilap)))
+end
+
+println("== C. 3D 4×5×6 random: local count against 4 Σ_e (n_e − 2) + 16 = ",
+        4 * sum((4, 5, 6) .- 2) + 16, ", and the global spectrum")
+for seed in (7, 1, 2, 3, 4, 5)
+    Ω3 = rmesh((4, 5, 6), seed); W3 = gridspace(Ω3; ghosts = :boundary)
+    A3 = asm(W3, bilap); G3 = multifacet(W3, npoints(Ω3)); M3 = Matrix(A3)
+    s = svdvals(M3); k = local_kernel(A3, G3)[1]
+    @printf("  seed %d (h ratio %6.0f): %d nodes with m=2, %d with m=3, local kernel %d; count(s < 1e-14 σ₁) %3d, next s/σ₁ %.1e, rank() nullity %3d\n",
+            seed, hratio(Ω3), count(g -> length(g) == 2, G3), count(g -> length(g) == 3, G3),
+            k, count(<(1e-14 * s[1]), s), s[end - 52] / s[1], size(M3, 1) - rank(M3))
+end
+
+println("== D. Extensions on 2D 6×7 (seed 11), F = A x for a random x")
+A = asm(W, bilap); M = Matrix(A); N = size(M, 1)
+Random.seed!(777); x = rand(N); Fx = M * x
+relerr(u) = norm(u[1:np] - x[1:np], Inf) / norm(x[1:np], Inf)
+s = svdvals(M); @printf("  κ of the nonzero part σ₁/σ_{N−4} = %.1e\n", s[1] / s[end - 4])
+@printf("  pinv(rtol = 1e-14): physical vs x %.1e\n", relerr(pinv(M; rtol = 1e-14) * Fx))
+drop = [g[2] for g in G]; keep = setdiff(1:N, drop)
+# D1: keep the x-ghost at every corner, drop the y-ghost (the relation z_y = 0)
+u1 = zeros(N); A1 = M[keep, keep]; u1[keep] = A1 \ Fx[keep]
+@printf("  D1 keep the x-ghost at every corner: nullity %d, κ %.1e, physical vs x %.1e, ‖A u − F‖/‖F‖ %.1e\n",
+        gnullity(A1), cond(A1), relerr(u1), norm(M * u1 - Fx) / norm(Fx))
+# D1': the same with the other ghost kept at every corner (no x-ghost at the corners)
+keepy = setdiff(1:N, [g[1] for g in G]); A1y = M[keepy, keepy]
+u1y = zeros(N); u1y[keepy] = A1y \ Fx[keepy]
+@printf("  D1' keep the y-ghost instead: nullity %d, κ %.1e, physical vs x %.1e\n",
+        gnullity(A1y), cond(A1y), relerr(u1y))
+# D2: a relation tying the corner ghosts, z_x − z_y = 0
+E = Matrix(1.0I, N, N)[:, keep]
+for g in G
+    E[g[2], findfirst(==(g[1]), keep)] = 1.0
+end
+A2 = E' * M * E; u2 = E * (A2 \ (E' * Fx))
+@printf("  D2 relation z_x = z_y per corner: nullity %d, κ %.1e, physical vs x %.1e, ‖A u − F‖/‖F‖ %.1e\n",
+        gnullity(A2), cond(A2), relerr(u2), norm(M * u2 - Fx) / norm(Fx))
+@printf("  D1 against D2: ghosts differ by %.1e, physical parts by %.1e\n",
+        norm(u1[drop] - u2[drop], Inf), norm(u1[1:np] - u2[1:np], Inf) / norm(u2[1:np], Inf))
+# D3: the boundary term inner_Γ(∂ₙ(u), ∂ₙ(v)) added: a different problem
+A3 = Matrix(asm(W, (u, v) -> bilap(u, v) + inner_Γ(∂ₙ(u), ∂ₙ(v)))); u3 = A3 \ Fx
+@printf("  D3 + inner_Γ(∂ₙ(u), ∂ₙ(v)): nullity %d, κ %.1e, physical vs x %.1e\n",
+        gnullity(A3), cond(A3), relerr(u3))
+```
+
+The conormal script:
+
+```julia
+# Conormal relation on :xmin only, K = [1 t; t 1]: when does the free y-ghost of an
+# xmin corner leave the reduced form? Its reduced column is (c_y + a t c_x) times a vector.
+using Statistics; include_string(Main, replace(read("/tmp/s71/ghost_kernels.jl", String), r"println\(\"== A\..*"s => ""))
+Ω = rmesh((6, 7), 11); W = gridspace(Ω; ghosts = :boundary); np = npoints(Ω)
+red(t) = Matrix(asm(constrained(W, u -> (:xmin => ∂ₙ(u; K = [1.0 t; t 1.0]) => 0.0,)), bilap))
+R = [red(t) for t in (0.0, 1.0, 2.0)]; n = size(R[1], 2)
+for j in (np + 1):n
+    R[2][:, j] ≈ R[1][:, j] && continue
+    roots = Float64[]
+    for i in 1:n
+        v0, v1, v2 = R[1][i, j], R[2][i, j], R[3][i, j]
+        s = v1 - v0
+        abs(s) > 1e-8 * abs(v0) && abs(v2 - 2v1 + v0) < 1e-10 * max(abs(v0), abs(v2)) &&
+            push!(roots, -v0 / s)
+    end
+    ts = median(sort(roots)); A = red(ts)
+    @printf("reduced ghost column %d: t* = %.6f (from %d affine rows, spread %.1e); ‖column(t*)‖/‖column(0)‖ %.1e, local kernel %d, nullity %d; t = 0: nullity %d\n",
+            j, ts, length(roots), isempty(roots) ? NaN : maximum(roots) - minimum(roots),
+            norm(A[:, j]) / norm(R[1][:, j]), count(iszero, eachcol(A[:, (np + 1):end])) +
+            (norm(A[:, j]) < 1e-12 * norm(R[1][:, j])), gnullity(A), gnullity(R[1]))
+end
+x, y = Bramble.points(Ω); hx, hy1, hyn = x[2] - x[1], y[2] - y[1], y[end] - y[end - 1]
+@printf("h_x/h_y at (xmin, ymin) %.6f, at (xmin, ymax) %.6f\n", hx / hy1, hx / hyn)
+for t in (hx / hy1, -hx / hyn)
+    K = [1.0 t; t t^2 + 1.0]
+    A = Matrix(asm(constrained(W, u -> (:xmin => ∂ₙ(u; K) => 0.0,)), bilap))
+    @printf("SPD K = [1 %.4f; %.4f %.4f] (eigvals %s): nullity %d\n", t, t, t^2 + 1,
+            string(round.(eigvals(K); sigdigits = 3)), gnullity(A))
+end
+```
 
 ## Open questions
 

@@ -11,6 +11,11 @@
 # facet there: the eliminated ghosts couple in blocks (one entry per ghost, a 2×2 block at a
 # 2D corner), each solved on its own, so the whole closure stays sparse.
 #
+# Data that depend on time, `(x, t) -> …`, leave `E` as it is and make `d` depend on time.
+# `d` is linear in the data values at the related facet nodes and the Dirichlet nodes, so
+# the same block solves give, once, the sparse `L` with `d(t) = L g(t)`, which the space
+# stores with the points where `g` is read (`_TimeData`, in ghost_gridspace.jl).
+#
 # See also: `GhostGridSpace`, `FacetOperator`, `GhostBilinearForm`
 
 """
@@ -27,12 +32,13 @@ Cₕ = constrained(Wₕ, u -> (:xmin => ∂ₙ(u) => 0.0,
 
 The operator is either `u` itself, a Dirichlet relation, or a facet operator that reads the
 facet's ghost: [`∂ₙ`](@ref) (conormal `∂ₙ(u; K)` included), [`∂ₙₙ`](@ref), and their linear
-combinations with `u`. The data is a number or a function of the point. At each node of the
-facet, a ghost relation is solved for the node's ghost; at a 2D corner where two conormal
-relations read each other's ghost, the two are solved together. A Dirichlet relation
-`:F => u => g` removes the nodes of `F` from the unknowns and fixes them to `g`; its facet
-needs no ghosts, and if it has them it needs one ghost relation besides, which solves for
-them. A ghosted facet without any relation keeps its ghosts as unknowns.
+combinations with `u`. The data is a number, a function of the point `x -> …`, or a
+function of the point and the time `(x, t) -> …` (told apart by the methods it has). At
+each node of the facet, a ghost relation is solved for the node's ghost; at a 2D corner
+where two conormal relations read each other's ghost, the two are solved together. A
+Dirichlet relation `:F => u => g` removes the nodes of `F` from the unknowns and fixes them
+to `g`; its facet needs no ghosts, and if it has them it needs one ghost relation besides,
+which solves for them. A ghosted facet without any relation keeps its ghosts as unknowns.
 
 The degrees of freedom of the result are the physical nodes no Dirichlet relation fixes, in
 the mesh's linear order, then the ghosts that remain unknowns, in the order of `Wₕ`. Its
@@ -41,6 +47,17 @@ load needs the bilinear form, `assemble(a, l)`, whose matrix `Eᵀ A E` stays sy
 `A` is. Dirichlet conditions can instead replace rows, `assemble(a, l; dirichlet,
 symmetrize)`, on a space whose ghosts are all eliminated and none of whose nodes are fixed
 by `u => g`: its unknowns are then the physical nodes, as on `gridspace(Ωₕ)`.
+
+When some data depend on time, `E` stays the same and only `d` depends on time, `d(t)`.
+[`lift`](@ref)`(Cₕ, u, t)` gives `E u + d(t)`; `lift(Cₕ, u)`, `lift(Cₕ)` and
+`assemble(a, l)` refuse with an `ArgumentError`, as there is no single `d`, while `form`
+and `assemble(a)`, which read `E` only, work as on a static space. A time-dependent problem
+on such a space is posed through `semidiscretize`. `constrained` evaluates the data at
+`t = 0`, so they must be defined there, and `closure(Cₕ)` gives `d(0)` as its `d`.
+Dirichlet data in time that meet at a corner are checked to agree at `t = 0` only; the
+corner then takes the first facet's datum at every `t`. Under `CpuPolyester` a datum that
+closes over an array crosses each task whole and allocates on every evaluation; one that
+closes over numbers only, or over nothing, allocates nothing.
 
 Refused with an `ArgumentError`: a space without ghosts, an already constrained space, a
 facet with two Dirichlet or two ghost relations, a ghost relation on a facet that carries
@@ -60,6 +77,9 @@ A, F = assemble(a, l)
 
 Dₕ = constrained(gridspace(Ωₕ; ghosts = (:xmax,)), u -> (:xmin => u => 0.0,
     :xmax => ∂ₙ(u) => x -> x[1]))  # 10 unknowns: the node at xmin is fixed
+
+Tₕ = constrained(Wₕ, u -> (:xmin => ∂ₙ(u) => (x, t) -> sin(t), :xmax => u + ∂ₙ(u) => 2.0))
+Bramble.lift(Tₕ, zeros(Bramble.ndofs(Tₕ)), 0.5)   # E u + d(0.5)
 ```
 
 See also: [`gridspace`](@ref), [`∂ₙ`](@ref), [`∂ₙₙ`](@ref)
@@ -84,7 +104,8 @@ end
 # has one degree of freedom per physical node and per ghost and no affine part.
 function _check_unconstrained(Wₕ::GhostGridSpace)
     G = mesh(padded_space(Wₕ))
-    ndofs(Wₕ) == npoints(physical_mesh(G)) + nghosts(G) && iszero(Wₕ.d) && return nothing
+    ndofs(Wₕ) == npoints(physical_mesh(G)) + nghosts(G) && iszero(Wₕ.d) &&
+        !_is_time_dependent(Wₕ) && return nothing
     throw(
         ArgumentError(
         "constrained takes the space of gridspace(Ωₕ; ghosts = ...), and $(Wₕ) is already " *
@@ -124,6 +145,15 @@ end
 
 @inline _is_dirichlet(r::_FacetRelation) = r.op isa TrialFunction
 
+# Data depending on time take the time as a second argument, read off their methods as
+# `dirichlet_constraints` reads its conditions (`_accepts`, geometry/marker.jl).
+@inline _is_time_datum(data) = data isa Function && _accepts(data, Val(2))
+@inline _is_time_relation(r::_FacetRelation) = _is_time_datum(r.data)
+
+# The datum at the point `x` at time `t`.
+@inline _datum(data::Number, x, t) = data
+@inline _datum(data, x, t) = _is_time_datum(data) ? data(x, t) : data(x)
+
 function _facet_relation(G::GhostMesh{D}, p::Pair{Symbol, <:Pair}) where {D}
     face = _find_face(Val(D), first(p))
     face === nothing && _throw_not_a_relation_facet(first(p), D)
@@ -155,7 +185,8 @@ _check_relation_data(::Union{Number, Function}, ::Symbol) = nothing
     throw(
         ArgumentError(
         "the data of the relation on :$name is $(summary(data)); give a number or a " *
-        "function of the point, as in `:$name => ∂ₙ(u) => x -> x[1]`.",
+        "function of the point, as in `:$name => ∂ₙ(u) => x -> x[1]`, or of the point " *
+        "and the time, as in `:$name => ∂ₙ(u) => (x, t) -> t * x[1]`.",
     ),
     )
 end
@@ -211,11 +242,12 @@ end
 
 # The rows of the relations of `rels` on the padded grid, one per ghost they eliminate,
 # in ghost order: `R[k, :]` is the facet weight times the relation of ghost `ghosts[k]`'s
-# facet at its node, and `b[k]` the weight times the data there.
+# facet at its node, and `b[k]` the weight times the data there (the weight alone, for data
+# depending on time); `rel[k]` is the index in `rels` of that relation.
 function _relation_rows(P::ScalarGridSpace, rels)
     G = mesh(P)
     plin = LinearIndices(npoints(G, Tuple))
-    isempty(rels) && return spzeros(eltype(P), 0, length(plin)), eltype(P)[], Int[]
+    isempty(rels) && return spzeros(eltype(P), 0, length(plin)), eltype(P)[], Int[], Int[]
     facet = zeros(Int, nghosts(G))            # the relation of each ghost, 0 if none
     for g in 1:nghosts(G)
         _, d, side = boundary_node(G, g)
@@ -235,13 +267,15 @@ function _relation_rows(P::ScalarGridSpace, rels)
         end
         b[k] = bF[i]
     end
-    return sparse(rows, cols, vals, length(ghosts), length(plin)), b, ghosts
+    return sparse(rows, cols, vals, length(ghosts), length(plin)), b, ghosts, facet[ghosts]
 end
 
 # The relation's rows and data on the nodes of its facet, by forms on the padded space;
-# the rows transposed, so each node's row is a column.
+# the rows transposed, so each node's row is a column. Data depending on time give the
+# facet weights instead, which `L` multiplies the data at each time by.
 function _assemble_relation(P::ScalarGridSpace, r::_FacetRelation)
-    op, data, name = r.op, r.data, r.name
+    op, name = r.op, r.name
+    data = _is_time_relation(r) ? one(eltype(P)) : r.data
     R = assemble(form(P, P, (u, v) -> inner_Γ(op, v; markers = (name,))))
     b = assemble(form(P, v -> inner_Γ(data, _facet_identity(v); markers = (name,))))
     return sparse(transpose(R)), b
@@ -256,46 +290,124 @@ function _constrained_space(Wₕ::GhostGridSpace, rels, drels)
         has_ghosts(G, r.d, _GHOST_SIDES[r.s]) || continue
         any(q -> q.d == r.d && q.s == r.s, rels) || _throw_dirichlet_orphan_ghosts(r.name)
     end
-    R, b, ghosts = _relation_rows(P, rels)
-    fixed, g = _dirichlet_values(G, drels, eltype(P))
+    R, b, ghosts, rel = _relation_rows(P, rels)
+    fixed, g, order, owner = _dirichlet_values(G, drels, eltype(P))
     keep = _kept_points(G, ghosts, fixed)
-    E, d = _relation_closure(G, R, b, ghosts, keep, fixed, g)::Tuple{SparseMatrixCSC, Vector}
     T = eltype(P)
-    return GhostGridSpace(P, SparseMatrixCSC{T, Int}(E), Vector{T}(d))
+    be = backend(P)
+    if !any(_is_time_relation, rels) && !any(_is_time_relation, drels)
+        E, d, _ = _relation_closure(G, R, b, ghosts, keep, fixed,
+            g)::Tuple{SparseMatrixCSC, Vector, Nothing}
+        return GhostGridSpace(P, _closure_matrix(be, T, E), _closure_data(be, T, d))
+    end
+    w = map(k -> _is_time_relation(rels[rel[k]]) ? b[k] : one(eltype(b)), eachindex(b))
+    E, _, L = _relation_closure(G, R, b, ghosts, keep, fixed, g, (w, order))
+    td = _time_data(be, T, G, L, rels, drels, b, ghosts, rel, g, order, owner)
+    d = _backend_vector(be, T, size(E, 1))
+    W = GhostGridSpace(P, _closure_matrix(be, T, E), d, td)
+    _lift_affine!(d, W, zero(real(T)))      # the stored `d` is `d(0)`
+    return W
+end
+
+# The record of `d(t) = L g(t)`: the sources are the eliminated ghosts (`1:m`, in the order
+# of `ghosts`), then the fixed points in `order`. `g` starts with the static values, the
+# facet-weighted data `b[k]` of a static relation and the value of a static Dirichlet datum;
+# each relation with data depending on time gets a group of its sources, which are
+# contiguous: a facet's ghosts follow one another, and so do the points a Dirichlet
+# relation fixes first.
+function _time_data(be, ::Type{T}, G::GhostMesh, L::SparseMatrixCSC, rels, drels, b,
+        ghosts, rel, gfix, order, owner) where {T}
+    Ωₕ = physical_mesh(G)
+    m = length(ghosts)
+    g = zeros(T, m + length(order))
+    for k in 1:m
+        _is_time_relation(rels[rel[k]]) || (g[k] = b[k])
+    end
+    for (q, p) in enumerate(order)
+        _is_time_relation(drels[owner[q]]) || (g[m + q] = gfix[p])
+    end
+    groups = Any[]
+    for (i, r) in enumerate(rels)
+        _is_time_relation(r) || continue
+        ks = findall(==(i), rel)
+        isempty(ks) && continue
+        pts = [point(Ωₕ, first(boundary_node(G, ghosts[k]))) for k in ks]
+        push!(groups, _time_group(be, r.data, pts, first(ks)))
+    end
+    pin = CartesianIndices(npoints(G, Tuple))
+    phys = first(physical_indices(G)) - oneunit(first(pin))
+    for (i, r) in enumerate(drels)
+        _is_time_relation(r) || continue
+        qs = findall(==(i), owner)
+        isempty(qs) && continue
+        pts = [point(Ωₕ, pin[order[q]] - phys) for q in qs]
+        push!(groups, _time_group(be, r.data, pts, m + first(qs)))
+    end
+    Lt = sparse(transpose(SparseMatrixCSC{T, Int}(L)))
+    stored(x) = copyto!(_backend_vector(be, eltype(x), length(x)), x)
+    return _TimeData(Tuple(groups), stored(SparseArrays.getcolptr(Lt)), stored(rowvals(Lt)),
+        stored(nonzeros(Lt)), stored(g), stored(g))
+end
+
+function _time_group(be, f, pts::Vector, first::Int)
+    return _TimeGroup(f, copyto!(_backend_vector(be, eltype(pts), length(pts)), pts), first)
 end
 
 # The padded points the Dirichlet relations fix, as a mask over the padded grid, and their
 # values: the data at each physical node of the facet, `data(point(Ωₕ, I))` as `dirichlet`
-# evaluates it. A node of two such facets (a corner) takes the first value, and the second
-# must agree with it to a relative `√eps` of the larger of the two, plus `10 eps` of the
-# largest datum of all, so that a rounding zero (`sin(π x)` at `x = 1`) meets an exact one.
+# evaluates it (at `t = 0` for data depending on time). A node of two such facets (a
+# corner) takes the first value, and the second must agree with it to a relative `√eps` of
+# the larger of the two, plus `10 eps` of the largest datum of all, so that a rounding zero
+# (`sin(π x)` at `x = 1`) meets an exact one. `order` lists the fixed points as first
+# fixed, and `owner` the index in `drels` of the relation that fixed each.
 function _dirichlet_values(G::GhostMesh{D}, drels, ::Type{T}) where {D, T}
     Ωₕ = physical_mesh(G)
     plin = LinearIndices(npoints(G, Tuple))
     n = npoints(Ωₕ, Tuple)
-    pts, vals, names = Int[], Any[], Symbol[]
-    for r in drels
+    pts, vals, names, rids = Int[], Any[], Symbol[], Int[]
+    t0 = zero(real(T))
+    for (i, r) in enumerate(drels)
         k = r.s == 1 ? 1 : n[r.d]
         for I in CartesianIndices(ntuple(e -> e == r.d ? (k:k) : (1:n[e]), Val(D)))
             push!(pts, plin[padded_index(G, I)])
-            push!(vals, r.data isa Number ? r.data : r.data(point(Ωₕ, I)))
+            push!(vals, _datum(r.data, point(Ωₕ, I), t0))
             push!(names, r.name)
+            push!(rids, i)
         end
     end
     S = mapreduce(typeof, promote_type, vals; init = T)
     fixed = falses(length(plin))
     g = zeros(S, length(plin))::Vector{S}
     first_name = Vector{Symbol}(undef, length(plin))
-    floor = isempty(vals) ? zero(real(S)) : 10 * eps(real(S)) * maximum(abs, vals)
-    for (p, v, name) in zip(pts, vals, names)
+    floor = 10 * eps(real(S)) * maximum(abs, Iterators.filter(isfinite, vals);
+        init = zero(real(S)))
+    order, owner, first_rel = Int[], Int[], zeros(Int, length(plin))
+    for (p, v, name, i) in zip(pts, vals, names, rids)
         if fixed[p]
+            isequal(g[p], v) && continue
+            isfinite(g[p]) || _throw_dirichlet_not_finite(drels[first_rel[p]], g[p])
+            isfinite(v) || _throw_dirichlet_not_finite(drels[i], v)
             abs(g[p] - v) <= sqrt(eps(real(S))) * max(abs(g[p]), abs(v)) + floor ||
                 _throw_dirichlet_disagree(first_name[p], name, g[p], v)
         else
-            fixed[p], g[p], first_name[p] = true, v, name
+            fixed[p], g[p], first_name[p], first_rel[p] = true, v, name, i
+            push!(order, p), push!(owner, i)
         end
     end
-    return fixed, g
+    return fixed, g, order, owner
+end
+
+# Two equal values agree, `Inf` included; a value that is not finite and differs from the
+# other cannot be compared, so the datum itself is named.
+@noinline function _throw_dirichlet_not_finite(r::_FacetRelation, v)
+    when = _is_time_relation(r) ? " at t = 0, where constrained evaluates it" : ""
+    throw(
+        ArgumentError(
+        "the Dirichlet datum on :$(r.name) is not finite$when ($v) at a node it shares " *
+        "with another Dirichlet facet, so the two cannot be checked to agree there. Give " *
+        "data that are finite at the corners of their facets.",
+    ),
+    )
 end
 
 # The ghosts of a ghosted facet whose nodes `u => g` fixes would be unknowns that no
@@ -343,8 +455,11 @@ end
 # Dirichlet value `g`, and the eliminated ghosts solve `C u_g = b − B u − R_fixed g`, `C`
 # their columns of the rows and `B` the kept ones. `C` couples only the ghosts of one node,
 # so it is solved block by block, each block's rows of `B` with its own LU.
+# With `sources = (w, order)` it also returns `L`, `d = L g` for the sources `g` of
+# `_time_data`: column `k` of `L` is the solve for `b = w[k] e_k`, column `m + q` the solve
+# for `b = −R[:, p]` plus the 1 at `p = order[q]`; otherwise `L` is `nothing`.
 function _relation_closure(G::GhostMesh, R::SparseMatrixCSC, b, ghosts, keep,
-        fixed::BitVector, g::AbstractVector)
+        fixed::BitVector, g::AbstractVector, sources = nothing)
     Npad = size(R, 2)
     m, n = length(ghosts), length(keep)
     gpos = zeros(Int, Npad)
@@ -355,6 +470,7 @@ function _relation_closure(G::GhostMesh, R::SparseMatrixCSC, b, ghosts, keep,
     bg = Vector{promote_type(eltype(b), eltype(R), eltype(g))}(b)
     Ci, Cj, Cv = Int[], Int[], eltype(R)[]
     Bi, Bj, Bv = Int[], Int[], eltype(R)[]
+    Fi, Fj, Fv = Int[], Int[], eltype(R)[]   # `−R_fixed`, by fixed point
     for p in 1:Npad, q in nzrange(R, p)
 
         v = nonzeros(R)[q]
@@ -366,6 +482,7 @@ function _relation_closure(G::GhostMesh, R::SparseMatrixCSC, b, ghosts, keep,
             push!(Bi, k), push!(Bj, kpos[p]), push!(Bv, -v)
         elseif fixed[p]
             bg[k] -= v * g[p]
+            push!(Fi, k), push!(Fj, p), push!(Fv, -v)
         else
             _throw_relation_reads_absent(_relation_name(G, ghosts[k]))
         end
@@ -382,7 +499,20 @@ function _relation_closure(G::GhostMesh, R::SparseMatrixCSC, b, ghosts, keep,
     d = zeros(promote_type(eltype(dg), eltype(g)), Npad)
     d[gpts] .= dg
     d[fixed] .= g[fixed]
-    return sparse(rows, cols, vals, Npad, n), d
+    L = _affine_map(G, C, gpts, Fi, Fj, Fv, ghosts, Npad, sources)
+    return sparse(rows, cols, vals, Npad, n), d, L
+end
+
+_affine_map(G, C, gpts, Fi, Fj, Fv, ghosts, Npad, ::Nothing) = nothing
+function _affine_map(G::GhostMesh, C::SparseMatrixCSC, gpts, Fi, Fj, Fv, ghosts, Npad::Int,
+        (w, order)::Tuple)
+    m, nf = size(C, 1), length(order)
+    src = zeros(Int, Npad)
+    src[order] .= m .+ (1:nf)
+    St = sparse(vcat(1:m, src[Fj]), vcat(1:m, Fi), vcat(w, Fv), m + nf, m)
+    Li, Lj, Lv, _ = _block_solve(G, C, St, zeros(eltype(St), m), ghosts)
+    return sparse(vcat(gpts[Li], order), vcat(Lj, m .+ (1:nf)),
+        vcat(Lv, ones(eltype(Lv), nf)), Npad, m + nf)
 end
 
 @inline function _relation_name(G::GhostMesh, g::Int)

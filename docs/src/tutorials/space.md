@@ -211,6 +211,107 @@ The weights of `inner_Γ` are facet weights: the transverse measure at each face
 
 A ghost space is a space of unknowns for forms. [`form`](@ref) builds on it as on any space, and [`constrained`](@ref) ties its ghosts to boundary relations, which the [form tutorial](@ref form_ghost) shows. The solution vector comes back in the order above, and `Bramble.lift` turns it into a grid function with its ghosts filled in. That grid function lives on the padded space, one point longer at each ghosted end.
 
+### Ghost values in a time loop
+
+An explicit time step assembles no system. It holds the solver's vector, refreshes the ghosts from it and applies an operator. [`GhostVector`](@ref) is that pair of the physical values and a buffer of ghosts. `GhostVector(Cₕ, u)` wraps the vector `u` of the physical values, in the mesh's linear order, without a copy. `Bramble.physical(v)` is `u` itself, and `Bramble.ghost_values(v)` is the buffer, which starts at zero. The space below is a [`constrained`](@ref) ghost space on the grid of this section, with a Neumann datum on every facet.
+
+```@example space
+import Bramble: Δₕ!, D₋ₓ
+
+Cₕ_g = constrained(W_ghost, u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => ∂ₙ(u) => 0.0,
+                                  :ymin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0))
+
+u_g = [sinpi(p[1]) + p[2]^2 for p in vec([point(Ωₕ_g, I) for I in indices(Ωₕ_g)])]
+v_g = GhostVector(Cₕ_g, u_g)
+
+@assert Bramble.physical(v_g) === u_g
+@assert length(v_g) == ndofs(W_ghost) == 26
+@assert all(iszero, Bramble.ghost_values(v_g))
+
+length(v_g), length(Bramble.ghost_values(v_g))
+```
+
+`update_ghosts!(v, Cₕ)` writes into the buffer the ghosts that the relations give, from the values of `v`. It reads the rows of the closure that belong to the ghosts and nothing else, so its cost follows the facets, not the mesh, and it allocates nothing. With a time, `update_ghosts!(v, Cₕ, t)` takes the data of the relations at `t`. The data here do not depend on time, so the time is ignored and both calls fill the same ghosts. They are the ghosts of `Bramble.lift`, which the next block compares through an operator:
+
+```@example space
+update_ghosts!(v_g, Cₕ_g)
+ghosts_static = copy(Bramble.ghost_values(v_g))
+
+fill!(Bramble.ghost_values(v_g), 0.0)
+update_ghosts!(v_g, Cₕ_g, 0.7)
+
+@assert Bramble.ghost_values(v_g) == ghosts_static
+@assert any(!iszero, ghosts_static)
+@assert Bramble.physical(v_g) === u_g                  # the update left the physical part alone
+@assert Δₕ!(similar(u_g), v_g) ≈ Δₕ!(similar(u_g), update_ghosts!(GhostVector(Cₕ_g, u_g), Cₕ_g))
+
+ghosts_static[1:3]
+```
+
+A runtime operator on a `GhostVector` reads the ghosts from the buffer and returns the values at the physical nodes, a plain vector. It equals the same operator on `Bramble.lift(Cₕ, u)` at those nodes, with no padded function built:
+
+```@example space
+U_g = Bramble.lift(Cₕ_g, u_g)
+phys = Bramble.physical_indices(mesh(Cₕ_g))
+dims = npoints(mesh(Bramble.padded_space(Cₕ_g)), Tuple)
+at_nodes(F) = reshape(collect(F), dims)[phys]
+
+out_g = similar(u_g)
+Δₕ!(out_g, v_g)
+
+@assert out_g ≈ vec(at_nodes(Δₕ(U_g)))
+@assert Δₕ(v_g) ≈ out_g
+@assert D₋ₓ(v_g) ≈ vec(at_nodes(D₋ₓ(U_g)))
+
+extrema(out_g)
+```
+
+Two things follow from the physical-only result. The result carries no ghosts: it is as long as `u`, not as `v`. And the nested mixed differences of the [operators tutorial](operators.md), which a `lift` function composes, stay forms: a `GhostVector` takes one operator at a time.
+
+#### An explicit heat step
+
+The use this serves is the explicit heat equation ``u_t = \Delta_h u`` with a Neumann relation, on a non-uniform grid. Each step refreshes the ghosts, applies `Δₕ!` and advances the physical vector in place. The unit square has ``11 \times 9`` nodes graded by ``x \mapsto x^{3/2}``, and the datum is zero on all four facets. The function ``e^{-2\pi^2 t}\cos \pi x \cos \pi y`` solves the continuous problem, so it is the reference. The step is ``0.2 / (h_x^{-2} + h_y^{-2})``, rounded down to divide the final time, with ``h_x`` and ``h_y`` the smallest spacings of each axis: inside the explicit stability limit ``1 / (2 (h_x^{-2} + h_y^{-2}))`` of the uniform grid with those spacings.
+
+```@example space
+Ω_h = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+Ωₕ_h = mesh(Ω_h, (11, 9), (true, true))
+xs = [(i / 10)^1.5 for i in 0:10]
+ys = [(j / 8)^1.5 for j in 0:8]
+change_points!(Ωₕ_h, markers(Ω_h), (xs, ys))
+
+Cₕ_h = constrained(gridspace(Ωₕ_h; ghosts = :boundary),
+                   u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => ∂ₙ(u) => 0.0,
+                         :ymin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0))
+
+u₀ = [cospi(p[1]) * cospi(p[2]) for p in vec([point(Ωₕ_h, I) for I in indices(Ωₕ_h)])]
+u_h = copy(u₀)
+v_h = GhostVector(Cₕ_h, u_h)
+Lu = similar(u_h)
+
+T = 0.05
+Δt₀ = 0.2 / (1 / minimum(diff(xs))^2 + 1 / minimum(diff(ys))^2)
+nsteps = ceil(Int, T / Δt₀)
+Δt = T / nsteps
+
+for _ in 1:nsteps
+    update_ghosts!(v_h, Cₕ_h)
+    Δₕ!(Lu, v_h)
+    u_h .+= Δt .* Lu
+end
+
+u_exact = exp(-2π^2 * T) .* u₀
+err = maximum(abs, u_h - u_exact)
+
+@assert Δt <= Δt₀
+@assert err < 2e-2 * maximum(abs, u₀)
+@assert maximum(abs, u_h) < maximum(abs, u₀)            # the mode decayed
+@assert Bramble.physical(v_h) === u_h                   # the loop wrote into the solver's vector
+
+nsteps, err
+```
+
+The error is the spatial error of the scheme on this grid, about half a percent of the amplitude.
+
 ## Reference
 
 ### Constructors

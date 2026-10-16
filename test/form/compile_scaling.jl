@@ -60,10 +60,12 @@ end
 #   2D  k=3   4.4 s   k=4  78.8 s
 #   3D  k=2   2.6 s   k=3  41.5 s
 # Each level multiplies the compile time by about 16, more than its term count (2 in 2D, 3
-# in 3D) accounts for, and this case records that cost. Depth 3 in 2D must stay within a
-# bound loose enough for machine noise (about 14 times the figure above), so a blow-up of
-# the kind the N-term case guards against fails it. The matrix is also compared with the
-# runtime composition, so a fast compile that drops a term fails too.
+# in 3D) accounts for, and this case records that cost. Depth 3 in 2D must stay within
+# 180 s, about 2.2 times the 80 s the macOS nightly runner takes (coverage, --optimize=1,
+# --check-bounds=yes; about 2.3 times slower than ubuntu) and about 40 times the local
+# 4.4 s. A depth-4 blow-up (78.8 s locally, about 16 times per level) still fails it by a
+# wide margin. The matrix is also compared with the runtime composition, so a fast compile
+# that drops a term fails too.
 @testset "Δₕ to depth 3 compiles in a bound" begin
     Random.seed!(774)
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false))
@@ -72,7 +74,7 @@ end
 
     a = form(Wₕ, Wₕ, (u, v) -> innerₕ(Δₕ(Δₕ(Δₕ(u))), v))
     t = @elapsed A = assemble(a)
-    @test t <= 60
+    @test t <= 180
 
     u = element(Wₕ, rand(ndofs(Wₕ)))
     w = element(Wₕ, rand(ndofs(Wₕ)))

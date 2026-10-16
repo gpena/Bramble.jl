@@ -526,6 +526,10 @@ let
     end
 end
 
+# --- 12. ghost spaces against plain spaces, on every CPU policy ------------ #
+include(joinpath(@__DIR__, "ghost_vs_plain.jl"))
+SUITE["ghost vs plain"] = _ghost_vs_plain_group()
+
 # --- allocation bounds, which are the part worth gating ------------------- #
 #
 # The number an operator is allowed to allocate is one output vector: the

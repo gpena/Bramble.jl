@@ -132,6 +132,8 @@ if __bramble_with_unit_tests
                 include("space/vector_elements.jl")
                 include("space/backend_profile.jl")
                 include("space/ghost_gridspace.jl")
+                include("space/ghost_vector.jl")
+                include("space/ghost_vector_operators.jl")
             end
 
             @testset "Operators" begin
@@ -282,6 +284,9 @@ if __bramble_with_ext_backends
         include("ext/kronecker_refactorize.jl")
         include("ext/polyester_ext.jl")
         include("ext/polyester_parity.jl")
+        include("ext/ghost_polyester.jl")
+        include("ext/ghost_vector_polyester.jl")
+        include("ext/ghost_semidiscrete_polyester.jl")
         # BrambleChainRulesExt: the pde_solve rrule's own math, checked against finite
         # differences and by hand. It needs only ChainRulesCore (a test/Project.toml
         # dependency), so it runs here, not in "AD backends (expensive)". Enzyme/Mooncake

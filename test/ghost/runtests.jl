@@ -6,4 +6,7 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("oracle_1d.jl")
     include("oracle_nd.jl")
     include("corners.jl")
+    include("backends.jl")
+    include("policies.jl")
+    include("allocations.jl")
 end

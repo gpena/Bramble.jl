@@ -2198,7 +2198,26 @@ grid function whose components are those results.
 <no docstring>
 ### end forward_difference!
 ### backward_finite_difference!
-<no docstring>
+    backward_finite_difference!(out::AbstractVector, v::GhostVector, dim_val::Val) -> out
+    backward_finite_difference(v::GhostVector, dim_val::Val) -> Vector
+
+The one-axis operators on a [`GhostVector`](@ref): `D₋ₓ`, `D₊ₓ`, `Mₓ` (the backward
+average), `M₊ₓ`, `Dcₓ`, `D̃ₓ`, `D̽ₓ` and their `ᵧ`, `₂` and `!` forms, and `∇ₕ(v)`, the
+tuple of `D₋` along every axis. Each gives the values at the physical nodes, in the mesh's
+linear order, as a plain vector with no ghosts: those of the same operator on
+`lift(Cₕ, u)` at the physical nodes, when `v` holds the degrees of freedom `u` and
+[`update_ghosts!`](@ref) has filled its ghosts. A stencil reaching beyond a facet with
+ghosts reads the ghost there, at `x₁ - h₂` or `xₙ + hₙ`; beyond a facet without ghosts it
+is truncated, as on a plain space.
+
+`out` is a vector of the physical length, a `GhostVector` on the mesh of `v` (its physical
+part is written) or a grid function on the physical mesh; any other mesh, or an `out`
+sharing memory with `v`, refuses with an `ArgumentError`. The in-place forms allocate
+nothing on `CpuSerial` and `CpuPolyester`. A result composed with another operator is
+truncated at the facets, as on a plain space.
+
+See also: [`Δₕ`](@ref), [`update_ghosts!`](@ref)
+
 ### end backward_finite_difference!
 ### forward_finite_difference!
 <no docstring>

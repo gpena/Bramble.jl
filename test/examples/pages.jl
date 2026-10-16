@@ -65,6 +65,14 @@ using ..TestUtils: _run_example_page
         _run_example_page(:neumann_robin_poisson)
     end
 
+    # The heat equation on the same kind of grid with Neumann and Robin data that change in
+    # time, through `semidiscretize` and `FBDF`: its assertions pin the order of the error
+    # at the final time at second, bracketed away from the integrator's tolerance, and that
+    # the solution has moved from its initial state, so frozen boundary data would fail.
+    @testset "Heat equation, Neumann and Robin data" begin
+        _run_example_page(:ghost_heat_equation)
+    end
+
     # The matrix-free Kronecker operator worked example.
     # It needs `using Kronecker`, but that is a lightweight, pure-Julia weak dependency --
     # unlike the stiff DAE solver, `NonlinearSolve` and `AlgebraicMultigrid` that justify

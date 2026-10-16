@@ -96,17 +96,42 @@ ghosts as unknowns.
 
 ### Grid functions with ghosts
 
-A grid function on a ghost space is a padded `VectorElement`: `lift(Cₕ, u)` returns
-`E u + d` on the padded space, ghosts filled and absent points 0, and the existing runtime
-operators read the ghosts there. Assembly already needs the padded mesh, so this layout adds no second code path. The
-alternative, a facet-only layout, keeps the solver's own `Vector` as the physical part and
-stores the ghosts in a facet buffer. Neither layout pays a SIMD or latency penalty for a
-row-wise stencil kernel, but the padded one costs a copy in and out of about two stencil
-applications when the solver keeps its own contiguous vector, and a stock `mul!` on its
-physical view falls back to a generic quadratic method; the facet-only layout needs
-neither. The layout is revisited when runtime ghost-aware operators are added. The DOF order
-above is the same for both, the padded layout appending the absent points as a suffix that
-is dropped.
+A grid function on a ghost space has two layouts, one for time loops and one for forms.
+
+A [`GhostVector`](@ref) is the layout of a time loop: the physical values stay the solver's
+own contiguous `Vector`, and the ghosts sit in a facet buffer in the order of the
+[ghost mesh](mesh.md). It carries the mesh with ghosts, so the runtime operators know the
+padded spacings and the ghosted facets. A padded `VectorElement` is the layout of forms:
+`lift(Cₕ, u)` returns `E u + d` on the padded space, ghosts filled and absent points 0, and
+assembly already works on the padded mesh. Both are kept because the padded layout costs a
+copy in and out of about two stencil applications when the solver keeps its own contiguous
+vector, and a stock `mul!` on its physical view falls back to a generic quadratic method;
+the facet-only layout needs neither, and forms need the padded mesh whatever the layout. The
+DOF order above is the same for both, the padded layout appending the absent points as a
+suffix that is dropped.
+
+[`update_ghosts!`](@ref)`(v, Cₕ)` fills the ghost buffer from the closure. The ghost update
+is precomputed when the space is built: the closure's rows for the ghosts that `d` and `E`
+determine are stored once, so the update is one sparse product plus the data, with no
+allocation on the serial and Polyester policies. With time-dependent relation data the data
+are affine in the unknown, `d(t) = L g(t)` with `L` fixed at construction, so
+`update_ghosts!(v, Cₕ, t)` and `lift(Cₕ, u, t)` evaluate `g(t)` at the ghosts' relations and
+apply `L`, and `semidiscretize` differentiates `d(t)` exactly for the time derivative of the
+load. A space with time-dependent data refuses the calls without `t`.
+
+A runtime operator on a `GhostVector` returns the physical values as a plain `Vector`, with
+no ghosts: it reads the ghosts of its argument and truncates, as the operators do on a
+plain space. Composing operators on the result is that truncation, so the corner rule, which
+lives in the stencil engine, is never applied to a runtime composition. Mixed differences
+at a ghost corner stay form-only.
+
+The reduction `Eᵀ A_pad E`, the load `Eᵀ(F_pad − A_pad d)` and `lift` run in bands. The
+reduction and the load are grouped by destination entry: each band owns a set of output
+entries and sums their contributions in the serial order, so `CpuSerial`, `CpuThreaded` and
+`CpuPolyester` all give the sums of the serial run, bitwise. The `!` calls, `lift!`, the
+pair `assemble!(A, F, a, l)` and `update_ghosts!` allocate nothing on `CpuSerial` and
+`CpuPolyester`; on `CpuThreaded` each band pass costs the task spawn of the plain space's own
+call and nothing that grows with the grid.
 
 ## Operator matrices: stencil_matrix versus the Kronecker construction
 
@@ -131,6 +156,7 @@ Pages = [
     "operators/jump.jl",
     "operators/average.jl",
     "operators/interpolation.jl",
+    "operators/ghost_vector_operators.jl",
     "space/inner_product.jl",
 ]
 ```
