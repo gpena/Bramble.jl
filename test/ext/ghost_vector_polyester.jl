@@ -1,5 +1,6 @@
 # test/ext/ghost_vector_polyester.jl: `update_ghosts!` on a `CpuPolyester` mesh writes the
-# serial ghosts, in bands, and allocates nothing warm (gpena/Bramble.jl#776).
+# serial ghosts, in bands, and allocates nothing warm, and so do the runtime operators on a
+# `GhostVector` (gpena/Bramble.jl#776).
 #
 # Gated like every other ext/*.jl file (test/runtests.jl only reaches this group under
 # BRAMBLE_TEST_GROUP=ext or full). Standalone:
@@ -13,7 +14,7 @@ module GhostVectorPolyesterTests
 
 using Test
 using Bramble
-using Bramble: CpuPolyester, CpuSerial
+using Bramble: CpuPolyester, CpuSerial, Δₕ!
 using SparseArrays: SparseMatrixCSC
 using Polyester
 
@@ -148,6 +149,85 @@ nthreads_seen(r::ThreadMarks) = count(r.seen)
         xt = ThreadMarks(rand(99))
         update_ghosts!(GhostVector(Ct, xt), Ct, 0.5)
         @test nthreads_seen(xt) >= 2
+    end
+end
+
+# The seven one-axis families on a `GhostVector`, in place: D₋, D₊, M, M₊, Dc, D̃, D̽.
+const BANGS = (Bramble.backward_finite_difference!, Bramble.forward_finite_difference!,
+    Bramble.backward_average!, Bramble.forward_average!, Bramble.centered_difference!,
+    Bramble.forward_star_difference!, Bramble.cross_weighted_difference!)
+
+# The values of `f!` on `v` along `dv`, and its warm bytes, behind a function barrier.
+function applied(f!::F, v, dv::Val) where {F}
+    out = zeros(eltype(v), length(Bramble.physical(v)))
+    f!(out, v, dv)
+    return out, alloc(() -> f!(out, v, dv))
+end
+function applied(f!::typeof(Δₕ!), v)
+    out = zeros(eltype(v), length(Bramble.physical(v)))
+    f!(out, v)
+    return out, alloc(() -> f!(out, v))
+end
+
+# A `GhostVector` under `pol` of the physical values `x`, its ghosts updated.
+function operand_under(pol, ns, ghosts, rel, x)
+    C = constrained(gridspace(ghost_mesh(pol, ns); ghosts), rel)
+    return update_ghosts!(GhostVector(C, copy(x)), C)
+end
+
+# Every operator under Polyester gives serial's values bitwise (each point is written by one
+# band, in the serial order), with ghosts reaching them, and allocates nothing warm.
+function operators_as_serial(ns, ghosts, rel)
+    x = rand(prod(ns))
+    vs = operand_under(CpuSerial(), ns, ghosts, rel, x)
+    vp = operand_under(CpuPolyester(), ns, ghosts, rel, x)
+    for d in 1:length(ns), f! in BANGS
+
+        rs, _ = applied(f!, vs, Val(d))
+        rp, bytes = applied(f!, vp, Val(d))
+        @test rp == rs
+        @test bytes == 0
+    end
+    rs, _ = applied(Δₕ!, vs)
+    rp, bytes = applied(Δₕ!, vp)
+    @test rp == rs
+    @test rp != Δₕ(element(gridspace(Bramble.physical_mesh(vp.mesh)), x))
+    @test bytes == 0
+end
+
+@testset "GhostVector operators, CpuPolyester" begin
+    @test Threads.nthreads() >= 2
+
+    @testset "2D conormal, named facets" begin
+        for ns in ((9, 11), (30, 33))
+            operators_as_serial(ns, :boundary, conormal2)
+        end
+        operators_as_serial((9, 11), (:xmin, :xmax, :ymax), dirichlet2)
+    end
+
+    @testset "1D Robin" begin
+        operators_as_serial((17,), :boundary, robin1)
+    end
+
+    # nightly only: 3D meshes are left out of the unit group (#650)
+    WITH_3D_TESTS && @testset "3D Robin, ∂ₙₙ, Dirichlet" begin
+        operators_as_serial((5, 6, 4), (:xmin, :xmax, :ymin, :ymax, :zmax), robin3)
+    end
+
+    @testset "the operators run in bands" begin
+        C = constrained(gridspace(ghost_mesh(CpuPolyester(), (9, 11)); ghosts = :boundary),
+            conormal2)
+        for f! in (BANGS[1], BANGS[6], BANGS[7])
+            xm = ThreadMarks(rand(99))
+            f!(zeros(99), GhostVector(C, xm), Val(1))
+            @test nthreads_seen(xm) >= 2
+        end
+        # `Δₕ!` runs the plain serial engine, then its facet slabs in bands
+        xm = ThreadMarks(rand(99))
+        v = GhostVector(C, xm)
+        Bramble.ghost_values(v) .= 1.0
+        Δₕ!(zeros(99), v)
+        @test nthreads_seen(xm) >= 2
     end
 end
 
