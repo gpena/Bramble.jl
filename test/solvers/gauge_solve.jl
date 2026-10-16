@@ -145,7 +145,8 @@ end
 
 # A `Z` spanning half the kernel is not detected: the physical part is still the quotient
 # solution, and only the two gauged components are fixed. Whether the factorisation
-# notices is a matter of rounding (no column at all throws `SingularException` here).
+# notices is a matter of rounding and backend (with no column at all, UMFPACK throws
+# `SingularException` here, while Accelerate solves).
 @testset "Gauged solve: an under-spanning gauge" begin
     Random.seed!(786)
     Ω = random_mesh(11, (interval(0.0, 1.0), interval(0.0, 2.0)), (6, 7))

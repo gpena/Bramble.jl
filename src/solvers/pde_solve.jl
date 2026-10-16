@@ -97,8 +97,9 @@ chain differentiable.
   A `Z` that spans only part of it is not detected: the factorisation usually proceeds (a
   `SingularException` is a matter of rounding), the physical part is still the solution of
   the quotient system, and the kernel components `Z` leaves out come back arbitrary and
-  different from one backend to another. The solution is only as accurate as the conditioning of `A` away from its kernel
-  allows: on the forms that produce a ghost-only kernel, near `1e-8` relative.
+  different from one backend to another. The solution is only as accurate as the
+  conditioning of `A` away from its kernel allows: on the forms that produce a ghost-only
+  kernel, near `1e-8` relative.
 
 # Returns
 - `Vector`: the solution, of the promoted element type of `A` and `F`.
