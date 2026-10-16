@@ -53,7 +53,7 @@ using Bramble:
                D̽ₓ,
                Mcₓ
 using LinearAlgebra: I, norm
-using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
+using ..TestUtils: WITH_3D_TESTS, TEST_DIMS, _grid_sample
 
 # The symbolic operator layer: averages, the shift node, region restriction, and the
 # inner products that turn a pair of operators into a bilinear product.
@@ -523,12 +523,13 @@ end
              D == 2 ? interval(0.0, 1.0) × interval(0.0, 2.0) :
              interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)
     # Every tap compiles its own form, matrix, refill and product per operand and dimension,
-    # which is what the sweep costs. `unit` keeps one tap per kind (a backward and a forward
+    # which is what the sweep costs. The cover is one tap per kind (a backward and a forward
     # difference, a jump, a forward average, a shift) on all three operands in every
-    # dimension; `slow` runs the whole family.
-    taps = WITH_SLOW_TESTS ?
-           (D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, jumpₓ, Mₓ, M₊ₓ, Mcₓ, S₊ₓ, S₋ₓ) :
-           (D₋ₓ, D₊ₓ, jumpₓ, M₊ₓ, S₊ₓ)
+    # dimension, plus the two `y` cases; `slow` adds a random draw from the other taps and
+    # `grids` runs the whole family (`TestUtils._grid_sample`, gpena/Bramble.jl#789).
+    taps = (D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, jumpₓ, Mₓ, M₊ₓ, Mcₓ, S₊ₓ, S₋ₓ)
+    cover_taps = (D₋ₓ, D₊ₓ, jumpₓ, M₊ₓ, S₊ₓ)
+    incover(case) = !(case[1] in taps) || case[1] in cover_taps
 
     @testset "$(D)D" for D in TEST_DIMS
         n = ntuple(i -> 4 + i, D)
@@ -544,7 +545,7 @@ end
         cases = Any[(t, o...) for o in (cu, cdu, dcu) for t in taps]  # Any: every tap and operand is its own closure type
         D >= 2 && push!(cases, (S₊ᵧ ∘ D₋ᵧ, cu...), (D₊ᵧ ∘ S₋ᵧ, cu...))
         basis(j) = element(W, [i == j ? 1.0 : 0.0 for i in 1:ndofs(W)])
-        @testset "$(tap)∘$(nm)" for (tap, nm, opd, grid) in cases
+        @testset "$(tap)∘$(nm)" for (tap, nm, opd, grid) in _grid_sample("tap∘operand $(D)D", cases, incover, 6)
             G = reduce(hcat, [parent(tap(grid(basis(j)))) for j in 1:ndofs(W)])
             a = form(W, W, (u, v) -> innerₕ(tap(opd(u)), v))
             A = assemble(a)

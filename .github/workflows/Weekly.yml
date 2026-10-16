@@ -10,7 +10,8 @@ name: Weekly
 # both platforms, and its ubuntu leg uploads that half of the coverage. This workflow runs
 # the other half, the `backends` group (the package extensions), on both platforms, and the
 # per-file coverage floor over both halves. Together they cover what `full` does except the
-# manual snippets, which only run locally anyway. The worked-example pages are in neither
+# manual snippets, which only run locally anyway. It also runs the `grids` group: every
+# combination of the operator and form grids that `slow` only samples (gpena/Bramble.jl#789). The worked-example pages are in neither
 # half: they are the `examples` group, which docs-on-demand.yml runs before every docs build.
 #
 # AD and GPU tests are switched off in every group until v4.3.0 and v4.4.0 respectively
@@ -143,6 +144,40 @@ jobs:
           name: lcov-backends
           path: lcov.info
           if-no-files-found: warn
+
+  # The combinatorial grids in full (gpena/Bramble.jl#789): operator pairs, taps over
+  # operands and matrix-free form cases. nightly.yml's `slow` runs each grid's cover plus a
+  # random draw from the rest, a different draw every night; this job runs every combination,
+  # so a pair no draw has reached is still checked once a week. One platform: the grids test
+  # the symbolic layer, which does not vary by OS, and the cover runs on both every night.
+  grids:
+    name: Full combinatorial grids (Julia 1.13, ubuntu-latest)
+    needs: changed
+    if: ${{ needs.changed.outputs.run == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.13"
+
+      # Compiled images are not cached, for the cache quota (see the `full` job above).
+      - uses: julia-actions/cache@v3
+        with:
+          cache-compiled: "false"
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      # As the `full` job's test step, without coverage: the `slow` half already covers these
+      # files' src/ lines through each grid's cover.
+      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=false, julia_args=["--optimize=1", "--check-bounds=yes"])'
+        env:
+          BRAMBLE_TEST_GROUP: grids
 
   # Per-file coverage floor over the two coverage halves merged: `lcov-backends` from this
   # run, and `lcov-suite` from the newest nightly.yml run on this run's commit. The halves

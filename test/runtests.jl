@@ -81,6 +81,11 @@ const __bramble_with_gpu_group = __bramble_with_gpu_tests && __bramble_test_grou
 # stiff solver, `NonlinearSolve`, `LinearSolve` or `AlgebraicMultigrid`).
 const __bramble_with_examples = __bramble_test_group == "examples"
 
+# The combinatorial grids in full (gpena/Bramble.jl#789): `unit` runs each grid's cover,
+# `slow` the cover plus a random draw (TestUtils `_grid_sample`), and this group every
+# combination, once a week (Weekly.yml). Only the files holding such grids run here.
+const __bramble_with_grids = __bramble_test_group == "grids"
+
 # `manual/test_snippets.jl` checks that the code in the 12-chapter PDF manual still
 # compiles and gives the answers it claims. Kept out of the every-push groups because it
 # assembles several real PDE systems (seconds, not milliseconds) and, unlike the operator
@@ -299,5 +304,13 @@ if __bramble_with_examples
         include("examples/pages.jl")
         include("examples/ext_pages.jl")
         include("examples/claude_plugin.jl")
+    end
+end
+
+if __bramble_with_grids
+    @testset verbose=true "Full combinatorial grids" begin
+        include("form/nested_operators.jl")
+        include("form/operators.jl")
+        include("form/matrix_free.jl")
     end
 end

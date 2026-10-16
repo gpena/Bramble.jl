@@ -105,7 +105,50 @@ end
 # `WITH_SLOW_TESTS && @testset ...` so the block keeps its indentation. The `Non-vacuous`
 # guards nested inside two of them travel with their property, which is right: a guard that
 # a property is not vacuously true has no job in a run where the property does not execute.
-const WITH_SLOW_TESTS = TEST_GROUP in ("all", "slow", "full")
+const WITH_SLOW_TESTS = TEST_GROUP in ("all", "slow", "full", "grids")
+
+# Combinatorial grids (gpena/Bramble.jl#789). A test that checks every combination of a few
+# lists (operator pairs, taps over operands, form cases) compiles a form per combination, so
+# its cost grows with the product of the lists. `_grid_sample` runs such a grid at three
+# sizes:
+#
+#   unit    the cover alone: a deterministic subset, chosen by the test, that puts every
+#           item through on each side. No randomness on the push gate.
+#   slow    the cover plus `budget` more, drawn at random from the rest (nightly.yml).
+#   grids   every combination (Weekly.yml; `.claude/scripts/test.sh grids` locally). The
+#           group runs only the files that hold such grids, listed in test/runtests.jl.
+#
+# The draw is seeded by `GRID_SEED` mixed with the grid's name, so each grid draws
+# independently of the others and of the order they run in. `GRID_SEED` is
+# `BRAMBLE_TEST_GRID_SEED` when set, else drawn afresh per run, so successive nightlies
+# reach different parts of each grid. Each sampled grid prints the seed: a failing draw is
+# rerun exactly, on the same Julia version, with
+# `BRAMBLE_TEST_GRID_SEED=<seed> .claude/scripts/test.sh slow`.
+const WITH_FULL_GRIDS = TEST_GROUP == "grids"
+const GRID_SEED = let s = get(ENV, "BRAMBLE_TEST_GRID_SEED", "")
+    isempty(s) ? rand(Random.RandomDevice(), UInt32) : parse(UInt32, s)
+end
+
+"""
+    _grid_sample(name, items, incover, budget)
+
+The combinations of `items` to run in this group: those satisfying `incover` under `unit`,
+those plus `budget` drawn from the rest under `slow`, and all of them under `grids`. Order
+within `items` is kept.
+"""
+function _grid_sample(name::AbstractString, items, incover, budget::Integer)
+    all_items = collect(items)
+    WITH_FULL_GRIDS && return all_items
+    WITH_SLOW_TESTS || return filter(incover, all_items)
+    rest = findall(!incover, all_items)
+    rng = Xoshiro(hash(name, UInt64(GRID_SEED)))
+    drawn = rest[Random.randperm(rng, length(rest))[1:min(budget, length(rest))]]
+    keep = map(incover, all_items)
+    keep[drawn] .= true
+    println("grid \"", name, "\": ", count(keep), " of ", length(all_items),
+        " (", length(drawn), " drawn), BRAMBLE_TEST_GRID_SEED=", GRID_SEED)
+    return all_items[keep]
+end
 
 # Whether a 3D mesh may be built: every group but `unit` (gpena/Bramble.jl#650). It is keyed
 # on `unit` itself and not on `WITH_SLOW_TESTS`, which is also false in `ext` and `backends`,
