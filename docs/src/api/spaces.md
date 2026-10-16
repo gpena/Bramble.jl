@@ -82,12 +82,23 @@ interpolation_matrix
 ## Ghost spaces
 
 A grid space with ghost nodes beyond named facets, built by
-[`gridspace`](@ref)`(Ωₕ; ghosts = ...)`. `constrained` turns boundary relations on it into
-a space of unknowns, and is exported. `lift` and `GhostGridSpace` are `public`, not
-exported (`lift` is also a Makie name): write `Bramble.lift`.
+[`gridspace`](@ref)`(Ωₕ; ghosts = ...)`. `constrained` turns boundary relations on it into a
+space of unknowns. Exported: `constrained`, `GhostVector` (the grid function of a time loop)
+and `update_ghosts!`, which fills its ghosts. `public` and not exported: `lift`, which is
+also a Makie name, so write `Bramble.lift`, and `lift!`, `physical`, `ghost_values` and
+`GhostGridSpace`.
+
+On a pair of ghost forms, `assemble!(A, F, a, l)` refills the matrix and the load that
+`assemble(a, l)` returns. It is a method of [`assemble!`](@ref) with no docstring of its
+own; the example of [`lift`](@ref) shows it.
 
 ```@docs
 GhostGridSpace
 constrained
 lift
+Bramble.lift!
+GhostVector
+update_ghosts!
+Bramble.physical
+Bramble.ghost_values
 ```

@@ -8,27 +8,32 @@ edits below are proposals for the maintainer to read first.
 
 The design below is kept as written; the implementation (`src/mesh/ghost_mesh.jl`,
 `src/space/ghost_gridspace.jl`, `src/assembly/ghost_assembly.jl`,
-`src/assembly/ghost_relations.jl`) follows it except in five places. The published account
+`src/assembly/ghost_relations.jl`) follows it except in the places below. The published account
 of what was built is `docs/src/internals/mesh.md` and `docs/src/internals/space.md`.
 
-- **Grid functions with ghosts are padded `VectorElement`s, not a facet-only `GhostVector`.**
+- **Forms use padded `VectorElement`s, time loops use the facet-only `GhostVector`.**
   Decision 4 and the layout section chose the facet-only layout. The implementation assembles
-  on the padded mesh anyway, so `lift(Cₕ, u)` returns the padded grid function and the
-  existing runtime operators read its ghosts. `GhostVector`, `update_ghosts!`, the
-  ghost-aware runtime kernels and time-dependent relation data are deferred to follow-up
-  work, and `semidiscretize` on a ghost space refuses. As a consequence, mixed differences
-  composed at runtime on a grid function with ghosts cannot apply the corner rule, which
-  lives in the stencil engine: nested mixed differences on a ghost space are assembled as
-  forms.
+  on the padded mesh anyway, so `lift(Cₕ, u)` returns the padded grid function for forms, and
+  `GhostVector` with `update_ghosts!` and the ghost-aware runtime operators serves time loops.
+  Runtime operators on a `GhostVector` return the physical values as a plain `Vector`, so
+  mixed differences at ghost corners stay form-only: nested mixed differences on a ghost
+  space are assembled as forms. Time-dependent relation data are supported through
+  `d(t) = L g(t)`, `update_ghosts!(v, Cₕ, t)` and `semidiscretize`. Still refused with an
+  `ArgumentError`: a `semidiscretize` call with the `dirichlet` keyword, on a space keeping
+  ghosts as unknowns, or with a mass that reads a ghost whose data depend on time,
+  `semidiscretize(build, l)` and `semidiscretize_rhs`.
 - **The reduction replaces the per-tap substitution, and one space type replaces two.** The
   proposal substituted the closure at each stencil tap and kept a `ConstrainedGridSpace`.
   The implementation assembles on the padded space and reduces the result once per form,
   `Eᵀ A_pad E`, with the load `Eᵀ(F_pad − A_pad d)`, which leaves the guarded walk, the
   pattern recorder and the replay untouched. `GhostGridSpace` carries the closure `(E, d)`
   for both `gridspace(Ωₕ; ghosts)` and `constrained`.
-- **No pure-Neumann compatibility diagnostic.** The criterion that a violation is reported is
-  not implemented: no single-mesh threshold separates a quadrature defect of order `h²` from
-  an incompatibility. `mean_zero` solves the bordered system whatever the data.
+- **The compatibility diagnostic is a function of a problem builder.** No single-mesh
+  threshold separates a quadrature defect of order `h²` from an incompatibility, so
+  `Bramble.neumann_compatibility(problem, Ωₕ)` builds the problem on `Ωₕ` and on copies
+  refined once and twice, and logs a warning for incompatible data; `pde_solve` itself, which
+  sees one mesh, does not check. `Bramble.ghost_kernel` and `pde_solve(A, F; gauge)` fix the
+  ghost-only kernel that a form reading a corner's ghosts only through `Δₕ` leaves.
 - **`lift` is `public`, not exported.** Makie exports a `lift` of its own, so an export would
   make both unusable after `using Bramble, GLMakie`: write `Bramble.lift`.
 - **Out of scope, refused with an `ArgumentError`:** matrix-free and Kronecker operators,

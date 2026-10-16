@@ -56,7 +56,12 @@ Bramble.adjoint_sensitivities
 
 ```@docs
 pde_solve
+Bramble.ghost_kernel
+Bramble.neumann_compatibility
 ```
+
+`ghost_kernel` and `neumann_compatibility` serve the pure-Neumann problems of a ghost space.
+Both are `public`, not exported: write `Bramble.ghost_kernel`.
 
 ## Algebraic multigrid preconditioning
 
