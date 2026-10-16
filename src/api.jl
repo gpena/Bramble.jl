@@ -36,6 +36,7 @@ public indices, boundary_indices, interior_indices, is_boundary_index, index_in_
 
 # --- Spaces & Grid Functions ---
 export gridspace, vector_gridspace, space, spaces, constrained
+export GhostVector, update_ghosts!
 export ndofs, ncomponents
 export element, components
 export Rₕ, Rₕ!, avgₕ, avgₕ!
@@ -47,7 +48,8 @@ export inner₊
 export norm, snorm₁ₕ, norm₁ₕ, normₕ, norminf
 
 public ScalarGridSpace, CompositeGridSpace, VectorGridSpace, VectorElement
-public lift, GhostGridSpace, GhostMesh
+public lift, lift!, GhostGridSpace, GhostMesh
+public physical, ghost_values, ghost_kernel, neumann_compatibility
 public component_range, component_ranges, skew_symmetric
 public inner₊ₓ, inner₊ᵧ, inner₊₂
 public norm₊

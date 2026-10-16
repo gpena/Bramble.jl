@@ -10,4 +10,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("multigrid.jl")
     # The mean-zero constraint on a singular (pure Neumann) solve.
     include("mean_zero.jl")
+    # The ghost-only kernel, the gauge solve and the Neumann compatibility check (v4.0.0).
+    include("ghost_kernel.jl")
+    include("gauge_solve.jl")
+    include("neumann_compatibility.jl")
 end
