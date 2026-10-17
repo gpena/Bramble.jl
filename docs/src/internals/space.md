@@ -78,8 +78,9 @@ plain mesh, and that is allowed.
 
 Nested mixed differences on a ghost space are assembled as forms, where the rule applies;
 the runtime operators are eager and cannot apply it (see the
-[operators tutorial](@ref operators_ghost)). `avgₕ` has no method on a ghost space and must
-not be used on a padded space: it averages over cells past the physical facet.
+[operators tutorial](@ref operators_ghost)). `Rₕ` and `avgₕ` refuse on a ghost space with an `ArgumentError`
+(`avgₕ` would average over cells past the physical facet); the
+[support table](@ref "Support on ghost spaces") lists what else does.
 
 ### Relations
 
@@ -132,6 +133,38 @@ entries and sums their contributions in the serial order, so `CpuSerial`, `CpuTh
 pair `assemble!(A, F, a, l)` and `update_ghosts!` allocate nothing on `CpuSerial` and
 `CpuPolyester`; on `CpuThreaded` each band pass costs the task spawn of the plain space's own
 call and nothing that grows with the grid.
+
+### Support on ghost spaces
+
+Each row is an operation of the standard space, its status on a ghost space (a scalar one
+unless the row says composite) and the test file that pins it. "Refused" is an
+`ArgumentError` that names the fix. `Cₕ` is the constrained ghost space, `a` and `l` its
+forms.
+
+| Operation | Status | Test |
+|:----------|:-------|:-----|
+| `assemble`, `assemble!`, `lift`, `pde_solve` | supported; `pde_solve` runs on the reduced matrix | `test/ghost/policies.jl` |
+| `matrix_free_operator` | supported; one product at a time per operator (a concurrent entry throws), and 0 B per warm serial apply in 1D to 3D | `test/ghost/matrix_free.jl` |
+| `kronecker_operator` | supported where the closure is separable, trial and test on one mesh object and a square reduced system; refused otherwise, naming `assemble(a)` | `test/ghost/kronecker.jl` |
+| `gmg_solve`, `gmg_preconditioner` | supported for Neumann, Robin, mixed and pure-Neumann ghost problems, with level-independent cycle counts on meshes of bounded aspect ratio; on graded meshes as slow as the plain path | `test/ghost/multigrid.jl` |
+| `evaluate!`, `l(v)`, `a(u, v)` | supported; `l(v)` and `evaluate!` refuse when the affine part `d` is not zero, naming `assemble(a, l)` | `test/ghost/contract.jl` |
+| `normₕ`, `interpolate_at` | supported on physical values only; refused on a DOF vector that is not a grid function, naming `lift` | `test/ghost/grid_functions.jl` |
+| `jacobi_preconditioner`, `chebyshev_preconditioner`, `ilu_preconditioner`, `amg_preconditioner` | supported | `test/ghost/preconditioners.jl` |
+| `fdm_solve`, `fdm_factorize`, `fdm_solve!`, `fdm_preconditioner` | supported where the form is separable; refused with the `dirichlet` keyword, on a 1D form and on a non-separable form | `test/ghost/preconditioners.jl` |
+| `solve(a, l; preconditioner = :amg)` and `:ilu0` (BrambleSciMLExt) | not tested on ghost forms | none |
+| `assemble_parallel!` | refused, naming `assemble!` (it runs in parallel under the policy of the mesh) | `test/ghost/policies.jl` |
+| `Rₕ`, `avgₕ` | refused, naming `gridspace(Ωₕ)` and `lift` | `test/ghost/grid_functions.jl` |
+| `CpuSerial`, `CpuThreaded`, `CpuPolyester` | supported; the reduction gives the serial sums bitwise | `test/ghost/policies.jl`, `test/ext/ghost_polyester.jl` |
+| device backends | refused; no test runs on a device | none |
+| `semidiscretize`, `ode_problem` | supported on a constrained space with `(x, t)` data; refused when the ghosts are unknowns and on composite ghost spaces | `test/form/ghost_semidiscrete.jl` |
+| `dirac` | supported, including ghosted facets that meet | `test/ghost/dirac.jl` |
+| `reaction` | refused, naming the plain-space route (`gridspace` and `lift`) | `test/ghost/dirac.jl` |
+| rank-one terms | supported on a scalar ghost space, with the pair load and `dirichlet`; refused on composite ghost spaces | `test/form/ghost_rank_one.jl` |
+| composite spaces `C₁ × C₂`, `C^Val(n)`, `C^N` with `N ≤ 3` | supported for ghost components with the same ghosted facets and mesh size: forms, `assemble`, loads, `lift`, `dirichlet` per component by keyword or relation, contractions; refused beside a plain component, with different facets per component, and for `semidiscretize`, matrix-free, Kronecker, `fdm_*` and the preconditioners | `test/ghost/composite.jl` |
+
+A mixed difference that reaches an absent corner is refused on a composite, where the scalar
+form takes the corner rule; with ghosts on three facets it assembles. It refuses and never
+computes wrong numbers.
 
 ## Operator matrices: stencil_matrix versus the Kronecker construction
 

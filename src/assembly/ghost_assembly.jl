@@ -46,10 +46,12 @@
 # `ghost_composite.jl` builds it and holds its `dirichlet` rows and refusals. A type of its
 # own keeps it out of the methods other files define on `GhostBilinearForm`.
 #
-# Out of scope on a ghost space, and refused with an `ArgumentError`: device backends,
-# matrix types other than `SparseMatrixCSC`, AD element types. The matrix-free and
-# Kronecker operators and the contractions of a form live in `ghost_matrix_free.jl`,
-# `ghost_kronecker.jl` and `ghost_contract.jl`.
+# Still refused with an `ArgumentError`: device backends, matrix types other than
+# `SparseMatrixCSC`, AD element types, composite spaces beyond what `ghost_composite.jl`
+# supports and `semidiscretize` on composites. The matrix-free and Kronecker operators and
+# the contractions of a form live in `ghost_matrix_free.jl`, `ghost_kronecker.jl` and
+# `ghost_contract.jl`. The table `Support on ghost spaces` in `docs/src/internals/space.md`
+# lists every operation.
 #
 # See also: `GhostGridSpace`, `BilinearForm`, `LinearForm`
 

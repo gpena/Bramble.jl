@@ -36,9 +36,11 @@ of what was built is `docs/src/internals/mesh.md` and `docs/src/internals/space.
   ghost-only kernel that a form reading a corner's ghosts only through `Δₕ` leaves.
 - **`lift` is `public`, not exported.** Makie exports a `lift` of its own, so an export would
   make both unusable after `using Bramble, GLMakie`: write `Bramble.lift`.
-- **Out of scope, refused with an `ArgumentError`:** matrix-free and Kronecker operators,
-  composite spaces with ghosts, device backends, automatic differentiation through ghost
-  spaces, a grid-function `K` in `∂ₙ(u; K)`, and elasticity tractions.
+- **Out of scope, refused with an `ArgumentError`:** device backends, automatic
+  differentiation through ghost spaces, a grid-function `K` in `∂ₙ(u; K)`, and elasticity
+  tractions. Matrix-free and Kronecker operators (where separable) and composite spaces of
+  ghost spaces now work within limits; the published table `Support on ghost spaces` in
+  `docs/src/internals/space.md` has each operation's status.
 
 The evidence is a set of throwaway prototypes. The three plain-matrix oracles and their
 tests are merged and run in the test tree under `test/ghost/`. The others stay on the local
