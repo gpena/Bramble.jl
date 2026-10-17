@@ -6,34 +6,24 @@ module AllocationsTests
 # `assemble!(b, l)` with and without `dirichlet`, and `dirichlet_bc!` and `symmetrize!` on a
 # ghost space. `CpuThreaded` spawns its tasks on every banded pass, so there each call is
 # bounded by its padded or plain counterpart plus one task spawn per band pass of the ghost
-# layer, and gives the same figure at two grid sizes. `CpuPolyester` is in
-# test/ext/ghost_polyester.jl, where Polyester is loaded.
+# layer, and gives the same figure at two grid sizes. The last two testsets refill a form
+# whose coefficient changed on a ghost space, and padded forms under the corner rule. The
+# plain-and-ghost warm refill with `dirichlet` is in test/form/two_spaces.jl,
+# and `CpuPolyester` is in test/ext/ghost_polyester.jl, where Polyester is loaded.
 
 using Test
 using Bramble
 import Bramble
-using Bramble: CpuSerial, CpuThreaded
+using Bramble: CpuSerial, CpuThreaded, D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, D̽ₓ, D̽ᵧ, Dcₓ, Dcᵧ
 using LinearAlgebra: norm
-using SparseArrays: SparseMatrixCSC, nonzeros
+using SparseArrays: nonzeros
 
-using ..TestUtils: WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS, ghost_mesh, padded
 
 const K = [2.0 1.0; 1.0 2.0]
 
 # The bytes of the third call of `f`, the first two compiling and warming it.
 alloc(f::F) where {F} = (f(); f(); @allocated f())
-
-# A seeded non-uniform mesh on [0, 1] × [0, 2] × [0, 3] (its first `D` axes) under `pol`.
-function ghost_mesh(pol, ns::NTuple{D, Int}; T = Float64, seed = 11) where {D}
-    Bramble._seed_mesh1d_rng!(seed)
-    be = backend(vector_type = Vector{T}, matrix_type = SparseMatrixCSC{T, Int},
-        policy = pol)
-    Ωd = domain(foldl(×, ntuple(d -> interval(T(0), T(d)), D)))
-    Ω = mesh(Ωd, D == 1 ? only(ns) : ns, D == 1 ? false : ntuple(_ -> false, D);
-        backend = be)
-    Bramble._unseed_mesh1d_rng!()
-    return Ω
-end
 
 laplacian(u, v) = innerₕ(-Δₕ(u), v)
 complex_laplacian(u, v) = (1.0 + 0.5im) * innerₕ(-Δₕ(u), v)
@@ -130,7 +120,9 @@ function warm_rows(pol, ns)
             symmetrize = true)),
         dirichlet_bc = alloc(() -> dirichlet_bc!(A, C, :xmin)),
         symmetrize = alloc(() -> symmetrize!(A, F, C, :xmin)),
-        marker_bc = alloc(() -> dirichlet_bc!(A, C, :boundary)))
+        marker_bc = alloc(() -> dirichlet_bc!(A, C, :boundary)),
+        matrix_marker = alloc(() -> assemble!(A, a; dirichlet = :boundary)),
+        load_marker = alloc(() -> assemble!(F, l; dirichlet = :boundary => g)))
     A3, F3 = assemble(a, l; dirichlet = :xmin => g, symmetrize = true)
     return out, (A2, F2), (A3, F3)
 end
@@ -261,6 +253,47 @@ end
         # the refusals left the system as it was
         @test A == r.A0
         @test F == r.F0
+    end
+end
+
+
+@testset "Warm refill follows a coefficient" begin
+    for ns in ((11,), (9, 10))
+        Wg = gridspace(ghost_mesh(CpuSerial(), ns); ghosts = :boundary)
+        β = Ref(1.0)
+        a = form(Wg, Wg, (u, v) -> inner₊(β * ∇ₕ(u), ∇ₕ(v)) + innerₕ(Dcₓ(u), v))
+        A = assemble(a)
+        A0 = copy(A)
+        β[] = 3.0
+        assemble!(A, a)
+        assemble!(A, a)
+        @test (@allocated assemble!(A, a)) == 0
+        @test A ≈ 3 * A0 - 2 * assemble(form(Wg, Wg, (u, v) -> innerₕ(Dcₓ(u), v)))
+        # a repeated assemble gives an equal, separate matrix
+        B = assemble(a)
+        @test B == A && B !== A
+        l = form(Wg, v -> innerₕ(x -> 1.0 + x[1], v))
+        b = assemble(l)
+        assemble!(b, l)
+        @test (@allocated assemble!(b, l)) == 0
+    end
+end
+
+@testset "Warm refill, padded corner rule" begin
+    P = padded(ghost_mesh(CpuSerial(), (9, 9)))
+    Kc = [1.0 0.5; 0.5 2.0]
+    L(u) = Kc[1, 1] * D̃ₓ(D₋ₓ(u)) + 2 * Kc[1, 2] * Dcₓ(Dcᵧ(u)) + Kc[2, 2] * D̃ᵧ(D₋ᵧ(u))
+    a = form(P, P, (u, v) -> innerₕ(L(u), v))
+    A = assemble(a)
+    @test alloc(() -> assemble!(A, a)) == 0
+    b = form(P, P, (u, v) -> innerₕ(D̽ₓ(D̽ᵧ(u)), D̽ᵧ(D̽ₓ(v))))
+    B = assemble(b)
+    @test alloc(() -> assemble!(B, b)) == 0
+    c = 1.0 .+ 0.5 .* sin.(1:Bramble.npoints(Bramble.mesh(P)))
+    for X in (u -> Dcₓ(c * Dcᵧ(u)), u -> Dcₓ(Dcᵧ(u) + 2.0 * D₋ᵧ(u)))
+        s = form(P, P, (u, v) -> innerₕ(X(u), v))
+        S = assemble(s)
+        @test alloc(() -> assemble!(S, s)) == 0
     end
 end
 

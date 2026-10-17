@@ -2,8 +2,7 @@ module FormGhostAssemblyTests
 
 # Forms on a `GhostGridSpace` assemble `E_vᵀ A_pad E_u` in DOF order (physical nodes in
 # mesh linear order, then the ghosts by facet xmin, xmax, ymin, ymax, zmin, zmax, each
-# facet's column-major), with the load `E_vᵀ (F_pad − A_pad d_u)` and an allocation-free
-# warm refill.
+# facet's column-major), with the load `E_vᵀ (F_pad − A_pad d_u)`.
 #
 # The operator rows (O6) are judged against the plain-matrix oracles (GhostOracle1D.jl,
 # GhostOracleND.jl), which share no code with the library: at a node of a ghosted facet
@@ -179,29 +178,6 @@ end
         Ap = assemble(form(P, P, f))
         @test size(A) == (Bramble.ndofs(W), Bramble.ndofs(W))
         @test relerr(A, transpose(E) * Ap * E) <= 1e-13
-    end
-end
-
-@testset "Warm assemble! allocates nothing" begin
-    for D in (1, 2)
-        Ω = D == 1 ? O1.make_mesh(:random, 0) : O.make_mesh(:graded, 0)
-        Wg = gridspace(Ω; ghosts = :boundary)
-        β = Ref(1.0)
-        a = form(Wg, Wg, (u, v) -> inner₊(β * ∇ₕ(u), ∇ₕ(v)) + innerₕ(Dcₓ(u), v))
-        A = assemble(a)
-        A0 = copy(A)
-        β[] = 3.0
-        assemble!(A, a)
-        assemble!(A, a)
-        @test (@allocated assemble!(A, a)) == 0
-        @test A ≈ 3 * A0 - 2 * assemble(form(Wg, Wg, (u, v) -> innerₕ(Dcₓ(u), v)))
-        # a repeated assemble gives an equal, separate matrix
-        B = assemble(a)
-        @test B == A && B !== A
-        l = form(Wg, v -> innerₕ(x -> 1.0 + x[1], v))
-        b = assemble(l)
-        assemble!(b, l)
-        @test (@allocated assemble!(b, l)) == 0
     end
 end
 

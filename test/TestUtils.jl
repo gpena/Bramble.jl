@@ -895,6 +895,53 @@ function plain_and_ghost_spaces(Ωₕ, data)
     return plain, ghost
 end
 
+# --- Meshes and spaces the ghost test files share ------------------------------------ #
+
+"""
+    random_mesh(ns; seed = 11, lengths = ones, level = 0)
+
+A seeded random non-uniform mesh of `ns` points per axis on the box `[0, lengths[d]]ᴰ`
+(`ns` a tuple, one entry for 1D), halved `level` times by `iterative_refinement!`.
+"""
+function random_mesh(ns::NTuple{D, Int}; seed = 11, lengths = ntuple(_ -> 1.0, D),
+        level = 0) where {D}
+    Ωd = domain(foldl(×, ntuple(d -> interval(0.0, Float64(lengths[d])), D)))
+    Bramble._seed_mesh1d_rng!(seed)
+    Ω = try
+        D == 1 ? mesh(Ωd, ns[1], false) : mesh(Ωd, ns, ntuple(_ -> false, D))
+    finally
+        Bramble._unseed_mesh1d_rng!()
+    end
+    foreach(_ -> iterative_refinement!(Ω), 1:level)
+    return Ω
+end
+
+"""
+    ghost_mesh(policy, ns; T = Float64, seed = 11)
+
+A seeded random non-uniform mesh on `[0, 1] × [0, 2] × [0, 3]` (its first `length(ns)` axes)
+of element type `T`, under the threading `policy`.
+"""
+function ghost_mesh(pol, ns::NTuple{D, Int}; T = Float64, seed = 11) where {D}
+    Bramble._seed_mesh1d_rng!(seed)
+    be = backend(vector_type = Vector{T}, matrix_type = SparseMatrixCSC{T, Int},
+        policy = pol)
+    Ωd = domain(foldl(×, ntuple(d -> interval(T(0), T(d)), D)))
+    Ω = mesh(Ωd, D == 1 ? only(ns) : ns, D == 1 ? false : ntuple(_ -> false, D);
+        backend = be)
+    Bramble._unseed_mesh1d_rng!()
+    return Ω
+end
+
+# The padded space of `gridspace(Ωₕ; ghosts)`: the ghost nodes as plain unknowns.
+padded(Ωₕ; ghosts = :boundary) = Bramble.padded_space(gridspace(Ωₕ; ghosts = ghosts))
+
+# An oracle's per-facet Robin data as `facet => α u + β ∂ₙ(u) => g` pairs.
+robin_pairs(u, rels) = map(keys(rels)) do F
+    r = rels[F]
+    F => r.α * u + r.β * Bramble.∂ₙ(u) => r.g
+end
+
 end # module TestUtils
 
 # Installs the per-file trace by overriding Main's own `include`, once, when this file loads

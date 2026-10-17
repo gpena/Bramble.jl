@@ -12,28 +12,18 @@ using Bramble
 import Bramble
 using Bramble: CpuSerial, CpuThreaded
 using LinearAlgebra: norm
-using SparseArrays: SparseMatrixCSC, nonzeros
+using SparseArrays: nonzeros
 
-using ..TestUtils: WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS, ghost_mesh
 
 const K = [2.0 1.0; 1.0 2.0]
-
-# A seeded non-uniform mesh on [0, 1] × [0, 2] × [0, 3] (its first `D` axes) under `pol`.
-function policy_mesh(pol, ns::NTuple{D, Int}; seed = 11) where {D}
-    Bramble._seed_mesh1d_rng!(seed)
-    Ωd = domain(foldl(×, ntuple(d -> interval(0.0, Float64(d)), D)))
-    Ω = mesh(Ωd, D == 1 ? only(ns) : ns, D == 1 ? false : ntuple(_ -> false, D);
-        backend = backend(policy = pol))
-    Bramble._unseed_mesh1d_rng!()
-    return Ω
-end
 
 laplacian(u, v) = innerₕ(-Δₕ(u), v)
 source(v) = innerₕ(x -> 1.0 + x[1], v)
 
 # Matrix, load, refilled matrix, solution and its lift on `space(Ω)` under `pol`.
 function solve_by(pol, ns, space; f = laplacian, kwargs...)
-    C = space(policy_mesh(pol, ns))
+    C = space(ghost_mesh(pol, ns))
     a, l = form(C, C, f), form(C, source)
     A, F = assemble(a, l; kwargs...)
     A2 = copy(A)
@@ -87,7 +77,7 @@ end
 # The threads that ran the reduction, the two passes of the load and `lift` under `pol`,
 # their values checked against the unmarked paths'.
 function band_threads(pol)
-    C = constrained(gridspace(policy_mesh(pol, (9, 11)); ghosts = :boundary), robin_conormal)
+    C = constrained(gridspace(ghost_mesh(pol, (9, 11)); ghosts = :boundary), robin_conormal)
     a, l = form(C, C, laplacian), form(C, source)
     A, F = assemble(a, l)
     am = marked_form(a)
@@ -155,7 +145,7 @@ end
     @testset "Load with d = 0 refills, CpuThreaded" begin
         rel = u -> map(F -> F => ∂ₙ(u; K) => 0.0, (:xmin, :xmax, :ymin, :ymax))
         b = map((CpuSerial(), CpuThreaded())) do pol
-            C = constrained(gridspace(policy_mesh(pol, (9, 11)); ghosts = :boundary), rel)
+            C = constrained(gridspace(ghost_mesh(pol, (9, 11)); ghosts = :boundary), rel)
             l = form(C, source)
             b = assemble(l)
             fill!(b, 0.0)
@@ -194,7 +184,7 @@ end
     end
 
     @testset "Every band count covers every entry once" begin
-        C = constrained(gridspace(policy_mesh(CpuSerial(), (9, 11)); ghosts = :boundary),
+        C = constrained(gridspace(ghost_mesh(CpuSerial(), (9, 11)); ghosts = :boundary),
             robin_conormal)
         a, l = form(C, C, laplacian), form(C, source)
         A, F = assemble(a, l)
@@ -219,7 +209,7 @@ end
     end
 
     @testset "assemble_parallel! names assemble!" begin
-        C = constrained(gridspace(policy_mesh(CpuThreaded(), (6, 7)); ghosts = :boundary),
+        C = constrained(gridspace(ghost_mesh(CpuThreaded(), (6, 7)); ghosts = :boundary),
             robin_conormal)
         a, l = form(C, C, laplacian), form(C, source)
         A = assemble(a)

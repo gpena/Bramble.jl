@@ -16,7 +16,7 @@ import Bramble
 using LinearAlgebra: Diagonal, dot, norm, ×
 using SparseArrays: sparse, spzeros
 
-using ..TestUtils: WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS, padded, random_mesh
 
 isdefined(Main, :GhostOracle1D) ||
     Base.include(Main, joinpath(@__DIR__, "..", "ghost", "GhostOracle1D.jl"))
@@ -26,18 +26,6 @@ const O1 = Main.GhostOracle1D
 const ON = Main.GhostOracleND
 
 const tol = 1e-12
-
-function random_mesh(ns; seed = 7)
-    Ω = domain(foldl(×, ntuple(_ -> interval(0.0, 1.0), length(ns))))
-    Bramble._seed_mesh1d_rng!(seed)
-    try
-        return mesh(Ω, length(ns) == 1 ? ns[1] : ns, ntuple(_ -> false, length(ns)))
-    finally
-        Bramble._unseed_mesh1d_rng!()
-    end
-end
-
-padded(Ωₕ; ghosts = :boundary) = Bramble.padded_space(gridspace(Ωₕ; ghosts = ghosts))
 
 const FACETS = (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
 facet_axis_side(f::Symbol) = (k = findfirst(==(f), FACETS); ((k + 1) ÷ 2, isodd(k) ? 1 : 2))
@@ -80,7 +68,7 @@ relerr(A, R) = norm(A - R) / norm(R)
 
 @testset "∂ₙ as a facet operator (#218)" begin
     @testset "1D: trial, test and both sides" begin
-        Ωₕ = random_mesh((19,))
+        Ωₕ = random_mesh((19,); seed = 7)
         P = padded(Ωₕ)
         R = sparse(trial_rows(Ωₕ, (:xmin, :xmax)))
         A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), v)))
@@ -99,7 +87,7 @@ relerr(A, R) = norm(A - R) / norm(R)
     end
 
     @testset "2D trial side against the oracle" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), v)))
         @test relerr(A, sparse(trial_rows(Ωₕ, FACETS[1:4]))) <= tol
@@ -110,7 +98,7 @@ relerr(A, R) = norm(A - R) / norm(R)
     end
 
     @testset "2D corner: one value per facet" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         (; Dc, ps) = oracle_ops(Ωₕ)
         corner = LinearIndices(ps)[2, 2]   # physical node (1, 1)
@@ -128,7 +116,7 @@ relerr(A, R) = norm(A - R) / norm(R)
     end
 
     @testset "2D test side and both sides" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         (; Dc) = oracle_ops(Ωₕ)
         B = assemble(form(P, P, (u, v) -> inner_Γ(u, ∂ₙ(v))))
@@ -142,7 +130,7 @@ relerr(A, R) = norm(A - R) / norm(R)
     end
 
     @testset "Per-facet coefficients by markers" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         c = (xmin = 2.0, xmax = 0.5, ymin = 3.0, ymax = 1.5)
         a = form(P,
@@ -163,7 +151,7 @@ relerr(A, R) = norm(A - R) / norm(R)
     end
 
     @testset "Conormal rows with a constant K" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         K = [2.0 0.7; 0.4 1.5]
         conormal = (Dc, d) -> K[d, 1] * Dc[1] + K[d, 2] * Dc[2]
@@ -178,7 +166,7 @@ relerr(A, R) = norm(A - R) / norm(R)
     @testset "Conormal at one ghosted facet's corners" begin
         # `u = y` on the padded grid: every centred difference is exact, so the conormal flux
         # at a node of xmin is `η · (K ∇u)_1 = -K[1, 2]`, and the row sum `-ω K[1, 2]`.
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         ns = ON.sizes(Ωₕ)
         y = ON.axis_points(Ωₕ)[2]
         K = [2.0 0.7; 0.4 1.5]
@@ -220,7 +208,7 @@ relerr(A, R) = norm(A - R) / norm(R)
     end
 
     @testset "Facet scalars and the element type" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         A2 = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u) / 2, v)))
         @test relerr(A2, sparse(0.5 * trial_rows(Ωₕ, FACETS[1:4]))) <= tol
@@ -239,7 +227,7 @@ relerr(A, R) = norm(A - R) / norm(R)
     end
 
     @testset "Linear form with ∂ₙ(v)" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         g(x) = 1.0 + x[1] + 2x[2]^2
         (; ns, ps) = oracle_ops(Ωₕ)
@@ -255,7 +243,7 @@ relerr(A, R) = norm(A - R) / norm(R)
     end
 
     @testset "η on a ghost space names facet nodes" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         (; ps) = oracle_ops(Ωₕ)
         Wx = facet_weights(Ωₕ, 1, 1)
@@ -269,7 +257,7 @@ relerr(A, R) = norm(A - R) / norm(R)
 
     if WITH_3D_TESTS
         @testset "3D trial and both sides" begin
-            Ωₕ = random_mesh((4, 5, 6))
+            Ωₕ = random_mesh((4, 5, 6); seed = 7)
             P = padded(Ωₕ)
             (; Dc) = oracle_ops(Ωₕ)
             A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), v)))
@@ -284,7 +272,7 @@ relerr(A, R) = norm(A - R) / norm(R)
     end
 
     @testset "Refusals" begin
-        Ω1 = random_mesh((19,))
+        Ω1 = random_mesh((19,); seed = 7)
         Px = padded(Ω1; ghosts = (:xmin,))
         @test_throws ArgumentError form(Px, Px,
             (u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmax,)))
@@ -294,7 +282,7 @@ relerr(A, R) = norm(A - R) / norm(R)
         @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(∂ₙ(u), v))
         @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(u, ∂ₙ(v)))
 
-        Ω2 = random_mesh((6, 7))
+        Ω2 = random_mesh((6, 7); seed = 7)
         P2 = padded(Ω2; ghosts = (:xmin, :ymin))
         @test_throws ArgumentError form(P2, P2, (u, v) -> inner_Γ(∂ₙ(u), v))
         @test form(P2, P2, (u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmin, :ymin))) isa
@@ -337,7 +325,7 @@ end
 
 @testset "∂ₙₙ and jumpₙ as facet operators" begin
     @testset "1D rows" begin
-        Ωₕ = random_mesh((19,))
+        Ωₕ = random_mesh((19,); seed = 7)
         P = padded(Ωₕ)
         n = length(points(Ωₕ))
         L = laps(Ωₕ)[1]
@@ -358,7 +346,7 @@ end
     end
 
     @testset "2D ∂ₙₙ: trial, test, both sides" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         Ls = laps(Ωₕ)
         N = (d, s) -> Ls[d]
@@ -376,7 +364,7 @@ end
     end
 
     @testset "2D corner: each facet its own ghost" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         (; ps) = oracle_ops(Ωₕ)
         LP = LinearIndices(ps)
@@ -399,7 +387,7 @@ end
     end
 
     @testset "2D jumpₙ: trial, test, both sides" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         N = (d, s) -> inward_jump(Ωₕ, d, s)
         R = facet_rows(Ωₕ, FACETS[1:4], N)
@@ -414,7 +402,7 @@ end
     end
 
     @testset "jumpₙ with c differing per facet" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         c = (xmin = 2.0, xmax = 0.5, ymin = 3.0, ymax = 1.5)
         a = form(P,
@@ -436,7 +424,7 @@ end
     end
 
     @testset "jumpₙ(Δₕ(u)) is the nesting" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         Lap = sum(laps(Ωₕ))
         R = facet_rows(Ωₕ, FACETS[1:4], (d, s) -> inward_jump(Ωₕ, d, s) * Lap)
@@ -459,7 +447,7 @@ end
     end
 
     @testset "Linear forms and Float32" begin
-        Ωₕ = random_mesh((6, 7))
+        Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         g(x) = 1.0 + x[1] + 2x[2]^2
         (; ns, ps) = oracle_ops(Ωₕ)
@@ -487,7 +475,7 @@ end
 
     if WITH_3D_TESTS
         @testset "3D rows" begin
-            Ωₕ = random_mesh((4, 5, 6))
+            Ωₕ = random_mesh((4, 5, 6); seed = 7)
             P = padded(Ωₕ)
             Ls = laps(Ωₕ)
             A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v)))
@@ -499,7 +487,7 @@ end
     end
 
     @testset "∂ₙₙ and jumpₙ refusals" begin
-        Ω1 = random_mesh((19,))
+        Ω1 = random_mesh((19,); seed = 7)
         Px = padded(Ω1; ghosts = (:xmin,))
         err = try
             form(Px, Px, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:xmax,)))
@@ -520,7 +508,7 @@ end
         Jw = assemble(form(W, W, (u, v) -> inner_Γ(jumpₙ(u), v)))
         @test Jw == sparse([1, 1, n, n], [1, 2, n, n - 1], [-1.0, 1.0, -1.0, 1.0], n, n)
 
-        Ω2 = random_mesh((6, 7))
+        Ω2 = random_mesh((6, 7); seed = 7)
         P2 = padded(Ω2; ghosts = (:xmin, :ymin))
         @test_throws ArgumentError form(P2, P2, (u, v) -> inner_Γ(∂ₙₙ(u), v))
         @test_throws ArgumentError form(P2, P2,

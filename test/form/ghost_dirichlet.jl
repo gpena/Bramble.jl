@@ -70,26 +70,17 @@ end
     end
 end
 
-@testset "1D both routes agree" begin
+@testset "dirichlet keyword: matrix and refill" begin
+    # The two routes' systems and solutions agree in test/form/two_spaces.jl; the matrix
+    # alone, its refill and `dirichlet_bc!` by hand give the same rows as the pair.
     Ω = O1.make_mesh(:random, 0)
     x = collect(points(Ω))
     f = x -> -O1.DEFAULT_EXACT.d2u(x[1])
     gD = O1.DEFAULT_EXACT.u(x[end])
     r = O1.problem_relations(:robin_a, Ω).xmin
     W = gridspace(Ω; ghosts = (:xmin,))
-    rob = u -> r.α * u + r.β * ∂ₙ(u)
-    Cb = constrained(W, u -> (:xmin => rob(u) => r.g, :xmax => u => gD))
-    ub = \(assemble(form(Cb, Cb, lap), form(Cb, v -> innerₕ(f, v)))...)
-    Ca = constrained(W, u -> :xmin => rob(u) => r.g)
+    Ca = constrained(W, u -> :xmin => r.α * u + r.β * ∂ₙ(u) => r.g)
     a, l = form(Ca, Ca, lap), form(Ca, v -> innerₕ(f, v))
-    for sym in (false, true)       # `dirichlet` data are functions of the point
-        A, F = assemble(a, l; dirichlet = :xmax => (p -> gD), symmetrize = sym)
-        @test sym == (norm(A - A') <= 1e-14 * norm(A))
-        ua = A \ F
-        @test ua[end] ≈ gD rtol = 1e-14
-        @test relerr(ua[1:(end - 1)], ub) <= 1e-10
-    end
-    # The matrix alone, its warm refill and `dirichlet_bc!` by hand give the same rows.
     A1, _ = assemble(a, l; dirichlet = :xmax => (p -> gD))
     A2 = assemble(a; dirichlet = :xmax)
     @test A2 == A1
@@ -119,27 +110,6 @@ end
     rels = u -> (:xmin => u => 1.0, :xmax => ∂ₙ(u) => 0.0)
     @test_throws ArgumentError constrained(Wb, rels)
     @test refuses(() -> constrained(Wb, rels), "Drop :xmin")
-end
-
-# Warm `assemble!` with `dirichlet`, in a function so that only the calls are measured.
-function warm_bytes(A, F, a, l, label, pair)
-    assemble!(A, a; dirichlet = label)
-    assemble!(F, l; dirichlet = pair)
-    return (@allocated assemble!(A, a; dirichlet = label)),
-    (@allocated assemble!(F, l; dirichlet = pair))
-end
-
-@testset "Warm dirichlet assemble! is 0 B" begin
-    Ω = ON.make_mesh(:graded, 0; n0 = 9)
-    g = x -> x[1]
-    C = constrained(gridspace(Ω; ghosts = :boundary),
-        u -> map(F -> F => ∂ₙ(u) => 0.0, (:xmin, :xmax, :ymin, :ymax)))
-    a, l = form(C, C, lap), form(C, v -> innerₕ(x -> 1.0, v))
-    A, F = assemble(a, l; dirichlet = :boundary => g)
-    @test warm_bytes(A, F, a, l, :boundary, :boundary => g) == (0, 0)   # a marker
-    @test warm_bytes(A, F, a, l, :xmin, :xmin => g) == (0, 0)           # a facet name
-    A2, F2 = assemble(a, l; dirichlet = :xmin => g)
-    @test A == A2 && F == F2
 end
 
 # −Δu = f with u fixed to `g` on the facets `fixed` and the relations `rels` on the others:

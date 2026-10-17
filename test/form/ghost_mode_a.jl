@@ -17,7 +17,7 @@ using Bramble
 import Bramble
 using LinearAlgebra: Diagonal, dot, issymmetric, norm, ×
 using SparseArrays: sparse
-using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS
+using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, random_mesh
 
 isdefined(Main, :GhostOracle1D) ||
     Base.include(Main, joinpath(pkgdir(Bramble), "test", "ghost", "GhostOracle1D.jl"))
@@ -30,18 +30,6 @@ const tol = 1e-12
 const κ = 3.0   # Helmholtz: −Δu + κu = f
 
 relerr(A, B) = norm(A - B) / norm(B)
-
-function random_mesh(ns; seed = 11)
-    D = length(ns)
-    Ω = domain(D == 1 ? interval(0.0, 1.0) :
-               foldl(×, ntuple(_ -> interval(0.0, 1.0), D)))
-    Bramble._seed_mesh1d_rng!(seed)
-    try
-        return D == 1 ? mesh(Ω, ns[1], false) : mesh(Ω, ns, ntuple(_ -> false, D))
-    finally
-        Bramble._unseed_mesh1d_rng!()
-    end
-end
 
 # The oracles' data, in one shape: α, β per facet (xmin, xmax, ymin, …), the exact
 # solution, its gradient as a tuple and its Laplacian; 1D points are scalars in Bramble.

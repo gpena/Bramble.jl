@@ -11,26 +11,15 @@ using Bramble
 import Bramble
 using Bramble: CpuSerial, CpuThreaded
 using LinearAlgebra: norm, isdiag, diag
-using SparseArrays: SparseMatrixCSC
 using ForwardDiff: ForwardDiff
 using SciMLBase: solve
 using OrdinaryDiffEqBDF: FBDF
 
+using ..TestUtils: ghost_mesh
+
 const TIMES = (0.0, 0.4, 1.3)
 
 alloc(f::F) where {F} = (f(); f(); @allocated f())
-
-# A seeded non-uniform mesh on [0, 1] × [0, 2] (its first `D` axes).
-function smesh(ns::NTuple{D, Int}; pol = CpuSerial(), T = Float64, seed = 11) where {D}
-    Bramble._seed_mesh1d_rng!(seed)
-    be = backend(vector_type = Vector{T}, matrix_type = SparseMatrixCSC{T, Int},
-        policy = pol)
-    Ωd = domain(foldl(×, ntuple(d -> interval(T(0), T(d)), D)))
-    Ω = mesh(Ωd, D == 1 ? only(ns) : ns, D == 1 ? false : ntuple(_ -> false, D);
-        backend = be)
-    Bramble._unseed_mesh1d_rng!()
-    return Ω
-end
 
 # The datum as given (`t === nothing`) or frozen at `t`.
 at(f, ::Nothing) = f
@@ -79,7 +68,7 @@ end
 
 @testset "Ghost semidiscretization (#776)" begin
     @testset "2D residual against frozen data" begin
-        W = gridspace(smesh((6, 7)); ghosts = GHOSTS2)
+        W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = GHOSTS2)
         C, sd, frozen = build(W, rel2)
         residual_matches(sd, C, frozen)
         a = form(C, C, laplacian)
@@ -94,7 +83,7 @@ end
     end
 
     @testset "Static data" begin
-        W = gridspace(smesh((9, 8); seed = 3); ghosts = :boundary)
+        W = gridspace(ghost_mesh(CpuSerial(), (9, 8); seed = 3); ghosts = :boundary)
         rs = t -> u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[2],
             :ymin => ∂ₙ(u) => 0.0, :ymax => 2.0 * u + ∂ₙ(u) => 1.0)
         C, sd, frozen = build(W, rs)
@@ -108,13 +97,13 @@ end
     end
 
     @testset "1D" begin
-        W = gridspace(smesh((13,)); ghosts = :xmax)
+        W = gridspace(ghost_mesh(CpuSerial(), (13,)); ghosts = :xmax)
         C, sd, frozen = build(W, rel1)
         residual_matches(sd, C, frozen)
     end
 
     @testset "Float32 space" begin
-        W = gridspace(smesh((6, 7); T = Float32); ghosts = GHOSTS2)
+        W = gridspace(ghost_mesh(CpuSerial(), (6, 7); T = Float32); ghosts = GHOSTS2)
         C, sd, frozen = build(W, rel2)
         u, du = residual_matches(sd, C, frozen; tol = 1e-5)
         @test eltype(du) == Float32
@@ -124,7 +113,7 @@ end
 
     @testset "Residual allocates nothing" begin
         for ns in ((6, 7), (30, 33))
-            W = gridspace(smesh(ns); ghosts = GHOSTS2)
+            W = gridspace(ghost_mesh(CpuSerial(), ns); ghosts = GHOSTS2)
             C, sd, _ = build(W, rel2)
             u = ones(Bramble.ndofs(C))
             du = similar(u)
@@ -133,7 +122,7 @@ end
     end
 
     @testset "jacobian! is -A" begin
-        W = gridspace(smesh((6, 7)); ghosts = GHOSTS2)
+        W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = GHOSTS2)
         C, sd, _ = build(W, rel2)
         J = Bramble.jacobian_prototype(sd)
         u = ones(Bramble.ndofs(C))
@@ -144,7 +133,7 @@ end
     # The operator changes with `t` through `update_coefficients!`: the source must lift
     # with `A_pad` at `t`, not at the step before.
     @testset "reassemble with update_coefficients!" begin
-        W = gridspace(smesh((6, 7)); ghosts = GHOSTS2)
+        W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = GHOSTS2)
         c = Ref(0.0)
         f = (u, v) -> innerₕ(-Δₕ(u), v) + innerₕ(c * Δₕ(u), v)
         C = constrained(W, rel2(nothing))
@@ -166,7 +155,7 @@ end
     # A Rosenbrock `tgrad` differentiates the residual through `t`: a Dual time takes
     # buffers of its own type and gives ∂ₜ of the source.
     @testset "Dual time" begin
-        W = gridspace(smesh((6, 7)); ghosts = GHOSTS2)
+        W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = GHOSTS2)
         C, sd, _ = build(W, rel2)
         u = collect(range(-1, 2; length = Bramble.ndofs(C)))
         t = 0.4
@@ -180,7 +169,7 @@ end
     end
 
     @testset "state receives lift(C, u, t)" begin
-        W = gridspace(smesh((6, 7)); ghosts = GHOSTS2)
+        W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = GHOSTS2)
         C = constrained(W, rel2(nothing))
         sₕ = element(Bramble.padded_space(C))
         sd = semidiscretize(form(C, C, laplacian), form(C, source); state = sₕ)
@@ -188,12 +177,12 @@ end
         sd(similar(u), u, nothing, 0.4)
         @test parent(sₕ) ≈ parent(Bramble.lift(C, u, 0.4)) rtol = 1e-14
         @test_throws ArgumentError semidiscretize(form(C, C, laplacian), form(C, source);
-            state = element(gridspace(smesh((6, 7)))))
+            state = element(gridspace(ghost_mesh(CpuSerial(), (6, 7)))))
     end
 
     # Static data: as `t → ∞` the solution tends to the steady `A u = F`.
     @testset "FBDF tends to the steady solution" begin
-        W = gridspace(smesh((7, 8); seed = 5); ghosts = GHOSTS2)
+        W = gridspace(ghost_mesh(CpuSerial(), (7, 8); seed = 5); ghosts = GHOSTS2)
         rs = u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => u + ∂ₙ(u) => x -> x[2],
             :ymin => u => x -> x[1], :ymax => ∂ₙ(u) => 1.0)
         C = constrained(W, rs)
@@ -205,7 +194,7 @@ end
     end
 
     @testset "Refusals" begin
-        Ω = smesh((6, 7))
+        Ω = ghost_mesh(CpuSerial(), (6, 7))
         W = gridspace(Ω; ghosts = GHOSTS2)
         C = constrained(W, rel2(nothing))
         a, l = form(C, C, laplacian), form(C, source)
@@ -250,16 +239,16 @@ end
     # pass it adds (two data groups, `L g`, the load), the same at two sizes.
     @testset "CpuThreaded" begin
         figures = map(((6, 7), (30, 33))) do ns
-            Ws = gridspace(smesh(ns); ghosts = GHOSTS2)
+            Ws = gridspace(ghost_mesh(CpuSerial(), ns); ghosts = GHOSTS2)
             _, sds, _ = build(Ws, rel2)
-            Wt = gridspace(smesh(ns; pol = CpuThreaded()); ghosts = GHOSTS2)
+            Wt = gridspace(ghost_mesh(CpuThreaded(), ns); ghosts = GHOSTS2)
             C, sdt, _ = build(Wt, rel2)
             u = collect(range(-1, 2; length = Bramble.ndofs(C)))
             dus, dut = similar(u), similar(u)
             sds(dus, u, nothing, 0.4)
             sdt(dut, u, nothing, 0.4)
             @test relerr(dut, dus) <= 1e-13
-            P = gridspace(smesh(ns; pol = CpuThreaded()))
+            P = gridspace(ghost_mesh(CpuThreaded(), ns))
             sdp = semidiscretize(form(P, P, laplacian), form(P, source))
             up = ones(Bramble.ndofs(P))
             dup = similar(up)
@@ -278,7 +267,7 @@ end
     # sets a coefficient the source also reads gives `F(t)` at `t`, not at the previous
     # call's time; `semidiscretize_rhs` keeps the same order and agrees with it.
     @testset "semidiscretize_rhs after another t" begin
-        P = gridspace(smesh((9, 8)))
+        P = gridspace(ghost_mesh(CpuSerial(), (9, 8)))
         αₕ = element(P)
         mk(t) = (form(P, P, (u, v) -> laplacian(u, v) + innerₕ(αₕ * u, v)),
             t -> (Rₕ!(αₕ, x -> 1 + t * x[1]); nothing))
