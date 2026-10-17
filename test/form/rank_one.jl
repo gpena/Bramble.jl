@@ -204,13 +204,29 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(
         Y0 = rand(size(K, 1), 3)
         @test K * X ≈ M * X
         @test mul!(copy(Y0), K, X, 2.0, 0.5) ≈ 2.0 * M * X + 0.5 * Y0
-        @test K' isa RankOneUpdate && transpose(K) isa RankOneUpdate
+        @test parent(K') === K && parent(transpose(K)) === K
         @test Matrix(K') ≈ M' && Matrix(transpose(K)) ≈ transpose(M)
         @test K' * x ≈ M' * x
         @test transpose(K) * x ≈ transpose(M) * x
-        # the adjoint shares the parts: a refill of `K` is seen through it
-        Kt = K'
-        @test Kt.ws === K.wt && Kt.wt === K.ws
+        @test mul!(copy(y0), K', x, 2.0, 0.5) ≈ 2.0 * M' * x + 0.5 * y0
+        @test mul!(copy(Y0), transpose(K), X, 2.0, 0.5) ≈ 2.0 * transpose(M) * X + 0.5 * Y0
+        @test alloc_test(mul!, copy(y0), K', x, 2.0, 0.5) == 0
+        # the adjoint reads `K`: a refill of `K` with a new `Ref` σ and new data is seen
+        # through it, σ included
+        gₕ = element(W)
+        parent(gₕ) .= 1 .+ rand(length(gₕ))
+        r = Ref(2.0)
+        b = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + r * innerₕ(gₕ, u) * innerₕ(1, v))
+        Kb = assemble(b)
+        Ka, Kt = Kb', transpose(Kb)
+        parent(gₕ) .*= 3
+        r[] = 5.0
+        assemble!(Kb, b)
+        Mb = Matrix(Kb)
+        @test Ka * x ≈ Mb' * x
+        @test Kt * x ≈ transpose(Mb) * x
+        @test Ka * X ≈ Mb' * X
+        @test Matrix(Ka) ≈ Mb'
         # `α = 0` reads no `x`, and `β = 0` no `y`, as `mul!` with a matrix does
         xinf = fill(Inf, size(K, 2))
         y1 = rand(size(K, 1))
@@ -225,6 +241,14 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(
         @test mul!(fill(NaN, size(K, 1), 3), K, X, 1.0, 0.0) ≈ M * X
         @test_throws DimensionMismatch mul!(rand(size(K, 1)), K, rand(size(K, 2) + 1), 1, 0)
         @test_throws DimensionMismatch mul!(rand(size(K, 1), 2), K, rand(size(K, 2) + 1, 2), 1, 0)
+        # the output's size is checked too, before `α = 0` returns, as for a matrix
+        n, m = size(K)
+        for α in (0.0, 1.0), Kx in (K, K', transpose(K))
+            @test_throws DimensionMismatch mul!(zeros(n - 1), Kx, rand(m), α, 1.0)
+            @test_throws DimensionMismatch mul!(zeros(n, 2), Kx, rand(m, 3), α, 1.0)
+            @test_throws DimensionMismatch mul!(zeros(n - 1, 2), Kx, rand(m, 2), α, 0.0)
+            @test_throws DimensionMismatch mul!(zeros(n), Kx, rand(m + 1), α, 0.0)
+        end
     end
 
     @testset "complex data and σ" begin
@@ -488,17 +512,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(
         @test occursin(nosd, msg(() -> semidiscretize(a, l)))
         @test occursin(nosd, msg(() -> semidiscretize(t -> (a, t -> nothing), l)))
         @test occursin(nosd, msg(() -> semidiscretize(form(W, W, lap), l; mass = a)))
-        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, false))
-        C = constrained(gridspace(Ωₕ; ghosts = (:xmin,)),
-            u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u => 0.0, :ymin => u => 0.0, :ymax => u => 0.0))
-        f = (u, v) -> lap(u, v) + innerₕ(1, u) * innerₕ(1, v)
-        ghost = "not supported on ghost spaces"
-        @test occursin(ghost, msg(() -> form(C, C, f)))
-        P = Bramble.padded_space(C)
-        Wp = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
-            npoints(mesh(P), Tuple), (false, false)))
-        @test occursin(ghost, msg(() -> form(P, Wp, f)))
-        @test occursin(ghost, msg(() -> form(Wp, P, f)))
+        # Ghost spaces assemble the term (test/form/ghost_rank_one.jl).
     end
 end
 

@@ -225,20 +225,6 @@ end
 _as_test(op::OperatorAdd) = OperatorAdd(_as_test(op.left_op), _as_test(op.right_op))
 _as_test(op::UnaryWrapper) = _rewrap_inner(op, _as_test(op.inner_op))
 
-# Ghost spaces assemble on their padded space and reduce; the rank-one part's reduction is
-# not written yet.
-_holds_ghost_leaf(Wₕ) = any(((s, _),) -> mesh(s) isa GhostMesh, leaf_spaces_offsets(Wₕ))
-
-@noinline function _throw_rank_one_ghost()
-    throw(
-        ArgumentError(
-        "rank-one terms σ * innerₕ(g, u) * innerₕ(h, v) are not supported on ghost " *
-        "spaces yet. Build the form on a space without ghosts, or impose the condition " *
-        "the term penalises with pde_solve(A, F; mean_zero = w).",
-    ),
-    )
-end
-
 # --- The form ------------------------------------------------------------------------- #
 
 """
@@ -250,8 +236,13 @@ What [`form`](@ref) returns for a bilinear expression holding a rank-one term
 functionals as [`LinearForm`](@ref)s, `test_functional` over the test space and
 `trial_functional` over the trial space. [`assemble`](@ref) gives a
 [`RankOneUpdate`](@ref).
+
+On [`GhostGridSpace`](@ref)s the three parts are the ghost forms of the form on the padded
+spaces (a `GhostBilinearForm` and two `GhostLinearForm`s), and `assemble` reduces each
+through its side's closure.
 """
-struct RankOneForm{D, B <: BilinearForm{D}, S <: Tuple, LS <: LinearForm, LT <: LinearForm}
+struct RankOneForm{D, B <: Union{BilinearForm{D}, GhostBilinearForm{D}}, S <: Tuple,
+    LS <: Union{LinearForm, GhostLinearForm}, LT <: Union{LinearForm, GhostLinearForm}}
     bilinear::B
     scale::S
     test_functional::LS
@@ -262,7 +253,6 @@ trial_space(a::RankOneForm) = trial_space(a.bilinear)
 test_space(a::RankOneForm) = test_space(a.bilinear)
 
 function _rank_one_form(Wₕ, Vₕ, raw_ast)
-    (_holds_ghost_leaf(Wₕ) || _holds_ghost_leaf(Vₕ)) && _throw_rank_one_ghost()
     rest, terms = _split_rank_one(raw_ast)
     length(terms) == 1 || _throw_several_rank_one(length(terms))
     t = only(terms)
@@ -274,6 +264,12 @@ function _rank_one_form(Wₕ, Vₕ, raw_ast)
     return RankOneForm{D, typeof(a), typeof(t.scale), typeof(ls), typeof(lt)}(
         a, t.scale, ls, lt)
 end
+
+# The form on plain spaces, and on ghost spaces (assembled in "Ghost spaces" below).
+const _PlainRankOneForm = RankOneForm{D, <:BilinearForm{D}, <:Tuple, <:LinearForm,
+    <:LinearForm} where {D}
+const _GhostRankOneForm = RankOneForm{D, <:GhostBilinearForm{D}, <:Tuple, <:GhostLinearForm,
+    <:GhostLinearForm} where {D}
 
 function Base.show(io::IO, a::RankOneForm{D}) where {D}
     print(io, "RankOneForm{$(D)D, ", ndofs(test_space(a)), "×", ndofs(trial_space(a)), "}")
@@ -315,9 +311,9 @@ converted to `T`. Not exported: write `Bramble.RankOneUpdate`.
 Entry `(i, j)` is `A[i, j] + σ * (ws[i] * wt[j])`. `mul!(y, K, x, α, β)` computes
 `α (A x + σ ws (wtᵀ x)) + β y` with one product by `A` and two passes over the vectors, and
 allocates nothing; so do `K * x`, `K * X` and `mul!` on matrices, apart from their result.
-`Matrix(K)` is the dense matrix. `adjoint(K)` and `transpose(K)` are rank-one updates of
-`A`'s adjoint and transpose with the two vectors swapped, sharing `A` and the vectors (the
-adjoint conjugates `σ` and complex vectors). `similar(K)` is a rank-one update with
+`Matrix(K)` is the dense matrix. `K'` and `transpose(K)` are LinearAlgebra's lazy
+`Adjoint` and `Transpose` of `K`: they read `A`, `σ` and the vectors from `K`, so a refill of
+`K` is seen through them, and their products allocate nothing either. `similar(K)` is a rank-one update with
 `similar` parts, and `copy(K)` one with copied parts.
 
 With `dirichlet` labels, `assemble` makes each Dirichlet row of `A` an identity row, as
@@ -399,7 +395,7 @@ end
 
 function mul!(
         y::AbstractVector, K::RankOneUpdate, x::AbstractVector, α::Number, β::Number)
-    length(x) == size(K, 2) || _throw_mul_size(size(K), length(x))
+    _check_mul_dims(size(K), y, x)
     iszero(α) && return _scale_only!(y, β)
     c = α * K.σ * _tdot(K.wt, x)
     mul!(y, K.A, x, α, β)
@@ -409,7 +405,7 @@ end
 
 function mul!(
         Y::AbstractMatrix, K::RankOneUpdate, X::AbstractMatrix, α::Number, β::Number)
-    size(X, 1) == size(K, 2) || _throw_mul_size(size(K), size(X, 1))
+    _check_mul_dims(size(K), Y, X)
     iszero(α) && return _scale_only!(Y, β)
     mul!(Y, K.A, X, α, β)
     for k in axes(X, 2)
@@ -428,8 +424,66 @@ function _scale_only!(y::AbstractArray, β::Number)
     return y
 end
 
-@noinline function _throw_mul_size(sz, n)
-    throw(DimensionMismatch("a $(sz[1])×$(sz[2]) rank-one update times $n rows."))
+# `Y = K X` needs `X` of `size(K, 2)` rows and `Y` of `size(K, 1)` rows and as many columns as
+# `X`, checked before `α = 0` returns, as `mul!` with a matrix checks them.
+@inline function _check_mul_dims(sz, Y::AbstractVecOrMat, X::AbstractVecOrMat)
+    size(X, 1) == sz[2] && size(Y, 1) == sz[1] && size(Y, 2) == size(X, 2) ||
+        _throw_mul_dims(sz, size(Y), size(X))
+    return nothing
+end
+
+@noinline function _throw_mul_dims(sz, ny, nx)
+    throw(DimensionMismatch("a $(sz[1])×$(sz[2]) rank-one update cannot map an array of " *
+                            "size $nx into one of size $ny."))
+end
+
+# `K'` and `transpose(K)` are LinearAlgebra's lazy wrappers of `K`, so they read `A`, `σ` and
+# the vectors from `K` itself and a refill of `K` is seen through them. Their products:
+# `(A + σ wₛ wₜᵀ)ᵀ x = Aᵀ x + σ wₜ (wₛᵀ x)`, and the adjoint conjugates `σ` and both vectors.
+using LinearAlgebra: Adjoint, Transpose
+
+const _AdjOrTransRankOne = Union{Adjoint{<:Any, <:RankOneUpdate}, Transpose{<:Any, <:RankOneUpdate}}
+
+_wrap_like(::Adjoint, A) = adjoint(A)
+_wrap_like(::Transpose, A) = transpose(A)
+_entry_op(::Adjoint) = conj
+_entry_op(::Transpose) = identity
+
+# `Σⱼ f(w[j]) x[j, k]`.
+@inline function _tdot(f::F, w::AbstractVector, X::AbstractVecOrMat, k::Int) where {F}
+    s = zero(promote_type(eltype(w), eltype(X)))
+    @inbounds @simd for j in eachindex(w)
+        s += f(w[j]) * X[j, k]
+    end
+    return s
+end
+
+function mul!(
+        y::AbstractVector, Kt::_AdjOrTransRankOne, x::AbstractVector, α::Number, β::Number)
+    _check_mul_dims(size(Kt), y, x)
+    iszero(α) && return _scale_only!(y, β)
+    K, f = parent(Kt), _entry_op(Kt)
+    c = α * f(K.σ) * _tdot(f, K.ws, x, 1)
+    mul!(y, _wrap_like(Kt, K.A), x, α, β)
+    @inbounds for i in eachindex(y, K.wt)
+        y[i] += c * f(K.wt[i])
+    end
+    return y
+end
+
+function mul!(
+        Y::AbstractMatrix, Kt::_AdjOrTransRankOne, X::AbstractMatrix, α::Number, β::Number)
+    _check_mul_dims(size(Kt), Y, X)
+    iszero(α) && return _scale_only!(Y, β)
+    K, f = parent(Kt), _entry_op(Kt)
+    mul!(Y, _wrap_like(Kt, K.A), X, α, β)
+    for k in axes(X, 2)
+        c = α * f(K.σ) * _tdot(f, K.ws, X, k)
+        @inbounds for i in eachindex(K.wt)
+            Y[i, k] += c * f(K.wt[i])
+        end
+    end
+    return Y
 end
 
 function Base.Matrix{S}(K::RankOneUpdate) where {S}
@@ -441,9 +495,6 @@ function Base.Matrix{S}(K::RankOneUpdate) where {S}
 end
 Base.Matrix(K::RankOneUpdate{T}) where {T} = Matrix{T}(K)
 Base.Array(K::RankOneUpdate) = Matrix(K)
-
-Base.adjoint(K::RankOneUpdate) = RankOneUpdate(adjoint(K.A), conj(K.σ), conj(K.wt), conj(K.ws))
-Base.transpose(K::RankOneUpdate) = RankOneUpdate(transpose(K.A), K.σ, K.wt, K.ws)
 
 Base.similar(K::RankOneUpdate{T}) where {T} = similar(K, T)
 Base.similar(K::RankOneUpdate, ::Type{S}) where {S} = RankOneUpdate{S}(
@@ -481,7 +532,7 @@ as [`assemble`](@ref) assembles a [`BilinearForm`](@ref), with `dirichlet` appli
 matrix, and the two functionals' vectors through the linear path. `wₛ` is zero at the
 Dirichlet rows, so they are identity rows of the result.
 """
-function assemble(a::RankOneForm; dirichlet = nothing, dirichlet_components = nothing)
+function assemble(a::_PlainRankOneForm; dirichlet = nothing, dirichlet_components = nothing)
     A = assemble(a.bilinear; dirichlet = dirichlet,
         dirichlet_components = dirichlet_components)
     ws = assemble(a.test_functional)
@@ -499,7 +550,8 @@ nothing on the host. A `Ref` factor of `σ` and every coefficient of the functio
 afresh.
 """
 function assemble!(
-        K::RankOneUpdate, a::RankOneForm; dirichlet = nothing, dirichlet_components = nothing)
+        K::RankOneUpdate, a::_PlainRankOneForm; dirichlet = nothing,
+        dirichlet_components = nothing)
     assemble!(K.A, a.bilinear; dirichlet = dirichlet,
         dirichlet_components = dirichlet_components)
     assemble!(K.ws, a.test_functional)
@@ -511,6 +563,7 @@ end
 
 assemble!(A::AbstractMatrix, ::RankOneForm; kwargs...) = _throw_rank_one_target(A)
 assemble!(K::RankOneUpdate, ::BilinearForm; kwargs...) = _throw_rank_one_target(K)
+assemble!(K::RankOneUpdate, ::GhostBilinearForm; kwargs...) = _throw_rank_one_target(K)
 
 # Entry points written for a matrix the form's sparsity covers, refused by name.
 assemble_add!(::AbstractMatrix, ::RankOneForm, α...) = _throw_rank_one_unsupported(
@@ -532,7 +585,7 @@ end
 
 # `semidiscretize(a, l)`, `semidiscretize(build, l)` with `build` returning one, and a rank-one
 # `mass`: each reaches one of these.
-semidiscretize(::RankOneForm, ::LinearForm; kwargs...) = _throw_rank_one_semidiscrete()
+semidiscretize(::RankOneForm, ::Union{LinearForm, GhostLinearForm}; kwargs...) = _throw_rank_one_semidiscrete()
 _validate_semidiscrete_spaces(::RankOneForm, ::LinearForm; kwargs...) = _throw_rank_one_semidiscrete()
 _validate_form_space(::RankOneForm, name, sp) = _throw_rank_one_semidiscrete()
 
@@ -565,7 +618,7 @@ The rank-one counterpart of `assemble(a::BilinearForm, l::LinearForm)`: `K` a
 to both. `symmetrize = true` runs [`symmetrize!`](@ref) on them.
 """
 function assemble(
-        a::RankOneForm,
+        a::_PlainRankOneForm,
         l::LinearForm;
         dirichlet = nothing,
         dirichlet_components = nothing,
@@ -635,14 +688,173 @@ end
 
 function _symmetrize_rank_one!(K::RankOneUpdate, F::AbstractVector, Wₕ, labels, components)
     _check_symmetrize_square(K)
-    c = Ref(zero(promote_type(eltype(K.wt), eltype(F))))
-    _each_dirichlet_mask(Wₕ, labels, components) do mask, offset
-        _each_marked(mask, offset) do j
-            c[] += K.wt[j] * F[j]
-            K.wt[j] = zero(eltype(K.wt))
-        end
-    end
-    F .-= (K.σ * c[]) .* K.ws
+    c = _take_dirichlet_columns!(K.wt, F, Wₕ, labels, components)
+    F .-= (K.σ * c) .* K.ws
     symmetrize!(K.A, F, Wₕ, labels...; components = components)
     return nothing
+end
+
+# --- Ghost spaces ------------------------------------------------------------------- #
+
+# A ghost space's form is the form on its padded spaces, reduced: on the padded unknown
+# `E_u u + d` the rank-one part is `σ wₛ_pad wₜ_padᵀ`, so the reduced term is
+# `σ (E_vᵀ wₛ_pad)(E_uᵀ wₜ_pad)ᵀ`, each vector reduced through its own side's closure
+# (`_closure_transpose_mul!` reads the closure of the functional's space), and the load
+# gains `−σ wₛ (wₜ_padᵀ d)`. The sparse part reduces through its own map, which covers
+# `A_pad`'s pattern only; the term never enters it.
+
+# The parts of the form on the padded spaces, `r`, as ghost forms of `Wₕ` and `Vₕ`.
+function _ghost_rank_one_form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace,
+        r::_PlainRankOneForm{D}) where {D}
+    a = _ghost_bilinear_form(Wₕ, Vₕ, r.bilinear)
+    ls = _ghost_linear_form(Vₕ, r.test_functional)
+    lt = _ghost_linear_form(Wₕ, r.trial_functional)
+    return RankOneForm{D, typeof(a), typeof(r.scale), typeof(ls), typeof(lt)}(
+        a, r.scale, ls, lt)
+end
+
+# `w = Eᵀ w_pad` for the functional `l`, `E` the closure of its own space. No `d` enters
+# (the functional's vector is not a load), so neither the affine part nor time-dependent
+# data are refused here, as `assemble(l)` refuses them for a load.
+function _reduce_functional!(w::AbstractVector, l::GhostLinearForm)
+    assemble!(l.F_pad, l.padded)
+    return _closure_transpose_mul!(w, l, l.F_pad)
+end
+
+_reduced_functional(l::GhostLinearForm) = _reduce_functional!(
+    similar(l.F_pad, ndofs(l.test_space)), l)
+
+function assemble(a::_GhostRankOneForm; dirichlet = nothing, dirichlet_components = nothing)
+    A = assemble(a.bilinear; dirichlet = dirichlet,
+        dirichlet_components = dirichlet_components)
+    K = RankOneUpdate(A, _rank_scale_value(a.scale), _reduced_functional(a.test_functional),
+        _reduced_functional(a.trial_functional))
+    _zero_dirichlet_rows!(K.ws, test_space(a), dirichlet, dirichlet_components)
+    return K
+end
+
+function assemble!(K::RankOneUpdate, a::_GhostRankOneForm; dirichlet = nothing,
+        dirichlet_components = nothing)
+    assemble!(K.A, a.bilinear; dirichlet = dirichlet,
+        dirichlet_components = dirichlet_components)
+    _reduce_functional!(K.ws, a.test_functional)
+    _reduce_functional!(K.wt, a.trial_functional)
+    K.σ = _rank_scale_value(a.scale)
+    _zero_dirichlet_rows!(K.ws, test_space(a), dirichlet, dirichlet_components)
+    return K
+end
+
+"""
+    assemble(a::RankOneForm, l::GhostLinearForm; dirichlet = nothing, dirichlet_components = nothing, symmetrize::Bool = false) -> (K, F)
+    assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = nothing, dirichlet_components = nothing, symmetrize::Bool = false) -> (K, F)
+
+A form holding a rank-one term and a load on ghost spaces, assembled together as for a
+ghost form without one: `K` the [`RankOneUpdate`](@ref) `A + σ wₛ wₜᵀ` reduced through the
+closures `(E, d)`, and the load `E_vᵀ(F_pad − A_pad d) − σ wₛ (wₜ_padᵀ d)`, the rank-one part
+acting on the padded unknown `E u + d`. `assemble!` refills the outputs of an earlier
+`assemble(a, l)` in place, allocating nothing. `dirichlet` replaces the rows of `A` and
+zeroes `wₛ` there, and `symmetrize` then moves the Dirichlet columns into the load, as on a
+plain space. Both, and spaces whose relation data depend on time, are refused where the
+ghost form without the term refuses them.
+"""
+function assemble(a::_GhostRankOneForm, l::GhostLinearForm; dirichlet = nothing,
+        dirichlet_components = nothing, symmetrize::Bool = false)
+    labels, _ = _normalize_dirichlet(dirichlet)
+    _check_pair(a.bilinear, l, labels, symmetrize)
+    K = RankOneUpdate(_reduced_matrix(a.bilinear.A_pad, a.bilinear),
+        _rank_scale_value(a.scale),
+        similar(a.test_functional.F_pad, ndofs(test_space(a))),
+        similar(a.trial_functional.F_pad, ndofs(trial_space(a))))
+    F = similar(l.F_pad, promote_type(eltype(l.F_pad), eltype(K)), ndofs(l.test_space))
+    return _assemble_rank_one_pair!(K, F, a, l, dirichlet, dirichlet_components, symmetrize)
+end
+
+function assemble!(K::RankOneUpdate, F::AbstractVector, a::_GhostRankOneForm,
+        l::GhostLinearForm; dirichlet = nothing, dirichlet_components = nothing,
+        symmetrize::Bool = false)
+    labels, _ = _normalize_dirichlet(dirichlet)
+    _check_pair(a.bilinear, l, labels, symmetrize, "assemble!(K, F, a, l)")
+    _check_reduced_pattern(K.A, a.bilinear)
+    _check_linear_length(F, l.test_space)
+    T = promote_type(eltype(l.F_pad), eltype(K))
+    promote_type(eltype(F), T) === eltype(F) || _throw_pair_eltype(F, T)
+    return _assemble_rank_one_pair!(K, F, a, l, dirichlet, dirichlet_components, symmetrize)
+end
+
+assemble!(A::AbstractMatrix, ::AbstractVector, ::_GhostRankOneForm, ::GhostLinearForm;
+    kwargs...) = _throw_rank_one_target(A)
+
+function _assemble_rank_one_pair!(K::RankOneUpdate, F::AbstractVector, a::_GhostRankOneForm,
+        l::GhostLinearForm, dirichlet, components, symmetrize::Bool)
+    labels, bcs = _normalize_dirichlet(dirichlet)
+    b = a.bilinear
+    _assemble_ghost!(K.A, b)
+    _assemble_ghost_load!(F, b, l)
+    _reduce_functional!(K.ws, a.test_functional)
+    _reduce_functional!(K.wt, a.trial_functional)
+    K.σ = _rank_scale_value(a.scale)
+    # The term's lift, `σ wₛ (wₜ_padᵀ d)`, read before `wₛ`'s Dirichlet rows are zeroed;
+    # those rows of `F` are replaced below.
+    c = K.σ * _tdot(a.trial_functional.F_pad, b.trial_space.d)
+    F .-= c .* K.ws
+    _form_rows!(K.A, b, labels, components)
+    _form_rows!(F, l, labels, bcs, components)
+    _zero_dirichlet_rows!(K.ws, test_space(a), dirichlet, components)
+    # `_check_pair` refused `symmetrize` without labels.
+    symmetrize && labels isa Tuple &&
+        _symmetrize_rank_one!(K, F, test_space(a), labels, components)
+    return K, F
+end
+
+# The Dirichlet rows of a ghost space whose reduced rows are its physical nodes, through the
+# masks of the physical mesh (`_check_rows` refuses any other space).
+function _each_dirichlet_mask(f::F, Vₕ::GhostGridSpace, labels::Tuple, components) where {F}
+    _validate_scalar_components(components)
+    _check_rows(Vₕ.rows, (Vₕ,), labels)
+    Ωₕ = physical_mesh(mesh(Vₕ))
+    for label in labels
+        f(_label_mask(Ωₕ, Vₕ.rows, label), 0)
+    end
+    return nothing
+end
+
+function symmetrize!(K::RankOneUpdate, F::AbstractVector, Wₕ::GhostGridSpace,
+        labels::Symbol...; components = nothing)
+    return _symmetrize_rank_one!(K, F, Wₕ, labels, components)
+end
+
+# `Σⱼ∈D wₜ[j] F[j]` over the Dirichlet indices `D`, zeroing `wₜ[D]` as it goes (a point two
+# labels share adds once: its `wₜ` is zero the second time). A scalar or ghost space sums in
+# a loop over its labels, which keeps the sum off the heap; a composite one walks its leaves
+# through a closure, the sum held in a `Ref`.
+function _take_dirichlet_columns!(wt, F, Wₕ::Union{ScalarGridSpace, GhostGridSpace}, labels,
+        components)
+    c = zero(promote_type(eltype(wt), eltype(F)))
+    _validate_scalar_components(components)
+    Wₕ isa GhostGridSpace && _check_rows(Wₕ.rows, (Wₕ,), labels)
+    for label in labels
+        c += _take_marked!(wt, F, _dirichlet_label_mask(Wₕ, label))
+    end
+    return c
+end
+
+function _take_dirichlet_columns!(wt, F, Wₕ, labels, components)
+    c = Ref(zero(promote_type(eltype(wt), eltype(F))))
+    _each_dirichlet_mask(Wₕ, labels, components) do mask, offset
+        c[] += _take_marked!(wt, F, mask, offset)
+    end
+    return c[]
+end
+
+_dirichlet_label_mask(Wₕ::ScalarGridSpace, label) = index_in_marker(mesh(Wₕ), label)
+_dirichlet_label_mask(Wₕ::GhostGridSpace, label) = _label_mask(
+    physical_mesh(mesh(Wₕ)), Wₕ.rows, label)
+
+function _take_marked!(wt, F, mask::BitVector, offset::Int = 0)
+    c = zero(promote_type(eltype(wt), eltype(F)))
+    @inbounds for j in MarkedIndices(mask, offset)
+        c += wt[j] * F[j]
+        wt[j] = zero(eltype(wt))
+    end
+    return c
 end

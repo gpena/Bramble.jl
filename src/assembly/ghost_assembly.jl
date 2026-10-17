@@ -35,6 +35,10 @@
 # `semidiscretize` and `ode_problem` take ghost forms in `ghost_semidiscrete.jl`, whose load
 # is the one built here with `d(t)` in place of `d`.
 #
+# A rank-one term `σ * innerₕ(g, u) * innerₕ(h, v)` gives a `RankOneForm` whose parts are
+# ghost forms, reduced in `rank_one.jl`: the other terms as here, and each functional's
+# padded vector through its own side's closure, `wₛ = E_vᵀ wₛ_pad` and `wₜ = E_uᵀ wₜ_pad`.
+#
 # Out of scope on a ghost space, and refused with an `ArgumentError`: device backends,
 # matrix types other than `SparseMatrixCSC`, AD element types. The refusals of the
 # matrix-free and Kronecker operators, of composite spaces with a ghost leaf, and of
@@ -121,6 +125,14 @@ function form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, f)
     _check_ghost_host(Vₕ)
     _check_same_ghosts(Wₕ, Vₕ)
     a = form(padded_space(Wₕ), padded_space(Vₕ), f)
+    # A rank-one term makes `a` a `RankOneForm`, whose parts are reduced one by one; behind
+    # an inference barrier as in `form`, so a form without one still infers.
+    a isa RankOneForm && return Base.inferencebarrier(_ghost_rank_one_form)(Wₕ, Vₕ, a)  # rank_one.jl
+    return _ghost_bilinear_form(Wₕ, Vₕ, a)
+end
+
+# The ghost form of `a`, a form on the padded spaces of `Wₕ` and `Vₕ`.
+function _ghost_bilinear_form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, a::BilinearForm)
     _check_ghost_eltype(_matrix_eltype(a, a.ast))
     A_pad = allocate_system_matrix(a)::SparseMatrixCSC  # `_check_ghost_host`
     src, dst, coef, colptr, rowval = _ghost_reduction_map(
@@ -132,7 +144,11 @@ end
 
 function form(Vₕ::GhostGridSpace, f)
     _check_ghost_host(Vₕ)
-    l = form(padded_space(Vₕ), f)
+    return _ghost_linear_form(Vₕ, form(padded_space(Vₕ), f))
+end
+
+# The ghost form of `l`, a form on the padded space of `Vₕ`.
+function _ghost_linear_form(Vₕ::GhostGridSpace, l::LinearForm)
     T = _assembled_eltype(l.ast, padded_space(Vₕ))
     _check_ghost_eltype(T)
     F_pad = _backend_vector(backend(Vₕ), T, ndofs(padded_space(Vₕ)))
