@@ -191,6 +191,13 @@ never computed on; call [`gridspace`](@ref) again and rebuild `uₕ` on it.
 The same check covers [`πₕ!`](@ref), `πₕ(Wₕ, src)` and the symbolic
 source `πₕ(uₕ)`, which all evaluate through here.
 
+On a [`GhostGridSpace`](@ref) it interpolates the physical nodes on the physical mesh, the
+first `npoints(Ωₕ)` degrees of freedom: the ghost values never enter, and `x` is outside
+the domain of `Ωₕ`, not of the ghosts. A constrained space whose degrees of freedom omit
+fixed nodes or whose relations carry data has no grid function in them: `interpolate_at`
+throws an `ArgumentError`, and `interpolate_at(Bramble.lift(Cₕ, u), x)` is its
+interpolant.
+
 This is the building block both `πₕ!`/`πₕ` (below, the numeric operator) and the
 one-argument, symbolic `πₕ` use: `x -> interpolate_at(uₕ, x)` is itself a valid source
 function, usable anywhere one is accepted, including directly as [`Rₕ`](@ref)'s own argument:
@@ -207,31 +214,49 @@ function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{1}}, x; outside = 
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
     _validate_outside(outside)
     weights(space(uₕ))   # throws once uₕ's mesh has moved
-    Ωₕ = mesh(space(uₕ))
-    frac = _interp_cell_frac(Ωₕ, x, outside)
-    frac === nothing && return outside
-    i, t = frac
-    return _interp_lerp(uₕ[i], uₕ[i + 1], t)
+    return _interp_values(uₕ, mesh(space(uₕ)), x, outside)
 end
 
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x; outside = :error) where {D}
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
     _validate_outside(outside)
     weights(space(uₕ))   # throws once uₕ's mesh has moved
-    Ωₕ = mesh(space(uₕ))
+    return _interp_values(uₕ, mesh(space(uₕ)), x, outside)
+end
+
+# A ghost space interpolates its physical nodes, the first `npoints` degrees of freedom, on
+# the physical mesh: the ghosts are never read, so the cells are those of `Ωₕ` and the
+# domain is its own. A space whose degrees of freedom are not a grid function refuses.
+function interpolate_at(uₕ::VectorElement{<:GhostGridSpace}, x; outside = :error)
+    locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
+    u = _physical_values(:interpolate_at, uₕ)
+    _validate_outside(outside)
+    weights(uₕ.space.padded)   # throws once the mesh has moved
+    return _interp_values(u, physical_mesh(mesh(uₕ.space)), x, outside)
+end
+
+# The blend of the corner values `u[linear index]` of the cell of `Ωₕ` holding `x`.
+@inline function _interp_values(u, Ωₕ::AbstractMeshType{1}, x, outside)
+    frac = _interp_cell_frac(Ωₕ, x, outside)
+    frac === nothing && return outside
+    i, t = frac
+    return _interp_lerp(u[i], u[i + 1], t)
+end
+
+@inline function _interp_values(u, Ωₕ::AbstractMeshType{D}, x, outside) where {D}
     frac = _interp_cell_frac(Ωₕ, x, outside)
     frac === nothing && return outside
     idx, ts = frac
     li = LinearIndices(indices(Ωₕ))
 
-    T = promote_type(eltype(uₕ), typeof(first(ts)))
+    T = promote_type(eltype(u), typeof(first(ts)))
     # Outside the mesh, fold axis by axis instead (#625): see `_interp_fold`.
     all(t -> zero(t) <= t <= one(t), ts) ||
-        return _interp_fold(uₕ, li, idx, ts, 0, Val(D), T)
+        return _interp_fold(u, li, idx, ts, 0, Val(D), T)
     acc = zero(T)
     # No far corner along a collapsed axis: it has a single point.
     for corner in CartesianIndices(ntuple(d -> 0:min(1, size(li, d) - 1), Val(D)))
-        acc += _interp_corner_weight(ts, corner, Val(D)) * uₕ[li[idx + corner]]
+        acc += _interp_corner_weight(ts, corner, Val(D)) * u[li[idx + corner]]
     end
     return acc
 end

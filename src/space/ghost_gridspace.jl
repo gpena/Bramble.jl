@@ -63,6 +63,8 @@ struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix{T},
     td::TD
     "the eliminated ghosts' rows of `E` in the order of a `GhostVector` (a `_GhostUpdate`)."
     gu::GU
+    "whether the first `npoints` degrees of freedom are the physical nodes' values (`_dofs_are_grid_function`)."
+    grid_function::Bool
 end
 
 function GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector,
@@ -71,7 +73,26 @@ function GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector
     Ωₕ = physical_mesh(G)
     rows = _RowsDirichlet(_rows_are_physical(G, E), _facet_masks(Ωₕ, Val(dim(Ωₕ))))
     Et = _closure_transpose(E)
-    return GhostGridSpace(P, E, d, Et, rows, td, _ghost_update(backend(P), G, Et, d, td))
+    return GhostGridSpace(P, E, d, Et, rows, td, _ghost_update(backend(P), G, Et, d, td),
+        _dofs_are_grid_function(G, Et, d, td))
+end
+
+# Whether the first `npoints` degrees of freedom of a closure are the physical nodes' values,
+# in the mesh's order, so that a vector of them is a grid function there, with the ghosts
+# beyond: the padded row of each physical node `k` is the unit row of degree of freedom `k`
+# alone (column `plin[J]` of `Eᵀ` is the single entry `k`, 1: a fixed node has no entry, and
+# every node after it is shifted), and the affine part is 0 and constant in time. A
+# constrained space with data, or with a node fixed by a Dirichlet relation, is not.
+function _dofs_are_grid_function(G::GhostMesh, Et::SparseMatrixCSC, d::AbstractVector,
+        td)
+    td === nothing && all(iszero, Array(d)) || return false
+    plin = LinearIndices(npoints(G, Tuple))
+    cp, rv, nzv = SparseArrays.getcolptr(Et), rowvals(Et), nonzeros(Et)
+    for (k, J) in enumerate(physical_indices(G))
+        i = plin[J]
+        (cp[i + 1] - cp[i] == 1 && rv[cp[i]] == k && isone(nzv[cp[i]])) || return false
+    end
+    return true
 end
 
 # What `update_ghosts!` reads: the rows of `E` of the ghosts the relations eliminate,
@@ -700,6 +721,27 @@ end
         "ghost points is not decided yet. For the values of a function at the physical " *
         "nodes, apply $op on the plain space `gridspace(Ωₕ)`; for the values of a " *
         "constrained solution at the ghosts, use `Bramble.lift(Wₕ, u)`.",
+    ),
+    )
+end
+
+# The first `npoints` degrees of freedom of a ghost element, the values at the physical nodes
+# in the mesh's order, for `normₕ` and `interpolate_at`. A space whose degrees of freedom
+# omit fixed nodes or carry data has no such vector: refused, as a vector of its degrees of
+# freedom is not a grid function there.
+@inline function _physical_values(op::Symbol, uₕ::VectorElement{<:GhostGridSpace})
+    Wₕ = uₕ.space
+    Wₕ.grid_function || _throw_not_grid_function(op, Wₕ)
+    return view(parent(uₕ), 1:length(physical_indices(mesh(Wₕ))))
+end
+
+@noinline function _throw_not_grid_function(op::Symbol, Wₕ::GhostGridSpace)
+    throw(
+        ArgumentError(
+        "$op reads the physical values of a ghost space's grid function, and a vector of " *
+        "the degrees of freedom of $(Wₕ) is not one: its relations fix nodes or carry data, " *
+        "so its degrees of freedom are not the values at the physical nodes. Build the " *
+        "grid function with `uₕ = Bramble.lift(Cₕ, u)` and call $op on that.",
     ),
     )
 end
