@@ -12,6 +12,12 @@
 # iterations at degree 4, where the scaled polynomial takes it to 147; for a diagonally
 # dominant form, such as second-order diffusion plus mass, `D⁻¹A` has its spectrum in `(0, 2]`
 # whatever the cell sizes.
+#
+# A ghost-space form (#781) is preconditioned the same way through its own matrix-free
+# operator (`GhostMatrixFreeOperator`), whose diagonal `jacobi_preconditioner` reads off the
+# padded walk; `_AnyMatrixFreeOperator` is either operator.
+
+const _AnyMatrixFreeOperator{T} = Union{MatrixFreeOperator{T}, GhostMatrixFreeOperator{T}}
 
 """
     ChebyshevPreconditioner{T, Op, V <: AbstractVector{T}} <: AbstractMatrixFreePreconditioner{T}
@@ -36,7 +42,8 @@ vectors are stored in `P`, so one `P` must not be applied from two tasks at once
 
 # Type parameters
 - `T`: The element type of `A`.
-- `Op`: The operator type, a [`MatrixFreeOperator`](@ref).
+- `Op`: The operator type, a [`MatrixFreeOperator`](@ref) or the operator
+  [`matrix_free_operator`](@ref) returns for a ghost-space form.
 - `V`: The vector type of the reciprocal diagonal and the work vectors.
 
 See also: [`chebyshev_preconditioner`](@ref), [`max_eigenvalue_estimate`](@ref),
@@ -56,6 +63,7 @@ Base.size(P::ChebyshevPreconditioner) = size(P.op)
 
 """
     chebyshev_preconditioner(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a)), degree = 4, λmax = nothing, ratio = 30) -> ChebyshevPreconditioner
+    chebyshev_preconditioner(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, degree = 4, λmax = nothing, ratio = 30) -> ChebyshevPreconditioner
     chebyshev_preconditioner(op::MatrixFreeOperator; degree = 4, λmax = nothing, ratio = 30) -> ChebyshevPreconditioner
 
 The Chebyshev preconditioner of `A = assemble(a; dirichlet, dirichlet_components)`, or of the
@@ -73,10 +81,16 @@ polynomial reaches into the low spectrum against how flat it is on its interval.
 allocates three vectors of length `ndofs` and, when `λmax` is not given, the two of
 [`max_eigenvalue_estimate`](@ref).
 
+On a form over ghost spaces ([`GhostGridSpace`](@ref)), `A` is the reduced matrix
+`assemble(a)` returns, applied by [`matrix_free_operator`](@ref)`(a)`, and `D` its diagonal
+as [`jacobi_preconditioner`](@ref) reads it; `policy` defaults to the padded space's. That
+operator applies one product at a time, so neither it nor `P` may be shared between tasks.
+
 # Arguments
-- `a`: A square bilinear form ([`ndofs`](@ref) of trial and test space equal), on scalar or
-  composite spaces, whose matrix is SPD.
-- `op`: A square [`MatrixFreeOperator`](@ref); its Dirichlet rows are kept.
+- `a`: A square bilinear form ([`ndofs`](@ref) of trial and test space equal), on scalar,
+  composite or ghost spaces, whose matrix is SPD.
+- `op`: A square [`MatrixFreeOperator`](@ref), or the operator `matrix_free_operator`
+  returns for a ghost-space form; its Dirichlet rows are kept.
 
 # Keywords
 - `dirichlet`, `dirichlet_components`, `policy`: As in [`matrix_free_operator`](@ref).
@@ -128,10 +142,21 @@ function chebyshev_preconditioner(
 end
 
 function chebyshev_preconditioner(
-        op::MatrixFreeOperator{T}; degree::Integer = 4, λmax = nothing, ratio::Real = 30
+        a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing,
+        policy = _ghost_policy(a.trial_space), degree::Integer = 4, λmax = nothing,
+        ratio::Real = 30
+)
+    op = matrix_free_operator(
+        a; dirichlet = dirichlet, dirichlet_components = dirichlet_components, policy = policy
+    )
+    return chebyshev_preconditioner(op; degree = degree, λmax = λmax, ratio = ratio)
+end
+
+function chebyshev_preconditioner(
+        op::_AnyMatrixFreeOperator{T}; degree::Integer = 4, λmax = nothing, ratio::Real = 30
 ) where {T}
-    n = op.nrows
-    n == op.ncols || _throw_chebyshev_nonsquare(op)
+    n = size(op, 1)
+    n == size(op, 2) || _throw_chebyshev_nonsquare(op)
     degree >= 1 || throw(ArgumentError("chebyshev_preconditioner needs degree >= 1, got $degree"))
     ratio > 1 || throw(ArgumentError("chebyshev_preconditioner needs ratio > 1, got $ratio"))
     J = jacobi_preconditioner(op)
@@ -207,6 +232,7 @@ end
 
 """
     max_eigenvalue_estimate(op::MatrixFreeOperator; iterations = 20, preconditioner = nothing) -> T
+    max_eigenvalue_estimate(op::GhostMatrixFreeOperator; iterations = 20, preconditioner = nothing) -> T
 
 An upper estimate of the largest eigenvalue of the SPD matrix `A` that `op` stands for, or of
 `P⁻¹A` for an SPD `preconditioner` `P`, by power iteration on the matrix-free operator:
@@ -226,7 +252,9 @@ similar to a symmetric one, so `‖P⁻¹A v‖` may pass its top eigenvalue and
 overshoot a little more. Allocates two vectors of length `ndofs`.
 
 # Arguments
-- `op`: A square [`MatrixFreeOperator`](@ref) of an SPD matrix; its Dirichlet rows are kept.
+- `op`: A square [`MatrixFreeOperator`](@ref) of an SPD matrix, or the operator
+  [`matrix_free_operator`](@ref) returns for a ghost-space form; its Dirichlet rows are
+  kept.
 
 # Keywords
 - `iterations`: The number of products with `A` (default: `20`).
@@ -257,10 +285,10 @@ true
 See also: [`chebyshev_preconditioner`](@ref), [`matrix_free_operator`](@ref).
 """
 function max_eigenvalue_estimate(
-        op::MatrixFreeOperator{T}; iterations::Integer = 20, preconditioner = nothing
+        op::_AnyMatrixFreeOperator{T}; iterations::Integer = 20, preconditioner = nothing
 ) where {T}
-    n = op.nrows
-    n == op.ncols || _throw_chebyshev_nonsquare(op)
+    n = size(op, 1)
+    n == size(op, 2) || _throw_chebyshev_nonsquare(op)
     iterations >= 1 ||
         throw(ArgumentError("max_eigenvalue_estimate needs iterations >= 1, got $iterations"))
     v = rand!(Random.Xoshiro(327), zeros(T, n))

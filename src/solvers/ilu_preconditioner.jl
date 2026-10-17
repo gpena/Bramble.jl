@@ -15,7 +15,7 @@
 
 """
     ilu_preconditioner(A::AbstractMatrix; kwargs...) -> ILUZero.ILU0Precon
-    ilu_preconditioner(a::BilinearForm; dirichlet = nothing,
+    ilu_preconditioner(a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
                         dirichlet_components = nothing, kwargs...) -> ILUZero.ILU0Precon
 
 Build a zero-fill incomplete LU (ILU(0)) preconditioner for the matrix `A` -- or for `a`
@@ -38,6 +38,9 @@ symmetrize; ILU(0) does not assume symmetry, so this is the natural entry point 
 unsymmetric, convection-dominated forms this preconditioner targets.
 
 A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
+
+A form on ghost spaces ([`GhostGridSpace`](@ref)) is assembled to its reduced matrix,
+`assemble(a; dirichlet, dirichlet_components)`, and factorised as any other.
 
 Requires [ILUZero.jl](https://github.com/mohamed82008/ILUZero.jl); call `using ILUZero`
 before calling this function.
@@ -62,7 +65,8 @@ function ilu_preconditioner(A::AbstractMatrix; kwargs...)
 end
 
 function ilu_preconditioner(
-        a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, kwargs...
+        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        dirichlet_components = nothing, kwargs...
 )
     A = assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
     A = _as_csc(A)
