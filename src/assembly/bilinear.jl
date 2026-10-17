@@ -378,7 +378,7 @@ _check_space_components(ast, ::CompositeGridSpace, side_component, side) = nothi
 _split_restricted_products(op, ::Type) = op
 
 function _split_restricted_products(op::OperatorAdd, ::Type{E}) where {E}
-    _needs_rewrite(op) || return op
+    _needs_rewrite(op, E) || return op
     l = _split_restricted_products(op.left_op, E)
     r = _split_restricted_products(op.right_op, E)
     return l === op.left_op && r === op.right_op ? op : OperatorAdd(l, r)
@@ -389,7 +389,7 @@ end
 # product is split (`_product_summands`).
 function _split_restricted_products(
         op::Union{OperatorScale, GridFunctionScale}, ::Type{E}) where {E}
-    _needs_rewrite(op) || return op
+    _needs_rewrite(op, E) || return op
     inner = _split_restricted_products(op.inner_op, E)
     return inner === op.inner_op ? op : _distribute_scale(op, inner)
 end
@@ -403,7 +403,7 @@ end
 # at most one from each; with them on one side only, at most two from it. The counts are
 # read off the operand types, so a product with at most two folds to its early return.
 function _split_restricted_products(op::BilinearProduct{D, W}, ::Type{E}) where {D, W, E}
-    _needs_rewrite(op) || return op
+    _needs_rewrite(op, E) || return op
     _holds_restriction(op) || return _widened_product(op, E)
     l = _uniform_scales(op.left_op, E)
     r = _uniform_scales(op.right_op, E)
@@ -453,11 +453,46 @@ function _split_product(op::BilinearProduct{D, W}, l, r, ls, rs) where {D, W}
     # sides multiply them: past 16 (six distinct types a side made 36, a first assemble
     # up to 15 times slower and more bytes than the unsplit product), it stays as built.
     length(ls) * length(rs) > 16 && return op
-    if (length(ls) == 1 && length(rs) == 1) || _mixed_scales(l) || _mixed_scales(r)
+    if _mixed_scales(l) || _mixed_scales(r)
+        return l === op.left_op && r === op.right_op ? op :
+               BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
+    end
+    if length(ls) == 1 && length(rs) == 1
+        l = _hoisted(l, ls)
+        r = _hoisted(r, rs)
         return l === op.left_op && r === op.right_op ? op :
                BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
     end
     return _product_sum(op, ls, rs)
+end
+
+# An operand left as one group is kept as written, unless a constant scale sits between a
+# stencil node and a restriction: its one group is then the operand distributed through the
+# node and the scale (`_summands_of`), as `D₋ₓ(2.0 * (Rₕ(:l, v) + Rₕ(:r, v)))` boxed
+# (16704 B on a 7x9 grid) where `D₋ₓ(2.0 * Rₕ(:l, v)) + D₋ₓ(2.0 * Rₕ(:r, v))` does not.
+@inline _hoisted(op, groups::Tuple{Any}) = _scale_in_node(op) ? groups[1] : op
+@inline _hoisted(op, groups) = op
+function _type_scale_in_node(T, under::Bool = false)
+    T isa DataType || return false
+    under && T <: OperatorScale &&
+        _type_holds_restriction(fieldtype(T, :inner_op)) && return true
+    T <: _StencilNode && return _type_scale_in_node(fieldtype(T, :inner_op), true)
+    T <: UnaryWrapper && return _type_scale_in_node(fieldtype(T, :inner_op), under)
+    T <: OperatorAdd && return _type_scale_in_node(T.parameters[2], under) ||
+           _type_scale_in_node(T.parameters[3], under)
+    return false
+end
+
+# Whether `T` holds, under any wrapper or sum, a constant or grid function scale over an
+# operand holding a restriction.
+function _type_holds_scaled_restriction(T)
+    T isa DataType || return false
+    T <: Union{OperatorScale, GridFunctionScale} &&
+        _type_holds_restriction(fieldtype(T, :inner_op)) && return true
+    T <: UnaryWrapper && return _type_holds_scaled_restriction(fieldtype(T, :inner_op))
+    T <: OperatorAdd && return _type_holds_scaled_restriction(T.parameters[2]) ||
+           _type_holds_scaled_restriction(T.parameters[3])
+    return false
 end
 
 # Whether a `RegionRestriction` appears anywhere in `T`, its parameters searched in turn.
@@ -472,64 +507,121 @@ function _type_holds_restriction(T)
 end
 precompile(_type_holds_restriction, (Any,))
 @generated _holds_restriction(::T) where {T} = _type_holds_restriction(T)
+@generated _scale_in_node(::T) where {T} = _type_scale_in_node(T)
+@generated _holds_scaled_restriction(::T) where {T} = _type_holds_scaled_restriction(T)
 
 # Whether a product in the form type `T`, reached as `_split_restricted_products` descends,
-# has an operand whose outermost scales differ in type (`_scales_differ`, read off the
-# types): `0.1 * v + 3 * D₋ₓ(v)`. Asked with `_type_holds_restriction` as one question, so a
-# form with uniform scales and no restriction folds to itself (+17–26% on the first `form`
-# of the 3D elasticity form when every product was rewritten).
-function _type_mixed_scales(T)
+# has an operand whose summands' weights differ in type once multiplied by a weight of the
+# spaces' element type `E` (`_type_scales_differ`, read off the types): `0.1 * v +
+# 3 * D₋ₓ(v)`, `g * v + 0.5 * D₋ₓ(v)` on a Float32 mesh. Asked with
+# `_type_holds_restriction` as one question, so a form with uniform weights and no
+# restriction folds to itself (+17–26% on the first `form` of the 3D elasticity form when
+# every product was rewritten).
+function _type_mixed_scales(T, E)
     T isa DataType || return false
-    T <: BilinearProduct && return _type_scales_differ(T.parameters[3]) ||
-                                   _type_scales_differ(T.parameters[4])
-    T <: OperatorAdd && return _type_mixed_scales(T.parameters[2]) ||
-                               _type_mixed_scales(T.parameters[3])
+    T <: BilinearProduct && return _type_scales_differ(T.parameters[3], E) ||
+                                   _type_scales_differ(T.parameters[4], E)
+    T <: OperatorAdd && return _type_mixed_scales(T.parameters[2], E) ||
+                               _type_mixed_scales(T.parameters[3], E)
     T <: Union{OperatorScale, GridFunctionScale} &&
-        return _type_mixed_scales(T.parameters[3])
+        return _type_mixed_scales(T.parameters[3], E)
     return false
 end
-function _type_scales_differ(T)
-    T isa DataType && T <: OperatorAdd || return false
-    scales = Tuple{Any, Bool}[]  # (scale type, read live through a `Ref`)
-    _type_collect_scales!(scales, T)
-    S = mapreduce(first, promote_type, scales; init = Union{})
-    return any(((s, live),) -> !live && s !== S, scales)
-end
-function _type_collect_scales!(scales, T)
-    T isa DataType || return scales
-    if T <: OperatorAdd
-        _type_collect_scales!(scales, T.parameters[2])
-        _type_collect_scales!(scales, T.parameters[3])
-    elseif T <: OperatorScale
-        S = T.parameters[2]
-        live = S isa DataType && S <: Base.RefValue
-        push!(scales, (live ? S.parameters[1] : S, live))
-    end
-    return scales
-end
-precompile(_type_mixed_scales, (Any,))
-@generated _needs_rewrite(::T) where {T} = _type_holds_restriction(T) ||
-                                           _type_mixed_scales(T)
 
-# A summed operand whose summands' constant scales differ in type (`2.0 * Rₕ(:l, v) +
-# 3 * Rₕ(:r, v)`) has a stencil whose weights differ in type from summand to summand, and
-# the walk boxes it at every point even with two restricted summands. Those scales, the
-# outermost of each summand only, are converted to the type their products with a weight
-# of the spaces' element type `E` join to (`_scale_product_type`), never narrowed to `E`:
-# `Int` with `Rational` on a `Float64` mesh go to `Float64` as `Int * Float64` does, `π`
-# beside an `Int` on a Float32 mesh go to `Float32` as `π * 1f0` does, and a `Float64`
-# literal beside an `Int` on a Float32 mesh takes the `Int` to `Float64`, so the entries
-# keep the `Float64` they had and move only by the order of the products' rounding (39680 B
-# before on a 7x9 grid for `0.1 * Rₕ(:l, v) + 3 * D₋ₓ(v) + Rₕ(:r, v) + Rₕ(:b, v)`). An
-# unscaled summand needs no unit scale: its weights are `E`'s and it is grouped apart from
-# the scaled ones. A `Ref` scale is read live, so it is left as it is and only its value
-# type joins the promotion. A product gets here only if it holds a restriction or such an
-# operand (`_needs_rewrite`), and an operand whose scales agree is returned untouched.
-# Without a restriction the scales are widened the same way (9072 B before for
-# `0.1 * v + 3 * D₋ₓ(v)` on a Float32 mesh). `simplify_ast` keeps the literals (its
-# folding reads them).
-_uniform_scales(op, ::Type) = op
-# With no restriction there is no split to gain, so scales joining to a type that is not
+# Whether a sum in `T`, at its top or under any wrapper, has a summand whose weights'
+# type (`_type_weight`, linear.jl) is not the type they all join to: an unscaled summand
+# beside a scaled one, a grid function or `Ref` scale beside a constant one, a scale nested
+# in another, a sum under a restriction or a difference (`Rₕ(:c, 0.1 * v + 3 * D₋ₓ(v))`,
+# `D₋ₓ(0.1 * v + 3 * D₊ᵧ(v))`).
+function _type_scales_differ(T, E)
+    T isa DataType || return false
+    if T <: OperatorAdd
+        S = _type_value(T, E)
+        isconcretetype(S) || return false
+        return _type_summands_differ(T, S, _type_scalar_join(T), E)
+    elseif T <: UnaryWrapper
+        return _type_scales_differ(fieldtype(T, :inner_op), E)
+    end
+    return false
+end
+function _type_summands_differ(T, S, C, E)
+    T <: OperatorAdd && return _type_summands_differ(T.parameters[2], S, C, E) ||
+           _type_summands_differ(T.parameters[3], S, C, E)
+    return _type_weight(T, E) !== S || _type_scalar_off(T, C) || _type_scales_differ(T, E)
+end
+# The scalars of a sum's summands, outermost only, joined, a `Ref`'s by its value type:
+# their weights may agree and their types still not (`2 * Rₕ(:l, v)` beside
+# `(1 // 2) * Rₕ(:r, v)` on a Float64 mesh, `3` beside `Ref(2.0)`), and two restricted
+# summands share a product only when their types agree (`_type_groups`). `Union{}` with
+# none.
+function _type_scalar_join(T)
+    T <: OperatorAdd && return promote_type(
+        _type_scalar_join(T.parameters[2]), _type_scalar_join(T.parameters[3]))
+    T <: OperatorScale || return Union{}
+    C = T.parameters[2]
+    return C isa DataType && C <: Base.RefValue ? C.parameters[1] : C
+end
+function _type_constant_scalar(T)
+    T <: OperatorScale || return Union{}
+    C = T.parameters[2]
+    return C isa DataType && C <: Base.RefValue ? Union{} : C
+end
+# Whether `T` is a constant scale whose scalar is not of type `C`.
+function _type_scalar_off(T, C)
+    K = _type_constant_scalar(T)
+    return K !== Union{} && K !== C
+end
+precompile(_type_mixed_scales, (Any, Any))
+@generated _needs_rewrite(::T, ::Type{E}) where {T, E} = _type_holds_restriction(T) ||
+                                                         _type_mixed_scales(T, E)
+@generated _value_type(::T, ::Type{E}) where {T, E} = _type_value(T, E)
+# Whether the summand `T` already has weights of type `S` and no constant scalar off it.
+@generated _on_target(::T, ::Type{S}, ::Type{E}) where {T, S, E} = (
+    _type_weight(T, E) === S && !_type_scalar_off(T, S))
+@generated _sum_differs(::T, ::Type{E}) where {T, E} = _type_scales_differ(T, E)
+
+# A summed operand whose summands' weights differ in type (`2.0 * Rₕ(:l, v) +
+# 3 * Rₕ(:r, v)`, `g * v + 0.5 * D₋ₓ(v)` with `g` a Float32 grid function) has a stencil
+# whose weights differ in type from summand to summand, and the walk boxes it at every
+# point even with two restricted summands. Each summand is brought to the type the
+# summands' weights join to (`_type_value`, linear.jl), never narrowed below a weight of
+# the spaces' element type `E`: `Int` with `Rational` on a `Float64` mesh go to `Float64`
+# as `Int * Float64` does, `π` beside an `Int` on a Float32 mesh go to `Float32` as
+# `π * 1f0` does, and a `Float64` literal beside an `Int` on a Float32 mesh takes the `Int`
+# to `Float64`, so the entries keep the `Float64` they had and move only by the order of
+# the products' rounding (39680 B before on a 7x9 grid for `0.1 * Rₕ(:l, v) + 3 * D₋ₓ(v) +
+# Rₕ(:r, v) + Rₕ(:b, v)`). A summand's outermost constant scale is converted; any other
+# summand off that type (unscaled, under a grid function or a `Ref` scale, both read live)
+# takes a unit scale of it, `1.0 * (g * v)`, exact for every weight. A sum under a wrapper
+# (`Rₕ(:c, 0.1 * v + 3 * D₋ₓ(v))`, a scale or a difference over one) is made uniform
+# first, in place. A product gets here only if it holds a restriction or such an operand
+# (`_needs_rewrite`), and an operand whose weights and scalars agree is returned untouched.
+# Without a restriction the weights are widened the same way (9072 B before for `0.1 * v +
+# 3 * D₋ₓ(v)` on a Float32 mesh, 9072 B for `g * v + 0.5 * D₋ₓ(v)`). `simplify_ast` keeps
+# the literals (its folding reads them). A summand once computed in Float32 beside Float64
+# ones is now computed in Float64, so on a Float32 mesh entries move by up to about one
+# Float32 eps relative (1.35e-7 for `D₋ₓ(2.0 * (Rₕ + Rₕ)) - D₋ₓ(3 * (Rₕ + Rₕ))` in 2D), and
+# on a Float64 mesh by at most 3e-16, the element type unchanged.
+@inline _uniform_scales(op, ::Type{E}) where {E} = _sum_differs(op, E) ?
+                                                   _widened(op, E) : op
+@inline _widened(op, ::Type) = op
+@inline _widened(op::UnaryWrapper, ::Type{E}) where {E} = _rewrap_inner(
+    op, _uniform_scales(op.inner_op, E))
+@inline _widened(op::OperatorAdd, ::Type{E}) where {E} = _widen_summands(
+    op, _value_type(op, E), E)
+@inline _widen_summands(op::OperatorAdd, ::Type{S}, ::Type{E}) where {S, E} = OperatorAdd(
+    _widen_summands(op.left_op, S, E), _widen_summands(op.right_op, S, E))
+@inline function _widen_summands(op, ::Type{S}, ::Type{E}) where {S, E}
+    x = _uniform_scales(op, E)
+    return _on_target(x, S, E) ? x : _to_value_type(x, S)
+end
+@inline _to_value_type(x::OperatorScale, ::Type{S}) where {S} = OperatorScale(
+    convert(S, x.scalar), x.inner_op)
+@inline _to_value_type(
+    x::OperatorScale{D, <:Base.RefValue}, ::Type{S}) where {D, S} = OperatorScale(one(S), x)
+@inline _to_value_type(x, ::Type{S}) where {S} = OperatorScale(one(S), x)
+
+# With no restriction there is no split to gain, so weights joining to a type that is not
 # bits are left as they are. Every product with a `BigFloat` allocates anyway, and an `Int`
 # converted to one only adds allocations (56688 -> 106368 B for `big(0.1) * v +
 # 3 * D₋ₓ(v)`).
@@ -538,24 +630,12 @@ function _widened_product(op::BilinearProduct{D, W}, ::Type{E}) where {D, W, E}
     r = _bits_uniform_scales(op.right_op, E)
     return BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
 end
-_bits_uniform_scales(op, ::Type{E}) where {E} = isbitstype(_scale_product_type(op, E)) ?
+_bits_uniform_scales(op, ::Type{E}) where {E} = isbitstype(_value_type(op, E)) ?
                                                 _uniform_scales(op, E) : op
 # Scales still of several types after that would keep the walk boxing whatever the split
 # does, and a split then only adds walks (45648 B against 39680 B on a Float32 mesh when it
 # narrowed nothing and widened nothing), so it is skipped.
 @inline _mixed_scales(op) = _scales_differ(op, _scale_type(op))
-function _uniform_scales(op::OperatorAdd, ::Type{E}) where {E}
-    T = _scale_type(op)
-    return _scales_differ(op, T) ? _promote_scales(op, _scale_product_type(op, E)) : op
-end
-
-# The type of each scale's product with an `E` weight, joined over the summands: `π * 1f0`
-# is a `Float32`, though `promote_type(Irrational{:π}, Int)` is `Float64`.
-@inline _scale_product_type(op::OperatorScale, ::Type{E}) where {E} = Base.promote_op(
-    *, _scalar_type(op.scalar), E)
-@inline _scale_product_type(op::OperatorAdd, ::Type{E}) where {E} = promote_type(
-    _scale_product_type(op.left_op, E), _scale_product_type(op.right_op, E))
-@inline _scale_product_type(::Any, ::Type) = Union{}
 
 @inline _scale_type(op::OperatorScale) = _scalar_type(op.scalar)
 @inline _scale_type(op::OperatorAdd) = promote_type(
@@ -571,14 +651,6 @@ end
 @inline _scalar_differs(x, T) = typeof(x) !== T
 @inline _scalar_differs(::Base.RefValue, T) = false
 
-_promote_scales(op::OperatorScale, T) = OperatorScale(
-    _promote_scalar(op.scalar, T), op.inner_op)
-_promote_scales(op::OperatorAdd, T) = OperatorAdd(
-    _promote_scales(op.left_op, T), _promote_scales(op.right_op, T))
-_promote_scales(op, T) = op
-_promote_scalar(x, T) = convert(T, x)
-_promote_scalar(x::Base.RefValue, T) = x
-
 # How many restricted summands `op` holds, under any wrapper, as a bound on the stencil
 # shapes it brings (at most `2^bits`). A restriction nested in another adds no shape: both
 # answer `()` or the same full tuple. `g * (Rₕ(:l, v) + Rₕ(:r, v))` counts two.
@@ -589,26 +661,60 @@ _promote_scalar(x::Base.RefValue, T) = x
 @inline _shape_bits(op::OperatorAdd) = _shape_bits(op.left_op) + _shape_bits(op.right_op)
 @inline _shape_bits(::Any) = 0
 
-# An operand's summands with every unprobed restriction over a sum distributed over it:
-# `Rₕ(:c, v + Rₕ(:l, v))` is `Rₕ(:c, v) + Rₕ(:c, Rₕ(:l, v))`, entry for entry. Left whole,
-# the restriction would be one summand of too many shapes to group.
+# An operand's summands with every unprobed restriction over a sum holding a restriction
+# distributed over it: `Rₕ(:c, v + Rₕ(:l, v))` is `Rₕ(:c, v) + Rₕ(:c, Rₕ(:l, v))`, entry for
+# entry. Left whole, the restriction would be one summand of too many shapes to group. One
+# over a sum holding none is one summand of one bit, and distributed it was two
+# (`Rₕ(:c, 0.1 * v + 0.3 * D₋ₓ(v))` refilled 3600 B on a 7x9 grid).
 @inline _expanded_summands(op) = _summands_of(op, Val(false))
 @inline _summands_of(op::OperatorAdd, paired) = (
     _summands_of(op.left_op, paired)..., _summands_of(op.right_op, paired)...)
 @inline function _summands_of(op::RegionRestriction, paired)
-    op.zero_stencil === nothing || return (op,)
-    return map(x -> _rewrap_inner(op, x), _summands_of(op.inner_op, paired))
+    op.zero_stencil === nothing && _holds_restriction(op.inner_op) || return (op,)
+    return map(x -> _rewrap_inner(op, x), _restricted_summands(op.inner_op, paired))
 end
+# Under a restriction a summand holding a scale over a restriction is kept whole, as it
+# was before scales were distributed (below): `Rₕ(:c, D₋ₓ(2.0 * (Rₕ(:l, v) +
+# Rₕ(:r, v))))` refilled 15840 B whole and 32400 B distributed, as every restriction over
+# a difference over a restriction boxes (`Rₕ(:c, D₋ₓ(Rₕ(:l, v))) + Rₕ(:c, D₋ₓ(Rₕ(:r, v)))`
+# 32400 B too).
+@inline _restricted_summands(op::OperatorAdd, paired) = (
+    _restricted_summands(op.left_op, paired)..., _restricted_summands(op.right_op, paired)...)
+@inline _restricted_summands(op, paired) = _holds_scaled_restriction(op) ? (op,) :
+                                           _summands_of(op, paired)
 # A difference, average, jump or shift is linear in its operand entry for entry, so one
 # over a sum holding a restriction distributes the same way: `D₋ₓ(Rₕ(:c, v + Rₕ(:l, v)))`
 # is `D₋ₓ(Rₕ(:c, v)) + D₋ₓ(Rₕ(:c, Rₕ(:l, v)))`, and `Mₓ(D₊ᵧ(Rₕ(:l, v) + Rₕ(:r, v)))` is
 # `Mₓ(D₊ᵧ(Rₕ(:l, v))) + Mₓ(D₊ᵧ(Rₕ(:r, v)))` (gpena/Bramble.jl#759). An operand with no
 # restriction is left whole, so an unrestricted one compiles nothing new. The node list,
-# `_StencilNode`, is the simplifier's too (ast/stencil_nodes.jl).
+# `_StencilNode`, is the simplifier's too (ast/stencil_nodes.jl). A scale between the node
+# and the sum is distributed with it, so `D₋ₓ(2.0 * (Rₕ(:l, v) + Rₕ(:r, v)))` is
+# `D₋ₓ(2.0 * Rₕ(:l, v)) + D₋ₓ(2.0 * Rₕ(:r, v))`. Left whole, the scaled sum boxed the
+# fixed-length stencil of a difference over a restriction (16704 B on a 7x9 grid, 53424 B
+# for `D₋ᵧ(D₊ᵧ(…))`, 52560 B for `Mₓ(D₊ᵧ(…))`; `D₋ₓ(g * (Rₕ(:l, u) + Rₕ(:r, u)))` on both
+# sides 21600 B).
 @inline function _summands_of(op::_StencilNode, paired)
     _holds_restriction(op.inner_op) || return (op,)
+    return map(x -> _rewrap_inner(op, x), _scaled_summands(op.inner_op, paired))
+end
+# A constant scale over a sum holding a restriction distributes over it as a stencil node
+# does, at an operand's top too: `g * (2.0 * (Rₕ(:l, v) + Rₕ(:r, v)))` on both sides
+# refilled 7920 B with the constant scale left whole. A scalar that is not bits (a
+# `BigFloat`, a `Ref`) is left whole: each piece then allocates its own products
+# (`D₋ₓ(big(2) * (Rₕ(:l, v) + Rₕ(:r, v)))` 40704 B whole, 77856 B distributed).
+@inline function _summands_of(op::OperatorScale, paired)
+    isbits(op.scalar) && _holds_restriction(op.inner_op) || return (op,)
     return map(x -> _rewrap_inner(op, x), _summands_of(op.inner_op, paired))
 end
+# A grid function scale distributes only under a stencil node; at an operand's top it is
+# `_product_summands`'s to distribute, with its own cap on the pieces.
+@inline function _scaled_summands(op::GridFunctionScale, paired)
+    _holds_restriction(op.inner_op) || return (op,)
+    return map(x -> _rewrap_inner(op, x), _scaled_summands(op.inner_op, paired))
+end
+@inline _scaled_summands(op::OperatorAdd, paired) = (
+    _scaled_summands(op.left_op, paired)..., _scaled_summands(op.right_op, paired)...)
+@inline _scaled_summands(op, paired) = _summands_of(op, paired)
 # With restricted summands on both sides (`paired`) an average or jump is left whole, as
 # before its distribution: each piece meets the other side's in a product of its own, and
 # where those box anyway the split only adds walks. `innerₕ(Mₓ(D₊ᵧ(Rₕ(:l, u) +

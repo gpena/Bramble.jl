@@ -414,27 +414,75 @@ function form(Wₕ, f)
     return LinearForm{D, typeof(Wₕ), typeof(ast)}(Wₕ, ast)
 end
 
+# The type of the weights the stencil of `T` holds. A constant, `Ref` or grid function
+# scale multiplies its operand's by its value type, a difference, average or jump by an `E`
+# (the spaces' element type, as `1/h` and `1/2` are), a linear product its test side's by
+# its source's and the `E` volume, and a test or trial function's weight is an `L`. `Any`
+# where a value type is not known from the type (a function thunk, a point source), and
+# nothing is then rewritten or regrouped. With `L = E` it is the type the weights join to
+# once each is multiplied by an `E` volume, the target the widening converts scales to
+# (`π * 1f0` is a `Float32`); `_type_weight` is the type they have. Defined here, before
+# the generators that read it, bilinear.jl's `_needs_rewrite` and `_values_differ` below.
+function _type_value(T, E, L = E)
+    T isa DataType || return Any
+    if T <: OperatorAdd
+        return promote_type(
+            _type_value(T.parameters[2], E, L), _type_value(T.parameters[3], E, L))
+    elseif T <: OperatorScale
+        S = T.parameters[2]
+        S isa DataType && S <: Base.RefValue && (S = S.parameters[1])
+        return Base.promote_op(*, S, _type_value(T.parameters[3], E, L))
+    elseif T <: GridFunctionScale
+        V = T.parameters[2]
+        S = V <: Number ? V : V <: AbstractArray ? eltype(V) : Any
+        return Base.promote_op(*, S, _type_value(T.parameters[3], E, L))
+    elseif T <: LinearProduct
+        return Base.promote_op(
+            *, Base.promote_op(*, _type_value(T.parameters[3], E, L),
+                _type_value(T.parameters[4], E, L)), E)
+    elseif T <: Union{_DifferenceNode, _AverageNode}
+        return Base.promote_op(*, E, _type_value(fieldtype(T, :inner_op), E, L))
+    elseif T <: UnaryWrapper
+        return _type_value(fieldtype(T, :inner_op), E, L)
+    elseif T <: SourceVector
+        return eltype(T.parameters[2])
+    elseif T <: SourceConstant
+        return T.parameters[2]
+    elseif T <: Union{SourceFunction, DiracSource}
+        return Any
+    elseif T <: Union{TestFunction, TrialFunction, IndexedTestFunction,
+        IndexedTrialFunction, IdentityOperator}
+        return L
+    end
+    return E
+end
+# The type of `T`'s weights once multiplied by an `E` volume: a test function's weight is
+# the `Int` `1`, so `π * v` has `Float64` weights on a Float32 mesh beside the `Float32` of
+# `3 * D₋ₓ(v)`.
+_type_weight(T, E) = Base.promote_op(*, _type_value(T, E, Int), E)
+
 # A product's test side holding three or more restricted summands is split as a bilinear
 # product's is (`_split_restricted_products`, bilinear.jl, gpena/Bramble.jl#727): grouped
 # by type, at most two a piece, every piece one `LinearProduct` with the same source. Its
 # source is left as it is, since a restricted source keeps one stencil type once
-# `_typed_restrictions` (above) has typed it. The test side's outermost scales, when they
+# `_typed_restrictions` (above) has typed it. The test side's summands, when their weights
 # differ in type, are widened as a bilinear operand's are (`_uniform_scales`), to the type
-# of their products with an `E` weight and never narrowed to `E`. Without a restriction
-# that happens only when the type is bits (`_widened_product`, 14112 B before for
-# `0.1 * v + 3 * D₋ₓ(v)` on a Float32 mesh), and a form whose test sides' scales agree
-# folds to itself at compile time (`_needs_rewrite`, which reads the test side through
-# the method below, defined before bilinear.jl's generator that calls it).
-_type_mixed_scales(T::Type{<:LinearProduct}) = T isa DataType &&
-                                               _type_scales_differ(T.parameters[4])
+# their weights join to and never narrowed below an `E` weight. Without a restriction that
+# happens only when the type is bits (`_widened_product`, 14112 B before for `0.1 * v +
+# 3 * D₋ₓ(v)` on a Float32 mesh), and a form whose test sides' weights agree folds to
+# itself at compile time (`_needs_rewrite`, which reads the test side through the method
+# below, defined before bilinear.jl's generator that calls it).
+_type_mixed_scales(T::Type{<:LinearProduct}, E) = T isa DataType &&
+                                                  _type_scales_differ(T.parameters[4], E)
 
 function _split_restricted_products(op::LinearProduct{D, W}, ::Type{E}) where {D, W, E}
-    _needs_rewrite(op) || return op
+    _needs_rewrite(op, E) || return op
     _holds_restriction(op.right_op) || return _widened_product(op, E)
     r = _uniform_scales(op.right_op, E)
     rs = _operand_groups(_expanded_summands(r), Val(2))
     length(rs) > 16 && return op
     if length(rs) == 1 || _mixed_scales(r)
+        _mixed_scales(r) || (r = _hoisted(r, rs))
         return r === op.right_op ? op :
                LinearProduct{D, W, typeof(op.left_op), typeof(r)}(op.left_op, r)
     end
@@ -893,7 +941,7 @@ end
 # The scalar case is `_scatter_term!` (below) at offset zero: one leaf, the whole space.
 @inline function _assemble_linear_core!(
         b::AbstractVector, space, ast::AST_TYPE, α = true) where {AST_TYPE}
-    _each_walk_unit(t -> _scatter_term!(b, space, t, 0, α), ast)
+    _each_walk_unit(t -> _scatter_term!(b, space, t, 0, α), ast, eltype(space))
     return b
 end
 
@@ -905,12 +953,48 @@ end
 # (`_split_restricted_products`). Such a form is walked one summand at a time instead,
 # each summand a walk of its own, as a composite space's terms already are. A form with at
 # most two restricted summands, the count read off its type, is walked once, as before.
-@inline _each_walk_unit(f::F, ast) where {F} = _unit_bits(ast) > 2 ?
-                                               (map(f, _walk_summands(ast)); nothing) :
-                                               (f(ast); nothing)
-@inline _fold_walk_units(f::F, ast, acc) where {F} = _unit_bits(ast) > 2 ?
-                                                     _fold_summands(f, _walk_summands(ast), acc) :
-                                                     f(ast, acc)
+#
+# Terms whose weights differ in type (`innerₕ(f, 2 * v) + innerₕ(1.0, v)` on a Float32
+# mesh, Float32 and Float64) are walked one value type at a time too, each group of terms
+# of one type a walk of its own (`_value_groups`): concatenated, the stencil's entries
+# differ in type and the loop over them boxed at every point (27216 B on a 7x9 grid). Both
+# are read off the types (`_type_value`), so a form of one weight type walks as before.
+@inline function _each_walk_unit(f::F, ast, ::Type{E}) where {F, E}
+    if _unit_bits(ast) > 2
+        map(f, _walk_summands(ast))
+    elseif _values_differ(_walk_summands(ast), E)
+        map(f, _value_groups(_walk_summands(ast), E))
+    else
+        f(ast)
+    end
+    return nothing
+end
+@inline function _fold_walk_units(f::F, ast, acc, ::Type{E}) where {F, E}
+    _unit_bits(ast) > 2 && return _fold_summands(f, _walk_summands(ast), acc)
+    _values_differ(_walk_summands(ast), E) &&
+        return _fold_summands(f, _value_groups(_walk_summands(ast), E), acc)
+    return f(ast, acc)
+end
+
+# Whether the terms `ts` have weights of more than one type, each known.
+@generated function _values_differ(ts::Tuple, ::Type{E}) where {E}
+    values = Any[_type_weight(T, E) for T in fieldtypes(ts)]
+    return all(isconcretetype, values) && !allequal(values)
+end
+# The terms `ts` summed in groups of one weight type, in the order each type first comes.
+@generated function _value_groups(ts::Tuple, ::Type{E}) where {E}
+    values = Any[_type_weight(T, E) for T in fieldtypes(ts)]
+    groups = Expr(:tuple)
+    for v in unique(values)
+        idx = findall(isequal(v), values)
+        ex = :(ts[$(idx[1])])
+        for i in idx[2:end]
+            ex = :(OperatorAdd($ex, ts[$i]))
+        end
+        push!(groups.args, ex)
+    end
+    return groups
+end
 
 # The summands walked apart: a scale over a sum (`2.0 * (l₁ + l₂ + l₃)`, `-(l₁ + l₂ + l₃)`)
 # is looked through, each summand walked under its own copy of the scale. The tree `form`
@@ -1172,7 +1256,7 @@ end
 function _assemble_linear_parallel_core!(
         b::AbstractVector, space, ast::AST_TYPE, α = true
 ) where {AST_TYPE}
-    _each_walk_unit(ast) do t
+    _each_walk_unit(ast, eltype(space)) do t
         strides = _term_colour_strides(t)
         return _sweep_parallel!(b, space, t, indices(mesh(space)), strides, 0, α)
     end
@@ -1272,7 +1356,8 @@ end
 # The scalar case is `_contract_term` (below) at offset zero: one leaf, the whole space.
 @inline _contract_linear_core(
     space, ast::AST_TYPE, v::AbstractVector, acc::T
-) where {AST_TYPE, T} = _fold_walk_units((t, a) -> _contract_term(space, t, 0, v, a), ast, acc)
+) where {AST_TYPE, T} = _fold_walk_units(
+    (t, a) -> _contract_term(space, t, 0, v, a), ast, acc, eltype(space))
 
 function _contract_linear_core(
         space::CompositeGridSpace{N}, ast::AST_TYPE, v::AbstractVector, acc::T
