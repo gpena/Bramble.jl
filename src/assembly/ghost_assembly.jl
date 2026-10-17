@@ -35,9 +35,11 @@
 # `semidiscretize` and `ode_problem` take ghost forms in `ghost_semidiscrete.jl`, whose load
 # is the one built here with `d(t)` in place of `d`.
 #
-# Out of scope on a ghost space, and refused with an `ArgumentError`: `matrix_free_operator`,
-# `kronecker_operator`, device backends, matrix types other than `SparseMatrixCSC`,
-# composite spaces with a ghost leaf, AD element types.
+# Out of scope on a ghost space, and refused with an `ArgumentError`: device backends,
+# matrix types other than `SparseMatrixCSC`, AD element types. The refusals of the
+# matrix-free and Kronecker operators, of composite spaces with a ghost leaf, and of
+# contracting a linear form live in `ghost_matrix_free.jl`, `ghost_kronecker.jl`,
+# `ghost_composite.jl` and `ghost_contract.jl`.
 #
 # See also: `GhostGridSpace`, `BilinearForm`, `LinearForm`
 
@@ -149,10 +151,6 @@ form(Wₕ, ::GhostGridSpace, f) = _throw_ghost_mixed()
     ),
     )
 end
-
-# A composite space with a ghost leaf would need a closure per block.
-_leaf_spaces_offsets(::GhostGridSpace, ::Int) = _throw_ghost_composite()
-first_space(::GhostGridSpace) = _throw_ghost_composite()
 
 @noinline function _throw_ghost_composite()
     throw(
@@ -666,10 +664,6 @@ end
 
 # --- Refused paths ------------------------------------------------------------------- #
 
-function matrix_free_operator(::GhostBilinearForm; kwargs...)
-    _throw_ghost_unsupported("matrix_free_operator")
-end
-kronecker_operator(::GhostBilinearForm) = _throw_ghost_unsupported("kronecker_operator")
 function assemble_parallel!(::AbstractVecOrMat, ::Union{GhostBilinearForm, GhostLinearForm})
     _throw_ghost_assemble_parallel()
 end
@@ -681,10 +675,6 @@ end
         "which runs in parallel under the policy of the mesh's backend.",
     ),
     )
-end
-(::GhostLinearForm)(v) = _throw_ghost_unsupported("contracting a linear form")
-function evaluate!(::AbstractVector, ::GhostLinearForm, v)
-    _throw_ghost_unsupported("evaluate!")
 end
 
 # The AST of the form on the padded spaces.

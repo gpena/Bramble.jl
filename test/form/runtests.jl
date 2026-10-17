@@ -60,6 +60,9 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("ghost_constrained.jl")
         include("ghost_time_data.jl")
         include("ghost_heat_convergence.jl")
+        include("rank_one.jl")
+        include("padding_zero.jl")
+        include("vector_sums.jl")
     end
 
     if TestUtils.in_shard("forms-2")
@@ -109,5 +112,10 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("ghost_lift.jl")
         include("ghost_convergence.jl")
         include("ghost_semidiscrete.jl")
+        include("ghost_rank_one.jl")
+        include("two_spaces.jl")
+        include("warm_composite.jl")
+        # Behind `slow`, like compile_scaling.jl: a compile bound on the assembly pipeline.
+        TestUtils.WITH_SLOW_TESTS && include("compile_assembly.jl")
     end
 end

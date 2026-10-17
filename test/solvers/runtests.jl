@@ -14,4 +14,5 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("ghost_kernel.jl")
     include("gauge_solve.jl")
     include("neumann_compatibility.jl")
+    include("rank_one_solve.jl")
 end

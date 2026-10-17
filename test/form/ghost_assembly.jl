@@ -324,23 +324,24 @@ end
     a, l = form(Wg, Wg, f), form(Wg, fl)
     @test_throws ArgumentError form(Wg, W, f)
     @test_throws ArgumentError form(W, Wg, f)
-    @test_throws ArgumentError form(Bramble.CompositeGridSpace(Wg, Wg),
-        Bramble.CompositeGridSpace(Wg, Wg), (u, v) -> innerₕ(u(1), v(1)))
-    @test_throws ArgumentError form(Bramble.CompositeGridSpace(Wg, Wg),
-        v -> innerₕ(x -> 1.0, v(1)))
-    @test_throws ArgumentError semidiscretize(a, l)
+    # `Wg` keeps its ghosts as unknowns, so the semidiscrete problem refuses it (the mass
+    # rows of those ghosts vanish) before it reaches any other check.
+    for call in (() -> semidiscretize(a, l), () -> ode_problem(a, l, zeros(Bramble.ndofs(Wg)), (0.0, 1.0)))
+        err = try
+            call()
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("keeps ghosts as unknowns", sprint(showerror, err))
+    end
     @test_throws ArgumentError semidiscretize(form(W, W, f), l)
     @test_throws ArgumentError semidiscretize(t -> (form(W, W, f), t -> nothing), l)
     u₀ = zeros(Bramble.ndofs(Wg))
-    @test_throws ArgumentError ode_problem(a, l, u₀, (0.0, 1.0))
     @test_throws ArgumentError ode_problem(form(W, W, f), l, u₀, (0.0, 1.0))
-    @test_throws ArgumentError matrix_free_operator(a)
-    @test_throws ArgumentError kronecker_operator(a)
     @test_throws ArgumentError Bramble.assemble_parallel!(assemble(a), a)
     @test_throws ArgumentError Bramble.assemble_parallel!(zeros(Bramble.ndofs(Wg)), l)
-    vₕ = element(Bramble.padded_space(Wg), 1.0)
-    @test_throws ArgumentError l(vₕ)
-    @test_throws ArgumentError Bramble.evaluate!(zeros(length(parent(vₕ))), l, vₕ)
     @test_throws ArgumentError assemble(a; dirichlet = :boundary)
     @test_throws ArgumentError assemble(l; dirichlet = :boundary => x -> 0.0)
     @test_throws ArgumentError assemble(a, l; dirichlet = :boundary => x -> 0.0)
