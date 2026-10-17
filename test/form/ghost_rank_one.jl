@@ -13,7 +13,7 @@ module FormGhostRankOneTests
 using Test
 using Bramble
 import Bramble
-using Bramble: RankOneUpdate, padded_space, closure
+using Bramble: RankOneUpdate, padded_space, closure, D₋ₓ
 using LinearAlgebra: norm, dot, I
 using SparseArrays: SparseMatrixCSC, nonzeros, nnz
 using Random: seed!
@@ -55,8 +55,7 @@ function reference(Cu, Cv, σ; f = lap, g = gt, h = hs, load = fl)
         A = Ev' * Ap * Eu, Fplain = Ev' * (Fp - Ap * du), du, wtp)
 end
 
-rank_form(Cu, Cv, σ; f = lap, g = gt, h = hs) =
-    form(Cu, Cv, (u, v) -> f(u, v) + σ * innerₕ(g, u) * innerₕ(h, v))
+rank_form(Cu, Cv, σ; f = lap, g = gt, h = hs) = form(Cu, Cv, (u, v) -> f(u, v) + σ * innerₕ(g, u) * innerₕ(h, v))
 
 # Every output entry overwritten by a refill: start from NaN.
 function poison!(K, F = nothing)
@@ -70,8 +69,10 @@ end
 refill(K, a) = (assemble!(K, a); assemble!(K, a); @allocated assemble!(K, a))
 refill(K, F, a, l) = (assemble!(K, F, a, l); assemble!(K, F, a, l);
     @allocated assemble!(K, F, a, l))
-refill_rows(K, F, a, l, dir) = (assemble!(K, F, a, l; dirichlet = dir, symmetrize = true);
-    @allocated assemble!(K, F, a, l; dirichlet = dir, symmetrize = true))
+function refill_rows(K, F, a, l, dir)
+    (assemble!(K, F, a, l; dirichlet = dir, symmetrize = true);
+        @allocated assemble!(K, F, a, l; dirichlet = dir, symmetrize = true))
+end
 
 # The spaces of each case: `(trial, test)`, with relations of every kind and `d ≠ 0`.
 function cases(D, T)
@@ -87,8 +88,9 @@ function cases(D, T)
             ("u => g at xmax", Cd, Cd))
     elseif D == 2
         W = gridspace(Ωₕ; ghosts = (:xmin, :xmax, :ymin))
-        Cmix = constrained(W, u -> (:xmin => ∂ₙ(u) => o, :xmax => two * u + ∂ₙ(u) => x -> x[2],
-            :ymin => ∂ₙ(u) => T(0.5), :ymax => u => x -> x[1]))
+        Cmix = constrained(W,
+            u -> (:xmin => ∂ₙ(u) => o, :xmax => two * u + ∂ₙ(u) => x -> x[2],
+                :ymin => ∂ₙ(u) => T(0.5), :ymax => u => x -> x[1]))
         Cv = constrained(W, u -> (:xmin => u + ∂ₙ(u) => o, :xmax => ∂ₙ(u) => o,
             :ymin => ∂ₙ(u) => -o, :ymax => u => x -> x[1]))
         K = T[2 1; 1 2]
@@ -182,6 +184,17 @@ end
     @test refill(Kb, b) == 0
     @test Kb.σ == 5.0
     @test relerr(Matrix(Kb), reference(C, C, 5.0).K) <= 1e-12
+    # the pair's refill reads σ too, in the matrix and in the load's lift (`d ≠ 0`)
+    lb = form(C, v -> innerₕ(fl, v))
+    Kp, Fp = assemble(b, lb)
+    r[] = 7.0
+    poison!(Kp, Fp)
+    @test refill(Kp, Fp, b, lb) == 0
+    ref7 = reference(C, C, 7.0)
+    @test norm(ref7.du) > 0
+    @test Kp.σ == 7.0
+    @test relerr(Matrix(Kp), ref7.K) <= 1e-12
+    @test relerr(Fp, ref7.F) <= 1e-12
 end
 
 @testset "ghost values never read: sentinel data" begin
@@ -253,11 +266,49 @@ end
     @test refill_rows(Ks, Fs, a, l, :xmax => gD) == 0
     @test relerr(Matrix(Ks), Ms) <= 1e-12
     @test relerr(Ms \ Fs, Matrix(Kp) \ F) <= 1e-10
+    # two labels: the columns of both move into the load
+    dir2 = (:xmax => gD, :ymin => gD)
+    mask2 = mask .| vec([J[2] == 1 for J in CartesianIndices(n)])
+    rows2 = findall(mask2)
+    K2, F2 = assemble(a, l; dirichlet = dir2)
+    Ks2, Fs2 = assemble(a, l; dirichlet = dir2, symmetrize = true)
+    @test iszero(Ks2.wt[rows2]) && iszero(Ks2.ws[rows2])
+    @test iszero(Matrix(Ks2)[.!mask2, rows2])
+    @test relerr(Matrix(Ks2) \ Fs2, Matrix(K2) \ F2) <= 1e-10
     # by hand, as on a plain space
     Kh, Fh = assemble(a, l; dirichlet = :xmax => gD)
     symmetrize!(Kh, Fh, C, :xmax)
     @test relerr(Matrix(Kh), Ms) <= 1e-12
     @test relerr(Fh, Fs) <= 1e-12
+end
+
+@testset "lift before Dirichlet rows" begin
+    # A trial functional reading ghost values, `innerₕ(g, D₋ₓ(u))`, gives `wₜ_padᵀ d ≠ 0` on a
+    # Robin and Neumann space, whose rows `dirichlet` may replace: those rows of `F` hold the
+    # data exactly, the term's lift taken before them, and the other rows the lifted load.
+    for D in (1, 2)
+        Ωₕ = rmesh(D, Float64; seed = 5)
+        C = constrained(gridspace(Ωₕ; ghosts = (:xmin, :xmax)),
+            u -> (:xmin => 3.0 * u + ∂ₙ(u) => 1.0, :xmax => ∂ₙ(u) => 4.0))
+        gD = u -> innerₕ(x -> 1 + x[1], D₋ₓ(u))
+        a = form(C, C, (u, v) -> lap(u, v) + 2.0 * gD(u) * innerₕ(hs, v))
+        l = form(C, v -> innerₕ(fl, v))
+        P = padded_space(C)
+        E, d = closure(C)
+        wtp = assemble(form(P, gD))
+        @test abs(dot(wtp, d)) > 1e-3
+        Ar = Matrix(assemble(form(P, P, lap))) + 2.0 * assemble(form(P, v -> innerₕ(hs, v))) * wtp'
+        Fr = E' * (assemble(form(P, v -> innerₕ(fl, v))) - Ar * d)
+        n = Bramble.npoints(Bramble.physical_mesh(Bramble.mesh(C)), Tuple)
+        mask = vec([J[1] == n[1] for J in CartesianIndices(n)])
+        K, F = assemble(a, l; dirichlet = :xmax => (x -> 7.0))
+        @test all(==(7.0), F[mask])
+        @test relerr(F[.!mask], Fr[.!mask]) <= 1e-12
+        poison!(K, F)
+        assemble!(K, F, a, l; dirichlet = :xmax => (x -> 7.0))
+        @test all(==(7.0), F[mask])
+        @test relerr(F[.!mask], Fr[.!mask]) <= 1e-12
+    end
 end
 
 @testset "time-dependent relation data" begin

@@ -355,10 +355,14 @@ mutable struct RankOneUpdate{T, M <: AbstractMatrix, VS <: AbstractVector,
     end
 end
 
-RankOneUpdate{T}(A::AbstractMatrix, σ::Number, ws::AbstractVector, wt::AbstractVector) where {T} = RankOneUpdate{
-    T, typeof(A), typeof(ws), typeof(wt)}(A, convert(T, σ), ws, wt)
-RankOneUpdate(A::AbstractMatrix, σ::Number, ws::AbstractVector, wt::AbstractVector) = RankOneUpdate{
-    promote_type(eltype(A), typeof(σ), eltype(ws), eltype(wt))}(A, σ, ws, wt)
+function RankOneUpdate{T}(A::AbstractMatrix, σ::Number, ws::AbstractVector, wt::AbstractVector) where {T}
+    RankOneUpdate{
+        T, typeof(A), typeof(ws), typeof(wt)}(A, convert(T, σ), ws, wt)
+end
+function RankOneUpdate(A::AbstractMatrix, σ::Number, ws::AbstractVector, wt::AbstractVector)
+    RankOneUpdate{
+        promote_type(eltype(A), typeof(σ), eltype(ws), eltype(wt))}(A, σ, ws, wt)
+end
 
 @noinline function _throw_rank_one_sizes(sz, m, n)
     throw(
@@ -489,6 +493,7 @@ end
 function Base.Matrix{S}(K::RankOneUpdate) where {S}
     M = Matrix{S}(K.A)
     @inbounds for j in axes(M, 2), i in axes(M, 1)
+
         M[i, j] += K.σ * (K.ws[i] * K.wt[j])
     end
     return M
@@ -497,8 +502,10 @@ Base.Matrix(K::RankOneUpdate{T}) where {T} = Matrix{T}(K)
 Base.Array(K::RankOneUpdate) = Matrix(K)
 
 Base.similar(K::RankOneUpdate{T}) where {T} = similar(K, T)
-Base.similar(K::RankOneUpdate, ::Type{S}) where {S} = RankOneUpdate{S}(
-    similar(K.A, S), K.σ, similar(K.ws, S), similar(K.wt, S))
+function Base.similar(K::RankOneUpdate, ::Type{S}) where {S}
+    RankOneUpdate{S}(
+        similar(K.A, S), K.σ, similar(K.ws, S), similar(K.wt, S))
+end
 Base.copy(K::RankOneUpdate{T}) where {T} = RankOneUpdate{T}(
     copy(K.A), K.σ, copy(K.ws), copy(K.wt))
 
@@ -781,8 +788,10 @@ function assemble!(K::RankOneUpdate, F::AbstractVector, a::_GhostRankOneForm,
     return _assemble_rank_one_pair!(K, F, a, l, dirichlet, dirichlet_components, symmetrize)
 end
 
-assemble!(A::AbstractMatrix, ::AbstractVector, ::_GhostRankOneForm, ::GhostLinearForm;
-    kwargs...) = _throw_rank_one_target(A)
+function assemble!(A::AbstractMatrix, ::AbstractVector, ::_GhostRankOneForm, ::GhostLinearForm;
+        kwargs...)
+    _throw_rank_one_target(A)
+end
 
 function _assemble_rank_one_pair!(K::RankOneUpdate, F::AbstractVector, a::_GhostRankOneForm,
         l::GhostLinearForm, dirichlet, components, symmetrize::Bool)

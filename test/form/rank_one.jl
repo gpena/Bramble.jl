@@ -51,6 +51,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(
 @testset "Rank-one terms" begin
     @testset "values against a dense reference" begin
         for D in DIMS, T in (Float64, Float32)
+
             W = nonuniform_space(D, T)
             @test !is_uniform(mesh(W))
             Ωₕ = mesh(W)
@@ -166,6 +167,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(
 
     @testset "warm refills allocate nothing" begin
         for D in DIMS, T in (Float64, Float32)
+
             W = nonuniform_space(D, T)
             gₕ = element(W)
             parent(gₕ) .= 1 .+ rand(T, length(gₕ))
@@ -244,6 +246,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(
         # the output's size is checked too, before `α = 0` returns, as for a matrix
         n, m = size(K)
         for α in (0.0, 1.0), Kx in (K, K', transpose(K))
+
             @test_throws DimensionMismatch mul!(zeros(n - 1), Kx, rand(m), α, 1.0)
             @test_throws DimensionMismatch mul!(zeros(n, 2), Kx, rand(m, 3), α, 1.0)
             @test_throws DimensionMismatch mul!(zeros(n - 1, 2), Kx, rand(m, 2), α, 0.0)
@@ -267,6 +270,17 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(
         @test K' * x ≈ M' * x
         @test Matrix(adjoint(K)) ≈ M'
         @test Matrix(transpose(K)) ≈ transpose(M)
+        # the wrappers' products conjugate σ and both vectors, columns too
+        X = rand(ComplexF64, size(K, 1), 3)
+        Y0 = rand(ComplexF64, size(K, 2), 3)
+        α, β = 0.5 - 1.5im, 2.0 + 0.5im
+        @test mul!(copy(Y0), K', X, α, β) ≈ α * M' * X + β * Y0
+        @test mul!(copy(Y0), transpose(K), X, α, β) ≈ α * transpose(M) * X + β * Y0
+        @test mul!(copy(Y0[:, 1]), K', X[:, 1], α, β) ≈ α * M' * X[:, 1] + β * Y0[:, 1]
+        # `α = 0` still applies `β`
+        @test mul!(copy(Y0[:, 1]), K', X[:, 1], 0.0, β) ≈ β * Y0[:, 1]
+        @test mul!(copy(Y0), K', X, 0.0, β) ≈ β * Y0
+        @test mul!(copy(Y0), transpose(K), X, 0.0, β) ≈ β * Y0
     end
 
     @testset "trial and test spaces differ" begin
@@ -389,6 +403,22 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(
         Wu, Wv = rectangular_spaces()
         Kr = assemble(form(Wu, Wv, rectangular))
         @test_throws ArgumentError symmetrize!(Kr, zeros(ndofs(Wv)), Wv, :boundary)
+        # two labels: the columns of both move into the load
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        W2 = gridspace(mesh(domain(S, :l => x -> x[1] == 0, :t => x -> x[2] == 1), (7, 9),
+            (false, false)))
+        a2 = form(W2, W2, (u, v) -> lap(u, v) + σ * innerₕ(x -> 1 + x[1], u) * innerₕ(1, v))
+        l2 = form(W2, v -> innerₕ(x -> x[1] + 1, v))
+        dir = (:l => gD, :t => gD)
+        K2, F2 = assemble(a2, l2; dirichlet = dir)
+        Ks, Fs = assemble(a2, l2; dirichlet = dir, symmetrize = true)
+        mask = index_in_marker(mesh(W2), :l) .| index_in_marker(mesh(W2), :t)
+        rows = findall(mask)
+        @test !isempty(findall(index_in_marker(mesh(W2), :l)) ∩ rows) &&
+              !isempty(findall(index_in_marker(mesh(W2), :t)) ∩ rows)
+        @test iszero(Ks.wt[rows]) && iszero(Ks.ws[rows])
+        @test iszero(Matrix(Ks)[.!mask, rows])
+        @test Matrix(Ks) \ Fs ≈ Matrix(K2) \ F2
     end
 
     @testset "symmetrize! on a composite space" begin
