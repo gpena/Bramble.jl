@@ -93,6 +93,10 @@ end
     zeroed(A) = (B = copy(A); fill!(nonzeros(B), 0); B)
     tensor() = ntuple(_ -> ntuple(_ -> similar(u), 2), 2)
 
+    # The assembly cases return the sparse matrix itself: `==` on two sparse matrices
+    # compares their values, and a dense copy of this 3721-dof matrix is 110 MB, held
+    # 2 * nthreads times at once by `_nested_results`, which pushed the macOS nightly past
+    # its memory budget.
     cases = [
         ("Rₕ!", () -> parent(Rₕ!(similar(u), x -> sum(x)))),
         ("Rₕ! masked", () -> parent(Rₕ!(copy(u), x -> sum(x); markers = (:boundary,)))),
@@ -101,12 +105,12 @@ end
         ("inner₊", () -> inner₊(u, v, Val(()))),
         ("inner₊ masked", () -> inner₊(u, v, Val(()); markers = (:boundary,))),
         ("inner₊ two markers", () -> inner₊(u, v, Val(()); markers = (:boundary, :interior))),
-        ("assemble bilinear", () -> Matrix(assemble(a))),
-        ("assemble! bilinear", () -> (A = copy(A0); assemble!(A, a); Matrix(A))),
-        ("assemble_add!", () -> (A = zeroed(A0); assemble_add!(A, a); Matrix(A))),
-        ("assemble_parallel!", () -> (A = zeroed(A0); assemble_parallel!(A, a); Matrix(A))),
+        ("assemble bilinear", () -> assemble(a)),
+        ("assemble! bilinear", () -> (A = copy(A0); assemble!(A, a); A)),
+        ("assemble_add!", () -> (A = zeroed(A0); assemble_add!(A, a); A)),
+        ("assemble_parallel!", () -> (A = zeroed(A0); assemble_parallel!(A, a); A)),
         ("assemble_parallel! from Serial()",
-            () -> (A = zeroed(As0); assemble_parallel!(A, as); Matrix(A))),
+            () -> (A = zeroed(As0); assemble_parallel!(A, as); A)),
         ("assemble linear", () -> assemble(l)),
         ("D₋ₓ!", () -> (o = similar(u); D₋ₓ!(o, u); parent(o))),
         ("Mₓ!", () -> (o = similar(u); Mₓ!(o, u); parent(o))),
