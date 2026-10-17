@@ -380,5 +380,19 @@ const _IntDivisor = Union{Bool, Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32
 end
 @inline Base.:-(ops::Tuple{LazyOp, Vararg{LazyOp}}) = map(-, ops)
 
+# Operator tuple sums: 0.1 * ∇ₕ(v) + 3 * ∇ₕ(D₋ₓ(v)) adds entry by entry, and unequal
+# lengths throw a `DimensionMismatch` for the same reason as the coefficient tuples above.
+@inline function Base.:+(a::Tuple{LazyOp, Vararg{LazyOp}}, b::Tuple{LazyOp, Vararg{LazyOp}})
+    length(a) == length(b) || _throw_tuple_lengths(length(a), length(b))
+    return map(+, a, b)
+end
+@inline function Base.:-(a::Tuple{LazyOp, Vararg{LazyOp}}, b::Tuple{LazyOp, Vararg{LazyOp}})
+    length(a) == length(b) || _throw_tuple_lengths(length(a), length(b))
+    return map(-, a, b)
+end
+
+@noinline _throw_tuple_lengths(na::Int, nb::Int) = throw(DimensionMismatch(
+    "cannot add operator tuples of lengths $na and $nb: they must have equal length"))
+
 @noinline _throw_coeff_count(nc::Int, no::Int) = throw(DimensionMismatch(
     "got $nc coefficients for $no operators: a coefficient tuple holds one entry per operator"))
