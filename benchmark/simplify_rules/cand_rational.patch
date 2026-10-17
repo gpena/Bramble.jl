@@ -1,0 +1,47 @@
+diff --git a/src/ast/simplifier.jl b/src/ast/simplifier.jl
+index e8b2fbef..0f6fa0cb 100644
+--- a/src/ast/simplifier.jl
++++ b/src/ast/simplifier.jl
+@@ -110,10 +110,32 @@ end
+ @inline _fold_mul(a, b) = a * b
+ @inline _fold_mul(a::Integer, b::Integer) = Base.Checked.checked_mul(a, b)
+ 
++# Candidate rational: two coefficients, at least one a `Rational` and the other a `Rational` or
++# an `Integer` of at most 64 bits, fold into one `Rational` of the next wider integer type. The
++# product of two 64-bit numerators (denominators) fits 128 bits exactly, so unlike the checked
++# `Rational{Int64}` product (#633) it cannot overflow, and the result type follows from the two
++# operand types alone. Wider operands (`Int128`, `BigInt`) are left apart as before.
++@inline _small_int(::Type{<:Union{Int8, Int16, Int32, Int64}}) = true
++@inline _small_int(::Type) = false
++@inline _ratlike(c::Rational) = _small_int(typeof(c.num))
++@inline _ratlike(c::Integer) = _small_int(typeof(c))
++@inline _ratlike(::Any) = false
++@inline _folds_pair(a, b) = (_folds(a) && _folds(b)) ||
++                            ((a isa Rational || b isa Rational) && _ratlike(a) && _ratlike(b))
++@inline _rat_parts(r::Rational) = (r.num, r.den)
++@inline _rat_parts(n::Integer) = (n, one(n))
++@inline function _fold_mul(a::Rational, b::Union{Rational, Integer})
++    an, ad = _rat_parts(a)
++    bn, bd = _rat_parts(b)
++    R = widen(promote_type(typeof(an), typeof(bn)))
++    return (R(an) * R(bn)) // (R(ad) * R(bd))
++end
++@inline _fold_mul(a::Integer, b::Rational) = _fold_mul(b, a)
++
+ # Two coefficients just lifted out of the two arguments of one inner product, wrapped around
+ # the product they were lifted from.
+ @inline function _lift_scalars(cl, cr, inner::LazyOp)
+-    _folds(cl) && _folds(cr) && return _wrap_scale(_fold_mul(cl, cr), inner)
++    _folds_pair(cl, cr) && return _wrap_scale(_fold_mul(cl, cr), inner)
+     return _wrap_scale(cl, _wrap_scale(cr, inner))
+ end
+ 
+@@ -235,7 +257,7 @@ function simplify_ast(op::OperatorScale)
+         # the values are: both operands' types are known here, so `_wrap_scale` dispatches
+         # on a known type and the product's type follows from them alone. A `Rational` on
+         # either side does not fold either (`_folds`).
+-        if inner isa OperatorScale && _folds(op.scalar) && _folds(inner.scalar)
++        if inner isa OperatorScale && _folds_pair(op.scalar, inner.scalar)
+             return _wrap_scale(_fold_mul(op.scalar, inner.scalar), inner.inner_op)
+         end
+     end

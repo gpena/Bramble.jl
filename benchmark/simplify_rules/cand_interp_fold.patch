@@ -1,0 +1,23 @@
+diff --git a/src/operators/interpolation.jl b/src/operators/interpolation.jl
+index 975cbb3f..e225d733 100644
+--- a/src/operators/interpolation.jl
++++ b/src/operators/interpolation.jl
+@@ -1086,6 +1086,10 @@ function _bind_interp_spaces(
+         op::InterpolationNode{D, S, OpType, TrialSide}, trial_leaf, test_leaf
+ ) where {D, S, OpType}
+     inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
++    # Candidate interp_fold: interpolating from the space the sweep walks is the identity.
++    # Known only here, once the two leaves are, and by identity of the objects (a runtime
++    # value, so the bound type is a `Union` when both leaves share a type).
++    trial_leaf === test_leaf && return inner
+     weights(trial_leaf)
+     src = host_weights(trial_leaf)
+     return InterpolationNode{D, typeof(src), typeof(inner), TrialSide}(
+@@ -1097,6 +1101,7 @@ function _bind_interp_spaces(
+         op::InterpolationNode{D, S, OpType, TestSide}, trial_leaf, test_leaf
+ ) where {D, S, OpType}
+     inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
++    trial_leaf === test_leaf && return inner  # candidate interp_fold, as above
+     weights(test_leaf)
+     src = host_weights(test_leaf)
+     return InterpolationNode{D, typeof(src), typeof(inner), TestSide}(

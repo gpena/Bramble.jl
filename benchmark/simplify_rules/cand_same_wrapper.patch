@@ -1,0 +1,37 @@
+diff --git a/src/ast/simplifier.jl b/src/ast/simplifier.jl
+index e8b2fbef..a53e0869 100644
+--- a/src/ast/simplifier.jl
++++ b/src/ast/simplifier.jl
+@@ -272,9 +272,32 @@ function simplify_ast(op::OperatorAdd)
+     _is_zero_op(left) && return right
+     _is_zero_op(right) && return left
+ 
++    # Candidate same_wrapper: one wrapper over a same-component sum, `D₋ₓ(u) + D₋ₓ(w) ->
++    # D₋ₓ(u + w)`, one difference sweep instead of two. Decided by the two node types alone.
++    merged = _merge_wrappers(left, right)
++    merged === nothing || return merged
++
+     return left === op.left_op && right === op.right_op ? op : OperatorAdd(left, right)
+ end
+ 
++# Whether `op` names no component on either side, settled by its type (as the removed rule 1
++# did): a runtime component index would make the answer, and so `form`'s type, a `Union`.
++@inline _component_free(op::LazyOp) = _trial_component_class(op) === nothing &&
++                                      _test_component_class(op) === nothing
++
++# The same difference, average or jump node family along the same axis (a shift carries its
++# amount in a field, so it never merges), read off the two types.
++const _MergeableWrapper = Union{_DifferenceNode, _AverageNode}
++@inline _same_wrapper(::Type{A}, ::Type{B}) where {A, B} = Base.typename(A) === Base.typename(B) &&
++                                                          A.parameters[2] === B.parameters[2]
++
++@inline _merge_wrappers(::LazyOp, ::LazyOp) = nothing
++@inline function _merge_wrappers(a::A, b::B) where {A <: _MergeableWrapper, B <: _MergeableWrapper}
++    _same_wrapper(A, B) || return nothing
++    (_component_free(a.inner_op) && _component_free(b.inner_op)) || return nothing
++    return _rewrap_inner(a, OperatorAdd(a.inner_op, b.inner_op))
++end
++
+ # --- Dirac sources inside a sum ------------------------------------------------------ #
+ 
+ # `local_stencil(::LinearProduct)` weights a source by the cell measure unless `_is_dirac`

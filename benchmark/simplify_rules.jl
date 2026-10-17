@@ -5,10 +5,24 @@
 #
 #     julia --startup-file=no benchmark/simplify_rules.jl --rule N --base DIR --patched DIR
 #         [--pairs 3] [--max-pairs 5] [--threads 4] [--max-load 6] [--forms a,b,...] [--smoke]
+#     julia --startup-file=no benchmark/simplify_rules.jl --candidate NAME --base DIR
+#         --patched DIR [...]
 #
-# `--patched` is applied the patch with `git apply` when its `src/ast/simplifier.jl` is
-# still clean; a tree that already differs there is used as it is. Rules: 1 `c*A+c*B`,
-# 2 like terms, 3 zeros, 4 nested scale, 7 shared inner-product argument (`_factor`).
+# `--patched` is applied the patch with `git apply` when its `src/` is still clean; a tree
+# that already differs there is used as it is. The rules of the audit are 1 `c*A+c*B`,
+# 2 like terms, 3 zeros, 4 nested scale and 7 shared inner-product argument (`_factor`),
+# measured at fe3e8659 with A the rule on and B off. `--candidate NAME` measures a rule that
+# #771 proposes instead, at 9a7e093a (the rule set that remains after the removals). There
+# `--base` is the tree without the candidate and `--patched` the tree with
+# `benchmark/simplify_rules/cand_NAME.patch`; the driver swaps them so that A is always the
+# rule or candidate on. NAME is one of scalar_lift, same_wrapper, shared_wrapper,
+# component_type, rational, interp_fold and cse. The patch of component_type and of cse
+# says `not built` and the driver stops there. interp_fold rewrites at block time, so the
+# stored AST is identical and the form is timed anyway (`--always` does the same for any
+# candidate).
+# Every child also reports whether `form` inferred a concrete type (`@inferred`) and whether
+# `simplify_ast` is idempotent on the stored AST. For the first pair of a form it dumps the
+# assembled matrix, so the parent compares the two bit for bit.
 #
 # Each child is a fresh `julia` process on one tree and one form: it times the first
 # `form`, the first `assemble`, then `assemble!` warm (the min of 15), and reports the
@@ -35,14 +49,39 @@
 # power, with `.claude/scripts/gate_preflight.sh --timing` passing; run nothing alongside.
 #===========================================================================#
 
+import Serialization
+import SparseArrays
+import Test
+
 const FORMS = ["s2d_mix", "s3d_mix", "s3d_27", "v2d_elast", "v3d_elast", "v3d_lap"]
+
+# The forms of the candidate rules (`--candidate`): each is written so that one candidate
+# fires on it, and the others are probed too, since the no-op test settles which fire.
+const CAND_FORMS = ["s2d_lift", "s3d_lift", "v2d_lift", "s2d_sum", "s3d_sum", "s2d_shared",
+    "s3d_shared", "s2d_rat", "s3d_rat", "v2d_rat", "v3d_rat", "s2d_interp", "s3d_interp"]
+const CANDIDATES = ["scalar_lift", "same_wrapper", "shared_wrapper", "component_type",
+    "rational", "interp_fold", "cse"]
+const CAND_DEFAULT = Dict(
+    "scalar_lift" => ["s2d_lift", "s3d_lift", "v2d_lift", "s3d_27", "v3d_elast"],
+    "same_wrapper" => ["s2d_sum", "s3d_sum", "s3d_27", "v3d_elast"],
+    "shared_wrapper" => ["s2d_shared", "s3d_shared", "s3d_27", "v3d_elast"],
+    "rational" => ["s2d_rat", "s3d_rat", "v2d_rat", "v3d_rat"],
+    "interp_fold" => ["s2d_interp", "s3d_interp"],
+    "component_type" => ["v2d_elast", "v3d_elast"],
+    "cse" => ["v3d_elast", "s3d_27"])
 
 # Graded points of an axis: the exponent differs per axis, so no two axes agree.
 graded(n, axis) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * axis)
 
 const POINTS = Dict(
     "s2d_mix" => (200, 180), "s3d_mix" => (28, 25, 22), "s3d_27" => (22, 20, 18),
-    "v2d_elast" => (90, 80), "v3d_elast" => (16, 14, 12), "v3d_lap" => (22, 20, 18))
+    "v2d_elast" => (90, 80), "v3d_elast" => (16, 14, 12), "v3d_lap" => (22, 20, 18),
+    "s2d_lift" => (200, 180), "s3d_lift" => (28, 25, 22), "v2d_lift" => (90, 80),
+    "s2d_sum" => (200, 180), "s3d_sum" => (28, 25, 22),
+    "s2d_shared" => (200, 180), "s3d_shared" => (28, 25, 22),
+    "s2d_rat" => (200, 180), "s3d_rat" => (28, 25, 22),
+    "v2d_rat" => (90, 80), "v3d_rat" => (16, 14, 12),
+    "s2d_interp" => (200, 180), "s3d_interp" => (28, 25, 22))
 
 if "--child" in ARGS
     # --child <form> [--probe]
@@ -85,6 +124,49 @@ if "--child" in ARGS
         f27
     elseif name == "v3d_lap"
         (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))
+    elseif name == "s2d_lift"  # a scalar under a difference or an average
+        (u, v) -> innerₕ(D₋ₓ(2 * u), D₋ₓ(v)) + innerₕ(D₋ᵧ(3 * u), D₋ᵧ(v)) +
+                  innerₕ(Mₕ(2 * u, Val(1)), v) + innerₕ(D₊ₓ(u), D₊ₓ(v)) +
+                  innerₕ(Dcₓ(4 * u), Dcᵧ(v))
+    elseif name == "s3d_lift"
+        (u, v) -> innerₕ(D₋ₓ(2 * u), D₋ₓ(v)) + innerₕ(D₋ᵧ(3 * u), D₋ᵧ(v)) +
+                  innerₕ(D₋₂(5 * u), D₋₂(v)) + innerₕ(Mₕ(2 * u, Val(1)), v) +
+                  innerₕ(D₊ₓ(u), D₊ₓ(v)) + innerₕ(Dcₓ(4 * u), Dcᵧ(v))
+    elseif name == "v2d_lift"
+        (u, v) -> inner₊(εₕ(2 * u), εₕ(v)) + inner₊(divₘₕ(3 * u), divₘₕ(v))
+    elseif name == "s2d_sum"  # one wrapper over a same-component sum
+        (u, v) -> innerₕ(D₋ₓ(u) + D₋ₓ(D₊ᵧ(u)), D₋ₓ(v)) +
+                  innerₕ(D₋ᵧ(u) + D₋ᵧ(D₊ₓ(u)), D₋ᵧ(v)) +
+                  innerₕ(Mₕ(u, Val(1)) + Mₕ(D₊ₓ(u), Val(1)), v) + innerₕ(u, v)
+    elseif name == "s3d_sum"
+        (u, v) -> innerₕ(D₋ₓ(u) + D₋ₓ(D₊ᵧ(u)), D₋ₓ(v)) +
+                  innerₕ(D₋ᵧ(u) + D₋ᵧ(D₊₂(u)), D₋ᵧ(v)) +
+                  innerₕ(D₋₂(u) + D₋₂(D₊ₓ(u)), D₋₂(v)) +
+                  innerₕ(Mₕ(u, Val(1)) + Mₕ(D₊ₓ(u), Val(1)), v) + innerₕ(u, v)
+    elseif name == "s2d_shared"  # a shared argument, a shared wrapper on the other
+        (u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(D₋ₓ(u), D₊ₓ(D₊ᵧ(v))) +
+                  innerₕ(D₋ᵧ(u), D₊ᵧ(v)) + innerₕ(D₋ᵧ(u), D₊ᵧ(D₊ₓ(v))) + innerₕ(u, v)
+    elseif name == "s3d_shared"
+        (u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(D₋ₓ(u), D₊ₓ(D₊ᵧ(v))) +
+                  innerₕ(D₋ᵧ(u), D₊ᵧ(v)) + innerₕ(D₋ᵧ(u), D₊ᵧ(D₊₂(v))) +
+                  innerₕ(D₋₂(u), D₊₂(v)) + innerₕ(D₋₂(u), D₊₂(D₊ₓ(v))) + innerₕ(u, v)
+    elseif name == "s2d_rat"  # Rational coefficients (`op / 2`) nested
+        (u, v) -> (innerₕ(D₋ₓ(u), D₋ₓ(v)) / 2) * 3 + innerₕ(D₋ᵧ(u) / 2, D₋ᵧ(v) / 3) +
+                  (innerₕ(u, v) / 4) * 2 + innerₕ(D₊ₓ(u), D₊ₓ(v)) / 3
+    elseif name == "s3d_rat"
+        (u, v) -> (innerₕ(D₋ₓ(u), D₋ₓ(v)) / 2) * 3 + innerₕ(D₋ᵧ(u) / 2, D₋ᵧ(v) / 3) +
+                  (innerₕ(D₋₂(u), D₋₂(v)) / 4) * 2 + (innerₕ(u, v) / 4) * 2 +
+                  innerₕ(D₊ₓ(u), D₊ₓ(v)) / 3
+    elseif name == "v2d_rat"
+        (u, v) -> (inner₊(εₕ(u), εₕ(v)) / 2) * 3 + (inner₊(divₘₕ(u), divₘₕ(v)) / 4) * 2
+    elseif name == "v3d_rat"
+        (u, v) -> (inner₊(εₕ(u), εₕ(v)) / 2) * 3 + (inner₊(divₘₕ(u), divₘₕ(v)) / 4) * 2
+    elseif name == "s2d_interp"  # πₕ(u) on the mesh of u
+        (u, v) -> innerₕ(πₕ(u), v) + innerₕ(πₕ(u), D₋ₓ(v)) + innerₕ(D₋ₓ(u), D₋ₓ(v)) +
+                  innerₕ(D₋ᵧ(u), D₋ᵧ(v))
+    elseif name == "s3d_interp"
+        (u, v) -> innerₕ(πₕ(u), v) + innerₕ(πₕ(u), D₋ₓ(v)) + innerₕ(D₋ₓ(u), D₋ₓ(v)) +
+                  innerₕ(D₋ᵧ(u), D₋ᵧ(v)) + innerₕ(D₋₂(u), D₋₂(v))
     else  # elasticity, Integer Lamé coefficients so that `2μ` and `λ` are equal
         (u, v) -> 2 * inner₊(εₕ(u), εₕ(v)) + 2 * inner₊(divₘₕ(u), divₘₕ(v))
     end
@@ -103,8 +185,21 @@ if "--child" in ARGS
     t_asm = @elapsed A = assemble(a)
     t_warm = minimum(@elapsed(assemble!(A, a)) for _ in 1:15)
 
+    # Outside the timed calls: is `form` concretely inferred, and is `simplify_ast` idempotent
+    # on the stored AST (the same type back)?
+    inferred = try
+        Test.@inferred form(W, W, fun)
+        1.0
+    catch
+        0.0
+    end
+    idempotent = typeof(Bramble.simplify_ast(a.ast)) === typeof(a.ast) ? 1.0 : 0.0
+    di = findfirst(==("--dump"), ARGS)
+    if di !== nothing
+        Serialization.serialize(ARGS[di + 1], A)
+    end
     println("RESULT ", t_form, " ", t_asm, " ", t_warm, " ", nprod, " ", nnodes, " ",
-        sum(abs, A), " ", sum(A))
+        sum(abs, A), " ", sum(A), " ", inferred, " ", idempotent)
     exit(0)
 end
 
@@ -116,11 +211,15 @@ function arg(name, default)
 end
 
 const ROOT = abspath(joinpath(@__DIR__, ".."))
+const DUMPDIR = mktempdir()
 const SLOT = joinpath(ROOT, ".claude", "scripts", "julia_slot.sh")
 
-function child(tree, form, threads, probe = false)
+function child(tree, form, threads, probe = false, dump = "")
+    extra = String[]
+    probe && push!(extra, "--probe")
+    isempty(dump) || push!(extra, "--dump", dump)
     jl = `$(Base.julia_cmd()) --project=$tree --threads=$threads --startup-file=no
-        $(abspath(@__FILE__)) --child $form $(probe ? "--probe" : "")`
+        $(abspath(@__FILE__)) --child $form $extra`
     cmd = haskey(ENV, "BRAMBLE_JULIA_SLOTS") && isfile(SLOT) ? `$SLOT $threads $jl` : jl
     out = IOBuffer()
     run(pipeline(ignorestatus(cmd); stdout = out, stderr = stderr))
@@ -158,7 +257,8 @@ function machine_state()
 end
 
 function main()
-    rule = parse(Int, arg("--rule", "0"))
+    cand = arg("--candidate", "")
+    rule = cand == "" ? parse(Int, arg("--rule", "0")) : 0
     base = abspath(expanduser(arg("--base", "")))
     patched = abspath(expanduser(arg("--patched", "")))
     smoke = "--smoke" in ARGS
@@ -166,17 +266,31 @@ function main()
     minpairs = smoke ? 1 : parse(Int, arg("--pairs", "3"))
     maxpairs = smoke ? 1 : parse(Int, arg("--max-pairs", "5"))
     threads = parse(Int, arg("--threads", "4"))
-    forms = split(arg("--forms", join(FORMS, ",")), ",")
-    rule in (1, 2, 3, 4, 7) || error("--rule must be 1, 2, 3, 4 or 7")
+    forms = split(
+        arg("--forms", join(cand == "" ? FORMS : get(CAND_DEFAULT, cand, CAND_FORMS), ",")), ",")
+    if cand == ""
+        rule in (1, 2, 3, 4, 7) || error("--rule must be 1, 2, 3, 4 or 7 (or --candidate NAME)")
+    else
+        cand in CANDIDATES || error("--candidate must be one of $(join(CANDIDATES, ", "))")
+    end
     isdir(base) && isdir(patched) || error("--base and --patched must be directories")
 
-    file = "src/ast/simplifier.jl"
-    if success(`git -C $patched diff --quiet -- $file`)
-        patch = joinpath(@__DIR__, "simplify_rules", "rule$rule.patch")
+    patch = joinpath(@__DIR__, "simplify_rules", cand == "" ? "rule$rule.patch" : "cand_$cand.patch")
+    if cand != "" && startswith(readline(patch), "# not built")
+        error("candidate $cand is not built: $(readline(patch))")
+    end
+    if success(`git -C $patched diff --quiet -- src`)
         run(`git -C $patched apply $patch`)
     end
     sha(t) = strip(read(`git -C $t rev-parse --short HEAD`, String))
-    println("rule $rule, A (rule on) $base @ $(sha(base)), B (rule off) $patched @ $(sha(patched))")
+    if cand == ""
+        println("rule $rule, A (rule on) $base @ $(sha(base)), B (rule off) $patched @ $(sha(patched))")
+    else
+        # A is the tree with the candidate on (the patched one), B the base without it.
+        base, patched = patched, base
+        println("candidate $cand, A (candidate on) $base @ $(sha(base)) + patch, B (candidate off) $patched @ $(sha(patched))")
+        rule = cand
+    end
     println("threads $threads, pairs $minpairs-$maxpairs, forms $(join(forms, ", "))")
     if isfile(joinpath(ROOT, ".claude", "scripts", "check_power_load.sh"))
         run(ignorestatus(`$(joinpath(ROOT, ".claude", "scripts", "check_power_load.sh"))`))
@@ -190,11 +304,14 @@ function main()
 
     # The rule is a no-op on a form whose simplified AST has the same type in both trees:
     # A and B are then the same program, so the form is not timed.
+    # `interp_fold` rewrites at block time, after the stored AST is built, so the AST probe
+    # cannot see it: `--always` times every form (and the matrix comparison shows whether it fired).
+    always = "--always" in ARGS || cand == "interp_fold"
     noop = Dict{String, Any}()
     active = String[]
     for f in forms
         pa, pb = child(base, f, threads, true), child(patched, f, threads, true)
-        if pa == pb
+        if pa == pb && !always
             noop[f] = (Int(pa[2]), Int(pa[3]))
             println("  $f: no-op (identical AST type hash, $(Int(pa[2])) routed, $(Int(pa[3])) nodes)")
         else
@@ -236,7 +353,8 @@ function main()
                 lo, hi, foreign = Inf, 0.0, 0.0
                 for (s, t) in order
                     l0, f0 = machine_state()
-                    pair[s] = child(t, f, threads)
+                    dump = r == 1 && attempt == 1 ? joinpath(DUMPDIR, "$(f)_$s.jls") : ""
+                    pair[s] = child(t, f, threads, false, dump)
                     l1, f1 = machine_state()
                     lo, hi = min(lo, l0, l1), max(hi, l0, l1)
                     foreign = max(foreign, f0, f1)
@@ -264,7 +382,7 @@ function main()
     println("\nload range of the kept pairs: ", isempty(loads) ? "n/a" : "$(minimum(loads))-$(maximum(loads))",
         "; discarded pairs: ", discarded)
 
-    println("\nmedian [min-max]; A = rule on, B = rule off")
+    println("\nmedian [min-max]; A = ", cand == "" ? "rule" : "candidate", " on, B = off")
     println("| form | routed A/B | nodes A/B | pairs | first A | first B | assemble! A | assemble! B | first | assemble! |")
     wins = 0
     losses = 0
@@ -288,9 +406,27 @@ function main()
         println("| $f | $(np[1])/$(np[2]) | $(nn[1])/$(nn[2]) | $(length(ra)) | ",
             cell(fa), " | ", cell(fb), " | ", cell(wa), " | ", cell(wb), " | ", v1, " | ", v2,
             " |", same ? "" : " MATRICES DIFFER")
+        # The two matrices bit for bit (the first pair's dumps), and the inference and
+        # idempotence flags of both trees' children.
+        da = Serialization.deserialize(joinpath(DUMPDIR, "$(f)_A.jls"))
+        db = Serialization.deserialize(joinpath(DUMPDIR, "$(f)_B.jls"))
+        samepat = da.colptr == db.colptr && da.rowval == db.rowval
+        bits = samepat && reinterpret(UInt64, da.nzval) == reinterpret(UInt64, db.nzval)
+        ndiff = samepat ? count(reinterpret(UInt64, da.nzval) .!= reinterpret(UInt64, db.nzval)) : -1
+        # The difference of the matrices as values: a stored zero held by one tree only does
+        # not count, so a differing pattern can still be an equal matrix.
+        relmax = maximum(abs, SparseArrays.nonzeros(da - db); init = 0.0) / maximum(abs, db.nzval)
+        flags(k) = all(x -> length(x) >= k && x[k] == 1.0, vcat(ra, rb))
+        println("  $f matrix: pattern ",
+            samepat ? "equal" : "DIFFERS (stored $(length(da.nzval)) / $(length(db.nzval)))",
+            ", bit-exact ", bits ? "yes" : "no ($ndiff of $(length(db.nzval)) stored differ)",
+            ", max |A-B| / max |B| = $relmax; `form` inferred (on/off) ",
+            all(x -> x[8] == 1.0, ra) ? "yes" : "NO", "/", all(x -> x[8] == 1.0, rb) ? "yes" : "NO",
+            "; simplify_ast idempotent ", flags(9) ? "yes" : "NO")
     end
     println("\nrule $rule: ", wins, " win(s), ", losses, " loss(es) -> ",
-        wins >= 1 && losses == 0 ? "keep" : "remove")
+        wins >= 1 && losses == 0 ? "keep" : (cand == "" ? "remove" : "drop"),
+        " (before the matrix, inference and idempotence checks above)")
     return nothing
 end
 
