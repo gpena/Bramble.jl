@@ -51,8 +51,8 @@ robin3(u) = (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[3],
 # The product of `matrix_free_operator(a; dirichlet)` on `C` against the assembled matrix
 # and, without `dirichlet`, against `E' * A_pad * E`; then `α`/`β`, a `NaN`-filled `y`,
 # buffers holding a sentinel, a complex `x`, `getindex`, the threaded policy and the warm
-# allocations (`allocs = false` skips these).
-function check_operator(C, f; dirichlet = nothing, seed = 1, allocs = true)
+# allocations (two applies, then `@allocated`, on the serial policy).
+function check_operator(C, f; dirichlet = nothing, seed = 1)
     a = form(C, C, f)
     A = assemble(a; dirichlet)
     M = matrix_free_operator(a; dirichlet)
@@ -80,10 +80,8 @@ function check_operator(C, f; dirichlet = nothing, seed = 1, allocs = true)
     @test M[i, j] ≈ A[i, j] atol = 1e-12 * norm(A, Inf)
     Mt = matrix_free_operator(a; dirichlet, policy = CpuThreaded())
     @test relerr(Mt * x, A * x) <= 1e-12
-    if allocs
-        @test alloc(() -> mul!(y, M, x)) == 0
-        @test alloc(() -> mul!(y, M, x, 2.0, 1.0)) == 0
-    end
+    @test alloc(() -> mul!(y, M, x)) == 0
+    @test alloc(() -> mul!(y, M, x, 2.0, 1.0)) == 0
     return M, A
 end
 
@@ -155,9 +153,6 @@ end
         @test relerr(y[rows], (A * xs)[rows]) <= 1e-12
     end
 
-    # The padded 3D walk allocates: inference loses the summands' tuple type in
-    # `_concat_summand_stencils` on the 3D padded space (a runtime dispatch per point), in
-    # the shared stencil evaluation rather than in this operator.
     # One operator applies one product at a time: a product entered while another holds
     # the padded buffers throws, and tasks racing on one operator never get a wrong
     # product, each either the right one or that `ArgumentError`.
@@ -193,12 +188,14 @@ end
         end
     end
 
+    # The warm 3D apply is allocation-free too (`check_operator` asserts 0 B). It was not
+    # before the stencil evaluation kept the summands' tuple type inferred.
     WITH_3D_TESTS && @testset "3D Robin and Dirichlet relations" begin
         C = constrained(
             gridspace(ghost_mesh((5, 6, 4)); ghosts = (:xmin, :xmax, :ymin, :ymax, :zmax)),
             robin3)
-        check_operator(C, laplacian; allocs = false)
-        check_operator(C, gradient; allocs = false)
+        check_operator(C, laplacian)
+        check_operator(C, gradient)
     end
 
     # The operator in a Krylov solve: CG on the symmetric positive definite reduced
