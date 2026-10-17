@@ -151,6 +151,9 @@ Ag = assemble(form(Wg, Wg, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, 
 ug = pde_solve(Ag, Fg; gauge = Bramble.ghost_kernel(Ag, Wg))
 ```
 
+For the `Bramble.RankOneUpdate` that a form with a rank-one term assembles to, see
+`pde_solve(K::Bramble.RankOneUpdate, F)` below.
+
 See also [`assemble`](@ref), [`sparse_factorize`](@ref), [`suitesparse_solve`](@ref),
 [`suitesparse_qr_solve`](@ref), [`accelerate_solve`](@ref), [`mumps_solve`](@ref),
 [`sparspak_solve`](@ref), [`linear_problem`](@ref).
@@ -159,7 +162,7 @@ function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :defa
         mean_zero::Union{Nothing, AbstractVector} = nothing,
         gauge::Union{Nothing, AbstractMatrix} = nothing, kwargs...)
     (mean_zero === nothing && gauge === nothing) ||
-        return _mean_zero_solve(A, F, mean_zero, gauge, solver, kwargs)
+        return _bordered_solve(A, F, nothing, mean_zero, gauge, solver, kwargs)
     _warn_if_annihilates_constants(A)
     if solver === :default
         _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
@@ -246,24 +249,25 @@ end
 # indefinite: a symmetric route that pivots (Accelerate and MUMPS `LDLᵀ`) for a real
 # symmetric `A`, LU otherwise, never Cholesky; `:default` calls `lu` directly, because `\` on
 # a symmetric matrix tries Cholesky first. The caller's `sym` describes `A`, not the bordered
-# matrix, so it is not used.
-function _mean_zero_solve(A::SparseMatrixCSC, F::AbstractVector,
+# matrix, so it is not used. A rank-one term `r = (wₛ, wₜ, c)`, `c = −1/σ`, adds the column
+# `wₛ` and the row `wₜᵀ` in front of `C`, with `c` in the corner (see the `RankOneUpdate`
+# method of `pde_solve`); `r === nothing` builds the matrix above.
+function _bordered_solve(A::SparseMatrixCSC, F::AbstractVector, r,
         w::Union{Nothing, AbstractVector}, Z::Union{Nothing, AbstractMatrix}, solver::Symbol,
         kwargs)
     n = size(A, 1)
     (size(A, 2) == n && length(F) == n && (w === nothing || length(w) == n) &&
      (Z === nothing || size(Z, 1) == n)) || _throw_bordered_size(A, F, w, Z)
-    solver === :spqr && _throw_bordered_spqr()
+    solver === :spqr && (r === nothing ? _throw_bordered_spqr() : _throw_rank_one_spqr())
     solver === :sparspak && Z !== nothing && _throw_gauge_sparspak()
-    T = promote_type(eltype(A), _border_eltype(w), _border_eltype(Z))
+    T = promote_type(eltype(A), _border_eltype(w), _border_eltype(Z), _rank_one_eltype(r))
     S = float(promote_type(T, eltype(F)))  # an all-`Int` system has a fractional solution
     n == 0 && return S[]
     C = hcat(_border_columns(T, n, w), _border_columns(T, n, Z))
-    k = size(C, 2)
-    B = [A C; transpose(C) spzeros(T, k, k)]
+    B, bsym = _bordered_matrix(T, A, C, r)
+    k = size(B, 1) - n
     b = zeros(S, n + k)  # dense: the factorisations take no sparse `F`
     b[1:n] .= F
-    bsym = _bordered_sym(A, C)
     if solver === :default
         _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
         x = if bsym === :symmetric && Sys.isapple() &&
@@ -293,6 +297,166 @@ function _mean_zero_solve(A::SparseMatrixCSC, F::AbstractVector,
     u = Vector{S}(undef, n)
     copyto!(u, 1, x, 1, n)
     return u
+end
+
+using LinearAlgebra: Adjoint, Transpose
+
+# The bordered matrix and its symmetry: `[A C; Cᵀ 0]`, or with a rank-one term
+# `[A wₛ C; wₜᵀ c 0; Cᵀ 0 0]`, symmetric when `[A wₛ C]` gives a symmetric `[A C; Cᵀ 0]` and
+# `wₛ == wₜ` (`T` is then real, so `c` is too).
+_rank_one_eltype(::Nothing) = Union{}
+_rank_one_eltype((ws, wt, c)::Tuple) = promote_type(eltype(ws), eltype(wt), typeof(c))
+
+function _bordered_matrix(::Type{T}, A::SparseMatrixCSC, C, ::Nothing) where {T}
+    k = size(C, 2)
+    return [A C; transpose(C) spzeros(T, k, k)], _bordered_sym(A, C)
+end
+
+function _bordered_matrix(::Type{T}, A::SparseMatrixCSC, C, (ws, wt, c)::Tuple) where {T}
+    n, k = size(C)
+    Cs = hcat(_border_columns(T, n, ws), C)
+    Ct = hcat(_border_columns(T, n, wt), C)
+    D = spzeros(T, k + 1, k + 1)
+    D[1, 1] = c
+    return [A Cs; transpose(Ct) D], ws == wt ? _bordered_sym(A, Cs) : :unsymmetric
+end
+
+@noinline function _throw_rank_one_spqr()
+    throw(ArgumentError("pde_solve(solver = :spqr) does not accept a RankOneUpdate: its " *
+                        "bordered system is square, not a least-squares problem. Use " *
+                        ":default, :suitesparse, :accelerate, :mumps or :sparspak."))
+end
+
+"""
+    pde_solve(K::Bramble.RankOneUpdate, F::AbstractVector; solver = :default, sym = :auto, mean_zero = nothing, gauge = nothing, kwargs...) -> Vector
+
+Solve `(A + σ wₛ wₜᵀ) u = F` for the `Bramble.RankOneUpdate` `K` that [`assemble`](@ref)
+returns for a form holding a rank-one term `σ * innerₕ(g, u) * innerₕ(h, v)`, and return
+`u`. The dense matrix is never formed: `pde_solve` solves the sparse bordered system
+
+```math
+\\begin{bmatrix} A & w_s \\\\ w_t^\\top & -1/\\sigma \\end{bmatrix}
+\\begin{bmatrix} u \\\\ \\mu \\end{bmatrix} = \\begin{bmatrix} F \\\\ 0 \\end{bmatrix},
+```
+
+whose second row gives `μ = σ wₜᵀu`, so its first row is `A u + σ wₛ (wₜᵀu) = F`. This
+holds for any `A`, so a pure-Neumann `A`, singular alone, is solved when the penalty fixes
+its constant. For data with `1ᵀF = 0` the solution of `A + σ w wᵀ` (`wₛ = wₜ = w`, with
+`1ᵀA = 0`) has `wᵀu = 0`, so in exact arithmetic it is `pde_solve(A, F; mean_zero = w)`
+for every `σ ≠ 0`. In floating point a small `σ` costs accuracy, since `−1/σ` then dwarfs
+`A`'s entries: with `σ = γ / hₘₐₓ` the relative difference from the `mean_zero` solve is
+about `1e-14 / γ` on the meshes tested (`1e-15` for `γ ≥ 1`, `1e-8` at `γ = 1e-6`, `1e-2`
+at `γ = 1e-12`). Choose `γ ≥ 1e-2` for ten digits; a large `σ` costs nothing.
+`K`, `K'` and `transpose(K)` are all accepted.
+
+`σ` is `K.σ`, the value read when `K` was last assembled: after changing a `Ref` factor of
+`σ`, call [`assemble!`](@ref)`(K, a)` before solving.
+
+# Keywords
+The keywords and backends of `pde_solve(A, F; mean_zero)`, which this solve shares, its
+routing and element type included: `solver = :default` factors by LU, or by Accelerate's
+``LDL^T`` when the bordered matrix is symmetric (`A` real symmetric and `wₛ == wₜ`);
+`:suitesparse` and `:sparspak` by LU, `:accelerate` and `:mumps` by ``LDL^T`` or LU.
+`sym` describes `A` and is not used. `:spqr` throws an `ArgumentError`. `mean_zero = w`
+and `gauge = Z` add their columns to the border after `wₛ`, as they do for a matrix.
+
+# Edge cases
+- With `σ = 0` the term vanishes, and `pde_solve(K.A, F; ...)` runs with every keyword,
+  so the result is that of the plain matrix (including its warning for a pure-Neumann `A`).
+- A negative or complex `σ` solves the same bordered system, valid whenever it is
+  nonsingular. A complex `σ` or vector makes the border complex, transposed and not
+  conjugated. For a nonsingular `A` a negative `σ` with `1 + σ wₜᵀA⁻¹wₛ = 0` makes
+  `A + σ wₛ wₜᵀ` singular; the factorisation does not notice, and the solution comes back
+  huge without an error. A pure-Neumann `A` with `1ᵀwₛ` and `1ᵀwₜ` nonzero is nonsingular
+  for every `σ ≠ 0`.
+- With `wₛ ≠ wₜ`, a non-symmetric term, the border `[A wₛ; wₜᵀ −1/σ]` is routed as
+  unsymmetric.
+- A Dirichlet-modified `K` from `assemble(a; dirichlet)`, with `wₛ` zero at the Dirichlet
+  rows, keeps those rows as identity rows of the bordered matrix; [`symmetrize!`](@ref)'s
+  `K` solves as well.
+- A singular `A` the term cannot fix: when `‖A 1‖∞ ≤ 8 ε ‖A‖∞` (constants in its
+  kernel, as for pure Neumann conditions) and `|1ᵀwₜ| ≤ 8 ε ‖wₜ‖₁` (the trial
+  functional does not see constants), or the same for `1ᵀA` and `wₛ`, `A + σ wₛ wₜᵀ` is
+  singular and an `ArgumentError` names the fix (a functional with nonzero sum, or
+  `mean_zero`). `ε` is the machine epsilon of `A`'s element type. The check runs only
+  without `mean_zero` and `gauge`; any other singular case reaches the factorisation.
+- A `K.A` that is a `SparseMatrixCSR`, or the adjoint or transpose of a sparse matrix, is
+  converted to `SparseMatrixCSC`; any other non-sparse `K.A` throws an `ArgumentError`.
+
+# Returns
+- `Vector`: the solution, of the float type promoted from `K` and `F` (for `σ = 0`, the
+  plain matrix's result type). `F` is one vector, as for a matrix.
+
+# Examples
+```julia
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + σ * innerₕ(1, u) * innerₕ(1, v))
+K = assemble(a)
+u = pde_solve(K, F)  # pde_solve(A, F; mean_zero = w) when sum(F) == 0
+```
+"""
+function pde_solve(K::RankOneUpdate, F::AbstractVector; solver::Symbol = :default, sym = :auto,
+        mean_zero::Union{Nothing, AbstractVector} = nothing,
+        gauge::Union{Nothing, AbstractMatrix} = nothing, kwargs...)
+    A = _rank_one_sparse(K.A)
+    iszero(K.σ) && return pde_solve(A, F; solver = solver, sym = sym, mean_zero = mean_zero,
+        gauge = gauge, kwargs...)
+    mean_zero === nothing && gauge === nothing && _check_penalty_fixes_constants(A, K.ws, K.wt)
+    return _bordered_solve(A, F, (K.ws, K.wt, -inv(K.σ)), mean_zero, gauge, solver, kwargs)
+end
+
+# `K'` and `transpose(K)`, LinearAlgebra's lazy wrappers of `K`:
+# `(A + σ wₛ wₜᵀ)ᴴ = Aᴴ + σ̄ w̄ₜ w̄ₛᵀ`, and the transpose without conjugates, solved as the
+# rank-one update they are, from the parent's fields at solve time. A `RankOneUpdate` built
+# by hand around a lazily wrapped `A` is materialised by `_rank_one_sparse`.
+function pde_solve(Kt::Union{Adjoint{<:Any, <:RankOneUpdate}, Transpose{<:Any, <:RankOneUpdate}},
+        F::AbstractVector; kwargs...)
+    K = parent(Kt)
+    f = Kt isa Adjoint ? conj : identity
+    A0 = _rank_one_sparse(K.A)
+    A = Kt isa Adjoint ? adjoint(A0) : transpose(A0)
+    return pde_solve(RankOneUpdate(A, f(K.σ), f.(K.wt), f.(K.ws)), F; kwargs...)
+end
+
+const _WrappedSparse = Union{Adjoint{<:Any, <:SparseMatrixCSC},
+    Transpose{<:Any, <:SparseMatrixCSC}}
+
+_rank_one_sparse(A::SparseMatrixCSC) = A
+_rank_one_sparse(A::_WrappedSparse) = sparse(A)
+_rank_one_sparse(A::AbstractMatrix) = _is_csr(A) ? _csr_to_csc(A) : _throw_rank_one_dense(A)
+
+@noinline function _throw_rank_one_dense(@nospecialize(A))
+    throw(ArgumentError("pde_solve(K::RankOneUpdate, F) solves through a sparse bordered " *
+                        "system and needs K.A sparse; got a $(nameof(typeof(A))). Rebuild K " *
+                        "with sparse(K.A): Bramble.RankOneUpdate(sparse(K.A), K.σ, K.ws, K.wt)."))
+end
+
+# `A + σ wₛ wₜᵀ` with constants in the right kernel of `A` (pure Neumann) is singular when
+# `wₜ` does not see them, and with constants in the left kernel when `wₛ` does not. The
+# factorisation would not notice: rounding leaves a pivot near `1e-16`, and the solution is
+# of size `1e14`. Two products with `A` decide it, against `8 ε`: `‖A 1‖∞ / (ε ‖A‖∞)` is
+# 0.2 to 0.65 for pure-Neumann matrices from 323 to 15600 unknowns in 1D, 2D and 3D, while
+# `−Δ` plus a reaction of `1e-10` (nonsingular, if badly conditioned) reads 50.
+function _check_penalty_fixes_constants(A::SparseMatrixCSC, ws, wt)
+    n = size(A, 1)
+    (size(A, 2) == n && n > 0 && length(ws) == n && length(wt) == n) || return nothing
+    tol = 8 * eps(real(float(eltype(A))))
+    nA = norm(A, Inf)
+    o = ones(eltype(A), n)
+    _sees_constants(wt, tol) || norm(A * o, Inf) > tol * nA || _throw_penalty_singular("wₜ", "u")
+    _sees_constants(ws, tol) || norm(transpose(A) * o, Inf) > tol * nA ||
+        _throw_penalty_singular("wₛ", "v")
+    return nothing
+end
+
+_sees_constants(w, tol) = abs(sum(w)) > tol * norm(w, 1)
+
+@noinline function _throw_penalty_singular(name::String, f::String)
+    throw(ArgumentError("pde_solve(K::RankOneUpdate, F): A annihilates constants, as for " *
+                        "pure Neumann conditions, and the rank-one term's $name has zero " *
+                        "sum (1ᵀ$name ≈ 0), so the term does not fix them and " *
+                        "A + σ wₛ wₜᵀ is singular. Penalise a functional of $f that sees " *
+                        "constants, such as σ * innerₕ(1, u) * innerₕ(1, v), or solve " *
+                        "pde_solve(K, F; mean_zero = w)."))
 end
 
 # `SparseMatrixCSR` support, via the same CSC-conversion fallback `sparse_factorize` uses
