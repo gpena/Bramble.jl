@@ -1,0 +1,13 @@
+diff --git a/src/ast/simplifier.jl b/src/ast/simplifier.jl
+index f245b40f..15e58a00 100644
+--- a/src/ast/simplifier.jl
++++ b/src/ast/simplifier.jl
+@@ -302,7 +302,7 @@ function simplify_ast(op::OperatorScale)
+         # the values are: both operands' types are known here, so `_wrap_scale` dispatches
+         # on a known type and the product's type follows from them alone. A `Rational` on
+         # either side does not fold either (`_folds`).
+-        if inner isa OperatorScale && _folds(op.scalar) && _folds(inner.scalar)
++        if false && inner isa OperatorScale && _folds(op.scalar) && _folds(inner.scalar)
+             return _wrap_scale(_fold_mul(op.scalar, inner.scalar), inner.inner_op)
+         end
+     end

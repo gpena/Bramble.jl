@@ -1,0 +1,13 @@
+diff --git a/src/ast/simplifier.jl b/src/ast/simplifier.jl
+index f245b40f..2b7c9d28 100644
+--- a/src/ast/simplifier.jl
++++ b/src/ast/simplifier.jl
+@@ -380,8 +380,6 @@ function simplify_ast(op::OperatorAdd)
+     # Factor a shared inner-product argument out of `right` and whichever summand of `left`
+     # shares one: `⟨Au, Bv⟩ + ⟨Au, Cv⟩ -> ⟨Au, (B + C)v⟩` and the mirror on the test side.
+     # `left` is already factored, so a left-deep sum of many terms reaches every match.
+-    merged = _absorb(left, right)
+-    merged === nothing || return merged
+ 
+     return left === op.left_op && right === op.right_op ? op : OperatorAdd(left, right)
+ end
