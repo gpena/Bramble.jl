@@ -49,6 +49,15 @@ node's reach and its stencil cannot disagree -- they used to be spelled out twic
     _fold_taps(op, inner, space, I, markers, vdim, Base.tail(taps), Base.tail(ws))
 )
 
+# A node's weights in the type they join with the space's element type. A jump's are
+# `Int`s, so over a restriction its tap 0 kept `Int` entries where its shifted tap, zeroed
+# in that element type (`shifted_inner_stencil`), had `Float64` ones, and two such jumps
+# summed (`jumpₓ(Rₕ(:l, v)) + jumpₓ(Rₕ(:r, v))`) had four stencil types, more than the
+# walk splits (27360 B on a 7x9 grid). The conversion is exact; weights of that type are
+# left as they are.
+@inline _tap_weights(op, space, I) = map(
+    w -> convert(promote_type(typeof(w), eltype(space)), w), _stencil_weights(op, space, I))
+
 """
     UnaryWrapper{D}
 
@@ -155,7 +164,7 @@ end
         markers,
         Val(Dim),
         _stencil_taps(op),
-        _stencil_weights(op, space, I)
+        _tap_weights(op, space, I)
     )
 end
 
@@ -509,15 +518,35 @@ end
 # evaluated at the neighbour with that restriction zeroed outside its region, so the tap has
 # one length at every point, and relabelled as the trait path relabels it. The predicate
 # reads types only, so the branch folds; a source-only operand keeps the trait path.
+#
+# A tapped node over a scale of bits values over a sum is fixed as one over the sum is
+# (`_fixes_operand`). `Mₓ(D₋ₓ(2.0 * (Rₕ(:l, u) + Rₕ(:r, u))))`, where a paired average
+# stays whole, boxed (53136 B on 7x9 against one `D₋ₓ(Rₕ(:l, v))`) while
+# `Mₓ(D₋ₓ(Rₕ(:l, u) + Rₕ(:r, u)))` did not. Only another node's operand is fixed so. A
+# node directly over such a scale, its taps padded, boxed more where its product boxes
+# anyway (`innerₕ(2 * D₊ₓ(2.0 * Rₕ(:l, u) + 3 * Rₕ(:r, u)),
+# M₊ᵧ(2.0 * (Rₕ(:l, v) + Rₕ(:r, v))))` 49536 -> 63072 B). A `BigFloat` scale is not fixed,
+# as each padded zero is one more product that allocates (`Mₓ(D₋ₓ(g * (Rₕ(:l, u) +
+# Rₕ(:r, u))))` with `g` a `BigFloat` grid function 557808 B as it was, 816576 B fixed).
 @inline _fixes_restriction(op::RegionRestriction) = !_is_source_only(op)
 @inline _fixes_restriction(op::Union{OperatorScale, GridFunctionScale}) = !_is_source_only(op) &&
                                                                           (_scales_restriction(op) ||
                                                                            op.inner_op isa TappedNode &&
                                                                            _fixes_restriction(op.inner_op))
-@inline _fixes_restriction(op::TappedNode) = _fixes_restriction(op.inner_op)
+@inline _fixes_restriction(op::TappedNode) = _fixes_operand(op.inner_op)
 @inline _fixes_restriction(op::OperatorAdd) = _fixes_restriction(op.left_op) ||
                                               _fixes_restriction(op.right_op)
 @inline _fixes_restriction(::Any) = false
+@inline _fixes_operand(op) = _fixes_restriction(op)
+@inline _fixes_operand(op::Union{OperatorScale, GridFunctionScale}) = _fixes_restriction(op) ||
+                                                                      !_is_source_only(op) &&
+                                                                      op.inner_op isa OperatorAdd &&
+                                                                      _bits_weight(op) &&
+                                                                      _fixes_restriction(op.inner_op)
+@inline _bits_weight(op::OperatorScale) = isbits(_scale_value(op, 0))
+@inline _bits_weight(op::GridFunctionScale) = _bits_values(op.grid_function)
+@inline _bits_values(g::AbstractArray) = isbitstype(eltype(g))
+@inline _bits_values(g) = isbits(g)
 
 @inline function shifted_inner_stencil(
         inner_op::TappedNode{D}, inner, space, I::CartesianIndex{D}, markers, ::Val{Dim}, delta
@@ -557,7 +586,31 @@ end
     _fixes_restriction(op) || return local_stencil(op, space, J, markers, lin)
     taps = _stencil_taps(op)
     inner = _fixed_operand(op.inner_op, space, J, markers, lin, Val(Dim), _off_tap(taps))
-    return _fold_taps(op, inner, space, J, markers, Val(Dim), taps, _stencil_weights(op, space, J))
+    return _fixed_taps(
+        op, inner, space, J, markers, Val(Dim), taps, _tap_weights(op, space, J))
+end
+
+# `_fold_taps` for a fixed stencil. A node over a scale of bits values over a sum
+# (`_fixes_operand`) shifts the sum by its summands' own rules and scales it, as a scale
+# over a restriction is shifted (`shifted_inner_stencil`, region_restriction.jl), where the
+# trait path re-evaluated the sum at the neighbour in one of several lengths. Any other
+# operand is shifted as `_tap_stencil` shifts it.
+@inline _fixed_taps(op, inner, space, I, markers, vdim, taps::Tuple{Any}, ws::Tuple{Any}) = _fixed_tap(
+    op, inner, space, I, markers, vdim, taps[1], ws[1])
+@inline _fixed_taps(op, inner, space, I, markers, vdim, taps::Tuple, ws::Tuple) = concatenate_stencils(
+    _fixed_tap(op, inner, space, I, markers, vdim, taps[1], ws[1]),
+    _fixed_taps(op, inner, space, I, markers, vdim, Base.tail(taps), Base.tail(ws)))
+@inline _fixed_tap(op, inner, space, I, markers, vdim, ::Val{0}, w) = scale_stencil(inner, w)
+@inline _fixed_tap(op, inner, space, I, markers, vdim, delta::Val, w) = scale_stencil(
+    _fixed_shift_of(op.inner_op, inner, space, I, markers, vdim, delta), w)
+@inline _fixed_shift_of(op, inner, space, I, markers, vdim, delta) = shifted_inner_stencil(
+    op, inner, space, I, markers, vdim, delta)
+@inline function _fixed_shift_of(op::OperatorScale, inner, space, I, markers, vdim, delta)
+    !_fixes_restriction(op) && _fixes_operand(op) ||
+        return shifted_inner_stencil(op, inner, space, I, markers, vdim, delta)
+    return scale_stencil(
+        shifted_inner_stencil(op.inner_op, nothing, space, I, markers, vdim, delta),
+        _scale_value(op, 0))
 end
 
 # A node over such a node takes its tap 0 the same way (`local_stencil` above), through any
@@ -593,7 +646,7 @@ end
         op::Union{RegionRestriction, OperatorScale, GridFunctionScale}, space, J, markers,
         lin::Int, vdim, off
 )
-    _scales_restriction(op) || return _fixes_restriction(op) ?
+    _scales_restriction(op) || return _fixes_operand(op) ?
            scale_stencil(
         _fixed_operand(op.inner_op, space, J, markers, lin, vdim, off), _scale_value(op, lin)) :
            local_stencil(op, space, J, markers, lin)

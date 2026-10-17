@@ -483,18 +483,6 @@ function _type_scale_in_node(T, under::Bool = false)
     return false
 end
 
-# Whether `T` holds, under any wrapper or sum, a constant or grid function scale over an
-# operand holding a restriction.
-function _type_holds_scaled_restriction(T)
-    T isa DataType || return false
-    T <: Union{OperatorScale, GridFunctionScale} &&
-        _type_holds_restriction(fieldtype(T, :inner_op)) && return true
-    T <: UnaryWrapper && return _type_holds_scaled_restriction(fieldtype(T, :inner_op))
-    T <: OperatorAdd && return _type_holds_scaled_restriction(T.parameters[2]) ||
-           _type_holds_scaled_restriction(T.parameters[3])
-    return false
-end
-
 # Whether a `RegionRestriction` appears anywhere in `T`, its parameters searched in turn.
 # Defined before the generator that calls it, which runs in the world it was defined in.
 function _type_holds_restriction(T)
@@ -508,7 +496,6 @@ end
 precompile(_type_holds_restriction, (Any,))
 @generated _holds_restriction(::T) where {T} = _type_holds_restriction(T)
 @generated _scale_in_node(::T) where {T} = _type_scale_in_node(T)
-@generated _holds_scaled_restriction(::T) where {T} = _type_holds_scaled_restriction(T)
 
 # Whether a product in the form type `T`, reached as `_split_restricted_products` descends,
 # has an operand whose summands' weights differ in type once multiplied by a weight of the
@@ -539,10 +526,38 @@ function _type_scales_differ(T, E)
         S = _type_value(T, E)
         isconcretetype(S) || return false
         return _type_summands_differ(T, S, _type_scalar_join(T), E)
+    elseif T <: _StencilNode && _type_taps_differ(fieldtype(T, :inner_op), E)
+        return true
     elseif T <: UnaryWrapper
         return _type_scales_differ(fieldtype(T, :inner_op), E)
     end
     return false
+end
+
+# Whether a stencil node's operand `T` holds, through sums, restrictions and scales, a
+# constant scale over a restriction whose scalar (`_type_tap_scalar`) gives the node's
+# taps weights of two types: its tap 0 scales a leaf's `Int` weight, a shifted tap the
+# restriction zeroed in `E`, and on a Float32 mesh `π * 1` is a `Float64` where `π * 1f0`
+# is a `Float32`. `D₋ₓ(π * Rₕ(:l, v)) + D₋ₓ(π * Rₕ(:r, v))` then had four stencil types
+# and boxed (29952 B on a 7x9 grid).
+function _type_taps_differ(T, E)
+    T isa DataType || return false
+    T <: OperatorAdd && return _type_taps_differ(T.parameters[2], E) ||
+                               _type_taps_differ(T.parameters[3], E)
+    T <: Union{RegionRestriction, OperatorScale, GridFunctionScale} || return false
+    T <: OperatorScale && _type_tap_scalar(T, E) !== Union{} && return true
+    return _type_taps_differ(fieldtype(T, :inner_op), E)
+end
+# The type a constant scale over a restriction is converted to under a stencil node, the
+# one its scalar times an `E` has, or `Union{}` where an `Int` leaf weight and an `E` one
+# give the node's weights the same type (an `Int`, a `Rational`, a `Float64`).
+function _type_tap_scalar(T, E)
+    K = _type_constant_scalar(T)
+    K === Union{} && return Union{}
+    _type_holds_restriction(fieldtype(T, :inner_op)) || return Union{}
+    S = Base.promote_op(*, K, E)
+    return Base.promote_op(*, E, Base.promote_op(*, K, Int)) ===
+           Base.promote_op(*, E, S) ? Union{} : S
 end
 function _type_summands_differ(T, S, C, E)
     T <: OperatorAdd && return _type_summands_differ(T.parameters[2], S, C, E) ||
@@ -572,6 +587,8 @@ function _type_scalar_off(T, C)
     return K !== Union{} && K !== C
 end
 precompile(_type_mixed_scales, (Any, Any))
+precompile(_type_taps_differ, (Any, Any))
+precompile(_type_tap_scalar, (Any, Any))
 @generated _needs_rewrite(::T, ::Type{E}) where {T, E} = _type_holds_restriction(T) ||
                                                          _type_mixed_scales(T, E)
 @generated _value_type(::T, ::Type{E}) where {T, E} = _type_value(T, E)
@@ -607,13 +624,32 @@ precompile(_type_mixed_scales, (Any, Any))
 @inline _widened(op, ::Type) = op
 @inline _widened(op::UnaryWrapper, ::Type{E}) where {E} = _rewrap_inner(
     op, _uniform_scales(op.inner_op, E))
+# Under a stencil node such a scale is converted to `_type_tap_scalar`'s type: `π` to
+# `Float32(π)` on a Float32 mesh, the value `π * x` takes for every `Float32` `x`, so only
+# an entry once computed in `Float64` from a leaf's `Int` weight moves, by about one
+# Float32 rounding, and the matrix keeps its element type.
+@inline _widened(op::_StencilNode, ::Type{E}) where {E} = _rewrap_inner(
+    op, _tap_scales(_uniform_scales(op.inner_op, E), E))
+@inline _tap_scales(op, ::Type) = op
+@inline _tap_scales(op::OperatorAdd, ::Type{E}) where {E} = OperatorAdd(
+    _tap_scales(op.left_op, E), _tap_scales(op.right_op, E))
+@inline _tap_scales(
+    op::Union{RegionRestriction, GridFunctionScale}, ::Type{E}) where {E} = _rewrap_inner(
+    op, _tap_scales(op.inner_op, E))
+@inline _tap_scales(op::OperatorScale, ::Type{E}) where {E} = _tap_scaled(
+    op, _tap_scalar(op, E), E)
+@inline _tap_scaled(op, ::Type{Union{}}, ::Type{E}) where {E} = _rewrap_inner(
+    op, _tap_scales(op.inner_op, E))
+@inline _tap_scaled(op, ::Type{S}, ::Type{E}) where {S, E} = OperatorScale(
+    convert(S, op.scalar), _tap_scales(op.inner_op, E))
+@generated _tap_scalar(::T, ::Type{E}) where {T, E} = _type_tap_scalar(T, E)
 @inline _widened(op::OperatorAdd, ::Type{E}) where {E} = _widen_summands(
     op, _value_type(op, E), E)
 @inline _widen_summands(op::OperatorAdd, ::Type{S}, ::Type{E}) where {S, E} = OperatorAdd(
     _widen_summands(op.left_op, S, E), _widen_summands(op.right_op, S, E))
 @inline function _widen_summands(op, ::Type{S}, ::Type{E}) where {S, E}
     x = _uniform_scales(op, E)
-    return _on_target(x, S, E) ? x : _to_value_type(x, S)
+    return _on_target(x, S, E) || !isbitstype(S) ? x : _to_value_type(x, S)
 end
 @inline _to_value_type(x::OperatorScale, ::Type{S}) where {S} = OperatorScale(
     convert(S, x.scalar), x.inner_op)
@@ -624,7 +660,11 @@ end
 # With no restriction there is no split to gain, so weights joining to a type that is not
 # bits are left as they are. Every product with a `BigFloat` allocates anyway, and an `Int`
 # converted to one only adds allocations (56688 -> 106368 B for `big(0.1) * v +
-# 3 * D₋ₓ(v)`).
+# 3 * D₋ₓ(v)`). With a restriction a sum whose weights join to such a type keeps its
+# summands' scalars (`_widen_summands`), while a sum under it is still made uniform:
+# `D₋ₓ(big(2.0) * (Rₕ(:l, v) + Rₕ(:r, v))) + (1 // 3) * Rₕ(:c, v)` refilled 71808 B with
+# `1 // 3` converted, 45888 B without, and `M₊ᵧ(big(2.0) * (2.0 * Rₕ(:l, v) +
+# 3 * Rₕ(:r, v)))` 78144 B left whole, 42864 B made uniform.
 function _widened_product(op::BilinearProduct{D, W}, ::Type{E}) where {D, W, E}
     l = _bits_uniform_scales(op.left_op, E)
     r = _bits_uniform_scales(op.right_op, E)
@@ -671,17 +711,8 @@ _bits_uniform_scales(op, ::Type{E}) where {E} = isbitstype(_value_type(op, E)) ?
     _summands_of(op.left_op, paired)..., _summands_of(op.right_op, paired)...)
 @inline function _summands_of(op::RegionRestriction, paired)
     op.zero_stencil === nothing && _holds_restriction(op.inner_op) || return (op,)
-    return map(x -> _rewrap_inner(op, x), _restricted_summands(op.inner_op, paired))
+    return map(x -> _rewrap_inner(op, x), _summands_of(op.inner_op, paired))
 end
-# Under a restriction a summand holding a scale over a restriction is kept whole, as it
-# was before scales were distributed (below): `Rₕ(:c, D₋ₓ(2.0 * (Rₕ(:l, v) +
-# Rₕ(:r, v))))` refilled 15840 B whole and 32400 B distributed, as every restriction over
-# a difference over a restriction boxes (`Rₕ(:c, D₋ₓ(Rₕ(:l, v))) + Rₕ(:c, D₋ₓ(Rₕ(:r, v)))`
-# 32400 B too).
-@inline _restricted_summands(op::OperatorAdd, paired) = (
-    _restricted_summands(op.left_op, paired)..., _restricted_summands(op.right_op, paired)...)
-@inline _restricted_summands(op, paired) = _holds_scaled_restriction(op) ? (op,) :
-                                           _summands_of(op, paired)
 # A difference, average, jump or shift is linear in its operand entry for entry, so one
 # over a sum holding a restriction distributes the same way: `D₋ₓ(Rₕ(:c, v + Rₕ(:l, v)))`
 # is `D₋ₓ(Rₕ(:c, v)) + D₋ₓ(Rₕ(:c, Rₕ(:l, v)))`, and `Mₓ(D₊ᵧ(Rₕ(:l, v) + Rₕ(:r, v)))` is
@@ -694,9 +725,33 @@ end
 # for `D₋ᵧ(D₊ᵧ(…))`, 52560 B for `Mₓ(D₊ᵧ(…))`; `D₋ₓ(g * (Rₕ(:l, u) + Rₕ(:r, u)))` on both
 # sides 21600 B).
 @inline function _summands_of(op::_StencilNode, paired)
-    _holds_restriction(op.inner_op) || return (op,)
+    _holds_restriction(op.inner_op) && !_whole_shift(op) || return (op,)
     return map(x -> _rewrap_inner(op, x), _scaled_summands(op.inner_op, paired))
 end
+# A shift whose operand holds a restriction directly over another (through scales) is kept
+# whole: each piece is then a shift over that chain, whose restriction rule boxes past two
+# levels (`S₊ₓ(Rₕ(:c, Rₕ(:c, Rₕ(:l, v))))` 13824 B on 7x9), so `S₊ₓ(Rₕ(:c, Rₕ(:c, v +
+# Rₕ(:l, v))))` refilled 13824 B distributed and 0 B whole. A shift over one level of
+# restriction still distributes.
+@inline _whole_shift(op) = false
+@inline _whole_shift(op::ShiftNode) = _nested_restriction(op.inner_op)
+function _type_nested_restriction(T)
+    T isa DataType || return false
+    if T <: RegionRestriction
+        I = fieldtype(T, :inner_op)
+        while I isa DataType && I <: Union{OperatorScale, GridFunctionScale}
+            I = fieldtype(I, :inner_op)
+        end
+        I isa DataType && I <: RegionRestriction && return true
+    end
+    for p in T.parameters
+        p isa Type && _type_nested_restriction(p) && return true
+    end
+    return false
+end
+precompile(_type_nested_restriction, (Any,))
+@generated _nested_restriction(::T) where {T} = _type_nested_restriction(T)
+
 # A constant scale over a sum holding a restriction distributes over it as a stencil node
 # does, at an operand's top too: `g * (2.0 * (Rₕ(:l, v) + Rₕ(:r, v)))` on both sides
 # refilled 7920 B with the constant scale left whole. A scalar that is not bits (a
@@ -704,6 +759,14 @@ end
 # (`D₋ₓ(big(2) * (Rₕ(:l, v) + Rₕ(:r, v)))` 40704 B whole, 77856 B distributed).
 @inline function _summands_of(op::OperatorScale, paired)
     isbits(op.scalar) && _holds_restriction(op.inner_op) || return (op,)
+    return map(x -> _rewrap_inner(op, x), _summands_of(op.inner_op, paired))
+end
+# A `Ref` to a bits value distributes under a stencil node only, each piece reading it live:
+# `D₋ₓ(r * (Rₕ(:l, v) + Rₕ(:r, v))) + 0.5 * v` refilled 29088 B whole, and fixed whole
+# took its first `assemble` 0.66 s against 0.53 s distributed. Under a restriction
+# (`Rₕ(:c, r * (Rₕ(:l, v) + Rₕ(:r, v) + v))`) the pieces boxed more than the whole.
+@inline function _scaled_summands(op::OperatorScale{D, <:Base.RefValue}, paired) where {D}
+    _bits_weight(op) && _holds_restriction(op.inner_op) || return (op,)
     return map(x -> _rewrap_inner(op, x), _summands_of(op.inner_op, paired))
 end
 # A grid function scale distributes only under a stencil node; at an operand's top it is
@@ -771,11 +834,17 @@ end
 # reads several points too: `Mₓ(D₊ᵧ(Rₕ(:l, v)))` and `D₋ₓ(M₊ᵧ(Rₕ(:l, v)))` with their twins
 # boxed 38304 B. Each such level over a restricted one adds a bit, so such a summand takes a
 # sum of its own at any depth. A shift, a stencil node too (ast/stencil_nodes.jl), counts
-# the same.
+#
+# A restriction over such a summand adds a bit as well, as its `()` outside the region is
+# one shape more. `Rₕ(:c, D₋ₓ(Rₕ(:l, v)))` and its `:r` twin in one sum boxed (32400 B on
+# a 7x9 grid).
 function _type_shape_bits(T, nested::Bool = true)
     if T <: RegionRestriction
-        inner = _type_shape_bits(fieldtype(T, :inner_op), nested)
-        return fieldtype(T, :zero_stencil) === Nothing ? max(1, inner) : inner
+        I = fieldtype(T, :inner_op)
+        inner = _type_shape_bits(I, nested)
+        fieldtype(T, :zero_stencil) === Nothing || return inner
+        nested && inner > 0 && _type_restricted_stencil(I) && return inner + 1
+        return max(1, inner)
     elseif nested && T <: _StencilNode
         I = fieldtype(T, :inner_op)
         inner = _type_shape_bits(I)
