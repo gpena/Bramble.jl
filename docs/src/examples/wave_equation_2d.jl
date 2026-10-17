@@ -27,6 +27,9 @@
 # merely plausible. It starts at rest in the shape of the first mode and oscillates in place
 # with period ``\sqrt{2}``.
 #
+# The boundary stays Dirichlet-only here because the state is a composite space and
+# `semidiscretize` and `ode_problem` refuse a composite of ghost spaces for now.
+#
 # ## The first-order system
 #
 # With the velocity ``v = \dot u`` as a second unknown, the wave equation is

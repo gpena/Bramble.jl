@@ -28,6 +28,10 @@
 # -- is unknown; a handful of noisy point observations of ``u`` at the true ``\kappa`` are all
 # that is given.
 #
+# The boundary stays Dirichlet-only here because forms on a ghost space refuse the automatic
+# differentiation the adjoint gradient needs, which arrives with milestone v4.3.0
+# (automatic differentiation and form correctness on the CPU).
+#
 # !!! note "What used to block this"
 #     A gradient with respect to a *Dirichlet boundary value or source term* reaches only `F`,
 #     filled by `dirichlet_bc!`'s own value-writing path; it never touched `assemble`'s

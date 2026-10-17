@@ -28,6 +28,11 @@
 # energy form the discretisation reproduces. The traction-free condition disappears into it: it
 # is the natural boundary condition, imposed by *not* constraining those rows.
 #
+# The boundary stays Dirichlet-only here, the free faces natural, because a ghost relation
+# cannot couple components and a traction such as
+# ``(\lambda+2\mu)\partial_n u_1 + \lambda\partial_t u_2 = g`` does
+# (deferred to gpena/Bramble.jl#793).
+#
 # ```math
 # a(u,v) = \int_\Omega 2\mu\,\varepsilon(u):\varepsilon(v)
 #          + \lambda\,(\nabla\cdot u)(\nabla\cdot v) = \int_\Omega f\cdot v.

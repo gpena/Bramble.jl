@@ -32,6 +32,10 @@
 # amplitude and the boundary ramp's rate -- are both unknown; five noisy point observations
 # of `u`, taken at five different times, are all that is given.
 #
+# The boundary stays Dirichlet-only here because forms on a ghost space refuse automatic
+# differentiation (milestone v4.3.0) and `semidiscretize` takes no `dirichlet` keyword on a
+# ghost space, which the parameter-dependent boundary ramp below relies on.
+#
 # ## Discretisation and the initial condition
 
 using Bramble
