@@ -781,6 +781,58 @@ The compatible problem raises no warning and its relative defect is below ``10^{
 
 The check has limits. A defect on the refined mesh below `5e-3` counts as rounding, so a small incompatibility is not detected. Compatible data with a singular flux at a boundary point, whose quadrature error falls slower than the factor of four, can be reported incompatible. When the defect is above the floor the problem is built on a mesh with 16 times the points of `Ωₕ`.
 
+### Pure Neumann as one penalised form
+
+The bordered solve above keeps `A` and the weights apart. A form can also carry the constraint itself, as a rank-one penalty ``\sigma\,(1, u)_h (1, v)_h``, and then it assembles to a single matrix ``A + \sigma\, w w^T``, where ``w`` is the weight vector of the previous section. The matrix is nonsingular because the penalty fixes the constant. Take the Neumann problem with zero flux on the graded square: `inner₊(∇ₕ(u), ∇ₕ(v))` on the space without ghosts is its stiffness matrix. The penalty is `σ * innerₕ(1, u) * innerₕ(1, v)` with ``\sigma = \gamma / h_{max}``:
+
+```@example forms
+using LinearAlgebra: norm
+
+σ_pen = 1.0 / hₘₐₓ(Ωₕ_sq)   # γ = 1
+a_pen = form(W_plain_sq, W_plain_sq,
+    (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + σ_pen * innerₕ(1, u) * innerₕ(1, v))
+K_pen = assemble(a_pen)
+
+# the load with the data made compatible: 1ᵀF = 0
+F_raw = assemble(form(W_plain_sq, v -> innerₕ(f_sq, v)))
+F_pen = F_raw - (sum(F_raw) / sum(w_sq)) * w_sq
+
+typeof(K_pen).name.name, size(K_pen), Base.summarysize(K_pen) < 10 * Base.summarysize(K_pen.A)
+```
+
+`assemble` returns a `Bramble.RankOneUpdate`: the sparse matrix `K_pen.A` of the other terms, `σ` and the two weight vectors, with no dense block. Its products cost one product by `A` and two passes over the vectors. `K_pen'` and `transpose(K_pen)` are lazy wrappers of `K_pen`, and read its parts when they are applied. `pde_solve(K_pen, F_pen)` does not form the dense matrix either. It solves the sparse bordered system
+
+```math
+\begin{pmatrix} A & w \\ w^T & -1/\sigma \end{pmatrix}
+\begin{pmatrix} u \\ \mu \end{pmatrix} =
+\begin{pmatrix} F \\ 0 \end{pmatrix},
+```
+
+whose second row gives ``\mu = \sigma w^T u``, so its first row is ``A u + \sigma w (w^T u) = F``. For compatible data ``w^T u = 0``, so the solution is the `mean_zero` one for every ``\sigma > 0``. The next block checks that against the `mean_zero` solve and the dense solve, and shows the relative differences:
+
+```@example forms
+A_pen = assemble(form(W_plain_sq, W_plain_sq, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
+
+u_pen = pde_solve(K_pen, F_pen)
+u_mz = pde_solve(A_pen, F_pen; mean_zero = w_sq)
+u_dense = Matrix(K_pen) \ F_pen
+
+rel_mz = norm(u_pen - u_mz) / norm(u_mz)
+rel_dense = norm(u_pen - u_dense) / norm(u_dense)
+
+@assert Matrix(K_pen) ≈ Matrix(A_pen) + σ_pen * w_sq * w_sq'
+@assert abs(sum(F_pen)) <= 1e-12 * norm(F_pen)
+@assert abs(dot(w_sq, u_pen)) <= 1e-10 * norm(w_sq) * norm(u_pen)
+@assert rel_mz < 1e-10 && rel_dense < 1e-10
+@assert !all(iszero, u_pen)
+
+rel_mz, rel_dense
+```
+
+The difference from the `mean_zero` solve is about ``10^{-14}/\gamma``: a small ``\sigma`` makes ``-1/\sigma`` large against the entries of `A` and costs digits, so take ``\gamma \ge 10^{-2}``. A large ``\sigma`` costs nothing. [`pde_solve`](@ref) documents the figures for the `RankOneUpdate` method.
+
+Four rules apply to the term. The `σ` is read when the form is assembled, so with a `Ref` factor call `assemble!(K_pen, a_pen)` after changing it, before the next solve. With `dirichlet`, the Dirichlet rows of `K_pen` are identity rows and the penalty's row vector is zeroed there. One rank-one term per form: the sum of two is refused with an `ArgumentError`, so add the scalars when they share the functionals. The term also builds on a ghost space, where `assemble(a, l)` reduces it with the closure. A composite ghost space is covered by the support table in [the space internals](../internals/space.md).
+
 ### Data per facet
 
 A scalar datum on `:boundary` gives one value per node. A corner node lies on two facets, though. When the data differ from facet to facet, give each facet its own `inner_Γ` term or, as above, its own relation. A facet's term carries that facet's weight, which is a half cell at the corner. With the same function on every facet, the two spellings agree:
@@ -812,7 +864,7 @@ expected = (hy / 2) * data_x((0.0, 0.0)) + (hx / 2) * data_y((0.0, 0.0))
 l_corner[1], expected
 ```
 
-Ghost spaces are for `assemble`, and for `semidiscretize` and `ode_problem` once `constrained` has eliminated every ghost. `matrix_free_operator`, `kronecker_operator` and the device backends refuse them with an `ArgumentError`, and a composite space cannot hold one.
+Ghost spaces are for `assemble`, and for `semidiscretize` and `ode_problem` once `constrained` has eliminated every ghost. `matrix_free_operator(a)` applies a ghost-space form, one product at a time per operator. `kronecker_operator(a)` works where the closure and the form are separable and both spaces share one mesh object. The device backends refuse ghost spaces with an `ArgumentError`. Which entry points accept a composite space with a ghost leaf is in the support table of [the space internals](../internals/space.md).
 
 ## Threading
 
@@ -939,19 +991,24 @@ sum(assemble(l_flux))
 ### Automatic simplification
 
 `form` resolves the expression once and simplifies it before storing it. The assembler
-routes summands one at a time, so every top-level `+` is a separate sweep over the mesh, and
-fewer summands means fewer sweeps.
-
-Identical terms merge, so a form accumulated one physical effect at a time pays nothing for
-repetition:
+routes summands one at a time, so every top-level `+` is a separate sweep over the mesh.
+The pass is small and keeps terms as written: it does not combine like terms or factor a
+shared argument. Two identical terms stay two terms and are summed at assembly:
 
 ```@example forms
 a_dup = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(u, v))
-expression(a_dup)     # 2 * innerₕ(u, v): one term, not two
+expression(a_dup)     # two terms, as written
 ```
 
 ```@example forms
 Matrix(assemble(a_dup)) ≈ 2 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
+```
+
+Write `2 * innerₕ(u, v)` when one sweep is wanted. Nested scales fold into one:
+
+```@example forms
+a_fold = form(Wₕ, Wₕ, (u, v) -> 2 * (3 * innerₕ(u, v)))
+expression(a_fold)    # 6 * innerₕ(u, v)
 ```
 
 A zero-scaled term leaves nothing behind, so a coefficient can switch a term off without a
@@ -959,19 +1016,23 @@ branch around the form:
 
 ```@example forms
 a_off = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 0 * inner₊(∇ₕ(u), ∇ₕ(v)))
+expression(a_off)     # innerₕ(u, v): the zero term is gone
+```
+
+```@example forms
 Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
 ```
 
 !!! tip "Try this"
     Replace `0 *` by `0.0 *` in `a_off` and compare `expression(a_off)`.
-    A `Float64` coefficient is only known at run time, so the rule does not fire.
+    A `Float64` coefficient is only known at run time, so the term stays.
 
 Two limits apply. A rule whose outcomes have different node types fires only when the
-compiler settles it from types, so a scalar coefficient must be an `Integer` for the
-like-term and factoring rules to apply. A `Float64` known at run time, or a `Ref`, leaves the
-terms apart: same numbers, one extra sweep. And the pass stops at an inner product's own
-arguments, so a scalar buried in a difference such as `innerₕ(D₋ₓ(2 * u), v)` is invisible
-to it. Write `2 * innerₕ(D₋ₓ(u), v)` instead.
+compiler settles it from types, so the scalar of a dropped zero term must be an `Integer`.
+A `Float64` known at run time, or a `Ref`, leaves the term in: same numbers, one extra
+sweep. And the pass stops at an inner product's own arguments, so a scalar buried in a
+difference such as `innerₕ(D₋ₓ(2 * u), v)` is invisible to it. Write
+`2 * innerₕ(D₋ₓ(u), v)` instead.
 
 The [internals page on forms](../internals/form.md) documents the stencil algebra and the
 exact rewrite rules.
