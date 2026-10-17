@@ -29,6 +29,8 @@ Start from the closest one:
 | linear elasticity, 2D | `examples/elasticity.jl` | a vector field in `Wₕ^Val(2)`, `εₕ`, `divₘₕ` |
 | coupled reaction-diffusion | `examples/coupled_reaction_diffusion.jl` | two unknowns in one composite space, Newton |
 | point sources | `examples/point_source.jl` | `dirac`, boundary flux with `Bramble.reaction` |
+| Neumann and Robin Poisson, 2D | `examples/neumann_robin.jl` | `gridspace(Ωₕ; ghosts = :boundary)`, `constrained`, `assemble(a, l)` |
+| pure Neumann Poisson, 2D | `examples/pure_neumann.jl` | `∂ₙ` relations, `pde_solve(A, F; mean_zero = w)` |
 
 ## Rules that prevent wrong or slow code
 
