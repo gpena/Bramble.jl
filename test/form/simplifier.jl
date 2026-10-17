@@ -747,6 +747,33 @@ _lit_mixed_pair(V) = form(V, V, (u, v) -> innerₕ(u(1), (v(1) + v(2)) + (v(2) +
         D₋ₓ(test_function(Vₕ)(1) + test_function(Vₕ)(2)))
 end
 
+# A shift is a stencil node like a difference (src/ast/stencil_nodes.jl, #767), so the
+# restricted-product split distributes it over a restricted sum: one summand per
+# restriction, each a shift of its own, where it was one summand before.
+@testset "shift over a restricted sum: split" begin
+    I = interval(0.0, 1.0)
+    Ωd = domain(I × I, :l => :left, :r => :right, :b => :bottom, :t => :top)
+    Wₕ = gridspace(mesh(Ωd, (7, 9), (false, false)))   # non-uniform in both directions
+    R = Bramble.restrict_to
+    v = test_function(Wₕ)
+
+    for paired in (Val(false), Val(true)),
+        op in (S₊ₓ(R(:b, v) + R(:t, v)), S₊ₓ(D₋ᵧ(R(:b, v) + R(:t, v))))
+
+        parts = Bramble._summands_of(op, paired)
+        @test length(parts) == 2
+        @test all(p -> p isa ShiftNode, parts)
+    end
+    @test length(Bramble._summands_of(S₊ₓ(v + v), Val(false))) == 1
+
+    # The split changes no matrix: the whole form is the sum of its pieces, each nonzero.
+    M(f) = Matrix(assemble(form(Wₕ, Wₕ, f)))
+    P1 = M((u, v) -> innerₕ(u, S₊ₓ(R(:b, v))))
+    P2 = M((u, v) -> innerₕ(u, S₊ₓ(R(:t, v))))
+    @test any(!iszero, P1) && any(!iszero, P2)
+    @test M((u, v) -> innerₕ(u, S₊ₓ(R(:b, v) + R(:t, v)))) ≈ P1 + P2
+end
+
 # --- Type stability under a runtime coefficient ------------------------------------- #
 #
 # Every rewrite in `simplify_ast` decides what *node type* to return, so a rule that reads a

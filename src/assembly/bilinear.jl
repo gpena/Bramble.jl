@@ -599,15 +599,12 @@ _promote_scalar(x::Base.RefValue, T) = x
     op.zero_stencil === nothing || return (op,)
     return map(x -> _rewrap_inner(op, x), _summands_of(op.inner_op, paired))
 end
-# A difference, average or jump is linear in its operand entry for entry, so one over a
-# sum holding a restriction distributes the same way: `D₋ₓ(Rₕ(:c, v + Rₕ(:l, v)))` is
-# `D₋ₓ(Rₕ(:c, v)) + D₋ₓ(Rₕ(:c, Rₕ(:l, v)))`, and `Mₓ(D₊ᵧ(Rₕ(:l, v) + Rₕ(:r, v)))` is
+# A difference, average, jump or shift is linear in its operand entry for entry, so one
+# over a sum holding a restriction distributes the same way: `D₋ₓ(Rₕ(:c, v + Rₕ(:l, v)))`
+# is `D₋ₓ(Rₕ(:c, v)) + D₋ₓ(Rₕ(:c, Rₕ(:l, v)))`, and `Mₓ(D₊ᵧ(Rₕ(:l, v) + Rₕ(:r, v)))` is
 # `Mₓ(D₊ᵧ(Rₕ(:l, v))) + Mₓ(D₊ᵧ(Rₕ(:r, v)))` (gpena/Bramble.jl#759). An operand with no
-# restriction is left whole, so an unrestricted one compiles nothing new.
-const _DifferenceNode = Union{BackwardDifference, ForwardDifference, CenteredDifference,
-    StarDifference, CrossWeightedDifference, SecondDifference}
-const _AverageNode = Union{JumpNode, BackwardAverage, ForwardAverage, CenteredAverage}
-const _StencilNode = Union{_DifferenceNode, _AverageNode}
+# restriction is left whole, so an unrestricted one compiles nothing new. The node list,
+# `_StencilNode`, is the simplifier's too (ast/stencil_nodes.jl).
 @inline function _summands_of(op::_StencilNode, paired)
     _holds_restriction(op.inner_op) || return (op,)
     return map(x -> _rewrap_inner(op, x), _summands_of(op.inner_op, paired))
@@ -667,7 +664,8 @@ end
 # twin, paired in one sum, boxed (62496 B, gpena/Bramble.jl#759). An average or a jump
 # reads several points too: `Mₓ(D₊ᵧ(Rₕ(:l, v)))` and `D₋ₓ(M₊ᵧ(Rₕ(:l, v)))` with their twins
 # boxed 38304 B. Each such level over a restricted one adds a bit, so such a summand takes a
-# sum of its own at any depth.
+# sum of its own at any depth. A shift, a stencil node too (ast/stencil_nodes.jl), counts
+# the same.
 function _type_shape_bits(T, nested::Bool = true)
     if T <: RegionRestriction
         inner = _type_shape_bits(fieldtype(T, :inner_op), nested)
@@ -685,7 +683,7 @@ function _type_shape_bits(T, nested::Bool = true)
     return 0
 end
 
-# Whether `T` holds, under any wrapper or sum, a difference, average or jump over a
+# Whether `T` holds, under any wrapper or sum, a difference, average, jump or shift over a
 # restriction.
 function _type_restricted_stencil(T)
     if T <: _StencilNode
