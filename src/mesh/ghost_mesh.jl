@@ -447,6 +447,26 @@ end
 
 @inline Base.getindex(G::_GhostMeshLike, idx...) = getindex(_padded(G), idx...)
 
+"""
+    locate_cell(G::GhostMesh{1}, x::Real) -> Int
+    locate_cell(G::GhostMesh{D}, x::NTuple{D, Real}) -> CartesianIndex{D}
+
+The cell of the physical mesh holding `x`, numbered in the padded index space `G`'s points
+and the assembly walk use: [`locate_cell`](@ref) on `physical_mesh(G)`, shifted past the
+ghost layer below each axis. A point outside the domain is clamped to a physical boundary
+cell as on the physical mesh, never placed in a cell with a ghost corner, so a
+[`dirac`](@ref) source on a ghost space loads the physical nodes the plain space loads.
+"""
+@inline locate_cell(G::_GhostMeshLike{1}, x::Real) = locate_cell(physical_mesh(G), x) + G.lo[1]
+
+@inline function locate_cell(G::_GhostMeshLike{D}, x::NTuple{D, Real}) where {D}
+    return locate_cell(physical_mesh(G), x) + CartesianIndex(G.lo)
+end
+
+# Disambiguates against `locate_cell(::AbstractMeshType{1}, ::Tuple{Real})` (queries.jl),
+# answering as it does in 1D: the padded `Int` of the `Real` method above.
+@inline locate_cell(G::_GhostMeshLike{1}, x::NTuple{1, Real}) = locate_cell(G, x[1])
+
 # A stored marker is a write into the padded mesh, which the next access reads back.
 @inline _store_markers!(G::GhostMesh, mm, labels = Symbol[]) = _store_markers!(
     _padded(G), mm, labels)

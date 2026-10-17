@@ -399,8 +399,13 @@ end
 @noinline function _check_absent_reads(
         op::LinearProduct{D, InnerType}, space, I::CartesianIndex{D}, lin_idx::Int
 ) where {D, InnerType}
-    _is_dirac(op.left_op) || iszero(compute_weight(InnerType(), space, I, lin_idx)) &&
-                             return false
+    # A dirac's weight is not the volume, so its zero test is where it loads: on a ghost
+    # mesh `locate_cell` places every point in a physical cell, so only physical nodes.
+    if _is_dirac(op.left_op)
+        I in physical_indices(mesh(space)) || return false
+    else
+        iszero(compute_weight(InnerType(), space, I, lin_idx)) && return false
+    end
     _reads_at(op.right_op, space, I, _facet_inner(InnerType())) &&
         _throw_absent_read(op, I - CartesianIndex(mesh(space).lo))
     return false

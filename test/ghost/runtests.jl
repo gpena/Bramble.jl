@@ -16,4 +16,5 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("contract.jl")
     include("grid_functions.jl")
     include("preconditioners.jl")
+    include("dirac.jl")
 end

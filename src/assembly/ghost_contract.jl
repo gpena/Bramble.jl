@@ -10,7 +10,7 @@
 # On a closure with an affine part `d ≠ 0` the load is `E_vᵀ (F_pad − A_pad d)` and needs
 # the bilinear form, so `l(v)` and `evaluate!` refuse naming `assemble(a, l)`, as
 # `assemble!(b, l)` does. `a(u, v)` is the contraction of `assemble(a)`, the linear part,
-# whatever `d` is.
+# whatever `d` is. `reaction(a, l, u)` refuses: the plain rows it reads are the relations'.
 
 """
     (a::GhostBilinearForm)(u, v) -> Number
@@ -148,6 +148,30 @@ end
         DimensionMismatch(
         "a linear form on a ghost space with $(ndofs(l.test_space)) degrees of freedom " *
         "cannot contract a vector of length $(length(vd))",
+    ),
+    )
+end
+
+"""
+    reaction(a::GhostBilinearForm, l::GhostLinearForm, uₕ::VectorElement; marker, dirichlet_components = nothing)
+
+Refuses with an `ArgumentError`. A reaction reads the rows of the unconstrained plain
+system at the marked nodes, and a ghost space has replaced those rows by its relations.
+Pose `a` and `l` on the plain space `gridspace(Ωₕ)`, fill an element of it with the
+physical values of `Bramble.lift(C, u)`, and call [`reaction`](@ref) there.
+"""
+function reaction(::GhostBilinearForm, ::GhostLinearForm, ::VectorElement;
+        marker, dirichlet_components = nothing)
+    return _throw_ghost_reaction()
+end
+
+@noinline function _throw_ghost_reaction()
+    throw(
+        ArgumentError(
+        "reaction reads the rows of the unconstrained plain system at the marked nodes, " *
+        "and on a ghost space the relations have replaced them. Assemble the form on the " *
+        "plain space gridspace(Ωₕ), fill an element of it with the physical values of " *
+        "Bramble.lift(C, u), and call reaction(a, l, uₕ; marker) there.",
     ),
     )
 end
