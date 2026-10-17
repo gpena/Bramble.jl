@@ -29,6 +29,9 @@
 # Dirichlet rows are out of scope for this operator: it has no boundary constraint of its
 # own. The `Kronecker.jl` extension adds homogeneous Dirichlet conditions on the whole
 # boundary to `fdm_solve`, through its `dirichlet = :boundary` keyword.
+#
+# A form on ghost spaces factors through its spaces' closures (`ghost_kronecker.jl`): each
+# axis's padded factor reduced by the 1D closures of that axis.
 
 # --- Flattening a sum into (coefficient, term) pairs -------------------------------- #
 
@@ -500,6 +503,7 @@ end
 
 """
     kronecker_operator(a::BilinearForm) -> Union{KroneckerLinearOperator, KroneckerBlockOperator}
+    kronecker_operator(a::GhostBilinearForm) -> KroneckerLinearOperator
 
 Build a matrix-free [`KroneckerLinearOperator`](@ref) for the separable bilinear form `a`
 (see [`is_separable`](@ref)), without ever assembling the `D`-dimensional matrix.
@@ -529,8 +533,22 @@ On a composite trial or test space whose leaves all share one mesh, the result i
 (test leaf, trial leaf) block, placed at that block's rows and columns, with the same
 `size`, `getindex`, `mul!`, `SparseMatrixCSC` and `issymmetric` interface.
 
+On a form over ghost spaces, `form(Cₕ, Cₕ, f)` with `Cₕ` built by [`constrained`](@ref),
+the result is a `KroneckerLinearOperator` of the reduced matrix `E_vᵀ A_pad E_u` that
+`assemble(a)` returns, on the degrees of freedom of `Cₕ`. Its closure must be separable:
+every ghost eliminated by one relation per facet along its normal (`u => g`, `∂ₙ(u)`,
+`α * u + β * ∂ₙ(u)` with constant `α` and `β`, or `∂ₙ(u; K)` with diagonal `K`). The
+closures `E_u` and `E_v` are then Kronecker products of 1D closures, and each term's
+factor on axis `d` is `E_{v,d}ᵀ F_d E_{u,d}`, `F_d` its factor on the padded axis, so
+`dims` counts the points of each axis that no `u => g` fixes. The relation data enter the
+load only, not the operator.
+
 # Throws
 
+  - `ArgumentError`: on ghost spaces, a closure that is not separable (a conormal `K` with
+    off-diagonal entries, ghosts left as unknowns), a term that reads the padded points
+    beyond two ghosted facets (a mixed derivative), or a region restriction or
+    grid-function coefficient, each naming `assemble(a)` as the fix.
   - `ArgumentError`: `a` is not separable, naming the offending node and, on a composite
     space, its block (or the dimension, or the spaces) -- the same check
     [`is_separable`](@ref) runs, made specific; or `a` is device-backed and a term has more
