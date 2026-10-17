@@ -8,13 +8,18 @@
 #
 # ```math
 # -\nabla \cdot (\epsilon \nabla u) - b \, \mathbf{1} \cdot \nabla u = g \text{ in } \Omega,
-# \qquad u = u_{\text{exact}} \text{ on } \partial\Omega, \qquad \Omega = (0,1)^D
+# \qquad u = u_{\text{exact}} \text{ on the far sides}, \qquad
+# \partial_n u = h \text{ on the outflow sides}, \qquad \Omega = (0,1)^D
 # ```
 #
 # with a constant diffusion coefficient ``\epsilon`` and a constant convective speed ``b`` along
-# every coordinate direction at once: the vector field ``-b(1,\dots,1)``. The manufactured
-# solution is the same as the other two examples, ``u_{\text{exact}}(x) = e^{\sum_i x_i}``, so
-# ``g = -D\,(b+\epsilon)\,u_{\text{exact}}``.
+# every coordinate direction at once: the vector field ``-b(1,\dots,1)``. That field points
+# towards the sides ``x_i = 0``, so the fluid leaves through `xmin`, `ymin` and `zmin`, where
+# the natural condition is a given flux ``\partial_n u = h``. The other sides, where the fluid
+# enters, keep the Dirichlet condition ``u = u_{\text{exact}}``. The manufactured solution is
+# the same as the other two examples, ``u_{\text{exact}}(x) = e^{\sum_i x_i}``, so
+# ``g = -D\,(b+\epsilon)\,u_{\text{exact}}``, and on an outflow side the outward normal is
+# ``-e_i``, so ``h = -u_{\text{exact}}`` is exact.
 #
 # ## Adding the convective term
 
@@ -22,8 +27,8 @@ using Bramble
 using Random
 
 ϵ, b = 1.0, 0.1
-sol(x) = exp(x[1] + x[2])
-rhs(x) = -2 * sol(x) * (b + ϵ)
+sol(x) = exp(sum(x))
+rhs(x) = -length(x) * sol(x) * (b + ϵ)
 
 Random.seed!(20260903)
 Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
@@ -34,27 +39,100 @@ Wₕ = gridspace(Ωₕ)
 # points from the global RNG, so without it the mesh -- and every figure on this page --
 # would differ from build to build, and the suite could not assert what the page prints.
 #
-# `inner₊(Mₕ(u), ∇ₕ(v))` is the convective term: `Mₕ` averages the trial function onto the
-# same staggered points `∇ₕ` differences on, one pair per direction, and `inner₊`'s own
-# gradient-tuple overload sums them, which gives the identical spelling whether `D` is 1 or 3, since
-# `Mₕ`/`∇ₕ` collapse to a bare node instead of a one-element tuple in 1D and `inner₊` has a
-# method for both:
+# The outflow sides carry the Neumann relation through ghost points:
+# `gridspace(Ωₕ; ghosts = (:xmin, :ymin))` adds one layer of ghosts outside those two sides
+# and `constrained` fixes each ghost from the relation `∂ₙ(u) = h`, where `h` is a function of
+# the boundary point. The far sides stay Dirichlet and are handed to `assemble` as
+# `side => data`. The convective term is now the strong operator `∇̽ₕ`, the second-order
+# centred gradient on a non-uniform grid, summed over the directions, because a ghost
+# value enters a difference stencil and not the staggered average of the weak form. In 1D
+# `∇̽ₕ` is a bare node rather than a one-element tuple, so the sum is only taken for `D > 1`:
 
-bcs = dirichlet_constraints(Ω, :boundary => sol)
+outflow_flux(x) = -sol(x)
 
-a = form(Wₕ, Wₕ, (u, v) -> ϵ * inner₊(∇ₕ(u), ∇ₕ(v)) + b * inner₊(Mₕ(u), ∇ₕ(v)))
-A = assemble(a; dirichlet = :boundary)
+convection(u, ::Val{1}) = ∇̽ₕ(u)
+convection(u, ::Val) = sum(∇̽ₕ(u))
 
-gₕ = element(Wₕ)
-avgₕ!(gₕ, rhs)
-l = form(Wₕ, v -> innerₕ(gₕ, v))
-F = assemble(l; dirichlet = bcs)
+function convdiff_system(Ωₕ, D::Int)
+    inflow = (:xmax, :ymax, :zmax)[1:D]
+    outflow = (:xmin, :ymin, :zmin)[1:D]
+    Cₕ = constrained(gridspace(Ωₕ; ghosts = outflow),
+        u -> map(side -> side => ∂ₙ(u) => outflow_flux, outflow))
+    a = form(Cₕ, Cₕ,
+        (u, v) -> innerₕ(-ϵ * Δₕ(u) - b * convection(u, Val(D)), v))
+    l = form(Cₕ, v -> innerₕ(rhs, v))
+    A, F = assemble(a, l; dirichlet = map(side -> side => sol, inflow))
+    return Cₕ, A, F
+end
+
+Cₕ, A, F = convdiff_system(Ωₕ, 2)
 
 uₕ = element(Wₕ)
 uₕ .= A \ F
 nothing # hide
 
 @test 1.0e-4 < norm₁ₕ(uₕ .- Rₕ(Wₕ, sol)) < 1.0e-1                                           #src
+
+# The Dirichlet nodes hold the data: row replacement leaves them exactly at `sol`.          #src
+@test let X = Rₕ(Wₕ, sol), (nx, ny) = Bramble.npoints(Ωₕ, Tuple)                           #src
+    U = reshape(parent(uₕ), nx, ny)                                                         #src
+    V = reshape(parent(X), nx, ny)                                                          #src
+    U[end, :] == V[end, :] && U[:, end] == V[:, end]                                        #src
+end                                                                                         #src
+
+# ## The Neumann relation on the lifted solution
+#
+# `Bramble.lift(Cₕ, u)` returns the solution on the padded grid, with the ghost values the
+# relations fix filled in. The relation holds at the ghosts by construction, so the check
+# that means something is one-sided and independent of them: on the physical nodes of an
+# outflow side, the three-point forward difference of the lifted solution along the normal
+# axis, with the non-uniform spacings, negated for the outward normal, must equal ``h`` up
+# to the truncation error, of order ``h^2``. `flux_residual` returns the largest residual
+# over the nodes of one side, `axis` being 1 for `xmin` and 2 for `ymin`:
+
+function flux_residual(Ωₕ, Cₕ, u, axis)
+    U = parent(Bramble.lift(Cₕ, u))
+    G = Bramble.mesh(Cₕ)
+    n = Bramble.npoints(Ωₕ, Tuple)
+    xs = ntuple(d -> collect(points(Ωₕ(d))), 2)
+    h₁, h₂ = xs[axis][2] - xs[axis][1], xs[axis][3] - xs[axis][2]
+    lin = LinearIndices(Bramble.npoints(G, Tuple))
+    at(i, j) = U[lin[Bramble.padded_index(G, CartesianIndex(i, j))]]
+    along(k, t) = axis == 1 ? at(k, t) : at(t, k)
+    return maximum(1:n[3 - axis]) do t
+        dₓ = -(2h₁ + h₂) / (h₁ * (h₁ + h₂)) * along(1, t) +
+             (h₁ + h₂) / (h₁ * h₂) * along(2, t) - h₁ / (h₂ * (h₁ + h₂)) * along(3, t)
+        point = axis == 1 ? (xs[1][1], xs[2][t]) : (xs[1][t], xs[2][1])
+        abs(-dₓ - outflow_flux(point))
+    end
+end
+
+residuals = [flux_residual(Ωₕ, Cₕ, A \ F, axis) for axis in (1, 2)]
+
+# This is the truncation error of the one-sided difference plus the error of the solution
+# itself, so it is small but not round-off. It falls as ``h^2``: the same random mesh at 12
+# points per side, then split once, gives
+
+coarse_to_fine = let
+    Random.seed!(20260903)
+    Ωc = mesh(Ω, (12, 12), (false, false))
+    out = Float64[]
+    for level in 1:2
+        Cc, Ac, Fc = convdiff_system(Ωc, 2)
+        push!(out, flux_residual(Ωc, Cc, Ac \ Fc, 1))
+        level < 2 && iterative_refinement!(Ωc)
+    end
+    out
+end
+
+#-
+
+coarse_to_fine[2] < coarse_to_fine[1]
+
+# The residual is the one-sided truncation error, not a round-off level: it is bracketed     #src
+# away from zero, and it shrinks under refinement.                                           #src
+@test all(r -> 1.0e-7 < r < 1.0e-1, residuals)                                               #src
+@test coarse_to_fine[2] < 0.75 * coarse_to_fine[1]                                           #src
 
 # ## Péclet number and flow direction
 #
@@ -81,34 +159,22 @@ convection_diffusion_interactive_widget(uₕ; title = "Convection-diffusion, 2D"
 # ## Convergence with a convective term
 #
 # The same pattern as the other two examples: one random coarse mesh per dimension, refined
-# in place with [`iterative_refinement!`](@ref):
+# in place with [`iterative_refinement!`](@ref). Every dimension has the same mixed problem,
+# Neumann on the sides `xmin`, `ymin`, `zmin` that exist and Dirichlet on the opposite ones:
 
 function convdiff_series(D::Int; n0::Int = 5, levels::Int)
-    sol_d(x) = exp(sum(x))
-    rhs_d(x) = -D * sol_d(x) * (b + ϵ)
-
     Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
     Ωc = mesh(Ωd, ntuple(_ -> n0, D), ntuple(_ -> false, D))
 
     hs, errs = Float64[], Float64[]
     for level in 1:levels
         Wc = gridspace(Ωc)
-        bcs_c = dirichlet_constraints(Ωd, :boundary => sol_d)
-
-        a_c = form(Wc, Wc,
-            (u, v) -> ϵ * inner₊(∇ₕ(u), ∇ₕ(v)) + b * inner₊(Mₕ(u), ∇ₕ(v)))
-        A_c = assemble(a_c; dirichlet = :boundary)
-        g_c = element(Wc)
-        avgₕ!(g_c, rhs_d)
-        l_c = form(Wc, v -> innerₕ(g_c, v))
-        F_c = assemble(l_c; dirichlet = bcs_c)
-
+        _, A_c, F_c = convdiff_system(Ωc, D)
         u_c = element(Wc)
         u_c .= A_c \ F_c
-        uexact_c = Rₕ(Wc, sol_d)
 
         push!(hs, hₘₐₓ(Ωc))
-        push!(errs, norm₁ₕ(u_c .- uexact_c))
+        push!(errs, norm₁ₕ(u_c .- Rₕ(Wc, sol)))
         level < levels && iterative_refinement!(Ωc)
     end
     return hs, errs
@@ -137,9 +203,10 @@ include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
 convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), (hs3, errs3, "3D", "#B26A00")]; # hide
     title = "Convection-diffusion, ‖·‖₁ₕ") # hide
 
-# Second order in every dimension. The convective term does not change the rate. It changes
-# the matrix from symmetric to non-symmetric (`inner₊(Mₕ(u), ∇ₕ(v)) ≠ inner₊(Mₕ(v), ∇ₕ(u))`
-# in general), which is why this example does not also check `issymmetric`, unlike the
+# Second order in every dimension. Neither the Neumann relation nor the convective term
+# changes the rate. The convective term makes the matrix non-symmetric (the first
+# difference `∇̽ₕ` is antisymmetric to leading order, not self-adjoint), which is why this
+# example does not also check `issymmetric`, unlike the
 # [forms tutorial](@ref tutorial_form)'s pure-diffusion Poisson problem.
 #
 # ## Where to go next
