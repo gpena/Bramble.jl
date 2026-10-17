@@ -815,11 +815,48 @@ end
         op::InterpolationNode{D, S, OpType, Side}, space, I::CartesianIndex{D}, markers,
         lin_idx::Int
 ) where {D, S, OpType, Side}
+    Ωsrc = mesh(op.src_space)
+    _same_mesh_rule(Ωsrc, mesh(space)) &&
+        return _same_mesh_stencil(Ωsrc, I, Val(D), _interp_slot(Side))
     return _interp_stencil(
-        mesh(op.src_space), point(mesh(space), I), Val(D), _outside_symbol(op.outside),
-        _interp_slot(Side)
+        Ωsrc, point(mesh(space), I), Val(D), _outside_symbol(op.outside), _interp_slot(Side)
     )
 end
+
+# The `same_mesh` rule (gpena/Bramble.jl#771): interpolating from the mesh being walked is
+# the identity, so the stencil names the walked point's own column with weight one, and
+# skips the `locate_cell` search. It keeps the `2ᴰ` entries and their types, its other
+# entries naming that same column with weight zero, so the node, the bound term and every
+# fill infer as before, and the pattern, which merges repeated positions, reserves what
+# the plain `u` reserves instead of the explicit zeros of the other corners. Steady
+# `assemble!` 4.6x faster in 2D and 2.1x in 3D (module comment of `ast/simplifier.jl`).
+#
+# It is for `πₕ` written where the two meshes may coincide, as in one form over leaves on
+# one or on different meshes, or two spaces sharing a mesh. Decided per stencil by the
+# identity of the walked mesh and the source mesh, a pointer compare, never by dropping the
+# node in `_bind_interp_spaces`. That was tried first. It made the bound term a `Union`
+# whenever the two leaves share a type, so every such `πₕ` form, distinct meshes included,
+# refilled with 1.5-2.8 kB instead of 0 B. Nor by a flag stamped there, since
+# the Jacobian pattern binds a dependency to `(leaf, leaf)` and walks another mesh. Out of
+# line, because an inlined first version made the first 3D call on two distinct meshes
+# 25% slower.
+@noinline function _same_mesh_stencil(
+        Ωsrc::AbstractMeshType{D}, I::CartesianIndex{D}, ::Val{D}, Slot
+) where {D}
+    j = LinearIndices(indices(Ωsrc))[I]
+    E = eltype(point(Ωsrc, I))
+    T = typeof(one(E) / one(E))
+    return ntuple(k -> (Slot(j), k == 1 ? one(T) : zero(T)), Val(1 << D))
+end
+
+# Plain meshes only. On a ghost space the operator outside `πₕ` reads the ghost layer, and
+# there `πₕ` is not the identity: a ghost point lies outside the physical mesh, so the
+# blend reads the physical nodes it clamps or extrapolates to, not the ghost column. The
+# identity there would change the values, and make them depend on whether the source is
+# the walked mesh or a twin with the same points. Excluded by dispatch on the mesh type,
+# so the test folds at compile time and the bound term stays concrete.
+@inline _same_mesh_rule(Ωsrc, Ωₕ) = Ωsrc === Ωₕ
+@inline _same_mesh_rule(::_GhostMeshLike, Ωₕ) = false
 
 # An unbound node reaching the sweep means an assembly path walked a term without calling
 # `_bind_interp_spaces` first. Caught by dispatch rather than by a `nothing` check inside

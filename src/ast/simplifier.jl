@@ -4,57 +4,73 @@
 Algebraic simplification of a resolved AST, run once after `resolve_ast` and before a
 `BilinearForm`/`LinearForm` stores it (gpena/Bramble.jl#159).
 
-Most of this rewrites only three node types: `OperatorAdd`, `OperatorScale` and
-`GridFunctionScale` -- exactly what `ast.jl`'s `+`, `*` and `/` overloads build. That matters
-because the router splits work on `OperatorAdd` alone (`_visit_operator_add*` in
-`stencil_eval.jl`); every other node is one routed term, one mesh sweep, however large the
-subtree underneath it. Two rules act on that layer:
+Each rule below either measured faster or is needed for a form to assemble. The audit of
+gpena/Bramble.jl#771 gives the forms, meshes, machine and spread in
+`docs/notes/internals/simplify_rules.md`. Most of this rewrites only three node types,
+`OperatorAdd`, `OperatorScale` and `GridFunctionScale`, exactly what `ast.jl`'s `+`, `*`
+and `/` overloads build. That matters because the router splits work on `OperatorAdd` alone
+(`_visit_operator_add*` in `stencil_eval.jl`); every other node is one routed term, one mesh
+sweep, however large the subtree underneath it. The rules kept for speed, each with its gain
+over the same form without it:
 
-  - `0 * A` collapses to a zero term with a one-point sparsity pattern instead of `A`'s full
-    stencil, and `A + 0` / `0 + A` drops the zero term from the tree entirely. Only for an
+  - Zeros (rule 3): `0 * A` collapses to a zero term with a one-point sparsity pattern
+    instead of `A`'s full stencil, and `A + 0` / `0 + A` drops the zero term from the tree
+    entirely. Steady-state 2D `assemble!` 456 µs against 530 µs, 14% faster. Only for an
     `Integer` coefficient -- `0.0 * A` keeps its term. See `_wrap_scale` below for why
     (gpena/Bramble.jl#240): that collapse reads the coefficient's *value*, so allowing it on
     a `Float64` would make `form`'s return type depend on a number the compiler need not
     know.
-  - `c1 * (c2 * A)` folds to `(c1 * c2) * A` when both coefficients are static numbers. Not
-    across a `Ref`, whose value can change after the form is built, nor a `Rational`
-    (`_folds`): `op / 2` builds `1 // 2`, and checked `Rational` products overflow where the
-    floats they stand for do not (gpena/Bramble.jl#633).
+  - Nested scales (rule 4): `c1 * (c2 * A)` folds to `(c1 * c2) * A` when both coefficients
+    are static numbers. First 2D `form` and `assemble` 873 ms against 945 ms, steady-state
+    3D 407 µs against 422 µs. Not across a `Ref`, whose value can change after the form is
+    built, nor a `Rational` (`_folds`): `op / 2` builds `1 // 2`, and checked `Rational`
+    products overflow where the floats they stand for do not (gpena/Bramble.jl#633).
+  - Same mesh (`same_mesh`, not in this pass): `πₕ(u)` read on the mesh it interpolates
+    from is the identity, on a plain mesh only (a ghost mesh's layer is read through the
+    clamped physical nodes, `_same_mesh_rule`). Which two meshes meet is known only once
+    a block binds its leaves, so this pass keeps `πₕ(u)` in the stored tree and the
+    stencil decides (`_same_mesh_stencil`, operators/interpolation.jl): the point's own
+    column, weight one, no `locate_cell`, and a pattern without the other corners'
+    explicit zeros.
+    Steady-state 2D `assemble!` 56-71 µs against 260-328 µs, 4.6x faster, and 3D
+    200-236 µs against 410-511 µs, 2.1x (one thread, 61x57 and 17x15x16 points; the notes
+    time the dropped-node prototype the `Union` ruled out). It is for `πₕ` written where
+    two meshes may coincide (a form over the leaves of a composite space, some on one
+    mesh, or two spaces sharing one); interpolating a space onto itself is not a form
+    anyone writes for its own sake.
 
 A sum is otherwise kept as written: `c * A + c * B`, `c1 * A + c2 * A` and two inner
-products sharing an argument each stay two routed terms. Rules merging them were measured
-and removed (gpena/Bramble.jl#771, `docs/notes/internals/simplify_rules.md`).
+products sharing an argument each stay two routed terms. Rules merging them (1, 2 and 7)
+were measured and removed; of the candidate rules, four were measured and dropped and two
+were not built (`simplify_rules.md`).
 
-Two more rules reach one layer deeper, into `BilinearProduct`/`LinearProduct` (the nodes
-`innerₕ`/`inner₊`/... build), because leaving them out would mean either a
-correctness gap (a component-mixing sum inside one inner product currently has no valid
-routing at all) or a documented dead end (a hidden scalar defeating symmetry detection):
+Four more rules are needed for correctness and carry no timing (rules 5, 6, 8 and 9). The
+first three reach one layer deeper, into `BilinearProduct`/`LinearProduct` (the nodes
+`innerₕ`/`inner₊`/... build):
 
-  - `⟨c * u, v⟩` / `⟨u, c * v⟩` lifts the scalar out to `c * ⟨u, v⟩`, exposing it to the
-    nested-scale fold above and to `symmetry.jl`'s structural shape check, which only
-    recognises `⟨L(u), L(v)⟩` when nothing else sits between the product and its arguments.
-  - `⟨u, v(i) + v(j)⟩` (or the mirror on the trial side) distributes to
-    `⟨u, v(i)⟩ + ⟨u, v(j)⟩` -- but *only* when `i ≠ j` (or one side names a component the
-    other does not): that shape has no valid single-term routing today
+  - Scalar lift (rule 5): `⟨c * u, v⟩` / `⟨u, c * v⟩` lifts the scalar out to
+    `c * ⟨u, v⟩`, exposing it to the nested-scale fold above and to `symmetry.jl`'s
+    structural shape check, which only recognises `⟨L(u), L(v)⟩` when nothing else sits
+    between the product and its arguments.
+  - Component distribution (rule 6): `⟨u, v(i) + v(j)⟩` (or the mirror on the trial side)
+    distributes to `⟨u, v(i)⟩ + ⟨u, v(j)⟩` -- but *only* when `i ≠ j` (or one side names a
+    component the other does not): that shape has no valid single-term routing
     (`test_component_or_nothing`/`trial_component_or_nothing`, `block_extract.jl`, throw on
     it), so distributing is the only way to assemble it at all. A same-component sum, the
     ordinary `innerₕ(uₕ, v + 2 * D₋ₓ(v))` case, is left as the single term it already is.
+  - Dirac split (rule 8): `⟨a + δ, v⟩ -> ⟨a, v⟩ + ⟨δ, v⟩` when the sum holds a Dirac
+    source, so each term gets its own weight, none for the Dirac one (`_split_dirac_sum`).
+  - Wrapper distribution (rule 9): a difference, average, jump, shift or restriction over a
+    component-mixing sum distributes over it, `D₋ₓ(v(1) + v(2)) -> D₋ₓ(v(1)) + D₋ₓ(v(2))`,
+    so that sum assembles whatever wraps it (gpena/Bramble.jl#759).
 
 A `ShiftNode` is simplified inside but kept as built: `Shift₀(u)` stays, and nested shifts
 are not merged, since the amount is a runtime field (gpena/Bramble.jl#530).
 
-A difference, average, jump, shift or restriction over a component-mixing sum distributes
-over it, `D₋ₓ(v(1) + v(2)) -> D₋ₓ(v(1)) + D₋ₓ(v(2))`, so that sum assembles whatever wraps
-it (gpena/Bramble.jl#759).
-
 What is not attempted otherwise: this stops at `BilinearProduct`/`LinearProduct`/
 `ShiftNode` and does not descend into differences, averages, jumps, restrictions or
 interpolation -- a scalar or shift buried one layer further in (`D₋ₓ(2 * u)`, say) is not
-reached. Nor does it fold `πₕ(u)` away when the space it interpolates from is the one `u` is
-assembled against: that equality is only known once a concrete trial space is available,
-which a context-free rewrite over the expression alone does not have. Since gpena/Bramble.jl#10 that space is
-supplied by `_bind_interp_spaces` at block time, so the fold is available to a pass that
-runs there -- not to this one.
+reached.
 
 Bit-exact with the unsimplified AST for finite coefficients: every rule is an algebraic
 identity over the scalars, grid functions and components involved. The one exception is the

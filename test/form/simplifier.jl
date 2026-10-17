@@ -4,6 +4,7 @@ using Test
 using Bramble
 using LinearAlgebra: Diagonal, issymmetric, isposdef
 using SparseArrays: nnz
+using Random: seed!
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 using Bramble:
                D₋ᵧ,
@@ -14,6 +15,7 @@ using Bramble:
                GridFunctionScale,
                BilinearProduct,
                LinearProduct,
+               InterpolationNode,
                DiracSource,
                ShiftNode,
                shift_op,
@@ -814,6 +816,24 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     # same matrix: this pass may change how a form is routed, never what it computes.
     @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v) + 2.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
           2.0 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))))
+end
+
+# The `same_mesh` rule of gpena/Bramble.jl#771 (`_same_mesh_stencil`,
+# operators/interpolation.jl) acts in the stencil, after this pass: `πₕ(u)` stays in the
+# stored tree, which is the same tree, of the same type, whether or not the two spaces
+# share a mesh. Its matrices are tested in test/form/interpolation_operator.jl.
+_rt_interp(W1, W2) = form(W1, W2, (u, v) -> innerₕ(πₕ(u), v) + inner₊ₓ(D₋ₓ(πₕ(u)), D₋ₓ(v)))
+
+@testset "πₕ forms: the stored tree" begin
+    seed!(771)
+    Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+    W, W2 = gridspace(mesh(Ω, (9, 8), (false, false))), gridspace(mesh(Ω, (7, 6), (false, false)))
+    a = @inferred _rt_interp(W, W)
+    @test simplify_ast(a.ast) === a.ast
+    @test _infers(_rt_interp, (typeof(W), typeof(W)))
+    @test typeof(a.ast) === typeof(_rt_interp(W, W2).ast) === typeof(_rt_interp(W2, W).ast)
+    @test a.ast.left_op.left_op isa InterpolationNode
+    @test a.ast.right_op.left_op.inner_op isa InterpolationNode
 end
 
 end # module FormSimplifierTests
