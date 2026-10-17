@@ -91,7 +91,9 @@ jobs:
     needs: changed
     if: ${{ needs.changed.outputs.run == 'true' }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120  # warm macOS took 64 min before the ghost tests; a cold cache adds ~27 min
+    # macOS took 118 of its 120 minutes on 2026-10-16 (a cold cache's 30 min of precompiling,
+    # then 87 min of tests) before the ghost-dynamics tests (#791) landed; ubuntu runs faster.
+    timeout-minutes: ${{ matrix.os == 'macOS-latest' && 180 || 120 }}
     permissions:
       contents: read
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
