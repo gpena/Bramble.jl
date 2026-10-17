@@ -347,7 +347,7 @@ for every `σ ≠ 0`. In floating point a small `σ` costs accuracy, since `−1
 `A`'s entries: with `σ = γ / hₘₐₓ` the relative difference from the `mean_zero` solve is
 about `1e-14 / γ` on the meshes tested (`1e-15` for `γ ≥ 1`, `1e-8` at `γ = 1e-6`, `1e-2`
 at `γ = 1e-12`). Choose `γ ≥ 1e-2` for ten digits; a large `σ` costs nothing.
-`K`, `K'` and `transpose(K)` are all accepted.
+`K`, `K'`, `transpose(K)` and `transpose(K')` are all accepted.
 
 `σ` is `K.σ`, the value read when `K` was last assembled: after changing a `Ref` factor of
 `σ`, call [`assemble!`](@ref)`(K, a)` before solving.
@@ -415,6 +415,18 @@ function pde_solve(Kt::Union{Adjoint{<:Any, <:RankOneUpdate}, Transpose{<:Any, <
     A0 = _rank_one_sparse(K.A)
     A = Kt isa Adjoint ? adjoint(A0) : transpose(A0)
     return pde_solve(RankOneUpdate(A, f(K.σ), f.(K.wt), f.(K.ws)), F; kwargs...)
+end
+
+# `transpose(K')` and `(transpose(K))'`: both are `conj(K)`, entry by entry, with `wₛ` and
+# `wₜ` in their places.
+function pde_solve(
+        Kc::Union{Transpose{<:Any, <:Adjoint{<:Any, <:RankOneUpdate}},
+            Adjoint{<:Any, <:Transpose{<:Any, <:RankOneUpdate}}},
+        F::AbstractVector; kwargs...)
+    K = parent(parent(Kc))
+    return pde_solve(
+        RankOneUpdate(conj(_rank_one_sparse(K.A)), conj(K.σ), conj.(K.ws), conj.(K.wt)), F;
+        kwargs...)
 end
 
 const _WrappedSparse = Union{Adjoint{<:Any, <:SparseMatrixCSC},

@@ -18,6 +18,7 @@ import Bramble
 using Bramble: RankOneUpdate
 using LinearAlgebra: norm, dot, lu, I
 using SparseArrays: SparseMatrixCSC, sparse, spzeros, spdiagm
+using Random: Random
 using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS
 
 function random_mesh(seed, ranges, n)
@@ -253,26 +254,52 @@ zerosum(n) = (z = collect(range(-1.0, 1.0; length = n)); z .- sum(z) / n)
     end
     _, Ω = MESHES[2]
     _, A, w, F, _ = neumann_system(Ω)
-    z = zerosum(size(A, 1))
+    n = size(A, 1)
+    z = zerosum(n)
     Aδ = A + 1.0e-10 * spdiagm(0 => w)
     ub = (big.(Matrix(Aδ)) + big.(z) * big.(z)') \ big.(F)
     u = pde_solve(RankOneUpdate(Aδ, 1.0, z, z), F)
     # badly conditioned: the bordered solve keeps three digits (6e-4), as the dense LU does
     @test Float64(norm(u - ub) / norm(ub)) <= 2.0e-3
+    # the threshold itself: a reaction `c w` puts `‖A 1‖∞` at about ρ ε ‖A‖∞; ρ = 5 counts
+    # as constants in the kernel (refused) and ρ = 12 does not (solved)
+    ρ(B) = norm(B * ones(n), Inf) / (eps() * norm(B, Inf))
+    Aρ(r) = A + (r * eps() * norm(A, Inf) / maximum(w)) * spdiagm(0 => w)
+    @test 4.5 <= ρ(Aρ(5)) <= 5.5 && 11.5 <= ρ(Aρ(12)) <= 12.5
+    @test_throws ArgumentError pde_solve(RankOneUpdate(Aρ(5), 1.0, w, z), F)
+    @test all(isfinite, pde_solve(RankOneUpdate(Aρ(12), 1.0, w, z), F))
+    # the functional's side: refused when |1ᵀwₜ| ≤ 8 ε ‖wₜ‖₁, solved above it
+    s(x) = abs(sum(x)) / (eps() * norm(x, 1))
+    zs(r) = z .+ r * eps() * norm(z, 1) / n
+    @test 3 <= s(zs(4)) <= 5 && s(zs(1.0e4)) > 9.0e3
+    @test_throws ArgumentError pde_solve(RankOneUpdate(A, 1.0, w, zs(4)), F)
+    u = pde_solve(RankOneUpdate(A, 1.0, w, zs(1.0e4)), F)
+    # 1ᵀ(A + wₛ wₜᵀ) u = 1ᵀF with 1ᵀA = 0 fixes wₜᵀu; with 1ᵀwₜ near 1e-12 the system is
+    # that ill conditioned, and two digits survive (4e-3)
+    @test dot(zs(1.0e4), u) ≈ sum(F) / sum(w) rtol = 2.0e-2
 end
 
 @testset "Rank-one solve: K' and transpose(K)" begin
     _, Ω = MESHES[2]
     _, A, w, F, _ = neumann_system(Ω)
     v = assemble(form(gridspace(Ω), v -> innerₕ(x -> 1 + x[1], v)))
-    for σ in (2.0, 2.0 - 1.0im), ws in (w, 1.0im .* w)
-        K = RankOneUpdate(A, σ, ws, v)
-        M = Matrix(A) + σ * ws * transpose(v)
+    n = size(A, 1)
+    # unsymmetric, and complex, so that A, Aᵀ, Aᴴ and conj(A) all differ
+    Au = A + spdiagm(1 => fill(0.7, n - 1))
+    Ac = A + spdiagm(1 => fill(0.7 + 0.4im, n - 1))
+    for B in (Au, Ac), σ in (2.0, 2.0 - 1.0im), ws in (w, 1.0im .* w)
+        K = RankOneUpdate(B, σ, ws, v)
+        M = Matrix(B) + σ * ws * transpose(v)
         @test relerr(pde_solve(K', F), M' \ F) <= 1.0e-10
         @test relerr(pde_solve(transpose(K), F), transpose(M) \ F) <= 1.0e-10
+        @test relerr(pde_solve(transpose(K'), F), conj(M) \ F) <= 1.0e-10
+        @test relerr(pde_solve(transpose(K)', F), conj(M) \ F) <= 1.0e-10
         # a sparse part built lazily wrapped, by hand, is materialised
-        Ka = RankOneUpdate(A', σ, ws, v)
-        @test relerr(pde_solve(Ka, F), (Matrix(A)' + σ * ws * transpose(v)) \ F) <= 1.0e-10
+        Ka = RankOneUpdate(B', σ, ws, v)
+        @test relerr(pde_solve(Ka, F), (Matrix(B)' + σ * ws * transpose(v)) \ F) <= 1.0e-10
+        Kb = RankOneUpdate(transpose(B), σ, ws, v)
+        @test relerr(pde_solve(Kb, F),
+            (transpose(Matrix(B)) + σ * ws * transpose(v)) \ F) <= 1.0e-10
     end
     # σ and the vectors are read from the parent at solve time, after a refill
     W = gridspace(Ω)
@@ -364,14 +391,14 @@ end
 
 # The dense matrix is 25 MB here; the solve stays within the bordered system's size.
 @testset "Rank-one solve: sparse memory" begin
-    Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (41, 43), (false, false))
+    Ω = random_mesh(6, (interval(0.0, 1.0), interval(0.0, 1.0)), (41, 43))
     W, A, w, F, Fc = neumann_system(Ω)
     K = assemble(form(W, W, (u, v) -> ∇form(u, v) + innerₕ(1, u) * innerₕ(1, v)))
     pde_solve(K, Fc)
     bytes = @allocated pde_solve(K, Fc)
     @test bytes < 64 * Base.summarysize(A)
     @test 8 * length(F)^2 > 2 * 64 * Base.summarysize(A)
-    @test relerr(pde_solve(K, Fc), pde_solve(A, Fc; mean_zero = w)) <= 1.0e-11
+    @test relerr(pde_solve(K, Fc), pde_solve(A, Fc; mean_zero = w)) <= 1.0e-10
 end
 
 # Small σ: the corner −1/σ dwarfs A's entries and the bordered solve loses about
@@ -444,6 +471,16 @@ WITH_3D_TESTS && @testset "Rank-one solve: 3D" begin
         @test relerr(pde_solve(K, F), (Matrix(A) + σ * w * w') \ F) <= 1.0e-9
     end
     @test_throws ArgumentError pde_solve(RankOneUpdate(A, 1.0, w, zerosum(size(A, 1))), F)
+    # a true pure-Neumann matrix above 1 ε: 40³ random points read ρ = 1.12
+    Random.seed!(7)
+    Ωb = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+        (40, 40, 40), (false, false, false))
+    Wb = gridspace(Ωb)
+    Ab = assemble(form(Wb, Wb, ∇form))
+    nb = size(Ab, 1)
+    @test norm(Ab * ones(nb), Inf) > eps() * norm(Ab, Inf)
+    @test_throws ArgumentError pde_solve(RankOneUpdate(Ab, 1.0, ones(nb), zerosum(nb)),
+        ones(nb))
 end
 
 end # module RankOneSolveTests
