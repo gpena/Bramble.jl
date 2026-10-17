@@ -72,3 +72,27 @@ Bramble.component_range(Vₕ, 1), Bramble.component_ranges(Vₕ)   # DoF slice(s
 
 reshape(uₕ), reshape(vₕ)               # D-dimensional array view(s) of flat coefficients
 ```
+
+## Ghost points and constrained spaces
+
+`gridspace(Ωₕ; ghosts = :boundary)` (or a tuple of facet names, `ghosts = (:xmax,)`) adds one
+layer of ghosts outside those facets. `constrained(Wₕ, u -> (:F => operator => data, ...))`
+closes it: each relation (`∂ₙ`, `∂ₙₙ`, `jumpₙ`, or `u` for Dirichlet) determines the ghosts of
+its facet, and the constrained space `C` carries `E` and `d` with `u_pad = E u + d`.
+
+```julia
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+C = constrained(Wₕ, u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => u => g))
+vₕ = Bramble.lift(C, uₕ)                     # E u + d on the padded space; lift is public
+```
+
+- `lift` is `public`, not exported: write `Bramble.lift` (`lift!`, `update_ghosts!` likewise
+  for the in-place and time-loop forms; `GhostVector` and `update_ghosts!` are exported).
+- A ghosted facet with only `u => g` is refused: its ghosts would be unknowns no equation
+  reads. Give it a ghost relation too, or drop it from `ghosts`.
+- The same label given as `u => g` in `constrained` and as `dirichlet` in `assemble` is an
+  `ArgumentError`.
+- `Rₕ` and `avgₕ` refuse on a ghost space (an `ArgumentError` naming `gridspace(Ωₕ)` and
+  `lift`): restrict on the plain space, then lift.
+- Data in time, `:F => u => g(x, t)`: `lift(C, u, t)` and `semidiscretize`; the calls
+  without `t` refuse.

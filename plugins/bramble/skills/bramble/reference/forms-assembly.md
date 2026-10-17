@@ -33,6 +33,27 @@ issymmetric(a), isposdef(a)                          # symbolic checks on a Bili
 `dirac`/`DiracSource` build a point source. `dirichlet_constraints` returns a
 `DirichletConstraint`, the pairs `assemble`/`dirichlet_bc!` consume.
 
+### Ghost spaces
+
+On a constrained ghost space (`meshes-spaces.md`) the load is `Eᵀ(F − A d)`, so it needs the
+matrix: write `assemble(a, l)` (or `assemble!(A, F, a, l)`), never `assemble(l)` where the
+closure has `d ≠ 0`; `assemble(l)`, `l(v)` and `evaluate!` refuse with an `ArgumentError`
+naming `assemble(a, l)`. `dirichlet` and `symmetrize` work when every ghost is eliminated by a
+relation and none by `u => g`. `assemble_parallel!` refuses (`assemble!` already runs under
+the mesh's policy). `matrix_free_operator(a)` works on ghost forms (one product at a time per
+operator), and `kronecker_operator(a)` and the `fdm_*` solvers where the closure is
+separable; elsewhere they refuse with an `ArgumentError`. The table `Support on ghost spaces`
+in the documentation's `internals/space.md` lists every operation.
+
+### Rank-one terms
+
+`σ * innerₕ(g, u) * innerₕ(h, v)` (a penalty, such as `innerₕ(1, u) * innerₕ(1, v)` to fix
+the constant of pure Neumann) is a `Bramble.RankOneUpdate`: `assemble` returns `A` plus the
+rank-one part, never a dense matrix, and `pde_solve` solves the bordered system. One
+rank-one term per form, scalar spaces only (a composite ghost space refuses).
+`assemble!(K, a)` rereads a `Ref` σ; written `r[]` it is frozen at `form`. A large σ costs
+nothing; a small one loses digits, so take σ of order `1 / hₘₐₓ(Ωₕ)` or more.
+
 ## Kronecker path
 
 `kronecker_operator(a)` builds a matrix-free `KroneckerLinearOperator` for a separable
