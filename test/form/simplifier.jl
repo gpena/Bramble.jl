@@ -30,6 +30,8 @@ using Bramble:
                Innerplus,
                D₋₂,
                D₋ₓ,
+               D₊ₓ,
+               Dcₓ,
                D₊ᵧ,
                Mₓ,
                jumpₓ,
@@ -42,8 +44,8 @@ using Bramble:
                backward_shift
 
 # `simplify_ast` rewrites only the algebraic layer (`OperatorAdd`, `OperatorScale`,
-# `GridFunctionScale`) that `ast.jl`'s `+`/`*`/`/` overloads build, into a tree that routes
-# to fewer mesh sweeps (rules 1-3). Every check here is against either
+# `GridFunctionScale`) that `ast.jl`'s `+`/`*`/`/` overloads build: zero terms drop out and
+# nested static scales fold. Every check here is against either
 # a hand-built reference matrix or a form assembled through a completely different call --
 # never against another call to the code under test.
 
@@ -53,13 +55,8 @@ using Bramble:
     A = IdentityOperator(Wₕ)   # a leaf standing in for an arbitrary operator
     B = D₋ₓ(A)                 # a second leaf, structurally different from `A`
 
-    # Like-term combining fires only when the two subtrees' equality is settled by their types
-    # alone -- `_statically_equal`, i.e. `Base.issingletontype`. `A` and
-    # `B` above are *not* singletons: `IdentityOperator` carries the grid space in a field, so
-    # two of them are only equal by a run-time comparison. `S` and `T` are the singleton
-    # counterparts -- an inner product of a trial and a test function, which is the shape every
-    # form built from operators alone actually has -- and they are what the combining rules are
-    # checked against below.
+    # `S` and `T` are inner products of a trial and a test function, the shape every form
+    # built from operators alone has; `A` and `B` carry the grid space in a field.
     S = innerₕ(trial_function(Wₕ), test_function(Wₕ))
     T = inner₊ₓ(D₋ₓ(trial_function(Wₕ)), D₋ₓ(test_function(Wₕ)))
 
@@ -98,120 +95,36 @@ using Bramble:
         @test r.inner_op.inner_op === A
     end
 
-    @testset "Combining like terms" begin
-        # `S + S -> 2 * S`
-        c = simplify_ast(S + S)
-        @test c isa OperatorScale
-        @test c.scalar == 2
-        @test c.inner_op === S
-
-        # `c1 * S + c2 * S -> (c1 + c2) * S`
-        c = simplify_ast(2 * S + 3 * S)
-        @test c isa OperatorScale
-        @test c.scalar == 5
-        @test c.inner_op === S
-
-        # `S - S -> 0`
-        @test simplify_ast(S - S) isa ZeroOperator
-
-        # structurally different subtrees are never merged, however they compare numerically
-        @test !(simplify_ast(S + T) isa OperatorScale)
-        @test !(simplify_ast(A + B) isa OperatorScale)
-    end
-
     @testset "Int folding throws on overflow" begin
         # gpena/Bramble.jl#704: wrapping `Int` arithmetic turned `2^32 * (2^32 * S)` into a
-        # `ZeroOperator` and flipped the sign of a `typemax(Int)` like-term sum.
+        # `ZeroOperator`.
         u, v = trial_function(Wₕ), test_function(Wₕ)
         @test_throws OverflowError simplify_ast(2^32 * (2^32 * S))
-        @test_throws OverflowError simplify_ast(typemax(Int) * S + 2 * S)
         @test_throws OverflowError simplify_ast(innerₕ(2^32 * u, 2^32 * v))
-        # the largest products and sums that fit still fold exactly
+        # the largest products that fit still fold exactly
         c = simplify_ast(2^31 * (2^31 * S))
         @test c isa OperatorScale && c.scalar === 2^62 && c.inner_op === S
-        c = simplify_ast((typemax(Int) - 2) * S + 2 * S)
-        @test c isa OperatorScale && c.scalar === typemax(Int) && c.inner_op === S
         c = simplify_ast(innerₕ(2^31 * u, 2^31 * v))
         @test c isa OperatorScale && c.scalar === 2^62 && c.inner_op === S
-    end
-
-    @testset "Duplicate terms print as one" begin
-        a_dup = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(u, v))
-        @test expression(a_dup) == "2 * innerₕ(u, v)"
-    end
-
-    @testset "Data-carrying terms are never combined" begin
-        # The gate, stated as tests: equality decided by reading a field at run time would make
-        # this method's return type depend on that read, and `form`'s return type a `Union` of
-        # the combined and uncombined trees -- which is what Enzyme rejects.
-        # So a node holding data is left as the sum it was written as,
-        # *even when both sides hold the identical object*. One extra routed term, same numbers.
-        vₕ = Rₕ(Wₕ, x -> x[1])
-
-        same_array = simplify_ast(2 * (vₕ * B) + 3 * (vₕ * B))
-        @test same_array isa OperatorAdd
-        @test same_array.left_op isa OperatorScale
-        @test same_array.right_op isa OperatorScale
-
-        # `IdentityOperator` carries its grid space, so it is in the same boat as the array
-        @test simplify_ast(A + A) isa OperatorAdd
-        @test !(simplify_ast(A - A) isa ZeroOperator)
-
-        # ... and the numbers are unchanged by not combining, which is the only thing that
-        # may never move. Checked through `form`, against the single-term form scaled by hand.
-        five = form(Wₕ, Wₕ, (u, v) -> 2 * innerₕ(vₕ * u, v) + 3 * innerₕ(vₕ * u, v))
-        one_term = form(Wₕ, Wₕ, (u, v) -> innerₕ(vₕ * u, v))
-        # The shared test function factors out, but the two data-carrying trial arguments
-        # stay two summands inside it: `⟨2vₕu + 3vₕu, v⟩`, not `⟨5vₕu, v⟩`.
-        @test resolve_form_ast(five) isa BilinearProduct
-        @test resolve_form_ast(five).left_op isa OperatorAdd
-        @test Matrix(assemble(five)) ≈ 5 .* Matrix(assemble(one_term))
-
-        # two independently-built grid functions were never merged even before the gate --
-        # only object identity ever counted -- but the common `2` still factors out
-        wₕ = Rₕ(Wₕ, x -> x[1])  # same values, different array
-        different = simplify_ast(2 * (vₕ * B) + 2 * (wₕ * B))
-        @test different isa OperatorScale
-        @test different.inner_op isa OperatorAdd
-        @test different.inner_op.left_op isa GridFunctionScale
-        @test different.inner_op.right_op isa GridFunctionScale
-    end
-
-    @testset "Distributive factoring" begin
-        # `c * A + c * B -> c * (A + B)`, `A` and `B` structurally different
-        f = simplify_ast(2 * A + 2 * B)
-        @test f isa OperatorScale
-        @test f.scalar == 2
-        @test f.inner_op isa OperatorAdd
-        @test f.inner_op.left_op === A
-        @test f.inner_op.right_op === B
-
-        # a shared dynamic coefficient does not: `Ref` identity is a run-time value
-        # (gpena/Bramble.jl#527), so the sum keeps both scaled terms
-        β = Ref(1.5)
-        f = simplify_ast(β * A + β * B)
-        @test f isa OperatorAdd
-        @test f.left_op.scalar === β
-        @test f.right_op.scalar === β
-
-        # different coefficients never factor
-        g = simplify_ast(2 * A + 3 * B)
-        @test g isa OperatorAdd
     end
 
     @testset "Idempotent and recursive" begin
         vₕ_deep = Rₕ(Wₕ, x -> x[1])
 
-        # simplifying an already-simplified tree is a no-op
-        t = simplify_ast(2 * A + 2 * B)
+        # simplifying an already-simplified tree is a no-op, here one the pass rebuilt
+        t = simplify_ast(2 * (3 * A) + (0 * T + 1 * B))
+        @test t isa OperatorAdd && t.right_op === B
         @test simplify_ast(t) === t
 
-        # the rules apply however deep the algebra sits, not only at the root. `S`, not `A`:
-        # the innermost step is a like-term combine, which needs a singleton leaf.
-        nested = simplify_ast(S + (0 * T + (1 * S)))
-        @test nested isa OperatorScale
-        @test nested.scalar == 2
-        @test nested.inner_op === S
+        # the rules apply however deep the algebra sits, not only at the root: a zero term
+        # drops, a unit scale goes and a nested scale folds, three sums down
+        nested = simplify_ast(S + (0 * T + (1 * (2 * (3 * S)))))
+        @test nested isa OperatorAdd
+        @test nested.left_op === S
+        @test nested.right_op isa OperatorScale
+        @test nested.right_op.scalar == 6
+        @test nested.right_op.inner_op === S
+        @test simplify_ast(nested) === nested
 
         # the zero and identity collapses themselves are leaf-agnostic -- they read the
         # coefficient, not the subtree -- so they still reach a data-carrying leaf
@@ -251,30 +164,8 @@ end
         @test nnz(A_zero_float) > nnz(A_ref)
     end
 
-    @testset "like terms: two sweeps merge into one" begin
-        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(u, v))
-        @test resolve_form_ast(a) isa OperatorScale
-        @test resolve_form_ast(a).scalar == 2
-        @test Matrix(assemble(a)) ≈ 2 .* H
-    end
-
-    # Checked against two independent single-term forms.
-    @testset "distributive factoring" begin
-        Ax = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))))
-        Ay = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)))))
-
-        a = form(
-            Wₕ, Wₕ, (u, v) -> 2 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + 2 * inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v))
-        )
-        ast = resolve_form_ast(a)
-        @test ast isa OperatorScale
-        @test ast.scalar == 2
-        @test ast.inner_op isa OperatorAdd
-        @test Matrix(assemble(a)) ≈ 2 .* (Ax + Ay)
-    end
-
-    # The same `Ref` on both terms is not combined (gpena/Bramble.jl#527), and the two
-    # terms must still track its updates.
+    # Two terms scaled by the same `Ref` stay two terms, and both track its updates
+    # (gpena/Bramble.jl#527).
     @testset "RefValue coefficient tracks updates" begin
         β = Ref(1.0)
         a = form(Wₕ, Wₕ, (u, v) -> β * innerₕ(u, v) + β * innerₕ(u, v))
@@ -286,11 +177,59 @@ end
     end
 end
 
-# Rules 4-7: scalar lifting out of an inner product, component distribution on a
-# component-mixing sum inside one, nested grid-function scales, and shifts kept as built.
-# Each reaches one layer deeper than rules 1-3 (into `BilinearProduct`/`LinearProduct`/
-# `ShiftNode`), so every one gets its own structural check plus a numeric check against an
-# independent reference, exactly as rules 1-3 did above.
+# A sum is kept as written (gpena/Bramble.jl#771): no two terms are merged, whatever they
+# share. The tree keeps every term and coefficient, and each matrix equals the sum of its
+# terms assembled one form at a time, on a non-uniform mesh.
+_rt_two_term(θ::Float64, W) = form(W, W,
+    (u, v) -> θ * innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+
+@testset "Sums kept as written" begin
+    Wₕ = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8),
+        (false, false)))
+    A = IdentityOperator(Wₕ)
+    B = D₋ₓ(A)
+    M(g) = Matrix(assemble(form(Wₕ, Wₕ, g)))
+
+    @testset "the tree" begin
+        # one `Ref` on both terms stays on both, by identity, and is never read
+        β = Ref(1.5)
+        f = simplify_ast(β * A + β * B)
+        @test f isa OperatorAdd
+        @test f.left_op.scalar === β && f.right_op.scalar === β
+        @test f.left_op.inner_op === A && f.right_op.inner_op === B
+        # a difference of two equal terms is not collapsed to zero
+        d = simplify_ast(A - A)
+        @test d isa OperatorAdd && !(d isa ZeroOperator)
+    end
+
+    @testset "the matrix" begin
+        # the same grid-function scaling in two terms
+        gₕ = Rₕ(Wₕ, x -> 1.0 + x[1])
+        @test M((u, v) -> 2 * innerₕ(gₕ * u, v) + 3 * innerₕ(gₕ * u, v)) ≈
+              5 .* M((u, v) -> innerₕ(gₕ * u, v))
+        # four terms, two pairs sharing an argument, one scaled
+        @test M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(Dcₓ(u), D₊ᵧ(v)) +
+                          innerₕ(D₊ᵧ(u), D₋ᵧ(v)) + 2 * innerₕ(D₋ₓ(u), D₋ᵧ(v))) ≈
+              M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) + M((u, v) -> innerₕ(Dcₓ(u), D₊ᵧ(v))) +
+              M((u, v) -> innerₕ(D₊ᵧ(u), D₋ᵧ(v))) + 2 .* M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+        # two distinct `Ref`s, one changed after `form`: the next assembly reads it
+        a, b = Ref(2.0), Ref(3.0)
+        coef = form(Wₕ, Wₕ,
+            (u, v) -> innerₕ(a * D₋ₓ(u), D₊ₓ(v)) + innerₕ(b * D₋ₓ(u), D₋ᵧ(v)))
+        @test simplify_ast(coef.ast) === coef.ast
+        a[] = 5.0
+        @test Matrix(assemble(coef)) ≈ 5.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
+                                       3.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+    end
+
+    # a runtime `Float64` coefficient on one of two terms keeps `form` concrete
+    @test isconcretetype(only(Base.return_types(_rt_two_term, (Float64, typeof(Wₕ)))))
+end
+
+# Scalar lifting out of an inner product, component distribution on a component-mixing sum
+# inside one, nested grid-function scales, and shifts kept as built. Each reaches one layer
+# deeper than the rules above (into `BilinearProduct`/`LinearProduct`/`ShiftNode`), so every
+# one gets its own structural check plus a numeric check against an independent reference.
 @testset "Scalar lifting out of inner products" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, true))
     Wₕ = gridspace(Ωₕ)
@@ -329,13 +268,15 @@ end
         @test !isposdef(a_neg)
     end
 
-    # A lifted scalar feeds the combine rule.
-    @testset "lifted scalar: bilinear combine" begin
+    # Each term of a sum lifts its own scalar; the two terms stay two.
+    @testset "lifted scalar: bilinear sum" begin
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(2 * D₋ₓ(u), v) + innerₕ(3 * D₋ₓ(u), v))
         ast = resolve_form_ast(a)
-        @test ast isa OperatorScale
-        @test ast.scalar == 5
-        @test ast.inner_op isa BilinearProduct
+        @test ast isa OperatorAdd
+        @test ast.left_op isa OperatorScale && ast.left_op.scalar == 2
+        @test ast.right_op isa OperatorScale && ast.right_op.scalar == 3
+        @test ast.left_op.inner_op isa BilinearProduct
+        @test ast.right_op.inner_op isa BilinearProduct
         @test Matrix(assemble(a)) ≈
               5 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v))))
     end
@@ -348,24 +289,20 @@ end
         sf = source_function(x -> x[1] + 1, Val(2))
         l = form(Wₕ, v -> innerₕ(2 * sf, v) + innerₕ(3 * sf, v))
         ast = resolve_form_ast(l)
-        @test ast isa OperatorScale
-        @test ast.scalar == 5
-        @test ast.inner_op isa LinearProduct
+        @test ast isa OperatorAdd
+        @test ast.left_op isa OperatorScale && ast.left_op.scalar == 2
+        @test ast.right_op isa OperatorScale && ast.right_op.scalar == 3
+        @test ast.left_op.inner_op isa LinearProduct
         @test assemble(l) ≈ 5 .* assemble(form(Wₕ, v -> innerₕ(sf, v)))
     end
 
-    # Lifting and combining a DiracSource.
+    # Lifting a DiracSource.
     @testset "lifting: DiracSource, linear" begin
         # `dirac(...)` (a `DiracSource`) is a genuine `LazyOp` source exactly like
-        # `source_function` above, so it lifts and combines the same way.
+        # `source_function` above, so it lifts the same way: each coefficient out of its own
+        # inner product, the two terms left two.
         d = dirac((0.3, 0.4), 1.0)
         @test d isa DiracSource
-        # Each coefficient still lifts out of its own inner product. The two terms are *not*
-        # combined into `5 * innerₕ(d, v)`, though: a `DiracSource` carries its points and
-        # strengths in fields, so deciding the two sides are the same subtree would mean
-        # reading those at run time -- and the rule's two outcomes are different node types,
-        # which is what cost `form` its inferred return type. What may
-        # never change is the vector, and it does not.
         l = form(Wₕ, v -> innerₕ(2 * d, v) + innerₕ(3 * d, v))
         ast = resolve_form_ast(l)
         @test ast isa OperatorAdd
@@ -794,14 +731,11 @@ _rt_equal(θ::Float64, W) = form(W, W, (u, v) -> θ * inner₊ₓ(D₋ₓ(u), D�
 _rt_lifted(θ::Float64, W) = form(W, W, (u, v) -> innerₕ(θ * u, v))
 _rt_linear(θ::Float64, W, fₕ) = form(W, v -> θ * innerₕ(fₕ, v))
 
-# Two terms of the *same shape* carrying runtime data. These were the two shapes the `Integer`
-# restriction above did not reach: the like-term rule used to be decided by comparing the two
-# subtrees field by field at run time, so `form` inferred as `Union{..., OperatorAdd},
-# {..., OperatorScale}}` for any sum of same-typed data-carrying terms -- not just the
-# duplicate expressions that limitation was first described as. Two distinct diffusion
+# Two terms of the *same shape* carrying runtime data. A rule deciding whether the two
+# subtrees are equal by comparing them field by field at run time made `form` infer a
+# `Union` of the merged and unmerged trees for any such sum. Two distinct diffusion
 # coefficients in one bilinear form, or two source vectors in one linear form, are the
-# ordinary way to write a model, and both were affected. The rule is now gated on
-# `_statically_equal`, so these infer concretely and the sums assemble as written.
+# ordinary way to write a model: these pin that both infer concretely.
 _rt_two_coeffs(W, g₁, g₂) = form(W, W, (u, v) -> innerₕ(g₁ * u, v) + innerₕ(g₂ * u, v))
 _rt_two_sources(W, g₁, g₂) = form(W, v -> innerₕ(g₁, v) + innerₕ(g₂, v))
 
@@ -816,19 +750,18 @@ _rt_two_sources(W, g₁, g₂) = form(W, v -> innerₕ(g₁, v) + innerₕ(g₂,
 # trade-off has to be a deliberate edit to this test rather than a silent drift either way.
 _rt_runtime_int(n::Int, W) = form(W, W, (u, v) -> n * innerₕ(u, v))
 
-# A runtime component index (gpena/Bramble.jl#529). The `Integer`-factor rule is decided by
-# `_component_free`, a type, so two `2 *` terms on component `i` stay two terms and `form`
-# infers concretely. The distribution gates still read `component_idx` values: whether
-# `v(i) + v(1)` mixes components is known only at run time, so that form's type is a `Union`
-# of the distributed and undistributed trees -- kept on purpose, see `_mixes_components`.
+# A runtime component index (gpena/Bramble.jl#529). Two `2 *` terms on component `i` stay
+# two terms and `form` infers concretely. The distribution gates read `component_idx`
+# values: whether `v(i) + v(1)` mixes components is known only at run time, so that form's
+# type is a `Union` of the distributed and undistributed trees -- kept on purpose, see
+# `_mixes_components`.
 _rt_comp_factor(i::Int, V) = form(V, V, (u, v) -> 2 * innerₕ(u(i), v(i)) + 2 * innerₕ(D₋ₓ(u(i)), v(i)))
 _rt_comp_mixed(i::Int, V) = form(V, V, (u, v) -> innerₕ(u(i), v(i) + v(1)))
 
-# Sums of `Ref`-scaled terms (gpena/Bramble.jl#527). The like-term and factoring rules used to
-# fire when both sides held the *same* `Ref` object, but `cl === cr` on two `RefValue{Float64}`
-# field loads is a run-time value, so `form` inferred a `Union`. `_rt_ref_two` reached the
-# like-term branch (one singleton product), `_rt_ref_shared` the factoring branch (two
-# different products), `_rt_ref_linear` the factoring branch through a linear form.
+# Sums of `Ref`-scaled terms (gpena/Bramble.jl#527). A rule firing when both sides held the
+# *same* `Ref` object made `form` infer a `Union`: `cl === cr` on two `RefValue{Float64}`
+# field loads is a run-time value. `_rt_ref_two` scales one product twice, `_rt_ref_shared`
+# two different products, `_rt_ref_linear` two sources of a linear form.
 _rt_ref_two(β, γ, W) = form(W, W, (u, v) -> β * innerₕ(u, v) + γ * innerₕ(u, v))
 _rt_ref_shared(β, W) = form(W, W, (u, v) -> β * inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + β * innerₕ(u, v))
 _rt_ref_linear(β, W, f, g) = form(W, v -> β * innerₕ(f, v) + β * innerₕ(g, v))
@@ -849,7 +782,6 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     @test _infers(_rt_linear, (Float64, W, typeof(fₕ)))
 
     # Two same-shaped terms carrying distinct runtime data, bilinear and linear.
-    # These infer a concrete type because the like-term rule is gated.
     g₁ = Rₕ(Wₕ, x -> 1.0 + x[1])
     g₂ = Rₕ(Wₕ, x -> 2.0 - x[2])
     @test _infers(_rt_two_coeffs, (W, typeof(g₁), typeof(g₂)))
@@ -878,89 +810,10 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     @test Matrix(assemble(_rt_comp_mixed(2, V₂))) ≈
           M₂((u, v) -> innerₕ(u(2), v(2))) .+ M₂((u, v) -> innerₕ(u(2), v(1)))
 
-    # The rewrites themselves are unchanged for the `Integer` coefficients they are written
-    # for, which is what makes the restriction affordable: the earlier testsets pin them.
-    # A `Float64` coefficient is carried through as written instead. Assembling it
-    # must still give the same matrix: this pass may change how a form is routed, never what
-    # it computes.
-    A = IdentityOperator(Wₕ)
-    B = D₋ₓ(A)
-    @test simplify_ast(2.0 * A + 2.0 * B) isa OperatorAdd
+    # A `Float64` coefficient is carried through as written. Assembling it must give the
+    # same matrix: this pass may change how a form is routed, never what it computes.
     @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v) + 2.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
           2.0 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))))
-end
-
-# --- Shared inner-product arguments ------------------------------------------------- #
-
-using Bramble: D₊ₓ, Dcₓ
-
-function _nprod(x, T)
-    (x isa T ? 1 : 0) +
-    (x isa Union{Bramble.LazyOp, Tuple} ?
-     sum((_nprod(getfield(x, i), T) for i in 1:nfields(x)); init = 0) : 0)
-end
-
-_rt_factor(θ::Float64, W) = form(W, W,
-    (u, v) -> θ * innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(D₋ₓ(u), D₋ᵧ(v)))
-
-@testset "Shared inner-product arguments factor" begin
-    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 8), (false, false))
-    Wₕ = gridspace(Ωₕ)
-    bf(g) = form(Wₕ, Wₕ, g)
-    M(g) = Matrix(assemble(bf(g)))
-
-    # Same trial side, same test side, and a shared argument found three summands back.
-    right = bf((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(D₋ₓ(u), D₋ᵧ(v)))
-    left = bf((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(D₊ᵧ(u), D₊ₓ(v)))
-    deep = bf((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(Dcₓ(u), D₊ᵧ(v)) +
-                        innerₕ(D₊ᵧ(u), D₋ᵧ(v)) + 2 * innerₕ(D₋ₓ(u), D₋ᵧ(v)))
-    @test _nprod(right.ast, BilinearProduct) == 1
-    @test _nprod(left.ast, BilinearProduct) == 1
-    @test _nprod(deep.ast, BilinearProduct) == 3
-    @test Matrix(assemble(right)) ≈ M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
-                                    M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)))
-    @test Matrix(assemble(left)) ≈ M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
-                                   M((u, v) -> innerₕ(D₊ᵧ(u), D₊ₓ(v)))
-    @test Matrix(assemble(deep)) ≈
-          M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
-          M((u, v) -> innerₕ(Dcₓ(u), D₊ᵧ(v))) +
-          M((u, v) -> innerₕ(D₊ᵧ(u), D₋ᵧ(v))) +
-          2 .* M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)))
-
-    # Nothing shared, or the shared argument carries data: left as written.
-    none = bf((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v)) + innerₕ(Dcₓ(u), D₊ᵧ(v)))
-    @test _nprod(none.ast, BilinearProduct) == 2
-    gₕ = Rₕ(Wₕ, x -> 1.0 + x[1])
-    data = bf((u, v) -> innerₕ(gₕ * u, D₊ₓ(v)) + innerₕ(gₕ * u, D₋ᵧ(v)))
-    @test _nprod(data.ast, BilinearProduct) == 2
-
-    # Coefficients move onto the unshared argument, never compared: distinct `Ref`s factor,
-    # and changing one after construction still changes the matrix.
-    a, b = Ref(2.0), Ref(3.0)
-    coef = bf((u, v) -> innerₕ(a * D₋ₓ(u), D₊ₓ(v)) + innerₕ(b * D₋ₓ(u), D₋ᵧ(v)))
-    @test _nprod(coef.ast, BilinearProduct) == 1
-    a[] = 5.0
-    @test Matrix(assemble(coef)) ≈
-          5.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
-          3.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)))
-
-    # The same `Ref` on both terms no longer factors by identity (gpena/Bramble.jl#527), but
-    # a shared argument still merges the two products into one.
-    shared = bf((u, v) -> a * innerₕ(D₋ₓ(u), D₊ₓ(v)) + a * innerₕ(D₋ₓ(u), D₋ᵧ(v)))
-    @test _nprod(shared.ast, BilinearProduct) == 1
-    a[] = 7.0
-    @test Matrix(assemble(shared)) ≈
-          7.0 .* (M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) + M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v))))
-    @test simplify_ast(shared.ast) == shared.ast
-
-    # Component-indexed products never factor, so no component-mixing sum is formed.
-    V2 = Wₕ × Wₕ
-    mixed = form(V2, V2, (p, q) -> innerₕ(D₋ₓ(p(1)), D₊ₓ(q(1))) + innerₕ(D₋ₓ(p(1)), D₊ₓ(q(2))))
-    @test _nprod(mixed.ast, BilinearProduct) == 2
-
-    # A runtime `Float64` coefficient keeps `form` type-stable.
-    @test _infers(_rt_factor, (Float64, typeof(Wₕ)))
-    @test simplify_ast(right.ast) == right.ast
 end
 
 end # module FormSimplifierTests

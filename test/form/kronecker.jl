@@ -511,11 +511,11 @@ end
         @test_throws "axis-2 factor is not symmetric" Bramble._kron_check_device(up)
     end
 
-    # The simplifier merges like terms into a constant scalar inside a side
-    # (`innerₕ(D₋ₓ(u), v) + 0.3 * innerₕ(u, v)` becomes `innerₕ(D₋ₓ(u) + 0.3 * u, v)`), which
-    # the projection carries on axis 1. A `Ref` there is carried beside the factors and read
-    # at every product.
-    @testset "Kronecker: like terms merged" begin
+    # A mass term added to each family is a term of its own (the simplifier keeps a sum as
+    # written). A constant scalar written inside a side, `innerₕ(D₋ₓ(u) + c * u, v)`, the
+    # projection carries on axis 1; a `Ref` there is carried beside the factors and read at
+    # every product.
+    @testset "Kronecker: mass term beside a family" begin
         for n in ((9, 7), (WITH_3D_TESTS ? ((6, 5, 7),) : ())...)
             Wₕ = gridspace(_graded_mesh(n))
             fx = Rₕ(Wₕ, x -> 1 + x[1])
@@ -535,13 +535,14 @@ end
                 @test isapprox(K * x, A * x; rtol = 1e-12)
             end
         end
-        # A `Ref` advection coefficient beside the mass and stiffness terms, merged into the
-        # trial side of `innerₕ` or the test side of `inner₊ₓ`.
+        # A `Ref` advection coefficient beside the mass and stiffness terms, as a term of
+        # its own or inside the trial side of `innerₕ`.
         c = Ref(0.3)
         advection = [
             (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) + c * innerₕ(D₋ₓ(u), v),
             (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) + c * Bramble.inner₊ₓ(D₋ₓ(u), v),
-            (u, v) -> innerₕ(D₋ₓ(u), v) + c * innerₕ(u, v)
+            (u, v) -> innerₕ(D₋ₓ(u), v) + c * innerₕ(u, v),
+            (u, v) -> innerₕ(D₋ₓ(u) + c * u, v)
         ]
         for n in ((17, 13), (WITH_3D_TESTS ? ((6, 5, 7),) : ())...), f in advection
 

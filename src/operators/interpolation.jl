@@ -729,8 +729,8 @@ Which side of a bilinear term an [`InterpolationNode`](@ref) sits on.
 
 A trial-side interpolation names absolute *columns* and leaves the rows to the walked mesh; a
 test-side one names absolute *rows* and leaves the columns to it. The
-side is a type parameter rather than a field so the node stays a singleton the like-term
-simplifier can fold, and so every walk that reads it folds away at compile time.
+side is a type parameter rather than a field so the node stays a singleton, and so every
+walk that reads it folds away at compile time.
 
 The walked mesh is the native side's in both cases: it is the one carrying the quadrature
 weight the product integrates against.

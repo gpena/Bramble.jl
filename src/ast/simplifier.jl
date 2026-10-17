@@ -8,47 +8,37 @@ Most of this rewrites only three node types: `OperatorAdd`, `OperatorScale` and
 `GridFunctionScale` -- exactly what `ast.jl`'s `+`, `*` and `/` overloads build. That matters
 because the router splits work on `OperatorAdd` alone (`_visit_operator_add*` in
 `stencil_eval.jl`); every other node is one routed term, one mesh sweep, however large the
-subtree underneath it. Fewer top-level `OperatorAdd` nodes is therefore fewer sweeps for the
-same matrix or vector:
+subtree underneath it. Two rules act on that layer:
 
-  - `c * A + c * B` (same `c`, different `A`/`B`) factors to `c * (A + B)`: two routed terms
-    become one. Only for an `Integer` `c`, for the same reason the zero collapse below is --
-    "same `c`" is decided by comparing the two coefficients, and a comparison of two runtime
-    numbers is not something the compiler can settle. Nor does a shared `Ref`: two `Ref`s of
-    one type are told apart only by object identity, which is a run-time value too
-    (gpena/Bramble.jl#527). Nor when `A` or `B` names any component (`_component_free`),
-    so a component-mixing sum is never hidden inside the scale (gpena/Bramble.jl#529).
-  - `c1 * A + c2 * A` (same `A`) combines to `(c1 + c2) * A`: two routed terms become one.
-    Not when either `c` is a `Rational` (`_folds`): `op / 2` builds `1 // 2`, and checked
-    `Rational` sums and products overflow or throw where the floats they stand for do not
-    (gpena/Bramble.jl#633). Nested scales do not fold across one either.
   - `0 * A` collapses to a zero term with a one-point sparsity pattern instead of `A`'s full
     stencil, and `A + 0` / `0 + A` drops the zero term from the tree entirely. Only for an
     `Integer` coefficient -- `0.0 * A` keeps its term. See `_wrap_scale` below for why
     (gpena/Bramble.jl#240): that collapse reads the coefficient's *value*, so allowing it on
     a `Float64` would make `form`'s return type depend on a number the compiler need not
     know.
+  - `c1 * (c2 * A)` folds to `(c1 * c2) * A` when both coefficients are static numbers. Not
+    across a `Ref`, whose value can change after the form is built, nor a `Rational`
+    (`_folds`): `op / 2` builds `1 // 2`, and checked `Rational` products overflow where the
+    floats they stand for do not (gpena/Bramble.jl#633).
 
-Three more rules reach one layer deeper, into `BilinearProduct`/`LinearProduct` (the nodes
+A sum is otherwise kept as written: `c * A + c * B`, `c1 * A + c2 * A` and two inner
+products sharing an argument each stay two routed terms. Rules merging them were measured
+and removed (gpena/Bramble.jl#771, `docs/notes/internals/simplify_rules.md`).
+
+Two more rules reach one layer deeper, into `BilinearProduct`/`LinearProduct` (the nodes
 `innerₕ`/`inner₊`/... build), because leaving them out would mean either a
 correctness gap (a component-mixing sum inside one inner product currently has no valid
 routing at all) or a documented dead end (a hidden scalar defeating symmetry detection):
 
   - `⟨c * u, v⟩` / `⟨u, c * v⟩` lifts the scalar out to `c * ⟨u, v⟩`, exposing it to the
-    rules above and to `symmetry.jl`'s structural shape check, which only recognises
-    `⟨L(u), L(v)⟩` when nothing else sits between the product and its arguments.
+    nested-scale fold above and to `symmetry.jl`'s structural shape check, which only
+    recognises `⟨L(u), L(v)⟩` when nothing else sits between the product and its arguments.
   - `⟨u, v(i) + v(j)⟩` (or the mirror on the trial side) distributes to
     `⟨u, v(i)⟩ + ⟨u, v(j)⟩` -- but *only* when `i ≠ j` (or one side names a component the
     other does not): that shape has no valid single-term routing today
     (`test_component_or_nothing`/`trial_component_or_nothing`, `block_extract.jl`, throw on
     it), so distributing is the only way to assemble it at all. A same-component sum, the
     ordinary `innerₕ(uₕ, v + 2 * D₋ₓ(v))` case, is left as the single term it already is.
-  - `⟨Au, Bv⟩ + ⟨Au, Cv⟩ -> ⟨Au, (B + C)v⟩`, the mirror `⟨Au, Bv⟩ + ⟨Cu, Bv⟩ ->
-    ⟨(A + C)u, Bv⟩`, and `⟨f, Av⟩ + ⟨f, Bv⟩ -> ⟨f, (A + B)v⟩` for a linear form, anywhere in
-    a sum (`_absorb`). The shared argument must be a singleton node (`_statically_equal`, as
-    for like terms), both products must name no component, and each coefficient moves onto
-    its own unshared argument, so no coefficient is compared. Fewer products is fewer
-    compiled terms: see `_factor`.
 
 A `ShiftNode` is simplified inside but kept as built: `Shift₀(u)` stays, and nested shifts
 are not merged, since the amount is a runtime field (gpena/Bramble.jl#530).
@@ -85,10 +75,10 @@ identity over the scalars, grid functions and components involved. The one excep
 @inline _is_zero_op(::LazyOp) = false
 @inline _is_zero_op(::ZeroOperator) = true
 
-# `(scalar, inner)` for a node the combining/factoring/lifting rules can read a coefficient
-# from. A bare (non-`OperatorScale`) node is `1 * itself`. The scalar is returned exactly as
-# stored -- a `Base.RefValue` is never dereferenced, since its value can change after the
-# form is built (`β[] = 3.0`, gpena/Bramble.jl#159's own worked example).
+# `(scalar, inner)` for a node the lifting rule can read a coefficient from. A bare
+# (non-`OperatorScale`) node is `1 * itself`. The scalar is returned exactly as stored -- a
+# `Base.RefValue` is never dereferenced, since its value can change after the form is built
+# (`β[] = 3.0`, gpena/Bramble.jl#159's own worked example).
 @inline _scale_parts(op::OperatorScale) = (op.scalar, op.inner_op)
 @inline _scale_parts(op::LazyOp) = (1, op)
 
@@ -106,21 +96,19 @@ end
 # A `RefValue` coefficient is never statically zero or one; wrap unconditionally.
 @inline _wrap_scale(c::Base.RefValue, A::LazyOp) = OperatorScale(c, A)
 
-# Whether a coefficient may be multiplied or added into another at simplify time, decided by
-# its type. A `RefValue` may not: its value can change after the form is built. Nor may a
+# Whether a coefficient may be multiplied into another at simplify time, decided by its
+# type. A `RefValue` may not: its value can change after the form is built. Nor may a
 # `Rational` (`op / 2` is `1 // 2`, gpena/Bramble.jl#633): its arithmetic is checked, so
 # `(1 // 2^40) * (1 // 2^40)` overflows and `1 // 0 - 1 // 0` throws, where the floats it
 # stands for give `2.0^-80` and `NaN`. Left apart, each converts to the space's element type
 # on its own when assembled.
 @inline _folds(c) = c isa Number && !(c isa Rational)
 
-# The product and sum of two folding coefficients. Two `Integer`s use checked arithmetic, so
+# The product of two folding coefficients. Two `Integer`s use checked arithmetic, so
 # `2^32 * (2^32 * u)` throws `OverflowError` instead of wrapping to `0 * u` and vanishing
-# (gpena/Bramble.jl#704), as an overflowing `Rational` scale throws. Same type as `*`/`+`.
+# (gpena/Bramble.jl#704), as an overflowing `Rational` scale throws. Same type as `*`.
 @inline _fold_mul(a, b) = a * b
 @inline _fold_mul(a::Integer, b::Integer) = Base.Checked.checked_mul(a, b)
-@inline _fold_add(a, b) = a + b
-@inline _fold_add(a::Integer, b::Integer) = Base.Checked.checked_add(a, b)
 
 # Two coefficients just lifted out of the two arguments of one inner product, wrapped around
 # the product they were lifted from.
@@ -128,60 +116,6 @@ end
     _folds(cl) && _folds(cr) && return _wrap_scale(_fold_mul(cl, cr), inner)
     return _wrap_scale(cl, _wrap_scale(cr, inner))
 end
-
-# --- Structural equality ------------------------------------------------------------- #
-
-"""
-    _ast_equal(a, b) -> Bool
-
-Whether two `LazyOp` subtrees are the same expression: same concrete node type, and every
-field equal -- recursively for a field that is itself a `LazyOp`, by `===` otherwise.
-
-`===` rather than `==` for a leaf field (a grid function, a closure, a component index) is
-deliberate: two arrays that hold equal values right now are not the same operator if one is
-later mutated in place (`Rₕ!(cₕ, ...)`) and the other is not, and two independently built
-closures are never "the same" scaling function even if they happen to compute the same
-thing. Missing an equal-but-distinct pair only forgoes an optimization; treating two
-different subtrees as equal would silently change what the assembled form computes, which
-is the one thing this pass may never do.
-"""
-@inline _ast_equal(::LazyOp, ::LazyOp) = false
-@inline _ast_equal(::T, ::T) where {T <: Union{TrialFunction, TestFunction}} = true
-@inline function _ast_equal(a::T, b::T) where {T <: LazyOp}
-    for name in fieldnames(T)
-        fa = getfield(a, name)
-        fb = getfield(b, name)
-        if fa isa LazyOp && fb isa LazyOp
-            _ast_equal(fa, fb) || return false
-        else
-            fa === fb || return false
-        end
-    end
-    return true
-end
-
-# Whether `_ast_equal(a, b)` is settled by the two types alone, with no field read. The
-# like-term rule is gated on this *before* it asks `_ast_equal` anything: the rule returns a
-# different *node type* depending on the answer, so an answer the compiler cannot fold makes
-# `form`'s return type a `Union` of the rewritten and unrewritten trees -- the same defect
-# gpena/Bramble.jl#240 fixed for coefficient *values*, one level down, in the subtrees those
-# coefficients scale. It bites every sum of two same-shaped terms carrying runtime data:
-# `innerₕ(g₁ * u, v) + innerₕ(g₂ * u, v)` for distinct grid functions `g₁`, `g₂` inferred
-# as `Union{OperatorAdd, OperatorScale}`, and `IllegalTypeAnalysisException` is what Enzyme
-# makes of that.
-#
-# `issingletontype` is exactly the property needed: a type with no non-singleton fields has
-# one value, so any two of its instances are `===` and `_ast_equal` is constant-`true` after
-# inlining. Anything else -- a `GridFunctionScale` holding an array, a `DiracSource`, an
-# `IndexedTrialFunction` whose `component_idx` is a field rather than a type parameter -- is
-# left as the sum it was written as. That costs a routed term and changes no number.
-#
-# The pure-operator trees `form` actually builds *are* singletons: a `BilinearProduct` over
-# `TrialFunction`/`TestFunction` and any stack of difference or average wrappers has singleton
-# fields all the way down, so `innerₕ(u, v) + innerₕ(u, v)` and its static-coefficient
-# multiples still combine. `Ref`-coefficient sums do not: see the like-term branch below.
-@inline _statically_equal(::LazyOp, ::LazyOp) = false
-@inline _statically_equal(::T, ::T) where {T <: LazyOp} = Base.issingletontype(T)
 
 # --- Component-routing safety -------------------------------------------------------- #
 
@@ -248,9 +182,8 @@ end
 # restriction, or under a scalar or grid-function coefficient shared by the whole sum, even
 # when every term names the same `i` (gpena/Bramble.jl#529). Separate inner products, each
 # with its own coefficient, never reach those gates and infer concretely. Kept on purpose:
-# distributing every sum that is not `_component_free` would infer concretely, but costs a
-# sweep for every same-component sum (`v(1) + D₋ₓ(v(1))`). The factor rule in
-# `simplify_ast(::OperatorAdd)` uses `_component_free` instead, which is decided by type.
+# distributing every sum that names a component would infer concretely, but costs a sweep
+# for every same-component sum (`v(1) + D₋ₓ(v(1))`).
 @inline function _mixes_components(a::LazyOp, b::LazyOp)
     trial = _component_combine(_trial_component_class(a), _trial_component_class(b))
     test = _component_combine(_test_component_class(a), _test_component_class(b))
@@ -277,8 +210,8 @@ function simplify_ast(op::OperatorScale)
 
     if inner isa OperatorAdd && _mixes_components(inner.left_op, inner.right_op)
         # `c * (A + B)` cannot route as one term when `A`/`B` name different components:
-        # distributing is the only routing-safe shape, so it takes priority over the
-        # factoring this would otherwise be (rule 2's mirror image).
+        # distributing is the only routing-safe shape, so it takes priority over keeping
+        # the scaled sum as one term.
         return simplify_ast(
             OperatorAdd(
             _wrap_scale(op.scalar, inner.left_op),
@@ -339,118 +272,7 @@ function simplify_ast(op::OperatorAdd)
     _is_zero_op(left) && return right
     _is_zero_op(right) && return left
 
-    cl, al = _scale_parts(left)
-    cr, ar = _scale_parts(right)
-
-    if _statically_equal(al, ar) && _ast_equal(al, ar)
-        # Combine like terms: `c1 * A + c2 * A -> (c1 + c2) * A`, gated on `_statically_equal`
-        # so the branch folds (see there). A singleton type has no `component_idx` to
-        # disagree on. Static, non-`Rational` coefficients only (`_folds`); a `Ref`, even the
-        # same one on both sides, falls through (gpena/Bramble.jl#527).
-        _folds(cl) && _folds(cr) && return _wrap_scale(_fold_add(cl, cr), al)
-    elseif (left isa OperatorScale || right isa OperatorScale) &&
-           cl isa Integer &&
-           cr isa Integer &&
-           cl == cr &&
-           _component_free(al) &&
-           _component_free(ar)
-        # Factor a common static scalar out of two different subtrees: `c*A + c*B ->
-        # c*(A+B)`. Neither side is zero here (caught above), so `cl == cr` implies both
-        # are nonzero. Guarded on an actual `OperatorScale` being present so two already
-        # bare, unrelated terms (`cl == cr == 1` always) are not rebuilt for nothing --
-        # otherwise this pass would not be idempotent on its own output. Guarded on
-        # `_component_free` too, the policy `_factor_products` applies: factoring `A`/`B`
-        # naming different components would hide the shape the router cannot route as one
-        # term, and `_component_free` settles that by type. `!_mixes_components` would let
-        # same-component terms factor, but it compares two `Int` fields, so a runtime
-        # component index would make `form` infer a `Union` (gpena/Bramble.jl#529).
-        #
-        # `Integer`, not `Number`, for the reason `_wrap_scale` gives (gpena/Bramble.jl#240):
-        # whether this rule fires is decided by comparing two coefficients, so with `Float64`
-        # coefficients the *type* of what this method returns -- `OperatorScale` here,
-        # `OperatorAdd` at the bottom -- depends on a comparison the compiler cannot make.
-        # That is a `Union` in `form`'s return type for every sum of runtime-scaled terms,
-        # and `IllegalTypeAnalysisException` under Enzyme. `2 * A + 2 * B` still factors;
-        # `2.0 * A + 2.0 * B` assembles as the two terms it was written as. So does a
-        # shared `Ref`: object identity of two `RefValue`s of one type is just as invisible
-        # to inference (gpena/Bramble.jl#527). Write `β * (A + B)` for one sweep.
-        return _wrap_scale(cl, OperatorAdd(al, ar))
-    end
-
-    # Factor a shared inner-product argument out of `right` and whichever summand of `left`
-    # shares one: `⟨Au, Bv⟩ + ⟨Au, Cv⟩ -> ⟨Au, (B + C)v⟩` and the mirror on the test side.
-    # `left` is already factored, so a left-deep sum of many terms reaches every match.
-    merged = _absorb(left, right)
-    merged === nothing || return merged
-
     return left === op.left_op && right === op.right_op ? op : OperatorAdd(left, right)
-end
-
-# --- Shared inner-product arguments ------------------------------------------------- #
-
-# Whether `op` names no component on either side, settled by its type: the two classes are
-# `nothing` by type or an `Int` field, never compared at run time. Factoring is limited to
-# component-free products, so it can never assemble a component-mixing sum as one term.
-@inline _component_free(op::LazyOp) = _trial_component_class(op) === nothing && _test_component_class(op) === nothing
-
-# `X` carried under the coefficient the term `t` had, decided by `t`'s type and not by the
-# coefficient's value, so an `Integer` read from a stored `OperatorScale` never reaches
-# `_wrap_scale`'s value branch and the result keeps one type.
-@inline _rescale(t::OperatorScale, X::LazyOp) = OperatorScale(t.scalar, X)
-@inline _rescale(::LazyOp, X::LazyOp) = X
-
-# The product of `a` and `b` with their shared argument factored out, or `nothing`. Which
-# one it returns depends only on the argument types: the shared argument must pass
-# `_statically_equal` (a singleton type, so data-carrying arguments never factor), exactly
-# as the like-term rule requires of the terms it combines. Each term's coefficient moves
-# onto its own unshared argument, `c⟨Au, Bv⟩ = ⟨Au, c Bv⟩`, so coefficients are never
-# compared at all. Identical products are left to the like-term rule.
-#
-# One factored product compiles faster than the products it replaces: the 3D scalar form of
-# 27 distinct `innerₕ` terms whose pairs share trial operators three at a time, first
-# assemble, 16.4–17.1 s unfactored, 6.6–6.7 s factored (interleaved, 2 threads).
-@inline _factor(::LazyOp, ::LazyOp) = nothing
-@inline _factor_products(a, b, pa, pb) = nothing
-@inline _factor(a::OperatorScale, b::LazyOp) = _factor_products(a, b, a.inner_op, b)
-@inline _factor(a::LazyOp, b::OperatorScale) = _factor_products(a, b, a, b.inner_op)
-@inline _factor(a::OperatorScale, b::OperatorScale) = _factor_products(a, b, a.inner_op, b.inner_op)
-@inline _factor(a::BilinearProduct, b::BilinearProduct) = _factor_products(a, b, a, b)
-@inline _factor(a::LinearProduct, b::LinearProduct) = _factor_products(a, b, a, b)
-
-function _factor_products(a, b, pa::BilinearProduct{D, W}, pb::BilinearProduct{D, W}) where {D, W}
-    (_component_free(pa) && _component_free(pb)) || return nothing
-    _statically_equal(pa, pb) && return nothing
-    if _statically_equal(pa.left_op, pb.left_op) && _ast_equal(pa.left_op, pb.left_op)
-        r = OperatorAdd(_rescale(a, pa.right_op), _rescale(b, pb.right_op))
-        return BilinearProduct{D, W, typeof(pa.left_op), typeof(r)}(pa.left_op, r)
-    end
-    if _statically_equal(pa.right_op, pb.right_op) && _ast_equal(pa.right_op, pb.right_op)
-        l = OperatorAdd(_rescale(a, pa.left_op), _rescale(b, pb.left_op))
-        return BilinearProduct{D, W, typeof(l), typeof(pa.right_op)}(l, pa.right_op)
-    end
-    return nothing
-end
-
-# A linear form's left argument is its source, so only the source can be shared.
-function _factor_products(a, b, pa::LinearProduct{D, W}, pb::LinearProduct{D, W}) where {D, W}
-    (_component_free(pa) && _component_free(pb)) || return nothing
-    _statically_equal(pa, pb) && return nothing
-    if _statically_equal(pa.left_op, pb.left_op) && _ast_equal(pa.left_op, pb.left_op)
-        r = OperatorAdd(_rescale(a, pa.right_op), _rescale(b, pb.right_op))
-        return LinearProduct{D, W, typeof(pa.left_op), typeof(r)}(pa.left_op, r)
-    end
-    return nothing
-end
-
-# `s` with `t` factored into the first summand (searched right to left) sharing an argument
-# with it, or `nothing` when none does.
-@inline _absorb(s::LazyOp, t::LazyOp) = _factor(s, t)
-function _absorb(s::OperatorAdd, t::LazyOp)
-    r = _absorb(s.right_op, t)
-    r === nothing || return OperatorAdd(s.left_op, r)
-    l = _absorb(s.left_op, t)
-    l === nothing || return OperatorAdd(l, s.right_op)
-    return nothing
 end
 
 # --- Dirac sources inside a sum ------------------------------------------------------ #
@@ -513,9 +335,9 @@ function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
     end
 
     # Lift a scalar (static or `Ref`) out of either argument: `⟨c * u, v⟩ -> c * ⟨u, v⟩`,
-    # `⟨u, c * v⟩ -> c * ⟨u, v⟩`. Exposes it to the rules above, and to `symmetry.jl`'s
-    # `_same_operator_shape`, which only recognises `⟨L(u), L(v)⟩` when nothing else sits
-    # between the product and its two arguments.
+    # `⟨u, c * v⟩ -> c * ⟨u, v⟩`. Exposes it to the nested-scale fold, and to
+    # `symmetry.jl`'s `_same_operator_shape`, which only recognises `⟨L(u), L(v)⟩` when
+    # nothing else sits between the product and its two arguments.
     cl, al = _scale_parts(left)
     cr, ar = _scale_parts(right)
     inner = BilinearProduct{D, W, typeof(al), typeof(ar)}(al, ar)

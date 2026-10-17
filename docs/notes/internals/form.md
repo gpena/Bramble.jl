@@ -193,9 +193,16 @@ smaller number of sweeps for the same matrix or vector:
 | `A + 0`, `0 + A` | `A` | the zero term is not a term at all |
 | `1 * A` | `A` | no wrapper node to route through |
 | `c1 * (c2 * A)`, both static | `(c1 * c2) * A` | unchanged term count, one multiply instead of two |
-| `A + A`, `A` a singleton node | `2 * A` | two routed terms become one |
-| `c1 * A + c2 * A`, same singleton `A` | `(c1 + c2) * A` | two routed terms become one |
-| `c * A + c * B`, same `Integer` `c`, `A`/`B` name no component | `c * (A + B)` | two routed terms become one |
+
+A sum is otherwise kept as written. Three rules that merged terms were measured with and
+without each, in fresh processes on non-uniform meshes, and removed by the keep criterion of
+[gpena/Bramble.jl#771](https://github.com/gpena/Bramble.jl/issues/771) (a rule stays when it
+wins the first call or the steady-state `assemble!` and loses neither beyond the spread):
+like terms `c1 * A + c2 * A -> (c1 + c2) * A`, a common `Integer` factor
+`c * A + c * B -> c * (A + B)`, and a shared inner-product argument
+`⟨Au, Bv⟩ + ⟨Au, Cv⟩ -> ⟨Au, (B + C)v⟩`. The last one halved the first `assemble` of a
+27-term 3D scalar form but made its steady-state `assemble!` five times slower. The table,
+the trade-offs and the driver are in `docs/notes/internals/simplify_rules.md`.
 
 `ZeroOperator{D,Nothing}(nothing)` is synthesized for the zero case rather than reusing a
 concrete space, because a `LazyOp{D}` subtree in general carries no space to read back.
@@ -205,42 +212,20 @@ consumer of `ZeroOperator` (`local_stencil`, `stencil_offsets`, `component`) rea
 `a.space === b.space`, settles `nothing === nothing` the same way two zero operators over
 the same space would.
 
-"Same `A`" is two predicates, not one. `_ast_equal` (`ast/simplifier.jl`) is the *definition*:
-a structural equality over `LazyOp` subtrees. It asks for the same concrete node type and every field
-equal, recursively for a field that is itself a `LazyOp`, by `===` otherwise. `===` rather than `==` for a leaf field (a grid
-function, a closure, a component index) is deliberate: two arrays holding equal values right
-now are not the same operator once one of them is mutated in place and the other is not, and
-two independently built closures are never "the same" scaling function merely because they
-compute the same thing. Missing an equal-but-distinct pair only forgoes a rewrite; treating
-two different subtrees as equal would change what an assembled form computes, silently, which
-none of these rules may ever do. Every rewrite here is an algebraic identity, so the
-assembled matrix or vector is unaffected up to floating-point association (folding `2 * x +
-3 * x` into `5 * x` can move the last bit; not folding it does too, in the other direction).
-
-`_statically_equal` is the *gate*, and it is what the like-term rule actually branches on:
-whether `_ast_equal`'s answer is settled by the two types alone, which is
-`Base.issingletontype`. The rule has to be gated this way because its two outcomes return
-different node types (an `OperatorScale` when it fires, an `OperatorAdd` when it does not), so
-an answer inference cannot fold makes `form`'s return type a `Union` of both, costing every
-caller a dynamic dispatch into the assembly engine and drawing
-`IllegalTypeAnalysisException` from Enzyme (gpena/Bramble.jl#240). That bit every sum of two
-same-shaped terms carrying runtime data, not just the duplicate expressions it was first
-thought to: `innerₕ(g₁ * u, v) + innerₕ(g₂ * u, v)` for distinct grid functions `g₁ ≠ g₂`, or
-two source vectors in a linear form.
-
-In practice the gate is generous, because the trees `form` builds out of pure operators *are*
-singletons: a `BilinearProduct` over `TrialFunction`/`TestFunction`, wrapped in any stack of
-difference or average nodes, has singleton fields all the way down. What it excludes is a node
-carrying data, such as a `GridFunctionScale` holding an array, a `SourceVector`, a `DiracSource`, or an
-`IndexedTrialFunction` whose `component_idx` is a field rather than a type parameter. Those
-sums assemble as the two terms they were written as, which means one extra routed term and the same
-numbers.
+Every rewrite here is an algebraic identity, so the assembled matrix or vector is unaffected
+up to floating-point association. Each rule also chooses the node type it returns from
+types alone. A rule whose outcome hangs on a value inference cannot fold (a coefficient, or
+whether two subtrees carrying data are equal) makes `form`'s return type a `Union` of both
+outcomes, costing every caller a dynamic dispatch into the assembly engine and drawing
+`IllegalTypeAnalysisException` from Enzyme (gpena/Bramble.jl#240). That is why the zero and
+unit collapses read only an `Integer` coefficient, and why the removed like-term rule was
+gated on `Base.issingletontype` of the two subtrees.
 
 A `Base.RefValue` coefficient (§2's dynamic scalar coefficients) is never dereferenced by the
-pass and never combined with a static number or with another `Ref`, not even the same `Ref`
-object on both sides: that identity is a run-time value, so the rule would give `form` a
-`Union` return type (gpena/Bramble.jl#527). `β * A + β * B` assembles as two terms unless the
-shared-argument rule below factors it; write `β * (A + B)` for one sweep. The whole point of a
+pass and never folded into a static number or into another `Ref`, not even the same `Ref`
+object on both sides: that identity is a run-time value, so a rule reading it would give
+`form` a `Union` return type (gpena/Bramble.jl#527). `β * A + β * B` assembles as two terms;
+write `β * (A + B)` for one sweep. The whole point of a
 `Ref` coefficient is that its value can change after the form is built, so folding its
 current value into a static number would bake in a snapshot the rest of the design goes out
 of its way to avoid.
@@ -249,11 +234,9 @@ of its way to avoid.
 
 | Input | Simplifies to | Why |
 |:--- |:--- |:--- |
-| `⟨c * u, v⟩`, `⟨u, c * v⟩` | `c * ⟨u, v⟩` | exposes `c` to the rules above, and to `symmetry.jl` |
+| `⟨c * u, v⟩`, `⟨u, c * v⟩` | `c * ⟨u, v⟩` | exposes `c` to the nested-scale fold above, and to `symmetry.jl` |
 | `⟨u, v(i) + v(j)⟩`, `i ≠ j` (or the trial-side mirror) | `⟨u, v(i)⟩ + ⟨u, v(j)⟩` | the combined shape has no valid single-term routing at all |
 | `u_h * (v_h * A)` | `(u_h .* v_h) * A` | one elementwise multiply at construction, not two scalings per point per assembly |
-| `⟨Au, Bv⟩ + ⟨Au, Cv⟩` (or `⟨Au, Bv⟩ + ⟨Cu, Bv⟩`), shared `A` a singleton node, anywhere in the sum | `⟨Au, (B + C)v⟩` (or `⟨(A + C)u, Bv⟩`) | one product, one compiled term, instead of two |
-| `⟨f, Av⟩ + ⟨f, Bv⟩`, shared source a singleton node | `⟨f, (A + B)v⟩` | as above, for a linear form |
 
 A `ShiftNode` is simplified inside and kept as built. Neither `Shift₀(u)` nor a nest of
 shifts in one sense is folded any more, because the amount is a field rather than a type
@@ -262,19 +245,6 @@ parameter: both rewrites chose the node type from a runtime value, and `form` in
 not change. Each level of a nest costs one evaluation of its operand, at the shifted point
 (`local_stencil(::ShiftNode)`). A zero shift over a restricted operand now stores explicit
 zeros in the sparsity pattern, since `Shift₀` is no longer elided; the values are the same.
-
-Factoring a shared argument uses the like-term rule's gate: the shared argument must pass
-`_statically_equal`. Whether the rule fires is settled by the argument types, and a
-data-carrying argument (a grid-function scaling, a `SourceVector`) is never shared. The
-unshared arguments are not compared at all, so they may carry data: `⟨g₁u, v⟩ + ⟨g₂u, v⟩`
-becomes `⟨g₁u + g₂u, v⟩`. Each term's coefficient moves onto its own unshared argument,
-`c⟨Au, Bv⟩ = ⟨Au, c Bv⟩`, so coefficients are never compared either, and two distinct `Ref`
-coefficients still factor. Only products naming no component on either side factor, so the
-rule never builds a component-mixing sum. `simplify_ast(::OperatorAdd)` searches the already
-simplified left operand for a summand sharing an argument with the right one
-(`_absorb`), so a left-deep sum of many terms factors every match, not only adjacent ones.
-Fewer products means fewer compiled terms, so a form with many terms that share arguments
-compiles less on its first assemble.
 
 Scalar lifting matters beyond routing: `_same_operator_shape` (`symmetry.jl`) recognises
 `⟨L(u), L(v)⟩`, the same operator chain on both sides, structurally, by comparing the
@@ -297,10 +267,8 @@ That guard, `_mixes_components(a, b)`, has to be checked again wherever an
 `OperatorAdd` could end up hidden inside an `OperatorScale`/`GridFunctionScale` wrapper,
 because hiding one there reintroduces exactly the unroutable shape: `2 * (A + B)` for `A`/`B`
 naming different components would throw at assembly the same way the un-lifted `innerₕ(fₕ, v(1)
-+ v(2))` above did. So rule 2's factoring step (`c * A + c * B -> c * (A + B)`) refuses to
-fire when `A` or `B` names any component (`_component_free`, decided by type, so a runtime
-component index cannot make `form`'s type a `Union` through it; gpena/Bramble.jl#529), and
-`simplify_ast(::OperatorScale)`/`simplify_ast(::GridFunctionScale)` distribute their own
++ v(2))` above did. So `simplify_ast(::OperatorScale)`/`simplify_ast(::GridFunctionScale)`
+distribute their own
 coefficient over an inner sum that mixes, rather than wrapping it, whenever
 `BilinearProduct`'s/`LinearProduct`'s own distribution produces one and something still wraps
 it from outside.

@@ -454,11 +454,10 @@ using Bramble:
         @test (id / big(2)).scalar isa BigFloat
         @test (id / 0.5).scalar === 2.0
 
-        # the simplifier neither folds nor combines a rational scale: checked arithmetic
-        # would overflow where the floats it stands for do not
+        # the simplifier does not fold a rational scale: checked arithmetic would overflow
+        # where the floats it stands for do not
         t = Bramble.simplify_ast((id / 2^40) / 2^40)
         @test t isa OperatorScale && t.inner_op isa OperatorScale
-        @test Bramble.simplify_ast(id / 2 + id / 2) isa OperatorAdd
         @test Bramble.simplify_ast(2 * (3 * id)).scalar === 6
 
         # a Float32 space on a non-uniform mesh assembles Float32 forms through `/ 2`

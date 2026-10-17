@@ -54,8 +54,8 @@ for `S` shorter than 2.
 
 `S` is stored sorted (`_canonical_set`, this file) so two callers naming the same set in a
 different order -- `Val((1,2))` and `Val((2,1))` -- produce the identical singleton type,
-which is what lets the like-term simplifier fold them and `which(inner₊, ...)` resolve one
-way regardless of the order the caller wrote `S` in.
+which is what lets `which(inner₊, ...)` resolve one way regardless of the order the caller
+wrote `S` in.
 """
 struct InnerPlusSet{S} <: AbstractInnerProduct end
 
@@ -67,7 +67,7 @@ names (gpena/Bramble.jl#157).
 
 `MASK` is the per-axis `(min, max)` face mask `_surface_mask` (mesh/queries.jl) resolves the
 form's `markers` into, carried as a type parameter rather than a field so the node stays a
-singleton the like-term simplifier can fold and `compute_weight` reads a compile-time literal.
+singleton and `compute_weight` reads a compile-time literal.
 Building the node holds the labels (`_SurfaceLabels`); `form` resolves them once, against
 the mesh of the test space (`_resolve_surfaces`).
 """

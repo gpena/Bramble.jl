@@ -101,9 +101,8 @@ using ..TestUtils: _fd, _have
                   _fd(loss_coeff, θ0) rtol=1e-4
 
             # A sum of terms, each with its own runtime coefficient -- the shape an inverse
-            # problem actually has. This one needed the *factoring* rule (`c*A + c*B ->
-            # c*(A+B)`) restricted too: it decides by comparing the two coefficients, and
-            # comparing two runtime numbers leaves the same kind of `Union` behind.
+            # problem actually has. No rule compares the two coefficients, so `form` has one
+            # concrete type and the gradient goes through both terms.
             function loss_coeff_sum(θ::Real)
                 aθ = form(
                     Wₕ, Wₕ, (u, v) -> θ * inner₊(∇ₕ(u), ∇ₕ(v)) + (1 - θ) * innerₕ(u, v)
@@ -173,16 +172,16 @@ using ..TestUtils: _fd, _have
 
             # Two *distinct* coefficient fields on same-shaped terms in one sum. This is the
             # ordinary way to write a two-material model, and it raised
-            # `IllegalTypeAnalysisException` until the like-term rule stopped being decided by
-            # a run-time comparison (gpena/Bramble.jl#240): `_ast_equal` walked the two
+            # `IllegalTypeAnalysisException` while a like-term rule was decided by a
+            # run-time comparison (gpena/Bramble.jl#240): it walked the two
             # `GridFunctionScale` subtrees field by field, the compiler could not fold the
             # result, and `form` inferred as `Union{..., OperatorAdd}, {..., OperatorScale}}`.
-            # The rule is gated on `_statically_equal` now, so a data-carrying term is left as
-            # written and `form` has one concrete type. Measured on this exact loss: the
-            # exception before, this gradient after.
+            # That rule was removed (gpena/Bramble.jl#771); the sum is left as written and
+            # `form` has one concrete type. Measured on this exact loss: the exception
+            # before, this gradient after.
             #
             # Not a duplicate of `loss_field_2d` above: that one has a single coefficient
-            # field, so the sum -- and with it the rule that used to fire here -- never enters.
+            # field, so the sum never enters.
             function loss_two_fields_2d(θ::Real)
                 g₁ = Bramble.element(W2, θ)
                 g₂ = Bramble.element(W2, 2θ)
