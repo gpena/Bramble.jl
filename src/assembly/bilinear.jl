@@ -326,6 +326,13 @@ resolved once and run through [`simplify_ast`](@ref) -- factoring common scaling
 shared inner-product arguments, combining like terms, and eliding zero-scaled ones -- before
 it is stored.
 
+An expression may hold one rank-one term, a scalar times a functional of the trial function
+times a functional of the test function (`σ * innerₕ(g, u) * innerₕ(h, v)`, `g` and `h`
+data). Its matrix `σ wₛ wₜᵀ` is dense, so the term is kept apart from the stencil: `form`
+then returns a `RankOneForm`, which [`assemble`](@ref) turns into a
+[`RankOneUpdate`](@ref). A functional of one argument alone, a product of two functionals
+of the same argument, or two rank-one terms throw an `ArgumentError`.
+
 # Examples
 ```julia
 using Bramble: D₋ₓ, inner₊ₓ
@@ -334,12 +341,30 @@ a = form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 
 # a coupled system, one term per block
 a = form(Vₕ, Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)))
+
+# a penalty on the discrete mean, (∇ₕu, ∇ₕv)₊ + σ (1, u)ₕ (1, v)ₕ
+a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + σ * innerₕ(1, u) * innerₕ(1, v))
 ```
 """
 function form(Wₕ, Vₕ, f)
     D = dim(Wₕ)
     raw_ast = f(trial_function(Wₕ), test_function(Vₕ))
     _validate_form_expression(raw_ast, Val(D), Val(:bilinear))
+    # Behind an inference barrier: the branch is a constant `false` for an expression of known
+    # type without the term, so such a form still infers as its `BilinearForm`. Where the
+    # type is not known (generic code over abstract spaces) the result infers as `Any`, not
+    # as a union every caller taking only a `BilinearForm` would have to accept.
+    _holds_rank_one(raw_ast) &&
+        return Base.inferencebarrier(_rank_one_form)(Wₕ, Vₕ, raw_ast)  # rank_one.jl
+    return _bilinear_form(Wₕ, Vₕ, raw_ast)
+end
+
+# `form` past the rank-one split: `raw_ast` holds no rank-one term. Propagates constants:
+# a composite form's literal component indices (`u(1)`) are constants inside `raw_ast`,
+# and `simplify_ast` reads them to decide its result's type.
+Base.@constprop :aggressive function _bilinear_form(Wₕ, Vₕ, raw_ast)
+    D = dim(Wₕ)
+    _check_bilinear_terms(raw_ast)  # rank_one.jl
     ast = _split_restricted_products(
         simplify_ast(_resolve_surfaces_for_space(resolve_ast(raw_ast), Vₕ, Wₕ)),
         promote_type(eltype(Wₕ), eltype(Vₕ)))
