@@ -97,6 +97,9 @@ types, so this is the largest range that stays inferrable even when `N` is a run
 value the compiler cannot constant-fold (e.g. threaded through a generic function
 argument). It also covers every mesh dimension this package supports
 (`Wₕ^dim(mesh)`). For `N > 3`, call `Wₕ^Val(N)` directly, which has no upper bound.
+
+A ghost space `Cₕ` (a `GhostGridSpace`) takes `Cₕ^N` the same way, giving a composite of
+ghost spaces; its methods live with the ghost composites (assembly/ghost_composite.jl).
 """
 @inline Base.:^(Wₕ::ScalarGridSpace, ::Val{N}) where {N} = CompositeGridSpace(ntuple(_ -> Wₕ, Val(N)))
 @inline Base.:^(Wₕ::ScalarGridSpace, ::Val{1}) = Wₕ
@@ -117,7 +120,9 @@ end
 # ==============================================================================
 
 @inline first_space(Wₕ::ScalarGridSpace) = Wₕ
-# Recursive: always return the first leaf ScalarGridSpace
+# Recursive: always return the first leaf ScalarGridSpace. A flat composite of ghost spaces
+# returns its first GhostGridSpace; a GhostGridSpace reached through this recursion (one
+# beside plain spaces, as the first leaf) refuses (assembly/ghost_composite.jl).
 @inline first_space(Wₕ::CompositeGridSpace) = first_space(Wₕ.spaces[1])
 
 @inline mesh(Wₕ::CompositeGridSpace) = mesh(first_space(Wₕ))
@@ -200,6 +205,11 @@ Chaining products associatively flattens them into a flat `CompositeGridSpace{N}
 matching mathematical product space conventions (e.g. `W₁ × W₂ × W₃ -> CompositeGridSpace{3}`).
 To explicitly construct hierarchical (nested) composite spaces, call [`CompositeGridSpace`](@ref)
 directly (e.g. `CompositeGridSpace(Vh, Qh)`).
+
+Ghost spaces (`GhostGridSpace`) combine with ghost spaces only, `C₁ × C₂`, into a flat
+composite whose closure is block diagonal over the components; a product with a plain space
+refuses with an `ArgumentError`, and a nested composite with a ghost component is refused
+where it is used (assembly/ghost_composite.jl).
 """
 @inline ×(X::ScalarGridSpace, Y::ScalarGridSpace) = CompositeGridSpace((X, Y))
 @inline ×(X::CompositeGridSpace, Y::ScalarGridSpace) = CompositeGridSpace((X.spaces..., Y))
