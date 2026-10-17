@@ -807,7 +807,18 @@ only [`DiagonalReplaySink`](@ref) needs this, pairing itself (interior) with an 
 
 See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
 """
-@inline function visit_bilinear_stencil(
+@inline visit_bilinear_stencil(
+    interior_sink, boundary_sink, term, sp, row_offset::Int, col_offset::Int) = _visit_stencil!(
+    interior_sink, boundary_sink, term, sp, row_offset, col_offset)
+
+# The ordinary one-sink call: the same sink plays both roles.
+@inline visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) = _visit_stencil!(
+    sink, sink, term, sp, row_offset, col_offset)
+
+# The walk itself, which the replay calls directly: one method instance per (sink, term)
+# where the two `visit_bilinear_stencil` methods above, the one calling the other, compiled
+# two.
+@inline function _visit_stencil!(
         interior_sink::SINK1,
         boundary_sink::SINK2,
         term::TERM,
@@ -816,7 +827,11 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
         col_offset::Int
 ) where {SINK1, SINK2, TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, sp)
+    # `_bind_walk(term, sp)`, its mesh method reached only by a term that may restrict:
+    # a term type fewer to compile it for (`_may_restrict`).
+    weights(sp)
+    bound, mesh_markers = _may_restrict(typeof(term)) ? _bind_walk(term, mesh(sp)) :
+                          (term, nothing)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
@@ -865,11 +880,6 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
     end
     return boundary_sink
 end
-
-# The ordinary one-sink call every caller but the diagonal replay path uses: the same sink
-# plays both roles, so `visit_bilinear_stencil(sink, ...)` behaves exactly as it always has.
-@inline visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) = visit_bilinear_stencil(
-    sink, sink, term, sp, row_offset, col_offset)
 
 # --- the sinks --------------------------------------------------------------------- #
 

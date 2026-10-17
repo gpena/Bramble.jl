@@ -17,10 +17,56 @@
 # never read from a stencil: no term's stencil is compiled for it, and a term that writes
 # nothing at one point still decides the type. An interpolation node carries no coefficient,
 # so its leaves need no binding first.
+#
+# Folded summand by summand (`_summands`), as `_assembled_eltype`/`_trial_eltype` do through
+# the sum: recursing, each prefix of a left-deep `a + b + c + ...` was a method instance of
+# its own on either side.
 function _matrix_eltype(form::BilinearForm, ast)
+    ts = _summands(ast)
     return promote_type(
-        _assembled_eltype(ast, form.test_space, form.trial_space),
-        _trial_eltype(ast, form.trial_space, form.test_space))
+        _test_side_eltype(ts, form.test_space, form.trial_space),
+        _trial_side_eltype(ts, form.trial_space, form.test_space))
+end
+
+# `_assembled_eltype(ast, space, partner)`, over the summands `ts` of `ast`.
+_test_side_eltype(ts, space, partner) = _folded_summands_eltype(ts, space, eltype(space))
+function _test_side_eltype(ts, space::CompositeGridSpace, partner)
+    leaves = leaf_spaces_offsets(space)
+    return _routed_summands_eltype(
+        _routed_eltype, ts, leaves, _paired(leaves, _leaves_of(partner)), eltype(space))
+end
+
+# `_trial_eltype(ast, space, partner)`, over the summands `ts` of `ast`.
+_trial_side_eltype(ts, space, partner) = eltype(space)
+function _trial_side_eltype(ts, space::CompositeGridSpace, partner)
+    leaves = leaf_spaces_offsets(space)
+    return _routed_summands_eltype(
+        _trial_routed_eltype, ts, leaves, _paired(leaves, _leaves_of(partner)),
+        eltype(space))
+end
+
+# `T` threaded through `_folded_eltype` over every summand, left to right, as
+# `_leaf_eltype` threads it through an `OperatorAdd`. Unrolled with literal indices: a
+# tuple past 32 elements has no type-stable `map` or `foldl`.
+@generated function _folded_summands_eltype(ts::Tuple, sp, ::Type{T}) where {T}
+    body = Expr(:block, :(acc = T))
+    for i in 1:fieldcount(ts)
+        push!(body.args, :(acc = _folded_eltype(ts[$i], sp, acc)))
+    end
+    push!(body.args, :(return acc))
+    return body
+end
+
+# The promotion of `route(t, leaves, diagonal, T)` over every summand `t`, as the
+# `OperatorAdd` methods of `_routed_eltype`/`_trial_routed_eltype` promote their two sides.
+@generated function _routed_summands_eltype(
+        route::F, ts::Tuple, leaves, diagonal, ::Type{T}) where {F, T}
+    body = Expr(:block, :(acc = Union{}))
+    for i in 1:fieldcount(ts)
+        push!(body.args, :(acc = promote_type(acc, route(ts[$i], leaves, diagonal, T))))
+    end
+    push!(body.args, :(return acc))
+    return body
 end
 
 """
@@ -137,7 +183,9 @@ function (p::_CoordPass)(
         _coord_walk!(sink, term, hp, row_offset, col_offset)
         p.base += nd + _transposed_count(n, half)
     else
-        _validate_term_markers(term, markers(mesh(sp)), p.context)
+        # Guarded here, not only inside: a term restricting nothing compiles no instance.
+        _may_restrict(typeof(term)) &&
+            _validate_term_markers(term, markers(mesh(sp)), p.context)
         npts = length(indices(mesh(sp)))
         ptr = Vector{Int}(undef, npts + 1)
         sink = _CoordSink(ptr, p.I, p.J, 0, 0, dr, dc, half, false, 0)
@@ -159,7 +207,11 @@ end
         sink::_CoordSink, term::TERM, sp, row_offset::Int, col_offset::Int
 ) where {TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, sp)
+    # `_bind_walk(term, sp)`, its mesh method reached only by a term that may restrict:
+    # a term type fewer to compile it for (`_may_restrict`).
+    weights(sp)
+    bound, mesh_markers = _may_restrict(typeof(term)) ? _bind_walk(term, mesh(sp)) :
+                          (term, nothing)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     ax = axes(grid_inds)

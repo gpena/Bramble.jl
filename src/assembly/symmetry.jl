@@ -14,9 +14,9 @@ different operator on either side, such as `inner₊(u, D₋ₓ(v))`, generally 
 A term with different operators either side can still sit in a symmetric sum: ⟨Au, Bv⟩
 assembles to `BᵀWA` and ⟨Bu, Av⟩ to its transpose, so a transposed pair is symmetric whatever
 `A` and `B` are, provided both terms carry the same scalings. `issymmetric` pairs such terms
-anywhere in a sum, expanding a sum inside either side first (⟨Au, (B + C)v⟩ is how
-`simplify_ast`'s factoring can store one half of a pair); `isposdef` does not, since a pair
-need not be semi-definite.
+anywhere in a sum, expanding a sum inside either side first (a pair whose half is written
+⟨Au, (B + C)v⟩ is still found); `isposdef` does not, since a pair need not be
+semi-definite.
 
 The check walks the same AST `local_stencil` walks to assemble, asking whether `left_op`
 and `right_op` (or, for a pair, one term's `left_op` and the other's `right_op`) are the same
@@ -153,8 +153,8 @@ end
 _is_transposed_pair(p, q) = false
 
 # A product with a sum on either side, expanded into one product per pair of summands:
-# ⟨Au, (B + C)v⟩ is ⟨Au, Bv⟩ + ⟨Au, Cv⟩, which is how `simplify_ast`'s factoring can reshape
-# one half of a transposed pair. Runtime only (`issymmetric`), so it builds values freely.
+# ⟨Au, (B + C)v⟩ is ⟨Au, Bv⟩ + ⟨Au, Cv⟩, so a pair one of whose halves is written with a sum
+# inside a side is still paired. Runtime only (`issymmetric`), so it builds values freely.
 _side_summands(op::OperatorAdd) = (_side_summands(op.left_op)..., _side_summands(op.right_op)...)
 _side_summands(op) = (op,)
 function _expand_product(p::BilinearProduct{D, K}) where {D, K}
@@ -240,24 +240,31 @@ end
 # and trial and test exchanged at the leaves. Only products whose values carry nothing but
 # component indices are paired (`_pairable_type`): the type then fixes every stencil weight,
 # and a component index only chooses the block (`bilinear_execution.jl`).
-
-_transpose_type(::Type{TrialFunction{D, N}}) where {D, N} = TestFunction{D, N}
-_transpose_type(::Type{TestFunction{D, N}}) where {D, N} = TrialFunction{D, N}
-_transpose_type(::Type{IndexedTrialFunction{D}}) where {D} = IndexedTestFunction{D}
-_transpose_type(::Type{IndexedTestFunction{D}}) where {D} = IndexedTrialFunction{D}
-function _transpose_type(::Type{BilinearProduct{D, K, L, R}}) where {D, K, L, R}
-    return BilinearProduct{D, K, _transpose_type(R), _transpose_type(L)}
+#
+# Both helpers below run only in `_foldl_pairs`'s generator, on types as values. One method
+# each, `@nospecialize`: dispatching on `Type{T}` compiled one instance per node type of
+# every summand.
+function _transpose_type(@nospecialize(T))
+    T isa DataType || return T
+    P = T.parameters
+    isempty(P) && return T
+    w = T.name.wrapper
+    w === TrialFunction && return TestFunction{P...}
+    w === TestFunction && return TrialFunction{P...}
+    w === IndexedTrialFunction && return IndexedTestFunction{P...}
+    w === IndexedTestFunction && return IndexedTrialFunction{P...}
+    w === BilinearProduct &&
+        return BilinearProduct{P[1], P[2], _transpose_type(P[4]), _transpose_type(P[3])}
+    return w{map(p -> p isa Type ? _transpose_type(p) : p, P)...}
 end
-function _transpose_type(T::DataType)
-    isempty(T.parameters) && return T
-    return T.name.wrapper{map(p -> p isa Type ? _transpose_type(p) : p, T.parameters)...}
-end
-_transpose_type(T) = T
 
 # The product under any scalings, or `nothing` for a summand that is not one.
-_bare_product_type(::Type{<:OperatorScale{D, S, T}}) where {D, S, T} = _bare_product_type(T)
-_bare_product_type(T::Type{<:BilinearProduct}) = T
-_bare_product_type(::Type) = nothing
+function _bare_product_type(@nospecialize(T))
+    T isa Type || return nothing
+    T <: BilinearProduct && return T
+    T isa DataType && T <: OperatorScale && return _bare_product_type(T.parameters[3])
+    return nothing
+end
 
 # Singleton types, component-indexed trial and test functions, and nodes built only from
 # these. A coefficient, a scalar inside a side, a shift amount, a region or an interpolation's

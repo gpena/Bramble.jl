@@ -131,8 +131,8 @@ end
 # One method branching on `segment.is_diagonal`, not two dispatching on the segment's type: both branches are fully concrete (`Segment{D}` has one shape, not
 # a Union). Flat replays through `ReplaySink`; diagonal (1D only,
 # `_diagonal_replay`) replays the interior core through `DiagonalReplaySink`'s stride
-# arithmetic and the boundary shell through an ordinary `ReplaySink`, the two-sink form of
-# `visit_bilinear_stencil` running both in the one walk.
+# arithmetic and the boundary shell through an ordinary `ReplaySink`, the two-sink walk
+# (`_visit_stencil!`, the body of `visit_bilinear_stencil`) running both in the one walk.
 function _replay_segment!(
         A::AbstractMatrix,
         term::TERM,
@@ -143,7 +143,7 @@ function _replay_segment!(
         α
 ) where {TERM, D}
     if _diagonal_replay(Val(D)) && segment.is_diagonal
-        visit_bilinear_stencil(
+        _visit_stencil!(
             DiagonalReplaySink(
                 A, segment.interior, segment.base, segment.stride, segment.P, α
             ),
@@ -154,8 +154,10 @@ function _replay_segment!(
             col_offset
         )
     else
-        visit_bilinear_stencil(
-            ReplaySink(A, segment.point_ptr, segment.positions, α),
+        rs = ReplaySink(A, segment.point_ptr, segment.positions, α)
+        _visit_stencil!(
+            rs,
+            rs,
             term,
             sp,
             row_offset,
@@ -286,15 +288,27 @@ end
     return nothing
 end
 
+# `blocks(term, …)` and the folds over it are called as `_component_blocks` and, for a
+# homogeneous result (`_block_run`), as a plain loop here and in the walks below: `blocks`,
+# `block_of` and the folds `_foldl_blocks`/`_foldl_block_pairs` each compiled once per term
+# type, and a component index or a block loop is all they add.
 @noinline function _foreach_block_unit(
         f::F, term::TERM, trial_leaves, test_leaves
 ) where {F, TERM}
-    _foldl_blocks(nothing, blocks(term, trial_leaves, test_leaves)) do _, blk
+    unit = (_, blk) -> begin
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
         f(bound, sp, blk.row_offset, blk.col_offset, 0, 0, -1)
         return nothing
+    end
+    bs = _component_blocks(
+        trial_component_or_nothing(term), test_component_or_nothing(term), trial_leaves,
+        test_leaves
+    )
+    _block_run(bs) || return _foldl_blocks(unit, nothing, bs)
+    for blk in bs
+        unit(nothing, blk)
     end
     return nothing
 end
@@ -354,7 +368,7 @@ end
         next::Int,
         α
 ) where {TERM, D}
-    return _foldl_blocks(next, blocks(term, trial_leaves, test_leaves)) do n, blk
+    unit = (n, blk) -> begin
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         # `host_weights` per block: a device leaf's weights cannot be read point by point.
@@ -365,6 +379,15 @@ end
         )
         return n
     end
+    bs = _component_blocks(
+        trial_component_or_nothing(term), test_component_or_nothing(term), trial_leaves,
+        test_leaves
+    )
+    _block_run(bs) || return _foldl_blocks(unit, next, bs)
+    for blk in bs
+        next = unit(next, blk)
+    end
+    return next
 end
 
 # --- Transposed pairs: one kernel for ⟨Au, Bv⟩ + ⟨Bu, Av⟩ ---------------------------- #
@@ -382,10 +405,12 @@ end
         A::AbstractMatrix, term::TERM, sp, row_offset::Int, col_offset::Int,
         segment::Segment, α1, α2, half::Int
 ) where {TERM}
-    visit_bilinear_stencil(
-        _PairReplaySink(
-            A, segment.point_ptr, segment.positions, segment.positions_t, α1, α2, half
-        ),
+    sink = _PairReplaySink(
+        A, segment.point_ptr, segment.positions, segment.positions_t, α1, α2, half
+    )
+    _visit_stencil!(
+        sink,
+        sink,
         term,
         sp,
         row_offset,
@@ -394,7 +419,7 @@ end
     return nothing
 end
 
-# The serial leaves: one unit, one walk (`visit_bilinear_stencil`). `p2`, the pair's second
+# The serial leaves: one unit, one walk (`_visit_stencil!`). `p2`, the pair's second
 # bare product, and `offsets2`, its block's `(row_offset, col_offset)`, are unused here; the
 # threaded leaf needs `p2`'s reach to colour the sweep.
 @inline _replay_unit!(::_SerialReplay, A, term, sp, row_offset, col_offset, segment, α) = _replay_segment!(
@@ -428,10 +453,16 @@ end
 ) where {F}
     p1 = _bare_product(t1)
     p2 = _bare_product(t2)
-    b1 = blocks(p1, trial_leaves, test_leaves)
-    b2 = blocks(p2, trial_leaves, test_leaves)
+    b1 = _component_blocks(
+        trial_component_or_nothing(p1), test_component_or_nothing(p1), trial_leaves,
+        test_leaves
+    )
+    b2 = _component_blocks(
+        trial_component_or_nothing(p2), test_component_or_nothing(p2), trial_leaves,
+        test_leaves
+    )
     if _pair_blocks_ok(b1, b2)
-        _foldl_block_pairs(nothing, b1, b2) do _, blk, blk2
+        unit = (_, blk, blk2) -> begin
             bound = _bind_interp_spaces(p1, blk.trial_leaf, blk.test_leaf)
             _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
             _check_block_meshes(p2, blk2.trial_leaf, blk2.test_leaf)
@@ -445,6 +476,10 @@ end
                 f(bound, blk2.test_leaf, ro, co, dr, dc, 2)
             end
             return nothing
+        end
+        _block_run(b1) && _block_run(b2) || return _foldl_block_pairs(unit, nothing, b1, b2)
+        for (blk, blk2) in zip(b1, b2)
+            unit(nothing, blk, blk2)
         end
     else
         Base.inferencebarrier(_foreach_block_unit)(f, t1, trial_leaves, test_leaves)
@@ -466,12 +501,18 @@ end
 ) where {D}
     p1 = _bare_product(t1)
     p2 = _bare_product(t2)
-    b1 = blocks(p1, trial_leaves, test_leaves)
-    b2 = blocks(p2, trial_leaves, test_leaves)
+    b1 = _component_blocks(
+        trial_component_or_nothing(p1), test_component_or_nothing(p1), trial_leaves,
+        test_leaves
+    )
+    b2 = _component_blocks(
+        trial_component_or_nothing(p2), test_component_or_nothing(p2), trial_leaves,
+        test_leaves
+    )
     if _pair_blocks_ok(b1, b2)
         α1 = α * _term_scale(t1)
         α2 = α * _term_scale(t2)
-        return _foldl_block_pairs(next, b1, b2) do n, blk, blk2
+        unit = (n, blk, blk2) -> begin
             bound = _bind_interp_spaces(p1, blk.trial_leaf, blk.test_leaf)
             _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
             sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
@@ -498,6 +539,11 @@ end
             end
             return n
         end
+        _block_run(b1) && _block_run(b2) || return _foldl_block_pairs(unit, next, b1, b2)
+        for (blk, blk2) in zip(b1, b2)
+            next = unit(next, blk, blk2)
+        end
+        return next
     end
     next = Base.inferencebarrier(_replay_blocks!)(
         mode, A, t1, trial_leaves, test_leaves, segments, next, α
