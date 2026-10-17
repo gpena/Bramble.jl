@@ -271,7 +271,14 @@ end
         end
         f1, f2 = figures
         @test f1.ghost == f2.ghost
-        @test f1.ghost <= f1.plain + 4 * f1.spawn
+        # Under CPU contention a pass can settle, for the rest of the process, into
+        # re-boxing its two band closures in every task: `nthreads × 2 × closure` bytes
+        # more, the same at every size. Which passes do so varies from run to run. The
+        # residual's five closures are 256 (the load), 128 (`lift`'s load), 80 (`L g`) and
+        # 64 + 64 (the data groups) bytes. On a macOS runner at 3 threads, ghost was 7808
+        # against 6272 when idle (3 × 2 × 256). Under 8 spinners locally at 4 threads, it
+        # was 11696 against 8112 (4 × 2 × (256 + 128 + 64)), with plain 3808 against 1760.
+        @test f1.ghost <= f1.plain + 4 * f1.spawn + 2 * Threads.nthreads() * 592
     end
 
     # The residual refreshes the operator before the source, so a `build` whose `refill!`
