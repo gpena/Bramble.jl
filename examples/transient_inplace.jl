@@ -1,13 +1,12 @@
 # # A transient loop that allocates nothing
 #
-# Two pieces of this are already covered elsewhere. The
-# [heat equation](heat_equation.md) builds `M/Δt + K(t)` into a preallocated pattern with
-# [`allocate_system_matrix`](@ref) and [`assemble_add!`](@ref), and the
-# [solver tutorial](@ref tutorial_solvers) reuses one factorization across steps with
-# [`refactor!`](@ref); [Solving at every time step](@ref tutorial_time_stepping) shows the
-# pattern and is not repeated here. This page puts them together and closes the last gap: the backsolve
-# writes into the solution vector that already exists, so a Crank-Nicolson step allocates
-# nothing at all.
+# Two pieces of this are already covered elsewhere. The [heat equation](heat_equation.md)
+# builds `M/Δt + K(t)` once and the [solver tutorial](@ref tutorial_solvers) reuses one
+# factorization across steps with [`refactor!`](@ref); [Solving at every time step](@ref
+# tutorial_time_stepping) shows the pattern and is not repeated here. This page puts them
+# together on a problem with a Robin condition whose data decay in time, through the ghost
+# layer, and closes the last gap: the backsolve writes into the solution vector that already
+# exists, so a Crank-Nicolson step allocates nothing at all.
 #
 # This script runs under `test/examples/pages.jl`, where the `#src` assertions execute; it is
 # not part of the published manual.
@@ -16,11 +15,14 @@
 #
 # ```math
 # \partial_t u = \partial_{xx} u + f \text{ in } (0,1) \times (0, 1], \qquad
-# u(0, t) = u(1, t) = 0, \qquad u(x, 0) = \sin(\pi x)
+# u(0, t) = 0, \qquad u(x, 0) = \sin(\pi x), \qquad
+# u + \partial_n u = h(t) \text{ at } x = 1,
 # ```
 #
-# with the manufactured solution ``u_{\text{exact}}(x, t) = e^{-t}\sin(\pi x)``, which forces
-# ``f(x, t) = (\pi^2 - 1) e^{-t} \sin(\pi x)``. Crank-Nicolson in time:
+# with ``\partial_n`` the outward normal derivative and the manufactured solution
+# ``u_{\text{exact}}(x, t) = e^{-t}\sin(\pi x)``, which forces
+# ``f(x, t) = (\pi^2 - 1) e^{-t} \sin(\pi x)`` and the Robin data
+# ``h(t) = -\pi e^{-t}``. Crank-Nicolson in time:
 #
 # ```math
 # \Bigl(\frac{M}{\Delta t} + \frac{K}{2}\Bigr) u^{n+1} =
@@ -28,9 +30,8 @@
 # ```
 
 using Bramble
-using Bramble: allocate_system_matrix, sparse_factorize
+using Bramble: sparse_factorize
 using SuiteSparse
-using SparseArrays: nonzeros
 using LinearAlgebra: mul!, ldiv!
 
 uexact(x, t) = exp(-t) * sinpi(x[1])
@@ -41,71 +42,74 @@ Wₕ = gridspace(Ωₕ)
 
 # The mesh is uniform, but the order measured at the end of the page does not rely on that:
 # the reference run shares whatever mesh is used.
-
-m = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-k = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-
-# ## The two operators, built once
 #
-# Both sides share a sparsity pattern, so one call to [`allocate_system_matrix`](@ref) on a
-# form carrying both stencils gives a pattern wide enough for either, and
-# [`assemble_add!`](@ref) accumulates the pieces into it with no temporary and no sparse
-# addition. `dirichlet_bc!` goes last, after everything that writes to those rows.
+# ## The relation and its data in time
+#
+# The Robin side goes through a ghost point: `gridspace(Ωₕ; ghosts = (:right,))` adds one
+# node outside it, and `constrained` takes a function of the trial function `u` returning one
+# `side => relation => data` entry per side. The Dirichlet side is the relation `u => 0` and
+# leaves the unknowns. The data may take the time as a second argument, `(x, t) -> ...`, which
+# is how the solution is lifted at a given time below. The space the in-place step is built
+# from has the data at ``t = 0``, ``-\pi``:
 
-Δt = 1 / 200
+relations(h) = u -> (:left => u => 0.0, :right => u + ∂ₙ(u) => h)
+ghosted = gridspace(Ωₕ; ghosts = (:right,))
+Cₕ = constrained(ghosted, relations(x -> -π))
+Cₜ = constrained(ghosted, relations((x, t) -> -π * exp(-t)))
 
-pattern = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
-A = allocate_system_matrix(pattern)
-B = similar(A)
+ndofs(Cₕ), ndofs(Cₜ)
 
-fill!(nonzeros(A), 0.0)
-assemble_add!(A, m, 1 / Δt)
-assemble_add!(A, k, 0.5)
-dirichlet_bc!(A, Ωₕ, :boundary)
+# ## The operators, built once
+#
+# `assemble!(A, F, a, l)` fills a matrix and a load already allocated, and on a space with
+# data it puts the lift of those data on the load: with ``E`` the closure of the relations
+# and ``d`` their affine part, ``F = E^\top (F_{\text{pad}} - A_{\text{pad}} d)``. The pair
+# form refuses a space whose data depend on `t`, since it lifts with the stored ``d(0)``,
+# and the data here are separable, ``d(t) = e^{-t} d(0)``: so the source and the lift scale
+# with the same factor ``e^{-t}``, and a single call at unit time factor produces the load
+# that every step scales by ``e^{-t}``. The relation also moves in time, which the weak
+# form of the time derivative sees as ``-E^\top M_{\text{pad}} d'(t)``, and the mass form
+# gives that lift in the same way. Nothing is assembled inside the loop.
 
-fill!(nonzeros(B), 0.0)
-assemble_add!(B, m, 1 / Δt)
-assemble_add!(B, k, -0.5)
+sₕ = x -> (π^2 - 1) * sinpi(x[1])
 
-size(A), length(nonzeros(A))
+a = form(Cₕ, Cₕ, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
+m = form(Cₕ, Cₕ, (u, v) -> innerₕ(u, v))
+l = form(Cₕ, v -> innerₕ(sₕ, v))
+l0 = form(Cₕ, v -> innerₕ(x -> 0.0, v))
+
+K, g = assemble(a, l)
+M, gM = assemble(m, l0)
+assemble!(K, g, a, l)                  # the refill form, on the buffers just made
+assemble!(M, gM, m, l0)
+g .-= gM                               # the lift of d′ = -d, scaled by e⁻ᵗ like the rest
+
+size(K), length(g)
 
 # `A` does not change from step to step here, so it is factorized once and every step is a
-# pair of triangular solves. When a coefficient does vary with `t`, refill `A` the same way
-# and call [`refactor!`](@ref)`(fact, A)`, which reuses the symbolic analysis and repeats only
-# the numeric factorization.
+# pair of triangular solves. When a coefficient does vary with `t`, refill `A` and call
+# [`refactor!`](@ref)`(fact, A)`, which reuses the symbolic analysis and repeats only the
+# numeric factorization.
 
+Δt = 1 / 200
+A = M / Δt + K / 2
+B = M / Δt - K / 2
 fact = sparse_factorize(A; sym = :unsymmetric)
 
-# ## The source, without a closure per step
-#
-# The source separates as ``f(x,t) = e^{-t} s(x)``, so the spatial part is restricted once and
-# the time factor is a `Ref` the form reads live. Nothing is rebuilt between steps; the `Ref`
-# keeps the time factor out of the form's type, so the form is built once.
+u = copy(parent(Rₕ(Wₕ, x -> uexact(x, 0.0)))[2:end])
+F = zeros(ndofs(Cₕ))
 
-sₕ = Rₕ(Wₕ, x -> (π^2 - 1) * sinpi(x[1]))
-decay = Ref(1.0)
-
-l = form(Wₕ, v -> decay * innerₕ(sₕ, v))
-bcs = dirichlet_constraints(Ωₕ, :boundary => x -> 0.0)
-
-uₕ = Rₕ(Wₕ, x -> uexact(x, 0.0))
-F = zeros(ndofs(Wₕ))
-
-length(F), uₕ[1]
+length(F), u[1]
 
 # ## One step
 #
-# Five in-place calls: set the time factor, refill the load, add `B uⁿ` onto it, overwrite the
-# constrained entries, and backsolve into `uₕ`'s own storage. The last one takes the
-# [`VectorElement`](@ref) itself as its destination and writes through to the coefficients
-# behind it, so the solution never moves and nothing is allocated to hold it.
+# Three in-place calls: scale the load by the time factor, add `B uⁿ` onto it, and backsolve
+# into `u`'s own storage. The solution never moves and nothing is allocated to hold it.
 
-function step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)
-    decay[] = exp(-t)                            # the form reads this live
-    assemble!(F, l)                              # refill, no allocation
-    mul!(F, B, parent(uₕ), 1.0, 1.0)             # F += B uⁿ
-    dirichlet_bc!(F, Ωₕ, bcs, :boundary)
-    ldiv!(uₕ, fact, F)                           # uⁿ⁺¹ into the same storage
+function step!(u, F, g, B, fact, t)
+    F .= exp(-t) .* g                            # data and source at t
+    mul!(F, B, u, 1.0, 1.0)                      # F += B uⁿ
+    ldiv!(u, fact, F)                            # uⁿ⁺¹ into the same storage
     return nothing
 end
 
@@ -113,40 +117,73 @@ end
 # arguments. `@allocated` written at top level can report the caller's boxing of the globals
 # it reads rather than the routine's own work, so the barrier is the safer habit.
 
-function step_allocation(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)
-    step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t)             # warm up: compile first
-    return @allocated step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, t + 0.5)
+function step_allocation(u, F, g, B, fact, t)
+    step!(u, F, g, B, fact, t)                   # warm up: compile first
+    return @allocated step!(u, F, g, B, fact, t + 0.5)
 end
 
-allocated = step_allocation(uₕ, F, decay, B, fact, l, Ωₕ, bcs, Δt / 2)
+allocated = step_allocation(u, F, g, B, fact, Δt / 2)
 
 @test allocated == 0                                                                       #src
 
 allocated
 
-# Nothing, and the test asserts exactly that zero. A closure built inside the loop,
-# `Rₕ!(fₕ, x -> source(x, t))`, costs nothing here, because `Rₕ!` is compiled for it. A call
-# the compiler cannot specialise does cost: the same closure reaching `Rₕ!` through a value of
-# uninferred type allocates 96 bytes per step, which a bound of a few hundred bytes would let
-# through.
+# Nothing, and the test asserts exactly that zero. The step reads its time through a plain
+# number, so the Robin data moving in time cost no allocation.
 #
 # ## Running it
 #
-# Two hundred steps to `t = 1`, reusing the same five buffers:
+# Two hundred steps to `t = 1`, reusing the same buffers:
 
-parent(uₕ) .= parent(Rₕ(Wₕ, x -> uexact(x, 0.0)))
+u .= parent(Rₕ(Wₕ, x -> uexact(x, 0.0)))[2:end]
 
 for n in 1:200
-    step!(uₕ, F, decay, B, fact, l, Ωₕ, bcs, (n - 0.5) * Δt)
+    step!(u, F, g, B, fact, (n - 0.5) * Δt)
 end
 
-err = normₕ(uₕ - Rₕ(Wₕ, x -> uexact(x, 1.0)))
+function on_grid(u)
+    uₕ = element(Wₕ)
+    parent(uₕ)[1] = 0.0
+    parent(uₕ)[2:end] .= u
+    return uₕ
+end
+
+err = normₕ(on_grid(u) - Rₕ(Wₕ, x -> uexact(x, 1.0)))
 
 # Bracketed away from zero: an exactly zero error would mean the scheme had reproduced the #src
 # manufactured solution by construction rather than stepped to it.                         #src
 @test 1.0e-8 < err < 1.0e-4                                                                #src
 
 err
+
+# ## The relation at the final time
+#
+# `Bramble.lift(Cₜ, u, t)` returns the solution on the padded grid with the ghost value the
+# relation fixes at time `t`. The ghost is fixed by the relation itself, so the check that
+# means something is independent of it: the three-point backward difference of the lifted
+# solution at ``x = 1`` for the normal derivative must satisfy ``u + \partial_n u = h(1)``
+# up to the truncation error, with the data at the final time, not at ``t = 0``:
+
+function robin_residual(Cₜ, u, t)
+    U = parent(Bramble.lift(Cₜ, u, t))
+    G = Bramble.mesh(Cₜ)
+    xs = collect(points(Ωₕ))
+    n = length(xs)
+    h₁, h₂ = xs[n] - xs[n - 1], xs[n - 1] - xs[n - 2]
+    at(i) = U[Bramble.padded_index(G, CartesianIndex(i))]
+    dₙ = (2h₁ + h₂) / (h₁ * (h₁ + h₂)) * at(n) - (h₁ + h₂) / (h₁ * h₂) * at(n - 1) +
+         h₁ / (h₂ * (h₁ + h₂)) * at(n - 2)
+    return abs(at(n) + dₙ + π * exp(-t))
+end
+
+residual = robin_residual(Cₜ, u, 1.0)
+
+# A truncation error, not round-off, and far below the size of the data, ``\pi e^{-1}``,
+# which the same check at the initial data misses by order one:                              #src
+@test 1.0e-9 < residual < 1.0e-3                                                           #src
+@test robin_residual(Cₜ, u, 0.0) > 1.0                                                     #src
+
+residual
 
 #-
 
@@ -164,27 +201,17 @@ surface_plot(ust; title = "u(x, t) = e⁻ᵗ sin(πx), the solution being steppe
 
 function crank_nicolson(nsteps)
     Δt = 1 / nsteps
-    A = allocate_system_matrix(pattern)
-    B = similar(A)
-
-    fill!(nonzeros(A), 0.0)
-    assemble_add!(A, m, 1 / Δt)
-    assemble_add!(A, k, 0.5)
-    dirichlet_bc!(A, Ωₕ, :boundary)
-
-    fill!(nonzeros(B), 0.0)
-    assemble_add!(B, m, 1 / Δt)
-    assemble_add!(B, k, -0.5)
-
+    A = M / Δt + K / 2
+    B = M / Δt - K / 2
     fact = sparse_factorize(A; sym = :unsymmetric)
-    u = Rₕ(Wₕ, x -> uexact(x, 0.0))
-    F = zeros(ndofs(Wₕ))
+    u = copy(parent(Rₕ(Wₕ, x -> uexact(x, 0.0)))[2:end])
+    F = zeros(ndofs(Cₕ))
 
     for n in 1:nsteps
-        step!(u, F, decay, B, fact, l, Ωₕ, bcs, (n - 0.5) * Δt)
+        step!(u, F, g, B, fact, (n - 0.5) * Δt)
     end
 
-    return u
+    return on_grid(u)
 end
 
 uref = crank_nicolson(6400)
@@ -207,7 +234,7 @@ convergence_plot([(Δts, errs, "Crank-Nicolson", "#5B5FC7")]; # hide
 
 # The orders are two to within a few parts in a thousand, and the errors sit on the
 # dashed line of slope two. Against the exact solution the same four errors would flatten
-# out and then grow back toward the spatial error of the mesh, about `6e-6`, which says
+# out and then grow back toward the spatial error of the mesh, about `5e-6`, which says
 # nothing about the time stepping.
 #
 # ## Where to go next

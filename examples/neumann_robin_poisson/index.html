@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Neumann, Robin and pure Neumann boundaries — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=667304f3">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=7c9cb23c">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Neumann, Robin and pure Neumann boundaries — Bramble.jl">
   <meta property="og:title" content="Neumann, Robin and pure Neumann boundaries — Bramble.jl">
@@ -201,7 +201,7 @@ order_robin = order(hs_robin, errs_robin)
 order_neumann = order(hs_neumann, errs_neumann)
 (order_mixed, order_robin, order_neumann)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.000092631910595, 1.9999237631738949, 2.0001737138860487)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.000092631987504, 1.9999237630517444, 2.000173713957636)</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -287,7 +287,7 @@ order_neumann = order(hs_neumann, errs_neumann)
   const data = [{
   name: "Robin and Neumann",
   x: [0.34675352403294174,0.17337676201647093,0.08668838100823553,0.04334419050411781,0.021672095252058984],
-  y: [0.07012854226933694,0.017456643485991033,0.004359608300466965,0.0010896211219204733,0.0002723877905665896],
+  y: [0.07012854226933565,0.017456643485989756,0.004359608300472604,0.0010896211219100385,0.00027238779054946033],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
@@ -295,7 +295,7 @@ order_neumann = order(hs_neumann, errs_neumann)
 {
   name: "Robin",
   x: [0.34675352403294174,0.17337676201647093,0.08668838100823553,0.04334419050411781,0.021672095252058984],
-  y: [0.0473662373098158,0.011869704778755394,0.0029696820921601896,0.0007425735097182643,0.00018565318770507984],
+  y: [0.04736623730981574,0.011869704778755229,0.0029696820921642545,0.0007425735097244692,0.00018565318772235007],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#0E7C86", size: 8 },
@@ -303,7 +303,7 @@ order_neumann = order(hs_neumann, errs_neumann)
 {
   name: "pure Neumann",
   x: [0.34675352403294174,0.17337676201647093,0.08668838100823553,0.04334419050411781,0.021672095252058984],
-  y: [0.06525818269000067,0.016184690607558387,0.004038301502528256,0.0010090880786041952,0.00025224164558488877],
+  y: [0.06525818269000129,0.01618469060756113,0.0040383015025261685,0.0010090880786110697,0.0002522416455740908],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#B26A00", size: 8 },
@@ -311,7 +311,7 @@ order_neumann = order(hs_neumann, errs_neumann)
 {
   name: "slope 2",
   x: [0.021672095252058984, 0.34675352403294174],
-  y: [0.0002723877905665896, 0.06973127438504613],
+  y: [0.00027238779054946033, 0.06973127438066104],
   mode: 'lines',
   type: 'scatter',
   line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
@@ -386,6 +386,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=667304f3"></script>
+  <script src="../../assets/materialdocs.js?v=7c9cb23c"></script>
 </body>
 </html>

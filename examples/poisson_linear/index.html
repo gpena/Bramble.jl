@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear Poisson equation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=9a235df1">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=79baedad">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Linear Poisson equation — Bramble.jl">
   <meta property="og:title" content="Linear Poisson equation — Bramble.jl">
@@ -95,10 +95,14 @@
 <p>A worked problem, built from pieces the <a href="../../tutorials/form/#tutorial_form">forms tutorial</a> introduces one at a time. Every number and every plot below was produced by the code shown.</p>
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-math md-math-display">
-\[-\Delta u = g \text{ in } \Omega, \qquad u = u_{\text{exact}} \text{ on } \partial\Omega,
-\qquad \Omega = (0,1)^2\]
+\[-\Delta u = g \text{ in } \Omega = (0,1)^2, \qquad
+u = u_{\text{exact}} \text{ on } \texttt{xmin} \text{ and } \texttt{ymin}, \qquad
+u + \partial_n u = h \text{ on } \texttt{xmax} \text{ and } \texttt{ymax},\]
 </div>
-<p>with the manufactured solution <span class="md-math md-math-inline">\(u_{\text{exact}}(x, y) = e^{x+y}\)</span>, so <span class="md-math md-math-inline">\(g = -2 u_{\text{exact}}\)</span>. A manufactured solution is what makes the error checkable at all. Without one there is nothing to compare the discrete solution against.</p>
+<p>with <span class="md-math md-math-inline">\(\partial_n\)</span> the outward normal derivative: a Dirichlet condition on the two sides at the origin and a Robin condition on the two others. The manufactured solution is <span class="md-math md-math-inline">\(u_{\text{exact}}(x, y) = e^{x+y}\)</span>, so <span class="md-math md-math-inline">\(g = -2 u_{\text{exact}}\)</span>, and the Robin data <span class="md-math md-math-inline">\(h = u_{\text{exact}} + \partial_n u_{\text{exact}} = 2 u_{\text{exact}}\)</span> there, since the outward normal derivative of <span class="md-math md-math-inline">\(e^{x+y}\)</span> on <code class="md-code-inline">xmax</code> and <code class="md-code-inline">ymax</code> is <span class="md-math md-math-inline">\(u_{\text{exact}}\)</span> itself. A manufactured solution is what makes the error checkable at all. Without one there is nothing to compare the discrete solution against.</p>
+<h2 id="Ghost-points-on-the-Robin-sides" class="md-heading">Ghost points on the Robin sides<a href="#Ghost-points-on-the-Robin-sides" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The Robin sides go through ghost points: <code class="md-code-inline">gridspace(Ωₕ; ghosts = (:xmax, :ymax))</code> adds one layer outside those two sides only. <code class="md-code-inline">constrained</code> takes a function of the trial function <code class="md-code-inline">u</code> and returns one <code class="md-code-inline">side =&gt; relation =&gt; data</code> entry per side, here <code class="md-code-inline">u + ∂ₙ(u)</code> with the data <span class="md-math md-math-inline">\(h\)</span> as a function of the boundary point. Each relation fixes a ghost value from the interior ones, which leaves the physical nodes as the only unknowns.</p>
+<p>The Dirichlet sides need no ghosts. There are two ways to impose them. The <code class="md-code-inline">dirichlet</code> keyword of <code class="md-code-inline">assemble</code> replaces the rows of those nodes, and <code class="md-code-inline">symmetrize = true</code> moves the known values to the right-hand side so the matrix stays symmetric. The alternative is the relation <code class="md-code-inline">u =&gt; g</code> in <code class="md-code-inline">constrained</code>, which removes the nodes from the unknowns. The page solves with the keyword and checks below that the relation gives the same solution.</p>
 <h2 id="Assembling-and-solving-on-a-random-grid" class="md-heading">Assembling and solving on a random grid<a href="#Assembling-and-solving-on-a-random-grid" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -120,23 +124,77 @@ Wₕ = gridspace(Ωₕ)</code></pre>
 </div>
 <p><code class="md-code-inline">(false, false)</code> builds a non-uniform, randomly-perturbed grid in both directions, deliberately, not the default: a uniform grid happens to make this particular manufactured solution nearly exact for this scheme regardless of mesh size, which would make the convergence check below pass on a broken implementation just as readily as a correct one.</p>
 <p>The seed is what makes the numbers below reproducible: <code class="md-code-inline">(false, false)</code> draws the interior points from the global RNG, so without it the mesh – and every figure on this page – would differ from build to build, and the suite could not assert what the page prints.</p>
-<p>The bilinear form is the discrete Laplacian, the same <code class="md-code-inline">inner₊(∇ₕ(u), ∇ₕ(v))</code> the <a href="../../tutorials/form/#form_dirichlet">forms tutorial</a> builds in one dimension:</p>
+<p>The bilinear form is the discrete Laplacian, written <span class="md-math md-math-inline">\(\langle -\Delta_h u, v \rangle_h\)</span> because it reads the ghost values the relations fix; the <a href="../../tutorials/form/#form_dirichlet">forms tutorial</a> builds the same operator in one dimension as <code class="md-code-inline">inner₊(∇ₕ(u), ∇ₕ(v))</code>. The source is the cell average of the right-hand side against the test function, <code class="md-code-inline">innerₕ(rhs, v)</code>:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">bcs = dirichlet_constraints(Ω, :boundary =&gt; sol)
+<pre><code class="language-julia">robin_data(x) = 2 * sol(x)
 
-a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))
-A = assemble(a; dirichlet = :boundary)
+function poisson_system(Ωₕ)
+    Cₕ = constrained(gridspace(Ωₕ; ghosts = (:xmax, :ymax)),
+        u -&gt; (:xmax =&gt; u + ∂ₙ(u) =&gt; robin_data, :ymax =&gt; u + ∂ₙ(u) =&gt; robin_data))
+    a = form(Cₕ, Cₕ, (u, v) -&gt; innerₕ(-1.0 * Δₕ(u), v))
+    l = form(Cₕ, v -&gt; innerₕ(rhs, v))
+    A, F = assemble(a, l; dirichlet = (:xmin =&gt; sol, :ymin =&gt; sol), symmetrize = true)
+    return Cₕ, A, F
+end
 
-gₕ = element(Wₕ)
-avgₕ!(gₕ, rhs)
-l = form(Wₕ, v -&gt; innerₕ(gₕ, v))
-F = assemble(l; dirichlet = bcs)
+Cₕ, A, F = poisson_system(Ωₕ)
 
 uₕ = element(Wₕ)
-uₕ .= A \ F</code></pre>
+uₕ .= pde_solve(A, F)</code></pre>
 </div>
+</div>
+<h2 id="The-Robin-relation-on-the-lifted-solution" class="md-heading">The Robin relation on the lifted solution<a href="#The-Robin-relation-on-the-lifted-solution" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">Bramble.lift(Cₕ, u)</code> returns the solution on the padded grid, with the ghost values the relations fix filled in. The relation is satisfied by the ghosts, so the check that means something is one-sided and independent of them: on the physical nodes of <code class="md-code-inline">xmax</code>, the three-point backward difference of the lifted solution for the normal derivative, with the non-uniform spacings, must satisfy <span class="md-math md-math-inline">\(u + \partial_n u = h\)</span> up to the truncation error, of order <span class="md-math md-math-inline">\(h^2\)</span>. <code class="md-code-inline">robin_residual</code> returns the largest residual over the nodes of the side:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">function robin_residual(Ωₕ, Cₕ, u)
+    U = parent(Bramble.lift(Cₕ, u))
+    G = Bramble.mesh(Cₕ)
+    nx, ny = Bramble.npoints(Ωₕ, Tuple)
+    xs, ys = collect(points(Ωₕ(1))), collect(points(Ωₕ(2)))
+    h₁, h₂ = xs[nx] - xs[nx - 1], xs[nx - 1] - xs[nx - 2]
+    lin = LinearIndices(Bramble.npoints(G, Tuple))
+    at(i, j) = U[lin[Bramble.padded_index(G, CartesianIndex(i, j))]]
+    return maximum(1:ny) do j
+        dₙ = (2h₁ + h₂) / (h₁ * (h₁ + h₂)) * at(nx, j) -
+             (h₁ + h₂) / (h₁ * h₂) * at(nx - 1, j) + h₁ / (h₂ * (h₁ + h₂)) * at(nx - 2, j)
+        abs(at(nx, j) + dₙ - robin_data((xs[nx], ys[j])))
+    end
+end
+
+residual = robin_residual(Ωₕ, Cₕ, pde_solve(A, F))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.00913610567344314</code></pre>
+</div>
+<p>This is the truncation error of the one-sided difference, plus the error of the solution itself, so it is small but not round-off. It falls as <span class="md-math md-math-inline">\(h^2\)</span>: the same random mesh at 12 points per side, then split once, gives</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">residuals = let
+    Random.seed!(20260903)
+    Ωc = mesh(Ω, (12, 12), (false, false))
+    out = Float64[]
+    for level in 1:2
+        Cc, Ac, Fc = poisson_system(Ωc)
+        push!(out, robin_residual(Ωc, Cc, pde_solve(Ac, Fc)))
+        level &lt; 2 &amp;&amp; iterative_refinement!(Ωc)
+    end
+    out
+end</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
+ 0.009464289630539469
+ 0.0023085554352881843</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">residuals[2] &lt; residuals[1]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
 <h2 id="Browsing-the-solution" class="md-heading">Browsing the solution<a href="#Browsing-the-solution" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>An interactive panel, seeded from the resolution of <code class="md-code-inline">uₕ</code> above but solving its own problem in the browser: drag the resolution slider, switch between a uniform and a fully random mesh, or pick a different manufactured solution, and every plot and diagnostic below updates immediately.</p>
@@ -712,31 +770,32 @@ uₕ .= A \ F</code></pre>
 </div>
 </div>
 <h2 id="Convergence-in-one,-two-and-three-dimensions" class="md-heading">Convergence in one, two and three dimensions<a href="#Convergence-in-one,-two-and-three-dimensions" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>The check is not that it ran but that it converges at the rate the scheme promises, on genuinely random grids, in 1D, 2D and 3D: one random coarse mesh per dimension, refined in place with <a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> so every finer level is the <em>same</em> random mesh, dyadically split, rather than a fresh independent draw that would add its own noise to the measured rate.</p>
+<p>The check is not that it ran but that it converges at the rate the scheme promises, on genuinely random grids, in 1D, 2D and 3D, with the same Dirichlet and Robin sides in each: one random coarse mesh per dimension, refined in place with <a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> so every finer level is the <em>same</em> random mesh, dyadically split, rather than a fresh independent draw that would add its own noise to the measured rate.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">function poisson_series(D::Int; n0::Int = 5, levels::Int)
     sol_d(x) = exp(sum(x))
     rhs_d(x) = -D * sol_d(x)
+    robin_d(x) = 2 * sol_d(x)
+    lo = (:xmin, :ymin, :zmin)[1:D]    # Dirichlet sides
+    hi = (:xmax, :ymax, :zmax)[1:D]    # Robin sides, through ghost points
 
     Ωd = domain(reduce(×, ntuple(_ -&gt; interval(0.0, 1.0), D)))
     Ωc = mesh(Ωd, ntuple(_ -&gt; n0, D), ntuple(_ -&gt; false, D))
 
     hs, errs = Float64[], Float64[]
     for level in 1:levels
+        Cc = constrained(gridspace(Ωc; ghosts = hi),
+            u -&gt; ntuple(j -&gt; hi[j] =&gt; u + ∂ₙ(u) =&gt; robin_d, D))
+        a_c = form(Cc, Cc, (u, v) -&gt; innerₕ(-1.0 * Δₕ(u), v))
+        l_c = form(Cc, v -&gt; innerₕ(rhs_d, v))
+        A_c, F_c = assemble(a_c, l_c;
+            dirichlet = ntuple(j -&gt; lo[j] =&gt; sol_d, D), symmetrize = true)
+
         Wc = gridspace(Ωc)
-        bcs_c = dirichlet_constraints(Ωd, :boundary =&gt; sol_d)
-
-        a_c = form(Wc, Wc, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))
-        A_c = assemble(a_c; dirichlet = :boundary)
-        g_c = element(Wc)
-        avgₕ!(g_c, rhs_d)
-        l_c = form(Wc, v -&gt; innerₕ(g_c, v))
-        F_c = assemble(l_c; dirichlet = bcs_c)
-
         u_c = element(Wc)
-        u_c .= A_c \ F_c
+        u_c .= pde_solve(A_c, F_c)
         uexact_c = Rₕ(Wc, sol_d)
 
         push!(hs, hₘₐₓ(Ωc))
@@ -758,7 +817,7 @@ order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end])
 order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 (order1, order2, order3)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.9999725315392576, 1.9987351691302102, 1.9213573741845726)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.000007249133581, 1.9998135835124402, 1.9931291034460799)</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -839,7 +898,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
   const data = [{
   name: "1D",
   x: [0.4537346574443589,0.22686732872217952,0.11343366436108976,0.05671683218054491,0.028358416090272454,0.014179208045136282,0.007089604022568197],
-  y: [0.00563052255415435,0.0014387185891611759,0.00036159826835796555,9.051909558615742e-5,2.263723852315859e-5,5.659774746395203e-6,1.4149706269389574e-6],
+  y: [0.03802428777007767,0.009460861937153368,0.002362294497466596,0.0005903895326010851,0.0001475858519704996,3.689573987109674e-5,9.223888620232517e-6],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
@@ -847,7 +906,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 {
   name: "2D",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114,0.0227543707220516],
-  y: [0.03199953910428043,0.008793250953002473,0.0022653396970799826,0.0005717359850565832,0.00014335278947023912,3.586963099231606e-5],
+  y: [0.1003338249655285,0.02533002742783694,0.006359324280964541,0.001592092737199126,0.00039819738228465313,9.956220957763757e-5],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#0E7C86", size: 8 },
@@ -855,7 +914,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 {
   name: "3D",
   x: [0.918047411794347,0.4590237058971735,0.22951185294858678,0.1147559264742934],
-  y: [0.0492908472784506,0.02239485324746605,0.006603070237374775,0.0017432501646746801],
+  y: [0.23506965603104554,0.059801650024572044,0.015125541604017372,0.003799437362462924],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#B26A00", size: 8 },
@@ -863,7 +922,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 {
   name: "slope 2",
   x: [0.007089604022568197, 0.918047411794347],
-  y: [1.4149706269389574e-6, 0.023726500501668205],
+  y: [9.223888620232517e-6, 0.15466794420229318],
   mode: 'lines',
   type: 'scatter',
   line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
@@ -900,7 +959,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 
 </div>
 </div>
-<p>Second order in every dimension, on grids chosen specifically not to make that trivially true: every curve&#39;s markers sit along the same reference slope. 3D uses fewer refinement levels than 2D, and 2D fewer than 1D: the same dyadic split costs <span class="md-math md-math-inline">\(8\times\)</span> the points per level in 3D against <span class="md-math md-math-inline">\(4\times\)</span> in 2D and <span class="md-math md-math-inline">\(2\times\)</span> in 1D, so matching level counts across all three would make the higher dimensions by far the most expensive part of this page for no extra information.</p>
+<p>Second order in every dimension, with a Dirichlet condition on the sides at the origin and a Robin condition on the others, on grids chosen specifically not to make that trivially true: every curve&#39;s markers sit along the same reference slope. 3D uses fewer refinement levels than 2D, and 2D fewer than 1D: the same dyadic split costs <span class="md-math md-math-inline">\(8\times\)</span> the points per level in 3D against <span class="md-math md-math-inline">\(4\times\)</span> in 2D and <span class="md-math md-math-inline">\(2\times\)</span> in 1D, so matching level counts across all three would make the higher dimensions by far the most expensive part of this page for no extra information.</p>
 <h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <ul class="md-list-tight">
 <li><p><a href="../../examples/convection_diffusion_linear/">Convection-diffusion</a> for a non-symmetric operator on the same grids.</p>
@@ -917,7 +976,9 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
       <div class="md-toc-inner">
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#Problem">Problem</a>
+          <a class="md-toc-link md-toc-h2" href="#Ghost-points-on-the-Robin-sides">Ghost points on the Robin sides</a>
           <a class="md-toc-link md-toc-h2" href="#Assembling-and-solving-on-a-random-grid">Assembling and solving on a random grid</a>
+          <a class="md-toc-link md-toc-h2" href="#The-Robin-relation-on-the-lifted-solution">The Robin relation on the lifted solution</a>
           <a class="md-toc-link md-toc-h2" href="#Browsing-the-solution">Browsing the solution</a>
           <a class="md-toc-link md-toc-h2" href="#Convergence-in-one,-two-and-three-dimensions">Convergence in one, two and three dimensions</a>
           <a class="md-toc-link md-toc-h2" href="#Where-to-go-next">Where to go next</a>
@@ -938,6 +999,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=9a235df1"></script>
+  <script src="../../assets/materialdocs.js?v=79baedad"></script>
 </body>
 </html>

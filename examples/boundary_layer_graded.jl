@@ -10,10 +10,13 @@
 # ## Problem
 #
 # ```math
-# -\varepsilon u'' + u' = 1 \text{ in } (0,1), \qquad u(0) = u(1) = 0,
+# -\varepsilon u'' + u' = 1 \text{ in } (0,1), \qquad
+# u(0) - u'(0) = h, \quad u(1) = 0,
 # ```
 #
-# with ``\varepsilon = 10^{-3}``. The exact solution
+# with ``\varepsilon = 10^{-3}``: a Robin condition at `x = 0`, written with the outward
+# normal derivative ``\partial_n u = -u'`` as ``u + \partial_n u = h``, and a Dirichlet
+# condition at the layer end `x = 1`. The exact solution
 #
 # ```math
 # u_{\text{exact}}(x) = x - \frac{e^{(x-1)/\varepsilon} - e^{-1/\varepsilon}}
@@ -22,7 +25,10 @@
 #
 # rises like `x` across the domain and then drops to zero inside a layer of width
 # ``\mathcal{O}(\varepsilon)`` at `x = 1`. Written this way rather than with
-# ``e^{1/\varepsilon}`` in a denominator, which overflows at this ``\varepsilon``.
+# ``e^{1/\varepsilon}`` in a denominator, which overflows at this ``\varepsilon``. It
+# vanishes at `x = 0` and has ``u'(0) = 1 - e^{-1/\varepsilon} / (\varepsilon (1 -
+# e^{-1/\varepsilon}))``, which is `1` to machine precision, so the Robin datum is
+# ``h = u_{\text{exact}}(0) - u_{\text{exact}}'(0)``, computed from the exact solution.
 
 using Bramble
 using Bramble: change_points!
@@ -30,23 +36,34 @@ using Bramble: change_points!
 const ε = 1.0e-3
 
 uexact(x) = x[1] - (exp((x[1] - 1) / ε) - exp(-1 / ε)) / (1 - exp(-1 / ε))
+duexact(x) = 1 - exp((x[1] - 1) / ε) / (ε * (1 - exp(-1 / ε)))
+robin_datum(x) = uexact(x) - duexact(x)
 
 Ω = domain(interval(0.0, 1.0), :left => :left, :right => :right)
 
-# The convective term is `inner₊(Mₕ(u), ∇ₕ(v))`, the same staggered discretisation the
-# [convection-diffusion example](convection_diffusion_linear.md) uses. It is the discrete
-# counterpart of ``\int u v'``, which integration by parts turns into ``-\int u' v``, so a
-# convective term `+u'` in the equation enters the form with a minus sign.
+# The Robin end goes through ghost points: `gridspace(Ωₕ; ghosts = (:xmin,))` adds one ghost
+# node outside `x = 0` only, and `constrained` fixes it from the relation `u + ∂ₙ(u) = h`,
+# with `h` a function of the boundary point. The Dirichlet end needs no ghost and is handed
+# to `assemble` as `side => data`. The convective term is the strong operator `∇̽ₕ`, the
+# second-order centred derivative on a non-uniform grid, because a ghost value enters a
+# difference stencil and not the staggered average of the weak form. The form is
+# ``\langle -\varepsilon \Delta_h u + \breve\nabla_h u, v \rangle_h``, with the source `1`
+# tested against `v` in the same inner product.
 
-function solve_on(pts)
+function system_on(pts)
     Ωₕ = mesh(Ω, length(pts))
     change_points!(Ωₕ, collect(pts))
+    Cₕ = constrained(gridspace(Ωₕ; ghosts = (:xmin,)),
+        u -> (:xmin => u + ∂ₙ(u) => robin_datum,))
+    a = form(Cₕ, Cₕ, (u, v) -> innerₕ(-ε * Δₕ(u) + ∇̽ₕ(u), v))
+    l = form(Cₕ, v -> innerₕ(x -> 1.0, v))
+    A, F = assemble(a, l; dirichlet = :xmax => uexact)
+    return Ωₕ, Cₕ, A, F
+end
+
+function solve_on(pts)
+    Ωₕ, Cₕ, A, F = system_on(pts)
     Wₕ = gridspace(Ωₕ)
-
-    a = form(Wₕ, Wₕ, (u, v) -> ε * inner₊(∇ₕ(u), ∇ₕ(v)) - inner₊(Mₕ(u), ∇ₕ(v)))
-    l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 1.0), v))
-
-    A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
     uₕ = element(Wₕ)
     uₕ .= A \ F
 
@@ -90,10 +107,10 @@ err_graded, over_graded = solve_on(graded_points(41))
 
 (err_uniform, over_uniform), (err_graded, over_graded)
 
-# Three orders of magnitude in the error, and the overshoot tells the same story more
+# More than two orders of magnitude in the error, and the overshoot tells the same story more
 # physically: the uniform solution rises to nearly 1.9 where the exact solution peaks just
 # below 1, because a cell wider than the layer cannot represent the drop and oscillates
-# instead. The graded solution overshoots by less than a thousandth.
+# instead. The graded solution overshoots by about a thousandth.
 #
 # The oscillation is not a solver problem and no amount of tightening a tolerance removes it.
 # The cell Péclet number `h / (2ε)` is what decides it, and on a uniform mesh with
@@ -122,6 +139,38 @@ observed_orders = log2.(graded_errors[1:(end - 1)] ./ graded_errors[2:end])
 @test all(1.9 .< observed_orders .< 2.1)                                                   #src
 
 observed_orders
+
+# ## The Robin relation on the lifted solution
+#
+# `Bramble.lift(Cₕ, u)` returns the solution on the padded grid, with the ghost value the
+# relation fixes filled in. The relation holds at the ghost by construction, so the check
+# that means something is one-sided and independent of it: at `x = 0`, the three-point
+# forward difference of the lifted solution, with the non-uniform spacings and negated for
+# the outward normal, must satisfy ``u + \partial_n u = h`` up to the truncation error, of
+# order ``h^2``. `robin_residual` returns the residual at that node:
+
+function robin_residual(pts)
+    Ωₕ, Cₕ, A, F = system_on(pts)
+    U = parent(Bramble.lift(Cₕ, A \ F))
+    G = Bramble.mesh(Cₕ)
+    xs = collect(pts)
+    h₁, h₂ = xs[2] - xs[1], xs[3] - xs[2]
+    at(i) = U[Bramble.padded_index(G, CartesianIndex(i))]
+    dₓ = -(2h₁ + h₂) / (h₁ * (h₁ + h₂)) * at(1) + (h₁ + h₂) / (h₁ * h₂) * at(2) -
+         h₁ / (h₂ * (h₁ + h₂)) * at(3)
+    return abs(at(1) - dₓ - robin_datum(xs[1]))
+end
+
+robin_residuals = [robin_residual(graded_points(n)) for n in ns]
+
+@test all(robin_residuals .< 1.0e-5)                                                       #src
+@test robin_residuals[end] < robin_residuals[1] / 4                                        #src
+
+robin_residuals
+
+# The exact solution is linear near `x = 0`, so the one-sided difference has no truncation
+# error to speak of and the residual reaches round-off after the first mesh: the relation
+# holds to the accuracy of the solve, not only to the order of the scheme.
 
 #-
 

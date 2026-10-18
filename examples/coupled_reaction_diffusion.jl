@@ -19,6 +19,10 @@
 # interaction term, `v` is depleted by it. The manufactured solutions vanish on the boundary
 # already, so homogeneous Dirichlet data is all that is needed.
 #
+# The boundary stays Dirichlet-only here because forms on a ghost space refuse the automatic
+# differentiation that Newton's Jacobian needs, which arrives with milestone v4.3.0
+# (automatic differentiation and form correctness on the CPU).
+#
 # ## Mesh, space and load
 
 using Bramble

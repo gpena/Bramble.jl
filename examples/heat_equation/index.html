@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Heat equation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=6a9675fc">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1439f2fc">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Heat equation — Bramble.jl">
   <meta property="og:title" content="Heat equation — Bramble.jl">
@@ -97,34 +97,103 @@
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-math md-math-display">
 \[\partial_t u = \Delta u + f \text{ in } \Omega \times (0, T], \qquad u = g \text{ on }
-\partial\Omega, \qquad u(\cdot, 0) = u_0,\]
+\texttt{left}, \qquad u + \partial_n u = h \text{ on } \texttt{right}, \qquad
+u(\cdot, 0) = u_0,\]
 </div>
-<p>on <span class="md-math md-math-inline">\(\Omega = (0,1)\)</span> with the manufactured solution <span class="md-math md-math-inline">\(u_{\text{exact}}(x, t) = e^{-t} \sin(\pi x)\)</span>, which vanishes on the boundary and forces</p>
+<p>on <span class="md-math md-math-inline">\(\Omega = (0,1)\)</span> with <span class="md-math md-math-inline">\(\partial_n\)</span> the outward normal derivative, and the manufactured solution <span class="md-math md-math-inline">\(u_{\text{exact}}(x, t) = e^{-t} \sin(\pi x)\)</span>, which forces</p>
 <div class="md-math md-math-display">
-\[f(x, t) = (\pi^2 - 1)\, e^{-t} \sin(\pi x).\]
+\[f(x, t) = (\pi^2 - 1)\, e^{-t} \sin(\pi x),\]
 </div>
+<p>vanishes at the left end, so <span class="md-math md-math-inline">\(g = 0\)</span>, and gives the Robin data <span class="md-math md-math-inline">\(h(x, t) = u_{\text{exact}} + \partial_x u_{\text{exact}} = e^{-t} (\sin(\pi x) + \pi \cos(\pi x))\)</span> at the right end. Later sections also use the same solution with a Dirichlet condition at both ends, since it vanishes at both.</p>
 <h2 id="The-method-of-lines" class="md-heading">The method of lines<a href="#The-method-of-lines" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Discretising space alone leaves one ordinary differential equation per degree of freedom,</p>
 <div class="md-math md-math-display">
 \[M \frac{\mathrm{d} u_h}{\mathrm{d} t} = F(t) - A u_h,\]
 </div>
 <p>where <span class="md-math md-math-inline">\(A\)</span> is the same discrete Laplacian the steady problem assembles, <span class="md-math md-math-inline">\(F(t)\)</span> is the source at time <span class="md-math md-math-inline">\(t\)</span>, and <span class="md-math md-math-inline">\(M\)</span> is the mass matrix of the discrete inner product <span class="md-math md-math-inline">\(\langle \cdot, \cdot \rangle_h\)</span>. It is diagonal, since that inner product is a weighted sum over grid points.</p>
-<p><a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a> builds exactly this. The spatial form is written the way the steady problem writes it, so the steady state of the system below solves <span class="md-math md-math-inline">\(A u_h = F\)</span>:</p>
+<h2 id="Boundary-relations-through-ghost-points" class="md-heading">Boundary relations through ghost points<a href="#Boundary-relations-through-ghost-points" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a> builds exactly this. The Robin end goes through the ghost layer, as in the <a href="../../examples/neumann_robin_poisson/">Neumann and Robin Poisson example</a>: <code class="md-code-inline">gridspace(Ωₕ; ghosts)</code> adds a ghost point beyond the end, and <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> takes a function of the trial function <code class="md-code-inline">u</code> that returns one <code class="md-code-inline">side =&gt; relation =&gt; data</code> entry per side. The data may take the time as a second argument, <code class="md-code-inline">(x, t) -&gt; ...</code>, which <code class="md-code-inline">semidiscretize</code> finds by the arity and refreshes at every step. The Dirichlet end is the relation <code class="md-code-inline">u =&gt; g</code>, which removes its node from the unknowns. The spatial form is written <span class="md-math md-math-inline">\(\langle -\Delta_h u, v \rangle_h\)</span>, which reads the ghost values the relations fix:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">using Bramble
 using Bramble: allocate_system_matrix, mass_matrix
+using OrdinaryDiffEqBDF
 
 uexact(x, t) = exp(-t) * sinpi(x[1])
 source(x, t) = (pi^2 - 1) * exp(-t) * sinpi(x[1])
+robin(x, t) = exp(-t) * (sinpi(x[1]) + pi * cospi(x[1]))
 
 Ω = domain(interval(0.0, 1.0), :left =&gt; :left, :right =&gt; :right)
 Ωₕ = mesh(Ω, 101)
 Wₕ = gridspace(Ωₕ)
 I = interval(0.0, 1.0)          # the time domain
 
-fₕ = element(Wₕ, 0.0)
+function robin_problem(Ωₕ, (left, right); T = 1.0)
+    Cₕ = constrained(gridspace(Ωₕ; ghosts = right),
+        u -&gt; (left =&gt; u =&gt; (x, t) -&gt; 0.0, right =&gt; u + ∂ₙ(u) =&gt; robin))
+    fₕ = element(Bramble.padded_space(Cₕ), 0.0)
+    a = form(Cₕ, Cₕ, (u, v) -&gt; innerₕ(-1.0 * Δₕ(u), v))
+    l = form(Cₕ, v -&gt; innerₕ(fₕ, v))
+    sd = semidiscretize(a, l; update_coefficients! = t -&gt; Rₕ!(fₕ, x -&gt; source(x, t)))
+    u₀ = parent(Rₕ(gridspace(Ωₕ), x -&gt; uexact(x, 0.0)))[2:end]   # the left node is no unknown
+    sol = solve(ode_problem(sd, u₀, (0.0, T)), FBDF(); reltol = 1e-10, abstol = 1e-12)
+    return Cₕ, sd, sol
+end
+
+Cₕ, sd_robin, sol_robin = robin_problem(Ωₕ, (:left, :right))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(GhostGridSpace{1D, Float64, 100 dofs}, Semidiscretization{100 dofs, 0 constrained labels}, [0.03141075907812829 0.03141075907794701 … 0.011655556205233432 0.011555831455830046; 0.06279051952931337 0.062790519528951 … 0.023299609244673492 0.023100258166585026; … ; 0.03141075907812832 0.03141075907794704 … 0.011605232396870691 0.011505924331171745; 0.0 -5.969249180539204e-13 … -5.126777605657334e-5 -5.084319618367606e-5])</code></pre>
+</div>
+<p>Two pieces are worth naming. <code class="md-code-inline">update_coefficients!</code> is called with the current time just before each assembly, and is where a time-dependent source belongs. <code class="md-code-inline">Rₕ!</code> writes into the grid function <code class="md-code-inline">fₕ</code> the form already holds a reference to, which lives on the padded space since the ghost space has no <code class="md-code-inline">Rₕ!</code> of its own, so nothing is rebuilt and nothing is allocated. The initial condition holds the 100 unknowns, the grid points but the eliminated left one.</p>
+<h2 id="Eliminated-nodes-in-the-mass-matrix" class="md-heading">Eliminated nodes in the mass matrix<a href="#Eliminated-nodes-in-the-mass-matrix" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The Dirichlet node is no unknown and the Robin relation fixes only the ghost, so no row of the system is algebraic. <a href="../../api_sciml/#Bramble.mass_matrix"><code class="md-code-inline">mass_matrix</code></a> is the diagonal of grid weights on the remaining 100 nodes, and the system is an ordinary differential equation:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">M_robin = mass_matrix(sd_robin)
+(size(M_robin), M_robin[1, 1], M_robin[100, 100])   # first interior node, Robin end</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((100, 100), 0.01, 0.0050000000000000044)</code></pre>
+</div>
+<h2 id="The-solution-at-the-final-time" class="md-heading">The solution at the final time<a href="#The-solution-at-the-final-time" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">Bramble.lift(Cₕ, u, t)</code> returns the padded-grid values of the unknowns <code class="md-code-inline">u</code> with the ghost value and the eliminated node filled in from the relations at time <span class="md-math md-math-inline">\(t\)</span>. The physical nodes come first, so the compared fields are its first 101 entries:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble: lift
+
+Uₚ = parent(lift(Cₕ, sol_robin.u[end], 1.0))
+uₕ_robin = element(Wₕ)
+parent(uₕ_robin) .= Uₚ[1:101]
+normₕ(Rₕ(Wₕ, x -&gt; uexact(x, 1.0)) - uₕ_robin)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1.868087231114406e-5</code></pre>
+</div>
+<p>The relation is satisfied by the ghost, so the check that means something is one-sided and independent of it: the three-point backward difference of the lifted solution at the Robin end, with the actual spacings, must satisfy <span class="md-math md-math-inline">\(u + \partial_n u = h\)</span> up to its truncation error, of order <span class="md-math md-math-inline">\(h^2\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">function robin_residual(Ωₕ, Cₕ, sol)
+    U = parent(lift(Cₕ, sol.u[end], 1.0))
+    xs = collect(points(Ωₕ))
+    n = length(xs)
+    h₁, h₂ = xs[n] - xs[n - 1], xs[n - 1] - xs[n - 2]
+    dₙ = (2h₁ + h₂) / (h₁ * (h₁ + h₂)) * U[n] - (h₁ + h₂) / (h₁ * h₂) * U[n - 1] +
+         h₁ / (h₂ * (h₁ + h₂)) * U[n - 2]
+    return abs(U[n] + dₙ - robin(xs[n], 1.0))
+end
+
+robin_residual(Ωₕ, Cₕ, sol_robin)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0005702418304793788</code></pre>
+</div>
+<h2 id="Dirichlet-conditions-as-algebraic-constraints" class="md-heading">Dirichlet conditions as algebraic constraints<a href="#Dirichlet-conditions-as-algebraic-constraints" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The <code class="md-code-inline">dirichlet</code> keyword of <code class="md-code-inline">semidiscretize</code> belongs to a plain space; a ghost space refuses it, and takes the relation <code class="md-code-inline">u =&gt; g</code> instead. The sections below need what the ghost path does not offer yet, so they keep a plain space and a Dirichlet condition at both ends, which the manufactured solution satisfies with <span class="md-math md-math-inline">\(g = 0\)</span>. The time domain passed to <a href="../../api/forms/#Bramble.dirichlet_constraints"><code class="md-code-inline">dirichlet_constraints</code></a> is what lets the boundary values be written as <code class="md-code-inline">g(x, t)</code> rather than <code class="md-code-inline">g(x)</code>. The spatial form is the one the steady problem writes, so the steady state of the system solves <span class="md-math md-math-inline">\(A u_h = F\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">fₕ = element(Wₕ, 0.0)
 a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))
 l = form(Wₕ, v -&gt; innerₕ(fₕ, v))
 
@@ -140,9 +209,7 @@ sd = semidiscretize(a, l;
   <span class="sgr32">Constraints</span>: <span class="sgr34">g(x, t) on :boundary</span>
   <span class="sgr32">Reassembled</span>: <span class="sgr34">once</span></code></pre>
 </div>
-<p>Two pieces are worth naming. The time domain passed to <a href="../../api/forms/#Bramble.dirichlet_constraints"><code class="md-code-inline">dirichlet_constraints</code></a> is what lets the boundary values be written as <code class="md-code-inline">g(x, t)</code> rather than <code class="md-code-inline">g(x)</code>; <code class="md-code-inline">semidiscretize</code> detects that by the same arity test and re-evaluates them at every step. <code class="md-code-inline">update_coefficients!</code> is called with the current time just before each assembly, and is where a time-dependent source belongs. <code class="md-code-inline">Rₕ!</code> writes into the <code class="md-code-inline">fₕ</code> the form already holds a reference to, so nothing is rebuilt and nothing is allocated.</p>
-<h2 id="Dirichlet-conditions-as-algebraic-constraints" class="md-heading">Dirichlet conditions as algebraic constraints<a href="#Dirichlet-conditions-as-algebraic-constraints" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A constrained row of <code class="md-code-inline">A</code> is <span class="md-math md-math-inline">\(e_k\)</span> and the matching entry of <code class="md-code-inline">F(t)</code> is <span class="md-math md-math-inline">\(g(x_i, t)\)</span>, which is what <code class="md-code-inline">assemble</code> produces for the steady problem too. <a href="../../api_sciml/#Bramble.mass_matrix"><code class="md-code-inline">mass_matrix</code></a> zeroes those same rows, so each one reads</p>
+<p>Here the constrained row of <code class="md-code-inline">A</code> is <span class="md-math md-math-inline">\(e_k\)</span> and the matching entry of <code class="md-code-inline">F(t)</code> is <span class="md-math md-math-inline">\(g(x_i, t)\)</span>, which is what <code class="md-code-inline">assemble</code> produces for the steady problem too. <a href="../../api_sciml/#Bramble.mass_matrix"><code class="md-code-inline">mass_matrix</code></a> zeroes those same rows, so each one reads</p>
 <div class="md-math md-math-display">
 \[0 = g(x_i, t) - u_h[i],\]
 </div>
@@ -160,16 +227,14 @@ sd = semidiscretize(a, l;
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">using OrdinaryDiffEqBDF
-
-prob = ode_problem(sd, Rₕ(Wₕ, x -&gt; uexact(x, 0.0)), I)
+<pre><code class="language-julia">prob = ode_problem(sd, Rₕ(Wₕ, x -&gt; uexact(x, 0.0)), I)
 sol = solve(prob, FBDF(); reltol = 1e-10, abstol = 1e-12)
 
 uₕ = element(Wₕ)
 parent(uₕ) .= sol.u[end]
 normₕ(Rₕ(Wₕ, x -&gt; uexact(x, 1.0)) - uₕ)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">2.380504758046399e-5</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.3805047580463986e-5</code></pre>
 </div>
 <p>A surface plot of the whole time evolution, <code class="md-code-inline">x</code> and <code class="md-code-inline">t</code> the two horizontal axes, <code class="md-code-inline">u</code> as height and colour, needs no new solve: <code class="md-code-inline">sol</code> already interpolates continuously in <code class="md-code-inline">t</code>, so sampling it at a uniform grid of times is enough to lay one out. The white curve traces <code class="md-code-inline">u(x, t)</code> at the current instant and loops on its own:</p>
 <div class="md-multi-output">
@@ -390,11 +455,11 @@ uₕ_r = element(Wₕ)
 parent(uₕ_r) .= sol_rosenbrock.u[end]
 normₕ(Rₕ(Wₕ, x -&gt; uexact(x, 1.0)) - uₕ_r)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">2.3805036993673637e-5</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.3805036993673634e-5</code></pre>
 </div>
 <p>No <code class="md-code-inline">AutoFiniteDiff()</code> and no BDF fallback: <code class="md-code-inline">ode_problem</code> already hands the solver the exact Jacobian <span class="md-math md-math-inline">\(-A\)</span>, and <code class="md-code-inline">tgrad</code> supplies the <code class="md-code-inline">t</code>-derivative, so <code class="md-code-inline">Rodas5P</code> differentiates nothing.</p>
 <h2 id="A-time-dependent-operator" class="md-heading">A time-dependent operator<a href="#A-time-dependent-operator" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">tgrad</code> fixes the source half of <code class="md-code-inline">∂f/∂t</code>; the other method of <a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a> fixes the operator half, for a spatial operator whose own coefficients vary with <code class="md-code-inline">t</code>. A fixed <code class="md-code-inline">BilinearForm</code> closes over a <code class="md-code-inline">Float64</code> coefficient buffer, which cannot hold the <code class="md-code-inline">Dual</code> a Rosenbrock stepper reaches for either way. <code class="md-code-inline">semidiscretize(build, l; ...)</code> instead takes a <code class="md-code-inline">build(t) -&gt; (a, refill!)</code> factory, called once per element type <code class="md-code-inline">t</code> is ever seen at <code class="md-code-inline">Float64</code> on an ordinary step, and at <code class="md-code-inline">Dual</code> while <code class="md-code-inline">Rodas5P</code>&#39;s default <code class="md-code-inline">autodiff</code> differentiates through <code class="md-code-inline">t</code>. The coefficient buffer it refills is always the right type. The source is held fixed here on purpose, to isolate the operator: a <code class="md-code-inline">t</code>-dependent source reached through <code class="md-code-inline">update_coefficients!</code> has the same <code class="md-code-inline">Float64</code>-buffer limitation <code class="md-code-inline">tgrad</code> fixes above, for the same reason:</p>
+<p><code class="md-code-inline">tgrad</code> fixes the source half of <code class="md-code-inline">∂f/∂t</code>; the other method of <a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a> fixes the operator half, for a spatial operator whose own coefficients vary with <code class="md-code-inline">t</code>. It keeps the Dirichlet problem, because <code class="md-code-inline">semidiscretize(build, l)</code> on a ghost space is refused. A fixed <code class="md-code-inline">BilinearForm</code> closes over a <code class="md-code-inline">Float64</code> coefficient buffer, which cannot hold the <code class="md-code-inline">Dual</code> a Rosenbrock stepper reaches for either way. <code class="md-code-inline">semidiscretize(build, l; ...)</code> instead takes a <code class="md-code-inline">build(t) -&gt; (a, refill!)</code> factory, called once per element type <code class="md-code-inline">t</code> is ever seen at <code class="md-code-inline">Float64</code> on an ordinary step, and at <code class="md-code-inline">Dual</code> while <code class="md-code-inline">Rodas5P</code>&#39;s default <code class="md-code-inline">autodiff</code> differentiates through <code class="md-code-inline">t</code>. The coefficient buffer it refills is always the right type. The source is held fixed here on purpose, to isolate the operator: a <code class="md-code-inline">t</code>-dependent source reached through <code class="md-code-inline">update_coefficients!</code> has the same <code class="md-code-inline">Float64</code>-buffer limitation <code class="md-code-inline">tgrad</code> fixes above, for the same reason:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -416,11 +481,11 @@ sol_t_rosenbrock = solve(prob_t, Rodas5P(); reltol = 1e-11, abstol = 1e-13)
 sol_t_fbdf = solve(prob_t, FBDF(); reltol = 1e-11, abstol = 1e-13)
 maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end]))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">4.1046610554928975e-12</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1.852989983675002e-12</code></pre>
 </div>
 <p>The same <code class="md-code-inline">ODEProblem</code>, one stepper differentiating through <code class="md-code-inline">t</code> by default and the other needing no <code class="md-code-inline">∂f/∂t</code> at all, land on the same answer – neither <code class="md-code-inline">AutoFiniteDiff()</code> nor a hand-written <code class="md-code-inline">tgrad</code> was needed for the operator itself.</p>
 <h2 id="Hand-rolled-backward-Euler" class="md-heading">Hand-rolled backward Euler<a href="#Hand-rolled-backward-Euler" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">semidiscretize</code>/<code class="md-code-inline">ode_problem</code> above hide the per-step matrix assembly entirely. Building it explicitly – the shape a solver without a method-of-lines layer expects – is what <a href="../../api/forms/#Bramble.assemble_add!"><code class="md-code-inline">assemble_add!</code></a> exists for: accumulating <span class="md-math md-math-inline">\(M/\Delta t\)</span> and the <span class="md-math md-math-inline">\(t\)</span>-dependent stiffness piece <span class="md-math md-math-inline">\(K(t)\)</span> into the same preallocated matrix, in place, with no temporary and no sparse matrix addition of its own on every step. Backward Euler for the same varying-diffusivity problem as the section above,</p>
+<p><code class="md-code-inline">semidiscretize</code>/<code class="md-code-inline">ode_problem</code> above hide the per-step matrix assembly entirely. This one keeps the Dirichlet problem as well, since <code class="md-code-inline">dirichlet_bc!</code> writes identity rows into a plain assembled matrix and has no ghost counterpart. Building it explicitly – the shape a solver without a method-of-lines layer expects – is what <a href="../../api/forms/#Bramble.assemble_add!"><code class="md-code-inline">assemble_add!</code></a> exists for: accumulating <span class="md-math md-math-inline">\(M/\Delta t\)</span> and the <span class="md-math md-math-inline">\(t\)</span>-dependent stiffness piece <span class="md-math md-math-inline">\(K(t)\)</span> into the same preallocated matrix, in place, with no temporary and no sparse matrix addition of its own on every step. Backward Euler for the same varying-diffusivity problem as the section above,</p>
 <div class="md-math md-math-display">
 \[\Bigl(\frac{M}{\Delta t} + K(t^{n+1})\Bigr) u^{n+1} = \frac{M}{\Delta t} u^n + F,\]
 </div>
@@ -474,7 +539,7 @@ end
 
 maximum(abs.(u_be .- sol_t_fbdf.u[end]))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0005879630916251211</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0005879630938767921</code></pre>
 </div>
 <p><code class="md-code-inline">assemble_add!</code>&#39;s row is <code class="md-code-inline">nonzeros(A_be)</code>, not <code class="md-code-inline">A_be</code> itself: refilling every entry the pattern holds costs the stored nonzeros, where <code class="md-code-inline">fill!(A_be, 0)</code> would walk the whole dense <code class="md-code-inline">m × n</code> index space <code class="md-code-inline">SparseMatrixCSC</code>&#39;s generic <code class="md-code-inline">AbstractArray</code> fallback covers. <code class="md-code-inline">dirichlet_bc!</code> runs <em>after</em> both accumulations, never between them – accumulating a second piece into an already-constrained row would add its own contribution on top of the identity <code class="md-code-inline">dirichlet_bc!</code> wrote there.</p>
 <p>Backward Euler at <span class="md-math md-math-inline">\(\Delta t = 1/200\)</span> against the adaptive, high-accuracy <code class="md-code-inline">FBDF</code> solve above: first order in time, so the two are close but not equal – the discrepancy this checks is bounded well above round-off and well below a scheme that regressed to a wrong answer entirely.</p>
@@ -517,15 +582,53 @@ hs, errs = heat_series(5)   # 11 up to 161 points
 orders = [log(errs[i] / errs[i + 1]) / log(hs[i] / hs[i + 1]) for i in 1:(length(errs) - 1)]</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">4-element Vector{Float64}:
- 2.062674321025039
- 2.0157613945747768
+ 2.0626743207874627
+ 2.0157613948123534
  2.003946603482324
- 2.000987054632041</code></pre>
+ 2.000987054557495</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">all(&gt;(1.95), orders)    # second order is the promise</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
+</div>
+<p>The Robin problem runs on the same seeded random mesh through <code class="md-code-inline">robin_problem</code>, whose sides here are the <code class="md-code-inline">:xmin</code> and <code class="md-code-inline">:xmax</code> of a domain with no markers of its own. Its error is the one at the physical nodes of the lifted solution, and the residual of the Robin relation, as above, comes with it:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">function robin_series(levels; n0 = 11)
+    Random.seed!(20260903)
+    Ωc = mesh(domain(interval(0.0, 1.0)), n0, false)
+    hs, errs, resids = Float64[], Float64[], Float64[]
+    for level in 1:levels
+        Cc, _, solc = robin_problem(Ωc, (:xmin, :xmax))
+        Wc = gridspace(Ωc)
+        uc = element(Wc)
+        parent(uc) .= parent(lift(Cc, solc.u[end], 1.0))[1:length(parent(uc))]
+        push!(hs, hₘₐₓ(Ωc))
+        push!(errs, normₕ(Rₕ(Wc, x -&gt; uexact(x, 1.0)) - uc))
+        push!(resids, robin_residual(Ωc, Cc, solc))
+        level &lt; levels &amp;&amp; iterative_refinement!(Ωc)
+    end
+    return hs, errs, resids
+end
+
+hs_r, errs_r, resids_r = robin_series(5)
+orders_r = [log(errs_r[i] / errs_r[i + 1]) / log(hs_r[i] / hs_r[i + 1])
+            for i in 1:(length(errs_r) - 1)]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4-element Vector{Float64}:
+ 2.112192085362945
+ 2.0294538054675026
+ 2.0074611774467157
+ 2.001871580171878</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">all(&gt;(1.95), orders_r)    # second order with a Robin end too</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
@@ -595,17 +698,25 @@ orders = [log(errs[i] / errs[i + 1]) / log(hs[i] / hs[i + 1]) for i in 1:(length
 (function () {
   const theme = window.bramblePlotlyTheme();
   const data = [{
-  name: "1D heat",
+  name: "Dirichlet",
   x: [0.22578350716539197,0.11289175358269599,0.05644587679134799,0.028222938395674024,0.014111469197837012],
-  y: [0.010055484076517277,0.002407000279450092,0.0005952117511686535,0.00014839643215387038,3.707373446926619e-5],
+  y: [0.010055484076517277,0.0024070002798464653,0.0005952117511686535,0.00014839643215387038,3.7073734471181854e-5],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
 },
 {
+  name: "Dirichlet and Robin",
+  x: [0.22578350716539197,0.11289175358269599,0.05644587679134799,0.028222938395674024,0.014111469197837012],
+  y: [0.007246373441707431,0.0016760521880170483,0.00041054528342382115,0.00010210688741377005,2.5493628005103322e-5],
+  mode: 'markers',
+  type: 'scatter',
+  marker: { color: "#D1495B", size: 8 },
+},
+{
   name: "slope 2",
   x: [0.014111469197837012, 0.22578350716539197],
-  y: [3.707373446926619e-5, 0.009490876024132126],
+  y: [3.7073734471181854e-5, 0.009490876024622535],
   mode: 'lines',
   type: 'scatter',
   line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
@@ -692,6 +803,9 @@ sol = solve(prob, KrylovJL_GMRES())</code></pre>
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#Problem">Problem</a>
           <a class="md-toc-link md-toc-h2" href="#The-method-of-lines">The method of lines</a>
+          <a class="md-toc-link md-toc-h2" href="#Boundary-relations-through-ghost-points">Boundary relations through ghost points</a>
+          <a class="md-toc-link md-toc-h2" href="#Eliminated-nodes-in-the-mass-matrix">Eliminated nodes in the mass matrix</a>
+          <a class="md-toc-link md-toc-h2" href="#The-solution-at-the-final-time">The solution at the final time</a>
           <a class="md-toc-link md-toc-h2" href="#Dirichlet-conditions-as-algebraic-constraints">Dirichlet conditions as algebraic constraints</a>
           <a class="md-toc-link md-toc-h2" href="#Solving-with-a-BDF-stepper">Solving with a BDF stepper</a>
           <a class="md-toc-link md-toc-h2" href="#An-analytical-time-derivative-for-Rosenbrock-methods">An analytical time derivative for Rosenbrock methods</a>
@@ -718,6 +832,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=6a9675fc"></script>
+  <script src="../../assets/materialdocs.js?v=1439f2fc"></script>
 </body>
 </html>

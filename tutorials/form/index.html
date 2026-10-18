@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear and bilinear forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f4e36772">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=5a5c2a2a">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Linear and bilinear forms — Bramble.jl">
   <meta property="og:title" content="Linear and bilinear forms — Bramble.jl">
@@ -130,7 +130,7 @@ l = form(Wₕ, v -&gt; innerₕ(fₕ, v))</code></pre>
 <pre><code class="language-julia">b = assemble(l)
 length(b), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808496)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808495)</code></pre>
 </div>
 <p>In a time loop the allocation is the part worth avoiding. <code class="md-code-inline">assemble!</code> refills a vector that already exists with zero allocations:</p>
 <div class="md-multi-output">
@@ -139,7 +139,7 @@ length(b), sum(b)</code></pre>
 <pre><code class="language-julia">assemble!(b, l)
 sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808496</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808495</code></pre>
 </div>
 <h3 id="Live-grid-coefficients-and-dynamic-scalars" class="md-heading">Live grid coefficients and dynamic scalars<a href="#Live-grid-coefficients-and-dynamic-scalars" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>A form keeps direct references to its coefficient arrays. Overwrite a grid function in place with <code class="md-code-inline">Rₕ!(fₕ, ...)</code> or <code class="md-code-inline">parent(fₕ) .= ...</code> between steps, and the next <code class="md-code-inline">assemble!(b, l)</code> reads the new values with no allocation and no rebuilt form.</p>
@@ -164,7 +164,7 @@ sum(b_dyn) ≈ 2 * sum(b)</code></pre>
 <pre><code class="language-julia">oneₕ = Rₕ(Wₕ, x -&gt; 1.0)
 l(oneₕ), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808496)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808495)</code></pre>
 </div>
 <p>Against the all-ones grid function a linear form is the sum of its assembled vector. The difference is that <code class="md-code-inline">l(oneₕ)</code> builds no vector and allocates nothing, so prefer it when the result is a scalar.</p>
 <p><code class="md-code-inline">evaluate!</code> is the middle case. It takes a scratch vector, fills it with the assembled vector and returns the contraction:</p>
@@ -405,7 +405,7 @@ ratio = ghost_error(33) / ghost_error(65)
 
 ratio</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">4.000864772047653</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4.00086477356136</code></pre>
 </div>
 <p>The relations a facet takes:</p>
 <div class="md-table-wrap">
@@ -825,7 +825,7 @@ err_sq = maximum(abs, u_sol - u_ex)
 
 abs(dot(w_sq, u_sol)), err_sq</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(6.765421556309548e-17, 0.008916806046415426)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(7.222311128058517e-17, 0.008916806046414205)</code></pre>
 </div>
 <p>The residual of the system is <span class="md-math md-math-inline">\(F - \lambda w\)</span> with <span class="md-math md-math-inline">\(\lambda = \sum F / \sum w\)</span>, because <span class="md-math md-math-inline">\(\mathbf{1}^T A = 0\)</span>. The compatibility of the data holds only to the quadrature error, so <span class="md-math md-math-inline">\(\lambda\)</span> is small, not zero. The error is the discrete difference to the exact solution shifted to the same mean.</p>
 <h4 id="A-kernel-in-the-ghosts" class="md-heading">A kernel in the ghosts<a href="#A-kernel-in-the-ghosts" class="md-heading-anchor" aria-label="Link to this section">#</a></h4>
@@ -849,7 +849,7 @@ n_phys = npoints(Ωₕ_rect)
 
 size(Z_rect), norm(A_rect * Z_rect, Inf)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">((139, 4), 2.1316282072803006e-14)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((139, 4), 2.842170943040401e-14)</code></pre>
 </div>
 <p>The kernel has 4 columns, each supported on the two ghosts of a corner, and <code class="md-code-inline">A * Z</code> vanishes to rounding. The physical values come first in the vector of unknowns, then the ghosts. To check the solve, choose a physical vector, set the ghosts to zero, and form the load <code class="md-code-inline">F = A x</code>. The gauged solve returns the physical values of <code class="md-code-inline">x</code>, and the load of a vector shifted by any combination of the kernel columns gives the same answer:</p>
 <div class="md-multi-output">
@@ -872,7 +872,7 @@ u_shifted = pde_solve(A_rect, A_rect * (x_ghost0 + Z_rect * [1.0, -2.0, 3.0, 0.5
 
 maximum(abs, u_gauged[1:n_phys] - x_phys), norm(Z_rect&#39; * u_gauged, Inf)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(3.548286109378296e-10, 3.841829816480246e-17)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.8467839197077183e-10, 9.453534337892915e-18)</code></pre>
 </div>
 <p>The physical error is about <span class="md-math md-math-inline">\(10^{-10}\)</span> here and is only as small as the conditioning of <code class="md-code-inline">A</code> away from its kernel allows: these forms are ill conditioned, and the accuracy of the physical part is near <span class="md-math md-math-inline">\(10^{-8}\)</span> relative in general. A form that never reads a ghost leaves each ghost in the kernel as one column. With a single ghosted facet no node carries two ghosts and a form that reads them through <code class="md-code-inline">Δₕ</code> alone has no ghost-only kernel. A kernel vector spread over the ghosts of several nodes, which a form that differences the ghosts along their own facet produces, is not found: <code class="md-code-inline">ghost_kernel</code> returns no column for it, and a gauged solve with such a <code class="md-code-inline">Z</code> still gives the right physical part, while the ghost components it leaves out are arbitrary. With <code class="md-code-inline">mean_zero = w</code> as well, the border is <code class="md-code-inline">[w Z]</code>.</p>
 <h4 id="Checking-that-the-data-are-compatible" class="md-heading">Checking that the data are compatible<a href="#Checking-that-the-data-are-compatible" class="md-heading-anchor" aria-label="Link to this section">#</a></h4>
@@ -926,10 +926,61 @@ bad, bad_warnings = check_compatibility(0.2)
 
 (ok.compatible, ok.defect), (bad.compatible, bad.λ, bad.second_ratio)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">((true, 7.309780343141524e-6), (false, 0.2000631200513218, 1.0000182239919038))</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((true, 7.309780343599364e-6), (false, 0.2000631200513299, 1.0000182239908741))</code></pre>
 </div>
 <p>The compatible problem raises no warning and its relative defect is below <span class="md-math md-math-inline">\(10^{-4}\)</span>. The shifted one warns once. Its <span class="md-math md-math-inline">\(\lambda\)</span> is <span class="md-math md-math-inline">\(0.2\)</span>, the shift, on the mesh and on both refinements, so the ratio of the removed loads is <span class="md-math md-math-inline">\(1\)</span> where a quadrature error would give about <span class="md-math md-math-inline">\(4\)</span>. The mesh <code class="md-code-inline">Ωₕ</code> is not modified, and a mesh that carries markers of its own needs the domain&#39;s <code class="md-code-inline">markers(Ω)</code> as a third argument so that the refinement can evaluate them again.</p>
 <p>The check has limits. A defect on the refined mesh below <code class="md-code-inline">5e-3</code> counts as rounding, so a small incompatibility is not detected. Compatible data with a singular flux at a boundary point, whose quadrature error falls slower than the factor of four, can be reported incompatible. When the defect is above the floor the problem is built on a mesh with 16 times the points of <code class="md-code-inline">Ωₕ</code>.</p>
+<h3 id="Pure-Neumann-as-one-penalised-form" class="md-heading">Pure Neumann as one penalised form<a href="#Pure-Neumann-as-one-penalised-form" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>The bordered solve above keeps <code class="md-code-inline">A</code> and the weights apart. A form can also carry the constraint itself, as a rank-one penalty <span class="md-math md-math-inline">\(\sigma\,(1, u)_h (1, v)_h\)</span>, and then it assembles to a single matrix <span class="md-math md-math-inline">\(A + \sigma\, w w^T\)</span>, where <span class="md-math md-math-inline">\(w\)</span> is the weight vector of the previous section. The matrix is nonsingular because the penalty fixes the constant. Take the Neumann problem with zero flux on the graded square: <code class="md-code-inline">inner₊(∇ₕ(u), ∇ₕ(v))</code> on the space without ghosts is its stiffness matrix. The penalty is <code class="md-code-inline">σ * innerₕ(1, u) * innerₕ(1, v)</code> with <span class="md-math md-math-inline">\(\sigma = \gamma / h_{max}\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using LinearAlgebra: norm
+
+σ_pen = 1.0 / hₘₐₓ(Ωₕ_sq)   # γ = 1
+a_pen = form(W_plain_sq, W_plain_sq,
+    (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)) + σ_pen * innerₕ(1, u) * innerₕ(1, v))
+K_pen = assemble(a_pen)
+
+# the load with the data made compatible: 1ᵀF = 0
+F_raw = assemble(form(W_plain_sq, v -&gt; innerₕ(f_sq, v)))
+F_pen = F_raw - (sum(F_raw) / sum(w_sq)) * w_sq
+
+typeof(K_pen).name.name, size(K_pen), Base.summarysize(K_pen) &lt; 10 * Base.summarysize(K_pen.A)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(:RankOneUpdate, (289, 289), true)</code></pre>
+</div>
+<p><code class="md-code-inline">assemble</code> returns a <code class="md-code-inline">Bramble.RankOneUpdate</code>: the sparse matrix <code class="md-code-inline">K_pen.A</code> of the other terms, <code class="md-code-inline">σ</code> and the two weight vectors, with no dense block. Its products cost one product by <code class="md-code-inline">A</code> and two passes over the vectors. <code class="md-code-inline">K_pen&#39;</code> and <code class="md-code-inline">transpose(K_pen)</code> are lazy wrappers of <code class="md-code-inline">K_pen</code>, and read its parts when they are applied. <code class="md-code-inline">pde_solve(K_pen, F_pen)</code> does not form the dense matrix either. It solves the sparse bordered system</p>
+<div class="md-math md-math-display">
+\[\begin{pmatrix} A &amp; w \\ w^T &amp; -1/\sigma \end{pmatrix}
+\begin{pmatrix} u \\ \mu \end{pmatrix} =
+\begin{pmatrix} F \\ 0 \end{pmatrix},\]
+</div>
+<p>whose second row gives <span class="md-math md-math-inline">\(\mu = \sigma w^T u\)</span>, so its first row is <span class="md-math md-math-inline">\(A u + \sigma w (w^T u) = F\)</span>. For compatible data <span class="md-math md-math-inline">\(w^T u = 0\)</span>, so the solution is the <code class="md-code-inline">mean_zero</code> one for every <span class="md-math md-math-inline">\(\sigma &gt; 0\)</span>. The next block checks that against the <code class="md-code-inline">mean_zero</code> solve and the dense solve, and shows the relative differences:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">A_pen = assemble(form(W_plain_sq, W_plain_sq, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v))))
+
+u_pen = pde_solve(K_pen, F_pen)
+u_mz = pde_solve(A_pen, F_pen; mean_zero = w_sq)
+u_dense = Matrix(K_pen) \ F_pen
+
+rel_mz = norm(u_pen - u_mz) / norm(u_mz)
+rel_dense = norm(u_pen - u_dense) / norm(u_dense)
+
+@assert Matrix(K_pen) ≈ Matrix(A_pen) + σ_pen * w_sq * w_sq&#39;
+@assert abs(sum(F_pen)) &lt;= 1e-12 * norm(F_pen)
+@assert abs(dot(w_sq, u_pen)) &lt;= 1e-10 * norm(w_sq) * norm(u_pen)
+@assert rel_mz &lt; 1e-10 &amp;&amp; rel_dense &lt; 1e-10
+@assert !all(iszero, u_pen)
+
+rel_mz, rel_dense</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0, 5.648025058533923e-15)</code></pre>
+</div>
+<p>The difference from the <code class="md-code-inline">mean_zero</code> solve is about <span class="md-math md-math-inline">\(10^{-14}/\gamma\)</span>: a small <span class="md-math md-math-inline">\(\sigma\)</span> makes <span class="md-math md-math-inline">\(-1/\sigma\)</span> large against the entries of <code class="md-code-inline">A</code> and costs digits, so take <span class="md-math md-math-inline">\(\gamma \ge 10^{-2}\)</span>. A large <span class="md-math md-math-inline">\(\sigma\)</span> costs nothing. <a href="../../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a> documents the figures for the <code class="md-code-inline">RankOneUpdate</code> method.</p>
+<p>Four rules apply to the term. The <code class="md-code-inline">σ</code> is read when the form is assembled, so with a <code class="md-code-inline">Ref</code> factor call <code class="md-code-inline">assemble!(K_pen, a_pen)</code> after changing it, before the next solve. With <code class="md-code-inline">dirichlet</code>, the Dirichlet rows of <code class="md-code-inline">K_pen</code> are identity rows and the penalty&#39;s row vector is zeroed there. One rank-one term per form: the sum of two is refused with an <code class="md-code-inline">ArgumentError</code>, so add the scalars when they share the functionals. The term also builds on a ghost space, where <code class="md-code-inline">assemble(a, l)</code> reduces it with the closure. A composite ghost space is covered by the support table in <a href="../../internals/space/">the space internals</a>.</p>
 <h3 id="Data-per-facet" class="md-heading">Data per facet<a href="#Data-per-facet" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>A scalar datum on <code class="md-code-inline">:boundary</code> gives one value per node. A corner node lies on two facets, though. When the data differ from facet to facet, give each facet its own <code class="md-code-inline">inner_Γ</code> term or, as above, its own relation. A facet&#39;s term carries that facet&#39;s weight, which is a half cell at the corner. With the same function on every facet, the two spellings agree:</p>
 <div class="md-multi-output">
@@ -964,7 +1015,7 @@ l_corner[1], expected</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(0.013671875, 0.013671875)</code></pre>
 </div>
-<p>Ghost spaces are for <code class="md-code-inline">assemble</code>, and for <code class="md-code-inline">semidiscretize</code> and <code class="md-code-inline">ode_problem</code> once <code class="md-code-inline">constrained</code> has eliminated every ghost. <code class="md-code-inline">matrix_free_operator</code>, <code class="md-code-inline">kronecker_operator</code> and the device backends refuse them with an <code class="md-code-inline">ArgumentError</code>, and a composite space cannot hold one.</p>
+<p>Ghost spaces are for <code class="md-code-inline">assemble</code>, and for <code class="md-code-inline">semidiscretize</code> and <code class="md-code-inline">ode_problem</code> once <code class="md-code-inline">constrained</code> has eliminated every ghost. <code class="md-code-inline">matrix_free_operator(a)</code> applies a ghost-space form, one product at a time per operator. <code class="md-code-inline">kronecker_operator(a)</code> works where the closure and the form are separable and both spaces share one mesh object. The device backends refuse ghost spaces with an <code class="md-code-inline">ArgumentError</code>. Which entry points accept a composite space with a ghost leaf is in the support table of <a href="../../internals/space/">the space internals</a>.</p>
 <h2 id="Threading" class="md-heading">Threading<a href="#Threading" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Assembly reads the execution policy off the space it is given. A space whose backend says <code class="md-code-inline">Parallel()</code> assembles on several threads, and nothing about the call changes.</p>
 <h2 id="Reference" class="md-heading">Reference<a href="#Reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -1074,15 +1125,14 @@ sum(assemble(l_flux))</code></pre>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">2.0</code></pre>
 </div>
 <h3 id="Automatic-simplification" class="md-heading">Automatic simplification<a href="#Automatic-simplification" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><code class="md-code-inline">form</code> resolves the expression once and simplifies it before storing it. The assembler routes summands one at a time, so every top-level <code class="md-code-inline">+</code> is a separate sweep over the mesh, and fewer summands means fewer sweeps.</p>
-<p>Identical terms merge, so a form accumulated one physical effect at a time pays nothing for repetition:</p>
+<p><code class="md-code-inline">form</code> resolves the expression once and simplifies it before storing it. The assembler routes summands one at a time, so every top-level <code class="md-code-inline">+</code> is a separate sweep over the mesh. The pass is small and keeps terms as written: it does not combine like terms or factor a shared argument. Two identical terms stay two terms and are summed at assembly:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">a_dup = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + innerₕ(u, v))
-expression(a_dup)     # 2 * innerₕ(u, v): one term, not two</code></pre>
+expression(a_dup)     # two terms, as written</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;2 * innerₕ(u, v)&quot;</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;innerₕ(u, v) + innerₕ(u, v)&quot;</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -1091,22 +1141,38 @@ expression(a_dup)     # 2 * innerₕ(u, v): one term, not two</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
+<p>Write <code class="md-code-inline">2 * innerₕ(u, v)</code> when one sweep is wanted. Nested scales fold into one:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">a_fold = form(Wₕ, Wₕ, (u, v) -&gt; 2 * (3 * innerₕ(u, v)))
+expression(a_fold)    # 6 * innerₕ(u, v)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;6 * innerₕ(u, v)&quot;</code></pre>
+</div>
 <p>A zero-scaled term leaves nothing behind, so a coefficient can switch a term off without a branch around the form:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">a_off = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + 0 * inner₊(∇ₕ(u), ∇ₕ(v)))
-Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v))))</code></pre>
+expression(a_off)     # innerₕ(u, v): the zero term is gone</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;innerₕ(u, v)&quot;</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v))))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
-<p>Replace <code class="md-code-inline">0 *</code> by <code class="md-code-inline">0.0 *</code> in <code class="md-code-inline">a_off</code> and compare <code class="md-code-inline">expression(a_off)</code>. A <code class="md-code-inline">Float64</code> coefficient is only known at run time, so the rule does not fire.</p>
+<p>Replace <code class="md-code-inline">0 *</code> by <code class="md-code-inline">0.0 *</code> in <code class="md-code-inline">a_off</code> and compare <code class="md-code-inline">expression(a_off)</code>. A <code class="md-code-inline">Float64</code> coefficient is only known at run time, so the term stays.</p>
 </div>
 </div>
-<p>Two limits apply. A rule whose outcomes have different node types fires only when the compiler settles it from types, so a scalar coefficient must be an <code class="md-code-inline">Integer</code> for the like-term and factoring rules to apply. A <code class="md-code-inline">Float64</code> known at run time, or a <code class="md-code-inline">Ref</code>, leaves the terms apart: same numbers, one extra sweep. And the pass stops at an inner product&#39;s own arguments, so a scalar buried in a difference such as <code class="md-code-inline">innerₕ(D₋ₓ(2 * u), v)</code> is invisible to it. Write <code class="md-code-inline">2 * innerₕ(D₋ₓ(u), v)</code> instead.</p>
+<p>Two limits apply. A rule whose outcomes have different node types fires only when the compiler settles it from types, so the scalar of a dropped zero term must be an <code class="md-code-inline">Integer</code>. A <code class="md-code-inline">Float64</code> known at run time, or a <code class="md-code-inline">Ref</code>, leaves the term in: same numbers, one extra sweep. And the pass stops at an inner product&#39;s own arguments, so a scalar buried in a difference such as <code class="md-code-inline">innerₕ(D₋ₓ(2 * u), v)</code> is invisible to it. Write <code class="md-code-inline">2 * innerₕ(D₋ₓ(u), v)</code> instead.</p>
 <p>The <a href="../../internals/form/">internals page on forms</a> documents the stencil algebra and the exact rewrite rules.</p>
       </article>
       <footer class="md-footer">
@@ -1130,6 +1196,7 @@ Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -&gt; inner�
             <a class="md-toc-link md-toc-h3" href="#Solutions-as-grid-functions:-lift">Solutions as grid functions: lift</a>
             <a class="md-toc-link md-toc-h3" href="#Data-that-depend-on-time">Data that depend on time</a>
             <a class="md-toc-link md-toc-h3" href="#Pure-Neumann-and-mean_zero">Pure Neumann and mean_zero</a>
+            <a class="md-toc-link md-toc-h3" href="#Pure-Neumann-as-one-penalised-form">Pure Neumann as one penalised form</a>
             <a class="md-toc-link md-toc-h3" href="#Data-per-facet">Data per facet</a>
           <a class="md-toc-link md-toc-h2" href="#Threading">Threading</a>
           <a class="md-toc-link md-toc-h2" href="#Reference">Reference</a>
@@ -1154,6 +1221,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=f4e36772"></script>
+  <script src="../../assets/materialdocs.js?v=5a5c2a2a"></script>
 </body>
 </html>

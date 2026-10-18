@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=bcc03e3e">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=205847d1">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces — Bramble.jl">
   <meta property="og:title" content="Grid spaces — Bramble.jl">
@@ -456,9 +456,9 @@ element(Wₕ::AbstractSpaceType, α::Number) -&gt; VectorElement</code></pre>
 <p>Returns the coefficient vector containing the degrees of freedom of <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> <code class="md-code-inline">uₕ</code>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s35&quot;, T} where {var&quot;#s35&quot;&lt;:Bramble.ScalarGridSpace, T}}">
+<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s37&quot;, T} where {var&quot;#s37&quot;&lt;:Bramble.ScalarGridSpace, T}}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s35&quot;, T} where {var&quot;#s35&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
+<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s37&quot;, T} where {var&quot;#s37&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
 <a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L17-L28" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
@@ -723,7 +723,7 @@ avgₕ!(uₕ::VectorElement, f, quad_points::Val) -&gt; VectorElement</code></pr
 <div class="md-docstring" id="Bramble.interpolate_at">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.interpolate_at</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L162-L205" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L162-L212" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -745,6 +745,7 @@ avgₕ!(uₕ::VectorElement, f, quad_points::Val) -&gt; VectorElement</code></pr
 </ul>
 <p>A point outside by no more than a few <code class="md-code-inline">eps</code>, relative to the domain extent, is always treated as exactly on the boundary, regardless of <code class="md-code-inline">outside</code> – this is what keeps <code class="md-code-inline">πₕ</code> between two meshes over the same nominal domain from tripping over floating-point endpoint noise at the rim.</p>
 <p><code class="md-code-inline">uₕ</code>&#39;s mesh is read as it is now, so once an in-place mutator (<code class="md-code-inline">set_points!</code>, <code class="md-code-inline">change_points!</code>, <code class="md-code-inline">iterative_refinement!</code>) has moved it, this throws an <code class="md-code-inline">ArgumentError</code> (the one <a href="../../api/spaces/#Bramble.weights"><code class="md-code-inline">weights</code></a> throws) rather than locating <code class="md-code-inline">x</code> on a mesh <code class="md-code-inline">uₕ</code>&#39;s values were never computed on; call <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a> again and rebuild <code class="md-code-inline">uₕ</code> on it. The same check covers <a href="../../api/spaces/#Bramble.πₕ!"><code class="md-code-inline">πₕ!</code></a>, <code class="md-code-inline">πₕ(Wₕ, src)</code> and the symbolic source <code class="md-code-inline">πₕ(uₕ)</code>, which all evaluate through here.</p>
+<p>On a <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a> it interpolates the physical nodes on the physical mesh, the first <code class="md-code-inline">npoints(Ωₕ)</code> degrees of freedom: the ghost values never enter, and <code class="md-code-inline">x</code> is outside the domain of <code class="md-code-inline">Ωₕ</code>, not of the ghosts. A constrained space whose degrees of freedom omit fixed nodes or whose relations carry data has no grid function in them: <code class="md-code-inline">interpolate_at</code> throws an <code class="md-code-inline">ArgumentError</code>, and <code class="md-code-inline">interpolate_at(Bramble.lift(Cₕ, u), x)</code> is its interpolant.</p>
 <p>This is the building block both <code class="md-code-inline">πₕ!</code>/<code class="md-code-inline">πₕ</code> (below, the numeric operator) and the one-argument, symbolic <code class="md-code-inline">πₕ</code> use: <code class="md-code-inline">x -&gt; interpolate_at(uₕ, x)</code> is itself a valid source function, usable anywhere one is accepted, including directly as <a href="../../api/spaces/#Bramble.Rₕ"><code class="md-code-inline">Rₕ</code></a>&#39;s own argument: <code class="md-code-inline">πₕ(Wₕ, src)</code> is <code class="md-code-inline">Rₕ</code> applied to this one function, not a separate mechanism. <code class="md-code-inline">Rₕ(Wₕ, f)</code> restricts an arbitrary continuous <code class="md-code-inline">f</code>; when <code class="md-code-inline">f</code> happens to be another grid function&#39;s own interpolant, restricting it is interpolating it, which is why <code class="md-code-inline">πₕ</code> generalises <code class="md-code-inline">Rₕ</code> for the case the source is discrete rather than a closed-form function.</p>
 <p>See also <a href="../../api/spaces/#Bramble.interpolation_matrix"><code class="md-code-inline">interpolation_matrix</code></a>, whose <code class="md-code-inline">outside</code> accepts only <code class="md-code-inline">:error</code>, <code class="md-code-inline">:clamp</code> and <code class="md-code-inline">:extrapolate</code> – a fill value cannot be represented as a linear map (see the note atop this file).</p>
 </div>
@@ -752,7 +753,7 @@ avgₕ!(uₕ::VectorElement, f, quad_points::Val) -&gt; VectorElement</code></pr
 <div class="md-docstring" id="Bramble.πₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.πₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L358-L387" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L383-L412" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -786,7 +787,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.πₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.πₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L465-L473" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L490-L498" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -819,7 +820,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.interpolation_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.interpolation_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L533-L559" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L558-L584" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -898,7 +899,7 @@ Bramble.lift(Tₕ, zeros(Bramble.ndofs(Tₕ)), 0.5)   # E u + d(0.5)</code></pre
 <div class="md-docstring" id="Bramble.lift">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.lift</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L415-L463" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L436-L484" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -929,11 +930,20 @@ Dₜ = constrained(gridspace(Ωₕ; ghosts = :boundary),
 vₕ = Bramble.lift(Dₜ, zeros(Bramble.ndofs(Dₜ)), 0.5)   # the ghosts of the data at t = 0.5</code></pre>
 </div>
 </div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">lift(Vₕ::CompositeGridSpace) -&gt; VectorElement
+lift(Vₕ::CompositeGridSpace, u::AbstractVector) -&gt; VectorElement
+lift(Vₕ::CompositeGridSpace, u::AbstractVector, t::Number) -&gt; VectorElement</code></pre>
+</div>
+<p><a href="../../api/spaces/#Bramble.lift"><code class="md-code-inline">lift</code></a> on a composite of ghost spaces (<code class="md-code-inline">C₁ × C₂</code>): the grid function on <code class="md-code-inline">Bramble.padded_space(Vₕ)</code> whose component <code class="md-code-inline">i</code> is <code class="md-code-inline">lift(Cᵢ, uᵢ)</code> (<code class="md-code-inline">d</code>, <code class="md-code-inline">E u + d</code> or <code class="md-code-inline">E u + d(t)</code>) for the slice <code class="md-code-inline">uᵢ</code> of <code class="md-code-inline">u</code> at <code class="md-code-inline">component_range(Vₕ, i)</code>. Each component is checked, and refused, as <code class="md-code-inline">lift</code> on it is. <code class="md-code-inline">Bramble.lift!(uₕ, Vₕ, u)</code> and <code class="md-code-inline">Bramble.lift!(uₕ, Vₕ, u, t)</code> refill a grid function <code class="md-code-inline">lift</code> returned.</p>
+</div>
 </div>
 <div class="md-docstring" id="Bramble.lift!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.lift!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L486-L516" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L507-L537" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1041,7 +1051,7 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 <div class="md-docstring" id="Bramble.assemble!-Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code> — <span class="md-docstring-sig">Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L541-L559" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L660-L678" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1085,6 +1095,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=bcc03e3e"></script>
+  <script src="../../assets/materialdocs.js?v=205847d1"></script>
 </body>
 </html>

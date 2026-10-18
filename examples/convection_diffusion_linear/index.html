@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Convection-diffusion equation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=a5de533b">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=6bd939a6">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Convection-diffusion equation — Bramble.jl">
   <meta property="og:title" content="Convection-diffusion equation — Bramble.jl">
@@ -96,9 +96,10 @@
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-math md-math-display">
 \[-\nabla \cdot (\epsilon \nabla u) - b \, \mathbf{1} \cdot \nabla u = g \text{ in } \Omega,
-\qquad u = u_{\text{exact}} \text{ on } \partial\Omega, \qquad \Omega = (0,1)^D\]
+\qquad u = u_{\text{exact}} \text{ on the far sides}, \qquad
+\partial_n u = h \text{ on the outflow sides}, \qquad \Omega = (0,1)^D\]
 </div>
-<p>with a constant diffusion coefficient <span class="md-math md-math-inline">\(\epsilon\)</span> and a constant convective speed <span class="md-math md-math-inline">\(b\)</span> along every coordinate direction at once: the vector field <span class="md-math md-math-inline">\(-b(1,\dots,1)\)</span>. The manufactured solution is the same as the other two examples, <span class="md-math md-math-inline">\(u_{\text{exact}}(x) = e^{\sum_i x_i}\)</span>, so <span class="md-math md-math-inline">\(g = -D\,(b+\epsilon)\,u_{\text{exact}}\)</span>.</p>
+<p>with a constant diffusion coefficient <span class="md-math md-math-inline">\(\epsilon\)</span> and a constant convective speed <span class="md-math md-math-inline">\(b\)</span> along every coordinate direction at once: the vector field <span class="md-math md-math-inline">\(-b(1,\dots,1)\)</span>. That field points towards the sides <span class="md-math md-math-inline">\(x_i = 0\)</span>, so the fluid leaves through <code class="md-code-inline">xmin</code>, <code class="md-code-inline">ymin</code> and <code class="md-code-inline">zmin</code>, where the natural condition is a given flux <span class="md-math md-math-inline">\(\partial_n u = h\)</span>. The other sides, where the fluid enters, keep the Dirichlet condition <span class="md-math md-math-inline">\(u = u_{\text{exact}}\)</span>. The manufactured solution is the same as the other two examples, <span class="md-math md-math-inline">\(u_{\text{exact}}(x) = e^{\sum_i x_i}\)</span>, so <span class="md-math md-math-inline">\(g = -D\,(b+\epsilon)\,u_{\text{exact}}\)</span>, and on an outflow side the outward normal is <span class="md-math md-math-inline">\(-e_i\)</span>, so <span class="md-math md-math-inline">\(h = -u_{\text{exact}}\)</span> is exact.</p>
 <h2 id="Adding-the-convective-term" class="md-heading">Adding the convective term<a href="#Adding-the-convective-term" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -107,8 +108,8 @@
 using Random
 
 ϵ, b = 1.0, 0.1
-sol(x) = exp(x[1] + x[2])
-rhs(x) = -2 * sol(x) * (b + ϵ)
+sol(x) = exp(sum(x))
+rhs(x) = -length(x) * sol(x) * (b + ϵ)
 
 Random.seed!(20260903)
 Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
@@ -120,23 +121,87 @@ Wₕ = gridspace(Ωₕ)</code></pre>
   <span class="sgr32">Dofs</span>: <span class="sgr34">576</span></code></pre>
 </div>
 <p>The seed is what makes the numbers below reproducible: <code class="md-code-inline">(false, false)</code> draws the interior points from the global RNG, so without it the mesh – and every figure on this page – would differ from build to build, and the suite could not assert what the page prints.</p>
-<p><code class="md-code-inline">inner₊(Mₕ(u), ∇ₕ(v))</code> is the convective term: <code class="md-code-inline">Mₕ</code> averages the trial function onto the same staggered points <code class="md-code-inline">∇ₕ</code> differences on, one pair per direction, and <code class="md-code-inline">inner₊</code>&#39;s own gradient-tuple overload sums them, which gives the identical spelling whether <code class="md-code-inline">D</code> is 1 or 3, since <code class="md-code-inline">Mₕ</code>/<code class="md-code-inline">∇ₕ</code> collapse to a bare node instead of a one-element tuple in 1D and <code class="md-code-inline">inner₊</code> has a method for both:</p>
+<p>The outflow sides carry the Neumann relation through ghost points: <code class="md-code-inline">gridspace(Ωₕ; ghosts = (:xmin, :ymin))</code> adds one layer of ghosts outside those two sides and <code class="md-code-inline">constrained</code> fixes each ghost from the relation <code class="md-code-inline">∂ₙ(u) = h</code>, where <code class="md-code-inline">h</code> is a function of the boundary point. The far sides stay Dirichlet and are handed to <code class="md-code-inline">assemble</code> as <code class="md-code-inline">side =&gt; data</code>. The convective term is now the strong operator <code class="md-code-inline">∇̽ₕ</code>, the second-order centred gradient on a non-uniform grid, summed over the directions, because a ghost value enters a difference stencil and not the staggered average of the weak form. In 1D <code class="md-code-inline">∇̽ₕ</code> is a bare node rather than a one-element tuple, so the sum is only taken for <code class="md-code-inline">D &gt; 1</code>:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">bcs = dirichlet_constraints(Ω, :boundary =&gt; sol)
+<pre><code class="language-julia">outflow_flux(x) = -sol(x)
 
-a = form(Wₕ, Wₕ, (u, v) -&gt; ϵ * inner₊(∇ₕ(u), ∇ₕ(v)) + b * inner₊(Mₕ(u), ∇ₕ(v)))
-A = assemble(a; dirichlet = :boundary)
+convection(u, ::Val{1}) = ∇̽ₕ(u)
+convection(u, ::Val) = sum(∇̽ₕ(u))
 
-gₕ = element(Wₕ)
-avgₕ!(gₕ, rhs)
-l = form(Wₕ, v -&gt; innerₕ(gₕ, v))
-F = assemble(l; dirichlet = bcs)
+function convdiff_system(Ωₕ, D::Int)
+    inflow = (:xmax, :ymax, :zmax)[1:D]
+    outflow = (:xmin, :ymin, :zmin)[1:D]
+    Cₕ = constrained(gridspace(Ωₕ; ghosts = outflow),
+        u -&gt; map(side -&gt; side =&gt; ∂ₙ(u) =&gt; outflow_flux, outflow))
+    a = form(Cₕ, Cₕ,
+        (u, v) -&gt; innerₕ(-ϵ * Δₕ(u) - b * convection(u, Val(D)), v))
+    l = form(Cₕ, v -&gt; innerₕ(rhs, v))
+    A, F = assemble(a, l; dirichlet = map(side -&gt; side =&gt; sol, inflow))
+    return Cₕ, A, F
+end
+
+Cₕ, A, F = convdiff_system(Ωₕ, 2)
 
 uₕ = element(Wₕ)
 uₕ .= A \ F</code></pre>
 </div>
+</div>
+<h2 id="The-Neumann-relation-on-the-lifted-solution" class="md-heading">The Neumann relation on the lifted solution<a href="#The-Neumann-relation-on-the-lifted-solution" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">Bramble.lift(Cₕ, u)</code> returns the solution on the padded grid, with the ghost values the relations fix filled in. The relation holds at the ghosts by construction, so the check that means something is one-sided and independent of them: on the physical nodes of an outflow side, the three-point forward difference of the lifted solution along the normal axis, with the non-uniform spacings, negated for the outward normal, must equal <span class="md-math md-math-inline">\(h\)</span> up to the truncation error, of order <span class="md-math md-math-inline">\(h^2\)</span>. <code class="md-code-inline">flux_residual</code> returns the largest residual over the nodes of one side, <code class="md-code-inline">axis</code> being 1 for <code class="md-code-inline">xmin</code> and 2 for <code class="md-code-inline">ymin</code>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">function flux_residual(Ωₕ, Cₕ, u, axis)
+    U = parent(Bramble.lift(Cₕ, u))
+    G = Bramble.mesh(Cₕ)
+    n = Bramble.npoints(Ωₕ, Tuple)
+    xs = ntuple(d -&gt; collect(points(Ωₕ(d))), 2)
+    h₁, h₂ = xs[axis][2] - xs[axis][1], xs[axis][3] - xs[axis][2]
+    lin = LinearIndices(Bramble.npoints(G, Tuple))
+    at(i, j) = U[lin[Bramble.padded_index(G, CartesianIndex(i, j))]]
+    along(k, t) = axis == 1 ? at(k, t) : at(t, k)
+    return maximum(1:n[3 - axis]) do t
+        dₓ = -(2h₁ + h₂) / (h₁ * (h₁ + h₂)) * along(1, t) +
+             (h₁ + h₂) / (h₁ * h₂) * along(2, t) - h₁ / (h₂ * (h₁ + h₂)) * along(3, t)
+        point = axis == 1 ? (xs[1][1], xs[2][t]) : (xs[1][t], xs[2][1])
+        abs(-dₓ - outflow_flux(point))
+    end
+end
+
+residuals = [flux_residual(Ωₕ, Cₕ, A \ F, axis) for axis in (1, 2)]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
+ 0.0002478185736558558
+ 0.0010144662635300783</code></pre>
+</div>
+<p>This is the truncation error of the one-sided difference plus the error of the solution itself, so it is small but not round-off. It falls as <span class="md-math md-math-inline">\(h^2\)</span>: the same random mesh at 12 points per side, then split once, gives</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">coarse_to_fine = let
+    Random.seed!(20260903)
+    Ωc = mesh(Ω, (12, 12), (false, false))
+    out = Float64[]
+    for level in 1:2
+        Cc, Ac, Fc = convdiff_system(Ωc, 2)
+        push!(out, flux_residual(Ωc, Cc, Ac \ Fc, 1))
+        level &lt; 2 &amp;&amp; iterative_refinement!(Ωc)
+    end
+    out
+end</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
+ 0.030187781962067728
+ 0.0072637706835516624</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">coarse_to_fine[2] &lt; coarse_to_fine[1]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
 <h2 id="Péclet-number-and-flow-direction" class="md-heading">Péclet number and flow direction<a href="#Péclet-number-and-flow-direction" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>A different problem from the one just solved, not a plot of <code class="md-code-inline">uₕ</code> above: constant-coefficient convection-diffusion again, but on a domain-independent, boundary-driven flow rather than a manufactured solution, so the field itself moves as the parameters change instead of always resolving to the same prescribed answer.</p>
@@ -682,36 +747,23 @@ uₕ .= A \ F</code></pre>
 </div>
 </div>
 <h2 id="Convergence-with-a-convective-term" class="md-heading">Convergence with a convective term<a href="#Convergence-with-a-convective-term" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>The same pattern as the other two examples: one random coarse mesh per dimension, refined in place with <a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a>:</p>
+<p>The same pattern as the other two examples: one random coarse mesh per dimension, refined in place with <a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a>. Every dimension has the same mixed problem, Neumann on the sides <code class="md-code-inline">xmin</code>, <code class="md-code-inline">ymin</code>, <code class="md-code-inline">zmin</code> that exist and Dirichlet on the opposite ones:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">function convdiff_series(D::Int; n0::Int = 5, levels::Int)
-    sol_d(x) = exp(sum(x))
-    rhs_d(x) = -D * sol_d(x) * (b + ϵ)
-
     Ωd = domain(reduce(×, ntuple(_ -&gt; interval(0.0, 1.0), D)))
     Ωc = mesh(Ωd, ntuple(_ -&gt; n0, D), ntuple(_ -&gt; false, D))
 
     hs, errs = Float64[], Float64[]
     for level in 1:levels
         Wc = gridspace(Ωc)
-        bcs_c = dirichlet_constraints(Ωd, :boundary =&gt; sol_d)
-
-        a_c = form(Wc, Wc,
-            (u, v) -&gt; ϵ * inner₊(∇ₕ(u), ∇ₕ(v)) + b * inner₊(Mₕ(u), ∇ₕ(v)))
-        A_c = assemble(a_c; dirichlet = :boundary)
-        g_c = element(Wc)
-        avgₕ!(g_c, rhs_d)
-        l_c = form(Wc, v -&gt; innerₕ(g_c, v))
-        F_c = assemble(l_c; dirichlet = bcs_c)
-
+        _, A_c, F_c = convdiff_system(Ωc, D)
         u_c = element(Wc)
         u_c .= A_c \ F_c
-        uexact_c = Rₕ(Wc, sol_d)
 
         push!(hs, hₘₐₓ(Ωc))
-        push!(errs, norm₁ₕ(u_c .- uexact_c))
+        push!(errs, norm₁ₕ(u_c .- Rₕ(Wc, sol)))
         level &lt; levels &amp;&amp; iterative_refinement!(Ωc)
     end
     return hs, errs
@@ -786,7 +838,7 @@ end</code></pre>
   const data = [{
   name: "1D",
   x: [0.4537346574443589,0.22686732872217952,0.11343366436108976,0.05671683218054491,0.028358416090272454,0.014179208045136282,0.007089604022568197],
-  y: [0.007321832869221185,0.0018702458334760464,0.00047001791626974246,0.00011765753065799848,2.9423939099950523e-5,7.356571333557699e-6,1.8391703740302698e-6],
+  y: [0.041751727375782546,0.010442370789976207,0.0026108129618809188,0.000652716083915612,0.0001631798092496307,4.0795001533414595e-5,1.0198754683248187e-5],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
@@ -794,7 +846,7 @@ end</code></pre>
 {
   name: "2D",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114,0.0227543707220516],
-  y: [0.03301860800856004,0.009089635054968766,0.002341481991143459,0.0005908586922754032,0.00014813605640899853,3.7065426280759455e-5],
+  y: [0.08074226228693267,0.021725967323594945,0.005565403644405923,0.0014024909204681613,0.00035151265644661663,8.794641213902576e-5],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#0E7C86", size: 8 },
@@ -802,7 +854,7 @@ end</code></pre>
 {
   name: "3D",
   x: [0.918047411794347,0.4590237058971735,0.22951185294858678,0.1147559264742934],
-  y: [0.052750442350509165,0.023918148212604125,0.007046640601904006,0.0018597160627795782],
+  y: [0.12163655667331273,0.03819044199085216,0.010303362339364401,0.0026415213948843518],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#B26A00", size: 8 },
@@ -810,7 +862,7 @@ end</code></pre>
 {
   name: "slope 2",
   x: [0.007089604022568197, 0.918047411794347],
-  y: [1.8391703740302698e-6, 0.030839563713406345],
+  y: [1.0198754683248187e-5, 0.17101468645463144],
   mode: 'lines',
   type: 'scatter',
   line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
@@ -847,7 +899,7 @@ end</code></pre>
 
 </div>
 </div>
-<p>Second order in every dimension. The convective term does not change the rate. It changes the matrix from symmetric to non-symmetric (<code class="md-code-inline">inner₊(Mₕ(u), ∇ₕ(v)) ≠ inner₊(Mₕ(v), ∇ₕ(u))</code> in general), which is why this example does not also check <code class="md-code-inline">issymmetric</code>, unlike the <a href="../../tutorials/form/#tutorial_form">forms tutorial</a>&#39;s pure-diffusion Poisson problem.</p>
+<p>Second order in every dimension. Neither the Neumann relation nor the convective term changes the rate. The convective term makes the matrix non-symmetric (the first difference <code class="md-code-inline">∇̽ₕ</code> is antisymmetric to leading order, not self-adjoint), which is why this example does not also check <code class="md-code-inline">issymmetric</code>, unlike the <a href="../../tutorials/form/#tutorial_form">forms tutorial</a>&#39;s pure-diffusion Poisson problem.</p>
 <h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <ul class="md-list-tight">
 <li><p><a href="../../examples/poisson_linear/">Linear Poisson</a> for the pure-diffusion case this one extends.</p>
@@ -863,6 +915,7 @@ end</code></pre>
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#Problem">Problem</a>
           <a class="md-toc-link md-toc-h2" href="#Adding-the-convective-term">Adding the convective term</a>
+          <a class="md-toc-link md-toc-h2" href="#The-Neumann-relation-on-the-lifted-solution">The Neumann relation on the lifted solution</a>
           <a class="md-toc-link md-toc-h2" href="#Péclet-number-and-flow-direction">Péclet number and flow direction</a>
           <a class="md-toc-link md-toc-h2" href="#Convergence-with-a-convective-term">Convergence with a convective term</a>
           <a class="md-toc-link md-toc-h2" href="#Where-to-go-next">Where to go next</a>
@@ -883,6 +936,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=a5de533b"></script>
+  <script src="../../assets/materialdocs.js?v=6bd939a6"></script>
 </body>
 </html>

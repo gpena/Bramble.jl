@@ -94,6 +94,85 @@ errors
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 surface_plot(uₕ; title = "head from one well at (0.35, 0.65)") # hide
 
+# ## The same well beside a leaky side
+#
+# One side can instead take a flux or a mixed condition, through ghost points, as on the
+# [Neumann and Robin Poisson example](neumann_robin_poisson.md). Here the right side lets
+# water seep out at a rate proportional to the head: the Robin relation
+# ``u + \partial_n u = 0``. The other three sides keep ``u = 0``.
+#
+# `gridspace(Ωₕ; ghosts = (:xmax,))` adds one layer outside the right side and `constrained`
+# attaches the relation. The point source is written in the load exactly as before, since
+# `dirac` works on a constrained space too. The relation reaches the system through
+# ``\langle -\Delta_h u, v \rangle_h``, which reads the ghost values, so that form replaces
+# `inner₊(∇ₕ(u), ∇ₕ(v))` here.
+
+Cᵍ = constrained(gridspace(Ωₕ; ghosts = (:xmax,)),
+    u -> (:xmax => u + ∂ₙ(u) => x -> 0.0,))
+aᵍ = form(Cᵍ, Cᵍ, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
+lᵍ = form(Cᵍ, v -> innerₕ(dirac(x₀, Q), v))
+
+Aᵍ, Fᵍ = assemble(aᵍ, lᵍ; dirichlet = (:left => x -> 0.0, :bottom => x -> 0.0,
+    :top => x -> 0.0))
+uᵍ = element(Wₕ)
+uᵍ .= pde_solve(Aᵍ, Fᵍ)
+
+maximum(parent(uᵍ)), maximum(parent(uₕ))
+
+# The head peaks higher than with ``u = 0`` on all four sides, since a leaky side holds the
+# head up where a Dirichlet side pins it to zero. The well's strength is untouched by the ghost layer: it is far from `xmax`,
+# so the load assembled on the constrained space is the plain one, node for node, and still
+# sums to `Q`. The Dirichlet rows of `Fᵍ` hold the boundary data, here zero, so they add
+# nothing to the sum.
+
+Fₚ = assemble(l)
+
+@test abs(sum(assemble(lᵍ)) - Q) < 1.0e-10                                                 #src
+@test abs(sum(Fᵍ) - Q) < 1.0e-10                                                           #src
+@test maximum(abs, Fᵍ .- Fₚ) < 1.0e-12                                                     #src
+@test maximum(parent(uᵍ)) > maximum(parent(uₕ))                                            #src
+
+sum(Fᵍ) - Q, maximum(abs, Fᵍ .- Fₚ)
+
+# The ghost values are fixed by the relation, so the check that means something is one-sided
+# and independent of them. `Bramble.lift(Cᵍ, u)` returns the solution on the padded grid;
+# on the physical nodes of `xmax` the three-point backward difference of that lifted solution
+# is the normal derivative, and ``u + \partial_n u`` must vanish up to the truncation error,
+# of order ``h^2``. The mesh is uniform, so the spacing is one number:
+
+function leaky_residual(Ωₕ, C, u)
+    U = parent(Bramble.lift(C, u))
+    G = Bramble.mesh(C)
+    nx, ny = Bramble.npoints(Ωₕ, Tuple)
+    xs = collect(points(Ωₕ(1)))
+    h = xs[nx] - xs[nx - 1]
+    lin = LinearIndices(Bramble.npoints(G, Tuple))
+    at(i, j) = U[lin[Bramble.padded_index(G, CartesianIndex(i, j))]]
+    return maximum(1:ny) do j
+        dₙ = (3 * at(nx, j) - 4 * at(nx - 1, j) + at(nx - 2, j)) / (2h)
+        abs(at(nx, j) + dₙ)
+    end
+end
+
+leaky = leaky_residual(Ωₕ, Cᵍ, uᵍ)
+
+# It is small compared with the head itself, which is of order one, but not round-off: the
+# one-sided difference carries its own truncation error. A solution that ignored the
+# relation would leave a residual of the size of ``\partial_n u`` itself, orders larger.
+
+@test 1.0e-8 < leaky < 1.0e-2 * maximum(parent(uᵍ))                                        #src
+
+leaky
+
+#-
+
+surface_plot(uᵍ; title = "head from one well, leaky right side") # hide
+
+# The flux sections below stay Dirichlet on the plain space, because [`reaction`](@ref)
+# refuses a ghost form with an `ArgumentError`: it reads rows of the unconstrained plain
+# system, and the fix it names is to apply it on the plain space to the physical values of
+# `Bramble.lift(Cᵍ, u)`.
+
 # ## What the boundary had to supply
 #
 # [`reaction`](@ref) recovers that flux from the *unconstrained* form pair and the solved

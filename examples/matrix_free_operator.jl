@@ -230,6 +230,77 @@ rel_err(u) = norm(u - x_direct) / norm(x_direct)
 # preconditioner; the tutorial's multigrid section shows it and states where its point
 # smoothers stop.
 
+# ## A Dirichlet-Neumann problem on ghost points
+#
+# The same path takes a form on a space with ghost points. `gridspace(Ωₕ; ghosts)` adds a
+# layer of ghost nodes outside the sides named, and `constrained` attaches one relation to
+# each side: `u => g` is Dirichlet and `∂ₙ(u) => h` is a Neumann flux. The unknowns are the
+# nodes that no Dirichlet side fixes, and each ghost value is fixed by its relation. The
+# problem is ``-\Delta u + u = f`` on the page's graded square with ``u = g`` on `xmin` and
+# `ymin` and ``\partial_n u = h`` on `xmax` and `ymax`, for the manufactured solution
+# ``u = e^{x} \cos 2y``, so that ``f = 4 u``. The ghosts are on the two Neumann sides only:
+
+sol(p) = exp(p[1]) * cos(2p[2])
+∇sol(p) = (sol(p), -2 * exp(p[1]) * sin(2p[2]))
+flux(j, s) = p -> s * ∇sol(p)[j]
+
+Ωg = mesh(Ω, (n, n), (false, false))
+Bramble.change_points!(Ωg, (graded(n), graded(n)))
+Cₕ = constrained(gridspace(Ωg; ghosts = (:xmax, :ymax)),
+    u -> (:xmin => u => sol, :ymin => u => sol,
+        :xmax => ∂ₙ(u) => flux(1, 1.0), :ymax => ∂ₙ(u) => flux(2, 1.0)))
+a_g = form(Cₕ, Cₕ, (u, v) -> innerₕ(u, v) + innerₕ(-1.0 * Δₕ(u), v))
+l_g = form(Cₕ, v -> innerₕ(p -> 4 * sol(p), v))
+
+# `matrix_free_operator(a_g)` is the operator of the reduced system, without assembling it.
+# The Dirichlet data and the flux data belong to the load, so the right-hand side comes from
+# `assemble(a_g, l_g)`; the matrix that call also returns is the reference. The product
+# matches the assembled one, and the solve, with CG and no preconditioner, matches the
+# assembled solve:
+
+A_g, F_g = assemble(a_g, l_g)
+op_g = matrix_free_operator(a_g)
+x_g = rand(size(A_g, 2))
+product_gap = norm(op_g * x_g - A_g * x_g) / norm(A_g * x_g)
+
+prob_g = LinearProblem(op_g, F_g)
+sol_g = solve(prob_g, KrylovJL_CG(); reltol = 1e-12, abstol = 0.0, maxiters = 5000)
+u_direct = pde_solve(A_g, F_g)
+solve_gap = norm(sol_g.u - u_direct) / norm(u_direct)
+(ndofs = size(A_g, 2), product_gap = product_gap, cg_iterations = sol_g.iters,
+    solve_gap = solve_gap)
+
+@test !(op_g isa typeof(A_g)) #src
+@test size(op_g) == size(A_g) #src
+@test product_gap <= 1e-12 #src
+@test sol_g.iters < 5000 #src
+@test solve_gap <= 1e-8 #src
+
+# One operator serves one task at a time, since a product works in buffers the operator owns;
+# build one per task when solves run in parallel. The relation itself is checked on the
+# matrix-free solution. `Bramble.lift(Cₕ, u)` puts it on the padded grid with the ghost
+# values filled in, and the three-point backward difference of the lifted solution along
+# `xmax`, with the graded spacings, must give the flux `h` up to the truncation error:
+
+function flux_residual(Ωₕ, Cₕ, u)
+    U = parent(Bramble.lift(Cₕ, u))
+    G = Bramble.mesh(Cₕ)
+    nx, ny = Bramble.npoints(Ωₕ, Tuple)
+    xs, ys = collect(points(Ωₕ(1))), collect(points(Ωₕ(2)))
+    h₁, h₂ = xs[nx] - xs[nx - 1], xs[nx - 1] - xs[nx - 2]
+    lin = LinearIndices(Bramble.npoints(G, Tuple))
+    at(i, j) = U[lin[Bramble.padded_index(G, CartesianIndex(i, j))]]
+    return maximum(1:ny) do j
+        dₙ = (2h₁ + h₂) / (h₁ * (h₁ + h₂)) * at(nx, j) -
+             (h₁ + h₂) / (h₁ * h₂) * at(nx - 1, j) + h₁ / (h₂ * (h₁ + h₂)) * at(nx - 2, j)
+        abs(dₙ - flux(1, 1.0)((xs[nx], ys[j])))
+    end
+end
+
+relation_residual = flux_residual(Ωg, Cₕ, sol_g.u)
+
+@test 0 < relation_residual < 1e-1 #src
+
 # ## Kronecker or matrix-free?
 #
 # For a separable form, [`kronecker_operator`](@ref) and [`matrix_free_operator`](@ref) are
@@ -488,3 +559,4 @@ rel_gap(y) = norm(y - y_reference) / norm(y_reference)
 #   - [Backend policies](@ref backend_policies) explains the serial and threaded policies that
 #     the product runs under, and the [backend tutorial](@ref tutorial_backend) shows how to
 #     choose one.
+println() #src

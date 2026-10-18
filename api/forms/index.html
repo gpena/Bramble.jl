@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=fa8ace7d">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=47b171cc">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -97,7 +97,7 @@
 <div class="md-docstring" id="Bramble.form">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.form</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L351-L404" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L351-L405" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -105,7 +105,7 @@
 <pre><code class="language-julia">form(Wₕ, f) -&gt; LinearForm</code></pre>
 </div>
 <p>Construct a <code class="md-code-inline">LinearForm</code> over the test space <code class="md-code-inline">Wₕ</code> using the linear expression <code class="md-code-inline">f</code>.</p>
-<p>Construction resolves the AST once and runs <a href="../../internals/form/#Bramble.simplify_ast-Tuple{Bramble.LazyOp}"><code class="md-code-inline">simplify_ast</code></a> over it – factoring common scalings and shared inner-product arguments, combining like terms, and eliding zero-scaled ones – before it is stored. Grid partitioning for parallel assembly is determined from the resolved AST during assembly (see <code class="md-code-inline">_term_colour_strides</code>).</p>
+<p>Construction resolves the AST once and runs <a href="../../internals/form/#Bramble.simplify_ast-Tuple{Bramble.LazyOp}"><code class="md-code-inline">simplify_ast</code></a> over it – dropping zero terms, folding nested constant scalings, lifting scalars out of inner products, and distributing sums that mix components – before it is stored; a sum is otherwise kept as written. Grid partitioning for parallel assembly is determined from the resolved AST during assembly (see <code class="md-code-inline">_term_colour_strides</code>).</p>
 <p>Every <code class="md-code-inline">SourceFunction</code> reachable from the simplified AST – a source term built directly from a plain function, <code class="md-code-inline">f(x)</code>, rather than a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> or a <code class="md-code-inline">Ref</code> – is then sampled once against its own leaf&#39;s space and lowered to a <code class="md-code-inline">SourceVector</code> because a brand-new closure passed as a source would force a full recompilation of the assembly pipeline on every distinct closure, since Julia gives it its own type; assembling against the fixed <code class="md-code-inline">SourceVector</code> shape instead means that cost is paid once, here, not on every later <code class="md-code-inline">assemble!</code>/<code class="md-code-inline">assemble</code> call. This changes what a raw closure that captures mutable state does: it is evaluated once, now, not re-evaluated on later assemblies. <code class="md-code-inline">VectorElement</code> and <code class="md-code-inline">Ref</code> coefficients are unaffected – see the note on <code class="md-code-inline">_lower_sources</code> in <code class="md-code-inline">ast/common.jl</code> for why, and for the documented alternative (<code class="md-code-inline">update_coefficients!</code>) a source meant to keep varying should use instead.</p>
 <p>The one exception is an interpolant <a href="../../api/spaces/#Bramble.πₕ"><code class="md-code-inline">πₕ</code></a><code class="md-code-inline">(uₕ)</code>, which is never sampled: every <code class="md-code-inline">assemble</code>/<code class="md-code-inline">assemble!</code> evaluates it on <code class="md-code-inline">uₕ</code>&#39;s current values, and throws an <code class="md-code-inline">ArgumentError</code> once <code class="md-code-inline">uₕ</code>&#39;s mesh has moved.</p>
 <p>A source under <code class="md-code-inline">restrict_to</code> is also called once here, at the first point of its region that the assembly reads (inside every enclosing region, moved by every enclosing shift), so that outside its region it answers a zero of the type it has inside and its stencil keeps one type at every point. It is never called at a point no assembly reads, with one exception: the point comes from the markers as they stand at <code class="md-code-inline">form</code>, so after <code class="md-code-inline">markers!</code> moves the region the source has been called once at a point of the old one. A region with no such point at <code class="md-code-inline">form</code> keeps the empty stencil. In return:</p>
@@ -135,7 +135,8 @@ true</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">form(Wₕ, Vₕ, f) -&gt; BilinearForm</code></pre>
 </div>
-<p>Construct a <code class="md-code-inline">BilinearForm</code> over the trial space <code class="md-code-inline">Wₕ</code> and the test space <code class="md-code-inline">Vₕ</code> from the bilinear expression <code class="md-code-inline">f</code> (a function of trial and test arguments <code class="md-code-inline">(u, v)</code>). The AST is resolved once and run through <a href="../../internals/form/#Bramble.simplify_ast-Tuple{Bramble.LazyOp}"><code class="md-code-inline">simplify_ast</code></a> – factoring common scalings and shared inner-product arguments, combining like terms, and eliding zero-scaled ones – before it is stored.</p>
+<p>Construct a <code class="md-code-inline">BilinearForm</code> over the trial space <code class="md-code-inline">Wₕ</code> and the test space <code class="md-code-inline">Vₕ</code> from the bilinear expression <code class="md-code-inline">f</code> (a function of trial and test arguments <code class="md-code-inline">(u, v)</code>). The AST is resolved once and run through <a href="../../internals/form/#Bramble.simplify_ast-Tuple{Bramble.LazyOp}"><code class="md-code-inline">simplify_ast</code></a> – dropping zero terms, folding nested constant scalings, lifting scalars out of inner products, and distributing sums that mix components – before it is stored; a sum is otherwise kept as written.</p>
+<p>An expression may hold one rank-one term, a scalar times a functional of the trial function times a functional of the test function (<code class="md-code-inline">σ * innerₕ(g, u) * innerₕ(h, v)</code>, <code class="md-code-inline">g</code> and <code class="md-code-inline">h</code> data). Its matrix <code class="md-code-inline">σ wₛ wₜᵀ</code> is dense, so the term is kept apart from the stencil: <code class="md-code-inline">form</code> then returns a <code class="md-code-inline">RankOneForm</code>, which <a href="../../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a> turns into a <a href="../../api/forms/#Bramble.RankOneUpdate"><code class="md-code-inline">RankOneUpdate</code></a>. A functional of one argument alone, a product of two functionals of the same argument, or two rank-one terms throw an <code class="md-code-inline">ArgumentError</code>.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -144,8 +145,20 @@ true</code></pre>
 a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
 
 # a coupled system, one term per block
-a = form(Vₕ, Vₕ, (u, v) -&gt; inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)))</code></pre>
+a = form(Vₕ, Vₕ, (u, v) -&gt; inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)))
+
+# a penalty on the discrete mean, (∇ₕu, ∇ₕv)₊ + σ (1, u)ₕ (1, v)ₕ
+a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)) + σ * innerₕ(1, u) * innerₕ(1, v))</code></pre>
 </div>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">form(Wₕ::CompositeGridSpace, Vₕ::CompositeGridSpace, f) -&gt; GhostCompositeBilinearForm
+form(Vₕ::CompositeGridSpace, f) -&gt; GhostCompositeLinearForm</code></pre>
+</div>
+<p>Forms on composites of ghost spaces (<code class="md-code-inline">C₁ × C₂</code>, <code class="md-code-inline">C^Val(n)</code>): the form on their padded spaces, reduced through the block-diagonal closure. <code class="md-code-inline">f</code> addresses the components as on a plain composite, <code class="md-code-inline">u(1)</code>, <code class="md-code-inline">v(2)</code>. <code class="md-code-inline">assemble(a)</code>, <code class="md-code-inline">assemble(a, l)</code>, <code class="md-code-inline">assemble!</code> and their <code class="md-code-inline">dirichlet</code> and <code class="md-code-inline">dirichlet_components</code> keywords act as on a scalar ghost space, the rows of each selected component replaced through its physical mesh. <code class="md-code-inline">a(u, v)</code>, <code class="md-code-inline">l(v)</code> and <code class="md-code-inline">evaluate!</code> give <code class="md-code-inline">vᴴ A u</code> and <code class="md-code-inline">Fᵀ v</code> as on a scalar ghost space.</p>
+<p>Every component of both spaces must ghost the same facets of meshes of one size; an <code class="md-code-inline">ArgumentError</code> names the fix otherwise. A rank-one term, a scalar space on the other side, <code class="md-code-inline">semidiscretize</code>, and the matrix-free, Kronecker and multigrid operators are refused with an <code class="md-code-inline">ArgumentError</code>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.expression">
@@ -249,7 +262,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.assemble">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L626-L639" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L714-L727" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -290,11 +303,33 @@ u = A \ F</code></pre>
 </div>
 <p>is the one-call equivalent of assembling <code class="md-code-inline">a</code> and <code class="md-code-inline">l</code> separately and calling <a href="../../api/forms/#Bramble.symmetrize!"><code class="md-code-inline">symmetrize!</code></a> by hand.</p>
 </div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">assemble(a::RankOneForm; dirichlet = nothing, dirichlet_components = nothing) -&gt; RankOneUpdate</code></pre>
+</div>
+<p>Assemble a form holding a rank-one term into a <a href="../../api/forms/#Bramble.RankOneUpdate"><code class="md-code-inline">RankOneUpdate</code></a>: its other terms as <a href="../../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a> assembles a <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a>, with <code class="md-code-inline">dirichlet</code> applied to their matrix, and the two functionals&#39; vectors through the linear path. <code class="md-code-inline">wₛ</code> is zero at the Dirichlet rows, so they are identity rows of the result.</p>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">assemble(a::RankOneForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing, symmetrize::Bool = false) -&gt; (K, F)</code></pre>
+</div>
+<p>The rank-one counterpart of <code class="md-code-inline">assemble(a::BilinearForm, l::LinearForm)</code>: <code class="md-code-inline">K</code> a <a href="../../api/forms/#Bramble.RankOneUpdate"><code class="md-code-inline">RankOneUpdate</code></a> and <code class="md-code-inline">F</code> the load, with the same <code class="md-code-inline">dirichlet</code> constraints applied to both. <code class="md-code-inline">symmetrize = true</code> runs <a href="../../api/forms/#Bramble.symmetrize!"><code class="md-code-inline">symmetrize!</code></a> on them.</p>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">assemble(a::RankOneForm, l::GhostLinearForm; dirichlet = nothing, dirichlet_components = nothing, symmetrize::Bool = false) -&gt; (K, F)
+assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = nothing, dirichlet_components = nothing, symmetrize::Bool = false) -&gt; (K, F)</code></pre>
+</div>
+<p>A form holding a rank-one term and a load on ghost spaces, assembled together as for a ghost form without one: <code class="md-code-inline">K</code> the <a href="../../api/forms/#Bramble.RankOneUpdate"><code class="md-code-inline">RankOneUpdate</code></a> <code class="md-code-inline">A + σ wₛ wₜᵀ</code> reduced through the closures <code class="md-code-inline">(E, d)</code>, and the load <code class="md-code-inline">E_vᵀ(F_pad − A_pad d) − σ wₛ (wₜ_padᵀ d)</code>, the rank-one part acting on the padded unknown <code class="md-code-inline">E u + d</code>. <code class="md-code-inline">assemble!</code> refills the outputs of an earlier <code class="md-code-inline">assemble(a, l)</code> in place, allocating nothing. <code class="md-code-inline">dirichlet</code> replaces the rows of <code class="md-code-inline">A</code> and zeroes <code class="md-code-inline">wₛ</code> there, and <code class="md-code-inline">symmetrize</code> then moves the Dirichlet columns into the load, as on a plain space. Both, and spaces whose relation data depend on time, are refused where the ghost form without the term refuses them.</p>
+</div>
 </div>
 <div class="md-docstring" id="Bramble.assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1347-L1380" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1472-L1505" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -355,11 +390,18 @@ u = A \ F</code></pre>
 <p>Both forms are assembled together because, when the closure of the space has an affine part <code class="md-code-inline">d ≠ 0</code>, the load is <code class="md-code-inline">Eᵀ(F − A d)</code> and reads the matrix. <code class="md-code-inline">assemble!(b, l)</code> alone refuses such a space. <code class="md-code-inline">dirichlet</code>, <code class="md-code-inline">dirichlet_components</code> and <code class="md-code-inline">symmetrize</code> act as in <code class="md-code-inline">assemble(a, l)</code>.</p>
 <p>It throws an <code class="md-code-inline">ArgumentError</code> for a time-dependent space (pose the problem with <code class="md-code-inline">semidiscretize</code>), for <code class="md-code-inline">symmetrize = true</code> without <code class="md-code-inline">dirichlet</code>, for <code class="md-code-inline">A</code> that is not a <code class="md-code-inline">SparseMatrixCSC</code> with the reduced pattern of <code class="md-code-inline">a</code>, for a <code class="md-code-inline">dirichlet</code> the rows of the space do not allow, and for an <code class="md-code-inline">F</code> whose element type cannot hold the load&#39;s. A <code class="md-code-inline">DimensionMismatch</code> follows an <code class="md-code-inline">F</code> of the wrong length and forms whose test spaces differ.</p>
 </div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">assemble!(K::RankOneUpdate, a::RankOneForm; dirichlet = nothing, dirichlet_components = nothing) -&gt; RankOneUpdate</code></pre>
+</div>
+<p>Refill <code class="md-code-inline">K</code>, from an earlier <code class="md-code-inline">assemble(a)</code>, in place: <code class="md-code-inline">A</code>, both vectors and <code class="md-code-inline">σ</code>, allocating nothing on the host. A <code class="md-code-inline">Ref</code> factor of <code class="md-code-inline">σ</code> and every coefficient of the functionals are read afresh.</p>
+</div>
 </div>
 <div class="md-docstring" id="Bramble.assemble_parallel!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_parallel!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1550-L1559" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1675-L1684" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -381,7 +423,7 @@ u = A \ F</code></pre>
 <div class="md-docstring" id="Bramble.allocate_system_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.allocate_system_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_pattern.jl#L265-L290" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_pattern.jl#L317-L342" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -427,15 +469,67 @@ for step in 1:nsteps
 end</code></pre>
 </div>
 </div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">evaluate!(scratch::AbstractVector, l::GhostLinearForm, vₕ::VectorElement) -&gt; Number</code></pre>
+</div>
+<p>Write the reduced load <code class="md-code-inline">assemble(l)</code> into <code class="md-code-inline">scratch</code>, of length <code class="md-code-inline">ndofs(test_space(l))</code>, and return its contraction with <code class="md-code-inline">vₕ</code>, the value <code class="md-code-inline">l(vₕ)</code>. It refuses as <code class="md-code-inline">l(vₕ)</code> does: with an <code class="md-code-inline">ArgumentError</code> naming <code class="md-code-inline">assemble(a, l)</code> on a closure with an affine part <code class="md-code-inline">d ≠ 0</code>.</p>
+</div>
+</div>
+<p>A form with a rank-one penalty term <code class="md-code-inline">σ * innerₕ(g, u) * innerₕ(h, v)</code> assembles to a <code class="md-code-inline">Bramble.RankOneUpdate</code>, the matrix <code class="md-code-inline">A + σ wₛ wₜᵀ</code> kept as its parts. <code class="md-code-inline">pde_solve(K, F)</code> solves it through a sparse bordered system (see the <a href="../../tutorials/form/">forms tutorial</a>), and <code class="md-code-inline">symmetrize!</code> accepts it. <code class="md-code-inline">RankOneUpdate</code> is <code class="md-code-inline">public</code>, not exported.</p>
+<div class="md-docstring" id="Bramble.RankOneUpdate">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.RankOneUpdate</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/rank_one.jl#L289-L343" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">RankOneUpdate{T, M, VS, VT} &lt;: AbstractMatrix{T}
+RankOneUpdate(A, σ, ws, wt)
+RankOneUpdate{T}(A, σ, ws, wt)</code></pre>
+</div>
+<p>The matrix <code class="md-code-inline">A + σ wₛ wₜᵀ</code>, stored as its four parts and never as a dense block: what <a href="../../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a> returns for a form holding a rank-one term <code class="md-code-inline">σ * innerₕ(g, u) * innerₕ(h, v)</code>. <code class="md-code-inline">A</code> is the matrix of the form&#39;s other terms, <code class="md-code-inline">wₛ</code> the vector of the test functional <code class="md-code-inline">innerₕ(h, ·)</code> and <code class="md-code-inline">wₜ</code> that of the trial functional <code class="md-code-inline">innerₕ(g, ·)</code>, each assembled by the linear path (<code class="md-code-inline">assemble(form(Vₕ, v -&gt; innerₕ(h, v)))</code>).</p>
+<p><strong>Fields</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">A::M</code>: the sparse part, an <code class="md-code-inline">AbstractMatrix</code> of size <code class="md-code-inline">(length(ws), length(wt))</code>.</p>
+</li>
+<li><p><code class="md-code-inline">σ::T</code>: the scalar, read when the form is assembled; a <code class="md-code-inline">Ref</code> factor stays live, so <a href="../../api/forms/#Bramble.assemble!"><code class="md-code-inline">assemble!</code></a> reads its new value.</p>
+</li>
+<li><p><code class="md-code-inline">ws::VS</code>: the test-side (row) vector.</p>
+</li>
+<li><p><code class="md-code-inline">wt::VT</code>: the trial-side (column) vector.</p>
+</li>
+</ul>
+<p><code class="md-code-inline">assemble!(K, a)</code> refills <code class="md-code-inline">A</code>, <code class="md-code-inline">ws</code>, <code class="md-code-inline">wt</code> and <code class="md-code-inline">σ</code> in place, allocating nothing. <code class="md-code-inline">RankOneUpdate(A, σ, ws, wt)</code> takes <code class="md-code-inline">T</code> from the four parts&#39; element types; <code class="md-code-inline">σ</code> is converted to <code class="md-code-inline">T</code>. Not exported: write <code class="md-code-inline">Bramble.RankOneUpdate</code>.</p>
+<p>Entry <code class="md-code-inline">(i, j)</code> is <code class="md-code-inline">A[i, j] + σ * (ws[i] * wt[j])</code>. <code class="md-code-inline">mul!(y, K, x, α, β)</code> computes <code class="md-code-inline">α (A x + σ ws (wtᵀ x)) + β y</code> with one product by <code class="md-code-inline">A</code> and two passes over the vectors, and allocates nothing; so do <code class="md-code-inline">K * x</code>, <code class="md-code-inline">K * X</code> and <code class="md-code-inline">mul!</code> on matrices, apart from their result. <code class="md-code-inline">Matrix(K)</code> is the dense matrix. <code class="md-code-inline">K&#39;</code> and <code class="md-code-inline">transpose(K)</code> are LinearAlgebra&#39;s lazy <code class="md-code-inline">Adjoint</code> and <code class="md-code-inline">Transpose</code> of <code class="md-code-inline">K</code>: they read <code class="md-code-inline">A</code>, <code class="md-code-inline">σ</code> and the vectors from <code class="md-code-inline">K</code>, so a refill of <code class="md-code-inline">K</code> is seen through them, and their products allocate nothing either. <code class="md-code-inline">similar(K)</code> is a rank-one update with <code class="md-code-inline">similar</code> parts, and <code class="md-code-inline">copy(K)</code> one with copied parts.</p>
+<p>With <code class="md-code-inline">dirichlet</code> labels, <code class="md-code-inline">assemble</code> makes each Dirichlet row of <code class="md-code-inline">A</code> an identity row, as <a href="../../api/forms/#Bramble.dirichlet_bc!"><code class="md-code-inline">dirichlet_bc!</code></a> does, and zeroes <code class="md-code-inline">ws</code> there, so the row is the identity row of <code class="md-code-inline">K</code>; the columns keep their entries, as <code class="md-code-inline">A</code>&#39;s do. <a href="../../api/forms/#Bramble.symmetrize!"><code class="md-code-inline">symmetrize!</code></a> then moves those columns&#39; entries, of <code class="md-code-inline">A</code> and of <code class="md-code-inline">σ wₛ wₜᵀ</code>, into the load and zeroes <code class="md-code-inline">wt</code> at the Dirichlet indices.</p>
+<p><code class="md-code-inline">issymmetric(K)</code> is <code class="md-code-inline">true</code> when <code class="md-code-inline">A</code> is symmetric and <code class="md-code-inline">ws == wt</code> (or <code class="md-code-inline">σ</code> is zero), the case of a symmetric form with one functional on both sides. Any other <code class="md-code-inline">K</code> reports <code class="md-code-inline">false</code> without comparing its <code class="md-code-inline">N²</code> entries, even if they happen to be symmetric (<code class="md-code-inline">ws</code> a multiple of <code class="md-code-inline">wt</code>, say).</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, LinearAlgebra
+Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 6, false))
+a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)) + 2.0 * innerₕ(1, u) * innerₕ(1, v))
+K = assemble(a)
+w = assemble(form(Wₕ, v -&gt; innerₕ(1, v)))
+A = assemble(form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v))))
+(K isa Bramble.RankOneUpdate, Matrix(K) ≈ Matrix(A) + 2.0 * w * w&#39;)
+
+# output
+(true, true)</code></pre>
+</div>
+</div>
 </div>
 <h2 id="Matrix-free-Kronecker-operators" class="md-heading">Matrix-free Kronecker operators<a href="#Matrix-free-Kronecker-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>For a separable <code class="md-code-inline">BilinearForm</code> (one whose assembled matrix is an exact sum of Kronecker products of one-dimensional factors over a <code class="md-code-inline">MeshnD</code>), <code class="md-code-inline">kronecker_operator</code> builds a <code class="md-code-inline">KroneckerLinearOperator</code> that applies in one fused pass over the grid instead of ever assembling the <code class="md-code-inline">D</code>-dimensional matrix: a <code class="md-code-inline">200^3</code> mesh stores <code class="md-code-inline">O(200)</code> numbers per axis rather than the assembled matrix&#39;s <code class="md-code-inline">O(200^3)</code> stored entries. <code class="md-code-inline">is_separable</code> checks the condition beforehand and lists what factors.</p>
-<p>What factors: the difference, average, jump and shift families along any axis and chains of them, so mixed derivatives and advection terms (whose factors need not be symmetric); <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">inner₊</code> and <code class="md-code-inline">inner_Γ</code> weights; a restriction to <code class="md-code-inline">:interior</code>; a grid-function coefficient that varies along one axis; and scalar or <code class="md-code-inline">Ref</code> coefficients. A composite space whose leaves share one mesh gives a block operator, one Kronecker operator per block. What does not: a coefficient varying along several axes, other region restrictions (Dirichlet rows included), an interpolation, a 1D mesh, trial and test spaces on different meshes, and the star and cross-weighted differences. A grid-function coefficient is read once, when the operator is built, and warns so; use a <code class="md-code-inline">Ref</code> for a coefficient that changes, or <code class="md-code-inline">matrix_free_operator</code>, which reads it live. Under <code class="md-code-inline">CpuThreaded</code> the product runs threaded, and an operator whose mesh was mutated in place afterwards throws instead of applying.</p>
-<p><code class="md-code-inline">fdm_solve</code> requires <code class="md-code-inline">using Kronecker</code> (the <code class="md-code-inline">BrambleKroneckerExt</code> extension). It solves a Laplacian-like system, one whose terms each differ from one mass per axis on at most one axis, without a general sparse factorisation: by fast diagonalisation when it is symmetric, and by a Schur-form solve when advection terms make it non-symmetric. A mixed derivative is refused. For such a form, <code class="md-code-inline">fdm_preconditioner</code> (in <a href="../../api_sciml/">Scientific computing</a>) preconditions a Krylov solver with its Laplacian-like part. <code class="md-code-inline">fdm_factorize</code> factorises once, and <code class="md-code-inline">fdm_solve!</code> then solves each right-hand side with zero allocations; <code class="md-code-inline">fdm_factorize!</code> refills that factorisation after a coefficient or the mesh changed, without building it again.</p>
+<p>What factors: the difference, average, jump and shift families along any axis and chains of them, so mixed derivatives and advection terms (whose factors need not be symmetric); <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">inner₊</code> and <code class="md-code-inline">inner_Γ</code> weights; a restriction to <code class="md-code-inline">:interior</code>; a grid-function coefficient that varies along one axis; and scalar or <code class="md-code-inline">Ref</code> coefficients. A form on a ghost space factors where its closure is separable and both spaces share one mesh object. A composite space whose leaves share one mesh gives a block operator, one Kronecker operator per block. What does not: a coefficient varying along several axes, other region restrictions (Dirichlet rows included), an interpolation, a 1D mesh, trial and test spaces on different meshes, and the star and cross-weighted differences. A grid-function coefficient is read once, when the operator is built, and warns so; use a <code class="md-code-inline">Ref</code> for a coefficient that changes, or <code class="md-code-inline">matrix_free_operator</code>, which reads it live. Under <code class="md-code-inline">CpuThreaded</code> the product runs threaded, and an operator whose mesh was mutated in place afterwards throws instead of applying.</p>
+<p><code class="md-code-inline">fdm_solve</code> requires <code class="md-code-inline">using Kronecker</code> (the <code class="md-code-inline">BrambleKroneckerExt</code> extension). It solves a Laplacian-like system, one whose terms each differ from one mass per axis on at most one axis, without a general sparse factorisation: by fast diagonalisation when it is symmetric, and by a Schur-form solve when advection terms make it non-symmetric. A mixed derivative is refused. A form on a ghost space is accepted where its closure and its terms are separable; otherwise the call throws an <code class="md-code-inline">ArgumentError</code> naming <code class="md-code-inline">assemble(a)</code>. For such a form, <code class="md-code-inline">fdm_preconditioner</code> (in <a href="../../api_sciml/">Scientific computing</a>) preconditions a Krylov solver with its Laplacian-like part. <code class="md-code-inline">fdm_factorize</code> factorises once, and <code class="md-code-inline">fdm_solve!</code> then solves each right-hand side with zero allocations; <code class="md-code-inline">fdm_factorize!</code> refills that factorisation after a coefficient or the mesh changed, without building it again.</p>
 <div class="md-docstring" id="Bramble.is_separable">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.is_separable</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L122-L177" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L125-L180" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -489,12 +583,13 @@ is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(fₕ * u, v)))  # false: var
 <div class="md-docstring" id="Bramble.kronecker_operator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.kronecker_operator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L501-L552" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L504-L570" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">kronecker_operator(a::BilinearForm) -&gt; Union{KroneckerLinearOperator, KroneckerBlockOperator}</code></pre>
+<pre><code class="language-julia">kronecker_operator(a::BilinearForm) -&gt; Union{KroneckerLinearOperator, KroneckerBlockOperator}
+kronecker_operator(a::GhostBilinearForm) -&gt; KroneckerLinearOperator</code></pre>
 </div>
 <p>Build a matrix-free <a href="../../api/forms/#Bramble.KroneckerLinearOperator"><code class="md-code-inline">KroneckerLinearOperator</code></a> for the separable bilinear form <code class="md-code-inline">a</code> (see <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a>), without ever assembling the <code class="md-code-inline">D</code>-dimensional matrix.</p>
 <p>Each term&#39;s factor on axis <code class="md-code-inline">d</code> is the 1D form it projects to there, assembled on <code class="md-code-inline">gridspace(Ωₕ(d))</code> (<code class="md-code-inline">_kron_project</code>): a diagonal factor is stored as a <code class="md-code-inline">Diagonal</code> (the axis&#39;s cell measures <code class="md-code-inline">weights(gridspace(Ωₕ(d)), Innerh())</code> themselves for a mass factor), and terms sharing a factor on an axis share one matrix. Factors are always built on the host (a device mesh through its host mirror) and then converted to the storage <code class="md-code-inline">backend(trial_space(a))</code> uses, so a device-backed form yields device-resident factors. A scalar or <code class="md-code-inline">Ref</code> coefficient around a term stays live, read at every <code class="md-code-inline">mul!</code>.</p>
@@ -506,8 +601,11 @@ is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(fₕ * u, v)))  # false: var
 </div>
 <p>The factors also describe the mesh as it is now: if the mesh is mutated in place after this call, the operator throws instead of applying (see <a href="../../api/forms/#Bramble.KroneckerLinearOperator"><code class="md-code-inline">KroneckerLinearOperator</code></a>).</p>
 <p>On a composite trial or test space whose leaves all share one mesh, the result is a <code class="md-code-inline">Bramble.KroneckerBlockOperator</code> (not exported): one <code class="md-code-inline">KroneckerLinearOperator</code> per nonzero (test leaf, trial leaf) block, placed at that block&#39;s rows and columns, with the same <code class="md-code-inline">size</code>, <code class="md-code-inline">getindex</code>, <code class="md-code-inline">mul!</code>, <code class="md-code-inline">SparseMatrixCSC</code> and <code class="md-code-inline">issymmetric</code> interface.</p>
+<p>On a form over ghost spaces, <code class="md-code-inline">form(Cₕ, Cₕ, f)</code> with <code class="md-code-inline">Cₕ</code> built by <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>, the result is a <code class="md-code-inline">KroneckerLinearOperator</code> of the reduced matrix <code class="md-code-inline">E_vᵀ A_pad E_u</code> that <code class="md-code-inline">assemble(a)</code> returns, on the degrees of freedom of <code class="md-code-inline">Cₕ</code>. Its closure must be separable: every ghost eliminated by one relation per facet along its normal (<code class="md-code-inline">u =&gt; g</code>, <code class="md-code-inline">∂ₙ(u)</code>, <code class="md-code-inline">α * u + β * ∂ₙ(u)</code> with constant <code class="md-code-inline">α</code> and <code class="md-code-inline">β</code>, or <code class="md-code-inline">∂ₙ(u; K)</code> with diagonal <code class="md-code-inline">K</code>). The closures <code class="md-code-inline">E_u</code> and <code class="md-code-inline">E_v</code> are then Kronecker products of 1D closures, and each term&#39;s factor on axis <code class="md-code-inline">d</code> is <code class="md-code-inline">E_{v,d}ᵀ F_d E_{u,d}</code>, <code class="md-code-inline">F_d</code> its factor on the padded axis, so <code class="md-code-inline">dims</code> counts the points of each axis that no <code class="md-code-inline">u =&gt; g</code> fixes. The relation data enter the load only, not the operator.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
+<li><p><code class="md-code-inline">ArgumentError</code>: on ghost spaces, a closure that is not separable (a conormal <code class="md-code-inline">K</code> with off-diagonal entries, ghosts left as unknowns), a term that reads the padded points beyond two ghosted facets (a mixed derivative), or a region restriction or grid-function coefficient, each naming <code class="md-code-inline">assemble(a)</code> as the fix.</p>
+</li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">a</code> is not separable, naming the offending node and, on a composite space, its block (or the dimension, or the spaces) – the same check <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a> runs, made specific; or <code class="md-code-inline">a</code> is device-backed and a term has more than one non-diagonal factor or a non-symmetric one, which the device kernel cannot apply (<code class="md-code-inline">_kron_check_device</code>).</p>
 </li>
 </ul>
@@ -527,7 +625,7 @@ K * x ≈ assemble(a) * x</code></pre>
 <div class="md-docstring" id="Bramble.KroneckerLinearOperator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.KroneckerLinearOperator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L245-L316" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L248-L319" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -674,11 +772,11 @@ end</code></pre>
 </div>
 </div>
 <h2 id="Matrix-free-operators" class="md-heading">Matrix-free operators<a href="#Matrix-free-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">matrix_free_operator</code> applies any <code class="md-code-inline">BilinearForm</code> that <code class="md-code-inline">assemble</code> accepts, separable or not, without building its matrix: <code class="md-code-inline">mul!(y, op, x)</code> walks the form&#39;s stencil and agrees with <code class="md-code-inline">assemble(a) * x</code>, Dirichlet rows included, on vectors and <code class="md-code-inline">VectorElement</code>s. Its execution policy comes from the trial space, as for assembly. Preconditioners and multigrid built on it are in <a href="../../api_sciml/">Scientific computing</a>.</p>
+<p><code class="md-code-inline">matrix_free_operator</code> applies any <code class="md-code-inline">BilinearForm</code>, or ghost-space form, that <code class="md-code-inline">assemble</code> accepts, separable or not, without building its matrix: <code class="md-code-inline">mul!(y, op, x)</code> walks the form&#39;s stencil and agrees with <code class="md-code-inline">assemble(a) * x</code>, Dirichlet rows included, on vectors and <code class="md-code-inline">VectorElement</code>s. Its execution policy comes from the trial space, as for assembly. Preconditioners and multigrid built on it are in <a href="../../api_sciml/">Scientific computing</a>.</p>
 <div class="md-docstring" id="Bramble.matrix_free_operator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.matrix_free_operator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/matrix_free.jl#L199-L246" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/matrix_free.jl#L199-L260" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -686,9 +784,10 @@ end</code></pre>
 <pre><code class="language-julia">matrix_free_operator(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a))) -&gt; MatrixFreeOperator</code></pre>
 </div>
 <p>The linear operator of <code class="md-code-inline">a</code>, applied without assembling its matrix: <code class="md-code-inline">op * x</code> agrees with <code class="md-code-inline">assemble(a; dirichlet, dirichlet_components) * x</code>.</p>
+<p>A form on ghost spaces (<a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a>) gives an operator that applies its reduced matrix <code class="md-code-inline">E_vᵀ A_pad E_u</code>: the closure of the trial space without its affine part, the operator of the form on the padded spaces, then the transpose of the test space&#39;s closure. The affine part belongs to the load, as in <code class="md-code-inline">assemble(a, l)</code>. Its padded buffers are built once, so a warm product allocates no vector. It applies one product at a time: a product entered on it while another runs throws an <code class="md-code-inline">ArgumentError</code>, so build one operator per task. <code class="md-code-inline">dirichlet</code> there takes what <code class="md-code-inline">assemble(a; dirichlet)</code> takes.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">a</code>: The bilinear form. Any form <a href="../../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a> accepts, on scalar or composite spaces.</p>
+<li><p><code class="md-code-inline">a</code>: The bilinear form. Any form <a href="../../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a> accepts, on scalar or composite spaces, or on ghost spaces.</p>
 </li>
 </ul>
 <p><strong>Keywords</strong></p>
@@ -702,7 +801,7 @@ end</code></pre>
 </ul>
 <p><strong>Returns</strong></p>
 <ul class="md-list-tight">
-<li><p><a href="../../api/forms/#Bramble.MatrixFreeOperator"><code class="md-code-inline">MatrixFreeOperator</code></a>: of size <code class="md-code-inline">(ndofs(test_space(a)), ndofs(trial_space(a)))</code> and the element type of <code class="md-code-inline">assemble(a)</code>.</p>
+<li><p><a href="../../api/forms/#Bramble.MatrixFreeOperator"><code class="md-code-inline">MatrixFreeOperator</code></a>: of size <code class="md-code-inline">(ndofs(test_space(a)), ndofs(trial_space(a)))</code> and the element type of <code class="md-code-inline">assemble(a)</code>. On ghost spaces, a <code class="md-code-inline">GhostMatrixFreeOperator</code> of that size holding the padded form&#39;s <code class="md-code-inline">MatrixFreeOperator</code>.</p>
 </li>
 </ul>
 <p><strong>Throws</strong></p>
@@ -710,6 +809,10 @@ end</code></pre>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.4.0.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet_components</code> names a leaf the test space does not have.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet</code> on ghost spaces whose unknowns are not the physical nodes, as for <code class="md-code-inline">assemble(a; dirichlet)</code>.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code>, from <code class="md-code-inline">mul!</code>: a product on a ghost-space operator while another task&#39;s product on it runs.</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -946,6 +1049,15 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">dirichlet_bc!(A::AbstractMatrix, Vₕ::CompositeGridSpace, labels::Symbol...; components = nothing)
+dirichlet_bc!(v::AbstractVector, Vₕ::CompositeGridSpace, bcs, labels::Symbol...; components = nothing)
+symmetrize!(A, F, Vₕ::CompositeGridSpace, labels::Symbol...; components = nothing)</code></pre>
+</div>
+<p>Row replacement by hand on a composite of ghost spaces, as the <code class="md-code-inline">dirichlet</code> keyword of <code class="md-code-inline">assemble</code> does it: the rows of the nodes of <code class="md-code-inline">labels</code> (markers or facet names of the physical mesh) in each component <code class="md-code-inline">components</code> selects (all by default). Each selected component&#39;s unknowns must be its physical nodes: every ghost eliminated by a relation and no node fixed by <code class="md-code-inline">u =&gt; g</code>; an <code class="md-code-inline">ArgumentError</code> names the route otherwise.</p>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">dirichlet_bc!(u::AbstractVector, sd::AbstractSemidiscretization, t::Number, p = nothing) -&gt; u</code></pre>
 </div>
 <p>Write <code class="md-code-inline">sd</code>&#39;s Dirichlet values at time <code class="md-code-inline">t</code> (and, for a parameter-dependent condition, parameter <code class="md-code-inline">p</code>) into <code class="md-code-inline">u</code> and return it.</p>
@@ -986,6 +1098,13 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 <p>The counterpart of the composite <code class="md-code-inline">dirichlet_bc!</code>: each leaf&#39;s marker mask is read at that leaf&#39;s offset into the global system without allocating full-system masks. <code class="md-code-inline">leaf_spaces_offsets</code> returns a tuple, enabling loop unrolling and type stability.</p>
 <p>Takes the same <code class="md-code-inline">components</code> keyword as composite <code class="md-code-inline">dirichlet_bc!</code>, restricting which leaf components <code class="md-code-inline">labels</code> binds to (1-based positions in <code class="md-code-inline">leaf_spaces_offsets(Wₕ)</code>). <code class="md-code-inline">components = nothing</code> (the default) applies to every leaf.</p>
 <p>Combines every label into one mask per leaf (<code class="md-code-inline">_combined_mask</code>, space/inner<em>product.jl) rather than visiting each leaf once per label: by the time <code class="md-code-inline">symmetrize!</code> runs, `dirichlet</em>bc!<code class="md-code-inline">has already zeroed every marked row of</code>A<code class="md-code-inline">off its diagonal (the documented order of use), so for any two marked indices</code>i<code class="md-code-inline">,</code>k<code class="md-code-inline">in the combined set,</code>A[k, i] == 0`. That makes each marked index&#39;s elimination read/write entries that no other marked index&#39;s elimination touches, so the order they are visited in cannot change the result, and a row marked by several labels is visited once.</p>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">symmetrize!(K::RankOneUpdate, F::AbstractVector, Wₕ, labels::Symbol...; components = nothing)</code></pre>
+</div>
+<p><a href="../../api/forms/#Bramble.symmetrize!"><code class="md-code-inline">symmetrize!</code></a> for a <a href="../../api/forms/#Bramble.RankOneUpdate"><code class="md-code-inline">RankOneUpdate</code></a> <code class="md-code-inline">K = A + σ wₛ wₜᵀ</code>, after the Dirichlet rows are applied (<code class="md-code-inline">assemble(a; dirichlet)</code>). <code class="md-code-inline">A</code> is symmetrized as a matrix is, and the rank-one columns of the Dirichlet indices <code class="md-code-inline">D</code> move into the load: <code class="md-code-inline">F -= σ wₛ Σⱼ∈D wₜ[j] F[j]</code>, then <code class="md-code-inline">wₜ[D] = 0</code>. As <code class="md-code-inline">wₛ</code> is zero at <code class="md-code-inline">D</code>, the Dirichlet rows of <code class="md-code-inline">F</code> keep their values.</p>
 </div>
 </div>
 <h2 id="Boundary-flux-/-reaction-extraction" class="md-heading">Boundary flux / reaction extraction<a href="#Boundary-flux-/-reaction-extraction" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -1030,6 +1149,13 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <pre><code class="language-julia">reaction(a::BilinearForm, l::LinearForm, uₕ::VectorElement; marker, dirichlet_components = nothing) -&gt; Real</code></pre>
 </div>
 <p>Reassembles the unconstrained <code class="md-code-inline">a</code>/<code class="md-code-inline">l</code> (<code class="md-code-inline">assemble</code> with no <code class="md-code-inline">dirichlet</code> keyword) and calls <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a><code class="md-code-inline">(A, F, uₕ; marker, components = dirichlet_components)</code>. <code class="md-code-inline">a</code> and <code class="md-code-inline">l</code> must be posed on the same space as <code class="md-code-inline">uₕ</code>.</p>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">reaction(a::GhostBilinearForm, l::GhostLinearForm, uₕ::VectorElement; marker, dirichlet_components = nothing)</code></pre>
+</div>
+<p>Refuses with an <code class="md-code-inline">ArgumentError</code>. A reaction reads the rows of the unconstrained plain system at the marked nodes, and a ghost space has replaced those rows by its relations. Pose <code class="md-code-inline">a</code> and <code class="md-code-inline">l</code> on the plain space <code class="md-code-inline">gridspace(Ωₕ)</code>, fill an element of it with the physical values of <code class="md-code-inline">Bramble.lift(C, u)</code>, and call <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a> there.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.reaction!">
@@ -1116,6 +1242,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=fa8ace7d"></script>
+  <script src="../../assets/materialdocs.js?v=47b171cc"></script>
 </body>
 </html>
