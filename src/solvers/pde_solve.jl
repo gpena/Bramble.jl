@@ -299,8 +299,6 @@ function _bordered_solve(A::SparseMatrixCSC, F::AbstractVector, r,
     return u
 end
 
-using LinearAlgebra: Adjoint, Transpose
-
 # The bordered matrix and its symmetry: `[A C; Cᵀ 0]`, or with a rank-one term
 # `[A wₛ C; wₜᵀ c 0; Cᵀ 0 0]`, symmetric when `[A wₛ C]` gives a symmetric `[A C; Cᵀ 0]` and
 # `wₛ == wₜ` (`T` is then real, so `c` is too).

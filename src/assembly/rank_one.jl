@@ -444,8 +444,6 @@ end
 # `K'` and `transpose(K)` are LinearAlgebra's lazy wrappers of `K`, so they read `A`, `σ` and
 # the vectors from `K` itself and a refill of `K` is seen through them. Their products:
 # `(A + σ wₛ wₜᵀ)ᵀ x = Aᵀ x + σ wₜ (wₛᵀ x)`, and the adjoint conjugates `σ` and both vectors.
-using LinearAlgebra: Adjoint, Transpose
-
 const _AdjOrTransRankOne = Union{Adjoint{<:Any, <:RankOneUpdate}, Transpose{<:Any, <:RankOneUpdate}}
 
 _wrap_like(::Adjoint, A) = adjoint(A)
