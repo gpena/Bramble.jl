@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Utilities — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=59f5109d">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=18143e54">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Utilities — Bramble.jl">
   <meta property="og:title" content="Utilities — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -107,7 +109,7 @@
 <div class="md-docstring" id="Bramble.Backend">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L354-L379" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L324-L349" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -124,7 +126,7 @@
 <li><p><code class="md-code-inline">EP&lt;:ExecutionPolicy</code>: An <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a>, for example <a href="../../api/utilities/#Bramble.Serial"><code class="md-code-inline">Serial</code></a>, <a href="../../api/utilities/#Bramble.Parallel"><code class="md-code-inline">Parallel</code></a>, <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> or <a href="../../api/utilities/#Bramble.GpuKernel"><code class="md-code-inline">GpuKernel</code></a>.</p>
 </li>
 </ul>
-<p>All three parameters must agree on <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a>: a backend is meant to be wholly host – a <code class="md-code-inline">Vector</code> alongside a CPU sparse or dense matrix, run under a <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> – or wholly device – once a vendor is chosen, <code class="md-code-inline">VT</code>, <code class="md-code-inline">MT</code> and the policy are all that vendor&#39;s. Any other combination (a device <code class="md-code-inline">VT</code> with a host <code class="md-code-inline">MT</code>, a device <code class="md-code-inline">VT</code> with a <code class="md-code-inline">CpuPolicy</code>, or a host <code class="md-code-inline">VT</code> with a <code class="md-code-inline">GpuPolicy</code>) is rejected at construction rather than accepted and left to fail on first use (gpena/Bramble.jl#298, #296).</p>
+<p>All three parameters must agree on <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a>: a backend is meant to be wholly host – a <code class="md-code-inline">Vector</code> alongside a CPU sparse or dense matrix, run under a <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> – or wholly device – once a vendor is chosen, <code class="md-code-inline">VT</code>, <code class="md-code-inline">MT</code> and the policy are all that vendor&#39;s. Any other combination (a device <code class="md-code-inline">VT</code> with a host <code class="md-code-inline">MT</code>, a device <code class="md-code-inline">VT</code> with a <code class="md-code-inline">CpuPolicy</code>, or a host <code class="md-code-inline">VT</code> with a <code class="md-code-inline">GpuPolicy</code>) is rejected at construction rather than accepted and left to fail on first use.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">locality(VT) != locality(EP())</code>.</p>
@@ -148,7 +150,7 @@
 <pre><code class="language-julia">Locality</code></pre>
 </div>
 <p>Abstract supertype for where an array&#39;s storage lives: <a href="../../api/utilities/#Bramble.HostLocality"><code class="md-code-inline">HostLocality</code></a> for memory a CPU loop can index element by element, <a href="../../api/utilities/#Bramble.DeviceLocality"><code class="md-code-inline">DeviceLocality</code></a> for memory an accelerator schedules against instead.</p>
-<p>Never declared directly – <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a> derives it from an array type, an <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a>, or a <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a>. Introduced by gpena/Bramble.jl#298 so a <code class="md-code-inline">Backend</code>&#39;s storage and its execution policy answer the same question and can be checked against each other, rather than each independently claiming a locality that need not agree.</p>
+<p>Never declared directly – <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a> derives it from an array type, an <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a>, or a <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a>. So a <code class="md-code-inline">Backend</code>&#39;s storage and its execution policy answer the same question and can be checked against each other, rather than each independently claiming a locality that need not agree.</p>
 <p>See also: <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a>, <a href="../../api/utilities/#Bramble.HostLocality"><code class="md-code-inline">HostLocality</code></a>, <a href="../../api/utilities/#Bramble.DeviceLocality"><code class="md-code-inline">DeviceLocality</code></a>.</p>
 </div>
 </div>
@@ -176,14 +178,14 @@
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">DeviceLocality() &lt;: Locality</code></pre>
 </div>
-<p>Storage an accelerator schedules against rather than a CPU loop indexing it directly: <code class="md-code-inline">MtlVector</code>/<code class="md-code-inline">MtlMatrix</code> and any future GPU array type. Scalar indexing such storage from a host loop is the failure this trait exists to catch before it happens (gpena/Bramble.jl#298).</p>
+<p>Storage an accelerator schedules against rather than a CPU loop indexing it directly: <code class="md-code-inline">MtlVector</code>/<code class="md-code-inline">MtlMatrix</code> and any future GPU array type. Scalar indexing such storage from a host loop is the failure this trait exists to catch before it happens.</p>
 <p>See also: <a href="../../api/utilities/#Bramble.Locality"><code class="md-code-inline">Locality</code></a>, <a href="../../api/utilities/#Bramble.HostLocality"><code class="md-code-inline">HostLocality</code></a>, <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.locality">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.locality</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L38-L76" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L38-L75" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -191,8 +193,8 @@
 <pre><code class="language-julia">locality(x) -&gt; Locality</code></pre>
 </div>
 <p>Return the <a href="../../api/utilities/#Bramble.Locality"><code class="md-code-inline">Locality</code></a> of <code class="md-code-inline">x</code> – an array type, an <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a>, or a <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a>.</p>
-<p>Locality is derived from storage, never declared. The fallback method, <code class="md-code-inline">locality(::Type{&lt;:AbstractArray}) = HostLocality()</code>, treats any array type this package has not been taught otherwise about as host memory. Any array type subtyping <code class="md-code-inline">GPUArraysCore.AbstractGPUArray</code> answers <code class="md-code-inline">DeviceLocality()</code> generically (gpena/Bramble.jl#321), so a GPU package extension no longer has to add its own method for that to hold – Metal&#39;s <code class="md-code-inline">MtlVector</code>/<code class="md-code-inline">MtlMatrix</code> already subtype it, and any future CUDA/ROCm/oneAPI array type gets the right answer the same way, for free. <code class="md-code-inline">BrambleMetalExt</code> keeps its own <code class="md-code-inline">MtlVector</code>/<code class="md-code-inline">MtlMatrix</code>/sparse-matrix methods regardless: Julia dispatches to the more specific method, and those predate this generic one – the same idiom as <a href="../../api/utilities/#Bramble.ka_device"><code class="md-code-inline">ka_device</code></a>: a method a package extension supplies for its own type, picked up automatically once loaded.</p>
-<p>For an <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a>, <code class="md-code-inline">locality</code> answers what the policy claims: a <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> claims <a href="../../api/utilities/#Bramble.HostLocality"><code class="md-code-inline">HostLocality</code></a>, a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> claims <a href="../../api/utilities/#Bramble.DeviceLocality"><code class="md-code-inline">DeviceLocality</code></a>. For a <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a>, it answers the locality of the backend&#39;s vector type <code class="md-code-inline">VT</code> alone: <code class="md-code-inline">VT</code> is the storage a sweep actually indexes, so that is the locality that matters for legality. The matrix type <code class="md-code-inline">MT</code> is not consulted (gpena/Bramble.jl#298), so a device <code class="md-code-inline">MT</code> paired with a host <code class="md-code-inline">VT</code> goes unchecked.</p>
+<p>Locality is derived from storage, never declared. The fallback method, <code class="md-code-inline">locality(::Type{&lt;:AbstractArray}) = HostLocality()</code>, treats any array type this package has not been taught otherwise about as host memory. Any array type subtyping <code class="md-code-inline">GPUArraysCore.AbstractGPUArray</code> answers <code class="md-code-inline">DeviceLocality()</code> generically, so a GPU package extension need not add its own method for that to hold – Metal&#39;s <code class="md-code-inline">MtlVector</code>/<code class="md-code-inline">MtlMatrix</code> already subtype it, and any future CUDA/ROCm/oneAPI array type gets the right answer the same way, for free. <code class="md-code-inline">BrambleMetalExt</code> keeps its own <code class="md-code-inline">MtlVector</code>/<code class="md-code-inline">MtlMatrix</code>/sparse-matrix methods regardless: Julia dispatches to the more specific method, and those predate this generic one – the same idiom as <a href="../../api/utilities/#Bramble.ka_device"><code class="md-code-inline">ka_device</code></a>: a method a package extension supplies for its own type, picked up automatically once loaded.</p>
+<p>For an <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a>, <code class="md-code-inline">locality</code> answers what the policy claims: a <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> claims <a href="../../api/utilities/#Bramble.HostLocality"><code class="md-code-inline">HostLocality</code></a>, a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> claims <a href="../../api/utilities/#Bramble.DeviceLocality"><code class="md-code-inline">DeviceLocality</code></a>. For a <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a>, it answers the locality of the backend&#39;s vector type <code class="md-code-inline">VT</code> alone: <code class="md-code-inline">VT</code> is the storage a sweep actually indexes, so that is the locality that matters for legality. The matrix type <code class="md-code-inline">MT</code> is not consulted, so a device <code class="md-code-inline">MT</code> paired with a host <code class="md-code-inline">VT</code> goes unchecked.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -211,7 +213,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.ExecutionPolicy">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ExecutionPolicy</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L91-L101" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L90-L100" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -219,13 +221,13 @@ true</code></pre>
 <pre><code class="language-julia">ExecutionPolicy</code></pre>
 </div>
 <p>Abstract supertype for backend execution policies.</p>
-<p>Two regimes sit under it, and the split is the point (gpena/Bramble.jl#191): <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> for work a CPU loop drives, <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> for work a device schedules. Before the split there was only &quot;serial or threaded&quot;, which had no way to say <em>where</em>: a GPU backend was constructed with <code class="md-code-inline">Serial()</code>, a policy that says a single CPU thread walks the array element by element – the one thing a device array refuses.</p>
+<p>Two regimes sit under it, and the split is the point: <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> for work a CPU loop drives, <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> for work a device schedules. Before the split there was only &quot;serial or threaded&quot;, which had no way to say <em>where</em>: a GPU backend was constructed with <code class="md-code-inline">Serial()</code>, a policy that says a single CPU thread walks the array element by element – the one thing a device array refuses.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.CpuPolicy">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CpuPolicy</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L104-L112" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L103-L111" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -239,7 +241,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.CpuSerial">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CpuSerial</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L119-L134" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L118-L133" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -256,7 +258,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.CpuThreaded">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CpuThreaded</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L137-L167" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L136-L166" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -267,15 +269,15 @@ true</code></pre>
 <p>Directs grid operations and form assembly to execute across CPU threads via static partitioning. Execution is unconditional: no per-call size thresholds are imposed. For workloads dominated by small, frequently repeated calls, use <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>.</p>
 <p>Spelled <code class="md-code-inline">Parallel()</code> as often as not: <code class="md-code-inline">const Parallel = CpuThreaded</code>.</p>
 <p>A call made from inside another threaded region, such as the body of a user&#39;s own <code class="md-code-inline">Threads.@threads</code> loop, or from a spawned task while another task&#39;s threaded region runs, executes serially on the calling task instead of throwing, and returns exactly what the same call returns at top level.</p>
-<p><code class="md-code-inline">Base.Threads.@threads</code> is the primitive, and naming it that way leaves room for the others that are not this one – Polyester&#39;s <code class="md-code-inline">@batch</code> (gpena/Bramble.jl#190) and MPI. <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> is that Polyester-backed sibling: the policy type ships here, but the sweeps it selects live in the <code class="md-code-inline">BramblePolyesterExt</code> package extension, and requesting one without <code class="md-code-inline">using Polyester</code> errors the way <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a> does without <code class="md-code-inline">using Metal</code>.</p>
-<p>Where &quot;small&quot; ends differs widely between workloads (restriction, cell averaging, the <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">normₕ</code> reductions, <code class="md-code-inline">D₋ₓ!</code>, broadcasts), so a size from one does not transfer to another, and it depends on the machine. <code class="md-code-inline">benchmark/policy_crossover.jl</code> measures it per workload. <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">normₕ</code> (<code class="md-code-inline">_dot</code>/<code class="md-code-inline">_dot_masked</code>, <code class="md-code-inline">src/utils/linear_algebra.jl</code>), <code class="md-code-inline">D₋ₓ!</code> and the warmed broadcast axpy <code class="md-code-inline">vₕ .= a .* uₕ .+ wₕ</code> into a <code class="md-code-inline">VectorElement</code> thread under this policy (gpena/Bramble.jl#301, #356, #357).</p>
+<p><code class="md-code-inline">Base.Threads.@threads</code> is the primitive, and naming it that way leaves room for the others that are not this one – Polyester&#39;s <code class="md-code-inline">@batch</code> and MPI. <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> is that Polyester-backed sibling: the policy type ships here, but the sweeps it selects live in the <code class="md-code-inline">BramblePolyesterExt</code> package extension, and requesting one without <code class="md-code-inline">using Polyester</code> errors the way <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a> does without <code class="md-code-inline">using Metal</code>.</p>
+<p>Where &quot;small&quot; ends differs widely between workloads (restriction, cell averaging, the <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">normₕ</code> reductions, <code class="md-code-inline">D₋ₓ!</code>, broadcasts), so a size from one does not transfer to another, and it depends on the machine. <code class="md-code-inline">benchmark/policy_crossover.jl</code> measures it per workload. <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">normₕ</code> (<code class="md-code-inline">_dot</code>/<code class="md-code-inline">_dot_masked</code>, <code class="md-code-inline">src/utils/linear_algebra.jl</code>), <code class="md-code-inline">D₋ₓ!</code> and the warmed broadcast axpy <code class="md-code-inline">vₕ .= a .* uₕ .+ wₕ</code> into a <code class="md-code-inline">VectorElement</code> thread under this policy.</p>
 <p>See also: <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>, <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>, <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.CpuPolyester">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CpuPolyester</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L170-L224" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L169-L221" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -283,9 +285,9 @@ true</code></pre>
 <pre><code class="language-julia">CpuPolyester() &lt;: CpuPolicy</code></pre>
 </div>
 <p>Polyester-batched execution policy.</p>
-<p>Named for the provider, matching <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a> and <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>: the name makes the <code class="md-code-inline">using Polyester</code> requirement self-evident, where the previous name (<code class="md-code-inline">CpuBatch</code>, now a deprecated alias) named the <code class="md-code-inline">Polyester.@batch</code> primitive instead and gave no hint that a weak dependency was involved (gpena/Bramble.jl#300).</p>
-<p>Directs grid operations and form assembly through <code class="md-code-inline">Polyester.jl</code>&#39;s <code class="md-code-inline">@batch</code>, a primitive whose per-call overhead is low enough to pay off on grids where <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s <code class="md-code-inline">Threads.@threads</code> does not (gpena/Bramble.jl#190). The sweeps this policy selects are implemented in the <code class="md-code-inline">BramblePolyesterExt</code> package extension, not here: <code class="md-code-inline">using Polyester</code> must be loaded before this policy reaches one of them, or the call errors naming the package, matching <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a>&#39;s precedent. <code class="md-code-inline">Parallel()</code> is untouched and keeps meaning <code class="md-code-inline">Threads.@threads</code>.</p>
-<p>Its crossover against <code class="md-code-inline">CpuSerial</code> (gpena/Bramble.jl#299) falls at smaller sizes than <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s for every workload measured, <code class="md-code-inline">D₋ₓ!</code> and the warmed broadcast axpy <code class="md-code-inline">vₕ .= a .* uₕ .+ wₕ</code> included (gpena/Bramble.jl#356, #357). <code class="md-code-inline">benchmark/policy_crossover.jl</code> measures both on your machine.</p>
+<p>Named for the provider, matching <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a> and <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>, so the name makes the <code class="md-code-inline">using Polyester</code> requirement self-evident.</p>
+<p>Directs grid operations and form assembly through <code class="md-code-inline">Polyester.jl</code>&#39;s <code class="md-code-inline">@batch</code>, a primitive whose per-call overhead is low enough to pay off on grids where <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s <code class="md-code-inline">Threads.@threads</code> does not. The sweeps this policy selects are implemented in the <code class="md-code-inline">BramblePolyesterExt</code> package extension, not here: <code class="md-code-inline">using Polyester</code> must be loaded before this policy reaches one of them, or the call errors naming the package, matching <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a>&#39;s precedent. <code class="md-code-inline">Parallel()</code> is untouched and keeps meaning <code class="md-code-inline">Threads.@threads</code>.</p>
+<p>Its crossover against <code class="md-code-inline">CpuSerial</code> falls at smaller sizes than <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s for every workload measured, <code class="md-code-inline">D₋ₓ!</code> and the warmed broadcast axpy <code class="md-code-inline">vₕ .= a .* uₕ .+ wₕ</code> included. <code class="md-code-inline">benchmark/policy_crossover.jl</code> measures both on your machine.</p>
 <p>Its reductions, <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">normₕ</code> and <code class="md-code-inline">inner₊</code> with or without <code class="md-code-inline">markers</code>, split the sum into <code class="md-code-inline">Threads.nthreads()</code> fixed bands and add the band sums with <code class="md-code-inline">sum</code>, exactly as <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> does, and return <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>&#39;s value bitwise. The value depends only on the data and <code class="md-code-inline">Threads.nthreads()</code>, never on how many threads are free, so a reduction nested in another sweep, as in <code class="md-code-inline">Rₕ!(uₕ, x -&gt; innerₕ(vₕ, vₕ) * x[1])</code>, returns exactly the top-level value. It agrees with <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a> to rounding, since the bands add the terms in another order, and on one thread it is <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>&#39;s value bitwise. A task&#39;s first reduction allocates its band sums once.</p>
 <p>A warm call under this policy allocates 0 bytes, on any grid, when the storage is a <code class="md-code-inline">Vector</code> or a contiguous view of one; storage that is not, such as a strided view, allocates on every call. Differences, shifts, averages, divergence, curl, <code class="md-code-inline">εₕ!</code>, <code class="md-code-inline">Rₕ!</code>, <code class="md-code-inline">avgₕ!</code> (masked and composite too), <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">inner₊</code>, the broadcasts (a 0-dimensional array leaf too), the weight build, linear and bilinear assembly and refill, the matrix-free product, a multigrid V-cycle, the explicit right-hand side (<a href="../../api_sciml/#Bramble.SemidiscretizeRHS"><code class="md-code-inline">SemidiscretizeRHS</code></a>) and the <a href="../../api/forms/#Bramble.KroneckerLinearOperator"><code class="md-code-inline">KroneckerLinearOperator</code></a> product all allocate 0 B. Polyester copies what a loop captures into an argument box, and the box stays on the stack when it holds only plain arrays and isbits values. So the loops never capture a form, a space or a mesh: Bramble splits them into an isbits skeleton and their arrays, and each task rebuilds them. No call reaches <code class="md-code-inline">Threads.@threads</code> or <code class="md-code-inline">Threads.@spawn</code>.</p>
 <p>A function you supply that captures an array, as in an <code class="md-code-inline">avgₕ!</code> whose source is a closure over a <code class="md-code-inline">Vector</code>, allocates nothing either, and sees its own objects: the loop holds a handle to a slot that stores the function, not the function. Only a function of a type beyond the 256 that have slots, a call that finds all 64 slots of its type taken (or retired by an interrupted call, for the session), and data the split cannot take apart, such as a <code class="md-code-inline">BigFloat</code> coefficient or a <code class="md-code-inline">Dict</code>, fall back to a heap-allocated box. That costs an amount per call that does not grow with the grid, and never changes the result. A task that throws rethrows on the caller with the exception type and text <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a> gives.</p>
@@ -295,7 +297,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.GpuOffload">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GpuOffload</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L486-L513" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L456-L483" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -303,7 +305,7 @@ true</code></pre>
 <pre><code class="language-julia">GpuOffload{I, DB}() &lt;: CpuPolicy
 GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOffload</code></pre>
 </div>
-<p>A <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> that wraps a host <code class="md-code-inline">inner</code> policy alongside a device <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a> <code class="md-code-inline">device_backend</code>, for host-side <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a>s that offload individual calls (<code class="md-code-inline">Rₕ!</code>, <code class="md-code-inline">avgₕ!</code>) to the device rather than running them on the host (gpena/Bramble.jl#324).</p>
+<p>A <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> that wraps a host <code class="md-code-inline">inner</code> policy alongside a device <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a> <code class="md-code-inline">device_backend</code>, for host-side <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a>s that offload individual calls (<code class="md-code-inline">Rₕ!</code>, <code class="md-code-inline">avgₕ!</code>) to the device rather than running them on the host.</p>
 <p>Carries no runtime fields: <code class="md-code-inline">I</code> and <code class="md-code-inline">DB</code> are type parameters only, so a <code class="md-code-inline">Backend{VT, MT, GpuOffload{I, DB}}</code> still rebuilds <code class="md-code-inline">EP()</code> the way every other <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a> does. <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a> answers <a href="../../api/utilities/#Bramble.HostLocality"><code class="md-code-inline">HostLocality</code></a> for it, as for any <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a>: the <code class="md-code-inline">Backend</code> it configures is a host backend, and <code class="md-code-inline">device_backend</code> is only where the offloaded calls are dispatched, not this backend&#39;s own storage. <a href="../../api/utilities/#Bramble.execution_policy"><code class="md-code-inline">execution_policy</code></a> on a <code class="md-code-inline">Backend</code> configured with a <code class="md-code-inline">GpuOffload</code> policy returns <code class="md-code-inline">I()</code>, the wrapped inner policy instance, not the <code class="md-code-inline">GpuOffload</code> itself – every existing concrete-policy dispatch site sees the inner policy and behaves exactly as it does without a <code class="md-code-inline">GpuOffload</code> in play.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
@@ -318,7 +320,7 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <div class="md-docstring" id="Bramble.GpuPolicy">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GpuPolicy</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L227-L233" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L224-L230" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -332,7 +334,7 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <div class="md-docstring" id="Bramble.GpuKernel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GpuKernel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L240-L260" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L236-L253" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -340,41 +342,41 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <pre><code class="language-julia">GpuKernel() &lt;: GpuPolicy</code></pre>
 </div>
 <p>Device execution policy: work is dispatched to the accelerator rather than to a host loop.</p>
-<p>What <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a> carries by default. A GPU is massively parallel and cannot execute serially, so the old default of <code class="md-code-inline">Serial()</code> was not a conservative choice but a false statement about the hardware, and it sent CPU assembly loops at device arrays.</p>
-<p>The name states the launch mechanism only: work is dispatched to a device kernel. It replaces the previous name, <code class="md-code-inline">GpuAsync</code> (now a deprecated alias), which claimed a scheduling property the API does not have. A kernel launch only enqueues onto the device&#39;s queue; a host read of the result, or <a href="../../api/utilities/#Bramble.ka_synchronize"><code class="md-code-inline">ka_synchronize</code></a>, is the barrier. Kernels on one queue run in its order, so a chain of operators needs no synchronise between its steps. <code class="md-code-inline">Async</code> named a scheduling interface the package does not offer (no handle to wait on), which is why it was replaced rather than kept (gpena/Bramble.jl#300); the memory locality the old name also carried now lives in the <code class="md-code-inline">Locality</code> trait (gpena/Bramble.jl#298), which this policy claims through <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a> instead.</p>
+<p>What <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a> carries by default. A GPU is massively parallel and cannot execute serially, so <code class="md-code-inline">Serial()</code> would be a false statement about the hardware and would send CPU assembly loops at device arrays.</p>
+<p>The name states the launch mechanism only: work is dispatched to a device kernel. A kernel launch only enqueues onto the device&#39;s queue; a host read of the result, or <a href="../../api/utilities/#Bramble.ka_synchronize"><code class="md-code-inline">ka_synchronize</code></a>, is the barrier. There is no handle to wait on. Kernels on one queue run in its order, so a chain of operators needs no synchronise between its steps. The memory locality lives in the <code class="md-code-inline">Locality</code> trait, which this policy claims through <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a>.</p>
 <p>See also: <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>, <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.Serial">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Serial</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L263-L268" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L256-L261" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">Serial</code></pre>
 </div>
-<p>Alias for <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>. The spelling this package used before the CPU/GPU split (gpena/Bramble.jl#191), and the one its call sites, tests and benchmark baseline keys use.</p>
+<p>Alias for <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>, the spelling the package&#39;s call sites, tests and benchmark baseline keys use.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.Parallel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Parallel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L271-L276" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L264-L268" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">Parallel</code></pre>
 </div>
-<p>Alias for <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>. The spelling this package used before the CPU/GPU split (gpena/Bramble.jl#191).</p>
+<p>Alias for <a href="../../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.execution_policy">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.execution_policy</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L414-L422" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L384-L392" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -396,7 +398,7 @@ execution_policy(::Type{&lt;:Backend{&lt;:Any, &lt;:Any, EP}}) -&gt; EP</code></
 <div class="md-docstring" id="Bramble.vector">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.vector</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L623-L637" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L589-L603" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -422,7 +424,7 @@ execution_policy(::Type{&lt;:Backend{&lt;:Any, &lt;:Any, EP}}) -&gt; EP</code></
 <div class="md-docstring" id="Bramble.matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L645-L663" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L611-L629" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -451,7 +453,7 @@ execution_policy(::Type{&lt;:Backend{&lt;:Any, &lt;:Any, EP}}) -&gt; EP</code></
 <div class="md-docstring" id="Bramble.vector_type">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.vector_type</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L390-L395" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L360-L365" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -465,7 +467,7 @@ vector_type(::Type{&lt;:Backend{VT}}) -&gt; Type{VT}</code></pre>
 <div class="md-docstring" id="Bramble.matrix_type">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.matrix_type</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L405-L410" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L375-L380" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -479,7 +481,7 @@ matrix_type(::Type{&lt;:Backend{&lt;:Any, MT}}) -&gt; Type{MT}</code></pre>
 <div class="md-docstring" id="Bramble.backend_types">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backend_types</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L550-L555" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L520-L525" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -493,7 +495,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.supports_undef_construction">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.supports_undef_construction</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L559-L582" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L529-L548" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -506,13 +508,13 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">Bramble.supports_undef_construction(::Type{&lt;:MySizedArray}) = false</code></pre>
 </div>
-<p>Read at compile time from the type, so the branch it guards folds away (gpena/Bramble.jl#100). This replaced a <code class="md-code-inline">try</code>/<code class="md-code-inline">catch</code> that called the <code class="md-code-inline">undef</code> constructor and caught its failure to decide the same question: exceptions as a dispatch mechanism, which blocks the compiler from seeing through the allocation path, and which reported a genuinely broken array type as &quot;tried both, both failed&quot; rather than as the one thing that was wrong. The three shipped backends never reached it either way – <code class="md-code-inline">Vector</code>, <code class="md-code-inline">DenseMatrix</code> and <code class="md-code-inline">SparseMatrixCSC</code> each have their own <code class="md-code-inline">@inline</code> method below – so what this buys is a stated contract for the types that do.</p>
+<p>Read at compile time from the type, so the branch it guards folds away and the compiler sees through the allocation path. The three shipped backends never reach it – <code class="md-code-inline">Vector</code>, <code class="md-code-inline">DenseMatrix</code> and <code class="md-code-inline">SparseMatrixCSC</code> each have their own <code class="md-code-inline">@inline</code> method below – so it is the stated contract for the types that do.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.backend_eye">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backend_eye</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L676-L680" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L642-L646" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -525,7 +527,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.backend_zeros">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backend_zeros</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L693-L697" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L659-L663" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -585,14 +587,14 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.metal_sparse_csr">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.metal_sparse_csr</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L761-L775" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L726-L740" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">metal_sparse_csr(A::SparseMatrixCSC) -&gt; MetalSparseMatrixCSR</code></pre>
 </div>
-<p>Convert a host <code class="md-code-inline">SparseMatrixCSC</code> to a sparse matrix in compressed sparse row (CSR) format, stored in Metal device memory (gpena/Bramble.jl#250).</p>
+<p>Convert a host <code class="md-code-inline">SparseMatrixCSC</code> to a sparse matrix in compressed sparse row (CSR) format, stored in Metal device memory.</p>
 <p>Requires <code class="md-code-inline">using Metal</code> in the caller environment. The conversion is sparse-to-sparse throughout – <code class="md-code-inline">A</code> is never densified.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
@@ -609,14 +611,14 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.metal_sparse_csc">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.metal_sparse_csc</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L782-L796" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L747-L761" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">metal_sparse_csc(A::SparseMatrixCSC) -&gt; MetalSparseMatrixCSC</code></pre>
 </div>
-<p>Convert a host <code class="md-code-inline">SparseMatrixCSC</code> to a sparse matrix in compressed sparse column (CSC) format, stored in Metal device memory (gpena/Bramble.jl#250).</p>
+<p>Convert a host <code class="md-code-inline">SparseMatrixCSC</code> to a sparse matrix in compressed sparse column (CSC) format, stored in Metal device memory.</p>
 <p>Requires <code class="md-code-inline">using Metal</code> in the caller environment. <code class="md-code-inline">SparseMatrixCSC</code>&#39;s own storage already is CSC, so no format conversion happens – its fields are placed in device memory as-is.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
@@ -633,7 +635,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.gpu_backend">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gpu_backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L832-L859" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L797-L824" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -641,7 +643,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <pre><code class="language-julia">gpu_backend(::Type{T} = Float32; policy::ExecutionPolicy = GpuKernel()) -&gt; Backend</code></pre>
 </div>
 <p>Construct a GPU <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a> for whichever accelerator extension is loaded <strong>and</strong> has a functional device.</p>
-<p>Detects a loaded GPU package extension with <code class="md-code-inline">Base.get_extension</code>, checks <code class="md-code-inline">_gpu_functional</code> for that device, and forwards to the backend&#39;s own constructor: currently <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a>, under <code class="md-code-inline">using Metal</code> with <code class="md-code-inline">Metal.functional()</code> true. A CUDA or AMDGPU extension joins this dispatch once it exists (gpena/Bramble.jl#11, v3.5.0).</p>
+<p>Detects a loaded GPU package extension with <code class="md-code-inline">Base.get_extension</code>, checks <code class="md-code-inline">_gpu_functional</code> for that device, and forwards to the backend&#39;s own constructor: currently <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a>, under <code class="md-code-inline">using Metal</code> with <code class="md-code-inline">Metal.functional()</code> true. A CUDA or AMDGPU extension joins this dispatch once it exists.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">T</code>: Floating-point element type (default: <code class="md-code-inline">Float32</code>).</p>
@@ -663,7 +665,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.metal_backend">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.metal_backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L721-L751" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L687-L716" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -680,7 +682,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 </ul>
 <p><strong>Keywords</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">policy</code>: Execution policy instance (default: <a href="../../api/utilities/#Bramble.GpuKernel"><code class="md-code-inline">GpuKernel</code></a>). A <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> is rejected at construction, not accepted and left to fail on first use: Metal&#39;s device arrays answer <a href="../../api/utilities/#Bramble.DeviceLocality"><code class="md-code-inline">DeviceLocality</code></a> to <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a>, a <code class="md-code-inline">CpuPolicy</code> answers <a href="../../api/utilities/#Bramble.HostLocality"><code class="md-code-inline">HostLocality</code></a>, and <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a>&#39;s inner constructor requires the two to agree (gpena/Bramble.jl#298, #296).</p>
+<li><p><code class="md-code-inline">policy</code>: Execution policy instance (default: <a href="../../api/utilities/#Bramble.GpuKernel"><code class="md-code-inline">GpuKernel</code></a>). A <a href="../../api/utilities/#Bramble.CpuPolicy"><code class="md-code-inline">CpuPolicy</code></a> is rejected at construction, not accepted and left to fail on first use: Metal&#39;s device arrays answer <a href="../../api/utilities/#Bramble.DeviceLocality"><code class="md-code-inline">DeviceLocality</code></a> to <a href="../../api/utilities/#Bramble.locality"><code class="md-code-inline">locality</code></a>, a <code class="md-code-inline">CpuPolicy</code> answers <a href="../../api/utilities/#Bramble.HostLocality"><code class="md-code-inline">HostLocality</code></a>, and <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a>&#39;s inner constructor requires the two to agree.</p>
 </li>
 </ul>
 <p><strong>Throws</strong></p>
@@ -695,7 +697,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.csr_backend">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.csr_backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L904-L921" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L869-L886" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -703,7 +705,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <pre><code class="language-julia">csr_backend(::Type{T} = Float64; policy::ExecutionPolicy = Serial()) -&gt; Backend</code></pre>
 </div>
 <p>Construct a <code class="md-code-inline">SparseMatrixCSR</code> <a href="../../api/utilities/#Bramble.Backend"><code class="md-code-inline">Backend</code></a> backed by <code class="md-code-inline">SparseMatricesCSR.jl</code>.</p>
-<p>Requires <code class="md-code-inline">using SparseMatricesCSR</code> in the caller environment. A finite-difference stencil is assembled row by row, which compressed sparse row storage reaches without the column scatter a <code class="md-code-inline">SparseMatrixCSC</code> assembly needs (gpena/Bramble.jl#214).</p>
+<p>Requires <code class="md-code-inline">using SparseMatricesCSR</code> in the caller environment. A finite-difference stencil is assembled row by row, which compressed sparse row storage reaches without the column scatter a <code class="md-code-inline">SparseMatrixCSC</code> assembly needs.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">T</code>: Coordinate and scalar element type (default: <code class="md-code-inline">Float64</code>).</p>
@@ -823,35 +825,6 @@ set_preferences!(Bramble, &quot;precompile_workload&quot; =&gt; false)</code></p
 <p><code class="md-code-inline">public</code>, not <code class="md-code-inline">export</code>ed: a real, cross-module contract every extension&#39;s own precompile gate reads, but not something an ordinary caller uses.</p>
 </div>
 </div>
-<h3 id="Deprecated" class="md-heading">Deprecated<a href="#Deprecated" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<div class="md-docstring" id="Bramble.CpuBatch">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.CpuBatch</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L279-L287" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">CpuBatch</code></pre>
-</div>
-<p>Deprecated alias for <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>. Will be removed in the next major release.</p>
-<p>The old name spelled the <code class="md-code-inline">Polyester.@batch</code> primitive rather than the provider, unlike <code class="md-code-inline">CpuSerial</code> and <code class="md-code-inline">CpuThreaded</code>, and gave no hint that <code class="md-code-inline">using Polyester</code> is required before a sweep under this policy runs (gpena/Bramble.jl#300).</p>
-</div>
-</div>
-<div class="md-docstring" id="Bramble.GpuAsync">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.GpuAsync</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L290-L298" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">GpuAsync</code></pre>
-</div>
-<p>Deprecated alias for <a href="../../api/utilities/#Bramble.GpuKernel"><code class="md-code-inline">GpuKernel</code></a>. Will be removed in the next major release.</p>
-<p>The old name claimed a scheduling property the API does not have: a kernel launch only enqueues onto the device&#39;s queue, and a host read of the result, or <a href="../../api/utilities/#Bramble.ka_synchronize"><code class="md-code-inline">ka_synchronize</code></a>, is the barrier, with no handle to wait on (gpena/Bramble.jl#300).</p>
-</div>
-</div>
       </article>
       <footer class="md-footer">
 <p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
@@ -861,7 +834,6 @@ set_preferences!(Bramble, &quot;precompile_workload&quot; =&gt; false)</code></p
       <div class="md-toc-inner">
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#Linear-algebra-backends">Linear algebra backends</a>
-            <a class="md-toc-link md-toc-h3" href="#Deprecated">Deprecated</a>
       </div>
     </aside>
   </div>
@@ -879,6 +851,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=59f5109d"></script>
+  <script src="../../assets/materialdocs.js?v=18143e54"></script>
 </body>
 </html>

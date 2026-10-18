@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d4c21ea0">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=bcc03e3e">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces — Bramble.jl">
   <meta property="og:title" content="Grid spaces — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -205,14 +207,15 @@ CompositeGridSpace{N, Spaces}(spaces::Spaces) where {N, Spaces &lt;: Tuple}</cod
 <div class="md-docstring" id="Bramble.gridspace">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gridspace</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L212-L239" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L212-L244" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">gridspace(Ωₕ::AbstractMeshType{D}) -&gt; ScalarGridSpace{D}</code></pre>
+<pre><code class="language-julia">gridspace(Ωₕ::AbstractMeshType{D}; ghosts = ()) -&gt; ScalarGridSpace{D}</code></pre>
 </div>
 <p>Constructs a <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a> defined on the mesh <code class="md-code-inline">Ωₕ</code>, precomputing the inner product weights listed in <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a>.</p>
+<p>With <code class="md-code-inline">ghosts = :boundary</code> (every boundary facet) or a tuple of facet names such as <code class="md-code-inline">(:xmin, :ymax)</code>, it returns a <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a> instead: the physical nodes of <code class="md-code-inline">Ωₕ</code> and one ghost beyond each node of the named facets, with inner products that weigh the physical nodes, cells and facets only. The default <code class="md-code-inline">ghosts = ()</code> is the space above.</p>
 <p>Scratch memory is supplied explicitly by callers through in-place mutating operators (such as <code class="md-code-inline">D₋ₓ!(vₕ, uₕ)</code>), avoiding hidden internal vector buffers.</p>
 <p>Weights are a snapshot: they read <code class="md-code-inline">Ωₕ</code>&#39;s grid at the moment of this call and are never refreshed afterward. If <code class="md-code-inline">Ωₕ</code> is later mutated in place (<code class="md-code-inline">set_points!</code>, <code class="md-code-inline">change_points!</code>, <code class="md-code-inline">iterative_refinement!</code>), the space this call returns keeps the <em>old</em> weights, and its <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">inner₊*</code>/every norm then throw naming the mismatch rather than silently computing against a mesh that no longer exists (gpena/Bramble.jl#221) – call <code class="md-code-inline">gridspace(Ωₕ)</code> again to get a space that reads the mutated mesh.</p>
 <p><strong>Examples</strong></p>
@@ -276,7 +279,7 @@ ndofs(Wₕ::AbstractSpaceType, ::Type{Tuple}) -&gt; NTuple{N, Int}</code></pre>
 <div class="md-docstring" id="Bramble.weights">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.weights</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L327-L404" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L336-L413" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -453,9 +456,9 @@ element(Wₕ::AbstractSpaceType, α::Number) -&gt; VectorElement</code></pre>
 <p>Returns the coefficient vector containing the degrees of freedom of <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> <code class="md-code-inline">uₕ</code>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s40&quot;, T} where {var&quot;#s40&quot;&lt;:Bramble.ScalarGridSpace, T}}">
+<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s35&quot;, T} where {var&quot;#s35&quot;&lt;:Bramble.ScalarGridSpace, T}}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s40&quot;, T} where {var&quot;#s40&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
+<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s35&quot;, T} where {var&quot;#s35&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
 <a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L17-L28" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
@@ -525,7 +528,7 @@ components(op::LazyOp, space::AbstractSpaceType) -&gt; Tuple</code></pre>
 <div class="md-docstring" id="Base.:*-Tuple{Function, Bramble.VectorElement}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.:*</code> — <span class="md-docstring-sig">Tuple{Function, Bramble.VectorElement}</span></h4>
-<a class="md-docstring-source" href="https://github.com/JuliaLang/julia/blob/96ca370cf0e339faf45a7ba863793f6c7c6980fb/base/docs/basedocs.jl#L3281-L3316" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/JuliaLang/julia/blob/45b6d15e34bbd2003a31acce0b1847b63dad029c/base/docs/basedocs.jl#L3281-L3316" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -828,6 +831,229 @@ end</code></pre>
 <p>Unlike <a href="../../api/operators/#Bramble.D₋ₓ"><code class="md-code-inline">D₋ₓ</code></a><code class="md-code-inline">(Wₕ)</code> and the other operator matrices, this is always a <code class="md-code-inline">SparseMatrixCSC</code>, regardless of either space&#39;s own backend <code class="md-code-inline">matrix_type</code>. Those matrices are built from <a href="../../internals/space/#Bramble.shift-Union{Tuple{i}, Tuple{SHIFT_DIM}, Tuple{Bramble.AbstractMeshType, Val{SHIFT_DIM}, Val{i}}} where {SHIFT_DIM, i}"><code class="md-code-inline">shift</code></a> (a fixed diagonal offset generalized via Kronecker products), but which source cell a destination point falls in has no such regular structure across two independent meshes: it is genuinely sparse and irregular, assembled directly from <code class="md-code-inline">locate_cell</code> rather than composed from a handful of shifts. Converting the result to another matrix type, where that is meaningful, is left to the caller.</p>
 </div>
 </div>
+<h2 id="Ghost-spaces" class="md-heading">Ghost spaces<a href="#Ghost-spaces" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A grid space with ghost nodes beyond named facets, built by <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a><code class="md-code-inline">(Ωₕ; ghosts = ...)</code>. <code class="md-code-inline">constrained</code> turns boundary relations on it into a space of unknowns. Exported: <code class="md-code-inline">constrained</code>, <code class="md-code-inline">GhostVector</code> (the grid function of a time loop) and <code class="md-code-inline">update_ghosts!</code>, which fills its ghosts. <code class="md-code-inline">public</code> and not exported: <code class="md-code-inline">lift</code>, which is also a Makie name, so write <code class="md-code-inline">Bramble.lift</code>, and <code class="md-code-inline">lift!</code>, <code class="md-code-inline">physical</code>, <code class="md-code-inline">ghost_values</code> and <code class="md-code-inline">GhostGridSpace</code>. <code class="md-code-inline">assemble!</code> also refills a pair of ghost forms.</p>
+<div class="md-docstring" id="Bramble.GhostGridSpace">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.GhostGridSpace</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L23-L49" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">GhostGridSpace{D, T, S, ET, DT, TD, GU} &lt;: AbstractSpaceType{1}</code></pre>
+</div>
+<p>A scalar grid space with ghost points beyond the named facets of its mesh, built by <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a><code class="md-code-inline">(Ωₕ; ghosts = :boundary)</code> or <code class="md-code-inline">gridspace(Ωₕ; ghosts = (:xmin, ...))</code>.</p>
+<p>Its degrees of freedom are the physical nodes of <code class="md-code-inline">Ωₕ</code>, in the mesh&#39;s linear order, then the ghosts in the order of <a href="../../api/meshes/#Bramble.GhostMesh"><code class="md-code-inline">GhostMesh</code></a>. <code class="md-code-inline">padded_space(Wₕ)</code> is the <code class="md-code-inline">ScalarGridSpace</code> on the padded mesh, the one forms assemble on: its <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">inner₊</code> and <code class="md-code-inline">inner_Γ</code> weigh the physical nodes, cells and facets only, and are 0 at every ghost and absent point, so they equal those of <code class="md-code-inline">gridspace(Ωₕ)</code> on the physical nodes. <code class="md-code-inline">closure(Wₕ)</code> is the pair <code class="md-code-inline">(E, d)</code> that maps the degrees of freedom <code class="md-code-inline">u</code> to the padded values <code class="md-code-inline">E u + d</code>; on a space whose relations have data depending on time (see <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>), <code class="md-code-inline">d</code> depends on time too.</p>
+<p>The weights follow the version of the mesh they were built from: after <code class="md-code-inline">change_points!</code> of <code class="md-code-inline">Ωₕ</code> the ghost coordinates follow, and the padded space&#39;s weights throw as those of any stale space; call <code class="md-code-inline">gridspace(Ωₕ; ghosts = ...)</code> again.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 7), (false, false))
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+ndofs(Wₕ)                     # 35 physical nodes + 24 ghosts
+E, d = Bramble.closure(Wₕ)    # E is 63 × 59, d = 0</code></pre>
+</div>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.constrained">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.constrained</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_relations.jl#L21-L86" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">constrained(Wₕ, relations) -&gt; GhostGridSpace</code></pre>
+</div>
+<p>The space <code class="md-code-inline">Wₕ</code>, built by <code class="md-code-inline">gridspace(Ωₕ; ghosts = ...)</code>, with the ghosts of some facets eliminated through boundary relations. <code class="md-code-inline">relations</code> is a function of the unknown <code class="md-code-inline">u</code> that returns one pair <code class="md-code-inline">facet =&gt; (operator =&gt; data)</code> per related facet, or a tuple of them:</p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Cₕ = constrained(Wₕ, u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; 0.0,
+    :xmax =&gt; 2.0 * u + 0.5 * ∂ₙ(u) =&gt; x -&gt; exp(x[1])))</code></pre>
+</div>
+<p>The operator is either <code class="md-code-inline">u</code> itself, a Dirichlet relation, or a facet operator that reads the facet&#39;s ghost: <a href="../../api/operators/#Bramble.∂ₙ"><code class="md-code-inline">∂ₙ</code></a> (conormal <code class="md-code-inline">∂ₙ(u; K)</code> included), <a href="../../api/operators/#Bramble.∂ₙₙ"><code class="md-code-inline">∂ₙₙ</code></a>, and their linear combinations with <code class="md-code-inline">u</code>. The data is a number, a function of the point <code class="md-code-inline">x -&gt; …</code>, or a function of the point and the time <code class="md-code-inline">(x, t) -&gt; …</code> (told apart by the methods it has). At each node of the facet, a ghost relation is solved for the node&#39;s ghost; at a 2D corner where two conormal relations read each other&#39;s ghost, the two are solved together. A Dirichlet relation <code class="md-code-inline">:F =&gt; u =&gt; g</code> removes the nodes of <code class="md-code-inline">F</code> from the unknowns and fixes them to <code class="md-code-inline">g</code>; its facet needs no ghosts, and if it has them it needs one ghost relation besides, which solves for them. A ghosted facet without any relation keeps its ghosts as unknowns.</p>
+<p>The degrees of freedom of the result are the physical nodes no Dirichlet relation fixes, in the mesh&#39;s linear order, then the ghosts that remain unknowns, in the order of <code class="md-code-inline">Wₕ</code>. Its closure <code class="md-code-inline">(E, d)</code> maps them to the padded values <code class="md-code-inline">E u + d</code>, where <code class="md-code-inline">d</code> carries the data; so a load needs the bilinear form, <code class="md-code-inline">assemble(a, l)</code>, whose matrix <code class="md-code-inline">Eᵀ A E</code> stays symmetric when <code class="md-code-inline">A</code> is. Dirichlet conditions can instead replace rows, <code class="md-code-inline">assemble(a, l; dirichlet, symmetrize)</code>, on a space whose ghosts are all eliminated and none of whose nodes are fixed by <code class="md-code-inline">u =&gt; g</code>: its unknowns are then the physical nodes, as on <code class="md-code-inline">gridspace(Ωₕ)</code>.</p>
+<p>When some data depend on time, <code class="md-code-inline">E</code> stays the same and only <code class="md-code-inline">d</code> depends on time, <code class="md-code-inline">d(t)</code>. <a href="../../api/spaces/#Bramble.lift"><code class="md-code-inline">lift</code></a><code class="md-code-inline">(Cₕ, u, t)</code> gives <code class="md-code-inline">E u + d(t)</code>; <code class="md-code-inline">lift(Cₕ, u)</code>, <code class="md-code-inline">lift(Cₕ)</code> and <code class="md-code-inline">assemble(a, l)</code> refuse with an <code class="md-code-inline">ArgumentError</code>, as there is no single <code class="md-code-inline">d</code>, while <code class="md-code-inline">form</code> and <code class="md-code-inline">assemble(a)</code>, which read <code class="md-code-inline">E</code> only, work as on a static space. A time-dependent problem on such a space is posed through <code class="md-code-inline">semidiscretize</code>. <code class="md-code-inline">constrained</code> evaluates the data at <code class="md-code-inline">t = 0</code>, so they must be defined there, and <code class="md-code-inline">closure(Cₕ)</code> gives <code class="md-code-inline">d(0)</code> as its <code class="md-code-inline">d</code>. Dirichlet data in time that meet at a corner are checked to agree at <code class="md-code-inline">t = 0</code> only; the corner then takes the first facet&#39;s datum at every <code class="md-code-inline">t</code>. Under <code class="md-code-inline">CpuPolyester</code> a datum that closes over an array crosses each task whole and allocates on every evaluation; one that closes over numbers only, or over nothing, allocates nothing.</p>
+<p>Refused with an <code class="md-code-inline">ArgumentError</code>: a space without ghosts, an already constrained space, a facet with two Dirichlet or two ghost relations, a ghost relation on a facet that carries no ghosts, a ghosted facet with <code class="md-code-inline">u =&gt; g</code> and no ghost relation, a relation that does not read its facet&#39;s ghost (<code class="md-code-inline">β = 0</code>, or a <code class="md-code-inline">jumpₙ</code> alone), two Dirichlet relations disagreeing at a shared node, and a singular block at a corner (a singular <code class="md-code-inline">K</code>).</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, false)
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+Cₕ = constrained(Wₕ, u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; 1.0, :xmax =&gt; u + ∂ₙ(u) =&gt; 2.0))
+a = form(Cₕ, Cₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))
+l = form(Cₕ, v -&gt; innerₕ(x -&gt; 1.0, v))
+A, F = assemble(a, l)
+
+Dₕ = constrained(gridspace(Ωₕ; ghosts = (:xmax,)), u -&gt; (:xmin =&gt; u =&gt; 0.0,
+    :xmax =&gt; ∂ₙ(u) =&gt; x -&gt; x[1]))  # 10 unknowns: the node at xmin is fixed
+
+Tₕ = constrained(Wₕ, u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; (x, t) -&gt; sin(t), :xmax =&gt; u + ∂ₙ(u) =&gt; 2.0))
+Bramble.lift(Tₕ, zeros(Bramble.ndofs(Tₕ)), 0.5)   # E u + d(0.5)</code></pre>
+</div>
+<p>See also: <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a>, <a href="../../api/operators/#Bramble.∂ₙ"><code class="md-code-inline">∂ₙ</code></a>, <a href="../../api/operators/#Bramble.∂ₙₙ"><code class="md-code-inline">∂ₙₙ</code></a></p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.lift">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.lift</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L415-L463" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">lift(Wₕ::GhostGridSpace) -&gt; VectorElement
+lift(Wₕ::GhostGridSpace, u::AbstractVector) -&gt; VectorElement
+lift(Wₕ::GhostGridSpace, u::AbstractVector, t::Number) -&gt; VectorElement</code></pre>
+</div>
+<p>Grid functions on the padded space of <code class="md-code-inline">Wₕ</code> (<code class="md-code-inline">Bramble.padded_space(Wₕ)</code>) from its closure <code class="md-code-inline">(E, d)</code> (<code class="md-code-inline">Bramble.closure(Wₕ)</code>).</p>
+<p><code class="md-code-inline">lift(Wₕ)</code> is the data <code class="md-code-inline">d</code>: on a space built by <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>, the ghost values the relations&#39; data give when every degree of freedom is 0, and 0 everywhere else. <code class="md-code-inline">lift(Wₕ, u)</code> is <code class="md-code-inline">E u + d</code>, the grid function of the degrees of freedom <code class="md-code-inline">u</code> (a solution of a system assembled on <code class="md-code-inline">Wₕ</code>) with its eliminated ghosts filled in by the relations. The runtime operators read the ghosts of the result, and both are data in forms on <code class="md-code-inline">Wₕ</code>, so a linear form can name, say, the full <code class="md-code-inline">Δₕ</code> of the lifting at the facet nodes. Absent padded points (corners beyond two ghosted facets) hold 0. After <code class="md-code-inline">change_points!</code> of the mesh, <code class="md-code-inline">lift</code> throws as the space&#39;s weights do: build the space again.</p>
+<p><code class="md-code-inline">lift(Wₕ, u, t)</code> is <code class="md-code-inline">E u + d(t)</code>, for a space whose relation data depend on time, <code class="md-code-inline">(x, t) -&gt; …</code> (see <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>): <code class="md-code-inline">d(t)</code> comes from the data at <code class="md-code-inline">t</code>, and <code class="md-code-inline">E</code> is the same at every <code class="md-code-inline">t</code>. On a static space it is <code class="md-code-inline">lift(Wₕ, u)</code>. It evaluates the data into a buffer of its own, so it may be called concurrently on one space, and a time of a non-float type, such as a <code class="md-code-inline">ForwardDiff.Dual</code>, gives values of that type. On a space with time-dependent data, <code class="md-code-inline">lift(Wₕ)</code> and <code class="md-code-inline">lift(Wₕ, u)</code> refuse with an <code class="md-code-inline">ArgumentError</code>, as there is no single <code class="md-code-inline">d</code>: give the time, <code class="md-code-inline">lift(Wₕ, u, t)</code>, or pose the problem in time through <code class="md-code-inline">semidiscretize</code>.</p>
+<p><code class="md-code-inline">lift(Wₕ, u)</code> runs in the bands of the mesh&#39;s execution policy, each padded point summed by one band, so it gives the same values on every CPU policy. <code class="md-code-inline">Bramble.lift!(uₕ, Wₕ, u)</code> and <code class="md-code-inline">Bramble.lift!(uₕ, Wₕ, u, t)</code> refill a grid function <code class="md-code-inline">lift</code> returned, allocating nothing.</p>
+<p><code class="md-code-inline">lift</code> is public, not exported: write <code class="md-code-inline">Bramble.lift</code> or <code class="md-code-inline">using Bramble: lift</code>.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+Cₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
+                 u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; 1.0, :xmax =&gt; u + ∂ₙ(u) =&gt; 2.0))
+a = form(Cₕ, Cₕ, (u, v) -&gt; innerₕ(-1.0 * Bramble.D̃ₓ(Bramble.D₋ₓ(u)), v))
+l = form(Cₕ, v -&gt; innerₕ(x -&gt; 1.0, v))
+A, F = assemble(a, l)
+uₕ = Bramble.lift(Cₕ, A \ F)          # 11 padded values, ghosts included
+Δₕ(uₕ)                                 # reads the ghosts at the facet nodes
+
+Dₜ = constrained(gridspace(Ωₕ; ghosts = :boundary),
+                 u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; (x, t) -&gt; sin(t), :xmax =&gt; ∂ₙ(u) =&gt; 0.0))
+vₕ = Bramble.lift(Dₜ, zeros(Bramble.ndofs(Dₜ)), 0.5)   # the ghosts of the data at t = 0.5</code></pre>
+</div>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.lift!">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.lift!</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L486-L516" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector) -&gt; uₕ
+lift!(uₕ::VectorElement, Wₕ::GhostGridSpace, u::AbstractVector, t::Number[, g]) -&gt; uₕ</code></pre>
+</div>
+<p>Write <code class="md-code-inline">E u + d</code> into the grid function <code class="md-code-inline">uₕ</code>, the in-place form of <a href="../../api/spaces/#Bramble.lift"><code class="md-code-inline">lift</code></a><code class="md-code-inline">(Wₕ, u)</code>: <code class="md-code-inline">uₕ</code> lives on the padded space of <code class="md-code-inline">Wₕ</code>, as the result of <code class="md-code-inline">lift</code> does, so a solve loop lifts each new solution without allocating. The values are those of <code class="md-code-inline">lift(Wₕ, u)</code>, bit for bit, on every CPU policy. With <code class="md-code-inline">t</code>, it writes <code class="md-code-inline">E u + d(t)</code>, the values of <code class="md-code-inline">lift(Wₕ, u, t)</code>; on a space whose relation data depend on time, the form without <code class="md-code-inline">t</code> refuses, as <code class="md-code-inline">lift(Wₕ, u)</code> does. The data at <code class="md-code-inline">t</code> go into a buffer the space stores, so <code class="md-code-inline">lift!(uₕ, Wₕ, u, t)</code> is not safe to call concurrently on one space; each concurrent caller passes its own buffer <code class="md-code-inline">g = Bramble._affine_buffer(Wₕ)</code> instead.</p>
+<p><code class="md-code-inline">lift!</code> refuses a grid function on another space, or of an element type that cannot hold the values (a real <code class="md-code-inline">uₕ</code> for a complex <code class="md-code-inline">u</code>), with an <code class="md-code-inline">ArgumentError</code>. It is public, not exported: write <code class="md-code-inline">Bramble.lift!</code>.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+Cₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
+                 u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; 1.0, :xmax =&gt; u + ∂ₙ(u) =&gt; 2.0))
+a = form(Cₕ, Cₕ, (u, v) -&gt; innerₕ(-1.0 * Bramble.D̃ₓ(Bramble.D₋ₓ(u)), v))
+l = form(Cₕ, v -&gt; innerₕ(x -&gt; 1.0, v))
+A, F = assemble(a, l)
+uₕ = Bramble.lift(Cₕ, A \ F)
+assemble!(A, F, a, l)                  # the same system, refilled in place
+Bramble.lift!(uₕ, Cₕ, A \ F)</code></pre>
+</div>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.GhostVector">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.GhostVector</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_vector.jl#L14-L49" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">GhostVector{T, VP, VG, G} &lt;: AbstractVector{T}</code></pre>
+</div>
+<p>The values of a grid function on a ghost space: the physical values, the very vector the solver holds, and the values at the ghosts beyond the named facets, kept in a buffer of their own.</p>
+<p><code class="md-code-inline">GhostVector(Wₕ, u)</code> takes the vector <code class="md-code-inline">u</code> of the values at the physical nodes of the mesh of <code class="md-code-inline">Wₕ</code>, in the mesh&#39;s linear order, and holds <code class="md-code-inline">u</code> itself as its physical part, not a copy: a time loop that writes its state into <code class="md-code-inline">u</code> sees it in the <code class="md-code-inline">GhostVector</code>. The ghost buffer has one entry per ghost of <code class="md-code-inline">mesh(Wₕ)</code>, in the ghost order of <a href="../../api/meshes/#Bramble.GhostMesh"><code class="md-code-inline">GhostMesh</code></a> (the facets <code class="md-code-inline">xmin</code>, <code class="md-code-inline">xmax</code>, <code class="md-code-inline">ymin</code>, …, each facet&#39;s nodes in the mesh&#39;s column-major order), and starts at 0; <a href="../../api/spaces/#Bramble.update_ghosts!"><code class="md-code-inline">update_ghosts!</code></a> fills it from the relations of a constrained space. <code class="md-code-inline">GhostVector(Wₕ)</code> starts from zeros, its physical part a vector of the backend of <code class="md-code-inline">Wₕ</code>. <code class="md-code-inline">Wₕ</code> is any space with ghosts, as built by <code class="md-code-inline">gridspace(Ωₕ; ghosts = ...)</code> or <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>.</p>
+<p>A <code class="md-code-inline">GhostVector</code> is an <code class="md-code-inline">AbstractVector</code> of length <code class="md-code-inline">np + ng</code>: the <code class="md-code-inline">np</code> physical values, then the <code class="md-code-inline">ng</code> ghosts, the order of the degrees of freedom of the unconstrained ghost space <code class="md-code-inline">gridspace(Ωₕ; ghosts = ...)</code>. <code class="md-code-inline">Bramble.physical(v)</code> and <code class="md-code-inline">Bramble.ghost_values(v)</code> return the two parts. It carries the mesh with ghosts, <code class="md-code-inline">mesh(Wₕ)</code>, and <code class="md-code-inline">update_ghosts!</code> refuses a space on another mesh.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 7), (false, false))
+Cₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
+                 u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; 1.0, :xmax =&gt; u + ∂ₙ(u) =&gt; 0.0,
+                       :ymin =&gt; ∂ₙ(u) =&gt; 0.0, :ymax =&gt; ∂ₙ(u) =&gt; 0.0))
+u = rand(35)                    # the values at the 5 × 7 physical nodes
+v = GhostVector(Cₕ, u)          # Bramble.physical(v) === u
+update_ghosts!(v, Cₕ)           # the 24 ghosts the relations give
+length(v)                       # 59</code></pre>
+</div>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.update_ghosts!">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.update_ghosts!</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_vector.jl#L129-L167" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">update_ghosts!(v::GhostVector, Cₕ::GhostGridSpace) -&gt; v
+update_ghosts!(v::GhostVector, Cₕ::GhostGridSpace, t::Number[, g]) -&gt; v</code></pre>
+</div>
+<p>Write into the ghost buffer of <code class="md-code-inline">v</code> the ghosts that the relations of <code class="md-code-inline">Cₕ</code> eliminate, from the values in <code class="md-code-inline">v</code>: each is its row of the closure <code class="md-code-inline">(E, d)</code> of <code class="md-code-inline">Cₕ</code> (see <a href="../../api/spaces/#Bramble.lift"><code class="md-code-inline">lift</code></a>), applied to the physical values of <code class="md-code-inline">v</code> and to the ghosts <code class="md-code-inline">Cₕ</code> keeps as unknowns, which are read from the buffer. These are the ghost values of <code class="md-code-inline">lift(Cₕ, u)</code> for the degrees of freedom <code class="md-code-inline">u</code> that <code class="md-code-inline">v</code> holds, the conormal corner blocks included; a point a Dirichlet relation fixes contributes its datum, whatever <code class="md-code-inline">v</code> holds there. The ghosts of a facet without a relation, and the physical part, are left as they are. On <code class="md-code-inline">gridspace(Ωₕ; ghosts = ...)</code> itself, with no relations, nothing is written.</p>
+<p>The update reads the eliminated ghosts&#39; rows only, stored with the space, so it costs a sweep over facet-sized data, allocates nothing, and runs in the bands of the mesh&#39;s execution policy, each ghost summed by one band: every CPU policy gives the same values.</p>
+<p>With <code class="md-code-inline">t</code>, the relation data are taken at time <code class="md-code-inline">t</code> (data <code class="md-code-inline">(x, t) -&gt; …</code>, see <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>): the ghosts of <code class="md-code-inline">lift(Cₕ, u, t)</code>. On a static space the time is ignored; on a space whose data depend on time, the form without <code class="md-code-inline">t</code> refuses with an <code class="md-code-inline">ArgumentError</code>. The data at <code class="md-code-inline">t</code> go into a buffer the space stores, so <code class="md-code-inline">update_ghosts!(v, Cₕ, t)</code> is not safe to call concurrently on one space; each concurrent caller passes its own buffer <code class="md-code-inline">g = Bramble._affine_buffer(Cₕ)</code>.</p>
+<p><code class="md-code-inline">update_ghosts!</code> refuses with an <code class="md-code-inline">ArgumentError</code> a <code class="md-code-inline">GhostVector</code> on the mesh of another space, one whose parts were resized, one whose element type cannot hold the ghost values (a real <code class="md-code-inline">v</code> on a complex space), and a space on a mesh changed in place since it was built.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+Cₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
+                 u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; (x, t) -&gt; sin(t), :xmax =&gt; u + ∂ₙ(u) =&gt; 0.0))
+v = GhostVector(Cₕ, collect(points(Ωₕ)))
+update_ghosts!(v, Cₕ, 0.5)
+Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code></pre>
+</div>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.physical">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.physical</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_vector.jl#L112-L117" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">physical(v::GhostVector) -&gt; AbstractVector</code></pre>
+</div>
+<p>The values of <code class="md-code-inline">v</code> at the physical nodes, in the mesh&#39;s linear order: the vector <code class="md-code-inline">v</code> was built from, not a copy. <code class="md-code-inline">physical</code> is public, not exported: write <code class="md-code-inline">Bramble.physical</code>.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.ghost_values">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.ghost_values</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_vector.jl#L120-L126" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">ghost_values(v::GhostVector) -&gt; AbstractVector</code></pre>
+</div>
+<p>The values of <code class="md-code-inline">v</code> at the ghosts, one per ghost of its mesh in the ghost order of <a href="../../api/meshes/#Bramble.GhostMesh"><code class="md-code-inline">GhostMesh</code></a>: the buffer <a href="../../api/spaces/#Bramble.update_ghosts!"><code class="md-code-inline">update_ghosts!</code></a> writes, not a copy. <code class="md-code-inline">ghost_values</code> is public, not exported: write <code class="md-code-inline">Bramble.ghost_values</code>.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.assemble!-Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.assemble!</code> — <span class="md-docstring-sig">Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L541-L559" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">assemble!(A, F, a::GhostBilinearForm, l::GhostLinearForm;
+    dirichlet = nothing, dirichlet_components = nothing, symmetrize = false)</code></pre>
+</div>
+<p>Refill <code class="md-code-inline">A</code> and <code class="md-code-inline">F</code> with the matrix and the load that <code class="md-code-inline">A, F = assemble(a, l)</code> returns, and return <code class="md-code-inline">A, F</code>. <code class="md-code-inline">A</code> keeps the pattern and <code class="md-code-inline">F</code> the element type that <code class="md-code-inline">assemble(a, l)</code> gave, so call that once and refill its two outputs. The call allocates nothing warm.</p>
+<p>Both forms are assembled together because, when the closure of the space has an affine part <code class="md-code-inline">d ≠ 0</code>, the load is <code class="md-code-inline">Eᵀ(F − A d)</code> and reads the matrix. <code class="md-code-inline">assemble!(b, l)</code> alone refuses such a space. <code class="md-code-inline">dirichlet</code>, <code class="md-code-inline">dirichlet_components</code> and <code class="md-code-inline">symmetrize</code> act as in <code class="md-code-inline">assemble(a, l)</code>.</p>
+<p>It throws an <code class="md-code-inline">ArgumentError</code> for a time-dependent space (pose the problem with <code class="md-code-inline">semidiscretize</code>), for <code class="md-code-inline">symmetrize = true</code> without <code class="md-code-inline">dirichlet</code>, for <code class="md-code-inline">A</code> that is not a <code class="md-code-inline">SparseMatrixCSC</code> with the reduced pattern of <code class="md-code-inline">a</code>, for a <code class="md-code-inline">dirichlet</code> the rows of the space do not allow, and for an <code class="md-code-inline">F</code> whose element type cannot hold the load&#39;s. A <code class="md-code-inline">DimensionMismatch</code> follows an <code class="md-code-inline">F</code> of the wrong length and forms whose test spaces differ.</p>
+</div>
+</div>
       </article>
       <footer class="md-footer">
 <p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
@@ -841,6 +1067,7 @@ end</code></pre>
           <a class="md-toc-link md-toc-h2" href="#Vector-elements-and-grid-functions">Vector elements and grid functions</a>
           <a class="md-toc-link md-toc-h2" href="#Restriction-and-averaging-operators">Restriction and averaging operators</a>
           <a class="md-toc-link md-toc-h2" href="#Interpolation-between-grid-spaces">Interpolation between grid spaces</a>
+          <a class="md-toc-link md-toc-h2" href="#Ghost-spaces">Ghost spaces</a>
       </div>
     </aside>
   </div>
@@ -858,6 +1085,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=d4c21ea0"></script>
+  <script src="../../assets/materialdocs.js?v=bcc03e3e"></script>
 </body>
 </html>

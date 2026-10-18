@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear and bilinear forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e1a96966">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f4e36772">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Linear and bilinear forms — Bramble.jl">
   <meta property="og:title" content="Linear and bilinear forms — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
@@ -90,7 +92,7 @@
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/form.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="tutorial_form" class="md-heading">Linear and bilinear forms<a href="#tutorial_form" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<p><strong>What you will learn.</strong> How to write a linear or bilinear form, assemble it into a vector or a matrix, impose Dirichlet conditions and solve a Poisson problem.</p>
+<p><strong>What you will learn.</strong> How to write a linear or bilinear form, assemble it into a vector or a matrix, impose Dirichlet conditions and solve a Poisson problem, and impose Neumann and Robin conditions through ghost points, with data that depend on time, a gauge for the ghosts and a check on the compatibility of pure-Neumann data.</p>
 <p><strong>What you need first.</strong> The <a href="../../tutorials/mesh/">mesh tutorial</a>, the <a href="../../tutorials/space/">space tutorial</a> for grid spaces and elements, and the <a href="../../tutorials/operators/">operators tutorial</a> for <code class="md-code-inline">D₋ₓ</code>, <code class="md-code-inline">innerₕ</code> and <code class="md-code-inline">inner₊</code>.</p>
 <p><strong>Where next.</strong> <a href="../../tutorials/coupled_systems/">Coupled systems</a>, where one form addresses several unknowns.</p>
 <p>The operators in the previous tutorial act on grid functions. A form is the other half: an expression written in the <em>test</em> function, which Bramble assembles into the vector or the matrix a solver wants. Every number below was produced by the code shown. The running problem is the one-dimensional Poisson equation on the unit interval.</p>
@@ -298,6 +300,671 @@ reaction(ad, ld, uh_elt; marker = :left), reaction(ad, ld, uh_elt; marker = :rig
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(3.139068950903201, 3.139068950903206)</code></pre>
 </div>
 <p>Both come out near <span class="md-math md-math-inline">\(\pi\)</span>. For <span class="md-math md-math-inline">\(u = \sin(\pi x)\)</span> the flux <span class="md-math md-math-inline">\(-u&#39;\)</span> leaving the domain is <span class="md-math md-math-inline">\(\pi\)</span> at each end, and the two together recover the discrete net source <span class="md-math md-math-inline">\((f_h, 1)_h\)</span> to round-off at any resolution, which approaches <span class="md-math md-math-inline">\(2\pi\)</span> at second order (<span class="md-math md-math-inline">\(6.2781\)</span> here). The sign convention is in the docstring of <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>; <a href="../../api/forms/#Bramble.reaction_density"><code class="md-code-inline">reaction_density</code></a> gives the pointwise quantity, suitable for <a href="../../api/exporters/#Bramble.export_vtk"><code class="md-code-inline">export_vtk</code></a>.</p>
+<h2 id="form_ghost" class="md-heading">Neumann and Robin conditions with ghost points<a href="#form_ghost" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A Dirichlet condition fixes a value, and the rows above replace it. A Neumann or Robin condition fixes a normal derivative, and a second-order scheme needs the solution one point past the boundary to write it. This section solves three problems: Neumann and Robin on an interval, Dirichlet beside Robin by two routes, and Neumann on a square. All use non-uniform meshes. The model problem on the interval is</p>
+<div class="md-math md-math-display">
+\[-u&#39;&#39; = f \text{ on } (0, 1), \qquad \partial_\eta u = g_0 \text{ at } 0, \qquad
+\alpha u + \partial_\eta u = g_1 \text{ at } 1,\]
+</div>
+<p>where <span class="md-math md-math-inline">\(\partial_\eta\)</span> is the derivative along the outward normal, <span class="md-math md-math-inline">\(-u&#39;\)</span> at the left end and <span class="md-math md-math-inline">\(u&#39;\)</span> at the right. The exact solution is <span class="md-math md-math-inline">\(u = \cos \pi x + x\)</span>, and the data come from it:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">import Bramble: change_points!
+using LinearAlgebra: norm, dot
+
+function graded_interval(n)
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), n)
+    change_points!(Ωₕ, collect(range(0.0, 1.0, length = n) .^ 2))
+    return Ωₕ
+end
+
+u_exact(x) = cos(π * x[1]) + x[1]
+du_exact(x) = -π * sin(π * x[1]) + 1
+f_src(x) = π^2 * cos(π * x[1])
+robin_α = 2.0
+g_left(x) = -du_exact(x)                         # ∂ₙu = -u&#39; at x = 0
+g_right(x) = robin_α * u_exact(x) + du_exact(x)  # αu + u&#39; at x = 1
+
+Ω_gh = graded_interval(33)
+x_gh = collect(points(Ω_gh))
+extrema(diff(x_gh))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0009765625, 0.0615234375)</code></pre>
+</div>
+<p>The spacings run from <span class="md-math md-math-inline">\(10^{-3}\)</span> to <span class="md-math md-math-inline">\(0.06\)</span>.</p>
+<h3 id="Without-ghosts:-the-forms-you-already-have" class="md-heading">Without ghosts: the forms you already have<a href="#Without-ghosts:-the-forms-you-already-have" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>The weak form of the problem is <span class="md-math md-math-inline">\((D_{-}u, D_{-}v)_+\)</span> plus a boundary term per facet, and <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a> writes both. The Robin coefficient multiplies <code class="md-code-inline">u</code> inside the matrix and the data go on the right:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Wₕ_gh = gridspace(Ω_gh)
+a_modeA = form(Wₕ_gh, Wₕ_gh, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)) +
+    inner_Γ(robin_α * u, v; markers = (:xmax,)))
+l_modeA = form(Wₕ_gh, v -&gt; innerₕ(f_src, v) +
+    inner_Γ(g_left, v; markers = (:xmin,)) + inner_Γ(g_right, v; markers = (:xmax,)))
+
+A_modeA, F_modeA = assemble(a_modeA, l_modeA)
+u_modeA = pde_solve(A_modeA, F_modeA)
+
+err_modeA = maximum(abs, u_modeA - u_exact.(x_gh))
+@assert err_modeA &lt; 2e-2
+
+err_modeA</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.009641064918987308</code></pre>
+</div>
+<p>Nothing here needs a ghost: a ghost-eliminated Neumann or Robin condition is this system. Ghosts matter when the scheme differentiates the unknown at the boundary, for instance the collocation form <span class="md-math md-math-inline">\((-\Delta_h u, v)_h\)</span>, a conormal condition with a mixed derivative, or a condition on a second normal derivative. No spelling of those exists on a space without ghosts, because every operator is truncated on the end slices.</p>
+<h3 id="Relations-and-constrained" class="md-heading">Relations and <code class="md-code-inline">constrained</code><a href="#Relations-and-constrained" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>Give the space ghosts on the facets that carry such a condition, and tie each facet&#39;s ghosts to a <em>relation</em>, written <code class="md-code-inline">operator =&gt; data</code>. <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> takes a function of the unknown <code class="md-code-inline">u</code> that returns one <code class="md-code-inline">facet =&gt; relation</code> pair per facet:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">W_ghosts = gridspace(Ω_gh; ghosts = :boundary)
+C_gh = constrained(W_ghosts, u -&gt; (
+    :xmin =&gt; ∂ₙ(u) =&gt; g_left,
+    :xmax =&gt; robin_α * u + ∂ₙ(u) =&gt; g_right))
+
+ndofs(W_ghosts), ndofs(C_gh)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(35, 33)</code></pre>
+</div>
+<p><code class="md-code-inline">=&gt;</code> binds looser than <code class="md-code-inline">+</code> and <code class="md-code-inline">*</code> and is right-associative, so the second line reads <code class="md-code-inline">:xmax =&gt; ((robin_α * u + ∂ₙ(u)) =&gt; g_right)</code>. The data is a number or a function of the point tuple, as for <a href="../../api/forms/#Bramble.dirichlet_constraints"><code class="md-code-inline">dirichlet_constraints</code></a>. <code class="md-code-inline">constrained</code> solves each ghost&#39;s relation for the ghost, and its unknowns are the 33 physical nodes again: the 2 ghosts were eliminated.</p>
+<p>The form below is the collocation Laplacian at every node, the boundary ones included, with the cell weight as the test weight. Assemble both forms together with <code class="md-code-inline">assemble(a, l)</code>: the data move the ghosts, so the load is <span class="md-math md-math-inline">\(E^T (F - A d)\)</span> and needs the matrix.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">a_gh = form(C_gh, C_gh, (u, v) -&gt; innerₕ(-Δₕ(u), v))
+l_gh = form(C_gh, v -&gt; innerₕ(f_src, v))
+A_gh, F_gh = assemble(a_gh, l_gh)
+u_gh = pde_solve(A_gh, F_gh)
+
+@assert norm(A_gh - A_modeA) &lt;= 1e-12 * norm(A_modeA)
+@assert norm(F_gh - F_modeA) &lt;= 1e-12 * norm(F_modeA)
+@assert maximum(abs, u_gh - u_modeA) &lt;= 1e-10
+
+norm(A_gh - A_modeA) / norm(A_modeA), maximum(abs, u_gh - u_exact.(x_gh))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(3.122804891532466e-17, 0.00964106491893224)</code></pre>
+</div>
+<p>The ghost-eliminated matrix and load equal those of the forms of the previous section to rounding. The two spellings are the same scheme, and the ghost one extends to what the first cannot say. The error decreases at second order on this graded mesh: it falls by a factor of four when the number of points doubles.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">function ghost_error(n)
+    Ωₕ = graded_interval(n)
+    C = constrained(gridspace(Ωₕ; ghosts = :boundary), u -&gt; (
+        :xmin =&gt; ∂ₙ(u) =&gt; g_left, :xmax =&gt; robin_α * u + ∂ₙ(u) =&gt; g_right))
+    A, F = assemble(form(C, C, (u, v) -&gt; innerₕ(-Δₕ(u), v)),
+        form(C, v -&gt; innerₕ(f_src, v)))
+    return maximum(abs, pde_solve(A, F) - u_exact.(points(Ωₕ)))
+end
+
+ratio = ghost_error(33) / ghost_error(65)
+@assert 3.5 &lt; ratio &lt; 4.5
+
+ratio</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4.000864772047653</code></pre>
+</div>
+<p>The relations a facet takes:</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:left">Relation</th>
+<th style="text-align:left">Condition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">∂ₙ(u) =&gt; g</code></td>
+<td style="text-align:left">Neumann</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">α * u + β * ∂ₙ(u) =&gt; g</code></td>
+<td style="text-align:left">Robin, with <span class="md-math md-math-inline">\(\beta \neq 0\)</span></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">∂ₙ(u; K = K) =&gt; g</code></td>
+<td style="text-align:left">conormal, <span class="md-math md-math-inline">\(\eta \cdot (K \nabla u)\)</span>, with a constant matrix <code class="md-code-inline">K</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">∂ₙₙ(u) =&gt; g</code></td>
+<td style="text-align:left">second normal difference, <span class="md-math md-math-inline">\((\tilde D D_{-} u)\)</span> at the facet node</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">u =&gt; g</code></td>
+<td style="text-align:left">Dirichlet, see below</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Each relation of a ghosted facet must read that facet&#39;s ghost: <code class="md-code-inline">β = 0</code> or a lone <code class="md-code-inline">jumpₙ</code> is an <code class="md-code-inline">ArgumentError</code>. At a 2D corner two conormal relations that read each other&#39;s ghost are solved together as a <span class="md-math md-math-inline">\(2 \times 2\)</span> block, and a singular <code class="md-code-inline">K</code> is refused. A ghosted facet with no relation keeps its ghosts as unknowns.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">try
+    constrained(W_ghosts, u -&gt; (:xmin =&gt; jumpₙ(u) =&gt; 0.0, :xmax =&gt; ∂ₙ(u) =&gt; 0.0))
+catch e
+    @assert e isa ArgumentError
+    first(split(sprint(showerror, e), &quot;. &quot;))
+end</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;ArgumentError: the relation on :xmin does not read the ghost of :xmin (a zero coefficient on the normal derivative, or an operator such as jumpₙ that stays inside), so it cannot be solved for it&quot;</code></pre>
+</div>
+<h3 id="Dirichlet-conditions-beside-ghost-relations" class="md-heading">Dirichlet conditions beside ghost relations<a href="#Dirichlet-conditions-beside-ghost-relations" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>Keep the Robin condition at <span class="md-math md-math-inline">\(x = 1\)</span> and impose <span class="md-math md-math-inline">\(u(0) = 1\)</span> instead, so only <code class="md-code-inline">xmax</code> needs a ghost. There are two routes, and they give the same solution.</p>
+<p><strong>Route (a), row replacement, as above.</strong> <code class="md-code-inline">constrained</code> receives only the ghost relation. The unknowns are the physical nodes, as on a space without ghosts, so the <code class="md-code-inline">dirichlet</code> keyword of <code class="md-code-inline">assemble</code> replaces the rows of <code class="md-code-inline">:xmin</code> and <code class="md-code-inline">symmetrize</code> restores symmetry, exactly as in the <a href="../../tutorials/form/#form_dirichlet">Dirichlet section</a>. Every existing program keeps working:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">W_right = gridspace(Ω_gh; ghosts = (:xmax,))
+C_a = constrained(W_right, u -&gt; (:xmax =&gt; robin_α * u + ∂ₙ(u) =&gt; g_right,))
+a_a = form(C_a, C_a, (u, v) -&gt; innerₕ(-Δₕ(u), v))
+l_a = form(C_a, v -&gt; innerₕ(f_src, v))
+A_a, F_a = assemble(a_a, l_a; dirichlet = :xmin =&gt; u_exact, symmetrize = true)
+u_a = pde_solve(A_a, F_a)
+
+@assert length(u_a) == 33 &amp;&amp; u_a[1] ≈ u_exact(x_gh[1])
+@assert norm(A_a - A_a&#39;) &lt;= 1e-12 * norm(A_a)
+
+ndofs(C_a), maximum(abs, u_a - u_exact.(x_gh))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.0016854604630304193)</code></pre>
+</div>
+<p><strong>Route (b), <code class="md-code-inline">u =&gt; g</code> in the relations.</strong> The Dirichlet node leaves the unknowns: its column is removed and its value goes into the data. The matrix is <span class="md-math md-math-inline">\(E^T A E\)</span>, symmetric by construction, and it has one row less:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">C_b = constrained(W_right, u -&gt; (
+    :xmin =&gt; u =&gt; u_exact,
+    :xmax =&gt; robin_α * u + ∂ₙ(u) =&gt; g_right))
+a_b = form(C_b, C_b, (u, v) -&gt; innerₕ(-Δₕ(u), v))
+l_b = form(C_b, v -&gt; innerₕ(f_src, v))
+A_b, F_b = assemble(a_b, l_b)
+u_b = pde_solve(A_b, F_b)
+
+@assert ndofs(C_b) == 32 &amp;&amp; size(A_b) == (32, 32)
+@assert norm(A_b - A_b&#39;) &lt;= 1e-12 * norm(A_b)
+@assert maximum(abs, [u_exact(x_gh[1]); u_b] - u_a) &lt;= 1e-10
+
+ndofs(C_b), maximum(abs, [u_exact(x_gh[1]); u_b] - u_exact.(x_gh))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(32, 0.0016854604630301973)</code></pre>
+</div>
+<p>The solution vector of route (b) has one entry per kept node, so the Dirichlet value is prepended above; <code class="md-code-inline">Bramble.lift(C_b, u_b)</code> below gives the grid function. The two routes compare as follows:</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:left"></th>
+<th style="text-align:left">(a) row replacement</th>
+<th style="text-align:left">(b) <code class="md-code-inline">u =&gt; g</code> in <code class="md-code-inline">constrained</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">unknowns</td>
+<td style="text-align:left">all physical nodes</td>
+<td style="text-align:left">physical nodes minus the Dirichlet nodes</td>
+</tr>
+<tr>
+<td style="text-align:left">solution vector</td>
+<td style="text-align:left">one entry per node, a grid function as today</td>
+<td style="text-align:left">one entry per kept node; <code class="md-code-inline">Bramble.lift(Cₕ, u)</code> is the grid function</td>
+</tr>
+<tr>
+<td style="text-align:left">symmetry of a self-adjoint form</td>
+<td style="text-align:left">after <code class="md-code-inline">symmetrize</code>, as today</td>
+<td style="text-align:left">by construction</td>
+</tr>
+<tr>
+<td style="text-align:left">data</td>
+<td style="text-align:left"><code class="md-code-inline">dirichlet</code>, <code class="md-code-inline">dirichlet_constraints</code>, time-dependent as today</td>
+<td style="text-align:left">the relation&#39;s <code class="md-code-inline">g</code>, a number or a function</td>
+</tr>
+<tr>
+<td style="text-align:left">existing programs</td>
+<td style="text-align:left">unchanged</td>
+<td style="text-align:left">new route, nothing depends on it</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Route (a) is the one every earlier program uses; route (b) is the symmetric alternative when the vector should carry only unknowns. Give each facet&#39;s condition once. The same label given both ways, <code class="md-code-inline">u =&gt; g</code> in <code class="md-code-inline">constrained</code> and <code class="md-code-inline">dirichlet</code> in <code class="md-code-inline">assemble</code>, is an <code class="md-code-inline">ArgumentError</code>, since the value would be imposed twice. A ghosted facet that carries only <code class="md-code-inline">u =&gt; g</code> is refused too, since its ghosts would be unknowns no equation reads: give it a ghost relation as well, or drop it from <code class="md-code-inline">ghosts</code>.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">refusals = String[]
+for thunk in (
+    () -&gt; assemble(a_b, l_b; dirichlet = :xmin =&gt; u_exact),
+    () -&gt; constrained(W_ghosts, u -&gt; (:xmin =&gt; u =&gt; u_exact, :xmax =&gt; ∂ₙ(u) =&gt; g_right)),
+)
+    try
+        thunk()
+    catch e
+        @assert e isa ArgumentError
+        push!(refusals, first(split(sprint(showerror, e), &quot;. &quot;)))
+    end
+end
+
+@assert length(refusals) == 2
+
+refusals</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{String}:
+ &quot;ArgumentError: the Dirichlet co&quot;<span class="sgr93"><span class="sgr1"> ⋯ 95 bytes ⋯ </span></span>&quot;` in constrained already fixed&quot;
+ &quot;ArgumentError: the facet :xmin &quot;<span class="sgr93"><span class="sgr1"> ⋯ 101 bytes ⋯ </span></span>&quot;tion reads (a singular system)&quot;</code></pre>
+</div>
+<h3 id="Solutions-as-grid-functions:-lift" class="md-heading">Solutions as grid functions: <code class="md-code-inline">lift</code><a href="#Solutions-as-grid-functions:-lift" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>A solution of <code class="md-code-inline">assemble(a, l)</code> is a vector of unknowns. <code class="md-code-inline">Bramble.lift(Cₕ, u)</code> is the grid function it describes, with the eliminated ghosts filled in by the relations. It lives on the padded space, one point longer at each ghosted end, so the runtime operators read its ghosts. <code class="md-code-inline">lift</code> is <code class="md-code-inline">public</code>, not exported, because it is also a Makie name: write <code class="md-code-inline">Bramble.lift</code>.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">U = Bramble.lift(C_gh, u_gh)
+
+@assert length(U) == 35
+
+points(space(U))[[1, 2, end - 1, end]]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4-element Vector{Float64}:
+ -0.0009765625
+  0.0
+  1.0
+  1.0615234375</code></pre>
+</div>
+<p>The solution of route (b) above lifts the same way, and the lifted function holds the Dirichlet value at its first node:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">U_b = Bramble.lift(C_b, u_b)
+
+@assert length(U_b) == 34 &amp;&amp; U_b[1] ≈ u_exact(x_gh[1])
+@assert U_b[1:33] ≈ [u_exact(x_gh[1]); u_b]
+
+U_b[1], u_exact(x_gh[1])</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.0, 1.0)</code></pre>
+</div>
+<p>The relations hold on the lifted function. The runtime centred difference at the first and last nodes gives the data, and the collocation equation <span class="md-math md-math-inline">\(-\Delta_h u = f\)</span> holds at every node, the two boundary nodes included:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">import Bramble: Dcₓ
+
+@assert -Dcₓ(U)[2] ≈ g_left(x_gh[1])
+@assert robin_α * U[end - 1] + Dcₓ(U)[end - 1] ≈ g_right(x_gh[end])
+@assert maximum(abs, [(-Δₕ(U))[i + 1] - f_src(x_gh[i]) for i in 1:33]) &lt; 1e-6
+
+(-Dcₓ(U)[2], g_left(x_gh[1])), (robin_α * U[end - 1] + Dcₓ(U)[end - 1], g_right(x_gh[end]))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((-1.0, -1.0), (0.9999999999999998, 0.9999999999999997))</code></pre>
+</div>
+<p><code class="md-code-inline">Bramble.lift(Cₕ)</code> alone is the data <span class="md-math md-math-inline">\(d\)</span>: the ghost values of the zero function. For the Neumann relation at the left, <span class="md-math md-math-inline">\(-(u_2 - u_0)/(2 h_2) = g_0\)</span> with <span class="md-math md-math-inline">\(u_2 = 0\)</span> gives <span class="md-math md-math-inline">\(u_0 = 2 h_2 g_0\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">d_gh = Bramble.lift(C_gh)
+h₂ = x_gh[2] - x_gh[1]
+
+@assert d_gh[1] ≈ 2h₂ * g_left(x_gh[1])
+@assert iszero(d_gh[2:(end - 1)])
+
+d_gh[1], 2h₂ * g_left(x_gh[1])</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(-0.001953125, -0.001953125)</code></pre>
+</div>
+<p>Both are data in forms on <code class="md-code-inline">Cₕ</code>, so a linear form can name the full <code class="md-code-inline">Δₕ</code> of the lifted function at a facet node. A relation on the second normal difference puts its data into the same ghost:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">C_nn = constrained(W_ghosts, u -&gt; (:xmin =&gt; ∂ₙₙ(u) =&gt; 3.0, :xmax =&gt; u + ∂ₙ(u) =&gt; 1.0))
+d_nn = Bramble.lift(C_nn)
+
+@assert d_nn[1] ≈ 3.0 * h₂^2          # (u₂ - 2u₁ + u₀) / h₂² = 3 with u = 0
+
+d_nn[1]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.86102294921875e-6</code></pre>
+</div>
+<p>A system whose ghost data are nonzero needs the matrix to build its load. Assembling the linear form alone is an <code class="md-code-inline">ArgumentError</code>, and the message names the fix:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">try
+    assemble(l_gh)
+catch e
+    @assert e isa ArgumentError
+    sprint(showerror, e)
+end</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;ArgumentError: the closure of this ghost space has an affine part d ≠ 0, so its load is Eᵀ(F − A d) and needs the bilinear form: assemble both with assemble(a, l).&quot;</code></pre>
+</div>
+<h3 id="Data-that-depend-on-time" class="md-heading">Data that depend on time<a href="#Data-that-depend-on-time" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>The data of a relation may take the time as a second argument, <code class="md-code-inline">(x, t) -&gt; …</code>; <code class="md-code-inline">constrained</code> tells it from a datum in <code class="md-code-inline">x</code> alone by the methods the function has. The operators in a relation do not change with time, so the matrix of a form on the space is the same at every <code class="md-code-inline">t</code>, and only the data <span class="md-math md-math-inline">\(d(t)\)</span> that the relations put into the ghosts move. Take the heat equation <span class="md-math md-math-inline">\(\partial_t u = \partial_{xx} u\)</span> on the graded interval, with the exact solution <span class="md-math md-math-inline">\(u = e^{-t} (\cos x + \sin x)\)</span> and the data it gives, a flux at the left end and a Robin condition at the right end:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using LinearAlgebra: diag
+
+heat_sol(x, t) = exp(-t) * (cos(x[1]) + sin(x[1]))
+heat_dx(x, t) = exp(-t) * (cos(x[1]) - sin(x[1]))
+g_left_t(x, t) = -heat_dx(x, t)
+g_right_t(x, t) = robin_α * heat_sol(x, t) + heat_dx(x, t)
+
+C_t = constrained(gridspace(Ω_gh; ghosts = :boundary), u -&gt; (
+    :xmin =&gt; ∂ₙ(u) =&gt; g_left_t,
+    :xmax =&gt; robin_α * u + ∂ₙ(u) =&gt; g_right_t))
+a_t = form(C_t, C_t, (u, v) -&gt; innerₕ(-Δₕ(u), v))
+l_t = form(C_t, v -&gt; innerₕ(x -&gt; 0.0, v))
+
+ndofs(C_t)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">33</code></pre>
+</div>
+<p><code class="md-code-inline">Bramble.lift(Cₕ, u, t)</code> is the grid function <span class="md-math md-math-inline">\(E u + d(t)\)</span> at time <code class="md-code-inline">t</code>. The exact solution at the nodes lifts to a padded function whose centred difference at the first node gives the flux datum at that time, and the data at two times give different ghosts:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">u_heat(t) = [heat_sol(x, t) for x in x_gh]
+U_a = Bramble.lift(C_t, u_heat(0.3), 0.3)
+U_b = Bramble.lift(C_t, u_heat(1.0), 1.0)
+
+@assert -Dcₓ(U_a)[2] ≈ g_left_t(x_gh[1], 0.3)
+@assert -Dcₓ(U_b)[2] ≈ g_left_t(x_gh[1], 1.0)
+@assert abs(U_a[1] - U_b[1]) &gt; 0.1
+
+U_a[1], U_b[1]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.7400944120234663, 0.36752000842899757)</code></pre>
+</div>
+<p><a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a> takes the form and the load on this space and returns the <code class="md-code-inline">Semidiscretization</code> of <span class="md-math md-math-inline">\(M u&#39; = F(t) - A u\)</span>, with <span class="md-math md-math-inline">\(A = E^T A_{pad} E\)</span>, the default mass <span class="md-math md-math-inline">\(M\)</span> diagonal and positive, and <span class="md-math md-math-inline">\(F(t) = E^T (F_{pad}(t) - A_{pad}\, d(t))\)</span>. The residual at a time is the one a space with the data frozen at that time assembles. Here is the comparison at three times:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">sd_t = semidiscretize(a_t, l_t)
+u_probe = collect(range(-1, 2; length = ndofs(C_t)) .^ 2)
+
+residual_gaps = map((0.0, 0.5, 1.0)) do t
+    C_frozen = constrained(gridspace(Ω_gh; ghosts = :boundary), u -&gt; (
+        :xmin =&gt; ∂ₙ(u) =&gt; (x -&gt; g_left_t(x, t)),
+        :xmax =&gt; robin_α * u + ∂ₙ(u) =&gt; (x -&gt; g_right_t(x, t))))
+    A_fr, F_fr = assemble(form(C_frozen, C_frozen, (u, v) -&gt; innerₕ(-Δₕ(u), v)),
+        form(C_frozen, v -&gt; innerₕ(x -&gt; 0.0, v)))
+    du = similar(u_probe)
+    sd_t(du, u_probe, nothing, t)
+    norm(du - (F_fr - A_fr * u_probe)) / norm(du)
+end
+
+@assert all(&lt;(1e-12), residual_gaps)
+@assert Bramble.operator_matrix(sd_t) ≈ assemble(a_t)
+@assert all(&gt;(0), diag(Bramble.mass_matrix(sd_t)))
+
+maximum(residual_gaps)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.534254412108908e-16</code></pre>
+</div>
+<p><a href="../../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a> wraps it for an ODE solver. The initial condition is the exact solution at <span class="md-math md-math-inline">\(t = 0\)</span> and the solver is <code class="md-code-inline">FBDF</code> from <code class="md-code-inline">OrdinaryDiffEqBDF</code>, with tolerances tight enough that the error left at the final time is the one in space. The solution changes by a factor <span class="md-math md-math-inline">\(e^{-1}\)</span> over the run and the data change with it, so an error far below that change shows the data in time are followed. The error falls by a factor of four when the number of points doubles:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using OrdinaryDiffEqBDF
+
+function heat_error(n; T = 1.0)
+    Ωₕ = graded_interval(n)
+    C = constrained(gridspace(Ωₕ; ghosts = :boundary), u -&gt; (
+        :xmin =&gt; ∂ₙ(u) =&gt; g_left_t, :xmax =&gt; robin_α * u + ∂ₙ(u) =&gt; g_right_t))
+    a = form(C, C, (u, v) -&gt; innerₕ(-Δₕ(u), v))
+    l = form(C, v -&gt; innerₕ(x -&gt; 0.0, v))
+    xs = collect(points(Ωₕ))
+    prob = ode_problem(a, l, [heat_sol(x, 0.0) for x in xs], (0.0, T))
+    sol = solve(prob, FBDF(); reltol = 1e-10, abstol = 1e-12)
+    return maximum(abs, sol.u[end] - [heat_sol(x, T) for x in xs])
+end
+
+err_heat_33, err_heat_65 = heat_error(33), heat_error(65)
+@assert err_heat_33 &lt; 1e-3
+@assert 3.5 &lt; err_heat_33 / err_heat_65 &lt; 4.5
+
+err_heat_33, err_heat_33 / err_heat_65</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(9.281502435054545e-5, 4.000580280337525)</code></pre>
+</div>
+<p>The refusals are the same everywhere on a space with data in time, and each is an <code class="md-code-inline">ArgumentError</code> that names what to do. <code class="md-code-inline">lift(Cₕ, u)</code>, <code class="md-code-inline">lift(Cₕ)</code> and <code class="md-code-inline">assemble(a, l)</code> have no single <span class="md-math md-math-inline">\(d\)</span>: give the time through <code class="md-code-inline">lift(Cₕ, u, t)</code>, or pose the problem in time. <code class="md-code-inline">form</code> and <code class="md-code-inline">assemble(a)</code> read <code class="md-code-inline">E</code> only and work. <code class="md-code-inline">semidiscretize</code> takes no <code class="md-code-inline">dirichlet</code> keyword, since a Dirichlet condition on a facet is the relation <code class="md-code-inline">:F =&gt; u =&gt; g(x, t)</code>. It refuses a space that keeps ghosts as unknowns, since the mass has no row for them. A mass that reads a point where the data depend on time is refused too, because its term <span class="md-math md-math-inline">\(E^T M_{pad}\, d&#39;(t)\)</span> needs <span class="md-math md-math-inline">\(\partial_t g\)</span>, which no relation carries. The default mass reads the physical nodes only. <code class="md-code-inline">semidiscretize_rhs</code> and <code class="md-code-inline">semidiscretize(build, l)</code> with a ghost load are refused as well.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">W_unknown = gridspace(Ω_gh; ghosts = :boundary)
+C_unknown = constrained(W_unknown, u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; g_left_t,))
+
+timed_refusals = String[]
+for thunk in (
+    () -&gt; Bramble.lift(C_t, u_heat(0.0)),
+    () -&gt; assemble(a_t, l_t),
+    () -&gt; semidiscretize(a_t, l_t; dirichlet = :xmin =&gt; 0.0),
+    () -&gt; semidiscretize(form(C_unknown, C_unknown, (u, v) -&gt; innerₕ(-Δₕ(u), v)),
+        form(C_unknown, v -&gt; innerₕ(x -&gt; 0.0, v))),
+    () -&gt; semidiscretize(a_t, l_t;
+        mass = form(C_t, C_t, (u, v) -&gt; innerₕ(u, v) + 0.01 * innerₕ(Δₕ(u), v))),
+)
+    try
+        thunk()
+    catch e
+        @assert e isa ArgumentError
+        push!(timed_refusals, first(split(sprint(showerror, e), &quot;. &quot;)))
+    end
+end
+
+@assert length(timed_refusals) == 5
+@assert size(assemble(a_t), 1) == ndofs(C_t)
+
+timed_refusals</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">5-element Vector{String}:
+ &quot;ArgumentError: lift(Wₕ, u) has &quot;<span class="sgr93"><span class="sgr1"> ⋯ 99 bytes ⋯ </span></span>&quot;re&#39;s affine part d(t) does too&quot;
+ &quot;ArgumentError: assemble(a, l) h&quot;<span class="sgr93"><span class="sgr1"> ⋯ 70 bytes ⋯ </span></span>&quot;load&#39;s lift Eᵀ A d(t) does too&quot;
+ &quot;ArgumentError: semidiscretize o&quot;<span class="sgr93"><span class="sgr1"> ⋯ 123 bytes ⋯ </span></span>&quot;d, which eliminates its nodes.&quot;
+ &quot;ArgumentError: semidiscretize: &quot;<span class="sgr93"><span class="sgr1"> ⋯ 69 bytes ⋯ </span></span>&quot;rows of the mass matrix vanish&quot;
+ &quot;ArgumentError: semidiscretize: &quot;<span class="sgr93"><span class="sgr1"> ⋯ 132 bytes ⋯ </span></span>&quot;ata, which no relation carries&quot;</code></pre>
+</div>
+<p>A constrained space whose data are all static takes <code class="md-code-inline">semidiscretize</code> and <code class="md-code-inline">ode_problem</code> too.</p>
+<h3 id="Pure-Neumann-and-mean_zero" class="md-heading">Pure Neumann and <code class="md-code-inline">mean_zero</code><a href="#Pure-Neumann-and-mean_zero" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>With Neumann conditions on every facet the solution is defined up to a constant. The matrix annihilates constants and is singular. Fix the constant by a discrete mean-zero condition: <a href="../../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a> takes <code class="md-code-inline">mean_zero = w</code>, a weight vector, and returns the solution with <span class="md-math md-math-inline">\(w^T u = 0\)</span>. Internally it solves the bordered system</p>
+<div class="md-math md-math-display">
+\[\begin{pmatrix} A &amp; w \\ w^T &amp; 0 \end{pmatrix}
+\begin{pmatrix} u \\ \lambda \end{pmatrix} =
+\begin{pmatrix} F \\ 0 \end{pmatrix}\]
+</div>
+<p>with a symmetric or LU factorization, never Cholesky, since the border makes it indefinite. <code class="md-code-inline">A</code> is not modified and stays sparse. A matrix that annihilates constants, passed without <code class="md-code-inline">mean_zero</code>, produces a warning that names the keyword.</p>
+<p>The problem is <span class="md-math md-math-inline">\(-\Delta u = f\)</span> on a graded square with the normal derivative given on each facet. Each facet carries its own datum, so a corner node takes two values, one per facet:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ω_sq = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+Ωₕ_sq = mesh(Ω_sq, (17, 17), (true, true))
+grid = collect(range(0.0, 1.0, length = 17) .^ 2)
+change_points!(Ωₕ_sq, markers(Ω_sq), (grid, grid))
+
+u_sq(p) = cos(π * p[1]) * cos(π * p[2]) + p[1] * p[2] / 2
+grad_sq(p) = (-π * sin(π * p[1]) * cos(π * p[2]) + p[2] / 2,
+    -π * cos(π * p[1]) * sin(π * p[2]) + p[1] / 2)
+f_sq(p) = 2π^2 * cos(π * p[1]) * cos(π * p[2])
+
+W_sq = gridspace(Ωₕ_sq; ghosts = :boundary)
+C_sq = constrained(W_sq, u -&gt; (
+    :xmin =&gt; ∂ₙ(u) =&gt; (p -&gt; -grad_sq(p)[1]), :xmax =&gt; ∂ₙ(u) =&gt; (p -&gt; grad_sq(p)[1]),
+    :ymin =&gt; ∂ₙ(u) =&gt; (p -&gt; -grad_sq(p)[2]), :ymax =&gt; ∂ₙ(u) =&gt; (p -&gt; grad_sq(p)[2])))
+A_sq, F_sq = assemble(form(C_sq, C_sq, (u, v) -&gt; innerₕ(-Δₕ(u), v)),
+    form(C_sq, v -&gt; innerₕ(f_sq, v)))
+
+@assert norm(A_sq * ones(size(A_sq, 1)), Inf) &lt;= 1e-10 * norm(A_sq, Inf)
+
+ndofs(C_sq), norm(A_sq * ones(size(A_sq, 1)), Inf)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(289, 3.552713678800501e-15)</code></pre>
+</div>
+<p>The matrix has 289 unknowns, one per node, and <span class="md-math md-math-inline">\(A \mathbf{1} = 0\)</span> to rounding. The weight vector is the cell measure, the linear form of the constant function <span class="md-math md-math-inline">\(1\)</span> on the space without ghosts:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">W_plain_sq = gridspace(Ωₕ_sq)
+w_sq = assemble(form(W_plain_sq, v -&gt; innerₕ(x -&gt; 1.0, v)))
+u_sol = pde_solve(A_sq, F_sq; mean_zero = w_sq)
+
+# the defining equations of the bordered system
+λ = sum(F_sq) / sum(w_sq)
+@assert abs(dot(w_sq, u_sol)) &lt;= 1e-12
+@assert norm(A_sq * u_sol - (F_sq - λ * w_sq)) &lt;= 1e-9 * norm(F_sq)
+
+# against the exact solution shifted to discrete mean zero
+u_ex = parent(Rₕ(W_plain_sq, u_sq))
+u_ex .-= dot(w_sq, u_ex) / sum(w_sq)
+err_sq = maximum(abs, u_sol - u_ex)
+@assert err_sq &lt; 2e-2
+
+abs(dot(w_sq, u_sol)), err_sq</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(6.765421556309548e-17, 0.008916806046415426)</code></pre>
+</div>
+<p>The residual of the system is <span class="md-math md-math-inline">\(F - \lambda w\)</span> with <span class="md-math md-math-inline">\(\lambda = \sum F / \sum w\)</span>, because <span class="md-math md-math-inline">\(\mathbf{1}^T A = 0\)</span>. The compatibility of the data holds only to the quadrature error, so <span class="md-math md-math-inline">\(\lambda\)</span> is small, not zero. The error is the discrete difference to the exact solution shifted to the same mean.</p>
+<h4 id="A-kernel-in-the-ghosts" class="md-heading">A kernel in the ghosts<a href="#A-kernel-in-the-ghosts" class="md-heading-anchor" aria-label="Link to this section">#</a></h4>
+<p><code class="md-code-inline">mean_zero</code> fixes the constant of a pure-Neumann problem. A space that keeps its ghosts as unknowns has a second kind of kernel, in the ghosts themselves. The form <code class="md-code-inline">innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)</code> reads the ghost of a corner node only through <code class="md-code-inline">Δₕ</code>, where the two ghosts of a 2D corner enter in one combination, so the matrix assembled on <code class="md-code-inline">gridspace(Ωₕ; ghosts = :boundary)</code> is singular: a vector that is zero at every physical node and nonzero on the ghosts of a corner solves <span class="md-math md-math-inline">\(A z = 0\)</span>. The physical solution is unique, and the ghost values are not. <code class="md-code-inline">Bramble.ghost_kernel(A, Wₕ)</code> returns a sparse basis of that kernel, one column per corner here, found node by node and never as a dense null space. <code class="md-code-inline">pde_solve(A, F; gauge = Z)</code> solves the bordered system <span class="md-math md-math-inline">\([A\ Z; Z^T\ 0]\)</span> and returns the solution with <span class="md-math md-math-inline">\(Z^T u = 0\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ω_rect = domain(interval(0.0, 1.0) × interval(0.0, 2.0))
+Ωₕ_rect = mesh(Ω_rect, (9, 11), (true, true))
+change_points!(Ωₕ_rect, markers(Ω_rect), (collect(range(0.0, 1.0, length = 9) .^ 1.5),
+    2 .* collect(range(0.0, 1.0, length = 11) .^ 1.5)))
+
+W_rect = gridspace(Ωₕ_rect; ghosts = :boundary)
+A_rect = assemble(form(W_rect, W_rect, (u, v) -&gt; innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+Z_rect = Bramble.ghost_kernel(A_rect, W_rect)
+
+n_phys = npoints(Ωₕ_rect)
+@assert size(Z_rect) == (ndofs(W_rect), 4)
+@assert all(&gt;(n_phys), rowvals(Z_rect))
+@assert norm(A_rect * Z_rect, Inf) &lt;= 1e-10 * norm(A_rect, Inf)
+
+size(Z_rect), norm(A_rect * Z_rect, Inf)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((139, 4), 2.1316282072803006e-14)</code></pre>
+</div>
+<p>The kernel has 4 columns, each supported on the two ghosts of a corner, and <code class="md-code-inline">A * Z</code> vanishes to rounding. The physical values come first in the vector of unknowns, then the ghosts. To check the solve, choose a physical vector, set the ghosts to zero, and form the load <code class="md-code-inline">F = A x</code>. The gauged solve returns the physical values of <code class="md-code-inline">x</code>, and the load of a vector shifted by any combination of the kernel columns gives the same answer:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Random
+
+Random.seed!(7)
+x_phys = rand(n_phys)
+x_ghost0 = [x_phys; zeros(ndofs(W_rect) - n_phys)]
+
+u_gauged = pde_solve(A_rect, A_rect * x_ghost0; gauge = Z_rect)
+u_shifted = pde_solve(A_rect, A_rect * (x_ghost0 + Z_rect * [1.0, -2.0, 3.0, 0.5]);
+    gauge = Z_rect)
+
+@assert maximum(abs, u_gauged[1:n_phys] - x_phys) &lt;= 1e-7
+@assert norm(Z_rect&#39; * u_gauged, Inf) &lt;= 1e-10 * norm(u_gauged, Inf)
+@assert maximum(abs, u_shifted - u_gauged) &lt;= 1e-6
+@assert norm(A_rect * u_gauged - A_rect * x_ghost0, Inf) &lt;= 1e-8 * norm(A_rect, Inf)
+
+maximum(abs, u_gauged[1:n_phys] - x_phys), norm(Z_rect&#39; * u_gauged, Inf)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(3.548286109378296e-10, 3.841829816480246e-17)</code></pre>
+</div>
+<p>The physical error is about <span class="md-math md-math-inline">\(10^{-10}\)</span> here and is only as small as the conditioning of <code class="md-code-inline">A</code> away from its kernel allows: these forms are ill conditioned, and the accuracy of the physical part is near <span class="md-math md-math-inline">\(10^{-8}\)</span> relative in general. A form that never reads a ghost leaves each ghost in the kernel as one column. With a single ghosted facet no node carries two ghosts and a form that reads them through <code class="md-code-inline">Δₕ</code> alone has no ghost-only kernel. A kernel vector spread over the ghosts of several nodes, which a form that differences the ghosts along their own facet produces, is not found: <code class="md-code-inline">ghost_kernel</code> returns no column for it, and a gauged solve with such a <code class="md-code-inline">Z</code> still gives the right physical part, while the ghost components it leaves out are arbitrary. With <code class="md-code-inline">mean_zero = w</code> as well, the border is <code class="md-code-inline">[w Z]</code>.</p>
+<h4 id="Checking-that-the-data-are-compatible" class="md-heading">Checking that the data are compatible<a href="#Checking-that-the-data-are-compatible" class="md-heading-anchor" aria-label="Link to this section">#</a></h4>
+<p>The Neumann data of <span class="md-math md-math-inline">\(-\Delta u = f\)</span> must satisfy <span class="md-math md-math-inline">\(\int f = -\oint \partial_\eta u\)</span>. A source off by a constant leaves a system with no solution: the bordered solve returns a <span class="md-math md-math-inline">\(\lambda\)</span> that measures the part of <code class="md-code-inline">F</code> no <code class="md-code-inline">u</code> reaches, and the answer looks plausible. <code class="md-code-inline">Bramble.neumann_compatibility(problem, Ωₕ)</code> checks the data. <code class="md-code-inline">problem</code> is a function of a mesh that returns <code class="md-code-inline">(A, F, w)</code>, the matrix, the load and the weights of the discrete average, because the check builds the problem on <code class="md-code-inline">Ωₕ</code> and on copies of it refined once and twice. For compatible data the removed load is a quadrature error and falls by about four per refinement. For an incompatible datum it tends to a constant, the integral of the discrepancy, and the check logs a warning that reports the relative defects, <span class="md-math md-math-inline">\(\lambda\)</span> and the ratios. Nothing is thrown, and the result is a <code class="md-code-inline">NamedTuple</code> with <code class="md-code-inline">compatible</code>. The problem below is the square from above on a random non-uniform mesh, once as it is and once with the source shifted by <span class="md-math md-math-inline">\(0.2\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Logging
+
+struct WarningLog &lt;: Logging.AbstractLogger
+    messages::Vector{String}
+end
+Logging.min_enabled_level(::WarningLog) = Logging.Warn
+Logging.shouldlog(::WarningLog, args...) = true
+function Logging.handle_message(log::WarningLog, level, message, args...; kwargs...)
+    push!(log.messages, string(message))
+    return nothing
+end
+
+function neumann_problem(shift)
+    return function (Ωₕ)
+        C = constrained(gridspace(Ωₕ; ghosts = :boundary), u -&gt; (
+            :xmin =&gt; ∂ₙ(u) =&gt; (p -&gt; -grad_sq(p)[1]), :xmax =&gt; ∂ₙ(u) =&gt; (p -&gt; grad_sq(p)[1]),
+            :ymin =&gt; ∂ₙ(u) =&gt; (p -&gt; -grad_sq(p)[2]), :ymax =&gt; ∂ₙ(u) =&gt; (p -&gt; grad_sq(p)[2])))
+        A, F = assemble(form(C, C, (u, v) -&gt; innerₕ(-Δₕ(u), v)),
+            form(C, v -&gt; innerₕ(p -&gt; f_sq(p) + shift, v)))
+        w = assemble(form(gridspace(Ωₕ), v -&gt; innerₕ(p -&gt; 1.0, v)))
+        return A, F, w
+    end
+end
+
+Random.seed!(20261016)
+Ωₕ_rand = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 17), (false, false))
+
+function check_compatibility(shift)
+    log = WarningLog(String[])
+    result = Logging.with_logger(log) do
+        Bramble.neumann_compatibility(neumann_problem(shift), Ωₕ_rand)
+    end
+    return result, log.messages
+end
+
+ok, ok_warnings = check_compatibility(0.0)
+bad, bad_warnings = check_compatibility(0.2)
+
+@assert ok.compatible &amp;&amp; isempty(ok_warnings)
+@assert ok.defect &lt; 1e-4
+@assert !bad.compatible &amp;&amp; length(bad_warnings) == 1
+@assert occursin(&quot;incompatible&quot;, only(bad_warnings))
+@assert isapprox(bad.λ, 0.2; atol = 1e-3) &amp;&amp; isapprox(bad.second_ratio, 1.0; atol = 0.1)
+
+(ok.compatible, ok.defect), (bad.compatible, bad.λ, bad.second_ratio)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((true, 7.309780343141524e-6), (false, 0.2000631200513218, 1.0000182239919038))</code></pre>
+</div>
+<p>The compatible problem raises no warning and its relative defect is below <span class="md-math md-math-inline">\(10^{-4}\)</span>. The shifted one warns once. Its <span class="md-math md-math-inline">\(\lambda\)</span> is <span class="md-math md-math-inline">\(0.2\)</span>, the shift, on the mesh and on both refinements, so the ratio of the removed loads is <span class="md-math md-math-inline">\(1\)</span> where a quadrature error would give about <span class="md-math md-math-inline">\(4\)</span>. The mesh <code class="md-code-inline">Ωₕ</code> is not modified, and a mesh that carries markers of its own needs the domain&#39;s <code class="md-code-inline">markers(Ω)</code> as a third argument so that the refinement can evaluate them again.</p>
+<p>The check has limits. A defect on the refined mesh below <code class="md-code-inline">5e-3</code> counts as rounding, so a small incompatibility is not detected. Compatible data with a singular flux at a boundary point, whose quadrature error falls slower than the factor of four, can be reported incompatible. When the defect is above the floor the problem is built on a mesh with 16 times the points of <code class="md-code-inline">Ωₕ</code>.</p>
+<h3 id="Data-per-facet" class="md-heading">Data per facet<a href="#Data-per-facet" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>A scalar datum on <code class="md-code-inline">:boundary</code> gives one value per node. A corner node lies on two facets, though. When the data differ from facet to facet, give each facet its own <code class="md-code-inline">inner_Γ</code> term or, as above, its own relation. A facet&#39;s term carries that facet&#39;s weight, which is a half cell at the corner. With the same function on every facet, the two spellings agree:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">q(p) = 1 + p[1] + 2p[2]
+l_all = assemble(form(W_plain_sq, v -&gt; inner_Γ(q, v; markers = (:boundary,))))
+l_each = assemble(form(W_plain_sq, v -&gt; inner_Γ(q, v; markers = (:xmin,)) +
+    inner_Γ(q, v; markers = (:xmax,)) + inner_Γ(q, v; markers = (:ymin,)) +
+    inner_Γ(q, v; markers = (:ymax,))))
+
+@assert l_all ≈ l_each
+
+norm(l_all - l_each)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0</code></pre>
+</div>
+<p>With different data the corner entry is the sum of the facet terms, each at its own weight:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">data_x(p) = 10.0 + p[2]
+data_y(p) = -3.0 + p[1]
+l_corner = assemble(form(W_plain_sq, v -&gt; inner_Γ(data_x, v; markers = (:xmin,)) +
+    inner_Γ(data_y, v; markers = (:ymin,))))
+
+hx, hy = grid[2] - grid[1], grid[2] - grid[1]
+expected = (hy / 2) * data_x((0.0, 0.0)) + (hx / 2) * data_y((0.0, 0.0))
+@assert l_corner[1] ≈ expected
+
+l_corner[1], expected</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.013671875, 0.013671875)</code></pre>
+</div>
+<p>Ghost spaces are for <code class="md-code-inline">assemble</code>, and for <code class="md-code-inline">semidiscretize</code> and <code class="md-code-inline">ode_problem</code> once <code class="md-code-inline">constrained</code> has eliminated every ghost. <code class="md-code-inline">matrix_free_operator</code>, <code class="md-code-inline">kronecker_operator</code> and the device backends refuse them with an <code class="md-code-inline">ArgumentError</code>, and a composite space cannot hold one.</p>
 <h2 id="Threading" class="md-heading">Threading<a href="#Threading" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Assembly reads the execution policy off the space it is given. A space whose backend says <code class="md-code-inline">Parallel()</code> assembles on several threads, and nothing about the call changes.</p>
 <h2 id="Reference" class="md-heading">Reference<a href="#Reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -456,6 +1123,14 @@ Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -&gt; inner�
           <a class="md-toc-link md-toc-h2" href="#Bilinear-forms-and-the-system-matrix">Bilinear forms and the system matrix</a>
           <a class="md-toc-link md-toc-h2" href="#form_dirichlet">Dirichlet conditions and a Poisson problem</a>
             <a class="md-toc-link md-toc-h3" href="#Boundary-fluxes">Boundary fluxes</a>
+          <a class="md-toc-link md-toc-h2" href="#form_ghost">Neumann and Robin conditions with ghost points</a>
+            <a class="md-toc-link md-toc-h3" href="#Without-ghosts:-the-forms-you-already-have">Without ghosts: the forms you already have</a>
+            <a class="md-toc-link md-toc-h3" href="#Relations-and-constrained">Relations and constrained</a>
+            <a class="md-toc-link md-toc-h3" href="#Dirichlet-conditions-beside-ghost-relations">Dirichlet conditions beside ghost relations</a>
+            <a class="md-toc-link md-toc-h3" href="#Solutions-as-grid-functions:-lift">Solutions as grid functions: lift</a>
+            <a class="md-toc-link md-toc-h3" href="#Data-that-depend-on-time">Data that depend on time</a>
+            <a class="md-toc-link md-toc-h3" href="#Pure-Neumann-and-mean_zero">Pure Neumann and mean_zero</a>
+            <a class="md-toc-link md-toc-h3" href="#Data-per-facet">Data per facet</a>
           <a class="md-toc-link md-toc-h2" href="#Threading">Threading</a>
           <a class="md-toc-link md-toc-h2" href="#Reference">Reference</a>
             <a class="md-toc-link md-toc-h3" href="#Point-sources">Point sources</a>
@@ -479,6 +1154,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=e1a96966"></script>
+  <script src="../../assets/materialdocs.js?v=f4e36772"></script>
 </body>
 </html>

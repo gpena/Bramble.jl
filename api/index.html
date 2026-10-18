@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>API reference — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=6a2fe6bc">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=b473fafb">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="API reference — Bramble.jl">
   <meta property="og:title" content="API reference — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../examples/heat_equation/">Heat equation</a>
+        <a href="../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -96,11 +98,11 @@
 </li>
 <li><p><a href="../api/geometry/">Geometry</a>: sets, intervals, markers and domains, which describe where a problem lives and how its boundary is labelled.</p>
 </li>
-<li><p><a href="../api/meshes/">Meshes</a>: mesh types and constructors, points and spacings, indexing and boundaries, and adaptation.</p>
+<li><p><a href="../api/meshes/">Meshes</a>: mesh types and constructors, points and spacings, indexing and boundaries, adaptation, and ghost meshes.</p>
 </li>
-<li><p><a href="../api/spaces/">Grid spaces</a>: function spaces on a mesh, their degrees of freedom, grid functions, restriction and averaging, and interpolation between spaces.</p>
+<li><p><a href="../api/spaces/">Grid spaces</a>: function spaces on a mesh, their degrees of freedom, grid functions, restriction and averaging, interpolation between spaces, and spaces with ghost points and boundary relations.</p>
 </li>
-<li><p><a href="../api/operators/">Difference, jump and average operators</a>: the discrete derivatives and related operators that act on grid functions.</p>
+<li><p><a href="../api/operators/">Difference, jump and average operators</a>: the discrete derivatives and related operators that act on grid functions, and the normal derivatives of a facet.</p>
 </li>
 <li><p><a href="../api/inner_products/">Inner products and norms</a>: discrete inner products and the norms built from them.</p>
 </li>
@@ -126,6 +128,6 @@
   <script>hljs.highlightAll();</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=6a2fe6bc"></script>
+  <script src="../assets/materialdocs.js?v=b473fafb"></script>
 </body>
 </html>

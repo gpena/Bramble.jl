@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Difference, jump and average operators — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=788b11d2">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=4e9cd040">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Difference, jump and average operators — Bramble.jl">
   <meta property="og:title" content="Difference, jump and average operators — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
@@ -90,7 +92,7 @@
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/operators.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="tutorial_operators" class="md-heading">Difference, jump and average operators<a href="#tutorial_operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<p><strong>What you will learn.</strong> How to apply a difference, a jump or an average to a discrete function, what each does at the edge of the grid, and how to get the same operator as a matrix.</p>
+<p><strong>What you will learn.</strong> How to apply a difference, a jump or an average to a discrete function, what each does at the edge of the grid, and how to get the same operator as a matrix, and how the normal derivative and the Laplacian read ghost points.</p>
 <p><strong>What you need first.</strong> The <a href="../../tutorials/mesh/#tutorial_mesh">mesh tutorial</a> and the <a href="../../tutorials/space/#tutorial_space">space tutorial</a>, for meshes, grid spaces and discrete functions.</p>
 <p><strong>Where next.</strong> The <a href="../../tutorials/form/">form tutorial</a> assembles these operators into linear systems.</p>
 <p>Every block below runs when this page is built.</p>
@@ -380,6 +382,242 @@ parent(∇ₕ ⋅ uv) == parent(divₕ(uv)), parent(∇ₕ × uv) == parent(curl
 </div>
 <p>The next page, the <a href="../../tutorials/form/">form tutorial</a>, assembles these operators into linear systems.</p>
 <hr class="md-hr">
+<h2 id="operators_ghost" class="md-heading">Operators at a ghost boundary<a href="#operators_ghost" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A difference at the first point has no neighbour, so it is truncated. A second-order Neumann or Robin condition needs that neighbour, and a <a href="../../tutorials/space/#space_ghost">ghost space</a> supplies it. This section reads the operators on a ghost space through the matrices of forms, which the <a href="../../tutorials/form/">form tutorial</a> introduces: <code class="md-code-inline">form(Wₕ, Wₕ, (u, v) -&gt; ...)</code> takes the unknown <code class="md-code-inline">u</code> and a test function <code class="md-code-inline">v</code> symbolically, and <code class="md-code-inline">assemble</code> returns the matrix. The running example is a graded interval with six points and ghosts on both ends. Its degrees of freedom are the six nodes, then the <code class="md-code-inline">xmin</code> ghost (7), then the <code class="md-code-inline">xmax</code> ghost (8):</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">import Bramble: change_points!, Dcₓ, Dcᵧ, D₋ₓ, D̃ₓ, D̃ᵧ, D₋ᵧ
+using LinearAlgebra: norm
+
+Ω₁ = mesh(domain(interval(0.0, 1.0)), 6)
+change_points!(Ω₁, collect(range(0.0, 1.0, length = 6) .^ 2))
+W₁ = gridspace(Ω₁; ghosts = :boundary)
+
+x₁ = collect(points(Ω₁))
+h₂, hₙ = x₁[2] - x₁[1], x₁[6] - x₁[5]       # the spacings the ghosts copy
+row(f, i) = Matrix(assemble(form(W₁, W₁, f)))[i, :]
+
+ndofs(W₁), h₂, hₙ</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(8, 0.04000000000000001, 0.3599999999999999)</code></pre>
+</div>
+<h3 id="How-differences-read-the-ghost" class="md-heading">How differences read the ghost<a href="#How-differences-read-the-ghost" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>At a ghosted facet the stencil of every operator reads the ghost as if it were a neighbour, with the boundary spacing repeated beyond it: <span class="md-math md-math-inline">\(h_1 := h_2\)</span> at the first point and <span class="md-math md-math-inline">\(h_{n+1} := h_n\)</span> at the last. In 1D an <code class="md-code-inline">inner_Γ</code> term has weight <span class="md-math md-math-inline">\(1\)</span> at the facet node, so its row is the stencil itself. The backward difference at the first node is <span class="md-math md-math-inline">\((u_1 - u_0)/h_2\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">r = row((u, v) -&gt; inner_Γ(D₋ₓ(u), v; markers = (:xmin,)), 1)
+
+@assert r[[1, 7]] ≈ [1 / h₂, -1 / h₂] &amp;&amp; count(!iszero, r) == 2
+
+r</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">8-element Vector{Float64}:
+  24.999999999999996
+   0.0
+   0.0
+   0.0
+   0.0
+   0.0
+ -24.999999999999996
+   0.0</code></pre>
+</div>
+<p>Entry 1 is the node, entry 7 the ghost, and no other point is read. A facet without ghosts is truncated as in the first sections of this page. With a ghost on <code class="md-code-inline">xmin</code> only, the centred difference of a volume term is zero at the last node and reads the ghost at the first:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">W_left = gridspace(Ω₁; ghosts = (:xmin,))
+A_dc = Matrix(assemble(form(W_left, W_left, (u, v) -&gt; innerₕ(Dcₓ(u), v))))
+
+@assert all(iszero, A_dc[6, :])             # truncated at xmax, as without ghosts
+@assert !iszero(A_dc[1, 7])                 # reads the xmin ghost (degree of freedom 7)
+
+A_dc[1, :], A_dc[6, :]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.25, 0.0, 0.0, 0.0, 0.0, -0.25], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])</code></pre>
+</div>
+<p>A boundary term that needs a point beyond a facet without ghosts is refused rather than truncated: <code class="md-code-inline">inner_Γ(Dcₓ(u), v; markers = (:xmax,))</code> on this space throws an <code class="md-code-inline">ArgumentError</code> that asks for ghosts on that facet.</p>
+<h3 id="The-normal-derivative-and-the-facet-operators" class="md-heading">The normal derivative and the facet operators<a href="#The-normal-derivative-and-the-facet-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>Three operators serve the boundary conditions that name a normal direction. They act at the nodes of a facet with outward normal <span class="md-math md-math-inline">\(\eta\)</span>, and they are only meaningful inside <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a> or a <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> relation: they are not grid functions.</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:left">Operator</th>
+<th style="text-align:left">Meaning at a facet node, axis <span class="md-math md-math-inline">\(d\)</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">∂ₙ(u)</code></td>
+<td style="text-align:left"><span class="md-math md-math-inline">\(\eta\, D_{c,d} u\)</span>: the centred difference reading the ghost, times the outward sign</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">∂ₙₙ(u)</code></td>
+<td style="text-align:left"><span class="md-math md-math-inline">\(\tilde D_d D_{-d}\, u\)</span>: the second difference along the normal, reading the ghost</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">jumpₙ(w)</code></td>
+<td style="text-align:left"><span class="md-math md-math-inline">\(w_{I - \eta e_d} - w_I\)</span>: the inward jump, which reads no ghost</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>On the six-point mesh the stencils are explicit, at both ends:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">r∂ₙ_min = row((u, v) -&gt; inner_Γ(∂ₙ(u), v; markers = (:xmin,)), 1)
+r∂ₙ_max = row((u, v) -&gt; inner_Γ(∂ₙ(u), v; markers = (:xmax,)), 6)
+
+@assert r∂ₙ_min[[2, 7]] ≈ [-1 / (2h₂), 1 / (2h₂)]     # -(u₂ - u₀) / (2h₂)
+@assert r∂ₙ_max[[5, 8]] ≈ [-1 / (2hₙ), 1 / (2hₙ)]     # (u₇ - u₅) / (2hₙ)
+
+r∂ₙ_min, r∂ₙ_max</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, -12.499999999999998, 0.0, 0.0, 0.0, 0.0, 12.499999999999998, 0.0], [0.0, 0.0, 0.0, 0.0, -1.3888888888888893, 0.0, 0.0, 1.3888888888888893])</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">r∂ₙₙ_min = row((u, v) -&gt; inner_Γ(∂ₙₙ(u), v; markers = (:xmin,)), 1)
+r∂ₙₙ_max = row((u, v) -&gt; inner_Γ(∂ₙₙ(u), v; markers = (:xmax,)), 6)
+rjump_min = row((u, v) -&gt; inner_Γ(jumpₙ(u), v; markers = (:xmin,)), 1)
+rjump_max = row((u, v) -&gt; inner_Γ(jumpₙ(u), v; markers = (:xmax,)), 6)
+
+@assert r∂ₙₙ_min[[1, 2, 7]] ≈ [-2, 1, 1] ./ h₂^2      # (u₂ - 2u₁ + u₀) / h₂²
+@assert r∂ₙₙ_max[[5, 6, 8]] ≈ [1, -2, 1] ./ hₙ^2      # (u₅ - 2u₆ + u₇) / hₙ²
+@assert rjump_min[[1, 2]] == [-1.0, 1.0] &amp;&amp; rjump_min[[7, 8]] == [0.0, 0.0]
+@assert rjump_max[[5, 6]] == [1.0, -1.0] &amp;&amp; rjump_max[[7, 8]] == [0.0, 0.0]
+
+r∂ₙₙ_min, rjump_max</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([-1249.9999999999995, 624.9999999999998, 0.0, 0.0, 0.0, 0.0, 624.9999999999998, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0, -1.0, 0.0, 0.0])</code></pre>
+</div>
+<p>The jump is the inward one at both ends, <span class="md-math md-math-inline">\(u_2 - u_1\)</span> at the left and <span class="md-math md-math-inline">\(u_{n-1} - u_n\)</span> at the right, which is why it needs no ghost of its own. The plain forward <code class="md-code-inline">jumpₓ</code> would read across the ghost cell at the right end. A facet operator takes scalars and sums, so <code class="md-code-inline">α * u + β * ∂ₙ(u)</code> is the Robin combination. It is not a grid function: <code class="md-code-inline">jumpₙ(∂ₙ(u))</code> and a function coefficient times a facet operator are errors, and the function belongs in the data of <code class="md-code-inline">inner_Γ</code> or of a relation.</p>
+<p>A facet whose ghosts are missing is refused when the form is built, never read as zero:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">try
+    form(W_left, W_left, (u, v) -&gt; inner_Γ(∂ₙ(u), v; markers = (:xmax,)))
+catch e
+    @assert e isa ArgumentError
+    first(split(sprint(showerror, e), &quot;. &quot;))
+end</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;ArgumentError: ∂ₙ and ∂ₙₙ read the ghost beyond each facet they are integrated on, and the facet :xmax carries no ghosts on this space&quot;</code></pre>
+</div>
+<h3 id="One-value-per-incident-facet" class="md-heading">One value per incident facet<a href="#One-value-per-incident-facet" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>A corner lies on two facets. A node there has two normal derivatives, one per facet. Inside <code class="md-code-inline">inner_Γ</code>, a facet operator expands into one product per facet, each with its own facet weight and its own ghost; <code class="md-code-inline">markers</code> chooses the facets. Take the corner node of the non-uniform grid of the <a href="../../tutorials/space/#space_ghost">space tutorial</a>, degree of freedom 1. The <code class="md-code-inline">xmin</code> ghost of its row is degree of freedom 13 and the <code class="md-code-inline">ymin</code> ghost of its column is 19:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ω_c = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+Ωₕ_c = mesh(Ω_c, (4, 3), (true, true))
+change_points!(Ωₕ_c, markers(Ω_c), ([0.0, 0.2, 0.6, 1.0], [0.0, 0.5, 1.0]))
+W_c = gridspace(Ωₕ_c; ghosts = :boundary)
+
+row_c(f) = Matrix(assemble(form(W_c, W_c, f)))[1, :]
+r_x = row_c((u, v) -&gt; inner_Γ(∂ₙ(u), v; markers = (:xmin,)))
+r_y = row_c((u, v) -&gt; inner_Γ(∂ₙ(u), v; markers = (:ymin,)))
+r_xy = row_c((u, v) -&gt; inner_Γ(∂ₙ(u), v; markers = (:xmin, :ymin)))
+
+@assert r_x[13] != 0 &amp;&amp; r_x[19] == 0         # the xmin term reads only the xmin ghost
+@assert r_y[19] != 0 &amp;&amp; r_y[13] == 0
+@assert r_xy ≈ r_x + r_y
+
+r_x[13], r_y[19]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.625, 0.1)</code></pre>
+</div>
+<p>The two entries differ, <span class="md-math md-math-inline">\(0.625\)</span> and <span class="md-math md-math-inline">\(0.1\)</span>, because each facet term carries its facet&#39;s weight, and at the corner that weight is a half cell. A coefficient per facet is a sum over <code class="md-code-inline">markers</code>, one <code class="md-code-inline">inner_Γ</code> per facet, and the corner row follows:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">r_c = row_c((u, v) -&gt; inner_Γ(2.0 * ∂ₙ(u), v; markers = (:xmin,)) +
+                      inner_Γ(5.0 * ∂ₙ(u), v; markers = (:ymin,)))
+
+@assert r_c ≈ 2.0 * r_x + 5.0 * r_y
+
+r_c[13], r_c[19]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.25, 0.5)</code></pre>
+</div>
+<p>The same holds for <code class="md-code-inline">∂ₙₙ</code> and <code class="md-code-inline">jumpₙ</code>. The conormal derivative of a constant tensor <span class="md-math md-math-inline">\(K\)</span>, <code class="md-code-inline">∂ₙ(u; K = K)</code>, is <span class="md-math md-math-inline">\(\eta_F\,(K\, D_c u)\)</span> per facet. With a mixed entry <span class="md-math md-math-inline">\(K_{12}\)</span> the <code class="md-code-inline">xmin</code> term also differences along <span class="md-math md-math-inline">\(y\)</span>, so at the corner it reads the <code class="md-code-inline">ymin</code> ghost too:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">K = [1.0 0.5; 0.5 2.0]
+r_K = row_c((u, v) -&gt; inner_Γ(∂ₙ(u; K = K), v; markers = (:xmin,)))
+
+@assert r_K[19] != 0 &amp;&amp; r_K[13] != 0
+
+r_K[13], r_K[19]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.625, 0.125)</code></pre>
+</div>
+<p>Two relations that couple two ghosts at a corner are what <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> solves as a <span class="md-math md-math-inline">\(2 \times 2\)</span> block. A conormal term is refused where the ghosts of the neighbouring facet at the corner are missing, and <span class="md-math md-math-inline">\(K\)</span> must be a constant matrix of numbers.</p>
+<h3 id="The-Laplacian-inside-a-form" class="md-heading">The Laplacian inside a form<a href="#The-Laplacian-inside-a-form" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>On trial and test functions, <a href="../../api/operators/#Bramble.Δₕ"><code class="md-code-inline">Δₕ</code></a> is one operator: the sum over the axes of the second difference <span class="md-math md-math-inline">\(\tilde D_d D_{-d}\)</span>. It assembles to the matrix of the spelled-out sum, on a space without ghosts and on a ghost space:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">W_p = gridspace(Ωₕ_c)
+lap(W) = assemble(form(W, W, (u, v) -&gt; innerₕ(Δₕ(u), v)))
+spelled(W) = assemble(form(W, W, (u, v) -&gt; innerₕ(D̃ₓ(D₋ₓ(u)) + D̃ᵧ(D₋ᵧ(u)), v)))
+
+@assert norm(lap(W_p) - spelled(W_p)) &lt;= 1e-13 * norm(lap(W_p))
+@assert norm(lap(W_c) - spelled(W_c)) &lt;= 1e-13 * norm(lap(W_c))
+@assert norm(lap(W_c)) &gt; 0
+
+norm(lap(W_c) - spelled(W_c)) / norm(lap(W_c))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1.3225930849381489e-16</code></pre>
+</div>
+<p><code class="md-code-inline">Δₕ</code> is cheaper to build than the nested pair, because the form compiles one three-point stencil per axis. At a facet node on a ghost space it is the ordinary three-point stencil with the ghost as a neighbour. On <code class="md-code-inline">W₁</code>, the row of the first node is the cell weight times <span class="md-math md-math-inline">\((u_2 - 2u_1 + u_0)/h_2^2\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">r_lap = row((u, v) -&gt; innerₕ(Δₕ(u), v), 1)
+ĥ₁ = h₂ / 2
+
+@assert r_lap[[1, 2, 7]] ≈ ĥ₁ .* [-2, 1, 1] ./ h₂^2
+
+r_lap</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">8-element Vector{Float64}:
+ -24.999999999999996
+  12.499999999999998
+   0.0
+   0.0
+   0.0
+   0.0
+  12.499999999999998
+   0.0</code></pre>
+</div>
+<p>It nests with the other operators, <code class="md-code-inline">jumpₓ(Δₕ(u))</code> or <code class="md-code-inline">Dcₓ(Δₕ(u))</code>, and with itself.</p>
+<h3 id="Mixed-differences-at-a-corner" class="md-heading">Mixed differences at a corner<a href="#Mixed-differences-at-a-corner" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>The mixed difference <span class="md-math md-math-inline">\(D_{c,x} D_{c,y}\)</span> at a corner node would read the padded corner point, which is absent. On a ghost space the stencil there is the inward one-sided difference along both axes, which is second order and reads only nodes. At the corner node of the grid above, with <span class="md-math md-math-inline">\(h_x = 0.2\)</span> and <span class="md-math md-math-inline">\(h_y = 0.5\)</span>, the row is the cell weight <span class="md-math md-math-inline">\(h_x h_y / 4\)</span> over <span class="md-math md-math-inline">\(h_x h_y\)</span> times <span class="md-math md-math-inline">\(+1, -1, -1, +1\)</span> on the nodes <span class="md-math md-math-inline">\((1,1), (2,1), (1,2), (2,2)\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">r_mixed = row_c((u, v) -&gt; innerₕ(Dcₓ(Dcᵧ(u)), v))
+
+@assert r_mixed[[1, 2, 5, 6]] ≈ 0.25 .* [1, -1, -1, 1]
+@assert count(!iszero, r_mixed) == 4
+
+r_mixed[[1, 2, 5, 6]]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4-element Vector{Float64}:
+  0.25
+ -0.25
+ -0.25
+  0.25</code></pre>
+</div>
+<p>Every other mixed difference that would read an absent point is refused with an <code class="md-code-inline">ArgumentError</code>. Nested mixed differences on a ghost space are assembled as forms, as here. The runtime operators of the sections above are eager: <code class="md-code-inline">Dcᵧ(uₕ)</code> returns a finished grid function before <code class="md-code-inline">Dcₓ</code> sees it, so on a lifted grid function the composition at the ghosts next to a corner is not claimed to equal the form.</p>
+<hr class="md-hr">
 <h2 id="Reference" class="md-heading">Reference<a href="#Reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <h3 id="operators_names" class="md-heading">How the names are built<a href="#operators_names" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>A name is a stem, a direction, and a coordinate:</p>
@@ -544,6 +782,12 @@ parent(dx(vₕ)) == parent(∇ₕ(vₕ)[1]), parent(∇ₕ[:x](vₕ)) == parent(
           <a class="md-toc-link md-toc-h2" href="#What-happens-at-the-boundary">What happens at the boundary</a>
           <a class="md-toc-link md-toc-h2" href="#Operators-as-matrices">Operators as matrices</a>
           <a class="md-toc-link md-toc-h2" href="#Gradients-in-two-dimensions">Gradients in two dimensions</a>
+          <a class="md-toc-link md-toc-h2" href="#operators_ghost">Operators at a ghost boundary</a>
+            <a class="md-toc-link md-toc-h3" href="#How-differences-read-the-ghost">How differences read the ghost</a>
+            <a class="md-toc-link md-toc-h3" href="#The-normal-derivative-and-the-facet-operators">The normal derivative and the facet operators</a>
+            <a class="md-toc-link md-toc-h3" href="#One-value-per-incident-facet">One value per incident facet</a>
+            <a class="md-toc-link md-toc-h3" href="#The-Laplacian-inside-a-form">The Laplacian inside a form</a>
+            <a class="md-toc-link md-toc-h3" href="#Mixed-differences-at-a-corner">Mixed differences at a corner</a>
           <a class="md-toc-link md-toc-h2" href="#Reference">Reference</a>
             <a class="md-toc-link md-toc-h3" href="#operators_names">How the names are built</a>
             <a class="md-toc-link md-toc-h3" href="#Four-differences-compared">Four differences compared</a>
@@ -566,6 +810,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=788b11d2"></script>
+  <script src="../../assets/materialdocs.js?v=4e9cd040"></script>
 </body>
 </html>

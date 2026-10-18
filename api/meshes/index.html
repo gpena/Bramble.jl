@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Meshes — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=820f8ed7">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=c445798a">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Meshes — Bramble.jl">
   <meta property="og:title" content="Meshes — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -604,6 +606,32 @@ is_boundary_index(Ωₕ::AbstractMeshType, idx) -&gt; Bool</code></pre>
 <p>Bumps <code class="md-code-inline">Ωₕ</code>&#39;s mesh version (gpena/Bramble.jl#221): every <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a> already built on <code class="md-code-inline">Ωₕ</code> – via <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a>, directly or as a leaf of a <a href="../../api/spaces/#Bramble.CompositeGridSpace"><code class="md-code-inline">CompositeGridSpace</code></a> – keeps its own weights, precomputed from the mesh <em>before</em> this call. Its <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">inner₊*</code>/norms now throw naming the mismatch instead of silently computing against stale weights; call <code class="md-code-inline">gridspace(Ωₕ)</code> again for a space that reads the mutated mesh. This is also what <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a> goes through, so the same applies to it.</p>
 </div>
 </div>
+<h2 id="Ghost-meshes" class="md-heading">Ghost meshes<a href="#Ghost-meshes" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">GhostMesh</code> is <code class="md-code-inline">public</code>, not exported: write <code class="md-code-inline">Bramble.GhostMesh</code>. A space built with <code class="md-code-inline">ghosts</code> holds one; see <a href="../../api/spaces/">Grid spaces</a>.</p>
+<div class="md-docstring" id="Bramble.GhostMesh">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.GhostMesh</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/ghost_mesh.jl#L22-L53" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">GhostMesh{D, M, P, CI} &lt;: AbstractMeshType{D}</code></pre>
+</div>
+<p>A physical mesh with one ghost point beyond each node of the facets it names.</p>
+<p><a href="../../api/meshes/#Bramble.GhostMesh"><code class="md-code-inline">GhostMesh</code></a><code class="md-code-inline">(Ωₕ; ghosts = :boundary)</code> pads <code class="md-code-inline">Ωₕ</code> on every boundary facet, <code class="md-code-inline">ghosts = (:xmin, :ymax)</code> only on the named ones (canonical names or their aliases), <code class="md-code-inline">ghosts = ()</code> on none. The ghost beyond node <code class="md-code-inline">x₁</code> sits at <code class="md-code-inline">x₁ - h₂</code> and the one beyond <code class="md-code-inline">xₙ</code> at <code class="md-code-inline">xₙ + hₙ</code>, read from the physical mesh&#39;s points whenever they are asked for, so the mesh follows <code class="md-code-inline">change_points!</code> of <code class="md-code-inline">Ωₕ</code>.</p>
+<p>Its points, spacings and indices are those of the padded mesh, <code class="md-code-inline">npoints(G, Tuple)</code> the padded sizes and <code class="md-code-inline">G(i)</code> the padded axis submesh; the labels and facet queries (<code class="md-code-inline">boundary_indices</code>, <code class="md-code-inline">index_in_marker</code>, the surface weights) name the physical nodes. The ghosts are numbered <code class="md-code-inline">1:nghosts(G)</code>: facets in the order <code class="md-code-inline">xmin, xmax, ymin, ymax, zmin, zmax</code> (named ones only), each facet&#39;s ghosts in the column-major order of its nodes. A padded point outside along two or more axes is absent (<code class="md-code-inline">Bramble.is_absent</code>) and has no ghost number. <code class="md-code-inline">Bramble.ghost_index</code> and <code class="md-code-inline">Bramble.boundary_node</code> map in <code class="md-code-inline">O(1)</code> between a facet node and its ghost.</p>
+<p>After <code class="md-code-inline">iterative_refinement!</code> of <code class="md-code-inline">Ωₕ</code> the ghost mesh is stale and every access throws an <code class="md-code-inline">ArgumentError</code>: build a new one.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 7), (false, true))
+G = Bramble.GhostMesh(Ωₕ; ghosts = :boundary)
+npoints(G, Tuple)            # (7, 9)
+Bramble.nghosts(G)           # 24</code></pre>
+</div>
+</div>
+</div>
       </article>
       <footer class="md-footer">
 <p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
@@ -617,6 +645,7 @@ is_boundary_index(Ωₕ::AbstractMeshType, idx) -&gt; Bool</code></pre>
           <a class="md-toc-link md-toc-h2" href="#Mesh-indexing-and-boundaries">Mesh indexing and boundaries</a>
           <a class="md-toc-link md-toc-h2" href="#Immutable-mesh-state">Immutable mesh state</a>
           <a class="md-toc-link md-toc-h2" href="#Mesh-adaptation-and-mutation">Mesh adaptation and mutation</a>
+          <a class="md-toc-link md-toc-h2" href="#Ghost-meshes">Ghost meshes</a>
       </div>
     </aside>
   </div>
@@ -634,6 +663,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=820f8ed7"></script>
+  <script src="../../assets/materialdocs.js?v=c445798a"></script>
 </body>
 </html>

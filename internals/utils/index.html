@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Utilities — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=8aa04e60">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=25efd514">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Utilities — Bramble.jl">
   <meta property="og:title" content="Utilities — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -94,7 +96,7 @@
 <div class="md-docstring" id="Base.eltype-Union{Tuple{Bramble.Backend{VT, MT, EP}}, Tuple{EP}, Tuple{MT}, Tuple{VT}} where {VT, MT, EP}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.eltype</code> — <span class="md-docstring-sig">Union{Tuple{Bramble.Backend{VT, MT, EP}}, Tuple{EP}, Tuple{MT}, Tuple{VT}} where {VT, MT, EP}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L704-L709" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L670-L675" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -108,7 +110,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble._gpu_functional-Tuple{Val}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._gpu_functional</code> — <span class="md-docstring-sig">Tuple{Val}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L807-L825" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L772-L790" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -116,7 +118,7 @@ eltype(::Type{&lt;:Backend{VT}}) -&gt; Type</code></pre>
 <pre><code class="language-julia">_gpu_functional(::Val{name}) -&gt; Bool</code></pre>
 </div>
 <p>Whether the GPU extension named by <code class="md-code-inline">name</code> (a <code class="md-code-inline">Symbol</code>, e.g. <code class="md-code-inline">:metal</code>) has a functional device, not merely that the corresponding package loaded.</p>
-<p>Defaults to <code class="md-code-inline">false</code> for every name: loading a GPU package extension (<code class="md-code-inline">using Metal</code>, and in future <code class="md-code-inline">using CUDA</code>/<code class="md-code-inline">using AMDGPU</code>) succeeds on any platform, whether or not that host actually has the accelerator&#39;s hardware and drivers – it degrades gracefully rather than erroring. <code class="md-code-inline">ext/BrambleMetalExt.jl</code> overrides this for <code class="md-code-inline">Val(:metal)</code> with <code class="md-code-inline">Metal.functional()</code>, the one call that actually probes the device (gpena/Bramble.jl#192). <a href="../../api/utilities/#Bramble.gpu_backend"><code class="md-code-inline">gpu_backend</code></a> requires both this and the extension being loaded.</p>
+<p>Defaults to <code class="md-code-inline">false</code> for every name: loading a GPU package extension (<code class="md-code-inline">using Metal</code>, and in future <code class="md-code-inline">using CUDA</code>/<code class="md-code-inline">using AMDGPU</code>) succeeds on any platform, whether or not that host actually has the accelerator&#39;s hardware and drivers – it degrades gracefully rather than erroring. <code class="md-code-inline">ext/BrambleMetalExt.jl</code> overrides this for <code class="md-code-inline">Val(:metal)</code> with <code class="md-code-inline">Metal.functional()</code>, the one call that actually probes the device. <a href="../../api/utilities/#Bramble.gpu_backend"><code class="md-code-inline">gpu_backend</code></a> requires both this and the extension being loaded.</p>
 <p>It is declared with the generic <code class="md-code-inline">::Val</code> signature (rather than <code class="md-code-inline">::Val{:metal}</code> itself) so that <code class="md-code-inline">BrambleMetalExt</code>&#39;s own <code class="md-code-inline">Val(:metal)</code> method is strictly more specific than this stub – otherwise the extension&#39;s method would silently overwrite this one instead of adding to it, which precompilation reports as method overwriting.</p>
 </div>
 </div>
@@ -792,7 +794,7 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <div class="md-docstring" id="Bramble._batch_rebuild-Tuple{Any, Tuple}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_rebuild</code> — <span class="md-docstring-sig">Tuple{Any, Tuple}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/batch_split.jl#L245-L259" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/batch_split.jl#L252-L266" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -810,7 +812,7 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <div class="md-docstring" id="Bramble._batch_split-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_split</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/batch_split.jl#L96-L119" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/batch_split.jl#L103-L126" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -822,7 +824,7 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <ul class="md-list-tight">
 <li><p>an <code class="md-code-inline">Array</code> of an isbits element type becomes a slot of <code class="md-code-inline">arrays</code>;</p>
 </li>
-<li><p>a mutable mesh is replaced by its walk state <a href="../../internals/mesh/#Bramble._walk_mesh-Tuple{Bramble.Mesh1D}"><code class="md-code-inline">_walk_mesh</code></a>, which is split in turn;</p>
+<li><p>a mutable mesh is replaced by its walk state <a href="../../internals/mesh/#Bramble._walk_mesh-Tuple{Bramble.Mesh1D}"><code class="md-code-inline">_walk_mesh</code></a>, which is split in turn (a <a href="../../api/meshes/#Bramble.GhostMesh"><code class="md-code-inline">GhostMesh</code></a> by its <code class="md-code-inline">GhostMeshState</code>);</p>
 </li>
 <li><p>a <code class="md-code-inline">Base.RefValue</code> of an isbits value is replaced by that value, read once at split time on the host: a <code class="md-code-inline">Ref</code> coefficient is read per call at launch, not per point;</p>
 </li>
@@ -839,7 +841,7 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <div class="md-docstring" id="Bramble._batch_splittable-Union{Tuple{Type{T}}, Tuple{T}} where T">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_splittable</code> — <span class="md-docstring-sig">Union{Tuple{Type{T}}, Tuple{T}} where T</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/batch_split.jl#L207-L218" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/batch_split.jl#L214-L225" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -917,6 +919,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=8aa04e60"></script>
+  <script src="../../assets/materialdocs.js?v=25efd514"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mesh — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3c74630c">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=157356e8">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Mesh — Bramble.jl">
   <meta property="og:title" content="Mesh — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -90,6 +92,11 @@
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/internals/mesh.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Mesh" class="md-heading">Mesh<a href="#Mesh" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
+<h2 id="Ghost-meshes" class="md-heading">Ghost meshes<a href="#Ghost-meshes" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A <a href="../../api/meshes/#Bramble.GhostMesh"><code class="md-code-inline">GhostMesh</code></a> is a physical mesh together with one ghost point beyond each node of the facets it names. It wraps two meshes: the physical one, and a padded one of the same kind (<code class="md-code-inline">Mesh1D</code> or <code class="md-code-inline">MeshnD</code>) with one extra point at each named facet end, at <span class="md-math md-math-inline">\(x_1 - h_2\)</span> below and <span class="md-math md-math-inline">\(x_n + h_n\)</span> above, the values <code class="md-code-inline">spacing(Ωₕ, 2)</code> and <code class="md-code-inline">forward_spacing(Ωₕ, n)</code> already hold. The padded mesh is a real mesh with submeshes of its own, so every operator family and the assembly walk read the ghosts with no change.</p>
+<p>The wrapper forwards the accessors to the padded mesh: points, spacings and indices are the padded ones, <code class="md-code-inline">npoints(G, Tuple)</code> is the padded size and <code class="md-code-inline">G(i)</code> the padded axis submesh. It overrides the queries that depend on where the faces are, so that a facet means the physical facet nodes: <code class="md-code-inline">boundary_indices</code>, <code class="md-code-inline">index_in_marker</code>, the surface weights and masks, and the geometric markers. A facet label (<code class="md-code-inline">:xmin</code>, <code class="md-code-inline">:boundary</code>, an alias, or a label of the physical mesh) is an index-derived stored marker on those nodes, never a predicate of position, so the labels survive <code class="md-code-inline">change_points!</code> and the mesh type carries no function.</p>
+<p>A ghost has a number among <code class="md-code-inline">1:nghosts(G)</code>: the named facets in the order <code class="md-code-inline">xmin, xmax, ymin, ymax, zmin, zmax</code>, each facet&#39;s ghosts in the column-major order of its nodes. <code class="md-code-inline">ghost_index</code> and <code class="md-code-inline">boundary_node</code> convert between a facet node and its ghost number in <code class="md-code-inline">O(1)</code>. A padded point outside along two or more axes (a 2D corner, a 3D edge or corner) is absent: it is not a node, has no ghost number and is never a degree of freedom, and <code class="md-code-inline">is_absent</code> tells it.</p>
+<p>The padded points follow <code class="md-code-inline">change_points!</code> of the physical mesh through the version stamp of its submeshes, and are recomputed on the access that finds them stale. <code class="md-code-inline">iterative_refinement!</code> of the physical mesh changes the point count, which a ghost mesh cannot follow: every later access throws an <code class="md-code-inline">ArgumentError</code>, and a new space is needed. <code class="md-code-inline">gridspace</code> of a <code class="md-code-inline">GhostMesh</code> is refused, because it would weigh the ghost and absent points as nodes: a space with ghosts is built from the physical mesh with <code class="md-code-inline">gridspace(Ωₕ; ghosts)</code> (see <a href="../../internals/space/">Spaces</a>).</p>
 <div class="md-docstring" id="Bramble.AbstractMeshType">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.AbstractMeshType</code></h4>
@@ -307,7 +314,7 @@ Base.size(Ωₕ::AbstractMeshType, d::Integer) -&gt; Int</code></pre>
 <div class="md-docstring" id="Bramble._check_surface_is_thin-Union{Tuple{D}, Tuple{Bramble.AbstractMeshType{D}, Any}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._check_surface_is_thin</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.AbstractMeshType{D}, Any}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/queries.jl#L552-L561" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/queries.jl#L531-L540" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -321,7 +328,7 @@ Base.size(Ωₕ::AbstractMeshType, d::Integer) -&gt; Int</code></pre>
 <div class="md-docstring" id="Bramble._face_mask-Union{Tuple{N}, Tuple{D}, Tuple{Val{D}, NTuple{N, Symbol}}} where {D, N}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._face_mask</code> — <span class="md-docstring-sig">Union{Tuple{N}, Tuple{D}, Tuple{Val{D}, NTuple{N, Symbol}}} where {D, N}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/queries.jl#L405-L412" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/queries.jl#L384-L391" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -335,7 +342,7 @@ Base.size(Ωₕ::AbstractMeshType, d::Integer) -&gt; Int</code></pre>
 <div class="md-docstring" id="Bramble._marked_face_mask-Union{Tuple{D}, Tuple{Bramble.AbstractMeshType{D}, Any}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._marked_face_mask</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.AbstractMeshType{D}, Any}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/queries.jl#L431-L443" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/queries.jl#L410-L422" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -349,7 +356,7 @@ Base.size(Ωₕ::AbstractMeshType, d::Integer) -&gt; Int</code></pre>
 <div class="md-docstring" id="Bramble._surface_mask-Union{Tuple{N}, Tuple{D}, Tuple{Bramble.AbstractMeshType{D}, NTuple{N, Symbol}}, Tuple{Bramble.AbstractMeshType{D}, NTuple{N, Symbol}, String}} where {D, N}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._surface_mask</code> — <span class="md-docstring-sig">Union{Tuple{N}, Tuple{D}, Tuple{Bramble.AbstractMeshType{D}, NTuple{N, Symbol}}, Tuple{Bramble.AbstractMeshType{D}, NTuple{N, Symbol}, String}} where {D, N}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/queries.jl#L468-L482" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/queries.jl#L447-L461" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -363,7 +370,7 @@ Base.size(Ωₕ::AbstractMeshType, d::Integer) -&gt; Int</code></pre>
 <div class="md-docstring" id="Bramble._surface_weight-Union{Tuple{D}, Tuple{Bramble.AbstractMeshType{D}, Any, CartesianIndex{D}}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._surface_weight</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.AbstractMeshType{D}, Any, CartesianIndex{D}}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/queries.jl#L580-L588" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/queries.jl#L559-L567" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1267,6 +1274,7 @@ print_mesh_spacing_info(pp::PrettyPrinter, uniform::Tuple{Vararg{Bool}}, hmax) -
     <aside class="md-toc">
       <div class="md-toc-inner">
         <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#Ghost-meshes">Ghost meshes</a>
       </div>
     </aside>
   </div>
@@ -1284,6 +1292,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=3c74630c"></script>
+  <script src="../../assets/materialdocs.js?v=157356e8"></script>
 </body>
 </html>

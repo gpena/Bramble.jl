@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f788936d">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=fa8ace7d">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -95,7 +97,7 @@
 <div class="md-docstring" id="Bramble.form">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.form</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L352-L405" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L351-L404" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -247,7 +249,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.assemble">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L627-L640" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L626-L639" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -263,7 +265,7 @@ end</code></pre>
 <pre><code class="language-julia">assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -&gt; AbstractMatrix</code></pre>
 </div>
 <p>Allocate a matrix with the form&#39;s sparsity pattern and assemble into it. The matrix type is <code class="md-code-inline">matrix_type(backend(test_space(form)))</code> – <code class="md-code-inline">SparseMatrixCSC{Float64,Int}</code> by default, or whatever <a href="../../api/utilities/#Bramble.backend"><code class="md-code-inline">backend</code></a> the space&#39;s mesh was built with.</p>
-<p><strong>Call this once, then assemble into what it returns.</strong> Building the sparsity pattern is the larger part of the work (a refill allocates nothing), and the pattern does not change between assemblies. A time loop or Newton iteration benefits from preallocating the pattern once:</p>
+<p><strong>Call this once, then assemble into what it returns.</strong> The first call builds the sparsity pattern, the larger part of the work. A repeated call copies the pattern the form recorded and allocates about the matrix it returns, re-recording only after the mesh markers change or another matrix is filled; a refill allocates nothing. A time loop or Newton iteration benefits from preallocating the pattern once:</p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">A = assemble(a)                        # once: pattern, allocation and initial fill
@@ -292,7 +294,7 @@ u = A \ F</code></pre>
 <div class="md-docstring" id="Bramble.assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1349-L1382" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1347-L1380" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -343,11 +345,21 @@ u = A \ F</code></pre>
 </li>
 </ul>
 </div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">assemble!(A, F, a::GhostBilinearForm, l::GhostLinearForm;
+    dirichlet = nothing, dirichlet_components = nothing, symmetrize = false)</code></pre>
+</div>
+<p>Refill <code class="md-code-inline">A</code> and <code class="md-code-inline">F</code> with the matrix and the load that <code class="md-code-inline">A, F = assemble(a, l)</code> returns, and return <code class="md-code-inline">A, F</code>. <code class="md-code-inline">A</code> keeps the pattern and <code class="md-code-inline">F</code> the element type that <code class="md-code-inline">assemble(a, l)</code> gave, so call that once and refill its two outputs. The call allocates nothing warm.</p>
+<p>Both forms are assembled together because, when the closure of the space has an affine part <code class="md-code-inline">d ≠ 0</code>, the load is <code class="md-code-inline">Eᵀ(F − A d)</code> and reads the matrix. <code class="md-code-inline">assemble!(b, l)</code> alone refuses such a space. <code class="md-code-inline">dirichlet</code>, <code class="md-code-inline">dirichlet_components</code> and <code class="md-code-inline">symmetrize</code> act as in <code class="md-code-inline">assemble(a, l)</code>.</p>
+<p>It throws an <code class="md-code-inline">ArgumentError</code> for a time-dependent space (pose the problem with <code class="md-code-inline">semidiscretize</code>), for <code class="md-code-inline">symmetrize = true</code> without <code class="md-code-inline">dirichlet</code>, for <code class="md-code-inline">A</code> that is not a <code class="md-code-inline">SparseMatrixCSC</code> with the reduced pattern of <code class="md-code-inline">a</code>, for a <code class="md-code-inline">dirichlet</code> the rows of the space do not allow, and for an <code class="md-code-inline">F</code> whose element type cannot hold the load&#39;s. A <code class="md-code-inline">DimensionMismatch</code> follows an <code class="md-code-inline">F</code> of the wrong length and forms whose test spaces differ.</p>
+</div>
 </div>
 <div class="md-docstring" id="Bramble.assemble_parallel!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_parallel!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1554-L1563" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1550-L1559" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -536,7 +548,7 @@ K * x ≈ assemble(a) * x</code></pre>
 <div class="md-docstring" id="Bramble.fdm_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fdm_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L25-L46" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/fdm.jl#L4-L25" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -553,7 +565,7 @@ fdm_solve(K::KroneckerLinearOperator, F::AbstractVector) -&gt; Vector</code></pr
 <div class="md-docstring" id="Bramble.fdm_factorize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fdm_factorize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L103-L149" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/fdm.jl#L82-L128" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -593,7 +605,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.fdm_factorize!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fdm_factorize!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L152-L211" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/fdm.jl#L131-L190" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -638,7 +650,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.fdm_solve!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fdm_solve!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L214-L235" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/fdm.jl#L193-L214" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -840,7 +852,7 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 <p>Requires <a href="https://github.com/SciML/ADTypes.jl">ADTypes.jl</a>; call <code class="md-code-inline">using ADTypes</code> before calling this function.</p>
 </div>
 </div>
-<p>Time integration, differentiable linear solves, and the sparse/iterative solver backends move to their own <a href="../../api_sciml/">scientific computing reference</a>: the SciML stack (<code class="md-code-inline">semidiscretize</code>, <code class="md-code-inline">ode_problem</code>, <code class="md-code-inline">linear_problem</code>, <code class="md-code-inline">nonlinear_problem</code>, ...), second-order wave problems, <code class="md-code-inline">pde_solve</code>&#39;s adjoint rule, AMG preconditioning, the SuiteSparse/Apple Accelerate/MUMPS direct solvers, and <code class="md-code-inline">type_cached_assemble!</code>.</p>
+<p>Time integration, differentiable linear solves, and the sparse/iterative solver backends move to their own <a href="../../api_sciml/">scientific computing reference</a>: the SciML stack (<code class="md-code-inline">semidiscretize</code>, <code class="md-code-inline">ode_problem</code>, <code class="md-code-inline">linear_problem</code>, <code class="md-code-inline">nonlinear_problem</code>, ...), <code class="md-code-inline">pde_solve</code>&#39;s adjoint rule, AMG preconditioning, the SuiteSparse/Apple Accelerate/MUMPS direct solvers, and <code class="md-code-inline">type_cached_assemble!</code>.</p>
 <h2 id="Dirichlet-conditions" class="md-heading">Dirichlet conditions<a href="#Dirichlet-conditions" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.DirichletConstraint">
 <div class="md-docstring-header">
@@ -937,7 +949,7 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 <pre><code class="language-julia">dirichlet_bc!(u::AbstractVector, sd::AbstractSemidiscretization, t::Number, p = nothing) -&gt; u</code></pre>
 </div>
 <p>Write <code class="md-code-inline">sd</code>&#39;s Dirichlet values at time <code class="md-code-inline">t</code> (and, for a parameter-dependent condition, parameter <code class="md-code-inline">p</code>) into <code class="md-code-inline">u</code> and return it.</p>
-<p>An index-1 differential-algebraic system needs its initial condition to satisfy the algebraic rows already: a <code class="md-code-inline">u</code> disagreeing with <code class="md-code-inline">g(x, 0)</code> on the boundary is inconsistent, and a stiff solver either rejects it or absorbs it into the first step. <a href="../../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a>/<a href="../../api_sciml/#Bramble.second_order_ode_problem"><code class="md-code-inline">second_order_ode_problem</code></a> apply this to a copy of the initial condition they are handed, forwarding whatever <code class="md-code-inline">p</code> the caller gave the <code class="md-code-inline">ODEProblem</code>.</p>
+<p>An index-1 differential-algebraic system needs its initial condition to satisfy the algebraic rows already: a <code class="md-code-inline">u</code> disagreeing with <code class="md-code-inline">g(x, 0)</code> on the boundary is inconsistent, and a stiff solver either rejects it or absorbs it into the first step. <a href="../../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a> applies this to a copy of the initial condition it is handed, forwarding whatever <code class="md-code-inline">p</code> the caller gave the <code class="md-code-inline">ODEProblem</code>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.symmetrize!">
@@ -1104,6 +1116,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=f788936d"></script>
+  <script src="../../assets/materialdocs.js?v=fa8ace7d"></script>
 </body>
 </html>

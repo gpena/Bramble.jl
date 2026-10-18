@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mesh tutorial — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b61a5ac7">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3b3ef7ef">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Mesh tutorial — Bramble.jl">
   <meta property="og:title" content="Mesh tutorial — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
@@ -90,7 +92,7 @@
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/mesh.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="tutorial_mesh" class="md-heading">Mesh tutorial<a href="#tutorial_mesh" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<p><strong>What you will learn.</strong> How a domain becomes a mesh, how to make the points non-uniform, and what the spacings, half points and cell measures that difference operators read mean.</p>
+<p><strong>What you will learn.</strong> How a domain becomes a mesh, how to make the points non-uniform, what the spacings, half points and cell measures that difference operators read mean, and how a ghost mesh pads the boundary.</p>
 <p><strong>What you need first.</strong> The <a href="../../tutorials/geometry/#tutorial_geometry">geometry tutorial</a>, for sets, markers and domains.</p>
 <p><strong>Where next.</strong> The <a href="../../tutorials/space/">space tutorial</a> puts discrete functions on a mesh.</p>
 <p>Every block below runs when this page is built.</p>
@@ -422,6 +424,99 @@ sum(index_in_marker(Ωₕ_marked, :walls)), sum(index_in_marker(Ωₕ_marked, :o
 </div>
 </div>
 <hr class="md-hr">
+<h2 id="mesh_ghost" class="md-heading">Ghost points beyond the boundary<a href="#mesh_ghost" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A second-order Neumann or Robin condition needs the solution one point past the boundary, and every stencil stops at the last point. A <a href="../../api/meshes/#Bramble.GhostMesh"><code class="md-code-inline">Bramble.GhostMesh</code></a> adds that point. It wraps a mesh and pads it with one ghost point beyond each node of the facets you name, either <code class="md-code-inline">:boundary</code> or a tuple such as <code class="md-code-inline">(:xmin, :ymax)</code>. <code class="md-code-inline">GhostMesh</code> is <code class="md-code-inline">public</code>, not exported.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Gₕ = Bramble.GhostMesh(Ωₕ_graded; ghosts = :boundary)
+
+npoints(Gₕ), Bramble.nghosts(Gₕ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(13, 2)</code></pre>
+</div>
+<p>The mesh <code class="md-code-inline">Ωₕ_graded</code> has 11 points, so the padded mesh has 13 and two of them are ghosts. A ghost sits one spacing outside its facet node, using the spacings the mesh already holds: <span class="md-math md-math-inline">\(x_1 - h_2\)</span> below and <span class="md-math md-math-inline">\(x_n + h_n\)</span> above. On a graded mesh the two distances differ, so the ghosts do not mirror each other:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">x = collect(points(Ωₕ_graded))
+xg = collect(points(Gₕ))
+
+@assert xg[1] ≈ x[1] - (x[2] - x[1])
+@assert xg[end] ≈ x[end] + (x[end] - x[end-1])
+@assert xg[2:(end-1)] == x      # the physical points are untouched
+
+xg[1] - x[1], xg[end] - x[end]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(-0.010000000000000002, 0.18999999999999995)</code></pre>
+</div>
+<p>The left ghost is <span class="md-math md-math-inline">\(h_2 = 0.01\)</span> below the boundary and the right one <span class="md-math md-math-inline">\(h_n = 0.19\)</span> above it.</p>
+<p>In two dimensions only the facet nodes get ghosts. The padded mesh is a tensor product, so it also has points outside along two axes at once, the four corners here. Those points are <em>absent</em>: they are not nodes, carry no degree of freedom and are never read as a value.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">G₂ = Bramble.GhostMesh(Ωₕ_prod; ghosts = :boundary)
+
+npoints(G₂, Tuple), Bramble.nghosts(G₂), points(G₂)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((6, 5), 14, ([-0.2, 0.0, 0.2, 0.6, 1.0, 1.4], [-0.5, 0.0, 0.5, 1.0, 1.5]))</code></pre>
+</div>
+<p>The padded size is <span class="md-math md-math-inline">\((4 + 2) \times (3 + 2)\)</span>. The ghosts are <span class="md-math md-math-inline">\(2 \cdot 3 + 2 \cdot 4 = 14\)</span>, one per facet node, and counting the padded grid&#39;s four corners separately leaves exactly those:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">absent = [Bramble.is_absent(G₂, I) for I in CartesianIndices(npoints(G₂, Tuple))]
+
+@assert sum(absent) == 4 &amp;&amp; all(absent[[1, end], [1, end]])
+@assert prod(npoints(G₂, Tuple)) - sum(absent) == prod(npoints(Ωₕ_prod, Tuple)) + Bramble.nghosts(G₂)
+
+sum(absent)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4</code></pre>
+</div>
+<p>Naming fewer facets pads fewer:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">G_part = Bramble.GhostMesh(Ωₕ_prod; ghosts = (:xmin, :ymax))
+
+@assert npoints(G_part, Tuple) == (5, 4) &amp;&amp; Bramble.nghosts(G_part) == 3 + 4
+
+npoints(G_part, Tuple), Bramble.nghosts(G_part)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((5, 4), 7)</code></pre>
+</div>
+<p>A facet the dimension does not have, such as <code class="md-code-inline">:ymin</code> on an interval, is an <code class="md-code-inline">ArgumentError</code>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">try
+    Bramble.GhostMesh(Ωₕ; ghosts = (:ymin,))
+catch e
+    @assert e isa ArgumentError
+    showerror(stdout, e)
+end</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: ghosts must be :boundary or a tuple of facet names, got :ymin. Name facets among :xmin, :xmax (or their aliases), or pass `ghosts = ()` for none.</code></pre>
+</div>
+<p>A ghost mesh follows its physical mesh. After <code class="md-code-inline">change_points!</code> the ghosts move with the facet spacings, and after <code class="md-code-inline">iterative_refinement!</code> the point count changes, which a ghost mesh cannot follow: build a new one.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ_move = mesh(Ω, 5)
+G_move = Bramble.GhostMesh(Ωₕ_move; ghosts = :boundary)
+before = collect(points(G_move))[[1, end]]
+change_points!(Ωₕ_move, [0.0, 0.1, 0.3, 0.6, 1.0])
+after = collect(points(G_move))[[1, end]]
+
+@assert before ≈ [-0.25, 1.25] &amp;&amp; after ≈ [-0.1, 1.4]
+
+before, after</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([-0.25, 1.25], [-0.1, 1.4])</code></pre>
+</div>
+<p>You rarely build a <code class="md-code-inline">GhostMesh</code> yourself. <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a><code class="md-code-inline">(Ωₕ; ghosts = ...)</code> builds one and a space on top of it, which the <a href="../../tutorials/space/">space tutorial</a> describes.</p>
+<hr class="md-hr">
 <h2 id="Refinement" class="md-heading">Refinement<a href="#Refinement" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> inserts a point at every cell midpoint, updating indices and reapplying the domain&#39;s markers. Refinement is uniform and dyadic: <code class="md-code-inline">N</code> points become <code class="md-code-inline">2N - 1</code> along every axis. Above 1D, refine the whole mesh rather than one submesh: <code class="md-code-inline">iterative_refinement!(Ωₕ(1))</code> leaves the mesh&#39;s index set and markers sized for the old grid, and <code class="md-code-inline">gridspace</code> refuses it.</p>
 <figure>
@@ -596,6 +691,7 @@ npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))</code></pr
           <a class="md-toc-link md-toc-h2" href="#Half-points,-spacings-and-cell-measures">Half points, spacings and cell measures</a>
           <a class="md-toc-link md-toc-h2" href="#Meshes-in-two-dimensions">Meshes in two dimensions</a>
           <a class="md-toc-link md-toc-h2" href="#Boundary,-interior-and-markers">Boundary, interior and markers</a>
+          <a class="md-toc-link md-toc-h2" href="#mesh_ghost">Ghost points beyond the boundary</a>
           <a class="md-toc-link md-toc-h2" href="#Refinement">Refinement</a>
           <a class="md-toc-link md-toc-h2" href="#mesh_reference">Reference</a>
             <a class="md-toc-link md-toc-h3" href="#Constructing-from-a-set">Constructing from a set</a>
@@ -618,6 +714,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=b61a5ac7"></script>
+  <script src="../../assets/materialdocs.js?v=3b3ef7ef"></script>
 </body>
 </html>

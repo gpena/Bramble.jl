@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Difference, jump and average operators — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=233c81bf">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=db323f20">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Difference, jump and average operators — Bramble.jl">
   <meta property="og:title" content="Difference, jump and average operators — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -941,21 +943,20 @@
 <p>The symbolic cross-weighted centered difference of <code class="md-code-inline">op</code> along every coordinate, as a <code class="md-code-inline">D</code>-tuple of nodes. In one dimension there is one direction, so the node itself is returned rather than a one-element tuple.</p>
 </div>
 </div>
-<p>The vector calculus operators built on those differences: the divergence and the curl of a vector field, and the conservative discrete Laplacian of a grid function. The unsubscripted spellings use the backward differences, as <a href="../../api/operators/#Bramble.∇ₕ"><code class="md-code-inline">∇ₕ</code></a> does; <code class="md-code-inline">div₊ₕ</code> and <code class="md-code-inline">curl₊ₕ</code> are their forward twins. <a href="../../api/operators/#Bramble.εₕ"><code class="md-code-inline">εₕ</code></a>/<a href="../../api/operators/#Bramble.εₕ!"><code class="md-code-inline">εₕ!</code></a> are the discrete symmetric small-strain tensor, over a composite <code class="md-code-inline">VectorElement</code> at runtime or, inside a <a href="../../api/forms/#Bramble.form"><code class="md-code-inline">form</code></a>, over a composite trial or test function – the same name spans both, dispatching on what it is given. The in-place <code class="md-code-inline">!</code> forms write into a preallocated result and are <code class="md-code-inline">public</code> but not exported, as are <code class="md-code-inline">D̃ₕ</code>, <code class="md-code-inline">Dcₕ</code> and <code class="md-code-inline">D̽ₕ</code>, which are the same functions as the exported <code class="md-code-inline">∇̃ₕ</code>, <code class="md-code-inline">∇cₕ</code> and <code class="md-code-inline">∇̽ₕ</code>.</p>
+<p>The vector calculus operators built on those differences: the divergence and the curl of a vector field, and the conservative discrete Laplacian of a grid function. The unsubscripted spellings use the backward differences, as <a href="../../api/operators/#Bramble.∇ₕ"><code class="md-code-inline">∇ₕ</code></a> does; <code class="md-code-inline">div₊ₕ</code> and <code class="md-code-inline">curl₊ₕ</code> are their forward twins. <a href="../../api/operators/#Bramble.εₕ"><code class="md-code-inline">εₕ</code></a>/<a href="../../api/operators/#Bramble.εₕ!"><code class="md-code-inline">εₕ!</code></a> are the discrete symmetric small-strain tensor, over a composite <code class="md-code-inline">VectorElement</code> at runtime or, inside a <a href="../../api/forms/#Bramble.form"><code class="md-code-inline">form</code></a>, over a composite trial or test function – the same name spans both, dispatching on what it is given. So does <a href="../../api/operators/#Bramble.divₕ"><code class="md-code-inline">divₕ</code></a>: inside a form it is the runtime divergence, term by term. The staggered divergence <a href="../../api/operators/#Bramble.divₘₕ"><code class="md-code-inline">divₘₕ</code></a> exists only inside a form. The in-place <code class="md-code-inline">!</code> forms write into a preallocated result and are <code class="md-code-inline">public</code> but not exported, as are <code class="md-code-inline">D̃ₕ</code>, <code class="md-code-inline">Dcₕ</code> and <code class="md-code-inline">D̽ₕ</code>, which are the same functions as the exported <code class="md-code-inline">∇̃ₕ</code>, <code class="md-code-inline">∇cₕ</code> and <code class="md-code-inline">∇̽ₕ</code>.</p>
 <div class="md-docstring" id="Bramble.divₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.divₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1583-L1599" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1647-L1661" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">divₕ(u) -&gt; Bramble._DivergenceTerms</code></pre>
 </div>
-<p>The symbolic staggered divergence of a composite trial or test function <code class="md-code-inline">u</code> with one component per spatial dimension, placed at the cell centre every axis shares: term <code class="md-code-inline">i</code> is <span class="md-math md-math-inline">\(D_{-,i}(u_i)\)</span> averaged onto that centre by every axis other than <code class="md-code-inline">i</code>.</p>
-<p>Shares its name with the <em>runtime</em> <a href="../../api/operators/#Bramble.divₕ"><code class="md-code-inline">divₕ</code></a> over grid functions (<code class="md-code-inline">operators/vector_calculus.jl</code>, gpena/Bramble.jl#158); see this section&#39;s header comment for how and why the two differ.</p>
-<p>The only supported use is <code class="md-code-inline">inner₊(divₕ(u), divₕ(v))</code>, which expands to <span class="md-math md-math-inline">\(\sum_{i,j} (\mathrm{div}_h^{(i)}(u), \mathrm{div}_h^{(j)}(v))_{\{1,\dots,D\}}\)</span> through <a href="../../api/inner_products/#Bramble.inner₊"><code class="md-code-inline">inner₊</code></a><code class="md-code-inline">(left, right, Val(S))</code>.</p>
-<p>See also: <a href="../../api/operators/#Bramble.εₕ"><code class="md-code-inline">εₕ</code></a>.</p>
+<p>The symbolic divergence of a composite trial or test function <code class="md-code-inline">u</code> with one component per spatial dimension: term <code class="md-code-inline">i</code> is <span class="md-math md-math-inline">\(D_{-,i}(u_i)\)</span>, with no averaging. It is the symbolic twin of the <em>runtime</em> <a href="../../api/operators/#Bramble.divₕ"><code class="md-code-inline">divₕ</code></a> over grid functions (<code class="md-code-inline">operators/vector_calculus.jl</code>, gpena/Bramble.jl#158), so <code class="md-code-inline">inner₊(divₕ(u), divₕ(v))</code> assembles the runtime <code class="md-code-inline">inner₊(divₕ(w), divₕ(w), Val(S))</code>, and <code class="md-code-inline">∇ₕ ⋅ u</code> inside a form is this operator.</p>
+<p>The only supported use is <code class="md-code-inline">inner₊(divₕ(u), divₕ(v))</code>, which expands to <span class="md-math md-math-inline">\(\sum_{i,j} (D_{-,i}(u_i), D_{-,j}(v_j))_{\{1,\dots,D\}}\)</span> through <a href="../../api/inner_products/#Bramble.inner₊"><code class="md-code-inline">inner₊</code></a><code class="md-code-inline">(left, right, Val(S))</code>.</p>
+<p>See also: <a href="../../api/operators/#Bramble.divₘₕ"><code class="md-code-inline">divₘₕ</code></a>, <a href="../../api/operators/#Bramble.εₕ"><code class="md-code-inline">εₕ</code></a>.</p>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -987,6 +988,22 @@ divₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <p>The in-place form of <a href="../../api/operators/#Bramble.divₕ"><code class="md-code-inline">divₕ</code></a>: the discrete divergence of <code class="md-code-inline">uₕ</code>, written into <code class="md-code-inline">vₕ</code>.</p>
 <p>Allocates nothing, where the allocating form allocates its result. Returns <code class="md-code-inline">vₕ</code>, so it composes: <code class="md-code-inline">normₕ(divₕ!(vₕ, uₕ))</code>.</p>
 <p><code class="md-code-inline">vₕ</code> is a grid function of the <em>scalar</em> space the components live on, and must not be one of them: every stencil reads a neighbour, and aliasing would read values already overwritten.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.divₘₕ">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.divₘₕ</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1667-L1682" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">divₘₕ(u) -&gt; Bramble._DivergenceTerms</code></pre>
+</div>
+<p>The symbolic staggered divergence of a composite trial or test function <code class="md-code-inline">u</code> with one component per spatial dimension, placed at the cell centre every axis shares: term <code class="md-code-inline">i</code> is <span class="md-math md-math-inline">\(D_{-,i}(u_i)\)</span> averaged onto that centre by every axis other than <code class="md-code-inline">i</code>.</p>
+<p>It is form-only: it has no runtime twin, so no operator over grid functions computes it. Use <a href="../../api/operators/#Bramble.divₕ"><code class="md-code-inline">divₕ</code></a> where the form must match the runtime divergence.</p>
+<p>The only supported use is <code class="md-code-inline">inner₊(divₘₕ(u), divₘₕ(v))</code>, which expands to <span class="md-math md-math-inline">\(\sum_{i,j} (\mathrm{div}_h^{(i)}(u), \mathrm{div}_h^{(j)}(v))_{\{1,\dots,D\}}\)</span> through <a href="../../api/inner_products/#Bramble.inner₊"><code class="md-code-inline">inner₊</code></a><code class="md-code-inline">(left, right, Val(S))</code>.</p>
+<p>See also: <a href="../../api/operators/#Bramble.divₕ"><code class="md-code-inline">divₕ</code></a>, <a href="../../api/operators/#Bramble.εₕ"><code class="md-code-inline">εₕ</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.div₊ₕ">
@@ -1024,7 +1041,7 @@ div₊ₕ!(vₕ::VectorElement, uₕ) -&gt; VectorElement</code></pre>
 <div class="md-docstring" id="Bramble.divcₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.divcₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1632-L1647" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1715-L1730" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1058,7 +1075,7 @@ divcₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.divcₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.divcₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1632-L1647" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1715-L1730" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1076,7 +1093,7 @@ divcₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.div̽ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.div̽ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1731-L1746" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1814-L1829" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1110,7 +1127,7 @@ div̽ₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.div̽ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.div̽ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1731-L1746" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1814-L1829" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1204,7 +1221,7 @@ curl₊ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curlcₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curlcₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1026-L1048" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1037-L1059" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1226,7 +1243,7 @@ curlcₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curlcₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curlcₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1026-L1048" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1037-L1059" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1248,7 +1265,7 @@ curlcₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curl̽ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curl̽ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1562-L1585" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1573-L1596" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1271,7 +1288,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curl̽ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curl̽ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1562-L1585" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1573-L1596" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1294,13 +1311,14 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Δₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Δₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L575-L606" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L575-L614" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">Δₕ(uₕ::VectorElement) -&gt; VectorElement
-Δₕ!(vₕ::VectorElement, uₕ::VectorElement) -&gt; vₕ</code></pre>
+Δₕ!(vₕ::VectorElement, uₕ::VectorElement) -&gt; vₕ
+Δₕ(u::LazyOp{D}) -&gt; LazyOp{D}</code></pre>
 </div>
 <p>Returns the conservative discrete Laplacian of the grid function <code class="md-code-inline">uₕ</code>, matrix-free:</p>
 <div class="md-math md-math-display">
@@ -1316,19 +1334,40 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <p>per direction. This is the composition whose summation-by-parts identity with <a href="../../api/inner_products/#Bramble.inner₊"><code class="md-code-inline">inner₊</code></a> holds, <code class="md-code-inline">innerₕ(Δₕ(uₕ), vₕ) = -inner₊(∇ₕ(uₕ), ∇ₕ(vₕ))</code> for grid functions vanishing on the boundary, which is what makes it <em>the</em> discrete Laplacian rather than one of several plausible five-point stencils.</p>
 <p>Evaluated in a single traversal per direction rather than as two nested operator calls, so <code class="md-code-inline">Δₕ!</code> needs no scratch grid function and allocates nothing. It agrees with the composition <code class="md-code-inline">D̃ₓ(D₋ₓ(uₕ))</code> entry for entry, truncation at the two ends of each axis included.</p>
 <p>On a composite element <code class="md-code-inline">Δₕ</code> is the Laplacian of each component, each on its own mesh.</p>
+<p>In a form, <code class="md-code-inline">Δₕ(u)</code> of a trial or test function, or of any operator over one, builds the same operator as nodes: the sum over the <code class="md-code-inline">D</code> axes of one three-point second difference each, entry for entry <code class="md-code-inline">D̃ₓ(D₋ₓ(u)) + D̃ᵧ(D₋ᵧ(u)) + …</code>, so the identity above reads <code class="md-code-inline">innerₕ(Δₕ(u), v) = -inner₊(∇ₕ(u), ∇ₕ(v))</code> in a bilinear form on functions vanishing on the boundary. One node per axis, not the nested pair: the pair evaluates its inner difference again at each outer tap.</p>
 <p>See also: <a href="../../api/operators/#Bramble.divₕ"><code class="md-code-inline">divₕ</code></a>, <a href="../../api/operators/#Bramble.∇ₕ"><code class="md-code-inline">∇ₕ</code></a>, <a href="../../api/operators/#Bramble.D̃ₓ"><code class="md-code-inline">D̃ₓ</code></a></p>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Δₕ(v::GhostVector) -&gt; Vector
+Δₕ!(out::AbstractVector, v::GhostVector) -&gt; out</code></pre>
+</div>
+<p>The conservative discrete Laplacian of a <a href="../../api/spaces/#Bramble.GhostVector"><code class="md-code-inline">GhostVector</code></a> at the physical nodes, as a plain vector with no ghosts: the values of <code class="md-code-inline">Δₕ(lift(Cₕ, u))</code> there, when <code class="md-code-inline">v</code> holds the degrees of freedom <code class="md-code-inline">u</code> and <a href="../../api/spaces/#Bramble.update_ghosts!"><code class="md-code-inline">update_ghosts!</code></a> has filled its ghosts. Along an axis whose facet carries ghosts, the flux across the facet reads the ghost; along one without, the stencil is truncated as on a plain space.</p>
+<p><code class="md-code-inline">out</code> follows the rule of the one-axis operators (<code class="md-code-inline">D₋ₓ!</code> on a <code class="md-code-inline">GhostVector</code>). <code class="md-code-inline">Δₕ!</code> allocates nothing on <code class="md-code-inline">CpuSerial</code> and <code class="md-code-inline">CpuPolyester</code>.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 7), (false, false))
+Cₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
+                 u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; 1.0, :xmax =&gt; u + ∂ₙ(u) =&gt; 0.0,
+                       :ymin =&gt; ∂ₙ(u) =&gt; 0.0, :ymax =&gt; ∂ₙ(u) =&gt; 0.0))
+v = update_ghosts!(GhostVector(Cₕ, rand(35)), Cₕ)
+Δₕ(v)                           # 35 values, the Neumann and Robin data in the boundary rows</code></pre>
+</div>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.Δₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Δₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L575-L606" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L575-L614" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">Δₕ(uₕ::VectorElement) -&gt; VectorElement
-Δₕ!(vₕ::VectorElement, uₕ::VectorElement) -&gt; vₕ</code></pre>
+Δₕ!(vₕ::VectorElement, uₕ::VectorElement) -&gt; vₕ
+Δₕ(u::LazyOp{D}) -&gt; LazyOp{D}</code></pre>
 </div>
 <p>Returns the conservative discrete Laplacian of the grid function <code class="md-code-inline">uₕ</code>, matrix-free:</p>
 <div class="md-math md-math-display">
@@ -1344,13 +1383,33 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <p>per direction. This is the composition whose summation-by-parts identity with <a href="../../api/inner_products/#Bramble.inner₊"><code class="md-code-inline">inner₊</code></a> holds, <code class="md-code-inline">innerₕ(Δₕ(uₕ), vₕ) = -inner₊(∇ₕ(uₕ), ∇ₕ(vₕ))</code> for grid functions vanishing on the boundary, which is what makes it <em>the</em> discrete Laplacian rather than one of several plausible five-point stencils.</p>
 <p>Evaluated in a single traversal per direction rather than as two nested operator calls, so <code class="md-code-inline">Δₕ!</code> needs no scratch grid function and allocates nothing. It agrees with the composition <code class="md-code-inline">D̃ₓ(D₋ₓ(uₕ))</code> entry for entry, truncation at the two ends of each axis included.</p>
 <p>On a composite element <code class="md-code-inline">Δₕ</code> is the Laplacian of each component, each on its own mesh.</p>
+<p>In a form, <code class="md-code-inline">Δₕ(u)</code> of a trial or test function, or of any operator over one, builds the same operator as nodes: the sum over the <code class="md-code-inline">D</code> axes of one three-point second difference each, entry for entry <code class="md-code-inline">D̃ₓ(D₋ₓ(u)) + D̃ᵧ(D₋ᵧ(u)) + …</code>, so the identity above reads <code class="md-code-inline">innerₕ(Δₕ(u), v) = -inner₊(∇ₕ(u), ∇ₕ(v))</code> in a bilinear form on functions vanishing on the boundary. One node per axis, not the nested pair: the pair evaluates its inner difference again at each outer tap.</p>
 <p>See also: <a href="../../api/operators/#Bramble.divₕ"><code class="md-code-inline">divₕ</code></a>, <a href="../../api/operators/#Bramble.∇ₕ"><code class="md-code-inline">∇ₕ</code></a>, <a href="../../api/operators/#Bramble.D̃ₓ"><code class="md-code-inline">D̃ₓ</code></a></p>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Δₕ(v::GhostVector) -&gt; Vector
+Δₕ!(out::AbstractVector, v::GhostVector) -&gt; out</code></pre>
+</div>
+<p>The conservative discrete Laplacian of a <a href="../../api/spaces/#Bramble.GhostVector"><code class="md-code-inline">GhostVector</code></a> at the physical nodes, as a plain vector with no ghosts: the values of <code class="md-code-inline">Δₕ(lift(Cₕ, u))</code> there, when <code class="md-code-inline">v</code> holds the degrees of freedom <code class="md-code-inline">u</code> and <a href="../../api/spaces/#Bramble.update_ghosts!"><code class="md-code-inline">update_ghosts!</code></a> has filled its ghosts. Along an axis whose facet carries ghosts, the flux across the facet reads the ghost; along one without, the stencil is truncated as on a plain space.</p>
+<p><code class="md-code-inline">out</code> follows the rule of the one-axis operators (<code class="md-code-inline">D₋ₓ!</code> on a <code class="md-code-inline">GhostVector</code>). <code class="md-code-inline">Δₕ!</code> allocates nothing on <code class="md-code-inline">CpuSerial</code> and <code class="md-code-inline">CpuPolyester</code>.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (5, 7), (false, false))
+Cₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
+                 u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; 1.0, :xmax =&gt; u + ∂ₙ(u) =&gt; 0.0,
+                       :ymin =&gt; ∂ₙ(u) =&gt; 0.0, :ymax =&gt; ∂ₙ(u) =&gt; 0.0))
+v = update_ghosts!(GhostVector(Cₕ, rand(35)), Cₕ)
+Δₕ(v)                           # 35 values, the Neumann and Robin data in the boundary rows</code></pre>
+</div>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.εₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.εₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1522-L1539" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1585-L1602" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1360,7 +1419,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <p>The symbolic small-strain tensor <span class="md-math md-math-inline">\(\varepsilon(u) = \tfrac12(\nabla u + \nabla u^{T})\)</span> of a composite trial or test function <code class="md-code-inline">u</code> with one component per spatial dimension.</p>
 <p><code class="md-code-inline">u</code> is whatever <code class="md-code-inline">form</code>&#39;s trial or test argument already is: <code class="md-code-inline">u(i)</code> addresses its <code class="md-code-inline">i</code>-th component exactly as it does everywhere else in the form layer (gpena/Bramble.jl#74). Every entry is placed the way the discrete energy form needs it, with no collocation choice exposed – see this section&#39;s header comment for the placement.</p>
 <p>The only supported use is <code class="md-code-inline">inner₊(εₕ(u), εₕ(v))</code>, which expands to <span class="md-math md-math-inline">\(\sum_{i,j} (\varepsilon_{ij}(u), \varepsilon_{ij}(v))_{S_{ij}}\)</span> with <span class="md-math md-math-inline">\(S_{ii} = \{i\}\)</span> and <span class="md-math md-math-inline">\(S_{ij} = \{i,j\}\)</span> for <code class="md-code-inline">i != j</code>, through <a href="../../api/inner_products/#Bramble.inner₊"><code class="md-code-inline">inner₊</code></a><code class="md-code-inline">(left, right, Val(S))</code>.</p>
-<p>See also: <a href="../../api/operators/#Bramble.divₕ"><code class="md-code-inline">divₕ</code></a>, <a href="../../api/operators/#Bramble.∇ₕ"><code class="md-code-inline">∇ₕ</code></a>.</p>
+<p>See also: <a href="../../api/operators/#Bramble.divₘₕ"><code class="md-code-inline">divₘₕ</code></a>, <a href="../../api/operators/#Bramble.∇ₕ"><code class="md-code-inline">∇ₕ</code></a>.</p>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1388,7 +1447,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.εₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.εₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L844-L855" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L855-L866" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1403,7 +1462,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.εcₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.εcₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1670-L1686" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1753-L1769" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1440,7 +1499,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.εcₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.εcₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1670-L1686" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1753-L1769" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1460,7 +1519,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.ε̽ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ε̽ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1751-L1769" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1834-L1852" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1499,7 +1558,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.ε̽ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ε̽ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1751-L1769" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1834-L1852" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1520,7 +1579,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.∇cₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇cₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L925-L944" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L936-L955" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1541,7 +1600,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.∇cₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇cₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L947-L954" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L958-L965" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1555,7 +1614,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.∇̽ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇̽ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1433-L1456" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1444-L1467" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1578,7 +1637,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.∇̽ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇̽ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1497-L1504" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1508-L1515" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1592,7 +1651,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.∇̃ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇̃ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1176-L1195" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1187-L1206" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1613,7 +1672,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.∇̃ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.∇̃ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1198-L1205" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1209-L1216" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1627,7 +1686,7 @@ curl̽ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.diṽₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diṽₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1227-L1252" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1238-L1263" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1650,7 +1709,7 @@ diṽₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.diṽₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.diṽₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1227-L1252" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1238-L1263" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1673,7 +1732,7 @@ diṽₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curl̃ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curl̃ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1272-L1295" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1283-L1306" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1696,7 +1755,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.curl̃ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.curl̃ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1272-L1295" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1283-L1306" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1719,7 +1778,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.ε₊ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ε₊ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1371-L1393" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1382-L1404" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1742,7 +1801,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.ε₊ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ε₊ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1371-L1393" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/vector_calculus.jl#L1382-L1404" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2766,6 +2825,78 @@ parent(backward_shift(uₕ, Val(1)))
 <p>See also: <a href="../../api/operators/#Bramble.forward_shift"><code class="md-code-inline">forward_shift</code></a>, <a href="../../api/operators/#Bramble.S₋ₕ"><code class="md-code-inline">S₋ₕ</code></a>.</p>
 </div>
 </div>
+<h2 id="Facet-operators" class="md-heading">Facet operators<a href="#Facet-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Operators for the facets of a space with ghost nodes (see <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a><code class="md-code-inline">(Ωₕ; ghosts = ...)</code>): the outward normal derivative, the second normal derivative and the normal jump, read in the integrals over a facet (<a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a>) and in the relations of <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>.</p>
+<div class="md-docstring" id="Bramble.∂ₙ">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.∂ₙ</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/normal.jl#L509-L540" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">∂ₙ(u; K = nothing)</code></pre>
+</div>
+<p>The outward normal derivative of <code class="md-code-inline">u</code> at the boundary facets, <code class="md-code-inline">η_F Dc_d(u)</code> on the facet <code class="md-code-inline">F</code> of normal axis <code class="md-code-inline">d</code>, with <code class="md-code-inline">Dc_d</code> the centred difference across the facet. It reads the ghost beyond the facet, so the space must have ghosts there: build it with <code class="md-code-inline">gridspace(Ωₕ; ghosts = ...)</code>.</p>
+<p>A node on several facets (a 2D corner) has one value per facet. Meaningful inside <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a>, on either side or both, where each facet&#39;s term carries that facet&#39;s weight and <code class="md-code-inline">markers</code> selects the facets (all of them by default); so <code class="md-code-inline">inner_Γ(∂ₙ(u), v; markers = (:xmin,))</code> gives a corner only its <code class="md-code-inline">xmin</code> term, and per-facet coefficients are sums over <code class="md-code-inline">markers</code>. With <code class="md-code-inline">∂ₙ</code> on both sides, facet pairs with facet.</p>
+<p>With a constant <code class="md-code-inline">D × D</code> matrix <code class="md-code-inline">K</code>, it is the conormal derivative <code class="md-code-inline">η_F · (K Dc u)</code>, the centred difference along every axis. A <code class="md-code-inline">K</code> that varies in space is refused with an <code class="md-code-inline">ArgumentError</code>, as is a facet without ghosts, or a space without any, when <code class="md-code-inline">form</code> is called. So is a nonzero <code class="md-code-inline">K[d, e]</code>, <code class="md-code-inline">e ≠ d</code>, on a facet of axis <code class="md-code-inline">d</code> whose corners lack the ghosts of the two <code class="md-code-inline">e</code> facets: the tangential difference there reads them.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+a = form(Wₕ, Wₕ, (u, v) -&gt; inner_Γ(∂ₙ(u), v; markers = (:xmin, :ymax)))
+K = [2.0 0.5; 0.5 1.0]
+b = form(Wₕ, Wₕ, (u, v) -&gt; inner_Γ(∂ₙ(u; K), v))</code></pre>
+</div>
+<p>See also: <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a>, <a href="../../api/inner_products/#Bramble.η"><code class="md-code-inline">η</code></a></p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.∂ₙₙ">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.∂ₙₙ</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/normal.jl#L578-L601" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">∂ₙₙ(u)</code></pre>
+</div>
+<p>The second normal derivative of <code class="md-code-inline">u</code> at the boundary facets: on the facet <code class="md-code-inline">F</code> of normal axis <code class="md-code-inline">d</code>, the second difference <code class="md-code-inline">D̃_d D₋_d u</code> along <code class="md-code-inline">d</code> alone (the per-axis term of <a href="../../api/operators/#Bramble.Δₕ"><code class="md-code-inline">Δₕ</code></a>), the same on both sides since <code class="md-code-inline">η_F² = 1</code>. It reads the ghost beyond the facet, whose spacing is the first interior one, so the space must have ghosts there: build it with <code class="md-code-inline">gridspace(Ωₕ; ghosts = ...)</code>.</p>
+<p>A node on several facets (a 2D corner) has one value per facet, each reading only the ghost of its own facet. Meaningful inside <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a>, on either side or both, with <code class="md-code-inline">markers</code> selecting the facets as for <a href="../../api/operators/#Bramble.∂ₙ"><code class="md-code-inline">∂ₙ</code></a>; a facet without ghosts, or a space without any, is refused with an <code class="md-code-inline">ArgumentError</code> when <code class="md-code-inline">form</code> is called.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+a = form(Wₕ, Wₕ, (u, v) -&gt; inner_Γ(∂ₙₙ(u), v; markers = (:xmin,)))</code></pre>
+</div>
+<p>See also: <a href="../../api/operators/#Bramble.∂ₙ"><code class="md-code-inline">∂ₙ</code></a>, <a href="../../api/operators/#Bramble.jumpₙ"><code class="md-code-inline">jumpₙ</code></a>, <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a></p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.jumpₙ">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.jumpₙ</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/normal.jl#L607-L630" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">jumpₙ(w)</code></pre>
+</div>
+<p>The inward jump of <code class="md-code-inline">w</code> at the boundary facets, <code class="md-code-inline">w_{I − η_F e_d} − w_I</code> at the node <code class="md-code-inline">I</code> of the facet <code class="md-code-inline">F</code> of normal axis <code class="md-code-inline">d</code>: the forward jump <code class="md-code-inline">w_{I + e_d} − w_I</code> on a minimum facet, the backward one <code class="md-code-inline">w_{I − e_d} − w_I</code> on a maximum facet. Both read only the facet node and its interior neighbour, so <code class="md-code-inline">jumpₙ</code> needs no ghosts of its own and works on any space; an operand that reads ghosts (<code class="md-code-inline">jumpₙ(Δₕ(u))</code>) needs the space to have them.</p>
+<p>A node on several facets (a 2D corner) has one value per facet. Meaningful inside <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a>, on either side or both, with <code class="md-code-inline">markers</code> selecting the facets as for <a href="../../api/operators/#Bramble.∂ₙ"><code class="md-code-inline">∂ₙ</code></a>, so per-facet coefficients are sums over <code class="md-code-inline">markers</code>.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+a = form(Wₕ, Wₕ, (u, v) -&gt; inner_Γ(2.0 * jumpₙ(u), jumpₙ(v); markers = (:xmin,)))
+b = form(Wₕ, Wₕ, (u, v) -&gt; inner_Γ(jumpₙ(Δₕ(u)), v))</code></pre>
+</div>
+<p>See also: <a href="../../api/operators/#Bramble.∂ₙ"><code class="md-code-inline">∂ₙ</code></a>, <a href="../../api/operators/#Bramble.∂ₙₙ"><code class="md-code-inline">∂ₙₙ</code></a>, <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a></p>
+</div>
+</div>
       </article>
       <footer class="md-footer">
 <p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
@@ -2774,6 +2905,7 @@ parent(backward_shift(uₕ, Val(1)))
     <aside class="md-toc">
       <div class="md-toc-inner">
         <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#Facet-operators">Facet operators</a>
       </div>
     </aside>
   </div>
@@ -2791,6 +2923,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=233c81bf"></script>
+  <script src="../../assets/materialdocs.js?v=db323f20"></script>
 </body>
 </html>

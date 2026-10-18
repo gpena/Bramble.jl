@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML, AD and solvers — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=e4a7e80e">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=abc68441">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../examples/heat_equation/">Heat equation</a>
+        <a href="../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -98,7 +100,7 @@
 <div class="md-docstring" id="Bramble.semidiscretize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.semidiscretize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L111-L158" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L107-L164" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -143,6 +145,7 @@ bcs = dirichlet_constraints(Ωₕ, I, :boundary =&gt; (x, t) -&gt; 0.0)
 
 sd = semidiscretize(a, l; dirichlet = bcs)</code></pre>
 </div>
+<p>Forms posed on a constrained ghost space, whose relation data may depend on time (<code class="md-code-inline">(x, t) -&gt; ...</code>, see <a href="../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>), are taken too, by the method <code class="md-code-inline">semidiscretize(a::GhostBilinearForm, l::GhostLinearForm; mass, state, update_coefficients!, reassemble)</code>: the relations eliminate the ghosts and the Dirichlet nodes, so the mass has no zero rows, and the source at <code class="md-code-inline">t</code> carries the lift of the data at <code class="md-code-inline">t</code>. That method refuses the <code class="md-code-inline">dirichlet</code> keyword (give <code class="md-code-inline">:F =&gt; u =&gt; g(x, t)</code> in <code class="md-code-inline">constrained</code>), a space keeping ghosts as unknowns, a mass coupling a degree of freedom to a point whose data depend on time, <code class="md-code-inline">semidiscretize(build, l)</code> with a ghost load, and <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a>, each with an <code class="md-code-inline">ArgumentError</code> naming the alternative.</p>
 <p>See also <a href="../api_sciml/#Bramble.ode_function"><code class="md-code-inline">ode_function</code></a>, <a href="../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a>, <a href="../api_sciml/#Bramble.jacobian!"><code class="md-code-inline">jacobian!</code></a>.</p>
 </div>
 <div class="md-docstring-content">
@@ -171,11 +174,28 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 </div>
 <p>See also <a href="../api_sciml/#Bramble.ode_function"><code class="md-code-inline">ode_function</code></a>, <a href="../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a>.</p>
 </div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">semidiscretize(a::GhostBilinearForm, l::GhostLinearForm; kwargs...) -&gt; Semidiscretization</code></pre>
+</div>
+<p>Semidiscretise <code class="md-code-inline">M u&#39; = F(t) − A u</code> for forms posed on one constrained ghost space <code class="md-code-inline">Cₕ</code>, whose relation data may depend on time. With <code class="md-code-inline">(E, d(t))</code> the closure of <code class="md-code-inline">Cₕ</code>, <code class="md-code-inline">A = Eᵀ A_pad E</code>, <code class="md-code-inline">M = Eᵀ M_pad E</code> and <code class="md-code-inline">F(t) = Eᵀ (F_pad(t) − A_pad d(t))</code>, so at a fixed <code class="md-code-inline">t</code> the residual is <code class="md-code-inline">F − A u</code> of <code class="md-code-inline">assemble(a, l)</code> on the space rebuilt with the data frozen at <code class="md-code-inline">t</code>.</p>
+<p><strong>Keywords</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">mass</code>: a form on <code class="md-code-inline">Cₕ</code> defining <code class="md-code-inline">M</code> (default <code class="md-code-inline">innerₕ(u, v)</code>, diagonal and positive). A mass that couples a degree of freedom to a point where <code class="md-code-inline">d</code> depends on time is refused: its term <code class="md-code-inline">Eᵀ M_pad d′(t)</code> needs the time derivative of the data.</p>
+</li>
+<li><p><code class="md-code-inline">state</code>: a grid function on <code class="md-code-inline">Bramble.padded_space(Cₕ)</code> that receives <code class="md-code-inline">lift(Cₕ, u, t)</code> before each assembly, for forms whose coefficients read it (default <code class="md-code-inline">nothing</code>).</p>
+</li>
+<li><p><code class="md-code-inline">update_coefficients!</code>, <code class="md-code-inline">reassemble</code>: as for plain forms.</p>
+</li>
+</ul>
+<p>The <code class="md-code-inline">dirichlet</code> keyword is refused: give a Dirichlet condition as <code class="md-code-inline">:F =&gt; u =&gt; g(x, t)</code> in <a href="../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>. So are a space that keeps ghosts as unknowns (their mass rows vanish), <code class="md-code-inline">semidiscretize(build, l)</code> with a ghost load (use <code class="md-code-inline">update_coefficients!</code> and <code class="md-code-inline">reassemble = true</code>), and <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a>.</p>
+</div>
 </div>
 <div class="md-docstring" id="Bramble.Semidiscretization">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Semidiscretization</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L59-L81" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L55-L77" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -186,7 +206,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <p>Built by <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>; read back with <a href="../api_sciml/#Bramble.mass_matrix"><code class="md-code-inline">mass_matrix</code></a> and <a href="../api_sciml/#Bramble.operator_matrix"><code class="md-code-inline">operator_matrix</code></a>.</p>
 <p><strong>Fields</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">operator</code>: spatial <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a>, assembled into <code class="md-code-inline">A</code>.</p>
+<li><p><code class="md-code-inline">operator</code>: spatial <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> (or a ghost-space form), assembled into <code class="md-code-inline">A</code>.</p>
 </li>
 <li><p><code class="md-code-inline">source</code>: source <a href="../internals/form/#Bramble.LinearForm"><code class="md-code-inline">LinearForm</code></a>, assembled into <code class="md-code-inline">F(t)</code> at each step.</p>
 </li>
@@ -198,7 +218,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 </li>
 <li><p><code class="md-code-inline">source_vector</code>: the reusable <code class="md-code-inline">F</code> buffer, refilled in place.</p>
 </li>
-<li><p><code class="md-code-inline">constraints</code>: how the source&#39;s boundary values are reached – one of <code class="md-code-inline">NoConstraints</code>, <code class="md-code-inline">LabelsOnly</code>, <code class="md-code-inline">StaticConstraints</code>, <code class="md-code-inline">TimeDependentConstraints</code> or <code class="md-code-inline">TimeParamDependentConstraints</code>.</p>
+<li><p><code class="md-code-inline">constraints</code>: how the source&#39;s boundary values are reached – one of <code class="md-code-inline">NoConstraints</code>, <code class="md-code-inline">LabelsOnly</code>, <code class="md-code-inline">StaticConstraints</code>, <code class="md-code-inline">TimeDependentConstraints</code>, <code class="md-code-inline">TimeParamDependentConstraints</code> or, on a ghost space, <code class="md-code-inline">GhostConstraints</code>.</p>
 </li>
 <li><p><code class="md-code-inline">labels</code>: constrained boundary labels.</p>
 </li>
@@ -256,7 +276,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.mass_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.mass_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L97-L101" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L93-L97" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -265,18 +285,11 @@ sol = solve(prob, Tsit5())</code></pre>
 </div>
 <p>Return the constant mass matrix <code class="md-code-inline">M</code>, whose constrained rows are zero.</p>
 </div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">mass_matrix(sd::SecondOrderSemidiscretization) -&gt; AbstractMatrix</code></pre>
-</div>
-<p>Return the constant mass matrix <code class="md-code-inline">M</code>, whose constrained rows are zero.</p>
-</div>
 </div>
 <div class="md-docstring" id="Bramble.operator_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.operator_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L104-L108" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L100-L104" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -289,7 +302,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.jacobian!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L569-L581" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L580-L592" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -304,7 +317,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.jacobian_prototype">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian_prototype</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L612-L623" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L623-L634" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -522,195 +535,31 @@ du0, dp = Bramble.adjoint_sensitivities(sol, FBDF(); t = ts, dgdu_discrete = dgd
 <p>See also <a href="../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">Bramble.ode_problem</code></a>, <a href="../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">Bramble.pde_solve</code></a> for the steady-state adjoint this mirrors.</p>
 </div>
 </div>
-<h2 id="Second-order-wave-problems" class="md-heading">Second-order wave problems<a href="#Second-order-wave-problems" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">semidiscretize_second_order</code> is the second-order-in-time counterpart of <code class="md-code-inline">semidiscretize</code>: from a stiffness <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> and a source <a href="../internals/form/#Bramble.LinearForm"><code class="md-code-inline">LinearForm</code></a>, it produces <code class="md-code-inline">M üₕ + C u̇ₕ + K uₕ = F(t)</code>, and <code class="md-code-inline">second_order_ode_problem</code>/<code class="md-code-inline">second_order_ode_function</code> hand that to <code class="md-code-inline">OrdinaryDiffEq</code> as a <code class="md-code-inline">SecondOrderODEProblem</code> – state <code class="md-code-inline">(v, u)</code>, velocity then displacement. Dirichlet conditions constrain the displacement <code class="md-code-inline">u</code> the same way <code class="md-code-inline">semidiscretize</code> constrains its own state, and the consistent velocity follows from differentiating that constraint in time rather than being prescribed separately. Explicit/symplectic solvers (<code class="md-code-inline">VelocityVerlet</code> and similar) cannot be used at all – see <a href="../api_sciml/#Bramble.SecondOrderSemidiscretization"><code class="md-code-inline">SecondOrderSemidiscretization</code></a>&#39;s docstring for why.</p>
-<div class="md-docstring" id="Bramble.semidiscretize_second_order">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.semidiscretize_second_order</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L137-L171" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">semidiscretize_second_order(K::BilinearForm, l::LinearForm; kwargs...) -&gt; SecondOrderSemidiscretization</code></pre>
-</div>
-<p>Semidiscretise <code class="md-code-inline">M üₕ + C u̇ₕ + K uₕ = F(t)</code> from the spatial stiffness form <code class="md-code-inline">K</code> and the source <code class="md-code-inline">l</code>, both posed on the same test space.</p>
-<p>Write <code class="md-code-inline">K</code> as the steady problem is written: <code class="md-code-inline">assemble(K)</code> is the same matrix <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a> calls <code class="md-code-inline">A</code>.</p>
-<p><strong>Keywords</strong></p>
-<ul class="md-list-tight">
-<li><p><code class="md-code-inline">mass</code>: <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> defining <code class="md-code-inline">M</code> (<code class="md-code-inline">innerₕ(u, v)</code> by default, the discrete <code class="md-code-inline">L²</code> inner product, which is diagonal).</p>
-</li>
-<li><p><code class="md-code-inline">damping</code>: <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> defining <code class="md-code-inline">C</code> (<code class="md-code-inline">nothing</code> by default, an undamped system).</p>
-</li>
-<li><p><code class="md-code-inline">dirichlet</code>: constrained labels and, where they carry values, the values – every form <a href="../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a> accepts, including time-dependent constraints from <a href="../api/forms/#Bramble.dirichlet_constraints"><code class="md-code-inline">dirichlet_constraints</code></a><code class="md-code-inline">(Ωₕ, I, :label =&gt; (x, t) -&gt; ...)</code> (default: <code class="md-code-inline">nothing</code>).</p>
-</li>
-<li><p><code class="md-code-inline">dirichlet_components</code>: leaf components of a composite space the labels bind to (default: <code class="md-code-inline">nothing</code>, all leaves).</p>
-</li>
-</ul>
-<p>Dirichlet conditions constrain <code class="md-code-inline">u</code>; the consistent velocity at a constrained dof follows from differentiating that constraint in time and is never prescribed independently – see this file&#39;s header comment for why, and for the solver-compatibility warning that follows from it.</p>
-<p><strong>Examples</strong></p>
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0)), 101)
-Wₕ = gridspace(Ωₕ)
-I = interval(0.0, 1.0)
-
-fₕ = Rₕ(Wₕ, x -&gt; 0.0)
-K = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))
-l = form(Wₕ, v -&gt; innerₕ(fₕ, v))
-
-sd = semidiscretize_second_order(K, l)</code></pre>
-</div>
-<p>See also <a href="../api_sciml/#Bramble.second_order_ode_function"><code class="md-code-inline">second_order_ode_function</code></a>, <a href="../api_sciml/#Bramble.second_order_ode_problem"><code class="md-code-inline">second_order_ode_problem</code></a>.</p>
-</div>
-</div>
-<div class="md-docstring" id="Bramble.SecondOrderSemidiscretization">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.SecondOrderSemidiscretization</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L76-L99" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">SecondOrderSemidiscretization{...} &lt;: AbstractSemidiscretization</code></pre>
-</div>
-<p>Method-of-lines semidiscretisation of <code class="md-code-inline">M üₕ + C u̇ₕ + K uₕ = F(t)</code>, callable with the <code class="md-code-inline">(dv, v, u, p, t)</code> signature a second-order time stepper expects.</p>
-<p>Built by <a href="../api_sciml/#Bramble.semidiscretize_second_order"><code class="md-code-inline">semidiscretize_second_order</code></a>; read back with <a href="../api_sciml/#Bramble.mass_matrix"><code class="md-code-inline">mass_matrix</code></a>, <a href="../api_sciml/#Bramble.damping_matrix"><code class="md-code-inline">damping_matrix</code></a> and <a href="../api_sciml/#Bramble.stiffness_matrix"><code class="md-code-inline">stiffness_matrix</code></a>.</p>
-<p><strong>Fields</strong></p>
-<ul class="md-list-tight">
-<li><p><code class="md-code-inline">stiffness</code>: spatial <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a>, assembled into <code class="md-code-inline">K</code>.</p>
-</li>
-<li><p><code class="md-code-inline">damping</code>: spatial <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a>, assembled into <code class="md-code-inline">C</code>, or <code class="md-code-inline">nothing</code> for an undamped system.</p>
-</li>
-<li><p><code class="md-code-inline">source</code>: source <a href="../internals/form/#Bramble.LinearForm"><code class="md-code-inline">LinearForm</code></a>, assembled into <code class="md-code-inline">F(t)</code> at each step.</p>
-</li>
-<li><p><code class="md-code-inline">space</code>: the test space every form shares.</p>
-</li>
-<li><p><code class="md-code-inline">stiffness_matrix</code>: <code class="md-code-inline">K</code>, with <code class="md-code-inline">eₖ</code> rows on the constrained degrees of freedom.</p>
-</li>
-<li><p><code class="md-code-inline">damping_matrix</code>: <code class="md-code-inline">C</code>, with zero rows on the constrained degrees of freedom, or <code class="md-code-inline">nothing</code>.</p>
-</li>
-<li><p><code class="md-code-inline">mass_matrix</code>: <code class="md-code-inline">M</code>, with zero rows on the constrained degrees of freedom.</p>
-</li>
-<li><p><code class="md-code-inline">source_vector</code>: the reusable <code class="md-code-inline">F</code> buffer, refilled in place.</p>
-</li>
-<li><p><code class="md-code-inline">constraints</code>: how the source&#39;s boundary values are reached – one of <code class="md-code-inline">NoConstraints</code>, <code class="md-code-inline">LabelsOnly</code>, <code class="md-code-inline">StaticConstraints</code>, <code class="md-code-inline">TimeDependentConstraints</code> or <code class="md-code-inline">TimeParamDependentConstraints</code>.</p>
-</li>
-<li><p><code class="md-code-inline">labels</code>: constrained boundary labels.</p>
-</li>
-<li><p><code class="md-code-inline">components</code>: leaf components the labels bind to, or <code class="md-code-inline">nothing</code> for all.</p>
-</li>
-</ul>
-</div>
-</div>
-<div class="md-docstring" id="Bramble.damping_matrix">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.damping_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L122-L127" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">damping_matrix(sd::SecondOrderSemidiscretization) -&gt; Union{AbstractMatrix, Nothing}</code></pre>
-</div>
-<p>Return the assembled damping operator <code class="md-code-inline">C</code>, whose constrained rows are zero, or <code class="md-code-inline">nothing</code> for an undamped system.</p>
-</div>
-</div>
-<div class="md-docstring" id="Bramble.stiffness_matrix">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.stiffness_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L130-L134" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">stiffness_matrix(sd::SecondOrderSemidiscretization) -&gt; AbstractMatrix</code></pre>
-</div>
-<p>Return the assembled spatial stiffness operator <code class="md-code-inline">K</code>, whose constrained rows are <code class="md-code-inline">eₖ</code>.</p>
-</div>
-</div>
-<div class="md-docstring" id="Bramble.block_mass_matrix">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.block_mass_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L229-L236" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">block_mass_matrix(sd::SecondOrderSemidiscretization) -&gt; AbstractMatrix</code></pre>
-</div>
-<p>Return the <code class="md-code-inline">2n × 2n</code> block-diagonal <code class="md-code-inline">blockdiag(mass_matrix(sd), I)</code>, the mass matrix <a href="../api_sciml/#Bramble.second_order_ode_function"><code class="md-code-inline">second_order_ode_function</code></a> hands <code class="md-code-inline">DynamicalODEFunction</code>: the <code class="md-code-inline">I</code> block leaves the kinematic equation <code class="md-code-inline">u&#39; = v</code> an ordinary ODE, and the <code class="md-code-inline">mass_matrix(sd)</code> block carries whatever Dirichlet row-zeroing <code class="md-code-inline">sd</code> was built with.</p>
-</div>
-</div>
-<div class="md-docstring" id="Bramble.second_order_ode_function">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.second_order_ode_function</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L300-L314" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">second_order_ode_function(sd::SecondOrderSemidiscretization) -&gt; DynamicalODEFunction
-second_order_ode_function(K::BilinearForm, l::LinearForm; kwargs...) -&gt; DynamicalODEFunction</code></pre>
-</div>
-<p>Wrap a second-order semidiscretisation as a <code class="md-code-inline">DynamicalODEFunction</code> carrying its block mass matrix, ready for <code class="md-code-inline">OrdinaryDiffEq</code>.</p>
-<p>The two-form method builds the <a href="../api_sciml/#Bramble.SecondOrderSemidiscretization"><code class="md-code-inline">SecondOrderSemidiscretization</code></a> first, forwarding every keyword to <a href="../api_sciml/#Bramble.semidiscretize_second_order"><code class="md-code-inline">semidiscretize_second_order</code></a>.</p>
-<p>Requires <a href="https://github.com/SciML/SciMLBase.jl">SciMLBase.jl</a>; call <code class="md-code-inline">using SciMLBase</code> (or any package that loads it, such as <code class="md-code-inline">OrdinaryDiffEq</code>) before calling this function.</p>
-<p>See also <a href="../api_sciml/#Bramble.second_order_ode_problem"><code class="md-code-inline">second_order_ode_problem</code></a>, <a href="../api_sciml/#Bramble.semidiscretize_second_order"><code class="md-code-inline">semidiscretize_second_order</code></a>.</p>
-</div>
-</div>
-<div class="md-docstring" id="Bramble.second_order_ode_problem">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.second_order_ode_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/second_order_semidiscrete.jl#L331-L368" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">second_order_ode_problem(sd::SecondOrderSemidiscretization, du₀, u₀, I; p) -&gt; SecondOrderODEProblem
-second_order_ode_problem(K::BilinearForm, l::LinearForm, du₀, u₀, I; p, kwargs...) -&gt; SecondOrderODEProblem</code></pre>
-</div>
-<p>Build the <code class="md-code-inline">SecondOrderODEProblem</code> stepping <code class="md-code-inline">sd</code> over the time domain <code class="md-code-inline">I</code>, from the initial velocity <code class="md-code-inline">du₀</code> and initial displacement <code class="md-code-inline">u₀</code> – each a <a href="../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> or a plain vector. <code class="md-code-inline">I</code> may equally be a <code class="md-code-inline">(t₀, t₁)</code> tuple.</p>
-<p><code class="md-code-inline">u₀</code> is copied, never mutated, and the copy is made consistent with the Dirichlet rows at <code class="md-code-inline">t₀</code> (see <a href="../api/forms/#Bramble.dirichlet_bc!"><code class="md-code-inline">dirichlet_bc!</code></a>), against <code class="md-code-inline">p</code> when one is given. <code class="md-code-inline">du₀</code> is copied too, and its rows are not made consistent: velocity at a constrained dof is not an independent algebraic unknown here (see this file&#39;s header comment). When <code class="md-code-inline">p</code> is an array whose element type is not a float, such as <code class="md-code-inline">ForwardDiff.Dual</code>s, both copies are widened to hold it.</p>
-<p>The only keyword is <code class="md-code-inline">p</code> (default <code class="md-code-inline">SciMLBase.NullParameters()</code>), for a residual or Dirichlet conditions given a parameter-dependent, <code class="md-code-inline">(x, t, p)</code> form (see <a href="../api_sciml/#Bramble.semidiscretize_second_order"><code class="md-code-inline">semidiscretize_second_order</code></a>). It is stored in the problem and used for the Dirichlet values at <code class="md-code-inline">t₀</code>. The two-form method also forwards its other keywords to <a href="../api_sciml/#Bramble.semidiscretize_second_order"><code class="md-code-inline">semidiscretize_second_order</code></a>.</p>
-<p>Requires <a href="https://github.com/SciML/SciMLBase.jl">SciMLBase.jl</a>.</p>
-<p><strong>Examples</strong></p>
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">sd = semidiscretize_second_order(K, l; dirichlet = bcs)
-prob = second_order_ode_problem(sd, Rₕ(Wₕ, x -&gt; 0.0), Rₕ(Wₕ, x -&gt; sinpi(x[1])), interval(0.0, 1.0))
-sol = solve(prob, Rodas5P(); reltol = 1e-11, abstol = 1e-13)</code></pre>
-</div>
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">bcs = dirichlet_constraints(Ωₕ, I, :boundary =&gt; (x, t, p) -&gt; p[1] * t)
-sd = semidiscretize_second_order(K, l; dirichlet = bcs)
-prob = second_order_ode_problem(sd, du₀, u₀, I; p = [0.7])</code></pre>
-</div>
-<p>See also <a href="../api_sciml/#Bramble.second_order_ode_function"><code class="md-code-inline">second_order_ode_function</code></a>, <a href="../api_sciml/#Bramble.semidiscretize_second_order"><code class="md-code-inline">semidiscretize_second_order</code></a>.</p>
-</div>
-</div>
 <h2 id="Differentiable-linear-solve-(adjoint-gradients)" class="md-heading">Differentiable linear solve (adjoint gradients)<a href="#Differentiable-linear-solve-(adjoint-gradients)" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.pde_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.pde_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/pde_solve.jl#L38-L121" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/pde_solve.jl#L38-L157" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver = :default, sym = :auto, kwargs...) -&gt; Vector
+<pre><code class="language-julia">pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver = :default, sym = :auto, mean_zero = nothing, gauge = nothing, kwargs...) -&gt; Vector
 pde_solve(fact::Factorization, F::AbstractVector) -&gt; Vector</code></pre>
 </div>
 <p>Solve <code class="md-code-inline">A u = F</code> (or <code class="md-code-inline">fact u = F</code>) and return <code class="md-code-inline">u</code>.</p>
 <p>With no keyword arguments this is <code class="md-code-inline">A \ F</code>, unless <code class="md-code-inline">AppleAccelerate.jl</code> is loaded on macOS <em>and</em> the system is symmetric (see <code class="md-code-inline">:default</code> below), in which case it is <code class="md-code-inline">accelerate_solve(A, F; sym)</code>. The name exists so that reverse-mode AD tools have one function to attach an adjoint rule to, which is what makes a whole <code class="md-code-inline">θ -&gt; assemble -&gt; pde_solve -&gt; J(u)</code> chain differentiable.</p>
 <p><strong>Keywords</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">solver</code>: <code class="md-code-inline">:default</code> – <code class="md-code-inline">A \ F</code> on Linux, Windows, macOS without <code class="md-code-inline">AppleAccelerate.jl</code> loaded, and macOS on an unsymmetric <code class="md-code-inline">A</code>; on macOS with <code class="md-code-inline">using AppleAccelerate</code> in effect and <code class="md-code-inline">A</code> symmetric, dispatches to <code class="md-code-inline">accelerate_solve</code> instead (same as passing <code class="md-code-inline">solver = :accelerate</code> explicitly). Symmetry is <code class="md-code-inline">issymmetric(A)</code> under <code class="md-code-inline">sym = :auto</code> (the default), or trusted outright from an explicit <code class="md-code-inline">sym = :spd</code>/<code class="md-code-inline">:definite</code>/<code class="md-code-inline">:symmetric</code> (and conversely <code class="md-code-inline">:unsymmetric</code> skips straight to <code class="md-code-inline">A \ F</code>) – the caller has already asserted the property, so it is not checked again. The narrowing exists because Accelerate is only a win on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ): on forms assembled on 2D grid spaces it won on a symmetric Poisson-plus-mass system and lost on an unsymmetric convection-diffusion one. This only ever narrows which solver runs on macOS; Linux and Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws from <code class="md-code-inline">accelerate_solve</code> exactly as <code class="md-code-inline">solver = :accelerate</code> would – <code class="md-code-inline">:default</code> never silently falls back to <code class="md-code-inline">\</code> after picking Accelerate. <code class="md-code-inline">:suitesparse</code> (CHOLMOD/UMFPACK), <code class="md-code-inline">:spqr</code> (sparse QR, for a least-squares or rectangular <code class="md-code-inline">A</code>), <code class="md-code-inline">:accelerate</code> (Apple <code class="md-code-inline">libSparse</code>, needs <code class="md-code-inline">AppleAccelerate.jl</code>, honoured unconditionally regardless of symmetry), <code class="md-code-inline">:mumps</code> (needs <code class="md-code-inline">MUMPS.jl</code>), <code class="md-code-inline">:sparspak</code> (pure Julia, needs <code class="md-code-inline">Sparspak.jl</code>).</p>
+<li><p><code class="md-code-inline">solver</code>: <code class="md-code-inline">:default</code> – <code class="md-code-inline">A \ F</code> on Linux, Windows, macOS without <code class="md-code-inline">AppleAccelerate.jl</code> loaded, and macOS on an unsymmetric <code class="md-code-inline">A</code>; on macOS with <code class="md-code-inline">using AppleAccelerate</code> in effect and <code class="md-code-inline">A</code> symmetric, dispatches to <code class="md-code-inline">accelerate_solve</code> instead (same as passing <code class="md-code-inline">solver = :accelerate</code> explicitly). Symmetry is <code class="md-code-inline">issymmetric(A)</code> under <code class="md-code-inline">sym = :auto</code> (the default), or trusted outright from an explicit <code class="md-code-inline">sym = :spd</code>/<code class="md-code-inline">:definite</code>/<code class="md-code-inline">:symmetric</code> (and conversely <code class="md-code-inline">:unsymmetric</code> skips straight to <code class="md-code-inline">A \ F</code>) – the caller has already asserted the property, so it is not checked again. The narrowing exists because Accelerate is only a win on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ). On forms assembled on 2D grid spaces it won on a symmetric Poisson-plus-mass system and lost on an unsymmetric convection-diffusion one. This only ever narrows which solver runs on macOS; Linux and Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws from <code class="md-code-inline">accelerate_solve</code> exactly as <code class="md-code-inline">solver = :accelerate</code> would – <code class="md-code-inline">:default</code> never silently falls back to <code class="md-code-inline">\</code> after picking Accelerate. <code class="md-code-inline">:suitesparse</code> (CHOLMOD/UMFPACK), <code class="md-code-inline">:spqr</code> (sparse QR, for a least-squares or rectangular <code class="md-code-inline">A</code>), <code class="md-code-inline">:accelerate</code> (Apple <code class="md-code-inline">libSparse</code>, needs <code class="md-code-inline">AppleAccelerate.jl</code>, honoured unconditionally regardless of symmetry), <code class="md-code-inline">:mumps</code> (needs <code class="md-code-inline">MUMPS.jl</code>), <code class="md-code-inline">:sparspak</code> (pure Julia, needs <code class="md-code-inline">Sparspak.jl</code>).</p>
 </li>
-<li><p><code class="md-code-inline">kwargs</code>: passed to the chosen backend (for <code class="md-code-inline">:accelerate</code> and <code class="md-code-inline">:mumps</code> the keywords of <a href="../api_sciml/#Bramble.accelerate_solve"><code class="md-code-inline">accelerate_solve</code></a> and <a href="../api_sciml/#Bramble.mumps_solve"><code class="md-code-inline">mumps_solve</code></a>), which throws on one it does not take. <code class="md-code-inline">:default</code> takes only <code class="md-code-inline">kind</code> and <code class="md-code-inline">:sparspak</code> takes none: both throw an <code class="md-code-inline">ArgumentError</code> on any other keyword. <code class="md-code-inline">kind</code> and <code class="md-code-inline">sym</code> are read only when the Accelerate route runs; on <code class="md-code-inline">A \ F</code> they are accepted and ignored, so <code class="md-code-inline">kind = :bogus</code> throws only where Accelerate is taken.</p>
+<li><p><code class="md-code-inline">kwargs</code>: passed to the chosen backend (for <code class="md-code-inline">:accelerate</code> and <code class="md-code-inline">:mumps</code> the keywords of <a href="../api_sciml/#Bramble.accelerate_solve"><code class="md-code-inline">accelerate_solve</code></a> and <a href="../api_sciml/#Bramble.mumps_solve"><code class="md-code-inline">mumps_solve</code></a>), which throws on one it does not take. <code class="md-code-inline">:default</code> takes only <code class="md-code-inline">kind</code> and <code class="md-code-inline">:sparspak</code> takes none. Both throw an <code class="md-code-inline">ArgumentError</code> on any other keyword. <code class="md-code-inline">kind</code> and <code class="md-code-inline">sym</code> are read only when the Accelerate route runs. On <code class="md-code-inline">A \ F</code> they are accepted and ignored, so <code class="md-code-inline">kind = :bogus</code> throws only where Accelerate is taken.</p>
 </li>
 <li><p><code class="md-code-inline">sym</code>: symmetry hint for <code class="md-code-inline">:suitesparse</code>, <code class="md-code-inline">:accelerate</code> and <code class="md-code-inline">:mumps</code> (and, on macOS, for <code class="md-code-inline">:default</code>&#39;s own choice of solver – see above). <code class="md-code-inline">:auto</code> (default) detects it; <code class="md-code-inline">:spd</code>/<code class="md-code-inline">:definite</code>/<code class="md-code-inline">1</code>, <code class="md-code-inline">:symmetric</code>/<code class="md-code-inline">2</code> and <code class="md-code-inline">:unsymmetric</code>/<code class="md-code-inline">0</code> state it.</p>
+</li>
+<li><p><code class="md-code-inline">mean_zero</code>: a weight vector <code class="md-code-inline">w</code> (for instance the assembled <code class="md-code-inline">innerₕ(1, v)</code>), or <code class="md-code-inline">nothing</code> (default). With <code class="md-code-inline">w</code>, <code class="md-code-inline">pde_solve</code> solves the bordered system <code class="md-code-inline">[A w; wᵀ 0] [u; λ] = [F; 0]</code> and returns <code class="md-code-inline">u</code>, the solution with discrete zero average <span class="md-math md-math-inline">\(w^T u = 0\)</span> of a pure-Neumann system whose <code class="md-code-inline">A</code> annihilates constants, of the promoted float type of <code class="md-code-inline">A</code>, <code class="md-code-inline">F</code> and <code class="md-code-inline">w</code>; <code class="md-code-inline">A</code> is not modified. The bordered matrix is indefinite, so <code class="md-code-inline">sym</code> is not used. For a real symmetric <code class="md-code-inline">A</code> and real <code class="md-code-inline">w</code>, <code class="md-code-inline">:default</code> factors it by LU (or by Accelerate&#39;s pivoting <span class="md-math md-math-inline">\(LDL^T\)</span>) and <code class="md-code-inline">:accelerate</code> and <code class="md-code-inline">:mumps</code> by <span class="md-math md-math-inline">\(LDL^T\)</span>; for any other <code class="md-code-inline">A</code> they use LU, as do <code class="md-code-inline">:suitesparse</code> (UMFPACK) and <code class="md-code-inline">:sparspak</code>. <code class="md-code-inline">:spqr</code> throws an <code class="md-code-inline">ArgumentError</code>, and a <code class="md-code-inline">w</code>, <code class="md-code-inline">F</code> or <code class="md-code-inline">A</code> of mismatched size a <code class="md-code-inline">DimensionMismatch</code>. Without <code class="md-code-inline">mean_zero</code> or <code class="md-code-inline">gauge</code>, a square <code class="md-code-inline">A</code> with <code class="md-code-inline">‖A 1‖∞ ≤ 1e-10 ‖A‖∞</code> (constants in its kernel) logs a warning naming <code class="md-code-inline">mean_zero</code>, and the solve proceeds.</p>
+</li>
+<li><p><code class="md-code-inline">gauge</code>: a matrix <code class="md-code-inline">Z</code> with one column per kernel vector to fix (for instance <code class="md-code-inline">Bramble.ghost_kernel(A, Wₕ)</code>, the ghost-only kernel of a form such as <code class="md-code-inline">innerₕ(Δₕ(u), Δₕ(v))</code> on a ghost space), or <code class="md-code-inline">nothing</code> (default). With <code class="md-code-inline">Z</code>, <code class="md-code-inline">pde_solve</code> solves <code class="md-code-inline">[A Z; Zᵀ 0] [u; μ] = [F; 0]</code> and returns <code class="md-code-inline">u</code>, the solution with <span class="md-math md-math-inline">\(Z^T u = 0\)</span>, which makes its component in the kernel deterministic. With <code class="md-code-inline">mean_zero = w</code> too, the border is <code class="md-code-inline">[w Z]</code>. The routing, the element type and the refusals are those of <code class="md-code-inline">mean_zero</code>, a <code class="md-code-inline">Z</code> whose row count is not that of <code class="md-code-inline">A</code> being a <code class="md-code-inline">DimensionMismatch</code>, except that <code class="md-code-inline">:sparspak</code>, which factors without pivoting, throws an <code class="md-code-inline">ArgumentError</code>. A complex <code class="md-code-inline">A</code> or <code class="md-code-inline">Z</code> is accepted; the border is transposed, not conjugated. <code class="md-code-inline">Z</code> is used as given, and the values in the kernel are deterministic only when its columns span the whole kernel. A <code class="md-code-inline">Z</code> that spans only part of it is not detected: the factorisation usually proceeds (a <code class="md-code-inline">SingularException</code> is a matter of rounding), the physical part is still the solution of the quotient system, and the kernel components <code class="md-code-inline">Z</code> leaves out come back arbitrary and different from one backend to another. The solution is only as accurate as the conditioning of <code class="md-code-inline">A</code> away from its kernel allows: on the forms that produce a ghost-only kernel, near <code class="md-code-inline">1e-8</code> relative.</p>
 </li>
 </ul>
 <p><strong>Returns</strong></p>
@@ -729,11 +578,95 @@ pde_solve(fact::Factorization, F::AbstractVector) -&gt; Vector</code></pre>
 u = pde_solve(A, F)
 
 using SuiteSparse
-u_spd = pde_solve(A, F; solver = :suitesparse, sym = :spd)</code></pre>
+u_spd = pde_solve(A, F; solver = :suitesparse, sym = :spd)
+
+# pure Neumann: fix the constant by a discrete zero average
+w = assemble(form(W, v -&gt; innerₕ(x -&gt; 1.0, v)))
+u0 = pde_solve(A_neumann, F_neumann; mean_zero = w)
+
+# a ghost-only kernel: fix the ghost values no row of A sees
+Wg = gridspace(Ωₕ; ghosts = :boundary)
+Ag = assemble(form(Wg, Wg, (u, v) -&gt; innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+ug = pde_solve(Ag, Fg; gauge = Bramble.ghost_kernel(Ag, Wg))</code></pre>
 </div>
 <p>See also <a href="../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a>, <a href="../api_sciml/#Bramble.sparse_factorize"><code class="md-code-inline">sparse_factorize</code></a>, <a href="../api_sciml/#Bramble.suitesparse_solve"><code class="md-code-inline">suitesparse_solve</code></a>, <a href="../api_sciml/#Bramble.suitesparse_qr_solve"><code class="md-code-inline">suitesparse_qr_solve</code></a>, <a href="../api_sciml/#Bramble.accelerate_solve"><code class="md-code-inline">accelerate_solve</code></a>, <a href="../api_sciml/#Bramble.mumps_solve"><code class="md-code-inline">mumps_solve</code></a>, <a href="../api_sciml/#Bramble.sparspak_solve"><code class="md-code-inline">sparspak_solve</code></a>, <a href="../api_sciml/#Bramble.linear_problem"><code class="md-code-inline">linear_problem</code></a>.</p>
 </div>
 </div>
+<div class="md-docstring" id="Bramble.ghost_kernel">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.ghost_kernel</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/ghost_gauge.jl#L13-L59" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">ghost_kernel(A, Wₕ::GhostGridSpace; rtol = 64 eps) -&gt; SparseMatrixCSC</code></pre>
+</div>
+<p>A sparse <code class="md-code-inline">ndofs(Wₕ) × k</code> matrix whose columns span the ghost-only kernel of <code class="md-code-inline">A</code>, a matrix assembled on the ghost space <code class="md-code-inline">Wₕ</code> (built by <code class="md-code-inline">gridspace(Ωₕ; ghosts = ...)</code> or <a href="../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>): the vectors <code class="md-code-inline">z</code> with <code class="md-code-inline">A z = 0</code> that are zero at every physical degree of freedom.</p>
+<p>The kernel is computed one physical node at a time. The ghosts at a node that remain unknowns, one for each ghosted facet through it without a relation, give <code class="md-code-inline">m</code> columns of <code class="md-code-inline">A</code>; restricted to their nonzero rows they form a small dense block, and each of its right singular vectors whose singular value is at most <code class="md-code-inline">rtol</code> times the larger of the block&#39;s largest one and the largest column 2-norm of <code class="md-code-inline">A</code> becomes a column of the result, with at most <code class="md-code-inline">m</code> entries. The second scale makes a ghost column that is zero only to rounding (a conormal <code class="md-code-inline">K</code> that cancels a coefficient) a kernel vector, as the dense spectrum calls it. The columns have unit 2-norm and their first nonzero entry is real and positive; the nodes come in the mesh&#39;s linear order, so the result depends on <code class="md-code-inline">A</code> and <code class="md-code-inline">Wₕ</code> only.</p>
+<p>For a form that reads the ghosts at a corner through <code class="md-code-inline">Δₕ</code> alone, such as <code class="md-code-inline">innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)</code>, the corner&#39;s ghost columns are parallel, so each 2D corner gives one column and each 3D corner two, and each node inside a 3D edge one: <code class="md-code-inline">k = 4</code> in 2D, <code class="md-code-inline">k = 4 Σₑ (nₑ - 2) + 16</code> in 3D, with <code class="md-code-inline">nₑ</code> the points along axis <code class="md-code-inline">e</code>. With a single ghosted facet no node carries two ghosts, and <code class="md-code-inline">k = 0</code> for that form. A form that never reads a ghost leaves it in the kernel, one column each.</p>
+<p>A kernel vector spread over the ghosts of several nodes is not found. Such vectors arise when the form differences the ghosts along their own facet: with <code class="md-code-inline">ghosts = (:xmin,)</code>, <code class="md-code-inline">innerₕ(∇ₕ(Δₕ(u))[2], v)</code> annihilates the vector that is constant on the <code class="md-code-inline">:xmin</code> ghosts, and <code class="md-code-inline">ghost_kernel</code> returns no column for it. A gauged solve with such a <code class="md-code-inline">Z</code> is not refused and usually factors: the physical part is still right, and the components left out are arbitrary.</p>
+<p><code class="md-code-inline">ghost_kernel</code> is public, not exported: write <code class="md-code-inline">Bramble.ghost_kernel</code>.</p>
+<p>Throws an <code class="md-code-inline">ArgumentError</code> when <code class="md-code-inline">A</code> is not <code class="md-code-inline">ndofs(Wₕ) × ndofs(Wₕ)</code>, or when <code class="md-code-inline">Wₕ</code> has no ghosts.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 7), (false, false))
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+A = assemble(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+Z = Bramble.ghost_kernel(A, Wₕ)    # 66 × 4, two entries per column, one column per corner
+norm(A * Z)                        # rounding</code></pre>
+</div>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.neumann_compatibility">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.neumann_compatibility</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/neumann_compatibility.jl#L27-L106" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">neumann_compatibility(problem, Ωₕ[, domain_markers]) -&gt; NamedTuple</code></pre>
+</div>
+<p>Check that the data of a pure-Neumann problem are compatible, by building the problem on the mesh <code class="md-code-inline">Ωₕ</code> and on copies of it refined once and twice at the midpoints. <code class="md-code-inline">problem(Ωₕ)</code> returns <code class="md-code-inline">(A, F, w)</code>: the assembled matrix <code class="md-code-inline">A</code>, whose kernel holds the constants, the load <code class="md-code-inline">F</code> and the weights <code class="md-code-inline">w</code> of the discrete average (for instance the assembled <code class="md-code-inline">innerₕ(1, v)</code>). <code class="md-code-inline">Ωₕ</code> itself is not changed. The copies are refined by <a href="../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a>: pass the domain&#39;s <code class="md-code-inline">domain_markers</code> (<code class="md-code-inline">markers(Ω)</code>) when <code class="md-code-inline">Ωₕ</code> carries markers of its own, which the refinement re-evaluates on the new points; without them such a mesh is refused.</p>
+<p>On each mesh the system is solved with <a href="../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a><code class="md-code-inline">(A, F; mean_zero = w)</code>, and the bordered solve&#39;s multiplier <span class="md-math md-math-inline">\(\lambda = w^\top (F - A u) / w^\top w\)</span> measures the part of <code class="md-code-inline">F</code> that no <code class="md-code-inline">u</code> reaches. The signed load it removes and its relative defect are</p>
+<div class="md-math md-math-display">
+\[\mu = \lambda \sum_i |w_i|, \qquad \delta = \frac{|\mu|}{\sum_i |F_i|},\]
+</div>
+<p>both independent of the scale of <code class="md-code-inline">w</code> (<span class="md-math md-math-inline">\(\delta\)</span> is zero for zero data). For compatible data <span class="md-math md-math-inline">\(\mu\)</span> is a quadrature error and falls under refinement, by about 4 when the spacings halve; an incompatible datum, such as a source with a nonzero mean added to compatible flux data, leaves a <span class="md-math md-math-inline">\(\mu\)</span> that tends to the datum&#39;s integral and keeps its sign.</p>
+<p>The data are reported incompatible when the defect <span class="md-math md-math-inline">\(\delta_f\)</span> on the refined mesh is above <code class="md-code-inline">5e-3</code> and the ratio <span class="md-math md-math-inline">\(\mu_f / \mu_{ff}\)</span> of the removed loads on the once- and twice-refined meshes lies in <span class="md-math md-math-inline">\([0.4, 2.5]\)</span>; <code class="md-code-inline">Ωₕ</code> itself does not decide, since its quadrature error can be pre-asymptotic. The thresholds come from measurement on random, graded and one-axis-uniform 2D meshes of the unit square and of <span class="md-math md-math-inline">\([0, 1] \times [0, 2]\)</span>, with 9 to 129 points per axis: the ratio was negative or at least 3.39 for compatible harmonic data, 0.99 to 1.01 for a source shifted by 0.2, and 0.64 to 1.9 for a shift of 5 or ±20 against the larger quadrature error of <span class="md-math md-math-inline">\(e^{5x} \cos 5y\)</span> fluxes (random meshes of the square, 9 to 33 points).</p>
+<p>The check has known limits:</p>
+<ul class="md-list-tight">
+<li><p>An incompatibility whose refined defect is below <code class="md-code-inline">5e-3</code>, or which is small against the quadrature error of the refined meshes (seen on coarse meshes of the rectangle), is not detected.</p>
+</li>
+<li><p>Compatible data whose flux is singular at a boundary point (as for <span class="md-math md-math-inline">\(u = \operatorname{Re} z^{\alpha}\)</span> near a corner, <span class="md-math md-math-inline">\(\alpha &lt; 1\)</span>) can be reported incompatible: their quadrature error falls like <span class="md-math md-math-inline">\(h^{\alpha}\)</span>, a ratio of <span class="md-math md-math-inline">\(2^{\alpha} &lt; 2\)</span> per refinement that no ratio of two or three meshes tells from an incompatibility.</p>
+</li>
+<li><p>When <span class="md-math md-math-inline">\(\delta_f\)</span> is above <code class="md-code-inline">5e-3</code> the problem is built and solved on the twice-refined mesh, with 16 times the points of <code class="md-code-inline">Ωₕ</code>: at 129 points per axis that took 20.8 s and 3.4 GiB, against 1.4 s when the floor decides.</p>
+</li>
+</ul>
+<p>An incompatible datum logs a warning reporting the relative defects, the multipliers and the ratios; nothing is thrown. The result is the <code class="md-code-inline">NamedTuple</code> <code class="md-code-inline">(; defect, refined_defect, λ, refined_λ, ratio, second_ratio, compatible)</code>, with <code class="md-code-inline">ratio = μ / μ_f</code>, the removed loads on <code class="md-code-inline">Ωₕ</code> and its refinement (infinite when <code class="md-code-inline">μ_f</code> is zero), <code class="md-code-inline">second_ratio = μ_f / μ_ff</code>, which decides, or <code class="md-code-inline">nothing</code> when the floor decided and the second refinement was not built, and <code class="md-code-inline">compatible</code> the negation of the rule above.</p>
+<p><code class="md-code-inline">neumann_compatibility</code> is public, not exported: write <code class="md-code-inline">Bramble.neumann_compatibility</code>.</p>
+<p>Throws an <code class="md-code-inline">ArgumentError</code> when <code class="md-code-inline">A</code>, on any of the meshes, does not annihilate the constants (<span class="md-math md-math-inline">\(\| A \mathbf{1} \|_\infty &gt; 1000\, \varepsilon \| A \|_\infty\)</span>, with <span class="md-math md-math-inline">\(\varepsilon\)</span> the machine epsilon of <code class="md-code-inline">A</code>&#39;s element type), and the errors of <a href="../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> for a mesh it cannot refine.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 17), (false, false))
+function problem(Ωₕ)   # -Δu = f + s with ∂ₙu = ∂ₙ(cos πx cos πy): compatible only for s = 0
+    Wₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
+        u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; 0.0, :xmax =&gt; ∂ₙ(u) =&gt; 0.0,
+              :ymin =&gt; ∂ₙ(u) =&gt; 0.0, :ymax =&gt; ∂ₙ(u) =&gt; 0.0))
+    f = x -&gt; 2π^2 * cos(π * x[1]) * cos(π * x[2]) + 0.2
+    A, F = assemble(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(-Δₕ(u), v)), form(Wₕ, v -&gt; innerₕ(f, v)))
+    w = assemble(form(gridspace(Ωₕ), v -&gt; innerₕ(x -&gt; 1.0, v)))
+    return A, F, w
+end
+r = Bramble.neumann_compatibility(problem, Ωₕ)   # warns: λ ≈ 0.2 on every mesh
+r.compatible                                    # false</code></pre>
+</div>
+</div>
+</div>
+<p><code class="md-code-inline">ghost_kernel</code> and <code class="md-code-inline">neumann_compatibility</code> serve the pure-Neumann problems of a ghost space. Both are <code class="md-code-inline">public</code>, not exported: write <code class="md-code-inline">Bramble.ghost_kernel</code>.</p>
 <h2 id="Algebraic-multigrid-preconditioning" class="md-heading">Algebraic multigrid preconditioning<a href="#Algebraic-multigrid-preconditioning" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.amg_preconditioner">
 <div class="md-docstring-header">
@@ -998,7 +931,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.fdm_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fdm_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/Bramble.jl#L49-L100" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/fdm.jl#L28-L79" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2534,7 +2467,6 @@ fact = suitesparse_factorize(A; sym = :spd, perm = Int.(perm))</code></pre>
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#Time-dependent-problems-and-the-SciML-stack">Time-dependent problems and the SciML stack</a>
           <a class="md-toc-link md-toc-h2" href="#Adjoint-sensitivities-for-a-transient-solve">Adjoint sensitivities for a transient solve</a>
-          <a class="md-toc-link md-toc-h2" href="#Second-order-wave-problems">Second-order wave problems</a>
           <a class="md-toc-link md-toc-h2" href="#Differentiable-linear-solve-(adjoint-gradients)">Differentiable linear solve (adjoint gradients)</a>
           <a class="md-toc-link md-toc-h2" href="#Algebraic-multigrid-preconditioning">Algebraic multigrid preconditioning</a>
           <a class="md-toc-link md-toc-h2" href="#Zero-fill-ILU-preconditioning-for-convection-dominated-systems">Zero-fill ILU preconditioning for convection-dominated systems</a>
@@ -2569,6 +2501,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=e4a7e80e"></script>
+  <script src="../assets/materialdocs.js?v=abc68441"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d9c2b725">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e53d910b">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -58,6 +58,8 @@
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -287,7 +289,7 @@ extrema(X::CartesianProduct{D}) -&gt; NTuple{D, Tuple{T, T}}</code></pre>
 <div class="md-docstring" id="Bramble.boundary_symbols">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.boundary_symbols</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L353-L364" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/set.jl#L355-L366" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -318,7 +320,7 @@ boundary_symbols(D::Integer) -&gt; Tuple{Vararg{Symbol}}</code></pre>
 <div class="md-docstring" id="Bramble.markers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.markers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L126-L156" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L86-L116" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -420,7 +422,7 @@ true</code></pre>
 <pre><code class="language-julia">labels(Ω::Domain)</code></pre>
 </div>
 <p>Return a tuple of the <code class="md-code-inline">Symbol</code> label of every marker in domain <code class="md-code-inline">Ω</code>.</p>
-<p>Zero-allocation; see <a href="../../internals/geometry/#Bramble.label_identifiers-Tuple{Bramble.DomainMarkers}"><code class="md-code-inline">label_identifiers</code></a>.</p>
+<p>Zero-allocation; see <a href="../../internals/geometry/#Bramble.label_identifiers-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}"><code class="md-code-inline">label_identifiers</code></a>.</p>
 </div>
 </div>
       </article>
@@ -450,6 +452,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=d9c2b725"></script>
+  <script src="../../assets/materialdocs.js?v=e53d910b"></script>
 </body>
 </html>
