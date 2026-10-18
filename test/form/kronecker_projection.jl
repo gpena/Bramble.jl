@@ -113,11 +113,11 @@ end
     # is returned beside the factors, since a factor would read it once.
     @testset "a number inside a side" begin
         W = gridspace(_graded_mesh((9, 7)))
-        a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + 0.3 * innerₕ(u, v))
+        a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u) + 0.3 * u, v))
         @test any(l -> occursin("OperatorScale", string(typeof(l[2]))), _proj_leaves(a))
         @test _proj_matches(a)
         c = Ref(0.3)
-        a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + c * innerₕ(u, v))
+        a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u) + c * u, v))
         @test _proj_matches(a)
         P = Bramble._kron_project(only(_proj_leaves(a))[2], mesh(W))
         @test map(first, P) == ((), (c,))

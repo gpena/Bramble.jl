@@ -20,7 +20,7 @@ using ForwardDiff: ForwardDiff
 using SciMLBase: solve, successful_retcode
 using OrdinaryDiffEqBDF: FBDF
 using OrdinaryDiffEqRosenbrock: Rosenbrock23
-using ..TestUtils: WITH_SLOW_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, random_mesh
 
 const MIN_ORDER = 1.8
 const T_FINAL = 0.5
@@ -64,17 +64,6 @@ end
 
 box() = domain(interval(0.0, 1.0) × interval(0.0, 2.0))
 
-function random_mesh(level; seed = 7, n0 = 9)
-    Bramble._seed_mesh1d_rng!(seed)
-    Ω = try
-        mesh(box(), (n0, n0), (false, false))
-    finally
-        Bramble._unseed_mesh1d_rng!()
-    end
-    foreach(_ -> iterative_refinement!(Ω), 1:level)
-    return Ω
-end
-
 # A smooth grading of each axis, different on the two so no symmetry survives.
 function graded_mesh(level; n0 = 9)
     n = (n0 - 1) * 2^level + 1
@@ -84,7 +73,10 @@ function graded_mesh(level; n0 = 9)
     return Ω
 end
 
-meshes(kind, levels) = [kind === :graded ? graded_mesh(ℓ) : random_mesh(ℓ) for ℓ in levels]
+function meshes(kind, levels)
+    random(ℓ) = random_mesh((9, 9); seed = 7, lengths = (1.0, 2.0), level = ℓ)
+    return [kind === :graded ? graded_mesh(ℓ) : random(ℓ) for ℓ in levels]
+end
 
 #------------------------------------------------------------------------------------------#
 # The ODE problem through `ode_problem`

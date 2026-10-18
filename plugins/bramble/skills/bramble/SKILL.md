@@ -29,6 +29,8 @@ Start from the closest one:
 | linear elasticity, 2D | `examples/elasticity.jl` | a vector field in `Wₕ^Val(2)`, `εₕ`, `divₘₕ` |
 | coupled reaction-diffusion | `examples/coupled_reaction_diffusion.jl` | two unknowns in one composite space, Newton |
 | point sources | `examples/point_source.jl` | `dirac`, boundary flux with `Bramble.reaction` |
+| Neumann and Robin Poisson, 2D | `examples/neumann_robin.jl` | `gridspace(Ωₕ; ghosts = :boundary)`, `constrained`, `assemble(a, l)` |
+| pure Neumann Poisson, 2D | `examples/pure_neumann.jl` | `∂ₙ` relations, `pde_solve(A, F; mean_zero = w)` |
 
 ## Rules that prevent wrong or slow code
 
@@ -57,6 +59,14 @@ Start from the closest one:
    `reference/performance.md`.
 9. **A backend's policy and storage must agree.** Host arrays take a CPU policy, device
    arrays (`metal_backend`) a GPU one, or construction throws. See `reference/gpu.md`.
+10. **Ghost spaces: pass both forms.** On `constrained(gridspace(Ωₕ; ghosts = :boundary), ...)`
+    write `assemble(a, l)`, not `assemble(l)`: the load is `Eᵀ(F − A d)`. A ghosted facet
+    with only `u => g` is refused, nested mixed differences are assembled as forms (the
+    runtime operators truncate), and `Bramble.lift` is `public`, not exported. Every
+    unsupported path throws an `ArgumentError` that names the fix.
+11. **Rank-one terms are not dense.** `σ * innerₕ(g, u) * innerₕ(h, v)` assembles to a
+    `Bramble.RankOneUpdate` that `pde_solve` solves as a bordered system, on scalar spaces.
+    A pure-Neumann problem uses it or `pde_solve(A, F; mean_zero = w)`. `reference/forms-assembly.md`.
 
 ## Notation
 
@@ -78,12 +88,13 @@ ending in `!` write into their first argument and return it.
 Read the one the task needs; each is self-contained.
 
 - `reference/meshes-spaces.md`: domains and markers, meshes and their metric, refinement,
-  grid spaces, elements, components.
+  grid spaces, elements, components, ghost points and `constrained`.
 - `reference/operators.md`: restriction `Rₕ`, cell averages `avgₕ`, interpolation `πₕ`,
-  differences, jumps and averages, vector calculus, inner products and norms.
+  differences, jumps and averages, vector calculus (`Δₕ`, `divₘₕ`), the ghost-space
+  operators `∂ₙ`, `∂ₙₙ`, `jumpₙ`, inner products and norms.
 - `reference/forms-assembly.md`: bilinear and linear forms, `assemble` and its in-place
   variants, Dirichlet constraints, symmetrisation, point sources, the Kronecker path and
-  its `fdm_*` solvers.
+  its `fdm_*` solvers, ghost spaces, rank-one terms.
 - `reference/backends-solvers.md`: execution policies and backends, profiling them, exporters,
   `semidiscretize` and SciML problems, sparse factorisations and preconditioners.
 - `reference/performance.md`: type stability, allocation measurement, in-place routines,

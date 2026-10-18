@@ -5,7 +5,7 @@ import Base: show, first, last, getindex, setindex!, iterate, size, firstindex, 
 
 using SparseArrays: SparseArrays, SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!
 
-using LinearAlgebra: I, Diagonal, svd
+using LinearAlgebra: I, Diagonal, svd, Adjoint, Transpose
 import LinearAlgebra: mul!, issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot, lu, cholesky, ⋅, norm
 
 import Base: copy
@@ -84,6 +84,7 @@ include("assembly/stencil_eval.jl")
 include("ast/component.jl")
 include("ast/stencil_pattern.jl")
 include("assembly/block_extract.jl")
+include("ast/stencil_nodes.jl")
 include("ast/simplifier.jl")
 include("assembly/dirichlet_constraints.jl")
 include("assembly/linear.jl")
@@ -102,6 +103,11 @@ include("assembly/symmetry.jl")
 include("assembly/matrix_free.jl")
 include("assembly/ghost_assembly.jl")
 include("assembly/ghost_relations.jl")
+include("assembly/rank_one.jl")
+include("assembly/ghost_matrix_free.jl")
+include("assembly/ghost_kronecker.jl")
+include("assembly/ghost_composite.jl")
+include("assembly/ghost_contract.jl")
 include("problems/semidiscrete_constraints.jl")
 include("problems/semidiscrete.jl")
 include("problems/semidiscrete_rhs.jl")
@@ -117,6 +123,7 @@ include("solvers/gmg_hierarchy.jl")
 include("solvers/gmg_transfer.jl")
 include("solvers/gmg_smoothers.jl")
 include("solvers/gmg_cycles.jl")
+include("solvers/gmg_ghost.jl")
 include("solvers/suitesparse_solver.jl")
 include("solvers/accelerate_solver.jl")
 include("solvers/mumps_solver.jl")

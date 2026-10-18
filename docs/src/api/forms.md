@@ -38,6 +38,15 @@ allocate_system_matrix
 evaluate!
 ```
 
+A form with a rank-one penalty term `σ * innerₕ(g, u) * innerₕ(h, v)` assembles to a
+`Bramble.RankOneUpdate`, the matrix `A + σ wₛ wₜᵀ` kept as its parts. `pde_solve(K, F)` solves it
+through a sparse bordered system (see the [forms tutorial](../tutorials/form.md)), and
+`symmetrize!` accepts it. `RankOneUpdate` is `public`, not exported.
+
+```@docs
+Bramble.RankOneUpdate
+```
+
 ## Matrix-free Kronecker operators
 
 For a separable `BilinearForm` (one whose assembled matrix is an exact sum of Kronecker
@@ -50,7 +59,8 @@ condition beforehand and lists what factors.
 What factors: the difference, average, jump and shift families along any axis and chains of
 them, so mixed derivatives and advection terms (whose factors need not be symmetric);
 `innerₕ`, `inner₊` and `inner_Γ` weights; a restriction to `:interior`; a grid-function
-coefficient that varies along one axis; and scalar or `Ref` coefficients. A composite space
+coefficient that varies along one axis; and scalar or `Ref` coefficients. A form on a ghost space factors where its closure is separable and both spaces share one
+mesh object. A composite space
 whose leaves share one mesh gives a block operator, one Kronecker operator per block. What
 does not: a coefficient varying along several axes, other region restrictions (Dirichlet
 rows included), an interpolation, a 1D mesh, trial and test spaces on different meshes, and
@@ -63,7 +73,8 @@ and an operator whose mesh was mutated in place afterwards throws instead of app
 Laplacian-like system, one whose terms each differ from one mass per axis on at most one
 axis, without a general sparse factorisation: by fast diagonalisation when it is symmetric,
 and by a Schur-form solve when advection terms make it non-symmetric. A mixed derivative is
-refused. For such a form, `fdm_preconditioner` (in [Scientific computing](../api_sciml.md))
+refused. A form on a ghost space is accepted where its closure and its terms are separable;
+otherwise the call throws an `ArgumentError` naming `assemble(a)`. For such a form, `fdm_preconditioner` (in [Scientific computing](../api_sciml.md))
 preconditions a Krylov solver with its Laplacian-like part. `fdm_factorize` factorises once, and `fdm_solve!` then solves each
 right-hand side with zero allocations; `fdm_factorize!` refills that factorisation after a
 coefficient or the mesh changed, without building it again.
@@ -80,8 +91,8 @@ fdm_solve!
 
 ## Matrix-free operators
 
-`matrix_free_operator` applies any `BilinearForm` that `assemble` accepts, separable or not,
-without building its matrix: `mul!(y, op, x)` walks the form's stencil and agrees with
+`matrix_free_operator` applies any `BilinearForm`, or ghost-space form, that `assemble` accepts,
+separable or not, without building its matrix: `mul!(y, op, x)` walks the form's stencil and agrees with
 `assemble(a) * x`, Dirichlet rows included, on vectors and `VectorElement`s. Its execution
 policy comes from the trial space, as for assembly. Preconditioners and multigrid built on it
 are in [Scientific computing](../api_sciml.md).

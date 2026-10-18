@@ -1643,8 +1643,8 @@ end
 # Records `a`, the form `f` was built or last refilled from, in `f.form` and its operator
 # `K`, whose scales hold `a`'s live `Ref`s, in `f.op`; `nothing` there when a term of `a`
 # reads a grid-function coefficient, which `K`'s factors hold a copy of.
-function _fdm_record!(f, a::BilinearForm, K::KroneckerLinearOperator)
-    leaves = Bramble._kron_leaves(Bramble.resolve_form_ast(a), ())
+function _fdm_record!(f, a, K::KroneckerLinearOperator)
+    leaves = Bramble._kron_leaves(Bramble.resolve_form_ast(_fdm_ast_form(a)), ())
     f.form[] = a
     f.op[] = any(l -> Bramble._kron_reads_coef(l[2]), leaves) ? nothing : K
     return f
@@ -1689,6 +1689,87 @@ function Bramble.fdm_preconditioner(a::BilinearForm; dirichlet = nothing)
     is_separable(a) || _throw_fdm_not_separable(a; precond = true)
     K = kronecker_operator(a)
     f = _fdm_factorize(K, dirichlet; precond = true)
+    return Bramble.FDMPreconditioner{eltype(K), typeof(f)}(f)
+end
+
+# --- 5. Forms on ghost spaces ------------------------------------------------------ #
+#
+# A form on ghost spaces (#781) is solved through its reduced Kronecker operator, which
+# `kronecker_operator` builds from 1D closures when every ghost is eliminated by one
+# relation per facet along its normal, and refuses otherwise with an `ArgumentError` naming
+# `assemble(a)`. The operator's degrees of freedom are the physical points no Dirichlet
+# relation fixes, so `dirichlet = :boundary`, which drops the first and last point of every
+# axis, would drop the wrong ones: Dirichlet facets are relations `u => g` of the space
+# instead, and any `dirichlet` is refused by name. A 1D form has no Kronecker factors and
+# is refused as on a plain space.
+
+_fdm_ast_form(a::BilinearForm) = a
+_fdm_ast_form(a::Bramble.GhostBilinearForm) = a.padded
+
+function _fdm_ghost_operator(a::Bramble.GhostBilinearForm{D}, dirichlet;
+        precond::Bool = false) where {D}
+    dirichlet === nothing || _throw_fdm_ghost_dirichlet(dirichlet; precond = precond)
+    D == 1 && _throw_fdm_not_separable(a; precond = precond)
+    return kronecker_operator(a)
+end
+
+@noinline function _throw_fdm_ghost_dirichlet(dirichlet; precond::Bool = false)
+    caller = precond ? "fdm_preconditioner" : "fdm_solve"
+    throw(
+        ArgumentError(
+        "$caller on a form over ghost spaces takes no dirichlet (got $(repr(dirichlet))): " *
+        "its unknowns are the points the space's relations leave free, so pose each " *
+        "Dirichlet facet as a relation `u => g` of the space (see `constrained`), or " *
+        "solve assemble(a; dirichlet) with a sparse direct solve instead.",
+    ),
+    )
+end
+
+"""
+    fdm_solve(a::GhostBilinearForm, F::AbstractVector) -> AbstractVector
+
+Solve `assemble(a) \\ F` for a form on ghost spaces ([`GhostGridSpace`](@ref)) from
+one-dimensional factorisations of its reduced [`kronecker_operator`](@ref)`(a)`, as the
+`BilinearForm` method does from the plain one. That operator exists when every ghost is
+eliminated by one relation per facet along its normal (`u => g`, `∂ₙ(u)`, or
+`α * u + β * ∂ₙ(u)` with constant `α` and `β`); the form must then be Laplacian-like on it.
+`fdm_factorize(a)`, `fdm_factorize!(f, a)` and `fdm_preconditioner(a)` take ghost-space
+forms the same way.
+
+A Dirichlet facet is a relation `u => g` of the space, which removes its points from the
+unknowns; the `dirichlet` keyword is refused. The data `g` of the relations enter the
+right-hand side `assemble(l)`, not the operator.
+
+# Throws
+
+  - `ArgumentError` naming `assemble(a)`: the closure is not separable (a conormal
+    `∂ₙ(u; K)` with off-diagonal `K`, a coefficient varying along a facet, a ghost kept as
+    an unknown), a term is not separable, or the form is 1D; or, as for the `BilinearForm`
+    method, the form is not Laplacian-like or is singular.
+  - `ArgumentError`: `dirichlet` is given.
+  - `DimensionMismatch`: `F`'s length is not `ndofs` of the space.
+"""
+function Bramble.fdm_solve(a::Bramble.GhostBilinearForm, F::AbstractVector;
+        dirichlet = nothing)
+    return _fdm_solve_core(_fdm_ghost_operator(a, dirichlet), F, nothing)
+end
+
+function Bramble.fdm_factorize(a::Bramble.GhostBilinearForm; dirichlet = nothing)
+    K = _fdm_ghost_operator(a, dirichlet)
+    return _fdm_record!(_fdm_factorize(K, nothing), a, K)
+end
+
+function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization},
+        a::Bramble.GhostBilinearForm)
+    f.form[] === a && _fdm_cached!(f, f.op[]) && return f
+    K = _fdm_ghost_operator(a, nothing)
+    Bramble.fdm_factorize!(f, K)
+    return _fdm_record!(f, a, K)
+end
+
+function Bramble.fdm_preconditioner(a::Bramble.GhostBilinearForm; dirichlet = nothing)
+    K = _fdm_ghost_operator(a, dirichlet; precond = true)
+    f = _fdm_factorize(K, nothing; precond = true)
     return Bramble.FDMPreconditioner{eltype(K), typeof(f)}(f)
 end
 

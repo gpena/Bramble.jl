@@ -298,7 +298,7 @@ using Bramble:
         @test !issymmetric(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)) + g1(u, v)))
         @test !issymmetric(form(Wₕ, Wₕ, (u, v) -> g1(u, v) + g2(u, v) + g1(u, v)))
 
-        # A sum on one side, as `simplify_ast` factoring can store it.
+        # A sum written on one side of a product.
         c = form(Wₕ, Wₕ,
             (u, v) -> innerₕ(D₋ₓ(u), D₊ᵧ(v) + D₋ᵧ(v)) + innerₕ(D₊ᵧ(u), D₋ₓ(v)) +
                       innerₕ(D₋ᵧ(u), D₋ₓ(v)))

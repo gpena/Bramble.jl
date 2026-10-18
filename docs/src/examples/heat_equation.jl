@@ -13,15 +13,21 @@
 #
 # ```math
 # \partial_t u = \Delta u + f \text{ in } \Omega \times (0, T], \qquad u = g \text{ on }
-# \partial\Omega, \qquad u(\cdot, 0) = u_0,
+# \texttt{left}, \qquad u + \partial_n u = h \text{ on } \texttt{right}, \qquad
+# u(\cdot, 0) = u_0,
 # ```
 #
-# on ``\Omega = (0,1)`` with the manufactured solution ``u_{\text{exact}}(x, t) = e^{-t}
-# \sin(\pi x)``, which vanishes on the boundary and forces
+# on ``\Omega = (0,1)`` with ``\partial_n`` the outward normal derivative, and the manufactured
+# solution ``u_{\text{exact}}(x, t) = e^{-t} \sin(\pi x)``, which forces
 #
 # ```math
-# f(x, t) = (\pi^2 - 1)\, e^{-t} \sin(\pi x).
+# f(x, t) = (\pi^2 - 1)\, e^{-t} \sin(\pi x),
 # ```
+#
+# vanishes at the left end, so ``g = 0``, and gives the Robin data ``h(x, t) = u_{\text{exact}} +
+# \partial_x u_{\text{exact}} = e^{-t} (\sin(\pi x) + \pi \cos(\pi x))`` at the right end. Later
+# sections also use the same solution with a Dirichlet condition at both ends, since it
+# vanishes at both.
 #
 # ## The method of lines
 #
@@ -36,19 +42,114 @@
 # ``\langle \cdot, \cdot \rangle_h``. It is diagonal, since that inner product is a weighted sum
 # over grid points.
 #
-# [`semidiscretize`](@ref) builds exactly this. The spatial form is written the way the steady
-# problem writes it, so the steady state of the system below solves ``A u_h = F``:
+# ## Boundary relations through ghost points
+#
+# [`semidiscretize`](@ref) builds exactly this. The Robin end goes through the ghost layer, as
+# in the [Neumann and Robin Poisson example](neumann_robin_poisson.md): `gridspace(Ωₕ; ghosts)`
+# adds a ghost point beyond the end, and [`constrained`](@ref) takes a function of the trial
+# function `u` that returns one `side => relation => data` entry per side. The data may take
+# the time as a second argument, `(x, t) -> ...`, which `semidiscretize` finds by the arity
+# and refreshes at every step. The Dirichlet end is the relation `u => g`, which removes its
+# node from the unknowns. The spatial form is written ``\langle -\Delta_h u, v \rangle_h``, which
+# reads the ghost values the relations fix:
 
 using Bramble
 using Bramble: allocate_system_matrix, mass_matrix
+using OrdinaryDiffEqBDF
 
 uexact(x, t) = exp(-t) * sinpi(x[1])
 source(x, t) = (pi^2 - 1) * exp(-t) * sinpi(x[1])
+robin(x, t) = exp(-t) * (sinpi(x[1]) + pi * cospi(x[1]))
 
 Ω = domain(interval(0.0, 1.0), :left => :left, :right => :right)
 Ωₕ = mesh(Ω, 101)
 Wₕ = gridspace(Ωₕ)
 I = interval(0.0, 1.0)          # the time domain
+
+function robin_problem(Ωₕ, (left, right); T = 1.0)
+    Cₕ = constrained(gridspace(Ωₕ; ghosts = right),
+        u -> (left => u => (x, t) -> 0.0, right => u + ∂ₙ(u) => robin))
+    fₕ = element(Bramble.padded_space(Cₕ), 0.0)
+    a = form(Cₕ, Cₕ, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
+    l = form(Cₕ, v -> innerₕ(fₕ, v))
+    sd = semidiscretize(a, l; update_coefficients! = t -> Rₕ!(fₕ, x -> source(x, t)))
+    u₀ = parent(Rₕ(gridspace(Ωₕ), x -> uexact(x, 0.0)))[2:end]   # the left node is no unknown
+    sol = solve(ode_problem(sd, u₀, (0.0, T)), FBDF(); reltol = 1e-10, abstol = 1e-12)
+    return Cₕ, sd, sol
+end
+
+Cₕ, sd_robin, sol_robin = robin_problem(Ωₕ, (:left, :right))
+
+# Two pieces are worth naming. `update_coefficients!` is called with the current time just
+# before each assembly, and is where a time-dependent source belongs. `Rₕ!` writes into the
+# grid function `fₕ` the form already holds a reference to, which lives on the padded space
+# since the ghost space has no `Rₕ!` of its own, so nothing is rebuilt and nothing is
+# allocated. The initial condition holds the 100 unknowns, the grid points but the eliminated
+# left one.
+#
+# ## Eliminated nodes in the mass matrix
+#
+# The Dirichlet node is no unknown and the Robin relation fixes only the ghost, so no row of
+# the system is algebraic. [`mass_matrix`](@ref) is the diagonal of grid weights on the
+# remaining 100 nodes, and the system is an ordinary differential equation:
+
+M_robin = mass_matrix(sd_robin)
+(size(M_robin), M_robin[1, 1], M_robin[100, 100])   # first interior node, Robin end
+
+# The first unknown is the node next to the Dirichlet end and carries the full weight h, and #src
+# the last is the Robin end, which carries half of it as the end of the mesh.                #src
+@test size(M_robin) == (100, 100)                                      #src
+@test M_robin[1, 1] ≈ hₘₐₓ(Ωₕ)                                         #src
+@test M_robin[100, 100] ≈ hₘₐₓ(Ωₕ) / 2                                 #src
+
+# ## The solution at the final time
+#
+# `Bramble.lift(Cₕ, u, t)` returns the padded-grid values of the unknowns `u` with the
+# ghost value and the eliminated node filled in from the relations at time ``t``. The
+# physical nodes come first, so the compared fields are its first 101 entries:
+
+using Bramble: lift
+
+Uₚ = parent(lift(Cₕ, sol_robin.u[end], 1.0))
+uₕ_robin = element(Wₕ)
+parent(uₕ_robin) .= Uₚ[1:101]
+normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_robin)
+
+# The error is bracketed on both sides: a solution that collapsed to zero, or stayed at the   #src
+# initial condition, would sit far outside this window, and so would a first-order one.       #src
+@test 1.0e-5 < normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_robin) < 5.0e-5   #src
+
+# The relation is satisfied by the ghost, so the check that means something is one-sided and
+# independent of it: the three-point backward difference of the lifted solution at the
+# Robin end, with the actual spacings, must satisfy ``u + \partial_n u = h`` up to its
+# truncation error, of order ``h^2``:
+
+function robin_residual(Ωₕ, Cₕ, sol)
+    U = parent(lift(Cₕ, sol.u[end], 1.0))
+    xs = collect(points(Ωₕ))
+    n = length(xs)
+    h₁, h₂ = xs[n] - xs[n - 1], xs[n - 1] - xs[n - 2]
+    dₙ = (2h₁ + h₂) / (h₁ * (h₁ + h₂)) * U[n] - (h₁ + h₂) / (h₁ * h₂) * U[n - 1] +
+         h₁ / (h₂ * (h₁ + h₂)) * U[n - 2]
+    return abs(U[n] + dₙ - robin(xs[n], 1.0))
+end
+
+robin_residual(Ωₕ, Cₕ, sol_robin)
+
+# The residual is the one-sided truncation error plus the error of the solution itself, so   #src
+# it is bracketed away from zero as well as above, and the eliminated Dirichlet node of the   #src
+# lift holds its datum exactly.                                                               #src
+@test 1.0e-5 < robin_residual(Ωₕ, Cₕ, sol_robin) < 1.0e-2                                    #src
+@test parent(lift(Cₕ, sol_robin.u[end], 1.0))[1] == 0.0                                      #src
+
+# ## Dirichlet conditions as algebraic constraints
+#
+# The `dirichlet` keyword of `semidiscretize` belongs to a plain space; a ghost space
+# refuses it, and takes the relation `u => g` instead. The sections below need what the ghost
+# path does not offer yet, so they keep a plain space and a Dirichlet condition at both ends,
+# which the manufactured solution satisfies with ``g = 0``. The time domain passed to [`dirichlet_constraints`](@ref) is what lets the
+# boundary values be written as `g(x, t)` rather than `g(x)`. The spatial form is the one the
+# steady problem writes, so the steady state of the system solves ``A u_h = F``:
 
 fₕ = element(Wₕ, 0.0)
 a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
@@ -60,18 +161,9 @@ sd = semidiscretize(a, l;
     dirichlet = bcs,
     update_coefficients! = t -> Rₕ!(fₕ, x -> source(x, t)))
 
-# Two pieces are worth naming. The time domain passed to [`dirichlet_constraints`](@ref) is
-# what lets the boundary values be written as `g(x, t)` rather than `g(x)`; `semidiscretize`
-# detects that by the same arity test and re-evaluates them at every step.
-# `update_coefficients!` is called with the current time just before each assembly, and is
-# where a time-dependent source belongs. `Rₕ!` writes into the `fₕ` the form already holds a
-# reference to, so nothing is rebuilt and nothing is allocated.
-#
-# ## Dirichlet conditions as algebraic constraints
-#
-# A constrained row of `A` is ``e_k`` and the matching entry of `F(t)` is ``g(x_i, t)``,
-# which is what `assemble` produces for the steady problem too. [`mass_matrix`](@ref) zeroes
-# those same rows, so each one reads
+# Here the constrained row of `A` is ``e_k`` and the matching entry of `F(t)` is
+# ``g(x_i, t)``, which is what `assemble` produces for the steady problem too.
+# [`mass_matrix`](@ref) zeroes those same rows, so each one reads
 #
 # ```math
 # 0 = g(x_i, t) - u_h[i],
@@ -95,8 +187,6 @@ M = mass_matrix(sd)
 # ``-A`` into a problem `OrdinaryDiffEq` can step. Because the mass matrix is singular, the
 # method has to be one that admits that: `FBDF` and `QNDF` here, or a Rosenbrock method such
 # as `Rodas5P`:
-
-using OrdinaryDiffEqBDF
 
 prob = ode_problem(sd, Rₕ(Wₕ, x -> uexact(x, 0.0)), I)
 sol = solve(prob, FBDF(); reltol = 1e-10, abstol = 1e-12)
@@ -177,7 +267,9 @@ normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_r)
 # ## A time-dependent operator
 #
 # `tgrad` fixes the source half of `∂f/∂t`; the other method of [`semidiscretize`](@ref)
-# fixes the operator half, for a spatial operator whose own coefficients vary with `t`. A
+# fixes the operator half, for a spatial operator whose own coefficients vary with `t`. It
+# keeps the Dirichlet problem, because `semidiscretize(build, l)` on a ghost space is
+# refused. A
 # fixed `BilinearForm` closes over a `Float64` coefficient buffer, which cannot hold the
 # `Dual` a Rosenbrock stepper reaches for either way. `semidiscretize(build, l; ...)` instead
 # takes a `build(t) -> (a, refill!)` factory, called once per element type `t` is ever seen
@@ -212,7 +304,9 @@ maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end]))
 #
 # ## Hand-rolled backward Euler
 #
-# `semidiscretize`/`ode_problem` above hide the per-step matrix assembly entirely. Building
+# `semidiscretize`/`ode_problem` above hide the per-step matrix assembly entirely. This one
+# keeps the Dirichlet problem as well, since `dirichlet_bc!` writes identity rows into a
+# plain assembled matrix and has no ghost counterpart. Building
 # it explicitly -- the shape a solver without a method-of-lines layer expects -- is what
 # [`assemble_add!`](@ref) exists for: accumulating ``M/\Delta t`` and the ``t``-dependent
 # stiffness piece ``K(t)`` into the same preallocated matrix, in place, with no temporary
@@ -329,10 +423,48 @@ all(>(1.95), orders)    # second order is the promise
 # rate is pinned, so a decay to first order fails the suite instead of publishing `false`.  #src
 @test all(>(1.95), orders)                                       #src
 
+# The Robin problem runs on the same seeded random mesh through `robin_problem`, whose
+# sides here are the `:xmin` and `:xmax` of a domain with no markers of its own. Its error
+# is the one at the physical nodes of the lifted solution, and the residual of the Robin
+# relation, as above, comes with it:
+
+function robin_series(levels; n0 = 11)
+    Random.seed!(20260903)
+    Ωc = mesh(domain(interval(0.0, 1.0)), n0, false)
+    hs, errs, resids = Float64[], Float64[], Float64[]
+    for level in 1:levels
+        Cc, _, solc = robin_problem(Ωc, (:xmin, :xmax))
+        Wc = gridspace(Ωc)
+        uc = element(Wc)
+        parent(uc) .= parent(lift(Cc, solc.u[end], 1.0))[1:length(parent(uc))]
+        push!(hs, hₘₐₓ(Ωc))
+        push!(errs, normₕ(Rₕ(Wc, x -> uexact(x, 1.0)) - uc))
+        push!(resids, robin_residual(Ωc, Cc, solc))
+        level < levels && iterative_refinement!(Ωc)
+    end
+    return hs, errs, resids
+end
+
+hs_r, errs_r, resids_r = robin_series(5)
+orders_r = [log(errs_r[i] / errs_r[i + 1]) / log(hs_r[i] / hs_r[i + 1])
+            for i in 1:(length(errs_r) - 1)]
+
+#-
+
+all(>(1.95), orders_r)    # second order with a Robin end too
+
+# The ghost layer costs no order, and the Robin residual falls as ``h^2`` as well. The       #src
+# bracket keeps both away from zero, so a solve that reproduced the answer by construction  #src
+# would fail.                                                                               #src
+@test all(>(1.95), orders_r)                                                                #src
+@test all(e -> 1.0e-7 < e < 1.0e-1, errs_r)                                                 #src
+@test resids_r[1] / resids_r[end] > 100 && resids_r[end] > 1.0e-7                           #src
+
 #-
 
 include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
-convergence_plot([(hs, errs, "1D heat", "#5B5FC7")]; # hide
+convergence_plot([(hs, errs, "Dirichlet", "#5B5FC7"), # hide
+        (hs_r, errs_r, "Dirichlet and Robin", "#D1495B")]; # hide
     title = "Heat equation, ‖·‖ₕ at t = 1") # hide
 
 # ## Time-dependent boundary data

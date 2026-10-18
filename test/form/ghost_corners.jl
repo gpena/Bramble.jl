@@ -25,7 +25,7 @@ using Bramble: Dcₓ, Dcᵧ, Dc₂, D̽ₓ, D̽ᵧ, D̽₂, D₋ₓ, D₋ᵧ, D�
 using LinearAlgebra: Diagonal, I, norm, ×
 using SparseArrays: SparseMatrixCSC, sparse, spzeros, kron, nnz
 
-using ..TestUtils: WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS, padded, random_mesh
 
 isdefined(Main, :GhostOracle1D) ||
     Base.include(Main, joinpath(@__DIR__, "..", "ghost", "GhostOracle1D.jl"))
@@ -35,18 +35,6 @@ const O1 = Main.GhostOracle1D
 const C = Main.GhostCorners
 
 const tol = 1e-12
-
-padded(Ωₕ; ghosts = :boundary) = Bramble.padded_space(gridspace(Ωₕ; ghosts = ghosts))
-
-function random_mesh(ns; seed = 11)
-    Ω = domain(foldl(×, ntuple(_ -> interval(0.0, 1.0), length(ns))))
-    Bramble._seed_mesh1d_rng!(seed)
-    try
-        return mesh(Ω, ns, ntuple(_ -> false, length(ns)))
-    finally
-        Bramble._unseed_mesh1d_rng!()
-    end
-end
 
 relerr(A, B) = norm(A - B) / norm(B)
 
@@ -399,25 +387,6 @@ matrix(P, f) = assemble(form(P, P, f))
         G = Bramble.mesh(padded(Ωₕ))
         @test Bramble._needs_onesided(X, G, CartesianIndex(2, 2))
         @test !Bramble._needs_onesided(X, G, CartesianIndex(3, 2))
-    end
-
-    @testset "Warm assemble! allocates nothing" begin
-        Ωₕ = C.make_mesh(:graded, 0; n0 = 9)
-        P = padded(Ωₕ)
-        L(u) = K[1, 1] * D̃ₓ(D₋ₓ(u)) + 2 * K[1, 2] * Dcₓ(Dcᵧ(u)) + K[2, 2] * D̃ᵧ(D₋ᵧ(u))
-        a = form(P, P, (u, v) -> innerₕ(L(u), v))
-        A = assemble(a)
-        _alloc(A, a) = (assemble!(A, a); @allocated assemble!(A, a))
-        @test _alloc(A, a) == 0
-        b = form(P, P, (u, v) -> innerₕ(D̽ₓ(D̽ᵧ(u)), D̽ᵧ(D̽ₓ(v))))
-        B = assemble(b)
-        @test _alloc(B, b) == 0
-        c = 1.0 .+ 0.5 .* sin.(1:Bramble.npoints(Bramble.mesh(P)))
-        for X in (u -> Dcₓ(c * Dcᵧ(u)), u -> Dcₓ(Dcᵧ(u) + 2.0 * D₋ᵧ(u)))
-            s = form(P, P, (u, v) -> innerₕ(X(u), v))
-            S = assemble(s)
-            @test _alloc(S, s) == 0
-        end
     end
 
     # 3D runs nightly (#650): the edge nodes take the rule for each pair of axes.

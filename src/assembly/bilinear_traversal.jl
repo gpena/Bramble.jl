@@ -650,6 +650,216 @@ Base.@propagate_inbounds function _visit_entries_unguarded(
     return nothing
 end
 
+# --- products walked factor by factor (gpena/Bramble.jl#765) ----------------------- #
+#
+# A product's stencil is the outer product of its two factor stencils. `local_stencil`
+# (operators/inner.jl) builds every `(off_u, off_v, l * r * vol)` entry into one tuple, which
+# `_visit_entries` then splits into offsets and weights and walks by index. For two factors
+# of 8 entries (the 3D `inner₊(divₘₕ(u), divₘₕ(v))` blocks) that tuple has 64 entries, built
+# and stored at every grid point before one of them is added. Walking the two factors in a
+# double loop forms each entry where it is added and stores nothing. The entries are the
+# same, in the same order (left-major, as `multiply_stencils_bilinear` lays them out), with
+# the same arithmetic, `(l * r) * vol` and then each scale above the product, innermost
+# first, as `scale_stencil` applies them. A symmetric product (`_same_operator_shape`)
+# evaluates its one factor once, as `multiply_stencils_bilinear_symmetric` does, and its
+# mirrored entry `r * l` is `l * r` bit for bit, since floating-point multiplication
+# commutes. So the matrix is unchanged, bit for bit. Warm `assemble!` of the 3D elasticity
+# form on 31x30x29 points, one thread: 1674 ns per unknown with the product stencil, 839
+# factored; 46x45x44 points: 1736 and 920 (#765).
+#
+# Taken by the recording and the value replays only (`_factored_walk`): the coordinate walk
+# and the replays must enumerate one unit's entries identically, and they do either way, but
+# a walk that compiles one path for both compiles the product stencil for neither.
+# `matrix_free_operator`'s sinks keep the stencil walk, so the two stay independent checks
+# of each other. Off for a term that may restrict (a restriction's stencil length varies by
+# point), an interpolating term (absolute rows or columns) and a ghost space (its product
+# method checks absent reads, `stencil_eval.jl`): each keeps the stencil walk unchanged.
+
+# Whether `T` is products of factor stencils under constant or pointwise scales and sums,
+# which `_factored_point!` walks: decided from the type alone, one compiled instance.
+Base.@nospecializeinfer Base.@assume_effects :foldable function _factored_type(
+        @nospecialize(T))
+    T isa DataType || return false
+    T <: BilinearProduct && return true
+    T <: Union{OperatorScale, GridFunctionScale} &&
+        return _factored_type(fieldtype(T, :inner_op))
+    T <: OperatorAdd &&
+        return _factored_type(fieldtype(T, :left_op)) && _factored_type(fieldtype(T, :right_op))
+    return false
+end
+
+# Whether `T` holds no interpolation, which would name rows or columns absolutely.
+Base.@nospecializeinfer Base.@assume_effects :foldable function _interp_free_type(
+        @nospecialize(T))
+    T isa DataType || return false
+    T <: InterpolationNode && return false
+    for F in fieldtypes(T)
+        F <: LazyOp && !_interp_free_type(F) && return false
+    end
+    return true
+end
+
+# Whether a walk with a sink of type `S` over a term of type `T` on a leaf of type `P` is
+# factored. Types, not values, and one compiled instance for every walk: each answer folds
+# where the walk is compiled.
+Base.@nospecializeinfer Base.@assume_effects :foldable function _factored_walk(
+        @nospecialize(S), @nospecialize(T), @nospecialize(P))
+    S <: Union{_CoordSink, ReplaySink, _PairReplaySink} || return false
+    (isconcretetype(P) && !(P <: _GhostSpace)) || return false
+    return !_may_restrict(T) && _factored_type(T) && _interp_free_type(T)
+end
+
+# The products of a factored term of type `T`, read at generation time: each as the
+# expression reaching it from `path` and the expressions reaching the scales above it,
+# innermost first, a sum's summands left to right as `_summands` flattens them.
+function _factored_products!(acc::Vector{Any}, @nospecialize(T), path, scales::Vector{Any})
+    if T <: Union{OperatorScale, GridFunctionScale}
+        _factored_products!(
+            acc, fieldtype(T, :inner_op), :($path.inner_op), Any[path, scales...])
+    elseif T <: OperatorAdd
+        _factored_products!(acc, fieldtype(T, :left_op), :($path.left_op), scales)
+        _factored_products!(acc, fieldtype(T, :right_op), :($path.right_op), scales)
+    else
+        push!(acc, (path, scales))
+    end
+    return acc
+end
+
+# One point's entries of a factored term from base slot `slot`, answering the next slot:
+# each product in turn, under the values its scales take at the point. Generated, so a term
+# is one compiled body whatever its depth: a method recursing down the tree would meet
+# itself at a deeper type at every scale, which inference widens.
+@generated function _factored_point!(
+        sink, term, sp, I, markers, lin_indices, lin_idx::Int, row_offset::Int,
+        col_offset::Int, slot::Int, g::Val
+)
+    body = Expr(:block, Expr(:meta, :inline), Expr(:meta, :propagate_inbounds))
+    for (p, scales) in _factored_products!(Any[], term, :term, Any[])
+        values = Expr(:tuple, (:(_scale_value($sc, lin_idx)) for sc in scales)...)
+        push!(body.args,
+            :(slot = _factored_product!(sink, $p, $values, sp, I, markers, lin_indices,
+                lin_idx, row_offset, col_offset, slot, g)))
+    end
+    push!(body.args, :(return slot))
+    return body
+end
+
+Base.@propagate_inbounds function _factored_product!(
+        sink, op::BilinearProduct{D, InnerType}, scales::Tuple, sp, I, markers,
+        lin_indices, lin_idx::Int, row_offset::Int, col_offset::Int, slot::Int, g::Val
+) where {D, InnerType}
+    vol = compute_weight(InnerType(), sp, I, lin_idx)
+    left = local_stencil(op.left_op, sp, I, markers, lin_idx)
+    if _same_operator_shape(op.left_op, op.right_op)
+        _loops_symmetric(left) && return _product_entries(
+            sink, left, left, vol, scales, lin_indices, I, row_offset, col_offset, slot, g)
+        return _stencil_entries(sink, multiply_stencils_bilinear_symmetric(left, vol),
+            scales, lin_indices, I, row_offset, col_offset, slot, g)
+    end
+    right = local_stencil(op.right_op, sp, I, markers, lin_idx)
+    _uniform_weights(left) && _uniform_weights(right) &&
+        return _product_entries(
+            sink, left, right, vol, scales, lin_indices, I, row_offset, col_offset, slot, g)
+    return _stencil_entries(sink, multiply_stencils_bilinear(left, right, vol), scales,
+        lin_indices, I, row_offset, col_offset, slot, g)
+end
+
+# Whether a symmetric product walks its factor in the double loop. It forms all `N²`
+# weights where `multiply_stencils_bilinear_symmetric` forms `N(N + 1)/2` and stores them,
+# which for a short factor is the cheaper of the two: warm `assemble!` of the 3D vector
+# Laplacian on 31x30x29 points, two-entry factors, 1.735 ms looped against 1.672 ms through
+# the symmetric stencil (#765). Elasticity's four- and eight-entry factors win looped: 71 ms
+# with both looped, 83 ms with the four-entry ones through the symmetric stencil. The
+# length is in the type, so the choice folds.
+@inline _loops_symmetric(stencil::Tuple) = length(stencil) >= _MIN_LOOPED_FACTOR &&
+                                           _uniform_weights(stencil)
+const _MIN_LOOPED_FACTOR = 3
+
+# Whether a factor's weights share one bits type. Mixed ones (an `Int` beside a `Float64`)
+# would be indexed by a loop variable in `_product_entries` and boxed at every point, and
+# a `BigFloat` is not bits, so such a product is built as `local_stencil` builds it, its
+# weights multiplied by `vol` into one type first, and walked entry by entry
+# (`_stencil_entries`). Decided by the type.
+@inline function _uniform_weights(stencil::Tuple)
+    T = eltype(typeof(entry_weights(stencil)))
+    return isconcretetype(T) && isbitstype(T)
+end
+
+# A product's own stencil under `scales`, entry by entry as `_visit_entries` and
+# `_visit_entries_unguarded` walk it, answering the next slot.
+Base.@propagate_inbounds function _stencil_entries(
+        sink, stencil, scales::Tuple, lin_indices, I, row_offset::Int, col_offset::Int,
+        slot::Int, ::Val{G}
+) where {G}
+    offs = entry_offsets(stencil)
+    wts = entry_weights(stencil)
+    for k in eachindex(wts)
+        off_u, off_v = offs[k]
+        w = _apply_scales(wts[k], scales)
+        if G
+            _step_entry!(
+                sink, lin_indices, I, off_u, off_v, w, row_offset, col_offset, slot
+            ) && (slot += 1)
+        else
+            _step_entry_unguarded!(
+                sink, lin_indices, I, off_u, off_v, w, row_offset, col_offset, slot
+            )
+            slot += 1
+        end
+    end
+    return slot
+end
+
+@inline _apply_scales(w, ::Tuple{}) = w
+@inline _apply_scales(w, scales::Tuple) = _apply_scales(w * first(scales), Base.tail(scales))
+
+# The double loop over two factor stencils, guarded (`Val(true)`, as `_visit_entries`) or
+# not (`Val(false)`, as `_visit_entries_unguarded`). Offsets and weights read apart, for
+# Enzyme's sake as there. A guarded entry survives when its column and its row both land
+# (`_step_entry!`); a sink that reads no coordinates asks each factor entry once, a left
+# one per row of the loop and the right ones before it, not both per entry.
+Base.@propagate_inbounds function _product_entries(
+        sink, left, right, vol, scales::Tuple, lin_indices, I, row_offset::Int,
+        col_offset::Int, slot::Int, ::Val{G}
+) where {G}
+    loffs = entry_offsets(left)
+    lwts = entry_weights(left)
+    roffs = entry_offsets(right)
+    rwts = entry_weights(right)
+    if G && !_sink_needs_coordinates(sink)
+        rows_in = map(o -> _test_inbounds(lin_indices, I, o[1]), roffs)
+        for i in eachindex(lwts)
+            _trial_inbounds(lin_indices, I, loffs[i][1]) || continue
+            wl = lwts[i]
+            for j in eachindex(rwts)
+                rows_in[j] || continue
+                _sink_entry!(sink, 0, 0, _apply_scales(wl * rwts[j] * vol, scales), slot)
+                slot += 1
+            end
+        end
+        return slot
+    end
+    for i in eachindex(lwts)
+        off_u = loffs[i][1]
+        wl = lwts[i]
+        for j in eachindex(rwts)
+            off_v = roffs[j][1]
+            w = _apply_scales(wl * rwts[j] * vol, scales)
+            if G
+                _step_entry!(
+                    sink, lin_indices, I, off_u, off_v, w, row_offset, col_offset, slot
+                ) && (slot += 1)
+            else
+                _step_entry_unguarded!(
+                    sink, lin_indices, I, off_u, off_v, w, row_offset, col_offset, slot
+                )
+                slot += 1
+            end
+        end
+    end
+    return slot
+end
+
 # --- interior/boundary geometry (gpena/Bramble.jl#160) ----------------------------- #
 #
 # `visit_bilinear_stencil` used to guard every point alike: a `checkbounds` and a
@@ -733,6 +943,17 @@ end
         row_offset::Int,
         col_offset::Int
 ) where {SINK, TERM}
+    if _factored_walk(typeof(sink), typeof(term), typeof(sp))
+        @inbounds for I in region
+            lin_idx = lin_indices[I]
+            slot = _sink_point!(sink, lin_idx, I)
+            _factored_point!(
+                sink, term, sp, I, mesh_markers, lin_indices, lin_idx, row_offset,
+                col_offset, slot, Val(true)
+            )
+        end
+        return nothing
+    end
     @inbounds for I in region
         lin_idx = lin_indices[I]
         stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
@@ -753,6 +974,17 @@ end
         row_offset::Int,
         col_offset::Int
 ) where {SINK, TERM}
+    if _factored_walk(typeof(sink), typeof(term), typeof(sp))
+        @inbounds for I in interior
+            lin_idx = lin_indices[I]
+            slot = _sink_point!(sink, lin_idx, I)
+            _factored_point!(
+                sink, term, sp, I, mesh_markers, lin_indices, lin_idx, row_offset,
+                col_offset, slot, Val(false)
+            )
+        end
+        return nothing
+    end
     @inbounds for I in interior
         lin_idx = lin_indices[I]
         stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
@@ -787,6 +1019,10 @@ set of entries regardless of which path ran, in a possibly different order.
 [`ReplaySink`](@ref) is unaffected by that: it addresses each point by its own linear
 index, not by visit order (see its docstring).
 
+For the recording and replay sinks a product term is walked factor by factor, never built
+into its product stencil (`_factored_walk`): the same entries, in the same order and to
+the bit, handed to the sink as they are formed.
+
 The two-sink form lets the interior and the boundary shell be handled by different sinks --
 only [`DiagonalReplaySink`](@ref) needs this, pairing itself (interior) with an ordinary
 [`ReplaySink`](@ref) (boundary shell), so the one-sink form below is the thin, common case.
@@ -807,7 +1043,18 @@ only [`DiagonalReplaySink`](@ref) needs this, pairing itself (interior) with an 
 
 See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
 """
-@inline function visit_bilinear_stencil(
+@inline visit_bilinear_stencil(
+    interior_sink, boundary_sink, term, sp, row_offset::Int, col_offset::Int) = _visit_stencil!(
+    interior_sink, boundary_sink, term, sp, row_offset, col_offset)
+
+# The ordinary one-sink call: the same sink plays both roles.
+@inline visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) = _visit_stencil!(
+    sink, sink, term, sp, row_offset, col_offset)
+
+# The walk itself, which the replay calls directly: one method instance per (sink, term)
+# where the two `visit_bilinear_stencil` methods above, the one calling the other, compiled
+# two.
+@inline function _visit_stencil!(
         interior_sink::SINK1,
         boundary_sink::SINK2,
         term::TERM,
@@ -816,7 +1063,11 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
         col_offset::Int
 ) where {SINK1, SINK2, TERM}
     Ωₕ = mesh(sp)
-    bound, mesh_markers = _bind_walk(term, sp)
+    # `_bind_walk(term, sp)`, its mesh method reached only by a term that may restrict:
+    # a term type fewer to compile it for (`_may_restrict`).
+    weights(sp)
+    bound, mesh_markers = _may_restrict(typeof(term)) ? _bind_walk(term, mesh(sp)) :
+                          (term, nothing)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
@@ -865,11 +1116,6 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
     end
     return boundary_sink
 end
-
-# The ordinary one-sink call every caller but the diagonal replay path uses: the same sink
-# plays both roles, so `visit_bilinear_stencil(sink, ...)` behaves exactly as it always has.
-@inline visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) = visit_bilinear_stencil(
-    sink, sink, term, sp, row_offset, col_offset)
 
 # --- the sinks --------------------------------------------------------------------- #
 

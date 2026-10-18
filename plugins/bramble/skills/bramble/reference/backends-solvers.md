@@ -53,6 +53,8 @@ dirichlet_components, symmetrize, kwargs...)`, assembling and solving in one cal
 
 ```julia
 pde_solve(A, F)                              # A \ F with a ChainRulesCore adjoint rule
+pde_solve(A, F; mean_zero = w)               # pure Neumann: solution with wᵀu = 0 (w: cell measures)
+pde_solve(K, F)                              # K a Bramble.RankOneUpdate: bordered system, not A + σwwᵀ
 amg_preconditioner(A), ilu_preconditioner(A) # multigrid / ILU(0), each its own package
 
 Bramble.sparse_factorize(A; solver = :default, sym = :auto)   # dispatches to a backend below
@@ -65,6 +67,13 @@ sparspak_factorize(A)                        # pure Julia, works with Dual/BigFl
 
 Bramble.type_cached_assemble!(...)                   # one sparsity pattern per coefficient element type
 ```
+
+A pure-Neumann ghost problem is singular: give `pde_solve(A, F; mean_zero = w)` the compatible
+load (`1ᵀF = 0`), or add a rank-one penalty (`forms-assembly.md`). On ghost spaces
+`matrix_free_operator`, `gmg_solve`, `gmg_preconditioner` (Neumann, Robin, mixed, pure
+Neumann), and the `jacobi_`, `chebyshev_`, `ilu_` and `amg_preconditioner`s work on a
+scalar constrained space; device backends and the composite-space paths the support table
+marks refuse with an `ArgumentError`. `:spqr` refuses a `RankOneUpdate`.
 
 For a Laplacian-like form on a tensor mesh, the `fdm_*` solvers skip assembly
 (`reference/forms-assembly.md`, Kronecker path).

@@ -19,6 +19,10 @@
 # and the manufactured solution ``u_{\text{exact}}(x) = e^{x}``, with ``g`` calculated so that
 # it is exactly satisfied.
 #
+# The boundary stays Dirichlet-only here because forms on a ghost space refuse the automatic
+# differentiation that Newton's Jacobian needs, which arrives with milestone v4.3.0
+# (automatic differentiation and form correctness on the CPU).
+#
 # ## The mesh and the load
 
 using Bramble

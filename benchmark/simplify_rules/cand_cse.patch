@@ -1,0 +1,10 @@
+# not built: common-subexpression sharing is an execution change (one operand stencil per point fed to several products), not a simplify_ast rewrite; a router prototype of exactly this was built, bit-exact, and lost (docs/notes/internals/form.md, "Shared sub-operators across terms", commit 76c0eb25).
+#
+# What it would be: the 3D elasticity form assembles about nine term-outer units sharing
+# operand differences; the shared difference of one grid function is evaluated once per point
+# and fed to every product. As an AST rewrite the only form of it is factoring a shared
+# argument (`⟨Au, Bv⟩ + ⟨Au, Cv⟩ -> ⟨Au, (B + C)v⟩`), which is the removed rule 7 and is measured
+# there (4.5 ms against 902 µs warm on `s3d_27`). The router-level prototype that grouped
+# units sharing an operand type kept matrices bitwise identical but made the first assembly
+# of 3D εc 1.133x slower and the warm refill only 0.907x, against an adoption rule set before
+# measuring; the code is not in the tree.

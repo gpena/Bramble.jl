@@ -18,8 +18,8 @@
 
 """
     amg_preconditioner(A::AbstractMatrix; method = :smoothed_aggregation, kwargs...) -> MultiLevel
-    amg_preconditioner(a::BilinearForm; method = :smoothed_aggregation, dirichlet = nothing,
-                        dirichlet_components = nothing, kwargs...) -> MultiLevel
+    amg_preconditioner(a::Union{BilinearForm, GhostBilinearForm}; method = :smoothed_aggregation,
+                        dirichlet = nothing, dirichlet_components = nothing, kwargs...) -> MultiLevel
 
 Build an algebraic multigrid hierarchy for the symmetric positive-definite matrix `A` -- or
 for `a` assembled with the given Dirichlet conditions -- ready to turn into a preconditioner
@@ -48,6 +48,9 @@ method instead.
 
 A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
 
+A form on ghost spaces ([`GhostGridSpace`](@ref)) is assembled to its reduced matrix,
+`assemble(a; dirichlet, dirichlet_components)`, and coarsened as any other.
+
 Requires [AlgebraicMultigrid.jl](https://github.com/JuliaLinearAlgebra/AlgebraicMultigrid.jl);
 call `using AlgebraicMultigrid` before calling this function.
 
@@ -72,7 +75,8 @@ function amg_preconditioner(A::AbstractMatrix; kwargs...)
 end
 
 function amg_preconditioner(
-        a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, kwargs...
+        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        dirichlet_components = nothing, kwargs...
 )
     A = assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
     A = _as_csc(A)

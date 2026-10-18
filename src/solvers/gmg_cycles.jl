@@ -7,6 +7,11 @@
 # coarsest level alone is assembled, densely, and factorised once; the default hierarchy
 # coarsens until an axis would drop below three points, so it is small by construction.
 #
+# `build` may return a form on ghost spaces built on `mesh(W)` instead, on every level: its
+# levels then hold degrees of freedom, not points, and gmg_ghost.jl holds the transfers
+# through their physical nodes, the reduced diagonal the smoothers read, and the coarsest
+# factorisation, bordered by the constant when that lies in the kernel (pure Neumann).
+#
 # A cycle recurses on the level index and works on vectors stored per level in the
 # preconditioner: `x[l]` the correction, `b[l]` the restricted residual, `r[l]` the residual
 # (and then the prolongated correction). The finest level's iterate and right-hand side are
@@ -18,13 +23,13 @@
 # from a zero guess are symmetric operators, which conjugate gradients needs.
 
 """
-    GMGPreconditioner{T, H, Op, S, F, V <: AbstractVector{T}} <: AbstractMatrixFreePreconditioner{T}
+    GMGPreconditioner{T, H, Op, S, F, V <: AbstractVector{T}, G} <: AbstractMatrixFreePreconditioner{T}
 
 A geometric multigrid cycle as a preconditioner: `ldiv!(y, P, x)` sets `y` to one cycle for
 `A y = x` from `y = 0`, where `A` is the finest level's form. It holds the
 [`GeometricMeshHierarchy`](@ref), one [`MatrixFreeOperator`](@ref) and one smoother per
 level, the dense factorisation of the coarsest level's matrix, and the per-level work
-vectors, so an application allocates nothing on a [`CpuSerial`](@ref) policy and one `P`
+vectors (of each level's [`ndofs`](@ref)), so an application allocates nothing on a [`CpuSerial`](@ref) policy and one `P`
 must not be applied from two tasks at once. Build one with [`gmg_preconditioner`](@ref); the
 cycles themselves are [`v_cycle!`](@ref), [`w_cycle!`](@ref) and [`fmg!`](@ref).
 
@@ -35,11 +40,13 @@ cycles themselves are [`v_cycle!`](@ref), [`w_cycle!`](@ref) and [`fmg!`](@ref).
 - `S`: The smoother type of the levels.
 - `F`: The type of the coarsest level's factorisation.
 - `V`: The vector type of the work vectors.
+- `G`: `Nothing` on plain spaces; on ghost spaces, the type of the map from each level's
+  degrees of freedom to its physical nodes, which the transfers go through.
 
 See also: [`gmg_preconditioner`](@ref), [`gmg_solve`](@ref),
 [`AbstractMatrixFreePreconditioner`](@ref).
 """
-struct GMGPreconditioner{T, H <: GeometricMeshHierarchy, Op, S, F, V <: AbstractVector{T}} <:
+struct GMGPreconditioner{T, H <: GeometricMeshHierarchy, Op, S, F, V <: AbstractVector{T}, G} <:
        AbstractMatrixFreePreconditioner{T}
     hierarchy::H
     ops::Vector{Op}
@@ -51,6 +58,8 @@ struct GMGPreconditioner{T, H <: GeometricMeshHierarchy, Op, S, F, V <: Abstract
     cycle::Symbol
     ν₁::Int
     ν₂::Int
+    "`nothing`, or on ghost spaces the physical nodes of each level's degrees of freedom."
+    transfer::G
 end
 
 Base.size(P::GMGPreconditioner) = size(last(P.ops))
@@ -107,7 +116,15 @@ conjugate gradients may use them (`Pl = P` in `LinearSolve`'s `KrylovJL_CG`). Th
 multigrid cycle `:FMG` ([`fmg!`](@ref)) is a linear operator but not symmetric.
 
 `build(W)` must return a square [`BilinearForm`](@ref) on the scalar grid space `W` it is
-given, with no Dirichlet rows (a form carries none; `A` is `assemble(build(W))`). Conjugate
+given, with no Dirichlet rows (a form carries none; `A` is `assemble(build(W))`), or a
+square form on ghost spaces built on `mesh(W)`, such as `form(Cₕ, Cₕ, f)` with `Cₕ =
+constrained(gridspace(mesh(W); ghosts = ...), relations)`. On ghost spaces, every level has
+ghosts on the same facets and every ghost is eliminated by a relation; Dirichlet relations
+`u => g` are allowed, and the unknowns of each level are its [`ndofs`](@ref). Neumann,
+Robin, mixed and pure Neumann relations all work: when the constant lies in the kernel of
+the coarsest matrix, its solve is bordered by the constant and returns the mean-zero
+solution, so a compatible right-hand side (`b = A x`) converges, to some solution of `A u =
+b`. The smoothers read the reduced diagonal, and red-black Gauss-Seidel is refused. Conjugate
 gradients needs `A` SPD, such as mass plus diffusion with natural boundary conditions. A
 Dirichlet problem needs its constrained rows eliminated or lifted into the right-hand side
 before a form without them is passed here. Every grid function in the form (a coefficient
@@ -139,7 +156,7 @@ the grid size.
 
 # Arguments
 - `build`: A function of a [`ScalarGridSpace`](@ref) `W` returning a square
-  [`BilinearForm`](@ref) on `W`.
+  [`BilinearForm`](@ref) on `W`, or a square form on ghost spaces built on `mesh(W)`.
 - `Ωₕ`: The finest mesh.
 
 # Keywords
@@ -163,7 +180,11 @@ the grid size.
   `ν₁ + ν₂ == 0` (no smoothing leaves the cycle singular).
 - `ArgumentError`: `levels` is not an integer, or is invalid for `Ωₕ` (see
   [`GeometricMeshHierarchy`](@ref)).
-- `ArgumentError`: `build(W)` does not return a square form on `W`.
+- `ArgumentError`: `build(W)` does not return a square form on `W` or on ghost spaces on
+  `mesh(W)`, returns a form on ghost spaces on some levels only, or with ghosts on other
+  facets than on the finest level.
+- `ArgumentError`: on ghost spaces, a ghost is kept as an unknown (a ghosted facet without a
+  relation), or the trial and test spaces have different degrees of freedom.
 - `ArgumentError`: `smoother(op)` does not return an [`AbstractSmoother`](@ref).
 - `ArgumentError`: the coarsest level has more than 4096 points: `Ωₕ`'s point counts minus
   one need a larger power of two as a factor.
@@ -203,27 +224,34 @@ function gmg_preconditioner(
     H = GeometricMeshHierarchy(Ωₕ, L)
     nc = npoints(H[1])
     nc <= _GMG_MAX_COARSE_DOFS || _throw_gmg_coarse(H)
-    ops = [matrix_free_operator(_gmg_level_form(build, H[l], l)) for l in 1:L]
+    forms = [_gmg_level_form(build, H[l], l) for l in 1:L]
+    _gmg_check_level_kinds(forms)
+    ops = [matrix_free_operator(a) for a in forms]
     smoothers = [_gmg_level_smoother(smoother, op, l) for (l, op) in enumerate(ops)]
     T = eltype(first(ops))
-    coarse = lu(Matrix{T}(assemble(first(ops).form)))
+    coarse = _gmg_coarse_factor(T, first(forms))
+    transfer = _gmg_transfer(forms, H, T)
     vec_of(n) = zeros(T, n)
-    x = [vec_of(l < L || L == 1 ? npoints(H[l]) : 0) for l in 1:L]
-    b = [vec_of(npoints(H[l])) for l in 1:L]
-    r = [vec_of(l > 1 ? npoints(H[l]) : 0) for l in 1:L]
+    n = [size(op, 1) for op in ops]
+    x = [vec_of(l < L || L == 1 ? n[l] : 0) for l in 1:L]
+    b = [vec_of(n[l]) for l in 1:L]
+    r = [vec_of(l > 1 ? n[l] : 0) for l in 1:L]
     return GMGPreconditioner{
-        T, typeof(H), eltype(ops), eltype(smoothers), typeof(coarse), eltype(x)}(
-        H, ops, smoothers, coarse, x, b, r, cycle, Int(ν₁), Int(ν₂)
+        T, typeof(H), eltype(ops), eltype(smoothers), typeof(coarse), eltype(x),
+        typeof(transfer)}(
+        H, ops, smoothers, coarse, x, b, r, cycle, Int(ν₁), Int(ν₂), transfer
     )
 end
 
-# The form `build` returns on level `l`, checked to be square on that level's mesh.
+# The form `build` returns on level `l`, checked to be square on that level's mesh; a form
+# on ghost spaces is checked in gmg_ghost.jl.
 function _gmg_level_form(build, Ωl, l)
     a = build(gridspace(Ωl))
+    a isa GhostBilinearForm && return _gmg_ghost_level_form(a, Ωl, l)
     a isa BilinearForm || throw(
         ArgumentError(
-        "gmg_preconditioner: build(W) must return a BilinearForm, got a " *
-        "$(nameof(typeof(a))) on level $l",
+        "gmg_preconditioner: build(W) must return a BilinearForm, or one on ghost spaces " *
+        "built on mesh(W), got a $(nameof(typeof(a))) on level $l",
     ),
     )
     Wu, Wv = trial_space(a), test_space(a)
@@ -237,6 +265,11 @@ function _gmg_level_form(build, Ωl, l)
     )
     return a
 end
+
+# The coarsest level's matrix, assembled dense and factorised.
+_gmg_coarse_factor(::Type{T}, a::BilinearForm) where {T} = lu(Matrix{T}(assemble(a)))
+
+@inline _gmg_trial_space(op::MatrixFreeOperator) = trial_space(op.form)
 
 function _gmg_level_smoother(smoother, op, l)
     s = smoother(op)
@@ -455,12 +488,12 @@ function _gmg_cycle!(P::GMGPreconditioner, l::Int, x, b, γ::Int)
         smooth!(s, x, b)
     end
     _residual!(r, op, x, b)
-    coarsen!(bc, P.hierarchy, l, r)
+    _gmg_restrict!(P.transfer, bc, P.hierarchy, l, r)
     fill!(xc, zero(eltype(xc)))
     for _ in 1:γ
         _gmg_cycle!(P, l - 1, xc, bc, γ)
     end
-    prolongate!(r, P.hierarchy, l, xc)
+    _gmg_prolongate!(P.transfer, r, P.hierarchy, l, xc)
     x .+= r
     for _ in 1:(P.ν₂)
         _gmg_post_smooth!(s, x, b)
@@ -487,18 +520,19 @@ function _gmg_fmg!(P::GMGPreconditioner, x, b)
     H = P.hierarchy
     L = length(H)
     L == 1 && return _gmg_coarse_solve!(P, x, b)
-    coarsen!(P.b[L - 1], H, L, b)
+    t = P.transfer
+    _gmg_restrict!(t, P.b[L - 1], H, L, b)
     for l in (L - 1):-1:2
-        coarsen!(P.b[l - 1], H, l, P.b[l])
+        _gmg_restrict!(t, P.b[l - 1], H, l, P.b[l])
     end
     _gmg_coarse_solve!(P, P.x[1], P.b[1])
     # The finest level is peeled out of the loop so that the caller's `x` and `b`, whose types
     # may differ from the hierarchy's, never share a variable with `P.x[l]` and `P.b[l]`.
     for l in 2:(L - 1)
-        prolongate!(P.x[l], H, l, P.x[l - 1])
+        _gmg_prolongate!(t, P.x[l], H, l, P.x[l - 1])
         _gmg_cycle!(P, l, P.x[l], P.b[l], 1)
     end
-    prolongate!(x, H, L, P.x[L - 1])
+    _gmg_prolongate!(t, x, H, L, P.x[L - 1])
     _gmg_cycle!(P, L, x, b, 1)
     return x
 end
@@ -527,10 +561,12 @@ The residual floors at a multiple of the rounding error of the element type `T` 
 
 # Arguments
 - `build`: A function of a [`ScalarGridSpace`](@ref) `W` returning a square
-  [`BilinearForm`](@ref) on `W`, as in [`gmg_preconditioner`](@ref).
+  [`BilinearForm`](@ref) on `W`, or one on ghost spaces built on `mesh(W)`, as in
+  [`gmg_preconditioner`](@ref).
 - `Ωₕ`: The finest mesh.
-- `b`: The right-hand side: a vector of length `npoints(Ωₕ)` or a [`VectorElement`](@ref),
-  such as `assemble(l)` for a linear form `l`.
+- `b`: The right-hand side: a vector of length `ndofs` of the finest form's spaces
+  (`npoints(Ωₕ)` on a plain space) or a [`VectorElement`](@ref), such as `assemble(l)` for
+  a linear form `l`.
 
 # Keywords
 - `levels`, `cycle`, `ν₁`, `ν₂`, `smoother`: As in [`gmg_preconditioner`](@ref).
@@ -581,7 +617,7 @@ function gmg_solve(
     )
     bd = _mf_data(b)
     Base.require_one_based_indexing(bd)
-    uₕ = element(trial_space(op.form), zero(promote_type(eltype(P), eltype(bd))))
+    uₕ = element(_gmg_trial_space(op), zero(promote_type(eltype(P), eltype(bd))))
     x = parent(uₕ)
     r = similar(x)
     target = τ * norm(bd)

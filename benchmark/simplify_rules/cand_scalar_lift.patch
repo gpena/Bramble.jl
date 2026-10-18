@@ -1,0 +1,32 @@
+diff --git a/src/ast/simplifier.jl b/src/ast/simplifier.jl
+index e8b2fbef..0c34081b 100644
+--- a/src/ast/simplifier.jl
++++ b/src/ast/simplifier.jl
+@@ -405,6 +405,7 @@ end
+ function simplify_ast(op::ShiftNode{D, Dim}) where {D, Dim}
+     inner = simplify_ast(op.inner_op)
+     _mixes(inner) && return _distribute_wrapper(op, inner)
++    inner isa OperatorScale && return _lift_wrapper_scalar(op, inner)
+     return if inner === op.inner_op
+         op
+     else
+@@ -435,10 +436,18 @@ const _LinearWrapper = Union{_StencilNode, RegionRestriction}
+                      _test_component_class(op) isa _MixedComponents
+ 
+ function simplify_ast(op::_LinearWrapper)
+-    _mixes(op.inner_op) || return op
++    _mixes(op.inner_op) || return _lift_wrapper_scalar(op, op.inner_op)
+     return _distribute_wrapper(op, op.inner_op)
+ end
+ 
++# Candidate scalar_lift: a scalar under a linear wrapper moves out of it, `D₋ₓ(c * u) ->
++# c * D₋ₓ(u)`, where it meets the nested-scale fold and the inner-product lift. Decided by the
++# node type alone (`OperatorScale`), with the coefficient carried over untouched.
++@inline _lift_wrapper_scalar(op, ::Any) = op
++@inline function _lift_wrapper_scalar(op, inner::OperatorScale)
++    return simplify_ast(OperatorScale(inner.scalar, simplify_ast(_rewrap_inner(op, inner.inner_op))))
++end
++
+ # `op` distributed over its mixing operand `inner`. A sum is split as it stands, each piece
+ # simplified on its own, so the branch a same-component sum compiles but never takes stays
+ # small. Anything else (a scale, another wrapper) is simplified first and split if that

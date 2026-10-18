@@ -12,27 +12,15 @@ using Bramble
 import Bramble
 using Bramble: CpuSerial, CpuThreaded
 using LinearAlgebra: norm
-using SparseArrays: SparseMatrixCSC, nonzeros
+using SparseArrays: nonzeros
 using ForwardDiff: ForwardDiff
 
-using ..TestUtils: WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS, ghost_mesh
 
 const K = [2.0 1.0; 1.0 2.0]
 const TIMES = (0.0, 0.3, 1.7)
 
 alloc(f::F) where {F} = (f(); f(); @allocated f())
-
-# A seeded non-uniform mesh on [0, 1] × [0, 2] × [0, 3] (its first `D` axes).
-function tmesh(ns::NTuple{D, Int}; pol = CpuSerial(), T = Float64, seed = 11) where {D}
-    Bramble._seed_mesh1d_rng!(seed)
-    be = backend(vector_type = Vector{T}, matrix_type = SparseMatrixCSC{T, Int},
-        policy = pol)
-    Ωd = domain(foldl(×, ntuple(d -> interval(T(0), T(d)), D)))
-    Ω = mesh(Ωd, D == 1 ? only(ns) : ns, D == 1 ? false : ntuple(_ -> false, D);
-        backend = be)
-    Bramble._unseed_mesh1d_rng!()
-    return Ω
-end
 
 # The datum `f` as given (`t === nothing`) or frozen at `t`, a function of the point.
 at(f, ::Nothing) = f
@@ -77,7 +65,7 @@ function rels2d(t)
 end
 
 @testset "2D Neumann, Robin, ∂ₙₙ, Dirichlet" begin
-    W = gridspace(tmesh((6, 7)); ghosts = (:xmin, :xmax, :ymax))
+    W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = (:xmin, :xmax, :ymax))
     C, Cfix = spaces(W, rels2d)
     @test C.td isa Bramble._TimeData
     @test relerr(Bramble.closure(C)[2], Bramble.closure(Cfix(0.0))[2]) <= 1e-13
@@ -85,18 +73,18 @@ end
 end
 
 @testset "1D Neumann and Robin in time" begin
-    W = gridspace(tmesh((9,)); ghosts = :boundary)
+    W = gridspace(ghost_mesh(CpuSerial(), (9,)); ghosts = :boundary)
     rels(t) = u -> (:xmin => ∂ₙ(u) => at((x, s) -> cos(3s) + x[1], t),
         :xmax => 2.0 * u + ∂ₙ(u) => at((x, s) -> s^2 - x[1], t))
     matches_frozen(spaces(W, rels)...)
     # One datum in time, the other static, and a Dirichlet relation in time.
-    W1 = gridspace(tmesh((9,)); ghosts = (:xmax,))
+    W1 = gridspace(ghost_mesh(CpuSerial(), (9,)); ghosts = (:xmax,))
     rels1(t) = u -> (:xmin => u => at((x, s) -> 1 + s, t), :xmax => ∂ₙ(u) => x -> x[1])
     matches_frozen(spaces(W1, rels1)...)
 end
 
 @testset "Conormal corner blocks in time" begin
-    W = gridspace(tmesh((7, 6)); ghosts = :boundary)
+    W = gridspace(ghost_mesh(CpuSerial(), (7, 6)); ghosts = :boundary)
     rels(t) = u -> (:xmin => ∂ₙ(u; K) => at((x, s) -> sin(s) * x[2], t),
         :xmax => u + ∂ₙ(u; K) => at((x, s) -> cos(s) + x[2], t),
         :ymin => ∂ₙ(u; K) => 0.5,
@@ -109,7 +97,7 @@ end
     # Two Dirichlet facets meet at (0, 0), where both data are `s`. The ghost relations on
     # xmax and ymax read the fixed nodes of xmin and ymin, and xmin carries ghosts that
     # its own ghost relation solves for, reading the fixed nodes it is beside.
-    W = gridspace(tmesh((6, 7)); ghosts = (:xmin, :xmax, :ymax))
+    W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = (:xmin, :xmax, :ymax))
     rels(t) = u -> (:xmin => u => at((x, s) -> s + x[2]^2, t),
         :ymin => u => at((x, s) -> s + x[1], t),
         :xmin => ∂ₙ(u) => at((x, s) -> s * x[2], t),
@@ -119,7 +107,7 @@ end
 end
 
 @testset "Static data keep the static path" begin
-    W = gridspace(tmesh((6, 7)); ghosts = (:xmin, :xmax, :ymax))
+    W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = (:xmin, :xmax, :ymax))
     C = constrained(W, rels2d(0.4))
     @test C.td === nothing
     u = collect(1.0:Bramble.ndofs(C))
@@ -132,7 +120,7 @@ end
 end
 
 @testset "Without a time, the load refuses" begin
-    W = gridspace(tmesh((6, 7)); ghosts = (:xmin, :xmax, :ymax))
+    W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = (:xmin, :xmax, :ymax))
     C, Cfix = spaces(W, rels2d)
     u = ones(Bramble.ndofs(C))
     # The message names the call made, `lift(Cₕ, u, t)` and `semidiscretize`.
@@ -168,7 +156,7 @@ end
 @testset "The load's lift reads every d(t) column" begin
     # Data that vanish at t = 0 leave `d(0) = 0` on their facets; the form's `A_pad d` map
     # must still cover every column `d(t)` can touch, or the load at a later `t` drops it.
-    W = gridspace(tmesh((6, 7)); ghosts = (:xmin, :xmax, :ymax))
+    W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = (:xmin, :xmax, :ymax))
     rels(t) = u -> (:xmin => ∂ₙ(u) => at((x, s) -> s * (1 + x[2]), t),
         :xmax => u + ∂ₙ(u) => at((x, s) -> sin(s), t),
         :ymin => u => at((x, s) -> s * x[1], t),
@@ -199,8 +187,9 @@ wave(ω) = (x, s) -> cos(ω * s) + x[2]
         :ymin => ∂ₙ(u; K) => 0.5,
         :ymax => u => at((x, s) -> s * x[1], t),
         :ymax => ∂ₙ(u; K) => at((x, s) -> s - x[1], t))
-    C0 = constrained(gridspace(tmesh((9, 11)); ghosts = :boundary), rels(nothing))
-    C1 = constrained(gridspace(tmesh((9, 11); pol = CpuThreaded()); ghosts = :boundary),
+    C0 = constrained(gridspace(ghost_mesh(CpuSerial(), (9, 11)); ghosts = :boundary),
+        rels(nothing))
+    C1 = constrained(gridspace(ghost_mesh(CpuThreaded(), (9, 11)); ghosts = :boundary),
         rels(nothing))
     @test Bramble.execution_policy(Bramble.padded_space(C1)) == CpuThreaded()
     u = collect(range(0.0, 1.0; length = Bramble.ndofs(C0)))
@@ -216,7 +205,8 @@ end
         :xmax => u + 0.5f0 * ∂ₙ(u) => at((x, s) -> s * x[2], t),
         :ymin => u => at((x, s) -> exp(-s) * x[1], t),
         :ymax => ∂ₙₙ(u) => 1.0f0)
-    W = gridspace(tmesh((6, 7); T = Float32); ghosts = (:xmin, :xmax, :ymax))
+    W = gridspace(ghost_mesh(CpuSerial(), (6, 7); T = Float32);
+        ghosts = (:xmin, :xmax, :ymax))
     C, Cfix = spaces(W, rels)
     @test eltype(C.d) == Float32 && eltype(C.td.g) == Float32
     matches_frozen(C, t -> Cfix(Float32(t)); tol = 1.0f-5, times = Float32.(TIMES))
@@ -227,7 +217,7 @@ end
 end
 
 @testset "_lift_affine! infers and allocates 0 B" begin
-    W = gridspace(tmesh((6, 7)); ghosts = (:xmin, :xmax, :ymax))
+    W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = (:xmin, :xmax, :ymax))
     C = constrained(W, rels2d(nothing))
     d = similar(C.d)
     @test (@inferred Bramble._lift_affine!(d, C, 0.4)) === d
@@ -244,7 +234,7 @@ end
 @testset "A Dual time gives ∂d/∂t" begin
     # `d` is linear in the data, so `∂d/∂t` is the `d` of the space whose data are `∂ₜg`
     # and whose static data are 0: the frozen reference of the derivative.
-    W = gridspace(tmesh((6, 7)); ghosts = (:xmin, :xmax, :ymax))
+    W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = (:xmin, :xmax, :ymax))
     rels(g, h, k) = u -> (:xmin => ∂ₙ(u) => g, :xmax => u + ∂ₙ(u) => h,
         :ymin => u => k, :ymax => ∂ₙ(u) => 0.0)
     C = constrained(W, rels((x, t) -> sin(t) * (1 + x[2]), (x, t) -> t^2 * x[2],
@@ -264,7 +254,7 @@ end
 end
 
 @testset "Concurrent lifts at two times" begin
-    W = gridspace(tmesh((30, 33)); ghosts = (:xmin, :xmax, :ymax))
+    W = gridspace(ghost_mesh(CpuSerial(), (30, 33)); ghosts = (:xmin, :xmax, :ymax))
     C = constrained(W, u -> (:xmin => ∂ₙ(u) => (x, t) -> t * (1 + x[2]),
         :xmax => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => (x, t) -> t * x[1]))
     u = zeros(Bramble.ndofs(C))
@@ -289,7 +279,7 @@ end
 end
 
 @testset "Data not finite at t = 0" begin
-    W = gridspace(tmesh((6, 7)); ghosts = (:xmin, :xmax, :ymax))
+    W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = (:xmin, :xmax, :ymax))
     # The same datum on two facets meeting at a corner agrees there, `Inf` at `t = 0` too.
     rels(t) = u -> (:xmin => u => at((x, s) -> 1 / s, t),
         :ymin => u => at((x, s) -> 1 / s, t),
@@ -320,7 +310,7 @@ end
 
 # 3D, nightly.
 WITH_3D_TESTS && @testset "3D Neumann, Robin, Dirichlet" begin
-    W = gridspace(tmesh((4, 5, 4)); ghosts = (:xmin, :xmax, :ymax, :zmax))
+    W = gridspace(ghost_mesh(CpuSerial(), (4, 5, 4)); ghosts = (:xmin, :xmax, :ymax, :zmax))
     rels(t) = u -> (:xmin => ∂ₙ(u) => at((x, s) -> sin(s) + x[2] * x[3], t),
         :xmax => u + ∂ₙ(u) => at((x, s) -> s * x[3], t),
         :ymin => u => at((x, s) -> s + x[1], t),

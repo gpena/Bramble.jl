@@ -17,7 +17,7 @@ import Bramble
 using LinearAlgebra: det, dot, norm, ×
 using SparseArrays: SparseMatrixCSC, nonzeros, rowvals, sparse
 
-using ..TestUtils: WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS, robin_pairs
 
 isdefined(Main, :GhostOracle1D) ||
     Base.include(Main, joinpath(pkgdir(Bramble), "test", "ghost", "GhostOracle1D.jl"))
@@ -36,12 +36,6 @@ relerr(A, B) = norm(A - B) / max(norm(B), eps())
 # The padded index of each degree of freedom of the ghost space: its selection closure has
 # one entry per column.
 dof_rows(W) = rowvals(first(Bramble.closure(W)))
-
-# The relations of an oracle's `FacetRobin`s (or 1D `Robin`s) as `operator => data` pairs.
-robin_pairs(u, rels) = map(keys(rels)) do F
-    r = rels[F]
-    F => r.α * u + r.β * ∂ₙ(u) => r.g
-end
 
 # `-Δₕ u = f`, row-scaled by the cell measure, as the oracles' eliminated systems are.
 poisson(C, f) = (form(C, C, (u, v) -> innerₕ(-1.0 * Δₕ(u), v)), form(C, v -> innerₕ(f, v)))

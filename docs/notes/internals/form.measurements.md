@@ -2,6 +2,11 @@
 
 ## Factoring a shared argument: compile time
 
+The rule was removed by [gpena/Bramble.jl#771](https://github.com/gpena/Bramble.jl/issues/771):
+it shortened the first call but slowed the steady-state `assemble!` of the same form about
+five times (`docs/notes/internals/simplify_rules.md`). The measurement below is kept as
+history.
+
 Fewer products means fewer compiled terms. The 3D scalar form of 27 distinct `innerₕ` terms in
 `nterm-form.jl`, whose pairs share trial operators three at a time, compiles its first
 assemble in 6.6–6.7 s factored against 16.4–17.1 s unfactored (one measurement at

@@ -1,0 +1,29 @@
+diff --git a/src/ast/simplifier.jl b/src/ast/simplifier.jl
+index f245b40f..c6c3060c 100644
+--- a/src/ast/simplifier.jl
++++ b/src/ast/simplifier.jl
+@@ -98,7 +98,6 @@ identity over the scalars, grid functions and components involved. The one excep
+ # (and Enzyme rejects that). A runtime `Int` does the same, deliberately: pass `float(n)` or
+ # a `Ref`. `test/form/simplifier.jl` pins that `Union`.
+ @inline function _wrap_scale(c::Integer, A::LazyOp)
+-    iszero(c) && return _zero_of(A)
+     isone(c) && return A
+     return OperatorScale(c, A)
+ end
+@@ -291,7 +290,6 @@ function simplify_ast(op::OperatorScale)
+     # value of a `Float64` coefficient makes this method's return type depend on a number the
+     # compiler may not know (gpena/Bramble.jl#240).
+     if op.scalar isa Integer
+-        iszero(op.scalar) && return _zero_of(inner)
+         isone(op.scalar) && return inner
+     end
+ 
+@@ -336,8 +334,6 @@ function simplify_ast(op::OperatorAdd)
+     left = simplify_ast(op.left_op)
+     right = simplify_ast(op.right_op)
+ 
+-    _is_zero_op(left) && return right
+-    _is_zero_op(right) && return left
+ 
+     cl, al = _scale_parts(left)
+     cr, ar = _scale_parts(right)

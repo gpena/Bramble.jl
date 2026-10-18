@@ -643,8 +643,8 @@ end
             c[] = 2.0
         end
 
-        # A number scale inside a side, merged from like terms or written there: Int, Complex,
-        # BigFloat, nested, zero, beside a coefficient, a face or a restriction. On a mesh
+        # A number scale written inside a side: Int, Complex, BigFloat, nested, zero, beside
+        # a coefficient, a face or a restriction. On a mesh
         # with a one-point axis the NaNs of the differences agree too.
         # Any: each size and form is its own type
         for n in _ke_sizes(Any[(7, 6), (1, 5), (4, 3, 5)])

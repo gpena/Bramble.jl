@@ -1,0 +1,12 @@
+diff --git a/src/ast/simplifier.jl b/src/ast/simplifier.jl
+index f245b40f..0a9af474 100644
+--- a/src/ast/simplifier.jl
++++ b/src/ast/simplifier.jl
+@@ -347,7 +347,6 @@ function simplify_ast(op::OperatorAdd)
+         # so the branch folds (see there). A singleton type has no `component_idx` to
+         # disagree on. Static, non-`Rational` coefficients only (`_folds`); a `Ref`, even the
+         # same one on both sides, falls through (gpena/Bramble.jl#527).
+-        _folds(cl) && _folds(cr) && return _wrap_scale(_fold_add(cl, cr), al)
+     elseif (left isa OperatorScale || right isa OperatorScale) &&
+            cl isa Integer &&
+            cr isa Integer &&

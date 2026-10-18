@@ -202,8 +202,17 @@ end
 The linear operator of `a`, applied without assembling its matrix: `op * x` agrees with
 `assemble(a; dirichlet, dirichlet_components) * x`.
 
+A form on ghost spaces ([`GhostGridSpace`](@ref)) gives an operator that applies its
+reduced matrix `E_vᵀ A_pad E_u`: the closure of the trial space without its affine part,
+the operator of the form on the padded spaces, then the transpose of the test space's
+closure. The affine part belongs to the load, as in `assemble(a, l)`. Its padded buffers
+are built once, so a warm product allocates no vector. It applies one product at a time:
+a product entered on it while another runs throws an `ArgumentError`, so build one
+operator per task. `dirichlet` there takes what `assemble(a; dirichlet)` takes.
+
 # Arguments
-- `a`: The bilinear form. Any form [`assemble`](@ref) accepts, on scalar or composite spaces.
+- `a`: The bilinear form. Any form [`assemble`](@ref) accepts, on scalar or composite spaces,
+  or on ghost spaces.
 
 # Keywords
 - `dirichlet`: The Dirichlet labels whose rows become identity rows, in any form `assemble`
@@ -220,12 +229,17 @@ The linear operator of `a`, applied without assembling its matrix: `op * x` agre
 
 # Returns
 - [`MatrixFreeOperator`](@ref): of size `(ndofs(test_space(a)), ndofs(trial_space(a)))` and
-  the element type of `assemble(a)`.
+  the element type of `assemble(a)`. On ghost spaces, a `GhostMatrixFreeOperator` of that
+  size holding the padded form's `MatrixFreeOperator`.
 
 # Throws
 - `ArgumentError`: `policy` is a [`GpuPolicy`](@ref); device execution is tracked on
   milestone v4.4.0.
 - `ArgumentError`: `dirichlet_components` names a leaf the test space does not have.
+- `ArgumentError`: `dirichlet` on ghost spaces whose unknowns are not the physical nodes,
+  as for `assemble(a; dirichlet)`.
+- `ArgumentError`, from `mul!`: a product on a ghost-space operator while another task's
+  product on it runs.
 
 # Examples
 ```jldoctest

@@ -550,10 +550,9 @@ end
         @test_throws "whole boundary faces" lin(Wc, :c)
         @test_throws "whole boundary faces" bil(Wc, :c)
 
-        # two spellings of one face fold into one term, as any like terms do
+        # two spellings of one face assemble as the same face
         a2 = form(W, W, (u, v) -> inner_Γ(u, v; markers = :left) +
                                   inner_Γ(u, v; markers = :ymin))
-        @test resolve_form_ast(a2) isa Bramble.OperatorScale
         @test assemble(a2) ≈ 2A
         @test !Bramble._has_surface_labels(resolve_form_ast(a2))
     end

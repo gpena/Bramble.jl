@@ -98,6 +98,12 @@ benchmark/*
 # v4.0.0 ghost dynamics benchmarks (gpena/Bramble.jl#776, #777)
 !benchmark/ghost_vector_kernels.jl
 !benchmark/ghost_vs_plain.jl
+# v4.0.0 multi-term form compile and warm-assembly benchmarks, and the simplify_ast rule audit
+# (gpena/Bramble.jl#763, #765, #771)
+!benchmark/multiterm_ttfx.jl
+!benchmark/warm_composite.jl
+!benchmark/simplify_rules.jl
+!benchmark/simplify_rules/
 # v3.21.0 saved results of the standalone scripts, one TOML per script (gpena/Bramble.jl#372)
 !benchmark/results/
 !benchmark/baselines/

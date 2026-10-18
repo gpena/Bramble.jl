@@ -65,6 +65,19 @@ Vector calculus built on those differences: `divₕ`/`divₕ!`/`div₊ₕ`, `cur
 `Δₕ`/`Δₕ!` (conservative discrete Laplacian), `εₕ`/`εₕ!` (symmetric small-strain tensor, over
 a composite `VectorElement` or a trial/test function inside a `form`).
 
+`divₘₕ(u)` (staggered divergence of a composite trial or test function, one component per
+axis, placed at the shared cell centre) is form-only, with no runtime twin: its one use is
+`inner₊(divₘₕ(u), divₘₕ(v))`. Use `divₕ(u)` where the form must match the runtime divergence.
+
+On a ghost space (`meshes-spaces.md`) the runtime operators are eager and truncate: a
+`Δₕ` or a difference of a difference applied to a `GhostVector` returns plain physical values,
+so the corner rule never applies to a composition. Assemble nested mixed differences
+(`D₋ₓ(D₋ᵧ(u))`) as forms, where a ghost corner uses the one-sided stencil. Inside a form,
+reading a point the padded grid lacks (an average, jump or shift of a cross difference) is an
+`ArgumentError` naming the term. The facet operators `∂ₙ`, `∂ₙₙ` and `jumpₙ` are builder-only:
+they exist inside `constrained` relations and `inner_Γ(relation, v; markers = (F,))`, and
+compute nothing on a grid function.
+
 ## Inner products and norms
 
 ```julia

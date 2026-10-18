@@ -15,6 +15,8 @@ import Bramble
 using LinearAlgebra: dot, norm
 using SparseArrays: rowvals
 
+using ..TestUtils: robin_pairs
+
 isdefined(Main, :GhostOracle1D) ||
     Base.include(Main, joinpath(pkgdir(Bramble), "test", "ghost", "GhostOracle1D.jl"))
 isdefined(Main, :GhostOracleND) ||
@@ -25,11 +27,6 @@ const ON = Main.GhostOracleND
 const tol = 1e-12
 
 relerr(a, b) = norm(a - b) / max(norm(b), eps())
-
-robin_pairs(u, rels) = map(keys(rels)) do F
-    r = rels[F]
-    F => r.α * u + r.β * ∂ₙ(u) => r.g
-end
 
 laplacian_form(C) = form(C, C, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
 zero_load(C) = form(C, v -> innerₕ(x -> 0.0, v))

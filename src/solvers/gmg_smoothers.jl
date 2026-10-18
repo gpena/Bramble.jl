@@ -2,7 +2,8 @@
 # updates an iterate `x` towards `A x = b` in place through products with a
 # `MatrixFreeOperator` and the Jacobi diagonal (`jacobi_preconditioner`), so no level's
 # matrix is ever built: damped Jacobi, the Chebyshev recurrence of `chebyshev.jl` from a
-# nonzero guess, and red-black Gauss-Seidel.
+# nonzero guess, and red-black Gauss-Seidel. Jacobi and Chebyshev also take the operator of
+# a form on ghost spaces, whose reduced diagonal `jacobi_preconditioner` reads off one walk.
 #
 # Red-black Gauss-Seidel is two masked Jacobi updates per sweep: a residual through `mul!`,
 # then an update of one colour's points only. A row cannot be read off the walk, which
@@ -53,7 +54,7 @@ Build one with [`jacobi_smoother`](@ref).
 
 # Type parameters
 - `T`: The element type of `A`.
-- `Op`: The operator type, a [`MatrixFreeOperator`](@ref).
+- `Op`: The operator type, a [`MatrixFreeOperator`](@ref) or a ghost-space operator.
 - `V`: The vector type of the reciprocal diagonal and the residual.
 
 See also: [`jacobi_smoother`](@ref), [`AbstractSmoother`](@ref).
@@ -80,7 +81,7 @@ tasks at once. Build one with [`chebyshev_smoother`](@ref).
 
 # Type parameters
 - `T`: The element type of `A`.
-- `Op`: The operator type, a [`MatrixFreeOperator`](@ref).
+- `Op`: The operator type, a [`MatrixFreeOperator`](@ref) or a ghost-space operator.
 - `V`: The vector type of the reciprocal diagonal and the work vectors.
 
 See also: [`chebyshev_smoother`](@ref), [`AbstractSmoother`](@ref).
@@ -132,6 +133,7 @@ end
 """
     jacobi_smoother(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a)), ω = nothing, sweeps = 1) -> JacobiSmoother
     jacobi_smoother(op::MatrixFreeOperator; ω = nothing, sweeps = 1) -> JacobiSmoother
+    jacobi_smoother(op::GhostMatrixFreeOperator; ω = nothing, sweeps = 1) -> JacobiSmoother
 
 The damped Jacobi smoother of `A = assemble(a; dirichlet, dirichlet_components)`, or of the
 matrix `op` stands for: each sweep sets `x ← x + ω D⁻¹ (b - A x)`, with `D = diag(A)` read
@@ -154,7 +156,9 @@ random). Mesh non-uniformity with large cell aspect ratios slows every point smo
 # Arguments
 - `a`: A square bilinear form ([`ndofs`](@ref) of trial and test space equal), on scalar or
   composite spaces.
-- `op`: A square [`MatrixFreeOperator`](@ref); its Dirichlet rows are kept.
+- `op`: A square [`MatrixFreeOperator`](@ref), or the operator `matrix_free_operator`
+  returns for a form on ghost spaces, whose diagonal is that of the reduced matrix
+  `assemble(a)`; its Dirichlet rows are kept.
 
 # Keywords
 - `dirichlet`, `dirichlet_components`, `policy`: As in [`matrix_free_operator`](@ref).
@@ -202,10 +206,10 @@ function jacobi_smoother(
 end
 
 function jacobi_smoother(
-        op::MatrixFreeOperator{T}; ω = nothing, sweeps::Integer = 1
+        op::_AnyMatrixFreeOperator{T}; ω = nothing, sweeps::Integer = 1
 ) where {T}
     _check_sweeps(:jacobi_smoother, sweeps)
-    D = dim(test_space(op.form))
+    D = _smoother_dim(op)
     w = ω === nothing ? T(2D // (2D + 1)) : T(ω)
     (isfinite(w) && w > 0) ||
         throw(ArgumentError("jacobi_smoother needs a finite ω > 0, got $ω"))
@@ -217,6 +221,7 @@ end
 """
     chebyshev_smoother(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a)), degree = 2, λmax = nothing) -> ChebyshevSmoother
     chebyshev_smoother(op::MatrixFreeOperator; degree = 2, λmax = nothing) -> ChebyshevSmoother
+    chebyshev_smoother(op::GhostMatrixFreeOperator; degree = 2, λmax = nothing) -> ChebyshevSmoother
 
 The Chebyshev smoother of `A = assemble(a; dirichlet, dirichlet_components)`, or of the
 matrix `op` stands for: [`smooth!`](@ref) runs `degree` steps of the Jacobi-scaled
@@ -242,7 +247,9 @@ Construction allocates four vectors of length `ndofs` and, when `λmax` is not g
 # Arguments
 - `a`: A square bilinear form ([`ndofs`](@ref) of trial and test space equal), on scalar or
   composite spaces, whose matrix is SPD.
-- `op`: A square [`MatrixFreeOperator`](@ref); its Dirichlet rows are kept.
+- `op`: A square [`MatrixFreeOperator`](@ref), or the operator `matrix_free_operator`
+  returns for a form on ghost spaces, whose diagonal is that of the reduced matrix
+  `assemble(a)`; its Dirichlet rows are kept.
 
 # Keywords
 - `dirichlet`, `dirichlet_components`, `policy`: As in [`matrix_free_operator`](@ref).
@@ -289,7 +296,7 @@ function chebyshev_smoother(
 end
 
 function chebyshev_smoother(
-        op::MatrixFreeOperator{T}; degree::Integer = 2, λmax = nothing
+        op::_AnyMatrixFreeOperator{T}; degree::Integer = 2, λmax = nothing
 ) where {T}
     degree >= 1 || throw(ArgumentError("chebyshev_smoother needs degree >= 1, got $degree"))
     J = jacobi_preconditioner(op)
@@ -333,7 +340,8 @@ cycle's pre- and post-smoothing counts sweep counts.
 # Arguments
 - `a`: A square bilinear form on a scalar grid space, with the same mesh for trial and test
   space and no interpolation (`πₕ`).
-- `op`: A [`MatrixFreeOperator`](@ref) of such a form; its Dirichlet rows are kept.
+- `op`: A [`MatrixFreeOperator`](@ref) of such a form; its Dirichlet rows are kept. The
+  operator of a form on ghost spaces is refused.
 
 # Keywords
 - `dirichlet`, `policy`: As in [`matrix_free_operator`](@ref).
@@ -346,6 +354,9 @@ cycle's pre- and post-smoothing counts sweep counts.
 - `ArgumentError`: `sweeps < 1`.
 - `ArgumentError`: the form couples two distinct points of one colour, is on a composite
   space, has an interpolation, or its trial and test meshes differ in shape.
+- `ArgumentError`: `op` is the operator of a form on ghost spaces, whose closure couples a
+  facet node to nodes of its own colour; use [`jacobi_smoother`](@ref) or
+  [`chebyshev_smoother`](@ref).
 - `ArgumentError`: `policy` is a [`GpuPolicy`](@ref); device execution is tracked on
   milestone v4.4.0.
 - `DimensionMismatch`: `A` is not square.
@@ -400,6 +411,10 @@ function red_black_gauss_seidel(op::MatrixFreeOperator{T}; sweeps::Integer = 1) 
         op, d, dims, Int(sweeps), similar(d)
     )
 end
+
+# The dimension of the operator's test space, for the default Jacobi weight.
+@inline _smoother_dim(op::MatrixFreeOperator) = dim(test_space(op.form))
+@inline _smoother_dim(op::GhostMatrixFreeOperator) = dim(op.test_space)
 
 @inline function _check_sweeps(fname, sweeps)
     sweeps >= 1 || throw(ArgumentError("$fname needs sweeps >= 1, got $sweeps"))

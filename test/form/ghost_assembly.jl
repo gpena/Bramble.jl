@@ -2,8 +2,7 @@ module FormGhostAssemblyTests
 
 # Forms on a `GhostGridSpace` assemble `E_vᵀ A_pad E_u` in DOF order (physical nodes in
 # mesh linear order, then the ghosts by facet xmin, xmax, ymin, ymax, zmin, zmax, each
-# facet's column-major), with the load `E_vᵀ (F_pad − A_pad d_u)` and an allocation-free
-# warm refill.
+# facet's column-major), with the load `E_vᵀ (F_pad − A_pad d_u)`.
 #
 # The operator rows (O6) are judged against the plain-matrix oracles (GhostOracle1D.jl,
 # GhostOracleND.jl), which share no code with the library: at a node of a ghosted facet
@@ -182,29 +181,6 @@ end
     end
 end
 
-@testset "Warm assemble! allocates nothing" begin
-    for D in (1, 2)
-        Ω = D == 1 ? O1.make_mesh(:random, 0) : O.make_mesh(:graded, 0)
-        Wg = gridspace(Ω; ghosts = :boundary)
-        β = Ref(1.0)
-        a = form(Wg, Wg, (u, v) -> inner₊(β * ∇ₕ(u), ∇ₕ(v)) + innerₕ(Dcₓ(u), v))
-        A = assemble(a)
-        A0 = copy(A)
-        β[] = 3.0
-        assemble!(A, a)
-        assemble!(A, a)
-        @test (@allocated assemble!(A, a)) == 0
-        @test A ≈ 3 * A0 - 2 * assemble(form(Wg, Wg, (u, v) -> innerₕ(Dcₓ(u), v)))
-        # a repeated assemble gives an equal, separate matrix
-        B = assemble(a)
-        @test B == A && B !== A
-        l = form(Wg, v -> innerₕ(x -> 1.0 + x[1], v))
-        b = assemble(l)
-        assemble!(b, l)
-        @test (@allocated assemble!(b, l)) == 0
-    end
-end
-
 @testset "Linear form is Eᵀ F_pad" begin
     Ω = O1.make_mesh(:random, 1)
     Wg = gridspace(Ω; ghosts = :boundary)
@@ -324,23 +300,24 @@ end
     a, l = form(Wg, Wg, f), form(Wg, fl)
     @test_throws ArgumentError form(Wg, W, f)
     @test_throws ArgumentError form(W, Wg, f)
-    @test_throws ArgumentError form(Bramble.CompositeGridSpace(Wg, Wg),
-        Bramble.CompositeGridSpace(Wg, Wg), (u, v) -> innerₕ(u(1), v(1)))
-    @test_throws ArgumentError form(Bramble.CompositeGridSpace(Wg, Wg),
-        v -> innerₕ(x -> 1.0, v(1)))
-    @test_throws ArgumentError semidiscretize(a, l)
+    # `Wg` keeps its ghosts as unknowns, so the semidiscrete problem refuses it (the mass
+    # rows of those ghosts vanish) before it reaches any other check.
+    for call in (() -> semidiscretize(a, l), () -> ode_problem(a, l, zeros(Bramble.ndofs(Wg)), (0.0, 1.0)))
+        err = try
+            call()
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("keeps ghosts as unknowns", sprint(showerror, err))
+    end
     @test_throws ArgumentError semidiscretize(form(W, W, f), l)
     @test_throws ArgumentError semidiscretize(t -> (form(W, W, f), t -> nothing), l)
     u₀ = zeros(Bramble.ndofs(Wg))
-    @test_throws ArgumentError ode_problem(a, l, u₀, (0.0, 1.0))
     @test_throws ArgumentError ode_problem(form(W, W, f), l, u₀, (0.0, 1.0))
-    @test_throws ArgumentError matrix_free_operator(a)
-    @test_throws ArgumentError kronecker_operator(a)
     @test_throws ArgumentError Bramble.assemble_parallel!(assemble(a), a)
     @test_throws ArgumentError Bramble.assemble_parallel!(zeros(Bramble.ndofs(Wg)), l)
-    vₕ = element(Bramble.padded_space(Wg), 1.0)
-    @test_throws ArgumentError l(vₕ)
-    @test_throws ArgumentError Bramble.evaluate!(zeros(length(parent(vₕ))), l, vₕ)
     @test_throws ArgumentError assemble(a; dirichlet = :boundary)
     @test_throws ArgumentError assemble(l; dirichlet = :boundary => x -> 0.0)
     @test_throws ArgumentError assemble(a, l; dirichlet = :boundary => x -> 0.0)

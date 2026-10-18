@@ -405,9 +405,41 @@ The result has the real type of the element type (gpena/Bramble.jl#644): a `Floa
 `Float64` or `ComplexF64` data on a `Float64` mesh, a `Dual` for `ForwardDiff.Dual` data.
 The inner product of a complex `uₕ` with itself is real up to a zero imaginary part, which
 is dropped before the square root.
+
+On a [`GhostGridSpace`](@ref) it is the norm over the physical nodes, the first
+`npoints(Ωₕ)` degrees of freedom: the ghost values never enter, whatever they hold. That
+holds for `gridspace(Ωₕ; ghosts)` and for a [`constrained`](@ref) space whose relations
+carry no data and fix no node. A constrained space whose degrees of freedom omit the fixed
+nodes or whose relations carry data has no grid function in a vector of its degrees of
+freedom: `normₕ` throws an `ArgumentError`, and `normₕ(Bramble.lift(Cₕ, u))` is the norm
+of the lifted grid function.
 """
 @inline normₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ)))
 @inline normₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ)))
+
+# A ghost space reads its physical nodes only, the first `npoints` degrees of freedom, with
+# the weights of the padded space, which are 0 at every ghost: the ghost values never enter.
+# A space whose degrees of freedom are not a grid function refuses (`_physical_values`).
+function normₕ(uₕ::VectorElement{<:GhostGridSpace})
+    locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_ghost_norm()
+    u = _physical_values(:normₕ, uₕ)
+    w = weights(uₕ.space.padded, Innerh())   # throws once the mesh has moved
+    acc = zero(promote_type(eltype(uₕ), eltype(w)))
+    for (k, J) in enumerate(physical_indices(mesh(uₕ.space)))
+        @inbounds acc += conj(u[k]) * u[k] * w[J]
+    end
+    return sqrt(real(acc))
+end
+
+@noinline function _throw_no_scalar_ghost_norm()
+    throw(
+        ArgumentError(
+        "normₕ of a ghost-space element sums its physical nodes one at a time, which a " *
+        "device-backed element's scalar-indexing guard refuses. Bring the element to the " *
+        "host first.",
+    ),
+    )
+end
 
 """
     norminf(uₕ::VectorElement) -> Real

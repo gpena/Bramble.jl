@@ -46,6 +46,31 @@ domain names them. A domain's own definition wins.
 Dyadic halving in place (`iterative_refinement!`): the refined mesh is the same mesh split,
 not a new draw, which makes a convergence order measurable on a random mesh.
 
+**Ghost mesh**:
+A physical mesh `Ωₕ` plus one ghost point beyond each node of the facets it names,
+built by `Bramble.GhostMesh(Ωₕ; ghosts = :boundary)` or `ghosts = (:xmin, :ymax)` for named facets.
+Its points, spacings and indices are those of the padded mesh; its labels and facet queries
+name the physical nodes. After `iterative_refinement!` of `Ωₕ` it is stale and refuses every
+access. Owned by [docs/src/internals/mesh.md](docs/src/internals/mesh.md).
+_Avoid_: halo, boundary layer
+
+**Padded mesh**:
+The mesh of a ghost mesh's points: `Ωₕ` extended by one point on each ghosted side of each
+axis, with sizes `npoints(G, Tuple)`. Forms on a ghost space are assembled on the space over
+it, then reduced (see **Closure**).
+
+**Facet ghost**:
+The padded point beyond a node of a ghosted facet, at `x₁ - h₂` beyond the first node and
+`xₙ + hₙ` beyond the last. Facet ghosts are numbered `1:nghosts(G)`: facets in the order
+`xmin, xmax, ymin, ymax, zmin, zmax` (named ones only), each facet's ghosts in the
+column-major order of its nodes; `Bramble.ghost_index` and `Bramble.boundary_node` map between
+a facet node and its ghost.
+
+**Absent point**:
+A padded point outside the physical mesh along two or more axes (a 2D corner, a 3D edge or
+corner of the padded grid): no node and no ghost, never a degree of freedom, with value 0 in
+a lifted grid function. `Bramble.is_absent(G, J)` tests it.
+
 ### Spaces and grid functions
 
 **Grid space**:
@@ -77,6 +102,55 @@ Where a space's arrays live and how they are iterated, with the execution policy
 as a trait.
 _Avoid_: device, mode
 
+**DOF order**:
+The order of the degrees of freedom of a ghost space: the physical nodes in the mesh's linear
+order (those no Dirichlet relation fixes), then the ghosts that remain unknowns, in the
+numbering of the ghost mesh. The first entries are therefore the values at the physical
+nodes, as on `gridspace(Ωₕ)`. Owned by
+[docs/src/internals/space.md](docs/src/internals/space.md).
+
+**Physical-only weights**:
+The quadrature weights of the padded space `Wₕ`: per axis, the factor of a ghost node and of
+a ghost cell is zero and a facet node keeps its physical half cell. `innerₕ`, `inner₊`,
+`inner_Γ` and the facet markers then have the weights of `gridspace(Ωₕ)` at the physical
+nodes and exactly zero at every ghost and absent point, so a form on the padded space has no
+weight in its ghost rows.
+
+**Closure**:
+The pair `(E, d)` of a ghost space, `Bramble.closure(Wₕ)`: its unknowns `u` stand for the
+padded values `E u + d`, `E` sparse of size `npoints(mesh) × ndofs`, `d` the data at the
+eliminated ghosts. `Bramble.padded_space(Wₕ)` is the space those values live on. Assembly
+fills `A_pad` on the padded space and returns `Eᵀ A_pad E`; a load is `Eᵀ (F_pad - A_pad d)`,
+so a space with `d ≠ 0` needs the pair `assemble(a, l)`. On `gridspace(Ωₕ; ghosts)` `E`
+selects the unknowns and `d = 0`. A composite of ghost spaces whose components ghost the same
+facets has the composite of the padded spaces as its padded space and
+`(blockdiag(E₁, E₂, …), vcat(d₁, d₂, …))` as its closure. If the data depend on time, `E`
+stays and `d(t)` varies.
+
+**Relation**:
+A boundary condition of a ghost space written `facet => operator => data`, as in
+`:xmin => α * u + β * ∂ₙ(u) => g`, with `operator` either `u` (a Dirichlet relation, whose
+facet nodes leave the unknowns and take `g`) or a facet operator reading the facet's ghost. At each node
+of the facet it is solved for that node's ghost; where two conormal relations read each
+other's ghost at a 2D corner, the 2×2 block is solved together. Its rows are assembled by
+`inner_Γ(relation, v; markers = (F,))`, so the facet's weight cancels. The `data` is a
+number, `x -> …` or `(x, t) -> …`.
+_Avoid_: boundary condition (a relation pairs an operator with data; a marker names *where*)
+
+**Constrained space**:
+A ghost space whose ghosts are tied to relations by `constrained(Wₕ, u -> (:xmin => ∂ₙ(u) =>
+g, …))` on `gridspace(Ωₕ; ghosts)`. Its closure `(E, d)` comes from the relations, `E` and
+`d` stay sparse, and its unknowns are the physical nodes no Dirichlet relation fixes plus
+the ghosts left unrelated. Refused with an `ArgumentError`: a space without ghosts, an
+already constrained one, a facet with two relations of one kind, a ghosted facet with only
+`u => g`. See [docs/src/tutorials/form.md](docs/src/tutorials/form.md) (the ghost sections).
+
+**Lift**:
+`Bramble.lift(Wₕ, u)` is `E u + d`: the grid function on the padded space of the unknowns
+`u`, with the eliminated ghosts filled and absent points 0. `lift(Wₕ)` is `d`;
+`lift(Wₕ, u, t)` is `E u + d(t)` where the data depend on time, the only form such a space
+accepts. `lift!` fills one in place. `public`, not exported.
+
 ### Operators
 
 **Difference operator**:
@@ -104,6 +178,22 @@ _Avoid_: footprint, pattern (a *pattern* is a matrix's sparsity)
 `innerₕ` is the discrete ``L^2`` inner product, each point weighted by its cell measure;
 `inner₊` the *modified* ``L^2_+`` product used with backward differences. Distinct objects,
 not spellings.
+
+**Facet operator**:
+`∂ₙ` (conormal `∂ₙ(u; K)` included), `∂ₙₙ` and `jumpₙ`, operators on the facets `F`
+of outward unit normal `η_F` (`η`) that live only inside `inner_Γ`. Each
+holds one operator per (axis, side) and expands into one product per facet its `markers`
+select, so a corner node gets one value per facet. `∂ₙ` and `∂ₙₙ` read the ghost beyond the
+facet and need a space with ghosts there; `jumpₙ` reads the facet node and its interior
+neighbour and needs none.
+
+**Corner rule**:
+The stencil of a mixed difference (a first difference of first differences across two axes)
+at a 2D corner node, or a 3D edge node, of a ghost mesh, where it would read an absent
+point. It uses the inward one-sided difference along both axes, `D₊` at a first node and `D₋` at a
+last, reading physical nodes only, second order. It depends on the form, not on
+the values of the coefficients. Any other read of an absent point is refused with an
+`ArgumentError`. See [docs/src/internals/space.md](docs/src/internals/space.md).
 
 ### Forms and assembly
 
@@ -147,3 +237,18 @@ existing one, the time-loop call, and must not allocate.
 **Block**:
 One leaf-space pair's rectangle in a composite system matrix: row offset from the test leaf,
 column offset from the trial leaf.
+
+**Mean-zero**:
+`pde_solve(A, F; mean_zero = w)`: the bordered solve `[A w; wᵀ 0] [u; λ] = [F; 0]`, which
+returns the `u` with `wᵀ u = 0` for a pure-Neumann `A` annihilating constants, `w` typically
+the assembled `innerₕ(1, v)`. `A` is not modified; without `mean_zero` such an `A` only logs a
+warning.
+
+**Rank-one**:
+A term `σ innerₕ(g, u) innerₕ(h, v)` (`g`, `h` data) of a bilinear form, not stored in the
+sparse matrix (`nnz = N²`): `assemble` returns `RankOneUpdate(A, σ, ws, wt)`, the matrix
+`A + σ ws wtᵀ` kept as its parts, `ws` assembled from the test side and `wt` from the trial
+side. `pde_solve` solves it exactly through the sparse bordered system, as for **Mean-zero**.
+`public`, not exported (`Bramble.RankOneUpdate`); supported on plain and scalar ghost spaces,
+refused on a composite of ghost spaces. See [docs/src/tutorials/form.md](docs/src/tutorials/form.md)
+and [docs/src/api/forms.md](docs/src/api/forms.md).

@@ -813,6 +813,136 @@ function _run_example_page(name::Symbol)
     return nothing
 end
 
+# --- One problem, a plain and a ghost space ---------------------------------------------- #
+
+# A system the shared bodies of test/form/two_spaces.jl run over: the forms `a`, `l`, how
+# the Dirichlet data enter (`route`), and where the Dirichlet nodes sit among the nodes in
+# mesh order (`fixed`, with `gfixed` their data; `free` the rest).
+struct SpaceCase{S, A, L, T <: Tuple, P, N <: Tuple}
+    name::String
+    route::Symbol            # :rows (`dirichlet` keyword) or :relations (`u => g`)
+    space::S
+    a::A
+    l::L
+    labels::T                # the `dirichlet` labels of the :rows route
+    pairs::P                 # `label => g`, for the `dirichlet` keyword of `assemble!`
+    free::Vector{Int}
+    fixed::Vector{Int}
+    gfixed::Vector{Float64}
+    dims::N
+end
+
+# Nodes of `dims` (mesh order, first axis fastest) lying on one of the named facets.
+function _facet_node_mask(dims::NTuple{D, Int}, facets) where {D}
+    mask = falses(prod(dims))
+    for (k, I) in enumerate(CartesianIndices(dims)), F in facets
+
+        s = String(F)
+        d = findfirst(==(s[1]), "xyz")
+        I[d] == (endswith(s, "min") ? 1 : dims[d]) && (mask[k] = true)
+    end
+    return mask
+end
+
+"""
+    plain_and_ghost_spaces(Ωₕ, data) -> (SpaceCase, SpaceCase)
+
+The one problem `-Δu = f` with `u = g` on the facets `data.dirichlet`, on a plain and on a
+ghost space, for the shared bodies to run over.
+
+`data` is a `NamedTuple` with `f`, `g` and `h(facet, p)` (functions of the point `p`),
+`dirichlet` (facet names such as `:xmin`) and optionally `robin`, a tuple of
+`(facet, α, β, r)` for `α u + β ∂ₙ(u) = r` on the remaining facets (`α = 0` is Neumann).
+
+  - Without `robin` the first case is `gridspace(Ωₕ)` with row Dirichlet on `:boundary`.
+    With it, it is the ghost space of the Robin facets only, the Dirichlet rows through the
+    `dirichlet` keyword.
+  - The second case ghosts every facet: `u => g` and `∂ₙₙ(u) => h` on the Dirichlet facets,
+    the Robin relations on the others, so its unknowns are the free nodes only.
+
+Where the two should agree is `A[free, free]` and `F[free]` of the first, symmetrized, with
+the second's system (departure 8 of the v4.0.0-rest plan).
+"""
+function plain_and_ghost_spaces(Ωₕ, data)
+    dims = npoints(Ωₕ, Tuple)
+    D = length(dims)
+    ax = D == 1 ? (Bramble.points(Ωₕ),) : Bramble.points(Ωₕ)
+    pts = [ntuple(d -> ax[d][I[d]], D) for I in CartesianIndices(dims)]
+    mask = _facet_node_mask(dims, data.dirichlet)
+    free, fixed = findall(!, mask), findall(mask)
+    gfixed = Float64[data.g(pts[k]) for k in fixed]
+    robin = get(data, :robin, ())
+    lap(u, v) = innerₕ(-1.0 * Bramble.Δₕ(u), v)
+    rob(u, (F, α, β, r)) = F => (iszero(α) ? β * Bramble.∂ₙ(u) : α * u + β * Bramble.∂ₙ(u)) => r
+    lin(W) = form(W, v -> innerₕ(data.f, v))
+    if isempty(robin)
+        W = gridspace(Ωₕ)
+        labels = (:boundary,)
+    else
+        Wr = gridspace(Ωₕ; ghosts = Tuple(r[1] for r in robin))
+        W = Bramble.constrained(Wr, u -> map(r -> rob(u, r), robin))
+        labels = Tuple(data.dirichlet)
+    end
+    pairs = map(L -> L => data.g, labels)
+    plain = SpaceCase("plain space, row Dirichlet", :rows, W, form(W, W, lap), lin(W),
+        labels, pairs, free, fixed, gfixed, dims)
+    Wg = gridspace(Ωₕ; ghosts = :boundary)
+    C = Bramble.constrained(Wg,
+        u -> (map(F -> F => u => data.g, data.dirichlet)...,
+            map(F -> F => Bramble.∂ₙₙ(u) => (p -> data.h(F, p)), data.dirichlet)...,
+            map(r -> rob(u, r), robin)...))
+    ghost = SpaceCase("ghost space, u => g and ∂ₙₙ(u) => h", :relations, C,
+        form(C, C, lap), lin(C), labels, pairs, free, fixed, gfixed, dims)
+    return plain, ghost
+end
+
+# --- Meshes and spaces the ghost test files share ------------------------------------ #
+
+"""
+    random_mesh(ns; seed = 11, lengths = ones, level = 0)
+
+A seeded random non-uniform mesh of `ns` points per axis on the box `[0, lengths[d]]ᴰ`
+(`ns` a tuple, one entry for 1D), halved `level` times by `iterative_refinement!`.
+"""
+function random_mesh(ns::NTuple{D, Int}; seed = 11, lengths = ntuple(_ -> 1.0, D),
+        level = 0) where {D}
+    Ωd = domain(foldl(×, ntuple(d -> interval(0.0, Float64(lengths[d])), D)))
+    Bramble._seed_mesh1d_rng!(seed)
+    Ω = try
+        D == 1 ? mesh(Ωd, ns[1], false) : mesh(Ωd, ns, ntuple(_ -> false, D))
+    finally
+        Bramble._unseed_mesh1d_rng!()
+    end
+    foreach(_ -> iterative_refinement!(Ω), 1:level)
+    return Ω
+end
+
+"""
+    ghost_mesh(policy, ns; T = Float64, seed = 11)
+
+A seeded random non-uniform mesh on `[0, 1] × [0, 2] × [0, 3]` (its first `length(ns)` axes)
+of element type `T`, under the threading `policy`.
+"""
+function ghost_mesh(pol, ns::NTuple{D, Int}; T = Float64, seed = 11) where {D}
+    Bramble._seed_mesh1d_rng!(seed)
+    be = backend(vector_type = Vector{T}, matrix_type = SparseMatrixCSC{T, Int},
+        policy = pol)
+    Ωd = domain(foldl(×, ntuple(d -> interval(T(0), T(d)), D)))
+    Ω = mesh(Ωd, D == 1 ? only(ns) : ns, D == 1 ? false : ntuple(_ -> false, D);
+        backend = be)
+    Bramble._unseed_mesh1d_rng!()
+    return Ω
+end
+
+# The padded space of `gridspace(Ωₕ; ghosts)`: the ghost nodes as plain unknowns.
+padded(Ωₕ; ghosts = :boundary) = Bramble.padded_space(gridspace(Ωₕ; ghosts = ghosts))
+
+# An oracle's per-facet Robin data as `facet => α u + β ∂ₙ(u) => g` pairs.
+robin_pairs(u, rels) = map(keys(rels)) do F
+    r = rels[F]
+    F => r.α * u + r.β * Bramble.∂ₙ(u) => r.g
+end
+
 end # module TestUtils
 
 # Installs the per-file trace by overriding Main's own `include`, once, when this file loads

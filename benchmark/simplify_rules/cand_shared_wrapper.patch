@@ -1,0 +1,76 @@
+diff --git a/src/ast/simplifier.jl b/src/ast/simplifier.jl
+index e8b2fbef..489d975a 100644
+--- a/src/ast/simplifier.jl
++++ b/src/ast/simplifier.jl
+@@ -272,9 +272,71 @@ function simplify_ast(op::OperatorAdd)
+     _is_zero_op(left) && return right
+     _is_zero_op(right) && return left
+ 
++    # Candidate shared_wrapper: of two products sharing one argument whose other arguments
++    # are one wrapper over two operands, factor the shared argument and merge the wrapper,
++    # `⟨Au, W(x)⟩ + ⟨Au, W(y)⟩ -> ⟨Au, W(x + y)⟩` (rule 7's shape, restricted to a shared
++    # wrapper). `left` is already factored, so a left-deep sum reaches every match.
++    merged = _absorb(left, right)
++    merged === nothing || return merged
++
+     return left === op.left_op && right === op.right_op ? op : OperatorAdd(left, right)
+ end
+ 
++# --- Shared wrapper over a shared argument (candidate shared_wrapper) --------------- #
++
++@inline _component_free(op::LazyOp) = _trial_component_class(op) === nothing &&
++                                      _test_component_class(op) === nothing
++
++# A singleton type has one value, so two instances are `===`: equality settled by the types.
++@inline _statically_equal(::LazyOp, ::LazyOp) = false
++@inline _statically_equal(::T, ::T) where {T <: LazyOp} = Base.issingletontype(T)
++
++# The same difference, average or jump family along the same axis (never a shift).
++const _MergeableWrapper = Union{_DifferenceNode, _AverageNode}
++@inline _same_wrapper(::Type{A}, ::Type{B}) where {A, B} = Base.typename(A) === Base.typename(B) &&
++                                                          A.parameters[2] === B.parameters[2]
++@inline _same_wrapper_nodes(::Any, ::Any) = false
++@inline _same_wrapper_nodes(::A, ::B) where {A <: _MergeableWrapper, B <: _MergeableWrapper} =
++    _same_wrapper(A, B)
++
++# `X` under the coefficient the term `t` had, decided by `t`'s type.
++@inline _rescale(t::OperatorScale, X::LazyOp) = OperatorScale(t.scalar, X)
++@inline _rescale(::LazyOp, X::LazyOp) = X
++
++@inline _factor(::LazyOp, ::LazyOp) = nothing
++@inline _factor_products(a, b, pa, pb) = nothing
++@inline _factor(a::OperatorScale, b::LazyOp) = _factor_products(a, b, a.inner_op, b)
++@inline _factor(a::LazyOp, b::OperatorScale) = _factor_products(a, b, a, b.inner_op)
++@inline _factor(a::OperatorScale, b::OperatorScale) = _factor_products(a, b, a.inner_op, b.inner_op)
++@inline _factor(a::BilinearProduct, b::BilinearProduct) = _factor_products(a, b, a, b)
++
++# Each term's coefficient moves onto its own wrapped operand, `c ⟨Au, W(x)⟩ = ⟨Au, W(c x)⟩`.
++function _factor_products(a, b, pa::BilinearProduct{D, W}, pb::BilinearProduct{D, W}) where {D, W}
++    (_component_free(pa) && _component_free(pb)) || return nothing
++    if _statically_equal(pa.left_op, pb.left_op) &&
++       _same_wrapper_nodes(pa.right_op, pb.right_op)
++        r = _rewrap_inner(pa.right_op,
++            OperatorAdd(_rescale(a, pa.right_op.inner_op), _rescale(b, pb.right_op.inner_op)))
++        return BilinearProduct{D, W, typeof(pa.left_op), typeof(r)}(pa.left_op, r)
++    end
++    if _statically_equal(pa.right_op, pb.right_op) &&
++       _same_wrapper_nodes(pa.left_op, pb.left_op)
++        l = _rewrap_inner(pa.left_op,
++            OperatorAdd(_rescale(a, pa.left_op.inner_op), _rescale(b, pb.left_op.inner_op)))
++        return BilinearProduct{D, W, typeof(l), typeof(pa.right_op)}(l, pa.right_op)
++    end
++    return nothing
++end
++
++@inline _absorb(s::LazyOp, t::LazyOp) = _factor(s, t)
++function _absorb(s::OperatorAdd, t::LazyOp)
++    r = _absorb(s.right_op, t)
++    r === nothing || return OperatorAdd(s.left_op, r)
++    l = _absorb(s.left_op, t)
++    l === nothing || return OperatorAdd(l, s.right_op)
++    return nothing
++end
++
+ # --- Dirac sources inside a sum ------------------------------------------------------ #
+ 
+ # `local_stencil(::LinearProduct)` weights a source by the cell measure unless `_is_dirac`

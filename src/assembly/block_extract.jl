@@ -85,9 +85,14 @@ in a variational formulation, and reading it as a whole row or column of blocks 
 guess about what was meant.
 """
 function block_of(term, nblocks_trial::Int, nblocks_test::Int)
-    tc = trial_component_or_nothing(term)
-    sc = test_component_or_nothing(term)
+    _block_of_components(
+        trial_component_or_nothing(term), test_component_or_nothing(term), nblocks_trial,
+        nblocks_test)
+end
 
+# `block_of` from the two components a term names (`Int` or `nothing` each), so the assembly
+# walks compile it once per component type, not once per term type.
+function _block_of_components(tc, sc, nblocks_trial::Int, nblocks_test::Int)
     tc === nothing && sc === nothing && return nothing
     # An unnamed side on a single-leaf space can only mean its one leaf.
     tc === nothing && sc !== nothing && nblocks_trial == 1 && (tc = 1)
@@ -201,12 +206,24 @@ term naming neither is the same integrand on every diagonal block, so it resolve
 [`_NamedBlock`](@ref), so the result is concrete either way; walk it with
 [`_foldl_blocks`](@ref) to reach each `Block` concretely.
 """
-@inline function blocks(term, trial_leaves::Tuple, test_leaves::Tuple)
-    blk = block_of(term, length(trial_leaves), length(test_leaves))
+@inline blocks(term, trial_leaves::Tuple, test_leaves::Tuple) = _component_blocks(
+    trial_component_or_nothing(term), test_component_or_nothing(term), trial_leaves,
+    test_leaves)
+
+# `blocks` from the two components a term names (`_block_of_components`): what the assembly
+# walks call, so it compiles once per component and leaf type, not once per term type.
+@inline function _component_blocks(tc, sc, trial_leaves::Tuple, test_leaves::Tuple)
+    blk = _block_of_components(tc, sc, length(trial_leaves), length(test_leaves))
     blk === nothing && return _diagonal_blocks(trial_leaves, test_leaves)
     tc, sc = blk
     return (_named_block(trial_leaves, test_leaves, tc, sc),)
 end
+
+# Whether `bs`, a `blocks` result, is one `Block` type throughout: a plain loop walks it,
+# the `_foldl_blocks` homogeneous case written inline by the assembly walks, so a walk whose
+# block body captures its term compiles no fold instance per term.
+@inline _block_run(::Tuple{B, Vararg{B}}) where {B <: Block} = true
+@inline _block_run(::Tuple) = false
 
 # `f(acc, blk)` on one element of `blocks`: a `Block` as it is; a `_NamedBlock` by walking
 # its trial leaves, then its test leaves, to the named positions, so the `Block` built there
@@ -348,6 +365,23 @@ end
 
 _collect_region_labels(op) = ()
 
+# Whether a node of type `T` can hold a `RegionRestriction` where `_collect_region_labels`
+# looks; `false` only when its labels are surely `()`. Read off the type alone, one
+# `@nospecialize` method folded at compile time, so a walk of a term restricting nothing
+# compiles no `_collect_region_labels` instance per node type. A field of abstract type
+# answers `true`.
+Base.@nospecializeinfer Base.@assume_effects :foldable function _may_restrict(
+        @nospecialize(T))
+    T isa DataType || return true
+    T <: RegionRestriction && return true
+    T <: UnaryWrapper && return _may_restrict(fieldtype(T, :inner_op))
+    if T <: Union{BilinearProduct, LinearProduct, OperatorAdd}
+        return _may_restrict(fieldtype(T, :left_op)) ||
+               _may_restrict(fieldtype(T, :right_op))
+    end
+    return !isconcretetype(T)
+end
+
 """
     _validate_term_markers(term, mesh_markers, context::String)
 
@@ -359,6 +393,7 @@ it does for "not marked", so a typo'd or leaf-missing label would otherwise asse
 silent all-zero contribution instead of failing loudly.
 """
 function _validate_term_markers(term, mesh_markers, context::String)
+    _may_restrict(typeof(term)) || return nothing
     for label in _collect_region_labels(term)
         haskey(mesh_markers, label) || _throw_marker_not_on_space(label, mesh_markers, context)
     end
@@ -398,16 +433,20 @@ changes the labels. A label written in place has no id and throws too
 weights unchecked.
 """
 @inline function _bind_walk(term, Ωₕ::AbstractMeshType)
-    isempty(_collect_region_labels(term)) && return term, nothing
+    (_may_restrict(typeof(term)) && !isempty(_collect_region_labels(term))) ||
+        return term, nothing
     return _bind_marker_ids(term, Ωₕ), _marker_words(Ωₕ)
 end
 
 # The form every walk entry calls, with the leaf it walks: `sp`'s weights are checked
 # against its mesh here, once per walk, and the stencil then reads them unchecked at every
 # point (`_stored_weights`, gpena/Bramble.jl#437). A stale `sp` throws `weights`'s error;
-# a bilinear walk's trial leaf is checked in `_check_block_meshes` (#466).
+# a bilinear walk's trial leaf is checked in `_check_block_meshes` (#466). A term
+# restricting nothing returns here, not through the mesh method: one instance per term
+# type instead of two.
 @inline function _bind_walk(term, sp::ScalarGridSpace)
     weights(sp)
+    _may_restrict(typeof(term)) || return term, nothing
     return _bind_walk(term, mesh(sp))
 end
 

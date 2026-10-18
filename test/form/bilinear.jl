@@ -1153,6 +1153,438 @@ using Bramble:
         @test _loop_bytes(A, a) <= _loop_bytes(U, unsplit)
     end
 
+    @testset "Weights of several types refill with 0 B" begin
+        # Mixed weight types boxed. An unscaled, grid-function-scaled or `Ref`-scaled
+        # summand beside a Float64 literal on a Float32 mesh, or a sum under a grid
+        # function scale, refilled 9072 B on a 7x9 grid. A constant scale between a
+        # difference or average and a restricted sum boxed on a Float64 mesh too
+        # (`u, D₋ₓ(2.0 * (R + R))` 16704 B, `Mₓ(D₊ᵧ(…))` 52560 B, and with the sum on both
+        # sides `D₋ₓ(g * (R + R))` 21600 B, `g * (2.0 * (R + R))` 7920 B). Each form must
+        # refill a NaN-filled matrix with what its terms give assembled apart, keep their
+        # promoted element type, and read a `Ref` live. The rewrite infers. On a Float64
+        # mesh the tolerance is rounding, which a scale converted through Float32 misses;
+        # on a Float32 one it is a few eps, since a term once computed in Float32 is now
+        # computed in Float64.
+        R = restrict_to
+        bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
+        function refilled(a)
+            A = assemble(a)
+            fill!(nonzeros(A), NaN)
+            assemble!(A, a)
+            return Matrix(A)
+        end
+        for T in (Float32, Float64), D in TEST_DIMS
+
+            Iv = interval(zero(T), one(T))
+            Bramble._seed_mesh1d_rng!(20261017)
+            W = try
+                Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,
+                    :c => x -> x[1] < 0.5)
+                gridspace(D == 1 ? mesh(Ω, 11, false; backend = backend(T)) :
+                          mesh(Ω, (7, 9, 5)[1:D], ntuple(_ -> false, D);
+                    backend = backend(T)))
+            finally
+                Bramble._unseed_mesh1d_rng!()
+            end
+            g = element(W)
+            g .= 1 .+ (1:length(g)) ./ 7
+            r = Ref(T(0.1))
+            L(w) = R(:l, w)
+            Rr(w) = R(:r, w)
+            RR(w) = L(w) + Rr(w)
+            # Both sides restricted: the four products of one summand a side.
+            both(N) = Tuple((u, v) -> innerₕ(N(P(u)), N(Q(v))) for P in (L, Rr), Q in (L, Rr))
+            tol = T === Float32 ? 8 * eps(Float32) : 1.0e-12
+            forms = Any[
+                ("u, (1//3)v + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, (1 // 3) * v + 0.5 * D₋ₓ(v)),
+                    ((u, v) -> innerₕ(u, (1 // 3) * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
+                ("u, πv + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, π * v + 0.5 * D₋ₓ(v)),
+                    ((u, v) -> innerₕ(u, π * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
+                ("u, 0.1f0v + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, 0.1f0 * v + 0.5 * D₋ₓ(v)),
+                    ((u, v) -> innerₕ(u, 0.1f0 * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
+                ("u, (1//3)L(v) + 2.0Rr(v) + 0.5v",
+                    (u, v) -> innerₕ(u, (1 // 3) * L(v) + 2.0 * Rr(v) + 0.5 * v),
+                    ((u, v) -> innerₕ(u, (1 // 3) * L(v)), (u, v) -> innerₕ(u, 2.0 * Rr(v)),
+                        (u, v) -> innerₕ(u, 0.5 * v))),
+                ("u, v + 0.1D₋ₓ(v)", (u, v) -> innerₕ(u, v + 0.1 * D₋ₓ(v)),
+                    ((u, v) -> innerₕ(u, v), (u, v) -> innerₕ(u, 0.1 * D₋ₓ(v)))),
+                ("u, g*v + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, g * v + 0.5 * D₋ₓ(v)),
+                    ((u, v) -> innerₕ(u, g * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
+                ("u, r*v + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, r * v + 0.5 * D₋ₓ(v)),
+                    ((u, v) -> innerₕ(u, r[] * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
+                ("u, g*(0.1v + 3D₋ₓ(v))", (u, v) -> innerₕ(u, g * (0.1 * v + 3 * D₋ₓ(v))),
+                    ((u, v) -> innerₕ(u, g * (0.1 * v)),
+                        (u, v) -> innerₕ(u, g * (3 * D₋ₓ(v))))),
+                ("u, D₋ₓ(2.0RR(v))", (u, v) -> innerₕ(u, D₋ₓ(2.0 * RR(v))),
+                    ((u, v) -> innerₕ(u, D₋ₓ(2.0 * L(v))),
+                        (u, v) -> innerₕ(u, D₋ₓ(2.0 * Rr(v))))),
+                ("u, D₊ₓ(D₋ₓ(2.0RR(v)))", (u, v) -> innerₕ(u, Bramble.D₊ₓ(D₋ₓ(2.0 * RR(v)))),
+                    ((u, v) -> innerₕ(u, 2.0 * Bramble.D₊ₓ(D₋ₓ(L(v)))),
+                        (u, v) -> innerₕ(u, 2.0 * Bramble.D₊ₓ(D₋ₓ(Rr(v)))))),
+                ("D₋ₓ(g*RR(u)), D₋ₓ(g*RR(v))",
+                    (u, v) -> innerₕ(D₋ₓ(g * RR(u)), D₋ₓ(g * RR(v))),
+                    both(w -> D₋ₓ(g * w))),
+                ("g*(2.0RR(u)), g*(2.0RR(v))",
+                    (u, v) -> innerₕ(g * (2.0 * RR(u)), g * (2.0 * RR(v))),
+                    both(w -> g * (2.0 * w)))]
+            if D >= 2
+                for c in (2.0, 2)
+                    push!(forms,
+                        ("u, Mₓ(D₊ᵧ($(c)RR(v)))",
+                            (u, v) -> innerₕ(u, Mₓ(Bramble.D₊ᵧ(c * RR(v)))),
+                            ((u, v) -> innerₕ(u, c * Mₓ(Bramble.D₊ᵧ(L(v)))),
+                                (u, v) -> innerₕ(u, c * Mₓ(Bramble.D₊ᵧ(Rr(v)))))))
+                end
+            end
+            for (n, whole, parts) in forms
+                @testset "$(T) $(D)D $n" begin
+                    ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+                        resolve_ast(whole(Bramble.trial_function(W),
+                            Bramble.test_function(W))), W, W))
+                    @inferred Bramble._split_restricted_products(ast, T)
+                    a = form(W, W, whole)
+                    pieces = [assemble(form(W, W, p)) for p in parts]
+                    want = sum(Matrix, pieces)
+                    A = refilled(a)
+                    @test eltype(A) === mapreduce(eltype, promote_type, pieces)
+                    @test count(!iszero, want) > 0
+                    @test isapprox(A, want; rtol = tol)
+                    @test bytes(assemble(a), a) == 0
+                end
+            end
+            a = form(W, W, (u, v) -> innerₕ(u, r * v + 0.5 * D₋ₓ(v)))
+            r[] = T(0.7)
+            want = Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, T(0.7) * v)))) +
+                   Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))))
+            @test isapprox(refilled(a), want; rtol = tol)
+            # Under a restriction a scale over a restricted sum is distributed, each piece a
+            # restriction over a difference over a restriction, a product of its own (two
+            # such pieces in one product boxed, 32400 B; kept whole 24912 B). A `BigFloat`
+            # scale stays whole, as its pieces each allocate (`D₋ₓ(big(2) * (R + R))`
+            # 77856 B against 40704 B, with a third summand 152832 B against 89760 B). The
+            # `BigFloat` caps are their bytes on 7x9 with room, as it allocates differently
+            # on x64.
+            if T === Float64 && D == 2
+                Bramble._seed_mesh1d_rng!(20261017)
+                Wb = try
+                    gridspace(mesh(
+                        domain(Iv × Iv, :l => :left, :r => :right, :b => :bottom,
+                            :c => x -> x[1] < 0.5), (7, 9), (false, false)))
+                finally
+                    Bramble._unseed_mesh1d_rng!()
+                end
+                B(w) = R(:b, w)
+                for (f, parts, cap) in (
+                    ((u, v) -> innerₕ(u, R(:c, D₋ₓ(2.0 * RR(v)))),
+                    ((u, v) -> innerₕ(u, R(:c, D₋ₓ(2.0 * L(v)))),
+                        (u, v) -> innerₕ(u, R(:c, D₋ₓ(2.0 * Rr(v))))), 0),
+                    ((u, v) -> innerₕ(u, D₋ₓ(big(2.0) * RR(v))),
+                    ((u, v) -> innerₕ(u, D₋ₓ(big(2.0) * L(v))),
+                        (u, v) -> innerₕ(u, D₋ₓ(big(2.0) * Rr(v)))), 56000),
+                    ((u, v) -> innerₕ(u, D₋ₓ(big(2.0) * (RR(v) + B(v)))),
+                    ((u, v) -> innerₕ(u, D₋ₓ(big(2.0) * L(v))),
+                        (u, v) -> innerₕ(u, D₋ₓ(big(2.0) * Rr(v))),
+                        (u, v) -> innerₕ(u, D₋ₓ(big(2.0) * B(v)))), 120000),
+                # A restriction over a difference over a restricted sum, distributed: each
+                # piece counts two bits, so it is a product of its own (24912 B and
+                # 32400 B when they shared one).
+                    ((u, v) -> innerₕ(u, R(:c, D₋ₓ(RR(v)))),
+                    ((u, v) -> innerₕ(u, R(:c, D₋ₓ(L(v)))),
+                        (u, v) -> innerₕ(u, R(:c, D₋ₓ(Rr(v))))), 0),
+                    ((u, v) -> innerₕ(u, R(:c, D₋ₓ(RR(v) + B(v)))),
+                    ((u, v) -> innerₕ(u, R(:c, D₋ₓ(L(v)))),
+                        (u, v) -> innerₕ(u, R(:c, D₋ₓ(Rr(v)))),
+                        (u, v) -> innerₕ(u, R(:c, D₋ₓ(B(v))))), 0),
+                    ((u, v) -> innerₕ(u, R(:c, 2.0 * D₋ₓ(RR(v)))),
+                    ((u, v) -> innerₕ(u, R(:c, 2.0 * D₋ₓ(L(v)))),
+                        (u, v) -> innerₕ(u, R(:c, 2.0 * D₋ₓ(Rr(v))))), 0))
+                    a = form(Wb, Wb, f)
+                    A = assemble(a)
+                    @test bytes(A, a) <= cap
+                    want = sum(p -> Matrix(assemble(form(Wb, Wb, p))), parts)
+                    @test count(!iszero, want) > 0
+                    @test isapprox(refilled(a), want; rtol = tol)
+                end
+            end
+        end
+    end
+
+    @testset "Restricted sums under nodes refill 0 B" begin
+        # Each of these boxed: a jump's `Int` weights beside the shifted tap's element
+        # type (`jumpₓ(Rₕ(:l, v)) + jumpₓ(Rₕ(:r, v))` 27360 B on 7x9), a scale over a
+        # restricted sum under an average left whole (`Mₓ(D₋ₓ(π * (R + R)))` 105264 B) or
+        # under a difference (`Ref`, 16704 B), and on a Float32 mesh `π` over a
+        # restriction under a difference (`D₋ₓ(π * R) + D₋ₓ(π * R)` 29952 B). Each is
+        # compared with its terms assembled apart, the scales applied to their matrices,
+        # so the reference never meets the scale it checks.
+        R = restrict_to
+        J = Bramble.jumpₓ
+        bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
+        for T in (Float32, Float64), D in TEST_DIMS
+
+            Iv = interval(zero(T), one(T))
+            Bramble._seed_mesh1d_rng!(20261017)
+            W = try
+                Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,
+                    :c => x -> x[1] < 0.5)
+                gridspace(D == 1 ? mesh(Ω, 11, false; backend = backend(T)) :
+                          mesh(Ω, (7, 9, 5)[1:D], ntuple(_ -> false, D);
+                    backend = backend(T)))
+            finally
+                Bramble._unseed_mesh1d_rng!()
+            end
+            g = element(W)
+            g .= 1 .+ (1:length(g)) ./ 7
+            r = Ref(T(0.1))
+            L(w) = R(:l, w)
+            Rr(w) = R(:r, w)
+            RR(w) = L(w) + Rr(w)
+            tol = T === Float32 ? 8 * eps(Float32) : 1.0e-12
+            # (name, form, (scales, term) pairs it equals)
+            forms = Any[
+                ("jumpₓ(R(:c, v + L(v) + Rr(v)))",
+                    (u, v) -> innerₕ(u, J(R(:c, v + L(v) + Rr(v)))),
+                    ((1, (u, v) -> innerₕ(u, J(R(:c, v)))),
+                        (1, (u, v) -> innerₕ(u, J(R(:c, L(v))))),
+                        (1, (u, v) -> innerₕ(u, J(R(:c, Rr(v))))))),
+                ("jumpₓ(L(v)) + jumpₓ(Rr(v))", (u, v) -> innerₕ(u, J(L(v)) + J(Rr(v))),
+                    ((1, (u, v) -> innerₕ(u, J(L(v)))),
+                        (1, (u, v) -> innerₕ(u, J(Rr(v)))))),
+                ("u, D₋ₓ(r RR(v)) + 0.5v", (u, v) -> innerₕ(u, D₋ₓ(r * RR(v)) + 0.5 * v),
+                    ((r[], (u, v) -> innerₕ(u, D₋ₓ(L(v)))),
+                        (r[], (u, v) -> innerₕ(u, D₋ₓ(Rr(v)))),
+                        (0.5, (u, v) -> innerₕ(u, v)))),
+                ("u, D₋ₓ(π RR(v)) + 2v", (u, v) -> innerₕ(u, D₋ₓ(π * RR(v)) + 2 * v),
+                    ((π, (u, v) -> innerₕ(u, D₋ₓ(L(v)))),
+                        (π, (u, v) -> innerₕ(u, D₋ₓ(Rr(v)))),
+                        (2, (u, v) -> innerₕ(u, v)))),
+                ("u, D₋ₓ(R(:c, π L(v))) + D₋ₓ(R(:c, π Rr(v)))",
+                    (u, v) -> innerₕ(u, D₋ₓ(R(:c, π * L(v))) + D₋ₓ(R(:c, π * Rr(v)))),
+                    ((π, (u, v) -> innerₕ(u, D₋ₓ(R(:c, L(v))))),
+                        (π, (u, v) -> innerₕ(u, D₋ₓ(R(:c, Rr(v))))))),
+                ("u, D₋ₓ(g (π L(v))) + D₋ₓ(g (π Rr(v)))",
+                    (u, v) -> innerₕ(u, D₋ₓ(g * (π * L(v))) + D₋ₓ(g * (π * Rr(v)))),
+                    ((π, (u, v) -> innerₕ(u, D₋ₓ(g * L(v)))),
+                        (π, (u, v) -> innerₕ(u, D₋ₓ(g * Rr(v))))))]
+            for c in (π, 2.0, r)
+                push!(forms,
+                    ("Mₓ(D₋ₓ($(c isa Ref ? "r" : c) RR(u))), D₋ₓ(2RR(v)))",
+                        (u, v) -> innerₕ(Mₓ(D₋ₓ(c * RR(u))), D₋ₓ(2 * RR(v))),
+                        Tuple(((2, c isa Ref ? c[] : c),
+                                  (u, v) -> innerₕ(Mₓ(D₋ₓ(P(u))), D₋ₓ(Q(v))))
+                        for P in (L, Rr), Q in (L, Rr))))
+            end
+            push!(forms,
+                ("Mₓ(D₋ₓ(g RR(u))), D₋ₓ(RR(v))",
+                    (u, v) -> innerₕ(Mₓ(D₋ₓ(g * RR(u))), D₋ₓ(RR(v))),
+                    Tuple((1, (u, v) -> innerₕ(Mₓ(D₋ₓ(g * P(u))), D₋ₓ(Q(v))))
+                    for P in (L, Rr), Q in (L, Rr))))
+            # A distributed `Ref` scale is still read live.
+            a = form(W, W, forms[3][2])
+            A = assemble(a)
+            r[] = T(0.7)
+            assemble!(A, a)
+            @test Matrix(A) ≈ Matrix(assemble(form(W, W, forms[3][2])))
+            r[] = T(0.1)
+            for (n, whole, parts) in forms
+                @testset "$(T) $(D)D $n" begin
+                    a = form(W, W, whole)
+                    pieces = [(s isa Tuple ? s : (s,), assemble(form(W, W, p)))
+                              for (s, p) in parts]
+                    want = sum(prod(s) * Matrix{Float64}(P) for (s, P) in pieces)
+                    A = assemble(a)
+                    @test eltype(A) === mapreduce(
+                        ((s, P),) -> typeof(foldl(*, s; init = one(eltype(P)))),
+                        promote_type, pieces)
+                    @test count(!iszero, want) > 0
+                    fill!(nonzeros(A), NaN)
+                    assemble!(A, a)
+                    @test isapprox(Matrix(A), want; rtol = tol)
+                    @test bytes(A, a) == 0
+                end
+            end
+        end
+
+        # A `BigFloat` scale allocates at every product, so no form holding one refills
+        # 0 B; a sum's scalars are not converted to one (71808 B with `1 // 3` converted
+        # to a `BigFloat`), and a `BigFloat` grid function over a restricted sum is not
+        # padded to one length (816576 B padded against 557808 B on 7x9).
+        for T in (Float32, Float64)
+            Iv = interval(zero(T), one(T))
+            Random.seed!(20261017)
+            W = gridspace(mesh(domain(Iv × Iv, :l => :left, :r => :right,
+                    :c => x -> x[1] < 0.5),
+                (7, 9), (false, false); backend = backend(T)))
+            RR(w) = R(:l, w) + R(:r, w)
+            tol = T === Float32 ? 8 * eps(Float32) : 1.0e-12
+            a = form(W, W, (u, v) -> innerₕ(u, D₋ₓ(big(2.0) * RR(v)) + 1 // 3 * R(:c, v)))
+            want = 2 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, D₋ₓ(RR(v)))))) +
+                   Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, R(:c, v))))) / 3
+            A = assemble(a)
+            @test isapprox(Matrix(A), want; rtol = tol)
+            @test bytes(A, a) <= (T === Float64 ? 45888 : 44160) + 8000
+            # A `Ref` to a `BigFloat` is not distributed under a node (102912 B against
+            # 40704 B whole, 447648 B against 118176 B under an average).
+            if T === Float64
+                rb = Ref(big(2.0))
+                D2RR = 2 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, D₋ₓ(RR(v))))))
+                for (f, want, cap) in (
+                    ((u, v) -> innerₕ(u, D₋ₓ(rb * RR(v))), D2RR, 40704),
+                    ((u, v) -> innerₕ(u, D₋ₓ(rb * RR(v)) + 0.5 * v),
+                    D2RR + 0.5 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, v)))),
+                    62160),
+                    ((u, v) -> innerₕ(u, Mₓ(D₋ₓ(rb * RR(v)))),
+                    2 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, Mₓ(D₋ₓ(RR(v))))))),
+                    118176))
+                    a = form(W, W, f)
+                    A = assemble(a)
+                    @test isapprox(Matrix(A), want; rtol = tol)
+                    @test bytes(A, a) <= cap + 8000
+                end
+                # A fixed stencil shifts a scale over a restriction by the restriction
+                # rule, which zeroes it outside the region before the scale: shifted as a
+                # scaled sum, an infinite scale gave 99 NaN entries, not 18.
+                A = assemble(form(W, W, (u, v) -> innerₕ(u, Mₓ(Mₓ(Inf * R(:l, v))))))
+                @test count(isnan, nonzeros(A)) <= 18
+            end
+            # A sum under a `BigFloat` scale is still made one type (78144 B left mixed).
+            a = form(W, W,
+                (u, v) -> innerₕ(u, M₊ᵧ(big(2.0) * (2.0 * R(:l, v) + 3 * R(:r, v)))))
+            want = 4 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, M₊ᵧ(R(:l, v)))))) +
+                   6 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, M₊ᵧ(R(:r, v))))))
+            A = assemble(a)
+            @test isapprox(Matrix(A), want; rtol = tol)
+            @test bytes(A, a) <= 42864 + 8000
+            gw = element(W)
+            gw .= 1 .+ (1:length(gw)) ./ 7
+            gb = big.(Vector(gw))
+            a = form(W, W, (u, v) -> innerₕ(Mₓ(D₋ₓ(gb * RR(u))), D₋ₓ(RR(v))))
+            want = sum(Matrix(assemble(form(W, W,
+                           (u, v) -> innerₕ(Mₓ(D₋ₓ(gb * P(u))), D₋ₓ(Q(v))))))
+            for P in (w -> R(:l, w), w -> R(:r, w)),
+            Q in (w -> R(:l, w), w -> R(:r, w)))
+            A = assemble(a)
+            @test isapprox(Matrix(A), want; rtol = tol)
+            T === Float64 && @test bytes(A, a) <= 557808 + 60000
+        end
+
+        # Forms that boxed before these changes refill at most what they did then
+        # (a70e3159, 7x9 and 11 points): the padded taps of a node directly over a scaled
+        # sum and a `Ref` distributed under a restriction boxed more (49536 -> 63072 B,
+        # 27216 -> 27792 B), and a shift over two nested restrictions distributed onto
+        # pieces that box (0 -> 13824 B, kept whole now). The jump form assembles to a
+        # zero matrix on these grids; its bytes are still pinned.
+        for D in (1, 2)
+            Random.seed!(20261017)
+            Iv = interval(0.0, 1.0)
+            Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,
+                :c => x -> x[1] < 0.5)
+            W = gridspace(D == 1 ? mesh(Ω, 11, false) : mesh(Ω, (7, 9), (false, false)))
+            r = Ref(0.1)
+            L(w) = R(:l, w)
+            Rr(w) = R(:r, w)
+            C(w) = R(:c, w)
+            CR(w) = C(Rr(w))
+            RR(w) = L(w) + Rr(w)
+            S = Bramble.S₊ₓ
+            Dp = Bramble.D₊ₓ
+            forms = Any[
+                ("Mₓ(r(u+L(u))), D₋ₓ(2.0L+3Rr)",
+                    (u, v) -> innerₕ(Mₓ(r * (u + L(u))), D₋ₓ(2.0 * L(v) + 3 * Rr(v))),
+                    [(r[] * b, (u, v) -> innerₕ(Mₓ(P(u)), D₋ₓ(Q(v))))
+                     for P in (identity, L), (b, Q) in ((2.0, L), (3, Rr))],
+                    (3440, 30384), true),
+                ("Mₓ(L+Rr+u+0.5u), C(jumpₓ(2.0(L+C(Rr))))",
+                    (u, v) -> innerₕ(Mₓ(L(u) + Rr(u) + u + 0.5 * u),
+                        C(J(2.0 * (L(v) + CR(v))))),
+                    [(2.0 * a, (u, v) -> innerₕ(Mₓ(P(u)), C(J(Q(v)))))
+                     for (a, P) in ((1, L), (1, Rr), (1.5, identity)), Q in (L, CR)],
+                    (6000, 48096), false),
+                ("Mₓ(L+C(Rr)), C(r(L+Rr+v))",
+                    (u, v) -> innerₕ(Mₓ(L(u) + CR(u)), C(r * (L(v) + Rr(v) + v))),
+                    [(r[], (u, v) -> innerₕ(Mₓ(P(u)), C(Q(v))))
+                     for P in (L, CR), Q in (L, Rr, identity)],
+                    (2896, 27216), true),
+                ("u, S₊ₓ(C(C(v+L)))", (u, v) -> innerₕ(u, S(C(C(v + L(v))))),
+                    [(1, (u, v) -> innerₕ(u, S(C(C(Q(v)))))) for Q in (identity, L)],
+                    (0, 0), true),
+                ("u, S₊ₓ(C(C(L+Rr+v)))", (u, v) -> innerₕ(u, S(C(C(L(v) + Rr(v) + v)))),
+                    [(1, (u, v) -> innerₕ(u, S(C(C(Q(v)))))) for Q in (L, Rr, identity)],
+                    (2256, 21168), true),
+                ("D₊ₓ(L+Rr+u), S₊ₓ(C(C(L+Rr+v)))",
+                    (u, v) -> innerₕ(Dp(L(u) + Rr(u) + u), S(C(C(L(v) + Rr(v) + v)))),
+                    [(1, (u, v) -> innerₕ(Dp(P(u)), S(C(C(Q(v))))))
+                     for P in (L, Rr, identity), Q in (L, Rr, identity)],
+                    (6768, 63504), true)]
+            if D == 2
+                append!(forms,
+                    Any[
+                        ("2D₊ₓ(2.0L+3Rr), M₊ᵧ(2.0RR)",
+                            (u, v) -> innerₕ(2 * Dp(2.0 * L(u) + 3 * Rr(u)), M₊ᵧ(2.0 * RR(v))),
+                            [(4.0 * a, (u, v) -> innerₕ(Dp(P(u)), M₊ᵧ(Q(v))))
+                             for (a, P) in ((2.0, L), (3, Rr)), Q in (L, Rr)],
+                            (0, 49536), true),
+                        ("M₊ᵧ(L+C(Rr)), M₊ᵧ((1//3)(L+C(Rr)))",
+                            (u, v) -> innerₕ(M₊ᵧ(L(u) + CR(u)), M₊ᵧ((1 // 3) * (L(v) + CR(v)))),
+                            [(1 / 3, (u, v) -> innerₕ(M₊ᵧ(P(u)), M₊ᵧ(Q(v))))
+                             for P in (L, CR), Q in (L, CR)],
+                            (0, 20736), true)])
+            end
+            # (name, form, (scale, term) pairs it equals, caps 1D and 2D, nonzero)
+            for (n, whole, parts, caps, nonzero) in forms
+                @testset "$(D)D $n" begin
+                    a = form(W, W, whole)
+                    want = sum(s * Matrix(assemble(form(W, W, p))) for (s, p) in parts)
+                    A = assemble(a)
+                    @test count(!iszero, want) > 0 || !nonzero
+                    fill!(nonzeros(A), NaN)
+                    assemble!(A, a)
+                    @test isapprox(Matrix(A), want; rtol = 1.0e-12, atol = 1.0e-12)
+                    @test bytes(A, a) <= caps[D]
+                end
+            end
+        end
+
+        # Under a stencil node only a scalar that gives an `Int` leaf weight and an
+        # element-type one different types is converted, to the type it has times the
+        # element type; a scale over no restriction, or at an operand's top, is kept.
+        W = gridspace(mesh(domain(interval(0.0f0, 1.0f0), :l => :left), 5, true;
+            backend = backend(Float32)))
+        v = Bramble.test_function(W)
+        tap(x, E) = Bramble._type_tap_scalar(typeof(x), E)
+        @test tap(π * R(:l, v), Float32) === Float32
+        @test tap(π * R(:l, v), Float64) === Union{}
+        @test tap(2 * R(:l, v), Float32) === Union{}
+        @test tap((1 // 3) * R(:l, v), Float32) === Union{}
+        @test tap(2.0 * R(:l, v), Float32) === Union{}
+        @test tap(Ref(2.0f0) * R(:l, v), Float32) === Union{}
+        @test tap(π * D₋ₓ(v), Float32) === Union{}
+        # A `Ref` to a bits value distributes as a bits scalar does; a `BigFloat` does not.
+        pieces(x) = length(Bramble._summands_of(x, Val(false)))
+        @test pieces(D₋ₓ(Ref(2.0f0) * (R(:l, v) + R(:r, v)))) == 2
+        @test pieces(D₋ₓ(big(2.0) * (R(:l, v) + R(:r, v)))) == 1
+        # A shift over one restriction level splits; over a restriction directly over
+        # another, through scales too, it stays whole.
+        S = Bramble.S₊ₓ
+        @test pieces(S(R(:l, v) + R(:r, v))) == 2
+        @test pieces(S(R(:c, v + R(:l, v)))) == 2
+        @test pieces(S(R(:c, R(:c, v + R(:l, v))))) == 1
+        @test pieces(S(R(:c, 2.0 * R(:c, v + R(:l, v))))) == 1
+        @test pieces(D₋ₓ(R(:c, R(:c, v + R(:l, v))))) == 2
+        # A restriction over a restricted stencil counts the extra bit only where nested
+        # stencils count (`_groups_expr`'s fallback past 16 groups counts neither).
+        bits(x, nested) = Bramble._type_shape_bits(typeof(x), nested)
+        @test bits(R(:c, D₋ₓ(R(:l, v))), true) == 2
+        @test bits(R(:c, D₋ₓ(R(:l, v))), false) == 1
+        @test bits(R(:c, R(:l, v)), true) == 1
+        differ(x) = Bramble._type_scales_differ(typeof(x), Float32)
+        @test differ(D₋ₓ(R(:c, π * R(:l, v))))
+        @test differ(D₋ₓ(element(W) * (π * R(:l, v))))
+        @test differ(D₋ₓ(R(:c, D₋ₓ(π * R(:l, v)))))
+        @test !differ(π * D₋ₓ(R(:l, v)))
+        @test !differ(D₋ₓ(π * v))
+    end
+
     @testset "Cached nzval positions (#26)" begin
         # `assemble!` used to search for every scattered entry's nzval position on every
         # call. It now records that search's result the first time a given matrix is

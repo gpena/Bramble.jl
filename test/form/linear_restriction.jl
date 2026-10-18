@@ -26,7 +26,7 @@ using Bramble:
                D₋ₓ,
                Mₓ,
                jumpₓ
-using ..TestUtils: alloc_test, WITH_3D_TESTS
+using ..TestUtils: alloc_test, WITH_3D_TESTS, TEST_DIMS
 
 # The linear-form tests of restricted sums and scales: the refill allocation contract and the
 # scaled and nested cases. Split from linear.jl, whose single module took 0.95 GB of the
@@ -370,6 +370,133 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS
                 @test A ≈ assemble(form(Wu, Wu, fm))
                 @test nnz(A) == k
                 @test bytes(A, a) == 0
+            end
+        end
+    end
+
+    @testset "Weights of several types refill with 0 B" begin
+        # A test side whose summands' weights differ in type boxed at every point: an
+        # unscaled or grid-function-scaled summand beside a Float64 literal on a Float32
+        # mesh (14112 B on a 7x9 grid), a `Ref` scale, a sum under a scale, a restriction
+        # or a difference, and two products of different weight types walked as one
+        # (27216 B). A constant scale between a difference and a restricted sum boxed on
+        # a Float64 mesh too. Each form must refill a NaN-filled vector with what its terms
+        # give assembled apart, keep the element type they promote to, and read a `Ref` and
+        # a grid function live; the rewrite is read off the types, so it infers. On a
+        # Float64 mesh the terms apart agree to rounding, and a scale converted through
+        # Float32 would not; on a Float32 mesh a term once computed in Float32 is now
+        # computed in Float64.
+        R = restrict_to
+        bytes(y, l) = (assemble!(y, l); assemble!(y, l); @allocated assemble!(y, l))
+        function refilled(l)
+            y = assemble(l)
+            fill!(y, NaN)
+            assemble!(y, l)
+            return y
+        end
+        f = x -> 1 + x[1]
+        for T in (Float32, Float64), D in TEST_DIMS
+
+            I = interval(zero(T), one(T))
+            Bramble._seed_mesh1d_rng!(20261017)
+            W = try
+                Ω = domain(foldl(×, ntuple(_ -> I, D)), :l => :left, :r => :right,
+                    :c => x -> x[1] < 0.5)
+                gridspace(D == 1 ? mesh(Ω, 11, false; backend = backend(T)) :
+                          mesh(Ω, (7, 9, 5)[1:D], ntuple(_ -> false, D);
+                    backend = backend(T)))
+            finally
+                Bramble._unseed_mesh1d_rng!()
+            end
+            g = element(W)
+            g .= 1 .+ (1:length(g)) ./ 7
+            r = Ref(T(0.1))
+            RR(v) = R(:l, v) + R(:r, v)
+            tol = T === Float32 ? 8 * eps(Float32) : 1.0e-12
+            forms = (
+                ("(1//3)v + 0.5D₋ₓ(v)", v -> innerₕ(f, (1 // 3) * v + 0.5 * D₋ₓ(v)),
+                    (v -> innerₕ(f, (1 // 3) * v), v -> innerₕ(f, 0.5 * D₋ₓ(v)))),
+                ("πv + 0.5D₋ₓ(v)", v -> innerₕ(f, π * v + 0.5 * D₋ₓ(v)),
+                    (v -> innerₕ(f, π * v), v -> innerₕ(f, 0.5 * D₋ₓ(v)))),
+                ("(1//3)R(:l, v) + 2.0R(:r, v) + 0.5v",
+                    v -> innerₕ(f, (1 // 3) * R(:l, v) + 2.0 * R(:r, v) + 0.5 * v),
+                    (v -> innerₕ(f, (1 // 3) * R(:l, v)), v -> innerₕ(f, 2.0 * R(:r, v)),
+                        v -> innerₕ(f, 0.5 * v))),
+                ("g*v + 0.5D₋ₓ(v)", v -> innerₕ(g, g * v + 0.5 * D₋ₓ(v)),
+                    (v -> innerₕ(g, g * v), v -> innerₕ(g, 0.5 * D₋ₓ(v)))),
+                ("(f, 2v + 3D₋ₓ(v)) + (1.0, v)",
+                    v -> innerₕ(f, 2 * v + 3 * D₋ₓ(v)) + innerₕ(1.0, v),
+                    (v -> innerₕ(f, 2 * v), v -> innerₕ(f, 3 * D₋ₓ(v)),
+                        v -> innerₕ(1.0, v))),
+                ("(g, v) + (1.0, D₋ₓ(v))", v -> innerₕ(g, v) + innerₕ(1.0, D₋ₓ(v)),
+                    (v -> innerₕ(g, v), v -> innerₕ(1.0, D₋ₓ(v)))),
+                ("v + 0.1D₋ₓ(v)", v -> innerₕ(f, v + 0.1 * D₋ₓ(v)),
+                    (v -> innerₕ(f, v), v -> innerₕ(f, 0.1 * D₋ₓ(v)))),
+                ("g*(0.1v + 3D₋ₓ(v))", v -> innerₕ(f, g * (0.1 * v + 3 * D₋ₓ(v))),
+                    (v -> innerₕ(f, g * (0.1 * v)), v -> innerₕ(f, g * (3 * D₋ₓ(v))))),
+                ("r*v + 0.5D₋ₓ(v)", v -> innerₕ(f, r * v + 0.5 * D₋ₓ(v)),
+                    (v -> innerₕ(f, r[] * v), v -> innerₕ(f, 0.5 * D₋ₓ(v)))),
+                ("R(:c, 0.1v + 3D₋ₓ(v))", v -> innerₕ(f, R(:c, 0.1 * v + 3 * D₋ₓ(v))),
+                    (v -> innerₕ(f, R(:c, 0.1 * v)), v -> innerₕ(f, R(:c, 3 * D₋ₓ(v))))),
+                ("D₋ₓ(0.1v + 3D₊ₓ(v))", v -> innerₕ(f, D₋ₓ(0.1 * v + 3 * D₊ₓ(v))),
+                    (v -> innerₕ(f, D₋ₓ(0.1 * v)), v -> innerₕ(f, D₋ₓ(3 * D₊ₓ(v))))),
+                ("D₋ₓ(2.0RR(v))", v -> innerₕ(f, D₋ₓ(2.0 * RR(v))),
+                    (v -> innerₕ(f, D₋ₓ(2.0 * R(:l, v))),
+                        v -> innerₕ(f, D₋ₓ(2.0 * R(:r, v))))))
+            for (n, whole, parts) in forms
+                @testset "$(T) $(D)D $n" begin
+                    ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+                        Bramble.resolve_ast(whole(Bramble.test_function(W))), W))
+                    @inferred Bramble._split_restricted_products(ast, T)
+                    l = form(W, whole)
+                    want = sum(assemble(form(W, p)) for p in parts)
+                    y = refilled(l)
+                    @test eltype(y) === eltype(want)
+                    @test count(!iszero, want) > 0
+                    @test isapprox(y, want; rtol = tol)
+                    @test bytes(y, l) == 0
+                end
+            end
+            # The `Ref` and the grid function are read at each refill, not at `form`.
+            l = form(W, v -> innerₕ(f, r * v + 0.5 * D₋ₓ(v)))
+            r[] = T(0.7)
+            want = assemble(form(W, v -> innerₕ(f, T(0.7) * v))) +
+                   assemble(form(W, v -> innerₕ(f, 0.5 * D₋ₓ(v))))
+            @test isapprox(refilled(l), want; rtol = tol)
+            l = form(W, v -> innerₕ(g, g * v + 0.5 * D₋ₓ(v)))
+            g .*= 2
+            want = assemble(form(W, v -> innerₕ(g, g * v))) +
+                   assemble(form(W, v -> innerₕ(g, 0.5 * D₋ₓ(v))))
+            @test isapprox(refilled(l), want; rtol = tol)
+            # Under a restriction a scale over a restricted sum stays whole: distributed,
+            # every piece is a restriction over a difference over a restriction, which
+            # boxes (61920 B against 16992 B whole on 7x9). A restriction over a difference
+            # over a restricted sum is kept as written as one group (61920 B regrouped)
+            # and distributed over three (92016 B kept whole).
+            if T === Float64 && D == 2
+                Bramble._seed_mesh1d_rng!(20261017)
+                Wb = try
+                    gridspace(mesh(
+                        domain(I × I, :l => :left, :r => :right, :b => :bottom,
+                            :c => x -> x[1] < 0.5), (7, 9), (false, false)))
+                finally
+                    Bramble._unseed_mesh1d_rng!()
+                end
+                for (whole, parts, cap) in (
+                    (v -> R(:c, D₋ₓ(2.0 * RR(v))),
+                    (v -> R(:c, D₋ₓ(2.0 * R(:l, v))), v -> R(:c, D₋ₓ(2.0 * R(:r, v)))),
+                    16992),
+                    (v -> R(:c, D₋ₓ(RR(v))),
+                    (v -> R(:c, D₋ₓ(R(:l, v))), v -> R(:c, D₋ₓ(R(:r, v)))), 54432),
+                    (v -> R(:c, D₋ₓ(RR(v) + R(:b, v))),
+                    (v -> R(:c, D₋ₓ(R(:l, v))), v -> R(:c, D₋ₓ(R(:r, v))),
+                        v -> R(:c, D₋ₓ(R(:b, v)))), 61920))
+                    l = form(Wb, v -> innerₕ(f, whole(v)))
+                    want = sum(p -> assemble(form(Wb, v -> innerₕ(f, p(v)))), parts)
+                    @test count(!iszero, want) > 0
+                    @test isapprox(refilled(l), want; rtol = tol)
+                    @test bytes(assemble(l), l) <= cap
+                end
             end
         end
     end

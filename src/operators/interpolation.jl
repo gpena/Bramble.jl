@@ -191,6 +191,13 @@ never computed on; call [`gridspace`](@ref) again and rebuild `uₕ` on it.
 The same check covers [`πₕ!`](@ref), `πₕ(Wₕ, src)` and the symbolic
 source `πₕ(uₕ)`, which all evaluate through here.
 
+On a [`GhostGridSpace`](@ref) it interpolates the physical nodes on the physical mesh, the
+first `npoints(Ωₕ)` degrees of freedom: the ghost values never enter, and `x` is outside
+the domain of `Ωₕ`, not of the ghosts. A constrained space whose degrees of freedom omit
+fixed nodes or whose relations carry data has no grid function in them: `interpolate_at`
+throws an `ArgumentError`, and `interpolate_at(Bramble.lift(Cₕ, u), x)` is its
+interpolant.
+
 This is the building block both `πₕ!`/`πₕ` (below, the numeric operator) and the
 one-argument, symbolic `πₕ` use: `x -> interpolate_at(uₕ, x)` is itself a valid source
 function, usable anywhere one is accepted, including directly as [`Rₕ`](@ref)'s own argument:
@@ -207,31 +214,49 @@ function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{1}}, x; outside = 
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
     _validate_outside(outside)
     weights(space(uₕ))   # throws once uₕ's mesh has moved
-    Ωₕ = mesh(space(uₕ))
-    frac = _interp_cell_frac(Ωₕ, x, outside)
-    frac === nothing && return outside
-    i, t = frac
-    return _interp_lerp(uₕ[i], uₕ[i + 1], t)
+    return _interp_values(uₕ, mesh(space(uₕ)), x, outside)
 end
 
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x; outside = :error) where {D}
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
     _validate_outside(outside)
     weights(space(uₕ))   # throws once uₕ's mesh has moved
-    Ωₕ = mesh(space(uₕ))
+    return _interp_values(uₕ, mesh(space(uₕ)), x, outside)
+end
+
+# A ghost space interpolates its physical nodes, the first `npoints` degrees of freedom, on
+# the physical mesh: the ghosts are never read, so the cells are those of `Ωₕ` and the
+# domain is its own. A space whose degrees of freedom are not a grid function refuses.
+function interpolate_at(uₕ::VectorElement{<:GhostGridSpace}, x; outside = :error)
+    locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
+    u = _physical_values(:interpolate_at, uₕ)
+    _validate_outside(outside)
+    weights(uₕ.space.padded)   # throws once the mesh has moved
+    return _interp_values(u, physical_mesh(mesh(uₕ.space)), x, outside)
+end
+
+# The blend of the corner values `u[linear index]` of the cell of `Ωₕ` holding `x`.
+@inline function _interp_values(u, Ωₕ::AbstractMeshType{1}, x, outside)
+    frac = _interp_cell_frac(Ωₕ, x, outside)
+    frac === nothing && return outside
+    i, t = frac
+    return _interp_lerp(u[i], u[i + 1], t)
+end
+
+@inline function _interp_values(u, Ωₕ::AbstractMeshType{D}, x, outside) where {D}
     frac = _interp_cell_frac(Ωₕ, x, outside)
     frac === nothing && return outside
     idx, ts = frac
     li = LinearIndices(indices(Ωₕ))
 
-    T = promote_type(eltype(uₕ), typeof(first(ts)))
+    T = promote_type(eltype(u), typeof(first(ts)))
     # Outside the mesh, fold axis by axis instead (#625): see `_interp_fold`.
     all(t -> zero(t) <= t <= one(t), ts) ||
-        return _interp_fold(uₕ, li, idx, ts, 0, Val(D), T)
+        return _interp_fold(u, li, idx, ts, 0, Val(D), T)
     acc = zero(T)
     # No far corner along a collapsed axis: it has a single point.
     for corner in CartesianIndices(ntuple(d -> 0:min(1, size(li, d) - 1), Val(D)))
-        acc += _interp_corner_weight(ts, corner, Val(D)) * uₕ[li[idx + corner]]
+        acc += _interp_corner_weight(ts, corner, Val(D)) * u[li[idx + corner]]
     end
     return acc
 end
@@ -704,8 +729,8 @@ Which side of a bilinear term an [`InterpolationNode`](@ref) sits on.
 
 A trial-side interpolation names absolute *columns* and leaves the rows to the walked mesh; a
 test-side one names absolute *rows* and leaves the columns to it. The
-side is a type parameter rather than a field so the node stays a singleton the like-term
-simplifier can fold, and so every walk that reads it folds away at compile time.
+side is a type parameter rather than a field so the node stays a singleton, and so every
+walk that reads it folds away at compile time.
 
 The walked mesh is the native side's in both cases: it is the one carrying the quadrature
 weight the product integrates against.
@@ -790,11 +815,48 @@ end
         op::InterpolationNode{D, S, OpType, Side}, space, I::CartesianIndex{D}, markers,
         lin_idx::Int
 ) where {D, S, OpType, Side}
+    Ωsrc = mesh(op.src_space)
+    _same_mesh_rule(Ωsrc, mesh(space)) &&
+        return _same_mesh_stencil(Ωsrc, I, Val(D), _interp_slot(Side))
     return _interp_stencil(
-        mesh(op.src_space), point(mesh(space), I), Val(D), _outside_symbol(op.outside),
-        _interp_slot(Side)
+        Ωsrc, point(mesh(space), I), Val(D), _outside_symbol(op.outside), _interp_slot(Side)
     )
 end
+
+# The `same_mesh` rule (gpena/Bramble.jl#771): interpolating from the mesh being walked is
+# the identity, so the stencil names the walked point's own column with weight one, and
+# skips the `locate_cell` search. It keeps the `2ᴰ` entries and their types, its other
+# entries naming that same column with weight zero, so the node, the bound term and every
+# fill infer as before, and the pattern, which merges repeated positions, reserves what
+# the plain `u` reserves instead of the explicit zeros of the other corners. Steady
+# `assemble!` 4.6x faster in 2D and 2.1x in 3D (module comment of `ast/simplifier.jl`).
+#
+# It is for `πₕ` written where the two meshes may coincide, as in one form over leaves on
+# one or on different meshes, or two spaces sharing a mesh. Decided per stencil by the
+# identity of the walked mesh and the source mesh, a pointer compare, never by dropping the
+# node in `_bind_interp_spaces`. That was tried first. It made the bound term a `Union`
+# whenever the two leaves share a type, so every such `πₕ` form, distinct meshes included,
+# refilled with 1.5-2.8 kB instead of 0 B. Nor by a flag stamped there, since
+# the Jacobian pattern binds a dependency to `(leaf, leaf)` and walks another mesh. Out of
+# line, because an inlined first version made the first 3D call on two distinct meshes
+# 25% slower.
+@noinline function _same_mesh_stencil(
+        Ωsrc::AbstractMeshType{D}, I::CartesianIndex{D}, ::Val{D}, Slot
+) where {D}
+    j = LinearIndices(indices(Ωsrc))[I]
+    E = eltype(point(Ωsrc, I))
+    T = typeof(one(E) / one(E))
+    return ntuple(k -> (Slot(j), k == 1 ? one(T) : zero(T)), Val(1 << D))
+end
+
+# Plain meshes only. On a ghost space the operator outside `πₕ` reads the ghost layer, and
+# there `πₕ` is not the identity: a ghost point lies outside the physical mesh, so the
+# blend reads the physical nodes it clamps or extrapolates to, not the ghost column. The
+# identity there would change the values, and make them depend on whether the source is
+# the walked mesh or a twin with the same points. Excluded by dispatch on the mesh type,
+# so the test folds at compile time and the bound term stays concrete.
+@inline _same_mesh_rule(Ωsrc, Ωₕ) = Ωsrc === Ωₕ
+@inline _same_mesh_rule(::_GhostMeshLike, Ωₕ) = false
 
 # An unbound node reaching the sweep means an assembly path walked a term without calling
 # `_bind_interp_spaces` first. Caught by dispatch rather than by a `nothing` check inside

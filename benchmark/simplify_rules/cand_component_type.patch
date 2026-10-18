@@ -1,0 +1,8 @@
+# not built: the component index is an `Int` field of IndexedTrialFunction/IndexedTestFunction, and a type parameter would reach every operator, the router and the user-facing `u(i)` with a runtime `i`, which then infers a Union; outside simplifier.jl.
+#
+# What it would be: `IndexedTrialFunction{D, I}` / `IndexedTestFunction{D, I}` with `I` a
+# `Val`-like type parameter, so `_component_class` answers by type and same-component sums
+# (`v(1) + D₋ₓ(v(1))`) could factor or merge under `c*A + c*B -> c*(A + B)`. The part that
+# is already decided by type (component-free operands) is the removed rule 1 (#771, M1/M2) and
+# the candidates same_wrapper and shared_wrapper, which this tree measures with the
+# `_component_free` gate. The remainder is a change of the node types, not a rewrite rule.

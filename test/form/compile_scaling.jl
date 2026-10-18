@@ -3,8 +3,10 @@ module FormCompileScalingTests
 using Test
 using Bramble
 using Random
-using LinearAlgebra: dot
-import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D₋ᵧ, D₊ᵧ, Dcᵧ, D₋₂, D₊₂, Dc₂
+using LinearAlgebra: dot, norm
+using SparseArrays: SparseMatrixCSC, nnz
+import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D₋ᵧ, D₊ᵧ, Dcᵧ, D₋₂, D₊₂, Dc₂, D̽ᵧ, Mₓ
+using Bramble: OperatorAdd, OperatorScale, BilinearProduct, LinearProduct
 
 # S3 (gpena/Bramble.jl, this milestone) fixed a compile blow-up in `resolve_ast`. Each
 # summand's AST was being resolved twice per node -- once inside `typeof(resolve_ast(x))`,
@@ -79,6 +81,147 @@ end
     u = element(Wₕ, rand(ndofs(Wₕ)))
     w = element(Wₕ, rand(ndofs(Wₕ)))
     @test dot(parent(w), A*parent(u))≈innerₕ(Δₕ(Δₕ(Δₕ(u))), w) rtol=1e-10 atol=1e-12
+end
+
+# #763 step 2. The first `form` of 3D elasticity compiled 5803 method instances module-wide
+# at a70e3159 and 3485 at 018c6224, most of them in the mesh-check walks over every partial
+# sum and term (`_check_walked_meshes`, `_check_centered_mesh`, `_check_source_mesh`) and in
+# `simplify_ast`: one method per partial sum, a scale distributed over a sum by simplifying
+# every partial sum again, a zero test on every node and component-class queries under each
+# difference and average. The bound, 2900, is half the first count. Counted as
+# compile_assembly.jl counts its own, in a fresh process, so no earlier test file has
+# compiled any of them.
+const ELASTICITY_FORM_COUNT = raw"""
+using Bramble, Random
+nspec(f) = sum(m -> count(!isnothing, Base.specializations(m)), methods(f); init = 0)
+fns = [getfield(Bramble, n) for n in names(Bramble; all = true)
+       if isdefined(Bramble, n) && getfield(Bramble, n) isa Function]
+total() = sum(nspec, fns)
+Random.seed!(20260903)
+Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 5, 5), (false, false, false))
+Vₕ = gridspace(Ωₕ)^Val(3)
+μ, λ = 1.0, 2.0
+c0 = total()
+a = form(Vₕ, Vₕ, (u, v) -> 2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₘₕ(u), divₘₕ(v)))
+n = total() - c0
+println(n, " ", a isa Bramble.BilinearForm)
+"""
+
+@testset "Elasticity first form bound (#763)" begin
+    project = Base.active_project()
+    cmd = `$(Base.julia_cmd()) --startup-file=no --threads=1 --project=$project
+        -e $ELASTICITY_FORM_COUNT`
+    out = split(readchomp(cmd))
+    @test parse(Int, out[1]) <= 2900
+    @test out[2] == "true"
+end
+
+# What #763's changes to `form` must not move. A scale over a sum whose terms name different
+# components is distributed by `_scale_over_sum` in one generated body, and the mesh checks
+# skip a term that holds nothing they read (`_reads_meshes`). Each form below is compared
+# with the tree 018c6224 builds for it, written out by hand, bit for bit, and a few with
+# the type and norm that commit gives. The second argument of each pair is already in that
+# shape, so it never reaches the distribution under test.
+function _same_bits(A::SparseMatrixCSC, B::SparseMatrixCSC)
+    A.colptr == B.colptr &&
+        A.rowval == B.rowval &&
+        reinterpret(UInt64, A.nzval) ==
+        reinterpret(UInt64, B.nzval)
+end
+_same_bits(a::AbstractVector, b::AbstractVector) = reinterpret(UInt64, a) ==
+                                                   reinterpret(UInt64, b)
+
+@testset "Scaled mixed sums keep their tree (#763)" begin
+    Random.seed!(763)
+    Wₕ = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7),
+        (false, false)))
+    Vₕ = Wₕ × Wₕ
+    r = Ref(1.7)
+    fₕ = Rₕ(Wₕ, x -> 1.0 + x[1] * x[2])
+    δ = dirac((0.35, 0.6), 2.0)
+    pairs = (
+        # A nested static scale folds into the distributed one (rule 4).
+        "fold" => ((u, v) -> 2.0 * (3.0 * innerₕ(u(1), v(1)) + innerₕ(u(2), v(2))),
+            (u, v) -> 6.0 * innerₕ(u(1), v(1)) + 2.0 * innerₕ(u(2), v(2))),
+        # A `Rational` never folds.
+        "rational" => ((u, v) -> 2.0 * ((1 // 3) * innerₕ(u(1), v(1)) + innerₕ(u(2), v(2))),
+            (u, v) -> 2.0 * ((1 // 3) * innerₕ(u(1), v(1))) + 2.0 * innerₕ(u(2), v(2))),
+        # A sum naming one component stays whole under the scale.
+        "same component" => (
+            (u, v) -> 2.0 * ((innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(1)), v(1))) +
+                             innerₕ(u(2), v(2))),
+            (u, v) -> 2.0 * (innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(1)), v(1))) +
+                      2.0 * innerₕ(u(2), v(2))),
+        # An `Integer` zero drops every term.
+        "integer zero" => (
+            (u, v) -> 0 * (innerₕ(u(1), v(1)) + innerₕ(u(2), v(2))) +
+                      innerₕ(D₋ₓ(u(1)), D₋ₓ(v(1))),
+            (u, v) -> innerₕ(D₋ₓ(u(1)), D₋ₓ(v(1)))),
+        # A product left with a scale operand is simplified again, as 018c6224 did.
+        "ref over integer" => (
+            (u, v) -> 3.0 * (innerₕ(r * (2 * u(1)), v(1)) + innerₕ(u(2), v(2))),
+            (u, v) -> 3.0 * (r * (2 * innerₕ(u(1), v(1)))) + 3.0 * innerₕ(u(2), v(2))),
+        "rational over integer" => (
+            (u, v) -> 0.3 * (innerₕ((1 // 3) * (3 * u(1)), D₋ₓ(v(1))) +
+                             innerₕ(u(2), v(2))),
+            (u, v) -> 0.3 * ((1 // 3) * (3 * innerₕ(u(1), D₋ₓ(v(1))))) +
+                      0.3 * innerₕ(u(2), v(2))),
+        "rational over float" => (
+            (u, v) -> 2 * (innerₕ(u(1), (1 // 7) * (0.3 * v(1))) + innerₕ(u(2), v(1))),
+            (u, v) -> 2 * ((1 // 7) * (0.3 * innerₕ(u(1), v(1)))) + 2 * innerₕ(u(2), v(1)))
+    )
+    for (name, (f, g)) in pairs
+        @testset "$name" begin
+            a, b = form(Vₕ, Vₕ, f), form(Vₕ, Vₕ, g)
+            @test typeof(a) == typeof(b)
+            @test _same_bits(assemble(a), assemble(b))
+        end
+    end
+
+    # The same, pinned to 018c6224's own figures rather than to a second form.
+    a = form(Vₕ, Vₕ, (u, v) -> 2.0 * (3.0 * innerₕ(u(1), v(1)) + innerₕ(u(2), v(2))))
+    @test a.ast isa OperatorAdd{2, <:OperatorScale{2, Float64, <:BilinearProduct},
+        <:OperatorScale{2, Float64, <:BilinearProduct}}
+    @test a.ast.left_op.scalar === 6.0 && a.ast.right_op.scalar === 2.0
+    a = form(Vₕ, Vₕ, (u, v) -> 2.0 * ((1 // 3) * innerₕ(u(1), v(1)) + innerₕ(u(2), v(2))))
+    @test a.ast.left_op isa
+          OperatorScale{2, Float64, <:OperatorScale{2, Rational{Int}, <:BilinearProduct}}
+    a = form(Vₕ, Vₕ, (u, v) -> 0 * (innerₕ(u(1), v(1)) + innerₕ(u(2), v(2))) +
+                               innerₕ(D₋ₓ(u(1)), D₋ₓ(v(1))))
+    @test a.ast isa BilinearProduct
+    a = form(Vₕ, Vₕ, (u, v) -> 0.3 * (innerₕ((1 // 3) * (3 * u(1)), D₋ₓ(v(1))) +
+                                      innerₕ(u(2), v(2))))
+    @test a.ast.left_op isa OperatorScale{2, Float64,
+        <:OperatorScale{2, Rational{Int}, <:OperatorScale{2, Int, <:BilinearProduct}}}
+    A = assemble(a)
+    @test nnz(A) == 119
+    @test isapprox(norm(A), 0.5279233254079588; rtol = 1e-12)
+
+    # A Dirac split leaves `0.3 * πₕ(fₕ)` inside its product, which a distributed scale
+    # simplifies again.
+    l = form(Vₕ, v -> 3.0 * (innerₕ(0.3 * πₕ(fₕ) + δ, v(1)) + innerₕ(fₕ, v(2))))
+    m = form(Vₕ, v -> 3.0 * (0.3 * innerₕ(πₕ(fₕ), v(1)) + innerₕ(δ, v(1))) +
+                      3.0 * innerₕ(fₕ, v(2)))
+    @test typeof(l) == typeof(m)
+    @test _same_bits(assemble(l), assemble(m))
+end
+
+# A centered difference on an axis of two points is refused at `form` wherever it sits:
+# bare, under an average, as the last of twelve terms, and in a linear form.
+@testset "Short-axis Dc refused at form (#763)" begin
+    Random.seed!(764)
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 2), (false, true))
+    Wₕ = gridspace(Ωₕ)
+    many = (u, v) -> foldl(+, ntuple(k -> (k + 0.5) * innerₕ(D₋ₓ(u), v), 11)) +
+                     innerₕ(Dcᵧ(u), v)
+    for f in ((u, v) -> innerₕ(Dcᵧ(u), v), (u, v) -> innerₕ(Mₓ(Dcᵧ(u)), v),
+        (u, v) -> innerₕ(u, D̽ᵧ(v)), many)
+        @test_throws "needs at least 3 points" form(Wₕ, Wₕ, f)
+        @test_throws ArgumentError form(Wₕ, Wₕ, f)
+    end
+    @test_throws ArgumentError form(Wₕ, v -> innerₕ(x -> 1.0, Mₓ(Dcᵧ(v))))
+    @test_throws ArgumentError form(Wₕ × Wₕ, Wₕ × Wₕ,
+        (u, v) -> innerₕ(u(1), v(1)) + innerₕ(Dcᵧ(u(2)), v(2)))
 end
 
 end # module FormCompileScalingTests

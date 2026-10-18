@@ -120,6 +120,7 @@ export jacobi_smoother, chebyshev_smoother, red_black_gauss_seidel, smooth!
 export gmg_preconditioner, gmg_solve
 
 public KroneckerLinearOperator, MatrixFreeOperator, ode_function
+public RankOneUpdate
 public AbstractMatrixFreePreconditioner, JacobiPreconditioner, ChebyshevPreconditioner
 public FDMPreconditioner
 public max_eigenvalue_estimate

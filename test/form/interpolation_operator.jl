@@ -9,6 +9,7 @@ import Bramble: D₊ₓ
 # file included afterward -- the same trap flagged elsewhere in this suite.
 using LinearAlgebra: Diagonal, dot, I
 using SparseArrays
+using Random: seed!
 using ForwardDiff
 using Bramble:
                CompositeGridSpace,
@@ -46,7 +47,9 @@ using Bramble:
                S₊ₓ,
                S₋ₓ,
                forward_shift,
-               backward_shift
+               backward_shift,
+               Dcₓ,
+               Δₕ
 using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, WITH_3D_TESTS
 
 # The interpolation operator: `πₕ(u)` over a trial function, as opposed to
@@ -224,6 +227,132 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(πₕ(u)), D₋ₓ(v)) + innerₕ(πₕ(u), v))
         )
         @test interp ≈ plain
+    end
+
+    @testset "Same-mesh stencil (#771)" begin
+        # `πₕ` from the mesh being walked names the walked point's own column with weight one
+        # (`_same_mesh_stencil`), so the pattern is the plain form's. The oracle is the
+        # general path on a twin: a second mesh object with the same points, where
+        # `locate_cell` runs and the other corners stay as explicit zeros. Every stored
+        # entry must match it to the bit, and the bound term must keep its type.
+        bits(x) = reinterpret(UInt64, x)
+        function same_bits(A, R)
+            ok = all(zip(findnz(A)...)) do (i, j, x)
+                bits(x) == bits(R[i, j])
+            end
+            # and nothing the twin stores outside `A`'s pattern is other than zero
+            return ok && all(((i, j, x),) -> iszero(x) || bits(x) == bits(A[i, j]),
+                zip(findnz(R)...))
+        end
+        nonuniform(Ω, n::Int) = mesh(Ω, n, false)
+        nonuniform(Ω, n::Tuple) = mesh(Ω, n, map(_ -> false, n))
+        twins(Ω, n) = (seed!(771); M = nonuniform(Ω, n); seed!(771); (M, nonuniform(Ω, n)))
+
+        trial_side = (u, v) -> innerₕ(πₕ(u), v) + inner₊ₓ(D₋ₓ(πₕ(u)), D₋ₓ(v))
+        test_side = (u, v) -> innerₕ(u, πₕ(v)) + inner₊ₓ(D₋ₓ(u), D₋ₓ(πₕ(v)))
+        plain = (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v))
+        unit = interval(0.0, 1.0)
+        cases = [(domain(unit), 13), (domain(unit × unit), (9, 8))]
+        WITH_3D_TESTS && push!(cases, (domain(unit × unit × unit), (6, 5, 7)))
+        @testset "$(dim(Ω))D" for (Ω, n) in cases
+            M, Mt = twins(Ω, n)
+            @test M !== Mt && points(M) == points(Mt)
+            W, Wt = gridspace(M), gridspace(Mt)
+            P = assemble(form(W, W, plain))
+            # the twin's space on the interpolated side: the trial leaf, then the test leaf
+            for (f, twin) in ((trial_side, (Wt, W)), (test_side, (W, Wt)))
+                a = @inferred form(W, W, f)
+                A = assemble(a)
+                R = assemble(form(twin..., f))
+                @test rowvals(A) == rowvals(P) && A.colptr == P.colptr
+                @test nnz(R) > nnz(A)   # the rule does not fire on a twin mesh
+                @test same_bits(A, R)
+                @test A ≈ P
+                @test typeof(_bind_interp_spaces(a.ast, W, W)) ===
+                      typeof(_bind_interp_spaces(a.ast, twin...))
+                @test_allocs assemble!(A, a)
+                Rf = form(twin..., f)
+                Rm = assemble(Rf)
+                @test_allocs assemble!(Rm, Rf)
+            end
+
+            # a second space on the same mesh object is the same mesh: the rule fires
+            @test nnz(assemble(form(W, gridspace(M), trial_side))) == nnz(P)
+
+            # the stencil itself: `2ᴰ` entries, all on the walked point's column, the
+            # first with weight one, and the same type as the general path's
+            node = πₕ(TrialFunction{dim(Ω)}())
+            I = CartesianIndex(ntuple(d -> 2, dim(Ω)))
+            j = LinearIndices(indices(M))[I]
+            st = @inferred local_stencil(
+                _bind_interp_spaces(node, W, W), W, I, markers(M), j
+            )
+            @test length(st) == 2^dim(Ω)
+            @test all(e -> e[1] == AbsoluteColumn(j), st)
+            @test bits(st[1][2]) == bits(1.0) && all(e -> bits(e[2]) == bits(0.0), st[2:end])
+            @test typeof(st) ===
+                  typeof(local_stencil(_bind_interp_spaces(node, Wt, W), W, I, markers(M), j))
+        end
+
+        @testset "composite leaves" begin
+            M, Mt = twins(domain(unit × unit), (9, 8))
+            W, Wt = gridspace(M), gridspace(Mt)
+            V, Vt = CompositeGridSpace((W, W)), CompositeGridSpace((W, Wt))
+            f = (u, v) -> innerₕ(u(1), v(1)) + innerₕ(πₕ(u(2)), v(1)) +
+                          inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(πₕ(v(2))))
+            a = form(V, V, f)
+            A = assemble(a)
+            R = assemble(form(Vt, Vt, f))
+            @test nnz(R) > nnz(A)
+            @test same_bits(A, R)
+            n = ndofs(W)
+            @test nnz(A[1:n, (n + 1):(2n)]) == n   # the off-diagonal mass block is diagonal
+            @test_allocs assemble!(A, a)
+        end
+
+        @testset "ghost leaves" begin
+            # Not on a ghost space (`_same_mesh_rule`): the operator outside `πₕ` reads the
+            # ghost layer, where `πₕ` is no identity, since it reads the clamped physical
+            # nodes instead of the ghost column. So the walked mesh and a twin with the same
+            # points give one matrix, values and pattern, constrained or not; the rule firing
+            # there gives `∂ₙ(πₕ(u))` the ghost column's weights instead (max |A - R| 17.3).
+            same_matrix(A, R) = rowvals(A) == rowvals(R) && A.colptr == R.colptr &&
+                                bits.(nonzeros(A)) == bits.(nonzeros(R))
+            normal = (u, v) -> inner_Γ(∂ₙ(πₕ(u)), v)
+            clamped = (u, v) -> innerₕ(Dcₓ(πₕ(u; outside = :clamp)), v)
+            Δclamped = (u, v) -> innerₕ(Δₕ(πₕ(u; outside = :clamp)), v)
+            test_clamped = (u, v) -> innerₕ(u, Dcₓ(πₕ(v; outside = :clamp)))
+            M1, Mt1 = twins(domain(unit), 9)
+            M2, Mt2 = twins(domain(unit × unit), (9, 8))
+            rel1(u) = (:xmin => ∂ₙ(u) => 0.0, :xmax => ∂ₙ(u) => 0.0)
+            rel2(u) = map(F -> F => ∂ₙ(u) => 0.0, (:xmin, :xmax, :ymin, :ymax))
+            cases = [(M1, Mt1, rel1, (normal, clamped, Δclamped, test_clamped)),
+                (M2, Mt2, rel2, (trial_side, normal, Δclamped))]
+            @testset "$(dim(M))D, $(nameof(wrap))" for (M, Mt, rel, fs) in cases,
+                wrap in (identity, constrained)
+
+                w = wrap === identity ? identity : X -> constrained(X, rel)
+                X = w(gridspace(M; ghosts = :boundary))
+                Xt = w(gridspace(Mt; ghosts = :boundary))
+                for f in fs
+                    a = form(X, X, f)
+                    A = assemble(a)
+                    # the twin on the interpolated side
+                    twin = f === test_clamped ? (X, Xt) : (Xt, X)
+                    @test same_matrix(A, assemble(form(twin..., f)))
+                    @test_allocs assemble!(A, a)
+                end
+            end
+        end
+
+        @testset "Float32" begin
+            seed!(771)
+            M = nonuniform(domain(interval(0.0f0, 1.0f0)), 11)
+            W = gridspace(M)
+            A = assemble(form(W, W, trial_side))
+            @test eltype(A) === Float32
+            @test A == assemble(form(W, W, plain))
+        end
     end
 
     @testset "Action on a grid function" begin

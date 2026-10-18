@@ -1,0 +1,13 @@
+diff --git a/src/ast/simplifier.jl b/src/ast/simplifier.jl
+index f245b40f..a5dcf0fd 100644
+--- a/src/ast/simplifier.jl
++++ b/src/ast/simplifier.jl
+@@ -348,7 +348,7 @@ function simplify_ast(op::OperatorAdd)
+         # disagree on. Static, non-`Rational` coefficients only (`_folds`); a `Ref`, even the
+         # same one on both sides, falls through (gpena/Bramble.jl#527).
+         _folds(cl) && _folds(cr) && return _wrap_scale(_fold_add(cl, cr), al)
+-    elseif (left isa OperatorScale || right isa OperatorScale) &&
++    elseif false && (left isa OperatorScale || right isa OperatorScale) &&
+            cl isa Integer &&
+            cr isa Integer &&
+            cl == cr &&
