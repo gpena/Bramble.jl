@@ -122,10 +122,12 @@ end
 # with the tree 018c6224 builds for it, written out by hand, bit for bit, and a few with
 # the type and norm that commit gives. The second argument of each pair is already in that
 # shape, so it never reaches the distribution under test.
-_same_bits(A::SparseMatrixCSC, B::SparseMatrixCSC) = A.colptr == B.colptr &&
-                                                     A.rowval == B.rowval &&
-                                                     reinterpret(UInt64, A.nzval) ==
-                                                     reinterpret(UInt64, B.nzval)
+function _same_bits(A::SparseMatrixCSC, B::SparseMatrixCSC)
+    A.colptr == B.colptr &&
+        A.rowval == B.rowval &&
+        reinterpret(UInt64, A.nzval) ==
+        reinterpret(UInt64, B.nzval)
+end
 _same_bits(a::AbstractVector, b::AbstractVector) = reinterpret(UInt64, a) ==
                                                    reinterpret(UInt64, b)
 
@@ -147,7 +149,7 @@ _same_bits(a::AbstractVector, b::AbstractVector) = reinterpret(UInt64, a) ==
         # A sum naming one component stays whole under the scale.
         "same component" => (
             (u, v) -> 2.0 * ((innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(1)), v(1))) +
-                      innerₕ(u(2), v(2))),
+                             innerₕ(u(2), v(2))),
             (u, v) -> 2.0 * (innerₕ(u(1), v(1)) + innerₕ(D₋ₓ(u(1)), v(1))) +
                       2.0 * innerₕ(u(2), v(2))),
         # An `Integer` zero drops every term.
@@ -161,7 +163,7 @@ _same_bits(a::AbstractVector, b::AbstractVector) = reinterpret(UInt64, a) ==
             (u, v) -> 3.0 * (r * (2 * innerₕ(u(1), v(1)))) + 3.0 * innerₕ(u(2), v(2))),
         "rational over integer" => (
             (u, v) -> 0.3 * (innerₕ((1 // 3) * (3 * u(1)), D₋ₓ(v(1))) +
-                      innerₕ(u(2), v(2))),
+                             innerₕ(u(2), v(2))),
             (u, v) -> 0.3 * ((1 // 3) * (3 * innerₕ(u(1), D₋ₓ(v(1))))) +
                       0.3 * innerₕ(u(2), v(2))),
         "rational over float" => (

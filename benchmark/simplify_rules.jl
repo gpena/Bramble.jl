@@ -172,9 +172,11 @@ if "--child" in ARGS
     end
 
     t_form = @elapsed a = form(W, W, fun)
-    count_nodes(x, T) = (x isa T ? 1 : 0) +
-                        (x isa Union{Bramble.LazyOp, Tuple} ?
-                         sum((count_nodes(getfield(x, i), T) for i in 1:nfields(x)); init = 0) : 0)
+    function count_nodes(x, T)
+        (x isa T ? 1 : 0) +
+        (x isa Union{Bramble.LazyOp, Tuple} ?
+         sum((count_nodes(getfield(x, i), T) for i in 1:nfields(x)); init = 0) : 0)
+    end
     nprod = count_nodes(a.ast, Bramble.BilinearProduct)
     nnodes = count_nodes(a.ast, Bramble.LazyOp)
     if "--probe" in ARGS  # the AST only: which program does this tree build for the form?

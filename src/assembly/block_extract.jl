@@ -84,9 +84,11 @@ A term naming one and not the other is refused: `innerₕ(u(1), v)` is not somet
 in a variational formulation, and reading it as a whole row or column of blocks would be a
 guess about what was meant.
 """
-block_of(term, nblocks_trial::Int, nblocks_test::Int) = _block_of_components(
-    trial_component_or_nothing(term), test_component_or_nothing(term), nblocks_trial,
-    nblocks_test)
+function block_of(term, nblocks_trial::Int, nblocks_test::Int)
+    _block_of_components(
+        trial_component_or_nothing(term), test_component_or_nothing(term), nblocks_trial,
+        nblocks_test)
+end
 
 # `block_of` from the two components a term names (`Int` or `nothing` each), so the assembly
 # walks compile it once per component type, not once per term type.

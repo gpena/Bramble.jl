@@ -41,7 +41,7 @@ function problem_data(D; mixed)
     f = p -> -sum(ex.d2u(p))
     h = (F, p) -> ex.d2u(p)[findfirst(==(String(F)[1]), "xyz")]
     mixed || return (; f, g = ex.u, h, dirichlet = D == 1 ? (:xmin, :xmax) :
-                                                  (:xmin, :xmax, :ymin, :ymax))
+                                                   (:xmin, :xmax, :ymin, :ymax))
     D == 1 && return (; f, g = ex.u, h, dirichlet = (:xmin,),
         robin = (robin_on(ex, :xmax, 2.0, 1.0),))
     return (; f, g = ex.u, h, dirichlet = (:xmin, :ymax),
@@ -161,7 +161,7 @@ function dense_reference(Ω, c, data)
     Afull = length(axs) == 1 ? KW[1][1] : kron(KW[2][2], KW[1][1]) + kron(KW[2][1], KW[1][2])
     pts = vec([ntuple(d -> axs[d][I[d]], length(axs)) for I in CartesianIndices(c.dims)])
     w = length(axs) == 1 ? diag_of(KW[1][2]) : vec([a * b for a in diag_of(KW[1][2]),
-        b in diag_of(KW[2][2])])
+    b in diag_of(KW[2][2])])
     Afull = Matrix(Afull)
     F = w .* data.f.(pts) .- Afull[:, c.fixed] * c.gfixed
     return Afull[c.free, c.free], F[c.free]
@@ -171,6 +171,7 @@ diag_of(D) = D.diag
 
 @testset "The meshes are non-uniform" begin
     for prob in PROBLEMS, level in 0:1
+
         for x in mesh_axes(random_mesh(prob.D, prob.n0, level))
             h = diff(collect(x))
             @test maximum(h) / minimum(h) > 1.3

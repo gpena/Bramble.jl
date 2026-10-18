@@ -220,8 +220,9 @@ _rt_two_term(θ::Float64, W) = form(W, W,
             (u, v) -> innerₕ(a * D₋ₓ(u), D₊ₓ(v)) + innerₕ(b * D₋ₓ(u), D₋ᵧ(v)))
         @test simplify_ast(coef.ast) === coef.ast
         a[] = 5.0
-        @test Matrix(assemble(coef)) ≈ 5.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
-                                       3.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)))
+        @test Matrix(assemble(coef)) ≈
+              5.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₊ₓ(v))) +
+              3.0 .* M((u, v) -> innerₕ(D₋ₓ(u), D₋ᵧ(v)))
     end
 
     # a runtime `Float64` coefficient on one of two terms keeps `form` concrete

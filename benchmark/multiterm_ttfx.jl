@@ -76,6 +76,7 @@ function main()
     threads = parse(Int, arg("--threads", "1"))
     runs = Dict(r => Vector{Vector{Float64}}() for r in ROWS)
     for _ in 1:n, r in ROWS
+
         push!(runs[r], launch(tree, r, threads))
     end
     println("median of $n launch(es), seconds: tree $tree, $threads thread(s)")

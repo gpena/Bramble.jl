@@ -836,6 +836,7 @@ end
 function _facet_node_mask(dims::NTuple{D, Int}, facets) where {D}
     mask = falses(prod(dims))
     for (k, I) in enumerate(CartesianIndices(dims)), F in facets
+
         s = String(F)
         d = findfirst(==(s[1]), "xyz")
         I[d] == (endswith(s, "min") ? 1 : dims[d]) && (mask[k] = true)

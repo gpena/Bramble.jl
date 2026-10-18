@@ -256,7 +256,6 @@ end
     end
 end
 
-
 @testset "Warm refill follows a coefficient" begin
     for ns in ((11,), (9, 10))
         Wg = gridspace(ghost_mesh(CpuSerial(), ns); ghosts = :boundary)

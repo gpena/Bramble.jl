@@ -46,8 +46,9 @@ using ..TestUtils: WITH_3D_TESTS
     end
 
     WITH_3D_TESTS && @testset "3D" begin
-        W3 = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) ×
-                                   interval(0.0, 1.0)), (5, 6, 4), (false, false, false)))
+        W3 = gridspace(mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0) ×
+                   interval(0.0, 1.0)), (5, 6, 4), (false, false, false)))
         asm3(f) = Matrix(assemble(form(W3, W3, f)))
         A = asm3((u, v) -> inner₊(∇ₕ(u), 2 * ∇ₕ(v) - 0.25 * ∇ₕ(D₋ₓ(v))))
         B = asm3((u, v) -> 2 * inner₊(∇ₕ(u), ∇ₕ(v)) - 0.25 * inner₊(∇ₕ(u), ∇ₕ(D₋ₓ(v))))

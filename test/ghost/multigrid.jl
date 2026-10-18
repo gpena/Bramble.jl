@@ -55,8 +55,10 @@ end
 
 # `-Δₕ u` reads the ghosts at every facet node, so each relation's closure enters the
 # matrix (`inner₊(∇ₕ u, ∇ₕ v)` with physical weights never reads a ghost).
-builder(rels, ghosts, c) = W -> (C = constrained(gridspace(mesh(W); ghosts), rels);
-    form(C, C, (u, v) -> innerₕ(-1.0 * Δₕ(u), v) + c * innerₕ(u, v)))
+function builder(rels, ghosts, c)
+    W -> (C = constrained(gridspace(mesh(W); ghosts), rels);
+        form(C, C, (u, v) -> innerₕ(-1.0 * Δₕ(u), v) + c * innerₕ(u, v)))
+end
 
 # The V-cycles from zero that bring `‖b - A x‖` to `1e-8 ‖b‖`, at most `cap`.
 function cycles(P, A, b; cap = 40)
@@ -242,27 +244,28 @@ end
         Ω = jittered(Val(2), 17)
         f = (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v)
         rels = kinds(facets(2)).robin[1]
-        message(build; kw...) = try
-            gmg_preconditioner(build, Ω; kw...)
-            ""
-        catch err
-            err isa ArgumentError ? sprint(showerror, err) : rethrow()
-        end
+        message(build; kw...) =
+            try
+                gmg_preconditioner(build, Ω; kw...)
+                ""
+            catch err
+                err isa ArgumentError ? sprint(showerror, err) : rethrow()
+            end
         # ghosts left as unknowns
         kept = W -> (C = gridspace(mesh(W); ghosts = :boundary); form(C, C, f))
         @test_throws ArgumentError gmg_preconditioner(kept, Ω)
         @test occursin("constrained", message(kept))
         # a ghost form on the finest level only
         mixedkinds = W -> npoints(mesh(W)) == npoints(Ω) ?
-            (C = constrained(gridspace(mesh(W); ghosts = :boundary), rels); form(C, C, f)) :
-            form(W, W, f)
+                          (C = constrained(gridspace(mesh(W); ghosts = :boundary), rels); form(C, C, f)) :
+                          form(W, W, f)
         @test occursin("same kind of form on every level", message(mixedkinds))
         # other ghosted facets below the finest level
         partial = u -> (:xmin => u + ∂ₙ(u) => 0.0, :xmax => u => 0.0, :ymin => u => 0.0,
             :ymax => u => 0.0)
         facetsdiffer = W -> npoints(mesh(W)) == npoints(Ω) ?
-            (C = constrained(gridspace(mesh(W); ghosts = :boundary), rels); form(C, C, f)) :
-            (C = constrained(gridspace(mesh(W); ghosts = (:xmin,)), partial); form(C, C, f))
+                            (C = constrained(gridspace(mesh(W); ghosts = :boundary), rels); form(C, C, f)) :
+                            (C = constrained(gridspace(mesh(W); ghosts = (:xmin,)), partial); form(C, C, f))
         @test occursin("same ghosted facets", message(facetsdiffer))
         # the finest space captured instead of one built on mesh(W)
         Cfine = constrained(gridspace(Ω; ghosts = :boundary), rels)
@@ -272,8 +275,9 @@ end
         build = builder(rels, :boundary, 1.0)
         @test occursin("jacobi_smoother", message(build; smoother = red_black_gauss_seidel))
         # relation data in time read `E` alone, so the cycle runs on them
-        timed = W -> (C = constrained(gridspace(mesh(W); ghosts = :boundary),
-            u -> map(F -> F => u + ∂ₙ(u) => (x, t) -> t * x[1], facets(2)));
+        timed = W -> (
+            C = constrained(gridspace(mesh(W); ghosts = :boundary),
+                u -> map(F -> F => u + ∂ₙ(u) => (x, t) -> t * x[1], facets(2)));
             form(C, C, f))
         A = assemble(timed(gridspace(Ω)))
         b = A * rand(MersenneTwister(3), size(A, 2))

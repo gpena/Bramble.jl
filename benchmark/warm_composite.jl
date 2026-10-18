@@ -86,8 +86,10 @@ if "--child" in ARGS || "--child-profile" in ARGS
         return sum(s -> length(s.positions) + length(s.positions_t), a.cache.segments)
     end
 
-    replay!(B, a) = Bramble._replay_bilinear_core!(Bramble._SerialReplay(), B,
-        a.trial_space, a.test_space, a.ast, a.cache.segments, true)
+    function replay!(B, a)
+        Bramble._replay_bilinear_core!(Bramble._SerialReplay(), B,
+            a.trial_space, a.test_space, a.ast, a.cache.segments, true)
+    end
 
     # Allocation of one warm call, behind a function barrier.
     bytes_fill(B, a) = @allocated assemble!(B, a)
@@ -282,6 +284,7 @@ function main()
     launches = parse(Int, arg("--launches", "3"))
     runs = Dict(r => Vector{Dict{String, Float64}}() for r in ROWS)
     for _ in 1:launches, r in ROWS
+
         push!(runs[r], launch(tree, r, n, threads))
     end
     println("median of $launches launch(es) of min of 5: tree $tree, size $n, ",

@@ -124,13 +124,14 @@ function point_sets(Ωₕ, D::Int)
         (pts = (outside,), s = (1.25,)),
         (pts = (corner_out,), s = (0.75,)),
         (pts = (corner_in,), s = (2.5,)),
-        (pts = (near_max, edge, inside, near_min, outside), s = (3.0, 2.0, -1.0, 0.5, 1.25)),
+        (pts = (near_max, edge, inside, near_min, outside), s = (3.0, 2.0, -1.0, 0.5, 1.25))
     )
 end
 
 function check_dimension(ns::NTuple{D, Int}, ghost_sets; seed) where {D}
     Ωₕ = nonuniform_mesh(ns; seed)
     for ghosts in ghost_sets, c in point_sets(Ωₕ, D)
+
         @testset "ghosts $ghosts, $(length(c.pts)) point(s) $(c.pts)" begin
             check_case(Ωₕ, D, ghosts, c.pts, c.s)
         end

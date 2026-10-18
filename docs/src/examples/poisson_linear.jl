@@ -147,7 +147,9 @@ residuals[2] < residuals[1]
             :xmax => u + ∂ₙ(u) => robin_data, :ymax => u + ∂ₙ(u) => robin_data))            #src
     ar = form(Cr, Cr, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))                                     #src
     ur = pde_solve(assemble(ar, form(Cr, v -> innerₕ(rhs, v)))...)                          #src
-    free = trues(nx, ny); free[1, :] .= false; free[:, 1] .= false                           #src
+    free = trues(nx, ny)                                                                     #src
+    free[1, :] .= false                                                                      #src
+    free[:, 1] .= false                                                                      #src
     length(ur) == count(free) && isapprox(parent(uₕ)[vec(free)], ur; rtol = 1.0e-8)         #src
 end                                                                                          #src
 

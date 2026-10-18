@@ -38,15 +38,21 @@ mixed(u, v) = innerₕ(D₋ₓ(D₊ᵧ(u)), v) + innerₕ(u, v)      # reads the
 
 robin1(u) = (:xmin => u + ∂ₙ(u) => 2.0, :xmax => ∂ₙ(u) => x -> x[1])
 dirichlet1(u) = (:xmin => u => 1.0, :xmax => ∂ₙ(u) => 0.5)
-robin2(u) = (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[2],
-    :ymin => ∂ₙ(u) => 0.0, :ymax => 2.0 * u + ∂ₙ(u) => 1.0)
-conormal2(u) = (:xmin => ∂ₙ(u; K) => 1.0, :xmax => u + ∂ₙ(u; K) => x -> x[2],
-    :ymin => ∂ₙ(u; K) => 0.0, :ymax => 2.0 * u + ∂ₙ(u; K) => 1.0)
+function robin2(u)
+    (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[2],
+        :ymin => ∂ₙ(u) => 0.0, :ymax => 2.0 * u + ∂ₙ(u) => 1.0)
+end
+function conormal2(u)
+    (:xmin => ∂ₙ(u; K) => 1.0, :xmax => u + ∂ₙ(u; K) => x -> x[2],
+        :ymin => ∂ₙ(u; K) => 0.0, :ymax => 2.0 * u + ∂ₙ(u; K) => 1.0)
+end
 dirichlet2(u) = (:xmin => ∂ₙ(u) => 1.0, :xmax => 2.0 * u + ∂ₙ(u) => 0.0,
     :ymin => ∂ₙ(u) => 0.5, :ymax => u => x -> x[1])
-robin3(u) = (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[3],
-    :ymin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0, :zmin => u => x -> x[1],
-    :zmax => ∂ₙ(u) => 1.0)
+function robin3(u)
+    (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[3],
+        :ymin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0, :zmin => u => x -> x[1],
+        :zmax => ∂ₙ(u) => 1.0)
+end
 
 # The product of `matrix_free_operator(a; dirichlet)` on `C` against the assembled matrix
 # and, without `dirichlet`, against `E' * A_pad * E`; then `α`/`β`, a `NaN`-filled `y`,
