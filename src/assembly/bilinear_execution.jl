@@ -703,6 +703,15 @@ See also: [`_ReplayTarget`](@ref), [`_batch_bilinear_band_replay!`](@ref).
 ) where {SINK, TERM}
     @inbounds begin
         lin_idx = lin_indices[I]
+        # A product walked factor by factor, as the serial walk does (`_factored_walk`).
+        if _factored_walk(typeof(sink), typeof(term), typeof(sp))
+            slot = _sink_point!(sink, lin_idx, I)
+            _factored_point!(
+                sink, term, sp, I, mesh_markers, lin_indices, lin_idx, row_offset,
+                col_offset, slot, Val(true)
+            )
+            return nothing
+        end
         stencil = local_stencil(term, sp, I, mesh_markers, lin_idx)
         slot = _sink_point!(sink, lin_idx, I)
         _visit_entries(sink, stencil, lin_indices, I, row_offset, col_offset, slot)
