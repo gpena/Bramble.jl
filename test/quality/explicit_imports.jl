@@ -648,7 +648,12 @@ using Kronecker: Kronecker
                 # at one method so a method an extension adds invalidates none of its callers
                 # (#755); neither the module nor the macro has a public spelling.
                 :Experimental,
-                Symbol("@max_methods")
+                Symbol("@max_methods"),
+                # `Base.@nospecializeinfer` (src/assembly/bilinear_traversal.jl, the
+                # factored-product predicates): keeps inference from specialising a
+                # type-level predicate that folds to a constant (#763, #765); Base has no
+                # public spelling for it.
+                Symbol("@nospecializeinfer")
             )
         ) === nothing
     end
