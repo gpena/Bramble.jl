@@ -322,9 +322,9 @@ Return the resolved AST stored inside the bilinear form.
 
 Construct a `BilinearForm` over the trial space `Wₕ` and the test space `Vₕ` from the
 bilinear expression `f` (a function of trial and test arguments `(u, v)`). The AST is
-resolved once and run through [`simplify_ast`](@ref) -- factoring common scalings and
-shared inner-product arguments, combining like terms, and eliding zero-scaled ones -- before
-it is stored.
+resolved once and run through [`simplify_ast`](@ref) -- dropping zero terms, folding nested
+constant scalings, lifting scalars out of inner products, and distributing sums that mix
+components -- before it is stored; a sum is otherwise kept as written.
 
 An expression may hold one rank-one term, a scalar times a functional of the trial function
 times a functional of the test function (`σ * innerₕ(g, u) * innerₕ(h, v)`, `g` and `h`
@@ -370,8 +370,7 @@ Base.@constprop :aggressive function _bilinear_form(Wₕ, Vₕ, raw_ast)
         promote_type(eltype(Wₕ), eltype(Vₕ)))
     _check_space_components(ast, Wₕ, trial_component_or_nothing, "trial")
     _check_space_components(ast, Vₕ, test_component_or_nothing, "test")
-    _check_centered_meshes(ast, Wₕ, Vₕ)  # linear.jl (gpena/Bramble.jl#629)
-    _check_source_meshes(ast, Wₕ, Vₕ)    # linear.jl (gpena/Bramble.jl#685)
+    _check_form_meshes(ast, Wₕ, Vₕ)  # linear.jl (gpena/Bramble.jl#629, #685)
     return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(
         Wₕ, Vₕ, ast, _AssemblyCache{D}(ast)
     )

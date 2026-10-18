@@ -353,9 +353,10 @@ end
 
 Construct a `LinearForm` over the test space `Wₕ` using the linear expression `f`.
 
-Construction resolves the AST once and runs [`simplify_ast`](@ref) over it -- factoring
-common scalings and shared inner-product arguments, combining like terms, and eliding
-zero-scaled ones -- before it is stored.
+Construction resolves the AST once and runs [`simplify_ast`](@ref) over it -- dropping zero
+terms, folding nested constant scalings, lifting scalars out of inner products, and
+distributing sums that mix components -- before it is stored; a sum is otherwise kept as
+written.
 Grid partitioning for parallel assembly is determined from the resolved AST during assembly
 (see `_term_colour_strides`).
 
@@ -514,8 +515,7 @@ end
 # components outside the space never reach here, as `_lower_sources_for_space` runs first
 # in `form` and throws for them. The walk reaches what `_host_sources` does. Once, at
 # `form`: points moved later (`change_points!`) are not caught, as in `_same_mesh`.
-_check_source_meshes(ast, Wₕ) = _check_source_meshes(ast, Wₕ, Wₕ)
-_check_source_meshes(ast, Wₕ, Vₕ) = _check_walked_meshes(_check_source_mesh, ast, Wₕ, Vₕ)
+_check_source_meshes(ast, Wₕ) = _check_walked_meshes(_check_source_mesh, ast, Wₕ, Wₕ)
 
 _check_source_mesh(op, Ωₕ) = nothing
 
@@ -567,20 +567,58 @@ end
 # walks, so a composite whose collapsed leaf the term never touches still forms. A
 # component outside the space matches no leaf here and is refused where it was before. The
 # operand of an `InterpolationNode` lives on another mesh, so it is not entered. A linear
-# form walks its test space; `bilinear.jl`'s `form` passes both of its spaces. The walk is
-# `_check_walked_meshes`, shared with `_check_source_meshes` above.
+# form walks its test space; `bilinear.jl`'s `form` passes both of its spaces and runs both
+# checks in one walk (`_check_form_meshes`), since no source is lowered between them there.
+# The walk is `_check_walked_meshes`, shared with `_check_source_meshes` above.
 _check_centered_meshes(ast, Vₕ) = _check_centered_meshes(ast, Vₕ, Vₕ)
 _check_centered_meshes(ast, Wₕ, Vₕ) = _check_walked_meshes(_check_centered_mesh, ast, Wₕ, Vₕ)
 
-# Calls `check(term, Ωₕ)` for each term of `ast` on the mesh of every leaf the sweep walks
-# it over, routed as described above.
-function _check_walked_meshes(check::C, op::OperatorAdd, Wₕ, Vₕ) where {C}
-    _check_walked_meshes(check, op.left_op, Wₕ, Vₕ)
-    _check_walked_meshes(check, op.right_op, Wₕ, Vₕ)
+_check_form_meshes(ast, Wₕ, Vₕ) = _check_walked_meshes(_check_term_meshes, ast, Wₕ, Vₕ)
+
+function _check_term_meshes(term, Ωₕ)
+    _check_centered_mesh(term, Ωₕ)
+    _check_source_mesh(term, Ωₕ)
     return nothing
 end
 
-function _check_walked_meshes(check::C, term, Wₕ, Vₕ) where {C}
+# Calls `check(term, Ωₕ)` for each term of `ast` on the mesh of every leaf the sweep walks
+# it over, routed as described above. A sum's terms are visited from one generated body,
+# not one method per partial sum, and a term whose type holds no node either check reads
+# (`_reads_meshes`) is routed but not checked, so neither the leaf loop nor the checks
+# compile for it (gpena/Bramble.jl#763). The routing queries stay: `assemble` compiles the
+# same ones per term (`block_of`), so skipping them here only moves them there.
+_check_walked_meshes(check::C, ast, Wₕ, Vₕ) where {C} = _check_summand_meshes(
+    check, ast, Wₕ, Vₕ)
+
+# Whether a node of type `T` may hold one the checks above read: a centered difference, or a
+# field holding a `VectorElement`. Read off the type alone and folded at compile time, as
+# `_may_restrict` is (block_extract.jl); a field whose type is not concrete answers `true`.
+Base.@nospecializeinfer Base.@assume_effects :foldable function _reads_meshes(
+        @nospecialize(T))
+    T isa DataType || return true
+    T <: Union{CenteredDifference, CrossWeightedDifference} && return true
+    for i in 1:fieldcount(T)
+        F = fieldtype(T, i)
+        isconcretetype(F) || return true
+        F <: VectorElement && return true
+        F <: Union{LazyOp, Tuple} && _reads_meshes(F) && return true
+    end
+    return false
+end
+
+# The field paths from a sum of type `T`, reached as `path`, to each of its summands.
+function _summand_paths(@nospecialize(T), path)
+    T <: OperatorAdd || return Any[path]
+    return vcat(_summand_paths(fieldtype(T, :left_op), :($path.left_op)),
+        _summand_paths(fieldtype(T, :right_op), :($path.right_op)))
+end
+
+@generated function _check_summand_meshes(check::C, op::OperatorAdd, Wₕ, Vₕ) where {C}
+    calls = [:(_check_summand_meshes(check, $p, Wₕ, Vₕ)) for p in _summand_paths(op, :op)]
+    return :($(calls...); nothing)
+end
+
+function _check_summand_meshes(check::C, term, Wₕ, Vₕ) where {C}
     # A term naming neither side is assembled on the diagonal blocks alone, the first
     # `min` of the two leaf counts (`_diagonal_blocks`), so only those leaves are checked.
     # A linear form passes its test space twice: every leaf, as `each_routed_leaf` routes.
@@ -594,12 +632,14 @@ end
 
 @inline function _check_on_side(check::C, term, space, side_component::F,
         nmax) where {C, F}
+    _reads_meshes(typeof(term)) || return nothing
     return check(term, mesh(space))
 end
 
 @inline function _check_on_side(check::C, term, space::CompositeGridSpace,
         side_component::F, nmax) where {C, F}
     target = side_component(term)
+    _reads_meshes(typeof(term)) || return nothing
     _foldl_leaves(nothing, leaf_spaces_offsets(space)) do _, c, leaf
         (target === nothing ? c <= nmax : target == c) && check(term, mesh(first(leaf)))
         return nothing

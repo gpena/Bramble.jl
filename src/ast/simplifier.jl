@@ -88,9 +88,6 @@ identity over the scalars, grid functions and components involved. The one excep
 # would: they are the same operator.
 @inline _zero_of(::LazyOp{D}) where {D} = ZeroOperator{D, Nothing}(nothing)
 
-@inline _is_zero_op(::LazyOp) = false
-@inline _is_zero_op(::ZeroOperator) = true
-
 # `(scalar, inner)` for a node the lifting rule can read a coefficient from. A bare
 # (non-`OperatorScale`) node is `1 * itself`. The scalar is returned exactly as stored -- a
 # `Base.RefValue` is never dereferenced, since its value can change after the form is built
@@ -222,18 +219,20 @@ unchanged; `form(Wₕ, Vₕ, f)`/`form(Wₕ, f)` call this immediately after `re
 
 function simplify_ast(op::OperatorScale)
     inner = simplify_ast(op.inner_op)
-    _is_zero_op(inner) && return inner  # `c * 0 == 0`, whatever `c` is.
+    inner isa ZeroOperator && return inner  # `c * 0 == 0`, whatever `c` is.
 
     if inner isa OperatorAdd && _mixes_components(inner.left_op, inner.right_op)
         # `c * (A + B)` cannot route as one term when `A`/`B` name different components:
         # distributing is the only routing-safe shape, so it takes priority over keeping
-        # the scaled sum as one term.
-        return simplify_ast(
+        # the scaled sum as one term. Each piece is simplified again when that can change
+        # it (`_resimplify_moves`); otherwise one generated body distributes the scale.
+        _resimplify_moves(typeof(inner)) && return simplify_ast(
             OperatorAdd(
             _wrap_scale(op.scalar, inner.left_op),
             _wrap_scale(op.scalar, inner.right_op)
         ),
         )
+        return _scale_over_sum(op.scalar, inner)
     end
 
     # `Integer`, not `Number`, and for the reason `_wrap_scale` spells out: collapsing on the
@@ -261,7 +260,7 @@ end
 
 function simplify_ast(op::GridFunctionScale)
     inner = simplify_ast(op.inner_op)
-    _is_zero_op(inner) && return inner
+    inner isa ZeroOperator && return inner
 
     if inner isa OperatorAdd && _mixes_components(inner.left_op, inner.right_op)
         # Same reasoning as `OperatorScale` above: a grid-function coefficient distributes
@@ -281,14 +280,90 @@ function simplify_ast(op::GridFunctionScale)
     return inner === op.inner_op ? op : GridFunctionScale(op.grid_function, inner)
 end
 
-function simplify_ast(op::OperatorAdd)
-    left = simplify_ast(op.left_op)
-    right = simplify_ast(op.right_op)
+# --- Sums: one generated body each (gpena/Bramble.jl#763) ---------------------------- #
 
-    _is_zero_op(left) && return right
-    _is_zero_op(right) && return left
+# The expression simplifying the node of type `T` reached as `path`. The generators below
+# call it, so it is defined before them.
+function _simplified_sum_expr(@nospecialize(T), path)
+    T <: OperatorAdd || return :(simplify_ast($path))
+    l, r = gensym(:l), gensym(:r)
+    return quote
+        $l = $(_simplified_sum_expr(fieldtype(T, :left_op), :($path.left_op)))
+        $r = $(_simplified_sum_expr(fieldtype(T, :right_op), :($path.right_op)))
+        $(_sum_dropping_zeros(l, r))
+    end
+end
 
-    return left === op.left_op && right === op.right_op ? op : OperatorAdd(left, right)
+_sum_dropping_zeros(l, r) = :($l isa ZeroOperator ? $r :
+                              $r isa ZeroOperator ? $l : OperatorAdd($l, $r))
+
+# A sum is simplified from one generated body, not one method per partial sum: each term
+# through `simplify_ast`, then every `+` rebuilt with a zero operand dropped, as a recursion
+# over `left_op` and `right_op` would. A sum whose terms come back unchanged is rebuilt
+# equal (`===`) to itself.
+@generated function simplify_ast(op::OperatorAdd)
+    return _simplified_sum_expr(op, :op)
+end
+
+function _distributed_expr(@nospecialize(T), path)
+    T <: OperatorAdd || return :(_scale_piece(c, $path))
+    l, r = gensym(:l), gensym(:r)
+    return quote
+        if _mixes_components($path.left_op, $path.right_op)
+            $l = $(_distributed_expr(fieldtype(T, :left_op), :($path.left_op)))
+            $r = $(_distributed_expr(fieldtype(T, :right_op), :($path.right_op)))
+            $(_sum_dropping_zeros(l, r))
+        else
+            _scale_piece(c, $path)
+        end
+    end
+end
+
+# `simplify_ast(c * x)` for a sum `x` already simplified whose two operands mix components:
+# `c` goes into every sum in `x` that mixes them, and each piece left is scaled by
+# `_scale_piece`, which is what simplifying `OperatorAdd(c * x.left_op, c * x.right_op)`
+# gives, one sum at a time, without simplifying the terms of `x` a second time. That holds
+# only where simplifying `x` again returns it, which `_resimplify_moves` answers before
+# this is called. One generated body for the whole of `x`.
+@generated function _scale_over_sum(c, x::OperatorAdd)
+    return _distributed_expr(x, :x)
+end
+
+# Whether simplifying again a tree of type `T`, itself the output of `simplify_ast`, may
+# change it. Only a product with a scale operand can: the lift peels one scale off each
+# operand per pass, so `⟨r * (2 * u), v⟩` lifts `r` and keeps `2 * u`, and a Dirac split
+# keeps `k * f` inside `⟨k * f + δ, v⟩`'s pieces. Every other node it outputs is returned
+# as it is, so a sum without such a product distributes a scale without simplifying its
+# terms again (`_scale_over_sum`). Read off the type and folded at compile time; a field
+# whose type is not concrete answers `true`.
+Base.@nospecializeinfer Base.@assume_effects :foldable function _resimplify_moves(
+        @nospecialize(T))
+    T isa DataType || return true
+    if T <: Union{BilinearProduct, LinearProduct}
+        (fieldtype(T, :left_op) <: OperatorScale ||
+         fieldtype(T, :right_op) <: OperatorScale) && return true
+    end
+    for i in 1:fieldcount(T)
+        F = fieldtype(T, i)
+        isconcretetype(F) || return true
+        F <: LazyOp && _resimplify_moves(F) && return true
+    end
+    return false
+end
+
+# `simplify_ast(_wrap_scale(c, x))` for an `x` already simplified that is not a sum mixing
+# components: dropped or kept whole for an `Integer` zero or one, a zero kept, a nested
+# static scale folded (rule 4), anything else scaled.
+@inline function _scale_piece(c, x::LazyOp)
+    if c isa Integer
+        iszero(c) && return _zero_of(x)
+        isone(c) && return x
+    end
+    x isa ZeroOperator && return x
+    if x isa OperatorScale && _folds(c) && _folds(x.scalar)
+        return _wrap_scale(_fold_mul(c, x.scalar), x.inner_op)
+    end
+    return OperatorScale(c, x)
 end
 
 # --- Dirac sources inside a sum ------------------------------------------------------ #
@@ -318,8 +393,8 @@ function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
     left = simplify_ast(op.left_op)
     right = simplify_ast(op.right_op)
 
-    _is_zero_op(left) && return _zero_of(op)
-    _is_zero_op(right) && return _zero_of(op)
+    left isa ZeroOperator && return _zero_of(op)
+    right isa ZeroOperator && return _zero_of(op)
 
     # Distribute over a component-mixing sum on either side: `⟨u, v(i) + v(j)⟩ ->
     # ⟨u, v(i)⟩ + ⟨u, v(j)⟩` for `i ≠ j`. This is the only case that fires -- a
@@ -364,8 +439,8 @@ function simplify_ast(op::LinearProduct{D, W}) where {D, W}
     left = simplify_ast(op.left_op)
     right = simplify_ast(op.right_op)
 
-    _is_zero_op(left) && return _zero_of(op)
-    _is_zero_op(right) && return _zero_of(op)
+    left isa ZeroOperator && return _zero_of(op)
+    right isa ZeroOperator && return _zero_of(op)
 
     # As `BilinearProduct` above; only the test side can name a component here, since a
     # `LinearProduct`'s left side is always a source (`_is_source_only`).
@@ -446,9 +521,26 @@ end
 # keeps its own `simplify_ast` above, which simplifies its operand first.
 const _LinearWrapper = Union{_StencilNode, RegionRestriction}
 
-# Whether `op` names more than one component on either side.
-@inline _mixes(op) = _trial_component_class(op) isa _MixedComponents ||
-                     _test_component_class(op) isa _MixedComponents
+# Whether `op` names more than one component on either side. Only a sum can, so an operand
+# whose type holds none (`_may_hold_sum`) answers `false` without compiling the class
+# queries over it (gpena/Bramble.jl#763).
+@inline _mixes(op) = _may_hold_sum(typeof(op)) &&
+                     (_trial_component_class(op) isa _MixedComponents ||
+                      _test_component_class(op) isa _MixedComponents)
+
+# Whether a node of type `T` may hold an `OperatorAdd`, read off the type alone and folded
+# at compile time; a field whose type is not concrete answers `true`.
+Base.@nospecializeinfer Base.@assume_effects :foldable function _may_hold_sum(
+        @nospecialize(T))
+    T isa DataType || return true
+    T <: OperatorAdd && return true
+    for i in 1:fieldcount(T)
+        F = fieldtype(T, i)
+        isconcretetype(F) || return true
+        F <: LazyOp && _may_hold_sum(F) && return true
+    end
+    return false
+end
 
 function simplify_ast(op::_LinearWrapper)
     _mixes(op.inner_op) || return op
