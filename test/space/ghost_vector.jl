@@ -395,8 +395,15 @@ end
         f1 = threaded_figures((9, 11))
         f2 = threaded_figures((30, 33))
         @test f1 == f2
-        @test f1.update <= f1.plain
-        @test f1.update_t <= (f1.groups + 1) * f1.plain
+        # Under CPU contention a pass can settle, for the rest of the process, into
+        # re-boxing its two band closures in every task: `nthreads × 2 × closure` bytes
+        # more, the same at every size. The update's closure is 80 bytes; the update at
+        # `t` has one of 64 per data group and a ghost pass of 128. At 4 threads, the
+        # ubuntu nightly measured update 2224 against plain 1584 (4 × 2 × 80); the same
+        # +640 hit plain `D₋ₓ!` locally under 8 spinners.
+        slack = 2 * Threads.nthreads()
+        @test f1.update <= f1.plain + slack * 80
+        @test f1.update_t <= (f1.groups + 1) * f1.plain + slack * (f1.groups * 64 + 128)
     end
 end
 
