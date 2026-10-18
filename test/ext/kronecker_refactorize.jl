@@ -32,10 +32,17 @@ symmetric_form(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
 advection_form(u, v) = innerₕ(u, v) + 0.1 * inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(D₋ₓ(u), v)
 
 # The refill's forms, each with a live `Ref` coefficient: symmetric; Schur; Schur with the
-# `Ref` on the mass term, so `c_m` changes; and a negative multiple of the axis-1 mass
-# (`-0.5 * innerₕ(D₋ᵧ(u), v)`), which the classification matches proportionally and
-# represents negated; and a `Ref` on the advection term, which the simplifier merges into
-# a side of the mass (`innerₕ(u + c * D₋ₓ(u), v)`) or of the axis-1 stiffness term.
+# `Ref` on the mass term, so `c_m` changes; a negative multiple of the axis-1 mass
+# (`-0.5 * innerₕ(D₋ᵧ(u), v)`); and a `Ref` on the advection term, which the simplifier
+# merges into a side of the mass (`innerₕ(u + c * D₋ₓ(u), v)`) or of the axis-1 stiffness
+# term. A literal scalar is a term's coefficient, so no factor is a multiple of a mass and
+# the classification matches exactly. The last two forms scale a side by a constant grid
+# function (`kron_const`), which `kronecker_operator` folds into the term's axis-1 factor:
+# the classification then matches that factor to the mass proportionally and represents it
+# negated (`-0.5`), also when the negated factor is the mass of an axis (the last form).
+# `kron_const` reads the space the loop under test is on, `KRON_REFILL_W`.
+const KRON_REFILL_W = Ref{Any}()
+kron_const(c) = Rₕ(KRON_REFILL_W[], x -> c)
 const KRON_REFILL_C = Ref(2.5)
 const KRON_REFILL_FORMS = (
     (u, v) -> innerₕ(u, v) + KRON_REFILL_C * inner₊(∇ₕ(u), ∇ₕ(v)),
@@ -46,7 +53,11 @@ const KRON_REFILL_FORMS = (
               KRON_REFILL_C * inner₊(∇ₕ(u), ∇ₕ(v)),
     (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) + KRON_REFILL_C * innerₕ(D₋ₓ(u), v),
     (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
-              KRON_REFILL_C * Bramble.inner₊ₓ(D₋ₓ(u), v))
+              KRON_REFILL_C * Bramble.inner₊ₓ(D₋ₓ(u), v),
+    (u, v) -> innerₕ(kron_const(-0.5) * Bramble.D₋ᵧ(u), v) + innerₕ(u, v) +
+              KRON_REFILL_C * inner₊(∇ₕ(u), ∇ₕ(v)),
+    (u, v) -> innerₕ(kron_const(-0.5) * u, v) + innerₕ(kron_const(2.0) * Bramble.D₋ᵧ(u), v) +
+              KRON_REFILL_C * inner₊(∇ₕ(u), ∇ₕ(v)))
 
 # The arrays `_fdm_decompose!` writes, so zeroing them first keeps a no-op from passing.
 outputs(f::KronExt._FDMFactorization) = (f.Q..., f.Λ)
@@ -127,6 +138,7 @@ end
             dir in (nothing, :boundary)
             KRON_REFILL_C[] = 2.5
             W = graded_space(T, n, p)
+            KRON_REFILL_W[] = W
             f = fdm_factorize(kronecker_operator(form(W, W, L)); dirichlet = dir)
             @test f isa (k == 1 ? KronExt._FDMFactorization : KronExt._SchurFactorization)
             x(d) = T.(range(0.0, 1.0; length = n[d]) .^ (1 + 0.4d))
@@ -148,15 +160,45 @@ end
     end
 
     # The recipe of each form: which terms differ on which axis, and how the masses matched.
+    # `on` lists the terms in the order the form is written (the simplifier no longer
+    # merges like terms or reorders a sum), so the advection term, written last in forms 2,
+    # 3, 5 and 6, comes after the stiffness term, and the `D₋ᵧ` term of form 4, written
+    # first, comes first. Its `-0.5` is a coefficient, not part of a factor, so the factors
+    # match the masses exactly and `proportional` is false: only forms 7 and 8 reach the
+    # proportional pass, through a grid-function coefficient folded into a factor.
     @testset "fdm_factorize!: recorded recipe" begin
         W = graded_space(Float64, (17, 13), Serial())
+        KRON_REFILL_W[] = W
         recipe(L) = fdm_factorize(kronecker_operator(form(W, W, L))).recipe
         r = map(recipe, KRON_REFILL_FORMS)
-        @test map(q -> q.on, r) == ([0, 1, 2], [0, 1, 1, 2], [0, 1, 1, 2], [2, 0, 1, 2],
-            [0, 1, 1, 2], [0, 1, 1, 2])
-        @test map(q -> q.proportional, r) == (false, false, false, true, false, false)
-        @test r[4].mass == (1, 2) && r[4].neg == (true, false)
-        @test all(q -> !any(q.neg), r[[1:3; 5:6]])
+        @test map(q -> q.on, r) == ([0, 1, 2], [0, 1, 2, 1], [0, 1, 2, 1], [2, 0, 1, 2],
+            [0, 1, 2, 1], [0, 1, 2, 1], [2, 0, 1, 2], [0, 2, 1, 2])
+        @test map(q -> q.proportional, r) == (false, false, false, false, false, false,
+            true, true)
+        @test map(q -> q.mass, r[7:8]) == ((1, 2), (1, 1))
+        @test map(q -> q.neg, r[7:8]) == ((true, false), (true, false))
+        @test all(q -> !any(q.neg), r[1:6])
+        @test all(q -> q.mass == (1, 1), r[[1:3; 5:6]]) && r[4].mass == (1, 2)
+    end
+
+    # A form recorded with a negated axis-1 mass (form 7) is refused a refill whose mass term
+    # has the opposite sign, before anything is written: `f` still solves as it did. The
+    # same form with the constant `-0.5` as `-2.5` refills, as only the sign is recorded.
+    @testset "fdm_factorize!: proportional mass sign" begin
+        W = graded_space(Float64, (17, 13), Serial())
+        KRON_REFILL_W[] = W
+        K(c) = kronecker_operator(form(W, W, (u, v) -> innerₕ(kron_const(c) * Bramble.D₋ᵧ(u), v) +
+                                                       innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))
+        f = fdm_factorize(K(-0.5))
+        @test f.recipe.proportional && f.recipe.neg == (true, false)
+        F = rhs(W, Float64, nothing)
+        x = fdm_solve!(similar(F), f, F)
+        @test_throws ArgumentError fdm_factorize!(f, K(0.5))
+        @test_throws "fdm_factorize! cannot refill this factorisation" fdm_factorize!(f, K(0.5))
+        @test_throws "mass" fdm_factorize!(f, K(0.5))
+        @test fdm_solve!(similar(F), f, F) == x
+        @test fdm_factorize!(f, K(-2.5)) === f
+        @test fdm_solve!(similar(F), f, F) == fdm_solve!(similar(F), fdm_factorize(K(-2.5)), F)
     end
 
     # A stale operator is refused as `fdm_solve(K, F)` refuses it, and an empty interior has
@@ -324,14 +366,18 @@ end
     # would fail.
     @testset "fdm_factorize!(f, a): 0 B, bitwise" begin
         for T in (Float64, Float32), p in (Serial(), CpuPolyester()),
-            n in ((17, 13), (7, 6, 5)), L in KRON_REFILL_FORMS, dir in (nothing, :boundary)
+            n in ((17, 13), (7, 6, 5)), (k, L) in enumerate(KRON_REFILL_FORMS),
+            dir in (nothing, :boundary)
             KRON_REFILL_C[] = 2.5
             W = graded_space(T, n, p)
+            KRON_REFILL_W[] = W
             a = form(W, W, L)
             f = fdm_factorize(a; dirichlet = dir)
             KRON_REFILL_C[] = 0.7
             @test fdm_factorize!(f, a) === f
-            @test refill_bytes(f, a) == 0
+            # Projecting `a` again reads a grid-function coefficient (forms 7, 8), which
+            # allocates.
+            k <= 6 && @test refill_bytes(f, a) == 0
             F = rhs(W, T, dir)
             x = fdm_solve!(similar(F), f, F)
             g = fdm_factorize(a; dirichlet = dir)
