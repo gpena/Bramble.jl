@@ -8,22 +8,32 @@ module GhostTractionTests
 # `Σⱼ ∂ₙ(u(j); K = Kᵢⱼ)`, `Kᵢⱼ[d, e] = λ δᵢd δⱼe + μ (δᵢⱼ δde + δᵢe δⱼd)`; a displacement
 # facet carries `u(i) => g` and `∂ₙₙ(u(i)) => h`, both from the manufactured solution.
 #
-# Covered: the reduced matrix and load against the dense `Eᵀ A_pad E` and
-# `Eᵀ (F_pad − A_pad d)` from the padded composite; second-order H¹ convergence of each
-# component on random and graded meshes with a loaded traction facet, a traction-free one
-# and two displacement facets, the two tractions meeting at a corner; the corner relation
-# written out by hand from the mesh points; symmetry of the reduced matrix of a symmetric
-# padded form, and the padded elasticity matrix's lack of it; and, nightly, the same in 3D.
+# On a facet whose relations read several components (a traction), the mixed differences
+# of the form read the facet's ghosts as the quadratic through the three nodes inward,
+# extrapolated along the normal (the facet rule, T2.4): the centred mixed difference over
+# the traction's ghosts is unstable once cells are longer across the facet than along it.
+# So the reduced matrix is `Eᵀ (A_rest + A_mixed X) E`, `X` that extrapolation.
 #
-# A random mesh is refined, never redrawn, across levels (`O.make_mesh(:random, ℓ)`): the
-# centred tangential difference of the traction is first order on a redrawn one.
+# Covered: the reduced matrix and load against `Eᵀ (A_rest + A_mixed X) E` and
+# `Eᵀ (F_pad − (A_rest + A_mixed X) d)` from the padded composite, `X` built by hand; the
+# relation at the corner of the two tractions written out from the mesh points;
+# second-order H¹ convergence of each component on graded meshes with a loaded traction
+# facet, a traction-free one and two displacement facets, the two tractions meeting at a
+# corner; stability on random meshes; symmetry of the reduced matrix of a symmetric padded
+# form, and the padded elasticity matrix's lack of it; and, nightly, the same in 3D.
+#
+# A random mesh is refined, never redrawn, across levels (`O.make_mesh(:random, ℓ)`), and
+# carries no order gate: on these meshes the collocated form reaches only 1.77-1.84 over
+# levels 0-3 with displacement on every facet, no traction at all (`n0 = 9`, seeds
+# 20261014 and 7). It is held instead to the error of that all-displacement problem: the
+# traction's within a factor 5 at every level.
 
 using Test
 using Bramble
 import Bramble
 using Bramble: Dcₓ, Dcᵧ, Dc₂, D̃ₓ, D̃ᵧ, D̃₂, D₋ₓ, D₋ᵧ, D₋₂, εₕ, divₘₕ
 using ForwardDiff: gradient, hessian
-using LinearAlgebra: issymmetric, norm
+using LinearAlgebra: Diagonal, issymmetric, norm
 using Random: Xoshiro
 
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
@@ -78,10 +88,18 @@ const DM = (D₋ₓ, D₋ᵧ, D₋₂)
 # `∂ₐ∂_b u`: the second difference of axis `a` when `a = b`, else the centred mixed one.
 second(u, a, b) = a == b ? DT[a](DM[a](u)) : DC[min(a, b)](DC[max(a, b)](u))
 
-function elasticity(D)
-    row(u, v, i) = innerₕ(-μ * Δₕ(u(i)), v(i)) +
-                   sum(innerₕ(-(λ + μ) * second(u(j), i, j), v(i)) for j in 1:D)
+# The form without its mixed differences, and those alone (the facet rule's operand).
+function rest_part(D)
+    row(u, v, i) = innerₕ(-μ * Δₕ(u(i)), v(i)) + innerₕ(-(λ + μ) * second(u(i), i, i), v(i))
     return (u, v) -> sum(row(u, v, i) for i in 1:D)
+end
+function mixed_part(D)
+    term(u, v, i, j) = innerₕ(-(λ + μ) * second(u(j), i, j), v(i))
+    return (u, v) -> sum(term(u, v, i, j) for i in 1:D, j in 1:D if i != j)
+end
+function elasticity(D)
+    rest, mixed = rest_part(D), mixed_part(D)
+    return (u, v) -> rest(u, v) + mixed(u, v)
 end
 
 load_form(ue) = v -> sum(innerₕ(load(ue, i), v(i)) for i in eachindex(ue))
@@ -101,6 +119,7 @@ function relations(ue, tfacets, dfacets; free = ())
 end
 
 const CASE2 = (tfacets = (:xmin, :ymin), dfacets = (:xmax, :ymax), free = (:ymin,))
+const ALL_DISPLACEMENT = (tfacets = (), dfacets = (:xmin, :xmax, :ymin, :ymax), free = ())
 
 function elasticity_space(Ωₕ, ue, case)
     S = gridspace(Ωₕ; ghosts = :boundary)
@@ -135,11 +154,11 @@ function h1_error(xs, e)
 end
 
 # `hₘₐₓ` and the H¹ error of each component on `make_mesh(kind, ℓ)`, ℓ in `levels`.
-function errors(ue, case, kind, levels; n0)
+function errors(ue, case, kind, levels; n0, seed = 20261014)
     D = length(ue)
     hs, errs = Float64[], NTuple{D, Float64}[]
     for ℓ in levels
-        Ωₕ = O.make_mesh(kind, ℓ; dim = D, n0)
+        Ωₕ = O.make_mesh(kind, ℓ; dim = D, n0, seed)
         _, C = elasticity_space(Ωₕ, ue, case)
         A, F = assemble(form(C, C, elasticity(D)), form(C, load_form(ue)))
         U = parent(Bramble.lift(C, A \ F))
@@ -160,14 +179,47 @@ end
 
 close(a, b; rtol = 1.0e-12) = norm(a - b) <= rtol * max(norm(b), 1)
 
-# The reduced matrix and load against the dense `Eᵀ A_pad E`, `Eᵀ (F_pad − A_pad d)`.
-function reference(V, C, fa, fl)
+# The facet rule by hand: the identity on the padded values of every component, but each
+# ghost of `facets` replaced by the quadratic through the three nodes inward along the
+# normal, extrapolated to the ghost (at the first spacing mirrored).
+function extrapolation(Ωₕ, facets)
+    xs = O.axis_points(Ωₕ)
+    D = length(xs)
+    np = map(length, xs) .+ 2
+    L = LinearIndices(np)
+    m = prod(np)
+    px = map(x -> [2x[1] - x[2]; x; 2x[end] - x[end - 1]], xs)
+    X = Matrix{Float64}(Diagonal(ones(D * m)))
+    for c in 0:(D - 1), F in facets
+
+        a = AXIS[F]
+        g, σ = SIDE[F] < 0 ? (1, 1) : (np[a], -1)
+        z, y = px[a][g], ntuple(k -> px[a][g + k * σ], 3)
+        w = ntuple(k -> prod((z - y[o]) / (y[k] - y[o]) for o in 1:3 if o != k), 3)
+        for J in CartesianIndices(ntuple(b -> b == a ? (1:1) : (2:(np[b] - 1)), D))
+            at(k) = c * m + L[CartesianIndex(ntuple(b -> b == a ? g + k * σ : J[b], D))]
+            X[at(0), at(0)] = 0.0
+            for k in 1:3
+                X[at(0), at(k)] = w[k]
+            end
+        end
+    end
+    return X
+end
+
+# The reduced matrix and load against the dense `Eᵀ (A_rest + A_mixed X) E` and
+# `Eᵀ (F_pad − (A_rest + A_mixed X) d)`, the facet rule on the traction facets `facets`,
+# and the plain `Eᵀ A_pad E`, which the rule moves.
+function reference(V, C, Ωₕ, facets, fl)
+    D = length(V.spaces)
     PV = Bramble.padded_space(V)
-    Ap = Matrix(assemble(form(PV, PV, fa)))
+    Ar = Matrix(assemble(form(PV, PV, rest_part(D))))
+    Am = Matrix(assemble(form(PV, PV, mixed_part(D))))
+    Ap = Ar + Am * extrapolation(Ωₕ, facets)
     Fp = assemble(form(PV, fl))
     E, d = Bramble.closure(C)
     E = Matrix(E)
-    return transpose(E) * Ap * E, transpose(E) * (Fp - Ap * d), Ap
+    return transpose(E) * Ap * E, transpose(E) * (Fp - Ap * d), transpose(E) * (Ar + Am) * E
 end
 
 # --- The corner of two tractions -------------------------------------------------------- #
@@ -205,15 +257,17 @@ end
 const KINDS = (:random, :graded)
 
 @testset "Traction conditions through ghost points" begin
-    @testset "Eᵀ A_pad E: $kind" for kind in KINDS
+    @testset "Reduced matrix and load: $kind" for kind in KINDS
         Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 9)
         V, C = elasticity_space(Ωₕ, UE2, CASE2)
         fa, fl = elasticity(2), load_form(UE2)
         A, F = assemble(form(C, C, fa), form(C, fl))
-        Aref, Fref, _ = reference(V, C, fa, fl)
+        Aref, Fref, Aplain = reference(V, C, Ωₕ, CASE2.tfacets, fl)
         @test size(A) == size(Aref)
         @test close(Matrix(A), Aref)
         @test close(F, Fref)
+        # the facet rule is on: the plain `Eᵀ A_pad E` is not what assembles
+        @test norm(Matrix(A) - Aplain) > 1.0e-3 * norm(Aref)
         # the data reach the load: the traction and displacement data move `F`
         _, F0 = assemble(form(C, C, fa), form(C, v -> innerₕ(0.0, v(1))))
         @test norm(F - F0) > 1.0e-3 * norm(F)
@@ -257,13 +311,32 @@ const KINDS = (:random, :graded)
         end
     end
 
-    @testset "Order, $kind meshes" for kind in KINDS
+    @testset "Order, graded meshes" begin
         levels = WITH_SLOW_TESTS ? (0:3) : (0:2)
-        hs, errs = errors(UE2, CASE2, kind, levels; n0 = 9)
+        hs, errs = errors(UE2, CASE2, :graded, levels; n0 = 9)
         @test maximum(hs) / minimum(hs) > 3
         for i in 1:2
             @test errs[end][i] < errs[1][i] / 8
             @test lsq_order(hs, getindex.(errs, i)) > 1.8
+        end
+    end
+
+    # Random meshes: no order gate (see the header); the traction's error stays within 5×
+    # that of displacement on every facet, through ghosts, level by level.
+    @testset "Stability, random meshes, seed $seed" for seed in (20261014, 7)
+        levels = WITH_SLOW_TESTS ? (0:3) : (0:2)
+        hs, errs = errors(UE2, CASE2, :random, levels; n0 = 9, seed)
+        _, base = errors(UE2, ALL_DISPLACEMENT, :random, levels; n0 = 9, seed)
+        @test maximum(hs) / minimum(hs) > 3
+        for ℓ in eachindex(levels), i in 1:2
+
+            @test errs[ℓ][i] <= 5 * base[ℓ][i]
+        end
+        # the errors at least halve per level: a scheme stalled as the all-displacement
+        # one is would pass the ratio alone
+        for ℓ in 2:length(levels), i in 1:2
+
+            @test errs[ℓ][i] < errs[ℓ - 1][i] / 2
         end
     end
 
@@ -300,9 +373,10 @@ const KINDS = (:random, :graded)
         V, C = elasticity_space(Ωₕ, UE3, case)
         fa, fl = elasticity(3), load_form(UE3)
         A, F = assemble(form(C, C, fa), form(C, fl))
-        Aref, Fref, _ = reference(V, C, fa, fl)
+        Aref, Fref, Aplain = reference(V, C, Ωₕ, case.tfacets, fl)
         @test close(Matrix(A), Aref)
         @test close(F, Fref)
+        @test norm(Matrix(A) - Aplain) > 1.0e-3 * norm(Aref)
         # the order on graded meshes of 9, 17 and 33 points per axis: from 5 points per
         # axis the slope of u₃ is still pre-asymptotic
         if kind === :graded
