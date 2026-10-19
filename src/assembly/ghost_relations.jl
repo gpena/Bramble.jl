@@ -19,11 +19,12 @@
 # On a composite of ghost spaces, `constrained(C₁ × C₂, relations)` (ghost_composite.jl),
 # a relation may read several components, as a traction `Σⱼ ∂ₙ(u(j); K = Kᵢⱼ)` does. One
 # `inner_Γ` holds one trial component, so its rows are the sum of one form per component it
-# reads (`_relation_pieces`). A facet's ghost relations are not keyed by component: a facet
-# with any has one per component, each attached to one component's ghosts, and the rows of
-# a node are solved together in its block, which must be nonsingular as a whole. At a corner
-# of two tractions the two shear relations are one equation, so that block is singular and
-# refused (`_throw_traction_corner`).
+# reads (`_relation_pieces`). A facet's ghost relations are not keyed by component: each
+# is attached to one component's ghosts (a facet with a relation reading several has one
+# per component), and the rows of a node are solved together in its block, which must be
+# nonsingular as a whole. At a corner of two isotropic tractions the two shear relations
+# are one equation, so that block is singular and refused (`_throw_traction_corner`); a
+# corner of tractions whose block is nonsingular is solved.
 #
 # See also: `GhostGridSpace`, `FacetOperator`, `GhostBilinearForm`
 
@@ -253,10 +254,11 @@ end
 
 # The relations of `constrained(C₁ × C₂, relations)`, `Gs` the components' ghost meshes. A
 # Dirichlet relation `u(i) => g` names its component, which has at most one per facet. The
-# ghost relations of a facet are not keyed by component: a facet that has any has one per
-# component, and each is attached to the ghosts of one component at every node of the
-# facet, the one it reads alone if it reads one (`∂ₙ(u(2))` to component 2's), the others
-# in order (a traction reads all of them). The rows of a node, or of a corner, are solved
+# ghost relations of a facet are not keyed by component. A relation reading one component
+# alone (`∂ₙ(u(2))`) is attached to that component's ghosts, at most one per component, and
+# a component without one keeps its ghosts there as unknowns. A facet with a relation
+# reading several components (a traction) has one ghost relation per component, the others
+# attached in order to the components left. The rows of a node, or of a corner, are solved
 # together, so which ghost a row is attached to changes no value. Data depending on time
 # are refused (they would need a `d(t)` of the whole).
 function _composite_relations(Gs::Tuple, out)
@@ -273,9 +275,11 @@ function _composite_relations(Gs::Tuple, out)
     return _attach_relations(rels, length(Gs))
 end
 
-# Each facet's ghost relations, one per component, attached to distinct components: first
-# each that reads one component alone to that one, then the rest to the components left,
-# in order. `r.c` of a ghost relation is the component it reads alone, `0` for several.
+# Each facet's ghost relations attached to distinct components: first each that reads one
+# component alone to that one, then the rest to the components left, in order. `r.c` of a
+# ghost relation is the component it reads alone, `0` for several. A facet of one-component
+# relations takes at most one per component; one with a relation reading several takes one
+# per component.
 function _attach_relations(rels::Vector{Any}, N::Int)
     out = copy(rels)
     for (i, r) in enumerate(rels)
@@ -283,7 +287,16 @@ function _attach_relations(rels::Vector{Any}, N::Int)
         any(q -> !_is_dirichlet(q) && q.d == r.d && q.s == r.s, view(rels, 1:(i - 1))) &&
             continue
         idx = findall(q -> !_is_dirichlet(q) && q.d == r.d && q.s == r.s, rels)
-        length(idx) == N || _throw_facet_relation_count(r.name, length(idx), N)
+        if any(k -> rels[k].c == 0, idx)
+            length(idx) == N || _throw_facet_relation_count(r.name, length(idx), N)
+        else
+            for (a, k) in enumerate(idx)
+                c = rels[k].c
+                any(j -> rels[j].c == c, view(idx, 1:(a - 1))) &&
+                    _throw_facet_twice(r.name, false, c)
+            end
+            continue                        # each already attached to its own component
+        end
         taken = falses(N)
         attached = zeros(Int, N)
         for (a, k) in enumerate(idx)
@@ -350,9 +363,10 @@ end
         ArgumentError(
         "the facet :$name has $n relation$(n == 1 ? "" : "s") reading its ghosts, and " *
         "each of its nodes has a ghost in each of the $N components. Give :$name one " *
-        "ghost relation per component, solved together at each node (a traction gives " *
-        "one per component, `:$name => ∂ₙ(u(1); K = K₁₁) + ∂ₙ(u(2); K = K₁₂) => g₁`, " *
-        "…), or none, to keep its ghosts as unknowns.",
+        "ghost relation per component, solved together at each node, as a relation " *
+        "there reads several components (a traction gives one per component, " *
+        "`:$name => ∂ₙ(u(1); K = K₁₁) + ∂ₙ(u(2); K = K₁₂) => g₁`, …); or relations of " *
+        "one component each, at most one per component.",
     ),
     )
 end
@@ -921,8 +935,9 @@ end
         "the relations on :$a and :$b each read several components (a traction) and " *
         "meet at a corner, where they cannot be solved for the ghosts of " *
         "$(_component_list(cs)): the two shear relations are one equation there (the " *
-        "stress is symmetric), so the corner block is singular. Two such facets may not " *
-        "share a corner yet. Make one of them a displacement facet whose ghosts close by " *
+        "stress is symmetric), so the corner block is singular. Two such facets may share " *
+        "a corner only where their joint block is nonsingular, which isotropic tractions " *
+        "never give. Make one of them a displacement facet whose ghosts close by " *
         "`∂ₙₙ(u(i)) => 0`: `:$b => u(1) => g₁, :$b => u(2) => g₂, " *
         ":$b => ∂ₙₙ(u(1)) => 0.0, :$b => ∂ₙₙ(u(2)) => 0.0`.",
     ),

@@ -11,15 +11,15 @@
 # `constrained(C₁ × C₂, u -> (:xmin => t₁ => g₁, :xmin => t₂ => g₂, :ymin => u(2) => h, …))`
 # constrains the composite as a whole, and a relation may read several components, as the
 # traction `tᵢ = Σⱼ ∂ₙ(u(j); K = Kᵢⱼ)` does (gpena/Bramble.jl#793). A Dirichlet relation
-# `u(i) => g` names its component; a facet's ghost relations are not keyed, one per
-# component, and the rows of all of them are solved once on the padded composite
-# (ghost_relations.jl), each node's together. The `ConstrainedCompositeSpace` it returns
-# stores a closure `(E, d)` of its own, which couples the components wherever a relation
-# does and which its forms, `closure` and `lift` read. With relations of one component each
+# `u(i) => g` names its component; a facet's ghost relations are not keyed (one per
+# component where one reads several), and the rows of all of them are solved once on the
+# padded composite (ghost_relations.jl), each node's together. The
+# `ConstrainedCompositeSpace` it returns stores a closure `(E, d)` of its own, which couples
+# the components wherever a relation does and which its forms, `closure` and `lift` read. With relations of one component each
 # it equals `constrained(C₁, r₁) × constrained(C₂, r₂)`. Beyond the refusals below, it
-# refuses data depending on time, the `dirichlet` rows, `GhostVector`, and two facets
-# with relations reading several components that meet at a corner (their shear relations
-# are one equation there).
+# refuses data depending on time, the `dirichlet` rows, `GhostVector`, and a corner of two
+# facets with relations reading several components whose joint block is singular, as it
+# is for isotropic tractions (their shear relations are one equation there).
 #
 # The components of a form's spaces must ghost the same facets of meshes of one size: a term
 # coupling `u(1)` and `v(2)` reads both at one padded index, which names different points on
@@ -774,10 +774,12 @@ components `u(i)`. A Dirichlet relation names its component: `:ymin => u(2) => 0
 the nodes of `:ymin` in component 2, at most one per component and facet. A ghost relation
 may read one component, `:xmin => ∂ₙ(u(1)) => g`, or several, as the traction of
 component `i`, `Σⱼ ∂ₙ(u(j); K = Kᵢⱼ)`, does; its tangential terms are the conormal's.
-A facet's ghost relations are not keyed by component: a ghosted facet has one per
-component, or none to keep its ghosts as unknowns. Each is attached to the ghosts of one
-component (the one it reads alone, if any), and the relations of a node, or of a corner,
-are solved together, so a traction closes jointly with its partner.
+A facet's ghost relations are not keyed by component. Relations of one component each
+take at most one per component, and a component without one keeps its ghosts on that
+facet as unknowns, as on the product; a facet with a relation reading several components
+has one ghost relation per component. Each is attached to the ghosts of one component
+(the one it reads alone, if any), and the relations of a node, or of a corner, are solved
+together, so a traction closes jointly with its partner.
 
 The relations of all the components are solved together on the padded composite, and the
 result stores the closure `(E, d)` they give (`Bramble.closure`), whose `E` couples the
@@ -788,14 +790,16 @@ Forms on it, `assemble(a, l)` and [`lift`](@ref) work as on that product.
 
 A displacement facet beside a traction facet carries ghosts, which the traction's
 tangential difference reads at their corner: close them by `∂ₙₙ(u(i)) => 0` besides
-`u(i) => g`. Two facets whose relations each read several components may not meet at a
-corner yet: there their shear relations are one equation (the stress is symmetric), and
-the corner is refused; make one of them a displacement facet.
+`u(i) => g`. A corner of two facets whose relations each read several components is
+refused when their joint block there is singular, as it is for isotropic tractions,
+whose shear relations are one equation at the corner (the stress is symmetric): make one
+of them a displacement facet. Where the block is nonsingular the corner is solved.
 
 Refused with an `ArgumentError`, besides what `constrained` and the product refuse: a
-relation naming no component, a ghosted facet with some ghost relations but not one per
-component, relations whose block at a node is singular, two tractions meeting at a
-corner, data depending on time (constrain the components apart and take the product), the
+relation naming no component, two ghost relations of one component on a facet, a facet
+with a relation reading several components but not one ghost relation per component,
+relations whose block at a node is singular (two isotropic tractions meeting at a corner
+among them), data depending on time (constrain the components apart and take the product), the
 `dirichlet` keyword of `assemble`, `dirichlet_bc!` and `symmetrize!` (give `u(i) => g`
 instead), and `GhostVector` and `update_ghosts!`.
 

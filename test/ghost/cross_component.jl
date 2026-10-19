@@ -138,13 +138,13 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         @test refuses(() -> constrained(V, u -> (:xmin => ∂ₙ(u) => 0.0,)),
             "names no component")
         @test refuses(() -> constrained(V, u -> (:ymin => u => 0.0,)), "names no component")
-        # a ghosted facet takes one ghost relation per component, of any components
+        # a facet with a relation reading several components takes one per component
         @test refuses(() -> constrained(V, u -> (:xmin => ∂ₙ(u(1)) + ∂ₙ(u(2)) => 0.0,)),
             "the facet :xmin has 1 relation reading its ghosts")
-        # two relations of one component leave the other's ghost unread: a singular block
+        # one ghost relation of each component per facet; both components may share one
         @test refuses(() -> constrained(V, u -> (:xmin => ∂ₙ(u(1)) => 0.0,
                 :xmin => ∂ₙₙ(u(1)) => 0.0)),
-            "cannot be solved for the ghosts of components 1 and 2")
+            ":xmin of component 1 has two relations")
         @test refuses(
             () -> constrained(V, u -> (:ymin => u(2) => 0.0,
                 :ymin => u(2) => 1.0)), ":ymin of component 2 has two Dirichlet")
@@ -235,10 +235,10 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
 
     # The relation of component `i` on `F`: its rows by one `inner_Γ` per component, against
     # the facet weights times the data at the padded points.
-    function traction_residual(PV, PS, U, i, F, g)
+    function traction_residual(PV, PS, U, i, F, g; K = Kt)
         R = assemble(form(PV, PV,
-            (w, v) -> inner_Γ(∂ₙ(w(1); K = Kt(i, 1)), v(i); markers = (F,)) +
-                      inner_Γ(∂ₙ(w(2); K = Kt(i, 2)), v(i); markers = (F,))))
+            (w, v) -> inner_Γ(∂ₙ(w(1); K = K(i, 1)), v(i); markers = (F,)) +
+                      inner_Γ(∂ₙ(w(2); K = K(i, 2)), v(i); markers = (F,))))
         W = assemble(form(PV, PV, (w, v) -> inner_Γ(w(i), v(i); markers = (F,))))
         m = Bramble.ndofs(PS)
         G = zeros(length(U))
@@ -307,12 +307,17 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
             () -> constrained(V, u -> (:xmin => t(u, 1) => 0.0, :xmin => t(u, 2) => 0.0,
                 :xmin => ∂ₙ(u(1)) => 0.0, rest(u)...)),
             "the facet :xmin has 3 relations reading its ghosts")
-        # two relations of component 1 and none reading component 2's ghost
+        # two relations of component 1 alone on one facet
         @test refuses(
             () -> constrained(V, u -> (:xmin => ∂ₙ(u(1)) => 0.0,
                 :xmin => 2.0 * ∂ₙ(u(1)) => 0.0, rest(u)...)),
+            ":xmin of component 1 has two relations")
+        # two relations reading both components that agree: a singular block at each node
+        @test refuses(
+            () -> constrained(V, u -> (:xmin => ∂ₙ(u(1)) + ∂ₙ(u(2)) => 0.0,
+                :xmin => 2.0 * (∂ₙ(u(1)) + ∂ₙ(u(2))) => 0.0, rest(u)...)),
             "cannot be solved for the ghosts of components 1 and 2")
-        # two traction facets meeting at a corner: their shear relations coincide there
+        # two isotropic traction facets meeting at a corner: their shear relations coincide
         corner = u -> (:xmin => t(u, 1) => 0.0, :xmin => t(u, 2) => 0.0,
             :ymin => t(u, 1) => 0.0, :ymin => t(u, 2) => 0.0, disp(:xmax)(u)...,
             disp(:ymax)(u)...)
@@ -323,6 +328,51 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
             () -> constrained(V, u -> (:xmin => t(u, 1) => 0.0, :xmin => t(u, 2) => 0.0,
                 :ymin => u(1) => 0.0, :ymin => u(1) => 1.0, rest(u)...)),
             ":ymin of component 1 has two Dirichlet")
+    end
+
+    # A nonsingular corner block of two tractions (a K without the stress's symmetry) is
+    # solved, and every relation holds on the lifted values, the corner nodes included.
+    @testset "Anisotropic traction corner: $kind" for kind in KINDS
+        Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
+        S = gridspace(Ωₕ; ghosts = :boundary)
+        V = S × S
+        PV, PS = Bramble.padded_space(V), Bramble.padded_space(S)
+        rng = Xoshiro(3)
+        Ka = Dict((i, j) => randn(rng, 2, 2) .+ (i == j ? 4.0 : 0.0) .* [1 0; 0 1]
+        for i in 1:2, j in 1:2)
+        Kf(i, j) = Ka[(i, j)]
+        ta(u, i) = ∂ₙ(u(1); K = Kf(i, 1)) + ∂ₙ(u(2); K = Kf(i, 2))
+        g = (xmin = (1.0, 0.0), ymin = (0.0, x -> x[1]))
+        C = constrained(V, u -> (:xmin => ta(u, 1) => g.xmin[1],
+            :xmin => ta(u, 2) => g.xmin[2], :ymin => ta(u, 1) => g.ymin[1],
+            :ymin => ta(u, 2) => g.ymin[2], disp(:xmax)(u)..., disp(:ymax)(u)...))
+        E, d = Bramble.closure(C)
+        U = E * rand(Xoshiro(20261019), Bramble.ndofs(C)) + d
+        for F in (:xmin, :ymin), i in 1:2
+            res, _ = traction_residual(PV, PS, U, i, F, g[F][i]; K = Kf)
+            @test res <= 1.0e-10
+        end
+    end
+
+    # Relations of one component each, component 2 leaving the ghosts of :ymin and :ymax as
+    # unknowns: the whole equals the product, as without any relation reading several.
+    @testset "Ghosts of one component kept: $kind" for kind in KINDS
+        Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
+        S = gridspace(Ωₕ; ghosts = :boundary)
+        r1 = u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => ∂ₙ(u) => 0.0, :ymin => ∂ₙ(u) => 0.0,
+            :ymax => ∂ₙ(u) => x -> x[1])
+        r2 = u -> (:xmin => ∂ₙ(u) => 2.0, :xmax => ∂ₙ(u) => x -> 100.0 * x[2])
+        X = constrained(S, r1) × constrained(S, r2)
+        C = constrained(S × S, whole(r1, r2))
+        @test Bramble.ndofs(C) == Bramble.ndofs(X)
+        E, d = Bramble.closure(C)
+        Ex, dx = Bramble.closure(X)
+        @test size(E) == size(Ex)
+        @test close(Matrix(E), Matrix(Ex); rtol = 1.0e-13)
+        @test close(d, dx; rtol = 1.0e-13)
+        # component 2 keeps the ghosts of :ymin and :ymax, component 1 none
+        np = npoints(Ωₕ, Tuple)
+        @test Bramble.ndofs(C) == 2 * prod(np) + 2 * np[1]
     end
 
     @testset "Arithmetic on a whole element" begin
