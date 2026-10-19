@@ -75,14 +75,16 @@ normal(F) = ntuple(d -> d == AXIS[F] ? OUTWARD[F] : 0.0, 2)
 tractiondata(F, i) = x -> sum(normal(F)[d] * K(i, j)[d, e] * ∇(uᵉ[j], x)[e]
 for j in 1:2, d in 1:2, e in 1:2)
 
-relations(u) = (
-    :xmin => traction(u, 1) => tractiondata(:xmin, 1),
-    :xmin => traction(u, 2) => tractiondata(:xmin, 2),
-    :ymin => traction(u, 1) => x -> 0.0,
-    :ymin => traction(u, 2) => x -> 0.0,
-    (F => u(i) => uᵉ[i] for F in (:xmax, :ymax) for i in 1:2)...,
-    (F => ∂ₙₙ(u(i)) => (x -> hess(uᵉ[i], x)[AXIS[F], AXIS[F]])
-    for F in (:xmax, :ymax) for i in 1:2)...)
+function relations(u)
+    (
+        :xmin => traction(u, 1) => tractiondata(:xmin, 1),
+        :xmin => traction(u, 2) => tractiondata(:xmin, 2),
+        :ymin => traction(u, 1) => x -> 0.0,
+        :ymin => traction(u, 2) => x -> 0.0,
+        (F => u(i) => uᵉ[i] for F in (:xmax, :ymax) for i in 1:2)...,
+        (F => ∂ₙₙ(u(i)) => (x -> hess(uᵉ[i], x)[AXIS[F], AXIS[F]])
+        for F in (:xmax, :ymax) for i in 1:2)...)
+end
 
 # The traction-free side carries zero data, and the manufactured one does too, to rounding:
 
