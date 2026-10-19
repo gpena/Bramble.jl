@@ -367,8 +367,8 @@ end
 # about 1.5 times the spacing along it, the reduced matrix has eigenvalues of negative real
 # part (traction on one facet, uniform cells; #793).
 #
-# There `form` (ghost_composite.jl) marks the trial function of every mixed difference the
-# corner rule takes (`_FacetExtrapolated`, `_mark_mixed`): read at a ghost beyond a node of
+# There `form` (ghost_composite.jl) marks the trial functions of every mixed difference
+# (`_FacetExtrapolated`, `_mark_mixed`): read at a ghost beyond a node of
 # a marked facet, it is the quadratic through its values at the three nodes inward along
 # the normal, evaluated at the ghost (`_one_sided_weights`, ghost_relations.jl), and
 # elsewhere its own value. The centred difference across the facet then reads the
@@ -469,13 +469,13 @@ end
 _stencil_margin(op::_FacetExtrapolated) = _stencil_margin(op.inner_op) + 3
 expression(op::_FacetExtrapolated) = expression(op.inner_op)
 
-# `op` with the trial function of every mixed difference marked for the facet rule on
-# `facets`: the trial side of each product, through sums and wrappers. The mixed differences
-# are those the corner rule takes (`_rule_applies`); with no facet marked, `op`.
-function _mark_mixed(op, facets::NTuple{D, NTuple{2, Bool}}) where {D}
-    any(any, facets) || return op
-    return _mark(op, facets)
-end
+# `op` with the trial functions of every mixed difference marked for the facet rule on
+# `facets`, on the trial side of each product, through sums and wrappers. A mixed
+# difference is a first difference along one axis of a first difference along another,
+# under any sums and scales between them, and the functions of the inner one are marked
+# through its own sums and scales (`Dcₓ(Dcᵧ(u(1) + 2.0 * u(2)))` as
+# `Dcₓ(Dcᵧ(u(1))) + 2.0 * Dcₓ(Dcᵧ(u(2)))`).
+_mark_mixed(op, facets::NTuple{D, NTuple{2, Bool}}) where {D} = _mark(op, facets)
 _mark(op, facets) = op
 function _mark(op::OperatorAdd{D}, facets) where {D}
     left, right = _mark(op.left_op, facets), _mark(op.right_op, facets)
@@ -487,25 +487,32 @@ function _mark(op::BilinearProduct{D, W}, facets) where {D, W}
 end
 _mark(op::UnaryWrapper, facets) = _rewrap_inner(op, _mark(op.inner_op, facets))
 function _mark(op::_FirstDifference{D, Dim}, facets) where {D, Dim}
-    _rule_applies(op) || return _rewrap_inner(op, _mark(op.inner_op, facets))
     return _rewrap_inner(op, _mark_operand(op.inner_op, Val(Dim), facets))
 end
 
-# The functions of the mixed terms of a difference along `Dim`'s operand, under their sums
-# and scales.
-function _mark_operand(op::OperatorAdd{D}, vdim, facets) where {D}
+# The operand of a first difference along `Dim`: through its sums and scales, a first
+# difference along another axis has its functions marked; any other term is walked on.
+function _mark_operand(op::OperatorAdd{D}, vdim::Val, facets) where {D}
     left = _mark_operand(op.left_op, vdim, facets)
     right = _mark_operand(op.right_op, vdim, facets)
     return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
 end
-_mark_operand(op::_Scale, vdim, facets) = _rewrap_inner(
+_mark_operand(op::_Scale, vdim::Val, facets) = _rewrap_inner(
     op, _mark_operand(op.inner_op, vdim, facets))
-function _mark_operand(op, ::Val{Dim}, facets) where {Dim}
-    op isa _FirstDifference && _cross_axis(op) ∉ (0, Dim) || return op
-    return _rewrap_inner(op, _mark_leaf(op.inner_op, facets))
+function _mark_operand(op::_FirstDifference{D, E}, ::Val{Dim}, facets) where {D, E, Dim}
+    E == Dim && return _mark(op, facets)
+    return _rewrap_inner(op, _mark_leaves(op.inner_op, facets))
 end
-_mark_leaf(op::_Scale, facets) = _rewrap_inner(op, _mark_leaf(op.inner_op, facets))
-_mark_leaf(op::_AnyLeaf, facets) = _FacetExtrapolated(op, facets)
+_mark_operand(op, ::Val, facets) = _mark(op, facets)
+
+# The trial functions of `op` marked through its sums and scales; anything else as it is.
+function _mark_leaves(op::OperatorAdd{D}, facets) where {D}
+    left, right = _mark_leaves(op.left_op, facets), _mark_leaves(op.right_op, facets)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+_mark_leaves(op::_Scale, facets) = _rewrap_inner(op, _mark_leaves(op.inner_op, facets))
+_mark_leaves(op::_AnyLeaf, facets) = _FacetExtrapolated(op, facets)
+_mark_leaves(op, facets) = op
 
 # --- The refusal: any other read of a point the padded grid lacks -------------------- #
 #

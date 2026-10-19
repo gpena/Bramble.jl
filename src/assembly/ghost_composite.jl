@@ -20,7 +20,7 @@
 # r₂)`. At a corner of two facets with relations reading several components, each facet's
 # relations read the other's ghosts through a one-sided difference along the facet, so the
 # corner closes facet by facet (a joint block is singular for isotropic tractions). A form
-# on it reads the ghosts of a facet whose closure ties components together through its
+# on it reads the ghosts of a facet with a relation reading several components through its
 # mixed differences by extrapolation from the nodes inward (the facet rule of
 # stencil_eval.jl, `_with_facet_rule` below): through the relation's tangential difference,
 # they gave eigenvalues of negative real part on cells stretched across the facet. Beyond
@@ -227,50 +227,21 @@ function form(Vₕ::_GhostCompositeSide, f)
 end
 
 # The form's function with the facet rule of stencil_eval.jl on the trial side: on a
-# composite constrained as a whole, a mixed difference reads the ghosts of a facet whose
-# closure couples components by extrapolation from the nodes inward (`_mark_mixed`).
+# composite constrained as a whole, a mixed difference reads the ghosts of a facet with a
+# relation reading several components by extrapolation from the nodes inward
+# (`_mark_mixed`). Decided by the space's type, which says whether there is such a facet.
+# Refused where such a facet has fewer than three nodes across it.
 _with_facet_rule(::_GhostCompositeSpace, f) = f
+_with_facet_rule(::ConstrainedCompositeSpace{<:Any, <:Any, <:Any, <:Any, <:Any, <:Any,
+        false}, f) = f
 function _with_facet_rule(Wₕ::ConstrainedCompositeSpace, f)
-    facets = _coupled_facets(Wₕ)
-    return (u, v) -> _mark_mixed(f(u, v), facets)
-end
-
-# The facets `(d, s)` of a composite constrained as a whole whose ghosts the closure ties
-# to another component's degrees of freedom (`facets[d][s]`, `s` 1 the minimum): those of a
-# relation reading several components. A degree of freedom belongs to the component whose
-# physical node is its unit row of `E`. Refused where such a facet has fewer than three
-# nodes across it, the facet rule's extrapolation.
-function _coupled_facets(Wₕ::ConstrainedCompositeSpace)
-    leaves = _padded_leaves(Wₕ.space)
-    n = npoints(physical_mesh(mesh(first(first(leaves)))), Tuple)
-    Et = Wₕ.Et
-    owner = zeros(Int, size(Et, 1))
-    for (c, (C, _, poffset)) in enumerate(leaves)
-        G = mesh(C)
-        plin = LinearIndices(npoints(G, Tuple))
-        for I in CartesianIndices(n)
-            q = nzrange(Et, poffset + plin[padded_index(G, I)])
-            length(q) == 1 && isone(nonzeros(Et)[only(q)]) || continue
-            owner[rowvals(Et)[only(q)]] = c
-        end
-    end
-    coupled = falses(length(n), 2)
-    for (c, (C, _, poffset)) in enumerate(leaves)
-        G = mesh(C)
-        plin = LinearIndices(npoints(G, Tuple))
-        for g in 1:nghosts(G)
-            I, d, side = boundary_node(G, g)
-            t = side === _GHOST_SIDES[1] ? 1 : 2
-            coupled[d, t] && continue
-            r = poffset + plin[_step(padded_index(G, I), d, t == 1 ? -1 : 1)]
-            any(q -> owner[rowvals(Et)[q]] != c, nzrange(Et, r)) && (coupled[d, t] = true)
-        end
-    end
+    facets = Wₕ.facets
+    n = npoints(physical_mesh(mesh(first(Wₕ.space.spaces))), Tuple)
     for d in eachindex(n), t in 1:2
 
-        coupled[d, t] && n[d] < 3 && _throw_facet_axis_too_short(_facet_name(d, t), d, n[d])
+        facets[d][t] && n[d] < 3 && _throw_facet_axis_too_short(_facet_name(d, t), d, n[d])
     end
-    return ntuple(d -> (coupled[d, 1], coupled[d, 2]), Val(length(n)))
+    return (u, v) -> _mark_mixed(f(u, v), facets)
 end
 
 @noinline function _throw_facet_axis_too_short(name::Symbol, d::Int, n::Int)
@@ -911,7 +882,16 @@ function constrained(Vₕ::_GhostCompositeSpace, relations)
     T, be = eltype(P), backend(P)
     Ec = _closure_matrix(be, T, E)
     return ConstrainedCompositeSpace(Vₕ, P, Ec, _closure_data(be, T, d),
-        _closure_transpose(Ec))
+        _closure_transpose(Ec), _multi_component_facets(rels, first(first(comps))))
+end
+
+# `facets[d][s]`: whether facet `(d, s)` has a ghost relation reading several components,
+# read off its operator (`_relation_component` is `0`), so `∂ₙ(u(1)) + 0.0 * u(2)` counts.
+function _multi_component_facets(rels, ::GhostMesh{D}) where {D}
+    several(d, s) = any(
+        r -> !_is_dirichlet(r) && r.d == d && r.s == s &&
+             _relation_component(r.op, d, s, r.name) == 0, rels)
+    return ntuple(d -> (several(d, 1), several(d, 2)), Val(D))
 end
 
 @noinline function constrained(Vₕ::ConstrainedCompositeSpace, relations)

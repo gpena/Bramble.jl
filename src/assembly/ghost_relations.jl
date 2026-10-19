@@ -29,9 +29,9 @@
 # a joint block would be singular for isotropic tractions, whose shear relations are one
 # equation there. A form on the result reads the ghosts of such a facet through its mixed
 # differences by extrapolation from the nodes inward instead (the facet rule of
-# stencil_eval.jl, on the facets whose ghosts `E` ties to several components), since read
-# through the relation's tangential difference they made the reduced matrix unstable on
-# cells stretched across the facet. The closure itself is the same.
+# stencil_eval.jl, `_multi_component_facets` in ghost_composite.jl), since read through the
+# relation's tangential difference they made the reduced matrix unstable on cells stretched
+# across the facet. The closure itself is the same.
 #
 # See also: `GhostGridSpace`, `FacetOperator`, `GhostBilinearForm`
 

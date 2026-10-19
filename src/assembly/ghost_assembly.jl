@@ -63,10 +63,13 @@ A composite of `N` ghost spaces constrained as a whole, built by
 `constrained(C₁ × C₂, relations)` (ghost_composite.jl): the unconstrained composite, its
 padded space and the closure `(E, d)` the relations give, stored once. `E` is general, not
 block diagonal: the degrees of freedom are each component's, one component after the
-other, and its padded values are `E * u + d`.
+other, and its padded values are `E * u + d`. It also stores the facets with a relation
+reading several components, whose ghosts a form's mixed differences read by extrapolation
+from the nodes inward (the facet rule, stencil_eval.jl); the last type parameter says
+whether there is any, so `form` decides by type whether to apply the rule.
 """
 struct ConstrainedCompositeSpace{N, S <: CompositeGridSpace{N}, P <: CompositeGridSpace{N},
-    ET <: SparseMatrixCSC, DT <: AbstractVector} <: AbstractSpaceType{N}
+    ET <: SparseMatrixCSC, DT <: AbstractVector, FT <: Tuple, R} <: AbstractSpaceType{N}
     "the unconstrained composite of ghost spaces the relations were given on."
     space::S
     "the composite of the components' padded spaces."
@@ -77,13 +80,16 @@ struct ConstrainedCompositeSpace{N, S <: CompositeGridSpace{N}, P <: CompositeGr
     d::DT
     "the transpose of `E`, whose columns give `lift` its padded rows."
     Et::ET
+    "`facets[d][s]`: facet `(d, s)`, `s` 1 the minimum, has a relation reading several."
+    facets::FT
 end
 
 function ConstrainedCompositeSpace(space::CompositeGridSpace{N},
         padded::CompositeGridSpace{N}, E::SparseMatrixCSC, d::AbstractVector,
-        Et::SparseMatrixCSC) where {N}
-    S, P = typeof(space), typeof(padded)
-    return ConstrainedCompositeSpace{N, S, P, typeof(E), typeof(d)}(space, padded, E, d, Et)
+        Et::SparseMatrixCSC, facets::Tuple) where {N}
+    S, P, R = typeof(space), typeof(padded), any(any, facets)
+    return ConstrainedCompositeSpace{N, S, P, typeof(E), typeof(d), typeof(facets), R}(
+        space, padded, E, d, Et, facets)
 end
 
 """

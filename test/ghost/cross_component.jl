@@ -531,6 +531,75 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         @test close(F, transpose(E) * (Fp - (As + Ax * X) * d))
     end
 
+    # Mixed differences spelled with sums and scales on either side of the inner difference,
+    # each `(rest, mixed)` against `Eᵀ (A_rest + A_mixed X) E`, the form assembled being
+    # the one spelled; equal operators assemble equal matrices. A facet of one-component
+    # conormal relations beside the traction keeps its ghosts in the mixed differences.
+    @testset "Facet rule, other spellings: $kind" for kind in KINDS
+        Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
+        S = gridspace(Ωₕ; ghosts = :boundary)
+        V = S^2
+        PV = Bramble.padded_space(V)
+        gv = 1.0 .+ rand(Xoshiro(5), Bramble.ndofs(Bramble.padded_space(S)))
+        c = -(λ + μ)
+        none = (u, v) -> innerₕ(0.0 * u(1), v(1))
+        spellings = (
+            (none, (u, v) -> innerₕ(Dcₓ(2.0 * Dcᵧ(u(2))), v(1)),
+                (u, v) -> innerₕ(Dcₓ(2.0 * Dcᵧ(u(2))), v(1))),
+            (none, (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(1)) + Dcᵧ(u(2))), v(1)),
+                (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(1)) + Dcᵧ(u(2))), v(1))),
+            ((u, v) -> innerₕ(c * Dcₓ(Dcₓ(u(1))), v(1)),
+                (u, v) -> innerₕ(c * Dcₓ(Dcᵧ(u(2))), v(1)),
+                (u, v) -> innerₕ(c * Dcₓ(Dcₓ(u(1)) + Dcᵧ(u(2))), v(1))),
+            ((u, v) -> innerₕ(Dcₓ(D₋ₓ(u(1))), v(2)),
+                (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(2))), v(2)),
+                (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(2)) + D₋ₓ(u(1))), v(2))),
+            (none, (u, v) -> innerₕ(Dcₓ(gv * Dcᵧ(u(2))), v(1)),
+                (u, v) -> innerₕ(Dcₓ(gv * Dcᵧ(u(2))), v(1))),
+            (none, (u, v) -> innerₕ(Dcₓ(Dcᵧ(gv * u(2))), v(1)),
+                (u, v) -> innerₕ(Dcₓ(Dcᵧ(gv * u(2))), v(1))),
+            (none, (u, v) -> innerₕ(Dcₓ(2.0 * (Dcᵧ(u(2)) + Dcᵧ(u(1)))), v(2)),
+                (u, v) -> innerₕ(Dcₓ(2.0 * (Dcᵧ(u(2)) + Dcᵧ(u(1)))), v(2))),
+            (none, (u, v) -> innerₕ(Dcᵧ(Dcₓ(u(1) + 3.0 * u(2))), v(1)),
+                (u, v) -> innerₕ(Dcᵧ(Dcₓ(u(1) + 3.0 * u(2))), v(1))))
+        for (facets, rels) in FACET_CASES
+            C = constrained(V, rels)
+            E = Matrix(first(Bramble.closure(C)))
+            X = extrapolation(Ωₕ, facets)
+            for (rest, mixed, spelled) in spellings
+                Ar = Matrix(assemble(form(PV, PV, rest)))
+                Am = Matrix(assemble(form(PV, PV, mixed)))
+                A = Matrix(assemble(form(C, C, spelled)))
+                @test close(A, transpose(E) * (Ar + Am * X) * E)
+                @test norm(A - transpose(E) * (Ar + Am) * E) > 1.0e-3 * norm(A)
+            end
+            Asum = assemble(form(C, C, (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(1) + u(2))), v(1))))
+            Asplit = assemble(form(C, C,
+                (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(1))), v(1)) + innerₕ(Dcₓ(Dcᵧ(u(2))), v(1))))
+            @test close(Matrix(Asum), Matrix(Asplit))
+        end
+        Ka, Kb = [2.0 0.6; 0.6 1.0], [1.0 0.3; 0.3 1.0]
+        C = constrained(V,
+            u -> (traction(:xmin)(u)..., :ymin => ∂ₙ(u(1); K = Ka) => 0.0,
+                :ymin => ∂ₙ(u(2); K = Kb) => x -> x[1], disp(:xmax)(u)...,
+                disp(:ymax)(u)...))
+        @test C.facets == ((true, false), (false, false))
+        E = Matrix(first(Bramble.closure(C)))
+        X = extrapolation(Ωₕ, (:xmin,))
+        As, Ax = Matrix(assemble(form(PV, PV, fs))), Matrix(assemble(form(PV, PV, fx)))
+        @test close(Matrix(assemble(form(C, C, fe))), transpose(E) * (As + Ax * X) * E)
+        # a relation reading several components marks its facet by what it is written of,
+        # though its term in `u(2)` vanishes and its ghosts read component 1 alone
+        C = constrained(V,
+            u -> (:xmin => ∂ₙ(u(1)) + 0.0 * u(2) => 1.0, :xmin => ∂ₙ(u(2)) => 0.0,
+                disp(:ymin)(u)..., disp(:xmax)(u)..., disp(:ymax)(u)...))
+        @test C.facets == ((true, false), (false, false))
+        E = Matrix(first(Bramble.closure(C)))
+        @test close(Matrix(assemble(form(C, C, fe))), transpose(E) * (As + Ax * X) * E)
+        Afx = Matrix(assemble(form(C, C, fx)))
+        @test norm(Afx - transpose(E) * Ax * E) > 1.0e-3 * norm(Afx)
+    end
+
     # Traction on one facet, displacement on the others, on cells twice as long across the
     # facet as along it (uniform) and on a random mesh whose ratio reaches 3.7 on :ymin: the
     # centred mixed difference over the traction's ghosts gave eigenvalues of negative real
