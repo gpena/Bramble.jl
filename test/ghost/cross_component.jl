@@ -577,6 +577,21 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
             Asplit = assemble(form(C, C,
                 (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(1))), v(1)) + innerₕ(Dcₓ(Dcᵧ(u(2))), v(1))))
             @test close(Matrix(Asum), Matrix(Asplit))
+            # either argument order: the left argument's stencil gives the columns, the
+            # padded values the closure fills, so its mixed difference reads them by
+            # extrapolation whether it is written of `u` or of `v`; the right argument's
+            # gives the rows and is left as it is (Bramble places the sides by position)
+            for g in ((u, v) -> innerₕ(Dcₓ(Dcᵧ(v(2))), u(1)),
+                (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(2))), v(1)))
+                Ag, Pg = Matrix(assemble(form(C, C, g))), Matrix(assemble(form(PV, PV, g)))
+                @test close(Ag, transpose(E) * Pg * X * E)
+                @test norm(Ag - transpose(E) * Pg * E) > 1.0e-3 * norm(Ag)
+            end
+            for g in ((u, v) -> innerₕ(v(1), Dcₓ(Dcᵧ(u(2)))),
+                (u, v) -> innerₕ(u(1), Dcₓ(Dcᵧ(v(2)))))
+                Ag, Pg = Matrix(assemble(form(C, C, g))), Matrix(assemble(form(PV, PV, g)))
+                @test close(Ag, transpose(E) * Pg * E; rtol = 1.0e-13)
+            end
         end
         Ka, Kb = [2.0 0.6; 0.6 1.0], [1.0 0.3; 0.3 1.0]
         C = constrained(V,

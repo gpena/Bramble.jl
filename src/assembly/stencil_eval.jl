@@ -367,8 +367,9 @@ end
 # about 1.5 times the spacing along it, the reduced matrix has eigenvalues of negative real
 # part (traction on one facet, uniform cells; #793).
 #
-# There `form` (ghost_composite.jl) marks the trial functions of every mixed difference
-# (`_FacetExtrapolated`, `_mark_mixed`): read at a ghost beyond a node of
+# There `form` (ghost_composite.jl) marks the functions of every mixed difference in a
+# product's left argument, the side of the matrix columns (`_FacetExtrapolated`,
+# `_mark_mixed`): read at a ghost beyond a node of
 # a marked facet, it is the quadratic through its values at the three nodes inward along
 # the normal, evaluated at the ghost (`_one_sided_weights`, ghost_relations.jl), and
 # elsewhere its own value. The centred difference across the facet then reads the
@@ -469,8 +470,11 @@ end
 _stencil_margin(op::_FacetExtrapolated) = _stencil_margin(op.inner_op) + 3
 expression(op::_FacetExtrapolated) = expression(op.inner_op)
 
-# `op` with the trial functions of every mixed difference marked for the facet rule on
-# `facets`, on the trial side of each product, through sums and wrappers. A mixed
+# `op` with the functions of every mixed difference marked for the facet rule on `facets`,
+# in the left argument of each product, through sums and wrappers. The left argument's
+# stencil gives the matrix columns, the padded values the closure fills, whose ghosts the
+# rule reads by extrapolation; the right argument's gives the rows, never marked. Bramble
+# places a product's sides by position, not by the leaf type (`u` or `v`). A mixed
 # difference is a first difference along one axis of a first difference along another,
 # under any sums and scales between them, and the functions of the inner one are marked
 # through its own sums and scales (`Dcₓ(Dcᵧ(u(1) + 2.0 * u(2)))` as
@@ -505,7 +509,7 @@ function _mark_operand(op::_FirstDifference{D, E}, ::Val{Dim}, facets) where {D,
 end
 _mark_operand(op, ::Val, facets) = _mark(op, facets)
 
-# The trial functions of `op` marked through its sums and scales; anything else as it is.
+# The functions of `op` marked through its sums and scales; anything else as it is.
 function _mark_leaves(op::OperatorAdd{D}, facets) where {D}
     left, right = _mark_leaves(op.left_op, facets), _mark_leaves(op.right_op, facets)
     return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
