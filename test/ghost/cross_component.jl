@@ -4,16 +4,20 @@ module GhostCrossComponentTests
 # `constrained(S × S, u -> (… u(1) …, … u(2) …))`. With relations of one component each,
 # the result must equal the product of the separately constrained components,
 # `constrained(S, r₁) × constrained(S, r₂)`, whose closure is block diagonal (#781): `E`,
-# `d`, the assembled matrix and load, and `lift`. Every mesh is non-uniform, and the
-# components' relations and data differ, so a swapped or shared component shows. The
-# refusals (data in time, the `dirichlet` rows, `GhostVector`, relations naming no
-# component or several) are pinned by their messages.
+# `d`, the assembled matrix and load, and `lift`. A relation reading several components (a
+# traction, #793) must hold on the lifted values, its rows assembled by one `inner_Γ` per
+# component as the oracle, and must change the closure against one-component relations.
+# Every mesh is non-uniform, and the components' relations and data differ, so a swapped or
+# shared component shows. The refusals (data in time, the `dirichlet` rows, `GhostVector`,
+# relations naming no component, a facet with too few or too many ghost relations, a
+# singular block, a corner of two tractions) are pinned by their messages.
 
 using Test
 using Bramble
 import Bramble
 using Bramble: lift, lift!
 using LinearAlgebra: dot, norm
+using SparseArrays: nnz
 using Random: Xoshiro
 
 isdefined(Main, :GhostOracleND) ||
@@ -134,12 +138,13 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         @test refuses(() -> constrained(V, u -> (:xmin => ∂ₙ(u) => 0.0,)),
             "names no component")
         @test refuses(() -> constrained(V, u -> (:ymin => u => 0.0,)), "names no component")
+        # a ghosted facet takes one ghost relation per component, of any components
         @test refuses(() -> constrained(V, u -> (:xmin => ∂ₙ(u(1)) + ∂ₙ(u(2)) => 0.0,)),
-            "reads several components")
-        # one relation of each kind per component and facet; both components may share one
+            "the facet :xmin has 1 relation reading its ghosts")
+        # two relations of one component leave the other's ghost unread: a singular block
         @test refuses(() -> constrained(V, u -> (:xmin => ∂ₙ(u(1)) => 0.0,
                 :xmin => ∂ₙₙ(u(1)) => 0.0)),
-            ":xmin of component 1 has two relations")
+            "cannot be solved for the ghosts of components 1 and 2")
         @test refuses(
             () -> constrained(V, u -> (:ymin => u(2) => 0.0,
                 :ymin => u(2) => 1.0)), ":ymin of component 2 has two Dirichlet")
@@ -209,6 +214,138 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         Ux = lift(X2(S, c), parent(uₕ))
         @test close(parent(Uₕ(2)), parent(Ux(2)); rtol = 1.0e-13)
         @test close(parent(Uₕ(1)), parent(Ux(1)); rtol = 1.0e-13)
+    end
+
+    # Isotropic traction, component i: Σⱼ ∂ₙ(u(j); K = Kᵢⱼ), the conormal of departure 1.
+    λ, μ = 2.0, 0.5
+    Kt(i, j) = [λ * (i == d) * (j == e) + μ * ((i == j) * (d == e) + (i == e) * (j == d))
+                for d in 1:2, e in 1:2]
+    t(u, i) = ∂ₙ(u(1); K = Kt(i, 1)) + ∂ₙ(u(2); K = Kt(i, 2))
+    gd = (x -> x[1] * x[2], x -> 100.0 + x[1])
+    disp(F) = u -> (F => u(1) => gd[1], F => u(2) => gd[2], F => ∂ₙₙ(u(1)) => 0.0,
+        F => ∂ₙₙ(u(2)) => 0.0)
+    # The traction data `tg[F][i]`, distinct per facet and component.
+    tg = (xmin = (x -> 1.0 + x[2], 0.5), xmax = (-2.0, x -> 50.0 * x[2]^2))
+    TRACTIONS = (
+        one = (facets = (:xmin,), others = (:ymin, :xmax, :ymax)),
+        apart = (facets = (:xmin, :xmax), others = (:ymin, :ymax)))
+    rels_of(c) = u -> (Iterators.flatten((F => t(u, 1) => tg[F][1], F => t(u, 2) => tg[F][2])
+                                         for F in c.facets)...,
+        Iterators.flatten(disp(F)(u) for F in c.others)...)
+
+    # The relation of component `i` on `F`: its rows by one `inner_Γ` per component, against
+    # the facet weights times the data at the padded points.
+    function traction_residual(PV, PS, U, i, F, g)
+        R = assemble(form(PV, PV,
+            (w, v) -> inner_Γ(∂ₙ(w(1); K = Kt(i, 1)), v(i); markers = (F,)) +
+                      inner_Γ(∂ₙ(w(2); K = Kt(i, 2)), v(i); markers = (F,))))
+        W = assemble(form(PV, PV, (w, v) -> inner_Γ(w(i), v(i); markers = (F,))))
+        m = Bramble.ndofs(PS)
+        G = zeros(length(U))
+        G[((i - 1) * m + 1):(i * m)] .= collect(Rₕ(PS, g isa Number ? (x -> g) : g))
+        RU = R * U
+        return norm(RU - W * G, Inf) / max(1.0, norm(RU, Inf)), norm(W * G, Inf)
+    end
+
+    @testset "Traction on lifted values: $kind, $name" for kind in KINDS,
+        name in keys(TRACTIONS)
+
+        c = TRACTIONS[name]
+        Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
+        S = gridspace(Ωₕ; ghosts = :boundary)
+        V = S × S
+        PV, PS = Bramble.padded_space(V), Bramble.padded_space(S)
+        C = constrained(V, rels_of(c))
+        E, d = Bramble.closure(C)
+        @test size(E, 1) == Bramble.ndofs(PV)
+        U = E * rand(Xoshiro(20261019), Bramble.ndofs(C)) + d
+        for F in c.facets, i in 1:2
+            res, scale = traction_residual(PV, PS, U, i, F, tg[F][i])
+            @test res <= 1.0e-10
+            @test scale > 0     # the data reach the oracle: a zero weight would hide them
+        end
+        # the displacement facets hold their data on the lifted values
+        m = Bramble.ndofs(PS)
+        Gs = (collect(Rₕ(PS, gd[1])), collect(Rₕ(PS, gd[2])))
+        np = Bramble.npoints(Bramble.mesh(PS), Tuple)
+        for j in 2:(np[1] - 1)
+            p = LinearIndices(np)[j, 2]   # a node of :ymin, beyond its ghost row
+            @test U[p] ≈ Gs[1][p] atol = 1.0e-13
+            @test U[m + p] ≈ Gs[2][p] atol = 1.0e-13
+        end
+
+        # the cross terms: component 1's padded values read component 2's degrees of
+        # freedom, which a closure of one-component relations never does
+        one = u -> (Iterators.flatten((F => ∂ₙ(u(1)) => 0.0, F => ∂ₙ(u(2)) => 0.0)
+                                      for F in c.facets)...,
+            Iterators.flatten(disp(F)(u) for F in c.others)...)
+        Ex, _ = Bramble.closure(constrained(V, one))
+        n1 = Bramble.ndofs(constrained(S, u -> (Iterators.flatten((F => ∂ₙ(u) => 0.0,)
+                                                                for F in c.facets)...,
+            Iterators.flatten((F => u => gd[1], F => ∂ₙₙ(u) => 0.0) for F in c.others)...)))
+        @test size(Ex) == size(E)
+        @test nnz(Ex[1:m, (n1 + 1):end]) == 0
+        @test count(!iszero, E[1:m, (n1 + 1):end]) > 0
+        @test count(!iszero, E[(m + 1):end, 1:n1]) > 0
+
+        # the order of the relations changes nothing: each is attached by what it reads
+        rev = u -> reverse(rels_of(c)(u))
+        Er, dr = Bramble.closure(constrained(V, rev))
+        @test close(Matrix(Er), Matrix(E); rtol = 1.0e-13)
+        @test close(dr, d; rtol = 1.0e-13)
+    end
+
+    @testset "Refusals of cross-component relations" begin
+        Ωₕ = O.make_mesh(:graded, 0; dim = 2, n0 = 7)
+        S = gridspace(Ωₕ; ghosts = :boundary)
+        V = S × S
+        rest = u -> (disp(:ymin)(u)..., disp(:xmax)(u)..., disp(:ymax)(u)...)
+        # one ghost relation per component on a facet that has any
+        @test refuses(() -> constrained(V, u -> (:xmin => t(u, 1) => 0.0, rest(u)...)),
+            "the facet :xmin has 1 relation reading its ghosts")
+        @test refuses(
+            () -> constrained(V, u -> (:xmin => t(u, 1) => 0.0, :xmin => t(u, 2) => 0.0,
+                :xmin => ∂ₙ(u(1)) => 0.0, rest(u)...)),
+            "the facet :xmin has 3 relations reading its ghosts")
+        # two relations of component 1 and none reading component 2's ghost
+        @test refuses(
+            () -> constrained(V, u -> (:xmin => ∂ₙ(u(1)) => 0.0,
+                :xmin => 2.0 * ∂ₙ(u(1)) => 0.0, rest(u)...)),
+            "cannot be solved for the ghosts of components 1 and 2")
+        # two traction facets meeting at a corner: their shear relations coincide there
+        corner = u -> (:xmin => t(u, 1) => 0.0, :xmin => t(u, 2) => 0.0,
+            :ymin => t(u, 1) => 0.0, :ymin => t(u, 2) => 0.0, disp(:xmax)(u)...,
+            disp(:ymax)(u)...)
+        @test refuses(() -> constrained(V, corner), "meet at a corner")
+        @test refuses(() -> constrained(V, corner), ":xmin and :ymin")
+        # still one component's Dirichlet relation per facet
+        @test refuses(
+            () -> constrained(V, u -> (:xmin => t(u, 1) => 0.0, :xmin => t(u, 2) => 0.0,
+                :ymin => u(1) => 0.0, :ymin => u(1) => 1.0, rest(u)...)),
+            ":ymin of component 1 has two Dirichlet")
+    end
+
+    @testset "Arithmetic on a whole element" begin
+        Ωₕ = O.make_mesh(:random, 0; dim = 2, n0 = 7)
+        S = gridspace(Ωₕ; ghosts = :boundary)
+        V = S × S
+        C = constrained(V, u -> (:xmin => t(u, 1) => 1.0, :xmin => t(u, 2) => 0.0,
+            disp(:ymin)(u)..., disp(:xmax)(u)..., disp(:ymax)(u)...))
+        u = collect(1.0:Bramble.ndofs(C)) ./ 7
+        w = element(C, u)
+        z = copy(w)
+        @test z isa Bramble.VectorElement
+        @test parent(z) == u && parent(z) !== parent(w)
+        @test parent(w + 2 * w) == 3 .* u
+        @test parent(w - w) == zero(u)
+        y = similar(w)
+        y .= 2 .* w .+ 1.0
+        @test parent(y) == 2 .* u .+ 1.0
+        @test w ≈ w
+        @test !(w ≈ 2 * w)
+        x = element(C)
+        x .= 1.0
+        @test parent(copy(x) + 2 * x) == fill(3.0, Bramble.ndofs(C))
     end
 end
 
