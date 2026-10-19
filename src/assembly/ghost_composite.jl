@@ -17,10 +17,11 @@
 # `ConstrainedCompositeSpace` it returns stores a closure `(E, d)` of its own, which couples
 # the components wherever a relation does and which its forms, `closure` and `lift` read.
 # With relations of one component each it equals `constrained(C₁, r₁) × constrained(C₂,
-# r₂)`. Beyond the refusals below, it refuses data depending on time, the `dirichlet` rows,
-# `GhostVector`, and a corner of two facets with relations reading several components
-# whose joint block is singular, as it is for isotropic tractions (their shear relations
-# are one equation there).
+# r₂)`. At a corner of two facets with relations reading several components, each facet's
+# relations read the other's ghosts through a one-sided difference along the facet, so the
+# corner closes facet by facet (a joint block is singular for isotropic tractions). Beyond
+# the refusals below, it refuses data depending on time, the `dirichlet` rows and
+# `GhostVector`.
 #
 # The components of a form's spaces must ghost the same facets of meshes of one size: a term
 # coupling `u(1)` and `v(2)` reads both at one padded index, which names different points on
@@ -791,18 +792,20 @@ Forms on it, `assemble(a, l)` and [`lift`](@ref) work as on that product.
 
 A displacement facet beside a traction facet carries ghosts, which the traction's
 tangential difference reads at their corner: close them by `∂ₙₙ(u(i)) => 0` besides
-`u(i) => g`. A corner of two facets whose relations each read several components is
-refused when their joint block there is singular, as it is for isotropic tractions,
-whose shear relations are one equation at the corner (the stress is symmetric): make one
-of them a displacement facet. Where the block is nonsingular the corner is solved.
+`u(i) => g`. At a corner of two facets that each have a relation reading several
+components (two tractions), the tangential difference of each facet's relations is
+one-sided into the domain, second order over the three nodes along the facet, so each
+facet's relations read its own ghosts alone and the corner closes facet by facet: solved
+together, isotropic tractions would give a singular block, their shear relations being
+one equation there (the stress is symmetric). Elsewhere the difference stays centred.
 
 Refused with an `ArgumentError`, besides what `constrained` and the product refuse: a
 relation naming no component, two ghost relations of one component on a facet, a facet
 with a relation reading several components but not one ghost relation per component,
-relations whose block at a node is singular (two isotropic tractions meeting at a corner
-among them), data depending on time (constrain the components apart and take the
-product), the `dirichlet` keyword of `assemble`, `dirichlet_bc!` and `symmetrize!` (give
-`u(i) => g` instead), and `GhostVector` and `update_ghosts!`.
+relations whose block at a node is singular, a corner of two tractions with fewer than
+three nodes along a facet, data depending on time (constrain the components apart and
+take the product), the `dirichlet` keyword of `assemble`, `dirichlet_bc!` and
+`symmetrize!` (give `u(i) => g` instead), and `GhostVector` and `update_ghosts!`.
 
 # Examples
 

@@ -7,10 +7,12 @@ module GhostCrossComponentTests
 # `d`, the assembled matrix and load, and `lift`. A relation reading several components (a
 # traction, #793) must hold on the lifted values, its rows assembled by one `inner_Γ` per
 # component as the oracle, and must change the closure against one-component relations.
-# Every mesh is non-uniform, and the components' relations and data differ, so a swapped or
-# shared component shows. The refusals (data in time, the `dirichlet` rows, `GhostVector`,
-# relations naming no component, a facet with too few or too many ghost relations, a
-# singular block, a corner of two tractions) are pinned by their messages.
+# At a corner of two tractions each relation's tangential difference is one-sided, which a
+# residual written out by hand checks there. Every mesh is non-uniform, and the components'
+# relations and data differ, so a swapped or shared component shows. The refusals (data in
+# time, the `dirichlet` rows, `GhostVector`, relations naming no component, a facet with too
+# few or too many ghost relations, a singular block, a corner too short for the one-sided
+# difference) are pinned by their messages.
 
 using Test
 using Bramble
@@ -225,7 +227,8 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
     disp(F) = u -> (F => u(1) => gd[1], F => u(2) => gd[2], F => ∂ₙₙ(u(1)) => 0.0,
         F => ∂ₙₙ(u(2)) => 0.0)
     # The traction data `tg[F][i]`, distinct per facet and component.
-    tg = (xmin = (x -> 1.0 + x[2], 0.5), xmax = (-2.0, x -> 50.0 * x[2]^2))
+    tg = (xmin = (x -> 1.0 + x[2], 0.5), xmax = (-2.0, x -> 50.0 * x[2]^2),
+        ymin = (x -> x[1], -1.0), ymax = (3.0, x -> 10.0 * x[1]))
     TRACTIONS = (
         one = (facets = (:xmin,), others = (:ymin, :xmax, :ymax)),
         apart = (facets = (:xmin, :xmax), others = (:ymin, :ymax)))
@@ -234,8 +237,10 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         Iterators.flatten(disp(F)(u) for F in c.others)...)
 
     # The relation of component `i` on `F`: its rows by one `inner_Γ` per component, against
-    # the facet weights times the data at the padded points.
-    function traction_residual(PV, PS, U, i, F, g; K = Kt)
+    # the facet weights times the data at the padded points. The rows of the padded points
+    # `skip` (the corners of two tractions, where the difference along `F` is one-sided) are
+    # left out of the residual, which comes with the whole residual vector.
+    function traction_residual(PV, PS, U, i, F, g; K = Kt, skip = ())
         R = assemble(form(PV, PV,
             (w, v) -> inner_Γ(∂ₙ(w(1); K = K(i, 1)), v(i); markers = (F,)) +
                       inner_Γ(∂ₙ(w(2); K = K(i, 2)), v(i); markers = (F,))))
@@ -244,7 +249,44 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         G = zeros(length(U))
         G[((i - 1) * m + 1):(i * m)] .= collect(Rₕ(PS, g isa Number ? (x -> g) : g))
         RU = R * U
-        return norm(RU - W * G, Inf) / max(1.0, norm(RU, Inf)), norm(W * G, Inf)
+        r = RU - W * G
+        kept = copy(r)
+        kept[[(i - 1) * m + p for p in skip]] .= 0.0
+        return norm(kept, Inf) / max(1.0, norm(RU, Inf)), norm(W * G, Inf), r
+    end
+
+    # The padded point of the physical node `I`, every facet ghosted.
+    padded_point(np, I) = LinearIndices(np)[I[1] + 1, I[2] + 1]
+
+    # The relation of component `i` on the facet of axis `d`, side `s`, at the corner node
+    # `I` (physical), on the padded values `U`, written out from the mesh points: the
+    # outward sign times `Σⱼ Kᵢⱼ[d, d] ∂_d uⱼ + Kᵢⱼ[d, e] ∂_e uⱼ` minus the datum, `∂_d` the
+    # centred difference over the ghost (the first spacing mirrored), `∂_e` the derivative
+    # at the node of the quadratic through the three nodes along the facet into the domain.
+    # The second value is the size of the terms, for a relative tolerance.
+    function corner_relation(Ωₕ, np, U, i, d, s, I, K, g)
+        e = 3 - d
+        xs = (collect(points(Ωₕ(1))), collect(points(Ωₕ(2))))
+        m = prod(np)
+        val(j, J) = U[(j - 1) * m + padded_point(np, J)]
+        ud = CartesianIndex(ntuple(a -> a == d ? 1 : 0, 2))
+        ue = CartesianIndex(ntuple(a -> a == e ? 1 : 0, 2))
+        h = abs(xs[d][I[d] == 1 ? 2 : end] - xs[d][I[d] == 1 ? 1 : end - 1])
+        σ = I[e] == 1 ? 1 : -1                 # into the domain along `e`
+        y = (xs[e][I[e]], xs[e][I[e] + σ], xs[e][I[e] + 2σ])
+        w = (1 / (y[1] - y[2]) + 1 / (y[1] - y[3]),
+            (y[1] - y[3]) / ((y[2] - y[1]) * (y[2] - y[3])),
+            (y[1] - y[2]) / ((y[3] - y[1]) * (y[3] - y[2])))
+        η = s == 1 ? -1.0 : 1.0
+        terms = Float64[]
+        for j in 1:2
+            ∂d = (val(j, I + ud) - val(j, I - ud)) / (2h)
+            ∂e = sum(w[k] * val(j, I + (k - 1) * σ * ue) for k in 1:3)
+            push!(terms, η * K(i, j)[d, d] * ∂d, η * K(i, j)[d, e] * ∂e)
+        end
+        x = (xs[1][I[1]], xs[2][I[2]])
+        gx = g isa Number ? g : g(x)
+        return sum(terms) - gx, max(maximum(abs, terms), abs(gx))
     end
 
     @testset "Traction on lifted values: $kind, $name" for kind in KINDS,
@@ -319,12 +361,13 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
             () -> constrained(V, u -> (:xmin => ∂ₙ(u(1)) + ∂ₙ(u(2)) => 0.0,
                 :xmin => 2.0 * (∂ₙ(u(1)) + ∂ₙ(u(2))) => 0.0, rest(u)...)),
             "cannot be solved for the ghosts of components 1 and 2")
-        # two isotropic traction facets meeting at a corner: their shear relations coincide
+        # a corner of two tractions with two nodes along a facet: no one-sided difference
         corner = u -> (:xmin => t(u, 1) => 0.0, :xmin => t(u, 2) => 0.0,
             :ymin => t(u, 1) => 0.0, :ymin => t(u, 2) => 0.0, disp(:xmax)(u)...,
             disp(:ymax)(u)...)
-        @test refuses(() -> constrained(V, corner), "meet at a corner")
-        @test refuses(() -> constrained(V, corner), ":xmin and :ymin")
+        Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 2), (false, true))
+        V2 = gridspace(Ω2; ghosts = :boundary)^2
+        @test refuses(() -> constrained(V2, corner), "along axis 2, which has 2")
         # still one component's Dirichlet relation per facet
         @test refuses(
             () -> constrained(V,
@@ -333,8 +376,42 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
             ":ymin of component 1 has two Dirichlet")
     end
 
-    # A nonsingular corner block of two tractions (a K without the stress's symmetry) is
-    # solved, and every relation holds on the lifted values, the corner nodes included.
+    # Isotropic tractions on every facet: at each corner the two shear relations are one
+    # equation, so a joint corner block is singular. Each facet's relations read the other
+    # facet's ghosts through the one-sided difference, and hold on the lifted values: the
+    # centred rows away from the corners, the one-sided relation written out at them.
+    @testset "Traction corners: $kind" for kind in KINDS
+        Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
+        S = gridspace(Ωₕ; ghosts = :boundary)
+        V = S × S
+        PV, PS = Bramble.padded_space(V), Bramble.padded_space(S)
+        np = Bramble.npoints(Bramble.mesh(PS), Tuple)
+        n = npoints(Ωₕ, Tuple)
+        facets = (:xmin, :xmax, :ymin, :ymax)
+        C = constrained(V, u -> (Iterators.flatten(traction(F)(u) for F in facets)...,))
+        @test Bramble.ndofs(C) == 2 * prod(n)
+        E, d = Bramble.closure(C)
+        U = E * rand(Xoshiro(20261019), Bramble.ndofs(C)) + d
+        corners = [CartesianIndex(a, b) for a in (1, n[1]), b in (1, n[2])]
+        skip = [padded_point(np, I) for I in corners]
+        for (k, F) in enumerate(facets), i in 1:2
+
+            res, scale, r = traction_residual(PV, PS, U, i, F, tg[F][i]; skip)
+            @test res <= 1.0e-10
+            @test scale > 0
+            dd, s = (k + 1) ÷ 2, 2 - k % 2
+            for I in corners
+                I[dd] == (s == 1 ? 1 : n[dd]) || continue
+                c, sz = corner_relation(Ωₕ, np, U, i, dd, s, I, Kt, tg[F][i])
+                @test abs(c) <= 1.0e-10 * max(1.0, sz)
+                # the centred row is not what holds there
+                @test abs(r[(i - 1) * prod(np) + padded_point(np, I)]) > 1.0e-6
+            end
+        end
+    end
+
+    # A corner of tractions with a K without the stress's symmetry takes the same one-sided
+    # difference, and every relation holds on the lifted values, the corner nodes included.
     @testset "Anisotropic traction corner: $kind" for kind in KINDS
         Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
         S = gridspace(Ωₕ; ghosts = :boundary)
@@ -352,10 +429,16 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
                 :ymin => ta(u, 2) => g.ymin[2], disp(:xmax)(u)..., disp(:ymax)(u)...))
         E, d = Bramble.closure(C)
         U = E * rand(Xoshiro(20261019), Bramble.ndofs(C)) + d
-        for F in (:xmin, :ymin), i in 1:2
+        np = Bramble.npoints(Bramble.mesh(PS), Tuple)
+        I = CartesianIndex(1, 1)
+        for (dd, F) in ((1, :xmin), (2, :ymin)), i in 1:2
 
-            res, _ = traction_residual(PV, PS, U, i, F, g[F][i]; K = Kf)
+            res, _, r = traction_residual(PV, PS, U, i, F, g[F][i]; K = Kf,
+                skip = (padded_point(np, I),))
             @test res <= 1.0e-10
+            c, sz = corner_relation(Ωₕ, np, U, i, dd, 1, I, Kf, g[F][i])
+            @test abs(c) <= 1.0e-10 * max(1.0, sz)
+            @test abs(r[(i - 1) * prod(np) + padded_point(np, I)]) > 1.0e-6
         end
     end
 

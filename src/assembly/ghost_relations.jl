@@ -22,9 +22,12 @@
 # reads (`_relation_pieces`). A facet's ghost relations are not keyed by component: each
 # is attached to one component's ghosts (a facet with a relation reading several has one
 # per component), and the rows of a node are solved together in its block, which must be
-# nonsingular as a whole. At a corner of two isotropic tractions the two shear relations
-# are one equation, so that block is singular and refused (`_throw_traction_corner`); a
-# corner of tractions whose block is nonsingular is solved.
+# nonsingular as a whole. At a node shared by two facets that each have a relation reading
+# several components (a corner of two tractions), the rows of each facet read the other
+# facet's ghosts through the one-sided difference along the facet (`_one_sided_corner!`),
+# so each facet's corner rows read its own ghosts alone and the corner block splits in two:
+# a joint block would be singular for isotropic tractions, whose shear relations are one
+# equation there.
 #
 # See also: `GhostGridSpace`, `FacetOperator`, `GhostBilinearForm`
 
@@ -477,8 +480,10 @@ end
 # The same on a padded composite, `comps` holding each component's `GhostMesh` and the
 # offset of its padded values: a relation of component `c` eliminates the ghosts of its
 # facet in that component, and `ghosts[k]` is the pair `(c, g)`, ghost `g` of component `c`,
-# component by component. The columns of `R` run over the whole padded composite.
-function _relation_rows(P, comps::Tuple, rels)
+# component by component. The columns of `R` run over the whole padded composite. The rows
+# on a facet of `onesided`, at a node it shares with another, read the other's ghosts
+# through the one-sided difference along the facet (`_one_sided_corner!`).
+function _relation_rows(P, comps::Tuple, rels; onesided = ())
     T = eltype(P)
     isempty(rels) && return spzeros(T, 0, ndofs(P)), T[], Tuple{Int, Int}[], Int[]
     ghosts, rel = Tuple{Int, Int}[], Int[]
@@ -495,15 +500,77 @@ function _relation_rows(P, comps::Tuple, rels)
         G, offset = comps[c]
         Rt, bF = blocks[rel[k]]
         plin = LinearIndices(npoints(G, Tuple))
-        i = offset + plin[padded_index(G, first(boundary_node(G, g)))]
+        I = first(boundary_node(G, g))
+        i = offset + plin[padded_index(G, I)]
+        start = length(rows) + 1
         for q in nzrange(Rt, i)
             push!(rows, k)
             push!(cols, rowvals(Rt)[q])
             push!(vals, nonzeros(Rt)[q])
         end
+        r = rels[rel[k]]
+        r.name in onesided &&
+            _one_sided_corner!(rows, cols, vals, start, k, comps, I, r.d, onesided)
         b[k] = bF[i]
     end
     return sparse(rows, cols, vals, length(ghosts), ndofs(P)), b, ghosts, rel
+end
+
+# The row `k`, its entries `start:end` of `(rows, cols, vals)`, of a relation on a facet of
+# axis `d` at its node `I`: on each other facet of `facets` that `I` lies on, the row's
+# entries at that facet's ghosts beyond `I`, one per component, move to the three physical
+# nodes along the facet, by the quadratic through them extrapolated to the ghost
+# (`_one_sided_weights`). The centred difference along the facet, `(u_g − u₁) / (x_g − x₁)`
+# with the ghost `g` mirroring the first neighbour `1` about the node, then reads the
+# derivative of that quadratic at the node: the one-sided difference into the domain,
+# second order on the non-uniform spacing.
+function _one_sided_corner!(rows, cols, vals, start::Int, k::Int, comps::Tuple,
+        I::CartesianIndex{D}, d::Int, facets) where {D}
+    n = npoints(physical_mesh(first(first(comps))), Tuple)
+    for e in 1:D, t in 1:2
+
+        e != d && I[e] == (t == 1 ? 1 : n[e]) && _facet_name(e, t) in facets || continue
+        n[e] >= 3 || _throw_corner_axis_too_short(_facet_name(e, t), e, n[e])
+        step = CartesianIndex(ntuple(a -> a == e ? (t == 1 ? -1 : 1) : 0, Val(D)))
+        for (G, offset) in comps
+            has_ghosts(G, e, _GHOST_SIDES[t]) || continue
+            plin = LinearIndices(npoints(G, Tuple))
+            J = padded_index(G, I)
+            ghost = offset + plin[J + step]
+            v = zero(eltype(vals))
+            for q in start:lastindex(cols)
+                cols[q] == ghost && (v += vals[q]; vals[q] = zero(v))
+            end
+            iszero(v) && continue
+            x = host_points(_padded(G)(e))
+            at(m) = J[e] + m * step[e]
+            w = _one_sided_weights(x[at(1)], x[at(0)], x[at(-1)], x[at(-2)])
+            for m in 0:2
+                push!(rows, k), push!(cols, offset + plin[J - m * step])
+                push!(vals, v * w[m + 1])
+            end
+        end
+    end
+    return nothing
+end
+
+# The weights at the nodes `x₀`, `x₁`, `x₂` of the quadratic through them, evaluated at `x`:
+# the one-sided second-order difference of a corner, as `_one_sided_corner!` applies them.
+@inline function _one_sided_weights(x, x₀, x₁, x₂)
+    return ((x - x₁) * (x - x₂) / ((x₀ - x₁) * (x₀ - x₂)),
+        (x - x₀) * (x - x₂) / ((x₁ - x₀) * (x₁ - x₂)),
+        (x - x₀) * (x - x₁) / ((x₂ - x₀) * (x₂ - x₁)))
+end
+
+@noinline function _throw_corner_axis_too_short(name::Symbol, e::Int, n::Int)
+    throw(
+        ArgumentError(
+        "the relations on :$name and on a facet it meets each read several components " *
+        "(tractions), so at their corner each reads the other's ghosts through a " *
+        "one-sided difference over three nodes along axis $e, which has $n. Use a mesh " *
+        "with at least three nodes along axis $e.",
+    ),
+    )
 end
 
 # The relation's rows and data on the nodes of its facet, by forms on the padded space;
@@ -568,7 +635,9 @@ function _composite_closure(P::CompositeGridSpace, comps::Tuple, rels, drels)
         any(q -> q.c == r.c && q.d == r.d && q.s == r.s, rels) ||
             _throw_dirichlet_orphan_ghosts(r.name)
     end
-    R, b, ghosts, _ = _relation_rows(P, comps, rels)
+    reads_several(r) = _relation_component(r.op, r.d, r.s, r.name) == 0
+    multi = unique!(Symbol[r.name for r in rels if reads_several(r)])
+    R, b, ghosts, _ = _relation_rows(P, comps, rels; onesided = multi)
     fixed, gs, keep = falses(ndofs(P)), Any[], Int[]
     for (c, (G, offset)) in enumerate(comps)
         f, g, _, _ = _dirichlet_values(G, filter(r -> r.c == c, drels), eltype(P))
@@ -581,10 +650,8 @@ function _composite_closure(P::CompositeGridSpace, comps::Tuple, rels, drels)
                    _ghost_point(first(comps[c]), k)] for (c, k) in ghosts]
     names = Symbol[_relation_name(first(comps[c]), k) for (c, k) in ghosts]
     owner = Int[c for (c, _) in ghosts]
-    reads_several(r) = _relation_component(r.op, r.d, r.s, r.name) == 0
-    multi = unique!(Symbol[r.name for r in rels if reads_several(r)])
     E, d, _ = _relation_closure(gpts, names, R, b, keep, fixed, reduce(vcat, gs);
-        comps = (owner, multi))::Tuple{SparseMatrixCSC, Vector, Nothing}
+        comps = owner)::Tuple{SparseMatrixCSC, Vector, Nothing}
     return E, d
 end
 
@@ -747,14 +814,13 @@ end
 
 # The closure on index sets alone, as a padded composite gives them: the eliminated ghosts'
 # padded points `gpts`, the names of their relations, for the refusals, and the kept points.
-# On a composite, `comps` holds the component of each eliminated ghost and the facets whose
-# relations read several components: a row may read other components' ghosts and none of
-# its own (a traction attached to a component whose normal derivative it does not read), so
-# only each block as a whole must be nonsingular. A scalar space's row must read its own
-# ghost.
+# On a composite, `comps` holds the component of each eliminated ghost: a row may read
+# other components' ghosts and none of its own (a traction attached to a component whose
+# normal derivative it does not read), so only each block as a whole must be nonsingular.
+# A scalar space's row must read its own ghost.
 function _relation_closure(gpts::Vector{Int}, names::Vector{Symbol}, R::SparseMatrixCSC,
         b, keep, fixed::BitVector, g::AbstractVector, sources = nothing;
-        comps::Union{Nothing, Tuple{Vector{Int}, Vector{Symbol}}} = nothing)
+        comps::Union{Nothing, Vector{Int}} = nothing)
     Npad = size(R, 2)
     m, n = length(gpts), length(keep)
     gpos = zeros(Int, Npad)
@@ -822,9 +888,9 @@ end
 # of `E` and the ghosts' `d`. A solve, not a multiplication by an inverse: on a block near
 # singularity (a nearly singular `K`) the inverse leaves the relations unsatisfied.
 # `names[k]` is the relation of ghost `k`, which a singular block names, with, on a
-# composite, the components of its ghosts and the facets of relations reading several.
+# composite, the components of its ghosts.
 function _block_solve(names::Vector{Symbol}, C::SparseMatrixCSC, Bt::SparseMatrixCSC, b,
-        comps::Union{Nothing, Tuple{Vector{Int}, Vector{Symbol}}} = nothing)
+        comps::Union{Nothing, Vector{Int}} = nothing)
     m = size(C, 1)
     root = collect(1:m)
     find(k) = (while root[k] != k
@@ -898,16 +964,11 @@ end
     )
 end
 
-# A singular block of a composite spanning two facets whose relations each read several
-# components is a corner of two tractions: there the two shear relations are one equation
-# (the stress is symmetric), so no closure of the corner ghosts exists.
 _throw_singular_block(names, ::Nothing, idx) = _throw_singular_corner(names[idx])
-function _throw_singular_block(names, (owner, multi)::Tuple, idx)
+function _throw_singular_block(names, owner::Vector{Int}, idx)
     order = (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)
     facets = sort!(unique(names[idx]); by = f -> findfirst(==(f), order))
-    cs = sort!(unique(owner[idx]))
-    count(in(multi), facets) >= 2 && _throw_traction_corner(facets, cs)
-    return _throw_composite_singular(facets, cs)
+    return _throw_composite_singular(facets, sort!(unique(owner[idx])))
 end
 
 function _component_list(cs::Vector{Int})
@@ -926,22 +987,6 @@ end
         "ghost). Give each component a relation whose rows read its ghost independently " *
         "of the others, such as `∂ₙ(u(i))`, or a traction Σⱼ ∂ₙ(u(j); K = Kᵢⱼ) with " *
         "Kᵢᵢ[d, d] ≠ 0 on the facet of axis d.",
-    ),
-    )
-end
-
-@noinline function _throw_traction_corner(facets, cs)
-    a, b = facets[1], facets[2]
-    throw(
-        ArgumentError(
-        "the relations on :$a and :$b each read several components (a traction) and " *
-        "meet at a corner, where they cannot be solved for the ghosts of " *
-        "$(_component_list(cs)): the two shear relations are one equation there (the " *
-        "stress is symmetric), so the corner block is singular. Two such facets may " *
-        "share a corner only where their joint block is nonsingular, which isotropic " *
-        "tractions never give. Make one of them a displacement facet whose ghosts " *
-        "close by `∂ₙₙ(u(i)) => 0`: `:$b => u(1) => g₁, :$b => u(2) => g₂, " *
-        ":$b => ∂ₙₙ(u(1)) => 0.0, :$b => ∂ₙₙ(u(2)) => 0.0`.",
     ),
     )
 end
