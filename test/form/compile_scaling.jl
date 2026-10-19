@@ -5,7 +5,7 @@ using Bramble
 using Random
 using LinearAlgebra: dot, norm
 using SparseArrays: SparseMatrixCSC, nnz
-import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D₋ᵧ, D₊ᵧ, Dcᵧ, D₋₂, D₊₂, Dc₂, D̽ᵧ, Mₓ
+import Bramble: D₋ₓ, Dcᵧ, D̽ᵧ, Mₓ
 using Bramble: OperatorAdd, OperatorScale, BilinearProduct, LinearProduct
 
 # S3 (gpena/Bramble.jl, this milestone) fixed a compile blow-up in `resolve_ast`. Each
@@ -23,36 +23,46 @@ using Bramble: OperatorAdd, OperatorScale, BilinearProduct, LinearProduct
 #   after the fix:   N=9   3.7 s   N=27  15.1 s   (ratio ~4.1, close to linear)
 # The assertion below allows slack around that ratio (4.5x plus a fixed 1s) rather than
 # pinning it exactly, since compile time is noisy across machines and Julia versions.
+#
+# Timed in a fresh process: in the suite, earlier files have already compiled the first nine
+# pairs (k = 0, each operator with itself), so `t9` shrank to 0.6 s while `t27` stayed at
+# 9.5 s, a ratio of 17 with no change to the compile. Coverage on, 3 threads: fresh, the
+# ratio is 2.6.
+const NTERM_TIMES = raw"""
+using Bramble, Random
+import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D₋ᵧ, D₊ᵧ, Dcᵧ, D₋₂, D₊₂, Dc₂
+Random.seed!(287)
+Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (9, 8, 7), (false, false, false))
+Wₕ = gridspace(Ωₕ)
+OPS = (D₋ₓ, D₊ₓ, Dcₓ, D₋ᵧ, D₊ᵧ, Dcᵧ, D₋₂, D₊₂, Dc₂)
+# (i, i+k) mod 9 for k = 0, 1, 2, ...: every N ≤ 81 gets N distinct operator pairs.
+PAIRS = [(OPS[i], OPS[mod1(i + k, 9)]) for k in 0:8 for i in 1:9]
+# Warm up shared machinery (mesh/space construction, the simplifier, `assemble` itself)
+# with a one-term form, so the timed runs below measure only the N-term compile.
+assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))))
+function assemble_nterms(n)
+    ps = Tuple(PAIRS[1:n])
+    f = form(Wₕ, Wₕ, (u, v) -> foldl(+, map(p -> innerₕ(p[1](u), p[2](v)), ps)))
+    t = @elapsed A = assemble(f)
+    return t, A
+end
+t9, _ = assemble_nterms(9)
+t27, A27 = assemble_nterms(27)
+# Cheap correctness guard alongside the timing one: the 27-term matrix must equal the
+# sum of its 27 single-term matrices -- catches a fused or short-circuited sum that
+# happens to compile fast but silently drops or double-counts a term.
+singles = [assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(p[1](u), p[2](v)))) for p in PAIRS[1:27]]
+println(t9, " ", t27, " ", isapprox(Matrix(A27), sum(Matrix.(singles))))
+"""
+
 @testset "N-term form compiles near-linearly" begin
-    Random.seed!(287)
-    Ωₕ = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (9, 8, 7), (false, false, false))
-    Wₕ = gridspace(Ωₕ)
-
-    OPS = (D₋ₓ, D₊ₓ, Dcₓ, D₋ᵧ, D₊ᵧ, Dcᵧ, D₋₂, D₊₂, Dc₂)
-    # (i, i+k) mod 9 for k = 0, 1, 2, ...: every N ≤ 81 gets N distinct operator pairs.
-    PAIRS = [(OPS[i], OPS[mod1(i + k, 9)]) for k in 0:8 for i in 1:9]
-
-    # Warm up shared machinery (mesh/space construction, the simplifier, `assemble` itself)
-    # with a one-term form, so the timed runs below measure only the N-term compile.
-    assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))))
-
-    function assemble_nterms(n)
-        ps = Tuple(PAIRS[1:n])
-        f = form(Wₕ, Wₕ, (u, v) -> foldl(+, map(p -> innerₕ(p[1](u), p[2](v)), ps)))
-        t = @elapsed A = assemble(f)
-        return t, A
-    end
-
-    t9, _ = assemble_nterms(9)
-    t27, A27 = assemble_nterms(27)
-
+    project = Base.active_project()
+    cmd = `$(Base.julia_cmd()) --startup-file=no --threads=2 --project=$project
+        -e $NTERM_TIMES`
+    out = split(readchomp(cmd))
+    t9, t27 = parse(Float64, out[1]), parse(Float64, out[2])
     @test t27 <= 4.5 * t9 + 1
-
-    # Cheap correctness guard alongside the timing one: the 27-term matrix must equal the
-    # sum of its 27 single-term matrices -- catches a fused or short-circuited sum that
-    # happens to compile fast but silently drops or double-counts a term.
-    singles = [assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(p[1](u), p[2](v)))) for p in PAIRS[1:27]]
-    @test isapprox(Matrix(A27), sum(Matrix.(singles)))
+    @test out[3] == "true"
 end
 
 # The Laplacian `Δₕ` (gpena/Bramble.jl#774) nests as a node of its own, so `Δₕ(Δₕ(Δₕ(u)))`
