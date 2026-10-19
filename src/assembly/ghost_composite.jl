@@ -815,6 +815,44 @@ end
     )
 end
 
+# Built in one call from the unconstrained composite: it takes no further component.
+×(::ConstrainedCompositeSpace, ::AbstractSpaceType) = _throw_whole_product()
+×(::AbstractSpaceType, ::ConstrainedCompositeSpace) = _throw_whole_product()
+×(::ConstrainedCompositeSpace, ::ConstrainedCompositeSpace) = _throw_whole_product()
+Base.:^(::ConstrainedCompositeSpace, ::Integer) = _throw_whole_product()
+Base.:^(::ConstrainedCompositeSpace, ::Val) = _throw_whole_product()
+
+@noinline function _throw_whole_product()
+    throw(
+        ArgumentError(
+        "a composite constrained as a whole, constrained(C₁ × C₂, relations), takes no " *
+        "further component: its closure is solved once for all of them. Build the whole " *
+        "product of ghost spaces first, C₁ × C₂ × C₃, and constrain it in one call.",
+    ),
+    )
+end
+
+# A component of an element has no space of its own: no component's closure maps its
+# degrees of freedom alone to its padded values once a relation couples the components.
+@noinline function (uₕ::VectorElement{<:ConstrainedCompositeSpace})(i::Int)
+    return _throw_whole_component(space(uₕ))
+end
+@noinline function components(uₕ::VectorElement{<:ConstrainedCompositeSpace})
+    return _throw_whole_component(space(uₕ))
+end
+
+@noinline function _throw_whole_component(Vₕ::ConstrainedCompositeSpace)
+    throw(
+        ArgumentError(
+        "an element of $(Vₕ) has no component of its own, uₕ(i): its closure (E, d) may " *
+        "tie a component's padded values to the degrees of freedom of the others, so no " *
+        "component space maps a slice of them alone. For the values of component i, its " *
+        "ghosts included, lift the element and take the component: " *
+        "Bramble.lift(Vₕ, parent(uₕ))(i).",
+    ),
+    )
+end
+
 @inline padded_space(Vₕ::ConstrainedCompositeSpace) = Vₕ.padded
 @inline ndofs(Vₕ::ConstrainedCompositeSpace) = size(Vₕ.E, 2)
 @inline backend(Vₕ::ConstrainedCompositeSpace) = backend(Vₕ.padded)

@@ -191,6 +191,24 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         @test refuses(() -> avgₕ!(element(C), x -> x[1]), "Rₕ or avgₕ")
         @test refuses(() -> form(C, S, (u, v) -> innerₕ(u, v)), "takes such a composite")
         @test refuses(() -> semidiscretize(a, l), "semidiscretize")
+
+        # no further component: the closure is solved once for the whole product
+        whole_product = "takes no further component"
+        W = gridspace(Ωₕ)
+        for (left, right) in ((C, W), (W, C), (C, S), (S, C), (C, C), (C, V), (V, C))
+            @test refuses(() -> left × right, whole_product)
+        end
+        @test refuses(() -> C^2, whole_product)
+        @test refuses(() -> C^Val(2), whole_product)
+
+        # a component of an element has no space of its own; its lift's component does
+        uₕ = element(C, collect(1.0:Bramble.ndofs(C)))
+        @test refuses(() -> uₕ(1), "has no component of its own")
+        @test refuses(() -> Bramble.components(uₕ), "has no component of its own")
+        Uₕ = lift(C, parent(uₕ))
+        Ux = lift(X2(S, c), parent(uₕ))
+        @test close(parent(Uₕ(2)), parent(Ux(2)); rtol = 1.0e-13)
+        @test close(parent(Uₕ(1)), parent(Ux(1)); rtol = 1.0e-13)
     end
 end
 
