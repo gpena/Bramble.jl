@@ -66,7 +66,8 @@ tinf = @snoop_inference begin
     mf_call(a, x, y)
 end
 using SnoopCompile
-_mi(t) = (d = t.ci.def; d isa Core.MethodInstance ? d : d.def)
+# SnoopCompile's own accessor: the field holding the CodeInstance moved between releases.
+_mi(t) = Core.MethodInstance(t)
 mis = [m for m in map(_mi, flatten(tinf)) if m isa Core.MethodInstance && m.def isa Method]
 # A type defined in Main or in this wrapper module (the user's form closure) is new to
 # every session, so its inference is never a cache miss; only instances built entirely from

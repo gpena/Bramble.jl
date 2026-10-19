@@ -185,7 +185,7 @@ _from_main(T::DataType) = parentmodule(T) === Main || any(_from_main, T.paramete
 
 function count_cpupolyester(tinf, ms)
     SC = Main.SnoopCompile
-    mi_of(t) = (d = t.ci.def; d isa Core.MethodInstance ? d : d.def)
+    mi_of(t) = Core.MethodInstance(t)
     mis = [m for m in map(mi_of, SC.flatten(tinf)) if m isa Core.MethodInstance && m.def isa Method]
     hit(mi) = !_from_main(mi.specTypes) &&
               (occursin("CpuPolyester", string(mi.specTypes)) ||
