@@ -37,14 +37,15 @@ On `gridspace(Ωₕ; ghosts)` the closure is the selection of the degrees of fre
 padded points. `E` is `N_pad × ndofs` with one entry 1 per column, and `d = 0`. On the
 result of [`constrained`](@ref) the closure comes from the relations. `E` expresses each
 eliminated ghost through the physical nodes, and `d` carries the relations' data at the
-eliminated ghosts. Assembly fills `A_pad` on the padded space and returns
-``E_v^T A_{\mathrm{pad}} E_u``; the load of a linear form is
-``E_v^T (F_{\mathrm{pad}} - A_{\mathrm{pad}}\, d_u)``, so a space with ``d \neq 0`` needs the
-bilinear form, and `assemble(l)` alone throws an `ArgumentError`. The reduction is a sparse
-map from the stored values of `A_pad` to those of the reduced matrix, computed once with the
-form, so a warm `assemble!` allocates nothing. It is symmetric whenever `A_pad` and the two
-closures are. Substituting `E` at each stencil tap instead would rewrite the guarded walk,
-the pattern recorder and the replay of the assembly, for the same matrix.
+eliminated ghosts. Assembly fills `A_pad` on the padded space (on a traction facet of a
+composite, by the facet rule below) and returns ``E_v^T A_{\mathrm{pad}} E_u``; the load of
+a linear form is ``E_v^T (F_{\mathrm{pad}} - A_{\mathrm{pad}}\, d_u)``, so a space with ``d
+\neq 0`` needs the bilinear form, and `assemble(l)` alone throws an `ArgumentError`. The
+reduction is a sparse map from the stored values of `A_pad` to those of the reduced matrix,
+computed once with the form, so a warm `assemble!` allocates nothing. It is symmetric
+whenever `A_pad` and the two closures are. Substituting `E` at each stencil tap instead
+would rewrite the guarded walk, the pattern recorder and the replay of the assembly, for the
+same matrix.
 
 `dirichlet` and `symmetrize` replace rows of the reduced system when its unknowns are the
 physical nodes in mesh order (every ghost eliminated, no node fixed by a Dirichlet
@@ -116,6 +117,16 @@ view `uₕ(i)` of it is refused, since `E` couples the components, so take
 `GhostVector` are refused too. A corner of two traction facets uses a one-sided tangential
 difference along the facets, since the two shear relations there are one equation.
 
+On a facet whose ghost relation reads several components, a traction, the mixed differences
+of the form read no ghost of that facet. The mixed differences in the left argument of a
+product, the argument whose stencil gives the matrix columns, extrapolate the function to
+the ghost from its values at the three nodes inward along the normal, to second order on
+non-uniform spacing. Second differences and the relations still read the ghosts of the
+closure, and `E` and `d` are unchanged, so the relations hold on lifted values exactly as
+before. The shear-closed ghosts would make the collocated form unstable once the cells are
+about 1.55 times wider across the facet than along it. A composite whose relations each read
+one component is not affected.
+
 ### Grid functions with ghosts
 
 A grid function on a ghost space has two layouts, one for time loops and one for forms.
@@ -183,8 +194,10 @@ forms.
 | rank-one terms | supported on a scalar ghost space, with the pair load and `dirichlet`; refused on composite ghost spaces | `test/form/ghost_rank_one.jl` |
 | composite spaces `C₁ × C₂`, `C^Val(n)`, `C^N` with `N ≤ 3` | supported for ghost components with the same ghosted facets and mesh size: forms, `assemble`, loads, `lift`, `dirichlet` per component by keyword or relation, relations reading several components (`constrained` of the whole composite), contractions; refused beside a plain component, with different facets per component, and for `semidiscretize`, matrix-free, Kronecker, `fdm_*` and the preconditioners | `test/ghost/composite.jl`, `test/ghost/cross_component.jl` |
 
-A mixed difference at a corner takes the corner rule on a composite as on a scalar space:
-the composite assembles the same rows per component.
+A mixed difference at a corner takes the corner rule on a composite as on a scalar space.
+On a facet of a composite constrained as a whole whose relations read several components,
+the facet rule applies as well, and the assembled rows differ from the plain padded form's
+there (see the traction rule above).
 
 ## Operator matrices: stencil_matrix versus the Kronecker construction
 

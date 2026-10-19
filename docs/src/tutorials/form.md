@@ -414,7 +414,7 @@ end
 ndofs(Cₕ), ndofs(PV)
 ```
 
-`Bramble.lift(Cₕ, u)` returns the padded displacement with its ghosts filled; take a component of it as `Bramble.lift(Cₕ, u)(i)`. A component view `uₕ(i)` of the constrained space itself is refused, because the closure couples the components, and so are `×` and `^` of it, relations with data in time, the `dirichlet` keyword and `GhostVector`. A corner of two traction facets closes with a one-sided tangential difference along the facets.
+`Bramble.lift(Cₕ, u)` returns the padded displacement with its ghosts filled; take a component of it as `Bramble.lift(Cₕ, u)(i)`. A component view `uₕ(i)` of the constrained space itself is refused, because the closure couples the components, and so are `×` and `^` of it, relations with data in time, the `dirichlet` keyword and `GhostVector`. A corner of two traction facets closes with a one-sided tangential difference along the facets. On a facet with a traction, the mixed differences of the form (those with `∂ₓ` and `∂ᵧ` of different axes, in the left argument of the product) do not read the ghosts of the facet: they extrapolate the function to the ghost from the three nodes inward, to second order, which keeps the collocated form stable on cells wider across the facet than along it. The relations still hold on the lifted values, as the check above asserts.
 
 ### Dirichlet conditions beside ghost relations
 

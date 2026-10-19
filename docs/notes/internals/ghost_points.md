@@ -1217,6 +1217,26 @@ facets at such a corner, which makes the corner rule uniform. A nonsingular anis
 corner stays accepted. The tests of the corner are `test/ghost/cross_component.jl` and the
 elasticity traction tests of `test/ghost/traction.jl`.
 
+**The facet rule (T2.4).** The shear-closed ghosts of a traction facet, read by the mixed
+differences of the form, make the collocated form unstable. The mixed term `A_d(B_e(u(j)))`
+becomes a centred tangential difference of a centred tangential difference with the sign of
+anti-diffusion along the facet, coefficient `-λ` (`λ = 2`, `μ = 0.5`). Once the aspect ratio
+across the facet exceeds about 1.55 the reduced matrix had eigenvalues with negative real
+part (traction on one facet, uniform cells). The rule applies on facets whose ghost relation
+reads several components (syntactic, recorded by `constrained`). There the mixed differences
+in a product's left argument, the side of the matrix columns, extrapolate the function to
+the ghost from the three nodes inward, second order on non-uniform spacing. Second
+differences and the relations read the closure's ghosts, `E` and `d` are unchanged, and the
+relations hold on lifted values exactly as before. At a corner of two traction facets the
+one-sided tangential difference of the relations (T2.3) is unchanged. The code is in the
+facet rule section of `src/assembly/stencil_eval.jl` and in `_mark_mixed`.
+
+The departure from #793 AC 2 is this. It asked for second order on random and graded meshes.
+The orders are gated on graded meshes only (user, 2026-10-19), since on the random test
+meshes the scheme reaches only 1.77 to 1.84 over levels 0 to 3, even with displacement on
+every facet. Random meshes are checked for stability instead: the error stays within 5 times
+that of the all-displacement problem.
+
 ## Open questions
 
 1. **3D edges.** The edge lines carry padded points (60 on a 4×5×6 mesh, plus 8 corners).
