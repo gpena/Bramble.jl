@@ -367,6 +367,55 @@ catch e
 end
 ```
 
+### Relations that read several components
+
+On a composite space `S × S`, `constrained` takes relations that read several components of `u`. The case that needs it is the traction of elasticity, whose component ``i`` is ``\sum_j \eta \cdot (K_{ij} \nabla u_j)`` with ``(K_{ij})_{de} = \lambda\,\delta_{id}\delta_{je} + \mu\,(\delta_{ij}\delta_{de} + \delta_{ie}\delta_{jd})``. The tangential part is the conormal derivative with an off-diagonal `K`, so `∂ₙ(u(j); K = Kᵢⱼ)` summed over `j` is the traction on every facet, and no new operator is needed.
+
+A facet whose relation reads several components needs one ghost relation per component, written unkeyed: `:xmin => t₁ => g₁, :xmin => t₂ => g₂`. The ghosts of a node are solved together, so the relation of component 1 may read the ghost of component 2. A displacement facet carries ghosts too, closed by `∂ₙₙ(u(i)) => 0` beside the Dirichlet relation `u(i) => 0` of each component. The block below loads the facet ``x = 0`` with a traction, clamps the other three, solves the collocated form, and checks that both traction relations hold on the lifted values:
+
+```@example forms_traction
+using Bramble, LinearAlgebra
+import Bramble: Dcₓ, Dcᵧ, lift
+
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (false, false))
+S = gridspace(Ωₕ; ghosts = :boundary)
+V = S × S
+λ, μ = 2.0, 0.5
+
+# Kᵢⱼ[d, e] = λ δᵢd δⱼe + μ (δᵢⱼ δde + δᵢe δⱼd), so that Σⱼ ∂ₙ(u(j); K = Kᵢⱼ) is the
+# traction of component i on every facet.
+K(i, j) = [λ * (i == d) * (j == e) + μ * ((i == j) * (d == e) + (i == e) * (j == d))
+           for d in 1:2, e in 1:2]
+traction(u, i) = ∂ₙ(u(1); K = K(i, 1)) + ∂ₙ(u(2); K = K(i, 2))
+displacement(F, u) = (F => u(1) => 0.0, F => u(2) => 0.0,
+    F => ∂ₙₙ(u(1)) => 0.0, F => ∂ₙₙ(u(2)) => 0.0)
+
+Cₕ = constrained(V, u -> (
+    :xmin => traction(u, 1) => 1.0, :xmin => traction(u, 2) => 0.0,
+    displacement(:ymin, u)..., displacement(:xmax, u)..., displacement(:ymax, u)...))
+
+Dc = (Dcₓ, Dcᵧ)
+a = form(Cₕ, Cₕ, (u, v) -> sum(
+    innerₕ(-μ * Δₕ(u(i)), v(i)) +
+    sum(innerₕ(-(λ + μ) * Dc[i](Dc[j](u(j))), v(i)) for j in 1:2) for i in 1:2))
+l = form(Cₕ, v -> innerₕ(1.0, v(1)) + innerₕ(0.5, v(2)))
+A, F = assemble(a, l)
+U = lift(Cₕ, pde_solve(A, F))
+
+# Check on the lifted padded values that each traction row equals its data on :xmin.
+PV = Bramble.padded_space(V)
+for (i, g) in ((1, 1.0), (2, 0.0))
+    R = assemble(form(PV, PV, (w, v) -> sum(
+        inner_Γ(∂ₙ(w(j); K = K(i, j)), v(i); markers = (:xmin,)) for j in 1:2)))
+    W = assemble(form(PV, PV, (w, v) -> inner_Γ(w(i), v(i); markers = (:xmin,))))
+    r = R * collect(U) - g * (W * ones(length(U)))
+    @assert norm(r, Inf) <= 1e-9 * max(1.0, norm(R * collect(U), Inf))
+end
+ndofs(Cₕ), ndofs(PV)
+```
+
+`Bramble.lift(Cₕ, u)` returns the padded displacement with its ghosts filled; take a component of it as `Bramble.lift(Cₕ, u)(i)`. A component view `uₕ(i)` of the constrained space itself is refused, because the closure couples the components, and so are `×` and `^` of it, relations with data in time, the `dirichlet` keyword and `GhostVector`. A corner of two traction facets closes with a one-sided tangential difference along the facets.
+
 ### Dirichlet conditions beside ghost relations
 
 Keep the Robin condition at ``x = 1`` and impose ``u(0) = 1`` instead, so only `xmax` needs a ghost. There are two routes, and they give the same solution.
