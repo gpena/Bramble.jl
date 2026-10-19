@@ -27,7 +27,11 @@
 # facet's ghosts through the one-sided difference along the facet (`_one_sided_corner!`),
 # so each facet's corner rows read its own ghosts alone and the corner block splits in two:
 # a joint block would be singular for isotropic tractions, whose shear relations are one
-# equation there.
+# equation there. A form on the result reads the ghosts of such a facet through its mixed
+# differences by extrapolation from the nodes inward instead (the facet rule of
+# stencil_eval.jl, on the facets whose ghosts `E` ties to several components), since read
+# through the relation's tangential difference they made the reduced matrix unstable on
+# cells stretched across the facet. The closure itself is the same.
 #
 # See also: `GhostGridSpace`, `FacetOperator`, `GhostBilinearForm`
 
@@ -555,7 +559,8 @@ function _one_sided_corner!(rows, cols, vals, start::Int, k::Int, comps::Tuple,
 end
 
 # The weights at the nodes `x₀`, `x₁`, `x₂` of the quadratic through them, evaluated at `x`:
-# the one-sided second-order difference of a corner, as `_one_sided_corner!` applies them.
+# the one-sided second-order difference of a corner, as `_one_sided_corner!` applies them,
+# and the facet rule's extrapolation to a ghost (`_extrapolated`, stencil_eval.jl).
 @inline function _one_sided_weights(x, x₀, x₁, x₂)
     return ((x - x₁) * (x - x₂) / ((x₀ - x₁) * (x₀ - x₂)),
         (x - x₀) * (x - x₂) / ((x₁ - x₀) * (x₁ - x₂)),

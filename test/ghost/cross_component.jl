@@ -8,17 +8,22 @@ module GhostCrossComponentTests
 # traction, #793) must hold on the lifted values, its rows assembled by one `inner_Γ` per
 # component as the oracle, and must change the closure against one-component relations.
 # At a corner of two tractions each relation's tangential difference is one-sided, which a
-# residual written out by hand checks there. Every mesh is non-uniform, and the components'
-# relations and data differ, so a swapped or shared component shows. The refusals (data in
-# time, the `dirichlet` rows, `GhostVector`, relations naming no component, a facet with too
-# few or too many ghost relations, a singular block, a corner too short for the one-sided
-# difference) are pinned by their messages.
+# residual written out by hand checks there. On a facet whose relations read several
+# components, a mixed difference of the form reads the ghosts by extrapolation from the
+# nodes inward (the facet rule), checked against that extrapolation built by hand, and
+# keeps the reduced matrix free of eigenvalues of negative real part on cells stretched
+# across a traction facet; relations of one component each leave the form as it was. Every
+# mesh is non-uniform but the stretched uniform ones, and the components' relations and
+# data differ, so a swapped or shared component shows. The refusals (data in time, the
+# `dirichlet` rows, `GhostVector`, relations naming no component, a facet with too few or
+# too many ghost relations, a singular block, a corner too short for the one-sided
+# difference, a facet too short for the facet rule) are pinned by their messages.
 
 using Test
 using Bramble
 import Bramble
-using Bramble: lift, lift!
-using LinearAlgebra: dot, norm
+using Bramble: lift, lift!, Dcₓ, Dcᵧ, D̃ₓ, D̃ᵧ, D₋ₓ, D₋ᵧ
+using LinearAlgebra: Diagonal, dot, eigvals, norm
 using SparseArrays: nnz
 using Random: Xoshiro
 
@@ -461,6 +466,116 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         # component 2 keeps the ghosts of :ymin and :ymax, component 1 none
         np = npoints(Ωₕ, Tuple)
         @test Bramble.ndofs(C) == 2 * prod(np) + 2 * np[1]
+    end
+
+    # The facet rule: on a facet whose relations read several components, a mixed
+    # difference of the form reads the facet's ghosts as the quadratic through the three
+    # nodes inward along the normal, extrapolated to the ghost; second differences read the
+    # closure's ghosts. The oracle builds that extrapolation by hand from the mesh points, a
+    # matrix `X` on the padded values, and reduces `Eᵀ (A_second + A_mixed X) E` from forms
+    # on the padded composite.
+    second(u, a) = a == 1 ? D̃ₓ(D₋ₓ(u)) : D̃ᵧ(D₋ᵧ(u))
+    fs = (u, v) -> sum(innerₕ(-μ * Δₕ(u(i)), v(i)) +
+                       innerₕ(-(λ + μ) * second(u(i), i), v(i)) for i in 1:2)
+    fx = (u, v) -> innerₕ(-(λ + μ) * Dcₓ(Dcᵧ(u(2))), v(1)) +
+                   innerₕ(-(λ + μ) * Dcₓ(Dcᵧ(u(1))), v(2))
+    fe = (u, v) -> fs(u, v) + fx(u, v)
+    SIDE = (xmin = (1, 1), xmax = (1, 2), ymin = (2, 1), ymax = (2, 2))
+    function extrapolation(Ωₕ, facets)
+        xs = (collect(points(Ωₕ(1))), collect(points(Ωₕ(2))))
+        np = map(length, xs) .+ 2
+        L = LinearIndices(np)
+        m = prod(np)
+        px = map(x -> [2x[1] - x[2]; x; 2x[end] - x[end - 1]], xs)
+        X = Matrix{Float64}(Diagonal(ones(2m)))
+        for c in 0:1, F in facets
+
+            a, s = SIDE[F]
+            g, σ = s == 1 ? (1, 1) : (np[a], -1)
+            for r in 2:(np[3 - a] - 1)
+                at(k) = a == 1 ? L[g + k * σ, r] : L[r, g + k * σ]
+                z, y = px[a][g], ntuple(k -> px[a][g + k * σ], 3)
+                X[c * m + at(0), c * m + at(0)] = 0.0
+                for k in 1:3
+                    X[c * m + at(0), c * m + at(k)] = prod((z - y[o]) / (y[k] - y[o])
+                    for o in 1:3 if o != k)
+                end
+            end
+        end
+        return X
+    end
+    corner_rels = u -> (traction(:xmin)(u)..., traction(:ymin)(u)..., disp(:xmax)(u)...,
+        disp(:ymax)(u)...)
+
+    FACET_CASES = (((:xmin,), rels_of(TRACTIONS.one)), ((:xmin, :ymin), corner_rels))
+    @testset "Facet rule vs extrapolation: $kind, $(facets)" for kind in KINDS,
+        (facets, rels) in FACET_CASES
+
+        Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
+        V = gridspace(Ωₕ; ghosts = :boundary)^2
+        PV = Bramble.padded_space(V)
+        C = constrained(V, rels)
+        E, d = Bramble.closure(C)
+        E = Matrix(E)
+        X = extrapolation(Ωₕ, facets)
+        As, Ax = Matrix(assemble(form(PV, PV, fs))), Matrix(assemble(form(PV, PV, fx)))
+        A = Matrix(assemble(form(C, C, fe)))
+        @test close(A, transpose(E) * (As + Ax * X) * E)
+        @test close(Matrix(assemble(form(C, C, fx))), transpose(E) * Ax * X * E)
+        # the centred mixed difference over the closure's ghosts is not what assembles
+        @test norm(A - transpose(E) * (As + Ax) * E) > 1.0e-3 * norm(A)
+        # the load reduces through the same padded matrix
+        fl = v -> innerₕ(x -> 1.0 + x[1], v(1)) + innerₕ(x -> 100.0 * x[2], v(2))
+        _, F = assemble(form(C, C, fe), form(C, fl))
+        Fp = assemble(form(PV, fl))
+        @test close(F, transpose(E) * (Fp - (As + Ax * X) * d))
+    end
+
+    # Traction on one facet, displacement on the others, on cells twice as long across the
+    # facet as along it (uniform) and on a random mesh whose ratio reaches 3.7 on :ymin: the
+    # centred mixed difference over the traction's ghosts gave eigenvalues of negative real
+    # part there; with the facet rule the reduced matrix has none.
+    @testset "Facet rule, stretched cells: $(n), $(F)" for (n, F) in (
+        ((17, 9), :ymin), ((9, 17), :xmin), (:random, :ymin))
+        Ωₕ = n === :random ? O.make_mesh(:random, 0; dim = 2, n0 = 9, seed = 7) :
+             mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), n, (true, true))
+        a, s = SIDE[F]
+        xs = (collect(points(Ωₕ(1))), collect(points(Ωₕ(2))))
+        across = s == 1 ? xs[a][2] - xs[a][1] : xs[a][end] - xs[a][end - 1]
+        @test across / minimum(diff(xs[3 - a])) >= 2.0 - 1.0e-12
+        others = filter(!=(F), (:xmin, :xmax, :ymin, :ymax))
+        C = constrained(gridspace(Ωₕ; ghosts = :boundary)^2,
+            u -> (traction(F)(u)..., Iterators.flatten(disp(G)(u) for G in others)...))
+        @test minimum(real, eigvals(Matrix(assemble(form(C, C, fe))))) > 0
+    end
+
+    # Relations of one component each, scalar or per component, leave the mixed difference
+    # centred over the closure's ghosts.
+    @testset "Facet rule off one component: $kind" for kind in KINDS
+        Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
+        S = gridspace(Ωₕ; ghosts = :boundary)
+        PV = Bramble.padded_space(S^2)
+        c = CASES.boundary
+        for C in (constrained(S^2, whole(c.r1, c.r2)), X2(S, c))
+            E = Matrix(first(Bramble.closure(C)))
+            Ap = Matrix(assemble(form(PV, PV, fe)))
+            @test close(Matrix(assemble(form(C, C, fe))), transpose(E) * Ap * E;
+                rtol = 1.0e-13)
+        end
+        W = constrained(S, c.r1)
+        P = Bramble.padded_space(S)
+        f1 = (u, v) -> innerₕ(-Δₕ(u), v) + innerₕ(Dcₓ(Dcᵧ(u)), v)
+        E = Matrix(first(Bramble.closure(W)))
+        @test close(Matrix(assemble(form(W, W, f1))),
+            transpose(E) * Matrix(assemble(form(P, P, f1))) * E; rtol = 1.0e-13)
+    end
+
+    @testset "Facet rule refuses a short axis" begin
+        Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (2, 7), (true, false))
+        C = constrained(gridspace(Ω2; ghosts = :boundary)^2,
+            u -> (traction(:xmin)(u)..., disp(:xmax)(u)..., disp(:ymin)(u)...,
+                disp(:ymax)(u)...))
+        @test refuses(() -> form(C, C, fe), "three nodes along axis 1, which has 2")
     end
 
     @testset "Arithmetic on a whole element" begin

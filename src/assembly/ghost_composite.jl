@@ -19,7 +19,11 @@
 # With relations of one component each it equals `constrained(C₁, r₁) × constrained(C₂,
 # r₂)`. At a corner of two facets with relations reading several components, each facet's
 # relations read the other's ghosts through a one-sided difference along the facet, so the
-# corner closes facet by facet (a joint block is singular for isotropic tractions). Beyond
+# corner closes facet by facet (a joint block is singular for isotropic tractions). A form
+# on it reads the ghosts of a facet whose closure ties components together through its
+# mixed differences by extrapolation from the nodes inward (the facet rule of
+# stencil_eval.jl, `_with_facet_rule` below): through the relation's tangential difference,
+# they gave eigenvalues of negative real part on cells stretched across the facet. Beyond
 # the refusals below, it refuses data depending on time, the `dirichlet` rows and
 # `GhostVector`.
 #
@@ -211,7 +215,7 @@ an `ArgumentError`.
 function form(Wₕ::_GhostCompositeSide, Vₕ::_GhostCompositeSide, f)
     _check_composite_ghosts(_ghost_components(Wₕ)..., _ghost_components(Vₕ)...)
     W, V = _CompositeClosure(Wₕ), _CompositeClosure(Vₕ)
-    a = form(W.padded, V.padded, f)
+    a = form(W.padded, V.padded, _with_facet_rule(Wₕ, f))
     a isa RankOneForm && _throw_ghost_composite_unsupported("a rank-one term")
     return _ghost_bilinear_form(W, V, a)
 end
@@ -220,6 +224,63 @@ function form(Vₕ::_GhostCompositeSide, f)
     _check_composite_ghosts(_ghost_components(Vₕ)...)
     V = _CompositeClosure(Vₕ)
     return _ghost_linear_form(V, form(V.padded, f))
+end
+
+# The form's function with the facet rule of stencil_eval.jl on the trial side: on a
+# composite constrained as a whole, a mixed difference reads the ghosts of a facet whose
+# closure couples components by extrapolation from the nodes inward (`_mark_mixed`).
+_with_facet_rule(::_GhostCompositeSpace, f) = f
+function _with_facet_rule(Wₕ::ConstrainedCompositeSpace, f)
+    facets = _coupled_facets(Wₕ)
+    return (u, v) -> _mark_mixed(f(u, v), facets)
+end
+
+# The facets `(d, s)` of a composite constrained as a whole whose ghosts the closure ties
+# to another component's degrees of freedom (`facets[d][s]`, `s` 1 the minimum): those of a
+# relation reading several components. A degree of freedom belongs to the component whose
+# physical node is its unit row of `E`. Refused where such a facet has fewer than three
+# nodes across it, the facet rule's extrapolation.
+function _coupled_facets(Wₕ::ConstrainedCompositeSpace)
+    leaves = _padded_leaves(Wₕ.space)
+    n = npoints(physical_mesh(mesh(first(first(leaves)))), Tuple)
+    Et = Wₕ.Et
+    owner = zeros(Int, size(Et, 1))
+    for (c, (C, _, poffset)) in enumerate(leaves)
+        G = mesh(C)
+        plin = LinearIndices(npoints(G, Tuple))
+        for I in CartesianIndices(n)
+            q = nzrange(Et, poffset + plin[padded_index(G, I)])
+            length(q) == 1 && isone(nonzeros(Et)[only(q)]) || continue
+            owner[rowvals(Et)[only(q)]] = c
+        end
+    end
+    coupled = falses(length(n), 2)
+    for (c, (C, _, poffset)) in enumerate(leaves)
+        G = mesh(C)
+        plin = LinearIndices(npoints(G, Tuple))
+        for g in 1:nghosts(G)
+            I, d, side = boundary_node(G, g)
+            t = side === _GHOST_SIDES[1] ? 1 : 2
+            coupled[d, t] && continue
+            r = poffset + plin[_step(padded_index(G, I), d, t == 1 ? -1 : 1)]
+            any(q -> owner[rowvals(Et)[q]] != c, nzrange(Et, r)) && (coupled[d, t] = true)
+        end
+    end
+    for d in eachindex(n), t in 1:2
+
+        coupled[d, t] && n[d] < 3 && _throw_facet_axis_too_short(_facet_name(d, t), d, n[d])
+    end
+    return ntuple(d -> (coupled[d, 1], coupled[d, 2]), Val(length(n)))
+end
+
+@noinline function _throw_facet_axis_too_short(name::Symbol, d::Int, n::Int)
+    throw(
+        ArgumentError(
+        "the relations on :$name read several components, so a mixed difference of a " *
+        "form reads its ghosts by extrapolation from three nodes along axis $d, which " *
+        "has $n. Use a mesh with at least three nodes along axis $d.",
+    ),
+    )
 end
 
 # `vᴴ A u` and `Fᵀ v` without assembling, as on a scalar ghost space (ghost_contract.jl,
@@ -799,13 +860,24 @@ facet's relations read its own ghosts alone and the corner closes facet by facet
 together, isotropic tractions would give a singular block, their shear relations being
 one equation there (the stress is symmetric). Elsewhere the difference stays centred.
 
+A form on it reads the ghosts of a facet with a relation reading several components
+through second differences as the closure gives them, and through mixed differences such
+as `Dcₓ(Dcᵧ(u(2)))` as the quadratic through the three nodes inward along the facet's
+normal, extrapolated to the ghost: the difference across the facet is then one-sided,
+second order on the non-uniform spacing. Read through the traction's tangential
+difference, the ghosts made the collocated elasticity operator unstable on cells longer
+across the facet than along it. Relations of one component each leave every form as on
+the product.
+
 Refused with an `ArgumentError`, besides what `constrained` and the product refuse: a
 relation naming no component, two ghost relations of one component on a facet, a facet
 with a relation reading several components but not one ghost relation per component,
 relations whose block at a node is singular, a corner of two tractions with fewer than
-three nodes along a facet, data depending on time (constrain the components apart and
-take the product), the `dirichlet` keyword of `assemble`, `dirichlet_bc!` and
-`symmetrize!` (give `u(i) => g` instead), and `GhostVector` and `update_ghosts!`.
+three nodes along a facet, a facet with a relation reading several components and fewer
+than three nodes across it (refused by `form`), data depending on time (constrain the
+components apart and take the product), the `dirichlet` keyword of `assemble`,
+`dirichlet_bc!` and `symmetrize!` (give `u(i) => g` instead), and `GhostVector` and
+`update_ghosts!`.
 
 # Examples
 
