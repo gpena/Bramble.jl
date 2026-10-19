@@ -16,7 +16,7 @@ module GhostCompositeTests
 using Test
 using Bramble
 import Bramble
-using Bramble: D₋ₓ, D₊ᵧ, lift, lift!
+using Bramble: D₋ₓ, D₊ᵧ, Dcₓ, Dcᵧ, lift, lift!
 using LinearAlgebra: dot, norm
 using SparseArrays: blockdiag, sparse
 using Random: Xoshiro
@@ -80,9 +80,8 @@ function space_b(S)
             :ymin => u + ∂ₙ(u) => x -> x[1]))
 end
 
-# The mixed difference reads the ghosts beside the corners. On a padded composite with every
-# facet ghosted the walk refuses its read of the absent corner point (a scalar padded space
-# takes the corner rule there), so the `:boundary` spaces below are given other forms.
+# The mixed difference reads the ghosts beside the corners; at a corner node of a padded
+# composite it takes the one-sided corner rule, as on a scalar space (tested below).
 const fa2 = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(-1.0 * Δₕ(u(2)), v(2)) +
                       0.5 * innerₕ(u(2), v(2)) + innerₕ(u(2), v(1)) +
                       innerₕ(D₋ₓ(D₊ᵧ(u(1))), v(2))
@@ -217,6 +216,42 @@ end
         fl33 = v -> innerₕ(x -> x[3], v(1)) + innerₕ(x -> 1.0, v(2))
         check_assembly(C3^2, C3^2, fa33, fl33; zero_alloc = false)
     end
+end
+
+# --- The corner rule per component ------------------------------------------------------ #
+
+# A centred mixed difference of a component reads the absent padded corner point at a corner
+# node (2D) or an edge node (3D) and takes the one-sided corner rule there, as the scalar
+# form does: each block of the padded composite matrix is the scalar padded matrix, and the
+# reduced matrix is `Eᵀ A_pad E`.
+function check_corner_rule(Ωₕ)
+    S = gridspace(Ωₕ; ghosts = :boundary)
+    P = Bramble.padded_space(S)
+    V = S × S
+    PV = Bramble.padded_space(V)
+    m = ndofs(P)
+    Aref = Matrix(assemble(form(P, P, (u, v) -> innerₕ(Dcₓ(Dcᵧ(u)), v))))
+    for (i, j) in ((1, 1), (1, 2), (2, 1))
+        A = Matrix(assemble(form(PV, PV, (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(j))), v(i)))))
+        B = A[((i - 1) * m + 1):(i * m), ((j - 1) * m + 1):(j * m)]
+        @test close(B, Aref)
+        @test count(!iszero, A) == count(!iszero, B)
+    end
+    # two blocks at once, with coefficients that cannot be confused
+    A = Matrix(assemble(form(PV, PV,
+        (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(2))), v(1)) + 100.0 * innerₕ(Dcₓ(Dcᵧ(u(1))), v(2)))))
+    @test close(A[1:m, (m + 1):(2m)], Aref)
+    @test close(A[(m + 1):(2m), 1:m], 100.0 * Aref)
+    @test iszero(A[1:m, 1:m]) && iszero(A[(m + 1):(2m), (m + 1):(2m)])
+    fc = (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(2))), v(1))
+    E, _ = Bramble.closure(V)
+    @test close(Matrix(assemble(form(V, V, fc))),
+        Matrix(E' * assemble(form(PV, PV, fc)) * E))
+end
+
+@testset "Composite ghost corner rule" begin
+    check_corner_rule(mesh2d())
+    WITH_3D_TESTS && check_corner_rule(O.make_mesh(:random, 0; dim = 3, n0 = 5))
 end
 
 # --- lift ---------------------------------------------------------------------------- #

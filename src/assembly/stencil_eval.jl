@@ -208,7 +208,7 @@ const _Scale = Union{OperatorScale, GridFunctionScale}
 @inline _cross_axis(op::_Scale) = _cross_axis(op.inner_op)
 @inline _cross_axis(::Any) = 0
 
-@inline _scaled_leaf(::_BareLeaf) = true
+@inline _scaled_leaf(::_AnyLeaf) = true
 @inline _scaled_leaf(op::_Scale) = _scaled_leaf(op.inner_op)
 @inline _scaled_leaf(::Any) = false
 
