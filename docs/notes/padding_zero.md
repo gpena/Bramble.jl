@@ -457,3 +457,104 @@ $J /tmp/p795/corpus.jl /tmp/p795/corpus-$tag.jls > /tmp/p795/corpus-$tag.txt 2>&
 $J /tmp/p795/pins.jl "$tree" /tmp/p795/pins-$tag.tsv > /tmp/p795/pins-$tag.txt 2>&1
 echo "run_tree $tag done"
 ```
+
+## Measured costs
+
+Method (P1b). Each figure is measured on the three trees of the table above, alone on the
+machine (no other agent ran), at `--threads=4`, the default `-O` and `--startup-file=no`,
+every process through `julia_slot.sh 4`. The first-call figures come from
+`benchmark/multiterm_ttfx.jl` (C0's script, #797), run with `--launches 1` once per tree and
+round. There were five rounds, alternating the trees (base, option 1, option 2, base, ...), each launch
+a set of fresh child processes, so every first-call figure is a fresh process. Rows:
+`elasticity` (the 3D elasticity form on a 5^3 mesh), `vector_laplacian` and `scalar_2d`
+(the no-regression row). The warm figures come from `/tmp/p1b/warm.jl`, one process per
+tree and round, three rounds alternating the trees, each figure the minimum over repeated
+`assemble` calls (2000 for the 7 by 9 reproduction form, 50 for 201 by 201, 200 for the
+5^3 elasticity form, 20 for 9^3). The reproduction form is the issue's,
+`innerₕ(gi * u, D₊ₓ(D₋ₓ(restrict_to(:l, v))))` with finite `gi`. Every table gives the
+median over the back-to-back runs, the spread (min to max), and the ratio to base of each
+run pair (option over base of the same round): its median and its range.
+
+Machine state. **Every figure is under load.** The preflight failed on load and the
+user ruled "if load stays above 2, run it anyway and label the figures as under load,
+relying on back-to-back alternating ratios". The output of `check_power_load.sh` was
+`Power: AC Power`, `Load:  3.71 (threshold: < 4.0 on 8 logical cores)`. The output of
+`gate_preflight.sh --timing` was `FAIL load 1-min load 3.71 on 8 cores (above 2)`,
+`OK power on AC`, `OK onedrive not running`, `FAIL julia other julia processes: 45040`
+(that process had exited when checked a minute later), `OK cpu nothing above 50% CPU`.
+The 1-minute load average read 2.69 to 4.03 across the run's uptime lines. The ratios of
+back-to-back pairs are the evidence; the absolute seconds are not.
+
+### First call, fresh process, seconds (5 rounds)
+
+| Row, figure | Tree | Median | Spread (min-max) | Ratio to base, median | Ratio range |
+| --- | --- | --- | --- | --- | --- |
+| elasticity, `form` | base | 4.693 | 4.587-4.754 | 1 | 1 |
+| | option 1 | 4.830 | 4.696-4.891 | 1.023 | 1.016-1.060 |
+| | option 2 | 4.741 | 4.591-4.805 | 1.009 | 0.981-1.047 |
+| elasticity, `assemble` | base | 16.99 | 16.44-17.23 | 1 | 1 |
+| | option 1 | 16.82 | 16.40-17.28 | 0.994 | 0.952-1.027 |
+| | option 2 | 16.41 | 16.36-17.15 | 0.981 | 0.954-1.006 |
+| vector_laplacian, `form` | base | 0.0713 | 0.0656-0.0814 | 1 | 1 |
+| | option 1 | 0.0658 | 0.0649-0.0697 | 0.931 | 0.825-1.002 |
+| | option 2 | 0.0672 | 0.0655-0.0725 | 0.939 | 0.891-1.077 |
+| vector_laplacian, `assemble` | base | 2.865 | 2.710-3.030 | 1 | 1 |
+| | option 1 | 2.774 | 2.727-2.809 | 0.968 | 0.919-1.020 |
+| | option 2 | 2.784 | 2.735-2.866 | 0.968 | 0.905-1.029 |
+| scalar_2d, `form` | base | 0.00634 | 0.00610-0.00722 | 1 | 1 |
+| | option 1 | 0.00637 | 0.00615-0.00645 | 0.996 | 0.884-1.039 |
+| | option 2 | 0.00630 | 0.00619-0.00645 | 0.993 | 0.857-1.041 |
+| scalar_2d, `assemble` | base | 0.003661 | 0.003314-0.003859 | 1 | 1 |
+| | option 1 | 0.003555 | 0.003425-0.003690 | 0.971 | 0.956-1.081 |
+| | option 2 | 0.003493 | 0.003418-0.003578 | 0.977 | 0.905-1.071 |
+
+Every option median lies inside base's spread, and every ratio range straddles 1 except
+option 1's `elasticity form` (1.016 to 1.060, medians 1.023: the largest first-call figure
+that moves, about 0.14 s of 4.7 s, with its spread overlapping base's). Neither prototype
+changes compile cost beyond base's spread; under load this is not a win or a loss.
+
+### Warm `assemble`, microseconds (3 rounds)
+
+| Form | Tree | Median | Spread (min-max) | Ratio to base, median | Ratio range |
+| --- | --- | --- | --- | --- | --- |
+| reproduction, 7 by 9 (timer resolution about 0.04 us) | base | 1.208 | 1.208-1.208 | 1 | 1 |
+| | option 1 | 1.167 | 1.166-1.208 | 0.966 | 0.965-1.000 |
+| | option 2 | 1.250 | 1.208-1.250 | 1.035 | 1.000-1.035 |
+| reproduction, 201 by 201 | base | 421.3 | 420.5-425.7 | 1 | 1 |
+| | option 1 | 445.7 | 445.4-447.3 | 1.059 | 1.047-1.062 |
+| | option 2 | 453.7 | 452.5-455.0 | 1.077 | 1.063-1.082 |
+| elasticity, 5^3 | base | 178.2 | 176.2-178.6 | 1 | 1 |
+| | option 1 | 178.1 | 178.1-178.6 | 1.000 | 0.999-1.011 |
+| | option 2 | 178.6 | 178.1-178.8 | 1.002 | 0.997-1.015 |
+| elasticity, 9^3 | base | 1046 | 1004-1069 | 1 | 1 |
+| | option 1 | 1034 | 1032-1036 | 0.990 | 0.967-1.028 |
+| | option 2 | 1015 | 1001-1082 | 0.957 | 0.950-1.077 |
+
+The elasticity form, which has no padded entry, is unchanged (ratios within 1.00 and the
+base spread). The 201 by 201 reproduction form, which does carry padding, is slower by 5.9 %
+(option 1) and 7.7 % (option 2), and both option spreads lie wholly above base's spread in
+all three back-to-back pairs (ratios 1.047 to 1.082). That cost is real within this
+measurement, though taken under load. The 7 by 9 figure is at the timer's resolution and
+says nothing. The in-process `warm assemble` column of the TTFX script (`1e-5` s rows) is
+equally at that resolution and is not tabulated.
+
+### Recommendation
+
+Under the rule of the plan (an option passes if every value constraint of the section
+"Summary of the values" holds and its first-call and warm figures sit within base's
+spread), neither option passes, whatever the timings: both fail the refill-bytes
+constraint, and the 201 by 201 warm figure fails the spread test as well.
+
+Recommendation: do not change the padding
+
+- Option 1 fails the refill constraint ("stays at 0 B, or at its recorded cap"): 14
+  measurements of forms that already box at base are above their recorded cap
+  (bilinear.jl lines 869, 1468 and twelve forms of 1543; 16 higher in all). Its 201 by 201
+  warm `assemble` of the padded reproduction form is 5.9 % slower, outside base's spread.
+- Option 2 fails the same constraint with 13 measurements above their cap (bilinear.jl
+  lines 982, 1468 and ten forms of 1543, and linear_restriction.jl line 181), plus the
+  `_zero_entries` layout test at linear_restriction.jl line 185, which the flag changes by
+  design. Its 201 by 201 warm `assemble` is 7.7 % slower, outside base's spread.
+
+Both fix the reproduction, keep a genuine `0 * Inf` as `NaN`, and leave the finite corpus
+bit-identical; those are not what rejects them.
