@@ -215,16 +215,26 @@ end
     # `CpuThreaded` allocates its tasks: each ghost call is bounded by its padded or plain
     # counterpart plus one spawn per band pass it adds (the reduction 1, the load 1,
     # `lift!` 1), and nothing grows with the grid.
+    #
+    # A pass can also settle, for the rest of the process, into re-boxing its `@threads`
+    # body closures in every task (`Threads._ThreadsFun` reaches the body through a dynamic
+    # call): `nthreads × 2 × closure` bytes more, the same at every size, as in
+    # test/form/ghost_semidiscrete.jl. Which passes do so varies from run to run, and only
+    # the ubuntu nightly has shown it: `lift!` at 2224 B and the load at 3984 B, each
+    # 4 × 2 × 80 B over the idle figure. So each bound allows that for the closures of the
+    # passes on its left: 288 B (the padded matrix), 256 B (the padded load), 128 B (the
+    # lifted load) and 80 B (the reduction, the load's ghost band and `lift!`).
+    reboxed(bytes...) = 2 * Threads.nthreads() * sum(bytes)
     @testset "CpuThreaded bound" begin
         f1 = threaded_figures((9, 11))
         f2 = threaded_figures((30, 33))
         @test f1 == f2
         s = f1.spawn
-        @test f1.matrix <= f1.padded_matrix + s
-        @test f1.rows_matrix <= f1.padded_matrix + s
-        @test f1.load <= f1.padded_load + s
-        @test f1.pair <= f1.padded_matrix + f1.padded_load + 2s
-        @test f1.lift <= s
+        @test f1.matrix <= f1.padded_matrix + s + reboxed(288, 80)
+        @test f1.rows_matrix <= f1.padded_matrix + s + reboxed(288, 80)
+        @test f1.load <= f1.padded_load + s + reboxed(256, 80)
+        @test f1.pair <= f1.padded_matrix + f1.padded_load + 2s + reboxed(288, 80, 256, 128)
+        @test f1.lift <= s + reboxed(80)
         @test f1.dirichlet_bc <= f1.plain_bc
         @test f1.marker_bc <= f1.plain_bc
         @test f1.symmetrize <= f1.plain_symmetrize
