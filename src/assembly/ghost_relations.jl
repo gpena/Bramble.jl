@@ -387,8 +387,9 @@ end
 
 # The terms of `op` that read component `j`, or `nothing` if none does: the leaves of the
 # other components are dropped, with the sums, scales and differences around them.
-_trial_piece(op::IndexedTrialFunction, j::Int, ::Symbol) = op.component_idx == j ? op :
-                                                            nothing
+function _trial_piece(op::IndexedTrialFunction, j::Int, ::Symbol)
+    return op.component_idx == j ? op : nothing
+end
 for T in (
     :BackwardDifference,
     :ForwardDifference,
@@ -580,8 +581,8 @@ function _composite_closure(P::CompositeGridSpace, comps::Tuple, rels, drels)
                    _ghost_point(first(comps[c]), k)] for (c, k) in ghosts]
     names = Symbol[_relation_name(first(comps[c]), k) for (c, k) in ghosts]
     owner = Int[c for (c, _) in ghosts]
-    multi = unique!(Symbol[r.name for r in rels if _relation_component(r.op, r.d, r.s,
-                                                       r.name) == 0])
+    reads_several(r) = _relation_component(r.op, r.d, r.s, r.name) == 0
+    multi = unique!(Symbol[r.name for r in rels if reads_several(r)])
     E, d, _ = _relation_closure(gpts, names, R, b, keep, fixed, reduce(vcat, gs);
         comps = (owner, multi))::Tuple{SparseMatrixCSC, Vector, Nothing}
     return E, d
@@ -910,7 +911,8 @@ function _throw_singular_block(names, (owner, multi)::Tuple, idx)
 end
 
 function _component_list(cs::Vector{Int})
-    return length(cs) == 1 ? "component $(only(cs))" : "components $(join(cs, ", ", " and "))"
+    length(cs) == 1 && return "component $(only(cs))"
+    return "components $(join(cs, ", ", " and "))"
 end
 
 @noinline function _throw_composite_singular(facets, cs)
@@ -935,10 +937,10 @@ end
         "the relations on :$a and :$b each read several components (a traction) and " *
         "meet at a corner, where they cannot be solved for the ghosts of " *
         "$(_component_list(cs)): the two shear relations are one equation there (the " *
-        "stress is symmetric), so the corner block is singular. Two such facets may share " *
-        "a corner only where their joint block is nonsingular, which isotropic tractions " *
-        "never give. Make one of them a displacement facet whose ghosts close by " *
-        "`∂ₙₙ(u(i)) => 0`: `:$b => u(1) => g₁, :$b => u(2) => g₂, " *
+        "stress is symmetric), so the corner block is singular. Two such facets may " *
+        "share a corner only where their joint block is nonsingular, which isotropic " *
+        "tractions never give. Make one of them a displacement facet whose ghosts " *
+        "close by `∂ₙₙ(u(i)) => 0`: `:$b => u(1) => g₁, :$b => u(2) => g₂, " *
         ":$b => ∂ₙₙ(u(1)) => 0.0, :$b => ∂ₙₙ(u(2)) => 0.0`.",
     ),
     )

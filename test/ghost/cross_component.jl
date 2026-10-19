@@ -229,8 +229,8 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
     TRACTIONS = (
         one = (facets = (:xmin,), others = (:ymin, :xmax, :ymax)),
         apart = (facets = (:xmin, :xmax), others = (:ymin, :ymax)))
-    rels_of(c) = u -> (Iterators.flatten((F => t(u, 1) => tg[F][1], F => t(u, 2) => tg[F][2])
-                                         for F in c.facets)...,
+    traction(F) = u -> (F => t(u, 1) => tg[F][1], F => t(u, 2) => tg[F][2])
+    rels_of(c) = u -> (Iterators.flatten(traction(F)(u) for F in c.facets)...,
         Iterators.flatten(disp(F)(u) for F in c.others)...)
 
     # The relation of component `i` on `F`: its rows by one `inner_Γ` per component, against
@@ -260,6 +260,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         @test size(E, 1) == Bramble.ndofs(PV)
         U = E * rand(Xoshiro(20261019), Bramble.ndofs(C)) + d
         for F in c.facets, i in 1:2
+
             res, scale = traction_residual(PV, PS, U, i, F, tg[F][i])
             @test res <= 1.0e-10
             @test scale > 0     # the data reach the oracle: a zero weight would hide them
@@ -276,13 +277,14 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
 
         # the cross terms: component 1's padded values read component 2's degrees of
         # freedom, which a closure of one-component relations never does
-        one = u -> (Iterators.flatten((F => ∂ₙ(u(1)) => 0.0, F => ∂ₙ(u(2)) => 0.0)
-                                      for F in c.facets)...,
+        flux(F) = u -> (F => ∂ₙ(u(1)) => 0.0, F => ∂ₙ(u(2)) => 0.0)
+        one = u -> (Iterators.flatten(flux(F)(u) for F in c.facets)...,
             Iterators.flatten(disp(F)(u) for F in c.others)...)
         Ex, _ = Bramble.closure(constrained(V, one))
-        n1 = Bramble.ndofs(constrained(S, u -> (Iterators.flatten((F => ∂ₙ(u) => 0.0,)
-                                                                for F in c.facets)...,
-            Iterators.flatten((F => u => gd[1], F => ∂ₙₙ(u) => 0.0) for F in c.others)...)))
+        # the degrees of freedom of component 1 alone, the first `n1` of the whole
+        r1(u) = (Iterators.flatten((F => ∂ₙ(u) => 0.0,) for F in c.facets)...,
+            Iterators.flatten((F => u => gd[1], F => ∂ₙₙ(u) => 0.0) for F in c.others)...)
+        n1 = Bramble.ndofs(constrained(S, r1))
         @test size(Ex) == size(E)
         @test nnz(Ex[1:m, (n1 + 1):end]) == 0
         @test count(!iszero, E[1:m, (n1 + 1):end]) > 0
@@ -325,8 +327,9 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         @test refuses(() -> constrained(V, corner), ":xmin and :ymin")
         # still one component's Dirichlet relation per facet
         @test refuses(
-            () -> constrained(V, u -> (:xmin => t(u, 1) => 0.0, :xmin => t(u, 2) => 0.0,
-                :ymin => u(1) => 0.0, :ymin => u(1) => 1.0, rest(u)...)),
+            () -> constrained(V,
+                u -> (:xmin => t(u, 1) => 0.0, :xmin => t(u, 2) => 0.0,
+                    :ymin => u(1) => 0.0, :ymin => u(1) => 1.0, rest(u)...)),
             ":ymin of component 1 has two Dirichlet")
     end
 
@@ -343,12 +346,14 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         Kf(i, j) = Ka[(i, j)]
         ta(u, i) = ∂ₙ(u(1); K = Kf(i, 1)) + ∂ₙ(u(2); K = Kf(i, 2))
         g = (xmin = (1.0, 0.0), ymin = (0.0, x -> x[1]))
-        C = constrained(V, u -> (:xmin => ta(u, 1) => g.xmin[1],
-            :xmin => ta(u, 2) => g.xmin[2], :ymin => ta(u, 1) => g.ymin[1],
-            :ymin => ta(u, 2) => g.ymin[2], disp(:xmax)(u)..., disp(:ymax)(u)...))
+        C = constrained(V,
+            u -> (:xmin => ta(u, 1) => g.xmin[1],
+                :xmin => ta(u, 2) => g.xmin[2], :ymin => ta(u, 1) => g.ymin[1],
+                :ymin => ta(u, 2) => g.ymin[2], disp(:xmax)(u)..., disp(:ymax)(u)...))
         E, d = Bramble.closure(C)
         U = E * rand(Xoshiro(20261019), Bramble.ndofs(C)) + d
         for F in (:xmin, :ymin), i in 1:2
+
             res, _ = traction_residual(PV, PS, U, i, F, g[F][i]; K = Kf)
             @test res <= 1.0e-10
         end

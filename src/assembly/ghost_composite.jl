@@ -15,11 +15,12 @@
 # component where one reads several), and the rows of all of them are solved once on the
 # padded composite (ghost_relations.jl), each node's together. The
 # `ConstrainedCompositeSpace` it returns stores a closure `(E, d)` of its own, which couples
-# the components wherever a relation does and which its forms, `closure` and `lift` read. With relations of one component each
-# it equals `constrained(C₁, r₁) × constrained(C₂, r₂)`. Beyond the refusals below, it
-# refuses data depending on time, the `dirichlet` rows, `GhostVector`, and a corner of two
-# facets with relations reading several components whose joint block is singular, as it
-# is for isotropic tractions (their shear relations are one equation there).
+# the components wherever a relation does and which its forms, `closure` and `lift` read.
+# With relations of one component each it equals `constrained(C₁, r₁) × constrained(C₂,
+# r₂)`. Beyond the refusals below, it refuses data depending on time, the `dirichlet` rows,
+# `GhostVector`, and a corner of two facets with relations reading several components
+# whose joint block is singular, as it is for isotropic tractions (their shear relations
+# are one equation there).
 #
 # The components of a form's spaces must ghost the same facets of meshes of one size: a term
 # coupling `u(1)` and `v(2)` reads both at one padded index, which names different points on
@@ -799,9 +800,9 @@ Refused with an `ArgumentError`, besides what `constrained` and the product refu
 relation naming no component, two ghost relations of one component on a facet, a facet
 with a relation reading several components but not one ghost relation per component,
 relations whose block at a node is singular (two isotropic tractions meeting at a corner
-among them), data depending on time (constrain the components apart and take the product), the
-`dirichlet` keyword of `assemble`, `dirichlet_bc!` and `symmetrize!` (give `u(i) => g`
-instead), and `GhostVector` and `update_ghosts!`.
+among them), data depending on time (constrain the components apart and take the
+product), the `dirichlet` keyword of `assemble`, `dirichlet_bc!` and `symmetrize!` (give
+`u(i) => g` instead), and `GhostVector` and `update_ghosts!`.
 
 # Examples
 
