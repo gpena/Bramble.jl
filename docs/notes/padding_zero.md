@@ -44,6 +44,22 @@ base gives there (`D₊ₓ(D₋ₓ(v))` 6, `Mₓ(D₋ₓ(v))` 4, `D₋ₓ(D₋�
 the 7 by 9 mesh; `clamp.jl` below). Whether those zeros are padding or the operator's own
 boundary rule is a question for P2's scope.
 
+## Pins the rewrite misses, and the critic's confirmation
+
+`pins.jl` rewrites `@test <bytes call> == / <=`, `@test_allocs` and `@test b == 0` lines.
+It misses four allocation pins: `@test alloc_test(Bramble._zero_entries, s40) == 0`
+(linear_restriction.jl line 186) and the `contract` pins (bilinear.jl lines 2173, 2182 and
+2193). They are not recorded in the byte tables, and they pass on base and on both
+prototypes (the test files run whole).
+
+The integrator's critic (one round) ran the real, unmodified test files on both branches.
+Each fails with 14 failures. Option 1's are its 14 byte caps. Option 2's are its 13 byte
+caps plus the `_zero_entries` layout test (linear_restriction.jl line 185). The failures
+and their bytes are identical at 1 and 2 threads, at -O1 and the default -O, and byte for
+byte equal to the `pins.jl` figures above. The critic also found that the `NaN` entries
+left under both options sit only at the off-grid clamp sites named above, never at a slot
+outside the region (its scripts `variants.jl` and `detail.jl`, under `/tmp/p1a-critic/`).
+
 ## Option 1
 
 **A strong-zero weight type.** `_Padded{T} <: Number` holds the weight and a live flag.
@@ -58,7 +74,7 @@ untouched: the sinks' `nzval[k] += α * w` collapses the weight. Four files, +65
 | --- | --- | --- |
 | The issue's reproduction, `Inf` and `-Inf` at nodes 2, 9, 16, Float64 and Float32 | 0 `NaN`, 1 `Inf` each, `A[k-1, k] = ±Inf` (12 of 12 cases) | 2 `NaN` (at `(k-1, k)`, `(k, k)`), 0 `Inf` |
 | A genuine 0 * Inf outside padding (`innerₕ(gi * u, z * v)`, `gi[9] = Inf`, `z[9] = 0`) | `A[9, 9] = NaN`, 1 `NaN`; under `D₋ₓ(z * v)` 1 `NaN` (Float64, Float32) | the same |
-| Refill bytes of every pin in test/form/bilinear.jl and test/form/linear_restriction.jl (57 pin lines, 532 measurements) | all 500 measurements at 0 B stay 0 B; 512 equal, 16 higher, 4 lower; 14 above their recorded cap | every pin at or under its cap |
+| Refill bytes of the byte pins in test/form/bilinear.jl and test/form/linear_restriction.jl that `pins.jl` records (57 pin lines, 532 measurements; the four it misses are listed below) | all 500 measurements at 0 B stay 0 B; 512 equal, 16 higher, 4 lower; 14 above their recorded cap | every pin at or under its cap |
 | Finite-coefficient corpus (43 forms), values | bit-identical, 43 of 43 | — |
 | Finite-coefficient corpus, stored pattern | 43 of 43 unchanged | — |
 
@@ -89,16 +105,17 @@ which the compiler can fold away; P1b measures whether it does.
 | --- | --- | --- |
 | The issue's reproduction, `Inf` and `-Inf` at nodes 2, 9, 16, Float64 and Float32 | 0 `NaN`, 1 `Inf` each, `A[k-1, k] = ±Inf` (12 of 12 cases) | 2 `NaN`, 0 `Inf` |
 | A genuine 0 * Inf outside padding | `A[9, 9] = NaN`, 1 `NaN`; under `D₋ₓ(z * v)` 1 `NaN` (Float64, Float32) | the same |
-| Refill bytes of every pin (57 pin lines, 532 measurements) | all 500 measurements at 0 B stay 0 B; 508 equal, 22 higher, 2 lower; 13 above their recorded cap | every pin at or under its cap |
+| Refill bytes of the pins `pins.jl` records (57 pin lines, 532 measurements) | all 500 measurements at 0 B stay 0 B; 508 equal, 22 higher, 2 lower; 13 above their recorded cap | every pin at or under its cap |
 | Finite-coefficient corpus (43 forms), values | bit-identical, 43 of 43 | — |
 | Finite-coefficient corpus, stored pattern | 43 of 43 unchanged | — |
 
 Bytes above their cap, base → option 2, by pin line. In bilinear.jl, line 982 56688 →
-62736 and 63744 → 69792; line 1468 (`BigFloat`) 557808 → 749184; line 1543, ten forms, by
+62736 (cap 56688); line 1468 (`BigFloat`) 557808 → 749184; line 1543, ten forms, by
 1 % to 20 % (6000 → 7200, 2896 → 3248, 2256 → 2432, 6768 → 7296, 48096 → 56016, 27216 →
 29520, 21168 → 23184, 63504 → 69552, 49536 → 50112, 20736 → 23040). In
 linear_restriction.jl, line 181 (a `BigFloat` linear form) 65760 → 71808. Higher but within
-their caps, bilinear.jl lines 1303, 1425, 1442 and 1457 (by 3264 to 5472 B). One more
+their caps, bilinear.jl line 982's `big(3) * v + 0.5 * D₋ₓ(v)` form 63744 → 69792 (cap
+72000), and lines 1303, 1425, 1442 and 1457 (by 3264 to 5472 B). One more
 failure is not a pin. linear_restriction.jl line 185 compares `_zero_entries` with base's
 entry layout, which the flag changes by design (P2 would rewrite it).
 
