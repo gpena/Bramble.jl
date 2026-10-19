@@ -9,6 +9,14 @@
 # `GhostCompositeBilinearForm` or `GhostCompositeLinearForm`, so the reduction and the load
 # of ghost_assembly.jl assemble it unchanged.
 #
+# `constrained(C₁ × C₂, u -> (:xmin => ∂ₙ(u(1)) => g, :xmax => u(2) => h, …))` constrains
+# the composite as a whole: each relation names its component through `u(i)`, and the rows
+# of all of them are solved once on the padded composite (ghost_relations.jl), so the
+# `ConstrainedCompositeSpace` it returns stores a closure `(E, d)` of its own, which its
+# forms, `closure` and `lift` read. With relations of one component each it equals
+# `constrained(C₁, r₁) × constrained(C₂, r₂)`. Beyond the refusals below, it refuses data
+# depending on time, the `dirichlet` rows and `GhostVector`.
+#
 # The components of a form's spaces must ghost the same facets of meshes of one size: a term
 # coupling `u(1)` and `v(2)` reads both at one padded index, which names different points on
 # padded grids of different shapes or shifted by one node. Components ghosting different
@@ -40,6 +48,13 @@
 # has a closure.
 const _GhostCompositeSpace = CompositeGridSpace{<:Any,
     <:Tuple{GhostGridSpace, Vararg{GhostGridSpace}}}
+
+# Either kind of composite of ghost spaces a form takes as a side.
+const _GhostCompositeSide = Union{_GhostCompositeSpace, ConstrainedCompositeSpace}
+
+# The ghost spaces of a side, unconstrained for a `ConstrainedCompositeSpace`.
+@inline _ghost_components(Vₕ::_GhostCompositeSpace) = Vₕ.spaces
+@inline _ghost_components(Vₕ::ConstrainedCompositeSpace) = Vₕ.space.spaces
 
 # --- Building the space -------------------------------------------------------------- #
 
@@ -117,15 +132,19 @@ spaces, the space its forms assemble on and its [`lift`](@ref)s live on.
 
 """
     closure(Vₕ::CompositeGridSpace) -> (E::SparseMatrixCSC, d::Vector)
+    closure(Vₕ::ConstrainedCompositeSpace) -> (E::SparseMatrixCSC, d::Vector)
 
 The closure of a composite of ghost spaces: `E = blockdiag(E₁, E₂, …)` and
 `d = vcat(d₁, d₂, …)` from the components' closures, so the padded values of its degrees of
-freedom `u` are `E * u + d`, component by component. It is built on each call.
+freedom `u` are `E * u + d`, component by component. It is built on each call. On a
+composite constrained as a whole, `constrained(C₁ × C₂, relations)`, it is the closure
+`constrained` stored, whose `E` couples the components wherever a relation does.
 """
 function closure(Vₕ::_GhostCompositeSpace)
     return (SparseArrays.blockdiag(map(C -> sparse(C.E), Vₕ.spaces)...), vcat(map(C -> C.d,
         Vₕ.spaces)...))
 end
+@inline closure(Vₕ::ConstrainedCompositeSpace) = (Vₕ.E, Vₕ.d)
 
 # --- The closure as a form's side ---------------------------------------------------- #
 
@@ -134,13 +153,21 @@ function _CompositeClosure(Vₕ::_GhostCompositeSpace)
     E, d = closure(Vₕ)
     return _CompositeClosure(Vₕ, padded_space(Vₕ), E, d, _closure_transpose(E))
 end
+function _CompositeClosure(Vₕ::ConstrainedCompositeSpace)
+    foreach(_check_ghost_host, _ghost_components(Vₕ))
+    return _CompositeClosure(Vₕ, Vₕ.padded, Vₕ.E, Vₕ.d, Vₕ.Et)
+end
 
 @inline padded_space(W::_CompositeClosure) = W.padded
 @inline backend(W::_CompositeClosure) = backend(W.padded)
 @inline ndofs(W::_CompositeClosure) = size(W.E, 2)
 @inline _ghost_policy(W::_CompositeClosure) = execution_policy(W.padded)
-@inline _is_time_dependent(W::_CompositeClosure) = any(_is_time_dependent, W.space.spaces)
-_affine_support(W::_CompositeClosure) = vcat(map(_affine_support, W.space.spaces)...)
+@inline _is_time_dependent(W::_CompositeClosure) = _is_time_dependent(W.space)
+@inline _is_time_dependent(Vₕ::_GhostCompositeSpace) = any(_is_time_dependent, Vₕ.spaces)
+@inline _is_time_dependent(::ConstrainedCompositeSpace) = false   # refused by `constrained`
+_affine_support(W::_CompositeClosure) = _affine_support(W.space)
+_affine_support(Vₕ::_GhostCompositeSpace) = vcat(map(_affine_support, Vₕ.spaces)...)
+_affine_support(Vₕ::ConstrainedCompositeSpace) = map(!iszero, Array(Vₕ.d))
 Base.show(io::IO, W::_CompositeClosure) = show(io, W.space)
 
 trial_space(a::GhostCompositeBilinearForm) = a.trial_space.space
@@ -175,16 +202,16 @@ Every component of both spaces must ghost the same facets of meshes of one size;
 `semidiscretize`, and the matrix-free, Kronecker and multigrid operators are refused with
 an `ArgumentError`.
 """
-function form(Wₕ::_GhostCompositeSpace, Vₕ::_GhostCompositeSpace, f)
-    _check_composite_ghosts(Wₕ.spaces..., Vₕ.spaces...)
+function form(Wₕ::_GhostCompositeSide, Vₕ::_GhostCompositeSide, f)
+    _check_composite_ghosts(_ghost_components(Wₕ)..., _ghost_components(Vₕ)...)
     W, V = _CompositeClosure(Wₕ), _CompositeClosure(Vₕ)
     a = form(W.padded, V.padded, f)
     a isa RankOneForm && _throw_ghost_composite_unsupported("a rank-one term")
     return _ghost_bilinear_form(W, V, a)
 end
 
-function form(Vₕ::_GhostCompositeSpace, f)
-    _check_composite_ghosts(Vₕ.spaces...)
+function form(Vₕ::_GhostCompositeSide, f)
+    _check_composite_ghosts(_ghost_components(Vₕ)...)
     V = _CompositeClosure(Vₕ)
     return _ghost_linear_form(V, form(V.padded, f))
 end
@@ -241,10 +268,10 @@ end
     )
 end
 
-form(::_GhostCompositeSpace, Vₕ, f) = _throw_ghost_composite_side()
-form(Wₕ, ::_GhostCompositeSpace, f) = _throw_ghost_composite_side()
-form(::_GhostCompositeSpace, ::GhostGridSpace, f) = _throw_ghost_composite_side()
-form(::GhostGridSpace, ::_GhostCompositeSpace, f) = _throw_ghost_composite_side()
+form(::_GhostCompositeSide, Vₕ, f) = _throw_ghost_composite_side()
+form(Wₕ, ::_GhostCompositeSide, f) = _throw_ghost_composite_side()
+form(::_GhostCompositeSide, ::GhostGridSpace, f) = _throw_ghost_composite_side()
+form(::GhostGridSpace, ::_GhostCompositeSide, f) = _throw_ghost_composite_side()
 
 @noinline function _throw_ghost_composite_side()
     throw(
@@ -354,7 +381,18 @@ function project!(uₕ::VectorElement{<:_GhostCompositeSpace}, ::Tuple,
     return _throw_composite_projection(space(uₕ))
 end
 
-@noinline function _throw_composite_projection(Vₕ::_GhostCompositeSpace)
+# A composite constrained as a whole is no `CompositeGridSpace`: it refuses at the entry
+# points, as a ghost space does (ghost_gridspace.jl).
+Rₕ(Vₕ::ConstrainedCompositeSpace, f; kwargs...) = _throw_composite_projection(Vₕ)
+function Rₕ!(uₕ::VectorElement{<:ConstrainedCompositeSpace}, f; kwargs...)
+    return _throw_composite_projection(uₕ.space)
+end
+avgₕ(Vₕ::ConstrainedCompositeSpace, f; kwargs...) = _throw_composite_projection(Vₕ)
+function avgₕ!(uₕ::VectorElement{<:ConstrainedCompositeSpace}, f, rest...; kwargs...)
+    return _throw_composite_projection(uₕ.space)
+end
+
+@noinline function _throw_composite_projection(Vₕ::_GhostCompositeSide)
     throw(
         ArgumentError(
         "Rₕ or avgₕ is not defined on a composite of ghost spaces, $(Vₕ), as on each " *
@@ -368,12 +406,37 @@ end
 # --- Dirichlet by row replacement, per component ------------------------------------- #
 
 function _check_rows(a::GhostCompositeBilinearForm, labels, components)
-    return _check_component_rows(leaf_spaces_offsets(test_space(a)),
-        leaf_spaces_offsets(trial_space(a)), labels, components)
+    _check_whole_rows(test_space(a), labels)
+    _check_whole_rows(trial_space(a), labels)
+    return _check_component_rows(_row_leaves(test_space(a)), _row_leaves(trial_space(a)),
+        labels, components)
 end
 function _check_rows(l::GhostCompositeLinearForm, labels, components)
-    return _check_component_rows(leaf_spaces_offsets(test_space(l)), nothing, labels,
-        components)
+    _check_whole_rows(test_space(l), labels)
+    return _check_component_rows(_row_leaves(test_space(l)), nothing, labels, components)
+end
+
+# A composite constrained as a whole has no rows of a component to replace: its unknowns
+# are not split into components' closures. With no labels there is nothing to replace, so
+# its leaves are none.
+@inline _row_leaves(Vₕ::_GhostCompositeSpace) = leaf_spaces_offsets(Vₕ)
+@inline _row_leaves(::ConstrainedCompositeSpace) = ()
+@inline _check_whole_rows(::_GhostCompositeSpace, labels) = nothing
+@inline _check_whole_rows(::ConstrainedCompositeSpace, ::Nothing) = nothing
+@inline function _check_whole_rows(::ConstrainedCompositeSpace, labels::Tuple)
+    isempty(labels) || _throw_whole_rows()
+    return nothing
+end
+
+@noinline function _throw_whole_rows()
+    throw(
+        ArgumentError(
+        "`dirichlet`, `dirichlet_bc!` and `symmetrize!` replace rows by facet label, " *
+        "and a composite constrained as a whole, constrained(C₁ × C₂, relations), does " *
+        "not take them. Give each Dirichlet condition as a relation of its component in " *
+        "constrained, `:F => u(i) => g`, and assemble with assemble(a, l).",
+    ),
+    )
 end
 
 # Each selected component, on the test side and, at the same position, the trial side, must
@@ -466,20 +529,18 @@ end
 
 function _form_rows!(A::AbstractMatrix, a::GhostCompositeBilinearForm, labels::Tuple,
         components)
-    return _component_rows!(A, leaf_spaces_offsets(test_space(a)), labels, components)
+    return _component_rows!(A, _row_leaves(test_space(a)), labels, components)
 end
 
 function _form_rows!(b::AbstractVector, l::GhostCompositeLinearForm, labels::Tuple, bcs,
         components)
     isempty(labels) && return b
     bcs === nothing && _throw_labels_without_conditions(labels)
-    return _component_conditions!(b, leaf_spaces_offsets(test_space(l)), bcs, labels,
-        components)
+    return _component_conditions!(b, _row_leaves(test_space(l)), bcs, labels, components)
 end
 
 function _form_symmetrize!(A, F, a::GhostCompositeBilinearForm, labels::Tuple, components)
-    return _component_symmetrize!(A, F, leaf_spaces_offsets(test_space(a)), labels,
-        components)
+    return _component_symmetrize!(A, F, _row_leaves(test_space(a)), labels, components)
 end
 
 """
@@ -515,6 +576,20 @@ function symmetrize!(A::AbstractMatrix, F::AbstractVector, Vₕ::_GhostComposite
     return _component_symmetrize!(A, F, leaves, labels, components)
 end
 
+function dirichlet_bc!(::AbstractMatrix, ::ConstrainedCompositeSpace, labels::Symbol...;
+        components = nothing)
+    return _throw_whole_rows()
+end
+function dirichlet_bc!(::AbstractVector, ::ConstrainedCompositeSpace,
+        ::Union{ConstraintMarkers, EvaluatedParametricDomainMarkers}, labels::Symbol...;
+        components = nothing)
+    return _throw_whole_rows()
+end
+function symmetrize!(::AbstractMatrix, ::AbstractVector, ::ConstrainedCompositeSpace,
+        labels::Symbol...; components = nothing)
+    return _throw_whole_rows()
+end
+
 # No form on these spaces holds a rank-one term (`form` refuses it).
 function symmetrize!(::RankOneUpdate, ::AbstractVector, ::_GhostCompositeSpace,
         labels::Symbol...; components = nothing)
@@ -544,13 +619,17 @@ end
 `E u + d(t)`) for the slice `uᵢ` of `u` at `component_range(Vₕ, i)`. Each component is
 checked, and refused, as `lift` on it is. `Bramble.lift!(uₕ, Vₕ, u)` and
 `Bramble.lift!(uₕ, Vₕ, u, t)` refill a grid function `lift` returned.
+
+On a composite constrained as a whole, `constrained(C₁ × C₂, relations)`, they give
+`d` and `E u + d` from its stored closure, whose `E` may couple the components; its data
+do not depend on time, so `t` changes nothing.
 """
 function lift(Vₕ::_GhostCompositeSpace)
     foreach(C -> (_check_lift_fresh(C); _check_lift_static(C, "lift(Vₕ)")), Vₕ.spaces)
     return VectorElement(vcat(map(C -> C.d, Vₕ.spaces)...), padded_space(Vₕ))
 end
 
-@noinline function lift(Vₕ::_GhostCompositeSpace, u, rest...)
+@noinline function lift(Vₕ::_GhostCompositeSide, u, rest...)
     throw(
         ArgumentError(
         "lift on a composite of ghost spaces takes lift(Vₕ), lift(Vₕ, u) or " *
@@ -593,13 +672,13 @@ function lift!(uₕ::VectorElement, Vₕ::_GhostCompositeSpace, u::AbstractVecto
     return uₕ
 end
 
-function _check_composite_lift(Vₕ::_GhostCompositeSpace, u::AbstractVector)
-    foreach(_check_lift_fresh, Vₕ.spaces)
+function _check_composite_lift(Vₕ::_GhostCompositeSide, u::AbstractVector)
+    foreach(_check_lift_fresh, _ghost_components(Vₕ))
     length(u) == ndofs(Vₕ) || _throw_composite_lift_length(Vₕ, u)
     return nothing
 end
 
-function _check_composite_lift_into(uₕ::VectorElement, Vₕ::_GhostCompositeSpace,
+function _check_composite_lift_into(uₕ::VectorElement, Vₕ::_GhostCompositeSide,
         ::Type{T}) where {T}
     uₕ.space === padded_space(Vₕ) || _throw_composite_lift_target(Vₕ)
     promote_type(eltype(uₕ), T) === eltype(uₕ) || _throw_lift_eltype(uₕ, T)
@@ -626,7 +705,7 @@ end
     return _lift_components!(U, Base.tail(leaves), u, t, Val(own))
 end
 
-@noinline function _throw_composite_lift_length(Vₕ::_GhostCompositeSpace, u)
+@noinline function _throw_composite_lift_length(Vₕ::_GhostCompositeSide, u)
     throw(
         ArgumentError(
         "lift takes one value per degree of freedom of $(Vₕ), $(ndofs(Vₕ)) of them, the " *
@@ -636,11 +715,134 @@ end
     )
 end
 
-@noinline function _throw_composite_lift_target(Vₕ::_GhostCompositeSpace)
+@noinline function _throw_composite_lift_target(Vₕ::_GhostCompositeSide)
     throw(
         ArgumentError(
         "lift!(uₕ, Vₕ, u) writes into a grid function on the padded space of $(Vₕ), and " *
         "uₕ lives on another space. Build it once with uₕ = Bramble.lift(Vₕ, u).",
+    ),
+    )
+end
+
+# `U = E u + d` from the stored closure of a composite constrained as a whole, over the
+# whole padded composite: a relation coupling two components makes a component's padded
+# values read the other's degrees of freedom, so no slice of `u` lifts alone.
+function lift(Vₕ::ConstrainedCompositeSpace)
+    foreach(_check_lift_fresh, _ghost_components(Vₕ))
+    return VectorElement(copy(Vₕ.d), Vₕ.padded)
+end
+
+function lift(Vₕ::ConstrainedCompositeSpace, u::AbstractVector)
+    _check_composite_lift(Vₕ, u)
+    U = similar(Vₕ.d, promote_type(eltype(u), eltype(Vₕ.d)))
+    return VectorElement(_lift_whole!(U, Vₕ, u), Vₕ.padded)
+end
+lift(Vₕ::ConstrainedCompositeSpace, u::AbstractVector, ::Number) = lift(Vₕ, u)
+
+function lift!(uₕ::VectorElement, Vₕ::ConstrainedCompositeSpace, u::AbstractVector)
+    _check_composite_lift(Vₕ, u)
+    _check_composite_lift_into(uₕ, Vₕ, promote_type(eltype(u), eltype(Vₕ.d)))
+    _lift_whole!(parent(uₕ), Vₕ, u)
+    return uₕ
+end
+function lift!(uₕ::VectorElement, Vₕ::ConstrainedCompositeSpace, u::AbstractVector,
+        ::Number)
+    return lift!(uₕ, Vₕ, u)
+end
+
+function _lift_whole!(U::AbstractVector, Vₕ::ConstrainedCompositeSpace, u::AbstractVector)
+    Et = Vₕ.Et
+    _run_bands!(execution_policy(Vₕ.padded), _lift_band!, U, Vₕ.d,
+        SparseArrays.getcolptr(Et), rowvals(Et), nonzeros(Et), u)
+    return U
+end
+
+# --- Constrained as a whole ---------------------------------------------------------- #
+
+"""
+    constrained(Vₕ::CompositeGridSpace, relations) -> ConstrainedCompositeSpace
+
+A composite of ghost spaces (`C₁ × C₂`, each built by `gridspace(Ωₕ; ghosts = ...)` with
+the same ghosts) constrained as a whole. `relations(u)` returns the pairs
+`facet => operator => data` of [`constrained`](@ref) on a ghost space, each written of one
+component `u(i)`: `:xmin => ∂ₙ(u(1)) => g` relates the ghosts of `:xmin` in component 1,
+`:ymin => u(2) => 0.0` fixes the nodes of `:ymin` in component 2. A component has at most
+one relation of each kind per facet.
+
+The relations of all the components are solved together on the padded composite, and the
+result stores the closure `(E, d)` they give (`Bramble.closure`). Its degrees of freedom are
+component 1's, then component 2's, …, each in the order `constrained` gives on the
+component alone, so with relations of one component each it equals
+`constrained(C₁, r₁) × constrained(C₂, r₂)`. Forms on it, `assemble(a, l)` and
+[`lift`](@ref) work as on that product.
+
+Refused with an `ArgumentError`, besides what `constrained` and the product refuse: a
+relation naming no component or several, data depending on time (constrain the components
+apart and take the product), the `dirichlet` keyword of `assemble`, `dirichlet_bc!` and
+`symmetrize!` (give `u(i) => g` instead), and `GhostVector` and `update_ghosts!`.
+
+# Examples
+
+```julia
+Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, false))
+Sₕ = gridspace(Ωₕ; ghosts = (:xmin, :xmax))
+Vₕ = constrained(Sₕ × Sₕ, u -> (:xmin => ∂ₙ(u(1)) => 1.0, :xmax => ∂ₙ(u(1)) => 0.0,
+    :xmin => ∂ₙ(u(2)) => 0.0, :xmax => u(2) + ∂ₙ(u(2)) => 0.0))
+E, d = Bramble.closure(Vₕ)
+```
+"""
+function constrained(Vₕ::_GhostCompositeSpace, relations)
+    foreach(_check_unconstrained, Vₕ.spaces)
+    _check_composite_ghosts(Vₕ.spaces...)
+    P = padded_space(Vₕ)
+    comps = map(((C, _, poffset),) -> (mesh(C), poffset), _padded_leaves(Vₕ))
+    rels = _composite_relations(map(first, comps), relations(trial_function(P)))
+    E, d = _composite_closure(P, comps, filter(!_is_dirichlet, rels),
+        filter(_is_dirichlet, rels))
+    T, be = eltype(P), backend(P)
+    Ec = _closure_matrix(be, T, E)
+    return ConstrainedCompositeSpace(Vₕ, P, Ec, _closure_data(be, T, d),
+        _closure_transpose(Ec))
+end
+
+@noinline function constrained(Vₕ::ConstrainedCompositeSpace, relations)
+    throw(
+        ArgumentError(
+        "constrained takes the composite of gridspace(Ωₕ; ghosts = ...) spaces, and " *
+        "$(Vₕ) is already constrained. Give every relation in one call on the " *
+        "unconstrained composite.",
+    ),
+    )
+end
+
+@inline padded_space(Vₕ::ConstrainedCompositeSpace) = Vₕ.padded
+@inline ndofs(Vₕ::ConstrainedCompositeSpace) = size(Vₕ.E, 2)
+@inline backend(Vₕ::ConstrainedCompositeSpace) = backend(Vₕ.padded)
+@inline eltype(Vₕ::ConstrainedCompositeSpace) = eltype(Vₕ.padded)
+@inline dim(Vₕ::ConstrainedCompositeSpace) = dim(Vₕ.padded)
+
+function Base.show(io::IO, Vₕ::ConstrainedCompositeSpace{N}) where {N}
+    print(io, "ConstrainedCompositeSpace{$N components, ", ndofs(Vₕ), " dofs}")
+    return nothing
+end
+Base.summary(Vₕ::ConstrainedCompositeSpace) = sprint(show, Vₕ)
+
+# A `GhostVector` holds one scalar ghost space's values, which a closure coupling the
+# components does not split into.
+@noinline function GhostVector(Vₕ::ConstrainedCompositeSpace, u...)
+    return _throw_whole_ghost_vector("GhostVector")
+end
+@noinline function update_ghosts!(v, Vₕ::ConstrainedCompositeSpace, rest...)
+    return _throw_whole_ghost_vector("update_ghosts!")
+end
+
+@noinline function _throw_whole_ghost_vector(call::String)
+    throw(
+        ArgumentError(
+        "$call takes a scalar ghost space, and a composite constrained as a whole, " *
+        "constrained(C₁ × C₂, relations), has no ghost vector of its own. Lift a " *
+        "solution with Bramble.lift(Vₕ, u), whose padded values hold every component's " *
+        "ghosts.",
     ),
     )
 end

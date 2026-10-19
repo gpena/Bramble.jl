@@ -117,13 +117,15 @@ end
 # --- Parsing the relations ----------------------------------------------------------- #
 
 # One parsed relation: the facet `(d, s)` (`s` 1 the minimum, 2 the maximum), its
-# canonical name, the facet operator (the trial function itself for `u => g`) and the data.
+# canonical name, the facet operator (the trial function itself for `u => g`), the data and
+# the component it constrains (1 on a scalar space).
 struct _FacetRelation{O, T}
     d::Int
     s::Int
     name::Symbol
     op::O
     data::T
+    c::Int
 end
 
 _relation_pairs(p::Pair) = (p,)
@@ -143,7 +145,8 @@ function _facet_relations(G::GhostMesh{D}, out) where {D}
     return rels
 end
 
-@inline _is_dirichlet(r::_FacetRelation) = r.op isa TrialFunction
+@inline _is_dirichlet(r::_FacetRelation) = r.op isa Union{TrialFunction,
+    IndexedTrialFunction}
 
 # Data depending on time take the time as a second argument, read off their methods as
 # `dirichlet_constraints` reads its conditions (`_accepts`, geometry/marker.jl).
@@ -163,7 +166,7 @@ function _facet_relation(G::GhostMesh{D}, p::Pair{Symbol, <:Pair}) where {D}
     _check_relation_operator(op, name)
     op isa TrialFunction || has_ghosts(G, d, _GHOST_SIDES[s]) || _throw_relation_unghosted(name)
     _check_relation_data(data, name)
-    return _FacetRelation(d, s, name, op, data)
+    return _FacetRelation(d, s, name, op, data, 1)
 end
 _facet_relation(G::GhostMesh, p) = _throw_relation_shape(p)
 
@@ -212,12 +215,13 @@ end
     )
 end
 
-@noinline function _throw_facet_twice(name::Symbol, dirichlet::Bool)
+@noinline function _throw_facet_twice(name::Symbol, dirichlet::Bool, c::Int = 0)
     what = dirichlet ? "two Dirichlet relations `u => g`" : "two relations reading its ghost"
+    whose = c == 0 ? "" : " of component $c"
     throw(
         ArgumentError(
-        "the facet :$name has $what; give at most one of each kind per facet, summing " *
-        "the operators into one relation if both hold.",
+        "the facet :$name$whose has $what; give at most one of each kind per facet, " *
+        "summing the operators into one relation if both hold.",
     ),
     )
 end
@@ -228,6 +232,77 @@ end
         "the facet :$name carries no ghosts on this space, so a relation there has no " *
         "ghost to solve for. Name :$name in `gridspace(Ωₕ; ghosts = ...)` (or use " *
         "`ghosts = :boundary`).",
+    ),
+    )
+end
+
+# --- Relations on a composite of ghost spaces ---------------------------------------- #
+
+# The relations of `constrained(C₁ × C₂, relations)`, `Gs` the components' ghost meshes:
+# each names its component through the trial leaf it reads, `u(i)` in `u(i) => g` or in a
+# facet operator such as `∂ₙ(u(i))`, and a component has at most one relation of each kind
+# per facet. Data depending on time are refused (they would need a `d(t)` of the whole).
+function _composite_relations(Gs::Tuple, out)
+    pairs = _relation_pairs(out)
+    isempty(pairs) && _throw_relation_shape(out)
+    rels = Any[]
+    for p in pairs
+        r = _composite_relation(Gs, p)
+        any(q -> q.c == r.c && q.d == r.d && q.s == r.s &&
+                 _is_dirichlet(q) == _is_dirichlet(r), rels) &&
+            _throw_facet_twice(r.name, _is_dirichlet(r), r.c)
+        push!(rels, r)
+    end
+    return rels
+end
+
+function _composite_relation(Gs::Tuple{Vararg{GhostMesh{D}}},
+        p::Pair{Symbol, <:Pair}) where {D}
+    face = _find_face(Val(D), first(p))
+    face === nothing && _throw_not_a_relation_facet(first(p), D)
+    d, s = face
+    name = _facet_name(d, s)
+    op, data = last(p)
+    c = _relation_component(op, d, s, name)
+    _check_component_range(c, length(Gs))
+    op isa IndexedTrialFunction || has_ghosts(Gs[c], d, _GHOST_SIDES[s]) ||
+        _throw_relation_unghosted(name)
+    _check_relation_data(data, name)
+    _is_time_datum(data) && _throw_composite_time(name)
+    return _FacetRelation(d, s, name, op, data, c)
+end
+_composite_relation(::Tuple, p) = _throw_relation_shape(p)
+
+# The component a relation constrains: that of its trial leaf on its own facet.
+_relation_component(op::IndexedTrialFunction, ::Int, ::Int, ::Symbol) = op.component_idx
+function _relation_component(op::FacetOperator, d::Int, s::Int, name::Symbol)
+    c = _trial_component_class(_facet_component(op, d, s))
+    c isa Int && return c
+    return _throw_relation_components(name, c === nothing)
+end
+function _relation_component(::TrialFunction, ::Int, ::Int, name::Symbol)
+    return _throw_relation_components(name, true)
+end
+_relation_component(op, ::Int, ::Int, name::Symbol) = _check_relation_operator(op, name)
+
+@noinline function _throw_relation_components(name::Symbol, none::Bool)
+    what = none ? "names no component of the composite" :
+           "reads several components, which constrained does not take yet"
+    throw(
+        ArgumentError(
+        "the relation on :$name $what. Write each relation of one component u(i), such " *
+        "as `:$name => ∂ₙ(u(1)) => g`, or `:$name => u(2) => g` for a Dirichlet condition.",
+    ),
+    )
+end
+
+@noinline function _throw_composite_time(name::Symbol)
+    throw(
+        ArgumentError(
+        "the data of the relation on :$name depend on time, which constrained does not " *
+        "take on a composite of ghost spaces. Give data of the point alone, x -> …, or " *
+        "constrain each component on its own and take the product, " *
+        "constrained(W₁, r₁) × constrained(W₂, r₂), whose components take data in time.",
     ),
     )
 end
@@ -245,21 +320,32 @@ end
 # facet at its node, and `b[k]` the weight times the data there (the weight alone, for data
 # depending on time); `rel[k]` is the index in `rels` of that relation.
 function _relation_rows(P::ScalarGridSpace, rels)
-    G = mesh(P)
-    plin = LinearIndices(npoints(G, Tuple))
-    isempty(rels) && return spzeros(eltype(P), 0, length(plin)), eltype(P)[], Int[], Int[]
-    facet = zeros(Int, nghosts(G))            # the relation of each ghost, 0 if none
-    for g in 1:nghosts(G)
+    R, b, ghosts, rel = _relation_rows(P, ((mesh(P), 0),), rels)
+    return R, b, Int[g for (_, g) in ghosts], rel
+end
+
+# The same on a padded composite, `comps` holding each component's `GhostMesh` and the
+# offset of its padded values: a relation of component `c` eliminates the ghosts of its
+# facet in that component, and `ghosts[k]` is the pair `(c, g)`, ghost `g` of component `c`,
+# component by component. The columns of `R` run over the whole padded composite.
+function _relation_rows(P, comps::Tuple, rels)
+    T = eltype(P)
+    isempty(rels) && return spzeros(T, 0, ndofs(P)), T[], Tuple{Int, Int}[], Int[]
+    ghosts, rel = Tuple{Int, Int}[], Int[]
+    for (c, (G, _)) in enumerate(comps), g in 1:nghosts(G)
+
         _, d, side = boundary_node(G, g)
-        facet[g] = something(findfirst(r -> r.d == d && _GHOST_SIDES[r.s] === side, rels), 0)
+        i = findfirst(r -> r.c == c && r.d == d && _GHOST_SIDES[r.s] === side, rels)
+        i === nothing || (push!(ghosts, (c, g)); push!(rel, i))
     end
-    ghosts = findall(!iszero, facet)
     blocks = map(r -> _assemble_relation(P, r), rels)
     rows, cols, vals = Int[], Int[], promote_type(map(x -> eltype(first(x)), blocks)...)[]
     b = zeros(promote_type(eltype(vals), map(x -> eltype(last(x)), blocks)...), length(ghosts))
-    for (k, g) in enumerate(ghosts)
-        Rt, bF = blocks[facet[g]]
-        i = plin[padded_index(G, first(boundary_node(G, g)))]
+    for (k, (c, g)) in enumerate(ghosts)
+        G, offset = comps[c]
+        Rt, bF = blocks[rel[k]]
+        plin = LinearIndices(npoints(G, Tuple))
+        i = offset + plin[padded_index(G, first(boundary_node(G, g)))]
         for q in nzrange(Rt, i)
             push!(rows, k)
             push!(cols, rowvals(Rt)[q])
@@ -267,7 +353,7 @@ function _relation_rows(P::ScalarGridSpace, rels)
         end
         b[k] = bF[i]
     end
-    return sparse(rows, cols, vals, length(ghosts), length(plin)), b, ghosts, facet[ghosts]
+    return sparse(rows, cols, vals, length(ghosts), ndofs(P)), b, ghosts, rel
 end
 
 # The relation's rows and data on the nodes of its facet, by forms on the padded space;
@@ -278,6 +364,14 @@ function _assemble_relation(P::ScalarGridSpace, r::_FacetRelation)
     data = _is_time_relation(r) ? one(eltype(P)) : r.data
     R = assemble(form(P, P, (u, v) -> inner_Γ(op, v; markers = (name,))))
     b = assemble(form(P, v -> inner_Γ(data, _facet_identity(v); markers = (name,))))
+    return sparse(transpose(R)), b
+end
+
+# On a padded composite, tested against the component `r.c` the relation constrains.
+function _assemble_relation(P::CompositeGridSpace, r::_FacetRelation)
+    op, name, c = r.op, r.name, r.c
+    R = assemble(form(P, P, (u, v) -> inner_Γ(op, v(c); markers = (name,))))
+    b = assemble(form(P, v -> inner_Γ(r.data, _facet_identity(v(c)); markers = (name,))))
     return sparse(transpose(R)), b
 end
 
@@ -307,6 +401,35 @@ function _constrained_space(Wₕ::GhostGridSpace, rels, drels)
     W = GhostGridSpace(P, _closure_matrix(be, T, E), d, td)
     _lift_affine!(d, W, zero(real(T)))      # the stored `d` is `d(0)`
     return W
+end
+
+# The closure of the padded composite `P` under the ghost relations `rels` and the
+# Dirichlet ones `drels`, `comps` each component's `GhostMesh` and padded offset: the rows,
+# kept points and fixed points of every component, at its offset, solved together by the
+# core below, so `E` couples two components wherever a relation does. The degrees of
+# freedom are each component's, in the order `constrained` gives it alone, one after the
+# other.
+function _composite_closure(P::CompositeGridSpace, comps::Tuple, rels, drels)
+    for r in drels
+        has_ghosts(first(comps[r.c]), r.d, _GHOST_SIDES[r.s]) || continue
+        any(q -> q.c == r.c && q.d == r.d && q.s == r.s, rels) ||
+            _throw_dirichlet_orphan_ghosts(r.name)
+    end
+    R, b, ghosts, _ = _relation_rows(P, comps, rels)
+    fixed, gs, keep = falses(ndofs(P)), Any[], Int[]
+    for (c, (G, offset)) in enumerate(comps)
+        f, g, _, _ = _dirichlet_values(G, filter(r -> r.c == c, drels), eltype(P))
+        own = Int[k for (j, k) in ghosts if j == c]
+        append!(keep, offset .+ _kept_points(G, own, f))
+        fixed[offset .+ eachindex(f)] .= f
+        push!(gs, g)
+    end
+    gpts = Int[comps[c][2] + LinearIndices(npoints(first(comps[c]), Tuple))[
+                   _ghost_point(first(comps[c]), k)] for (c, k) in ghosts]
+    names = Symbol[_relation_name(first(comps[c]), k) for (c, k) in ghosts]
+    E, d, _ = _relation_closure(gpts, names, R, b, keep, fixed,
+        reduce(vcat, gs))::Tuple{SparseMatrixCSC, Vector, Nothing}
+    return E, d
 end
 
 # The record of `d(t) = L g(t)`: the sources are the eliminated ghosts (`1:m`, in the order
@@ -460,11 +583,20 @@ end
 # for `b = −R[:, p]` plus the 1 at `p = order[q]`; otherwise `L` is `nothing`.
 function _relation_closure(G::GhostMesh, R::SparseMatrixCSC, b, ghosts, keep,
         fixed::BitVector, g::AbstractVector, sources = nothing)
+    plin = LinearIndices(npoints(G, Tuple))
+    gpts = Int[plin[_ghost_point(G, k)] for k in ghosts]
+    names = Symbol[_relation_name(G, k) for k in ghosts]
+    return _relation_closure(gpts, names, R, b, keep, fixed, g, sources)
+end
+
+# The closure on index sets alone, as a padded composite gives them: the eliminated ghosts'
+# padded points `gpts`, the names of their relations, for the refusals, and the kept points.
+function _relation_closure(gpts::Vector{Int}, names::Vector{Symbol}, R::SparseMatrixCSC,
+        b, keep, fixed::BitVector, g::AbstractVector, sources = nothing)
     Npad = size(R, 2)
-    m, n = length(ghosts), length(keep)
+    m, n = length(gpts), length(keep)
     gpos = zeros(Int, Npad)
     kpos = zeros(Int, Npad)
-    gpts = [LinearIndices(npoints(G, Tuple))[_ghost_point(G, k)] for k in ghosts]
     gpos[gpts] .= 1:m
     kpos[keep] .= 1:n
     bg = Vector{promote_type(eltype(b), eltype(R), eltype(g))}(b)
@@ -484,33 +616,33 @@ function _relation_closure(G::GhostMesh, R::SparseMatrixCSC, b, ghosts, keep,
             bg[k] -= v * g[p]
             push!(Fi, k), push!(Fj, p), push!(Fv, -v)
         else
-            _throw_relation_reads_absent(_relation_name(G, ghosts[k]))
+            _throw_relation_reads_absent(names[k])
         end
     end
     C = sparse(Ci, Cj, Cv, m, m)
     for k in 1:m
-        iszero(C[k, k]) && _throw_relation_misses_ghost(_relation_name(G, ghosts[k]))
+        iszero(C[k, k]) && _throw_relation_misses_ghost(names[k])
     end
     Bt = sparse(Bj, Bi, Bv, n, m)            # the rows of `B` as columns
-    Ei, Ej, Ev, dg = _block_solve(G, C, Bt, bg, ghosts)
+    Ei, Ej, Ev, dg = _block_solve(names, C, Bt, bg)
     rows = vcat(keep, gpts[Ei])
     cols = vcat(1:n, Ej)
     vals = vcat(ones(eltype(Ev), n), Ev)
     d = zeros(promote_type(eltype(dg), eltype(g)), Npad)
     d[gpts] .= dg
     d[fixed] .= g[fixed]
-    L = _affine_map(G, C, gpts, Fi, Fj, Fv, ghosts, Npad, sources)
+    L = _affine_map(names, C, gpts, Fi, Fj, Fv, Npad, sources)
     return sparse(rows, cols, vals, Npad, n), d, L
 end
 
-_affine_map(G, C, gpts, Fi, Fj, Fv, ghosts, Npad, ::Nothing) = nothing
-function _affine_map(G::GhostMesh, C::SparseMatrixCSC, gpts, Fi, Fj, Fv, ghosts, Npad::Int,
+_affine_map(names, C, gpts, Fi, Fj, Fv, Npad, ::Nothing) = nothing
+function _affine_map(names::Vector{Symbol}, C::SparseMatrixCSC, gpts, Fi, Fj, Fv, Npad::Int,
         (w, order)::Tuple)
     m, nf = size(C, 1), length(order)
     src = zeros(Int, Npad)
     src[order] .= m .+ (1:nf)
     St = sparse(vcat(1:m, src[Fj]), vcat(1:m, Fi), vcat(w, Fv), m + nf, m)
-    Li, Lj, Lv, _ = _block_solve(G, C, St, zeros(eltype(St), m), ghosts)
+    Li, Lj, Lv, _ = _block_solve(names, C, St, zeros(eltype(St), m))
     return sparse(vcat(gpts[Li], order), vcat(Lj, m .+ (1:nf)),
         vcat(Lv, ones(eltype(Lv), nf)), Npad, m + nf)
 end
@@ -525,7 +657,8 @@ end
 # columns its rows of `B` touch. The result is the triplets `(k, j, v)` of the ghosts' rows
 # of `E` and the ghosts' `d`. A solve, not a multiplication by an inverse: on a block near
 # singularity (a nearly singular `K`) the inverse leaves the relations unsatisfied.
-function _block_solve(G::GhostMesh, C::SparseMatrixCSC, Bt::SparseMatrixCSC, b, ghosts)
+# `names[k]` is the relation of ghost `k`, which a singular block names.
+function _block_solve(names::Vector{Symbol}, C::SparseMatrixCSC, Bt::SparseMatrixCSC, b)
     m = size(C, 1)
     root = collect(1:m)
     find(k) = (while root[k] != k
@@ -557,7 +690,7 @@ function _block_solve(G::GhostMesh, C::SparseMatrixCSC, Bt::SparseMatrixCSC, b, 
         Cb = Matrix(C[idx, idx])
         F = lu(Cb; check = false)
         _nonsingular(F, Cb) ||
-            _throw_singular_corner(map(k -> _relation_name(G, ghosts[k]), idx))
+            _throw_singular_corner(names[idx])
         js = sort!(unique!(reduce(vcat, (rowvals(Bt)[nzrange(Bt, k)] for k in idx))))
         Bb = zeros(T, length(idx), length(js))
         for (a, k) in enumerate(idx), q in nzrange(Bt, k)

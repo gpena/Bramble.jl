@@ -41,8 +41,9 @@
 #
 # A form on composites of ghost spaces, `C₁ × C₂`, is a `GhostCompositeBilinearForm` or
 # `GhostCompositeLinearForm`, whose sides are `_CompositeClosure`s: the padded composite
-# `padded(C₁) × padded(C₂)` with the closure `(blockdiag(E₁, E₂), vcat(d₁, d₂))`. The
-# reduction and the load below run on it unchanged (`_AnyGhostBilinearForm`);
+# `padded(C₁) × padded(C₂)` with the closure `(blockdiag(E₁, E₂), vcat(d₁, d₂))`, or, on a
+# `ConstrainedCompositeSpace`, the closure `constrained` stored. The reduction and the load
+# below run on it unchanged (`_AnyGhostBilinearForm`);
 # `ghost_composite.jl` builds it and holds its `dirichlet` rows and refusals. A type of its
 # own keeps it out of the methods other files define on `GhostBilinearForm`.
 #
@@ -56,23 +57,55 @@
 # See also: `GhostGridSpace`, `BilinearForm`, `LinearForm`
 
 """
+    ConstrainedCompositeSpace{N} <: AbstractSpaceType{N}
+
+A composite of `N` ghost spaces constrained as a whole, built by
+`constrained(C₁ × C₂, relations)` (ghost_composite.jl): the unconstrained composite, its
+padded space and the closure `(E, d)` the relations give, stored once. `E` is general, not
+block diagonal: the degrees of freedom are each component's, one component after the
+other, and its padded values are `E * u + d`.
+"""
+struct ConstrainedCompositeSpace{N, S <: CompositeGridSpace{N}, P <: CompositeGridSpace{N},
+    ET <: SparseMatrixCSC, DT <: AbstractVector} <: AbstractSpaceType{N}
+    "the unconstrained composite of ghost spaces the relations were given on."
+    space::S
+    "the composite of the components' padded spaces."
+    padded::P
+    "the closure matrix, padded values by degrees of freedom."
+    E::ET
+    "the affine part of the closure, one entry per padded value."
+    d::DT
+    "the transpose of `E`, whose columns give `lift` its padded rows."
+    Et::ET
+end
+
+function ConstrainedCompositeSpace(space::CompositeGridSpace{N},
+        padded::CompositeGridSpace{N}, E::SparseMatrixCSC, d::AbstractVector,
+        Et::SparseMatrixCSC) where {N}
+    S, P = typeof(space), typeof(padded)
+    return ConstrainedCompositeSpace{N, S, P, typeof(E), typeof(d)}(space, padded, E, d, Et)
+end
+
+"""
     _CompositeClosure
 
 One side of a form on a composite of ghost spaces (`C₁ × C₂`, built in
 `ghost_composite.jl`): the composite, its padded space `padded(C₁) × padded(C₂)` and the
-closure of the whole, `E = blockdiag(E₁, E₂)` and `d = vcat(d₁, d₂)`, each component
-constrained by its own relations. It has the fields of a [`GhostGridSpace`](@ref) that the
-reduction reads, so a `GhostCompositeBilinearForm` or `GhostCompositeLinearForm` holds it
-as a side.
+closure of the whole: `E = blockdiag(E₁, E₂)` and `d = vcat(d₁, d₂)` when each component
+is constrained by its own relations, the stored closure of a `ConstrainedCompositeSpace`.
+It has the fields of a [`GhostGridSpace`](@ref) that the reduction reads, so a
+`GhostCompositeBilinearForm` or `GhostCompositeLinearForm` holds it as a side.
 """
-struct _CompositeClosure{S <: CompositeGridSpace{<:Any, <:Tuple{Vararg{GhostGridSpace}}},
+struct _CompositeClosure{
+    S <: Union{CompositeGridSpace{<:Any, <:Tuple{Vararg{GhostGridSpace}}},
+        ConstrainedCompositeSpace},
     P <: CompositeGridSpace{<:Any, <:Tuple{Vararg{ScalarGridSpace}}}, ET <: SparseMatrixCSC,
     DT <: AbstractVector}
-    "the composite of ghost spaces."
+    "the composite of ghost spaces, or one constrained as a whole."
     space::S
     "the composite of the components' padded spaces."
     padded::P
-    "the closure matrix, block diagonal over the components."
+    "the closure matrix."
     E::ET
     "the affine part, the components' in order."
     d::DT
