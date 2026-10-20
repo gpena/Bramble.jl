@@ -7,6 +7,9 @@
 # and `assemble` returns the sparse part and the two vectors together, as a
 # `RankOneUpdate`. Storing it in the sparse matrix would cost `N²` entries.
 
+# Only this file extends `ishermitian`, for `RankOneUpdate`.
+import LinearAlgebra: ishermitian
+
 # --- The term ------------------------------------------------------------------------ #
 
 """
@@ -276,7 +279,6 @@ function Base.show(io::IO, a::RankOneForm{D}) where {D}
     return nothing
 end
 
-# The form's other terms as a `BilinearForm` shows them, then the rank-one term's `σ`.
 function Base.show(io::IO, ::MIME"text/plain", a::RankOneForm)
     println(io, "RankOneForm: the bilinear form below + σ wₛ wₜᵀ, σ = ",
         _rank_scale_value(a.scale))
@@ -312,9 +314,9 @@ Entry `(i, j)` is `A[i, j] + σ * (ws[i] * wt[j])`. `mul!(y, K, x, α, β)` comp
 `α (A x + σ ws (wtᵀ x)) + β y` with one product by `A` and two passes over the vectors, and
 allocates nothing; so do `K * x`, `K * X` and `mul!` on matrices, apart from their result.
 `Matrix(K)` is the dense matrix. `K'` and `transpose(K)` are LinearAlgebra's lazy
-`Adjoint` and `Transpose` of `K`: they read `A`, `σ` and the vectors from `K`, so a refill of
-`K` is seen through them, and their products allocate nothing either. `similar(K)` is a rank-one update with
-`similar` parts, and `copy(K)` one with copied parts.
+`Adjoint` and `Transpose` of `K`: they read `A`, `σ` and the vectors from `K`, so a refill
+of `K` is seen through them, and their products allocate nothing either. `similar(K)` is a
+rank-one update with `similar` parts, and `copy(K)` one with copied parts.
 
 With `dirichlet` labels, `assemble` makes each Dirichlet row of `A` an identity row, as
 [`dirichlet_bc!`](@ref) does, and zeroes `ws` there, so the row is the identity row of
@@ -325,7 +327,8 @@ Dirichlet indices.
 `issymmetric(K)` is `true` when `A` is symmetric and `ws == wt` (or `σ` is zero), the case
 of a symmetric form with one functional on both sides. Any other `K` reports `false`
 without comparing its `N²` entries, even if they happen to be symmetric (`ws` a multiple of
-`wt`, say).
+`wt`, say). `ishermitian(K)` is the same test for a real `K`, and for a complex one asks
+for a Hermitian `A`, a real `σ` and `ws == conj.(wt)`.
 
 # Examples
 ```jldoctest
@@ -380,45 +383,45 @@ Base.@propagate_inbounds function Base.getindex(K::RankOneUpdate{T}, i::Int, j::
     return convert(T, @inbounds K.A[i, j] + K.σ * (K.ws[i] * K.wt[j]))
 end
 
-# `Σⱼ w[j] x[j]`, unconjugated: the term is `σ ws wtᵀ`, a transpose and not an adjoint.
-@inline function _tdot(w::AbstractVector, x::AbstractVector)
-    s = zero(promote_type(eltype(w), eltype(x)))
-    @inbounds @simd for j in eachindex(w, x)
-        s += w[j] * x[j]
-    end
-    return s
-end
-
-@inline function _tdot(w::AbstractVector, X::AbstractMatrix, k::Int)
+# `Σⱼ f(w[j]) x[j, k]`, unconjugated for `f = identity`: the term is `σ ws wtᵀ`, a
+# transpose and not an adjoint. A vector `x` is read as its one column, `k = 1`.
+@inline function _tdot(f::F, w::AbstractVector, X::AbstractVecOrMat, k::Int) where {F}
     s = zero(promote_type(eltype(w), eltype(X)))
     @inbounds @simd for j in eachindex(w)
-        s += w[j] * X[j, k]
+        s += f(w[j]) * X[j, k]
     end
     return s
 end
 
+# `Y = α (A′ X + f(σ) f(wadd) (f(wdot)ᵀ X)) + β Y`, column by column, with `f` applied to
+# each entry: `K`'s products take `A′ = A`, `wdot = wt` and `wadd = ws`; `K'`'s and
+# `transpose(K)`'s take the wrapped `A`, `wdot = ws` and `wadd = wt`, the adjoint with
+# `f = conj`. A vector `Y` is read as one column.
+function _rank_one_mul!(Y::AbstractVecOrMat, A′, f::F, σ, wdot::AbstractVector,
+        wadd::AbstractVector, X::AbstractVecOrMat, α::Number, β::Number) where {F}
+    _check_mul_dims(size(A′), Y, X)
+    iszero(α) && return _scale_only!(Y, β)
+    mul!(Y, A′, X, α, β)
+    for k in axes(X, 2)
+        c = α * f(σ) * _tdot(f, wdot, X, k)
+        @inbounds for i in eachindex(wadd)
+            Y[i, k] += c * f(wadd[i])
+        end
+    end
+    return Y
+end
+
+# Four signatures, not one on `AbstractVecOrMat`: they are as specific as LinearAlgebra's
+# `mul!(::AbstractVector, ::AbstractVecOrMat, ::AbstractVector, ::Number, ::Number)`, so a
+# call is not ambiguous between the two.
 function mul!(
         y::AbstractVector, K::RankOneUpdate, x::AbstractVector, α::Number, β::Number)
-    _check_mul_dims(size(K), y, x)
-    iszero(α) && return _scale_only!(y, β)
-    c = α * K.σ * _tdot(K.wt, x)
-    mul!(y, K.A, x, α, β)
-    y .+= c .* K.ws
-    return y
+    return _rank_one_mul!(y, K.A, identity, K.σ, K.wt, K.ws, x, α, β)
 end
 
 function mul!(
         Y::AbstractMatrix, K::RankOneUpdate, X::AbstractMatrix, α::Number, β::Number)
-    _check_mul_dims(size(K), Y, X)
-    iszero(α) && return _scale_only!(Y, β)
-    mul!(Y, K.A, X, α, β)
-    for k in axes(X, 2)
-        c = α * K.σ * _tdot(K.wt, X, k)
-        @inbounds for i in eachindex(K.ws)
-            Y[i, k] += c * K.ws[i]
-        end
-    end
-    return Y
+    return _rank_one_mul!(Y, K.A, identity, K.σ, K.wt, K.ws, X, α, β)
 end
 
 # `α = 0`: `x` is not read, so an `Inf` in it gives no `NaN`, and with `β = 0` neither is
@@ -451,41 +454,16 @@ _wrap_like(::Transpose, A) = transpose(A)
 _entry_op(::Adjoint) = conj
 _entry_op(::Transpose) = identity
 
-# `Σⱼ f(w[j]) x[j, k]`.
-@inline function _tdot(f::F, w::AbstractVector, X::AbstractVecOrMat, k::Int) where {F}
-    s = zero(promote_type(eltype(w), eltype(X)))
-    @inbounds @simd for j in eachindex(w)
-        s += f(w[j]) * X[j, k]
-    end
-    return s
-end
-
 function mul!(
         y::AbstractVector, Kt::_AdjOrTransRankOne, x::AbstractVector, α::Number, β::Number)
-    _check_mul_dims(size(Kt), y, x)
-    iszero(α) && return _scale_only!(y, β)
-    K, f = parent(Kt), _entry_op(Kt)
-    c = α * f(K.σ) * _tdot(f, K.ws, x, 1)
-    mul!(y, _wrap_like(Kt, K.A), x, α, β)
-    @inbounds for i in eachindex(y, K.wt)
-        y[i] += c * f(K.wt[i])
-    end
-    return y
+    K = parent(Kt)
+    return _rank_one_mul!(y, _wrap_like(Kt, K.A), _entry_op(Kt), K.σ, K.ws, K.wt, x, α, β)
 end
 
 function mul!(
         Y::AbstractMatrix, Kt::_AdjOrTransRankOne, X::AbstractMatrix, α::Number, β::Number)
-    _check_mul_dims(size(Kt), Y, X)
-    iszero(α) && return _scale_only!(Y, β)
-    K, f = parent(Kt), _entry_op(Kt)
-    mul!(Y, _wrap_like(Kt, K.A), X, α, β)
-    for k in axes(X, 2)
-        c = α * f(K.σ) * _tdot(f, K.ws, X, k)
-        @inbounds for i in eachindex(K.wt)
-            Y[i, k] += c * f(K.wt[i])
-        end
-    end
-    return Y
+    K = parent(Kt)
+    return _rank_one_mul!(Y, _wrap_like(Kt, K.A), _entry_op(Kt), K.σ, K.ws, K.wt, X, α, β)
 end
 
 function Base.Matrix{S}(K::RankOneUpdate) where {S}
@@ -509,6 +487,17 @@ Base.copy(K::RankOneUpdate{T}) where {T} = RankOneUpdate{T}(
 
 issymmetric(K::RankOneUpdate) = (iszero(K.σ) || K.ws == K.wt) && issymmetric(K.A)
 
+# The same structural test with conjugation: `(σ ws wtᵀ)ᴴ = conj(σ) conj(wt) wsᴴ`, so `K` is
+# Hermitian when `A` is, `σ` is real and `ws == conj(wt)` (or `σ` is zero). Without these
+# methods LinearAlgebra's fallback reads all `N²` entries through `getindex`.
+ishermitian(K::RankOneUpdate{<:Real}) = issymmetric(K)
+function ishermitian(K::RankOneUpdate)
+    size(K, 1) == size(K, 2) || return false
+    rank_one = iszero(K.σ) ||
+               (isreal(K.σ) && all(i -> K.ws[i] == conj(K.wt[i]), eachindex(K.ws, K.wt)))
+    return rank_one && ishermitian(K.A)
+end
+
 function Base.show(io::IO, K::RankOneUpdate{T}) where {T}
     m, n = size(K)
     print(io, "RankOneUpdate{$T}($(m)×$(n) A + σ wₛ wₜᵀ, σ = ", K.σ, ")")
@@ -529,6 +518,11 @@ end
 
 # --- Assembly ---------------------------------------------------------------------- #
 
+# A functional's vector, by the linear path on a plain space; the ghost methods, reduced
+# through the closure, are in "Ghost spaces" below.
+_functional_vector(l::LinearForm) = assemble(l)
+_functional_vector!(w::AbstractVector, l::LinearForm) = assemble!(w, l)
+
 """
     assemble(a::RankOneForm; dirichlet = nothing, dirichlet_components = nothing) -> RankOneUpdate
 
@@ -537,12 +531,11 @@ as [`assemble`](@ref) assembles a [`BilinearForm`](@ref), with `dirichlet` appli
 matrix, and the two functionals' vectors through the linear path. `wₛ` is zero at the
 Dirichlet rows, so they are identity rows of the result.
 """
-function assemble(a::_PlainRankOneForm; dirichlet = nothing, dirichlet_components = nothing)
+function assemble(a::RankOneForm; dirichlet = nothing, dirichlet_components = nothing)
     A = assemble(a.bilinear; dirichlet = dirichlet,
         dirichlet_components = dirichlet_components)
-    ws = assemble(a.test_functional)
-    wt = assemble(a.trial_functional)
-    K = RankOneUpdate(A, _rank_scale_value(a.scale), ws, wt)
+    K = RankOneUpdate(A, _rank_scale_value(a.scale), _functional_vector(a.test_functional),
+        _functional_vector(a.trial_functional))
     _zero_dirichlet_rows!(K.ws, test_space(a), dirichlet, dirichlet_components)
     return K
 end
@@ -555,12 +548,12 @@ nothing on the host. A `Ref` factor of `σ` and every coefficient of the functio
 afresh.
 """
 function assemble!(
-        K::RankOneUpdate, a::_PlainRankOneForm; dirichlet = nothing,
+        K::RankOneUpdate, a::RankOneForm; dirichlet = nothing,
         dirichlet_components = nothing)
     assemble!(K.A, a.bilinear; dirichlet = dirichlet,
         dirichlet_components = dirichlet_components)
-    assemble!(K.ws, a.test_functional)
-    assemble!(K.wt, a.trial_functional)
+    _functional_vector!(K.ws, a.test_functional)
+    _functional_vector!(K.wt, a.trial_functional)
     K.σ = _rank_scale_value(a.scale)
     _zero_dirichlet_rows!(K.ws, test_space(a), dirichlet, dirichlet_components)
     return K
@@ -652,11 +645,14 @@ function _zero_dirichlet_rows!(ws::AbstractVector, Vₕ, dirichlet, components)
     return ws
 end
 
-# Calls `f(mask, offset)` once per label and selected leaf of `Vₕ`.
-function _each_dirichlet_mask(f::F, Vₕ::ScalarGridSpace, labels, components) where {F}
+# Calls `f(mask, offset)` once per label and selected leaf of `Vₕ`. A ghost space's reduced
+# rows must be its physical nodes (`_check_rows` refuses any other space).
+function _each_dirichlet_mask(f::F, Vₕ::Union{ScalarGridSpace, GhostGridSpace}, labels,
+        components) where {F}
     _validate_scalar_components(components)
+    Vₕ isa GhostGridSpace && _check_rows(Vₕ.rows, (Vₕ,), labels)
     for label in labels
-        f(index_in_marker(mesh(Vₕ), label), 0)
+        f(_dirichlet_label_mask(Vₕ, label), 0)
     end
     return nothing
 end
@@ -721,33 +717,13 @@ end
 # `w = Eᵀ w_pad` for the functional `l`, `E` the closure of its own space. No `d` enters
 # (the functional's vector is not a load), so neither the affine part nor time-dependent
 # data are refused here, as `assemble(l)` refuses them for a load.
-function _reduce_functional!(w::AbstractVector, l::GhostLinearForm)
+function _functional_vector!(w::AbstractVector, l::GhostLinearForm)
     assemble!(l.F_pad, l.padded)
     return _closure_transpose_mul!(w, l, l.F_pad)
 end
 
-_reduced_functional(l::GhostLinearForm) = _reduce_functional!(
+_functional_vector(l::GhostLinearForm) = _functional_vector!(
     similar(l.F_pad, ndofs(l.test_space)), l)
-
-function assemble(a::_GhostRankOneForm; dirichlet = nothing, dirichlet_components = nothing)
-    A = assemble(a.bilinear; dirichlet = dirichlet,
-        dirichlet_components = dirichlet_components)
-    K = RankOneUpdate(A, _rank_scale_value(a.scale), _reduced_functional(a.test_functional),
-        _reduced_functional(a.trial_functional))
-    _zero_dirichlet_rows!(K.ws, test_space(a), dirichlet, dirichlet_components)
-    return K
-end
-
-function assemble!(K::RankOneUpdate, a::_GhostRankOneForm; dirichlet = nothing,
-        dirichlet_components = nothing)
-    assemble!(K.A, a.bilinear; dirichlet = dirichlet,
-        dirichlet_components = dirichlet_components)
-    _reduce_functional!(K.ws, a.test_functional)
-    _reduce_functional!(K.wt, a.trial_functional)
-    K.σ = _rank_scale_value(a.scale)
-    _zero_dirichlet_rows!(K.ws, test_space(a), dirichlet, dirichlet_components)
-    return K
-end
 
 """
     assemble(a::RankOneForm, l::GhostLinearForm; dirichlet = nothing, dirichlet_components = nothing, symmetrize::Bool = false) -> (K, F)
@@ -797,12 +773,12 @@ function _assemble_rank_one_pair!(K::RankOneUpdate, F::AbstractVector, a::_Ghost
     b = a.bilinear
     _assemble_ghost!(K.A, b)
     _assemble_ghost_load!(F, b, l)
-    _reduce_functional!(K.ws, a.test_functional)
-    _reduce_functional!(K.wt, a.trial_functional)
+    _functional_vector!(K.ws, a.test_functional)
+    _functional_vector!(K.wt, a.trial_functional)
     K.σ = _rank_scale_value(a.scale)
     # The term's lift, `σ wₛ (wₜ_padᵀ d)`, read before `wₛ`'s Dirichlet rows are zeroed;
     # those rows of `F` are replaced below.
-    c = K.σ * _tdot(a.trial_functional.F_pad, b.trial_space.d)
+    c = K.σ * _tdot(identity, a.trial_functional.F_pad, b.trial_space.d, 1)
     F .-= c .* K.ws
     _form_rows!(K.A, b, labels, components)
     _form_rows!(F, l, labels, bcs, components)
@@ -811,18 +787,6 @@ function _assemble_rank_one_pair!(K::RankOneUpdate, F::AbstractVector, a::_Ghost
     symmetrize && labels isa Tuple &&
         _symmetrize_rank_one!(K, F, test_space(a), labels, components)
     return K, F
-end
-
-# The Dirichlet rows of a ghost space whose reduced rows are its physical nodes, through the
-# masks of the physical mesh (`_check_rows` refuses any other space).
-function _each_dirichlet_mask(f::F, Vₕ::GhostGridSpace, labels::Tuple, components) where {F}
-    _validate_scalar_components(components)
-    _check_rows(Vₕ.rows, (Vₕ,), labels)
-    Ωₕ = physical_mesh(mesh(Vₕ))
-    for label in labels
-        f(_label_mask(Ωₕ, Vₕ.rows, label), 0)
-    end
-    return nothing
 end
 
 function symmetrize!(K::RankOneUpdate, F::AbstractVector, Wₕ::GhostGridSpace,

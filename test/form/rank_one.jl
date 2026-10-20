@@ -212,7 +212,11 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(
         @test transpose(K) * x ≈ transpose(M) * x
         @test mul!(copy(y0), K', x, 2.0, 0.5) ≈ 2.0 * M' * x + 0.5 * y0
         @test mul!(copy(Y0), transpose(K), X, 2.0, 0.5) ≈ 2.0 * transpose(M) * X + 0.5 * Y0
+        @test alloc_test(mul!, copy(y0), K, x, 2.0, 0.5) == 0
+        @test alloc_test(mul!, copy(Y0), K, X, 2.0, 0.5) == 0
         @test alloc_test(mul!, copy(y0), K', x, 2.0, 0.5) == 0
+        @test alloc_test(mul!, copy(y0), transpose(K), x, 2.0, 0.5) == 0
+        @test alloc_test(mul!, copy(Y0), transpose(K), X, 2.0, 0.5) == 0
         # the adjoint reads `K`: a refill of `K` with a new `Ref` σ and new data is seen
         # through it, σ included
         gₕ = element(W)
@@ -441,11 +445,47 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(
 
     @testset "issymmetric" begin
         W = nonuniform_space(2, Float64)
-        sym(f) = issymmetric(assemble(form(W, W, f)))
+        # `issymmetric` and `ishermitian` agree on a real `K`, and neither reads the entries
+        function sym(f)
+            K = assemble(form(W, W, f))
+            @test which(ishermitian, (typeof(K),)).module === Bramble
+            @test ishermitian(K) == issymmetric(K)
+            return issymmetric(K)
+        end
         @test sym((u, v) -> lap(u, v) + 2.0 * innerₕ(1, u) * innerₕ(1, v))
         @test !sym((u, v) -> lap(u, v) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(1, v))
         @test sym((u, v) -> lap(u, v) + 0.0 * innerₕ(x -> x[1], u) * innerₕ(1, v))
         @test !sym((u, v) -> innerₕ(D₋ₓ(u), v) + 2.0 * innerₕ(1, u) * innerₕ(1, v))
+        # `ws` a multiple of `wt`: the matrix is symmetric, the structural test says no
+        b = (u, v) -> lap(u, v) + innerₕ(2, u) * innerₕ(1, v)
+        @test issymmetric(Matrix(assemble(form(W, W, b))))
+        @test !sym(b)
+    end
+
+    @testset "ishermitian, complex" begin
+        Random.seed!(781)
+        n = 7
+        B = sprandn(ComplexF64, n, n, 0.4) + I
+        H = B + B'
+        w = randn(ComplexF64, n)
+        herm(A, σ, ws, wt) = ishermitian(RankOneUpdate(A, σ, ws, wt))
+        dense(A, σ, ws, wt) = ishermitian(Matrix(RankOneUpdate(A, σ, ws, wt)))
+        # Hermitian `A`, real `σ` and `ws == conj.(wt)`: Hermitian, as the dense matrix is
+        @test herm(H, 2.0 + 0im, conj.(w), w) && dense(H, 2.0 + 0im, conj.(w), w)
+        # each part broken alone: neither is Hermitian
+        @test !herm(H, 2.0 + 1im, conj.(w), w) && !dense(H, 2.0 + 1im, conj.(w), w)
+        @test !herm(H, 2.0 + 0im, w, w) && !dense(H, 2.0 + 0im, w, w)
+        @test !herm(B, 2.0 + 0im, conj.(w), w) && !dense(B, 2.0 + 0im, conj.(w), w)
+        # `σ = 0` leaves `A`
+        @test herm(H, 0.0im, w, w) && !herm(B, 0.0im, w, w)
+        # a rectangular `K` is not Hermitian, nor is the dense matrix
+        R = sparse(ComplexF64[1 2im 0; 0 1 1])
+        @test !herm(R, 2.0 + 0im, ComplexF64[1, 1im], ComplexF64[1, 2, 3]) &&
+              !dense(R, 2.0 + 0im, ComplexF64[1, 1im], ComplexF64[1, 2, 3])
+        @test !herm(R, 0.0im, ComplexF64[1, 1im], ComplexF64[1, 2, 3])
+        K = RankOneUpdate(H, 2.0 + 0im, conj.(w), w)
+        @test which(ishermitian, (typeof(K),)).module === Bramble
+        @test !issymmetric(K)
     end
 
     @testset "similar and copy" begin
