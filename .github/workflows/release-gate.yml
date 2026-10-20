@@ -128,7 +128,7 @@ jobs:
 
       - name: Build
         env:
-          JULIA_NUM_THREADS: auto
+          JULIA_NUM_THREADS: 4
         run: julia --color=yes --project=docs docs/make.jl
 
   # The one check branch protection requires from this workflow. A matrix job skipped by its
