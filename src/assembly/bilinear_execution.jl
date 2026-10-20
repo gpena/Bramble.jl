@@ -42,12 +42,13 @@ struct _ThreadedReplay <: _ReplayMode end
 # `LinearIndices(interior)` order, so `positions[1:n_interior*P]` already *is* the interior
 # in that order, with no need to touch `point_ptr` to find it.
 #
-# Validated against the actual positions, not assumed from the term's own margin: a form summing terms of different margins into the same block
-# records one segment per summand, and a narrower term's own "interior" can still include
-# columns whose true `nzval` footprint -- set by every segment sharing that column, not just
-# this one -- varies where a wider-margin sibling still adds taps. That shows up here as a
-# non-constant per-tap stride; any mismatch, or too little interior to bother, falls back to
-# the plain flat segment unchanged, which `ReplaySink` already handles.
+# Validated against the actual positions, not assumed from the term's own margin: a form
+# summing terms of different margins into the same block records one segment per summand,
+# and a narrower term's own "interior" can still include columns whose true `nzval`
+# footprint -- set by every segment sharing that column, not just this one -- varies where
+# a wider-margin sibling still adds taps. That shows up here as a non-constant per-tap
+# stride; any mismatch, or too little interior to bother, falls back to the plain flat
+# segment unchanged, which `ReplaySink` already handles.
 #
 # Every early return builds a `Segment{D}` via `_flat_segment`, never a bare tuple: the
 # return type must stay the single concrete `Segment{D}` on every path, not a `Union` with
@@ -128,11 +129,12 @@ end
 # `point_ptr[lin_idx]` addresses each point's own slice of `positions` directly, so this
 # stays correct regardless of what order grid points are visited in.
 #
-# One method branching on `segment.is_diagonal`, not two dispatching on the segment's type: both branches are fully concrete (`Segment{D}` has one shape, not
-# a Union). Flat replays through `ReplaySink`; diagonal (1D only,
-# `_diagonal_replay`) replays the interior core through `DiagonalReplaySink`'s stride
-# arithmetic and the boundary shell through an ordinary `ReplaySink`, the two-sink walk
-# (`_visit_stencil!`, the body of `visit_bilinear_stencil`) running both in the one walk.
+# One method branching on `segment.is_diagonal`, not two dispatching on the segment's type:
+# both branches are fully concrete (`Segment{D}` has one shape, not a Union). Flat replays
+# through `ReplaySink`; diagonal (1D only, `_diagonal_replay`) replays the interior core
+# through `DiagonalReplaySink`'s stride arithmetic and the boundary shell through an
+# ordinary `ReplaySink`, the two-sink walk (`_visit_stencil!`, the body of
+# `visit_bilinear_stencil`) running both in the one walk.
 function _replay_segment!(
         A::AbstractMatrix,
         term::TERM,
@@ -924,8 +926,9 @@ end
 # One colour, threaded, writing through `A` (a `_ReplayTarget` or an action target, see
 # `_sweep_point!`). Dispatches on the *effective* execution policy (`_sweep_bilinear!`
 # computes it): `CpuThreaded` runs the shared `Threads.@threads` loop; `CpuPolyester`
-# reaches its own hook instead, so it never silently threads with the wrong mechanism. `CpuSerial` never reaches this function --
-# `_effective_parallel_policy` only ever hands it `CpuThreaded` or `CpuPolyester`.
+# reaches its own hook instead, so it never silently threads with the wrong mechanism.
+# `CpuSerial` never reaches this function -- `_effective_parallel_policy` only ever hands
+# it `CpuThreaded` or `CpuPolyester`.
 @noinline function _sweep_bilinear_colour!(
         ::CpuThreaded,
         A,
@@ -969,8 +972,8 @@ calling [`_replay_point!`](@ref)`(target, term, sp, I, lin_indices, mesh_markers
 col_offset)` per point. `target` is a [`_ReplayTarget`](@ref) or an action target. The
 loop captures none of them whole: the target's storage vector (`nzval`, or `y` and `x`)
 crosses as a top-level argument, the rest of `target`, `sp`, `term` and `mesh_markers` as one
-[`_batch_split`](@ref), rebuilt in each task. The only `src/`
-method errors naming Polyester.
+[`_batch_split`](@ref), rebuilt in each task. Its `src/` method only throws, naming
+Polyester; `BramblePolyesterExt` defines the one that runs.
 """
 @noinline function _batch_bilinear_colour_replay!(
         target, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
@@ -1040,8 +1043,8 @@ end
 `bidx`, every `I` in `CartesianIndices((rest..., _band_range(ax, nbands, b)))` gets
 [`_replay_point!`](@ref)`(target, term, sp, I, lin_indices, mesh_markers, row_offset,
 col_offset)`. `target` is a [`_ReplayTarget`](@ref) or an action target, crossing `@batch`
-as [`_batch_bilinear_colour_replay!`](@ref) describes. The only `src/` method errors
-naming Polyester.
+as [`_batch_bilinear_colour_replay!`](@ref) describes. Its `src/` method only throws,
+naming Polyester; `BramblePolyesterExt` defines the one that runs.
 """
 @noinline function _batch_bilinear_band_replay!(
         target, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset,

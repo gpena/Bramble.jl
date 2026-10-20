@@ -748,7 +748,7 @@ Forms and assembly:
       eliminated too, the lift `d` carrying `g`. `assemble(a, l)` on it returns
       `Eᵀ A_full E` and `Eᵀ (F_full − A_full d)`, where `A_full` is the same form on the
       unconstrained ghost space; `assemble(l)` alone with `d ≠ 0` throws an `ArgumentError`.
-- [ ] `inner_Γ(∂ₙ(u), v)` assembles on an unknown through the constrained space, zero runtime
+- [ ] `inner_Γ(∂ₙ(u), v; markers = (:boundary,))` assembles on an unknown through the constrained space, zero runtime
       allocation during assembly (was #213).
 - [ ] The 2×2 corner block of conormal data is solved at construction; the anisotropic
       problem of #218 converges at second order.
@@ -844,7 +844,7 @@ Script `/tmp/s71/ghost_kernels.jl` (listed at the end of this section). The run 
 thread, `julia --project=. --startup-file=no`, Julia 1.13.2, on the branch
 `v4.0.0/ghost-dynamics` at 9fc39556. The local kernel of a node is `m` minus the rank of its
 `m` ghost columns, normalised, at a 1e-12 relative singular-value threshold. Each node's
-ghosts come from `inner_Γ(∂ₙ(u), v)`, whose ghost columns have one entry each, in the row of
+ghosts come from `inner_Γ(∂ₙ(u), v; markers = (:boundary,))`, whose ghost columns have one entry each, in the row of
 the facet node.
 
 ```
@@ -852,9 +852,9 @@ the facet node.
   42 physical nodes, 26 ghosts, max h ratio 50; ghosts of the multi-facet nodes [[43, 57], [49, 63], [50, 62], [56, 68]]
   innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)
       local kernel 4 (σ_min/σ_max: largest counted 1e-16, smallest not counted none); zero ghost columns 0, rows 0
-  innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v) + inner_Γ(∂ₙ(u), ∂ₙ(v))
+  innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v) + inner_Γ(∂ₙ(u), ∂ₙ(v); markers = (:boundary,))
       local kernel 0 (σ_min/σ_max: largest counted 0e+00, smallest not counted 4e-03); zero ghost columns 0, rows 0
-  innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v) + inner_Γ(∂ₙ(u), v)
+  innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v) + inner_Γ(∂ₙ(u), v; markers = (:boundary,))
       local kernel 4 (σ_min/σ_max: largest counted 2e-16, smallest not counted none); zero ghost columns 0, rows 0
   innerₕ(Δₕ(u), v) + innerₕ(u, v)
       local kernel 4 (σ_min/σ_max: largest counted 0e+00, smallest not counted none); zero ghost columns 0, rows 26
@@ -865,12 +865,12 @@ the facet node.
 - **`innerₕ(Δₕ(u), Δₕ(v))` (+ mass) is the form with this kernel.** `Δₕ` on both sides gives
   every ghost a row and a column, and the corner columns are parallel to rounding (1e-16).
   The system is square, symmetric and singular only by the ghost-only kernel.
-- **A trial-side boundary flux keeps the kernel.** With `inner_Γ(∂ₙ(u), v)` added, the
+- **A trial-side boundary flux keeps the kernel.** With `inner_Γ(∂ₙ(u), v; markers = (:boundary,))` added, the
   columns stay parallel (2e-16). At a facet node, the ghost tap of `∂ₙ` times the facet
   weight is proportional to the ghost tap of `Δₕ` times the cell weight, with the same factor
   on every facet: this is the summation by parts of "Form-level `Δₕ`". So the combination
   the forms see is the node's discrete outward flux, summed over its facets.
-- **A test-side normal derivative per facet removes it.** `inner_Γ(∂ₙ(u), ∂ₙ(v))` gives each
+- **A test-side normal derivative per facet removes it.** `inner_Γ(∂ₙ(u), ∂ₙ(v); markers = (:boundary,))` gives each
   ghost its own row (its facet's `∂ₙ(v)`), and the columns separate (`σ_min/σ_max ≥ 4e-3`).
 - **`Δₕ` on one side only does not give a ghost-only kernel; it gives a singular system that
   needs a relation per ghost.** With `Δₕ(u)` against a plain `v`, every ghost row is zero
@@ -975,7 +975,7 @@ rounding on these forms (plan departure 4).
   D1' keep the y-ghost instead: nullity 0, κ 1.9e+12, physical vs x 1.1e-09
   D2 relation z_x = z_y per corner: nullity 0, κ 1.9e+12, physical vs x 1.1e-09, ‖A u − F‖/‖F‖ 3.7e-16
   D1 against D2: ghosts differ by 9.7e-01, physical parts by 1.1e-10
-  D3 + inner_Γ(∂ₙ(u), ∂ₙ(v)): nullity 0, κ 4.0e+07, physical vs x 3.5e+00
+  D3 + inner_Γ(∂ₙ(u), ∂ₙ(v); markers = (:boundary,)): nullity 0, κ 4.0e+07, physical vs x 3.5e+00
 ```
 
 1. **More storage (padded corner and edge points).** No row reads them: `Δₕ` reads one ghost
@@ -999,11 +999,11 @@ rounding on these forms (plan departure 4).
    are still not extrapolations of `u`. S7.3's bordered gauge `Zᵀu = 0` gives the same
    physical part without a new relation kind, and its ghost values are the minimum-norm
    ones.
-4. **A change of form (D3).** Adding `inner_Γ(∂ₙ(u), ∂ₙ(v))` removes the kernel and lowers
+4. **A change of form (D3).** Adding `inner_Γ(∂ₙ(u), ∂ₙ(v); markers = (:boundary,))` removes the kernel and lowers
    `κ` to 4.0e7. It is a different problem: the physical part moves by 3.5 (relative) from
    the original form's. It is admissible only where the boundary term is part of the PDE's
    weak form, for example a least-squares Neumann penalty. The trial-side
-   `inner_Γ(∂ₙ(u), v)` does not remove the kernel (part A).
+   `inner_Γ(∂ₙ(u), v; markers = (:boundary,))` does not remove the kernel (part A).
 
 So the kernel is removable only by a gauge (items 2, 3, and S7.3's border) or by changing
 the problem (item 4). Of the gauges, the border needs no new relation kind and does not
@@ -1029,10 +1029,10 @@ gnullity(A; r = 1e-14) = (s = svdvals(Matrix(A)); count(<(r * s[1]), s))
 bilap(u, v) = innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)
 asm(W, f) = sparse(assemble(form(W, W, f)))
 
-# Each ghost column of inner_Γ(∂ₙ(u), v) has one entry, in the row of the ghost's facet node:
+# Each ghost column of inner_Γ(∂ₙ(u), v; markers = (:boundary,)) has one entry, in the row of the ghost's facet node:
 # that maps every ghost to its node. Nodes with m ≥ 2 ghosts are the multi-facet nodes.
 function multifacet(W, np)
-    B = asm(W, (u, v) -> inner_Γ(∂ₙ(u), v))
+    B = asm(W, (u, v) -> inner_Γ(∂ₙ(u), v; markers = (:boundary,)))
     node = Dict{Int, Vector{Int}}()
     for j in (np + 1):size(B, 2)
         r = findall(!iszero, B[:, j]); length(r) == 1 || error("ghost $j reads $(r)")
@@ -1060,10 +1060,10 @@ G = multifacet(W, np)
         np, size(asm(W, bilap), 1) - np, hratio(Ω), string(G))
 forms = [
     "innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)" => bilap,
-    "innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v) + inner_Γ(∂ₙ(u), ∂ₙ(v))" =>
-        (u, v) -> bilap(u, v) + inner_Γ(∂ₙ(u), ∂ₙ(v)),
-    "innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v) + inner_Γ(∂ₙ(u), v)" =>
-        (u, v) -> bilap(u, v) + inner_Γ(∂ₙ(u), v),
+    "innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v) + inner_Γ(∂ₙ(u), ∂ₙ(v); markers = (:boundary,))" =>
+        (u, v) -> bilap(u, v) + inner_Γ(∂ₙ(u), ∂ₙ(v); markers = (:boundary,)),
+    "innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v) + inner_Γ(∂ₙ(u), v; markers = (:boundary,))" =>
+        (u, v) -> bilap(u, v) + inner_Γ(∂ₙ(u), v; markers = (:boundary,)),
     "innerₕ(Δₕ(u), v) + innerₕ(u, v)" => (u, v) -> innerₕ(Δₕ(u), v) + innerₕ(u, v),
     "innerₕ(u, Δₕ(v)) + innerₕ(u, v)" => (u, v) -> innerₕ(u, Δₕ(v)) + innerₕ(u, v),
 ]
@@ -1125,9 +1125,9 @@ A2 = E' * M * E; u2 = E * (A2 \ (E' * Fx))
         gnullity(A2), cond(A2), relerr(u2), norm(M * u2 - Fx) / norm(Fx))
 @printf("  D1 against D2: ghosts differ by %.1e, physical parts by %.1e\n",
         norm(u1[drop] - u2[drop], Inf), norm(u1[1:np] - u2[1:np], Inf) / norm(u2[1:np], Inf))
-# D3: the boundary term inner_Γ(∂ₙ(u), ∂ₙ(v)) added: a different problem
-A3 = Matrix(asm(W, (u, v) -> bilap(u, v) + inner_Γ(∂ₙ(u), ∂ₙ(v)))); u3 = A3 \ Fx
-@printf("  D3 + inner_Γ(∂ₙ(u), ∂ₙ(v)): nullity %d, κ %.1e, physical vs x %.1e\n",
+# D3: the boundary term inner_Γ(∂ₙ(u), ∂ₙ(v); markers = (:boundary,)) added: a different problem
+A3 = Matrix(asm(W, (u, v) -> bilap(u, v) + inner_Γ(∂ₙ(u), ∂ₙ(v); markers = (:boundary,)))); u3 = A3 \ Fx
+@printf("  D3 + inner_Γ(∂ₙ(u), ∂ₙ(v); markers = (:boundary,)): nullity %d, κ %.1e, physical vs x %.1e\n",
         gnullity(A3), cond(A3), relerr(u3))
 ```
 

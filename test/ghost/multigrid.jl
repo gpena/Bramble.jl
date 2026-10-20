@@ -186,6 +186,46 @@ end
         @test occursin("chebyshev_smoother", sprint(showerror, e))
     end
 
+    # Each smoother built from the ghost form applies as the one built from its operator,
+    # keywords forwarded, and Jacobi as `x + ω D⁻¹ (b - A x)` with the assembled `A`.
+    @testset "Smoothers take the ghost form" begin
+        Ω = jittered(Val(2), 9)
+        rels, ghosts, c = kinds(facets(2)).neumann_robin
+        a = builder(rels, ghosts, c)(gridspace(Ω))
+        A = Matrix(assemble(a))
+        op = matrix_free_operator(a)
+        x₀, b = rand(MersenneTwister(6), size(A, 2)), rand(MersenneTwister(8), size(A, 1))
+        apply(s) = smooth!(s, copy(x₀), b)
+        @test jacobi_smoother(a).inv_diagonal ≈ 1 ./ diag(A)
+        @test apply(jacobi_smoother(a; ω = 0.5)) ≈ x₀ .+ 0.5 .* (b .- A * x₀) ./ diag(A)
+        @test apply(jacobi_smoother(a; ω = 0.5, sweeps = 2)) ≈
+              apply(jacobi_smoother(op; ω = 0.5, sweeps = 2))
+        @test apply(jacobi_smoother(a; ω = 0.5, sweeps = 2)) ≉
+              apply(jacobi_smoother(op; ω = 0.5))
+        @test apply(chebyshev_smoother(a)) ≈ apply(chebyshev_smoother(op))
+        @test apply(chebyshev_smoother(a; degree = 3, λmax = 2.5)) ≈
+              apply(chebyshev_smoother(op; degree = 3, λmax = 2.5))
+        @test chebyshev_smoother(a; λmax = 2.5).λmax == 2.5
+        @test jacobi_smoother(a).op.policy === op.policy
+        @test jacobi_preconditioner(a).inv_diagonal ≈ 1 ./ diag(A)
+        @test_throws ArgumentError red_black_gauss_seidel(a)
+        e = try
+            red_black_gauss_seidel(a)
+        catch err
+            err
+        end
+        @test occursin("ghost-space operator", sprint(showerror, e))
+        # `dirichlet` reaches the operator: its rows are identity rows in both. No relation
+        # fixes `:xmin`, which `dirichlet` may then name.
+        C = constrained(gridspace(Ω; ghosts = (:xmax,)), u -> (:xmax => u + ∂ₙ(u) => 0.0,))
+        a = form(C, C, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+        Ad = Matrix(assemble(a; dirichlet = :xmin))
+        @test Ad != Matrix(assemble(a))
+        @test jacobi_smoother(a; dirichlet = :xmin).inv_diagonal ≈ 1 ./ diag(Ad)
+        @test apply(chebyshev_smoother(a; dirichlet = :xmin)) ≈
+              apply(chebyshev_smoother(matrix_free_operator(a; dirichlet = :xmin)))
+    end
+
     # A V-cycle with ν₁ = ν₂ is symmetric when restriction is the transpose of
     # prolongation and the fixed nodes stay 0 in both, so CG can use it.
     @testset "Symmetric V-cycle, PCG ($(D)D)" for D in (1, 2)

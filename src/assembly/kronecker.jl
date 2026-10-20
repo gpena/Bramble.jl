@@ -549,6 +549,7 @@ load only, not the operator.
     off-diagonal entries, ghosts left as unknowns), a term that reads the padded points
     beyond two ghosted facets (a mixed derivative), or a region restriction or
     grid-function coefficient, each naming `assemble(a)` as the fix.
+  - `ArgumentError`: a form over composite ghost spaces.
   - `ArgumentError`: `a` is not separable, naming the offending node and, on a composite
     space, its block (or the dimension, or the spaces) -- the same check
     [`is_separable`](@ref) runs, made specific; or `a` is device-backed and a term has more
@@ -1023,7 +1024,8 @@ end
 [`CpuPolyester`](@ref)'s host `KroneckerLinearOperator` product, filled by
 `BramblePolyesterExt`: line `o` of `lines` (the `CartesianIndices` of axes `2:D`) starts at
 offset `(o - 1) * m` and gets `_kron_line_init!` then `_kron_line_terms!`, one line per
-`Polyester.@batch` iteration. The only `src/` method errors naming Polyester.
+`Polyester.@batch` iteration. Its `src/` method only throws, naming Polyester;
+`BramblePolyesterExt` defines the one that runs.
 """
 @noinline function _batch_kron_lines!(y, terms, cs, x, β, ss, lines, m)
     return _throw_cpubatch_without_polyester(:_batch_kron_lines!)

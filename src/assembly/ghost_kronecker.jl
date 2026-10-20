@@ -30,9 +30,9 @@ function kronecker_operator(a::GhostBilinearForm{D}) where {D}
     _kron_check_spaces(a.padded)
     G = mesh(Wu)
     Eu = _ghost_kron_closures(Wu)
-    Eu === nothing && _throw_ghost_not_separable(Wu, "its closure is not separable")
+    Eu === nothing && _throw_ghost_not_separable(Wu, _GHOST_KRON_CLOSURE)
     Ev = Wv === Wu ? Eu : _ghost_kron_closures(Wv)
-    Ev === nothing && _throw_ghost_not_separable(Wv, "its closure is not separable")
+    Ev === nothing && _throw_ghost_not_separable(Wv, _GHOST_KRON_CLOSURE)
     map(E -> size(E, 2), Eu) == map(E -> size(E, 2), Ev) || _throw_ghost_kron_rectangular(Wu, Wv)
     Ωp = _padded(G)
     spaces = ntuple(d -> _ghost_kron_axis_space(G, d), Val(D))
@@ -46,7 +46,7 @@ function kronecker_operator(a::GhostBilinearForm{D}) where {D}
     terms = ()
     for (scales, term) in _kron_leaves(resolve_form_ast(a.padded), ())
         P = _ghost_kron_project(term, Ωp, spaces)
-        P === nothing && _throw_ghost_not_separable_term(term)
+        P === nothing && _throw_ghost_not_separable_term(term, Ωp)
         reads_coef |= _kron_reads_coef(term)
         for (live, padded) in P
             _ghost_kron_reads_absent(padded, G) &&
@@ -177,8 +177,8 @@ every padded point that is not absent, or `nothing` when there are none. `E_d` i
 `P_d × m_d`: `P_d` padded points, `m_d` physical ones that no Dirichlet relation fixes. The
 degrees of freedom must be the product of those, in the mesh's linear order, so no ghost
 is left as an unknown. Each ghost's row of `E_d` is read on one line, through the first
-unfixed point of every other axis. Then `E` is checked against the product on every line.
-The tolerance is a relative `64 eps`.
+unfixed point of every other axis. Then `E` is checked against the product at every padded
+point that is not absent, to `64 eps` times the larger of 1 and the largest entry of `E`.
 """
 function _ghost_kron_closures(Wₕ::GhostGridSpace{D, T}) where {D, T}
     G = mesh(Wₕ)
@@ -238,26 +238,43 @@ function _ghost_kron_closures(Wₕ::GhostGridSpace{D, T}) where {D, T}
     return Es
 end
 
+# Why a closure is not the product of 1D ones, and what makes it one.
+const _GHOST_KRON_CLOSURE = "its closure is not separable (it is when every ghost is " *
+                            "eliminated by one relation per facet along its normal: u => g, " *
+                            "∂ₙ(u), α * u + β * ∂ₙ(u) with constant α and β, or ∂ₙ(u; K) " *
+                            "with diagonal K; a conormal K with off-diagonal entries " *
+                            "couples the axes at the corners)"
+
 @noinline function _throw_ghost_not_separable(Wₕ::GhostGridSpace, what::String)
     throw(
         ArgumentError(
         "kronecker_operator on $(Wₕ): $what, so the reduced matrix is not a sum of " *
-        "Kronecker products of 1D factors. It is when every ghost is eliminated " *
-        "by one relation per facet along its normal (u => g, ∂ₙ(u), α * u + β * ∂ₙ(u) " *
-        "with constant α and β, or ∂ₙ(u; K) with diagonal K): a conormal K with " *
-        "off-diagonal entries couples the axes at the corners. Assemble the form " *
-        "instead, assemble(a), or apply it with matrix_free_operator(a).",
+        "Kronecker products of 1D factors. Assemble the form instead, assemble(a), or " *
+        "apply it with matrix_free_operator(a).",
     ),
     )
 end
 
-@noinline function _throw_ghost_not_separable_term(term)
+# What in `term` has no factors on the padded axes: the node `_kron_refused_node` names,
+# or, when every node projects, a region restriction, which the padded axes do not carry.
+function _ghost_kron_refused_node(term::BilinearProduct{D, I}, Ωp) where {D, I}
+    projects(side) = (c = _kron_split(side); c !== nothing && _kron_coefs(c, Ωp) !== nothing)
+    _kron_inners(I, Ωp) !== nothing && projects(term.left_op) && projects(term.right_op) &&
+        return "a region restriction, which the padded axes have no factors for,"
+    return _kron_refused_node(term, Ωp) * ", which has no projection onto the padded axes,"
+end
+function _ghost_kron_refused_node(term::LazyOp, Ωp)
+    _kron_refused_node(term, Ωp) * ", which has " *
+    "no projection onto the padded axes,"
+end
+
+@noinline function _throw_ghost_not_separable_term(term, Ωp)
     throw(
         ArgumentError(
         "kronecker_operator on a ghost space: the term $(nameof(typeof(term))) is not " *
-        "separable into 1D factors on the padded axes (a region restriction or a " *
-        "grid-function coefficient has none there; see `is_separable` for what factors). " *
-        "Assemble the form instead, assemble(a), or apply it with matrix_free_operator(a).",
+        "separable into 1D factors: it holds $(_ghost_kron_refused_node(term, Ωp)) so the " *
+        "reduced matrix is not a sum of Kronecker products. Assemble the form instead, " *
+        "assemble(a), or apply it with matrix_free_operator(a).",
     ),
     )
 end

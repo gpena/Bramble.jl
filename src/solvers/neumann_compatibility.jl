@@ -1,6 +1,5 @@
 # neumann_compatibility.jl: `neumann_compatibility`, the check that the data of a pure
 # Neumann problem satisfies the compatibility condition, warning on an incompatible datum.
-# Filled in by the ghost-dynamics plan (gpena/Bramble.jl#777).
 #
 # One mesh cannot tell an incompatible datum from a quadrature error, since on a coarse
 # random mesh the multiplier of compatible data is as large as an O(1) incompatibility's.
@@ -13,14 +12,8 @@
 #
 # See also: `pde_solve` (its `mean_zero` keyword), `iterative_refinement!`
 
-# The thresholds of the rule, measured on [0,1]² and [0,1]×[0,2], random and
-# one-axis-uniform meshes, n = 9, 17, 33, and the test file's cases up to n = 129. The
-# ratio of the removed loads on the once- and twice-refined meshes, for compatible harmonic
-# data (e^{kx} cos ky, k = 5, 8, seeds 1:20) with a refined defect above the floor, was
-# negative or at least 3.39; with the source shifted by 0.2 (tutorial problem) it was 0.99
-# to 1.01, and with e^{5x} cos 5y fluxes and the source shifted by ±20 or 5 (seeds 1:3 on
-# the square) 0.64 to 1.9. A refined defect at or below the floor (also rounding) is never
-# reported.
+# The thresholds of the rule; the docstring of `neumann_compatibility` gives the
+# measurements behind them, on random, graded and one-axis-uniform meshes.
 const _NEUMANN_RATIO_WINDOW = (0.4, 2.5)
 const _NEUMANN_DEFECT_FLOOR = 5e-3
 

@@ -13,6 +13,7 @@ module FormGhostFacetOperatorsTests
 using Test
 using Bramble
 import Bramble
+using Bramble: Dcₓ
 using LinearAlgebra: Diagonal, dot, norm, ×
 using SparseArrays: sparse, spzeros
 
@@ -71,7 +72,7 @@ relerr(A, R) = norm(A - R) / norm(R)
         Ωₕ = random_mesh((19,); seed = 7)
         P = padded(Ωₕ)
         R = sparse(trial_rows(Ωₕ, (:xmin, :xmax)))
-        A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), v)))
+        A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), v; markers = :boundary)))
         @test relerr(A, R) <= tol
         n = length(points(Ωₕ))
         Dc = O1.operators(Ωₕ).Dc
@@ -79,9 +80,9 @@ relerr(A, R) = norm(A - R) / norm(R)
         @test A[2, 1] ≈ 1 / (2 * (points(Ωₕ)[2] - points(Ωₕ)[1]))
         @test norm(A[n + 1, :] - Dc[n + 1, :]) <= tol * norm(Dc[n + 1, :])
 
-        B = assemble(form(P, P, (u, v) -> inner_Γ(u, ∂ₙ(v))))
+        B = assemble(form(P, P, (u, v) -> inner_Γ(u, ∂ₙ(v); markers = :boundary)))
         @test relerr(B, sparse(R')) <= tol
-        C = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), ∂ₙ(v))))
+        C = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), ∂ₙ(v); markers = :boundary)))
         @test relerr(C, sparse(Dc' * (facet_weights(Ωₕ, 1, 1) + facet_weights(Ωₕ, 1, 2)) *
                                Dc)) <= tol
     end
@@ -89,7 +90,7 @@ relerr(A, R) = norm(A - R) / norm(R)
     @testset "2D trial side against the oracle" begin
         Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
-        A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), v)))
+        A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), v; markers = :boundary)))
         @test relerr(A, sparse(trial_rows(Ωₕ, FACETS[1:4]))) <= tol
         for f in FACETS[1:4]
             Af = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), v; markers = (f,))))
@@ -119,9 +120,9 @@ relerr(A, R) = norm(A - R) / norm(R)
         Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
         (; Dc) = oracle_ops(Ωₕ)
-        B = assemble(form(P, P, (u, v) -> inner_Γ(u, ∂ₙ(v))))
+        B = assemble(form(P, P, (u, v) -> inner_Γ(u, ∂ₙ(v); markers = :boundary)))
         @test relerr(B, sparse(trial_rows(Ωₕ, FACETS[1:4])')) <= tol
-        C = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), ∂ₙ(v))))
+        C = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), ∂ₙ(v); markers = :boundary)))
         RC = sum(FACETS[1:4]) do f
             d, s = facet_axis_side(f)
             Dc[d]' * facet_weights(Ωₕ, d, s) * Dc[d]
@@ -155,10 +156,10 @@ relerr(A, R) = norm(A - R) / norm(R)
         P = padded(Ωₕ)
         K = [2.0 0.7; 0.4 1.5]
         conormal = (Dc, d) -> K[d, 1] * Dc[1] + K[d, 2] * Dc[2]
-        A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = K), v)))
+        A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = K), v; markers = :boundary)))
         @test relerr(A, sparse(trial_rows(Ωₕ, FACETS[1:4]; flux = conormal))) <= tol
         # an integer matrix is the same tensor
-        Ai = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = [2 0; 0 1]), v)))
+        Ai = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = [2 0; 0 1]), v; markers = :boundary)))
         Ri = trial_rows(Ωₕ, FACETS[1:4]; flux = (Dc, d) -> (2, 1)[d] * Dc[d])
         @test relerr(Ai, sparse(Ri)) <= tol
     end
@@ -210,20 +211,37 @@ relerr(A, R) = norm(A - R) / norm(R)
     @testset "Facet scalars and the element type" begin
         Ωₕ = random_mesh((6, 7); seed = 7)
         P = padded(Ωₕ)
-        A2 = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u) / 2, v)))
+        A2 = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u) / 2, v; markers = :boundary)))
         @test relerr(A2, sparse(0.5 * trial_rows(Ωₕ, FACETS[1:4]))) <= tol
-        @test A2 ≈ assemble(form(P, P, (u, v) -> inner_Γ(0.5 * ∂ₙ(u), v)))
-        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(u, ∂ₙ(v) / 4.0))),
+        @test A2 ≈ assemble(form(P, P, (u, v) -> inner_Γ(0.5 * ∂ₙ(u), v; markers = :boundary)))
+        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(u, ∂ₙ(v) / 4.0; markers = :boundary))),
             sparse(0.25 * trial_rows(Ωₕ, FACETS[1:4])')) <= tol
 
         Ω32 = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (6, 7),
             (true, true))
         P32 = padded(Ω32)
-        for t in ((u, v) -> inner_Γ(2 * ∂ₙ(u), v),
-            (u, v) -> inner_Γ(∂ₙ(u; K = [2 0; 0 1]), v),
-            (u, v) -> inner_Γ(∂ₙ(u) / 2, v))
+        for t in ((u, v) -> inner_Γ(2 * ∂ₙ(u), v; markers = :boundary),
+            (u, v) -> inner_Γ(∂ₙ(u; K = [2 0; 0 1]), v; markers = :boundary),
+            (u, v) -> inner_Γ(∂ₙ(u) / 2, v; markers = :boundary))
             @test eltype(assemble(form(P32, P32, t))) == Float32
         end
+
+        # a Ref divisor would freeze its value at build, so it is refused, not snapshotted
+        @test_throws "freeze its value" form(P, P,
+            (u, v) -> inner_Γ(∂ₙ(u) / Ref(2.0), v; markers = :boundary))
+    end
+
+    @testset "markers required, jumpₙ takes a field" begin
+        Ωₕ = random_mesh((6, 7); seed = 7)
+        P = padded(Ωₕ)
+        # an empty selection is the plain inner_Γ's refusal, on each of the four methods
+        @test_throws "needs at least one surface" form(P, P, (u, v) -> inner_Γ(∂ₙ(u), v))
+        @test_throws "needs at least one surface" form(P, P, (u, v) -> inner_Γ(u, ∂ₙ(v)))
+        @test_throws "needs at least one surface" form(P, P, (u, v) -> inner_Γ(∂ₙ(u), ∂ₙ(v)))
+        @test_throws "needs at least one surface" form(P, v -> inner_Γ(x -> 1.0, ∂ₙ(v)))
+        @test_throws ArgumentError form(P, P, (u, v) -> inner_Γ(u, v))
+        # jumpₙ of a facet operator is named, not a MethodError
+        @test_throws "jumpₙ takes a field expression" form(P, P, (u, v) -> inner_Γ(jumpₙ(∂ₙ(u)), v; markers = :boundary))
     end
 
     @testset "Linear form with ∂ₙ(v)" begin
@@ -260,7 +278,7 @@ relerr(A, R) = norm(A - R) / norm(R)
             Ωₕ = random_mesh((4, 5, 6); seed = 7)
             P = padded(Ωₕ)
             (; Dc) = oracle_ops(Ωₕ)
-            A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), v)))
+            A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), v; markers = :boundary)))
             @test relerr(A, sparse(trial_rows(Ωₕ, FACETS))) <= tol
             C = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u), ∂ₙ(v); markers = (:zmax, :xmin))))
             RC = sum((:zmax, :xmin)) do f
@@ -276,22 +294,31 @@ relerr(A, R) = norm(A - R) / norm(R)
         Px = padded(Ω1; ghosts = (:xmin,))
         @test_throws ArgumentError form(Px, Px,
             (u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmax,)))
+        # a centred difference reads the padded point beyond the facet, which Px lacks
+        err = try
+            assemble(form(Px, Px, (u, v) -> inner_Γ(Dcₓ(u), v; markers = (:xmax,))))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("a padded point that does not exist", err.msg)
         # the ghosted facet alone is fine
         @test form(Px, Px, (u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmin,))) isa Bramble.BilinearForm
         W = gridspace(Ω1)
-        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(∂ₙ(u), v))
-        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(u, ∂ₙ(v)))
+        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(∂ₙ(u), v; markers = :boundary))
+        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(u, ∂ₙ(v); markers = :boundary))
 
         Ω2 = random_mesh((6, 7); seed = 7)
         P2 = padded(Ω2; ghosts = (:xmin, :ymin))
-        @test_throws ArgumentError form(P2, P2, (u, v) -> inner_Γ(∂ₙ(u), v))
+        @test_throws ArgumentError form(P2, P2, (u, v) -> inner_Γ(∂ₙ(u), v; markers = :boundary))
         @test form(P2, P2, (u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmin, :ymin))) isa
               Bramble.BilinearForm
         P = padded(Ω2)
         Kf = [(x -> 1.0) (x -> 0.0); (x -> 0.0) (x -> 1.0)]
-        @test_throws ArgumentError form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = Kf), v))
-        @test_throws ArgumentError form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = x -> 1.0), v))
-        @test_throws ArgumentError form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = ones(3, 3)), v))
+        @test_throws ArgumentError form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = Kf), v; markers = :boundary))
+        @test_throws ArgumentError form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = x -> 1.0), v; markers = :boundary))
+        @test_throws ArgumentError form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = ones(3, 3)), v; markers = :boundary))
         @test_throws ArgumentError form(P, P, (u, v) -> innerₕ(∂ₙ(u), v))
     end
 end
@@ -329,7 +356,7 @@ end
         P = padded(Ωₕ)
         n = length(points(Ωₕ))
         L = laps(Ωₕ)[1]
-        A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v)))
+        A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = :boundary)))
         R = spzeros(n + 2, n + 2)
         R[2, :] = L[2, :]
         R[n + 1, :] = L[n + 1, :]
@@ -337,11 +364,11 @@ end
         # the facet node's row reads the ghost, with the first interior spacing for it
         h2 = points(Ωₕ)[2] - points(Ωₕ)[1]
         @test A[2, 1] ≈ 1 / h2^2 && A[2, 3] ≈ 1 / h2^2
-        J = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), v)))
+        J = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), v; markers = :boundary)))
         Rj = sparse([2, 2, n + 1, n + 1], [2, 3, n + 1, n], [-1.0, 1.0, -1.0, 1.0],
             n + 2, n + 2)
         @test norm(J - Rj) <= tol
-        @test norm(assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), jumpₙ(v)))) -
+        @test norm(assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), jumpₙ(v); markers = :boundary))) -
                    Rj' * Rj) <= tol
     end
 
@@ -351,9 +378,9 @@ end
         Ls = laps(Ωₕ)
         N = (d, s) -> Ls[d]
         R = facet_rows(Ωₕ, FACETS[1:4], N)
-        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v))), sparse(R)) <= tol
-        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(u, ∂ₙₙ(v)))), sparse(R')) <= tol
-        C = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), ∂ₙₙ(v))))
+        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = :boundary))), sparse(R)) <= tol
+        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(u, ∂ₙₙ(v); markers = :boundary))), sparse(R')) <= tol
+        C = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), ∂ₙₙ(v); markers = :boundary)))
         RC = sum(f -> (d = facet_axis_side(f)[1]; Ls[d]' * facet_rows(Ωₕ, (f,), N)),
             FACETS[1:4])
         @test relerr(C, sparse(RC)) <= tol
@@ -373,11 +400,11 @@ end
         @test Ax[corner, LP[1, 2]] != 0 && Ax[corner, LP[2, 1]] == 0
         Ay = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:ymin,))))
         @test Ay[corner, LP[2, 1]] != 0 && Ay[corner, LP[1, 2]] == 0
-        Ab = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v)))
+        Ab = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = :boundary)))
         @test Ab[corner, :] ≈ Ax[corner, :] + Ay[corner, :]
         @test Ab[corner, LP[1, 1]] == 0
 
-        J = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), v)))
+        J = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), v; markers = :boundary)))
         I = CartesianIndex(1, 1)
         ωx, ωy = ON.facet_weight(Ωₕ, 1, I), ON.facet_weight(Ωₕ, 2, I)
         @test ωx != ωy
@@ -391,8 +418,8 @@ end
         P = padded(Ωₕ)
         N = (d, s) -> inward_jump(Ωₕ, d, s)
         R = facet_rows(Ωₕ, FACETS[1:4], N)
-        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), v))), sparse(R)) <= tol
-        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(u, jumpₙ(v)))), sparse(R')) <= tol
+        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), v; markers = :boundary))), sparse(R)) <= tol
+        @test relerr(assemble(form(P, P, (u, v) -> inner_Γ(u, jumpₙ(v); markers = :boundary))), sparse(R')) <= tol
         # a max facet reads inward, never the ghost a forward jump would cross to
         Rx = facet_rows(Ωₕ, (:xmax,), N)
         Ax = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(u), v; markers = (:xmax,))))
@@ -428,22 +455,30 @@ end
         P = padded(Ωₕ)
         Lap = sum(laps(Ωₕ))
         R = facet_rows(Ωₕ, FACETS[1:4], (d, s) -> inward_jump(Ωₕ, d, s) * Lap)
-        A = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v)))
+        A = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = :boundary)))
         @test relerr(A, sparse(R)) <= tol
         S(u) = Bramble.D̃ₓ(Bramble.D₋ₓ(u)) + Bramble.D̃ᵧ(Bramble.D₋ᵧ(u))
-        @test relerr(A, assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(S(u)), v)))) <= tol
+        @test relerr(A, assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(S(u)), v; markers = :boundary)))) <= tol
         # a max facet's row is `S₋(Δₕ u) − Δₕ u`, spelled out with the shift
         Ax = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = (:xmax,))))
         Sx = assemble(form(P, P, (u, v) -> inner_Γ(Bramble.S₋ₓ(Δₕ(u)) - Δₕ(u), v;
             markers = (:xmax,))))
         @test relerr(Ax, Sx) <= tol
-        B = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), jumpₙ(Δₕ(v)))))
+        B = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), jumpₙ(Δₕ(v)); markers = :boundary)))
         RB = sum(FACETS[1:4]) do f
             d, s = facet_axis_side(f)
             N = inward_jump(Ωₕ, d, s) * Lap
             N' * facet_weights(Ωₕ, d, s) * N
         end
         @test relerr(B, sparse(RB)) <= tol
+
+        # on a plain space Δₕ is truncated at the boundary, and jumpₙ nests on it all the same
+        W = gridspace(Ωₕ)
+        Jp = assemble(form(W, W, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = (:xmax,))))
+        Sp = assemble(form(W, W, (u, v) -> inner_Γ(Bramble.S₋ₓ(Δₕ(u)) - Δₕ(u), v;
+            markers = (:xmax,))))
+        @test !iszero(Jp)
+        @test relerr(Jp, Sp) <= tol
     end
 
     @testset "Linear forms and Float32" begin
@@ -468,7 +503,8 @@ end
         Ω32 = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0)), (6, 7),
             (true, true))
         P32 = padded(Ω32)
-        for t in ((u, v) -> inner_Γ(2 * ∂ₙₙ(u), v), (u, v) -> inner_Γ(jumpₙ(u), 3 * jumpₙ(v)))
+        for t in ((u, v) -> inner_Γ(2 * ∂ₙₙ(u), v; markers = :boundary),
+            (u, v) -> inner_Γ(jumpₙ(u), 3 * jumpₙ(v); markers = :boundary))
             @test eltype(assemble(form(P32, P32, t))) == Float32
         end
     end
@@ -478,7 +514,7 @@ end
             Ωₕ = random_mesh((4, 5, 6); seed = 7)
             P = padded(Ωₕ)
             Ls = laps(Ωₕ)
-            A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v)))
+            A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = :boundary)))
             @test relerr(A, sparse(facet_rows(Ωₕ, FACETS, (d, s) -> Ls[d]))) <= tol
             J = assemble(form(P, P, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = (:zmax, :xmin))))
             RJ = facet_rows(Ωₕ, (:zmax, :xmin), (d, s) -> inward_jump(Ωₕ, d, s) * sum(Ls))
@@ -500,17 +536,17 @@ end
         @test form(Px, Px, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = (:xmin,))) isa
               Bramble.BilinearForm
         W = gridspace(Ω1)
-        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(∂ₙₙ(u), v))
-        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(u, ∂ₙₙ(v)))
-        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(jumpₙ(u), ∂ₙₙ(v)))
+        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = :boundary))
+        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(u, ∂ₙₙ(v); markers = :boundary))
+        @test_throws ArgumentError form(W, W, (u, v) -> inner_Γ(jumpₙ(u), ∂ₙₙ(v); markers = :boundary))
         # jumpₙ reads no ghost, so a space without any takes it
         n = length(points(Ω1))
-        Jw = assemble(form(W, W, (u, v) -> inner_Γ(jumpₙ(u), v)))
+        Jw = assemble(form(W, W, (u, v) -> inner_Γ(jumpₙ(u), v; markers = :boundary)))
         @test Jw == sparse([1, 1, n, n], [1, 2, n, n - 1], [-1.0, 1.0, -1.0, 1.0], n, n)
 
         Ω2 = random_mesh((6, 7); seed = 7)
         P2 = padded(Ω2; ghosts = (:xmin, :ymin))
-        @test_throws ArgumentError form(P2, P2, (u, v) -> inner_Γ(∂ₙₙ(u), v))
+        @test_throws ArgumentError form(P2, P2, (u, v) -> inner_Γ(∂ₙₙ(u), v; markers = :boundary))
         @test_throws ArgumentError form(P2, P2,
             (u, v) -> inner_Γ(∂ₙₙ(u), jumpₙ(v); markers = (:xmax,)))
         P = padded(Ω2)

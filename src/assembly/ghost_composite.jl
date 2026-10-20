@@ -216,7 +216,8 @@ function form(Wₕ::_GhostCompositeSide, Vₕ::_GhostCompositeSide, f)
     _check_composite_ghosts(_ghost_components(Wₕ)..., _ghost_components(Vₕ)...)
     W, V = _CompositeClosure(Wₕ), _CompositeClosure(Vₕ)
     a = form(W.padded, V.padded, _with_facet_rule(Wₕ, f))
-    a isa RankOneForm && _throw_ghost_composite_unsupported("a rank-one term")
+    a isa RankOneForm &&
+        _throw_ghost_composite_unsupported("a rank-one term", _COMPOSITE_RANK_ONE_ROUTE)
     return _ghost_bilinear_form(W, V, a)
 end
 
@@ -226,11 +227,11 @@ function form(Vₕ::_GhostCompositeSide, f)
     return _ghost_linear_form(V, form(V.padded, f))
 end
 
-# The form's function with the facet rule of stencil_eval.jl on the trial side: on a
-# composite constrained as a whole, a mixed difference reads the ghosts of a facet with a
-# relation reading several components by extrapolation from the nodes inward
-# (`_mark_mixed`). Decided by the space's type, which says whether there is such a facet.
-# Refused where such a facet has fewer than three nodes across it.
+# The form's function with the facet rule of stencil_eval.jl on the left argument of each
+# product, the matrix columns: on a composite constrained as a whole, a mixed difference
+# reads the ghosts of a facet with a relation reading several components by extrapolation
+# from the nodes inward (`_mark_mixed`). Decided by the space's type, which says whether
+# there is such a facet. Refused where such a facet has fewer than three nodes across it.
 _with_facet_rule(::_GhostCompositeSpace, f) = f
 _with_facet_rule(::ConstrainedCompositeSpace{<:Any, <:Any, <:Any, <:Any, <:Any, <:Any,
         false}, f) = f
@@ -254,69 +255,25 @@ end
     )
 end
 
-# `vᴴ A u` and `Fᵀ v` without assembling, as on a scalar ghost space (ghost_contract.jl,
-# which defines `_ClosureApplied`): the closures' linear parts lift `u` and `v` lazily.
-function (a::GhostCompositeBilinearForm)(u, v)
-    ud, vd = _mf_data(u), _mf_data(v)
-    Wₕ, Vₕ = a.trial_space, a.test_space
-    (length(ud) == ndofs(Wₕ) && length(vd) == ndofs(Vₕ)) ||
-        _throw_composite_contraction_length(Wₕ, Vₕ, ud, vd)
-    Base.require_one_based_indexing(ud, vd)
-    return a.padded(_ClosureApplied{false}(Wₕ.Et, ud), _ClosureApplied{true}(Vₕ.Et, vd))
+# `a(u, v)`, `l(v)` and `evaluate!` take these forms in ghost_contract.jl, one method each
+# for both kinds of form.
+
+form(::_GhostCompositeSide, Vₕ, f) = _throw_ghost_composite_side("test", Vₕ)
+form(Wₕ, ::_GhostCompositeSide, f) = _throw_ghost_composite_side("trial", Wₕ)
+function form(::_GhostCompositeSide, Vₕ::GhostGridSpace, f)
+    return _throw_ghost_composite_side("test", Vₕ)
+end
+function form(Wₕ::GhostGridSpace, ::_GhostCompositeSide, f)
+    return _throw_ghost_composite_side("trial", Wₕ)
 end
 
-function (l::GhostCompositeLinearForm)(vₕ::VectorElement)
-    _is_time_dependent(l.test_space) && _throw_ghost_time("l(v)")
-    any(!iszero, l.test_space.d) && _throw_ghost_lift()
-    vd = parent(vₕ)
-    E = l.test_space.E
-    length(vd) == size(E, 2) || _throw_composite_contraction_length(l.test_space,
-        l.test_space, vd, vd)
-    assemble!(l.F_pad, l.padded)
-    T = promote_type(eltype(l.F_pad), eltype(E), eltype(vd))
-    return _closure_contract(zero(T), SparseArrays.getcolptr(E), rowvals(E), nonzeros(E),
-        l.F_pad, vd)
-end
-
-@noinline function (l::GhostCompositeLinearForm)(::AbstractVector)
-    throw(
-        ArgumentError(
-        "a linear form contracts against an element of its test space, not a bare vector. " *
-        "Name the space first, with l(element(test_space(l), v)).",
-    ),
-    )
-end
-
-# The load `assemble(l)` written into `scratch`, and its contraction with `vₕ`: `l(vₕ)`.
-function evaluate!(scratch::AbstractVector, l::GhostCompositeLinearForm,
-        vₕ::VectorElement)
-    vd = parent(vₕ)
-    length(vd) == ndofs(l.test_space) ||
-        _throw_composite_contraction_length(l.test_space, l.test_space, vd, vd)
-    assemble!(scratch, l)
-    return _contract_values(scratch, vd)
-end
-
-@noinline function _throw_composite_contraction_length(Wₕ, Vₕ, ud, vd)
-    throw(
-        DimensionMismatch(
-        "a form on composites of ghost spaces with $(ndofs(Vₕ))×$(ndofs(Wₕ)) degrees of " *
-        "freedom cannot contract vectors of lengths $(length(ud)) and $(length(vd))",
-    ),
-    )
-end
-
-form(::_GhostCompositeSide, Vₕ, f) = _throw_ghost_composite_side()
-form(Wₕ, ::_GhostCompositeSide, f) = _throw_ghost_composite_side()
-form(::_GhostCompositeSide, ::GhostGridSpace, f) = _throw_ghost_composite_side()
-form(::GhostGridSpace, ::_GhostCompositeSide, f) = _throw_ghost_composite_side()
-
-@noinline function _throw_ghost_composite_side()
+# `side` names the side that is not a composite of ghost spaces, `Xₕ` the space it holds.
+@noinline function _throw_ghost_composite_side(side::String, Xₕ)
     throw(
         ArgumentError(
         "a form on a composite of ghost spaces takes such a composite on both sides: the " *
-        "other side is a scalar or plain space. Build both as products of ghost spaces, " *
-        "C₁ × C₂, of the same mesh and ghosts.",
+        "$side space, $(summary(Xₕ)), is a scalar or plain space. Build both as products " *
+        "of ghost spaces, C₁ × C₂, of the same mesh and ghosts.",
     ),
     )
 end
@@ -345,13 +302,19 @@ end
     )
 end
 
-@noinline function _throw_ghost_composite_unsupported(what::String)
+# The routes that work instead: for an operator or a preconditioner, the assembled system.
+const _COMPOSITE_ASSEMBLE_ROUTE = "Assemble the system, A, F = assemble(a, l), and " *
+                                  "solve it with pde_solve(A, F) or a preconditioner " *
+                                  "built from A, or pose the problem on each scalar " *
+                                  "ghost space."
+const _COMPOSITE_RANK_ONE_ROUTE = "Pose the rank-one term on each scalar ghost space."
+const _COMPOSITE_TIME_ROUTE = "Pose the time problem with semidiscretize on each scalar " *
+                              "ghost space."
+
+@noinline function _throw_ghost_composite_unsupported(what::String,
+        route::String = _COMPOSITE_ASSEMBLE_ROUTE)
     throw(
-        ArgumentError(
-        "$what on a composite of ghost spaces is not supported yet. Assemble the system, " *
-        "A, F = assemble(a, l), and solve it with pde_solve(A, F) or a preconditioner " *
-        "built from A, or pose the problem on each scalar ghost space.",
-    ),
+        ArgumentError("$what on a composite of ghost spaces is not supported yet. $route"),
     )
 end
 
@@ -383,23 +346,23 @@ function jacobi_preconditioner(::GhostCompositeBilinearForm; kwargs...)
 end
 # With any other operator, load or `build` beside it: a composite form on either side.
 function semidiscretize(::GhostCompositeBilinearForm, ::GhostCompositeLinearForm; kwargs...)
-    return _throw_ghost_composite_unsupported("semidiscretize")
+    return _throw_ghost_composite_unsupported("semidiscretize", _COMPOSITE_TIME_ROUTE)
 end
 function semidiscretize(::GhostCompositeBilinearForm, l; kwargs...)
-    return _throw_ghost_composite_unsupported("semidiscretize")
+    return _throw_ghost_composite_unsupported("semidiscretize", _COMPOSITE_TIME_ROUTE)
 end
 function semidiscretize(a, ::GhostCompositeLinearForm; kwargs...)
-    return _throw_ghost_composite_unsupported("semidiscretize")
+    return _throw_ghost_composite_unsupported("semidiscretize", _COMPOSITE_TIME_ROUTE)
 end
 function ode_problem(::GhostCompositeBilinearForm, ::GhostCompositeLinearForm, u₀, I;
         kwargs...)
-    return _throw_ghost_composite_unsupported("ode_problem")
+    return _throw_ghost_composite_unsupported("ode_problem", _COMPOSITE_TIME_ROUTE)
 end
 function ode_problem(::GhostCompositeBilinearForm, l, u₀, I; kwargs...)
-    return _throw_ghost_composite_unsupported("ode_problem")
+    return _throw_ghost_composite_unsupported("ode_problem", _COMPOSITE_TIME_ROUTE)
 end
 function ode_problem(a, ::GhostCompositeLinearForm, u₀, I; kwargs...)
-    return _throw_ghost_composite_unsupported("ode_problem")
+    return _throw_ghost_composite_unsupported("ode_problem", _COMPOSITE_TIME_ROUTE)
 end
 
 # A reaction reads the plain rows the relations replaced, as on a scalar ghost space.
@@ -462,17 +425,18 @@ end
 @inline _check_whole_rows(::_GhostCompositeSpace, labels) = nothing
 @inline _check_whole_rows(::ConstrainedCompositeSpace, ::Nothing) = nothing
 @inline function _check_whole_rows(::ConstrainedCompositeSpace, labels::Tuple)
-    isempty(labels) || _throw_whole_rows()
+    isempty(labels) || _throw_whole_rows(labels)
     return nothing
 end
 
-@noinline function _throw_whole_rows()
+@noinline function _throw_whole_rows(labels::Tuple)
     throw(
         ArgumentError(
         "`dirichlet`, `dirichlet_bc!` and `symmetrize!` replace rows by facet label, " *
         "and a composite constrained as a whole, constrained(C₁ × C₂, relations), does " *
-        "not take them. Give each Dirichlet condition as a relation of its component in " *
-        "constrained, `:F => u(i) => g`, and assemble with assemble(a, l).",
+        "not take them (given dirichlet = $(labels)). Give each Dirichlet condition as a " *
+        "relation of its component in constrained, `:F => u(i) => g`, and assemble with " *
+        "assemble(a, l).",
     ),
     )
 end
@@ -616,22 +580,22 @@ end
 
 function dirichlet_bc!(::AbstractMatrix, ::ConstrainedCompositeSpace, labels::Symbol...;
         components = nothing)
-    return _throw_whole_rows()
+    return _throw_whole_rows(labels)
 end
 function dirichlet_bc!(::AbstractVector, ::ConstrainedCompositeSpace,
         ::Union{ConstraintMarkers, EvaluatedParametricDomainMarkers}, labels::Symbol...;
         components = nothing)
-    return _throw_whole_rows()
+    return _throw_whole_rows(labels)
 end
 function symmetrize!(::AbstractMatrix, ::AbstractVector, ::ConstrainedCompositeSpace,
         labels::Symbol...; components = nothing)
-    return _throw_whole_rows()
+    return _throw_whole_rows(labels)
 end
 
 # No form on these spaces holds a rank-one term (`form` refuses it).
 function symmetrize!(::RankOneUpdate, ::AbstractVector, ::_GhostCompositeSpace,
         labels::Symbol...; components = nothing)
-    return _throw_ghost_composite_unsupported("a rank-one term")
+    return _throw_ghost_composite_unsupported("a rank-one term", _COMPOSITE_RANK_ONE_ROUTE)
 end
 
 # --- Lifting a solution -------------------------------------------------------------- #
@@ -831,14 +795,17 @@ facet's relations read its own ghosts alone and the corner closes facet by facet
 together, isotropic tractions would give a singular block, their shear relations being
 one equation there (the stress is symmetric). Elsewhere the difference stays centred.
 
-A form on it reads the ghosts of a facet with a relation reading several components
-through second differences as the closure gives them, and through mixed differences such
-as `Dcₓ(Dcᵧ(u(2)))` as the quadratic through the three nodes inward along the facet's
-normal, extrapolated to the ghost: the difference across the facet is then one-sided,
-second order on the non-uniform spacing. Read through the traction's tangential
-difference, the ghosts made the collocated elasticity operator unstable on cells longer
-across the facet than along it. Relations of one component each leave every form as on
-the product.
+A form on it reads the ghosts of a facet with a relation reading several components through
+second differences as the closure gives them, and, in the left argument of a product,
+through a first difference along one axis of a first difference along another (under sums
+and scales only, such as `Dcₓ(Dcᵧ(u(2)))` or `Dcₓ(2.0 * Dcᵧ(u(2)))`) as the quadratic
+through the three nodes inward along the facet's normal, extrapolated to the ghost: the
+difference across the facet is then one-sided, second order on the non-uniform spacing. The
+right argument reads the closure's ghosts; an average or shift between the two differences
+has no facet rule and reads past a corner of the padded grid, so a form with one is refused
+with an `ArgumentError`. Read through the traction's tangential difference, the ghosts made
+the collocated elasticity operator unstable on cells longer across the facet than along it.
+Relations of one component each leave every form as on the product.
 
 Refused with an `ArgumentError`, besides what `constrained` and the product refuse: a
 relation naming no component, two ghost relations of one component on a facet, a facet

@@ -59,12 +59,12 @@ condition beforehand and lists what factors.
 What factors: the difference, average, jump and shift families along any axis and chains of
 them, so mixed derivatives and advection terms (whose factors need not be symmetric);
 `innerₕ`, `inner₊` and `inner_Γ` weights; a restriction to `:interior`; a grid-function
-coefficient that varies along one axis; and scalar or `Ref` coefficients. A form on a ghost space factors where its closure is separable and both spaces share one
-mesh object. A composite space
-whose leaves share one mesh gives a block operator, one Kronecker operator per block. What
-does not: a coefficient varying along several axes, other region restrictions (Dirichlet
-rows included), an interpolation, a 1D mesh, trial and test spaces on different meshes, and
-the star and cross-weighted differences. A grid-function coefficient is read once, when the
+coefficient that varies along one axis; and scalar or `Ref` coefficients. A form on a ghost
+space factors where its closure is separable and both spaces share one mesh object. A
+composite space whose leaves share one mesh gives a block operator, one Kronecker operator
+per block. What does not: a coefficient varying along several axes, other region
+restrictions (Dirichlet rows included), an interpolation, a 1D mesh, trial and test spaces
+on different meshes, and the star and cross-weighted differences. A grid-function coefficient is read once, when the
 operator is built, and warns so; use a `Ref` for a coefficient that changes, or
 `matrix_free_operator`, which reads it live. Under `CpuThreaded` the product runs threaded,
 and an operator whose mesh was mutated in place afterwards throws instead of applying.
@@ -73,11 +73,13 @@ and an operator whose mesh was mutated in place afterwards throws instead of app
 Laplacian-like system, one whose terms each differ from one mass per axis on at most one
 axis, without a general sparse factorisation: by fast diagonalisation when it is symmetric,
 and by a Schur-form solve when advection terms make it non-symmetric. A mixed derivative is
-refused. A form on a ghost space is accepted where its closure and its terms are separable;
-otherwise the call throws an `ArgumentError` naming `assemble(a)`. For such a form, `fdm_preconditioner` (in [Scientific computing](../api_sciml.md))
-preconditions a Krylov solver with its Laplacian-like part. `fdm_factorize` factorises once, and `fdm_solve!` then solves each
-right-hand side with zero allocations; `fdm_factorize!` refills that factorisation after a
-coefficient or the mesh changed, without building it again.
+refused. On a ghost space it is accepted where the closure and the terms are separable; a 1D
+form, the `dirichlet` keyword and a form with `Δₕ` are refused with an `ArgumentError`. For
+such a form, `fdm_preconditioner` (in [Scientific computing](../api_sciml.md)) preconditions
+a Krylov solver with its Laplacian-like part. `fdm_factorize` factorises once, and
+`fdm_solve!` then solves each right-hand side with zero allocations; `fdm_factorize!`
+refills that factorisation after a coefficient or the mesh changed, without building it
+again.
 
 ```@docs
 is_separable

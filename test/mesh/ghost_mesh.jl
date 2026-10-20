@@ -256,6 +256,7 @@ end
         @test_throws ArgumentError points(G)
         @test_throws ArgumentError G(1)
         @test_throws ArgumentError _walk_mesh(G)
+        @test_throws ArgumentError Bramble.locate_cell(G, (0.5, 0.5))
         err = thrown(() -> points(G))
         @test err isa ArgumentError
         @test occursin("refined", err.msg) && occursin("gridspace", err.msg)
@@ -379,6 +380,7 @@ end
         # The node is not on the facet.
         @test_throws ArgumentError ghost_index(G, CartesianIndex(2, 2), 1, :min)
         @test_throws ArgumentError ghost_index(G, CartesianIndex(1, 2), 1, :middle)
+        @test_throws BoundsError ghost_index(G, (1, 99), 1, :min)
         @test_throws ArgumentError boundary_node(G, 0)
         @test_throws ArgumentError boundary_node(G, nghosts(G) + 1)
         # An axis too short to place a ghost from.

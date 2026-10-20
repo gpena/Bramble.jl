@@ -1,31 +1,38 @@
-# ghost_contract.jl: `a(u, v)`, `l(v)` and `evaluate!` on forms posed on `GhostGridSpace`s,
-# with the meanings they have on the reduced system `assemble(a)`, `assemble(l)`: the
-# contraction `vᴴ A u` of `A = E_vᵀ A_pad E_u`, and `Fᵀ v` of `F = E_vᵀ F_pad` (#781).
+# ghost_contract.jl: `a(u, v)`, `l(v)` and `evaluate!` on forms posed on `GhostGridSpace`s
+# or on composites of them, with the meanings they have on the reduced system `assemble(a)`,
+# `assemble(l)`: the contraction `vᴴ A u` of `A = E_vᵀ A_pad E_u`, and `Fᵀ v` of
+# `F = E_vᵀ F_pad` (#781). One method each serves both kinds of form, whose sides
+# (`GhostGridSpace`, `_CompositeClosure`) have the same fields.
 #
 # Neither assembles the reduced system. `a(u, v)` contracts the form on the padded spaces
 # with `u` and `v` lifted through the closures' linear parts, `(E_v v)ᴴ A_pad (E_u u)`
-# (bilinear.jl's walk, no matrix), each lifted value summed where the walk reads it. `l(v)` fills the padded load
-# `F_pad` the form stores and sums `F_padᵀ (E_v v)` over the columns of `E_v`.
+# (bilinear.jl's walk, no matrix), each lifted value summed where the walk reads it.
+# `l(v)` fills the padded load `F_pad` the form stores and sums `F_padᵀ (E_v v)` over
+# the columns of `E_v`.
 #
-# On a closure with an affine part `d ≠ 0` the load is `E_vᵀ (F_pad − A_pad d)` and needs
-# the bilinear form, so `l(v)` and `evaluate!` refuse naming `assemble(a, l)`, as
-# `assemble!(b, l)` does. `a(u, v)` is the contraction of `assemble(a)`, the linear part,
-# whatever `d` is. `reaction(a, l, u)` refuses: the plain rows it reads are the relations'.
+# On a pair whose trial closure has an affine part `d ≠ 0` the load is
+# `E_vᵀ (F_pad − A_pad d)` and needs the bilinear form. A load alone sees its test space
+# only, so `l(v)` and `evaluate!` refuse a test space with `d ≠ 0` naming `assemble(a, l)`,
+# as `assemble!(b, l)` does, which is exact when both sides are one space. `a(u, v)` is the
+# contraction of `assemble(a)`, the linear part, whatever `d` is. `reaction(a, l, u)`
+# refuses: the plain rows it reads are the relations'.
 
 """
     (a::GhostBilinearForm)(u, v) -> Number
+    (a::GhostCompositeBilinearForm)(u, v) -> Number
 
-The form on ghost spaces evaluated at a trial function `u` and a test function `v` of its
-degrees of freedom: `vᴴ A u` for `A = assemble(a)`, without `A`. It lifts `u` and `v` to the
-padded spaces through the closures' linear parts and contracts them with the form there,
-`(E_v v)ᴴ A_pad (E_u u)`, each padded value summed where the walk reads it, so the call
-allocates only the one cell its sum runs in, as the plain form's does. The affine part `d`
+The form on ghost spaces, or on composites of them, evaluated at a trial function `u` and a
+test function `v` of its degrees of freedom: `vᴴ A u` for `A = assemble(a)`, without `A`.
+It lifts `u` and `v` to the padded spaces through the closures' linear parts and contracts
+them with the form there, `(E_v v)ᴴ A_pad (E_u u)`, each padded value summed where the walk
+reads it, so the call allocates only the one cell its sum runs in, as the plain form's
+does. The affine part `d`
 of the closures does not enter, as it does not enter `assemble(a)`.
 
 `u` and `v` are [`VectorElement`](@ref)s or plain vectors, of lengths `ndofs` of the trial
 and test spaces; a `DimensionMismatch` is thrown otherwise.
 """
-function (a::GhostBilinearForm)(u, v)
+function (a::_AnyGhostBilinearForm)(u, v)
     ud, vd = _mf_data(u), _mf_data(v)
     Wₕ, Vₕ = a.trial_space, a.test_space
     (length(ud) == ndofs(Wₕ) && length(vd) == ndofs(Vₕ)) ||
@@ -66,30 +73,41 @@ Base.size(y::_ClosureApplied) = (length(y.colptr) - 1,)
     return s
 end
 
-@noinline function _throw_ghost_contraction_length(a::GhostBilinearForm, ud, vd)
+@noinline function _throw_ghost_contraction_length(a::_AnyGhostBilinearForm, ud, vd)
     throw(
         DimensionMismatch(
-        "a bilinear form on ghost spaces with $(ndofs(a.test_space))×" *
-        "$(ndofs(a.trial_space)) degrees of freedom cannot contract a trial vector of " *
-        "length $(length(ud)) with a test vector of length $(length(vd))",
+        "a bilinear form on $(_ghost_kind(a.test_space, true)) with " *
+        "$(ndofs(a.test_space))×$(ndofs(a.trial_space)) degrees of freedom cannot " *
+        "contract a trial vector of length $(length(ud)) with a test vector of length " *
+        "$(length(vd))",
     ),
     )
 end
 
+# The kind of space a side is, for the messages: one, or two (`plural`).
+_ghost_kind(::GhostGridSpace, plural::Bool) = plural ? "ghost spaces" : "a ghost space"
+function _ghost_kind(::_CompositeClosure, plural::Bool)
+    return plural ? "composites of ghost spaces" : "a composite of ghost spaces"
+end
+
 """
     (l::GhostLinearForm)(vₕ::VectorElement) -> Number
+    (l::GhostCompositeLinearForm)(vₕ::VectorElement) -> Number
 
-The linear form on a ghost space evaluated at `vₕ`, an element of its degrees of freedom:
-`Fᵀ v` for `F = assemble(l)`, without `F`. It fills the padded load `F_pad` the form
-stores and sums `F_padᵀ (E v)`, allocating nothing; as `assemble!(b, l)`, it is not safe
-to call concurrently on one form.
+The linear form on a ghost space, or on a composite of them, evaluated at `vₕ`, an element
+of its degrees of freedom: `Fᵀ v` for `F = assemble(l)`, without `F`. It fills the padded
+load `F_pad` the form stores and sums `F_padᵀ (E v)`, allocating nothing; as
+`assemble!(b, l)`, it is not safe to call concurrently on one form.
 
-On a closure with an affine part `d ≠ 0` the load is `Eᵀ (F_pad − A_pad d)`, which needs
-the bilinear form: the call refuses with an `ArgumentError` naming `assemble(a, l)`. On a
-space whose relation data depend on time it refuses naming `semidiscretize`. A `vₕ` of the
-wrong length throws a `DimensionMismatch`.
+The load of a pair whose trial space has an affine part `d ≠ 0` is
+`E_vᵀ (F_pad − A_pad d)`, which needs the bilinear form, `assemble(a, l)`. The call alone
+refuses a test space with `d ≠ 0` with an `ArgumentError` naming `assemble(a, l)`, which is
+exact when both sides are one space: on a pair whose trial space has data and whose test
+space has none, it gives `E_vᵀ F_pad`, without the lift. On a space whose relation data
+depend on time it refuses naming `semidiscretize`. A `vₕ` of the wrong length throws a
+`DimensionMismatch`.
 """
-function (l::GhostLinearForm)(vₕ::VectorElement)
+function (l::_AnyGhostLinearForm)(vₕ::VectorElement)
     _check_ghost_load(l, "l(v)")
     vd = parent(vₕ)
     E = l.test_space.E
@@ -100,7 +118,7 @@ function (l::GhostLinearForm)(vₕ::VectorElement)
         l.F_pad, vd)
 end
 
-@noinline function (l::GhostLinearForm)(::AbstractVector)
+@noinline function (l::_AnyGhostLinearForm)(::AbstractVector)
     throw(
         ArgumentError(
         "a linear form contracts against an element of its test space, not a bare vector. " *
@@ -124,30 +142,33 @@ end
 
 """
     evaluate!(scratch::AbstractVector, l::GhostLinearForm, vₕ::VectorElement) -> Number
+    evaluate!(scratch::AbstractVector, l::GhostCompositeLinearForm, vₕ::VectorElement) -> Number
 
 Write the reduced load `assemble(l)` into `scratch`, of length `ndofs(test_space(l))`, and
 return its contraction with `vₕ`, the value `l(vₕ)`. It refuses as `l(vₕ)` does: with an
-`ArgumentError` naming `assemble(a, l)` on a closure with an affine part `d ≠ 0`.
+`ArgumentError` naming `assemble(a, l)` on a test space whose closure has an affine part
+`d ≠ 0`.
 """
-function evaluate!(scratch::AbstractVector, l::GhostLinearForm, vₕ::VectorElement)
+function evaluate!(scratch::AbstractVector, l::_AnyGhostLinearForm, vₕ::VectorElement)
     _check_ghost_load(l, "evaluate!")
     length(parent(vₕ)) == ndofs(l.test_space) || _throw_ghost_load_length(l, parent(vₕ))
     assemble!(scratch, l)
     return _contract_values(scratch, parent(vₕ))
 end
 
-# The load alone exists only for a static closure with `d = 0` (`assemble!(b, l)`).
-function _check_ghost_load(l::GhostLinearForm, call::String)
+# The load alone exists only for a static test closure with `d = 0` (`assemble!(b, l)`).
+function _check_ghost_load(l::_AnyGhostLinearForm, call::String)
     _is_time_dependent(l.test_space) && _throw_ghost_time(call)
     any(!iszero, l.test_space.d) && _throw_ghost_lift()
     return nothing
 end
 
-@noinline function _throw_ghost_load_length(l::GhostLinearForm, vd)
+@noinline function _throw_ghost_load_length(l::_AnyGhostLinearForm, vd)
     throw(
         DimensionMismatch(
-        "a linear form on a ghost space with $(ndofs(l.test_space)) degrees of freedom " *
-        "cannot contract a vector of length $(length(vd))",
+        "a linear form on $(_ghost_kind(l.test_space, false)) with " *
+        "$(ndofs(l.test_space)) degrees of freedom cannot contract a vector of length " *
+        "$(length(vd))",
     ),
     )
 end

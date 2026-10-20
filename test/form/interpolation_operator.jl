@@ -318,7 +318,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             # there gives `∂ₙ(πₕ(u))` the ghost column's weights instead (max |A - R| 17.3).
             same_matrix(A, R) = rowvals(A) == rowvals(R) && A.colptr == R.colptr &&
                                 bits.(nonzeros(A)) == bits.(nonzeros(R))
-            normal = (u, v) -> inner_Γ(∂ₙ(πₕ(u)), v)
+            normal = (u, v) -> inner_Γ(∂ₙ(πₕ(u)), v; markers = :boundary)
             clamped = (u, v) -> innerₕ(Dcₓ(πₕ(u; outside = :clamp)), v)
             Δclamped = (u, v) -> innerₕ(Δₕ(πₕ(u; outside = :clamp)), v)
             test_clamped = (u, v) -> innerₕ(u, Dcₓ(πₕ(v; outside = :clamp)))

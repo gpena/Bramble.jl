@@ -266,7 +266,7 @@ function _bordered_solve(A::SparseMatrixCSC, F::AbstractVector, r,
     C = hcat(_border_columns(T, n, w), _border_columns(T, n, Z))
     B, bsym = _bordered_matrix(T, A, C, r)
     k = size(B, 1) - n
-    b = zeros(S, n + k)  # dense: the factorisations take no sparse `F`
+    b = zeros(S, n + k)::Vector{S}  # dense: the factorisations take no sparse `F`
     b[1:n] .= F
     if solver === :default
         _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
@@ -305,9 +305,15 @@ end
 _rank_one_eltype(::Nothing) = Union{}
 _rank_one_eltype((ws, wt, c)::Tuple) = promote_type(eltype(ws), eltype(wt), typeof(c))
 
+_int_csc(::Type{T}, A::SparseMatrixCSC) where {T} = convert(SparseMatrixCSC{T, Int}, A)
+
 function _bordered_matrix(::Type{T}, A::SparseMatrixCSC, C, ::Nothing) where {T}
     k = size(C, 2)
-    return [A C; transpose(C) spzeros(T, k, k)], _bordered_sym(A, C)
+    # Asserted: `hvcat` of sparse blocks is not inferred, and an uninferred `B` dispatches
+    # at run time on every backend call in `_bordered_solve`. `A` is converted first, since
+    # `hvcat` keeps an index type wider than `Int` (`UInt64`).
+    B = [_int_csc(T, A) C; transpose(C) spzeros(T, k, k)]::SparseMatrixCSC{T, Int}
+    return B, _bordered_sym(A, C)
 end
 
 function _bordered_matrix(::Type{T}, A::SparseMatrixCSC, C, (ws, wt, c)::Tuple) where {T}
@@ -316,7 +322,8 @@ function _bordered_matrix(::Type{T}, A::SparseMatrixCSC, C, (ws, wt, c)::Tuple) 
     Ct = hcat(_border_columns(T, n, wt), C)
     D = spzeros(T, k + 1, k + 1)
     D[1, 1] = c
-    return [A Cs; transpose(Ct) D], ws == wt ? _bordered_sym(A, Cs) : :unsymmetric
+    B = [_int_csc(T, A) Cs; transpose(Ct) D]::SparseMatrixCSC{T, Int}
+    return B, ws == wt ? _bordered_sym(A, Cs) : :unsymmetric
 end
 
 @noinline function _throw_rank_one_spqr()

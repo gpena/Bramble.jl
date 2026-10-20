@@ -210,7 +210,8 @@ struct ScalarGridSpace{
 end
 
 """
-    gridspace(Ωₕ::AbstractMeshType{D}; ghosts = ()) -> ScalarGridSpace{D}
+    gridspace(Ωₕ::AbstractMeshType{D}) -> ScalarGridSpace{D}
+    gridspace(Ωₕ::AbstractMeshType{D}; ghosts) -> GhostGridSpace{D}
 
 Constructs a [`ScalarGridSpace`](@ref) defined on the mesh `Ωₕ`, precomputing the inner product
 weights listed in [`ScalarGridSpace`](@ref).

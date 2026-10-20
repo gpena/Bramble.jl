@@ -369,16 +369,16 @@ end
 #
 # There `form` (ghost_composite.jl) marks the functions of every mixed difference in a
 # product's left argument, the side of the matrix columns (`_FacetExtrapolated`,
-# `_mark_mixed`): read at a ghost beyond a node of
-# a marked facet, it is the quadratic through its values at the three nodes inward along
-# the normal, evaluated at the ghost (`_one_sided_weights`, ghost_relations.jl), and
-# elsewhere its own value. The centred difference across the facet then reads the
-# derivative of that quadratic at the node, second order on the non-uniform spacing, and no
-# ghost of the facet, whichever of `A` and `B` crosses it. The second differences and the
-# relations read the closure's ghosts, and at a corner node the corner rule above comes
-# first. Every other space, and a composite whose relations each read one component,
-# assembles as before. A marked function has three entries at every point, the last two
-# zero away from a marked ghost, so the walk sees one length.
+# `_mark_mixed`): read at a ghost beyond a node of a marked facet, it is the quadratic
+# through its values at the three nodes inward along the normal, evaluated at the ghost
+# (`_one_sided_weights`, ghost_relations.jl), and elsewhere its own value. The centred
+# difference across the facet then reads the derivative of that quadratic at the node,
+# second order on the non-uniform spacing, and no ghost of the facet, whichever of `A` and
+# `B` crosses it. The second differences and the relations read the closure's ghosts, and
+# at a corner node the corner rule above comes first. Every other space, and a composite
+# whose relations each read one component, assembles without the rule. A marked function
+# has three entries at every point, the last two zero away from a marked ghost, so the
+# walk sees one length.
 
 # A marked function is the corner rule's operand as the function is.
 @inline _scaled_leaf(op::_FacetExtrapolated) = _scaled_leaf(op.inner_op)

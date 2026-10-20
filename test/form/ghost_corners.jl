@@ -319,7 +319,7 @@ matrix(P, f) = assemble(form(P, P, f))
         # A read a zero weight multiplies is none: `jumpₙ(Δₕ(u))` evaluates its xmin
         # component at the xmax nodes too, where that facet weighs nothing, and assembles;
         # the volume `jumpₓ(Δₕ(u))` reads the corners at weighted nodes and is refused.
-        @test nnz(matrix(P, (u, v) -> inner_Γ(Bramble.jumpₙ(Δₕ(u)), v))) > 0
+        @test nnz(matrix(P, (u, v) -> inner_Γ(Bramble.jumpₙ(Δₕ(u)), v; markers = :boundary))) > 0
         @test_throws ArgumentError matrix(P, (u, v) -> innerₕ(jumpₓ(Δₕ(u)), v))
         # Under a volume product a difference truncated at the edge of the padded grid is
         # the plain closure and reads nothing absent: it assembles.

@@ -106,7 +106,7 @@ M_robin = mass_matrix(sd_robin)
 #
 # `Bramble.lift(Cₕ, u, t)` returns the padded-grid values of the unknowns `u` with the
 # ghost value and the eliminated node filled in from the relations at time ``t``. The
-# physical nodes come first, so the compared fields are its first 101 entries:
+# ghost lies beyond the right end, so the physical nodes are its first 101 entries:
 
 using Bramble: lift
 
@@ -305,9 +305,8 @@ maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end]))
 # ## Hand-rolled backward Euler
 #
 # `semidiscretize`/`ode_problem` above hide the per-step matrix assembly entirely. This one
-# keeps the Dirichlet problem as well, since `dirichlet_bc!` writes identity rows into a
-# plain assembled matrix and has no ghost counterpart. Building
-# it explicitly -- the shape a solver without a method-of-lines layer expects -- is what
+# keeps the Dirichlet problem as well, since [`assemble_add!`](@ref) takes forms on a plain
+# space only. Building it explicitly -- the shape a solver without a method-of-lines layer expects -- is what
 # [`assemble_add!`](@ref) exists for: accumulating ``M/\Delta t`` and the ``t``-dependent
 # stiffness piece ``K(t)`` into the same preallocated matrix, in place, with no temporary
 # and no sparse matrix addition of its own on every step. Backward Euler for the same

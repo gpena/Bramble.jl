@@ -16,7 +16,7 @@ module GhostCompositeTests
 using Test
 using Bramble
 import Bramble
-using Bramble: D₋ₓ, D₊ᵧ, Dcₓ, Dcᵧ, lift, lift!
+using Bramble: D₋ₓ, D₊ᵧ, Dcₓ, Dcᵧ, Mₓ, lift, lift!
 using LinearAlgebra: dot, norm
 using SparseArrays: blockdiag, sparse
 using Random: Xoshiro
@@ -205,6 +205,21 @@ end
     scratch = fill(NaN, ndofs(W))
     @test Bramble.evaluate!(scratch, l, v) ≈ dot(Fref, parent(v))
     @test close(scratch, Fref)
+    # a vector of another length, named with both lengths
+    w = element(gridspace(Ωₕ)^3)
+    @test_throws DimensionMismatch l(w)
+    @test_throws DimensionMismatch Bramble.evaluate!(zeros(ndofs(W)), l, w)
+    err = try
+        l(w)
+        nothing
+    catch e
+        e
+    end
+    @test occursin(
+        "a linear form on a composite of ghost spaces with " *
+        "$(ndofs(W)) degrees of freedom cannot contract a vector of length " *
+        "$(length(w))",
+        sprint(showerror, err))
     # with data, the load alone refuses as on a scalar space
     @test refuses(() -> assemble(form(V, fl2)), "assemble(a, l)")
 
@@ -537,6 +552,63 @@ end
 
 # --- Refusals ------------------------------------------------------------------------ #
 
+# --- Traction spaces: pairs, the facet rule's limits, the refusals' advice ------------- #
+
+const λt, μt = 2.0, 0.5
+Kt(i, j) = [λt * (i == d) * (j == e) + μt * ((i == j) * (d == e) + (i == e) * (j == d))
+            for d in 1:2, e in 1:2]
+trac(u, i) = ∂ₙ(u(1); K = Kt(i, 1)) + ∂ₙ(u(2); K = Kt(i, 2))
+clamped(F, u) = (F => u(1) => 0.0, F => u(2) => 0.0, F => ∂ₙₙ(u(1)) => 0.0,
+    F => ∂ₙₙ(u(2)) => 0.0)
+others(F, u) = mapreduce(G -> clamped(G, u), (x, y) -> (x..., y...),
+    filter(!=(F), (:xmin, :xmax, :ymin, :ymax)))
+
+# A traction on facet `F` and the other three facets clamped.
+function traction_space(V, F)
+    return constrained(V, u -> (F => trac(u, 1) => 1.0, F => trac(u, 2) => 0.0,
+        others(F, u)...))
+end
+
+const fe = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) +
+                     innerₕ(u(2), v(1))
+
+@testset "Composite ghost traction pairs" begin
+    Ωₕ = mesh2d()
+    S = gridspace(Ωₕ; ghosts = :boundary)
+    V = S × S
+    Ta, Tb = traction_space(V, :xmin), traction_space(V, :ymin)
+    @test ndofs(Ta) == ndofs(Tb)
+    a = form(Ta, Ta, fe)
+    la, lb = form(Ta, fl2), form(Tb, fl2)
+    A, F = assemble(a, la)
+    # one size, different kept nodes: the pair is refused, as the loads differ
+    @test_throws DimensionMismatch assemble(a, lb)
+    @test_throws DimensionMismatch assemble!(copy(A), copy(F), a, lb)
+    @test norm(assemble(form(Tb, Tb, fe), lb)[2] - F) > 1.0e-3 * norm(F)
+    # a space rebuilt alike pairs, with the same system
+    @test assemble(a, form(traction_space(V, :xmin), fl2)) == (A, F)
+
+    # the bare mixed difference takes the facet rule, so differs from the reading of the
+    # closure's ghosts; with an average between the two differences there is no rule, and
+    # the form reads past a corner of the padded grid
+    PV = Bramble.padded_space(V)
+    E = Matrix(first(Bramble.closure(Ta)))
+    g = (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(2))), v(1))
+    Ag, Pg = Matrix(assemble(form(Ta, Ta, g))), Matrix(assemble(form(PV, PV, g)))
+    @test norm(Ag - transpose(E) * Pg * E) > 1.0e-3 * norm(Ag)
+    for gm in ((u, v) -> innerₕ(Dcₓ(Mₓ(Dcᵧ(u(2)))), v(1)),
+        (u, v) -> innerₕ(Dcₓ(Dcᵧ(Mₓ(u(2)))), v(1)))
+        @test refuses(() -> assemble(form(Ta, Ta, gm)),
+            "a padded point that does not exist")
+    end
+
+    # a component fixed on the traction facet is told its ghost relation
+    slide = u -> (:xmin => u(1) => 0.0, :xmin => trac(u, 2) => 0.0, others(:xmin, u)...)
+    @test refuses(() -> constrained(V, slide), "takes `:xmin => ∂ₙₙ(u(i)) => h`")
+    # the row replacements name the labels given
+    @test refuses(() -> dirichlet_bc!(zeros(2, 2), Ta, :ymin), "dirichlet = (:ymin,)")
+end
+
 @testset "Composite ghost refusals" begin
     Ωₕ = mesh2d()
     S = gridspace(Ωₕ; ghosts = GH)
@@ -558,6 +630,8 @@ end
     for (X, Y) in ((V, Ca), (Ca, V), (V, W), (W, V))
         @test refuses(() -> form(X, Y, (u, v) -> innerₕ(u(1), v(1))), side)
     end
+    @test refuses(() -> form(V, Ca, (u, v) -> innerₕ(u(1), v(1))), "the test space, ")
+    @test refuses(() -> form(W, V, (u, v) -> innerₕ(u(1), v(1))), "the trial space, ")
     # components ghosting different facets, or on meshes of different sizes
     sets = "ghost different facets"
     Cy = gridspace(Ωₕ; ghosts = (:ymax,))
@@ -575,6 +649,11 @@ end
     yet = "not supported yet"
     @test refuses(() -> form(V, V, (u, v) -> fa(u, v) + 2.0 * innerₕ(1, u(1)) *
                                                         innerₕ(1, v(1))), "a rank-one term")
+    @test refuses(() -> form(V, V, (u, v) -> fa(u, v) + 2.0 * innerₕ(1, u(1)) *
+                                                        innerₕ(1, v(1))),
+        "Pose the rank-one term on each scalar ghost space")
+    @test refuses(() -> semidiscretize(a, l), "Pose the time problem with semidiscretize")
+    @test refuses(() -> matrix_free_operator(a), "A, F = assemble(a, l)")
     @test refuses(() -> matrix_free_operator(a), "matrix_free_operator on a composite")
     @test refuses(() -> kronecker_operator(a), "kronecker_operator on a composite")
     @test refuses(() -> chebyshev_preconditioner(a), "chebyshev_preconditioner on a composite")

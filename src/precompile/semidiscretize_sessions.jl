@@ -4,9 +4,8 @@
 #
 # Not reachable from the form sessions: `Semidiscretization` is a new struct built on top
 # of an already-assembled `BilinearForm`/`LinearForm` pair. Its constraint handling
-# dispatches on one of four types (`NoConstraints`, `LabelsOnly`, `StaticConstraints`,
-# `TimeDependentConstraints`), but only `NoConstraints` and `LabelsOnly` are covered here,
-# the other two bought nothing measurable.
+# dispatches on one of the carrier types of `semidiscrete_constraints.jl`, of which only
+# `NoConstraints` and `LabelsOnly` are covered here, the others bought nothing measurable.
 #
 # `StaticConstraints`/`TimeDependentConstraints` store the caller's own boundary closure
 # and call it per boundary point at residual/Jacobian time (`dirichlet_bc!`,

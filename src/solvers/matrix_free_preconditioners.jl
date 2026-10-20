@@ -55,10 +55,16 @@ end
 
 Base.size(P::JacobiPreconditioner) = (n = length(P.inv_diagonal); (n, n))
 
+# The policy a form-level preconditioner or smoother runs under by default: the trial
+# space's, or the padded space's for a form on ghost spaces.
+@inline _default_policy(a::BilinearForm) = execution_policy(trial_space(a))
+@inline _default_policy(a::GhostBilinearForm) = _ghost_policy(a.trial_space)
+
 """
     jacobi_preconditioner(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a))) -> JacobiPreconditioner
-    jacobi_preconditioner(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy) -> JacobiPreconditioner
+    jacobi_preconditioner(a::Bramble.GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy) -> JacobiPreconditioner
     jacobi_preconditioner(op::MatrixFreeOperator) -> JacobiPreconditioner
+    jacobi_preconditioner(op::Bramble.GhostMatrixFreeOperator) -> JacobiPreconditioner
 
 The Jacobi preconditioner of `A = assemble(a; dirichlet, dirichlet_components)`, or of the
 matrix `op` stands for, from its diagonal alone: one walk of the form's stencil keeps the
@@ -106,8 +112,8 @@ true
 See also: [`JacobiPreconditioner`](@ref), [`matrix_free_operator`](@ref).
 """
 function jacobi_preconditioner(
-        a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
-        policy = execution_policy(trial_space(a))
+        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        dirichlet_components = nothing, policy = _default_policy(a)
 )
     op = matrix_free_operator(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components, policy = policy
@@ -128,16 +134,6 @@ function jacobi_preconditioner(op::MatrixFreeOperator{T}) where {T <: Number}
     end
     d .= inv.(d)
     return JacobiPreconditioner{T, typeof(d)}(d)
-end
-
-function jacobi_preconditioner(
-        a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing,
-        policy = _ghost_policy(a.trial_space)
-)
-    op = matrix_free_operator(
-        a; dirichlet = dirichlet, dirichlet_components = dirichlet_components, policy = policy
-    )
-    return jacobi_preconditioner(op)
 end
 
 function jacobi_preconditioner(op::GhostMatrixFreeOperator{T}) where {T <: Number}

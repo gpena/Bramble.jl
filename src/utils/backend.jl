@@ -52,11 +52,12 @@ the right answer the same way, for free. `BrambleMetalExt` keeps its own
 specific method, and those predate this generic one -- the same idiom as [`ka_device`](@ref):
 a method a package extension supplies for its own type, picked up automatically once loaded.
 
-For an [`ExecutionPolicy`](@ref), `locality` answers what the policy claims: a
-[`CpuPolicy`](@ref) claims [`HostLocality`](@ref), a [`GpuPolicy`](@ref) claims
+For an [`ExecutionPolicy`](@ref), `locality` answers what the policy claims. A
+[`CpuPolicy`](@ref) claims [`HostLocality`](@ref) and a [`GpuPolicy`](@ref) claims
 [`DeviceLocality`](@ref). For a [`Backend`](@ref), it answers the locality of the backend's
-vector type `VT` alone: `VT` is the storage a sweep actually indexes, so that is the
-locality that matters for legality. The matrix type `MT` is not consulted, so a device `MT` paired with a host `VT` goes unchecked.
+vector type `VT` alone, because `VT` is the storage a sweep actually indexes. The matrix
+type `MT` is not consulted here, since `Backend`'s constructor checks `MT` against `VT`
+separately.
 
 # Examples
 ```jldoctest
@@ -230,7 +231,8 @@ See also: [`CpuPolicy`](@ref), [`ExecutionPolicy`](@ref).
 """
 abstract type GpuPolicy <: ExecutionPolicy end
 
-# The other half of the locality trait: every `GpuPolicy` claims device memory, checked against what the backend's vector type actually is.
+# The other half of the locality trait: every `GpuPolicy` claims device memory,
+# checked against what the backend's vector type actually is.
 @inline locality(::GpuPolicy) = DeviceLocality()
 
 """
@@ -367,8 +369,8 @@ Return the vector type `VT` configured for `backend`.
 @inline vector_type(::Type{<:Backend{VT, MT, EP}}) where {VT, MT, EP} = VT
 
 # `Backend`'s half of the locality trait: reads `VT` alone, since `VT`
-# is the storage a sweep actually indexes. `MT` is not consulted, so a device `MT` paired
-# with a host `VT` is not caught by this method.
+# is the storage a sweep actually indexes. `MT` is not consulted here: the `Backend`
+# constructor checks `MT` against `VT` separately.
 @inline locality(be::Backend) = locality(vector_type(be))
 @inline locality(::Type{BT}) where {BT <: Backend} = locality(vector_type(BT))
 

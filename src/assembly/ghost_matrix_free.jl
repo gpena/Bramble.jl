@@ -105,8 +105,8 @@ end
     throw(
         ArgumentError(
         "this ghost-space matrix-free operator is already applying a product on another " *
-        "task, and its padded buffers hold one product at a time: one operator per task. " *
-        "Build one operator per task with matrix_free_operator(a).",
+        "task, and its padded buffers hold one product at a time. Build one operator per " *
+        "task with matrix_free_operator(a).",
     ),
     )
 end

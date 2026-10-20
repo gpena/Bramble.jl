@@ -65,8 +65,8 @@ Built by [`semidiscretize`](@ref); read back with [`mass_matrix`](@ref) and
 - `operator`: spatial [`BilinearForm`](@ref) (or a ghost-space form), assembled into `A`.
 - `source`: source [`LinearForm`](@ref), assembled into `F(t)` at each step.
 - `space`: the test space both forms share.
-- `operator_matrix`: `A`, with `eₖ` rows on the constrained degrees of freedom.
-- `mass_matrix`: `M`, with zero rows on the constrained degrees of freedom.
+- `operator_matrix`: `A`, with `eₖ` rows on the constrained degrees of freedom (none on a ghost space, whose relations eliminate them).
+- `mass_matrix`: `M`, with zero rows on the constrained degrees of freedom (none on a ghost space, whose relations eliminate them).
 - `source_vector`: the reusable `F` buffer, refilled in place.
 - `constraints`: how the source's boundary values are reached -- one of `NoConstraints`, `LabelsOnly`, `StaticConstraints`, `TimeDependentConstraints`, `TimeParamDependentConstraints` or, on a ghost space, `GhostConstraints`.
 - `labels`: constrained boundary labels.

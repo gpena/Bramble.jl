@@ -128,7 +128,7 @@ function _ghost_update(be, G::GhostMesh{D}, Et::SparseMatrixCSC, d::AbstractVect
     np, ng = length(phys), nghosts(G)
     cp, rv, nzv = SparseArrays.getcolptr(Et), rowvals(Et), nonzeros(Et)
     dh = td === nothing ? Array(d) : zeros(eltype(d), length(d))
-    affine = td === nothing ? map(!iszero, dh) : map(>(0), diff(Array(td.colptr)))
+    affine = _affine_support(d, td)
     own = zeros(Int, size(Et, 1))           # the vector index of each degree of freedom
     alone(i) = cp[i + 1] - cp[i] == 1 && isone(nzv[cp[i]]) ? rv[cp[i]] : 0
     for (k, J) in enumerate(phys)
@@ -192,9 +192,9 @@ end
 
 # The padded points the affine part can be nonzero at, at any time: those of `d ≠ 0` on a
 # static space, the rows of `L` otherwise.
-_affine_support(Wₕ::GhostGridSpace) = _affine_support(Wₕ, Wₕ.td)
-_affine_support(Wₕ::GhostGridSpace, ::Nothing) = map(!iszero, Array(Wₕ.d))
-_affine_support(::GhostGridSpace, td::_TimeData) = map(>(0), diff(Array(td.colptr)))
+_affine_support(Wₕ::GhostGridSpace) = _affine_support(Wₕ.d, Wₕ.td)
+_affine_support(d, ::Nothing) = map(!iszero, Array(d))
+_affine_support(_, td::_TimeData) = map(>(0), diff(Array(td.colptr)))
 
 """
     _lift_affine!(d, Wₕ::GhostGridSpace, t[, g]) -> d
@@ -553,7 +553,7 @@ end
         ::Type{S} = eltype(Wₕ.d)) where {S}
     _check_lift_fresh(Wₕ)
     length(u) == ndofs(Wₕ) || _throw_lift_length(:lift!, Wₕ, u)
-    uₕ.space === Wₕ.padded || _throw_lift_target(Wₕ)
+    uₕ.space === Wₕ.padded || _throw_lift_target(uₕ, Wₕ)
     T = promote_type(eltype(u), S)
     promote_type(eltype(uₕ), T) === eltype(uₕ) || _throw_lift_eltype(uₕ, T)
     return nothing
@@ -593,11 +593,11 @@ end
     )
 end
 
-@noinline function _throw_lift_target(Wₕ::GhostGridSpace)
+@noinline function _throw_lift_target(uₕ, Wₕ::GhostGridSpace)
     throw(
         ArgumentError(
         "lift!(uₕ, Wₕ, u) writes into a grid function on the padded space of $(Wₕ), and " *
-        "uₕ lives on another space. Build it once with uₕ = Bramble.lift(Wₕ, u).",
+        "uₕ lives on $(summary(uₕ.space)). Build it once with uₕ = Bramble.lift(Wₕ, u).",
     ),
     )
 end
@@ -639,9 +639,9 @@ end
     return nothing
 end
 
-# The closure was built from the mesh `Wₕ`'s weights were: after `change_points!` its ghost
-# values solve the relations on a mesh that no longer exists. The padded space's own stale
-# message would send the user to `padded_space`, which `lift` refuses.
+# The closure holds on the mesh version the weights record: after `change_points!` its
+# ghost values solve the relations on a mesh that no longer exists. The padded space's own
+# stale message would send the user to `padded_space`, which `lift` refuses.
 @inline function _check_lift_fresh(Wₕ::GhostGridSpace)
     Wₕ.padded.weights.built_version == _mesh_version(mesh(Wₕ)) || _throw_lift_stale(Wₕ)
     return nothing

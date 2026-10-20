@@ -509,8 +509,8 @@ end
     _batch_broadcast!(v, bc, ax) -> Nothing
 
 [`CpuPolyester`](@ref)'s `_polyester_broadcast!`, filled by `BramblePolyesterExt` (one
-`_broadcast_band!` per band under `Polyester.@batch`). The only `src/` method here
-that errors naming Polyester.
+`_broadcast_band!` per band under `Polyester.@batch`). Its `src/` method only throws,
+naming Polyester; `BramblePolyesterExt` defines the one that runs.
 """
 @noinline function _batch_broadcast!(v, bc, ax)
     return _throw_cpubatch_without_polyester(:_batch_broadcast!)

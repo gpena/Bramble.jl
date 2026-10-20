@@ -5,10 +5,11 @@ module GhostKroneckerTests
 # 1D factors. The reference is that product from the padded space and the closure, in
 # dense matrices; the meshes are seeded random ones, with a different size per axis.
 
+using Random
 using Test
 using Bramble
 import Bramble
-using Bramble: padded_space, closure
+using Bramble: padded_space, closure, restrict_to
 using LinearAlgebra: ×
 using SparseArrays: SparseMatrixCSC
 using ..TestUtils: WITH_3D_TESTS
@@ -198,7 +199,7 @@ end
             :ymax => u + ∂ₙ(u) => 0.0))
     mixed = (u, v) -> innerₕ(Bramble.D₋ₓ(Bramble.D₋ᵧ(u)), v)
     msg = message(() -> kronecker_operator(form(Cr, Cr, mixed)))
-    @test names_fix(msg) && occursin("absent", msg)
+    @test names_fix(msg) && occursin("absent", msg) && !occursin("conormal", msg)
 
     # Spaces on two physical meshes of one size, or ghosting different facets.
     Ω2 = random_mesh((9, 7))
@@ -226,6 +227,19 @@ end
     Cx = constrained(gridspace(Ωₕ; ghosts = (:xmin, :xmax)),
         u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => ∂ₙ(u) => 0.0))
     @test_throws ArgumentError kronecker_operator(form(Cr, Cx, stiffness))
+
+    # A region restriction other than `:interior` is refused, naming `assemble(a)`.
+    Random.seed!(20261017)
+    Ωb = mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0),
+            :blob => x -> (x[1] - 0.4)^2 + (x[2] - 0.5)^2 < 0.1), (9, 7), (false, false))
+    Cb = constrained(gridspace(Ωb; ghosts = :boundary),
+        u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => ∂ₙ(u) => 0.0, :ymin => ∂ₙ(u) => 0.0,
+            :ymax => ∂ₙ(u) => 0.0))
+    restricted = (u, v) -> innerₕ(Bramble.D₋ₓ(restrict_to(:blob, u)), v)
+    @test_throws ArgumentError kronecker_operator(form(Cb, Cb, restricted))
+    @test occursin("assemble(a)",
+        message(() -> kronecker_operator(form(Cb, Cb, restricted))))
 
     # A 1D form has nothing to factor.
     Ω1 = Main.GhostOracle1D.make_mesh(:random, 0)

@@ -18,7 +18,7 @@
 
 """
     amg_preconditioner(A::AbstractMatrix; method = :smoothed_aggregation, kwargs...) -> MultiLevel
-    amg_preconditioner(a::Union{BilinearForm, GhostBilinearForm}; method = :smoothed_aggregation,
+    amg_preconditioner(a::Union{BilinearForm, Bramble.GhostBilinearForm}; method = :smoothed_aggregation,
                         dirichlet = nothing, dirichlet_components = nothing, kwargs...) -> MultiLevel
 
 Build an algebraic multigrid hierarchy for the symmetric positive-definite matrix `A` -- or

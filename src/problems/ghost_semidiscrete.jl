@@ -63,7 +63,8 @@ end
 end
 
 """
-    semidiscretize(a::GhostBilinearForm, l::GhostLinearForm; kwargs...) -> Semidiscretization
+    semidiscretize(a::GhostBilinearForm, l::GhostLinearForm; mass, dirichlet,
+        dirichlet_components, state, update_coefficients!, reassemble) -> Semidiscretization
 
 Semidiscretise `M u' = F(t) − A u` for forms posed on one constrained ghost space `Cₕ`,
 whose relation data may depend on time. With `(E, d(t))` the closure of `Cₕ`, `A = Eᵀ A_pad E`,
@@ -75,7 +76,7 @@ whose relation data may depend on time. With `(E, d(t))` the closure of `Cₕ`, 
 - `state`: a grid function on `Bramble.padded_space(Cₕ)` that receives `lift(Cₕ, u, t)` before each assembly, for forms whose coefficients read it (default `nothing`).
 - `update_coefficients!`, `reassemble`: as for plain forms.
 
-The `dirichlet` keyword is refused: give a Dirichlet condition as `:F => u => g(x, t)` in
+The `dirichlet` and `dirichlet_components` keywords are refused: give a Dirichlet condition as `:F => u => g(x, t)` in
 [`constrained`](@ref). So are a space that keeps ghosts as unknowns (their mass rows
 vanish), `semidiscretize(build, l)` with a ghost load (use `update_coefficients!` and
 `reassemble = true`), and [`semidiscretize_rhs`](@ref).
@@ -98,7 +99,8 @@ Base.@constprop :aggressive function semidiscretize(
 
     A = assemble(a)
     mform = mass === nothing ? _default_mass_form(Cₕ) : mass
-    mform isa GhostBilinearForm || _throw_ghost_semidiscrete_mixed()
+    mform isa GhostBilinearForm ||
+        _throw_ghost_semidiscrete_mixed(("a", a), ("l", l), ("mass", mform))
     _check_ghost_semidiscrete_space(mform, Cₕ, "mass")
     M = assemble(mform)
     _check_ghost_mass(mform.A_pad, Cₕ)
@@ -179,15 +181,16 @@ end
 @inline _ghost_state(::Nothing, ::GhostGridSpace) = nothing
 function _ghost_state(state, Cₕ::GhostGridSpace)
     state isa VectorElement && state.space === padded_space(Cₕ) ||
-        _throw_ghost_state_space()
+        _throw_ghost_state_space(state)
     return _GhostState(state, Cₕ)
 end
 
-@noinline function _throw_ghost_state_space()
+@noinline function _throw_ghost_state_space(state)
+    on = state isa VectorElement ? state.space : typeof(state)
     throw(
         ArgumentError(
         "the state of a semidiscretization on a ghost space Cₕ receives lift(Cₕ, u, t), " *
-        "a grid function on the padded space: build it with " *
+        "a grid function on the padded space, got a $(typeof(state)) on $on: build it with " *
         "element(Bramble.padded_space(Cₕ)) and read that in the form's coefficients.",
     ),
     )
@@ -288,17 +291,19 @@ end
     )
 end
 
-@noinline function _throw_ghost_semidiscrete_mixed()
+@noinline function _throw_ghost_semidiscrete_mixed(forms::Tuple...)
+    given = join(("$name::$(nameof(typeof(f)))" for (name, f) in forms), ", ")
     throw(
         ArgumentError(
-        "semidiscretize takes forms on ghost spaces on every side or on none: build the " *
-        "operator, the load and the mass on the same constrained ghost space.",
+        "semidiscretize takes forms on ghost spaces on every side or on none, got " *
+        "$given: build the operator, the load and the mass on the same constrained " *
+        "ghost space.",
     ),
     )
 end
 
-semidiscretize(::GhostBilinearForm, ::LinearForm; kwargs...) = _throw_ghost_semidiscrete_mixed()
-semidiscretize(::BilinearForm, ::GhostLinearForm; kwargs...) = _throw_ghost_semidiscrete_mixed()
+semidiscretize(a::GhostBilinearForm, l::LinearForm; kwargs...) = _throw_ghost_semidiscrete_mixed(("a", a), ("l", l))
+semidiscretize(a::BilinearForm, l::GhostLinearForm; kwargs...) = _throw_ghost_semidiscrete_mixed(("a", a), ("l", l))
 
 function semidiscretize(::Function, ::GhostLinearForm; kwargs...)
     throw(
@@ -310,8 +315,8 @@ function semidiscretize(::Function, ::GhostLinearForm; kwargs...)
     )
 end
 
-ode_problem(::GhostBilinearForm, ::LinearForm, u₀, I; kwargs...) = _throw_ghost_semidiscrete_mixed()
-ode_problem(::BilinearForm, ::GhostLinearForm, u₀, I; kwargs...) = _throw_ghost_semidiscrete_mixed()
+ode_problem(a::GhostBilinearForm, l::LinearForm, u₀, I; kwargs...) = _throw_ghost_semidiscrete_mixed(("a", a), ("l", l))
+ode_problem(a::BilinearForm, l::GhostLinearForm, u₀, I; kwargs...) = _throw_ghost_semidiscrete_mixed(("a", a), ("l", l))
 
 function semidiscretize_rhs(::Semidiscretization{<:GhostBilinearForm})
     throw(

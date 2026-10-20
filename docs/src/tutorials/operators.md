@@ -319,7 +319,7 @@ A_dc = Matrix(assemble(form(W_left, W_left, (u, v) -> innerₕ(Dcₓ(u), v))))
 A_dc[1, :], A_dc[6, :]
 ```
 
-A boundary term that needs a point beyond a facet without ghosts is refused rather than truncated: `inner_Γ(Dcₓ(u), v; markers = (:xmax,))` on this space throws an `ArgumentError` that asks for ghosts on that facet.
+A boundary term that needs a point beyond a facet without ghosts is refused rather than truncated: `inner_Γ(Dcₓ(u), v; markers = (:xmax,))` on this space throws an `ArgumentError` naming the read of a padded point the space lacks.
 
 ### The normal derivative and the facet operators
 
@@ -357,7 +357,7 @@ rjump_max = row((u, v) -> inner_Γ(jumpₙ(u), v; markers = (:xmax,)), 6)
 r∂ₙₙ_min, rjump_max
 ```
 
-The jump is the inward one at both ends, ``u_2 - u_1`` at the left and ``u_{n-1} - u_n`` at the right, which is why it needs no ghost of its own. The plain forward `jumpₓ` would read across the ghost cell at the right end. A facet operator takes scalars and sums, so `α * u + β * ∂ₙ(u)` is the Robin combination. It is not a grid function: `jumpₙ(∂ₙ(u))` and a function coefficient times a facet operator are errors, and the function belongs in the data of `inner_Γ` or of a relation.
+The jump is the inward one at both ends, ``u_2 - u_1`` at the left and ``u_{n-1} - u_n`` at the right, which is why it needs no ghost of its own. The plain forward `jumpₓ` would read across the ghost cell at the right end. A facet operator takes scalars and sums, so `α * u + β * ∂ₙ(u)` is the Robin combination. It is not a grid function: `jumpₙ(∂ₙ(u))` throws an `ArgumentError` that begins "jumpₙ takes a field expression", a function coefficient times a facet operator is a `MethodError` (no method matching `*`), and the function belongs in the data of `inner_Γ` or of a relation.
 
 A facet whose ghosts are missing is refused when the form is built, never read as zero:
 
@@ -432,7 +432,7 @@ spelled(W) = assemble(form(W, W, (u, v) -> innerₕ(D̃ₓ(D₋ₓ(u)) + D̃ᵧ(
 norm(lap(W_c) - spelled(W_c)) / norm(lap(W_c))
 ```
 
-`Δₕ` is cheaper to build than the nested pair, because the form compiles one three-point stencil per axis. At a facet node on a ghost space it is the ordinary three-point stencil with the ghost as a neighbour. On `W₁`, the row of the first node is the cell weight times ``(u_2 - 2u_1 + u_0)/h_2^2``:
+At a facet node on a ghost space it is the ordinary three-point stencil with the ghost as a neighbour. On `W₁`, the row of the first node is the cell weight times ``(u_2 - 2u_1 + u_0)/h_2^2``:
 
 ```@example operators
 r_lap = row((u, v) -> innerₕ(Δₕ(u), v), 1)

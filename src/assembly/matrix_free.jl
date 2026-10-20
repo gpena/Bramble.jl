@@ -198,6 +198,7 @@ end
 
 """
     matrix_free_operator(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a))) -> MatrixFreeOperator
+    matrix_free_operator(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy) -> GhostMatrixFreeOperator
 
 The linear operator of `a`, applied without assembling its matrix: `op * x` agrees with
 `assemble(a; dirichlet, dirichlet_components) * x`.
@@ -211,8 +212,8 @@ a product entered on it while another runs throws an `ArgumentError`, so build o
 operator per task. `dirichlet` there takes what `assemble(a; dirichlet)` takes.
 
 # Arguments
-- `a`: The bilinear form. Any form [`assemble`](@ref) accepts, on scalar or composite spaces,
-  or on ghost spaces.
+- `a`: The bilinear form. Any form [`assemble`](@ref) accepts, on scalar or composite spaces
+  or on scalar ghost spaces, except one holding a rank-one term.
 
 # Keywords
 - `dirichlet`: The Dirichlet labels whose rows become identity rows, in any form `assemble`
@@ -238,6 +239,8 @@ operator per task. `dirichlet` there takes what `assemble(a; dirichlet)` takes.
 - `ArgumentError`: `dirichlet_components` names a leaf the test space does not have.
 - `ArgumentError`: `dirichlet` on ghost spaces whose unknowns are not the physical nodes,
   as for `assemble(a; dirichlet)`.
+- `ArgumentError`: `a` holds a rank-one term.
+- `ArgumentError`: `a` is a form over composite ghost spaces, which have no matrix-free operator.
 - `ArgumentError`, from `mul!`: a product on a ghost-space operator while another task's
   product on it runs.
 
@@ -1512,7 +1515,8 @@ end
 
 [`CpuPolyester`](@ref)'s fused sweep, filled by `BramblePolyesterExt`: one `Polyester.@batch`
 task per band of `nbands`, each walking every unit of `plan`'s form over its band, as
-`_mf_band_task!` does. The only `src/` method errors naming Polyester.
+`_mf_band_task!` does. Its `src/` method only throws, naming Polyester;
+`BramblePolyesterExt` defines the one that runs.
 """
 @noinline function _batch_mf_bands!(s, plan, nbands::Int)
     return _throw_cpubatch_without_polyester(:_batch_mf_bands!)

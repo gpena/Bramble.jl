@@ -59,11 +59,13 @@ which solves for them. A ghosted facet without any relation keeps its ghosts as 
 
 The degrees of freedom of the result are the physical nodes no Dirichlet relation fixes, in
 the mesh's linear order, then the ghosts that remain unknowns, in the order of `Wₕ`. Its
-closure `(E, d)` maps them to the padded values `E u + d`, where `d` carries the data; so a
-load needs the bilinear form, `assemble(a, l)`, whose matrix `Eᵀ A E` stays symmetric when
-`A` is. Dirichlet conditions can instead replace rows, `assemble(a, l; dirichlet,
-symmetrize)`, on a space whose ghosts are all eliminated and none of whose nodes are fixed
-by `u => g`: its unknowns are then the physical nodes, as on `gridspace(Ωₕ)`.
+closure `(E, d)` maps them to the padded values `E u + d`, where `d` carries the data. The
+load of a pair whose trial space has `d ≠ 0` reads the bilinear form, so `assemble(a, l)`
+builds the two together, its matrix `Eᵀ A E` symmetric when `A` is; `assemble(l)` alone
+refuses a test space with `d ≠ 0`, which is exact when both sides are one space. Dirichlet
+conditions can instead replace rows, `assemble(a, l; dirichlet, symmetrize)`, on a space
+whose ghosts are all eliminated and none of whose nodes are fixed by `u => g`: its
+unknowns are then the physical nodes, as on `gridspace(Ωₕ)`.
 
 When some data depend on time, `E` stays the same and only `d` depends on time, `d(t)`.
 [`lift`](@ref)`(Cₕ, u, t)` gives `E u + d(t)`; `lift(Cₕ, u)`, `lift(Cₕ)` and
@@ -373,7 +375,8 @@ end
         "ghost relation per component, solved together at each node, as a relation " *
         "there reads several components (a traction gives one per component, " *
         "`:$name => ∂ₙ(u(1); K = K₁₁) + ∂ₙ(u(2); K = K₁₂) => g₁`, …); or relations of " *
-        "one component each, at most one per component.",
+        "one component each, at most one per component. A component fixed on :$name " *
+        "by `u(i) => g` takes `:$name => ∂ₙₙ(u(i)) => h` as its ghost relation.",
     ),
     )
 end

@@ -6,8 +6,9 @@
 # same AST) wrapped with the closures `(E, d)` of both sides. `assemble` fills the padded
 # matrix `A_pad` and reduces it to `E_vᵀ A_pad E_u` in DOF order. The load of a linear form
 # is `E_vᵀ (F_pad − A_pad d_u)`, so it needs the bilinear form: `assemble(a, l)` builds it,
-# `assemble!(A, F, a, l)` refills it, and `assemble(l)` alone refuses a closure with
-# `d ≠ 0`. A map from `A_pad`'s stored values to the reduced matrix's, built once with the
+# `assemble!(A, F, a, l)` refills it, and `assemble(l)` alone refuses a test space with
+# `d ≠ 0`, which is exact when both sides are one space (it cannot see the trial space's
+# `d_u`). A map from `A_pad`'s stored values to the reduced matrix's, built once with the
 # form, does the reduction, so a warm `assemble!` allocates nothing at all. Substituting `E`
 # at each stencil tap instead would rewrite the guarded walk, the pattern recorder and the
 # replay.
@@ -17,9 +18,9 @@
 # no two bands write one entry, and every policy adds an entry's terms in the same order and
 # gives the serial result bitwise. The reduction's contributions are grouped by reduced
 # entry, `A_pad d` is stored by padded row over the columns where `d` can be nonzero (at
-# any time, for data depending on time), `E_vᵀ w` reads
-# the columns of `E_v` and `E u` those of the stored `Eᵀ`. The band functions take arrays
-# and isbits scalars only, so that a `CpuPolyester` task boxes nothing.
+# any time, for data depending on time), `E_vᵀ w` reads the columns of `E_v` and `E u`
+# those of the stored `Eᵀ`. The band functions take arrays and isbits scalars only, so that
+# a `CpuPolyester` task boxes nothing.
 #
 # `dirichlet` and `symmetrize` replace rows of the reduced system, through the masks of the
 # physical mesh, when its unknowns are the physical nodes in mesh order: every ghost
@@ -43,9 +44,9 @@
 # `GhostCompositeLinearForm`, whose sides are `_CompositeClosure`s: the padded composite
 # `padded(C₁) × padded(C₂)` with the closure `(blockdiag(E₁, E₂), vcat(d₁, d₂))`, or, on a
 # `ConstrainedCompositeSpace`, the closure `constrained` stored. The reduction and the load
-# below run on it unchanged (`_AnyGhostBilinearForm`);
-# `ghost_composite.jl` builds it and holds its `dirichlet` rows and refusals. A type of its
-# own keeps it out of the methods other files define on `GhostBilinearForm`.
+# below run on it unchanged (`_AnyGhostBilinearForm`); `ghost_composite.jl` builds it and
+# holds its `dirichlet` rows and refusals. A type of its own keeps it out of the methods
+# other files define on `GhostBilinearForm`.
 #
 # Still refused with an `ArgumentError`: device backends, matrix types other than
 # `SparseMatrixCSC`, AD element types, composite spaces beyond what `ghost_composite.jl`
@@ -183,7 +184,8 @@ end
     GhostCompositeBilinearForm
 
 A bilinear form on two composites of ghost spaces (`C₁ × C₂`), built by `form(Wₕ, Vₕ, f)`:
-the fields of a [`GhostBilinearForm`](@ref) without its `rows`, the sides `_CompositeClosure`s.
+the fields of a [`GhostBilinearForm`](@ref) without its `rows`, the sides
+`_CompositeClosure`s.
 `dirichlet` replaces the rows of each selected component (ghost_composite.jl).
 """
 struct GhostCompositeBilinearForm{D, F <: BilinearForm{D}, WT <: _CompositeClosure,
@@ -286,14 +288,16 @@ function _ghost_load_buffer(Vₕ::_GhostSide, l::LinearForm)
     return _backend_vector(backend(Vₕ), T, ndofs(padded_space(Vₕ)))
 end
 
-form(::GhostGridSpace, Vₕ, f) = _throw_ghost_mixed()
-form(Wₕ, ::GhostGridSpace, f) = _throw_ghost_mixed()
+form(::GhostGridSpace, Vₕ, f) = _throw_ghost_mixed("test", Vₕ)
+form(Wₕ, ::GhostGridSpace, f) = _throw_ghost_mixed("trial", Wₕ)
 
-@noinline function _throw_ghost_mixed()
+# `side` names the side without ghosts, `Xₕ` the space it holds.
+@noinline function _throw_ghost_mixed(side::String, Xₕ)
     throw(
         ArgumentError(
         "a form takes ghost spaces on both sides or on neither: the reduction to the " *
-        "degrees of freedom needs a closure on each. Build both spaces with " *
+        "degrees of freedom needs a closure on each, and the $side space, " *
+        "$(summary(Xₕ)), has no ghosts. Build both spaces with " *
         "gridspace(Ωₕ; ghosts = ...).",
     ),
     )
@@ -446,7 +450,7 @@ end
 @inline function _check_reduced_pattern(A::AbstractMatrix, a::_AnyGhostBilinearForm)
     A isa SparseMatrixCSC && size(A) == (ndofs(a.test_space), ndofs(a.trial_space)) &&
     SparseArrays.getcolptr(A) == a.colptr && rowvals(A) == a.rowval ||
-        _throw_ghost_pattern()
+        _throw_ghost_pattern(A, a)
     return nothing
 end
 
@@ -481,11 +485,13 @@ end
     return nothing
 end
 
-@noinline function _throw_ghost_pattern()
+@noinline function _throw_ghost_pattern(A::AbstractMatrix, a::_AnyGhostBilinearForm)
     throw(
         ArgumentError(
         "assemble! on a ghost-space form fills a SparseMatrixCSC with the pattern of the " *
-        "matrix assemble(a) returns; call A = assemble(a) once and refill that.",
+        "matrix assemble(a) returns, its size " *
+        "$((ndofs(a.test_space), ndofs(a.trial_space))) and its stored entries; got a " *
+        "$(typeof(A)) of size $(size(A)). Call A = assemble(a) once and refill that.",
     ),
     )
 end
@@ -704,16 +710,18 @@ Refill `A` and `F` with the matrix and the load that `A, F = assemble(a, l)` ret
 return `A, F`. `A` keeps the pattern and `F` the element type that `assemble(a, l)` gave,
 so call that once and refill its two outputs. The call allocates nothing warm.
 
-Both forms are assembled together because, when the closure of the space has an affine part
-`d ≠ 0`, the load is `Eᵀ(F − A d)` and reads the matrix. `assemble!(b, l)` alone refuses
-such a space. `dirichlet`, `dirichlet_components` and `symmetrize` act as in
-`assemble(a, l)`.
+Both forms are assembled together because, when the closure of the trial space has an
+affine part `d ≠ 0`, the load is `E_vᵀ(F − A d)` and reads the matrix. `assemble!(b, l)`
+alone refuses a test space with `d ≠ 0`, which is exact when both sides are one space: on a
+pair whose trial space has data and whose test space has none, it gives `E_vᵀ F` without
+the lift. `dirichlet`, `dirichlet_components` and `symmetrize` act as in `assemble(a, l)`.
 
-It throws an `ArgumentError` for a time-dependent space (pose the problem with
-`semidiscretize`), for `symmetrize = true` without `dirichlet`, for `A` that is not a
-`SparseMatrixCSC` with the reduced pattern of `a`, for a `dirichlet` the rows of the space
-do not allow, and for an `F` whose element type cannot hold the load's. A `DimensionMismatch`
-follows an `F` of the wrong length and forms whose test spaces differ.
+It throws an `ArgumentError` when the trial space of `a` or the test space of `l` is
+time-dependent (pose the problem with `semidiscretize`), for `symmetrize = true` without
+`dirichlet`, for `A` that is not a `SparseMatrixCSC` with the reduced pattern of `a`, for a
+`dirichlet` the rows of the space do not allow, and for an `F` whose element type cannot
+hold the load's. A `DimensionMismatch` follows an `F` of the wrong length and forms whose
+test spaces differ: not the same space, and closures `(E, d)` that are not equal.
 """
 function assemble!(A::AbstractMatrix, F::AbstractVector, a::_AnyGhostBilinearForm,
         l::_AnyGhostLinearForm; dirichlet = nothing, dirichlet_components = nothing,
@@ -742,16 +750,39 @@ end
 function _check_pair(a::_AnyGhostBilinearForm, l::_AnyGhostLinearForm, labels,
         symmetrize::Bool, call::String = "assemble(a, l)", components = nothing)
     _is_time_dependent(a.trial_space) && _throw_ghost_time(call)
+    _is_time_dependent(l.test_space) && _throw_ghost_time(call)
     symmetrize && labels === nothing && _throw_symmetrize_without_dirichlet()
     _check_rows(a, labels, components)
-    size(l.F_pad, 1) == size(a.A_pad, 1) && ndofs(l.test_space) == ndofs(a.test_space) ||
-        _throw_pair_spaces(a, l)
+    _same_closure(a.test_space, l.test_space) || _throw_pair_spaces(a, l)
     return nothing
 end
 
+# Whether two test sides reduce alike: one space (a pointer compare, so a warm `assemble!`
+# stays 0 B), or closures `(E, d)` equal entry by entry, as two spaces built alike give.
+# Equal sizes are not enough: Dirichlet relations on different facets keep as many nodes,
+# different ones. A composite side compares the space its `_CompositeClosure` was built
+# from, since `form` builds a closure per call.
+@inline function _same_closure(W::GhostGridSpace, V::GhostGridSpace)
+    return W === V || _equal_closure(W, V)
+end
+@inline function _same_closure(W::_CompositeClosure, V::_CompositeClosure)
+    return W.space === V.space || _equal_closure(W, V)
+end
+_same_closure(::_GhostSide, ::_GhostSide) = false   # a scalar side and a composite one
+# Static closures only: a space with data in time stores `d(0)`, which a static space with
+# zero data matches.
+@noinline function _equal_closure(W, V)
+    return !_is_time_dependent(W) && !_is_time_dependent(V) && W.E == V.E && W.d == V.d
+end
+
 @noinline function _throw_pair_spaces(a::_AnyGhostBilinearForm, l::_AnyGhostLinearForm)
-    throw(DimensionMismatch("the forms' test spaces differ: $(a.test_space) and " *
-                            "$(l.test_space)"))
+    throw(
+        DimensionMismatch(
+        "the forms' test spaces differ: $(a.test_space) and $(l.test_space), whose " *
+        "closures (E, d) are not equal. Build the linear form on the bilinear form's " *
+        "test space, form(test_space(a), f).",
+    ),
+    )
 end
 
 @noinline function _throw_pair_eltype(F::AbstractVector, T::Type)
@@ -767,7 +798,8 @@ function _assemble_pair!(A::SparseMatrixCSC, F::AbstractVector, a::_AnyGhostBili
         l::_AnyGhostLinearForm, labels, bcs, components, symmetrize::Bool)
     _assemble_ghost!(A, a)
     _assemble_ghost_load!(F, a, l)
-    # The load is built before the rows are replaced: its lift reads `A_pad`, not `A`.
+    # The load fills all of `F`, so it comes before `_form_rows!` writes the boundary rows;
+    # its lift reads `A_pad`, which they leave alone.
     _form_rows!(A, a, labels, components)
     _form_rows!(F, l, labels, bcs, components)
     # `_check_pair` refused `symmetrize` without labels.

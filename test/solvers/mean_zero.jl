@@ -109,6 +109,20 @@ end
     @test u32 isa Vector{Float32}
     @test u32 ≈ pde_solve(A, F; mean_zero = w) rtol = 1e-4
     @test (@inferred pde_solve(A, F; mean_zero = w)) isa Vector{Float64}
+    # The bordered matrix itself infers: an uninferred `B` is a runtime dispatch on every
+    # backend call, which the concrete `Vector{S}` result above does not show.
+    C = sparse(reshape(w, :, 1))
+    @test (@inferred Bramble._bordered_matrix(Float64, A, C, nothing))[1] ==
+          [A w; w' 0]
+    @test (@inferred Bramble._bordered_matrix(Float64, A, C, (w, w, -0.5)))[1] isa
+          SparseMatrixCSC{Float64, Int}
+    # `A` with `Int32` or `UInt64` indices is solved with the `Int` indices of the border.
+    for Ti in (Int32, UInt64)
+        Ai = SparseMatrixCSC{Float64, Ti}(A)
+        @test pde_solve(Ai, F; mean_zero = w) ≈ pde_solve(A, F; mean_zero = w) rtol = 1e-12
+        @test Bramble._bordered_matrix(Float64, Ai, C, (w, w, -0.5))[1] ==
+              Bramble._bordered_matrix(Float64, A, C, (w, w, -0.5))[1]
+    end
     @test pde_solve(spzeros(0, 0), Float64[]; mean_zero = Float64[]) == Float64[]
     @test pde_solve(spzeros(0, 0), Float64[]; mean_zero = Float64[]) isa Vector{Float64}
     Ai = SparseMatrixCSC{Int, Int}([1 -1 0; -1 2 -1; 0 -1 1])
