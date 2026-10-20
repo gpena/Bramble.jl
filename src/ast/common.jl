@@ -500,6 +500,9 @@ end
 # parameter, so it folds at compile time; the node files add the methods for their own
 # wrappers (operators/average.jl).
 const _BareLeaf = Union{TrialFunction, TestFunction}
+# A trial or test function, of a scalar space or a component of a composite one (`u(i)`):
+# what the corner rule (`assembly/stencil_eval.jl`) takes as a mixed difference's operand.
+const _AnyLeaf = Union{_BareLeaf, IndexedTrialFunction, IndexedTestFunction}
 @inline _wraps_leaf(::Any) = false
 @inline _wraps_leaf(::Union{
     OperatorScale{D, S, <:_BareLeaf}, GridFunctionScale{D, S, <:_BareLeaf}}) where {D, S} = true

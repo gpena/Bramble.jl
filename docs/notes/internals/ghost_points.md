@@ -37,8 +37,8 @@ of what was built is `docs/src/internals/mesh.md` and `docs/src/internals/space.
 - **`lift` is `public`, not exported.** Makie exports a `lift` of its own, so an export would
   make both unusable after `using Bramble, GLMakie`: write `Bramble.lift`.
 - **Out of scope, refused with an `ArgumentError`:** device backends, automatic
-  differentiation through ghost spaces, a grid-function `K` in `∂ₙ(u; K)`, and elasticity
-  tractions. Matrix-free and Kronecker operators (where separable) and composite spaces of
+  differentiation through ghost spaces and a grid-function `K` in `∂ₙ(u; K)`. Elasticity
+  tractions were out of scope here and are taken up in "Cross-component relations" below. Matrix-free and Kronecker operators (where separable) and composite spaces of
   ghost spaces now work within limits; the published table `Support on ghost spaces` in
   `docs/src/internals/space.md` has each operation's status.
 
@@ -1165,13 +1165,85 @@ for t in (hx / hy1, -hx / hyn)
 end
 ```
 
+## Cross-component relations: elasticity tractions (#793)
+
+`constrained` takes a composite of ghost spaces as a whole, and a relation may read several
+components. The design, as implemented in `src/assembly/ghost_relations.jl` and
+`ghost_composite.jl`:
+
+- **The traction is a conormal.** Component `i` is `Σⱼ ∂ₙ(u(j); K = Kᵢⱼ)` with
+  `Kᵢⱼ[d, e] = λ δᵢd δⱼe + μ (δᵢⱼ δde + δᵢe δⱼd)`. On the facet of axis `d` the term with
+  `K[d, e] ≠ 0`, `e ≠ d`, is `η K[d, e] Dc_e`: it reads the two physical facet neighbours
+  away from corners and, at a corner, the ghost of the neighbouring facet. One expression is
+  valid on every facet.
+- **The closure is general.** The composite parses the relations of the placeholder of the
+  padded space, keys them by (component, facet, kind), offsets rows, ghosts, kept and fixed
+  points per component, and runs the closure core once on the whole padded composite. `E` is
+  not `blockdiag` wherever a relation couples components, so the result stores its own
+  `(E, d)` and `closure`, `lift` and its forms read it. With one-component relations it equals
+  `constrained(S, r₁) × constrained(S, r₂)`.
+- **A relation is split by the component it reads**, because one `inner_Γ` cannot hold a
+  facet operator mixing `u(1)` and `u(2)`; its row is the sum of one `inner_Γ` per component,
+  tested against `v(i)` of the ghost it is attached to.
+- **Relations are unkeyed per facet**, as the issue spells them
+  (`:xmin => t₁ => g₁, :xmin => t₂ => g₂`): one ghost relation per component on a facet with a
+  relation reading several, all of a node solved together. Dirichlet is `:F => u(i) => g`.
+- **Displacement facets carry ghosts**, closed by `∂ₙₙ(u(i)) => 0`.
+- **Refused:** a component view `uₕ(i)` of the constrained composite (`E` couples the
+  components; use `lift(Vₕ, parent(uₕ))(i)`), `×` and `^` of it, data depending on time, the
+  `dirichlet` rows and `GhostVector`.
+
+Departures from the issue, each confirmed at the gate:
+
+1. No new tangential operator: the conormal with an off-diagonal `K` already is it. A
+   `∂ₜ(u, axis)` would duplicate its stencils and corner rule.
+2. #793 targets the collocated (strong) elasticity form. The energy form
+   `2μ inner₊(εₕ, εₕ) + λ inner₊(divₘₕ, divₘₕ)` reads no ghost, and its traction stays the
+   natural condition. Documenting that as a ghost feature was rejected.
+3. Displacement facets are closed by `∂ₙₙ(u(i)) => 0`.
+
+**The singular corner.** Two isotropic traction facets meeting at a corner give a singular
+joint block in exact arithmetic: `t₂` on `:xmin` and `t₁` on `:ymin` are both
+`μ(Dc_y u₁ + Dc_x u₂) = g` at the corner (stress symmetry), the same equation reading the
+same two ghosts with the same coefficients. The block has singular values
+`[1.447, 0.277, 0.216, 5.2e-19]`, and an infinitesimal rotation of the corner ghosts is in
+its kernel. The plan's first reading, that two traction facets merge into one solvable
+block, does not hold.
+
+**The user's split ruling (2026-10-19, "Split it").** The first subplan landed without
+traction-traction corners and refused them with an `ArgumentError` naming the corner. A
+second subplan replaces that refusal with a one-sided tangential difference along the
+facets at such a corner, which makes the corner rule uniform. A nonsingular anisotropic
+corner stays accepted. The tests of the corner are `test/ghost/cross_component.jl` and the
+elasticity traction tests of `test/ghost/traction.jl`.
+
+**The facet rule (T2.4).** The shear-closed ghosts of a traction facet, read by the mixed
+differences of the form, make the collocated form unstable. The mixed term `A_d(B_e(u(j)))`
+becomes a centred tangential difference of a centred tangential difference with the sign of
+anti-diffusion along the facet, coefficient `-λ` (`λ = 2`, `μ = 0.5`). Once the aspect ratio
+across the facet exceeds about 1.55 the reduced matrix had eigenvalues with negative real
+part (traction on one facet, uniform cells). The rule applies on facets whose ghost relation
+reads several components (syntactic, recorded by `constrained`). There the mixed differences
+in a product's left argument, the side of the matrix columns, extrapolate the function to
+the ghost from the three nodes inward, second order on non-uniform spacing. Second
+differences and the relations read the closure's ghosts, `E` and `d` are unchanged, and the
+relations hold on lifted values exactly as before. At a corner of two traction facets the
+one-sided tangential difference of the relations (T2.3) is unchanged. The code is in the
+facet rule section of `src/assembly/stencil_eval.jl` and in `_mark_mixed`.
+
+The departure from #793 AC 2 is this. It asked for second order on random and graded meshes.
+The orders are gated on graded meshes only (user, 2026-10-19), since on the random test
+meshes the scheme reaches only 1.77 to 1.84 over levels 0 to 3, even with displacement on
+every facet. Random meshes are checked for stability instead: the error stays within 5 times
+that of the all-displacement problem.
+
 ## Open questions
 
 1. **3D edges.** The edge lines carry padded points (60 on a 4×5×6 mesh, plus 8 corners).
    Mixed differences at edge nodes read them, as the 2D corner does. The one-sided rule
    generalises, but only the 2D corner problem was built; a 3D conormal problem with a full
    tensor was not.
-2. **Elasticity tractions.** A natural condition for a symmetric gradient or a Stokes
+2. **Elasticity tractions** (settled by #793, see "Cross-component relations"). A natural condition for a symmetric gradient or a Stokes
    stress needs the mixed differences `D_e u_d` with `e ≠ d` at facet nodes and vector-valued
    ghosts per component. The corner problem here is scalar. Not prototyped.
 3. **Corner rule as a tap rule or as `E` rows.** S5 ran only the padded closures through

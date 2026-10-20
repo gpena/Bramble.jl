@@ -73,6 +73,14 @@ using ..TestUtils: _run_example_page
         _run_example_page(:ghost_heat_equation)
     end
 
+    # Elasticity with a traction through ghost points, collocated form: its assertions pin
+    # the traction relations on the lifted padded values, as rounding, on the loaded and
+    # the traction-free side and at the corner of the two, and the order of the H1 error of
+    # both components above 1.8 on three graded grids.
+    @testset "Elasticity with a traction" begin
+        _run_example_page(:elasticity_traction_2d)
+    end
+
     # The matrix-free Kronecker operator worked example.
     # It needs `using Kronecker`, but that is a lightweight, pure-Julia weak dependency --
     # unlike the stiff DAE solver, `NonlinearSolve` and `AlgebraicMultigrid` that justify

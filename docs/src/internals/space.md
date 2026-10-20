@@ -37,14 +37,15 @@ On `gridspace(Ωₕ; ghosts)` the closure is the selection of the degrees of fre
 padded points. `E` is `N_pad × ndofs` with one entry 1 per column, and `d = 0`. On the
 result of [`constrained`](@ref) the closure comes from the relations. `E` expresses each
 eliminated ghost through the physical nodes, and `d` carries the relations' data at the
-eliminated ghosts. Assembly fills `A_pad` on the padded space and returns
-``E_v^T A_{\mathrm{pad}} E_u``; the load of a linear form is
-``E_v^T (F_{\mathrm{pad}} - A_{\mathrm{pad}}\, d_u)``, so a space with ``d \neq 0`` needs the
-bilinear form, and `assemble(l)` alone throws an `ArgumentError`. The reduction is a sparse
-map from the stored values of `A_pad` to those of the reduced matrix, computed once with the
-form, so a warm `assemble!` allocates nothing. It is symmetric whenever `A_pad` and the two
-closures are. Substituting `E` at each stencil tap instead would rewrite the guarded walk,
-the pattern recorder and the replay of the assembly, for the same matrix.
+eliminated ghosts. Assembly fills `A_pad` on the padded space (on a traction facet of a
+composite, by the facet rule below) and returns ``E_v^T A_{\mathrm{pad}} E_u``; the load of
+a linear form is ``E_v^T (F_{\mathrm{pad}} - A_{\mathrm{pad}}\, d_u)``, so a space with ``d
+\neq 0`` needs the bilinear form, and `assemble(l)` alone throws an `ArgumentError`. The
+reduction is a sparse map from the stored values of `A_pad` to those of the reduced matrix,
+computed once with the form, so a warm `assemble!` allocates nothing. It is symmetric
+whenever `A_pad` and the two closures are. Substituting `E` at each stencil tap instead
+would rewrite the guarded walk, the pattern recorder and the replay of the assembly, for the
+same matrix.
 
 `dirichlet` and `symmetrize` replace rows of the reduced system when its unknowns are the
 physical nodes in mesh order (every ghost eliminated, no node fixed by a Dirichlet
@@ -88,12 +89,43 @@ the runtime operators are eager and cannot apply it (see the
 placeholder of the padded space. The facet operators `∂ₙ`, `∂ₙₙ` and `jumpₙ` are builder-only:
 each holds one operator per (axis, side) and `inner_Γ` expands it into one product per
 incident facet with that facet's weight, so a corner node gets one value per facet and no
-assembly node is added. A relation takes its facet's component. Its rows on the facet nodes
-are assembled by forms, `inner_Γ(relation, v; markers = (F,))`, and solved for the ghosts:
+assembly node is added. A relation of a scalar space takes its facet's component. Its rows
+on the facet nodes are assembled by forms, `inner_Γ(relation, v; markers = (F,))`, and solved for the ghosts:
 one entry per ghost, or a 2×2 block per 2D corner where two conormal relations read each
 other's ghost. Each block is solved by its own LU, and `E` and `d` stay sparse; no dense
 factorisation of the whole closure is formed. Ghosted facets without a relation keep their
 ghosts as unknowns.
+
+On a composite `C₁ × C₂`, `constrained(V, u -> (...))` constrains the composite as a whole,
+and a relation may read several components, as the traction of elasticity does. Component `i` of it is
+`∂ₙ(u(1); K = Kᵢ₁) + ∂ₙ(u(2); K = Kᵢ₂)`, with `Kᵢⱼ` a constant matrix.
+The relation is split by the component it reads, each piece assembled by its own `inner_Γ`
+and tested against `v(i)` of the ghost it is attached to. A facet's ghost relations are
+unkeyed, and a facet with a relation reading several components carries one ghost relation per
+component, and the rows of all of them at a node (or at a corner, where facets meet) are
+solved together as one block, so the relation of component 1 may read the ghost of component
+2. A Dirichlet relation names its component, `u(i) => g`, and a displacement facet's ghosts
+are closed by `∂ₙₙ(u(i)) => 0`. The rows are solved once on the padded composite: the
+padded space is `padded(C₁) × padded(C₂)`, the unknowns are component 1's then component 2's,
+each in the scalar order, with ghost, kept and fixed points offset per component. The
+closure `(E, d)` is therefore general, not `blockdiag`, wherever a relation couples
+components; with relations of one component each it equals
+`constrained(C₁, r₁) × constrained(C₂, r₂)`.
+The result stores its own `(E, d)`, which `closure`, `lift` and its forms read. A component
+view `uₕ(i)` of it is refused, since `E` couples the components, so take
+`lift(Vₕ, parent(uₕ))(i)` instead. `×` and `^` of it, data depending on time, the `dirichlet` rows and
+`GhostVector` are refused too. A corner of two traction facets uses a one-sided tangential
+difference along the facets, since the two shear relations there are one equation.
+
+On a facet whose ghost relation reads several components, a traction, the mixed differences
+of the form read no ghost of that facet. The mixed differences in the left argument of a
+product, the argument whose stencil gives the matrix columns, extrapolate the function to
+the ghost from its values at the three nodes inward along the normal, to second order on
+non-uniform spacing. Second differences and the relations still read the ghosts of the
+closure, and `E` and `d` are unchanged, so the relations hold on lifted values exactly as
+before. The shear-closed ghosts would make the collocated form unstable once the cells are
+about 1.55 times wider across the facet than along it. A composite whose relations each read
+one component is not affected.
 
 ### Grid functions with ghosts
 
@@ -160,11 +192,12 @@ forms.
 | `dirac` | supported, including ghosted facets that meet | `test/ghost/dirac.jl` |
 | `reaction` | refused, naming the plain-space route (`gridspace` and `lift`) | `test/ghost/dirac.jl` |
 | rank-one terms | supported on a scalar ghost space, with the pair load and `dirichlet`; refused on composite ghost spaces | `test/form/ghost_rank_one.jl` |
-| composite spaces `C₁ × C₂`, `C^Val(n)`, `C^N` with `N ≤ 3` | supported for ghost components with the same ghosted facets and mesh size: forms, `assemble`, loads, `lift`, `dirichlet` per component by keyword or relation, contractions; refused beside a plain component, with different facets per component, and for `semidiscretize`, matrix-free, Kronecker, `fdm_*` and the preconditioners | `test/ghost/composite.jl` |
+| composite spaces `C₁ × C₂`, `C^Val(n)`, `C^N` with `N ≤ 3` | supported for ghost components with the same ghosted facets and mesh size: forms, `assemble`, loads, `lift`, `dirichlet` per component by keyword or relation, relations reading several components (`constrained` of the whole composite), contractions; refused beside a plain component, with different facets per component, and for `semidiscretize`, matrix-free, Kronecker, `fdm_*` and the preconditioners | `test/ghost/composite.jl`, `test/ghost/cross_component.jl` |
 
-A mixed difference that reaches an absent corner is refused on a composite, where the scalar
-form takes the corner rule; with ghosts on three facets it assembles. It refuses and never
-computes wrong numbers.
+A mixed difference at a corner takes the corner rule on a composite as on a scalar space.
+On a facet of a composite constrained as a whole whose relations read several components,
+the facet rule applies as well, and the assembled rows differ from the plain padded form's
+there (see the traction rule above).
 
 ## Operator matrices: stencil_matrix versus the Kronecker construction
 
