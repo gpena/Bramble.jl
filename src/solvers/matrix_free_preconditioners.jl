@@ -62,8 +62,9 @@ Base.size(P::JacobiPreconditioner) = (n = length(P.inv_diagonal); (n, n))
 
 """
     jacobi_preconditioner(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a))) -> JacobiPreconditioner
-    jacobi_preconditioner(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy) -> JacobiPreconditioner
+    jacobi_preconditioner(a::Bramble.GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy) -> JacobiPreconditioner
     jacobi_preconditioner(op::MatrixFreeOperator) -> JacobiPreconditioner
+    jacobi_preconditioner(op::Bramble.GhostMatrixFreeOperator) -> JacobiPreconditioner
 
 The Jacobi preconditioner of `A = assemble(a; dirichlet, dirichlet_components)`, or of the
 matrix `op` stands for, from its diagonal alone: one walk of the form's stencil keeps the

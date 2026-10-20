@@ -63,8 +63,9 @@ Base.size(P::ChebyshevPreconditioner) = size(P.op)
 
 """
     chebyshev_preconditioner(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a)), degree = 4, λmax = nothing, ratio = 30) -> ChebyshevPreconditioner
-    chebyshev_preconditioner(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, degree = 4, λmax = nothing, ratio = 30) -> ChebyshevPreconditioner
+    chebyshev_preconditioner(a::Bramble.GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, degree = 4, λmax = nothing, ratio = 30) -> ChebyshevPreconditioner
     chebyshev_preconditioner(op::MatrixFreeOperator; degree = 4, λmax = nothing, ratio = 30) -> ChebyshevPreconditioner
+    chebyshev_preconditioner(op::Bramble.GhostMatrixFreeOperator; degree = 4, λmax = nothing, ratio = 30) -> ChebyshevPreconditioner
 
 The Chebyshev preconditioner of `A = assemble(a; dirichlet, dirichlet_components)`, or of the
 matrix `op` stands for. It is a fixed polynomial in `D⁻¹A`, with `D = diag(A)`, on the
@@ -131,20 +132,9 @@ See also: [`ChebyshevPreconditioner`](@ref), [`max_eigenvalue_estimate`](@ref),
 [`jacobi_preconditioner`](@ref).
 """
 function chebyshev_preconditioner(
-        a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
-        policy = execution_policy(trial_space(a)), degree::Integer = 4, λmax = nothing,
-        ratio::Real = 30
-)
-    op = matrix_free_operator(
-        a; dirichlet = dirichlet, dirichlet_components = dirichlet_components, policy = policy
-    )
-    return chebyshev_preconditioner(op; degree = degree, λmax = λmax, ratio = ratio)
-end
-
-function chebyshev_preconditioner(
-        a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing,
-        policy = _ghost_policy(a.trial_space), degree::Integer = 4, λmax = nothing,
-        ratio::Real = 30
+        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        dirichlet_components = nothing, policy = _default_policy(a), degree::Integer = 4,
+        λmax = nothing, ratio::Real = 30
 )
     op = matrix_free_operator(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components, policy = policy
@@ -232,7 +222,7 @@ end
 
 """
     max_eigenvalue_estimate(op::MatrixFreeOperator; iterations = 20, preconditioner = nothing) -> T
-    max_eigenvalue_estimate(op::GhostMatrixFreeOperator; iterations = 20, preconditioner = nothing) -> T
+    max_eigenvalue_estimate(op::Bramble.GhostMatrixFreeOperator; iterations = 20, preconditioner = nothing) -> T
 
 An upper estimate of the largest eigenvalue of the SPD matrix `A` that `op` stands for, or of
 `P⁻¹A` for an SPD `preconditioner` `P`, by power iteration on the matrix-free operator:

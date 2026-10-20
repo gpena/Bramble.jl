@@ -7,9 +7,6 @@
 # and `assemble` returns the sparse part and the two vectors together, as a
 # `RankOneUpdate`. Storing it in the sparse matrix would cost `N²` entries.
 
-# Only this file extends `ishermitian`, for `RankOneUpdate`.
-import LinearAlgebra: ishermitian
-
 # --- The term ------------------------------------------------------------------------ #
 
 """

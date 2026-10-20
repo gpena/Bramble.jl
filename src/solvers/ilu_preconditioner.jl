@@ -15,7 +15,7 @@
 
 """
     ilu_preconditioner(A::AbstractMatrix; kwargs...) -> ILUZero.ILU0Precon
-    ilu_preconditioner(a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+    ilu_preconditioner(a::Union{BilinearForm, Bramble.GhostBilinearForm}; dirichlet = nothing,
                         dirichlet_components = nothing, kwargs...) -> ILUZero.ILU0Precon
 
 Build a zero-fill incomplete LU (ILU(0)) preconditioner for the matrix `A` -- or for `a`

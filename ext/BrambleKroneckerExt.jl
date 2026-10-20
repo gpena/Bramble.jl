@@ -1726,7 +1726,7 @@ end
 end
 
 """
-    fdm_solve(a::GhostBilinearForm, F::AbstractVector) -> AbstractVector
+    fdm_solve(a::Bramble.GhostBilinearForm, F::AbstractVector; dirichlet = nothing) -> Vector
 
 Solve `assemble(a) \\ F` for a form on ghost spaces ([`GhostGridSpace`](@ref)) from
 one-dimensional factorisations of its reduced [`kronecker_operator`](@ref)`(a)`, as the

@@ -70,6 +70,7 @@ end
 """
     ode_problem(sd::Semidiscretization, u₀, I; kwargs...) -> ODEProblem
     ode_problem(a::BilinearForm, l::LinearForm, u₀, I; kwargs...) -> ODEProblem
+    ode_problem(a::Bramble.GhostBilinearForm, l::Bramble.GhostLinearForm, u₀, I; kwargs...) -> ODEProblem
 
 Build the `ODEProblem` stepping `sd` over the time domain `I`, from the initial condition
 `u₀` -- a [`VectorElement`](@ref) or a plain vector. `I` may equally be a `(t₀, t₁)` tuple.

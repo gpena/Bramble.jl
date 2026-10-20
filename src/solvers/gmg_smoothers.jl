@@ -132,9 +132,9 @@ end
 
 """
     jacobi_smoother(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a)), ω = nothing, sweeps = 1) -> JacobiSmoother
-    jacobi_smoother(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, ω = nothing, sweeps = 1) -> JacobiSmoother
+    jacobi_smoother(a::Bramble.GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, ω = nothing, sweeps = 1) -> JacobiSmoother
     jacobi_smoother(op::MatrixFreeOperator; ω = nothing, sweeps = 1) -> JacobiSmoother
-    jacobi_smoother(op::GhostMatrixFreeOperator; ω = nothing, sweeps = 1) -> JacobiSmoother
+    jacobi_smoother(op::Bramble.GhostMatrixFreeOperator; ω = nothing, sweeps = 1) -> JacobiSmoother
 
 The damped Jacobi smoother of `A = assemble(a; dirichlet, dirichlet_components)`, or of the
 matrix `op` stands for: each sweep sets `x ← x + ω D⁻¹ (b - A x)`, with `D = diag(A)` read
@@ -222,9 +222,9 @@ end
 
 """
     chebyshev_smoother(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a)), degree = 2, λmax = nothing) -> ChebyshevSmoother
-    chebyshev_smoother(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, degree = 2, λmax = nothing) -> ChebyshevSmoother
+    chebyshev_smoother(a::Bramble.GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, degree = 2, λmax = nothing) -> ChebyshevSmoother
     chebyshev_smoother(op::MatrixFreeOperator; degree = 2, λmax = nothing) -> ChebyshevSmoother
-    chebyshev_smoother(op::GhostMatrixFreeOperator; degree = 2, λmax = nothing) -> ChebyshevSmoother
+    chebyshev_smoother(op::Bramble.GhostMatrixFreeOperator; degree = 2, λmax = nothing) -> ChebyshevSmoother
 
 The Chebyshev smoother of `A = assemble(a; dirichlet, dirichlet_components)`, or of the
 matrix `op` stands for: [`smooth!`](@ref) runs `degree` steps of the Jacobi-scaled
@@ -320,7 +320,7 @@ end
 
 """
     red_black_gauss_seidel(a::BilinearForm; dirichlet = nothing, policy = execution_policy(trial_space(a)), sweeps = 1) -> RedBlackGaussSeidel
-    red_black_gauss_seidel(a::GhostBilinearForm; dirichlet = nothing, policy, sweeps = 1) -> RedBlackGaussSeidel
+    red_black_gauss_seidel(a::Bramble.GhostBilinearForm; dirichlet = nothing, policy, sweeps = 1) -> RedBlackGaussSeidel
     red_black_gauss_seidel(op::MatrixFreeOperator; sweeps = 1) -> RedBlackGaussSeidel
 
 The red-black Gauss-Seidel smoother of `A = assemble(a; dirichlet)`, or of the matrix `op`
