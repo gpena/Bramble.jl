@@ -119,8 +119,8 @@ end
 if __bramble_with_unit_tests
     @testset verbose=true "Core library" begin
         # `BRAMBLE_TEST_SHARD` (TestUtils) splits this block over CI runners: the form tests
-        # run under `forms-1` and `forms-2` (test/form/runtests.jl divides them), everything
-        # else here under `rest`. Unset, all of it runs.
+        # run under `forms-1` and `forms-2` (test/form/runtests.jl divides them), the ghost
+        # tests under `ghost`, everything else here under `rest`. Unset, all of it runs.
         if TestUtils.in_shard("rest")
             include("utils/runtests.jl")
             include("geometry/runtests.jl")
@@ -179,8 +179,11 @@ if __bramble_with_unit_tests
             include("form/runtests.jl")
         end
 
-        if TestUtils.in_shard("rest")
+        if TestUtils.in_shard("ghost")
             include("ghost/runtests.jl")
+        end
+
+        if TestUtils.in_shard("rest")
             include("solvers/runtests.jl")
             include("exporters/runtests.jl")
 

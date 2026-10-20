@@ -6,8 +6,8 @@ name: Weekly
 # daily in nightly.yml, and `full` used to drag them in here as well, four times over on this
 # matrix. `full` no longer implies `quality` (see test/runtests.jl).
 #
-# Nor the `slow` group: nightly.yml's `slow` job runs it daily on the same Julia 1.13 and
-# both platforms, and its ubuntu leg uploads that half of the coverage. This workflow runs
+# Nor the `slow` group: nightly.yml's `slow` job runs it daily on the same Julia 1.13, on
+# macOS in four shards, each uploading its part of that half of the coverage. This workflow runs
 # the other half, the `backends` group (the package extensions), on both platforms, and the
 # per-file coverage floor over both halves. Together they cover what `full` does except the
 # manual snippets, which only run locally anyway. It also runs the `grids` group: every
@@ -185,7 +185,8 @@ jobs:
           BRAMBLE_TEST_GROUP: grids
 
   # Per-file coverage floor over the two coverage halves merged: `lcov-backends` from this
-  # run, and `lcov-suite` from the newest nightly.yml run on this run's commit. The halves
+  # run, and the four `lcov-suite-<shard>` parts from the newest nightly.yml run on this
+  # run's commit. The halves
   # must come from the same commit: lcov records line numbers, so merging halves from two
   # commits that touched a file measures the wrong lines (the 2026-10-11 run reported 55% for
   # a file covered at 87%). Without a nightly half on this commit the floor is skipped with a
@@ -202,7 +203,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      actions: read  # to download nightly.yml's `lcov-suite` artifact
+      actions: read  # to download nightly.yml's `lcov-suite-*` artifacts
     steps:
       - uses: actions/checkout@v7
 
@@ -223,14 +224,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          run_id=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=lcov-suite&per_page=20" \
+          run_id=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=lcov-suite-forms-1&per_page=20" \
             --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")
                    | select(.workflow_run.head_sha == "${{ github.sha }}")][0].workflow_run.id // ""')
           if [ -z "$run_id" ]; then
             echo "::warning::No unexpired lcov-suite artifact from nightly.yml on ${{ github.sha }}."
             exit 0
           fi
-          gh run download "$run_id" --repo "${{ github.repository }}" --name lcov-suite --dir lcov/lcov-suite
+          gh run download "$run_id" --repo "${{ github.repository }}" --pattern 'lcov-suite-*' --dir lcov
+          # One part per nightly shard; with a part missing the floor would measure part of
+          # the `slow` half and fail files that shard covers.
+          parts=$(find lcov -path 'lcov/lcov-suite-*/lcov.info' | wc -l)
+          if [ "$parts" -ne 4 ]; then
+            echo "::warning::nightly.yml run $run_id has $parts of 4 lcov-suite parts."
+            exit 0
+          fi
           echo "found=true" >> "$GITHUB_OUTPUT"
 
       - name: Report the per-file coverage floor
