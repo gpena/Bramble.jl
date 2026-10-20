@@ -222,8 +222,9 @@ end
     # test/form/ghost_semidiscrete.jl. Which passes do so varies from run to run, and only
     # the ubuntu nightly has shown it: `lift!` at 2224 B and the load at 3984 B, each
     # 4 × 2 × 80 B over the idle figure. So each bound allows that for the closures of the
-    # passes on its left: 288 B (the padded matrix), 256 B (the padded load), 128 B (the
-    # lifted load) and 80 B (the reduction, the load's ghost band and `lift!`).
+    # passes on its left, which come to 288 B (the padded matrix), 256 B (the padded
+    # load), 128 B (the lifted load) and 80 B (the reduction, the load's ghost band and
+    # `lift!`).
     reboxed(bytes...) = 2 * Threads.nthreads() * sum(bytes)
     @testset "CpuThreaded bound" begin
         f1 = threaded_figures((9, 11))

@@ -21,7 +21,7 @@ using LinearAlgebra: dot, norm
 using SparseArrays: blockdiag, sparse
 using Random: Xoshiro
 
-using ..TestUtils: WITH_3D_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 
 isdefined(Main, :GhostOracleND) ||
     Base.include(Main, joinpath(pkgdir(Bramble), "test", "ghost", "GhostOracleND.jl"))
@@ -173,22 +173,24 @@ end
     Vd = space_a(gridspace(Ωₕ; ghosts = GH)) × space_b(gridspace(Ωₕ; ghosts = GH))
     @test mesh(Vd.spaces[1]) !== mesh(Vd.spaces[2])
     @test assemble(form(Vd, Vd, fa2), form(Vd, fl2)) == assemble(a, form(V, fl2))
-    # different closures on the two sides: a rectangular block system
-    check_assembly(Ca × Cb, Cb × Ca, fa2, fl2)
-    # three copies of one space, every pair coupled
-    fa3 = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(-1.0 * Δₕ(u(2)), v(3)) +
-                    innerₕ(u(3), v(2)) + 2.0 * innerₕ(u(3), v(3)) + innerₕ(u(1), v(2))
-    fl3 = v -> innerₕ(x -> x[1], v(1)) + innerₕ(x -> 1.0, v(3))
-    check_assembly(Ca^Val(3), Ca^Val(3), fa3, fl3)
+    if WITH_SLOW_TESTS
+        # different closures on the two sides: a rectangular block system
+        check_assembly(Ca × Cb, Cb × Ca, fa2, fl2)
+        # three copies of one space, every pair coupled
+        fa3 = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(-1.0 * Δₕ(u(2)), v(3)) +
+                        innerₕ(u(3), v(2)) + 2.0 * innerₕ(u(3), v(3)) + innerₕ(u(1), v(2))
+        fl3 = v -> innerₕ(x -> x[1], v(1)) + innerₕ(x -> 1.0, v(3))
+        check_assembly(Ca^Val(3), Ca^Val(3), fa3, fl3)
 
-    # 1D: a constrained component beside a selection space that keeps its ghosts
-    Ω1 = O.O1.make_mesh(:random, 0; n0 = 9)
-    C1 = constrained(gridspace(Ω1; ghosts = :boundary),
-        u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => 2.0))
-    S1 = gridspace(Ω1; ghosts = :boundary)
-    fa1 = (u, v) -> innerₕ(-1.0 * Δₕ(u(1)), v(1)) + innerₕ(u(2), v(2)) + innerₕ(u(1), v(2))
-    fl1 = v -> innerₕ(x -> x, v(1)) + innerₕ(x -> 1.0, v(2))
-    check_assembly(C1 × S1, C1 × S1, fa1, fl1)
+        # 1D: a constrained component beside a selection space that keeps its ghosts
+        Ω1 = O.O1.make_mesh(:random, 0; n0 = 9)
+        C1 = constrained(gridspace(Ω1; ghosts = :boundary),
+            u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => 2.0))
+        S1 = gridspace(Ω1; ghosts = :boundary)
+        fa1 = (u, v) -> innerₕ(-1.0 * Δₕ(u(1)), v(1)) + innerₕ(u(2), v(2)) + innerₕ(u(1), v(2))
+        fl1 = v -> innerₕ(x -> x, v(1)) + innerₕ(x -> 1.0, v(2))
+        check_assembly(C1 × S1, C1 × S1, fa1, fl1)
+    end
 
     # A selection space has d = 0, so its load stands alone, and l(v) is Fᵀv.
     Sb = gridspace(Ωₕ; ghosts = :boundary)

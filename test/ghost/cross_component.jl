@@ -27,6 +27,8 @@ using LinearAlgebra: Diagonal, dot, eigvals, norm
 using SparseArrays: nnz
 using Random: Xoshiro
 
+using ..TestUtils: WITH_SLOW_TESTS
+
 isdefined(Main, :GhostOracleND) ||
     Base.include(Main, joinpath(pkgdir(Bramble), "test", "ghost", "GhostOracleND.jl"))
 const O = Main.GhostOracleND
@@ -75,7 +77,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
     fl = v -> innerₕ(x -> 1.0, v(1)) + innerₕ(x -> 100.0 * x[2], v(2))
 
     @testset "Whole equals product: $kind, $name" for kind in KINDS,
-        name in keys(CASES)
+        name in (WITH_SLOW_TESTS ? keys(CASES) : (:sides,))
 
         c = CASES[name]
         Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
@@ -295,7 +297,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
     end
 
     @testset "Traction on lifted values: $kind, $name" for kind in KINDS,
-        name in keys(TRACTIONS)
+        name in (WITH_SLOW_TESTS ? keys(TRACTIONS) : (:one,))
 
         c = TRACTIONS[name]
         Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
@@ -448,7 +450,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
     end
 
     # Relations of one component each, component 2 leaving the ghosts of :ymin and :ymax as
-    # unknowns: the whole equals the product, as without any relation reading several.
+    # unknowns. The whole equals the product, as without any relation reading several.
     @testset "Ghosts of one component kept: $kind" for kind in KINDS
         Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
         S = gridspace(Ωₕ; ghosts = :boundary)
@@ -566,17 +568,19 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
             C = constrained(V, rels)
             E = Matrix(first(Bramble.closure(C)))
             X = extrapolation(Ωₕ, facets)
-            for (rest, mixed, spelled) in spellings
+            for (rest, mixed, spelled) in (WITH_SLOW_TESTS ? spellings : spellings[1:1])
                 Ar = Matrix(assemble(form(PV, PV, rest)))
                 Am = Matrix(assemble(form(PV, PV, mixed)))
                 A = Matrix(assemble(form(C, C, spelled)))
                 @test close(A, transpose(E) * (Ar + Am * X) * E)
                 @test norm(A - transpose(E) * (Ar + Am) * E) > 1.0e-3 * norm(A)
             end
-            Asum = assemble(form(C, C, (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(1) + u(2))), v(1))))
-            Asplit = assemble(form(C, C,
-                (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(1))), v(1)) + innerₕ(Dcₓ(Dcᵧ(u(2))), v(1))))
-            @test close(Matrix(Asum), Matrix(Asplit))
+            if WITH_SLOW_TESTS
+                Asum = assemble(form(C, C, (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(1) + u(2))), v(1))))
+                Asplit = assemble(form(C, C,
+                    (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(1))), v(1)) + innerₕ(Dcₓ(Dcᵧ(u(2))), v(1))))
+                @test close(Matrix(Asum), Matrix(Asplit))
+            end
             # either argument order: the left argument's stencil gives the columns, the
             # padded values the closure fills, so its mixed difference reads them by
             # extrapolation whether it is written of `u` or of `v`; the right argument's
@@ -637,9 +641,9 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
     # centred over the closure's ghosts.
     @testset "Facet rule off one component: $kind" for kind in KINDS
         Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
-        S = gridspace(Ωₕ; ghosts = :boundary)
+        c = WITH_SLOW_TESTS ? CASES.boundary : CASES.sides
+        S = gridspace(Ωₕ; ghosts = c.ghosts)
         PV = Bramble.padded_space(S^2)
-        c = CASES.boundary
         for C in (constrained(S^2, whole(c.r1, c.r2)), X2(S, c))
             E = Matrix(first(Bramble.closure(C)))
             Ap = Matrix(assemble(form(PV, PV, fe)))

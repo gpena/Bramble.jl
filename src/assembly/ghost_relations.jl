@@ -265,7 +265,7 @@ end
 # alone (`∂ₙ(u(2))`) is attached to that component's ghosts, at most one per component, and
 # a component without one keeps its ghosts there as unknowns. A facet with a relation
 # reading several components (a traction) has one ghost relation per component, the others
-# attached in order to the components left. The rows of a node, or of a corner, are solved
+# attached one by one to the components left. The rows of a node, or of a corner, are solved
 # together, so which ghost a row is attached to changes no value. Data depending on time
 # are refused (they would need a `d(t)` of the whole).
 function _composite_relations(Gs::Tuple, out)
