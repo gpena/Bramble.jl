@@ -29,9 +29,10 @@ A geometric multigrid cycle as a preconditioner: `ldiv!(y, P, x)` sets `y` to on
 `A y = x` from `y = 0`, where `A` is the finest level's form. It holds the
 [`GeometricMeshHierarchy`](@ref), one [`MatrixFreeOperator`](@ref) and one smoother per
 level, the dense factorisation of the coarsest level's matrix, and the per-level work
-vectors (of each level's [`ndofs`](@ref)), so an application allocates nothing on a [`CpuSerial`](@ref) policy and one `P`
-must not be applied from two tasks at once. Build one with [`gmg_preconditioner`](@ref); the
-cycles themselves are [`v_cycle!`](@ref), [`w_cycle!`](@ref) and [`fmg!`](@ref).
+vectors (of each level's [`ndofs`](@ref)), so an application allocates nothing on a
+[`CpuSerial`](@ref) policy and one `P` must not be applied from two tasks at once. Build one
+with [`gmg_preconditioner`](@ref); the cycles themselves are [`v_cycle!`](@ref),
+[`w_cycle!`](@ref) and [`fmg!`](@ref).
 
 # Type parameters
 - `T`: The element type of `A`.
@@ -608,6 +609,13 @@ function gmg_solve(
         throw(ArgumentError("gmg_solve needs tol > 0, got $tol"))
     maxiters >= 1 || throw(ArgumentError("gmg_solve needs maxiters >= 1, got $maxiters"))
     P = gmg_preconditioner(build, Ωₕ; levels, cycle, ν₁, ν₂, smoother)
+    return _gmg_solve_loop(P, b, cycle, tol, maxiters)
+end
+
+# A function barrier: on a ghost form `P` is inferred only as a `Union` (`constrained`
+# returns one of two space types), and the loop is compiled for the concrete `P`.
+function _gmg_solve_loop(P::GMGPreconditioner, b::AbstractVector, cycle::Symbol, tol,
+        maxiters::Integer)
     op = last(P.ops)
     T = eltype(op)
     τ = tol === nothing ? sqrt(eps(real(T))) : tol

@@ -217,13 +217,12 @@ function _gmg_coarse_factor(::Type{T}, a::GhostBilinearForm) where {T}
     return _GMGBorderedLU(lu(B), zeros(T, n + 1))
 end
 
-# Whether every row of `A` sums to zero up to the rounding of its own entries: then the
-# constant is in the kernel (pure Neumann, no reaction). Each row sum is a handful of
-# entries whose exact sum is 0, so its rounding is a few `eps` times the row's absolute sum;
-# the tolerance `64 eps` per row keeps a weak Robin `α` or a small reaction `c`, which add
-# `α` or `c` times a cell weight to some row, out of it down to `α, c ~ 1e-12` relative to
-# the row (in `Float64`), where a test on the whole of `A e` against `√eps ‖A‖` bordered a
-# nonsingular matrix and the cycle stalled.
+# Whether every row of `A` sums to zero up to the rounding of its own entries: then
+# the constant is in the kernel (pure Neumann, no reaction). A row sum is a handful
+# of entries whose exact sum is 0, so its rounding is a few `eps` times the row's
+# absolute sum. The per-row tolerance `64 eps` keeps a weak Robin `α` or reaction
+# `c` out down to `α, c ~ 1e-12` relative to the row (in `Float64`); a test on the
+# whole of `A e` against `‖A‖` would border such a nonsingular matrix and stall.
 function _gmg_constant_in_kernel(A::AbstractMatrix{T}) where {T}
     tol = 64 * eps(real(T))
     for i in axes(A, 1)
