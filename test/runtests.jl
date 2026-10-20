@@ -109,7 +109,7 @@ end
 # more than one thread is actually available -- on one thread the multi-colour sweep never
 # runs concurrently, so nothing can race, and the tests that check it degrade to
 # `@test_skip` (test/form/linear.jl's "Parallel vs serial agreement", test/form/bilinear.jl's
-# "Determinism under threads"). CI sets `JULIA_NUM_THREADS=auto`, so this only fires for a
+# "Determinism under threads"). CI sets `JULIA_NUM_THREADS` above 1, so this only fires for a
 # local `Pkg.test()`, which defaults to one thread -- without this, that run reads as "all
 # green" with five-plus concurrency assertions quietly never having run at all.
 if __bramble_with_unit_tests && Threads.nthreads() == 1
@@ -119,8 +119,8 @@ end
 if __bramble_with_unit_tests
     @testset verbose=true "Core library" begin
         # `BRAMBLE_TEST_SHARD` (TestUtils) splits this block over CI runners: the form tests
-        # run under `forms-1` and `forms-2` (test/form/runtests.jl divides them), everything
-        # else here under `rest`. Unset, all of it runs.
+        # run under `forms-1` and `forms-2` (test/form/runtests.jl divides them), the ghost
+        # tests under `ghost`, everything else here under `rest`. Unset, all of it runs.
         if TestUtils.in_shard("rest")
             include("utils/runtests.jl")
             include("geometry/runtests.jl")
@@ -179,8 +179,11 @@ if __bramble_with_unit_tests
             include("form/runtests.jl")
         end
 
-        if TestUtils.in_shard("rest")
+        if TestUtils.in_shard("ghost")
             include("ghost/runtests.jl")
+        end
+
+        if TestUtils.in_shard("rest")
             include("solvers/runtests.jl")
             include("exporters/runtests.jl")
 

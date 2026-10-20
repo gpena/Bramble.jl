@@ -1,15 +1,15 @@
 name: Nightly
 
-# Everything the per-push CI.yml deliberately leaves off, once a day: Linux entirely, and the
-# checks that are not canaries but don't need every-push feedback either.
+# Everything the per-push CI.yml deliberately leaves off, once a day: the deferred tests, and
+# the checks that are not canaries but don't need every-push feedback either.
 #
-# CI.yml's push gate is macOS-only, and runs the `unit` group. Linux lives here, in the
-# `slow` job below, on the same released Julia 1.13 — a second platform on the gate doubles
-# the runner time for a leg that agrees with the first one almost always, and when it does
-# not, the disagreement has historically been a Linux-only allocation flake in `avgₕ!`
+# CI.yml's push gate is macOS-only, and runs the `unit` group. Linux lived here too, in the
+# `slow` job below, until 2026-10-20 (see that job for why it left); on Linux the suite now
+# runs only through Weekly.yml's `backends` and `grids` groups. When the platforms disagree,
+# it has historically been a Linux-only allocation flake in `avgₕ!`
 # (test/space/vector_elements.jl's "allocations do not grow with the grid" — an
 # architecture-dependent `@generated` fold, documented there, not a real regression each time
-# it fires) rather than a break. That same job runs the `slow` group, which is `unit` plus
+# it fires) rather than a break. The `slow` job runs the `slow` group, which is `unit` plus
 # the blocks whose cost is out of proportion to what a *push* learns from them; see
 # test/TestUtils.jl's `WITH_SLOW_TESTS` for the list and the measurement. The worked-example
 # pages are not in `slow` any more: they are the `examples` group, which docs-on-demand.yml
@@ -48,7 +48,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  JULIA_NUM_THREADS: auto
+  # Pinned, not `auto`, which follows whatever host a job lands on (see CI.yml): 4 is the
+  # standard ubuntu runner's vCPU count. The matrix jobs below set 3 on macOS, that
+  # runner's count.
+  JULIA_NUM_THREADS: 4
 
 jobs:
   # A scheduled run on the same `main` commit as the last successful scheduled run would
@@ -69,41 +72,45 @@ jobs:
           last=$(gh api "repos/${{ github.repository }}/actions/workflows/nightly.yml/runs?branch=main&event=schedule&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // ""')
           if [ "$last" = "${{ github.sha }}" ]; then echo "run=false" >> "$GITHUB_OUTPUT"; else echo "run=true" >> "$GITHUB_OUTPUT"; fi
 
-  # The released Julia that CI.yml gates on, on both platforms, plus everything CI.yml
-  # leaves off the gate for cost. CI.yml runs `unit` on macOS only, to keep a push's
-  # feedback short; this runs `slow`, which is `unit` plus the deferred blocks
-  # (test/TestUtils.jl's `WITH_SLOW_TESTS` names them, with what each one costs). One job
-  # therefore covers both the Linux platform check and the deferred blocks, and covers them
-  # on macOS too, so a block that moved off the gate is not thereby moved off macOS.
+  # The released Julia that CI.yml gates on, plus everything CI.yml leaves off the gate for
+  # cost. CI.yml runs `unit`, to keep a push's feedback short; this runs `slow`, which is
+  # `unit` plus the deferred blocks (test/TestUtils.jl's `WITH_SLOW_TESTS` names them, with
+  # what each one costs), so a block that moved off the gate is not thereby moved off macOS.
   #
   # It gates — no `continue-on-error` — because, unlike the `test` job below, it runs a
   # released compiler over Bramble's own code: a red leg here is Bramble's, not upstream's.
   #
-  # Keep the version in step with CI.yml's matrix. The point of the ubuntu leg is that the
-  # two platforms run the same thing; a drift makes it a different question.
+  # Keep the version in step with CI.yml's matrix.
   #
-  # The ubuntu leg also uploads the `slow` half of the coverage, to Codecov (flag `suite`)
-  # and as the `lcov-suite` artifact that Weekly.yml's per-file coverage floor merges with
-  # its `backends` half. id-token: write is for the codecov-action's `use_oidc: true`;
-  # Weekly.yml's `full` job explains why the job fails without it.
+  # macOS only, split over CI.yml's shards (BRAMBLE_TEST_SHARD in test/TestUtils.jl). As one
+  # job the group outgrew a runner: on 2026-10-20 (run 39411520084) the macOS leg took 3h59
+  # of its 240 minutes, and the ubuntu leg's runner was shut down 1h38 in, inside
+  # ghost/traction.jl, with no test failing. That run's macOS times by shard: forms-1 43 min,
+  # forms-2 52, ghost 75 (traction.jl alone 37, #816), rest 48.
+  #
+  # Each shard uploads its part of the `slow` coverage to Codecov (flag `suite`, which
+  # Codecov merges across uploads) and as an `lcov-suite-<shard>` artifact; Weekly.yml's
+  # per-file coverage floor merges all four with its `backends` half. id-token: write is for
+  # the codecov-action's `use_oidc: true`; Weekly.yml's `full` job explains why the job fails
+  # without it.
   slow:
-    name: Julia 1.13 + deferred tests (${{ matrix.os }})
+    name: Julia 1.13 + deferred tests (macOS-latest, ${{ matrix.shard }})
     needs: changed
     if: ${{ needs.changed.outputs.run == 'true' }}
-    runs-on: ${{ matrix.os }}
-    # macOS took 118 of its 120 minutes on 2026-10-16 (a cold cache's 30 min of precompiling,
-    # then 87 min of tests) before the ghost-dynamics tests (#791) landed; ubuntu runs faster.
-    # With #797 it took 2h22 to 2h37 (2026-10-17/18), and on 2026-10-19 a runner 1.2 to 1.9
-    # times slower in every file ran into 180 minutes inside the solver tests.
-    timeout-minutes: ${{ matrix.os == 'macOS-latest' && 240 || 120 }}
+    runs-on: macOS-latest
+    # 180, for the slowest shard (ghost, 75 min of tests) behind a cold cache's 30 min of
+    # precompiling, on a runner like 2026-10-19's, 1.2 to 1.9 times slower in every file.
+    timeout-minutes: 180
     permissions:
       contents: read
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
       id-token: write
+    env:
+      JULIA_NUM_THREADS: 3
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macOS-latest]
+        shard: [forms-1, forms-2, ghost, rest]
     steps:
       - uses: actions/checkout@v7
 
@@ -137,21 +144,18 @@ jobs:
       # `coverage=true` (its default), `--check-bounds=yes`, and `--depwarn=yes --inline=yes` on the outer process.
       # Dropped: `force_latest_compatible_version` (the action sets it to true only for
       # Dependabot/CompatHelper jobs, which these triggers are not) and `annotate` (off by
-      # default). `JULIA_NUM_THREADS=auto` comes from the workflow-level `env`, so it still reaches the test subprocess.
+      # default). `JULIA_NUM_THREADS` comes from the job-level `env`, so it still reaches the test subprocess.
       - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: slow
-          # Below each runner's memory, so a blow-up fails by name (see TestUtils.jl) before
-          # the runner just kills the job: 5 on the macOS leg's 7 GB runner, 12 on the ubuntu
-          # leg's 16 GB, where the same suite peaks higher: its GC lets the heap grow on the
-          # larger runner. At 89937ab0 (2026-10-18) ubuntu peaked at 8.63 GB and macOS at
-          # 3.44 GB; at 5db80dc5 they peaked at 7.42 and 3.68. Coverage is on by default here.
-          BRAMBLE_TEST_MAXRSS_GB: ${{ matrix.os == 'ubuntu-latest' && 12 || 5 }}
+          BRAMBLE_TEST_SHARD: ${{ matrix.shard }}
+          # 5, below this macOS runner's 7 GB, so a blow-up fails by name (see TestUtils.jl)
+          # before the runner just kills the job. The unsharded group peaked at 3.53 GB on
+          # 2026-10-20. Coverage is on by default here.
+          BRAMBLE_TEST_MAXRSS_GB: 5
 
       - uses: julia-actions/julia-processcoverage@v1
-        if: matrix.os == 'ubuntu-latest'
       - uses: codecov/codecov-action@v7
-        if: matrix.os == 'ubuntu-latest'
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -159,9 +163,9 @@ jobs:
           flags: suite
           fail_ci_if_error: false
       - uses: actions/upload-artifact@v7
-        if: always() && matrix.os == 'ubuntu-latest'
+        if: always()
         with:
-          name: lcov-suite
+          name: lcov-suite-${{ matrix.shard }}
           path: lcov.info
           if-no-files-found: warn
 
@@ -193,6 +197,8 @@ jobs:
       contents: read
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
       id-token: write
+    env:
+      JULIA_NUM_THREADS: ${{ matrix.os == 'macOS-latest' && 3 || 4 }}
     strategy:
       fail-fast: false
       matrix:

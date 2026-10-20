@@ -28,21 +28,21 @@ using Bramble: indices, point
 # too; see its own comments for what each group means.
 const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 
-# `BRAMBLE_TEST_SHARD` narrows the `unit` block to one of three parts, so CI can run each on
-# its own runner: `forms-1` and `forms-2` are the two halves of test/form/, `rest` is the
-# remainder of the unit block. Unset runs everything, which is what every local run and
+# `BRAMBLE_TEST_SHARD` narrows the `unit` block to one of four parts, so CI can run each on
+# its own runner: `forms-1` and `forms-2` are the two halves of test/form/, `ghost` is
+# test/ghost/, and `rest` is the remainder of the unit block. Unset runs everything, which is what every local run and
 # every other group does; the quality, ext, ad, gpu and examples blocks ignore it. The gate
 # sits at the include sites in test/runtests.jl and test/form/runtests.jl, through
 # `in_shard`.
 const TEST_SHARD = get(ENV, "BRAMBLE_TEST_SHARD", "")
 
-const TEST_SHARDS = ("forms-1", "forms-2", "rest")
+const TEST_SHARDS = ("forms-1", "forms-2", "ghost", "rest")
 
 """
     in_shard(name)
 
 True when no shard is selected or the selected shard is `name`. Throws an `ArgumentError`
-for a `name`, or a `BRAMBLE_TEST_SHARD`, outside `("forms-1", "forms-2", "rest")`, since a
+for a `name`, or a `BRAMBLE_TEST_SHARD`, outside `("forms-1", "forms-2", "ghost", "rest")`, since a
 misspelt shard would select nothing and pass green.
 """
 function in_shard(name::AbstractString)
