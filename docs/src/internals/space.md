@@ -24,12 +24,9 @@ nodes, as on `gridspace(Ωₕ)`.
 
 ### Weights
 
-The padded space has physical-only weights: per axis, the factor of a ghost node and of a
-ghost cell is zero, and a facet node keeps its physical half cell. The tensor products then
-give `innerₕ`, `inner₊`, `inner_Γ` and the facet markers the weights of `gridspace(Ωₕ)` at
-the physical nodes, cells and facets, and exactly zero at every ghost and absent point. A
-form on the padded space has no weight in its ghost rows, so only the reduction below gives
-the ghosts a role.
+Per axis the weight of a ghost node and of a ghost cell is 0, so a form has no weight in
+its ghost rows and only the reduction below gives the ghosts a role. The
+[space tutorial](@ref space_ghost) gives the weights and why they are physical-only.
 
 ### The closure and the reduction
 
@@ -43,9 +40,7 @@ a linear form is ``E_v^T (F_{\mathrm{pad}} - A_{\mathrm{pad}}\, d_u)``, so a spa
 \neq 0`` needs the bilinear form, and `assemble(l)` alone throws an `ArgumentError`. The
 reduction is a sparse map from the stored values of `A_pad` to those of the reduced matrix,
 computed once with the form, so a warm `assemble!` allocates nothing. It is symmetric
-whenever `A_pad` and the two closures are. Substituting `E` at each stencil tap instead
-would rewrite the guarded walk, the pattern recorder and the replay of the assembly, for the
-same matrix.
+whenever `A_pad` and the two closures are.
 
 `dirichlet` and `symmetrize` replace rows of the reduced system when its unknowns are the
 physical nodes in mesh order (every ghost eliminated, no node fixed by a Dirichlet
@@ -65,8 +60,7 @@ grid-function scales, and it distributes over sums and differences of such terms
 
 The rule is structural: which stencil a corner node uses depends on the form, not on the
 values of its coefficients, so the discretisation is continuous in the data. A coefficient
-that is zero at the ghost tap still gets the one-sided row. Off a ghost mesh the test is a
-constant `false` and plain meshes assemble bitwise as before.
+that is zero at the ghost tap still gets the one-sided row.
 
 Reading an absent point is otherwise refused. A product on a ghost space asks, at every
 node where its weight is not zero, whether either operand reads a point the padded grid
@@ -77,45 +71,43 @@ that leaves the padded grid (past the one ghost layer, or across a facet without
 refused too. A volume product's operand at the edge of the padded grid truncates, as on a
 plain mesh, and that is allowed.
 
-Nested mixed differences on a ghost space are assembled as forms, where the rule applies;
-the runtime operators are eager and cannot apply it (see the
-[operators tutorial](@ref operators_ghost)). `Rₕ` and `avgₕ` refuse on a ghost space with an `ArgumentError`
-(`avgₕ` would average over cells past the physical facet); the
+The rule applies in forms only; the runtime operators are eager (see the
+[operators tutorial](@ref operators_ghost)). `Rₕ` and `avgₕ` refuse on a ghost space with
+an `ArgumentError` (`avgₕ` would average over cells past the physical facet); the
 [support table](@ref "Support on ghost spaces") lists what else does.
 
 ### Relations
 
 `constrained(Wₕ, u -> (:F => operator => data, ...))` calls the lambda once with the trial
-placeholder of the padded space. The facet operators `∂ₙ`, `∂ₙₙ` and `jumpₙ` are builder-only:
-each holds one operator per (axis, side) and `inner_Γ` expands it into one product per
-incident facet with that facet's weight, so a corner node gets one value per facet and no
-assembly node is added. A relation of a scalar space takes its facet's component. Its rows
-on the facet nodes are assembled by forms, `inner_Γ(relation, v; markers = (F,))`, and solved for the ghosts:
-one entry per ghost, or a 2×2 block per 2D corner where two conormal relations read each
-other's ghost. Each block is solved by its own LU, and `E` and `d` stay sparse; no dense
-factorisation of the whole closure is formed. Ghosted facets without a relation keep their
-ghosts as unknowns.
+placeholder of the padded space. The facet operators `∂ₙ`, `∂ₙₙ` and `jumpₙ` are
+builder-only: each holds one operator per (axis, side) and `inner_Γ` expands it into one
+product per incident facet with that facet's weight, so a corner node gets one value per
+facet and no assembly node is added. A relation of a scalar space takes its facet's
+component. Its rows on the facet nodes are assembled by forms,
+`inner_Γ(relation, v; markers = (F,))`, and solved for the ghosts: one entry per ghost, or a
+2×2 block per 2D corner where two conormal relations read each other's ghost. Each block is
+solved by its own LU, and `E` and `d` stay sparse; no dense factorisation of the whole
+closure is formed. Ghosted facets without a relation keep their ghosts as unknowns.
 
 On a composite `C₁ × C₂`, `constrained(V, u -> (...))` constrains the composite as a whole,
-and a relation may read several components, as the traction of elasticity does. Component `i` of it is
-`∂ₙ(u(1); K = Kᵢ₁) + ∂ₙ(u(2); K = Kᵢ₂)`, with `Kᵢⱼ` a constant matrix.
-The relation is split by the component it reads, each piece assembled by its own `inner_Γ`
-and tested against `v(i)` of the ghost it is attached to. A facet's ghost relations are
-unkeyed, and a facet with a relation reading several components carries one ghost relation per
-component, and the rows of all of them at a node (or at a corner, where facets meet) are
-solved together as one block, so the relation of component 1 may read the ghost of component
-2. A Dirichlet relation names its component, `u(i) => g`, and a displacement facet's ghosts
-are closed by `∂ₙₙ(u(i)) => 0`. The rows are solved once on the padded composite: the
-padded space is `padded(C₁) × padded(C₂)`, the unknowns are component 1's then component 2's,
-each in the scalar order, with ghost, kept and fixed points offset per component. The
-closure `(E, d)` is therefore general, not `blockdiag`, wherever a relation couples
-components; with relations of one component each it equals
-`constrained(C₁, r₁) × constrained(C₂, r₂)`.
-The result stores its own `(E, d)`, which `closure`, `lift` and its forms read. A component
-view `uₕ(i)` of it is refused, since `E` couples the components, so take
-`lift(Vₕ, parent(uₕ))(i)` instead. `×` and `^` of it, data depending on time, the `dirichlet` rows and
-`GhostVector` are refused too. A corner of two traction facets uses a one-sided tangential
-difference along the facets, since the two shear relations there are one equation.
+and a relation may read several components, as the traction of elasticity does. Component
+`i` of it is `∂ₙ(u(1); K = Kᵢ₁) + ∂ₙ(u(2); K = Kᵢ₂)`, with `Kᵢⱼ` a constant matrix. The
+relation is split by the component it reads, each piece assembled by its own `inner_Γ` and
+tested against `v(i)` of the ghost it is attached to. A facet whose relation reads several
+components carries one ghost relation per component, written unkeyed. The rows of all of
+them at a node, or at a corner, are solved together as one block, so component 1's relation
+may read component 2's ghost. A Dirichlet relation names its component, `u(i) => g`, and a
+displacement facet's ghosts are closed by `∂ₙₙ(u(i)) => 0`. The rows are solved once on the
+padded composite: the padded space is `padded(C₁) × padded(C₂)`, and the unknowns are
+component 1's then component 2's, each in the scalar order. The closure `(E, d)` is
+therefore general, not `blockdiag`, wherever a relation couples components; with relations
+of one component each it equals `constrained(C₁, r₁) × constrained(C₂, r₂)`. The result
+stores its own `(E, d)`, which `closure`, `lift` and its forms read. A component view
+`uₕ(i)` of it is refused, since `E` couples the components, so take
+`lift(Vₕ, parent(uₕ))(i)` instead. `×` and `^` of it, data depending on time, the
+`dirichlet` rows and `GhostVector` are refused too. A corner of two traction facets uses a
+one-sided tangential difference along the facets, since the two shear relations there are
+one equation.
 
 On a facet whose ghost relation reads several components, a traction, the mixed differences
 of the form read no ghost of that facet. The mixed differences in the left argument of a
@@ -123,9 +115,10 @@ product, the argument whose stencil gives the matrix columns, extrapolate the fu
 the ghost from its values at the three nodes inward along the normal, to second order on
 non-uniform spacing. Second differences and the relations still read the ghosts of the
 closure, and `E` and `d` are unchanged, so the relations hold on lifted values exactly as
-before. The shear-closed ghosts would make the collocated form unstable once the cells are
-about 1.55 times wider across the facet than along it. A composite whose relations each read
-one component is not affected.
+before. The shear-closed ghosts make the reduced matrix of the collocated form acquire an
+eigenvalue with negative real part, measured for a traction on one facet of a uniform grid
+(`docs/notes/internals/ghost_points.md`), once the cells are wider across the facet than
+along it. A composite whose relations each read one component is not affected.
 
 ### Grid functions with ghosts
 
@@ -133,15 +126,13 @@ A grid function on a ghost space has two layouts, one for time loops and one for
 
 A [`GhostVector`](@ref) is the layout of a time loop: the physical values stay the solver's
 own contiguous `Vector`, and the ghosts sit in a facet buffer in the order of the
-[ghost mesh](mesh.md). It carries the mesh with ghosts, so the runtime operators know the
+[ghost mesh](mesh.md). It carries the mesh with ghosts. The runtime operators then know the
 padded spacings and the ghosted facets. A padded `VectorElement` is the layout of forms:
 `lift(Cₕ, u)` returns `E u + d` on the padded space, ghosts filled and absent points 0, and
-assembly already works on the padded mesh. Both are kept because the padded layout costs a
-copy in and out of about two stencil applications when the solver keeps its own contiguous
-vector, and a stock `mul!` on its physical view falls back to a generic quadratic method;
-the facet-only layout needs neither, and forms need the padded mesh whatever the layout. The
-DOF order above is the same for both, the padded layout appending the absent points as a
-suffix that is dropped.
+assembly already works on the padded mesh. The padded layout costs a copy in and out of
+about two stencil applications, which is why a time loop keeps the facet buffer. The DOF
+order above is the same for both, the padded layout appending the absent points as a suffix
+that is dropped.
 
 [`update_ghosts!`](@ref)`(v, Cₕ)` fills the ghost buffer from the closure. The ghost update
 is precomputed when the space is built: the closure's rows for the ghosts that `d` and `E`
@@ -176,9 +167,9 @@ forms.
 | Operation | Status | Test |
 |:----------|:-------|:-----|
 | `assemble`, `assemble!`, `lift`, `pde_solve` | supported; `pde_solve` runs on the reduced matrix | `test/ghost/policies.jl` |
-| `matrix_free_operator` | supported; one product at a time per operator (a concurrent entry throws), and 0 B per warm serial apply in 1D to 3D | `test/ghost/matrix_free.jl` |
+| `matrix_free_operator` | supported; one product at a time per operator (a concurrent entry throws), and 0 B per warm serial apply in 1D and 2D (3D on the nightly) | `test/ghost/matrix_free.jl` |
 | `kronecker_operator` | supported where the closure is separable, trial and test on one mesh object and a square reduced system; refused otherwise, naming `assemble(a)` | `test/ghost/kronecker.jl` |
-| `gmg_solve`, `gmg_preconditioner` | supported for Neumann, Robin, mixed and pure-Neumann ghost problems, with level-independent cycle counts on meshes of bounded aspect ratio; on graded meshes as slow as the plain path | `test/ghost/multigrid.jl` |
+| `gmg_solve`, `gmg_preconditioner` | supported for Neumann, Robin, mixed and pure-Neumann ghost problems, with level-independent cycle counts on 1D graded and on jittered meshes; on 2D meshes graded as `t^(1 + d/4)`, where point smoothers slow down on every space, within 3 cycles of the plain path (3D on the nightly) | `test/ghost/multigrid.jl` |
 | `evaluate!`, `l(v)`, `a(u, v)` | supported; `l(v)` and `evaluate!` refuse when the affine part `d` is not zero, naming `assemble(a, l)` | `test/ghost/contract.jl` |
 | `normₕ`, `interpolate_at` | supported on physical values only; refused on a DOF vector that is not a grid function, naming `lift` | `test/ghost/grid_functions.jl` |
 | `jacobi_preconditioner`, `chebyshev_preconditioner`, `ilu_preconditioner`, `amg_preconditioner` | supported | `test/ghost/preconditioners.jl` |
