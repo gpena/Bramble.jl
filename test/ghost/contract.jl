@@ -293,8 +293,10 @@ end
         sprint(showerror, e)
     end
     n = ndofs(Wg)
-    @test occursin("a linear form on a ghost space with $n degrees of freedom cannot " *
-                   "contract a vector of length $(length(vₕ))", msg(() -> l(vₕ)))
+    @test occursin(
+        "a linear form on a ghost space with $n degrees of freedom cannot " *
+        "contract a vector of length $(length(vₕ))",
+        msg(() -> l(vₕ)))
     @test occursin("on ghost spaces with $(n)×$n degrees", msg(() -> a(vₕ, u)))
     # a refill matrix of another size names both sizes
     @test occursin("of size (3, 3)", msg(() -> assemble!(zeros(3, 3), a)))

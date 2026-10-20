@@ -263,8 +263,10 @@ function _ghost_kron_refused_node(term::BilinearProduct{D, I}, Ωp) where {D, I}
         return "a region restriction, which the padded axes have no factors for,"
     return _kron_refused_node(term, Ωp) * ", which has no projection onto the padded axes,"
 end
-_ghost_kron_refused_node(term::LazyOp, Ωp) = _kron_refused_node(term, Ωp) * ", which has " *
-                                             "no projection onto the padded axes,"
+function _ghost_kron_refused_node(term::LazyOp, Ωp)
+    _kron_refused_node(term, Ωp) * ", which has " *
+    "no projection onto the padded axes,"
+end
 
 @noinline function _throw_ghost_not_separable_term(term, Ωp)
     throw(

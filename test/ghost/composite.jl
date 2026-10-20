@@ -215,9 +215,10 @@ end
     catch e
         e
     end
-    @test occursin("a linear form on a composite of ghost spaces with " *
-                   "$(ndofs(W)) degrees of freedom cannot contract a vector of length " *
-                   "$(length(w))",
+    @test occursin(
+        "a linear form on a composite of ghost spaces with " *
+        "$(ndofs(W)) degrees of freedom cannot contract a vector of length " *
+        "$(length(w))",
         sprint(showerror, err))
     # with data, the load alone refuses as on a scalar space
     @test refuses(() -> assemble(form(V, fl2)), "assemble(a, l)")
