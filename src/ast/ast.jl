@@ -392,7 +392,7 @@ end
 end
 
 @noinline _throw_tuple_lengths(na::Int, nb::Int) = throw(DimensionMismatch(
-    "cannot add operator tuples of lengths $na and $nb: they must have equal length"))
+    "cannot add or subtract operator tuples of lengths $na and $nb: they must have equal length"))
 
 @noinline _throw_coeff_count(nc::Int, no::Int) = throw(DimensionMismatch(
     "got $nc coefficients for $no operators: a coefficient tuple holds one entry per operator"))

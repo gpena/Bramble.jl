@@ -590,8 +590,9 @@ end
 _check_walked_meshes(check::C, ast, Wₕ, Vₕ) where {C} = _check_summand_meshes(
     check, ast, Wₕ, Vₕ)
 
-# Whether a node of type `T` may hold one the checks above read: a centered difference, or a
-# field holding a `VectorElement`. Read off the type alone and folded at compile time, as
+# Whether a node of type `T` may hold one the checks above read: a centered or
+# cross-weighted difference (`_check_centered_mesh`), or a field holding a `VectorElement`
+# (`_check_source_mesh`). Read off the type alone and folded at compile time, as
 # `_may_restrict` is (block_extract.jl); a field whose type is not concrete answers `true`.
 Base.@nospecializeinfer Base.@assume_effects :foldable function _reads_meshes(
         @nospecialize(T))
@@ -745,15 +746,6 @@ end
 function _assembled_eltype(ast, space::CompositeGridSpace)
     leaves = leaf_spaces_offsets(space)
     return _routed_eltype(ast, leaves, leaves, eltype(space))
-end
-
-# The test side of a bilinear form, whose `partner` is the trial space: a term naming no
-# component writes only the diagonal blocks both sides have, so only the first
-# `min(ntest, ntrial)` leaves decide its type (a scalar side counts as one leaf).
-_assembled_eltype(ast, space, partner) = _assembled_eltype(ast, space)
-function _assembled_eltype(ast, space::CompositeGridSpace, partner)
-    leaves = leaf_spaces_offsets(space)
-    return _routed_eltype(ast, leaves, _paired(leaves, _leaves_of(partner)), eltype(space))
 end
 
 # A space's leaves as a tuple, a scalar space being its own one leaf.
@@ -946,16 +938,6 @@ end
     term, first(first(leaves)), T)
 @inline _every_leaf_eltype(term, leaves::Tuple, T) = _every_leaf_eltype(
     term, Base.tail(leaves), _folded_eltype(term, first(first(leaves)), T))
-
-# The trial side's half, for a bilinear form whose test space is `partner`: the leaf (or,
-# unnamed, every diagonal block's leaf) each term's trial function is routed to contributes
-# its own type, as the test leaf does in `_folded_eltype`.
-_trial_eltype(ast, space, partner) = eltype(space)
-function _trial_eltype(ast, space::CompositeGridSpace, partner)
-    leaves = leaf_spaces_offsets(space)
-    return _trial_routed_eltype(
-        ast, leaves, _paired(leaves, _leaves_of(partner)), eltype(space))
-end
 
 function _trial_routed_eltype(op::OperatorAdd, leaves, diagonal, T)
     return promote_type(
@@ -1239,7 +1221,8 @@ end
 
 [`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in
 [`_sweep_linear_band_colour!`](@ref), filled by `BramblePolyesterExt`.
-The only `src/` method errors naming Polyester.
+Its `src/` method only throws, naming Polyester; `BramblePolyesterExt` defines the one that
+runs.
 """
 @noinline function _batch_linear_band_sweep!(
         b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
@@ -1269,8 +1252,8 @@ end
     _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α) -> Nothing
 
 [`CpuPolyester`](@ref)'s counterpart of the `Threads.@threads` body in `_sweep_colour!`,
-filled by `BramblePolyesterExt`. The only `src/` method errors
-naming Polyester.
+filled by `BramblePolyesterExt`. Its `src/` method only throws,
+naming Polyester; `BramblePolyesterExt` defines the one that runs.
 """
 @noinline function _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α)
     return _throw_cpubatch_without_polyester(:_batch_linear_colour_sweep!)
@@ -1512,11 +1495,12 @@ function assemble!(
     return _assemble_linear!(b, form, form.ast, dirichlet, dirichlet_components)
 end
 
-# The shared core behind `assemble!` and `assemble`: takes the form's resolved `ast`
-# positionally, so both public entry points hand it the same tree. Split on where the test
-# space lives, a type-level choice the compiler folds away: a host space sweeps `b`
-# directly, a device one goes through a host buffer (`_assemble_linear_device!`, below). The
-# length check comes first, before any write and before the device path builds its buffer.
+# The shared core behind `assemble!` and `assemble`: takes `ast` positionally, the public
+# entry points passing `form.ast`, the device path its host-sourced copy (`_host_sources`).
+# Split on where the test space lives, a type-level choice the compiler folds away: a host
+# space sweeps `b` directly, a device one goes through a host buffer
+# (`_assemble_linear_device!`, below). The length check comes first, before any write and
+# before the device path builds its buffer.
 @inline function _assemble_linear!(
         b::AbstractVector, form::LinearForm, ast, dirichlet, dirichlet_components
 )

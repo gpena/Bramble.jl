@@ -18,9 +18,8 @@
 # nothing at one point still decides the type. An interpolation node carries no coefficient,
 # so its leaves need no binding first.
 #
-# Folded summand by summand (`_summands`), as `_assembled_eltype`/`_trial_eltype` do through
-# the sum: recursing, each prefix of a left-deep `a + b + c + ...` was a method instance of
-# its own on either side.
+# Folded summand by summand (`_summands`), not by recursing through the sum: each prefix of
+# a left-deep `a + b + c + ...` was a method instance of its own on either side.
 function _matrix_eltype(form::BilinearForm, ast)
     ts = _summands(ast)
     return promote_type(
@@ -28,7 +27,8 @@ function _matrix_eltype(form::BilinearForm, ast)
         _trial_side_eltype(ts, form.trial_space, form.test_space))
 end
 
-# `_assembled_eltype(ast, space, partner)`, over the summands `ts` of `ast`.
+# The test side's element type: each summand's folded on its leaf, a term naming no
+# component on the diagonal leaves only.
 _test_side_eltype(ts, space, partner) = _folded_summands_eltype(ts, space, eltype(space))
 function _test_side_eltype(ts, space::CompositeGridSpace, partner)
     leaves = leaf_spaces_offsets(space)
@@ -36,7 +36,8 @@ function _test_side_eltype(ts, space::CompositeGridSpace, partner)
         _routed_eltype, ts, leaves, _paired(leaves, _leaves_of(partner)), eltype(space))
 end
 
-# `_trial_eltype(ast, space, partner)`, over the summands `ts` of `ast`.
+# The trial side's element type, the same way over the leaf each term's trial function is
+# routed to.
 _trial_side_eltype(ts, space, partner) = eltype(space)
 function _trial_side_eltype(ts, space::CompositeGridSpace, partner)
     leaves = leaf_spaces_offsets(space)

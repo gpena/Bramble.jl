@@ -26,8 +26,9 @@ struct _GhostAverage end
 struct _GhostLaplacian end
 
 # The fix-up of one facet normal to axis `d`: its physical index `i` along `d` (1 or the
-# last), the ghost number before its first ghost, whether it is the minimum facet, whether
-# the operator reads its ghosts at all, and the padded spacings the slab formula divides by.
+# last), the ghost number before its first ghost, whether it is the minimum facet,
+# whether it runs (the operator reads beyond the facet and the facet carries ghosts),
+# and the padded spacings the slab formula divides by.
 struct _FacetFix{T}
     d::Int
     i::Int

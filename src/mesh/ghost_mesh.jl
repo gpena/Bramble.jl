@@ -13,7 +13,7 @@
 # mesh changes the point count, which a ghost mesh cannot follow, and throws.
 #
 # The walk reads a ghost mesh through its immutable `GhostMeshState` (`_walk_mesh`), as it
-# reads a `MeshnD` through a `MeshnDState`: the two answer every accessor and ghost query
+# reads a `MeshnD` through a `MeshnDState`: the two answer each accessor and ghost query
 # alike (`_GhostMeshLike`), so a space rebuilt around the state in a `Polyester.@batch`
 # task still takes the ghost methods.
 #
@@ -39,8 +39,9 @@ padded point outside along two or more axes is absent (`Bramble.is_absent`) and 
 ghost number. `Bramble.ghost_index` and `Bramble.boundary_node` map in `O(1)` between a
 facet node and its ghost.
 
-After `iterative_refinement!` of `Ωₕ` the ghost mesh is stale and every access throws an
-`ArgumentError`: build a new one.
+After `iterative_refinement!` of `Ωₕ` the ghost mesh is stale: its points, spacings,
+submeshes and cell lookup throw an `ArgumentError`, while its counts and index sets keep
+the sizes it was built with. Build a new one.
 
 # Examples
 
@@ -81,7 +82,7 @@ end
 The immutable walk state of a [`GhostMesh`](@ref), built on demand by [`_walk_mesh`](@ref)
 once the padded mesh is brought up to date with the physical one, so it is never stale: the
 walk states of the physical and padded meshes, the padded indices and the facet tuples. It
-answers every accessor and ghost query a `GhostMesh` does; its version, identity (`uid`) and
+answers each accessor and ghost query a `GhostMesh` does; its version, identity (`uid`) and
 marker words are the padded state's. The state types `M` and `P` are parameters so a rebuilt
 state can hold other array types ([`_batch_rebuild`](@ref)).
 """
@@ -340,7 +341,8 @@ The number `g ∈ 1:nghosts(G)` of the ghost beyond the node `I` (a tuple or a
 `CartesianIndex` of the physical mesh) of facet `(d, side)`, with `side` `:min` or `:max`.
 `O(1)`; the inverse of `Bramble.boundary_node`.
 
-Throws an `ArgumentError` when the facet carries no ghosts, or `I` is not on it.
+Throws an `ArgumentError` when the facet carries no ghosts or `I[d]` is not the facet's
+index along `d`; a transverse index outside the mesh throws a `BoundsError`.
 """
 @inline function ghost_index(G::_GhostMeshLike, I, d::Int, side::Symbol)
     s = _ghost_side(side)
@@ -457,9 +459,13 @@ ghost layer below each axis. A point outside the domain is clamped to a physical
 cell as on the physical mesh, never placed in a cell with a ghost corner, so a
 [`dirac`](@ref) source on a ghost space loads the physical nodes the plain space loads.
 """
-@inline locate_cell(G::_GhostMeshLike{1}, x::Real) = locate_cell(physical_mesh(G), x) + G.lo[1]
+@inline function locate_cell(G::_GhostMeshLike{1}, x::Real)
+    _padded(G)
+    return locate_cell(physical_mesh(G), x) + G.lo[1]
+end
 
 @inline function locate_cell(G::_GhostMeshLike{D}, x::NTuple{D, Real}) where {D}
+    _padded(G)
     return locate_cell(physical_mesh(G), x) + CartesianIndex(G.lo)
 end
 

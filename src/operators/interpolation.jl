@@ -828,18 +828,14 @@ end
 # skips the `locate_cell` search. It keeps the `2ᴰ` entries and their types, its other
 # entries naming that same column with weight zero, so the node, the bound term and every
 # fill infer as before, and the pattern, which merges repeated positions, reserves what
-# the plain `u` reserves instead of the explicit zeros of the other corners. Steady
-# `assemble!` 4.6x faster in 2D and 2.1x in 3D (module comment of `ast/simplifier.jl`).
+# the plain `u` reserves instead of the explicit zeros of the other corners.
 #
 # It is for `πₕ` written where the two meshes may coincide, as in one form over leaves on
 # one or on different meshes, or two spaces sharing a mesh. Decided per stencil by the
-# identity of the walked mesh and the source mesh, a pointer compare, never by dropping the
-# node in `_bind_interp_spaces`. That was tried first. It made the bound term a `Union`
-# whenever the two leaves share a type, so every such `πₕ` form, distinct meshes included,
-# refilled with 1.5-2.8 kB instead of 0 B. Nor by a flag stamped there, since
-# the Jacobian pattern binds a dependency to `(leaf, leaf)` and walks another mesh. Out of
-# line, because an inlined first version made the first 3D call on two distinct meshes
-# 25% slower.
+# identity of the two meshes, a pointer compare: dropping the node in
+# `_bind_interp_spaces` makes the bound term a `Union` (refills then allocate), and a
+# flag stamped there is wrong for the Jacobian pattern, which binds `(leaf, leaf)` and
+# walks another mesh. `@noinline` keeps the distinct-mesh first call fast.
 @noinline function _same_mesh_stencil(
         Ωsrc::AbstractMeshType{D}, I::CartesianIndex{D}, ::Val{D}, Slot
 ) where {D}

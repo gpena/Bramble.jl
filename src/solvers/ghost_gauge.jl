@@ -1,6 +1,5 @@
 # ghost_gauge.jl: `ghost_kernel(A, Wₕ)`, the sparse basis of the ghost-only kernel of a matrix
-# assembled on a ghost space, which `pde_solve(A, F; gauge)` imposes as a constraint. Filled
-# in by the ghost-dynamics plan (gpena/Bramble.jl#777).
+# assembled on a ghost space, which `pde_solve(A, F; gauge)` imposes as a constraint.
 #
 # The kernel is found node by node: the ghosts that remain unknowns at one physical node
 # (one per ghosted facet through it, so two at a 2D corner and up to three at a 3D corner)
@@ -44,8 +43,9 @@ are arbitrary.
 
 `ghost_kernel` is public, not exported: write `Bramble.ghost_kernel`.
 
-Throws an `ArgumentError` when `A` is not `ndofs(Wₕ) × ndofs(Wₕ)`, or when `Wₕ` has no
-ghosts.
+Throws an `ArgumentError` when `A` is not an `AbstractMatrix` of size `ndofs(Wₕ) × ndofs(Wₕ)`,
+or when `Wₕ` is not a [`GhostGridSpace`](@ref). A space whose relations eliminate every
+ghost has no ghost-only kernel, and the result has no columns.
 
 # Examples
 
@@ -53,7 +53,7 @@ ghosts.
 Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 7), (false, false))
 Wₕ = gridspace(Ωₕ; ghosts = :boundary)
 A = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
-Z = Bramble.ghost_kernel(A, Wₕ)    # 66 × 4, two entries per column, one column per corner
+Z = Bramble.ghost_kernel(A, Wₕ)    # 68 × 4, two entries per column, one column per corner
 norm(A * Z)                        # rounding
 ```
 """
@@ -77,6 +77,14 @@ function ghost_kernel(A::AbstractMatrix, Wₕ::GhostGridSpace;
         lo = hi + 1
     end
     return sparse(Zi, Zj, Zv, n, k)
+end
+
+@noinline function ghost_kernel(A, Wₕ::GhostGridSpace; kwargs...)
+    throw(
+        ArgumentError(
+        "ghost_kernel(A, Wₕ) takes an `AbstractMatrix` A; got a $(nameof(typeof(A))).",
+    ),
+    )
 end
 
 @noinline function ghost_kernel(A, Wₕ; kwargs...)

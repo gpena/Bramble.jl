@@ -639,10 +639,10 @@ precompile(_type_tap_scalar, (Any, Any))
 # (`_needs_rewrite`), and an operand whose weights and scalars agree is returned untouched.
 # Without a restriction the weights are widened the same way (9072 B before for `0.1 * v +
 # 3 * D₋ₓ(v)` on a Float32 mesh, 9072 B for `g * v + 0.5 * D₋ₓ(v)`). `simplify_ast` keeps
-# the literals (its folding reads them). A summand once computed in Float32 beside Float64
-# ones is now computed in Float64, so on a Float32 mesh entries move by up to about one
-# Float32 eps relative (1.35e-7 for `D₋ₓ(2.0 * (Rₕ + Rₕ)) - D₋ₓ(3 * (Rₕ + Rₕ))` in 2D), and
-# on a Float64 mesh by at most 3e-16, the element type unchanged.
+# the literals (its folding reads them). A summand beside Float64 ones is computed in
+# Float64, so on a Float32 mesh its entries differ from the summand assembled alone by up
+# to about one Float32 eps relative (1.35e-7 for `D₋ₓ(2.0 * (Rₕ + Rₕ)) - D₋ₓ(3 * (Rₕ +
+# Rₕ))` in 2D), and on a Float64 mesh by at most 3e-16; the element type is unchanged.
 @inline _uniform_scales(op, ::Type{E}) where {E} = _sum_differs(op, E) ?
                                                    _widened(op, E) : op
 @inline _widened(op, ::Type) = op
@@ -857,7 +857,8 @@ end
 # twin, paired in one sum, boxed (62496 B, gpena/Bramble.jl#759). An average or a jump
 # reads several points too: `Mₓ(D₊ᵧ(Rₕ(:l, v)))` and `D₋ₓ(M₊ᵧ(Rₕ(:l, v)))` with their twins
 # boxed 38304 B. Each such level over a restricted one adds a bit, so such a summand takes a
-# sum of its own at any depth. A shift, a stencil node too (ast/stencil_nodes.jl), counts
+# sum of its own at any depth. A shift is a stencil node too (ast/stencil_nodes.jl) and
+# counts the same way.
 #
 # A restriction over such a summand adds a bit as well, as its `()` outside the region is
 # one shape more. `Rₕ(:c, D₋ₓ(Rₕ(:l, v)))` and its `:r` twin in one sum boxed (32400 B on
@@ -1099,8 +1100,10 @@ whatever [`backend`](@ref) the space's mesh was built with.
 
 **Call this once, then assemble into what it returns.** The first call builds the sparsity
 pattern, the larger part of the work. A repeated call copies the pattern the form recorded
-and allocates about the matrix it returns, re-recording only after the mesh markers change
-or another matrix is filled; a refill allocates nothing.
+and allocates about the matrix it returns. It re-records after the mesh markers change,
+after another matrix is filled, when a Dirichlet row inserted a missing diagonal, and on
+every call for a matrix type other than `SparseMatrixCSC{T, Int}`; a refill allocates
+nothing.
 A time loop or Newton iteration benefits from preallocating the pattern once:
 
 ```julia
@@ -1121,7 +1124,7 @@ they bind to (see [`dirichlet_bc!`](@ref)).
 """
 function assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing)
     A = _allocate_assembled(form)
-    _assemble_bilinear!(A, form, form.ast, dirichlet, dirichlet_components)
+    _assemble_bilinear!(A, form, dirichlet, dirichlet_components)
     _keep_pattern!(form.cache, A)
     return A
 end
@@ -1152,14 +1155,15 @@ function assemble!(
         dirichlet = nothing,
         dirichlet_components = nothing
 )
-    return _assemble_bilinear!(A, form, form.ast, dirichlet, dirichlet_components)
+    return _assemble_bilinear!(A, form, dirichlet, dirichlet_components)
 end
 
-# The shared core behind `assemble!` and `assemble`: takes the form's resolved `ast`
-# positionally, so both public entry points hand it the same tree.
+# The shared core behind `assemble!` and `assemble`, reading the resolved tree off
+# `form.ast`.
 function _assemble_bilinear!(
-        A::AbstractMatrix, form::BilinearForm, ast, dirichlet, dirichlet_components
+        A::AbstractMatrix, form::BilinearForm, dirichlet, dirichlet_components
 )
+    ast = form.ast
     dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
     _zero_stored!(A)
 

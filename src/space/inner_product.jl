@@ -421,7 +421,7 @@ of the lifted grid function.
 # the weights of the padded space, which are 0 at every ghost: the ghost values never enter.
 # A space whose degrees of freedom are not a grid function refuses (`_physical_values`).
 function normₕ(uₕ::VectorElement{<:GhostGridSpace})
-    locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_ghost_norm()
+    locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_ghost_norm(parent(uₕ))
     u = _physical_values(:normₕ, uₕ)
     w = weights(uₕ.space.padded, Innerh())   # throws once the mesh has moved
     acc = zero(promote_type(eltype(uₕ), eltype(w)))
@@ -431,12 +431,12 @@ function normₕ(uₕ::VectorElement{<:GhostGridSpace})
     return sqrt(real(acc))
 end
 
-@noinline function _throw_no_scalar_ghost_norm()
+@noinline function _throw_no_scalar_ghost_norm(x)
     throw(
         ArgumentError(
         "normₕ of a ghost-space element sums its physical nodes one at a time, which a " *
-        "device-backed element's scalar-indexing guard refuses. Bring the element to the " *
-        "host first.",
+        "device-backed element's scalar-indexing guard refuses; got a " *
+        "$(nameof(typeof(x))): bring the element to the host first.",
     ),
     )
 end

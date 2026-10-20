@@ -184,6 +184,8 @@ end
 # `Semidiscretization`'s own `Base.show` (`semidiscrete.jl`), which calls this.
 
 function _constraints_description(sd::AbstractSemidiscretization)
+    # A ghost space has no labels: its relations are the constraints.
+    sd.constraints isa GhostConstraints && return _constraint_description(sd.constraints)
     isempty(sd.labels) && return "none"
     return string(
         _constraint_description(sd.constraints),

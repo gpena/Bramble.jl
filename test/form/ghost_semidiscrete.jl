@@ -166,6 +166,25 @@ end
         @test norm(dr) > 0.1
         rd = r(ForwardDiff.Dual(t, 1.0))
         @test ForwardDiff.value.(rd) ≈ r(t) rtol = 1e-14
+        # a state held at Float64 cannot follow a Dual time
+        sₕ = element(Bramble.padded_space(C))
+        sds = semidiscretize(form(C, C, laplacian), form(C, source); state = sₕ)
+        err = try
+            sds(zeros(ForwardDiff.Dual{Nothing, Float64, 1}, length(u)), u, nothing,
+                ForwardDiff.Dual{Nothing}(t, 1.0))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("tgrad", sprint(showerror, err))
+    end
+
+    @testset "show names the relations" begin
+        W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = GHOSTS2)
+        _, sd, _ = build(W, rel2)
+        @test occursin("Constraints: relations",
+            sprint(show, MIME"text/plain"(), sd))
     end
 
     @testset "state receives lift(C, u, t)" begin
@@ -176,8 +195,15 @@ end
         u = collect(range(-1, 2; length = Bramble.ndofs(C)))
         sd(similar(u), u, nothing, 0.4)
         @test parent(sₕ) ≈ parent(Bramble.lift(C, u, 0.4)) rtol = 1e-14
+        Wp = gridspace(ghost_mesh(CpuSerial(), (6, 7)))
         @test_throws ArgumentError semidiscretize(form(C, C, laplacian), form(C, source);
-            state = element(gridspace(ghost_mesh(CpuSerial(), (6, 7)))))
+            state = element(Wp))
+        err = try
+            semidiscretize(form(C, C, laplacian), form(C, source); state = element(Wp))
+        catch e
+            e
+        end
+        @test occursin("got a ", sprint(showerror, err))
     end
 
     # Static data: as `t → ∞` the solution tends to the steady `A u = F`.
@@ -220,6 +246,10 @@ end
         # plain and ghost forms together
         @test_throws ArgumentError semidiscretize(form(P, P, laplacian), l)
         @test_throws ArgumentError semidiscretize(a, form(P, source))
+        @test says(() -> semidiscretize(a, form(P, source)), "l::LinearForm")
+        # a plain-space mass with a ghost operator
+        @test says(() -> semidiscretize(a, l; mass = form(P, P, (u, v) -> innerₕ(u, v))),
+            "mass::BilinearForm")
         @test_throws ArgumentError ode_problem(form(P, P, laplacian), l,
             zeros(Bramble.ndofs(C)), (0.0, 1.0))
         @test_throws ArgumentError ode_problem(a, form(P, source),

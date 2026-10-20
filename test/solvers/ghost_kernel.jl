@@ -180,6 +180,25 @@ end
     B = assemble(form(V, V, (u, v) -> innerₕ(u, v)))
     @test_throws ArgumentError Bramble.ghost_kernel(B, V)
     @test_throws ArgumentError Bramble.ghost_kernel(B, gridspace(Ω; ghosts = ()))
+    @test_throws ArgumentError Bramble.ghost_kernel(rand(3), W)
+    msg = try
+        Bramble.ghost_kernel(rand(3), W)
+        ""
+    catch err
+        sprint(showerror, err)
+    end
+    @test occursin("AbstractMatrix", msg)
+    @test !occursin("got a GhostGridSpace", msg)
+end
+
+# The example of the docstring: 6·7 physical points and 2·6 + 2·7 ghosts.
+@testset "Ghost kernel: docstring example" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 7), (false, false))
+    Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+    A = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+    Z = Bramble.ghost_kernel(A, Wₕ)
+    @test size(Z) == (68, 4)
+    @test nnz(Z) == 8
 end
 
 # A conormal `K = [1 t; t 1]` on the xmin facet whose `t` cancels a corner ghost's column

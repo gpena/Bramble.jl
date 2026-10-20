@@ -1581,8 +1581,9 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         @test Bramble._paired((1, 2), (:a, :b, :c)) == (1, 2)
         @test Bramble._paired((), (:a,)) == ()
         V2, V3 = gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(3))
-        @test Bramble._assembled_eltype(
-            resolve_form_ast(form(V2, v -> innerₕ(1.0f0, v))), V2, V3) === Float64
+        @test Bramble._test_side_eltype(
+            Bramble._summands(resolve_form_ast(form(V2, v -> innerₕ(1.0f0, v)))),
+            V2, V3) === Float64
     end
 
     @testset "Host mirror helpers" begin
