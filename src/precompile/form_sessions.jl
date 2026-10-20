@@ -480,7 +480,8 @@ end
 #     - `Δₕ(u)` trial side, `Δₕ(v)` test side in a bilinear form, `Δₕ(v)` in a linear one
 #     - `Δₕ(Δₕ(u))` trial side
 #     - in 2D the mixed `Dcₓ(Dcᵧ(u))` and `D̽ₓ(D̽ᵧ(u))`, trial side
-#   plain space, 3D (src/precompile.jl), the Laplacian `Δₕ(u)`, trial side
+#   plain space, 3D (src/precompile.jl): the Laplacian `Δₕ(u)`, the `c`-scaled
+#   `jumpₓ(Δₕ)` and `D₋ₓ(Δₕ)` pairs and the `jumpₙ(Δₕ(u))` facet row
 #   ghost space (`gridspace(Ωₕ; ghosts = ...)`), 1D and 2D
 #     - the relation rows `constrained(W, u -> F => α * u + ∂ₙ(u) => g)`, which `constrained`
 #       builds as forms of the facet operator `∂ₙ` on each axis (depth 1, trial side); 2D
@@ -492,7 +493,7 @@ end
 #
 # Not warmed: `Δₕ(Δₕ(u))` on a ghost space (the second Laplacian reads past the one ghost
 # layer, so the form is refused), and 3D ghost spaces. Float64 only. The meshes are
-# non-uniform, built here with one `:boundary` marker like `_pc_form_reaction`'s.
+# non-uniform (`false`), over the default domain.
 function _pc_form_nested(::Val{1})
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
     return _pc_form_nested(Ωₕ, Val(1))
