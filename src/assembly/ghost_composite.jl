@@ -434,8 +434,8 @@ end
         ArgumentError(
         "`dirichlet`, `dirichlet_bc!` and `symmetrize!` replace rows by facet label, " *
         "and a composite constrained as a whole, constrained(C₁ × C₂, relations), does " *
-        "not take dirichlet = $(labels). Give each Dirichlet condition as a relation of " *
-        "its component in constrained, `:F => u(i) => g`, and assemble with " *
+        "not take them (given dirichlet = $(labels)). Give each Dirichlet condition as a " *
+        "relation of its component in constrained, `:F => u(i) => g`, and assemble with " *
         "assemble(a, l).",
     ),
     )
