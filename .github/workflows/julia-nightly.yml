@@ -4,7 +4,7 @@ name: Julia DEV
 # a coming Julia release does to Bramble. Nothing triggers it but `workflow_dispatch`, and nothing depends on
 # it: it is not a gate and not part of the release procedure.
 #
-#   gh workflow run julia-nightly.yml -f os=ubuntu-latest
+#   gh workflow run julia-nightly.yml -f os=macos-latest
 
 permissions:
   contents: read
@@ -15,8 +15,8 @@ on:
       os:
         description: Runner
         type: choice
-        default: ubuntu-latest
-        options: [ubuntu-latest, macos-latest]
+        default: macos-latest
+        options: [macos-latest, ubuntu-latest]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
