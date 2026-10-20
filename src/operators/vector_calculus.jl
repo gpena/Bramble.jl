@@ -118,8 +118,9 @@ end
     _batch_run_bands!(f, nbands::Int, args...) -> Nothing
 
 [`CpuPolyester`](@ref)'s `_run_bands!`, filled by `BramblePolyesterExt` (one `f(args...,
-nbands, b)` per band under `Polyester.@batch`). The only `src/` method errors naming
-Polyester.
+nbands, b)` per band under `Polyester.@batch`).
+Its `src/` method only throws, naming Polyester; `BramblePolyesterExt` defines the one that
+runs.
 """
 @noinline function _batch_run_bands!(f, nbands::Int, args::Vararg{Any, N}) where {N}
     return _throw_cpubatch_without_polyester(:_batch_run_bands!)

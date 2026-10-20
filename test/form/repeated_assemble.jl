@@ -62,6 +62,19 @@ const _SIZES = (((15,), (61,)), ((9, 11), (17, 21)))
         end
     end
 
+    @testset "$(D)D: repeated assemble with dirichlet" for D in (1, 2)
+        W = gridspace(_mesh(D, first(_SIZES[D])))
+        for f in _forms(W, Val(D))
+            a = form(W, W, f)
+            R = assemble(form(W, W, f); dirichlet = :boundary)
+            A = assemble(a; dirichlet = :boundary)
+            @test _agrees(A, R)
+            for _ in 1:3
+                @test _agrees(assemble(a; dirichlet = :boundary), R)
+            end
+        end
+    end
+
     @testset "$(D)D: matrices do not alias" for D in (1, 2)
         W = gridspace(_mesh(D, first(_SIZES[D])))
         f = last(_forms(W, Val(D)))

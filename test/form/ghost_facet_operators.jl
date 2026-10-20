@@ -13,6 +13,7 @@ module FormGhostFacetOperatorsTests
 using Test
 using Bramble
 import Bramble
+using Bramble: Dcₓ
 using LinearAlgebra: Diagonal, dot, norm, ×
 using SparseArrays: sparse, spzeros
 
@@ -293,6 +294,15 @@ relerr(A, R) = norm(A - R) / norm(R)
         Px = padded(Ω1; ghosts = (:xmin,))
         @test_throws ArgumentError form(Px, Px,
             (u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmax,)))
+        # a centred difference reads the padded point beyond the facet, which Px lacks
+        err = try
+            assemble(form(Px, Px, (u, v) -> inner_Γ(Dcₓ(u), v; markers = (:xmax,))))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("a padded point that does not exist", err.msg)
         # the ghosted facet alone is fine
         @test form(Px, Px, (u, v) -> inner_Γ(∂ₙ(u), v; markers = (:xmin,))) isa Bramble.BilinearForm
         W = gridspace(Ω1)

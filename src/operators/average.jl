@@ -246,7 +246,9 @@ end
     _batch_average_engine!(out, in_ref, dims::Tuple, dir::GridDirection, dim_val::Val) -> Nothing
 
 [`CpuPolyester`](@ref)'s `_average_engine!`, filled by `BramblePolyesterExt` (one
-[`_average_band!`](@ref) per band). The only `src/` method errors naming Polyester.
+[`_average_band!`](@ref) per band).
+Its `src/` method only throws, naming Polyester; `BramblePolyesterExt` defines the one that
+runs.
 """
 @noinline function _batch_average_engine!(out, in_ref, dims, dir, dim_val)
     return _throw_cpubatch_without_polyester(:_batch_average_engine!)
@@ -256,7 +258,9 @@ end
     _batch_centered_average_engine!(out, in_ref, dims::Tuple, dim_val::Val) -> Nothing
 
 [`CpuPolyester`](@ref)'s `_centered_average_engine!`, filled by `BramblePolyesterExt` (one
-[`_centered_average_band!`](@ref) per band). The only `src/` method errors naming Polyester.
+[`_centered_average_band!`](@ref) per band).
+Its `src/` method only throws, naming Polyester; `BramblePolyesterExt` defines the one that
+runs.
 """
 @noinline function _batch_centered_average_engine!(out, in_ref, dims, dim_val)
     return _throw_cpubatch_without_polyester(:_batch_centered_average_engine!)

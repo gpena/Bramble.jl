@@ -43,6 +43,14 @@ using ..TestUtils: WITH_3D_TESTS
             (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v) + (first(∇ₕ(v)),)))
         @test_throws DimensionMismatch form(W, W,
             (u, v) -> inner₊(∇ₕ(u), (first(∇ₕ(v)),) - ∇ₕ(v)))
+        err = try
+            form(W, W, (u, v) -> inner₊(∇ₕ(u), (first(∇ₕ(v)),) - ∇ₕ(v)))
+            nothing
+        catch e
+            e
+        end
+        @test err isa DimensionMismatch
+        @test occursin("subtract operator tuples", sprint(showerror, err))
     end
 
     WITH_3D_TESTS && @testset "3D" begin

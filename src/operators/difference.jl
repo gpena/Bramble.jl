@@ -477,7 +477,9 @@ end
     _batch_difference_engine!(out, in_ref, h, dims::Tuple, dir::GridDirection, dim_val::Val) -> Nothing
 
 [`CpuPolyester`](@ref)'s `_difference_engine!`, filled by `BramblePolyesterExt` (one
-[`_difference_band!`](@ref) per band). The only `src/` method errors naming Polyester.
+[`_difference_band!`](@ref) per band).
+Its `src/` method only throws, naming Polyester; `BramblePolyesterExt` defines the one that
+runs.
 """
 @noinline function _batch_difference_engine!(out, in_ref, h, dims, dir, dim_val)
     return _throw_cpubatch_without_polyester(:_batch_difference_engine!)
