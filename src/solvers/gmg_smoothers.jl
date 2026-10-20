@@ -132,6 +132,7 @@ end
 
 """
     jacobi_smoother(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a)), ω = nothing, sweeps = 1) -> JacobiSmoother
+    jacobi_smoother(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, ω = nothing, sweeps = 1) -> JacobiSmoother
     jacobi_smoother(op::MatrixFreeOperator; ω = nothing, sweeps = 1) -> JacobiSmoother
     jacobi_smoother(op::GhostMatrixFreeOperator; ω = nothing, sweeps = 1) -> JacobiSmoother
 
@@ -154,8 +155,8 @@ random). Mesh non-uniformity with large cell aspect ratios slows every point smo
 [`AbstractSmoother`](@ref)).
 
 # Arguments
-- `a`: A square bilinear form ([`ndofs`](@ref) of trial and test space equal), on scalar or
-  composite spaces.
+- `a`: A square bilinear form ([`ndofs`](@ref) of trial and test space equal), on scalar,
+  composite or ghost spaces; on ghost spaces `policy` defaults to the padded space's.
 - `op`: A square [`MatrixFreeOperator`](@ref), or the operator `matrix_free_operator`
   returns for a form on ghost spaces, whose diagonal is that of the reduced matrix
   `assemble(a)`; its Dirichlet rows are kept.
@@ -196,8 +197,9 @@ See also: [`JacobiSmoother`](@ref), [`smooth!`](@ref), [`chebyshev_smoother`](@r
 [`red_black_gauss_seidel`](@ref).
 """
 function jacobi_smoother(
-        a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
-        policy = execution_policy(trial_space(a)), ω = nothing, sweeps::Integer = 1
+        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        dirichlet_components = nothing, policy = _default_policy(a), ω = nothing,
+        sweeps::Integer = 1
 )
     op = matrix_free_operator(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components, policy = policy
@@ -220,6 +222,7 @@ end
 
 """
     chebyshev_smoother(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a)), degree = 2, λmax = nothing) -> ChebyshevSmoother
+    chebyshev_smoother(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, degree = 2, λmax = nothing) -> ChebyshevSmoother
     chebyshev_smoother(op::MatrixFreeOperator; degree = 2, λmax = nothing) -> ChebyshevSmoother
     chebyshev_smoother(op::GhostMatrixFreeOperator; degree = 2, λmax = nothing) -> ChebyshevSmoother
 
@@ -245,8 +248,9 @@ Construction allocates four vectors of length `ndofs` and, when `λmax` is not g
 [`max_eigenvalue_estimate`](@ref)'s 20 products with `A` and allocates its two vectors.
 
 # Arguments
-- `a`: A square bilinear form ([`ndofs`](@ref) of trial and test space equal), on scalar or
-  composite spaces, whose matrix is SPD.
+- `a`: A square bilinear form ([`ndofs`](@ref) of trial and test space equal), on scalar,
+  composite or ghost spaces, whose matrix is SPD; on ghost spaces `policy` defaults to the
+  padded space's.
 - `op`: A square [`MatrixFreeOperator`](@ref), or the operator `matrix_free_operator`
   returns for a form on ghost spaces, whose diagonal is that of the reduced matrix
   `assemble(a)`; its Dirichlet rows are kept.
@@ -286,8 +290,9 @@ true
 See also: [`ChebyshevSmoother`](@ref), [`smooth!`](@ref), [`chebyshev_preconditioner`](@ref).
 """
 function chebyshev_smoother(
-        a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
-        policy = execution_policy(trial_space(a)), degree::Integer = 2, λmax = nothing
+        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        dirichlet_components = nothing, policy = _default_policy(a), degree::Integer = 2,
+        λmax = nothing
 )
     op = matrix_free_operator(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components, policy = policy
@@ -315,6 +320,7 @@ end
 
 """
     red_black_gauss_seidel(a::BilinearForm; dirichlet = nothing, policy = execution_policy(trial_space(a)), sweeps = 1) -> RedBlackGaussSeidel
+    red_black_gauss_seidel(a::GhostBilinearForm; dirichlet = nothing, policy, sweeps = 1) -> RedBlackGaussSeidel
     red_black_gauss_seidel(op::MatrixFreeOperator; sweeps = 1) -> RedBlackGaussSeidel
 
 The red-black Gauss-Seidel smoother of `A = assemble(a; dirichlet)`, or of the matrix `op`
@@ -339,7 +345,7 @@ cycle's pre- and post-smoothing counts sweep counts.
 
 # Arguments
 - `a`: A square bilinear form on a scalar grid space, with the same mesh for trial and test
-  space and no interpolation (`πₕ`).
+  space and no interpolation (`πₕ`). A form on ghost spaces is refused, as its operator is.
 - `op`: A [`MatrixFreeOperator`](@ref) of such a form; its Dirichlet rows are kept. The
   operator of a form on ghost spaces is refused.
 
@@ -354,8 +360,8 @@ cycle's pre- and post-smoothing counts sweep counts.
 - `ArgumentError`: `sweeps < 1`.
 - `ArgumentError`: the form couples two distinct points of one colour, is on a composite
   space, has an interpolation, or its trial and test meshes differ in shape.
-- `ArgumentError`: `op` is the operator of a form on ghost spaces, whose closure couples a
-  facet node to nodes of its own colour; use [`jacobi_smoother`](@ref) or
+- `ArgumentError`: `a` is a form on ghost spaces, or `op` its operator, whose closure
+  couples a facet node to nodes of its own colour; use [`jacobi_smoother`](@ref) or
   [`chebyshev_smoother`](@ref).
 - `ArgumentError`: `policy` is a [`GpuPolicy`](@ref); device execution is tracked on
   milestone v4.4.0.
@@ -380,8 +386,8 @@ true
 See also: [`RedBlackGaussSeidel`](@ref), [`smooth!`](@ref), [`jacobi_smoother`](@ref).
 """
 function red_black_gauss_seidel(
-        a::BilinearForm; dirichlet = nothing, policy = execution_policy(trial_space(a)),
-        sweeps::Integer = 1
+        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        policy = _default_policy(a), sweeps::Integer = 1
 )
     op = matrix_free_operator(a; dirichlet = dirichlet, policy = policy)
     return red_black_gauss_seidel(op; sweeps = sweeps)
