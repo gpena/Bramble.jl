@@ -4,7 +4,7 @@ CurrentModule = Bramble
 
 # [Linear and bilinear forms](@id tutorial_form)
 
-**What you will learn.** How to write a linear or bilinear form, assemble it into a vector or a matrix, impose Dirichlet conditions and solve a Poisson problem, and impose Neumann and Robin conditions through ghost points, with data that depend on time, a gauge for the ghosts and a check on the compatibility of pure-Neumann data.
+**What you will learn.** How to write a linear or bilinear form, assemble it into a vector or a matrix, impose Dirichlet conditions and solve a Poisson problem, and impose Neumann and Robin conditions through ghost points, with data in time and a pure-Neumann gauge and compatibility check.
 
 **What you need first.** The [mesh tutorial](mesh.md), the [space tutorial](space.md) for grid spaces and elements, and the [operators tutorial](operators.md) for `D₋ₓ`, `innerₕ` and `inner₊`.
 
@@ -296,7 +296,7 @@ err_modeA = maximum(abs, u_modeA - u_exact.(x_gh))
 err_modeA
 ```
 
-Nothing here needs a ghost: a ghost-eliminated Neumann or Robin condition is this system. Ghosts matter when the scheme differentiates the unknown at the boundary, for instance the collocation form ``(-\Delta_h u, v)_h``, a conormal condition with a mixed derivative, or a condition on a second normal derivative. No spelling of those exists on a space without ghosts, because every operator is truncated on the end slices.
+Nothing here needs a ghost: a ghost-eliminated Neumann or Robin condition is this system. Ghosts matter when the scheme differentiates the unknown at the boundary, for instance the collocation form ``(-\Delta_h u, v)_h``, a conormal condition with a mixed derivative, or a condition on a second normal derivative.
 
 ### Relations and `constrained`
 
@@ -328,7 +328,7 @@ u_gh = pde_solve(A_gh, F_gh)
 norm(A_gh - A_modeA) / norm(A_modeA), maximum(abs, u_gh - u_exact.(x_gh))
 ```
 
-The ghost-eliminated matrix and load equal those of the forms of the previous section to rounding. The two spellings are the same scheme, and the ghost one extends to what the first cannot say. The error decreases at second order on this graded mesh: it falls by a factor of four when the number of points doubles.
+The ghost-eliminated matrix and load equal those of the forms of the previous section to rounding. The error decreases at second order on this graded mesh: it falls by a factor of four when the number of points doubles.
 
 ```@example forms
 function ghost_error(n)
@@ -356,7 +356,7 @@ The relations a facet takes:
 | `∂ₙₙ(u) => g` | second normal difference, ``(\tilde D D_{-} u)`` at the facet node |
 | `u => g` | Dirichlet, see below |
 
-Each relation of a ghosted facet must read that facet's ghost: `β = 0` or a lone `jumpₙ` is an `ArgumentError`. At a 2D corner two conormal relations that read each other's ghost are solved together as a ``2 \times 2`` block, and a singular `K` is refused. A ghosted facet with no relation keeps its ghosts as unknowns.
+Each relation of a ghosted facet must read that facet's ghost: `β = 0` or a lone `jumpₙ` is an `ArgumentError`. The stencils behind each relation are in the [operators page](../api/operators.md).
 
 ```@example forms
 try
@@ -369,14 +369,15 @@ end
 
 ### Relations that read several components
 
-On a composite space `S × S`, `constrained` takes relations that read several components of `u`. The case that needs it is the traction of elasticity, whose component ``i`` is ``\sum_j \eta \cdot (K_{ij} \nabla u_j)`` with ``(K_{ij})_{de} = \lambda\,\delta_{id}\delta_{je} + \mu\,(\delta_{ij}\delta_{de} + \delta_{ie}\delta_{jd})``. The tangential part is the conormal derivative with an off-diagonal `K`, so `∂ₙ(u(j); K = Kᵢⱼ)` summed over `j` is the traction on every facet, and no new operator is needed.
+On a composite space `S × S`, `constrained` takes relations that read several components of `u`. The case that needs it is the traction of elasticity, whose component ``i`` is ``\sum_j \eta \cdot (K_{ij} \nabla u_j)`` with ``(K_{ij})_{de} = \lambda\,\delta_{id}\delta_{je} + \mu\,(\delta_{ij}\delta_{de} + \delta_{ie}\delta_{jd})``. The tangential part is the conormal derivative with an off-diagonal `K`, so `∂ₙ(u(j); K = Kᵢⱼ)` summed over `j` is the traction on every facet.
 
 A facet whose relation reads several components needs one ghost relation per component, written unkeyed: `:xmin => t₁ => g₁, :xmin => t₂ => g₂`. The ghosts of a node are solved together, so the relation of component 1 may read the ghost of component 2. A displacement facet carries ghosts too, closed by `∂ₙₙ(u(i)) => 0` beside the Dirichlet relation `u(i) => 0` of each component. The block below loads the facet ``x = 0`` with a traction, clamps the other three, solves the collocated form, and checks that both traction relations hold on the lifted values:
 
 ```@example forms_traction
-using Bramble, LinearAlgebra
-import Bramble: Dcₓ, Dcᵧ, lift
+using Bramble, LinearAlgebra, Random
+import Bramble: Dcₓ, Dcᵧ, D̃ₓ, D̃ᵧ, D₋ₓ, D₋ᵧ, lift
 
+Random.seed!(20261020)
 Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (false, false))
 S = gridspace(Ωₕ; ghosts = :boundary)
 V = S × S
@@ -394,33 +395,45 @@ Cₕ = constrained(V, u -> (
     :xmin => traction(u, 1) => 1.0, :xmin => traction(u, 2) => 0.0,
     displacement(:ymin, u)..., displacement(:xmax, u)..., displacement(:ymax, u)...))
 
-Dc = (Dcₓ, Dcᵧ)
+# The second difference of one axis for j = i, the centred mixed difference for j ≠ i.
+second(u, a, b) = a == b ? (a == 1 ? D̃ₓ(D₋ₓ(u)) : D̃ᵧ(D₋ᵧ(u))) : Dcₓ(Dcᵧ(u))
 a = form(Cₕ, Cₕ, (u, v) -> sum(
     innerₕ(-μ * Δₕ(u(i)), v(i)) +
-    sum(innerₕ(-(λ + μ) * Dc[i](Dc[j](u(j))), v(i)) for j in 1:2) for i in 1:2))
+    sum(innerₕ(-(λ + μ) * second(u(j), i, j), v(i)) for j in 1:2) for i in 1:2))
 l = form(Cₕ, v -> innerₕ(1.0, v(1)) + innerₕ(0.5, v(2)))
 A, F = assemble(a, l)
 U = lift(Cₕ, pde_solve(A, F))
 
 # Check on the lifted padded values that each traction row equals its data on :xmin.
 PV = Bramble.padded_space(V)
+flux_norms = Float64[]
 for (i, g) in ((1, 1.0), (2, 0.0))
     R = assemble(form(PV, PV, (w, v) -> sum(
         inner_Γ(∂ₙ(w(j); K = K(i, j)), v(i); markers = (:xmin,)) for j in 1:2)))
     W = assemble(form(PV, PV, (w, v) -> inner_Γ(w(i), v(i); markers = (:xmin,))))
     r = R * collect(U) - g * (W * ones(length(U)))
     @assert norm(r, Inf) <= 1e-9 * max(1.0, norm(R * collect(U), Inf))
+    push!(flux_norms, norm(R * collect(U), Inf))
 end
-ndofs(Cₕ), ndofs(PV)
+# component 1 carries the traction datum, so its check is not met by a zero solution
+@assert 0.1 < flux_norms[1] < 0.5 && flux_norms[2] < 1e-12
+
+flux_norms
 ```
 
-`Bramble.lift(Cₕ, u)` returns the padded displacement with its ghosts filled; take a component of it as `Bramble.lift(Cₕ, u)(i)`. A component view `uₕ(i)` of the constrained space itself is refused, because the closure couples the components, and so are `×` and `^` of it, relations with data in time, the `dirichlet` keyword and `GhostVector`. A corner of two traction facets closes with a one-sided tangential difference along the facets. On a facet with a traction, the mixed differences of the form (those with `∂ₓ` and `∂ᵧ` of different axes, in the left argument of the product) do not read the ghosts of the facet: they extrapolate the function to the ghost from the three nodes inward, to second order, which keeps the collocated form stable on cells wider across the facet than along it. The relations still hold on the lifted values, as the check above asserts.
+The block ends on the largest traction row of each component. On this seeded mesh it is
+about 0.23 for component 1, which carries the datum, and rounding for component 2, whose
+datum is zero. Take a component of the lifted displacement as `Bramble.lift(Cₕ, u)(i)`; a
+component view of the constrained space itself is refused, because the closure couples the
+components. On a facet with a traction, the mixed differences of the form do not read that
+facet's ghosts but extrapolate to them from the three nodes inward. The refusals and this
+rule are listed in the [space internals](../internals/space.md).
 
 ### Dirichlet conditions beside ghost relations
 
 Keep the Robin condition at ``x = 1`` and impose ``u(0) = 1`` instead, so only `xmax` needs a ghost. There are two routes, and they give the same solution.
 
-**Route (a), row replacement, as above.** `constrained` receives only the ghost relation. The unknowns are the physical nodes, as on a space without ghosts, so the `dirichlet` keyword of `assemble` replaces the rows of `:xmin` and `symmetrize` restores symmetry, exactly as in the [Dirichlet section](@ref form_dirichlet). Every existing program keeps working:
+**Route (a), row replacement, as above.** `constrained` receives only the ghost relation. The unknowns are the physical nodes, as on a space without ghosts, so the `dirichlet` keyword of `assemble` replaces the rows of `:xmin` and `symmetrize` restores symmetry, exactly as in the [Dirichlet section](@ref form_dirichlet):
 
 ```@example forms
 W_right = gridspace(Ω_gh; ghosts = (:xmax,))
@@ -459,12 +472,10 @@ The solution vector of route (b) has one entry per kept node, so the Dirichlet v
 | | (a) row replacement | (b) `u => g` in `constrained` |
 |:--|:--|:--|
 | unknowns | all physical nodes | physical nodes minus the Dirichlet nodes |
-| solution vector | one entry per node, a grid function as today | one entry per kept node; `Bramble.lift(Cₕ, u)` is the grid function |
-| symmetry of a self-adjoint form | after `symmetrize`, as today | by construction |
-| data | `dirichlet`, `dirichlet_constraints`, time-dependent as today | the relation's `g`, a number or a function |
-| existing programs | unchanged | new route, nothing depends on it |
+| solution vector | one entry per node, a grid function | one entry per kept node; `Bramble.lift(Cₕ, u)` is the grid function |
+| symmetry of a self-adjoint form | after `symmetrize` | by construction |
 
-Route (a) is the one every earlier program uses; route (b) is the symmetric alternative when the vector should carry only unknowns. Give each facet's condition once. The same label given both ways, `u => g` in `constrained` and `dirichlet` in `assemble`, is an `ArgumentError`, since the value would be imposed twice. A ghosted facet that carries only `u => g` is refused too, since its ghosts would be unknowns no equation reads: give it a ghost relation as well, or drop it from `ghosts`.
+Give each facet's condition once. The same label given both ways, `u => g` in `constrained` and `dirichlet` in `assemble`, is an `ArgumentError`, since the value would be imposed twice. A ghosted facet that carries only `u => g` is refused too, since its ghosts would be unknowns no equation reads: give it a ghost relation as well, or drop it from `ghosts`.
 
 ```@example forms
 refusals = String[]
@@ -487,7 +498,7 @@ refusals
 
 ### Solutions as grid functions: `lift`
 
-A solution of `assemble(a, l)` is a vector of unknowns. `Bramble.lift(Cₕ, u)` is the grid function it describes, with the eliminated ghosts filled in by the relations. It lives on the padded space, one point longer at each ghosted end, so the runtime operators read its ghosts. `lift` is `public`, not exported, because it is also a Makie name: write `Bramble.lift`.
+A solution of `assemble(a, l)` is a vector of unknowns. `Bramble.lift(Cₕ, u)` is the grid function it describes, with the eliminated ghosts filled in by the relations. It lives on the padded space, one point longer at each ghosted end, so the runtime operators read its ghosts. `lift` is public, not exported, because it is also a Makie name: write `Bramble.lift`.
 
 ```@example forms
 U = Bramble.lift(C_gh, u_gh)
@@ -637,7 +648,7 @@ err_heat_33, err_heat_65 = heat_error(33), heat_error(65)
 err_heat_33, err_heat_33 / err_heat_65
 ```
 
-The refusals are the same everywhere on a space with data in time, and each is an `ArgumentError` that names what to do. `lift(Cₕ, u)`, `lift(Cₕ)` and `assemble(a, l)` have no single ``d``: give the time through `lift(Cₕ, u, t)`, or pose the problem in time. `form` and `assemble(a)` read `E` only and work. `semidiscretize` takes no `dirichlet` keyword, since a Dirichlet condition on a facet is the relation `:F => u => g(x, t)`. It refuses a space that keeps ghosts as unknowns, since the mass has no row for them. A mass that reads a point where the data depend on time is refused too, because its term ``E^T M_{pad}\, d'(t)`` needs ``\partial_t g``, which no relation carries. The default mass reads the physical nodes only. `semidiscretize_rhs` and `semidiscretize(build, l)` with a ghost load are refused as well.
+Each refusal below is an `ArgumentError` that names the fix. The one rule worth knowing: a Dirichlet condition on a facet is the relation `:F => u => g(x, t)`, since `semidiscretize` takes no `dirichlet` keyword.
 
 ```@example forms
 W_unknown = gridspace(Ω_gh; ghosts = :boundary)
@@ -772,7 +783,7 @@ u_shifted = pde_solve(A_rect, A_rect * (x_ghost0 + Z_rect * [1.0, -2.0, 3.0, 0.5
 maximum(abs, u_gauged[1:n_phys] - x_phys), norm(Z_rect' * u_gauged, Inf)
 ```
 
-The physical error is about ``10^{-10}`` here and is only as small as the conditioning of `A` away from its kernel allows: these forms are ill conditioned, and the accuracy of the physical part is near ``10^{-8}`` relative in general. A form that never reads a ghost leaves each ghost in the kernel as one column. With a single ghosted facet no node carries two ghosts and a form that reads them through `Δₕ` alone has no ghost-only kernel. A kernel vector spread over the ghosts of several nodes, which a form that differences the ghosts along their own facet produces, is not found: `ghost_kernel` returns no column for it, and a gauged solve with such a `Z` still gives the right physical part, while the ghost components it leaves out are arbitrary. With `mean_zero = w` as well, the border is `[w Z]`.
+The physical error is about ``10^{-10}`` here. `ghost_kernel` finds corner kernels only; others are left out, and the gauged solve still gives the physical part, to about ``10^{-8}`` relative in general (see [`pde_solve`](@ref)). With `mean_zero = w` as well, the border is `[w Z]`.
 
 #### Checking that the data are compatible
 
@@ -878,9 +889,9 @@ rel_dense = norm(u_pen - u_dense) / norm(u_dense)
 rel_mz, rel_dense
 ```
 
-The difference from the `mean_zero` solve is about ``10^{-14}/\gamma``: a small ``\sigma`` makes ``-1/\sigma`` large against the entries of `A` and costs digits, so take ``\gamma \ge 10^{-2}``. A large ``\sigma`` costs nothing. [`pde_solve`](@ref) documents the figures for the `RankOneUpdate` method.
+The difference from the `mean_zero` solve is about ``10^{-15}`` for ``\gamma \ge 1`` and grows as ``1/\gamma``: a small ``\sigma`` makes ``-1/\sigma`` large against the entries of `A` and costs digits, so take ``\gamma \ge 10^{-2}``. A large ``\sigma`` costs nothing. The [`pde_solve`](@ref) docstring gives the measured figures.
 
-Four rules apply to the term. The `σ` is read when the form is assembled, so with a `Ref` factor call `assemble!(K_pen, a_pen)` after changing it, before the next solve. With `dirichlet`, the Dirichlet rows of `K_pen` are identity rows and the penalty's row vector is zeroed there. One rank-one term per form: the sum of two is refused with an `ArgumentError`, so add the scalars when they share the functionals. The term also builds on a ghost space, where `assemble(a, l)` reduces it with the closure. A composite ghost space is covered by the support table in [the space internals](../internals/space.md).
+Three rules apply to the term. The `σ` is read when the form is assembled, so with a `Ref` factor call `assemble!(K_pen, a_pen)` after changing it, before the next solve. With `dirichlet`, the Dirichlet rows of `K_pen` are identity rows and the penalty's row vector is zeroed there. One rank-one term per form: the sum of two is refused with an `ArgumentError`, so add the scalars when they share the functionals. On a ghost space the rank-one term is covered by the [support table](../internals/space.md).
 
 ### Data per facet
 
@@ -913,7 +924,7 @@ expected = (hy / 2) * data_x((0.0, 0.0)) + (hx / 2) * data_y((0.0, 0.0))
 l_corner[1], expected
 ```
 
-Ghost spaces are for `assemble`, and for `semidiscretize` and `ode_problem` once `constrained` has eliminated every ghost. `matrix_free_operator(a)` applies a ghost-space form, one product at a time per operator. `kronecker_operator(a)` works where the closure and the form are separable and both spaces share one mesh object. The device backends refuse ghost spaces with an `ArgumentError`. Which entry points accept a composite space with a ghost leaf is in the support table of [the space internals](../internals/space.md).
+Which entry points accept a ghost space is the [support table](../internals/space.md).
 
 ## Threading
 

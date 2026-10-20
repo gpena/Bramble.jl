@@ -266,7 +266,7 @@ out_g = similar(u_g)
 extrema(out_g)
 ```
 
-Two things follow from the physical-only result. The result carries no ghosts: it is as long as `u`, not as `v`. And the nested mixed differences of the [operators tutorial](operators.md), which a `lift` function composes, stay forms: a `GhostVector` takes one operator at a time.
+One thing follows from the physical-only result. The result carries no ghosts: it is as long as `u`, not as `v`.
 
 #### An explicit heat step
 
