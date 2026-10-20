@@ -64,8 +64,8 @@ ndofs(Cₕ), ndofs(Cₜ)
 # `assemble!(A, F, a, l)` fills a matrix and a load already allocated, and on a space with
 # data it puts the lift of those data on the load: with ``E`` the closure of the relations
 # and ``d`` their affine part, ``F = E^\top (F_{\text{pad}} - A_{\text{pad}} d)``. The pair
-# form refuses a space whose data depend on `t`, since it lifts with the stored ``d(0)``,
-# and the data here are separable, ``d(t) = e^{-t} d(0)``: so the source and the lift scale
+# form refuses a space whose data depend on `t`, since it has no time to evaluate
+# them at; the data here are separable, ``d(t) = e^{-t} d(0)``, so the source and the lift scale
 # with the same factor ``e^{-t}``, and a single call at unit time factor produces the load
 # that every step scales by ``e^{-t}``. The relation also moves in time, which the weak
 # form of the time derivative sees as ``-E^\top M_{\text{pad}} d'(t)``, and the mass form
@@ -178,8 +178,8 @@ end
 
 residual = robin_residual(Cₜ, u, 1.0)
 
-# A truncation error, not round-off, and far below the size of the data, ``\pi e^{-1}``,
-# which the same check at the initial data misses by order one:                              #src
+# A truncation error, not round-off, and far below the size of the data, ``\pi e^{-1}``.
+# The same check at the initial data misses by order one.                                    #src
 @test 1.0e-9 < residual < 1.0e-3                                                           #src
 @test robin_residual(Cₜ, u, 0.0) > 1.0                                                     #src
 
@@ -234,8 +234,7 @@ convergence_plot([(Δts, errs, "Crank-Nicolson", "#5B5FC7")]; # hide
 
 # The orders are two to within a few parts in a thousand, and the errors sit on the
 # dashed line of slope two. Against the exact solution the same four errors would flatten
-# out and then grow back toward the spatial error of the mesh, about `5e-6`, which says
-# nothing about the time stepping.
+# out at the spatial error of the mesh, about `5e-6`, which says nothing about the time stepping.
 #
 # ## Where to go next
 #

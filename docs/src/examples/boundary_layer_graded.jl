@@ -104,6 +104,8 @@ err_graded, over_graded = solve_on(graded_points(41))
 @test 0.1 < err_uniform < 1.0                                                              #src
 @test 1.0e-6 < err_graded < 1.0e-2                                                          #src
 @test err_graded < err_uniform / 100                                                       #src
+@test 0.8 < over_uniform < 0.95                                                            #src
+@test 0.0 < over_graded < 2.0e-3                                                           #src
 
 (err_uniform, over_uniform), (err_graded, over_graded)
 
@@ -127,7 +129,7 @@ graded_errors = [solve_on(graded_points(n))[1] for n in ns]
 @test all(graded_errors .< uniform_errors)                                                 #src
 @test graded_errors[1] < uniform_errors[end]                                               #src
 
-collect(zip(ns, uniform_errors, graded_errors))
+nothing # hide
 
 # The graded mesh at 41 points is already better than the uniform one at 641. That is the
 # whole argument for a non-uniform Cartesian grid: the points go where the solution varies,
@@ -164,6 +166,7 @@ end
 robin_residuals = [robin_residual(graded_points(n)) for n in ns]
 
 @test all(robin_residuals .< 1.0e-5)                                                       #src
+@test all(robin_residuals[2:end] .< 1.0e-12)                                               #src
 @test robin_residuals[end] < robin_residuals[1] / 4                                        #src
 
 robin_residuals
