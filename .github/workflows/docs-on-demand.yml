@@ -85,11 +85,11 @@ jobs:
         # `coverage=false`, as the `with:` input had it, `--check-bounds=yes`, and `--depwarn=yes --inline=yes` on the outer process.
         # Dropped: `force_latest_compatible_version` (the action sets it to true only for
         # Dependabot/CompatHelper jobs, which these triggers are not) and `annotate` (off by
-        # default). `JULIA_NUM_THREADS: auto` stays in the step's `env`.
+        # default). `JULIA_NUM_THREADS: 4` (the ubuntu runner's vCPU count) stays in the step's `env`.
         run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=false, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: examples
-          JULIA_NUM_THREADS: auto
+          JULIA_NUM_THREADS: 4
 
       - name: Install dependencies
         run: |
@@ -101,5 +101,5 @@ jobs:
       - name: Build and deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          JULIA_NUM_THREADS: auto
+          JULIA_NUM_THREADS: 4
         run: julia --color=yes --project=docs docs/make.jl

@@ -48,7 +48,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  JULIA_NUM_THREADS: auto
+  # Pinned, not `auto`, which follows whatever host a job lands on (see CI.yml): 4 is the
+  # standard ubuntu runner's vCPU count. The matrix jobs below set 3 on macOS, that
+  # runner's count.
+  JULIA_NUM_THREADS: 4
 
 jobs:
   # A scheduled run on the same `main` commit as the last successful scheduled run would
@@ -100,6 +103,8 @@ jobs:
       contents: read
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
       id-token: write
+    env:
+      JULIA_NUM_THREADS: ${{ matrix.os == 'macOS-latest' && 3 || 4 }}
     strategy:
       fail-fast: false
       matrix:
@@ -137,7 +142,7 @@ jobs:
       # `coverage=true` (its default), `--check-bounds=yes`, and `--depwarn=yes --inline=yes` on the outer process.
       # Dropped: `force_latest_compatible_version` (the action sets it to true only for
       # Dependabot/CompatHelper jobs, which these triggers are not) and `annotate` (off by
-      # default). `JULIA_NUM_THREADS=auto` comes from the workflow-level `env`, so it still reaches the test subprocess.
+      # default). `JULIA_NUM_THREADS` comes from the job-level `env`, so it still reaches the test subprocess.
       - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: slow
@@ -193,6 +198,8 @@ jobs:
       contents: read
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
       id-token: write
+    env:
+      JULIA_NUM_THREADS: ${{ matrix.os == 'macOS-latest' && 3 || 4 }}
     strategy:
       fail-fast: false
       matrix:

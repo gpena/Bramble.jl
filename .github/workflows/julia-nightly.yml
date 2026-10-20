@@ -46,4 +46,4 @@ jobs:
         run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=false, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: unit
-          JULIA_NUM_THREADS: auto
+          JULIA_NUM_THREADS: ${{ inputs.os == 'macos-latest' && 3 || 4 }}
