@@ -23,7 +23,8 @@ const LITERATE_EXAMPLES = [
     "convection_diffusion_linear.jl",
     "heat_equation.jl",
     "neumann_robin_poisson.jl",
-    "ghost_heat_equation.jl"
+    "ghost_heat_equation.jl",
+    "elasticity_traction_2d.jl"
 ]
 
 if Threads.nthreads() == 1
@@ -78,7 +79,8 @@ examples = "Examples" => [
     "examples/convection_diffusion_linear.md",
     "examples/heat_equation.md",
     "examples/neumann_robin_poisson.md",
-    "examples/ghost_heat_equation.md"
+    "examples/ghost_heat_equation.md",
+    "examples/elasticity_traction_2d.md"
 ]
 internals = "Internals" => [
     "internals/utils.md",

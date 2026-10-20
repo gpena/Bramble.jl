@@ -58,6 +58,15 @@ node's reach and its stencil cannot disagree -- they used to be spelled out twic
 @inline _tap_weights(op, space, I) = map(
     w -> convert(promote_type(typeof(w), eltype(space)), w), _stencil_weights(op, space, I))
 
+# The trial function of a mixed difference on a composite constrained as a whole, read at a
+# ghost of a facet of `facets` (`facets[d][s]`, `s` 1 the minimum) by extrapolation from
+# the nodes inward: the facet rule (below the corner rule), which `form` builds
+# (ghost_composite.jl).
+struct _FacetExtrapolated{D, OpType <: LazyOp{D}} <: LazyOp{D}
+    inner_op::OpType
+    facets::NTuple{D, NTuple{2, Bool}}
+end
+
 """
     UnaryWrapper{D}
 
@@ -94,7 +103,8 @@ const UnaryWrapper{D} = Union{
     OperatorScale{D},
     GridFunctionScale{D},
     RegionRestriction{D},
-    InterpolationNode{D}
+    InterpolationNode{D},
+    _FacetExtrapolated{D}
 }
 
 # The queries that answer for a wrapper whatever they answer for its operand. One method
@@ -179,8 +189,10 @@ end
 # a first node and `-1` (`D₋`) at a last, which reads physical nodes only. `A`'s operand may
 # be a linear combination of such terms and others. The rule distributes over it
 # (`_rule_terms`): each mixed term that reads the corner takes the one-sided difference, and
-# every other term `A`'s own taps. Nothing changes elsewhere. Off a ghost mesh the predicate
-# is a constant `false`.
+# every other term `A`'s own taps. Elsewhere `A` reads the ghosts as the closure gives them,
+# but across a facet of the facet rule below (a composite constrained as a whole, whose
+# relations there read several components). Off a ghost mesh the predicate is a constant
+# `false`.
 #
 # The one-sided stencil keeps the node's own stencil type: entry for entry in the order of
 # `A`'s taps and, within each, of the terms, `A`'s taps past the two it uses and `B`'s
@@ -208,7 +220,7 @@ const _Scale = Union{OperatorScale, GridFunctionScale}
 @inline _cross_axis(op::_Scale) = _cross_axis(op.inner_op)
 @inline _cross_axis(::Any) = 0
 
-@inline _scaled_leaf(::_BareLeaf) = true
+@inline _scaled_leaf(::_AnyLeaf) = true
 @inline _scaled_leaf(op::_Scale) = _scaled_leaf(op.inner_op)
 @inline _scaled_leaf(::Any) = false
 
@@ -342,6 +354,169 @@ end
     ),
     )
 end
+
+# --- The facet rule of a composite constrained as a whole ---------------------------- #
+#
+# On `constrained(C₁ × C₂, relations)` a facet whose relations read several components (a
+# traction) closes its ghosts by a relation with a tangential difference: `u_g` of one
+# component is the mirror node's value plus the spacing across the facet times the centred
+# tangential difference of another. A mixed difference `A_d(B_e(u(j)))` of the form at a
+# node of that facet reads those ghosts, so its row carries a centred tangential difference
+# of a centred tangential difference, of the opposite sign to the row's own second
+# difference along the facet (`-λ ∂ₑₑ` in elasticity). Once the spacing across the facet is
+# about 1.5 times the spacing along it, the reduced matrix has eigenvalues of negative real
+# part (traction on one facet, uniform cells; #793).
+#
+# There `form` (ghost_composite.jl) marks the functions of every mixed difference in a
+# product's left argument, the side of the matrix columns (`_FacetExtrapolated`,
+# `_mark_mixed`): read at a ghost beyond a node of
+# a marked facet, it is the quadratic through its values at the three nodes inward along
+# the normal, evaluated at the ghost (`_one_sided_weights`, ghost_relations.jl), and
+# elsewhere its own value. The centred difference across the facet then reads the
+# derivative of that quadratic at the node, second order on the non-uniform spacing, and no
+# ghost of the facet, whichever of `A` and `B` crosses it. The second differences and the
+# relations read the closure's ghosts, and at a corner node the corner rule above comes
+# first. Every other space, and a composite whose relations each read one component,
+# assembles as before. A marked function has three entries at every point, the last two
+# zero away from a marked ghost, so the walk sees one length.
+
+# A marked function is the corner rule's operand as the function is.
+@inline _scaled_leaf(op::_FacetExtrapolated) = _scaled_leaf(op.inner_op)
+
+@inline _three_parts(S₁, S₂, S₃, w) = concatenate_stencils(scale_stencil(S₁, w[1]),
+    concatenate_stencils(scale_stencil(S₂, w[2]), scale_stencil(S₃, w[3])))
+
+@inline function local_stencil(
+        op::_FacetExtrapolated{D}, space, P::CartesianIndex{D}, markers, lin_idx::Int
+) where {D}
+    d, s = _marked_ghost(op.facets, mesh(space), P)
+    iszero(d) || return _extrapolated(op.inner_op, space, P, markers, d, s)
+    S = local_stencil(op.inner_op, space, P, markers, lin_idx)
+    T = eltype(space)
+    return _three_parts(S, S, S, (one(T), zero(T), zero(T)))
+end
+
+# The axis `d` and inward step `s` of the marked facet whose ghost `P` is, with three nodes
+# inward; `(0, 0)` if it is none (a node, a padded corner point, an unmarked facet's ghost).
+@inline function _marked_ghost(
+        facets::NTuple{D, NTuple{2, Bool}}, G, P::CartesianIndex{D}) where {D}
+    phys = physical_indices(G)
+    P in phys && return (0, 0)
+    for d in 1:D, t in 1:2
+
+        facets[d][t] || continue
+        s = t == 1 ? 1 : -1
+        _step(P, d, s) in phys && _step(P, d, 3s) in phys && return (d, s)
+    end
+    return (0, 0)
+end
+
+@inline _step(P::CartesianIndex{D}, d::Int, k::Int) where {D} = CartesianIndex(
+    ntuple(a -> a == d ? P[a] + k : P[a], Val(D)))
+
+# The function `w` at the ghost `P` extrapolated from the nodes `P + k s` along `d`, `k` 1
+# to 3: their stencils relabelled to offsets from `P` and weighted by the quadratic through
+# them evaluated at `P`.
+@inline function _extrapolated(
+        w, space, P::CartesianIndex{D}, markers, d::Int, s::Int) where {D}
+    G = mesh(space)
+    T = eltype(space)
+    x₁ = _inward_spacing(G, P, d, s)
+    x₂ = x₁ + _inward_spacing(G, _step(P, d, s), d, s)
+    x₃ = x₂ + _inward_spacing(G, _step(P, d, 2s), d, s)
+    c = map(a -> convert(T, a), _one_sided_weights(zero(x₁), x₁, x₂, x₃))
+    lins = LinearIndices(indices(G))
+    S₁ = _part(w, space, P, markers, lins, d, s)
+    S₂ = _part(w, space, P, markers, lins, d, 2s)
+    return _three_parts(S₁, S₂, _part(w, space, P, markers, lins, d, 3s), c)
+end
+
+@inline _inward_spacing(G, Q, d::Int, s::Int) = s == 1 ? forward_spacing(G, Q, d) :
+                                                spacing(G, Q, d)
+@inline function _part(w, space, P, markers, lins, d::Int, k::Int)
+    Q = _step(P, d, k)
+    return _shift_along(local_stencil(w, space, Q, markers, lins[Q]), d, k)
+end
+
+@inline _shift_along(S::Tuple, d::Int, k::Int) = _each_entry(
+    t -> (shift_offset(t[1], d, k), t[2]), S)
+
+# The facet rule's reads at `J`: the function's at the nodes it extrapolates from.
+@inline function _reads_at(
+        op::_FacetExtrapolated{D}, space, J::CartesianIndex{D}, facet::Bool) where {D}
+    _at_absent(op, space, J) && return true
+    d, s = _marked_ghost(op.facets, mesh(space), J)
+    iszero(d) && return _reads_at(op.inner_op, space, J, facet)
+    return _reads_at(op.inner_op, space, _step(J, d, s), facet) ||
+           _reads_at(op.inner_op, space, _step(J, d, 2s), facet) ||
+           _reads_at(op.inner_op, space, _step(J, d, 3s), facet)
+end
+
+# Its reach: the point, and one to three steps inward across each marked facet.
+function stencil_offsets(op::_FacetExtrapolated{D}) where {D}
+    inner = stencil_offsets(op.inner_op)
+    out = copy(inner)
+    for d in 1:D, t in 1:2
+
+        op.facets[d][t] || continue
+        for k in 1:3, o in inner
+
+            p = shift_offset(o, d, t == 1 ? k : -k)
+            p in out || push!(out, p)
+        end
+    end
+    return sort!(out)
+end
+_stencil_margin(op::_FacetExtrapolated) = _stencil_margin(op.inner_op) + 3
+expression(op::_FacetExtrapolated) = expression(op.inner_op)
+
+# `op` with the functions of every mixed difference marked for the facet rule on `facets`,
+# in the left argument of each product, through sums and wrappers. The left argument's
+# stencil gives the matrix columns, the padded values the closure fills, whose ghosts the
+# rule reads by extrapolation; the right argument's gives the rows, never marked. Bramble
+# places a product's sides by position, not by the leaf type (`u` or `v`). A mixed
+# difference is a first difference along one axis of a first difference along another,
+# under any sums and scales between them, and the functions of the inner one are marked
+# through its own sums and scales (`Dcₓ(Dcᵧ(u(1) + 2.0 * u(2)))` as
+# `Dcₓ(Dcᵧ(u(1))) + 2.0 * Dcₓ(Dcᵧ(u(2)))`).
+_mark_mixed(op, facets::NTuple{D, NTuple{2, Bool}}) where {D} = _mark(op, facets)
+_mark(op, facets) = op
+function _mark(op::OperatorAdd{D}, facets) where {D}
+    left, right = _mark(op.left_op, facets), _mark(op.right_op, facets)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+function _mark(op::BilinearProduct{D, W}, facets) where {D, W}
+    left = _mark(op.left_op, facets)
+    return BilinearProduct{D, W, typeof(left), typeof(op.right_op)}(left, op.right_op)
+end
+_mark(op::UnaryWrapper, facets) = _rewrap_inner(op, _mark(op.inner_op, facets))
+function _mark(op::_FirstDifference{D, Dim}, facets) where {D, Dim}
+    return _rewrap_inner(op, _mark_operand(op.inner_op, Val(Dim), facets))
+end
+
+# The operand of a first difference along `Dim`: through its sums and scales, a first
+# difference along another axis has its functions marked; any other term is walked on.
+function _mark_operand(op::OperatorAdd{D}, vdim::Val, facets) where {D}
+    left = _mark_operand(op.left_op, vdim, facets)
+    right = _mark_operand(op.right_op, vdim, facets)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+_mark_operand(op::_Scale, vdim::Val, facets) = _rewrap_inner(
+    op, _mark_operand(op.inner_op, vdim, facets))
+function _mark_operand(op::_FirstDifference{D, E}, ::Val{Dim}, facets) where {D, E, Dim}
+    E == Dim && return _mark(op, facets)
+    return _rewrap_inner(op, _mark_leaves(op.inner_op, facets))
+end
+_mark_operand(op, ::Val, facets) = _mark(op, facets)
+
+# The functions of `op` marked through its sums and scales; anything else as it is.
+function _mark_leaves(op::OperatorAdd{D}, facets) where {D}
+    left, right = _mark_leaves(op.left_op, facets), _mark_leaves(op.right_op, facets)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+_mark_leaves(op::_Scale, facets) = _rewrap_inner(op, _mark_leaves(op.inner_op, facets))
+_mark_leaves(op::_AnyLeaf, facets) = _FacetExtrapolated(op, facets)
+_mark_leaves(op, facets) = op
 
 # --- The refusal: any other read of a point the padded grid lacks -------------------- #
 #

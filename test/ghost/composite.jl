@@ -16,12 +16,12 @@ module GhostCompositeTests
 using Test
 using Bramble
 import Bramble
-using Bramble: D₋ₓ, D₊ᵧ, lift, lift!
+using Bramble: D₋ₓ, D₊ᵧ, Dcₓ, Dcᵧ, lift, lift!
 using LinearAlgebra: dot, norm
 using SparseArrays: blockdiag, sparse
 using Random: Xoshiro
 
-using ..TestUtils: WITH_3D_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 
 isdefined(Main, :GhostOracleND) ||
     Base.include(Main, joinpath(pkgdir(Bramble), "test", "ghost", "GhostOracleND.jl"))
@@ -80,9 +80,8 @@ function space_b(S)
             :ymin => u + ∂ₙ(u) => x -> x[1]))
 end
 
-# The mixed difference reads the ghosts beside the corners. On a padded composite with every
-# facet ghosted the walk refuses its read of the absent corner point (a scalar padded space
-# takes the corner rule there), so the `:boundary` spaces below are given other forms.
+# The mixed difference reads the ghosts beside the corners; at a corner node of a padded
+# composite it takes the one-sided corner rule, as on a scalar space (tested below).
 const fa2 = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(-1.0 * Δₕ(u(2)), v(2)) +
                       0.5 * innerₕ(u(2), v(2)) + innerₕ(u(2), v(1)) +
                       innerₕ(D₋ₓ(D₊ᵧ(u(1))), v(2))
@@ -174,22 +173,24 @@ end
     Vd = space_a(gridspace(Ωₕ; ghosts = GH)) × space_b(gridspace(Ωₕ; ghosts = GH))
     @test mesh(Vd.spaces[1]) !== mesh(Vd.spaces[2])
     @test assemble(form(Vd, Vd, fa2), form(Vd, fl2)) == assemble(a, form(V, fl2))
-    # different closures on the two sides: a rectangular block system
-    check_assembly(Ca × Cb, Cb × Ca, fa2, fl2)
-    # three copies of one space, every pair coupled
-    fa3 = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(-1.0 * Δₕ(u(2)), v(3)) +
-                    innerₕ(u(3), v(2)) + 2.0 * innerₕ(u(3), v(3)) + innerₕ(u(1), v(2))
-    fl3 = v -> innerₕ(x -> x[1], v(1)) + innerₕ(x -> 1.0, v(3))
-    check_assembly(Ca^Val(3), Ca^Val(3), fa3, fl3)
+    if WITH_SLOW_TESTS
+        # different closures on the two sides: a rectangular block system
+        check_assembly(Ca × Cb, Cb × Ca, fa2, fl2)
+        # three copies of one space, every pair coupled
+        fa3 = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(-1.0 * Δₕ(u(2)), v(3)) +
+                        innerₕ(u(3), v(2)) + 2.0 * innerₕ(u(3), v(3)) + innerₕ(u(1), v(2))
+        fl3 = v -> innerₕ(x -> x[1], v(1)) + innerₕ(x -> 1.0, v(3))
+        check_assembly(Ca^Val(3), Ca^Val(3), fa3, fl3)
 
-    # 1D: a constrained component beside a selection space that keeps its ghosts
-    Ω1 = O.O1.make_mesh(:random, 0; n0 = 9)
-    C1 = constrained(gridspace(Ω1; ghosts = :boundary),
-        u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => 2.0))
-    S1 = gridspace(Ω1; ghosts = :boundary)
-    fa1 = (u, v) -> innerₕ(-1.0 * Δₕ(u(1)), v(1)) + innerₕ(u(2), v(2)) + innerₕ(u(1), v(2))
-    fl1 = v -> innerₕ(x -> x, v(1)) + innerₕ(x -> 1.0, v(2))
-    check_assembly(C1 × S1, C1 × S1, fa1, fl1)
+        # 1D: a constrained component beside a selection space that keeps its ghosts
+        Ω1 = O.O1.make_mesh(:random, 0; n0 = 9)
+        C1 = constrained(gridspace(Ω1; ghosts = :boundary),
+            u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => 2.0))
+        S1 = gridspace(Ω1; ghosts = :boundary)
+        fa1 = (u, v) -> innerₕ(-1.0 * Δₕ(u(1)), v(1)) + innerₕ(u(2), v(2)) + innerₕ(u(1), v(2))
+        fl1 = v -> innerₕ(x -> x, v(1)) + innerₕ(x -> 1.0, v(2))
+        check_assembly(C1 × S1, C1 × S1, fa1, fl1)
+    end
 
     # A selection space has d = 0, so its load stands alone, and l(v) is Fᵀv.
     Sb = gridspace(Ωₕ; ghosts = :boundary)
@@ -217,6 +218,42 @@ end
         fl33 = v -> innerₕ(x -> x[3], v(1)) + innerₕ(x -> 1.0, v(2))
         check_assembly(C3^2, C3^2, fa33, fl33; zero_alloc = false)
     end
+end
+
+# --- The corner rule per component ------------------------------------------------------ #
+
+# A centred mixed difference of a component reads the absent padded corner point at a corner
+# node (2D) or an edge node (3D) and takes the one-sided corner rule there, as the scalar
+# form does: each block of the padded composite matrix is the scalar padded matrix, and the
+# reduced matrix is `Eᵀ A_pad E`.
+function check_corner_rule(Ωₕ)
+    S = gridspace(Ωₕ; ghosts = :boundary)
+    P = Bramble.padded_space(S)
+    V = S × S
+    PV = Bramble.padded_space(V)
+    m = ndofs(P)
+    Aref = Matrix(assemble(form(P, P, (u, v) -> innerₕ(Dcₓ(Dcᵧ(u)), v))))
+    for (i, j) in ((1, 1), (1, 2), (2, 1))
+        A = Matrix(assemble(form(PV, PV, (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(j))), v(i)))))
+        B = A[((i - 1) * m + 1):(i * m), ((j - 1) * m + 1):(j * m)]
+        @test close(B, Aref)
+        @test count(!iszero, A) == count(!iszero, B)
+    end
+    # two blocks at once, with coefficients that cannot be confused
+    A = Matrix(assemble(form(PV, PV,
+        (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(2))), v(1)) + 100.0 * innerₕ(Dcₓ(Dcᵧ(u(1))), v(2)))))
+    @test close(A[1:m, (m + 1):(2m)], Aref)
+    @test close(A[(m + 1):(2m), 1:m], 100.0 * Aref)
+    @test iszero(A[1:m, 1:m]) && iszero(A[(m + 1):(2m), (m + 1):(2m)])
+    fc = (u, v) -> innerₕ(Dcₓ(Dcᵧ(u(2))), v(1))
+    E, _ = Bramble.closure(V)
+    @test close(Matrix(assemble(form(V, V, fc))),
+        Matrix(E' * assemble(form(PV, PV, fc)) * E))
+end
+
+@testset "Composite ghost corner rule" begin
+    check_corner_rule(mesh2d())
+    WITH_3D_TESTS && check_corner_rule(O.make_mesh(:random, 0; dim = 3, n0 = 5))
 end
 
 # --- lift ---------------------------------------------------------------------------- #
