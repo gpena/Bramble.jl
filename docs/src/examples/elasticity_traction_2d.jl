@@ -86,17 +86,21 @@ function relations(u)
         for F in (:xmax, :ymax) for i in 1:2)...)
 end
 
-# The traction-free side carries zero data, and the manufactured one does too, to rounding:
+# The datum on `ymin` vanishes to rounding (first value); the loaded side `xmin` carries a
+# nonzero one at its midpoint (second):
 
-(maximum(abs, tractiondata(:ymin, i)((x, 0.0)) for x in 0:0.1:1 for i in 1:2),
-    abs(tractiondata(:xmin, 1)((0.0, 0.5))))
+zerodatum = maximum(abs, tractiondata(:ymin, i)((x, 0.0)) for x in 0:0.1:1 for i in 1:2)
+loadeddatum = abs(tractiondata(:xmin, 1)((0.0, 0.5)))
+(zerodatum, loadeddatum)
+
+@test zerodatum < 1.0e-14                                                                   #src
+@test loadeddatum > 1                                                                       #src
 
 # ## Assembling and solving
 #
 # Mixed differences in the left argument of `innerₕ` read the ghosts of a traction side, and
-# the library replaces them by the extrapolation of the nodes inward along the normal. That
-# is what keeps the collocated form stable on cells longer across a side than along it.
-# `pde_solve` takes the reduced system, and `Bramble.lift` returns the solution with its
+# the library replaces them by an extrapolation along the normal, as the internals page
+# explains. `pde_solve` takes the reduced system, and `Bramble.lift` returns the solution with its
 # ghost values, component by component.
 
 function solve_on(Ωₕ)
@@ -115,16 +119,13 @@ end
 # closure takes the tangential derivative one-sided, so the relation there is written out
 # by hand from the mesh points.
 
-paddedvalues(U) = parent(U)
-function relation_residual(Ωₕ, U, F, i)
+function relation_residual(Ωₕ, P, U, F, i)
     m = prod(Bramble.size(Ωₕ) .+ 2)
-    V = gridspace(Ωₕ; ghosts = :boundary)^Val(2)
-    P = Bramble.padded_space(V)
     R = assemble(form(P, P,
         (w, v) -> inner_Γ(∂ₙ(w(1); K = K(i, 1)), v(i); markers = (F,)) +
                   inner_Γ(∂ₙ(w(2); K = K(i, 2)), v(i); markers = (F,))))
     data = assemble(form(P, v -> inner_Γ(tractiondata(F, i), v(i); markers = (F,))))
-    flux = R * paddedvalues(U)
+    flux = R * parent(U)
     block = ((i - 1) * m + 1):(i * m)
     return (flux - data)[block], flux[block]
 end
@@ -132,37 +133,50 @@ end
 # The weighted residual of the relation of component `i` on side `F`, on every padded row
 # but the corner of the two tractions, against the size of the flux:
 
-function facet_residual(Ωₕ, U, F, i)
-    r, flux = relation_residual(Ωₕ, U, F, i)
-    n = Bramble.size(Ωₕ)
+function facet_residual(Ωₕ, P, U, F, i)
+    r, flux = relation_residual(Ωₕ, P, U, F, i)
     keep = trues(length(r))
-    P = LinearIndices(n .+ 2)
-    I = CartesianIndex(1, 1)
-    keep[P[I + oneunit(I)]] = false
+    keep[LinearIndices(Bramble.size(Ωₕ) .+ 2)[2, 2]] = false
     return maximum(abs, r[keep]) / max(1.0, maximum(abs, flux[keep]))
 end
 
-Ωchk = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
+# The checks run on a graded grid, the points of a uniform one pushed through a smooth
+# increasing map and installed with [`change_points!`](@ref), so that a wrong spacing in a
+# relation would show:
+
+grade(ξ) = expm1(2ξ) / expm1(2.0)
+
+function graded(n)
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n), (true, true))
+    change_points!(Ωₕ, (grade.(points(Ωₕ)[1]), 1 .- grade.(1 .- points(Ωₕ)[2])))
+    return Ωₕ
+end
+
+Ωchk = graded(9)
 Cchk, Uchk = solve_on(Ωchk)
-resid = (facet_residual(Ωchk, Uchk, :xmin, 1), facet_residual(Ωchk, Uchk, :xmin, 2))
+Pchk = Bramble.padded_space(gridspace(Ωchk; ghosts = :boundary)^Val(2))
+resid = (facet_residual(Ωchk, Pchk, Uchk, :xmin, 1),
+    facet_residual(Ωchk, Pchk, Uchk, :xmin, 2))
 
 # The traction-free side `ymin` holds the same way, with zero data:
 
-resid_free = (facet_residual(Ωchk, Uchk, :ymin, 1), facet_residual(Ωchk, Uchk, :ymin, 2))
+resid_free = (facet_residual(Ωchk, Pchk, Uchk, :ymin, 1),
+    facet_residual(Ωchk, Pchk, Uchk, :ymin, 2))
 
 # Both are rounding, not discretisation error: the relation is an identity of the lifted
 # values, whatever the accuracy of the solution.
 @test all(<(1.0e-12), resid)                                                                #src
 @test all(<(1.0e-12), resid_free)                                                           #src
 # The loaded side's flux is far from zero, so the relation is not met by a zero solution.   #src
-@test maximum(abs, relation_residual(Ωchk, Uchk, :xmin, 1)[2]) > 0.1                        #src
+@test maximum(abs, relation_residual(Ωchk, Pchk, Uchk, :xmin, 1)[2]) > 0.1                        #src
 
 # ### The corner of the two tractions
 #
 # At the corner node the ghost across `xmin` reads the tangential derivative along the
-# side. The closure takes it one-sided: the derivative at the node of the quadratic through
+# side, and the one across `ymin` the same along `ymin`. The closure takes it one-sided: the derivative at the node of the quadratic through
 # the three nodes along the side into the domain, with the normal derivative centred over
-# the ghost. This writes that relation from the mesh points and the padded values.
+# the ghost. This writes that relation from the mesh points and the padded values, and
+# returns the residual scaled by the size of its terms, with the terms.
 
 function corner_relation(xs, U, i, d, g)
     e = 3 - d
@@ -183,32 +197,29 @@ function corner_relation(xs, U, i, d, g)
         ∂e = sum(w[k] * val(j, I + (k - 1) * uex) for k in 1:3)
         push!(terms, -K(i, j)[d, d] * ∂d, -K(i, j)[d, e] * ∂e)
     end
-    return (sum(terms) - g) / max(1.0, maximum(abs, terms), abs(g))
+    return (sum(terms) - g) / max(1.0, maximum(abs, terms), abs(g)), terms
 end
 
 xschk = points(Ωchk)
-corner = [corner_relation(xschk, Uchk, i, d, g)
-          for i in 1:2 for (d, g) in ((1, tractiondata(:xmin, i)((0.0, 0.0))), (2, 0.0))]
-maximum(abs, corner)
+cornerx = [corner_relation(xschk, Uchk, i, 1, tractiondata(:xmin, i)((0.0, 0.0)))
+           for i in 1:2]
+cornery = [corner_relation(xschk, Uchk, i, 2, 0.0) for i in 1:2]
+maximum(abs, first.(cornerx))
 
-# Rounding again, at the corner too:
-@test maximum(abs, corner) < 1.0e-10                                                        #src
+# Rounding again, at the corner too. The `ymin` relation has zero datum and is homogeneous,
+# so its residual is exactly zero and is not printed; the `xmin` relation of component 1
+# carries a datum and terms of order one (component 2 has a small datum there):
+@test maximum(abs, first.(cornerx)) < 1.0e-10                                               #src
+@test maximum(abs, first.(cornery)) < 1.0e-10                                               #src
+@test maximum(abs, cornerx[1][2]) > 0.1                                                     #src
 
 # ## Second order on graded grids
 #
 # Three graded grids of 9, 17 and 33 points per axis: the points of a uniform grid pushed
-# through a smooth increasing map, installed with [`change_points!`](@ref), the cells
-# differing in size by a factor of about six. The error is the discrete ``H^1`` norm of
-# each component at the physical nodes. A random grid is left out on purpose: the
-# collocated form is stable on it but reaches second order only on a smooth grading.
-
-grade(ξ) = expm1(2ξ) / expm1(2.0)
-
-function graded(n)
-    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n), (true, true))
-    change_points!(Ωₕ, (grade.(points(Ωₕ)[1]), 1 .- grade.(1 .- points(Ωₕ)[2])))
-    return Ωₕ
-end
+# through the same map, the cells differing in size by a factor of about six. The error is
+# the discrete ``H^1`` norm of each component at the physical nodes. A random grid is left
+# out: the collocated form is stable on it (the errors at least halve per level, in
+# `test/ghost/traction.jl`), but no second order is asserted there.
 
 function component_errors(Ωₕ)
     _, U = solve_on(Ωₕ)
@@ -260,9 +271,9 @@ convergence_plot(
     [(hs, err1, "u₁", "#5B5FC7"), (hs, err2, "u₂", "#0E7C86")];
     title = "Elasticity with a traction, ‖·‖₁ₕ") # hide
 
-# Both components run parallel to the slope-2 line, with a loaded traction side, a
-# traction-free one and two displacement sides, and with the two tractions meeting at a
-# corner.
+println("Both components run parallel to the slope-2 line: orders ",
+    round(order1; digits = 2), " and ", round(order2; digits = 2),
+    " on these three levels, for the problem above.")
 #
 # ## Where to go next
 #
