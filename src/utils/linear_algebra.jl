@@ -201,8 +201,8 @@ end
     _batch_for!(v::AbstractArray, idxs, f::Function) -> Nothing
 
 [`CpuPolyester`](@ref)'s counterpart of [`_threaded_for!`](@ref), filled by
-`BramblePolyesterExt` (gpena/Bramble.jl#190). The only `src/` method errors naming
-Polyester, the way `_metal_backend` errors naming Metal.
+`BramblePolyesterExt` (gpena/Bramble.jl#190). Its `src/` method only throws, naming
+Polyester; `BramblePolyesterExt` defines the one that runs.
 """
 @noinline function _batch_for!(v, idxs, f)
     return _throw_cpubatch_without_polyester(:_batch_for!)
@@ -212,7 +212,8 @@ end
     _batch_axis_for!(v::AbstractArray, idxs::CartesianIndices, f::Function) -> Nothing
 
 [`CpuPolyester`](@ref)'s counterpart of [`_threaded_axis_for!`](@ref), filled by
-`BramblePolyesterExt`. The only `src/` method errors naming Polyester.
+`BramblePolyesterExt`. Its `src/` method only throws, naming Polyester;
+`BramblePolyesterExt` defines the one that runs.
 """
 @noinline function _batch_axis_for!(v, idxs::CartesianIndices, f)
     return _throw_cpubatch_without_polyester(:_batch_axis_for!)
@@ -567,7 +568,8 @@ end
     _batch_scatter_for!(mats::Tuple, idxs, g::Function) -> Nothing
 
 [`CpuPolyester`](@ref)'s counterpart of `_threaded_scatter_for!`, filled by
-`BramblePolyesterExt`. The only `src/` method errors naming Polyester.
+`BramblePolyesterExt`. Its `src/` method only throws, naming Polyester;
+`BramblePolyesterExt` defines the one that runs.
 """
 @noinline function _batch_scatter_for!(mats::Tuple, idxs, g)
     return _throw_cpubatch_without_polyester(:_batch_scatter_for!)
@@ -923,8 +925,9 @@ end
 """
     _batch_dot(u, w, v) -> Number
 
-[`CpuPolyester`](@ref)'s counterpart of [`_dot`](@ref), filled by `BramblePolyesterExt`. The
-only `src/` method errors naming Polyester.
+[`CpuPolyester`](@ref)'s counterpart of [`_dot`](@ref), filled by `BramblePolyesterExt`.
+Its `src/` method only throws, naming Polyester; `BramblePolyesterExt` defines the one that
+runs.
 """
 @noinline function _batch_dot(u, w, v)
     return _throw_cpubatch_without_polyester(:_batch_dot)
@@ -934,7 +937,8 @@ end
     _batch_dot_masked(u, w, v, mask) -> Number
 
 [`CpuPolyester`](@ref)'s counterpart of [`_dot_masked`](@ref), filled by
-`BramblePolyesterExt`. The only `src/` method errors naming Polyester.
+`BramblePolyesterExt`. Its `src/` method only throws, naming Polyester;
+`BramblePolyesterExt` defines the one that runs.
 """
 @noinline function _batch_dot_masked(u, w, v, mask)
     return _throw_cpubatch_without_polyester(:_batch_dot_masked)

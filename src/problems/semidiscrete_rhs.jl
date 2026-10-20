@@ -198,8 +198,9 @@ end
 
 [`CpuPolyester`](@ref)'s explicit right-hand-side product, filled by `BramblePolyesterExt`:
 `du[i] -= Σₖ nzval[perm[k]] * u[colval[k]]` over `k in rowptr[i]:(rowptr[i + 1] - 1)`, with
-`(rowptr, colval, perm)` the compressed-row pattern of `A` and `nzval = nonzeros(A)`, one row
-`i` per `Polyester.@batch` iteration. The only `src/` method errors naming Polyester.
+`(rowptr, colval, perm)` the compressed-row pattern of `A` and `nzval = nonzeros(A)`, one
+row `i` per `Polyester.@batch` iteration. Its `src/` method only throws, naming Polyester;
+`BramblePolyesterExt` defines the one that runs.
 """
 @noinline function _batch_csr_spmv!(du, rowptr, colval, perm, nzval, u)
     return _throw_cpubatch_without_polyester(:_batch_csr_spmv!)
