@@ -75,5 +75,14 @@ Neumann), and the `jacobi_`, `chebyshev_`, `ilu_` and `amg_preconditioner`s work
 scalar constrained space; device backends and the composite-space paths the support table
 marks refuse with an `ArgumentError`. `:spqr` refuses a `RankOneUpdate`.
 
+`Bramble.neumann_compatibility(problem, Ωₕ)` (public, not exported) checks a pure-Neumann
+datum: `problem(Ωₕ)` returns `(A, F, w)`, and the check rebuilds it on twice-refined copies
+of the mesh. An incompatible datum logs a warning and returns `compatible = false`; it
+throws nothing, and a small defect or a flux singular at a boundary point can be misjudged.
+A form that differences the ghosts (`innerₕ(Δₕ(u), Δₕ(v))`) leaves ghost-only kernel
+vectors: `pde_solve(A, F; gauge = Bramble.ghost_kernel(A, Wₕ))` fixes them (not with
+`:spqr` or `:sparspak`). `ghost_kernel` misses a kernel vector spread over the ghosts of
+several nodes, and a gauge that spans part of the kernel is not detected.
+
 For a Laplacian-like form on a tensor mesh, the `fdm_*` solvers skip assembly
 (`reference/forms-assembly.md`, Kronecker path).
