@@ -23,7 +23,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  JULIA_NUM_THREADS: auto
+  # Pinned, not `auto`: the standard macOS arm64 runner has 3 vCPUs, but `auto` follows
+  # whatever host the job lands on, and the peak RSS the 5 GB budget below checks likely
+  # grows with the thread count. Same code peaked at 2.89 and 5.29 GB on two runs of the
+  # `rest` shard (gpena/Bramble.jl#801); the thread link is suspected, not measured.
+  JULIA_NUM_THREADS: 3
 
 jobs:
   changes:
@@ -176,7 +180,7 @@ jobs:
       # `--check-bounds=yes`, plus `--depwarn=yes` and `--inline=yes` on the outer process.
       # Dropped: `force_latest_compatible_version`, which the action sets to true only for
       # Dependabot/CompatHelper jobs and which does not apply to a pull_request run here, and
-      # the `annotate` option (off by default). `JULIA_NUM_THREADS=auto` comes from the
+      # the `annotate` option (off by default). `JULIA_NUM_THREADS=3` comes from the
       # workflow-level `env`, so it still reaches the test subprocess.
       #
       # Open question: Julia keys package image caches on the optimisation level, so the -O1
