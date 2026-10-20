@@ -161,7 +161,7 @@ end
     C = constrained(gridspace(Ω; ghosts = :boundary), u -> robin_pairs(u, rels))
     Eo, do_ = O1.ghost_closure(rels, Ω)
     a = laplacian_form(C)
-    l = form(C, v -> inner_Γ(Δₕ(Bramble.lift(C)), ∂ₙ(v)))
+    l = form(C, v -> inner_Γ(Δₕ(Bramble.lift(C)), ∂ₙ(v); markers = :boundary))
     _, Fl = assemble(a, l)
     _, F0 = assemble(a, zero_load(C))
     g = ops.Lap * do_

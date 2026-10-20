@@ -151,7 +151,7 @@ end
         space = Ω -> constrained(gridspace(Ω; ghosts = :boundary), rel)
         mixed = (u, v) -> innerₕ(K[1, 1] * D̃ₓ(D₋ₓ(u)) + 2 * K[1, 2] * Dcₓ(Dcᵧ(u)) +
                                  K[2, 2] * D̃ᵧ(D₋ᵧ(u)), v)
-        facet = (u, v) -> innerₕ(-Δₕ(u), v) + inner_Γ(∂ₙ(u), v)
+        facet = (u, v) -> innerₕ(-Δₕ(u), v) + inner_Γ(∂ₙ(u), v; markers = :boundary)
         for f in (mixed, facet)
             (A0, F0), (A1, F1) = pair_by_policy((9, 11), space, f, source)
             @test relerr(A1, A0) <= 1e-13

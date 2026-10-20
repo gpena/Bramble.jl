@@ -559,10 +559,10 @@ end
 function _pc_nested_constrained(C)
     a = form(C, C, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
     assemble(a, form(C, v -> innerₕ(x -> 1.0, v)))
-    assemble(a, form(C, v -> inner_Γ(Δₕ(lift(C)), ∂ₙ(v))))
+    assemble(a, form(C, v -> inner_Γ(Δₕ(lift(C)), ∂ₙ(v); markers = :boundary)))
     assemble(form(C, C, (u, v) -> innerₕ(u, Δₕ(v))))
-    assemble(form(C, C, (u, v) -> inner_Γ(∂ₙ(u), v)))
-    assemble(form(C, C, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v)))
+    assemble(form(C, C, (u, v) -> inner_Γ(∂ₙ(u), v; markers = :boundary)))
+    assemble(form(C, C, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = :boundary)))
     return nothing
 end
 
