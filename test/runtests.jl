@@ -109,7 +109,7 @@ end
 # more than one thread is actually available -- on one thread the multi-colour sweep never
 # runs concurrently, so nothing can race, and the tests that check it degrade to
 # `@test_skip` (test/form/linear.jl's "Parallel vs serial agreement", test/form/bilinear.jl's
-# "Determinism under threads"). CI sets `JULIA_NUM_THREADS=auto`, so this only fires for a
+# "Determinism under threads"). CI sets `JULIA_NUM_THREADS` above 1, so this only fires for a
 # local `Pkg.test()`, which defaults to one thread -- without this, that run reads as "all
 # green" with five-plus concurrency assertions quietly never having run at all.
 if __bramble_with_unit_tests && Threads.nthreads() == 1
