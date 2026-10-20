@@ -52,27 +52,27 @@ Kt(i, j, D) = [λ * (i == d) * (j == e) + μ * ((i == j) * (d == e) + (i == e) *
 # In 2D the traction on `:ymin` (outward normal −e₂) vanishes: `∂ᵧu₁ = ∂ₓu₂ = 0` there and
 # `λ ∂ₓu₁ + (λ + 2μ) ∂ᵧu₂ = 0` through the factor `c = λ / (λ + 2μ)`.
 const c = λ / (λ + 2μ)
-const UE2 = (x -> sin(x[1] + 0.3) * cos(x[2]) + exp(x[1]) * x[2]^2 / 2,
+const UEX2 = (x -> sin(x[1] + 0.3) * cos(x[2]) + exp(x[1]) * x[2]^2 / 2,
     x -> -c * cos(x[1] + 0.3) * sin(x[2]) + cos(2x[1]) * x[2]^2)
-const UE3 = (x -> sin(x[1] + 0.3) * cos(x[2]) * exp(x[3] / 2),
+const UEX3 = (x -> sin(x[1] + 0.3) * cos(x[2]) * exp(x[3] / 2),
     x -> cos(x[1]) * x[2] * x[3] + exp(x[1] + x[2] / 2),
     x -> sin(x[1] + x[2]) * cos(x[3] + 0.2))
 
 ∇(f, x) = gradient(f, collect(Float64, x))
 H(f, x) = hessian(f, collect(Float64, x))
 
-# The traction of component i of `ue` on the facet with outward normal `n`.
-function traction_data(ue, i, n)
-    D = length(ue)
-    return x -> sum(n[d] * Kt(i, j, D)[d, e] * ∇(ue[j], x)[e]
+# The traction of component i of `uex` on the facet with outward normal `n`.
+function traction_data(uex, i, n)
+    D = length(uex)
+    return x -> sum(n[d] * Kt(i, j, D)[d, e] * ∇(uex[j], x)[e]
     for j in 1:D, d in 1:D, e in 1:D)
 end
 
 # The load `−μ Δuᵢ − (λ + μ) ∂ᵢ div u`.
-function load(ue, i)
-    D = length(ue)
-    return x -> -μ * sum(H(ue[i], x)[a, a] for a in 1:D) -
-                (λ + μ) * sum(H(ue[j], x)[i, j] for j in 1:D)
+function load(uex, i)
+    D = length(uex)
+    return x -> -μ * sum(H(uex[i], x)[a, a] for a in 1:D) -
+                (λ + μ) * sum(H(uex[j], x)[i, j] for j in 1:D)
 end
 
 const AXIS = (xmin = 1, xmax = 1, ymin = 2, ymax = 2, zmin = 3, zmax = 3)
@@ -102,17 +102,17 @@ function elasticity(D)
     return (u, v) -> rest(u, v) + mixed(u, v)
 end
 
-load_form(ue) = v -> sum(innerₕ(load(ue, i), v(i)) for i in eachindex(ue))
+load_form(uex) = v -> sum(innerₕ(load(uex, i), v(i)) for i in eachindex(uex))
 
 tr(u, i, D) = sum(∂ₙ(u(j); K = Kt(i, j, D)) for j in 1:D)
 
-# Traction on `tfacets`, the data of `ue` (or zero on `free`), displacement on `dfacets`.
-function relations(ue, tfacets, dfacets; free = ())
-    D = length(ue)
-    tdata(F, i) = F in free ? 0.0 : traction_data(ue, i, normal(F, D))
-    ∂ₙₙdata(F, i) = x -> H(ue[i], x)[AXIS[F], AXIS[F]]
+# Traction on `tfacets`, the data of `uex` (or zero on `free`), displacement on `dfacets`.
+function relations(uex, tfacets, dfacets; free = ())
+    D = length(uex)
+    tdata(F, i) = F in free ? 0.0 : traction_data(uex, i, normal(F, D))
+    ∂ₙₙdata(F, i) = x -> H(uex[i], x)[AXIS[F], AXIS[F]]
     traction(u, F) = ntuple(i -> F => tr(u, i, D) => tdata(F, i), D)
-    displacement(u, F) = (ntuple(i -> F => u(i) => ue[i], D)...,
+    displacement(u, F) = (ntuple(i -> F => u(i) => uex[i], D)...,
         ntuple(i -> F => ∂ₙₙ(u(i)) => ∂ₙₙdata(F, i), D)...)
     return u -> (Iterators.flatten(traction(u, F) for F in tfacets)...,
         Iterators.flatten(displacement(u, F) for F in dfacets)...)
@@ -121,10 +121,10 @@ end
 const CASE2 = (tfacets = (:xmin, :ymin), dfacets = (:xmax, :ymax), free = (:ymin,))
 const ALL_DISPLACEMENT = (tfacets = (), dfacets = (:xmin, :xmax, :ymin, :ymax), free = ())
 
-function elasticity_space(Ωₕ, ue, case)
+function elasticity_space(Ωₕ, uex, case)
     S = gridspace(Ωₕ; ghosts = :boundary)
-    V = S^Val(length(ue))
-    return V, constrained(V, relations(ue, case.tfacets, case.dfacets; free = case.free))
+    V = S^Val(length(uex))
+    return V, constrained(V, relations(uex, case.tfacets, case.dfacets; free = case.free))
 end
 
 # --- Errors ----------------------------------------------------------------------------- #
@@ -154,19 +154,19 @@ function h1_error(xs, e)
 end
 
 # `hₘₐₓ` and the H¹ error of each component on `make_mesh(kind, ℓ)`, ℓ in `levels`.
-function errors(ue, case, kind, levels; n0, seed = 20261014)
-    D = length(ue)
+function errors(uex, case, kind, levels; n0, seed = 20261014)
+    D = length(uex)
     hs, errs = Float64[], NTuple{D, Float64}[]
     for ℓ in levels
         Ωₕ = O.make_mesh(kind, ℓ; dim = D, n0, seed)
-        _, C = elasticity_space(Ωₕ, ue, case)
-        A, F = assemble(form(C, C, elasticity(D)), form(C, load_form(ue)))
+        _, C = elasticity_space(Ωₕ, uex, case)
+        A, F = assemble(form(C, C, elasticity(D)), form(C, load_form(uex)))
         U = parent(Bramble.lift(C, A \ F))
         xs = O.axis_points(Ωₕ)
         n = map(length, xs)
         nodes = collect(Iterators.product(xs...))
         push!(hs, maximum(x -> maximum(diff(x)), xs))
-        push!(errs, ntuple(i -> h1_error(xs, physical(U, n, i) - ue[i].(nodes)), D))
+        push!(errs, ntuple(i -> h1_error(xs, physical(U, n, i) - uex[i].(nodes)), D))
     end
     return hs, errs
 end
@@ -238,7 +238,7 @@ function corner_relation(xs, np, U, i, d, η, I, g)
     m = prod(np)
     val(j, J) = U[(j - 1) * m + padded_point(np, J)]
     ud = CartesianIndex(ntuple(a -> a == d ? 1 : 0, 2))
-    ue = CartesianIndex(ntuple(a -> a == e ? 1 : 0, 2))
+    uex = CartesianIndex(ntuple(a -> a == e ? 1 : 0, 2))
     h = abs(xs[d][I[d] == 1 ? 2 : end] - xs[d][I[d] == 1 ? 1 : end - 1])
     σ = I[e] == 1 ? 1 : -1
     y = (xs[e][I[e]], xs[e][I[e] + σ], xs[e][I[e] + 2σ])
@@ -248,7 +248,7 @@ function corner_relation(xs, np, U, i, d, η, I, g)
     terms = Float64[]
     for j in 1:2
         ∂d = (val(j, I + ud) - val(j, I - ud)) / (2h)
-        ∂e = sum(w[k] * val(j, I + (k - 1) * σ * ue) for k in 1:3)
+        ∂e = sum(w[k] * val(j, I + (k - 1) * σ * uex) for k in 1:3)
         push!(terms, η * Kt(i, j, 2)[d, d] * ∂d, η * Kt(i, j, 2)[d, e] * ∂e)
     end
     return sum(terms) - g, max(maximum(abs, terms), abs(g))
@@ -259,8 +259,8 @@ const KINDS = (:random, :graded)
 @testset "Traction conditions through ghost points" begin
     @testset "Reduced matrix and load: $kind" for kind in KINDS
         Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 9)
-        V, C = elasticity_space(Ωₕ, UE2, CASE2)
-        fa, fl = elasticity(2), load_form(UE2)
+        V, C = elasticity_space(Ωₕ, UEX2, CASE2)
+        fa, fl = elasticity(2), load_form(UEX2)
         A, F = assemble(form(C, C, fa), form(C, fl))
         Aref, Fref, Aplain = reference(V, C, Ωₕ, CASE2.tfacets, fl)
         @test size(A) == size(Aref)
@@ -277,15 +277,15 @@ const KINDS = (:random, :graded)
         # the manufactured solution leaves `:ymin` traction-free and loads `:xmin`
         for x in (0.1, 0.5, 0.9), i in 1:2
 
-            @test abs(traction_data(UE2, i, (0.0, -1.0))((x, 0.0))) <= 1.0e-14
+            @test abs(traction_data(UEX2, i, (0.0, -1.0))((x, 0.0))) <= 1.0e-14
         end
-        @test abs(traction_data(UE2, 1, (-1.0, 0.0))((0.0, 0.5))) > 0.1
-        @test abs(traction_data(UE2, 2, (-1.0, 0.0))((0.0, 0.5))) > 0.1
+        @test abs(traction_data(UEX2, 1, (-1.0, 0.0))((0.0, 0.5))) > 0.1
+        @test abs(traction_data(UEX2, 2, (-1.0, 0.0))((0.0, 0.5))) > 0.1
     end
 
     @testset "Corner of two tractions: $kind" for kind in KINDS
         Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 9)
-        V, C = elasticity_space(Ωₕ, UE2, CASE2)
+        V, C = elasticity_space(Ωₕ, UEX2, CASE2)
         xs = O.axis_points(Ωₕ)
         n = map(length, xs)
         np = n .+ 2
@@ -299,12 +299,12 @@ const KINDS = (:random, :graded)
 
             @test norm(E[(i - 1) * m + p, :]) > 0
         end
-        A, F = assemble(form(C, C, elasticity(2)), form(C, load_form(UE2)))
+        A, F = assemble(form(C, C, elasticity(2)), form(C, load_form(UEX2)))
         rng = Xoshiro(20261019)
         for U in (E * rand(rng, Bramble.ndofs(C)) + d, parent(Bramble.lift(C, A \ F)))
             for (dd, Fc) in ((1, :xmin), (2, :ymin)), i in 1:2
 
-                g = Fc === :ymin ? 0.0 : traction_data(UE2, i, (-1.0, 0.0))((0.0, 0.0))
+                g = Fc === :ymin ? 0.0 : traction_data(UEX2, i, (-1.0, 0.0))((0.0, 0.0))
                 r, sz = corner_relation(xs, np, U, i, dd, -1.0, I, g)
                 @test abs(r) <= 1.0e-10 * max(1.0, sz)
             end
@@ -313,7 +313,7 @@ const KINDS = (:random, :graded)
 
     @testset "Order, graded meshes" begin
         levels = WITH_SLOW_TESTS ? (0:3) : (0:2)
-        hs, errs = errors(UE2, CASE2, :graded, levels; n0 = 9)
+        hs, errs = errors(UEX2, CASE2, :graded, levels; n0 = 9)
         @test maximum(hs) / minimum(hs) > 3
         for i in 1:2
             @test errs[end][i] < errs[1][i] / 8
@@ -325,8 +325,8 @@ const KINDS = (:random, :graded)
     # that of displacement on every facet, through ghosts, level by level.
     @testset "Stability, random meshes, seed $seed" for seed in (20261014, 7)
         levels = WITH_SLOW_TESTS ? (0:3) : (0:2)
-        hs, errs = errors(UE2, CASE2, :random, levels; n0 = 9, seed)
-        _, base = errors(UE2, ALL_DISPLACEMENT, :random, levels; n0 = 9, seed)
+        hs, errs = errors(UEX2, CASE2, :random, levels; n0 = 9, seed)
+        _, base = errors(UEX2, ALL_DISPLACEMENT, :random, levels; n0 = 9, seed)
         @test maximum(hs) / minimum(hs) > 3
         for ℓ in eachindex(levels), i in 1:2
 
@@ -344,7 +344,7 @@ const KINDS = (:random, :graded)
         # #793 AC 3: the reduced matrix is symmetric whenever the padded one is. A symmetric
         # padded form here: the energy form, which reads no ghost, plus a term that does.
         Ωₕ = O.make_mesh(:random, 0; dim = 2, n0 = 9)
-        V, C = elasticity_space(Ωₕ, UE2, CASE2)
+        V, C = elasticity_space(Ωₕ, UEX2, CASE2)
         energy = (u, v) -> 2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₘₕ(u), divₘₕ(v))
         fs = (u, v) -> energy(u, v) + innerₕ(Dcₓ(u(1)), Dcₓ(v(1))) +
                        innerₕ(Dcᵧ(u(2)), Dcᵧ(v(2)))
@@ -370,8 +370,8 @@ const KINDS = (:random, :graded)
         case = (tfacets = (:xmin,), dfacets = (:xmax, :ymin, :ymax, :zmin, :zmax),
             free = ())
         Ωₕ = O.make_mesh(kind, 0; dim = 3, n0 = 5)
-        V, C = elasticity_space(Ωₕ, UE3, case)
-        fa, fl = elasticity(3), load_form(UE3)
+        V, C = elasticity_space(Ωₕ, UEX3, case)
+        fa, fl = elasticity(3), load_form(UEX3)
         A, F = assemble(form(C, C, fa), form(C, fl))
         Aref, Fref, Aplain = reference(V, C, Ωₕ, case.tfacets, fl)
         @test close(Matrix(A), Aref)
@@ -380,7 +380,7 @@ const KINDS = (:random, :graded)
         # the order on graded meshes of 9, 17 and 33 points per axis: from 5 points per
         # axis the slope of u₃ is still pre-asymptotic
         if kind === :graded
-            hs, errs = errors(UE3, case, kind, 0:2; n0 = 9)
+            hs, errs = errors(UEX3, case, kind, 0:2; n0 = 9)
             for i in 1:3
                 @test lsq_order(hs, getindex.(errs, i)) > 1.8
             end

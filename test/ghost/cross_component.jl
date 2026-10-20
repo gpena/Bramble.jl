@@ -277,7 +277,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         m = prod(np)
         val(j, J) = U[(j - 1) * m + padded_point(np, J)]
         ud = CartesianIndex(ntuple(a -> a == d ? 1 : 0, 2))
-        ue = CartesianIndex(ntuple(a -> a == e ? 1 : 0, 2))
+        uex = CartesianIndex(ntuple(a -> a == e ? 1 : 0, 2))
         h = abs(xs[d][I[d] == 1 ? 2 : end] - xs[d][I[d] == 1 ? 1 : end - 1])
         σ = I[e] == 1 ? 1 : -1                 # into the domain along `e`
         y = (xs[e][I[e]], xs[e][I[e] + σ], xs[e][I[e] + 2σ])
@@ -288,7 +288,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         terms = Float64[]
         for j in 1:2
             ∂d = (val(j, I + ud) - val(j, I - ud)) / (2h)
-            ∂e = sum(w[k] * val(j, I + (k - 1) * σ * ue) for k in 1:3)
+            ∂e = sum(w[k] * val(j, I + (k - 1) * σ * uex) for k in 1:3)
             push!(terms, η * K(i, j)[d, d] * ∂d, η * K(i, j)[d, e] * ∂e)
         end
         x = (xs[1][I[1]], xs[2][I[2]])

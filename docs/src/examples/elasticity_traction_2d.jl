@@ -170,7 +170,7 @@ function corner_relation(xs, U, i, d, g)
     P = LinearIndices(n .+ 2)
     val(j, I) = parent(U)[(j - 1) * prod(n .+ 2) + P[I + oneunit(I)]]
     ud = CartesianIndex(ntuple(a -> a == d ? 1 : 0, 2))
-    ue = CartesianIndex(ntuple(a -> a == e ? 1 : 0, 2))
+    uex = CartesianIndex(ntuple(a -> a == e ? 1 : 0, 2))
     I = CartesianIndex(1, 1)
     h = xs[d][2] - xs[d][1]
     y = (xs[e][1], xs[e][2], xs[e][3])
@@ -180,7 +180,7 @@ function corner_relation(xs, U, i, d, g)
     terms = Float64[]
     for j in 1:2
         ∂d = (val(j, I + ud) - val(j, I - ud)) / (2h)
-        ∂e = sum(w[k] * val(j, I + (k - 1) * ue) for k in 1:3)
+        ∂e = sum(w[k] * val(j, I + (k - 1) * uex) for k in 1:3)
         push!(terms, -K(i, j)[d, d] * ∂d, -K(i, j)[d, e] * ∂e)
     end
     return (sum(terms) - g) / max(1.0, maximum(abs, terms), abs(g))
