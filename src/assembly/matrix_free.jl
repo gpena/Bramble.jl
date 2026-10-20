@@ -239,7 +239,8 @@ operator per task. `dirichlet` there takes what `assemble(a; dirichlet)` takes.
 - `ArgumentError`: `dirichlet_components` names a leaf the test space does not have.
 - `ArgumentError`: `dirichlet` on ghost spaces whose unknowns are not the physical nodes,
   as for `assemble(a; dirichlet)`.
-- `ArgumentError`: `a` holds a rank-one term, or is a form over composite ghost spaces.
+- `ArgumentError`: `a` holds a rank-one term.
+- `ArgumentError`: `a` is a form over composite ghost spaces, which have no matrix-free operator.
 - `ArgumentError`, from `mul!`: a product on a ghost-space operator while another task's
   product on it runs.
 

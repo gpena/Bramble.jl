@@ -52,12 +52,12 @@ the right answer the same way, for free. `BrambleMetalExt` keeps its own
 specific method, and those predate this generic one -- the same idiom as [`ka_device`](@ref):
 a method a package extension supplies for its own type, picked up automatically once loaded.
 
-For an [`ExecutionPolicy`](@ref), `locality` answers what the policy claims: a
-[`CpuPolicy`](@ref) claims [`HostLocality`](@ref), a [`GpuPolicy`](@ref) claims
+For an [`ExecutionPolicy`](@ref), `locality` answers what the policy claims. A
+[`CpuPolicy`](@ref) claims [`HostLocality`](@ref) and a [`GpuPolicy`](@ref) claims
 [`DeviceLocality`](@ref). For a [`Backend`](@ref), it answers the locality of the backend's
-vector type `VT` alone: `VT` is the storage a sweep actually indexes, so that is the
-locality that matters for legality. The matrix type `MT` is not consulted here:
-[`Backend`](@ref)'s constructor checks `MT` against `VT` separately.
+vector type `VT` alone, because `VT` is the storage a sweep actually indexes. The matrix
+type `MT` is not consulted here, since `Backend`'s constructor checks `MT` against `VT`
+separately.
 
 # Examples
 ```jldoctest
