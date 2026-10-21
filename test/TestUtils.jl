@@ -239,6 +239,21 @@ const MAXRSS_BUDGET_GB = let v = get(ENV, "BRAMBLE_TEST_MAXRSS_GB", "")
     isempty(v) ? nothing : parse(Float64, v)
 end
 
+# The machine's memory and the `--heap-size-hint` the test process got, once at the top of
+# the trace. The same commit peaked at 2.57 GB on one macOS runner and 5.56 GB on another
+# (nightly runs 39580418315 and 39590231313, forms-1), for no reason the log could show:
+# with these figures in it, a high run can be checked against the runner it got. A hint of
+# 0 means none was passed.
+if TRACE_TESTS
+    let total_gb = Sys.total_memory() / 1024^3
+        hint_gb = Base.JLOptions().heap_size_hint / 1024^3
+        budget = MAXRSS_BUDGET_GB === nothing ? "none" : "$(MAXRSS_BUDGET_GB) GB"
+        println(@sprintf("memory: total %.2f GB, heap-size-hint %.2f GB", total_gb, hint_gb),
+            ", maxrss budget ", budget)
+    end
+    flush(stdout)
+end
+
 # Prints the start/end trace lines around one `Base.include(Main, path)` call, when active.
 # Broken out so the `include` override below (installed once, outside this module) is a
 # one-line forward into it.
