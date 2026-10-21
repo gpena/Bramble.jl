@@ -61,8 +61,10 @@ function read_table(path; basename_keys = false)
 end
 
 function compare_tables(before_path, after_path)
-    legacy(p) = any(l -> !startswith(l, HEADER_PREFIX) && !startswith(l, "file\t") &&
-                         !isempty(l) && !occursin('/', first(split(l, '\t'))), eachline(p))
+    legacy(p) = any(
+        l -> !startswith(l, HEADER_PREFIX) && !startswith(l, "file\t") &&
+             !isempty(l) && !occursin('/', first(split(l, '\t'))),
+        eachline(p))
     bn = legacy(before_path) || legacy(after_path)
     hb, before = read_table(before_path; basename_keys = bn)
     ha, after = read_table(after_path; basename_keys = bn)

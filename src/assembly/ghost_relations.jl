@@ -838,7 +838,7 @@ function _dirichlet_values(G::GhostMesh{D}, drels::Tuple, ::Type{T},
     zr = zero(real(S))
     floor = 10 * eps(real(S)) *
             maximum(map(x -> maximum(abs, Iterators.filter(isfinite, last(x)); init = zr),
-                chunks); init = zr)
+                    chunks); init = zr)
     order, owner, first_rel = Int[], Int[], zeros(Int, length(plin))
     for i in eachindex(chunks)
         pts, vals = chunks[i]
