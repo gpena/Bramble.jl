@@ -30,19 +30,21 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 
 # `BRAMBLE_TEST_SHARD` narrows the `unit` block to one of four parts, so CI can run each on
 # its own runner: `forms-1` and `forms-2` are the two halves of test/form/, `ghost` is
-# test/ghost/, and `rest` is the remainder of the unit block. Unset runs everything, which is what every local run and
-# every other group does; the quality, ext, ad, gpu and examples blocks ignore it. The gate
-# sits at the include sites in test/runtests.jl and test/form/runtests.jl, through
-# `in_shard`.
+# test/ghost/, and `rest` is the remainder of the unit block. It also narrows the package
+# extensions block (the `ext` and `backends` groups) to one of two parts, which Weekly.yml
+# runs on separate runners: `ext-solvers` is the plotting, solver and Kronecker files and
+# `ext-polyester` the Polyester files. Unset runs everything, which is what every local run
+# does; the quality, ad, gpu, examples and grids blocks ignore it. The gate sits at the
+# include sites in test/runtests.jl and test/form/runtests.jl, through `in_shard`.
 const TEST_SHARD = get(ENV, "BRAMBLE_TEST_SHARD", "")
 
-const TEST_SHARDS = ("forms-1", "forms-2", "ghost", "rest")
+const TEST_SHARDS = ("forms-1", "forms-2", "ghost", "rest", "ext-solvers", "ext-polyester")
 
 """
     in_shard(name)
 
 True when no shard is selected or the selected shard is `name`. Throws an `ArgumentError`
-for a `name`, or a `BRAMBLE_TEST_SHARD`, outside `("forms-1", "forms-2", "ghost", "rest")`, since a
+for a `name`, or a `BRAMBLE_TEST_SHARD`, outside `TEST_SHARDS`, since a
 misspelt shard would select nothing and pass green.
 """
 function in_shard(name::AbstractString)
@@ -239,6 +241,21 @@ TRACE_TESTS && Base.cumulative_compile_timing(true)
 # over. Parsed once here rather than in every call to `traced_include`.
 const MAXRSS_BUDGET_GB = let v = get(ENV, "BRAMBLE_TEST_MAXRSS_GB", "")
     isempty(v) ? nothing : parse(Float64, v)
+end
+
+# The machine's memory and the `--heap-size-hint` the test process got, once at the top of
+# the trace. The same commit peaked at 2.57 GB on one macOS runner and 5.56 GB on another
+# (nightly runs 39580418315 and 39590231313, forms-1), for no reason the log could show:
+# with these figures in it, a high run can be checked against the runner it got. A hint of
+# 0 means none was passed.
+if TRACE_TESTS
+    let total_gb = Sys.total_memory() / 1024^3
+        hint_gb = Base.JLOptions().heap_size_hint / 1024^3
+        budget = MAXRSS_BUDGET_GB === nothing ? "none" : "$(MAXRSS_BUDGET_GB) GB"
+        println(@sprintf("memory: total %.2f GB, heap-size-hint %.2f GB", total_gb, hint_gb),
+            ", maxrss budget ", budget)
+    end
+    flush(stdout)
 end
 
 # Prints the start/end trace lines around one `Base.include(Main, path)` call, when active.

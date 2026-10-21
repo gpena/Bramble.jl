@@ -267,34 +267,38 @@ if __bramble_with_ext_backends
         # runtests.jl files.
         isdefined(Main, :ExtSolverContracts) || include("ext/SolverContracts.jl")
 
-        include("ext/plots_ext.jl")
-        include("ext/makie_ext.jl")
-        include("ext/meshes_ext.jl")
-        include("ext/sciml_ext.jl")
-        include("ext/algebraicmultigrid_ext.jl")
-        include("ext/iluzero_ext.jl")
-        include("ext/suitesparse_ext.jl")
-        include("ext/appleaccelerate_ext.jl")
-        include("ext/mumps_ext.jl")
-        include("ext/sparspak_ext.jl")
-        # The memory-scaling milestone's own backend/operator extensions (v3.3.0 plan S3.1,
-        # S5.2, S7.2): SparseMatrixCSR assembly, the Kronecker.jl fast-diagonalisation solve,
-        # and the Polyester-backed CpuPolyester sweeps. Grouped with the other package-extension
-        # files above rather than the every-push suite because each needs its own weak
-        # dependency loaded.
-        include("ext/sparse_csr_ext.jl")
-        include("ext/kronecker_ext.jl")
-        include("ext/kronecker_refactorize.jl")
-        include("ext/polyester_ext.jl")
-        include("ext/polyester_parity.jl")
-        include("ext/ghost_polyester.jl")
-        include("ext/ghost_vector_polyester.jl")
-        include("ext/ghost_semidiscrete_polyester.jl")
-        # BrambleChainRulesExt: the pde_solve rrule's own math, checked against finite
-        # differences and by hand. It needs only ChainRulesCore (a test/Project.toml
-        # dependency), so it runs here, not in "AD backends (expensive)". Enzyme/Mooncake
-        # composition is chainrules_enzyme_ext.jl there.
-        include("ext/chainrules_ext.jl")
+        if TestUtils.in_shard("ext-solvers")
+            include("ext/plots_ext.jl")
+            include("ext/makie_ext.jl")
+            include("ext/meshes_ext.jl")
+            include("ext/sciml_ext.jl")
+            include("ext/algebraicmultigrid_ext.jl")
+            include("ext/iluzero_ext.jl")
+            include("ext/suitesparse_ext.jl")
+            include("ext/appleaccelerate_ext.jl")
+            include("ext/mumps_ext.jl")
+            include("ext/sparspak_ext.jl")
+            # The memory-scaling milestone's own backend/operator extensions (v3.3.0 plan S3.1,
+            # S5.2, S7.2): SparseMatrixCSR assembly and the Kronecker.jl fast-diagonalisation
+            # solve; the Polyester-backed CpuPolyester sweeps follow in their own shard.
+            # Grouped with the other package-extension files above rather than the every-push
+            # suite because each needs its own weak dependency loaded.
+            include("ext/sparse_csr_ext.jl")
+            include("ext/kronecker_ext.jl")
+            include("ext/kronecker_refactorize.jl")
+            # BrambleChainRulesExt: the pde_solve rrule's own math, checked against finite
+            # differences and by hand. It needs only ChainRulesCore (a test/Project.toml
+            # dependency), so it runs here, not in "AD backends (expensive)". Enzyme/Mooncake
+            # composition is chainrules_enzyme_ext.jl there.
+            include("ext/chainrules_ext.jl")
+        end
+        if TestUtils.in_shard("ext-polyester")
+            include("ext/polyester_ext.jl")
+            include("ext/polyester_parity.jl")
+            include("ext/ghost_polyester.jl")
+            include("ext/ghost_vector_polyester.jl")
+            include("ext/ghost_semidiscrete_polyester.jl")
+        end
     end
 end
 

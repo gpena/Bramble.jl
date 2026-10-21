@@ -8,11 +8,18 @@ name: Weekly
 #
 # Nor the `slow` group: nightly.yml's `slow` job runs it daily on the same Julia 1.13, on
 # macOS in four shards, each uploading its part of that half of the coverage. This workflow runs
-# the other half, the `backends` group (the package extensions), on both platforms, and the
-# per-file coverage floor over both halves. Together they cover what `full` does except the
+# the other half, the `backends` group (the package extensions), on macOS in two shards, and
+# the per-file coverage floor over both halves. Together they cover what `full` does except the
 # manual snippets, which only run locally anyway. It also runs the `grids` group: every
-# combination of the operator and form grids that `slow` only samples (gpena/Bramble.jl#789). The worked-example pages are in neither
-# half: they are the `examples` group, which docs-on-demand.yml runs before every docs build.
+# combination of the operator and form grids that `slow` only samples (gpena/Bramble.jl#789).
+# The worked-example pages are in neither half: they are the `examples` group, which
+# docs-on-demand.yml runs before every docs build.
+#
+# Every test job runs on macOS only, as nightly.yml's does: as one job, the `backends` leg took
+# 53 minutes of its 60 on macOS in the 2026-10-19 run, so the group is split over two runners
+# (`BRAMBLE_TEST_SHARD`, test/TestUtils.jl) and `grids` has a runner of its own. Linux has no
+# test leg here; the jobs that stay on ubuntu-latest (`changed`, `coverage-floor`,
+# `security-audit`) run no Julia tests.
 #
 # AD and GPU tests are switched off in every group until v4.3.0 and v4.4.0 respectively
 # (test/TestUtils.jl, `WITH_AD_TESTS` and `WITH_GPU_TESTS`, and the `ad` and `gpu` groups).
@@ -41,8 +48,7 @@ concurrency:
 
 env:
   # Pinned, not `auto`, which follows whatever host a job lands on (see CI.yml): 4 is the
-  # standard ubuntu runner's vCPU count. The matrix jobs below set 3 on macOS, that
-  # runner's count.
+  # standard ubuntu runner's vCPU count. The test jobs below set 3, the macOS runner's count.
   JULIA_NUM_THREADS: 4
 
 jobs:
@@ -67,19 +73,22 @@ jobs:
           if [ "$last" = "${{ github.sha }}" ]; then echo "run=false" >> "$GITHUB_OUTPUT"; else echo "run=true" >> "$GITHUB_OUTPUT"; fi
 
   full:
-    name: Package extensions (Julia ${{ matrix.version }}, ${{ matrix.os }})
+    name: Package extensions (Julia ${{ matrix.version }}, macOS-latest, ${{ matrix.shard }})
     needs: changed
     if: ${{ needs.changed.outputs.run == 'true' }}
-    runs-on: ${{ matrix.os }}
-    # The `backends` legs took 5 to 25 minutes in the last three runs; compiled images are not
-    # cached here (see below), so a leg spends most of its time precompiling.
-    timeout-minutes: 60
+    runs-on: macOS-latest
+    # The macOS `backends` leg took 53 minutes as one job (2026-10-19), 23 of them in tests;
+    # compiled images are not cached here (see below), so a leg spends most of its time
+    # precompiling. By the test times of that run the two shards split the tests about 9 to
+    # 14 minutes, `ext-solvers` the shorter. In the first sharded run (2026-10-21) the shards
+    # took 33 and 52 minutes, `ext-polyester` with 19 minutes of tests, so the limit is 90
+    # rather than 60: a runner slower by a sixth would have timed it out.
+    timeout-minutes: 90
     # Nothing here gates a merge, but a red run should still mean something specific.
     # Julia nightly is not in this matrix (see below), so a failure here is Bramble's own —
-    # on the 1.13 release, on either OS.
+    # on the 1.13 release.
     #
-    # id-token: write is for the codecov-action step below (`use_oidc: true`, Julia 1.13 on
-    # ubuntu-latest only) -- without it, requesting an OIDC token throws an unhandled error
+    # id-token: write is for the codecov-action step below (`use_oidc: true`) -- without it, requesting an OIDC token throws an unhandled error
     # in the action's own github-script substep before its own `fail_ci_if_error: false`
     # ever gets a chance to apply, failing the whole job even though every test passed.
     permissions:
@@ -87,16 +96,18 @@ jobs:
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
       id-token: write
     env:
-      JULIA_NUM_THREADS: ${{ matrix.os == 'macOS-latest' && 3 || 4 }}
+      JULIA_NUM_THREADS: 3
     strategy:
       fail-fast: false
       matrix:
-        # The 1.13 release, on both platforms. Julia nightly is deliberately not here: what
+        # The 1.13 release. Julia nightly is deliberately not here: what
         # this workflow tests is how the package extensions behave under their own upstream
         # releases, and `nightly` itself moves daily for reasons unrelated to Bramble, which would make a
         # red leg here noise rather than signal.
         version: ["1.13"]
-        os: [ubuntu-latest, macOS-latest]
+        # `BRAMBLE_TEST_SHARD`, test/TestUtils.jl: the plotting, solver and Kronecker files, and
+        # the Polyester files.
+        shard: [ext-solvers, ext-polyester]
     steps:
       - uses: actions/checkout@v7
 
@@ -116,37 +127,36 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      # Coverage is collected on the ubuntu leg only; the `slow` half comes from nightly.yml.
-      # See CI.yml's history for why only one leg per half uploads at all.
+      # Coverage is collected on both shards, each uploading its part; the `slow` half comes
+      # from nightly.yml.
       # A `run:` step instead of julia-actions/julia-runtest, because that action cannot pass Julia
       # flags: its harness hard-codes `julia_args` to `--check-bounds` alone. Every group of the
       # suite runs at `--optimize=1`, which on the plain harness cut the slow group from 1051 s to
       # 664 s, ext from 283 s to 184 s, backends from 274 s to 190 s, quality from 173 s to 160 s
       # and examples from 206 s to 184 s, with the same tests passing and no allocation,
       # inference or AD-gated check changing result. The call restates what the action passed:
-      # `coverage` from the same expression the `with:` input had (on for the ubuntu leg only), `--check-bounds=yes`, and `--depwarn=yes --inline=yes` on the outer process.
+      # `coverage` on, `--check-bounds=yes`, and `--depwarn=yes --inline=yes` on the outer process.
       # Dropped: `force_latest_compatible_version` (the action sets it to true only for
       # Dependabot/CompatHelper jobs, which these triggers are not) and `annotate` (off by
       # default). `JULIA_NUM_THREADS` comes from the job-level `env`.
-      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=${{ matrix.os == 'ubuntu-latest' }}, julia_args=["--optimize=1", "--check-bounds=yes"])'
+      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: backends
+          BRAMBLE_TEST_SHARD: ${{ matrix.shard }}
 
       - uses: julia-actions/julia-processcoverage@v1
-        if: matrix.os == 'ubuntu-latest'
       - uses: codecov/codecov-action@v7
-        if: matrix.os == 'ubuntu-latest'
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
           use_oidc: true
           flags: backends
           fail_ci_if_error: false
-      # Kept for the `coverage-floor` job below: each half sees only its own files.
+      # Kept for the `coverage-floor` job below: each part sees only its own files.
       - uses: actions/upload-artifact@v7
-        if: always() && matrix.os == 'ubuntu-latest'
+        if: always()
         with:
-          name: lcov-backends
+          name: lcov-backends-${{ matrix.shard }}
           path: lcov.info
           if-no-files-found: warn
 
@@ -154,16 +164,19 @@ jobs:
   # operands and matrix-free form cases. nightly.yml's `slow` runs each grid's cover plus a
   # random draw from the rest, a different draw every night; this job runs every combination,
   # so a pair no draw has reached is still checked once a week. One platform: the grids test
-  # the symbolic layer, which does not vary by OS, and the cover runs on both every night.
+  # the symbolic layer, which does not vary by OS. It took 26 minutes on ubuntu-latest
+  # (2026-10-19), 10 of them in tests.
   grids:
-    name: Full combinatorial grids (Julia 1.13, ubuntu-latest)
+    name: Full combinatorial grids (Julia 1.13, macOS-latest)
     needs: changed
     if: ${{ needs.changed.outputs.run == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: macOS-latest
     timeout-minutes: 60
     permissions:
       contents: read
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
+    env:
+      JULIA_NUM_THREADS: 3
     steps:
       - uses: actions/checkout@v7
 
@@ -184,8 +197,8 @@ jobs:
         env:
           BRAMBLE_TEST_GROUP: grids
 
-  # Per-file coverage floor over the two coverage halves merged: `lcov-backends` from this
-  # run, and the four `lcov-suite-<shard>` parts from the newest nightly.yml run on this
+  # Per-file coverage floor over the two coverage halves merged: the two `lcov-backends-<shard>`
+  # parts from this run, and the four `lcov-suite-<shard>` parts from the newest nightly.yml run on this
   # run's commit. The halves
   # must come from the same commit: lcov records line numbers, so merging halves from two
   # commits that touched a file measures the wrong lines (the 2026-10-11 run reported 55% for
@@ -246,6 +259,13 @@ jobs:
           if [ "${{ steps.suite.outputs.found }}" != "true" ]; then
             echo "::warning::No nightly coverage half on this commit; skipping the coverage floor."
             echo "No nightly.yml \`lcov-suite\` on ${{ github.sha }}; floor not computed." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # One part per backends shard; with one missing the floor would fail the files
+          # that shard covers.
+          if [ "$(find lcov -path 'lcov/lcov-backends-*/lcov.info' | wc -l)" -ne 2 ]; then
+            echo "::warning::A backends shard uploaded no lcov part; skipping the coverage floor."
+            echo "A \`lcov-backends\` part is missing; floor not computed." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           files=$(find lcov -name lcov.info 2>/dev/null | sort)
