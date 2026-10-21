@@ -111,7 +111,7 @@ function constrained(Wₕ::GhostGridSpace, relations)
     _check_unconstrained(Wₕ)
     P = padded_space(Wₕ)
     rels = _facet_relations(mesh(P), relations(trial_function(P)))
-    return _constrained_space(Wₕ, filter(!_is_dirichlet, rels), filter(_is_dirichlet, rels))
+    return _constrained_space(Wₕ, _ghost_relations(rels), _dirichlet_relations(rels))
 end
 
 @noinline function constrained(Wₕ, relations)
@@ -131,7 +131,8 @@ function _check_unconstrained(Wₕ::GhostGridSpace)
         !_is_time_dependent(Wₕ) && return nothing
     throw(
         ArgumentError(
-        "constrained takes the space of gridspace(Ωₕ; ghosts = ...), and $(Wₕ) is already " *
+        "constrained takes the space of gridspace(Ωₕ; ghosts = ...), and " *
+        "$(sprint(show, Wₕ)) is already " *
         "constrained. Give every relation in one call on the unconstrained space.",
     ),
     )
@@ -155,26 +156,81 @@ _relation_pairs(p::Pair) = (p,)
 _relation_pairs(t::Tuple) = t
 _relation_pairs(x) = _throw_relation_shape(x)
 
+# The relations as a tuple of `_FacetRelation`s, one per pair, each of its own concrete
+# type, so that what `constrained` builds from them infers. Each is checked against those
+# before it as it is parsed, on a tuple of their facets, which has one type throughout.
 function _facet_relations(G::GhostMesh{D}, out) where {D}
     pairs = _relation_pairs(out)
     isempty(pairs) && _throw_relation_shape(out)
-    rels = Any[]
-    for p in pairs
-        r = _facet_relation(G, p)
-        any(q -> q.d == r.d && q.s == r.s && _is_dirichlet(q) == _is_dirichlet(r), rels) &&
+    keys = map(p -> _pair_key(Val(D), p, false), pairs)
+    return _parse_in_order(p -> _facet_relation(G, p), pairs) do r, i
+        any(j -> keys[j] == keys[i], 1:(i - 1)) &&
             _throw_facet_twice(r.name, _is_dirichlet(r))
-        push!(rels, r)
+        return nothing
     end
-    return rels
 end
+
+# Each pair parsed in order, `map` going from the first, and checked (`check(r, i)`) against
+# the pairs before it, so the first error in the order of the pairs is the one reported.
+@inline function _parse_in_order(check::C, parse::F, pairs::Tuple{Vararg{Any, N}}) where {C,
+        F, N}
+    return map(pairs, ntuple(identity, Val(N))) do p, i
+        r = parse(p)
+        check(r, i)
+        return r
+    end
+end
+
+# What two relations on one facet must not share, read off a pair without parsing it:
+# `(d, s, dirichlet)`, with the component `c` first on a composite (`composite`), where only
+# Dirichlet relations are keyed; `nothing` for a pair that parses to no relation.
+@inline function _pair_key(::Val{D}, p::Pair{Symbol, <:Pair}, composite::Bool) where {D}
+    face = _find_face(Val(D), first(p))
+    face === nothing && return nothing
+    op = first(last(p))
+    dirichlet = op isa Union{TrialFunction, IndexedTrialFunction}
+    composite || return (0, face[1], face[2], dirichlet)
+    op isa IndexedTrialFunction || return nothing
+    return (op.component_idx, face[1], face[2], true)
+end
+@inline _pair_key(::Val, p, ::Bool) = nothing
 
 @inline _is_dirichlet(r::_FacetRelation) = r.op isa Union{TrialFunction,
     IndexedTrialFunction}
+
+# The ghost and the Dirichlet relations of a tuple of them: `_is_dirichlet` is decided by
+# the type, so each filter infers.
+@inline _ghost_relations(rels::Tuple) = filter(!_is_dirichlet, rels)
+@inline _dirichlet_relations(rels::Tuple) = filter(_is_dirichlet, rels)
 
 # Data depending on time take the time as a second argument, read off their methods as
 # `dirichlet_constraints` reads its conditions (`_accepts`, geometry/marker.jl).
 @inline _is_time_datum(data) = data isa Function && _accepts(data, Val(2))
 @inline _is_time_relation(r::_FacetRelation) = _is_time_datum(r.data)
+
+# Whether some relation of the tuple has data depending on time; decided by the types, as
+# `_is_time_datum` folds on the datum's type.
+@inline _any_time(::Tuple{}) = false
+@inline function _any_time(rels::Tuple)
+    return _is_time_relation(first(rels)) || _any_time(Base.tail(rels))
+end
+
+# `f(Val(name), Val(d), Val(s))` on the facet `(d, s)` of a `D`-dimensional mesh, unrolled
+# over the facets of `_boundary_faces(Val(D))`: each call sees its facet as constants, so
+# the forms it builds on `markers = (name,)` infer whichever facet `(d, s)` names.
+@inline function _at_facet(f::F, ::Val{D}, d::Int, s::Int) where {F, D}
+    return _at_facet(f, _boundary_faces(Val(D)), d, s)
+end
+@inline function _at_facet(f::F, faces::Tuple, d::Int, s::Int) where {F}
+    name, _, a, side = first(faces)
+    a == d && side == s && return f(Val(name), Val(a), Val(side))
+    return _at_facet(f, Base.tail(faces), d, s)
+end
+@noinline function _at_facet(f, ::Tuple{}, d::Int, s::Int)
+    throw(ArgumentError("no facet ($d, $s)"))
+end
+
+@inline _val(::Val{x}) where {x} = x
 
 # The datum at the point `x` at time `t`.
 @inline _datum(data::Number, x, t) = data
@@ -182,7 +238,7 @@ end
 
 function _facet_relation(G::GhostMesh{D}, p::Pair{Symbol, <:Pair}) where {D}
     face = _find_face(Val(D), first(p))
-    face === nothing && _throw_not_a_relation_facet(first(p), D)
+    face === nothing && _throw_not_a_relation_facet(first(p), Val(D))
     d, s = face
     name = _facet_name(d, s)
     op, data = last(p)
@@ -228,8 +284,8 @@ end
     )
 end
 
-@noinline function _throw_not_a_relation_facet(s, D::Int)
-    faces = join((":$c" for (c, _, _, _) in _boundary_faces(Val(D))), ", ")
+@noinline function _throw_not_a_relation_facet(s, ::Val{D}) where {D}
+    faces = join(map(f -> ":$(first(f))", _boundary_faces(Val(D))), ", ")
     throw(
         ArgumentError(
         "a relation is keyed by a facet name, and $(repr(s)) does not name a facet in " *
@@ -273,43 +329,50 @@ end
 function _composite_relations(Gs::Tuple, out)
     pairs = _relation_pairs(out)
     isempty(pairs) && _throw_relation_shape(out)
-    rels = Any[]
-    for p in pairs
-        r = _composite_relation(Gs, p)
-        _is_dirichlet(r) &&
-            any(q -> _is_dirichlet(q) && q.c == r.c && q.d == r.d && q.s == r.s, rels) &&
+    keys = map(p -> _pair_key(Val(dim(first(Gs))), p, true), pairs)
+    rels = _parse_in_order(p -> _composite_relation(Gs, p), pairs) do r, i
+        _is_dirichlet(r) && any(j -> keys[j] == keys[i], 1:(i - 1)) &&
             _throw_facet_twice(r.name, true, r.c)
-        push!(rels, r)
+        return nothing
     end
-    return _attach_relations(rels, length(Gs))
+    key(r) = (r.c, r.d, r.s, _is_dirichlet(r))
+    return _with_components(rels, _attach_relations(collect(map(key, rels)), length(Gs)))
+end
+
+# The relations with the components `cs` they are attached to.
+function _with_components(rels::Tuple{Vararg{Any, N}}, cs::Vector{Int}) where {N}
+    return map((r, c) -> _FacetRelation(r.d, r.s, r.name, r.op, r.data, c), rels,
+        ntuple(i -> cs[i], Val(N)))
 end
 
 # Each facet's ghost relations attached to distinct components: first each that reads one
-# component alone to that one, then the rest to the components left, in order. `r.c` of a
-# ghost relation is the component it reads alone, `0` for several. A facet of one-component
-# relations takes at most one per component; one with a relation reading several takes one
-# per component.
-function _attach_relations(rels::Vector{Any}, N::Int)
-    out = copy(rels)
-    for (i, r) in enumerate(rels)
-        _is_dirichlet(r) && continue
-        any(q -> !_is_dirichlet(q) && q.d == r.d && q.s == r.s, view(rels, 1:(i - 1))) &&
-            continue
-        idx = findall(q -> !_is_dirichlet(q) && q.d == r.d && q.s == r.s, rels)
-        if any(k -> rels[k].c == 0, idx)
-            length(idx) == N || _throw_facet_relation_count(r.name, length(idx), N)
+# component alone to that one, then the rest to the components left, in order. `rels` holds
+# each relation's `(c, d, s, dirichlet)`: `c` of a ghost relation is the component it reads
+# alone, `0` for several. A facet of one-component relations takes at most one per
+# component; one with a relation reading several takes one per component. The result is
+# the component of each relation.
+function _attach_relations(rels::Vector{Tuple{Int, Int, Int, Bool}}, N::Int)
+    out = Int[c for (c, _, _, _) in rels]
+    ghost_at(q, d, s) = !q[4] && q[2] == d && q[3] == s
+    for (i, (_, d, s, dirichlet)) in enumerate(rels)
+        dirichlet && continue
+        name = _facet_name(d, s)
+        any(q -> ghost_at(q, d, s), view(rels, 1:(i - 1))) && continue
+        idx = findall(q -> ghost_at(q, d, s), rels)
+        if any(k -> rels[k][1] == 0, idx)
+            length(idx) == N || _throw_facet_relation_count(name, length(idx), N)
         else
             for (a, k) in enumerate(idx)
-                c = rels[k].c
-                any(j -> rels[j].c == c, view(idx, 1:(a - 1))) &&
-                    _throw_facet_twice(r.name, false, c)
+                c = rels[k][1]
+                any(j -> rels[j][1] == c, view(idx, 1:(a - 1))) &&
+                    _throw_facet_twice(name, false, c)
             end
             continue                        # each already attached to its own component
         end
         taken = falses(N)
         attached = zeros(Int, N)
         for (a, k) in enumerate(idx)
-            c = rels[k].c
+            c = rels[k][1]
             c != 0 && !taken[c] && (attached[a] = c; taken[c] = true)
         end
         for a in 1:N
@@ -318,8 +381,7 @@ function _attach_relations(rels::Vector{Any}, N::Int)
             attached[a], taken[c] = c, true
         end
         for (a, k) in enumerate(idx)
-            q = rels[k]
-            out[k] = _FacetRelation(q.d, q.s, q.name, q.op, q.data, attached[a])
+            out[k] = attached[a]
         end
     end
     return out
@@ -328,7 +390,7 @@ end
 function _composite_relation(Gs::Tuple{Vararg{GhostMesh{D}}},
         p::Pair{Symbol, <:Pair}) where {D}
     face = _find_face(Val(D), first(p))
-    face === nothing && _throw_not_a_relation_facet(first(p), D)
+    face === nothing && _throw_not_a_relation_facet(first(p), Val(D))
     d, s = face
     name = _facet_name(d, s)
     op, data = last(p)
@@ -345,8 +407,9 @@ _composite_relation(::Tuple, p) = _throw_relation_shape(p)
 # The component a relation reads on its own facet: its trial leaf's, or `0` for a facet
 # operator reading several, such as a traction `∂ₙ(u(1); K = K₁₁) + ∂ₙ(u(2); K = K₁₂)`.
 _relation_component(op::IndexedTrialFunction, ::Int, ::Int, ::Symbol) = op.component_idx
-function _relation_component(op::FacetOperator, d::Int, s::Int, name::Symbol)
-    c = _trial_component_class(_facet_component(op, d, s))
+function _relation_component(op::FacetOperator{D}, d::Int, s::Int, name::Symbol) where {D}
+    c = _at_facet((_, a, b) -> _trial_component_class(_facet_component(op, a, b)), Val(D),
+        d, s)
     c isa Int && return c
     c isa _MixedComponents && return 0
     return _throw_relation_components(name)
@@ -381,18 +444,21 @@ end
     )
 end
 
-# The pieces of a ghost relation's operator on its facet, one per component it reads, each
-# as a facet operator with that piece on every facet (`markers` selects its own): one
-# `inner_Γ` holds one trial component (block_extract.jl), so the relation's row is the sum
-# of one per piece, as `_strain_pieces` keeps the terms of `εₕ` apart (difference.jl).
-function _relation_pieces(op::FacetOperator{D, G}, d::Int, s::Int, name::Symbol,
-        N::Int) where {D, G}
-    pieces = Any[]
+# The rows of a ghost relation's operator on its facet `(Val(d), Val(s))`, named `name`,
+# tested against component `c`: one `inner_Γ` holds one trial component
+# (block_extract.jl), so they are the sum of one form per component the operator reads, its
+# piece as a facet operator with that piece on every facet, as `_strain_pieces` keeps the
+# terms of `εₕ` apart (difference.jl).
+function _relation_matrix(P::CompositeGridSpace{N}, op::FacetOperator{D, G}, a::Val, b::Val,
+        name::Val, c::Int) where {N, D, G}
+    R = spzeros(eltype(P), ndofs(P), ndofs(P))
     for j in 1:N
-        p = _trial_piece(_facet_component(op, d, s), j, name)
-        p === nothing || push!(pieces, _facet_operator(Val(G), ntuple(_ -> (p, p), Val(D))))
+        p = _trial_piece(_facet_component(op, a, b), j, _val(name))
+        p === nothing && continue
+        F = _facet_operator(Val(G), ntuple(_ -> (p, p), Val(D)))
+        R += assemble(form(P, P, (u, v) -> _facet_inner(_facet_mask(name), F, v(c))))
     end
-    return pieces
+    return R
 end
 
 # The terms of `op` that read component `j`, or `nothing` if none does: the leaves of the
@@ -490,19 +556,21 @@ end
 # component by component. The columns of `R` run over the whole padded composite. The rows
 # on a facet of `onesided`, at a node it shares with another, read the other's ghosts
 # through the one-sided difference along the facet (`_one_sided_corner!`).
-function _relation_rows(P, comps::Tuple, rels; onesided = ())
+function _relation_rows(P, comps::Tuple, rels::Tuple; onesided = ())
     T = eltype(P)
     isempty(rels) && return spzeros(T, 0, ndofs(P)), T[], Tuple{Int, Int}[], Int[]
     ghosts, rel = Tuple{Int, Int}[], Int[]
+    keys = map(r -> (r.c, r.d, r.s), rels)
     for (c, (G, _)) in enumerate(comps), g in 1:nghosts(G)
 
         _, d, side = boundary_node(G, g)
-        i = findfirst(r -> r.c == c && r.d == d && _GHOST_SIDES[r.s] === side, rels)
+        i = findfirst(k -> k[1] == c && k[2] == d && _GHOST_SIDES[k[3]] === side, keys)
         i === nothing || (push!(ghosts, (c, g)); push!(rel, i))
     end
     blocks = map(r -> _assemble_relation(P, r), rels)
     rows, cols, vals = Int[], Int[], promote_type(map(x -> eltype(first(x)), blocks)...)[]
-    b = zeros(promote_type(eltype(vals), map(x -> eltype(last(x)), blocks)...), length(ghosts))
+    Tb = promote_type(eltype(vals), map(x -> eltype(last(x)), blocks)...)
+    b = fill!(Vector{Tb}(undef, length(ghosts)), zero(Tb))
     for (k, (c, g)) in enumerate(ghosts)
         G, offset = comps[c]
         Rt, bF = blocks[rel[k]]
@@ -515,9 +583,9 @@ function _relation_rows(P, comps::Tuple, rels; onesided = ())
             push!(cols, rowvals(Rt)[q])
             push!(vals, nonzeros(Rt)[q])
         end
-        r = rels[rel[k]]
-        r.name in onesided &&
-            _one_sided_corner!(rows, cols, vals, start, k, comps, I, r.d, onesided)
+        _, d, s = keys[rel[k]]
+        _facet_name(d, s) in onesided &&
+            _one_sided_corner!(rows, cols, vals, start, k, comps, I, d, onesided)
         b[k] = bF[i]
     end
     return sparse(rows, cols, vals, length(ghosts), ndofs(P)), b, ghosts, rel
@@ -584,45 +652,57 @@ end
 # The relation's rows and data on the nodes of its facet, by forms on the padded space;
 # the rows transposed, so each node's row is a column. Data depending on time give the
 # facet weights instead, which `L` multiplies the data at each time by.
-function _assemble_relation(P::ScalarGridSpace, r::_FacetRelation)
-    op, name = r.op, r.name
+# The forms are `inner_Γ(op, v; markers = (name,))` and `inner_Γ(data, …)`, with the
+# facet named as a constant (`_at_facet`, `_facet_mask`), so that each infers.
+function _assemble_relation(P::ScalarGridSpace{D}, r::_FacetRelation) where {D}
+    op = r.op
     data = _is_time_relation(r) ? one(eltype(P)) : r.data
-    R = assemble(form(P, P, (u, v) -> inner_Γ(op, v; markers = (name,))))
-    b = assemble(form(P, v -> inner_Γ(data, _facet_identity(v); markers = (name,))))
-    return sparse(transpose(R)), b
+    return _at_facet(Val(D), r.d, r.s) do name, _, _
+        R = assemble(form(P, P, (u, v) -> _facet_inner(_facet_mask(name), op, v)))
+        b = assemble(form(P,
+            v -> _facet_inner(_facet_mask(name), data, _facet_identity(v))))
+        return sparse(transpose(R)), b
+    end
 end
+
+# The labels of `markers = (name,)` as `inner_Γ` holds them until `form`.
+@inline _facet_mask(::Val{name}) where {name} = _SurfaceLabels{(name,)}
 
 # On a padded composite, tested against the component `r.c` whose ghosts the relation is
 # attached to: the sum of one `inner_Γ` per component the relation reads.
-function _assemble_relation(P::CompositeGridSpace{N}, r::_FacetRelation) where {N}
-    name, c = r.name, r.c
-    R = sum(_relation_pieces(r.op, r.d, r.s, name, N)) do F
-        return assemble(form(P, P, (u, v) -> inner_Γ(F, v(c); markers = (name,))))
+function _assemble_relation(P::CompositeGridSpace,
+        r::_FacetRelation{<:FacetOperator{D}}) where {D}
+    c, op, data = r.c, r.op, r.data
+    return _at_facet(Val(D), r.d, r.s) do name, a, b
+        R = _relation_matrix(P, op, a, b, name, c)
+        F = assemble(form(P,
+            v -> _facet_inner(_facet_mask(name), data, _facet_identity(v(c)))))
+        return sparse(transpose(R)), F
     end
-    b = assemble(form(P, v -> inner_Γ(r.data, _facet_identity(v(c)); markers = (name,))))
-    return sparse(transpose(R)), b
 end
 
 # --- The closure --------------------------------------------------------------------- #
 
-function _constrained_space(Wₕ::GhostGridSpace, rels, drels)
+# Whether the relations have data depending on time is read off their types
+# (`_any_time`), so each call builds one type of space: a static one, or one storing
+# `_TimeData`.
+function _constrained_space(Wₕ::GhostGridSpace, rels::Tuple, drels::Tuple)
     P = padded_space(Wₕ)
     G = mesh(P)
-    for r in drels
-        has_ghosts(G, r.d, _GHOST_SIDES[r.s]) || continue
-        any(q -> q.d == r.d && q.s == r.s, rels) || _throw_dirichlet_orphan_ghosts(r.name)
-    end
+    key(r) = (r.d, r.s)
+    ghosted(r) = has_ghosts(G, r.d, _GHOST_SIDES[r.s])
+    _check_dirichlet_orphans(ghosted, key, map(key, rels), drels)
     R, b, ghosts, rel = _relation_rows(P, rels)
     fixed, g, order, owner = _dirichlet_values(G, drels, eltype(P))
     keep = _kept_points(G, ghosts, fixed)
     T = eltype(P)
     be = backend(P)
-    if !any(_is_time_relation, rels) && !any(_is_time_relation, drels)
-        E, d, _ = _relation_closure(G, R, b, ghosts, keep, fixed,
-            g)::Tuple{SparseMatrixCSC, Vector, Nothing}
+    if !_any_time(rels) && !_any_time(drels)
+        E, d, _ = _relation_closure(G, R, b, ghosts, keep, fixed, g)
         return GhostGridSpace(P, _closure_matrix(be, T, E), _closure_data(be, T, d))
     end
-    w = map(k -> _is_time_relation(rels[rel[k]]) ? b[k] : one(eltype(b)), eachindex(b))
+    timed = map(_is_time_relation, rels)
+    w = map(k -> timed[rel[k]] ? b[k] : one(eltype(b)), eachindex(b))
     E, _, L = _relation_closure(G, R, b, ghosts, keep, fixed, g, (w, order))
     td = _time_data(be, T, G, L, rels, drels, b, ghosts, rel, g, order, owner)
     d = _backend_vector(be, T, size(E, 1))
@@ -637,30 +717,44 @@ end
 # core below, so `E` couples two components wherever a relation does. The degrees of
 # freedom are each component's, in the order `constrained` gives it alone, one after the
 # other.
-function _composite_closure(P::CompositeGridSpace, comps::Tuple, rels, drels)
-    for r in drels
-        has_ghosts(first(comps[r.c]), r.d, _GHOST_SIDES[r.s]) || continue
-        any(q -> q.c == r.c && q.d == r.d && q.s == r.s, rels) ||
-            _throw_dirichlet_orphan_ghosts(r.name)
-    end
-    reads_several(r) = _relation_component(r.op, r.d, r.s, r.name) == 0
-    multi = unique!(Symbol[r.name for r in rels if reads_several(r)])
+function _composite_closure(P::CompositeGridSpace, comps::Tuple{Vararg{Any, N}},
+        rels::Tuple, drels::Tuple) where {N}
+    key(r) = (r.c, r.d, r.s)
+    ghosted(r) = has_ghosts(first(comps[r.c]), r.d, _GHOST_SIDES[r.s])
+    _check_dirichlet_orphans(ghosted, key, map(key, rels), drels)
+    several = map(r -> _relation_component(r.op, r.d, r.s, r.name) == 0, rels)
+    names = map(r -> r.name, rels)
+    multi = unique!(Symbol[names[i] for i in eachindex(names) if several[i]])
     R, b, ghosts, _ = _relation_rows(P, comps, rels; onesided = multi)
-    fixed, gs, keep = falses(ndofs(P)), Any[], Int[]
+    fixed, keep = falses(ndofs(P)), Int[]
+    parts = map(c -> _dirichlet_values(first(comps[c]), drels, eltype(P), c),
+        ntuple(identity, Val(N)))
     for (c, (G, offset)) in enumerate(comps)
-        f, g, _, _ = _dirichlet_values(G, filter(r -> r.c == c, drels), eltype(P))
+        f = first(parts[c])
         own = Int[k for (j, k) in ghosts if j == c]
         append!(keep, offset .+ _kept_points(G, own, f))
         fixed[offset .+ eachindex(f)] .= f
-        push!(gs, g)
     end
+    gs = map(x -> x[2], parts)
     gpts = Int[comps[c][2] + LinearIndices(npoints(first(comps[c]), Tuple))[
                    _ghost_point(first(comps[c]), k)] for (c, k) in ghosts]
     names = Symbol[_relation_name(first(comps[c]), k) for (c, k) in ghosts]
     owner = Int[c for (c, _) in ghosts]
-    E, d, _ = _relation_closure(gpts, names, R, b, keep, fixed, reduce(vcat, gs);
-        comps = owner)::Tuple{SparseMatrixCSC, Vector, Nothing}
+    E, d, _ = _relation_closure(gpts, names, R, b, keep, fixed, vcat(gs...);
+        comps = owner)
     return E, d
+end
+
+# Each Dirichlet relation `r` of `drels` on a ghosted facet (`ghosted(r)`) needs a ghost
+# relation there: `keys` holds `key(q)` of each ghost relation `q`, its facet (and its
+# component, on a composite).
+function _check_dirichlet_orphans(ghosted::F, key::K, keys::Tuple,
+        drels::Tuple) where {F, K}
+    map(drels) do r
+        ghosted(r) && !(key(r) in keys) && _throw_dirichlet_orphan_ghosts(r.name)
+        return nothing
+    end
+    return nothing
 end
 
 # The record of `d(t) = L g(t)`: the sources are the eliminated ghosts (`1:m`, in the order
@@ -674,33 +768,39 @@ function _time_data(be, ::Type{T}, G::GhostMesh, L::SparseMatrixCSC, rels, drels
     Ωₕ = physical_mesh(G)
     m = length(ghosts)
     g = zeros(T, m + length(order))
+    timed, dtimed = map(_is_time_relation, rels), map(_is_time_relation, drels)
     for k in 1:m
-        _is_time_relation(rels[rel[k]]) || (g[k] = b[k])
+        timed[rel[k]] || (g[k] = b[k])
     end
     for (q, p) in enumerate(order)
-        _is_time_relation(drels[owner[q]]) || (g[m + q] = gfix[p])
+        dtimed[owner[q]] || (g[m + q] = gfix[p])
     end
-    groups = Any[]
-    for (i, r) in enumerate(rels)
-        _is_time_relation(r) || continue
+    ghost_groups = _time_groups(rels, 1) do r, i
         ks = findall(==(i), rel)
-        isempty(ks) && continue
         pts = [point(Ωₕ, first(boundary_node(G, ghosts[k]))) for k in ks]
-        push!(groups, _time_group(be, r.data, pts, first(ks)))
+        return _time_group(be, r.data, pts, isempty(ks) ? 1 : first(ks))
     end
     pin = CartesianIndices(npoints(G, Tuple))
     phys = first(physical_indices(G)) - oneunit(first(pin))
-    for (i, r) in enumerate(drels)
-        _is_time_relation(r) || continue
+    fixed_groups = _time_groups(drels, 1) do r, i
         qs = findall(==(i), owner)
-        isempty(qs) && continue
         pts = [point(Ωₕ, pin[order[q]] - phys) for q in qs]
-        push!(groups, _time_group(be, r.data, pts, m + first(qs)))
+        return _time_group(be, r.data, pts, m + (isempty(qs) ? 1 : first(qs)))
     end
-    Lt = sparse(transpose(SparseMatrixCSC{T, Int}(L)))
+    Lt = sparse(transpose(SparseMatrixCSC{T, Int}(L)::SparseMatrixCSC{T, Int}))
     stored(x) = copyto!(_backend_vector(be, eltype(x), length(x)), x)
-    return _TimeData(Tuple(groups), stored(SparseArrays.getcolptr(Lt)), stored(rowvals(Lt)),
-        stored(nonzeros(Lt)), stored(g), stored(g))
+    return _TimeData((ghost_groups..., fixed_groups...), stored(SparseArrays.getcolptr(Lt)),
+        stored(rowvals(Lt)), stored(nonzeros(Lt)), stored(g), stored(g))
+end
+
+# `f(r, i)` for each relation `r` of `rels` with data depending on time, `i` its index in
+# `rels`, as a tuple: unrolled, so each group keeps its datum's type. A relation that fixes
+# no point gets a group without points, which writes nothing.
+@inline _time_groups(f::F, ::Tuple{}, i::Int) where {F} = ()
+@inline function _time_groups(f::F, rels::Tuple, i::Int) where {F}
+    rest = _time_groups(f, Base.tail(rels), i + 1)
+    r = first(rels)
+    return _is_time_relation(r) ? (f(r, i), rest...) : rest
 end
 
 function _time_group(be, f, pts::Vector, first::Int)
@@ -713,39 +813,48 @@ end
 # corner) takes the first value, and the second must agree with it to a relative `√eps` of
 # the larger of the two, plus `10 eps` of the largest datum of all, so that a rounding zero
 # (`sin(π x)` at `x = 1`) meets an exact one. `order` lists the fixed points as first
-# fixed, and `owner` the index in `drels` of the relation that fixed each.
-function _dirichlet_values(G::GhostMesh{D}, drels, ::Type{T}) where {D, T}
+# fixed, and `owner` the index in `drels` of the relation that fixed each. On a composite,
+# `comp ≠ 0` keeps the relations of that component alone.
+function _dirichlet_values(G::GhostMesh{D}, drels::Tuple, ::Type{T},
+        comp::Int = 0) where {D, T}
     Ωₕ = physical_mesh(G)
     plin = LinearIndices(npoints(G, Tuple))
     n = npoints(Ωₕ, Tuple)
-    pts, vals, names, rids = Int[], Any[], Symbol[], Int[]
     t0 = zero(real(T))
-    for (i, r) in enumerate(drels)
+    raw = map(drels) do r
         k = r.s == 1 ? 1 : n[r.d]
-        for I in CartesianIndices(ntuple(e -> e == r.d ? (k:k) : (1:n[e]), Val(D)))
-            push!(pts, plin[padded_index(G, I)])
-            push!(vals, _datum(r.data, point(Ωₕ, I), t0))
-            push!(names, r.name)
-            push!(rids, i)
-        end
+        on = comp == 0 || r.c == comp
+        nodes = CartesianIndices(ntuple(e -> !on ? (1:0) : e == r.d ? (k:k) : (1:n[e]),
+            Val(D)))
+        return vec(Int[plin[padded_index(G, I)] for I in nodes]),
+        vec([_datum(r.data, point(Ωₕ, I), t0) for I in nodes])
     end
-    S = mapreduce(typeof, promote_type, vals; init = T)
+    S = promote_type(T, map(x -> eltype(last(x)), raw)...)
+    chunks = map(x -> (first(x), convert(Vector{S}, last(x))), raw)
+    names, timed = map(r -> r.name, drels), map(_is_time_relation, drels)
     fixed = falses(length(plin))
-    g = zeros(S, length(plin))::Vector{S}
+    g = fill!(Vector{S}(undef, length(plin)), zero(S))
     first_name = Vector{Symbol}(undef, length(plin))
-    floor = 10 * eps(real(S)) * maximum(abs, Iterators.filter(isfinite, vals);
-        init = zero(real(S)))
+    zr = zero(real(S))
+    floor = 10 * eps(real(S)) *
+            maximum(map(x -> maximum(abs, Iterators.filter(isfinite, last(x)); init = zr),
+                chunks); init = zr)
     order, owner, first_rel = Int[], Int[], zeros(Int, length(plin))
-    for (p, v, name, i) in zip(pts, vals, names, rids)
-        if fixed[p]
-            isequal(g[p], v) && continue
-            isfinite(g[p]) || _throw_dirichlet_not_finite(drels[first_rel[p]], g[p])
-            isfinite(v) || _throw_dirichlet_not_finite(drels[i], v)
-            abs(g[p] - v) <= sqrt(eps(real(S))) * max(abs(g[p]), abs(v)) + floor ||
-                _throw_dirichlet_disagree(first_name[p], name, g[p], v)
-        else
-            fixed[p], g[p], first_name[p], first_rel[p] = true, v, name, i
-            push!(order, p), push!(owner, i)
+    for i in eachindex(chunks)
+        pts, vals = chunks[i]
+        name = names[i]
+        for (p, v) in zip(pts, vals)
+            if fixed[p]
+                isequal(g[p], v) && continue
+                j = first_rel[p]
+                isfinite(g[p]) || _throw_dirichlet_not_finite(names[j], timed[j], g[p])
+                isfinite(v) || _throw_dirichlet_not_finite(name, timed[i], v)
+                abs(g[p] - v) <= sqrt(eps(real(S))) * max(abs(g[p]), abs(v)) + floor ||
+                    _throw_dirichlet_disagree(first_name[p], name, g[p], v)
+            else
+                fixed[p], g[p], first_name[p], first_rel[p] = true, v, name, i
+                push!(order, p), push!(owner, i)
+            end
         end
     end
     return fixed, g, order, owner
@@ -753,11 +862,11 @@ end
 
 # Two equal values agree, `Inf` included; a value that is not finite and differs from the
 # other cannot be compared, so the datum itself is named.
-@noinline function _throw_dirichlet_not_finite(r::_FacetRelation, v)
-    when = _is_time_relation(r) ? " at t = 0, where constrained evaluates it" : ""
+@noinline function _throw_dirichlet_not_finite(name::Symbol, timed::Bool, v)
+    when = timed ? " at t = 0, where constrained evaluates it" : ""
     throw(
         ArgumentError(
-        "the Dirichlet datum on :$(r.name) is not finite$when ($v) at a node it shares " *
+        "the Dirichlet datum on :$name is not finite$when ($v) at a node it shares " *
         "with another Dirichlet facet, so the two cannot be checked to agree there. Give " *
         "data that are finite at the corners of their facets.",
     ),
@@ -866,7 +975,8 @@ function _relation_closure(gpts::Vector{Int}, names::Vector{Symbol}, R::SparseMa
     rows = vcat(keep, gpts[Ei])
     cols = vcat(1:n, Ej)
     vals = vcat(ones(eltype(Ev), n), Ev)
-    d = zeros(promote_type(eltype(dg), eltype(g)), Npad)
+    Td = promote_type(eltype(dg), eltype(g))
+    d = fill!(Vector{Td}(undef, Npad), zero(Td))
     d[gpts] .= dg
     d[fixed] .= g[fixed]
     L = _affine_map(names, C, gpts, Fi, Fj, Fv, Npad, sources)
@@ -916,7 +1026,8 @@ function _block_solve(names::Vector{Symbol}, C::SparseMatrixCSC, Bt::SparseMatri
     end
     T = promote_type(eltype(C), eltype(Bt))
     rows, cols, vals = Int[], Int[], T[]
-    dg = zeros(promote_type(eltype(C), eltype(b)), m)
+    Tg = promote_type(eltype(C), eltype(b))
+    dg = fill!(Vector{Tg}(undef, m), zero(Tg))
     for idx in values(members)
         if length(idx) == 1
             k = only(idx)

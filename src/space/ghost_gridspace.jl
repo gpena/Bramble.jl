@@ -313,16 +313,20 @@ function _gridspace_ghosts(Ωₕ::Union{Mesh1D, MeshnD},
 end
 
 # The closure matrix in the backend's matrix type. A type that is not a `SparseMatrixCSC`
-# is left as built: forms on it are refused by `_check_ghost_host`.
+# is left as built: forms on it are refused by `_check_ghost_host`. The result's type
+# follows from `be` and `T` alone, whatever the type of `E` inference sees.
 function _closure_matrix(be, ::Type{T}, E::SparseMatrixCSC) where {T}
     MT = matrix_type(be)
-    E = SparseMatrixCSC{T, Int}(E)
-    return MT <: SparseMatrixCSC ? convert(MT, E) : E
+    Ec = SparseMatrixCSC{T, Int}(E)::SparseMatrixCSC{T, Int}
+    return MT <: SparseMatrixCSC ? convert(MT, Ec)::MT : Ec
 end
 
-# The affine part of a closure, in the backend's vector type.
-@inline _closure_data(be, ::Type{T}, d::AbstractVector) where {T} = copyto!(
-    _backend_vector(be, T, length(d)), d)
+# The affine part of a closure, in the backend's vector type, which `be` and `T` decide.
+@inline function _closure_data(be, ::Type{T}, d::AbstractVector) where {T}
+    v = _backend_vector(be, T, length(d))
+    copyto!(v, d)
+    return v
+end
 
 @noinline function _gridspace_ghosts(Ωₕ::AbstractMeshType, ghosts)
     throw(
