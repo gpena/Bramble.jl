@@ -1,6 +1,6 @@
 {
   "name": "bramble",
-  "version": "3.44.1",
+  "version": "4.0.0",
   "description": "Teaches Claude to write correct Bramble.jl code: the public API by task, the rules that keep finite-difference code right and fast, and worked, checked examples (linear and nonlinear Poisson, convection-diffusion, heat, wave, elasticity, coupled systems, point sources, Neumann and Robin boundaries, pure Neumann with a mean-zero solve).",
   "author": { "name": "Gonçalo Pena" },
   "homepage": "https://github.com/gpena/Bramble.jl",
