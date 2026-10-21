@@ -26,7 +26,7 @@ using Bramble:
                D₋ₓ,
                Mₓ,
                jumpₓ
-using ..TestUtils: alloc_test, WITH_3D_TESTS, TEST_DIMS
+using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS
 
 # The linear-form tests of restricted sums and scales: the refill allocation contract and the
 # scaled and nested cases. Split from linear.jl, whose single module took 0.95 GB of the
@@ -83,7 +83,8 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, TEST_DIMS
             @test b2 == b
             return b, parts
         end
-        for k in 3:5
+        # Tuples of four and five summands compile their own forms: they run in `slow`.
+        for k in 3:(WITH_SLOW_TESTS ? 5 : 3)
             on(s) = v -> innerₕ(x -> 1 + x[1], R(s, v))
             b, parts = _check_split(Tuple(on(s) for s in labels[1:k]))
             @test b == parts
@@ -201,8 +202,9 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, TEST_DIMS
         R = restrict_to
         bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
         I1 = interval(0.0, 1.0)
-        cases = ((I1, (11,), (D̽ₓ,)), (I1 × I1, (7, 9), (D̽ₓ, D̽ᵧ)),
-            # the 3D case runs in `slow` (gpena/Bramble.jl#650)
+        cases = ((I1, (11,), (D̽ₓ,)),
+            # the 2D case runs in `slow`, and the 3D one too (gpena/Bramble.jl#650)
+            (WITH_SLOW_TESTS ? ((I1 × I1, (7, 9), (D̽ₓ, D̽ᵧ)),) : ())...,
             (WITH_3D_TESTS ? ((I1 × I1 × I1, (4, 5, 6), (D̽ₓ, D̽ᵧ, D̽₂)),) : ())...)
         for (S, np, Ds) in cases
             Ωg = mesh(domain(S, :l => :left), np, ntuple(_ -> false, length(np)))
@@ -309,6 +311,8 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, TEST_DIMS
             # a sum of nested nodes: both sides refilled 463040 B with its tap 0 a union
             ("D̽ₓ(D̽ᵧ+D₋ₓ)", X -> D̽ₓ(D̽ᵧ(X) + D₋ₓ(X)), (466, 466, 1259), (472, 472, 1267)))
         for (n, N, nl, nc) in nests, ((w, wrap, masked), pins) in zip(wraps, (nl, nc))
+            # The restriction-by-scale wrap compiles its own forms: it runs in `slow`.
+            WITH_SLOW_TESTS || w == "l" || continue
 
             @testset "$n($w)" begin
                 sides = ((u, v) -> innerₕ(u, N(wrap(v))), (u, v) -> innerₕ(N(wrap(u)), v),
@@ -363,6 +367,8 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, TEST_DIMS
             ("D̽(2D̽)", (u, v) -> innerₕ(D̽ₓ(2.0 * D̽ᵧ(LR(u))), D̽ₓ(2.0 * D̽ᵧ(LR(v)))),
             (u, v) -> innerₕ(D̽ₓ(2.0 * D̽ᵧ(ml * u + mr * u)), D̽ₓ(2.0 * D̽ᵧ(ml * v + mr * v))),
             827))
+            # The two longer chains compile their own forms: they run in `slow`.
+            WITH_SLOW_TESTS || n == "MD(Rc)" || continue
             @testset "$n" begin
                 a = form(Wu, Wu, f)
                 A = assemble(a)
@@ -396,6 +402,9 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, TEST_DIMS
         end
         f = x -> 1 + x[1]
         for T in (Float32, Float64), D in TEST_DIMS
+            # Each element type and dimension compiles its own forms: unit keeps the 1D
+            # Float64 case, and the others run in `slow`.
+            WITH_SLOW_TESTS || (T === Float64 && D == 1) || continue
 
             I = interval(zero(T), one(T))
             Bramble._seed_mesh1d_rng!(20261017)
