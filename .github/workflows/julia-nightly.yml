@@ -1,7 +1,7 @@
 name: Julia DEV
 
-# On-demand run of the `unit` test group against the Julia nightly build, for finding out what
-# a coming Julia release does to Bramble. Nothing triggers it but `workflow_dispatch`, and nothing depends on
+# On-demand run of the `unit` test group against the newest Julia 1.14 prerelease, for finding out
+# what the coming release does to Bramble. Nothing triggers it but `workflow_dispatch`, and nothing depends on
 # it: it is not a gate and not part of the release procedure.
 #
 #   gh workflow run julia-nightly.yml -f os=macos-latest
@@ -32,9 +32,11 @@ jobs:
 
       - uses: julia-actions/setup-julia@v3
         with:
-          version: nightly
+          # `~1.14.0-0` is the newest 1.14 prerelease (1.14.0-alpha1 on 2026-10-21), then 1.14.x
+          # once released; each alpha, beta and rc is picked up without editing this file.
+          version: "~1.14.0-0"
 
-      # Nightly changes daily, and a compiled cache from another build is invalid anyway.
+      # Each prerelease is a new build, and a compiled cache from another build is invalid anyway.
       - uses: julia-actions/cache@v3
         with:
           cache-compiled: "false"
