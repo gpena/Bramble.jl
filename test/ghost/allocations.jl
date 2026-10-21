@@ -19,7 +19,7 @@ using Bramble: CpuSerial, CpuThreaded, D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, D̽ₓ,
 using LinearAlgebra: norm
 using SparseArrays: nonzeros
 
-using ..TestUtils: WITH_3D_TESTS, ghost_mesh, padded
+using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, ghost_mesh, padded
 
 const K = [2.0 1.0; 1.0 2.0]
 
@@ -347,13 +347,15 @@ end
     @test !(assemble(form(P, P, elasticity2)) ≈ a.A_pad)
     # the threaded refill replays the same recording, the term split per point as the
     # recording split it (`_SplitTerm`)
-    St = gridspace(ghost_mesh(CpuThreaded(), (12, 11)); ghosts = :boundary)
-    Ct = constrained(St^Val(2), traction2)
-    at = form(Ct, Ct, elasticity2)
-    At = assemble(at)
-    fill!(nonzeros(At), 0)
-    assemble!(At, at)
-    @test relerr(At, A0) <= 1e-12
+    WITH_SLOW_TESTS && @testset "Threaded refill matches serial (#813)" begin
+        St = gridspace(ghost_mesh(CpuThreaded(), (12, 11)); ghosts = :boundary)
+        Ct = constrained(St^Val(2), traction2)
+        at = form(Ct, Ct, elasticity2)
+        At = assemble(at)
+        fill!(nonzeros(At), 0)
+        assemble!(At, at)
+        @test relerr(At, A0) <= 1e-12
+    end
 end
 
 end
