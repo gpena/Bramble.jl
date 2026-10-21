@@ -17,7 +17,12 @@ using LinearAlgebra: norm
 using Random: MersenneTwister
 using SparseArrays: SparseMatrixCSC
 
-using ..TestUtils: WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS
+
+# Under `unit`, the serial update keeps its Neumann and time-dependent cases, a zero-byte pin
+# per relation kind on a small mesh, and the threaded update keeps one static case, the bands
+# and the bound. The other sweep cases run under `WITH_SLOW_TESTS`, which the nightly and
+# `all` groups set.
 
 const K = [2.0 1.0; 1.0 2.0]
 const K3 = [2.0 0.5 0.0; 0.5 2.0 0.5; 0.0 0.5 2.0]
@@ -89,6 +94,13 @@ function check_update(C, t...; tol = 1e-12, unrelated = ())
     @test (@inferred update_ghosts!(v, C_, t...)) === v
     @test alloc(() -> update_ghosts!(v, C_, t...)) == 0
     return r
+end
+
+# The zero-byte pin of `check_update` alone: a warm `update_ghosts!` of `C` at `t` allocates
+# nothing. Each relation kind compiles its own update kernel, so each keeps this pin in unit.
+function pin_update(C, t...)
+    v = GhostVector(C, rand(eltype(C), length(Bramble.physical_indices(mesh(C)))))
+    @test alloc(() -> update_ghosts!(v, C, t...)) == 0
 end
 
 function conormal2(u)
@@ -182,17 +194,17 @@ end
         check_update(constrained_on(pol, (6, 7), :boundary, neumann2))
     end
 
-    @testset "2D Robin" begin
+    WITH_SLOW_TESTS && @testset "2D Robin" begin
         check_update(constrained_on(pol, (6, 7), :boundary, robin2))
     end
 
-    @testset "2D conormal corner blocks" begin
+    WITH_SLOW_TESTS && @testset "2D conormal corner blocks" begin
         for ns in ((6, 7), (13, 9))
             check_update(constrained_on(pol, ns, :boundary, conormal2))
         end
     end
 
-    @testset "2D named facets, ∂ₙₙ, Dirichlet u => g" begin
+    WITH_SLOW_TESTS && @testset "2D named facets, ∂ₙₙ, Dirichlet u => g" begin
         C = constrained_on(pol, (6, 7), (:xmin, :xmax, :ymax), dirichlet2)
         r = check_update(C)
         @test any(!iszero, last(Bramble.closure(C)))     # an affine part reaches the ghosts
@@ -206,7 +218,7 @@ end
         @test Bramble.ghost_values(r.v) == gv
     end
 
-    @testset "2D facet left without a relation" begin
+    WITH_SLOW_TESTS && @testset "2D facet left without a relation" begin
         C = constrained_on(pol, (6, 7), :boundary, unrelated2)
         r = check_update(C; unrelated = (:ymin,))
         @test count(r.keep) == 6                     # the :ymin ghosts stay unknowns
@@ -223,7 +235,6 @@ end
         C = constrained_on(pol, (6, 7), :boundary, time2)
         for t in (0.0, 0.3, 1.7)
             check_update(C, t)
-            check_update(constrained_on(pol, (6, 7), TIME_GHOSTS, time_dirichlet2), t)
         end
         # a caller's buffer gives the same values, and touches no stored state
         u = rand(Bramble.ndofs(C))
@@ -246,7 +257,28 @@ end
         @test Bramble.ghost_values(w) == gs
     end
 
-    @testset "2D data in time, a facet unrelated" begin
+    # The zero-byte pin of each moved relation kind, on the smallest mesh that takes it.
+    @testset "0 B pin of each relation kind" begin
+        pol = CpuSerial()
+        pin_update(constrained_on(pol, (4, 5), :boundary, robin2))
+        pin_update(constrained_on(pol, (4, 5), :boundary, conormal2))
+        pin_update(constrained_on(pol, (4, 5), (:xmin, :xmax, :ymax), dirichlet2))
+        pin_update(constrained_on(pol, (4, 5), :boundary, unrelated2))
+        pin_update(constrained_on(pol, (4, 5), TIME_GHOSTS, time_dirichlet2), 0.3)
+        pin_update(constrained_on(pol, (4, 5), :boundary, time_unrelated2), 0.3)
+        pin_update(constrained_on(pol, (5,), :boundary, robin1))
+        pin_update(constrained_on(pol, (5,), (:xmax,), u -> (:xmax => ∂ₙ(u) => 3.0,)))
+        pin_update(constrained_on(pol, (4, 5), :boundary, conormal2; T = Float32))
+    end
+
+    WITH_SLOW_TESTS && @testset "2D Dirichlet in time, lift(Cₕ, u, t)" begin
+        C = constrained_on(pol, (6, 7), TIME_GHOSTS, time_dirichlet2)
+        for t in (0.0, 0.3, 1.7)
+            check_update(C, t)
+        end
+    end
+
+    WITH_SLOW_TESTS && @testset "2D data in time, a facet unrelated" begin
         C = constrained_on(pol, (6, 7), :boundary, time_unrelated2)
         for t in (0.0, 0.3, 1.7)
             r = check_update(C, t; unrelated = (:xmax,))
@@ -255,12 +287,12 @@ end
         end
     end
 
-    @testset "1D Robin" begin
+    WITH_SLOW_TESTS && @testset "1D Robin" begin
         check_update(constrained_on(pol, (17,), :boundary, robin1))
         check_update(constrained_on(pol, (17,), (:xmax,), u -> (:xmax => ∂ₙ(u) => 3.0,)))
     end
 
-    @testset "Float32" begin
+    WITH_SLOW_TESTS && @testset "Float32" begin
         C = constrained_on(pol, (6, 7), :boundary, conormal2; T = Float32)
         r = check_update(C; tol = 1e-5)
         @test eltype(Bramble.ghost_values(r.v)) == Float32
@@ -363,19 +395,25 @@ end
 
 @testset "update_ghosts! under CpuThreaded (#776)" begin
     @test Threads.nthreads() >= 2
-    cases = (((9, 11), :boundary, conormal2), ((9, 11), (:xmin, :xmax, :ymax), dirichlet2),
-        ((9, 11), :boundary, unrelated2), ((17,), :boundary, robin1))
-    for (ns, ghosts, rel) in cases
-        x = rand(prod(ns))
-        @test ghosts_under(CpuThreaded(), ns, ghosts, rel, x) ==
-              ghosts_under(CpuSerial(), ns, ghosts, rel, x)
-    end
     x = rand(99)
-    for t in (0.0, 1.3)
-        @test ghosts_under(CpuThreaded(), (9, 11), :boundary, time2, x, t) ==
-              ghosts_under(CpuSerial(), (9, 11), :boundary, time2, x, t)
-        @test ghosts_under(CpuThreaded(), (9, 11), TIME_GHOSTS, time_dirichlet2, x, t) ==
-              ghosts_under(CpuSerial(), (9, 11), TIME_GHOSTS, time_dirichlet2, x, t)
+    @test ghosts_under(CpuThreaded(), (9, 11), :boundary, conormal2, x) ==
+          ghosts_under(CpuSerial(), (9, 11), :boundary, conormal2, x)
+
+    WITH_SLOW_TESTS && @testset "the other relations, and data in time" begin
+        cases = (((9, 11), (:xmin, :xmax, :ymax), dirichlet2),
+            ((9, 11), :boundary, unrelated2), ((17,), :boundary, robin1))
+        for (ns, ghosts, rel) in cases
+            y = rand(prod(ns))
+            @test ghosts_under(CpuThreaded(), ns, ghosts, rel, y) ==
+                  ghosts_under(CpuSerial(), ns, ghosts, rel, y)
+        end
+        x = rand(99)
+        for t in (0.0, 1.3)
+            @test ghosts_under(CpuThreaded(), (9, 11), :boundary, time2, x, t) ==
+                  ghosts_under(CpuSerial(), (9, 11), :boundary, time2, x, t)
+            @test ghosts_under(CpuThreaded(), (9, 11), TIME_GHOSTS, time_dirichlet2, x, t) ==
+                  ghosts_under(CpuSerial(), (9, 11), TIME_GHOSTS, time_dirichlet2, x, t)
+        end
     end
 
     @testset "the update runs in bands" begin
