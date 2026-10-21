@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces and discrete functions — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=34621e2c">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=53a54624">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces and discrete functions — Bramble.jl">
   <meta property="og:title" content="Grid spaces and discrete functions — Bramble.jl">
@@ -60,6 +60,7 @@
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
@@ -361,7 +362,7 @@ extrema(out_g)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(-14.214548626861463, 41.389262614623654)</code></pre>
 </div>
-<p>Two things follow from the physical-only result. The result carries no ghosts: it is as long as <code class="md-code-inline">u</code>, not as <code class="md-code-inline">v</code>. And the nested mixed differences of the <a href="../../tutorials/operators/">operators tutorial</a>, which a <code class="md-code-inline">lift</code> function composes, stay forms: a <code class="md-code-inline">GhostVector</code> takes one operator at a time.</p>
+<p>One thing follows from the physical-only result. The result carries no ghosts: it is as long as <code class="md-code-inline">u</code>, not as <code class="md-code-inline">v</code>.</p>
 <h4 id="An-explicit-heat-step" class="md-heading">An explicit heat step<a href="#An-explicit-heat-step" class="md-heading-anchor" aria-label="Link to this section">#</a></h4>
 <p>The use this serves is the explicit heat equation <span class="md-math md-math-inline">\(u_t = \Delta_h u\)</span> with a Neumann relation, on a non-uniform grid. Each step refreshes the ghosts, applies <code class="md-code-inline">Δₕ!</code> and advances the physical vector in place. The unit square has <span class="md-math md-math-inline">\(11 \times 9\)</span> nodes graded by <span class="md-math md-math-inline">\(x \mapsto x^{3/2}\)</span>, and the datum is zero on all four facets. The function <span class="md-math md-math-inline">\(e^{-2\pi^2 t}\cos \pi x \cos \pi y\)</span> solves the continuous problem, so it is the reference. The step is <span class="md-math md-math-inline">\(0.2 / (h_x^{-2} + h_y^{-2})\)</span>, rounded down to divide the final time, with <span class="md-math md-math-inline">\(h_x\)</span> and <span class="md-math md-math-inline">\(h_y\)</span> the smallest spacings of each axis: inside the explicit stability limit <span class="md-math md-math-inline">\(1 / (2 (h_x^{-2} + h_y^{-2}))\)</span> of the uniform grid with those spacings.</p>
 <div class="md-multi-output">
@@ -695,6 +696,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=34621e2c"></script>
+  <script src="../../assets/materialdocs.js?v=53a54624"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Meshes — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3a1ff3fe">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=5c7cdc44">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Meshes — Bramble.jl">
   <meta property="og:title" content="Meshes — Bramble.jl">
@@ -60,6 +60,7 @@
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -611,7 +612,7 @@ is_boundary_index(Ωₕ::AbstractMeshType, idx) -&gt; Bool</code></pre>
 <div class="md-docstring" id="Bramble.GhostMesh">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GhostMesh</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/ghost_mesh.jl#L22-L53" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/ghost_mesh.jl#L22-L54" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -621,7 +622,7 @@ is_boundary_index(Ωₕ::AbstractMeshType, idx) -&gt; Bool</code></pre>
 <p>A physical mesh with one ghost point beyond each node of the facets it names.</p>
 <p><a href="../../api/meshes/#Bramble.GhostMesh"><code class="md-code-inline">GhostMesh</code></a><code class="md-code-inline">(Ωₕ; ghosts = :boundary)</code> pads <code class="md-code-inline">Ωₕ</code> on every boundary facet, <code class="md-code-inline">ghosts = (:xmin, :ymax)</code> only on the named ones (canonical names or their aliases), <code class="md-code-inline">ghosts = ()</code> on none. The ghost beyond node <code class="md-code-inline">x₁</code> sits at <code class="md-code-inline">x₁ - h₂</code> and the one beyond <code class="md-code-inline">xₙ</code> at <code class="md-code-inline">xₙ + hₙ</code>, read from the physical mesh&#39;s points whenever they are asked for, so the mesh follows <code class="md-code-inline">change_points!</code> of <code class="md-code-inline">Ωₕ</code>.</p>
 <p>Its points, spacings and indices are those of the padded mesh, <code class="md-code-inline">npoints(G, Tuple)</code> the padded sizes and <code class="md-code-inline">G(i)</code> the padded axis submesh; the labels and facet queries (<code class="md-code-inline">boundary_indices</code>, <code class="md-code-inline">index_in_marker</code>, the surface weights) name the physical nodes. The ghosts are numbered <code class="md-code-inline">1:nghosts(G)</code>: facets in the order <code class="md-code-inline">xmin, xmax, ymin, ymax, zmin, zmax</code> (named ones only), each facet&#39;s ghosts in the column-major order of its nodes. A padded point outside along two or more axes is absent (<code class="md-code-inline">Bramble.is_absent</code>) and has no ghost number. <code class="md-code-inline">Bramble.ghost_index</code> and <code class="md-code-inline">Bramble.boundary_node</code> map in <code class="md-code-inline">O(1)</code> between a facet node and its ghost.</p>
-<p>After <code class="md-code-inline">iterative_refinement!</code> of <code class="md-code-inline">Ωₕ</code> the ghost mesh is stale and every access throws an <code class="md-code-inline">ArgumentError</code>: build a new one.</p>
+<p>After <code class="md-code-inline">iterative_refinement!</code> of <code class="md-code-inline">Ωₕ</code> the ghost mesh is stale: its points, spacings, submeshes and cell lookup throw an <code class="md-code-inline">ArgumentError</code>, while its counts and index sets keep the sizes it was built with. Build a new one.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -663,6 +664,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=3a1ff3fe"></script>
+  <script src="../../assets/materialdocs.js?v=5c7cdc44"></script>
 </body>
 </html>

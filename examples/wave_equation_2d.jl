@@ -155,14 +155,17 @@ energy(y) = 0.5 * dot(y[(n + 1):(2n)], Mᵥ * y[(n + 1):(2n)]) + 0.5 * dot(y[1:n
 E = energy.(sol.u)
 drift = maximum(abs, E .- E[1]) / E[1]
 
-@test 0.0 < drift < 1.0e-8                                                                 #src
+@test 0.0 < drift < 1.0e-10                                                                #src
 @test length(sol.t) < 100                                                                  #src
+sol_tight = solve(prob, Rodas5P(); reltol = 1.0e-10, abstol = 1.0e-10)                       #src
+drift_tight = maximum(abs, energy.(sol_tight.u) .- E[1]) / E[1]                             #src
+@test drift_tight < drift / 10                                                              #src
 
 E[1], drift
 
 # Eleven digits of the initial energy survive some fifty adaptive steps. That is the
 # integrator's tolerance showing rather than a conservation theorem: tightening `reltol` to
-# `1e-10` takes the drift to around `1e-14`, and loosening it gives the digits back.
+# `1e-10` takes the drift to around `1e-13`, and loosening it gives the digits back.
 #
 # ## Spatial order of the wave solution
 #

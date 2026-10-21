@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Difference, jump and average operators — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=9566bce6">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=5c6a6249">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Difference, jump and average operators — Bramble.jl">
   <meta property="og:title" content="Difference, jump and average operators — Bramble.jl">
@@ -60,6 +60,7 @@
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
@@ -437,7 +438,7 @@ A_dc[1, :], A_dc[6, :]</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.25, 0.0, 0.0, 0.0, 0.0, -0.25], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])</code></pre>
 </div>
-<p>A boundary term that needs a point beyond a facet without ghosts is refused rather than truncated: <code class="md-code-inline">inner_Γ(Dcₓ(u), v; markers = (:xmax,))</code> on this space throws an <code class="md-code-inline">ArgumentError</code> that asks for ghosts on that facet.</p>
+<p>A boundary term that needs a point beyond a facet without ghosts is refused rather than truncated: <code class="md-code-inline">inner_Γ(Dcₓ(u), v; markers = (:xmax,))</code> on this space throws an <code class="md-code-inline">ArgumentError</code> naming the read of a padded point the space lacks.</p>
 <h3 id="The-normal-derivative-and-the-facet-operators" class="md-heading">The normal derivative and the facet operators<a href="#The-normal-derivative-and-the-facet-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>Three operators serve the boundary conditions that name a normal direction. They act at the nodes of a facet with outward normal <span class="md-math md-math-inline">\(\eta\)</span>, and they are only meaningful inside <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a> or a <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> relation: they are not grid functions.</p>
 <div class="md-table-wrap">
@@ -495,7 +496,7 @@ r∂ₙₙ_min, rjump_max</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">([-1249.9999999999995, 624.9999999999998, 0.0, 0.0, 0.0, 0.0, 624.9999999999998, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0, -1.0, 0.0, 0.0])</code></pre>
 </div>
-<p>The jump is the inward one at both ends, <span class="md-math md-math-inline">\(u_2 - u_1\)</span> at the left and <span class="md-math md-math-inline">\(u_{n-1} - u_n\)</span> at the right, which is why it needs no ghost of its own. The plain forward <code class="md-code-inline">jumpₓ</code> would read across the ghost cell at the right end. A facet operator takes scalars and sums, so <code class="md-code-inline">α * u + β * ∂ₙ(u)</code> is the Robin combination. It is not a grid function: <code class="md-code-inline">jumpₙ(∂ₙ(u))</code> and a function coefficient times a facet operator are errors, and the function belongs in the data of <code class="md-code-inline">inner_Γ</code> or of a relation.</p>
+<p>The jump is the inward one at both ends, <span class="md-math md-math-inline">\(u_2 - u_1\)</span> at the left and <span class="md-math md-math-inline">\(u_{n-1} - u_n\)</span> at the right, which is why it needs no ghost of its own. The plain forward <code class="md-code-inline">jumpₓ</code> would read across the ghost cell at the right end. A facet operator takes scalars and sums, so <code class="md-code-inline">α * u + β * ∂ₙ(u)</code> is the Robin combination. It is not a grid function: <code class="md-code-inline">jumpₙ(∂ₙ(u))</code> throws an <code class="md-code-inline">ArgumentError</code> that begins &quot;jumpₙ takes a field expression&quot;, a function coefficient times a facet operator is a <code class="md-code-inline">MethodError</code> (no method matching <code class="md-code-inline">*</code>), and the function belongs in the data of <code class="md-code-inline">inner_Γ</code> or of a relation.</p>
 <p>A facet whose ghosts are missing is refused when the form is built, never read as zero:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -576,7 +577,7 @@ norm(lap(W_c) - spelled(W_c)) / norm(lap(W_c))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">1.3225930849381489e-16</code></pre>
 </div>
-<p><code class="md-code-inline">Δₕ</code> is cheaper to build than the nested pair, because the form compiles one three-point stencil per axis. At a facet node on a ghost space it is the ordinary three-point stencil with the ghost as a neighbour. On <code class="md-code-inline">W₁</code>, the row of the first node is the cell weight times <span class="md-math md-math-inline">\((u_2 - 2u_1 + u_0)/h_2^2\)</span>:</p>
+<p>At a facet node on a ghost space it is the ordinary three-point stencil with the ghost as a neighbour. On <code class="md-code-inline">W₁</code>, the row of the first node is the cell weight times <span class="md-math md-math-inline">\((u_2 - 2u_1 + u_0)/h_2^2\)</span>:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -810,6 +811,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=9566bce6"></script>
+  <script src="../../assets/materialdocs.js?v=5c6a6249"></script>
 </body>
 </html>

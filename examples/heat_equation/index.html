@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Heat equation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1439f2fc">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=19d81f4d">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Heat equation — Bramble.jl">
   <meta property="og:title" content="Heat equation — Bramble.jl">
@@ -60,6 +60,7 @@
         <a href="../../examples/heat_equation/" class="md-nav-active">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
@@ -157,7 +158,7 @@ Cₕ, sd_robin, sol_robin = robin_problem(Ωₕ, (:left, :right))</code></pre>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">((100, 100), 0.01, 0.0050000000000000044)</code></pre>
 </div>
 <h2 id="The-solution-at-the-final-time" class="md-heading">The solution at the final time<a href="#The-solution-at-the-final-time" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">Bramble.lift(Cₕ, u, t)</code> returns the padded-grid values of the unknowns <code class="md-code-inline">u</code> with the ghost value and the eliminated node filled in from the relations at time <span class="md-math md-math-inline">\(t\)</span>. The physical nodes come first, so the compared fields are its first 101 entries:</p>
+<p><code class="md-code-inline">Bramble.lift(Cₕ, u, t)</code> returns the padded-grid values of the unknowns <code class="md-code-inline">u</code> with the ghost value and the eliminated node filled in from the relations at time <span class="md-math md-math-inline">\(t\)</span>. The ghost lies beyond the right end, so the physical nodes are its first 101 entries:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -485,7 +486,7 @@ maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end]))</code></pre>
 </div>
 <p>The same <code class="md-code-inline">ODEProblem</code>, one stepper differentiating through <code class="md-code-inline">t</code> by default and the other needing no <code class="md-code-inline">∂f/∂t</code> at all, land on the same answer – neither <code class="md-code-inline">AutoFiniteDiff()</code> nor a hand-written <code class="md-code-inline">tgrad</code> was needed for the operator itself.</p>
 <h2 id="Hand-rolled-backward-Euler" class="md-heading">Hand-rolled backward Euler<a href="#Hand-rolled-backward-Euler" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">semidiscretize</code>/<code class="md-code-inline">ode_problem</code> above hide the per-step matrix assembly entirely. This one keeps the Dirichlet problem as well, since <code class="md-code-inline">dirichlet_bc!</code> writes identity rows into a plain assembled matrix and has no ghost counterpart. Building it explicitly – the shape a solver without a method-of-lines layer expects – is what <a href="../../api/forms/#Bramble.assemble_add!"><code class="md-code-inline">assemble_add!</code></a> exists for: accumulating <span class="md-math md-math-inline">\(M/\Delta t\)</span> and the <span class="md-math md-math-inline">\(t\)</span>-dependent stiffness piece <span class="md-math md-math-inline">\(K(t)\)</span> into the same preallocated matrix, in place, with no temporary and no sparse matrix addition of its own on every step. Backward Euler for the same varying-diffusivity problem as the section above,</p>
+<p><code class="md-code-inline">semidiscretize</code>/<code class="md-code-inline">ode_problem</code> above hide the per-step matrix assembly entirely. This one keeps the Dirichlet problem as well, since <a href="../../api/forms/#Bramble.assemble_add!"><code class="md-code-inline">assemble_add!</code></a> takes forms on a plain space only. Building it explicitly – the shape a solver without a method-of-lines layer expects – is what <a href="../../api/forms/#Bramble.assemble_add!"><code class="md-code-inline">assemble_add!</code></a> exists for: accumulating <span class="md-math md-math-inline">\(M/\Delta t\)</span> and the <span class="md-math md-math-inline">\(t\)</span>-dependent stiffness piece <span class="md-math md-math-inline">\(K(t)\)</span> into the same preallocated matrix, in place, with no temporary and no sparse matrix addition of its own on every step. Backward Euler for the same varying-diffusivity problem as the section above,</p>
 <div class="md-math md-math-display">
 \[\Bigl(\frac{M}{\Delta t} + K(t^{n+1})\Bigr) u^{n+1} = \frac{M}{\Delta t} u^n + F,\]
 </div>
@@ -832,6 +833,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=1439f2fc"></script>
+  <script src="../../assets/materialdocs.js?v=19d81f4d"></script>
 </body>
 </html>

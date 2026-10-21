@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=406cbeca">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=df93815a">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -60,6 +60,7 @@
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -194,7 +195,7 @@ box(a::Tuple{Vararg{Number, D}}, b::Tuple{Vararg{Number, D}}) -&gt; CartesianPro
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">×(C₁::GhostGridSpace, C₂::GhostGridSpace) -&gt; CompositeGridSpace</code></pre>
 </div>
-<p>The composite of two ghost spaces, flat as for plain spaces: <code class="md-code-inline">C₁ × C₂ × C₃</code> has three components. Its degrees of freedom are those of <code class="md-code-inline">C₁</code> then those of <code class="md-code-inline">C₂</code>, and its closure is block diagonal, each component constrained by its own relations, so forms on it assemble a vector problem with per-component relations (see <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a>). <code class="md-code-inline">Bramble.padded_space</code> and <code class="md-code-inline">Bramble.closure</code> give the padded composite and the closure, and <a href="../../api/spaces/#Bramble.lift"><code class="md-code-inline">lift</code></a> the padded grid functions of a solution.</p>
+<p>The composite of two ghost spaces, flat as for plain spaces: <code class="md-code-inline">C₁ × C₂ × C₃</code> has three components. Its degrees of freedom are those of <code class="md-code-inline">C₁</code> then those of <code class="md-code-inline">C₂</code>, and its closure is block diagonal, each component constrained by its own relations, so forms on it assemble a vector problem with per-component relations (see <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a>). Relations coupling the components, such as a traction, are given on the product of the unconstrained ghost spaces, <code class="md-code-inline">constrained(C₁ × C₂, relations)</code>, whose closure is solved for all of them at once. <code class="md-code-inline">Bramble.padded_space</code> and <code class="md-code-inline">Bramble.closure</code> give the padded composite and the closure, and <a href="../../api/spaces/#Bramble.lift"><code class="md-code-inline">lift</code></a> the padded grid functions of a solution.</p>
 <p>A ghost space and a plain one do not combine: the product refuses with an <code class="md-code-inline">ArgumentError</code>. Forms couple the components only when they ghost the same facets of meshes of one size.</p>
 </div>
 </div>
@@ -461,6 +462,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=406cbeca"></script>
+  <script src="../../assets/materialdocs.js?v=df93815a"></script>
 </body>
 </html>

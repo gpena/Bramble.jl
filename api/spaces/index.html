@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=205847d1">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=2461ea71">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces — Bramble.jl">
   <meta property="og:title" content="Grid spaces — Bramble.jl">
@@ -60,6 +60,7 @@
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -207,12 +208,13 @@ CompositeGridSpace{N, Spaces}(spaces::Spaces) where {N, Spaces &lt;: Tuple}</cod
 <div class="md-docstring" id="Bramble.gridspace">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gridspace</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L212-L244" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L212-L245" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">gridspace(Ωₕ::AbstractMeshType{D}; ghosts = ()) -&gt; ScalarGridSpace{D}</code></pre>
+<pre><code class="language-julia">gridspace(Ωₕ::AbstractMeshType{D}) -&gt; ScalarGridSpace{D}
+gridspace(Ωₕ::AbstractMeshType{D}; ghosts) -&gt; GhostGridSpace{D}</code></pre>
 </div>
 <p>Constructs a <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a> defined on the mesh <code class="md-code-inline">Ωₕ</code>, precomputing the inner product weights listed in <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a>.</p>
 <p>With <code class="md-code-inline">ghosts = :boundary</code> (every boundary facet) or a tuple of facet names such as <code class="md-code-inline">(:xmin, :ymax)</code>, it returns a <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a> instead: the physical nodes of <code class="md-code-inline">Ωₕ</code> and one ghost beyond each node of the named facets, with inner products that weigh the physical nodes, cells and facets only. The default <code class="md-code-inline">ghosts = ()</code> is the space above.</p>
@@ -279,7 +281,7 @@ ndofs(Wₕ::AbstractSpaceType, ::Type{Tuple}) -&gt; NTuple{N, Int}</code></pre>
 <div class="md-docstring" id="Bramble.weights">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.weights</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L336-L413" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L337-L414" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -860,7 +862,7 @@ E, d = Bramble.closure(Wₕ)    # E is 63 × 59, d = 0</code></pre>
 <div class="md-docstring" id="Bramble.constrained">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.constrained</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_relations.jl#L21-L86" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_relations.jl#L38-L109" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -874,8 +876,9 @@ E, d = Bramble.closure(Wₕ)    # E is 63 × 59, d = 0</code></pre>
     :xmax =&gt; 2.0 * u + 0.5 * ∂ₙ(u) =&gt; x -&gt; exp(x[1])))</code></pre>
 </div>
 <p>The operator is either <code class="md-code-inline">u</code> itself, a Dirichlet relation, or a facet operator that reads the facet&#39;s ghost: <a href="../../api/operators/#Bramble.∂ₙ"><code class="md-code-inline">∂ₙ</code></a> (conormal <code class="md-code-inline">∂ₙ(u; K)</code> included), <a href="../../api/operators/#Bramble.∂ₙₙ"><code class="md-code-inline">∂ₙₙ</code></a>, and their linear combinations with <code class="md-code-inline">u</code>. The data is a number, a function of the point <code class="md-code-inline">x -&gt; …</code>, or a function of the point and the time <code class="md-code-inline">(x, t) -&gt; …</code> (told apart by the methods it has). At each node of the facet, a ghost relation is solved for the node&#39;s ghost; at a 2D corner where two conormal relations read each other&#39;s ghost, the two are solved together. A Dirichlet relation <code class="md-code-inline">:F =&gt; u =&gt; g</code> removes the nodes of <code class="md-code-inline">F</code> from the unknowns and fixes them to <code class="md-code-inline">g</code>; its facet needs no ghosts, and if it has them it needs one ghost relation besides, which solves for them. A ghosted facet without any relation keeps its ghosts as unknowns.</p>
-<p>The degrees of freedom of the result are the physical nodes no Dirichlet relation fixes, in the mesh&#39;s linear order, then the ghosts that remain unknowns, in the order of <code class="md-code-inline">Wₕ</code>. Its closure <code class="md-code-inline">(E, d)</code> maps them to the padded values <code class="md-code-inline">E u + d</code>, where <code class="md-code-inline">d</code> carries the data; so a load needs the bilinear form, <code class="md-code-inline">assemble(a, l)</code>, whose matrix <code class="md-code-inline">Eᵀ A E</code> stays symmetric when <code class="md-code-inline">A</code> is. Dirichlet conditions can instead replace rows, <code class="md-code-inline">assemble(a, l; dirichlet, symmetrize)</code>, on a space whose ghosts are all eliminated and none of whose nodes are fixed by <code class="md-code-inline">u =&gt; g</code>: its unknowns are then the physical nodes, as on <code class="md-code-inline">gridspace(Ωₕ)</code>.</p>
-<p>When some data depend on time, <code class="md-code-inline">E</code> stays the same and only <code class="md-code-inline">d</code> depends on time, <code class="md-code-inline">d(t)</code>. <a href="../../api/spaces/#Bramble.lift"><code class="md-code-inline">lift</code></a><code class="md-code-inline">(Cₕ, u, t)</code> gives <code class="md-code-inline">E u + d(t)</code>; <code class="md-code-inline">lift(Cₕ, u)</code>, <code class="md-code-inline">lift(Cₕ)</code> and <code class="md-code-inline">assemble(a, l)</code> refuse with an <code class="md-code-inline">ArgumentError</code>, as there is no single <code class="md-code-inline">d</code>, while <code class="md-code-inline">form</code> and <code class="md-code-inline">assemble(a)</code>, which read <code class="md-code-inline">E</code> only, work as on a static space. A time-dependent problem on such a space is posed through <code class="md-code-inline">semidiscretize</code>. <code class="md-code-inline">constrained</code> evaluates the data at <code class="md-code-inline">t = 0</code>, so they must be defined there, and <code class="md-code-inline">closure(Cₕ)</code> gives <code class="md-code-inline">d(0)</code> as its <code class="md-code-inline">d</code>. Dirichlet data in time that meet at a corner are checked to agree at <code class="md-code-inline">t = 0</code> only; the corner then takes the first facet&#39;s datum at every <code class="md-code-inline">t</code>. Under <code class="md-code-inline">CpuPolyester</code> a datum that closes over an array crosses each task whole and allocates on every evaluation; one that closes over numbers only, or over nothing, allocates nothing.</p>
+<p>The degrees of freedom of the result are the physical nodes no Dirichlet relation fixes, in the mesh&#39;s linear order, then the ghosts that remain unknowns, in the order of <code class="md-code-inline">Wₕ</code>. Its closure <code class="md-code-inline">(E, d)</code> maps them to the padded values <code class="md-code-inline">E u + d</code>, where <code class="md-code-inline">d</code> carries the data. The load of a pair whose trial space has <code class="md-code-inline">d ≠ 0</code> reads the bilinear form, so <code class="md-code-inline">assemble(a, l)</code> builds the two together, its matrix <code class="md-code-inline">Eᵀ A E</code> symmetric when <code class="md-code-inline">A</code> is; <code class="md-code-inline">assemble(l)</code> alone refuses a test space with <code class="md-code-inline">d ≠ 0</code>, which is exact when both sides are one space. Dirichlet conditions can instead replace rows, <code class="md-code-inline">assemble(a, l; dirichlet, symmetrize)</code>, on a space whose ghosts are all eliminated and none of whose nodes are fixed by <code class="md-code-inline">u =&gt; g</code>: its unknowns are then the physical nodes, as on <code class="md-code-inline">gridspace(Ωₕ)</code>.</p>
+<p>When some data depend on time, <code class="md-code-inline">E</code> stays the same and only <code class="md-code-inline">d</code> depends on time, <code class="md-code-inline">d(t)</code>. <a href="../../api/spaces/#Bramble.lift"><code class="md-code-inline">lift</code></a><code class="md-code-inline">(Cₕ, u, t)</code> gives <code class="md-code-inline">E u + d(t)</code>; <code class="md-code-inline">lift(Cₕ, u)</code>, <code class="md-code-inline">lift(Cₕ)</code> and <code class="md-code-inline">assemble(a, l)</code> refuse with an <code class="md-code-inline">ArgumentError</code>, as there is no single <code class="md-code-inline">d</code>, while <code class="md-code-inline">form</code> and <code class="md-code-inline">assemble(a)</code>, which read <code class="md-code-inline">E</code> only, work as on a static space. A time-dependent problem on such a space is posed through <code class="md-code-inline">semidiscretize</code>. <code class="md-code-inline">constrained</code> evaluates the data at <code class="md-code-inline">t = 0</code>, so they must be defined there, and <code class="md-code-inline">closure(Cₕ)</code> gives <code class="md-code-inline">d(0)</code> as its <code class="md-code-inline">d</code>. On a composite of ghost spaces, <code class="md-code-inline">constrained(C₁ × C₂, relations)</code> relates the components together, a relation reading several of them (a traction) included: see <code class="md-code-inline">constrained(::CompositeGridSpace, relations)</code>.</p>
+<p>Dirichlet data in time that meet at a corner are checked to agree at <code class="md-code-inline">t = 0</code> only; the corner then takes the first facet&#39;s datum at every <code class="md-code-inline">t</code>. Under <code class="md-code-inline">CpuPolyester</code> a datum that closes over an array crosses each task whole and allocates on every evaluation; one that closes over numbers only, or over nothing, allocates nothing.</p>
 <p>Refused with an <code class="md-code-inline">ArgumentError</code>: a space without ghosts, an already constrained space, a facet with two Dirichlet or two ghost relations, a ghost relation on a facet that carries no ghosts, a ghosted facet with <code class="md-code-inline">u =&gt; g</code> and no ghost relation, a relation that does not read its facet&#39;s ghost (<code class="md-code-inline">β = 0</code>, or a <code class="md-code-inline">jumpₙ</code> alone), two Dirichlet relations disagreeing at a shared node, and a singular block at a corner (a singular <code class="md-code-inline">K</code>).</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
@@ -894,6 +897,37 @@ Tₕ = constrained(Wₕ, u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; (x, t) -&gt; sin(t
 Bramble.lift(Tₕ, zeros(Bramble.ndofs(Tₕ)), 0.5)   # E u + d(0.5)</code></pre>
 </div>
 <p>See also: <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a>, <a href="../../api/operators/#Bramble.∂ₙ"><code class="md-code-inline">∂ₙ</code></a>, <a href="../../api/operators/#Bramble.∂ₙₙ"><code class="md-code-inline">∂ₙₙ</code></a></p>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">constrained(Vₕ::CompositeGridSpace, relations) -&gt; ConstrainedCompositeSpace</code></pre>
+</div>
+<p>A composite of ghost spaces (<code class="md-code-inline">C₁ × C₂</code>, each built by <code class="md-code-inline">gridspace(Ωₕ; ghosts = ...)</code> with the same ghosts) constrained as a whole. <code class="md-code-inline">relations(u)</code> returns the pairs <code class="md-code-inline">facet =&gt; operator =&gt; data</code> of <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> on a ghost space, written of the components <code class="md-code-inline">u(i)</code>. A Dirichlet relation names its component: <code class="md-code-inline">:ymin =&gt; u(2) =&gt; 0.0</code> fixes the nodes of <code class="md-code-inline">:ymin</code> in component 2, at most one per component and facet. A ghost relation may read one component, <code class="md-code-inline">:xmin =&gt; ∂ₙ(u(1)) =&gt; g</code>, or several, as the traction of component <code class="md-code-inline">i</code>, <code class="md-code-inline">Σⱼ ∂ₙ(u(j); K = Kᵢⱼ)</code>, does; its tangential terms are the conormal&#39;s. A facet&#39;s ghost relations are not keyed by component. Relations of one component each take at most one per component, and a component without one keeps its ghosts on that facet as unknowns, as on the product; a facet with a relation reading several components has one ghost relation per component. Each is attached to the ghosts of one component (the one it reads alone, if any), and the relations of a node, or of a corner, are solved together, so a traction closes jointly with its partner.</p>
+<p>The relations of all the components are solved together on the padded composite, and the result stores the closure <code class="md-code-inline">(E, d)</code> they give (<code class="md-code-inline">Bramble.closure</code>), whose <code class="md-code-inline">E</code> couples the components wherever a relation does. Its degrees of freedom are component 1&#39;s, then component 2&#39;s, …, each in the order <code class="md-code-inline">constrained</code> gives on the component alone, so with relations of one component each it equals <code class="md-code-inline">constrained(C₁, r₁) × constrained(C₂, r₂)</code>. Forms on it, <code class="md-code-inline">assemble(a, l)</code> and <a href="../../api/spaces/#Bramble.lift"><code class="md-code-inline">lift</code></a> work as on that product.</p>
+<p>A displacement facet beside a traction facet carries ghosts, which the traction&#39;s tangential difference reads at their corner: close them by <code class="md-code-inline">∂ₙₙ(u(i)) =&gt; 0</code> besides <code class="md-code-inline">u(i) =&gt; g</code>. At a corner of two facets that each have a relation reading several components (two tractions), the tangential difference of each facet&#39;s relations is one-sided into the domain, second order over the three nodes along the facet, so each facet&#39;s relations read its own ghosts alone and the corner closes facet by facet: solved together, isotropic tractions would give a singular block, their shear relations being one equation there (the stress is symmetric). Elsewhere the difference stays centred.</p>
+<p>A form on it reads the ghosts of a facet with a relation reading several components through second differences as the closure gives them, and, in the left argument of a product, through a first difference along one axis of a first difference along another (under sums and scales only, such as <code class="md-code-inline">Dcₓ(Dcᵧ(u(2)))</code> or <code class="md-code-inline">Dcₓ(2.0 * Dcᵧ(u(2)))</code>) as the quadratic through the three nodes inward along the facet&#39;s normal, extrapolated to the ghost: the difference across the facet is then one-sided, second order on the non-uniform spacing. The right argument reads the closure&#39;s ghosts; an average or shift between the two differences has no facet rule and reads past a corner of the padded grid, so a form with one is refused with an <code class="md-code-inline">ArgumentError</code>. Read through the traction&#39;s tangential difference, the ghosts made the collocated elasticity operator unstable on cells longer across the facet than along it. Relations of one component each leave every form as on the product.</p>
+<p>Refused with an <code class="md-code-inline">ArgumentError</code>, besides what <code class="md-code-inline">constrained</code> and the product refuse: a relation naming no component, two ghost relations of one component on a facet, a facet with a relation reading several components but not one ghost relation per component, relations whose block at a node is singular, a corner of two tractions with fewer than three nodes along a facet, a facet with a relation reading several components and fewer than three nodes across it (refused by <code class="md-code-inline">form</code>), data depending on time (constrain the components apart and take the product), the <code class="md-code-inline">dirichlet</code> keyword of <code class="md-code-inline">assemble</code>, <code class="md-code-inline">dirichlet_bc!</code> and <code class="md-code-inline">symmetrize!</code> (give <code class="md-code-inline">u(i) =&gt; g</code> instead), and <code class="md-code-inline">GhostVector</code> and <code class="md-code-inline">update_ghosts!</code>.</p>
+<p><strong>Examples</strong></p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, false))
+Sₕ = gridspace(Ωₕ; ghosts = (:xmin, :xmax))
+Vₕ = constrained(Sₕ × Sₕ, u -&gt; (:xmin =&gt; ∂ₙ(u(1)) =&gt; 1.0, :xmax =&gt; ∂ₙ(u(1)) =&gt; 0.0,
+    :xmin =&gt; ∂ₙ(u(2)) =&gt; 0.0, :xmax =&gt; u(2) + ∂ₙ(u(2)) =&gt; 0.0))
+E, d = Bramble.closure(Vₕ)
+
+# isotropic traction on :xmin, displacement on the other facets
+λ, μ = 2.0, 0.5
+K(i, j) = [λ * (i == d) * (j == e) + μ * ((i == j) * (d == e) + (i == e) * (j == d))
+           for d in 1:2, e in 1:2]
+t(u, i) = ∂ₙ(u(1); K = K(i, 1)) + ∂ₙ(u(2); K = K(i, 2))
+disp(F) = u -&gt; (F =&gt; u(1) =&gt; 0.0, F =&gt; u(2) =&gt; 0.0, F =&gt; ∂ₙₙ(u(1)) =&gt; 0.0,
+    F =&gt; ∂ₙₙ(u(2)) =&gt; 0.0)
+Wₕ = gridspace(Ωₕ; ghosts = :boundary)
+Tₕ = constrained(Wₕ × Wₕ, u -&gt; (:xmin =&gt; t(u, 1) =&gt; 1.0, :xmin =&gt; t(u, 2) =&gt; 0.0,
+    disp(:ymin)(u)..., disp(:xmax)(u)..., disp(:ymax)(u)...))</code></pre>
+</div>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.lift">
@@ -938,6 +972,7 @@ lift(Vₕ::CompositeGridSpace, u::AbstractVector) -&gt; VectorElement
 lift(Vₕ::CompositeGridSpace, u::AbstractVector, t::Number) -&gt; VectorElement</code></pre>
 </div>
 <p><a href="../../api/spaces/#Bramble.lift"><code class="md-code-inline">lift</code></a> on a composite of ghost spaces (<code class="md-code-inline">C₁ × C₂</code>): the grid function on <code class="md-code-inline">Bramble.padded_space(Vₕ)</code> whose component <code class="md-code-inline">i</code> is <code class="md-code-inline">lift(Cᵢ, uᵢ)</code> (<code class="md-code-inline">d</code>, <code class="md-code-inline">E u + d</code> or <code class="md-code-inline">E u + d(t)</code>) for the slice <code class="md-code-inline">uᵢ</code> of <code class="md-code-inline">u</code> at <code class="md-code-inline">component_range(Vₕ, i)</code>. Each component is checked, and refused, as <code class="md-code-inline">lift</code> on it is. <code class="md-code-inline">Bramble.lift!(uₕ, Vₕ, u)</code> and <code class="md-code-inline">Bramble.lift!(uₕ, Vₕ, u, t)</code> refill a grid function <code class="md-code-inline">lift</code> returned.</p>
+<p>On a composite constrained as a whole, <code class="md-code-inline">constrained(C₁ × C₂, relations)</code>, they give <code class="md-code-inline">d</code> and <code class="md-code-inline">E u + d</code> from its stored closure over the whole padded composite, as a relation reading several components (a traction) makes a component&#39;s ghosts depend on the others&#39; degrees of freedom; its data do not depend on time, so <code class="md-code-inline">t</code> changes nothing.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.lift!">
@@ -1051,7 +1086,7 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 <div class="md-docstring" id="Bramble.assemble!-Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code> — <span class="md-docstring-sig">Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L660-L678" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L705-L725" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1060,8 +1095,8 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
     dirichlet = nothing, dirichlet_components = nothing, symmetrize = false)</code></pre>
 </div>
 <p>Refill <code class="md-code-inline">A</code> and <code class="md-code-inline">F</code> with the matrix and the load that <code class="md-code-inline">A, F = assemble(a, l)</code> returns, and return <code class="md-code-inline">A, F</code>. <code class="md-code-inline">A</code> keeps the pattern and <code class="md-code-inline">F</code> the element type that <code class="md-code-inline">assemble(a, l)</code> gave, so call that once and refill its two outputs. The call allocates nothing warm.</p>
-<p>Both forms are assembled together because, when the closure of the space has an affine part <code class="md-code-inline">d ≠ 0</code>, the load is <code class="md-code-inline">Eᵀ(F − A d)</code> and reads the matrix. <code class="md-code-inline">assemble!(b, l)</code> alone refuses such a space. <code class="md-code-inline">dirichlet</code>, <code class="md-code-inline">dirichlet_components</code> and <code class="md-code-inline">symmetrize</code> act as in <code class="md-code-inline">assemble(a, l)</code>.</p>
-<p>It throws an <code class="md-code-inline">ArgumentError</code> for a time-dependent space (pose the problem with <code class="md-code-inline">semidiscretize</code>), for <code class="md-code-inline">symmetrize = true</code> without <code class="md-code-inline">dirichlet</code>, for <code class="md-code-inline">A</code> that is not a <code class="md-code-inline">SparseMatrixCSC</code> with the reduced pattern of <code class="md-code-inline">a</code>, for a <code class="md-code-inline">dirichlet</code> the rows of the space do not allow, and for an <code class="md-code-inline">F</code> whose element type cannot hold the load&#39;s. A <code class="md-code-inline">DimensionMismatch</code> follows an <code class="md-code-inline">F</code> of the wrong length and forms whose test spaces differ.</p>
+<p>Both forms are assembled together because, when the closure of the trial space has an affine part <code class="md-code-inline">d ≠ 0</code>, the load is <code class="md-code-inline">E_vᵀ(F − A d)</code> and reads the matrix. <code class="md-code-inline">assemble!(b, l)</code> alone refuses a test space with <code class="md-code-inline">d ≠ 0</code>, which is exact when both sides are one space: on a pair whose trial space has data and whose test space has none, it gives <code class="md-code-inline">E_vᵀ F</code> without the lift. <code class="md-code-inline">dirichlet</code>, <code class="md-code-inline">dirichlet_components</code> and <code class="md-code-inline">symmetrize</code> act as in <code class="md-code-inline">assemble(a, l)</code>.</p>
+<p>It throws an <code class="md-code-inline">ArgumentError</code> when the trial space of <code class="md-code-inline">a</code> or the test space of <code class="md-code-inline">l</code> is time-dependent (pose the problem with <code class="md-code-inline">semidiscretize</code>), for <code class="md-code-inline">symmetrize = true</code> without <code class="md-code-inline">dirichlet</code>, for <code class="md-code-inline">A</code> that is not a <code class="md-code-inline">SparseMatrixCSC</code> with the reduced pattern of <code class="md-code-inline">a</code>, for a <code class="md-code-inline">dirichlet</code> the rows of the space do not allow, and for an <code class="md-code-inline">F</code> whose element type cannot hold the load&#39;s. A <code class="md-code-inline">DimensionMismatch</code> follows an <code class="md-code-inline">F</code> of the wrong length and forms whose test spaces differ: not the same space, and closures <code class="md-code-inline">(E, d)</code> that are not equal.</p>
 </div>
 </div>
       </article>
@@ -1095,6 +1130,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=205847d1"></script>
+  <script src="../../assets/materialdocs.js?v=2461ea71"></script>
 </body>
 </html>

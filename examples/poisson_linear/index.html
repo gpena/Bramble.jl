@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear Poisson equation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=79baedad">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d8b06ff3">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Linear Poisson equation — Bramble.jl">
   <meta property="og:title" content="Linear Poisson equation — Bramble.jl">
@@ -60,6 +60,7 @@
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
@@ -124,7 +125,7 @@ Wₕ = gridspace(Ωₕ)</code></pre>
 </div>
 <p><code class="md-code-inline">(false, false)</code> builds a non-uniform, randomly-perturbed grid in both directions, deliberately, not the default: a uniform grid happens to make this particular manufactured solution nearly exact for this scheme regardless of mesh size, which would make the convergence check below pass on a broken implementation just as readily as a correct one.</p>
 <p>The seed is what makes the numbers below reproducible: <code class="md-code-inline">(false, false)</code> draws the interior points from the global RNG, so without it the mesh – and every figure on this page – would differ from build to build, and the suite could not assert what the page prints.</p>
-<p>The bilinear form is the discrete Laplacian, written <span class="md-math md-math-inline">\(\langle -\Delta_h u, v \rangle_h\)</span> because it reads the ghost values the relations fix; the <a href="../../tutorials/form/#form_dirichlet">forms tutorial</a> builds the same operator in one dimension as <code class="md-code-inline">inner₊(∇ₕ(u), ∇ₕ(v))</code>. The source is the cell average of the right-hand side against the test function, <code class="md-code-inline">innerₕ(rhs, v)</code>:</p>
+<p>The bilinear form is the discrete Laplacian, written <span class="md-math md-math-inline">\(\langle -\Delta_h u, v \rangle_h\)</span> because it reads the ghost values the relations fix; the <a href="../../tutorials/form/#form_dirichlet">forms tutorial</a> builds the same operator in one dimension as <code class="md-code-inline">inner₊(∇ₕ(u), ∇ₕ(v))</code>. The source is the right-hand side sampled at the grid points and tested against <code class="md-code-inline">v</code>, <code class="md-code-inline">innerₕ(rhs, v)</code>:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -999,6 +1000,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=79baedad"></script>
+  <script src="../../assets/materialdocs.js?v=d8b06ff3"></script>
 </body>
 </html>

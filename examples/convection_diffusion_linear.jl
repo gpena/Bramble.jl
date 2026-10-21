@@ -132,7 +132,7 @@ coarse_to_fine[2] < coarse_to_fine[1]
 # The residual is the one-sided truncation error, not a round-off level: it is bracketed     #src
 # away from zero, and it shrinks under refinement.                                           #src
 @test all(r -> 1.0e-7 < r < 1.0e-1, residuals)                                               #src
-@test coarse_to_fine[2] < 0.75 * coarse_to_fine[1]                                           #src
+@test 1.0e-7 < coarse_to_fine[2] && coarse_to_fine[1] / coarse_to_fine[2] > 3               #src
 
 # ## Péclet number and flow direction
 #

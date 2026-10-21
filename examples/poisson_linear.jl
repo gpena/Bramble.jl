@@ -58,8 +58,8 @@ Wₕ = gridspace(Ωₕ)
 # The bilinear form is the discrete Laplacian, written ``\langle -\Delta_h u, v \rangle_h``
 # because it reads the ghost values the relations fix; the
 # [forms tutorial](@ref form_dirichlet) builds the same operator in one dimension as
-# `inner₊(∇ₕ(u), ∇ₕ(v))`. The source is the cell average of the right-hand side against the test
-# function, `innerₕ(rhs, v)`:
+# `inner₊(∇ₕ(u), ∇ₕ(v))`. The source is the right-hand side sampled at the grid points and
+# tested against `v`, `innerₕ(rhs, v)`:
 
 robin_data(x) = 2 * sol(x)
 

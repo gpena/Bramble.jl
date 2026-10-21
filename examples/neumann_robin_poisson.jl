@@ -130,7 +130,8 @@ order_mixed > 1.8 && order_robin > 1.8 && order_neumann > 1.8
 @test all(e -> 1.0e-6 < e < 1.0, errs_robin)                                                #src
 @test all(e -> 1.0e-6 < e < 1.0, errs_neumann)                                              #src
 # The pure Neumann solution has discrete mean zero, the constraint `pde_solve` was given.   #src
-@test let Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))  #src
+Random.seed!(20260903)                                                                      #src
+@test let Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (false, false)) #src
     uₕ, _ = solve_case(Ωₕ, (0.0, 0.0, 0.0, 0.0))                                            #src
     w = assemble(form(gridspace(Ωₕ), v -> innerₕ(x -> 1.0, v)))                             #src
     abs(dot(w, uₕ)) < 1.0e-10                                                               #src

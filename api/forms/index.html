@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=47b171cc">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=946a20d9">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -60,6 +60,7 @@
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -157,7 +158,7 @@ a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)) + σ * innerₕ
 <pre><code class="language-julia">form(Wₕ::CompositeGridSpace, Vₕ::CompositeGridSpace, f) -&gt; GhostCompositeBilinearForm
 form(Vₕ::CompositeGridSpace, f) -&gt; GhostCompositeLinearForm</code></pre>
 </div>
-<p>Forms on composites of ghost spaces (<code class="md-code-inline">C₁ × C₂</code>, <code class="md-code-inline">C^Val(n)</code>): the form on their padded spaces, reduced through the block-diagonal closure. <code class="md-code-inline">f</code> addresses the components as on a plain composite, <code class="md-code-inline">u(1)</code>, <code class="md-code-inline">v(2)</code>. <code class="md-code-inline">assemble(a)</code>, <code class="md-code-inline">assemble(a, l)</code>, <code class="md-code-inline">assemble!</code> and their <code class="md-code-inline">dirichlet</code> and <code class="md-code-inline">dirichlet_components</code> keywords act as on a scalar ghost space, the rows of each selected component replaced through its physical mesh. <code class="md-code-inline">a(u, v)</code>, <code class="md-code-inline">l(v)</code> and <code class="md-code-inline">evaluate!</code> give <code class="md-code-inline">vᴴ A u</code> and <code class="md-code-inline">Fᵀ v</code> as on a scalar ghost space.</p>
+<p>Forms on composites of ghost spaces (<code class="md-code-inline">C₁ × C₂</code>, <code class="md-code-inline">C^Val(n)</code>, or <code class="md-code-inline">constrained(C₁ × C₂, relations)</code>): the form on their padded spaces, reduced through the closure, block diagonal on a product, coupling the components on a composite constrained as a whole wherever a relation reads several of them. <code class="md-code-inline">f</code> addresses the components as on a plain composite, <code class="md-code-inline">u(1)</code>, <code class="md-code-inline">v(2)</code>. <code class="md-code-inline">assemble(a)</code>, <code class="md-code-inline">assemble(a, l)</code>, <code class="md-code-inline">assemble!</code> and their <code class="md-code-inline">dirichlet</code> and <code class="md-code-inline">dirichlet_components</code> keywords act as on a scalar ghost space, the rows of each selected component replaced through its physical mesh. <code class="md-code-inline">a(u, v)</code>, <code class="md-code-inline">l(v)</code> and <code class="md-code-inline">evaluate!</code> give <code class="md-code-inline">vᴴ A u</code> and <code class="md-code-inline">Fᵀ v</code> as on a scalar ghost space.</p>
 <p>Every component of both spaces must ghost the same facets of meshes of one size; an <code class="md-code-inline">ArgumentError</code> names the fix otherwise. A rank-one term, a scalar space on the other side, <code class="md-code-inline">semidiscretize</code>, and the matrix-free, Kronecker and multigrid operators are refused with an <code class="md-code-inline">ArgumentError</code>.</p>
 </div>
 </div>
@@ -262,7 +263,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.assemble">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L714-L727" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L715-L728" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -278,7 +279,7 @@ end</code></pre>
 <pre><code class="language-julia">assemble(form::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -&gt; AbstractMatrix</code></pre>
 </div>
 <p>Allocate a matrix with the form&#39;s sparsity pattern and assemble into it. The matrix type is <code class="md-code-inline">matrix_type(backend(test_space(form)))</code> – <code class="md-code-inline">SparseMatrixCSC{Float64,Int}</code> by default, or whatever <a href="../../api/utilities/#Bramble.backend"><code class="md-code-inline">backend</code></a> the space&#39;s mesh was built with.</p>
-<p><strong>Call this once, then assemble into what it returns.</strong> The first call builds the sparsity pattern, the larger part of the work. A repeated call copies the pattern the form recorded and allocates about the matrix it returns, re-recording only after the mesh markers change or another matrix is filled; a refill allocates nothing. A time loop or Newton iteration benefits from preallocating the pattern once:</p>
+<p><strong>Call this once, then assemble into what it returns.</strong> The first call builds the sparsity pattern, the larger part of the work. A repeated call copies the pattern the form recorded and allocates about the matrix it returns. It re-records after the mesh markers change, after another matrix is filled, when a Dirichlet row inserted a missing diagonal, and on every call for a matrix type other than <code class="md-code-inline">SparseMatrixCSC{T, Int}</code>; a refill allocates nothing. A time loop or Newton iteration benefits from preallocating the pattern once:</p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">A = assemble(a)                        # once: pattern, allocation and initial fill
@@ -329,7 +330,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1472-L1505" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1455-L1488" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -387,8 +388,8 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
     dirichlet = nothing, dirichlet_components = nothing, symmetrize = false)</code></pre>
 </div>
 <p>Refill <code class="md-code-inline">A</code> and <code class="md-code-inline">F</code> with the matrix and the load that <code class="md-code-inline">A, F = assemble(a, l)</code> returns, and return <code class="md-code-inline">A, F</code>. <code class="md-code-inline">A</code> keeps the pattern and <code class="md-code-inline">F</code> the element type that <code class="md-code-inline">assemble(a, l)</code> gave, so call that once and refill its two outputs. The call allocates nothing warm.</p>
-<p>Both forms are assembled together because, when the closure of the space has an affine part <code class="md-code-inline">d ≠ 0</code>, the load is <code class="md-code-inline">Eᵀ(F − A d)</code> and reads the matrix. <code class="md-code-inline">assemble!(b, l)</code> alone refuses such a space. <code class="md-code-inline">dirichlet</code>, <code class="md-code-inline">dirichlet_components</code> and <code class="md-code-inline">symmetrize</code> act as in <code class="md-code-inline">assemble(a, l)</code>.</p>
-<p>It throws an <code class="md-code-inline">ArgumentError</code> for a time-dependent space (pose the problem with <code class="md-code-inline">semidiscretize</code>), for <code class="md-code-inline">symmetrize = true</code> without <code class="md-code-inline">dirichlet</code>, for <code class="md-code-inline">A</code> that is not a <code class="md-code-inline">SparseMatrixCSC</code> with the reduced pattern of <code class="md-code-inline">a</code>, for a <code class="md-code-inline">dirichlet</code> the rows of the space do not allow, and for an <code class="md-code-inline">F</code> whose element type cannot hold the load&#39;s. A <code class="md-code-inline">DimensionMismatch</code> follows an <code class="md-code-inline">F</code> of the wrong length and forms whose test spaces differ.</p>
+<p>Both forms are assembled together because, when the closure of the trial space has an affine part <code class="md-code-inline">d ≠ 0</code>, the load is <code class="md-code-inline">E_vᵀ(F − A d)</code> and reads the matrix. <code class="md-code-inline">assemble!(b, l)</code> alone refuses a test space with <code class="md-code-inline">d ≠ 0</code>, which is exact when both sides are one space: on a pair whose trial space has data and whose test space has none, it gives <code class="md-code-inline">E_vᵀ F</code> without the lift. <code class="md-code-inline">dirichlet</code>, <code class="md-code-inline">dirichlet_components</code> and <code class="md-code-inline">symmetrize</code> act as in <code class="md-code-inline">assemble(a, l)</code>.</p>
+<p>It throws an <code class="md-code-inline">ArgumentError</code> when the trial space of <code class="md-code-inline">a</code> or the test space of <code class="md-code-inline">l</code> is time-dependent (pose the problem with <code class="md-code-inline">semidiscretize</code>), for <code class="md-code-inline">symmetrize = true</code> without <code class="md-code-inline">dirichlet</code>, for <code class="md-code-inline">A</code> that is not a <code class="md-code-inline">SparseMatrixCSC</code> with the reduced pattern of <code class="md-code-inline">a</code>, for a <code class="md-code-inline">dirichlet</code> the rows of the space do not allow, and for an <code class="md-code-inline">F</code> whose element type cannot hold the load&#39;s. A <code class="md-code-inline">DimensionMismatch</code> follows an <code class="md-code-inline">F</code> of the wrong length and forms whose test spaces differ: not the same space, and closures <code class="md-code-inline">(E, d)</code> that are not equal.</p>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -401,7 +402,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.assemble_parallel!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_parallel!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1675-L1684" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1659-L1668" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -423,7 +424,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.allocate_system_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.allocate_system_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_pattern.jl#L317-L342" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_pattern.jl#L318-L343" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -472,16 +473,17 @@ end</code></pre>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">evaluate!(scratch::AbstractVector, l::GhostLinearForm, vₕ::VectorElement) -&gt; Number</code></pre>
+<pre><code class="language-julia">evaluate!(scratch::AbstractVector, l::GhostLinearForm, vₕ::VectorElement) -&gt; Number
+evaluate!(scratch::AbstractVector, l::GhostCompositeLinearForm, vₕ::VectorElement) -&gt; Number</code></pre>
 </div>
-<p>Write the reduced load <code class="md-code-inline">assemble(l)</code> into <code class="md-code-inline">scratch</code>, of length <code class="md-code-inline">ndofs(test_space(l))</code>, and return its contraction with <code class="md-code-inline">vₕ</code>, the value <code class="md-code-inline">l(vₕ)</code>. It refuses as <code class="md-code-inline">l(vₕ)</code> does: with an <code class="md-code-inline">ArgumentError</code> naming <code class="md-code-inline">assemble(a, l)</code> on a closure with an affine part <code class="md-code-inline">d ≠ 0</code>.</p>
+<p>Write the reduced load <code class="md-code-inline">assemble(l)</code> into <code class="md-code-inline">scratch</code>, of length <code class="md-code-inline">ndofs(test_space(l))</code>, and return its contraction with <code class="md-code-inline">vₕ</code>, the value <code class="md-code-inline">l(vₕ)</code>. It refuses as <code class="md-code-inline">l(vₕ)</code> does: with an <code class="md-code-inline">ArgumentError</code> naming <code class="md-code-inline">assemble(a, l)</code> on a test space whose closure has an affine part <code class="md-code-inline">d ≠ 0</code>.</p>
 </div>
 </div>
 <p>A form with a rank-one penalty term <code class="md-code-inline">σ * innerₕ(g, u) * innerₕ(h, v)</code> assembles to a <code class="md-code-inline">Bramble.RankOneUpdate</code>, the matrix <code class="md-code-inline">A + σ wₛ wₜᵀ</code> kept as its parts. <code class="md-code-inline">pde_solve(K, F)</code> solves it through a sparse bordered system (see the <a href="../../tutorials/form/">forms tutorial</a>), and <code class="md-code-inline">symmetrize!</code> accepts it. <code class="md-code-inline">RankOneUpdate</code> is <code class="md-code-inline">public</code>, not exported.</p>
 <div class="md-docstring" id="Bramble.RankOneUpdate">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.RankOneUpdate</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/rank_one.jl#L289-L343" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/rank_one.jl#L288-L343" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -505,7 +507,7 @@ RankOneUpdate{T}(A, σ, ws, wt)</code></pre>
 <p><code class="md-code-inline">assemble!(K, a)</code> refills <code class="md-code-inline">A</code>, <code class="md-code-inline">ws</code>, <code class="md-code-inline">wt</code> and <code class="md-code-inline">σ</code> in place, allocating nothing. <code class="md-code-inline">RankOneUpdate(A, σ, ws, wt)</code> takes <code class="md-code-inline">T</code> from the four parts&#39; element types; <code class="md-code-inline">σ</code> is converted to <code class="md-code-inline">T</code>. Not exported: write <code class="md-code-inline">Bramble.RankOneUpdate</code>.</p>
 <p>Entry <code class="md-code-inline">(i, j)</code> is <code class="md-code-inline">A[i, j] + σ * (ws[i] * wt[j])</code>. <code class="md-code-inline">mul!(y, K, x, α, β)</code> computes <code class="md-code-inline">α (A x + σ ws (wtᵀ x)) + β y</code> with one product by <code class="md-code-inline">A</code> and two passes over the vectors, and allocates nothing; so do <code class="md-code-inline">K * x</code>, <code class="md-code-inline">K * X</code> and <code class="md-code-inline">mul!</code> on matrices, apart from their result. <code class="md-code-inline">Matrix(K)</code> is the dense matrix. <code class="md-code-inline">K&#39;</code> and <code class="md-code-inline">transpose(K)</code> are LinearAlgebra&#39;s lazy <code class="md-code-inline">Adjoint</code> and <code class="md-code-inline">Transpose</code> of <code class="md-code-inline">K</code>: they read <code class="md-code-inline">A</code>, <code class="md-code-inline">σ</code> and the vectors from <code class="md-code-inline">K</code>, so a refill of <code class="md-code-inline">K</code> is seen through them, and their products allocate nothing either. <code class="md-code-inline">similar(K)</code> is a rank-one update with <code class="md-code-inline">similar</code> parts, and <code class="md-code-inline">copy(K)</code> one with copied parts.</p>
 <p>With <code class="md-code-inline">dirichlet</code> labels, <code class="md-code-inline">assemble</code> makes each Dirichlet row of <code class="md-code-inline">A</code> an identity row, as <a href="../../api/forms/#Bramble.dirichlet_bc!"><code class="md-code-inline">dirichlet_bc!</code></a> does, and zeroes <code class="md-code-inline">ws</code> there, so the row is the identity row of <code class="md-code-inline">K</code>; the columns keep their entries, as <code class="md-code-inline">A</code>&#39;s do. <a href="../../api/forms/#Bramble.symmetrize!"><code class="md-code-inline">symmetrize!</code></a> then moves those columns&#39; entries, of <code class="md-code-inline">A</code> and of <code class="md-code-inline">σ wₛ wₜᵀ</code>, into the load and zeroes <code class="md-code-inline">wt</code> at the Dirichlet indices.</p>
-<p><code class="md-code-inline">issymmetric(K)</code> is <code class="md-code-inline">true</code> when <code class="md-code-inline">A</code> is symmetric and <code class="md-code-inline">ws == wt</code> (or <code class="md-code-inline">σ</code> is zero), the case of a symmetric form with one functional on both sides. Any other <code class="md-code-inline">K</code> reports <code class="md-code-inline">false</code> without comparing its <code class="md-code-inline">N²</code> entries, even if they happen to be symmetric (<code class="md-code-inline">ws</code> a multiple of <code class="md-code-inline">wt</code>, say).</p>
+<p><code class="md-code-inline">issymmetric(K)</code> is <code class="md-code-inline">true</code> when <code class="md-code-inline">A</code> is symmetric and <code class="md-code-inline">ws == wt</code> (or <code class="md-code-inline">σ</code> is zero), the case of a symmetric form with one functional on both sides. Any other <code class="md-code-inline">K</code> reports <code class="md-code-inline">false</code> without comparing its <code class="md-code-inline">N²</code> entries, even if they happen to be symmetric (<code class="md-code-inline">ws</code> a multiple of <code class="md-code-inline">wt</code>, say). <code class="md-code-inline">ishermitian(K)</code> is the same test for a real <code class="md-code-inline">K</code>, and for a complex one asks for a Hermitian <code class="md-code-inline">A</code>, a real <code class="md-code-inline">σ</code> and <code class="md-code-inline">ws == conj.(wt)</code>.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -525,7 +527,7 @@ A = assemble(form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v))))
 <h2 id="Matrix-free-Kronecker-operators" class="md-heading">Matrix-free Kronecker operators<a href="#Matrix-free-Kronecker-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>For a separable <code class="md-code-inline">BilinearForm</code> (one whose assembled matrix is an exact sum of Kronecker products of one-dimensional factors over a <code class="md-code-inline">MeshnD</code>), <code class="md-code-inline">kronecker_operator</code> builds a <code class="md-code-inline">KroneckerLinearOperator</code> that applies in one fused pass over the grid instead of ever assembling the <code class="md-code-inline">D</code>-dimensional matrix: a <code class="md-code-inline">200^3</code> mesh stores <code class="md-code-inline">O(200)</code> numbers per axis rather than the assembled matrix&#39;s <code class="md-code-inline">O(200^3)</code> stored entries. <code class="md-code-inline">is_separable</code> checks the condition beforehand and lists what factors.</p>
 <p>What factors: the difference, average, jump and shift families along any axis and chains of them, so mixed derivatives and advection terms (whose factors need not be symmetric); <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">inner₊</code> and <code class="md-code-inline">inner_Γ</code> weights; a restriction to <code class="md-code-inline">:interior</code>; a grid-function coefficient that varies along one axis; and scalar or <code class="md-code-inline">Ref</code> coefficients. A form on a ghost space factors where its closure is separable and both spaces share one mesh object. A composite space whose leaves share one mesh gives a block operator, one Kronecker operator per block. What does not: a coefficient varying along several axes, other region restrictions (Dirichlet rows included), an interpolation, a 1D mesh, trial and test spaces on different meshes, and the star and cross-weighted differences. A grid-function coefficient is read once, when the operator is built, and warns so; use a <code class="md-code-inline">Ref</code> for a coefficient that changes, or <code class="md-code-inline">matrix_free_operator</code>, which reads it live. Under <code class="md-code-inline">CpuThreaded</code> the product runs threaded, and an operator whose mesh was mutated in place afterwards throws instead of applying.</p>
-<p><code class="md-code-inline">fdm_solve</code> requires <code class="md-code-inline">using Kronecker</code> (the <code class="md-code-inline">BrambleKroneckerExt</code> extension). It solves a Laplacian-like system, one whose terms each differ from one mass per axis on at most one axis, without a general sparse factorisation: by fast diagonalisation when it is symmetric, and by a Schur-form solve when advection terms make it non-symmetric. A mixed derivative is refused. A form on a ghost space is accepted where its closure and its terms are separable; otherwise the call throws an <code class="md-code-inline">ArgumentError</code> naming <code class="md-code-inline">assemble(a)</code>. For such a form, <code class="md-code-inline">fdm_preconditioner</code> (in <a href="../../api_sciml/">Scientific computing</a>) preconditions a Krylov solver with its Laplacian-like part. <code class="md-code-inline">fdm_factorize</code> factorises once, and <code class="md-code-inline">fdm_solve!</code> then solves each right-hand side with zero allocations; <code class="md-code-inline">fdm_factorize!</code> refills that factorisation after a coefficient or the mesh changed, without building it again.</p>
+<p><code class="md-code-inline">fdm_solve</code> requires <code class="md-code-inline">using Kronecker</code> (the <code class="md-code-inline">BrambleKroneckerExt</code> extension). It solves a Laplacian-like system, one whose terms each differ from one mass per axis on at most one axis, without a general sparse factorisation: by fast diagonalisation when it is symmetric, and by a Schur-form solve when advection terms make it non-symmetric. A mixed derivative is refused. On a ghost space it is accepted where the closure and the terms are separable; a 1D form, the <code class="md-code-inline">dirichlet</code> keyword and a form with <code class="md-code-inline">Δₕ</code> are refused with an <code class="md-code-inline">ArgumentError</code>. For such a form, <code class="md-code-inline">fdm_preconditioner</code> (in <a href="../../api_sciml/">Scientific computing</a>) preconditions a Krylov solver with its Laplacian-like part. <code class="md-code-inline">fdm_factorize</code> factorises once, and <code class="md-code-inline">fdm_solve!</code> then solves each right-hand side with zero allocations; <code class="md-code-inline">fdm_factorize!</code> refills that factorisation after a coefficient or the mesh changed, without building it again.</p>
 <div class="md-docstring" id="Bramble.is_separable">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.is_separable</code></h4>
@@ -583,7 +585,7 @@ is_separable(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(fₕ * u, v)))  # false: var
 <div class="md-docstring" id="Bramble.kronecker_operator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.kronecker_operator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L504-L570" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/kronecker.jl#L504-L571" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -605,6 +607,8 @@ kronecker_operator(a::GhostBilinearForm) -&gt; KroneckerLinearOperator</code></p
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">ArgumentError</code>: on ghost spaces, a closure that is not separable (a conormal <code class="md-code-inline">K</code> with off-diagonal entries, ghosts left as unknowns), a term that reads the padded points beyond two ghosted facets (a mixed derivative), or a region restriction or grid-function coefficient, each naming <code class="md-code-inline">assemble(a)</code> as the fix.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code>: a form over composite ghost spaces.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">a</code> is not separable, naming the offending node and, on a composite space, its block (or the dimension, or the spaces) – the same check <a href="../../api/forms/#Bramble.is_separable"><code class="md-code-inline">is_separable</code></a> runs, made specific; or <code class="md-code-inline">a</code> is device-backed and a term has more than one non-diagonal factor or a non-symmetric one, which the device kernel cannot apply (<code class="md-code-inline">_kron_check_device</code>).</p>
 </li>
@@ -776,18 +780,19 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.matrix_free_operator">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.matrix_free_operator</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/matrix_free.jl#L199-L260" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/matrix_free.jl#L199-L263" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">matrix_free_operator(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a))) -&gt; MatrixFreeOperator</code></pre>
+<pre><code class="language-julia">matrix_free_operator(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a))) -&gt; MatrixFreeOperator
+matrix_free_operator(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy) -&gt; GhostMatrixFreeOperator</code></pre>
 </div>
 <p>The linear operator of <code class="md-code-inline">a</code>, applied without assembling its matrix: <code class="md-code-inline">op * x</code> agrees with <code class="md-code-inline">assemble(a; dirichlet, dirichlet_components) * x</code>.</p>
 <p>A form on ghost spaces (<a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a>) gives an operator that applies its reduced matrix <code class="md-code-inline">E_vᵀ A_pad E_u</code>: the closure of the trial space without its affine part, the operator of the form on the padded spaces, then the transpose of the test space&#39;s closure. The affine part belongs to the load, as in <code class="md-code-inline">assemble(a, l)</code>. Its padded buffers are built once, so a warm product allocates no vector. It applies one product at a time: a product entered on it while another runs throws an <code class="md-code-inline">ArgumentError</code>, so build one operator per task. <code class="md-code-inline">dirichlet</code> there takes what <code class="md-code-inline">assemble(a; dirichlet)</code> takes.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">a</code>: The bilinear form. Any form <a href="../../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a> accepts, on scalar or composite spaces, or on ghost spaces.</p>
+<li><p><code class="md-code-inline">a</code>: The bilinear form. Any form <a href="../../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a> accepts, on scalar or composite spaces or on scalar ghost spaces, except one holding a rank-one term.</p>
 </li>
 </ul>
 <p><strong>Keywords</strong></p>
@@ -811,6 +816,10 @@ end</code></pre>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet_components</code> names a leaf the test space does not have.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet</code> on ghost spaces whose unknowns are not the physical nodes, as for <code class="md-code-inline">assemble(a; dirichlet)</code>.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">a</code> holds a rank-one term.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">a</code> is a form over composite ghost spaces, which have no matrix-free operator.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>, from <code class="md-code-inline">mul!</code>: a product on a ghost-space operator while another task&#39;s product on it runs.</p>
 </li>
@@ -1242,6 +1251,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=47b171cc"></script>
+  <script src="../../assets/materialdocs.js?v=946a20d9"></script>
 </body>
 </html>

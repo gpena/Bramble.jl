@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML, AD and solvers — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=d713fdff">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=4de6fa90">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
@@ -60,6 +60,7 @@
         <a href="../examples/heat_equation/">Heat equation</a>
         <a href="../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
+        <a href="../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -177,7 +178,8 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">semidiscretize(a::GhostBilinearForm, l::GhostLinearForm; kwargs...) -&gt; Semidiscretization</code></pre>
+<pre><code class="language-julia">semidiscretize(a::GhostBilinearForm, l::GhostLinearForm; mass, dirichlet,
+    dirichlet_components, state, update_coefficients!, reassemble) -&gt; Semidiscretization</code></pre>
 </div>
 <p>Semidiscretise <code class="md-code-inline">M u&#39; = F(t) − A u</code> for forms posed on one constrained ghost space <code class="md-code-inline">Cₕ</code>, whose relation data may depend on time. With <code class="md-code-inline">(E, d(t))</code> the closure of <code class="md-code-inline">Cₕ</code>, <code class="md-code-inline">A = Eᵀ A_pad E</code>, <code class="md-code-inline">M = Eᵀ M_pad E</code> and <code class="md-code-inline">F(t) = Eᵀ (F_pad(t) − A_pad d(t))</code>, so at a fixed <code class="md-code-inline">t</code> the residual is <code class="md-code-inline">F − A u</code> of <code class="md-code-inline">assemble(a, l)</code> on the space rebuilt with the data frozen at <code class="md-code-inline">t</code>.</p>
 <p><strong>Keywords</strong></p>
@@ -189,7 +191,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <li><p><code class="md-code-inline">update_coefficients!</code>, <code class="md-code-inline">reassemble</code>: as for plain forms.</p>
 </li>
 </ul>
-<p>The <code class="md-code-inline">dirichlet</code> keyword is refused: give a Dirichlet condition as <code class="md-code-inline">:F =&gt; u =&gt; g(x, t)</code> in <a href="../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>. So are a space that keeps ghosts as unknowns (their mass rows vanish), <code class="md-code-inline">semidiscretize(build, l)</code> with a ghost load (use <code class="md-code-inline">update_coefficients!</code> and <code class="md-code-inline">reassemble = true</code>), and <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a>.</p>
+<p>The <code class="md-code-inline">dirichlet</code> and <code class="md-code-inline">dirichlet_components</code> keywords are refused: give a Dirichlet condition as <code class="md-code-inline">:F =&gt; u =&gt; g(x, t)</code> in <a href="../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>. So are a space that keeps ghosts as unknowns (their mass rows vanish), <code class="md-code-inline">semidiscretize(build, l)</code> with a ghost load (use <code class="md-code-inline">update_coefficients!</code> and <code class="md-code-inline">reassemble = true</code>), and <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.Semidiscretization">
@@ -212,9 +214,9 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 </li>
 <li><p><code class="md-code-inline">space</code>: the test space both forms share.</p>
 </li>
-<li><p><code class="md-code-inline">operator_matrix</code>: <code class="md-code-inline">A</code>, with <code class="md-code-inline">eₖ</code> rows on the constrained degrees of freedom.</p>
+<li><p><code class="md-code-inline">operator_matrix</code>: <code class="md-code-inline">A</code>, with <code class="md-code-inline">eₖ</code> rows on the constrained degrees of freedom (none on a ghost space, whose relations eliminate them).</p>
 </li>
-<li><p><code class="md-code-inline">mass_matrix</code>: <code class="md-code-inline">M</code>, with zero rows on the constrained degrees of freedom.</p>
+<li><p><code class="md-code-inline">mass_matrix</code>: <code class="md-code-inline">M</code>, with zero rows on the constrained degrees of freedom (none on a ghost space, whose relations eliminate them).</p>
 </li>
 <li><p><code class="md-code-inline">source_vector</code>: the reusable <code class="md-code-inline">F</code> buffer, refilled in place.</p>
 </li>
@@ -365,13 +367,14 @@ ode_function(a::BilinearForm, l::LinearForm; kwargs...) -&gt; ODEFunction</code>
 <div class="md-docstring" id="Bramble.ode_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ode_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L70-L107" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L70-L108" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">ode_problem(sd::Semidiscretization, u₀, I; kwargs...) -&gt; ODEProblem
-ode_problem(a::BilinearForm, l::LinearForm, u₀, I; kwargs...) -&gt; ODEProblem</code></pre>
+ode_problem(a::BilinearForm, l::LinearForm, u₀, I; kwargs...) -&gt; ODEProblem
+ode_problem(a::Bramble.GhostBilinearForm, l::Bramble.GhostLinearForm, u₀, I; kwargs...) -&gt; ODEProblem</code></pre>
 </div>
 <p>Build the <code class="md-code-inline">ODEProblem</code> stepping <code class="md-code-inline">sd</code> over the time domain <code class="md-code-inline">I</code>, from the initial condition <code class="md-code-inline">u₀</code> – a <a href="../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> or a plain vector. <code class="md-code-inline">I</code> may equally be a <code class="md-code-inline">(t₀, t₁)</code> tuple.</p>
 <p><code class="md-code-inline">u₀</code> is copied, never mutated, and the copy is made consistent with the Dirichlet rows at <code class="md-code-inline">t₀</code> (see <a href="../api/forms/#Bramble.dirichlet_bc!"><code class="md-code-inline">dirichlet_bc!</code></a>), against <code class="md-code-inline">p</code> when one is given.</p>
@@ -422,7 +425,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.linear_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.linear_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L195-L219" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L196-L220" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -493,7 +496,7 @@ sol = solve(prob, NewtonRaphson())</code></pre>
 <div class="md-docstring" id="Bramble.adjoint_sensitivities">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.adjoint_sensitivities</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L174-L187" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L175-L188" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -638,7 +641,7 @@ u = pde_solve(K, F)  # pde_solve(A, F; mean_zero = w) when sum(F) == 0</code></p
 <div class="md-docstring" id="Bramble.ghost_kernel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ghost_kernel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/ghost_gauge.jl#L13-L59" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/ghost_gauge.jl#L12-L59" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -650,14 +653,14 @@ u = pde_solve(K, F)  # pde_solve(A, F; mean_zero = w) when sum(F) == 0</code></p
 <p>For a form that reads the ghosts at a corner through <code class="md-code-inline">Δₕ</code> alone, such as <code class="md-code-inline">innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)</code>, the corner&#39;s ghost columns are parallel, so each 2D corner gives one column and each 3D corner two, and each node inside a 3D edge one: <code class="md-code-inline">k = 4</code> in 2D, <code class="md-code-inline">k = 4 Σₑ (nₑ - 2) + 16</code> in 3D, with <code class="md-code-inline">nₑ</code> the points along axis <code class="md-code-inline">e</code>. With a single ghosted facet no node carries two ghosts, and <code class="md-code-inline">k = 0</code> for that form. A form that never reads a ghost leaves it in the kernel, one column each.</p>
 <p>A kernel vector spread over the ghosts of several nodes is not found. Such vectors arise when the form differences the ghosts along their own facet: with <code class="md-code-inline">ghosts = (:xmin,)</code>, <code class="md-code-inline">innerₕ(∇ₕ(Δₕ(u))[2], v)</code> annihilates the vector that is constant on the <code class="md-code-inline">:xmin</code> ghosts, and <code class="md-code-inline">ghost_kernel</code> returns no column for it. A gauged solve with such a <code class="md-code-inline">Z</code> is not refused and usually factors: the physical part is still right, and the components left out are arbitrary.</p>
 <p><code class="md-code-inline">ghost_kernel</code> is public, not exported: write <code class="md-code-inline">Bramble.ghost_kernel</code>.</p>
-<p>Throws an <code class="md-code-inline">ArgumentError</code> when <code class="md-code-inline">A</code> is not <code class="md-code-inline">ndofs(Wₕ) × ndofs(Wₕ)</code>, or when <code class="md-code-inline">Wₕ</code> has no ghosts.</p>
+<p>Throws an <code class="md-code-inline">ArgumentError</code> when <code class="md-code-inline">A</code> is not an <code class="md-code-inline">AbstractMatrix</code> of size <code class="md-code-inline">ndofs(Wₕ) × ndofs(Wₕ)</code>, or when <code class="md-code-inline">Wₕ</code> is not a <a href="../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a>. A space whose relations eliminate every ghost has no ghost-only kernel, and the result has no columns.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 7), (false, false))
 Wₕ = gridspace(Ωₕ; ghosts = :boundary)
 A = assemble(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
-Z = Bramble.ghost_kernel(A, Wₕ)    # 66 × 4, two entries per column, one column per corner
+Z = Bramble.ghost_kernel(A, Wₕ)    # 68 × 4, two entries per column, one column per corner
 norm(A * Z)                        # rounding</code></pre>
 </div>
 </div>
@@ -665,7 +668,7 @@ norm(A * Z)                        # rounding</code></pre>
 <div class="md-docstring" id="Bramble.neumann_compatibility">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.neumann_compatibility</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/neumann_compatibility.jl#L27-L106" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/neumann_compatibility.jl#L20-L99" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -720,7 +723,7 @@ r.compatible                                    # false</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">amg_preconditioner(A::AbstractMatrix; method = :smoothed_aggregation, kwargs...) -&gt; MultiLevel
-amg_preconditioner(a::Union{BilinearForm, GhostBilinearForm}; method = :smoothed_aggregation,
+amg_preconditioner(a::Union{BilinearForm, Bramble.GhostBilinearForm}; method = :smoothed_aggregation,
                     dirichlet = nothing, dirichlet_components = nothing, kwargs...) -&gt; MultiLevel</code></pre>
 </div>
 <p>Build an algebraic multigrid hierarchy for the symmetric positive-definite matrix <code class="md-code-inline">A</code> – or for <code class="md-code-inline">a</code> assembled with the given Dirichlet conditions – ready to turn into a preconditioner with <code class="md-code-inline">AlgebraicMultigrid.aspreconditioner</code>.</p>
@@ -762,7 +765,7 @@ uₕ = solve(a, l; dirichlet = bcs, preconditioner = :amg, solver = KrylovJL_CG(
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">ilu_preconditioner(A::AbstractMatrix; kwargs...) -&gt; ILUZero.ILU0Precon
-ilu_preconditioner(a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+ilu_preconditioner(a::Union{BilinearForm, Bramble.GhostBilinearForm}; dirichlet = nothing,
                     dirichlet_components = nothing, kwargs...) -&gt; ILUZero.ILU0Precon</code></pre>
 </div>
 <p>Build a zero-fill incomplete LU (ILU(0)) preconditioner for the matrix <code class="md-code-inline">A</code> – or for <code class="md-code-inline">a</code> assembled with the given Dirichlet conditions – ready to use directly as <code class="md-code-inline">LinearSolve</code>&#39;s <code class="md-code-inline">Pl</code>.</p>
@@ -811,14 +814,15 @@ uₕ = solve(a, l; dirichlet = bcs, preconditioner = :ilu0, solver = KrylovJL_GM
 <div class="md-docstring" id="Bramble.jacobi_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobi_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L58-L107" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L63-L113" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">jacobi_preconditioner(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a))) -&gt; JacobiPreconditioner
-jacobi_preconditioner(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy) -&gt; JacobiPreconditioner
-jacobi_preconditioner(op::MatrixFreeOperator) -&gt; JacobiPreconditioner</code></pre>
+jacobi_preconditioner(a::Bramble.GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy) -&gt; JacobiPreconditioner
+jacobi_preconditioner(op::MatrixFreeOperator) -&gt; JacobiPreconditioner
+jacobi_preconditioner(op::Bramble.GhostMatrixFreeOperator) -&gt; JacobiPreconditioner</code></pre>
 </div>
 <p>The Jacobi preconditioner of <code class="md-code-inline">A = assemble(a; dirichlet, dirichlet_components)</code>, or of the matrix <code class="md-code-inline">op</code> stands for, from its diagonal alone: one walk of the form&#39;s stencil keeps the entries with <code class="md-code-inline">row == col</code>, and <code class="md-code-inline">A</code> is never built. Construction allocates the diagonal and the Dirichlet row mask, both of length <code class="md-code-inline">ndofs</code>. The walk runs on the calling task under any CPU policy.</p>
 <p>On a form over ghost spaces (<a href="../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a>), <code class="md-code-inline">A</code> is the reduced matrix <code class="md-code-inline">E_vᵀ A_pad E_u</code> that <code class="md-code-inline">assemble(a)</code> returns, and <code class="md-code-inline">op</code> the operator <a href="../api/forms/#Bramble.matrix_free_operator"><code class="md-code-inline">matrix_free_operator</code></a><code class="md-code-inline">(a)</code> returns for it: one walk of the padded form sums, for each degree of freedom, the padded entries whose row and column closures both reach it, so neither <code class="md-code-inline">A_pad</code> nor <code class="md-code-inline">A</code> is built. <code class="md-code-inline">policy</code> defaults to the padded space&#39;s.</p>
@@ -889,14 +893,15 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.chebyshev_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.chebyshev_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/chebyshev.jl#L64-L132" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/chebyshev.jl#L64-L133" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">chebyshev_preconditioner(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a)), degree = 4, λmax = nothing, ratio = 30) -&gt; ChebyshevPreconditioner
-chebyshev_preconditioner(a::GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, degree = 4, λmax = nothing, ratio = 30) -&gt; ChebyshevPreconditioner
-chebyshev_preconditioner(op::MatrixFreeOperator; degree = 4, λmax = nothing, ratio = 30) -&gt; ChebyshevPreconditioner</code></pre>
+chebyshev_preconditioner(a::Bramble.GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, degree = 4, λmax = nothing, ratio = 30) -&gt; ChebyshevPreconditioner
+chebyshev_preconditioner(op::MatrixFreeOperator; degree = 4, λmax = nothing, ratio = 30) -&gt; ChebyshevPreconditioner
+chebyshev_preconditioner(op::Bramble.GhostMatrixFreeOperator; degree = 4, λmax = nothing, ratio = 30) -&gt; ChebyshevPreconditioner</code></pre>
 </div>
 <p>The Chebyshev preconditioner of <code class="md-code-inline">A = assemble(a; dirichlet, dirichlet_components)</code>, or of the matrix <code class="md-code-inline">op</code> stands for. It is a fixed polynomial in <code class="md-code-inline">D⁻¹A</code>, with <code class="md-code-inline">D = diag(A)</code>, on the interval <code class="md-code-inline">[λmax / ratio, λmax]</code>. It is applied through products with the matrix-free operator, and <code class="md-code-inline">D</code> is read off one stencil walk as by <a href="../api_sciml/#Bramble.jacobi_preconditioner"><code class="md-code-inline">jacobi_preconditioner</code></a>, so <code class="md-code-inline">A</code> is never built. <code class="md-code-inline">A</code> must be symmetric positive definite, and every eigenvalue of <code class="md-code-inline">D⁻¹A</code> at most <code class="md-code-inline">λmax</code>: one above it can make the preconditioner indefinite. With <code class="md-code-inline">dirichlet</code>, use it in conjugate gradients only for a right-hand side that vanishes on the Dirichlet rows (see <a href="../api_sciml/#Bramble.ChebyshevPreconditioner"><code class="md-code-inline">ChebyshevPreconditioner</code></a>).</p>
 <p>Eigenvalues below <code class="md-code-inline">λmax / ratio</code> are damped less, not lost, so <code class="md-code-inline">ratio</code> trades how far the polynomial reaches into the low spectrum against how flat it is on its interval. Construction allocates three vectors of length <code class="md-code-inline">ndofs</code> and, when <code class="md-code-inline">λmax</code> is not given, the two of <a href="../api_sciml/#Bramble.max_eigenvalue_estimate"><code class="md-code-inline">max_eigenvalue_estimate</code></a>.</p>
@@ -1018,7 +1023,7 @@ sol = solve(LinearProblem(A, F), KrylovJL_GMRES(); Pl = P)</code></pre>
 <div class="md-docstring" id="Bramble.FDMPreconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.FDMPreconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L185-L200" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L181-L196" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1039,13 +1044,13 @@ sol = solve(LinearProblem(A, F), KrylovJL_GMRES(); Pl = P)</code></pre>
 <div class="md-docstring" id="Bramble.max_eigenvalue_estimate">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.max_eigenvalue_estimate</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/chebyshev.jl#L233-L286" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/chebyshev.jl#L223-L276" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">max_eigenvalue_estimate(op::MatrixFreeOperator; iterations = 20, preconditioner = nothing) -&gt; T
-max_eigenvalue_estimate(op::GhostMatrixFreeOperator; iterations = 20, preconditioner = nothing) -&gt; T</code></pre>
+max_eigenvalue_estimate(op::Bramble.GhostMatrixFreeOperator; iterations = 20, preconditioner = nothing) -&gt; T</code></pre>
 </div>
 <p>An upper estimate of the largest eigenvalue of the SPD matrix <code class="md-code-inline">A</code> that <code class="md-code-inline">op</code> stands for, or of <code class="md-code-inline">P⁻¹A</code> for an SPD <code class="md-code-inline">preconditioner</code> <code class="md-code-inline">P</code>, by power iteration on the matrix-free operator: <code class="md-code-inline">iterations</code> products <code class="md-code-inline">w = A v</code> (then <code class="md-code-inline">w = P⁻¹ w</code>) from a fixed pseudo-random start, each normalising <code class="md-code-inline">v = w / ‖w‖</code>, return <code class="md-code-inline">1.1 ‖w‖</code> for the last <code class="md-code-inline">w</code>.</p>
 <p>For a symmetric <code class="md-code-inline">A</code>, <code class="md-code-inline">‖A v‖ ≤ λ_max</code> for every unit <code class="md-code-inline">v</code>, so the bare power iterate is a lower bound, and it approaches <code class="md-code-inline">λ_max</code> slowly when the top eigenvalues cluster, as they do for a discrete diffusion operator. The factor <code class="md-code-inline">1.1</code> lifts it above <code class="md-code-inline">λ_max</code> once power iteration has come within 9%. On variable-coefficient diffusion on non-uniform meshes in one to three dimensions (up to 65² and 17³ points, five meshes each) the default <code class="md-code-inline">iterations</code> came within 8%, scaled by Jacobi or not, so the estimate landed between <code class="md-code-inline">1.02 λ_max</code> and <code class="md-code-inline">1.1 λ_max</code>. Overshooting is the side a Chebyshev preconditioner or smoother must err on: an eigenvalue above its interval can make it indefinite, while an interval a tenth too wide only shifts the polynomial slightly. With a <code class="md-code-inline">preconditioner</code> the operator <code class="md-code-inline">P⁻¹A</code> is not symmetric, only similar to a symmetric one, so <code class="md-code-inline">‖P⁻¹A v‖</code> may pass its top eigenvalue and the estimate overshoot a little more. Allocates two vectors of length <code class="md-code-inline">ndofs</code>.</p>
@@ -1318,20 +1323,21 @@ xc = coarsen!(zeros(npoints(H[1])), H, 2, xf)
 <div class="md-docstring" id="Bramble.jacobi_smoother">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobi_smoother</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L133-L197" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L133-L198" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">jacobi_smoother(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a)), ω = nothing, sweeps = 1) -&gt; JacobiSmoother
+jacobi_smoother(a::Bramble.GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, ω = nothing, sweeps = 1) -&gt; JacobiSmoother
 jacobi_smoother(op::MatrixFreeOperator; ω = nothing, sweeps = 1) -&gt; JacobiSmoother
-jacobi_smoother(op::GhostMatrixFreeOperator; ω = nothing, sweeps = 1) -&gt; JacobiSmoother</code></pre>
+jacobi_smoother(op::Bramble.GhostMatrixFreeOperator; ω = nothing, sweeps = 1) -&gt; JacobiSmoother</code></pre>
 </div>
 <p>The damped Jacobi smoother of <code class="md-code-inline">A = assemble(a; dirichlet, dirichlet_components)</code>, or of the matrix <code class="md-code-inline">op</code> stands for: each sweep sets <code class="md-code-inline">x ← x + ω D⁻¹ (b - A x)</code>, with <code class="md-code-inline">D = diag(A)</code> read off one stencil walk as by <a href="../api_sciml/#Bramble.jacobi_preconditioner"><code class="md-code-inline">jacobi_preconditioner</code></a>. Construction allocates two vectors of length <code class="md-code-inline">ndofs</code> and no product with <code class="md-code-inline">A</code>, so it is cheap enough to build once per multigrid level. A Dirichlet row of <code class="md-code-inline">A</code> is the identity row, so a sweep moves <code class="md-code-inline">x[i]</code> a fraction <code class="md-code-inline">ω</code> of the way to <code class="md-code-inline">b[i]</code> there.</p>
 <p>For a diagonally dominant form, such as second-order diffusion plus mass, the spectrum of <code class="md-code-inline">D⁻¹A</code> lies in <code class="md-code-inline">(0, 2]</code>, and a sweep multiplies an eigencomponent of the error by <code class="md-code-inline">1 - ωλ</code>. In <code class="md-code-inline">d</code> dimensions the components a grid coarsened by 2 cannot represent have <code class="md-code-inline">λ</code> in about <code class="md-code-inline">[1/d, 2]</code> (the 3-, 5- and 7-point Laplacians), and the default <code class="md-code-inline">ω = 2d / (2d + 1)</code> (<code class="md-code-inline">2/3</code>, <code class="md-code-inline">4/5</code>, <code class="md-code-inline">6/7</code>) is the weight that minimises <code class="md-code-inline">|1 - ωλ|</code> over that band. With one sweep before and after an exact Galerkin coarse correction, on mass plus variable diffusion, it gave two-grid contraction factors 0.36 (2D, 33²) and 0.51 (3D, 9³), against 0.44 and 0.56 for <code class="md-code-inline">ω = 2/3</code>; in 1D the two are the same weight (0.11 on 65 points, uniform, graded or random). Mesh non-uniformity with large cell aspect ratios slows every point smoother (see <a href="../api_sciml/#Bramble.AbstractSmoother"><code class="md-code-inline">AbstractSmoother</code></a>).</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">a</code>: A square bilinear form (<a href="../api/spaces/#Bramble.ndofs"><code class="md-code-inline">ndofs</code></a> of trial and test space equal), on scalar or composite spaces.</p>
+<li><p><code class="md-code-inline">a</code>: A square bilinear form (<a href="../api/spaces/#Bramble.ndofs"><code class="md-code-inline">ndofs</code></a> of trial and test space equal), on scalar, composite or ghost spaces; on ghost spaces <code class="md-code-inline">policy</code> defaults to the padded space&#39;s.</p>
 </li>
 <li><p><code class="md-code-inline">op</code>: A square <a href="../api/forms/#Bramble.MatrixFreeOperator"><code class="md-code-inline">MatrixFreeOperator</code></a>, or the operator <code class="md-code-inline">matrix_free_operator</code> returns for a form on ghost spaces, whose diagonal is that of the reduced matrix <code class="md-code-inline">assemble(a)</code>; its Dirichlet rows are kept.</p>
 </li>
@@ -1382,21 +1388,22 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.chebyshev_smoother">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.chebyshev_smoother</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L221-L287" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L223-L291" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">chebyshev_smoother(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy = execution_policy(trial_space(a)), degree = 2, λmax = nothing) -&gt; ChebyshevSmoother
+chebyshev_smoother(a::Bramble.GhostBilinearForm; dirichlet = nothing, dirichlet_components = nothing, policy, degree = 2, λmax = nothing) -&gt; ChebyshevSmoother
 chebyshev_smoother(op::MatrixFreeOperator; degree = 2, λmax = nothing) -&gt; ChebyshevSmoother
-chebyshev_smoother(op::GhostMatrixFreeOperator; degree = 2, λmax = nothing) -&gt; ChebyshevSmoother</code></pre>
+chebyshev_smoother(op::Bramble.GhostMatrixFreeOperator; degree = 2, λmax = nothing) -&gt; ChebyshevSmoother</code></pre>
 </div>
 <p>The Chebyshev smoother of <code class="md-code-inline">A = assemble(a; dirichlet, dirichlet_components)</code>, or of the matrix <code class="md-code-inline">op</code> stands for: <a href="../api_sciml/#Bramble.smooth!"><code class="md-code-inline">smooth!</code></a> runs <code class="md-code-inline">degree</code> steps of the Jacobi-scaled Chebyshev recurrence of <a href="../api_sciml/#Bramble.chebyshev_preconditioner"><code class="md-code-inline">chebyshev_preconditioner</code></a> from the iterate passed in, on the interval <code class="md-code-inline">[λmax / 4, λmax]</code> of the spectrum of <code class="md-code-inline">D⁻¹A</code>, <code class="md-code-inline">D = diag(A)</code>. The interval is the upper part of the spectrum a coarser level cannot represent, so the smoother damps all of it and leaves the rest to the coarse correction. <code class="md-code-inline">A</code> must be SPD with every eigenvalue of <code class="md-code-inline">D⁻¹A</code> at most <code class="md-code-inline">λmax</code>; one above the interval is amplified.</p>
 <p>Each step damps the upper spectrum by more than a Jacobi sweep does for the same product: on the interval the error contracts by at most <code class="md-code-inline">1 / T_k(5/3)</code> in <code class="md-code-inline">k</code> products, 0.22 at degree 2. With one application before and after an exact Galerkin coarse correction, on mass plus variable diffusion on uniform meshes, degree 2 gave two-grid contraction factors 0.055 (1D, 65 points), 0.088 (2D, 33²) and 0.20 (3D, 9³) for four products with <code class="md-code-inline">A</code> per cycle, against 0.062, 0.20 and 0.33 for two sweeps of Jacobi with <code class="md-code-inline">ω = 2/3</code> at the same cost; degree 3 gave 0.034, 0.064 and 0.098 for six. Per product, degree 2 is the fastest or tied in every dimension, and on a graded 2D mesh too (0.82, against 0.74 at degree 3), so it is the default.</p>
 <p>Construction allocates four vectors of length <code class="md-code-inline">ndofs</code> and, when <code class="md-code-inline">λmax</code> is not given, runs <a href="../api_sciml/#Bramble.max_eigenvalue_estimate"><code class="md-code-inline">max_eigenvalue_estimate</code></a>&#39;s 20 products with <code class="md-code-inline">A</code> and allocates its two vectors.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">a</code>: A square bilinear form (<a href="../api/spaces/#Bramble.ndofs"><code class="md-code-inline">ndofs</code></a> of trial and test space equal), on scalar or composite spaces, whose matrix is SPD.</p>
+<li><p><code class="md-code-inline">a</code>: A square bilinear form (<a href="../api/spaces/#Bramble.ndofs"><code class="md-code-inline">ndofs</code></a> of trial and test space equal), on scalar, composite or ghost spaces, whose matrix is SPD; on ghost spaces <code class="md-code-inline">policy</code> defaults to the padded space&#39;s.</p>
 </li>
 <li><p><code class="md-code-inline">op</code>: A square <a href="../api/forms/#Bramble.MatrixFreeOperator"><code class="md-code-inline">MatrixFreeOperator</code></a>, or the operator <code class="md-code-inline">matrix_free_operator</code> returns for a form on ghost spaces, whose diagonal is that of the reduced matrix <code class="md-code-inline">assemble(a)</code>; its Dirichlet rows are kept.</p>
 </li>
@@ -1446,19 +1453,20 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.red_black_gauss_seidel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.red_black_gauss_seidel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L316-L381" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L321-L387" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">red_black_gauss_seidel(a::BilinearForm; dirichlet = nothing, policy = execution_policy(trial_space(a)), sweeps = 1) -&gt; RedBlackGaussSeidel
+red_black_gauss_seidel(a::Bramble.GhostBilinearForm; dirichlet = nothing, policy, sweeps = 1) -&gt; RedBlackGaussSeidel
 red_black_gauss_seidel(op::MatrixFreeOperator; sweeps = 1) -&gt; RedBlackGaussSeidel</code></pre>
 </div>
 <p>The red-black Gauss-Seidel smoother of <code class="md-code-inline">A = assemble(a; dirichlet)</code>, or of the matrix <code class="md-code-inline">op</code> stands for (see <a href="../api_sciml/#Bramble.RedBlackGaussSeidel"><code class="md-code-inline">RedBlackGaussSeidel</code></a>): each sweep updates the points whose zero-based indices sum to an even number, then the rest, by a masked Jacobi step with the current residual, which is exact Gauss-Seidel on each colour because no entry of <code class="md-code-inline">A</code> couples two distinct points of one colour. That holds for the 3-, 5- and 7-point forms of second-order diffusion and for mass terms; a form with a mixed difference such as <code class="md-code-inline">D₋ᵧ(D₋ₓ(u))</code> (a 9-point box) couples diagonal neighbours, which share a colour, and is refused. The check reads the offsets of every term&#39;s trial and test sides (<code class="md-code-inline">stencil_offsets</code>) and ignores collapsed axes (one point), where no entry lands off the axis. A Dirichlet row of <code class="md-code-inline">A</code> is the identity row, so a sweep sets <code class="md-code-inline">x[i] = b[i]</code> there.</p>
 <p>Construction allocates two vectors of length <code class="md-code-inline">ndofs</code> and the small offset lists, and no product with <code class="md-code-inline">A</code>, so it is cheap enough to build once per multigrid level. Red-black is defined on one grid: a composite space, whose leaves couple at a shared point, is refused. With one sweep before and after an exact Galerkin coarse correction, on mass plus variable diffusion on uniform meshes, it gave two-grid contraction factors 0.002 (1D, 65 points), 0.063 (2D, 33²) and 0.18 (3D, 9³) for four products with <code class="md-code-inline">A</code> per cycle, close to degree-2 <a href="../api_sciml/#Bramble.chebyshev_smoother"><code class="md-code-inline">chebyshev_smoother</code></a> at the same cost. The default <code class="md-code-inline">sweeps = 1</code> makes a multigrid cycle&#39;s pre- and post-smoothing counts sweep counts.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">a</code>: A square bilinear form on a scalar grid space, with the same mesh for trial and test space and no interpolation (<code class="md-code-inline">πₕ</code>).</p>
+<li><p><code class="md-code-inline">a</code>: A square bilinear form on a scalar grid space, with the same mesh for trial and test space and no interpolation (<code class="md-code-inline">πₕ</code>). A form on ghost spaces is refused, as its operator is.</p>
 </li>
 <li><p><code class="md-code-inline">op</code>: A <a href="../api/forms/#Bramble.MatrixFreeOperator"><code class="md-code-inline">MatrixFreeOperator</code></a> of such a form; its Dirichlet rows are kept. The operator of a form on ghost spaces is refused.</p>
 </li>
@@ -1481,7 +1489,7 @@ red_black_gauss_seidel(op::MatrixFreeOperator; sweeps = 1) -&gt; RedBlackGaussSe
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: the form couples two distinct points of one colour, is on a composite space, has an interpolation, or its trial and test meshes differ in shape.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">op</code> is the operator of a form on ghost spaces, whose closure couples a facet node to nodes of its own colour; use <a href="../api_sciml/#Bramble.jacobi_smoother"><code class="md-code-inline">jacobi_smoother</code></a> or <a href="../api_sciml/#Bramble.chebyshev_smoother"><code class="md-code-inline">chebyshev_smoother</code></a>.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">a</code> is a form on ghost spaces, or <code class="md-code-inline">op</code> its operator, whose closure couples a facet node to nodes of its own colour; use <a href="../api_sciml/#Bramble.jacobi_smoother"><code class="md-code-inline">jacobi_smoother</code></a> or <a href="../api_sciml/#Bramble.chebyshev_smoother"><code class="md-code-inline">chebyshev_smoother</code></a>.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.4.0.</p>
 </li>
@@ -1509,7 +1517,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.smooth!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.smooth!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L462-L511" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_smoothers.jl#L468-L517" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1566,7 +1574,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.gmg_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gmg_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L99-L209" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L100-L210" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1637,7 +1645,7 @@ x, y = rand(33^2), rand(33^2)
 <div class="md-docstring" id="Bramble.GMGPreconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GMGPreconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L25-L48" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L25-L49" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1668,7 +1676,7 @@ x, y = rand(33^2), rand(33^2)
 <div class="md-docstring" id="Bramble.gmg_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gmg_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L542-L601" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L543-L602" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1731,7 +1739,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.v_cycle!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.v_cycle!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L299-L342" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L300-L343" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1786,7 +1794,7 @@ v_cycle!(x, P, b)
 <div class="md-docstring" id="Bramble.w_cycle!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.w_cycle!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L349-L384" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L350-L385" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1835,7 +1843,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.fmg!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fmg!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L391-L432" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L392-L433" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2559,6 +2567,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=d713fdff"></script>
+  <script src="../assets/materialdocs.js?v=4de6fa90"></script>
 </body>
 </html>
