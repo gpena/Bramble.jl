@@ -86,7 +86,8 @@ Keywords are those of [`ode_function`](@ref), plus:
   trajectory goes to `Bramble.adjoint_sensitivities` with any specialization:
   `SciMLBase.FullSpecialize` is not needed for the adjoint on any backend.
 
-The two-form method also forwards its other keywords to [`semidiscretize`](@ref).
+The two-form method, one for plain forms and for forms on a constrained ghost space alike,
+also forwards its other keywords to [`semidiscretize`](@ref).
 
 Requires [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl).
 
@@ -110,9 +111,11 @@ Base.@constprop :aggressive function ode_problem(sd::Semidiscretization, u₀, I
     return _ode_problem(sd, u₀, I; kwargs...)
 end
 
+# One method for the plain and the ghost pair: `semidiscretize` dispatches on the pair, and
+# a mixed pair reaches its refusal there (and in `ghost_semidiscrete.jl`).
 Base.@constprop :aggressive function ode_problem(
-        a::BilinearForm,
-        l::LinearForm,
+        a::Union{BilinearForm, GhostBilinearForm},
+        l::Union{LinearForm, GhostLinearForm},
         u₀,
         I;
         jacobian = jacobian!,

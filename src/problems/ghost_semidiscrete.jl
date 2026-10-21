@@ -126,28 +126,6 @@ Base.@constprop :aggressive function semidiscretize(
     )
 end
 
-# The plain path's `ode_problem(a, l, u₀, I)`, through the method above.
-Base.@constprop :aggressive function ode_problem(
-        a::GhostBilinearForm,
-        l::GhostLinearForm,
-        u₀,
-        I;
-        jacobian = jacobian!,
-        jac_prototype = nothing,
-        tgrad = nothing,
-        p = nothing,
-        specialize = nothing,
-        kwargs...
-)
-    sd = semidiscretize(a, l; kwargs...)
-    p_kwargs = p === nothing ? (;) : (; p = p)
-    specialize_kwargs = specialize === nothing ? (;) : (; specialize = specialize)
-    return _ode_problem(
-        sd, u₀, I; jacobian = jacobian, jac_prototype = jac_prototype, tgrad = tgrad,
-        p_kwargs..., specialize_kwargs...
-    )
-end
-
 # --- The source --------------------------------------------------------------------- #
 
 # `Eᵀ (F_pad(t) − A_pad d(t))`. `d(t)` goes into the carrier's buffer through the space's
