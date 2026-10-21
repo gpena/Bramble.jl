@@ -13,7 +13,7 @@ import Bramble
 using Polyester
 using SparseArrays: SparseMatrixCSC
 
-using ..TestUtils: TEST_DIMS
+using ..TestUtils: TEST_DIMS, WITH_SLOW_TESTS
 
 const POLICIES = (Bramble.CpuSerial(), Bramble.CpuThreaded(), Bramble.CpuPolyester())
 
@@ -69,6 +69,9 @@ end
 
 @testset "Ghost forms store the backend's types" begin
     for pol in POLICIES, T in (Float64, Float32), D in TEST_DIMS
+        # Unit keeps one case per policy, Float64 in 1D: each other element type and
+        # dimension compiles its own form paths, which the slow group runs.
+        WITH_SLOW_TESTS || (T === Float64 && D == 1) || continue
         be = make_backend(T, pol)
         Ω = backend_mesh(be, T, D)
         @testset "$(nameof(typeof(pol))) $T $(D)D" begin
@@ -93,6 +96,9 @@ end
 
 @testset "constrained keeps the backend" begin
     for pol in POLICIES, T in (Float64, Float32), D in TEST_DIMS
+        # Unit keeps one case per policy, Float64 in 1D: each other element type and
+        # dimension compiles its own relation rows, which the slow group runs.
+        WITH_SLOW_TESTS || (T === Float64 && D == 1) || continue
 
         # 3D relation rows are slow to compile: one element type covers them.
         D == 3 && T === Float32 && continue
