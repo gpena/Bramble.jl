@@ -100,7 +100,7 @@ them is the current cost.
 
 One `assemble!` refill of `innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))` on the uniform `60³` mesh
 the per-axis-factor change was measured on (`ndofs = 216,000`, `nnz(A) = 1,490,400`),
-warmed up, minimum of 5, at 4 threads (this repository's standard, `bramble-benchmarks` §1):
+warmed up, minimum of 5, at 4 threads (this repository's standard, `bramble-verification` §12):
 
 | stage | min time | range | allocation |
 |---|---|---|---|
