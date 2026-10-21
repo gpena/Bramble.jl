@@ -54,14 +54,14 @@ struct _ThreadedReplay <: _ReplayMode end
 # return type must stay the single concrete `Segment{D}` on every path, not a `Union` with
 # some other flat representation.
 function _try_diagonal_segment(
-        margin::Int, grid_inds::CartesianIndices, point_ptr::Vector{Int}, positions::Vector{Int}
-)
+        margins::NTuple{D, NTuple{2, Int}}, grid_inds::CartesianIndices{D},
+        point_ptr::Vector{Int}, positions::Vector{Int}
+) where {D}
     ax = axes(grid_inds)
-    D = length(ax)
     _diagonal_replay(Val(D)) || return _flat_segment(Val(D), point_ptr, positions)
-    _peelable(ax, margin) || return _flat_segment(Val(D), point_ptr, positions)
+    _peelable(ax, margins) || return _flat_segment(Val(D), point_ptr, positions)
 
-    interior = CartesianIndices(map(r -> _interior_range(r, margin), ax))
+    interior = _interior_box(ax, margins)
     n_interior = length(interior)
     n_interior < 2 && return _flat_segment(Val(D), point_ptr, positions)
 
@@ -745,6 +745,53 @@ end
     return nothing
 end
 
+# A term under the facet rule, as a threaded replay walks it (#813). The recording walked it
+# unmarked inside its interior box and marked outside (`_coord_walk!`), and a replay target
+# writes the recording's positions point by point, so each point takes the same one.
+struct _SplitTerm{F, U, R <: CartesianIndices}
+    marked::F
+    unmarked::U
+    interior::R
+end
+
+# `bound` (`term` bound to the walked leaf) for a sweep of `target` over `grid_inds`: split
+# when `target` replays a recording and `bound` holds a mark (`_has_marks`), else itself.
+@inline _split_term(target, bound, term, grid_inds) = bound
+@inline function _split_term(target::_ReplayTarget, bound::B, term, grid_inds) where {B}
+    _has_marks(B) || return bound
+    ax = axes(grid_inds)
+    margins = _face_margins(term, ax)
+    interior = _peelable(ax, margins) ? _interior_box(ax, margins) :
+               CartesianIndices(map(r -> first(r):(first(r) - 1), ax))
+    return _SplitTerm(bound, _interior_term(bound), interior)
+end
+
+@inline function _replay_point!(
+        t::Union{ReplaySink, _PairReplaySink}, term::_SplitTerm, sp, I::CartesianIndex,
+        lin_indices, mesh_markers, row_offset::Int, col_offset::Int
+)
+    return _replay_split_point!(
+        t, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+end
+@inline function _replay_point!(
+        t::_DiagonalReplayTarget, term::_SplitTerm, sp, I::CartesianIndex, lin_indices,
+        mesh_markers, row_offset::Int, col_offset::Int
+)
+    return _replay_split_point!(
+        t, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+end
+@inline function _replay_split_point!(
+        t, term::_SplitTerm, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+    if I in term.interior
+        _replay_point!(
+            t, term.unmarked, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+    else
+        _replay_point!(
+            t, term.marked, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+    end
+    return nothing
+end
+
 # One point of a sweep: the target replays. `α` is unused, as the replay target carries its
 # own.
 @inline _sweep_point!(
@@ -1070,10 +1117,11 @@ function _sweep_bilinear_serial!(
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     bound, mesh_markers = _bind_walk(term, sp)
+    walked = _split_term(A, bound, term, grid_inds)
 
     @inbounds for I in grid_inds
         _sweep_point!(
-            A, bound, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
+            A, walked, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α
         )
     end
     return nothing
@@ -1091,7 +1139,8 @@ function _sweep_bilinear!(
     grid_inds = indices(mesh(sp))
     bound, mesh_markers = _bind_walk(term, sp)
     point = _BilinearPoint(
-        A, sp, bound, LinearIndices(grid_inds), mesh_markers, row_offset, col_offset, α)
+        A, sp, _split_term(A, bound, term, grid_inds), LinearIndices(grid_inds),
+        mesh_markers, row_offset, col_offset, α)
     _sweep_coloured!(_effective_parallel_policy(sp), point, grid_inds, strides)
     return A
 end

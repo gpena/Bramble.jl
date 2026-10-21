@@ -159,7 +159,7 @@ mutable struct _CoordPass
     const J::Vector{Int}
     const ptrs::Vector{Vector{Int}}
     const counts::Vector{Int}
-    const margins::Vector{Int}
+    const margins::Vector{NTuple{2, Int}}
     const halves::Vector{Int}
     const context::String
     fill::Bool
@@ -167,7 +167,8 @@ mutable struct _CoordPass
     base::Int
 end
 function _CoordPass(context::String)
-    return _CoordPass(Int[], Int[], Vector{Int}[], Int[], Int[], Int[], context, false, 0, 0)
+    return _CoordPass(Int[], Int[], Vector{Int}[], Int[], NTuple{2, Int}[], Int[], context,
+        false, 0, 0)
 end
 
 # One unit, in whichever pass `p` is in. `half` is `-1` for a term walked alone.
@@ -194,7 +195,8 @@ function (p::_CoordPass)(
         @inbounds ptr[npts + 1] = sink.n + 1
         push!(p.ptrs, ptr)
         push!(p.counts, sink.n)
-        push!(p.margins, _stencil_margin(term))
+        # The first axis's face margins: only a 1D unit reads them (`_unit_segment`).
+        push!(p.margins, first(_face_margins(term, axes(indices(mesh(sp))))))
         push!(p.halves, half)
     end
     return nothing
@@ -216,13 +218,15 @@ end
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     ax = axes(grid_inds)
-    margin = _stencil_margin(term)
-    if _peelable(ax, margin)
-        interior = CartesianIndices(map(r -> _interior_range(r, margin), ax))
+    margins = _face_margins(term, ax)
+    if _peelable(ax, margins)
+        interior = _interior_box(ax, margins)
+        # The term unmarked inside, as the replay walks it (`_interior_term`, #813).
         _visit_guarded_region!(
-            sink, bound, sp, mesh_markers, lin_indices, interior, row_offset, col_offset
+            sink, _interior_term(bound), sp, mesh_markers, lin_indices, interior,
+            row_offset, col_offset
         )
-        for slab in _boundary_shell_slabs(ax, margin)
+        for slab in _boundary_shell_slabs(ax, margins)
             _visit_guarded_region!(
                 sink, bound, sp, mesh_markers, lin_indices, slab, row_offset, col_offset
             )
@@ -299,9 +303,10 @@ end
 # Only 1D segments can be diagonal (`_diagonal_replay`), and a 1D unit's grid is exactly its
 # own points, so each unit (a cross-mesh leaf included) is checked against its own grid.
 _unit_segment(::Val{D}, _, ptr, positions) where {D} = _flat_segment(Val(D), ptr, positions)
-function _unit_segment(::Val{1}, margin::Int, ptr::Vector{Int}, positions::Vector{Int})
+function _unit_segment(
+        ::Val{1}, margins::NTuple{2, Int}, ptr::Vector{Int}, positions::Vector{Int})
     grid = CartesianIndices((Base.OneTo(length(ptr) - 1),))
-    return _try_diagonal_segment(margin, grid, ptr, positions)
+    return _try_diagonal_segment((margins,), grid, ptr, positions)
 end
 
 # The pattern from coordinates, leaving `I`/`J` intact for the positions search.

@@ -893,6 +893,13 @@ end
 # regression, for exactly the sizes where peeling would not be safe.
 
 @inline _interior_range(r::AbstractUnitRange{Int}, margin::Int) = (first(r) + margin):(last(r) - margin)
+# A margin per face, `(low, high)` (`_face_margins`): the facet rule widens only the faces
+# it extrapolates across (#813). The `Int` forms are the one margin on every face.
+@inline _interior_range(r::AbstractUnitRange{Int}, m::NTuple{2, Int}) = (first(r) + m[1]):(last(r) - m[2])
+@inline _interior_box(ax::NTuple{D, AbstractUnitRange{Int}}, margin::Int) where {D} = CartesianIndices(
+    map(r -> _interior_range(r, margin), ax))
+@inline _interior_box(ax::NTuple{D, AbstractUnitRange{Int}}, M::NTuple{D, NTuple{2, Int}}) where {D} = CartesianIndices(
+    map(_interior_range, ax, M))
 @inline _low_rim(r::AbstractUnitRange{Int}, margin::Int) = first(r):(first(r) + margin - 1)
 @inline _high_rim(r::AbstractUnitRange{Int}, margin::Int) = (last(r) - margin + 1):last(r)
 # The unrestricted case in `_boundary_shell_slabs` below, normalized to the same
@@ -904,24 +911,28 @@ end
 @inline _full_range(r::AbstractUnitRange{Int}) = first(r):last(r)
 
 @inline _peelable(ax::NTuple{D, AbstractUnitRange{Int}}, margin::Int) where {D} = all(r -> 2 * margin <= length(r), ax)
+@inline _peelable(ax::NTuple{D, AbstractUnitRange{Int}}, M::NTuple{D, NTuple{2, Int}}) where {D} = all(
+    map((r, m) -> m[1] + m[2] <= length(r), ax, M))
 
 # The `2D` non-overlapping slabs partitioning `indices(Ωₕ)`'s rim, described above. `Val(2D)`
 # and the inner `Val(D)` are both resolved from `term`/`sp`'s own type parameters, so both
 # `ntuple`s unroll at compile time -- no closure captures a runtime dimension count the way
 # `_vectorial_expr`'s comment (`operators/stencil.jl`) warns a `Val(i)` built
 # from a loop variable would.
+@inline _boundary_shell_slabs(ax::NTuple{D, AbstractUnitRange{Int}}, margin::Int) where {D} = _boundary_shell_slabs(
+    ax, ntuple(_ -> (margin, margin), Val(D)))
 @inline function _boundary_shell_slabs(
-        ax::NTuple{D, AbstractUnitRange{Int}}, margin::Int
+        ax::NTuple{D, AbstractUnitRange{Int}}, M::NTuple{D, NTuple{2, Int}}
 ) where {D}
     return ntuple(Val(2D)) do s
         d = (s + 1) >>> 1
         ranges = ntuple(Val(D)) do k
             if k < d
-                _interior_range(ax[k], margin)
+                _interior_range(ax[k], M[k])
             elseif k > d
                 _full_range(ax[k])
             else
-                isodd(s) ? _low_rim(ax[k], margin) : _high_rim(ax[k], margin)
+                isodd(s) ? _low_rim(ax[k], M[k][1]) : _high_rim(ax[k], M[k][2])
             end
         end
         CartesianIndices(ranges)
@@ -1012,10 +1023,14 @@ The fifth argument handed to `local_stencil` is the *leaf's* linear index. A ter
 the wrong leaf reads the wrong `SourceVector` without complaint, which is why the index is
 derived here rather than by each caller.
 
-Splits into an interior core and a boundary shell when [`_stencil_margin`](@ref) and the
-grid size allow it (see the comment above `_peelable`), so most points skip the bounds
-guard entirely; every point still gets exactly one visit either way, so a sink sees the same
-set of entries regardless of which path ran, in a possibly different order.
+Splits into an interior core and a boundary shell when the margins of
+[`_face_margins`](@ref) and the grid size allow it (see the comment above `_peelable`), so
+most points skip the bounds guard entirely; every point still gets exactly one visit either
+way, so a sink sees the same set of entries regardless of which path ran, in a possibly
+different order. The one exception is a term under the facet rule: the core walks it
+unmarked ([`_interior_term`](@ref)), without the zero-weight entries of the marked
+function's extra stencil parts. The same values land, and the recording
+(`_coord_walk!`) and every replay split the same way, so their entries still agree.
 [`ReplaySink`](@ref) is unaffected by that: it addresses each point by its own linear
 index, not by visit order (see its docstring).
 
@@ -1070,19 +1085,20 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
                           (term, nothing)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
-    margin = _stencil_margin(term)
     ax = axes(grid_inds)
+    margins = _face_margins(term, ax)
 
     # `@inbounds` here (and inside `_visit_guarded_region!`/`_visit_interior!`) is what the
     # hand-written sweeps had wrapping their whole nested loop. It does not cross a function
     # call on its own, so `_visit_entries`, `_visit_entries_unguarded`, `_entry_target` and
     # `_trial_column` are `Base.@propagate_inbounds` to inherit it -- without that, the bounds
     # checks come back and the replay path costs 8-17% more.
-    if _peelable(ax, margin)
-        interior = CartesianIndices(map(r -> _interior_range(r, margin), ax))
+    if _peelable(ax, margins)
+        interior = _interior_box(ax, margins)
+        # The term unmarked inside, which `margins` keeps off every marked ghost (#813).
         _visit_interior!(
             interior_sink,
-            bound,
+            _interior_term(bound),
             sp,
             mesh_markers,
             lin_indices,
@@ -1090,7 +1106,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
             row_offset,
             col_offset
         )
-        @inbounds for slab in _boundary_shell_slabs(ax, margin)
+        @inbounds for slab in _boundary_shell_slabs(ax, margins)
             _visit_guarded_region!(
                 boundary_sink,
                 bound,
