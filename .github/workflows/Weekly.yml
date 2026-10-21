@@ -80,8 +80,10 @@ jobs:
     # The macOS `backends` leg took 53 minutes as one job (2026-10-19), 23 of them in tests;
     # compiled images are not cached here (see below), so a leg spends most of its time
     # precompiling. By the test times of that run the two shards split the tests about 9 to
-    # 14 minutes, `ext-solvers` the shorter.
-    timeout-minutes: 60
+    # 14 minutes, `ext-solvers` the shorter. In the first sharded run (2026-10-21) the shards
+    # took 33 and 52 minutes, `ext-polyester` with 19 minutes of tests, so the limit is 90
+    # rather than 60: a runner slower by a sixth would have timed it out.
+    timeout-minutes: 90
     # Nothing here gates a merge, but a red run should still mean something specific.
     # Julia nightly is not in this matrix (see below), so a failure here is Bramble's own —
     # on the 1.13 release.
