@@ -30,19 +30,21 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 
 # `BRAMBLE_TEST_SHARD` narrows the `unit` block to one of four parts, so CI can run each on
 # its own runner: `forms-1` and `forms-2` are the two halves of test/form/, `ghost` is
-# test/ghost/, and `rest` is the remainder of the unit block. Unset runs everything, which is what every local run and
-# every other group does; the quality, ext, ad, gpu and examples blocks ignore it. The gate
-# sits at the include sites in test/runtests.jl and test/form/runtests.jl, through
-# `in_shard`.
+# test/ghost/, and `rest` is the remainder of the unit block. It also narrows the package
+# extensions block (the `ext` and `backends` groups) to one of two parts, which Weekly.yml
+# runs on separate runners: `ext-solvers` is the plotting, solver and Kronecker files and
+# `ext-polyester` the Polyester files. Unset runs everything, which is what every local run
+# does; the quality, ad, gpu, examples and grids blocks ignore it. The gate sits at the
+# include sites in test/runtests.jl and test/form/runtests.jl, through `in_shard`.
 const TEST_SHARD = get(ENV, "BRAMBLE_TEST_SHARD", "")
 
-const TEST_SHARDS = ("forms-1", "forms-2", "ghost", "rest")
+const TEST_SHARDS = ("forms-1", "forms-2", "ghost", "rest", "ext-solvers", "ext-polyester")
 
 """
     in_shard(name)
 
 True when no shard is selected or the selected shard is `name`. Throws an `ArgumentError`
-for a `name`, or a `BRAMBLE_TEST_SHARD`, outside `("forms-1", "forms-2", "ghost", "rest")`, since a
+for a `name`, or a `BRAMBLE_TEST_SHARD`, outside `TEST_SHARDS`, since a
 misspelt shard would select nothing and pass green.
 """
 function in_shard(name::AbstractString)
