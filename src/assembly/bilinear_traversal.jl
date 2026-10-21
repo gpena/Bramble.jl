@@ -1028,7 +1028,7 @@ Splits into an interior core and a boundary shell when the margins of
 most points skip the bounds guard entirely; every point still gets exactly one visit either
 way, so a sink sees the same set of entries regardless of which path ran, in a possibly
 different order. The one exception is a term under the facet rule: the core walks it
-unmarked ([`_interior_term`](@ref)), without the zero-weight entries of the marked
+unmarked (`_interior_term`), without the zero-weight entries of the marked
 function's extra stencil parts. The same values land, and the recording
 (`_coord_walk!`) and every replay split the same way, so their entries still agree.
 [`ReplaySink`](@ref) is unaffected by that: it addresses each point by its own linear

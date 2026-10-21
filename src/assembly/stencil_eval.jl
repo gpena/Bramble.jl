@@ -529,7 +529,7 @@ _facets_of(op::Union{OperatorAdd, BilinearProduct}, acc) = _marked_facets(
 The walk's guarded margin on each face of the grid with axes `ax`, `(low, high)` per axis:
 [`_stencil_margin`](@ref)`(term)`, and 3 more on a facet a marked function of `term`
 extrapolates across, so the interior they leave reads no ghost of a marked facet and takes
-the term unmarked ([`_interior_term`](@ref)). Every face alike for a term with no mark.
+the term unmarked (`_interior_term`). Every face alike for a term with no mark.
 """
 function _face_margins(term, ::NTuple{D, AbstractUnitRange{Int}}) where {D}
     m = _stencil_margin(term)
