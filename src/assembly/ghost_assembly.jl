@@ -66,11 +66,11 @@ padded space and the closure `(E, d)` the relations give, stored once. `E` is ge
 block diagonal: the degrees of freedom are each component's, one component after the
 other, and its padded values are `E * u + d`. It also stores the facets with a relation
 reading several components, whose ghosts a form's mixed differences read by extrapolation
-from the nodes inward (the facet rule, stencil_eval.jl); the last type parameter says
-whether there is any, so `form` decides by type whether to apply the rule.
+from the nodes inward (the facet rule, stencil_eval.jl). `form` applies the rule when
+there is one. That is a value, not a type parameter, so `constrained` infers.
 """
 struct ConstrainedCompositeSpace{N, S <: CompositeGridSpace{N}, P <: CompositeGridSpace{N},
-    ET <: SparseMatrixCSC, DT <: AbstractVector, FT <: Tuple, R} <: AbstractSpaceType{N}
+    ET <: SparseMatrixCSC, DT <: AbstractVector, FT <: Tuple} <: AbstractSpaceType{N}
     "the unconstrained composite of ghost spaces the relations were given on."
     space::S
     "the composite of the components' padded spaces."
@@ -88,8 +88,8 @@ end
 function ConstrainedCompositeSpace(space::CompositeGridSpace{N},
         padded::CompositeGridSpace{N}, E::SparseMatrixCSC, d::AbstractVector,
         Et::SparseMatrixCSC, facets::Tuple) where {N}
-    S, P, R = typeof(space), typeof(padded), any(any, facets)
-    return ConstrainedCompositeSpace{N, S, P, typeof(E), typeof(d), typeof(facets), R}(
+    S, P = typeof(space), typeof(padded)
+    return ConstrainedCompositeSpace{N, S, P, typeof(E), typeof(d), typeof(facets)}(
         space, padded, E, d, Et, facets)
 end
 

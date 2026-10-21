@@ -6,10 +6,11 @@ module AllocationsTests
 # `assemble!(b, l)` with and without `dirichlet`, and `dirichlet_bc!` and `symmetrize!` on a
 # ghost space. `CpuThreaded` spawns its tasks on every banded pass, so there each call is
 # bounded by its padded or plain counterpart plus one task spawn per band pass of the ghost
-# layer, and gives the same figure at two grid sizes. The last two testsets refill a form
-# whose coefficient changed on a ghost space, and padded forms under the corner rule. The
-# plain-and-ghost warm refill with `dirichlet` is in test/form/two_spaces.jl,
-# and `CpuPolyester` is in test/ext/ghost_polyester.jl, where Polyester is loaded.
+# layer, and gives the same figure at two grid sizes. The last three testsets refill a form
+# whose coefficient changed on a ghost space, padded forms under the corner rule, and an
+# elasticity form under the facet rule (#813). The plain-and-ghost warm refill with
+# `dirichlet` is in test/form/two_spaces.jl, and `CpuPolyester` is in
+# test/ext/ghost_polyester.jl, where Polyester is loaded.
 
 using Test
 using Bramble
@@ -18,7 +19,7 @@ using Bramble: CpuSerial, CpuThreaded, D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, D̽ₓ,
 using LinearAlgebra: norm
 using SparseArrays: nonzeros
 
-using ..TestUtils: WITH_3D_TESTS, ghost_mesh, padded
+using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, ghost_mesh, padded
 
 const K = [2.0 1.0; 1.0 2.0]
 
@@ -304,6 +305,56 @@ end
         s = form(P, P, (u, v) -> innerₕ(X(u), v))
         S = assemble(s)
         @test alloc(() -> assemble!(S, s)) == 0
+    end
+end
+
+# Elasticity, `−μ Δₕ uᵢ − (λ + μ) Σⱼ ∂ᵢ∂ⱼ uⱼ`, with a traction on `:xmin` and `:ymin`: the
+# relations there read both components, so the padded form carries the facet rule
+# (stencil_eval.jl, #813) and its refill must stay free too.
+const λe, μe = 2.0, 0.5
+Ke(i, j) = [λe * (i == d) * (j == e) + μe * ((i == j) * (d == e) + (i == e) * (j == d))
+            for d in 1:2, e in 1:2]
+mixed2(u, i, j) = i == 1 ? Dcₓ(Dcᵧ(u(j))) : Dcᵧ(Dcₓ(u(j)))
+function elasticity2(u, v)
+    row(i) = innerₕ(-μe * Δₕ(u(i)), v(i)) +
+             innerₕ(-(λe + μe) * (i == 1 ? D̃ₓ(D₋ₓ(u(1))) : D̃ᵧ(D₋ᵧ(u(2)))), v(i))
+    return row(1) + row(2) + innerₕ(-(λe + μe) * mixed2(u, 1, 2), v(1)) +
+           innerₕ(-(λe + μe) * mixed2(u, 2, 1), v(2))
+end
+traction_tr(u, i) = ∂ₙ(u(1); K = Ke(i, 1)) + ∂ₙ(u(2); K = Ke(i, 2))
+function traction2(u)
+    return (map(i -> :xmin => traction_tr(u, i) => 1.0, (1, 2))...,
+        map(i -> :ymin => traction_tr(u, i) => 0.0, (1, 2))...,
+        map(i -> :xmax => u(i) => x -> 2 - x[2], (1, 2))...,
+        map(i -> :ymax => u(i) => 0.0, (1, 2))...,
+        map(i -> :xmax => ∂ₙₙ(u(i)) => 0.0, (1, 2))...,
+        map(i -> :ymax => ∂ₙₙ(u(i)) => 0.0, (1, 2))...)
+end
+
+@testset "Warm refill, facet rule (#813)" begin
+    S = gridspace(ghost_mesh(CpuSerial(), (12, 11)); ghosts = :boundary)
+    V = S^Val(2)
+    C = constrained(V, traction2)
+    a = form(C, C, elasticity2)
+    A0 = assemble(a)
+    A = copy(A0)
+    fill!(nonzeros(A), 0)
+    @test alloc(() -> assemble!(A, a)) == 0
+    @test A == A0
+    @test alloc(() -> assemble!(a.A_pad, a.padded)) == 0
+    # the padded form is the marked one: the plain elasticity form differs from it
+    P = Bramble.padded_space(V)
+    @test !(assemble(form(P, P, elasticity2)) ≈ a.A_pad)
+    # the threaded refill replays the same recording, the term split per point as the
+    # recording split it (`_SplitTerm`)
+    WITH_SLOW_TESTS && @testset "Threaded refill matches serial (#813)" begin
+        St = gridspace(ghost_mesh(CpuThreaded(), (12, 11)); ghosts = :boundary)
+        Ct = constrained(St^Val(2), traction2)
+        at = form(Ct, Ct, elasticity2)
+        At = assemble(at)
+        fill!(nonzeros(At), 0)
+        assemble!(At, at)
+        @test relerr(At, A0) <= 1e-12
     end
 end
 

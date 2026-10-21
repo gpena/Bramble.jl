@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Random
 using LinearAlgebra: dot
-using ..TestUtils: @test_allocs, _grid_sample, _random_element
+using ..TestUtils: @test_allocs, _grid_sample, _random_element, WITH_SLOW_TESTS
 import Bramble: D₋ₓ, D₊ₓ, Dcₓ, D̃ₓ, D̽ₓ, Mₓ, M₊ₓ, Mcₓ, jumpₓ, D₋ᵧ, Mcᵧ, D̽ᵧ, restrict_to,
                 jumpₙ
 
@@ -124,6 +124,7 @@ function _inward_jump(g, d, side)
 end
 
 const FACET_NAMES = ((:xmin, 1, 1), (:xmax, 1, 2), (:ymin, 2, 1), (:ymax, 2, 2))
+const JUMP_KINDS_2D = (("Δₕ", :xmin), ("D̽ᵧ", :ymin))
 
 # `jumpₙ(op(u))` on facet `F`, trial and test side, against the same jump applied to the
 # runtime `op(u)` and weighed by `inner_Γ` on a grid function.
@@ -139,6 +140,11 @@ function _check_jump(Wₕ, dims, u, w, op, F, d, s)
     @test dot(parent(w), B*parent(u))≈dot(m, parent(u)) rtol=1e-10 atol=1e-12
 end
 
+# In unit the 2D block keeps one case per composition kind: Δₕ∘Δₕ, Δₕ∘XOP, XOP∘Δₕ, Δₕ∘YOP
+# and YOP∘Δₕ. The other 2D pairs run in `slow` and `grids` only.
+const LAP_KINDS_2D = (("Δₕ", "Δₕ"), ("Δₕ", "D₋ₓ"), ("D₋ₓ", "Δₕ"), ("Δₕ", "D₋ᵧ"),
+    ("D₋ᵧ", "Δₕ"))
+
 @testset "Δₕ nested in forms (#774)" begin
     Random.seed!(7741)
     for D in (1, 2)
@@ -146,9 +152,10 @@ end
         u, w, f = _random_element(Wₕ), _random_element(Wₕ), _random_element(Wₕ)
         @testset "$(D)D" begin
             for ((n1, o1), (n2, o2)) in _laplacian_pairs(D)
-                @testset "$n1($n2(u))" begin
-                    _check_pair(Wₕ, u, w, f, o1, o2)
-                end
+                (WITH_SLOW_TESTS || D == 1 || (n1, n2) in LAP_KINDS_2D) &&
+                    @testset "$n1($n2(u))" begin
+                        _check_pair(Wₕ, u, w, f, o1, o2)
+                    end
             end
         end
     end
@@ -166,10 +173,11 @@ end
               (("Δₕ", Δₕ), ("D̽ᵧ", D̽ᵧ), ("D₋ₓ", D₋ₓ), ("Dcₓ", Dcₓ), ("D₋ᵧ", D₋ᵧ))
         checks = [(op, facet) for op in ops for facet in FACET_NAMES[1:(2D)]]
         incover(c) = c[1] in ops[1:2]
-        @testset "$(D)D jumpₙ($name(u)) on $F" for ((name, op), (F, d, s)) in _grid_sample("jumpₙ $(D)D", checks, incover, D ==
-                                                                                                                           1 ?
-                                                                                                                           1 :
-                                                                                                                           4)
+        cases = _grid_sample("jumpₙ $(D)D", checks, incover, D == 1 ? 1 : 4)
+        # In unit the 2D block keeps one facet per composition kind, jumpₙ∘Δₕ and jumpₙ∘D̽ᵧ.
+        kept = filter(c -> D == 1 || WITH_SLOW_TESTS || (c[1][1], c[2][1]) in JUMP_KINDS_2D,
+            cases)
+        @testset "$(D)D jumpₙ($name(u)) on $F" for ((name, op), (F, d, s)) in kept
             _check_jump(Wₕ, dims, u, w, op, F, d, s)
         end
     end

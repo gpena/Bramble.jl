@@ -11,7 +11,7 @@ using Random
 using Polyester
 using Kronecker
 using ForwardDiff
-using ..TestUtils: TEST_DIMS, WITH_3D_TESTS, ZeroBasedVector, _graded_mesh
+using ..TestUtils: TEST_DIMS, WITH_3D_TESTS, WITH_SLOW_TESTS, ZeroBasedVector, _graded_mesh
 
 # Regression tests for the edge cases the critics' probes found while the general Kronecker
 # operators (gpena/Bramble.jl#427, #439, #442) were built. Each testset is one area; each
@@ -196,49 +196,61 @@ end
             sym = ntuple(d -> (b = band(dims[d], 1, 0); b + b'), D)
             check(Float64, dims, (((), sym),))
         end
-        # Four axes, dense factors and a range-backed diagonal.
-        check(Float64, (3, 4, 2, 3), (((), (band(3, 1, 1), band(4, 1, 1), band(2, 1, 1),
-            band(3, 1, 1))),))
+        # Dense factors in 3D.
         check(Float64, (4, 3, 2), (((), (randn(rng, 4, 4), randn(rng, 3, 3),
             randn(rng, 2, 2))),))
-        check(Float64, (4, 3), (((), (Diagonal(1.0:4.0), band(3, 1, 1))),))
+        # Four axes, and a range-backed diagonal.
+        WITH_SLOW_TESTS && @testset "four axes, range-backed diagonal" begin
+            check(Float64, (3, 4, 2, 3), (((), (band(3, 1, 1), band(4, 1, 1),
+                band(2, 1, 1), band(3, 1, 1))),))
+            check(Float64, (4, 3), (((), (Diagonal(1.0:4.0), band(3, 1, 1))),))
+        end
         # A symmetric pentadiagonal axis 1 is not tridiagonal, and an asymmetric tridiagonal
         # one is not symmetric: both take the row gather.
         P5 = band(6, 2, 0)
         check(Float64, (6, 4), (((), (P5 + P5', band(4, 1, 1))),))
         check(Float64, (6, 4), (((), (band(6, 1, 1), Diagonal(rand(rng, 4)))),))
-        # Five terms in 3D, none alike.
-        check(Float64,
-            (5, 4, 6),
-            (((Ref(0.3),), (band(5, 1, 2), band(4, 2, 1),
-                    band(6, 1, 1))),
-                ((), (dg(5), dg(4), dg(6))), ((), (dg(5), band(4, 1, 0), dg(6))),
-                ((2.0, 3.0), (band(5, 0, 1), dg(4), band(6, 2, 2))),
-                ((), (dg(5), band(4, 1, 1), band(6, 1, 0)))))
+        WITH_SLOW_TESTS && @testset "five terms in 3D" begin
+            # Five terms in 3D, none alike.
+            check(Float64,
+                (5, 4, 6),
+                (((Ref(0.3),), (band(5, 1, 2), band(4, 2, 1),
+                        band(6, 1, 1))),
+                    ((), (dg(5), dg(4), dg(6))), ((), (dg(5), band(4, 1, 0), dg(6))),
+                    ((2.0, 3.0), (band(5, 0, 1), dg(4), band(6, 2, 2))),
+                    ((), (dg(5), band(4, 1, 1), band(6, 1, 0)))))
+        end
 
         f32 = (((), (band(5, 1, 1; T = Float32),
             band(4, 1, 1; T = Float32), band(3, 1, 1; T = Float32))),)
         check(Float32, (5, 4, 3), f32; rtol = 1e-4)
         @test @inferred(_ke_op(Float32, (5, 4, 3), f32)[1, 1]) isa Float32
-        # A scaled Float32 term (a Rational scale, as `op / 2` makes) stays Float32 too.
-        check(
-            Float32, (5, 4), (((1 // 2, 2.5), (band(5, 1, 1; T = Float32),
-                band(4, 1, 1; T = Float32))),); rtol = 1e-4)
+        WITH_SLOW_TESTS && @testset "Float32 term with a rational scale" begin
+            # A scaled Float32 term (a Rational scale, as `op / 2` makes) stays Float32 too.
+            check(
+                Float32, (5, 4), (((1 // 2, 2.5), (band(5, 1, 1; T = Float32),
+                    band(4, 1, 1; T = Float32))),); rtol = 1e-4)
+        end
         check(ComplexF64, (5, 4), (((), (band(5, 1, 1; T = ComplexF64),
             band(4, 1, 1; T = ComplexF64))),))
-        check(BigFloat, (4, 3), ((
-            (), (sparse(BigFloat.(Matrix(band(4, 1, 1)))),
-                sparse(BigFloat.(Matrix(band(3, 1, 1)))))),))
-        # A complex symmetric factor is symmetric; a Hermitian one is not.
-        cs = band(5, 1, 0; T = ComplexF64)
-        cs = cs + transpose(cs)
-        ch = band(5, 1, 0; T = ComplexF64)
-        ch = ch + ch'
-        c4 = band(4, 1, 1; T = ComplexF64)
-        check(ComplexF64, (5, 4), (((), (cs, c4)),))
-        check(ComplexF64, (5, 4), (((), (ch, c4)), ((), (ch, Diagonal(rand(rng, 4))))))
-        @test issymmetric(_ke_op(ComplexF64, (5, 4), (((), (cs, c4 + transpose(c4))),)))
-        @test !issymmetric(_ke_op(ComplexF64, (5, 4), (((), (ch, c4 + transpose(c4))),)))
+        WITH_SLOW_TESTS && @testset "BigFloat factors" begin
+            check(BigFloat, (4, 3), ((
+                (), (sparse(BigFloat.(Matrix(band(4, 1, 1)))),
+                    sparse(BigFloat.(Matrix(band(3, 1, 1)))))),))
+        end
+        WITH_SLOW_TESTS && @testset "complex symmetric and Hermitian factors" begin
+            # A complex symmetric factor is symmetric; a Hermitian one is not.
+            cs = band(5, 1, 0; T = ComplexF64)
+            cs = cs + transpose(cs)
+            ch = band(5, 1, 0; T = ComplexF64)
+            ch = ch + ch'
+            c4 = band(4, 1, 1; T = ComplexF64)
+            check(ComplexF64, (5, 4), (((), (cs, c4)),))
+            check(ComplexF64, (5, 4), (((), (ch, c4)), ((), (ch, Diagonal(rand(rng, 4))))))
+            @test issymmetric(_ke_op(ComplexF64, (5, 4), (((), (cs, c4 + transpose(c4))),)))
+            @test !issymmetric(
+                _ke_op(ComplexF64, (5, 4), (((), (ch, c4 + transpose(c4))),)))
+        end
 
         # Dual numbers in the vector, in the factors, and through the threaded policy.
         D1 = ForwardDiff.Dual{Nothing, Float64, 1}
@@ -296,38 +308,43 @@ end
         @test eltype(K32) == Float32
         x32 = randn(rng, Float32, ndofs(W32))
         @test K32 * x32 ≈ assemble(a32) * x32 rtol = 1e-4
-        # Float32-based scales keep the Float32 base, as `assemble` does.
-        p32 = ForwardDiff.Dual{:t}(0.5f0, 1.0f0)
-        for s in (p32, Ref(p32), 1.0f0 + 2.0f0im)
-            a = form(W32, W32, (u, v) -> s * lap(u, v))
+        WITH_SLOW_TESTS && @testset "Float32-based scales on a Float32 mesh" begin
+            # Float32-based scales keep the Float32 base, as `assemble` does.
+            p32 = ForwardDiff.Dual{:t}(0.5f0, 1.0f0)
+            for s in (p32, Ref(p32), 1.0f0 + 2.0f0im)
+                a = form(W32, W32, (u, v) -> s * lap(u, v))
+                K, A = kronecker_operator(a), assemble(a)
+                @test eltype(K) == eltype(A) == typeof(s isa Ref ? s[] : s)
+                @test K * x32 ≈ A * x32 rtol = 1e-4
+                # The read paths keep that base too: an entry and the Kronecker.jl object.
+                @test typeof(K[1, 1]) == eltype(K)
+                @test eltype(Kronecker.kronecker(K)) == eltype(K)
+            end
+            # A term with no scale beside a `Ref`-scaled one.
+            a = form(W32, W32, (u, v) -> lap(u, v) + Ref(p32) * innerₕ(u, v))
+            K = kronecker_operator(a)
+            @test eltype(K) == eltype(assemble(a)) == typeof(K[1, 1]) == typeof(p32)
+            @test eltype(Kronecker.kronecker(K)) == typeof(p32)
+            @test ForwardDiff.partials.(K * x32, 1) ≈
+                  ForwardDiff.partials.(assemble(a) * x32, 1)
+            # A Dual{Float32} term beside a Float64-scaled one: `K` narrows the Float64
+            # scale to the mesh's Float32 on purpose, while `assemble` widens to
+            # Dual{Float64}, so only the values are compared with `assemble`.
+            a = form(W32, W32, (u, v) -> p32 * lap(u, v) + 2.0 * innerₕ(u, v))
             K, A = kronecker_operator(a), assemble(a)
-            @test eltype(K) == eltype(A) == typeof(s isa Ref ? s[] : s)
-            @test K * x32 ≈ A * x32 rtol = 1e-4
-            # The read paths keep that base too: an entry and the Kronecker.jl object.
-            @test typeof(K[1, 1]) == eltype(K)
-            @test eltype(Kronecker.kronecker(K)) == eltype(K)
+            @test eltype(K) == typeof(K[1, 1]) == eltype(Kronecker.kronecker(K)) ==
+                  typeof(p32)
+            @test ForwardDiff.value.(K * x32) ≈ ForwardDiff.value.(A * x32) rtol = 1e-4
+            @test ForwardDiff.partials.(K * x32, 1) ≈
+                  ForwardDiff.partials.(A * x32, 1) rtol = 1e-4
+            V32 = W32 × W32
+            b32 = form(V32, V32, (u, v) -> p32 * lap(u(1), v(1)) + innerₕ(u(2), v(2)))
+            Kb32 = kronecker_operator(b32)
+            @test eltype(Kb32) == eltype(assemble(b32)) == typeof(p32)
+            y32 = randn(rng, Float32, ndofs(V32))
+            @test ForwardDiff.partials.(Kb32 * y32, 1) ≈
+                  ForwardDiff.partials.(assemble(b32) * y32, 1) rtol = 1e-4
         end
-        # A term with no scale beside a `Ref`-scaled one.
-        a = form(W32, W32, (u, v) -> lap(u, v) + Ref(p32) * innerₕ(u, v))
-        K = kronecker_operator(a)
-        @test eltype(K) == eltype(assemble(a)) == typeof(K[1, 1]) == typeof(p32)
-        @test eltype(Kronecker.kronecker(K)) == typeof(p32)
-        @test ForwardDiff.partials.(K * x32, 1) ≈ ForwardDiff.partials.(assemble(a) * x32, 1)
-        # A Dual{Float32} term beside a Float64-scaled one: `K` narrows the Float64 scale to
-        # the mesh's Float32 on purpose, while `assemble` widens to Dual{Float64}, so only
-        # the values are compared with `assemble`.
-        a = form(W32, W32, (u, v) -> p32 * lap(u, v) + 2.0 * innerₕ(u, v))
-        K, A = kronecker_operator(a), assemble(a)
-        @test eltype(K) == typeof(K[1, 1]) == eltype(Kronecker.kronecker(K)) == typeof(p32)
-        @test ForwardDiff.value.(K * x32) ≈ ForwardDiff.value.(A * x32) rtol = 1e-4
-        @test ForwardDiff.partials.(K * x32, 1) ≈ ForwardDiff.partials.(A * x32, 1) rtol = 1e-4
-        V32 = W32 × W32
-        b32 = form(V32, V32, (u, v) -> p32 * lap(u(1), v(1)) + innerₕ(u(2), v(2)))
-        Kb32 = kronecker_operator(b32)
-        @test eltype(Kb32) == eltype(assemble(b32)) == typeof(p32)
-        y32 = randn(rng, Float32, ndofs(V32))
-        @test ForwardDiff.partials.(Kb32 * y32, 1) ≈
-              ForwardDiff.partials.(assemble(b32) * y32, 1) rtol = 1e-4
     end
 
     # (#427): factors with rows or columns that hold nothing, entries stored as an
@@ -381,13 +398,17 @@ end
                    (B = spdiagm(0 => randn(rng, n), -1 => randn(rng, max(n - 1, 0)));
             B + transpose(B) - Diagonal(diag(B)))
         for dims in ((0, 3), (3, 0), (2, 0, 3), (1, 0))
+            # A 3D product is a compile of its own: slow group only.
+            WITH_SLOW_TESTS || length(dims) == 2 || continue
             D = length(dims)
             # Any: each spec set and each policy is its own type
             specsets = Any[
                 ntuple(d -> mkf(dims[d]), D),
                 ntuple(d -> d == 1 ? mksym(dims[d]) : Diagonal(rand(rng, dims[d])), D),
                 ntuple(d -> d == 1 ? mkf(dims[d]) : Diagonal(rand(rng, dims[d])), D)]
-            for fs in specsets, P in Any[CpuSerial(), CpuThreaded(), CpuPolyester()]
+            pols = WITH_SLOW_TESTS ? Any[CpuSerial(), CpuThreaded(), CpuPolyester()] :
+                   Any[CpuSerial(), CpuThreaded()]
+            for fs in specsets, P in pols
 
                 K = _ke_op(Float64, dims, (((), fs),), P)
                 yb = fill(7.0, 3)
@@ -808,6 +829,8 @@ end
         # Float32 Laplacians: eigenvalue ratios in the thousands, thousands of unknowns.
         box(D, T) = reduce(×, ntuple(_ -> interval(zero(T), one(T)), D))
         for (n, dir) in (((129, 129), :boundary), ((65, 65), nothing))
+            # The 129-point grid is slow-group only; unit keeps the 65-point one.
+            WITH_SLOW_TESTS || n == (65, 65) || continue
             Wf = gridspace(mesh(domain(box(length(n), Float32)), n,
                 ntuple(_ -> true, length(n)); backend = backend(Float32)))
             a = form(Wf, Wf, (u, v) -> innerₕ(u, v) + grad(u, v))
@@ -874,7 +897,9 @@ end
             :refine_one_axis => Ω -> Bramble.iterative_refinement!(Ω(1)),
             :mutate_and_back => Ω -> (p0 = copy(Bramble.points(Ω(1)));
                 Bramble.set_points!(Ω(1), p0 .^ 2); Bramble.set_points!(Ω(1), p0))]
-        for (kind, mutate!) in mutations, P in Any[CpuSerial(), CpuPolyester()]
+        # Polyester's policy is a compile of its own: slow group only.
+        policies = WITH_SLOW_TESTS ? Any[CpuSerial(), CpuPolyester()] : Any[CpuSerial()]
+        for (kind, mutate!) in mutations, P in policies
 
             Ωₕ = _ke_mesh((7, 6), P; graded = false)
             W, V = gridspace(Ωₕ), gridspace(Ωₕ, Val(2))

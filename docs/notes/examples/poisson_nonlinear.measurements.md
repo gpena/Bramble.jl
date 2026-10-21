@@ -60,7 +60,7 @@ b_ns = @allocated run_nonlinearsolve()
 
 # A single machine, single process, `ntrials`-sample minimum of each, informative as a ratio
 # between the two methods measured together, not as an absolute number to compare against a
-# different run (bramble-benchmarks is the formal, commit-indexed baseline for that, and this
+# different run (bramble-verification §12 is the formal, commit-indexed baseline for that, and this
 # machine was on battery power when these numbers were taken, which a same-run ratio cancels
 # but an absolute number would not). `nonlinear_problem` came out both faster and lighter than
 # the hand-written Picard loop here -- 0.156 ms against 0.237 ms (0.66x), 321,232 B against

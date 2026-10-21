@@ -230,13 +230,13 @@ end
 # The form's function with the facet rule of stencil_eval.jl on the left argument of each
 # product, the matrix columns: on a composite constrained as a whole, a mixed difference
 # reads the ghosts of a facet with a relation reading several components by extrapolation
-# from the nodes inward (`_mark_mixed`). Decided by the space's type, which says whether
-# there is such a facet. Refused where such a facet has fewer than three nodes across it.
+# from the nodes inward (`_mark_mixed`). Decided by the space's facets, a value: without
+# such a facet the function is left as it is. Refused where such a facet has fewer than
+# three nodes across it.
 _with_facet_rule(::_GhostCompositeSpace, f) = f
-_with_facet_rule(::ConstrainedCompositeSpace{<:Any, <:Any, <:Any, <:Any, <:Any, <:Any,
-        false}, f) = f
 function _with_facet_rule(Wₕ::ConstrainedCompositeSpace, f)
     facets = Wₕ.facets
+    any(any, facets) || return f
     n = npoints(physical_mesh(mesh(first(Wₕ.space.spaces))), Tuple)
     for d in eachindex(n), t in 1:2
 
@@ -844,8 +844,7 @@ function constrained(Vₕ::_GhostCompositeSpace, relations)
     P = padded_space(Vₕ)
     comps = map(((C, _, poffset),) -> (mesh(C), poffset), _padded_leaves(Vₕ))
     rels = _composite_relations(map(first, comps), relations(trial_function(P)))
-    E, d = _composite_closure(P, comps, filter(!_is_dirichlet, rels),
-        filter(_is_dirichlet, rels))
+    E, d = _composite_closure(P, comps, _ghost_relations(rels), _dirichlet_relations(rels))
     T, be = eltype(P), backend(P)
     Ec = _closure_matrix(be, T, E)
     return ConstrainedCompositeSpace(Vₕ, P, Ec, _closure_data(be, T, d),
@@ -854,10 +853,11 @@ end
 
 # `facets[d][s]`: whether facet `(d, s)` has a ghost relation reading several components,
 # read off its operator (`_relation_component` is `0`), so `∂ₙ(u(1)) + 0.0 * u(2)` counts.
-function _multi_component_facets(rels, ::GhostMesh{D}) where {D}
-    several(d, s) = any(
-        r -> !_is_dirichlet(r) && r.d == d && r.s == s &&
-             _relation_component(r.op, d, s, r.name) == 0, rels)
+function _multi_component_facets(rels::Tuple, ::GhostMesh{D}) where {D}
+    keys = map(_ghost_relations(rels)) do r
+        return (r.d, r.s, _relation_component(r.op, r.d, r.s, r.name) == 0)
+    end
+    several(d, s) = (d, s, true) in keys
     return ntuple(d -> (several(d, 1), several(d, 2)), Val(D))
 end
 

@@ -230,6 +230,10 @@ const WITH_GPU_TESTS = get(ENV, "BRAMBLE_TEST_GPU", "false") == "true"
 const TRACE_TESTS = get(ENV, "CI", "false") == "true" ||
                     get(ENV, "BRAMBLE_TEST_TRACE", "0") == "1"
 
+# The trace also reports the JIT compile time spent inside each file, read from Julia's
+# process-wide counter (summed over threads), so the counter has to be on for the trace.
+TRACE_TESTS && Base.cumulative_compile_timing(true)
+
 # Turns the trace above into a budget: unset (the default) is today's behaviour, no check at
 # all. Set, `Sys.maxrss()` is the process peak (see the comment on `TRACE_TESTS`), so the
 # first file whose *end-of-file* peak crosses the budget is the one that fails -- not
@@ -260,28 +264,49 @@ end
 #
 # Format: `▸ path` before the file, then `✓ path  time  peak (+growth)` after it, with the
 # columns aligned and nested includes indented two spaces per level. The growth is how far
-# the process peak rose during this file, which is what tells files apart. `test/timing.jl`
-# parses these lines.
+# the process peak rose during this file, which is what tells files apart. The compile time
+# is the JIT time spent inside the file, nested files included, summed over threads.
+# `test/timing.jl` parses these lines.
 const TRACE_DEPTH = Ref(0)
+
+# The files being included, innermost last, each with the testset that was current when it
+# began: a testset recorded into that testset is a top-level testset of the file, whatever
+# wrapper testsets enclose the include. `test/timing.jl` reads it. Only kept while tracing.
+const INCLUDE_STACK = Tuple{String, Any}[]
+
+# `path` as `include` resolves it (against the including file's directory), shown relative to
+# the test directory, so `form/matrix_free.jl` and `ghost/matrix_free.jl` are told apart.
+function trace_path(path)
+    full = normpath(isabspath(path) ? path : joinpath(Base.source_dir(), path))
+    root = @__DIR__
+    return startswith(full, root * Base.Filesystem.path_separator) ? relpath(full, root) :
+           full
+end
 
 function traced_include(real_include::F, path) where {F}
     TRACE_TESTS || return real_include(Main, path)
     indent = "  "^TRACE_DEPTH[]
-    println("▸ ", indent, path)
+    rel = trace_path(path)
+    println("▸ ", indent, rel)
     flush(stdout)
     rss0_gb = Sys.maxrss() / 1024^3
+    compile0 = Base.cumulative_compile_time_ns()[1]
     t0 = time()
     TRACE_DEPTH[] += 1
+    push!(INCLUDE_STACK, (rel, Test.get_testset()))
     result = try
         real_include(Main, path)
     finally
+        pop!(INCLUDE_STACK)
         TRACE_DEPTH[] -= 1
     end
     elapsed = time() - t0
+    compile_s = (Base.cumulative_compile_time_ns()[1] - compile0) / 1e9
     maxrss_gb = Sys.maxrss() / 1024^3
     println(
-        "✓ ", rpad(indent * path, 52),
-        @sprintf("%8.2f s %6.2f GB (+%.2f)", elapsed, maxrss_gb, maxrss_gb - rss0_gb)
+        "✓ ", rpad(indent * rel, 52),
+        @sprintf("%8.2f s %6.2f GB (+%.2f) %7.2f s compile",
+            elapsed, maxrss_gb, maxrss_gb - rss0_gb, compile_s)
     )
     flush(stdout)
     # A named, failing `@test` beats a SIGKILL with no indication which file was running --

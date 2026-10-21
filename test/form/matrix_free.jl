@@ -265,7 +265,12 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
             push!(cases,
                 ("3D", form(W3, W3, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))), :boundary, (-1, 0)))
         end
+        # Unit keeps the cases that differ in the plan: the two-sided reach, the transposed pair,
+        # a composite, the interpolation and the two fallbacks. `wide`, `diffusion` and
+        # `pointwise` run under slow, their plans being the same as the kept ones'.
+        fused_unit = ("union", "pair", "composite pair", "no interior", "short axis", "test interpolation")
         for (name, a, dl, reach) in cases
+            WITH_SLOW_TESTS || name in fused_unit || continue
             @testset "$name" begin
                 op = _mf_op(a, dl)
                 opt = dl === nothing ? matrix_free_operator(a; policy = Parallel()) :
@@ -391,14 +396,27 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
                 mul!(y, op, x, 0.5, 2.0)
                 @test _mf_agree(y, 0.5 * (A * x) + 2.0 * y0)
                 name == "sum under product" || @test _mf_alloc5(y, op, x) == 0
-                opt = dl === nothing ? matrix_free_operator(a; policy = Parallel()) :
-                      matrix_free_operator(a; dirichlet = dl, policy = Parallel())
-                @test opt.plan isa Bramble._MFFusedPlan
-                same = name == "test interpolation" ? _mf_agree : (==)
-                yt = similar(ref)
-                @test all(1:20) do _
-                    mul!(yt, opt, x)
-                    return same(yt, ref)
+            end
+        end
+        # The fused threaded product of each case, as the serial one above. Unit keeps the 1D
+        # grid, whose bands cut its lines themselves; each other case's Parallel plan runs
+        # under slow.
+        @testset "gathered interior, fused threaded" begin
+            for (name, a, dl, _) in cases
+                WITH_SLOW_TESTS || name == "1D diffusion" || continue
+                @testset "$name" begin
+                    op = _mf_op(a, dl)
+                    x = randn(size(op, 2))
+                    ref = op * x
+                    opt = dl === nothing ? matrix_free_operator(a; policy = Parallel()) :
+                          matrix_free_operator(a; dirichlet = dl, policy = Parallel())
+                    @test opt.plan isa Bramble._MFFusedPlan
+                    same = name == "test interpolation" ? _mf_agree : (==)
+                    yt = similar(ref)
+                    @test all(1:20) do _
+                        mul!(yt, opt, x)
+                        return same(yt, ref)
+                    end
                 end
             end
         end

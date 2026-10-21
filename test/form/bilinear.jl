@@ -668,6 +668,7 @@ using Bramble:
         Ω1d = mesh(domain(interval(0.0, 1.0)), 11, true)
         Ω2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, true))
         for Ω in (Ω1d, Ω2d)
+            WITH_SLOW_TESTS || Ω === Ω1d || continue
             W = gridspace(Ω)
             a = form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(u, restrict_to(:boundary, v)))
             A = assemble(a)
@@ -695,6 +696,7 @@ using Bramble:
             @test nnz(A) == nnz(parts)
         end
         for k in 3:5
+            WITH_SLOW_TESTS || k == 3 || continue
             test_side = Tuple((u, v) -> innerₕ(u, restrict_to(s, v)) for s in labels[1:k])
             _check_split(test_side)
             _check_split(((u, v) -> innerₕ(u, v), test_side...))
@@ -1056,6 +1058,7 @@ using Bramble:
         # four pieces the product stays whole, as it was, since sixteen took the first
         # `assemble` 4.0 s against 0.51 s whole.
         for k in 3:4
+            WITH_SLOW_TESTS || k == 3 || continue
             labels_k = labels[1:k]
             f = (u, v) -> innerₕ(g * sum(R(s, u) for s in labels_k),
                 g * sum(R(s, v) for s in reverse(labels_k)))
@@ -1174,6 +1177,8 @@ using Bramble:
             return Matrix(A)
         end
         for T in (Float32, Float64), D in TEST_DIMS
+
+            WITH_SLOW_TESTS || (T === Float64 && D == 1) || continue
 
             Iv = interval(zero(T), one(T))
             Bramble._seed_mesh1d_rng!(20261017)
@@ -1322,6 +1327,8 @@ using Bramble:
         bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
         for T in (Float32, Float64), D in TEST_DIMS
 
+            WITH_SLOW_TESTS || (T === Float64 && D == 1) || continue
+
             Iv = interval(zero(T), one(T))
             Bramble._seed_mesh1d_rng!(20261017)
             W = try
@@ -1410,6 +1417,7 @@ using Bramble:
         # to a `BigFloat`), and a `BigFloat` grid function over a restricted sum is not
         # padded to one length (816576 B padded against 557808 B on 7x9).
         for T in (Float32, Float64)
+            WITH_SLOW_TESTS || T === Float64 || continue
             Iv = interval(zero(T), one(T))
             Random.seed!(20261017)
             W = gridspace(mesh(domain(Iv × Iv, :l => :left, :r => :right,
@@ -1475,6 +1483,7 @@ using Bramble:
         # pieces that box (0 -> 13824 B, kept whole now). The jump form assembles to a
         # zero matrix on these grids; its bytes are still pinned.
         for D in (1, 2)
+            WITH_SLOW_TESTS || D == 1 || continue
             Random.seed!(20261017)
             Iv = interval(0.0, 1.0)
             Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,

@@ -467,8 +467,75 @@ function stencil_offsets(op::_FacetExtrapolated{D}) where {D}
     end
     return sort!(out)
 end
-_stencil_margin(op::_FacetExtrapolated) = _stencil_margin(op.inner_op) + 3
+# Its margin is the function's: the reads by extrapolation, at a ghost, go inward to nodes,
+# and the walk widens its guarded margin on the marked facets alone (`_face_margins`).
+_stencil_margin(op::_FacetExtrapolated) = _stencil_margin(op.inner_op)
 expression(op::_FacetExtrapolated) = expression(op.inner_op)
+
+# --- The walk's interior: the term unmarked (#813) ------------------------------------ #
+#
+# The rule changes a read only at a ghost of a marked facet. The walk keeps its unguarded
+# interior `_stencil_margin(term) + 3` points in from each marked facet (`_face_margins`),
+# so no read there reaches such a ghost, and walks it with the term unmarked
+# (`_interior_term`): one stencil part where a marked function has three, and no
+# `_marked_ghost` test per read. The guarded shell walks the marked term. The recording
+# (`_coord_walk!`) and every replay (`_visit_stencil!`, `_SplitTerm`) split alike, so their
+# entries agree one for one.
+
+# Whether a term of type `T` holds a marked function where `_unmark` strips it, from the
+# type alone (as `_may_restrict`). A field of abstract type answers `false`: that term is
+# walked marked everywhere, which reads the same values.
+Base.@nospecializeinfer Base.@assume_effects :foldable function _has_marks(
+        @nospecialize(T))
+    T isa DataType || return false
+    T <: _FacetExtrapolated && return true
+    T <: UnaryWrapper && return _has_marks(fieldtype(T, :inner_op))
+    if T <: Union{BilinearProduct, OperatorAdd}
+        return _has_marks(fieldtype(T, :left_op)) || _has_marks(fieldtype(T, :right_op))
+    end
+    return false
+end
+
+# `op` for the walk's interior: unmarked, or `op` itself when it holds no mark.
+@inline _interior_term(op) = _has_marks(typeof(op)) ? _unmark(op) : op
+
+_unmark(op) = op
+_unmark(op::_FacetExtrapolated) = op.inner_op
+_unmark(op::UnaryWrapper) = _rewrap_inner(op, _interior_term(op.inner_op))
+# An interpolation reads its operand on another mesh, which this interior does not bound.
+_unmark(op::InterpolationNode) = op
+function _unmark(op::OperatorAdd{D}) where {D}
+    left, right = _interior_term(op.left_op), _interior_term(op.right_op)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+function _unmark(op::BilinearProduct{D, W}) where {D, W}
+    left, right = _interior_term(op.left_op), _interior_term(op.right_op)
+    return BilinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+end
+
+# The facets marked anywhere in `op`, joined into `acc` (`facets[d][t]` as in
+# `_FacetExtrapolated`).
+@inline _marked_facets(op, acc) = _has_marks(typeof(op)) ? _facets_of(op, acc) : acc
+_facets_of(op, acc) = acc
+_facets_of(op::_FacetExtrapolated, acc) = map(
+    (a, f) -> (a[1] | f[1], a[2] | f[2]), acc, op.facets)
+_facets_of(op::UnaryWrapper, acc) = _marked_facets(op.inner_op, acc)
+_facets_of(op::Union{OperatorAdd, BilinearProduct}, acc) = _marked_facets(
+    op.right_op, _marked_facets(op.left_op, acc))
+
+"""
+    _face_margins(term, ax::NTuple{D, AbstractUnitRange{Int}}) -> NTuple{D, NTuple{2, Int}}
+
+The walk's guarded margin on each face of the grid with axes `ax`, `(low, high)` per axis:
+[`_stencil_margin`](@ref)`(term)`, and 3 more on a facet a marked function of `term`
+extrapolates across, so the interior they leave reads no ghost of a marked facet and takes
+the term unmarked (`_interior_term`). Every face alike for a term with no mark.
+"""
+function _face_margins(term, ::NTuple{D, AbstractUnitRange{Int}}) where {D}
+    m = _stencil_margin(term)
+    facets = _marked_facets(term, ntuple(_ -> (false, false), Val(D)))
+    return map(f -> (m + 3 * f[1], m + 3 * f[2]), facets)
+end
 
 # `op` with the functions of every mixed difference marked for the facet rule on `facets`,
 # in the left argument of each product, through sums and wrappers. The left argument's

@@ -377,10 +377,11 @@ const KINDS = (:random, :graded)
         @test close(Matrix(A), Aref)
         @test close(F, Fref)
         @test norm(Matrix(A) - Aplain) > 1.0e-3 * norm(Aref)
-        # the order on graded meshes of 9, 17 and 33 points per axis: from 5 points per
-        # axis the slope of u₃ is still pre-asymptotic
+        # the order on graded meshes of 9 and 17 points per axis. The 33-point level costs
+        # ~280 s on one thread and is left out: measured, the slope of u₃ is 1.84 from 9 to
+        # 17 and 1.96 from 17 to 33 (u₁, u₂ above 1.98), and 1.68 from 5 to 17 points
         if kind === :graded
-            hs, errs = errors(UEX3, case, kind, 0:2; n0 = 9)
+            hs, errs = errors(UEX3, case, kind, 0:1; n0 = 9)
             for i in 1:3
                 @test lsq_order(hs, getindex.(errs, i)) > 1.8
             end

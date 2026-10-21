@@ -496,6 +496,7 @@ end
 
 # The operator of facet `(d, s)`, `s` 1 for the minimum and 2 for the maximum.
 @inline _facet_component(F::FacetOperator, d::Int, s::Int) = F.ops[d][s]
+@inline _facet_component(F::FacetOperator, ::Val{d}, ::Val{s}) where {d, s} = F.ops[d][s]
 
 @inline _reads_ghosts(::FacetOperator{D, G}) where {D, G} = G
 
@@ -555,9 +556,14 @@ end
 @inline _outward(op::LazyOp) = (-op, op)
 
 @inline _normal_flux(u::LazyOp, ::Nothing, d::Int) = Dc(u, Val(d))
+# The axes as `Val`s, so each term's difference has its axis as a type, summed by `+`,
+# which folds over terms of distinct types where `sum` would not infer.
 @inline function _normal_flux(u::LazyOp{D}, K::AbstractMatrix{<:Number}, d::Int) where {D}
-    return sum(ntuple(e -> K[d, e] * Dc(u, Val(e)), Val(D)))
+    return _add_terms(map(e -> K[d, _val_axis(e)] * Dc(u, e), ntuple(Val, Val(D))))
 end
+@inline _val_axis(::Val{e}) where {e} = e
+@inline _add_terms(t::Tuple{Any}) = only(t)
+@inline _add_terms(t::Tuple) = +(t...)
 
 @inline _check_conormal(::Nothing, ::Val{D}) where {D} = nothing
 @inline function _check_conormal(K::AbstractMatrix{<:Number}, ::Val{D}) where {D}
@@ -769,37 +775,67 @@ products pair the two on the same facet. `markers` is required, as for the plain
 every facet.
 """
 function inner_Γ(F::FacetOperator{D}, right::LazyOp{D}; markers = ()) where {D}
-    return _facet_terms(Val(_normal_mask(Val(D), markers)), Val(_reads_ghosts(F)), Val(D),
-        (d, s) -> F.ops[d][s], (d, s) -> right)
+    return _facet_inner(_normal_mask(Val(D), markers), F, right)
 end
 
 function inner_Γ(left::LazyOp{D}, F::FacetOperator{D}; markers = ()) where {D}
-    return _facet_terms(Val(_normal_mask(Val(D), markers)), Val(_reads_ghosts(F)), Val(D),
-        (d, s) -> left, (d, s) -> F.ops[d][s])
+    return _facet_inner(_normal_mask(Val(D), markers), left, F)
 end
 
 function inner_Γ(F::FacetOperator{D}, H::FacetOperator{D}; markers = ()) where {D}
-    G = _merge_reach(_reads_ghosts(F), _reads_ghosts(H))
-    return _facet_terms(Val(_normal_mask(Val(D), markers)), Val(G), Val(D),
-        (d, s) -> F.ops[d][s], (d, s) -> H.ops[d][s])
+    return _facet_inner(_normal_mask(Val(D), markers), F, H)
 end
 
 for S in (Function, Number, VectorElement)
     @eval function inner_Γ(g::$S, F::FacetOperator{D}; markers = ()) where {D}
-        return _facet_terms(Val(_normal_mask(Val(D), markers)), Val(_reads_ghosts(F)),
-            Val(D), (d, s) -> g, (d, s) -> F.ops[d][s])
+        return _facet_inner(_normal_mask(Val(D), markers), g, F)
     end
 end
 
-# One term per facet, `ntuple(Val(D))` over the axes so each weight is a type.
+# `inner_Γ` with the labels `MASK` of `markers` as a type: called with a constant `MASK`,
+# as `constrained` does for the facet it names, it infers where the keyword need not.
+@inline function _facet_inner(::Type{MASK}, F::FacetOperator{D},
+        right::LazyOp{D}) where {MASK, D}
+    return _facet_terms(MASK, Val(_reads_ghosts(F)), Val(D),
+        (d, s) -> _facet_component(F, d, s), (d, s) -> right)
+end
+@inline function _facet_inner(::Type{MASK}, left::LazyOp{D},
+        F::FacetOperator{D}) where {MASK, D}
+    return _facet_terms(MASK, Val(_reads_ghosts(F)), Val(D), (d, s) -> left,
+        (d, s) -> _facet_component(F, d, s))
+end
+@inline function _facet_inner(::Type{MASK}, F::FacetOperator{D},
+        H::FacetOperator{D}) where {MASK, D}
+    G = _merge_reach(_reads_ghosts(F), _reads_ghosts(H))
+    return _facet_terms(MASK, Val(G), Val(D), (d, s) -> _facet_component(F, d, s),
+        (d, s) -> _facet_component(H, d, s))
+end
+@inline function _facet_inner(::Type{MASK}, g::Union{Function, Number, VectorElement},
+        F::FacetOperator{D}) where {MASK, D}
+    return _facet_terms(MASK, Val(_reads_ghosts(F)), Val(D), (d, s) -> g,
+        (d, s) -> _facet_component(F, d, s))
+end
+
+# One term per facet, over the axes as `Val`s so each weight is a type.
 @inline function _facet_terms(
-        ::Val{MASK}, ::Val{G}, ::Val{D}, left::L, right::R) where {MASK, G, D, L, R}
-    return sum(
-        ntuple(Val(D)) do d
-        _normal_term(InnerGammaFacet{MASK, d, 1, G[d]}(), left(d, 1), right(d, 1)) +
-        _normal_term(InnerGammaFacet{MASK, d, 2, G[d]}(), left(d, 2), right(d, 2))
-    end
-    )
+        ::Type{MASK}, ::Val{G}, ::Val{D}, left::L, right::R) where {MASK, G, D, L, R}
+    return _add_terms(_facet_pairs(Val(MASK), Val(G), ntuple(Val, Val(D)), left, right))
+end
+
+# Unrolled without a closure, which would hold `MASK` as a value of an abstract type.
+@inline _facet_pairs(m::Val, g::Val, ::Tuple{}, left, right) = ()
+@inline function _facet_pairs(m::Val, g::Val, axes::Tuple, left::L, right::R) where {L, R}
+    return (_facet_pair(m, g, first(axes), left, right),
+        _facet_pairs(m, g, Base.tail(axes), left, right)...)
+end
+
+# The two facets of axis `d`, which `left` and `right` take as `Val`s, so each operand and
+# weight has its facet as a type.
+@inline function _facet_pair(::Val{MASK}, ::Val{G}, a::Val{d}, left::L,
+        right::R) where {MASK, G, d, L, R}
+    lo, hi = Val(1), Val(2)
+    return _normal_term(InnerGammaFacet{MASK, d, 1, G[d]}(), left(a, lo), right(a, lo)) +
+           _normal_term(InnerGammaFacet{MASK, d, 2, G[d]}(), left(a, hi), right(a, hi))
 end
 
 # A facet operator has a facet only inside `inner_Γ`.

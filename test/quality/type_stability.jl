@@ -187,6 +187,42 @@ end
         @test @inferred(_check_eoc(n -> (1.0 / n^2, 1.0 / n), [4, 8, 16])) isa Vector{Float64}
     end
 
+    # gpena/Bramble.jl#811. `constrained` builds one space type per call: the relations are
+    # a tuple of concrete types, and whether a datum depends on time is read off its type.
+    # The cases of the ghost precompile workload, and data in time.
+    @testset "Constrained ghost spaces" begin
+        W1 = gridspace(Ωₕ1; ghosts = :boundary)
+        W2 = gridspace(Ωₕ2; ghosts = :boundary)
+        K = [2.0 0.5; 0.5 1.0]
+        F4 = (:xmin, :xmax, :ymin, :ymax)
+        robin(u) = (:xmin => 2.0 * u + ∂ₙ(u) => 0.5, :xmax => ∂ₙ(u) => x -> x[1])
+        mixed(u) = (:xmin => u => 0.0, :xmin => ∂ₙ(u) => 1.0,
+            :xmax => 1.5 * u + ∂ₙₙ(u) => 1.0)
+        timed(u) = (:xmin => ∂ₙ(u) => (x, t) -> sin(t), :xmax => u + ∂ₙ(u) => 2.0)
+        @test @inferred(constrained(W1, robin)) isa Bramble.GhostGridSpace
+        @test @inferred(constrained(W1, mixed)) isa Bramble.GhostGridSpace
+        C = @inferred constrained(W1, timed)
+        @test Bramble._is_time_dependent(C)
+        @test @inferred(constrained(W2, u -> map(F -> F => 2.0 * u + ∂ₙ(u) => 0.5, F4))) isa
+              Bramble.GhostGridSpace
+        @test @inferred(constrained(W2,
+            u -> map(F -> F => 2.0 * u + ∂ₙ(u; K) => 1.0, F4))) isa Bramble.GhostGridSpace
+        # On a composite, whether a facet has a relation reading several components is a
+        # value of the space, not part of its type.
+        one_each(u) = (:xmin => ∂ₙ(u(1)) => 1.0, :xmax => ∂ₙ(u(1)) => 0.0,
+            :xmin => ∂ₙ(u(2)) => 0.0, :xmax => u(2) + ∂ₙ(u(2)) => 0.0)
+        @test @inferred(constrained(W1 × W1, one_each)) isa
+              Bramble.ConstrainedCompositeSpace
+        one_each2(u) = (one_each(u)..., :ymin => ∂ₙ(u(1)) => 0.0, :ymax => ∂ₙ(u(1)) => 0.0,
+            :ymin => ∂ₙ(u(2)) => 0.0, :ymax => ∂ₙ(u(2)) => 0.0)
+        @test @inferred(constrained(W2 × W2, one_each2)) isa
+              Bramble.ConstrainedCompositeSpace
+        traction(u) = map(F -> F => ∂ₙ(u(1); K) + ∂ₙ(u(2); K) => 0.0, F4)
+        sym(u) = (traction(u)..., map(F -> F => ∂ₙ(u(1); K) - ∂ₙ(u(2); K) => 0.0, F4)...)
+        T2 = @inferred constrained(W2 × W2, sym)
+        @test any(any, T2.facets)
+    end
+
     # gpena/Bramble.jl#549. The band sweeps pick one colour or two from `prod(strides)`, a
     # runtime value; a tuple of one or two ranges made that slot a Union. `@inferred` and
     # JET pass either way (the return type is concrete and the split is not dispatch), so
