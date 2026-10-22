@@ -190,6 +190,34 @@ On a facet of a composite constrained as a whole whose relations read several co
 the facet rule applies as well, and the assembled rows differ from the plain padded form's
 there (see the traction rule above).
 
+## Polygon spaces
+
+`polygon_spaces(Ωₕ, :P, g)` builds `(U, W)` as two `GhostGridSpace`s over the mesh itself.
+The degrees of freedom of `U` are the interior nodes of the polygon, the boundary nodes are
+fixed to `g`, and each exterior diagonal neighbour `p = k + (sx, sy)` of an interior node `k`
+takes the relation (3.2) of the paper, `u_p = u_{k+(sx,0)} + u_{k+(0,sy)} - u_k`. At a
+V-notch, an exterior node read by two interior nodes has two different (3.2) values and so no
+row of the extension. The reduction substitutes the value of each reading equation, per
+equation, as the paper does. `W` selects the interior nodes with no affine part.
+
+### Support on polygon spaces
+
+Each row is an operation and its status on `(U, W)`; the tests are in
+`test/ghost/polygon_spaces.jl`. "Throws" is an `ArgumentError`.
+
+| Operation | Status |
+|:----------|:-------|
+| `assemble(a, l)`, warm `assemble!` | supported; 0 B per warm call |
+| diffusion, mixed, convection, reaction and upwind terms | supported |
+| `matrix_free_operator` | supported; refuses a form that reads a V-notch conflict node |
+| contracting `a(u, v)` | supported; same refusal |
+| `semidiscretize` | throws; it needs one space as trial and test |
+| rank-one terms | throw |
+| composites (`U × U`) | forms throw |
+| `dirichlet =` | throws; `g` fixes the boundary |
+| `W` as trial space | supported only for forms that read no exterior node (`Δₕ` with `g = 0`); otherwise throws |
+| stencils reaching beyond the diagonal neighbours (`Dcₓ(Dcₓ(u))`) | throw |
+
 ## Operator matrices: stencil_matrix versus the Kronecker construction
 
 ### Adding a new operator family
