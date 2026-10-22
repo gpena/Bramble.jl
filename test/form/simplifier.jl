@@ -5,6 +5,7 @@ using Bramble
 using LinearAlgebra: Diagonal, issymmetric, isposdef
 using SparseArrays: nnz
 using Random: seed!
+using ForwardDiff: ForwardDiff
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 using Bramble:
                D₋ᵧ,
@@ -817,6 +818,46 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     # same matrix: this pass may change how a form is routed, never what it computes.
     @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v) + 2.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
           2.0 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))))
+end
+
+# The sign `-u` and `a - b` store (`_MinusOne`, src/ast/ast.jl) is decided by its type, so
+# `simplify_ast` folds it whatever the operator's values, and it acts as the `Int` `-1` it
+# replaced wherever a coefficient meets a number: constructors, `convert`, promotion, a
+# `ForwardDiff.Dual` beside it, and the two forms below differentiated through.
+_rt_negated(W) = form(W, W, (u, v) -> innerₕ(u, v) - innerₕ(D₋ₓ(u), v))
+
+@testset "the sign of minus acts as -1" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    u = trial_function(Wₕ)
+    M = (-u).scalar
+    @test M isa Bramble._MinusOne
+    @test (u - 2.0 * u).right_op.scalar isa Bramble._MinusOne
+    @test isconcretetype(only(Base.return_types(simplify_ast, (typeof(-u),))))
+    @test isconcretetype(only(Base.return_types(simplify_ast, (typeof(u - 2.0 * u),))))
+    @test _infers(_rt_negated, (typeof(Wₕ),))
+    @test simplify_ast(-(-u)) === u
+    @test string(M) == "-1"
+    @test (M + M, M - M, M * M, zero(M), one(M)) === (-2, 0, 1, 0, 1)
+    @test hash(M) == hash(-1) && M == -1
+
+    Dual = ForwardDiff.Dual{Nothing, Float64, 1}
+    for T in (Float32, Float64, BigFloat, Int, Int32, Rational{Int}, ComplexF64, Dual)
+        @test T(M) isa T && T(M) == -1
+        @test convert(T, M) isa T && convert(T, M) == -1
+        @test promote_type(typeof(M), T) === promote_type(Int, T)
+    end
+    @test M * ForwardDiff.Dual{Nothing}(2.0, 1.0) == ForwardDiff.Dual{Nothing}(-2.0, -1.0)
+
+    # d/ds of `s A - A` is `A`, and of `(s - 1) b` is `b`: their sums are the mass's.
+    A₁ = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
+    b₁ = assemble(form(Wₕ, v -> innerₕ(1.0, v)))
+    dA = ForwardDiff.derivative(
+        s -> sum(assemble(form(Wₕ, Wₕ, (u, v) -> s * innerₕ(u, v) - innerₕ(u, v)))), 1.0)
+    db = ForwardDiff.derivative(
+        s -> sum(assemble(form(Wₕ, v -> innerₕ(s, v) - innerₕ(1.0, v)))), 1.0)
+    @test dA ≈ sum(A₁)
+    @test db ≈ sum(b₁)
 end
 
 # The `same_mesh` rule of gpena/Bramble.jl#771 (`_same_mesh_stencil`,

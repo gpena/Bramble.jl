@@ -335,16 +335,26 @@ struct _MinusOne <: Integer end
 Base.show(io::IO, ::_MinusOne) = print(io, -1)
 Base.iszero(::_MinusOne) = false
 Base.isone(::_MinusOne) = false
-Base.:-(::_MinusOne) = 1
-Base.:*(::_MinusOne, ::_MinusOne) = 1
-Base.one(::Type{_MinusOne}) = 1
-Base.zero(::Type{_MinusOne}) = 0
+Base.zero(::Union{_MinusOne, Type{_MinusOne}}) = 0
+Base.one(::Union{_MinusOne, Type{_MinusOne}}) = 1
 Base.hash(::_MinusOne, h::UInt) = hash(-1, h)
+Base.:-(::_MinusOne) = 1
 Base.AbstractFloat(::_MinusOne) = -1.0
-Base.promote_rule(::Type{_MinusOne}, ::Type{T}) where {T <: Number} = promote_type(Int, T)
-function Base.convert(::Type{T}, ::_MinusOne) where {
-        T <: Union{AbstractFloat, Signed, Rational, Complex}}
-    return convert(T, -1)
+Base.widen(::Type{_MinusOne}) = widen(Int)
+# Two signs, which promotion leaves as they are, as two `Int`s `-1`.
+for f in (:+, :-, :*, :<, :<=, :div, :rem)
+    @eval Base.$f(::_MinusOne, ::_MinusOne) = $f(-1, -1)
+end
+# The constructors of Base's concrete number types; the generic ones (`Rational`,
+# `Complex`, `BigInt`, `BigFloat`, `Float16`) reach these through `convert` and `promote`.
+for T in (Float32, Float64, Base.BitInteger_types...)
+    @eval Base.$(nameof(T))(::_MinusOne) = $T(-1)
+end
+# Against Base's number families only, so a package's own rule against `Real` (a
+# `ForwardDiff.Dual`'s) is not ambiguous with it and reaches this one for its value type.
+function Base.promote_rule(::Type{_MinusOne},
+        ::Type{T}) where {T <: Union{AbstractFloat, Integer, Rational, Complex}}
+    return promote_type(Int, T)
 end
 
 @inline Base.:-(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = op1 + OperatorScale(
