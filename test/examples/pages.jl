@@ -28,6 +28,14 @@ using ..TestUtils: _run_example_page
         _run_example_page(:poisson_polygon)
     end
 
+    # The unit disk as a level set, on the closure path: its `#src` assertions pin the
+    # fitted second order in the max and H¹ₕ errors over four uniform grids, the boundary
+    # nodes on the circle to 1e-12, and a random-seed draw within a few times the uniform
+    # error.
+    @testset "Poisson on a disk" begin
+        _run_example_page(:poisson_circle)
+    end
+
     @testset "Convection-diffusion" begin
         _run_example_page(:convection_diffusion_linear)
     end
