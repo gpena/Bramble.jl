@@ -166,6 +166,7 @@ function svg_plot(o)
             "fill=\"currentColor\" text-anchor=\"end\" dy=\"-4\">slope 2</text>")
     end
     for (c, col) in zip(o, COLORS), (e, dashed) in ((c.e1, false), (c.emax, true))
+
         println(io, "  <polyline points=\"$(pts(c.h, e))\" fill=\"none\" stroke=\"$col\" ",
             "stroke-width=\"2\"", dashed ? " stroke-dasharray=\"6,3\"" : "", "/>")
         for (a, b) in zip(c.h, e)
@@ -220,5 +221,5 @@ if abspath(PROGRAM_FILE) == @__FILE__
     o = convergence_errors()
     write(joinpath(@__DIR__, "poisson_levelset_convergence.md"), page(o))
     @info "wrote poisson_levelset_convergence.md" slopes=[(c.name, slope(c.h, c.e1),
-        slope(c.h, c.emax)) for c in o]
+                                                              slope(c.h, c.emax)) for c in o]
 end
