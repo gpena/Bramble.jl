@@ -22,6 +22,12 @@ line with an oblique edge adds a line, until each crossing is a node. The number
 along an axis may therefore exceed `npts`. See [`mesh`](@ref) for the tolerances and the
 errors, and the [mesh internals page](../internals/mesh.md) for the closure.
 
+A domain with a level-set marker (`:D => levelset(φ)`) keeps its grid: the mesh has the
+`npts` points it was asked for. Its nodes are labelled `D` (`φ < 0`), `D_boundary` and
+`D_exterior`; a node is a boundary node when `φ = 0` there or when `φ = 0` crosses an
+incident grid edge within `√ε h` of it, with `h` the edge length. See the
+[mesh internals page](../internals/mesh.md).
+
 ## Points and spacings
 
 `host_points`, `host_spacings`, `forward_spacings`, `half_spacings`,

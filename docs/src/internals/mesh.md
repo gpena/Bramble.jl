@@ -22,6 +22,18 @@ The nodes are then marked by their signed distance `s` to the boundary: on it wh
 `|s| <= τ`, inside when `s < -τ`, outside when `s > τ`, with
 `τ = max(√ε hₘᵢₙ, 10³ ε L) + 4 ε M` and `M` the largest vertex coordinate magnitude.
 
+## Level-set markers
+
+A level-set marker adds no grid line: only polygon markers enter the closure, filtered from
+the domain's regions on the tuple's type, so a mesh of a level-set domain has exactly the
+grid its `npts` and uniformity flags give. Its nodes are marked from the values of `φ`. A
+node is a boundary node when `φ = 0` there, or when an incident grid edge whose end values
+have opposite signs has its crossing (a root found by bisection, not by interpolation)
+within `√ε h` of the node, `h` being the edge length and `ε` the epsilon of the points'
+type; this holds for nodes of either sign. Otherwise the node is inside when `φ < 0` and
+exterior when not. The labels are remembered as position labels, so `change_points!` with
+the domain's markers and `iterative_refinement!` derive them again.
+
 ## Ghost meshes
 
 A [`GhostMesh`](@ref) is a physical mesh together with one ghost point beyond each node of

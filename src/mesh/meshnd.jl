@@ -237,7 +237,7 @@ function _mesh(
     idxs = generate_indices(npts_with_collapsed)
 
     _submeshes = submeshes(Ω, npts_with_collapsed, unif, backend)
-    idxs = _close_grid!(_submeshes, regions(markers(Ω)), idxs)
+    idxs = _close_grid!(_submeshes, _polygon_markers(regions(markers(Ω))), idxs)
 
     mesh_markers = MeshMarkers()
     output_mesh = MeshnD(_set, mesh_markers, idxs, backend, _submeshes)
@@ -250,6 +250,13 @@ end
 # A domain without polygon markers keeps the submeshes it was given, so a plain mesh has the
 # points (and draws the random numbers) it always had.
 @inline _close_grid!(_, ::Tuple{}, idxs) = idxs
+
+# The polygon markers among `regs`, filtered on the tuple's type: a plain or polygon domain
+# compiles to what it did before, and a level-set marker adds no grid line.
+@inline _polygon_markers(::Tuple{}) = ()
+@inline _polygon_markers(t::Tuple) = (_only_polygon(first(t))..., _polygon_markers(Base.tail(t))...)
+@inline _only_polygon(m::_PolygonMarker) = (m,)
+@inline _only_polygon(_) = ()
 
 # A domain with polygon markers closes its grid lines (`_grid_closure`): each submesh takes
 # the closed lines, and the indices follow the new point counts.

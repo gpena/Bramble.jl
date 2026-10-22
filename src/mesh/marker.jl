@@ -426,27 +426,66 @@ and a far grid corner would widen τ around a small polygon and swallow its node
 """
     _set_markers_regions!(mesh_markers::MeshMarkers, regions, Ωₕ::AbstractMeshType) -> Nothing
 
-Mark the interior, boundary and exterior nodes of every polygon marker in `regions`.
+Mark the interior, boundary and exterior nodes of every polygon and level-set marker in `regions`.
 """
 function _set_markers_regions!(mesh_markers::MeshMarkers, regions, Ωₕ)
     isempty(regions) && return nothing
     pts = host_points(Ωₕ)
     linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
     for marker in regions
-        Li, Lb, Le = _polygon_labels(marker)
-        P = identifier(marker)
-        τ = _polygon_tolerance(P, pts)
-        inside, on, outside = mesh_markers[Li], mesh_markers[Lb], mesh_markers[Le]
-        @inbounds for idx in indices(Ωₕ)
-            k = linear_indices[idx]
-            s = signed_distance(P, _condition_point(pts, idx))
-            if abs(s) <= τ
-                on[k] = true
-            elseif s < 0
-                inside[k] = true
-            else
-                outside[k] = true
-            end
+        _set_region!(mesh_markers, marker, Ωₕ, pts, linear_indices)
+    end
+    return nothing
+end
+
+function _set_region!(mesh_markers, marker::_PolygonMarker, Ωₕ, pts, linear_indices)
+    Li, Lb, Le = _polygon_labels(marker)
+    P = identifier(marker)
+    τ = _polygon_tolerance(P, pts)
+    inside, on, outside = mesh_markers[Li], mesh_markers[Lb], mesh_markers[Le]
+    @inbounds for idx in indices(Ωₕ)
+        k = linear_indices[idx]
+        s = signed_distance(P, _condition_point(pts, idx))
+        if abs(s) <= τ
+            on[k] = true
+        elseif s < 0
+            inside[k] = true
+        else
+            outside[k] = true
+        end
+    end
+    return nothing
+end
+
+# A level-set node is on the boundary when φ = 0 there, or when the crossing of φ = 0 on an
+# incident grid edge, whose end values have opposite signs, lies within √ε h of it, h the
+# edge's length and ε the epsilon of the points' type. Otherwise the sign of φ decides.
+function _set_region!(mesh_markers, marker::_LevelSetMarker, Ωₕ, pts, linear_indices)
+    Li, Lb, Le = _polygon_labels(marker)
+    L = identifier(marker)
+    ε = max(eps(float(eltype(pts[1]))), eps(float(eltype(pts[2]))))
+    inside, on, outside = mesh_markers[Li], mesh_markers[Lb], mesh_markers[Le]
+    nx, ny = length(pts[1]), length(pts[2])
+    vals = [L((pts[1][i], pts[2][j])) for i in 1:nx, j in 1:ny]
+    @inbounds for idx in indices(Ωₕ)
+        k = linear_indices[idx]
+        i, j = Tuple(idx)
+        v = vals[i, j]
+        p = (pts[1][i], pts[2][j])
+        near = iszero(v)
+        for (a, c) in ((i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1))
+            near && break
+            (1 <= a <= nx && 1 <= c <= ny) || continue
+            v * vals[a, c] < 0 || continue
+            q = (pts[1][a], pts[2][c])
+            near = _crossing(L, p, q) <= sqrt(ε)
+        end
+        if near
+            on[k] = true
+        elseif v < 0
+            inside[k] = true
+        else
+            outside[k] = true
         end
     end
     return nothing
