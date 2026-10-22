@@ -1,0 +1,110 @@
+module MeshLevelSetClassTests
+
+using Test
+using LinearAlgebra
+using Bramble
+
+# `Bramble._levelset_class(φ, box)` sorts a curve φ = 0 into the closure path (the crossing
+# map T = σₕ∘σᵥ has finite order), the orbit path (T conjugate to an irrational rotation)
+# or a named `ArgumentError` (#834). Rotation numbers are checked against values derived here:
+# an ellipse is an affine image of the circle, so T is conjugate to the rotation by twice the
+# angle β between S e₁ and S e₂ (S the square root of the quadratic form): ρ ∈ {β/π, 1 − β/π}.
+
+# The ellipse ((u/a)² + (v/b)² = 1 in axes rotated by θ, centred at z) and its exact ρ pair.
+function ellipse(a, b, θ, z)
+    c, s = cos(θ), sin(θ)
+    φ = p -> ((c * (p[1] - z[1]) + s * (p[2] - z[2])) / a)^2 +
+             ((-s * (p[1] - z[1]) + c * (p[2] - z[2])) / b)^2 - 1
+    R = [c s; -s c]
+    S = sqrt(Symmetric(R' * Diagonal([1 / a^2, 1 / b^2]) * R))
+    β = acos(dot(S[:, 1], S[:, 2]) / (norm(S[:, 1]) * norm(S[:, 2])))
+    return φ, (β / π, 1 - β / π)
+end
+
+function egg(θ, k)
+    c, s = cos(θ), sin(θ)
+    return function (p)
+        x, y = p[1] - 0.1, p[2] + 0.05
+        u, v = c * x + s * y, -s * x + c * y
+        return u^2 + v^2 * (1 + k * u) / 0.36 - 1
+    end
+end
+
+const EB = ((-1.2, 1.3), (-1.25, 1.15))
+
+function message(φ, box)
+    try
+        Bramble._levelset_class(φ, box)
+    catch e
+        e isa ArgumentError && return sprint(showerror, e)
+        rethrow()
+    end
+    return ""
+end
+
+@testset "Level-set curve classification (#834)" begin
+    @testset "Symmetric curves take the closure path" begin
+        # One grid-aligned symmetry axis gives T² = id, so ρ = 1/2.
+        disk = p -> hypot(p[1], p[2]) - 1
+        @test Bramble._levelset_class(disk, ((-1.25, 1.25), (-1.25, 1.25))) == (path = :closure, ρ = 0.5)
+        φ, _ = ellipse(1.0, 0.6, 0.0, (0.2, -0.1))
+        @test Bramble._levelset_class(φ, ((-1.0, 1.4), (-0.9, 0.7))) == (path = :closure, ρ = 0.5)
+        @test Bramble._levelset_class(egg(0.0, 0.4), EB) == (path = :closure, ρ = 0.5)
+    end
+
+    @testset "Box element types are accepted" begin
+        disk = p -> hypot(p[1], p[2]) - 1
+        @test Bramble._levelset_class(disk, ((-2, 2), (-1.5f0, 1.5f0))) == (path = :closure, ρ = 0.5)
+    end
+
+    @testset "Rotated ellipses take the orbit path" begin
+        for (a, b, θ, z, box) in ((1.0, 0.6, π / 6, (0.0, 0.0), ((-1.25, 1.25), (-1.25, 1.25))),
+            (1.0, 0.5, deg2rad(50), (0.1, 0.2), ((-1.1, 1.3), (-1.0, 1.4))))
+            φ, ρs = ellipse(a, b, θ, z)
+            r = Bramble._levelset_class(φ, box)
+            @test r.path === :orbit
+            @test minimum(abs.(r.ρ .- ρs)) < 1e-12
+        end
+    end
+
+    @testset "A tilted egg takes the orbit path" begin
+        # Prototype value (architect report §2.3, weighted Birkhoff at 32000 steps).
+        r = Bramble._levelset_class(egg(deg2rad(35), 0.4), EB)
+        @test r.path === :orbit
+        @test abs(r.ρ - 0.35287719427212) < 1e-11
+    end
+
+    @testset "A star is not orthogonally convex" begin
+        star = p -> hypot(p[1], p[2]) - (0.6 + 0.2 * sin(5 * atan(p[2], p[1])))
+        m = message(star, ((-1.0, 1.0), (-1.0, 1.0)))
+        @test occursin(r"grid line [xy] = \S+ meets φ = 0 in [46] points", m)
+        @test occursin("orthogonally convex", m)
+    end
+
+    @testset "A tilted clover is phase-locked" begin
+        clover = p -> hypot(p[1], p[2]) - (1 + 0.15 * cos(4 * (atan(p[2], p[1]) - deg2rad(10))))
+        m = message(clover, ((-1.4, 1.4), (-1.4, 1.4)))
+        @test occursin("phase-locked at rotation number 1/2", m)
+        @test !occursin("nearly", m)
+    end
+
+    @testset "A nearly symmetric egg is nearly locked" begin
+        m = message(egg(deg2rad(0.2), 0.8), EB)
+        @test occursin("nearly phase-locked (rotation number ≈ 0.4999998", m)
+    end
+
+    @testset "A curved band is not star-shaped" begin
+        band = p -> ((p[2] - p[1]^3) / 0.075)^2 + p[1]^8 - 1
+        @test occursin("must be star-shaped", message(band, ((-1.3, 1.3), (-1.3, 1.3))))
+    end
+
+    @testset "Curves reaching the box throw" begin
+        disk = p -> hypot(p[1], p[2]) - 1
+        @test occursin("reaches the domain's bounding box", message(disk, ((-1.0, 1.0), (-1.5, 1.5))))
+        @test occursin("reaches the domain's bounding box", message(disk, ((-0.8, 1.5), (-1.5, 1.5))))
+        @test occursin("reaches the domain's bounding box", message(disk, ((-0.5, 0.5), (-0.5, 0.5))))
+        @test occursin("region φ < 0 is empty", message(p -> hypot(p[1], p[2]) + 1, ((-1.0, 1.0), (-1.0, 1.0))))
+    end
+end
+
+end # module
