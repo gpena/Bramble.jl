@@ -358,4 +358,21 @@ end
     end
 end
 
+@testset "Warm refill on polygon spaces" begin
+    V = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0), (4.0, 3.0),
+        (4.0, 5.0), (2.0, 5.0), (0.0, 3.0)]
+    Ω = domain(interval(0.0, 6.0) × interval(0.0, 5.0), :P => Bramble.polygon(V))
+    U, W = Bramble.polygon_spaces(mesh(Ω, (10, 9), (false, false)), :P, x -> 1.0)
+    mixed(w) = Dcₓ(Dcᵧ(w)) + Dcᵧ(Dcₓ(w))
+    a = form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.3 * mixed(w), v))
+    l = form(W, v -> innerₕ(x -> 1.0, v))
+    A, F = assemble(a, l)
+    A0, F0 = copy(A), copy(F)
+    fill!(nonzeros(A), 0)
+    fill!(F, 0)
+    @test alloc(() -> assemble!(A, F, a, l)) == 0
+    @test A == A0
+    @test F == F0
+end
+
 end

@@ -237,6 +237,7 @@ function _mesh(
     idxs = generate_indices(npts_with_collapsed)
 
     _submeshes = submeshes(Ω, npts_with_collapsed, unif, backend)
+    idxs = _close_grid!(_submeshes, regions(markers(Ω)), idxs)
 
     mesh_markers = MeshMarkers()
     output_mesh = MeshnD(_set, mesh_markers, idxs, backend, _submeshes)
@@ -244,6 +245,171 @@ function _mesh(
     set_markers!(output_mesh, markers(Ω); warn_marker_mismatch)
 
     return output_mesh
+end
+
+# A domain without polygon markers keeps the submeshes it was given, so a plain mesh has the
+# points (and draws the random numbers) it always had.
+@inline _close_grid!(_, ::Tuple{}, idxs) = idxs
+
+# A domain with polygon markers closes its grid lines (`_grid_closure`): each submesh takes
+# the closed lines, and the indices follow the new point counts.
+function _close_grid!(subs::NTuple{2, Mesh1D}, regs::Tuple{Any, Vararg}, idxs)
+    xs, ys = _grid_closure(map(identifier, regs), host_points(subs[1]), host_points(subs[2]))
+    _set_points!(subs[1], xs)
+    _set_points!(subs[2], ys)
+    return generate_indices((length(xs), length(ys)))
+end
+
+"""
+    _grid_closure(P, xs, ys) -> (Vector{T}, Vector{T})
+
+Close the grid lines `xs` and `ys` (sorted, end points included) over the polygon `P`, or a
+tuple of polygons, so that every crossing of a grid line with ``\\partial P`` is a grid node.
+`T` is the floating-point type of `xs` and `ys`; the vertices are converted to `T` first.
+
+The end points and the vertex coordinates are lines first, then the lines the closure
+computes: a grid line crossing an oblique edge adds the crossing's other coordinate as a
+line, until no line is new. The remaining entries of `xs` and `ys` are seeds. Lines closer
+than the merge tolerance ``\\max(10^{-10}, 64\\varepsilon) L`` (``L`` the polygons' extent,
+``\\varepsilon`` the larger epsilon of `T` and of the vertices' type, whose rounding a
+vertex carries) are one line. A seed that meets a vertex or end-point line, or whose lines
+meet those of a vertex or an earlier seed, within the tolerance but not exactly, is dropped
+and the closure restarts without it: the seed gives way, never the vertex or the line
+computed from it. Two lines that both come from the end points and vertices and lie within
+the tolerance are one line. Polygon detail finer than the tolerance is merged, as is
+rounding, since floating point cannot tell the two apart. Every vertex coordinate is a line,
+and every crossing is on a node, up to the merge tolerance.
+
+The oblique edges must share one slope magnitude, a necessary condition only: with equal
+slopes the closure may still grow without bound, or beyond the cap.
+
+# Throws
+
+  - `ArgumentError`: if the oblique edges do not share one slope magnitude, or if the
+    closure exceeds a number of lines proportional to the input (the polygon's grid
+    closure is unbounded or too fine for this grid).
+"""
+_grid_closure(P::Polygon, xs, ys) = _grid_closure((P,), xs, ys)
+
+function _grid_closure(Ps::Tuple, xs::AbstractVector, ys::AbstractVector)
+    T = float(promote_type(eltype(xs), eltype(ys)))
+    V = NTuple{2, T}[(T(v[1]), T(v[2])) for P in Ps for v in P.vertices]
+    E = _oblique_edges(T, Ps)
+    _check_closure_slopes(E)
+
+    L = max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V))
+    ε = T(max(eps(T), maximum(P -> eps(eltype(eltype(P.vertices))), Ps)))
+    tol = max(T(1e-10), 64 * ε) * L
+    sx, sy = sort!(T.(collect(xs))), sort!(T.(collect(ys)))
+    fixed = (T[sx[1]; sx[end]; first.(V)], T[sy[1]; sy[end]; last.(V)])
+    seeds = (sx[2:(end - 1)], sy[2:(end - 1)])
+    keep = trues(length(seeds[1]) + length(seeds[2]))
+    cap = 64 * (length(sx) + length(sy) + length(V)) + 1000
+
+    while true
+        lines, loser = _closure_pass(fixed, seeds, keep, E, tol, cap)
+        iszero(loser) && return lines
+        keep[loser] = false
+    end
+end
+
+# The oblique edges (neither horizontal nor vertical) of the polygons `Ps`, in type `T`.
+function _oblique_edges(::Type{T}, Ps::Tuple) where {T}
+    E = NTuple{4, T}[]
+    for P in Ps
+        W = P.vertices
+        n = length(W)
+        for k in 1:n
+            a, b = W[k], W[mod1(k + 1, n)]
+            ax, ay, bx, by = T(a[1]), T(a[2]), T(b[1]), T(b[2])
+            (ax == bx || ay == by) || push!(E, (ax, ay, bx, by))
+        end
+    end
+    return E
+end
+
+# Equal slope magnitudes are necessary for a fixpoint: the maps between crossings are then
+# translations and reflections, though their orbits may still be unbounded or very long
+# (the cap in `_closure_pass` catches those). Mixed magnitudes contract an orbit towards a
+# point instead, adding lines until the merge tolerance absorbs them.
+function _check_closure_slopes(E::Vector{NTuple{4, T}}) where {T}
+    isempty(E) && return nothing
+    s = [abs((e[4] - e[2]) / (e[3] - e[1])) for e in E]
+    all(m -> isapprox(m, s[1]; rtol = sqrt(eps(T))), s) && return nothing
+    throw(ArgumentError("Polygon grid closure: the oblique edges have slopes of magnitudes " *
+                        "$(unique(s)); every crossing of a grid line with the polygon " *
+                        "becomes a grid node only when all oblique edges share one slope " *
+                        "magnitude."))
+end
+
+# One closure from the fixed lines and the kept seeds. Returns the lines and 0, or, as soon
+# as a seed must give way, the lines so far and the index of that seed.
+function _closure_pass(fixed::NTuple{2, Vector{T}}, seeds::NTuple{2, Vector{T}}, keep::BitVector,
+        E::Vector{NTuple{4, T}}, tol::T, cap::Int) where {T}
+    pos = (T[], T[])
+    root = (Int[], Int[])
+    queue = Tuple{Int, T, Int}[]
+    for a in 1:2, c in fixed[a]
+
+        _closure_insert!(pos[a], root[a], queue, a, c, 0, tol)
+    end
+    k = 0
+    for a in 1:2, c in seeds[a]
+
+        k += 1
+        keep[k] || continue
+        loser = _closure_insert!(pos[a], root[a], queue, a, c, k, tol)
+        loser > 0 && return pos, loser
+    end
+
+    added = 0
+    q = 1
+    while q <= length(queue)
+        a, v, r = queue[q]
+        q += 1
+        b = 3 - a
+        for (ax, ay, bx, by) in E
+            # The edge as a map from coordinate `a` to coordinate `b`.
+            p₀, q₀, p₁, q₁ = a == 1 ? (ax, ay, bx, by) : (ay, ax, by, bx)
+            min(p₀, p₁) < v < max(p₀, p₁) || continue
+            c = q₀ + (q₁ - q₀) * (v - p₀) / (p₁ - p₀)
+            loser = _closure_insert!(pos[b], root[b], queue, b, c, r, tol)
+            loser > 0 && return pos, loser
+            if loser < 0
+                added += 1
+                added > cap && _throw_closure_cap(cap)
+            end
+        end
+    end
+    return pos, 0
+end
+
+@noinline _throw_closure_cap(cap) = throw(ArgumentError("Polygon grid closure: the " *
+                                                        "closure exceeded $cap added grid lines (a cap proportional to the input); the " *
+                                                        "polygon's grid closure is unbounded or too fine for this grid."))
+
+# Insert the line `c`, grown from root `r` (0 for an end point or a vertex, k for the k-th
+# seed), into the sorted lines `pos` of axis `a`. Returns -1 when it is new, 0 when it is
+# one already there (exactly equal, or from the same root, so two root-0 lines within `tol`
+# are one), and otherwise the seed that gives way: the seed root against root 0, the later
+# of two seeds.
+function _closure_insert!(
+        pos::Vector{T}, root::Vector{Int}, queue::Vector{Tuple{Int, T, Int}}, a::Int, c::T,
+        r::Int, tol::T) where {T}
+    i = searchsortedfirst(pos, c)
+    j = (i <= length(pos) && pos[i] - c <= tol) ? i : 0
+    if i > 1 && c - pos[i - 1] <= tol && (j == 0 || c - pos[i - 1] < pos[i] - c)
+        j = i - 1
+    end
+    if iszero(j)
+        insert!(pos, i, c)
+        insert!(root, i, r)
+        push!(queue, (a, c, r))
+        return -1
+    end
+    rj = root[j]
+    (pos[j] == c || rj == r) && return 0
+    return iszero(rj) ? r : iszero(r) ? rj : max(r, rj)
 end
 
 @inline eltype(::MeshnD{D, BT}) where {D, BT} = eltype(BT)

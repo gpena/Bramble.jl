@@ -16,6 +16,12 @@ MeshnD
 mesh
 ```
 
+A domain with polygon markers (`:P => polygon(V)`, see [Geometry](geometry.md)) gets a
+grid fitted to them: every vertex coordinate is a grid line, and every crossing of a grid
+line with an oblique edge adds a line, until each crossing is a node. The number of points
+along an axis may therefore exceed `npts`. See [`mesh`](@ref) for the tolerances and the
+errors, and the [mesh internals page](../internals/mesh.md) for the closure.
+
 ## Points and spacings
 
 `host_points`, `host_spacings`, `forward_spacings`, `half_spacings`,

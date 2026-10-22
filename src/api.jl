@@ -22,8 +22,10 @@ public PRECOMPILE_WORKLOAD
 # --- Domain & Geometry ---
 export box, interval, ×, ⋅, dim, boundary_symbols
 export domain, markers, labels
+export polygon
 
 public center, projection, point, topo_dim
+public signed_distance
 
 # --- Mesh ---
 export mesh, npoints, points, hₘₐₓ, iterative_refinement!
@@ -49,6 +51,7 @@ export norm, snorm₁ₕ, norm₁ₕ, normₕ, norminf
 
 public ScalarGridSpace, CompositeGridSpace, VectorGridSpace, VectorElement
 public lift, lift!, GhostGridSpace, GhostMesh
+public polygon_spaces
 public physical, ghost_values, ghost_kernel, neumann_compatibility
 public component_range, component_ranges, skew_symmetric
 public inner₊ₓ, inner₊ᵧ, inner₊₂

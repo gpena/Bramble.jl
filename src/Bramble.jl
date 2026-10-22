@@ -29,6 +29,7 @@ include("utils/backend_profile.jl")
 
 include("geometry/pretty_print.jl")
 include("geometry/set.jl")
+include("geometry/polygon.jl")
 include("geometry/marker.jl")
 include("geometry/domain.jl")
 
@@ -50,6 +51,7 @@ include("space/vector_gridspace.jl")
 include("space/vectorelement.jl")
 include("space/ghost_gridspace.jl")
 include("space/ghost_vector.jl")
+include("space/polygon_space.jl")
 
 include("operators/projection.jl")
 include("operators/restriction.jl")

@@ -162,6 +162,21 @@ end
         @test_opt target_modules = TM mul!(y, op, x)
     end
 
+    # The polygon path (#202): the closure in `mesh`, the masked spaces and the exact
+    # signed distance, in both precisions (a Float32 polygon once threw in the closure).
+    @testset "Polygon" begin
+        for T in (Float64, Float32)
+            V = [(T(0), T(2)), (T(2), T(0)), (T(4), T(0)), (T(6), T(2)), (T(6), T(3)),
+                (T(4), T(3)), (T(4), T(5)), (T(2), T(5)), (T(0), T(3))]
+            P = Bramble.polygon(V)
+            Ωp = domain(interval(T(0), T(6)) × interval(T(0), T(5)), :P => P)
+            @test_opt target_modules = TM mesh(Ωp, (10, 9), (false, false))
+            Ωₕp = mesh(Ωp, (10, 9), (false, false))
+            @test_opt target_modules = TM Bramble.polygon_spaces(Ωₕp, :P, x -> one(T))
+            @test_opt target_modules = TM Bramble.signed_distance(P, (T(3), T(2)))
+        end
+    end
+
     # Not among the eight testsets the CHECK names: it proves the harness above can fail.
     @testset "Oracle control" begin
         # Mechanics: JET's optimisation analysis reports a known runtime dispatch.

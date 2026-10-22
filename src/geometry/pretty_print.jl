@@ -103,7 +103,7 @@ Print each of `items` by calling `f(item)`, separating consecutive ones with `se
 
 Replaces seven hand-rolled variants of the same loop across the geometry and mesh
 renderers (gpena/Bramble.jl#47): `i < length(xs) && print(io, ", ")` in five places and a
-`first` flag in `print_marker_summary`, which had to guard three optional groups. `f` is
+`first` flag in `print_marker_summary`, which had to guard its optional groups. `f` is
 passed as a closure in the same style as `_each_marked` in `assembly/dirichlet_constraints.jl`,
 which measured at zero allocations, so the pattern costs nothing here.
 
@@ -173,18 +173,21 @@ function print_empty_message(pp::PrettyPrinter, message::String = "(none)")
 end
 
 """
-    print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int)
+    print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int, n_reg::Int = 0)
 
-Print categorized counts of symbols, tuples, and function condition markers without intermediate allocations.
+Print categorized counts of symbols, tuples, function condition markers and polygon markers
+without intermediate allocations.
 """
-function print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int)
-    total = n_sym + n_tup + n_cond
+function print_marker_summary(
+        pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int, n_reg::Int = 0
+)
+    total = n_sym + n_tup + n_cond + n_reg
     print_indent(pp)
     printstyled(pp.io, "$total marker$(total == 1 ? "" : "s")"; color = :yellow)
     print(pp.io, " (")
 
     # Only the non-empty groups.
-    groups = ((n_sym, "symbol"), (n_tup, "tuple"), (n_cond, "function"))
+    groups = ((n_sym, "symbol"), (n_tup, "tuple"), (n_cond, "function"), (n_reg, "polygon"))
     print_joined(pp, Iterators.filter(g -> first(g) > 0, groups)) do (n, name)
         return print(pp.io, "$n $name$(n == 1 ? "" : "s")")
     end

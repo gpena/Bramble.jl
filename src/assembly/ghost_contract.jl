@@ -15,7 +15,8 @@
 # only, so `l(v)` and `evaluate!` refuse a test space with `d ≠ 0` naming `assemble(a, l)`,
 # as `assemble!(b, l)` does, which is exact when both sides are one space. `a(u, v)` is the
 # contraction of `assemble(a)`, the linear part, whatever `d` is. `reaction(a, l, u)`
-# refuses: the plain rows it reads are the relations'.
+# refuses: the plain rows it reads are the relations'. So does `a(u, v)` on a polygon
+# form that reads a conflict node, whose substitution lives in the reduction map alone.
 
 """
     (a::GhostBilinearForm)(u, v) -> Number
@@ -30,11 +31,14 @@ does. The affine part `d`
 of the closures does not enter, as it does not enter `assemble(a)`.
 
 `u` and `v` are [`VectorElement`](@ref)s or plain vectors, of lengths `ndofs` of the trial
-and test spaces; a `DimensionMismatch` is thrown otherwise.
+and test spaces; a `DimensionMismatch` is thrown otherwise. On the spaces of
+`polygon_spaces`, a form that reads a node two interior nodes extend differently (a
+V-notch) throws an `ArgumentError`: only `assemble(a)` substitutes that node per equation.
 """
 function (a::_AnyGhostBilinearForm)(u, v)
     ud, vd = _mf_data(u), _mf_data(v)
     Wₕ, Vₕ = a.trial_space, a.test_space
+    _reads_conflict(a) && _throw_polygon_conflict("the contraction a(u, v)")
     (length(ud) == ndofs(Wₕ) && length(vd) == ndofs(Vₕ)) ||
         _throw_ghost_contraction_length(a, ud, vd)
     Base.require_one_based_indexing(ud, vd)

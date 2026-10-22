@@ -15,9 +15,26 @@
 # its reduced rows are its physical nodes in mesh order, and the physical nodes of each
 # facet (facet `(d, s)` at `2(d - 1) + s`), so that a warm `assemble!` with `dirichlet`, and
 # `dirichlet_bc!` and `symmetrize!` on the space, allocate nothing.
+#
+# A polygon space (polygon_space.jl) refuses `dirichlet`, and stores what the reduction
+# reads on it as a trial side (`_ghost_maps`): whether it is no test space, and three masks
+# over the padded points: the exterior nodes left without a value (`unclosed`, every one on
+# the test space), those the (3.2) extension gives (`extended`), and among these the
+# conflict nodes, substituted per reading equation (`conflict`). Every other space has
+# empty masks.
 struct _RowsDirichlet
     physical::Bool
     facets::Vector{BitVector}
+    polygon::Bool
+    trial_only::Bool
+    unclosed::BitVector
+    extended::BitVector
+    conflict::BitVector
+end
+
+function _RowsDirichlet(physical::Bool, facets::Vector{BitVector}, polygon::Bool = false)
+    return _RowsDirichlet(physical, facets, polygon, false, BitVector(), BitVector(),
+        BitVector())
 end
 
 """

@@ -57,6 +57,24 @@ include("precompile/solver_sessions.jl")
 include("precompile/parallel_sessions.jl")
 include("precompile/exporters_sessions.jl")
 
+# The polygon path: Figure 1's nine vertices meshed on a non-uniform grid, the
+# masked trial/test pair and a mixed form assembled. Defined here, not under `precompile/`.
+function _pc_polygon(::Type{T}) where {T}
+    V = [(T(0), T(2)), (T(2), T(0)), (T(4), T(0)), (T(6), T(2)), (T(6), T(3)),
+        (T(4), T(3)), (T(4), T(5)), (T(2), T(5)), (T(0), T(3))]
+    P = polygon(V)
+    signed_distance(P, (T(3), T(2)))
+    Ω = domain(interval(T(0), T(6)) × interval(T(0), T(5)), :P => P)
+    Ωₕ = mesh(Ω, (10, 9), (false, false))
+    U, W = polygon_spaces(Ωₕ, :P, x -> one(T))
+    mixed(w) = Dcₓ(Dcᵧ(w)) + Dcᵧ(Dcₓ(w))
+    a = form(U, W, (w, v) -> innerₕ(-one(T) * Δₕ(w) - T(0.3) * mixed(w), v))
+    l = form(W, v -> innerₕ(x -> one(T), v))
+    A, F = assemble(a, l)
+    assemble!(A, F, a, l)
+    return A, F
+end
+
 # --- Workload ------------------------------------------------------------ #
 
 if PRECOMPILE_WORKLOAD
@@ -243,6 +261,10 @@ if PRECOMPILE_WORKLOAD
             mesh(Ω4, (4, 4), (false, false))
             domain(S2, :dirichlet => (:left, :right), :neumann => (:top, :bottom))
             mesh(domain(S3, :clamped => :back), (3, 3, 3), (false, false, false))
+
+            # Polygon meshes, spaces and a mixed form (Figure 1), in both precisions.
+            _pc_polygon(Float64)
+            _pc_polygon(Float32)
 
             # The positional `mesh` methods with no `backend` keyword.
             mesh(domain(I1), 5)

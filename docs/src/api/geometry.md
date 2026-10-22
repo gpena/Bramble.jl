@@ -30,3 +30,17 @@ markers
 domain
 labels
 ```
+
+## Polygons
+
+`polygon(V)` is exported; `signed_distance` is `public` and not exported. A polygon is a
+marker value: `:P => polygon(V)` in a domain labels the nodes of a 2D mesh `:P` (interior),
+`:P_boundary` and `:P_exterior`. The vertices are validated with exact predicates: at least
+three, no zero-length edge, nonzero area, a simple boundary. A vertex in the middle of a
+straight edge is kept. See [Meshes](meshes.md) for the grid fitted to a polygon and
+[Grid spaces](spaces.md) for `polygon_spaces`.
+
+```@docs
+polygon
+Bramble.signed_distance
+```

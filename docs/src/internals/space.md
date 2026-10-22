@@ -7,10 +7,10 @@ CurrentModule = Bramble
 
 ## Ghost spaces
 
-`gridspace(Ωₕ; ghosts = :boundary)` (or `ghosts = (:xmin, :ymax)` for named facets) returns a
-[`GhostGridSpace`](@ref): a grid space whose degrees of freedom are the physical nodes of
-`Ωₕ` and the ghost values beyond the named facets. It holds a `ScalarGridSpace` on the
-padded mesh (a [`GhostMesh`](@ref), see [Mesh](mesh.md)), reached by `padded_space`, and a
+`gridspace(Ωₕ; ghosts = :boundary)` (or `ghosts = (:xmin, :ymax)` for named facets)
+returns a [`GhostGridSpace`](@ref): a grid space whose degrees of freedom are the physical
+nodes of `Ωₕ` and the ghost values beyond the named facets. It holds a `ScalarGridSpace` on
+the padded mesh (a [`GhostMesh`](@ref), see [Mesh](mesh.md)), reached by `padded_space`, and a
 closure `(E, d)`, reached by `closure`, with `u_pad = E u + d`. Every form on a ghost space
 is assembled on the padded space, with the engines, patterns and replays of a plain space,
 and reduced afterwards.
@@ -154,8 +154,8 @@ reduction and the load are grouped by destination entry: each band owns a set of
 entries and sums their contributions in the serial order, so `CpuSerial`, `CpuThreaded` and
 `CpuPolyester` all give the sums of the serial run, bitwise. The `!` calls, `lift!`, the
 pair `assemble!(A, F, a, l)` and `update_ghosts!` allocate nothing on `CpuSerial` and
-`CpuPolyester`; on `CpuThreaded` each band pass costs the task spawn of the plain space's own
-call and nothing that grows with the grid.
+`CpuPolyester`; on `CpuThreaded` each band pass costs the task spawn of the plain space's
+own call and nothing that grows with the grid.
 
 ### Support on ghost spaces
 
@@ -189,6 +189,33 @@ A mixed difference at a corner takes the corner rule on a composite as on a scal
 On a facet of a composite constrained as a whole whose relations read several components,
 the facet rule applies as well, and the assembled rows differ from the plain padded form's
 there (see the traction rule above).
+
+## Polygon spaces
+
+[`polygon_spaces`](@ref Bramble.polygon_spaces) builds `(U, W)` as two `GhostGridSpace`s
+over the mesh itself. Each exterior diagonal neighbour `p = k + (sx, sy)` of an interior
+node `k` takes the relation (3.2) of the paper, `u_p = u_{k+(sx,0)} + u_{k+(0,sy)} - u_k`.
+At a V-notch, an exterior node read by two interior nodes has two different values and so no
+row of the extension; the reduction substitutes the value of each reading equation, as the
+paper does.
+
+### Support on polygon spaces
+
+Each row is an operation and its status on `(U, W)`; the tests are in
+`test/ghost/polygon_spaces.jl`. "Throws" is an `ArgumentError`.
+
+| Operation | Status |
+|:----------|:-------|
+| `assemble(a, l)`, warm `assemble!` | supported; 0 B per warm call |
+| diffusion, mixed, convection, reaction and upwind terms | supported |
+| `matrix_free_operator` | supported; refuses a form that reads a V-notch conflict node |
+| contracting `a(u, v)` | supported; same refusal |
+| `semidiscretize` | throws; it needs one space as trial and test |
+| rank-one terms | throw |
+| composites (`U × U`) | forms throw |
+| `dirichlet =` | throws; `g` fixes the boundary |
+| `W` as trial space | supported only for forms that read no exterior node (`Δₕ` with `g = 0`); otherwise throws |
+| stencils reaching beyond the diagonal neighbours (`Dcₓ(Dcₓ(u))`) | throw |
 
 ## Operator matrices: stencil_matrix versus the Kronecker construction
 

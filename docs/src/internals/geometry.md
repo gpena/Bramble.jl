@@ -30,6 +30,18 @@ Public = false
 Pages = ["geometry/domain.jl"]
 ```
 
+## Polygons
+
+```@autodocs
+Modules = [Bramble]
+Public = false
+Pages = ["geometry/polygon.jl"]
+```
+
+The validation and the three labels of a polygon marker are in the
+[Geometry API page](../api/geometry.md#Polygons); the tolerance that classifies the nodes
+on a mesh is in the [mesh internals page](mesh.md).
+
 ## Pretty printing
 
 ```@autodocs

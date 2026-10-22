@@ -28,6 +28,19 @@ Return a [`Mesh1D`](@ref) or [`MeshnD`](@ref) (``D=2,3``) discretizing the [`Dom
 When passing a [`CartesianProduct`](@ref) `X` directly, `mesh` automatically constructs `domain(X)`, provisioning default `:boundary` and `:interior` geometric markers.
 Passing a single integer `npts::Int` constructs an isotropic grid with `npts` points along every coordinate axis.
 
+When `Ω` carries polygon markers (`:L => polygon(V)`), the grid is fitted to the polygons:
+the lines drawn from `npts` and `unif` are seeds, every vertex coordinate becomes a grid
+line up to the merge tolerance, and each crossing of a grid line with an oblique edge adds
+the crossing's other coordinate as a line, until every crossing is a grid node. The number
+of points along an axis may therefore exceed `npts`. Lines closer than the merge tolerance
+``\\max(10^{-10}, 64\\varepsilon) L`` are one line (``L`` the polygons' extent,
+``\\varepsilon`` the larger epsilon of the mesh's and the vertices' element types). A seed
+that close to a vertex or closure line is dropped, and polygon detail finer than the
+tolerance is merged, so every crossing is on a node up to the merge tolerance. `mesh` throws
+an `ArgumentError` when the oblique edges do not share one slope magnitude, or when the
+closure exceeds a number of lines proportional to the input. Equal slopes are necessary, not
+sufficient: the closure of some polygons grows without bound or beyond that cap.
+
 # Arguments
 
   - `Ω`: Continuous domain to discretize.
@@ -42,6 +55,13 @@ Passing a single integer `npts::Int` constructs an isotropic grid with `npts` po
   - `warn_marker_mismatch::Bool = true`: warn if `Ω` carries a custom `:boundary`/`:interior`
     marker that disagrees with this mesh's own geometric one. The custom marker is kept
     either way; set to `false` for a deliberate redefinition you don't want flagged.
+
+# Throws
+
+  - `ArgumentError`: on a domain with polygon markers, if the oblique edges do not share one
+    slope magnitude, or if the closure exceeds a number of lines proportional to the input.
+    Far from the origin the closure's rounding can exceed the merge tolerance, so a polygon
+    small relative to its offset may hit that cap.
 
 # Examples
 

@@ -99,3 +99,14 @@ Bramble.physical
 Bramble.ghost_values
 assemble!(::AbstractMatrix, ::AbstractVector, ::Bramble.GhostBilinearForm, ::Bramble.GhostLinearForm)
 ```
+
+## Polygon spaces
+
+`polygon_spaces(Ωₕ, :P, g)` returns the trial and test spaces `(U, W)` of the scheme of
+Ferreira and Grigorieff on a polygon marked `:P` of a 2D mesh. `public` and not exported:
+write `Bramble.polygon_spaces`. The support of each operation is in the
+[space internals page](../internals/space.md).
+
+```@docs
+Bramble.polygon_spaces
+```

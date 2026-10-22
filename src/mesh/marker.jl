@@ -115,7 +115,8 @@ Internal helper function to construct and initialize the [`MeshMarkers`](@ref) d
 
 Allocates `BitVector` storage initialized to `false` for every symbol, tuple, and condition
 label defined in `domain_markers`, a [`DomainMarkers`](@ref) or the `EvaluatedDomainMarkers`
-that `Ω(t)` of a time-dependent domain holds.
+that `Ω(t)` of a time-dependent domain holds, and for the three labels of each polygon
+marker.
 """
 function _init_mesh_markers(
         Ωₕ::AbstractMeshType, domain_markers::Union{DomainMarkers, EvaluatedDomainMarkers}
@@ -126,6 +127,9 @@ function _init_mesh_markers(
     process_label_for_mesh!(npts, markers_mesh, label_symbols(domain_markers))
     process_label_for_mesh!(npts, markers_mesh, label_tuples(domain_markers))
     process_label_for_mesh!(npts, markers_mesh, label_conditions(domain_markers))
+    for m in regions(domain_markers)
+        process_label_for_mesh!(npts, markers_mesh, _polygon_labels(m))
+    end
 
     return markers_mesh
 end
@@ -135,10 +139,13 @@ end
 
 Evaluate domain markers onto mesh points, creating `BitVector` indicators for each label.
 
-Supports three classes of domain markers:
+Supports four classes of domain markers:
   1. Symbol markers, the predefined boundary labels (`:left`, `:right`, etc.).
   2. Tuple markers, the unions of boundary symbols.
   3. Function markers, the level-set boolean predicates `x -> Bool`.
+  4. Polygon markers `:L => polygon(V)`, which split the nodes of a 2D mesh into `L`
+     (inside), `L_boundary` and `L_exterior` (outside); see [`markers`](@ref) for the
+     boundary tolerance.
 
 Also seeds the default geometric markers `:boundary` and `:interior` if not already defined.
 
@@ -175,13 +182,18 @@ function set_markers!(Ωₕ::AbstractMeshType, domain_markers; warn_marker_misma
     _set_markers_symbols!(mesh_markers, symbols(domain_markers), Ωₕ)
     _set_markers_symbols!(mesh_markers, tuples(domain_markers), Ωₕ)
     _set_markers_conditions!(mesh_markers, conditions(domain_markers), Ωₕ)
+    _set_markers_regions!(mesh_markers, regions(domain_markers), Ωₕ)
 
     # `:boundary`/`:interior` are reserved, always-available markers; see note above _ensure_geometric_markers!.
     _ensure_geometric_markers!(mesh_markers, Ωₕ; warn_marker_mismatch)
 
-    # The labels a predicate of position defines are remembered: moving the points leaves
-    # them stale, which `change_points!(Ωₕ, pts)` refuses rather than lets pass.
-    _store_markers!(Ωₕ, mesh_markers, Symbol[m.label for m in conditions(domain_markers)])
+    # The labels a predicate of position or a polygon defines are remembered: moving the
+    # points leaves them stale, which `change_points!(Ωₕ, pts)` refuses rather than lets pass.
+    position_labels = Symbol[m.label for m in conditions(domain_markers)]
+    for m in regions(domain_markers)
+        append!(position_labels, _polygon_labels(m))
+    end
+    _store_markers!(Ωₕ, mesh_markers, position_labels)
     return nothing
 end
 
@@ -391,4 +403,70 @@ function _set_markers_conditions!(mesh_markers::MeshMarkers, conditions, Ωₕ)
         __process_condition!(mesh_markers[label], identifier, Ωₕ)
     end
     return nothing
+end
+
+#=
+A polygon marker classifies each node by its signed distance s to the polygon's boundary:
+on the boundary when |s| <= τ, inside when s < -τ, outside when s > τ. The tolerance
+τ = max(√ε hₘᵢₙ, 10³ ε L) + 4 ε M follows the mesh spacing hₘᵢₙ, so a node a rounding error
+off an edge (a moved point, a refined grid) is still on it, and scales with the polygon's
+extent L. The 10³ ε L term keeps τ above the rounding of `signed_distance` itself when a
+sliver cell makes hₘᵢₙ tiny, where √ε hₘᵢₙ alone falls below it and boundary nodes are lost.
+
+ε is the larger machine epsilon of the points' and the vertices' types. A `Float32` node
+meant to sit on a `Float64` edge, or a `Float64` node on a `Float32` edge, is a `Float32`
+rounding off it, which a `Float64` ε would not cover. That rounding is up to ε |x| / 2 and
+grows with the coordinates, not with hₘᵢₙ or L: on [1000, 1001]² it reaches 3e-5 against
+10³ ε L ≈ 2.4e-5 for an extent of 0.2. The 4 ε M term, M the largest coordinate magnitude of
+the polygon's vertices, covers it; on that grid it is 5e-4, far below the spacing 0.01. M
+leaves out the grid: a node within τ of an edge has coordinates about the vertices' size,
+and a far grid corner would widen τ around a small polygon and swallow its nodes.
+=#
+
+"""
+    _set_markers_regions!(mesh_markers::MeshMarkers, regions, Ωₕ::AbstractMeshType) -> Nothing
+
+Mark the interior, boundary and exterior nodes of every polygon marker in `regions`.
+"""
+function _set_markers_regions!(mesh_markers::MeshMarkers, regions, Ωₕ)
+    isempty(regions) && return nothing
+    pts = host_points(Ωₕ)
+    linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
+    for marker in regions
+        Li, Lb, Le = _polygon_labels(marker)
+        P = identifier(marker)
+        τ = _polygon_tolerance(P, pts)
+        inside, on, outside = mesh_markers[Li], mesh_markers[Lb], mesh_markers[Le]
+        @inbounds for idx in indices(Ωₕ)
+            k = linear_indices[idx]
+            s = signed_distance(P, _condition_point(pts, idx))
+            if abs(s) <= τ
+                on[k] = true
+            elseif s < 0
+                inside[k] = true
+            else
+                outside[k] = true
+            end
+        end
+    end
+    return nothing
+end
+
+# The boundary tolerance of polygon `P` on a grid with axis points `pts`: see the note above.
+# An axis with a single point has no spacing; with none at all, hₘᵢₙ is the extent.
+function _polygon_tolerance(P::Polygon, pts::NTuple{2, AbstractVector})
+    T = float(promote_type(eltype(pts[1]), eltype(pts[2]), eltype(eltype(P.vertices))))
+    ε = T(max(eps(float(eltype(pts[1]))), eps(float(eltype(pts[2]))),
+        eps(float(eltype(eltype(P.vertices))))))
+    V = P.vertices
+    L = T(max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V)))
+    h = typemax(T)
+    for x in pts
+        for i in 2:length(x)
+            h = min(h, T(x[i] - x[i - 1]))
+        end
+    end
+    isinf(h) && (h = L)
+    M = T(maximum(v -> max(abs(v[1]), abs(v[2])), V))
+    return max(sqrt(ε) * h, 1000 * ε * L) + 4 * ε * M
 end
