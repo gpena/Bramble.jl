@@ -51,6 +51,7 @@ include("space/vector_gridspace.jl")
 include("space/vectorelement.jl")
 include("space/ghost_gridspace.jl")
 include("space/ghost_vector.jl")
+include("space/polygon_space.jl")
 
 include("operators/projection.jl")
 include("operators/restriction.jl")

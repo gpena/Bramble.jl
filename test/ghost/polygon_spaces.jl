@@ -1,0 +1,302 @@
+module GhostPolygonSpacesTests
+
+# `polygon_spaces(Ωₕ, :L, g)` (#202, #204): the trial and test spaces of the Ferreira and
+# Grigorieff scheme on a grid-fitted polygon. The trial closure keeps the interior nodes,
+# fixes the boundary nodes to `g` and extends each exterior diagonal neighbour of an
+# interior node by (3.2); the test closure selects the interior nodes. Solutions are exact
+# for separable-additive quadratics, for which (3.2) and the scheme are exact, and a
+# sign-flipped, zeroed or dropped (3.2), or the trial space as test space, breaks that.
+# The reduced system is also checked row by row against an oracle built on the plain
+# space's matrix: each tested row keeps its interior columns, moves its boundary columns to
+# the load through `g`, and replaces each exterior column by that row's own (3.2) row, so
+# a V-notch node (read by two interior nodes) is substituted per reading equation.
+
+using Test
+using Random
+using SparseArrays
+using LinearAlgebra: dot, mul!
+using Bramble
+import Bramble
+using Bramble: lift, polygon, polygon_spaces, Dcₓ, Dcᵧ
+
+# Figure 1 of the paper, its three oblique edges of slope ±1 apart; the V-notch, a reflex
+# vertex at (1, 2) between two oblique edges; an L without oblique edges.
+const FIG1 = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0), (4.0, 3.0),
+    (4.0, 5.0), (2.0, 5.0), (0.0, 3.0)]
+const VNOTCH = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 3.0), (1.0, 2.0),
+    (0.0, 1.0)]
+const LSHAPE = [(1.0, 1.0), (5.0, 1.0), (5.0, 3.0), (3.0, 3.0), (3.0, 5.0), (1.0, 5.0)]
+
+polygon_mesh(V, box, n, unif) = mesh(domain(box, :P => polygon(V)), n, unif)
+fig1_mesh(n, unif) = polygon_mesh(FIG1, interval(0.0, 6.0) × interval(0.0, 5.0), n, unif)
+vnotch_mesh(n, unif) = polygon_mesh(VNOTCH, interval(0.0, 4.0) × interval(0.0, 4.0), n,
+    unif)
+
+# Separable-additive (u_xy = 0), so (3.2) is exact, with −Δu = −4.
+uq(x) = x[1]^2 + x[2]^2 + x[1] + 2x[2]
+mixed(w) = Dcₓ(Dcᵧ(w)) + Dcᵧ(Dcₓ(w))
+
+labels(Ωₕ) = (Bramble.index_in_marker(Ωₕ, :P), Bramble.index_in_marker(Ωₕ, :P_boundary))
+
+# The reduced system from the plain space's matrix and load, sharing no closure code: rows
+# and columns of the interior nodes, the boundary columns times `g` to the load, and each
+# exterior column `p = i + (sx, sy)` of row `i` as `+1` on `i + (sx, 0)` and `i + (0, sy)`
+# and `−1` on `i`; any other exterior read is an error.
+function oracle(Ωₕ, f_a, f_l, g)
+    Wp = gridspace(Ωₕ)
+    Ap = Matrix(assemble(form(Wp, Wp, f_a)))
+    Fp = assemble(form(Wp, f_l))
+    I, Γ = labels(Ωₕ)
+    car = CartesianIndices(Bramble.npoints(Ωₕ, Tuple))
+    lin = LinearIndices(car)
+    gv = [Γ[k] ? g(Bramble.point(Ωₕ, car[k])) : 0.0 for k in eachindex(I)]
+    B = copy(Ap)
+    for i in findall(I), p in findall(.!(I .| Γ))
+
+        a = Ap[i, p]
+        iszero(a) && continue
+        sx, sy = Tuple(car[p] - car[i])
+        @assert abs(sx) == 1 && abs(sy) == 1
+        B[i, p] = 0
+        B[i, lin[car[i] + CartesianIndex(sx, 0)]] += a
+        B[i, lin[car[i] + CartesianIndex(0, sy)]] += a
+        B[i, i] -= a
+    end
+    return B[I, I], Fp[I] .- B[I, Γ] * gv[Γ]
+end
+
+@testset "Polygon spaces (#202, #204)" begin
+    @testset "Figure 1: exact for quadratics" begin
+        Random.seed!(2)
+        Ωₕ = fig1_mesh((10, 9), (false, false))
+        U, W = polygon_spaces(Ωₕ, :P, uq)
+        I, Γ = labels(Ωₕ)
+        f_a = (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.4 * mixed(w), v)
+        A, F = assemble(form(U, W, f_a), form(W, v -> innerₕ(x -> -4.0, v)))
+        @test size(A) == (count(I), count(I))
+        uh = lift(U, A \ F).data
+        ue = Rₕ(gridspace(Ωₕ), uq).data
+        @test maximum(abs, uh[I] .- ue[I]) < 1e-9
+        @test uh[Γ] == ue[Γ]
+        X = .!(I .| Γ)
+        @test count(!iszero, uh[X]) == count(U.rows.extended) > 0
+        @test uh[X .& .!U.rows.extended] == zeros(count(X .& .!U.rows.extended))
+        # The test side must be the interior selection: with the trial closure there, the
+        # extended rows join the interior ones.
+        @test_throws ArgumentError form(U, U, f_a)
+        @test_throws ArgumentError form(U, v -> innerₕ(x -> -4.0, v))
+    end
+
+    @testset "rows match the plain-matrix oracle" begin
+        Random.seed!(5)
+        for (Ωₕ, f_a) in (
+            (fig1_mesh((9, 8), (false, false)), (w, v) -> innerₕ(-1.0 * Δₕ(w) - mixed(w), v)),
+            (vnotch_mesh((5, 5), (true, true)), (w, v) -> innerₕ(-1.0 * mixed(w), v)))
+            g(x) = 1 + x[1] - 2x[2] + x[1] * x[2]
+            f_l = v -> innerₕ(x -> sin(x[1]) + x[2], v)
+            U, W = polygon_spaces(Ωₕ, :P, g)
+            A, F = assemble(form(U, W, f_a), form(W, f_l))
+            Ao, Fo = oracle(Ωₕ, f_a, f_l, g)
+            @test maximum(abs, Matrix(A) .- Ao) < 1e-12 * maximum(abs, Ao)
+            @test maximum(abs, F .- Fo) < 1e-12 * maximum(abs, Fo)
+        end
+    end
+
+    @testset "DOF k is the k-th interior node" begin
+        Random.seed!(3)
+        Ωₕ = fig1_mesh((8, 7), (false, false))
+        U, W = polygon_spaces(Ωₕ, :P, x -> 0.0)
+        I, _ = labels(Ωₕ)
+        keep = findall(I)
+        for k in (1, 7, length(keep))
+            e = zeros(length(keep))
+            e[k] = 1.0
+            @test findall(!iszero, lift(U, e).data[I]) == [k]
+            @test lift(U, e).data[keep[k]] == 1.0
+            @test lift(W, e).data == (1:length(I) .== keep[k])
+        end
+    end
+
+    @testset "(3.2) at every extended node" begin
+        Random.seed!(4)
+        Ωₕ = fig1_mesh((9, 9), (false, false))
+        U, _ = polygon_spaces(Ωₕ, :P, uq)
+        I, Γ = labels(Ωₕ)
+        ue = Rₕ(gridspace(Ωₕ), uq).data
+        z = rand(Xoshiro(1), count(I))
+        uz = lift(U, z).data
+        car = CartesianIndices(Bramble.npoints(Ωₕ, Tuple))
+        lin = LinearIndices(car)
+        uI = zeros(length(I))
+        uI[I] .= z
+        n = 0
+        for p in findall(U.rows.extended .& .!U.rows.conflict)
+            readers = [lin[car[p] + CartesianIndex(sx, sy)]
+                       for sx in (-1, 1), sy in (-1, 1)
+                       if checkbounds(Bool, car, car[p] + CartesianIndex(sx, sy)) &&
+                I[lin[car[p] + CartesianIndex(sx, sy)]]]
+            @test length(readers) == 1
+            k = readers[1]
+            s = Tuple(car[p] - car[k])
+            c1, c2 = lin[car[k] + CartesianIndex(s[1], 0)], lin[car[k] + CartesianIndex(0, s[2])]
+            @test Γ[c1] && Γ[c2]
+            @test uz[p] ≈ ue[c1] + ue[c2] - uI[k]
+            n += 1
+        end
+        @test n == count(U.rows.extended) > 0
+    end
+
+    @testset "innerₕ weight is the dual-cell area" begin
+        Random.seed!(6)
+        Ωₕ = fig1_mesh((9, 8), (false, false))
+        U, W = polygon_spaces(Ωₕ, :P, uq)
+        I, _ = labels(Ωₕ)
+        n = Bramble.npoints(Ωₕ, Tuple)
+        xs = [Bramble.point(Ωₕ, (i, 1))[1] for i in 1:n[1]]
+        ys = [Bramble.point(Ωₕ, (1, j))[2] for j in 1:n[2]]
+        area = [(xs[i + 1] - xs[i - 1]) * (ys[j + 1] - ys[j - 1]) / 4
+                for i in 2:(n[1] - 1), j in 2:(n[2] - 1)]
+        full = zeros(n)
+        full[2:(end - 1), 2:(end - 1)] .= area
+        F = assemble(form(W, v -> innerₕ(x -> 1.0, v)))
+        @test F ≈ vec(full)[I] rtol = 1e-14
+    end
+
+    @testset "no oblique edge: nothing extended" begin
+        Random.seed!(7)
+        Ωₕ = polygon_mesh(LSHAPE, interval(0.0, 6.0) × interval(0.0, 6.0), (9, 9),
+            (false, false))
+        U, W = polygon_spaces(Ωₕ, :P, uq)
+        I, Γ = labels(Ωₕ)
+        @test !any(U.rows.extended)
+        A, F = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v)),
+            form(W, v -> innerₕ(x -> -4.0, v)))
+        uh = lift(U, A \ F).data
+        @test maximum(abs, uh[I] .- Rₕ(gridspace(Ωₕ), uq).data[I]) < 1e-10
+        @test all(iszero, uh[.!(I .| Γ)])
+    end
+
+    @testset "V-notch: per-reader (3.2) rows" begin
+        Ωₕ = vnotch_mesh((5, 5), (true, true))
+        g(x) = x[1]^2 + x[2]^2
+        U, W = polygon_spaces(Ωₕ, :P, g)
+        I, _ = labels(Ωₕ)
+        @test findall(U.rows.conflict) == [LinearIndices((5, 5))[1, 3]]
+        ue = Rₕ(gridspace(Ωₕ), g).data[I]
+        l = form(W, v -> innerₕ(x -> -4.0, v))
+        A, F = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v)), l)
+        @test maximum(abs, A \ F .- ue) < 1e-12
+        # Reader rows by hand: interior nodes 1 = (1, 1) and 6 = (1, 3) both read (0, 2).
+        U0, W0 = polygon_spaces(Ωₕ, :P, x -> 0.0)
+        AM, _ = assemble(form(U0, W0, (w, v) -> innerₕ(mixed(w), v)),
+            form(W0, v -> innerₕ(x -> 0.0, v)))
+        @test AM[1, 1] ≈ 0.5 && AM[6, 6] ≈ -0.5
+        @test AM[1, 4] ≈ 0.5 && AM[6, 4] ≈ -0.5
+        @test AM[6, 1] == 0 && AM[1, 6] == 0
+        AX, FX = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.5 * mixed(w), v)), l)
+        @test maximum(abs, AX \ FX .- ue) < 1e-12
+    end
+
+    @testset "V-notch: variable b, random grid" begin
+        Random.seed!(11)
+        Ωₕ = vnotch_mesh((7, 6), (false, false))
+        U, W = polygon_spaces(Ωₕ, :P, uq)
+        I, _ = labels(Ωₕ)
+        @test count(U.rows.conflict) > 0
+        bₕ = Rₕ(Bramble.padded_space(U), x -> 0.3 + 0.1 * x[1] * x[2])
+        f_a = (w, v) -> innerₕ(-1.0 * Δₕ(w) - Dcₓ(bₕ * Dcᵧ(w)) - Dcᵧ(bₕ * Dcₓ(w)), v)
+        # The oracle's coefficient lives on the plain space, with the same values.
+        bp = Rₕ(gridspace(Ωₕ), x -> 0.3 + 0.1 * x[1] * x[2])
+        f_p = (w, v) -> innerₕ(-1.0 * Δₕ(w) - Dcₓ(bp * Dcᵧ(w)) - Dcᵧ(bp * Dcₓ(w)), v)
+        f_l = v -> innerₕ(x -> -4.0 + x[1], v)
+        A, F = assemble(form(U, W, f_a), form(W, f_l))
+        Ao, Fo = oracle(Ωₕ, f_p, f_l, uq)
+        @test maximum(abs, Matrix(A) .- Ao) < 1e-12 * maximum(abs, Ao)
+        @test maximum(abs, F .- Fo) < 1e-12 * maximum(abs, Fo)
+        # Constant b: exact for the separable quadratic.
+        A2, F2 = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.5 * mixed(w), v)),
+            form(W, v -> innerₕ(x -> -4.0, v)))
+        @test maximum(abs, A2 \ F2 .- Rₕ(gridspace(Ωₕ), uq).data[I]) < 1e-10
+    end
+
+    @testset "warm assemble! allocates nothing" begin
+        Random.seed!(12)
+        Ωₕ = vnotch_mesh((7, 6), (false, false))
+        U, W = polygon_spaces(Ωₕ, :P, uq)
+        a = form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.5 * mixed(w), v))
+        l = form(W, v -> innerₕ(x -> -4.0, v))
+        A, F = assemble(a, l)
+        assemble!(A, F, a, l)
+        @test (@allocated assemble!(A, F, a, l)) == 0
+    end
+
+    @testset "refusals" begin
+        Random.seed!(2)
+        Ω = domain(interval(0.0, 6.0) × interval(0.0, 5.0), :P => polygon(FIG1))
+        Ωₕ = mesh(Ω, (10, 9), (false, false))
+        U, W = polygon_spaces(Ωₕ, :P, uq)
+        l = form(W, v -> innerₕ(x -> -4.0, v))
+        # Dcₓ(Dcₓ(u)) reads two nodes along x, beyond the scheme's stencil.
+        @test_throws ArgumentError form(U, W, (w, v) -> innerₕ(Dcₓ(Dcₓ(w)), v))
+        @test_throws ArgumentError assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v)),
+            l; dirichlet = (:P_boundary => uq,))
+        @test_throws ArgumentError form(U, W,
+            (w, v) -> innerₕ(w, v) + 2.0 * innerₕ(x -> 1.0, w) * innerₕ(x -> 1.0, v))
+        # A grid line the closure would not give: y = 1.3 crosses the oblique edges off
+        # the nodes.
+        Mf = mesh(Ω, (7, 6), (true, true))
+        yf = collect(0.0:5.0)
+        yf[2] = 1.3
+        Bramble.change_points!(Mf, markers(Ω), (collect(0.0:6.0), yf))
+        @test_throws ArgumentError polygon_spaces(Mf, :P, uq)
+        M1 = polygon_mesh([(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0)],
+            interval(0.0, 3.0) × interval(0.0, 3.0), (4, 4), (true, true))
+        @test_throws ArgumentError polygon_spaces(M1, :P, uq)
+        @test_throws ArgumentError polygon_spaces(Ωₕ, :Q, uq)
+    end
+
+    @testset "vertex within the merge tolerance" begin
+        # The closure merges the line x = 1 into x = 1 + δ, so the vertex (1, 3) is off its
+        # node by δ: the grid still fits, while the probe's y = 1.3 above does not.
+        δ = 2.0e-10
+        V = [(0.0, 0.0), (3.0, 0.0), (3.0, 1.0), (1 + δ, 1.0), (1 + δ, 2.0), (2.0, 3.0),
+            (1.0, 3.0), (0.0, 2.0)]
+        Ωₕ = polygon_mesh(V, interval(0.0, 3.0) × interval(0.0, 3.0), (7, 7), (true, true))
+        U, W = polygon_spaces(Ωₕ, :P, uq)
+        @test Bramble.ndofs(U) > 0
+        I, _ = labels(Ωₕ)
+        A, F = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.5 * mixed(w), v)),
+            form(W, v -> innerₕ(x -> -4.0, v)))
+        @test maximum(abs, A \ F .- Rₕ(gridspace(Ωₕ), uq).data[I]) < 1e-8
+    end
+
+    @testset "matrix-free, contract, semidiscretize" begin
+        rng = Xoshiro(13)
+        Random.seed!(2)
+        Ωₕ = fig1_mesh((10, 9), (false, false))
+        U, W = polygon_spaces(Ωₕ, :P, uq)
+        @test !any(U.rows.conflict)
+        a = form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.4 * mixed(w), v))
+        l = form(W, v -> innerₕ(x -> -4.0, v))
+        A = assemble(a)
+        x, y = rand(rng, size(A, 2)), rand(rng, size(A, 1))
+        z = similar(y)
+        mul!(z, Bramble.matrix_free_operator(a), x)
+        @test z ≈ A * x
+        @test a(x, y) ≈ dot(y, A * x)
+        @test_throws ArgumentError semidiscretize(a, l)
+
+        # On the V-notch the matrix-free product would miss the substitution of the conflict
+        # node a mixed form reads; a form that does not read it applies.
+        UN, WN = polygon_spaces(vnotch_mesh((5, 5), (true, true)), :P, x -> 0.0)
+        am = form(UN, WN, (w, v) -> innerₕ(mixed(w), v))
+        @test_throws ArgumentError Bramble.matrix_free_operator(am)
+        ap = form(UN, WN, (w, v) -> innerₕ(-1.0 * Δₕ(w), v))
+        xn = rand(rng, Bramble.ndofs(UN))
+        zn = zeros(Bramble.ndofs(WN))
+        mul!(zn, Bramble.matrix_free_operator(ap), xn)
+        @test zn ≈ assemble(ap) * xn
+    end
+end
+
+end # module

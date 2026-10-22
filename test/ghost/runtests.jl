@@ -19,4 +19,5 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("grid_functions.jl")
     include("preconditioners.jl")
     include("dirac.jl")
+    include("polygon_spaces.jl")
 end

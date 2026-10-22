@@ -125,9 +125,13 @@ const _GhostSide = Union{GhostGridSpace, _CompositeClosure}
 
 # Row replacement on a form's spaces: the rows of each space are its physical nodes, and the
 # facet masks are those of the test space's physical mesh (`_RowsDirichlet`, in
-# ghost_gridspace.jl).
+# ghost_gridspace.jl). A form on a polygon space is a polygon form, and it keeps the
+# conflict nodes of its trial space, the last of `spaces`, which the matrix-free operator
+# refuses.
 function _RowsDirichlet(spaces::GhostGridSpace...)
-    return _RowsDirichlet(all(W -> W.rows.physical, spaces), first(spaces).rows.facets)
+    return _RowsDirichlet(all(W -> W.rows.physical, spaces), first(spaces).rows.facets,
+        any(W -> W.rows.polygon, spaces), false, BitVector(), BitVector(),
+        last(spaces).rows.conflict)
 end
 
 """
@@ -239,13 +243,17 @@ end
 # --- Construction -------------------------------------------------------------------- #
 
 function form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, f)
+    Vₕ.rows.trial_only && _throw_polygon_trial_as_test()
     _check_ghost_host(Wₕ)
     _check_ghost_host(Vₕ)
     _check_same_ghosts(Wₕ, Vₕ)
     a = form(padded_space(Wₕ), padded_space(Vₕ), f)
     # A rank-one term makes `a` a `RankOneForm`, whose parts are reduced one by one; behind
     # an inference barrier as in `form`, so a form without one still infers.
-    a isa RankOneForm && return Base.inferencebarrier(_ghost_rank_one_form)(Wₕ, Vₕ, a)  # rank_one.jl
+    if a isa RankOneForm
+        (Wₕ.rows.polygon || Vₕ.rows.polygon) && _throw_polygon_rank_one()
+        return Base.inferencebarrier(_ghost_rank_one_form)(Wₕ, Vₕ, a)  # rank_one.jl
+    end
     return _ghost_bilinear_form(Wₕ, Vₕ, a)
 end
 
@@ -262,13 +270,83 @@ end
 function _ghost_maps(Wₕ::_GhostSide, Vₕ::_GhostSide, a::BilinearForm)
     _check_ghost_eltype(_matrix_eltype(a, a.ast))
     A_pad = allocate_system_matrix(a)::SparseMatrixCSC  # `_check_ghost_host`
+    moves = _exterior_moves(Wₕ, Vₕ, A_pad)
     src, dst, coef, colptr, rowval = _ghost_reduction_map(
-        backend(Vₕ), A_pad, Vₕ.E, Wₕ.E)
-    liftptr, liftsrc, liftcol = _ghost_lift_map(backend(Vₕ), A_pad, _affine_support(Wₕ))
+        backend(Vₕ), A_pad, Vₕ.E, Wₕ.E, moves)
+    liftptr, liftsrc, liftcol = _ghost_lift_map(backend(Vₕ), A_pad, _affine_support(Wₕ),
+        moves)
     return (A_pad, src, dst, coef, colptr, rowval, liftptr, liftsrc, liftcol)
 end
 
+# The moves of the entries of `A_pad` at conflict columns, `(k, j, s)`: stored entry `k`, at
+# a tested row `i` and a conflict column, enters the reduction as `s` times an entry at
+# column `j` (polygon_space.jl). There are none on a space without a polygon trial side.
+const _Moves = Tuple{Vector{Int}, Vector{Int}, Vector{Int}}
+_exterior_moves(::_GhostSide, ::_GhostSide, ::SparseMatrixCSC) = (Int[], Int[], Int[])
+
+# The reach guard and the moves on a polygon trial space. A tested row (one `E_v` reads)
+# may read an exterior node only at a diagonal neighbour that the (3.2) extension gives:
+# an entry at an unclosed node, or at an extended one off the diagonals, is a stencil wider
+# than the scheme's, and throws. An entry `a` of row `i` at a conflict node `i + (sx, sy)`
+# moves onto the reader's own (3.2) row: `+a` at `i + (sx, 0)` and `i + (0, sy)`, the two
+# Γ corners, and `−a` at `i`.
+function _exterior_moves(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, A_pad::SparseMatrixCSC)
+    rows = Wₕ.rows
+    moves = (Int[], Int[], Int[])
+    rows.polygon && rows.trial_only || return moves
+    un, ext, cf = rows.unclosed, rows.extended, rows.conflict
+    cp = SparseArrays.getcolptr(Vₕ.Et)
+    car = CartesianIndices(npoints(mesh(Wₕ), Tuple))
+    lin = LinearIndices(car)
+    rv = rowvals(A_pad)
+    for j in axes(A_pad, 2)
+        (un[j] || ext[j]) || continue
+        for k in nzrange(A_pad, j)
+            i = rv[k]
+            cp[i + 1] > cp[i] || continue          # a row no test function reads
+            un[j] && _throw_polygon_reach(car[i], car[j])
+            sx, sy = Tuple(car[j] - car[i])
+            abs(sx) == 1 && abs(sy) == 1 || _throw_polygon_reach(car[i], car[j])
+            cf[j] || continue
+            I = car[i]
+            for (q, s) in ((lin[I[1] + sx, I[2]], 1), (lin[I[1], I[2] + sy], 1), (i, -1))
+                (un[q] || ext[q]) && _throw_polygon_reach(car[i], car[j])
+                push!(moves[1], k), push!(moves[2], q), push!(moves[3], s)
+            end
+        end
+    end
+    return moves
+end
+
+@noinline function _throw_polygon_reach(I::CartesianIndex, J::CartesianIndex)
+    throw(
+        ArgumentError(
+        "the form reads, in the equation of the interior node $(Tuple(I)), the exterior " *
+        "node $(Tuple(J)), which is not a diagonal neighbour the polygon closure extends " *
+        "by (3.2): its stencil reaches beyond the scheme's. Forms on polygon spaces read " *
+        "the 5-point neighbours and the four diagonal ones, as Δₕ, Dcₓ(Dcᵧ(u)) and " *
+        "first differences do.",
+    ),
+    )
+end
+
+@noinline function _throw_polygon_trial_as_test()
+    throw(
+        ArgumentError(
+        "the trial space of polygon_spaces is not a test space: its closure extends " *
+        "the exterior nodes, and the equations are those of the interior nodes alone. " *
+        "Pass the test space polygon_spaces returns, `U, V = polygon_spaces(...)`, " *
+        "form(U, V, f) and form(V, f).",
+    ),
+    )
+end
+
+@noinline function _throw_polygon_rank_one()
+    throw(ArgumentError("forms on polygon spaces do not support rank-one terms yet."))
+end
+
 function form(Vₕ::GhostGridSpace, f)
+    Vₕ.rows.trial_only && _throw_polygon_trial_as_test()
     _check_ghost_host(Vₕ)
     return _ghost_linear_form(Vₕ, form(padded_space(Vₕ), f))
 end
@@ -359,23 +437,30 @@ end
 # promoted type. The map is built on the host and stored in the backend's vector type.
 # The contributions are then grouped by reduced entry, in the order the walk met them (a
 # stable sort), and `dst` is the pointer over the groups, so a band owns whole entries.
+# Each move `(k, j, s)` (`_exterior_moves`) adds the contributions of stored entry `k` as
+# if it sat, times `s`, at column `j` of its row.
 function _ghost_reduction_map(be, A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
-        Eu::SparseMatrixCSC)
+        Eu::SparseMatrixCSC, moves::_Moves = (Int[], Int[], Int[]))
     Evt = sparse(transpose(Ev))
     Eut = sparse(transpose(Eu))
     src, rs, cs = Int[], Int[], Int[]
     coef = promote_type(eltype(Ev), eltype(Eu))[]
     rv, ev, eu = rowvals(A_pad), nonzeros(Evt), nonzeros(Eut)
-    for j in axes(A_pad, 2), k in nzrange(A_pad, j)
-
-        i = rv[k]
+    function contribute!(k, i, j, s)
         for p in nzrange(Evt, i), q in nzrange(Eut, j)
 
             push!(src, k)
             push!(rs, rowvals(Evt)[p])
             push!(cs, rowvals(Eut)[q])
-            push!(coef, ev[p] * eu[q])
+            push!(coef, s * ev[p] * eu[q])
         end
+    end
+    for j in axes(A_pad, 2), k in nzrange(A_pad, j)
+
+        contribute!(k, rv[k], j, true)
+    end
+    for (k, j, s) in zip(moves...)
+        contribute!(k, rv[k], j, s)
     end
     S = sparse(rs, cs, trues(length(rs)), size(Ev, 2), size(Eu, 2), |)
     srv = rowvals(S)
@@ -403,8 +488,11 @@ end
 
 # `A_pad d` by padded row, over the columns `j` where `d[j]` can be nonzero only (`support`,
 # `_affine_support`): the stored position of each term and its column, in column order
-# within a row, as `A_pad * d` adds them.
-function _ghost_lift_map(be, A_pad::SparseMatrixCSC, support::AbstractVector{Bool})
+# within a row, as `A_pad * d` adds them. A move `(k, j, 1)` adds stored entry `k` at
+# column `j` after them; a move `(k, j, -1)` lands on its reader, a degree of freedom,
+# where `d` is 0.
+function _ghost_lift_map(be, A_pad::SparseMatrixCSC, support::AbstractVector{Bool},
+        moves::_Moves = (Int[], Int[], Int[]))
     rv = rowvals(A_pad)
     rows, src, cols = Int[], Int[], Int[]
     for j in axes(A_pad, 2)
@@ -414,6 +502,12 @@ function _ghost_lift_map(be, A_pad::SparseMatrixCSC, support::AbstractVector{Boo
             push!(src, k)
             push!(cols, j)
         end
+    end
+    for (k, j, s) in zip(moves...)
+        (s == 1 && support[j]) || continue
+        push!(rows, rv[k])
+        push!(src, k)
+        push!(cols, j)
     end
     p = sortperm(rows)                  # stable
     return map(v -> copyto!(_backend_vector(be, eltype(v), length(v)), v),
@@ -538,13 +632,42 @@ end
     return rows.facets[2(d - 1) + s]
 end
 
-_check_rows(a::GhostBilinearForm, labels) = _check_rows(a.rows, (a.test_space, a.trial_space),
-    labels)
+# Without `dirichlet_components`, the call of `matrix_free_operator`, which applies
+# `E_vᵀ A_pad E_u` and so refuses a form that reads a conflict node of its trial space in
+# a tested row: the substitution per reading equation lives in the reduction map alone.
+function _check_rows(a::GhostBilinearForm, labels)
+    _reads_conflict(a) && _throw_polygon_matrix_free()
+    return _check_rows(a.rows, (a.test_space, a.trial_space), labels)
+end
+
+function _reads_conflict(a::GhostBilinearForm)
+    cf = a.rows.conflict
+    any(cf) || return false
+    cp, rv = SparseArrays.getcolptr(a.test_space.Et), rowvals(a.A_pad)
+    for j in findall(cf), k in nzrange(a.A_pad, j)
+
+        cp[rv[k] + 1] > cp[rv[k]] && return true
+    end
+    return false
+end
 _check_rows(l::GhostLinearForm, labels) = _check_rows(l.rows, (l.test_space,), labels)
 # With the `dirichlet_components` of the call: a scalar space validates them with its rows
 # (`_form_rows!`), a composite one reads them here (ghost_composite.jl).
-_check_rows(a::Union{GhostBilinearForm, GhostLinearForm}, labels, components) = _check_rows(
-    a, labels)
+_check_rows(a::GhostBilinearForm, labels, components) = _check_rows(
+    a.rows, (a.test_space, a.trial_space), labels)
+_check_rows(l::GhostLinearForm, labels, components) = _check_rows(l, labels)
+
+@noinline function _throw_polygon_matrix_free()
+    throw(
+        ArgumentError(
+        "the matrix-free operator applies E_vᵀ A_pad E_u, and this form reads a conflict " *
+        "node of its polygon trial space (an exterior node two interior nodes extend by " *
+        "different (3.2) rows), which only the assembled reduction substitutes per " *
+        "equation. " *
+        "Assemble the matrix with assemble(a).",
+    ),
+    )
+end
 @inline _check_rows(::_RowsDirichlet, ::Tuple, ::Nothing) = nothing
 @inline function _check_rows(rows::_RowsDirichlet, spaces::Tuple, labels::Tuple)
     isempty(labels) || rows.physical || _throw_rows_dirichlet(spaces, labels)
@@ -554,6 +677,13 @@ end
 # Why the rows are not the physical nodes: a label's node fixed by `u => g` (the label
 # given both ways), another node fixed by `u => g`, or ghosts left unknown.
 @noinline function _throw_rows_dirichlet(spaces::Tuple, labels::Tuple)
+    any(W -> W.rows.polygon, spaces) && throw(
+        ArgumentError(
+        "`dirichlet` replaces rows of the physical nodes, and the rows of a polygon space " *
+        "are its interior nodes: polygon_spaces(Ωₕ, :L, g) already fixes the polygon's " *
+        "boundary nodes to g. Drop `dirichlet`.",
+    ),
+    )
     Wₕ = first(spaces)
     for W in spaces                 # the first whose rows are not its physical nodes
         W.rows.physical || (Wₕ = W; break)
