@@ -80,6 +80,19 @@ end
 # exterior nodes.
 @inline _polygon_labels(L::Symbol) = (L, Symbol(L, :_boundary), Symbol(L, :_exterior))
 
+# A polygon marker `:L => P`. Its three mesh labels are built once, here, so that reading
+# them (`labels`, `set_markers!`) allocates nothing.
+struct _PolygonMarker{T}
+    label::Symbol
+    identifier::Polygon{T}
+    labels::NTuple{3, Symbol}
+end
+_PolygonMarker(L::Symbol, P::Polygon) = _PolygonMarker(L, P, _polygon_labels(L))
+
+@inline label(m::_PolygonMarker) = m.label
+@inline identifier(m::_PolygonMarker) = m.identifier
+@inline _polygon_labels(m::_PolygonMarker) = m.labels
+
 """
     symbols(domain_markers::DomainMarkers) -> Tuple
 
@@ -120,8 +133,8 @@ Construct a [`DomainMarkers`](@ref) collection from `label => identifier` pairs.
   inside the polygon, on its boundary and outside it. A node is on the boundary when its
   distance to the boundary is at most
   ``\\max(\\sqrt{\\varepsilon} h_{\\min}, 10^3 \\varepsilon L)``, with ``h_{\\min}`` the
-  smallest mesh spacing, ``L`` the polygon's extent and ``\\varepsilon`` the machine
-  epsilon of the mesh's points.
+  smallest mesh spacing, ``L`` the polygon's extent and ``\\varepsilon`` the larger machine
+  epsilon of the mesh's points and the polygon's vertices.
 
 # Throws
 - `ArgumentError`: if an identifier is of any other kind (for example a `String`, a `Dict`
@@ -323,7 +336,7 @@ end
 function _create_generic_markers(pairs::Pair...)
     symbols, tuples = _extract_identifier_markers(pairs)
     conditions = _pairs_to_tuple_conditions(pairs)
-    regions = map(p -> Marker(p.first, p.second), filter(p -> p.second isa Polygon, pairs))
+    regions = map(p -> _PolygonMarker(p.first, p.second), filter(p -> p.second isa Polygon, pairs))
 
     return DomainMarkers(symbols, tuples, conditions, regions)
 end
@@ -522,8 +535,8 @@ Return a tuple of the `Symbol` label of every marker in `markers`, a [`DomainMar
 an [`EvaluatedDomainMarkers`](@ref) or an [`EvaluatedParametricDomainMarkers`](@ref).
 
 Concatenates the per-category labels of `symbols`, `tuples`, and `conditions`, then the
-three labels of each polygon marker, as a single compile-time-unrolled tuple build, so with
-no polygon markers this allocates 0 bytes. For the labels of one
+three labels of each polygon marker (built with the marker), as a single
+compile-time-unrolled tuple build, so this allocates 0 bytes. For the labels of one
 category alone, [`label_symbols`](@ref), [`label_tuples`](@ref), or
 [`label_conditions`](@ref) are equally zero-allocation.
 """
@@ -536,7 +549,7 @@ category alone, [`label_symbols`](@ref), [`label_tuples`](@ref), or
 
 @inline _region_mesh_labels(::Tuple{}) = ()
 @inline function _region_mesh_labels(rs::Tuple)
-    return (_polygon_labels(label(first(rs)))..., _region_mesh_labels(Base.tail(rs))...)
+    return (_polygon_labels(first(rs))..., _region_mesh_labels(Base.tail(rs))...)
 end
 
 @inline labels(markers::_MarkerCollection) = label_identifiers(markers)
@@ -568,11 +581,13 @@ function Base.show(io::IO, m::Marker{F}) where {F}
     elseif F <: Set{Symbol}
         syms = join(m.identifier, ", ")
         print(io, "Marker(:$(m.label) => ($syms))")
-    elseif F <: Polygon
-        print(io, "Marker(:$(m.label) => <polygon>)")
     else
         print(io, "Marker(:$(m.label) => <function>)")
     end
+end
+
+function Base.show(io::IO, m::_PolygonMarker)
+    print(io, "Marker(:$(m.label) => <polygon>)")
 end
 
 function Base.show(io::IO, dm::DomainMarkers)

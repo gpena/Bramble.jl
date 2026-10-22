@@ -128,7 +128,7 @@ function _init_mesh_markers(
     process_label_for_mesh!(npts, markers_mesh, label_tuples(domain_markers))
     process_label_for_mesh!(npts, markers_mesh, label_conditions(domain_markers))
     for m in regions(domain_markers)
-        process_label_for_mesh!(npts, markers_mesh, _polygon_labels(label(m)))
+        process_label_for_mesh!(npts, markers_mesh, _polygon_labels(m))
     end
 
     return markers_mesh
@@ -191,7 +191,7 @@ function set_markers!(Ωₕ::AbstractMeshType, domain_markers; warn_marker_misma
     # points leaves them stale, which `change_points!(Ωₕ, pts)` refuses rather than lets pass.
     position_labels = Symbol[m.label for m in conditions(domain_markers)]
     for m in regions(domain_markers)
-        append!(position_labels, _polygon_labels(label(m)))
+        append!(position_labels, _polygon_labels(m))
     end
     _store_markers!(Ωₕ, mesh_markers, position_labels)
     return nothing
@@ -411,7 +411,11 @@ on the boundary when |s| <= τ, inside when s < -τ, outside when s > τ. The to
 τ = max(√ε hₘᵢₙ, 10³ ε L) follows the mesh spacing hₘᵢₙ, so a node a rounding error off an
 edge (a moved point, a refined grid) is still on it, and scales with the polygon's extent L.
 The second term keeps τ above the rounding of `signed_distance` itself when a sliver cell
-makes hₘᵢₙ tiny: √ε hₘᵢₙ alone then falls below it and boundary nodes are lost.
+makes hₘᵢₙ tiny, where √ε hₘᵢₙ alone falls below it and boundary nodes are lost.
+
+ε is the larger machine epsilon of the points' and the vertices' types. A `Float32` node
+meant to sit on a `Float64` edge, or a `Float64` node on a `Float32` edge, is a `Float32`
+rounding off it, which a `Float64` ε would not cover.
 =#
 
 """
@@ -424,7 +428,7 @@ function _set_markers_regions!(mesh_markers::MeshMarkers, regions, Ωₕ)
     pts = host_points(Ωₕ)
     linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
     for marker in regions
-        Li, Lb, Le = _polygon_labels(label(marker))
+        Li, Lb, Le = _polygon_labels(marker)
         P = identifier(marker)
         τ = _polygon_tolerance(P, pts)
         inside, on, outside = mesh_markers[Li], mesh_markers[Lb], mesh_markers[Le]
@@ -447,6 +451,8 @@ end
 # An axis with a single point has no spacing; with none at all, hₘᵢₙ is the extent.
 function _polygon_tolerance(P::Polygon, pts::NTuple{2, AbstractVector})
     T = float(promote_type(eltype(pts[1]), eltype(pts[2]), eltype(eltype(P.vertices))))
+    ε = T(max(eps(float(eltype(pts[1]))), eps(float(eltype(pts[2]))),
+        eps(float(eltype(eltype(P.vertices))))))
     V = P.vertices
     L = T(max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V)))
     h = typemax(T)
@@ -456,5 +462,5 @@ function _polygon_tolerance(P::Polygon, pts::NTuple{2, AbstractVector})
         end
     end
     isinf(h) && (h = L)
-    return max(sqrt(eps(T)) * h, 1000 * eps(T) * L)
+    return max(sqrt(ε) * h, 1000 * ε * L)
 end

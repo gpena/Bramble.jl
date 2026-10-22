@@ -57,12 +57,13 @@ Zero-allocation; see [`label_identifiers`](@ref).
 """
     marker_identifiers(Ω::Domain) -> Tuple
 
-Return a tuple of the identifying symbols, symbol sets, or predicate functions of all
-markers in domain `Ω`.
+Return a tuple of the identifying symbols, symbol sets, predicate functions or polygons of
+all markers in domain `Ω`.
 
 The tuple lists the identifiers of [`symbols`](@ref), then [`tuples`](@ref), then
-[`conditions`](@ref). It is built as a compile-time-unrolled tuple, like
-[`label_identifiers`](@ref), so its type is concrete even when the three kinds are mixed.
+[`conditions`](@ref), then the polygon markers. It is built as a compile-time-unrolled
+tuple, like [`label_identifiers`](@ref), so its type is concrete even when the kinds are
+mixed.
 
 !!! note
     Building the tuple, like iterating [`symbols`](@ref), [`tuples`](@ref), or
@@ -74,7 +75,8 @@ The tuple lists the identifiers of [`symbols`](@ref), then [`tuples`](@ref), the
     return (
         map(identifier, symbols(Ω))...,
         map(identifier, tuples(Ω))...,
-        map(identifier, conditions(Ω))...
+        map(identifier, conditions(Ω))...,
+        map(identifier, regions(markers(Ω)))...
     )
 end
 
@@ -293,15 +295,29 @@ function _show_domain_detailed(io::IO, Ω::Domain)
     n_sym = length(symbols(Ω))
     n_tup = length(tuples(Ω))
     n_cond = length(conditions(Ω))
+    n_reg = length(regions(markers(Ω)))
 
-    if n_sym + n_tup + n_cond == 0
+    if n_sym + n_tup + n_cond + n_reg == 0
         print(io, "    ")
         print_empty_message(pp, "(none)")
     else
-        print_marker_summary(with_indent(pp, 2), n_sym, n_tup, n_cond)
+        _print_domain_marker_summary(with_indent(pp, 2), n_sym, n_tup, n_cond, n_reg)
 
         print(io, "    ")
         print_labels_list(pp, collect(labels(Ω)))
     end
     return nothing
+end
+
+# `print_marker_summary` (pretty_print.jl) with a fourth group, the polygon markers.
+function _print_domain_marker_summary(pp::PrettyPrinter, n_sym, n_tup, n_cond, n_reg)
+    total = n_sym + n_tup + n_cond + n_reg
+    print_indent(pp)
+    printstyled(pp.io, "$total marker$(total == 1 ? "" : "s")"; color = :yellow)
+    print(pp.io, " (")
+    groups = ((n_sym, "symbol"), (n_tup, "tuple"), (n_cond, "function"), (n_reg, "polygon"))
+    print_joined(pp, Iterators.filter(g -> first(g) > 0, groups)) do (n, name)
+        return print(pp.io, "$n $name$(n == 1 ? "" : "s")")
+    end
+    return println(pp.io, ")")
 end

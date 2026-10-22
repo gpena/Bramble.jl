@@ -2,6 +2,7 @@ module PolygonMarkersTests
 
 using Test
 using Bramble
+using ..TestUtils: @test_allocs
 
 # A marker `:L => polygon(V)` splits the nodes of a 2D mesh into `L` (inside the polygon),
 # `L_boundary` and `L_exterior`. Every classification here is checked node by node against
@@ -70,6 +71,24 @@ marker_triple(Ωₕ, L) = map(l -> Bramble.markers(Ωₕ)[l], Bramble._polygon_l
         Ωₕ = mesh(Ω, (13, 11), (true, true))
         @test eltype(points(Ωₕ(1))) === Float32
         @test marker_triple(Ωₕ, :P) == exact_labels(W, Ωₕ)
+    end
+
+    @testset "Mixed Float32 and Float64" begin
+        # Vertices at 0.1 and 0.9 are not binary fractions, so a node of the other type
+        # meant to sit on an edge is a Float32 rounding (about 1.5e-9) off it: the
+        # tolerance uses the coarser of the two epsilons and keeps those nodes.
+        on_edge(i, j) = (i in (11, 91) && 11 <= j <= 91) || (j in (11, 91) && 11 <= i <= 91)
+        expected = BitVector(vec([on_edge(i, j) for i in 1:101, j in 1:101]))
+        sq = [(0.1, 0.1), (0.9, 0.1), (0.9, 0.9), (0.1, 0.9)]
+        for (S, W) in ((Float32, sq), (Float64, [Float32.(v) for v in sq]))
+            Y = interval(zero(S), one(S)) × interval(zero(S), one(S))
+            Ωₕ = mesh(domain(Y, :Q => Bramble.polygon(W)), (101, 101), (true, true))
+            @test eltype(points(Ωₕ(1))) === S
+            Qi, Qb, Qe = marker_triple(Ωₕ, :Q)
+            @test Qb == expected
+            @test count(Qb) == 320
+            @test count(Qi) == 79^2
+        end
     end
 
     @testset "Refinement re-derives labels" begin
@@ -147,6 +166,22 @@ marker_triple(Ωₕ, L) = map(l -> Bramble.markers(Ωₕ)[l], Bramble._polygon_l
         Ωₕ = mesh(Ω(0.5), (7, 6), (true, true))
         @test marker_triple(Ωₕ, :P) == exact_labels(V, Ωₕ)
         @test count(Bramble.markers(Ωₕ)[:moving]) == 18
+    end
+
+    @testset "Domain accessors" begin
+        P = Bramble.polygon(V)
+        Ω = domain(X, :a => :left, :P => P)
+        ids = Bramble.marker_identifiers(Ω)
+        @test length(ids) == length(markers(Ω)) == 2
+        @test ids[1] === :left && ids[2] === P
+        @test labels(Ω) == (:a, :P, :P_boundary, :P_exterior)
+        @test_allocs labels(Ω)
+        text = sprint(show, MIME"text/plain"(), Ω)
+        @test occursin("2 markers (1 symbol, 1 polygon)", text)
+        @test occursin(":P_exterior", text)
+        only_polygon = sprint(show, MIME"text/plain"(), domain(X, :P => P))
+        @test occursin("1 marker (1 polygon)", only_polygon)
+        @test !occursin("(none)", only_polygon)
     end
 
     @testset "Display" begin
