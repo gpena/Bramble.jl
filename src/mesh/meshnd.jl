@@ -277,8 +277,8 @@ meet those of a vertex or an earlier seed, within the tolerance but not exactly,
 and the closure restarts without it: the seed gives way, never the vertex or the line
 computed from it. Two lines that both come from the end points and vertices and lie within
 the tolerance are one line. Polygon detail finer than the tolerance is merged, as is
-rounding, since floating point cannot tell the two apart. Every crossing is on a node up to
-the merge tolerance.
+rounding, since floating point cannot tell the two apart. Every vertex coordinate is a line,
+and every crossing is on a node, up to the merge tolerance.
 
 The oblique edges must share one slope magnitude, a necessary condition only: with equal
 slopes the closure may still grow without bound, or beyond the cap.

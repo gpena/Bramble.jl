@@ -104,6 +104,19 @@ end
         @test occursin("slopes", err.msg) && occursin("3.0", err.msg)
     end
 
+    @testset "Near vertices merge" begin
+        # The vertex coordinate x = 1 lies 2e-10 from x = 1 + δ, inside the merge tolerance
+        # 3e-10: one line, so each vertex is a line up to the tolerance, not exactly.
+        δ = 2e-10
+        W = [(0.0, 0.0), (3.0, 0.0), (3.0, 1.0), (1.0 + δ, 1.0), (1.0 + δ, 2.0), (2.0, 3.0),
+            (1.0, 3.0), (0.0, 2.0)]
+        xs, ys = Bramble._grid_closure(Bramble.polygon(W), [0.0, 3.0], [0.0, 3.0])
+        @test count(x -> abs(x - 1.0) <= 3e-10, xs) == 1
+        @test all(v -> any(x -> abs(x - v[1]) <= 3e-10, xs) &&
+                       any(y -> abs(y - v[2]) <= 3e-10, ys), W)
+        @test off_node_crossings(W, xs, ys, 3e-10) == 0
+    end
+
     @testset "Sub-tolerance detail merges" begin
         # The closure line y = 0.5 (from the vertex line x = 0.5 on the edge y = x) lies δ
         # from the vertex line y = 0.5 + δ, inside the merge tolerance 4e-10: one line.
