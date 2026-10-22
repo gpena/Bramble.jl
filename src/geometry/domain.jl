@@ -301,23 +301,10 @@ function _show_domain_detailed(io::IO, Ω::Domain)
         print(io, "    ")
         print_empty_message(pp, "(none)")
     else
-        _print_domain_marker_summary(with_indent(pp, 2), n_sym, n_tup, n_cond, n_reg)
+        print_marker_summary(with_indent(pp, 2), n_sym, n_tup, n_cond, n_reg)
 
         print(io, "    ")
         print_labels_list(pp, collect(labels(Ω)))
     end
     return nothing
-end
-
-# `print_marker_summary` (pretty_print.jl) with a fourth group, the polygon markers.
-function _print_domain_marker_summary(pp::PrettyPrinter, n_sym, n_tup, n_cond, n_reg)
-    total = n_sym + n_tup + n_cond + n_reg
-    print_indent(pp)
-    printstyled(pp.io, "$total marker$(total == 1 ? "" : "s")"; color = :yellow)
-    print(pp.io, " (")
-    groups = ((n_sym, "symbol"), (n_tup, "tuple"), (n_cond, "function"), (n_reg, "polygon"))
-    print_joined(pp, Iterators.filter(g -> first(g) > 0, groups)) do (n, name)
-        return print(pp.io, "$n $name$(n == 1 ? "" : "s")")
-    end
-    return println(pp.io, ")")
 end
