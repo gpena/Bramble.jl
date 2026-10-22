@@ -13,6 +13,11 @@ blocks. Everything else lives here:
   which `docs/make.jl` no longer calls).
 - **Internals prose**: `internals/<page>.md` holds each internals page as it stood before
   being reduced to its `@autodocs`/`@docs` blocks.
+- **Level-set design**: `internals/levelset.md` records the design of level-set domains
+  (#834) on its five points, the thinness limit and the measured orders;
+  `examples/poisson_levelset_convergence.md` plots those orders, written by the generator
+  `examples/poisson_levelset_convergence.jl` beside it (as `poisson_polygon_convergence`
+  does for polygons).
 - **Sections moved out of pages**: `api_sciml.md` (adjoint, AMG, ILU, matrix-free and
   geometric-multigrid prose; the `@docs` blocks stay published) and `*.sections.md` (the
   GPU, matrix-free and preconditioner sections taken out of a page before the whole page

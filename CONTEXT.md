@@ -26,6 +26,24 @@ _Avoid_: tag, region, boundary condition (a marker names *where*, never *what va
 The `Symbol` half of a marker (`:left`, `:boundary`). Label is the name, marker the
 name-plus-rule.
 
+**Level set**:
+A domain given by a function `φ` with `φ < 0` inside, marked `label => levelset(φ)`
+(`levelset(φ)` is a `LevelSet`, never a bare `Function`, which would be a predicate). The
+nodes stay the user's grid; the labels are `:label`, `:label_boundary` and `:label_exterior`.
+Owned by [docs/notes/internals/levelset.md](docs/notes/internals/levelset.md).
+_Avoid_: implicit surface, signed distance (`φ` need not be one)
+
+**Crossing**:
+The point where `φ = 0` meets a grid edge whose end nodes differ in sign, found by a
+bracketed root solve on that edge. The crossing carries the Dirichlet datum.
+_Avoid_: intersection, cut point
+
+**Shortened arm**:
+The arm of a node's stencil along an axis that a crossing cuts, of length `θh` with
+`0 < θ ≤ 1` instead of `h`. The reduction gives each reading row its own value at the
+exterior node (the quadratic through the crossing), which on `-Δₕ` is the Shortley-Weller row.
+_Avoid_: cut stencil, short stencil
+
 ### Meshes
 
 **Mesh**:
