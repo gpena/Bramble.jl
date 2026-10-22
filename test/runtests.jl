@@ -81,6 +81,13 @@ const __bramble_with_gpu_group = __bramble_with_gpu_tests && __bramble_test_grou
 # stiff solver, `NonlinearSolve`, `LinearSolve` or `AlgebraicMultigrid`).
 const __bramble_with_examples = __bramble_test_group == "examples"
 
+# Every convergence study -- a refinement sequence with an observed order asserted -- lives
+# under test/convergence/ and runs only here. Each one solves a sequence of meshes, so they
+# are slow for what a push learns from them, and an order is a property of the
+# discretisation, not of the code path a unit test pins: CI.yml leaves them to nightly.yml's
+# `convergence` job. `all` and `full` include them.
+const __bramble_with_convergence = __bramble_test_group in ("all", "full", "convergence")
+
 # The combinatorial grids in full (gpena/Bramble.jl#789): `unit` runs each grid's cover,
 # `slow` the cover plus a random draw (TestUtils `_grid_sample`), and this group every
 # combination, once a week (Weekly.yml). Only the files holding such grids run here.
@@ -166,7 +173,6 @@ if __bramble_with_unit_tests
                 include("space/interpolation_bounds.jl")
                 include("space/interpolation_outside.jl")
                 include("space/inference_allocation.jl")
-                include("convergence/runtests.jl")
                 include("space/element_type.jl")
                 if __bramble_with_ad_tests
                     include("space/autodiff.jl")
@@ -187,10 +193,6 @@ if __bramble_with_unit_tests
             include("solvers/runtests.jl")
             include("exporters/runtests.jl")
 
-            # Independent full-pipeline tests (mesh -> space -> assemble -> solve) for a path no
-            # docs page reaches, as opposed to the `examples` group below, which runs the pages.
-            include("drivers/runtests.jl")
-
             # Static allocation verification. Lives under `quality/` because that is what
             # it is, but runs with the unit group because it is the one quality gate cheap enough
             # to pay on every push (3 s, against minutes for JET), and an allocation regression
@@ -201,6 +203,10 @@ if __bramble_with_unit_tests
             end
         end
     end
+end
+
+if __bramble_with_convergence
+    include("convergence/runtests.jl")
 end
 
 if __bramble_with_quality

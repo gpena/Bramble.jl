@@ -411,6 +411,50 @@ function _check_eoc(errfn, ns; order = 1.9)
     return eoc
 end
 
+# The printed tables of observed orders: `_order_header` once per study, then `_order_row`
+# once per case, so a nightly log reads as aligned columns. `cells` label the case, one per
+# entry of `widths`; `gate` is the order the case must clear, or `nothing` for a case that is
+# only printed; the errors print as `%.2e`, one column per level.
+function _order_header(title, labels, widths)
+    println("\n", title)
+    println("  ", join(rpad.(labels, widths)), rpad("order", 7), rpad("gate", 9), "errors")
+    return nothing
+end
+
+function _order_row(cells, order, errs, widths; gate = nothing)
+    mark = gate === nothing ? "—" : (order > gate ? "> $gate ✓" : "> $gate ✗")
+    println("  ", join(rpad.(string.(cells), widths)), rpad(@sprintf("%.3f", order), 7),
+        rpad(mark, 9), join((@sprintf("%.2e", e) for e in errs), "  "))
+    return nothing
+end
+
+# The heat equation `uₜ = uₓₓ + f` on (0, 1) with the manufactured solution
+# `exp(-t) sin(πx)` and zero Dirichlet data. form/semidiscrete.jl and ext/sciml_ext.jl check
+# the semidiscretisation on it; test/convergence/heat_1d.jl measures its orders.
+_heat_uex(x, t) = exp(-t) * sinpi(x[1])
+_heat_src(x, t) = (pi^2 - 1) * exp(-t) * sinpi(x[1])
+
+# Its forms on an `n`-point uniform mesh, the source a live element `fₕ`.
+function _sd_problem(n)
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), n)
+    Wₕ = gridspace(Ωₕ)
+    fₕ = element(Wₕ, 0.0)
+    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    l = form(Wₕ, v -> innerₕ(fₕ, v))
+    return Ωₕ, Wₕ, fₕ, a, l
+end
+
+# The same, semidiscretised on [0, T], `fₕ` refilled from `t` before each assembly.
+function _sciml_setup(n; T = 1.0)
+    Ωₕ, Wₕ, fₕ, a, l = _sd_problem(n)
+    I = interval(0.0, T)
+    bcs = Bramble.dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 0.0)
+    sd = Bramble.semidiscretize(
+        a, l; dirichlet = bcs, (update_coefficients!) = t -> Bramble.Rₕ!(fₕ, x -> _heat_src(x, t))
+    )
+    return Ωₕ, Wₕ, I, a, l, sd
+end
+
 # Error of `op` against the exact derivative `df`, over the points whose stencil is not
 # truncated. The max norm is used so the result does not depend on the quadrature weights.
 function _interior_error(Ωₕ, op, f, df, drop)

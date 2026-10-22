@@ -10,7 +10,7 @@ using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 using Bramble: components
-using ..TestUtils: alloc_test, _nonuniform_points, _observed_orders, _zero_boundary!
+using ..TestUtils: alloc_test, _nonuniform_points, _zero_boundary!
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # The centered difference.
@@ -137,26 +137,6 @@ centered_ops(::Val{3}) = (Dcₓ, Dcᵧ, Dc₂)
                 end
             end
         end
-    end
-
-    @testset "Convergence order" begin
-        # Second order on a uniform grid, and first order on a non-uniform one: the
-        # centered difference approximates the derivative at the midpoint of its stencil,
-        # which coincides with xᵢ only when the two spacings match.
-        function orders(unif)
-            Random.seed!(20260830)
-            Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, unif)
-            return first(_observed_orders(Ωₕ, Dcₓ, sin, cos, e -> e[2:(end - 1)]))
-        end
-
-        ou = orders(true)
-        @test all(o -> abs(o - 2.0) < 0.05, ou)
-
-        # Refinement halves every interval, so the non-uniform grids stay nested and the
-        # ratio is an order even though the starting grid is random.
-        orand = orders(false)
-        @test all(>(0.95), orand)
-        @test last(orand) < 1.15
     end
 
     @testset "Directional family" begin

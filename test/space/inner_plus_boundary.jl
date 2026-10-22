@@ -127,43 +127,6 @@ using ..TestUtils: WITH_3D_TESTS, _backward_spacing_oracle, _half_spacing_oracle
             @test zrows == 0
         end
     end
-
-    @testset "Neumann Poisson MMS: order 2" begin
-        # -Δu = f, natural (unconstrained) traction-free boundary everywhere -- inner₊
-        # encodes the Neumann condition without any dirichlet_bc! call. Pure Neumann is
-        # singular up to an additive constant, pinned by fixing one dof to the exact value
-        # there (a device, not a boundary condition of the continuum problem).
-        uexact(x) = cos(pi * x[1]) * cos(pi * x[2])
-        src(x) = 2 * pi^2 * cos(pi * x[1]) * cos(pi * x[2])
-
-        function solve_neumann(n)
-            Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (n, n), (true, true))
-            Wₕ = gridspace(Ωₕ)
-            a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-            l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, src), v))
-            A = assemble(a)
-            F = assemble(l)
-            A[1, :] .= 0.0
-            A[1, 1] = 1.0
-            F[1] = uexact(points(Ωₕ)[1])
-            uₕ = element(Wₕ)
-            uₕ .= A \ F
-            return normₕ(uₕ - Rₕ(Wₕ, uexact)), norm₁ₕ(uₕ - Rₕ(Wₕ, uexact))
-        end
-
-        ns = (13, 25, 49, 97)  # each doubles the previous mesh spacing exactly
-        errs_h = Float64[]
-        errs_1h = Float64[]
-        for n in ns
-            eh, e1h = solve_neumann(n)
-            push!(errs_h, eh)
-            push!(errs_1h, e1h)
-        end
-
-        rate(e) = [log2(e[i] / e[i + 1]) for i in 1:(length(e) - 1)]
-        @test all(>(1.9), rate(errs_h))
-        @test all(>(1.9), rate(errs_1h))
-    end
 end
 
 end # module

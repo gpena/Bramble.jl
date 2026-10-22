@@ -16,166 +16,26 @@ module GhostTractionTests
 #
 # Covered: the reduced matrix and load against `Eᵀ (A_rest + A_mixed X) E` and
 # `Eᵀ (F_pad − (A_rest + A_mixed X) d)` from the padded composite, `X` built by hand; the
-# relation at the corner of the two tractions written out from the mesh points;
-# second-order H¹ convergence of each component on graded meshes with a loaded traction
-# facet, a traction-free one and two displacement facets, the two tractions meeting at a
-# corner; stability on random meshes; symmetry of the reduced matrix of a symmetric padded
-# form, and the padded elasticity matrix's lack of it; and, nightly, the same in 3D.
-#
-# A random mesh is refined, never redrawn, across levels (`O.make_mesh(:random, ℓ)`), and
-# carries no order gate: on these meshes the collocated form reaches only 1.77-1.84 over
-# levels 0-3 with displacement on every facet, no traction at all (`n0 = 9`, seeds
-# 20261014 and 7). It is held instead to the error of that all-displacement problem: the
-# traction's within a factor 5 at every level.
+# relation at the corner of the two tractions written out from the mesh points; symmetry
+# of the reduced matrix of a symmetric padded form, and the padded elasticity matrix's lack
+# of it; and, nightly, the same in 3D. The problem and its errors are in GhostTraction.jl;
+# its convergence on graded and random meshes is in test/convergence/ghost_traction.jl.
 
 using Test
 using Bramble
 import Bramble
-using Bramble: Dcₓ, Dcᵧ, Dc₂, D̃ₓ, D̃ᵧ, D̃₂, D₋ₓ, D₋ᵧ, D₋₂, εₕ, divₘₕ
-using ForwardDiff: gradient, hessian
+using Bramble: Dcₓ, Dcᵧ, εₕ, divₘₕ
 using LinearAlgebra: Diagonal, issymmetric, norm
 using Random: Xoshiro
 
-using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS
 
 isdefined(Main, :GhostOracleND) ||
     Base.include(Main, joinpath(pkgdir(Bramble), "test", "ghost", "GhostOracleND.jl"))
 const O = Main.GhostOracleND
-
-const λ, μ = 2.0, 0.5
-
-Kt(i, j, D) = [λ * (i == d) * (j == e) + μ * ((i == j) * (d == e) + (i == e) * (j == d))
-               for d in 1:D, e in 1:D]
-
-# --- The manufactured displacement and its data ---------------------------------------- #
-
-# In 2D the traction on `:ymin` (outward normal −e₂) vanishes: `∂ᵧu₁ = ∂ₓu₂ = 0` there and
-# `λ ∂ₓu₁ + (λ + 2μ) ∂ᵧu₂ = 0` through the factor `c = λ / (λ + 2μ)`.
-const c = λ / (λ + 2μ)
-const UEX2 = (x -> sin(x[1] + 0.3) * cos(x[2]) + exp(x[1]) * x[2]^2 / 2,
-    x -> -c * cos(x[1] + 0.3) * sin(x[2]) + cos(2x[1]) * x[2]^2)
-const UEX3 = (x -> sin(x[1] + 0.3) * cos(x[2]) * exp(x[3] / 2),
-    x -> cos(x[1]) * x[2] * x[3] + exp(x[1] + x[2] / 2),
-    x -> sin(x[1] + x[2]) * cos(x[3] + 0.2))
-
-∇(f, x) = gradient(f, collect(Float64, x))
-H(f, x) = hessian(f, collect(Float64, x))
-
-# The traction of component i of `uex` on the facet with outward normal `n`.
-function traction_data(uex, i, n)
-    D = length(uex)
-    return x -> sum(n[d] * Kt(i, j, D)[d, e] * ∇(uex[j], x)[e]
-    for j in 1:D, d in 1:D, e in 1:D)
-end
-
-# The load `−μ Δuᵢ − (λ + μ) ∂ᵢ div u`.
-function load(uex, i)
-    D = length(uex)
-    return x -> -μ * sum(H(uex[i], x)[a, a] for a in 1:D) -
-                (λ + μ) * sum(H(uex[j], x)[i, j] for j in 1:D)
-end
-
-const AXIS = (xmin = 1, xmax = 1, ymin = 2, ymax = 2, zmin = 3, zmax = 3)
-const SIDE = (xmin = -1.0, xmax = 1.0, ymin = -1.0, ymax = 1.0, zmin = -1.0, zmax = 1.0)
-normal(F, D) = ntuple(d -> d == AXIS[F] ? SIDE[F] : 0.0, D)
-
-# --- The form and the relations --------------------------------------------------------- #
-
-const DC = (Dcₓ, Dcᵧ, Dc₂)
-const DT = (D̃ₓ, D̃ᵧ, D̃₂)
-const DM = (D₋ₓ, D₋ᵧ, D₋₂)
-
-# `∂ₐ∂_b u`: the second difference of axis `a` when `a = b`, else the centred mixed one.
-second(u, a, b) = a == b ? DT[a](DM[a](u)) : DC[min(a, b)](DC[max(a, b)](u))
-
-# The form without its mixed differences, and those alone (the facet rule's operand).
-function rest_part(D)
-    row(u, v, i) = innerₕ(-μ * Δₕ(u(i)), v(i)) + innerₕ(-(λ + μ) * second(u(i), i, i), v(i))
-    return (u, v) -> sum(row(u, v, i) for i in 1:D)
-end
-function mixed_part(D)
-    term(u, v, i, j) = innerₕ(-(λ + μ) * second(u(j), i, j), v(i))
-    return (u, v) -> sum(term(u, v, i, j) for i in 1:D, j in 1:D if i != j)
-end
-function elasticity(D)
-    rest, mixed = rest_part(D), mixed_part(D)
-    return (u, v) -> rest(u, v) + mixed(u, v)
-end
-
-load_form(uex) = v -> sum(innerₕ(load(uex, i), v(i)) for i in eachindex(uex))
-
-tr(u, i, D) = sum(∂ₙ(u(j); K = Kt(i, j, D)) for j in 1:D)
-
-# Traction on `tfacets`, the data of `uex` (or zero on `free`), displacement on `dfacets`.
-function relations(uex, tfacets, dfacets; free = ())
-    D = length(uex)
-    tdata(F, i) = F in free ? 0.0 : traction_data(uex, i, normal(F, D))
-    ∂ₙₙdata(F, i) = x -> H(uex[i], x)[AXIS[F], AXIS[F]]
-    traction(u, F) = ntuple(i -> F => tr(u, i, D) => tdata(F, i), D)
-    displacement(u, F) = (ntuple(i -> F => u(i) => uex[i], D)...,
-        ntuple(i -> F => ∂ₙₙ(u(i)) => ∂ₙₙdata(F, i), D)...)
-    return u -> (Iterators.flatten(traction(u, F) for F in tfacets)...,
-        Iterators.flatten(displacement(u, F) for F in dfacets)...)
-end
-
-const CASE2 = (tfacets = (:xmin, :ymin), dfacets = (:xmax, :ymax), free = (:ymin,))
-const ALL_DISPLACEMENT = (tfacets = (), dfacets = (:xmin, :xmax, :ymin, :ymax), free = ())
-
-function elasticity_space(Ωₕ, uex, case)
-    S = gridspace(Ωₕ; ghosts = :boundary)
-    V = S^Val(length(uex))
-    return V, constrained(V, relations(uex, case.tfacets, case.dfacets; free = case.free))
-end
-
-# --- Errors ----------------------------------------------------------------------------- #
-
-# The physical values of component `i` of the padded values `U`, every facet ghosted.
-function physical(U, n, i)
-    np = n .+ 2
-    m = prod(np)
-    P = reshape(U[((i - 1) * m + 1):(i * m)], np)
-    return P[ntuple(d -> 2:(np[d] - 1), length(n))...]
-end
-
-# The discrete H¹ error `(‖e‖_h² + Σₐ ‖D₋ₐ e‖₊²)^{1/2}` at the physical nodes.
-function h1_error(xs, e)
-    D = length(xs)
-    ĥ(x) = [(i > 1 ? x[i] - x[i - 1] : 0.0) / 2 +
-            (i < length(x) ? x[i + 1] - x[i] : 0.0) / 2 for i in eachindex(x)]
-    along(v, a) = reshape(v, ntuple(d -> d == a ? length(v) : 1, D))
-    w = reduce((p, q) -> p .* q, (along(ĥ(xs[a]), a) for a in 1:D))
-    total = sum(w .* abs2.(e))
-    for a in 1:D
-        wa = reduce((p, q) -> p .* q,
-            (b == a ? along(1 ./ diff(xs[a]), a) : along(ĥ(xs[b]), b) for b in 1:D))
-        total += sum(wa .* abs2.(diff(e; dims = a)))
-    end
-    return sqrt(total)
-end
-
-# `hₘₐₓ` and the H¹ error of each component on `make_mesh(kind, ℓ)`, ℓ in `levels`.
-function errors(uex, case, kind, levels; n0, seed = 20261014)
-    D = length(uex)
-    hs, errs = Float64[], NTuple{D, Float64}[]
-    for ℓ in levels
-        Ωₕ = O.make_mesh(kind, ℓ; dim = D, n0, seed)
-        _, C = elasticity_space(Ωₕ, uex, case)
-        A, F = assemble(form(C, C, elasticity(D)), form(C, load_form(uex)))
-        U = parent(Bramble.lift(C, A \ F))
-        xs = O.axis_points(Ωₕ)
-        n = map(length, xs)
-        nodes = collect(Iterators.product(xs...))
-        push!(hs, maximum(x -> maximum(diff(x)), xs))
-        push!(errs, ntuple(i -> h1_error(xs, physical(U, n, i) - uex[i].(nodes)), D))
-    end
-    return hs, errs
-end
-
-function lsq_order(hs, errs)
-    X, Y = log.(hs), log.(errs)
-    return sum((X .- sum(X) / length(X)) .* (Y .- sum(Y) / length(Y))) /
-           sum(abs2, X .- sum(X) / length(X))
-end
+isdefined(Main, :GhostTraction) || Base.include(Main, joinpath(@__DIR__, "GhostTraction.jl"))
+using Main.GhostTraction: AXIS, CASE2, Kt, SIDE, UEX2, UEX3, elasticity, elasticity_space,
+                          load_form, mixed_part, rest_part, traction_data, λ, μ
 
 close(a, b; rtol = 1.0e-12) = norm(a - b) <= rtol * max(norm(b), 1)
 
@@ -311,35 +171,6 @@ const KINDS = (:random, :graded)
         end
     end
 
-    @testset "Order, graded meshes" begin
-        levels = WITH_SLOW_TESTS ? (0:3) : (0:2)
-        hs, errs = errors(UEX2, CASE2, :graded, levels; n0 = 9)
-        @test maximum(hs) / minimum(hs) > 3
-        for i in 1:2
-            @test errs[end][i] < errs[1][i] / 8
-            @test lsq_order(hs, getindex.(errs, i)) > 1.8
-        end
-    end
-
-    # Random meshes: no order gate (see the header); the traction's error stays within 5×
-    # that of displacement on every facet, through ghosts, level by level.
-    @testset "Stability, random meshes, seed $seed" for seed in (20261014, 7)
-        levels = WITH_SLOW_TESTS ? (0:3) : (0:2)
-        hs, errs = errors(UEX2, CASE2, :random, levels; n0 = 9, seed)
-        _, base = errors(UEX2, ALL_DISPLACEMENT, :random, levels; n0 = 9, seed)
-        @test maximum(hs) / minimum(hs) > 3
-        for ℓ in eachindex(levels), i in 1:2
-
-            @test errs[ℓ][i] <= 5 * base[ℓ][i]
-        end
-        # the errors at least halve per level: a scheme stalled as the all-displacement
-        # one is would pass the ratio alone
-        for ℓ in 2:length(levels), i in 1:2
-
-            @test errs[ℓ][i] < errs[ℓ - 1][i] / 2
-        end
-    end
-
     @testset "Symmetry of the reduced matrix" begin
         # #793 AC 3: the reduced matrix is symmetric whenever the padded one is. A symmetric
         # padded form here: the energy form, which reads no ghost, plus a term that does.
@@ -377,15 +208,6 @@ const KINDS = (:random, :graded)
         @test close(Matrix(A), Aref)
         @test close(F, Fref)
         @test norm(Matrix(A) - Aplain) > 1.0e-3 * norm(Aref)
-        # the order on graded meshes of 9 and 17 points per axis. The 33-point level costs
-        # ~280 s on one thread and is left out: measured, the slope of u₃ is 1.84 from 9 to
-        # 17 and 1.96 from 17 to 33 (u₁, u₂ above 1.98), and 1.68 from 5 to 17 points
-        if kind === :graded
-            hs, errs = errors(UEX3, case, kind, 0:1; n0 = 9)
-            for i in 1:3
-                @test lsq_order(hs, getindex.(errs, i)) > 1.8
-            end
-        end
     end
 end
 
