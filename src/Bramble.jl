@@ -43,6 +43,7 @@ include("mesh/pretty_print.jl")
 include("mesh/mesh1d.jl")
 include("mesh/meshnd.jl")
 include("mesh/levelset_class.jl")
+include("mesh/levelset_grid.jl")
 include("mesh/ghost_mesh.jl")
 # The split of a walk argument names the mesh types and their walk states.
 include("utils/batch_split.jl")
