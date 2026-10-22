@@ -490,6 +490,8 @@ end
 #       `inner_Γ` (test side, with the lifted solution as data), `∂ₙ(u)` and `jumpₙ(Δₕ(u))`
 #       inside `inner_Γ` (trial side), and the joint assembly `assemble(a, l)`
 #     - in 2D the mixed `Dcₓ(Dcᵧ(u))` and `D̽ₓ(D̽ᵧ(u))` on the constrained space, trial side
+#     - in 2D, on the Robin space, `matrix_free_operator` and `kronecker_operator` of
+#       `inner₊(∇ₕ(u), ∇ₕ(v))` with a product each, and that form plus a rank-one penalty
 #
 # Not warmed: `Δₕ(Δₕ(u))` on a ghost space (the second Laplacian reads past the one ghost
 # layer, so the form is refused), and 3D ghost spaces. Float64 only. The meshes are
@@ -554,6 +556,24 @@ function _pc_nested_relations(W::GhostGridSpace, ::Val{2})
     assemble(a, l)
     assemble(form(robin, robin, (u, v) -> innerₕ(Dcₓ(Dcᵧ(u)), v)))
     assemble(form(robin, robin, (u, v) -> innerₕ(D̽ₓ(D̽ᵧ(u)), v)))
+    _pc_ghost_operators(robin)
+    return nothing
+end
+
+# The stiffness form's matrix-free and Kronecker operators, each with a product, and a
+# rank-one penalty on the same space (gpena/Bramble.jl#812).
+function _pc_ghost_operators(C)
+    a = form(C, C, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    x = zeros(ndofs(C))
+    # Behind an inference barrier: each call still compiles for the concrete form at run
+    # time, but JET does not follow it into the unions their bodies guard at run time (the
+    # per-axis closures of `_ghost_kron_closures`, the padded `matrix_free_operator`), which
+    # it would report as missing methods.
+    ab = Base.inferencebarrier(a)
+    matrix_free_operator(ab) * x
+    kronecker_operator(ab) * x
+    r = form(C, C, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + 0.5 * innerₕ(1, u) * innerₕ(1, v))
+    assemble(r)
     return nothing
 end
 

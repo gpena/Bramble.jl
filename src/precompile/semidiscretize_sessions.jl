@@ -66,7 +66,29 @@ function _pc_semidiscretize_session(Wₕ::ScalarGridSpace, label::Symbol)
 
     _pc_rhs_session(Val(1))
     _pc_rhs_session(Val(2))
+    _pc_ghost_semidiscretize_session()
 
+    return nothing
+end
+
+# `semidiscretize` on a constrained ghost space (gpena/Bramble.jl#812): the 2D Robin space
+# of the nested form session, on its own non-uniform mesh, with static data. The space type
+# is part of the key, so the plain session above does not reach it.
+function _pc_ghost_semidiscretize_session()
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
+    facets = (:xmin, :xmax, :ymin, :ymax)
+    C = constrained(gridspace(Ωₕ; ghosts = :boundary),
+        u -> map(F -> F => 2.0 * u + ∂ₙ(u) => 0.5, facets))
+    a = form(C, C, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    l = form(C, v -> innerₕ(x -> 1.0, v))
+
+    n = ndofs(C)
+    u = zeros(n)
+    du = zeros(n)
+    sd = semidiscretize(a, l)
+    sd(du, u, nothing, 0.0)
+    J = jacobian_prototype(sd)
+    jacobian!(J, sd, u, nothing, 0.0)
     return nothing
 end
 
