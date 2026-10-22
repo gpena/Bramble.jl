@@ -217,6 +217,44 @@ Each row is an operation and its status on `(U, W)`; the tests are in
 | `W` as trial space | supported only for forms that read no exterior node (`Δₕ` with `g = 0`); otherwise throws |
 | stencils reaching beyond the diagonal neighbours (`Dcₓ(Dcₓ(u))`) | throw |
 
+## Level-set spaces
+
+[`levelset_spaces`](@ref Bramble.levelset_spaces) builds `(U, W)` as two `GhostGridSpace`s
+over the mesh itself, as `polygon_spaces` does. The closure of `U` keeps the interior nodes,
+fixes the boundary nodes to `g` and gives each exterior node an empty row of `E` and
+`d = 0`: no single value of an exterior node serves every equation, as one read along `x` by
+one interior node and along `y` by another takes a different value in each. The reduction
+gives it a value per reading equation instead. An exterior 5-point neighbour `p` of an
+interior node `k` takes, in the equation of `k`, the value at `p` of the quadratic along
+their grid line through the node behind `k`, `k`, and the crossing of `φ = 0` between `k`
+and `p`, where it is `g`; when the node behind `k` is exterior too, the crossing on that
+side replaces it. The entry of `p` in the row of `k` moves onto the columns of `k` and of
+the node behind it with the quadratic's weights, and the weight of each crossing times its
+datum goes to the load. The rules are built with the space, in its element type, and the
+moves and constants with the form, so a warm `assemble!` allocates nothing. On a 3-point
+difference along the line, as in `Δₕ`, the row is the Shortley-Weller row, the arm cut by
+the curve shortened to its crossing, since a 3-point second difference is exact on
+quadratics; `test/ghost/levelset_oracle.jl` checks it against a hand-built system.
+
+### Support on level-set spaces
+
+Each row is an operation and its status on `(U, W)`; the tests are in
+`test/ghost/levelset_spaces.jl`. "Throws" is an `ArgumentError`.
+
+| Operation | Status |
+|:----------|:-------|
+| `assemble(a, l)`, warm `assemble!` | supported; 0 B per warm call |
+| diffusion, first and central differences, reaction terms | supported |
+| `matrix_free_operator` | supported; refuses a form that reads an exterior node, as `Δₕ` does |
+| contracting `a(u, v)` | supported; same refusal |
+| `semidiscretize` | throws; it needs one space as trial and test |
+| rank-one terms | throw |
+| composites (`U × U`) | forms throw |
+| `dirichlet =` | throws; `g` fixes the boundary |
+| `W` as trial space | supported only for forms that read no exterior node; otherwise throws |
+| diagonal reads (`Dcₓ(Dcᵧ(u))`), reads two nodes away (`D₋ₓ(D₋ₓ(u))`) | throw |
+| a cell with a crossing on each of its four edges | `levelset_spaces` throws; refine the grid |
+
 ## Operator matrices: stencil_matrix versus the Kronecker construction
 
 ### Adding a new operator family

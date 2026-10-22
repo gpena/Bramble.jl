@@ -110,3 +110,14 @@ write `Bramble.polygon_spaces`. The support of each operation is in the
 ```@docs
 Bramble.polygon_spaces
 ```
+
+## Level-set spaces
+
+`levelset_spaces(Ωₕ, Ω, :D, g)` returns the trial and test spaces `(U, W)` of the
+Shortley-Weller scheme on a level set marked `:D => levelset(φ)` in the domain `Ω` of a 2D
+mesh. `public` and not exported: write `Bramble.levelset_spaces`. The support of each
+operation is in the [space internals page](../internals/space.md).
+
+```@docs
+Bramble.levelset_spaces
+```

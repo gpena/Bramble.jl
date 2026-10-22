@@ -375,4 +375,22 @@ end
     @test F == F0
 end
 
+# The Shortley-Weller moves and the constants of the crossings' data are precomputed with
+# the form, so the refill of the pair allocates nothing either.
+@testset "Warm refill on level-set spaces" begin
+    Ω = domain(interval(-1.25, 1.25) × interval(-1.25, 1.25),
+        :D => Bramble.levelset(p -> hypot(p[1], p[2]) - 1))
+    U, W = Bramble.levelset_spaces(mesh(Ω, (21, 23), (false, false)), Ω, :D,
+        x -> 1 + x[1] * x[2])
+    a = form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) + 0.5 * Dcₓ(w), v))
+    l = form(W, v -> innerₕ(x -> 1.0, v))
+    A, F = assemble(a, l)
+    A0, F0 = copy(A), copy(F)
+    fill!(nonzeros(A), 0)
+    fill!(F, 0)
+    @test alloc(() -> assemble!(A, F, a, l)) == 0
+    @test A == A0
+    @test F == F0
+end
+
 end

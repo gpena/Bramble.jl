@@ -15,8 +15,9 @@
 # only, so `l(v)` and `evaluate!` refuse a test space with `d ≠ 0` naming `assemble(a, l)`,
 # as `assemble!(b, l)` does, which is exact when both sides are one space. `a(u, v)` is the
 # contraction of `assemble(a)`, the linear part, whatever `d` is. `reaction(a, l, u)`
-# refuses: the plain rows it reads are the relations'. So does `a(u, v)` on a polygon
-# form that reads a conflict node, whose substitution lives in the reduction map alone.
+# refuses: the plain rows it reads are the relations'. So does `a(u, v)` on a polygon or
+# level-set form that reads a conflict node, whose substitution lives in the reduction map
+# alone.
 
 """
     (a::GhostBilinearForm)(u, v) -> Number
@@ -34,6 +35,8 @@ of the closures does not enter, as it does not enter `assemble(a)`.
 and test spaces; a `DimensionMismatch` is thrown otherwise. On the spaces of
 `polygon_spaces`, a form that reads a node two interior nodes extend differently (a
 V-notch) throws an `ArgumentError`: only `assemble(a)` substitutes that node per equation.
+So does, on the spaces of `levelset_spaces`, a form that reads an exterior node, whose
+Shortley-Weller value depends on the equation reading it.
 """
 function (a::_AnyGhostBilinearForm)(u, v)
     ud, vd = _mf_data(u), _mf_data(v)

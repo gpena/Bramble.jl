@@ -11,17 +11,40 @@
 #
 # See also: `GhostMesh`, `ScalarGridSpace`, `SpaceWeights`
 
+# The Shortley-Weller ghost values of a level-set trial space (levelset_space.jl): the value
+# an exterior node `p` takes in the equation of an interior neighbour `k` reading it, the
+# quadratic along their grid line through the node `o` behind `k`, `k` and the crossing
+# between `k` and `p`, evaluated at `p`. The rules of `p` are `ptr[p]:(ptr[p + 1] - 1)`;
+# rule `r` gives `p` the value `coef[3r - 2] u_k + coef[3r - 1] u_o + coef[3r]` in the
+# equation of `k = reader[r]`, `o = other[r]`, or 0 when the arm behind `k` is cut too and
+# its crossing's datum is in the constant `coef[3r]` with the other one's. `coef` is a
+# `Vector` of the space's element type behind an abstract field, read with a type assertion
+# (`_arm_coef`), so that it adds no type parameter to the space. `ptr` is empty off a
+# level-set space, and holds no rule on its test space.
+struct _ArmRules
+    ptr::Vector{Int}
+    reader::Vector{Int}
+    other::Vector{Int}
+    coef::AbstractVector
+end
+
+_ArmRules() = _ArmRules(Int[], Int[], Int[], Int[])
+
+@inline _arm_coef(arms::_ArmRules, ::Type{T}) where {T} = arms.coef::Vector{T}
+
 # Row replacement (`dirichlet`) on a ghost space, worked out once with the space: whether
 # its reduced rows are its physical nodes in mesh order, and the physical nodes of each
 # facet (facet `(d, s)` at `2(d - 1) + s`), so that a warm `assemble!` with `dirichlet`, and
 # `dirichlet_bc!` and `symmetrize!` on the space, allocate nothing.
 #
-# A polygon space (polygon_space.jl) refuses `dirichlet`, and stores what the reduction
-# reads on it as a trial side (`_ghost_maps`): whether it is no test space, and three masks
-# over the padded points: the exterior nodes left without a value (`unclosed`, every one on
-# the test space), those the (3.2) extension gives (`extended`), and among these the
-# conflict nodes, substituted per reading equation (`conflict`). Every other space has
-# empty masks.
+# A polygon or level-set space (polygon_space.jl, levelset_space.jl; `polygon` is true on
+# both) refuses `dirichlet`, and stores what the reduction reads on it as a trial side
+# (`_ghost_maps`): whether it is no test space, and three masks over the padded points: the
+# exterior nodes left without a value (`unclosed`, every one on the test space), those the
+# (3.2) extension gives (`extended`), and the conflict nodes, substituted per reading
+# equation (`conflict`), which are the polygon's extended nodes two interior nodes read and
+# every exterior node a level-set row reads, valued by the rules `arms`. Every other space
+# has empty masks.
 struct _RowsDirichlet
     physical::Bool
     facets::Vector{BitVector}
@@ -30,12 +53,21 @@ struct _RowsDirichlet
     unclosed::BitVector
     extended::BitVector
     conflict::BitVector
+    arms::_ArmRules
 end
 
 function _RowsDirichlet(physical::Bool, facets::Vector{BitVector}, polygon::Bool = false)
     return _RowsDirichlet(physical, facets, polygon, false, BitVector(), BitVector(),
         BitVector())
 end
+
+function _RowsDirichlet(physical::Bool, facets::Vector{BitVector}, polygon::Bool,
+        trial_only::Bool, unclosed::BitVector, extended::BitVector, conflict::BitVector)
+    return _RowsDirichlet(physical, facets, polygon, trial_only, unclosed, extended,
+        conflict, _ArmRules())
+end
+
+@inline _is_levelset(rows::_RowsDirichlet) = !isempty(rows.arms.ptr)
 
 """
     GhostGridSpace{D, T, S, ET, DT, TD, GU} <: AbstractSpaceType{1}

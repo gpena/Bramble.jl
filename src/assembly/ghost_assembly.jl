@@ -164,6 +164,8 @@ struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
     "the stored position in `A_pad` and the column of each term of `A_pad d_u`."
     liftsrc::IV
     liftcol::IV
+    "the weight of each term of `A_pad d_u`, 1 but for a move (`_exterior_moves`)."
+    liftcoef::CV
     "row replacement on the spaces, for `dirichlet`."
     rows::_RowsDirichlet
 end
@@ -207,6 +209,7 @@ struct GhostCompositeBilinearForm{D, F <: BilinearForm{D}, WT <: _CompositeClosu
     liftptr::IV
     liftsrc::IV
     liftcol::IV
+    liftcoef::CV
 end
 
 """
@@ -267,34 +270,39 @@ function _ghost_bilinear_form(Wₕ::_CompositeClosure, Vₕ::_CompositeClosure,
     return GhostCompositeBilinearForm(a, Wₕ, Vₕ, _ghost_maps(Wₕ, Vₕ, a)...)
 end
 
-# The padded matrix of `a`, the map of its reduction and the map of `A_pad d_u`.
+# The padded matrix of `a`, the map of its reduction and the map of `A_pad d_u`, whose
+# weights are of the reduction's type.
 function _ghost_maps(Wₕ::_GhostSide, Vₕ::_GhostSide, a::BilinearForm)
     _check_ghost_eltype(_matrix_eltype(a, a.ast))
     A_pad = allocate_system_matrix(a)::SparseMatrixCSC  # `_check_ghost_host`
     moves = _exterior_moves(Wₕ, Vₕ, A_pad)
     src, dst, coef, colptr, rowval = _ghost_reduction_map(
         backend(Vₕ), A_pad, Vₕ.E, Wₕ.E, moves)
-    liftptr, liftsrc, liftcol = _ghost_lift_map(backend(Vₕ), A_pad, _affine_support(Wₕ),
-        moves)
-    return (A_pad, src, dst, coef, colptr, rowval, liftptr, liftsrc, liftcol)
+    liftptr, liftsrc, liftcol, liftcoef = _ghost_lift_map(backend(Vₕ), A_pad,
+        _affine_support(Wₕ), moves, eltype(coef))
+    return (A_pad, src, dst, coef, colptr, rowval, liftptr, liftsrc, liftcol, liftcoef)
 end
 
-# The moves of the entries of `A_pad` at conflict columns, `(k, j, s)`: stored entry `k`, at
-# a tested row `i` and a conflict column, enters the reduction as `s` times an entry at
-# column `j` (polygon_space.jl). There are none on a space without a polygon trial side.
-const _Moves = Tuple{Vector{Int}, Vector{Int}, Vector{Int}}
+# The moves of the entries of `A_pad` at conflict columns, `(k, j, w)`: stored entry `k`, at
+# a tested row `i` and a conflict column, enters the reduction as `w` times an entry at
+# column `j`, and the load (`_ghost_lift_map`) as `w` times an entry at a column holding 1
+# when `j = 0` (polygon_space.jl, levelset_space.jl). There are none on a space without a
+# polygon or level-set trial side.
+const _Moves = Tuple{Vector{Int}, Vector{Int}, <:AbstractVector}
 _exterior_moves(::_GhostSide, ::_GhostSide, ::SparseMatrixCSC) = (Int[], Int[], Int[])
 
-# The reach guard and the moves on a space of polygon_spaces as the trial side. The test
-# space there extends nothing, so every exterior node is unclosed. A tested row (one `E_v`
-# reads) may read an exterior node only at a diagonal neighbour the (3.2) extension gives.
-# An entry at an unclosed node, or at an extended one off the diagonals, is a stencil wider
-# than the scheme's, and throws. An entry `a` of row `i` at a conflict node `i + (sx, sy)`
-# moves onto the reader's own (3.2) row: `+a` at `i + (sx, 0)` and `i + (0, sy)`, the two
-# Γ corners, and `−a` at `i`.
-function _exterior_moves(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, A_pad::SparseMatrixCSC)
+# The reach guard and the moves on a space of polygon_spaces or levelset_spaces as the trial
+# side. The test space there extends nothing, so every exterior node is unclosed. A tested
+# row (one `E_v` reads) may read an exterior node only at a diagonal neighbour the (3.2)
+# extension gives, or, on a level set, at a 5-point neighbour, by the rule of its reader
+# (`_arm_moves!`). Any other exterior read is a stencil wider than the scheme's, and
+# throws. An entry `a` of row `i` at a polygon conflict node `i + (sx, sy)` moves onto the
+# reader's own (3.2) row: `+a` at `i + (sx, 0)` and `i + (0, sy)`, the two Γ corners, and
+# `−a` at `i`. The weights are of the trial space's element type.
+function _exterior_moves(Wₕ::GhostGridSpace{D, T}, Vₕ::GhostGridSpace,
+        A_pad::SparseMatrixCSC) where {D, T}
     rows = Wₕ.rows
-    moves = (Int[], Int[], Int[])
+    moves = (Int[], Int[], T[])
     rows.polygon || return moves
     un, ext, cf = rows.unclosed, rows.extended, rows.conflict
     cp = SparseArrays.getcolptr(Vₕ.Et)
@@ -306,7 +314,12 @@ function _exterior_moves(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, A_pad::Spar
         for k in nzrange(A_pad, j)
             i = rv[k]
             cp[i + 1] > cp[i] || continue          # a row no test function reads
-            un[j] && _throw_polygon_reach(car[i], car[j])
+            if un[j]
+                _is_levelset(rows) || _throw_polygon_reach(car[i], car[j])
+                _arm_moves!(moves, rows.arms, k, i, j) ||
+                    _throw_levelset_reach(car[i], car[j])
+                continue
+            end
             sx, sy = Tuple(car[j] - car[i])
             abs(sx) == 1 && abs(sy) == 1 || _throw_polygon_reach(car[i], car[j])
             cf[j] || continue
@@ -318,6 +331,37 @@ function _exterior_moves(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, A_pad::Spar
         end
     end
     return moves
+end
+
+# The moves of stored entry `k`, at row `i` and exterior column `p`, by the rule of `p` in
+# the equation of `i` (`_ArmRules`): onto `i`, onto the node behind it unless its arm is
+# cut, and the constant. `false` when `i` has no rule there, a read off its 5-point
+# neighbours.
+function _arm_moves!(moves::_Moves, arms::_ArmRules, k::Int, i::Int, p::Int)
+    c = _arm_coef(arms, eltype(moves[3]))
+    for r in arms.ptr[p]:(arms.ptr[p + 1] - 1)
+        arms.reader[r] == i || continue
+        o = arms.other[r]
+        move!(q, w) = (push!(moves[1], k); push!(moves[2], q); push!(moves[3], w))
+        move!(i, c[3r - 2])
+        o == 0 || move!(o, c[3r - 1])
+        move!(0, c[3r])
+        return true
+    end
+    return false
+end
+
+@noinline function _throw_levelset_reach(I::CartesianIndex, J::CartesianIndex)
+    throw(
+        ArgumentError(
+        "the form reads, in the equation of the interior node $(Tuple(I)), the exterior " *
+        "node $(Tuple(J)), to which the trial space of levelset_spaces gives no value " *
+        "there: it gives an exterior node a value only in the equation of an interior " *
+        "5-point neighbour, along their grid line. Diagonal reads (Dcₓ(Dcᵧ(u))) and " *
+        "reads two nodes away (D₋ₓ(D₋ₓ(u))) are beyond the Shortley-Weller stencil; pose " *
+        "the form with Δₕ, D̃ₓ(a * D₋ₓ(u)), first differences and reaction terms.",
+    ),
+    )
 end
 
 @noinline function _throw_polygon_reach(I::CartesianIndex, J::CartesianIndex)
@@ -336,16 +380,21 @@ end
 @noinline function _throw_polygon_trial_as_test()
     throw(
         ArgumentError(
-        "the trial space of polygon_spaces is not a test space: its closure extends " *
-        "the exterior nodes, and the equations are those of the interior nodes alone. " *
-        "Pass the test space polygon_spaces returns, `U, V = polygon_spaces(...)`, " *
-        "form(U, V, f) and form(V, f).",
+        "the trial space of polygon_spaces or levelset_spaces is not a test space: its " *
+        "closure fixes the boundary nodes and extends exterior ones, and the equations " *
+        "are those of the interior nodes alone. Pass the test space they return, " *
+        "`U, V = polygon_spaces(...)` or `levelset_spaces(...)`, form(U, V, f) and " *
+        "form(V, f).",
     ),
     )
 end
 
 @noinline function _throw_polygon_rank_one()
-    throw(ArgumentError("forms on polygon spaces do not support rank-one terms yet."))
+    throw(
+        ArgumentError(
+        "forms on polygon and level-set spaces do not support rank-one terms yet.",
+    ),
+    )
 end
 
 function form(Vₕ::GhostGridSpace, f)
@@ -363,16 +412,17 @@ function _ghost_linear_form(Vₕ::_CompositeClosure, l::LinearForm)
     return GhostCompositeLinearForm(l, Vₕ, _ghost_load_buffer(Vₕ, l))
 end
 
-# Whether a composite side has a component built by `polygon_spaces`: the reach guard and
-# the substitution of conflict nodes (`_exterior_moves`) see scalar sides only.
+# Whether a composite side has a component built by `polygon_spaces` or `levelset_spaces`:
+# the reach guard and the substitution of conflict nodes (`_exterior_moves`) see scalar
+# sides only.
 _has_polygon(C::_CompositeClosure) = any(W -> W.rows.polygon, _ghost_components(C.space))
 
 @noinline function _throw_polygon_composite()
     throw(
         ArgumentError(
-        "polygon spaces are not supported in composites: the reduction checks the reach " *
-        "of a form and substitutes conflict nodes on a scalar polygon space only. Pose " *
-        "each field on its own pair from polygon_spaces.",
+        "polygon and level-set spaces are not supported in composites: the reduction " *
+        "checks the reach of a form and substitutes conflict nodes on a scalar space " *
+        "only. Pose each field on its own pair from polygon_spaces or levelset_spaces.",
     ),
     )
 end
@@ -455,8 +505,8 @@ end
 # promoted type. The map is built on the host and stored in the backend's vector type.
 # The contributions are then grouped by reduced entry, in the order the walk met them (a
 # stable sort), and `dst` is the pointer over the groups, so a band owns whole entries.
-# Each move `(k, j, s)` (`_exterior_moves`) adds the contributions of stored entry `k` as
-# if it sat, times `s`, at column `j` of its row.
+# Each move `(k, j, w)` (`_exterior_moves`) adds the contributions of stored entry `k` as
+# if it sat, times `w`, at column `j` of its row; a constant move (`j = 0`) is the load's.
 function _ghost_reduction_map(be, A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
         Eu::SparseMatrixCSC, moves::_Moves = (Int[], Int[], Int[]))
     Evt = sparse(transpose(Ev))
@@ -477,8 +527,8 @@ function _ghost_reduction_map(be, A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
 
         contribute!(k, rv[k], j, true)
     end
-    for (k, j, s) in zip(moves...)
-        contribute!(k, rv[k], j, s)
+    for (k, j, w) in zip(moves...)
+        j == 0 || contribute!(k, rv[k], j, w)
     end
     S = sparse(rs, cs, trues(length(rs)), size(Ev, 2), size(Eu, 2), |)
     srv = rowvals(S)
@@ -505,31 +555,34 @@ function _group_pointer(keys::Vector{Int}, n::Int)
 end
 
 # `A_pad d` by padded row, over the columns `j` where `d[j]` can be nonzero only (`support`,
-# `_affine_support`): the stored position of each term and its column, in column order
-# within a row, as `A_pad * d` adds them. A move `(k, j, 1)` adds stored entry `k` at
-# column `j` after them; a move `(k, j, -1)` lands on its reader, a degree of freedom,
-# where `d` is 0.
+# `_affine_support`): the stored position of each term, its column and its weight, 1, in
+# column order within a row, as `A_pad * d` adds them. A move `(k, j, w)` adds stored entry
+# `k` times `w` at column `j` after them, where `d` can be nonzero, and a constant move
+# (`j = 0`) adds it times `w` alone. A polygon move `(k, j, -1)` lands on its reader, a
+# degree of freedom, where `d` is 0. The weights are of type `C`.
 function _ghost_lift_map(be, A_pad::SparseMatrixCSC, support::AbstractVector{Bool},
-        moves::_Moves = (Int[], Int[], Int[]))
+        moves::_Moves = (Int[], Int[], Int[]), ::Type{C} = Float64) where {C}
     rv = rowvals(A_pad)
-    rows, src, cols = Int[], Int[], Int[]
+    rows, src, cols, coefs = Int[], Int[], Int[], C[]
     for j in axes(A_pad, 2)
         support[j] || continue
         for k in nzrange(A_pad, j)
             push!(rows, rv[k])
             push!(src, k)
             push!(cols, j)
+            push!(coefs, one(C))
         end
     end
-    for (k, j, s) in zip(moves...)
-        (s == 1 && support[j]) || continue
+    for (k, j, w) in zip(moves...)
+        (j == 0 || support[j]) || continue
         push!(rows, rv[k])
         push!(src, k)
         push!(cols, j)
+        push!(coefs, w)
     end
     p = sortperm(rows)                  # stable
     return map(v -> copyto!(_backend_vector(be, eltype(v), length(v)), v),
-        (_group_pointer(rows, size(A_pad, 1)), src[p], cols[p]))
+        (_group_pointer(rows, size(A_pad, 1)), src[p], cols[p], coefs[p]))
 end
 
 # --- Bilinear assembly --------------------------------------------------------------- #
@@ -658,8 +711,9 @@ function _check_rows(a::GhostBilinearForm, labels)
     return _check_rows(a.rows, (a.test_space, a.trial_space), labels)
 end
 
-# Whether `a` reads, in a tested row, a conflict node of its polygon trial space; the
-# matrix-free operator and the contraction `a(u, v)` (ghost_contract.jl) refuse such a form.
+# Whether `a` reads, in a tested row, a conflict node of its polygon or level-set trial
+# space; the matrix-free operator and the contraction `a(u, v)` (ghost_contract.jl) refuse
+# such a form.
 _reads_conflict(::GhostCompositeBilinearForm) = false
 function _reads_conflict(a::GhostBilinearForm)
     cf = a.rows.conflict
@@ -682,9 +736,10 @@ _check_rows(l::GhostLinearForm, labels, components) = _check_rows(l, labels)
     throw(
         ArgumentError(
         "$what applies E_vᵀ A_pad E_u, and this form reads a conflict node of its " *
-        "polygon trial space (an exterior node two interior nodes extend by different " *
-        "(3.2) rows), which only the assembled reduction substitutes per equation. " *
-        "Assemble the matrix with assemble(a).",
+        "trial space, which only the assembled reduction substitutes per equation: on a " *
+        "polygon space an exterior node two interior nodes extend by different (3.2) " *
+        "rows, on a level-set space any exterior node, whose Shortley-Weller value " *
+        "depends on the equation reading it. Assemble the matrix with assemble(a).",
     ),
     )
 end
@@ -699,9 +754,10 @@ end
 @noinline function _throw_rows_dirichlet(spaces::Tuple, labels::Tuple)
     any(W -> W.rows.polygon, spaces) && throw(
         ArgumentError(
-        "`dirichlet` replaces rows of the physical nodes, and the rows of a polygon space " *
-        "are its interior nodes: polygon_spaces(Ωₕ, :L, g) already fixes the polygon's " *
-        "boundary nodes to g. Drop `dirichlet`.",
+        "`dirichlet` replaces rows of the physical nodes, and the rows of a polygon or " *
+        "level-set space are its interior nodes: polygon_spaces(Ωₕ, :L, g) and " *
+        "levelset_spaces(Ωₕ, Ω, :L, g) already fix the boundary nodes to g. Drop " *
+        "`dirichlet`.",
     ),
     )
     Wₕ = first(spaces)
@@ -974,24 +1030,29 @@ function _assemble_ghost_load!(F::AbstractVector, a::_AnyGhostBilinearForm,
     z = zero(promote_type(eltype(l.F_pad), eltype(a.A_pad), eltype(d)))
     _run_bands!(_ghost_policy(l), _lifted_load_band!, F,
         SparseArrays.getcolptr(E), rowvals(E), nonzeros(E), l.F_pad, nonzeros(a.A_pad),
-        a.liftptr, a.liftsrc, a.liftcol, d, z)
+        a.liftptr, a.liftsrc, a.liftcol, a.liftcoef, d, z)
     return F
 end
 
 # Entries `r` of band `b`: `y[r] = Σ E[i, r] w_i` over column `r` of `E`, with
-# `w_i = F[i] − Σ A_pad[i, j] d[j]` summed over the stored terms of row `i` in the type of
-# `z`. A row read by several columns is summed again for each, in the same order.
-@noinline function _lifted_load_band!(y, colptr, rowval, nz, F, pv, ptr, src, col, d, z,
-        nbands::Int, b::Int)
+# `w_i = F[i] − Σ A_pad[i, j] c d[j]` summed over the stored terms of row `i` in the type
+# of `z`, `c` the term's weight and `d[0] = 1` for a constant term. `c d[j]` is taken in the
+# type of `d`, so a weight 1 leaves `d[j]` as it is. A row read by several columns is
+# summed again for each, in the same order.
+@noinline function _lifted_load_band!(y, colptr, rowval, nz, F, pv, ptr, src, col, lc, d,
+        z, nbands::Int, b::Int)
     T = eltype(y)
     S = typeof(z)
+    DT = eltype(d)
     @inbounds for r in _band_range(1:length(y), nbands, b)
         acc = zero(T)
         for k in colptr[r]:(colptr[r + 1] - 1)
             i = rowval[k]
             w = convert(S, F[i])
             for t in ptr[i]:(ptr[i + 1] - 1)
-                w = convert(S, w - pv[src[t]] * d[col[t]])
+                j = col[t]
+                v = j == 0 ? convert(DT, lc[t]) : convert(DT, lc[t] * d[j])
+                w = convert(S, w - pv[src[t]] * v)
             end
             acc = convert(T, acc + nz[k] * w)
         end

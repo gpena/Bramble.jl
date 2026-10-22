@@ -177,6 +177,17 @@ end
         end
     end
 
+    # The level-set path (#834): the mesh keeps its grid, and the spaces' rules hold the
+    # space's element type, in both precisions.
+    @testset "Level set" begin
+        for T in (Float64, Float32)
+            L = Bramble.levelset(p -> hypot(p[1], p[2]) - one(T))
+            Ωl = domain(interval(T(-1.25), T(1.25)) × interval(T(-1.25), T(1.25)), :D => L)
+            Ωₕl = mesh(Ωl, (12, 11), (false, false))
+            @test_opt target_modules = TM Bramble.levelset_spaces(Ωₕl, Ωl, :D, x -> one(T))
+        end
+    end
+
     # Not among the eight testsets the CHECK names: it proves the harness above can fail.
     @testset "Oracle control" begin
         # Mechanics: JET's optimisation analysis reports a known runtime dispatch.
