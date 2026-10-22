@@ -98,11 +98,34 @@ end
         @test occursin("must be star-shaped", message(band, ((-1.3, 1.3), (-1.3, 1.3))))
     end
 
+    @testset "A swapped box throws" begin
+        disk = p -> hypot(p[1], p[2]) - 1
+        @test occursin("must have x₀ < x₁ and y₀ < y₁", message(disk, ((1.25, -1.25), (-1.25, 1.25))))
+        @test occursin("must have x₀ < x₁ and y₀ < y₁", message(disk, ((-1.25, 1.25), (1.25, -1.25))))
+    end
+
+    @testset "A disk far from the origin closes" begin
+        # T² = id holds to the coordinates' ulps, coarser than 1e-10 of the box at x = 1e6.
+        far = p -> hypot(p[1] - 1e6, p[2]) - 1
+        @test Bramble._levelset_class(far, ((1e6 - 1.25, 1e6 + 1.25), (-1.25, 1.25))) == (path = :closure, ρ = 0.5)
+    end
+
+    @testset "The result type is inferred" begin
+        disk = p -> hypot(p[1], p[2]) - 1
+        r = @inferred Bramble._levelset_class(disk, ((-1.25, 1.25), (-1.25, 1.25)))
+        @test r isa @NamedTuple{path::Symbol, ρ::Float64}
+    end
+
     @testset "Curves reaching the box throw" begin
         disk = p -> hypot(p[1], p[2]) - 1
         @test occursin("reaches the domain's bounding box", message(disk, ((-1.0, 1.0), (-1.5, 1.5))))
         @test occursin("reaches the domain's bounding box", message(disk, ((-0.8, 1.5), (-1.5, 1.5))))
         @test occursin("reaches the domain's bounding box", message(disk, ((-0.5, 0.5), (-0.5, 0.5))))
+        # Tangent to a side between two of its samples.
+        off = p -> hypot(p[1], p[2] - 0.1234567891) - 1
+        @test occursin("reaches the domain's bounding box", message(off, ((-1.5, 1.0), (-1.5, 1.5))))
+        offy = p -> hypot(p[1] - 0.1234567891, p[2]) - 1
+        @test occursin("reaches the domain's bounding box", message(offy, ((-1.5, 1.5), (-1.5, 1.0))))
         @test occursin("region φ < 0 is empty", message(p -> hypot(p[1], p[2]) + 1, ((-1.0, 1.0), (-1.0, 1.0))))
     end
 end

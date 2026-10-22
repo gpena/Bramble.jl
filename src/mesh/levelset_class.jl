@@ -10,6 +10,10 @@
     throw(ArgumentError("level-set grid: φ = 0 reaches the domain's bounding box, or φ < 0 on it; the curve must lie strictly inside the box."))
 end
 
+@noinline function _throw_levelset_box(box)
+    throw(ArgumentError("level-set grid: the box $box must have x₀ < x₁ and y₀ < y₁."))
+end
+
 @noinline function _throw_levelset_empty()
     throw(ArgumentError("level-set grid: φ is nonnegative at every sampled point of the domain's bounding box; the region φ < 0 is empty or too small to resolve."))
 end
@@ -72,16 +76,53 @@ function _levelset_ray(φ, box, c::NTuple{2, Float64}, θ::Float64; M::Int = 129
     return (c[1] + t * e[1], c[2] + t * e[2])
 end
 
-# Whether T^q = id, to 1e-10 L, at every point of `pts`.
-function _levelset_periodic(φ, box, pts, q::Int, L::Float64)
+# Whether T^q = id, to `tol`, at every point of `pts`.
+function _levelset_periodic(φ, box, pts, q::Int, tol::Float64)
     for p in pts
         x = p
         for _ in 1:q
             x = _levelset_T(φ, box, x)
         end
-        hypot(x[1] - p[1], x[2] - p[2]) <= 1e-10 * L || return false
+        hypot(x[1] - p[1], x[2] - p[2]) <= tol || return false
     end
     return true
+end
+
+# The minimum of φ on the box side {x_axis = v}, the other coordinate in [lo, hi], with the
+# largest |φ| sampled there: 2001 samples, refined by golden section around every sampled
+# local minimum, so a curve tangent to the side between two samples is found.
+function _levelset_side_min(φ, axis::Int, v::Float64, lo::Float64, hi::Float64; M::Int = 2001)
+    f = t -> φ(axis == 1 ? (v, t) : (t, v))
+    ts = range(lo, hi; length = M)
+    fs = map(f, ts)
+    fmin, scale = minimum(fs), maximum(abs, fs)
+    invφ = (sqrt(5.0) - 1) / 2
+    for k in 1:M
+        ((k > 1 && fs[k - 1] < fs[k]) || (k < M && fs[k + 1] < fs[k])) && continue
+        a, b = ts[max(k - 1, 1)], ts[min(k + 1, M)]
+        for _ in 1:100
+            m1, m2 = b - invφ * (b - a), a + invφ * (b - a)
+            f(m1) < f(m2) ? (b = m2) : (a = m1)
+        end
+        fmin = min(fmin, f((a + b) / 2))
+    end
+    return fmin, scale
+end
+
+# The minimum of φ on a 129 × 129 sample of the box, and where it is.
+function _levelset_centre(φ, box)
+    (x₀, x₁), (y₀, y₁) = box
+    ns = 129
+    c, fmin = (x₀, y₀), Inf
+    for i in 1:ns, j in 1:ns
+
+        p = (x₀ + (i - 1) * (x₁ - x₀) / (ns - 1), y₀ + (j - 1) * (y₁ - y₀) / (ns - 1))
+        fp = φ(p)
+        if fp < fmin
+            c, fmin = p, fp
+        end
+    end
+    return c, fmin
 end
 
 """
@@ -102,15 +143,14 @@ more than twice, it is not star-shaped about the minimum of `φ`, `T` is phase-l
 function _levelset_class(φ, box)
     B = ((Float64(box[1][1]), Float64(box[1][2])), (Float64(box[2][1]), Float64(box[2][2])))
     (x₀, x₁), (y₀, y₁) = B
-    L = max(x₁ - x₀, y₁ - y₀)
+    (x₀ < x₁ && y₀ < y₁) || _throw_levelset_box(box)
+    # T^q = id is read to 1e-10 of the box, or to 100 ulps of its coordinates when coarser.
+    tol = max(1e-10 * max(x₁ - x₀, y₁ - y₀), 100 * eps(max(abs(x₀), abs(x₁), abs(y₀), abs(y₁))))
 
-    # The curve lies strictly inside the box: φ > 0 at 2001 samples of each side, and no
-    # crossing found on it.
+    # The curve lies strictly inside the box: on each side, min φ > 1e-10 max |φ|.
     for (axis, v, lo, hi) in ((1, x₀, y₀, y₁), (1, x₁, y₀, y₁), (2, y₀, x₀, x₁), (2, y₁, x₀, x₁))
-        for t in range(lo, hi; length = 2001)
-            φ(axis == 1 ? (v, t) : (t, v)) <= 0 && _throw_levelset_touches_box()
-        end
-        isempty(_crossings(φ, axis, v, lo, hi)) || _throw_levelset_touches_box()
+        fmin, scale = _levelset_side_min(φ, axis, v, lo, hi)
+        fmin <= 1e-10 * scale && _throw_levelset_touches_box()
     end
 
     # Orthogonal convexity on 2001 sampled lines per axis.
@@ -126,16 +166,7 @@ function _levelset_class(φ, box)
     end
 
     # Centre: the minimum of φ on a sample of the box; star-shaped about it.
-    ns = 129
-    c, fmin = (x₀, y₀), Inf
-    for i in 1:ns, j in 1:ns
-
-        p = (x₀ + (i - 1) * (x₁ - x₀) / (ns - 1), y₀ + (j - 1) * (y₁ - y₀) / (ns - 1))
-        fp = φ(p)
-        if fp < fmin
-            c, fmin = p, fp
-        end
-    end
+    c, fmin = _levelset_centre(φ, B)
     fmin < 0 || _throw_levelset_empty()
     for k in 0:719
         _levelset_ray(φ, B, c, 2π * k / 720 + 0.001)
@@ -144,7 +175,7 @@ function _levelset_class(φ, box)
     # Finite order: T^q = id at 9 points, q ≤ 4.
     pts = [_levelset_ray(φ, B, c, 0.3 + 2π * (k - 1) / 9) for k in 1:9]
     for q in 1:4
-        _levelset_periodic(φ, B, pts, q, L) && return (path = :closure, ρ = _levelset_ρq(φ, B, c, pts[1], q))
+        _levelset_periodic(φ, B, pts, q, tol) && return (path = :closure, ρ = _levelset_ρq(φ, B, c, pts[1], q))
     end
 
     # Weighted Birkhoff rotation number (Das–Sander–Yorke), weights exp(-1/(t(1-t))), on one
@@ -171,7 +202,7 @@ function _levelset_class(φ, box)
     abs(ρ₁ - ρ₂) > 1e-10 && _throw_levelset_nearly_locked(ρ₂)
     for q in 1:60
         abs(q * ρ₂ - round(q * ρ₂)) < 1e-10 || continue
-        _levelset_periodic(φ, B, pts, q, L) && return (path = :closure, ρ = _levelset_ρq(φ, B, c, pts[1], q))
+        _levelset_periodic(φ, B, pts, q, tol) && return (path = :closure, ρ = _levelset_ρq(φ, B, c, pts[1], q))
         _throw_levelset_locked(round(Int, q * ρ₂), q)   # q is the smallest, so p/q is reduced
     end
     return (path = :orbit, ρ = ρ₂)
