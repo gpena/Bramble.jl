@@ -108,6 +108,7 @@ function _levelset_side_touches(φ, axis::Int, v::Float64, lo::Float64, hi::Floa
         for _ in 1:100
             m1, m2 = b - invφ * (b - a), a + invφ * (b - a)
             f1, f2 = f(m1), f(m2)
+            f1, f2 = isnan(f1) ? Inf : f1, isnan(f2) ? Inf : f2   # a NaN probe never wins
             isfinite(f1) && (g = min(g, f1))
             isfinite(f2) && (g = min(g, f2))
             f1 < f2 ? (b = m2) : f1 > f2 ? (a = m1) : ((a, b) = (m1, m2))

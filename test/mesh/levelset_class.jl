@@ -137,6 +137,12 @@ end
         # NaN on part of a side the disk crosses.
         nan = p -> p[1] > 1.2 ? NaN : hypot(p[1], p[2]) - 1
         @test occursin("reaches the domain's bounding box", message(nan, ((-1.25, 1.25), (-0.9, 1.25))))
+        # NaN beside a tangency must not pull the golden-section bracket off it.
+        Y0 = 0.1234567891
+        for δ in (1e-4, 1e-9)
+            half = p -> (p[1] >= 1.0 && p[2] > Y0 + δ) ? NaN : hypot(p[1], p[2] - Y0) - 1
+            @test occursin("reaches the domain's bounding box", message(half, ((-1.5, 1.0), (-1.5, 1.5))))
+        end
         # A side 1e-3 from the disk is clear.
         disk = p -> hypot(p[1], p[2]) - 1
         @test Bramble._levelset_class(disk, ((-1.001, 1.25), (-1.25, 1.25))).path === :closure
