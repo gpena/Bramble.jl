@@ -110,6 +110,24 @@ marker_triple(Ωₕ, L) = map(l -> Bramble.markers(Ωₕ)[l], Bramble._polygon_l
         @test map(count, (Qi, Qb, Qe)) == (19^2, 80, 101^2 - 80 - 19^2)
     end
 
+    @testset "Far grid corner keeps τ local" begin
+        # The unit square [1, 2]² on a grid reaching R: the node (1.5, 1 + δ) is δ inside
+        # the edge y = 1, thousands of ulps away. A τ scaled by the grid's corner R, not by
+        # the vertices, would swallow it into the boundary.
+        for (T, R, δ) in ((Float64, 1e8, 5e-8), (Float32, 1.0f4, 1.0f-3))
+            sq = [(T(1), T(1)), (T(2), T(1)), (T(2), T(2)), (T(1), T(2))]
+            Ω = domain(interval(T(0), R) × interval(T(0), R), :Q => Bramble.polygon(sq))
+            xs, ys = T[0, 1, 1.5, 2, R], T[0, 1, 1 + δ, 1.5, 2, R]
+            Ωₕ = mesh(Ω, (5, 6), (true, true))
+            Bramble.change_points!(Ωₕ, markers(Ω), (xs, ys))
+            Qi, Qb, Qe = marker_triple(Ωₕ, :Q)
+            k = LinearIndices((5, 6))[3, 3]
+            @test Qi[k]
+            @test !Qb[k]
+            @test (Qi, Qb, Qe) == exact_labels(sq, Ωₕ)
+        end
+    end
+
     @testset "Refinement re-derives labels" begin
         Ω = domain(X, :P => Bramble.polygon(V))
         Ωₕ = mesh(Ω, (7, 6), (true, true))

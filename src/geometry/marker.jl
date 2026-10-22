@@ -134,7 +134,7 @@ Construct a [`DomainMarkers`](@ref) collection from `label => identifier` pairs.
   distance to the boundary is at most
   ``\\max(\\sqrt{\\varepsilon} h_{\\min}, 10^3 \\varepsilon L) + 4 \\varepsilon M``, with
   ``h_{\\min}`` the smallest mesh spacing, ``L`` the polygon's extent, ``M`` the largest
-  coordinate magnitude of the polygon and the mesh's points, and ``\\varepsilon`` the larger
+  coordinate magnitude of the polygon's vertices, and ``\\varepsilon`` the larger
   machine epsilon of the mesh's points and the polygon's vertices.
 
 # Throws

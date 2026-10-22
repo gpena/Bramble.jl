@@ -418,7 +418,9 @@ meant to sit on a `Float64` edge, or a `Float64` node on a `Float32` edge, is a 
 rounding off it, which a `Float64` ε would not cover. That rounding is up to ε |x| / 2 and
 grows with the coordinates, not with hₘᵢₙ or L: on [1000, 1001]² it reaches 3e-5 against
 10³ ε L ≈ 2.4e-5 for an extent of 0.2. The 4 ε M term, M the largest coordinate magnitude of
-the polygon and the grid, covers it; on that grid it is 5e-4, far below the spacing 0.01.
+the polygon's vertices, covers it; on that grid it is 5e-4, far below the spacing 0.01. M
+leaves out the grid: a node within τ of an edge has coordinates about the vertices' size,
+and a far grid corner would widen τ around a small polygon and swallow its nodes.
 =#
 
 """
@@ -465,7 +467,6 @@ function _polygon_tolerance(P::Polygon, pts::NTuple{2, AbstractVector})
         end
     end
     isinf(h) && (h = L)
-    M = T(max(maximum(v -> max(abs(v[1]), abs(v[2])), V),
-        maximum(x -> maximum(abs, x; init = zero(eltype(x))), pts)))
+    M = T(maximum(v -> max(abs(v[1]), abs(v[2])), V))
     return max(sqrt(ε) * h, 1000 * ε * L) + 4 * ε * M
 end
