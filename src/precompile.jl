@@ -57,7 +57,7 @@ include("precompile/solver_sessions.jl")
 include("precompile/parallel_sessions.jl")
 include("precompile/exporters_sessions.jl")
 
-# The polygon path (#202): Figure 1's nine vertices meshed on a non-uniform grid, the
+# The polygon path: Figure 1's nine vertices meshed on a non-uniform grid, the
 # masked trial/test pair and a mixed form assembled. Defined here, not under `precompile/`.
 function _pc_polygon(::Type{T}) where {T}
     V = [(T(0), T(2)), (T(2), T(0)), (T(4), T(0)), (T(6), T(2)), (T(6), T(3)),

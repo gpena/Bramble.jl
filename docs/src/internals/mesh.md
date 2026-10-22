@@ -8,16 +8,15 @@ CurrentModule = Bramble
 ## Grid closure of polygons
 
 `mesh` of a domain with polygon markers fits the grid to the polygons with `_grid_closure`
-(internal). It starts from the seed lines of `npts` and `unif`, adds every vertex coordinate
-as a line, and adds, for each crossing of a line with an oblique edge, the crossing's other
-coordinate as a line, until every crossing is on a node. Lines within `max(1e-10, 64ε) L` of
-each other merge (`L` the polygons' extent), so crossings and vertices sit on nodes up to
-that tolerance. The point count may exceed `npts`.
+(internal), the closure described on the [Meshes API page](../api/meshes.md). Lines within
+`max(1e-10, 64ε) L` of each other merge (`L` the polygons' extent), so crossings and
+vertices sit on nodes up to that tolerance.
 
-The oblique edges must share one slope magnitude; that is necessary, not sufficient. A closure
-that grows past a number of lines proportional to the input throws an `ArgumentError`,
-"unbounded or too fine for this grid", and a polygon small relative to its offset from the
-origin may hit it, as the rounding of the closure then exceeds the merge tolerance.
+The oblique edges must share one slope magnitude; that is necessary, not
+sufficient. A closure that grows past a number of lines proportional to the input throws
+an `ArgumentError`, "unbounded or too fine for this grid", and a polygon small relative to
+its offset from the origin may hit it, as the rounding of the closure then exceeds the
+merge tolerance.
 
 The nodes are then marked by their signed distance `s` to the boundary: on it when
 `|s| <= τ`, inside when `s < -τ`, outside when `s > τ`, with

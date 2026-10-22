@@ -38,11 +38,9 @@ Public = false
 Pages = ["geometry/polygon.jl"]
 ```
 
-A polygon is validated at construction with exact predicates: at least three vertices, no
-zero-length edge, nonzero area and a simple boundary. A vertex in the middle of a straight
-edge is kept. As a marker value, `:P => polygon(V)` defines three labels, `:P`,
-`:P_boundary` and `:P_exterior`, whose nodes are classified on a mesh with the tolerance
-given in the [mesh internals page](mesh.md).
+The validation and the three labels of a polygon marker are in the
+[Geometry API page](../api/geometry.md#Polygons); the tolerance that classifies the nodes
+on a mesh is in the [mesh internals page](mesh.md).
 
 ## Pretty printing
 

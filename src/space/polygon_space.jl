@@ -3,24 +3,17 @@
 # itself, `GhostMesh(Ωₕ; ghosts = ())`, so that forms assemble through the ghost-space
 # reduction.
 #
-# The trial closure `(E, d)` keeps the interior nodes as the degrees of freedom, in mesh
-# order, fixes the boundary nodes to `g` and extends each exterior diagonal neighbour of an
-# interior node by the paper's relation (3.2): for interior `k` and exterior `p = k + (sx, sy)`,
-# `u_p = u_{k + (sx, 0)} + u_{k + (0, sy)} − u_k`, the two corners on the boundary. The test
-# closure selects the interior nodes, `d = 0` (the paper's W₀,H): the trial closure on the
-# test side would add the rows of the extended nodes to the interior ones. Every other
-# exterior node is 0 and must not be read (`_exterior_moves`, ghost_assembly.jl).
-#
-# An exterior node read by two interior nodes (a V-notch: a reflex vertex between two
-# oblique edges) has two different (3.2) values, so no row of `E`: the reduction substitutes
-# it per reading equation, as the paper does.
+# The test closure selects the interior nodes with `d = 0` (the paper's W₀,H): the trial
+# closure on the test side would add the rows of the extended nodes to the interior ones.
+# Every other exterior node is 0 and must not be read (`_exterior_moves`,
+# ghost_assembly.jl).
 #
 # See also: `GhostGridSpace`, `GhostMesh`, `_relation_closure`
 
 """
-    polygon_spaces(Ωₕ::MeshnD{2}, label::Symbol, g) -> (U, V)
+    polygon_spaces(Ωₕ::MeshnD{2}, label::Symbol, g) -> (U, W)
 
-The trial space `U` and the test space `V` of the scheme of Ferreira and Grigorieff (2006)
+The trial space `U` and the test space `W` of the scheme of Ferreira and Grigorieff (2006)
 on the polygon marked `label` on `Ωₕ`, a mesh of a domain with the marker
 `label => polygon(vertices)`, with the Dirichlet datum `g(x)` on the polygon's boundary.
 
@@ -28,13 +21,15 @@ Both are [`GhostGridSpace`](@ref)s over `Ωₕ`, whose degrees of freedom are th
 nodes of the polygon (the label `label`), in the mesh's linear order. `lift(U, u)` is the
 grid function on all of `Ωₕ`: `u` at the interior nodes, `g` at the boundary nodes
 (`Symbol(label, :_boundary)`), the extension (3.2) of the paper at each exterior diagonal
-neighbour of an interior node, and 0 at every other node. `V` selects the interior nodes.
-Assemble with `form(U, V, f)` and `form(V, f)`:
+neighbour `p = k + (sx, sy)` of an interior node `k`,
+`u_p = u_{k+(sx,0)} + u_{k+(0,sy)} − u_k`, and 0 at every other node. `W` selects the
+interior nodes.
+Assemble with `form(U, W, f)` and `form(W, f)`:
 
 ```julia
-U, V = Bramble.polygon_spaces(Ωₕ, :L, g)
-A, F = assemble(form(U, V, (u, v) -> innerₕ(-1.0 * Δₕ(u), v)),
-                form(V, v -> innerₕ(f, v)))
+U, W = Bramble.polygon_spaces(Ωₕ, :L, g)
+A, F = assemble(form(U, W, (u, v) -> innerₕ(-1.0 * Δₕ(u), v)),
+                form(W, v -> innerₕ(f, v)))
 uₕ = Bramble.lift(U, A \\ F)
 ```
 
@@ -128,7 +123,8 @@ function _check_polygon_fit(inn::BitVector, Γ::BitVector, ext::BitVector,
     for j in 1:(n[2] - 1), i in 1:(n[1] - 1)
 
         a, b, c, d = lin[i, j], lin[i + 1, j], lin[i, j + 1], lin[i + 1, j + 1]
-        (inn[a] | inn[b] | inn[c] | inn[d]) && (ext[a] | ext[b] | ext[c] | ext[d]) || continue
+        (inn[a] | inn[b] | inn[c] | inn[d]) &&
+            (ext[a] | ext[b] | ext[c] | ext[d]) || continue
         across(a, d, b, c) || across(b, c, a, d) || _throw_polygon_unfitted(label, (i, j))
     end
     return nothing
@@ -147,8 +143,9 @@ end
 @noinline function _throw_polygon_unfitted(label::Symbol, cell::NTuple{2, Int})
     throw(
         ArgumentError(
-        "the grid does not fit the polygon :$label: the cell at node $cell holds interior " *
-        "and exterior nodes other than across a diagonal between two boundary nodes, so " *
+        "the grid does not fit the polygon :$label: the cell at node $cell holds " *
+        "interior and exterior nodes other than across a diagonal between two boundary " *
+        "nodes, so " *
         "the polygon's boundary crosses a grid line off the nodes. Build the mesh with " *
         "mesh(Ω, npts, unif), which closes the grid lines, or move the points to lines " *
         "that closure gives.",
