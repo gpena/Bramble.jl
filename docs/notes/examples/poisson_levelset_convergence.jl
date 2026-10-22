@@ -210,7 +210,11 @@ $rows.
 The closure path is second order. On the orbit path the vertices lie within ``h^2/4`` of the curve, so the error stays
 below a multiple of ``h^2`` at every level, but the number of lines follows a cost rule and
 ``h`` does not fall by a fixed factor from one level to the next: the fitted slope depends
-on the curve (the egg at 35° has the largest jumps), and the gate asserts the bound on
+on the curve (the egg at 35° has the largest jumps, because its rotation number 0.35287719 lies
+within 6.4e-5 of 6/17, so the cost rule keeps multiples of a 17-step orbit whose closing
+mismatch does not shrink with ``h``, and the error stalls until the rule moves to a long
+orbit; see the design record, `docs/notes/internals/levelset.md`), and the gate asserts
+the bound on
 ``e/h^2`` and a floor on the slope of the ellipse. The page is written by
 `poisson_levelset_convergence.jl` next to it; the test gating these orders
 is `test/convergence/levelset.jl`.

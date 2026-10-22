@@ -107,15 +107,35 @@ term dominates the scheme's own error, about ``0.02 h^2`` on the disk. Since
 `emax/h² ≤ 0.2` and `eH1/h² ≤ 0.4` held in every run: second order with a constant set by
 `cmax`. The per-level orders plateau and jump (egg at 20° at n = 20 to 80 sits at
 `emax ≈ 1e-3` while `h` falls, until the cost rule jumps to q = 318), which is that constant
-moving inside its bound, not a lower order; hence the convergence test asserts a bounded
+moving inside its bound, not a lower order. The egg at 35° shows the same mechanism. In the
+architect's run (seed 1), ``\rho = 0.35287719`` lies within 6.4e-5 of `6/17`, so a 17-step
+orbit misses closing by only ``\|17\rho\| \approx 0.0011`` and `N = 17m` costs about
+`0.019 m²`. The rule takes `m = 1, 2, 3, 6` for n = 20 to 160; the 17-step mismatch is
+spread over the lines but does not shrink with `h`, so `dmax` stays near 1e-4,
+`dmax/h²` climbs from 0.004 to 0.127, and `emax` stays at 1.3e-4 to 1.7e-4 from n = 40 to
+160. At n = 320 the multiples of 17 near the requested count cost more than `cmax`, the rule
+moves to `N = 887` (cost 1.84), and `emax` falls to 2.3e-6. The fitted slope over these
+levels is about 1.6 (1.4 on the convergence page, other seeds) with `emax/h² ≤ 0.19`
+throughout. Hence the convergence test asserts a bounded
 `emax/h²` and a fitted slope, never consecutive orders. For `b ≠ 0` the M-matrix argument is
 gone; the paper's stability estimate covers boundary data perturbations of size O(h²). Not
 measured (#849).
 
 ## Where the grid cannot exist: the impossibility result
 
-For polygons whose edges are cell diagonals, as (Geom) asks, the vertices form closed
-pseudo-orbits of ``T``, and two facts follow.
+Exact vertices first. If every crossing of a grid line with the curve is a node, the vertex
+set is closed under ``\sigma_v`` and ``\sigma_h``, so it is a union of whole orbits of
+``T``, and a finite grid needs finite orbits. When ``\rho`` is irrational every orbit of
+``T`` is infinite (and dense on a smooth curve, by Denjoy), so no grid with finitely many
+lines has every vertex on the curve, at any resolution. This is why the egg at 35°, whose
+weighted Birkhoff average converges to ``\rho = 0.35287719`` with no sign of locking,
+cannot take the closure path. Its symmetric twin at 0° can: the reflection across the axis
+gives ``T^2 = \mathrm{id}``, so every orbit has two points. When ``\rho = p/q`` is rational
+but ``T^q \ne \mathrm{id}``, only a few periodic orbits exist and the rest are attracted
+to them, so the lines cannot be placed where they are needed (the phase-locked error).
+
+With vertices allowed off the curve, they form closed pseudo-orbits of ``T`` instead, for
+polygons whose edges are cell diagonals as (Geom) asks, and two facts follow.
 
 1. A closed ``\varepsilon``-pseudo-orbit of rotation ``p/q`` exists only for
    ``\varepsilon \gtrsim |q\rho - p|/q``, so `dmax/h² ≳ c N‖Nρ‖` (measured constant 0.01 to
