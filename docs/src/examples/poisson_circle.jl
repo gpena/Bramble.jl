@@ -225,7 +225,8 @@ length(xc), length(yc)
 #     <circle class="nD_exterior" cx="403.8" cy="20.0" r="3" fill="#9ca3af"/>
 #     <circle class="nD_exterior" cx="421.3" cy="20.0" r="3" fill="#9ca3af"/>
 #     <circle class="nD_exterior" cx="447.9" cy="20.0" r="3" fill="#9ca3af"/>
-#     <circle class="nD_exterior" cx="520.0" cy="20.0" r="3" fill="#9ca3af"/>#   </g>
+#     <circle class="nD_exterior" cx="520.0" cy="20.0" r="3" fill="#9ca3af"/>
+#   </g>
 # </svg>
 # <figcaption style="font-size:0.9em;opacity:0.8">A coarse grid with the circle (red) over it. Interior nodes are green, exterior nodes grey.</figcaption>
 # </figure>
@@ -240,12 +241,12 @@ let s = read(@__FILE__, String), px(x) = 20 + 250 * (x + 1), py(y) = 20 + 250 * 
     @test all(abs.(gx .- px.(xc)) .< 0.06) && all(abs.(gy .- py.(yc)) .< 0.06)           #src
     mc = markers(Ωc)                                                                     #src
     inn = reshape(BitVector(mc[:D]), length(xc), length(yc))                             #src
-    dots = [(parse(Float64, m[2]), parse(Float64, m[3]), m[1] == "nD")
-            for                #src
-            m in eachmatch(r"<circle class=\"(nD|nD_exterior)\" cx=\"([\d.]+)\" cy=\"([\d.]+)\"", s)]  #src
-    @test length(dots) == length(xc) * length(yc)                                        #src
-    want = Set((round(px(xc[i]); digits = 1), round(py(yc[j]); digits = 1), inn[i, j])  #src
-    for i in eachindex(xc), j in eachindex(yc))                               #src
+    rx = r"<circle class=\"(nD|nD_exterior)\" cx=\"([\d.]+)\" cy=\"([\d.]+)\""  #src
+    ms = collect(eachmatch(rx, s))                                                       #src
+    dots = Set((parse(Float64, m[2]), parse(Float64, m[3]), m[1] == "nD") for m in ms)   #src
+    @test length(ms) == length(xc) * length(yc)                                          #src
+    qx, qy = round.(px.(xc); digits = 1), round.(py.(yc); digits = 1)                    #src
+    want = Set((qx[i], qy[j], inn[i, j]) for i in eachindex(xc), j in eachindex(yc))     #src
     @test Set(dots) == want                                                              #src
     @test occursin("cx=\"270.0\" cy=\"270.0\" r=\"250.0\"", s)                             #src
 end                                                                                      #src
