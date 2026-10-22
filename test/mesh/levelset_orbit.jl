@@ -134,7 +134,7 @@ end
     rng = MersenneTwister(6)
     φ = ellipse(π / 6)
     m = message(() -> Bramble._levelset_grid(φ, seeds(rng, -1.25, 1.25, 4), seeds(rng, -1.25, 1.25, 4)))
-    @test occursin("too coarse", m) && occursin("6 points per axis", m)
+    @test occursin("too coarse", m) && occursin("6 × 6 points", m)
     xs, ys = seeds(rng, -1.25, 1.25, 40), seeds(rng, -1.25, 1.25, 40)
     ρ = 0.36227066168253
     m = message(() -> Bramble._levelset_orbit_grid(φ, xs, ys, ρ; cmax = 1e-3))
@@ -145,6 +145,45 @@ end
     star = p -> hypot(p[1], p[2]) - (0.6 + 0.2 * sin(5 * atan(p[2], p[1])))
     m = message(() -> Bramble._levelset_grid(star, seeds(rng, -1.0, 1.0, 20), seeds(rng, -1.0, 1.0, 20)))
     @test occursin("meets φ = 0 in", m)
+end
+
+@testset "A scaled curve gets the scaled grid" begin
+    φ = ellipse(π / 6)
+    for n in (40, 160)
+        xs, ys = seeds(MersenneTwister(8), -1.25, 1.25, n), seeds(MersenneTwister(9), -1.25, 1.25, n)
+        X, Y, _ = Bramble._levelset_grid(φ, xs, ys)
+        for L in (0.01, 100.0)
+            φL = p -> φ((p[1] / L, p[2] / L))
+            XL, YL, PL = Bramble._levelset_grid(φL, L .* xs, L .* ys)
+            @test length(XL) == length(X) && length(YL) == length(Y)
+            @test XL ≈ L .* X rtol = 1e-6
+            @test YL ≈ L .* Y rtol = 1e-6
+            _, d = check(φL, XL, YL, PL)
+            @test d * L <= 0.25
+        end
+    end
+end
+
+# The phases are anchored at the leftmost point in both, so the grids differ inside the
+# extent; the line counts, which nin decides, agree.
+@testset "Mirror inputs give equal line counts" begin
+    rng = MersenneTwister(10)
+    a, b = seeds(rng, -1.25, 1.25, 5), seeds(rng, -1.25, 1.25, 80)
+    φ₁, φ₂ = ellipse(π / 6), ellipse(π / 3)   # mirror images in y = x
+    X₁, Y₁, P₁ = Bramble._levelset_grid(φ₁, a, b)
+    X₂, Y₂, P₂ = Bramble._levelset_grid(φ₂, b, a)
+    @test length(X₁) == length(Y₂) && length(Y₁) == length(X₂)
+    @test length(P₁.vertices) == length(P₂.vertices)
+    check(φ₁, X₁, Y₁, P₁)
+end
+
+@testset "Duplicated seeds are one seed" begin
+    rng = MersenneTwister(11)
+    φ = ellipse(π / 6)
+    xs, ys = seeds(rng, -1.25, 1.25, 40), seeds(rng, -1.25, 1.25, 40)
+    X, Y, P = Bramble._levelset_grid(φ, xs, ys)
+    X₂, Y₂, P₂ = Bramble._levelset_grid(φ, sort([xs; xs[2]; xs[end - 1]]), [ys; ys[3]])
+    @test X₂ == X && Y₂ == Y && P₂.vertices == P.vertices
 end
 
 @testset "Cyclic tridiagonal solve" begin

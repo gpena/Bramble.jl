@@ -11,8 +11,8 @@
     throw(ArgumentError("level-set grid: too many lines: no grid with at most $cap lines per axis inside the curve's extent keeps its vertices within 0.2 h² of φ = 0 for the $nin lines asked there (rotation number $(round(ρ; digits = 8)))."))
 end
 
-@noinline function _throw_levelset_too_coarse(n)
-    throw(ArgumentError("level-set grid: too coarse: $n points per axis are too few to resolve the curve; use more."))
+@noinline function _throw_levelset_too_coarse(nx, ny)
+    throw(ArgumentError("level-set grid: too coarse: $nx × $ny points are too few to resolve the curve; use more."))
 end
 
 @noinline function _throw_levelset_check_failed(reason)
@@ -32,7 +32,8 @@ are the boundary nodes. `T` is the floating-point type of the seeds.
 
 The returned grid passes the post-check `_levelset_fit`: consecutive vertices are corners
 of one cell, every other node's `φ` sign agrees with its polygon label, no grid edge joins
-an interior and an exterior node, and every vertex is within `h²/4` of `φ = 0`.
+an interior and an exterior node, and every vertex is within `h²/(4ℓ)` of `φ = 0`, `ℓ`
+half the larger extent of the vertices.
 
 # Throws
 
@@ -76,14 +77,16 @@ end
     _levelset_orbit_grid(φ, xs, ys, ρ; cmax = 2.0) -> (X::Vector{T}, Y::Vector{T}, P::Polygon{T})
 
 The orbit-path grid of the curve `φ = 0` whose crossing map `T = σₕ∘σᵥ` has rotation number
-`ρ`. With `nin` the seeds of `xs` inside the curve's ``x``-extent (in proportion), the number
+`ρ`. With `nin` the larger of the two axes' seed counts inside the curve's extent (in
+proportion; the larger, so that no axis is coarser than asked), the number
 `N` of lines per axis inside the extent minimises the cost ``N\\|N\\rho\\|`` (which predicts
 the vertices' distance to the curve over ``h^2``) in ``[nin/1.25, 1.25 nin]``, or is the
 least `N` up to `4 nin` with cost at most `cmax`. With ``p`` the nearest integer to
 ``N\\rho``, ``m = \\gcd(N, p)`` orbits of period ``q = N/m`` start at phases ``1/(2N)``
 apart in the conjugacy of `T` to the rotation, a quarter of that off the leftmost point;
-Levenberg–Marquardt closes each orbit on the vertical lines alone (`_levelset_close!`). The
-seeds farther than a quarter of their spacing from the curve's extent are kept; the others
+Levenberg–Marquardt closes each orbit on the vertical lines alone (`_levelset_close!`), its
+anchor scaled by the curve's length scale `ℓ` (half its larger extent), so that a scaled
+curve with scaled seeds gives the scaled grid. The distinct seeds farther than a quarter of their spacing from the curve's extent are kept; the others
 give way. A grid that fails the post-check is rebuilt once with the next-best `N`.
 
 A rational `ρ = p/q` (an internal use: `T` of finite order) samples the conjugacy from
@@ -97,18 +100,20 @@ orbits started at equally spaced angles.
 """
 function _levelset_orbit_grid(φ, xs::AbstractVector, ys::AbstractVector, ρ::Real; cmax::Real = 2.0)
     B = _levelset_box(xs, ys)
-    sx, sy = sort!(Float64.(collect(xs))), sort!(Float64.(collect(ys)))
+    sx, sy = unique!(sort!(Float64.(collect(xs)))), unique!(sort!(Float64.(collect(ys))))
     c, _ = _levelset_centre(φ, B)
     θₗ, ex, ey = _levelset_extent(φ, B, c)
-    nin = round(Int, length(sx) * (ex[2] - ex[1]) / (B[1][2] - B[1][1]))
-    nin < 6 && _throw_levelset_too_coarse(length(sx))
+    nin = round(Int, max(length(sx) * (ex[2] - ex[1]) / (B[1][2] - B[1][1]), length(sy) * (ey[2] - ey[1]) /
+                                                                             (B[2][2] - B[2][1])))
+    nin < 6 && _throw_levelset_too_coarse(length(sx), length(sy))
+    ℓ = max(ex[2] - ex[1], ey[2] - ey[1]) / 2
     N = _levelset_N(Float64(ρ), nin, Float64(cmax), 0)
     iszero(N) && _throw_levelset_too_many(4nin, nin, ρ)
     kx, ky = _levelset_kept(sx, ex), _levelset_kept(sy, ey)
     T = float(promote_type(eltype(xs), eltype(ys)))
     r = ""
     for _ in 1:2
-        X, Y, V = _levelset_orbits(φ, B, c, θₗ, Float64(ρ), N, ex[2] - ex[1])
+        X, Y, V = _levelset_orbits(φ, B, c, θₗ, Float64(ρ), N, (ex[2] - ex[1]) / ℓ)
         r = _levelset_fit(φ, c, sort!([X; kx]), sort!([Y; ky]), V; T)
         r isa String || return r
         N = _levelset_N(Float64(ρ), nin, Float64(cmax), N)
@@ -208,7 +213,7 @@ function _levelset_Hinv(θs::Vector{Float64}, ψ)
 end
 
 # The vertical lines X, horizontal lines Y and vertices V of N = m q lines per axis inside
-# the extent (width w): m periodic orbits of T, each closed by `_levelset_close!`.
+# the extent (width w in units of the curve's length scale): m periodic orbits of T, each closed by `_levelset_close!`.
 function _levelset_orbits(φ, B, c, θₗ::Float64, ρ::Float64, N::Int, w::Float64)
     m = gcd(N, round(Int, N * ρ))
     q = N ÷ m
@@ -361,8 +366,9 @@ polygon, and check the grid fits it (architect §3.3 step 9). Returns the reason
   - two consecutive vertices are not corners of one cell;
   - a node other than a vertex has a polygon label that disagrees with the sign of `φ`, or
     a grid edge joins an interior and an exterior node;
-  - a vertex is farther than ``h^2/4`` from `φ = 0` (``|\\varphi|/|\\nabla\\varphi|``),
-    ``h`` the largest spacing between the lines within the vertices' extent.
+  - a vertex is farther than ``h^2/(4\\ell)`` from `φ = 0` (``|\\varphi|/|\\nabla\\varphi|``),
+    ``h`` the largest spacing between the lines within the vertices' extent and ``\\ell``
+    half the larger side of that extent: ``h^2/4`` in units of ``\\ell``.
 
 The polygon is built without `polygon`'s validation (quadratic in the vertices): the check
 certifies it.
@@ -421,14 +427,15 @@ function _levelset_fit(φ, c::NTuple{2, Float64}, X::AbstractVector, Y::Abstract
     il, ih = extrema(first, ij)
     jl, jh = extrema(last, ij)
     h = max(il < ih ? maximum(diff(XT[il:ih])) : zero(T), jl < jh ? maximum(diff(YT[jl:jh])) : zero(T))
+    ℓ = Float64(max(XT[ih] - XT[il], YT[jh] - YT[jl])) / 2
     δfd = 1e-6 * Float64(max(XT[end] - XT[1], YT[end] - YT[1]))
     for v in W
         x, y = Float64(v[1]), Float64(v[2])
         gx = (φ((x + δfd, y)) - φ((x - δfd, y))) / 2δfd
         gy = (φ((x, y + δfd)) - φ((x, y - δfd))) / 2δfd
         dist = abs(φ((x, y))) / hypot(gx, gy)
-        dist <= Float64(h)^2 / 4 ||
-            return "the vertex $v is $(round(dist / h^2; sigdigits = 3)) h² from φ = 0, above h²/4"
+        dist * ℓ <= Float64(h)^2 / 4 ||
+            return "the vertex $v is $(round(dist * ℓ / h^2; sigdigits = 3)) h²/ℓ from φ = 0, above h²/(4ℓ)"
     end
     return XT, YT, Polygon{T}(W)
 end
