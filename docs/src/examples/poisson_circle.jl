@@ -240,11 +240,12 @@ let s = read(@__FILE__, String), px(x) = 20 + 250 * (x + 1), py(y) = 20 + 250 * 
     @test all(abs.(gx .- px.(xc)) .< 0.06) && all(abs.(gy .- py.(yc)) .< 0.06)           #src
     mc = markers(Ωc)                                                                     #src
     inn = reshape(BitVector(mc[:D]), length(xc), length(yc))                             #src
-    dots = [(parse(Float64, m[2]), parse(Float64, m[3]), m[1] == "nD") for                #src
+    dots = [(parse(Float64, m[2]), parse(Float64, m[3]), m[1] == "nD")
+            for                #src
             m in eachmatch(r"<circle class=\"(nD|nD_exterior)\" cx=\"([\d.]+)\" cy=\"([\d.]+)\"", s)]  #src
     @test length(dots) == length(xc) * length(yc)                                        #src
     want = Set((round(px(xc[i]); digits = 1), round(py(yc[j]); digits = 1), inn[i, j])  #src
-               for i in eachindex(xc), j in eachindex(yc))                               #src
+    for i in eachindex(xc), j in eachindex(yc))                               #src
     @test Set(dots) == want                                                              #src
     @test occursin("cx=\"270.0\" cy=\"270.0\" r=\"250.0\"", s)                             #src
 end                                                                                      #src

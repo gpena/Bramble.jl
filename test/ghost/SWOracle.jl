@@ -42,6 +42,7 @@ function boundary_nodes(φ, xs, ys, vals)
     tol = sqrt(eps(Float64))
     bnd = falses(nx, ny)
     for j in 1:ny, i in 1:nx
+
         if vals[i, j] == 0
             bnd[i, j] = true
             continue
@@ -68,6 +69,7 @@ function sw_system(φ, xs, ys, g)
     I, J, V = Int[], Int[], Float64[]
     b = zeros(count(inside))
     for j in 1:ny, i in 1:nx
+
         inside[i, j] || continue
         r = id[i, j]
         p = (xs[i], ys[j])
@@ -83,9 +85,13 @@ function sw_system(φ, xs, ys, g)
             end
             w = 2 / (arms[1][1] + arms[2][1])
             for (h, col, gv) in arms
-                push!(I, r); push!(J, r); push!(V, w / h)
+                push!(I, r)
+                push!(J, r)
+                push!(V, w / h)
                 if col > 0
-                    push!(I, r); push!(J, col); push!(V, -w / h)
+                    push!(I, r)
+                    push!(J, col)
+                    push!(V, -w / h)
                 else
                     b[r] += w / h * gv
                 end

@@ -124,8 +124,7 @@ function levelset_orders(shape::Symbol, case::Symbol; seeds = 1:3,
 end
 
 @testset "Level-set convergence" begin
-    @testset "$shape, $case" for (shape, case) in
-                                 ((:disk, :poisson), (:star, :poisson), (:disk, :variable))
+    @testset "$shape, $case" for (shape, case) in ((:disk, :poisson), (:star, :poisson), (:disk, :variable))
         om, oh = levelset_orders(shape, case)
         @test 1.8 <= om < 3.5
         @test 1.8 <= oh < 3

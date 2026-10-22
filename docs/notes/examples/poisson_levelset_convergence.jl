@@ -89,7 +89,6 @@ function ls_level(φ, k, n, seed)
     return max(maximum(diff(xs)), maximum(diff(ys))), e1, emax
 end
 
-
 geomean(v) = exp(sum(log, v) / length(v))
 
 """
