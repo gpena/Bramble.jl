@@ -128,6 +128,19 @@ end
         @test occursin("reaches the domain's bounding box", message(offy, ((-1.5, 1.5), (-1.5, 1.0))))
         @test occursin("region φ < 0 is empty", message(p -> hypot(p[1], p[2]) + 1, ((-1.0, 1.0), (-1.0, 1.0))))
     end
+
+    @testset "The box-side test ignores φ's scale" begin
+        B = ((-1.25, 1.25), (-1.25, 1.25))
+        # φ grows by e^66 from the curve to the sides, and overflows to Inf on them.
+        @test Bramble._levelset_class(p -> exp(50 * (p[1]^2 + p[2]^2)) - exp(12.5), B).path === :closure
+        @test Bramble._levelset_class(p -> exp(1000 * (p[1]^2 + p[2]^2)) - exp(250.0), B).path === :closure
+        # NaN on part of a side the disk crosses.
+        nan = p -> p[1] > 1.2 ? NaN : hypot(p[1], p[2]) - 1
+        @test occursin("reaches the domain's bounding box", message(nan, ((-1.25, 1.25), (-0.9, 1.25))))
+        # A side 1e-3 from the disk is clear.
+        disk = p -> hypot(p[1], p[2]) - 1
+        @test Bramble._levelset_class(disk, ((-1.001, 1.25), (-1.25, 1.25))).path === :closure
+    end
 end
 
 end # module

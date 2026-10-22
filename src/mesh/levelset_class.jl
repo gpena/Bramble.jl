@@ -88,25 +88,33 @@ function _levelset_periodic(φ, box, pts, q::Int, tol::Float64)
     return true
 end
 
-# The minimum of φ on the box side {x_axis = v}, the other coordinate in [lo, hi], with the
-# largest |φ| sampled there: 2001 samples, refined by golden section around every sampled
-# local minimum, so a curve tangent to the side between two samples is found.
-function _levelset_side_min(φ, axis::Int, v::Float64, lo::Float64, hi::Float64; M::Int = 2001)
+# Whether φ = 0 reaches the box side {x_axis = v}, the other coordinate in [lo, hi]: some
+# of 2001 samples has φ ≤ 0, or golden section around a sampled local minimum finds
+# φ ≤ 1e-10 of the largest |φ| at the samples bracketing it (a curve tangent to the side
+# between two samples). Non-finite samples are skipped, so neither test reads NaN or Inf.
+function _levelset_side_touches(φ, axis::Int, v::Float64, lo::Float64, hi::Float64; M::Int = 2001)
     f = t -> φ(axis == 1 ? (v, t) : (t, v))
     ts = range(lo, hi; length = M)
     fs = map(f, ts)
-    fmin, scale = minimum(fs), maximum(abs, fs)
+    any(x -> isfinite(x) && x <= 0, fs) && return true
     invφ = (sqrt(5.0) - 1) / 2
     for k in 1:M
+        isfinite(fs[k]) || continue
         ((k > 1 && fs[k - 1] < fs[k]) || (k < M && fs[k + 1] < fs[k])) && continue
         a, b = ts[max(k - 1, 1)], ts[min(k + 1, M)]
+        spread = maximum(j -> isfinite(fs[j]) ? abs(fs[j]) : 0.0, max(k - 1, 1):min(k + 1, M))
+        # A tie keeps [m1, m2], so φ rounded flat near a tangency cannot drift the bracket.
+        g = Inf
         for _ in 1:100
             m1, m2 = b - invφ * (b - a), a + invφ * (b - a)
-            f(m1) < f(m2) ? (b = m2) : (a = m1)
+            f1, f2 = f(m1), f(m2)
+            isfinite(f1) && (g = min(g, f1))
+            isfinite(f2) && (g = min(g, f2))
+            f1 < f2 ? (b = m2) : f1 > f2 ? (a = m1) : ((a, b) = (m1, m2))
         end
-        fmin = min(fmin, f((a + b) / 2))
+        g <= 1e-10 * spread && return true
     end
-    return fmin, scale
+    return false
 end
 
 # The minimum of φ on a 129 × 129 sample of the box, and where it is.
@@ -147,10 +155,9 @@ function _levelset_class(φ, box)
     # T^q = id is read to 1e-10 of the box, or to 100 ulps of its coordinates when coarser.
     tol = max(1e-10 * max(x₁ - x₀, y₁ - y₀), 100 * eps(max(abs(x₀), abs(x₁), abs(y₀), abs(y₁))))
 
-    # The curve lies strictly inside the box: on each side, min φ > 1e-10 max |φ|.
+    # The curve lies strictly inside the box: φ > 0 on each side, tangency included.
     for (axis, v, lo, hi) in ((1, x₀, y₀, y₁), (1, x₁, y₀, y₁), (2, y₀, x₀, x₁), (2, y₁, x₀, x₁))
-        fmin, scale = _levelset_side_min(φ, axis, v, lo, hi)
-        fmin <= 1e-10 * scale && _throw_levelset_touches_box()
+        _levelset_side_touches(φ, axis, v, lo, hi) && _throw_levelset_touches_box()
     end
 
     # Orthogonal convexity on 2001 sampled lines per axis.
