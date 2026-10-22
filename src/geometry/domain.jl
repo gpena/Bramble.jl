@@ -57,11 +57,11 @@ Zero-allocation; see [`label_identifiers`](@ref).
 """
     marker_identifiers(Ω::Domain) -> Tuple
 
-Return a tuple of the identifying symbols, symbol sets, predicate functions or polygons of
+Return a tuple of the identifying symbols, symbol sets, predicate functions, polygons or level sets of
 all markers in domain `Ω`.
 
 The tuple lists the identifiers of [`symbols`](@ref), then [`tuples`](@ref), then
-[`conditions`](@ref), then the polygon markers. It is built as a compile-time-unrolled
+[`conditions`](@ref), then the polygon and level-set markers. It is built as a compile-time-unrolled
 tuple, like [`label_identifiers`](@ref), so its type is concrete even when the kinds are
 mixed.
 
@@ -295,13 +295,14 @@ function _show_domain_detailed(io::IO, Ω::Domain)
     n_sym = length(symbols(Ω))
     n_tup = length(tuples(Ω))
     n_cond = length(conditions(Ω))
+    n_ls = count(m -> identifier(m) isa LevelSet, regions(markers(Ω)))
     n_reg = length(regions(markers(Ω)))
 
     if n_sym + n_tup + n_cond + n_reg == 0
         print(io, "    ")
         print_empty_message(pp, "(none)")
     else
-        print_marker_summary(with_indent(pp, 2), n_sym, n_tup, n_cond, n_reg)
+        print_marker_summary(with_indent(pp, 2), n_sym, n_tup, n_cond, n_reg - n_ls, n_ls)
 
         print(io, "    ")
         print_labels_list(pp, collect(labels(Ω)))

@@ -5,5 +5,6 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
 @testset "Sets and Domains" begin
     include("sets.jl")
     include("polygon.jl")
+    include("levelset.jl")
     include("domains.jl")
 end
