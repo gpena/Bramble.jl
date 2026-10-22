@@ -28,6 +28,14 @@ Return a [`Mesh1D`](@ref) or [`MeshnD`](@ref) (``D=2,3``) discretizing the [`Dom
 When passing a [`CartesianProduct`](@ref) `X` directly, `mesh` automatically constructs `domain(X)`, provisioning default `:boundary` and `:interior` geometric markers.
 Passing a single integer `npts::Int` constructs an isotropic grid with `npts` points along every coordinate axis.
 
+When `Ω` carries polygon markers (`:L => polygon(V)`), the grid is fitted to the polygons:
+the lines drawn from `npts` and `unif` are seeds, every vertex coordinate becomes a grid
+line, and each crossing of a grid line with an oblique edge adds the crossing's other
+coordinate as a line, until every crossing is a grid node. The number of points along an axis
+may therefore exceed `npts`. A seed closer to a vertex or closure line than a small tolerance
+relative to the polygon's extent is dropped. The oblique edges must share one slope
+magnitude, otherwise the lines never close and `mesh` throws an `ArgumentError`.
+
 # Arguments
 
   - `Ω`: Continuous domain to discretize.
