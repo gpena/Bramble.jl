@@ -290,8 +290,8 @@ when the orbits of its crossing map are finite; otherwise the cap is reached.
 # Throws
 
   - `ArgumentError`: if the oblique edges do not share one slope magnitude, or if the
-    closure exceeds a number of lines proportional to the input (the polygon's grid
-    closure is unbounded or too fine for this grid).
+    closure exceeds a number of lines proportional to the input (the grid
+    closure of a polygon or level set is unbounded or too fine for this grid).
 """
 _grid_closure(P::Union{Polygon, LevelSet}, xs, ys) = _grid_closure((P,), xs, ys)
 
@@ -418,9 +418,9 @@ function _closure_pass(fixed::NTuple{2, Vector{T}}, seeds::NTuple{2, Vector{T}},
     return pos, 0
 end
 
-@noinline _throw_closure_cap(cap) = throw(ArgumentError("Polygon grid closure: the " *
+@noinline _throw_closure_cap(cap) = throw(ArgumentError("Grid closure: the " *
                                                         "closure exceeded $cap added grid lines (a cap proportional to the input); the " *
-                                                        "polygon's grid closure is unbounded or too fine for this grid."))
+                                                        "region's grid closure is unbounded or too fine for this grid."))
 
 # Insert the line `c`, grown from root `r` (0 for an end point or a vertex, k for the k-th
 # seed), into the sorted lines `pos` of axis `a`. Returns -1 when it is new, 0 when it is
