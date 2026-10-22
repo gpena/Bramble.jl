@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=df93815a">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=c60a89a7">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -56,6 +56,7 @@
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
@@ -330,7 +331,7 @@ boundary_symbols(D::Integer) -&gt; Tuple{Vararg{Symbol}}</code></pre>
 <div class="md-docstring" id="Bramble.markers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.markers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L86-L116" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L117-L157" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -345,12 +346,12 @@ markers(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair.
 </li>
 <li><p><code class="md-code-inline">time_set</code>: Optional 1D temporal interval for time-dependent boundary conditions. With it, every predicate <code class="md-code-inline">Function</code> takes <code class="md-code-inline">(x, t)</code>. <code class="md-code-inline">markers(...)(t)</code> fixes <code class="md-code-inline">(x, t)</code> predicates at <code class="md-code-inline">t</code> and keeps spatial <code class="md-code-inline">x</code> predicates, so it also applies to markers built without it.</p>
 </li>
-<li><p><code class="md-code-inline">pairs</code>: Vararg sequence of <code class="md-code-inline">label =&gt; identifier</code> pairs where identifier is a <code class="md-code-inline">Symbol</code>, a tuple (<code class="md-code-inline">NTuple{N, Symbol}</code>), <code class="md-code-inline">AbstractVector{Symbol}</code> or <code class="md-code-inline">AbstractSet{Symbol}</code> of boundary symbols, or a predicate <code class="md-code-inline">Function</code> (<code class="md-code-inline">x -&gt; Bool</code>, or <code class="md-code-inline">(x, t) -&gt; Bool</code> with <code class="md-code-inline">time_set</code>).</p>
+<li><p><code class="md-code-inline">pairs</code>: Vararg sequence of <code class="md-code-inline">label =&gt; identifier</code> pairs where identifier is a <code class="md-code-inline">Symbol</code>, a tuple (<code class="md-code-inline">NTuple{N, Symbol}</code>), <code class="md-code-inline">AbstractVector{Symbol}</code> or <code class="md-code-inline">AbstractSet{Symbol}</code> of boundary symbols, a predicate <code class="md-code-inline">Function</code> (<code class="md-code-inline">x -&gt; Bool</code>, or <code class="md-code-inline">(x, t) -&gt; Bool</code> with <code class="md-code-inline">time_set</code>), or, on a 2D <code class="md-code-inline">space_set</code>, a <code class="md-code-inline">Polygon</code> built by <code class="md-code-inline">polygon</code>. A pair <code class="md-code-inline">:L =&gt; polygon(V)</code> gives a mesh the labels <code class="md-code-inline">L</code>, <code class="md-code-inline">L_boundary</code> and <code class="md-code-inline">L_exterior</code>: the nodes inside the polygon, on its boundary and outside it. A node is on the boundary when its distance to the boundary is at most <span class="md-math md-math-inline">\(\max(\sqrt{\varepsilon} h_{\min}, 10^3 \varepsilon L) + 4 \varepsilon M\)</span>, with <span class="md-math md-math-inline">\(h_{\min}\)</span> the smallest mesh spacing, <span class="md-math md-math-inline">\(L\)</span> the polygon&#39;s extent, <span class="md-math md-math-inline">\(M\)</span> the largest coordinate magnitude of the polygon&#39;s vertices, and <span class="md-math md-math-inline">\(\varepsilon\)</span> the larger machine epsilon of the mesh&#39;s points and the polygon&#39;s vertices.</p>
 </li>
 </ul>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: if an identifier is of any other kind (for example a <code class="md-code-inline">String</code>, a <code class="md-code-inline">Dict</code> or a callable object that is not a <code class="md-code-inline">Function</code>), names a symbol that is not a boundary of <code class="md-code-inline">space_set</code>, or, with <code class="md-code-inline">time_set</code>, is a predicate that does not accept <code class="md-code-inline">(x, t)</code>.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: if an identifier is of any other kind (for example a <code class="md-code-inline">String</code>, a <code class="md-code-inline">Dict</code> or a callable object that is not a <code class="md-code-inline">Function</code>), names a symbol that is not a boundary of <code class="md-code-inline">space_set</code>, or, with <code class="md-code-inline">time_set</code>, is a predicate that does not accept <code class="md-code-inline">(x, t)</code>. Also if a polygon marks a set that is not 2D, has a vertex outside <code class="md-code-inline">space_set</code>, is labelled <code class="md-code-inline">:boundary</code> or <code class="md-code-inline">:interior</code>, or one of its three labels is another marker&#39;s.</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -384,7 +385,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.domain">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.domain</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L86-L113" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L88-L115" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -435,6 +436,41 @@ true</code></pre>
 <p>Zero-allocation; see <a href="../../internals/geometry/#Bramble.label_identifiers-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}"><code class="md-code-inline">label_identifiers</code></a>.</p>
 </div>
 </div>
+<h2 id="Polygons" class="md-heading">Polygons<a href="#Polygons" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">polygon(V)</code> is exported; <code class="md-code-inline">signed_distance</code> is <code class="md-code-inline">public</code> and not exported. A polygon is a marker value: <code class="md-code-inline">:P =&gt; polygon(V)</code> in a domain labels the nodes of a 2D mesh <code class="md-code-inline">:P</code> (interior), <code class="md-code-inline">:P_boundary</code> and <code class="md-code-inline">:P_exterior</code>. The vertices are validated with exact predicates: at least three, no zero-length edge, nonzero area, a simple boundary. A vertex in the middle of a straight edge is kept. See <a href="../../api/meshes/">Meshes</a> for the grid fitted to a polygon and <a href="../../api/spaces/">Grid spaces</a> for <code class="md-code-inline">polygon_spaces</code>.</p>
+<div class="md-docstring" id="Bramble.polygon">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.polygon</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/polygon.jl#L18-L32" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">polygon(V::AbstractVector{&lt;:NTuple{2, Real}}) -&gt; Polygon{T}</code></pre>
+</div>
+<p>Construct the simple polygon whose boundary visits the vertices <code class="md-code-inline">V</code> in order and returns from the last to the first. <code class="md-code-inline">V</code> may run clockwise or counter-clockwise; the result is stored counter-clockwise. Coordinates are converted to the promoted floating-point type <code class="md-code-inline">T</code>.</p>
+<p>A vertex in the middle of a straight edge is kept as a vertex.</p>
+<p><strong>Throws</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">ArgumentError</code>: if <code class="md-code-inline">V</code> has fewer than three vertices, a coordinate is not finite, two consecutive vertices coincide (the last and the first included), the polygon has zero area, or its boundary crosses or touches itself (a bowtie, an edge folding back on the previous one).</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.signed_distance">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.signed_distance</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/polygon.jl#L131-L140" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">signed_distance(P::Polygon, x) -&gt; Real</code></pre>
+</div>
+<p>Signed Euclidean distance from the point <code class="md-code-inline">x = (x₁, x₂)</code> to the boundary of <code class="md-code-inline">P</code>: negative inside, zero on the boundary, positive outside.</p>
+<p>The distance is the minimum over the edges of the exact distance from <code class="md-code-inline">x</code> to the edge; the sign comes from the crossing number of a horizontal ray from <code class="md-code-inline">x</code>, so non-convex polygons and reflex vertices are handled.</p>
+</div>
+</div>
       </article>
       <footer class="md-footer">
 <p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
@@ -445,6 +481,7 @@ true</code></pre>
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#Sets-and-intervals">Sets and intervals</a>
           <a class="md-toc-link md-toc-h2" href="#Markers-and-domains">Markers and domains</a>
+          <a class="md-toc-link md-toc-h2" href="#Polygons">Polygons</a>
       </div>
     </aside>
   </div>
@@ -462,6 +499,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=df93815a"></script>
+  <script src="../../assets/materialdocs.js?v=c60a89a7"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Meshes — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=5c7cdc44">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=cbf95793">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Meshes — Bramble.jl">
   <meta property="og:title" content="Meshes — Bramble.jl">
@@ -56,6 +56,7 @@
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
@@ -205,6 +206,7 @@ point(Ωₕ, (10, 15))  # returns (x₁₀, y₁₅)</code></pre>
 <p>Returns the underlying mesh object associated with the function space <code class="md-code-inline">Wₕ</code>.</p>
 </div>
 </div>
+<p>A domain with polygon markers (<code class="md-code-inline">:P =&gt; polygon(V)</code>, see <a href="../../api/geometry/">Geometry</a>) gets a grid fitted to them: every vertex coordinate is a grid line, and every crossing of a grid line with an oblique edge adds a line, until each crossing is a node. The number of points along an axis may therefore exceed <code class="md-code-inline">npts</code>. See <a href="../../api/meshes/#Bramble.mesh"><code class="md-code-inline">mesh</code></a> for the tolerances and the errors, and the <a href="../../internals/mesh/">mesh internals page</a> for the closure.</p>
 <h2 id="Points-and-spacings" class="md-heading">Points and spacings<a href="#Points-and-spacings" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><code class="md-code-inline">host_points</code>, <code class="md-code-inline">host_spacings</code>, <code class="md-code-inline">forward_spacings</code>, <code class="md-code-inline">half_spacings</code>, <code class="md-code-inline">host_half_spacings</code>, <code class="md-code-inline">stepsize</code>, <code class="md-code-inline">locate_cell</code> and <code class="md-code-inline">cell_measures</code> are private; see the <a href="../../internals/mesh/">mesh internals page</a>.</p>
 <div class="md-docstring" id="Bramble.npoints">
@@ -664,6 +666,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=5c7cdc44"></script>
+  <script src="../../assets/materialdocs.js?v=cbf95793"></script>
 </body>
 </html>

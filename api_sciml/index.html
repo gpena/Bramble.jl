@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML, AD and solvers — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=4de6fa90">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=4dc960d9">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
@@ -56,6 +56,7 @@
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../examples/heat_equation/">Heat equation</a>
         <a href="../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
@@ -367,7 +368,7 @@ ode_function(a::BilinearForm, l::LinearForm; kwargs...) -&gt; ODEFunction</code>
 <div class="md-docstring" id="Bramble.ode_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ode_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L70-L108" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L70-L109" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -385,7 +386,7 @@ ode_problem(a::Bramble.GhostBilinearForm, l::Bramble.GhostLinearForm, u₀, I; k
 <li><p><code class="md-code-inline">specialize</code> (default <code class="md-code-inline">nothing</code>, <code class="md-code-inline">ODEProblem</code>&#39;s own choice untouched). The solved trajectory goes to <code class="md-code-inline">Bramble.adjoint_sensitivities</code> with any specialization: <code class="md-code-inline">SciMLBase.FullSpecialize</code> is not needed for the adjoint on any backend.</p>
 </li>
 </ul>
-<p>The two-form method also forwards its other keywords to <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>.</p>
+<p>The two-form method, one for plain forms and for forms on a constrained ghost space alike, also forwards its other keywords to <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>.</p>
 <p>Requires <a href="https://github.com/SciML/SciMLBase.jl">SciMLBase.jl</a>.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
@@ -425,7 +426,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.linear_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.linear_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L196-L220" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L199-L223" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -496,7 +497,7 @@ sol = solve(prob, NewtonRaphson())</code></pre>
 <div class="md-docstring" id="Bramble.adjoint_sensitivities">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.adjoint_sensitivities</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L175-L188" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L178-L191" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2567,6 +2568,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=4de6fa90"></script>
+  <script src="../assets/materialdocs.js?v=4dc960d9"></script>
 </body>
 </html>

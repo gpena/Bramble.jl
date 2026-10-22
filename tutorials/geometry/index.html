@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry tutorial — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=2b679fc8">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b37235b3">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry tutorial — Bramble.jl">
   <meta property="og:title" content="Geometry tutorial — Bramble.jl">
@@ -56,6 +56,7 @@
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
@@ -351,7 +352,7 @@ m_time = markers(
 
 collect(labels(m_cond)), m_time(1.5)      # the second is the marker set frozen at t = 1.5</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">([:inflow, :hot_spot], Bramble.EvaluatedDomainMarkers{Bramble.DomainMarkers{Tuple{}, Tuple{}, Tuple{Bramble.Marker{Main.var&quot;#5#6&quot;}}}, Float64}(DomainMarkers(1 total), 1.5))</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([:inflow, :hot_spot], Bramble.EvaluatedDomainMarkers{Bramble.DomainMarkers{Tuple{}, Tuple{}, Tuple{Bramble.Marker{Main.var&quot;#5#6&quot;}}, Tuple{}}, Float64}(DomainMarkers(1 total), 1.5))</code></pre>
 </div>
 <p><code class="md-code-inline">labels</code> returns one tuple of every label, symbol markers first, then tuple markers, then predicate markers, built without allocating. The helpers <code class="md-code-inline">label_symbols</code>, <code class="md-code-inline">label_tuples</code> and <code class="md-code-inline">label_conditions</code> behind it are internal.</p>
       </article>
@@ -387,6 +388,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=2b679fc8"></script>
+  <script src="../../assets/materialdocs.js?v=b37235b3"></script>
 </body>
 </html>

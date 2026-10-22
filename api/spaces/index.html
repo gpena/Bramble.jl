@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=2461ea71">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=50523a1c">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces — Bramble.jl">
   <meta property="og:title" content="Grid spaces — Bramble.jl">
@@ -56,6 +56,7 @@
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
@@ -839,7 +840,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.GhostGridSpace">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GhostGridSpace</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L23-L49" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L40-L66" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -933,7 +934,7 @@ Tₕ = constrained(Wₕ × Wₕ, u -&gt; (:xmin =&gt; t(u, 1) =&gt; 1.0, :xmin =
 <div class="md-docstring" id="Bramble.lift">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.lift</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L436-L484" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L457-L505" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -978,7 +979,7 @@ lift(Vₕ::CompositeGridSpace, u::AbstractVector, t::Number) -&gt; VectorElement
 <div class="md-docstring" id="Bramble.lift!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.lift!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L507-L537" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L528-L558" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1086,7 +1087,7 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 <div class="md-docstring" id="Bramble.assemble!-Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code> — <span class="md-docstring-sig">Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L705-L725" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L855-L875" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1097,6 +1098,35 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 <p>Refill <code class="md-code-inline">A</code> and <code class="md-code-inline">F</code> with the matrix and the load that <code class="md-code-inline">A, F = assemble(a, l)</code> returns, and return <code class="md-code-inline">A, F</code>. <code class="md-code-inline">A</code> keeps the pattern and <code class="md-code-inline">F</code> the element type that <code class="md-code-inline">assemble(a, l)</code> gave, so call that once and refill its two outputs. The call allocates nothing warm.</p>
 <p>Both forms are assembled together because, when the closure of the trial space has an affine part <code class="md-code-inline">d ≠ 0</code>, the load is <code class="md-code-inline">E_vᵀ(F − A d)</code> and reads the matrix. <code class="md-code-inline">assemble!(b, l)</code> alone refuses a test space with <code class="md-code-inline">d ≠ 0</code>, which is exact when both sides are one space: on a pair whose trial space has data and whose test space has none, it gives <code class="md-code-inline">E_vᵀ F</code> without the lift. <code class="md-code-inline">dirichlet</code>, <code class="md-code-inline">dirichlet_components</code> and <code class="md-code-inline">symmetrize</code> act as in <code class="md-code-inline">assemble(a, l)</code>.</p>
 <p>It throws an <code class="md-code-inline">ArgumentError</code> when the trial space of <code class="md-code-inline">a</code> or the test space of <code class="md-code-inline">l</code> is time-dependent (pose the problem with <code class="md-code-inline">semidiscretize</code>), for <code class="md-code-inline">symmetrize = true</code> without <code class="md-code-inline">dirichlet</code>, for <code class="md-code-inline">A</code> that is not a <code class="md-code-inline">SparseMatrixCSC</code> with the reduced pattern of <code class="md-code-inline">a</code>, for a <code class="md-code-inline">dirichlet</code> the rows of the space do not allow, and for an <code class="md-code-inline">F</code> whose element type cannot hold the load&#39;s. A <code class="md-code-inline">DimensionMismatch</code> follows an <code class="md-code-inline">F</code> of the wrong length and forms whose test spaces differ: not the same space, and closures <code class="md-code-inline">(E, d)</code> that are not equal.</p>
+</div>
+</div>
+<h2 id="Polygon-spaces" class="md-heading">Polygon spaces<a href="#Polygon-spaces" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">polygon_spaces(Ωₕ, :P, g)</code> returns the trial and test spaces <code class="md-code-inline">(U, W)</code> of the scheme of Ferreira and Grigorieff on a polygon marked <code class="md-code-inline">:P</code> of a 2D mesh. <code class="md-code-inline">public</code> and not exported: write <code class="md-code-inline">Bramble.polygon_spaces</code>. The support of each operation is in the <a href="../../internals/space/">space internals page</a>.</p>
+<div class="md-docstring" id="Bramble.polygon_spaces">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.polygon_spaces</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/polygon_space.jl#L13-L48" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">polygon_spaces(Ωₕ::MeshnD{2}, label::Symbol, g) -&gt; (U, W)</code></pre>
+</div>
+<p>The trial space <code class="md-code-inline">U</code> and the test space <code class="md-code-inline">W</code> of the scheme of Ferreira and Grigorieff (2006) on the polygon marked <code class="md-code-inline">label</code> on <code class="md-code-inline">Ωₕ</code>, a mesh of a domain with the marker <code class="md-code-inline">label =&gt; polygon(vertices)</code>, with the Dirichlet datum <code class="md-code-inline">g(x)</code> on the polygon&#39;s boundary.</p>
+<p>Both are <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a>s over <code class="md-code-inline">Ωₕ</code>, whose degrees of freedom are the interior nodes of the polygon (the label <code class="md-code-inline">label</code>), in the mesh&#39;s linear order. <code class="md-code-inline">lift(U, u)</code> is the grid function on all of <code class="md-code-inline">Ωₕ</code>: <code class="md-code-inline">u</code> at the interior nodes, <code class="md-code-inline">g</code> at the boundary nodes (<code class="md-code-inline">Symbol(label, :_boundary)</code>), the extension (3.2) of the paper at each exterior diagonal neighbour <code class="md-code-inline">p = k + (sx, sy)</code> of an interior node <code class="md-code-inline">k</code>, <code class="md-code-inline">u_p = u_{k+(sx,0)} + u_{k+(0,sy)} − u_k</code>, and 0 at every other node. <code class="md-code-inline">W</code> selects the interior nodes. Assemble with <code class="md-code-inline">form(U, W, f)</code> and <code class="md-code-inline">form(W, f)</code>:</p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">U, W = Bramble.polygon_spaces(Ωₕ, :L, g)
+A, F = assemble(form(U, W, (u, v) -&gt; innerₕ(-1.0 * Δₕ(u), v)),
+                form(W, v -&gt; innerₕ(f, v)))
+uₕ = Bramble.lift(U, A \ F)</code></pre>
+</div>
+<p>A form may read, in the equation of an interior node, its 5-point neighbours and its diagonal neighbours (<code class="md-code-inline">Δₕ</code>, <code class="md-code-inline">Dcₓ(Dcᵧ(u))</code>, first differences): an exterior node beyond them has no value and the form throws. An exterior node two interior nodes extend differently (a V-notch) is substituted per reading equation in the reduction.</p>
+<p><strong>Throws</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">ArgumentError</code>: if <code class="md-code-inline">Ωₕ</code> has no polygon marker <code class="md-code-inline">label</code>; if the grid does not fit the polygon (a cell holding interior and exterior nodes other than across a diagonal between two boundary nodes, as after <code class="md-code-inline">change_points!</code> to lines the closure would not give); if the polygon has no interior node. <code class="md-code-inline">form(U, U, f)</code> and <code class="md-code-inline">form(U, f)</code> throw, as <code class="md-code-inline">U</code> is no test space, and so does <code class="md-code-inline">dirichlet =</code> in <code class="md-code-inline">assemble</code>: <code class="md-code-inline">g</code> fixes the boundary.</p>
+</li>
+</ul>
 </div>
 </div>
       </article>
@@ -1113,6 +1143,7 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
           <a class="md-toc-link md-toc-h2" href="#Restriction-and-averaging-operators">Restriction and averaging operators</a>
           <a class="md-toc-link md-toc-h2" href="#Interpolation-between-grid-spaces">Interpolation between grid spaces</a>
           <a class="md-toc-link md-toc-h2" href="#Ghost-spaces">Ghost spaces</a>
+          <a class="md-toc-link md-toc-h2" href="#Polygon-spaces">Polygon spaces</a>
       </div>
     </aside>
   </div>
@@ -1130,6 +1161,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=2461ea71"></script>
+  <script src="../../assets/materialdocs.js?v=50523a1c"></script>
 </body>
 </html>

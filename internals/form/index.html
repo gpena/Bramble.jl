@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=29be93fc">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=5e583341">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -56,6 +56,7 @@
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
@@ -180,7 +181,7 @@
 <div class="md-docstring" id="Bramble._batch_bilinear_band_replay!-NTuple{11, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_bilinear_band_replay!</code> — <span class="md-docstring-sig">NTuple{11, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L1038-L1048" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L1085-L1095" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -193,7 +194,7 @@
 <div class="md-docstring" id="Bramble._batch_bilinear_colour_replay!-NTuple{8, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_bilinear_colour_replay!</code> — <span class="md-docstring-sig">NTuple{8, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L966-L977" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L1013-L1024" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -667,10 +668,23 @@ trial_function(space::AbstractSpaceType) -&gt; TrialFunction{dim(space), leaf_co
 <p>Products and sums are not members. <code class="md-code-inline">BilinearProduct</code> and <code class="md-code-inline">LinearProduct</code> hold two operands with different roles – trial on the left, test on the right – so a query about the test component reads <code class="md-code-inline">right_op</code> alone, and <code class="md-code-inline">OperatorAdd</code> has to reconcile both sides. Those stay written out, which is the point: what is left explicit is what genuinely differs.</p>
 </div>
 </div>
+<div class="md-docstring" id="Bramble._face_margins-Union{Tuple{D}, Tuple{Any, NTuple{D, AbstractUnitRange{Int64}}}} where D">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._face_margins</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Any, NTuple{D, AbstractUnitRange{Int64}}}} where D</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/stencil_eval.jl#L526-L533" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_face_margins(term, ax::NTuple{D, AbstractUnitRange{Int}}) -&gt; NTuple{D, NTuple{2, Int}}</code></pre>
+</div>
+<p>The walk&#39;s guarded margin on each face of the grid with axes <code class="md-code-inline">ax</code>, <code class="md-code-inline">(low, high)</code> per axis: <a href="../../internals/form/#Bramble._stencil_margin-Tuple{Bramble.TrialFunction}"><code class="md-code-inline">_stencil_margin</code></a><code class="md-code-inline">(term)</code>, and 3 more on a facet a marked function of <code class="md-code-inline">term</code> extrapolates across, so the interior they leave reads no ghost of a marked facet and takes the term unmarked (<code class="md-code-inline">_interior_term</code>). Every face alike for a term with no mark.</p>
+</div>
+</div>
 <div class="md-docstring" id="Bramble._is_source_only-Tuple{Union{Bramble.BackwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.BackwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CrossWeightedDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.JumpNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.SecondDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ShiftNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StarDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._is_source_only</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.BackwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.BackwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CrossWeightedDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.JumpNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.SecondDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ShiftNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StarDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/stencil_eval.jl#L1125-L1145" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/stencil_eval.jl#L1192-L1212" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1547,7 +1561,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.DiagonalReplaySink">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DiagonalReplaySink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1309-L1325" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1325-L1341" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1562,7 +1576,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.ReplaySink">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ReplaySink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1200-L1222" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1216-L1238" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1579,7 +1593,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._CoordSink">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._CoordSink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1149-L1165" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1165-L1181" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1608,7 +1622,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._PairReplaySink">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._PairReplaySink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1247-L1259" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1263-L1275" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1687,7 +1701,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._sink_entry!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._sink_entry!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1122-L1131" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1138-L1147" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1862,7 +1876,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.visit_bilinear_stencil-Tuple{Any, Any, Any, Any, Int64, Int64}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.visit_bilinear_stencil</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any, Any, Int64, Int64}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L999-L1045" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1010-L1060" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1873,7 +1887,7 @@ visit_bilinear_stencil(interior_sink, boundary_sink, term, sp, row_offset::Int, 
 <p>Walk every grid point of <code class="md-code-inline">sp</code>, evaluate <code class="md-code-inline">term</code>&#39;s local stencil there, and hand each entry that lands inside the matrix to a sink.</p>
 <p>The walk that five separate sweeps used to re-derive: mesh, markers, linear indices, the loop over grid points, the stencil evaluation, and the decision of where each entry lands (<a href="../../internals/form/#Bramble._entry_target-Tuple{Any, CartesianIndex, Any, Any, Int64, Int64}"><code class="md-code-inline">_entry_target</code></a>). A sink supplies only what to do with an entry, so the pattern passes and the value passes share one traversal instead of agreeing by coincidence.</p>
 <p>The fifth argument handed to <code class="md-code-inline">local_stencil</code> is the <em>leaf&#39;s</em> linear index. A term routed to the wrong leaf reads the wrong <code class="md-code-inline">SourceVector</code> without complaint, which is why the index is derived here rather than by each caller.</p>
-<p>Splits into an interior core and a boundary shell when <a href="../../internals/form/#Bramble._stencil_margin-Tuple{Bramble.TrialFunction}"><code class="md-code-inline">_stencil_margin</code></a> and the grid size allow it (see the comment above <code class="md-code-inline">_peelable</code>), so most points skip the bounds guard entirely; every point still gets exactly one visit either way, so a sink sees the same set of entries regardless of which path ran, in a possibly different order. <a href="../../internals/form/#Bramble.ReplaySink"><code class="md-code-inline">ReplaySink</code></a> is unaffected by that: it addresses each point by its own linear index, not by visit order (see its docstring).</p>
+<p>Splits into an interior core and a boundary shell when the margins of <a href="../../internals/form/#Bramble._face_margins-Union{Tuple{D}, Tuple{Any, NTuple{D, AbstractUnitRange{Int64}}}} where D"><code class="md-code-inline">_face_margins</code></a> and the grid size allow it (see the comment above <code class="md-code-inline">_peelable</code>), so most points skip the bounds guard entirely; every point still gets exactly one visit either way, so a sink sees the same set of entries regardless of which path ran, in a possibly different order. The one exception is a term under the facet rule: the core walks it unmarked (<code class="md-code-inline">_interior_term</code>), without the zero-weight entries of the marked function&#39;s extra stencil parts. The same values land, and the recording (<code class="md-code-inline">_coord_walk!</code>) and every replay split the same way, so their entries still agree. <a href="../../internals/form/#Bramble.ReplaySink"><code class="md-code-inline">ReplaySink</code></a> is unaffected by that: it addresses each point by its own linear index, not by visit order (see its docstring).</p>
 <p>For the recording and replay sinks a product term is walked factor by factor, never built into its product stencil (<code class="md-code-inline">_factored_walk</code>): the same entries, in the same order and to the bit, handed to the sink as they are formed.</p>
 <p>The two-sink form lets the interior and the boundary shell be handled by different sinks – only <a href="../../internals/form/#Bramble.DiagonalReplaySink"><code class="md-code-inline">DiagonalReplaySink</code></a> needs this, pairing itself (interior) with an ordinary <a href="../../internals/form/#Bramble.ReplaySink"><code class="md-code-inline">ReplaySink</code></a> (boundary shell), so the one-sink form below is the thin, common case.</p>
 <p><strong>Arguments</strong></p>
@@ -1927,7 +1941,7 @@ visit_bilinear_stencil(interior_sink, boundary_sink, term, sp, row_offset::Int, 
 <div class="md-docstring" id="Bramble._sweep_band_colour!-Union{Tuple{TERM}, Tuple{Bramble.CpuThreaded, Any, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64, Int64, Any}} where TERM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._sweep_band_colour!</code> — <span class="md-docstring-sig">Union{Tuple{TERM}, Tuple{Bramble.CpuThreaded, Any, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64, Int64, Any}} where TERM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L984-L996" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L1031-L1043" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1941,7 +1955,7 @@ visit_bilinear_stencil(interior_sink, boundary_sink, term, sp, row_offset::Int, 
 <div class="md-docstring" id="Bramble._sweep_coloured!-Union{Tuple{P}, Tuple{Any, P, Any, Any}} where P">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._sweep_coloured!</code> — <span class="md-docstring-sig">Union{Tuple{P}, Tuple{Any, P, Any, Any}} where P</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L880-L894" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_execution.jl#L927-L941" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2050,6 +2064,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=29be93fc"></script>
+  <script src="../../assets/materialdocs.js?v=5e583341"></script>
 </body>
 </html>
