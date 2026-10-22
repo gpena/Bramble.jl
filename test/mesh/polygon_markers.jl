@@ -91,6 +91,25 @@ marker_triple(Ωₕ, L) = map(l -> Bramble.markers(Ωₕ)[l], Bramble._polygon_l
         end
     end
 
+    @testset "Offset Float32 grid on Float64 edges" begin
+        # On [1000, 1001]² a Float32 node is up to 3e-5 off the Float64 edge it is meant
+        # to sit on, more than 10³ ε L for L = 0.2: the 4 ε M term keeps every such node,
+        # and the 19² interior nodes show τ stays well below the spacing 0.01.
+        sq = [(1000.1, 1000.1), (1000.3, 1000.1), (1000.3, 1000.3), (1000.1, 1000.3)]
+        Y = interval(1000.0f0, 1001.0f0) × interval(1000.0f0, 1001.0f0)
+        Ωₕ = mesh(domain(Y, :Q => Bramble.polygon(sq)), (101, 101), (true, true))
+        xs = collect(points(Ωₕ(1)))
+        @test eltype(xs) === Float32
+        @test findall(==(Float32(1000.1)), xs) == [11]
+        @test findall(==(Float32(1000.3)), xs) == [31]
+        on_edge(i, j) = (i in (11, 31) && 11 <= j <= 31) || (j in (11, 31) && 11 <= i <= 31)
+        inner(i, j) = 11 < i < 31 && 11 < j < 31
+        Qi, Qb, Qe = marker_triple(Ωₕ, :Q)
+        @test Qb == BitVector(vec([on_edge(i, j) for i in 1:101, j in 1:101]))
+        @test Qi == BitVector(vec([inner(i, j) for i in 1:101, j in 1:101]))
+        @test map(count, (Qi, Qb, Qe)) == (19^2, 80, 101^2 - 80 - 19^2)
+    end
+
     @testset "Refinement re-derives labels" begin
         Ω = domain(X, :P => Bramble.polygon(V))
         Ωₕ = mesh(Ω, (7, 6), (true, true))

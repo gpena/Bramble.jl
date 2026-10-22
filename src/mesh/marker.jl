@@ -408,14 +408,17 @@ end
 #=
 A polygon marker classifies each node by its signed distance s to the polygon's boundary:
 on the boundary when |s| <= τ, inside when s < -τ, outside when s > τ. The tolerance
-τ = max(√ε hₘᵢₙ, 10³ ε L) follows the mesh spacing hₘᵢₙ, so a node a rounding error off an
-edge (a moved point, a refined grid) is still on it, and scales with the polygon's extent L.
-The second term keeps τ above the rounding of `signed_distance` itself when a sliver cell
-makes hₘᵢₙ tiny, where √ε hₘᵢₙ alone falls below it and boundary nodes are lost.
+τ = max(√ε hₘᵢₙ, 10³ ε L) + 4 ε M follows the mesh spacing hₘᵢₙ, so a node a rounding error
+off an edge (a moved point, a refined grid) is still on it, and scales with the polygon's
+extent L. The 10³ ε L term keeps τ above the rounding of `signed_distance` itself when a
+sliver cell makes hₘᵢₙ tiny, where √ε hₘᵢₙ alone falls below it and boundary nodes are lost.
 
 ε is the larger machine epsilon of the points' and the vertices' types. A `Float32` node
 meant to sit on a `Float64` edge, or a `Float64` node on a `Float32` edge, is a `Float32`
-rounding off it, which a `Float64` ε would not cover.
+rounding off it, which a `Float64` ε would not cover. That rounding is up to ε |x| / 2 and
+grows with the coordinates, not with hₘᵢₙ or L: on [1000, 1001]² it reaches 3e-5 against
+10³ ε L ≈ 2.4e-5 for an extent of 0.2. The 4 ε M term, M the largest coordinate magnitude of
+the polygon and the grid, covers it; on that grid it is 5e-4, far below the spacing 0.01.
 =#
 
 """
@@ -462,5 +465,7 @@ function _polygon_tolerance(P::Polygon, pts::NTuple{2, AbstractVector})
         end
     end
     isinf(h) && (h = L)
-    return max(sqrt(ε) * h, 1000 * ε * L)
+    M = T(max(maximum(v -> max(abs(v[1]), abs(v[2])), V),
+        maximum(x -> maximum(abs, x; init = zero(eltype(x))), pts)))
+    return max(sqrt(ε) * h, 1000 * ε * L) + 4 * ε * M
 end
