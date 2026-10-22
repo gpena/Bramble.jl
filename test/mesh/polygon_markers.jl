@@ -55,8 +55,10 @@ marker_triple(Ωₕ, L) = map(l -> Bramble.markers(Ωₕ)[l], Bramble._polygon_l
     end
 
     @testset "Non-uniform grid matches oracle" begin
+        # The mesh is built without the marker, whose grid closure would add nodes; the
+        # marker then labels the non-uniform points given here.
         Ω = domain(X, :P => Bramble.polygon(V))
-        Ωₕ = mesh(Ω, (7, 6), (false, false))
+        Ωₕ = mesh(domain(X), (7, 6), (false, false))
         xs = [0.0, 0.5, 1.75, 2.0, 3.25, 4.0, 6.0]
         ys = [0.0, 1.0, 2.5, 3.0, 4.75, 5.0]
         Bramble.change_points!(Ωₕ, markers(Ω), (xs, ys))
@@ -118,7 +120,7 @@ marker_triple(Ωₕ, L) = map(l -> Bramble.markers(Ωₕ)[l], Bramble._polygon_l
             sq = [(T(1), T(1)), (T(2), T(1)), (T(2), T(2)), (T(1), T(2))]
             Ω = domain(interval(T(0), R) × interval(T(0), R), :Q => Bramble.polygon(sq))
             xs, ys = T[0, 1, 1.5, 2, R], T[0, 1, 1 + δ, 1.5, 2, R]
-            Ωₕ = mesh(Ω, (5, 6), (true, true))
+            Ωₕ = mesh(domain(interval(T(0), R) × interval(T(0), R)), (5, 6), (true, true))
             Bramble.change_points!(Ωₕ, markers(Ω), (xs, ys))
             Qi, Qb, Qe = marker_triple(Ωₕ, :Q)
             k = LinearIndices((5, 6))[3, 3]
@@ -170,7 +172,7 @@ marker_triple(Ωₕ, L) = map(l -> Bramble.markers(Ωₕ)[l], Bramble._polygon_l
         # (1 + 1e-12, 4), 7e-13 off the edges through (1, 1) and (1, 4), stay boundary nodes
         # through the scale term: the 16 of the uniform grid and these two.
         Ω = domain(X, :P => Bramble.polygon(V))
-        Ωₕ = mesh(Ω, (8, 6), (false, false))
+        Ωₕ = mesh(domain(X), (8, 6), (false, false))
         xs = [0.0, 1.0, 1.0 + 1e-12, 2.0, 3.0, 4.0, 5.0, 6.0]
         Bramble.change_points!(Ωₕ, markers(Ω), (xs, collect(0.0:5.0)))
         Pb = Bramble.markers(Ωₕ)[:P_boundary]
@@ -183,7 +185,7 @@ marker_triple(Ωₕ, L) = map(l -> Bramble.markers(Ωₕ)[l], Bramble._polygon_l
     end
 
     @testset "Two polygons and a predicate" begin
-        tri = [(1.0, 1.0), (5.0, 1.0), (1.0, 4.0)]
+        tri = [(1.0, 1.0), (4.0, 1.0), (1.0, 4.0)]
         Ω = domain(X, :P => Bramble.polygon(V), :left => :left,
             :Q => Bramble.polygon(tri), :high => x -> x[2] > 3.5)
         Ωₕ = mesh(Ω, (7, 6), (true, true))
