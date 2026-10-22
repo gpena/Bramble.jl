@@ -455,7 +455,7 @@ end
 function _relation_matrix(P::CompositeGridSpace{N}, op::FacetOperator{D, G}, a::Val, b::Val,
         name::Val, c::Val) where {N, D, G}
     Ωₕ = mesh(first(leaf_spaces_offsets(P)[_val(c)]))
-    _check_facet_reach(Ωₕ, G[_val(a)], _val(a), _val(b))
+    _check_facet_reach(Ωₕ, G[_val(a)], _val(a), _val(b), (_facet_component(op, a, b),))
     R = spzeros(eltype(P), ndofs(P), ndofs(P))
     return _add_pieces(R, P, _facet_component(op, a, b), Val(G), (a, b, name, c),
         ntuple(Val, Val(N)))
@@ -717,7 +717,8 @@ function _assemble_relation(P::ScalarGridSpace{D}, r::_FacetRelation) where {D}
     op = r.op
     data = _is_time_relation(r) ? one(eltype(P)) : r.data
     return _at_facet(Val(D), r.d, r.s) do name, d, s
-        _check_facet_reach(mesh(P), _reads_ghosts(op)[_val(d)], _val(d), _val(s))
+        _check_facet_reach(mesh(P), _reads_ghosts(op)[_val(d)], _val(d), _val(s),
+            (_facet_component(op, d, s),))
         mask = _relation_mask(d, s, Val(D))
         R = assemble(form(P, P, (u, v) -> _facet_inner(mask, op, v)))
         b = assemble(form(P, v -> _facet_inner(mask, data, _facet_identity(v))))

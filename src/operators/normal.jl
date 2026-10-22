@@ -481,10 +481,12 @@ end
 A quantity with one value per boundary facet: `ops[d][s]` is the `LazyOp` it is on the facet
 of normal axis `d`, side `s` (1 the minimum, 2 the maximum), outward sign included. `G[d][e]`
 says whether the operator of a facet of axis `d` reads the ghosts along axis `e`: beyond its
-own facet for `e == d`, beyond both `e` facets at its corners otherwise. [`inner_Γ`](@ref)
-refuses it, at `form`, where those ghosts are missing. Built by [`∂ₙ`](@ref), [`∂ₙₙ`](@ref)
-and [`jumpₙ`](@ref), and meaningful only inside `inner_Γ`; not a `LazyOp`, since a node of a
-corner has a value for each facet it lies on.
+own facet for `e == d`, beyond both `e` facets at its corners otherwise. `G` depends on
+types only. A conormal `K` reaches every axis whatever its values, and [`inner_Γ`](@ref),
+at `form`, refuses the operator where those ghosts are missing unless every difference
+along that axis `e ≠ d` in the facet's operator carries a zero coefficient. Built by
+[`∂ₙ`](@ref), [`∂ₙₙ`](@ref) and [`jumpₙ`](@ref), and meaningful only inside `inner_Γ`; not a
+`LazyOp`, since a node of a corner has a value for each facet it lies on.
 """
 struct FacetOperator{D, G, T <: Tuple}
     ops::T
@@ -545,12 +547,14 @@ function ∂ₙ(u::LazyOp{D}; K = nothing) where {D}
     return _facet_operator(Val(_normal_reach(K, Val(D))), ops)
 end
 
-# A facet of axis `d` reads along `d`, and along each `e` with `K[d, e] ≠ 0`.
+# A facet of axis `d` reads along `d` and, with a matrix `K`, along every axis: a type of
+# `K` alone, so that `K`'s values do not reach the type. An axis whose coefficient `K[d, e]`
+# is zero is pruned where the check runs (`_check_facet_reach`), on the operator's values.
 @inline function _normal_reach(::Nothing, ::Val{D}) where {D}
     return ntuple(d -> ntuple(==(d), Val(D)), Val(D))
 end
-@inline function _normal_reach(K::AbstractMatrix, ::Val{D}) where {D}
-    return ntuple(d -> ntuple(e -> e == d || !iszero(K[d, e]), Val(D)), Val(D))
+@inline function _normal_reach(::AbstractMatrix, ::Val{D}) where {D}
+    return ntuple(_ -> ntuple(_ -> true, Val(D)), Val(D))
 end
 
 @inline _outward(op::LazyOp) = (-op, op)
@@ -688,8 +692,10 @@ end
 The quadrature weight of one facet: the transverse measure `∏_{e ≠ DIM} ĥ_e` at the nodes of
 the facet of normal axis `DIM`, side `SIDE` (1 the minimum, 2 the maximum), when `MASK`
 selects it, and zero anywhere else. Unsigned, since a `FacetOperator` carries its
-outward sign. `G[e]` says whether the term reads the ghosts along axis `e` (the facet's own
-for `e == DIM`, both `e` facets' at its corners otherwise), which `form` checks.
+outward sign. `G[e]` says whether the term may read the ghosts along axis `e` (the facet's
+own for `e == DIM`, both `e` facets' at its corners otherwise): the facet operator's
+structural reach, which no weight reads. `form` checks it on the product's operands,
+skipping an axis `e ≠ DIM` along which every difference carries a zero coefficient.
 """
 struct InnerGammaFacet{MASK, DIM, SIDE, G} <: AbstractInnerProduct end
 
@@ -701,10 +707,11 @@ struct InnerGammaFacet{MASK, DIM, SIDE, G} <: AbstractInnerProduct end
     return zero(eltype(Ωₕ))
 end
 
-function _resolved_inner(
-        ::Type{InnerGammaFacet{_SurfaceLabels{L}, DIM, SIDE, G}}, Ωₕ) where {L, DIM, SIDE, G}
+function _resolved_inner(::Type{InnerGammaFacet{_SurfaceLabels{L}, DIM, SIDE, G}}, Ωₕ,
+        product) where {L, DIM, SIDE, G}
     mask = _surface_mask(Ωₕ, L)
-    mask[DIM][SIDE] && _check_facet_reach(Ωₕ, G, DIM, SIDE)
+    operands = (product.left_op, product.right_op)
+    mask[DIM][SIDE] && _check_facet_reach(Ωₕ, G, DIM, SIDE, operands)
     return InnerGammaFacet{mask, DIM, SIDE, G}
 end
 function _surface_labels(
@@ -714,14 +721,45 @@ end
 
 # The facet's own ghosts first, then, for each other axis `e` the term reads along, the
 # ghosts of both `e` facets, which the tangential difference reads at the facet's corners.
-function _check_facet_reach(Ωₕ, G::Tuple, DIM::Int, SIDE::Int)
+# An axis `e` the reach `G` names is skipped when no operand reads along it
+# (`_reads_along`): a conormal `K` with `K[DIM, e] == 0` ghosts only its own facet.
+function _check_facet_reach(Ωₕ, G::Tuple, DIM::Int, SIDE::Int, operands::Tuple)
     G[DIM] && _check_facet_ghosts(Ωₕ, DIM, SIDE)
-    for e in eachindex(G), s in 1:2
-
-        e != DIM && G[e] && _check_transverse_ghosts(Ωₕ, DIM, SIDE, e, s)
+    for e in eachindex(G)
+        e != DIM && G[e] && any(o -> _reads_along(o, e), operands) || continue
+        for s in 1:2
+            _check_transverse_ghosts(Ωₕ, DIM, SIDE, e, s)
+        end
     end
     return nothing
 end
+
+# Whether `op` holds a difference, average, shift or jump along axis `e` that is not under a
+# zero scale: an `OperatorScale` whose scalar is a `Number` equal to zero (a `Ref` or any
+# other scalar counts as nonzero). A node not named here counts as reading every axis, so
+# the check errs on asking for ghosts; data (a function, a number) reads none.
+_reads_along(::Any, ::Int) = false
+_reads_along(::LazyOp, ::Int) = true
+const _ReachLeaf = Union{TrialFunction, TestFunction, IndexedTrialFunction,
+    IndexedTestFunction, SourceFunction, SourceVector, SourceConstant, IdentityOperator,
+    ZeroOperator}
+_reads_along(::_ReachLeaf, ::Int) = false
+function _reads_along(op::OperatorScale, e::Int)
+    return !_is_zero_scale(op.scalar) && _reads_along(op.inner_op, e)
+end
+_reads_along(op::GridFunctionScale, e::Int) = _reads_along(op.inner_op, e)
+function _reads_along(op::OperatorAdd, e::Int)
+    return _reads_along(op.left_op, e) || _reads_along(op.right_op, e)
+end
+for T in (:BackwardDifference, :ForwardDifference, :CenteredDifference, :StarDifference,
+    :CrossWeightedDifference, :SecondDifference, :BackwardAverage, :ForwardAverage,
+    :CenteredAverage, :JumpNode, :ShiftNode)
+    @eval function _reads_along(op::$T{D, Dim}, e::Int) where {D, Dim}
+        return Dim == e || _reads_along(op.inner_op, e)
+    end
+end
+_is_zero_scale(c::Number) = iszero(c)
+_is_zero_scale(::Any) = false
 
 @inline function _check_transverse_ghosts(G::_GhostMeshLike, d::Int, s::Int, e::Int, t::Int)
     has_ghosts(G, e, _GHOST_SIDES[t]) || _throw_conormal_unghosted(d, s, e, t)

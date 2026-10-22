@@ -196,7 +196,30 @@ relerr(A, R) = norm(A - R) / norm(R)
             rows = [LP[2, j] for j in 1:ns[2]]
             ω = [ON.facet_weight(Ωₕ, 1, CartesianIndex(1, j)) for j in 1:ns[2]]
             @test (Ad * ux)[rows] ≈ -2.0 .* ω   # `u = x`, its ghost mirrored: Dc_x(u) = 1
+            # the type is `K`'s alone: the zero is pruned at `form`, from the value
+            ut = Bramble.trial_function(Px)
+            @test typeof(∂ₙ(ut; K = Kd)) == typeof(∂ₙ(ut; K))
+            # on the test side too, as the transpose
+            At = assemble(form(Px, Px, (u, v) -> inner_Γ(u, ∂ₙ(v; K = Kd); markers)))
+            @test At ≈ transpose(Ad)
+            # and in a ghost relation, which checks its reach apart from `form`'s labels
+            Wx = gridspace(Ωₕ; ghosts = (:xmin,))
+            C = constrained(Wx, u -> :xmin => ∂ₙ(u; K = Kd) => 0.0)
+            @test C isa Bramble.GhostGridSpace
         end
+        @test_throws ArgumentError form(Px, Px, (u, v) -> inner_Γ(u, ∂ₙ(v; K); markers))
+        Wx = gridspace(Ωₕ; ghosts = (:xmin,))
+        rerr = try
+            constrained(Wx, u -> :xmin => ∂ₙ(u; K) => 0.0)
+            nothing
+        catch e
+            e
+        end
+        @test rerr isa ArgumentError
+        @test occursin(":ymin", sprint(showerror, rerr))
+        # a `Ref` scale is read at assembly, so it counts as nonzero, whatever it holds
+        @test_throws ArgumentError form(Px, Px,
+            (u, v) -> inner_Γ(Ref(0.0) * ∂ₙ(u; K), v; markers))
         # with both y facets ghosted, the corner rows are the exact conormal flux
         P3 = padded(Ωₕ; ghosts = (:xmin, :ymin, :ymax))
         A = assemble(form(P3, P3, (u, v) -> inner_Γ(∂ₙ(u; K), v; markers)))
