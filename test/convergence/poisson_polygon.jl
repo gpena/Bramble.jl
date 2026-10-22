@@ -18,8 +18,6 @@ using Bramble
 using Bramble: D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, Dcₓ, Dcᵧ
 using Random
 
-const _PP_SLOW = isdefined(Main, :TestUtils) && Main.TestUtils.WITH_SLOW_TESTS
-
 const _PP_FIG1 = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0), (4.0, 3.0),
     (4.0, 5.0), (2.0, 5.0), (0.0, 3.0)]
 const _PP_LSHAPE = [(0.0, 0.0), (6.0, 0.0), (6.0, 3.0), (4.0, 3.0), (4.0, 5.0), (0.0, 5.0)]
@@ -156,8 +154,8 @@ const _PP_GATES = ((:fig1_poisson, :jitter, 1.8, 1.8), (:fig1_mixed, :jitter, 1.
     (:fig1_poisson, :uniform, 1.8, 1.8))
 
 @testset "Polygon convergence" begin
-    # The slow group adds two more disjoint seed triples per case.
-    triples = _PP_SLOW ? (1:3, 4:6, 7:9) : (1:3,)
+    # Three disjoint seed triples per case.
+    triples = (1:3, 4:6, 7:9)
     @testset "$case, $kind seeds" for (case, kind, lo1, lomax) in _PP_GATES
         for seeds in (kind === :uniform ? (1:1,) : triples)
             o = polygon_errors(case; seeds, kind)

@@ -1,7 +1,7 @@
 name: CI
 
 # The fast gate: only the Julia version matrix that actually tests Bramble's code, on macOS
-# only, and only the `unit` test group. Formatting, quality (Aqua & JET), the docs
+# only, and only the `unit` and `convergence` test groups. Formatting, quality (Aqua & JET), the docs
 # build/deploy, coverage upload, Linux itself, and the test blocks too expensive to pay for
 # per push all moved to nightly.yml, once a day — see the comment there for why.
 
@@ -103,9 +103,11 @@ jobs:
         # shard plus precompile instead of the whole group. Three, not two: two would leave
         # `Forms` alone near 22 minutes, over the 20-minute bar. The fourth, `ghost`, came
         # from nightly.yml, which shards the `slow` group the same way and needs the ghost
-        # tests off `rest`. `CI result` aggregates every leg, so the required check is
-        # unchanged.
-        shard: [forms-1, forms-2, ghost, rest]
+        # tests off `rest`. The fifth, `convergence`, is not a unit shard: it runs the
+        # `convergence` group (test/convergence/), every convergence study of the suite,
+        # which `unit` no longer holds. `CI result` aggregates every leg, so the required
+        # check is unchanged.
+        shard: [forms-1, forms-2, ghost, rest, convergence]
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -203,8 +205,9 @@ jobs:
       # would fall on cold runners only. This has not been measured.
       - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
-          BRAMBLE_TEST_GROUP: unit
-          BRAMBLE_TEST_SHARD: ${{ matrix.shard }}
+          # The `convergence` leg runs its own group, unsharded; the others a `unit` shard.
+          BRAMBLE_TEST_GROUP: ${{ matrix.shard == 'convergence' && 'convergence' || 'unit' }}
+          BRAMBLE_TEST_SHARD: ${{ matrix.shard != 'convergence' && matrix.shard || '' }}
           # 5, below this macOS runner's 7 GB, so a blow-up fails by name (see TestUtils.jl)
           # before the runner just kills the job. Coverage is on here, as it was by default.
           BRAMBLE_TEST_MAXRSS_GB: 5

@@ -15,60 +15,13 @@ using LinearAlgebra: Diagonal, issymmetric, norm
 using SparseArrays: sparse, spdiagm
 import ..TestUtils
 
+isdefined(Main, :TwoSpacesCases) ||
+    Base.include(Main, joinpath(@__DIR__, "TwoSpacesCases.jl"))
+using Main.TwoSpacesCases: PROBLEMS, mesh_axes, node_solution, problem_data, random_mesh
+
 const tol = 1e-11
 
 relerr(A, B) = norm(A - B) / max(norm(B), eps())
-
-# The manufactured solution and its second derivatives, one per axis.
-function manufactured(D)
-    D == 1 && return (u = p -> sin(p[1]) + p[1]^2, du = p -> (cos(p[1]) + 2p[1],),
-        d2u = p -> (-sin(p[1]) + 2,))
-    return (u = p -> sin(p[1]) * cos(p[2]) + p[1] * p[2],
-        du = p -> (cos(p[1]) * cos(p[2]) + p[2], -sin(p[1]) * sin(p[2]) + p[1]),
-        d2u = p -> (-sin(p[1]) * cos(p[2]), -sin(p[1]) * cos(p[2])))
-end
-
-# `α u + β ∂ₙ(u) = r` on `facet`, with `r` from the manufactured solution.
-function robin_on(ex, facet, α, β)
-    s = String(facet)
-    d = findfirst(==(s[1]), "xyz")
-    η = endswith(s, "min") ? -1.0 : 1.0
-    return (facet, α, β, p -> α * ex.u(p) + β * η * ex.du(p)[d])
-end
-
-function problem_data(D; mixed)
-    ex = manufactured(D)
-    f = p -> -sum(ex.d2u(p))
-    h = (F, p) -> ex.d2u(p)[findfirst(==(String(F)[1]), "xyz")]
-    mixed || return (; f, g = ex.u, h, dirichlet = D == 1 ? (:xmin, :xmax) :
-                                                   (:xmin, :xmax, :ymin, :ymax))
-    D == 1 && return (; f, g = ex.u, h, dirichlet = (:xmin,),
-        robin = (robin_on(ex, :xmax, 2.0, 1.0),))
-    return (; f, g = ex.u, h, dirichlet = (:xmin, :ymax),
-        robin = (robin_on(ex, :xmax, 2.0, 1.0), robin_on(ex, :ymin, 0.0, 1.0)))
-end
-
-# A seeded random mesh of `n0` points per axis on the unit box, halved `level` times.
-function random_mesh(D, n0, level; seed = 11)
-    Bramble._seed_mesh1d_rng!(seed)
-    Ω = try
-        D == 1 ? mesh(domain(interval(0.0, 1.0)), n0, false) :
-        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n0, n0), (false, false))
-    finally
-        Bramble._unseed_mesh1d_rng!()
-    end
-    foreach(_ -> iterative_refinement!(Ω), 1:level)
-    return Ω
-end
-
-mesh_axes(Ω) = Bramble.points(Ω) isa Tuple ? Bramble.points(Ω) : (Bramble.points(Ω),)
-
-const PROBLEMS = [
-    (name = "1D Dirichlet", D = 1, n0 = 11, mixed = false),
-    (name = "1D Dirichlet and Robin", D = 1, n0 = 11, mixed = true),
-    (name = "2D Dirichlet", D = 2, n0 = 6, mixed = false),
-    (name = "2D Dirichlet, Robin and Neumann", D = 2, n0 = 6, mixed = true)
-]
 
 function build(prob)
     Ω = random_mesh(prob.D, prob.n0, 0)
@@ -96,19 +49,6 @@ function applied_by_hand(c)
     rows_only = copy(A)
     symmetrize!(A, F, sp, c.labels...)
     return rows_only, A, F
-end
-
-# The solution at every node, mesh order, by `pde_solve`: the plain system carries its
-# Dirichlet nodes, the ghost one is lifted by `Bramble.lift`.
-function node_solution(c)
-    if c.route === :rows
-        return pde_solve(assemble(c.a, c.l; dirichlet = c.pairs, symmetrize = true)...)
-    end
-    ub = pde_solve(assemble(c.a, c.l)...)
-    uh = parent(Bramble.lift(c.space, ub))
-    G = Bramble.mesh(c.space)
-    plin = LinearIndices(Bramble.npoints(G, Tuple))
-    return vec([uh[plin[Bramble.padded_index(G, I)]] for I in CartesianIndices(c.dims)])
 end
 
 # The plain forms refill a matrix and a load one at a time; the ghost ones, whose load can
@@ -237,23 +177,6 @@ end
         A, F = reduced_system(c)
         @test relerr(Matrix(A) \ F, u[c.free]) <= 1e-9              # a dense solve
         @test relerr(u[c.fixed], c.gfixed) <= 1e-13                 # the data sit at the facets
-    end
-end
-
-@testset "Observed order: $(prob.name)" for prob in PROBLEMS
-    ex = manufactured(prob.D)
-    levels = prob.D == 1 ? (0:3) : (1:3)
-    for which in 1:2
-        eoc = TestUtils._check_eoc(levels; order = 1.8) do level
-            Ω = random_mesh(prob.D, prob.n0 - (prob.D == 2), level)
-            c = TestUtils.plain_and_ghost_spaces(Ω,
-                problem_data(prob.D; mixed = prob.mixed))[which]
-            axs = mesh_axes(Ω)
-            pts = vec([ntuple(d -> axs[d][I[d]], prob.D) for I in CartesianIndices(c.dims)])
-            err = maximum(abs, node_solution(c) .- ex.u.(pts))
-            return err, maximum(maximum(diff(collect(x))) for x in axs)
-        end
-        @test length(eoc) == length(levels) - 1
     end
 end
 

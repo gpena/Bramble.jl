@@ -8,10 +8,10 @@ module GhostCompositeTests
 #
 # Covered: the product and its layout, assembly and refills, `a(u, v)` and `l(v)`, `lift`,
 # the `dirichlet` keyword per component against the `u => g` route, `pde_solve` against its
-# block reference, second-order convergence of a coupled two-component problem on random and
-# graded meshes, and the refusals: mixed or nested composites, components ghosting different
-# facets, a scalar space on the other side, rank-one terms, `semidiscretize`, and the
-# matrix-free, Kronecker and multigrid operators.
+# block reference, and the refusals: mixed or nested composites, components ghosting
+# different facets, a scalar space on the other side, rank-one terms, `semidiscretize`, and
+# the matrix-free, Kronecker and multigrid operators. The second-order convergence of the
+# coupled problem (GhostCoupled.jl) is in test/convergence/ghost_composite.jl.
 
 using Test
 using Bramble
@@ -26,6 +26,8 @@ using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 isdefined(Main, :GhostOracleND) ||
     Base.include(Main, joinpath(pkgdir(Bramble), "test", "ghost", "GhostOracleND.jl"))
 const O = Main.GhostOracleND
+isdefined(Main, :GhostCoupled) || Base.include(Main, joinpath(@__DIR__, "GhostCoupled.jl"))
+using Main.GhostCoupled: u2, fa_c, fl_c, coupled_solve
 
 # Refused with an `ArgumentError` whose message holds `needle`: the message pins which
 # refusal fired.
@@ -455,74 +457,7 @@ end
         "carries no values")
 end
 
-# --- pde_solve and second-order convergence -------------------------------------------- #
-
-# u₁ = e^{x + y/2}, u₂ = cos 2x sin(y + 1/2); −Δu₁ + u₁ + κu₂ = f₁, −Δu₂ + κu₁ = f₂.
-const κ = 0.5
-u1(p) = exp(p[1] + p[2] / 2)
-u2(p) = cos(2p[1]) * sin(p[2] + 0.5)
-dx1(p) = u1(p)
-dx2(p) = -2sin(2p[1]) * sin(p[2] + 0.5)
-f1(p) = -1.25u1(p) + u1(p) + κ * u2(p)
-f2(p) = 5u2(p) + κ * u1(p)
-
-const fa_c = (u, v) -> innerₕ(-1.0 * Δₕ(u(1)), v(1)) + innerₕ(u(1), v(1)) +
-                       κ * innerₕ(u(2), v(1)) + innerₕ(-1.0 * Δₕ(u(2)), v(2)) +
-                       κ * innerₕ(u(1), v(2))
-const fl_c = v -> innerₕ(f1, v(1)) + innerₕ(f2, v(2))
-
-# Component 1: Neumann on xmin, Robin on xmax, `u => g` on ymin and ymax; component 2:
-# Robin on xmin, Neumann on xmax, Dirichlet rows on ymin and ymax (the keyword).
-function coupled_spaces(Ωₕ)
-    C1 = constrained(gridspace(Ωₕ; ghosts = (:xmin, :xmax)),
-        u -> (:xmin => ∂ₙ(u) => p -> -dx1(p), :xmax => u + ∂ₙ(u) => p -> u1(p) + dx1(p),
-            :ymin => u => u1, :ymax => u => u1))
-    C2 = constrained(gridspace(Ωₕ; ghosts = (:xmin, :xmax)),
-        u -> (:xmin => 2.0 * u + ∂ₙ(u) => p -> 2u2(p) - dx2(p),
-            :xmax => ∂ₙ(u) => dx2))
-    return C1 × C2
-end
-
-const BC2 = (:ymin => u2, :ymax => u2)
-
-function coupled_solve(Ωₕ)
-    V = coupled_spaces(Ωₕ)
-    A, F = assemble(form(V, V, fa_c), form(V, fl_c); dirichlet = BC2,
-        dirichlet_components = 2)
-    return V, pde_solve(A, F)
-end
-
-# The discrete H¹ error `(‖e‖_{H}² + Σ_d ‖D₋_d e‖_+²)^{1/2}` at the physical nodes.
-function h1_error(Ωₕ, e)
-    xs = O.axis_points(Ωₕ)
-    ĥ(x) = [(i > 1 ? x[i] - x[i - 1] : 0.0) / 2 + (i < length(x) ? x[i + 1] - x[i] : 0.0) / 2
-            for i in eachindex(x)]
-    E = reshape(e, map(length, xs))
-    w = ĥ(xs[1]) .* ĥ(xs[2])'
-    total = sum(w .* abs2.(E))
-    total += sum((1 ./ diff(xs[1])) .* ĥ(xs[2])' .* abs2.(diff(E; dims = 1)))
-    total += sum(ĥ(xs[1]) .* (1 ./ diff(xs[2]))' .* abs2.(diff(E; dims = 2)))
-    return sqrt(total)
-end
-
-# The physical values of each component of a lifted solution.
-function physical_values(V, U)
-    out, start = Vector{Float64}[], 0
-    for C in V.spaces
-        G = mesh(C)
-        n = prod(Bramble.npoints(G, Tuple))
-        plin = LinearIndices(Bramble.npoints(G, Tuple))
-        push!(out, parent(U)[start .+ vec(plin[Bramble.physical_indices(G)])])
-        start += n
-    end
-    return out
-end
-
-function lsq_order(hs, errs)
-    X, Y = log.(hs), log.(errs)
-    return sum((X .- sum(X) / length(X)) .* (Y .- sum(Y) / length(Y))) /
-           sum(abs2, X .- sum(X) / length(X))
-end
+# --- pde_solve ------------------------------------------------------------------------- #
 
 @testset "Composite ghost pde_solve" begin
     Ωₕ = O.make_mesh(:graded, 0; dim = 2, n0 = 9)
@@ -531,23 +466,6 @@ end
     k, pts = facet_nodes(Ωₕ, (:ymin, :ymax))
     Ar, Fr = rows_ref(Aref, Fref, ndofs(V.spaces[1]) .+ k, u2.(pts))
     @test close(u, Ar \ Fr; rtol = 1.0e-10)
-end
-
-@testset "Composite ghost order, $kind meshes" for kind in (:random, :graded)
-    hs, errs = Float64[], NTuple{2, Float64}[]
-    for ℓ in 0:2
-        Ωₕ = O.make_mesh(kind, ℓ; dim = 2, n0 = 9)
-        V, u = coupled_solve(Ωₕ)
-        xs = O.axis_points(Ωₕ)
-        nodes = vec([(x, y) for x in xs[1], y in xs[2]])
-        v1, v2 = physical_values(V, lift(V, u))
-        push!(hs, maximum(x -> maximum(diff(x)), xs))
-        push!(errs, (h1_error(Ωₕ, v1 - u1.(nodes)), h1_error(Ωₕ, v2 - u2.(nodes))))
-    end
-    @test maximum(hs) / minimum(hs) > 3
-    for c in 1:2
-        @test lsq_order(hs, getindex.(errs, c)) > 1.8
-    end
 end
 
 # --- Refusals ------------------------------------------------------------------------ #

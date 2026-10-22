@@ -7,7 +7,7 @@ using Bramble: Dcₓ, D̽ᵧ, D̽₂, D̽ₓ, D₋ₓ, VectorElement
 using Random
 using Bramble: components
 using Bramble: div̽ₕ, div̽ₕ!, curl̽ₕ, curl̽ₕ!, ε̽ₕ, ε̽ₕ!, ∇̽ₕ!
-using ..TestUtils: alloc_test, _observed_orders, WITH_3D_TESTS, TEST_DIMS
+using ..TestUtils: alloc_test, WITH_3D_TESTS, TEST_DIMS
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # The cross-weighted centered difference.
@@ -143,24 +143,6 @@ cross_weighted_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
                 @test all(r[I] ≈ 2 * xd[I[d]] for I in interior)
             end
         end
-    end
-
-    @testset "Convergence order" begin
-        # Second order on both, which is the point: Dc is first order on a non-uniform
-        # grid and this is not.
-        function orders(unif)
-            Random.seed!(20260830)
-            Ωₕ = mesh(domain(interval(0.0, 1.0)), 21, unif)
-            return first(_observed_orders(Ωₕ, D̽ₓ, sin, cos, e -> e[2:(end - 1)]))
-        end
-
-        @test all(o -> abs(o - 2.0) < 0.05, orders(true))
-
-        # The coarsest random pair is not yet asymptotic (measured 1.18 there against
-        # 1.97 and better afterwards), so only the refined ones are held to second order.
-        orand = orders(false)
-        @test all(o -> abs(o - 2.0) < 0.1, orand[2:end])
-        @test all(>(1.0), orand)
     end
 
     @testset "Directional family" begin
@@ -316,31 +298,6 @@ _cw_ops(::Val{3}) = (D̽ₓ, D̽ᵧ, D̽₂)
                                        "got 3 components on a 2D mesh.") curl̽ₕ((u2, u2, u2))
         @test_throws DimensionMismatch("curl̽ₕ! needs one component per spatial dimension: " *
                                        "got 3 components on a 2D mesh.") curl̽ₕ!(similar(u2), (u2, u2, u2))
-    end
-
-    @testset "Second-order divergence, non-uniform" begin
-        # The leading error of D̽ is h_i h_{i+1} u'''/6, second order on any grid, where
-        # Dc's is (h_{i+1} - h_i) u''/2, first order on a random one. The end slices are
-        # one-sided, so first order, and are left out of the measured error. The rate is a
-        # least-squares slope over five random meshes, since no two share a grading.
-        F = (x -> sin(2x[1]) * cos(x[2]), x -> exp(x[1]) * x[2]^3)
-        divF = x -> 2cos(2x[1]) * cos(x[2]) + 3exp(x[1]) * x[2]^2
-        function rate(op)
-            errs, hs = Float64[], Float64[]
-            for n in (17, 33, 65, 129, 257)
-                Random.seed!(349)
-                Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n), (false, false))
-                Wₕ = gridspace(Ωₕ)
-                r = reshape(parent(op(map(f -> Rₕ(Wₕ, f), F))) .- parent(Rₕ(Wₕ, divF)), (n, n))
-                push!(errs, maximum(abs, @view r[2:(end - 1), 2:(end - 1)]))
-                push!(hs, maximum(maximum(spacing(Ωₕ(k), i) for i in 2:n) for k in 1:2))
-            end
-            lh, le = log.(hs), log.(errs)
-            lh, le = lh .- sum(lh) / length(lh), le .- sum(le) / length(le)
-            return sum(lh .* le) / sum(abs2, lh)
-        end
-        @test rate(div̽ₕ) > 1.7
-        @test rate(divcₕ) < 1.2
     end
 end
 

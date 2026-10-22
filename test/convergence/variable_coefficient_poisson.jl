@@ -1,4 +1,4 @@
-module DriversVariableCoefficientPoissonTests
+module ConvergenceVariableCoefficientPoissonTests
 
 using Test
 using Bramble
@@ -116,4 +116,4 @@ _has_quadratic_order(p, lower) = lower < p < 3.0
     WITH_3D_TESTS && @test _has_quadratic_order(ps[3], 1.8)
 end
 
-end # module DriversVariableCoefficientPoissonTests
+end # module ConvergenceVariableCoefficientPoissonTests

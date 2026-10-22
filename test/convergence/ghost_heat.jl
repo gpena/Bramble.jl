@@ -1,4 +1,4 @@
-# ghost_heat_convergence.jl: the heat equation `uₜ = Δu + f` on [0, 1] × [0, 2] with
+# ghost_heat.jl: the heat equation `uₜ = Δu + f` on [0, 1] × [0, 2] with
 # time-dependent Neumann and Robin data converges in space and in time (gpena/Bramble.jl#776).
 # The operator is `innerₕ(-Δₕ(u), v)`, which reads the ghosts (`inner₊(∇ₕ(u), ∇ₕ(v))` does
 # not). The data `(x, t) -> ...` and the source come from an exact solution written out by
@@ -10,7 +10,7 @@
 # `Rosenbrock23` with `adaptive = false` at halving steps on one graded mesh, against the
 # `FBDF` solution of the same semidiscretization, so that the spatial error cancels. That
 # run takes the Dual-`t` path of the residual through the solver's own `tgrad`.
-module GhostHeatConvergenceTests
+module ConvergenceGhostHeatTests
 
 using Test
 using Bramble
@@ -20,7 +20,7 @@ using ForwardDiff: ForwardDiff
 using SciMLBase: solve, successful_retcode
 using OrdinaryDiffEqBDF: FBDF
 using OrdinaryDiffEqRosenbrock: Rosenbrock23
-using ..TestUtils: WITH_SLOW_TESTS, random_mesh
+using ..TestUtils: _order_header, _order_row, random_mesh
 
 const MIN_ORDER = 1.8
 const T_FINAL = 0.5
@@ -124,10 +124,13 @@ function slope(hs, errs)
     return sum((X .- X̄) .* (Y .- Ȳ)) / sum(abs2, X .- X̄)
 end
 
-function report(label, hs, errs)
+# One table row per study: `cells` are the variable refined (space or time) and the mesh
+# kind or the stepper; the slope is against `hₘₐₓ` or the step.
+const WIDTHS = (8, 15)
+
+function report(cells, hs, errs)
     s = slope(hs, errs)
-    println("ghost heat ", label, ": slope ", round(s; digits = 3), " (errors ",
-        join(round.(errs; sigdigits = 3), ", "), ")")
+    _order_row(cells, s, errs, WIDTHS; gate = MIN_ORDER)
     return s
 end
 
@@ -141,18 +144,20 @@ function time_errors(prob, ref, dts)
 end
 
 @testset "Ghost heat equation converges (#776)" begin
+    _order_header("Ghost heat equation: space (discrete L²) and time (max norm) errors",
+        ("refine", "mesh, stepper"), WIDTHS)
     @testset "Space order, random meshes" begin
         hs, errs = space_errors(:random, 0:2)
         @test issorted(hs; rev = true)
         @test issorted(errs; rev = true)
-        @test report("space random", hs, errs) >= MIN_ORDER
+        @test report((:space, :random), hs, errs) >= MIN_ORDER
     end
 
     @testset "Space order, graded meshes" begin
         hs, errs = space_errors(:graded, 0:2)
         @test issorted(hs; rev = true)
         @test issorted(errs; rev = true)
-        @test report("space graded", hs, errs) >= MIN_ORDER
+        @test report((:space, :graded), hs, errs) >= MIN_ORDER
     end
 
     # Data frozen at `t = 0` solve another problem: the error is no longer the scheme's.
@@ -171,7 +176,7 @@ end
         errs = time_errors(prob, ref, dts)
         @test norm(ref - coarse, Inf) < errs[end] / 100
         @test issorted(errs; rev = true)
-        @test report("time Rosenbrock23", dts, errs) >= MIN_ORDER
+        @test report((:time, :Rosenbrock23), dts, errs) >= MIN_ORDER
     end
 
     # The ghosts' data carry the time derivative `tgrad` needs: a zero `∂f/∂t` loses the
@@ -185,10 +190,10 @@ end
         @test minimum(time_errors(zero, ref, dts) ./ errs) > 5
     end
 
-    WITH_SLOW_TESTS && @testset "Space order, four levels" begin
+    @testset "Space order, four levels" begin
         for kind in (:random, :graded)
             hs, errs = space_errors(kind, 0:3)
-            @test report("space $kind (4 levels)", hs, errs) >= MIN_ORDER
+            @test report((:space, kind), hs, errs) >= MIN_ORDER
         end
     end
 end
