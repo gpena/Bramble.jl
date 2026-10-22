@@ -61,6 +61,98 @@ max_off < 1.0e-12
 @test max_off < 1.0e-12                                                              #src
 @test count(m[:D_boundary]) > 0 && count(m[:D]) > count(m[:D_boundary])             #src
 
+# A coarse grid of the same disk, eight seeds per axis, keeps the lines readable. Each line
+# that meets the circle has a node there, and those nodes are the vertices of the polygon
+# inscribed in the circle:
+
+Ωc = mesh(Ω, (8, 8), (true, true))
+xc, yc = collect(points(Ωc(1))), collect(points(Ωc(2)))
+length(xc), length(yc)
+
+#-
+
+# ```@raw html
+# <figure style="margin:1.5em 0;text-align:center">
+# <svg viewBox="0 0 540 540" width="100%" style="max-width:540px;font-family:system-ui,sans-serif" role="img" aria-label="Grid closed on the unit disk from eight uniform seeds per axis, with the inscribed polygon whose vertices are the boundary nodes.">
+#   <g stroke="#3b82f6" stroke-opacity="0.6" stroke-width="1">
+#     <line class="gx" x1="20.0" y1="20.0" x2="20.0" y2="520.0"/>
+#     <line class="gx" x1="73.2" y1="20.0" x2="73.2" y2="520.0"/>
+#     <line class="gx" x1="91.4" y1="20.0" x2="91.4" y2="520.0"/>
+#     <line class="gx" x1="101.1" y1="20.0" x2="101.1" y2="520.0"/>
+#     <line class="gx" x1="162.9" y1="20.0" x2="162.9" y2="520.0"/>
+#     <line class="gx" x1="179.9" y1="20.0" x2="179.9" y2="520.0"/>
+#     <line class="gx" x1="234.3" y1="20.0" x2="234.3" y2="520.0"/>
+#     <line class="gx" x1="305.7" y1="20.0" x2="305.7" y2="520.0"/>
+#     <line class="gx" x1="360.1" y1="20.0" x2="360.1" y2="520.0"/>
+#     <line class="gx" x1="377.1" y1="20.0" x2="377.1" y2="520.0"/>
+#     <line class="gx" x1="438.9" y1="20.0" x2="438.9" y2="520.0"/>
+#     <line class="gx" x1="448.6" y1="20.0" x2="448.6" y2="520.0"/>
+#     <line class="gx" x1="466.8" y1="20.0" x2="466.8" y2="520.0"/>
+#     <line class="gx" x1="520.0" y1="20.0" x2="520.0" y2="520.0"/>
+#     <line class="gy" y1="520.0" x1="20.0" y2="520.0" x2="520.0"/>
+#     <line class="gy" y1="466.8" x1="20.0" y2="466.8" x2="520.0"/>
+#     <line class="gy" y1="448.6" x1="20.0" y2="448.6" x2="520.0"/>
+#     <line class="gy" y1="438.9" x1="20.0" y2="438.9" x2="520.0"/>
+#     <line class="gy" y1="377.1" x1="20.0" y2="377.1" x2="520.0"/>
+#     <line class="gy" y1="360.1" x1="20.0" y2="360.1" x2="520.0"/>
+#     <line class="gy" y1="305.7" x1="20.0" y2="305.7" x2="520.0"/>
+#     <line class="gy" y1="234.3" x1="20.0" y2="234.3" x2="520.0"/>
+#     <line class="gy" y1="179.9" x1="20.0" y2="179.9" x2="520.0"/>
+#     <line class="gy" y1="162.9" x1="20.0" y2="162.9" x2="520.0"/>
+#     <line class="gy" y1="101.1" x1="20.0" y2="101.1" x2="520.0"/>
+#     <line class="gy" y1="91.4" x1="20.0" y2="91.4" x2="520.0"/>
+#     <line class="gy" y1="73.2" x1="20.0" y2="73.2" x2="520.0"/>
+#     <line class="gy" y1="20.0" x1="20.0" y2="20.0" x2="520.0"/>
+#   </g>
+#   <circle cx="270.0" cy="270.0" r="200.0" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="5,4"/>
+#   <polygon class="poly" points="73.2,305.7 91.4,360.1 101.1,377.1 162.9,438.9 179.9,448.6 234.3,466.8 305.7,466.8 360.1,448.6 377.1,438.9 438.9,377.1 448.6,360.1 466.8,305.7 466.8,234.3 448.6,179.9 438.9,162.9 377.1,101.1 360.1,91.4 305.7,73.2 234.3,73.2 179.9,91.4 162.9,101.1 101.1,162.9 91.4,179.9 73.2,234.3" fill="#ef4444" fill-opacity="0.08" stroke="#ef4444" stroke-width="2"/>
+#   <g fill="#ef4444">
+#     <circle cx="73.2" cy="305.7" r="3.5"/>
+#     <circle cx="91.4" cy="360.1" r="3.5"/>
+#     <circle cx="101.1" cy="377.1" r="3.5"/>
+#     <circle cx="162.9" cy="438.9" r="3.5"/>
+#     <circle cx="179.9" cy="448.6" r="3.5"/>
+#     <circle cx="234.3" cy="466.8" r="3.5"/>
+#     <circle cx="305.7" cy="466.8" r="3.5"/>
+#     <circle cx="360.1" cy="448.6" r="3.5"/>
+#     <circle cx="377.1" cy="438.9" r="3.5"/>
+#     <circle cx="438.9" cy="377.1" r="3.5"/>
+#     <circle cx="448.6" cy="360.1" r="3.5"/>
+#     <circle cx="466.8" cy="305.7" r="3.5"/>
+#     <circle cx="466.8" cy="234.3" r="3.5"/>
+#     <circle cx="448.6" cy="179.9" r="3.5"/>
+#     <circle cx="438.9" cy="162.9" r="3.5"/>
+#     <circle cx="377.1" cy="101.1" r="3.5"/>
+#     <circle cx="360.1" cy="91.4" r="3.5"/>
+#     <circle cx="305.7" cy="73.2" r="3.5"/>
+#     <circle cx="234.3" cy="73.2" r="3.5"/>
+#     <circle cx="179.9" cy="91.4" r="3.5"/>
+#     <circle cx="162.9" cy="101.1" r="3.5"/>
+#     <circle cx="101.1" cy="162.9" r="3.5"/>
+#     <circle cx="91.4" cy="179.9" r="3.5"/>
+#     <circle cx="73.2" cy="234.3" r="3.5"/>
+#   </g>
+# </svg>
+# <figcaption style="font-size:0.9em;opacity:0.8">The grid after the closure, the circle (dashed) and the inscribed polygon (red), whose vertices are the boundary nodes.</figcaption>
+# </figure>
+# ```
+
+# The figure's lines sit at the coordinates of the live coarse mesh, and its polygon's          #src
+# vertices are the coarse mesh's boundary nodes in angular order.                             #src
+let s = read(@__FILE__, String), px(x) = 20 + 200 * (x + 1.25), py(y) = 20 + 200 * (1.25 - y) #src
+    gx = [parse(Float64, m[1]) for m in eachmatch(r"<line class=\"gx\" x1=\"([\d.]+)\"", s)] #src
+    gy = [parse(Float64, m[1]) for m in eachmatch(r"<line class=\"gy\" y1=\"([\d.]+)\"", s)] #src
+    @test length(gx) == length(xc) && length(gy) == length(yc)                               #src
+    @test all(abs.(gx .- px.(xc)) .< 0.06) && all(abs.(gy .- py.(yc)) .< 0.06)               #src
+    bc = reshape(BitVector(markers(Ωc)[:D_boundary]), length(xc), length(yc))                #src
+    V = sort([(xc[i], yc[j]) for i in eachindex(xc), j in eachindex(yc) if bc[i, j]];        #src
+        by = v -> atan(v[2], v[1]))                                                          #src
+    pts = match(r"<polygon class=\"poly\" points=\"([^\"]*)\"", s)[1]                     #src
+    fig = [parse.(Float64, split(q, ",")) for q in split(pts)]                              #src
+    @test length(fig) == length(V)                                                           #src
+    @test all(maximum(abs, f .- [px(v[1]), py(v[2])]) < 0.06 for (f, v) in zip(fig, V))      #src
+end                                                                                          #src
+
 # ## Solving
 #
 # `polygon_spaces(Ωₕ, :D, g)` returns the trial space `U` and the test space `W`. Their
@@ -139,6 +231,30 @@ println("order: max ", round(slope(emax); digits = 2), ", H¹ₕ ", round(slope(
 @test all(diff(emax) .< 0) && all(diff(eh1) .< 0)                                     #src
 @test 1.0e-6 < emax[end] < 5.0e-5 && 1.0e-5 < eh1[end] < 3.0e-4                      #src
 @test all(maximum(abs, r.E[r.boundary]) < 1.0e-12 for r in runs)                      #src
+
+# The errors against `h` on a log-log scale, with a slope-two reference line:
+
+include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
+convergence_plot([(h, emax, "max", "#5B5FC7"), (h, eh1, "H¹ₕ", "#0E7C86")];       # hide
+    title = "Poisson on the unit disk")                                                # hide
+
+# The solution on the grid requested at 80 points per axis. Nodes outside the disk carry no
+# value and are left blank; drag the plot to tilt it.
+
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+Ω₈₀ = mesh(Ω, (80, 80), (true, true))
+uₕ = element(gridspace(Ω₈₀))
+uₕ.data .= solve(Ω₈₀)
+uₕ.data[BitVector(markers(Ω₈₀)[:D_exterior])] .= NaN
+surface_plot(uₕ; title = "u on the unit disk, n = 80") # hide
+
+# The plotted values are the solution at the interior and boundary nodes only.          #src
+@test count(isnan, uₕ.data) == count(markers(Ω₈₀)[:D_exterior])                      #src
+let ue = vec([u_exact((x, y)) for x in points(Ω₈₀(1)), y in points(Ω₈₀(2))]),          #src
+    keep = .!isnan.(uₕ.data)                                                           #src
+
+    @test maximum(abs, uₕ.data[keep] .- ue[keep]) < 1.0e-3                             #src
+end                                                                                    #src
 
 # ## Seeds drawn at random
 #
