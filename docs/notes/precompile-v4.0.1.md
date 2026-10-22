@@ -73,3 +73,71 @@ Per-facet compile that S2.1 introduced: each relation compiles one form per face
 dimension (four in 2D). The conormal relation's four facet forms cost 3.6 s together, so
 about 0.9 s per facet if shared evenly; this is an estimate, not a per-facet measurement,
 because the facets are compiled in one workload call and cannot be toggled apart.
+
+## Ghost operators, rank-one and semidiscretize first calls (#812, S3)
+
+Measured on 2edafc95 (S2.2's result) with the S2.2 method above, a fresh temporary depot
+per build and `/usr/bin/time -p` inside `julia_slot.sh 4`, 4 threads, default `-O`, median
+of 3. Each candidate is dropped by building a copy of the source without it, not by a
+runtime toggle. A toggle leaves the skipped call inside a method the workload infers, so
+its code is compiled anyway (a first try measured the `semidiscretize` session that way
+and saw a 0.06 s saving where the real one is 0.44 s). Each first call is timed in its own
+fresh process, median of 3, on the PROBE's case, the non-uniform 2D (11, 14) mesh, the
+Robin space `2u + ∂ₙ(u) = 0.5` on four facets with `ghosts = :boundary`, and the
+stiffness form `inner₊(∇ₕ(u), ∇ₕ(v))`. The rank-one form is that form plus
+`0.5 * innerₕ(1, u) * innerₕ(1, v)`, assembled; the plain rank-one form is the same on
+`gridspace(Ωₕ)`; semidiscretize is `semidiscretize(a, l)` with
+`l = form(C, v -> innerₕ(x -> 1.0, v))` and one residual call. The control, a plain
+stiffness `assemble`, takes 0.010 s before and after.
+
+Load: OneDrive synced twice during the work (1-min load up to 23), and the blocks run then
+were discarded. The builds below ran at a 1-min load of 3.3 to 4.9, from the build's own
+threads.
+
+### First calls, before and after
+
+| path | before, s | after, s |
+|---|---|---|
+| ghost `kronecker_operator(a) * x` | 2.186 | 0.0034 |
+| ghost `matrix_free_operator(a) * x` | 1.109 | 0.0002 |
+| ghost rank-one `form` and `assemble` | 0.548 | 0.0060 |
+| plain rank-one `form` and `assemble` | 0.207 | 0.086 |
+| ghost `semidiscretize` and residual | 0.993 | 0.179 |
+
+The issue measured 2.42 s and 1.29 s for the two operators on the same case.
+
+### Precompile time and pkgimage size
+
+| build | time, s (3 runs) | median, s | depot `compiled/`, KiB | Bramble pkgimage, KiB |
+|---|---|---|---|---|
+| before (2edafc95) | 95.37, 95.67, 95.68 | 95.67 | 262056 | 250164 |
+| after | 99.11, 99.24, 99.26 | 99.24 | 274148 | 262256 |
+
+The added core precompile time is 3.6 s and the pkgimage grows by 11.8 MiB. The two rows
+come from consecutive blocks at the same load; within the second block, the build without
+the operators (below) is 96.16 s, so the operators carry 3.1 s of the 3.6 s.
+
+### Candidates
+
+Cost is the full-build median minus the median without that warm-up, all from one block
+of interleaved builds. Saving is the first call without it minus the first call with it.
+
+| candidate | precompile cost, s | pkgimage cost | first call without, s | first call with, s | saving, s | verdict |
+|---|---|---|---|---|---|---|
+| ghost `matrix_free_operator` and `kronecker_operator`, a product each | 3.1 | 10.3 MiB | 2.114 + 1.082 | 0.0034 + 0.0002 | 3.19 | keep |
+| ghost rank-one form | none measurable (-0.4) | 0.3 MiB | 0.221 ghost, 0.203 plain | 0.006, 0.086 | 0.33 | keep |
+| ghost `semidiscretize` session | 0.07 (inside the noise) | 0.5 MiB | 0.616 | 0.179 | 0.44 | keep |
+
+Nothing was dropped.
+
+- The operators cost about what they save, 3.1 s against 3.2 s, as S2.2's conormal did.
+  They are the issue's two figures and the subplan's gate.
+- The rank-one form and the `semidiscretize` session cost no build time the runs resolve
+  (the full build's three runs span 0.15 s, the others' up to 0.7 s) and half a MiB at
+  most, and save 0.33 s and 0.44 s.
+
+The two operators run behind `Base.inferencebarrier`. They compile for the concrete form
+all the same (the after column above), but JET then does not follow the calls into unions
+their bodies guard at run time (`_ghost_kron_closures`'s per-axis closures, the padded
+`matrix_free_operator`), which `report_package` counted as 5 missing methods when the
+workload called them directly.
