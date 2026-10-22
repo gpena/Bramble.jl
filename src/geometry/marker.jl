@@ -132,9 +132,10 @@ Construct a [`DomainMarkers`](@ref) collection from `label => identifier` pairs.
   `:L => polygon(V)` gives a mesh the labels `L`, `L_boundary` and `L_exterior`: the nodes
   inside the polygon, on its boundary and outside it. A node is on the boundary when its
   distance to the boundary is at most
-  ``\\max(\\sqrt{\\varepsilon} h_{\\min}, 10^3 \\varepsilon L)``, with ``h_{\\min}`` the
-  smallest mesh spacing, ``L`` the polygon's extent and ``\\varepsilon`` the larger machine
-  epsilon of the mesh's points and the polygon's vertices.
+  ``\\max(\\sqrt{\\varepsilon} h_{\\min}, 10^3 \\varepsilon L) + 4 \\varepsilon M``, with
+  ``h_{\\min}`` the smallest mesh spacing, ``L`` the polygon's extent, ``M`` the largest
+  coordinate magnitude of the polygon and the mesh's points, and ``\\varepsilon`` the larger
+  machine epsilon of the mesh's points and the polygon's vertices.
 
 # Throws
 - `ArgumentError`: if an identifier is of any other kind (for example a `String`, a `Dict`
