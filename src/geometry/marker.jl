@@ -6,7 +6,8 @@ Labeled geometric region or boundary marker on a computational domain.
 # Arguments
 - `label`: Region identifier (e.g. `:inlet`, `:wall`, `:boundary`).
 - `identifier`: Location specification, either a predefined boundary `Symbol` (e.g. `:left`),
-  a `Set{Symbol}` of boundary names, or a boolean spatial predicate function `f(x)`.
+  a `Set{Symbol}` of boundary names, a boolean spatial predicate function `f(x)`, or a
+  `Polygon` (from `polygon`) classifying the nodes of a 2D mesh.
   [`markers`](@ref) builds a `Marker` from a tuple, vector or set of boundary symbols by
   storing it as a `Set{Symbol}`.
 """
@@ -35,32 +36,49 @@ Return the `Symbol` label of marker `m`.
     identifier(m::Marker{F}) -> F
     identifier(m::MarkerPair{F}) -> F
 
-Return the identifying symbol, set of symbols, or predicate function of marker `m`.
+Return the identifying symbol, set of symbols, predicate function or polygon of marker `m`.
 """
 @inline identifier(m::Marker) = m.identifier
 @inline identifier(m::MarkerPair) = last(m)
 
 """
     DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple)
+    DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)
 
 Container categorizing and indexing boundary and interior markers for a computational domain.
 
-Every field is a statically typed tuple, so `symbols`, `tuples`, and `conditions` markers
-are each an unrolled, zero-allocation sweep to iterate.
+Every field is a statically typed tuple, so `symbols`, `tuples`, `conditions` and `regions`
+markers are each an unrolled, zero-allocation sweep to iterate. The three-argument form has
+no `regions`.
 
 # Fields
 - `symbols`: Tuple of markers identified by a single predefined boundary `Symbol` (e.g. `:left`).
 - `tuples`: Tuple of markers identified by collections of predefined boundary symbols,
   given as a tuple, vector or set (e.g. `(:top, :right)`, `[:top, :right]`), stored as `Set{Symbol}`.
 - `conditions`: Statically typed tuple of predicate function markers `f(x)` or `f(x, t)`.
+- `regions`: Tuple of polygon markers `:L => polygon(V)`. On a mesh, each gives the three
+  labels `L` (nodes inside the polygon), `L_boundary` (nodes on its boundary) and
+  `L_exterior` (nodes outside it).
 
 See also: [`markers`](@ref), [`symbols`](@ref), [`tuples`](@ref), [`conditions`](@ref).
 """
-struct DomainMarkers{ST <: Tuple, TT <: Tuple, CT <: Tuple}
+struct DomainMarkers{ST <: Tuple, TT <: Tuple, CT <: Tuple, RT <: Tuple}
     symbols::ST
     tuples::TT
     conditions::CT
+    regions::RT
 end
+
+function DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple)
+    return DomainMarkers(symbols, tuples, conditions, ())
+end
+
+# The polygon markers of `domain_markers`.
+@inline regions(domain_markers::DomainMarkers) = domain_markers.regions
+
+# The three mesh labels of the polygon marker labelled `L`: its interior, boundary and
+# exterior nodes.
+@inline _polygon_labels(L::Symbol) = (L, Symbol(L, :_boundary), Symbol(L, :_exterior))
 
 """
     symbols(domain_markers::DomainMarkers) -> Tuple
@@ -96,12 +114,21 @@ Construct a [`DomainMarkers`](@ref) collection from `label => identifier` pairs.
   `t` and keeps spatial `x` predicates, so it also applies to markers built without it.
 - `pairs`: Vararg sequence of `label => identifier` pairs where identifier is a `Symbol`,
   a tuple (`NTuple{N, Symbol}`), `AbstractVector{Symbol}` or `AbstractSet{Symbol}` of
-  boundary symbols, or a predicate `Function` (`x -> Bool`, or `(x, t) -> Bool` with `time_set`).
+  boundary symbols, a predicate `Function` (`x -> Bool`, or `(x, t) -> Bool` with
+  `time_set`), or, on a 2D `space_set`, a `Polygon` built by `polygon`. A pair
+  `:L => polygon(V)` gives a mesh the labels `L`, `L_boundary` and `L_exterior`: the nodes
+  inside the polygon, on its boundary and outside it. A node is on the boundary when its
+  distance to the boundary is at most
+  ``\\max(\\sqrt{\\varepsilon} h_{\\min}, 10^3 \\varepsilon L)``, with ``h_{\\min}`` the
+  smallest mesh spacing, ``L`` the polygon's extent and ``\\varepsilon`` the machine
+  epsilon of the mesh's points.
 
 # Throws
 - `ArgumentError`: if an identifier is of any other kind (for example a `String`, a `Dict`
   or a callable object that is not a `Function`), names a symbol that is not a boundary
   of `space_set`, or, with `time_set`, is a predicate that does not accept `(x, t)`.
+  Also if a polygon marks a set that is not 2D, has a vertex outside `space_set`, is
+  labelled `:boundary` or `:interior`, or one of its three labels is another marker's.
 
 # Examples
 ```jldoctest
@@ -118,6 +145,7 @@ true
     for p in pairs
         _validate_marker_pair(space_set, p)
     end
+    _check_polygon_label_clash(pairs)
     return _create_generic_markers(pairs...)
 end
 
@@ -127,6 +155,7 @@ end
     for p in pairs
         _validate_marker_pair(space_set, time_set, p)
     end
+    _check_polygon_label_clash(pairs)
     return _create_generic_markers(pairs...)
 end
 
@@ -162,10 +191,47 @@ function _validate_marker_pair(space_set::CartesianProduct{D}, p::Pair) where {D
         end
     elseif ident isa Function
         _check_marker_predicate(lbl, D, ident, _marker_probe_point(space_set))
+    elseif ident isa Polygon
+        _validate_polygon_marker(space_set, lbl, ident)
     else
         _throw_unsupported_marker_identifier(lbl, ident)
     end
     return nothing
+end
+
+# A polygon marks the nodes of a 2D mesh, lies in the set, and never takes a reserved label.
+function _validate_polygon_marker(
+        space_set::CartesianProduct{D}, lbl::Symbol, P::Polygon
+) where {D}
+    D == 2 || _throw_polygon_marker_error(lbl, "a polygon marks a 2D set, but this set is $(D)D")
+    lbl in (:boundary, :interior) && _throw_polygon_marker_error(lbl,
+        ":$lbl is reserved for the mesh's own geometric markers; choose another label")
+    (a1, b1), (a2, b2) = extrema(space_set)
+    for (k, v) in enumerate(P.vertices)
+        (a1 <= v[1] <= b1 && a2 <= v[2] <= b2) || _throw_polygon_marker_error(lbl,
+            "vertex $k at $v lies outside the set [$a1, $b1] × [$a2, $b2]")
+    end
+    return nothing
+end
+
+# The three labels of each polygon marker are told apart from every other marker's labels.
+function _check_polygon_label_clash(pairs::Tuple)
+    for (i, p) in enumerate(pairs)
+        p.second isa Polygon || continue
+        for (j, q) in enumerate(pairs)
+            i == j && continue
+            theirs = q.second isa Polygon ? _polygon_labels(q.first) : (q.first,)
+            for L in _polygon_labels(p.first)
+                L in theirs && _throw_polygon_marker_error(p.first,
+                    "its label :$L is also the label of another marker")
+            end
+        end
+    end
+    return nothing
+end
+
+@noinline function _throw_polygon_marker_error(lbl::Symbol, msg)
+    throw(ArgumentError("Polygon marker :$lbl: " * msg * "."))
 end
 
 function _validate_marker_pair(
@@ -173,7 +239,7 @@ function _validate_marker_pair(
 ) where {D}
     lbl = p.first
     ident = p.second
-    if ident isa Symbol || ident isa _SymbolCollection
+    if ident isa Symbol || ident isa _SymbolCollection || ident isa Polygon
         _validate_marker_pair(space_set, p)
     elseif ident isa Function
         probe_x = _marker_probe_point(space_set)
@@ -202,7 +268,7 @@ end
         ArgumentError(
         "Unsupported identifier of type $(typeof(ident)) for marker :$lbl. " *
         "Accepted identifiers are a boundary Symbol, a tuple, vector or set of boundary " *
-        "Symbols, or a predicate Function.",
+        "Symbols, a predicate Function, or a Polygon.",
     ),
     )
 end
@@ -257,8 +323,9 @@ end
 function _create_generic_markers(pairs::Pair...)
     symbols, tuples = _extract_identifier_markers(pairs)
     conditions = _pairs_to_tuple_conditions(pairs)
+    regions = map(p -> Marker(p.first, p.second), filter(p -> p.second isa Polygon, pairs))
 
-    return DomainMarkers(symbols, tuples, conditions)
+    return DomainMarkers(symbols, tuples, conditions, regions)
 end
 
 # Extract function-valued pairs into a tuple of Marker{F} instances, keeping each closure's
@@ -442,6 +509,7 @@ Return single-symbol markers from the underlying domain markers.
 Return multi-symbol markers from the underlying domain markers.
 """
 @inline tuples(edm::_EvaluatedMarkers) = tuples(edm.original_markers)
+@inline regions(edm::_EvaluatedMarkers) = regions(edm.original_markers)
 
 @inline Base.length(edm::_EvaluatedMarkers) = length(edm.original_markers)
 @inline Base.isempty(edm::_EvaluatedMarkers) = isempty(edm.original_markers)
@@ -453,16 +521,23 @@ Return multi-symbol markers from the underlying domain markers.
 Return a tuple of the `Symbol` label of every marker in `markers`, a [`DomainMarkers`](@ref),
 an [`EvaluatedDomainMarkers`](@ref) or an [`EvaluatedParametricDomainMarkers`](@ref).
 
-Concatenates the per-category labels of `symbols`, `tuples`, and `conditions` as a single
-compile-time-unrolled tuple build, so this allocates 0 bytes. For the labels of one
+Concatenates the per-category labels of `symbols`, `tuples`, and `conditions`, then the
+three labels of each polygon marker, as a single compile-time-unrolled tuple build, so with
+no polygon markers this allocates 0 bytes. For the labels of one
 category alone, [`label_symbols`](@ref), [`label_tuples`](@ref), or
 [`label_conditions`](@ref) are equally zero-allocation.
 """
 @inline label_identifiers(markers::_MarkerCollection) = (
     map(label, symbols(markers))...,
     map(label, tuples(markers))...,
-    map(label, conditions(markers))...
+    map(label, conditions(markers))...,
+    _region_mesh_labels(regions(markers))...
 )
+
+@inline _region_mesh_labels(::Tuple{}) = ()
+@inline function _region_mesh_labels(rs::Tuple)
+    return (_polygon_labels(label(first(rs)))..., _region_mesh_labels(Base.tail(rs))...)
+end
 
 @inline labels(markers::_MarkerCollection) = label_identifiers(markers)
 
@@ -493,6 +568,8 @@ function Base.show(io::IO, m::Marker{F}) where {F}
     elseif F <: Set{Symbol}
         syms = join(m.identifier, ", ")
         print(io, "Marker(:$(m.label) => ($syms))")
+    elseif F <: Polygon
+        print(io, "Marker(:$(m.label) => <polygon>)")
     else
         print(io, "Marker(:$(m.label) => <function>)")
     end
@@ -511,7 +588,8 @@ function Base.show(io::IO, ::MIME"text/plain", dm::DomainMarkers)
         n_sym = length(dm.symbols)
         n_tup = length(dm.tuples)
         n_cond = length(dm.conditions)
-        total = n_sym + n_tup + n_cond
+        n_reg = length(dm.regions)
+        total = n_sym + n_tup + n_cond + n_reg
 
         if total == 0
             print_empty_message(pp, "DomainMarkers: (empty)")
@@ -556,13 +634,26 @@ function Base.show(io::IO, ::MIME"text/plain", dm::DomainMarkers)
                 println(io)
             end
         end
+
+        if n_reg > 0
+            print_section_header(pp_indented, "Polygon markers ($n_reg):")
+            pp_double_indent = with_indent(pp, 2)
+            for m in dm.regions
+                print_indent(pp_double_indent)
+                printstyled(io, ":$(label(m))"; color = :green)
+                print(io, " => ")
+                nv = length(identifier(m).vertices)
+                printstyled(io, "<polygon, $nv vertices>"; color = :magenta)
+                println(io)
+            end
+        end
     end
 end
 
 @inline function Base.length(dm::DomainMarkers)
-    length(dm.symbols) + length(dm.tuples) + length(dm.conditions)
+    length(dm.symbols) + length(dm.tuples) + length(dm.conditions) + length(dm.regions)
 end
 
 @inline function Base.isempty(dm::DomainMarkers)
-    isempty(dm.symbols) && isempty(dm.tuples) && isempty(dm.conditions)
+    isempty(dm.symbols) && isempty(dm.tuples) && isempty(dm.conditions) && isempty(dm.regions)
 end
