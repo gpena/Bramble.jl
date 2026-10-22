@@ -16,11 +16,12 @@
 # facet (facet `(d, s)` at `2(d - 1) + s`), so that a warm `assemble!` with `dirichlet`, and
 # `dirichlet_bc!` and `symmetrize!` on the space, allocate nothing.
 #
-# A polygon space (polygon_space.jl) refuses `dirichlet`, and its trial space also stores
-# what the reduction reads (`_ghost_maps`): that it is no test space, and three masks over
-# the padded points: the exterior nodes left without a value (`unclosed`), those the (3.2)
-# extension gives (`extended`), and among these the conflict nodes, substituted per reading
-# equation (`conflict`). Every other space has empty masks.
+# A polygon space (polygon_space.jl) refuses `dirichlet`, and stores what the reduction
+# reads on it as a trial side (`_ghost_maps`): whether it is no test space, and three masks
+# over the padded points: the exterior nodes left without a value (`unclosed`, every one on
+# the test space), those the (3.2) extension gives (`extended`), and among these the
+# conflict nodes, substituted per reading equation (`conflict`). Every other space has
+# empty masks.
 struct _RowsDirichlet
     physical::Bool
     facets::Vector{BitVector}

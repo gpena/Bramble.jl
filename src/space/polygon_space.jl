@@ -111,8 +111,9 @@ function _polygon_spaces(Ωₕ, P::ScalarGridSpace{2, T}, label::Symbol, g, inn:
 
     Ev = sparse(keep, 1:length(keep), fill(one(T), length(keep)), N, length(keep))
     V0 = GhostGridSpace(P, _closure_matrix(be, T, Ev), _closure_data(be, T, zeros(T, N)))
-    V = GhostGridSpace(V0.padded, V0.E, V0.d, V0.Et, _RowsDirichlet(false, V0.rows.facets, true),
-        V0.td, V0.gu, V0.grid_function)
+    # As a trial side, `V` gives every exterior node 0: the reach guard refuses any read.
+    vrows = _RowsDirichlet(false, V0.rows.facets, true, false, ext, falses(N), falses(N))
+    V = GhostGridSpace(V0.padded, V0.E, V0.d, V0.Et, vrows, V0.td, V0.gu, V0.grid_function)
     return U, V
 end
 

@@ -270,6 +270,32 @@ end
         @test maximum(abs, A \ F .- Rₕ(gridspace(Ωₕ), uq).data[I]) < 1e-8
     end
 
+    @testset "test space as trial side" begin
+        # It gives every exterior node 0, so a form reading one throws; a form reading the
+        # boundary nodes reads them as 0, the trial space with g = 0.
+        Ωₕ = fig1_mesh((7, 6), (true, true))
+        U0, W = polygon_spaces(Ωₕ, :P, x -> 0.0)
+        @test_throws ArgumentError form(W, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - mixed(w), v))
+        f_a = (w, v) -> innerₕ(-1.0 * Δₕ(w), v)
+        @test assemble(form(W, W, f_a)) == assemble(form(U0, W, f_a))
+    end
+
+    @testset "composites refuse polygon spaces" begin
+        Random.seed!(2)
+        for Ωₕ in (fig1_mesh((10, 9), (false, false)), vnotch_mesh((5, 5), (true, true)))
+            U, W = polygon_spaces(Ωₕ, :P, uq)
+            f_a = (w, v) -> innerₕ(-1.0 * Δₕ(w[1]) - 0.5 * mixed(w[1]), v[1]) +
+                            innerₕ(w[2], v[2])
+            @test_throws ArgumentError form(U × U, W × W, f_a)
+            @test_throws ArgumentError form(W × W, v -> innerₕ(x -> 1.0, v[1]))
+            # Beside a plain ghost space: refused before the polygon check, as a polygon
+            # space ghosts no facet and the plain one does.
+            G = gridspace(Ωₕ; ghosts = :boundary)
+            @test_throws ArgumentError form(U × G, W × G, f_a)
+            @test_throws ArgumentError form(W × G, v -> innerₕ(x -> 1.0, v[1]))
+        end
+    end
+
     @testset "matrix-free, contract, semidiscretize" begin
         rng = Xoshiro(13)
         Random.seed!(2)
@@ -291,11 +317,15 @@ end
         UN, WN = polygon_spaces(vnotch_mesh((5, 5), (true, true)), :P, x -> 0.0)
         am = form(UN, WN, (w, v) -> innerₕ(mixed(w), v))
         @test_throws ArgumentError Bramble.matrix_free_operator(am)
+        xm, ym = rand(rng, Bramble.ndofs(UN)), rand(rng, Bramble.ndofs(WN))
+        @test_throws ArgumentError am(xm, ym)
         ap = form(UN, WN, (w, v) -> innerₕ(-1.0 * Δₕ(w), v))
         xn = rand(rng, Bramble.ndofs(UN))
         zn = zeros(Bramble.ndofs(WN))
         mul!(zn, Bramble.matrix_free_operator(ap), xn)
         @test zn ≈ assemble(ap) * xn
+        yn = rand(rng, Bramble.ndofs(WN))
+        @test ap(xn, yn) ≈ dot(yn, assemble(ap) * xn)
     end
 end
 

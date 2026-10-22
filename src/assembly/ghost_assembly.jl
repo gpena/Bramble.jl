@@ -263,6 +263,7 @@ function _ghost_bilinear_form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, a::Bil
 end
 function _ghost_bilinear_form(Wₕ::_CompositeClosure, Vₕ::_CompositeClosure,
         a::BilinearForm)
+    (_has_polygon(Wₕ) || _has_polygon(Vₕ)) && _throw_polygon_composite()
     return GhostCompositeBilinearForm(a, Wₕ, Vₕ, _ghost_maps(Wₕ, Vₕ, a)...)
 end
 
@@ -284,16 +285,17 @@ end
 const _Moves = Tuple{Vector{Int}, Vector{Int}, Vector{Int}}
 _exterior_moves(::_GhostSide, ::_GhostSide, ::SparseMatrixCSC) = (Int[], Int[], Int[])
 
-# The reach guard and the moves on a polygon trial space. A tested row (one `E_v` reads)
-# may read an exterior node only at a diagonal neighbour that the (3.2) extension gives:
-# an entry at an unclosed node, or at an extended one off the diagonals, is a stencil wider
+# The reach guard and the moves on a space of polygon_spaces as the trial side. The test
+# space there extends nothing, so every exterior node is unclosed. A tested row (one `E_v`
+# reads) may read an exterior node only at a diagonal neighbour the (3.2) extension gives.
+# An entry at an unclosed node, or at an extended one off the diagonals, is a stencil wider
 # than the scheme's, and throws. An entry `a` of row `i` at a conflict node `i + (sx, sy)`
 # moves onto the reader's own (3.2) row: `+a` at `i + (sx, 0)` and `i + (0, sy)`, the two
 # Γ corners, and `−a` at `i`.
 function _exterior_moves(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, A_pad::SparseMatrixCSC)
     rows = Wₕ.rows
     moves = (Int[], Int[], Int[])
-    rows.polygon && rows.trial_only || return moves
+    rows.polygon || return moves
     un, ext, cf = rows.unclosed, rows.extended, rows.conflict
     cp = SparseArrays.getcolptr(Vₕ.Et)
     car = CartesianIndices(npoints(mesh(Wₕ), Tuple))
@@ -322,10 +324,11 @@ end
     throw(
         ArgumentError(
         "the form reads, in the equation of the interior node $(Tuple(I)), the exterior " *
-        "node $(Tuple(J)), which is not a diagonal neighbour the polygon closure extends " *
-        "by (3.2): its stencil reaches beyond the scheme's. Forms on polygon spaces read " *
-        "the 5-point neighbours and the four diagonal ones, as Δₕ, Dcₓ(Dcᵧ(u)) and " *
-        "first differences do.",
+        "node $(Tuple(J)), to which the trial space gives no value: only the trial space " *
+        "of polygon_spaces extends exterior nodes, by (3.2), and only the diagonal " *
+        "neighbours of interior nodes. Pose the form as form(U, V, f) with " *
+        "`U, V = polygon_spaces(...)`, reading the 5-point and diagonal neighbours, as " *
+        "Δₕ, Dcₓ(Dcᵧ(u)) and first differences do.",
     ),
     )
 end
@@ -356,7 +359,22 @@ function _ghost_linear_form(Vₕ::GhostGridSpace, l::LinearForm)
     return GhostLinearForm(l, Vₕ, _ghost_load_buffer(Vₕ, l), _RowsDirichlet(Vₕ))
 end
 function _ghost_linear_form(Vₕ::_CompositeClosure, l::LinearForm)
+    _has_polygon(Vₕ) && _throw_polygon_composite()
     return GhostCompositeLinearForm(l, Vₕ, _ghost_load_buffer(Vₕ, l))
+end
+
+# Whether a composite side has a component built by `polygon_spaces`: the reach guard and
+# the substitution of conflict nodes (`_exterior_moves`) see scalar sides only.
+_has_polygon(C::_CompositeClosure) = any(W -> W.rows.polygon, _ghost_components(C.space))
+
+@noinline function _throw_polygon_composite()
+    throw(
+        ArgumentError(
+        "polygon spaces are not supported in composites: the reduction checks the reach " *
+        "of a form and substitutes conflict nodes on a scalar polygon space only. Pose " *
+        "each field on its own pair from polygon_spaces.",
+    ),
+    )
 end
 
 # The padded load vector of `l`.
@@ -636,10 +654,13 @@ end
 # `E_vᵀ A_pad E_u` and so refuses a form that reads a conflict node of its trial space in
 # a tested row: the substitution per reading equation lives in the reduction map alone.
 function _check_rows(a::GhostBilinearForm, labels)
-    _reads_conflict(a) && _throw_polygon_matrix_free()
+    _reads_conflict(a) && _throw_polygon_conflict("the matrix-free operator")
     return _check_rows(a.rows, (a.test_space, a.trial_space), labels)
 end
 
+# Whether `a` reads, in a tested row, a conflict node of its polygon trial space; the
+# matrix-free operator and the contraction `a(u, v)` (ghost_contract.jl) refuse such a form.
+_reads_conflict(::GhostCompositeBilinearForm) = false
 function _reads_conflict(a::GhostBilinearForm)
     cf = a.rows.conflict
     any(cf) || return false
@@ -657,13 +678,12 @@ _check_rows(a::GhostBilinearForm, labels, components) = _check_rows(
     a.rows, (a.test_space, a.trial_space), labels)
 _check_rows(l::GhostLinearForm, labels, components) = _check_rows(l, labels)
 
-@noinline function _throw_polygon_matrix_free()
+@noinline function _throw_polygon_conflict(what::String)
     throw(
         ArgumentError(
-        "the matrix-free operator applies E_vᵀ A_pad E_u, and this form reads a conflict " *
-        "node of its polygon trial space (an exterior node two interior nodes extend by " *
-        "different (3.2) rows), which only the assembled reduction substitutes per " *
-        "equation. " *
+        "$what applies E_vᵀ A_pad E_u, and this form reads a conflict node of its " *
+        "polygon trial space (an exterior node two interior nodes extend by different " *
+        "(3.2) rows), which only the assembled reduction substitutes per equation. " *
         "Assemble the matrix with assemble(a).",
     ),
     )
