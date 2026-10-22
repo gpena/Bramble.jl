@@ -237,27 +237,49 @@ function _mesh(
     idxs = generate_indices(npts_with_collapsed)
 
     _submeshes = submeshes(Ω, npts_with_collapsed, unif, backend)
-    idxs = _close_grid!(_submeshes, regions(markers(Ω)), idxs)
+    idxs, fitted = _close_grid!(_submeshes, regions(markers(Ω)), idxs)
 
     mesh_markers = MeshMarkers()
     output_mesh = MeshnD(_set, mesh_markers, idxs, backend, _submeshes)
 
-    set_markers!(output_mesh, markers(Ω); warn_marker_mismatch)
+    _set_markers!(output_mesh, markers(Ω), fitted; warn_marker_mismatch)
 
     return output_mesh
 end
 
-# A domain without polygon markers keeps the submeshes it was given, so a plain mesh has the
-# points (and draws the random numbers) it always had.
-@inline _close_grid!(_, ::Tuple{}, idxs) = idxs
+# A domain without polygon or level-set markers keeps the submeshes it was given, so a plain
+# mesh has the points (and draws the random numbers) it always had. The second value is the
+# polygon fitted to each region marker, `nothing` for a polygon marker.
+@inline _close_grid!(_, ::Tuple{}, idxs) = (idxs, ())
 
 # A domain with polygon markers closes its grid lines (`_grid_closure`): each submesh takes
-# the closed lines, and the indices follow the new point counts.
+# the closed lines, and the indices follow the new point counts. A level-set marker fits the
+# lines to its curve instead (`_levelset_grid`, on the submeshes' points as seeds), and the
+# polygon it returns labels the nodes. One level-set marker per domain, with no polygon
+# marker beside it.
 function _close_grid!(subs::NTuple{2, Mesh1D}, regs::Tuple{Any, Vararg}, idxs)
-    xs, ys = _grid_closure(map(identifier, regs), host_points(subs[1]), host_points(subs[2]))
+    ids = map(identifier, regs)
+    nls = count(P -> P isa LevelSet, ids)
+    nls == 0 && return _close_polygon_grid!(subs, ids, regs, idxs)
+    (nls == 1 && length(ids) == 1) || _throw_levelset_markers(nls, length(ids) - nls)
+    xs, ys = host_points(subs[1]), host_points(subs[2])
+    X, Y, P = _levelset_grid(only(ids).φ, xs, ys)
+    _set_points!(subs[1], X)
+    _set_points!(subs[2], Y)
+    return generate_indices((length(X), length(Y))), (P,)
+end
+
+function _close_polygon_grid!(subs, ids, regs, idxs)
+    xs, ys = _grid_closure(ids, host_points(subs[1]), host_points(subs[2]))
     _set_points!(subs[1], xs)
     _set_points!(subs[2], ys)
-    return generate_indices((length(xs), length(ys)))
+    return generate_indices((length(xs), length(ys))), map(_ -> nothing, regs)
+end
+
+@noinline function _throw_levelset_markers(nls, npoly)
+    throw(ArgumentError("a domain takes one level-set marker and no polygon marker beside it, " *
+                        "got $nls level-set markers and $npoly polygon markers: the grid " *
+                        "lines are fitted to one curve."))
 end
 
 """

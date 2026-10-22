@@ -1,7 +1,7 @@
 # polygon_space.jl: the trial and test spaces of the Ferreira and Grigorieff scheme on a
-# polygon marked on a 2D mesh (`:L => polygon(V)`), as two `GhostGridSpace`s over the mesh
-# itself, `GhostMesh(Ωₕ; ghosts = ())`, so that forms assemble through the ghost-space
-# reduction.
+# polygon (`:L => polygon(V)`) or level-set curve (`:L => levelset(φ)`) marked on a 2D mesh,
+# as two `GhostGridSpace`s over the mesh itself, `GhostMesh(Ωₕ; ghosts = ())`, so that
+# forms assemble through the ghost-space reduction.
 #
 # The test closure selects the interior nodes with `d = 0` (the paper's W₀,H): the trial
 # closure on the test side would add the rows of the extended nodes to the interior ones.
@@ -14,8 +14,11 @@
     polygon_spaces(Ωₕ::MeshnD{2}, label::Symbol, g) -> (U, W)
 
 The trial space `U` and the test space `W` of the scheme of Ferreira and Grigorieff (2006)
-on the polygon marked `label` on `Ωₕ`, a mesh of a domain with the marker
-`label => polygon(vertices)`, with the Dirichlet datum `g(x)` on the polygon's boundary.
+on the region marked `label` on `Ωₕ`, a mesh of a domain with the marker
+`label => polygon(vertices)` or `label => levelset(φ)`, with the Dirichlet datum `g(x)` on
+the region's boundary nodes. For a level-set marker the region is the polygon that `mesh`
+inscribes in the curve ``φ = 0`` (its vertices are the boundary nodes), and `g` is read at
+those vertices, not projected onto the curve: a vertex lies off the curve by ``O(h^2)``.
 
 Both are [`GhostGridSpace`](@ref)s over `Ωₕ`, whose degrees of freedom are the interior
 nodes of the polygon (the label `label`), in the mesh's linear order. `lift(U, u)` is the
@@ -40,10 +43,10 @@ differently (a V-notch) is substituted per reading equation in the reduction.
 
 # Throws
 
-  - `ArgumentError`: if `Ωₕ` has no polygon marker `label`; if the grid does not fit the
-    polygon (a cell holding interior and exterior nodes other than across a diagonal
+  - `ArgumentError`: if `Ωₕ` has no polygon or level-set marker `label`; if the grid does
+    not fit the region (a cell holding interior and exterior nodes other than across a diagonal
     between two boundary nodes, as after `change_points!` to lines the closure would not
-    give); if the polygon has no interior node. `form(U, U, f)` and `form(U, f)` throw, as
+    give); if the region has no interior node. `form(U, U, f)` and `form(U, f)` throw, as
     `U` is no test space, and so does `dirichlet =` in `assemble`: `g` fixes the boundary.
 """
 function polygon_spaces(Ωₕ::MeshnD{2}, label::Symbol, g)
@@ -134,8 +137,9 @@ end
     throw(
         ArgumentError(
         "polygon_spaces needs the labels :$label, :$(label)_boundary and " *
-        ":$(label)_exterior of a polygon marker `:$label => polygon(vertices)` on the " *
-        "mesh; build the mesh from a domain that holds one.",
+        ":$(label)_exterior of a polygon marker `:$label => polygon(vertices)` or a " *
+        "level-set marker `:$label => levelset(φ)` on the mesh; build the mesh from a " *
+        "domain that holds one.",
     ),
     )
 end
@@ -143,12 +147,12 @@ end
 @noinline function _throw_polygon_unfitted(label::Symbol, cell::NTuple{2, Int})
     throw(
         ArgumentError(
-        "the grid does not fit the polygon :$label: the cell at node $cell holds " *
+        "the grid does not fit the region :$label: the cell at node $cell holds " *
         "interior and exterior nodes other than across a diagonal between two boundary " *
         "nodes, so " *
-        "the polygon's boundary crosses a grid line off the nodes. Build the mesh with " *
-        "mesh(Ω, npts, unif), which closes the grid lines, or move the points to lines " *
-        "that closure gives.",
+        "the region's boundary crosses a grid line off the nodes. Build the mesh with " *
+        "mesh(Ω, npts, unif), which fits the grid lines to the polygon or level-set " *
+        "curve, or move the points to lines that fit gives.",
     ),
     )
 end
@@ -156,7 +160,7 @@ end
 @noinline function _throw_polygon_empty(label::Symbol)
     throw(
         ArgumentError(
-        "the polygon :$label has no interior node on this grid, so its spaces have no " *
+        "the region :$label has no interior node on this grid, so its spaces have no " *
         "degree of freedom; refine the grid.",
     ),
     )

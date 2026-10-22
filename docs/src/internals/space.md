@@ -199,10 +199,16 @@ At a V-notch, an exterior node read by two interior nodes has two different valu
 row of the extension; the reduction substitutes the value of each reading equation, as the
 paper does.
 
+The spaces of a level-set marker (`:D => levelset(φ)`, [Meshes](../api/meshes.md)) are the
+same call on the polygon inscribed in the curve: `g` is read at the polygon's vertices, the
+boundary nodes. The curve is orthogonally convex, so no line meets it four times near a
+notch and no exterior node has two readers; the V-notch rows below do not arise there.
+
 ### Support on polygon spaces
 
 Each row is an operation and its status on `(U, W)`; the tests are in
-`test/ghost/polygon_spaces.jl`. "Throws" is an `ArgumentError`.
+`test/ghost/polygon_spaces.jl`, and `test/ghost/levelset_spaces.jl` repeats them on a
+level-set mesh, except the rows about a conflict node. "Throws" is an `ArgumentError`.
 
 | Operation | Status |
 |:----------|:-------|
