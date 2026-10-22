@@ -104,17 +104,40 @@ end
         @test occursin("slopes", err.msg) && occursin("3.0", err.msg)
     end
 
-    @testset "Sub-tolerance detail throws" begin
+    @testset "Sub-tolerance detail merges" begin
         # The closure line y = 0.5 (from the vertex line x = 0.5 on the edge y = x) lies δ
-        # from the vertex line y = 0.5 + δ, inside the merge tolerance 4e-10.
+        # from the vertex line y = 0.5 + δ, inside the merge tolerance 4e-10: one line.
         for δ in (1e-10, 3e-10)
             W = [(0.0, 0.0), (4.0, 0.0), (4.0, 0.5 + δ), (3.0, 0.5 + δ), (3.0, 3.0),
                 (0.5, 3.0), (0.5, 2.0), (1.0, 2.0), (1.0, 1.0)]
             Ωw = domain(interval(0.0, 4.0) × interval(0.0, 3.0), :P => Bramble.polygon(W))
-            @test_throws "finer than the grid closure" mesh(Ωw, (5, 4), (true, true))
-            @test_throws ArgumentError Bramble._grid_closure(Bramble.polygon(W),
-                [0.0, 4.0], [0.0, 3.0])
+            ys = collect(points(mesh(Ωw, (5, 4), (true, true))(2)))
+            @test count(y -> abs(y - 0.5) <= 4e-10, ys) == 1
+            xs, ys = Bramble._grid_closure(Bramble.polygon(W), [0.0, 4.0], [0.0, 3.0])
+            @test count(y -> abs(y - 0.5) <= 4e-10, ys) == 1
+            @test off_node_crossings(W, xs, ys, 4e-10) == 0
         end
+    end
+
+    @testset "Chains rounding apart merge" begin
+        # Two reflection chains reach the line y = 10.73 with values 27 ulps apart: both
+        # are root-0 lines and merge, so the polygon closes.
+        W = [(0.0, 1.0), (0.29, 0.71), (2.54, 2.96), (3.42, 2.08), (4.0, 2.66), (4.0, 10.46),
+            (2.85, 11.61), (0.44, 9.2), (0.32, 9.32), (0.0, 9.0)]
+        Ωw = domain(interval(0.0, 4.0) × interval(0.0, 20.0), :P => Bramble.polygon(W))
+        Mw = mesh(Ωw, (5, 21), (true, true))
+        xs, ys = collect(points(Mw(1))), collect(points(Mw(2)))
+        @test vertices_on_lines(W, xs, ys)
+        @test count(y -> abs(y - 10.73) <= 1e-12, ys) == 1
+        @test off_node_crossings(W, xs, ys, 1e-12) == 0
+        @test (length(xs), length(ys)) == (259, 255)
+        cx, cy = Bramble._grid_closure(Bramble.polygon(W), [0.0, 4.0], [0.0, 20.0])
+        @test (length(cx), length(cy)) == (256, 235)
+        # A known limit: scaled by 7 at offset 1e6 the chains drift past the merge tolerance
+        # 1e-10·L (about 65 ulps there), and the closure hits the cap instead of 256 × 235.
+        W6 = [(7a + 1e6, 7b + 1e6) for (a, b) in W]
+        @test_throws "unbounded or too fine" Bramble._grid_closure(Bramble.polygon(W6),
+            [1e6, 1e6 + 28], [1e6, 1e6 + 140])
     end
 
     @testset "Rounded lines are one line" begin
