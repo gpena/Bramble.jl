@@ -483,8 +483,8 @@ of normal axis `d`, side `s` (1 the minimum, 2 the maximum), outward sign includ
 says whether the operator of a facet of axis `d` reads the ghosts along axis `e`: beyond its
 own facet for `e == d`, beyond both `e` facets at its corners otherwise. `G` depends on
 types only. A conormal `K` reaches every axis whatever its values, and [`inner_Γ`](@ref),
-at `form`, refuses the operator where those ghosts are missing unless every difference
-along that axis `e ≠ d` in the facet's operator carries a zero coefficient. Built by
+at `form`, refuses the operator where those ghosts are missing, except along an axis
+`e ≠ d` that each conormal term reads through a zero `K[d, e]`. Built by
 [`∂ₙ`](@ref), [`∂ₙₙ`](@ref) and [`jumpₙ`](@ref), and meaningful only inside `inner_Γ`; not a
 `LazyOp`, since a node of a corner has a value for each facet it lies on.
 """
@@ -695,7 +695,7 @@ selects it, and zero anywhere else. Unsigned, since a `FacetOperator` carries it
 outward sign. `G[e]` says whether the term may read the ghosts along axis `e` (the facet's
 own for `e == DIM`, both `e` facets' at its corners otherwise): the facet operator's
 structural reach, which no weight reads. `form` checks it on the product's operands,
-skipping an axis `e ≠ DIM` along which every difference carries a zero coefficient.
+skipping an axis `e ≠ DIM` that each conormal term there reads through a zero `K[DIM, e]`.
 """
 struct InnerGammaFacet{MASK, DIM, SIDE, G} <: AbstractInnerProduct end
 
@@ -721,12 +721,13 @@ end
 
 # The facet's own ghosts first, then, for each other axis `e` the term reads along, the
 # ghosts of both `e` facets, which the tangential difference reads at the facet's corners.
-# An axis `e` the reach `G` names is skipped when no operand reads along it
-# (`_reads_along`): a conormal `K` with `K[DIM, e] == 0` ghosts only its own facet.
+# An axis `e` the reach `G` names is read only where a conormal block of an operand has a
+# nonzero `K[DIM, e]` (`_conormal_reads`), so a `K` with `K[DIM, e] == 0` ghosts only its
+# own facet. Any other read past a corner is the absent-read check's, at `assemble`.
 function _check_facet_reach(Ωₕ, G::Tuple, DIM::Int, SIDE::Int, operands::Tuple)
     G[DIM] && _check_facet_ghosts(Ωₕ, DIM, SIDE)
     for e in eachindex(G)
-        e != DIM && G[e] && any(o -> _reads_along(o, e), operands) || continue
+        e != DIM && G[e] && any(o -> _conormal_reads(o, e), operands) || continue
         for s in 1:2
             _check_transverse_ghosts(Ωₕ, DIM, SIDE, e, s)
         end
@@ -734,32 +735,32 @@ function _check_facet_reach(Ωₕ, G::Tuple, DIM::Int, SIDE::Int, operands::Tupl
     return nothing
 end
 
-# Whether `op` holds a difference, average, shift or jump along axis `e` that is not under a
-# zero scale: an `OperatorScale` whose scalar is a `Number` equal to zero (a `Ref` or any
-# other scalar counts as nonzero). A node not named here counts as reading every axis, so
-# the check errs on asking for ghosts; data (a function, a number) reads none.
-_reads_along(::Any, ::Int) = false
-_reads_along(::LazyOp, ::Int) = true
-const _ReachLeaf = Union{TrialFunction, TestFunction, IndexedTrialFunction,
-    IndexedTestFunction, SourceFunction, SourceVector, SourceConstant, IdentityOperator,
-    ZeroOperator}
-_reads_along(::_ReachLeaf, ::Int) = false
-function _reads_along(op::OperatorScale, e::Int)
-    return !_is_zero_scale(op.scalar) && _reads_along(op.inner_op, e)
+# Whether some conormal block of `op` has a nonzero coefficient along axis `e`. A block is
+# the sum `∂ₙ(w; K)` builds on a facet of axis `d`, `K[d, 1] * Dc_1(w) + … + K[d, D] *
+# Dc_D(w)`, its terms in axis order; the walk finds it under sums and scales, whatever their
+# values, so `0.0 * ∂ₙ(u; K)` and `∂ₙ(u; K) - ∂ₙ(u; K)` still read through `K`. Other
+# terms, and the operands of differences, are not blocks: their reads are not `K`'s.
+_conormal_reads(::Any, ::Int) = false
+_conormal_reads(op::OperatorScale, e::Int) = _conormal_reads(op.inner_op, e)
+_conormal_reads(op::GridFunctionScale, e::Int) = _conormal_reads(op.inner_op, e)
+function _conormal_reads(op::OperatorAdd, e::Int)
+    k = _conormal_coefficients(op)
+    k === nothing || return !iszero(k[e])
+    return _conormal_reads(op.left_op, e) || _conormal_reads(op.right_op, e)
 end
-_reads_along(op::GridFunctionScale, e::Int) = _reads_along(op.inner_op, e)
-function _reads_along(op::OperatorAdd, e::Int)
-    return _reads_along(op.left_op, e) || _reads_along(op.right_op, e)
+
+# The coefficients `K[d, :]` of a conormal block, or `nothing` for any other sum.
+const _ConormalTerm{D, e} = OperatorScale{D, <:Number, <:CenteredDifference{D, e}}
+_conormal_coefficients(::OperatorAdd) = nothing
+function _conormal_coefficients(op::OperatorAdd{2, <:_ConormalTerm{2, 1},
+        <:_ConormalTerm{2, 2}})
+    return (op.left_op.scalar, op.right_op.scalar)
 end
-for T in (:BackwardDifference, :ForwardDifference, :CenteredDifference, :StarDifference,
-    :CrossWeightedDifference, :SecondDifference, :BackwardAverage, :ForwardAverage,
-    :CenteredAverage, :JumpNode, :ShiftNode)
-    @eval function _reads_along(op::$T{D, Dim}, e::Int) where {D, Dim}
-        return Dim == e || _reads_along(op.inner_op, e)
-    end
+function _conormal_coefficients(op::OperatorAdd{3,
+        <:OperatorAdd{3, <:_ConormalTerm{3, 1}, <:_ConormalTerm{3, 2}},
+        <:_ConormalTerm{3, 3}})
+    return (op.left_op.left_op.scalar, op.left_op.right_op.scalar, op.right_op.scalar)
 end
-_is_zero_scale(c::Number) = iszero(c)
-_is_zero_scale(::Any) = false
 
 @inline function _check_transverse_ghosts(G::_GhostMeshLike, d::Int, s::Int, e::Int, t::Int)
     has_ghosts(G, e, _GHOST_SIDES[t]) || _throw_conormal_unghosted(d, s, e, t)
