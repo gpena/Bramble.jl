@@ -792,34 +792,35 @@ for S in (Function, Number, VectorElement)
     end
 end
 
-# `inner_Γ` with the labels `MASK` of `markers` as a type: called with a constant `MASK`,
-# as `constrained` does for the facet it names, it infers where the keyword need not.
-@inline function _facet_inner(::Type{MASK}, F::FacetOperator{D},
-        right::LazyOp{D}) where {MASK, D}
-    return _facet_terms(MASK, Val(_reads_ghosts(F)), Val(D),
+# `inner_Γ` with the labels `MASK` of `markers` as a type, which `form` resolves to a mask
+# by reading the mesh (`_resolved_inner`); or, as a `Val`, with the mask already resolved,
+# which `form` keeps, as `constrained` passes the face it names (`_relation_mask`). Either
+# is a constant, so the term infers where the keyword need not.
+@inline function _facet_inner(::Type{MASK}, left, right) where {MASK}
+    return _facet_inner(Val(MASK), left, right)
+end
+@inline function _facet_inner(m::Val, F::FacetOperator{D}, right::LazyOp{D}) where {D}
+    return _facet_terms(m, Val(_reads_ghosts(F)), Val(D),
         (d, s) -> _facet_component(F, d, s), (d, s) -> right)
 end
-@inline function _facet_inner(::Type{MASK}, left::LazyOp{D},
-        F::FacetOperator{D}) where {MASK, D}
-    return _facet_terms(MASK, Val(_reads_ghosts(F)), Val(D), (d, s) -> left,
+@inline function _facet_inner(m::Val, left::LazyOp{D}, F::FacetOperator{D}) where {D}
+    return _facet_terms(m, Val(_reads_ghosts(F)), Val(D), (d, s) -> left,
         (d, s) -> _facet_component(F, d, s))
 end
-@inline function _facet_inner(::Type{MASK}, F::FacetOperator{D},
-        H::FacetOperator{D}) where {MASK, D}
+@inline function _facet_inner(m::Val, F::FacetOperator{D}, H::FacetOperator{D}) where {D}
     G = _merge_reach(_reads_ghosts(F), _reads_ghosts(H))
-    return _facet_terms(MASK, Val(G), Val(D), (d, s) -> _facet_component(F, d, s),
+    return _facet_terms(m, Val(G), Val(D), (d, s) -> _facet_component(F, d, s),
         (d, s) -> _facet_component(H, d, s))
 end
-@inline function _facet_inner(::Type{MASK}, g::Union{Function, Number, VectorElement},
-        F::FacetOperator{D}) where {MASK, D}
-    return _facet_terms(MASK, Val(_reads_ghosts(F)), Val(D), (d, s) -> g,
+@inline function _facet_inner(m::Val, g::Union{Function, Number, VectorElement},
+        F::FacetOperator{D}) where {D}
+    return _facet_terms(m, Val(_reads_ghosts(F)), Val(D), (d, s) -> g,
         (d, s) -> _facet_component(F, d, s))
 end
 
 # One term per facet, over the axes as `Val`s so each weight is a type.
-@inline function _facet_terms(
-        ::Type{MASK}, ::Val{G}, ::Val{D}, left::L, right::R) where {MASK, G, D, L, R}
-    return _add_terms(_facet_pairs(Val(MASK), Val(G), ntuple(Val, Val(D)), left, right))
+@inline function _facet_terms(m::Val, g::Val, ::Val{D}, left::L, right::R) where {D, L, R}
+    return _add_terms(_facet_pairs(m, g, ntuple(Val, Val(D)), left, right))
 end
 
 # Unrolled without a closure, which would hold `MASK` as a value of an abstract type.

@@ -183,17 +183,19 @@ end
 
 # What two relations on one facet must not share, read off a pair without parsing it:
 # `(d, s, dirichlet)`, with the component `c` first on a composite (`composite`), where only
-# Dirichlet relations are keyed; `nothing` for a pair that parses to no relation.
+# Dirichlet relations are keyed; `_NO_PAIR_KEY` for a pair that parses to no relation, a key
+# of the same type, so the tuple of keys the parsing checks capture is concrete.
+const _NO_PAIR_KEY = (-1, 0, 0, false)
 @inline function _pair_key(::Val{D}, p::Pair{Symbol, <:Pair}, composite::Bool) where {D}
     face = _find_face(Val(D), first(p))
-    face === nothing && return nothing
+    face === nothing && return _NO_PAIR_KEY
     op = first(last(p))
     dirichlet = op isa Union{TrialFunction, IndexedTrialFunction}
     composite || return (0, face[1], face[2], dirichlet)
-    op isa IndexedTrialFunction || return nothing
+    op isa IndexedTrialFunction || return _NO_PAIR_KEY
     return (op.component_idx, face[1], face[2], true)
 end
-@inline _pair_key(::Val, p, ::Bool) = nothing
+@inline _pair_key(::Val, p, ::Bool) = _NO_PAIR_KEY
 
 @inline _is_dirichlet(r::_FacetRelation) = r.op isa Union{TrialFunction,
     IndexedTrialFunction}
@@ -448,17 +450,72 @@ end
 # tested against component `c`: one `inner_Γ` holds one trial component
 # (block_extract.jl), so they are the sum of one form per component the operator reads, its
 # piece as a facet operator with that piece on every facet, as `_strain_pieces` keeps the
-# terms of `εₕ` apart (difference.jl).
+# terms of `εₕ` apart (difference.jl). The components `c` and `j` are `Val`s, so each
+# form names them as constants, as a form written with `u(1)` does.
 function _relation_matrix(P::CompositeGridSpace{N}, op::FacetOperator{D, G}, a::Val, b::Val,
-        name::Val, c::Int) where {N, D, G}
+        name::Val, c::Val) where {N, D, G}
+    Ωₕ = mesh(first(leaf_spaces_offsets(P)[_val(c)]))
+    _check_facet_reach(Ωₕ, G[_val(a)], _val(a), _val(b))
     R = spzeros(eltype(P), ndofs(P), ndofs(P))
-    for j in 1:N
-        p = _trial_piece(_facet_component(op, a, b), j, _val(name))
-        p === nothing && continue
-        F = _facet_operator(Val(G), ntuple(_ -> (p, p), Val(D)))
-        R += assemble(form(P, P, (u, v) -> _facet_inner(_facet_mask(name), F, v(c))))
+    return _add_pieces(R, P, _facet_component(op, a, b), Val(G), (a, b, name, c),
+        ntuple(Val, Val(N)))
+end
+
+# `R` plus the rows of the piece of `op` reading each component of `js`, unrolled.
+@inline _add_pieces(R, P, op, g::Val, facet::Tuple, ::Tuple{}) = R
+@inline function _add_pieces(R, P, op, g::Val, facet::Tuple, js::Tuple)
+    a, b, name, c = facet
+    p = _trial_piece(op, _val(first(js)), _val(name))
+    S = p === nothing ? R : R + _piece_matrix(P, p, g, a, b, c, first(js))
+    return _add_pieces(S, P, op, g, facet, Base.tail(js))
+end
+
+# The rows of one piece: a function barrier, since which leaves `_trial_piece` keeps is
+# read off their components, values, so `p`'s type is a union split at this call. Its
+# leaves are rebuilt inside the form as `u(j)` (`_retarget`): a leaf the form captures
+# holds its component as a value, which `simplify_ast` reads to decide its result's type.
+function _piece_matrix(P::CompositeGridSpace, p::LazyOp{D}, g::Val, a::Val, b::Val,
+        c::Val, j::Val) where {D}
+    mask = _relation_mask(a, b, Val(D))
+    return assemble(form(P, P,
+        (u, v) -> _facet_inner(mask, _piece_operator(g, p, u(_val(j))), v(_val(c)))))
+end
+
+# The piece `p` as a facet operator on every facet, its leaves `leaf`.
+@inline function _piece_operator(g::Val, p::LazyOp{D}, leaf) where {D}
+    q = _retarget(p, leaf)
+    return _facet_operator(g, ntuple(_ -> (q, q), Val(D)))
+end
+
+# `op` with each trial leaf replaced by `leaf`, every node rebuilt, so the result is built
+# from `leaf` even where its type is the operand's own (`_rewrap_inner` returns that
+# operand).
+@inline _retarget(::IndexedTrialFunction, leaf) = leaf
+@inline function _retarget(op::UnaryWrapper, leaf)
+    return _rebuilt_around(op, _retarget(op.inner_op, leaf))
+end
+@inline function _retarget(op::OperatorAdd, leaf)
+    return OperatorAdd(_retarget(op.left_op, leaf), _retarget(op.right_op, leaf))
+end
+@inline _retarget(op, leaf) = op
+
+# `_rewrap_inner` (block_extract.jl) without its shortcut: always a new node around `inner`.
+@generated function _rebuilt_around(op::T, inner::I) where {T, I}
+    wrapper = Base.typename(T).wrapper
+    decl = fieldtype(Base.unwrap_unionall(wrapper), :inner_op)
+    params = Any[T.parameters...]
+    params[findfirst(p -> p === decl, Base.unwrap_unionall(wrapper).parameters)] = I
+    args = map(fieldnames(T)) do f
+        f === :inner_op ? :inner : :(getfield(op, $(QuoteNode(f))))
     end
-    return R
+    return :($(wrapper{params...})($(args...)))
+end
+
+# `f(Val(i))` for the index `i` of `vals`, a tuple of `Val`s, unrolled as `_at_facet` is.
+@inline _at_index(f::F, ::Tuple{}, i::Int) where {F} = throw(ArgumentError("no index $i"))
+@inline function _at_index(f::F, vals::Tuple, i::Int) where {F}
+    _val(first(vals)) == i && return f(first(vals))
+    return _at_index(f, Base.tail(vals), i)
 end
 
 # The terms of `op` that read component `j`, or `nothing` if none does: the leaves of the
@@ -653,31 +710,42 @@ end
 # the rows transposed, so each node's row is a column. Data depending on time give the
 # facet weights instead, which `L` multiplies the data at each time by.
 # The forms are `inner_Γ(op, v; markers = (name,))` and `inner_Γ(data, …)`, with the
-# facet named as a constant (`_at_facet`, `_facet_mask`), so that each infers.
+# facet's mask a constant (`_at_facet`, `_relation_mask`), so that each infers. A resolved
+# mask skips the check `form` runs on labels (`_resolved_inner`), so the facet's reach is
+# checked here, on the padded mesh.
 function _assemble_relation(P::ScalarGridSpace{D}, r::_FacetRelation) where {D}
     op = r.op
     data = _is_time_relation(r) ? one(eltype(P)) : r.data
-    return _at_facet(Val(D), r.d, r.s) do name, _, _
-        R = assemble(form(P, P, (u, v) -> _facet_inner(_facet_mask(name), op, v)))
-        b = assemble(form(P,
-            v -> _facet_inner(_facet_mask(name), data, _facet_identity(v))))
+    return _at_facet(Val(D), r.d, r.s) do name, d, s
+        _check_facet_reach(mesh(P), _reads_ghosts(op)[_val(d)], _val(d), _val(s))
+        mask = _relation_mask(d, s, Val(D))
+        R = assemble(form(P, P, (u, v) -> _facet_inner(mask, op, v)))
+        b = assemble(form(P, v -> _facet_inner(mask, data, _facet_identity(v))))
         return sparse(transpose(R)), b
     end
 end
 
-# The labels of `markers = (name,)` as `inner_Γ` holds them until `form`.
-@inline _facet_mask(::Val{name}) where {name} = _SurfaceLabels{(name,)}
+# The mask of `markers = (name,)` for the facet `(d, s)` it names, resolved without
+# reading the mesh: a relation's facet is the whole coordinate face (`_find_face`), so its
+# mask is the face's, `_face_mask(Val(D), (name,))`, built from the constants `d` and `s`
+# so that it folds.
+@inline function _relation_mask(::Val{d}, ::Val{s}, ::Val{D}) where {d, s, D}
+    return Val(ntuple(e -> (e == d && s == 1, e == d && s == 2), Val(D)))
+end
 
 # On a padded composite, tested against the component `r.c` whose ghosts the relation is
 # attached to: the sum of one `inner_Γ` per component the relation reads.
-function _assemble_relation(P::CompositeGridSpace,
-        r::_FacetRelation{<:FacetOperator{D}}) where {D}
-    c, op, data = r.c, r.op, r.data
+function _assemble_relation(P::CompositeGridSpace{N},
+        r::_FacetRelation{<:FacetOperator{D}}) where {N, D}
+    op, data = r.op, r.data
     return _at_facet(Val(D), r.d, r.s) do name, a, b
-        R = _relation_matrix(P, op, a, b, name, c)
-        F = assemble(form(P,
-            v -> _facet_inner(_facet_mask(name), data, _facet_identity(v(c)))))
-        return sparse(transpose(R)), F
+        return _at_index(ntuple(Val, Val(N)), r.c) do c
+            R = _relation_matrix(P, op, a, b, name, c)
+            mask = _relation_mask(a, b, Val(D))
+            F = assemble(form(P,
+                v -> _facet_inner(mask, data, _facet_identity(v(_val(c))))))
+            return sparse(transpose(R)), F
+        end
     end
 end
 
@@ -723,8 +791,8 @@ function _composite_closure(P::CompositeGridSpace, comps::Tuple{Vararg{Any, N}},
     ghosted(r) = has_ghosts(first(comps[r.c]), r.d, _GHOST_SIDES[r.s])
     _check_dirichlet_orphans(ghosted, key, map(key, rels), drels)
     several = map(r -> _relation_component(r.op, r.d, r.s, r.name) == 0, rels)
-    names = map(r -> r.name, rels)
-    multi = unique!(Symbol[names[i] for i in eachindex(names) if several[i]])
+    rnames = map(r -> r.name, rels)
+    multi = unique!(Symbol[rnames[i] for i in eachindex(rnames) if several[i]])
     R, b, ghosts, _ = _relation_rows(P, comps, rels; onesided = multi)
     fixed, keep = falses(ndofs(P)), Int[]
     parts = map(c -> _dirichlet_values(first(comps[c]), drels, eltype(P), c),

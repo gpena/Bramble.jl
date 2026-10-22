@@ -326,9 +326,30 @@ expression(op::DiracSource) = "dirac($(string(op.points)), $(string(op.strengths
 # --- Algebra ----------------------------------------------------------------------- #
 
 @inline Base.:+(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = OperatorAdd(op1, op2)
-# `-1` promotes against whatever the space's element type is, preserving precision.
-@inline Base.:-(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = op1 + OperatorScale(-1, op2)
-@inline Base.:-(op::LazyOp) = OperatorScale(-1, op)
+# The sign of `-op` and `a - b`: the integer `-1` as a singleton type, so `simplify_ast`
+# reads that it is neither zero nor one off the type, even when the operator is a runtime
+# value (as in `constrained`). An `Int` `-1` stored in the node is collapsed by value
+# (gpena/Bramble.jl#240) and makes `form` a `Union` there. It promotes as `-1` does, against
+# whatever the space's element type is, preserving precision, and prints as `-1`.
+struct _MinusOne <: Integer end
+Base.show(io::IO, ::_MinusOne) = print(io, -1)
+Base.iszero(::_MinusOne) = false
+Base.isone(::_MinusOne) = false
+Base.:-(::_MinusOne) = 1
+Base.:*(::_MinusOne, ::_MinusOne) = 1
+Base.one(::Type{_MinusOne}) = 1
+Base.zero(::Type{_MinusOne}) = 0
+Base.hash(::_MinusOne, h::UInt) = hash(-1, h)
+Base.AbstractFloat(::_MinusOne) = -1.0
+Base.promote_rule(::Type{_MinusOne}, ::Type{T}) where {T <: Number} = promote_type(Int, T)
+function Base.convert(::Type{T}, ::_MinusOne) where {
+        T <: Union{AbstractFloat, Signed, Rational, Complex}}
+    return convert(T, -1)
+end
+
+@inline Base.:-(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = op1 + OperatorScale(
+    _MinusOne(), op2)
+@inline Base.:-(op::LazyOp) = OperatorScale(_MinusOne(), op)
 
 @inline Base.:*(c::Number, op::LazyOp) = OperatorScale(c, op)
 @inline Base.:*(op::LazyOp, c::Number) = OperatorScale(c, op)

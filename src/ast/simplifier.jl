@@ -122,6 +122,11 @@ end
 # (gpena/Bramble.jl#704), as an overflowing `Rational` scale throws. Same type as `*`.
 @inline _fold_mul(a, b) = a * b
 @inline _fold_mul(a::Integer, b::Integer) = Base.Checked.checked_mul(a, b)
+# The sign `_MinusOne` (ast.jl) folds as the `Int` `-1` it stands for; two give the literal
+# `1`, so `-(-u)` collapses to `u` from the types alone.
+@inline _fold_mul(::_MinusOne, ::_MinusOne) = 1
+@inline _fold_mul(::_MinusOne, b::Integer) = Base.Checked.checked_mul(-1, b)
+@inline _fold_mul(a::Integer, ::_MinusOne) = Base.Checked.checked_mul(a, -1)
 
 # Two coefficients just lifted out of the two arguments of one inner product, wrapped around
 # the product they were lifted from.
