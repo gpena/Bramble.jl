@@ -56,9 +56,9 @@ no `regions`.
 - `tuples`: Tuple of markers identified by collections of predefined boundary symbols,
   given as a tuple, vector or set (e.g. `(:top, :right)`, `[:top, :right]`), stored as `Set{Symbol}`.
 - `conditions`: Statically typed tuple of predicate function markers `f(x)` or `f(x, t)`.
-- `regions`: Tuple of polygon markers `:L => polygon(V)`. On a mesh, each gives the three
-  labels `L` (nodes inside the polygon), `L_boundary` (nodes on its boundary) and
-  `L_exterior` (nodes outside it).
+- `regions`: Tuple of polygon markers `:L => polygon(V)` and level-set markers
+  `:L => levelset(φ)`. On a mesh, each gives the three labels `L` (nodes inside the region),
+  `L_boundary` (nodes on its boundary) and `L_exterior` (nodes outside it).
 
 See also: [`markers`](@ref), [`symbols`](@ref), [`tuples`](@ref), [`conditions`](@ref).
 """
@@ -73,7 +73,7 @@ function DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple)
     return DomainMarkers(symbols, tuples, conditions, ())
 end
 
-# The polygon markers of `domain_markers`.
+# The polygon and level-set markers of `domain_markers`.
 @inline regions(domain_markers::DomainMarkers) = domain_markers.regions
 
 # The three mesh labels of the polygon marker labelled `L`: its interior, boundary and
@@ -92,6 +92,19 @@ _PolygonMarker(L::Symbol, P::Polygon) = _PolygonMarker(L, P, _polygon_labels(L))
 @inline label(m::_PolygonMarker) = m.label
 @inline identifier(m::_PolygonMarker) = m.identifier
 @inline _polygon_labels(m::_PolygonMarker) = m.labels
+
+# A level-set marker `:L => levelset(φ)`, with its three mesh labels built once, as the
+# polygon's are. It answers the same region queries as `_PolygonMarker`.
+struct _LevelSetMarker{F}
+    label::Symbol
+    identifier::LevelSet{F}
+    labels::NTuple{3, Symbol}
+end
+_LevelSetMarker(L::Symbol, S::LevelSet) = _LevelSetMarker(L, S, _polygon_labels(L))
+
+@inline label(m::_LevelSetMarker) = m.label
+@inline identifier(m::_LevelSetMarker) = m.identifier
+@inline _polygon_labels(m::_LevelSetMarker) = m.labels
 
 """
     symbols(domain_markers::DomainMarkers) -> Tuple
@@ -128,14 +141,16 @@ Construct a [`DomainMarkers`](@ref) collection from `label => identifier` pairs.
 - `pairs`: Vararg sequence of `label => identifier` pairs where identifier is a `Symbol`,
   a tuple (`NTuple{N, Symbol}`), `AbstractVector{Symbol}` or `AbstractSet{Symbol}` of
   boundary symbols, a predicate `Function` (`x -> Bool`, or `(x, t) -> Bool` with
-  `time_set`), or, on a 2D `space_set`, a `Polygon` built by `polygon`. A pair
+  `time_set`), or, on a 2D `space_set`, a `Polygon` built by `polygon` or a `LevelSet` built
+  by [`levelset`](@ref) (whose `φ` takes `x` alone, with or without `time_set`). A pair
   `:L => polygon(V)` gives a mesh the labels `L`, `L_boundary` and `L_exterior`: the nodes
   inside the polygon, on its boundary and outside it. A node is on the boundary when its
   distance to the boundary is at most
   ``\\max(\\sqrt{\\varepsilon} h_{\\min}, 10^3 \\varepsilon L) + 4 \\varepsilon M``, with
   ``h_{\\min}`` the smallest mesh spacing, ``L`` the polygon's extent, ``M`` the largest
   coordinate magnitude of the polygon's vertices, and ``\\varepsilon`` the larger
-  machine epsilon of the mesh's points and the polygon's vertices.
+  machine epsilon of the mesh's points and the polygon's vertices. A pair
+  `:L => levelset(φ)` gives the same three labels, with `φ < 0` inside.
 
 # Throws
 - `ArgumentError`: if an identifier is of any other kind (for example a `String`, a `Dict`
@@ -143,6 +158,8 @@ Construct a [`DomainMarkers`](@ref) collection from `label => identifier` pairs.
   of `space_set`, or, with `time_set`, is a predicate that does not accept `(x, t)`.
   Also if a polygon marks a set that is not 2D, has a vertex outside `space_set`, is
   labelled `:boundary` or `:interior`, or one of its three labels is another marker's.
+  Likewise for a level set, whose `φ` must also return a `Real` that is not a `Bool` at the
+  centre of `space_set`.
 
 # Examples
 ```jldoctest
@@ -207,6 +224,8 @@ function _validate_marker_pair(space_set::CartesianProduct{D}, p::Pair) where {D
         _check_marker_predicate(lbl, D, ident, _marker_probe_point(space_set))
     elseif ident isa Polygon
         _validate_polygon_marker(space_set, lbl, ident)
+    elseif ident isa LevelSet
+        _validate_levelset_marker(space_set, lbl, ident)
     else
         _throw_unsupported_marker_identifier(lbl, ident)
     end
@@ -228,15 +247,44 @@ function _validate_polygon_marker(
     return nothing
 end
 
-# The three labels of each polygon marker are told apart from every other marker's labels.
+# A level set marks the nodes of a 2D mesh, never takes a reserved label, and `φ` returns a
+# `Real` that is not a `Bool` (a predicate, which would give no sign to bracket) at the centre.
+function _validate_levelset_marker(
+        space_set::CartesianProduct{D}, lbl::Symbol, S::LevelSet
+) where {D}
+    D == 2 || _throw_levelset_marker_error(lbl, "a level set marks a 2D set, but this set is $(D)D")
+    lbl in (:boundary, :interior) && _throw_levelset_marker_error(lbl,
+        ":$lbl is reserved for the mesh's own geometric markers; choose another label")
+    c = _marker_probe_point(space_set)
+    res = try
+        S.φ(c)
+    catch err
+        _throw_levelset_marker_error(lbl, "φ failed at the centre $c of the set: $err")
+    end
+    (res isa Real && !(res isa Bool)) || _throw_levelset_marker_error(lbl,
+        "φ must return a Real, but returned a $(typeof(res)) at the centre $c of the set " *
+        "(a Bool predicate is not a level set)")
+    return nothing
+end
+
+@noinline function _throw_levelset_marker_error(lbl::Symbol, msg)
+    throw(ArgumentError("Level-set marker :$lbl: " * msg * "."))
+end
+
+# Polygons and level sets give three labels each.
+const _RegionIdentifier = Union{Polygon, LevelSet}
+
+# The three labels of each polygon or level-set marker are told apart from every other
+# marker's labels.
 function _check_polygon_label_clash(pairs::Tuple)
     for (i, p) in enumerate(pairs)
-        p.second isa Polygon || continue
+        p.second isa _RegionIdentifier || continue
         for (j, q) in enumerate(pairs)
             i == j && continue
-            theirs = q.second isa Polygon ? _polygon_labels(q.first) : (q.first,)
+            theirs = q.second isa _RegionIdentifier ? _polygon_labels(q.first) : (q.first,)
             for L in _polygon_labels(p.first)
-                L in theirs && _throw_polygon_marker_error(p.first,
+                L in theirs && (p.second isa Polygon ? _throw_polygon_marker_error :
+                 _throw_levelset_marker_error)(p.first,
                     "its label :$L is also the label of another marker")
             end
         end
@@ -253,7 +301,7 @@ function _validate_marker_pair(
 ) where {D}
     lbl = p.first
     ident = p.second
-    if ident isa Symbol || ident isa _SymbolCollection || ident isa Polygon
+    if ident isa Symbol || ident isa _SymbolCollection || ident isa _RegionIdentifier
         _validate_marker_pair(space_set, p)
     elseif ident isa Function
         probe_x = _marker_probe_point(space_set)
@@ -282,7 +330,7 @@ end
         ArgumentError(
         "Unsupported identifier of type $(typeof(ident)) for marker :$lbl. " *
         "Accepted identifiers are a boundary Symbol, a tuple, vector or set of boundary " *
-        "Symbols, a predicate Function, or a Polygon.",
+        "Symbols, a predicate Function, a Polygon, or a LevelSet.",
     ),
     )
 end
@@ -337,10 +385,13 @@ end
 function _create_generic_markers(pairs::Pair...)
     symbols, tuples = _extract_identifier_markers(pairs)
     conditions = _pairs_to_tuple_conditions(pairs)
-    regions = map(p -> _PolygonMarker(p.first, p.second), filter(p -> p.second isa Polygon, pairs))
+    regions = map(_region_marker, filter(p -> p.second isa _RegionIdentifier, pairs))
 
     return DomainMarkers(symbols, tuples, conditions, regions)
 end
+
+@inline _region_marker(p::Pair{Symbol, <:Polygon}) = _PolygonMarker(p.first, p.second)
+@inline _region_marker(p::Pair{Symbol, <:LevelSet}) = _LevelSetMarker(p.first, p.second)
 
 # Extract function-valued pairs into a tuple of Marker{F} instances, keeping each closure's
 # concrete type specialized for zero heap allocations during evaluation.
@@ -536,7 +587,7 @@ Return a tuple of the `Symbol` label of every marker in `markers`, a [`DomainMar
 an [`EvaluatedDomainMarkers`](@ref) or an [`EvaluatedParametricDomainMarkers`](@ref).
 
 Concatenates the per-category labels of `symbols`, `tuples`, and `conditions`, then the
-three labels of each polygon marker (built with the marker), as a single
+three labels of each polygon or level-set marker (built with the marker), as a single
 compile-time-unrolled tuple build, so this allocates 0 bytes. For the labels of one
 category alone, [`label_symbols`](@ref), [`label_tuples`](@ref), or
 [`label_conditions`](@ref) are equally zero-allocation.
@@ -589,6 +640,13 @@ end
 
 function Base.show(io::IO, m::_PolygonMarker)
     print(io, "Marker(:$(m.label) => <polygon>)")
+end
+
+_region_description(P::Polygon) = "<polygon, $(length(P.vertices)) vertices>"
+_region_description(::LevelSet) = "<levelset>"
+
+function Base.show(io::IO, m::_LevelSetMarker)
+    print(io, "Marker(:$(m.label) => <levelset>)")
 end
 
 function Base.show(io::IO, dm::DomainMarkers)
@@ -651,15 +709,16 @@ function Base.show(io::IO, ::MIME"text/plain", dm::DomainMarkers)
             end
         end
 
-        if n_reg > 0
-            print_section_header(pp_indented, "Polygon markers ($n_reg):")
+        for (title, kind) in (("Polygon", Polygon), ("Level-set", LevelSet))
+            group = filter(m -> identifier(m) isa kind, dm.regions)
+            isempty(group) && continue
+            print_section_header(pp_indented, "$title markers ($(length(group))):")
             pp_double_indent = with_indent(pp, 2)
-            for m in dm.regions
+            for m in group
                 print_indent(pp_double_indent)
                 printstyled(io, ":$(label(m))"; color = :green)
                 print(io, " => ")
-                nv = length(identifier(m).vertices)
-                printstyled(io, "<polygon, $nv vertices>"; color = :magenta)
+                printstyled(io, _region_description(identifier(m)); color = :magenta)
                 println(io)
             end
         end

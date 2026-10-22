@@ -42,6 +42,17 @@ The validation and the three labels of a polygon marker are in the
 [Geometry API page](../api/geometry.md#Polygons); the tolerance that classifies the nodes
 on a mesh is in the [mesh internals page](mesh.md).
 
+## Level sets
+
+```@autodocs
+Modules = [Bramble]
+Public = false
+Pages = ["geometry/levelset.jl"]
+```
+
+The validation and the three labels of a level-set marker are in the
+[Geometry API page](../api/geometry.md#Level-sets).
+
 ## Pretty printing
 
 ```@autodocs

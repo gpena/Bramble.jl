@@ -30,6 +30,7 @@ include("utils/backend_profile.jl")
 include("geometry/pretty_print.jl")
 include("geometry/set.jl")
 include("geometry/polygon.jl")
+include("geometry/levelset.jl")
 include("geometry/marker.jl")
 include("geometry/domain.jl")
 
