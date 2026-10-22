@@ -308,3 +308,168 @@ Notes:
   rule, which can carry compile from earlier code.
 - The `ghost/matrix_free.jl` entry in the plan's heavy list is below 30 s and not in this
   table. The 62 s matrix-free testset is `form/matrix_free.jl`, which is in this table.
+
+## After: cdfb0fbe, same harness, run alone
+
+S5.11 ran the S5.2 harness on HEAD `cdfb0fbe`: unit group, 4 threads, `--optimize=1
+--check-bounds=yes`, one run on this laptop with nothing else of ours running. Raw output is
+outside the repo in `timing-v4.0.1/`: `after.tsv`, `after.tsv.testsets`, `after.log` and
+`compare.txt` (`test/timing.jl --compare` of `before.tsv` against `after.tsv`). The run was
+started at 14:06 after the timing preflight passed; the load and CPU checks had failed for
+about 20 minutes first (macOS system daemons held the CPU).
+
+**Under load.** The 1-min load was 2.9 to 4.1 for most of the run, against 2.0 to 2.6 at
+baseline. Compare the figures below with that in mind.
+
+### Header
+
+| Field | Before (cfff528d) | After (cdfb0fbe) |
+|---|---|---|
+| Commit | `cfff528d` | `cdfb0fbe` |
+| Files traced | 157 | 162 (5 new, see below) |
+| Testsets | 3355 | 3265 |
+| Tests | 27521 | 27947 |
+| Suite wall | 1520.9 s | 1456.2 s |
+| Compile total | 1431.8 s (summed over threads) | 1327.0 s (summed over threads) |
+| `precompile` line | 1.9 s | 2.7 s |
+| Peak memory | 4.58 GB RSS (`/usr/bin/time -l`) | 4.66 GB footprint (per-file log column) |
+| 1-min load at start | 1.98 | 1.92 at preflight (14:06); 2.09 at the power check |
+| 1-min load during and at end | 2.0 to 2.6 | 2.9 to 4.1 during; 3.63 at the end (14:33) |
+
+The run stayed under the 10 GB slot cap. It was not wrapped in `/usr/bin/time`, so the RSS
+figure is the per-file footprint column.
+
+### Wall time, with and without the new polygon files
+
+| | Suite wall (s) | Compile (s) |
+|---|---|---|
+| Baseline cfff528d | 1520.9 | 1431.8 |
+| After, as measured | 1456.2 | 1327.0 |
+| New polygon files (table below) | 49.2 | 20.7 |
+| After, new files taken out | 1407.0 | 1306.3 |
+
+With the new files out, the wall is 113.9 s (7.5%) below baseline. The eight trimmed files
+alone fell by 166.5 s of self time (585.4 s to 418.9 s). The rest of the suite, by
+difference, rose by 52.6 s. Some of that is drift on untouched files (see below).
+
+### New unit test files since cfff528d
+
+Only the first five are traced by `timing.jl`. `poisson_polygon.jl` is loaded with
+`Base.include` inside `convergence/runtests.jl`, so its time is that container's self time,
+less `convergence/operators.jl` (33.58 s wall minus 2.89 s). `FGOracle.jl` is loaded from
+inside `ghost/polygon_oracle.jl`, so its time is in that file's self time.
+
+| File | Self (s) after | Compile (s) after | How timed |
+|---|---|---|---|
+| `convergence/poisson_polygon.jl` | 30.69 | 3.39 | container self less `operators.jl` |
+| `ghost/polygon_spaces.jl` | 11.21 | 10.66 | traced |
+| `ghost/polygon_oracle.jl` (with `FGOracle.jl`) | 4.73 | 4.63 | traced |
+| `mesh/polygon_markers.jl` | 1.59 | 1.39 | traced |
+| `mesh/polygon_closure.jl` | 0.62 | 0.38 | traced |
+| `geometry/polygon.jl` | 0.34 | 0.26 | traced |
+| Total | 49.18 | 20.71 | |
+
+### Changed files: before and after
+
+Self time is the file's wall minus the files it includes, as `--compare` reports it. The
+trim list is the files the plan's trims changed.
+
+| File | Self before (s) | Self after (s) | Delta (s) | Compile before (s) | Compile after (s) | Status |
+|---|---|---|---|---|---|---|
+| `form/bilinear.jl` | 216.59 | 164.74 | -51.85 | 199.78 | 147.75 | trimmed |
+| `ghost/backends.jl` | 65.53 | 18.35 | -47.18 | 68.27 | 18.56 | trimmed |
+| `form/linear_restriction.jl` | 62.33 | 33.71 | -28.62 | 61.33 | 32.74 | trimmed |
+| `form/nested_operators.jl` | 53.27 | 42.61 | -10.66 | 53.18 | 42.51 | trimmed |
+| `ghost/allocations.jl` | 35.41 | 25.90 | -9.51 | 38.26 | 26.18 | trimmed (#813) |
+| `form/kronecker_edge.jl` | 55.98 | 48.28 | -7.70 | 56.25 | 47.05 | trimmed |
+| `form/matrix_free.jl` | 61.51 | 56.34 | -5.17 | 61.42 | 55.93 | trimmed |
+| `space/ghost_vector.jl` | 34.78 | 28.93 | -5.85 | 38.88 | 31.51 | trimmed |
+| `ghost/traction.jl` | 9.13 | 10.02 | +0.89 | 8.33 | 9.20 | slow-only trim, in HEAD before the baseline (`a19e19c1`) |
+| `space/ghost_vector_operators.jl` | 8.48 | 12.63 | +4.15 | 9.83 | 14.98 | not on trim list; main commit |
+| `form/linear.jl` | 54.45 | 55.51 | +1.06 | 45.69 | 46.77 | left alone (S5.9 abandoned) |
+| `ghost/cross_component.jl` | 51.22 | 54.60 | +3.38 | 49.17 | 52.29 | left alone (S5.12 abandoned) |
+
+Notes on the rows:
+
+- `ghost/traction.jl`: the trim is in HEAD. S6 committed it as `a19e19c1`, which comes before
+  the baseline commit `cfff528d`, so the baseline and the after run both have it. That is why
+  `git diff cfff528d..cdfb0fbe` is empty for this file. Its effect is on the slow group only,
+  the 33-point 3D level: S6 measured 365.6 s down to 73.2 s locally. The unit levels read
+  `WITH_SLOW_TESTS` (0:3 slow, 0:2 unit), so the unit run is unchanged. Its +0.9 s (+10%) is
+  inside the drift range.
+- `space/ghost_vector_operators.jl`: not on the plan's trim list. Its only change since the
+  baseline is `34687dd1` (main, "GhostVector CpuThreaded bounds allow per-pass closure
+  re-boxing"). The +3.7 s is in its "GhostVector operators, CpuThreaded" testset.
+- `form/linear.jl` and `ghost/cross_component.jl` were not changed by this plan. S5.9 and
+  S5.12 were abandoned, so both files keep their baseline tests. Their +1 to +3 s is drift.
+
+### Per-testset, top-level testsets of the changed files
+
+Wall and compile in seconds, from `after.tsv.testsets` against `before.tsv.testsets`.
+
+| File | Testset | Wall before | Wall after | Delta | Compile before | Compile after |
+|---|---|---|---|---|---|---|
+| form/bilinear.jl | Bilinear forms | 138.19 | 84.15 | -54.04 | 195.44 | 143.00 |
+| form/bilinear.jl | bilinear: restricted sum replay width | 0.42 | 0.45 | +0.03 | 0.42 | 0.45 |
+| form/bilinear.jl | bilinear: matrix-free form call | 3.11 | 3.48 | +0.37 | 3.10 | 3.47 |
+| form/bilinear.jl | pair walk, unequal block counts | 0.42 | 0.43 | +0.01 | 0.42 | 0.43 |
+| form/bilinear.jl | zeroing a non-CSC sparse matrix | 0.03 | 0.03 | 0.00 | 0.03 | 0.03 |
+| form/bilinear.jl | bilinear: traversal and policy traits | 0.02 | 0.02 | 0.00 | 0.02 | 0.02 |
+| form/bilinear.jl | symbolic and source-only leaves | 0.06 | 0.06 | 0.00 | 0.06 | 0.06 |
+| form/bilinear.jl | source stencils, non-uniform mesh | 0.29 | 0.29 | 0.00 | 0.28 | 0.29 |
+| ghost/backends.jl | Ghost spaces keep the backend | 3.38 | 3.44 | +0.06 | 3.54 | 3.59 |
+| ghost/backends.jl | Ghost forms store the backend's types | 9.86 | 2.56 | -7.30 | 10.24 | 2.66 |
+| ghost/backends.jl | constrained keeps the backend | 46.81 | 5.26 | -41.55 | 49.21 | 5.41 |
+| ghost/backends.jl | Mesh edits keep the backend | 0.29 | 0.35 | +0.06 | 0.49 | 0.43 |
+| ghost/backends.jl | A ghost mesh has an immutable walk state | 0.99 | 1.08 | +0.09 | 1.12 | 1.22 |
+| ghost/backends.jl | Ghost constructors are inferable | 3.58 | 5.16 | +1.58 | 3.66 | 5.24 |
+| form/linear_restriction.jl | Linear forms: restrictions | 60.58 | 31.94 | -28.64 | 61.33 | 32.74 |
+| form/matrix_free.jl | matrix-free operator (#326) | 53.57 | 47.75 | -5.82 | 61.42 | 55.93 |
+| form/kronecker_edge.jl | Kronecker edge cases | 46.48 | 36.45 | -10.03 | 56.25 | 47.05 |
+| form/nested_operators.jl | Nested stencil operators in forms (#287) | 25.09 | 27.48 | +2.39 | 25.12 | 27.50 |
+| form/nested_operators.jl | Δₕ nested in forms (#774) | 13.23 | 7.98 | -5.25 | 13.29 | 8.05 |
+| form/nested_operators.jl | jumpₙ nested in inner_Γ (#205) | 14.78 | 6.97 | -7.81 | 14.76 | 6.96 |
+| ghost/allocations.jl | Warm ghost calls allocate (#785) | 10.88 | 12.42 | +1.54 | 11.03 | 12.85 |
+| ghost/allocations.jl | Warm refill follows a coefficient | 0.60 | 0.61 | +0.01 | 0.68 | 0.69 |
+| ghost/allocations.jl | Warm refill, padded corner rule | 1.16 | 1.27 | +0.11 | 1.16 | 1.27 |
+| ghost/allocations.jl | Warm refill, facet rule (#813) | 22.57 | 11.07 | -11.50 | 25.39 | 11.06 |
+| ghost/allocations.jl | Warm refill on polygon spaces (new) | - | 0.31 | new | - | 0.31 |
+| space/ghost_vector.jl | GhostVector holds the caller's vector | 0.67 | 0.38 | -0.29 | 0.70 | 0.41 |
+| space/ghost_vector.jl | update_ghosts! equals lift (#776) | 17.52 | 16.92 | -0.60 | 17.47 | 16.91 |
+| space/ghost_vector.jl | GhostVector refusals (#776) | 0.07 | 0.07 | 0.00 | 0.06 | 0.07 |
+| space/ghost_vector.jl | update_ghosts! under CpuThreaded (#776) | 16.27 | 11.25 | -5.02 | 20.64 | 14.13 |
+| ghost/traction.jl | Traction conditions through ghost points | 9.02 | 9.90 | +0.88 | 8.33 | 9.20 |
+| space/ghost_vector_operators.jl | operators on a GhostVector (#776) | 5.48 | 5.89 | +0.41 | 5.46 | 5.87 |
+| space/ghost_vector_operators.jl | GhostVector operator refusals (#776) | 0.11 | 0.12 | +0.01 | 0.09 | 0.12 |
+| space/ghost_vector_operators.jl | GhostVector operators, CpuThreaded | 2.74 | 6.46 | +3.72 | 4.28 | 8.99 |
+| form/linear.jl (left alone) | Linear forms | 13.42 | 13.71 | +0.29 | 45.69 | 46.77 |
+| ghost/cross_component.jl (left alone) | Cross-component ghost relations | 49.45 | 52.80 | +3.35 | 49.17 | 52.29 |
+
+Two things the testset rows show that the file rows hide:
+
+- `form/bilinear.jl`: the "Bilinear forms" testset fell 54 s, but the file-level time outside
+  every testset stayed at about 75 s (74.1 s before, 75.8 s after). That part is still
+  unresolved.
+- `form/nested_operators.jl`: the "#287" testset rose 2.4 s while the "#774" and "#205"
+  testsets fell 13 s. The file's total fell 10.7 s.
+
+### Drift on untouched files, and compile moves
+
+Across the 44 files of at least 5 s that no test diff touches, the median wall ratio is 1.040
+(range 0.96 to 1.28). That is the noise floor for this run under load. In the examples
+below, the rise is mostly compile. Files with no test diff since the baseline include
+`ghost/preconditioners.jl` (self +4.10 s, compile +3.68 s), `ghost/cross_component.jl`
+(compile +3.12 s), `ghost/policies.jl` (compile +2.45 s) and `ghost/multigrid.jl`
+(compile +1.95 s).
+
+The precompile workload grew since the baseline, from S3 and from the #832 polygon work. The
+`precompile` line in the log rose 0.8 s, from 1.9 s to 2.7 s; the +3.6 s figure from S3 does
+not show in that line, so it is not counted here. Compile can move between files as the
+workload changes, and that may explain part of the drift above. Only test diffs are
+attributed to the trims.
+
+### Not yet measured
+
+The gate's own unit wall time comes from `/bramble-gate unit` in §9. The figures above are
+S5.11's measurement under load, and are not the speedup claim. Re-measure on an idle machine
+before quoting a speedup (`bramble-verification`).
