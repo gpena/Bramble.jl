@@ -11,8 +11,9 @@ name: Nightly
 # architecture-dependent `@generated` fold, documented there, not a real regression each time
 # it fires) rather than a break. The `slow` job runs the `slow` group, which is `unit` plus
 # the blocks whose cost is out of proportion to what a *push* learns from them; see
-# test/TestUtils.jl's `WITH_SLOW_TESTS` for the list and the measurement. The worked-example
-# pages are not in `slow` any more: they are the `examples` group, which docs-on-demand.yml
+# test/TestUtils.jl's `WITH_SLOW_TESTS` for the list and the measurement. The `convergence`
+# job runs the convergence studies (test/convergence/), as CI.yml's `convergence` leg does
+# on every PR. The worked-example pages are not in `slow` any more: they are the `examples` group, which docs-on-demand.yml
 # runs before every docs build. AD and GPU tests are off in every group until v4.3.0 and
 # v4.4.0 respectively (test/TestUtils.jl, `WITH_AD_TESTS` and `WITH_GPU_TESTS`); each comes
 # back by setting `BRAMBLE_TEST_AD` or `BRAMBLE_TEST_GPU` in a job's env here and adding its
@@ -177,6 +178,62 @@ jobs:
           path: lcov.info
           if-no-files-found: warn
 
+  # The `convergence` group: every convergence study of the suite (test/convergence/).
+  # CI.yml runs it on every PR as its own leg, but CI.yml uploads no coverage; this job is
+  # here for that. Same Julia, flags and coverage as `slow`, and its coverage is a fifth
+  # `lcov-suite-*` part of Weekly.yml's floor: code only a convergence study reaches is
+  # covered nowhere else.
+  convergence:
+    name: Julia 1.13 + convergence studies (macOS-latest)
+    needs: changed
+    if: ${{ needs.changed.outputs.run == 'true' }}
+    runs-on: macOS-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
+      id-token: write
+    env:
+      JULIA_NUM_THREADS: 3
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.13"
+
+      # Its own entry, not `slow`'s: two jobs saving one key race, and only the newest is kept.
+      - uses: julia-actions/cache@v3
+        with:
+          cache-compiled: "true"
+          cache-name: julia-cache;convergence;julia=1.13
+          include-matrix: "false"
+          cache-objcache: "false"
+          save-always: "false"
+
+      - uses: julia-actions/julia-buildpkg@v1
+
+      # As in `slow`: a `run:` step, so the suite gets `--optimize=1`.
+      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
+        env:
+          BRAMBLE_TEST_GROUP: convergence
+          BRAMBLE_TEST_MAXRSS_GB: 6
+
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v7
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
+          flags: suite
+          fail_ci_if_error: false
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: lcov-suite-convergence
+          path: lcov.info
+          if-no-files-found: warn
+
   test:
     name: Julia nightly (${{ matrix.os }})
     # Switched off on 2026-09-25; see the header comment for why and how to restore it.
@@ -277,7 +334,7 @@ jobs:
   # restored, so this deletes the rest once the saving jobs are done.
   prune-caches:
     name: Prune superseded caches on main
-    needs: [slow, quality]
+    needs: [slow, convergence, quality]
     if: ${{ always() && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

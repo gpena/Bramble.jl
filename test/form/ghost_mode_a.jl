@@ -139,7 +139,6 @@ const MESHES = (random_mesh((11,); seed = 7), random_mesh((6, 7)),
             A, F = assembled(robin_forms(Wₕ, P, D)...)
             Ao, Fo = P.oracle.system(:robin_a, Ωₕ)
             ea, ef = relerr(A, Ao), relerr(F, Fo)
-            println("Mode A $(D)D robin_a: matrix ", ea, ", rhs ", ef)
             @test size(A) == size(Ao)
             @test ea <= tol
             @test ef <= tol
@@ -150,7 +149,6 @@ const MESHES = (random_mesh((11,); seed = 7), random_mesh((6, 7)),
             A, F = assembled(neumann_forms(Wₕ, P, D)...)
             Ao, Fo = P.oracle.system(:neumann_a, Ωₕ)
             ea, ef = relerr(A, Ao), relerr(F, Fo)
-            println("Mode A $(D)D neumann_a: matrix ", ea, ", rhs ", ef)
             @test ea <= tol
             @test ef <= tol
             @test issymmetric(A)
@@ -162,7 +160,6 @@ const MESHES = (random_mesh((11,); seed = 7), random_mesh((6, 7)),
             A, F = assembled(robin_forms(Wₕ, P, D; mass = κ)...)
             Ao, Fo = oracle_helmholtz(P, Ωₕ)
             ea, ef = relerr(A, Ao), relerr(F, Fo)
-            println("Mode A $(D)D helmholtz: matrix ", ea, ", rhs ", ef)
             @test ea <= tol
             @test ef <= tol
             @test issymmetric(A)
@@ -188,8 +185,6 @@ const MESHES = (random_mesh((11,); seed = 7), random_mesh((6, 7)),
                 push!(oerrs, eo)
             end
             r = slope(hs, errs)
-            println("Mode A graded 2D $problem: order ", round(r; digits = 3),
-                ", errors ", errs, ", oracle ", oerrs)
             # the same error as the oracle's solve, not only the same slope
             @test all(abs.(errs .- oerrs) .<= 1e-8 .* oerrs)
             # halving hₘₐₓ divides the error by about 4 at every step, the last included
@@ -211,8 +206,6 @@ const MESHES = (random_mesh((11,); seed = 7), random_mesh((6, 7)),
         ωx, ωy = O.facet_weight(Ωₕ, 1, I), O.facet_weight(Ωₕ, 2, I)
         flux = ωx * (-P.grad(x)[1]) + ωy * (-P.grad(x)[2])
         lumped = (ωx + ωy) * g(x)
-        println("Mode A corner (1,1): scalar g ", Fs[1], ", per-facet flux ", Ff[1],
-            ", difference ", Fs[1] - Ff[1])
         @test isapprox(Ff[1], flux; rtol = tol)
         @test isapprox(Fs[1], lumped; rtol = tol)
         @test abs(Fs[1] - Ff[1]) > 1e-3 * abs(Ff[1])

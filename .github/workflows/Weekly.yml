@@ -7,7 +7,8 @@ name: Weekly
 # matrix. `full` no longer implies `quality` (see test/runtests.jl).
 #
 # Nor the `slow` group: nightly.yml's `slow` job runs it daily on the same Julia 1.13, on
-# macOS in four shards, each uploading its part of that half of the coverage. This workflow runs
+# macOS in four shards, each uploading its part of that half of the coverage; its
+# `convergence` job runs the `convergence` group and uploads a fifth part. This workflow runs
 # the other half, the `backends` group (the package extensions), on macOS in two shards, and
 # the per-file coverage floor over both halves. Together they cover what `full` does except the
 # manual snippets, which only run locally anyway. It also runs the `grids` group: every
@@ -198,8 +199,8 @@ jobs:
           BRAMBLE_TEST_GROUP: grids
 
   # Per-file coverage floor over the two coverage halves merged: the two `lcov-backends-<shard>`
-  # parts from this run, and the four `lcov-suite-<shard>` parts from the newest nightly.yml run on this
-  # run's commit. The halves
+  # parts from this run, and the five `lcov-suite-<part>` parts (the four `slow` shards and the
+  # `convergence` job) from the newest nightly.yml run on this run's commit. The halves
   # must come from the same commit: lcov records line numbers, so merging halves from two
   # commits that touched a file measures the wrong lines (the 2026-10-11 run reported 55% for
   # a file covered at 87%). Without a nightly half on this commit the floor is skipped with a
@@ -245,11 +246,12 @@ jobs:
             exit 0
           fi
           gh run download "$run_id" --repo "${{ github.repository }}" --pattern 'lcov-suite-*' --dir lcov
-          # One part per nightly shard; with a part missing the floor would measure part of
-          # the `slow` half and fail files that shard covers.
+          # One part per nightly shard, and one from its `convergence` job; with a part
+          # missing the floor would measure part of the `slow` half and fail files that part
+          # covers.
           parts=$(find lcov -path 'lcov/lcov-suite-*/lcov.info' | wc -l)
-          if [ "$parts" -ne 4 ]; then
-            echo "::warning::nightly.yml run $run_id has $parts of 4 lcov-suite parts."
+          if [ "$parts" -ne 5 ]; then
+            echo "::warning::nightly.yml run $run_id has $parts of 5 lcov-suite parts."
             exit 0
           fi
           echo "found=true" >> "$GITHUB_OUTPUT"

@@ -1,4 +1,4 @@
-module FormGhostConvergenceTests
+module ConvergenceGhostRelationsTests
 
 # Second-order convergence of ghost-point boundary relations through the user's path only
 # (gpena/Bramble.jl#205, #218): `gridspace(Ωₕ; ghosts)`, `constrained`, `form`,
@@ -15,16 +15,13 @@ module FormGhostConvergenceTests
 # oracles' `make_mesh` sequences: graded and random, uniform as an extra. On one mesh per
 # case the library's solution is compared with the plain-matrix oracles' (test/ghost/),
 # which share no code with the library, so that a wrong scheme which converges still fails.
-#
-# The unit run takes one 1D and one 2D case at two levels; the order sweeps run in the slow
-# group and the 3D cases where 3D meshes are built.
 
 using Test
 using Bramble
 import Bramble
 using LinearAlgebra: Diagonal, dot, norm
 using SparseArrays: sparse, spzeros
-using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS
+using ..TestUtils: _order_header, _order_row
 
 isdefined(Main, :GhostOracle1D) ||
     Base.include(Main, joinpath(pkgdir(Bramble), "test", "ghost", "GhostOracle1D.jl"))
@@ -289,10 +286,15 @@ function conormal_observed(kind, levels)
     return hs, errs
 end
 
-function report(label, hs, errs)
+# One table per testset: `header(title)`, then `report(cells, hs, errs)` per case, `cells`
+# the dimension, the case, the mesh kind and the route.
+const WIDTHS = (5, 11, 9, 10)
+header(title) = _order_header("Ghost relations, $title: discrete H¹ error",
+    ("dim", "case", "mesh", "route"), WIDTHS)
+
+function report(cells, hs, errs)
     r = lsq_order(hs, errs)
-    println("ghost convergence ", label, ": order ", round(r; digits = 3), " (errors ",
-        join(round.(errs; sigdigits = 3), ", "), ")")
+    _order_row(cells, r, errs, WIDTHS; gate = MIN_ORDER)
     return r
 end
 
@@ -306,7 +308,8 @@ const KINDS = (:graded, :random, :uniform)
 @testset "Ghost relations converge (#205)" begin
     @testset "1D Neumann, two random levels" begin
         hs, errs = observed(:neumann, 1, :random, 0:1)
-        @test report("1D neumann random (2 levels)", hs, errs) > MIN_ORDER
+        header("two levels")
+        @test report(("1D", :neumann, :random, :relation), hs, errs) > MIN_ORDER
         Ωₕ = make_mesh(1, :random, 0)
         @test relerr(library_solution(:neumann, Ωₕ, 1), oracle_solution(:neumann, Ωₕ, 1)) <=
               AGREE
@@ -314,25 +317,25 @@ const KINDS = (:graded, :random, :uniform)
 
     @testset "2D Robin/Neumann, two graded levels" begin
         hs, errs = observed(:mixed, 2, :graded, 1:2)
-        @test report("2D mixed graded (2 levels)", hs, errs) > MIN_ORDER
+        @test report(("2D", :mixed, :graded, :relation), hs, errs) > MIN_ORDER
         Ωₕ = make_mesh(2, :graded, 0)
         @test relerr(library_solution(:mixed, Ωₕ, 2), oracle_solution(:mixed, Ωₕ, 2)) <=
               AGREE
     end
 
-    WITH_SLOW_TESTS && @testset "$(D)D orders over four levels" for D in (1, 2)
+    @testset "$(D)D orders over four levels" for D in (1, 2)
+        header("$(D)D, four levels")
         for case in CASES, kind in KINDS
 
             routes = case === :dirichlet ? (:relation, :keyword) : (:relation,)
             for route in routes
                 hs, errs = observed(case, D, kind, 0:3; route)
-                label = "$(D)D $case $kind" * (case === :dirichlet ? " $route" : "")
-                @test report(label, hs, errs) > MIN_ORDER
+                @test report(("$(D)D", case, kind, route), hs, errs) > MIN_ORDER
             end
         end
     end
 
-    WITH_SLOW_TESTS && @testset "$(D)D agrees with the oracle" for D in (1, 2)
+    @testset "$(D)D agrees with the oracle" for D in (1, 2)
         for case in CASES
             Ωₕ = make_mesh(D, :random, 1)
             u0 = oracle_solution(case, Ωₕ, D)
@@ -342,20 +345,19 @@ const KINDS = (:graded, :random, :uniform)
         end
     end
 
-    # 3D runs nightly (`WITH_3D_TESTS`).
-    WITH_3D_TESTS && WITH_SLOW_TESTS && @testset "3D orders over four levels" begin
+    @testset "3D orders over four levels" begin
+        header("3D, four levels")
         for case in CASES, kind in KINDS
 
             routes = case === :dirichlet ? (:relation, :keyword) : (:relation,)
             for route in routes
                 hs, errs = observed(case, 3, kind, 0:3; route)
-                label = "3D $case $kind" * (case === :dirichlet ? " $route" : "")
-                @test report(label, hs, errs) > MIN_ORDER
+                @test report(("3D", case, kind, route), hs, errs) > MIN_ORDER
             end
         end
     end
 
-    WITH_3D_TESTS && @testset "3D agrees with the oracle" begin
+    @testset "3D agrees with the oracle" begin
         for case in CASES
             Ωₕ = make_mesh(3, :random, 0)
             u0 = oracle_solution(case, Ωₕ, 3)
@@ -365,10 +367,11 @@ const KINDS = (:graded, :random, :uniform)
         end
     end
 
-    WITH_SLOW_TESTS && @testset "2D anisotropic ∂ₙ(u; K) orders" begin
+    @testset "2D anisotropic ∂ₙ(u; K) orders" begin
+        header("anisotropic ∂ₙ(u; K)")
         for kind in KINDS
             hs, errs = conormal_observed(kind, 0:3)
-            @test report("2D conormal $kind", hs, errs) > MIN_ORDER
+            @test report(("2D", :conormal, kind, :relation), hs, errs) > MIN_ORDER
         end
         Ωₕ = OC.make_mesh(:random, 0)
         u0 = OC.solve(:aniso_robin, Ωₕ; closure = :facet_onesided)
@@ -376,4 +379,4 @@ const KINDS = (:graded, :random, :uniform)
     end
 end
 
-end # module FormGhostConvergenceTests
+end # module ConvergenceGhostRelationsTests

@@ -16,21 +16,15 @@ using Bramble:
                semidiscretize_rhs,
                set_points!,
                type_cached_assemble!
-using ..TestUtils: _check_eoc, WITH_AD_TESTS
+using ..TestUtils: WITH_AD_TESTS, _sd_problem
 
 # `semidiscretize` and the residual it returns (src/problems/semidiscrete.jl) need no SciMLBase:
 # a `Semidiscretization` is a callable with the `(du, u, p, t)` signature plus two matrices.
 # Everything here therefore belongs in the always-run unit group, and only the
 # `ODEFunction`/`ODEProblem`/`LinearProblem` wrapping is left to test/ext/sciml_ext.jl.
 #
-# The integration test at the bottom steps the system with backward Euler written out by
-# hand, which keeps the mathematical claim -- that this semidiscretisation is second order
-# in space -- independent of any solver package.
-
-const _SD_T = 0.1
-
-_sd_uex(x, t) = exp(-t) * sinpi(x[1])
-_sd_src(x, t) = (pi^2 - 1) * exp(-t) * sinpi(x[1])
+# Its second order in space, stepped with backward Euler written out by hand, is in
+# test/convergence/heat_1d.jl.
 
 # Allocation assertions go behind a function barrier: measured at `@testset` scope they
 # would count the closure the testset body becomes (bramble-verification §1).
@@ -38,15 +32,6 @@ _sd_residual_allocs(sd, du, u, t) = @allocated sd(du, u, nothing, t)
 _sd_jacobian_allocs(J, sd, u, t) = @allocated Bramble.jacobian!(J, sd, u, nothing, t)
 _sd_rhs_allocs(rhs, du, u, t) = @allocated rhs(du, u, nothing, t)
 _sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
-
-function _sd_problem(n)
-    Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), n)
-    Wₕ = gridspace(Ωₕ)
-    fₕ = Bramble.element(Wₕ, 0.0)
-    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-    l = form(Wₕ, v -> innerₕ(fₕ, v))
-    return Ωₕ, Wₕ, fₕ, a, l
-end
 
 @testset "semidiscretize" begin
     Ωₕ, Wₕ, fₕ, a, l = _sd_problem(21)
@@ -725,46 +710,6 @@ end
         @test semidiscretize(stiff(Wᵣ), form(Wᵤ, v -> innerₕ(x -> 1.0, v))) isa
               Bramble.Semidiscretization
     end
-end
-
-# The semidiscretisation is second order in space. Backward Euler is written out here rather
-# than imported so the claim rests on nothing but Bramble: on a constrained row `M` is zero
-# and `A` is `eₖ`, so `(M + Δt A) u = M u + Δt F` reduces to `u[i] = g(x_i, t)` and the
-# boundary condition is imposed by the same step that advances the interior. `Δt = h²` keeps
-# the first-order time error at the order being measured.
-@testset "semidiscretize: backward Euler order" begin
-    function step_to(n)
-        Ωₕ, Wₕ, fₕ, a, l = _sd_problem(n)
-        h = hₘₐₓ(Ωₕ)
-        bcs = dirichlet_constraints(
-            Ωₕ, Bramble.interval(0.0, _SD_T), :boundary => (x, t) -> 0.0
-        )
-        sd = semidiscretize(
-            a, l; dirichlet = bcs, (update_coefficients!) = t -> Rₕ!(fₕ, x -> _sd_src(x, t))
-        )
-
-        M = mass_matrix(sd)
-        nsteps = ceil(Int, _SD_T / h^2)
-        Δt = _SD_T / nsteps
-        K = M + Δt * operator_matrix(sd)
-
-        u = collect(parent(Rₕ(Wₕ, x -> _sd_uex(x, 0.0))))
-        dirichlet_bc!(u, sd, 0.0)
-        F = similar(u)
-        zero_u = zero(u)
-        for k in 1:nsteps
-            t = k * Δt
-            sd(F, zero_u, nothing, t)      # F(t), the residual at u = 0
-            u = K \ (M * u + Δt * F)
-        end
-
-        uₕ = Bramble.element(Wₕ)
-        parent(uₕ) .= u
-        return normₕ(Rₕ(Wₕ, x -> _sd_uex(x, _SD_T)) - uₕ), h
-    end
-
-    eoc = _check_eoc(step_to, (11, 21, 41, 81))
-    @test last(eoc) > 1.95
 end
 
 # `semidiscretize_rhs`: `du = M⁻¹(F(t) - A u)` with `M`'s diagonal

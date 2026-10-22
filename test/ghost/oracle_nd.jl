@@ -4,7 +4,8 @@ module GhostOracleNdTests
 # meshes: ghost count, order and coordinates; that Δ_H at physical nodes never reads a
 # padded corner or edge point; the per-(facet, node) closure, a corner node taking one
 # datum per incident facet; the eliminated rows against the tensor product of GhostOracle1D's
-# variational 1D matrices; the augmented route; then the orders, printed.
+# variational 1D matrices; the augmented route. The orders are in
+# test/convergence/ghost_oracles.jl.
 
 using Test
 using Bramble
@@ -12,7 +13,7 @@ import Bramble
 using LinearAlgebra: Diagonal, dot, norm, ×
 using SparseArrays: nnz, sparse
 
-using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS
 
 isdefined(Main, :GhostOracleND) ||
     Base.include(Main, joinpath(@__DIR__, "GhostOracleND.jl"))
@@ -214,27 +215,6 @@ end
         @test_throws ArgumentError O.system_matrix(:dirichlet, Ω2)
         @test_throws ArgumentError O.observed_order(:robin_a, :uniform; dim = 1)
         @test_throws ArgumentError O.make_mesh(:smooth, 0)
-    end
-
-    @testset "Orders" begin
-        # Gated on uniform and graded meshes; refined random meshes printed. The errors
-        # must also fall at every level and end small (the slope alone hides a blow-up).
-        # The unit group runs the graded 2D meshes on three levels; `slow` runs every mesh
-        # kind in 2D and 3D on four.
-        levels = WITH_SLOW_TESTS ? 4 : 3
-        dims = WITH_SLOW_TESTS ? (2, 3) : (2,)
-        kinds = WITH_SLOW_TESTS ? O.MESH_KINDS : (:graded,)
-        for dim in dims, kind in kinds, p in O.PROBLEMS
-            hs, errs = O.observed_errors(p, kind; dim, levels)
-            X, Y = log.(hs), log.(errs)
-            X̄, Ȳ = sum(X) / levels, sum(Y) / levels
-            r = sum((X .- X̄) .* (Y .- Ȳ)) / sum(abs2, X .- X̄)
-            println("ND oracle $(dim)D $kind $p: order ", round(r; digits = 3),
-                ", errors ", round.(errs; sigdigits = 3))
-            @test all(errs[2:end] .< 0.5 .* errs[1:(end - 1)])
-            @test errs[end] < 1e-2
-            kind === :random || @test r > 1.8
-        end
     end
 end
 

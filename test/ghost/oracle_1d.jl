@@ -2,7 +2,8 @@ module GhostOracle1dTests
 
 # Pins the 1D ghost-point oracle (GhostOracle1D.jl) against notes §1 on a random mesh:
 # operator boundary rows entry by entry, summation by parts, the ghost closure, the
-# variational form of the eliminated rows, the augmented route, then the orders.
+# variational form of the eliminated rows and the augmented route. The orders are in
+# test/convergence/ghost_oracles.jl.
 
 using Test
 using Bramble
@@ -149,14 +150,6 @@ end
         @test dot(O.mean_weights(Ωₕ), O.solve(:neumann_a, Ωₕ)) ≈ 0 atol=tol
         @test_throws ArgumentError O.system_matrix(:dirichlet, Ωₕ)
         @test_throws ArgumentError O.observed_order(:robin_a, :uniform; dim = 2)
-    end
-
-    @testset "Second order" begin
-        for p in O.PROBLEMS, kind in O.MESH_KINDS
-
-            r = O.observed_order(p, kind)
-            @test r > 1.8
-        end
     end
 end
 

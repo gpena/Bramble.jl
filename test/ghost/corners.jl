@@ -2,16 +2,14 @@ module GhostCornersTests
 
 # Pins the corner-ghost oracle (GhostCorners.jl, notes §4) on a random 2D mesh: padded
 # counts in 2D and 3D, the facet relations' 2×2 coupling at each corner, the cross-weighted
-# factor, the three corner closures on bilinear data, which rows read a corner point, then
-# the orders of every closure × mixed form × mesh kind (printed; gated on convergence).
+# factor, the three corner closures on bilinear data and which rows read a corner point. The
+# orders of every closure × mixed form × mesh kind are in test/convergence/ghost_oracles.jl.
 
 using Test
 using Bramble
 import Bramble
 using LinearAlgebra: det, norm, rank
 using SparseArrays: SparseMatrixCSC, findnz
-
-using ..TestUtils: WITH_SLOW_TESTS
 
 isdefined(Main, :GhostCorners) || Base.include(Main, joinpath(@__DIR__, "GhostCorners.jl"))
 const C = Main.GhostCorners
@@ -176,27 +174,6 @@ corner_indices() = [C.padded(i, j, nx) for (i, j) in C.corner_points(nx, ny)]
         @test_throws ArgumentError C.system_matrix(:aniso_robin, Ωₕ; mixed = :forward)
         @test_throws ArgumentError C.system_matrix(:robin_a, Ωₕ)
         @test_throws ArgumentError C.observed_order(:aniso_robin, :uniform; dim = 3)
-    end
-
-    @testset "Convergence" begin
-        # The unit group runs the one-sided corner closure on the graded meshes with the
-        # centred mixed form, three levels; `slow` runs every closure, mixed form and mesh
-        # kind on four.
-        levels = WITH_SLOW_TESTS ? 4 : 3
-        closures = WITH_SLOW_TESTS ? C.CLOSURES : (:facet_onesided,)
-        mixeds = WITH_SLOW_TESTS ? C.MIXED : (:centered,)
-        kinds = WITH_SLOW_TESTS ? C.MESH_KINDS : (:graded,)
-        println("aniso_robin, discrete H¹ error, $levels levels from 17 points per axis")
-        println(rpad("closure", 20), rpad("mixed", 16), rpad("mesh", 9), "order  errors")
-        for closure in closures, mixed in mixeds, kind in kinds
-            hs, errs = C.observed_errors(:aniso_robin, kind; closure, mixed, levels)
-            r = C.observed_order(:aniso_robin, kind; closure, mixed, levels)
-            println(rpad(closure, 20), rpad(mixed, 16), rpad(kind, 9),
-                rpad(round(r; digits = 3), 7), round.(errs; sigdigits = 3))
-            @test all(diff(errs) .< 0)
-            @test errs[end] < errs[1] / (WITH_SLOW_TESTS ? 8 : 4)
-            @test r > (WITH_SLOW_TESTS ? 1.0 : 1.8)
-        end
     end
 end
 
