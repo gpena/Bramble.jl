@@ -1,13 +1,13 @@
 module GhostPolygonOracleTests
 
 # `polygon_spaces` (#204) against FGOracle.jl, a hand-built system (3.1) and (3.2) of
-# Ferreira and Grigorieff (2006) that shares no code with the package. The library row of an interior
-# node is the oracle's row times the node's dual-cell area (the `innerₕ` weight), so the
-# matrix and the load are compared after dividing each library row by that area. The
-# coefficients a and c sit at the edge midpoints, which on a non-uniform grid are no nodes:
-# the library reads them from a grid function holding at node j the value at the midpoint
-# of the edge behind it, the edge `D₋ₓ` differences across. The load is `avgₕ` of a
-# polynomial f of degree 5, which both quadratures integrate exactly.
+# Ferreira and Grigorieff (2006) that shares no code with the package. The library row of
+# an interior node is the oracle's row times the node's dual-cell area (the `innerₕ`
+# weight), so the matrix and the load are compared after dividing each library row by that
+# area. The coefficients a and c sit at the edge midpoints, which on a non-uniform grid
+# are no nodes: the library reads them from a grid function holding at node j the value at
+# the midpoint of the edge behind it, the edge `D₋ₓ` differences across. The load is
+# `avgₕ` of a polynomial f of degree 5, which both quadratures integrate exactly.
 #
 # Positive controls: every grid here makes the mixed term read exterior nodes, and the
 # library differs from the oracle that reads them as 0 instead of by (3.2).
@@ -98,11 +98,12 @@ function compare(Ωₕ, V, a, b, c, f, g; d = nothing, q = nothing)
     cls = O.classify(xs, ys, V)
     A, F = library_system(Ωₕ, a, b, c, f, g; d = d, q = q)
     bo = b === nothing ? zero_ : b
-    Ao, Fo, int = O.fg_system(xs, ys, cls, a, bo, c, f, g; d = d, q = q)
+    Aoracle, Foracle, int = O.fg_system(xs, ys, cls, a, bo, c, f, g; d = d, q = q)
     Az = O.fg_system(xs, ys, cls, a, bo, c, f, g; d = d, q = q, exterior = :zero)[1]
     ar = O.dual_areas(xs, ys, int)
-    return (; cls, A = A ./ ar, F = F ./ ar, Ao = Matrix(Ao), Fo, Az = Matrix(Az),
-        u = A \ F, uo = Matrix(Ao) \ Fo, reads = exterior_reads(cls), xs, ys, int)
+    return (; cls, A = A ./ ar, F = F ./ ar, Aoracle = Matrix(Aoracle), Foracle,
+        Az = Matrix(Az), u = A \ F, uoracle = Matrix(Aoracle) \ Foracle,
+        reads = exterior_reads(cls), xs, ys, int)
 end
 
 @testset "Polygon spaces against the F&G oracle" begin
@@ -112,8 +113,8 @@ end
         r = compare(M, FIG1, one_, one_, one_, f5, g_var)
         @test r.cls == library_classes(M)
         @test size(r.A) == (13, 13)
-        @test opnorm(r.A - r.Ao, Inf) < 1e-12
-        @test relerr(r.F, r.Fo) < 1e-12
+        @test opnorm(r.A - r.Aoracle, Inf) < 1e-12
+        @test relerr(r.F, r.Foracle) < 1e-12
         @test r.reads[1] > 0
         @test opnorm(r.A - r.Az, Inf) > 1e-3
 
@@ -121,9 +122,9 @@ end
         for b in (nothing, one_, b_var)
             r = compare(MN, VNOTCH, one_, b, one_, f5, g_var)
             @test r.cls == library_classes(MN)
-            @test relerr(r.A, r.Ao) < 1e-12
-            @test relerr(r.F, r.Fo) < 1e-12
-            @test relerr(r.u, r.uo) < 1e-10
+            @test relerr(r.A, r.Aoracle) < 1e-12
+            @test relerr(r.F, r.Foracle) < 1e-12
+            @test relerr(r.u, r.uoracle) < 1e-10
             # The conflict node (0, 2) is read twice; with the mixed term, (3.2) moves it.
             @test r.reads[2] == 1
             b === nothing || @test opnorm(r.A - r.Az, Inf) > 1e-3
@@ -137,9 +138,9 @@ end
         @test length(points(M(1))) > 9   # the closure added lines
         r = compare(M, FIG1, a_var, b_var, c_var, f5, g_var; d = d_var, q = q_var)
         @test r.cls == library_classes(M)
-        @test relerr(r.A, r.Ao) < 1e-12
-        @test relerr(r.F, r.Fo) < 1e-12
-        @test relerr(r.u, r.uo) < 1e-10
+        @test relerr(r.A, r.Aoracle) < 1e-12
+        @test relerr(r.F, r.Foracle) < 1e-12
+        @test relerr(r.u, r.uoracle) < 1e-10
         @test r.reads[1] > 0
         @test opnorm(r.A - r.Az, Inf) > 1e-3   # b ≈ 0.4..1: (3.2) is visible
     end
@@ -150,9 +151,9 @@ end
         for b in (nothing, b_var)
             r = compare(MN, VNOTCH, a_var, b, c_var, f5, g_var; d = d_var)
             @test r.cls == library_classes(MN)
-            @test relerr(r.A, r.Ao) < 1e-12
-            @test relerr(r.F, r.Fo) < 1e-12
-            @test relerr(r.u, r.uo) < 1e-10
+            @test relerr(r.A, r.Aoracle) < 1e-12
+            @test relerr(r.F, r.Foracle) < 1e-12
+            @test relerr(r.u, r.uoracle) < 1e-10
             @test r.reads[2] >= 1
             b === nothing || @test opnorm(r.A - r.Az, Inf) > 1e-3
         end
@@ -170,15 +171,15 @@ end
         uq(x) = x[1]^2 + x[2]^2 + x[1] + 2 * x[2]
         r = compare(M, FIG1, one_, one_, one_, x -> -4.0, uq)
         @test r.cls == library_classes(M)
-        @test relerr(r.A, r.Ao) < 1e-12
-        @test relerr(r.F, r.Fo) < 1e-12
+        @test relerr(r.A, r.Aoracle) < 1e-12
+        @test relerr(r.F, r.Foracle) < 1e-12
         exact = [uq((r.xs[k[1]], r.ys[k[2]]))
                  for k in CartesianIndices((length(r.xs), length(r.ys)))[r.int]]
         # Exact: each row's residual at u is round-off of that row's own terms. The solve
         # is not a fair measure, as the sliver puts cond(A) near 1e10.
         rowerr(A, F) = maximum(abs.(A * exact .- F) ./ (abs.(A) * abs.(exact) .+ abs.(F)))
         @test rowerr(r.A, r.F) < 1e-13
-        @test rowerr(r.Ao, r.Fo) < 1e-13
+        @test rowerr(r.Aoracle, r.Foracle) < 1e-13
         @test relerr(r.u, exact) < 1e-6
         @test r.reads[1] > 0
         @test opnorm(r.A - r.Az, Inf) > 1e-3

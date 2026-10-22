@@ -75,9 +75,9 @@ end
         A, F = assemble(form(U, W, f_a), form(W, v -> innerₕ(x -> -4.0, v)))
         @test size(A) == (count(I), count(I))
         uh = lift(U, A \ F).data
-        ue = Rₕ(gridspace(Ωₕ), uq).data
-        @test maximum(abs, uh[I] .- ue[I]) < 1e-9
-        @test uh[Γ] == ue[Γ]
+        uex = Rₕ(gridspace(Ωₕ), uq).data
+        @test maximum(abs, uh[I] .- uex[I]) < 1e-9
+        @test uh[Γ] == uex[Γ]
         X = .!(I .| Γ)
         @test count(!iszero, uh[X]) == count(U.rows.extended) > 0
         @test uh[X .& .!U.rows.extended] == zeros(count(X .& .!U.rows.extended))
@@ -96,9 +96,9 @@ end
             f_l = v -> innerₕ(x -> sin(x[1]) + x[2], v)
             U, W = polygon_spaces(Ωₕ, :P, g)
             A, F = assemble(form(U, W, f_a), form(W, f_l))
-            Ao, Fo = oracle(Ωₕ, f_a, f_l, g)
-            @test maximum(abs, Matrix(A) .- Ao) < 1e-12 * maximum(abs, Ao)
-            @test maximum(abs, F .- Fo) < 1e-12 * maximum(abs, Fo)
+            Aoracle, Foracle = oracle(Ωₕ, f_a, f_l, g)
+            @test maximum(abs, Matrix(A) .- Aoracle) < 1e-12 * maximum(abs, Aoracle)
+            @test maximum(abs, F .- Foracle) < 1e-12 * maximum(abs, Foracle)
         end
     end
 
@@ -122,7 +122,7 @@ end
         Ωₕ = fig1_mesh((9, 9), (false, false))
         U, _ = polygon_spaces(Ωₕ, :P, uq)
         I, Γ = labels(Ωₕ)
-        ue = Rₕ(gridspace(Ωₕ), uq).data
+        uex = Rₕ(gridspace(Ωₕ), uq).data
         z = rand(Xoshiro(1), count(I))
         uz = lift(U, z).data
         car = CartesianIndices(Bramble.npoints(Ωₕ, Tuple))
@@ -140,7 +140,7 @@ end
             s = Tuple(car[p] - car[k])
             c1, c2 = lin[car[k] + CartesianIndex(s[1], 0)], lin[car[k] + CartesianIndex(0, s[2])]
             @test Γ[c1] && Γ[c2]
-            @test uz[p] ≈ ue[c1] + ue[c2] - uI[k]
+            @test uz[p] ≈ uex[c1] + uex[c2] - uI[k]
             n += 1
         end
         @test n == count(U.rows.extended) > 0
@@ -182,10 +182,10 @@ end
         U, W = polygon_spaces(Ωₕ, :P, g)
         I, _ = labels(Ωₕ)
         @test findall(U.rows.conflict) == [LinearIndices((5, 5))[1, 3]]
-        ue = Rₕ(gridspace(Ωₕ), g).data[I]
+        uex = Rₕ(gridspace(Ωₕ), g).data[I]
         l = form(W, v -> innerₕ(x -> -4.0, v))
         A, F = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v)), l)
-        @test maximum(abs, A \ F .- ue) < 1e-12
+        @test maximum(abs, A \ F .- uex) < 1e-12
         # Reader rows by hand: interior nodes 1 = (1, 1) and 6 = (1, 3) both read (0, 2).
         U0, W0 = polygon_spaces(Ωₕ, :P, x -> 0.0)
         AM, _ = assemble(form(U0, W0, (w, v) -> innerₕ(mixed(w), v)),
@@ -194,7 +194,7 @@ end
         @test AM[1, 4] ≈ 0.5 && AM[6, 4] ≈ -0.5
         @test AM[6, 1] == 0 && AM[1, 6] == 0
         AX, FX = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.5 * mixed(w), v)), l)
-        @test maximum(abs, AX \ FX .- ue) < 1e-12
+        @test maximum(abs, AX \ FX .- uex) < 1e-12
     end
 
     @testset "V-notch: variable b, random grid" begin
@@ -210,9 +210,9 @@ end
         f_p = (w, v) -> innerₕ(-1.0 * Δₕ(w) - Dcₓ(bp * Dcᵧ(w)) - Dcᵧ(bp * Dcₓ(w)), v)
         f_l = v -> innerₕ(x -> -4.0 + x[1], v)
         A, F = assemble(form(U, W, f_a), form(W, f_l))
-        Ao, Fo = oracle(Ωₕ, f_p, f_l, uq)
-        @test maximum(abs, Matrix(A) .- Ao) < 1e-12 * maximum(abs, Ao)
-        @test maximum(abs, F .- Fo) < 1e-12 * maximum(abs, Fo)
+        Aoracle, Foracle = oracle(Ωₕ, f_p, f_l, uq)
+        @test maximum(abs, Matrix(A) .- Aoracle) < 1e-12 * maximum(abs, Aoracle)
+        @test maximum(abs, F .- Foracle) < 1e-12 * maximum(abs, Foracle)
         # Constant b: exact for the separable quadratic.
         A2, F2 = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.5 * mixed(w), v)),
             form(W, v -> innerₕ(x -> -4.0, v)))
