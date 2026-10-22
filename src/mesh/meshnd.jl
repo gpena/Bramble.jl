@@ -264,24 +264,28 @@ end
     _grid_closure(P, xs, ys) -> (Vector{T}, Vector{T})
 
 Close the grid lines `xs` and `ys` (sorted, end points included) over the polygon `P`, or a
-tuple of polygons, so that every crossing of a grid line with ``\\partial P`` is a grid node.
-`T` is the floating-point type of `xs` and `ys`; the vertices are converted to `T` first.
+tuple of polygons and level sets, so that every crossing of a grid line with ``\\partial P``
+is a grid node. `T` is the floating-point type of `xs` and `ys`; the vertices are converted
+to `T` first.
 
 The end points and the vertex coordinates are lines first, then the lines the closure
-computes: a grid line crossing an oblique edge adds the crossing's other coordinate as a
+computes: a grid line crossing an oblique edge, or the curve ``\\varphi = 0`` of a level set
+(`_crossings`, between the end-point lines), adds the crossing's other coordinate as a
 line, until no line is new. The remaining entries of `xs` and `ys` are seeds. Lines closer
 than the merge tolerance ``\\max(10^{-10}, 64\\varepsilon) L`` (``L`` the polygons' extent,
 ``\\varepsilon`` the larger epsilon of `T` and of the vertices' type, whose rounding a
-vertex carries) are one line. A seed that meets a vertex or end-point line, or whose lines
-meet those of a vertex or an earlier seed, within the tolerance but not exactly, is dropped
-and the closure restarts without it: the seed gives way, never the vertex or the line
+vertex carries; with no vertices, ``L`` is the larger span of the end-point lines) are one
+line. A seed that meets a vertex or end-point line, or whose lines meet those of a vertex
+or an earlier seed, within the tolerance but not exactly, is dropped and the closure
+restarts without it: the seed gives way, never the vertex or the line
 computed from it. Two lines that both come from the end points and vertices and lie within
 the tolerance are one line. Polygon detail finer than the tolerance is merged, as is
 rounding, since floating point cannot tell the two apart. Every vertex coordinate is a line,
 and every crossing is on a node, up to the merge tolerance.
 
 The oblique edges must share one slope magnitude, a necessary condition only: with equal
-slopes the closure may still grow without bound, or beyond the cap.
+slopes the closure may still grow without bound, or beyond the cap. A level set closes only
+when the orbits of its crossing map are finite; otherwise the cap is reached.
 
 # Throws
 
@@ -289,28 +293,61 @@ slopes the closure may still grow without bound, or beyond the cap.
     closure exceeds a number of lines proportional to the input (the polygon's grid
     closure is unbounded or too fine for this grid).
 """
-_grid_closure(P::Polygon, xs, ys) = _grid_closure((P,), xs, ys)
+_grid_closure(P::Union{Polygon, LevelSet}, xs, ys) = _grid_closure((P,), xs, ys)
 
 function _grid_closure(Ps::Tuple, xs::AbstractVector, ys::AbstractVector)
     T = float(promote_type(eltype(xs), eltype(ys)))
-    V = NTuple{2, T}[(T(v[1]), T(v[2])) for P in Ps for v in P.vertices]
-    E = _oblique_edges(T, Ps)
+    polys = filter(P -> P isa Polygon, Ps)
+    sets = filter(P -> P isa LevelSet, Ps)
+    V = NTuple{2, T}[(T(v[1]), T(v[2])) for P in polys for v in P.vertices]
+    E = _oblique_edges(T, polys)
     _check_closure_slopes(E)
 
-    L = max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V))
-    ε = T(max(eps(T), maximum(P -> eps(eltype(eltype(P.vertices))), Ps)))
-    tol = max(T(1e-10), 64 * ε) * L
     sx, sy = sort!(T.(collect(xs))), sort!(T.(collect(ys)))
+    L = if isempty(V)
+        max(sx[end] - sx[1], sy[end] - sy[1])
+    else
+        max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V))
+    end
+    ε = T(max(eps(T), maximum(P -> eps(eltype(eltype(P.vertices))), polys; init = zero(T))))
+    tol = max(T(1e-10), 64 * ε) * L
     fixed = (T[sx[1]; sx[end]; first.(V)], T[sy[1]; sy[end]; last.(V)])
     seeds = (sx[2:(end - 1)], sy[2:(end - 1)])
     keep = trues(length(seeds[1]) + length(seeds[2]))
     cap = 64 * (length(sx) + length(sy) + length(V)) + 1000
+    cross! = _Crossings(E, sets, (sx[1], sy[1]), (sx[end], sy[end]))
 
     while true
-        lines, loser = _closure_pass(fixed, seeds, keep, E, tol, cap)
+        lines, loser = _closure_pass(fixed, seeds, keep, cross!, tol, cap)
         iszero(loser) && return lines
         keep[loser] = false
     end
+end
+
+# The crossing rule of a closure: `cross!(out, a, v)` empties `out` and fills it with the
+# other coordinate of every crossing of the line `x_a = v` with the oblique edges `E` of the
+# polygons (in edge order) and then with each level set `sets`, whose curve is searched
+# between the end-point lines `lo` and `hi` of the other axis.
+struct _Crossings{T, S <: Tuple}
+    E::Vector{NTuple{4, T}}
+    sets::S
+    lo::NTuple{2, T}
+    hi::NTuple{2, T}
+end
+
+function (R::_Crossings{T})(out::Vector{T}, a::Int, v::T) where {T}
+    empty!(out)
+    for (ax, ay, bx, by) in R.E
+        # The edge as a map from coordinate `a` to coordinate `b`.
+        p₀, q₀, p₁, q₁ = a == 1 ? (ax, ay, bx, by) : (ay, ax, by, bx)
+        min(p₀, p₁) < v < max(p₀, p₁) || continue
+        push!(out, q₀ + (q₁ - q₀) * (v - p₀) / (p₁ - p₀))
+    end
+    b = 3 - a
+    for S in R.sets
+        append!(out, _crossings(S.φ, a, v, R.lo[b], R.hi[b]))
+    end
+    return out
 end
 
 # The oblique edges (neither horizontal nor vertical) of the polygons `Ps`, in type `T`.
@@ -345,7 +382,7 @@ end
 # One closure from the fixed lines and the kept seeds. Returns the lines and 0, or, as soon
 # as a seed must give way, the lines so far and the index of that seed.
 function _closure_pass(fixed::NTuple{2, Vector{T}}, seeds::NTuple{2, Vector{T}}, keep::BitVector,
-        E::Vector{NTuple{4, T}}, tol::T, cap::Int) where {T}
+        cross!, tol::T, cap::Int) where {T}
     pos = (T[], T[])
     root = (Int[], Int[])
     queue = Tuple{Int, T, Int}[]
@@ -364,15 +401,12 @@ function _closure_pass(fixed::NTuple{2, Vector{T}}, seeds::NTuple{2, Vector{T}},
 
     added = 0
     q = 1
+    cs = T[]
     while q <= length(queue)
         a, v, r = queue[q]
         q += 1
         b = 3 - a
-        for (ax, ay, bx, by) in E
-            # The edge as a map from coordinate `a` to coordinate `b`.
-            p₀, q₀, p₁, q₁ = a == 1 ? (ax, ay, bx, by) : (ay, ax, by, bx)
-            min(p₀, p₁) < v < max(p₀, p₁) || continue
-            c = q₀ + (q₁ - q₀) * (v - p₀) / (p₁ - p₀)
+        for c in cross!(cs, a, v)
             loser = _closure_insert!(pos[b], root[b], queue, b, c, r, tol)
             loser > 0 && return pos, loser
             if loser < 0
