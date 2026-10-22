@@ -28,8 +28,10 @@ const COEF = (
         b = p -> 0.5 + 0.2sin(p[1] * p[2]), bx = p -> 0.2p[2] * cos(p[1] * p[2]),
         by = p -> 0.2p[1] * cos(p[1] * p[2]), c = p -> 2 + 0.3cos(p[1]), cy = p -> 0.0))
 
-rhs(k) = p -> -(k.ax(p) * ux(p) + k.a(p) * uxx(p)) - (k.bx(p) * uy(p) + k.b(p) * uxy(p)) -
-              (k.by(p) * ux(p) + k.b(p) * uxy(p)) - (k.cy(p) * uy(p) + k.c(p) * uyy(p))
+function rhs(k)
+    p -> -(k.ax(p) * ux(p) + k.a(p) * uxx(p)) - (k.bx(p) * uy(p) + k.b(p) * uxy(p)) -
+         (k.by(p) * ux(p) + k.b(p) * uxy(p)) - (k.cy(p) * uy(p) + k.c(p) * uyy(p))
+end
 
 # Seed i of n at (i + 0.7(U - 1/2)) L / (n + 1), U uniform on (0, 1).
 jitter(rng, L, n) = [(i + 0.7 * (rand(rng) - 0.5)) * L / (n + 1) for i in 1:n]
@@ -50,10 +52,12 @@ function errors(xs, ys, inn, Γ, uh)
     I = reshape(inn, nx, ny)
     s = 0.0
     for l in 1:ny, j in 1:(nx - 1)
+
         (cl[j, l] && cl[j + 1, l]) || continue
         s += dual(ys, l) * (E[j + 1, l] - E[j, l])^2 / (xs[j + 1] - xs[j])
     end
     for l in 1:(ny - 1), j in 1:nx
+
         (cl[j, l] && cl[j, l + 1]) || continue
         s += dual(xs, j) * (E[j, l + 1] - E[j, l])^2 / (ys[l + 1] - ys[l])
     end
@@ -77,6 +81,7 @@ function solve_level(case, n, seed)
     aₓ, c_y, bₕ, fₕ = element(G), element(G), Rₕ(G, k.b), element(G)
     A3, C3 = reshape(aₓ.data, nx, ny), reshape(c_y.data, nx, ny)
     for l in 1:ny, j in 1:nx
+
         A3[j, l] = j > 1 ? k.a(((xs[j - 1] + xs[j]) / 2, ys[l])) : 0.0
         C3[j, l] = l > 1 ? k.c((xs[j], (ys[l - 1] + ys[l]) / 2)) : 0.0
     end
@@ -215,7 +220,7 @@ end
 if abspath(PROGRAM_FILE) == @__FILE__
     o = convergence_errors(; seeds = 1:3)
     write(joinpath(@__DIR__, "poisson_polygon_convergence.md"), page(o))
-    @info "wrote poisson_polygon_convergence.md" poisson = (slope(o.poisson.h, o.poisson.e1),
-        slope(o.poisson.h, o.poisson.emax)) mixed = (slope(o.mixed.h, o.mixed.e1),
+    @info "wrote poisson_polygon_convergence.md" poisson=(slope(o.poisson.h, o.poisson.e1),
+        slope(o.poisson.h, o.poisson.emax)) mixed=(slope(o.mixed.h, o.mixed.e1),
         slope(o.mixed.h, o.mixed.emax))
 end

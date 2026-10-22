@@ -124,7 +124,7 @@ function _check_polygon_fit(inn::BitVector, Γ::BitVector, ext::BitVector,
 
         a, b, c, d = lin[i, j], lin[i + 1, j], lin[i, j + 1], lin[i + 1, j + 1]
         (inn[a] | inn[b] | inn[c] | inn[d]) &&
-            (ext[a] | ext[b] | ext[c] | ext[d]) || continue
+        (ext[a] | ext[b] | ext[c] | ext[d]) || continue
         across(a, d, b, c) || across(b, c, a, d) || _throw_polygon_unfitted(label, (i, j))
     end
     return nothing

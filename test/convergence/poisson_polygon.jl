@@ -74,10 +74,12 @@ function _pp_errors(xs, ys, inn, Γ, uh)
     half(z, j) = ((j < length(z) ? z[j + 1] : z[j]) - (j > 1 ? z[j - 1] : z[j])) / 2
     s = 0.0
     for l in 1:ny, j in 1:(nx - 1)
+
         Ω̄[j, l] && Ω̄[j + 1, l] || continue
         s += half(ys, l) * (E[j + 1, l] - E[j, l])^2 / (xs[j + 1] - xs[j])
     end
     for l in 1:(ny - 1), j in 1:nx
+
         Ω̄[j, l] && Ω̄[j, l + 1] || continue
         s += half(xs, j) * (E[j, l + 1] - E[j, l])^2 / (ys[l + 1] - ys[l])
     end
@@ -102,6 +104,7 @@ function _pp_level(V, k, n, seed, kind)
     aₓ, cᵧ, fₕ = element(S), element(S), element(S)
     A3, C3 = reshape(aₓ.data, nx, ny), reshape(cᵧ.data, nx, ny)
     for l in 1:ny, j in 1:nx
+
         A3[j, l] = j > 1 ? k.a(((xs[j - 1] + xs[j]) / 2, ys[l])) : 0.0
         C3[j, l] = l > 1 ? k.c((xs[j], (ys[l - 1] + ys[l]) / 2)) : 0.0
     end

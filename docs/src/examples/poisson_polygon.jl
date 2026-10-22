@@ -166,6 +166,7 @@ aₕ, cₕ, fₕ = element(S), element(S), element(S)
 nx, ny = length(xs), length(ys)
 A3, C3 = reshape(aₕ.data, nx, ny), reshape(cₕ.data, nx, ny)
 for l in 1:ny, j in 1:nx
+
     A3[j, l] = j > 1 ? a(((xs[j - 1] + xs[j]) / 2, ys[l])) : 0.0
     C3[j, l] = l > 1 ? c((xs[j], (ys[l - 1] + ys[l]) / 2)) : 0.0
 end
@@ -199,10 +200,12 @@ function h1_error(E, xs, ys, closed)
     half(z, j) = ((j < length(z) ? z[j + 1] : z[j]) - (j > 1 ? z[j - 1] : z[j])) / 2
     s = 0.0
     for l in axes(E, 2), j in 1:(size(E, 1) - 1)
+
         closed[j, l] && closed[j + 1, l] || continue
         s += half(ys, l) * (E[j + 1, l] - E[j, l])^2 / (xs[j + 1] - xs[j])
     end
     for l in 1:(size(E, 2) - 1), j in axes(E, 1)
+
         closed[j, l] && closed[j, l + 1] || continue
         s += half(xs, j) * (E[j, l + 1] - E[j, l])^2 / (ys[l + 1] - ys[l])
     end
@@ -222,4 +225,3 @@ println("max error ", round(err_max; sigdigits = 3), ", H¹ₕ error ", round(er
 @test 1.0e-6 < err_max < 1.0e-2                                                            #src
 @test 1.0e-6 < err_h1 < 1.0e-1                                                             #src
 @test maximum(abs, E[BitVector(vec(m[:P_boundary]))]) == 0                                 #src
-
