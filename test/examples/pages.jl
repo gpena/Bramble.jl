@@ -28,6 +28,10 @@ using ..TestUtils: _run_example_page
         _run_example_page(:poisson_polygon)
     end
 
+    @testset "Poisson on a disk" begin
+        _run_example_page(:poisson_circle)
+    end
+
     @testset "Convection-diffusion" begin
         _run_example_page(:convection_diffusion_linear)
     end
