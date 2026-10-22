@@ -1,9 +1,10 @@
 # Classification of a level-set curve φ = 0 inside a box before any grid line is built
-# (Ferreira–Grigorieff grids, #834). Every horizontal and vertical line must meet the curve at
-# most twice, so the vertex set of a fitted grid is closed under σᵥ (the other crossing of the
-# vertical line through a point) and σₕ (the same for the horizontal line). The crossing map
-# T = σₕ∘σᵥ is then a circle homeomorphism: of finite order (closure path), conjugate to an
-# irrational rotation (orbit path), or locked or nearly locked (no grid fits; named error).
+# (Ferreira and Grigorieff grids, #834). Every horizontal and vertical line must meet the
+# curve at most twice, so the vertex set of a fitted grid is closed under σᵥ (the other
+# crossing of the vertical line through a point) and σₕ (the same for the horizontal line).
+# The crossing map T = σₕ∘σᵥ is then a circle homeomorphism: of finite order (closure
+# path), conjugate to an irrational rotation (orbit path), or locked or nearly locked (no
+# grid fits; named error).
 # Everything runs in Float64.
 
 @noinline function _throw_levelset_touches_box()
@@ -20,7 +21,7 @@ end
 
 @noinline function _throw_levelset_not_orthoconvex(axis, v, k)
     name = axis == 1 ? "x" : "y"
-    throw(ArgumentError("level-set grid: the grid line $name = $(round(v; sigdigits = 4)) meets φ = 0 in $k points; the Ferreira–Grigorieff grid needs every horizontal and vertical line to meet the curve at most twice (the domain must be orthogonally convex)."))
+    throw(ArgumentError("level-set grid: the grid line $name = $(round(v; sigdigits = 4)) meets φ = 0 in $k points; the Ferreira and Grigorieff grid needs every horizontal and vertical line to meet the curve at most twice (the domain must be orthogonally convex)."))
 end
 
 @noinline function _throw_levelset_not_star(c, θ, k)
@@ -137,8 +138,9 @@ end
 """
     _levelset_class(φ, box) -> (path = :closure | :orbit, ρ)
 
-Classify the curve `φ = 0` inside `box = ((x₀, x₁), (y₀, y₁))` for a Ferreira–Grigorieff grid
-and return its path with the rotation number `ρ` of the crossing map `T = σₕ∘σᵥ`:
+Classify the curve `φ = 0` inside `box = ((x₀, x₁), (y₀, y₁))` for a Ferreira and
+Grigorieff grid and return its path with the rotation number `ρ` of the crossing map
+`T = σₕ∘σᵥ`:
 
   - `:closure` when `T^q = id` for some `q ≤ 4` (any curve with one grid-aligned symmetry
     axis has `T² = id`); `ρ = p/q`.
@@ -186,8 +188,8 @@ function _levelset_class(φ, box)
         _levelset_periodic(φ, B, pts, q, tol) && return (path = :closure, ρ = _levelset_ρq(φ, B, c, pts[1], q))
     end
 
-    # Weighted Birkhoff rotation number (Das–Sander–Yorke), weights exp(-1/(t(1-t))), on one
-    # orbit: the first 8000 steps and all 32000.
+    # Weighted Birkhoff rotation number (Das, Sander and Yorke), weights exp(-1/(t(1-t))), on
+    # one orbit: the first 8000 steps and all 32000.
     N₁, N₂ = 8000, 32000
     p = pts[1]
     s₁ = W₁ = s₂ = W₂ = 0.0
