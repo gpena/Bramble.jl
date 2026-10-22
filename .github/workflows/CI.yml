@@ -170,6 +170,17 @@ jobs:
             julia -e 'import Pkg; Pkg.Registry.update()'
           fi
       - uses: julia-actions/julia-buildpkg@v1
+      # The precompile workloads (src/precompile.jl and each extension's) are off for this run.
+      # They cache what a user's first calls compile at default flags, and this -O1 coverage
+      # run reuses none of it: the unit group under these flags (M2, 3 threads, one pass each)
+      # took 1852 s off and 2047 s on, 26198 tests passing both, while the workloads alone
+      # cost 142 s for Bramble and 102 s for BramblePolyesterExt there (331-565 s and
+      # 223-237 s on this runner, in every shard). Nightly and release-gate keep them on, so
+      # the workloads still run. `Pkg.test` merges the root LocalPreferences.toml (gitignored)
+      # into the test sandbox's preferences. Nightly's cached Bramble image has the workload
+      # on, so every run here rebuilds Bramble, which takes seconds without it.
+      - name: Turn the precompile workloads off
+        run: printf '[Bramble]\nprecompile_workload = false\n' > LocalPreferences.toml
       # A `run:` step instead of julia-actions/julia-runtest, because that action has no input
       # that reaches the Julia flags: its harness hard-codes `julia_args` to `--check-bounds`
       # alone, and `prefix` only goes in front of the `julia` command. The unit group runs at
