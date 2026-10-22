@@ -279,8 +279,15 @@ end
         f1 = threaded_figures((9, 11))
         f2 = threaded_figures((30, 33))
         @test f1 == f2
-        @test all(f1.ghost .<= f1.plain .+ 256)
-        @test f1.Δ <= f1.Δplain + f1.spawn + 256
+        # Under CPU contention a pass can settle, for the rest of the process, into
+        # re-boxing its two band closures in every task (gpena/Bramble.jl#796):
+        # `nthreads × 2 × closure` bytes more, the same at every size. The ghost band
+        # closure is 192 bytes (224 for D₊), and Δₕ!'s facet pass 304; idle, the ghost
+        # side runs 112 to 128 bytes over the plain one. The macOS `rest` shard of
+        # PR 833 (3 threads) broke the flat 256 on two operators.
+        slack = 2 * Threads.nthreads()
+        @test all(f1.ghost .<= f1.plain .+ (256 + slack * 224))
+        @test f1.Δ <= f1.Δplain + f1.spawn + 256 + slack * 304
     end
 end
 
