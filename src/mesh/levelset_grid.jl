@@ -1,5 +1,5 @@
-# Fitted grids for a level-set curve φ = 0 (Ferreira–Grigorieff, #834): grid lines whose nodes
-# include the vertices of a polygon inscribed in the curve, every polygon edge a cell
+# Fitted grids for a level-set curve φ = 0 (Ferreira and Grigorieff, #834): grid lines whose
+# nodes include the vertices of a polygon inscribed in the curve, every polygon edge a cell
 # diagonal or a cell side, so that the paper's (Geom) holds. `_levelset_class` picks the path:
 # a crossing map T = σₕ∘σᵥ of finite order closes the seeds (`_grid_closure`); a T conjugate
 # to an irrational rotation gets periodic orbits of T closed by least squares. Both return
@@ -84,7 +84,7 @@ the vertices' distance to the curve over ``h^2``) in ``[nin/1.25, 1.25 nin]``, o
 least `N` up to `4 nin` with cost at most `cmax`. With ``p`` the nearest integer to
 ``N\\rho``, ``m = \\gcd(N, p)`` orbits of period ``q = N/m`` start at phases ``1/(2N)``
 apart in the conjugacy of `T` to the rotation, a quarter of that off the leftmost point;
-Levenberg–Marquardt closes each orbit on the vertical lines alone (`_levelset_close!`), its
+Levenberg-Marquardt closes each orbit on the vertical lines alone (`_levelset_close!`), its
 anchor scaled by the curve's length scale `ℓ` (half its larger extent), so that a scaled
 curve with scaled seeds gives the scaled grid. The distinct seeds farther than a quarter of their spacing from the curve's extent are kept; the others
 give way. A grid that fails the post-check is rebuilt once with the next-best `N`.
@@ -246,7 +246,7 @@ function _levelset_orbits(φ, B, c, θₗ::Float64, ρ::Float64, N::Int, w::Floa
     return X, Y, V
 end
 
-# Levenberg–Marquardt on the q vertical lines X of one orbit: vertex k is the crossing of
+# Levenberg-Marquardt on the q vertical lines X of one orbit: vertex k is the crossing of
 # branch inb[k] (1 lower, 2 upper) on X[k] and enters σᵥ exactly; the residuals are the
 # horizontal mismatches r_k = y_out(X_k) − y_in(X_{k+1}) (cyclic) and the anchor λ(X − X₀),
 # which keeps the orbits apart near the ghost of a periodic orbit. A step that shrinks a
