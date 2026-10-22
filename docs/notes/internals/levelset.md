@@ -164,12 +164,12 @@ Every failure is an `ArgumentError` from `mesh`, with the prefix "level-set grid
 
 | Cause | Detected by | Text (abridged) |
 |---|---|---|
-| not orthogonally convex (the star) | a sampled grid line meets `φ = 0` more than twice | "the grid line x = 0.31 meets φ = 0 in 4 points; the Ferreira–Grigorieff grid needs every horizontal and vertical line to meet the curve at most twice (the domain must be orthogonally convex)" |
+| not orthogonally convex (the star) | a sampled grid line meets `φ = 0` more than twice | "the grid line x = 0.31 meets φ = 0 in 4 points; the Ferreira and Grigorieff grid needs every horizontal and vertical line to meet the curve at most twice (the domain must be orthogonally convex)" |
 | not star-shaped about its centre | a ray from the minimum of `φ` changes sign more than once | "the curve must be star-shaped about that point" |
 | phase-locked | rotation number exactly `p/q`, `q ≤ 60`, with ``T^q \ne \mathrm{id}`` | "the curve's crossing map is phase-locked at rotation number 1/2 without being periodic ...; no Cartesian grid fits this curve at every refinement. Rotate or symmetrise the domain" |
 | nearly phase-locked | the weighted Birkhoff average at 8000 and 32000 steps differs by more than 1e-10 | "the curve's crossing map is nearly phase-locked (rotation number ≈ 0.49999984, not converged); a fitted grid would need far more lines than requested" |
 | too many lines | no `N ≤ 4 nin` has cost at most `cmax` | "no grid with at most 1040 lines per axis inside the curve's extent keeps its vertices within 0.2 h² of φ = 0 for the 260 lines asked there" |
-| too coarse | fewer than 6 lines inside the extent | "the points are too few to resolve the curve; use more" |
+| too coarse | fewer than 6 lines inside the extent | "too coarse: 5 × 5 points are too few to resolve the curve; use more" |
 | check failed | the post-check refuses both grids | "the fitted grid does not fit the level set (...), so the curve would cross a grid line off the nodes. Use more points per axis" |
 | curve touches the box, region empty | a side of the bounding box meets `φ ≤ 0`, or `φ ≥ 0` everywhere sampled | "φ = 0 reaches the domain's bounding box, or φ < 0 on it; the curve must lie strictly inside the box" |
 
