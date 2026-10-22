@@ -59,7 +59,8 @@ end
         # with the centred mixed form on graded meshes is held to second order, the rest to
         # first.
         levels = 4
-        _order_header("Corner oracle, aniso_robin: discrete H¹ error, $levels levels from 17 \
+        _order_header(
+            "Corner oracle, aniso_robin: discrete H¹ error, $levels levels from 17 \
                        points per axis", ("closure", "mixed", "mesh"), (20, 16, 9))
         for closure in C.CLOSURES, mixed in C.MIXED, kind in C.MESH_KINDS
             hs, errs = C.observed_errors(:aniso_robin, kind; closure, mixed, levels)
