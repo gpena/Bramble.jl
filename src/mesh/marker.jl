@@ -146,6 +146,9 @@ Supports four classes of domain markers:
   4. Polygon markers `:L => polygon(V)`, which split the nodes of a 2D mesh into `L`
      (inside), `L_boundary` and `L_exterior` (outside); see [`markers`](@ref) for the
      boundary tolerance.
+  5. Level-set markers `:L => levelset(φ)`, which give the same three labels. Their
+     labels come from the polygon that [`mesh`](@ref) inscribes in the curve ``φ = 0`` when
+     it fits the grid, so `set_markers!` alone refuses a level-set marker (below).
 
 Also seeds the default geometric markers `:boundary` and `:interior` if not already defined.
 
@@ -162,6 +165,13 @@ Also seeds the default geometric markers `:boundary` and `:interior` if not alre
     either way; set to `false` to silence the warning for an intentional redefinition (see
     [`mesh`](@ref)).
 
+# Throws
+
+  - `ArgumentError`: if `domain_markers` holds a level-set marker, whose labels only
+    [`mesh`](@ref) can set: the grid lines and the inscribed polygon are fitted together,
+    and neither is kept. This covers `change_points!` and `iterative_refinement!` of such a
+    mesh too.
+
 # Examples
 
 ```julia
@@ -177,12 +187,20 @@ Also seeds the default geometric markers `:boundary` and `:interior` if not alre
 See also: [`DomainMarkers`](@ref), [`MeshMarkers`](@ref).
 """
 function set_markers!(Ωₕ::AbstractMeshType, domain_markers; warn_marker_mismatch::Bool = true)
+    fitted = map(_ -> nothing, regions(domain_markers))
+    return _set_markers!(Ωₕ, domain_markers, fitted; warn_marker_mismatch)
+end
+
+# `set_markers!` with the polygon `mesh` fitted to each region marker of `domain_markers`
+# (`fitted`, one entry per region, `nothing` for a polygon marker, whose own polygon labels).
+function _set_markers!(Ωₕ::AbstractMeshType, domain_markers, fitted::Tuple;
+        warn_marker_mismatch::Bool = true)
     mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
 
     _set_markers_symbols!(mesh_markers, symbols(domain_markers), Ωₕ)
     _set_markers_symbols!(mesh_markers, tuples(domain_markers), Ωₕ)
     _set_markers_conditions!(mesh_markers, conditions(domain_markers), Ωₕ)
-    _set_markers_regions!(mesh_markers, regions(domain_markers), Ωₕ)
+    _set_markers_regions!(mesh_markers, regions(domain_markers), fitted, Ωₕ)
 
     # `:boundary`/`:interior` are reserved, always-available markers; see note above _ensure_geometric_markers!.
     _ensure_geometric_markers!(mesh_markers, Ωₕ; warn_marker_mismatch)
@@ -424,32 +442,99 @@ and a far grid corner would widen τ around a small polygon and swallow its node
 =#
 
 """
-    _set_markers_regions!(mesh_markers::MeshMarkers, regions, Ωₕ::AbstractMeshType) -> Nothing
+    _set_markers_regions!(mesh_markers::MeshMarkers, regions, fitted::Tuple, Ωₕ::AbstractMeshType) -> Nothing
 
-Mark the interior, boundary and exterior nodes of every polygon marker in `regions`.
+Mark the interior, boundary and exterior nodes of every polygon and level-set marker in
+`regions`. `fitted` holds, per region, the polygon `mesh` inscribed in a level-set curve
+(`nothing` for a polygon marker, which labels by its own polygon).
 """
-function _set_markers_regions!(mesh_markers::MeshMarkers, regions, Ωₕ)
+function _set_markers_regions!(mesh_markers::MeshMarkers, regions, fitted::Tuple, Ωₕ)
     isempty(regions) && return nothing
+    length(fitted) == length(regions) || throw(DimensionMismatch("one fitted polygon per region"))
     pts = host_points(Ωₕ)
-    linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
-    for marker in regions
+    for (marker, fit) in zip(regions, fitted)
         Li, Lb, Le = _polygon_labels(marker)
-        P = identifier(marker)
-        τ = _polygon_tolerance(P, pts)
         inside, on, outside = mesh_markers[Li], mesh_markers[Lb], mesh_markers[Le]
-        @inbounds for idx in indices(Ωₕ)
-            k = linear_indices[idx]
-            s = signed_distance(P, _condition_point(pts, idx))
-            if abs(s) <= τ
+        _label_region!(inside, on, outside, identifier(marker), fit, Ωₕ, pts, label(marker))
+    end
+    return nothing
+end
+
+# A polygon labels the nodes by the signed distance to it.
+function _label_region!(inside, on, outside, P::Polygon, ::Nothing, Ωₕ, pts, _)
+    linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
+    τ = _polygon_tolerance(P, pts)
+    @inbounds for idx in indices(Ωₕ)
+        k = linear_indices[idx]
+        s = signed_distance(P, _condition_point(pts, idx))
+        if abs(s) <= τ
+            on[k] = true
+        elseif s < 0
+            inside[k] = true
+        else
+            outside[k] = true
+        end
+    end
+    return nothing
+end
+
+# A level set labels the nodes by the polygon fitted to it.
+_label_region!(inside, on, outside, ::LevelSet, P::Polygon, _, pts, _) = _label_fitted!(
+    inside, on, outside, P, pts)
+
+@noinline function _label_region!(_, _, _, ::LevelSet, ::Nothing, _, _, label)
+    throw(ArgumentError("the level-set marker :$label labels the nodes by the polygon that " *
+                        "mesh(Ω, npts, unif) fits to its curve together with the grid lines, " *
+                        "and no mesh keeps that polygon: build the mesh with mesh(Ω, npts, " *
+                        "unif) instead of set_markers!, change_points! or iterative_refinement!."))
+end
+
+# Labels the nodes of the lines `pts` by the polygon `P` whose vertices are nodes: a vertex
+# is a boundary node, any other node is inside or outside by the parity of the polygon edges
+# above it. Consecutive vertices are corners of one cell, so a vertical ray up from a node of
+# column `i` crosses (half-open: one end at a larger x) only edges with an end on column `i`.
+# Linear in the nodes and vertices, where the signed distance is their product.
+function _label_fitted!(inside, on, outside, P::Polygon, pts::NTuple{2, AbstractVector})
+    X, Y = pts
+    nx, ny = length(X), length(Y)
+    V = P.vertices
+    ij = Vector{NTuple{2, Int}}(undef, length(V))
+    for (k, v) in enumerate(V)
+        i, j = searchsortedfirst(X, v[1]), searchsortedfirst(Y, v[2])
+        (i <= nx && j <= ny && X[i] == v[1] && Y[j] == v[2]) || _throw_fitted_off_node(v)
+        ij[k] = (i, j)
+    end
+    toggle = falses(nx, ny)
+    for k in eachindex(ij)
+        (i, j), (i₂, j₂) = ij[k], ij[mod1(k + 1, length(ij))]
+        i == i₂ && continue
+        iₑ, jₑ = i < i₂ ? (i, j) : (i₂, j₂)
+        toggle[iₑ, jₑ] = !toggle[iₑ, jₑ]
+    end
+    onpoly = falses(nx, ny)
+    for (i, j) in ij
+        onpoly[i, j] = true
+    end
+    @inbounds for i in 1:nx
+        above = false
+        for j in ny:-1:1
+            k = i + (j - 1) * nx
+            if onpoly[i, j]
                 on[k] = true
-            elseif s < 0
+            elseif above
                 inside[k] = true
             else
                 outside[k] = true
             end
+            above ⊻= toggle[i, j]
         end
     end
     return nothing
+end
+
+@noinline function _throw_fitted_off_node(v)
+    throw(ArgumentError("the polygon fitted to the level set has the vertex $v, which is not " *
+                        "a node of the mesh's lines."))
 end
 
 # The boundary tolerance of polygon `P` on a grid with axis points `pts`: see the note above.

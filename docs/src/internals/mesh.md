@@ -22,6 +22,26 @@ The nodes are then marked by their signed distance `s` to the boundary: on it wh
 `|s| <= τ`, inside when `s < -τ`, outside when `s > τ`, with
 `τ = max(√ε hₘᵢₙ, 10³ ε L) + 4 ε M` and `M` the largest vertex coordinate magnitude.
 
+## Grid fit of a level set
+
+`mesh` of a domain with a level-set marker `:D => levelset(φ)` hands the submeshes' points
+as seeds to `_levelset_grid`, which returns the fitted lines and the polygon inscribed in
+the curve `φ = 0` whose vertices are the boundary nodes. Two paths, chosen by the crossing
+map of the curve (`_levelset_class`): when its orbits are finite, `_grid_closure` closes
+the seeds (the closure path, every seed kept); otherwise periodic orbits of the map are
+closed by least squares (the orbit path). Both end in the same post-check, which refuses
+a grid that does not fit.
+
+`_close_grid!` returns that polygon with the new indices, and `_set_markers!` (what
+`set_markers!` calls, with one fitted polygon per region marker) labels the nodes by it:
+a vertex is a boundary node, every other node is inside or outside by the parity of the
+polygon edges above it, linear in the nodes. The polygon is never stored on the mesh,
+whose type carries no function, and `φ` stays on the domain. The labels are not recomputed
+from `φ`: snapping the curve to the nearest nodes mislabels a few vertices. The same
+reason makes `set_markers!`, `change_points!` and `iterative_refinement!` throw an
+`ArgumentError` on a level-set marker, since there is no polygon to label by.
+A domain takes one level-set marker, and none beside a polygon marker.
+
 ## Ghost meshes
 
 A [`GhostMesh`](@ref) is a physical mesh together with one ghost point beyond each node of

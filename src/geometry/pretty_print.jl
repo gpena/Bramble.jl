@@ -173,21 +173,22 @@ function print_empty_message(pp::PrettyPrinter, message::String = "(none)")
 end
 
 """
-    print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int, n_reg::Int = 0)
+    print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int, n_reg::Int = 0, n_ls::Int = 0)
 
-Print categorized counts of symbols, tuples, function condition markers and polygon markers
+Print categorized counts of symbols, tuples, function condition markers, polygon markers and level-set markers
 without intermediate allocations.
 """
 function print_marker_summary(
-        pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int, n_reg::Int = 0
+        pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int, n_reg::Int = 0, n_ls::Int = 0
 )
-    total = n_sym + n_tup + n_cond + n_reg
+    total = n_sym + n_tup + n_cond + n_reg + n_ls
     print_indent(pp)
     printstyled(pp.io, "$total marker$(total == 1 ? "" : "s")"; color = :yellow)
     print(pp.io, " (")
 
     # Only the non-empty groups.
-    groups = ((n_sym, "symbol"), (n_tup, "tuple"), (n_cond, "function"), (n_reg, "polygon"))
+    groups = ((n_sym, "symbol"), (n_tup, "tuple"), (n_cond, "function"), (n_reg, "polygon"),
+        (n_ls, "levelset"))
     print_joined(pp, Iterators.filter(g -> first(g) > 0, groups)) do (n, name)
         return print(pp.io, "$n $name$(n == 1 ? "" : "s")")
     end

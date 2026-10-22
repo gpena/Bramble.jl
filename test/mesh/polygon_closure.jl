@@ -244,6 +244,72 @@ end
         @test Γ == vec(on_edge)
     end
 
+    @testset "Level-set closure" begin
+        # Unit disk in the box [-1.25, 1.25]²: the crossing map is a reflection pair, so
+        # every orbit is finite.
+        n = 20
+        function jittered(rng, T = Float64)
+            ts = [-1.25 + (i + 0.6 * (rand(rng) - 0.5)) * 2.5 / (n + 1) for i in 1:n]
+            return T.(sort([-1.25; ts; 1.25]))
+        end
+        on(L, v, tol) = minimum(abs.(L .- v)) <= tol
+        φ = p -> hypot(p[1], p[2]) - 1
+        rng = MersenneTwister(1)
+
+        @testset "Every crossing is a node" begin
+            for _ in 1:5
+                xs, ys = jittered(rng), jittered(rng)
+                X, Y = Bramble._grid_closure((levelset(φ),), xs, ys)
+                @test length(X) <= 5n && length(Y) <= 5n
+                @test all(x -> on(X, x, 0.0), xs) && all(y -> on(Y, y, 0.0), ys)
+                # The circle's crossings with each line, recomputed here.
+                @test all(x -> abs(x) >= 1 || (on(Y, sqrt(1 - x^2), 1e-12) &&
+                                               on(Y, -sqrt(1 - x^2), 1e-12)), X)
+                @test all(y -> abs(y) >= 1 || (on(X, sqrt(1 - y^2), 1e-12) &&
+                                               on(X, -sqrt(1 - y^2), 1e-12)), Y)
+            end
+        end
+
+        @testset "A bare level set and a one-tuple agree" begin
+            xs, ys = jittered(rng), jittered(rng)
+            L = levelset(φ)
+            @test Bramble._grid_closure(L, xs, ys) == Bramble._grid_closure((L,), xs, ys)
+        end
+
+        @testset "Seed lines are honoured, unsorted or not" begin
+            xs, ys = jittered(rng), jittered(rng)
+            X, Y = Bramble._grid_closure((levelset(φ),), reverse(xs), reverse(ys))
+            X2, Y2 = Bramble._grid_closure((levelset(φ),), xs, ys)
+            @test X == X2 && Y == Y2
+            @test issorted(X) && issorted(Y)
+        end
+
+        @testset "Float32 seeds close in Float32" begin
+            xs, ys = jittered(rng, Float32), jittered(rng, Float32)
+            X, Y = Bramble._grid_closure((levelset(φ),), xs, ys)
+            @test eltype(X) == Float32 && eltype(Y) == Float32
+            @test all(x -> abs(x) >= 1 || (on(Y, sqrt(1 - x^2), 1.0f-5) &&
+                                           on(Y, -sqrt(1 - x^2), 1.0f-5)), X)
+        end
+
+        @testset "A polygon and a level set close together" begin
+            sq = Bramble.polygon([(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)])
+            xs, ys = jittered(rng), jittered(rng)
+            X, Y = Bramble._grid_closure((sq, levelset(φ)), xs, ys)
+            @test on(X, 0.5, 0.0) && on(X, -0.5, 0.0) && on(Y, 0.5, 0.0) && on(Y, -0.5, 0.0)
+            @test all(x -> abs(x) >= 1 || (on(Y, sqrt(1 - x^2), 1e-12) &&
+                                           on(Y, -sqrt(1 - x^2), 1e-12)), X)
+        end
+
+        @testset "An infinite orbit hits the cap" begin
+            # Unit circle sheared into a skew ellipse: the crossing map is not of finite order
+            # for these seeds, so lines keep appearing until the cap.
+            ψ = p -> hypot(p[1] + 0.3 * p[2], p[2] + 0.2 * p[1]) - 1
+            xs, ys = jittered(rng), jittered(rng)
+            @test_throws "unbounded or too fine" Bramble._grid_closure((levelset(ψ),), xs, ys)
+        end
+    end
+
     @testset "Refinement keeps the grid fitted" begin
         Random.seed!(7)
         Ωₕ = mesh(Ω, (9, 8), (false, false))
