@@ -20,6 +20,7 @@ using SciMLSensitivity
 # of each page, so a script's `[`name`](@ref)` resolves public-but-unexported names too.
 const LITERATE_EXAMPLES = [
     "poisson_linear.jl",
+    "poisson_polygon.jl",
     "convection_diffusion_linear.jl",
     "heat_equation.jl",
     "neumann_robin_poisson.jl",
@@ -76,6 +77,7 @@ forms = "Forms and assembly" => [
 ]
 examples = "Examples" => [
     "examples/poisson_linear.md",
+    "examples/poisson_polygon.md",
     "examples/convection_diffusion_linear.md",
     "examples/heat_equation.md",
     "examples/neumann_robin_poisson.md",
