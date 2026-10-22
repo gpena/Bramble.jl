@@ -104,6 +104,48 @@ end
         @test occursin("slopes", err.msg) && occursin("3.0", err.msg)
     end
 
+    @testset "Sub-tolerance detail throws" begin
+        # The closure line y = 0.5 (from the vertex line x = 0.5 on the edge y = x) lies δ
+        # from the vertex line y = 0.5 + δ, inside the merge tolerance 4e-10.
+        for δ in (1e-10, 3e-10)
+            W = [(0.0, 0.0), (4.0, 0.0), (4.0, 0.5 + δ), (3.0, 0.5 + δ), (3.0, 3.0),
+                (0.5, 3.0), (0.5, 2.0), (1.0, 2.0), (1.0, 1.0)]
+            Ωw = domain(interval(0.0, 4.0) × interval(0.0, 3.0), :P => Bramble.polygon(W))
+            @test_throws "finer than the grid closure" mesh(Ωw, (5, 4), (true, true))
+            @test_throws ArgumentError Bramble._grid_closure(Bramble.polygon(W),
+                [0.0, 4.0], [0.0, 3.0])
+        end
+    end
+
+    @testset "Rounded lines are one line" begin
+        # Scaled and shifted copies of a shape whose vertex lines cross its slope-1 edge:
+        # each crossing is computed with rounding, never a reason to throw.
+        W = [(0.0, 0.0), (2.0, 0.0), (2.0, 0.9), (1.5, 0.9), (1.5, 1.4), (1.0, 1.4),
+            (0.0, 0.4)]
+        rng = Xoshiro(1)
+        for T in (Float64, Float32), _ in 1:100
+
+            c, o = 10 * rand(rng) + 0.01, 7 * rand(rng)
+            Wc = [(T(c * a + o), T(c * b + o)) for (a, b) in W]
+            xs, ys = Bramble._grid_closure(Bramble.polygon(Wc), T[o - 1, 2c + o + 1],
+                T[o - 1, 1.4c + o + 1])
+            @test vertices_on_lines(Wc, xs, ys)
+            @test off_node_crossings(Wc, xs, ys, 64 * eps(T) * (2c + o)) == 0
+        end
+    end
+
+    @testset "Unbounded closure hits the cap" begin
+        # Every oblique edge has slope ±1 exactly, yet the closure needs 4097 × 3219 lines.
+        Z = [(0.0, 1.0), (0.2939453125, 0.7060546875), (1.396484375, 1.80859375),
+            (2.794921875, 0.41015625), (4.0, 1.615234375), (4.0, 8.837890625),
+            (3.66015625, 9.177734375), (2.5126953125, 8.0302734375),
+            (0.771484375, 9.771484375), (0.0, 9.0)]
+        Ωz = domain(interval(0.0, 4.0) × interval(0.0, 20.0), :Z => Bramble.polygon(Z))
+        @test_throws "unbounded or too fine" mesh(Ωz, (9, 41), (true, true))
+        @test_throws ArgumentError Bramble._grid_closure(Bramble.polygon(Z), [0.0, 4.0],
+            [0.0, 20.0])
+    end
+
     @testset "Vertices outrank seeds" begin
         cx, cy = Bramble._grid_closure(P, [0.0, 2.0 + 1e-13, 6.0], [0.0, 5.0])
         @test 2.0 in cx && !(2.0 + 1e-13 in cx)

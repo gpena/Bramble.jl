@@ -33,8 +33,11 @@ the lines drawn from `npts` and `unif` are seeds, every vertex coordinate become
 line, and each crossing of a grid line with an oblique edge adds the crossing's other
 coordinate as a line, until every crossing is a grid node. The number of points along an axis
 may therefore exceed `npts`. A seed closer to a vertex or closure line than a small tolerance
-relative to the polygon's extent is dropped. The oblique edges must share one slope
-magnitude, otherwise the lines never close and `mesh` throws an `ArgumentError`.
+relative to the polygon's extent is dropped. `mesh` throws an `ArgumentError` when the
+oblique edges do not share one slope magnitude, when two unequal vertex or closure lines lie
+within that tolerance (detail finer than the closure resolves), or when the closure exceeds
+a number of lines proportional to the input. Equal slopes are necessary, not sufficient: the
+closure of some polygons grows without bound or beyond that cap.
 
 # Arguments
 
@@ -50,6 +53,12 @@ magnitude, otherwise the lines never close and `mesh` throws an `ArgumentError`.
   - `warn_marker_mismatch::Bool = true`: warn if `Ω` carries a custom `:boundary`/`:interior`
     marker that disagrees with this mesh's own geometric one. The custom marker is kept
     either way; set to `false` for a deliberate redefinition you don't want flagged.
+
+# Throws
+
+  - `ArgumentError`: on a domain with polygon markers, if the oblique edges do not share one
+    slope magnitude, if two unequal vertex or closure lines lie within the merge tolerance,
+    or if the closure exceeds a number of lines proportional to the input.
 
 # Examples
 

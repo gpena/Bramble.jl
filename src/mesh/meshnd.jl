@@ -275,13 +275,21 @@ merge tolerance ``\\max(10^{-10}, 64\\varepsilon) L`` (``L`` the polygons' exten
 carries) are one line. A seed that meets a vertex or end-point line, or whose lines meet
 those of a vertex or an earlier seed, within the tolerance but not exactly, is dropped and
 the closure restarts without it: the seed gives way, never the vertex or the line computed
-from it, so every crossing stays exactly on a node.
+from it, so every crossing stays on a node up to rounding. Lines that differ by rounding
+alone (``16\\varepsilon M``, ``M`` the largest vertex coordinate magnitude or ``L``) are one
+line computed twice. Two lines that both come from the end points and vertices, farther
+apart than rounding but within the tolerance, mean the polygon has detail finer than the
+closure resolves, and throw.
+
+The oblique edges must share one slope magnitude, a necessary condition only: with equal
+slopes the closure may still grow without bound, or beyond the cap.
 
 # Throws
 
-  - `ArgumentError`: if the oblique edges do not share one slope magnitude (the closure has
-    no fixpoint then), or if the closure adds more lines than a cap proportional to the
-    input.
+  - `ArgumentError`: if the oblique edges do not share one slope magnitude, if two unequal
+    end-point, vertex or closure lines lie within the merge tolerance, or if the closure
+    exceeds a number of lines proportional to the input (the polygon's grid closure is
+    unbounded or too fine for this grid).
 """
 _grid_closure(P::Polygon, xs, ys) = _grid_closure((P,), xs, ys)
 
@@ -294,6 +302,8 @@ function _grid_closure(Ps::Tuple, xs::AbstractVector, ys::AbstractVector)
     L = max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V))
     ε = T(max(eps(T), maximum(P -> eps(eltype(eltype(P.vertices))), Ps)))
     tol = max(T(1e-10), 64 * ε) * L
+    # Two lines this close are one line computed twice with different rounding.
+    rnd = 16 * ε * max(L, maximum(v -> max(abs(v[1]), abs(v[2])), V))
     sx, sy = sort!(T.(collect(xs))), sort!(T.(collect(ys)))
     fixed = (T[sx[1]; sx[end]; first.(V)], T[sy[1]; sy[end]; last.(V)])
     seeds = (sx[2:(end - 1)], sy[2:(end - 1)])
@@ -301,7 +311,7 @@ function _grid_closure(Ps::Tuple, xs::AbstractVector, ys::AbstractVector)
     cap = 64 * (length(sx) + length(sy) + length(V)) + 1000
 
     while true
-        lines, loser = _closure_pass(fixed, seeds, keep, E, tol, cap)
+        lines, loser = _closure_pass(fixed, seeds, keep, E, tol, rnd, cap)
         iszero(loser) && return lines
         keep[loser] = false
     end
@@ -322,9 +332,10 @@ function _oblique_edges(::Type{T}, Ps::Tuple) where {T}
     return E
 end
 
-# The closure reaches a fixpoint when every oblique edge has the same slope magnitude: the
-# maps between crossings are then translations and reflections. Mixed magnitudes contract
-# an orbit towards a point instead, adding lines until the merge tolerance absorbs them.
+# Equal slope magnitudes are necessary for a fixpoint: the maps between crossings are then
+# translations and reflections, though their orbits may still be unbounded or very long
+# (the cap in `_closure_pass` catches those). Mixed magnitudes contract an orbit towards a
+# point instead, adding lines until the merge tolerance absorbs them.
 function _check_closure_slopes(E::Vector{NTuple{4, T}}) where {T}
     isempty(E) && return nothing
     s = [abs((e[4] - e[2]) / (e[3] - e[1])) for e in E]
@@ -338,20 +349,20 @@ end
 # One closure from the fixed lines and the kept seeds. Returns the lines and 0, or, as soon
 # as a seed must give way, the lines so far and the index of that seed.
 function _closure_pass(fixed::NTuple{2, Vector{T}}, seeds::NTuple{2, Vector{T}}, keep::BitVector,
-        E::Vector{NTuple{4, T}}, tol::T, cap::Int) where {T}
+        E::Vector{NTuple{4, T}}, tol::T, rnd::T, cap::Int) where {T}
     pos = (T[], T[])
     root = (Int[], Int[])
     queue = Tuple{Int, T, Int}[]
     for a in 1:2, c in fixed[a]
 
-        _closure_insert!(pos[a], root[a], queue, a, c, 0, tol)
+        _closure_insert!(pos[a], root[a], queue, a, c, 0, tol, rnd)
     end
     k = 0
     for a in 1:2, c in seeds[a]
 
         k += 1
         keep[k] || continue
-        loser = _closure_insert!(pos[a], root[a], queue, a, c, k, tol)
+        loser = _closure_insert!(pos[a], root[a], queue, a, c, k, tol, rnd)
         loser > 0 && return pos, loser
     end
 
@@ -366,25 +377,33 @@ function _closure_pass(fixed::NTuple{2, Vector{T}}, seeds::NTuple{2, Vector{T}},
             p₀, q₀, p₁, q₁ = a == 1 ? (ax, ay, bx, by) : (ay, ax, by, bx)
             min(p₀, p₁) < v < max(p₀, p₁) || continue
             c = q₀ + (q₁ - q₀) * (v - p₀) / (p₁ - p₀)
-            loser = _closure_insert!(pos[b], root[b], queue, b, c, r, tol)
+            loser = _closure_insert!(pos[b], root[b], queue, b, c, r, tol, rnd)
             loser > 0 && return pos, loser
             if loser < 0
                 added += 1
-                added > cap && throw(ArgumentError("Polygon grid closure: no fixpoint " *
-                                    "after $added added grid lines."))
+                added > cap && _throw_closure_cap(cap)
             end
         end
     end
     return pos, 0
 end
 
+@noinline _throw_closure_cap(cap) = throw(ArgumentError("Polygon grid closure: the " *
+                                                        "closure exceeded $cap added grid lines (a cap proportional to the input); the " *
+                                                        "polygon's grid closure is unbounded or too fine for this grid."))
+
+@noinline _throw_closure_detail(f, c, tol) = throw(ArgumentError("Polygon grid closure: " *
+                                                                 "the vertex or closure lines $f and $c are unequal but within the merge tolerance " *
+                                                                 "$tol; the polygon has detail finer than the grid closure resolves."))
+
 # Insert the line `c`, grown from root `r` (0 for an end point or a vertex, k for the k-th
 # seed), into the sorted lines `pos` of axis `a`. Returns -1 when it is new, 0 when it is
-# one already there (exactly equal, or from the same root, or both from root 0), and
-# otherwise the seed that gives way: the seed root against root 0, the later of two seeds.
+# one already there (equal up to the rounding `rnd`, or from the same seed), and otherwise
+# the seed that gives way: the seed root against root 0, the later of two seeds. Two root-0
+# lines farther apart than rounding but within `tol` throw.
 function _closure_insert!(
         pos::Vector{T}, root::Vector{Int}, queue::Vector{Tuple{Int, T, Int}}, a::Int, c::T,
-        r::Int, tol::T) where {T}
+        r::Int, tol::T, rnd::T) where {T}
     i = searchsortedfirst(pos, c)
     j = (i <= length(pos) && pos[i] - c <= tol) ? i : 0
     if i > 1 && c - pos[i - 1] <= tol && (j == 0 || c - pos[i - 1] < pos[i] - c)
@@ -397,7 +416,9 @@ function _closure_insert!(
         return -1
     end
     rj = root[j]
-    (pos[j] == c || rj == r) && return 0
+    abs(pos[j] - c) <= rnd && return 0
+    (iszero(r) && iszero(rj)) && _throw_closure_detail(pos[j], c, tol)
+    rj == r && return 0
     return iszero(rj) ? r : iszero(r) ? rj : max(r, rj)
 end
 
