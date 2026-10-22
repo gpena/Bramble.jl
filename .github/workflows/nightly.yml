@@ -12,8 +12,8 @@ name: Nightly
 # it fires) rather than a break. The `slow` job runs the `slow` group, which is `unit` plus
 # the blocks whose cost is out of proportion to what a *push* learns from them; see
 # test/TestUtils.jl's `WITH_SLOW_TESTS` for the list and the measurement. The `convergence`
-# job runs the convergence studies (test/convergence/), which no other group in CI runs. The worked-example
-# pages are not in `slow` any more: they are the `examples` group, which docs-on-demand.yml
+# job runs the convergence studies (test/convergence/), as CI.yml's `convergence` leg does
+# on every PR. The worked-example pages are not in `slow` any more: they are the `examples` group, which docs-on-demand.yml
 # runs before every docs build. AD and GPU tests are off in every group until v4.3.0 and
 # v4.4.0 respectively (test/TestUtils.jl, `WITH_AD_TESTS` and `WITH_GPU_TESTS`); each comes
 # back by setting `BRAMBLE_TEST_AD` or `BRAMBLE_TEST_GPU` in a job's env here and adding its
@@ -178,10 +178,9 @@ jobs:
           path: lcov.info
           if-no-files-found: warn
 
-  # The `convergence` group: every convergence study of the suite (test/convergence/), which
-  # no push-time group runs. Each refines a mesh or a time step several times over, so they
-  # are slow for what a push learns, and an order is a property of the scheme rather than of
-  # one code path. Same Julia, flags and coverage as `slow`, and its coverage is a fifth
+  # The `convergence` group: every convergence study of the suite (test/convergence/).
+  # CI.yml runs it on every PR as its own leg, but CI.yml uploads no coverage; this job is
+  # here for that. Same Julia, flags and coverage as `slow`, and its coverage is a fifth
   # `lcov-suite-*` part of Weekly.yml's floor: code only a convergence study reaches is
   # covered nowhere else.
   convergence:

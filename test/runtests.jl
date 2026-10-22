@@ -82,10 +82,9 @@ const __bramble_with_gpu_group = __bramble_with_gpu_tests && __bramble_test_grou
 const __bramble_with_examples = __bramble_test_group == "examples"
 
 # Every convergence study -- a refinement sequence with an observed order asserted -- lives
-# under test/convergence/ and runs only here. Each one solves a sequence of meshes, so they
-# are slow for what a push learns from them, and an order is a property of the
-# discretisation, not of the code path a unit test pins: CI.yml leaves them to nightly.yml's
-# `convergence` job. `all` and `full` include them.
+# under test/convergence/ and runs only here, in its own group, so CI.yml can give it a leg
+# of its own beside the `unit` shards; nightly.yml runs it too, for coverage. `all` and
+# `full` include them.
 const __bramble_with_convergence = __bramble_test_group in ("all", "full", "convergence")
 
 # The combinatorial grids in full (gpena/Bramble.jl#789): `unit` runs each grid's cover,
