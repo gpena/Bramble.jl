@@ -10,4 +10,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         Core.eval(m, :(using Test))
         Base.include(m, joinpath(@__DIR__, "poisson_polygon.jl"))
     end
+    let m = Module(:ConvergenceLevelsetTests)
+        Core.eval(m, :(using Test))
+        Base.include(m, joinpath(@__DIR__, "poisson_levelset.jl"))
+    end
 end
