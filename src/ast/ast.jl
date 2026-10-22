@@ -335,8 +335,6 @@ struct _MinusOne <: Integer end
 Base.show(io::IO, ::_MinusOne) = print(io, -1)
 Base.iszero(::_MinusOne) = false
 Base.isone(::_MinusOne) = false
-Base.zero(::Union{_MinusOne, Type{_MinusOne}}) = 0
-Base.one(::Union{_MinusOne, Type{_MinusOne}}) = 1
 Base.hash(::_MinusOne, h::UInt) = hash(-1, h)
 Base.:-(::_MinusOne) = 1
 Base.AbstractFloat(::_MinusOne) = -1.0
@@ -345,11 +343,21 @@ Base.widen(::Type{_MinusOne}) = widen(Int)
 for f in (:+, :-, :*, :<, :<=, :div, :rem)
     @eval Base.$f(::_MinusOne, ::_MinusOne) = $f(-1, -1)
 end
-# The constructors of Base's concrete number types; the generic ones (`Rational`,
-# `Complex`, `BigInt`, `BigFloat`, `Float16`) reach these through `convert` and `promote`.
-for T in (Float32, Float64, Base.BitInteger_types...)
+# The constructors a coefficient meets in a form: the float types (`T(c)` in the
+# extensions), and `BigInt`, which `BigFloat` and so a `BigFloat` scale go through;
+# `Complex` and `Float16` reach these. No `Int64`, `Int32`, ... constructor nor `one` or
+# `zero`: they invalidate the Base code compiled against an abstract `Integer` (over 250
+# MethodInstances when `Bramble` loads; a `convert` to `Int`, 146), so `Int(-u.scalar)`
+# and `Rational` throw.
+for T in (Float32, Float64, BigInt)
     @eval Base.$(nameof(T))(::_MinusOne) = $T(-1)
 end
+# What `expression` and `_same_operator_shape` (symmetry.jl) ask of a scale: its sign
+# against `0`, its digits, and whether it equals an `Int` scale.
+Base.:<(::_MinusOne, y::Int) = -1 < y
+Base.string(::_MinusOne) = "-1"
+Base.:(==)(::_MinusOne, y::Int) = y == -1
+Base.:(==)(x::Int, ::_MinusOne) = x == -1
 # Against Base's number families only, so a package's own rule against `Real` (a
 # `ForwardDiff.Dual`'s) is not ambiguous with it and reaches this one for its value type.
 function Base.promote_rule(::Type{_MinusOne},

@@ -822,8 +822,8 @@ end
 
 # The sign `-u` and `a - b` store (`_MinusOne`, src/ast/ast.jl) is decided by its type, so
 # `simplify_ast` folds it whatever the operator's values, and it acts as the `Int` `-1` it
-# replaced wherever a coefficient meets a number: constructors, `convert`, promotion, a
-# `ForwardDiff.Dual` beside it, and the two forms below differentiated through.
+# replaced wherever a coefficient meets a number: float constructors, `convert`,
+# promotion, a `ForwardDiff.Dual` beside it, and the two forms below differentiated through.
 _rt_negated(W) = form(W, W, (u, v) -> innerₕ(u, v) - innerₕ(D₋ₓ(u), v))
 
 @testset "the sign of minus acts as -1" begin
@@ -837,16 +837,26 @@ _rt_negated(W) = form(W, W, (u, v) -> innerₕ(u, v) - innerₕ(D₋ₓ(u), v))
     @test isconcretetype(only(Base.return_types(simplify_ast, (typeof(u - 2.0 * u),))))
     @test _infers(_rt_negated, (typeof(Wₕ),))
     @test simplify_ast(-(-u)) === u
-    @test string(M) == "-1"
-    @test (M + M, M - M, M * M, zero(M), one(M)) === (-2, 0, 1, 0, 1)
-    @test hash(M) == hash(-1) && M == -1
+    @test string(M) == "-1" && M < 0
+    @test Bramble.expression(-u) == "-u"
+    @test startswith(Bramble.expression(u - D₋ₓ(u)), "u - ")
+    @test (M + M, M - M, M * M) === (-2, 0, 1)
+    @test hash(M) == hash(-1) && M == -1 && -1 == M && M != 2 && 2 != M
+    @test !Bramble._same_operator_shape(-D₋ₓ(u), 2 * D₋ₓ(test_function(Wₕ)))
 
+    # No `Int` constructor (it invalidates Base on load), so the fixed-width integers and
+    # `Rational` only promote.
     Dual = ForwardDiff.Dual{Nothing, Float64, 1}
-    for T in (Float32, Float64, BigFloat, Int, Int32, Rational{Int}, ComplexF64, Dual)
+    for T in (Float32, Float64, BigFloat, ComplexF64, Dual)
         @test T(M) isa T && T(M) == -1
         @test convert(T, M) isa T && convert(T, M) == -1
+    end
+    for T in (Float32, Float64, BigFloat, Int, Int32, Rational{Int}, ComplexF64, Dual)
         @test promote_type(typeof(M), T) === promote_type(Int, T)
     end
+    # A `BigInt` divisor scales by a `BigFloat`, which the sign meets.
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> -(innerₕ(u, v) / big(2))))) ==
+          Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> -0.5 * innerₕ(u, v))))
     @test M * ForwardDiff.Dual{Nothing}(2.0, 1.0) == ForwardDiff.Dual{Nothing}(-2.0, -1.0)
 
     # d/ds of `s A - A` is `A`, and of `(s - 1) b` is `b`: their sums are the mass's.
