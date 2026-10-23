@@ -8,7 +8,7 @@ using LinearAlgebra: issymmetric, mul!
 using SparseArrays: SparseMatrixCSC, nnz, findnz
 using Random
 using Polyester
-using ..TestUtils: WITH_3D_TESTS, ZeroBasedVector, _graded_mesh
+using ..TestUtils: WITH_3D_TESTS, ZeroBasedVector, _graded_mesh, alloc_ok
 
 # `kronecker_operator` on a composite space whose leaves share one mesh: one
 # `KroneckerLinearOperator` per nonzero (test leaf, trial leaf) block, wrapped in a
@@ -184,9 +184,9 @@ end
             for K in (Ks[1], Ks[3])
                 y = copy(y0)
                 _kb_alloc5(y, K, x, 0.5, -3.0)
-                @test _kb_alloc5(y, K, x, 0.5, -3.0) == 0
+                @test alloc_ok(_kb_alloc5(y, K, x, 0.5, -3.0))
                 _kb_alloc3(y, K, x)
-                @test _kb_alloc3(y, K, x) == 0
+                @test alloc_ok(_kb_alloc3(y, K, x))
             end
         end
     end

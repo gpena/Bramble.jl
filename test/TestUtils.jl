@@ -326,6 +326,13 @@ end
     return @allocated(f(args...; kwargs...))
 end
 
+# The allocation guarantees are stated at `--optimize=1`. At `-O0` nothing is inlined, so a
+# wrapper that is free at `-O1` boxes a few hundred bytes (a Kronecker `mul!` measured 528 B).
+# `@test alloc_ok(bytes)` holds at `-O0` whatever `bytes` is and demands 0 from `-O1` up, so
+# the suite can run at `-O0`, about twice as fast as at `-O1` (the run is compile-bound).
+const ALLOC_GUARANTEES = Base.JLOptions().opt_level >= 1
+alloc_ok(bytes::Integer) = !ALLOC_GUARANTEES || bytes == 0
+
 # Allocation test helper: uses a function barrier to avoid @testset closure boxing.
 #
 # These run under code coverage as well. They used to skip there, on the assumption that
