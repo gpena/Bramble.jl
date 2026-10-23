@@ -785,13 +785,13 @@ end
     )
 end
 
-# The relation's rows and data on the nodes of its facet, by forms on the padded space;
-# the rows transposed, so each node's row is a column. Data depending on time give the
-# facet weights instead, which `L` multiplies the data at each time by.
-# The forms are `inner_Γ(op, v; markers = (name,))` and `inner_Γ(data, …)`, with the
-# facet's mask a constant (`_at_facet`, `_relation_mask`), so that each infers. A resolved
-# mask skips the check `form` runs on labels (`_resolved_inner`), so the facet's reach is
-# checked here, on the padded mesh.
+# The relation's rows and data on the nodes of its facet, assembled by forms on the padded
+# space and transposed, so each node's row is a column. Data depending on time give the
+# facet weights instead; `L` multiplies the data at each time by them.
+# The forms are `inner_Γ(op, v; markers = (name,))` and `inner_Γ(data, …)`. The facet's
+# mask is a constant (`_at_facet`, `_relation_mask`), so each form infers. Because a
+# resolved mask skips the label check of `form` (`_resolved_inner`), this function checks
+# the facet's reach itself, on the padded mesh.
 function _assemble_relation(P::ScalarGridSpace{D}, r::_FacetRelation) where {D}
     op = r.op
     data = _is_time_relation(r) ? one(eltype(P)) : r.data
