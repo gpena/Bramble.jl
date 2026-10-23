@@ -10,7 +10,7 @@ using Random: Random
 using Supposition
 using ForwardDiff
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, @test_allocs, _nonuniform_points
-using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
+using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle, bits_eq
 using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
 
 @testset "Inner products & norms" begin
@@ -1412,8 +1412,8 @@ _cplx_norm(f, ur, ui) = sqrt(f(ur)^2 + f(ui)^2)
         end
 
         # Real data takes the same kernels, so a norm is still the root of its inner product.
-        @test normₕ(ur) === sqrt(innerₕ(ur, ur))
-        @test norm₊(ur) === sqrt(inner₊(ur, ur))
+        @test bits_eq(normₕ(ur), sqrt(innerₕ(ur, ur)))
+        @test bits_eq(norm₊(ur), sqrt(inner₊(ur, ur)))
         if p isa Serial
             @test_allocs innerₕ(u, v)
             @test_allocs snorm₁ₕ(u)
