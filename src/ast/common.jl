@@ -110,6 +110,9 @@ end
 
 @inline scale_stencil(inner::Tuple, scalar::Number) = _each_entry(
     t -> (Base.front(t)..., t[end] * scalar), inner)
+# The sign of `-` (`_MinusOne`, ast.jl) in an operator that never went through `form`, whose
+# `_lower_signs` would have made it the `Int` `-1` it stands for.
+@inline scale_stencil(inner::Tuple, ::_MinusOne) = scale_stencil(inner, -1)
 
 """
     entry_offsets(stencil::Tuple)
