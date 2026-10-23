@@ -977,7 +977,10 @@ function _dirichlet_values(G::GhostMesh{D}, drels::Tuple, ::Type{T},
         return vec(Int[plin[padded_index(G, I)] for I in nodes]),
         vec([_datum(r.data, point(Ωₕ, I), t0) for I in nodes])
     end
-    S = promote_type(T, map(x -> eltype(last(x)), raw)...)
+    # Promote over the values' own types: a datum mixing `0` and `1.0` gives a
+    # `Vector{Real}`, whose `eltype` would leave `S = Real` (gpena/Bramble.jl#890).
+    S = mapreduce(x -> mapreduce(typeof, promote_type, last(x); init = T), promote_type,
+        raw; init = T)
     chunks = map(x -> (first(x), convert(Vector{S}, last(x))), raw)
     names, timed = map(r -> r.name, drels), map(_is_time_relation, drels)
     fixed = falses(length(plin))

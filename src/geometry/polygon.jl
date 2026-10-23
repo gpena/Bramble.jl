@@ -24,11 +24,14 @@ counter-clockwise. Coordinates are converted to the promoted floating-point type
 
 A vertex in the middle of a straight edge is kept as a vertex.
 
+The area is zero up to rounding when |2A| ≤ 8nεL², with 2A the shoelace sum, n the vertex
+count, ε the epsilon of the coordinate type and L the larger side of the bounding box.
+
 # Throws
 - `ArgumentError`: if `V` has fewer than three vertices, a coordinate is not finite, two
-  consecutive vertices coincide (the last and the first included), the polygon has zero
-  area, or its boundary crosses or touches itself (a bowtie, an edge folding back on the
-  previous one).
+  consecutive vertices coincide (the last and the first included), the polygon has
+  zero area up to rounding, or its boundary crosses or touches itself (a bowtie, an edge
+  folding back on the previous one).
 """
 function polygon(V::AbstractVector{<:NTuple{2, Real}})
     T = _polygon_eltype(V)
@@ -82,19 +85,22 @@ end
 function _validate_polygon(W::Vector{NTuple{2, T}}) where {T}
     n = length(W)
     n >= 3 || _throw_polygon_error("expected at least 3 vertices, got $n")
-    all(v -> isfinite(v[1]) && isfinite(v[2]), W) || _throw_polygon_error("a vertex coordinate is not finite")
+    k = findfirst(v -> !(isfinite(v[1]) && isfinite(v[2])), W)
+    isnothing(k) || _throw_polygon_error("vertex $k at $(W[k]) has a coordinate that is not finite")
     V = [(Rational{BigInt}(v[1]), Rational{BigInt}(v[2])) for v in W]
 
     for k in 1:n
         V[k] == V[mod1(k + 1, n)] &&
-            _throw_polygon_error("vertices $k and $(mod1(k + 1, n)) coincide at $(V[k]) (zero-length edge)")
+            _throw_polygon_error("vertices $k and $(mod1(k + 1, n)) coincide at $(W[k]) (zero-length edge)")
     end
 
     # Zero area, relative to the squared extent so that a scaled or translated copy is judged
     # alike.
     L = max(maximum(v -> v[1], V) - minimum(v -> v[1], V), maximum(v -> v[2], V) - minimum(v -> v[2], V))
     A = _signed_area2(V)
-    abs(A) > 8 * n * eps(T) * L^2 || _throw_polygon_error("the vertices enclose zero area")
+    tol = 8 * n * eps(T) * L^2
+    abs(A) > tol || _throw_polygon_error(
+        "the vertices enclose (nearly) zero area: |2A| = $(Float64(abs(A))), at most 8nεL² = $(Float64(tol))")
 
     # Consecutive edges a → b → c meet only at b: an edge folding back overlaps the previous.
     for k in 1:n

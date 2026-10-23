@@ -483,10 +483,24 @@ _label_region!(inside, on, outside, ::LevelSet, P::Polygon, _, pts, _) = _label_
     inside, on, outside, P, pts)
 
 @noinline function _label_region!(_, _, _, ::LevelSet, ::Nothing, _, _, label)
+    return _throw_levelset_refusal(label)
+end
+
+@noinline function _throw_levelset_refusal(label)
     throw(ArgumentError("the level-set marker :$label labels the nodes by the polygon that " *
                         "mesh(Ω, npts, unif) fits to its curve together with the grid lines, " *
                         "and no mesh keeps that polygon: build the mesh with mesh(Ω, npts, " *
                         "unif) instead of set_markers!, change_points! or iterative_refinement!."))
+end
+
+# Refuses a level-set marker before a caller mutates its mesh: `iterative_refinement!` and
+# `change_points!` refine or move the points first and mark them after, so the refusal of
+# `_label_region!` would come too late and leave the mesh changed (#866, #891).
+function _check_no_levelset_regions(domain_markers)
+    for m in regions(domain_markers)
+        identifier(m) isa LevelSet && _throw_levelset_refusal(label(m))
+    end
+    return nothing
 end
 
 # Labels the nodes of the lines `pts` by the polygon `P` whose vertices are nodes: a vertex

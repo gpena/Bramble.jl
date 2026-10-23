@@ -126,4 +126,40 @@ end
     end
 end
 
+# Refinement and `change_points!` refuse a level-set mesh before touching it (#866, #891):
+# the refusal used to come from the marking, after the points had changed and the marker
+# vectors no longer matched them.
+@testset "(Geom) refusals keep the mesh" begin
+    Ω = domain(BOX_DISK, :D => levelset(disk))
+    mk() = mesh(Ω, (20, 20), (false, false))
+    marker_lengths(Ωₕ) = Dict(k => length(v) for (k, v) in pairs(markers(Ωₕ)))
+
+    @testset "iterative_refinement!" begin
+        Ωₕ = mk()
+        n0 = npoints(Ωₕ, Tuple)
+        p0 = map(copy, Tuple(Bramble.points(Ωₕ(i)) for i in 1:2))
+        L0 = marker_lengths(Ωₕ)
+        @test_throws ArgumentError iterative_refinement!(Ωₕ, markers(Ω))
+        @test_throws "level-set marker :D" iterative_refinement!(Ωₕ, markers(Ω))
+        @test npoints(Ωₕ, Tuple) == n0
+        @test Tuple(Bramble.points(Ωₕ(i)) for i in 1:2) == p0
+        @test marker_lengths(Ωₕ) == L0
+        @test length(markers(Ωₕ)[:D]) == npoints(Ωₕ)
+    end
+
+    @testset "change_points!" begin
+        Ωₕ = mk()
+        n0 = npoints(Ωₕ, Tuple)
+        p0 = map(copy, Tuple(Bramble.points(Ωₕ(i)) for i in 1:2))
+        L0 = marker_lengths(Ωₕ)
+        pts = Tuple(collect(range(-1.25, 1.25; length = n)) for n in n0)
+        @test pts != p0
+        @test_throws ArgumentError Bramble.change_points!(Ωₕ, markers(Ω), pts)
+        @test_throws "level-set marker :D" Bramble.change_points!(Ωₕ, markers(Ω), pts)
+        @test npoints(Ωₕ, Tuple) == n0
+        @test Tuple(Bramble.points(Ωₕ(i)) for i in 1:2) == p0
+        @test marker_lengths(Ωₕ) == L0
+    end
+end
+
 end

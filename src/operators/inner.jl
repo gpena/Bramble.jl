@@ -693,7 +693,9 @@ the simplifier and resolves to the same `which(inner₊, ...).file`. Every other
 lazy `SeparableWeights` [`weights`](@ref)`(Wₕ, Val(S))` returns for those sets.
 
 `S` must be a subset of `1:D` with no axis repeated, and is accepted in any order --
-`Val((1,2))` and `Val((2,1))` build the identical node.
+`Val((1,2))` and `Val((2,1))` build the identical node. Its entries may be any integer type
+but `Bool` (`Val((Int32(1), Int32(2)))` builds the node `Val((1, 2))` does); a `Bool` entry
+throws an `ArgumentError`.
 
 Constructs a `LinearProduct` if `left` is source-only ([`_is_source_only`](@ref)), a
 `BilinearProduct` otherwise, matching [`innerₕ`](@ref).
@@ -720,9 +722,12 @@ end
 # two spellings are the same node (see InnerPlusSet's docstring for why that matters).
 @inline _inner₊_val(left, right, ::Val{D}, ::Val{()}, markers) where {D} = _inner(InnerH(), left, right, markers)
 
+# `map(Int, S)` after the check makes `Val((Int32(1), Int32(2)))` the node `Val((1, 2))`
+# builds, as `Int(Dim)` does for every other direction (gpena/Bramble.jl#689).
 @inline function _inner₊_val(left, right, ::Val{D}, ::Val{S}, markers) where {D, S}
     _check_staggered_set(Val(D), Val(S))
-    return _inner₊_val(left, right, Val(D), Val(S), Val(length(S)), markers)
+    Sᵢ = map(Int, S)
+    return _inner₊_val(left, right, Val(D), Val(Sᵢ), Val(length(Sᵢ)), markers)
 end
 
 # A singleton `S` is inner₊ₓ/ᵧ/₂'s own weight -- routed to InnerPlus{only(S)} rather than
@@ -738,7 +743,10 @@ end
     return _inner(InnerPlusSet{_canonical_set(S)}(), left, right, markers)
 end
 
+# Each entry's type is checked first: `true == 1`, so `Val((true,))` would pass the range
+# check alone and stand for the first axis (gpena/Bramble.jl#861).
 @inline function _check_staggered_set(::Val{D}, ::Val{S}) where {D, S}
+    foreach(_check_direction_type, S)
     (allunique(S) && all(d -> 1 <= d <= D, S)) || _throw_invalid_staggered_set(S, D)
     return nothing
 end
@@ -809,8 +817,9 @@ selected by `d`: an `Integer` (`1`, `2` or `3`) or a `Symbol` (`:x`, `:y` or `:z
 This is the preferred spelling: `inner₊(D₋ₓ(u), D₋ₓ(v), :x)` over
 `inner₊ₓ(D₋ₓ(u), D₋ₓ(v))`, which stays reachable as a plain alias.
 
-An `Integer` outside `1:3` throws a `BoundsError`; a `Symbol` that is not `:x`/`:y`/`:z`
-throws an `ArgumentError`, as does a direction beyond `D` (`inner₊(u, v, 2)` in 1D).
+An `Integer` outside `1:3` throws a `BoundsError`; a `Bool`, or a `Symbol` that is not
+`:x`/`:y`/`:z`, throws an `ArgumentError`, as does a direction beyond `D` (`inner₊(u, v, 2)`
+in 1D).
 
 The numeric twin, for the same selector against grid functions rather than operators, is
 [`inner₊`](@ref)`(uₕ, vₕ, d)` (`src/space/inner_product.jl`), which also documents how
@@ -821,6 +830,7 @@ aliases this method dispatches to.
         left::LazyOp{D}, right::LazyOp{D}, d::Integer;
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {D, N}
+    _check_direction_type(d)   # `true == 1` would otherwise build InnerPlus{1} (#861)
     d == 1 && return _inner(InnerPlus{1}(), left, right, markers)
     d == 2 && return _inner(InnerPlus{2}(), left, right, markers)
     d == 3 && return _inner(InnerPlus{3}(), left, right, markers)

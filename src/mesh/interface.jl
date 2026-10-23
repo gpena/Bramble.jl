@@ -337,6 +337,7 @@ end
 function iterative_refinement!(
         Ωₕ::AbstractMeshType, domain_markers::DomainMarkers; warn_marker_mismatch::Bool = true
 )
+    _check_no_levelset_regions(domain_markers)
     is_collapsed(Ωₕ) && return nothing
 
     _refine_indices!(Ωₕ)
@@ -350,6 +351,7 @@ function change_points!(
         pts;
         warn_marker_mismatch::Bool = true
 )
+    _check_no_levelset_regions(domain_markers)
     _check_not_submesh_of_predicate_parent(Ωₕ,
         "change_points!(Ωₕ, domain_markers, pts) was asked to move")
     _change_points!(Ωₕ, pts)

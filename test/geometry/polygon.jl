@@ -17,6 +17,17 @@ end
 # Twice the area computed exactly on the stored floats, so that rounding cannot fake the sign.
 exact_twice_area(V) = twice_area([(Rational{BigInt}(v[1]), Rational{BigInt}(v[2])) for v in V])
 
+# The text of the `ArgumentError` that `f` throws; another exception type is rethrown.
+function polygon_message(f)
+    try
+        f()
+    catch e
+        e isa ArgumentError || rethrow()
+        return sprint(showerror, e)
+    end
+    return "no error"
+end
+
 # Signed distance to the unit square, written from its definition and sharing no code with
 # the library: inside, minus the distance to the nearest side; outside, the norm of the excess.
 function square_distance(x)
@@ -133,6 +144,23 @@ end
         # the stored floats, though the floating-point orientation is 1.1e-16, not 0.
         @test_throws ArgumentError polygon([(0.3 * x, 0.3 * y)
                                             for (x, y) in ((3, 3), (-1, 1), (1, 2), (2, -4), (-3, 0), (2, 3))])
+        # The messages name the vertex or edge and the value that failed.
+        @test polygon_message(() -> polygon([(0.0, 0.0), (1.0, 0.0), (NaN, 1.0)])) ==
+              "ArgumentError: Invalid polygon: vertex 3 at (NaN, 1.0) has a coordinate that is not finite"
+        @test polygon_message(() -> polygon([(0.0, 0.0), (Inf, 0.0), (0.0, 1.0)])) ==
+              "ArgumentError: Invalid polygon: vertex 2 at (Inf, 0.0) has a coordinate that is not finite"
+        # The coincidence names the input values, not their Rational{BigInt} copies.
+        @test polygon_message(() -> polygon([(0.0, 0.0), (0.1, 0.0), (0.1, 0.0), (0.0, 1.0)])) ==
+              "ArgumentError: Invalid polygon: vertices 2 and 3 coincide at (0.1, 0.0) (zero-length edge)"
+        @test polygon_message(() -> polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)])) ==
+              "ArgumentError: Invalid polygon: vertices 4 and 1 coincide at (0.0, 0.0) (zero-length edge)"
+        # Zero area gives |2A| and the tolerance 8nεL², here 8 · 3 · eps(Float64) · 2².
+        @test polygon_message(() -> polygon([(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)])) ==
+              "ArgumentError: Invalid polygon: the vertices enclose (nearly) zero area: " *
+              "|2A| = 0.0, at most 8nεL² = 2.1316282072803006e-14"
+        @test polygon_message(() -> polygon([(0.0, 0.0), (1.0, 0.0), (2.0, 1.0e-17)])) ==
+              "ArgumentError: Invalid polygon: the vertices enclose (nearly) zero area: " *
+              "|2A| = 1.0e-17, at most 8nεL² = 2.1316282072803006e-14"
     end
 
     @testset "inference and allocations" begin
