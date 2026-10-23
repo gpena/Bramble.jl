@@ -326,12 +326,16 @@ end
     return @allocated(f(args...; kwargs...))
 end
 
-# The allocation guarantees are stated at `--optimize=1`. At `-O0` nothing is inlined, so a
-# wrapper that is free at `-O1` boxes a few hundred bytes (a Kronecker `mul!` measured 528 B).
-# `@test alloc_ok(bytes)` holds at `-O0` whatever `bytes` is and demands 0 from `-O1` up, so
-# the suite can run at `-O0`, about twice as fast as at `-O1` (the run is compile-bound).
-const ALLOC_GUARANTEES = Base.JLOptions().opt_level >= 1
-alloc_ok(bytes::Integer) = !ALLOC_GUARANTEES || bytes == 0
+# The allocation and bitwise guarantees are stated at `--optimize=1`. At `-O0` nothing is
+# inlined, so a wrapper that is free at `-O1` boxes a few hundred bytes (a Kronecker `mul!`
+# measured 528 B), and two kernels that round alike from `-O1` up can differ in the last bit
+# (`normₕ(u)` against `sqrt(innerₕ(u, u))`: no fused multiply-add, no SIMD reduction).
+# `@test alloc_ok(bytes)` and `@test bits_eq(a, b)` hold at `-O0` up to that and demand 0 B
+# and bitwise equality from `-O1` up, so the suite can run at `-O0`, about twice as fast as
+# at `-O1` (the run is compile-bound).
+const OPTIMIZED = Base.JLOptions().opt_level >= 1
+alloc_ok(bytes::Integer) = !OPTIMIZED || bytes == 0
+bits_eq(a::T, b::T) where {T <: AbstractFloat} = OPTIMIZED ? a === b : isapprox(a, b; rtol = 4eps(T))
 
 # Allocation test helper: uses a function barrier to avoid @testset closure boxing.
 #
