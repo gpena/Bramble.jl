@@ -195,8 +195,11 @@ function (p::_CoordPass)(
         @inbounds ptr[npts + 1] = sink.n + 1
         push!(p.ptrs, ptr)
         push!(p.counts, sink.n)
-        # The first axis's face margins: only a 1D unit reads them (`_unit_segment`).
-        push!(p.margins, first(_face_margins(term, axes(indices(mesh(sp))))))
+        # The first axis's face margins: only a 1D unit reads them (`_unit_segment`). An
+        # unmarked term skips the facet walk, decided by type (`_has_marks`, #763).
+        m = _stencil_margin(term)
+        push!(p.margins,
+            _has_marks(TERM) ? first(_face_margins(term, axes(indices(mesh(sp))))) : (m, m))
         push!(p.halves, half)
     end
     return nothing
@@ -218,13 +221,15 @@ end
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     ax = axes(grid_inds)
-    margins = _face_margins(term, ax)
+    # Per-face margins only for a term with a mark: an unmarked one keeps the one margin
+    # and walks itself inside, compiling none of the facet machinery (`_has_marks`, #763).
+    margins = _has_marks(TERM) ? _face_margins(term, ax) : _stencil_margin(term)
     if _peelable(ax, margins)
         interior = _interior_box(ax, margins)
         # The term unmarked inside, as the replay walks it (`_interior_term`, #813).
         _visit_guarded_region!(
-            sink, _interior_term(bound), sp, mesh_markers, lin_indices, interior,
-            row_offset, col_offset
+            sink, _has_marks(TERM) ? _interior_term(bound) : bound, sp, mesh_markers,
+            lin_indices, interior, row_offset, col_offset
         )
         for slab in _boundary_shell_slabs(ax, margins)
             _visit_guarded_region!(

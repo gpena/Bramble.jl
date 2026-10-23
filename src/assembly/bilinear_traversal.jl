@@ -1086,7 +1086,9 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     ax = axes(grid_inds)
-    margins = _face_margins(term, ax)
+    # Per-face margins only for a term with a mark: an unmarked one keeps the one margin
+    # and walks itself inside, compiling none of the facet machinery (`_has_marks`, #763).
+    margins = _has_marks(TERM) ? _face_margins(term, ax) : _stencil_margin(term)
 
     # `@inbounds` here (and inside `_visit_guarded_region!`/`_visit_interior!`) is what the
     # hand-written sweeps had wrapping their whole nested loop. It does not cross a function
@@ -1098,7 +1100,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
         # The term unmarked inside, which `margins` keeps off every marked ghost (#813).
         _visit_interior!(
             interior_sink,
-            _interior_term(bound),
+            _has_marks(TERM) ? _interior_term(bound) : bound,
             sp,
             mesh_markers,
             lin_indices,

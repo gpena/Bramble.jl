@@ -756,6 +756,7 @@ end
 
 # `bound` (`term` bound to the walked leaf) for a sweep of `target` over `grid_inds`: split
 # when `target` replays a recording and `bound` holds a mark (`_has_marks`), else itself.
+# Callers reach it only for a marked `bound`: an unmarked one compiles no instance (#763).
 @inline _split_term(target, bound, term, grid_inds) = bound
 @inline function _split_term(target::_ReplayTarget, bound::B, term, grid_inds) where {B}
     _has_marks(B) || return bound
@@ -1117,7 +1118,7 @@ function _sweep_bilinear_serial!(
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     bound, mesh_markers = _bind_walk(term, sp)
-    walked = _split_term(A, bound, term, grid_inds)
+    walked = _has_marks(typeof(bound)) ? _split_term(A, bound, term, grid_inds) : bound
 
     @inbounds for I in grid_inds
         _sweep_point!(
@@ -1138,9 +1139,9 @@ function _sweep_bilinear!(
 ) where {TERM}
     grid_inds = indices(mesh(sp))
     bound, mesh_markers = _bind_walk(term, sp)
+    walked = _has_marks(typeof(bound)) ? _split_term(A, bound, term, grid_inds) : bound
     point = _BilinearPoint(
-        A, sp, _split_term(A, bound, term, grid_inds), LinearIndices(grid_inds),
-        mesh_markers, row_offset, col_offset, α)
+        A, sp, walked, LinearIndices(grid_inds), mesh_markers, row_offset, col_offset, α)
     _sweep_coloured!(_effective_parallel_policy(sp), point, grid_inds, strides)
     return A
 end
