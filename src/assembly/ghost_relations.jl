@@ -447,44 +447,89 @@ end
 end
 
 # The rows of a ghost relation's operator on its facet `(Val(d), Val(s))`, named `name`,
-# tested against component `c`: one `inner_Γ` holds one trial component
-# (block_extract.jl), so they are the sum of one form per component the operator reads, its
-# piece as a facet operator with that piece on every facet, as `_strain_pieces` keeps the
-# terms of `εₕ` apart (difference.jl). The components `c` and `j` are `Val`s, so each
-# form names them as constants, as a form written with `u(1)` does.
+# tested against component `c`: the sum of one block per term of the operator, its terms
+# reading one component each (`_relation_terms`), as `_strain_pieces` keeps the terms of
+# `εₕ` apart (difference.jl). A term reading component `j` gives the block `(c, j)`, which
+# is the term's matrix on one component's padded space, as every component of a padded
+# composite has the same ghosts and mesh (`_throw_composite_ghost_sets`).
+# The blocks' entries gather in `acc` and sum in one `sparse`, which drops the zeros; their
+# values' type widens to each block's, as a sum of the blocks' matrices would.
 function _relation_matrix(P::CompositeGridSpace{N}, op::FacetOperator{D, G}, a::Val, b::Val,
         name::Val, c::Val) where {N, D, G}
     Ωₕ = mesh(first(leaf_spaces_offsets(P)[_val(c)]))
     _check_facet_reach(Ωₕ, G[_val(a)], _val(a), _val(b), (_facet_component(op, a, b),))
-    R = spzeros(eltype(P), ndofs(P), ndofs(P))
-    return _add_pieces(R, P, _facet_component(op, a, b), Val(G), (a, b, name, c),
-        ntuple(Val, Val(N)))
+    acc = _add_terms((Int[], Int[], eltype(P)[]), P,
+        _relation_terms(_facet_component(op, a, b)), Val(G),
+        (a, b, name, c, map(last, leaf_spaces_offsets(P))))
+    return SparseArrays.dropzeros!(sparse(acc..., ndofs(P), ndofs(P)))
 end
 
-# `R` plus the rows of the piece of `op` reading each component of `js`, unrolled; a
-# component no leaf of `op` reads adds none. The piece's type is the same for every
-# component, its leaves of the others scaled by a zero, so whether it reads is a `Bool`.
-@inline _add_pieces(R, P, op, g::Val, facet::Tuple, ::Tuple{}) = R
-@inline function _add_pieces(R, P, op, g::Val, facet::Tuple, js::Tuple)
-    a, b, name, c = facet
-    p, reads = _trial_piece(op, _val(first(js)), zero(eltype(P)), _val(name))
-    S = reads ? R + _piece_matrix(P, p, g, a, b, c, first(js)) : R
-    return _add_pieces(S, P, op, g, facet, Base.tail(js))
+# The nodes a term's split passes through, applying each to every term of its operand.
+const _SplitWrapper{D} = Union{BackwardDifference{D}, ForwardDifference{D},
+    CenteredDifference{D}, StarDifference{D}, CrossWeightedDifference{D},
+    SecondDifference{D}, JumpNode{D}, BackwardAverage{D}, ForwardAverage{D},
+    CenteredAverage{D}, ShiftNode{D}, OperatorScale{D}, GridFunctionScale{D}}
+
+# The terms of `op`, by type: its sums split, but for conormal blocks
+# (`_conormal_coefficients`), and a difference, average, shift or scale of a sum applied to
+# each of its terms. A sum of one component is split too, though one form would do: whether
+# it is one reads the leaves' components, values.
+_relation_terms(op::OperatorAdd) = _sum_terms(op, _conormal_coefficients(op))
+_sum_terms(op::OperatorAdd, ::Nothing) = (_relation_terms(op.left_op)...,
+    _relation_terms(op.right_op)...)
+_sum_terms(op::OperatorAdd, ::Tuple) = (op,)
+function _relation_terms(op::_SplitWrapper)
+    return map(t -> _rebuilt_around(op, t), _relation_terms(op.inner_op))
+end
+_relation_terms(op) = (op,)
+
+# `acc` with the block of each term of `terms` added, unrolled. A term reads one component,
+# a value that only places its block (`_add_term`); a term reading several, or none, is
+# refused, naming the first node below its differences, scales and sums that reads no one
+# component (`_unsplit_term`, `nothing` where every node reads one).
+@inline _add_terms(acc, P, ::Tuple{}, g::Val, facet::Tuple) = acc
+@inline function _add_terms(acc, P, terms::Tuple, g::Val, facet::Tuple)
+    t = first(terms)
+    k = _trial_component_class(t)
+    k isa Int || _throw_relation_unsplit(_val(facet[3]), t)
+    return _add_terms(_add_term(acc, P, t, k, g, facet), P, Base.tail(terms), g, facet)
+end
+_unsplit_term(op::_SplitWrapper) = _unsplit_term(op.inner_op)
+function _unsplit_term(op::OperatorAdd)
+    l = _unsplit_term(op.left_op)
+    return l === nothing ? _unsplit_term(op.right_op) : l
+end
+_unsplit_term(op) = _trial_component_class(op) isa Int ? nothing : summary(op)
+
+# `acc` with the block `(c, j)` of the term `t` added, `t` reading component `j`: its
+# matrix on component `c`'s padded space, its rows at `c`'s offset and its columns at
+# `j`'s, of `facet`'s `offsets`; a component outside them adds none.
+function _add_term(acc, P, t::LazyOp, j::Int, g::Val, facet::Tuple)
+    a, b, _, c, offsets = facet
+    1 <= j <= length(offsets) || return acc
+    S, oc = leaf_spaces_offsets(P)[_val(c)]
+    M = _term_matrix(S, t, g, a, b)
+    Is, Js, Us = acc
+    Vs = _widened(Us, eltype(M))
+    for col in axes(M, 2), q in nzrange(M, col)
+        v = nonzeros(M)[q]
+        iszero(v) && continue                # the form stores its whole pattern
+        push!(Is, rowvals(M)[q] + oc), push!(Js, col + offsets[j]), push!(Vs, v)
+    end
+    return Is, Js, Vs
+end
+function _widened(v::Vector{T}, ::Type{S}) where {T, S}
+    return promote_type(T, S) === T ? v : Vector{promote_type(T, S)}(v)
 end
 
-# The rows of one piece. Its leaves are rebuilt inside the form as `u(j)` (`_retarget`): a
-# leaf the form captures holds its component as a value, which `simplify_ast` reads to
-# decide its result's type. The zero-scaled leaves store explicit zeros, which the sum in
-# `_add_pieces` drops (a sparse sum stores no zero), so the rows hold the entries of the
-# terms reading `j` alone.
-function _piece_matrix(P::CompositeGridSpace, p::LazyOp{D}, g::Val, a::Val, b::Val,
-        c::Val, j::Val) where {D}
+# The matrix of the term `p` on the facet `(a, b)` of the padded space `S`, its leaves
+# rebuilt as `S`'s trial function (`_retarget`).
+function _term_matrix(S, p::LazyOp{D}, g::Val, a::Val, b::Val) where {D}
     mask = _relation_mask(a, b, Val(D))
-    return assemble(form(P, P,
-        (u, v) -> _facet_inner(mask, _piece_operator(g, p, u(_val(j))), v(_val(c)))))
+    return assemble(form(S, S, (u, v) -> _facet_inner(mask, _piece_operator(g, p, u), v)))
 end
 
-# The piece `p` as a facet operator on every facet, its leaves `leaf`.
+# The term `p` as a facet operator on every facet, its leaves `leaf`.
 @inline function _piece_operator(g::Val, p::LazyOp{D}, leaf) where {D}
     q = _retarget(p, leaf)
     return _facet_operator(g, ntuple(_ -> (q, q), Val(D)))
@@ -521,60 +566,11 @@ end
     return _at_index(f, Base.tail(vals), i)
 end
 
-# The terms of `op` that read component `j`, and whether any does. Every leaf is kept, with
-# the sums, scales and differences around it, scaled by `one(z)` if it reads `j` and by `z`,
-# a zero of the space's element type, if not: so the piece's type is `op`'s leaves scaled,
-# whatever their components, which are values.
-@inline function _trial_leaf(op::LazyOp{D}, c::Int, j::Int, z) where {D}
-    return OperatorScale{D, typeof(z), typeof(op)}(c == j ? one(z) : z, op), c == j
-end
-function _trial_piece(op::IndexedTrialFunction, j::Int, z, ::Symbol)
-    return _trial_leaf(op, op.component_idx, j, z)
-end
-for T in (
-    :BackwardDifference,
-    :ForwardDifference,
-    :CenteredDifference,
-    :StarDifference,
-    :CrossWeightedDifference,
-    :SecondDifference,
-    :JumpNode,
-    :BackwardAverage,
-    :ForwardAverage,
-    :CenteredAverage
-)
-    @eval function _trial_piece(op::$T{D, Dim}, j::Int, z, name::Symbol) where {D, Dim}
-        inner, reads = _trial_piece(op.inner_op, j, z, name)
-        return $T{D, Dim, typeof(inner)}(inner), reads
-    end
-end
-function _trial_piece(op::ShiftNode{D, Dim}, j::Int, z, name::Symbol) where {D, Dim}
-    inner, reads = _trial_piece(op.inner_op, j, z, name)
-    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner), reads
-end
-function _trial_piece(op::OperatorScale{D, S}, j::Int, z, name::Symbol) where {D, S}
-    inner, reads = _trial_piece(op.inner_op, j, z, name)
-    return OperatorScale{D, S, typeof(inner)}(op.scalar, inner), reads
-end
-function _trial_piece(op::GridFunctionScale{D, V}, j::Int, z, name::Symbol) where {D, V}
-    inner, reads = _trial_piece(op.inner_op, j, z, name)
-    return GridFunctionScale{D, V, typeof(inner)}(op.grid_function, inner), reads
-end
-function _trial_piece(op::OperatorAdd{D}, j::Int, z, name::Symbol) where {D}
-    l, lreads = _trial_piece(op.left_op, j, z, name)
-    r, rreads = _trial_piece(op.right_op, j, z, name)
-    return OperatorAdd{D, typeof(l), typeof(r)}(l, r), lreads | rreads
-end
-function _trial_piece(op, j::Int, z, name::Symbol)
-    c = _trial_component_class(op)
-    c isa Int || _throw_relation_unsplit(name, op)
-    return _trial_leaf(op, c, j, z)
-end
-
 @noinline function _throw_relation_unsplit(name::Symbol, op)
+    term = something(_unsplit_term(op), summary(op))
     throw(
         ArgumentError(
-        "the relation on :$name holds the term $(summary(op)), which cannot be split into " *
+        "the relation on :$name holds the term $term, which cannot be split into " *
         "one term per component it reads. Write the relation as a sum of facet operators " *
         "of one component each, such as `∂ₙ(u(1); K = K₁₁) + ∂ₙ(u(2); K = K₁₂)`.",
     ),
