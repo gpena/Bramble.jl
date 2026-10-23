@@ -62,9 +62,24 @@ so code generation would buy nothing here.
     t -> (
         shift_offset(t[1], Dim, delta), t[2]), inner)
 
-# `(left..., right...)` is already resolved at compile time for tuples; no metaprogramming
-# needed.
-@inline concatenate_stencils(left::Tuple, right::Tuple) = (left..., right...)
+# `(left..., right...)` is resolved at compile time while both operands hold at most
+# `_INLINED_ENTRIES` entries. A longer operand makes the splat run generically (a 27-entry
+# stencil with a 54-entry one: 2.5 µs, against 0.09 µs for the unrolled `ntuple`), which was
+# 92% of the warm `assemble!` of `innerₕ(Δₕ(Δₕ(u)), v)` on a 3D grid. Those are built out of
+# line, once per stencil type, as `_each_entry` does.
+@inline function concatenate_stencils(left::Tuple, right::Tuple)
+    max(length(left), length(right)) > _INLINED_ENTRIES &&
+        return _concatenate_outlined(left, right)
+    return (left..., right...)
+end
+
+@noinline function _concatenate_outlined(left::Tuple, right::Tuple)
+    n = length(left)
+    return ntuple(Val(n + length(right))) do k
+        @inline
+        return k <= n ? left[k] : right[k - n]
+    end
+end
 
 # Recursion on tuple structure (`_flatten_tuples`, below) rather than `Iterators.flatten`:
 # the latter does not stay type-stable for a tuple-of-tuples
