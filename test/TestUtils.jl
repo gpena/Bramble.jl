@@ -123,9 +123,8 @@ const WITH_SLOW_TESTS = TEST_GROUP in ("all", "slow", "full", "grids")
 # The draw is seeded by `GRID_SEED` mixed with the grid's name, so each grid draws
 # independently of the others and of the order they run in. `GRID_SEED` is
 # `BRAMBLE_TEST_GRID_SEED` when set, else drawn afresh per run, so successive nightlies
-# reach different parts of each grid. Each sampled grid prints the seed: a failing draw is
-# rerun exactly, on the same Julia version, with
-# `BRAMBLE_TEST_GRID_SEED=<seed> .claude/scripts/test.sh slow`.
+# reach different parts of each grid. A draw is rerun exactly, on the same Julia version,
+# with `BRAMBLE_TEST_GRID_SEED=<seed> .claude/scripts/test.sh slow`.
 const WITH_FULL_GRIDS = TEST_GROUP == "grids"
 const GRID_SEED = let s = get(ENV, "BRAMBLE_TEST_GRID_SEED", "")
     isempty(s) ? rand(Random.RandomDevice(), UInt32) : parse(UInt32, s)
@@ -147,8 +146,6 @@ function _grid_sample(name::AbstractString, items, incover, budget::Integer)
     drawn = rest[Random.randperm(rng, length(rest))[1:min(budget, length(rest))]]
     keep = map(incover, all_items)
     keep[drawn] .= true
-    println("grid \"", name, "\": ", count(keep), " of ", length(all_items),
-        " (", length(drawn), " drawn), BRAMBLE_TEST_GRID_SEED=", GRID_SEED)
     return all_items[keep]
 end
 
