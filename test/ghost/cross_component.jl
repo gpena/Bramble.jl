@@ -682,8 +682,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
             158, 105.85511569397478, 0.26577443390163735),
         (3, 5, (u, i, j) -> 2.0 * ∂ₙ(u(i)) + 0.5 * Dcᵧ(u(j) - u(i)) + 0.25 * Dc₂(u(i)),
             324, 255.3344468684748, 14.188956497806485))
-    @testset "Conormal look-alike: $(D)D, $(k)" for (k, (D, n, look, nE, sE, sd)) in
-                                                     enumerate(looks)
+    @testset "Conormal look-alike: $(D)D, $(k)" for (k, (D, n, look, nE, sE, sd)) in enumerate(looks)
         Ω = domain(foldl(×, ntuple(_ -> interval(0.0, 1.0), D)))
         Bramble._seed_mesh1d_rng!(7)
         Ωₕ = mesh(Ω, ntuple(_ -> n, D), ntuple(_ -> false, D))

@@ -27,10 +27,12 @@ end
 # and the closure's type must reach it as a constant. The relation closures capture
 # locals (`let`), never non-const globals, which infer `Any` for reasons outside Bramble.
 _in_constrained(f) = (mi = f.linfo; mi isa Core.MethodInstance && mi.def isa Method &&
-                                    mi.def.name === :constrained)
+                                        mi.def.name === :constrained)
 _constrained_reports(rs) = count(r -> any(_in_constrained, r.vst), JET.get_reports(rs))
-_constrained_reports(W, rels) = _constrained_reports(
-    JET.report_opt(Bramble.constrained, (typeof(W), typeof(rels)); target_modules = (Bramble,)))
+function _constrained_reports(W, rels)
+    _constrained_reports(
+        JET.report_opt(Bramble.constrained, (typeof(W), typeof(rels)); target_modules = (Bramble,)))
+end
 
 @testset "JET constrained frames" begin
     if isempty(VERSION.prerelease)

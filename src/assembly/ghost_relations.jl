@@ -592,6 +592,7 @@ function _add_term(acc, P, t::LazyOp, j::Int, g::Val, facet::Tuple)
     Is, Js, Us = acc
     Vs = _widened(Us, eltype(M))
     for col in axes(M, 2), q in nzrange(M, col)
+
         v = nonzeros(M)[q]
         iszero(v) && continue                # the form stores its whole pattern
         push!(Is, rowvals(M)[q] + oc), push!(Js, col + offsets[j]), push!(Vs, v)
