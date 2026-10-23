@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=50523a1c">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=beda7865">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces — Bramble.jl">
   <meta property="og:title" content="Grid spaces — Bramble.jl">
@@ -57,6 +57,7 @@
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
+        <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
@@ -1105,14 +1106,14 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 <div class="md-docstring" id="Bramble.polygon_spaces">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.polygon_spaces</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/polygon_space.jl#L13-L48" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/polygon_space.jl#L13-L51" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">polygon_spaces(Ωₕ::MeshnD{2}, label::Symbol, g) -&gt; (U, W)</code></pre>
 </div>
-<p>The trial space <code class="md-code-inline">U</code> and the test space <code class="md-code-inline">W</code> of the scheme of Ferreira and Grigorieff (2006) on the polygon marked <code class="md-code-inline">label</code> on <code class="md-code-inline">Ωₕ</code>, a mesh of a domain with the marker <code class="md-code-inline">label =&gt; polygon(vertices)</code>, with the Dirichlet datum <code class="md-code-inline">g(x)</code> on the polygon&#39;s boundary.</p>
+<p>The trial space <code class="md-code-inline">U</code> and the test space <code class="md-code-inline">W</code> of the scheme of Ferreira and Grigorieff (2006) on the region marked <code class="md-code-inline">label</code> on <code class="md-code-inline">Ωₕ</code>, a mesh of a domain with the marker <code class="md-code-inline">label =&gt; polygon(vertices)</code> or <code class="md-code-inline">label =&gt; levelset(φ)</code>, with the Dirichlet datum <code class="md-code-inline">g(x)</code> on the region&#39;s boundary nodes. For a level-set marker the region is the polygon that <code class="md-code-inline">mesh</code> inscribes in the curve <span class="md-math md-math-inline">\(φ = 0\)</span> (its vertices are the boundary nodes), and <code class="md-code-inline">g</code> is read at those vertices, not projected onto the curve: a vertex lies off the curve by <span class="md-math md-math-inline">\(O(h^2)\)</span>.</p>
 <p>Both are <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a>s over <code class="md-code-inline">Ωₕ</code>, whose degrees of freedom are the interior nodes of the polygon (the label <code class="md-code-inline">label</code>), in the mesh&#39;s linear order. <code class="md-code-inline">lift(U, u)</code> is the grid function on all of <code class="md-code-inline">Ωₕ</code>: <code class="md-code-inline">u</code> at the interior nodes, <code class="md-code-inline">g</code> at the boundary nodes (<code class="md-code-inline">Symbol(label, :_boundary)</code>), the extension (3.2) of the paper at each exterior diagonal neighbour <code class="md-code-inline">p = k + (sx, sy)</code> of an interior node <code class="md-code-inline">k</code>, <code class="md-code-inline">u_p = u_{k+(sx,0)} + u_{k+(0,sy)} − u_k</code>, and 0 at every other node. <code class="md-code-inline">W</code> selects the interior nodes. Assemble with <code class="md-code-inline">form(U, W, f)</code> and <code class="md-code-inline">form(W, f)</code>:</p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -1124,7 +1125,7 @@ uₕ = Bramble.lift(U, A \ F)</code></pre>
 <p>A form may read, in the equation of an interior node, its 5-point neighbours and its diagonal neighbours (<code class="md-code-inline">Δₕ</code>, <code class="md-code-inline">Dcₓ(Dcᵧ(u))</code>, first differences): an exterior node beyond them has no value and the form throws. An exterior node two interior nodes extend differently (a V-notch) is substituted per reading equation in the reduction.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: if <code class="md-code-inline">Ωₕ</code> has no polygon marker <code class="md-code-inline">label</code>; if the grid does not fit the polygon (a cell holding interior and exterior nodes other than across a diagonal between two boundary nodes, as after <code class="md-code-inline">change_points!</code> to lines the closure would not give); if the polygon has no interior node. <code class="md-code-inline">form(U, U, f)</code> and <code class="md-code-inline">form(U, f)</code> throw, as <code class="md-code-inline">U</code> is no test space, and so does <code class="md-code-inline">dirichlet =</code> in <code class="md-code-inline">assemble</code>: <code class="md-code-inline">g</code> fixes the boundary.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: if <code class="md-code-inline">Ωₕ</code> has no polygon or level-set marker <code class="md-code-inline">label</code>; if the grid does not fit the region (a cell holding interior and exterior nodes other than across a diagonal between two boundary nodes, as after <code class="md-code-inline">change_points!</code> to lines the closure would not give); if the region has no interior node. <code class="md-code-inline">form(U, U, f)</code> and <code class="md-code-inline">form(U, f)</code> throw, as <code class="md-code-inline">U</code> is no test space, and so does <code class="md-code-inline">dirichlet =</code> in <code class="md-code-inline">assemble</code>: <code class="md-code-inline">g</code> fixes the boundary.</p>
 </li>
 </ul>
 </div>
@@ -1161,6 +1162,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=50523a1c"></script>
+  <script src="../../assets/materialdocs.js?v=beda7865"></script>
 </body>
 </html>
