@@ -150,18 +150,12 @@ jobs:
         env:
           BRAMBLE_TEST_GROUP: slow
           BRAMBLE_TEST_SHARD: ${{ matrix.shard }}
-          # Below this macOS runner's 7 GB, so a blow-up fails by name (see TestUtils.jl)
-          # before the runner just kills the job. The unsharded group peaked at 3.53 GB on
-          # 2026-10-20. Coverage is on by default here.
-          #
-          # 6 is a stopgap; it was 5. The same commit and shard peaked at 2.57 GB on one
-          # runner and 5.56 GB on another (forms-1, runs 39580418315 and 39590231313,
-          # 2026-10-21), every file growing about twice as much, and 5 failed eight files that
-          # had no failing test. The cause is not known: a local 16 GB Mac peaked at 3.88 GB,
-          # and --heap-size-hint=4G did not lower it (4.05 GB). The trace's `memory:` line
-          # now records each runner's total memory; put this back to 5 once that explains
-          # the high runners.
-          BRAMBLE_TEST_MAXRSS_GB: 6
+          # 0.7 of the runner's memory (4.9 GB on a 7 GB macOS runner, 9.8 GB on a 14 GB one),
+          # so a blow-up fails by name (see TestUtils.jl) before the runner just kills the job.
+          # A fraction, not a fixed figure: the peak follows the runner's size, and the same
+          # forms-1 shard peaked at 2.70 GB on 7 GB and 6.13 GB on 14 GB (runs 39943360340 and
+          # 40009578770, 2026-10-23). Coverage is on by default here.
+          BRAMBLE_TEST_MAXRSS_FRACTION: 0.7
 
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v7
@@ -217,7 +211,7 @@ jobs:
       - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: convergence
-          BRAMBLE_TEST_MAXRSS_GB: 6
+          BRAMBLE_TEST_MAXRSS_FRACTION: 0.7
 
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v7
@@ -284,9 +278,9 @@ jobs:
       - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
         env:
           BRAMBLE_TEST_GROUP: slow
-          # 5, below the macOS leg's 7 GB runner, so a blow-up fails by name (see
+          # 0.7 of the runner's memory (see `slow`), so a blow-up fails by name (see
           # TestUtils.jl) before the runner just kills the job. Coverage is on by default here.
-          BRAMBLE_TEST_MAXRSS_GB: 5
+          BRAMBLE_TEST_MAXRSS_FRACTION: 0.7
 
   quality:
     name: Quality (Aqua & JET, Julia ${{ matrix.version }})
