@@ -22,7 +22,7 @@ module GhostCrossComponentTests
 using Test
 using Bramble
 import Bramble
-using Bramble: lift, lift!, Dcₓ, Dcᵧ, D̃ₓ, D̃ᵧ, D₋ₓ, D₋ᵧ
+using Bramble: lift, lift!, Dcₓ, Dcᵧ, Dc₂, D̃ₓ, D̃ᵧ, D₋ₓ, D₋ᵧ
 using LinearAlgebra: Diagonal, dot, eigvals, norm
 using SparseArrays: nnz, sparse
 using Random: Xoshiro
@@ -668,19 +668,28 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
 
     # A sum of the type of a conormal block `∂ₙ(u; K)` whose leaves read different
     # components, `2.0 * ∂ₙ(u(1)) + 0.5 * Dcᵧ(u(2))` on :xmax (on :xmin ∂ₙ's sign makes it
-    # another type), is split per leaf, not refused as one term. The figures are those of
-    # 7ef3c01b, which split every sum per leaf, on the seeded meshes below.
-    @testset "Conormal look-alike: $(D)D" for (D, n, nE, sE, sd) in (
-        (2, 7, 124, 106.78267354096216, 1.1959849525573678),
-        (3, 5, 276, 232.87239700090944, 14.188956497806485))
+    # another type), is split per leaf, not refused as one term; so is one whose leaf reads
+    # several itself, `0.5 * Dcᵧ(u(2) - u(1))` (a strain's tangential term). The figures
+    # are those of 7ef3c01b, which split every sum per leaf, on the seeded meshes below.
+    looks = (
+        (2, 7, (u, i, j) -> 2.0 * ∂ₙ(u(i)) + 0.5 * Dcᵧ(u(j)),
+            124, 106.78267354096216, 1.1959849525573678),
+        (3, 5, (u, i, j) -> 2.0 * ∂ₙ(u(i)) + 0.5 * Dcᵧ(u(j)) + 0.25 * Dc₂(u(i)),
+            276, 232.87239700090944, 14.188956497806485),
+        (2, 7, (u, i, j) -> 2.0 * ∂ₙ(u(i)) + 0.5 * Dcᵧ(u(j) - u(i)),
+            148, 109.56534708192434, 1.1959849525573678),
+        (2, 7, (u, i, j) -> 2.0 * ∂ₙ(3.0 * (u(i) + 0.5 * u(j))) + 0.5 * Dcᵧ(u(j)),
+            158, 105.85511569397478, 0.26577443390163735),
+        (3, 5, (u, i, j) -> 2.0 * ∂ₙ(u(i)) + 0.5 * Dcᵧ(u(j) - u(i)) + 0.25 * Dc₂(u(i)),
+            324, 255.3344468684748, 14.188956497806485))
+    @testset "Conormal look-alike: $(D)D, $(k)" for (k, (D, n, look, nE, sE, sd)) in
+                                                     enumerate(looks)
         Ω = domain(foldl(×, ntuple(_ -> interval(0.0, 1.0), D)))
         Bramble._seed_mesh1d_rng!(7)
         Ωₕ = mesh(Ω, ntuple(_ -> n, D), ntuple(_ -> false, D))
         Bramble._unseed_mesh1d_rng!()
         S = gridspace(Ωₕ; ghosts = :boundary)
         others = filter(!=(:xmax), (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)[1:(2D)])
-        look = (u, i, j) -> D == 2 ? 2.0 * ∂ₙ(u(i)) + 0.5 * Dcᵧ(u(j)) :
-                            2.0 * ∂ₙ(u(i)) + 0.5 * Dcᵧ(u(j)) + 0.25 * Bramble.Dc₂(u(i))
         rels = u -> (:xmax => look(u, 1, 2) => 1.0, :xmax => look(u, 2, 1) => 2.0,
             (G => u(i) => 0.0 for G in others for i in 1:2)...,
             (G => ∂ₙₙ(u(i)) => 0.0 for G in others for i in 1:2)...)

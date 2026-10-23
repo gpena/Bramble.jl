@@ -491,8 +491,10 @@ _holds_sum(::Any) = false
 # `acc` with the block of each term of `terms` added, unrolled. A term reads one component,
 # a value that only places its block (`_add_term`). A term reading several that holds a
 # sum, a sum of the type of a conormal block whose leaves read different components, such
-# as `2.0 * ∂ₙ(u(1)) + 0.5 * Dcᵧ(u(2))` on :xmax, is split per leaf (`_add_block_leaves`):
-# both paths have types fixed by the term's, so its components only choose between them.
+# as `2.0 * ∂ₙ(u(1)) + 0.5 * Dcᵧ(u(2))` on :xmax, is split per leaf (`_add_block_leaves`),
+# or, where a leaf holds a sum itself, `0.5 * Dcᵧ(u(2) - u(1))`, into terms without sums
+# (`_add_split_terms`), which of the two read off the term's type: both paths have types
+# fixed by the term's, so its components only choose between them.
 # Any other term reading several, or none, is refused, naming the first node below its
 # differences, scales and sums that reads no one component (`_unsplit_term`, `nothing`
 # where every node reads one).
@@ -504,7 +506,12 @@ _holds_sum(::Any) = false
         acc′ = _add_term(acc, P, t, k, g, facet)
     else
         _holds_sum(t) || _throw_relation_unsplit(_val(facet[3]), t)
-        acc′ = _add_block_leaves(acc, P, t, _block_leaves(t), 1, g, facet)
+        leaves = _block_leaves(t)
+        acc′ = if _leaves_hold_sums(leaves)
+            _add_split_terms(acc, P, _split_terms(t), g, facet)
+        else
+            _add_block_leaves(acc, P, t, leaves, 1, g, facet)
+        end
     end
     return _add_terms(acc′, P, Base.tail(terms), g, facet)
 end
@@ -519,6 +526,30 @@ end
     k isa Int || _throw_relation_unsplit(_val(facet[3]), t)
     acc′ = _add_term(acc, P, first(_block_part(t, e, 1)), k, g, facet)
     return _add_block_leaves(acc′, P, t, Base.tail(leaves), e + 1, g, facet)
+end
+
+# `acc` with each of `terms`, which hold no sum, added: a function of its own, so that
+# inference never meets `_add_terms` inside itself on another tuple of terms.
+@inline _add_split_terms(acc, P, ::Tuple{}, g::Val, facet::Tuple) = acc
+@inline function _add_split_terms(acc, P, terms::Tuple, g::Val, facet::Tuple)
+    t = first(terms)
+    k = _trial_component_class(t)
+    k isa Int || _throw_relation_unsplit(_val(facet[3]), t)
+    acc′ = _add_term(acc, P, t, k, g, facet)
+    return _add_split_terms(acc′, P, Base.tail(terms), g, facet)
+end
+
+# The terms of `op` with every sum split, conormal blocks too.
+_split_terms(op::OperatorAdd) = (_split_terms(op.left_op)..., _split_terms(op.right_op)...)
+function _split_terms(op::_SplitWrapper)
+    return map(t -> _rebuilt_around(op, t), _split_terms(op.inner_op))
+end
+_split_terms(op) = (op,)
+
+# Whether a leaf of `leaves` holds a sum below its coefficient, by type.
+_leaves_hold_sums(::Tuple{}) = false
+function _leaves_hold_sums(leaves::Tuple)
+    return _holds_sum(first(leaves).inner_op) || _leaves_hold_sums(Base.tail(leaves))
 end
 
 # The leaves of the conormal block `op` holds, under its differences and scales, in order.
