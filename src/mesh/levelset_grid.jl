@@ -114,7 +114,7 @@ function _levelset_orbit_grid(φ, xs::AbstractVector, ys::AbstractVector, ρ::Re
     r = ""
     for _ in 1:2
         X, Y, V = _levelset_orbits(φ, B, c, θₗ, Float64(ρ), N, (ex[2] - ex[1]) / ℓ)
-        r = _levelset_fit(φ, c, sort!([X; kx]), sort!([Y; ky]), V; T)
+        r = _levelset_fit(φ, c, sort!([X; kx]), sort!([Y; ky]), V, T)
         r isa String || return r
         N = _levelset_N(Float64(ρ), nin, Float64(cmax), N)
         iszero(N) && break
@@ -355,7 +355,7 @@ function _levelset_cyclic_solve!(x, d, e, r, work)
 end
 
 """
-    _levelset_fit(φ, c, X, Y, V; T) -> (X::Vector{T}, Y::Vector{T}, P::Polygon{T}) or String
+    _levelset_fit(φ, c, X, Y, V[, T]) -> (X::Vector{T}, Y::Vector{T}, P::Polygon{T}) or String
 
 Convert the lines `X`, `Y` and the vertices `V` (each on a node) to `T` (default: the lines'
 type), order the vertices by angle about the interior point `c` into a counter-clockwise
@@ -373,8 +373,13 @@ polygon, and check the grid fits it (architect §3.3 step 9). Returns the reason
 The polygon is built without `polygon`'s validation (quadratic in the vertices): the check
 certifies it.
 """
-function _levelset_fit(φ, c::NTuple{2, Float64}, X::AbstractVector, Y::AbstractVector, V::AbstractVector;
-        T::Type = float(promote_type(eltype(X), eltype(Y))))
+function _levelset_fit(φ, c::NTuple{2, Float64}, X::AbstractVector, Y::AbstractVector, V::AbstractVector)
+    return _levelset_fit(φ, c, X, Y, V, float(promote_type(eltype(X), eltype(Y))))
+end
+
+# `T` is positional so that it specialises: as a keyword it is a `DataType` (#892).
+function _levelset_fit(φ, c::NTuple{2, Float64}, X::AbstractVector, Y::AbstractVector, V::AbstractVector,
+        ::Type{T}) where {T}
     XT, YT = T.(X), T.(Y)
     W = NTuple{2, T}[(T(v[1]), T(v[2])) for v in V]
     all(isfinite, XT) && all(isfinite, YT) && all(v -> isfinite(v[1]) && isfinite(v[2]), W) ||

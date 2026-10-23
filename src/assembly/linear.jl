@@ -43,9 +43,29 @@ test_space(form::LinearForm) = form.test_space
 @inline function (form::LinearForm)(vₕ::VectorElement)
     ast = form.ast
     space = form.test_space
-    T = promote_type(_assembled_eltype(ast, space), eltype(parent(vₕ)))
+    v = parent(vₕ)
+    _check_contract_length(space, v)
+    T = promote_type(_assembled_eltype(ast, space), eltype(v))
 
-    return _contract_linear_core(space, ast, parent(vₕ), zero(T))
+    return _contract_linear_core(space, ast, v, zero(T))
+end
+
+# The contraction reads `v` with `@inbounds` at the rows the sweep reaches, so an element of
+# another space must be refused before it starts: a short one would be read out of bounds, a
+# long one would be summed as if its tail were absent.
+@inline function _check_contract_length(space, v::AbstractVector)
+    Base.require_one_based_indexing(v)
+    length(v) == ndofs(space) || _throw_contract_length(ndofs(space), length(v))
+    return nothing
+end
+
+@noinline function _throw_contract_length(expected::Int, actual::Int)
+    throw(
+        DimensionMismatch(
+        "a linear form on a test space with $expected degrees of freedom cannot contract " *
+        "a vector of length $actual",
+    ),
+    )
 end
 
 @noinline function (form::LinearForm)(v::AbstractVector)

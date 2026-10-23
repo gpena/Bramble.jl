@@ -130,6 +130,16 @@ end
     @test d <= 0.25
 end
 
+# The element type reaches `_levelset_fit` positionally, so the result infers (#892).
+@testset "The grid infers on both paths" begin
+    rng = MersenneTwister(6)
+    for T in (Float64, Float32), φ in (ellipse(π / 6), disk)
+        xs, ys = T.(seeds(rng, -1.25, 1.25, 40)), T.(seeds(rng, -1.25, 1.25, 40))
+        X, Y, P = @inferred Bramble._levelset_grid(φ, xs, ys)
+        @test P isa Bramble.Polygon{T}
+    end
+end
+
 @testset "Named errors" begin
     rng = MersenneTwister(6)
     φ = ellipse(π / 6)
