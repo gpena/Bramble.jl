@@ -208,9 +208,10 @@ jobs:
           # The `convergence` leg runs its own group, unsharded; the others a `unit` shard.
           BRAMBLE_TEST_GROUP: ${{ matrix.shard == 'convergence' && 'convergence' || 'unit' }}
           BRAMBLE_TEST_SHARD: ${{ matrix.shard != 'convergence' && matrix.shard || '' }}
-          # 5, below this macOS runner's 7 GB, so a blow-up fails by name (see TestUtils.jl)
-          # before the runner just kills the job. Coverage is on here, as it was by default.
-          BRAMBLE_TEST_MAXRSS_GB: 5
+          # 0.7 of the runner's memory (4.9 GB on 7 GB), so a blow-up fails by name (see
+          # TestUtils.jl) before the runner just kills the job. Coverage is on here, as it was
+          # by default.
+          BRAMBLE_TEST_MAXRSS_FRACTION: 0.7
 
   # The check branch protection requires, for the reason release-gate.yml's `result` job
   # gives: `test` is a matrix job skipped by its `if:` when no code changed, and a skipped

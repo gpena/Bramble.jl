@@ -236,15 +236,19 @@ TRACE_TESTS && Base.cumulative_compile_timing(true)
 # first file whose *end-of-file* peak crosses the budget is the one that fails -- not
 # necessarily the file that allocated the most, only the one that tipped the running total
 # over. Parsed once here rather than in every call to `traced_include`.
-const MAXRSS_BUDGET_GB = let v = get(ENV, "BRAMBLE_TEST_MAXRSS_GB", "")
-    isempty(v) ? nothing : parse(Float64, v)
+#
+# The budget is a fraction of the machine's memory, not a fixed figure: the peak follows the
+# runner's size, since the GC lets the heap grow further before collecting where there is
+# more memory. The same forms-1 shard peaked at 2.70 GB on a 7 GB macOS runner and 6.13 GB on
+# a 14 GB one (nightly runs 39943360340 and 40009578770), and a fixed budget low enough to
+# fail by name on the first is too low for the second.
+const MAXRSS_BUDGET_GB = let v = get(ENV, "BRAMBLE_TEST_MAXRSS_FRACTION", "")
+    isempty(v) ? nothing : round(parse(Float64, v) * Sys.total_memory() / 1024^3; digits = 2)
 end
 
 # The machine's memory and the `--heap-size-hint` the test process got, once at the top of
-# the trace. The same commit peaked at 2.57 GB on one macOS runner and 5.56 GB on another
-# (nightly runs 39580418315 and 39590231313, forms-1), for no reason the log could show:
-# with these figures in it, a high run can be checked against the runner it got. A hint of
-# 0 means none was passed.
+# the trace, so a high run can be checked against the runner it got. A hint of 0 means none
+# was passed.
 if TRACE_TESTS
     let total_gb = Sys.total_memory() / 1024^3
         hint_gb = Base.JLOptions().heap_size_hint / 1024^3
