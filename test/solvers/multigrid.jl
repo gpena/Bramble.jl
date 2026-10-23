@@ -11,7 +11,7 @@ using LinearSolve: LinearProblem, KrylovJL_CG, solve
 using ForwardDiff: ForwardDiff
 using Random
 using ..TestUtils: MG_SEED, TEST_DIMS, WITH_3D_TESTS, ZeroBasedVector, _mg_jitter_mesh, _mg_spd,
-                   _mg_transfer_meshes
+                   _mg_transfer_meshes, alloc_ok
 
 # Geometric multigrid. Meshes are non-uniform throughout: on a uniform
 # mesh rebuilding each level from the domain would nest too, and hide a hierarchy that does
@@ -655,7 +655,7 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
         @test F.p != 1:4
         y = copy(c)
         @test ldiv!(F, y) === y && isapprox(A * y, c; rtol = 100eps(T))
-        @test (@allocated ldiv!(F, y)) == 0
+        @test alloc_ok(@allocated ldiv!(F, y))
     end
 
     # Float32 stays Float32 and allocation-free.
@@ -663,7 +663,7 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
     P32 = gmg_preconditioner(_mg_spd, Ω32)
     b32 = randn(Float32, npoints(Ω32))
     @test eltype(P32) === Float32 && eltype(P32 \ b32) === Float32
-    @test _mg_ldalloc(zeros(Float32, npoints(Ω32)), P32, b32) == 0
+    @test alloc_ok(_mg_ldalloc(zeros(Float32, npoints(Ω32)), P32, b32))
     # The default tolerance √eps(Float32) sits above Float32's rounding floor; one below it
     # is refused with a message naming the tolerance and the element type.
     u32 = gmg_solve(_mg_spd, Ω32, b32)

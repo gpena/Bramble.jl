@@ -54,6 +54,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("centered_vector_calculus.jl")
         # The ghost-point plan (v4.0.0): its files are split between the two shards by cost.
         include("laplacian_form.jl")
+        # A stencil of more than 32 entries stays on the unrolled paths (#853).
+        include("long_stencil_allocations.jl")
         include("repeated_assemble.jl")
         include("ghost_mode_a.jl")
         include("ghost_corners.jl")

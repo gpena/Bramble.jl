@@ -827,7 +827,7 @@ Base.@propagate_inbounds function _product_entries(
     roffs = entry_offsets(right)
     rwts = entry_weights(right)
     if G && !_sink_needs_coordinates(sink)
-        rows_in = map(o -> _test_inbounds(lin_indices, I, o[1]), roffs)
+        rows_in = _each_entry(o -> _test_inbounds(lin_indices, I, o[1]), roffs)
         for i in eachindex(lwts)
             _trial_inbounds(lin_indices, I, loffs[i][1]) || continue
             wl = lwts[i]
