@@ -32,8 +32,8 @@ struct _RowsDirichlet
     conflict::BitVector
 end
 
-function _RowsDirichlet(physical::Bool, facets::Vector{BitVector}, polygon::Bool = false)
-    return _RowsDirichlet(physical, facets, polygon, false, BitVector(), BitVector(),
+function _RowsDirichlet(physical::Bool, facets::Vector{BitVector})
+    return _RowsDirichlet(physical, facets, false, false, BitVector(), BitVector(),
         BitVector())
 end
 

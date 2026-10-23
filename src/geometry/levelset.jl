@@ -24,8 +24,9 @@ Wrap the function `φ(x)`, `x = (x₁, x₂)`, as a 2D level-set marker. In a do
 (nodes on the curve `φ = 0`) and `D_exterior` (nodes where `φ > 0`).
 
 `φ` must return a real number, not a `Bool`. It need not be a signed distance; a mesh
-locates each crossing of `φ = 0` along an edge by bracketing the root, so `φ` only has to
-change sign across the curve. With a `time_set`, `φ` still takes `x` alone.
+samples each grid line at 129 points and bisects every sign change, so `φ` only has to
+change sign across the curve. Two roots on a line closer than its sample spacing are
+missed. With a `time_set`, `φ` still takes `x` alone.
 
 # Examples
 ```jldoctest
@@ -41,40 +42,6 @@ labels(Ω)
 See also: [`polygon`](@ref), [`domain`](@ref).
 """
 levelset(φ) = LevelSet(φ)
-
-@noinline function _throw_crossing_error(a, b)
-    throw(ArgumentError("levelset crossing: φ must have opposite signs at the two nodes, got $a and $b."))
-end
-
-# The parameter t ∈ [0, 1] of the root of φ on the segment p → q, for nodes where φ has
-# opposite signs (either order): bisection on the bracket [lo, hi], stopped when it cannot be
-# halved in the floating-point type. Bisection cannot leave the bracket, which a secant or
-# Newton step can on a φ that is not a signed distance. A zero of φ at an endpoint is
-# returned as 0 or 1.
-function _crossing(L::LevelSet, p, q)
-    T = float(promote_type(typeof(p[1]), typeof(p[2]), typeof(q[1]), typeof(q[2])))
-    x1, x2 = T(p[1]), T(p[2])
-    d1, d2 = T(q[1]) - x1, T(q[2]) - x2
-    φ(t) = L.φ((x1 + t * d1, x2 + t * d2))
-    fa, fb = φ(zero(T)), φ(one(T))
-    (fa * fb > 0 || isnan(fa) || isnan(fb)) && _throw_crossing_error(fa, fb)
-    iszero(fa) && return zero(T)
-    iszero(fb) && return one(T)
-    lo, hi = zero(T), one(T)
-    sa = signbit(fa)
-    while true
-        mid = (lo + hi) / 2
-        (mid <= lo || mid >= hi) && break
-        fm = φ(mid)
-        iszero(fm) && return mid
-        if signbit(fm) == sa
-            lo = mid
-        else
-            hi = mid
-        end
-    end
-    return (lo + hi) / 2
-end
 
 # Bisection for the root of f in [a, b] where f(a) < 0 differs in sign from f(b) (`neg_a`
 # says whether f(a) < 0); stops when the bracket cannot be halved. Returns its midpoint.

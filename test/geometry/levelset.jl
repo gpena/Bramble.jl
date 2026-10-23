@@ -2,21 +2,18 @@ module GeometryLevelSetTests
 
 using Test
 using Bramble
-using Bramble: LevelSet, _crossing, _crossings, conditions, regions
+using Bramble: LevelSet, _crossings, conditions, regions
 
 circle(p) = hypot(p[1], p[2]) - 1
-cubic(p) = p[1]^3 + p[2] - 0.3
 const X2 = interval(-1.25, 1.25) × interval(-1.25, 1.25)
 
 @testset "LevelSet" begin
     # Invariants tested:
     # 1. `levelset` is a marker value, not a predicate, and joins `regions` with three labels.
-    # 2. `_crossing` returns the root on the segment to rounding, in either node order, for a
-    #    signed distance and for a function that is not one, in Float32 too.
-    # 3. `_crossings` returns every root on a grid line, sorted. It finds two on a circle in
+    # 2. `_crossings` returns every root on a grid line, sorted. It finds two on a circle in
     #    either axis and a near-tangent pair, none off the curve, and four on a wavy curve.
-    # 4. Invalid use throws an ArgumentError (same signs, reserved or clashing label, not 2D,
-    #    a Bool predicate).
+    # 3. Invalid use throws an ArgumentError (reserved or clashing label, not 2D, a Bool
+    #    predicate).
     L = levelset(circle)
 
     @testset "marker value" begin
@@ -32,22 +29,6 @@ const X2 = interval(-1.25, 1.25) × interval(-1.25, 1.25)
         # A time set leaves φ taking x alone.
         T = interval(0.0, 1.0)
         @test labels(domain(X2, T, :D => L)) == (:D, :D_boundary, :D_exterior)
-    end
-
-    @testset "crossing" begin
-        @test _crossing(L, (0.0, 0.0), (0.8, 0.9)) ≈ 1 / hypot(0.8, 0.9) atol = 1e-14
-        @test _crossing(L, (2.0, 0.0), (0.0, 0.0)) ≈ 0.5 atol = 1e-14
-        @test _crossing(levelset(cubic), (0.0, 0.0), (1.0, 0.0)) ≈ cbrt(0.3) atol = 1e-14
-        t = _crossing(L, (0.0, 0.0), (0.8, 0.9))
-        @test 1 - _crossing(L, (0.8, 0.9), (0.0, 0.0)) ≈ t atol = 1e-14
-        # A root at an endpoint.
-        @test _crossing(L, (1.0, 0.0), (2.0, 0.0)) == 0.0
-        @test _crossing(L, (0.0, 0.0), (1.0, 0.0)) == 1.0
-        t32 = _crossing(L, (0.0f0, 0.0f0), (2.0f0, 0.0f0))
-        @test t32 isa Float32
-        @test t32 ≈ 0.5f0 atol = 2.0f-7
-        @test_throws ArgumentError _crossing(L, (0.0, 0.0), (0.5, 0.0))
-        @test_throws ArgumentError _crossing(L, (2.0, 0.0), (0.0, 2.0))
     end
 
     @testset "crossings" begin

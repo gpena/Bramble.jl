@@ -285,13 +285,13 @@ end
 const _Moves = Tuple{Vector{Int}, Vector{Int}, Vector{Int}}
 _exterior_moves(::_GhostSide, ::_GhostSide, ::SparseMatrixCSC) = (Int[], Int[], Int[])
 
-# The reach guard and the moves on a space of polygon_spaces as the trial side. The test
-# space there extends nothing, so every exterior node is unclosed. A tested row (one `E_v`
-# reads) may read an exterior node only at a diagonal neighbour the (3.2) extension gives.
-# An entry at an unclosed node, or at an extended one off the diagonals, is a stencil wider
-# than the scheme's, and throws. An entry `a` of row `i` at a conflict node `i + (sx, sy)`
-# moves onto the reader's own (3.2) row: `+a` at `i + (sx, 0)` and `i + (0, sy)`, the two
-# Γ corners, and `−a` at `i`.
+# The reach guard and the moves on a polygon_spaces trial side.
+# With the test space of polygon_spaces as trial side, every exterior node is unclosed.
+# A tested row (one `E_v` reads) may read an exterior node only at a diagonal neighbour the
+# (3.2) extension gives. An entry at an unclosed node, or at an extended one off the
+# diagonals, is a stencil wider than the scheme's, and throws. An entry `a` of row `i` at a
+# conflict node `i + (sx, sy)` moves onto the reader's own (3.2) row: `+a` at `i + (sx, 0)`
+# and `i + (0, sy)`, the two Γ corners, and `−a` at `i`.
 function _exterior_moves(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, A_pad::SparseMatrixCSC)
     rows = Wₕ.rows
     moves = (Int[], Int[], Int[])
@@ -345,7 +345,13 @@ end
 end
 
 @noinline function _throw_polygon_rank_one()
-    throw(ArgumentError("forms on polygon spaces do not support rank-one terms yet."))
+    throw(
+        ArgumentError(
+        "form(U, V, f) on the spaces of polygon_spaces holds a rank-one term (a product of " *
+        "two integrals), which polygon forms do not support: assemble the form without it " *
+        "and add the term as a `RankOneUpdate` of the matrix.",
+    ),
+    )
 end
 
 function form(Vₕ::GhostGridSpace, f)
@@ -650,9 +656,9 @@ end
     return rows.facets[2(d - 1) + s]
 end
 
-# Without `dirichlet_components`, the call of `matrix_free_operator`, which applies
-# `E_vᵀ A_pad E_u` and so refuses a form that reads a conflict node of its trial space in
-# a tested row: the substitution per reading equation lives in the reduction map alone.
+# The check of `matrix_free_operator`, which applies `E_vᵀ A_pad E_u`: it refuses a form
+# reading a conflict node of its trial space in a tested row, whose substitution per reading
+# equation is in the reduction map alone.
 function _check_rows(a::GhostBilinearForm, labels)
     _reads_conflict(a) && _throw_polygon_conflict("the matrix-free operator")
     return _check_rows(a.rows, (a.test_space, a.trial_space), labels)

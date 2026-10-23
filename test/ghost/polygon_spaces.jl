@@ -240,8 +240,9 @@ end
         @test_throws ArgumentError form(U, W, (w, v) -> innerₕ(Dcₓ(Dcₓ(w)), v))
         @test_throws ArgumentError assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v)),
             l; dirichlet = (:P_boundary => uq,))
-        @test_throws ArgumentError form(U, W,
+        e = @test_throws ArgumentError form(U, W,
             (w, v) -> innerₕ(w, v) + 2.0 * innerₕ(x -> 1.0, w) * innerₕ(x -> 1.0, v))
+        @test occursin("RankOneUpdate", e.value.msg) && occursin("without it", e.value.msg)
         # A grid line the closure would not give: y = 1.3 crosses the oblique edges off
         # the nodes.
         Mf = mesh(Ω, (7, 6), (true, true))
