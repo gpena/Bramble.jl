@@ -24,7 +24,7 @@ using Bramble
 import Bramble
 using Bramble: lift, lift!, Dcₓ, Dcᵧ, D̃ₓ, D̃ᵧ, D₋ₓ, D₋ᵧ
 using LinearAlgebra: Diagonal, dot, eigvals, norm
-using SparseArrays: nnz
+using SparseArrays: nnz, sparse
 using Random: Xoshiro
 
 using ..TestUtils: WITH_SLOW_TESTS
@@ -664,6 +664,30 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
             u -> (traction(:xmin)(u)..., disp(:xmax)(u)..., disp(:ymin)(u)...,
                 disp(:ymax)(u)...))
         @test refuses(() -> form(C, C, fe), "three nodes along axis 1, which has 2")
+    end
+
+    # A sum of the type of a conormal block `∂ₙ(u; K)` whose leaves read different
+    # components, `2.0 * ∂ₙ(u(1)) + 0.5 * Dcᵧ(u(2))` on :xmax (on :xmin ∂ₙ's sign makes it
+    # another type), is split per leaf, not refused as one term. The figures are those of
+    # 7ef3c01b, which split every sum per leaf, on the seeded meshes below.
+    @testset "Conormal look-alike: $(D)D" for (D, n, nE, sE, sd) in (
+        (2, 7, 124, 106.78267354096216, 1.1959849525573678),
+        (3, 5, 276, 232.87239700090944, 14.188956497806485))
+        Ω = domain(foldl(×, ntuple(_ -> interval(0.0, 1.0), D)))
+        Bramble._seed_mesh1d_rng!(7)
+        Ωₕ = mesh(Ω, ntuple(_ -> n, D), ntuple(_ -> false, D))
+        Bramble._unseed_mesh1d_rng!()
+        S = gridspace(Ωₕ; ghosts = :boundary)
+        others = filter(!=(:xmax), (:xmin, :xmax, :ymin, :ymax, :zmin, :zmax)[1:(2D)])
+        look = (u, i, j) -> D == 2 ? 2.0 * ∂ₙ(u(i)) + 0.5 * Dcᵧ(u(j)) :
+                            2.0 * ∂ₙ(u(i)) + 0.5 * Dcᵧ(u(j)) + 0.25 * Bramble.Dc₂(u(i))
+        rels = u -> (:xmax => look(u, 1, 2) => 1.0, :xmax => look(u, 2, 1) => 2.0,
+            (G => u(i) => 0.0 for G in others for i in 1:2)...,
+            (G => ∂ₙₙ(u(i)) => 0.0 for G in others for i in 1:2)...)
+        E, d = Bramble.closure(constrained(S × S, rels))
+        @test nnz(sparse(E)) == nE
+        @test isapprox(sum(abs, E), sE; rtol = 1.0e-12)
+        @test isapprox(sum(abs, d), sd; rtol = 1.0e-12)
     end
 
     @testset "Arithmetic on a whole element" begin

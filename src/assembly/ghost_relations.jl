@@ -483,16 +483,65 @@ function _relation_terms(op::_SplitWrapper)
 end
 _relation_terms(op) = (op,)
 
+# Whether `op` holds a sum, under its differences and scales, by type.
+_holds_sum(::OperatorAdd) = true
+_holds_sum(op::_SplitWrapper) = _holds_sum(op.inner_op)
+_holds_sum(::Any) = false
+
 # `acc` with the block of each term of `terms` added, unrolled. A term reads one component,
-# a value that only places its block (`_add_term`); a term reading several, or none, is
-# refused, naming the first node below its differences, scales and sums that reads no one
-# component (`_unsplit_term`, `nothing` where every node reads one).
+# a value that only places its block (`_add_term`). A term reading several that holds a
+# sum, a sum of the type of a conormal block whose leaves read different components, such
+# as `2.0 * ∂ₙ(u(1)) + 0.5 * Dcᵧ(u(2))` on :xmax, is split per leaf (`_add_block_leaves`):
+# both paths have types fixed by the term's, so its components only choose between them.
+# Any other term reading several, or none, is refused, naming the first node below its
+# differences, scales and sums that reads no one component (`_unsplit_term`, `nothing`
+# where every node reads one).
 @inline _add_terms(acc, P, ::Tuple{}, g::Val, facet::Tuple) = acc
 @inline function _add_terms(acc, P, terms::Tuple, g::Val, facet::Tuple)
     t = first(terms)
     k = _trial_component_class(t)
+    if k isa Int
+        acc′ = _add_term(acc, P, t, k, g, facet)
+    else
+        _holds_sum(t) || _throw_relation_unsplit(_val(facet[3]), t)
+        acc′ = _add_block_leaves(acc, P, t, _block_leaves(t), 1, g, facet)
+    end
+    return _add_terms(acc′, P, Base.tail(terms), g, facet)
+end
+
+# `acc` with the term `t`, holding a conormal block, added leaf by leaf: for the leaf `e` of
+# `leaves`, `t` with the block's other coefficients zero (`_block_part`), placed at the
+# leaf's component. Each part has `t`'s type, so it reuses `t`'s form, and a zero
+# coefficient replaces a value rather than scaling it, so an `Inf` leaves no NaN behind.
+@inline _add_block_leaves(acc, P, t, ::Tuple{}, e::Int, g::Val, facet::Tuple) = acc
+@inline function _add_block_leaves(acc, P, t, leaves::Tuple, e::Int, g::Val, facet::Tuple)
+    k = _trial_component_class(first(leaves))
     k isa Int || _throw_relation_unsplit(_val(facet[3]), t)
-    return _add_terms(_add_term(acc, P, t, k, g, facet), P, Base.tail(terms), g, facet)
+    acc′ = _add_term(acc, P, first(_block_part(t, e, 1)), k, g, facet)
+    return _add_block_leaves(acc′, P, t, Base.tail(leaves), e + 1, g, facet)
+end
+
+# The leaves of the conormal block `op` holds, under its differences and scales, in order.
+_block_leaves(op::_ConormalTerm) = (op,)
+function _block_leaves(op::OperatorAdd)
+    return (_block_leaves(op.left_op)..., _block_leaves(op.right_op)...)
+end
+_block_leaves(op::_SplitWrapper) = _block_leaves(op.inner_op)
+
+# `op` with the coefficient of each block leaf zero but the `e`-th, counting from `i`, and
+# the count after its leaves; of `op`'s type.
+function _block_part(op::_ConormalTerm, e::Int, i::Int)
+    s = i == e ? op.scalar : zero(op.scalar)
+    return typeof(op)(s, op.inner_op), i + 1
+end
+function _block_part(op::OperatorAdd, e::Int, i::Int)
+    l, j = _block_part(op.left_op, e, i)
+    r, k = _block_part(op.right_op, e, j)
+    return typeof(op)(l, r), k
+end
+function _block_part(op::_SplitWrapper, e::Int, i::Int)
+    inner, j = _block_part(op.inner_op, e, i)
+    return _rebuilt_around(op, inner), j
 end
 _unsplit_term(op::_SplitWrapper) = _unsplit_term(op.inner_op)
 function _unsplit_term(op::OperatorAdd)
