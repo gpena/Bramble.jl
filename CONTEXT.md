@@ -26,6 +26,17 @@ _Avoid_: tag, region, boundary condition (a marker names *where*, never *what va
 The `Symbol` half of a marker (`:left`, `:boundary`). Label is the name, marker the
 name-plus-rule.
 
+**Level-set marker**:
+A 2D marker `label => levelset(φ)`, the region where the function `φ(x)` is negative, with
+the three labels `label`, `label_boundary` and `label_exterior`, as for a polygon. A mesh of
+a domain holding one is fitted to the curve `φ = 0` (see **Fitted grid**).
+_Avoid_: implicit surface, signed-distance function (`φ` need not be a distance)
+
+**Orthogonally convex**:
+Of a curve: every horizontal and vertical line meets it in at most two points. Weaker than
+convex (a dented egg qualifies) and the first condition for a level-set domain to have a
+fitted grid; a star fails it.
+
 ### Meshes
 
 **Mesh**:
@@ -45,6 +56,26 @@ domain names them. A domain's own definition wins.
 **Refinement**:
 Dyadic halving in place (`iterative_refinement!`): the refined mesh is the same mesh split,
 not a new draw, which makes a convergence order measurable on a random mesh.
+
+**Fitted grid**:
+The grid `mesh` builds for a polygon or level-set marker, with lines added so that every line
+meeting the boundary has a node on it, or within a quarter of `h²` of it, and no grid edge
+joins an interior and an exterior node. The boundary nodes are the vertices of a polygon
+(the polygon itself, or one inscribed in the curve) and `polygon_spaces` solves on it. The
+design record is `docs/notes/internals/levelset.md`.
+_Avoid_: conforming mesh, body-fitted mesh
+
+**Closure path**:
+How a fitted grid of a level-set curve is built when the curve's crossing map `T` (the other
+crossing of a vertical line, then of a horizontal one) has finite order, as for any curve
+symmetric about a grid line: `_grid_closure` closes the user's seeds, every seed is kept and
+the vertices are on the curve to round-off. Not the **Closure** of a ghost space.
+
+**Orbit path**:
+How a fitted grid is built when `T` is conjugate to an irrational rotation (a rotated
+ellipse, an egg): periodic orbits of `T` replace the lines inside the curve's extent, with
+the vertices within a quarter of `h²` of the curve. A curve on neither path (not orthogonally
+convex, or `T` phase-locked or nearly so) makes `mesh` throw an `ArgumentError`.
 
 **Ghost mesh**:
 A physical mesh `Ωₕ` plus one ghost point beyond each node of the facets it names,

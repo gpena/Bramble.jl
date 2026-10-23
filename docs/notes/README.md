@@ -20,6 +20,11 @@ blocks. Everything else lives here:
 - **Machine-dependent figures**: `*.measurements.md` hold the timings, speedup ratios,
   crossover sizes and memory sizes taken out of the page with the same name, and
   `docstrings.measurements.md` those taken out of docstrings.
+- **Level-set domains** (gpena/Bramble.jl#834): `internals/levelset.md` is the design
+  record (the class of curves a fitted grid exists for, the closure and orbit paths, the
+  named errors, the impossibility result, the accepted limits), and
+  `examples/poisson_levelset_convergence.md` the measured convergence as log-log plots. The
+  worked page for it, `poisson_circle`, is in `docs/src/examples/`.
 - **CI run time**: `ci-run-time.md` profiles the `Forms` testset per file in a warm CI run,
   gives the cause, the shard boundary and the OpenEXR cache finding (gpena/Bramble.jl#480).
 

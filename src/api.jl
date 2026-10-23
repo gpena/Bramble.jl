@@ -22,7 +22,7 @@ public PRECOMPILE_WORKLOAD
 # --- Domain & Geometry ---
 export box, interval, ×, ⋅, dim, boundary_symbols
 export domain, markers, labels
-export polygon
+export polygon, levelset
 
 public center, projection, point, topo_dim
 public signed_distance

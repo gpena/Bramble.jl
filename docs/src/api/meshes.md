@@ -22,6 +22,15 @@ line with an oblique edge adds a line, until each crossing is a node. The number
 along an axis may therefore exceed `npts`. See [`mesh`](@ref) for the tolerances and the
 errors, and the [mesh internals page](../internals/mesh.md) for the closure.
 
+A domain with a level-set marker (`:D => levelset(φ)`, see [Geometry](geometry.md); one per
+domain, none beside a polygon marker) gets a grid fitted to the curve `φ = 0` instead: a
+polygon inscribed in the curve has its vertices on nodes and each edge a cell side or a
+cell diagonal, so the labels `D`, `D_boundary` and `D_exterior` and
+[`polygon_spaces`](@ref Bramble.polygon_spaces) work as for a polygon. The curve must lie
+inside the box, be orthogonally convex and be star-shaped about the minimum of `φ`.
+[`mesh`](@ref) lists the errors; the [mesh internals page](../internals/mesh.md) says how
+the labels are set.
+
 ## Points and spacings
 
 `host_points`, `host_spacings`, `forward_spacings`, `half_spacings`,

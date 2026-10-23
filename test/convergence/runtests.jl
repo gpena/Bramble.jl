@@ -24,4 +24,9 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         Core.eval(m, :(using Test))
         Base.include(m, joinpath(@__DIR__, "poisson_polygon.jl"))
     end
+    # Same for levelset.jl, which defines `levelset_errors` and its helpers.
+    let m = Module(:ConvergenceLevelSetTests)
+        Core.eval(m, :(using Test))
+        Base.include(m, joinpath(@__DIR__, "levelset.jl"))
+    end
 end

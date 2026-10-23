@@ -237,80 +237,139 @@ function _mesh(
     idxs = generate_indices(npts_with_collapsed)
 
     _submeshes = submeshes(Ω, npts_with_collapsed, unif, backend)
-    idxs = _close_grid!(_submeshes, regions(markers(Ω)), idxs)
+    idxs, fitted = _close_grid!(_submeshes, regions(markers(Ω)), idxs)
 
     mesh_markers = MeshMarkers()
     output_mesh = MeshnD(_set, mesh_markers, idxs, backend, _submeshes)
 
-    set_markers!(output_mesh, markers(Ω); warn_marker_mismatch)
+    _set_markers!(output_mesh, markers(Ω), fitted; warn_marker_mismatch)
 
     return output_mesh
 end
 
-# A domain without polygon markers keeps the submeshes it was given, so a plain mesh has the
-# points (and draws the random numbers) it always had.
-@inline _close_grid!(_, ::Tuple{}, idxs) = idxs
+# A domain without polygon or level-set markers keeps the submeshes it was given, so a plain
+# mesh has the points (and draws the random numbers) it always had. The second value is the
+# polygon fitted to each region marker, `nothing` for a polygon marker.
+@inline _close_grid!(_, ::Tuple{}, idxs) = (idxs, ())
 
 # A domain with polygon markers closes its grid lines (`_grid_closure`): each submesh takes
-# the closed lines, and the indices follow the new point counts.
+# the closed lines, and the indices follow the new point counts. A level-set marker fits the
+# lines to its curve instead (`_levelset_grid`, on the submeshes' points as seeds), and the
+# polygon it returns labels the nodes. One level-set marker per domain, with no polygon
+# marker beside it.
 function _close_grid!(subs::NTuple{2, Mesh1D}, regs::Tuple{Any, Vararg}, idxs)
-    xs, ys = _grid_closure(map(identifier, regs), host_points(subs[1]), host_points(subs[2]))
+    ids = map(identifier, regs)
+    nls = count(P -> P isa LevelSet, ids)
+    nls == 0 && return _close_polygon_grid!(subs, ids, regs, idxs)
+    (nls == 1 && length(ids) == 1) || _throw_levelset_markers(nls, length(ids) - nls)
+    xs, ys = host_points(subs[1]), host_points(subs[2])
+    X, Y, P = _levelset_grid(only(ids).φ, xs, ys)
+    _set_points!(subs[1], X)
+    _set_points!(subs[2], Y)
+    return generate_indices((length(X), length(Y))), (P,)
+end
+
+function _close_polygon_grid!(subs, ids, regs, idxs)
+    xs, ys = _grid_closure(ids, host_points(subs[1]), host_points(subs[2]))
     _set_points!(subs[1], xs)
     _set_points!(subs[2], ys)
-    return generate_indices((length(xs), length(ys)))
+    return generate_indices((length(xs), length(ys))), map(_ -> nothing, regs)
+end
+
+@noinline function _throw_levelset_markers(nls, npoly)
+    throw(ArgumentError("a domain takes one level-set marker and no polygon marker beside it, " *
+                        "got $nls level-set markers and $npoly polygon markers: the grid " *
+                        "lines are fitted to one curve."))
 end
 
 """
     _grid_closure(P, xs, ys) -> (Vector{T}, Vector{T})
 
 Close the grid lines `xs` and `ys` (sorted, end points included) over the polygon `P`, or a
-tuple of polygons, so that every crossing of a grid line with ``\\partial P`` is a grid node.
-`T` is the floating-point type of `xs` and `ys`; the vertices are converted to `T` first.
+tuple of polygons and level sets, so that every crossing of a grid line with ``\\partial P``
+is a grid node. `T` is the floating-point type of `xs` and `ys`; the vertices are converted
+to `T` first.
 
 The end points and the vertex coordinates are lines first, then the lines the closure
-computes: a grid line crossing an oblique edge adds the crossing's other coordinate as a
+computes: a grid line crossing an oblique edge, or the curve ``\\varphi = 0`` of a level set
+(`_crossings`, between the end-point lines), adds the crossing's other coordinate as a
 line, until no line is new. The remaining entries of `xs` and `ys` are seeds. Lines closer
 than the merge tolerance ``\\max(10^{-10}, 64\\varepsilon) L`` (``L`` the polygons' extent,
 ``\\varepsilon`` the larger epsilon of `T` and of the vertices' type, whose rounding a
-vertex carries) are one line. A seed that meets a vertex or end-point line, or whose lines
-meet those of a vertex or an earlier seed, within the tolerance but not exactly, is dropped
-and the closure restarts without it: the seed gives way, never the vertex or the line
+vertex carries; with no vertices, ``L`` is the larger span of the end-point lines) are one
+line. A seed that meets a vertex or end-point line, or whose lines meet those of a vertex
+or an earlier seed, within the tolerance but not exactly, is dropped and the closure
+restarts without it: the seed gives way, never the vertex or the line
 computed from it. Two lines that both come from the end points and vertices and lie within
 the tolerance are one line. Polygon detail finer than the tolerance is merged, as is
 rounding, since floating point cannot tell the two apart. Every vertex coordinate is a line,
 and every crossing is on a node, up to the merge tolerance.
 
 The oblique edges must share one slope magnitude, a necessary condition only: with equal
-slopes the closure may still grow without bound, or beyond the cap.
+slopes the closure may still grow without bound, or beyond the cap. A level set closes only
+when the orbits of its crossing map are finite; otherwise the cap is reached.
 
 # Throws
 
   - `ArgumentError`: if the oblique edges do not share one slope magnitude, or if the
-    closure exceeds a number of lines proportional to the input (the polygon's grid
-    closure is unbounded or too fine for this grid).
+    closure exceeds a number of lines proportional to the input (the grid
+    closure of a polygon or level set is unbounded or too fine for this grid).
 """
-_grid_closure(P::Polygon, xs, ys) = _grid_closure((P,), xs, ys)
+_grid_closure(P::Union{Polygon, LevelSet}, xs, ys) = _grid_closure((P,), xs, ys)
 
 function _grid_closure(Ps::Tuple, xs::AbstractVector, ys::AbstractVector)
     T = float(promote_type(eltype(xs), eltype(ys)))
-    V = NTuple{2, T}[(T(v[1]), T(v[2])) for P in Ps for v in P.vertices]
-    E = _oblique_edges(T, Ps)
+    polys = filter(P -> P isa Polygon, Ps)
+    sets = filter(P -> P isa LevelSet, Ps)
+    V = NTuple{2, T}[(T(v[1]), T(v[2])) for P in polys for v in P.vertices]
+    E = _oblique_edges(T, polys)
     _check_closure_slopes(E)
 
-    L = max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V))
-    ε = T(max(eps(T), maximum(P -> eps(eltype(eltype(P.vertices))), Ps)))
-    tol = max(T(1e-10), 64 * ε) * L
     sx, sy = sort!(T.(collect(xs))), sort!(T.(collect(ys)))
+    L = if isempty(V)
+        max(sx[end] - sx[1], sy[end] - sy[1])
+    else
+        max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V))
+    end
+    ε = T(max(eps(T), maximum(P -> eps(eltype(eltype(P.vertices))), polys; init = zero(T))))
+    tol = max(T(1e-10), 64 * ε) * L
     fixed = (T[sx[1]; sx[end]; first.(V)], T[sy[1]; sy[end]; last.(V)])
     seeds = (sx[2:(end - 1)], sy[2:(end - 1)])
     keep = trues(length(seeds[1]) + length(seeds[2]))
     cap = 64 * (length(sx) + length(sy) + length(V)) + 1000
+    cross! = _Crossings(E, sets, (sx[1], sy[1]), (sx[end], sy[end]))
 
     while true
-        lines, loser = _closure_pass(fixed, seeds, keep, E, tol, cap)
+        lines, loser = _closure_pass(fixed, seeds, keep, cross!, tol, cap)
         iszero(loser) && return lines
         keep[loser] = false
     end
+end
+
+# The crossing rule of a closure: `cross!(out, a, v)` empties `out` and fills it with the
+# other coordinate of every crossing of the line `x_a = v` with the oblique edges `E` of the
+# polygons (in edge order) and then with each level set `sets`, whose curve is searched
+# between the end-point lines `lo` and `hi` of the other axis.
+struct _Crossings{T, S <: Tuple}
+    E::Vector{NTuple{4, T}}
+    sets::S
+    lo::NTuple{2, T}
+    hi::NTuple{2, T}
+end
+
+function (R::_Crossings{T})(out::Vector{T}, a::Int, v::T) where {T}
+    empty!(out)
+    for (ax, ay, bx, by) in R.E
+        # The edge as a map from coordinate `a` to coordinate `b`.
+        p₀, q₀, p₁, q₁ = a == 1 ? (ax, ay, bx, by) : (ay, ax, by, bx)
+        min(p₀, p₁) < v < max(p₀, p₁) || continue
+        push!(out, q₀ + (q₁ - q₀) * (v - p₀) / (p₁ - p₀))
+    end
+    b = 3 - a
+    for S in R.sets
+        append!(out, _crossings(S.φ, a, v, R.lo[b], R.hi[b]))
+    end
+    return out
 end
 
 # The oblique edges (neither horizontal nor vertical) of the polygons `Ps`, in type `T`.
@@ -345,7 +404,7 @@ end
 # One closure from the fixed lines and the kept seeds. Returns the lines and 0, or, as soon
 # as a seed must give way, the lines so far and the index of that seed.
 function _closure_pass(fixed::NTuple{2, Vector{T}}, seeds::NTuple{2, Vector{T}}, keep::BitVector,
-        E::Vector{NTuple{4, T}}, tol::T, cap::Int) where {T}
+        cross!, tol::T, cap::Int) where {T}
     pos = (T[], T[])
     root = (Int[], Int[])
     queue = Tuple{Int, T, Int}[]
@@ -364,15 +423,12 @@ function _closure_pass(fixed::NTuple{2, Vector{T}}, seeds::NTuple{2, Vector{T}},
 
     added = 0
     q = 1
+    cs = T[]
     while q <= length(queue)
         a, v, r = queue[q]
         q += 1
         b = 3 - a
-        for (ax, ay, bx, by) in E
-            # The edge as a map from coordinate `a` to coordinate `b`.
-            p₀, q₀, p₁, q₁ = a == 1 ? (ax, ay, bx, by) : (ay, ax, by, bx)
-            min(p₀, p₁) < v < max(p₀, p₁) || continue
-            c = q₀ + (q₁ - q₀) * (v - p₀) / (p₁ - p₀)
+        for c in cross!(cs, a, v)
             loser = _closure_insert!(pos[b], root[b], queue, b, c, r, tol)
             loser > 0 && return pos, loser
             if loser < 0
@@ -384,9 +440,9 @@ function _closure_pass(fixed::NTuple{2, Vector{T}}, seeds::NTuple{2, Vector{T}},
     return pos, 0
 end
 
-@noinline _throw_closure_cap(cap) = throw(ArgumentError("Polygon grid closure: the " *
+@noinline _throw_closure_cap(cap) = throw(ArgumentError("Grid closure: the " *
                                                         "closure exceeded $cap added grid lines (a cap proportional to the input); the " *
-                                                        "polygon's grid closure is unbounded or too fine for this grid."))
+                                                        "region's grid closure is unbounded or too fine for this grid."))
 
 # Insert the line `c`, grown from root `r` (0 for an end point or a vertex, k for the k-th
 # seed), into the sorted lines `pos` of axis `a`. Returns -1 when it is new, 0 when it is

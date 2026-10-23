@@ -41,6 +41,19 @@ an `ArgumentError` when the oblique edges do not share one slope magnitude, or w
 closure exceeds a number of lines proportional to the input. Equal slopes are necessary, not
 sufficient: the closure of some polygons grows without bound or beyond that cap.
 
+When `Ω` carries a level-set marker (`:L => levelset(φ)`, 2D, one per domain and no polygon
+marker beside it), the lines drawn from `npts` and `unif` are seeds again, and the grid is
+fitted to the curve ``φ = 0`` so that the scheme of Ferreira and Grigorieff applies: the
+mesh holds the vertices of a polygon inscribed in the curve as nodes, every polygon edge a
+cell side or a cell diagonal, and the labels `L`, `L_boundary` (the vertices) and
+`L_exterior` come from that polygon. The curve must lie strictly inside the seeds' box, be
+orthogonally convex (every grid line meets it at most twice) and star-shaped about the
+minimum of `φ`. When the crossings of the grid lines close into finite orbits (a disk, an
+ellipse along the axes) every seed is kept and the lines grow; otherwise the lines are
+fitted anew, and their number is of the order of `npts` times a modest factor. See
+[`levelset`](@ref). `set_markers!`, `change_points!` and `iterative_refinement!` refuse such
+a mesh, as the polygon is not kept.
+
 # Arguments
 
   - `Ω`: Continuous domain to discretize.
@@ -62,6 +75,10 @@ sufficient: the closure of some polygons grows without bound or beyond that cap.
     slope magnitude, or if the closure exceeds a number of lines proportional to the input.
     Far from the origin the closure's rounding can exceed the merge tolerance, so a polygon
     small relative to its offset may hit that cap.
+  - `ArgumentError`: on a domain with a level-set marker, if it holds a second level-set
+    marker or a polygon marker; if the curve is outside the class above, touches the box, or
+    is nearly or exactly phase-locked; if `npts` is too coarse to resolve it or the fit
+    needs too many lines; if the fitted grid fails its check (the message names which).
 
 # Examples
 
