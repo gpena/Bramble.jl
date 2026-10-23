@@ -106,6 +106,8 @@ identity over the scalars, grid functions and components involved. The one excep
     return OperatorScale(c, A)
 end
 @inline _wrap_scale(c::Number, A::LazyOp) = OperatorScale(c, A)
+# The sign `_MinusOne` (ast.jl) is neither zero nor one, read off its type.
+@inline _wrap_scale(c::_MinusOne, A::LazyOp) = OperatorScale(c, A)
 # A `RefValue` coefficient is never statically zero or one; wrap unconditionally.
 @inline _wrap_scale(c::Base.RefValue, A::LazyOp) = OperatorScale(c, A)
 
@@ -116,12 +118,19 @@ end
 # stands for give `2.0^-80` and `NaN`. Left apart, each converts to the space's element type
 # on its own when assembled.
 @inline _folds(c) = c isa Number && !(c isa Rational)
+@inline _folds(::_MinusOne) = true
 
 # The product of two folding coefficients. Two `Integer`s use checked arithmetic, so
 # `2^32 * (2^32 * u)` throws `OverflowError` instead of wrapping to `0 * u` and vanishing
 # (gpena/Bramble.jl#704), as an overflowing `Rational` scale throws. Same type as `*`.
 @inline _fold_mul(a, b) = a * b
 @inline _fold_mul(a::Integer, b::Integer) = Base.Checked.checked_mul(a, b)
+# The sign `_MinusOne` (ast.jl) folds as the `Int` `-1` it stands for, against each scalar
+# type as `-1` would; two give the literal `1`, so `-(-u)` collapses to `u` from the types
+# alone.
+@inline _fold_mul(::_MinusOne, ::_MinusOne) = 1
+@inline _fold_mul(::_MinusOne, b) = _fold_mul(-1, b)
+@inline _fold_mul(a, ::_MinusOne) = _fold_mul(a, -1)
 
 # Two coefficients just lifted out of the two arguments of one inner product, wrapped around
 # the product they were lifted from.
@@ -243,7 +252,7 @@ function simplify_ast(op::OperatorScale)
         isone(op.scalar) && return inner
     end
 
-    if op.scalar isa Number
+    if op.scalar isa Union{Number, _MinusOne}
         # `c1 * (c2 * A) -> (c1 * c2) * A`, only when both scalars are static numbers: a
         # `RefValue` on either side can change after construction, so folding through one
         # would bake in whatever value it happened to hold right now. Type-stable whatever
@@ -561,4 +570,28 @@ end
 function _distribute_wrapper(op, inner)
     s = simplify_ast(inner)
     return s isa OperatorAdd ? _distribute_wrapper(op, s) : _rewrap_inner(op, s)
+end
+
+# --- The sign, lowered --------------------------------------------------------------- #
+
+# `op` with each sign `_MinusOne` (ast.jl) left after `simplify_ast` stored as the `Int`
+# `-1` it stands for, every other node as it was. `form` calls it on the simplified tree, so
+# what assembles, checks symmetry, splits into Kronecker factors or prints is main's tree
+# and the sign never meets Base's arithmetic. Read off the types: a node holding no sign
+# comes back as itself (`_rewrap_inner`'s shortcut, a sum or product rebuilt equal).
+@inline _lower_signs(op) = op
+@inline function _lower_signs(op::OperatorScale{D, _MinusOne}) where {D}
+    return OperatorScale(-1, _lower_signs(op.inner_op))
+end
+@inline _lower_signs(op::UnaryWrapper) = _rewrap_inner(op, _lower_signs(op.inner_op))
+@inline function _lower_signs(op::OperatorAdd)
+    return OperatorAdd(_lower_signs(op.left_op), _lower_signs(op.right_op))
+end
+@inline function _lower_signs(op::BilinearProduct{D, W}) where {D, W}
+    l, r = _lower_signs(op.left_op), _lower_signs(op.right_op)
+    return BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
+end
+@inline function _lower_signs(op::LinearProduct{D, W}) where {D, W}
+    l, r = _lower_signs(op.left_op), _lower_signs(op.right_op)
+    return LinearProduct{D, W, typeof(l), typeof(r)}(l, r)
 end

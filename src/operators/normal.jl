@@ -481,10 +481,12 @@ end
 A quantity with one value per boundary facet: `ops[d][s]` is the `LazyOp` it is on the facet
 of normal axis `d`, side `s` (1 the minimum, 2 the maximum), outward sign included. `G[d][e]`
 says whether the operator of a facet of axis `d` reads the ghosts along axis `e`: beyond its
-own facet for `e == d`, beyond both `e` facets at its corners otherwise. [`inner_Γ`](@ref)
-refuses it, at `form`, where those ghosts are missing. Built by [`∂ₙ`](@ref), [`∂ₙₙ`](@ref)
-and [`jumpₙ`](@ref), and meaningful only inside `inner_Γ`; not a `LazyOp`, since a node of a
-corner has a value for each facet it lies on.
+own facet for `e == d`, beyond both `e` facets at its corners otherwise. `G` depends on
+types only. A conormal `K` reaches every axis whatever its values, and [`inner_Γ`](@ref),
+at `form`, refuses the operator where those ghosts are missing, except along an axis
+`e ≠ d` that each conormal term reads through a zero `K[d, e]`. Built by
+[`∂ₙ`](@ref), [`∂ₙₙ`](@ref) and [`jumpₙ`](@ref), and meaningful only inside `inner_Γ`; not a
+`LazyOp`, since a node of a corner has a value for each facet it lies on.
 """
 struct FacetOperator{D, G, T <: Tuple}
     ops::T
@@ -545,12 +547,14 @@ function ∂ₙ(u::LazyOp{D}; K = nothing) where {D}
     return _facet_operator(Val(_normal_reach(K, Val(D))), ops)
 end
 
-# A facet of axis `d` reads along `d`, and along each `e` with `K[d, e] ≠ 0`.
+# A facet of axis `d` reads along `d` and, with a matrix `K`, along every axis: a type of
+# `K` alone, so that `K`'s values do not reach the type. An axis whose coefficient `K[d, e]`
+# is zero is pruned where the check runs (`_check_facet_reach`), on the operator's values.
 @inline function _normal_reach(::Nothing, ::Val{D}) where {D}
     return ntuple(d -> ntuple(==(d), Val(D)), Val(D))
 end
-@inline function _normal_reach(K::AbstractMatrix, ::Val{D}) where {D}
-    return ntuple(d -> ntuple(e -> e == d || !iszero(K[d, e]), Val(D)), Val(D))
+@inline function _normal_reach(::AbstractMatrix, ::Val{D}) where {D}
+    return ntuple(_ -> ntuple(_ -> true, Val(D)), Val(D))
 end
 
 @inline _outward(op::LazyOp) = (-op, op)
@@ -688,8 +692,10 @@ end
 The quadrature weight of one facet: the transverse measure `∏_{e ≠ DIM} ĥ_e` at the nodes of
 the facet of normal axis `DIM`, side `SIDE` (1 the minimum, 2 the maximum), when `MASK`
 selects it, and zero anywhere else. Unsigned, since a `FacetOperator` carries its
-outward sign. `G[e]` says whether the term reads the ghosts along axis `e` (the facet's own
-for `e == DIM`, both `e` facets' at its corners otherwise), which `form` checks.
+outward sign. `G[e]` says whether the term may read the ghosts along axis `e` (the facet's
+own for `e == DIM`, both `e` facets' at its corners otherwise): the facet operator's
+structural reach, which no weight reads. `form` checks it on the product's operands,
+skipping an axis `e ≠ DIM` that each conormal term there reads through a zero `K[DIM, e]`.
 """
 struct InnerGammaFacet{MASK, DIM, SIDE, G} <: AbstractInnerProduct end
 
@@ -701,10 +707,11 @@ struct InnerGammaFacet{MASK, DIM, SIDE, G} <: AbstractInnerProduct end
     return zero(eltype(Ωₕ))
 end
 
-function _resolved_inner(
-        ::Type{InnerGammaFacet{_SurfaceLabels{L}, DIM, SIDE, G}}, Ωₕ) where {L, DIM, SIDE, G}
+function _resolved_inner(::Type{InnerGammaFacet{_SurfaceLabels{L}, DIM, SIDE, G}}, Ωₕ,
+        product) where {L, DIM, SIDE, G}
     mask = _surface_mask(Ωₕ, L)
-    mask[DIM][SIDE] && _check_facet_reach(Ωₕ, G, DIM, SIDE)
+    operands = (product.left_op, product.right_op)
+    mask[DIM][SIDE] && _check_facet_reach(Ωₕ, G, DIM, SIDE, operands)
     return InnerGammaFacet{mask, DIM, SIDE, G}
 end
 function _surface_labels(
@@ -714,13 +721,45 @@ end
 
 # The facet's own ghosts first, then, for each other axis `e` the term reads along, the
 # ghosts of both `e` facets, which the tangential difference reads at the facet's corners.
-function _check_facet_reach(Ωₕ, G::Tuple, DIM::Int, SIDE::Int)
+# An axis `e` the reach `G` names is read only where a conormal block of an operand has a
+# nonzero `K[DIM, e]` (`_conormal_reads`), so a `K` with `K[DIM, e] == 0` ghosts only its
+# own facet. Any other read past a corner is the absent-read check's, at `assemble`.
+function _check_facet_reach(Ωₕ, G::Tuple, DIM::Int, SIDE::Int, operands::Tuple)
     G[DIM] && _check_facet_ghosts(Ωₕ, DIM, SIDE)
-    for e in eachindex(G), s in 1:2
-
-        e != DIM && G[e] && _check_transverse_ghosts(Ωₕ, DIM, SIDE, e, s)
+    for e in eachindex(G)
+        e != DIM && G[e] && any(o -> _conormal_reads(o, e), operands) || continue
+        for s in 1:2
+            _check_transverse_ghosts(Ωₕ, DIM, SIDE, e, s)
+        end
     end
     return nothing
+end
+
+# Whether some conormal block of `op` has a nonzero coefficient along axis `e`. A block is
+# the sum `∂ₙ(w; K)` builds on a facet of axis `d`, `K[d, 1] * Dc_1(w) + … + K[d, D] *
+# Dc_D(w)`, its terms in axis order; the walk finds it under sums and scales, whatever their
+# values, so `0.0 * ∂ₙ(u; K)` and `∂ₙ(u; K) - ∂ₙ(u; K)` still read through `K`. Other
+# terms, and the operands of differences, are not blocks: their reads are not `K`'s.
+_conormal_reads(::Any, ::Int) = false
+_conormal_reads(op::OperatorScale, e::Int) = _conormal_reads(op.inner_op, e)
+_conormal_reads(op::GridFunctionScale, e::Int) = _conormal_reads(op.inner_op, e)
+function _conormal_reads(op::OperatorAdd, e::Int)
+    k = _conormal_coefficients(op)
+    k === nothing || return !iszero(k[e])
+    return _conormal_reads(op.left_op, e) || _conormal_reads(op.right_op, e)
+end
+
+# The coefficients `K[d, :]` of a conormal block, or `nothing` for any other sum.
+const _ConormalTerm{D, e} = OperatorScale{D, <:Number, <:CenteredDifference{D, e}}
+_conormal_coefficients(::OperatorAdd) = nothing
+function _conormal_coefficients(op::OperatorAdd{2, <:_ConormalTerm{2, 1},
+        <:_ConormalTerm{2, 2}})
+    return (op.left_op.scalar, op.right_op.scalar)
+end
+function _conormal_coefficients(op::OperatorAdd{3,
+        <:OperatorAdd{3, <:_ConormalTerm{3, 1}, <:_ConormalTerm{3, 2}},
+        <:_ConormalTerm{3, 3}})
+    return (op.left_op.left_op.scalar, op.left_op.right_op.scalar, op.right_op.scalar)
 end
 
 @inline function _check_transverse_ghosts(G::_GhostMeshLike, d::Int, s::Int, e::Int, t::Int)
@@ -792,34 +831,35 @@ for S in (Function, Number, VectorElement)
     end
 end
 
-# `inner_Γ` with the labels `MASK` of `markers` as a type: called with a constant `MASK`,
-# as `constrained` does for the facet it names, it infers where the keyword need not.
-@inline function _facet_inner(::Type{MASK}, F::FacetOperator{D},
-        right::LazyOp{D}) where {MASK, D}
-    return _facet_terms(MASK, Val(_reads_ghosts(F)), Val(D),
+# `inner_Γ` with the labels `MASK` of `markers` as a type, which `form` resolves to a mask
+# by reading the mesh (`_resolved_inner`); or, as a `Val`, with the mask already resolved,
+# which `form` keeps, as `constrained` passes the face it names (`_relation_mask`). Either
+# is a constant, so the term infers where the keyword need not.
+@inline function _facet_inner(::Type{MASK}, left, right) where {MASK}
+    return _facet_inner(Val(MASK), left, right)
+end
+@inline function _facet_inner(m::Val, F::FacetOperator{D}, right::LazyOp{D}) where {D}
+    return _facet_terms(m, Val(_reads_ghosts(F)), Val(D),
         (d, s) -> _facet_component(F, d, s), (d, s) -> right)
 end
-@inline function _facet_inner(::Type{MASK}, left::LazyOp{D},
-        F::FacetOperator{D}) where {MASK, D}
-    return _facet_terms(MASK, Val(_reads_ghosts(F)), Val(D), (d, s) -> left,
+@inline function _facet_inner(m::Val, left::LazyOp{D}, F::FacetOperator{D}) where {D}
+    return _facet_terms(m, Val(_reads_ghosts(F)), Val(D), (d, s) -> left,
         (d, s) -> _facet_component(F, d, s))
 end
-@inline function _facet_inner(::Type{MASK}, F::FacetOperator{D},
-        H::FacetOperator{D}) where {MASK, D}
+@inline function _facet_inner(m::Val, F::FacetOperator{D}, H::FacetOperator{D}) where {D}
     G = _merge_reach(_reads_ghosts(F), _reads_ghosts(H))
-    return _facet_terms(MASK, Val(G), Val(D), (d, s) -> _facet_component(F, d, s),
+    return _facet_terms(m, Val(G), Val(D), (d, s) -> _facet_component(F, d, s),
         (d, s) -> _facet_component(H, d, s))
 end
-@inline function _facet_inner(::Type{MASK}, g::Union{Function, Number, VectorElement},
-        F::FacetOperator{D}) where {MASK, D}
-    return _facet_terms(MASK, Val(_reads_ghosts(F)), Val(D), (d, s) -> g,
+@inline function _facet_inner(m::Val, g::Union{Function, Number, VectorElement},
+        F::FacetOperator{D}) where {D}
+    return _facet_terms(m, Val(_reads_ghosts(F)), Val(D), (d, s) -> g,
         (d, s) -> _facet_component(F, d, s))
 end
 
 # One term per facet, over the axes as `Val`s so each weight is a type.
-@inline function _facet_terms(
-        ::Type{MASK}, ::Val{G}, ::Val{D}, left::L, right::R) where {MASK, G, D, L, R}
-    return _add_terms(_facet_pairs(Val(MASK), Val(G), ntuple(Val, Val(D)), left, right))
+@inline function _facet_terms(m::Val, g::Val, ::Val{D}, left::L, right::R) where {D, L, R}
+    return _add_terms(_facet_pairs(m, g, ntuple(Val, Val(D)), left, right))
 end
 
 # Unrolled without a closure, which would hold `MASK` as a value of an abstract type.

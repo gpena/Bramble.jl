@@ -438,7 +438,7 @@ function _resolved_on_walked(op, W, Wₕ, Vₕ)
 end
 
 _resolved_on_side(op, W, space, side_component::F, nmax) where {F} = _resolved_inner(
-    W, mesh(space))
+    W, mesh(space), op)
 
 # A component outside the space is resolved on the first `nmax` leaves, and left to the
 # block routing to refuse by name.
@@ -447,16 +447,20 @@ function _resolved_on_side(
     leaves = leaf_spaces_offsets(space)
     k = side_component(op)
     if k isa Int && 1 <= k <= length(leaves)
-        return _resolved_inner(W, mesh(first(leaves[k])))
+        return _resolved_inner(W, mesh(first(leaves[k])), op)
     end
-    R = _resolved_inner(W, mesh(first(first(leaves))))
+    R = _resolved_inner(W, mesh(first(first(leaves))), op)
     for c in 2:min(nmax, length(leaves))
-        _resolved_inner(W, mesh(first(leaves[c]))) === R ||
+        _resolved_inner(W, mesh(first(leaves[c])), op) === R ||
             _throw_surface_leaves_disagree(W, 1, c)
     end
     return R
 end
 
+# The weight `W` of the product `op`, resolved on `Ωₕ`. A weight that checks the
+# product's operands (`InnerGammaFacet`, operators/normal.jl) reads `op`; the others need
+# only the mesh.
+_resolved_inner(::Type{W}, Ωₕ, op) where {W} = _resolved_inner(W, Ωₕ)
 _resolved_inner(::Type{W}, Ωₕ) where {W} = W
 function _resolved_inner(::Type{InnerGamma{_SurfaceLabels{L}}}, Ωₕ) where {L}
     return InnerGamma{_surface_mask(Ωₕ, L)}

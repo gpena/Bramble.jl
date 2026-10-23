@@ -236,6 +236,26 @@ end
         sym(u) = (traction(u)..., map(F -> F => ∂ₙ(u(1); K) - ∂ₙ(u(2); K) => 0.0, F4)...)
         T2 = @inferred constrained(W2 × W2, sym)
         @test any(any, T2.facets)
+        # `form` on a constrained space is inferred, whatever the relation's nesting.
+        conormal(u) = map(F -> F => 2.0 * u + ∂ₙ(u; K) => 1.0, F4)
+        robin2(u) = map(F -> F => 2.0 * u + ∂ₙ(u) => 0.5, F4)
+        for C in (constrained(W1, robin), constrained(W1, mixed), constrained(W2, robin2),
+            constrained(W2, conormal))
+            @test @inferred(form(C, C, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))) isa
+                  Bramble.GhostBilinearForm
+        end
+        # `gmg_solve` on a ghost `build` infers a concrete type. The build is defined here,
+        # capturing locals: one reading non-const globals infers `Any` for reasons outside
+        # Bramble. The right side is a vector assembled from the form, as in a solve. The
+        # build's own `Cb` must not be a name of this scope, or the closure boxes it.
+        ghost_build(rels) = Wb -> (Cb = constrained(gridspace(mesh(Wb); ghosts = :boundary), rels);
+            form(Cb, Cb, (u, v) -> innerₕ(-1.0 * Δₕ(u), v) + innerₕ(u, v)))
+        for (Ω, build) in ((Ωₕ1, ghost_build(robin)), (Ωₕ2, ghost_build(robin2)))
+            a = build(gridspace(Ω))
+            _, F = assemble(a, form(Bramble.trial_space(a), v -> innerₕ(x -> 1.0, v)))
+            rt = Base.return_types(gmg_solve, (typeof(build), typeof(Ω), typeof(F)))
+            @test isconcretetype(only(rt))
+        end
     end
 
     # gpena/Bramble.jl#549. The band sweeps pick one colour or two from `prod(strides)`, a

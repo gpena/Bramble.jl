@@ -359,6 +359,32 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
         end
     end
 
+    # A form written with `-`: `form` lowers the sign `-` stores (`_MinusOne`,
+    # src/ast/ast.jl) to the `Int` `-1`, which the fast-diagonalisation build, its refill
+    # and the Schur route each convert to the system's eltype.
+    @testset "fdm: forms written with minus" begin
+        L(u, v) = innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(D₋ᵧ(u), D₋ᵧ(v))
+        # Nonsingular: `L + 2 M - M` is `L + M`.
+        sym(u, v) = L(u, v) + 2.0 * innerₕ(u, v) - innerₕ(u, v)
+        adv(u, v) = L(u, v) + innerₕ(u, v) - innerₕ(D₋ₓ(u), v)
+        for (n, dir) in (((7, 6), nothing), ((13, 9), :boundary)), f in (sym, adv)
+
+            Wₕ = gridspace(_graded_mesh(n))
+            a = form(Wₕ, Wₕ, f)
+            A = assemble(a; dirichlet = dir)
+            F = rand(MersenneTwister(KRON_EXT_SEED + n[1]), size(A, 1))
+            dir === :boundary && (F[Bramble._combined_mask(mesh(Wₕ), (:boundary,))] .= 0)
+            xref = A \ F
+            @test isapprox(fdm_solve(a, F; dirichlet = dir), xref; rtol = 1e-9)
+            fact = fdm_factorize(a; dirichlet = dir)
+            x = fill(NaN, length(F))
+            @test isapprox(ldiv!(x, fact, F), xref; rtol = 1e-9)
+            # Refilled from a form scaled by `-(-1)`, which is the same system.
+            fdm_factorize!(fact, form(Wₕ, Wₕ, (u, v) -> -(-f(u, v))))
+            @test isapprox(ldiv!(x, fact, F), xref; rtol = 1e-9)
+        end
+    end
+
     # Float32 on a graded mesh (points `t^2`, condition about 2e4): the singularity bound
     # (`D eps` times the largest entry, measured 15 eps away here) must not refuse it, on
     # either route, while the pure-Neumann form on the same mesh is still refused.

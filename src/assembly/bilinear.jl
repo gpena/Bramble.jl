@@ -365,8 +365,8 @@ end
 Base.@constprop :aggressive function _bilinear_form(Wₕ, Vₕ, raw_ast)
     D = dim(Wₕ)
     _check_bilinear_terms(raw_ast)  # rank_one.jl
-    ast = _split_restricted_products(
-        simplify_ast(_resolve_surfaces_for_space(resolve_ast(raw_ast), Vₕ, Wₕ)),
+    resolved = _resolve_surfaces_for_space(resolve_ast(raw_ast), Vₕ, Wₕ)
+    ast = _split_restricted_products(_lower_signs(simplify_ast(resolved)),
         promote_type(eltype(Wₕ), eltype(Vₕ)))
     _check_space_components(ast, Wₕ, trial_component_or_nothing, "trial")
     _check_space_components(ast, Vₕ, test_component_or_nothing, "test")

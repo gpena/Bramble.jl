@@ -408,7 +408,8 @@ function form(Wₕ, f)
     raw_ast = f(test_function(Wₕ))
     _validate_form_expression(raw_ast, Val(D), Val(:linear))
     ast = _split_restricted_products(
-        simplify_ast(_resolve_surfaces_for_space(resolve_ast(raw_ast), Wₕ)), eltype(Wₕ))
+        _lower_signs(simplify_ast(_resolve_surfaces_for_space(resolve_ast(raw_ast), Wₕ))),
+        eltype(Wₕ))
     _check_centered_meshes(ast, Wₕ)
     ast = _lower_sources_for_space(ast, Wₕ)
     _check_source_meshes(ast, Wₕ)

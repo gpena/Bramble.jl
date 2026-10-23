@@ -5,6 +5,8 @@ using Bramble
 using LinearAlgebra: Diagonal, issymmetric, isposdef
 using SparseArrays: nnz
 using Random: seed!
+using ForwardDiff: ForwardDiff
+using Kronecker: Kronecker
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 using Bramble:
                D₋ᵧ,
@@ -817,6 +819,108 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     # same matrix: this pass may change how a form is routed, never what it computes.
     @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v) + 2.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
           2.0 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))))
+end
+
+# The sign `-u` and `a - b` store (`_MinusOne`, src/ast/ast.jl) is decided by its type, so
+# `simplify_ast` folds it whatever the operator's values. It is not a number: `form` lowers
+# what is left of it to the `Int` `-1`, so every reader of the stored tree (assembly,
+# symmetry, Kronecker, matrix-free, ForwardDiff) meets main's tree, which the forms below
+# check against the same form written with a numeric coefficient.
+_rt_negated(W) = form(W, W, (u, v) -> innerₕ(u, v) - innerₕ(D₋ₓ(u), v))
+
+@testset "the sign of minus acts as -1" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    u = trial_function(Wₕ)
+    M = (-u).scalar
+    @test M isa Bramble._MinusOne
+    @test (u - 2.0 * u).right_op.scalar isa Bramble._MinusOne
+    @test isconcretetype(only(Base.return_types(simplify_ast, (typeof(-u),))))
+    @test isconcretetype(only(Base.return_types(simplify_ast, (typeof(u - 2.0 * u),))))
+    @test _infers(_rt_negated, (typeof(Wₕ),))
+    @test simplify_ast(-(-u)) === u
+    @test string(M) == "-1"
+    # An unsimplified tree prints as it did with the `Int` `-1`.
+    @test Bramble.expression(-u) == "-u"
+    @test Bramble.expression(u - D₋ₓ(u)) == "u - 1 * D₋ₓ(u)"
+    @test Bramble.expression(u - 2.0 * u) == "u - 1 * 2 * u"
+    # The stored tree holds the `Int` `-1`, and prints as main's did.
+    ast = Bramble.resolve_form_ast(_rt_negated(Wₕ))
+    @test ast.right_op.scalar === -1
+    @test !occursin("_MinusOne", string(typeof(ast)))
+    @test occursin(" - ", Bramble.expression(_rt_negated(Wₕ)))
+
+    # Each of these threw `Int64(::_MinusOne)` while the sign was an `Integer`.
+    lap(u, v) = innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(D₋ᵧ(u), D₋ᵧ(v))
+    mass = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
+    L = Matrix(assemble(form(Wₕ, Wₕ, lap)))
+    B = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v))))
+    @test isposdef(form(Wₕ, Wₕ, (u, v) -> lap(u, v) - innerₕ(u, v))) ===
+          isposdef(form(Wₕ, Wₕ, (u, v) -> lap(u, v) + (-1.0) * innerₕ(u, v)))
+    @test !isposdef(form(Wₕ, Wₕ, (u, v) -> -innerₕ(u, v)))
+    S = form(Wₕ, Wₕ, Bramble.skew_symmetric(D₋ₓ))
+    @test Matrix(assemble(S)) ≈ (B - B') / 2
+    @test !issymmetric(S)
+    F = collect(range(0.1, 1.0; length = ndofs(Wₕ)))
+    a = form(Wₕ, Wₕ, (u, v) -> lap(u, v) + Bramble.skew_symmetric(D₋ₓ)(u, v))
+    @test matrix_free_operator(a) * F ≈ (L + (B - B') / 2) * F
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(-u / 2, v)))) ≈ -mass / 2
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Ref(2) * (-u), v)))) ≈ -2mass
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ((1 + 2im) * (-u), v)))) ≈
+          -(1 + 2im) * mass
+    # A `BigInt` divisor scales by a `BigFloat`, which the sign meets.
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> -(innerₕ(u, v) / big(2))))) ≈ -mass / 2
+    # Fast diagonalisation splits the scales into Kronecker factors.
+    a₁ = form(Wₕ, Wₕ, (u, v) -> -(lap(u, v) / 2) + lap(u, v) + innerₕ(u, v))
+    @test fdm_solve(a₁, F) ≈ (L / 2 + mass) \ F
+    a₂ = form(Wₕ, Wₕ, (u, v) -> (lap(u, v) - innerₕ(u, v)) / 2 + lap(u, v))
+    @test fdm_solve(a₂, F) ≈ (3L / 2 - mass / 2) \ F
+    # A rank-one term under the sign, or with the sign on a factor, keeps it in its `σ`.
+    g = element(Wₕ, collect(range(0.1, 1.0; length = ndofs(Wₕ))))
+    r = form(Wₕ, Wₕ, (u, v) -> lap(u, v) - innerₕ(g, u) * innerₕ(g, v))
+    @test only(r.scale) === -1
+    w = assemble(form(Wₕ, v -> innerₕ(g, v)))
+    for (f, σ) in (((u, v) -> -innerₕ(g, u) * innerₕ(g, v), -1),
+        ((u, v) -> innerₕ(g, u) * (-innerₕ(g, v)), -1),
+        ((u, v) -> -(innerₕ(g, u) / 2) * innerₕ(g, v), -1 // 2))
+        rf = form(Wₕ, Wₕ, f)
+        @test only(rf.scale) === σ
+        K = assemble(rf)
+        @test Matrix(K.A) + K.σ * K.ws * K.wt' ≈ σ * w * w'
+    end
+    # A ghost relation on a `BigFloat` mesh, the sign beside a conormal derivative.
+    Ωᵇ = mesh(domain(interval(big"0.0", big"1.0") × interval(big"0.0", big"1.0")), (6, 7),
+        (false, false))
+    P = Bramble.padded_space(gridspace(Ωᵇ; ghosts = :boundary))
+    K = BigFloat[2 0.5; 0.5 1]
+    rel(c) = form(P, P, (u, v) -> inner_Γ(c(u), v; markers = (:xmin,)))
+    A = assemble(rel(u -> -∂ₙ(u; K) - u))
+    @test eltype(A) === BigFloat
+    @test A == assemble(rel(u -> (-1) * ∂ₙ(u; K) + (-1) * u))
+    # `jumpₙ` is built with `-`; beside a `BigFloat` `K` it assembles what a `Float64`
+    # one does.
+    Pⱼ = Bramble.padded_space(gridspace(
+        mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 7), (false, false));
+        ghosts = :boundary))
+    jmp(K) = assemble(form(Pⱼ, Pⱼ,
+        (u, v) -> inner_Γ(∂ₙ(u; K) + jumpₙ(u), jumpₙ(v); markers = (:xmin,))))
+    Aᵇ = jmp(BigFloat[1 0.5; 0 1])
+    @test eltype(Aᵇ) === BigFloat
+    @test Float64.(Matrix(Aᵇ)) ≈ Matrix(jmp([1.0 0.5; 0.0 1.0]))
+
+    # d/ds of `s A - A` is `A`, and of `(s - 1) b` is `b`: their sums are the mass's.
+    A₁ = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
+    b₁ = assemble(form(Wₕ, v -> innerₕ(1.0, v)))
+    dA = ForwardDiff.derivative(
+        s -> sum(assemble(form(Wₕ, Wₕ, (u, v) -> s * innerₕ(u, v) - innerₕ(u, v)))), 1.0)
+    db = ForwardDiff.derivative(
+        s -> sum(assemble(form(Wₕ, v -> innerₕ(s, v) - innerₕ(1.0, v)))), 1.0)
+    @test dA ≈ sum(A₁)
+    @test db ≈ sum(b₁)
+    # and of `-(s u) / 2` is `-M / 2`.
+    dM = ForwardDiff.derivative(
+        s -> sum(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(-(s * u) / 2, v)))), 1.0)
+    @test dM ≈ -sum(A₁) / 2
 end
 
 # The `same_mesh` rule of gpena/Bramble.jl#771 (`_same_mesh_stencil`,

@@ -183,17 +183,19 @@ end
 
 # What two relations on one facet must not share, read off a pair without parsing it:
 # `(d, s, dirichlet)`, with the component `c` first on a composite (`composite`), where only
-# Dirichlet relations are keyed; `nothing` for a pair that parses to no relation.
+# Dirichlet relations are keyed; `_NO_PAIR_KEY` for a pair that parses to no relation, a key
+# of the same type, so the tuple of keys the parsing checks capture is concrete.
+const _NO_PAIR_KEY = (-1, 0, 0, false)
 @inline function _pair_key(::Val{D}, p::Pair{Symbol, <:Pair}, composite::Bool) where {D}
     face = _find_face(Val(D), first(p))
-    face === nothing && return nothing
+    face === nothing && return _NO_PAIR_KEY
     op = first(last(p))
     dirichlet = op isa Union{TrialFunction, IndexedTrialFunction}
     composite || return (0, face[1], face[2], dirichlet)
-    op isa IndexedTrialFunction || return nothing
+    op isa IndexedTrialFunction || return _NO_PAIR_KEY
     return (op.component_idx, face[1], face[2], true)
 end
-@inline _pair_key(::Val, p, ::Bool) = nothing
+@inline _pair_key(::Val, p, ::Bool) = _NO_PAIR_KEY
 
 @inline _is_dirichlet(r::_FacetRelation) = r.op isa Union{TrialFunction,
     IndexedTrialFunction}
@@ -445,77 +447,211 @@ end
 end
 
 # The rows of a ghost relation's operator on its facet `(Val(d), Val(s))`, named `name`,
-# tested against component `c`: one `inner_Γ` holds one trial component
-# (block_extract.jl), so they are the sum of one form per component the operator reads, its
-# piece as a facet operator with that piece on every facet, as `_strain_pieces` keeps the
-# terms of `εₕ` apart (difference.jl).
+# tested against component `c`: the sum of one block per term of the operator, its terms
+# reading one component each (`_relation_terms`), as `_strain_pieces` keeps the terms of
+# `εₕ` apart (difference.jl). A term reading component `j` gives the block `(c, j)`, which
+# is the term's matrix on one component's padded space, as every component of a padded
+# composite has the same ghosts and mesh (`_throw_composite_ghost_sets`).
+# The blocks' entries gather in `acc` and sum in one `sparse`, which drops the zeros; their
+# values' type widens to each block's, as a sum of the blocks' matrices would.
 function _relation_matrix(P::CompositeGridSpace{N}, op::FacetOperator{D, G}, a::Val, b::Val,
-        name::Val, c::Int) where {N, D, G}
-    R = spzeros(eltype(P), ndofs(P), ndofs(P))
-    for j in 1:N
-        p = _trial_piece(_facet_component(op, a, b), j, _val(name))
-        p === nothing && continue
-        F = _facet_operator(Val(G), ntuple(_ -> (p, p), Val(D)))
-        R += assemble(form(P, P, (u, v) -> _facet_inner(_facet_mask(name), F, v(c))))
-    end
-    return R
+        name::Val, c::Val) where {N, D, G}
+    Ωₕ = mesh(first(leaf_spaces_offsets(P)[_val(c)]))
+    _check_facet_reach(Ωₕ, G[_val(a)], _val(a), _val(b), (_facet_component(op, a, b),))
+    acc = _add_terms((Int[], Int[], eltype(P)[]), P,
+        _relation_terms(_facet_component(op, a, b)), Val(G),
+        (a, b, name, c, map(last, leaf_spaces_offsets(P))))
+    return SparseArrays.dropzeros!(sparse(acc..., ndofs(P), ndofs(P)))
 end
 
-# The terms of `op` that read component `j`, or `nothing` if none does: the leaves of the
-# other components are dropped, with the sums, scales and differences around them.
-function _trial_piece(op::IndexedTrialFunction, j::Int, ::Symbol)
-    return op.component_idx == j ? op : nothing
+# The nodes a term's split passes through, applying each to every term of its operand.
+const _SplitWrapper{D} = Union{BackwardDifference{D}, ForwardDifference{D},
+    CenteredDifference{D}, StarDifference{D}, CrossWeightedDifference{D},
+    SecondDifference{D}, JumpNode{D}, BackwardAverage{D}, ForwardAverage{D},
+    CenteredAverage{D}, ShiftNode{D}, OperatorScale{D}, GridFunctionScale{D}}
+
+# The terms of `op`, by type: its sums split, but for conormal blocks
+# (`_conormal_coefficients`), and a difference, average, shift or scale of a sum applied to
+# each of its terms. A sum of one component is split too, though one form would do: whether
+# it is one reads the leaves' components, values.
+_relation_terms(op::OperatorAdd) = _sum_terms(op, _conormal_coefficients(op))
+_sum_terms(op::OperatorAdd, ::Nothing) = (_relation_terms(op.left_op)...,
+    _relation_terms(op.right_op)...)
+_sum_terms(op::OperatorAdd, ::Tuple) = (op,)
+function _relation_terms(op::_SplitWrapper)
+    return map(t -> _rebuilt_around(op, t), _relation_terms(op.inner_op))
 end
-for T in (
-    :BackwardDifference,
-    :ForwardDifference,
-    :CenteredDifference,
-    :StarDifference,
-    :CrossWeightedDifference,
-    :SecondDifference,
-    :JumpNode,
-    :BackwardAverage,
-    :ForwardAverage,
-    :CenteredAverage
-)
-    @eval function _trial_piece(op::$T{D, Dim}, j::Int, name::Symbol) where {D, Dim}
-        inner = _trial_piece(op.inner_op, j, name)
-        inner === nothing && return nothing
-        return $T{D, Dim, typeof(inner)}(inner)
+_relation_terms(op) = (op,)
+
+# Whether `op` holds a sum, under its differences and scales, by type.
+_holds_sum(::OperatorAdd) = true
+_holds_sum(op::_SplitWrapper) = _holds_sum(op.inner_op)
+_holds_sum(::Any) = false
+
+# `acc` with the block of each term of `terms` added, unrolled. A term reads one component,
+# a value that only places its block (`_add_term`). A term reading several that holds a
+# sum, a sum of the type of a conormal block whose leaves read different components, such
+# as `2.0 * ∂ₙ(u(1)) + 0.5 * Dcᵧ(u(2))` on :xmax, is split per leaf (`_add_block_leaves`),
+# or, where a leaf holds a sum itself, `0.5 * Dcᵧ(u(2) - u(1))`, into terms without sums
+# (`_add_split_terms`), which of the two read off the term's type: both paths have types
+# fixed by the term's, so its components only choose between them.
+# Any other term reading several, or none, is refused, naming the first node below its
+# differences, scales and sums that reads no one component (`_unsplit_term`, `nothing`
+# where every node reads one).
+@inline _add_terms(acc, P, ::Tuple{}, g::Val, facet::Tuple) = acc
+@inline function _add_terms(acc, P, terms::Tuple, g::Val, facet::Tuple)
+    t = first(terms)
+    k = _trial_component_class(t)
+    if k isa Int
+        acc′ = _add_term(acc, P, t, k, g, facet)
+    else
+        _holds_sum(t) || _throw_relation_unsplit(_val(facet[3]), t)
+        leaves = _block_leaves(t)
+        acc′ = if _leaves_hold_sums(leaves)
+            _add_split_terms(acc, P, _split_terms(t), g, facet)
+        else
+            _add_block_leaves(acc, P, t, leaves, 1, g, facet)
+        end
     end
+    return _add_terms(acc′, P, Base.tail(terms), g, facet)
 end
-function _trial_piece(op::ShiftNode{D, Dim}, j::Int, name::Symbol) where {D, Dim}
-    inner = _trial_piece(op.inner_op, j, name)
-    inner === nothing && return nothing
-    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
+
+# `acc` with the term `t`, holding a conormal block, added leaf by leaf: for the leaf `e` of
+# `leaves`, `t` with the block's other coefficients zero (`_block_part`), placed at the
+# leaf's component. Each part has `t`'s type, so it reuses `t`'s form, and a zero
+# coefficient replaces a value rather than scaling it, so an `Inf` leaves no NaN behind.
+@inline _add_block_leaves(acc, P, t, ::Tuple{}, e::Int, g::Val, facet::Tuple) = acc
+@inline function _add_block_leaves(acc, P, t, leaves::Tuple, e::Int, g::Val, facet::Tuple)
+    k = _trial_component_class(first(leaves))
+    k isa Int || _throw_relation_unsplit(_val(facet[3]), t)
+    acc′ = _add_term(acc, P, first(_block_part(t, e, 1)), k, g, facet)
+    return _add_block_leaves(acc′, P, t, Base.tail(leaves), e + 1, g, facet)
 end
-function _trial_piece(op::OperatorScale{D, S}, j::Int, name::Symbol) where {D, S}
-    inner = _trial_piece(op.inner_op, j, name)
-    inner === nothing && return nothing
-    return OperatorScale{D, S, typeof(inner)}(op.scalar, inner)
+
+# `acc` with each of `terms`, which hold no sum, added: a function of its own, so that
+# inference never meets `_add_terms` inside itself on another tuple of terms.
+@inline _add_split_terms(acc, P, ::Tuple{}, g::Val, facet::Tuple) = acc
+@inline function _add_split_terms(acc, P, terms::Tuple, g::Val, facet::Tuple)
+    t = first(terms)
+    k = _trial_component_class(t)
+    k isa Int || _throw_relation_unsplit(_val(facet[3]), t)
+    acc′ = _add_term(acc, P, t, k, g, facet)
+    return _add_split_terms(acc′, P, Base.tail(terms), g, facet)
 end
-function _trial_piece(op::GridFunctionScale{D, V}, j::Int, name::Symbol) where {D, V}
-    inner = _trial_piece(op.inner_op, j, name)
-    inner === nothing && return nothing
-    return GridFunctionScale{D, V, typeof(inner)}(op.grid_function, inner)
+
+# The terms of `op` with every sum split, conormal blocks too.
+_split_terms(op::OperatorAdd) = (_split_terms(op.left_op)..., _split_terms(op.right_op)...)
+function _split_terms(op::_SplitWrapper)
+    return map(t -> _rebuilt_around(op, t), _split_terms(op.inner_op))
 end
-function _trial_piece(op::OperatorAdd{D}, j::Int, name::Symbol) where {D}
-    l = _trial_piece(op.left_op, j, name)
-    r = _trial_piece(op.right_op, j, name)
-    l === nothing && return r
-    r === nothing && return l
-    return OperatorAdd{D, typeof(l), typeof(r)}(l, r)
+_split_terms(op) = (op,)
+
+# Whether a leaf of `leaves` holds a sum below its coefficient, by type.
+_leaves_hold_sums(::Tuple{}) = false
+function _leaves_hold_sums(leaves::Tuple)
+    return _holds_sum(first(leaves).inner_op) || _leaves_hold_sums(Base.tail(leaves))
 end
-function _trial_piece(op, j::Int, name::Symbol)
-    c = _trial_component_class(op)
-    c isa Int || _throw_relation_unsplit(name, op)
-    return c == j ? op : nothing
+
+# The leaves of the conormal block `op` holds, under its differences and scales, in order.
+_block_leaves(op::_ConormalTerm) = (op,)
+function _block_leaves(op::OperatorAdd)
+    return (_block_leaves(op.left_op)..., _block_leaves(op.right_op)...)
+end
+_block_leaves(op::_SplitWrapper) = _block_leaves(op.inner_op)
+
+# `op` with the coefficient of each block leaf zero but the `e`-th, counting from `i`, and
+# the count after its leaves; of `op`'s type.
+function _block_part(op::_ConormalTerm, e::Int, i::Int)
+    s = i == e ? op.scalar : zero(op.scalar)
+    return typeof(op)(s, op.inner_op), i + 1
+end
+function _block_part(op::OperatorAdd, e::Int, i::Int)
+    l, j = _block_part(op.left_op, e, i)
+    r, k = _block_part(op.right_op, e, j)
+    return typeof(op)(l, r), k
+end
+function _block_part(op::_SplitWrapper, e::Int, i::Int)
+    inner, j = _block_part(op.inner_op, e, i)
+    return _rebuilt_around(op, inner), j
+end
+_unsplit_term(op::_SplitWrapper) = _unsplit_term(op.inner_op)
+function _unsplit_term(op::OperatorAdd)
+    l = _unsplit_term(op.left_op)
+    return l === nothing ? _unsplit_term(op.right_op) : l
+end
+_unsplit_term(op) = _trial_component_class(op) isa Int ? nothing : summary(op)
+
+# `acc` with the block `(c, j)` of the term `t` added, `t` reading component `j`: its
+# matrix on component `c`'s padded space, its rows at `c`'s offset and its columns at
+# `j`'s, of `facet`'s `offsets`; a component outside them adds none.
+function _add_term(acc, P, t::LazyOp, j::Int, g::Val, facet::Tuple)
+    a, b, _, c, offsets = facet
+    1 <= j <= length(offsets) || return acc
+    S, oc = leaf_spaces_offsets(P)[_val(c)]
+    M = _term_matrix(S, t, g, a, b)
+    Is, Js, Us = acc
+    Vs = _widened(Us, eltype(M))
+    for col in axes(M, 2), q in nzrange(M, col)
+
+        v = nonzeros(M)[q]
+        iszero(v) && continue                # the form stores its whole pattern
+        push!(Is, rowvals(M)[q] + oc), push!(Js, col + offsets[j]), push!(Vs, v)
+    end
+    return Is, Js, Vs
+end
+function _widened(v::Vector{T}, ::Type{S}) where {T, S}
+    return promote_type(T, S) === T ? v : Vector{promote_type(T, S)}(v)
+end
+
+# The matrix of the term `p` on the facet `(a, b)` of the padded space `S`, its leaves
+# rebuilt as `S`'s trial function (`_retarget`).
+function _term_matrix(S, p::LazyOp{D}, g::Val, a::Val, b::Val) where {D}
+    mask = _relation_mask(a, b, Val(D))
+    return assemble(form(S, S, (u, v) -> _facet_inner(mask, _piece_operator(g, p, u), v)))
+end
+
+# The term `p` as a facet operator on every facet, its leaves `leaf`.
+@inline function _piece_operator(g::Val, p::LazyOp{D}, leaf) where {D}
+    q = _retarget(p, leaf)
+    return _facet_operator(g, ntuple(_ -> (q, q), Val(D)))
+end
+
+# `op` with each trial leaf replaced by `leaf`, every node rebuilt, so the result is built
+# from `leaf` even where its type is the operand's own (`_rewrap_inner` returns that
+# operand).
+@inline _retarget(::IndexedTrialFunction, leaf) = leaf
+@inline function _retarget(op::UnaryWrapper, leaf)
+    return _rebuilt_around(op, _retarget(op.inner_op, leaf))
+end
+@inline function _retarget(op::OperatorAdd, leaf)
+    return OperatorAdd(_retarget(op.left_op, leaf), _retarget(op.right_op, leaf))
+end
+@inline _retarget(op, leaf) = op
+
+# `_rewrap_inner` (block_extract.jl) without its shortcut: always a new node around `inner`.
+@generated function _rebuilt_around(op::T, inner::I) where {T, I}
+    wrapper = Base.typename(T).wrapper
+    decl = fieldtype(Base.unwrap_unionall(wrapper), :inner_op)
+    params = Any[T.parameters...]
+    params[findfirst(p -> p === decl, Base.unwrap_unionall(wrapper).parameters)] = I
+    args = map(fieldnames(T)) do f
+        f === :inner_op ? :inner : :(getfield(op, $(QuoteNode(f))))
+    end
+    return :($(wrapper{params...})($(args...)))
+end
+
+# `f(Val(i))` for the index `i` of `vals`, a tuple of `Val`s, unrolled as `_at_facet` is.
+@inline _at_index(f::F, ::Tuple{}, i::Int) where {F} = throw(ArgumentError("no index $i"))
+@inline function _at_index(f::F, vals::Tuple, i::Int) where {F}
+    _val(first(vals)) == i && return f(first(vals))
+    return _at_index(f, Base.tail(vals), i)
 end
 
 @noinline function _throw_relation_unsplit(name::Symbol, op)
+    term = something(_unsplit_term(op), summary(op))
     throw(
         ArgumentError(
-        "the relation on :$name holds the term $(summary(op)), which cannot be split into " *
+        "the relation on :$name holds the term $term, which cannot be split into " *
         "one term per component it reads. Write the relation as a sum of facet operators " *
         "of one component each, such as `∂ₙ(u(1); K = K₁₁) + ∂ₙ(u(2); K = K₁₂)`.",
     ),
@@ -653,31 +789,43 @@ end
 # the rows transposed, so each node's row is a column. Data depending on time give the
 # facet weights instead, which `L` multiplies the data at each time by.
 # The forms are `inner_Γ(op, v; markers = (name,))` and `inner_Γ(data, …)`, with the
-# facet named as a constant (`_at_facet`, `_facet_mask`), so that each infers.
+# facet's mask a constant (`_at_facet`, `_relation_mask`), so that each infers. A resolved
+# mask skips the check `form` runs on labels (`_resolved_inner`), so the facet's reach is
+# checked here, on the padded mesh.
 function _assemble_relation(P::ScalarGridSpace{D}, r::_FacetRelation) where {D}
     op = r.op
     data = _is_time_relation(r) ? one(eltype(P)) : r.data
-    return _at_facet(Val(D), r.d, r.s) do name, _, _
-        R = assemble(form(P, P, (u, v) -> _facet_inner(_facet_mask(name), op, v)))
-        b = assemble(form(P,
-            v -> _facet_inner(_facet_mask(name), data, _facet_identity(v))))
+    return _at_facet(Val(D), r.d, r.s) do name, d, s
+        _check_facet_reach(mesh(P), _reads_ghosts(op)[_val(d)], _val(d), _val(s),
+            (_facet_component(op, d, s),))
+        mask = _relation_mask(d, s, Val(D))
+        R = assemble(form(P, P, (u, v) -> _facet_inner(mask, op, v)))
+        b = assemble(form(P, v -> _facet_inner(mask, data, _facet_identity(v))))
         return sparse(transpose(R)), b
     end
 end
 
-# The labels of `markers = (name,)` as `inner_Γ` holds them until `form`.
-@inline _facet_mask(::Val{name}) where {name} = _SurfaceLabels{(name,)}
+# The mask of `markers = (name,)` for the facet `(d, s)` it names, resolved without
+# reading the mesh: a relation's facet is the whole coordinate face (`_find_face`), so its
+# mask is the face's, `_face_mask(Val(D), (name,))`, built from the constants `d` and `s`
+# so that it folds.
+@inline function _relation_mask(::Val{d}, ::Val{s}, ::Val{D}) where {d, s, D}
+    return Val(ntuple(e -> (e == d && s == 1, e == d && s == 2), Val(D)))
+end
 
 # On a padded composite, tested against the component `r.c` whose ghosts the relation is
 # attached to: the sum of one `inner_Γ` per component the relation reads.
-function _assemble_relation(P::CompositeGridSpace,
-        r::_FacetRelation{<:FacetOperator{D}}) where {D}
-    c, op, data = r.c, r.op, r.data
+function _assemble_relation(P::CompositeGridSpace{N},
+        r::_FacetRelation{<:FacetOperator{D}}) where {N, D}
+    op, data = r.op, r.data
     return _at_facet(Val(D), r.d, r.s) do name, a, b
-        R = _relation_matrix(P, op, a, b, name, c)
-        F = assemble(form(P,
-            v -> _facet_inner(_facet_mask(name), data, _facet_identity(v(c)))))
-        return sparse(transpose(R)), F
+        return _at_index(ntuple(Val, Val(N)), r.c) do c
+            R = _relation_matrix(P, op, a, b, name, c)
+            mask = _relation_mask(a, b, Val(D))
+            F = assemble(form(P,
+                v -> _facet_inner(mask, data, _facet_identity(v(_val(c))))))
+            return sparse(transpose(R)), F
+        end
     end
 end
 
@@ -723,8 +871,8 @@ function _composite_closure(P::CompositeGridSpace, comps::Tuple{Vararg{Any, N}},
     ghosted(r) = has_ghosts(first(comps[r.c]), r.d, _GHOST_SIDES[r.s])
     _check_dirichlet_orphans(ghosted, key, map(key, rels), drels)
     several = map(r -> _relation_component(r.op, r.d, r.s, r.name) == 0, rels)
-    names = map(r -> r.name, rels)
-    multi = unique!(Symbol[names[i] for i in eachindex(names) if several[i]])
+    rnames = map(r -> r.name, rels)
+    multi = unique!(Symbol[rnames[i] for i in eachindex(rnames) if several[i]])
     R, b, ghosts, _ = _relation_rows(P, comps, rels; onesided = multi)
     fixed, keep = falses(ndofs(P)), Int[]
     parts = map(c -> _dirichlet_values(first(comps[c]), drels, eltype(P), c),

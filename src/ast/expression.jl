@@ -43,6 +43,10 @@ function _format_scalar(c::AbstractFloat)
 end
 _format_scalar(c::Real) = isinteger(c) ? string(Integer(c)) : string(c)
 _format_scalar(c) = string(c)
+# The sign of `-` (`_MinusOne`, ast.jl) is not a number; an unsimplified `a - b` prints as
+# the `Int` `-1` it stands for did.
+_sign_as_int(::_MinusOne) = -1
+_sign_as_int(c) = c
 
 # --- Parenthesization -------------------------------------------------------------- #
 
@@ -72,8 +76,9 @@ expression(op::GridFunctionScale) = "vₕ * $(expression(op.inner_op))"
 function expression(op::OperatorAdd)
     left = _paren_if_add(op.left_op)
     right_op = op.right_op
-    if right_op isa OperatorScale && right_op.scalar isa Real && right_op.scalar < 0
-        flip = expression(OperatorScale(-right_op.scalar, right_op.inner_op))
+    c = right_op isa OperatorScale ? _sign_as_int(right_op.scalar) : nothing
+    if c isa Real && c < 0
+        flip = expression(OperatorScale(-c, right_op.inner_op))
         return "$(left) - $(flip)"
     end
     return "$(left) + $(_paren_if_add(right_op))"

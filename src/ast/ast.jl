@@ -326,9 +326,19 @@ expression(op::DiracSource) = "dirac($(string(op.points)), $(string(op.strengths
 # --- Algebra ----------------------------------------------------------------------- #
 
 @inline Base.:+(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = OperatorAdd(op1, op2)
-# `-1` promotes against whatever the space's element type is, preserving precision.
-@inline Base.:-(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = op1 + OperatorScale(-1, op2)
-@inline Base.:-(op::LazyOp) = OperatorScale(-1, op)
+# The sign of `-op` and `a - b`: the `-1` as a singleton type, so `simplify_ast` reads that
+# it is neither zero nor one off the type, even when the operator is a runtime value (as in
+# `constrained`). An `Int` `-1` stored in the node is collapsed by value
+# (gpena/Bramble.jl#240) and makes `form` a `Union` there. Not a `Number`, so Base never
+# promotes it and it adds no method that would invalidate Base code on load: it lives only
+# between `-` and the end of `simplify_ast`, which folds it (`_fold_mul`), and `form` lowers
+# what is left to the `Int` `-1` (`_lower_signs`), so nothing after it meets the sign.
+struct _MinusOne end
+Base.show(io::IO, ::_MinusOne) = print(io, -1)
+
+@inline Base.:-(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = op1 + OperatorScale(
+    _MinusOne(), op2)
+@inline Base.:-(op::LazyOp) = OperatorScale(_MinusOne(), op)
 
 @inline Base.:*(c::Number, op::LazyOp) = OperatorScale(c, op)
 @inline Base.:*(op::LazyOp, c::Number) = OperatorScale(c, op)
