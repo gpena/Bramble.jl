@@ -359,9 +359,9 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
         end
     end
 
-    # A form written with `-` scales by the sign `-1` that `-` stores (`_MinusOne`,
-    # src/ast/ast.jl): the fast-diagonalisation build, its refill and the Schur route each
-    # convert it to the system's eltype, as they did the `Int` `-1` it replaced.
+    # A form written with `-`: `form` lowers the sign `-` stores (`_MinusOne`,
+    # src/ast/ast.jl) to the `Int` `-1`, which the fast-diagonalisation build, its refill
+    # and the Schur route each convert to the system's eltype.
     @testset "fdm: forms written with minus" begin
         L(u, v) = innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(D₋ᵧ(u), D₋ᵧ(v))
         # Nonsingular: `L + 2 M - M` is `L + M`.

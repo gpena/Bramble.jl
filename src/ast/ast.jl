@@ -326,44 +326,15 @@ expression(op::DiracSource) = "dirac($(string(op.points)), $(string(op.strengths
 # --- Algebra ----------------------------------------------------------------------- #
 
 @inline Base.:+(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = OperatorAdd(op1, op2)
-# The sign of `-op` and `a - b`: the integer `-1` as a singleton type, so `simplify_ast`
-# reads that it is neither zero nor one off the type, even when the operator is a runtime
-# value (as in `constrained`). An `Int` `-1` stored in the node is collapsed by value
-# (gpena/Bramble.jl#240) and makes `form` a `Union` there. It promotes as `-1` does, against
-# whatever the space's element type is, preserving precision, and prints as `-1`.
-struct _MinusOne <: Integer end
+# The sign of `-op` and `a - b`: the `-1` as a singleton type, so `simplify_ast` reads that
+# it is neither zero nor one off the type, even when the operator is a runtime value (as in
+# `constrained`). An `Int` `-1` stored in the node is collapsed by value
+# (gpena/Bramble.jl#240) and makes `form` a `Union` there. Not a `Number`, so Base never
+# promotes it and it adds no method that would invalidate Base code on load: it lives only
+# between `-` and the end of `simplify_ast`, which folds it (`_fold_mul`), and `form` lowers
+# what is left to the `Int` `-1` (`_lower_signs`), so nothing after it meets the sign.
+struct _MinusOne end
 Base.show(io::IO, ::_MinusOne) = print(io, -1)
-Base.iszero(::_MinusOne) = false
-Base.isone(::_MinusOne) = false
-Base.hash(::_MinusOne, h::UInt) = hash(-1, h)
-Base.:-(::_MinusOne) = 1
-Base.AbstractFloat(::_MinusOne) = -1.0
-Base.widen(::Type{_MinusOne}) = widen(Int)
-# Two signs, which promotion leaves as they are, as two `Int`s `-1`.
-for f in (:+, :-, :*, :<, :<=, :div, :rem)
-    @eval Base.$f(::_MinusOne, ::_MinusOne) = $f(-1, -1)
-end
-# The constructors a coefficient meets in a form: the float types (`T(c)` in the
-# extensions), and `BigInt`, which `BigFloat` and so a `BigFloat` scale go through;
-# `Complex` and `Float16` reach these. No `Int64`, `Int32`, ... constructor nor `one` or
-# `zero`: they invalidate the Base code compiled against an abstract `Integer` (over 250
-# MethodInstances when `Bramble` loads; a `convert` to `Int`, 146), so `Int(-u.scalar)`
-# and `Rational` throw.
-for T in (Float32, Float64, BigInt)
-    @eval Base.$(nameof(T))(::_MinusOne) = $T(-1)
-end
-# What `expression` and `_same_operator_shape` (symmetry.jl) ask of a scale: its sign
-# against `0`, its digits, and whether it equals an `Int` scale.
-Base.:<(::_MinusOne, y::Int) = -1 < y
-Base.string(::_MinusOne) = "-1"
-Base.:(==)(::_MinusOne, y::Int) = y == -1
-Base.:(==)(x::Int, ::_MinusOne) = x == -1
-# Against Base's number families only, so a package's own rule against `Real` (a
-# `ForwardDiff.Dual`'s) is not ambiguous with it and reaches this one for its value type.
-function Base.promote_rule(::Type{_MinusOne},
-        ::Type{T}) where {T <: Union{AbstractFloat, Integer, Rational, Complex}}
-    return promote_type(Int, T)
-end
 
 @inline Base.:-(op1::LazyOp{D}, op2::LazyOp{D}) where {D} = op1 + OperatorScale(
     _MinusOne(), op2)

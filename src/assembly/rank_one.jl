@@ -28,7 +28,8 @@ struct RankOneTerm{D, S <: Tuple, FT <: LazyOp{D}, FS <: LazyOp{D}} <: LazyOp{D}
     test::FS
 end
 
-const _RankScalar = Union{Number, Base.RefValue{<:Number}}
+# The sign of `-` (`_MinusOne`, ast.jl) is a constant factor too, the `-1` it stands for.
+const _RankScalar = Union{Number, Base.RefValue{<:Number}, _MinusOne}
 
 # `σ`'s value: the number times every `Ref`'s current value, so a `Ref` stays live.
 @inline _rank_scale_value(s::Tuple) = _rank_scale_value(s[1], Base.tail(s)...)
@@ -36,6 +37,7 @@ const _RankScalar = Union{Number, Base.RefValue{<:Number}}
 @inline _rank_scale_value(c::Number, r::Base.RefValue, rs...) = _rank_scale_value(c * r[], rs...)
 
 @inline _push_scale(s::Tuple, c::Number) = (s[1] * c, Base.tail(s)...)
+@inline _push_scale(s::Tuple, ::_MinusOne) = _push_scale(s, -1)
 @inline _push_scale(s::Tuple, r::Base.RefValue) = (s..., r)
 @inline _join_scales(a::Tuple, b::Tuple) = (a[1] * b[1], Base.tail(a)..., Base.tail(b)...)
 
