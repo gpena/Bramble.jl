@@ -461,19 +461,22 @@ function _relation_matrix(P::CompositeGridSpace{N}, op::FacetOperator{D, G}, a::
         ntuple(Val, Val(N)))
 end
 
-# `R` plus the rows of the piece of `op` reading each component of `js`, unrolled.
+# `R` plus the rows of the piece of `op` reading each component of `js`, unrolled; a
+# component no leaf of `op` reads adds none. The piece's type is the same for every
+# component, its leaves of the others scaled by a zero, so whether it reads is a `Bool`.
 @inline _add_pieces(R, P, op, g::Val, facet::Tuple, ::Tuple{}) = R
 @inline function _add_pieces(R, P, op, g::Val, facet::Tuple, js::Tuple)
     a, b, name, c = facet
-    p = _trial_piece(op, _val(first(js)), _val(name))
-    S = p === nothing ? R : R + _piece_matrix(P, p, g, a, b, c, first(js))
+    p, reads = _trial_piece(op, _val(first(js)), zero(eltype(P)), _val(name))
+    S = reads ? R + _piece_matrix(P, p, g, a, b, c, first(js)) : R
     return _add_pieces(S, P, op, g, facet, Base.tail(js))
 end
 
-# The rows of one piece: a function barrier, since which leaves `_trial_piece` keeps is
-# read off their components, values, so `p`'s type is a union split at this call. Its
-# leaves are rebuilt inside the form as `u(j)` (`_retarget`): a leaf the form captures
-# holds its component as a value, which `simplify_ast` reads to decide its result's type.
+# The rows of one piece. Its leaves are rebuilt inside the form as `u(j)` (`_retarget`): a
+# leaf the form captures holds its component as a value, which `simplify_ast` reads to
+# decide its result's type. The zero-scaled leaves store explicit zeros, which the sum in
+# `_add_pieces` drops (a sparse sum stores no zero), so the rows hold the entries of the
+# terms reading `j` alone.
 function _piece_matrix(P::CompositeGridSpace, p::LazyOp{D}, g::Val, a::Val, b::Val,
         c::Val, j::Val) where {D}
     mask = _relation_mask(a, b, Val(D))
@@ -518,10 +521,15 @@ end
     return _at_index(f, Base.tail(vals), i)
 end
 
-# The terms of `op` that read component `j`, or `nothing` if none does: the leaves of the
-# other components are dropped, with the sums, scales and differences around them.
-function _trial_piece(op::IndexedTrialFunction, j::Int, ::Symbol)
-    return op.component_idx == j ? op : nothing
+# The terms of `op` that read component `j`, and whether any does. Every leaf is kept, with
+# the sums, scales and differences around it, scaled by `one(z)` if it reads `j` and by `z`,
+# a zero of the space's element type, if not: so the piece's type is `op`'s leaves scaled,
+# whatever their components, which are values.
+@inline function _trial_leaf(op::LazyOp{D}, c::Int, j::Int, z) where {D}
+    return OperatorScale{D, typeof(z), typeof(op)}(c == j ? one(z) : z, op), c == j
+end
+function _trial_piece(op::IndexedTrialFunction, j::Int, z, ::Symbol)
+    return _trial_leaf(op, op.component_idx, j, z)
 end
 for T in (
     :BackwardDifference,
@@ -535,38 +543,32 @@ for T in (
     :ForwardAverage,
     :CenteredAverage
 )
-    @eval function _trial_piece(op::$T{D, Dim}, j::Int, name::Symbol) where {D, Dim}
-        inner = _trial_piece(op.inner_op, j, name)
-        inner === nothing && return nothing
-        return $T{D, Dim, typeof(inner)}(inner)
+    @eval function _trial_piece(op::$T{D, Dim}, j::Int, z, name::Symbol) where {D, Dim}
+        inner, reads = _trial_piece(op.inner_op, j, z, name)
+        return $T{D, Dim, typeof(inner)}(inner), reads
     end
 end
-function _trial_piece(op::ShiftNode{D, Dim}, j::Int, name::Symbol) where {D, Dim}
-    inner = _trial_piece(op.inner_op, j, name)
-    inner === nothing && return nothing
-    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
+function _trial_piece(op::ShiftNode{D, Dim}, j::Int, z, name::Symbol) where {D, Dim}
+    inner, reads = _trial_piece(op.inner_op, j, z, name)
+    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner), reads
 end
-function _trial_piece(op::OperatorScale{D, S}, j::Int, name::Symbol) where {D, S}
-    inner = _trial_piece(op.inner_op, j, name)
-    inner === nothing && return nothing
-    return OperatorScale{D, S, typeof(inner)}(op.scalar, inner)
+function _trial_piece(op::OperatorScale{D, S}, j::Int, z, name::Symbol) where {D, S}
+    inner, reads = _trial_piece(op.inner_op, j, z, name)
+    return OperatorScale{D, S, typeof(inner)}(op.scalar, inner), reads
 end
-function _trial_piece(op::GridFunctionScale{D, V}, j::Int, name::Symbol) where {D, V}
-    inner = _trial_piece(op.inner_op, j, name)
-    inner === nothing && return nothing
-    return GridFunctionScale{D, V, typeof(inner)}(op.grid_function, inner)
+function _trial_piece(op::GridFunctionScale{D, V}, j::Int, z, name::Symbol) where {D, V}
+    inner, reads = _trial_piece(op.inner_op, j, z, name)
+    return GridFunctionScale{D, V, typeof(inner)}(op.grid_function, inner), reads
 end
-function _trial_piece(op::OperatorAdd{D}, j::Int, name::Symbol) where {D}
-    l = _trial_piece(op.left_op, j, name)
-    r = _trial_piece(op.right_op, j, name)
-    l === nothing && return r
-    r === nothing && return l
-    return OperatorAdd{D, typeof(l), typeof(r)}(l, r)
+function _trial_piece(op::OperatorAdd{D}, j::Int, z, name::Symbol) where {D}
+    l, lreads = _trial_piece(op.left_op, j, z, name)
+    r, rreads = _trial_piece(op.right_op, j, z, name)
+    return OperatorAdd{D, typeof(l), typeof(r)}(l, r), lreads | rreads
 end
-function _trial_piece(op, j::Int, name::Symbol)
+function _trial_piece(op, j::Int, z, name::Symbol)
     c = _trial_component_class(op)
     c isa Int || _throw_relation_unsplit(name, op)
-    return c == j ? op : nothing
+    return _trial_leaf(op, c, j, z)
 end
 
 @noinline function _throw_relation_unsplit(name::Symbol, op)
