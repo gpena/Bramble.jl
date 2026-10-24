@@ -1,10 +1,11 @@
 module GhostGridFunctionsTests
 
-# `normₕ` and `interpolate_at` of an element of a ghost space read the physical nodes, the
-# first `npoints` degrees of freedom, and never the ghosts (here the sentinel 1e300). The
-# oracle is the same call on the plain space `gridspace(Ωₕ)`, which shares no ghost code,
-# and a hand sum or an affine function. A constrained space whose degrees of freedom omit
-# fixed nodes or carry data has no grid function in a DOF vector: both refuse naming `lift`.
+# `normₕ`, `norminf`, `snorm₁ₕ`, `norm₁ₕ` and `interpolate_at` of an element of a ghost
+# space read the physical nodes, the first `npoints` degrees of freedom, and never the
+# ghosts (here the sentinel 1e300). The oracle is the same call on the plain space
+# `gridspace(Ωₕ)`, which shares no ghost code, and a hand sum or an affine function. A
+# constrained space whose degrees of freedom omit fixed nodes or carry data has no grid
+# function in a DOF vector: both refuse naming `lift`.
 
 using Test
 using Random
@@ -229,6 +230,85 @@ end
         @test interpolate_at(uc, 0.4) ≈ 1.0 + 1.0im
     end
 
+    @testset "max and H¹ norms skip the ghosts" begin
+        # oracle: the same norm on the plain space; the sentinel ghosts would dominate
+        for (Ωₕ, ghosts) in ((O1.make_mesh(:random, 0; n0 = 9, seed = 5), (:xmin, :xmax)),
+            (ON.make_mesh(:random, 0; dim = 2, n0 = 7, seed = 9), :boundary),
+            (ON.make_mesh(:random, 0; dim = 2, n0 = 7, seed = 9), (:xmin, :ymax)))
+            @test !Bramble.is_uniform(Ωₕ)
+            v = rand(MersenneTwister(23), npoints(Ωₕ))
+            ug, up = sentinel_pair(gridspace(Ωₕ; ghosts = ghosts), gridspace(Ωₕ), v)
+            @test norminf(ug) == maximum(abs, v)
+            @test norm(ug, "∞") == maximum(abs, v)
+            @test snorm₁ₕ(ug) ≈ snorm₁ₕ(up)
+            @test norm₁ₕ(ug) ≈ norm₁ₕ(up)
+            @test norm(ug, "1h") ≈ norm₁ₕ(up)
+            @test snorm₁ₕ(up) > 0 && norm₁ₕ(up) > normₕ(up)
+        end
+        # two points: the seminorm of a constant is 0, its norm the L² norm of a constant
+        Ωₕ = mesh(domain(interval(0.0, 2.0)), 2, false)
+        Wg = gridspace(Ωₕ; ghosts = :boundary)
+        ug = element(Wg)
+        ug .= SENTINEL
+        ug[1:2] .= (1.0, 3.0)
+        @test norminf(ug) == 3.0
+        @test snorm₁ₕ(ug) ≈ sqrt(2.0)   # h ((3 - 1) / h)² over one cell of width h = 2
+        u1 = element(Wg, 1.0)
+        @test norm(u1, "1h") isa Float64
+        @test snorm₁ₕ(u1) == 0
+        @test norm₁ₕ(u1) ≈ sqrt(2.0)
+        # Float32 keeps its type; the 1f30 ghosts would overflow a square
+        Ω32 = mesh(domain(interval(0.0f0, 1.0f0)), 6, true)
+        u32 = element(gridspace(Ω32; ghosts = :boundary))
+        u32 .= 1.0f30
+        u32[1:6] .= 1.0f0
+        @test norminf(u32) === 1.0f0
+        @test snorm₁ₕ(u32) === 0.0f0
+        @test norm₁ₕ(u32) isa Float32 && norm₁ₕ(u32) ≈ 1.0f0
+        # constrained DOFs that are the nodes: the DOF vector is the grid function
+        Ω2 = ON.make_mesh(:random, 0; dim = 2, n0 = 7, seed = 13)
+        C = constrained(gridspace(Ω2; ghosts = (:xmin, :ymax)),
+            u -> (:xmin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0))
+        uc = element(C)
+        uc .= rand(MersenneTwister(29), ndofs(C))
+        up = element(gridspace(Ω2))
+        up .= parent(uc)
+        @test norminf(uc) == norminf(up)
+        @test norm₁ₕ(uc) ≈ norm₁ₕ(up)
+        # DOFs that are no grid function refuse naming `lift`; the lifted grid function
+        # lives on the padded space, so `norminf` of it reads the whole padded box
+        Cd = constrained(gridspace(Ω2; ghosts = (:xmin,)), u -> (:xmin => ∂ₙ(u) => 1.0,))
+        ud = element(Cd)
+        ud .= 1.0
+        for f in (norminf, snorm₁ₕ, norm₁ₕ)
+            @test refuses_naming_lift(() -> f(ud))
+            @test_throws ArgumentError f(ud)
+        end
+        lifted = Bramble.lift(Cd, parent(ud))
+        @test norminf(lifted) == maximum(abs, parent(lifted)) > 1.0
+        # composites of ghost spaces, 1D and 2D: per component, the product-space norms
+        for (Ωₕ, ghosts) in ((O1.make_mesh(:random, 0; n0 = 9, seed = 5), :boundary),
+            (ON.make_mesh(:random, 0; dim = 2, n0 = 7, seed = 9), (:xmin, :ymax)))
+            Wg = gridspace(Ωₕ; ghosts = ghosts)
+            W = gridspace(Ωₕ)
+            rng = MersenneTwister(31)
+            v1, v2 = rand(rng, npoints(Ωₕ)), 2.0 .+ rand(rng, npoints(Ωₕ))
+            a1, p1 = sentinel_pair(Wg, W, v1)
+            a2, p2 = sentinel_pair(Wg, W, v2)
+            up = element(W × W)
+            up .= vcat(v1, v2)
+            for Cg in (Wg × Wg, Wg^2)
+                ug = element(Cg)
+                ug .= vcat(parent(a1), parent(a2))
+                @test norminf(ug) == maximum(abs, v2)
+                @test norm(ug, "∞") == maximum(abs, v2)
+                @test snorm₁ₕ(ug) ≈ snorm₁ₕ(up) ≈ hypot(snorm₁ₕ(p1), snorm₁ₕ(p2))
+                @test norm₁ₕ(ug) ≈ norm₁ₕ(up)
+                @test norm(ug, "1h") ≈ hypot(norm₁ₕ(p1), norm₁ₕ(p2))
+            end
+        end
+    end
+
     @testset "a moved mesh refuses, no allocation" begin
         Ωₕ = ON.make_mesh(:random, 0; dim = 2, n0 = 6, seed = 21)
         Wg = gridspace(Ωₕ; ghosts = :boundary)
@@ -247,6 +327,7 @@ end
         axes = ntuple(d -> collect(points(Ωₕ(d))) .^ 2, 2)
         change_points!(Ωₕ, axes)
         @test_throws ArgumentError normₕ(ug)
+        @test_throws ArgumentError norm₁ₕ(ug)
         @test_throws ArgumentError interpolate_at(ug, (0.4, 0.4))
     end
 end

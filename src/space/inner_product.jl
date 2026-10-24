@@ -460,12 +460,31 @@ every entry of every component.
 The element type comes from the data, not from the space, so a `ForwardDiff.Dual`-valued grid
 function returns a `Dual`.
 
+On a [`GhostGridSpace`](@ref) it is the maximum over the physical nodes, the first
+`npoints(Ωₕ)` degrees of freedom: the ghost values never enter, and a space whose degrees of
+freedom are no grid function throws an `ArgumentError`, as for [`normₕ`](@ref). The lifted
+grid function `Bramble.lift(Cₕ, u)` lives on the padded space, so `norminf` of it reads the
+whole padded box, ghosts included. On a composite of ghost spaces, `Cₕ × Cₕ` or `Cₕ^N`, it
+is the maximum over the components, each read so.
+
 See also: [`normₕ`](@ref), [`norm₁ₕ`](@ref)
 """
 @inline function norminf(uₕ::VectorElement)
     data = parent(uₕ)
     return mapreduce(abs, max, data; init = abs(zero(eltype(data))))
 end
+
+@inline function norminf(uₕ::VectorElement{<:GhostGridSpace})
+    u = _physical_values(:norminf, uₕ)
+    return mapreduce(abs, max, u; init = abs(zero(eltype(u))))
+end
+
+# A flat composite of ghost spaces, `Cₕ × Cₕ` or `Cₕ^N`: its norms go component by component,
+# since the generic composite methods would read the ghosts of the concatenated vector.
+const _CompositeOfGhosts = CompositeGridSpace{<:Any,
+    <:Tuple{GhostGridSpace, Vararg{GhostGridSpace}}}
+
+@inline norminf(uₕ::VectorElement{<:_CompositeOfGhosts}) = maximum(norminf, components(uₕ))
 
 @inline norminf(uₕ::NTuple{<:Any, VectorElement}) = maximum(norminf, uₕ)
 
@@ -1343,14 +1362,22 @@ On a [`CompositeGridSpace`](@ref) it is the seminorm of the product space, as fo
 
 The result has the real type of the element type, as for [`normₕ`](@ref): each difference
 `δ` contributes `abs2(δ)`.
+
+On a [`GhostGridSpace`](@ref) it is the seminorm of the physical grid function, the first
+`npoints(Ωₕ)` degrees of freedom on the physical mesh `Ωₕ`: the ghost values never enter,
+and a space whose degrees of freedom are no grid function throws, as for [`normₕ`](@ref).
+On a composite of ghost spaces it is the seminorm of the product space of those grid
+functions.
 """
 @inline snorm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
 @inline snorm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
+snorm₁ₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
 
 # Squared seminorm summed over the leaves, so the composite never takes a root per
 # component.
 @inline _snorm₁ₕ_sq(uₕ::VectorElement{<:CompositeGridSpace}) = sum(
     _snorm₁ₕ_sq, components(uₕ))
+_snorm₁ₕ_sq(uₕ::VectorElement{<:GhostGridSpace}) = _snorm₁ₕ_sq(_physical_element(:snorm₁ₕ, uₕ))
 
 """
     norm₁ₕ(uₕ::VectorElement) -> Number
@@ -1370,6 +1397,26 @@ On a [`CompositeGridSpace`](@ref) it is the norm of the product space, as for
 [`normₕ`](@ref): the square root of the sum of the components' squared norms.
 
 The result has the real type of the element type, as for [`normₕ`](@ref).
+
+On a [`GhostGridSpace`](@ref) it is the norm of the physical grid function, as for
+[`snorm₁ₕ`](@ref): the ghost values never enter. On a composite of ghost spaces it is the
+norm of the product space of those grid functions.
 """
 @inline norm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
 @inline norm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
+norm₁ₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_norm₁ₕ_sq(uₕ)))
+norm₁ₕ(uₕ::VectorElement{<:_CompositeOfGhosts}) = sqrt(real(sum(_norm₁ₕ_sq, components(uₕ))))
+
+function _norm₁ₕ_sq(uₕ::VectorElement{<:GhostGridSpace})
+    e = _physical_element(:norm₁ₕ, uₕ)
+    return innerₕ(e, e) + _snorm₁ₕ_sq(e)
+end
+
+# The physical grid function of a ghost element: its first `npoints` degrees of freedom, a
+# view, on a plain space of the physical mesh, which builds its weights afresh. The padded
+# space's weights are read first, so a moved mesh throws as in `normₕ`.
+function _physical_element(op::Symbol, uₕ::VectorElement{<:GhostGridSpace})
+    u = _physical_values(op, uₕ)
+    weights(uₕ.space.padded)   # throws once the mesh has moved
+    return VectorElement(u, gridspace(physical_mesh(mesh(uₕ.space))))
+end
