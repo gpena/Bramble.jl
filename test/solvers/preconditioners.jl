@@ -3,7 +3,7 @@ module SolversPreconditionersTests
 using Test
 using Bramble
 using Bramble: AbstractMatrixFreePreconditioner, JacobiPreconditioner, ChebyshevPreconditioner, max_eigenvalue_estimate,
-               restrict_to, jumpₓ, M₊ₓ, D₋ₓ
+               restrict_to, jumpₓ, M₊ₓ, D₋ₓ, Dcₓ, CpuSerial, CpuThreaded
 using LinearAlgebra: LinearAlgebra, ldiv!, diag, norm, cond, Symmetric, eigmax, isposdef
 using LinearSolve: LinearProblem, KrylovJL_CG, solve
 using Random
@@ -139,6 +139,27 @@ end
                 @test _pc_alloc2(P, z) == 0
             end
         end
+    end
+
+    # The threaded walk cuts the grid into bands that each own their rows, and every row
+    # takes its entries in the serial order: the diagonal is bitwise the serial one (#886).
+    # The 41×37 box gives several bands at any thread count, and `Dcₓ` an unsymmetric row.
+    @testset "jacobi: bitwise under every policy" begin
+        Random.seed!(PC_SEED)
+        W = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (41, 37), (false, false)))
+        box = form(W, W, (u, v) -> innerₕ(-1.0 * Δₕ(u), v) + innerₕ(0.5 * Dcₓ(u), v))
+        for (name, a, dl) in ((("box", box, nothing),)..., _pc_cases()...)
+            @testset "$name" begin
+                kw = _pc_kw(dl)
+                ds = jacobi_preconditioner(a; policy = CpuSerial(), kw...).inv_diagonal
+                dt = jacobi_preconditioner(a; policy = CpuThreaded(), kw...).inv_diagonal
+                @test isequal(dt, ds)
+                @test _pc_agree(ds, inv.(diag(assemble(a; kw...))))
+            end
+        end
+        # The threaded walk above is the banded one, not the serial fallback.
+        op = matrix_free_operator(box; policy = CpuThreaded())
+        @test Bramble._diagonal_banded(op.plan, op.form)
     end
 
     @testset "jacobi: dirichlet_components" begin

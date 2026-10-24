@@ -11,7 +11,8 @@ module GhostPreconditionersTests
 using Test
 using Bramble
 import Bramble
-using Bramble: D₋ₓ, closure, padded_space
+using Bramble: D₋ₓ, Dcₓ, closure, padded_space, polygon, polygon_spaces, levelset, CpuSerial,
+               CpuThreaded
 using AlgebraicMultigrid: aspreconditioner
 using ILUZero: ILUZero
 using Kronecker: Kronecker
@@ -303,6 +304,33 @@ end
         _, (ns, ghosts, rel) = CASES_2D[2]
         C = space(ns, ghosts, rel)
         check_fdm_refuses(form(C, C, stiffness), "u => g"; dirichlet = :boundary)
+    end
+
+    # A threaded walk adds each band into its own vector and sums them in band order, so
+    # the reduced diagonal is bitwise the serial one (#886). On the Robin box a ghost's
+    # closure row crosses rows; on a polygon test space `E_v` is a selection.
+    @testset "works: jacobi bitwise under every policy" begin
+        f(u, v) = innerₕ(-1.0 * Δₕ(u), v) + innerₕ(0.5 * Dcₓ(u), v)
+        _, (ns, ghosts, rel) = CASES_2D[2]
+        C = space((41, 37), ghosts, rel)
+        VN = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 3.0), (1.0, 2.0), (0.0, 1.0)]
+        Ωv = mesh(domain(interval(0.0, 4.0) × interval(0.0, 4.0), :P => polygon(VN)), (33, 31),
+            (false, false))
+        Ωd = mesh(
+            domain(interval(-1.5, 1.5) × interval(-1.5, 1.5),
+                :D => levelset(p -> hypot(p[1], p[2]) - 1)), (30, 30), (false, false))
+        cases = ("Robin box" => (C, C), "V-notch" => polygon_spaces(Ωv, :P, x -> 0.0),
+            "level set" => polygon_spaces(Ωd, :D, x -> 0.0))
+        @testset "$name" for (name, (U, V)) in cases
+            a = form(U, V, f)
+            ds = jacobi_preconditioner(a; policy = CpuSerial()).inv_diagonal
+            dt = jacobi_preconditioner(a; policy = CpuThreaded()).inv_diagonal
+            @test isequal(dt, ds)
+            @test relerr(ds, inv.(diag(assemble(a)))) <= 1e-12
+            # The banded walk ran, not the serial fallback.
+            @test Bramble._diagonal_banded(
+                Bramble._mf_plan(CpuThreaded(), a.padded, nothing), a.padded)
+        end
     end
 
     WITH_3D_TESTS && @testset "works: 3D $name" for (name, (ns, ghosts, rel)) in CASES_3D

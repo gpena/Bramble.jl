@@ -18,8 +18,8 @@ using Test
 using Random
 using Bramble
 using Bramble: CpuPolyester, CpuSerial, Dcₓ, Dcᵧ, D̃ₓ, D₋ₓ, D̃ᵧ, D₋ᵧ,
-               matrix_free_operator, polygon, polygon_spaces
-using LinearAlgebra: mul!, norm
+               matrix_free_operator, polygon, polygon_spaces, levelset
+using LinearAlgebra: diag, mul!, norm
 using SparseArrays: SparseMatrixCSC, nonzeros
 using Polyester
 
@@ -304,6 +304,37 @@ end
                 @test r1[k] == r0[k]
                 @test r2[k] == r1[k]
             end
+        end
+    end
+
+    # `jacobi_preconditioner` walks the diagonal in `@batch` bands that each own their rows
+    # (a plain form) or their own vector (a ghost form, summed in band order), so its
+    # diagonal is bitwise the serial one (#886). The Robin box's closure rows cross rows.
+    @testset "Jacobi diagonal bitwise serial" begin
+        f(u, v) = innerₕ(-1.0 * Δₕ(u), v) + innerₕ(0.5 * Dcₓ(u), v)
+        rel = u -> (:xmin => 2.0 * u + ∂ₙ(u) => 0.0, :xmax => 0.5 * u + ∂ₙ(u) => 1.0,
+            :ymin => u + ∂ₙ(u) => 0.0, :ymax => 4.0 * u + ∂ₙ(u) => 1.0)
+        Ω = ghost_mesh(CpuSerial(), (41, 37))
+        W = gridspace(Ω)
+        C = constrained(gridspace(Ω; ghosts = :boundary), rel)
+        VN = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 3.0), (1.0, 2.0),
+            (0.0, 1.0)]
+        Ωv = mesh(domain(interval(0.0, 4.0) × interval(0.0, 4.0), :P => polygon(VN)),
+            (33, 31), (false, false))
+        Ωd = mesh(
+            domain(interval(-1.5, 1.5) × interval(-1.5, 1.5),
+                :D => levelset(p -> hypot(p[1], p[2]) - 1)), (30, 30), (false, false))
+        cases = ("box" => (W, W), "Robin box" => (C, C),
+            "V-notch" => polygon_spaces(Ωv, :P, x -> 0.0),
+            "level set" => polygon_spaces(Ωd, :D, x -> 0.0))
+        @testset "$name" for (name, (U, V)) in cases
+            a = form(U, V, f)
+            ds = jacobi_preconditioner(a; policy = CpuSerial()).inv_diagonal
+            dp = jacobi_preconditioner(a; policy = CpuPolyester()).inv_diagonal
+            @test isequal(dp, ds)
+            # Entrywise: the box's corner row has a zero diagonal, so an infinite entry.
+            @test all(((x, y),) -> isapprox(x, y; rtol = 1e-12),
+                zip(ds, inv.(diag(assemble(a)))))
         end
     end
 
