@@ -385,6 +385,11 @@ using Kronecker: Kronecker
                 # non-2D element, called as `Bramble.name(...)`. Not a user call.
                 :_throw_plot_composite,
                 :_throw_plot_dim,
+                # `_ghost_kron_polygon`, `_throw_ghost_kron_polygon` (BrambleKroneckerExt):
+                # the polygon-space check and refusal `kronecker_operator` shares with the
+                # `fdm_*` methods on ghost forms (gpena/Bramble.jl#880). Not a user call.
+                :_ghost_kron_polygon,
+                :_throw_ghost_kron_polygon,
                 # `_allocate_from_pattern` (BrambleMetalExt, BrambleSparseMatricesCSRExt): the
                 # system-matrix allocation hook a storage backend specialises on its own sparse
                 # type, same shape as `_csr_backend` above.
