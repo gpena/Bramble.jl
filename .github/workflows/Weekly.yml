@@ -89,9 +89,11 @@ jobs:
     # Julia nightly is not in this matrix (see below), so a failure here is Bramble's own —
     # on the 1.13 release.
     #
-    # id-token: write is for the codecov-action step below (`use_oidc: true`) -- without it, requesting an OIDC token throws an unhandled error
-    # in the action's own github-script substep before its own `fail_ci_if_error: false`
-    # ever gets a chance to apply, failing the whole job even though every test passed.
+    # id-token: write is for the codecov-action step below (`use_oidc: true`). Without it,
+    # requesting an OIDC token throws in the action's own github-script substep, before its
+    # `fail_ci_if_error: false` can apply. A throw there still fails the step, so the step
+    # carries `continue-on-error: true`: the failure stays an annotation and the job stays
+    # green when every test passed (#909).
     permissions:
       contents: read
       actions: write  # lets julia-actions/cache delete the superseded entry (delete-old-caches)
@@ -147,6 +149,7 @@ jobs:
 
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v7
+        continue-on-error: true  # an upload failure must not fail a job whose tests passed (#909)
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
