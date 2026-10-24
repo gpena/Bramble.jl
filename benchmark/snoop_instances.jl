@@ -26,6 +26,10 @@
 #       the distinct instances inferred up to and including the row. A closure row has
 #       position 2, the second build of the fresh child, `added_instances` its count,
 #       `sequence_instances` the distinct instances of both builds.
+#   second_form_s, second_assemble_s, second_inference_s (closure rows only, TOML only)
+#       the wall times of `form` and `assemble` and the inference time of the second build,
+#       medians over the launches. Inference carries the positive control: fresh closures
+#       infer the second build again (`added_instances` > 0), named functions do not (0).
 #   repeat_instances
 #       the row's last call repeated in the same process. It must be 0, being the control of
 #       the counting oracle, and the script stops when it is not.
@@ -167,7 +171,8 @@ if CHILD
             println("FRESH ", length(r.set), " ", r.form_s, " ", r.assemble_s, " ",
                 r.inference_s, " ", length(again.set))
             println("SEQUENCE ", row, " 2 ", length(s.set), " ",
-                length(union(r.set, s.set)))
+                length(union(r.set, s.set)), " ", s.form_s, " ", s.assemble_s, " ",
+                s.inference_s)
             return nothing
         end
 
@@ -249,6 +254,9 @@ function fresh_table(tree, row, n, threads)
             [parse(Int, s[4]) for s in seqs])
         table["sequence_instances"] = agree("sequence_instances", row,
             [parse(Int, s[5]) for s in seqs])
+        table["second_form_s"] = median([parse(Float64, s[6]) for s in seqs])
+        table["second_assemble_s"] = median([parse(Float64, s[7]) for s in seqs])
+        table["second_inference_s"] = median([parse(Float64, s[8]) for s in seqs])
     end
     return table
 end
