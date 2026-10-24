@@ -29,8 +29,10 @@ function polygon_mesh(V, box, n, seed)
     Random.seed!(seed)
     return mesh(domain(box, :P => polygon(V)), n, (false, false))
 end
-octagon_mesh(T = Float64) = polygon_mesh([T.(v) for v in OCTAGON],
-    interval(T(-1), T(5)) × interval(T(-1), T(5)), (19, 19), 2)
+function octagon_mesh(T = Float64)
+    polygon_mesh([T.(v) for v in OCTAGON],
+        interval(T(-1), T(5)) × interval(T(-1), T(5)), (19, 19), 2)
+end
 fig1_mesh() = polygon_mesh(FIG1, interval(0.0, 6.0) × interval(0.0, 5.0), (10, 9), 2)
 
 # (name, mesh), both jittered.

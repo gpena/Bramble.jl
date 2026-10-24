@@ -18,7 +18,7 @@ using Test
 using Random
 using Bramble
 using Bramble: CpuPolyester, CpuSerial, Dcₓ, Dcᵧ, D̃ₓ, D₋ₓ, D̃ᵧ, D₋ᵧ,
-    matrix_free_operator, polygon, polygon_spaces
+               matrix_free_operator, polygon, polygon_spaces
 using LinearAlgebra: mul!, norm
 using SparseArrays: SparseMatrixCSC, nonzeros
 using Polyester

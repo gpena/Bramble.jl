@@ -338,7 +338,7 @@ function _is_posdef_term(op::BilinearProduct{D, W}) where {D, W}
            _is_real_side(op.left_op) && _is_real_side(op.right_op)
 end
 _has_nonnegative_weight(::Type{<:Union{InnerH, InnerPlus, InnerPlusSet, InnerGamma,
-        InnerGammaFacet}}) = true
+    InnerGammaFacet}}) = true
 _has_nonnegative_weight(::Type) = false
 function _is_posdef_term(op::OperatorAdd)
     return _is_posdef_term(op.left_op) && _is_posdef_term(op.right_op)
