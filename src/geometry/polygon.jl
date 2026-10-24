@@ -79,7 +79,7 @@ end
 # orient2d filter, l and r its two products; otherwise, or when an underflow or overflow
 # voids the bound, the copies `V` in `Rational{BigInt}` decide.
 @inline function _orient_sign(W::Vector{NTuple{2, T}}, V, i, j, k) where {T}
-    if T <: Base.IEEEFloat
+    if T <: Union{Float16, Float32, Float64}
         a, b, c = W[i], W[j], W[k]
         l = (b[1] - a[1]) * (c[2] - a[2])
         r = (b[2] - a[2]) * (c[1] - a[1])
