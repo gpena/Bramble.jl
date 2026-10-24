@@ -268,13 +268,13 @@ One line per function above 0.5 s.
 - elasticity, `Bramble._bilinear_form`, 3.739 s: #918. The root is `simplify_ast`, the mesh
   checks and `_split_restricted_products`, all of which only walk a type-encoded tree; each is
   re-specialised on the 13610 character AST type. #918 erases that type in the form-time layer.
-- elasticity, `Bramble.form`, 1.331 s: new: make `divₘₕ` infer concretely, so the elasticity form
-  infers (paragraph below).
+- elasticity, `Bramble.form`, 1.331 s: #921, make `divₘₕ` infer concretely, so the elasticity
+  form infers (paragraph below).
 - vector_laplacian, `Bramble.assemble`, 2.835 s: #916. The same kernels with 3 summand types and no
   pairs, so it is the cheap end of the same question, and a useful control for #916's
   before and after.
 
-### new: make `divₘₕ` infer concretely, so the elasticity form infers
+### #921: make `divₘₕ` infer concretely, so the elasticity form infers
 
 Problem. `_div_term` builds each averaged divergence term with a `foldl` over a runtime
 filtered range, so `divₘₕ(u)` returns a non-concrete `_DivergenceTerms`, the elasticity
