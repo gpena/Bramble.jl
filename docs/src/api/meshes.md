@@ -31,6 +31,14 @@ strictly inside the box, be orthogonally convex and be star-shaped about the min
 [`mesh`](@ref) lists the errors; the [mesh internals page](../internals/mesh.md) says how
 the labels are set.
 
+On a fitted mesh, `hₘₐₓ` is no guide to the `h` of an error plot: the lines the closure adds
+can sit very close to the seed lines and to each other. Take instead the largest gap between
+neighbouring lines that hold nodes of the closed domain Ω̄, the interior and the boundary
+nodes: for the disk, `maximum(diff(filter(t -> -1 <= t <= 1, z)))` over the points `z` of
+each axis, and the larger of the two axes. This is the `spacing` of the
+[disk example](../examples/poisson_circle.md), and the level-set convergence study measures it
+the same way.
+
 ## Points and spacings
 
 `host_points`, `host_spacings`, `forward_spacings`, `half_spacings`,

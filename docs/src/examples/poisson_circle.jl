@@ -26,7 +26,7 @@
 # the disk must contain the circle strictly.
 
 using Bramble
-using Bramble: lift, polygon_spaces
+using Bramble: polygon_spaces, lift # public, not exported
 using Random
 
 φ(p) = hypot(p[1], p[2]) - 1
@@ -161,12 +161,13 @@ end                                                                             
 # `polygon_spaces(Ωₕ, :D, g)` returns the trial space `U` and the test space `W`. Their
 # unknowns are the interior nodes, and the Dirichlet data `g` sit at the boundary nodes. The
 # load is `avgₕ`, the mean of ``f`` over each dual cell, and `lift(U, u)` puts a solution back
-# on the whole grid.
+# on the whole grid. The function is called `solve_on`, since `solve` already names the
+# SciML function that the steppers and `LinearSolve` extend.
 
 u_exact(p) = sin(2p[1] + 0.5) * cos(1.5p[2] - 0.2) + exp(0.6p[1] - 0.4p[2])
 f(p) = 6.25 * sin(2p[1] + 0.5) * cos(1.5p[2] - 0.2) - 0.52 * exp(0.6p[1] - 0.4p[2])
 
-function solve(Ωₕ)
+function solve_on(Ωₕ)
     U, W = polygon_spaces(Ωₕ, :D, u_exact)
     fₕ = element(gridspace(Ωₕ))
     avgₕ!(fₕ, f)
@@ -215,7 +216,7 @@ nothing # hide
 levels = (20, 40, 80, 160)
 runs = map(levels) do n
     Ωₙ = mesh(Ω, (n, n), (true, true))
-    return errors(Ωₙ, solve(Ωₙ))
+    return errors(Ωₙ, solve_on(Ωₙ))
 end
 h = [r.h for r in runs]
 emax = [r.max for r in runs]
@@ -245,7 +246,7 @@ convergence_plot([(h, emax, "max", "#5B5FC7"), (h, eh1, "H¹ₕ", "#0E7C86")];  
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 Ω₈₀ = mesh(Ω, (80, 80), (true, true))
 uₕ = element(gridspace(Ω₈₀))
-uₕ.data .= solve(Ω₈₀)
+uₕ.data .= solve_on(Ω₈₀)
 uₕ.data[BitVector(markers(Ω₈₀)[:D_exterior])] .= NaN
 surface_plot(uₕ; title = "u on the unit disk, n = 80") # hide
 
@@ -266,7 +267,7 @@ end                                                                             
 
 Random.seed!(1)
 Ωr = mesh(Ω, (80, 80), (false, false))
-rr = errors(Ωr, solve(Ωr))
+rr = errors(Ωr, solve_on(Ωr))
 println("random seeds, n = 80: max error ", round(rr.max; sigdigits = 3), ", H¹ₕ error ",
     round(rr.h1; sigdigits = 3))
 

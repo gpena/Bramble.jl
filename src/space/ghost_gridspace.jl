@@ -21,7 +21,9 @@
 # over the padded points: the exterior nodes left without a value (`unclosed`, every one on
 # the test space), those the (3.2) extension gives (`extended`), and among these the
 # conflict nodes, substituted per reading equation (`conflict`). Every other space has
-# empty masks.
+# empty masks. The rows of a bilinear form store whether a tested row reads a conflict node
+# (`reads_conflict`), decided once by `form` from the pattern of `A_pad`, which `assemble!`
+# keeps; the rows of a space are never read for it.
 struct _RowsDirichlet
     physical::Bool
     facets::Vector{BitVector}
@@ -30,11 +32,17 @@ struct _RowsDirichlet
     unclosed::BitVector
     extended::BitVector
     conflict::BitVector
+    reads_conflict::Bool
 end
 
 function _RowsDirichlet(physical::Bool, facets::Vector{BitVector})
     return _RowsDirichlet(physical, facets, false, false, BitVector(), BitVector(),
         BitVector())
+end
+function _RowsDirichlet(physical::Bool, facets::Vector{BitVector}, polygon::Bool,
+        trial_only::Bool, unclosed::BitVector, extended::BitVector, conflict::BitVector)
+    return _RowsDirichlet(physical, facets, polygon, trial_only, unclosed, extended,
+        conflict, false)
 end
 
 """

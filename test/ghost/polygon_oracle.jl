@@ -18,6 +18,7 @@ using LinearAlgebra: opnorm
 using Bramble
 import Bramble
 using Bramble: polygon, polygon_spaces, Dcₓ, Dcᵧ, D₋ₓ, D₋ᵧ, inner₊ₓ, inner₊ᵧ
+using ..TestUtils: alloc_test
 
 isdefined(Main, :FGOracle) || Base.include(Main, joinpath(@__DIR__, "FGOracle.jl"))
 const O = Main.FGOracle
@@ -253,6 +254,28 @@ end
         @test relerr(r.u, exact) < 1e-6
         @test r.reads[1] > 0
         @test opnorm(r.A - r.Az, Inf) > 1e-3
+    end
+
+    # Whether a form reads the conflict node is decided by `form` (#902): the contraction of
+    # a form that does not read it allocates what the padded form's own does (the one cell
+    # of its sum, test/ghost/contract.jl), and one that does still throws after a warm
+    # `assemble!`, which refills the pattern `form` read.
+    @testset "V-notch: conflict read set by form" begin
+        Random.seed!(7)
+        U, W = polygon_spaces(polygon_mesh(VNOTCH, VNOTCH_BOX, (6, 7), (false, false)), :P,
+            g_var)
+        ap = form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v))
+        xn, yn = rand(Bramble.ndofs(U)), rand(Bramble.ndofs(W))
+        @test ap(xn, yn) ≈ sum(yn .* (assemble(ap) * xn))
+        up = element(Bramble.padded_space(U), U.E * xn)
+        vp = element(Bramble.padded_space(W), W.E * yn)
+        @test alloc_test(ap, xn, yn) == alloc_test(ap.padded, up, vp)
+        bₕ = Rₕ(Bramble.padded_space(U), b_var)
+        am = form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - Dcₓ(bₕ * Dcᵧ(w)), v))
+        A = assemble(am)
+        assemble!(A, am)
+        @test_throws ArgumentError am(xn, yn)
+        @test_throws ArgumentError Bramble.matrix_free_operator(am)
     end
 end
 

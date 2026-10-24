@@ -96,8 +96,10 @@ uₕ .= A \ F
 normₕ(uₕ .- Rₕ(Wₕ, uexact))
 ```
 
-Four parts in ten thousand. Halving the spacing should cut that by four, since the scheme
-is second order:
+Four parts in ten thousand. The grid is uniform, which keeps the example short, but a
+uniform grid can flatter a scheme: the [linear Poisson example](examples/poisson_linear.md)
+checks convergence on a random non-uniform grid for that reason. Halving the spacing should
+cut the error by four, since the scheme is second order:
 
 ```@example gs
 function poisson_error(n)

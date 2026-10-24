@@ -27,7 +27,8 @@
 # may add lines, so the grid has more points than the requested count.
 
 using Bramble
-using Bramble: D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, Dcₓ, Dcᵧ, lift, polygon_spaces
+using Bramble: polygon_spaces, lift # public, not exported
+using Bramble: D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, Dcₓ, Dcᵧ
 using Random
 
 V = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0), (4.0, 3.0), (4.0, 5.0),
