@@ -187,7 +187,7 @@ wait(reader)
 rows = Tuple{String, Int, Float64, Float64, Float64}[]
 stack = Vector{Any}[]
 for line in LINES
-    if (m = match(r"^▸ \s*(\S+)$", line)) !== nothing
+    if (m = match(r"^▸ \s*(\S+)", line)) !== nothing
         push!(stack, Any[m[1], 0.0])
     elseif (m = match(r"^✓ \s*(\S+)\s+([\d.]+) s", line)) !== nothing
         wall = parse(Float64, m[2])

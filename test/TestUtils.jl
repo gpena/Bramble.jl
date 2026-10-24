@@ -284,11 +284,67 @@ function trace_path(path)
            full
 end
 
+# The run's progress, `[k/N]` on each test file's start line: `N` counts the leaf files (those
+# that include no other) the suite will reach, found once by walking runtests.jl's syntax and
+# evaluating its `if`, `&&` and `||` conditions in `Main`; a condition that cannot be
+# evaluated there counts as true. Only the shards and groups decide the count, so it is exact
+# unless a file is included from a loop or a computed path.
+const TRACE_DONE = Ref(0)
+const TRACE_LEAVES = Ref{Union{Nothing, Set{String}}}(nothing)
+
+function _trace_cond(ex)
+    return try
+        Core.eval(Main, ex) === true
+    catch
+        true
+    end
+end
+
+function _trace_walk!(leaves, file)
+    ex = try
+        Meta.parseall(read(file, String); filename = file)
+    catch
+        return false
+    end
+    found = Ref(false)
+    function walk(e)
+        e isa Expr || return
+        if e.head === :call && e.args[1] === :include && length(e.args) == 2 &&
+           e.args[2] isa String
+            found[] = true
+            child = normpath(joinpath(dirname(file), e.args[2]))
+            isfile(child) && !_trace_walk!(leaves, child) && push!(leaves, child)
+        elseif e.head === :if || e.head === :elseif
+            _trace_cond(e.args[1]) ? walk(e.args[2]) : length(e.args) > 2 && walk(e.args[3])
+        elseif e.head === :&&
+            _trace_cond(e.args[1]) && walk(e.args[2])
+        elseif e.head === :||
+            _trace_cond(e.args[1]) || walk(e.args[2])
+        elseif e.head !== :function && e.head !== :macro
+            foreach(walk, e.args)
+        end
+    end
+    walk(ex)
+    return found[]
+end
+
+function _trace_leaves()
+    if TRACE_LEAVES[] === nothing
+        leaves = Set{String}()
+        _trace_walk!(leaves, joinpath(@__DIR__, "runtests.jl"))
+        TRACE_LEAVES[] = leaves
+    end
+    return TRACE_LEAVES[]
+end
+
 function traced_include(real_include::F, path) where {F}
     TRACE_TESTS || return real_include(Main, path)
     indent = "  "^TRACE_DEPTH[]
     rel = trace_path(path)
-    println("▸ ", indent, rel)
+    leaves = _trace_leaves()
+    full = normpath(isabspath(path) ? path : joinpath(Base.source_dir(), path))
+    progress = full in leaves ? "  [$(TRACE_DONE[] += 1)/$(length(leaves))]" : ""
+    println("▸ ", indent, rel, progress)
     flush(stdout)
     rss0_gb = Sys.maxrss() / 1024^3
     compile0 = Base.cumulative_compile_time_ns()[1]
