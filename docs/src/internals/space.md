@@ -73,8 +73,9 @@ plain mesh, and that is allowed.
 
 The rule applies in forms only; the runtime operators are eager (see the
 [operators tutorial](@ref operators_ghost)). `Rₕ` and `avgₕ` refuse on a ghost space with
-an `ArgumentError` (`avgₕ` would average over cells past the physical facet); the
-[support table](@ref "Support on ghost spaces") lists what else does.
+an `ArgumentError` (`avgₕ` would average over cells past the physical facet), except that
+`Rₕ(U, f)` works on the trial space of [`polygon_spaces`](@ref Bramble.polygon_spaces); the
+[support table](@ref "Support on ghost spaces") lists what else refuses.
 
 ### Relations
 
@@ -176,7 +177,7 @@ forms.
 | `fdm_solve`, `fdm_factorize`, `fdm_solve!`, `fdm_preconditioner` | supported where the form is separable; refused with the `dirichlet` keyword, on a 1D form and on a non-separable form | `test/ghost/preconditioners.jl` |
 | `solve(a, l; preconditioner = :amg)` and `:ilu0` (BrambleSciMLExt) | not tested on ghost forms | none |
 | `assemble_parallel!` | refused, naming `assemble!` (it runs in parallel under the policy of the mesh) | `test/ghost/policies.jl` |
-| `Rₕ`, `avgₕ` | refused, naming `gridspace(Ωₕ)` and `lift` | `test/ghost/grid_functions.jl` |
+| `Rₕ`, `avgₕ` | refused, naming `gridspace(Ωₕ)` and `lift`; on the trial space of `polygon_spaces`, `Rₕ` is supported (see the polygon table) | `test/ghost/grid_functions.jl` |
 | `CpuSerial`, `CpuThreaded`, `CpuPolyester` | supported; the reduction gives the serial sums bitwise | `test/ghost/policies.jl`, `test/ext/ghost_polyester.jl` |
 | device backends | refused; no test runs on a device | none |
 | `semidiscretize`, `ode_problem` | supported on a constrained space with `(x, t)` data; refused when the ghosts are unknowns and on composite ghost spaces | `test/form/ghost_semidiscrete.jl` |
@@ -206,22 +207,53 @@ notch and no exterior node has two readers; the V-notch rows below do not arise 
 
 ### Support on polygon spaces
 
-Each row is an operation and its status on `(U, W)`; the tests are in
-`test/ghost/polygon_spaces.jl`, and `test/ghost/levelset_spaces.jl` repeats them on a
-level-set mesh, except the rows about a conflict node. "Throws" is an `ArgumentError`.
+Each row is an operation and its status on `(U, W)`, with the test that pins it: the file,
+and the testset where the file has several. A row with no test says "untested", and
+nothing pins its status. "Throws" is an `ArgumentError`. A
+level-set mesh (`:D => levelset(φ)`) has the same behaviour; its own tests are named below
+the table. Files are in `test/ghost/` unless a path says otherwise.
 
-| Operation | Status |
-|:----------|:-------|
-| `assemble(a, l)`, warm `assemble!` | supported; 0 B per warm call |
-| diffusion, mixed, convection, reaction and upwind terms | supported |
-| `matrix_free_operator` | supported; refuses a form that reads a V-notch conflict node |
-| contracting `a(u, v)` | supported; same refusal |
-| `semidiscretize` | throws; it needs one space as trial and test |
-| rank-one terms | throw |
-| composites (`U × U`) | forms throw |
-| `dirichlet =` | throws; `g` fixes the boundary |
-| `W` as trial space | supported only for forms that read no exterior node (`Δₕ` with `g = 0`); otherwise throws |
-| stencils reaching beyond the diagonal neighbours (`Dcₓ(Dcₓ(u))`) | throw |
+| Operation | Status | Test |
+|:----------|:-------|:-----|
+| `assemble(a, l)`, `assemble(a)` | supported; each row equals the plain matrix's with every exterior column replaced by its own (3.2) row | `polygon_spaces.jl` ("rows match the plain-matrix oracle"), `polygon_oracle.jl` |
+| warm `assemble!` | 0 B on `CpuSerial` and on `CpuPolyester`; under `CpuThreaded` the values are the serial ones and no allocation is asserted | `polygon_spaces.jl` ("warm assemble! allocates nothing"), `allocations.jl` ("Warm refill on polygon spaces"), `ext/ghost_polyester.jl` ("polygon_spaces under CpuPolyester") |
+| diffusion, mixed, convection (central) and reaction (the zeroth-order term `q u`) | supported; the rows equal the oracle's, with variable `a`, `b`, `c`, `d` and `q` | `polygon_oracle.jl` ("Variable coefficients (seed $seed)") |
+| upwind terms (`D₋ₓ(u) + D₋ᵧ(u)`) | supported; exact for a linear `u` | `polygon_support.jl` ("upwind D₋ₓ(w) + D₋ᵧ(w)") |
+| `CpuSerial`, `CpuThreaded`, `CpuPolyester` | supported; matrix, load, refilled matrix, solution and `lift` equal the serial ones bit for bit, the matrix-free product to 1e-13 | `policies.jl` ("polygon_spaces under CpuThreaded"), `ext/ghost_polyester.jl` ("polygon_spaces under CpuPolyester") |
+| `pde_solve`, `linear_problem`, `solve(a, l)` | supported, with the default solver and with `KrylovJL_GMRES` | `policies.jl` (`pde_solve`), `polygon_spaces.jl` ("linear_problem and solve (#880)") |
+| `ilu_preconditioner`, `amg_preconditioner` | supported; each takes under half the iterations of unpreconditioned GMRES | `polygon_support.jl` ("ILU and AMG preconditioned GMRES") |
+| `jacobi_preconditioner`, `chebyshev_preconditioner`, `solve(a, l; preconditioner = :amg)` | untested | none |
+| `kronecker_operator`, `fdm_solve`, `fdm_factorize`, `fdm_factorize!`, `fdm_preconditioner`, `gmg_preconditioner` | throw, naming polygon spaces; the multigrid message names #846 | `polygon_spaces.jl` ("Kronecker, fdm, GMG refusals (#880)") |
+| `matrix_free_operator`, contracting `a(u, v)` | supported; a form that reads a V-notch conflict node throws, decided when `form` is called, before and after a warm `assemble!`; 0 B per warm `mul!` under `CpuPolyester` | `polygon_spaces.jl` ("matrix-free, contract, semidiscretize"), `polygon_oracle.jl` ("V-notch: conflict read set by form"), `ext/ghost_polyester.jl` ("Warm calls allocate nothing") |
+| `Rₕ(U, f)`, `Rₕ!`, `normₕ`, `snorm₁ₕ`, `norm₁ₕ`, `norminf` on `U` | supported; the norms read the element at the interior nodes and 0 at the boundary nodes; `Rₕ(U, f; markers = ...)`, and all of them on `W`, throw | `polygon_oracle.jl` ("Rₕ and norms on the trial space"), `convergence/poisson_polygon.jl` ("Norm errors match the hand sums", and the convergence orders) |
+| `interpolate_at(lift(U, u), x)` | supported; the bilinear blend on the cell holding `x` | `polygon_support.jl` ("interpolate_at of lift(U, u)") |
+| `export_vtk` of `lift(U, u)` | supported; the whole box, the extension included | `polygon_support.jl` ("export_vtk of lift(U, u)") |
+| `Float32` | supported; matrix, load, solution and lift keep the element type | `polygon_support.jl` ("Float32 keeps its eltype") |
+| `semidiscretize` on `(W, W)`, as `semidiscretize(form(W, W, f), form(W, g))` | supported, with the boundary nodes read as 0; the mass matrix is the dual-cell areas | `polygon_support.jl` ("semidiscretize on (W, W)") |
+| `semidiscretize` on `(U, W)` | throws | `polygon_spaces.jl` ("matrix-free, contract, semidiscretize") |
+| `W` as trial space | supported only for forms that read no exterior node, with the boundary nodes read as 0; otherwise throws | `polygon_spaces.jl` ("test space as trial side") |
+| `U` as test space, `form(U, f)` | throw | `polygon_spaces.jl` ("Figure 1: exact for quadratics") |
+| `dirichlet =` | throws; `g` fixes the boundary | `polygon_spaces.jl` ("refusals") |
+| rank-one terms | throw | `polygon_spaces.jl` ("refusals") |
+| composites (`U × U`, beside a plain ghost space) | forms throw | `polygon_spaces.jl` ("composites refuse polygon spaces") |
+| a form that reads an exterior node past the diagonal neighbours of the interior node | throws, naming the node and the equation; `Dcₓ(Dcₓ(u))` is the tested case | `polygon_spaces.jl` ("refusals") |
+| a form that reaches two nodes along an axis and lands on an interior or boundary node | assembles; the V-notch with `Dcᵧ(Dcᵧ(u))` is the probed case | untested |
+
+The last two rows come from one probe on the jittered Figure 1, the integer Figure 1 and the
+integer V-notch. `Dcₓ(Dcₓ(u))`, `Dcᵧ(Dcᵧ(u))`, `Dcₓ(Dcᵧ(Dcₓ(u)))` and `Δₕ(Δₕ(u))` throw on
+the two Figure 1 meshes, each naming an exterior node two nodes from the equation's interior
+node. On the V-notch only `Dcᵧ(Dcᵧ(u))` assembled, as every second node it reads along `y`
+is an interior or boundary node, and the others threw. The guard looks at what each
+equation reads, not at the width of the stencil: it refuses an exterior node that (3.2)
+gives no value, and a wide stencil that lands on interior or boundary nodes passes.
+
+On a level-set mesh the same rows are pinned by `levelset_spaces.jl` (the quadratic solve,
+(3.2) at every extended node, the rows against the plain matrix, warm `assemble!`,
+matrix-free and contraction, the refusals), by `levelset_oracle.jl` (every term of the
+third row, `Rₕ` and the norms), and by the level-set disk of `policies.jl` and
+`ext/ghost_polyester.jl`. The test space as trial side has its own level-set testset in
+`polygon_support.jl` ("test space as trial side"). The rows about a conflict node do not
+arise there, and the remaining rows are untested on a level-set mesh.
 
 ## Operator matrices: stencil_matrix versus the Kronecker construction
 
