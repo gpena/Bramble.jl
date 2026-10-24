@@ -88,11 +88,12 @@ factored(term, sp) = _factored_walk(
     Wc = gridspace(rmesh((5, 4); seed = 3))
     interp = form(Wc, W, (u, v) -> innerₕ(πₕ(u), v)).ast
     @test !factored(interp, W)
-    # A ghost space's padded leaf keeps it too: its products check absent reads.
+    # A ghost space's padded leaf takes it too: each factored product makes the absent-read
+    # check its stencil method makes (#876).
     Wg = gridspace(rmesh((9, 7)); ghosts = (:xmin,))
     C = constrained(Wg, u -> (:xmin => ∂ₙ(u) => 1.0,))
     padded = form(C, C, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))).padded
-    @test !factored(padded.ast, padded_space(Wg))
+    @test factored(padded.ast, padded_space(Wg))
     # The matrix-free sinks keep the stencil walk, so they check this one independently.
     @test !_factored_walk(Bramble.ActionSink, typeof(us[1][1]), typeof(us[1][2]))
 end

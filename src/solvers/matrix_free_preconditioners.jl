@@ -1,8 +1,9 @@
 # matrix_free_preconditioners.jl: preconditioners built from a `BilinearForm` without its
 # matrix (gpena/Bramble.jl#327). Jacobi reads the form's diagonal off one walk of
-# `visit_bilinear_stencil` with a `DiagonalSink`, through the serial unit walk
+# `visit_bilinear_stencil` with a `DiagonalSink`, through the unit walk
 # `matrix_free_operator`'s `mul!` takes (`_mf_apply!`, matrix_free.jl), so it costs one vector
-# and never assembles `A`.
+# and never assembles `A`. Under a threaded policy the walk is cut into the bands of the
+# fused product's plan, each owning its rows (see "The diagonal walk" below, #886).
 #
 # On a ghost-space form (#781) the matrix is the reduced `E_vᵀ A_pad E_u`, whose diagonal
 # differs from the padded one's wherever a closure row reaches a ghost: entry `j` sums
@@ -69,14 +70,17 @@ Base.size(P::JacobiPreconditioner) = (n = length(P.inv_diagonal); (n, n))
 The Jacobi preconditioner of `A = assemble(a; dirichlet, dirichlet_components)`, or of the
 matrix `op` stands for, from its diagonal alone: one walk of the form's stencil keeps the
 entries with `row == col`, and `A` is never built. Construction allocates the diagonal and
-the Dirichlet row mask, both of length `ndofs`. The walk runs on the calling task under any
-CPU policy.
+the Dirichlet row mask, both of length `ndofs`. The walk runs under the operator's
+policy: under [`CpuThreaded`](@ref) or [`CpuPolyester`](@ref) its bands each own their
+rows, so the diagonal is the same, bit for bit, under every CPU policy at one thread count.
 
 On a form over ghost spaces ([`GhostGridSpace`](@ref)), `A` is the reduced matrix
 `E_vᵀ A_pad E_u` that `assemble(a)` returns, and `op` the operator
 [`matrix_free_operator`](@ref)`(a)` returns for it: one walk of the padded form sums, for
 each degree of freedom, the padded entries whose row and column closures both reach it,
-so neither `A_pad` nor `A` is built. `policy` defaults to the padded space's.
+so neither `A_pad` nor `A` is built. `policy` defaults to the padded space's. Under every
+policy, [`CpuSerial`](@ref) included, the walk keeps one vector of length `ndofs` per band
+of the threaded cut, which is why the diagonal is the same bits under each.
 
 # Arguments
 - `a`: A square bilinear form ([`ndofs`](@ref) of trial and test space equal), on scalar,
@@ -125,7 +129,7 @@ function jacobi_preconditioner(op::MatrixFreeOperator{T}) where {T <: Number}
     n = op.nrows
     n == op.ncols || _throw_jacobi_nonsquare(op)
     d = zeros(T, n)
-    _mf_apply!(CpuSerial(), DiagonalSink(d), op.form)
+    _diagonal_walk!(op.policy, op.plan, DiagonalSink(d), op.form)
     mask = _mf_mask(op)
     if mask !== nothing
         @inbounds for i in eachindex(mask)
@@ -141,9 +145,7 @@ function jacobi_preconditioner(op::GhostMatrixFreeOperator{T}) where {T <: Numbe
     n == size(op, 2) || _throw_jacobi_nonsquare(op)
     d = zeros(T, n)
     Eu, Ev = op.trial_space.Et, op.test_space.Et
-    sink = ReducedDiagonalSink(d, SparseArrays.getcolptr(Ev), rowvals(Ev), nonzeros(Ev),
-        SparseArrays.getcolptr(Eu), rowvals(Eu), nonzeros(Eu))
-    _mf_apply!(CpuSerial(), sink, op.padded.form)
+    _reduced_diagonal_walk!(op.policy, d, Ev, Eu, op.padded.form)
     @inbounds for i in eachindex(op.mask)
         op.mask[i] && (d[i] = one(T))
     end
@@ -251,6 +253,136 @@ end
         for q in s.uptr[col]:(s.uptr[col + 1] - 1)
             s.uidx[q] == j && (s.d[j] += s.vnz[p] * weight * s.unz[q])
         end
+    end
+    return nothing
+end
+
+# --- The banded walk (#886) ------------------------------------------------------------- #
+#
+# Under a threaded policy the diagonal walk takes the fused product's band cut (`_mf_plan`,
+# matrix_free.jl): band `b` owns the rows of the last-axis slices `_band_range(1:len,
+# nbands, b)` and walks every point that writes one of them, the core through the sink and
+# the rim through `_OwnedDiagonal`, which drops the rows other bands own (`_mf_visit_slab!`).
+# The slab walk visits the points in the whole-grid walk's order, so every row receives its
+# entries in the serial order and the plain diagonal is bitwise the serial one under any
+# policy. A form without a plan, or with a unit walked serially after the bands (`interp`, a
+# test-side interpolation, which would reorder a row's entries), walks serially.
+#
+# A ghost form's sink scatters padded row `r` into every reduced row its closure reaches, so
+# bands owning padded rows still meet in `d`. Each band adds into a vector of its own, and
+# bands of reduced rows then sum those vectors in band order. The cut is
+# `_mf_plan(CpuThreaded(), a)`'s whatever the policy, `CpuSerial` included, so every policy
+# keeps those vectors, and at one thread count the reduced diagonal is bitwise one under
+# each. An atomic add is not.
+
+"""
+    _OwnedDiagonal(s, lo, hi)
+
+A diagonal sink (`DiagonalSink` or `ReducedDiagonalSink`) that keeps only the entries whose
+row lies in `lo:hi`, the rows the calling band owns.
+"""
+struct _OwnedDiagonal{S}
+    s::S
+    lo::Int
+    hi::Int
+end
+
+@inline function _sink_entry!(o::_OwnedDiagonal, row::Int, col::Int, weight, slot::Int)
+    o.lo <= row <= o.hi && _sink_entry!(o.s, row, col, weight, slot)
+    return nothing
+end
+
+# The unit walk's `policy` for one band of the diagonal walk: the owned last-axis slices
+# `own` and the plan's row reach `omin:omax`. Only `_mf_visit!` needs a method: a diagonal
+# sink walks a transposed pair's two terms one after the other (`_mf_pair!`).
+struct _DiagonalBand
+    own::UnitRange{Int}
+    omin::Int
+    omax::Int
+end
+
+# One unit over one band, cut as `_mf_visit_band!` cuts it (matrix_free.jl), but always by
+# the slab walk: a diagonal sink has no gathered interior.
+@inline function _mf_visit!(p::_DiagonalBand, s, term::TERM, sp, ro::Int, co::Int) where {TERM}
+    dims = size(indices(mesh(sp)))
+    len = last(dims)
+    stride = prod(Base.front(dims))
+    a, b = first(p.own), last(p.own)
+    vlo, vhi = max(1, a - p.omax), min(len, b - p.omin)
+    clo, chi = max(vlo, a - p.omin), min(vhi, b - p.omax)
+    owned = _OwnedDiagonal(s, (a - 1) * stride + 1 + ro, b * stride + ro)
+    lo, core, hi = clo > chi ? (vlo:vhi, 1:0, 1:0) : (vlo:(clo - 1), clo:chi, (chi + 1):vhi)
+    _mf_visit_slab!(s, owned, term, sp, ro, co, lo, core, hi)
+    return nothing
+end
+
+# Whether `plan` cuts `a`'s diagonal walk into bands (see the section comment).
+@inline _diagonal_banded(::Nothing, _) = false
+@inline _diagonal_banded(plan::_MFFusedPlan, a) = plan.form === a && !plan.interp
+
+@inline _diagonal_bands(plan::_MFFusedPlan{D}) where {D} = min(
+    Threads.nthreads(), plan.dims[D])
+
+# The diagonal of a plain form into `s.d`, under `policy`.
+function _diagonal_walk!(policy, plan, s::DiagonalSink, a::BilinearForm)
+    if _diagonal_banded(plan, a)
+        _run_bands!(policy, _diagonal_band_task!, s.d, a, plan, _diagonal_bands(plan))
+    else
+        _mf_apply!(CpuSerial(), s, a)
+    end
+    return nothing
+end
+
+# Task `k` of `ntasks`: bands `k`, `k + ntasks`, ... of `nbands`, into `d`.
+@noinline function _diagonal_band_task!(
+        d, a, plan::_MFFusedPlan{D}, nbands::Int, ntasks::Int, k::Int) where {D}
+    s = DiagonalSink(d)
+    for b in k:ntasks:nbands
+        own = _band_range(1:plan.dims[D], nbands, b)
+        _mf_apply!(_DiagonalBand(own, plan.omin, plan.omax), s, a)
+    end
+    return nothing
+end
+
+@inline _reduced_diagonal_sink(d, Ev, Eu) = ReducedDiagonalSink(
+    d, SparseArrays.getcolptr(Ev), rowvals(Ev), nonzeros(Ev), SparseArrays.getcolptr(Eu),
+    rowvals(Eu), nonzeros(Eu))
+
+# The reduced diagonal of a ghost form's padded form `a` into `d`, under `policy`. `Ev` and
+# `Eu` are the stored `E_vᵀ` and `E_uᵀ`.
+function _reduced_diagonal_walk!(policy, d, Ev, Eu, a::BilinearForm)
+    plan = _mf_plan(CpuThreaded(), a, nothing)
+    if _diagonal_banded(plan, a)
+        nbands = _diagonal_bands(plan)
+        parts = [zero(d) for _ in 1:nbands]
+        _run_bands!(policy, _reduced_band_task!, parts, Ev, Eu, a, plan, nbands)
+        _run_bands!(policy, _sum_parts_band!, d, parts)
+    else
+        _mf_apply!(CpuSerial(), _reduced_diagonal_sink(d, Ev, Eu), a)
+    end
+    return nothing
+end
+
+# Task `k` of `ntasks`: band `b` of `nbands` adds into `parts[b]`.
+@noinline function _reduced_band_task!(
+        parts, Ev, Eu, a, plan::_MFFusedPlan{D}, nbands::Int, ntasks::Int, k::Int) where {D}
+    for b in k:ntasks:nbands
+        own = _band_range(1:plan.dims[D], nbands, b)
+        s = _reduced_diagonal_sink(parts[b], Ev, Eu)
+        _mf_apply!(_DiagonalBand(own, plan.omin, plan.omax), s, a)
+    end
+    return nothing
+end
+
+# The entries of band `b` of `nbands` of `d`: each sums the parts in band order.
+@noinline function _sum_parts_band!(d, parts, nbands::Int, b::Int)
+    T = eltype(d)
+    @inbounds for j in _band_range(1:length(d), nbands, b)
+        s = zero(T)
+        for p in parts
+            s += p[j]
+        end
+        d[j] = s
     end
     return nothing
 end

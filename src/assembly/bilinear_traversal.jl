@@ -672,8 +672,10 @@ end
 # a walk that compiles one path for both compiles the product stencil for neither.
 # `matrix_free_operator`'s sinks keep the stencil walk, so the two stay independent checks
 # of each other. Off for a term that may restrict (a restriction's stencil length varies by
-# point), an interpolating term (absolute rows or columns) and a ghost space (its product
-# method checks absent reads, `stencil_eval.jl`): each keeps the stencil walk unchanged.
+# point) and an interpolating term (absolute rows or columns): each keeps the stencil walk
+# unchanged. On a ghost space each product makes the absent-read check its stencil method
+# makes (`_check_product_reads`, `stencil_eval.jl`), at the same points and before the same
+# reads, so a refused read throws on either walk (#876).
 
 # Whether `T` is products of factor stencils under constant or pointwise scales and sums,
 # which `_factored_point!` walks: decided from the type alone, one compiled instance.
@@ -699,13 +701,48 @@ Base.@nospecializeinfer Base.@assume_effects :foldable function _interp_free_typ
     return true
 end
 
+# Whether a walk with a sink of type `S` over a term of type `T` skips the absent-read check
+# (#876). The check at a point reads the term's scales and the space's weights; the
+# recording walk (`_CoordSink`) makes it at every point, and the replays of the same form
+# (`cache.ast === ast`, the markers unchanged or it re-records) read the same weights'
+# zeros: the padded indices are fixed, and moving a mesh's points stales the weights. So a
+# value replay of a term whose every scale is a Base number (`_constant_scales`), fixed
+# since the recording, would make the same checks and pass them all. Any other scale (a
+# `Ref`, a grid function, a `Real` reading memory of its own) is checked on every walk.
+Base.@nospecializeinfer Base.@assume_effects :foldable function _replays_unchecked(
+        @nospecialize(S), @nospecialize(T))
+    return S <: Union{ReplaySink, _PairReplaySink} && _constant_scales(T)
+end
+
+# The scale types whose value cannot change once recorded: Base's own numbers, not a
+# subtype a user can define (an `isbits` `Real` may still read a global or a pointer), and
+# of the irrationals only `Base.MathConstants`' five, as `Irrational` takes any symbol.
+const _ConstantReal = Union{Bool, Int8, Int16, Int32, Int64, Int128, UInt8, UInt16, UInt32,
+    UInt64, UInt128, Float16, Float32, Float64}
+const _ConstantNumber = Union{_ConstantReal, Rational{<:_ConstantReal},
+    Complex{<:_ConstantReal}, Complex{<:Rational{<:_ConstantReal}}, Irrational{:π},
+    Irrational{:ℯ}, Irrational{:γ}, Irrational{:φ}, Irrational{:catalan}}
+
+# Whether every scale in a term of type `T` is a `_ConstantNumber`, walking its operator
+# fields and tuples of them; a grid-function scale, or a field of abstract type, is not.
+Base.@nospecializeinfer Base.@assume_effects :foldable function _constant_scales(
+        @nospecialize(T))
+    T isa DataType || return false
+    T <: GridFunctionScale && return false
+    T <: OperatorScale && !(fieldtype(T, :scalar) <: _ConstantNumber) && return false
+    for F in fieldtypes(T)
+        (F <: LazyOp || F <: Tuple) && !_constant_scales(F) && return false
+    end
+    return true
+end
+
 # Whether a walk with a sink of type `S` over a term of type `T` on a leaf of type `P` is
 # factored. Types, not values, and one compiled instance for every walk: each answer folds
 # where the walk is compiled.
 Base.@nospecializeinfer Base.@assume_effects :foldable function _factored_walk(
         @nospecialize(S), @nospecialize(T), @nospecialize(P))
     S <: Union{_CoordSink, ReplaySink, _PairReplaySink} || return false
-    (isconcretetype(P) && !(P <: _GhostSpace)) || return false
+    isconcretetype(P) || return false
     return !_may_restrict(T) && _factored_type(T) && _interp_free_type(T)
 end
 
@@ -729,12 +766,19 @@ end
 # each product in turn, under the values its scales take at the point. Generated, so a term
 # is one compiled body whatever its depth: a method recursing down the tree would meet
 # itself at a deeper type at every scale, which inference widens.
+#
+# Each product first makes its absent-read check (`_check_product_reads`, a no-op off a
+# ghost space), except in a value replay of a term of constant scales
+# (`_replays_unchecked`).
 @generated function _factored_point!(
         sink, term, sp, I, markers, lin_indices, lin_idx::Int, row_offset::Int,
         col_offset::Int, slot::Int, g::Val
 )
     body = Expr(:block, Expr(:meta, :inline), Expr(:meta, :propagate_inbounds))
+    # Decided in the body, where it folds: the generator may run before the sinks exist.
+    push!(body.args, :(check = !_replays_unchecked(typeof(sink), typeof(term))))
     for (p, scales) in _factored_products!(Any[], term, :term, Any[])
+        push!(body.args, :(check && _check_product_reads($p, sp, I, lin_idx)))
         values = Expr(:tuple, (:(_scale_value($sc, lin_idx)) for sc in scales)...)
         push!(body.args,
             :(slot = _factored_product!(sink, $p, $values, sp, I, markers, lin_indices,
@@ -1067,6 +1111,16 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
 @inline visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) = _visit_stencil!(
     sink, sink, term, sp, row_offset, col_offset)
 
+# The space the walk reads: a ghost space around its mesh's walk state (`_walk_mesh`), whose
+# padded mesh is a field and not the version check `_padded(::GhostMesh)` makes at each tap
+# (#876), built after `weights(sp)` brings the weights up to date. Any other space is its
+# own.
+@inline _walk_space(sp) = sp
+@inline function _walk_space(sp::ScalarGridSpace{D, T, VT, <:GhostMesh}) where {D, T, VT}
+    s = _walk_mesh(mesh(sp))
+    return ScalarGridSpace{D, T, VT, typeof(s)}(s, sp.weights)
+end
+
 # The walk itself, which the replay calls directly: one method instance per (sink, term)
 # where the two `visit_bilinear_stencil` methods above, the one calling the other, compiled
 # two.
@@ -1084,6 +1138,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
     weights(sp)
     bound, mesh_markers = _may_restrict(typeof(term)) ? _bind_walk(term, mesh(sp)) :
                           (term, nothing)
+    wsp = _walk_space(sp)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     ax = axes(grid_inds)
@@ -1102,7 +1157,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
         _visit_interior!(
             interior_sink,
             _has_marks(TERM) ? _interior_term(bound) : bound,
-            sp,
+            wsp,
             mesh_markers,
             lin_indices,
             interior,
@@ -1113,7 +1168,7 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
             _visit_guarded_region!(
                 boundary_sink,
                 bound,
-                sp,
+                wsp,
                 mesh_markers,
                 lin_indices,
                 slab,
@@ -1125,13 +1180,140 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
         _visit_guarded_region!(
             boundary_sink,
             bound,
-            sp,
+            wsp,
             mesh_markers,
             lin_indices,
             CartesianIndices(map(_full_range, ax)),
             row_offset,
             col_offset
         )
+    end
+    return boundary_sink
+end
+
+# --- a walk over some of the grid's points (#884) ---------------------------------- #
+#
+# A form on ghost spaces whose test closure reads only some padded rows (`polygon_spaces`
+# reads the interior nodes) walks only the points writing those rows. The points are held
+# line by line along axis 1, as ranges, so each region of the walk above (the interior box,
+# each boundary slab) is cut into pieces of whole ranges and each piece walked as the region
+# was: a test per range, none per point or entry. The recording and every replay cut the
+# same regions alike, so their entries still agree point by point.
+
+# Points of `grid` by line along axis 1: line `l` (the linear index of its other indices,
+# `lines[J]`) holds the ranges `lo[s]:hi[s]`, `s in ptr[l]:(ptr[l + 1] - 1)`, increasing and
+# disjoint.
+struct _GridLines{C <: CartesianIndices, L <: LinearIndices}
+    grid::C
+    lines::L
+    ptr::Vector{Int}
+    lo::Vector{Int}
+    hi::Vector{Int}
+end
+
+# The points of `grid` set in `mask`, a vector in the grid's linear order.
+function _GridLines(mask::AbstractVector{Bool}, grid::CartesianIndices)
+    r1 = _full_range(first(axes(grid)))
+    lines = LinearIndices(Base.tail(axes(grid)))
+    lin = LinearIndices(grid)
+    ptr = Vector{Int}(undef, length(lines) + 1)
+    lo, hi = Int[], Int[]
+    for (l, J) in enumerate(CartesianIndices(Base.tail(axes(grid))))
+        ptr[l] = length(lo) + 1
+        open = false
+        for i in r1
+            m = mask[lin[CartesianIndex(i, Tuple(J)...)]]
+            m && !open && push!(lo, i)
+            !m && open && push!(hi, i - 1)
+            open = m
+        end
+        open && push!(hi, last(r1))
+    end
+    ptr[end] = length(lo) + 1
+    return _GridLines(grid, lines, ptr, lo, hi)
+end
+
+"""
+    _WalkRows
+
+The part of the padded grid a form on ghost spaces walks: the points `points` whose stencil
+writes a row of `rows`, the padded rows its test closure reads, and the columns `cols` those
+points read (`_ghost_walk`, ghost_assembly.jl). `whole` when the closure reads every row, a
+ghost box: the walk is then the plain one. `salt` tells a recording of this walk from one
+of the whole grid on one matrix (`_walk_stamp`).
+"""
+struct _WalkRows{P <: _GridLines, R <: _GridLines, Q <: _GridLines}
+    whole::Bool
+    points::P
+    rows::R
+    cols::Q
+    salt::UInt64
+end
+
+# The walked leaf `sp` with the walk `w` it is cut to, or `sp` itself.
+struct _RowRestricted{S, W <: _WalkRows}
+    space::S
+    walk::W
+end
+@inline _restrict_walk(sp, ::Nothing) = sp
+@inline _restrict_walk(sp, w::_WalkRows) = _RowRestricted(sp, w)
+
+# A recording's marker stamp, moved by a cut walk: the cache replays a recording only under
+# the walk it was made with.
+@inline _walk_stamp(stamp::UInt64, ::Nothing) = stamp
+@inline _walk_stamp(stamp::UInt64, w::_WalkRows) = hash(w.salt, stamp)
+
+# `f(piece)` for each piece of `region` (`CartesianIndices` of `UnitRange{Int}`s) in `g`:
+# the ranges of each line along axis 1 cut to `region`, in the region's own order.
+@inline function _each_piece(f::F, region::CartesianIndices, g::_GridLines) where {F}
+    r1 = first(region.indices)
+    for J in CartesianIndices(Base.tail(region.indices))
+        l = @inbounds g.lines[J]
+        for s in @inbounds(g.ptr[l]:(g.ptr[l + 1] - 1))
+            r = max(first(r1), @inbounds g.lo[s]):min(last(r1), @inbounds g.hi[s])
+            isempty(r) || f(CartesianIndices((r, map(j -> j:j, Tuple(J))...)))
+        end
+    end
+    return nothing
+end
+
+# `_visit_stencil!` over the points of the walk alone: the same regions, cut into pieces.
+@inline function _visit_stencil!(
+        interior_sink::SINK1,
+        boundary_sink::SINK2,
+        term::TERM,
+        rsp::_RowRestricted,
+        row_offset::Int,
+        col_offset::Int
+) where {SINK1, SINK2, TERM}
+    sp = rsp.space
+    pts = rsp.walk.points
+    Ωₕ = mesh(sp)
+    weights(sp)
+    bound, mesh_markers = _may_restrict(typeof(term)) ? _bind_walk(term, mesh(sp)) :
+                          (term, nothing)
+    wsp = _walk_space(sp)
+    grid_inds = indices(Ωₕ)
+    lin_indices = LinearIndices(grid_inds)
+    ax = axes(grid_inds)
+    margins = _has_marks(TERM) ? _face_margins(term, ax) : _stencil_margin(term)
+    if _peelable(ax, margins)
+        inner = _has_marks(TERM) ? _interior_term(bound) : bound
+        _each_piece(_interior_box(ax, margins), pts) do piece
+            _visit_interior!(interior_sink, inner, wsp, mesh_markers, lin_indices, piece,
+                row_offset, col_offset)
+        end
+        for slab in _boundary_shell_slabs(ax, margins)
+            _each_piece(slab, pts) do piece
+                _visit_guarded_region!(boundary_sink, bound, wsp, mesh_markers, lin_indices,
+                    piece, row_offset, col_offset)
+            end
+        end
+    else
+        _each_piece(CartesianIndices(map(_full_range, ax)), pts) do piece
+            _visit_guarded_region!(boundary_sink, bound, wsp, mesh_markers, lin_indices,
+                piece, row_offset, col_offset)
+        end
     end
     return boundary_sink
 end

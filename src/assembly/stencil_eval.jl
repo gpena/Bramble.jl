@@ -468,16 +468,19 @@ function stencil_offsets(op::_FacetExtrapolated{D}) where {D}
     return sort!(out)
 end
 # Its margin is the function's: the reads by extrapolation, at a ghost, go inward to nodes,
-# and the walk widens its guarded margin on the marked facets alone (`_face_margins`).
+# and the walk's interior reads no marked ghost without widening (`_face_margins`).
 _stencil_margin(op::_FacetExtrapolated) = _stencil_margin(op.inner_op)
 expression(op::_FacetExtrapolated) = expression(op.inner_op)
 
 # --- The walk's interior: the term unmarked (#813) ------------------------------------ #
 #
 # The rule changes a read only at a ghost of a marked facet. The walk keeps its unguarded
-# interior `_stencil_margin(term) + 3` points in from each marked facet (`_face_margins`),
-# so no read there reaches such a ghost, and walks it with the term unmarked
-# (`_interior_term`): one stencil part where a marked function has three, and no
+# interior `m = _stencil_margin(term)` points in from every face (`_face_margins`). A marked
+# function sits only inside a mixed difference (`_mark`), under taps along two axes, and `m`
+# counts every tap whatever its axis, so the function reaches at most `m - 1` along any one
+# axis: from the interior it reads the first node in from a face, never its ghost layer. So
+# no read there reaches a marked ghost, and the walk takes the interior with the term
+# unmarked (`_interior_term`): one stencil part where a marked function has three, and no
 # `_marked_ghost` test per read. The guarded shell walks the marked term. The recording
 # (`_coord_walk!`) and every replay (`_visit_stencil!`, `_SplitTerm`) split alike, so their
 # entries agree one for one.
@@ -513,28 +516,19 @@ function _unmark(op::BilinearProduct{D, W}) where {D, W}
     return BilinearProduct{D, W, typeof(left), typeof(right)}(left, right)
 end
 
-# The facets marked anywhere in `op`, joined into `acc` (`facets[d][t]` as in
-# `_FacetExtrapolated`).
-@inline _marked_facets(op, acc) = _has_marks(typeof(op)) ? _facets_of(op, acc) : acc
-_facets_of(op, acc) = acc
-_facets_of(op::_FacetExtrapolated, acc) = map(
-    (a, f) -> (a[1] | f[1], a[2] | f[2]), acc, op.facets)
-_facets_of(op::UnaryWrapper, acc) = _marked_facets(op.inner_op, acc)
-_facets_of(op::Union{OperatorAdd, BilinearProduct}, acc) = _marked_facets(
-    op.right_op, _marked_facets(op.left_op, acc))
-
 """
     _face_margins(term, ax::NTuple{D, AbstractUnitRange{Int}}) -> NTuple{D, NTuple{2, Int}}
 
 The walk's guarded margin on each face of the grid with axes `ax`, `(low, high)` per axis:
-[`_stencil_margin`](@ref)`(term)`, and 3 more on a facet a marked function of `term`
-extrapolates across, so the interior they leave reads no ghost of a marked facet and takes
-the term unmarked (`_interior_term`). Every face alike for a term with no mark.
+[`_stencil_margin`](@ref)`(term)` on every face. A marked function of `term` sits only
+inside a mixed difference (`_mark`), so it reaches at most `m - 1` along any one axis,
+`m = _stencil_margin(term)`, and an interior point `m` in from a marked face reads the first
+node in from that face, never its ghost layer: the interior takes the term unmarked
+(`_interior_term`) without widening the margin on a marked facet.
 """
 function _face_margins(term, ::NTuple{D, AbstractUnitRange{Int}}) where {D}
     m = _stencil_margin(term)
-    facets = _marked_facets(term, ntuple(_ -> (false, false), Val(D)))
-    return map(f -> (m + 3 * f[1], m + 3 * f[2]), facets)
+    return ntuple(_ -> (m, m), Val(D))
 end
 
 # `op` with the functions of every mixed difference marked for the facet rule on `facets`,
@@ -545,7 +539,11 @@ end
 # difference is a first difference along one axis of a first difference along another,
 # under any sums and scales between them, and the functions of the inner one are marked
 # through its own sums and scales (`Dcₓ(Dcᵧ(u(1) + 2.0 * u(2)))` as
-# `Dcₓ(Dcᵧ(u(1))) + 2.0 * Dcₓ(Dcᵧ(u(2)))`).
+# `Dcₓ(Dcᵧ(u(1))) + 2.0 * Dcₓ(Dcᵧ(u(2)))`). `_face_margins` relies on this: under taps
+# along two axes a marked function reaches at most `_stencil_margin - 1` along either, so
+# the walk's interior reads no marked ghost. Marking the function of a single-axis
+# difference (`Dcₓ(u)`) would let it reach the ghost layer from the interior, and
+# `_face_margins` must then widen the margin by 1 on every marked facet again.
 _mark_mixed(op, facets::NTuple{D, NTuple{2, Bool}}) where {D} = _mark(op, facets)
 _mark(op, facets) = op
 function _mark(op::OperatorAdd{D}, facets) where {D}
@@ -608,9 +606,20 @@ const _GhostSpace{D} = ScalarGridSpace{D, <:Any, <:Any, <:_GhostMeshLike}
         op::BilinearProduct{D, InnerType}, space::_GhostSpace{D}, I::CartesianIndex{D},
         markers, lin_idx::Int
 ) where {D, InnerType}
-    _near_edge(mesh(space), I, _stencil_margin(op)) && _check_absent_reads(op, space, I, lin_idx)
+    _check_product_reads(op, space, I, lin_idx)
     return @invoke local_stencil(op::BilinearProduct{D, InnerType}, space::Any,
         I::CartesianIndex{D}, markers::Any, lin_idx::Int)
+end
+
+# The absent-read check of a product at `I`, which the stencil walk above and the factored
+# walk (`_factored_product!`, `bilinear_traversal.jl`) both make before reading a factor.
+# Off a ghost space there is nothing to check.
+@inline _check_product_reads(op, space, I, lin_idx::Int) = nothing
+@inline function _check_product_reads(
+        op::BilinearProduct{D}, space::_GhostSpace{D}, I::CartesianIndex{D}, lin_idx::Int
+) where {D}
+    _near_edge(mesh(space), I, _stencil_margin(op)) && _check_absent_reads(op, space, I, lin_idx)
+    return nothing
 end
 
 @inline function local_stencil(

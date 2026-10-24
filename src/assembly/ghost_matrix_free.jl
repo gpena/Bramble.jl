@@ -9,7 +9,8 @@
 # closure passes allocate nothing. A product holds them through the `busy` flag, taken by
 # compare-and-swap, so a product entered on the same operator while another runs throws
 # an `ArgumentError` rather than overwrite them. The closure passes run in the bands of
-# the operator's policy (`_run_bands!`).
+# the operator's policy (`_run_bands!`). A serial product computes the padded rows the
+# test closure reads only, over the points writing them (the form's `walk`, #884).
 #
 # `dirichlet` replaces reduced rows by identity rows, through the masks of the physical
 # mesh, on the spaces `assemble(a; dirichlet)` allows it on (`_check_rows`), as that does.
@@ -27,7 +28,8 @@ product entered while another runs on it throws an `ArgumentError`, so build one
 per task. `getindex` costs one product per entry.
 """
 struct GhostMatrixFreeOperator{T, Op <: MatrixFreeOperator, WT <: GhostGridSpace,
-    VT <: GhostGridSpace, EP <: ExecutionPolicy, BT <: AbstractVector} <: AbstractMatrix{T}
+    VT <: GhostGridSpace, EP <: ExecutionPolicy, BT <: AbstractVector, RW <: _WalkRows} <:
+       AbstractMatrix{T}
     "the matrix-free operator of the form on the padded spaces."
     padded::Op
     trial_space::WT
@@ -40,6 +42,8 @@ struct GhostMatrixFreeOperator{T, Op <: MatrixFreeOperator, WT <: GhostGridSpace
     ypad::BT
     "whether a product holds `xpad` and `ypad`."
     busy::Threads.Atomic{Bool}
+    "the padded points and rows the product walks, the form's."
+    walk::RW
 end
 
 function matrix_free_operator(a::GhostBilinearForm; dirichlet = nothing,
@@ -68,9 +72,9 @@ function _ghost_mf_operator(op::MatrixFreeOperator, a::GhostBilinearForm, mask::
     xpad = similar(a.trial_space.d, T, size(op, 2))
     ypad = similar(a.trial_space.d, T, size(op, 1))
     return GhostMatrixFreeOperator{T, typeof(op), typeof(a.trial_space),
-        typeof(a.test_space), typeof(policy), typeof(xpad)}(
+        typeof(a.test_space), typeof(policy), typeof(xpad), typeof(a.walk)}(
         op, a.trial_space, a.test_space, mask, policy, xpad, ypad,
-        Threads.Atomic{Bool}(false))
+        Threads.Atomic{Bool}(false), a.walk)
 end
 
 Base.size(op::GhostMatrixFreeOperator) = (ndofs(op.test_space), ndofs(op.trial_space))
@@ -121,14 +125,38 @@ end
 
 function _ghost_mf_apply!(y, op::GhostMatrixFreeOperator, x, α, β, xpad, ypad)
     Et = op.trial_space.Et
-    _run_bands!(op.policy, _csc_columns_band!, xpad, SparseArrays.getcolptr(Et),
-        rowvals(Et), nonzeros(Et), x)
-    mul!(ypad, op.padded, xpad, true, false)
+    if op.walk.whole || !(op.policy isa CpuSerial)
+        _run_bands!(op.policy, _csc_columns_band!, xpad, SparseArrays.getcolptr(Et),
+            rowvals(Et), nonzeros(Et), x)
+    else
+        _closure_columns!(xpad, Et, x, op.walk.cols)
+    end
+    _mf_walked_mul!(ypad, op.padded, xpad, op.walk)
     E = op.test_space.E
     _run_bands!(op.policy, _ghost_mf_out_band!, y, SparseArrays.getcolptr(E), rowvals(E),
         nonzeros(E), ypad, op.mask.chunks, α, β)
     _mf_identity_rows!(y, x, α, isempty(op.mask) ? nothing : op.mask)
     return nothing
+end
+
+# `_csc_columns_band!` over the padded columns `cols` (`_GridLines`) alone, the ones the
+# serial product's cut walk reads (`_mf_walked_mul!`); `y` keeps its other entries.
+function _closure_columns!(y, Et::SparseMatrixCSC, x, cols::_GridLines)
+    T = eltype(y)
+    cp, rv, nz = SparseArrays.getcolptr(Et), rowvals(Et), nonzeros(Et)
+    lin = LinearIndices(cols.grid)
+    @inbounds for J in CartesianIndices(Base.tail(axes(cols.grid)))
+        l = cols.lines[J]
+        for t in cols.ptr[l]:(cols.ptr[l + 1] - 1), i in cols.lo[t]:cols.hi[t]
+            r = lin[CartesianIndex(i, Tuple(J)...)]
+            s = zero(T)
+            for k in cp[r]:(cp[r + 1] - 1)
+                s = convert(T, s + nz[k] * x[rv[k]])
+            end
+            y[r] = s
+        end
+    end
+    return y
 end
 
 # Entries `r` of band `b` of `y = α E_vᵀ w + β y`, from column `r` of `E_v`; `β == 0`

@@ -6,16 +6,17 @@ module AllocationsTests
 # `assemble!(b, l)` with and without `dirichlet`, and `dirichlet_bc!` and `symmetrize!` on a
 # ghost space. `CpuThreaded` spawns its tasks on every banded pass, so there each call is
 # bounded by its padded or plain counterpart plus one task spawn per band pass of the ghost
-# layer, and gives the same figure at two grid sizes. The last three testsets refill a form
-# whose coefficient changed on a ghost space, padded forms under the corner rule, and an
-# elasticity form under the facet rule (#813). The plain-and-ghost warm refill with
-# `dirichlet` is in test/form/two_spaces.jl, and `CpuPolyester` is in
-# test/ext/ghost_polyester.jl, where Polyester is loaded.
+# layer, and gives the same figure at two grid sizes. The later testsets refill a form
+# whose coefficient changed on a ghost space, padded forms under the corner rule, an
+# elasticity form under the facet rule (#813) and the polygon forms, the padded one alone
+# included (#876); the last refuses a refill whose scale now reads an absent point (#876).
+# The plain-and-ghost warm refill with `dirichlet` is in test/form/two_spaces.jl, and
+# `CpuPolyester` is in test/ext/ghost_polyester.jl, where Polyester is loaded.
 
 using Test
 using Bramble
 import Bramble
-using Bramble: CpuSerial, CpuThreaded, D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, D̽ₓ, D̽ᵧ, Dcₓ, Dcᵧ
+using Bramble: CpuSerial, CpuThreaded, D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, D̽ₓ, D̽ᵧ, Dcₓ, Dcᵧ, Mₓ
 using LinearAlgebra: norm
 using SparseArrays: nonzeros
 
@@ -373,6 +374,65 @@ end
     @test alloc(() -> assemble!(A, F, a, l)) == 0
     @test A == A0
     @test F == F0
+    # the padded refill alone, walked factor by factor on the ghost space (#876), over the
+    # rows the test closure reads (#884)
+    Ap0 = copy(a.A_pad)
+    fill!(nonzeros(a.A_pad), 0)
+    @test alloc(() -> Bramble._assemble_padded!(a)) == 0
+    @test a.A_pad == Ap0
+    # and over the whole padded grid, into a matrix of its own (#876)
+    Bp = assemble(a.padded)
+    Bp0 = copy(Bp)
+    fill!(nonzeros(Bp), 0)
+    @test alloc(() -> assemble!(Bp, a.padded)) == 0
+    @test Bp == Bp0
+end
+
+# A scale that is isbits and yet not constant: its value is a global's (#876).
+const SCALE = Ref(0.0)
+struct GlobalScale <: Real end
+Base.Float64(::GlobalScale) = SCALE[]
+Base.convert(::Type{Float64}, s::GlobalScale) = Float64(s)
+Base.promote_rule(::Type{GlobalScale}, ::Type{Float64}) = Float64
+Base.promote_rule(::Type{GlobalScale}, ::Type{Int}) = Float64
+Base.:*(a::GlobalScale, b::GlobalScale) = Float64(a) * Float64(b)
+Base.:+(a::GlobalScale, b::GlobalScale) = Float64(a) + Float64(b)
+Base.iszero(s::GlobalScale) = iszero(Float64(s))
+Base.isinteger(::GlobalScale) = false
+Base.show(io::IO, s::GlobalScale) = print(io, "GlobalScale(", Float64(s), ")")
+Base.zero(::Type{GlobalScale}) = 0.0
+Base.one(::Type{GlobalScale}) = 1.0
+Base.:(==)(s::GlobalScale, b::Real) = Float64(s) == b
+# So is an `Irrational` of a new symbol: the type is open to any.
+const KNOB = Ref(0.0)
+Base.Float64(::Irrational{:knob876}) = KNOB[]
+Base.iszero(::Irrational{:knob876}) = iszero(KNOB[])
+
+# A refill skips the absent-read check only for a term whose scales are Base numbers, fixed
+# since the recording (#876): with a grid-function, `Ref`, `GlobalScale` or new `Irrational`
+# scale zero where the operand reads past a corner, the recording passes and the refill
+# after the scale changes refuses.
+@testset "Refill re-checks absent reads (#876)" begin
+    P = padded(ghost_mesh(CpuSerial(), (9, 9)))
+    c = zeros(Bramble.npoints(Bramble.mesh(P)))
+    β = Ref(0.0)
+    for (X, set!) in ((u -> c * Dcᵧ(u), () -> fill!(c, 1.0)),
+        (u -> β * Dcᵧ(u), () -> β[] = 1.0),
+        (u -> GlobalScale() * Dcᵧ(u), () -> SCALE[] = 1.0),
+        (u -> Irrational{:knob876}() * Dcᵧ(u), () -> KNOB[] = 1.0))
+        a = form(P, P, (u, v) -> innerₕ(Dcₓ(Mₓ(X(u))), v))
+        A = assemble(a)
+        assemble!(A, a)
+        set!()
+        @test_throws ArgumentError assemble!(A, a)
+        msg = try
+            assemble!(A, a)
+            "no refusal"
+        catch e
+            sprint(showerror, e)
+        end
+        @test occursin("a padded point that does not exist", msg)
+    end
 end
 
 end

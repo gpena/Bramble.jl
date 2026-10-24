@@ -361,6 +361,25 @@ end
 @inline _mf_sink_geom(::CpuSerial, geom) = geom
 @inline _mf_sink_geom(_, _) = nothing
 
+# `mul!(y, op, x, true, false)` computed on the rows of the walk `walk` alone (`_WalkRows`,
+# a form on ghost spaces whose test closure reads those rows only): a serial operator walks
+# the walk's points and gathers its rows; every other row of `y` is zero or a sum of some of
+# its entries, which no reader of `y` reads. A threaded operator, or the whole grid
+# (`nothing`), takes `mul!`.
+_mf_walked_mul!(y, op::MatrixFreeOperator, x, ::Nothing) = mul!(y, op, x, true, false)
+function _mf_walked_mul!(y, op::MatrixFreeOperator, x, walk::_WalkRows)
+    (walk.whole || !(op.policy isa CpuSerial)) && return mul!(y, op, x, true, false)
+    (length(x) == op.ncols && length(y) == op.nrows) ||
+        _throw_matrix_free_dimmismatch(op, x, y)
+    fill!(y, zero(eltype(y)))
+    mask = _mf_mask(op)
+    a = op.form
+    _mf_apply_parts!(op.policy, ActionSink(y, x, true, mask, op.geom), trial_space(a),
+        test_space(a), a.ast, walk)
+    _mf_identity_rows!(y, x, true, mask)
+    return y
+end
+
 # A Dirichlet row of `α * A * x + β * y` is `α * x[i] + β * y[i]`; `β * y[i]` is already in
 # place, since the walk skipped the row. A row past the last column (a rectangular form, say
 # `πₕ` onto a finer test mesh) has no diagonal, and `dirichlet_bc!` leaves it all zero, so
@@ -428,15 +447,16 @@ _mf_apply!(policy, s, a::BilinearForm) = _mf_apply_parts!(
 
 # `_mf_apply!` on the form's walked parts, which a `CpuPolyester` band task rebuilds from
 # their split (`_batch_mf_bands!`): the form itself holds a mutable cache, which no task may
-# capture without putting `Polyester.@batch`'s argument box on the heap.
-function _mf_apply_parts!(policy, s, Wu, Wv, ast)
+# capture without putting `Polyester.@batch`'s argument box on the heap. `walk` cuts a
+# scalar form's serial walk to its points and rows (`_mf_walked_mul!`), or is `nothing`.
+function _mf_apply_parts!(policy, s, Wu, Wv, ast, walk = nothing)
     if _is_block_pair(Wu, Wv)
         _mf_blocks!(policy, s, ast, leaf_spaces_offsets(Wu), leaf_spaces_offsets(Wv))
         return nothing
     end
     bound = _bind_interp_spaces(ast, Wu, Wv)
     _check_block_meshes(bound, Wu, Wv)
-    sp = host_weights(_walked_leaf(bound, Wu, Wv))
+    sp = _restrict_walk(host_weights(_walked_leaf(bound, Wu, Wv)), walk)
     _mf_summands!(policy, s, bound, sp)
     return nothing
 end
@@ -728,6 +748,23 @@ _mf_tapped(_) = _MF_LONG
     return nothing
 end
 
+# A serial unit over the points and rows of a cut walk (`_RowRestricted`): the walk's rows
+# gathered and its points of the shell scattered. Each row the walk keeps takes every entry,
+# from the box's points and from the shell's, each of which is a point of the walk.
+@inline function _mf_walk!(
+        s, term::TERM, rsp::_RowRestricted, ro::Int, co::Int, ::Val{true}) where {TERM}
+    sp = rsp.space
+    grid_inds = indices(mesh(sp))
+    if _peelable(axes(grid_inds), _stencil_margin(term))
+        _mf_gather_unit!(
+            s, term, sp, ro, co, _full_range(last(axes(grid_inds))), rsp.walk.rows)
+        _mf_whole(s.geom, term, sp) || _mf_scatter_shell!(s, term, rsp, ro, co)
+    else
+        visit_bilinear_stencil(s, term, rsp, ro, co)
+    end
+    return nothing
+end
+
 # `visit_bilinear_stencil`'s boundary shell alone.
 @noinline function _mf_scatter_shell!(s::SINK, term::TERM, sp, ro::Int, co::Int) where {SINK, TERM}
     Ωₕ = mesh(sp)
@@ -740,20 +777,39 @@ end
     return nothing
 end
 
+# The shell's points of a cut walk, each slab cut into the walk's pieces.
+@noinline function _mf_scatter_shell!(
+        s::SINK, term::TERM, rsp::_RowRestricted, ro::Int, co::Int) where {SINK, TERM}
+    sp = rsp.space
+    bound, mesh_markers = _mf_bind_walk(term, sp)
+    wsp = _walk_space(sp)
+    grid_inds = indices(mesh(sp))
+    lin_indices = LinearIndices(grid_inds)
+    for slab in _boundary_shell_slabs(axes(grid_inds), _stencil_margin(term))
+        _each_piece(slab, rsp.walk.points) do piece
+            _visit_guarded_region!(s, bound, wsp, mesh_markers, lin_indices, piece, ro, co)
+        end
+    end
+    return nothing
+end
+
 # The rows whose last index lies in `cut`, gathered: an entry's own row, and a pair's
 # transposed row at the transposed block's origin `co + dr`, reading `x` at `ro + dc`.
-@inline function _mf_gather_unit!(s::ActionSink, term, sp, ro::Int, co::Int, cut::UnitRange{Int})
-    _mf_gather!(s.y, s.x, s.α, s.mask, s.geom, term, sp, ro, co, Val(false), cut)
+# `live` (`_GridLines`) keeps the rows of a cut walk only, or is `nothing`.
+@inline function _mf_gather_unit!(
+        s::ActionSink, term, sp, ro::Int, co::Int, cut::UnitRange{Int}, live = nothing)
+    _mf_gather!(s.y, s.x, s.α, s.mask, s.geom, term, sp, ro, co, Val(false), cut, live)
     return nothing
 end
 
 @inline function _mf_gather_unit!(
-        s::_PairActionSink, term, sp, ro::Int, co::Int, cut::UnitRange{Int}
+        s::_PairActionSink, term, sp, ro::Int, co::Int, cut::UnitRange{Int}, live = nothing
 )
-    s.half != 2 && _mf_gather!(s.y, s.x, s.α1, s.mask, s.geom, term, sp, ro, co, Val(false), cut)
+    s.half != 2 &&
+        _mf_gather!(s.y, s.x, s.α1, s.mask, s.geom, term, sp, ro, co, Val(false), cut, live)
     if s.half != 1
-        _mf_gather!(
-            s.y, s.x, s.α2, s.mask, s.geom, term, sp, co + s.dr, ro + s.dc, Val(true), cut)
+        _mf_gather!(s.y, s.x, s.α2, s.mask, s.geom, term, sp, co + s.dr, ro + s.dc,
+            Val(true), cut, live)
     end
     return nothing
 end
@@ -765,17 +821,20 @@ end
 # loop is compiled into, so that they are constants there. Weights are live. When the
 # operator's cached geometry `geom` answers the term (`_mf_evaluator`), they come from it
 # instead, over every point with a stencil (`_mf_whole_box`), and no shell is left to scatter.
+# The stencils read a ghost space through its walk state (`_walk_space`), as the walk does.
 @noinline function _mf_gather!(
-        y, x, α, mask, geom, term::TERM, sp, rs::Int, cs::Int, tr::Val, cut::UnitRange{Int}
+        y, x, α, mask, geom, term::TERM, sp0, rs::Int, cs::Int, tr::Val,
+        cut::UnitRange{Int}, live = nothing
 ) where {TERM}
-    Ωₕ = mesh(sp)
-    bound, mesh_markers = _mf_bind_walk(term, sp)
+    Ωₕ = mesh(sp0)
+    bound, mesh_markers = _mf_bind_walk(term, sp0)
+    sp = _walk_space(sp0)
     grid_inds = indices(Ωₕ)
     lin = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
     ax = map(_full_range, axes(grid_inds))
     rows = (Base.front(ax)..., intersect(last(ax), cut))
-    ev = _mf_evaluator(geom, term, sp)
+    ev = _mf_evaluator(geom, term, sp0)
     if ev === nothing
         box = CartesianIndices(map(r -> _interior_range(r, margin), ax))
         isempty(box) && return nothing
@@ -784,7 +843,7 @@ end
         inner = map(r -> _interior_range(r, 2 * margin), ax)
         _mf_gather_rows!(
             (y, x, α, mask, bound, sp, mesh_markers, lin, offs, rs, cs, tr, nothing), box,
-            rows, inner)
+            rows, inner, live)
     else
         box = _mf_whole_box(ev, ax)
         isempty(box) && return nothing
@@ -793,7 +852,7 @@ end
         inner = _mf_unguarded_rows(box, offs, tr)
         _mf_gather_rows!(
             (y, x, α, mask, bound, sp, mesh_markers, lin, offs, rs, cs, tr, ev), box, rows,
-            inner)
+            inner, live)
     end
     return nothing
 end
@@ -810,7 +869,7 @@ end
 end
 
 # The rows `rows` of `_mf_gather!`, with its arguments `args` and the evaluator last in them.
-@inline function _mf_gather_rows!(args, box, rows, inner)
+@inline function _mf_gather_rows!(args, box, rows, inner, ::Nothing)
     r1 = first(rows)
     c1 = intersect(r1, first(inner))
     lo1, hi1 = isempty(c1) ? (r1, 1:0) : (first(r1):(first(c1) - 1), (last(c1) + 1):last(r1))
@@ -825,6 +884,35 @@ end
             end
         else
             for i in r1
+                _mf_guarded_row!(args..., box, CartesianIndex(i, Tuple(J)...))
+            end
+        end
+    end
+    return nothing
+end
+
+# The rows of a cut walk (`live`) among `rows`: each range of a line cut to them, then split
+# as above into its rows nearer a face, guarded, and its unguarded run.
+@inline function _mf_gather_rows!(args, box, rows, inner, live::_GridLines)
+    r1 = first(rows)
+    i1 = first(inner)
+    @inbounds for J in CartesianIndices(Base.tail(rows))
+        l = live.lines[J]
+        unguarded = all(map(in, Tuple(J), Base.tail(inner)))
+        for t in live.ptr[l]:(live.ptr[l + 1] - 1)
+            g = max(first(r1), live.lo[t]):min(last(r1), live.hi[t])
+            c = unguarded ? intersect(g, i1) : 1:0
+            if isempty(c)
+                for i in g
+                    _mf_guarded_row!(args..., box, CartesianIndex(i, Tuple(J)...))
+                end
+                continue
+            end
+            for i in first(g):(first(c) - 1)
+                _mf_guarded_row!(args..., box, CartesianIndex(i, Tuple(J)...))
+            end
+            _mf_gather_line!(args..., c, J)
+            for i in (last(c) + 1):last(g)
                 _mf_guarded_row!(args..., box, CartesianIndex(i, Tuple(J)...))
             end
         end
@@ -869,6 +957,13 @@ end
 # that each entry's offsets are constants and two entries at one point share its evaluation.
 # A stencil the previous row of the line evaluated (`prev`, `nothing` on a line's first row)
 # is taken from it. The points lie in the interior box, so every read is in bounds.
+#
+# On a ghost space an entry at the point of an earlier one takes that entry's stencil, so
+# each point is evaluated once: its evaluation holds the absent-read check, a call that may
+# throw, which the compiler does not merge (#884; `innerₕ(Dcₓ(u), v)` on `polygon_spaces`,
+# two entries at one point, 3.4 against 2.8 ns per row). Elsewhere it merges them, and a
+# plain space keeps the `ntuple` (the same form on a plain 200×201 grid, 1.42 against
+# 1.65 ns).
 @inline function _mf_line_stencils(prev, ev, term, sp, mesh_markers, lin, offs, R, tr::Val)
     return ntuple(Val(length(offs))) do k
         @inline
@@ -880,6 +975,30 @@ end
             prev[j]
         end
     end
+end
+@inline _mf_line_stencils(prev, ev, term, sp::_GhostSpace, mesh_markers, lin, offs, R,
+    tr::Val) = _mf_line_stencils_once(prev, ev, term, sp, mesh_markers, lin, offs, R, tr)
+
+# Generated so that entry `k` names the earlier ones; the choices fold, as the offsets are
+# constants where the line is compiled.
+@generated function _mf_line_stencils_once(
+        prev, ev, term, sp, mesh_markers, lin, offs::Tuple, R, tr::Val)
+    N = fieldcount(offs)
+    body = Expr(:block, Expr(:meta, :inline))
+    ws = [Symbol(:w, k) for k in 1:N]
+    for k in 1:N
+        o, j, f = Symbol(:o, k), Symbol(:j, k), Symbol(:f, k)
+        push!(body.args, :($o = _mf_row_offset(offs[$k], tr)))
+        push!(body.args, :($j = prev === nothing ? 0 : _mf_behind(offs, $o, tr)))
+        push!(body.args, :($f = _mf_first_at(offs, $o, tr)))
+        w = :(_mf_line_weights(ev, term, sp, R, $o, mesh_markers, lin, offs, tr))
+        for e in (k - 1):-1:1
+            w = :($f == $e ? $(ws[e]) : $w)
+        end
+        push!(body.args, :($(ws[k]) = $j != 0 ? prev[$j] : $w))
+    end
+    push!(body.args, :(return ($(ws...),)))
+    return body
 end
 
 # Row `R` from its points' stencils `st`: entry `k` is `st[k][k]` times `x` at its column.

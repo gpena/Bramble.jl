@@ -186,20 +186,22 @@ end
 # A cache miss: the recording `allocate_system_matrix` would have stored, built against `A`,
 # then replayed (`mode`: serially, or across threads). Its positions search reports an entry
 # `A`'s pattern cannot hold. The search itself is serial either way; only the replay threads.
+# `walk` (`_WalkRows`, a scalar form on ghost spaces) cuts the recording and the replay to
+# its points alike; `nothing` walks the whole grid.
 function _record_bilinear_core!(
         mode::_ReplayMode, A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE,
-        ::Val{D}, α
+        ::Val{D}, α, walk = nothing
 ) where {AST_TYPE, D}
-    p = _form_coordinates(trial_space, test_space, ast)
+    p = _form_coordinates(trial_space, test_space, ast, walk)
     _coordinates_to_positions!(A, p, ast)
     segments = _segments_from_positions(Val(D), p)
-    _replay_bilinear_core!(mode, A, trial_space, test_space, ast, segments, α)
+    _replay_bilinear_core!(mode, A, trial_space, test_space, ast, segments, α, walk)
     return segments
 end
 
 function _replay_bilinear_core!(
         mode::_ReplayMode, A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE,
-        segments::Vector{Segment{D}}, α
+        segments::Vector{Segment{D}}, α, walk = nothing
 ) where {AST_TYPE, D}
     if _is_block_pair(trial_space, test_space)
         _replay_blocks!(
@@ -219,7 +221,7 @@ function _replay_bilinear_core!(
     # `host_weights` once per fill for every summand, never once per unit: on a device leaf
     # it rebuilds a host mesh and weights, which per unit made a multi-term refill slower than
     # the search it replaces. A no-op on a host leaf.
-    sp = host_weights(_walked_leaf(bound, trial_space, test_space))
+    sp = _restrict_walk(host_weights(_walked_leaf(bound, trial_space, test_space)), walk)
     _replay_summands!(mode, A, bound, sp, segments, 0, α)
     return nothing
 end
@@ -562,7 +564,9 @@ end
 #
 # `mode` is how the replay runs; the recording is the same for both, so a matrix recorded by
 # a serial fill replays threaded and the other way round. The five-argument form is the
-# serial fill every serial caller (`assemble!`, `assemble_add!`) makes.
+# serial fill every serial caller (`assemble!`, `assemble_add!`) makes. `walk` cuts the
+# recording and the replay to its points (`_WalkRows`) and keys the recording by its stamp;
+# only the serial replay takes one, the threaded sweeps walk the whole grid.
 @inline _assemble_bilinear_core_cached!(
     A::AbstractMatrix, trial_space, test_space, ast, cache::_AssemblyCache, α = true
 ) = _assemble_bilinear_core_cached!(
@@ -576,12 +580,14 @@ function _assemble_bilinear_core_cached!(
         test_space,
         ast::AST_TYPE,
         cache::_AssemblyCache{D, CACHED_AST},
-        α = true
+        α = true,
+        walk = nothing
 ) where {AST_TYPE, D, CACHED_AST}
-    stamp = _pattern_stamp(trial_space, test_space)
+    stamp = _walk_stamp(_pattern_stamp(trial_space, test_space), walk)
     if cache.valid && cache.A_id === objectid(A) && cache.ast === ast &&
        cache.stamp === stamp && cache.stored == _pattern_length(A)
-        _replay_bilinear_core!(mode, A, trial_space, test_space, ast, cache.segments, α)
+        _replay_bilinear_core!(
+            mode, A, trial_space, test_space, ast, cache.segments, α, walk)
     else
         # A fresh vector, never `empty!` on whatever `cache.segments` currently references.
         #
@@ -594,7 +600,7 @@ function _assemble_bilinear_core_cached!(
         # So does a stored-entry count that moved (an inserted diagonal, #534), once; the
         # fills after it replay again.
         segments = _record_bilinear_core!(
-            mode, A, trial_space, test_space, ast, Val(D), α
+            mode, A, trial_space, test_space, ast, Val(D), α, walk
         )
         _store_recording!(cache, ast, segments, A, stamp)
     end

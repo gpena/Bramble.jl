@@ -13,6 +13,10 @@
 # at each stencil tap instead would rewrite the guarded walk, the pattern recorder and the
 # replay.
 #
+# On a serial policy `A_pad` holds the padded rows the test closure reads, and the walk that
+# fills it visits the points writing them only (`_ghost_walk`, #884): on `polygon_spaces`,
+# the interior nodes. The serial matrix-free product walks the same points (`walk`).
+#
 # The reduction, the load and `lift` run in the bands of the mesh's policy (`_run_bands!`):
 # each band owns a range of output entries and sums every contribution to them itself, so
 # no two bands write one entry, and every policy adds an entry's terms in the same order and
@@ -143,7 +147,7 @@ their padded spaces, the padded matrix it fills, and the map that reduces that m
 """
 struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
     VT <: GhostGridSpace, MT <: AbstractMatrix, IV <: AbstractArray{Int, 1},
-    CV <: AbstractVector}
+    CV <: AbstractVector, RW <: _WalkRows}
     "the form on the padded spaces."
     padded::F
     trial_space::WT
@@ -166,6 +170,8 @@ struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
     liftcol::IV
     "row replacement on the spaces, for `dirichlet`."
     rows::_RowsDirichlet
+    "the padded points and rows `assemble!` and the matrix-free product walk."
+    walk::RW
 end
 
 """
@@ -259,9 +265,10 @@ end
 
 # The ghost form of `a`, a form on the padded spaces of `Wₕ` and `Vₕ`.
 function _ghost_bilinear_form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, a::BilinearForm)
-    maps = _ghost_maps(Wₕ, Vₕ, a)
+    walk = _ghost_walk(Vₕ, a)
+    maps = _ghost_maps(Wₕ, Vₕ, a, walk)
     return GhostBilinearForm(a, Wₕ, Vₕ, Base.front(maps)...,
-        _RowsDirichlet((Vₕ, Wₕ), last(maps)))
+        _RowsDirichlet((Vₕ, Wₕ), last(maps)), walk)
 end
 function _ghost_bilinear_form(Wₕ::_CompositeClosure, Vₕ::_CompositeClosure,
         a::BilinearForm)
@@ -269,12 +276,62 @@ function _ghost_bilinear_form(Wₕ::_CompositeClosure, Vₕ::_CompositeClosure,
     return GhostCompositeBilinearForm(a, Wₕ, Vₕ, Base.front(_ghost_maps(Wₕ, Vₕ, a))...)
 end
 
-# The padded matrix of `a`, the map of its reduction and the map of `A_pad d_u`, and whether
-# a tested row reads a conflict node: a move is made for each such entry and none other.
-# All of it hangs on the pattern of `A_pad`, which `assemble!` refills in place.
-function _ghost_maps(Wₕ::_GhostSide, Vₕ::_GhostSide, a::BilinearForm)
+# The part of the padded grid a form on `Vₕ` walks (#884): the rows its test closure reads,
+# those with a stored entry in `E_v` (on `polygon_spaces`, the interior nodes), the points
+# whose stencil writes one of them, each such row moved back by every test offset of the
+# form (`_row_bounds`, the reach the threaded assembly colours by), and the columns those
+# points read, within the form's margin of one. A row of `A_pad` that no column of `E_v`
+# reads drops out of the reduction, so `A_pad` stores these rows only, and the rows the
+# walked points reach beyond them.
+#
+# The whole grid is walked (`whole`) by a form naming its rows by interpolation, one
+# assembled under a threaded policy (the threaded sweeps colour the whole grid, and cut to a
+# serial walk they would lose their threads), and one whose walk would keep more than 7/8
+# of the points: cut into pieces, a walk costs 5 to 9% more per point than whole (a Robin
+# ghost box on 200×201 points, whose four absent corners no column of `E_v` reads).
+function _ghost_walk(Vₕ::GhostGridSpace, a::BilinearForm)
+    grid = indices(mesh(padded_space(Vₕ)))
+    none = _GridLines(grid, LinearIndices(Base.tail(axes(grid))), Int[], Int[], Int[])
+    whole = _WalkRows(true, none, none, none, UInt64(0))
+    (_has_test_interp(a.ast) || !(execution_policy(trial_space(a)) isa CpuSerial)) &&
+        return whole
+    cp = SparseArrays.getcolptr(Vₕ.Et)
+    live = BitVector(undef, length(grid))
+    for i in eachindex(live)
+        live[i] = cp[i + 1] > cp[i]
+    end
+    lo, hi = _row_bounds(a.ast)
+    pts = _moved_mask(live, grid, CartesianIndices(map((l, h) -> (-h):(-l), lo, hi)))
+    8 * count(pts) > 7 * length(grid) && return whole
+    m = _stencil_margin(a.ast)
+    cols = _moved_mask(pts, grid, CartesianIndices(ntuple(_ -> (-m):m, length(lo))))
+    rows = _GridLines(live, grid)
+    walked = pts == live ? rows : _GridLines(pts, grid)
+    salt = UInt64(objectid(rows.ptr))
+    return _WalkRows(false, walked, rows, _GridLines(cols, grid), salt)
+end
+
+# The points `I + o` of `grid`, for `I` set in `mask` and `o` in `steps`.
+function _moved_mask(mask::BitVector, grid::CartesianIndices, steps::CartesianIndices)
+    moved = falses(length(mask))
+    lin = LinearIndices(grid)
+    for I in grid
+        mask[lin[I]] || continue
+        for o in steps
+            I + o in grid && (moved[lin[I + o]] = true)
+        end
+    end
+    return moved
+end
+
+# The padded matrix of `a` over the walk `walk` (`nothing` on a composite, the whole grid),
+# the map of its reduction and the map of `A_pad d_u`, and whether a tested row reads a
+# conflict node: a move is made for each such entry and none other. All of it hangs on the
+# pattern of `A_pad`, which `assemble!` refills in place.
+function _ghost_maps(Wₕ::_GhostSide, Vₕ::_GhostSide, a::BilinearForm, walk = nothing)
     _check_ghost_eltype(_matrix_eltype(a, a.ast))
-    A_pad = allocate_system_matrix(a)::SparseMatrixCSC  # `_check_ghost_host`
+    # A `SparseMatrixCSC`, by `_check_ghost_host`.
+    A_pad = _allocate_walked(a, a.ast, _cut_walk(walk))::SparseMatrixCSC
     moves = _exterior_moves(Wₕ, Vₕ, A_pad)
     src, dst, coef, colptr, rowval = _ghost_reduction_map(
         backend(Vₕ), A_pad, Vₕ.E, Wₕ.E, moves)
@@ -476,7 +533,7 @@ function _ghost_reduction_map(be, A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
     src, rs, cs = Int[], Int[], Int[]
     coef = promote_type(eltype(Ev), eltype(Eu))[]
     rv, ev, eu = rowvals(A_pad), nonzeros(Evt), nonzeros(Eut)
-    function contribute!(k, i, j, s)
+    @inline function contribute!(k, i, j, s)
         for p in nzrange(Evt, i), q in nzrange(Eut, j)
 
             push!(src, k)
@@ -579,10 +636,27 @@ end
 end
 
 function _assemble_ghost!(A::SparseMatrixCSC, a::_AnyGhostBilinearForm)
-    assemble!(a.A_pad, a.padded)
+    _assemble_padded!(a)
     _run_bands!(_ghost_policy(a), _reduce_band!, nonzeros(A), nonzeros(a.A_pad),
         a.dst, a.src, a.coef)
     return A
+end
+
+# The walk a cut grid takes (`_WalkRows`), or `nothing` for the whole grid.
+@inline _cut_walk(::Nothing) = nothing
+@inline _cut_walk(w::_WalkRows) = w.whole ? nothing : w
+
+# `A_pad` refilled. On a cut walk, by the serial replay of its points alone, recording first
+# when the cache holds no recording of that walk for `A_pad`: the threaded sweeps walk the
+# whole grid. Its stored entries are zeroed first, as `assemble!` does.
+_assemble_padded!(a::GhostCompositeBilinearForm) = assemble!(a.A_pad, a.padded)
+function _assemble_padded!(a::GhostBilinearForm)
+    a.walk.whole && return assemble!(a.A_pad, a.padded)
+    p = a.padded
+    _zero_stored!(a.A_pad)
+    _assemble_bilinear_core_cached!(_SerialReplay(), a.A_pad, p.trial_space, p.test_space,
+        p.ast, p.cache, true, a.walk)
+    return a.A_pad
 end
 
 # The policy of a ghost space, and of a ghost form read from its padded form, which the
@@ -597,8 +671,18 @@ end
     test_space(a.padded))
 
 # The reduced entries of band `b` of `nbands`: entry `e` sums its contributions in order.
+# With as many contributions as entries, each entry has one, its `e`-th (every group is
+# nonempty), so the entries are a plain gather: on `polygon_spaces` without a conflict node,
+# `E_v` selects rows and `E_u` holds a 1 at each interior node, 1.15 against 0.45 ns per
+# entry (#884). The same sum either way, from zero.
 @noinline function _reduce_band!(nz, pv, ptr, src, coef, nbands::Int, b::Int)
     T = eltype(nz)
+    if length(src) == length(nz)
+        @inbounds for e in _band_range(1:length(nz), nbands, b)
+            nz[e] = convert(T, zero(T) + coef[e] * pv[src[e]])
+        end
+        return nothing
+    end
     @inbounds for e in _band_range(1:length(nz), nbands, b)
         s = zero(T)
         for t in ptr[e]:(ptr[e + 1] - 1)
