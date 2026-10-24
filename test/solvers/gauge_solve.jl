@@ -140,7 +140,9 @@ end
     Z = Bramble.ghost_kernel(A, W)
     @test size(Z, 2) == 0
     x = rand(size(A, 1))
-    @test relerr(pde_solve(A, A * x; gauge = Z), x) <= 1e-7
+    # cond(A) ≈ 3e13: over 300 draws of `x` the error had median 6e-8 and maximum 5e-7, so
+    # the bound clears the spread of any draw; a solve that ignores the gauge is O(1) off.
+    @test relerr(pde_solve(A, A * x; gauge = Z), x) <= 1e-5
 end
 
 # A `Z` spanning half the kernel is not detected: the physical part is still the quotient
