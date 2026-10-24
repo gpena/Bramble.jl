@@ -99,6 +99,11 @@ using ..TestUtils: WITH_3D_TESTS
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) - 2 * innerₕ(D₋ₓ(u), D₋ₓ(v)))
         s = expression(a)
         @test s == "innerₕ(u, v) - 2 * innerₕ(D₋ₓ(u), D₋ₓ(v))"
+        # A unit coefficient prints no `1 *`, an `Int` `-1` as the sign of `-` does.
+        u = TrialFunction{1}()
+        @test expression(u - D₋ₓ(u)) == "u - D₋ₓ(u)"
+        @test expression(u + (-1) * D₋ₓ(u)) == "u - D₋ₓ(u)"
+        @test expression(u - (D₋ₓ(u) + u)) == "u - (D₋ₓ(u) + u)"
     end
 
     @testset "Product nodes rendered directly" begin

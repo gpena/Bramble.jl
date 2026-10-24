@@ -842,8 +842,8 @@ _rt_negated(W) = form(W, W, (u, v) -> innerₕ(u, v) - innerₕ(D₋ₓ(u), v))
     @test string(M) == "-1"
     # An unsimplified tree prints as it did with the `Int` `-1`.
     @test Bramble.expression(-u) == "-u"
-    @test Bramble.expression(u - D₋ₓ(u)) == "u - 1 * D₋ₓ(u)"
-    @test Bramble.expression(u - 2.0 * u) == "u - 1 * 2 * u"
+    @test Bramble.expression(u - D₋ₓ(u)) == "u - D₋ₓ(u)"
+    @test Bramble.expression(u - 2.0 * u) == "u - 2 * u"
     # The stored tree holds the `Int` `-1`, and prints as the `Int` `-1` tree does.
     ast = Bramble.resolve_form_ast(_rt_negated(Wₕ))
     @test ast.right_op.scalar === -1

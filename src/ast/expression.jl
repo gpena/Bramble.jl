@@ -78,7 +78,9 @@ function expression(op::OperatorAdd)
     right_op = op.right_op
     c = right_op isa OperatorScale ? _sign_as_int(right_op.scalar) : nothing
     if c isa Real && c < 0
-        flip = expression(OperatorScale(-c, right_op.inner_op))
+        # A unit coefficient drops: `a - X`, not `a - 1 * X`.
+        flip = isone(-c) ? _paren_if_add(right_op.inner_op) :
+               expression(OperatorScale(-c, right_op.inner_op))
         return "$(left) - $(flip)"
     end
     return "$(left) + $(_paren_if_add(right_op))"

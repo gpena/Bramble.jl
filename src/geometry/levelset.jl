@@ -44,9 +44,13 @@ See also: [`polygon`](@ref), [`domain`](@ref).
 levelset(φ) = LevelSet(φ)
 
 # Bisection for the root of f in [a, b] where f(a) < 0 differs in sign from f(b) (`neg_a`
-# says whether f(a) < 0); stops when the bracket cannot be halved. Returns its midpoint.
+# says whether f(a) < 0). Stops once the bracket is within eps of its initial width, about
+# 53 halvings in Float64 and 24 in Float32, or when it cannot be halved, as happens first
+# far from 0. Halving until then would run a root near 0 to subnormals (#893). Half-widths
+# keep a bracket as wide as the type's range from overflowing.
 function _bisect_root(f, a, b, neg_a::Bool)
-    while true
+    tol = eps(float(typeof(b - a))) * (b / 2 - a / 2)
+    while b / 2 - a / 2 > tol
         m = (a + b) / 2
         (m <= a || m >= b) && break
         (f(m) < 0) == neg_a ? (a = m) : (b = m)
