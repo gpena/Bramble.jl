@@ -56,6 +56,14 @@ function matrix_free_operator(a::GhostBilinearForm; dirichlet = nothing,
             mask .|= _label_mask(Ωₕ, a.rows, lbl)
         end
     end
+    return _ghost_mf_operator(op, a, mask, policy)
+end
+
+# The operator from its parts, each type parameter read off the value passed. The padded
+# `op` infers as a union (whether it caches its geometry is a runtime question, see
+# `_mf_operator`): this call takes each member on its own, so `Op` is the type of `op`.
+function _ghost_mf_operator(op::MatrixFreeOperator, a::GhostBilinearForm, mask::BitVector,
+        policy::ExecutionPolicy)
     T = promote_type(eltype(op), eltype(a.test_space.E), eltype(a.trial_space.E))
     xpad = similar(a.trial_space.d, T, size(op, 2))
     ypad = similar(a.trial_space.d, T, size(op, 1))

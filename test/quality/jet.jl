@@ -63,4 +63,18 @@ end
     end
 end
 
+# The ghost Kronecker and matrix-free operators infer without an inference barrier in the
+# precompile workload (#894): a closure that is not separable throws, never `nothing`.
+@testset "JET ghost operators" begin
+    if isempty(VERSION.prerelease)
+        Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 6), (true, true))
+        C = constrained(gridspace(Ωₕ; ghosts = :xmin), u -> :xmin => 1.0 * u + ∂ₙ(u) => 0.0)
+        a = form(C, C, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        @test isempty(JET.get_reports(JET.report_call(kronecker_operator, (typeof(a),))))
+        @test isempty(JET.get_reports(JET.report_call(matrix_free_operator, (typeof(a),))))
+    else
+        @test_skip "JET ghost-operator reports are skipped on prerelease Julia"
+    end
+end
+
 end # module QualityJetTests
