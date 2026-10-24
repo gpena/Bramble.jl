@@ -1,0 +1,63 @@
+[scale_float32]
+added_instances = 88
+commit = "e34e11c2"
+fresh_assemble_s = 0.263657917
+fresh_form_s = 0.016048583
+fresh_inference_s = 0.2960008382797241
+fresh_instances = 89
+julia = "1.13.2"
+launches = 3
+load_1min = 4.18
+load_1min_after = 4.1
+repeat_instances = 0
+sequence_instances = 94
+sequence_position = 2
+threads = 1
+
+[scale_float64]
+added_instances = 6
+commit = "e34e11c2"
+fresh_assemble_s = 0.014112417
+fresh_form_s = 0.015167708
+fresh_inference_s = 0.02756708860397339
+fresh_instances = 6
+julia = "1.13.2"
+launches = 3
+load_1min = 4.18
+load_1min_after = 4.1
+repeat_instances = 0
+sequence_instances = 6
+sequence_position = 1
+threads = 1
+
+[scale_pi]
+added_instances = 89
+commit = "e34e11c2"
+fresh_assemble_s = 0.254898042
+fresh_form_s = 0.017691916
+fresh_inference_s = 0.2928212881088257
+fresh_instances = 90
+julia = "1.13.2"
+launches = 3
+load_1min = 4.18
+load_1min_after = 4.1
+repeat_instances = 0
+sequence_instances = 183
+sequence_position = 3
+threads = 1
+
+[scale_rational]
+added_instances = 88
+commit = "e34e11c2"
+fresh_assemble_s = 0.259857375
+fresh_form_s = 0.015873334
+fresh_inference_s = 0.2931281328201294
+fresh_instances = 89
+julia = "1.13.2"
+launches = 3
+load_1min = 4.18
+load_1min_after = 4.1
+repeat_instances = 0
+sequence_instances = 271
+sequence_position = 4
+threads = 1

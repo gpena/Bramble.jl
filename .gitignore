@@ -103,6 +103,13 @@ benchmark/*
 # v4.0.0 multi-term form compile and warm-assembly benchmarks, and the simplify_ast rule audit
 # (gpena/Bramble.jl#763, #765, #771)
 !benchmark/multiterm_ttfx.jl
+!benchmark/trace_compile.jl
+# v4.1.4 measure-first scripts (gpena/Bramble.jl#912, #913, #915, #916, #917)
+!benchmark/snoop_instances.jl
+!benchmark/kernel_specializations.jl
+!benchmark/bool_audit.jl
+!benchmark/tracy_zones.patch
+!benchmark/tracy_phases.jl
 !benchmark/warm_composite.jl
 !benchmark/simplify_rules.jl
 !benchmark/simplify_rules/

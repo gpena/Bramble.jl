@@ -1,0 +1,1937 @@
+[elasticity]
+baseline_instances = 860
+commit = "af40fc12"
+instances = 967
+julia = "1.13.2"
+threads = 1
+
+    [elasticity.kernels._foreach_block_unit]
+    baseline_instances = 16
+    instances = 29
+
+        [[elasticity.kernels._foreach_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_CoordPass"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:281"
+        method_instances = 9
+        name = "f"
+        position = 1
+        [[elasticity.kernels._foreach_block_unit.args]]
+        abstract_types = 1
+        distinct_types = 5
+        labels = ["OperatorAdd"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:281"
+        method_instances = 9
+        name = "op"
+        position = 2
+        [[elasticity.kernels._foreach_block_unit.args]]
+        abstract_types = 2
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:281"
+        method_instances = 9
+        name = "trial_leaves"
+        position = 3
+        [[elasticity.kernels._foreach_block_unit.args]]
+        abstract_types = 2
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:281"
+        method_instances = 9
+        name = "test_leaves"
+        position = 4
+        [[elasticity.kernels._foreach_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_CoordPass"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:297"
+        method_instances = 20
+        name = "f"
+        position = 1
+        [[elasticity.kernels._foreach_block_unit.args]]
+        abstract_types = 1
+        distinct_types = 16
+        labels = ["Any", "BilinearProduct", "OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:297"
+        method_instances = 20
+        name = "term"
+        position = 2
+        [[elasticity.kernels._foreach_block_unit.args]]
+        abstract_types = 2
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:297"
+        method_instances = 20
+        name = "trial_leaves"
+        position = 3
+        [[elasticity.kernels._foreach_block_unit.args]]
+        abstract_types = 2
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:297"
+        method_instances = 20
+        name = "test_leaves"
+        position = 4
+
+    [elasticity.kernels._foreach_pair_block_unit]
+    baseline_instances = 0
+    instances = 9
+
+        [[elasticity.kernels._foreach_pair_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_CoordPass"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:453"
+        method_instances = 9
+        name = "f"
+        position = 1
+        [[elasticity.kernels._foreach_pair_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 9
+        labels = ["OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:453"
+        method_instances = 9
+        name = "t1"
+        position = 2
+        [[elasticity.kernels._foreach_pair_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 9
+        labels = ["OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:453"
+        method_instances = 9
+        name = "t2"
+        position = 3
+        [[elasticity.kernels._foreach_pair_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:453"
+        method_instances = 9
+        name = "trial_leaves"
+        position = 4
+        [[elasticity.kernels._foreach_pair_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:453"
+        method_instances = 9
+        name = "test_leaves"
+        position = 5
+
+    [elasticity.kernels._foreach_summand_unit]
+    baseline_instances = 159
+    instances = 159
+
+        [[elasticity.kernels._foreach_summand_unit.args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_CoordPass"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:266"
+        method_instances = 37
+        name = "f"
+        position = 1
+        [[elasticity.kernels._foreach_summand_unit.args]]
+        abstract_types = 1
+        distinct_types = 33
+        labels = ["OperatorAdd"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:266"
+        method_instances = 37
+        name = "op"
+        position = 2
+        [[elasticity.kernels._foreach_summand_unit.args]]
+        abstract_types = 1
+        distinct_types = 5
+        labels = ["Any", "ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:266"
+        method_instances = 37
+        name = "sp"
+        position = 3
+        [[elasticity.kernels._foreach_summand_unit.args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_CoordPass"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:276"
+        method_instances = 122
+        name = "f"
+        position = 1
+        [[elasticity.kernels._foreach_summand_unit.args]]
+        abstract_types = 1
+        distinct_types = 109
+        labels = ["Any", "BilinearProduct", "OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:276"
+        method_instances = 122
+        name = "term"
+        position = 2
+        [[elasticity.kernels._foreach_summand_unit.args]]
+        abstract_types = 1
+        distinct_types = 7
+        labels = ["Any", "ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:276"
+        method_instances = 122
+        name = "sp"
+        position = 3
+
+    [elasticity.kernels."_replay_blocks!"]
+    baseline_instances = 14
+    instances = 27
+
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["_SerialReplay", "_ThreadedReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "mode"
+        position = 1
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 3
+        distinct_types = 1
+        labels = ["AbstractArray", "Array", "SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "A"
+        position = 2
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 1
+        distinct_types = 5
+        labels = ["OperatorAdd"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "op"
+        position = 3
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 1
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "trial_leaves"
+        position = 4
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 1
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "test_leaves"
+        position = 5
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 1
+        distinct_types = 3
+        labels = ["Array"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "segments"
+        position = 6
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "next"
+        position = 7
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Bool"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "α"
+        position = 8
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_SerialReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 16
+        name = "mode"
+        position = 1
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 16
+        name = "A"
+        position = 2
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 16
+        labels = ["BilinearProduct", "OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 16
+        name = "term"
+        position = 3
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 16
+        name = "trial_leaves"
+        position = 4
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 16
+        name = "test_leaves"
+        position = 5
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 3
+        labels = ["Array"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 16
+        name = "segments"
+        position = 6
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 16
+        name = "next"
+        position = 7
+        [[elasticity.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Bool"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 16
+        name = "α"
+        position = 8
+
+    [elasticity.kernels."_replay_pair!"]
+    baseline_instances = 0
+    instances = 0
+
+        [[elasticity.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "mode"
+        position = 1
+        [[elasticity.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "A"
+        position = 2
+        [[elasticity.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "t1"
+        position = 3
+        [[elasticity.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "t2"
+        position = 4
+        [[elasticity.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "sp"
+        position = 5
+        [[elasticity.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "segments"
+        position = 6
+        [[elasticity.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "next"
+        position = 7
+        [[elasticity.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "α"
+        position = 8
+
+    [elasticity.kernels."_replay_pair_blocks!"]
+    baseline_instances = 0
+    instances = 9
+
+        [[elasticity.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_SerialReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 9
+        name = "mode"
+        position = 1
+        [[elasticity.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 9
+        name = "A"
+        position = 2
+        [[elasticity.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 9
+        labels = ["OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 9
+        name = "t1"
+        position = 3
+        [[elasticity.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 9
+        labels = ["OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 9
+        name = "t2"
+        position = 4
+        [[elasticity.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 9
+        name = "trial_leaves"
+        position = 5
+        [[elasticity.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 9
+        name = "test_leaves"
+        position = 6
+        [[elasticity.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Array"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 9
+        name = "segments"
+        position = 7
+        [[elasticity.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 9
+        name = "next"
+        position = 8
+        [[elasticity.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Bool"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 9
+        name = "α"
+        position = 9
+
+    [elasticity.kernels."_replay_pair_unit!"]
+    baseline_instances = 0
+    instances = 9
+
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_SerialReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 9
+        name = "#unused#"
+        position = 1
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 9
+        name = "A"
+        position = 2
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 9
+        labels = ["BilinearProduct"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 9
+        name = "p1"
+        position = 3
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 9
+        labels = ["BilinearProduct"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 9
+        name = "_p2"
+        position = 4
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 9
+        name = "sp"
+        position = 5
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 9
+        name = "row_offset"
+        position = 6
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 9
+        name = "col_offset"
+        position = 7
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 9
+        name = "_offsets2"
+        position = 8
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Segment"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 9
+        name = "segment"
+        position = 9
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Float64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 9
+        name = "α1"
+        position = 10
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Float64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 9
+        name = "α2"
+        position = 11
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 9
+        name = "half"
+        position = 12
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "#unused#"
+        position = 1
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "A"
+        position = 2
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "p1"
+        position = 3
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "p2"
+        position = 4
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "sp"
+        position = 5
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "row_offset"
+        position = 6
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "col_offset"
+        position = 7
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "_offsets2"
+        position = 8
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "segment"
+        position = 9
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "α1"
+        position = 10
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "α2"
+        position = 11
+        [[elasticity.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "half"
+        position = 12
+
+    [elasticity.kernels."_replay_summands!"]
+    baseline_instances = 171
+    instances = 171
+
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["_SerialReplay", "_ThreadedReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "mode"
+        position = 1
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 3
+        distinct_types = 1
+        labels = ["AbstractArray", "Array", "SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "A"
+        position = 2
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 1
+        distinct_types = 33
+        labels = ["OperatorAdd"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "op"
+        position = 3
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 1
+        distinct_types = 5
+        labels = ["ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "sp"
+        position = 4
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 1
+        distinct_types = 3
+        labels = ["Array"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "segments"
+        position = 5
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "next"
+        position = 6
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["Bool", "Float64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "α"
+        position = 7
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["_SerialReplay", "_ThreadedReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "mode"
+        position = 1
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "A"
+        position = 2
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 109
+        labels = ["BilinearProduct", "OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "term"
+        position = 3
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 7
+        labels = ["ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "sp"
+        position = 4
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 3
+        labels = ["Array"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "segments"
+        position = 5
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "next"
+        position = 6
+        [[elasticity.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["Bool", "Float64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "α"
+        position = 7
+
+    [elasticity.kernels."_replay_unit!"]
+    baseline_instances = 132
+    instances = 144
+
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_SerialReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 139
+        name = "#unused#"
+        position = 1
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 139
+        name = "A"
+        position = 2
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 125
+        labels = ["BilinearProduct", "OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 139
+        name = "term"
+        position = 3
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 6
+        labels = ["ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 139
+        name = "sp"
+        position = 4
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 139
+        name = "row_offset"
+        position = 5
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 139
+        name = "col_offset"
+        position = 6
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 3
+        labels = ["Segment"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 139
+        name = "segment"
+        position = 7
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["Bool", "Float64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 139
+        name = "α"
+        position = 8
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_ThreadedReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "#unused#"
+        position = 1
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "A"
+        position = 2
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 4
+        labels = ["BilinearProduct"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "term"
+        position = 3
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 3
+        labels = ["ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "sp"
+        position = 4
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "row_offset"
+        position = 5
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "col_offset"
+        position = 6
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["Segment"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "segment"
+        position = 7
+        [[elasticity.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Bool"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "α"
+        position = 8
+
+    [elasticity.kernels."_visit_guarded_region!"]
+    baseline_instances = 368
+    instances = 410
+
+        [[elasticity.kernels."_visit_guarded_region!".args]]
+        abstract_types = 10
+        distinct_types = 23
+        labels = ["ActionSink", "ContractionSink", "DiagonalSink", "ReducedDiagonalSink", "ReplaySink", "_CoordSink", "_OwnedAction", "_PairReplaySink"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 410
+        name = "sink"
+        position = 1
+        [[elasticity.kernels."_visit_guarded_region!".args]]
+        abstract_types = 1
+        distinct_types = 135
+        labels = ["Any", "BilinearProduct", "OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 410
+        name = "term"
+        position = 2
+        [[elasticity.kernels."_visit_guarded_region!".args]]
+        abstract_types = 1
+        distinct_types = 7
+        labels = ["ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 410
+        name = "sp"
+        position = 3
+        [[elasticity.kernels."_visit_guarded_region!".args]]
+        abstract_types = 1
+        distinct_types = 2
+        labels = ["AbstractArray", "Array", "Nothing"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 410
+        name = "mesh_markers"
+        position = 4
+        [[elasticity.kernels."_visit_guarded_region!".args]]
+        abstract_types = 1
+        distinct_types = 3
+        labels = ["Any", "LinearIndices"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 410
+        name = "lin_indices"
+        position = 5
+        [[elasticity.kernels."_visit_guarded_region!".args]]
+        abstract_types = 1
+        distinct_types = 3
+        labels = ["Any", "CartesianIndices"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 410
+        name = "region"
+        position = 6
+        [[elasticity.kernels."_visit_guarded_region!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 410
+        name = "row_offset"
+        position = 7
+        [[elasticity.kernels."_visit_guarded_region!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 410
+        name = "col_offset"
+        position = 8
+
+[vector_laplacian]
+baseline_instances = 860
+commit = "af40fc12"
+instances = 877
+julia = "1.13.2"
+threads = 1
+
+    [vector_laplacian.kernels._foreach_block_unit]
+    baseline_instances = 16
+    instances = 20
+
+        [[vector_laplacian.kernels._foreach_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_CoordPass"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:281"
+        method_instances = 9
+        name = "f"
+        position = 1
+        [[vector_laplacian.kernels._foreach_block_unit.args]]
+        abstract_types = 1
+        distinct_types = 5
+        labels = ["OperatorAdd"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:281"
+        method_instances = 9
+        name = "op"
+        position = 2
+        [[vector_laplacian.kernels._foreach_block_unit.args]]
+        abstract_types = 2
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:281"
+        method_instances = 9
+        name = "trial_leaves"
+        position = 3
+        [[vector_laplacian.kernels._foreach_block_unit.args]]
+        abstract_types = 2
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:281"
+        method_instances = 9
+        name = "test_leaves"
+        position = 4
+        [[vector_laplacian.kernels._foreach_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_CoordPass"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:297"
+        method_instances = 11
+        name = "f"
+        position = 1
+        [[vector_laplacian.kernels._foreach_block_unit.args]]
+        abstract_types = 1
+        distinct_types = 7
+        labels = ["Any", "BilinearProduct"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:297"
+        method_instances = 11
+        name = "term"
+        position = 2
+        [[vector_laplacian.kernels._foreach_block_unit.args]]
+        abstract_types = 2
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:297"
+        method_instances = 11
+        name = "trial_leaves"
+        position = 3
+        [[vector_laplacian.kernels._foreach_block_unit.args]]
+        abstract_types = 2
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:297"
+        method_instances = 11
+        name = "test_leaves"
+        position = 4
+
+    [vector_laplacian.kernels._foreach_pair_block_unit]
+    baseline_instances = 0
+    instances = 0
+
+        [[vector_laplacian.kernels._foreach_pair_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:453"
+        method_instances = 0
+        name = "f"
+        position = 1
+        [[vector_laplacian.kernels._foreach_pair_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:453"
+        method_instances = 0
+        name = "t1"
+        position = 2
+        [[vector_laplacian.kernels._foreach_pair_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:453"
+        method_instances = 0
+        name = "t2"
+        position = 3
+        [[vector_laplacian.kernels._foreach_pair_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:453"
+        method_instances = 0
+        name = "trial_leaves"
+        position = 4
+        [[vector_laplacian.kernels._foreach_pair_block_unit.args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:453"
+        method_instances = 0
+        name = "test_leaves"
+        position = 5
+
+    [vector_laplacian.kernels._foreach_summand_unit]
+    baseline_instances = 159
+    instances = 159
+
+        [[vector_laplacian.kernels._foreach_summand_unit.args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_CoordPass"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:266"
+        method_instances = 37
+        name = "f"
+        position = 1
+        [[vector_laplacian.kernels._foreach_summand_unit.args]]
+        abstract_types = 1
+        distinct_types = 33
+        labels = ["OperatorAdd"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:266"
+        method_instances = 37
+        name = "op"
+        position = 2
+        [[vector_laplacian.kernels._foreach_summand_unit.args]]
+        abstract_types = 1
+        distinct_types = 5
+        labels = ["Any", "ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:266"
+        method_instances = 37
+        name = "sp"
+        position = 3
+        [[vector_laplacian.kernels._foreach_summand_unit.args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_CoordPass"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:276"
+        method_instances = 122
+        name = "f"
+        position = 1
+        [[vector_laplacian.kernels._foreach_summand_unit.args]]
+        abstract_types = 1
+        distinct_types = 109
+        labels = ["Any", "BilinearProduct", "OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:276"
+        method_instances = 122
+        name = "term"
+        position = 2
+        [[vector_laplacian.kernels._foreach_summand_unit.args]]
+        abstract_types = 1
+        distinct_types = 7
+        labels = ["Any", "ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:276"
+        method_instances = 122
+        name = "sp"
+        position = 3
+
+    [vector_laplacian.kernels."_replay_blocks!"]
+    baseline_instances = 14
+    instances = 18
+
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["_SerialReplay", "_ThreadedReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "mode"
+        position = 1
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 3
+        distinct_types = 1
+        labels = ["AbstractArray", "Array", "SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "A"
+        position = 2
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 1
+        distinct_types = 5
+        labels = ["OperatorAdd"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "op"
+        position = 3
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 1
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "trial_leaves"
+        position = 4
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 1
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "test_leaves"
+        position = 5
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 1
+        distinct_types = 3
+        labels = ["Array"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "segments"
+        position = 6
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "next"
+        position = 7
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Bool"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:343"
+        method_instances = 11
+        name = "α"
+        position = 8
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_SerialReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 7
+        name = "mode"
+        position = 1
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 7
+        name = "A"
+        position = 2
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 7
+        labels = ["BilinearProduct"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 7
+        name = "term"
+        position = 3
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 7
+        name = "trial_leaves"
+        position = 4
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 3
+        labels = ["Tuple"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 7
+        name = "test_leaves"
+        position = 5
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 3
+        labels = ["Array"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 7
+        name = "segments"
+        position = 6
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 7
+        name = "next"
+        position = 7
+        [[vector_laplacian.kernels."_replay_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Bool"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:363"
+        method_instances = 7
+        name = "α"
+        position = 8
+
+    [vector_laplacian.kernels."_replay_pair!"]
+    baseline_instances = 0
+    instances = 0
+
+        [[vector_laplacian.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "mode"
+        position = 1
+        [[vector_laplacian.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "A"
+        position = 2
+        [[vector_laplacian.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "t1"
+        position = 3
+        [[vector_laplacian.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "t2"
+        position = 4
+        [[vector_laplacian.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "sp"
+        position = 5
+        [[vector_laplacian.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "segments"
+        position = 6
+        [[vector_laplacian.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "next"
+        position = 7
+        [[vector_laplacian.kernels."_replay_pair!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:434"
+        method_instances = 0
+        name = "α"
+        position = 8
+
+    [vector_laplacian.kernels."_replay_pair_blocks!"]
+    baseline_instances = 0
+    instances = 0
+
+        [[vector_laplacian.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 0
+        name = "mode"
+        position = 1
+        [[vector_laplacian.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 0
+        name = "A"
+        position = 2
+        [[vector_laplacian.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 0
+        name = "t1"
+        position = 3
+        [[vector_laplacian.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 0
+        name = "t2"
+        position = 4
+        [[vector_laplacian.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 0
+        name = "trial_leaves"
+        position = 5
+        [[vector_laplacian.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 0
+        name = "test_leaves"
+        position = 6
+        [[vector_laplacian.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 0
+        name = "segments"
+        position = 7
+        [[vector_laplacian.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 0
+        name = "next"
+        position = 8
+        [[vector_laplacian.kernels."_replay_pair_blocks!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:493"
+        method_instances = 0
+        name = "α"
+        position = 9
+
+    [vector_laplacian.kernels."_replay_pair_unit!"]
+    baseline_instances = 0
+    instances = 0
+
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 0
+        name = "#unused#"
+        position = 1
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 0
+        name = "A"
+        position = 2
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 0
+        name = "p1"
+        position = 3
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 0
+        name = "_p2"
+        position = 4
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 0
+        name = "sp"
+        position = 5
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 0
+        name = "row_offset"
+        position = 6
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 0
+        name = "col_offset"
+        position = 7
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 0
+        name = "_offsets2"
+        position = 8
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 0
+        name = "segment"
+        position = 9
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 0
+        name = "α1"
+        position = 10
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 0
+        name = "α2"
+        position = 11
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:429"
+        method_instances = 0
+        name = "half"
+        position = 12
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "#unused#"
+        position = 1
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "A"
+        position = 2
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "p1"
+        position = 3
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "p2"
+        position = 4
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "sp"
+        position = 5
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "row_offset"
+        position = 6
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "col_offset"
+        position = 7
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "_offsets2"
+        position = 8
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "segment"
+        position = 9
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "α1"
+        position = 10
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "α2"
+        position = 11
+        [[vector_laplacian.kernels."_replay_pair_unit!".args]]
+        abstract_types = 0
+        distinct_types = 0
+        labels = []
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:839"
+        method_instances = 0
+        name = "half"
+        position = 12
+
+    [vector_laplacian.kernels."_replay_summands!"]
+    baseline_instances = 171
+    instances = 171
+
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["_SerialReplay", "_ThreadedReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "mode"
+        position = 1
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 3
+        distinct_types = 1
+        labels = ["AbstractArray", "Array", "SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "A"
+        position = 2
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 1
+        distinct_types = 33
+        labels = ["OperatorAdd"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "op"
+        position = 3
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 1
+        distinct_types = 5
+        labels = ["ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "sp"
+        position = 4
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 1
+        distinct_types = 3
+        labels = ["Array"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "segments"
+        position = 5
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "next"
+        position = 6
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["Bool", "Float64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:322"
+        method_instances = 43
+        name = "α"
+        position = 7
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["_SerialReplay", "_ThreadedReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "mode"
+        position = 1
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "A"
+        position = 2
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 109
+        labels = ["BilinearProduct", "OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "term"
+        position = 3
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 7
+        labels = ["ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "sp"
+        position = 4
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 3
+        labels = ["Array"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "segments"
+        position = 5
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "next"
+        position = 6
+        [[vector_laplacian.kernels."_replay_summands!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["Bool", "Float64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:334"
+        method_instances = 128
+        name = "α"
+        position = 7
+
+    [vector_laplacian.kernels."_replay_unit!"]
+    baseline_instances = 132
+    instances = 135
+
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_SerialReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 130
+        name = "#unused#"
+        position = 1
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 130
+        name = "A"
+        position = 2
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 116
+        labels = ["BilinearProduct", "OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 130
+        name = "term"
+        position = 3
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 6
+        labels = ["ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 130
+        name = "sp"
+        position = 4
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 130
+        name = "row_offset"
+        position = 5
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 130
+        name = "col_offset"
+        position = 6
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 3
+        labels = ["Segment"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 130
+        name = "segment"
+        position = 7
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["Bool", "Float64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:427"
+        method_instances = 130
+        name = "α"
+        position = 8
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["_ThreadedReplay"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "#unused#"
+        position = 1
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["SparseMatrixCSC"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "A"
+        position = 2
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 4
+        labels = ["BilinearProduct"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "term"
+        position = 3
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 3
+        labels = ["ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "sp"
+        position = 4
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "row_offset"
+        position = 5
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "col_offset"
+        position = 6
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 2
+        labels = ["Segment"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "segment"
+        position = 7
+        [[vector_laplacian.kernels."_replay_unit!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Bool"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_execution.jl:807"
+        method_instances = 5
+        name = "α"
+        position = 8
+
+    [vector_laplacian.kernels."_visit_guarded_region!"]
+    baseline_instances = 368
+    instances = 374
+
+        [[vector_laplacian.kernels."_visit_guarded_region!".args]]
+        abstract_types = 10
+        distinct_types = 22
+        labels = ["ActionSink", "ContractionSink", "DiagonalSink", "ReducedDiagonalSink", "ReplaySink", "_CoordSink", "_OwnedAction"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 374
+        name = "sink"
+        position = 1
+        [[vector_laplacian.kernels."_visit_guarded_region!".args]]
+        abstract_types = 1
+        distinct_types = 117
+        labels = ["Any", "BilinearProduct", "OperatorScale"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 374
+        name = "term"
+        position = 2
+        [[vector_laplacian.kernels."_visit_guarded_region!".args]]
+        abstract_types = 1
+        distinct_types = 7
+        labels = ["ScalarGridSpace"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 374
+        name = "sp"
+        position = 3
+        [[vector_laplacian.kernels."_visit_guarded_region!".args]]
+        abstract_types = 1
+        distinct_types = 2
+        labels = ["AbstractArray", "Array", "Nothing"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 374
+        name = "mesh_markers"
+        position = 4
+        [[vector_laplacian.kernels."_visit_guarded_region!".args]]
+        abstract_types = 1
+        distinct_types = 3
+        labels = ["Any", "LinearIndices"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 374
+        name = "lin_indices"
+        position = 5
+        [[vector_laplacian.kernels."_visit_guarded_region!".args]]
+        abstract_types = 1
+        distinct_types = 3
+        labels = ["Any", "CartesianIndices"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 374
+        name = "region"
+        position = 6
+        [[vector_laplacian.kernels."_visit_guarded_region!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 374
+        name = "row_offset"
+        position = 7
+        [[vector_laplacian.kernels."_visit_guarded_region!".args]]
+        abstract_types = 0
+        distinct_types = 1
+        labels = ["Int64"]
+        method = "/Users/goncalopena/worktrees/Bramble/v4.1.4-measure/src/assembly/bilinear_traversal.jl:948"
+        method_instances = 374
+        name = "col_offset"
+        position = 8

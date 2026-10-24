@@ -1,0 +1,329 @@
+[elasticity]
+warm_calls = 3
+loadavg_start = [3.65625, 3.037109375, 2.7177734375]
+threads = 1
+
+    [elasticity.phases.replay]
+    warm_self_s = 0.000271833
+    warm_s = 0.000290125
+    first_s = 6.880638417
+    warm_events = 1
+    first_self_s = 6.880586128
+    first_events = 1
+
+    [elasticity.phases.allocate_system_matrix]
+    warm_self_s = 8.2583e-5
+    warm_s = 0.001724417
+    first_s = 9.294186541
+    warm_events = 1
+    first_self_s = 2.256431083
+    first_events = 1
+
+    [elasticity.phases.check_form_meshes]
+    warm_self_s = 1.792e-6
+    warm_s = 1.792e-6
+    first_s = 0.052485791
+    warm_events = 1
+    first_self_s = 0.052485791
+    first_events = 1
+
+    [elasticity.phases.split_restricted_products]
+    warm_self_s = 2.75e-6
+    warm_s = 2.75e-6
+    first_s = 0.10212925
+    warm_events = 1
+    first_self_s = 0.10212925
+    first_events = 1
+
+    [elasticity.phases.validate_form_expression]
+    warm_self_s = 1.041e-6
+    warm_s = 1.041e-6
+    first_s = 2.1e-5
+    warm_events = 1
+    first_self_s = 2.1e-5
+    first_events = 1
+
+    [elasticity.phases.coordinates_to_positions]
+    warm_self_s = 0.00067475
+    warm_s = 0.00067475
+    first_s = 0.012739708
+    warm_events = 1
+    first_self_s = 0.012739708
+    first_events = 1
+
+    [elasticity.phases.lower_sources]
+    warm_self_s = 0.0
+    warm_s = 0.0
+    first_s = 0.0
+    warm_events = 0
+    first_self_s = 0.0
+    first_events = 0
+
+    [elasticity.phases.simplify_ast]
+    warm_self_s = 5.4541e-5
+    warm_s = 5.4541e-5
+    first_s = 3.724921792
+    warm_events = 1
+    first_self_s = 3.724921792
+    first_events = 1
+
+    [elasticity.phases.resolve_ast]
+    warm_self_s = 2.084e-6
+    warm_s = 2.084e-6
+    first_s = 0.0128445
+    warm_events = 1
+    first_self_s = 0.0128445
+    first_events = 1
+
+    [elasticity.phases.check_block_meshes]
+    warm_self_s = 4.7622999999999994e-5
+    warm_s = 4.7622999999999994e-5
+    first_s = 0.15694229300000004
+    warm_events = 96
+    first_self_s = 0.15694229300000004
+    first_events = 96
+
+    [elasticity.phases.pattern_build]
+    warm_self_s = 0.00032275
+    warm_s = 0.00032275
+    first_s = 0.063013125
+    warm_events = 1
+    first_self_s = 0.063013125
+    first_events = 1
+
+    [elasticity.phases.coordinate_pass]
+    warm_self_s = 0.00057934
+    warm_s = 0.000611708
+    first_s = 6.962002625
+    warm_events = 1
+    first_self_s = 6.805112621
+    first_events = 1
+
+    [elasticity.calls]
+    assemble_first_s = 18.680153167
+    form_first_s = 5.074991916
+    form_warm_s = 0.000127333
+    assemble_warm_s = 0.002035542
+
+[scalar_2d]
+warm_calls = 3
+loadavg_start = [3.6416015625, 3.05224609375, 2.7265625]
+threads = 1
+
+    [scalar_2d.phases.replay]
+    warm_self_s = 9.58e-7
+    warm_s = 1.208e-6
+    first_s = 0.109517459
+    warm_events = 1
+    first_self_s = 0.109511001
+    first_events = 1
+
+    [scalar_2d.phases.allocate_system_matrix]
+    warm_self_s = 1.959e-6
+    warm_s = 1.4875e-5
+    first_s = 0.547096208
+    warm_events = 1
+    first_self_s = 0.076661623
+    first_events = 1
+
+    [scalar_2d.phases.check_form_meshes]
+    warm_self_s = 2.08e-7
+    warm_s = 2.08e-7
+    first_s = 0.032474709
+    warm_events = 1
+    first_self_s = 0.032474709
+    first_events = 1
+
+    [scalar_2d.phases.split_restricted_products]
+    warm_self_s = 4.16e-7
+    warm_s = 4.16e-7
+    first_s = 0.078091833
+    warm_events = 1
+    first_self_s = 0.078091833
+    first_events = 1
+
+    [scalar_2d.phases.validate_form_expression]
+    warm_self_s = 1.25e-7
+    warm_s = 1.25e-7
+    first_s = 3.4042e-5
+    warm_events = 1
+    first_self_s = 3.4042e-5
+    first_events = 1
+
+    [scalar_2d.phases.coordinates_to_positions]
+    warm_self_s = 2.25e-6
+    warm_s = 2.25e-6
+    first_s = 0.012400667
+    warm_events = 1
+    first_self_s = 0.012400667
+    first_events = 1
+
+    [scalar_2d.phases.lower_sources]
+    warm_self_s = 0.0
+    warm_s = 0.0
+    first_s = 0.0
+    warm_events = 0
+    first_self_s = 0.0
+    first_events = 0
+
+    [scalar_2d.phases.simplify_ast]
+    warm_self_s = 8.3e-8
+    warm_s = 8.3e-8
+    first_s = 0.053026125
+    warm_events = 1
+    first_self_s = 0.053026125
+    first_events = 1
+
+    [scalar_2d.phases.resolve_ast]
+    warm_self_s = 2.08e-7
+    warm_s = 2.08e-7
+    first_s = 0.008755584
+    warm_events = 1
+    first_self_s = 0.008755584
+    first_events = 1
+
+    [scalar_2d.phases.check_block_meshes]
+    warm_self_s = 5.42e-7
+    warm_s = 5.42e-7
+    first_s = 0.013395332000000001
+    warm_events = 3
+    first_self_s = 0.013395332000000001
+    first_events = 3
+
+    [scalar_2d.phases.pattern_build]
+    warm_self_s = 5.875e-6
+    warm_s = 5.875e-6
+    first_s = 0.068037084
+    warm_events = 1
+    first_self_s = 0.068037084
+    first_events = 1
+
+    [scalar_2d.phases.coordinate_pass]
+    warm_self_s = 5.541e-6
+    warm_s = 5.833e-6
+    first_s = 0.389996834
+    warm_events = 1
+    first_self_s = 0.37660796
+    first_events = 1
+
+    [scalar_2d.calls]
+    assemble_first_s = 0.821502
+    form_first_s = 0.294681625
+    form_warm_s = 3.167e-6
+    assemble_warm_s = 1.7208e-5
+
+[vector_laplacian]
+warm_calls = 3
+loadavg_start = [3.5234375, 3.01953125, 2.71337890625]
+threads = 1
+
+    [vector_laplacian.phases.replay]
+    warm_self_s = 1.2457e-5
+    warm_s = 1.3958e-5
+    first_s = 0.68401225
+    warm_events = 1
+    first_self_s = 0.683993917
+    first_events = 1
+
+    [vector_laplacian.phases.allocate_system_matrix]
+    warm_self_s = 7.834e-6
+    warm_s = 8.0e-5
+    first_s = 1.918069458
+    warm_events = 1
+    first_self_s = 0.634906832
+    first_events = 1
+
+    [vector_laplacian.phases.check_form_meshes]
+    warm_self_s = 3.33e-7
+    warm_s = 3.33e-7
+    first_s = 0.03353
+    warm_events = 1
+    first_self_s = 0.03353
+    first_events = 1
+
+    [vector_laplacian.phases.split_restricted_products]
+    warm_self_s = 5.42e-7
+    warm_s = 5.42e-7
+    first_s = 0.083295834
+    warm_events = 1
+    first_self_s = 0.083295834
+    first_events = 1
+
+    [vector_laplacian.phases.validate_form_expression]
+    warm_self_s = 1.67e-7
+    warm_s = 1.67e-7
+    first_s = 5.2625e-5
+    warm_events = 1
+    first_self_s = 5.2625e-5
+    first_events = 1
+
+    [vector_laplacian.phases.coordinates_to_positions]
+    warm_self_s = 1.0625e-5
+    warm_s = 1.0625e-5
+    first_s = 0.01391275
+    warm_events = 1
+    first_self_s = 0.01391275
+    first_events = 1
+
+    [vector_laplacian.phases.lower_sources]
+    warm_self_s = 0.0
+    warm_s = 0.0
+    first_s = 0.0
+    warm_events = 0
+    first_self_s = 0.0
+    first_events = 0
+
+    [vector_laplacian.phases.simplify_ast]
+    warm_self_s = 1.66e-7
+    warm_s = 1.66e-7
+    first_s = 0.029902875
+    warm_events = 1
+    first_self_s = 0.029902875
+    first_events = 1
+
+    [vector_laplacian.phases.resolve_ast]
+    warm_self_s = 4.17e-7
+    warm_s = 4.17e-7
+    first_s = 0.012938834
+    warm_events = 1
+    first_self_s = 0.012938834
+    first_events = 1
+
+    [vector_laplacian.phases.check_block_meshes]
+    warm_self_s = 3.7080000000000008e-6
+    warm_s = 3.7080000000000008e-6
+    first_s = 0.026105459000000008
+    warm_events = 27
+    first_self_s = 0.026105459000000008
+    first_events = 27
+
+    [vector_laplacian.phases.pattern_build]
+    warm_self_s = 2.1625e-5
+    warm_s = 2.1625e-5
+    first_s = 0.065318584
+    warm_events = 1
+    first_self_s = 0.065318584
+    first_events = 1
+
+    [vector_laplacian.phases.coordinate_pass]
+    warm_self_s = 3.8501e-5
+    warm_s = 4.0708e-5
+    first_s = 1.203931292
+    warm_events = 1
+    first_self_s = 1.177844166
+    first_events = 1
+
+    [vector_laplacian.calls]
+    assemble_first_s = 3.44305725
+    form_first_s = 0.361704042
+    form_warm_s = 4.166e-6
+    assemble_warm_s = 9.6833e-5
+
+[meta]
+precompile_workload = "off"
+julia = "1.13.2"
+commit = "ebaa231dd8a2fd91f97e44bd2b3e047a17642e67"
+tracyprofiler_jll = "0.13.1+1"
+zones = ["allocate_system_matrix", "check_block_meshes", "check_form_meshes", "coordinate_pass", "coordinates_to_positions", "lower_sources", "pattern_build", "replay", "resolve_ast", "simplify_ast", "split_restricted_products", "validate_form_expression"]
+machine = "arm64-apple-darwin27.0.0, 8 threads"
+libtracyclient_jll = "0.13.1+0"
