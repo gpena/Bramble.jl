@@ -240,7 +240,8 @@ end
     frac = _interp_cell_frac(Ωₕ, x, outside)
     frac === nothing && return outside
     i, t = frac
-    return _interp_lerp(u[i], u[i + 1], t)
+    # A one-point mesh has no far corner: `t = 0`, so read the near one twice (#860).
+    return _interp_lerp(u[i], u[min(i + 1, npoints(Ωₕ))], t)
 end
 
 @inline function _interp_values(u, Ωₕ::AbstractMeshType{D}, x, outside) where {D}
@@ -324,6 +325,8 @@ end
     end
     xc = _interp_resolve_coord(x, lo, hi, outside isa Number ? :extrapolate : outside)
     i = locate_cell(Ωₕ, xc)
+    # One point: no cell, `t = 0`, as on a collapsed axis below (#860).
+    length(pts) == 1 && return i, zero(xc - pts[1])
     plo, phi = pts[i], pts[i + 1]
     t = phi > plo ? (xc - plo) / (phi - plo) : zero(xc - plo)
     return i, t
@@ -523,12 +526,15 @@ function _interpolation_triplets!(
     li_dest = LinearIndices(indices(Ωdest))
     pts_dest = host_points(Ωdest)
     pts_src = host_points(Ωsrc)
+    # A one-point source has no far corner: its zero weight lands on the near column, and
+    # `sparse` sums the pair (#860).
+    far = length(pts_src) > 1 ? 1 : 0
     for i in indices(Ωdest)
         row = li_dest[i]
         x = pts_dest[row]
         j, t = _interp_cell_frac(Ωsrc, pts_src, x, outside)
         push!(rows, row, row)
-        push!(cols, j, j + 1)
+        push!(cols, j, j + far)
         push!(vals, 1 - t, t)
     end
 end
@@ -877,7 +883,8 @@ end
         Ωsrc::AbstractMeshType{1}, x, ::Val{1}, outside::Symbol, Slot
 )
     j, t = _interp_cell_frac(Ωsrc, x, outside)
-    return ((Slot(j), 1 - t), (Slot(j + 1), t))
+    # A one-point source: the far slot clamped onto the near one, where `t = 0` (#860).
+    return ((Slot(j), 1 - t), (Slot(min(j + 1, npoints(Ωsrc))), t))
 end
 
 @inline function _interp_stencil(

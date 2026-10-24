@@ -264,6 +264,34 @@ using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunctio
         @test_throws ArgumentError _interp_cell_frac(Ωs, host_points(Ωs), 1.5, :error)
     end
 
+    # A one-point 1D source (#860) has no cell: like a collapsed axis (#622), it is a 1×1
+    # identity factor, so every path returns its constant. Oracle: the constant itself,
+    # through the pointwise, matrix and bilinear-form paths, on a non-uniform target.
+    @testset "One-point 1D source" begin
+        Ω1 = domain(interval(0.0, 1.0))
+        W1 = gridspace(mesh(Ω1, 1, true))
+        W5 = gridspace(mesh(Ω1, 5, false))
+        u1 = Rₕ(W1, x -> 3.0)
+        @test _interp_cell_frac(mesh(W1), 0.0, :error) == (1, 0.0)
+        @test interpolate_at(u1, 0.0) == 3.0
+        for o in (:clamp, :extrapolate)
+            @test interpolate_at(u1, 0.7; outside = o) == 3.0
+            M = interpolation_matrix(W5, W1; outside = o)
+            @test size(M) == (5, 1)
+            @test Matrix(M) == ones(5, 1)
+            @test parent(πₕ(W5, u1; outside = o)) == fill(3.0, 5)
+        end
+        @test_throws ArgumentError interpolate_at(u1, 0.7)
+
+        w = collect(weights(W5, Innerh()))
+        A = assemble(form(W1, W5, (u, v) -> innerₕ(πₕ(u; outside = :clamp), v)))
+        @test size(A) == (5, 1)
+        @test A * [3.0] ≈ 3.0 .* w
+        At = assemble(form(W5, W1, (u, v) -> innerₕ(u, πₕ(v; outside = :clamp))))
+        @test size(At) == (1, 5)
+        @test At * fill(3.0, 5) ≈ [3.0 * sum(w)]
+    end
+
     # The symbolic source `πₕ(uₕ)` in a linear form, read through its `GridInterpolant` at
     # every point of a test mesh reaching past the source domain. Oracle: the quadrature
     # weight times the affine function where the point is inside, times the fill outside.
