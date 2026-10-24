@@ -476,7 +476,7 @@ function _ghost_reduction_map(be, A_pad::SparseMatrixCSC, Ev::SparseMatrixCSC,
     src, rs, cs = Int[], Int[], Int[]
     coef = promote_type(eltype(Ev), eltype(Eu))[]
     rv, ev, eu = rowvals(A_pad), nonzeros(Evt), nonzeros(Eut)
-    function contribute!(k, i, j, s)
+    @inline function contribute!(k, i, j, s)
         for p in nzrange(Evt, i), q in nzrange(Eut, j)
 
             push!(src, k)
