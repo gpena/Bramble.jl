@@ -608,9 +608,20 @@ const _GhostSpace{D} = ScalarGridSpace{D, <:Any, <:Any, <:_GhostMeshLike}
         op::BilinearProduct{D, InnerType}, space::_GhostSpace{D}, I::CartesianIndex{D},
         markers, lin_idx::Int
 ) where {D, InnerType}
-    _near_edge(mesh(space), I, _stencil_margin(op)) && _check_absent_reads(op, space, I, lin_idx)
+    _check_product_reads(op, space, I, lin_idx)
     return @invoke local_stencil(op::BilinearProduct{D, InnerType}, space::Any,
         I::CartesianIndex{D}, markers::Any, lin_idx::Int)
+end
+
+# The absent-read check of a product at `I`, which the stencil walk above and the factored
+# walk (`_factored_product!`, `bilinear_traversal.jl`) both make before reading a factor.
+# Off a ghost space there is nothing to check.
+@inline _check_product_reads(op, space, I, lin_idx::Int) = nothing
+@inline function _check_product_reads(
+        op::BilinearProduct{D}, space::_GhostSpace{D}, I::CartesianIndex{D}, lin_idx::Int
+) where {D}
+    _near_edge(mesh(space), I, _stencil_margin(op)) && _check_absent_reads(op, space, I, lin_idx)
+    return nothing
 end
 
 @inline function local_stencil(
