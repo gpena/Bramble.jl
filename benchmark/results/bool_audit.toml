@@ -1,0 +1,256 @@
+
+[[control.sites]]
+callers = []
+function = "AuditControl.isp"
+rettype = "Any"
+signature = "Tuple{typeof(Main.AuditControl.isp), Any}"
+[elasticity]
+commit = "96ff3a4c"
+jet_assemble_reports = 0
+jet_form_reports = 38
+julia = "1.13.2"
+summands = 35
+
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._is_source_only"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._is_source_only), Bramble.BackwardAverage{3, Dim, OpType} where {Dim, OpType<:Bramble.LazyOp{3}}}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._is_source_only"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._is_source_only), Bramble.BackwardAverage}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._shares_one_mesh"
+    rettype = "Union{Missing, Bool}"
+    signature = "Tuple{typeof(Bramble._shares_one_mesh), Tuple}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._ghost_kron_reads_absent"
+    rettype = "Union{Missing, Bool}"
+    signature = "Tuple{typeof(Bramble._ghost_kron_reads_absent), Tuple, Bramble.GhostMesh{2, Bramble.MeshnD{2, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}, Tuple{Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}}, Float64}, Bramble.MeshnD{2, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}, Tuple{Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}}, Float64}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}}}"
+    [[elasticity.sites]]
+    callers = ["Bramble._check_one_interpolated_side"]
+    function = "Bramble._has_test_interp"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._has_test_interp), Bramble.BackwardAverage}"
+    [[elasticity.sites]]
+    callers = ["Bramble._check_one_interpolated_side"]
+    function = "Bramble._has_trial_interp"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._has_trial_interp), Bramble.BackwardAverage{3, Dim, OpType} where {Dim, OpType<:Bramble.LazyOp{3}}}"
+    [[elasticity.sites]]
+    callers = ["Bramble._check_one_interpolated_side"]
+    function = "Bramble._has_trial_interp"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._has_trial_interp), Bramble.BackwardAverage}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._kron_is_fresh"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._kron_is_fresh), Bramble.KroneckerLinearOperator}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._kron_is_fresh"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._kron_is_fresh), Bramble.AbstractMeshType, Int64}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._marks_only_face"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._marks_only_face), Bramble.AbstractMeshType{D}, BitVector, Symbol} where D"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._mf_gathers"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._mf_gathers), Bramble.OperatorAdd}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._mf_gathers"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._mf_gathers), Bramble.LazyOp}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._near_edge"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._near_edge), Bramble.GhostMesh{1, M, P, CI} where {M<:Bramble.AbstractMeshType{1}, P<:Bramble.AbstractMeshType{1}, CI<:(CartesianIndices{1, R} where R<:Tuple{OrdinalRange{Int64, Int64}})}, CartesianIndex{1}, Int64}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._pairable_type"
+    rettype = "Union{Missing, Bool}"
+    signature = "Tuple{typeof(Bramble._pairable_type), Any}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._pairable_type"
+    rettype = "Union{Missing, Bool}"
+    signature = "Tuple{typeof(Bramble._pairable_type), Type}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._pairable_type"
+    rettype = "Union{Missing, Bool}"
+    signature = "Tuple{typeof(Bramble._pairable_type), DataType}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._peelable"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._peelable), NTuple{D, AbstractUnitRange{Int64}}, NTuple{D, Tuple{Int64, Int64}}} where D"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._same_mesh"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._same_mesh), Any, Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._same_mesh"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._same_mesh), Any, Bramble.MeshnD{2, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}, Tuple{Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}}, Float64}}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._storage_collapsed"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._storage_collapsed), Any, Any, Any}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._type_holds"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._type_holds), Any, Type{Bramble.RankOneTerm}}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._type_holds"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._type_holds), Type, Type{Bramble.RankOneTerm}}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._type_holds"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._type_holds), Any, Type{Bramble.LinearProduct}}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._type_holds"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._type_holds), Type, Type{Bramble.LinearProduct}}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._type_holds"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._type_holds), Type, Type{Union{Bramble.BilinearProduct, Bramble.LinearProduct}}}"
+    [[elasticity.sites]]
+    callers = []
+    function = "Bramble._type_holds"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._type_holds), Any, Type{Union{Bramble.BilinearProduct, Bramble.LinearProduct}}}"
+
+[sum40]
+commit = "96ff3a4c"
+jet_assemble_reports = 0
+jet_form_reports = 5
+julia = "1.13.2"
+summands = 40
+
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._shares_one_mesh"
+    rettype = "Union{Missing, Bool}"
+    signature = "Tuple{typeof(Bramble._shares_one_mesh), Tuple}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._ghost_kron_reads_absent"
+    rettype = "Union{Missing, Bool}"
+    signature = "Tuple{typeof(Bramble._ghost_kron_reads_absent), Tuple, Bramble.GhostMesh{2, Bramble.MeshnD{2, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}, Tuple{Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}}, Float64}, Bramble.MeshnD{2, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}, Tuple{Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}}, Float64}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}}}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._kron_is_fresh"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._kron_is_fresh), Bramble.KroneckerLinearOperator}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._kron_is_fresh"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._kron_is_fresh), Bramble.AbstractMeshType, Int64}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._marks_only_face"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._marks_only_face), Bramble.AbstractMeshType{D}, BitVector, Symbol} where D"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._mf_gathers"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._mf_gathers), Bramble.OperatorAdd}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._mf_gathers"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._mf_gathers), Bramble.LazyOp}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._near_edge"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._near_edge), Bramble.GhostMesh{1, M, P, CI} where {M<:Bramble.AbstractMeshType{1}, P<:Bramble.AbstractMeshType{1}, CI<:(CartesianIndices{1, R} where R<:Tuple{OrdinalRange{Int64, Int64}})}, CartesianIndex{1}, Int64}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._pairable_type"
+    rettype = "Union{Missing, Bool}"
+    signature = "Tuple{typeof(Bramble._pairable_type), Any}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._pairable_type"
+    rettype = "Union{Missing, Bool}"
+    signature = "Tuple{typeof(Bramble._pairable_type), Type}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._pairable_type"
+    rettype = "Union{Missing, Bool}"
+    signature = "Tuple{typeof(Bramble._pairable_type), DataType}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._peelable"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._peelable), NTuple{D, AbstractUnitRange{Int64}}, NTuple{D, Tuple{Int64, Int64}}} where D"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._same_mesh"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._same_mesh), Any, Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._same_mesh"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._same_mesh), Any, Bramble.MeshnD{2, Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{2, Tuple{Base.OneTo{Int64}, Base.OneTo{Int64}}}, Tuple{Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}, Bramble.Mesh1D{Bramble.Backend{Vector{Float64}, SparseArrays.SparseMatrixCSC{Float64, Int64}, Bramble.CpuSerial}, CartesianIndices{1, Tuple{Base.OneTo{Int64}}}, Vector{Float64}, Float64}}, Float64}}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._storage_collapsed"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._storage_collapsed), Any, Any, Any}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._type_holds"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._type_holds), Any, Type{Bramble.RankOneTerm}}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._type_holds"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._type_holds), Type, Type{Bramble.RankOneTerm}}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._type_holds"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._type_holds), Any, Type{Bramble.LinearProduct}}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._type_holds"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._type_holds), Type, Type{Bramble.LinearProduct}}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._type_holds"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._type_holds), Type, Type{Union{Bramble.BilinearProduct, Bramble.LinearProduct}}}"
+    [[sum40.sites]]
+    callers = []
+    function = "Bramble._type_holds"
+    rettype = "Any"
+    signature = "Tuple{typeof(Bramble._type_holds), Any, Type{Union{Bramble.BilinearProduct, Bramble.LinearProduct}}}"
