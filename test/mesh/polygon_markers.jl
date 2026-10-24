@@ -253,12 +253,16 @@ end
     @test refuses(() -> domain(S, :P => big), "vertex 2 at (2.0, 0.0) lies outside")
     @test refuses(() -> domain(X, :boundary => P), ":boundary is reserved")
     @test refuses(() -> domain(X, :interior => P), ":interior is reserved")
-    clash = "is also the label of another marker"
-    @test refuses(() -> domain(X, :P => P, :P_boundary => :left), ":P_boundary " * clash)
-    @test refuses(() -> domain(X, :P_exterior => x -> true, :P => P), ":P_exterior " * clash)
-    @test refuses(() -> domain(X, :P => P, :P => P), ":P " * clash)
-    @test refuses(() -> domain(X, :P => P, :P_exterior => P), ":P_exterior " * clash)
-    @test refuses(() -> domain(X, interval(0.0, 1.0), :P => P, :P => :left), ":P " * clash)
+    clash = "is also the label of marker "
+    @test refuses(() -> domain(X, :P => P, :P_boundary => :left),
+        ":P_boundary " * clash * ":P_boundary")
+    @test refuses(() -> domain(X, :P_exterior => x -> true, :P => P),
+        ":P_exterior " * clash * ":P_exterior")
+    @test refuses(() -> domain(X, :P => P, :P => P), ":P " * clash * ":P")
+    @test refuses(() -> domain(X, :P => P, :P_exterior => P),
+        ":P_exterior " * clash * ":P_exterior")
+    @test refuses(() -> domain(X, interval(0.0, 1.0), :P => P, :P => :left),
+        ":P " * clash * ":P")
     @test_throws ArgumentError domain(X, :P => P, :P_boundary => :left)
     # On the set's edge is inside the set.
     edge = Bramble.polygon([(0.0, 0.0), (6.0, 0.0), (0.0, 5.0)])

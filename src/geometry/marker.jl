@@ -6,8 +6,8 @@ Labeled geometric region or boundary marker on a computational domain.
 # Arguments
 - `label`: Region identifier (e.g. `:inlet`, `:wall`, `:boundary`).
 - `identifier`: Location specification, either a predefined boundary `Symbol` (e.g. `:left`),
-  a `Set{Symbol}` of boundary names, a boolean spatial predicate function `f(x)`, or a
-  `Polygon` (from `polygon`) classifying the nodes of a 2D mesh.
+  a `Set{Symbol}` of boundary names, or a boolean spatial predicate function `f(x)`.
+  Polygon and level-set pairs are kept apart, in the `regions` of [`DomainMarkers`](@ref).
   [`markers`](@ref) builds a `Marker` from a tuple, vector or set of boundary symbols by
   storing it as a `Set{Symbol}`.
 """
@@ -36,7 +36,8 @@ Return the `Symbol` label of marker `m`.
     identifier(m::Marker{F}) -> F
     identifier(m::MarkerPair{F}) -> F
 
-Return the identifying symbol, set of symbols, predicate function or polygon of marker `m`.
+Return the identifying symbol, set of symbols, predicate function,
+polygon or level set of marker `m`.
 """
 @inline identifier(m::Marker) = m.identifier
 @inline identifier(m::MarkerPair) = last(m)
@@ -279,13 +280,14 @@ const _RegionIdentifier = Union{Polygon, LevelSet}
 function _check_polygon_label_clash(pairs::Tuple)
     for (i, p) in enumerate(pairs)
         p.second isa _RegionIdentifier || continue
+        throw_clash = p.second isa Polygon ? _throw_polygon_marker_error :
+                      _throw_levelset_marker_error
         for (j, q) in enumerate(pairs)
             i == j && continue
             theirs = q.second isa _RegionIdentifier ? _polygon_labels(q.first) : (q.first,)
             for L in _polygon_labels(p.first)
-                L in theirs && (p.second isa Polygon ? _throw_polygon_marker_error :
-                 _throw_levelset_marker_error)(p.first,
-                    "its label :$L is also the label of another marker")
+                L in theirs && throw_clash(p.first,
+                    "its label :$L is also the label of marker :$(q.first)")
             end
         end
     end

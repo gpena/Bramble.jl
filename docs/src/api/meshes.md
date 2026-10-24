@@ -27,7 +27,7 @@ domain, none beside a polygon marker) gets a grid fitted to the curve `φ = 0` i
 polygon inscribed in the curve has its vertices on nodes and each edge a cell side or a
 cell diagonal, so the labels `D`, `D_boundary` and `D_exterior` and
 [`polygon_spaces`](@ref Bramble.polygon_spaces) work as for a polygon. The curve must lie
-inside the box, be orthogonally convex and be star-shaped about the minimum of `φ`.
+strictly inside the box, be orthogonally convex and be star-shaped about the minimum of `φ`.
 [`mesh`](@ref) lists the errors; the [mesh internals page](../internals/mesh.md) says how
 the labels are set.
 

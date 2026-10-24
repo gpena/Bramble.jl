@@ -28,6 +28,7 @@ Problems are written as bilinear and linear forms built from discrete operators,
 ## Features
 
 - **Meshes.** Nonuniform Cartesian meshes in 1D, 2D and 3D, with uniform or random point distributions, or points you place yourself (graded) with `change_points!`, boundary markers and iterative refinement.
+- **Polygon and level-set domains.** `polygon(V)` and `levelset(φ)` mark a region of a 2D domain (`:P => polygon(V)`, `:D => levelset(φ)`). `mesh` adds the grid lines the boundary needs, so every crossing of the boundary with a grid line is a node, and `Bramble.polygon_spaces` gives the trial and test spaces of the Ferreira and Grigorieff scheme, second order on non-convex polygons with oblique edges and on orthogonally convex curves such as a disk. The worked examples solve a [polygon](https://gpena.github.io/Bramble.jl/examples/poisson_polygon/) and a [disk](https://gpena.github.io/Bramble.jl/examples/poisson_circle/).
 - **Discrete calculus.** Gradient, divergence, curl, Laplacian and strain operators (`∇ₕ`, `divₕ`, `curlₕ`, `Δₕ`, `εₕ`) in staggered, centered and averaged variants, jumps, means and index shifts, with discrete inner products and norms (`innerₕ`, `inner₊`, `inner_Γ`, `normₕ`) and point sources (`dirac`).
 - **Forms and assembly.** `form` and `assemble` build sparse matrices and load vectors directly. Separable operators assemble as Kronecker products, and `matrix_free_operator` applies a form without storing its matrix.
 - **Dirichlet conditions.** The `dirichlet` keyword of `assemble` (`:boundary`, a marker or `marker => g`), `dirichlet_constraints` for values by marker function, restricted to chosen components of a system, with `symmetrize!` to keep symmetric problems symmetric.
@@ -134,7 +135,7 @@ Documentation, tutorials, and the API reference are available at [https://gpena.
 - [Getting started](https://gpena.github.io/Bramble.jl/getting_started/)
 - Discrete foundations: [geometry](https://gpena.github.io/Bramble.jl/tutorials/geometry/), [meshes](https://gpena.github.io/Bramble.jl/tutorials/mesh/), [spaces](https://gpena.github.io/Bramble.jl/tutorials/space/), [operators](https://gpena.github.io/Bramble.jl/tutorials/operators/)
 - Forms and assembly: [forms](https://gpena.github.io/Bramble.jl/tutorials/form/), [coupled systems](https://gpena.github.io/Bramble.jl/tutorials/coupled_systems/)
-- [Worked examples](https://gpena.github.io/Bramble.jl/examples/poisson_linear/): a Poisson problem, a convection-diffusion problem and a heat equation
+- [Worked examples](https://gpena.github.io/Bramble.jl/examples/poisson_linear/): a Poisson problem, a polygon, a disk, a convection-diffusion problem and a heat equation
 
 ---
 
