@@ -872,10 +872,11 @@ end
 # interior box, `margin` cells in from every face, where every offset the term can produce is
 # statically guaranteed in bounds, and a boundary shell outside it, where the guarded path
 # from before still runs unchanged. `margin` is `_stencil_margin(term)` (`stencil_pattern.jl`)
-# -- the widest offset the term's whole AST can reach, trial and test sides combined, not a
-# hardcoded 1: a nested difference or a multi-cell `Shift` reaches further than a single tap,
-# and treating a 1-cell rim as always safe for those would silently corrupt the boundary rows
-# instead of merely running slower.
+# -- the widest offset the term's whole AST can reach (a marked function aside, whose margin
+# is its function's), trial and test sides combined, not a hardcoded 1: a nested difference
+# or a multi-cell `Shift` reaches further than a single tap, and treating a 1-cell rim as
+# always safe for those would silently corrupt the boundary rows instead of merely running
+# slower.
 #
 # The shell is walked as `2D` axis-aligned slabs, one per `(dimension, low/high face)` pair.
 # Slab `2d-1`/`2d` covers dimension `d`'s low/high margin, at the box's full extent in every

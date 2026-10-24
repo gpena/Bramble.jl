@@ -824,8 +824,8 @@ end
 # The sign `-u` and `a - b` store (`_MinusOne`, src/ast/ast.jl) is decided by its type, so
 # `simplify_ast` folds it whatever the operator's values. It is not a number: `form` lowers
 # what is left of it to the `Int` `-1`, so every reader of the stored tree (assembly,
-# symmetry, Kronecker, matrix-free, ForwardDiff) meets main's tree, which the forms below
-# check against the same form written with a numeric coefficient.
+# symmetry, Kronecker, matrix-free, ForwardDiff) meets the `Int` `-1` tree, which the forms
+# below check against the same form written with a numeric coefficient.
 _rt_negated(W) = form(W, W, (u, v) -> innerₕ(u, v) - innerₕ(D₋ₓ(u), v))
 
 @testset "the sign of minus acts as -1" begin
@@ -844,7 +844,7 @@ _rt_negated(W) = form(W, W, (u, v) -> innerₕ(u, v) - innerₕ(D₋ₓ(u), v))
     @test Bramble.expression(-u) == "-u"
     @test Bramble.expression(u - D₋ₓ(u)) == "u - 1 * D₋ₓ(u)"
     @test Bramble.expression(u - 2.0 * u) == "u - 1 * 2 * u"
-    # The stored tree holds the `Int` `-1`, and prints as main's did.
+    # The stored tree holds the `Int` `-1`, and prints as the `Int` `-1` tree does.
     ast = Bramble.resolve_form_ast(_rt_negated(Wₕ))
     @test ast.right_op.scalar === -1
     @test !occursin("_MinusOne", string(typeof(ast)))

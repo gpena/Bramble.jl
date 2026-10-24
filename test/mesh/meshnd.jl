@@ -143,6 +143,14 @@ using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask
         Ωₕ_2d_unif = mesh(Ω_2d, npts_2d, (true, true); backend = backend())
         Ωₕ_2d_nonunif = mesh(Ω_2d, npts_2d, (false, true); backend = backend())
 
+        @testset "Zero points on an axis" begin
+            msg = "a mesh needs at least one point per axis; got 0"
+            for n in ((0, 5), (5, 0))
+                @test_throws ArgumentError mesh(Ω_2d, n)
+                @test_throws msg mesh(Ω_2d, n, (false, true); backend = backend())
+            end
+        end
+
         @testset "Construction and properties" begin
             @test Ωₕ_2d_unif isa MeshnD{2}
             @test backend(Ωₕ_2d_unif) isa Backend

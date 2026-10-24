@@ -330,9 +330,10 @@ expression(op::DiracSource) = "dirac($(string(op.points)), $(string(op.strengths
 # it is neither zero nor one off the type, even when the operator is a runtime value (as in
 # `constrained`). An `Int` `-1` stored in the node is collapsed by value
 # (gpena/Bramble.jl#240) and makes `form` a `Union` there. Not a `Number`, so Base never
-# promotes it and it adds no method that would invalidate Base code on load: it lives only
-# between `-` and the end of `simplify_ast`, which folds it (`_fold_mul`), and `form` lowers
-# what is left to the `Int` `-1` (`_lower_signs`), so nothing after it meets the sign.
+# promotes it and it adds no method that would invalidate Base code on load. `simplify_ast`
+# folds it (`_fold_mul`) and `form` lowers what is left to the `Int` `-1` (`_lower_signs`);
+# the readers of a raw tree (`expression`, `scale_stencil`, the rank-one split) take it as
+# `-1`.
 struct _MinusOne end
 Base.show(io::IO, ::_MinusOne) = print(io, -1)
 

@@ -24,7 +24,7 @@ using Bramble
 import Bramble
 using Bramble: lift, lift!, Dcₓ, Dcᵧ, Dc₂, D̃ₓ, D̃ᵧ, D₋ₓ, D₋ᵧ
 using LinearAlgebra: Diagonal, dot, eigvals, norm
-using SparseArrays: nnz, sparse
+using SparseArrays: SparseMatrixCSC, nnz, sparse
 using Random: Xoshiro
 
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
@@ -698,6 +698,29 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         @test nnz(sparse(E)) == nE
         @test isapprox(sum(abs, E), sE; rtol = 1.0e-12)
         @test isapprox(sum(abs, d), sd; rtol = 1.0e-12)
+    end
+
+    # A Float32 composite with Float64 `K` blocks: the blocks' values widen to Float64, and
+    # the closure comes back in the space's type with the Float64 closure's values.
+    @testset "Float32 composite, Float64 K: $kind" for kind in (:xmin, :xmax)
+        rels = u -> (traction(kind)(u)..., disp(:ymin)(u)..., disp(:ymax)(u)...,
+            disp(kind == :xmin ? :xmax : :xmin)(u)...)
+        closures = map((Float32, Float64)) do T
+            Ωd = domain(interval(T(0), T(1)) × interval(T(0), T(2)))
+            Ωₕ = mesh(Ωd, (7, 6), (true, true))
+            xs = ntuple(d -> collect(points(Ωₕ(d))), 2)
+            Bramble.change_points!(Ωₕ, ntuple(d -> xs[d] .^ 2 ./ xs[d][end], 2))
+            return Bramble.closure(constrained(
+                gridspace(Ωₕ; ghosts = :boundary) ×
+                gridspace(Ωₕ; ghosts = :boundary), rels))
+        end
+        (E32, d32), (E64, d64) = closures
+        @test E32 isa SparseMatrixCSC{Float32, Int}
+        @test d32 isa Vector{Float32}
+        @test E64 isa SparseMatrixCSC{Float64, Int}
+        @test nnz(E32) == nnz(E64) > 0
+        @test close(Matrix(E32), Matrix(E64); rtol = 1.0e-4)
+        @test norm(d64) > 0 && close(d32, d64; rtol = 1.0e-4)
     end
 
     @testset "Arithmetic on a whole element" begin

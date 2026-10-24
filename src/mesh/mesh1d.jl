@@ -1202,6 +1202,10 @@ end
     throw(ArgumentError(msg))
 end
 
+@noinline function _throw_no_mesh_points(n)
+    throw(ArgumentError("a mesh needs at least one point per axis; got $n"))
+end
+
 # Internal constructor function for creating a 1D mesh.
 function _mesh(
         Ω::Domain{CartesianProduct{1, T}},
@@ -1213,6 +1217,7 @@ function _mesh(
     # Unpack the domain's set and markers, and the number of points.
     (; set, markers) = Ω
     n_points, = npts
+    n_points >= 1 || _throw_no_mesh_points(n_points)
 
     # Check if the domain is a single point in the storage eltype.
     is_collapsed = _storage_collapsed(extrema(set)..., backend)

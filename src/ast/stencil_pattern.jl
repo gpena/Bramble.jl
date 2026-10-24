@@ -118,6 +118,10 @@ A composed reach past magnitude 1 is not a hypothetical this ignores: `D₋ₓ(D
 `Shift(u, dim, 2)` both carry offsets wider than the one step a single difference or a unit
 shift would suggest, which is why this walks the same tree `stencil_offsets` does rather
 than assuming every node caps out at 1.
+
+One exception: a marked function (`_FacetExtrapolated`) answers its function's margin, as
+its reads by extrapolation go inward from a ghost to the three nodes `_marked_ghost`
+requires; the walk widens the marked faces itself (`_face_margins`).
 """
 _stencil_margin(op::TrialFunction) = 0
 _stencil_margin(op::TestFunction) = 0

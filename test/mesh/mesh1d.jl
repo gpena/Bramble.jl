@@ -134,6 +134,16 @@ import Base: diff
                 false; backend = backend(Float32))
         end
 
+        @testset "Zero or negative point count" begin
+            msg = "a mesh needs at least one point per axis; got"
+            for n in (0, -2), unif in (true, false)
+                @test_throws ArgumentError mesh(create_test_domain(0.0, 1.0), n, unif)
+                @test_throws msg mesh(create_test_domain(0.0, 1.0), n, unif)
+            end
+            # A collapsed interval is no exception: 0 points is still refused.
+            @test_throws ArgumentError mesh(create_test_domain(1.0, 1.0), 0)
+        end
+
         @testset "Storage-eltype collapse" begin
             # The interval is a point in Float32 storage: one point, never five copies of
             # 1f6 with zero spacings.

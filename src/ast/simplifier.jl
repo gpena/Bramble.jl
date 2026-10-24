@@ -576,8 +576,8 @@ end
 
 # `op` with each sign `_MinusOne` (ast.jl) left after `simplify_ast` stored as the `Int`
 # `-1` it stands for, every other node as it was. `form` calls it on the simplified tree, so
-# what assembles, checks symmetry, splits into Kronecker factors or prints is main's tree
-# and the sign never meets Base's arithmetic. Read off the types: a node holding no sign
+# what assembles, checks symmetry, splits into Kronecker factors or prints holds the `Int`
+# `-1` and the sign never meets Base's arithmetic. Read off the types: a node holding no sign
 # comes back as itself (`_rewrap_inner`'s shortcut, a sum or product rebuilt equal).
 @inline _lower_signs(op) = op
 @inline function _lower_signs(op::OperatorScale{D, _MinusOne}) where {D}
