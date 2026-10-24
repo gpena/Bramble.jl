@@ -503,21 +503,21 @@ function _check_no_levelset_regions(domain_markers)
     return nothing
 end
 
-# Labels the nodes of the lines `pts` by the polygon `P` whose vertices are nodes: a vertex
-# is a boundary node, any other node is inside or outside by the parity of the polygon edges
-# above it. Consecutive vertices are corners of one cell, so a vertical ray up from a node of
-# column `i` crosses (half-open: one end at a larger x) only edges with an end on column `i`.
-# Linear in the nodes and vertices, where the signed distance is their product.
-function _label_fitted!(inside, on, outside, P::Polygon, pts::NTuple{2, AbstractVector})
-    X, Y = pts
+# The node (i, j) of the lines `X`, `Y` that is the point `v`, or `nothing` when `v` is none.
+function _fitted_node(X, Y, v)
+    i, j = searchsortedfirst(X, v[1]), searchsortedfirst(Y, v[2])
+    return i <= length(X) && j <= length(Y) && X[i] == v[1] && Y[j] == v[2] ? (i, j) : nothing
+end
+
+# Labels of the nodes of the lines `X`, `Y` by the closed polygon whose vertices are the nodes
+# `ij` in order: 0 at a vertex, -1 inside, 1 outside. A vertical ray up from a node of column
+# `i` crosses (half-open: one end at a larger x) only edges with an end on column `i`, so the
+# parity of those edges above a node says which side it is on. Consecutive vertices must be
+# corners of one cell. Linear in the nodes and vertices, where the signed distance is their
+# product. The matrix is `length(X) * length(Y)` bytes, and a bit matrix of the same shape is
+# the scratch.
+function _fitted_labels(X, Y, ij::AbstractVector{NTuple{2, Int}})
     nx, ny = length(X), length(Y)
-    V = P.vertices
-    ij = Vector{NTuple{2, Int}}(undef, length(V))
-    for (k, v) in enumerate(V)
-        i, j = searchsortedfirst(X, v[1]), searchsortedfirst(Y, v[2])
-        (i <= nx && j <= ny && X[i] == v[1] && Y[j] == v[2]) || _throw_fitted_off_node(v)
-        ij[k] = (i, j)
-    end
     toggle = falses(nx, ny)
     for k in eachindex(ij)
         (i, j), (i₂, j₂) = ij[k], ij[mod1(k + 1, length(ij))]
@@ -525,22 +525,40 @@ function _label_fitted!(inside, on, outside, P::Polygon, pts::NTuple{2, Abstract
         iₑ, jₑ = i < i₂ ? (i, j) : (i₂, j₂)
         toggle[iₑ, jₑ] = !toggle[iₑ, jₑ]
     end
-    onpoly = falses(nx, ny)
-    for (i, j) in ij
-        onpoly[i, j] = true
-    end
+    lbl = Matrix{Int8}(undef, nx, ny)
     @inbounds for i in 1:nx
         above = false
         for j in ny:-1:1
-            k = i + (j - 1) * nx
-            if onpoly[i, j]
-                on[k] = true
-            elseif above
-                inside[k] = true
-            else
-                outside[k] = true
-            end
+            lbl[i, j] = above ? Int8(-1) : Int8(1)
             above ⊻= toggle[i, j]
+        end
+    end
+    for (i, j) in ij
+        lbl[i, j] = Int8(0)
+    end
+    return lbl
+end
+
+# Labels the nodes of the lines `pts` by the polygon `P` whose vertices are nodes: a vertex
+# is a boundary node, any other node is inside or outside (see `_fitted_labels`).
+function _label_fitted!(inside, on, outside, P::Polygon, pts::NTuple{2, AbstractVector})
+    X, Y = pts
+    V = P.vertices
+    ij = Vector{NTuple{2, Int}}(undef, length(V))
+    for (k, v) in enumerate(V)
+        n = _fitted_node(X, Y, v)
+        n === nothing && _throw_fitted_off_node(v)
+        ij[k] = n
+    end
+    lbl = _fitted_labels(X, Y, ij)
+    @inbounds for k in eachindex(lbl)
+        l = lbl[k]
+        if l == 0
+            on[k] = true
+        elseif l < 0
+            inside[k] = true
+        else
+            outside[k] = true
         end
     end
     return nothing

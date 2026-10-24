@@ -165,11 +165,7 @@ function _levelset_extent(φ, B, c::NTuple{2, Float64})
         k = argmin(k -> sgn * P[k][d], 1:M)
         a, b = θs[k] - 2π / M, θs[k] + 2π / M
         f = θ -> sgn * _levelset_ray(φ, B, c, θ)[d]
-        invφ = (sqrt(5.0) - 1) / 2
-        for _ in 1:100
-            m1, m2 = b - invφ * (b - a), a + invφ * (b - a)
-            f(m1) < f(m2) ? (b = m2) : (a = m1)
-        end
+        a, b = _golden_min(f, a, b)
         θ = (a + b) / 2
         return θ, sgn * min(f(θ), sgn * P[k][d])
     end
@@ -392,35 +388,17 @@ function _levelset_fit(φ, c::NTuple{2, Float64}, X::AbstractVector, Y::Abstract
     nx, ny = length(XT), length(YT)
     ij = Vector{NTuple{2, Int}}(undef, length(W))
     for (k, v) in enumerate(W)
-        i, j = searchsortedfirst(XT, v[1]), searchsortedfirst(YT, v[2])
-        (i <= nx && j <= ny && XT[i] == v[1] && YT[j] == v[2]) || return "a vertex is not a node"
-        ij[k] = (i, j)
+        n = _fitted_node(XT, YT, v)
+        n === nothing && return "a vertex is not a node"
+        ij[k] = n
     end
-    # Labels: 0 at a vertex, -1 inside the polygon, 1 outside. A vertical ray up from a node
-    # crosses the edges whose ends straddle the node's line under the half-open rule
-    # (one end at x > X[i]); each such edge has its other end on column i.
-    lbl = ones(Int8, nx, ny)
-    tog = falses(nx, ny)
     nv = length(ij)
     for k in 1:nv
         (i, j), (i₂, j₂) = ij[k], ij[mod1(k + 1, nv)]
         (abs(i - i₂) <= 1 && abs(j - j₂) <= 1 && (i, j) != (i₂, j₂)) ||
             return "vertices $(W[k]) and $(W[mod1(k + 1, nv)]) are consecutive but not corners of one cell"
-        if i != i₂
-            iₑ, jₑ = i < i₂ ? (i, j) : (i₂, j₂)
-            tog[iₑ, jₑ] = !tog[iₑ, jₑ]
-        end
     end
-    for i in 1:nx
-        s = false
-        for j in ny:-1:1
-            lbl[i, j] = s ? -1 : 1
-            s ⊻= tog[i, j]
-        end
-    end
-    for (i, j) in ij
-        lbl[i, j] = 0
-    end
+    lbl = _fitted_labels(XT, YT, ij)
     for j in 1:ny, i in 1:nx
 
         l = lbl[i, j]
