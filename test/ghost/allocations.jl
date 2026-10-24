@@ -374,11 +374,18 @@ end
     @test alloc(() -> assemble!(A, F, a, l)) == 0
     @test A == A0
     @test F == F0
-    # the padded refill alone, walked factor by factor on the ghost space (#876)
+    # the padded refill alone, walked factor by factor on the ghost space (#876), over the
+    # rows the test closure reads (#884)
     Ap0 = copy(a.A_pad)
     fill!(nonzeros(a.A_pad), 0)
-    @test alloc(() -> assemble!(a.A_pad, a.padded)) == 0
+    @test alloc(() -> Bramble._assemble_padded!(a)) == 0
     @test a.A_pad == Ap0
+    # and over the whole padded grid, into a matrix of its own (#876)
+    Bp = assemble(a.padded)
+    Bp0 = copy(Bp)
+    fill!(nonzeros(Bp), 0)
+    @test alloc(() -> assemble!(Bp, a.padded)) == 0
+    @test Bp == Bp0
 end
 
 # A scale that is isbits and yet not constant: its value is a global's (#876).

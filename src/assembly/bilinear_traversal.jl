@@ -1191,6 +1191,133 @@ end
     return boundary_sink
 end
 
+# --- a walk over some of the grid's points (#884) ---------------------------------- #
+#
+# A form on ghost spaces whose test closure reads only some padded rows (`polygon_spaces`
+# reads the interior nodes) walks only the points writing those rows. The points are held
+# line by line along axis 1, as ranges, so each region of the walk above (the interior box,
+# each boundary slab) is cut into pieces of whole ranges and each piece walked as the region
+# was: a test per range, none per point or entry. The recording and every replay cut the
+# same regions alike, so their entries still agree point by point.
+
+# Points of `grid` by line along axis 1: line `l` (the linear index of its other indices,
+# `lines[J]`) holds the ranges `lo[s]:hi[s]`, `s in ptr[l]:(ptr[l + 1] - 1)`, increasing and
+# disjoint.
+struct _GridLines{C <: CartesianIndices, L <: LinearIndices}
+    grid::C
+    lines::L
+    ptr::Vector{Int}
+    lo::Vector{Int}
+    hi::Vector{Int}
+end
+
+# The points of `grid` set in `mask`, a vector in the grid's linear order.
+function _GridLines(mask::AbstractVector{Bool}, grid::CartesianIndices)
+    r1 = _full_range(first(axes(grid)))
+    lines = LinearIndices(Base.tail(axes(grid)))
+    lin = LinearIndices(grid)
+    ptr = Vector{Int}(undef, length(lines) + 1)
+    lo, hi = Int[], Int[]
+    for (l, J) in enumerate(CartesianIndices(Base.tail(axes(grid))))
+        ptr[l] = length(lo) + 1
+        open = false
+        for i in r1
+            m = mask[lin[CartesianIndex(i, Tuple(J)...)]]
+            m && !open && push!(lo, i)
+            !m && open && push!(hi, i - 1)
+            open = m
+        end
+        open && push!(hi, last(r1))
+    end
+    ptr[end] = length(lo) + 1
+    return _GridLines(grid, lines, ptr, lo, hi)
+end
+
+"""
+    _WalkRows
+
+The part of the padded grid a form on ghost spaces walks: the points `points` whose stencil
+writes a row of `rows`, the padded rows its test closure reads, and the columns `cols` those
+points read (`_ghost_walk`, ghost_assembly.jl). `whole` when the closure reads every row, a
+ghost box: the walk is then the plain one. `salt` tells a recording of this walk from one
+of the whole grid on one matrix (`_walk_stamp`).
+"""
+struct _WalkRows{P <: _GridLines, R <: _GridLines, Q <: _GridLines}
+    whole::Bool
+    points::P
+    rows::R
+    cols::Q
+    salt::UInt64
+end
+
+# The walked leaf `sp` with the walk `w` it is cut to, or `sp` itself.
+struct _RowRestricted{S, W <: _WalkRows}
+    space::S
+    walk::W
+end
+@inline _restrict_walk(sp, ::Nothing) = sp
+@inline _restrict_walk(sp, w::_WalkRows) = _RowRestricted(sp, w)
+
+# A recording's marker stamp, moved by a cut walk: the cache replays a recording only under
+# the walk it was made with.
+@inline _walk_stamp(stamp::UInt64, ::Nothing) = stamp
+@inline _walk_stamp(stamp::UInt64, w::_WalkRows) = hash(w.salt, stamp)
+
+# `f(piece)` for each piece of `region` (`CartesianIndices` of `UnitRange{Int}`s) in `g`:
+# the ranges of each line along axis 1 cut to `region`, in the region's own order.
+@inline function _each_piece(f::F, region::CartesianIndices, g::_GridLines) where {F}
+    r1 = first(region.indices)
+    for J in CartesianIndices(Base.tail(region.indices))
+        l = @inbounds g.lines[J]
+        for s in @inbounds(g.ptr[l]:(g.ptr[l + 1] - 1))
+            r = max(first(r1), @inbounds g.lo[s]):min(last(r1), @inbounds g.hi[s])
+            isempty(r) || f(CartesianIndices((r, map(j -> j:j, Tuple(J))...)))
+        end
+    end
+    return nothing
+end
+
+# `_visit_stencil!` over the points of the walk alone: the same regions, cut into pieces.
+@inline function _visit_stencil!(
+        interior_sink::SINK1,
+        boundary_sink::SINK2,
+        term::TERM,
+        rsp::_RowRestricted,
+        row_offset::Int,
+        col_offset::Int
+) where {SINK1, SINK2, TERM}
+    sp = rsp.space
+    pts = rsp.walk.points
+    Ωₕ = mesh(sp)
+    weights(sp)
+    bound, mesh_markers = _may_restrict(typeof(term)) ? _bind_walk(term, mesh(sp)) :
+                          (term, nothing)
+    wsp = _walk_space(sp)
+    grid_inds = indices(Ωₕ)
+    lin_indices = LinearIndices(grid_inds)
+    ax = axes(grid_inds)
+    margins = _has_marks(TERM) ? _face_margins(term, ax) : _stencil_margin(term)
+    if _peelable(ax, margins)
+        inner = _has_marks(TERM) ? _interior_term(bound) : bound
+        _each_piece(_interior_box(ax, margins), pts) do piece
+            _visit_interior!(interior_sink, inner, wsp, mesh_markers, lin_indices, piece,
+                row_offset, col_offset)
+        end
+        for slab in _boundary_shell_slabs(ax, margins)
+            _each_piece(slab, pts) do piece
+                _visit_guarded_region!(boundary_sink, bound, wsp, mesh_markers, lin_indices,
+                    piece, row_offset, col_offset)
+            end
+        end
+    else
+        _each_piece(CartesianIndices(map(_full_range, ax)), pts) do piece
+            _visit_guarded_region!(boundary_sink, bound, wsp, mesh_markers, lin_indices,
+                piece, row_offset, col_offset)
+        end
+    end
+    return boundary_sink
+end
+
 # --- the sinks --------------------------------------------------------------------- #
 
 """

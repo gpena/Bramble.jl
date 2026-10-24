@@ -153,8 +153,9 @@ end
 @inline _direct_count(n::Int, half::Int) = half == 2 ? 0 : n
 @inline _transposed_count(n::Int, half::Int) = (half == 0 || half == 2) ? n : 0
 
-# Per-unit state for the two coordinate passes.
-mutable struct _CoordPass
+# Per-unit state for the two coordinate passes. `walk` is the walk each unit is cut to
+# (`_WalkRows`), or `nothing` for the whole grid.
+mutable struct _CoordPass{W}
     const I::Vector{Int}
     const J::Vector{Int}
     const ptrs::Vector{Vector{Int}}
@@ -162,20 +163,21 @@ mutable struct _CoordPass
     const margins::Vector{NTuple{2, Int}}
     const halves::Vector{Int}
     const context::String
+    const walk::W
     fill::Bool
     unit::Int
     base::Int
 end
-function _CoordPass(context::String)
+function _CoordPass(context::String, walk = nothing)
     return _CoordPass(Int[], Int[], Vector{Int}[], Int[], NTuple{2, Int}[], Int[], context,
-        false, 0, 0)
+        walk, false, 0, 0)
 end
 
 # One unit, in whichever pass `p` is in. `half` is `-1` for a term walked alone.
 function (p::_CoordPass)(
         term::TERM, sp, row_offset::Int, col_offset::Int, dr::Int, dc::Int, half::Int
 ) where {TERM}
-    hp = host_weights(sp)
+    hp = _restrict_walk(host_weights(sp), p.walk)
     if p.fill
         p.unit += 1
         u = p.unit
@@ -189,7 +191,8 @@ function (p::_CoordPass)(
         _may_restrict(typeof(term)) &&
             _validate_term_markers(term, markers(mesh(sp)), p.context)
         npts = length(indices(mesh(sp)))
-        ptr = Vector{Int}(undef, npts + 1)
+        # Zero at a point the walk skips, which no diagonal segment then takes.
+        ptr = zeros(Int, npts + 1)
         sink = _CoordSink(ptr, p.I, p.J, 0, 0, dr, dc, half, false, 0)
         _coord_walk!(sink, term, hp, row_offset, col_offset)
         @inbounds ptr[npts + 1] = sink.n + 1
@@ -245,12 +248,50 @@ end
     return nothing
 end
 
+# `_coord_walk!` over the points of the walk alone (`_RowRestricted`): the same regions,
+# cut into pieces, as the replay walks them.
+@noinline function _coord_walk!(
+        sink::_CoordSink, term::TERM, rsp::_RowRestricted, row_offset::Int, col_offset::Int
+) where {TERM}
+    sp = rsp.space
+    pts = rsp.walk.points
+    Ωₕ = mesh(sp)
+    weights(sp)
+    bound, mesh_markers = _may_restrict(typeof(term)) ? _bind_walk(term, mesh(sp)) :
+                          (term, nothing)
+    grid_inds = indices(Ωₕ)
+    lin_indices = LinearIndices(grid_inds)
+    ax = axes(grid_inds)
+    margins = _has_marks(TERM) ? _face_margins(term, ax) : _stencil_margin(term)
+    if _peelable(ax, margins)
+        inner = _has_marks(TERM) ? _interior_term(bound) : bound
+        _each_piece(_interior_box(ax, margins), pts) do piece
+            _visit_guarded_region!(
+                sink, inner, sp, mesh_markers, lin_indices, piece, row_offset, col_offset)
+        end
+        for slab in _boundary_shell_slabs(ax, margins)
+            _each_piece(slab, pts) do piece
+                _visit_guarded_region!(sink, bound, sp, mesh_markers, lin_indices, piece,
+                    row_offset, col_offset)
+            end
+        end
+    else
+        _each_piece(CartesianIndices(map(_full_range, ax)), pts) do piece
+            _visit_guarded_region!(
+                sink, bound, sp, mesh_markers, lin_indices, piece, row_offset, col_offset)
+        end
+    end
+    return nothing
+end
+
 # Count, size, fill: every unit's coordinates in one pair of vectors, in the order
-# `_replay_bilinear_core!` consumes segments.
-function _form_coordinates(trial_space, test_space, ast)
+# `_replay_bilinear_core!` consumes segments. A walk `walk` cuts a scalar form's units only,
+# as the replay cuts them.
+function _form_coordinates(trial_space, test_space, ast, walk = nothing)
+    block = _is_block_pair(trial_space, test_space)
     p = _CoordPass(
-        _is_block_pair(trial_space, test_space) ? "one of the composite space's leaves" :
-        "the form's space"
+        block ? "one of the composite space's leaves" : "the form's space",
+        block ? nothing : walk
     )
     _foreach_unit(p, trial_space, test_space, ast)
     total = 0
@@ -351,8 +392,14 @@ Only the structure is preallocated here; all stored entries are zero until `asse
 
 See also [`assemble`](@ref) and [`assemble!`](@ref).
 """
-function allocate_system_matrix(form::BilinearForm{D}, ast = form.ast) where {D}
-    p = _form_coordinates(form.trial_space, form.test_space, ast)
+allocate_system_matrix(form::BilinearForm, ast = form.ast) = _allocate_walked(
+    form, ast, nothing)
+
+# The matrix of `form` over the points of `walk` (`_WalkRows`, a form on ghost spaces), or
+# of the whole grid (`nothing`). A cut walk's form keeps its recording on any policy: it is
+# refilled by the serial replay only (`_assemble_padded!`, ghost_assembly.jl).
+function _allocate_walked(form::BilinearForm{D}, ast, walk) where {D}
+    p = _form_coordinates(form.trial_space, form.test_space, ast, walk)
     MT = matrix_type(backend(form.test_space))
     V = _zeros_of(_matrix_eltype(form, ast), length(p.I))
     nrows = ndofs(form.test_space)
@@ -360,12 +407,12 @@ function allocate_system_matrix(form::BilinearForm{D}, ast = form.ast) where {D}
     # The walk's coordinates are the replay cache's positions too, once searched in the new
     # matrix, so a serial sparse form keeps them: its first fill is then a replay.
     keep = MT <: SparseMatrixCSC && ast === form.ast &&
-           execution_policy(form.trial_space) isa CpuSerial
+           (walk !== nothing || execution_policy(form.trial_space) isa CpuSerial)
     keep || return _allocate_from_pattern(MT, nrows, ncols, p.I, p.J, V)
     A = _allocate_keeping(MT, nrows, ncols, p.I, p.J, V)
     _coordinates_to_positions!(A, p, ast)
     _store_recording!(form.cache, ast, _segments_from_positions(Val(D), p), A,
-        _pattern_stamp(form.trial_space, form.test_space))
+        _walk_stamp(_pattern_stamp(form.trial_space, form.test_space), walk))
     return A
 end
 

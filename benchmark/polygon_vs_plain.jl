@@ -19,7 +19,10 @@
 #   - rect:      plain non-uniform square mesh with about the polygon's DOF count, one per
 #                polygon case (`rect(fig1)`, `rect(disk)`);
 #   - plain box: `gridspace` on the Figure 1 box, no polygon (the padded/plain denominator);
-#   - padded:    the padded form that the polygon assembly refills (`ap.padded`, `ap.A_pad`);
+#   - padded:    the polygon form's padded form over the whole box (`ap.padded`), refilled
+#                into a matrix of its own, `assemble(ap.padded)`: on the branch `ap.A_pad`
+#                holds only the rows the test closure reads (#884), which the whole-box
+#                refill does not fit;
 #   - ghost box: `gridspace(Ωₕ; ghosts = :boundary)` on the Figure 1 box.
 #
 # Per case: DOFs, warm `assemble!` (minimum of 30 calls) and warm matrix-free `mul!`, both in
@@ -91,7 +94,7 @@ function polygon_row(name, Ωₕ, label)
     prow = measure(name, ndofs(U), Ap, ap, () -> matrix_free_operator(ap))
     pad = ap.padded
     Wpad = Bramble.trial_space(pad)
-    padrow = measure(name * " padded", ndofs(Wpad), ap.A_pad, pad,
+    padrow = measure(name * " padded", ndofs(Wpad), assemble(pad), pad,
         () -> matrix_free_operator(pad))
     return prow, padrow
 end
