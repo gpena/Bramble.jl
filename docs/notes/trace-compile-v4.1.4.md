@@ -37,7 +37,7 @@ paused for the run, so this is a run alone on the machine, though the load of ab
 not an idle machine. The whole run took about one minute. Figures are therefore
 measurements, with the run to run noise of a session that was not completely quiet. The
 raw traces of every child are in `/var/folders/jk/p59shldn311gyml_mx2pcry40000gn/T/jl_UBPJIb`
-(a temporary directory, not kept). The ranked figures are in
+(a temporary directory made with `cleanup = false`, so it stays until the OS clears it). The ranked figures are in
 `benchmark/results/trace_compile.toml`.
 
 `trace_s` is the sum of the per-root compile times in the trace. Each root includes the
@@ -198,3 +198,107 @@ none
 ### Recompiled signatures
 
 none
+
+## Follow-ups
+
+The section below gives one verdict per function above 0.5 s, read off the source in
+`src/assembly/` and `src/ast/`. The tables give cost, not cause, so the causes come from the
+code and from four one-off probes (not part of `benchmark/trace_compile.jl`, not kept) on the
+same graded 5x5x5 mesh and `gridspace(Ωₕ)^Val(3)`: a count of the summands of `form.ast`, a
+count of its distinct summand types, `Base.return_types` of the form closure and of `form`,
+and the same for `divₘₕ`.
+
+### What the trace can and cannot say
+
+The trace lists compiled roots only: the entry points reached by a dynamic dispatch. Every
+callee dispatched statically is compiled inside its root and is not listed. So the instance
+counts of the three roots above 0.5 s (1 each) say nothing about how many specialisations a
+root holds, and the trace cannot split `Bramble.assemble` into its kernels or `form` into its
+passes. A finer split needs another tool. #915 (Tracy zones per phase of the first `form` and
+`assemble`) covers the phase split for these three forms, and #916 (Cthulhu over the replay
+kernels) covers the split inside `assemble`. Neither needs a new issue.
+
+### What multiplies the work in `assemble`
+
+`assemble` compiles one walk per summand type, not per form. `_foldl_pairs` is `@generated`
+and unrolls `_pair_plan` (`src/assembly/symmetry.jl`), and the unit walks
+`_foreach_block_unit`, `_foreach_pair_block_unit`, `_replay_blocks!` and `_replay_pair_blocks!`
+(`src/assembly/bilinear_execution.jl`) are `@noinline` with the term type as a parameter, so
+each term type keeps its own instance. Each is visited by the coordinate pass
+(`_form_coordinates`, sink `_CoordPass`) and by the replay (`ReplaySink`, and
+`_PairReplaySink` for a transposed pair). The summand type, with the sink type, is therefore
+the parameter that multiplies instances. The probe gives, for the two 3-component rows:
+
+| row | summands in `form.ast` | distinct summand types | `_pair_plan` groups | printed length of `typeof(ast)` | first `assemble`, s |
+|---|---:|---:|---:|---:|---:|
+| vector_laplacian | 9 | 3 | 9 (0 pairs, 9 single) | 1837 | 2.835 |
+| elasticity | 35 | 24 | 26 (9 pairs, 17 single) | 13610 | 16.73 |
+
+The type count rises 8x and the time 5.9x. That is the same order, as a per-type kernel
+predicts. Elasticity expands `εₕ` into off-diagonal pieces (`_strain_pieces`) that each give a
+new type, where the vector Laplacian's nine summands fall into three types. The 69
+`Bramble.OperatorAdd` instances in the elasticity `form` (0.125 s, below the line) show the
+same thing on the form side: the AST is built as many distinct type trees. Both rows hold only
+`Float64` scalars and no source closures, so #912 (scalar types) and #917 (closure types) do
+not apply to them.
+
+### Why `form` is a separate root only for elasticity
+
+The vector Laplacian closure infers to a concrete type and `form` infers to a concrete
+`BilinearForm`. The elasticity closure does not: `Base.return_types` gives a non-concrete
+`OperatorAdd{3, OperatorScale{3, Float64, ...}, ...}`, and `form(W, W, f)` infers as `Any`. So
+inside `form` the calls to `_validate_form_expression`, `_holds_rank_one` and `_bilinear_form`
+are dynamic dispatches. That is why `Bramble._bilinear_form` shows up as its own root (3.739 s,
+`simplify_ast` and the mesh checks) beside `Bramble.form` (1.331 s).
+
+The loss is in `divₘₕ`. `inner₊(εₕ(u), εₕ(v))` and `2μ * inner₊(εₕ(u), εₕ(v))` infer
+concretely, while `divₘₕ(u)` infers as `_DivergenceTerms{3, <:Tuple{Union{...}}}`. `_div_term`
+(`src/operators/difference.jl`) stays non-concrete even for a constant component index, and
+the same average chain written out by hand, `_vc_avg(_vc_avg(_vc_bwd(u(1), 1), 2), 3)`, infers
+concretely. So the cause sits in the `foldl` over `Iterators.filter(!=(i), 1:D)`. The node
+type grows at each step of a runtime-filtered range, which gives inference nothing to unroll.
+
+### Verdicts
+
+One line per function above 0.5 s.
+
+- elasticity, `Bramble.assemble`, 16.73 s: #916. The root holds the per-summand-type walks above
+  for both sinks, 24 summand types and 9 transposed pairs. #916 asks which kernel arguments the
+  hot loop needs and which only multiply instances, which is the question here.
+- elasticity, `Bramble._bilinear_form`, 3.739 s: #918. The root is `simplify_ast`, the mesh
+  checks and `_split_restricted_products`, all of which only walk a type-encoded tree; each is
+  re-specialised on the 13610 character AST type. #918 erases that type in the form-time layer.
+- elasticity, `Bramble.form`, 1.331 s: new: make `divₘₕ` infer concretely, so the elasticity form
+  infers (paragraph below).
+- vector_laplacian, `Bramble.assemble`, 2.835 s: #916. The same kernels with 3 summand types and no
+  pairs, so it is the cheap end of the same question, and a useful control for #916's
+  before and after.
+
+### new: make `divₘₕ` infer concretely, so the elasticity form infers
+
+Problem. `_div_term` builds each averaged divergence term with a `foldl` over a runtime
+filtered range, so `divₘₕ(u)` returns a non-concrete `_DivergenceTerms`, the elasticity
+closure is non-concrete, and `form` infers as `Any`. Every pass inside `form` is then reached
+by dynamic dispatch, and the 3-component vector Laplacian, whose closure is concrete, does not
+pay that. The comment above `_div_term` justifies the `foldl` as builder-time code, which is
+true of its run time and says nothing of the inference.
+
+Measured cost. From the tables: `Bramble.form` 1.331 s and `Bramble._bilinear_form` 3.739 s,
+5.07 s of the 5.6 s first `form`. The trace cannot say how much of that the non-concrete
+inference causes: the same passes compile either way, and a statically dispatched
+`_bilinear_form` merges into `form`'s root. The saving may be small or zero, so this is a
+measure-first change, not a promised one.
+
+Proposed change. Write `_div_term` so the type is known from `D`: for example a recursion over
+`ntuple`-built axes with `Val(D)`, or a `@generated` unrolling, that applies `_vc_avg` once per
+axis other than `i`. The result must be the same node as today (same type, so the same
+assembled matrices bit for bit and the same `_DivergenceTerms`). Check `εₕ` and `_vc_avg`
+for the same pattern.
+
+How to measure. Before and after, in fresh processes: `Base.return_types` of the elasticity
+closure and of `form` (the target is `BilinearForm{...}`, not `Any`), then
+`julia --startup-file=no benchmark/trace_compile.jl --launches 3 --out ...` on a run alone, and
+compare `Bramble.form` plus `Bramble._bilinear_form` (before) with `Bramble.form` (after) in the
+elasticity row, and the `compile_s` of the row. A change inside the spread of the
+launches is recorded as rejected. The warm `form` and `assemble!` figures must stay within
+their spread, and the unit tests of `test/form/` must pass.
