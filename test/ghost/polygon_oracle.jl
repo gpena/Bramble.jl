@@ -106,7 +106,77 @@ function compare(Ωₕ, V, a, b, c, f, g; d = nothing, q = nothing)
         reads = exterior_reads(cls), xs, ys, int)
 end
 
+# The norms on Ω̄ₕ of #879 by hand: the values `v` at the interior nodes `int`, 0 on Γ and
+# outside. The squared L² norm sums the dual-cell areas; the squared H¹ seminorm sums, over
+# the grid edges with both ends in Ω̄ (`cls ≥ 0`), the dual length times the squared
+# difference over the edge length.
+function hand_norms(xs, ys, cls, int, v)
+    V = zeros(length(xs), length(ys))
+    V[int] .= v
+    half(z, j) = ((j < length(z) ? z[j + 1] : z[j]) - (j > 1 ? z[j - 1] : z[j])) / 2
+    s = 0.0
+    for l in eachindex(ys), j in 1:(length(xs) - 1)
+
+        cls[j, l] >= 0 && cls[j + 1, l] >= 0 || continue
+        s += half(ys, l) * (V[j + 1, l] - V[j, l])^2 / (xs[j + 1] - xs[j])
+    end
+    for l in 1:(length(ys) - 1), j in eachindex(xs)
+
+        cls[j, l] >= 0 && cls[j, l + 1] >= 0 || continue
+        s += half(xs, j) * (V[j, l + 1] - V[j, l])^2 / (ys[l + 1] - ys[l])
+    end
+    return sqrt(sum(O.dual_areas(xs, ys, int) .* v .^ 2)), sqrt(s), maximum(abs, v)
+end
+
+# `Rₕ` and the norms on the trial space `U` of `polygon_spaces(Ωₕ, label, uq)`, `cls` the
+# oracle's labels: `Rₕ` holds f at the interior nodes, the norms match `hand_norms`, the
+# error of the quadratic solve is round-off, and the test space `W` still refuses.
+function check_trial_norms(Ωₕ, label, cls)
+    xs, ys = lines(Ωₕ)
+    C = CartesianIndices(cls)
+    int = findall(==(1), vec(cls))
+    uq(x) = x[1]^2 + x[2]^2 + x[1] + 2 * x[2]
+    U, W = polygon_spaces(Ωₕ, label, uq)
+    r = Rₕ(U, g_var)
+    @test r.space === U
+    @test parent(r) == [g_var((xs[C[k][1]], ys[C[k][2]])) for k in int]
+    r! = element(U)
+    @test Rₕ!(r!, g_var) === r!
+    @test parent(r!) == parent(r)
+    n, s, m = hand_norms(xs, ys, cls, int, parent(r))
+    @test normₕ(r) ≈ n rtol = 1e-13
+    @test snorm₁ₕ(r) ≈ s rtol = 1e-13
+    @test norm₁ₕ(r) ≈ hypot(n, s) rtol = 1e-13
+    @test norminf(r) == m
+
+    A, F = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v)),
+        form(W, v -> innerₕ(x -> -4.0, v)))
+    e = element(U, A \ F) - Rₕ(U, uq)
+    @test normₕ(e) < 1e-9
+    @test snorm₁ₕ(e) < 1e-9
+    @test norm₁ₕ(e) < 1e-9
+    @test norminf(e) < 1e-9
+    @test normₕ(Rₕ(U, uq)) > 1   # the positive control: the norm reads the values
+
+    @test_throws ArgumentError Rₕ(U, uq; markers = (label,))
+    @test_throws ArgumentError Rₕ(W, uq)
+    @test_throws ArgumentError Rₕ!(element(W), uq)
+    @test_throws ArgumentError normₕ(element(W))
+    @test_throws ArgumentError snorm₁ₕ(element(W))
+    @test_throws ArgumentError norminf(element(W))
+    @test_throws ArgumentError Rₕ(gridspace(Ωₕ; ghosts = :boundary), uq)
+    return nothing
+end
+
 @testset "Polygon spaces against the F&G oracle" begin
+    @testset "Rₕ and norms on the trial space" begin
+        Random.seed!(2)
+        M = polygon_mesh(FIG1, FIG1_BOX, (10, 9), (false, false))
+        cls = O.classify(lines(M)..., FIG1)
+        @test cls == library_classes(M)
+        check_trial_norms(M, :P, cls)
+    end
+
     @testset "Integer grids: Figure 1 and the V-notch" begin
         # Dual areas are 1: the rows agree unscaled.
         M = polygon_mesh(FIG1, FIG1_BOX, (7, 6), (true, true))

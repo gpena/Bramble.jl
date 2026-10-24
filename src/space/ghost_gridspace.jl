@@ -441,6 +441,8 @@ whose relation data depend on time, `d` is its value at `t = 0`, and
 @inline mesh_type(::Type{<:GhostGridSpace{D, T, S}}) where {D, T, S} = mesh_type(S)
 @inline mesh_type(Wₕ::GhostGridSpace) = mesh_type(typeof(Wₕ))
 @inline backend(Wₕ::GhostGridSpace) = backend(Wₕ.padded)
+# The policy element broadcasts run under, as on a plain space: `uₕ - vₕ` on one space.
+@inline execution_policy(Wₕ::GhostGridSpace) = execution_policy(backend(Wₕ))
 @inline dim(::GhostGridSpace{D}) where {D} = D
 @inline dim(::Type{<:GhostGridSpace{D}}) where {D} = D
 @inline eltype(::GhostGridSpace{D, T}) where {D, T} = T
@@ -725,10 +727,19 @@ end
 # form: whether a restriction holds values at the physical nodes only or at the ghost
 # coordinates too is not decided. Without these methods `Rₕ!` falls to its general keyword
 # method, which calls itself until the stack overflows, and `avgₕ!` reaches a `project!`
-# with no method for the space.
-Rₕ(Wₕ::GhostGridSpace, f; kwargs...) = _throw_projection_on_ghost_space(:Rₕ, Wₕ)
+# with no method for the space. A polygon trial space is the exception for `Rₕ`: its
+# degrees of freedom are the interior nodes, so `Rₕ(U, f)` holds `f` there
+# (`_polygon_restrict!`, polygon_space.jl); its test space keeps the refusal.
+function Rₕ(Wₕ::GhostGridSpace, f; kwargs...)
+    _is_polygon_trial(Wₕ) || _throw_projection_on_ghost_space(:Rₕ, Wₕ)
+    isempty(kwargs) || _throw_polygon_restriction_markers(:Rₕ)
+    uₕ = element(Wₕ, _polygon_restriction_eltype(Wₕ, f))
+    return _polygon_restrict!(uₕ, f)
+end
 function Rₕ!(uₕ::VectorElement{<:GhostGridSpace}, f; kwargs...)
-    return _throw_projection_on_ghost_space(:Rₕ!, uₕ.space)
+    _is_polygon_trial(uₕ.space) || _throw_projection_on_ghost_space(:Rₕ!, uₕ.space)
+    isempty(kwargs) || _throw_polygon_restriction_markers(:Rₕ!)
+    return _polygon_restrict!(uₕ, f)
 end
 avgₕ(Wₕ::GhostGridSpace, f; kwargs...) = _throw_projection_on_ghost_space(:avgₕ, Wₕ)
 function avgₕ!(uₕ::VectorElement{<:GhostGridSpace}, f, rest...; kwargs...)

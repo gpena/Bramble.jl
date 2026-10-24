@@ -41,6 +41,18 @@ diagonal neighbours (`Δₕ`, `Dcₓ(Dcᵧ(u))`, first differences): an exterior
 them has no value and the form throws. An exterior node two interior nodes extend
 differently (a V-notch) is substituted per reading equation in the reduction.
 
+`Rₕ(U, f)` is the element of `U` holding `f` at the interior nodes, and [`normₕ`](@ref),
+[`snorm₁ₕ`](@ref), [`norm₁ₕ`](@ref) and [`norminf`](@ref) of an element of `U` measure
+the grid function on Ω̄ₕ that is the element at the interior nodes and 0 at the boundary
+nodes, so that the error of a solve on the region is
+
+```julia
+e = element(U, A \\ F) - Rₕ(U, u)
+normₕ(e), snorm₁ₕ(e), norminf(e)
+```
+
+`W` refuses `Rₕ` and the norms.
+
 # Throws
 
   - `ArgumentError`: if `Ωₕ` has no polygon or level-set marker `label`; if the grid does
@@ -113,6 +125,72 @@ function _polygon_spaces(Ωₕ, P::ScalarGridSpace{2, T}, label::Symbol, g, inn:
     vrows = _RowsDirichlet(false, V0.rows.facets, true, false, ext, falses(N), falses(N))
     V = GhostGridSpace(V0.padded, V0.E, V0.d, V0.Et, vrows, V0.td, V0.gu, V0.grid_function)
     return U, V
+end
+
+# Whether `Wₕ` is the trial space of `polygon_spaces`: its degrees of freedom are the
+# interior nodes, and `Rₕ` and the discrete norms act on them. The test space and the
+# ghost spaces of `gridspace(Ωₕ; ghosts)` are not.
+@inline _is_polygon_trial(Wₕ::GhostGridSpace) = Wₕ.rows.polygon && Wₕ.rows.trial_only
+
+# The mesh linear index of each degree of freedom of a polygon trial space, its interior
+# node: outside the exterior, the closure's row of an interior node is that degree of
+# freedom alone and the row of a boundary node is empty. With no ghosts, padded and mesh
+# linear indices agree.
+function _polygon_interior(U::GhostGridSpace)
+    Et = U.Et
+    ext = U.rows.unclosed .| U.rows.extended
+    cp, rv = SparseArrays.getcolptr(Et), rowvals(Et)
+    idx = Vector{Int}(undef, size(Et, 1))
+    for p in eachindex(ext)
+        ext[p] || cp[p + 1] == cp[p] || (idx[rv[cp[p]]] = p)
+    end
+    return idx
+end
+
+# `Rₕ` on a polygon trial space: `f` at each interior node, the degrees of freedom.
+function _polygon_restrict!(uₕ::VectorElement{<:GhostGridSpace}, f)
+    Ωₕ = physical_mesh(mesh(uₕ.space))
+    car = CartesianIndices(npoints(Ωₕ, Tuple))
+    u = parent(uₕ)
+    for (k, p) in enumerate(_polygon_interior(uₕ.space))
+        u[k] = f(point(Ωₕ, car[p]))
+    end
+    return uₕ
+end
+
+# The element type of `Rₕ(U, f)`: the backend's, promoted with that of `f` at the first
+# interior node, as `Rₕ` on a plain space samples `f` at one point.
+function _polygon_restriction_eltype(U::GhostGridSpace, f)
+    Ωₕ = physical_mesh(mesh(U))
+    p = CartesianIndices(npoints(Ωₕ, Tuple))[first(_polygon_interior(U))]
+    return promote_type(eltype(backend(U)), _restricted_value_type(f, point(Ωₕ, p)))
+end
+
+# The grid function on Ω̄ₕ of an element of a polygon trial space, on a plain space of the
+# mesh: the element at the interior nodes and 0 at every other node, the boundary nodes
+# included. The norms read it: no grid edge joins an interior node to an exterior one (the
+# grid fits the region), so the box sums are those over Ω̄ₕ. The padded space's weights are
+# read first, so a moved mesh throws as on any ghost space.
+function _polygon_element(uₕ::VectorElement{<:GhostGridSpace})
+    U = uₕ.space
+    weights(U.padded)   # throws once the mesh has moved
+    Ωₕ = physical_mesh(mesh(U))
+    u = parent(uₕ)
+    v = fill!(similar(u, npoints(Ωₕ)), zero(eltype(u)))
+    for (k, p) in enumerate(_polygon_interior(U))
+        v[p] = u[k]
+    end
+    return VectorElement(v, gridspace(Ωₕ))
+end
+
+@noinline function _throw_polygon_restriction_markers(op::Symbol)
+    throw(
+        ArgumentError(
+        "$op on a polygon trial space takes no `markers`: its degrees of freedom are the " *
+        "interior nodes of the region, and $op holds f at each of them. Restrict on " *
+        "`gridspace(Ωₕ)` for the values at marked nodes of the mesh.",
+    ),
+    )
 end
 
 # The grid fits the polygon (the paper's (Geom)) when every cell holding an interior and an
