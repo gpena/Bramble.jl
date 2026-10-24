@@ -1,0 +1,31 @@
+[closures_fresh]
+added_instances = 178
+commit = "77f7258c"
+fresh_assemble_s = 0.102327333
+fresh_form_s = 0.128327625
+fresh_inference_s = 0.342083215713501
+fresh_instances = 219
+julia = "1.13.2"
+launches = 3
+load_1min = 3.55
+load_1min_after = 3.58
+repeat_instances = 0
+sequence_instances = 397
+sequence_position = 2
+threads = 1
+
+[closures_named]
+added_instances = 0
+commit = "77f7258c"
+fresh_assemble_s = 0.109817792
+fresh_form_s = 0.142196875
+fresh_inference_s = 0.3751354217529297
+fresh_instances = 219
+julia = "1.13.2"
+launches = 3
+load_1min = 3.55
+load_1min_after = 3.58
+repeat_instances = 0
+sequence_instances = 219
+sequence_position = 2
+threads = 1
