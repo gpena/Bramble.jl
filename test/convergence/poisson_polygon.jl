@@ -7,9 +7,11 @@
 # Errors are pooled over three seeds (the geometric mean per level), and the order is the
 # least-squares slope of log e against log hₘₐₓ over six levels.
 #
-# The H¹ₕ error sums, over the grid edges with both ends in Ω̄, the dual length times the
+# The errors are `snorm₁ₕ` and `norminf` of `uₕ - Rₕ(U, u)` on the trial space U (#879):
+# the H¹ₕ error sums, over the grid edges with both ends in Ω̄, the dual length times the
 # squared difference over the edge length (the paper's P1 seminorm of the error); the max
-# error is over the interior nodes. The load is `avgₕ`, the dual-cell mean of f.
+# error is over the interior nodes. One level checks them against those sums written out
+# by hand (`_pp_errors`). The load is `avgₕ`, the dual-cell mean of f.
 #
 # Self-contained: the file needs only `Test` in the including module, and defines
 # `polygon_errors` there.
@@ -62,8 +64,8 @@ function _pp_seeds(rng, lo, hi, n, kind)
     return [lo + (i + 0.7 * (rand(rng) - 0.5)) * (hi - lo) / (n + 1) for i in 1:n]
 end
 
-# The H¹ₕ error over the edges with both ends in Ω̄ and the max error over the interior
-# nodes, of the grid function `uh` against the exact solution.
+# The oracle of the errors: the H¹ₕ error over the edges with both ends in Ω̄ and the max
+# error over the interior nodes, of the grid function `uh` against the exact solution.
 function _pp_errors(xs, ys, inn, Γ, uh)
     nx, ny = length(xs), length(ys)
     E = reshape(uh, nx, ny) .- [_pp_u((x, y)) for x in xs, y in ys]
@@ -84,8 +86,9 @@ function _pp_errors(xs, ys, inn, Γ, uh)
     return sqrt(s), maximum(abs, E[In])
 end
 
-# One level: closure of the seed lines, solve, (hₘₐₓ, H¹ₕ error, max error).
-function _pp_level(V, k, n, seed, kind)
+# One level: closure of the seed lines and solve; the mesh, its lines, the trial space and
+# the solution's degrees of freedom.
+function _pp_solve(V, k, n, seed, kind)
     rng = Xoshiro(1000seed + n)
     X = interval(0.0, 6.0) × interval(0.0, 5.0)
     P = Bramble.polygon(V)
@@ -117,10 +120,14 @@ function _pp_level(V, k, n, seed, kind)
         diffusion
     end
     A, F = assemble(form(U, W, (u, v) -> innerₕ(op(u), v)), form(W, v -> innerₕ(fₕ, v)))
-    uh = Bramble.lift(U, A \ F).data
-    m = markers(Ωₕ)
-    e1, emax = _pp_errors(xs, ys, BitVector(m[:P]), BitVector(m[:P_boundary]), uh)
-    return max(maximum(diff(xs)), maximum(diff(ys))), e1, emax
+    return Ωₕ, xs, ys, U, A \ F
+end
+
+# One level: (hₘₐₓ, H¹ₕ error, max error).
+function _pp_level(V, k, n, seed, kind)
+    _, xs, ys, U, u = _pp_solve(V, k, n, seed, kind)
+    e = element(U, u) - Rₕ(U, _pp_u)
+    return max(maximum(diff(xs)), maximum(diff(ys))), snorm₁ₕ(e), norminf(e)
 end
 
 _pp_gmean(v) = exp(sum(log, v) / length(v))
@@ -154,6 +161,18 @@ const _PP_GATES = ((:fig1_poisson, :jitter, 1.8, 1.8), (:fig1_mixed, :jitter, 1.
     (:fig1_poisson, :uniform, 1.8, 1.8))
 
 @testset "Polygon convergence" begin
+    @testset "Norm errors match the hand sums" begin
+        V, coef = _PP_CASES[:lshape_mixed]
+        Ωₕ, xs, ys, U, u = _pp_solve(V, _PP_COEF[coef], 12, 1, :jitter)
+        e = element(U, u) - Rₕ(U, _pp_u)
+        m = markers(Ωₕ)
+        e1, emax = _pp_errors(xs, ys, BitVector(m[:P]), BitVector(m[:P_boundary]),
+            Bramble.lift(U, u).data)
+        @test emax > 1e-6   # the solution is not exact: the sums are not both 0
+        @test snorm₁ₕ(e) ≈ e1 rtol = 1e-12
+        @test norminf(e) == emax
+    end
+
     # Three disjoint seed triples per case.
     triples = (1:3, 4:6, 7:9)
     @testset "$case, $kind seeds" for (case, kind, lo1, lomax) in _PP_GATES

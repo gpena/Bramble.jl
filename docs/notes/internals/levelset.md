@@ -3,7 +3,7 @@
 Design record for milestone v4.1.1 (gpena/Bramble.jl#834): `:D => levelset(φ)` as a domain
 marker, a grid fitted to the curve `φ = 0`, and the polygon inscribed in it, so that
 `polygon_spaces` solves the Dirichlet problem with the Ferreira and Grigorieff
-([2006](https://doi.org/10.1007/s00211-006-0006-7)) scheme on a curved domain. Nothing here
+([2006](https://doi.org/10.1080/01630560600796485)) scheme on a curved domain. Nothing here
 is published. The worked example is `docs/src/examples/poisson_circle.jl`; the measured
 convergence, as log-log plots, is
 [poisson_levelset_convergence.md](../examples/poisson_levelset_convergence.md).
@@ -810,8 +810,8 @@ Every failure is an `ArgumentError` from `mesh`, with the prefix "level-set grid
 | not star-shaped about its centre | a ray from the minimum of `φ` changes sign more than once | "the curve must be star-shaped about that point" |
 | phase-locked | rotation number exactly `p/q`, `q ≤ 60`, with ``T^q \ne \mathrm{id}`` | "the curve's crossing map is phase-locked at rotation number 1/2 without being periodic ...; no Cartesian grid fits this curve at every refinement. Rotate or symmetrise the domain" |
 | nearly phase-locked | the weighted Birkhoff average at 8000 and 32000 steps differs by more than 1e-10 | "the curve's crossing map is nearly phase-locked (rotation number ≈ 0.49999984, not converged); a fitted grid would need far more lines than requested" |
-| too many lines | no `N ≤ 4 nin` has cost at most `cmax` | "no grid with at most 1040 lines per axis inside the curve's extent keeps its vertices within 0.2 h² of φ = 0 for the 260 lines asked there" |
-| too coarse | fewer than 6 lines inside the extent | "too coarse: 5 × 5 points are too few to resolve the curve; use more" |
+| too many lines | no `N ≤ 4 nin` has cost at most `cmax` | "too many lines: no N ≤ 1040 lines per axis inside the curve's extent has N‖Nρ‖ ≤ 2.0 (rotation number 0.38196601) for the 260 lines asked there." |
+| too coarse | fewer than 6 lines inside the extent | "too coarse: 5 × 5 points give 4 lines inside the curve's extent, and the fit needs at least 6; use more." |
 | check failed | the post-check refuses both grids | "the fitted grid does not fit the level set (...), so the curve would cross a grid line off the nodes. Use more points per axis" |
 | curve touches the box, region empty | a side of the bounding box meets `φ ≤ 0`, or `φ ≥ 0` everywhere sampled | "φ = 0 reaches the domain's bounding box, or φ < 0 on it; the curve must lie strictly inside the box" |
 

@@ -232,8 +232,6 @@ end
     throw(ArgumentError("no facet ($d, $s)"))
 end
 
-@inline _val(::Val{x}) where {x} = x
-
 # The datum at the point `x` at time `t`.
 @inline _datum(data::Number, x, t) = data
 @inline _datum(data, x, t) = _is_time_datum(data) ? data(x, t) : data(x)
@@ -446,12 +444,13 @@ end
     )
 end
 
-# The rows of a ghost relation's operator on its facet `(Val(d), Val(s))`, named `name`,
-# tested against component `c`: the sum of one block per term of the operator, its terms
-# reading one component each (`_relation_terms`), as `_strain_pieces` keeps the terms of
-# `εₕ` apart (difference.jl). A term reading component `j` gives the block `(c, j)`, which
-# is the term's matrix on one component's padded space, as every component of a padded
-# composite has the same ghosts and mesh (`_throw_composite_ghost_sets`).
+# The rows of the ghost relation `op`, named `name`, on the facet `(a, b)` of the padded
+# composite `P`, tested against component `c`: the sum of one block per term of `op`, its
+# terms reading one component each (`_relation_terms`), as `_strain_pieces` keeps the terms
+# of `εₕ` apart (difference.jl). The facet is `(Val(d), Val(s))`, the axis and the side. A
+# term reading component `j` gives the block `(c, j)`, which is the term's matrix on one
+# component's padded space, as every component of a padded composite has the same ghosts
+# and mesh (`_throw_composite_ghost_sets`).
 # The blocks' entries gather in `acc` and sum in one `sparse`, which drops the zeros; their
 # values' type widens to each block's, as a sum of the blocks' matrices would.
 function _relation_matrix(P::CompositeGridSpace{N}, op::FacetOperator{D, G}, a::Val, b::Val,
@@ -590,7 +589,7 @@ function _add_term(acc, P, t::LazyOp, j::Int, g::Val, facet::Tuple)
     S, oc = leaf_spaces_offsets(P)[_val(c)]
     M = _term_matrix(S, t, g, a, b)
     Is, Js, Us = acc
-    Vs = _widened(Us, eltype(M))
+    Vs = _widened_values(Us, eltype(M))
     for col in axes(M, 2), q in nzrange(M, col)
 
         v = nonzeros(M)[q]
@@ -599,7 +598,7 @@ function _add_term(acc, P, t::LazyOp, j::Int, g::Val, facet::Tuple)
     end
     return Is, Js, Vs
 end
-function _widened(v::Vector{T}, ::Type{S}) where {T, S}
+function _widened_values(v::Vector{T}, ::Type{S}) where {T, S}
     return promote_type(T, S) === T ? v : Vector{promote_type(T, S)}(v)
 end
 
@@ -977,7 +976,10 @@ function _dirichlet_values(G::GhostMesh{D}, drels::Tuple, ::Type{T},
         return vec(Int[plin[padded_index(G, I)] for I in nodes]),
         vec([_datum(r.data, point(Ωₕ, I), t0) for I in nodes])
     end
-    S = promote_type(T, map(x -> eltype(last(x)), raw)...)
+    # Promote over the values' own types: a datum mixing `0` and `1.0` gives a
+    # `Vector{Real}`, whose `eltype` would leave `S = Real` (gpena/Bramble.jl#890).
+    S = mapreduce(x -> mapreduce(typeof, promote_type, last(x); init = T), promote_type,
+        raw; init = T)
     chunks = map(x -> (first(x), convert(Vector{S}, last(x))), raw)
     names, timed = map(r -> r.name, drels), map(_is_time_relation, drels)
     fixed = falses(length(plin))

@@ -293,9 +293,6 @@ function semidiscretize(::Function, ::GhostLinearForm; kwargs...)
     )
 end
 
-ode_problem(a::GhostBilinearForm, l::LinearForm, u₀, I; kwargs...) = _throw_ghost_semidiscrete_mixed(("a", a), ("l", l))
-ode_problem(a::BilinearForm, l::GhostLinearForm, u₀, I; kwargs...) = _throw_ghost_semidiscrete_mixed(("a", a), ("l", l))
-
 function semidiscretize_rhs(::Semidiscretization{<:GhostBilinearForm})
     throw(
         ArgumentError(

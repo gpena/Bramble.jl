@@ -115,8 +115,8 @@ Internal helper function to construct and initialize the [`MeshMarkers`](@ref) d
 
 Allocates `BitVector` storage initialized to `false` for every symbol, tuple, and condition
 label defined in `domain_markers`, a [`DomainMarkers`](@ref) or the `EvaluatedDomainMarkers`
-that `Ω(t)` of a time-dependent domain holds, and for the three labels of each polygon
-marker.
+that `Ω(t)` of a time-dependent domain holds, and for the three labels
+of each polygon and level-set marker.
 """
 function _init_mesh_markers(
         Ωₕ::AbstractMeshType, domain_markers::Union{DomainMarkers, EvaluatedDomainMarkers}
@@ -139,7 +139,7 @@ end
 
 Evaluate domain markers onto mesh points, creating `BitVector` indicators for each label.
 
-Supports four classes of domain markers:
+Supports five classes of domain markers:
   1. Symbol markers, the predefined boundary labels (`:left`, `:right`, etc.).
   2. Tuple markers, the unions of boundary symbols.
   3. Function markers, the level-set boolean predicates `x -> Bool`.
@@ -483,27 +483,41 @@ _label_region!(inside, on, outside, ::LevelSet, P::Polygon, _, pts, _) = _label_
     inside, on, outside, P, pts)
 
 @noinline function _label_region!(_, _, _, ::LevelSet, ::Nothing, _, _, label)
+    return _throw_levelset_refusal(label)
+end
+
+@noinline function _throw_levelset_refusal(label)
     throw(ArgumentError("the level-set marker :$label labels the nodes by the polygon that " *
                         "mesh(Ω, npts, unif) fits to its curve together with the grid lines, " *
                         "and no mesh keeps that polygon: build the mesh with mesh(Ω, npts, " *
                         "unif) instead of set_markers!, change_points! or iterative_refinement!."))
 end
 
-# Labels the nodes of the lines `pts` by the polygon `P` whose vertices are nodes: a vertex
-# is a boundary node, any other node is inside or outside by the parity of the polygon edges
-# above it. Consecutive vertices are corners of one cell, so a vertical ray up from a node of
-# column `i` crosses (half-open: one end at a larger x) only edges with an end on column `i`.
-# Linear in the nodes and vertices, where the signed distance is their product.
-function _label_fitted!(inside, on, outside, P::Polygon, pts::NTuple{2, AbstractVector})
-    X, Y = pts
-    nx, ny = length(X), length(Y)
-    V = P.vertices
-    ij = Vector{NTuple{2, Int}}(undef, length(V))
-    for (k, v) in enumerate(V)
-        i, j = searchsortedfirst(X, v[1]), searchsortedfirst(Y, v[2])
-        (i <= nx && j <= ny && X[i] == v[1] && Y[j] == v[2]) || _throw_fitted_off_node(v)
-        ij[k] = (i, j)
+# Refuses a level-set marker before a caller mutates its mesh: `iterative_refinement!` and
+# `change_points!` refine or move the points first and mark them after, so the refusal of
+# `_label_region!` would come too late and leave the mesh changed (#866, #891).
+function _check_no_levelset_regions(domain_markers)
+    for m in regions(domain_markers)
+        identifier(m) isa LevelSet && _throw_levelset_refusal(label(m))
     end
+    return nothing
+end
+
+# The node (i, j) of the lines `X`, `Y` that is the point `v`, or `nothing` when `v` is none.
+function _fitted_node(X, Y, v)
+    i, j = searchsortedfirst(X, v[1]), searchsortedfirst(Y, v[2])
+    return i <= length(X) && j <= length(Y) && X[i] == v[1] && Y[j] == v[2] ? (i, j) : nothing
+end
+
+# Labels of the nodes of the lines `X`, `Y` by the closed polygon whose vertices are the nodes
+# `ij` in order: 0 at a vertex, -1 inside, 1 outside. A vertical ray up from a node of column
+# `i` crosses (half-open: one end at a larger x) only edges with an end on column `i`, so the
+# parity of those edges above a node says which side it is on. Consecutive vertices must be
+# corners of one cell. Linear in the nodes and vertices, where the signed distance is their
+# product. The matrix is `length(X) * length(Y)` bytes, and a bit matrix of the same shape is
+# the scratch.
+function _fitted_labels(X, Y, ij::AbstractVector{NTuple{2, Int}})
+    nx, ny = length(X), length(Y)
     toggle = falses(nx, ny)
     for k in eachindex(ij)
         (i, j), (i₂, j₂) = ij[k], ij[mod1(k + 1, length(ij))]
@@ -511,22 +525,40 @@ function _label_fitted!(inside, on, outside, P::Polygon, pts::NTuple{2, Abstract
         iₑ, jₑ = i < i₂ ? (i, j) : (i₂, j₂)
         toggle[iₑ, jₑ] = !toggle[iₑ, jₑ]
     end
-    onpoly = falses(nx, ny)
-    for (i, j) in ij
-        onpoly[i, j] = true
-    end
+    lbl = Matrix{Int8}(undef, nx, ny)
     @inbounds for i in 1:nx
         above = false
         for j in ny:-1:1
-            k = i + (j - 1) * nx
-            if onpoly[i, j]
-                on[k] = true
-            elseif above
-                inside[k] = true
-            else
-                outside[k] = true
-            end
+            lbl[i, j] = above ? Int8(-1) : Int8(1)
             above ⊻= toggle[i, j]
+        end
+    end
+    for (i, j) in ij
+        lbl[i, j] = Int8(0)
+    end
+    return lbl
+end
+
+# Labels the nodes of the lines `pts` by the polygon `P` whose vertices are nodes: a vertex
+# is a boundary node, any other node is inside or outside (see `_fitted_labels`).
+function _label_fitted!(inside, on, outside, P::Polygon, pts::NTuple{2, AbstractVector})
+    X, Y = pts
+    V = P.vertices
+    ij = Vector{NTuple{2, Int}}(undef, length(V))
+    for (k, v) in enumerate(V)
+        n = _fitted_node(X, Y, v)
+        n === nothing && _throw_fitted_off_node(v)
+        ij[k] = n
+    end
+    lbl = _fitted_labels(X, Y, ij)
+    @inbounds for k in eachindex(lbl)
+        l = lbl[k]
+        if l == 0
+            on[k] = true
+        elseif l < 0
+            inside[k] = true
+        else
+            outside[k] = true
         end
     end
     return nothing

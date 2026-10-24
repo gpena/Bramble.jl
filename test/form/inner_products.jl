@@ -391,6 +391,25 @@ end
             @test_throws ArgumentError inner₊(u2, v2, Val((1, 3)))   # 3 is out of range for D=2
             @test_throws ArgumentError inner₊(u2, v2, Val((1, 1)))   # repeated axis
         end
+
+        # `true == 1`, so a Bool would pass the range check as the first axis (#861).
+        @testset "a Bool direction throws" begin
+            @test_throws ArgumentError inner₊(u2, v2, true)
+            @test_throws ArgumentError inner₊(u2, v2, false)
+            @test_throws ArgumentError inner₊(u2, v2, Val((true,)))
+            @test_throws ArgumentError inner₊(u2, v2, Val((true, 2)))
+            @test_throws ArgumentError inner₊(u2, v2, Val((2, true)))
+        end
+
+        # Any other integer type builds the node the `Int` spelling builds (#861).
+        @testset "a non-Int integer S builds the Int node" begin
+            @test typeof(inner₊(u2, v2, Int32(2))).parameters[2] === InnerPlus{2}
+            @test typeof(inner₊(u2, v2, Val((Int32(2),)))).parameters[2] === InnerPlus{2}
+            @test typeof(inner₊(u2, v2, Val((UInt8(2), Int32(1))))).parameters[2] ===
+                  InnerPlusSet{(1, 2)}
+            @test assemble(form(Wₕ2, Wₕ2, (u, v) -> inner₊(u, v, Val((Int32(1), Int32(2)))))) ==
+                  assemble(form(Wₕ2, Wₕ2, (u, v) -> inner₊(u, v, Val((1, 2)))))
+        end
     end
 
     # 3D only: runs nightly (`slow`).

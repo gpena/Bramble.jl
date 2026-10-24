@@ -252,6 +252,32 @@ relerr(A, R) = norm(A - R) / norm(R)
         for j in (1, 4, ns[2])
             @test r[LP[2, j + 1]] ≈ -ON.facet_weight(Ωₕ, 1, CartesianIndex(1, j)) * K[1, 2]
         end
+
+        # 3D: the pattern of `K[1, :]` is read through three terms, and a zero `K[1, e]` prunes
+        # the ghost of axis `e` there
+        if WITH_3D_TESTS
+            Ω3 = random_mesh((4, 5, 6); seed = 7)
+            m3 = (:xmin,)
+            K3 = [2.0 0.7 0.0; 0.4 1.5 0.3; 0.2 0.1 1.1]
+            Kz = [2.0 0.7 0.5; 0.4 1.5 0.3; 0.2 0.1 1.1]
+            Ky = [2.0 0.0 0.5; 0.4 1.5 0.3; 0.2 0.1 1.1]
+            for (ghosts, Kok, Kbad, other, entry) in (
+                ((:xmin, :ymin, :ymax), K3, Kz, ":zmin", "K[1, 3]"),
+                ((:xmin, :zmin, :zmax), Ky, Kz, ":ymin", "K[1, 2]"))
+                P = padded(Ω3; ghosts)
+                A = assemble(form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = Kok), v; markers = m3)))
+                @test nnz(A) > 0
+                err3 = try
+                    form(P, P, (u, v) -> inner_Γ(∂ₙ(u; K = Kbad), v; markers = m3))
+                    nothing
+                catch e
+                    e
+                end
+                @test err3 isa ArgumentError
+                msg3 = sprint(showerror, err3)
+                @test occursin(other, msg3) && occursin(entry, msg3)
+            end
+        end
     end
 
     @testset "Facet scalars and the element type" begin

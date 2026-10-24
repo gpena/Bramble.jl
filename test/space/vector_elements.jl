@@ -1477,10 +1477,13 @@ WITH_SLOW_TESTS && @testset "Cell average reproduction (Supposition)" begin
     # A partition of [0, 1] from a vector of spacings: cumulative sum, rescaled. Same
     # construction as test/space/commutation.jl's, which is where this file's random
     # partitions have to match if a failure is to be comparable between them.
-    # The exact mean of `c0 + c1 x + c2 x^2` over `[a, b]`, from the antiderivative.
+    # The exact mean of `c0 + c1 x + c2 x^2` over `[a, b]`, expanded about the midpoint `m`
+    # with width `δ`: `c0 + c1 m + c2 (m^2 + δ^2 / 12)`. The antiderivative quotient cancels
+    # on a thin cell near x = 1 (2.8e-11 off on a 1.4e-4 cell, #908); this form subtracts
+    # nothing.
     function _exact_mean(c0, c1, c2, a, b)
-        F(x) = c0 * x + c1 * x^2 / 2 + c2 * x^3 / 3
-        return (F(b) - F(a)) / (b - a)
+        m, δ = (a + b) / 2, b - a
+        return c0 + c1 * m + c2 * (m^2 + δ^2 / 12)
     end
 
     # Absolute floor alongside the relative tolerance: the drawn spacings get very small, so
@@ -1508,12 +1511,7 @@ WITH_SLOW_TESTS && @testset "Cell average reproduction (Supposition)" begin
     # In 2D the integrand is a product of two one-dimensional polynomials, so its exact cell
     # mean is the product of the two one-dimensional means -- no two-dimensional quadrature
     # is needed on the test side to state what the answer must be.
-    @check function check_cell_average_is_exact_2d(
-            hx = Data.Vectors(positive_h; min_size = 3, max_size = 7),
-            hy = Data.Vectors(positive_h; min_size = 3, max_size = 7),
-            c0 = coefficient, c1 = coefficient, c2 = coefficient, d0 = coefficient,
-            d1 = coefficient
-    )
+    function _cell_average_is_exact_2d(hx, hy, c0, c1, c2, d0, d1)
         px, py = _nonuniform_points(hx), _nonuniform_points(hy)
         nx, ny = length(px), length(py)
 
@@ -1534,6 +1532,26 @@ WITH_SLOW_TESTS && @testset "Cell average reproduction (Supposition)" begin
             _agree(uₕ[i, j], expected) || return false
         end
         return true
+    end
+
+    @check function check_cell_average_is_exact_2d(
+            hx = Data.Vectors(positive_h; min_size = 3, max_size = 7),
+            hy = Data.Vectors(positive_h; min_size = 3, max_size = 7),
+            c0 = coefficient, c1 = coefficient, c2 = coefficient, d0 = coefficient,
+            d1 = coefficient
+    )
+        return _cell_average_is_exact_2d(hx, hy, c0, c1, c2, d0, d1)
+    end
+
+    # The nightly counterexample of #908: corner cell (4, 8) is 1.4e-4 tall at y = 1, where
+    # the antiderivative oracle cancelled to 2.8e-11 relative.
+    @testset "Thin corner cell (#908)" begin
+        hy = [0.44559120733122437, 9.877736172483251, 10.0, 5.470466347439395,
+            4.544135568879552, 5.116704373241084, 0.01]
+        @test _cell_average_is_exact_2d(
+            [0.01, 0.01, 0.01], hy, 0.0, 0.0, 3.4190381180793334, -4.460815970192901,
+            4.297859954940247
+        )
     end
 
     # Non-vacuous: one quadrature point is the midpoint rule, exact for degree 1 and not for

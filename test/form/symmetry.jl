@@ -210,6 +210,37 @@ using Bramble:
         @test !isposdef(j2)
     end
 
+    # `InnerGammaNormal` weighs a minimum facet by `-ĥ`, so a product weighted by the
+    # signed normal is indefinite even with matching sides (#865). Graded mesh.
+    @testset "Signed normal weight (#865)" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (false, true))
+        Wn = gridspace(Ωₕ)
+        for markers in ((:xmin,), (:ymin,), (:xmin, :xmax))
+            a = form(Wn, Wn, (u, v) -> inner_Γ(u * η[1] + u * η[2], v; markers))
+            @test isposdef(a) === false
+        end
+        a = form(Wn, Wn, (u, v) -> inner_Γ(u * η[1], v; markers = (:xmin,)))
+        @test !isposdef(Matrix(assemble(a)))
+        @test isposdef(a) === false
+        # Unsigned weights keep answering `true`: the plain surface and the cell products.
+        for f in ((u, v) -> inner_Γ(u, v; markers = (:xmin, :ymax)),
+            (u, v) -> innerₕ(u, v), (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+            b = form(Wn, Wn, f)
+            @test isposdef(b) === true
+            M = Matrix(assemble(b))
+            @test minimum(eigvals(Symmetric(M))) >= -1e-10 * opnorm(M, 1)
+        end
+        # `InnerGammaFacet` weighs a facet by `∏ ĥ_e`, its sign on the `FacetOperator`: the
+        # padded form of `inner_Γ(∂ₙ(u), ∂ₙ(v))` keeps answering `true`.
+        Wg = gridspace(Ωₕ; ghosts = :boundary)
+        for markers in ((:xmin,), (:xmin, :ymax))
+            p = form(Wg, Wg, (u, v) -> inner_Γ(∂ₙ(u), ∂ₙ(v); markers)).padded
+            @test isposdef(p) === true
+            M = Matrix(assemble(p))
+            @test minimum(eigvals(Symmetric(M))) >= -1e-10 * opnorm(M, 1)
+        end
+    end
+
     # Assembly does not conjugate the test side, so a non-real coefficient inside a side
     # gives `LᵀGWGL`, which `g = im` makes negative definite (#687). Graded mesh.
     @testset "Non-real coefficient in a side (#687)" begin

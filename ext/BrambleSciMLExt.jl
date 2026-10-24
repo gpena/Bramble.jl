@@ -141,9 +141,10 @@ function Bramble._ode_problem(
     return ODEProblem(rhs, u0, tspan, p; kwargs...)
 end
 
+# A form on ghost spaces assembles to its reduced system, of the same keywords.
 function Bramble._linear_problem(
-        a::BilinearForm,
-        l::LinearForm;
+        a::Union{BilinearForm, Bramble.GhostBilinearForm},
+        l::Union{LinearForm, Bramble.GhostLinearForm};
         dirichlet = nothing,
         dirichlet_components = nothing,
         symmetrize::Bool = false
@@ -169,11 +170,17 @@ Bramble.VectorElement(sol::LinearSolution, Wₕ::Bramble.AbstractSpaceType) = Br
 """
     solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing,
           symmetrize = false, solver = nothing, preconditioner = nothing, kwargs...) -> VectorElement
+    solve(a::GhostBilinearForm, l::GhostLinearForm; kwargs...) -> VectorElement
 
 Assemble `a` and `l`, solve the resulting linear system, and hand back the solution as a
 `VectorElement` over `a`'s trial space -- the convenience path around [`linear_problem`](@ref)
 for a caller who wants the solved grid function directly, not the raw `LinearProblem` and a
 bare coefficient vector to wrap by hand.
+
+On ghost spaces (a [`constrained`](@ref) space, or the pair `polygon_spaces` returns), the
+system solved is the reduced one, `A, F = assemble(a, l)`, and the solution is the
+`VectorElement` over the trial space that `element(trial_space(a), A \\ F)` gives: its
+entries are the space's [`ndofs`](@ref), not the mesh's points. The keywords are the same.
 
 # Keywords
 - `dirichlet`, `dirichlet_components`, `symmetrize`: forwarded to [`assemble`](@ref), exactly
@@ -210,7 +217,8 @@ See also [`linear_problem`](@ref), [`amg_preconditioner`](@ref), [`ilu_precondit
 [`element`](@ref).
 """
 function SciMLBase.solve(
-        a::BilinearForm, l::LinearForm;
+        a::Union{BilinearForm, Bramble.GhostBilinearForm},
+        l::Union{LinearForm, Bramble.GhostLinearForm};
         dirichlet = nothing, dirichlet_components = nothing, symmetrize::Bool = false,
         solver = nothing, preconditioner = nothing, kwargs...
 )

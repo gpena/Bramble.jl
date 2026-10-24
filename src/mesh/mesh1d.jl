@@ -532,8 +532,10 @@ end
 # Refuse, before any mutation, points `set_points!` would turn into a wrong geometry: no
 # points at all; several points on a collapsed mesh, whose spacings stay zero
 # (gpena/Bramble.jl#696); points that are not finite and strictly increasing, which give
-# negative weights and a wrong `locate_cell` (#698). One O(n) scan of one host copy at
-# most, as the constructor. `MeshnD` calls it per axis before mutating any.
+# negative weights and a wrong `locate_cell` (#698); points whose value, spacing
+# `x[k] - x[k-1]`, half-point `(x[k] + x[k-1]) * 0.5` or cell measure
+# `(h[k-1] + h[k]) * 0.5` overflows the storage eltype (#867). One O(n) scan of one host
+# copy at most, as the constructor. `MeshnD` calls it per axis before mutating any.
 function _check_set_points(Ωₕ::Mesh1D, pts)
     n = length(pts)
     n == 0 && _throw_set_points_empty()
@@ -542,9 +544,23 @@ function _check_set_points(Ωₕ::Mesh1D, pts)
         _throw_collapsed_set_points(n, a, b)
     end
     x = _host_array(pts)
+    T = eltype(points(Ωₕ))
+    k₀ = firstindex(x)
+    # every value is the one the commit stores or computes, in `T`
     @inbounds for k in eachindex(x)
-        isfinite(x[k]) || _throw_set_points_not_finite(k, x[k])
-        k > firstindex(x) && x[k] <= x[k - 1] && _throw_set_points_not_increasing(k, x)
+        xₖ = convert(T, x[k])
+        isfinite(xₖ) || _throw_set_points_not_finite(k, xₖ)
+        k > k₀ || continue
+        x[k] <= x[k - 1] && _throw_set_points_not_increasing(k, x)
+        xₖ₋₁ = convert(T, x[k - 1])
+        hₖ = xₖ - xₖ₋₁
+        isfinite(hₖ) || _throw_set_points_overflow("spacing", k, x, T)
+        isfinite(convert(T, (xₖ + xₖ₋₁) * 0.5)) ||
+            _throw_set_points_overflow("half-point", k, x, T)
+        k > k₀ + 1 || continue
+        hₖ₋₁ = xₖ₋₁ - convert(T, x[k - 2])
+        isfinite(convert(T, (hₖ₋₁ + hₖ) * 0.5)) ||
+            _throw_set_points_overflow("cell measure", k - 1, x, T)
     end
     return nothing
 end
@@ -561,6 +577,12 @@ end
 
 @noinline function _throw_set_points_not_finite(k, v)
     msg = "set_points! needs finite points, but point $k is $v; the mesh is left unchanged"
+    throw(ArgumentError(msg))
+end
+
+@noinline function _throw_set_points_overflow(what, k, x, T)
+    msg = "set_points! needs points whose spacings, half-points and cell measures fit " *
+          "$T, but the $what at point $k overflows; the mesh is left unchanged"
     throw(ArgumentError(msg))
 end
 
@@ -1202,6 +1224,10 @@ end
     throw(ArgumentError(msg))
 end
 
+@noinline function _throw_no_mesh_points(n)
+    throw(ArgumentError("a mesh needs at least one point per axis; got $n"))
+end
+
 # Internal constructor function for creating a 1D mesh.
 function _mesh(
         Ω::Domain{CartesianProduct{1, T}},
@@ -1213,6 +1239,7 @@ function _mesh(
     # Unpack the domain's set and markers, and the number of points.
     (; set, markers) = Ω
     n_points, = npts
+    n_points >= 1 || _throw_no_mesh_points(n_points)
 
     # Check if the domain is a single point in the storage eltype.
     is_collapsed = _storage_collapsed(extrema(set)..., backend)
@@ -1298,6 +1325,11 @@ function _mesh(
         a, b = extrema(set)
         _throw_half_point_overflow(n_points, a, b, eltype(pts))
     end
+    # A spacing `b - a` overflows too, with both points finite (gpena/Bramble.jl#867).
+    if !all(isfinite, spacings(mesh))
+        a, b = extrema(set)
+        _throw_spacing_overflow(n_points, a, b, eltype(pts))
+    end
 
     # Finally, apply the domain markers to the mesh points.
     set_markers!(mesh, markers; warn_marker_mismatch)
@@ -1306,6 +1338,12 @@ end
 
 @noinline function _throw_half_point_overflow(n, a, b, T)
     msg = "a mesh of $n points in [$a, $b] with eltype $T makes a half-point overflow " *
+          "$T. Use a wider eltype"
+    throw(ArgumentError(msg))
+end
+
+@noinline function _throw_spacing_overflow(n, a, b, T)
+    msg = "a mesh of $n points in [$a, $b] with eltype $T makes a spacing overflow " *
           "$T. Use a wider eltype"
     throw(ArgumentError(msg))
 end
@@ -1329,10 +1367,10 @@ function _refine_indices_fill!(new_points::AbstractVector, old_points, N_old, ba
 end
 
 # The refined points of `Ωₕ`, filled and checked but not committed, or `nothing` when
-# there is nothing to refine. A midpoint or half-point that overflows, or a midpoint that
-# rounds onto a neighbour, in the storage eltype throws here, before any mutation, so a
-# failed refinement leaves the mesh unchanged; a device vector is read once through a host
-# copy.
+# there is nothing to refine. A midpoint, spacing or half-point that overflows, or a
+# midpoint that rounds onto a neighbour, in the storage eltype throws here, before any
+# mutation, so a failed refinement leaves the mesh unchanged; a device vector is read once
+# through a host copy.
 function _refined_points(Ωₕ::Mesh1D)
     # Do nothing if the mesh is just a single point.
     if is_collapsed(Ωₕ)
@@ -1356,9 +1394,11 @@ function _refined_points(Ωₕ::Mesh1D)
     _refine_indices_fill!(new_points, old_points, N_old, backend(Ωₕ))
 
     host_points = _host_array(new_points)
-    # the half-points the commit fills, `(x[i] + x[i-1]) * 0.5`
+    # the half-points and spacings the commit fills, `(x[i] + x[i-1]) * 0.5` and
+    # `x[i] - x[i-1]` (gpena/Bramble.jl#867)
     if !all(isfinite, host_points) ||
-       any(i -> !isfinite((host_points[i] + host_points[i - 1]) * 0.5), 2:N_new)
+       any(i -> !isfinite((host_points[i] + host_points[i - 1]) * 0.5), 2:N_new) ||
+       any(i -> !isfinite(host_points[i] - host_points[i - 1]), 2:N_new)
         a, b = extrema(set(Ωₕ))
         _throw_refinement_overflow(N_new, a, b, eltype(new_points))
     end
@@ -1370,8 +1410,8 @@ function _refined_points(Ωₕ::Mesh1D)
 end
 
 @noinline function _throw_refinement_overflow(n, a, b, T)
-    msg = "refining to $n points in [$a, $b] with eltype $T makes a midpoint or " *
-          "half-point overflow $T; the mesh is left unrefined. Use a wider eltype"
+    msg = "refining to $n points in [$a, $b] with eltype $T makes a midpoint, spacing " *
+          "or half-point overflow $T; the mesh is left unrefined. Use a wider eltype"
     throw(ArgumentError(msg))
 end
 

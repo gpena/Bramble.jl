@@ -7,12 +7,12 @@
 # construction runs in Float64; lines and polygon are converted to the seeds' type and
 # checked in it.
 
-@noinline function _throw_levelset_too_many(cap, nin, ρ)
-    throw(ArgumentError("level-set grid: too many lines: no grid with at most $cap lines per axis inside the curve's extent keeps its vertices within 0.2 h² of φ = 0 for the $nin lines asked there (rotation number $(round(ρ; digits = 8)))."))
+@noinline function _throw_levelset_too_many(cap, nin, ρ, cmax)
+    throw(ArgumentError("level-set grid: too many lines: no N ≤ $cap lines per axis inside the curve's extent has N‖Nρ‖ ≤ $cmax (rotation number $(round(ρ; digits = 8))) for the $nin lines asked there."))
 end
 
-@noinline function _throw_levelset_too_coarse(nx, ny)
-    throw(ArgumentError("level-set grid: too coarse: $nx × $ny points are too few to resolve the curve; use more."))
+@noinline function _throw_levelset_too_coarse(nx, ny, nin)
+    throw(ArgumentError("level-set grid: too coarse: $nx × $ny points give $nin lines inside the curve's extent, and the fit needs at least 6; use more."))
 end
 
 @noinline function _throw_levelset_check_failed(reason)
@@ -38,7 +38,7 @@ half the larger extent of the vertices.
 # Throws
 
   - `ArgumentError`: the errors of `_levelset_class` and of `_levelset_orbit_grid`, or, on
-    the closure path, "check failed".
+    the closure path, "check failed" or `_grid_closure`'s cap error.
 """
 function _levelset_grid(φ, xs::AbstractVector, ys::AbstractVector)
     B = _levelset_box(xs, ys)
@@ -86,11 +86,12 @@ least `N` up to `4 nin` with cost at most `cmax`. With ``p`` the nearest integer
 apart in the conjugacy of `T` to the rotation, a quarter of that off the leftmost point;
 Levenberg-Marquardt closes each orbit on the vertical lines alone (`_levelset_close!`), its
 anchor scaled by the curve's length scale `ℓ` (half its larger extent), so that a scaled
-curve with scaled seeds gives the scaled grid. The distinct seeds farther than a quarter of their spacing from the curve's extent are kept; the others
-give way. A grid that fails the post-check is rebuilt once with the next-best `N`.
+curve with scaled seeds gives the scaled grid. The distinct seeds farther than a quarter of
+their spacing from the curve's extent are kept; the others give way. A grid that fails the
+post-check is rebuilt once with the next-best `N`.
 
-A rational `ρ = p/q` (an internal use: `T` of finite order) samples the conjugacy from
-orbits started at equally spaced angles.
+A rational `ρ = p/q` (reached only by tests, to build a grid that fails the post-check)
+samples the conjugacy from orbits started at equally spaced angles.
 
 # Throws
 
@@ -105,16 +106,16 @@ function _levelset_orbit_grid(φ, xs::AbstractVector, ys::AbstractVector, ρ::Re
     θₗ, ex, ey = _levelset_extent(φ, B, c)
     nin = round(Int, max(length(sx) * (ex[2] - ex[1]) / (B[1][2] - B[1][1]), length(sy) * (ey[2] - ey[1]) /
                                                                              (B[2][2] - B[2][1])))
-    nin < 6 && _throw_levelset_too_coarse(length(sx), length(sy))
+    nin < 6 && _throw_levelset_too_coarse(length(sx), length(sy), nin)
     ℓ = max(ex[2] - ex[1], ey[2] - ey[1]) / 2
     N = _levelset_N(Float64(ρ), nin, Float64(cmax), 0)
-    iszero(N) && _throw_levelset_too_many(4nin, nin, ρ)
+    iszero(N) && _throw_levelset_too_many(4nin, nin, ρ, cmax)
     kx, ky = _levelset_kept(sx, ex), _levelset_kept(sy, ey)
     T = float(promote_type(eltype(xs), eltype(ys)))
     r = ""
     for _ in 1:2
         X, Y, V = _levelset_orbits(φ, B, c, θₗ, Float64(ρ), N, (ex[2] - ex[1]) / ℓ)
-        r = _levelset_fit(φ, c, sort!([X; kx]), sort!([Y; ky]), V; T)
+        r = _levelset_fit(φ, c, sort!([X; kx]), sort!([Y; ky]), V, T)
         r isa String || return r
         N = _levelset_N(Float64(ρ), nin, Float64(cmax), N)
         iszero(N) && break
@@ -164,11 +165,7 @@ function _levelset_extent(φ, B, c::NTuple{2, Float64})
         k = argmin(k -> sgn * P[k][d], 1:M)
         a, b = θs[k] - 2π / M, θs[k] + 2π / M
         f = θ -> sgn * _levelset_ray(φ, B, c, θ)[d]
-        invφ = (sqrt(5.0) - 1) / 2
-        for _ in 1:100
-            m1, m2 = b - invφ * (b - a), a + invφ * (b - a)
-            f(m1) < f(m2) ? (b = m2) : (a = m1)
-        end
+        a, b = _golden_min(f, a, b)
         θ = (a + b) / 2
         return θ, sgn * min(f(θ), sgn * P[k][d])
     end
@@ -213,7 +210,8 @@ function _levelset_Hinv(θs::Vector{Float64}, ψ)
 end
 
 # The vertical lines X, horizontal lines Y and vertices V of N = m q lines per axis inside
-# the extent (width w in units of the curve's length scale): m periodic orbits of T, each closed by `_levelset_close!`.
+# the extent (width w in units of the curve's length scale): m periodic orbits of T, each
+# closed by `_levelset_close!`.
 function _levelset_orbits(φ, B, c, θₗ::Float64, ρ::Float64, N::Int, w::Float64)
     m = gcd(N, round(Int, N * ρ))
     q = N ÷ m
@@ -355,7 +353,7 @@ function _levelset_cyclic_solve!(x, d, e, r, work)
 end
 
 """
-    _levelset_fit(φ, c, X, Y, V; T) -> (X::Vector{T}, Y::Vector{T}, P::Polygon{T}) or String
+    _levelset_fit(φ, c, X, Y, V[, T]) -> (X::Vector{T}, Y::Vector{T}, P::Polygon{T}) or String
 
 Convert the lines `X`, `Y` and the vertices `V` (each on a node) to `T` (default: the lines'
 type), order the vertices by angle about the interior point `c` into a counter-clockwise
@@ -373,8 +371,13 @@ polygon, and check the grid fits it (architect §3.3 step 9). Returns the reason
 The polygon is built without `polygon`'s validation (quadratic in the vertices): the check
 certifies it.
 """
-function _levelset_fit(φ, c::NTuple{2, Float64}, X::AbstractVector, Y::AbstractVector, V::AbstractVector;
-        T::Type = float(promote_type(eltype(X), eltype(Y))))
+function _levelset_fit(φ, c::NTuple{2, Float64}, X::AbstractVector, Y::AbstractVector, V::AbstractVector)
+    return _levelset_fit(φ, c, X, Y, V, float(promote_type(eltype(X), eltype(Y))))
+end
+
+# `T` is positional so that it specialises: as a keyword it is a `DataType` (#892).
+function _levelset_fit(φ, c::NTuple{2, Float64}, X::AbstractVector, Y::AbstractVector, V::AbstractVector,
+        ::Type{T}) where {T}
     XT, YT = T.(X), T.(Y)
     W = NTuple{2, T}[(T(v[1]), T(v[2])) for v in V]
     all(isfinite, XT) && all(isfinite, YT) && all(v -> isfinite(v[1]) && isfinite(v[2]), W) ||
@@ -385,35 +388,17 @@ function _levelset_fit(φ, c::NTuple{2, Float64}, X::AbstractVector, Y::Abstract
     nx, ny = length(XT), length(YT)
     ij = Vector{NTuple{2, Int}}(undef, length(W))
     for (k, v) in enumerate(W)
-        i, j = searchsortedfirst(XT, v[1]), searchsortedfirst(YT, v[2])
-        (i <= nx && j <= ny && XT[i] == v[1] && YT[j] == v[2]) || return "a vertex is not a node"
-        ij[k] = (i, j)
+        n = _fitted_node(XT, YT, v)
+        n === nothing && return "a vertex is not a node"
+        ij[k] = n
     end
-    # Labels: 0 at a vertex, -1 inside the polygon, 1 outside. A vertical ray up from a node
-    # crosses the edges whose ends straddle the node's line under the half-open rule
-    # (one end at x > X[i]); each such edge has its other end on column i.
-    lbl = ones(Int8, nx, ny)
-    tog = falses(nx, ny)
     nv = length(ij)
     for k in 1:nv
         (i, j), (i₂, j₂) = ij[k], ij[mod1(k + 1, nv)]
         (abs(i - i₂) <= 1 && abs(j - j₂) <= 1 && (i, j) != (i₂, j₂)) ||
             return "vertices $(W[k]) and $(W[mod1(k + 1, nv)]) are consecutive but not corners of one cell"
-        if i != i₂
-            iₑ, jₑ = i < i₂ ? (i, j) : (i₂, j₂)
-            tog[iₑ, jₑ] = !tog[iₑ, jₑ]
-        end
     end
-    for i in 1:nx
-        s = false
-        for j in ny:-1:1
-            lbl[i, j] = s ? -1 : 1
-            s ⊻= tog[i, j]
-        end
-    end
-    for (i, j) in ij
-        lbl[i, j] = 0
-    end
+    lbl = _fitted_labels(XT, YT, ij)
     for j in 1:ny, i in 1:nx
 
         l = lbl[i, j]

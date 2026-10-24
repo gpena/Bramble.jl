@@ -33,10 +33,12 @@ labels
 
 ## Polygons
 
-`polygon(V)` is exported; `signed_distance` is `public` and not exported. A polygon is a
+`polygon(V)` is exported. `signed_distance`, `polygon_spaces` and `lift` are `public` and not
+exported; `using Bramble: polygon_spaces, lift` brings the last two in by name. A polygon is a
 marker value: `:P => polygon(V)` in a domain labels the nodes of a 2D mesh `:P` (interior),
-`:P_boundary` and `:P_exterior`. The vertices are validated with exact predicates: at least
-three, no zero-length edge, nonzero area, a simple boundary. A vertex in the middle of a
+`:P_boundary` and `:P_exterior`. The vertices are validated with exact predicates for
+orientation, folding back and crossing: at least three, no zero-length edge,
+an area above rounding level, a simple boundary. A vertex in the middle of a
 straight edge is kept. See [Meshes](meshes.md) for the grid fitted to a polygon and
 [Grid spaces](spaces.md) for `polygon_spaces`.
 

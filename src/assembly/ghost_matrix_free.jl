@@ -56,6 +56,14 @@ function matrix_free_operator(a::GhostBilinearForm; dirichlet = nothing,
             mask .|= _label_mask(Ωₕ, a.rows, lbl)
         end
     end
+    return _ghost_mf_operator(op, a, mask, policy)
+end
+
+# The operator from its parts, each type parameter read off the value passed. The padded
+# `op` infers as a union (whether it caches its geometry is a runtime question, see
+# `_mf_operator`): this call takes each member on its own, so `Op` is the type of `op`.
+function _ghost_mf_operator(op::MatrixFreeOperator, a::GhostBilinearForm, mask::BitVector,
+        policy::ExecutionPolicy)
     T = promote_type(eltype(op), eltype(a.test_space.E), eltype(a.trial_space.E))
     xpad = similar(a.trial_space.d, T, size(op, 2))
     ypad = similar(a.trial_space.d, T, size(op, 1))
@@ -118,21 +126,22 @@ function _ghost_mf_apply!(y, op::GhostMatrixFreeOperator, x, α, β, xpad, ypad)
     mul!(ypad, op.padded, xpad, true, false)
     E = op.test_space.E
     _run_bands!(op.policy, _ghost_mf_out_band!, y, SparseArrays.getcolptr(E), rowvals(E),
-        nonzeros(E), ypad, op.mask, α, β)
+        nonzeros(E), ypad, op.mask.chunks, α, β)
     _mf_identity_rows!(y, x, α, isempty(op.mask) ? nothing : op.mask)
     return nothing
 end
 
 # Entries `r` of band `b` of `y = α E_vᵀ w + β y`, from column `r` of `E_v`; `β == 0`
 # overwrites `y`, so a `NaN` in it does not survive. A row the nonempty `mask` marks keeps
-# `β y[r]` only: `_mf_identity_rows!` adds its `α x[r]` after.
-@noinline function _ghost_mf_out_band!(y, colptr, rowval, nz, w, mask, α, β, nbands::Int,
+# `β y[r]` only: `_mf_identity_rows!` adds its `α x[r]` after. The mask crosses as its
+# words (`_MFMask`): a `BitVector` among the `@batch` arguments puts them on the heap.
+@noinline function _ghost_mf_out_band!(y, colptr, rowval, nz, w, chunks, α, β, nbands::Int,
         b::Int)
     T = eltype(y)
-    marked = !isempty(mask)
+    marked = !isempty(chunks)
     @inbounds for r in _band_range(1:length(y), nbands, b)
         s = zero(T)
-        if !(marked && mask[r])
+        if !marked || _mf_live(_MFMask(chunks), r)
             for k in colptr[r]:(colptr[r + 1] - 1)
                 s = convert(T, s + nz[k] * w[rowval[k]])
             end

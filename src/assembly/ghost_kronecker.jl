@@ -25,14 +25,13 @@
 
 function kronecker_operator(a::GhostBilinearForm{D}) where {D}
     D == 1 && _throw_not_separable_dim(D)
+    _ghost_kron_polygon(a) && _throw_ghost_kron_polygon("kronecker_operator")
     Wu, Wv = trial_space(a), test_space(a)
     _ghost_kron_same_mesh(mesh(Wu), mesh(Wv))
     _kron_check_spaces(a.padded)
     G = mesh(Wu)
     Eu = _ghost_kron_closures(Wu)
-    Eu === nothing && _throw_ghost_not_separable(Wu, _GHOST_KRON_CLOSURE)
     Ev = Wv === Wu ? Eu : _ghost_kron_closures(Wv)
-    Ev === nothing && _throw_ghost_not_separable(Wv, _GHOST_KRON_CLOSURE)
     map(E -> size(E, 2), Eu) == map(E -> size(E, 2), Ev) || _throw_ghost_kron_rectangular(Wu, Wv)
     Ωp = _padded(G)
     spaces = ntuple(d -> _ghost_kron_axis_space(G, d), Val(D))
@@ -53,9 +52,12 @@ function kronecker_operator(a::GhostBilinearForm{D}) where {D}
                 _throw_ghost_not_separable(Wu,
                     "a term reads the absent padded points (beyond two ghosted facets, as a " *
                     "mixed derivative does), where the separable closure is not 0")
-            factors = ntuple(
-                d -> _kron_cached!(seen[d],
-                    _kron_factor(sparse(Ev[d]' * padded[d] * Eu[d]), mass[d])), Val(D))
+            # `_kron_cached!` returns a factor of the type of the one it is given, which
+            # the assertion tells inference, as `seen` holds factors of any type.
+            factors = ntuple(Val(D)) do d
+                F = _kron_factor(sparse(Ev[d]' * padded[d] * Eu[d]), mass[d])
+                return _kron_cached!(seen[d], F)::typeof(F)
+            end
             T = promote_type(T, map(eltype, factors)...)
             T = promote_type(T, typeof(_kron_coeff(T, (scales..., live...))))
             terms = (terms..., _kron_term((scales..., live...), factors))
@@ -117,16 +119,17 @@ end
     )
 end
 
-# The padded 1D space of axis `d`: the ghost space of the physical axis, ghosted on the
-# sides `G` ghosts along `d`, whose padded space weighs the physical points only. Built on a
-# serial host backend, as `_kron_axis_space` builds the factors of a plain space.
+# The padded 1D space of axis `d`: the padded space of the physical axis, ghosted on the
+# sides `G` ghosts along `d` (on none, the axis itself), weighing the physical points only.
+# One type for every axis, so the tuple of them is concrete. Built on a serial host
+# backend, as `_kron_axis_space` builds the factors of a plain space.
 function _ghost_kron_axis_space(G::GhostMesh, d::Int)
     m = physical_mesh(G)(d)
     execution_policy(backend(m)) isa CpuSerial ||
         (m = _rebackend(m, backend(eltype(m)), identity))
     sides = Tuple(s for (s, side) in ((:xmin, :min), (:xmax, :max)) if has_ghosts(G, d, side))
-    isempty(sides) && return gridspace(m)
-    return padded_space(gridspace(m; ghosts = sides))
+    Gd = GhostMesh(m; ghosts = sides)
+    return _gridspace(Gd, _ghost_space_weights(Gd))
 end
 
 # `_kron_project` with the given axis spaces: the factors of `term` on the padded axes.
@@ -170,10 +173,10 @@ function _ghost_kron_reads_absent(factors::Tuple, G::GhostMesh)
 end
 
 """
-    _ghost_kron_closures(Wₕ::GhostGridSpace{D}) -> Union{Nothing, NTuple{D, SparseMatrixCSC}}
+    _ghost_kron_closures(Wₕ::GhostGridSpace{D}) -> NTuple{D, SparseMatrixCSC}
 
 The 1D closures `E_d` whose Kronecker product `E_D ⊗ … ⊗ E_1` is the closure `E` of `Wₕ` at
-every padded point that is not absent, or `nothing` when there are none. `E_d` is
+every padded point that is not absent; throws an `ArgumentError` if there are none. `E_d` is
 `P_d × m_d`: `P_d` padded points, `m_d` physical ones that no Dirichlet relation fixes. The
 degrees of freedom must be the product of those, in the mesh's linear order, so no ghost
 is left as an unknown. Each ghost's row of `E_d` is read on one line, through the first
@@ -181,6 +184,7 @@ unfixed point of every other axis. Then `E` is checked against the product at ev
 point that is not absent, to `64 eps` times the larger of 1 and the largest entry of `E`.
 """
 function _ghost_kron_closures(Wₕ::GhostGridSpace{D, T}) where {D, T}
+    refuse() = _throw_ghost_not_separable(Wₕ, _GHOST_KRON_CLOSURE)
     G = mesh(Wₕ)
     E = Wₕ.E
     Et = Wₕ.Et
@@ -197,15 +201,15 @@ function _ghost_kron_closures(Wₕ::GhostGridSpace{D, T}) where {D, T}
         if length(k) == 1 && isone(nz[first(k)])
             push!(units, (P, rv[first(k)]))
         elseif any(q -> !iszero(nz[q]), k)
-            return nothing
+            refuse()
         end
     end
     kept = ntuple(d -> sort!(unique!([P[d] for (P, _) in units])), Val(D))
     m = map(length, kept)
-    (prod(m) == n == length(units) && n > 0) || return nothing
+    (prod(m) == n == length(units) && n > 0) || refuse()
     loc = ntuple(d -> Dict(p => j for (j, p) in enumerate(kept[d])), Val(D))
     dof = LinearIndices(m)
-    all(((P, j),) -> j == dof[ntuple(d -> loc[d][P[d]], Val(D))...], units) || return nothing
+    all(((P, j),) -> j == dof[ntuple(d -> loc[d][P[d]], Val(D))...], units) || refuse()
     Es = ntuple(Val(D)) do d
         rows = Int[]
         cols = Int[]
@@ -221,7 +225,7 @@ function _ghost_kron_closures(Wₕ::GhostGridSpace{D, T}) where {D, T}
             i = plin[Q]
             for q in cp[i]:(cp[i + 1] - 1)
                 J = CartesianIndices(m)[rv[q]]
-                all(e -> e == d || J[e] == 1, 1:D) || return nothing
+                all(e -> e == d || J[e] == 1, 1:D) || refuse()
                 push!(rows, g)
                 push!(cols, J[d])
                 push!(vals, nz[q])
@@ -229,12 +233,11 @@ function _ghost_kron_closures(Wₕ::GhostGridSpace{D, T}) where {D, T}
         end
         sparse(rows, cols, vals, pd[d], m[d])
     end
-    any(isnothing, Es) && return nothing
     present = Diagonal(vec([!is_absent(G, J) for J in CartesianIndices(pd)]))
     Δ = E - present * foldl(kron, reverse(Es))
     R = real(T)
     tol = 64 * eps(R) * max(one(R), maximum(abs, nonzeros(E); init = zero(R)))
-    all(x -> abs(x) <= tol, nonzeros(Δ)) || return nothing
+    all(x -> abs(x) <= tol, nonzeros(Δ)) || refuse()
     return Es
 end
 
@@ -251,6 +254,25 @@ const _GHOST_KRON_CLOSURE = "its closure is not separable (it is when every ghos
         "kronecker_operator on $(Wₕ): $what, so the reduced matrix is not a sum of " *
         "Kronecker products of 1D factors. Assemble the form instead, assemble(a), or " *
         "apply it with matrix_free_operator(a).",
+    ),
+    )
+end
+
+# A polygon space (#202) extends an exterior node by (3.2) from the interior nodes beside
+# it, node by node along the polygon's edges, not by one relation per facet along an axis,
+# so its closure has no 1D factors whatever the form. `fdm_*` (BrambleKroneckerExt) asks
+# the same question.
+_ghost_kron_polygon(a::GhostBilinearForm) = trial_space(a).rows.polygon ||
+                                            test_space(a).rows.polygon
+
+@noinline function _throw_ghost_kron_polygon(caller::String)
+    throw(
+        ArgumentError(
+        "$caller on a form over polygon spaces: their closure extends each exterior " *
+        "node from its interior neighbours along the polygon's edges, which no product " *
+        "of 1D closures gives, so the reduced matrix has no Kronecker factors. Assemble " *
+        "the form instead, assemble(a, l), and solve it with pde_solve, or precondition " *
+        "it with ilu_preconditioner or amg_preconditioner.",
     ),
     )
 end

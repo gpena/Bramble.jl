@@ -22,7 +22,7 @@ import Bramble:
 using Bramble: set
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS, alloc_test
-using ..TestUtils: _tri
+using ..TestUtils: _tri, _sd_problem
 
 @testset "Dirichlet constraints" begin
     # --- Setup ---
@@ -129,6 +129,22 @@ using ..TestUtils: _tri
                 Ωd, I, :not_a_real_label => ((x, t) -> f_t(x, t))
             )
         end
+    end
+
+    @testset "Time domain is not the ODE time span" begin
+        # `I` only demands the (x, t) shape of the conditions. It is not stored, so a time
+        # span reaching outside it evaluates the condition there rather than refusing.
+        Ωₕ, Wₕ, _, a, l = _sd_problem(11)
+        n = ndofs(Wₕ)
+        bcs = dirichlet_constraints(Ωₕ, interval(0.0, 1.0), :boundary => (x, t) -> 2t)
+        sd = semidiscretize(a, l; dirichlet = bcs)
+        du = zeros(n)
+        @test sd(du, zeros(n), nothing, 0.5)[1] == 1.0
+        # t = 2.5 lies outside I = [0, 1]: the value is g(x, 2.5), with no error
+        @test sd(du, zeros(n), nothing, 2.5)[1] == 5.0
+        # an interval disjoint from the time span of the problem is accepted the same way
+        other = dirichlet_constraints(Ωₕ, interval(10.0, 20.0), :boundary => (x, t) -> 2t)
+        @test semidiscretize(a, l; dirichlet = other)(du, zeros(n), nothing, 0.5)[1] == 1.0
     end
 
     @testset "Lazy time evaluation" begin

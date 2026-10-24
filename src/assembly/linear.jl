@@ -41,11 +41,45 @@ test_space(form::LinearForm) = form.test_space
 # Requiring a `VectorElement` prevents errors on composite spaces where bare vector lengths
 # do not convey block alignments.
 @inline function (form::LinearForm)(vₕ::VectorElement)
+    v = parent(vₕ)
+    _check_contract_length(form.test_space, v)
+    return _contract_linear(locality(backend(form.test_space)), form, v)
+end
+
+@inline function _contract_linear(::HostLocality, form::LinearForm, v::AbstractVector)
     ast = form.ast
     space = form.test_space
-    T = promote_type(_assembled_eltype(ast, space), eltype(parent(vₕ)))
+    T = promote_type(_assembled_eltype(ast, space), eltype(v))
 
-    return _contract_linear_core(space, ast, parent(vₕ), zero(T))
+    return _contract_linear_core(space, ast, v, zero(T))
+end
+
+# The fused sweep reads `v` and the space one grid point at a time, which a device array
+# refuses. A device test space assembles the vector instead (`assemble`, a host-mirror
+# sweep and one upload) and contracts it against `v` without conjugating: a real vector
+# through `dot`, the device's own reduction, anything else on host copies of both.
+function _contract_linear(::DeviceLocality, form::LinearForm, v::AbstractVector)
+    b = assemble(form)
+    eltype(b) <: Real && return _contract_values(b, v)
+    return _contract_values(Array(b), Array(v))
+end
+
+# The contraction reads `v` with `@inbounds` at the rows the sweep reaches, so an element of
+# another space must be refused before it starts: a short one would be read out of bounds, a
+# long one would be summed as if its tail were absent.
+@inline function _check_contract_length(space, v::AbstractVector)
+    Base.require_one_based_indexing(v)
+    length(v) == ndofs(space) || _throw_contract_length(ndofs(space), length(v))
+    return nothing
+end
+
+@noinline function _throw_contract_length(expected::Int, actual::Int)
+    throw(
+        DimensionMismatch(
+        "a linear form on a test space with $expected degrees of freedom cannot contract " *
+        "a vector of length $actual",
+    ),
+    )
 end
 
 @noinline function (form::LinearForm)(v::AbstractVector)

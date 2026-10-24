@@ -62,15 +62,24 @@ so code generation would buy nothing here.
     t -> (
         shift_offset(t[1], Dim, delta), t[2]), inner)
 
-# `(left..., right...)` is resolved at compile time while both operands hold at most
-# `_INLINED_ENTRIES` entries. A longer operand makes the splat run generically (a 27-entry
-# stencil with a 54-entry one: 2.5 µs, against 0.09 µs for the unrolled `ntuple`), which was
-# 92% of the warm `assemble!` of `innerₕ(Δₕ(Δₕ(u)), v)` on a 3D grid. Those are built out of
-# line, once per stencil type, as `_each_entry` does.
-@inline function concatenate_stencils(left::Tuple, right::Tuple)
-    max(length(left), length(right)) > _INLINED_ENTRIES &&
-        return _concatenate_outlined(left, right)
-    return (left..., right...)
+# `(left..., right...)` unrolls while both operands hold at most `_INLINED_ENTRIES` entries;
+# past that it runs generically, so the tuple is built out of line, once per stencil type, as
+# `_each_entry` does (#853). The length is picked by dispatch, not by a branch on `length`:
+# a restricted summand's stencil is a `Union` (`()` or a full tuple), the method is then
+# compiled for the `Union`, and where the caller does not split it the branch stays, its
+# out-of-line call widening the result (49536 B against 16992 B on 7x9 for
+# `R(:c, D₋ₓ(2.0 * RR(v)))`, gpena/Bramble.jl#889).
+const _LongStencil = Tuple{ntuple(_ -> Any, _INLINED_ENTRIES + 1)..., Vararg{Any}}
+
+@inline concatenate_stencils(left::Tuple, right::Tuple) = (left..., right...)
+@inline function concatenate_stencils(left::_LongStencil, right::Tuple)
+    return _concatenate_outlined(left, right)
+end
+@inline function concatenate_stencils(left::Tuple, right::_LongStencil)
+    return _concatenate_outlined(left, right)
+end
+@inline function concatenate_stencils(left::_LongStencil, right::_LongStencil)
+    return _concatenate_outlined(left, right)
 end
 
 @noinline function _concatenate_outlined(left::Tuple, right::Tuple)

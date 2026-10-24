@@ -1051,6 +1051,24 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         end
     end
 
+    @testset "Wrong-length element refused" begin
+        # `l(vₕ)` reads `vₕ` with `@inbounds` at every row it reaches, so an element of a
+        # coarser space would be read out of bounds and one of a finer space summed short.
+        # Any: each mesh, space and closure is its own type
+        for (label, mk, l) in Any[("scalar", gridspace, v -> innerₕ(1.0, v)),
+            ("composite", M -> gridspace(M) × gridspace(M),
+                V -> innerₕ(1.0, V[1]) + innerₕ(2.0, V[2]))]
+            lw = form(mk(mesh(domain(interval(0.0, 1.0)), 11, false)), l)
+            for n in (6, 21)
+                @testset "$label, $n points" begin
+                    wrong = element(mk(mesh(domain(interval(0.0, 1.0)), n, false)), 1.0)
+                    @test_throws DimensionMismatch lw(wrong)
+                end
+            end
+            @test lw(element(test_space(lw), 1.0)) ≈ sum(assemble(lw))
+        end
+    end
+
     @testset "Expression validation" begin
         # The `ast` field stores the pre-resolved tree; the expression itself is not kept
         # since nothing downstream ever calls it again.

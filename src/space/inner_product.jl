@@ -413,6 +413,13 @@ carry no data and fix no node. A constrained space whose degrees of freedom omit
 nodes or whose relations carry data has no grid function in a vector of its degrees of
 freedom: `normₕ` throws an `ArgumentError`, and `normₕ(Bramble.lift(Cₕ, u))` is the norm
 of the lifted grid function.
+
+On the trial space `U` of [`Bramble.polygon_spaces`](@ref) it is the norm over Ω̄ₕ of the
+grid function that is `uₕ` at the interior nodes, its degrees of freedom, and 0 at the
+boundary nodes: each interior node weighs its dual cell, and no exterior node enters. The
+error of a solve is `normₕ(element(U, u) - Rₕ(U, u_exact))`; the norm of
+`Bramble.lift(U, u)` would sum the (3.2) extension at the exterior nodes, which holds no
+value of the solution. The test space `W` throws an `ArgumentError`.
 """
 @inline normₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ)))
 @inline normₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ)))
@@ -420,8 +427,10 @@ of the lifted grid function.
 # A ghost space reads its physical nodes only, the first `npoints` degrees of freedom, with
 # the weights of the padded space, which are 0 at every ghost: the ghost values never enter.
 # A space whose degrees of freedom are not a grid function refuses (`_physical_values`).
+# A polygon trial space measures its grid function on Ω̄ₕ (`_polygon_element`).
 function normₕ(uₕ::VectorElement{<:GhostGridSpace})
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_ghost_norm(parent(uₕ))
+    _is_polygon_trial(uₕ.space) && return normₕ(_polygon_element(uₕ))
     u = _physical_values(:normₕ, uₕ)
     w = weights(uₕ.space.padded, Innerh())   # throws once the mesh has moved
     acc = zero(promote_type(eltype(uₕ), eltype(w)))
@@ -460,12 +469,33 @@ every entry of every component.
 The element type comes from the data, not from the space, so a `ForwardDiff.Dual`-valued grid
 function returns a `Dual`.
 
+On a [`GhostGridSpace`](@ref) it is the maximum over the physical nodes, the first
+`npoints(Ωₕ)` degrees of freedom: the ghost values never enter, and a space whose degrees of
+freedom are no grid function throws an `ArgumentError`, as for [`normₕ`](@ref). The lifted
+grid function `Bramble.lift(Cₕ, u)` lives on the padded space, so `norminf` of it reads the
+whole padded box, ghosts included. On a composite of ghost spaces, `Cₕ × Cₕ` or `Cₕ^N`, it
+is the maximum over the components, each read so. On the trial space of
+[`Bramble.polygon_spaces`](@ref) it is the maximum over the interior nodes, the degrees of
+freedom, as for [`normₕ`](@ref).
+
 See also: [`normₕ`](@ref), [`norm₁ₕ`](@ref)
 """
 @inline function norminf(uₕ::VectorElement)
     data = parent(uₕ)
     return mapreduce(abs, max, data; init = abs(zero(eltype(data))))
 end
+
+@inline function norminf(uₕ::VectorElement{<:GhostGridSpace})
+    u = _is_polygon_trial(uₕ.space) ? parent(uₕ) : _physical_values(:norminf, uₕ)
+    return mapreduce(abs, max, u; init = abs(zero(eltype(u))))
+end
+
+# A flat composite of ghost spaces, `Cₕ × Cₕ` or `Cₕ^N`: its norms go component by component,
+# since the generic composite methods would read the ghosts of the concatenated vector.
+const _CompositeOfGhosts = CompositeGridSpace{<:Any,
+    <:Tuple{GhostGridSpace, Vararg{GhostGridSpace}}}
+
+@inline norminf(uₕ::VectorElement{<:_CompositeOfGhosts}) = maximum(norminf, components(uₕ))
 
 @inline norminf(uₕ::NTuple{<:Any, VectorElement}) = maximum(norminf, uₕ)
 
@@ -1343,14 +1373,25 @@ On a [`CompositeGridSpace`](@ref) it is the seminorm of the product space, as fo
 
 The result has the real type of the element type, as for [`normₕ`](@ref): each difference
 `δ` contributes `abs2(δ)`.
+
+On a [`GhostGridSpace`](@ref) it is the seminorm of the physical grid function, the first
+`npoints(Ωₕ)` degrees of freedom on the physical mesh `Ωₕ`: the ghost values never enter,
+and a space whose degrees of freedom are no grid function throws, as for [`normₕ`](@ref).
+On a composite of ghost spaces it is the seminorm of the product space of those grid
+functions. On the trial space of [`Bramble.polygon_spaces`](@ref) it is the seminorm of the
+grid function on Ω̄ₕ that [`normₕ`](@ref) reads, `uₕ` at the interior nodes and 0 at the
+boundary nodes: it sums every grid edge with both ends interior or on the boundary, and no
+edge joins an interior node to an exterior one.
 """
 @inline snorm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
 @inline snorm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
+snorm₁ₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
 
 # Squared seminorm summed over the leaves, so the composite never takes a root per
 # component.
 @inline _snorm₁ₕ_sq(uₕ::VectorElement{<:CompositeGridSpace}) = sum(
     _snorm₁ₕ_sq, components(uₕ))
+_snorm₁ₕ_sq(uₕ::VectorElement{<:GhostGridSpace}) = _snorm₁ₕ_sq(_physical_element(:snorm₁ₕ, uₕ))
 
 """
     norm₁ₕ(uₕ::VectorElement) -> Number
@@ -1370,6 +1411,29 @@ On a [`CompositeGridSpace`](@ref) it is the norm of the product space, as for
 [`normₕ`](@ref): the square root of the sum of the components' squared norms.
 
 The result has the real type of the element type, as for [`normₕ`](@ref).
+
+On a [`GhostGridSpace`](@ref) it is the norm of the physical grid function, as for
+[`snorm₁ₕ`](@ref): the ghost values never enter. On a composite of ghost spaces it is the
+norm of the product space of those grid functions. On the trial space of
+[`Bramble.polygon_spaces`](@ref) it reads the nodes of Ω̄ₕ, as `normₕ` and `snorm₁ₕ` do.
 """
 @inline norm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
 @inline norm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
+norm₁ₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_norm₁ₕ_sq(uₕ)))
+norm₁ₕ(uₕ::VectorElement{<:_CompositeOfGhosts}) = sqrt(real(sum(_norm₁ₕ_sq, components(uₕ))))
+
+function _norm₁ₕ_sq(uₕ::VectorElement{<:GhostGridSpace})
+    e = _physical_element(:norm₁ₕ, uₕ)
+    return innerₕ(e, e) + _snorm₁ₕ_sq(e)
+end
+
+# The physical grid function of a ghost element: its first `npoints` degrees of freedom, a
+# view, on a plain space of the physical mesh, which builds its weights afresh. The padded
+# space's weights are read first, so a moved mesh throws as in `normₕ`. A polygon trial
+# space gives its grid function on Ω̄ₕ, 0 on the boundary nodes (`_polygon_element`).
+function _physical_element(op::Symbol, uₕ::VectorElement{<:GhostGridSpace})
+    _is_polygon_trial(uₕ.space) && return _polygon_element(uₕ)
+    u = _physical_values(op, uₕ)
+    weights(uₕ.space.padded)   # throws once the mesh has moved
+    return VectorElement(u, gridspace(physical_mesh(mesh(uₕ.space))))
+end

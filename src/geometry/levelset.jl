@@ -24,8 +24,9 @@ Wrap the function `φ(x)`, `x = (x₁, x₂)`, as a 2D level-set marker. In a do
 (nodes on the curve `φ = 0`) and `D_exterior` (nodes where `φ > 0`).
 
 `φ` must return a real number, not a `Bool`. It need not be a signed distance; a mesh
-locates each crossing of `φ = 0` along an edge by bracketing the root, so `φ` only has to
-change sign across the curve. With a `time_set`, `φ` still takes `x` alone.
+samples each grid line at 129 points and bisects every sign change, so `φ` only has to
+change sign across the curve. Two roots on a line closer than its sample spacing are
+missed. With a `time_set`, `φ` still takes `x` alone.
 
 # Examples
 ```jldoctest
@@ -42,49 +43,40 @@ See also: [`polygon`](@ref), [`domain`](@ref).
 """
 levelset(φ) = LevelSet(φ)
 
-@noinline function _throw_crossing_error(a, b)
-    throw(ArgumentError("levelset crossing: φ must have opposite signs at the two nodes, got $a and $b."))
-end
-
-# The parameter t ∈ [0, 1] of the root of φ on the segment p → q, for nodes where φ has
-# opposite signs (either order): bisection on the bracket [lo, hi], stopped when it cannot be
-# halved in the floating-point type. Bisection cannot leave the bracket, which a secant or
-# Newton step can on a φ that is not a signed distance. A zero of φ at an endpoint is
-# returned as 0 or 1.
-function _crossing(L::LevelSet, p, q)
-    T = float(promote_type(typeof(p[1]), typeof(p[2]), typeof(q[1]), typeof(q[2])))
-    x1, x2 = T(p[1]), T(p[2])
-    d1, d2 = T(q[1]) - x1, T(q[2]) - x2
-    φ(t) = L.φ((x1 + t * d1, x2 + t * d2))
-    fa, fb = φ(zero(T)), φ(one(T))
-    (fa * fb > 0 || isnan(fa) || isnan(fb)) && _throw_crossing_error(fa, fb)
-    iszero(fa) && return zero(T)
-    iszero(fb) && return one(T)
-    lo, hi = zero(T), one(T)
-    sa = signbit(fa)
-    while true
-        mid = (lo + hi) / 2
-        (mid <= lo || mid >= hi) && break
-        fm = φ(mid)
-        iszero(fm) && return mid
-        if signbit(fm) == sa
-            lo = mid
-        else
-            hi = mid
-        end
-    end
-    return (lo + hi) / 2
-end
-
 # Bisection for the root of f in [a, b] where f(a) < 0 differs in sign from f(b) (`neg_a`
-# says whether f(a) < 0); stops when the bracket cannot be halved. Returns its midpoint.
+# says whether f(a) < 0). Stops once the bracket is within eps of its initial width, about
+# 53 halvings in Float64 and 24 in Float32, or when it cannot be halved, as happens first
+# far from 0. Halving until then would run a root near 0 to subnormals (#893). Half-widths
+# keep a bracket as wide as the type's range from overflowing.
 function _bisect_root(f, a, b, neg_a::Bool)
-    while true
+    tol = eps(float(typeof(b - a))) * (b / 2 - a / 2)
+    while b / 2 - a / 2 > tol
         m = (a + b) / 2
         (m <= a || m >= b) && break
         (f(m) < 0) == neg_a ? (a = m) : (b = m)
     end
     return (a + b) / 2
+end
+
+# The bracket [a, b] left by 100 golden-section steps on f, which shrinks it towards a local
+# minimum. A step keeps [a, m2] when f(m1) < f(m2) and [m1, b] otherwise. With `keep_ties`, a
+# tie keeps [m1, m2] instead, so an f rounded flat near its minimum cannot drift the bracket.
+function _golden_min(f, a::Real, b::Real; keep_ties::Bool = false)
+    T = float(promote_type(typeof(a), typeof(b)))
+    a, b = T(a), T(b)
+    invφ = (sqrt(T(5)) - 1) / 2
+    for _ in 1:100
+        m1, m2 = b - invφ * (b - a), a + invφ * (b - a)
+        f1, f2 = f(m1), f(m2)
+        if f1 < f2
+            b = m2
+        elseif keep_ties && !(f1 > f2)
+            a, b = m1, m2
+        else
+            a = m1
+        end
+    end
+    return a, b
 end
 
 # All roots of φ on the line {x_axis = v}, the other coordinate in [lo, hi], sorted. φ is
@@ -108,11 +100,7 @@ function _crossings(φ, axis::Integer, v::Real, lo::Real, hi::Real; M::Integer =
     if isempty(out) && all(>=(0), fs)
         k = argmin(fs)
         a, b = ts[max(k - 1, 1)], ts[min(k + 1, M)]
-        invφ = (sqrt(T(5)) - 1) / 2
-        for _ in 1:100
-            m1, m2 = b - invφ * (b - a), a + invφ * (b - a)
-            f(m1) < f(m2) ? (b = m2) : (a = m1)
-        end
+        a, b = _golden_min(f, a, b)
         m = (a + b) / 2
         if f(m) < 0
             push!(out, _bisect_root(f, T(lo), m, false), _bisect_root(f, m, T(hi), true))

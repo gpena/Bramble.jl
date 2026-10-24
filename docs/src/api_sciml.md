@@ -23,6 +23,14 @@ the way SciMLBase does: `ode_function` and `ode_problem` hand the semidiscretisa
 factorisations and preconditioners, and `nonlinear_problem` hands a steady nonlinear residual
 to `NonlinearSolve`. All four require [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl).
 
+Bramble defines no time stepper and exports no `solve` for an ODE problem. The `solve` that
+steps an `ode_problem` comes from the package that provides the stepper: load
+`OrdinaryDiffEqBDF` for `FBDF` and `QNDF`, or `OrdinaryDiffEqRosenbrock` for the Rosenbrock
+methods, and call `solve(ode_problem(...), FBDF())`, as
+[the heat equation example](examples/heat_equation.md) does. The mass matrix is singular, so
+the stepper must admit one: an explicit method, which needs ``M`` invertible, is not
+suitable, and `FBDF`, `QNDF` and the Rosenbrock methods are.
+
 `solve(a::BilinearForm, l::LinearForm; ...)` is a further convenience defined alongside
 `linear_problem`: assemble, solve and unwrap the `LinearSolve` solution into a
 [`VectorElement`](@ref) in one call, for a caller who wants the solved grid function

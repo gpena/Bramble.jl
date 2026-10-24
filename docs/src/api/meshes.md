@@ -27,9 +27,17 @@ domain, none beside a polygon marker) gets a grid fitted to the curve `φ = 0` i
 polygon inscribed in the curve has its vertices on nodes and each edge a cell side or a
 cell diagonal, so the labels `D`, `D_boundary` and `D_exterior` and
 [`polygon_spaces`](@ref Bramble.polygon_spaces) work as for a polygon. The curve must lie
-inside the box, be orthogonally convex and be star-shaped about the minimum of `φ`.
+strictly inside the box, be orthogonally convex and be star-shaped about the minimum of `φ`.
 [`mesh`](@ref) lists the errors; the [mesh internals page](../internals/mesh.md) says how
 the labels are set.
+
+On a fitted mesh, `hₘₐₓ` is no guide to the `h` of an error plot: the lines the closure adds
+can sit very close to the seed lines and to each other. Take instead the largest gap between
+neighbouring lines that hold nodes of the closed domain Ω̄, the interior and the boundary
+nodes: for the disk, `maximum(diff(filter(t -> -1 <= t <= 1, z)))` over the points `z` of
+each axis, and the larger of the two axes. This is the `spacing` of the
+[disk example](../examples/poisson_circle.md), and the level-set convergence study measures it
+the same way.
 
 ## Points and spacings
 

@@ -130,6 +130,17 @@ end
     @test d <= 0.25
 end
 
+# The element type reaches `_levelset_fit` positionally, so the result infers (#892).
+@testset "The grid infers on both paths" begin
+    rng = MersenneTwister(6)
+    for T in (Float64, Float32), φ in (ellipse(π / 6), disk)
+
+        xs, ys = T.(seeds(rng, -1.25, 1.25, 40)), T.(seeds(rng, -1.25, 1.25, 40))
+        X, Y, P = @inferred Bramble._levelset_grid(φ, xs, ys)
+        @test P isa Bramble.Polygon{T}
+    end
+end
+
 @testset "Named errors" begin
     rng = MersenneTwister(6)
     φ = ellipse(π / 6)
@@ -138,7 +149,7 @@ end
     xs, ys = seeds(rng, -1.25, 1.25, 40), seeds(rng, -1.25, 1.25, 40)
     ρ = 0.36227066168253
     m = message(() -> Bramble._levelset_orbit_grid(φ, xs, ys, ρ; cmax = 1e-3))
-    @test occursin("too many lines", m)
+    @test occursin("too many lines", m) && occursin("N‖Nρ‖ ≤ 0.001", m)
     # A rotation number off the curve's: the orbits cannot close.
     m = message(() -> Bramble._levelset_orbit_grid(φ, xs, ys, 0.3))
     @test occursin("check failed", m)

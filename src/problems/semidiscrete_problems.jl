@@ -86,8 +86,8 @@ Keywords are those of [`ode_function`](@ref), plus:
   trajectory goes to `Bramble.adjoint_sensitivities` with any specialization:
   `SciMLBase.FullSpecialize` is not needed for the adjoint on any backend.
 
-The two-form method, one for plain forms and for forms on a constrained ghost space alike,
-also forwards its other keywords to [`semidiscretize`](@ref).
+The two-form method, for plain forms and for forms on one constrained ghost space,
+forwards its other keywords to [`semidiscretize`](@ref).
 
 Requires [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl).
 
@@ -112,7 +112,7 @@ Base.@constprop :aggressive function ode_problem(sd::Semidiscretization, u₀, I
 end
 
 # One method for the plain and the ghost pair: `semidiscretize` dispatches on the pair, and
-# a mixed pair reaches its refusal there (and in `ghost_semidiscrete.jl`).
+# a mixed pair reaches its refusal there.
 Base.@constprop :aggressive function ode_problem(
         a::Union{BilinearForm, GhostBilinearForm},
         l::Union{LinearForm, GhostLinearForm},
@@ -198,10 +198,15 @@ end
 
 """
     linear_problem(a::BilinearForm, l::LinearForm; kwargs...) -> LinearProblem
+    linear_problem(a::GhostBilinearForm, l::GhostLinearForm; kwargs...) -> LinearProblem
 
 Assemble `a` and `l` into the `LinearProblem` that `LinearSolve.solve` takes, so the steady
 system reaches the factorisations, iterative solvers and preconditioners in that stack
 without being assembled by hand first.
+
+On ghost spaces (a [`constrained`](@ref) space, or the pair `polygon_spaces` returns), the
+problem is the reduced system `A, F = assemble(a, l)`, whose unknowns are the
+[`ndofs`](@ref) of the trial space, exactly as `pde_solve(A, F)` would take it.
 
 # Keywords
 - `dirichlet`, `dirichlet_components`: as [`assemble`](@ref) takes them.
@@ -222,6 +227,10 @@ sol = solve(prob, KrylovJL_GMRES())
 See also [`assemble`](@ref), [`ode_problem`](@ref), [`nonlinear_problem`](@ref).
 """
 function linear_problem(a::BilinearForm, l::LinearForm; kwargs...)
+    return _linear_problem(a, l; kwargs...)
+end
+
+function linear_problem(a::GhostBilinearForm, l::GhostLinearForm; kwargs...)
     return _linear_problem(a, l; kwargs...)
 end
 

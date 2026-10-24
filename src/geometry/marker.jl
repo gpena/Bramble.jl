@@ -6,8 +6,8 @@ Labeled geometric region or boundary marker on a computational domain.
 # Arguments
 - `label`: Region identifier (e.g. `:inlet`, `:wall`, `:boundary`).
 - `identifier`: Location specification, either a predefined boundary `Symbol` (e.g. `:left`),
-  a `Set{Symbol}` of boundary names, a boolean spatial predicate function `f(x)`, or a
-  `Polygon` (from `polygon`) classifying the nodes of a 2D mesh.
+  a `Set{Symbol}` of boundary names, or a boolean spatial predicate function `f(x)`.
+  Polygon and level-set pairs are kept apart, in the `regions` of [`DomainMarkers`](@ref).
   [`markers`](@ref) builds a `Marker` from a tuple, vector or set of boundary symbols by
   storing it as a `Set{Symbol}`.
 """
@@ -36,7 +36,8 @@ Return the `Symbol` label of marker `m`.
     identifier(m::Marker{F}) -> F
     identifier(m::MarkerPair{F}) -> F
 
-Return the identifying symbol, set of symbols, predicate function or polygon of marker `m`.
+Return the identifying symbol, set of symbols, predicate function,
+polygon or level set of marker `m`.
 """
 @inline identifier(m::Marker) = m.identifier
 @inline identifier(m::MarkerPair) = last(m)
@@ -80,31 +81,21 @@ end
 # exterior nodes.
 @inline _polygon_labels(L::Symbol) = (L, Symbol(L, :_boundary), Symbol(L, :_exterior))
 
-# A polygon marker `:L => P`. Its three mesh labels are built once, here, so that reading
-# them (`labels`, `set_markers!`) allocates nothing.
-struct _PolygonMarker{T}
+# A region marker `:L => P` (a `Polygon`) or `:L => levelset(φ)` (a `LevelSet`). Its three
+# mesh labels are built once, here, so that reading them (`labels`, `set_markers!`)
+# allocates nothing.
+struct _RegionMarker{I <: Union{Polygon, LevelSet}}
     label::Symbol
-    identifier::Polygon{T}
+    identifier::I
     labels::NTuple{3, Symbol}
 end
-_PolygonMarker(L::Symbol, P::Polygon) = _PolygonMarker(L, P, _polygon_labels(L))
-
-@inline label(m::_PolygonMarker) = m.label
-@inline identifier(m::_PolygonMarker) = m.identifier
-@inline _polygon_labels(m::_PolygonMarker) = m.labels
-
-# A level-set marker `:L => levelset(φ)`, with its three mesh labels built once, as the
-# polygon's are. It answers the same region queries as `_PolygonMarker`.
-struct _LevelSetMarker{F}
-    label::Symbol
-    identifier::LevelSet{F}
-    labels::NTuple{3, Symbol}
+function _RegionMarker(L::Symbol, R::Union{Polygon, LevelSet})
+    return _RegionMarker(L, R, _polygon_labels(L))
 end
-_LevelSetMarker(L::Symbol, S::LevelSet) = _LevelSetMarker(L, S, _polygon_labels(L))
 
-@inline label(m::_LevelSetMarker) = m.label
-@inline identifier(m::_LevelSetMarker) = m.identifier
-@inline _polygon_labels(m::_LevelSetMarker) = m.labels
+@inline label(m::_RegionMarker) = m.label
+@inline identifier(m::_RegionMarker) = m.identifier
+@inline _polygon_labels(m::_RegionMarker) = m.labels
 
 """
     symbols(domain_markers::DomainMarkers) -> Tuple
@@ -279,13 +270,14 @@ const _RegionIdentifier = Union{Polygon, LevelSet}
 function _check_polygon_label_clash(pairs::Tuple)
     for (i, p) in enumerate(pairs)
         p.second isa _RegionIdentifier || continue
+        throw_clash = p.second isa Polygon ? _throw_polygon_marker_error :
+                      _throw_levelset_marker_error
         for (j, q) in enumerate(pairs)
             i == j && continue
             theirs = q.second isa _RegionIdentifier ? _polygon_labels(q.first) : (q.first,)
             for L in _polygon_labels(p.first)
-                L in theirs && (p.second isa Polygon ? _throw_polygon_marker_error :
-                 _throw_levelset_marker_error)(p.first,
-                    "its label :$L is also the label of another marker")
+                L in theirs && throw_clash(p.first,
+                    "its label :$L is also the label of marker :$(q.first)")
             end
         end
     end
@@ -390,8 +382,7 @@ function _create_generic_markers(pairs::Pair...)
     return DomainMarkers(symbols, tuples, conditions, regions)
 end
 
-@inline _region_marker(p::Pair{Symbol, <:Polygon}) = _PolygonMarker(p.first, p.second)
-@inline _region_marker(p::Pair{Symbol, <:LevelSet}) = _LevelSetMarker(p.first, p.second)
+@inline _region_marker(p::Pair{Symbol, <:Union{Polygon, LevelSet}}) = _RegionMarker(p.first, p.second)
 
 # Extract function-valued pairs into a tuple of Marker{F} instances, keeping each closure's
 # concrete type specialized for zero heap allocations during evaluation.
@@ -638,15 +629,15 @@ function Base.show(io::IO, m::Marker{F}) where {F}
     end
 end
 
-function Base.show(io::IO, m::_PolygonMarker)
-    print(io, "Marker(:$(m.label) => <polygon>)")
-end
-
 _region_description(P::Polygon) = "<polygon, $(length(P.vertices)) vertices>"
 _region_description(::LevelSet) = "<levelset>"
 
-function Base.show(io::IO, m::_LevelSetMarker)
-    print(io, "Marker(:$(m.label) => <levelset>)")
+# The short form of `_region_description`, without the vertex count.
+_region_kind(::Polygon) = "<polygon>"
+_region_kind(S::LevelSet) = _region_description(S)
+
+function Base.show(io::IO, m::_RegionMarker)
+    print(io, "Marker(:$(m.label) => $(_region_kind(m.identifier)))")
 end
 
 function Base.show(io::IO, dm::DomainMarkers)

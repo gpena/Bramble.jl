@@ -437,6 +437,29 @@ else
         end
     end
 
+    # `l(vₕ)` on a Metal test space contracts the assembled vector against the device
+    # element, rather than sweeping it one scalar at a time, and equals its CPU twin on
+    # non-uniform meshes, for a constant and a varying element (gpena/Bramble.jl#864). An
+    # element of another space is refused before the contraction.
+    @testset "Metal l(vₕ) contraction (#864)" begin
+        for npts in ((13,), (13, 11))
+            Wc, Wg = _matched_spaces(npts)
+            for (label, sc, sg, l) in (("scalar", Wc, Wg, v -> innerₕ(_f, v)),
+                ("stencil", Wc, Wg, v -> innerₕ(_f, D₋ₓ(v))),
+                ("composite", Wc × Wc, Wg × Wg, V -> innerₕ(_f, V[1]) + innerₕ(2.0f0, V[2])))
+                @testset "$(length(npts))D $label" begin
+                    lc, lg = form(sc, l), form(sg, l)
+                    @test lg(element(sg, 1.0f0)) ≈ lc(element(sc, 1.0f0)) rtol = _RTOL
+                    w = Float32[1 + (-1)^i * 0.5f0 * i / ndofs(sc) for i in 1:ndofs(sc)]
+                    @test lg(element(sg, Metal.MtlVector(w))) ≈ lc(element(sc, w)) rtol = _RTOL
+                end
+            end
+            _, Wshort = _matched_spaces(npts .- 2)
+            lg = form(Wg, v -> innerₕ(_f, v))
+            @test_throws DimensionMismatch lg(element(Wshort, 1.0f0))
+        end
+    end
+
     # A `dirac` source assembles on a Metal space: its weight is computed in the mesh's
     # element type promoted with the strength's, so a Float32 strength on a Float32 space
     # gives a Float32 vector the device path can upload (a Float64 hardcode made it fail).

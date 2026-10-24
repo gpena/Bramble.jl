@@ -18,6 +18,8 @@ using LinearAlgebra: dot, mul!
 using Bramble
 import Bramble
 using Bramble: lift, polygon, polygon_spaces, Dcₓ, Dcᵧ
+using LinearSolve: KrylovJL_GMRES, solve
+using Kronecker: Kronecker
 
 # Figure 1 of the paper, its three oblique edges of slope ±1 apart; the V-notch, a reflex
 # vertex at (1, 2) between two oblique edges; an L without oblique edges.
@@ -240,8 +242,9 @@ end
         @test_throws ArgumentError form(U, W, (w, v) -> innerₕ(Dcₓ(Dcₓ(w)), v))
         @test_throws ArgumentError assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v)),
             l; dirichlet = (:P_boundary => uq,))
-        @test_throws ArgumentError form(U, W,
+        e = @test_throws ArgumentError form(U, W,
             (w, v) -> innerₕ(w, v) + 2.0 * innerₕ(x -> 1.0, w) * innerₕ(x -> 1.0, v))
+        @test occursin("RankOneUpdate", e.value.msg) && occursin("without it", e.value.msg)
         # A grid line the closure would not give: y = 1.3 crosses the oblique edges off
         # the nodes.
         Mf = mesh(Ω, (7, 6), (true, true))
@@ -326,6 +329,65 @@ end
         @test zn ≈ assemble(ap) * xn
         yn = rand(rng, Bramble.ndofs(WN))
         @test ap(xn, yn) ≈ dot(yn, assemble(ap) * xn)
+    end
+
+    @testset "linear_problem and solve (#880)" begin
+        Random.seed!(2)
+        Ωₕ = fig1_mesh((10, 9), (false, false))
+        U, W = polygon_spaces(Ωₕ, :P, uq)
+        a = form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.4 * mixed(w), v))
+        l = form(W, v -> innerₕ(x -> -4.0, v))
+        A, F = assemble(a, l)
+        prob = linear_problem(a, l)
+        @test prob.A == A && prob.b == F
+        I, _ = labels(Ωₕ)
+        uex = Rₕ(gridspace(Ωₕ), uq).data[I]
+        @test maximum(abs, solve(prob).u .- uex) < 1e-9
+        uₕ = solve(a, l)
+        @test Bramble.space(uₕ) === U
+        @test maximum(abs, parent(uₕ) .- uex) < 1e-9
+        uₖ = solve(a, l; solver = KrylovJL_GMRES(), reltol = 1e-12, abstol = 0.0)
+        @test maximum(abs, parent(uₖ) .- uex) < 1e-8
+    end
+
+    @testset "Kronecker, fdm, GMG refusals (#880)" begin
+        Random.seed!(2)
+        Ωₕ = fig1_mesh((10, 9), (false, false))
+        U, W = polygon_spaces(Ωₕ, :P, uq)
+        a = form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v))
+        F = assemble(a, form(W, v -> innerₕ(x -> -4.0, v)))[2]
+        # The facet-ghost messages name relations per facet and `constrained`, neither of
+        # which a polygon space has.
+        polygon_msg(e) = occursin("polygon spaces", e.value.msg) &&
+                         !occursin("facet", e.value.msg) &&
+                         !occursin("constrained", e.value.msg)
+        # A plain form's factorisation, for `fdm_factorize!` to refill from the polygon one.
+        Wp = gridspace(Ωₕ)
+        fp = fdm_factorize(form(Wp, Wp, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))
+        for (name, f) in (("kronecker_operator", () -> kronecker_operator(a)),
+            ("fdm_solve", () -> fdm_solve(a, F)),
+            ("fdm_solve", () -> fdm_solve(a, F; dirichlet = :boundary)),
+            ("fdm_factorize", () -> fdm_factorize(a)),
+            ("fdm_factorize!", () -> fdm_factorize!(fp, a)),
+            ("fdm_preconditioner", () -> fdm_preconditioner(a)))
+            e = @test_throws ArgumentError f()
+            @test polygon_msg(e) && startswith(e.value.msg, name * " on a form")
+        end
+        e = @test_throws ArgumentError gmg_preconditioner(a)
+        @test polygon_msg(e) && occursin("#846", e.value.msg)
+        # The L's vertices lie on the odd lines of the 7² grid, off every line of the
+        # coarse 4² grid, where `polygon_spaces` throws: the finest level is built first.
+        build(W0) = (S = polygon_spaces(mesh(W0), :P, uq);
+            form(S[1], S[2], (w, v) -> innerₕ(-1.0 * Δₕ(w), v)))
+        for Ωg in (fig1_mesh((13, 11), (true, true)),
+            polygon_mesh(LSHAPE, interval(0.0, 6.0) × interval(0.0, 6.0), (7, 7),
+            (true, true)))
+            e = @test_throws ArgumentError gmg_preconditioner(build, Ωg; levels = 2)
+            @test polygon_msg(e) && occursin("#846", e.value.msg)
+        end
+        # Any other form on ghost spaces still has no one-argument method.
+        G = gridspace(Ωₕ; ghosts = :boundary)
+        @test_throws MethodError gmg_preconditioner(form(G, G, (u, v) -> innerₕ(u, v)))
     end
 end
 

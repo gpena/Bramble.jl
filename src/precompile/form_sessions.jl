@@ -565,13 +565,16 @@ end
 function _pc_ghost_operators(C)
     a = form(C, C, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     x = zeros(ndofs(C))
-    # Behind an inference barrier: each call still compiles for the concrete form at run
-    # time, but JET does not follow it into the unions their bodies guard at run time (the
-    # per-axis closures of `_ghost_kron_closures`, the padded `matrix_free_operator`), which
-    # it would report as missing methods.
-    ab = Base.inferencebarrier(a)
-    matrix_free_operator(ab) * x
-    kronecker_operator(ab) * x
+    M = matrix_free_operator(a)
+    K = kronecker_operator(a)
+    M * x
+    K * x
+    # Inferred here, the calls may be inlined into this function; a user's call dispatches
+    # to each entry point at run time, so compile those for the concrete types too.
+    precompile(matrix_free_operator, (typeof(a),))
+    precompile(kronecker_operator, (typeof(a),))
+    precompile(*, (typeof(M), typeof(x)))
+    precompile(*, (typeof(K), typeof(x)))
     r = form(C, C, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + 0.5 * innerₕ(1, u) * innerₕ(1, v))
     assemble(r)
     return nothing

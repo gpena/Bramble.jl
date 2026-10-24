@@ -134,6 +134,24 @@ import Base: diff
                 false; backend = backend(Float32))
         end
 
+        @testset "Zero or negative point count" begin
+            msg = "a mesh needs at least one point per axis; got"
+            for n in (0, -2), unif in (true, false)
+
+                @test_throws ArgumentError mesh(create_test_domain(0.0, 1.0), n, unif)
+                @test_throws msg mesh(create_test_domain(0.0, 1.0), n, unif)
+            end
+            # A collapsed interval is no exception: 0 points is still refused.
+            @test_throws ArgumentError mesh(create_test_domain(1.0, 1.0), 0)
+        end
+
+        @testset "Spacing overflow" begin
+            # Finite ends whose spacing b - a overflows are refused (#867).
+            Ω = create_test_domain(-1.0e308, 1.0e308)
+            @test_throws ArgumentError mesh(Ω, 2, false)
+            @test_throws "spacing overflow Float64" mesh(Ω, 2, false)
+        end
+
         @testset "Storage-eltype collapse" begin
             # The interval is a point in Float32 storage: one point, never five copies of
             # 1f6 with zero spacings.
@@ -223,7 +241,11 @@ import Base: diff
                 ([0.0, 0.25, 0.5, 0.75, Inf], "point 5"),
                 ([-Inf, 0.25, 0.5, 0.75, 1.0], "point 1"),
                 ([0.0, 0.75, 0.5], "point 3"),
-                (Float64[], "at least one point")]
+                (Float64[], "at least one point"),
+                # finite points whose half-point, spacing or cell measure overflows (#867)
+                ([1.0e308, 1.7e308], "half-point at point 2"),
+                ([-1.0e308, 1.0e308], "spacing at point 2"),
+                ([-1.0e308, 0.0, 1.0e308], "cell measure at point 2")]
             for (pts, msg) in bad
                 @test_throws ArgumentError set_points!(Ωₕ, pts)
                 @test_throws msg set_points!(Ωₕ, pts)
@@ -235,6 +257,26 @@ import Base: diff
             # change_points! goes through the same check
             @test_throws ArgumentError change_points!(Ωₕ, [0.0, 0.5, 0.25, 0.75, 1.0])
             @test points(Ωₕ) == p0
+
+            # The overflow is judged in the storage eltype: points finite in Float32 whose
+            # spacing is not are refused on a Float32 mesh, though fine in Float64.
+            Ω32 = mesh(create_test_domain(0.0f0, 1.0f0), 2, false;
+                backend = backend(Float32))
+            @test_throws "spacing at point 2" set_points!(Ω32, [-3.0e38, 3.0e38])
+            @test points(Ω32) == Float32[0, 1]
+            @test spacings(Ω32) == Float32[1, 1]
+            # a point that overflows only on conversion, even alone
+            @test_throws "point 1 is Inf" set_points!(Ω32, [1.0e39])
+            @test points(Ω32) == Float32[0, 1]
+
+            # The cell measure is checked as the mesh computes it, (h₁ + h₂) * 0.5: here
+            # x₃ - x₁ is floatmax, but the rounded h₁ + h₂ ties up to Inf.
+            x_tie = [-2.0^1023, nextfloat(2.0^970), 2.0^1023 - 2.0^971]
+            @test isfinite(x_tie[3] - x_tie[1])
+            @test !isfinite((x_tie[2] - x_tie[1]) + (x_tie[3] - x_tie[2]))
+            @test_throws "cell measure at point 2" set_points!(Ωₕ, x_tie)
+            @test points(Ωₕ) == p0
+            @test Bramble._mesh_version(Ωₕ) == v0
 
             # An empty list is refused on a collapsed mesh too, which keeps its one point.
             Ωc = mesh(create_test_domain(1.0, 1.0), 1; backend = backend())

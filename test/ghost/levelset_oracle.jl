@@ -140,7 +140,58 @@ function mesh_classes(φ, Ωₕ, tol)
     return phi_classes(φ, xs, ys, Γ, tol(h))
 end
 
+# The norms on Ω̄ₕ of #879 by hand, as in polygon_oracle.jl: the values `v` at the interior
+# nodes `int`, 0 on Γ and outside; dual-cell areas for the L² norm, and for the H¹
+# seminorm the grid edges with both ends in Ω̄ (`cls ≥ 0`).
+function hand_norms(xs, ys, cls, int, v)
+    V = zeros(length(xs), length(ys))
+    V[int] .= v
+    half(z, j) = ((j < length(z) ? z[j + 1] : z[j]) - (j > 1 ? z[j - 1] : z[j])) / 2
+    s = 0.0
+    for l in eachindex(ys), j in 1:(length(xs) - 1)
+
+        cls[j, l] >= 0 && cls[j + 1, l] >= 0 || continue
+        s += half(ys, l) * (V[j + 1, l] - V[j, l])^2 / (xs[j + 1] - xs[j])
+    end
+    for l in 1:(length(ys) - 1), j in eachindex(xs)
+
+        cls[j, l] >= 0 && cls[j, l + 1] >= 0 || continue
+        s += half(xs, j) * (V[j, l + 1] - V[j, l])^2 / (ys[l + 1] - ys[l])
+    end
+    return sqrt(sum(O.dual_areas(xs, ys, int) .* v .^ 2)), sqrt(s), maximum(abs, v)
+end
+
 @testset "Level-set spaces against the F&G oracle" begin
+    # `Rₕ` and the norms on the trial space: the norms read Ω̄ₕ as the hand sums do, and the
+    # quadratic solve is exact on the inscribed polygon, where `g = uq` at the vertices.
+    @testset "Rₕ and norms on the trial space" begin
+        Random.seed!(1)
+        Ωₕ = levelset_mesh(disk, 20, (false, false))
+        cls = mesh_classes(disk, Ωₕ, h -> 1e-12)
+        @test cls == library_classes(Ωₕ)
+        xs, ys = lines(Ωₕ)
+        C = CartesianIndices(cls)
+        int = findall(==(1), vec(cls))
+        uq(x) = x[1]^2 + x[2]^2 + x[1] + 2 * x[2]
+        U, W = polygon_spaces(Ωₕ, :D, uq)
+        r = Rₕ(U, g_var)
+        @test parent(r) == [g_var((xs[C[k][1]], ys[C[k][2]])) for k in int]
+        n, s, m = hand_norms(xs, ys, cls, int, parent(r))
+        @test normₕ(r) ≈ n rtol = 1e-13
+        @test snorm₁ₕ(r) ≈ s rtol = 1e-13
+        @test norm₁ₕ(r) ≈ hypot(n, s) rtol = 1e-13
+        @test norminf(r) == m
+        A, F = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v)),
+            form(W, v -> innerₕ(x -> -4.0, v)))
+        e = element(U, A \ F) - Rₕ(U, uq)
+        @test normₕ(e) < 1e-9
+        @test snorm₁ₕ(e) < 1e-9
+        @test norminf(e) < 1e-9
+        @test normₕ(Rₕ(U, uq)) > 1   # the positive control: the norm reads the values
+        @test_throws ArgumentError Rₕ(W, uq)
+        @test_throws ArgumentError normₕ(element(W))
+    end
+
     @testset "$name, n = $n (seed $seed)" for (name, φ, tol) in CASES, n in (20, 40),
         seed in (1,)
         Random.seed!(seed)

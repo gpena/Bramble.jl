@@ -57,13 +57,13 @@ Zero-allocation; see [`label_identifiers`](@ref).
 """
     marker_identifiers(Ω::Domain) -> Tuple
 
-Return a tuple of the identifying symbols, symbol sets, predicate functions, polygons or level sets of
-all markers in domain `Ω`.
+Return a tuple of the identifying symbols, symbol sets, predicate functions, polygons or
+level sets of all markers in domain `Ω`.
 
 The tuple lists the identifiers of [`symbols`](@ref), then [`tuples`](@ref), then
-[`conditions`](@ref), then the polygon and level-set markers. It is built as a compile-time-unrolled
-tuple, like [`label_identifiers`](@ref), so its type is concrete even when the kinds are
-mixed.
+[`conditions`](@ref), then the polygon and level-set markers. It is built as a
+compile-time-unrolled tuple, like [`label_identifiers`](@ref), so its type is concrete even
+when the kinds are mixed.
 
 !!! note
     Building the tuple, like iterating [`symbols`](@ref), [`tuples`](@ref), or

@@ -125,13 +125,13 @@ const _GhostSide = Union{GhostGridSpace, _CompositeClosure}
 
 # Row replacement on a form's spaces: the rows of each space are its physical nodes, and the
 # facet masks are those of the test space's physical mesh (`_RowsDirichlet`, in
-# ghost_gridspace.jl). A form on a polygon space is a polygon form, and it keeps the
-# conflict nodes of its trial space, the last of `spaces`, which the matrix-free operator
-# refuses.
-function _RowsDirichlet(spaces::GhostGridSpace...)
+# ghost_gridspace.jl). A form on a polygon space is a polygon form, and it keeps whether a
+# tested row reads a conflict node of its trial space (`reads_conflict`), which the
+# matrix-free operator and the contraction refuse.
+function _RowsDirichlet(spaces::Tuple{Vararg{GhostGridSpace}}, reads_conflict::Bool)
     return _RowsDirichlet(all(W -> W.rows.physical, spaces), first(spaces).rows.facets,
-        any(W -> W.rows.polygon, spaces), false, BitVector(), BitVector(),
-        last(spaces).rows.conflict)
+        any(W -> W.rows.polygon, spaces), false, BitVector(), BitVector(), BitVector(),
+        reads_conflict)
 end
 
 """
@@ -259,15 +259,19 @@ end
 
 # The ghost form of `a`, a form on the padded spaces of `Wₕ` and `Vₕ`.
 function _ghost_bilinear_form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, a::BilinearForm)
-    return GhostBilinearForm(a, Wₕ, Vₕ, _ghost_maps(Wₕ, Vₕ, a)..., _RowsDirichlet(Vₕ, Wₕ))
+    maps = _ghost_maps(Wₕ, Vₕ, a)
+    return GhostBilinearForm(a, Wₕ, Vₕ, Base.front(maps)...,
+        _RowsDirichlet((Vₕ, Wₕ), last(maps)))
 end
 function _ghost_bilinear_form(Wₕ::_CompositeClosure, Vₕ::_CompositeClosure,
         a::BilinearForm)
     (_has_polygon(Wₕ) || _has_polygon(Vₕ)) && _throw_polygon_composite()
-    return GhostCompositeBilinearForm(a, Wₕ, Vₕ, _ghost_maps(Wₕ, Vₕ, a)...)
+    return GhostCompositeBilinearForm(a, Wₕ, Vₕ, Base.front(_ghost_maps(Wₕ, Vₕ, a))...)
 end
 
-# The padded matrix of `a`, the map of its reduction and the map of `A_pad d_u`.
+# The padded matrix of `a`, the map of its reduction and the map of `A_pad d_u`, and whether
+# a tested row reads a conflict node: a move is made for each such entry and none other.
+# All of it hangs on the pattern of `A_pad`, which `assemble!` refills in place.
 function _ghost_maps(Wₕ::_GhostSide, Vₕ::_GhostSide, a::BilinearForm)
     _check_ghost_eltype(_matrix_eltype(a, a.ast))
     A_pad = allocate_system_matrix(a)::SparseMatrixCSC  # `_check_ghost_host`
@@ -276,7 +280,8 @@ function _ghost_maps(Wₕ::_GhostSide, Vₕ::_GhostSide, a::BilinearForm)
         backend(Vₕ), A_pad, Vₕ.E, Wₕ.E, moves)
     liftptr, liftsrc, liftcol = _ghost_lift_map(backend(Vₕ), A_pad, _affine_support(Wₕ),
         moves)
-    return (A_pad, src, dst, coef, colptr, rowval, liftptr, liftsrc, liftcol)
+    return (A_pad, src, dst, coef, colptr, rowval, liftptr, liftsrc, liftcol,
+        !isempty(moves[1]))
 end
 
 # The moves of the entries of `A_pad` at conflict columns, `(k, j, s)`: stored entry `k`, at
@@ -285,13 +290,13 @@ end
 const _Moves = Tuple{Vector{Int}, Vector{Int}, Vector{Int}}
 _exterior_moves(::_GhostSide, ::_GhostSide, ::SparseMatrixCSC) = (Int[], Int[], Int[])
 
-# The reach guard and the moves on a space of polygon_spaces as the trial side. The test
-# space there extends nothing, so every exterior node is unclosed. A tested row (one `E_v`
-# reads) may read an exterior node only at a diagonal neighbour the (3.2) extension gives.
-# An entry at an unclosed node, or at an extended one off the diagonals, is a stencil wider
-# than the scheme's, and throws. An entry `a` of row `i` at a conflict node `i + (sx, sy)`
-# moves onto the reader's own (3.2) row: `+a` at `i + (sx, 0)` and `i + (0, sy)`, the two
-# Γ corners, and `−a` at `i`.
+# The reach guard and the moves on a polygon_spaces trial side.
+# With the test space of polygon_spaces as trial side, every exterior node is unclosed.
+# A tested row (one `E_v` reads) may read an exterior node only at a diagonal neighbour the
+# (3.2) extension gives. An entry at an unclosed node, or at an extended one off the
+# diagonals, is a stencil wider than the scheme's, and throws. An entry `a` of row `i` at a
+# conflict node `i + (sx, sy)` moves onto the reader's own (3.2) row: `+a` at `i + (sx, 0)`
+# and `i + (0, sy)`, the two Γ corners, and `−a` at `i`.
 function _exterior_moves(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, A_pad::SparseMatrixCSC)
     rows = Wₕ.rows
     moves = (Int[], Int[], Int[])
@@ -345,7 +350,13 @@ end
 end
 
 @noinline function _throw_polygon_rank_one()
-    throw(ArgumentError("forms on polygon spaces do not support rank-one terms yet."))
+    throw(
+        ArgumentError(
+        "form(U, V, f) on the spaces of polygon_spaces holds a rank-one term (a product of " *
+        "two integrals), which polygon forms do not support: assemble the form without it " *
+        "and add the term as a `RankOneUpdate` of the matrix.",
+    ),
+    )
 end
 
 function form(Vₕ::GhostGridSpace, f)
@@ -356,7 +367,8 @@ end
 
 # The ghost form of `l`, a form on the padded space of `Vₕ`.
 function _ghost_linear_form(Vₕ::GhostGridSpace, l::LinearForm)
-    return GhostLinearForm(l, Vₕ, _ghost_load_buffer(Vₕ, l), _RowsDirichlet(Vₕ))
+    rows = _RowsDirichlet((Vₕ,), false)
+    return GhostLinearForm(l, Vₕ, _ghost_load_buffer(Vₕ, l), rows)
 end
 function _ghost_linear_form(Vₕ::_CompositeClosure, l::LinearForm)
     _has_polygon(Vₕ) && _throw_polygon_composite()
@@ -650,27 +662,19 @@ end
     return rows.facets[2(d - 1) + s]
 end
 
-# Without `dirichlet_components`, the call of `matrix_free_operator`, which applies
-# `E_vᵀ A_pad E_u` and so refuses a form that reads a conflict node of its trial space in
-# a tested row: the substitution per reading equation lives in the reduction map alone.
+# The check of `matrix_free_operator`, which applies `E_vᵀ A_pad E_u`: it refuses a form
+# reading a conflict node of its trial space in a tested row, whose substitution per reading
+# equation is in the reduction map alone.
 function _check_rows(a::GhostBilinearForm, labels)
     _reads_conflict(a) && _throw_polygon_conflict("the matrix-free operator")
     return _check_rows(a.rows, (a.test_space, a.trial_space), labels)
 end
 
-# Whether `a` reads, in a tested row, a conflict node of its polygon trial space; the
-# matrix-free operator and the contraction `a(u, v)` (ghost_contract.jl) refuse such a form.
+# Whether `a` reads, in a tested row, a conflict node of its polygon trial space, as `form`
+# found it; the matrix-free operator and the contraction `a(u, v)` (ghost_contract.jl)
+# refuse such a form.
 _reads_conflict(::GhostCompositeBilinearForm) = false
-function _reads_conflict(a::GhostBilinearForm)
-    cf = a.rows.conflict
-    any(cf) || return false
-    cp, rv = SparseArrays.getcolptr(a.test_space.Et), rowvals(a.A_pad)
-    for j in findall(cf), k in nzrange(a.A_pad, j)
-
-        cp[rv[k] + 1] > cp[rv[k]] && return true
-    end
-    return false
-end
+_reads_conflict(a::GhostBilinearForm) = a.rows.reads_conflict
 _check_rows(l::GhostLinearForm, labels) = _check_rows(l.rows, (l.test_space,), labels)
 # With the `dirichlet_components` of the call: a scalar space validates them with its rows
 # (`_form_rows!`), a composite one reads them here (ghost_composite.jl).

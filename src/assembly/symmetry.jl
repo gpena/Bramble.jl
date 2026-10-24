@@ -329,10 +329,17 @@ end
 # so `innerₕ(g * u, g * v)` assembles to `LᵀGWGL`, and a non-real `g` makes `G²` indefinite
 # or negative (`g = im` gives `-LᵀWL`). Both sides are walked, since `OperatorScale` sides
 # match by `==` and `1.0 == 1.0 + 0im`.
-function _is_posdef_term(op::BilinearProduct)
-    return _same_operator_shape(op.left_op, op.right_op) && _is_real_side(op.left_op) &&
-           _is_real_side(op.right_op)
+#
+# The weight `W` must be non-negative too: `InnerGammaNormal` carries the outward sign
+# (`-` on a minimum facet), so `inner_Γ(u * η[1], v)` is indefinite (#865). The weights
+# are whitelisted, so a signed weight added later answers `false` until it is listed.
+function _is_posdef_term(op::BilinearProduct{D, W}) where {D, W}
+    return _has_nonnegative_weight(W) && _same_operator_shape(op.left_op, op.right_op) &&
+           _is_real_side(op.left_op) && _is_real_side(op.right_op)
 end
+_has_nonnegative_weight(::Type{<:Union{InnerH, InnerPlus, InnerPlusSet, InnerGamma,
+    InnerGammaFacet}}) = true
+_has_nonnegative_weight(::Type) = false
 function _is_posdef_term(op::OperatorAdd)
     return _is_posdef_term(op.left_op) && _is_posdef_term(op.right_op)
 end

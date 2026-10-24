@@ -7,16 +7,17 @@
 # grid fits; named error).
 # Everything runs in Float64.
 
-@noinline function _throw_levelset_touches_box()
-    throw(ArgumentError("level-set grid: φ = 0 reaches the domain's bounding box, or φ < 0 on it; the curve must lie strictly inside the box."))
+@noinline function _throw_levelset_touches_box(axis, v, box)
+    name = axis == 1 ? "x" : "y"
+    throw(ArgumentError("level-set grid: φ = 0 reaches the side $name = $v of the box $box, or φ < 0 on it; the curve must lie strictly inside the box."))
 end
 
 @noinline function _throw_levelset_box(box)
     throw(ArgumentError("level-set grid: the box $box must have x₀ < x₁ and y₀ < y₁."))
 end
 
-@noinline function _throw_levelset_empty()
-    throw(ArgumentError("level-set grid: φ is nonnegative at every sampled point of the domain's bounding box; the region φ < 0 is empty or too small to resolve."))
+@noinline function _throw_levelset_empty(box)
+    throw(ArgumentError("level-set grid: φ is nonnegative at every sampled point of the box $box; the region φ < 0 is empty or too small to resolve."))
 end
 
 @noinline function _throw_levelset_not_orthoconvex(axis, v, k)
@@ -98,7 +99,6 @@ function _levelset_side_touches(φ, axis::Int, v::Float64, lo::Float64, hi::Floa
     ts = range(lo, hi; length = M)
     fs = map(f, ts)
     any(x -> isfinite(x) && x <= 0, fs) && return true
-    invφ = (sqrt(5.0) - 1) / 2
     for k in 1:M
         isfinite(fs[k]) || continue
         ((k > 1 && fs[k - 1] < fs[k]) || (k < M && fs[k + 1] < fs[k])) && continue
@@ -106,13 +106,11 @@ function _levelset_side_touches(φ, axis::Int, v::Float64, lo::Float64, hi::Floa
         spread = maximum(j -> isfinite(fs[j]) ? abs(fs[j]) : 0.0, max(k - 1, 1):min(k + 1, M))
         # A tie keeps [m1, m2], so φ rounded flat near a tangency cannot drift the bracket.
         g = Inf
-        for _ in 1:100
-            m1, m2 = b - invφ * (b - a), a + invφ * (b - a)
-            f1, f2 = f(m1), f(m2)
-            f1, f2 = isnan(f1) ? Inf : f1, isnan(f2) ? Inf : f2   # a NaN probe never wins
-            isfinite(f1) && (g = min(g, f1))
-            isfinite(f2) && (g = min(g, f2))
-            f1 < f2 ? (b = m2) : f1 > f2 ? (a = m1) : ((a, b) = (m1, m2))
+        _golden_min(a, b; keep_ties = true) do t
+            ft = f(t)
+            isnan(ft) && return Inf   # a NaN probe never wins
+            isfinite(ft) && (g = min(g, ft))
+            return ft
         end
         g <= 1e-10 * spread && return true
     end
@@ -142,14 +140,16 @@ Classify the curve `φ = 0` inside `box = ((x₀, x₁), (y₀, y₁))` for a Fe
 Grigorieff grid and return its path with the rotation number `ρ` of the crossing map
 `T = σₕ∘σᵥ`:
 
-  - `:closure` when `T^q = id` for some `q ≤ 4` (any curve with one grid-aligned symmetry
-    axis has `T² = id`); `ρ = p/q`.
+  - `:closure` when `T^q = id` for some `q ≤ 4`, or for the `q ≤ 60` of a rotation number
+    `p/q` found below (any curve with one grid-aligned symmetry axis has `T² = id`);
+    `ρ = p/q`.
   - `:orbit` when the weighted Birkhoff rotation number converges (8000 and 32000 steps agree
     to 1e-10) and is not `p/q` with `q ≤ 60`.
 
 Throws a named `ArgumentError` when the curve reaches the box, a sampled grid line meets it
 more than twice, it is not star-shaped about the minimum of `φ`, `T` is phase-locked
-(`ρ = p/q`, `T^q ≠ id`) or nearly locked (the average does not converge).
+(`ρ = p/q`, `T^q ≠ id`) or nearly locked (the average does not converge), the box is empty,
+or `φ` is nonnegative at every sample (the region `φ < 0` is empty or too small to resolve).
 """
 function _levelset_class(φ, box)
     B = ((Float64(box[1][1]), Float64(box[1][2])), (Float64(box[2][1]), Float64(box[2][2])))
@@ -160,7 +160,7 @@ function _levelset_class(φ, box)
 
     # The curve lies strictly inside the box: φ > 0 on each side, tangency included.
     for (axis, v, lo, hi) in ((1, x₀, y₀, y₁), (1, x₁, y₀, y₁), (2, y₀, x₀, x₁), (2, y₁, x₀, x₁))
-        _levelset_side_touches(φ, axis, v, lo, hi) && _throw_levelset_touches_box()
+        _levelset_side_touches(φ, axis, v, lo, hi) && _throw_levelset_touches_box(axis, v, B)
     end
 
     # Orthogonal convexity on 2001 sampled lines per axis.
@@ -177,7 +177,7 @@ function _levelset_class(φ, box)
 
     # Centre: the minimum of φ on a sample of the box; star-shaped about it.
     c, fmin = _levelset_centre(φ, B)
-    fmin < 0 || _throw_levelset_empty()
+    fmin < 0 || _throw_levelset_empty(B)
     for k in 0:719
         _levelset_ray(φ, B, c, 2π * k / 720 + 0.001)
     end

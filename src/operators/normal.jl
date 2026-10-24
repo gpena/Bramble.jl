@@ -349,8 +349,9 @@ end
 
 # Scalar multiples: a `Number` or a `Ref` to one, the scalars `OperatorScale` carries. Each is
 # kept as given and applied at expansion through the same `c * term` a `LazyOp` uses, so an
-# integer literal stays an `Integer` (and promotes to the space's element type, as `-1` does
-# in `A - B`) and a `Ref` stays a runtime scalar (bramble-form §6).
+# integer literal stays an `Integer` (and promotes to the space's element type) and a `Ref`
+# stays a runtime scalar (bramble-form §6). `-t` below stores the `Integer` `-1`, whereas
+# `A - B` on operators stores the sign `_MinusOne` (ast.jl).
 const _NormalScalar = Union{Number, Base.RefValue{<:Number}}
 
 @inline function Base.:*(c::_NormalScalar, p::NormalComponentProduct{DIM}) where {DIM}
@@ -496,8 +497,10 @@ end
     return FacetOperator{D, G, typeof(ops)}(ops)
 end
 
+# The value `x` of a `Val{x}`.
+@inline _val(::Val{x}) where {x} = x
+
 # The operator of facet `(d, s)`, `s` 1 for the minimum and 2 for the maximum.
-@inline _facet_component(F::FacetOperator, d::Int, s::Int) = F.ops[d][s]
 @inline _facet_component(F::FacetOperator, ::Val{d}, ::Val{s}) where {d, s} = F.ops[d][s]
 
 @inline _reads_ghosts(::FacetOperator{D, G}) where {D, G} = G
@@ -563,11 +566,10 @@ end
 # The axes as `Val`s, so each term's difference has its axis as a type, summed by `+`,
 # which folds over terms of distinct types where `sum` would not infer.
 @inline function _normal_flux(u::LazyOp{D}, K::AbstractMatrix{<:Number}, d::Int) where {D}
-    return _add_terms(map(e -> K[d, _val_axis(e)] * Dc(u, e), ntuple(Val, Val(D))))
+    return _tuple_sum(map(e -> K[d, _val(e)] * Dc(u, e), ntuple(Val, Val(D))))
 end
-@inline _val_axis(::Val{e}) where {e} = e
-@inline _add_terms(t::Tuple{Any}) = only(t)
-@inline _add_terms(t::Tuple) = +(t...)
+@inline _tuple_sum(t::Tuple{Any}) = only(t)
+@inline _tuple_sum(t::Tuple) = +(t...)
 
 @inline _check_conormal(::Nothing, ::Val{D}) where {D} = nothing
 @inline function _check_conormal(K::AbstractMatrix{<:Number}, ::Val{D}) where {D}
@@ -859,7 +861,7 @@ end
 
 # One term per facet, over the axes as `Val`s so each weight is a type.
 @inline function _facet_terms(m::Val, g::Val, ::Val{D}, left::L, right::R) where {D, L, R}
-    return _add_terms(_facet_pairs(m, g, ntuple(Val, Val(D)), left, right))
+    return _tuple_sum(_facet_pairs(m, g, ntuple(Val, Val(D)), left, right))
 end
 
 # Unrolled without a closure, which would hold `MASK` as a value of an abstract type.

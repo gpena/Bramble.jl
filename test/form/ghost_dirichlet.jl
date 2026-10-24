@@ -257,4 +257,25 @@ end
             symmetrize = true), "nothing to symmetrize")
 end
 
+# A datum mixing `Int` and `Float64` values is a `Vector{Real}`; its values promote to
+# `Float64` and give the same `d` as the all-`Float64` datum (gpena/Bramble.jl#890).
+@testset "Dirichlet datum mixing Int and Float64" begin
+    Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 6), (true, true))
+    W = gridspace(Ωₕ; ghosts = :boundary)
+    mixed, float = x -> x[2] < 0.5 ? 0 : 1.0, x -> x[2] < 0.5 ? 0.0 : 1.0
+    rels(g) = u -> (:xmin => u => g, :xmin => ∂ₙ(u) => 0.0)
+    dm, df = Bramble.closure(constrained(W, rels(mixed)))[2],
+    Bramble.closure(constrained(W, rels(float)))[2]
+    @test eltype(dm) == Float64
+    @test dm == df
+    @test any(isone, df)
+    crels(g) = u -> (:xmin => u(1) => g, :xmin => ∂ₙ(u(1)) => 0.0,
+        :xmin => ∂ₙ(u(2)) => 0.0)
+    cm, cf = Bramble.closure(constrained(W × W, crels(mixed)))[2],
+    Bramble.closure(constrained(W × W, crels(float)))[2]
+    @test eltype(cm) == Float64
+    @test cm == cf
+    @test any(isone, cf)
+end
+
 end # module FormGhostDirichletTests

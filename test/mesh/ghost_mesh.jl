@@ -1,7 +1,7 @@
 module MeshGhostMeshTests
 
 using Test
-using Random: MersenneTwister
+using Random: MersenneTwister, seed!
 using Bramble
 using Bramble: GhostMesh, nghosts, ghost_index, boundary_node, is_absent, has_ghosts,
                physical_mesh, physical_indices, padded_index, boundary_indices,
@@ -213,6 +213,26 @@ end
         # The submeshes are the padded mesh's own, and the physical ones keep their points.
         @test Gu(1) !== Ωu(1) && Gu(2) !== Ωu(2)
         @test npoints(Ωu, Tuple) == (8, 9)
+    end
+
+    @testset "Leaves the global RNG untouched" begin # gpena/Bramble.jl#868
+        for Ωₕ in (mesh(domain(interval(0.0, 1.0)), 5, false),
+            mesh(domain(interval(0.0, 1.0) × interval(-1.0, 2.0)), (5, 6), (true, false)))
+            seed!(1)
+            a = rand()
+            seed!(1)
+            GhostMesh(Ωₕ)
+            @test rand() == a
+        end
+    end
+
+    @testset "Tight axis in floating point" begin # consecutive floats round 1.0
+        x = [prevfloat(1.0, 4), prevfloat(1.0, 3), prevfloat(1.0, 2), prevfloat(1.0), 1.0,
+            nextfloat(1.0)]
+        Ωₕ = mesh(domain(interval(x[1], x[end])), length(x), false)
+        Bramble.change_points!(Ωₕ, x)
+        G = GhostMesh(Ωₕ)
+        @test points(G(1)) == [x[1] - (x[2] - x[1]); x; x[end] + (x[end] - x[end - 1])]
     end
 
     @testset "Follows change_points!" begin

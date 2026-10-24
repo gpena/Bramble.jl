@@ -219,6 +219,18 @@ end
         @test relerr(sol.u[end], A \ F) <= 1e-6
     end
 
+    # `mass` reaches `semidiscretize` through the ghost pair: the problem's mass matrix is
+    # `assemble(m)`, not the default `innerₕ(u, v)` one.
+    @testset "ode_problem forwards mass (ghost)" begin
+        W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = GHOSTS2)
+        C = constrained(W, rel2(nothing))
+        a, l = form(C, C, laplacian), form(C, source)
+        m = form(C, C, (u, v) -> 3.0 * innerₕ(u, v))
+        prob = ode_problem(a, l, zeros(Bramble.ndofs(C)), (0.0, 1.0); mass = m)
+        @test prob.f.mass_matrix == assemble(m)
+        @test prob.f.mass_matrix != Bramble.mass_matrix(semidiscretize(a, l))
+    end
+
     @testset "Refusals" begin
         Ω = ghost_mesh(CpuSerial(), (6, 7))
         W = gridspace(Ω; ghosts = GHOSTS2)
@@ -250,9 +262,9 @@ end
         # a plain-space mass with a ghost operator
         @test says(() -> semidiscretize(a, l; mass = form(P, P, (u, v) -> innerₕ(u, v))),
             "mass::BilinearForm")
-        @test_throws ArgumentError ode_problem(form(P, P, laplacian), l,
+        @test_throws "on every side or on none" ode_problem(form(P, P, laplacian), l,
             zeros(Bramble.ndofs(C)), (0.0, 1.0))
-        @test_throws ArgumentError ode_problem(a, form(P, source),
+        @test_throws "on every side or on none" ode_problem(a, form(P, source),
             zeros(Bramble.ndofs(C)), (0.0, 1.0))
         # forms on another constrained space of the same mesh
         C2 = constrained(W, rel2(nothing))
