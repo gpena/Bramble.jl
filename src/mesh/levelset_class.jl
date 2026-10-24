@@ -99,7 +99,6 @@ function _levelset_side_touches(φ, axis::Int, v::Float64, lo::Float64, hi::Floa
     ts = range(lo, hi; length = M)
     fs = map(f, ts)
     any(x -> isfinite(x) && x <= 0, fs) && return true
-    invφ = (sqrt(5.0) - 1) / 2
     for k in 1:M
         isfinite(fs[k]) || continue
         ((k > 1 && fs[k - 1] < fs[k]) || (k < M && fs[k + 1] < fs[k])) && continue
@@ -107,13 +106,11 @@ function _levelset_side_touches(φ, axis::Int, v::Float64, lo::Float64, hi::Floa
         spread = maximum(j -> isfinite(fs[j]) ? abs(fs[j]) : 0.0, max(k - 1, 1):min(k + 1, M))
         # A tie keeps [m1, m2], so φ rounded flat near a tangency cannot drift the bracket.
         g = Inf
-        for _ in 1:100
-            m1, m2 = b - invφ * (b - a), a + invφ * (b - a)
-            f1, f2 = f(m1), f(m2)
-            f1, f2 = isnan(f1) ? Inf : f1, isnan(f2) ? Inf : f2   # a NaN probe never wins
-            isfinite(f1) && (g = min(g, f1))
-            isfinite(f2) && (g = min(g, f2))
-            f1 < f2 ? (b = m2) : f1 > f2 ? (a = m1) : ((a, b) = (m1, m2))
+        _golden_min(a, b; keep_ties = true) do t
+            ft = f(t)
+            isnan(ft) && return Inf   # a NaN probe never wins
+            isfinite(ft) && (g = min(g, ft))
+            return ft
         end
         g <= 1e-10 * spread && return true
     end

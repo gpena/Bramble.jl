@@ -58,6 +58,27 @@ function _bisect_root(f, a, b, neg_a::Bool)
     return (a + b) / 2
 end
 
+# The bracket [a, b] left by 100 golden-section steps on f, which shrinks it towards a local
+# minimum. A step keeps [a, m2] when f(m1) < f(m2) and [m1, b] otherwise. With `keep_ties`, a
+# tie keeps [m1, m2] instead, so an f rounded flat near its minimum cannot drift the bracket.
+function _golden_min(f, a::Real, b::Real; keep_ties::Bool = false)
+    T = float(promote_type(typeof(a), typeof(b)))
+    a, b = T(a), T(b)
+    invφ = (sqrt(T(5)) - 1) / 2
+    for _ in 1:100
+        m1, m2 = b - invφ * (b - a), a + invφ * (b - a)
+        f1, f2 = f(m1), f(m2)
+        if f1 < f2
+            b = m2
+        elseif keep_ties && !(f1 > f2)
+            a, b = m1, m2
+        else
+            a = m1
+        end
+    end
+    return a, b
+end
+
 # All roots of φ on the line {x_axis = v}, the other coordinate in [lo, hi], sorted. φ is
 # sampled at `M` equispaced points and every sign change is bisected. When φ is nonnegative
 # at every sample, a golden-section search on the sampled minimum finds a near-tangent line
@@ -79,11 +100,7 @@ function _crossings(φ, axis::Integer, v::Real, lo::Real, hi::Real; M::Integer =
     if isempty(out) && all(>=(0), fs)
         k = argmin(fs)
         a, b = ts[max(k - 1, 1)], ts[min(k + 1, M)]
-        invφ = (sqrt(T(5)) - 1) / 2
-        for _ in 1:100
-            m1, m2 = b - invφ * (b - a), a + invφ * (b - a)
-            f(m1) < f(m2) ? (b = m2) : (a = m1)
-        end
+        a, b = _golden_min(f, a, b)
         m = (a + b) / 2
         if f(m) < 0
             push!(out, _bisect_root(f, T(lo), m, false), _bisect_root(f, m, T(hi), true))
