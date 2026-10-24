@@ -15,6 +15,7 @@
 module GhostPolyesterTests
 
 using Test
+using Random
 using Bramble
 using Bramble: CpuPolyester, CpuSerial, Dcₓ, Dcᵧ, D̃ₓ, D₋ₓ, D̃ᵧ, D₋ᵧ,
     matrix_free_operator, polygon, polygon_spaces
@@ -117,6 +118,75 @@ function marked_form(a)
     marks = (k, v) -> v isa AbstractVector && k !== :A_pad ? ThreadMarks(v) : v
     fields = map(k -> marks(k, getfield(a, k)), fieldnames(typeof(a)))
     return Bramble.GhostBilinearForm(fields...)
+end
+
+# Polygon and level-set spaces (#878): `polygon_spaces` on a mesh built with a backend of
+# policy `pol`, the way `ghost_mesh` builds its meshes. Builders copied from
+# test/ghost/polygon_support.jl, polygon_oracle.jl and levelset_spaces.jl.
+const FIG1 = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0), (4.0, 3.0),
+    (4.0, 5.0), (2.0, 5.0), (0.0, 3.0)]
+const VNOTCH = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 3.0), (1.0, 2.0),
+    (0.0, 1.0)]
+const OCTAGON = [(1.0, 0.0), (3.0, 0.0), (4.0, 1.0), (4.0, 3.0), (3.0, 4.0), (1.0, 4.0),
+    (0.0, 3.0), (0.0, 1.0)]
+
+disk(p) = hypot(p[1], p[2]) - 1
+
+policy_backend(pol) = backend(vector_type = Vector{Float64},
+    matrix_type = SparseMatrixCSC{Float64, Int}, policy = pol)
+
+box(x0, x1, y0, y1) = interval(1.0 * x0, 1.0 * x1) × interval(1.0 * y0, 1.0 * y1)
+
+# The jittered mesh of `box` with the curve `:P => shape` (a polygon or a level set).
+function curve_mesh(pol, shape, box, n, seed)
+    Random.seed!(seed)
+    return mesh(domain(box, :P => shape), n, (false, false); backend = policy_backend(pol))
+end
+
+# (name, conflict nodes expected, matrix-free form, mesh builder of the policy): the
+# jittered Figure 1, the V-notch, whose exterior node (0, 2) is read by two interior nodes
+# (a conflict node, which a matrix-free mixed form refuses), the convex octagon and a
+# level-set disk.
+const CURVES = (
+    (name = "Figure 1", conflict = false, f_free = :mixed,
+        build = pol -> curve_mesh(pol, polygon(FIG1), box(0, 6, 0, 5), (10, 9), 2)),
+    (name = "V-notch", conflict = true, f_free = :laplacian,
+        build = pol -> curve_mesh(pol, polygon(VNOTCH), box(0, 4, 0, 4), (6, 7), 7)),
+    (name = "octagon", conflict = false, f_free = :mixed,
+        build = pol -> curve_mesh(pol, polygon(OCTAGON), box(-1, 5, -1, 5), (19, 19), 2)),
+    (name = "level-set disk", conflict = false, f_free = :mixed,
+        build = pol -> curve_mesh(pol, levelset(disk), box(-1.25, 1.25, -1.25, 1.25),
+            (20, 20), 2)))
+
+mixed(w) = Dcₓ(Dcᵧ(w)) + Dcᵧ(Dcₓ(w))
+laplacian_mixed(u, v) = innerₕ(-1.0 * Δₕ(u) - 0.4 * mixed(u), v)
+boundary_data(x) = 1 + x[1] - 2x[2] + x[1] * x[2]
+
+# Matrix, load, refilled matrix, refilled pair, solution, its lift and the matrix-free
+# product of the form with `f_free` on one mesh, under `pol`.
+function curve_by(build, pol, f_free)
+    Ω = build(pol)
+    U, W = polygon_spaces(Ω, :P, boundary_data)
+    a, l = form(U, W, laplacian_mixed), form(W, source)
+    A, F = assemble(a, l)
+    A2 = copy(A)
+    fill!(nonzeros(A2), 0.0)
+    assemble!(A2, a)
+    A3, F3 = copy(A), copy(F)
+    fill!(nonzeros(A3), 0.0)
+    fill!(F3, 0.0)
+    assemble!(A3, F3, a, l)
+    u = pde_solve(A, F)
+    af = form(U, W, f_free === :mixed ? laplacian_mixed : laplacian)
+    op = matrix_free_operator(af)
+    x = collect(range(-1.0, 2.0; length = size(op, 2)))
+    z = zeros(size(op, 1))
+    mul!(z, op, x)
+    bytes = (matrix = alloc(() -> assemble!(A2, a)),
+        pair = alloc(() -> assemble!(A3, F3, a, l)), mul = alloc(() -> mul!(z, op, x)))
+    return (A = A, F = F, A2 = A2, A3 = A3, F3 = F3, u = u, U = Bramble.lift(U, u).data,
+        z = z, zA = assemble(af) * x, conflicts = count(U.rows.conflict), bytes = bytes,
+        policy = Bramble.execution_policy(Ω))
 end
 
 @testset "Ghost forms on CpuPolyester (#785)" begin
@@ -310,6 +380,27 @@ end
             @test alloc(() -> mul!(z, op, x)) == 0
             @test z ≈ assemble(a; kw...) * x
         end
+    end
+
+    # Polygon and level-set spaces (#878): every result equals the serial one bit for bit
+    # (the matrix-free product to 1e-13), and the warm `assemble!` calls and `mul!` leave
+    # no bytes.
+    @testset "$(c.name): polygon_spaces under CpuPolyester" for c in CURVES
+        r0 = curve_by(c.build, CpuSerial(), c.f_free)
+        r1 = curve_by(c.build, CpuPolyester(), c.f_free)
+        @test r0.policy isa CpuSerial
+        @test r1.policy isa CpuPolyester
+        @test (r0.conflicts > 0) == c.conflict
+        @test norm(r0.F, Inf) > 0 && norm(r0.z, Inf) > 0
+        for k in (:A, :F, :A2, :A3, :F3, :u, :U)
+            @test getfield(r1, k) == getfield(r0, k)
+        end
+        @test r0.A2 == r0.A
+        @test r0.A3 == r0.A
+        @test r0.F3 == r0.F
+        @test relerr(r1.z, r0.z) <= 1e-13
+        @test relerr(r1.z, r1.zA) <= 1e-13
+        @test r1.bytes == (matrix = 0, pair = 0, mul = 0)
     end
 
     WITH_3D_TESTS && @testset "3D Laplacian, Dirichlet relation" begin
