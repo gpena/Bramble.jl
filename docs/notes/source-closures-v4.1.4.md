@@ -15,7 +15,8 @@ and SnoopCompile, builds a graded 2D mesh and its `gridspace`, then builds the f
 form(W, v -> innerₕ(a, v) + innerₕ(b, v) + innerₕ(c, v))
 ```
 
-and `assemble`s it, each inside `@snoop_inference`, twice with the same `form` call. The
+and `assemble`s it, each inside `@snoop_inference`, twice with the same `form` call. It times
+both builds. The
 three sources are those of `test/form/linear.jl`: `x -> x[1]`, `x -> 100 * x[1]` and
 `x -> x[2]`. The count is the number of distinct `MethodInstance`s of Bramble or its
 submodules in the flattened inference tree, root excluded, summed over `form` and
@@ -28,7 +29,8 @@ submodules in the flattened inference tree, root excluded, summed over `form` an
   defined once, so the second build has the same types as the first.
 
 A third build of the second set, in the same process, must infer 0 instances (it did, for
-both rows). Counts agreed across the 3 launches. Times are medians over 3 launches.
+both rows). Counts agreed across the 3 launches. Times are medians over 3 launches. The
+`julia` in the command below ran through `julia_slot.sh 1`, one child at a time.
 
 Command, one `julia` with 1 thread per child, serial:
 
@@ -40,57 +42,65 @@ julia --startup-file=no benchmark/snoop_instances.jl \
 
 | quantity | value |
 |---|---|
-| commit | `77f7258c` on `perf/v4.1.4-measure` (the benchmark scripts and the S3 note) |
+| commit | `82882e01` on `perf/v4.1.4-measure` (the benchmark scripts, which now time the second build) |
 | Julia | 1.13.2, default `-O` |
 | machine | Apple M2, 8 cores, 16 GiB, on AC power, battery 100% |
 | threads | 1 per child |
-| load | 1-minute load 3.55 at the start and 3.58 at the end (21:17 to 21:20) |
+| load | 1-minute load 2.55 at the start and 2.43 at the end (21:26, under a minute) |
 
 ## Run under load
 
-`gate_preflight.sh --timing` FAILED at 21:17. Load 4.33 on 8 cores (limit 2), and other
-julia processes were running, two of them above 98% CPU (the concurrent v4.1.3-perf
-plan). Those sessions were not paused or stopped. The run went ahead anyway, so every
-time below is "under load", with a 1-minute load of 3.6 to 4.3 around the run (`uptime`
-4.33, 4.25, 4.11 before; 3.55 at the first child and 3.58 after the last). The instance
-counts do not depend on load. The times are one under-load figure each and say nothing
-about a difference of a few percent.
+`gate_preflight.sh --timing` FAILED at 21:26 on one check: load 2.60 on 8 cores, limit 2.
+Power, OneDrive, other julia processes (none) and CPU (nothing above 50%) passed. Other
+sessions were not paused or stopped. The run went ahead anyway, so every time below is
+"under load", with a 1-minute load of 2.4 to 2.6 around the run (`uptime` 2.60, 2.87, 3.43
+at the preflight; 2.55, 2.85, 3.42 before the first child; 2.43, 2.81, 3.40 after the
+last). The instance counts do not depend on load. The times are one under-load figure each
+and say nothing about a difference of a few percent.
 
 ## Figures
 
-| row | fresh | added | sequence | form, s | assemble, s | inference, s |
-|---|---:|---:|---:|---:|---:|---:|
-| `closures_fresh` | 219 | 178 | 397 | 0.1283 | 0.1023 | 0.3421 |
-| `closures_named` | 219 | 0 | 219 | 0.1422 | 0.1098 | 0.3751 |
+First build, in a fresh child:
 
-The `fresh`, `form`, `assemble` and `inference` columns come from the FIRST build of the
-fresh child, medians over 3 launches. Both rows run the same first build (three closures
-of the same shape), so the 219 agree, and the time differences of 0.014 s in `form` and
-0.007 s in `assemble` are load noise. `added` counts the instances the SECOND build infers
-over the first. `sequence` counts the distinct instances of both builds together.
+| row | fresh | form, s | assemble, s | inference, s |
+|---|---:|---:|---:|---:|
+| `closures_fresh` | 219 | 0.128 | 0.105 | 0.344 |
+| `closures_named` | 219 | 0.126 | 0.100 | 0.337 |
+
+Second build, same child, same `form` call with the second set of sources:
+
+| row | added | sequence | form, s | assemble, s | inference, s |
+|---|---:|---:|---:|---:|---:|
+| `closures_fresh` | 178 | 397 | 0.110 | 0.000 | 0.158 |
+| `closures_named` | 0 | 219 | 0.005 | 0.000 | 0.004 |
+| gap (fresh minus named) | 178 | 178 | 0.105 | 0.000 | 0.153 |
+
+Both rows run the same first build (three closures of the same shape), so the 219 agree,
+and the differences of 0.002 s in `form` and 0.005 s in `assemble` are load noise. `added`
+counts the instances the second build infers over the first. `sequence` counts the
+distinct instances of both builds together. `assemble` of the second build is 2 us for
+`closures_fresh` and 1 us for `closures_named`, which print as 0.000 at 3 decimals.
 
 ## The gap the prototype must close
 
-| | second build, added instances |
-|---|---:|
-| three new closures (`closures_fresh`) | 178 |
-| the same three named functions (`closures_named`) | 0 |
+The gap is 178 instances, 81% of the 219 of the first build, and 0.105 s of `form` (0.110 s
+against 0.005 s), 0.153 s of inference (0.158 s against 0.004 s) and no `assemble` time.
+A reused function costs the second build nothing, since `form`, the AST walks and
+`assemble` find every instance compiled for the first. The 0.005 s that `closures_named`
+still spends in `form` is the call itself, with 0 instances inferred. Three new closures
+make new types. The second build then infers 178 instances again, and a user who writes
+the closures anew at each call pays that each time.
 
-The gap is 178 instances, 81% of the 219 of the first build. A reused function costs the
-second build nothing, since `form`, the AST walks and `assemble` find every instance
-compiled for the first. Three new closures make new types. The second build then infers
-178 instances again, and a user who writes the closures anew at each call pays that each
-time.
+The `added` count is `form` and `assemble` summed: it does not say how many of the 178
+are `form` and how many are `assemble`. The times do: the second build's `assemble` takes
+2 us in both rows, so the time of the gap sits in `form`.
 
-The script does not time the second build. `form_s` and `assemble_s` are the first
-build's, and the second build's `form` time, the quantity #888 reports, is not in the
-TOML. The `added` count is `form` and `assemble` summed: it does not say how many of the
-178 are `form` and how many are `assemble`. The nearest recorded figures are the first
-build's, for the same code on new types: `form` 0.128 s and 0.142 s, `assemble` 0.102 s
-and 0.110 s, `inference` 0.342 s and 0.375 s. The `inference` times exceed the wall times
-of `form` plus `assemble` (0.231 s and 0.252 s), so they are not a share of them, and this
-run does not explain why. The first build is also the one that finds part of the image
-cold, so its time cannot be scaled to the second build's 178 instances without guessing.
+The `inference` times exceed the wall times of `form` plus `assemble` in the first build
+(0.233 s against 0.344 s for `closures_fresh`, 0.226 s against 0.337 s for
+`closures_named`) and, for `closures_fresh`, in the second (0.110 s against 0.158 s). They
+are not a share of those times, and this run does not explain why. The integrator checked
+that the exclusive time of the inference root is about 2e-6 s, so `inference_s` is the
+inference time of the tree and not the whole snoop window. The excess is left unexplained.
 
 ## Against #888's figure
 
@@ -103,36 +113,44 @@ cold, so its time cannot be scaled to the second build's 178 instances without g
 | same structure, reused named functions | 0.00 | 0.00 |
 
 Its headline is 0.17 s of `form` for new closures against 0.00 s for reused functions.
-The two measurements differ in method:
+This run gives the second build in seconds as well, `form` and `assemble` apart:
 
-- Unit: #888 gives compile seconds of the second build, `form` and `assemble` apart. This
-  run counts the method instances the second build infers, `form` and `assemble` summed,
-  and does not time the second build, so no second-build seconds can be set beside 0.17 s.
-- Reused functions agree: 0 instances here, 0.00 s there.
-- New closures: 178 instances here. #888 puts the whole cost in `form` (0.17 s) and none
-  in `assemble` (0.00 s), as #197 intends. This run cannot say whether the 178 are all
-  `form`: it sums the two.
-- The first build is a cross-check of order only: #888's first closures cost `form` 0.13 s
-  and `assemble` 0.15 s, here 0.128 s and 0.102 s (0.142 s and 0.110 s with named
-  functions, the same first build).
+| second build | #888 form, s | here form, s | #888 assemble, s | here assemble, s |
+|---|---:|---:|---:|---:|
+| new closures | 0.17 | 0.110 | 0.00 | 0.000 |
+| reused named functions | 0.00 | 0.005 | 0.00 | 0.000 |
+| gap | 0.17 | 0.105 | 0.00 | 0.000 |
+
+- Where the cost sits: in `form`, as #888 found. The second build's `assemble` takes
+  2 us for new closures and 1 us for reused functions, 0.00 s at #888's two decimals. The
+  earlier version of this note could not tell, since it had no second-build time.
+- Size: here 0.105 s of gap in `form` against #888's 0.17 s. The runs differ in machine
+  load, in the main commit, and in what #888 does not state (its mesh and process), so
+  this note does not say whether 0.105 s and 0.17 s disagree.
+- Reused functions agree: 0 instances and 0.005 s of `form` here, 0.00 s there.
+- Instances: 178 for new closures here. #888 counts seconds only.
+- The first build is a cross-check of order: #888's first closures cost `form` 0.13 s and
+  `assemble` 0.15 s, here 0.128 s and 0.105 s (0.126 s and 0.100 s with named functions,
+  the same first build).
 - Mesh, process and load: here a fresh process per launch and a graded 2D mesh, as #917
-  step 1 asks. #888 does not state its mesh or process, and its load is not recorded.
+  step 1 asks, at a 1-minute load of 2.4 to 2.6. #888's load is not recorded.
 
-For #917, the criterion for the prototype is the second build's count, 178 against 0,
-taken in the same script and run as the prototype's. The prototype closes the gap when
-`closures_fresh` adds close to 0, as `closures_named` does.
+For #917, the criterion for the prototype is the second build's count, 178 against 0, and
+its `form` time, 0.110 s against 0.005 s, taken in the same script and run as the
+prototype's. The prototype closes the gap when `closures_fresh` adds close to 0, as
+`closures_named` does.
 
 ## To retake
 
 The times are to be retaken on main after v4.1.3-perf merges, on a machine that passes
 `gate_preflight.sh --timing`: #895 and #906 change the first-call cost of `form` and
-`assemble`, and this run was under load. The instance counts should be retaken with them,
-since those changes may alter them too.
+`assemble`, and this run was under load (preflight failed on load 2.60). The instance
+counts should be retaken with them, since those changes may alter them too.
 
 ## What #917's step 2 needs
 
-- The target: the second build of `closures_fresh` adds 178 instances today and
-  `closures_named` adds 0.
-- Not measured here: the second build's `form` time on its own (the script times the
-  first build only), the split of the 178 between `form` and `assemble`, warm `assemble`
-  on a non-uniform mesh, and any `Dual`-valued source.
+- The target: the second build of `closures_fresh` adds 178 instances and spends 0.110 s
+  in `form` today, and `closures_named` adds 0 and spends 0.005 s (under load).
+- Not recorded: the split of the 178 instances between `form` and `assemble` (the times
+  put the gap in `form`), warm `assemble` on a non-uniform mesh, and any `Dual`-valued
+  source.
