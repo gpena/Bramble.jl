@@ -1,0 +1,217 @@
+diff --git a/Project.toml b/Project.toml
+index 41086974..7ccbf18e 100755
+--- a/Project.toml
++++ b/Project.toml
+@@ -14,6 +14,7 @@ Preferences = "21216c6a-2e73-6563-6e65-726566657250"
+ QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
++Tracy = "e689c965-62c8-4b79-b2c5-8359227902fd"
+ 
+ [weakdeps]
+ ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
+@@ -100,6 +101,7 @@ Sparspak = "0.3"
+ SuiteSparse = "1"
+ Supposition = "0.3"
+ Test = "1"
++Tracy = "0.1"
+ WriteVTK = "1"
+ julia = "1.13"
+ 
+diff --git a/src/Bramble.jl b/src/Bramble.jl
+index da92ddc4..a767c8b5 100755
+--- a/src/Bramble.jl
++++ b/src/Bramble.jl
+@@ -17,6 +17,7 @@ using PrecompileTools: @setup_workload, @compile_workload
+ using Preferences: @load_preference
+ using QuadGK: gauss
+ import GPUArraysCore
++import Tracy
+ 
+ include("api.jl")
+ 
+diff --git a/src/assembly/bilinear.jl b/src/assembly/bilinear.jl
+index ab59de77..5a359fdf 100644
+--- a/src/assembly/bilinear.jl
++++ b/src/assembly/bilinear.jl
+@@ -349,7 +349,8 @@ a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + σ * innerₕ(1,
+ function form(Wₕ, Vₕ, f)
+     D = dim(Wₕ)
+     raw_ast = f(trial_function(Wₕ), test_function(Vₕ))
+-    _validate_form_expression(raw_ast, Val(D), Val(:bilinear))
++    Tracy.@tracepoint "validate_form_expression" Base.inferencebarrier(
++        _validate_form_expression)(raw_ast, Val(D), Val(:bilinear))
+     # Behind an inference barrier: the branch is a constant `false` for an expression of known
+     # type without the term, so such a form still infers as its `BilinearForm`. Where the
+     # type is not known (generic code over abstract spaces) the result infers as `Any`, not
+@@ -365,12 +366,17 @@ end
+ Base.@constprop :aggressive function _bilinear_form(Wₕ, Vₕ, raw_ast)
+     D = dim(Wₕ)
+     _check_bilinear_terms(raw_ast)  # rank_one.jl
+-    resolved = _resolve_surfaces_for_space(resolve_ast(raw_ast), Vₕ, Wₕ)
+-    ast = _split_restricted_products(_lower_signs(simplify_ast(resolved)),
+-        promote_type(eltype(Wₕ), eltype(Vₕ)))
++    resolved = Tracy.@tracepoint "resolve_ast" Base.inferencebarrier(
++        _resolve_surfaces_for_space)(resolve_ast(raw_ast), Vₕ, Wₕ)
++    simplified = Tracy.@tracepoint "simplify_ast" Base.inferencebarrier(
++        simplify_ast)(resolved)
++    ast = Tracy.@tracepoint "split_restricted_products" Base.inferencebarrier(
++        _split_restricted_products)(
++        _lower_signs(simplified), promote_type(eltype(Wₕ), eltype(Vₕ)))
+     _check_space_components(ast, Wₕ, trial_component_or_nothing, "trial")
+     _check_space_components(ast, Vₕ, test_component_or_nothing, "test")
+-    _check_form_meshes(ast, Wₕ, Vₕ)  # linear.jl (gpena/Bramble.jl#629, #685)
++    Tracy.@tracepoint "check_form_meshes" Base.inferencebarrier(
++        _check_form_meshes)(ast, Wₕ, Vₕ)
+     return BilinearForm{D, typeof(Wₕ), typeof(Vₕ), typeof(ast)}(
+         Wₕ, Vₕ, ast, _AssemblyCache{D}(ast)
+     )
+diff --git a/src/assembly/bilinear_execution.jl b/src/assembly/bilinear_execution.jl
+index 281e7d6b..fbf4206b 100644
+--- a/src/assembly/bilinear_execution.jl
++++ b/src/assembly/bilinear_execution.jl
+@@ -190,10 +190,13 @@ function _record_bilinear_core!(
+         mode::_ReplayMode, A::AbstractMatrix, trial_space, test_space, ast::AST_TYPE,
+         ::Val{D}, α
+ ) where {AST_TYPE, D}
+-    p = _form_coordinates(trial_space, test_space, ast)
+-    _coordinates_to_positions!(A, p, ast)
++    p = Tracy.@tracepoint "coordinate_pass" Base.inferencebarrier(
++        _form_coordinates)(trial_space, test_space, ast)
++    Tracy.@tracepoint "coordinates_to_positions" Base.inferencebarrier(
++        _coordinates_to_positions!)(A, p, ast)
+     segments = _segments_from_positions(Val(D), p)
+-    _replay_bilinear_core!(mode, A, trial_space, test_space, ast, segments, α)
++    Tracy.@tracepoint "replay" Base.inferencebarrier(_replay_bilinear_core!)(
++        mode, A, trial_space, test_space, ast, segments, α)
+     return segments
+ end
+ 
+@@ -215,7 +218,7 @@ function _replay_bilinear_core!(
+         return nothing
+     end
+     bound = _bind_interp_spaces(ast, trial_space, test_space)
+-    _check_block_meshes(bound, trial_space, test_space)
++    Tracy.@tracepoint "check_block_meshes" Base.inferencebarrier(_check_block_meshes)(bound, trial_space, test_space)
+     # `host_weights` once per fill for every summand, never once per unit: on a device leaf
+     # it rebuilds a host mesh and weights, which per unit made a multi-term refill slower than
+     # the search it replaces. A no-op on a host leaf.
+@@ -257,7 +260,7 @@ function _foreach_unit(f::F, trial_space, test_space, ast) where {F}
+         return nothing
+     end
+     bound = _bind_interp_spaces(ast, trial_space, test_space)
+-    _check_block_meshes(bound, trial_space, test_space)
++    Tracy.@tracepoint "check_block_meshes" Base.inferencebarrier(_check_block_meshes)(bound, trial_space, test_space)
+     sp = _walked_leaf(bound, trial_space, test_space)
+     _foreach_summand_unit(f, bound, sp)
+     return nothing
+@@ -299,7 +302,7 @@ end
+ ) where {F, TERM}
+     unit = (_, blk) -> begin
+         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
+-        _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
++        Tracy.@tracepoint "check_block_meshes" Base.inferencebarrier(_check_block_meshes)(bound, blk.trial_leaf, blk.test_leaf)
+         sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
+         f(bound, sp, blk.row_offset, blk.col_offset, 0, 0, -1)
+         return nothing
+@@ -372,7 +375,7 @@ end
+ ) where {TERM, D}
+     unit = (n, blk) -> begin
+         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
+-        _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
++        Tracy.@tracepoint "check_block_meshes" Base.inferencebarrier(_check_block_meshes)(bound, blk.trial_leaf, blk.test_leaf)
+         # `host_weights` per block: a device leaf's weights cannot be read point by point.
+         sp = host_weights(_walked_leaf(bound, blk.trial_leaf, blk.test_leaf))
+         n += 1
+@@ -466,8 +469,8 @@ end
+     if _pair_blocks_ok(b1, b2)
+         unit = (_, blk, blk2) -> begin
+             bound = _bind_interp_spaces(p1, blk.trial_leaf, blk.test_leaf)
+-            _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
+-            _check_block_meshes(p2, blk2.trial_leaf, blk2.test_leaf)
++            Tracy.@tracepoint "check_block_meshes" Base.inferencebarrier(_check_block_meshes)(bound, blk.trial_leaf, blk.test_leaf)
++            Tracy.@tracepoint "check_block_meshes" Base.inferencebarrier(_check_block_meshes)(p2, blk2.trial_leaf, blk2.test_leaf)
+             sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
+             dr, dc = _pair_shift(blk, blk2)
+             ro, co = blk.row_offset, blk.col_offset
+@@ -516,7 +519,7 @@ end
+         α2 = α * _term_scale(t2)
+         unit = (n, blk, blk2) -> begin
+             bound = _bind_interp_spaces(p1, blk.trial_leaf, blk.test_leaf)
+-            _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
++            Tracy.@tracepoint "check_block_meshes" Base.inferencebarrier(_check_block_meshes)(bound, blk.trial_leaf, blk.test_leaf)
+             sp = _walked_leaf(bound, blk.trial_leaf, blk.test_leaf)
+             ro, co = blk.row_offset, blk.col_offset
+             off2 = (blk2.row_offset, blk2.col_offset)
+@@ -581,7 +584,8 @@ function _assemble_bilinear_core_cached!(
+     stamp = _pattern_stamp(trial_space, test_space)
+     if cache.valid && cache.A_id === objectid(A) && cache.ast === ast &&
+        cache.stamp === stamp && cache.stored == _pattern_length(A)
+-        _replay_bilinear_core!(mode, A, trial_space, test_space, ast, cache.segments, α)
++        Tracy.@tracepoint "replay" Base.inferencebarrier(_replay_bilinear_core!)(
++            mode, A, trial_space, test_space, ast, cache.segments, α)
+     else
+         # A fresh vector, never `empty!` on whatever `cache.segments` currently references.
+         #
+diff --git a/src/assembly/bilinear_pattern.jl b/src/assembly/bilinear_pattern.jl
+index 42250abc..05f647b3 100644
+--- a/src/assembly/bilinear_pattern.jl
++++ b/src/assembly/bilinear_pattern.jl
+@@ -352,7 +352,8 @@ Only the structure is preallocated here; all stored entries are zero until `asse
+ See also [`assemble`](@ref) and [`assemble!`](@ref).
+ """
+ function allocate_system_matrix(form::BilinearForm{D}, ast = form.ast) where {D}
+-    p = _form_coordinates(form.trial_space, form.test_space, ast)
++    p = Tracy.@tracepoint "coordinate_pass" Base.inferencebarrier(
++        _form_coordinates)(form.trial_space, form.test_space, ast)
+     MT = matrix_type(backend(form.test_space))
+     V = _zeros_of(_matrix_eltype(form, ast), length(p.I))
+     nrows = ndofs(form.test_space)
+@@ -361,9 +362,12 @@ function allocate_system_matrix(form::BilinearForm{D}, ast = form.ast) where {D}
+     # matrix, so a serial sparse form keeps them: its first fill is then a replay.
+     keep = MT <: SparseMatrixCSC && ast === form.ast &&
+            execution_policy(form.trial_space) isa CpuSerial
+-    keep || return _allocate_from_pattern(MT, nrows, ncols, p.I, p.J, V)
+-    A = _allocate_keeping(MT, nrows, ncols, p.I, p.J, V)
+-    _coordinates_to_positions!(A, p, ast)
++    keep || return Tracy.@tracepoint "pattern_build" Base.inferencebarrier(
++        _allocate_from_pattern)(MT, nrows, ncols, p.I, p.J, V)
++    A = Tracy.@tracepoint "pattern_build" Base.inferencebarrier(
++        _allocate_keeping)(MT, nrows, ncols, p.I, p.J, V)
++    Tracy.@tracepoint "coordinates_to_positions" Base.inferencebarrier(
++        _coordinates_to_positions!)(A, p, ast)
+     _store_recording!(form.cache, ast, _segments_from_positions(Val(D), p), A,
+         _pattern_stamp(form.trial_space, form.test_space))
+     return A
+@@ -383,13 +387,15 @@ end
+ _allocate_assembled(form::BilinearForm) = _allocate_assembled(
+     matrix_type(backend(form.test_space)), form)
+ 
+-_allocate_assembled(::Type, form::BilinearForm) = allocate_system_matrix(form, form.ast)
++_allocate_assembled(::Type, form::BilinearForm) = Tracy.@tracepoint "allocate_system_matrix" Base.inferencebarrier(
++    allocate_system_matrix)(form, form.ast)
+ 
+ function _allocate_assembled(::Type{MT}, form::BilinearForm) where {MT <: SparseMatrixCSC}
+     cache = form.cache
+     reusable = cache.has_pattern && cache.valid && cache.ast === form.ast &&
+                cache.stamp === _pattern_stamp(form.trial_space, form.test_space)
+-    reusable || return allocate_system_matrix(form, form.ast)
++    reusable || return Tracy.@tracepoint "allocate_system_matrix" Base.inferencebarrier(
++        allocate_system_matrix)(form, form.ast)
+     Tv = _matrix_eltype(form, form.ast)
+     nnz = length(cache.rowval)
+     A = SparseMatrixCSC{Tv, Int}(cache.m, length(cache.colptr) - 1, copy(cache.colptr),
+diff --git a/src/assembly/linear.jl b/src/assembly/linear.jl
+index 79b72d71..3e8fb72c 100644
+--- a/src/assembly/linear.jl
++++ b/src/assembly/linear.jl
+@@ -445,7 +445,8 @@ function form(Wₕ, f)
+         _lower_signs(simplify_ast(_resolve_surfaces_for_space(resolve_ast(raw_ast), Wₕ))),
+         eltype(Wₕ))
+     _check_centered_meshes(ast, Wₕ)
+-    ast = _lower_sources_for_space(ast, Wₕ)
++    ast = Tracy.@tracepoint "lower_sources" Base.inferencebarrier(
++        _lower_sources_for_space)(ast, Wₕ)
+     _check_source_meshes(ast, Wₕ)
+     return LinearForm{D, typeof(Wₕ), typeof(ast)}(Wₕ, ast)
+ end
