@@ -47,7 +47,8 @@ end
     #    point exactly on an edge gives exactly zero, not a rounding residue.
     # 3. Invalid input throws ArgumentError: fewer than 3 vertices, non-finite coordinates,
     #    a zero-length edge, zero area, a bowtie, a touching vertex, an edge folding back
-    #    (also when only exact arithmetic sees the vertices as collinear).
+    #    (also when only exact arithmetic sees the vertices as collinear), a vertex on or
+    #    across a non-adjacent edge that only the exact fallback of the filter detects.
     #    A collinear vertex in the middle of an edge is kept.
     # 4. `polygon` and `signed_distance` are inferred; `signed_distance` allocates 0 bytes.
     @testset "construction and orientation" begin
@@ -140,10 +141,31 @@ end
         @test_throws ArgumentError polygon([(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (2.0, 0.0), (0.0, 4.0)])
         @test_throws ArgumentError polygon([(0.0, 0.0), (2.0, 0.0), (1.0, 0.0), (1.0, 1.0)])
         @test_throws ArgumentError polygon([(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (2.0, 4.0), (2.0, -1.0), (0.0, 4.0)])
-        # Edge 2 runs back along edge 1: the first three vertices are exactly collinear on
-        # the stored floats, though the floating-point orientation is 1.1e-16, not 0.
+        # Vertex 3 lies 1.7e-17 (exact orientation) to the right of edge 1, so edge 3 crosses
+        # edge 1 just past it; the floating-point orientation, 1.1e-16, has the wrong sign.
         @test_throws ArgumentError polygon([(0.3 * x, 0.3 * y)
                                             for (x, y) in ((3, 3), (-1, 1), (1, 2), (2, -4), (-3, 0), (2, 3))])
+        # Vertex 4 against edge 1 from (0.1, 0.1) to (0.7, 0.4), the inside below it. The
+        # floating-point orientation lies within the filter's error bound, so only the exact
+        # fallback decides. The three points, a few ulps apart, lie on the edge, above it and
+        # below it; floats put them below, below and on the edge, and alone would accept the
+        # first two.
+        a, b = (0.1, 0.1), (0.7, 0.4)
+        notch(c) = [a, b, (0.7, -0.5), c, (0.1, -0.5)]
+        float_orient(c) = (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1])
+        within_bound(c) = abs(float_orient(c)) <=
+                          3 * eps() * (abs((b[1] - a[1]) * (c[2] - a[2])) +
+                                       abs((b[2] - a[2]) * (c[1] - a[1])))
+        on = (0.3, 0.2)
+        above = (0.2999999999999998, 0.19999999999999993)
+        below = (0.30000000000000004, 0.20000000000000004)
+        @test all(within_bound, (on, above, below))
+        @test float_orient(on) < 0 && float_orient(above) < 0 && iszero(float_orient(below))
+        for c in (on, above)
+            @test polygon_message(() -> polygon(notch(c))) ==
+                  "ArgumentError: Invalid polygon: edges 1 and 3 cross or touch (the polygon is not simple)"
+        end
+        @test polygon(notch(below)).vertices == reverse(notch(below))
         # The messages name the vertex or edge and the value that failed.
         @test polygon_message(() -> polygon([(0.0, 0.0), (1.0, 0.0), (NaN, 1.0)])) ==
               "ArgumentError: Invalid polygon: vertex 3 at (NaN, 1.0) has a coordinate that is not finite"

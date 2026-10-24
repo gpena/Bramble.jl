@@ -1701,13 +1701,16 @@ end
 # relation fixes, so `dirichlet = :boundary`, which drops the first and last point of every
 # axis, would drop the wrong ones: Dirichlet facets are relations `u => g` of the space
 # instead, and any `dirichlet` is refused by name. A 1D form has no Kronecker factors and
-# is refused as on a plain space.
+# is refused as on a plain space. A form over polygon spaces is refused first, naming
+# polygon spaces: their closure is never a product of 1D closures (ghost_kronecker.jl).
 
 _fdm_ast_form(a::BilinearForm) = a
 _fdm_ast_form(a::Bramble.GhostBilinearForm) = a.padded
 
 function _fdm_ghost_operator(a::Bramble.GhostBilinearForm{D}, dirichlet;
-        precond::Bool = false) where {D}
+        precond::Bool = false,
+        caller::String = precond ? "fdm_preconditioner" : "fdm_solve") where {D}
+    Bramble._ghost_kron_polygon(a) && Bramble._throw_ghost_kron_polygon(caller)
     dirichlet === nothing || _throw_fdm_ghost_dirichlet(dirichlet; precond = precond)
     D == 1 && _throw_fdm_not_separable(a; precond = precond)
     return kronecker_operator(a)
@@ -1746,6 +1749,8 @@ right-hand side `assemble(l)`, not the operator.
     `∂ₙ(u; K)` with off-diagonal `K`, a coefficient varying along a facet, a ghost kept as
     an unknown), a term is not separable, or the form is 1D; or, as for the `BilinearForm`
     method, the form is not Laplacian-like or is singular.
+  - `ArgumentError` naming polygon spaces: a space is one of `polygon_spaces`, whose
+    closure is never a product of 1D closures; solve `assemble(a, l)` with `pde_solve`.
   - `ArgumentError`: `dirichlet` is given.
   - `DimensionMismatch`: `F`'s length is not `ndofs` of the space.
 """
@@ -1755,14 +1760,14 @@ function Bramble.fdm_solve(a::Bramble.GhostBilinearForm, F::AbstractVector;
 end
 
 function Bramble.fdm_factorize(a::Bramble.GhostBilinearForm; dirichlet = nothing)
-    K = _fdm_ghost_operator(a, dirichlet)
+    K = _fdm_ghost_operator(a, dirichlet; caller = "fdm_factorize")
     return _fdm_record!(_fdm_factorize(K, nothing), a, K)
 end
 
 function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization},
         a::Bramble.GhostBilinearForm)
     f.form[] === a && _fdm_cached!(f, f.op[]) && return f
-    K = _fdm_ghost_operator(a, nothing)
+    K = _fdm_ghost_operator(a, nothing; caller = "fdm_factorize!")
     Bramble.fdm_factorize!(f, K)
     return _fdm_record!(f, a, K)
 end

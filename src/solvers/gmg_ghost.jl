@@ -8,13 +8,13 @@
 # Every ghost must be eliminated by a relation, so each degree of freedom is the value of
 # one physical node (a node a Dirichlet relation fixes is none), read off `E`. The physical
 # node's padded row of `E` is that degree of freedom alone, with coefficient 1. A closure
-# whose physical rows are not, or a ghost kept as an unknown, is refused. The transfers then
-# act on the physical grid, where the levels nest. Prolongation writes the coarse degrees of
-# freedom at their nodes (0 at a fixed node, as the closure's linear part gives), runs
-# `prolongate!` and reads the fine degrees of freedom at theirs. Restriction is its exact
-# transpose through `coarsen!`. A fine physical node lies between coarse physical nodes, so
-# interpolating the padded grid instead would give the same fine values: the ghosts never
-# enter.
+# whose physical rows are not, or a ghost kept as an unknown, is refused, and so, first, is
+# a form over polygon spaces (#846). The transfers then act on the physical grid, where the
+# levels nest. Prolongation writes the coarse degrees of freedom at their nodes (0 at a
+# fixed node, as the closure's linear part gives), runs `prolongate!` and reads the fine
+# degrees of freedom at theirs. Restriction is its exact transpose through `coarsen!`. A
+# fine physical node lies between coarse physical nodes, so interpolating the padded grid
+# instead would give the same fine values: the ghosts never enter.
 #
 # The smoothers read the diagonal of the reduced matrix from `jacobi_preconditioner`, and
 # `λmax` from `max_eigenvalue_estimate`, both of which take the ghost operator.
@@ -41,6 +41,7 @@ end
 # level's mesh, with a closure whose degrees of freedom are physical nodes.
 function _gmg_ghost_level_form(a::GhostBilinearForm, Ωl, l)
     Wu, Wv = trial_space(a), test_space(a)
+    (Wu.rows.polygon || Wv.rows.polygon) && _throw_gmg_polygon()
     (physical_mesh(mesh(Wu)) === Ωl && physical_mesh(mesh(Wv)) === Ωl) || throw(
         ArgumentError(
         "gmg_preconditioner: build(W) must return a form on ghost spaces built on mesh(W) " *
@@ -78,6 +79,19 @@ function _gmg_ghost_points(W::GhostGridSpace, l)
     end
     any(iszero, pts) && _throw_gmg_ghost_unknowns(l)
     return pts
+end
+
+# A polygon space (#202) is built on one mesh only: a coarser level need not fit the
+# polygon, and the transfers between its closures are not written (#846).
+@noinline function _throw_gmg_polygon()
+    throw(
+        ArgumentError(
+        "gmg_preconditioner does not take forms over polygon spaces yet " *
+        "(gpena/Bramble.jl#846): the grid transfers between their closures are not " *
+        "written. Assemble the form instead, assemble(a, l), and precondition it with " *
+        "ilu_preconditioner or amg_preconditioner, or solve it with pde_solve.",
+    ),
+    )
 end
 
 @noinline function _throw_gmg_ghost_node(l)

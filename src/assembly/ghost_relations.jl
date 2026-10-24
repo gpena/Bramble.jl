@@ -232,8 +232,6 @@ end
     throw(ArgumentError("no facet ($d, $s)"))
 end
 
-@inline _val(::Val{x}) where {x} = x
-
 # The datum at the point `x` at time `t`.
 @inline _datum(data::Number, x, t) = data
 @inline _datum(data, x, t) = _is_time_datum(data) ? data(x, t) : data(x)

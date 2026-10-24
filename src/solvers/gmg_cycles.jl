@@ -186,6 +186,8 @@ the grid size.
   facets than on the finest level.
 - `ArgumentError`: on ghost spaces, a ghost is kept as an unknown (a ghosted facet without a
   relation), or the trial and test spaces have different degrees of freedom.
+- `ArgumentError`: `build(W)` returns a form over polygon spaces (`polygon_spaces`), and so
+  does `gmg_preconditioner(a)` on one: multigrid on them is gpena/Bramble.jl#846.
 - `ArgumentError`: `smoother(op)` does not return an [`AbstractSmoother`](@ref).
 - `ArgumentError`: the coarsest level has more than 4096 points: `Ωₕ`'s point counts minus
   one need a larger power of two as a factor.
@@ -225,7 +227,9 @@ function gmg_preconditioner(
     H = GeometricMeshHierarchy(Ωₕ, L)
     nc = npoints(H[1])
     nc <= _GMG_MAX_COARSE_DOFS || _throw_gmg_coarse(H)
-    forms = [_gmg_level_form(build, H[l], l) for l in 1:L]
+    # Finest first: a form `build` can make on `Ωₕ` alone (a polygon's) is refused by name
+    # before a coarser level fails to build it.
+    forms = reverse!([_gmg_level_form(build, H[l], l) for l in L:-1:1])
     _gmg_check_level_kinds(forms)
     ops = [matrix_free_operator(a) for a in forms]
     smoothers = [_gmg_level_smoother(smoother, op, l) for (l, op) in enumerate(ops)]
@@ -242,6 +246,13 @@ function gmg_preconditioner(
         typeof(transfer)}(
         H, ops, smoothers, coarse, x, b, r, cycle, Int(ν₁), Int(ν₂), transfer
     )
+end
+
+# A form passed alone, where `build` and a mesh are needed: a form over polygon spaces is
+# refused by name (#846), as `build` returning one is; any other has no method.
+function gmg_preconditioner(a::GhostBilinearForm; kwargs...)
+    (trial_space(a).rows.polygon || test_space(a).rows.polygon) && _throw_gmg_polygon()
+    throw(MethodError(gmg_preconditioner, (a,)))
 end
 
 # The form `build` returns on level `l`, checked to be square on that level's mesh; a form

@@ -25,6 +25,7 @@
 
 function kronecker_operator(a::GhostBilinearForm{D}) where {D}
     D == 1 && _throw_not_separable_dim(D)
+    _ghost_kron_polygon(a) && _throw_ghost_kron_polygon("kronecker_operator")
     Wu, Wv = trial_space(a), test_space(a)
     _ghost_kron_same_mesh(mesh(Wu), mesh(Wv))
     _kron_check_spaces(a.padded)
@@ -251,6 +252,25 @@ const _GHOST_KRON_CLOSURE = "its closure is not separable (it is when every ghos
         "kronecker_operator on $(Wₕ): $what, so the reduced matrix is not a sum of " *
         "Kronecker products of 1D factors. Assemble the form instead, assemble(a), or " *
         "apply it with matrix_free_operator(a).",
+    ),
+    )
+end
+
+# A polygon space (#202) extends an exterior node by (3.2) from the interior nodes beside
+# it, node by node along the polygon's edges, not by one relation per facet along an axis,
+# so its closure has no 1D factors whatever the form. `fdm_*` (BrambleKroneckerExt) asks
+# the same question.
+_ghost_kron_polygon(a::GhostBilinearForm) = trial_space(a).rows.polygon ||
+                                            test_space(a).rows.polygon
+
+@noinline function _throw_ghost_kron_polygon(caller::String)
+    throw(
+        ArgumentError(
+        "$caller on a form over polygon spaces: their closure extends each exterior " *
+        "node from its interior neighbours along the polygon's edges, which no product " *
+        "of 1D closures gives, so the reduced matrix has no Kronecker factors. Assemble " *
+        "the form instead, assemble(a, l), and solve it with pde_solve, or precondition " *
+        "it with ilu_preconditioner or amg_preconditioner.",
     ),
     )
 end

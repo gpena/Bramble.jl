@@ -68,20 +68,48 @@ end
     return min(a[1], b[1]) <= c[1] <= max(a[1], b[1]) && min(a[2], b[2]) <= c[2] <= max(a[2], b[2])
 end
 
-# Whether the closed segments `ab` and `cd` share a point.
-function _segments_meet(a, b, c, d)
-    o1, o2 = _orient(a, b, c), _orient(a, b, d)
-    o3, o4 = _orient(c, d, a), _orient(c, d, b)
-    (sign(o1) * sign(o2) < 0 && sign(o3) * sign(o4) < 0) && return true
+# Whether the closed bounding boxes of the segments `ab` and `cd` overlap.
+@inline function _boxes_meet(a, b, c, d)
+    return max(min(a[1], b[1]), min(c[1], d[1])) <= min(max(a[1], b[1]), max(c[1], d[1])) &&
+           max(min(a[2], b[2]), min(c[2], d[2])) <= min(max(a[2], b[2]), max(c[2], d[2]))
+end
+
+# The exact sign of the orientation of the vertices `W[i]`, `W[j]`, `W[k]`. The floating-point
+# cross product decides when it exceeds the error bound (3ε + 16ε²)(|l| + |r|) of Shewchuk's
+# orient2d filter, l and r its two products; otherwise, or when an underflow or overflow
+# voids the bound, the copies `V` in `Rational{BigInt}` decide.
+@inline function _orient_sign(W::Vector{NTuple{2, T}}, V, i, j, k) where {T}
+    if T <: Base.IEEEFloat
+        a, b, c = W[i], W[j], W[k]
+        l = (b[1] - a[1]) * (c[2] - a[2])
+        r = (b[2] - a[2]) * (c[1] - a[1])
+        o, s = l - r, abs(l) + abs(r)
+        ε = eps(T)
+        (floatmin(T) / ε <= s < floatmax(T) && abs(o) > (3 * ε + 16 * ε^2) * s) && return Int(sign(o))
+    end
+    return Int(sign(_orient(V[i], V[j], V[k])))
+end
+
+# Whether the closed edges `W[i] → W[j]` and `W[k] → W[m]` share a point, decided exactly.
+# Disjoint bounding boxes reject a pair at once; the orientations are filtered.
+function _edges_meet(W, V, i, j, k, m)
+    a, b, c, d = W[i], W[j], W[k], W[m]
+    _boxes_meet(a, b, c, d) || return false
+    o1, o2 = _orient_sign(W, V, i, j, k), _orient_sign(W, V, i, j, m)
+    o3, o4 = _orient_sign(W, V, k, m, i), _orient_sign(W, V, k, m, j)
+    (o1 * o2 < 0 && o3 * o4 < 0) && return true
+    # The float comparisons of `_in_box` are exact.
     return (iszero(o1) && _in_box(a, b, c)) || (iszero(o2) && _in_box(a, b, d)) ||
            (iszero(o3) && _in_box(c, d, a)) || (iszero(o4) && _in_box(c, d, b))
 end
 
 # Validate the vertices `W` and return the sign of the enclosed area (positive when `W` runs
-# counter-clockwise). Every predicate is evaluated exactly on the given floats, in
-# `Rational{BigInt}`: rounding would otherwise flip the orientation of nearly collinear
-# vertices (accepting an edge that folds back) or of a small polygon far from the origin.
-# Validation runs once, at construction, so the cost is affordable.
+# counter-clockwise). Every predicate is exact on the given floats: rounding would otherwise
+# flip the orientation of nearly collinear vertices (accepting an edge that folds back) or
+# of a small polygon far from the origin. The O(n) checks run in `Rational{BigInt}`. The
+# O(n²) test of non-adjacent edges rejects most pairs by their bounding boxes and decides
+# most orientations in floating point, inside a proven error bound; `Rational{BigInt}`
+# decides only the nearly degenerate rest (a 1500-vertex polygon validates in milliseconds).
 function _validate_polygon(W::Vector{NTuple{2, T}}) where {T}
     n = length(W)
     n >= 3 || _throw_polygon_error("expected at least 3 vertices, got $n")
@@ -114,7 +142,7 @@ function _validate_polygon(W::Vector{NTuple{2, T}}) where {T}
     for i in 1:n, j in (i + 2):n
 
         (i == 1 && j == n) && continue
-        if _segments_meet(V[i], V[i + 1], V[j], V[mod1(j + 1, n)])
+        if _edges_meet(W, V, i, i + 1, j, mod1(j + 1, n))
             _throw_polygon_error("edges $i and $j cross or touch (the polygon is not simple)")
         end
     end

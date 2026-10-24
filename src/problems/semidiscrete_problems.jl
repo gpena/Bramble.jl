@@ -198,10 +198,15 @@ end
 
 """
     linear_problem(a::BilinearForm, l::LinearForm; kwargs...) -> LinearProblem
+    linear_problem(a::GhostBilinearForm, l::GhostLinearForm; kwargs...) -> LinearProblem
 
 Assemble `a` and `l` into the `LinearProblem` that `LinearSolve.solve` takes, so the steady
 system reaches the factorisations, iterative solvers and preconditioners in that stack
 without being assembled by hand first.
+
+On ghost spaces (a [`constrained`](@ref) space, or the pair `polygon_spaces` returns), the
+problem is the reduced system `A, F = assemble(a, l)`, whose unknowns are the
+[`ndofs`](@ref) of the trial space, exactly as `pde_solve(A, F)` would take it.
 
 # Keywords
 - `dirichlet`, `dirichlet_components`: as [`assemble`](@ref) takes them.
@@ -222,6 +227,10 @@ sol = solve(prob, KrylovJL_GMRES())
 See also [`assemble`](@ref), [`ode_problem`](@ref), [`nonlinear_problem`](@ref).
 """
 function linear_problem(a::BilinearForm, l::LinearForm; kwargs...)
+    return _linear_problem(a, l; kwargs...)
+end
+
+function linear_problem(a::GhostBilinearForm, l::GhostLinearForm; kwargs...)
     return _linear_problem(a, l; kwargs...)
 end
 
