@@ -37,6 +37,8 @@ Create Dirichlet boundary constraints.
 
 Each `pair` is of the form `:label => func`, where `:label` identifies the boundary region and `func` defines the Dirichlet values. If the optional time domain `I` is provided, `func` must be a time-dependent function `func(x, t)`, or a time- and parameter-dependent one `func(x, t, p)` for a value that a [`semidiscretize`](@ref) residual's own `p` should reach; this is checked by arity, since nothing about `func` itself can be evaluated at construction time. Every `pair` given alongside `I` must agree on which of the two shapes it uses.
 
+`I` is used only to require the time-dependent shape of `func`: it is not stored, and nothing compares it with the time span of an [`ode_problem`](@ref). The conditions are evaluated at whatever `t` the solver passes, so `I` need not match the time span, and a time span that reaches outside `I` evaluates `func` outside `I` without a warning. Pass the same interval to both so that `func` is only called on the time span it was written for.
+
 `input` can be a `CartesianProduct`, a `Domain`, an `AbstractMeshType`, a `ScalarGridSpace`, or a `CompositeGridSpace` from which the mesh is extracted. The `:label` must match a label in the mesh definition.
 """
 function dirichlet_constraints(input, pairs::Pair...)
