@@ -292,9 +292,9 @@ function summarize(row, tracefile, zones, threads, nwarm)
             "first_self_s" => phase_figure(calls, s_self, "first", z),
             "warm_self_s" => phase_figure(calls, s_self, "warm", z),
             "first_events" => sum(n_incl[k][z] for k in eachindex(calls)
-                                  if calls[k].which == "first"),
+            if calls[k].which == "first"),
             "warm_events" => sum(n_incl[k][z] for k in eachindex(calls)
-                                 if calls[k].which == "warm") ÷ nwarm)
+            if calls[k].which == "warm") ÷ nwarm)
     end
     return Dict{String, Any}(
         "threads" => threads, "warm_calls" => nwarm,

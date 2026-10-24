@@ -85,11 +85,12 @@ if "--child" in ARGS
             for p in 2:length(argnames)
                 slot = Set{Any}(s[p] for s in sigs if length(s) >= p)
                 concrete = count(isconcretetype, slot)
-                push!(args, Dict{String, Any}("method" => "$(m.file):$(m.line)",
-                    "method_instances" => length(mis), "position" => p - 1,
-                    "name" => string(argnames[p]), "distinct_types" => concrete,
-                    "abstract_types" => length(slot) - concrete,
-                    "labels" => sort!(unique!([label(T) for T in slot]))))
+                push!(args,
+                    Dict{String, Any}("method" => "$(m.file):$(m.line)",
+                        "method_instances" => length(mis), "position" => p - 1,
+                        "name" => string(argnames[p]), "distinct_types" => concrete,
+                        "abstract_types" => length(slot) - concrete,
+                        "labels" => sort!(unique!([label(T) for T in slot]))))
             end
         end
         return total, args

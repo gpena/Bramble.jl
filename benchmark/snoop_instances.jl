@@ -65,120 +65,121 @@ end
 # child's code is evaluated from a quote, after the `using` above has run: the parent has no
 # SnoopCompileCore.
 if CHILD
-    Core.eval(Main, quote
-        # `--child fresh <row>` or `--child sequence <row>...`
-        mode = ARGS[2]
-        rows = ARGS[3:end]
+    Core.eval(Main,
+        quote
+            # `--child fresh <row>` or `--child sequence <row>...`
+            mode = ARGS[2]
+            rows = ARGS[3:end]
 
-        const SCALARS = Dict("scale_float64" => 2.0, "scale_float32" => 2.0f0,
-            "scale_pi" => π, "scale_rational" => 1 // 2)
+            const SCALARS = Dict("scale_float64" => 2.0, "scale_float32" => 2.0f0,
+                "scale_pi" => π, "scale_rational" => 1 // 2)
 
-        # The points of an axis: the exponent differs per axis, so no two axes agree.
-        graded(n, axis) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * axis)
+            # The points of an axis: the exponent differs per axis, so no two axes agree.
+            graded(n, axis) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * axis)
 
-        function setup()
-            n = (9, 11)
-            Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), n)
-            change_points!(Ωₕ, ntuple(d -> graded(n[d], d), 2))
-            return gridspace(Ωₕ)
-        end
-
-        function in_bramble(m::Module)
-            return m === Bramble || (m !== parentmodule(m) && in_bramble(parentmodule(m)))
-        end
-
-        # The distinct Bramble instances of one snoop, and its total inference time.
-        function bramble_instances(tinf)
-            set = Set{Core.MethodInstance}()
-            for t in flatten(tinf)
-                mi = Core.MethodInstance(t)
-                mi.def isa Method || continue         # the root's `def` is a module
-                in_bramble(mi.def.module) && push!(set, mi)
+            function setup()
+                n = (9, 11)
+                Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), n)
+                change_points!(Ωₕ, ntuple(d -> graded(n[d], d), 2))
+                return gridspace(Ωₕ)
             end
-            return set
-        end
 
-        # One call, snooped. Inference of the caller would infer the thunk's body, and its
-        # callees, before the snoop starts, so the count would miss those instances. The
-        # thunk is therefore not specialised on and is called through `invokelatest`.
-        function phase(@nospecialize(thunk))
-            value = Ref{Any}(nothing)
-            wall = Ref(0.0)
-            tinf = @snoop_inference begin
-                wall[] = @elapsed value[] = Base.invokelatest(thunk)
+            function in_bramble(m::Module)
+                return m === Bramble || (m !== parentmodule(m) && in_bramble(parentmodule(m)))
             end
-            return (; set = bramble_instances(tinf), wall = wall[],
-                inference = SnoopCompile.inclusive(tinf), value = value[])
-        end
 
-        # `form` then `assemble` of one build, as two snoops.
-        function form_assemble(@nospecialize(build))
-            f = phase(build)
-            a = phase(() -> assemble(f.value))
-            return (; set = union(f.set, a.set), form_s = f.wall, assemble_s = a.wall,
-                inference_s = f.inference + a.inference)
-        end
+            # The distinct Bramble instances of one snoop, and its total inference time.
+            function bramble_instances(tinf)
+                set = Set{Core.MethodInstance}()
+                for t in flatten(tinf)
+                    mi = Core.MethodInstance(t)
+                    mi.def isa Method || continue         # the root's `def` is a module
+                    in_bramble(mi.def.module) && push!(set, mi)
+                end
+                return set
+            end
 
-        scale_form(W, c) = form(W, W, (u, v) -> c * inner₊(∇ₕ(u), ∇ₕ(v)))
+            # One call, snooped. Inference of the caller would infer the thunk's body, and its
+            # callees, before the snoop starts, so the count would miss those instances. The
+            # thunk is therefore not specialised on and is called through `invokelatest`.
+            function phase(@nospecialize(thunk))
+                value = Ref{Any}(nothing)
+                wall = Ref(0.0)
+                tinf = @snoop_inference begin
+                    wall[] = @elapsed value[] = Base.invokelatest(thunk)
+                end
+                return (; set = bramble_instances(tinf), wall = wall[],
+                    inference = SnoopCompile.inclusive(tinf), value = value[])
+            end
 
-        # Three source coefficients as test/form/linear.jl writes them, one call that builds
-        # the form from any three. The form's closure captures them, so its type follows
-        # theirs.
-        named_1(x) = x[1]
-        named_2(x) = 100 * x[1]
-        named_3(x) = x[2]
-        anonymous_a() = (x -> x[1], x -> 100 * x[1], x -> x[2])
-        anonymous_b() = (x -> x[1], x -> 100 * x[1], x -> x[2])
-        function sources_form(W, a, b, c)
-            return form(W, v -> innerₕ(a, v) + innerₕ(b, v) + innerₕ(c, v))
-        end
+            # `form` then `assemble` of one build, as two snoops.
+            function form_assemble(@nospecialize(build))
+                f = phase(build)
+                a = phase(() -> assemble(f.value))
+                return (; set = union(f.set, a.set), form_s = f.wall, assemble_s = a.wall,
+                    inference_s = f.inference + a.inference)
+            end
 
-        function check_default_opt()
-            Base.JLOptions().opt_level == 2 ||
-                error("counting needs the default -O (2), got " *
-                      "$(Base.JLOptions().opt_level)")
-            return nothing
-        end
+            scale_form(W, c) = form(W, W, (u, v) -> c * inner₊(∇ₕ(u), ∇ₕ(v)))
 
-        function run_child()
-            check_default_opt()
-            W = setup()
-            if mode == "sequence"
-                seen = Set{Core.MethodInstance}()
-                for (i, row) in enumerate(rows)
+            # Three source coefficients as test/form/linear.jl writes them, one call that builds
+            # the form from any three. The form's closure captures them, so its type follows
+            # theirs.
+            named_1(x) = x[1]
+            named_2(x) = 100 * x[1]
+            named_3(x) = x[2]
+            anonymous_a() = (x -> x[1], x -> 100 * x[1], x -> x[2])
+            anonymous_b() = (x -> x[1], x -> 100 * x[1], x -> x[2])
+            function sources_form(W, a, b, c)
+                return form(W, v -> innerₕ(a, v) + innerₕ(b, v) + innerₕ(c, v))
+            end
+
+            function check_default_opt()
+                Base.JLOptions().opt_level == 2 ||
+                    error("counting needs the default -O (2), got " *
+                          "$(Base.JLOptions().opt_level)")
+                return nothing
+            end
+
+            function run_child()
+                check_default_opt()
+                W = setup()
+                if mode == "sequence"
+                    seen = Set{Core.MethodInstance}()
+                    for (i, row) in enumerate(rows)
+                        c = SCALARS[row]
+                        r = form_assemble(() -> scale_form(W, c))
+                        union!(seen, r.set)
+                        println("SEQUENCE ", row, " ", i, " ", length(r.set), " ", length(seen))
+                    end
+                    return nothing
+                end
+                row = only(rows)
+                if haskey(SCALARS, row)
                     c = SCALARS[row]
                     r = form_assemble(() -> scale_form(W, c))
-                    union!(seen, r.set)
-                    println("SEQUENCE ", row, " ", i, " ", length(r.set), " ", length(seen))
+                    again = form_assemble(() -> scale_form(W, c))
+                    println("FRESH ", length(r.set), " ", r.form_s, " ", r.assemble_s, " ",
+                        r.inference_s, " ", length(again.set))
+                    return nothing
                 end
-                return nothing
-            end
-            row = only(rows)
-            if haskey(SCALARS, row)
-                c = SCALARS[row]
-                r = form_assemble(() -> scale_form(W, c))
-                again = form_assemble(() -> scale_form(W, c))
+                named = (named_1, named_2, named_3)
+                first_set, second_set = row == "closures_fresh" ?
+                                        (anonymous_a(), anonymous_b()) : (named, named)
+                r = form_assemble(() -> sources_form(W, first_set...))
+                s = form_assemble(() -> sources_form(W, second_set...))
+                again = form_assemble(() -> sources_form(W, second_set...))
                 println("FRESH ", length(r.set), " ", r.form_s, " ", r.assemble_s, " ",
                     r.inference_s, " ", length(again.set))
+                println("SEQUENCE ", row, " 2 ", length(s.set), " ",
+                    length(union(r.set, s.set)), " ", s.form_s, " ", s.assemble_s, " ",
+                    s.inference_s)
                 return nothing
             end
-            named = (named_1, named_2, named_3)
-            first_set, second_set = row == "closures_fresh" ?
-                                    (anonymous_a(), anonymous_b()) : (named, named)
-            r = form_assemble(() -> sources_form(W, first_set...))
-            s = form_assemble(() -> sources_form(W, second_set...))
-            again = form_assemble(() -> sources_form(W, second_set...))
-            println("FRESH ", length(r.set), " ", r.form_s, " ", r.assemble_s, " ",
-                r.inference_s, " ", length(again.set))
-            println("SEQUENCE ", row, " 2 ", length(s.set), " ",
-                length(union(r.set, s.set)), " ", s.form_s, " ", s.assemble_s, " ",
-                s.inference_s)
-            return nothing
-        end
 
-        Base.invokelatest(run_child)
-        exit(0)
-    end)
+            Base.invokelatest(run_child)
+            exit(0)
+        end)
 end
 
 using TOML
@@ -204,7 +205,8 @@ function launch(tree, threads, args)
     cmd = `$(Base.julia_cmd()) --project=$(joinpath(tree, "test")) --threads=$threads
         --startup-file=no $(abspath(@__FILE__)) --child $args`
     out = read(cmd, String)
-    return [split(line) for line in eachline(IOBuffer(out))
+    return [split(line)
+            for line in eachline(IOBuffer(out))
             if startswith(line, "FRESH ") || startswith(line, "SEQUENCE ")]
 end
 
@@ -225,7 +227,7 @@ end
 
 function agree(what, row, vals)
     allequal(vals) || error("$what of $row differs between launches: $vals (a count that " *
-                            "changes between fresh launches is a finding, not noise)")
+          "changes between fresh launches is a finding, not noise)")
     return vals[1]
 end
 
@@ -245,7 +247,7 @@ function fresh_table(tree, row, n, threads)
     rep = agree("repeat_instances", row, [parse(Int, f[6]) for f in freshes])
     table["repeat_instances"] = rep
     rep == 0 || error("the repeat of $row inferred $rep Bramble instances in the same " *
-                      "process; the counting oracle is broken")
+          "process; the counting oracle is broken")
     if row in CLOSURE_ROWS
         seqs = [only(filter(l -> l[1] == "SEQUENCE", lines)) for lines in fresh]
         table["sequence_position"] = agree("sequence_position", row,

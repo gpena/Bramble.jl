@@ -107,6 +107,7 @@ end
 function owned_functions(root::Module)
     fns = Any[]
     for m in submodules(root), n in names(m; all = true, imported = false)
+
         isdefined(m, n) || continue
         f = getfield(m, n)
         f isa Function && within(parentmodule(f), root) && !any(g -> g === f, fns) &&
@@ -152,9 +153,10 @@ function detect_sites(root::Module)
         rt === Bool && (has_bool[f] = true)
         isconcretetype(rt) && rt !== Bool && (has_other[f] = true)
     end
-    return [(f, mi, rt) for (f, mi, rt) in instances
+    return [(f, mi, rt)
+            for (f, mi, rt) in instances
             if get(has_bool, f, false) && !get(has_other, f, false) && rt !== Bool &&
-               rt !== Union{}]
+                   rt !== Union{}]
 end
 
 # --- JET ------------------------------------------------------------------- #
