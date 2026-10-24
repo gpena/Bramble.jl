@@ -366,6 +366,25 @@ struct NotAFunctionPredicate end
         @test (@inferred marker_identifiers(Ω_ids)) isa Tuple
         @test isconcretetype(typeof(ids))
 
+        # All five kinds at once: the unrolled tuple still infers, in kind order.
+        P = Bramble.polygon([(0.2, 0.2), (0.8, 0.2), (0.5, 0.8)])
+        Ω_mix = domain(
+            interval(0.0, 1.0) × interval(0.0, 1.0),
+            :s => :left,
+            :t => (:top, :right),
+            :f => x -> true,
+            :P => P,
+            :D => Bramble.levelset(p -> (p[1] - 0.5)^2 + (p[2] - 0.5)^2 - 0.04)
+        )
+        mixed = @inferred marker_identifiers(Ω_mix)
+        @test isconcretetype(typeof(mixed))
+        @test length(mixed) == 5
+        @test mixed[1] === :left
+        @test mixed[2] == Set([:top, :right])
+        @test mixed[3] isa Function
+        @test mixed[4] === P
+        @test mixed[5] isa Bramble.LevelSet
+
         @test Set(label_symbols(Ω)) == Set([:bnd_left, :boundary])
         @test Set(label_tuples(Ω)) == Set([:corners])
         @test Set(label_conditions(Ω)) == Set([:region1])
