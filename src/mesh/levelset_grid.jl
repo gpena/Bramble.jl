@@ -7,12 +7,12 @@
 # construction runs in Float64; lines and polygon are converted to the seeds' type and
 # checked in it.
 
-@noinline function _throw_levelset_too_many(cap, nin, ρ)
-    throw(ArgumentError("level-set grid: too many lines: no grid with at most $cap lines per axis inside the curve's extent keeps its vertices within 0.2 h² of φ = 0 for the $nin lines asked there (rotation number $(round(ρ; digits = 8)))."))
+@noinline function _throw_levelset_too_many(cap, nin, ρ, cmax)
+    throw(ArgumentError("level-set grid: too many lines: no N ≤ $cap lines per axis inside the curve's extent has N‖Nρ‖ ≤ $cmax (rotation number $(round(ρ; digits = 8))) for the $nin lines asked there."))
 end
 
-@noinline function _throw_levelset_too_coarse(nx, ny)
-    throw(ArgumentError("level-set grid: too coarse: $nx × $ny points are too few to resolve the curve; use more."))
+@noinline function _throw_levelset_too_coarse(nx, ny, nin)
+    throw(ArgumentError("level-set grid: too coarse: $nx × $ny points give $nin lines inside the curve's extent, and the fit needs at least 6; use more."))
 end
 
 @noinline function _throw_levelset_check_failed(reason)
@@ -38,7 +38,7 @@ half the larger extent of the vertices.
 # Throws
 
   - `ArgumentError`: the errors of `_levelset_class` and of `_levelset_orbit_grid`, or, on
-    the closure path, "check failed".
+    the closure path, "check failed" or `_grid_closure`'s cap error.
 """
 function _levelset_grid(φ, xs::AbstractVector, ys::AbstractVector)
     B = _levelset_box(xs, ys)
@@ -86,11 +86,12 @@ least `N` up to `4 nin` with cost at most `cmax`. With ``p`` the nearest integer
 apart in the conjugacy of `T` to the rotation, a quarter of that off the leftmost point;
 Levenberg-Marquardt closes each orbit on the vertical lines alone (`_levelset_close!`), its
 anchor scaled by the curve's length scale `ℓ` (half its larger extent), so that a scaled
-curve with scaled seeds gives the scaled grid. The distinct seeds farther than a quarter of their spacing from the curve's extent are kept; the others
-give way. A grid that fails the post-check is rebuilt once with the next-best `N`.
+curve with scaled seeds gives the scaled grid. The distinct seeds farther than a quarter of
+their spacing from the curve's extent are kept; the others give way. A grid that fails the
+post-check is rebuilt once with the next-best `N`.
 
-A rational `ρ = p/q` (an internal use: `T` of finite order) samples the conjugacy from
-orbits started at equally spaced angles.
+A rational `ρ = p/q` (reached only by tests, to build a grid that fails the post-check)
+samples the conjugacy from orbits started at equally spaced angles.
 
 # Throws
 
@@ -105,10 +106,10 @@ function _levelset_orbit_grid(φ, xs::AbstractVector, ys::AbstractVector, ρ::Re
     θₗ, ex, ey = _levelset_extent(φ, B, c)
     nin = round(Int, max(length(sx) * (ex[2] - ex[1]) / (B[1][2] - B[1][1]), length(sy) * (ey[2] - ey[1]) /
                                                                              (B[2][2] - B[2][1])))
-    nin < 6 && _throw_levelset_too_coarse(length(sx), length(sy))
+    nin < 6 && _throw_levelset_too_coarse(length(sx), length(sy), nin)
     ℓ = max(ex[2] - ex[1], ey[2] - ey[1]) / 2
     N = _levelset_N(Float64(ρ), nin, Float64(cmax), 0)
-    iszero(N) && _throw_levelset_too_many(4nin, nin, ρ)
+    iszero(N) && _throw_levelset_too_many(4nin, nin, ρ, cmax)
     kx, ky = _levelset_kept(sx, ex), _levelset_kept(sy, ey)
     T = float(promote_type(eltype(xs), eltype(ys)))
     r = ""
@@ -213,7 +214,8 @@ function _levelset_Hinv(θs::Vector{Float64}, ψ)
 end
 
 # The vertical lines X, horizontal lines Y and vertices V of N = m q lines per axis inside
-# the extent (width w in units of the curve's length scale): m periodic orbits of T, each closed by `_levelset_close!`.
+# the extent (width w in units of the curve's length scale): m periodic orbits of T, each
+# closed by `_levelset_close!`.
 function _levelset_orbits(φ, B, c, θₗ::Float64, ρ::Float64, N::Int, w::Float64)
     m = gcd(N, round(Int, N * ρ))
     q = N ÷ m

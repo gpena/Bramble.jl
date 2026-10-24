@@ -258,6 +258,21 @@ end
         end
     end
 
+    # gpena/Bramble.jl#895. `form` resolves `markers` to a face mask held in the weight's
+    # type, and reads it off the mesh's markers, so the form's type depends on their values.
+    # `-Δₕ` on the same spaces is the control: concrete.
+    @testset "Surface forms" begin
+        rt(W, f) = only(Base.return_types(form, (typeof(W), typeof(W), typeof(f))))
+        surface(u, v) = inner_Γ(u, v; markers = :boundary)
+        conormal(u, v) = inner_Γ(∂ₙ(u), v; markers = :boundary)
+        laplacian(u, v) = innerₕ(-1.0 * Δₕ(u), v)
+        G2 = gridspace(Ωₕ2; ghosts = :boundary)
+        @test_broken isconcretetype(rt(Wₕ2, surface))
+        @test_broken isconcretetype(rt(G2, conormal))
+        @test isconcretetype(rt(Wₕ2, laplacian))
+        @test isconcretetype(rt(G2, laplacian))
+    end
+
     # gpena/Bramble.jl#549. The band sweeps pick one colour or two from `prod(strides)`, a
     # runtime value; a tuple of one or two ranges made that slot a Union. `@inferred` and
     # JET pass either way (the return type is concrete and the split is not dispatch), so

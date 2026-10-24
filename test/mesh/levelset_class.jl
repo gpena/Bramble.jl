@@ -67,6 +67,16 @@ end
         end
     end
 
+    @testset "A 5-fold ellipse takes the closure path" begin
+        # Semi-axes 1 and b = √(5 + 2√5) at 45° give cos β = (b² − 1)/(b² + 1) = cos(π/5), so
+        # ρ = 1/5 and T⁵ = id: the q ∈ 5:60 return of `_levelset_class`.
+        φ, ρs = ellipse(1.0, sqrt(5 + 2sqrt(5)), π / 4, (0.0, 0.0))
+        @test ρs[1] ≈ 1 / 5 atol = 1e-12
+        r = Bramble._levelset_class(φ, ((-2.6, 2.6), (-2.6, 2.6)))
+        @test r.path === :closure
+        @test minimum(abs.(r.ρ .- ρs)) < 1e-12
+    end
+
     @testset "A tilted egg takes the orbit path" begin
         # Prototype value (architect report §2.3, weighted Birkhoff at 32000 steps).
         r = Bramble._levelset_class(egg(deg2rad(35), 0.4), EB)
@@ -118,15 +128,23 @@ end
 
     @testset "Curves reaching the box throw" begin
         disk = p -> hypot(p[1], p[2]) - 1
-        @test occursin("reaches the domain's bounding box", message(disk, ((-1.0, 1.0), (-1.5, 1.5))))
-        @test occursin("reaches the domain's bounding box", message(disk, ((-0.8, 1.5), (-1.5, 1.5))))
-        @test occursin("reaches the domain's bounding box", message(disk, ((-0.5, 0.5), (-0.5, 0.5))))
+        @test occursin("reaches the side x = -1.0 of the box ((-1.0, 1.0), (-1.5, 1.5))",
+            message(disk, ((-1.0, 1.0), (-1.5, 1.5))))
+        @test occursin("reaches the side", message(disk, ((-0.8, 1.5), (-1.5, 1.5))))
+        @test occursin("reaches the side", message(disk, ((-0.5, 0.5), (-0.5, 0.5))))
         # Tangent to a side between two of its samples.
         off = p -> hypot(p[1], p[2] - 0.1234567891) - 1
-        @test occursin("reaches the domain's bounding box", message(off, ((-1.5, 1.0), (-1.5, 1.5))))
+        @test occursin("reaches the side", message(off, ((-1.5, 1.0), (-1.5, 1.5))))
         offy = p -> hypot(p[1] - 0.1234567891, p[2]) - 1
-        @test occursin("reaches the domain's bounding box", message(offy, ((-1.5, 1.5), (-1.5, 1.0))))
+        @test occursin("reaches the side y = 1.0", message(offy, ((-1.5, 1.5), (-1.5, 1.0))))
         @test occursin("region φ < 0 is empty", message(p -> hypot(p[1], p[2]) + 1, ((-1.0, 1.0), (-1.0, 1.0))))
+    end
+
+    @testset "A nonnegative φ throws the empty error" begin
+        B = ((0.0, 1.0), (0.0, 1.0))
+        @test occursin("nonnegative at every sampled point of the box ((0.0, 1.0), (0.0, 1.0))",
+            message(p -> 1.0, B))
+        @test_throws ArgumentError Bramble._levelset_class(p -> 1.0, B)
     end
 
     @testset "The box-side test ignores φ's scale" begin
@@ -136,12 +154,12 @@ end
         @test Bramble._levelset_class(p -> exp(1000 * (p[1]^2 + p[2]^2)) - exp(250.0), B).path === :closure
         # NaN on part of a side the disk crosses.
         nan = p -> p[1] > 1.2 ? NaN : hypot(p[1], p[2]) - 1
-        @test occursin("reaches the domain's bounding box", message(nan, ((-1.25, 1.25), (-0.9, 1.25))))
+        @test occursin("reaches the side", message(nan, ((-1.25, 1.25), (-0.9, 1.25))))
         # NaN beside a tangency must not pull the golden-section bracket off it.
         Y0 = 0.1234567891
         for δ in (1e-4, 1e-9)
             half = p -> (p[1] >= 1.0 && p[2] > Y0 + δ) ? NaN : hypot(p[1], p[2] - Y0) - 1
-            @test occursin("reaches the domain's bounding box", message(half, ((-1.5, 1.0), (-1.5, 1.5))))
+            @test occursin("reaches the side", message(half, ((-1.5, 1.0), (-1.5, 1.5))))
         end
         # A side 1e-3 from the disk is clear.
         disk = p -> hypot(p[1], p[2]) - 1

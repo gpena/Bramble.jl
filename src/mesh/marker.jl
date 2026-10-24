@@ -115,8 +115,8 @@ Internal helper function to construct and initialize the [`MeshMarkers`](@ref) d
 
 Allocates `BitVector` storage initialized to `false` for every symbol, tuple, and condition
 label defined in `domain_markers`, a [`DomainMarkers`](@ref) or the `EvaluatedDomainMarkers`
-that `Ω(t)` of a time-dependent domain holds, and for the three labels of each polygon
-marker.
+that `Ω(t)` of a time-dependent domain holds, and for the three labels
+of each polygon and level-set marker.
 """
 function _init_mesh_markers(
         Ωₕ::AbstractMeshType, domain_markers::Union{DomainMarkers, EvaluatedDomainMarkers}
@@ -139,7 +139,7 @@ end
 
 Evaluate domain markers onto mesh points, creating `BitVector` indicators for each label.
 
-Supports four classes of domain markers:
+Supports five classes of domain markers:
   1. Symbol markers, the predefined boundary labels (`:left`, `:right`, etc.).
   2. Tuple markers, the unions of boundary symbols.
   3. Function markers, the level-set boolean predicates `x -> Bool`.
