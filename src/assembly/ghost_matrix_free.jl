@@ -126,21 +126,22 @@ function _ghost_mf_apply!(y, op::GhostMatrixFreeOperator, x, α, β, xpad, ypad)
     mul!(ypad, op.padded, xpad, true, false)
     E = op.test_space.E
     _run_bands!(op.policy, _ghost_mf_out_band!, y, SparseArrays.getcolptr(E), rowvals(E),
-        nonzeros(E), ypad, op.mask, α, β)
+        nonzeros(E), ypad, op.mask.chunks, α, β)
     _mf_identity_rows!(y, x, α, isempty(op.mask) ? nothing : op.mask)
     return nothing
 end
 
 # Entries `r` of band `b` of `y = α E_vᵀ w + β y`, from column `r` of `E_v`; `β == 0`
 # overwrites `y`, so a `NaN` in it does not survive. A row the nonempty `mask` marks keeps
-# `β y[r]` only: `_mf_identity_rows!` adds its `α x[r]` after.
-@noinline function _ghost_mf_out_band!(y, colptr, rowval, nz, w, mask, α, β, nbands::Int,
+# `β y[r]` only: `_mf_identity_rows!` adds its `α x[r]` after. The mask crosses as its
+# words (`_MFMask`): a `BitVector` among the `@batch` arguments puts them on the heap.
+@noinline function _ghost_mf_out_band!(y, colptr, rowval, nz, w, chunks, α, β, nbands::Int,
         b::Int)
     T = eltype(y)
-    marked = !isempty(mask)
+    marked = !isempty(chunks)
     @inbounds for r in _band_range(1:length(y), nbands, b)
         s = zero(T)
-        if !(marked && mask[r])
+        if !marked || _mf_live(_MFMask(chunks), r)
             for k in colptr[r]:(colptr[r + 1] - 1)
                 s = convert(T, s + nz[k] * w[rowval[k]])
             end

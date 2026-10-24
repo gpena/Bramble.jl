@@ -16,8 +16,9 @@ module GhostPolyesterTests
 
 using Test
 using Bramble
-using Bramble: CpuPolyester, CpuSerial, Dcₓ, Dcᵧ, D̃ₓ, D₋ₓ, D̃ᵧ, D₋ᵧ
-using LinearAlgebra: norm
+using Bramble: CpuPolyester, CpuSerial, Dcₓ, Dcᵧ, D̃ₓ, D₋ₓ, D̃ᵧ, D₋ᵧ,
+    matrix_free_operator, polygon, polygon_spaces
+using LinearAlgebra: mul!, norm
 using SparseArrays: SparseMatrixCSC, nonzeros
 using Polyester
 
@@ -288,6 +289,26 @@ end
             for (k, n) in pairs(warm_rows(CpuPolyester(), ns))
                 @test n == 0
             end
+        end
+        # The matrix-free product (#877), with and without Dirichlet rows, on a ghost box
+        # and a polygon space: its values are the assembled matrix's.
+        rel = u -> map(F -> F => ∂ₙ(u) => 0.0, (:xmin, :xmax, :ymin, :ymax))
+        C = constrained(gridspace(ghost_mesh(CpuPolyester(), (12, 11)); ghosts = :boundary),
+            rel)
+        be = backend(vector_type = Vector{Float64},
+            matrix_type = SparseMatrixCSC{Float64, Int}, policy = CpuPolyester())
+        octagon = [(1.0, 0.0), (3.0, 0.0), (4.0, 1.0), (4.0, 3.0), (3.0, 4.0), (1.0, 4.0),
+            (0.0, 3.0), (0.0, 1.0)]
+        Ωp = mesh(domain(interval(-1.0, 5.0) × interval(-1.0, 5.0), :P => polygon(octagon)),
+            (19, 19), (false, false); backend = be)
+        U, W = polygon_spaces(Ωp, :P, x -> 1 + x[1] - 2x[2])
+        for (a, kw) in ((form(C, C, laplacian), (;)),
+            (form(C, C, laplacian), (; dirichlet = :xmin)), (form(U, W, laplacian), (;)))
+            op = matrix_free_operator(a; kw...)
+            x = collect(range(-1.0, 2.0; length = size(op, 2)))
+            z = zeros(size(op, 1))
+            @test alloc(() -> mul!(z, op, x)) == 0
+            @test z ≈ assemble(a; kw...) * x
         end
     end
 
