@@ -125,11 +125,16 @@ apply(P, x) = ldiv!(similar(x), P, x)
         @test apply(Pi, x) == apply(ilu_preconditioner(A), x)
         Pa = aspreconditioner(amg_preconditioner(a))
         @test apply(Pa, x) == apply(aspreconditioner(amg_preconditioner(A)), x)
+        gmres(P) = solve(LinearProblem(A, F), KrylovJL_GMRES(precs = (_, _) -> (P, Id));
+            reltol = 1e-12, abstol = 0.0)
+        # Full GMRES reaches `A \ F` with any nonsingular P, the identity included: a
+        # working preconditioner must also take well under half its iterations.
+        s0 = gmres(Id)
         for P in (Pi, Pa)
-            s = solve(LinearProblem(A, F), KrylovJL_GMRES(precs = (_, _) -> (P, Id));
-                reltol = 1e-12, abstol = 0.0)
+            s = gmres(P)
             @test s.retcode == ReturnCode.Success
             @test relerr(s.u, u) <= 1e-8
+            @test 2 * s.iters < s0.iters
         end
     end
 
@@ -160,6 +165,15 @@ apply(P, x) = ldiv!(similar(x), P, x)
             @test endswith(f, ".vtr") && isfile(f)
             # The rectilinear grid of the whole box.
             @test occursin("WholeExtent=\"0 $(n[1] - 1) 0 $(n[2] - 1) 0 0\"", read(f, String))
+            # The field: the same bytes as WriteVTK writes from the hand-built axes and the
+            # lifted values, which are compressed in the file.
+            @test occursin(r"<PointData>\s*<DataArray type=\"Float64\" Name=\"u\"",
+                read(f, String))
+            xs = [Bramble.point(Ωₕ, (i, 1))[1] for i in 1:n[1]]
+            ys = [Bramble.point(Ωₕ, (1, j))[2] for j in 1:n[2]]
+            vtk = WriteVTK.vtk_grid(joinpath(dir, "ref"), xs, ys)
+            vtk["u"] = reshape(copy(uₕ.data), n)
+            @test read(f) == read(only(WriteVTK.vtk_save(vtk)))
         end
         # The values handed to WriteVTK, the exterior extension included.
         @test Bramble._vtk_data(uₕ) == reshape(uₕ.data, n)
@@ -177,6 +191,10 @@ apply(P, x) = ldiv!(similar(x), P, x)
         M = sd.mass_matrix
         @test isdiag(M)
         @test diag(M) ≈ assemble(form(W, v -> innerₕ(x -> 1.0, v))) rtol = 1e-14
+        # The right-hand side F − A u, its source the load of form(W, f_l).
+        u = rand(Xoshiro(3), size(M, 1))
+        du = sd(similar(u), u, nothing, 0.0)
+        @test du ≈ assemble(form(W, f_l)) .- assemble(form(W, W, f_a)) * u
     end
 
     @testset "Float32 keeps its eltype" begin
