@@ -1,0 +1,567 @@
+[elasticity]
+assemble_wall_s = 16.745005667
+commit = "7c015691"
+compile_s = 22.340436169
+form_wall_s = 5.599518375
+julia = "1.13.2"
+launches = 3
+recompiles = []
+threads = 1
+trace_lines = 292
+trace_s = 22.648600000000002
+
+    [elasticity.functions."Base.:(!=)"]
+    assemble_s = 0.0
+    form_s = 0.0014
+    instances = 1
+    recompiled = 0
+    total_s = 0.0014
+
+    [elasticity.functions."Base.:(*)"]
+    assemble_s = 0.0
+    form_s = 0.015299999999999994
+    instances = 12
+    recompiled = 0
+    total_s = 0.015299999999999994
+
+    [elasticity.functions."Base.:(+)"]
+    assemble_s = 0.0
+    form_s = 0.03480000000000001
+    instances = 21
+    recompiled = 0
+    total_s = 0.03480000000000001
+
+    [elasticity.functions."Base.:(//)"]
+    assemble_s = 0.0
+    form_s = 0.0026
+    instances = 1
+    recompiled = 0
+    total_s = 0.0026
+
+    [elasticity.functions."Base.BottomRF"]
+    assemble_s = 0.0
+    form_s = 0.05439999999999999
+    instances = 27
+    recompiled = 0
+    total_s = 0.05439999999999999
+
+    [elasticity.functions."Base.FilteringRF"]
+    assemble_s = 0.0
+    form_s = 0.023000000000000003
+    instances = 10
+    recompiled = 0
+    total_s = 0.023000000000000003
+
+    [elasticity.functions."Base.Generator"]
+    assemble_s = 0.0
+    form_s = 0.0026
+    instances = 2
+    recompiled = 0
+    total_s = 0.0026
+
+    [elasticity.functions."Base.Iterators.Filter"]
+    assemble_s = 0.0
+    form_s = 0.0013
+    instances = 1
+    recompiled = 0
+    total_s = 0.0013
+
+    [elasticity.functions."Base.Iterators.filter"]
+    assemble_s = 0.0
+    form_s = 0.003
+    instances = 1
+    recompiled = 0
+    total_s = 0.003
+
+    [elasticity.functions."Base.Iterators.rest"]
+    assemble_s = 0.0
+    form_s = 0.0013
+    instances = 1
+    recompiled = 0
+    total_s = 0.0013
+
+    [elasticity.functions."Base.Val"]
+    assemble_s = 0.0
+    form_s = 0.006
+    instances = 2
+    recompiled = 0
+    total_s = 0.006
+
+    [elasticity.functions."Base._all"]
+    assemble_s = 0.0
+    form_s = 0.005300000000000001
+    instances = 2
+    recompiled = 0
+    total_s = 0.005300000000000001
+
+    [elasticity.functions."Base._foldl_impl"]
+    assemble_s = 0.0
+    form_s = 0.01
+    instances = 1
+    recompiled = 0
+    total_s = 0.01
+
+    [elasticity.functions."Base._xfadjoint"]
+    assemble_s = 0.0
+    form_s = 0.0027
+    instances = 2
+    recompiled = 0
+    total_s = 0.0027
+
+    [elasticity.functions."Base._xfadjoint_unwrap"]
+    assemble_s = 0.0
+    form_s = 0.0028
+    instances = 2
+    recompiled = 0
+    total_s = 0.0028
+
+    [elasticity.functions."Base.afoldl"]
+    assemble_s = 0.0
+    form_s = 0.012
+    instances = 1
+    recompiled = 0
+    total_s = 0.012
+
+    [elasticity.functions."Base.all"]
+    assemble_s = 0.0
+    form_s = 0.0073
+    instances = 2
+    recompiled = 0
+    total_s = 0.0073
+
+    [elasticity.functions."Base.allunique"]
+    assemble_s = 0.0
+    form_s = 0.0040999999999999995
+    instances = 2
+    recompiled = 0
+    total_s = 0.0040999999999999995
+
+    [elasticity.functions."Base.argtail"]
+    assemble_s = 0.0
+    form_s = 0.0037999999999999996
+    instances = 3
+    recompiled = 0
+    total_s = 0.0037999999999999996
+
+    [elasticity.functions."Base.first"]
+    assemble_s = 0.0
+    form_s = 0.0137
+    instances = 7
+    recompiled = 0
+    total_s = 0.0137
+
+    [elasticity.functions."Base.foldl"]
+    assemble_s = 0.0
+    form_s = 0.0497
+    instances = 5
+    recompiled = 0
+    total_s = 0.0497
+
+    [elasticity.functions."Base.foldl_impl"]
+    assemble_s = 0.0
+    form_s = 0.0095
+    instances = 1
+    recompiled = 0
+    total_s = 0.0095
+
+    [elasticity.functions."Base.getproperty"]
+    assemble_s = 0.0
+    form_s = 0.0127
+    instances = 5
+    recompiled = 0
+    total_s = 0.0127
+
+    [elasticity.functions."Base.indexed_iterate"]
+    assemble_s = 0.0023
+    form_s = 0.0187
+    instances = 7
+    recompiled = 0
+    total_s = 0.021
+
+    [elasticity.functions."Base.iterate"]
+    assemble_s = 0.0
+    form_s = 0.0037
+    instances = 2
+    recompiled = 0
+    total_s = 0.0037
+
+    [elasticity.functions."Base.map"]
+    assemble_s = 0.0
+    form_s = 0.0024999999999999996
+    instances = 2
+    recompiled = 0
+    total_s = 0.0024999999999999996
+
+    [elasticity.functions."Base.mapfoldl"]
+    assemble_s = 0.0
+    form_s = 0.0013
+    instances = 1
+    recompiled = 0
+    total_s = 0.0013
+
+    [elasticity.functions."Base.mapfoldl_impl"]
+    assemble_s = 0.0
+    form_s = 0.0216
+    instances = 5
+    recompiled = 0
+    total_s = 0.0216
+
+    [elasticity.functions."Base.merge"]
+    assemble_s = 0.0
+    form_s = 0.0068000000000000005
+    instances = 6
+    recompiled = 0
+    total_s = 0.0068000000000000005
+
+    [elasticity.functions."Base.ntuple"]
+    assemble_s = 0.0
+    form_s = 0.0212
+    instances = 1
+    recompiled = 0
+    total_s = 0.0212
+
+    [elasticity.functions."Base.pairs"]
+    assemble_s = 0.0
+    form_s = 0.007199999999999999
+    instances = 6
+    recompiled = 0
+    total_s = 0.007199999999999999
+
+    [elasticity.functions."Base.tail"]
+    assemble_s = 0.0
+    form_s = 0.015399999999999999
+    instances = 6
+    recompiled = 0
+    total_s = 0.015399999999999999
+
+    [elasticity.functions."Base.var\"##foldl#272\""]
+    assemble_s = 0.0
+    form_s = 0.0012
+    instances = 1
+    recompiled = 0
+    total_s = 0.0012
+
+    [elasticity.functions."Bramble.BilinearForm"]
+    assemble_s = 0.0
+    form_s = 0.0184
+    instances = 1
+    recompiled = 0
+    total_s = 0.0184
+
+    [elasticity.functions."Bramble.BilinearProduct"]
+    assemble_s = 0.0
+    form_s = 0.011399999999999999
+    instances = 9
+    recompiled = 0
+    total_s = 0.011399999999999999
+
+    [elasticity.functions."Bramble.IndexedTestFunction"]
+    assemble_s = 0.0
+    form_s = 0.0013
+    instances = 1
+    recompiled = 0
+    total_s = 0.0013
+
+    [elasticity.functions."Bramble.IndexedTrialFunction"]
+    assemble_s = 0.0
+    form_s = 0.0013
+    instances = 1
+    recompiled = 0
+    total_s = 0.0013
+
+    [elasticity.functions."Bramble.OperatorAdd"]
+    assemble_s = 0.0
+    form_s = 0.1253
+    instances = 69
+    recompiled = 0
+    total_s = 0.1253
+
+    [elasticity.functions."Bramble.OperatorScale"]
+    assemble_s = 0.0
+    form_s = 0.0029
+    instances = 1
+    recompiled = 0
+    total_s = 0.0029
+
+    [elasticity.functions."Bramble._AssemblyCache"]
+    assemble_s = 0.0
+    form_s = 0.0023
+    instances = 1
+    recompiled = 0
+    total_s = 0.0023
+
+    [elasticity.functions."Bramble._DivergenceTerms"]
+    assemble_s = 0.0
+    form_s = 0.0027
+    instances = 2
+    recompiled = 0
+    total_s = 0.0027
+
+    [elasticity.functions."Bramble._StrainTensor"]
+    assemble_s = 0.0
+    form_s = 0.0026
+    instances = 2
+    recompiled = 0
+    total_s = 0.0026
+
+    [elasticity.functions."Bramble._bilinear_form"]
+    assemble_s = 0.0
+    form_s = 3.739
+    instances = 1
+    recompiled = 0
+    total_s = 3.739
+
+    [elasticity.functions."Bramble._canonical_set"]
+    assemble_s = 0.0
+    form_s = 0.0056
+    instances = 2
+    recompiled = 0
+    total_s = 0.0056
+
+    [elasticity.functions."Bramble._check_form_meshes"]
+    assemble_s = 0.0
+    form_s = 0.019399999999999997
+    instances = 1
+    recompiled = 0
+    total_s = 0.019399999999999997
+
+    [elasticity.functions."Bramble._cross_terms"]
+    assemble_s = 0.0
+    form_s = 0.028399999999999998
+    instances = 9
+    recompiled = 0
+    total_s = 0.028399999999999998
+
+    [elasticity.functions."Bramble._flatten_tuples"]
+    assemble_s = 0.0
+    form_s = 0.0471
+    instances = 10
+    recompiled = 0
+    total_s = 0.0471
+
+    [elasticity.functions."Bramble._lower_signs"]
+    assemble_s = 0.0
+    form_s = 0.045899999999999996
+    instances = 1
+    recompiled = 0
+    total_s = 0.045899999999999996
+
+    [elasticity.functions."Bramble._pair_plan"]
+    assemble_s = 0.019899999999999998
+    form_s = 0.0
+    instances = 1
+    recompiled = 0
+    total_s = 0.019899999999999998
+
+    [elasticity.functions."Bramble._resimplify_moves"]
+    assemble_s = 0.0
+    form_s = 0.009800000000000001
+    instances = 1
+    recompiled = 0
+    total_s = 0.009800000000000001
+
+    [elasticity.functions."Bramble._split_restricted_products"]
+    assemble_s = 0.0
+    form_s = 0.0022
+    instances = 1
+    recompiled = 0
+    total_s = 0.0022
+
+    [elasticity.functions."Bramble._stagger_set"]
+    assemble_s = 0.0
+    form_s = 0.002
+    instances = 1
+    recompiled = 0
+    total_s = 0.002
+
+    [elasticity.functions."Bramble._vc_avg"]
+    assemble_s = 0.0
+    form_s = 0.019200000000000002
+    instances = 6
+    recompiled = 0
+    total_s = 0.019200000000000002
+
+    [elasticity.functions."Bramble._vc_bwd"]
+    assemble_s = 0.0
+    form_s = 0.006500000000000001
+    instances = 2
+    recompiled = 0
+    total_s = 0.006500000000000001
+
+    [elasticity.functions."Bramble.assemble"]
+    assemble_s = 16.728900000000003
+    form_s = 0.0
+    instances = 1
+    recompiled = 0
+    total_s = 16.728900000000003
+
+    [elasticity.functions."Bramble.form"]
+    assemble_s = 0.0
+    form_s = 1.3311
+    instances = 1
+    recompiled = 0
+    total_s = 1.3311
+
+    [elasticity.functions."Bramble.inner₊"]
+    assemble_s = 0.0
+    form_s = 0.04
+    instances = 2
+    recompiled = 0
+    total_s = 0.04
+
+    [elasticity.functions."Bramble.shift_stencil"]
+    assemble_s = 0.01
+    form_s = 0.0
+    instances = 3
+    recompiled = 0
+    total_s = 0.01
+
+    [elasticity.functions."Bramble.var\"##707#708\""]
+    assemble_s = 0.0
+    form_s = 0.0123
+    instances = 1
+    recompiled = 0
+    total_s = 0.0123
+
+    [elasticity.functions."Bramble.var\"#_div_term##0#_div_term##1\""]
+    assemble_s = 0.0
+    form_s = 0.019399999999999997
+    instances = 6
+    recompiled = 0
+    total_s = 0.019399999999999997
+
+    [elasticity.functions.NamedTuple]
+    assemble_s = 0.0
+    form_s = 0.007499999999999999
+    instances = 6
+    recompiled = 0
+    total_s = 0.007499999999999999
+
+[scalar_2d]
+assemble_wall_s = 0.004628167
+commit = "7c015691"
+compile_s = 0.011899541
+form_wall_s = 0.007155167
+julia = "1.13.2"
+launches = 3
+recompiles = []
+threads = 1
+trace_lines = 2
+trace_s = 0.0096
+
+    [scalar_2d.functions."Bramble.assemble"]
+    assemble_s = 0.0034
+    form_s = 0.0
+    instances = 1
+    recompiled = 0
+    total_s = 0.0034
+
+    [scalar_2d.functions."Bramble.form"]
+    assemble_s = 0.0
+    form_s = 0.0060999999999999995
+    instances = 1
+    recompiled = 0
+    total_s = 0.0060999999999999995
+
+[vector_laplacian]
+assemble_wall_s = 2.839406167
+commit = "7c015691"
+compile_s = 2.918422751
+form_wall_s = 0.079415667
+julia = "1.13.2"
+launches = 3
+recompiles = []
+threads = 1
+trace_lines = 20
+trace_s = 2.9890000000000003
+
+    [vector_laplacian.functions."Base.indexed_iterate"]
+    assemble_s = 0.0022
+    form_s = 0.0
+    instances = 1
+    recompiled = 0
+    total_s = 0.0022
+
+    [vector_laplacian.functions."Bramble.D₋"]
+    assemble_s = 0.0
+    form_s = 0.0071
+    instances = 6
+    recompiled = 0
+    total_s = 0.0071
+
+    [vector_laplacian.functions."Bramble.IndexedTestFunction"]
+    assemble_s = 0.0
+    form_s = 0.0011
+    instances = 1
+    recompiled = 0
+    total_s = 0.0011
+
+    [vector_laplacian.functions."Bramble.IndexedTrialFunction"]
+    assemble_s = 0.0
+    form_s = 0.0013
+    instances = 1
+    recompiled = 0
+    total_s = 0.0013
+
+    [vector_laplacian.functions."Bramble._lower_signs"]
+    assemble_s = 0.0
+    form_s = 0.0032
+    instances = 1
+    recompiled = 0
+    total_s = 0.0032
+
+    [vector_laplacian.functions."Bramble._pair_plan"]
+    assemble_s = 0.0355
+    form_s = 0.0
+    instances = 1
+    recompiled = 0
+    total_s = 0.0355
+
+    [vector_laplacian.functions."Bramble._split_restricted_products"]
+    assemble_s = 0.0
+    form_s = 0.0025
+    instances = 1
+    recompiled = 0
+    total_s = 0.0025
+
+    [vector_laplacian.functions."Bramble.assemble"]
+    assemble_s = 2.8353
+    form_s = 0.0
+    instances = 1
+    recompiled = 0
+    total_s = 2.8353
+
+    [vector_laplacian.functions."Bramble.form"]
+    assemble_s = 0.0
+    form_s = 0.07640000000000001
+    instances = 1
+    recompiled = 0
+    total_s = 0.07640000000000001
+
+    [vector_laplacian.functions."Bramble.inner₊"]
+    assemble_s = 0.0
+    form_s = 0.0038
+    instances = 1
+    recompiled = 0
+    total_s = 0.0038
+
+    [vector_laplacian.functions."Bramble.resolve_ast"]
+    assemble_s = 0.0
+    form_s = 0.0037
+    instances = 1
+    recompiled = 0
+    total_s = 0.0037
+
+    [vector_laplacian.functions."Bramble.shift_stencil"]
+    assemble_s = 0.0106
+    form_s = 0.0
+    instances = 3
+    recompiled = 0
+    total_s = 0.0106
+
+    [vector_laplacian.functions."Bramble.simplify_ast"]
+    assemble_s = 0.0
+    form_s = 0.0035
+    instances = 1
+    recompiled = 0
+    total_s = 0.0035
