@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=afb4c413">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d44ee7b3">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -253,7 +253,7 @@ point_type(::Type{&lt;:CartesianProduct{D, T}}) -&gt; Type{NTuple{D, T}}</code><
 <div class="md-docstring" id="Bramble.DomainMarkers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DomainMarkers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L44-L64" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L45-L65" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -280,7 +280,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.DomainMarkers-Tuple{Number, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DomainMarkers</code> — <span class="md-docstring-sig">Tuple{Number, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L516-L522" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L507-L513" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -293,7 +293,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.DomainMarkers-Tuple{Number}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DomainMarkers</code> — <span class="md-docstring-sig">Tuple{Number}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L481-L487" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L472-L478" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -306,7 +306,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.EvaluatedDomainMarkers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.EvaluatedDomainMarkers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L403-L413" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L394-L404" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -326,7 +326,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.EvaluatedParametricDomainMarkers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.EvaluatedParametricDomainMarkers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L490-L509" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L481-L500" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -361,7 +361,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">label</code>: Region identifier (e.g. <code class="md-code-inline">:inlet</code>, <code class="md-code-inline">:wall</code>, <code class="md-code-inline">:boundary</code>).</p>
 </li>
-<li><p><code class="md-code-inline">identifier</code>: Location specification, either a predefined boundary <code class="md-code-inline">Symbol</code> (e.g. <code class="md-code-inline">:left</code>), a <code class="md-code-inline">Set{Symbol}</code> of boundary names, a boolean spatial predicate function <code class="md-code-inline">f(x)</code>, or a <code class="md-code-inline">Polygon</code> (from <code class="md-code-inline">polygon</code>) classifying the nodes of a 2D mesh. <a href="../../api/geometry/#Bramble.markers"><code class="md-code-inline">markers</code></a> builds a <code class="md-code-inline">Marker</code> from a tuple, vector or set of boundary symbols by storing it as a <code class="md-code-inline">Set{Symbol}</code>.</p>
+<li><p><code class="md-code-inline">identifier</code>: Location specification, either a predefined boundary <code class="md-code-inline">Symbol</code> (e.g. <code class="md-code-inline">:left</code>), a <code class="md-code-inline">Set{Symbol}</code> of boundary names, or a boolean spatial predicate function <code class="md-code-inline">f(x)</code>. Polygon and level-set pairs are kept apart, in the <code class="md-code-inline">regions</code> of <a href="../../internals/geometry/#Bramble.DomainMarkers"><code class="md-code-inline">DomainMarkers</code></a>. <a href="../../api/geometry/#Bramble.markers"><code class="md-code-inline">markers</code></a> builds a <code class="md-code-inline">Marker</code> from a tuple, vector or set of boundary symbols by storing it as a <code class="md-code-inline">Set{Symbol}</code>.</p>
 </li>
 </ul>
 </div>
@@ -382,7 +382,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.conditions-Tuple{Bramble.DomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.conditions</code> — <span class="md-docstring-sig">Tuple{Bramble.DomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L123-L127" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L114-L118" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -395,7 +395,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.conditions-Tuple{Bramble.EvaluatedDomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.conditions</code> — <span class="md-docstring-sig">Tuple{Bramble.EvaluatedDomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L419-L437" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L410-L428" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -410,7 +410,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.conditions-Tuple{Bramble.EvaluatedParametricDomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.conditions</code> — <span class="md-docstring-sig">Tuple{Bramble.EvaluatedParametricDomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L525-L549" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L516-L540" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -425,7 +425,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.identifier-Tuple{Bramble.Marker}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.identifier</code> — <span class="md-docstring-sig">Tuple{Bramble.Marker}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L35-L40" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L35-L41" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -433,7 +433,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <pre><code class="language-julia">identifier(m::Marker{F}) -&gt; F
 identifier(m::MarkerPair{F}) -&gt; F</code></pre>
 </div>
-<p>Return the identifying symbol, set of symbols, predicate function or polygon of marker <code class="md-code-inline">m</code>.</p>
+<p>Return the identifying symbol, set of symbols, predicate function, polygon or level set of marker <code class="md-code-inline">m</code>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.label-Tuple{Bramble.Marker}">
@@ -453,7 +453,7 @@ label(m::MarkerPair) -&gt; Symbol</code></pre>
 <div class="md-docstring" id="Bramble.label_conditions-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_conditions</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L623-L627" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L614-L618" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -466,7 +466,7 @@ label(m::MarkerPair) -&gt; Symbol</code></pre>
 <div class="md-docstring" id="Bramble.label_identifiers-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_identifiers</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L582-L594" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L573-L585" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -481,7 +481,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.label_symbols-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_symbols</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L609-L613" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L600-L604" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -494,7 +494,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.label_tuples-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_tuples</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L616-L620" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L607-L611" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -507,7 +507,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.symbols-Tuple{Bramble.DomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.symbols</code> — <span class="md-docstring-sig">Tuple{Bramble.DomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L109-L113" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L100-L104" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -520,7 +520,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.symbols-Tuple{Union{Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.symbols</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L564-L568" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L555-L559" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -533,7 +533,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.tuples-Tuple{Bramble.DomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.tuples</code> — <span class="md-docstring-sig">Tuple{Bramble.DomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L116-L120" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L107-L111" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -546,7 +546,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.tuples-Tuple{Union{Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.tuples</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L571-L575" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L562-L566" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -753,7 +753,7 @@ point_type(::Type{&lt;:Domain{SetType}}) -&gt; Type</code></pre>
 </ul>
 </div>
 </div>
-<p>The validation and the three labels of a polygon marker are in the <a href="../../api/geometry/#Polygons">Geometry API page</a>; the tolerance that classifies the nodes on a mesh is in the <a href="../../internals/mesh/">mesh internals page</a>.</p>
+<p>The validation and the three labels of a polygon marker are in the <a href="../../api/geometry/#Polygons">Geometry API page</a>. Orientation, folding back and crossing are exact: a bounding-box test rejects most pairs of edges, a floating-point orientation decides when it exceeds its error bound, and <code class="md-code-inline">Rational{BigInt}</code> decides the nearly degenerate rest. The area is judged with a tolerance, <code class="md-code-inline">|2A| &gt; 8nεL²</code> for <code class="md-code-inline">n</code> vertices and extent <code class="md-code-inline">L</code>; a sliver below it is rejected as zero area. The tolerance that classifies the nodes on a mesh is in the <a href="../../internals/mesh/">mesh internals page</a>.</p>
 <h2 id="Level-sets" class="md-heading">Level sets<a href="#Level-sets" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.LevelSet">
 <div class="md-docstring-header">
@@ -930,7 +930,7 @@ point_type(::Type{&lt;:Domain{SetType}}) -&gt; Type</code></pre>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int, n_reg::Int = 0, n_ls::Int = 0)</code></pre>
+<pre><code class="language-julia">print_marker_summary(pp::PrettyPrinter, n_sym::Int, n_tup::Int, n_cond::Int, n_poly::Int = 0, n_ls::Int = 0)</code></pre>
 </div>
 <p>Print categorized counts of symbols, tuples, function condition markers, polygon markers and level-set markers without intermediate allocations.</p>
 </div>
@@ -1020,6 +1020,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=afb4c413"></script>
+  <script src="../../assets/materialdocs.js?v=d44ee7b3"></script>
 </body>
 </html>

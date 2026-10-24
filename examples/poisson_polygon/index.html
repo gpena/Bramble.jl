@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Poisson-type problem on a polygon — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3528f1c8">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=a3427845">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Poisson-type problem on a polygon — Bramble.jl">
   <meta property="og:title" content="Poisson-type problem on a polygon — Bramble.jl">
@@ -95,7 +95,7 @@
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/poisson_polygon.jl#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Poisson-type-problem-on-a-polygon" class="md-heading">Poisson-type problem on a polygon<a href="#Poisson-type-problem-on-a-polygon" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<p>A Dirichlet problem on the polygon of Figure 1 in Ferreira and Grigorieff (<a href="https://doi.org/10.1007/s00211-006-0006-7">2006</a>): a non-convex nine-sided shape with oblique edges, discretised on a tensor-product grid whose lines are not fitted to it by hand. The coefficients vary, and the operator has a mixed term. Every number and every plot below was produced by the code shown.</p>
+<p>A Dirichlet problem on the polygon of Figure 1 in Ferreira and Grigorieff (<a href="https://doi.org/10.1080/01630560600796485">2006</a>): a non-convex nine-sided shape with oblique edges, discretised on a tensor-product grid whose lines are not fitted to it by hand. The coefficients vary, and the operator has a mixed term. Every number and every plot below was produced by the code shown.</p>
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-math md-math-display">
 \[-\partial_x(a\, \partial_x u + b\, \partial_y u) - \partial_y(b\, \partial_x u + c\, \partial_y u)
@@ -108,7 +108,8 @@
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">using Bramble
-using Bramble: D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, Dcₓ, Dcᵧ, lift, polygon_spaces
+using Bramble: polygon_spaces, lift # public, not exported
+using Bramble: D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, Dcₓ, Dcᵧ
 using Random
 
 V = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0), (4.0, 3.0), (4.0, 5.0),
@@ -189,9 +190,8 @@ length(xc), length(yc)</code></pre>
 </svg>
 <figcaption style="font-size:0.9em;opacity:0.8">The grid after the closure, with the polygon (red) over it.</figcaption>
 </figure>
-<p>The grid lines in the figure sit at the coordinates of the live coarse mesh, and its</p>
 <h2 id="The-fine-grid,-labels-and-spaces" class="md-heading">The fine grid, labels and spaces<a href="#The-fine-grid,-labels-and-spaces" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>The problem is solved on a grid requested at 72 by 60 points, which the closure enlarges. The errors of a random grid scatter with the draw: over five seeds the max error stayed below 5e-3 and the <span class="md-math md-math-inline">\(H^1_h\)</span> error below 5e-2 at this size.</p>
+<p>The problem is solved on a grid requested at 72 by 60 points, which the closure enlarges. The errors of a random grid scatter with the draw: at this size the max error stays below 1e-2 and the <span class="md-math md-math-inline">\(H^1_h\)</span> error below 1e-1.</p>
 <p><code class="md-code-inline">polygon_spaces(Ωₕ, :P, g)</code> returns the trial space <code class="md-code-inline">U</code> and the test space <code class="md-code-inline">W</code>. Their unknowns are the interior nodes. The nodes on the polygon carry the Dirichlet data <code class="md-code-inline">g</code> exactly, and <code class="md-code-inline">lift(U, u)</code> puts a solution back on the whole grid.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -327,6 +327,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=3528f1c8"></script>
+  <script src="../../assets/materialdocs.js?v=a3427845"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=cf9d035a">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=2750f562">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -100,7 +100,7 @@
 <div class="md-docstring" id="Bramble.form">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.form</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L351-L405" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L385-L439" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -265,7 +265,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.assemble">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L716-L729" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L750-L763" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -332,7 +332,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1456-L1489" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1490-L1523" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -404,7 +404,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.assemble_parallel!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_parallel!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1660-L1669" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1694-L1703" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -450,7 +450,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.evaluate!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.evaluate!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L61-L83" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L95-L117" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -984,7 +984,7 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 <div class="md-docstring" id="Bramble.dirichlet_constraints">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.dirichlet_constraints</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L33-L41" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L33-L43" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -993,6 +993,7 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 </div>
 <p>Create Dirichlet boundary constraints.</p>
 <p>Each <code class="md-code-inline">pair</code> is of the form <code class="md-code-inline">:label =&gt; func</code>, where <code class="md-code-inline">:label</code> identifies the boundary region and <code class="md-code-inline">func</code> defines the Dirichlet values. If the optional time domain <code class="md-code-inline">I</code> is provided, <code class="md-code-inline">func</code> must be a time-dependent function <code class="md-code-inline">func(x, t)</code>, or a time- and parameter-dependent one <code class="md-code-inline">func(x, t, p)</code> for a value that a <a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a> residual&#39;s own <code class="md-code-inline">p</code> should reach; this is checked by arity, since nothing about <code class="md-code-inline">func</code> itself can be evaluated at construction time. Every <code class="md-code-inline">pair</code> given alongside <code class="md-code-inline">I</code> must agree on which of the two shapes it uses.</p>
+<p><code class="md-code-inline">I</code> is used only to require the time-dependent shape of <code class="md-code-inline">func</code>: it is not stored, and nothing compares it with the time span of an <a href="../../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a>. The conditions are evaluated at whatever <code class="md-code-inline">t</code> the solver passes, so <code class="md-code-inline">I</code> need not match the time span, and a time span that reaches outside <code class="md-code-inline">I</code> evaluates <code class="md-code-inline">func</code> outside <code class="md-code-inline">I</code> without a warning. Pass the same interval to both so that <code class="md-code-inline">func</code> is only called on the time span it was written for.</p>
 <p><code class="md-code-inline">input</code> can be a <code class="md-code-inline">CartesianProduct</code>, a <code class="md-code-inline">Domain</code>, an <code class="md-code-inline">AbstractMeshType</code>, a <code class="md-code-inline">ScalarGridSpace</code>, or a <code class="md-code-inline">CompositeGridSpace</code> from which the mesh is extracted. The <code class="md-code-inline">:label</code> must match a label in the mesh definition.</p>
 </div>
 <div class="md-docstring-content">
@@ -1006,7 +1007,7 @@ sparse_ad = AutoSparse(AutoForwardDiff();
 <div class="md-docstring" id="Bramble.dirichlet_bc!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.dirichlet_bc!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L302-L311" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L304-L313" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1078,7 +1079,7 @@ symmetrize!(A, F, Vₕ::CompositeGridSpace, labels::Symbol...; components = noth
 <div class="md-docstring" id="Bramble.symmetrize!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.symmetrize!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L772-L774" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L774-L776" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <p><code class="md-code-inline">symmetrize!(A, F, Wₕ::ScalarGridSpace, labels...; components = nothing)</code>: the same on <code class="md-code-inline">mesh(Wₕ)</code>; <code class="md-code-inline">components</code> may only be <code class="md-code-inline">nothing</code> or <code class="md-code-inline">1</code></p>
@@ -1253,6 +1254,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=cf9d035a"></script>
+  <script src="../../assets/materialdocs.js?v=2750f562"></script>
 </body>
 </html>

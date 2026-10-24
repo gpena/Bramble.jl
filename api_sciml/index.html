@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML, AD and solvers — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=a5be1172">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=b99d18fd">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
@@ -99,6 +99,7 @@
 <h2 id="Time-dependent-problems-and-the-SciML-stack" class="md-heading">Time-dependent problems and the SciML stack<a href="#Time-dependent-problems-and-the-SciML-stack" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><code class="md-code-inline">semidiscretize</code> applies the method of lines to a spatial <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> and a source <a href="../internals/form/#Bramble.LinearForm"><code class="md-code-inline">LinearForm</code></a>, producing the system <code class="md-code-inline">M uₕ&#39; = F(t) - A uₕ</code> as a callable with the <code class="md-code-inline">(du, u, p, t)</code> signature a time stepper expects. Dirichlet conditions become algebraic rows of a singular mass matrix, so the result is an index-1 differential-algebraic system needing only the boundary data <code class="md-code-inline">g</code>, never its time derivative (see <a href="../examples/heat_equation/">the heat equation example</a>).</p>
 <p>Nothing in this group needs a weak dependency except the last four, which name their results the way SciMLBase does: <code class="md-code-inline">ode_function</code> and <code class="md-code-inline">ode_problem</code> hand the semidiscretisation to <code class="md-code-inline">OrdinaryDiffEq</code>, <code class="md-code-inline">linear_problem</code> hands a steady linear system to <code class="md-code-inline">LinearSolve</code> with its factorisations and preconditioners, and <code class="md-code-inline">nonlinear_problem</code> hands a steady nonlinear residual to <code class="md-code-inline">NonlinearSolve</code>. All four require <a href="https://github.com/SciML/SciMLBase.jl">SciMLBase.jl</a>.</p>
+<p>Bramble defines no time stepper and exports no <code class="md-code-inline">solve</code> for an ODE problem. The <code class="md-code-inline">solve</code> that steps an <code class="md-code-inline">ode_problem</code> comes from the package that provides the stepper: load <code class="md-code-inline">OrdinaryDiffEqBDF</code> for <code class="md-code-inline">FBDF</code> and <code class="md-code-inline">QNDF</code>, or <code class="md-code-inline">OrdinaryDiffEqRosenbrock</code> for the Rosenbrock methods, and call <code class="md-code-inline">solve(ode_problem(...), FBDF())</code>, as <a href="../examples/heat_equation/">the heat equation example</a> does. The mass matrix is singular, so the stepper must admit one: an explicit method, which needs <span class="md-math md-math-inline">\(M\)</span> invertible, is not suitable, and <code class="md-code-inline">FBDF</code>, <code class="md-code-inline">QNDF</code> and the Rosenbrock methods are.</p>
 <p><code class="md-code-inline">solve(a::BilinearForm, l::LinearForm; ...)</code> is a further convenience defined alongside <code class="md-code-inline">linear_problem</code>: assemble, solve and unwrap the <code class="md-code-inline">LinearSolve</code> solution into a <a href="../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> in one call, for a caller who wants the solved grid function directly rather than the raw <code class="md-code-inline">LinearProblem</code>. <code class="md-code-inline">element(Wₕ, sol)</code>/<code class="md-code-inline">VectorElement(sol, Wₕ)</code> do the unwrapping step alone, for a <code class="md-code-inline">LinearSolution</code> already in hand.</p>
 <div class="md-docstring" id="Bramble.semidiscretize">
 <div class="md-docstring-header">
@@ -387,7 +388,7 @@ ode_problem(a::Bramble.GhostBilinearForm, l::Bramble.GhostLinearForm, u₀, I; k
 <li><p><code class="md-code-inline">specialize</code> (default <code class="md-code-inline">nothing</code>, <code class="md-code-inline">ODEProblem</code>&#39;s own choice untouched). The solved trajectory goes to <code class="md-code-inline">Bramble.adjoint_sensitivities</code> with any specialization: <code class="md-code-inline">SciMLBase.FullSpecialize</code> is not needed for the adjoint on any backend.</p>
 </li>
 </ul>
-<p>The two-form method, one for plain forms and for forms on a constrained ghost space alike, also forwards its other keywords to <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>.</p>
+<p>The two-form method, for plain forms and for forms on one constrained ghost space, forwards its other keywords to <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>.</p>
 <p>Requires <a href="https://github.com/SciML/SciMLBase.jl">SciMLBase.jl</a>.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
@@ -427,14 +428,16 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.linear_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.linear_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L199-L223" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L199-L228" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">linear_problem(a::BilinearForm, l::LinearForm; kwargs...) -&gt; LinearProblem</code></pre>
+<pre><code class="language-julia">linear_problem(a::BilinearForm, l::LinearForm; kwargs...) -&gt; LinearProblem
+linear_problem(a::GhostBilinearForm, l::GhostLinearForm; kwargs...) -&gt; LinearProblem</code></pre>
 </div>
 <p>Assemble <code class="md-code-inline">a</code> and <code class="md-code-inline">l</code> into the <code class="md-code-inline">LinearProblem</code> that <code class="md-code-inline">LinearSolve.solve</code> takes, so the steady system reaches the factorisations, iterative solvers and preconditioners in that stack without being assembled by hand first.</p>
+<p>On ghost spaces (a <a href="../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> space, or the pair <code class="md-code-inline">polygon_spaces</code> returns), the problem is the reduced system <code class="md-code-inline">A, F = assemble(a, l)</code>, whose unknowns are the <a href="../api/spaces/#Bramble.ndofs"><code class="md-code-inline">ndofs</code></a> of the trial space, exactly as <code class="md-code-inline">pde_solve(A, F)</code> would take it.</p>
 <p><strong>Keywords</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">dirichlet</code>, <code class="md-code-inline">dirichlet_components</code>: as <a href="../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a> takes them.</p>
@@ -1576,7 +1579,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.gmg_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gmg_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L100-L210" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L100-L212" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1620,6 +1623,8 @@ true</code></pre>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">build(W)</code> does not return a square form on <code class="md-code-inline">W</code> or on ghost spaces on <code class="md-code-inline">mesh(W)</code>, returns a form on ghost spaces on some levels only, or with ghosts on other facets than on the finest level.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: on ghost spaces, a ghost is kept as an unknown (a ghosted facet without a relation), or the trial and test spaces have different degrees of freedom.</p>
+</li>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">build(W)</code> returns a form over polygon spaces (<code class="md-code-inline">polygon_spaces</code>), and so does <code class="md-code-inline">gmg_preconditioner(a)</code> on one: multigrid on them is gpena/Bramble.jl#846.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">smoother(op)</code> does not return an <a href="../api_sciml/#Bramble.AbstractSmoother"><code class="md-code-inline">AbstractSmoother</code></a>.</p>
 </li>
@@ -1678,7 +1683,7 @@ x, y = rand(33^2), rand(33^2)
 <div class="md-docstring" id="Bramble.gmg_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gmg_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L543-L602" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L554-L613" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1741,7 +1746,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.v_cycle!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.v_cycle!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L300-L343" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L311-L354" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1796,7 +1801,7 @@ v_cycle!(x, P, b)
 <div class="md-docstring" id="Bramble.w_cycle!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.w_cycle!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L350-L385" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L361-L396" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1845,7 +1850,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.fmg!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fmg!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L392-L433" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/gmg_cycles.jl#L403-L444" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2569,6 +2574,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=a5be1172"></script>
+  <script src="../assets/materialdocs.js?v=b99d18fd"></script>
 </body>
 </html>

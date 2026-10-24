@@ -1,7 +1,7 @@
 # # Poisson-type problem on a polygon
 #
 # A Dirichlet problem on the polygon of Figure 1 in Ferreira and Grigorieff
-# ([2006](https://doi.org/10.1007/s00211-006-0006-7)): a non-convex nine-sided shape with
+# ([2006](https://doi.org/10.1080/01630560600796485)): a non-convex nine-sided shape with
 # oblique edges, discretised on a tensor-product grid whose lines are not fitted to it by hand.
 # The coefficients vary, and the operator has a mixed term. Every number and every plot below
 # was produced by the code shown.
@@ -27,7 +27,8 @@
 # may add lines, so the grid has more points than the requested count.
 
 using Bramble
-using Bramble: D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, Dcₓ, Dcᵧ, lift, polygon_spaces
+using Bramble: polygon_spaces, lift # public, not exported
+using Bramble: D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, Dcₓ, Dcᵧ
 using Random
 
 V = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0), (4.0, 3.0), (4.0, 5.0),
@@ -102,7 +103,7 @@ length(xc), length(yc)
 # </figure>
 # ```
 
-# The grid lines in the figure sit at the coordinates of the live coarse mesh, and its
+# The grid lines in the figure sit at the coordinates of the live coarse mesh, and its     #src
 # polygon has the vertices of `V`. The page's run compares them, so the figure cannot go stale.   #src
 let s = read(@__FILE__, String), px(x) = 20 + 90x, py(y) = 20 + 90 * (5 - y)             #src
     gx = [parse(Float64, m[1]) for m in eachmatch(r"<line class=\"gx\" x1=\"([\d.]+)\"", s)]  #src
@@ -117,8 +118,8 @@ end                                                                             
 # ## The fine grid, labels and spaces
 #
 # The problem is solved on a grid requested at 72 by 60 points, which the closure enlarges.
-# The errors of a random grid scatter with the draw: over five seeds the max error stayed
-# below 5e-3 and the ``H^1_h`` error below 5e-2 at this size.
+# The errors of a random grid scatter with the draw: at this size the max error stays
+# below 1e-2 and the ``H^1_h`` error below 1e-1.
 #
 # `polygon_spaces(Ωₕ, :P, g)` returns the trial space `U` and the test space `W`. Their
 # unknowns are the interior nodes. The nodes on the polygon carry the Dirichlet data `g`
@@ -221,7 +222,8 @@ println("max error ", round(err_max; sigdigits = 3), ", H¹ₕ error ", round(er
 # over six levels, are in the convergence test of the suite. The error vanishes on the
 # polygon, where the Dirichlet data sit.
 
-# The errors are bracketed away from zero as well, and the polygon nodes hold the data.     #src
+# The errors are bracketed away from zero. The polygon nodes hold the data by construction,  #src
+# so the last check does not discriminate and follows the bracket.                           #src
 @test 1.0e-6 < err_max < 1.0e-2                                                            #src
 @test 1.0e-6 < err_h1 < 1.0e-1                                                             #src
 @test maximum(abs, E[BitVector(vec(m[:P_boundary]))]) == 0                                 #src

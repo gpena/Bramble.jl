@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Inner products and norms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=38f6a79c">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=47deb6f8">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Inner products and norms — Bramble.jl">
   <meta property="og:title" content="Inner products and norms — Bramble.jl">
@@ -298,7 +298,7 @@ a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)) + skew_symmetri
 <div class="md-docstring" id="Bramble.inner₊">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner₊</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L753-L798" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L783-L828" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -449,7 +449,7 @@ inner₊(left::BackwardDifference{D,Dim}, right::LazyOp{D}) -&gt; LazyOp{D}</cod
 </div>
 <p>Constructs the symbolic modified <span class="md-math md-math-inline">\(L^2_+\)</span> inner product staggered in the direction set <code class="md-code-inline">S ⊆ 1:D</code> (gpena/Bramble.jl#115, #234): the weight at grid index <code class="md-code-inline">I</code> is <span class="md-math md-math-inline">\(\prod_{d \in S} h_d(I_d) \cdot \prod_{d \notin S} h_d(I_d + 1/2)\)</span>, matching <a href="../../api/spaces/#Bramble.weights"><code class="md-code-inline">weights</code></a><code class="md-code-inline">(Wₕ, Val(S))</code>.</p>
 <p>This is the general entry point <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a> (<code class="md-code-inline">S = ()</code>) and <a href="../../api/inner_products/#Bramble.inner₊ₓ"><code class="md-code-inline">inner₊ₓ</code></a>/<a href="../../api/inner_products/#Bramble.inner₊ᵧ"><code class="md-code-inline">inner₊ᵧ</code></a>/<a href="../../api/inner_products/#Bramble.inner₊₂"><code class="md-code-inline">inner₊₂</code></a> (<code class="md-code-inline">S</code> a singleton) are aliases of: for those two shapes it builds exactly the same <a href="../../internals/form/#Bramble.InnerH"><code class="md-code-inline">InnerH</code></a>/<a href="../../internals/form/#Bramble.InnerPlus"><code class="md-code-inline">InnerPlus</code></a> node they do, not a new node under a shared name, so a term written either way folds the same way in the simplifier and resolves to the same <code class="md-code-inline">which(inner₊, ...).file</code>. Every other <code class="md-code-inline">S</code> (<code class="md-code-inline">|S| ≥ 2</code>) builds an <a href="../../internals/form/#Bramble.InnerPlusSet"><code class="md-code-inline">InnerPlusSet</code></a> node, whose weight at assembly comes from the lazy <code class="md-code-inline">SeparableWeights</code> <a href="../../api/spaces/#Bramble.weights"><code class="md-code-inline">weights</code></a><code class="md-code-inline">(Wₕ, Val(S))</code> returns for those sets.</p>
-<p><code class="md-code-inline">S</code> must be a subset of <code class="md-code-inline">1:D</code> with no axis repeated, and is accepted in any order – <code class="md-code-inline">Val((1,2))</code> and <code class="md-code-inline">Val((2,1))</code> build the identical node.</p>
+<p><code class="md-code-inline">S</code> must be a subset of <code class="md-code-inline">1:D</code> with no axis repeated, and is accepted in any order – <code class="md-code-inline">Val((1,2))</code> and <code class="md-code-inline">Val((2,1))</code> build the identical node. Its entries may be any integer type but <code class="md-code-inline">Bool</code> (<code class="md-code-inline">Val((Int32(1), Int32(2)))</code> builds the node <code class="md-code-inline">Val((1, 2))</code> does); a <code class="md-code-inline">Bool</code> entry throws an <code class="md-code-inline">ArgumentError</code>.</p>
 <p>Constructs a <code class="md-code-inline">LinearProduct</code> if <code class="md-code-inline">left</code> is source-only (<a href="../../internals/form/#Bramble._is_source_only-Tuple{Union{Bramble.BackwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.BackwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CrossWeightedDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.JumpNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.SecondDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ShiftNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StarDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}"><code class="md-code-inline">_is_source_only</code></a>), a <code class="md-code-inline">BilinearProduct</code> otherwise, matching <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
 <p><code class="md-code-inline">markers</code> restricts the sum as it does for <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
 <p><strong>Examples</strong></p>
@@ -468,14 +468,14 @@ inner₊(u, v, Val((1,)))        # what inner₊ₓ(u, v) is</code></pre>
 </div>
 <p>Constructs <a href="../../api/inner_products/#Bramble.inner₊ₓ"><code class="md-code-inline">inner₊ₓ</code></a>/<a href="../../api/inner_products/#Bramble.inner₊ᵧ"><code class="md-code-inline">inner₊ᵧ</code></a>/<a href="../../api/inner_products/#Bramble.inner₊₂"><code class="md-code-inline">inner₊₂</code></a><code class="md-code-inline">(left, right; markers)</code>, selected by <code class="md-code-inline">d</code>: an <code class="md-code-inline">Integer</code> (<code class="md-code-inline">1</code>, <code class="md-code-inline">2</code> or <code class="md-code-inline">3</code>) or a <code class="md-code-inline">Symbol</code> (<code class="md-code-inline">:x</code>, <code class="md-code-inline">:y</code> or <code class="md-code-inline">:z</code>) (gpena/Bramble.jl#341).</p>
 <p>This is the preferred spelling: <code class="md-code-inline">inner₊(D₋ₓ(u), D₋ₓ(v), :x)</code> over <code class="md-code-inline">inner₊ₓ(D₋ₓ(u), D₋ₓ(v))</code>, which stays reachable as a plain alias.</p>
-<p>An <code class="md-code-inline">Integer</code> outside <code class="md-code-inline">1:3</code> throws a <code class="md-code-inline">BoundsError</code>; a <code class="md-code-inline">Symbol</code> that is not <code class="md-code-inline">:x</code>/<code class="md-code-inline">:y</code>/<code class="md-code-inline">:z</code> throws an <code class="md-code-inline">ArgumentError</code>, as does a direction beyond <code class="md-code-inline">D</code> (<code class="md-code-inline">inner₊(u, v, 2)</code> in 1D).</p>
+<p>An <code class="md-code-inline">Integer</code> outside <code class="md-code-inline">1:3</code> throws a <code class="md-code-inline">BoundsError</code>; a <code class="md-code-inline">Bool</code>, or a <code class="md-code-inline">Symbol</code> that is not <code class="md-code-inline">:x</code>/<code class="md-code-inline">:y</code>/<code class="md-code-inline">:z</code>, throws an <code class="md-code-inline">ArgumentError</code>, as does a direction beyond <code class="md-code-inline">D</code> (<code class="md-code-inline">inner₊(u, v, 2)</code> in 1D).</p>
 <p>The numeric twin, for the same selector against grid functions rather than operators, is <a href="../../api/inner_products/#Bramble.inner₊"><code class="md-code-inline">inner₊</code></a><code class="md-code-inline">(uₕ, vₕ, d)</code> (<code class="md-code-inline">src/space/inner_product.jl</code>), which also documents how <code class="md-code-inline">inner₊</code> destructures and indexes (<code class="md-code-inline">ix, iy, iz = inner₊</code>, <code class="md-code-inline">inner₊[:x]</code>) into the same three aliases this method dispatches to.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.inner₊ₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner₊ₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L846-L877" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L876-L907" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -524,7 +524,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.inner₊ᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner₊ᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L884-L910" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L914-L940" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -554,7 +554,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.inner₊₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner₊₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L917-L932" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L947-L962" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -572,7 +572,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.normₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.normₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L392-L416" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L392-L423" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -586,12 +586,13 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <p>On a <a href="../../api/spaces/#Bramble.CompositeGridSpace"><code class="md-code-inline">CompositeGridSpace</code></a> it is the norm of the product space, which follows from the inner product there: the square root of the sum of the components&#39; squared norms.</p>
 <p>The result has the real type of the element type (gpena/Bramble.jl#644): a <code class="md-code-inline">Float64</code> for <code class="md-code-inline">Float64</code> or <code class="md-code-inline">ComplexF64</code> data on a <code class="md-code-inline">Float64</code> mesh, a <code class="md-code-inline">Dual</code> for <code class="md-code-inline">ForwardDiff.Dual</code> data. The inner product of a complex <code class="md-code-inline">uₕ</code> with itself is real up to a zero imaginary part, which is dropped before the square root.</p>
 <p>On a <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a> it is the norm over the physical nodes, the first <code class="md-code-inline">npoints(Ωₕ)</code> degrees of freedom: the ghost values never enter, whatever they hold. That holds for <code class="md-code-inline">gridspace(Ωₕ; ghosts)</code> and for a <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> space whose relations carry no data and fix no node. A constrained space whose degrees of freedom omit the fixed nodes or whose relations carry data has no grid function in a vector of its degrees of freedom: <code class="md-code-inline">normₕ</code> throws an <code class="md-code-inline">ArgumentError</code>, and <code class="md-code-inline">normₕ(Bramble.lift(Cₕ, u))</code> is the norm of the lifted grid function.</p>
+<p>On the trial space <code class="md-code-inline">U</code> of <a href="../../api/spaces/#Bramble.polygon_spaces"><code class="md-code-inline">Bramble.polygon_spaces</code></a> it is the norm over Ω̄ₕ of the grid function that is <code class="md-code-inline">uₕ</code> at the interior nodes, its degrees of freedom, and 0 at the boundary nodes: each interior node weighs its dual cell, and no exterior node enters. The error of a solve is <code class="md-code-inline">normₕ(element(U, u) - Rₕ(U, u_exact))</code>; the norm of <code class="md-code-inline">Bramble.lift(U, u)</code> would sum the (3.2) extension at the exterior nodes, which holds no value of the solution. The test space <code class="md-code-inline">W</code> throws an <code class="md-code-inline">ArgumentError</code>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.norm₁ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.norm₁ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1355-L1373" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1396-L1419" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -606,12 +607,13 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <p>Built from the squared quantities directly: taking <code class="md-code-inline">normₕ</code> and <code class="md-code-inline">snorm₁ₕ</code> and squaring them back up would compute two square roots only to undo them.</p>
 <p>On a <a href="../../api/spaces/#Bramble.CompositeGridSpace"><code class="md-code-inline">CompositeGridSpace</code></a> it is the norm of the product space, as for <a href="../../api/inner_products/#Bramble.normₕ"><code class="md-code-inline">normₕ</code></a>: the square root of the sum of the components&#39; squared norms.</p>
 <p>The result has the real type of the element type, as for <a href="../../api/inner_products/#Bramble.normₕ"><code class="md-code-inline">normₕ</code></a>.</p>
+<p>On a <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a> it is the norm of the physical grid function, as for <a href="../../api/inner_products/#Bramble.snorm₁ₕ"><code class="md-code-inline">snorm₁ₕ</code></a>: the ghost values never enter. On a composite of ghost spaces it is the norm of the product space of those grid functions. On the trial space of <a href="../../api/spaces/#Bramble.polygon_spaces"><code class="md-code-inline">Bramble.polygon_spaces</code></a> it reads the nodes of Ω̄ₕ, as <code class="md-code-inline">normₕ</code> and <code class="md-code-inline">snorm₁ₕ</code> do.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.snorm₁ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.snorm₁ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1326-L1346" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1356-L1385" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -626,12 +628,13 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <p>See also: <a href="../../api/inner_products/#Bramble.norm₁ₕ"><code class="md-code-inline">norm₁ₕ</code></a>, <a href="../../api/inner_products/#Bramble.norm₊"><code class="md-code-inline">norm₊</code></a>, <a href="../../api/operators/#Bramble.∇ₕ"><code class="md-code-inline">∇ₕ</code></a>.</p>
 <p>On a <a href="../../api/spaces/#Bramble.CompositeGridSpace"><code class="md-code-inline">CompositeGridSpace</code></a> it is the seminorm of the product space, as for <a href="../../api/inner_products/#Bramble.normₕ"><code class="md-code-inline">normₕ</code></a>: the square root of the sum of the components&#39; squared seminorms.</p>
 <p>The result has the real type of the element type, as for <a href="../../api/inner_products/#Bramble.normₕ"><code class="md-code-inline">normₕ</code></a>: each difference <code class="md-code-inline">δ</code> contributes <code class="md-code-inline">abs2(δ)</code>.</p>
+<p>On a <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a> it is the seminorm of the physical grid function, the first <code class="md-code-inline">npoints(Ωₕ)</code> degrees of freedom on the physical mesh <code class="md-code-inline">Ωₕ</code>: the ghost values never enter, and a space whose degrees of freedom are no grid function throws, as for <a href="../../api/inner_products/#Bramble.normₕ"><code class="md-code-inline">normₕ</code></a>. On a composite of ghost spaces it is the seminorm of the product space of those grid functions. On the trial space of <a href="../../api/spaces/#Bramble.polygon_spaces"><code class="md-code-inline">Bramble.polygon_spaces</code></a> it is the seminorm of the grid function on Ω̄ₕ that <a href="../../api/inner_products/#Bramble.normₕ"><code class="md-code-inline">normₕ</code></a> reads, <code class="md-code-inline">uₕ</code> at the interior nodes and 0 at the boundary nodes: it sums every grid edge with both ends interior or on the boundary, and no edge joins an interior node to an exterior one.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.norm₊">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.norm₊</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1178-L1202" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1208-L1232" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -655,7 +658,7 @@ norm₊(uₕ::NTuple{D, VectorElement}) -&gt; Number</code></pre>
 <div class="md-docstring" id="Bramble.norminf">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.norminf</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L444-L464" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L453-L482" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -669,13 +672,14 @@ norminf(uₕ::NTuple{D, VectorElement}) -&gt; Real</code></pre>
 </div>
 <p>Unlike the <span class="md-math md-math-inline">\(L^2\)</span>-type norms, this one carries no quadrature weight, so the same expression serves a <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a> and a <a href="../../api/spaces/#Bramble.CompositeGridSpace"><code class="md-code-inline">CompositeGridSpace</code></a>: the maximum over a composite&#39;s degrees of freedom is the maximum over its components. On an <code class="md-code-inline">NTuple</code> of grid functions – what the vectorial aliases such as <a href="../../api/operators/#Bramble.∇ₕ"><code class="md-code-inline">∇ₕ</code></a> return – it is the maximum over every entry of every component.</p>
 <p>The element type comes from the data, not from the space, so a <code class="md-code-inline">ForwardDiff.Dual</code>-valued grid function returns a <code class="md-code-inline">Dual</code>.</p>
+<p>On a <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a> it is the maximum over the physical nodes, the first <code class="md-code-inline">npoints(Ωₕ)</code> degrees of freedom: the ghost values never enter, and a space whose degrees of freedom are no grid function throws an <code class="md-code-inline">ArgumentError</code>, as for <a href="../../api/inner_products/#Bramble.normₕ"><code class="md-code-inline">normₕ</code></a>. The lifted grid function <code class="md-code-inline">Bramble.lift(Cₕ, u)</code> lives on the padded space, so <code class="md-code-inline">norminf</code> of it reads the whole padded box, ghosts included. On a composite of ghost spaces, <code class="md-code-inline">Cₕ × Cₕ</code> or <code class="md-code-inline">Cₕ^N</code>, it is the maximum over the components, each read so. On the trial space of <a href="../../api/spaces/#Bramble.polygon_spaces"><code class="md-code-inline">Bramble.polygon_spaces</code></a> it is the maximum over the interior nodes, the degrees of freedom, as for <a href="../../api/inner_products/#Bramble.normₕ"><code class="md-code-inline">normₕ</code></a>.</p>
 <p>See also: <a href="../../api/inner_products/#Bramble.normₕ"><code class="md-code-inline">normₕ</code></a>, <a href="../../api/inner_products/#Bramble.norm₁ₕ"><code class="md-code-inline">norm₁ₕ</code></a></p>
 </div>
 </div>
 <div class="md-docstring" id="LinearAlgebra.norm-Tuple{Bramble.VectorElement, AbstractString}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>LinearAlgebra.norm</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement, AbstractString}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L472-L486" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L502-L516" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -712,6 +716,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=38f6a79c"></script>
+  <script src="../../assets/materialdocs.js?v=47deb6f8"></script>
 </body>
 </html>

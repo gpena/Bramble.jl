@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f6159af5">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=bb569722">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Spaces — Bramble.jl">
   <meta property="og:title" content="Spaces — Bramble.jl">
@@ -108,7 +108,7 @@
 <p>A mixed difference at a 2D corner node, or at a 3D edge node, of a ghost mesh would read an absent padded point: the tap to the facet ghost along one axis re-evaluates the inner difference there, whose tap along the other axis lands outside along both. At such a node the stencil engine uses the inward one-sided difference along both axes, <code class="md-code-inline">D₊</code> at a first node and <code class="md-code-inline">D₋</code> at a last, which reads physical nodes only and is second order. The rule applies to a first difference of first differences across two axes, with constant or grid-function scales, and it distributes over sums and differences of such terms.</p>
 <p>The rule is structural: which stencil a corner node uses depends on the form, not on the values of its coefficients, so the discretisation is continuous in the data. A coefficient that is zero at the ghost tap still gets the one-sided row.</p>
 <p>Reading an absent point is otherwise refused. A product on a ghost space asks, at every node where its weight is not zero, whether either operand reads a point the padded grid lacks, and throws an <code class="md-code-inline">ArgumentError</code> naming the term when one does: an average, jump or shift of a cross difference, a difference around a second difference, and deeper nestings. Reads a zero weight or a zero scale multiplies are not reads. Under a facet product, a read that leaves the padded grid (past the one ghost layer, or across a facet without ghosts) is refused too. A volume product&#39;s operand at the edge of the padded grid truncates, as on a plain mesh, and that is allowed.</p>
-<p>The rule applies in forms only; the runtime operators are eager (see the <a href="../../tutorials/operators/#operators_ghost">operators tutorial</a>). <code class="md-code-inline">Rₕ</code> and <code class="md-code-inline">avgₕ</code> refuse on a ghost space with an <code class="md-code-inline">ArgumentError</code> (<code class="md-code-inline">avgₕ</code> would average over cells past the physical facet); the <a href="../../internals/space/#Support-on-ghost-spaces">support table</a> lists what else does.</p>
+<p>The rule applies in forms only; the runtime operators are eager (see the <a href="../../tutorials/operators/#operators_ghost">operators tutorial</a>). <code class="md-code-inline">Rₕ</code> and <code class="md-code-inline">avgₕ</code> refuse on a ghost space with an <code class="md-code-inline">ArgumentError</code> (<code class="md-code-inline">avgₕ</code> would average over cells past the physical facet), except that <code class="md-code-inline">Rₕ(U, f)</code> works on the trial space of <a href="../../api/spaces/#Bramble.polygon_spaces"><code class="md-code-inline">polygon_spaces</code></a>; the <a href="../../internals/space/#Support-on-ghost-spaces">support table</a> lists what else refuses.</p>
 <h3 id="Relations" class="md-heading">Relations<a href="#Relations" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p><code class="md-code-inline">constrained(Wₕ, u -&gt; (:F =&gt; operator =&gt; data, ...))</code> calls the lambda once with the trial placeholder of the padded space. The facet operators <code class="md-code-inline">∂ₙ</code>, <code class="md-code-inline">∂ₙₙ</code> and <code class="md-code-inline">jumpₙ</code> are builder-only: each holds one operator per (axis, side) and <code class="md-code-inline">inner_Γ</code> expands it into one product per incident facet with that facet&#39;s weight, so a corner node gets one value per facet and no assembly node is added. A relation of a scalar space takes its facet&#39;s component. Its rows on the facet nodes are assembled by forms, <code class="md-code-inline">inner_Γ(relation, v; markers = (F,))</code>, and solved for the ghosts: one entry per ghost, or a 2×2 block per 2D corner where two conormal relations read each other&#39;s ghost. Each block is solved by its own LU, and <code class="md-code-inline">E</code> and <code class="md-code-inline">d</code> stay sparse; no dense factorisation of the whole closure is formed. Ghosted facets without a relation keep their ghosts as unknowns.</p>
 <p>On a composite <code class="md-code-inline">C₁ × C₂</code>, <code class="md-code-inline">constrained(V, u -&gt; (...))</code> constrains the composite as a whole, and a relation may read several components, as the traction of elasticity does. Component <code class="md-code-inline">i</code> of it is <code class="md-code-inline">∂ₙ(u(1); K = Kᵢ₁) + ∂ₙ(u(2); K = Kᵢ₂)</code>, with <code class="md-code-inline">Kᵢⱼ</code> a constant matrix. The relation is split by the component it reads, each piece assembled by its own <code class="md-code-inline">inner_Γ</code> and tested against <code class="md-code-inline">v(i)</code> of the ghost it is attached to. A facet whose relation reads several components carries one ghost relation per component, written unkeyed. The rows of all of them at a node, or at a corner, are solved together as one block, so component 1&#39;s relation may read component 2&#39;s ghost. A Dirichlet relation names its component, <code class="md-code-inline">u(i) =&gt; g</code>, and a displacement facet&#39;s ghosts are closed by <code class="md-code-inline">∂ₙₙ(u(i)) =&gt; 0</code>. The rows are solved once on the padded composite: the padded space is <code class="md-code-inline">padded(C₁) × padded(C₂)</code>, and the unknowns are component 1&#39;s then component 2&#39;s, each in the scalar order. The closure <code class="md-code-inline">(E, d)</code> is therefore general, not <code class="md-code-inline">blockdiag</code>, wherever a relation couples components; with relations of one component each it equals <code class="md-code-inline">constrained(C₁, r₁) × constrained(C₂, r₂)</code>. The result stores its own <code class="md-code-inline">(E, d)</code>, which <code class="md-code-inline">closure</code>, <code class="md-code-inline">lift</code> and its forms read. A component view <code class="md-code-inline">uₕ(i)</code> of it is refused, since <code class="md-code-inline">E</code> couples the components, so take <code class="md-code-inline">lift(Vₕ, parent(uₕ))(i)</code> instead. <code class="md-code-inline">×</code> and <code class="md-code-inline">^</code> of it, data depending on time, the <code class="md-code-inline">dirichlet</code> rows and <code class="md-code-inline">GhostVector</code> are refused too. A corner of two traction facets uses a one-sided tangential difference along the facets, since the two shear relations there are one equation.</p>
@@ -183,7 +183,7 @@
 </tr>
 <tr>
 <td style="text-align:left"><code class="md-code-inline">Rₕ</code>, <code class="md-code-inline">avgₕ</code></td>
-<td style="text-align:left">refused, naming <code class="md-code-inline">gridspace(Ωₕ)</code> and <code class="md-code-inline">lift</code></td>
+<td style="text-align:left">refused, naming <code class="md-code-inline">gridspace(Ωₕ)</code> and <code class="md-code-inline">lift</code>; on the trial space of <code class="md-code-inline">polygon_spaces</code>, <code class="md-code-inline">Rₕ</code> is supported (see the polygon table)</td>
 <td style="text-align:left"><code class="md-code-inline">test/ghost/grid_functions.jl</code></td>
 </tr>
 <tr>
@@ -229,59 +229,137 @@
 <p><a href="../../api/spaces/#Bramble.polygon_spaces"><code class="md-code-inline">polygon_spaces</code></a> builds <code class="md-code-inline">(U, W)</code> as two <code class="md-code-inline">GhostGridSpace</code>s over the mesh itself. Each exterior diagonal neighbour <code class="md-code-inline">p = k + (sx, sy)</code> of an interior node <code class="md-code-inline">k</code> takes the relation (3.2) of the paper, <code class="md-code-inline">u_p = u_{k+(sx,0)} + u_{k+(0,sy)} - u_k</code>. At a V-notch, an exterior node read by two interior nodes has two different values and so no row of the extension; the reduction substitutes the value of each reading equation, as the paper does.</p>
 <p>The spaces of a level-set marker (<code class="md-code-inline">:D =&gt; levelset(φ)</code>, <a href="../../api/meshes/">Meshes</a>) are the same call on the polygon inscribed in the curve: <code class="md-code-inline">g</code> is read at the polygon&#39;s vertices, the boundary nodes. The curve is orthogonally convex, so no line meets it four times near a notch and no exterior node has two readers; the V-notch rows below do not arise there.</p>
 <h3 id="Support-on-polygon-spaces" class="md-heading">Support on polygon spaces<a href="#Support-on-polygon-spaces" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>Each row is an operation and its status on <code class="md-code-inline">(U, W)</code>; the tests are in <code class="md-code-inline">test/ghost/polygon_spaces.jl</code>, and <code class="md-code-inline">test/ghost/levelset_spaces.jl</code> repeats them on a level-set mesh, except the rows about a conflict node. &quot;Throws&quot; is an <code class="md-code-inline">ArgumentError</code>.</p>
+<p>Each row is an operation and its status on <code class="md-code-inline">(U, W)</code>, with the test that pins it: the file, and the testset where the file has several. A row with no test says &quot;untested&quot;, and nothing pins its status. &quot;Throws&quot; is an <code class="md-code-inline">ArgumentError</code>. A level-set mesh (<code class="md-code-inline">:D =&gt; levelset(φ)</code>) has the same behaviour; its own tests are named below the table. Files are in <code class="md-code-inline">test/ghost/</code> unless a path says otherwise.</p>
 <div class="md-table-wrap">
 <table class="md-table">
 <thead>
 <tr>
 <th style="text-align:left">Operation</th>
 <th style="text-align:left">Status</th>
+<th style="text-align:left">Test</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align:left"><code class="md-code-inline">assemble(a, l)</code>, warm <code class="md-code-inline">assemble!</code></td>
-<td style="text-align:left">supported; 0 B per warm call</td>
+<td style="text-align:left"><code class="md-code-inline">assemble(a, l)</code>, <code class="md-code-inline">assemble(a)</code></td>
+<td style="text-align:left">supported; each row equals the plain matrix&#39;s with every exterior column replaced by its own (3.2) row</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_spaces.jl</code> (&quot;rows match the plain-matrix oracle&quot;), <code class="md-code-inline">polygon_oracle.jl</code></td>
 </tr>
 <tr>
-<td style="text-align:left">diffusion, mixed, convection, reaction and upwind terms</td>
-<td style="text-align:left">supported</td>
+<td style="text-align:left">warm <code class="md-code-inline">assemble!</code></td>
+<td style="text-align:left">0 B on <code class="md-code-inline">CpuSerial</code> and on <code class="md-code-inline">CpuPolyester</code>; under <code class="md-code-inline">CpuThreaded</code> the values are the serial ones and no allocation is asserted</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_spaces.jl</code> (&quot;warm assemble! allocates nothing&quot;), <code class="md-code-inline">allocations.jl</code> (&quot;Warm refill on polygon spaces&quot;), <code class="md-code-inline">ext/ghost_polyester.jl</code> (&quot;polygon_spaces under CpuPolyester&quot;)</td>
 </tr>
 <tr>
-<td style="text-align:left"><code class="md-code-inline">matrix_free_operator</code></td>
-<td style="text-align:left">supported; refuses a form that reads a V-notch conflict node</td>
+<td style="text-align:left">diffusion, mixed, convection (central) and reaction (the zeroth-order term <code class="md-code-inline">q u</code>)</td>
+<td style="text-align:left">supported; the rows equal the oracle&#39;s, with variable <code class="md-code-inline">a</code>, <code class="md-code-inline">b</code>, <code class="md-code-inline">c</code>, <code class="md-code-inline">d</code> and <code class="md-code-inline">q</code></td>
+<td style="text-align:left"><code class="md-code-inline">polygon_oracle.jl</code> (&quot;Variable coefficients (seed )&quot;)</td>
 </tr>
 <tr>
-<td style="text-align:left">contracting <code class="md-code-inline">a(u, v)</code></td>
-<td style="text-align:left">supported; same refusal</td>
+<td style="text-align:left">upwind terms (<code class="md-code-inline">D₋ₓ(u) + D₋ᵧ(u)</code>)</td>
+<td style="text-align:left">supported; exact for a linear <code class="md-code-inline">u</code></td>
+<td style="text-align:left"><code class="md-code-inline">polygon_support.jl</code> (&quot;upwind D₋ₓ(w) + D₋ᵧ(w)&quot;)</td>
 </tr>
 <tr>
-<td style="text-align:left"><code class="md-code-inline">semidiscretize</code></td>
-<td style="text-align:left">throws; it needs one space as trial and test</td>
+<td style="text-align:left"><code class="md-code-inline">CpuSerial</code>, <code class="md-code-inline">CpuThreaded</code>, <code class="md-code-inline">CpuPolyester</code></td>
+<td style="text-align:left">supported; matrix, load, refilled matrix, solution and <code class="md-code-inline">lift</code> equal the serial ones bit for bit, the matrix-free product to 1e-13</td>
+<td style="text-align:left"><code class="md-code-inline">policies.jl</code> (&quot;polygon<em>spaces under CpuThreaded&quot;), `ext/ghost</em>polyester.jl` (&quot;polygon_spaces under CpuPolyester&quot;)</td>
 </tr>
 <tr>
-<td style="text-align:left">rank-one terms</td>
+<td style="text-align:left"><code class="md-code-inline">pde_solve</code>, <code class="md-code-inline">linear_problem</code>, <code class="md-code-inline">solve(a, l)</code></td>
+<td style="text-align:left">supported, with the default solver and with <code class="md-code-inline">KrylovJL_GMRES</code></td>
+<td style="text-align:left"><code class="md-code-inline">policies.jl</code> (<code class="md-code-inline">pde_solve</code>), <code class="md-code-inline">polygon_spaces.jl</code> (&quot;linear_problem and solve (#880)&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">ilu_preconditioner</code>, <code class="md-code-inline">amg_preconditioner</code></td>
+<td style="text-align:left">supported; each takes under half the iterations of unpreconditioned GMRES</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_support.jl</code> (&quot;ILU and AMG preconditioned GMRES&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">jacobi_preconditioner</code>, <code class="md-code-inline">chebyshev_preconditioner</code>, <code class="md-code-inline">solve(a, l; preconditioner = :amg)</code></td>
+<td style="text-align:left">untested</td>
+<td style="text-align:left">none</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">kronecker_operator</code>, <code class="md-code-inline">fdm_solve</code>, <code class="md-code-inline">fdm_factorize</code>, <code class="md-code-inline">fdm_factorize!</code>, <code class="md-code-inline">fdm_preconditioner</code>, <code class="md-code-inline">gmg_preconditioner</code></td>
+<td style="text-align:left">throw, naming polygon spaces; the multigrid message names #846</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_spaces.jl</code> (&quot;Kronecker, fdm, GMG refusals (#880)&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">matrix_free_operator</code>, contracting <code class="md-code-inline">a(u, v)</code></td>
+<td style="text-align:left">supported; a form that reads a V-notch conflict node throws, decided when <code class="md-code-inline">form</code> is called, before and after a warm <code class="md-code-inline">assemble!</code>; 0 B per warm <code class="md-code-inline">mul!</code> under <code class="md-code-inline">CpuPolyester</code></td>
+<td style="text-align:left"><code class="md-code-inline">polygon_spaces.jl</code> (&quot;matrix-free, contract, semidiscretize&quot;), <code class="md-code-inline">polygon_oracle.jl</code> (&quot;V-notch: conflict read set by form&quot;), <code class="md-code-inline">ext/ghost_polyester.jl</code> (&quot;Warm calls allocate nothing&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">Rₕ(U, f)</code>, <code class="md-code-inline">Rₕ!</code>, <code class="md-code-inline">normₕ</code>, <code class="md-code-inline">snorm₁ₕ</code>, <code class="md-code-inline">norm₁ₕ</code>, <code class="md-code-inline">norminf</code> on <code class="md-code-inline">U</code></td>
+<td style="text-align:left">supported; the norms read the element at the interior nodes and 0 at the boundary nodes; <code class="md-code-inline">Rₕ(U, f; markers = ...)</code>, and all of them on <code class="md-code-inline">W</code>, throw</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_oracle.jl</code> (&quot;Rₕ and norms on the trial space&quot;), <code class="md-code-inline">convergence/poisson_polygon.jl</code> (&quot;Norm errors match the hand sums&quot;, and the convergence orders)</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">interpolate_at(lift(U, u), x)</code></td>
+<td style="text-align:left">supported; the bilinear blend on the cell holding <code class="md-code-inline">x</code></td>
+<td style="text-align:left"><code class="md-code-inline">polygon_support.jl</code> (&quot;interpolate_at of lift(U, u)&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">export_vtk</code> of <code class="md-code-inline">lift(U, u)</code></td>
+<td style="text-align:left">supported; the whole box, the extension included</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_support.jl</code> (&quot;export_vtk of lift(U, u)&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">Float32</code></td>
+<td style="text-align:left">supported; matrix, load, solution and lift keep the element type</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_support.jl</code> (&quot;Float32 keeps its eltype&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">semidiscretize</code> on <code class="md-code-inline">(W, W)</code>, as <code class="md-code-inline">semidiscretize(form(W, W, f), form(W, g))</code></td>
+<td style="text-align:left">supported, with the boundary nodes read as 0; the mass matrix is the dual-cell areas</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_support.jl</code> (&quot;semidiscretize on (W, W)&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">semidiscretize</code> on <code class="md-code-inline">(U, W)</code></td>
+<td style="text-align:left">throws</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_spaces.jl</code> (&quot;matrix-free, contract, semidiscretize&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">W</code> as trial space</td>
+<td style="text-align:left">supported only for forms that read no exterior node, with the boundary nodes read as 0; otherwise throws</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_spaces.jl</code> (&quot;test space as trial side&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">U</code> as test space, <code class="md-code-inline">form(U, f)</code></td>
 <td style="text-align:left">throw</td>
-</tr>
-<tr>
-<td style="text-align:left">composites (<code class="md-code-inline">U × U</code>)</td>
-<td style="text-align:left">forms throw</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_spaces.jl</code> (&quot;Figure 1: exact for quadratics&quot;)</td>
 </tr>
 <tr>
 <td style="text-align:left"><code class="md-code-inline">dirichlet =</code></td>
 <td style="text-align:left">throws; <code class="md-code-inline">g</code> fixes the boundary</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_spaces.jl</code> (&quot;refusals&quot;)</td>
 </tr>
 <tr>
-<td style="text-align:left"><code class="md-code-inline">W</code> as trial space</td>
-<td style="text-align:left">supported only for forms that read no exterior node (<code class="md-code-inline">Δₕ</code> with <code class="md-code-inline">g = 0</code>); otherwise throws</td>
-</tr>
-<tr>
-<td style="text-align:left">stencils reaching beyond the diagonal neighbours (<code class="md-code-inline">Dcₓ(Dcₓ(u))</code>)</td>
+<td style="text-align:left">rank-one terms</td>
 <td style="text-align:left">throw</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_spaces.jl</code> (&quot;refusals&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left">composites (<code class="md-code-inline">U × U</code>, beside a plain ghost space)</td>
+<td style="text-align:left">forms throw</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_spaces.jl</code> (&quot;composites refuse polygon spaces&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left">a form that reads an exterior node past the diagonal neighbours of the interior node</td>
+<td style="text-align:left">throws, naming the node and the equation; <code class="md-code-inline">Dcₓ(Dcₓ(u))</code> is the tested case</td>
+<td style="text-align:left"><code class="md-code-inline">polygon_spaces.jl</code> (&quot;refusals&quot;)</td>
+</tr>
+<tr>
+<td style="text-align:left">a form that reaches two nodes along an axis and lands on an interior or boundary node</td>
+<td style="text-align:left">assembles; the V-notch with <code class="md-code-inline">Dcᵧ(Dcᵧ(u))</code> is the probed case</td>
+<td style="text-align:left">untested</td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>The last two rows come from one probe on the jittered Figure 1, the integer Figure 1 and the integer V-notch. <code class="md-code-inline">Dcₓ(Dcₓ(u))</code>, <code class="md-code-inline">Dcᵧ(Dcᵧ(u))</code>, <code class="md-code-inline">Dcₓ(Dcᵧ(Dcₓ(u)))</code> and <code class="md-code-inline">Δₕ(Δₕ(u))</code> throw on the two Figure 1 meshes, each naming an exterior node two nodes from the equation&#39;s interior node. On the V-notch only <code class="md-code-inline">Dcᵧ(Dcᵧ(u))</code> assembled, as every second node it reads along <code class="md-code-inline">y</code> is an interior or boundary node, and the others threw. The guard looks at what each equation reads, not at the width of the stencil: it refuses an exterior node that (3.2) gives no value, and a wide stencil that lands on interior or boundary nodes passes.</p>
+<p>On a level-set mesh the same rows are pinned by <code class="md-code-inline">levelset_spaces.jl</code> (the quadratic solve, (3.2) at every extended node, the rows against the plain matrix, warm <code class="md-code-inline">assemble!</code>, matrix-free and contraction, the refusals), by <code class="md-code-inline">levelset_oracle.jl</code> (every term of the third row, <code class="md-code-inline">Rₕ</code> and the norms), and by the level-set disk of <code class="md-code-inline">policies.jl</code> and <code class="md-code-inline">ext/ghost_polyester.jl</code>. The test space as trial side has its own level-set testset in <code class="md-code-inline">polygon_support.jl</code> (&quot;test space as trial side&quot;). The rows about a conflict node do not arise there, and the remaining rows are untested on a level-set mesh.</p>
 <h2 id="Operator-matrices:-stencil_matrix-versus-the-Kronecker-construction" class="md-heading">Operator matrices: stencil_matrix versus the Kronecker construction<a href="#Operator-matrices:-stencil_matrix-versus-the-Kronecker-construction" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <h3 id="Adding-a-new-operator-family" class="md-heading">Adding a new operator family<a href="#Adding-a-new-operator-family" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <div class="md-docstring" id="Bramble._BRAMBLE_var2label">
@@ -674,9 +752,9 @@ host_weights(w::SeparableWeights) -&gt; SeparableWeights</code></pre>
 <p>Fills <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> <code class="md-code-inline">uₕ</code> with the value <code class="md-code-inline">α</code> and returns <code class="md-code-inline">uₕ</code>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Base.getindex-Tuple{Bramble.VectorElement{var&quot;#s727&quot;, T} where {var&quot;#s727&quot;&lt;:Bramble.ScalarGridSpace, T}, CartesianIndex}">
+<div class="md-docstring" id="Base.getindex-Tuple{Bramble.VectorElement{var&quot;#s710&quot;, T} where {var&quot;#s710&quot;&lt;:Bramble.ScalarGridSpace, T}, CartesianIndex}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Base.getindex</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s727&quot;, T} where {var&quot;#s727&quot;&lt;:Bramble.ScalarGridSpace, T}, CartesianIndex}</span></h4>
+<h4 class="md-docstring-binding"><code>Base.getindex</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s710&quot;, T} where {var&quot;#s710&quot;&lt;:Bramble.ScalarGridSpace, T}, CartesianIndex}</span></h4>
 <a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L287-L319" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
@@ -705,9 +783,9 @@ uₕ[5, 1] == parent(uₕ)[5]</code></pre>
 <p>See also: <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a>, <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a>, <a href="../../api/spaces/#Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s37&quot;, T} where {var&quot;#s37&quot;&lt;:Bramble.ScalarGridSpace, T}}"><code class="md-code-inline">reshape</code></a></p>
 </div>
 </div>
-<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s727&quot;, T} where {var&quot;#s727&quot;&lt;:Bramble.ScalarGridSpace, T}}">
+<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s710&quot;, T} where {var&quot;#s710&quot;&lt;:Bramble.ScalarGridSpace, T}}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s727&quot;, T} where {var&quot;#s727&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
+<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s710&quot;, T} where {var&quot;#s710&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
 <a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L17-L28" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
@@ -725,9 +803,9 @@ uₕ[5, 1] == parent(uₕ)[5]</code></pre>
 <p>This zero-argument form is specific to <code class="md-code-inline">VectorElement</code> and does not conflict with <code class="md-code-inline">reshape(A, dims)</code>; it does shadow <code class="md-code-inline">Base.reshape(A) = reshape(A, ())</code>&#39;s 0-dimensional result for this type specifically, in favor of the shape a grid function actually has.</p>
 </div>
 </div>
-<div class="md-docstring" id="Base.setindex!-Tuple{Bramble.VectorElement{var&quot;#s727&quot;, T} where {var&quot;#s727&quot;&lt;:Bramble.ScalarGridSpace, T}, Any, CartesianIndex}">
+<div class="md-docstring" id="Base.setindex!-Tuple{Bramble.VectorElement{var&quot;#s710&quot;, T} where {var&quot;#s710&quot;&lt;:Bramble.ScalarGridSpace, T}, Any, CartesianIndex}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Base.setindex!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s727&quot;, T} where {var&quot;#s727&quot;&lt;:Bramble.ScalarGridSpace, T}, Any, CartesianIndex}</span></h4>
+<h4 class="md-docstring-binding"><code>Base.setindex!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s710&quot;, T} where {var&quot;#s710&quot;&lt;:Bramble.ScalarGridSpace, T}, Any, CartesianIndex}</span></h4>
 <a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L328-L345" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
@@ -2057,9 +2135,9 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <p>Constructs the backward <strong>finite difference</strong> operator, which approximates the first derivative using the formula <span class="md-math md-math-inline">\(\frac{u_{i} - u_{i-1}}{h_i}\)</span>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.centered_difference!-Tuple{Bramble.VectorElement{var&quot;#s726&quot;, T} where {var&quot;#s726&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s725&quot;, T} where {var&quot;#s725&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}">
+<div class="md-docstring" id="Bramble.centered_difference!-Tuple{Bramble.VectorElement{var&quot;#s709&quot;, T} where {var&quot;#s709&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s708&quot;, T} where {var&quot;#s708&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.centered_difference!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s726&quot;, T} where {var&quot;#s726&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s725&quot;, T} where {var&quot;#s725&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}</span></h4>
+<h4 class="md-docstring-binding"><code>Bramble.centered_difference!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s709&quot;, T} where {var&quot;#s709&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s708&quot;, T} where {var&quot;#s708&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}</span></h4>
 <a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L843-L861" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
@@ -2091,9 +2169,9 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <p>Reaches one point either side, so both end rows are zero and the mesh needs at least three points along the direction.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.cross_weighted_difference!-Tuple{Bramble.VectorElement{var&quot;#s726&quot;, T} where {var&quot;#s726&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s725&quot;, T} where {var&quot;#s725&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}">
+<div class="md-docstring" id="Bramble.cross_weighted_difference!-Tuple{Bramble.VectorElement{var&quot;#s709&quot;, T} where {var&quot;#s709&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s708&quot;, T} where {var&quot;#s708&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.cross_weighted_difference!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s726&quot;, T} where {var&quot;#s726&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s725&quot;, T} where {var&quot;#s725&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}</span></h4>
+<h4 class="md-docstring-binding"><code>Bramble.cross_weighted_difference!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s709&quot;, T} where {var&quot;#s709&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s708&quot;, T} where {var&quot;#s708&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}</span></h4>
 <a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L880-L904" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
@@ -2427,9 +2505,9 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <p>Constructs the forward <strong>finite difference</strong> operator, which approximates the first derivative using the formula <span class="md-math md-math-inline">\(\frac{u_{i+1} - u_i}{h_i}\)</span>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Bramble.forward_star_difference!-Tuple{Bramble.VectorElement{var&quot;#s726&quot;, T} where {var&quot;#s726&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s725&quot;, T} where {var&quot;#s725&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}">
+<div class="md-docstring" id="Bramble.forward_star_difference!-Tuple{Bramble.VectorElement{var&quot;#s709&quot;, T} where {var&quot;#s709&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s708&quot;, T} where {var&quot;#s708&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.forward_star_difference!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s726&quot;, T} where {var&quot;#s726&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s725&quot;, T} where {var&quot;#s725&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}</span></h4>
+<h4 class="md-docstring-binding"><code>Bramble.forward_star_difference!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s709&quot;, T} where {var&quot;#s709&quot;&lt;:Bramble.ScalarGridSpace, T}, Bramble.VectorElement{var&quot;#s708&quot;, T} where {var&quot;#s708&quot;&lt;:Bramble.ScalarGridSpace, T}, Val}</span></h4>
 <a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L808-L825" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
@@ -2747,7 +2825,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.InterpolationNode">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.InterpolationNode</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L691-L717" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L697-L723" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2764,7 +2842,7 @@ stencil_matrix(Wₕ::AbstractSpaceType, op::StencilOp)</code></pre>
 <div class="md-docstring" id="Bramble.TestSide">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.TestSide</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L724-L737" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L730-L743" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2780,7 +2858,7 @@ TestSide</code></pre>
 <div class="md-docstring" id="Bramble.TrialSide">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.TrialSide</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L724-L737" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L730-L743" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2796,7 +2874,7 @@ TestSide</code></pre>
 <div class="md-docstring" id="Bramble._walked_leaf-Tuple{Any, Any, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._walked_leaf</code> — <span class="md-docstring-sig">Tuple{Any, Any, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L1063-L1072" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L1070-L1079" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2842,7 +2920,7 @@ backward_finite_difference(v::GhostVector, dim_val::Val) -&gt; Vector</code></pr
 <div class="md-docstring" id="Bramble._dot-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L691-L697" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L721-L727" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2855,7 +2933,7 @@ backward_finite_difference(v::GhostVector, dim_val::Val) -&gt; Vector</code></pr
 <div class="md-docstring" id="Bramble._dot_masked-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, BitVector}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, BitVector}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L708-L714" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L738-L744" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2868,7 +2946,7 @@ backward_finite_difference(v::GhostVector, dim_val::Val) -&gt; Vector</code></pr
 <div class="md-docstring" id="Bramble._dot_masked-Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, Bramble.MarkedIndicesUnion}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._dot_masked</code> — <span class="md-docstring-sig">Union{Tuple{D}, Tuple{Bramble.DeviceLocality, Bramble.GpuPolicy, AbstractVector, Bramble.SeparableWeights{D, T} where T, AbstractVector, Bramble.MarkedIndicesUnion}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L729-L734" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L759-L764" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2944,6 +3022,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=f6159af5"></script>
+  <script src="../../assets/materialdocs.js?v=bb569722"></script>
 </body>
 </html>

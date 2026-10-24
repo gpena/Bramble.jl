@@ -2,7 +2,7 @@
 #
 # A Dirichlet problem on the unit disk, which is not a polygon and has no grid line along its
 # boundary, solved with the Ferreira and Grigorieff
-# ([2006](https://doi.org/10.1007/s00211-006-0006-7)) scheme on a tensor-product grid. The
+# ([2006](https://doi.org/10.1080/01630560600796485)) scheme on a tensor-product grid. The
 # disk is given as a level set ``\{\varphi < 0\}``; `mesh` adds grid lines until every line
 # that meets the circle has a node on it, and the nodes on the circle are the boundary of the
 # discrete domain. Every number below was produced by the code shown.
@@ -26,7 +26,7 @@
 # the disk must contain the circle strictly.
 
 using Bramble
-using Bramble: lift, polygon_spaces
+using Bramble: polygon_spaces, lift # public, not exported
 using Random
 
 φ(p) = hypot(p[1], p[2]) - 1
@@ -41,6 +41,9 @@ using Random
 Ωₕ = mesh(Ω, (20, 20), (true, true))
 xs, ys = collect(points(Ωₕ(1))), collect(points(Ωₕ(2)))
 length(xs), length(ys)
+
+# The count follows the claim of about ``1.8n`` lines.                                  #src
+@test 1.5 * 20 < length(xs) < 2.1 * 20 && 1.5 * 20 < length(ys) < 2.1 * 20            #src
 
 #-
 
@@ -158,12 +161,13 @@ end                                                                             
 # `polygon_spaces(Ωₕ, :D, g)` returns the trial space `U` and the test space `W`. Their
 # unknowns are the interior nodes, and the Dirichlet data `g` sit at the boundary nodes. The
 # load is `avgₕ`, the mean of ``f`` over each dual cell, and `lift(U, u)` puts a solution back
-# on the whole grid.
+# on the whole grid. The function is called `solve_on`, since `solve` already names the
+# SciML function that the steppers and `LinearSolve` extend.
 
 u_exact(p) = sin(2p[1] + 0.5) * cos(1.5p[2] - 0.2) + exp(0.6p[1] - 0.4p[2])
 f(p) = 6.25 * sin(2p[1] + 0.5) * cos(1.5p[2] - 0.2) - 0.52 * exp(0.6p[1] - 0.4p[2])
 
-function solve(Ωₕ)
+function solve_on(Ωₕ)
     U, W = polygon_spaces(Ωₕ, :D, u_exact)
     fₕ = element(gridspace(Ωₕ))
     avgₕ!(fₕ, f)
@@ -212,16 +216,12 @@ nothing # hide
 levels = (20, 40, 80, 160)
 runs = map(levels) do n
     Ωₙ = mesh(Ω, (n, n), (true, true))
-    return errors(Ωₙ, solve(Ωₙ))
+    return errors(Ωₙ, solve_on(Ωₙ))
 end
 h = [r.h for r in runs]
 emax = [r.max for r in runs]
 eh1 = [r.h1 for r in runs]
 slope(e) = ([ones(length(h)) log.(h)] \ log.(e))[2]
-for (n, r) in zip(levels, runs)
-    println("n = ", n, ": h = ", round(r.h; sigdigits = 3), ", max error ",
-        round(r.max; sigdigits = 3), ", H¹ₕ error ", round(r.h1; sigdigits = 3))
-end
 println("order: max ", round(slope(emax); digits = 2), ", H¹ₕ ", round(slope(eh1); digits = 2))
 
 # Both orders are about two, as for a polygon: the errors fall by about a factor of four
@@ -230,6 +230,8 @@ println("order: max ", round(slope(emax); digits = 2), ", H¹ₕ ", round(slope(
 @test slope(emax) > 1.8 && slope(eh1) > 1.8                                           #src
 @test all(diff(emax) .< 0) && all(diff(eh1) .< 0)                                     #src
 @test 1.0e-6 < emax[end] < 5.0e-5 && 1.0e-5 < eh1[end] < 3.0e-4                      #src
+# The boundary nodes hold the data by construction; the bracket above is the check that  #src
+# discriminates.                                                                         #src
 @test all(maximum(abs, r.E[r.boundary]) < 1.0e-12 for r in runs)                      #src
 
 # The errors against `h` on a log-log scale, with a slope-two reference line:
@@ -244,7 +246,7 @@ convergence_plot([(h, emax, "max", "#5B5FC7"), (h, eh1, "H¹ₕ", "#0E7C86")];  
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 Ω₈₀ = mesh(Ω, (80, 80), (true, true))
 uₕ = element(gridspace(Ω₈₀))
-uₕ.data .= solve(Ω₈₀)
+uₕ.data .= solve_on(Ω₈₀)
 uₕ.data[BitVector(markers(Ω₈₀)[:D_exterior])] .= NaN
 surface_plot(uₕ; title = "u on the unit disk, n = 80") # hide
 
@@ -265,7 +267,7 @@ end                                                                             
 
 Random.seed!(1)
 Ωr = mesh(Ω, (80, 80), (false, false))
-rr = errors(Ωr, solve(Ωr))
+rr = errors(Ωr, solve_on(Ωr))
 println("random seeds, n = 80: max error ", round(rr.max; sigdigits = 3), ", H¹ₕ error ",
     round(rr.h1; sigdigits = 3))
 
@@ -278,5 +280,5 @@ println("random seeds, n = 80: max error ", round(rr.max; sigdigits = 3), ", H¹
 # A disk is the simplest curve the grid fits. Curves with no symmetry about a grid line need
 # lines that are not drawn from the seeds, and some curves cannot be fitted at all: a curve
 # that a horizontal or vertical line meets in more than two points (a star) throws an
-# `ArgumentError` naming the line. The design record in `docs/notes/internals/levelset.md`
-# gives the class of curves, the errors and the reasons.
+# `ArgumentError` naming the line. The [mesh internals page](../internals/mesh.md) and the
+# [`mesh`](@ref) docstring give the class of curves, the errors and the reasons.

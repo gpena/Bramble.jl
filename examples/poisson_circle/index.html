@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Poisson problem on a disk — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1a6df80d">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=7cf852d0">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Poisson problem on a disk — Bramble.jl">
   <meta property="og:title" content="Poisson problem on a disk — Bramble.jl">
@@ -95,7 +95,7 @@
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/poisson_circle.jl#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Poisson-problem-on-a-disk" class="md-heading">Poisson problem on a disk<a href="#Poisson-problem-on-a-disk" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<p>A Dirichlet problem on the unit disk, which is not a polygon and has no grid line along its boundary, solved with the Ferreira and Grigorieff (<a href="https://doi.org/10.1007/s00211-006-0006-7">2006</a>) scheme on a tensor-product grid. The disk is given as a level set <span class="md-math md-math-inline">\(\{\varphi &lt; 0\}\)</span>; <code class="md-code-inline">mesh</code> adds grid lines until every line that meets the circle has a node on it, and the nodes on the circle are the boundary of the discrete domain. Every number below was produced by the code shown.</p>
+<p>A Dirichlet problem on the unit disk, which is not a polygon and has no grid line along its boundary, solved with the Ferreira and Grigorieff (<a href="https://doi.org/10.1080/01630560600796485">2006</a>) scheme on a tensor-product grid. The disk is given as a level set <span class="md-math md-math-inline">\(\{\varphi &lt; 0\}\)</span>; <code class="md-code-inline">mesh</code> adds grid lines until every line that meets the circle has a node on it, and the nodes on the circle are the boundary of the discrete domain. Every number below was produced by the code shown.</p>
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-math md-math-display">
 \[-\Delta u = f \text{ in } D = \{x^2 + y^2 &lt; 1\}, \qquad u = u_{\text{exact}} \text{ on } \partial D,\]
@@ -107,7 +107,7 @@
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">using Bramble
-using Bramble: lift, polygon_spaces
+using Bramble: polygon_spaces, lift # public, not exported
 using Random
 
 φ(p) = hypot(p[1], p[2]) - 1
@@ -225,14 +225,14 @@ length(xc), length(yc)</code></pre>
 <figcaption style="font-size:0.9em;opacity:0.8">The grid after the closure, the circle (dashed) and the inscribed polygon (red), whose vertices are the boundary nodes.</figcaption>
 </figure>
 <h2 id="Solving" class="md-heading">Solving<a href="#Solving" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">polygon_spaces(Ωₕ, :D, g)</code> returns the trial space <code class="md-code-inline">U</code> and the test space <code class="md-code-inline">W</code>. Their unknowns are the interior nodes, and the Dirichlet data <code class="md-code-inline">g</code> sit at the boundary nodes. The load is <code class="md-code-inline">avgₕ</code>, the mean of <span class="md-math md-math-inline">\(f\)</span> over each dual cell, and <code class="md-code-inline">lift(U, u)</code> puts a solution back on the whole grid.</p>
+<p><code class="md-code-inline">polygon_spaces(Ωₕ, :D, g)</code> returns the trial space <code class="md-code-inline">U</code> and the test space <code class="md-code-inline">W</code>. Their unknowns are the interior nodes, and the Dirichlet data <code class="md-code-inline">g</code> sit at the boundary nodes. The load is <code class="md-code-inline">avgₕ</code>, the mean of <span class="md-math md-math-inline">\(f\)</span> over each dual cell, and <code class="md-code-inline">lift(U, u)</code> puts a solution back on the whole grid. The function is called <code class="md-code-inline">solve_on</code>, since <code class="md-code-inline">solve</code> already names the SciML function that the steppers and <code class="md-code-inline">LinearSolve</code> extend.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">u_exact(p) = sin(2p[1] + 0.5) * cos(1.5p[2] - 0.2) + exp(0.6p[1] - 0.4p[2])
 f(p) = 6.25 * sin(2p[1] + 0.5) * cos(1.5p[2] - 0.2) - 0.52 * exp(0.6p[1] - 0.4p[2])
 
-function solve(Ωₕ)
+function solve_on(Ωₕ)
     U, W = polygon_spaces(Ωₕ, :D, u_exact)
     fₕ = element(gridspace(Ωₕ))
     avgₕ!(fₕ, f)
@@ -279,23 +279,15 @@ end</code></pre>
 <pre><code class="language-julia">levels = (20, 40, 80, 160)
 runs = map(levels) do n
     Ωₙ = mesh(Ω, (n, n), (true, true))
-    return errors(Ωₙ, solve(Ωₙ))
+    return errors(Ωₙ, solve_on(Ωₙ))
 end
 h = [r.h for r in runs]
 emax = [r.max for r in runs]
 eh1 = [r.h1 for r in runs]
 slope(e) = ([ones(length(h)) log.(h)] \ log.(e))[2]
-for (n, r) in zip(levels, runs)
-    println(&quot;n = &quot;, n, &quot;: h = &quot;, round(r.h; sigdigits = 3), &quot;, max error &quot;,
-        round(r.max; sigdigits = 3), &quot;, H¹ₕ error &quot;, round(r.h1; sigdigits = 3))
-end
 println(&quot;order: max &quot;, round(slope(emax); digits = 2), &quot;, H¹ₕ &quot;, round(slope(eh1); digits = 2))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">n = 20: h = 0.132, max error 0.00103, H¹ₕ error 0.00302
-n = 40: h = 0.0641, max error 0.000153, H¹ₕ error 0.00073
-n = 80: h = 0.0316, max error 5.61e-5, H¹ₕ error 0.000183
-n = 160: h = 0.0157, max error 1.17e-5, H¹ₕ error 4.6e-5
-order: max 2.04, H¹ₕ 1.97</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">order: max 2.04, H¹ₕ 1.97</code></pre>
 </div>
 <p>Both orders are about two, as for a polygon: the errors fall by about a factor of four per halving of <code class="md-code-inline">h</code>, with the max error scattering more from level to level. The error is zero on the circle, where the data sit.</p>
 <p>The errors against <code class="md-code-inline">h</code> on a log-log scale, with a slope-two reference line:</p>
@@ -426,7 +418,7 @@ order: max 2.04, H¹ₕ 1.97</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">Ω₈₀ = mesh(Ω, (80, 80), (true, true))
 uₕ = element(gridspace(Ω₈₀))
-uₕ.data .= solve(Ω₈₀)
+uₕ.data .= solve_on(Ω₈₀)
 uₕ.data[BitVector(markers(Ω₈₀)[:D_exterior])] .= NaN</code></pre>
 </div>
 <div class="md-output md-output-html">
@@ -543,14 +535,14 @@ uₕ.data[BitVector(markers(Ω₈₀)[:D_exterior])] .= NaN</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">Random.seed!(1)
 Ωr = mesh(Ω, (80, 80), (false, false))
-rr = errors(Ωr, solve(Ωr))
+rr = errors(Ωr, solve_on(Ωr))
 println(&quot;random seeds, n = 80: max error &quot;, round(rr.max; sigdigits = 3), &quot;, H¹ₕ error &quot;,
     round(rr.h1; sigdigits = 3))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">random seeds, n = 80: max error 5.53e-5, H¹ₕ error 0.000336</code></pre>
 </div>
 <h2 id="Where-the-method-stops" class="md-heading">Where the method stops<a href="#Where-the-method-stops" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A disk is the simplest curve the grid fits. Curves with no symmetry about a grid line need lines that are not drawn from the seeds, and some curves cannot be fitted at all: a curve that a horizontal or vertical line meets in more than two points (a star) throws an <code class="md-code-inline">ArgumentError</code> naming the line. The design record in <code class="md-code-inline">docs/notes/internals/levelset.md</code> gives the class of curves, the errors and the reasons.</p>
+<p>A disk is the simplest curve the grid fits. Curves with no symmetry about a grid line need lines that are not drawn from the seeds, and some curves cannot be fitted at all: a curve that a horizontal or vertical line meets in more than two points (a star) throws an <code class="md-code-inline">ArgumentError</code> naming the line. The <a href="../../internals/mesh/">mesh internals page</a> and the <a href="../../api/meshes/#Bramble.mesh"><code class="md-code-inline">mesh</code></a> docstring give the class of curves, the errors and the reasons.</p>
       </article>
       <footer class="md-footer">
 <p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
@@ -583,6 +575,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=1a6df80d"></script>
+  <script src="../../assets/materialdocs.js?v=7cf852d0"></script>
 </body>
 </html>

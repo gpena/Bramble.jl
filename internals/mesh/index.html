@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mesh — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=6b9f17e5">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=df3f291c">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Mesh — Bramble.jl">
   <meta property="og:title" content="Mesh — Bramble.jl">
@@ -145,7 +145,7 @@
 <div class="md-docstring" id="Base.eltype-Tuple{Bramble.AbstractMeshType}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.eltype</code> — <span class="md-docstring-sig">Tuple{Bramble.AbstractMeshType}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L418-L423" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L420-L425" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -159,7 +159,7 @@ eltype(::Type{&lt;:AbstractMeshType}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.half_spacings">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.half_spacings</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L492-L499" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L494-L501" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -513,7 +513,7 @@ stepsize(Ωₕ::AbstractMeshType, d::Integer) -&gt; Real</code></pre>
 <pre><code class="language-julia">_init_mesh_markers(Ωₕ::AbstractMeshType, domain_markers) -&gt; MeshMarkers</code></pre>
 </div>
 <p>Internal helper function to construct and initialize the <a href="../../internals/mesh/#Bramble.MeshMarkers"><code class="md-code-inline">MeshMarkers</code></a> dictionary.</p>
-<p>Allocates <code class="md-code-inline">BitVector</code> storage initialized to <code class="md-code-inline">false</code> for every symbol, tuple, and condition label defined in <code class="md-code-inline">domain_markers</code>, a <a href="../../internals/geometry/#Bramble.DomainMarkers"><code class="md-code-inline">DomainMarkers</code></a> or the <code class="md-code-inline">EvaluatedDomainMarkers</code> that <code class="md-code-inline">Ω(t)</code> of a time-dependent domain holds, and for the three labels of each polygon marker.</p>
+<p>Allocates <code class="md-code-inline">BitVector</code> storage initialized to <code class="md-code-inline">false</code> for every symbol, tuple, and condition label defined in <code class="md-code-inline">domain_markers</code>, a <a href="../../internals/geometry/#Bramble.DomainMarkers"><code class="md-code-inline">DomainMarkers</code></a> or the <code class="md-code-inline">EvaluatedDomainMarkers</code> that <code class="md-code-inline">Ω(t)</code> of a time-dependent domain holds, and for the three labels of each polygon and level-set marker.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble._mark_indices!-Tuple{AbstractVector{Bool}, Any, Any}">
@@ -698,7 +698,7 @@ true</code></pre>
 <pre><code class="language-julia">set_markers!(Ωₕ::AbstractMeshType, domain_markers; warn_marker_mismatch = true) -&gt; Nothing</code></pre>
 </div>
 <p>Evaluate domain markers onto mesh points, creating <code class="md-code-inline">BitVector</code> indicators for each label.</p>
-<p>Supports four classes of domain markers:</p>
+<p>Supports five classes of domain markers:</p>
 <ol class="md-list-tight">
 <li><p>Symbol markers, the predefined boundary labels (<code class="md-code-inline">:left</code>, <code class="md-code-inline">:right</code>, etc.).</p>
 </li>
@@ -787,7 +787,7 @@ true</code></pre>
 <div class="md-docstring" id="Base.copy-Tuple{Bramble.Mesh1D}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.copy</code> — <span class="md-docstring-sig">Tuple{Bramble.Mesh1D}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L1426-L1433" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L1466-L1473" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -800,7 +800,7 @@ true</code></pre>
 <div class="md-docstring" id="Base.show-Tuple{IO, Bramble.Mesh1D}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.show</code> — <span class="md-docstring-sig">Tuple{IO, Bramble.Mesh1D}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L1460-L1464" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L1500-L1504" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -813,7 +813,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._launch_half_points!-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_half_points!</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L900-L910" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L922-L932" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -831,7 +831,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._launch_half_spacing!-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_half_spacing!</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L926-L936" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L948-L958" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -849,7 +849,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._launch_nonuniform_mesh1d_metrics!-NTuple{6, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_nonuniform_mesh1d_metrics!</code> — <span class="md-docstring-sig">NTuple{6, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L939-L960" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L961-L982" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -867,7 +867,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._launch_refine_indices!-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_refine_indices!</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L965-L976" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L987-L998" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -885,7 +885,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._launch_spacing!-NTuple{4, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_spacing!</code> — <span class="md-docstring-sig">NTuple{4, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L913-L923" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L935-L945" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -903,7 +903,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._launch_uniform_mesh1d_init!-NTuple{9, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._launch_uniform_mesh1d_init!</code> — <span class="md-docstring-sig">NTuple{9, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L878-L895" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L900-L917" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -948,7 +948,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._seed_mesh1d_rng!-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._seed_mesh1d_rng!</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L743-L758" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L765-L780" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -962,7 +962,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._unseed_mesh1d_rng!-Tuple{}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._unseed_mesh1d_rng!</code> — <span class="md-docstring-sig">Tuple{}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L765-L772" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L787-L794" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -988,7 +988,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.backward_spacings_for_derivative-Tuple{Union{Bramble.Mesh1D{BT, CI, VT, T}, Bramble.Mesh1DState{BT, CI, VT, T}} where {BT, CI, VT, T}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backward_spacings_for_derivative</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.Mesh1D{BT, CI, VT, T}, Bramble.Mesh1DState{BT, CI, VT, T}} where {BT, CI, VT, T}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L665-L671" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L687-L693" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1001,7 +1001,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.forward_spacing_for_derivative-Tuple{Union{Bramble.Mesh1D{BT, CI, VT, T}, Bramble.Mesh1DState{BT, CI, VT, T}} where {BT, CI, VT, T}, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.forward_spacing_for_derivative</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.Mesh1D{BT, CI, VT, T}, Bramble.Mesh1DState{BT, CI, VT, T}} where {BT, CI, VT, T}, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L700-L708" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L722-L730" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1029,7 +1029,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.forward_spacings_for_derivative-Tuple{Union{Bramble.Mesh1D{BT, CI, VT, T}, Bramble.Mesh1DState{BT, CI, VT, T}} where {BT, CI, VT, T}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.forward_spacings_for_derivative</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.Mesh1D{BT, CI, VT, T}, Bramble.Mesh1DState{BT, CI, VT, T}} where {BT, CI, VT, T}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L674-L680" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L696-L702" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1106,7 +1106,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.spacing_for_derivative-Tuple{Union{Bramble.Mesh1D{BT, CI, VT, T}, Bramble.Mesh1DState{BT, CI, VT, T}} where {BT, CI, VT, T}, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.spacing_for_derivative</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.Mesh1D{BT, CI, VT, T}, Bramble.Mesh1DState{BT, CI, VT, T}} where {BT, CI, VT, T}, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L647-L655" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/mesh1d.jl#L669-L677" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1346,6 +1346,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=6b9f17e5"></script>
+  <script src="../../assets/materialdocs.js?v=df3f291c"></script>
 </body>
 </html>

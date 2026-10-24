@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Getting started — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=ab9ca951">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=98f90c92">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Getting started — Bramble.jl">
   <meta property="og:title" content="Getting started — Bramble.jl">
@@ -179,7 +179,7 @@ normₕ(uₕ .- Rₕ(Wₕ, uexact))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">0.0004017888396867575</code></pre>
 </div>
-<p>Four parts in ten thousand. Halving the spacing should cut that by four, since the scheme is second order:</p>
+<p>Four parts in ten thousand. The grid is uniform, which keeps the example short, but a uniform grid can flatter a scheme: the <a href="../examples/poisson_linear/">linear Poisson example</a> checks convergence on a random non-uniform grid for that reason. Halving the spacing should cut the error by four, since the scheme is second order:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -262,6 +262,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=ab9ca951"></script>
+  <script src="../assets/materialdocs.js?v=98f90c92"></script>
 </body>
 </html>

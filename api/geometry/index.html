@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=252628c4">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=66f99d5f">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -137,7 +137,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.point">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.point</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L445-L453" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L447-L455" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -332,7 +332,7 @@ boundary_symbols(D::Integer) -&gt; Tuple{Vararg{Symbol}}</code></pre>
 <div class="md-docstring" id="Bramble.markers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.markers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L130-L174" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L121-L165" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -438,11 +438,11 @@ true</code></pre>
 </div>
 </div>
 <h2 id="Polygons" class="md-heading">Polygons<a href="#Polygons" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">polygon(V)</code> is exported; <code class="md-code-inline">signed_distance</code> is <code class="md-code-inline">public</code> and not exported. A polygon is a marker value: <code class="md-code-inline">:P =&gt; polygon(V)</code> in a domain labels the nodes of a 2D mesh <code class="md-code-inline">:P</code> (interior), <code class="md-code-inline">:P_boundary</code> and <code class="md-code-inline">:P_exterior</code>. The vertices are validated with exact predicates: at least three, no zero-length edge, nonzero area, a simple boundary. A vertex in the middle of a straight edge is kept. See <a href="../../api/meshes/">Meshes</a> for the grid fitted to a polygon and <a href="../../api/spaces/">Grid spaces</a> for <code class="md-code-inline">polygon_spaces</code>.</p>
+<p><code class="md-code-inline">polygon(V)</code> is exported. <code class="md-code-inline">signed_distance</code>, <code class="md-code-inline">polygon_spaces</code> and <code class="md-code-inline">lift</code> are <code class="md-code-inline">public</code> and not exported; <code class="md-code-inline">using Bramble: polygon_spaces, lift</code> brings the last two in by name. A polygon is a marker value: <code class="md-code-inline">:P =&gt; polygon(V)</code> in a domain labels the nodes of a 2D mesh <code class="md-code-inline">:P</code> (interior), <code class="md-code-inline">:P_boundary</code> and <code class="md-code-inline">:P_exterior</code>. The vertices are validated with exact predicates for orientation, folding back and crossing: at least three, no zero-length edge, an area above rounding level, a simple boundary. A vertex in the middle of a straight edge is kept. See <a href="../../api/meshes/">Meshes</a> for the grid fitted to a polygon and <a href="../../api/spaces/">Grid spaces</a> for <code class="md-code-inline">polygon_spaces</code>.</p>
 <div class="md-docstring" id="Bramble.polygon">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.polygon</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/polygon.jl#L18-L32" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/polygon.jl#L18-L35" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -451,9 +451,10 @@ true</code></pre>
 </div>
 <p>Construct the simple polygon whose boundary visits the vertices <code class="md-code-inline">V</code> in order and returns from the last to the first. <code class="md-code-inline">V</code> may run clockwise or counter-clockwise; the result is stored counter-clockwise. Coordinates are converted to the promoted floating-point type <code class="md-code-inline">T</code>.</p>
 <p>A vertex in the middle of a straight edge is kept as a vertex.</p>
+<p>The area is zero up to rounding when |2A| ≤ 8nεL², with 2A the shoelace sum, n the vertex count, ε the epsilon of the coordinate type and L the larger side of the bounding box.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: if <code class="md-code-inline">V</code> has fewer than three vertices, a coordinate is not finite, two consecutive vertices coincide (the last and the first included), the polygon has zero area, or its boundary crosses or touches itself (a bowtie, an edge folding back on the previous one).</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: if <code class="md-code-inline">V</code> has fewer than three vertices, a coordinate is not finite, two consecutive vertices coincide (the last and the first included), the polygon has zero area up to rounding, or its boundary crosses or touches itself (a bowtie, an edge folding back on the previous one).</p>
 </li>
 </ul>
 </div>
@@ -461,7 +462,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.signed_distance">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.signed_distance</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/polygon.jl#L131-L140" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/polygon.jl#L165-L174" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -477,7 +478,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.levelset">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.levelset</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/levelset.jl#L19-L42" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/levelset.jl#L19-L43" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -485,7 +486,7 @@ true</code></pre>
 <pre><code class="language-julia">levelset(φ) -&gt; LevelSet</code></pre>
 </div>
 <p>Wrap the function <code class="md-code-inline">φ(x)</code>, <code class="md-code-inline">x = (x₁, x₂)</code>, as a 2D level-set marker. In a domain, <code class="md-code-inline">:D =&gt; levelset(φ)</code> gives a 2D mesh the labels <code class="md-code-inline">D</code> (nodes where <code class="md-code-inline">φ &lt; 0</code>), <code class="md-code-inline">D_boundary</code> (nodes on the curve <code class="md-code-inline">φ = 0</code>) and <code class="md-code-inline">D_exterior</code> (nodes where <code class="md-code-inline">φ &gt; 0</code>).</p>
-<p><code class="md-code-inline">φ</code> must return a real number, not a <code class="md-code-inline">Bool</code>. It need not be a signed distance; a mesh locates each crossing of <code class="md-code-inline">φ = 0</code> along an edge by bracketing the root, so <code class="md-code-inline">φ</code> only has to change sign across the curve. With a <code class="md-code-inline">time_set</code>, <code class="md-code-inline">φ</code> still takes <code class="md-code-inline">x</code> alone.</p>
+<p><code class="md-code-inline">φ</code> must return a real number, not a <code class="md-code-inline">Bool</code>. It need not be a signed distance; a mesh samples each grid line at 129 points and bisects every sign change, so <code class="md-code-inline">φ</code> only has to change sign across the curve. Two roots on a line closer than its sample spacing are missed. With a <code class="md-code-inline">time_set</code>, <code class="md-code-inline">φ</code> still takes <code class="md-code-inline">x</code> alone.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -529,6 +530,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=252628c4"></script>
+  <script src="../../assets/materialdocs.js?v=66f99d5f"></script>
 </body>
 </html>
