@@ -176,11 +176,17 @@ function _padded_axis_points(x::AbstractVector, padlo::Bool, padhi::Bool)
     return p
 end
 
-# The padded axis submesh of `Ωd`, a mesh of its own with the points of `p`.
+# The padded axis submesh of `Ωd`, a mesh of its own with the points of `p`. Built as two
+# uniform points and then given `p`: a non-uniform mesh draws its points from the global
+# RNG (#868), and a uniform fill of `length(p)` points can tie on a tight valid `p`, so the
+# checks of `set_points!` alone judge `p`. The set's eltype keeps one `Mesh1D` type.
 function _padded_axis(Ωd::Mesh1D, p::AbstractVector, padded::Bool)
     padded || return copy(Ωd)
-    ax = mesh(domain(interval(first(p), last(p))), length(p), false; backend = backend(Ωd))
-    _change_points!(ax, p)
+    T = eltype(set(Ωd))
+    Ωp = domain(interval(T(first(p)), T(last(p))))
+    ax = mesh(Ωp, 2, true; backend = backend(Ωd))::Mesh1D
+    _check_set_points(ax, p)
+    _set_points!(ax, p)
     return ax
 end
 
