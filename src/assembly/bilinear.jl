@@ -429,15 +429,17 @@ function _type_scale_depth(T)
     T isa DataType || return 0
     T <: OperatorScale && return 1 + _type_scale_depth(T.parameters[3])
     T <: Union{BilinearProduct, LinearProduct} && return _type_scale_depth(T.parameters[3]) +
-                                                         _type_scale_depth(T.parameters[4])
+           _type_scale_depth(T.parameters[4])
     return maximum(p -> p isa Type ? _type_scale_depth(p) : 0, T.parameters; init = 0)
 end
 
 # Whether every scalar of `T` promotes with `Float64` to `Float64` and every data value
 # of `T` is a `Float64`.
-_float64_scalar(S) = S isa DataType &&
-                     (S <: Base.RefValue ? _float64_scalar(S.parameters[1]) :
-                      S <: Real && promote_type(Float64, S) === Float64)
+function _float64_scalar(S)
+    S isa DataType &&
+        (S <: Base.RefValue ? _float64_scalar(S.parameters[1]) :
+         S <: Real && promote_type(Float64, S) === Float64)
+end
 function _float64_data(V)
     V === Float64 && return true
     return V isa DataType && V <: AbstractArray && eltype(V) === Float64
@@ -459,9 +461,9 @@ precompile(_type_scale_depth, (Any,))
 precompile(_type_float64_values, (Any,))
 @generated _holds_loose_scalar(::T) where {T} = _type_loose_scalars(T)
 @generated _normalisable(::T, ::Type{E}) where {T, E} = E === Float64 &&
-                                                       _type_loose_scalars(T) &&
-                                                       _type_scale_depth(T) <= 1 &&
-                                                       _type_float64_values(T)
+                                                        _type_loose_scalars(T) &&
+                                                        _type_scale_depth(T) <= 1 &&
+                                                        _type_float64_values(T)
 
 # The element type every leaf space of `Wₕ` has, `Nothing` where two differ: a composite's
 # `eltype` is its first leaf's, so `W × Wf` answers `Float64` for its Float32 component.
