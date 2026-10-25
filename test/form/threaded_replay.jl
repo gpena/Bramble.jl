@@ -4,9 +4,11 @@ using Test
 using Bramble
 using Random
 using SparseArrays
+using LinearAlgebra: mul!
 using SparseArrays: getcolptr
 using Bramble: Serial, Parallel, CpuPolyester, backend, assemble_parallel!,
-               allocate_system_matrix, D₋ₓ, D₊ᵧ, πₕ, inner₊ₓ, CompositeGridSpace
+               allocate_system_matrix, D₋ₓ, D₊ᵧ, πₕ, inner₊ₓ, CompositeGridSpace, Dcₓ,
+               polygon, polygon_spaces, matrix_free_operator
 using ..TestUtils: WITH_SLOW_TESTS, _fillnz!, alloc_test
 
 # The threaded refill replays the form's recording: `assemble!` on a
@@ -396,6 +398,122 @@ const _ALL_FORMS = WITH_SLOW_TESTS ? ((("scalar", _scalar, 1), ("pair", _pair, 1
             end
             @test _agrees(P, R)
             @test _agrees(B, R)
+        end
+    end
+
+    # A polygon space's form walks only the padded points its interior rows need (#884).
+    # Under `Parallel()` each band walks the walk's points in its own slab, so `A_pad`
+    # stores the serial walk's rows, and the matrix, its refill and the matrix-free product
+    # are the serial ones bit for bit. A band that walked its whole slab would write
+    # entries `A_pad` does not store.
+    @testset "polygon walk cut in bands (#884)" begin
+        fig1 = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0), (4.0, 3.0),
+            (4.0, 5.0), (2.0, 5.0), (0.0, 3.0)]
+        f = (u, v) -> innerₕ(-1.0 * Δₕ(u), v) + innerₕ(0.5 * Dcₓ(u), v)
+        (w0, P0, A0, B0, z0), (w1, P1, A1, B1, z1) = map((Serial(), Parallel())) do pol
+            Random.seed!(2)
+            Ω = mesh(domain(interval(0.0, 6.0) × interval(0.0, 5.0), :P => polygon(fig1)),
+                (24, 22), (false, false); backend = backend(policy = pol))
+            U, V = polygon_spaces(Ω, :P, x -> 1 + x[1] * x[2])
+            a = form(U, V, f)
+            A = assemble(a)
+            B = copy(A)
+            _fillnz!(B, 0.0)
+            assemble!(B, a)
+            op = matrix_free_operator(a)
+            fill!(op.xpad, NaN)
+            fill!(op.ypad, NaN)
+            z = op * collect(range(-1.0, 2.0; length = size(op, 2)))
+            return (a.walk.whole, a.A_pad, A, B, z)
+        end
+        @test !w0 && !w1
+        @test length(unique(rowvals(P0))) < size(P0, 1)
+        @test _same_structure(P1, P0)
+        @test P1 == P0
+        @test A1 == A0
+        @test B1 == A0
+        @test z1 == z0
+    end
+
+    # The same in 1D, where a band's slices are points of the walk's one line: a ghost
+    # only at `:xmax` and a Dirichlet relation at `:xmin`, whose node no row reads. The
+    # padded buffers start as `NaN`, so a padded column or row the bands leave unset shows.
+    @testset "1D ghost walk cut in bands (#884)" begin
+        rel = u -> (:xmin => u => 1.0, :xmax => ∂ₙ(u) => 0.5)
+        f = (u, v) -> innerₕ(-1.0 * Δₕ(u), v) + innerₕ(u, v)
+        (w0, A0, z0), (w1, A1, z1) = map((Serial(), Parallel())) do pol
+            C = constrained(gridspace(_mesh(1, 6, pol); ghosts = (:xmax,)), rel)
+            a = form(C, C, f)
+            op = matrix_free_operator(a)
+            fill!(op.xpad, NaN)
+            fill!(op.ypad, NaN)
+            z = op * collect(range(-1.0, 2.0; length = size(op, 2)))
+            return (a.walk.whole, assemble(a), z)
+        end
+        @test !w0 && !w1
+        @test A1 == A0
+        @test all(isfinite, z0)
+        @test z1 == z0
+    end
+
+    # Cut-walk products made by sticky tasks (#884): the iterations of a user's
+    # `Threads.@threads :static` loop, and two `@async` children of spawned tasks, which
+    # together pin every default thread. A product whose bands waited for each other by
+    # yielding would never let the other band run. Each loop runs in a task the test waits
+    # for with a bound: on a hang the test fails, `abort` stops the loops, and a band left
+    # waiting on an operator's `phase` (the yielding design) is released, so the file goes
+    # on.
+    @testset "cut walk on sticky tasks (#884)" begin
+        if Threads.nthreads() < 2
+            @test_skip "needs 2 threads"
+        else
+            fig1 = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0), (4.0, 3.0),
+                (4.0, 5.0), (2.0, 5.0), (0.0, 3.0)]
+            f = (u, v) -> innerₕ(-1.0 * Δₕ(u) + 0.5 * Dcₓ(u), v)
+            a0, a1 = map((Serial(), Parallel())) do pol
+                Random.seed!(2)
+                d = domain(interval(0.0, 6.0) × interval(0.0, 5.0), :P => polygon(fig1))
+                Ω = mesh(d, (24, 22), (false, false); backend = backend(policy = pol))
+                U, V = polygon_spaces(Ω, :P, x -> 1 + x[1])
+                return form(U, V, f)
+            end
+            @test !a1.walk.whole
+            ops = [matrix_free_operator(a1) for _ in 1:2]
+            xs = [collect(range(-1.0, Float64(i); length = size(ops[1], 2))) for i in 1:2]
+            zs = [matrix_free_operator(a0) * x for x in xs]
+            outs = [similar(z) for z in zs]
+            abort = Threads.Atomic{Bool}(false)
+            function watched(body)
+                t = Threads.@spawn body()
+                timedwait(() -> istaskdone(t), 60.0) === :ok && return true
+                abort[] = true
+                foreach(op -> hasproperty(op, :phase) && (op.phase[] = typemax(Int)), ops)
+                timedwait(() -> istaskdone(t), 60.0)
+                return false
+            end
+            @test watched() do
+                for _ in 1:20
+                    abort[] && break
+                    Threads.@threads :static for i in 1:2
+                        mul!(outs[i], ops[i], xs[i])
+                    end
+                end
+            end
+            @test outs == zs
+            fill!.(outs, 0.0)
+            @test watched() do
+                ts = map(1:2) do k
+                    Threads.@spawn begin
+                        child = @async for _ in 1:20
+                            abort[] && break
+                            mul!(outs[k], ops[k], xs[k])
+                        end
+                        wait(child)
+                    end
+                end
+                foreach(wait, ts)
+            end
+            @test outs == zs
         end
     end
 

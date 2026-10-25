@@ -312,3 +312,57 @@ finding 3 (1.4 s per set of function types). Details under the findings above.
 - The `benchmark/ttfx.jl` rerun (AC3), and a full build without `_pc_polygon(Float64)` alone.
 - The drop-one rows with one run have the spread given above.
 - The prototype's timing under load.
+
+## Partial-ghost workload
+
+Subplan S3.2.1, measured on the final code of branch `v4.1.3/perf` (HEAD `ddbb9b71` plus the
+change), on battery, 1-min load about 2 to 3 on 8 cores with nothing else running.
+
+- The workload saves 1.45 s on the first call of the tutorials' partial-ghost Robin snippet
+  (2.43 s to 0.98 s, median of 5 fresh processes, both snippets) and adds 1.5 s of precompile
+  (median of 3 interleaved full builds, 105.97 s against 104.48 s) and 3.2 MiB of pkgimage. The
+  saving is not larger than the cost: they are equal, inside the build spread (pair
+  differences +2.08, +1.49, +0.79 s). The workload pays back once per fresh Julia session
+  that runs such a snippet, and costs once per install.
+- Kept at break-even, by the user's decision (2026-10-25): the first-call saving repeats in
+  every session, the build cost is paid once per install.
+
+`_pc_ghost_partial()` in `src/precompile/form_sessions.jl`, called from the Float64 block of
+`src/precompile.jl`: one 2D non-uniform mesh, one `gridspace(Ωₕ; ghosts = (:xmax, :ymax))` with
+the Robin relation `u + ∂ₙ(u)` on both facets, the form `innerₕ(-1.0 * Δₕ(u), v)`, then
+`assemble(a, l)` and `assemble(a, l; dirichlet = ..., symmetrize = true)`.
+
+Method: two trees with the branch Manifest, one with the call and one without it (the function
+stays defined). Each build is `using Bramble` in a fresh depot with `julia --threads=4`, the arms
+alternated per round. Each first call is a fresh process on the pkgimage of its tree, the arms
+alternated per round, 5 rounds, default `-O`: the time of `constrained`, two forms and one
+`assemble` of a snippet whose functions (`sol`, `rhs`, `robin_data`) are the user's, on a
+12 by 12 non-uniform mesh built before the timer.
+
+| | with | without |
+|---|---|---|
+| core build, median of 3 | 105.97 s | 104.48 s |
+| build, runs | 106.04, 105.97, 105.46 s | 103.96, 104.48, 104.67 s |
+| Bramble pkgimage, median | 266.0 MiB | 262.8 MiB |
+| first call, `(:xmax, :ymax)`, `dirichlet` keyword and `symmetrize` | 0.98 s | 2.43 s |
+| first call, `(:xmax, :ymax)`, no keyword | 0.98 s | 2.42 s |
+| first call, `ghosts = :boundary`, relation `u + ∂ₙ(u)` | 0.99 s | 2.38 s |
+| control: `ghosts = :boundary`, relation `2.0 * u + ∂ₙ(u)` (the shape the sessions warm) | 0.98 s | 1.33 s |
+
+Spread of the first-call runs: 0.96 to 1.09 s with, 2.36 to 2.53 s without, apart from the
+control, 0.97 to 0.99 s and 1.32 to 1.34 s.
+
+Reading:
+
+- The snippet infers 2.4 s without the workload on this branch, against 4.8 to 5.3 s in
+  finding 3 above. The code under it has changed since (S3.3 and the commits before it), so the
+  saving is smaller than finding 3's 3.4 to 3.6 s, and the cost is smaller too (1.5 s and
+  3.2 MiB against 2.6 s and 6.1 MiB).
+- The `:boundary` control with the coefficient-free relation is not covered by the sessions
+  either (they write `2.0 * u + ∂ₙ(u)`): it gains the same 1.4 s. The workload warms the
+  relation shape the sessions did not, so the gain is not specific to the partial facet
+  tuple. The `2.0 * u` control gains 0.35 s from it, so the workload shares methods with the
+  sessions.
+- Not covered, as in finding 3: the data-type part, the user's function types.
+- All figures are on battery. Julia's `-O` default, the 4 threads and the load are the same in
+  every pair, so the pairs compare; the absolute seconds are not an AC figure.

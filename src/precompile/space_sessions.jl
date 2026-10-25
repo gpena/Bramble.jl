@@ -157,7 +157,7 @@ function _pc_interpolation_session(Ω_src, Ω_dest)
 end
 
 # The polygon path: Figure 1's nine vertices meshed on a non-uniform grid, the
-# masked trial/test pair and a mixed form assembled.
+# masked trial/test pair, a mixed form and a Laplacian-plus-convection form assembled.
 function _pc_polygon(::Type{T}) where {T}
     V = [(T(0), T(2)), (T(2), T(0)), (T(4), T(0)), (T(6), T(2)), (T(6), T(3)),
         (T(4), T(3)), (T(4), T(5)), (T(2), T(5)), (T(0), T(3))]
@@ -171,5 +171,8 @@ function _pc_polygon(::Type{T}) where {T}
     l = form(W, v -> innerₕ(x -> one(T), v))
     A, F = assemble(a, l)
     assemble!(A, F, a, l)
+    # The pair users write first: a Laplacian and a convection term, each in its own `innerₕ`.
+    b = form(U, W, (w, v) -> innerₕ(-one(T) * Δₕ(w), v) + innerₕ(T(0.5) * Dcₓ(w), v))
+    assemble(b, l)
     return A, F
 end

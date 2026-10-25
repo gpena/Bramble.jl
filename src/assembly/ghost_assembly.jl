@@ -13,9 +13,10 @@
 # at each stencil tap instead would rewrite the guarded walk, the pattern recorder and the
 # replay.
 #
-# On a serial policy `A_pad` holds the padded rows the test closure reads, and the walk that
-# fills it visits the points writing them only (`_ghost_walk`, #884): on `polygon_spaces`,
-# the interior nodes. The serial matrix-free product walks the same points (`walk`).
+# `A_pad` holds the padded rows the test closure reads, and the walk that fills it visits
+# the points writing them only (`_ghost_walk`, #884): on `polygon_spaces`, the interior
+# nodes. The matrix-free product walks the same points (`walk`), under every policy: a
+# threaded band walks the walk's points in its slab.
 #
 # The reduction, the load and `lift` run in the bands of the mesh's policy (`_run_bands!`):
 # each band owns a range of output entries and sums every contribution to them itself, so
@@ -284,17 +285,16 @@ end
 # reads drops out of the reduction, so `A_pad` stores these rows only, and the rows the
 # walked points reach beyond them.
 #
-# The whole grid is walked (`whole`) by a form naming its rows by interpolation, one
-# assembled under a threaded policy (the threaded sweeps colour the whole grid, and cut to a
-# serial walk they would lose their threads), and one whose walk would keep more than 7/8
-# of the points: cut into pieces, a walk costs 5 to 9% more per point than whole (a Robin
-# ghost box on 200×201 points, whose four absent corners no column of `E_v` reads).
+# The whole grid is walked (`whole`) by a form naming its rows by interpolation, and one
+# whose walk would keep more than 7/8 of the points: cut into pieces, a walk costs 5 to 9%
+# more per point than whole (a Robin ghost box on 200×201 points, whose four absent corners
+# no column of `E_v` reads). A threaded policy cuts its bands to the walk's points
+# (`_sweep_bilinear!`, `_mf_visit_band!`).
 function _ghost_walk(Vₕ::GhostGridSpace, a::BilinearForm)
     grid = indices(mesh(padded_space(Vₕ)))
     none = _GridLines(grid, LinearIndices(Base.tail(axes(grid))), Int[], Int[], Int[])
-    whole = _WalkRows(true, none, none, none, UInt64(0))
-    (_has_test_interp(a.ast) || !(execution_policy(trial_space(a)) isa CpuSerial)) &&
-        return whole
+    whole = _WalkRows(true, none, none, none, UInt64(0), Int[], Vector{Int}[])
+    _has_test_interp(a.ast) && return whole
     cp = SparseArrays.getcolptr(Vₕ.Et)
     live = BitVector(undef, length(grid))
     for i in eachindex(live)
@@ -308,7 +308,29 @@ function _ghost_walk(Vₕ::GhostGridSpace, a::BilinearForm)
     rows = _GridLines(live, grid)
     walked = pts == live ? rows : _GridLines(pts, grid)
     salt = UInt64(objectid(rows.ptr))
-    return _WalkRows(false, walked, rows, _GridLines(cols, grid), salt)
+    len = last(size(grid))
+    cum = cumsum(vec(sum(reshape(pts, :, len); dims = 1)))
+    starts = _band_starts(cum, min(Threads.nthreads(), len))
+    # The replay's bands for each span up to the form's row reach along the last axis.
+    bands = map(1:(last(hi) - last(lo) + 1)) do span
+        nb = _band_count(len, span, Threads.nthreads())
+        return nb == 0 ? Int[] : _balanced_starts(cum, nb, span)
+    end
+    return _WalkRows(false, walked, rows, _GridLines(cols, grid), salt, starts, bands)
+end
+
+# The band starts `_walk_own` reads: `starts[a]`, for `a` the first slice of band `b` of the
+# even split of the last axis into `nbands`, is the first slice of balanced band `b`
+# (`_balanced_starts`, with `cum` the walked points counted up to each slice); every other
+# entry is its own index.
+function _band_starts(cum::Vector{Int}, nbands::Int)
+    len = length(cum)
+    starts = collect(1:(len + 1))
+    balanced = _balanced_starts(cum, nbands, 1)
+    for b in 2:nbands
+        starts[first(_band_range(1:len, nbands, b))] = balanced[b]
+    end
+    return starts
 end
 
 # The points `I + o` of `grid`, for `I` set in `mask` and `o` in `steps`.
@@ -646,16 +668,21 @@ end
 @inline _cut_walk(::Nothing) = nothing
 @inline _cut_walk(w::_WalkRows) = w.whole ? nothing : w
 
-# `A_pad` refilled. On a cut walk, by the serial replay of its points alone, recording first
-# when the cache holds no recording of that walk for `A_pad`: the threaded sweeps walk the
-# whole grid. Its stored entries are zeroed first, as `assemble!` does.
+# `A_pad` refilled. On a cut walk, by the replay of its points alone, serial or in the
+# threaded bands of the form's policy, recording first when the cache holds no recording of
+# that walk for `A_pad`. Its stored entries are zeroed first, as `assemble!` does.
 _assemble_padded!(a::GhostCompositeBilinearForm) = assemble!(a.A_pad, a.padded)
 function _assemble_padded!(a::GhostBilinearForm)
     a.walk.whole && return assemble!(a.A_pad, a.padded)
     p = a.padded
     _zero_stored!(a.A_pad)
-    _assemble_bilinear_core_cached!(_SerialReplay(), a.A_pad, p.trial_space, p.test_space,
-        p.ast, p.cache, true, a.walk)
+    if execution_policy(p.trial_space) isa CpuSerial
+        _assemble_bilinear_core_cached!(_SerialReplay(), a.A_pad, p.trial_space,
+            p.test_space, p.ast, p.cache, true, a.walk)
+    else
+        _assemble_bilinear_core_cached!(_ThreadedReplay(), a.A_pad, p.trial_space,
+            p.test_space, p.ast, p.cache, true, a.walk)
+    end
     return a.A_pad
 end
 

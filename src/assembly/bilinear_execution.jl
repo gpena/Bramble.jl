@@ -566,7 +566,7 @@ end
 # a serial fill replays threaded and the other way round. The five-argument form is the
 # serial fill every serial caller (`assemble!`, `assemble_add!`) makes. `walk` cuts the
 # recording and the replay to its points (`_WalkRows`) and keys the recording by its stamp;
-# only the serial replay takes one, the threaded sweeps walk the whole grid.
+# the threaded replay's bands walk its points too (`_sweep_bilinear!`).
 @inline _assemble_bilinear_core_cached!(
     A::AbstractMatrix, trial_space, test_space, ast, cache::_AssemblyCache, α = true
 ) = _assemble_bilinear_core_cached!(
@@ -799,6 +799,83 @@ end
     return nothing
 end
 
+# A cut walk (`_RowRestricted`, #884) as a `CpuPolyester` band hook takes it
+# (`_batch_bilinear_band_replay!`), whose band loop calls `_replay_point!` once per index of
+# `CartesianIndices((rest..., _band_range(ax, nbands, b)))`. The caller (`_batch_walk`)
+# passes a band axis of `nbands` blocks of `len` virtual slices, block `b` mapped onto
+# balanced band `b` (`starts`, `_cut_slices`) and its slices past that band skipped, or,
+# with `starts` empty, the last axis itself. From 2D up it narrows `rest`'s first axis to
+# one index, so an index names a line along axis 1 and its replay walks the walk's pieces
+# of that line, in order; in 1D the line is the band's own axis, so an index names a point
+# and its replay keeps it only if the walk does. The hook's loop thus visits the walk's
+# points in the order the `CpuThreaded` band does (`_each_walked`).
+struct _WalkLines{S, G <: _GridLines, V <: AbstractVector{Int}}
+    space::S
+    points::G
+    starts::V
+    len::Int
+end
+
+# `sp`, the band axis `ax` and `rest` as a `CpuPolyester` band hook takes them: themselves,
+# or a cut walk's lines and its bands for `nbands`.
+@inline _batch_walk(sp, ax, rest::Tuple, ::Int) = sp, ax, rest
+@inline function _batch_walk(rsp::_RowRestricted, ax::_CutAxis, rest::Tuple, nbands::Int)
+    len = last(size(rsp.walk.points.grid))
+    starts = _cut_starts(rsp.walk, nbands, ax.span)
+    w = _WalkLines(rsp.space, rsp.walk.points, starts, len)
+    band = isempty(starts) ? (1:len) : (1:(nbands * len))
+    isempty(rest) && return w, band, rest
+    i = first(first(rest))
+    return w, band, (i:i, Base.tail(rest)...)
+end
+
+# A call of its own per line, so that each point's stencil is compiled into its loop as the
+# whole grid's band compiles it (the matrix-free cut walk ran 2 times slower inlined).
+@noinline function _replay_walk_line!(
+        t, term, w::_WalkLines, I0::CartesianIndex, lin_indices, mesh_markers,
+        row_offset::Int, col_offset::Int
+)
+    g = w.points
+    v = last(Tuple(I0))
+    if !isempty(w.starts)
+        b, o = divrem(v - 1, w.len)
+        v = @inbounds w.starts[b + 1] + o
+        v < @inbounds(w.starts[b + 2]) || return nothing
+    end
+    I = CartesianIndex(Base.front(Tuple(I0))..., v)
+    J = Base.tail(Tuple(I))
+    r1 = isempty(J) ? (first(Tuple(I)):first(Tuple(I))) : _full_range(first(g.grid.indices))
+    l = @inbounds g.lines[J...]
+    for s in @inbounds(g.ptr[l]:(g.ptr[l + 1] - 1))
+        for i in max(first(r1), @inbounds g.lo[s]):min(last(r1), @inbounds g.hi[s])
+            _replay_point!(t, term, w.space, CartesianIndex(i, J...), lin_indices,
+                mesh_markers, row_offset, col_offset)
+        end
+    end
+    return nothing
+end
+
+# One method per signature of the point methods above, typed as each is, so no call is
+# ambiguous.
+@inline _replay_point!(
+    t::SINK, term::TERM, w::_WalkLines, I::CartesianIndex, lin_indices, mesh_markers,
+    row_offset::Int, col_offset::Int) where {SINK, TERM} = _replay_walk_line!(
+    t, term, w, I, lin_indices, mesh_markers, row_offset, col_offset)
+@inline _replay_point!(
+    t::_DiagonalReplayTarget{V, P, D, S}, term::TERM, w::_WalkLines, I::CartesianIndex,
+    lin_indices, mesh_markers, row_offset::Int,
+    col_offset::Int) where {V, P, D, S, TERM} = _replay_walk_line!(
+    t, term, w, I, lin_indices, mesh_markers, row_offset, col_offset)
+@inline _replay_point!(
+    t::Union{ReplaySink, _PairReplaySink}, term::_SplitTerm, w::_WalkLines,
+    I::CartesianIndex, lin_indices, mesh_markers, row_offset::Int,
+    col_offset::Int) = _replay_walk_line!(
+    t, term, w, I, lin_indices, mesh_markers, row_offset, col_offset)
+@inline _replay_point!(
+    t::_DiagonalReplayTarget, term::_SplitTerm, w::_WalkLines, I::CartesianIndex,
+    lin_indices, mesh_markers, row_offset::Int, col_offset::Int) = _replay_walk_line!(
+    t, term, w, I, lin_indices, mesh_markers, row_offset, col_offset)
+
 # One point of a sweep: the target replays. `α` is unused, as the replay target carries its
 # own.
 @inline _sweep_point!(
@@ -868,7 +945,9 @@ end
 # reaches through `_sweep_bands!`/`_sweep_points!`: the matrix-free product extends the
 # bilinear pair, and under `CpuPolyester` each pair calls its own `_batch_*` hooks.
 
-# One point of a bilinear sweep: `_sweep_point!` through `target` at `I`.
+# One point of a bilinear sweep: `_sweep_point!` through `target` at `I`. `sp` is the walked
+# leaf, or a cut walk of it (`_RowRestricted`), whose bands visit its points alone
+# (`_each_walked`); each point reads the leaf.
 struct _BilinearPoint{T, S, M, L, K, A}
     target::T
     sp::S
@@ -880,7 +959,8 @@ struct _BilinearPoint{T, S, M, L, K, A}
     α::A
 end
 @inline (p::_BilinearPoint)(I) = _sweep_point!(
-    p.target, p.term, p.sp, I, p.lin_indices, p.mesh_markers, p.row_offset, p.col_offset, p.α)
+    p.target, p.term, _unwalk(p.sp), I, p.lin_indices, p.mesh_markers, p.row_offset,
+    p.col_offset, p.α)
 
 @inline _sweep_bands!(policy, p::_BilinearPoint, ax, bidx, nbands::Int, rest) = _sweep_band_colour!(
     policy, p.target, p.sp, p.term, ax, bidx, nbands, rest, p.lin_indices, p.mesh_markers,
@@ -928,6 +1008,44 @@ end
 # One band colour, or one point colour, under `CpuThreaded`.
 @inline _threaded_bands!(point::P, ax, bidx, nbands::Int, rest) where {P} = _static_or_serial(
     _static_band_colour!, _serial_band_colour!, point, ax, bidx, nbands, rest)
+
+# A cut walk's band colour (#884): each band balanced (`_cut_slices`), its slab visiting
+# the walk's points in it alone (`_each_walked`). Its tasks take the band from the walk the
+# point holds and `span`, rather than capture the axes or the band starts: the
+# `Threads.@threads` closure is then no larger than a whole walk's.
+@inline function _threaded_bands!(point::_BilinearPoint{T, <:_RowRestricted},
+        ax::_CutAxis, bidx, nbands::Int, _) where {T}
+    return _static_or_serial(
+        _static_cut_band_colour!, _serial_cut_band_colour!, point, ax.span, bidx, nbands)
+end
+
+@noinline function _static_cut_band_colour!(point::P, span, bidx, nbands) where {P}
+    Threads.@threads :static for b in bidx
+        _cut_band!(point, nbands, span, b)
+    end
+    return nothing
+end
+
+@noinline function _serial_cut_band_colour!(point::P, span, bidx, nbands) where {P}
+    for b in bidx
+        _cut_band!(point, nbands, span, b)
+    end
+    return nothing
+end
+
+# The point reads the leaf as the walk does (`_walk_space`), built here in the task: through
+# its walk state, or the space itself for a term reading a component. Held in the point,
+# the state's meshes grew the closure of an L-shaped 13×13 refill to 1008 bytes.
+@inline function _cut_band!(point, nbands::Int, span::Int, b::Int)
+    ax = axes(point.lin_indices)
+    slices = _cut_slices(point.sp.walk, length(last(ax)), nbands, span, b)
+    band = CartesianIndices((Base.front(ax)..., slices))
+    rsp = _RowRestricted(_walk_space(point.sp.space, typeof(point.term)), point.sp.walk)
+    p = _BilinearPoint(point.target, rsp, point.term, point.lin_indices, point.mesh_markers,
+        point.row_offset, point.col_offset, point.α)
+    _each_walked(p, rsp, band)
+    return nothing
+end
 @inline _threaded_colour!(point::P, idxs) where {P} = _static_or_serial(
     _static_colour!, _serial_colour!, point, idxs)
 
@@ -1082,9 +1200,10 @@ end
         col_offset::Int,
         _
 ) where {TERM}
+    wsp, wax, wrest = _batch_walk(sp, ax, rest, nbands)
     return _late(
         _batch_bilinear_band_replay!,
-        target, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset,
+        target, wsp, term, wax, bidx, nbands, wrest, lin_indices, mesh_markers, row_offset,
         col_offset
     )
 end
@@ -1134,6 +1253,22 @@ function _sweep_bilinear_serial!(
     return nothing
 end
 
+# The same over the points of a cut walk (`_RowRestricted`), line piece by line piece.
+function _sweep_bilinear_serial!(
+        A, rsp::_RowRestricted, term::TERM, row_offset::Int, col_offset::Int, α = true
+) where {TERM}
+    sp = rsp.space
+    grid_inds = indices(mesh(sp))
+    lin_indices = LinearIndices(grid_inds)
+    bound, mesh_markers = _bind_walk(term, sp)
+    walked = _has_marks(typeof(bound)) ? _split_term(A, bound, term, grid_inds) : bound
+    wrsp = _RowRestricted(_walk_space(sp, typeof(walked)), rsp.walk)
+    point = _BilinearPoint(
+        A, wrsp, walked, lin_indices, mesh_markers, row_offset, col_offset, α)
+    _each_walked(point, wrsp, grid_inds)
+    return nothing
+end
+
 # Every colour in turn (`_sweep_coloured!`). `policy` is the *effective* policy
 # (`_effective_parallel_policy(sp)`, computed once here): `CpuSerial` is coerced to
 # `CpuThreaded` since every call into this function is already on the forced-threaded path
@@ -1149,6 +1284,38 @@ function _sweep_bilinear!(
     point = _BilinearPoint(
         A, sp, walked, LinearIndices(grid_inds), mesh_markers, row_offset, col_offset, α)
     _sweep_coloured!(_effective_parallel_policy(sp), point, grid_inds, strides)
+    return A
+end
+
+# The bands of a cut walk (`_RowRestricted`, #884): the bands and colours of the whole grid,
+# each band walking only the walk's points in it (`_each_walked`) and reading the leaf as
+# the serial cut walk does (`_cut_band!`): through its walk state, or the space itself for
+# a term reading a component. Bands still own whole slices of the last axis, each holding
+# about as many points (`_cut_slices`). A grid too short to band walks its points on one
+# thread, because a point colour is strided and the walk's line pieces do not cut it.
+function _sweep_bilinear!(
+        A, rsp::_RowRestricted, term::TERM, strides, row_offset::Int, col_offset::Int,
+        α = true
+) where {TERM}
+    sp = rsp.space
+    grid_inds = indices(mesh(sp))
+    ax = last(grid_inds.indices)
+    nbands = _band_count(length(ax), last(strides), Threads.nthreads())
+    if nbands == 0
+        _sweep_bilinear_serial!(A, rsp, term, row_offset, col_offset, α)
+        return A
+    end
+    bound, mesh_markers = _bind_walk(term, sp)
+    walked = _has_marks(typeof(bound)) ? _split_term(A, bound, term, grid_inds) : bound
+    point = _BilinearPoint(
+        A, rsp, walked, LinearIndices(grid_inds), mesh_markers, row_offset, col_offset, α)
+    policy = _effective_parallel_policy(sp)
+    rest = Base.front(grid_inds.indices)
+    cut = _CutAxis(last(strides))
+    step = prod(strides) == 1 ? 1 : 2
+    for start in 1:step
+        _sweep_bands!(policy, point, cut, start:step:nbands, nbands, rest)
+    end
     return A
 end
 

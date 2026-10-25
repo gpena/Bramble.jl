@@ -94,6 +94,21 @@ factored(term, sp) = _factored_walk(
     C = constrained(Wg, u -> (:xmin => ∂ₙ(u) => 1.0,))
     padded = form(C, C, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))).padded
     @test factored(padded.ast, padded_space(Wg))
+    # It reads a scalar padded leaf through the mesh's walk state, a composite one's leaf
+    # through the space itself, its out-of-line taps passing the space at each call (#876).
+    Pg = padded_space(Wg)
+    @test Bramble._walk_space(Pg, typeof(padded.ast)) isa
+          Bramble.ScalarGridSpace{2, Float64, <:Any, <:Bramble.GhostMeshState}
+    Cg = padded_space(gridspace(rmesh((9, 7)); ghosts = :boundary)^Val(2))
+    cus = units(form(Cg, Cg, elasticity))
+    @test length(cus) == 10
+    @test all(((t, sp),) -> factored(t, sp) && Bramble._walk_space(sp, typeof(t)) === sp,
+        cus)
+    # The matrix-free walk reads the composite leaf the same way, and applies the matrix.
+    ac = form(Cg, Cg, elasticity)
+    seed!(11)
+    x = randn(ndofs(Cg))
+    @test matrix_free_operator(ac) * x ≈ assemble(ac) * x rtol = 1e-13
     # The matrix-free sinks keep the stencil walk, so they check this one independently.
     @test !_factored_walk(Bramble.ActionSink, typeof(us[1][1]), typeof(us[1][2]))
 end

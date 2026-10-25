@@ -188,6 +188,9 @@ if PRECOMPILE_WORKLOAD
                 assemble(f3)
             end
 
+            # The 2D Robin form on `ghosts = (:xmax, :ymax)`, the tutorials' first call.
+            _pc_ghost_partial()
+
             # Jacobian sparsity from the AST, scalar and composite, and the per-element-type
             # assembly cache (gpena/Bramble.jl#21/#95/#20). Kept to 1D, the same economy the
             # sessions above already apply.
@@ -244,7 +247,7 @@ if PRECOMPILE_WORKLOAD
             domain(S2, :dirichlet => (:left, :right), :neumann => (:top, :bottom))
             mesh(domain(S3, :clamped => :back), (3, 3, 3), (false, false, false))
 
-            # Polygon meshes, spaces and a mixed form (Figure 1), in both precisions.
+            # Polygon meshes, spaces and two forms (Figure 1), in both precisions.
             _pc_polygon(Float64)
             _pc_polygon(Float32)
 
