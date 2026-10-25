@@ -1121,6 +1121,27 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
     return ScalarGridSpace{D, T, VT, typeof(s)}(s, sp.weights)
 end
 
+# The space a walk of a term of type `T` reads: `sp` itself for a term reading a component
+# of a composite space (`u(i)`, `v(i)`), whose every tap re-evaluates its operand out of
+# line (`_wraps_leaf`, `ast/common.jl`) and so passes the space to a call per tap. A
+# `GhostMesh` passes as a pointer, but its walk state is an immutable of nested states,
+# copied at each such call: 2D padded vector Laplacian, 200x200 random, warm `assemble!`,
+# 2.62 ms through the state and 1.23 ms through `sp`, the plain composite 0.97 ms (#876).
+# A scalar term's taps on a bare leaf are inlined and keep the state.
+@inline _walk_space(sp, ::Type{T}) where {T} = _reads_component(T) ? sp : _walk_space(sp)
+
+# Whether a term of type `T` holds a component leaf, walking its fields and tuples of them.
+# A type it cannot see through answers `true`, so the walk reads `sp`.
+Base.@nospecializeinfer Base.@assume_effects :foldable function _reads_component(
+        @nospecialize(T))
+    (T isa DataType && isconcretetype(T)) || return true
+    T <: Union{IndexedTrialFunction, IndexedTestFunction} && return true
+    for F in fieldtypes(T)
+        (F <: LazyOp || F <: Tuple) && _reads_component(F) && return true
+    end
+    return false
+end
+
 # The walk itself, which the replay calls directly: one method instance per (sink, term)
 # where the two `visit_bilinear_stencil` methods above, the one calling the other, compiled
 # two.
@@ -1138,7 +1159,7 @@ end
     weights(sp)
     bound, mesh_markers = _may_restrict(typeof(term)) ? _bind_walk(term, mesh(sp)) :
                           (term, nothing)
-    wsp = _walk_space(sp)
+    wsp = _walk_space(sp, TERM)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     ax = axes(grid_inds)
@@ -1202,13 +1223,14 @@ end
 
 # Points of `grid` by line along axis 1: line `l` (the linear index of its other indices,
 # `lines[J]`) holds the ranges `lo[s]:hi[s]`, `s in ptr[l]:(ptr[l + 1] - 1)`, increasing and
-# disjoint.
-struct _GridLines{C <: CartesianIndices, L <: LinearIndices}
+# disjoint. The vectors' type is a parameter, so that a `CpuPolyester` task rebuilds them
+# around the `PtrArray`s `@batch` passes (`_batch_rebuild`).
+struct _GridLines{C <: CartesianIndices, L <: LinearIndices, V <: AbstractVector{Int}}
     grid::C
     lines::L
-    ptr::Vector{Int}
-    lo::Vector{Int}
-    hi::Vector{Int}
+    ptr::V
+    lo::V
+    hi::V
 end
 
 # The points of `grid` set in `mask`, a vector in the grid's linear order.
@@ -1240,23 +1262,109 @@ The part of the padded grid a form on ghost spaces walks: the points `points` wh
 writes a row of `rows`, the padded rows its test closure reads, and the columns `cols` those
 points read (`_ghost_walk`, ghost_assembly.jl). `whole` when the closure reads every row, a
 ghost box: the walk is then the plain one. `salt` tells a recording of this walk from one
-of the whole grid on one matrix (`_walk_stamp`).
+of the whole grid on one matrix (`_walk_stamp`). `starts` moves the fused matrix-free
+product's bands so that each holds as many walked points (`_walk_own`), and `bands[span]`
+holds the starts of the replay's balanced bands for a unit of row reach `span`
+(`_cut_slices`); both are empty on a whole walk.
+
+Mutable, so that a threaded sweep's task captures it as one pointer: inline, its three
+`_GridLines` grew each `Threads.@threads` closure of a `CpuThreaded` refill by 144 bytes.
+A `CpuPolyester` task, which takes no mutable value, receives its `_WalkCut` instead.
 """
-struct _WalkRows{P <: _GridLines, R <: _GridLines, Q <: _GridLines}
-    whole::Bool
+mutable struct _WalkRows{P <: _GridLines, R <: _GridLines, Q <: _GridLines}
+    const whole::Bool
+    const points::P
+    const rows::R
+    const cols::Q
+    const salt::UInt64
+    const starts::Vector{Int}
+    const bands::Vector{Vector{Int}}
+end
+
+# The points, rows and band starts of a `_WalkRows`, all a walk reads, as an immutable
+# value that `_batch_split` takes apart (`_mf_run_bands!` under `CpuPolyester`).
+struct _WalkCut{P <: _GridLines, R <: _GridLines, V <: AbstractVector{Int}}
     points::P
     rows::R
-    cols::Q
-    salt::UInt64
+    starts::V
+end
+@inline _walk_cut(::Nothing) = nothing
+@inline _walk_cut(w::_WalkRows) = _WalkCut(w.points, w.rows, w.starts)
+
+# The slices of the last axis a fused product's band owns on a cut walk: its even share
+# `own` (`_band_range`) moved by the walk's `starts`, which `_ghost_walk` sets for
+# `min(Threads.nthreads(), len)` bands so that each holds as many walked points. An even
+# split leaves the bands of Figure 1, wide below and narrow above, 33 and 20 µs apart.
+@inline function _walk_own(w, own::UnitRange{Int})
+    s = w.starts
+    isempty(s) && return own
+    return @inbounds s[first(own)]:(s[last(own) + 1] - 1)
+end
+
+# The starts of `nbands` bands of the last axis (`len = length(cum)` slices), each holding
+# about a `1 / nbands` share of the walked points (`cum`, their running count by slice) and
+# `span` slices at least, which keeps two bands of one colour apart as the even split
+# (`_band_range`, `_band_count`) does: band `b` is `starts[b]:(starts[b + 1] - 1)`.
+function _balanced_starts(cum::Vector{Int}, nbands::Int, span::Int)
+    len = length(cum)
+    starts = Vector{Int}(undef, nbands + 1)
+    starts[1], starts[nbands + 1] = 1, len + 1
+    for c in 2:nbands
+        starts[c] = clamp(searchsortedfirst(cum, cld((c - 1) * cum[len], nbands)) + 1,
+            starts[c - 1] + span, len - (nbands - c + 1) * span + 1)
+    end
+    return starts
+end
+
+# The slices of band `b` of `nbands` of a cut walk's replay for a unit of row reach `span`:
+# balanced (`bands`, which `_ghost_walk` fills for the band count `_band_count` gives each
+# span), or, for a span or band count it did not fill, the even split. Figure 1 on 40×36
+# points, wide below and narrow above, walks 1288, 2854, 1638 and 837 points in its four
+# even bands, which leaves one of two threads 4142 and the other 2475.
+@inline function _cut_slices(w, len::Int, nbands::Int, span::Int, b::Int)
+    s = _cut_starts(w, nbands, span)
+    isempty(s) && return _band_range(1:len, nbands, b)
+    return @inbounds s[b]:(s[b + 1] - 1)
+end
+@inline function _cut_starts(w, nbands::Int, span::Int)
+    (1 <= span <= length(w.bands) && length(@inbounds w.bands[span]) == nbands + 1) ||
+        return _NO_STARTS
+    return @inbounds w.bands[span]
+end
+const _NO_STARTS = Int[]
+
+# The band axis of a cut walk's replay (`_sweep_bilinear!`): its unit's row reach `span`.
+struct _CutAxis
+    span::Int
 end
 
 # The walked leaf `sp` with the walk `w` it is cut to, or `sp` itself.
-struct _RowRestricted{S, W <: _WalkRows}
+struct _RowRestricted{S, W <: Union{_WalkRows, _WalkCut}}
     space::S
     walk::W
 end
 @inline _restrict_walk(sp, ::Nothing) = sp
-@inline _restrict_walk(sp, w::_WalkRows) = _RowRestricted(sp, w)
+@inline _restrict_walk(sp, w::Union{_WalkRows, _WalkCut}) = _RowRestricted(sp, w)
+
+# The leaf a walk is cut from, and `f(I)` for each point `I` of `region` the walk keeps:
+# all of them on a whole leaf, the pieces of a cut one (`_each_piece`) in the region's
+# order. The `CpuThreaded` sweeps' bands go through it (`_static_cut_band_colour!`).
+@inline _unwalk(sp) = sp
+@inline _unwalk(rsp::_RowRestricted) = rsp.space
+@inline function _each_walked(f::F, _, region::CartesianIndices) where {F}
+    for I in region
+        f(I)
+    end
+    return nothing
+end
+@inline function _each_walked(f::F, rsp::_RowRestricted, region::CartesianIndices) where {F}
+    _each_piece(region, rsp.walk.points) do piece
+        for I in piece
+            f(I)
+        end
+    end
+    return nothing
+end
 
 # A recording's marker stamp, moved by a cut walk: the cache replays a recording only under
 # the walk it was made with.
@@ -1292,7 +1400,7 @@ end
     weights(sp)
     bound, mesh_markers = _may_restrict(typeof(term)) ? _bind_walk(term, mesh(sp)) :
                           (term, nothing)
-    wsp = _walk_space(sp)
+    wsp = _walk_space(sp, TERM)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     ax = axes(grid_inds)

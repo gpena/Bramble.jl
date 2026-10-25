@@ -1200,20 +1200,23 @@ end
 # single-iteration `@batch` runs its body inline on the plain `Vector`s, which the rebuild
 # accepts as well. The caller (`_mf_product!`) has checked on the host that the plan is the
 # product's form's. Parts that do not split cross whole, the host-bound AST among them
-# (`_split_or_whole` above).
+# (`_split_or_whole` above). The walk each unit is cut to (`_WalkCut`, #884, or `nothing`)
+# crosses with them, its line ranges as `PtrArray`s.
 @_task function _mf_band!(skel, arrays, y, x, len, nbands, b, omin, omax)
-    (α, mask), Wu, Wv, ast, geom = _rejoin(skel, arrays)
+    (α, mask), Wu, Wv, ast, geom, walk = _rejoin(skel, arrays)
     own = _band_range(1:len, nbands, b)
     _mf_apply_parts!(_MFPass(_MF_BAND, own, omin, omax, _MF_NO_COLLECT),
-        ActionSink(y, x, α, mask, geom), Wu, Wv, ast)
+        ActionSink(y, x, α, mask, geom), Wu, Wv, ast, walk)
     return nothing
 end
 
-function Bramble._batch_mf_bands!(s::ActionSink, plan::_MFFusedPlan{D}, nbands::Int) where {D}
+function Bramble._batch_mf_bands!(
+        s::ActionSink, plan::_MFFusedPlan{D}, nbands::Int, walk) where {D}
     a = plan.form
     y, x = s.y, s.x
     skel, arrays = _split_or_whole(
-        ((s.α, s.mask), a.trial_space, a.test_space, _mf_host_ast(a), plan.geom), y, x)
+        ((s.α, s.mask), a.trial_space, a.test_space, _mf_host_ast(a), plan.geom, walk), y,
+        x)
     len, omin, omax = plan.dims[D], plan.omin, plan.omax
     failed = false
     @batch reduction=((|, failed),) for b in 1:nbands
@@ -1223,7 +1226,7 @@ function Bramble._batch_mf_bands!(s::ActionSink, plan::_MFFusedPlan{D}, nbands::
         _mf_apply_parts!(
             _MFPass(_MF_BAND, _band_range(1:len, nbands, b), omin, omax, _MF_NO_COLLECT),
             ActionSink(y, x, s.α, s.mask, plan.geom), a.trial_space, a.test_space,
-            _mf_host_ast(a))
+            _mf_host_ast(a), walk)
     end
     return nothing
 end

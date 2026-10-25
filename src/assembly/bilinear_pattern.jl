@@ -397,7 +397,8 @@ allocate_system_matrix(form::BilinearForm, ast = form.ast) = _allocate_walked(
 
 # The matrix of `form` over the points of `walk` (`_WalkRows`, a form on ghost spaces), or
 # of the whole grid (`nothing`). A cut walk's form keeps its recording on any policy: it is
-# refilled by the serial replay only (`_assemble_padded!`, ghost_assembly.jl).
+# refilled by the replay of the walk's points alone, serial or banded
+# (`_assemble_padded!`, ghost_assembly.jl).
 function _allocate_walked(form::BilinearForm{D}, ast, walk) where {D}
     p = _form_coordinates(form.trial_space, form.test_space, ast, walk)
     MT = matrix_type(backend(form.test_space))

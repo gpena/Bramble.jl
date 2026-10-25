@@ -20,7 +20,7 @@ using Bramble
 using Bramble: CpuPolyester, CpuSerial, Dcₓ, Dcᵧ, D̃ₓ, D₋ₓ, D̃ᵧ, D₋ᵧ,
                matrix_free_operator, polygon, polygon_spaces, levelset
 using LinearAlgebra: diag, mul!, norm
-using SparseArrays: SparseMatrixCSC, nonzeros
+using SparseArrays: SparseArrays, SparseMatrixCSC, nonzeros, rowvals
 using Polyester
 
 using ..TestUtils: WITH_3D_TESTS
@@ -186,7 +186,7 @@ function curve_by(build, pol, f_free)
         pair = alloc(() -> assemble!(A3, F3, a, l)), mul = alloc(() -> mul!(z, op, x)))
     return (A = A, F = F, A2 = A2, A3 = A3, F3 = F3, u = u, U = Bramble.lift(U, u).data,
         z = z, zA = assemble(af) * x, conflicts = count(U.rows.conflict), bytes = bytes,
-        policy = Bramble.execution_policy(Ω))
+        policy = Bramble.execution_policy(Ω), A_pad = a.A_pad, whole = a.walk.whole)
 end
 
 @testset "Ghost forms on CpuPolyester (#785)" begin
@@ -415,12 +415,18 @@ end
 
     # Polygon and level-set spaces (#878): every result equals the serial one bit for bit
     # (the matrix-free product to 1e-13), and the warm `assemble!` calls and `mul!` leave
-    # no bytes.
+    # no bytes. Each `@batch` band walks only the padded points the interior rows need
+    # (#884), so `A_pad` stores the serial walk's rows: a band walking its whole slab would
+    # write entries it does not store.
     @testset "$(c.name): polygon_spaces under CpuPolyester" for c in CURVES
         r0 = curve_by(c.build, CpuSerial(), c.f_free)
         r1 = curve_by(c.build, CpuPolyester(), c.f_free)
         @test r0.policy isa CpuSerial
         @test r1.policy isa CpuPolyester
+        @test !r0.whole && !r1.whole
+        @test SparseArrays.getcolptr(r1.A_pad) == SparseArrays.getcolptr(r0.A_pad)
+        @test rowvals(r1.A_pad) == rowvals(r0.A_pad)
+        @test r1.A_pad == r0.A_pad
         @test (r0.conflicts > 0) == c.conflict
         @test norm(r0.F, Inf) > 0 && norm(r0.z, Inf) > 0
         for k in (:A, :F, :A2, :A3, :F3, :u, :U)
@@ -432,6 +438,27 @@ end
         @test relerr(r1.z, r0.z) <= 1e-13
         @test relerr(r1.z, r1.zA) <= 1e-13
         @test r1.bytes == (matrix = 0, pair = 0, mul = 0)
+    end
+
+    # In 1D a band's slices are points of the walk's one line (#884): a ghost only at
+    # `:xmax` and a Dirichlet relation at `:xmin`, whose node no row reads, cut the walk.
+    # The padded buffers start as `NaN`, so a padded entry the bands leave unset shows.
+    @testset "1D ghost walk cut in bands" begin
+        rel = u -> (:xmin => u => 1.0, :xmax => ∂ₙ(u) => 0.5)
+        r0, r1 = map(POLICIES) do pol
+            C = constrained(gridspace(ghost_mesh(pol, (6,)); ghosts = (:xmax,)), rel)
+            a = form(C, C, laplacian)
+            op = matrix_free_operator(a)
+            fill!(op.xpad, NaN)
+            fill!(op.ypad, NaN)
+            z = op * collect(range(-1.0, 2.0; length = size(op, 2)))
+            return (whole = a.walk.whole, A = assemble(a), A_pad = a.A_pad, z = z)
+        end
+        @test !r0.whole && !r1.whole
+        @test r1.A_pad == r0.A_pad
+        @test r1.A == r0.A
+        @test all(isfinite, r0.z)
+        @test r1.z == r0.z
     end
 
     WITH_3D_TESTS && @testset "3D Laplacian, Dirichlet relation" begin

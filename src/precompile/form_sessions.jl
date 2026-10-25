@@ -590,6 +590,23 @@ function _pc_nested_constrained(C)
     return nothing
 end
 
+# A ghost space on a partial facet set, as the tutorials build it (`ghosts = (:xmax, :ymax)`
+# with Robin data and Dirichlet sides left to `assemble`): the `:boundary` sessions above do
+# not warm its first call (gpena/Bramble.jl#906).
+# One mesh, one space, `assemble(a, l)` with and without the `dirichlet` keyword.
+function _pc_ghost_partial()
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
+    C = constrained(
+        gridspace(Ωₕ; ghosts = (:xmax, :ymax)),
+        u -> (:xmax => u + ∂ₙ(u) => 0.5, :ymax => u + ∂ₙ(u) => 0.5)
+    )
+    a = form(C, C, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
+    l = form(C, v -> innerₕ(x -> 1.0, v))
+    assemble(a, l)
+    assemble(a, l; dirichlet = (:xmin => x -> 0.0, :ymin => x -> 0.0), symmetrize = true)
+    return nothing
+end
+
 # --- Jacobian sparsity and per-type assembly caching (gpena/Bramble.jl#21/#95/#20) ------- #
 #
 # Neither is reachable from the sessions above. jacobian_pattern walks a BilinearForm's own

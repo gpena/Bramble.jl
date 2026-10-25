@@ -152,9 +152,59 @@ end
 # `_surface_weight` (mesh/queries.jl) answers it in a few multiplies. The same function
 # answers for the numeric `inner_Γ`, so the two layers agree by construction rather than by
 # two implementations being written to match.
-@inline compute_weight(
-    w::InnerGamma, space, I::CartesianIndex{D}, lin_idx::Int
-) where {D} = _surface_weight(mesh(space), w.mask, I)
+#
+# The mask is a field, read per point (gpena/Bramble.jl#895). Off the grid's boundary the
+# walk returns zero before reading the mask or any spacing: with the mask a type parameter
+# the compiler folded it, and reading it in `_surface_weight`'s `&&` chain at every point
+# made plain `inner_Γ` `assemble!` 0.25 of the Laplacian's time, against 0.165 with the mask
+# a parameter. Zero is what `_surface_weight`'s sum of unselected terms gives there, so the
+# bits are the same.
+@inline function compute_weight(
+        w::InnerGamma, space, I::CartesianIndex{D}, lin_idx::Int
+) where {D}
+    Ωₕ = mesh(space)
+    _on_grid_boundary(Ωₕ, I) || return zero(eltype(Ωₕ))
+    return _surface_weight(Ωₕ, w.mask, I)
+end
+
+# Whether `I` lies on any face of the grid, whatever the mask selects. A ghost mesh's padded
+# index is left to `_surface_weight` (mesh/ghost_mesh.jl).
+@inline function _on_grid_boundary(Ωₕ::AbstractMeshType{D}, I::CartesianIndex{D}) where {D}
+    np = npoints(Ωₕ, Tuple)
+    on = false
+    for d in 1:D
+        on |= (I[d] == 1) | (I[d] == np[d])
+    end
+    return on
+end
+@inline _on_grid_boundary(::_GhostMeshLike, ::CartesianIndex) = true
+
+# Whether `I` lies on the face of axis `d` that `mask` selects: `_surface_weight_dir`'s test
+# (mesh/queries.jl) as integer compares with no branch. An unselected side's index is `0`,
+# which no point of a plain mesh has.
+@inline _on_face(mask, I, np, d) = (I[d] == ifelse(mask[d][1], 1, 0)) |
+                                   (I[d] == ifelse(mask[d][2], np[d], 0))
+
+# The weight `local_stencil` multiplies a product's stencil by: `compute_weight`, except for
+# the surface weight, whose test is `_on_face`'s, with no branch. The matrix-free sweep
+# evaluates it along whole lines, where plain `inner_Γ` `mul!` took 0.81 of the Laplacian's
+# time through `compute_weight`'s early return, 0.65 through `_surface_weight`'s `&&`
+# chain, and 0.44 with the mask a parameter; the factored assembly walk calls
+# `compute_weight` directly. The terms are `_surface_weight_dir`'s, summed in its
+# order, so the bits are the same.
+@inline _stencil_weight(w, space, I, lin_idx) = compute_weight(w, space, I, lin_idx)
+@inline function _stencil_weight(w::InnerGamma, space, I::CartesianIndex{D}, lin_idx) where {D}
+    Ωₕ = mesh(space)
+    Ωₕ isa _GhostMeshLike && return compute_weight(w, space, I, lin_idx)
+    return _selected_weight(Ωₕ, w.mask, I, npoints(Ωₕ, Tuple), Val(D), Val(D))
+end
+
+@inline function _selected_weight(Ωₕ, mask, I, np, ::Val{d}, ::Val{D}) where {d, D}
+    m = _transverse_measure(Ωₕ, I, Val(d), Val(D))
+    return ifelse(_on_face(mask, I, np, d), m, zero(m)) +
+           _selected_weight(Ωₕ, mask, I, np, Val(d - 1), Val(D))
+end
+@inline _selected_weight(Ωₕ, mask, I, np, ::Val{0}, ::Val{D}) where {D} = zero(eltype(Ωₕ))
 
 # ==============================================================================
 # User-Facing API & Overloads
@@ -992,7 +1042,7 @@ end
 @inline function local_stencil(
         op::BilinearProduct{D, InnerType}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D, InnerType}
-    vol = compute_weight(op.inner, space, I, lin_idx)
+    vol = _stencil_weight(op.inner, space, I, lin_idx)
     if _same_operator_shape(op.left_op, op.right_op)
         stencil = local_stencil(op.left_op, space, I, markers, lin_idx)
         return multiply_stencils_bilinear_symmetric(stencil, vol)
