@@ -2,8 +2,8 @@ module FormInnerProductsTests
 
 using Test
 using Bramble
-using LinearAlgebra: Diagonal, diag, dot
-using ..TestUtils: @test_allocs, WITH_3D_TESTS
+using LinearAlgebra: Diagonal, diag, dot, mul!
+using ..TestUtils: @test_allocs, WITH_3D_TESTS, random_mesh
 using Bramble:
                IdentityOperator,
                TrialFunction,
@@ -523,6 +523,23 @@ end
         assemble!(B, a)
         @test A ≈ B
         @test_allocs assemble!(B, a)
+    end
+
+    # The matrix-free sweep evaluates the surface weight by its own branch-free test of the
+    # mask (`_stencil_weight`, operators/inner.jl), the assembly by `compute_weight`: both
+    # must select the faces the markers name, on a non-uniform mesh (#895).
+    @testset "Matrix-free mul! matches assembly" begin
+        Wₕ = gridspace(random_mesh((9, 8); seed = 5))
+        x = collect(range(-1.0, 2.0; length = ndofs(Wₕ)))
+        lap(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
+        for m in (:ymin, (:xmin, :ymax), :boundary)
+            for f in ((u, v) -> inner_Γ(u, v; markers = m),
+                (u, v) -> lap(u, v) + inner_Γ(u, v; markers = m))
+                a = form(Wₕ, Wₕ, f)
+                y = mul!(similar(x), matrix_free_operator(a), x)
+                @test y ≈ assemble(a) * x
+            end
+        end
     end
 
     # A label is read from its definition at `form`, as the numeric `inner_Γ` reads it
