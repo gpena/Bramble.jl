@@ -188,6 +188,9 @@ if PRECOMPILE_WORKLOAD
                 assemble(f3)
             end
 
+            # The 2D Robin form on `ghosts = (:xmax, :ymax)`, the tutorials' first call.
+            _pc_ghost_partial()
+
             # Jacobian sparsity from the AST, scalar and composite, and the per-element-type
             # assembly cache (gpena/Bramble.jl#21/#95/#20). Kept to 1D, the same economy the
             # sessions above already apply.
