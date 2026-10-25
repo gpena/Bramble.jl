@@ -47,6 +47,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("forwarddiff_smoke.jl")
         include("common.jl")
         include("simplifier.jl")
+        # Real coefficients converted once at `form`, one AST type per value (#912).
+        include("scalar_coefficients.jl")
         include("block_extract.jl")
         include("component.jl")
         include("centered_average.jl")
