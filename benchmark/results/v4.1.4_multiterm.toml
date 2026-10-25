@@ -62,6 +62,78 @@ form = 0.073512333
 threads = 4
 warm_assemble = 1.375e-5
 
+[spellings_head.scale_pi]
+assemble = 0.010497959
+"warm_assemble!" = 9.17e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.020625208
+threads = 4
+warm_assemble = 1.208e-6
+
+[spellings_head.scale_float64]
+assemble = 0.0111815
+"warm_assemble!" = 9.17e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.006632
+threads = 4
+warm_assemble = 1.208e-6
+
+[spellings_head.scale_float32]
+assemble = 0.012043667
+"warm_assemble!" = 9.17e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.0193885
+threads = 4
+warm_assemble = 1.292e-6
+
+[spellings_head.scale_rational]
+assemble = 0.010813208
+"warm_assemble!" = 9.17e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.017703542
+threads = 4
+warm_assemble = 1.25e-6
+
+[spellings_base.scale_pi]
+assemble = 0.215027375
+"warm_assemble!" = 7.08e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.011027084
+threads = 4
+warm_assemble = 1.042e-6
+
+[spellings_base.scale_float64]
+assemble = 0.010498333
+"warm_assemble!" = 7.91e-7
+launches = 5
+warm_form = 4.2e-8
+form = 0.006513083
+threads = 4
+warm_assemble = 1.083e-6
+
+[spellings_base.scale_float32]
+assemble = 0.214744792
+"warm_assemble!" = 7.08e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.008803083
+threads = 4
+warm_assemble = 1.042e-6
+
+[spellings_base.scale_rational]
+assemble = 0.22129425
+"warm_assemble!" = 7.08e-7
+launches = 5
+warm_form = 4.2e-8
+form = 0.0087635
+threads = 4
+warm_assemble = 1.125e-6
+
 [head.elasticity]
 assemble = 18.028217333
 "warm_assemble!" = 0.000172625
