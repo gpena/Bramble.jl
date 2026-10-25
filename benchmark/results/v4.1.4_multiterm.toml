@@ -1,0 +1,261 @@
+
+[base.elasticity]
+assemble = 17.827043583
+"warm_assemble!" = 0.000168958
+launches = 5
+warm_form = 2.0209e-5
+form = 5.026414792
+threads = 4
+warm_assemble = 0.000187125
+
+[base.scale_float64]
+assemble = 0.010287167
+"warm_assemble!" = 7.91e-7
+launches = 5
+warm_form = 4.1e-8
+form = 0.006426708
+threads = 4
+warm_assemble = 1.166e-6
+
+[base.scale_float32]
+assemble = 0.212268375
+"warm_assemble!" = 7.08e-7
+launches = 5
+warm_form = 4.2e-8
+form = 0.008773583
+threads = 4
+warm_assemble = 1.083e-6
+
+[base.scale_pi]
+assemble = 0.212044083
+"warm_assemble!" = 7.08e-7
+launches = 5
+warm_form = 4.2e-8
+form = 0.010077375
+threads = 4
+warm_assemble = 1.041e-6
+
+[base.scale_rational]
+assemble = 0.219552791
+"warm_assemble!" = 7.08e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.008950083
+threads = 4
+warm_assemble = 1.25e-6
+
+[base.scalar_2d]
+assemble = 0.003520042
+"warm_assemble!" = 7.5e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.006276833
+threads = 4
+warm_assemble = 1.042e-6
+
+[base.vector_laplacian]
+assemble = 2.816126917
+"warm_assemble!" = 1.1083e-5
+launches = 5
+warm_form = 2.08e-7
+form = 0.073512333
+threads = 4
+warm_assemble = 1.375e-5
+
+[spellings_head.scale_pi]
+assemble = 0.010497959
+"warm_assemble!" = 9.17e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.020625208
+threads = 4
+warm_assemble = 1.208e-6
+
+[spellings_head.scale_float64]
+assemble = 0.0111815
+"warm_assemble!" = 9.17e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.006632
+threads = 4
+warm_assemble = 1.208e-6
+
+[spellings_head.scale_float32]
+assemble = 0.012043667
+"warm_assemble!" = 9.17e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.0193885
+threads = 4
+warm_assemble = 1.292e-6
+
+[spellings_head.scale_rational]
+assemble = 0.010813208
+"warm_assemble!" = 9.17e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.017703542
+threads = 4
+warm_assemble = 1.25e-6
+
+[spellings_base.scale_pi]
+assemble = 0.215027375
+"warm_assemble!" = 7.08e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.011027084
+threads = 4
+warm_assemble = 1.042e-6
+
+[spellings_base.scale_float64]
+assemble = 0.010498333
+"warm_assemble!" = 7.91e-7
+launches = 5
+warm_form = 4.2e-8
+form = 0.006513083
+threads = 4
+warm_assemble = 1.083e-6
+
+[spellings_base.scale_float32]
+assemble = 0.214744792
+"warm_assemble!" = 7.08e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.008803083
+threads = 4
+warm_assemble = 1.042e-6
+
+[spellings_base.scale_rational]
+assemble = 0.22129425
+"warm_assemble!" = 7.08e-7
+launches = 5
+warm_form = 4.2e-8
+form = 0.0087635
+threads = 4
+warm_assemble = 1.125e-6
+
+[head.elasticity]
+assemble = 18.028217333
+"warm_assemble!" = 0.000172625
+launches = 5
+warm_form = 1.3584e-5
+form = 5.152876375
+threads = 4
+warm_assemble = 0.00020125
+
+[head.scale_float64]
+assemble = 0.011563542
+"warm_assemble!" = 9.17e-7
+launches = 5
+warm_form = 4.2e-8
+form = 0.007130917
+threads = 4
+warm_assemble = 1.292e-6
+
+[head.scale_float32]
+assemble = 0.010535959
+"warm_assemble!" = 9.17e-7
+launches = 5
+warm_form = 4.2e-8
+form = 0.017934125
+threads = 4
+warm_assemble = 1.291e-6
+
+[head.scale_pi]
+assemble = 0.013700458
+"warm_assemble!" = 9.58e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.025284542
+threads = 4
+warm_assemble = 1.292e-6
+
+[head.scale_rational]
+assemble = 0.01069475
+"warm_assemble!" = 9.58e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.018689292
+threads = 4
+warm_assemble = 1.291e-6
+
+[head.scalar_2d]
+assemble = 0.003695083
+"warm_assemble!" = 7.91e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.006429875
+threads = 4
+warm_assemble = 1.083e-6
+
+[head.vector_laplacian]
+assemble = 2.925498417
+"warm_assemble!" = 1.1375e-5
+launches = 5
+warm_form = 2.08e-7
+form = 0.078333625
+threads = 4
+warm_assemble = 1.4083e-5
+
+[div.elasticity]
+assemble = 16.790204583
+"warm_assemble!" = 0.000172958
+launches = 5
+warm_form = 1.2542e-5
+form = 4.927549292
+threads = 4
+warm_assemble = 0.000187958
+
+[div.scale_float64]
+assemble = 0.011573917
+"warm_assemble!" = 7.5e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.007356542
+threads = 4
+warm_assemble = 1.084e-6
+
+[div.scale_float32]
+assemble = 0.229263417
+"warm_assemble!" = 6.67e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.009870417
+threads = 4
+warm_assemble = 1.125e-6
+
+[div.scale_pi]
+assemble = 0.215865292
+"warm_assemble!" = 7.08e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.009995625
+threads = 4
+warm_assemble = 1.083e-6
+
+[div.scale_rational]
+assemble = 0.223636084
+"warm_assemble!" = 7.09e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.008947541
+threads = 4
+warm_assemble = 1.042e-6
+
+[div.scalar_2d]
+assemble = 0.004016583
+"warm_assemble!" = 6.66e-7
+launches = 5
+warm_form = 8.3e-8
+form = 0.006731041
+threads = 4
+warm_assemble = 1.041e-6
+
+[div.vector_laplacian]
+assemble = 2.869065917
+"warm_assemble!" = 1.1166e-5
+launches = 5
+warm_form = 2.5e-7
+form = 0.073016167
+threads = 4
+warm_assemble = 1.4042e-5

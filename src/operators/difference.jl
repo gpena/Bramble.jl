@@ -1565,12 +1565,18 @@ end
 end
 
 # One term of the staggered divergence: D_{-i}(u_i), averaged onto the shared cell centre by
-# every other axis. `foldl` over a runtime-filtered range, not `ntuple`: this runs once per
-# `εₕ`/`divₘₕ` call (builder time, not per grid point), the same footing
-# `docs/src/examples/elasticity_3d.jl`'s `divₜ` already stands on.
-@inline _div_term(u, i::Int, ::Val{D}) where {D} = foldl(
-    (op, d) -> _vc_avg(op, d), Iterators.filter(!=(i), 1:D); init = _vc_bwd(u(i), i)
-)
+# every other axis, in ascending order (the order fixes the floating-point sums). `i` and the
+# axes are type parameters and the generated body unrolls the averages, so each term's node
+# type is known to inference: a `foldl` over a filtered `1:D` builds the same node, but
+# constant propagation does not reach through it and the elasticity `form` inferred `Any`
+# (gpena/Bramble.jl#921).
+@generated function _div_term(u, ::Val{i}, ::Val{D}) where {i, D}
+    ex = :(_vc_bwd(u($i), $i))
+    for d in 1:D
+        d == i || (ex = :(_vc_avg($ex, $d)))
+    end
+    return :(@inline; $ex)
+end
 
 """
     Bramble._StrainTensor{D}
@@ -1683,7 +1689,7 @@ through [`inner₊`](@ref)`(left, right, Val(S))`.
 See also: [`divₕ`](@ref), [`εₕ`](@ref).
 """
 function divₘₕ(u::LazyOp{D}) where {D}
-    terms = ntuple(i -> _div_term(u, i, Val(D)), Val(D))
+    terms = ntuple(i -> _div_term(u, Val(i), Val(D)), Val(D))
     return _DivergenceTerms{D, typeof(terms)}(terms)
 end
 

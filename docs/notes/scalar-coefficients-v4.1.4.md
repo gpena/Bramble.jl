@@ -96,3 +96,226 @@ since those changes may alter them too.
 - The Float64 row sets the floor: 6 instances, 0.03 s.
 - Not measured here: the cost of the conversion itself, and the result for a coefficient
   that does not round-trip through Float64.
+
+## After normalising
+
+The figures above stay as they were: one run under load, on `e34e11c2`, before #912 was
+changed. This section retakes the four spellings on two trees in one run, with #912 step 2
+(S2) on one of them.
+
+### What S2 changes
+
+S2 normalises the scalar coefficient to `Float64` only where that is bit-neutral: every
+leaf space is `Float64`, no product meets two constant scales, all data is `Float64`, and
+there is no `SourceFunction` or `DiracSource`. Float32 spaces, `εₕ`'s nested `1//2`,
+two-sided scales and linear forms with a function source are kept as built. The four
+rows here are plain `Float64`-space bilinear forms, so all four are normalised.
+
+### Method and conditions
+
+Two trees: `base`, a detached worktree at `995412a2` (`git merge-base HEAD origin/main`),
+and `head`, `perf/v4.1.4-scalars-div` at `00e9d784` (S1, then S2 with its format commit).
+Both ran from the head worktree's scripts with `--tree`. The base tree got head's
+`Manifest.toml`, was instantiated and precompiled (test project, which covers the root
+workspace) before any timing, and no other process ran during the timing. 4 threads
+throughout, each `julia` under `julia_slot.sh 4`, default optimisation level, the whole
+run under `caffeinate -dims`.
+
+```
+julia --startup-file=no benchmark/snoop_instances.jl --tree T \
+    --rows scale_float64,scale_float32,scale_pi,scale_rational --launches 3 --threads 4 \
+    --out benchmark/results/v4.1.4_scalar_spellings_T.toml
+julia --startup-file=no benchmark/multiterm_ttfx.jl --tree T \
+    --rows scale_float64,scale_float32,scale_pi,scale_rational --launches 5 --threads 4 \
+    --section spellings_T --out benchmark/results/v4.1.4_multiterm.toml
+```
+
+for T in base, head. Both scripts write medians only, so the spread comes from a third
+step: `multiterm_ttfx.jl --child ROW` run directly, 5 rounds, in each round the four rows
+in turn and each row base then head, so the load drifts through both trees together. Every
+"spread" below is min to max over those 5 children. Its medians are close to the
+multiterm TOML medians, which come from a run of their own.
+
+| quantity | value |
+|---|---|
+| Julia | 1.13.2, default `-O` |
+| machine | Apple M2, 16 GiB, on AC power (battery 100%, charging) |
+| preflight | `gate_preflight.sh --timing` OK at 20:52 (load 1.63; no other julia, nothing above 50% CPU); OneDrive was running, not paused (its ASK line) |
+| load, 1-minute | 1.95 to 2.90 over the run (20:52 to 20:56); 2.19 to 2.69 over the control below |
+
+These times are measurements, not "under load" figures: the preflight passed. The
+benchmark TOMLs are `benchmark/results/v4.1.4_scalar_spellings_base.toml` and
+`..._head.toml`, and the sections `spellings_base` and `spellings_head` of
+`benchmark/results/v4.1.4_multiterm.toml`. Sections `base`, `div` and `head` of that file
+are S3.1's and were not touched.
+
+### First call: instances
+
+| row | fresh base | fresh head | added base | added head |
+|---|---:|---:|---:|---:|
+| `scale_float64` | 6 | 6 | 6 | 6 |
+| `scale_float32` | 91 | 29 | 90 | 24 |
+| `scale_pi` | 92 | 30 | 91 | 20 |
+| `scale_rational` | 91 | 29 | 90 | 19 |
+
+`fresh` is the instance count of the row alone in its process. `added` is what it infers
+after the rows above it in one process, in the order listed. The sequence child inferred 277
+distinct instances on base (6 + 90 + 91 + 90) and 69 on head (6 + 24 + 20 + 19). The
+repeat of the last call inferred 0 on both trees, for every row. The three
+non-`Float64` rows do not reach the 6 of `2.0`: each still infers 19 to 30 instances. The
+likely source is the normalisation itself (`_normalise_scalars`, run by `form`), though
+this run does not itemise them. The rows share only part of it with each other (24, then
+20, then 19 added).
+
+### First call: times
+
+Snoop figures are medians over 3 launches. The spread step gives the first-call time of
+`form` and `assemble` as median (min to max) over 5 children, in ms.
+
+| row | form base | form head | assemble base | assemble head |
+|---|---:|---:|---:|---:|
+| `scale_float64` | 6.87 (6.52 to 7.33) | 6.69 (6.55 to 7.24) | 10.77 (10.29 to 13.29) | 10.90 (10.75 to 12.04) |
+| `scale_float32` | 8.51 (8.34 to 8.81) | 17.84 (17.45 to 18.81) | 214.8 (209.4 to 229.2) | 10.44 (10.42 to 10.62) |
+| `scale_pi` | 10.71 (10.43 to 12.27) | 22.19 (20.29 to 23.07) | 212.7 (207.8 to 214.7) | 10.46 (10.23 to 12.77) |
+| `scale_rational` | 9.06 (8.76 to 9.92) | 17.62 (16.72 to 18.32) | 217.9 (217.2 to 230.6) | 10.44 (9.90 to 10.75) |
+
+The `fresh_form_s` and `fresh_assemble_s` of the snoop TOMLs, in ms, agree: base form
+11.7, 14.9, 15.3, 14.1 and assemble 10.6, 240.9, 231.7, 235.7; head form 11.9, 23.3, 26.3,
+23.4 and assemble 10.9, 11.3, 11.2, 10.6 (rows in the table's order). The snoop child's `form` times differ
+from the multiterm child's because it runs `form` inside `@snoop_inference`.
+
+So on the three non-`Float64` spellings the first `assemble` falls from about 0.21 s to
+the 0.01 s of `Float64` (the spreads do not overlap), and the first `form` rises by about
+9 to 11 ms, the conversion paying its own inference at `form` time. The first `form` plus
+`assemble` of one such spelling goes from about 223 to 228 ms down to about 28 to 33 ms.
+The `Float64` row did not move.
+
+### Warm
+
+Warm times are the min of 5 calls inside the child, so each figure is a min taken
+once per child. Median (min to max) over 5 children, in µs. The clock step is 0.042 µs.
+
+| row | warm `assemble` base | warm `assemble` head | warm `assemble!` base | warm `assemble!` head |
+|---|---:|---:|---:|---:|
+| `scale_float64` | 1.042 (1.041 to 1.291) | 1.708 (1.208 to 1.750) | 0.792 (0.791 to 0.792) | 0.917 (0.875 to 0.959) |
+| `scale_float32` | 1.083 (1.000 to 1.209) | 1.209 (1.167 to 1.250) | 0.667 (0.666 to 0.709) | 0.916 (0.916 to 0.958) |
+| `scale_pi` | 1.083 (1.041 to 1.167) | 1.208 (1.166 to 1.292) | 0.708 (0.708 to 0.750) | 0.958 (0.916 to 0.958) |
+| `scale_rational` | 1.083 (1.000 to 1.166) | 1.292 (1.208 to 1.292) | 0.667 (0.666 to 0.750) | 0.916 (0.916 to 0.958) |
+
+Warm `form` is 0.04 to 0.08 µs in all eight cells, which is the clock step, and does not
+separate the trees.
+
+A control, same conditions, same interleaving (5 rounds, base and head alternating):
+`scalar_2d`, a form with no coefficient that S2 does not touch.
+
+| row | warm `assemble` base | warm `assemble` head | warm `assemble!` base | warm `assemble!` head |
+|---|---:|---:|---:|---:|
+| `scalar_2d` | 1.167 (1.000 to 1.208) | 0.792 (0.750 to 0.959) | 0.750 (0.708 to 0.792) | 0.500 (0.500 to 0.709) |
+
+### Verdict on warm
+
+Warm `assemble!` did move outside the spread, on all four spellings: head is 0.12 to 0.29
+µs higher (+16% for `scale_float64`, +34 to +37% for the other three), and the min to max
+ranges do not overlap. Warm `assemble` moved by +0.13 to +0.67 µs in the median; its ranges overlap for
+`scale_float32` and `scale_pi`, and separate for `scale_rational` (1.208 against at most
+1.166) and, in the median, for `scale_float64`. By the criterion as written, that the warm
+times stay inside the spread, it is not met.
+
+Two things bound what that means. First, the control `scalar_2d`, which S2 cannot affect,
+moved outside its spread too, and the other way (warm `assemble!` 0.750 to 0.500 µs,
+-33%), so these sub-microsecond rows shift by tens of percent between two trees for
+reasons of code placement, in either direction. Second, on head the four spellings now
+read the same (`assemble!` 0.92, 0.92, 0.96, 0.92 µs): all four reach the one `Float64`
+path. On base `Float64` runs the precompiled instance (0.79 µs) and the other three a
+freshly inferred one that is faster (0.67 to 0.71 µs), so the three non-`Float64` rows lose the
+0.1 to 0.2 µs they had on base and `scale_float64` gains 0.13 µs. An absolute
+gain or loss of 0.1 to 0.3 µs on a 9x11 mesh is not a measurement of warm cost per
+degree of freedom: the warm times here say that no spelling got slower than the others
+by more than a quarter of a microsecond, and nothing more. A warm A/B on a mesh large
+enough to take tens of µs would settle it.
+
+### Warm on a larger mesh
+
+The 9x11 rows above are too short to decide the criterion: they take about 1 µs, and rows
+that short move by tens of percent with code placement alone (the control `scalar_2d` moved
+-33% for a form S2 cannot touch, and `scale_float64`, whose AST is identical on both trees
+because S2's gate returns it unchanged, moved +16%). So the warm times were retaken on a
+graded 200x200 mesh (the same `graded` as `snoop_instances.jl`), where warm `assemble!`
+takes about 0.2 ms, and on 400x400 (about 0.9 ms) as a second size. A scratch script outside
+the repository (`~/bramble-scratch/v414sd/s32/warm_big.jl`) builds the mesh and the form in
+a fresh child process, warms up (one `form`, one `assemble`, then three rounds of both),
+then times warm `assemble(a)` and `assemble!(A, a)` as the min of 5, results kept live
+with `Base.donotdelete`. Rows: the four spellings of `c * inner₊(∇ₕ(u), ∇ₕ(v))` and, as a
+control, `inner₊(∇ₕ(u), ∇ₕ(v))` (`scalar_2d`'s form) on the same mesh. 5 rounds per size, in
+each round the five rows in turn and each row base then head, so the load drifts through
+both trees together. Figures are the median over the 5 children, then min to max, in µs.
+
+Conditions: both trees as in "Method and conditions" above, alone at 4 threads
+(`julia_slot.sh 4`, `BRAMBLE_JULIA_SLOTS=4`), default `-O`, under `caffeinate -dims`. On AC
+(battery 100%, charging). `gate_preflight.sh --timing` passed at 21:06 (load 1.91, no other
+julia, nothing above 50% CPU; OneDrive running, not paused, its ASK line). The 1-minute
+load was 1.92 at the start of the run (21:06) and 3.04 at its end (21:11), the last of
+which includes the run itself. Not "under load". Raw rows:
+`~/bramble-scratch/v414sd/s32/big.txt`.
+
+Mesh 200x200:
+
+| row | `assemble` base | `assemble` head | `assemble!` base | `assemble!` head |
+|---|---:|---:|---:|---:|
+| `scale_float64` | 320.4 (269.4 to 327.7) | 280.1 (274.2 to 321.8) | 217.0 (211.0 to 245.7) | 218.7 (218.0 to 219.1) |
+| `scale_float32` | 282.8 (269.5 to 320.8) | 288.5 (273.5 to 356.2) | 215.2 (214.5 to 238.6) | 218.5 (218.0 to 219.2) |
+| `scale_pi` | 291.6 (280.9 to 374.3) | 321.8 (271.0 to 334.2) | 223.8 (223.0 to 231.0) | 219.6 (218.6 to 220.6) |
+| `scale_rational` | 278.8 (264.8 to 370.8) | 310.3 (284.2 to 336.7) | 214.2 (214.1 to 215.0) | 235.1 (218.7 to 246.1) |
+| `scalar_2d` (control) | 275.3 (270.6 to 304.5) | 268.4 (264.8 to 273.5) | 205.3 (201.2 to 206.1) | 201.2 (197.3 to 202.9) |
+
+Mesh 400x400:
+
+| row | `assemble` base | `assemble` head | `assemble!` base | `assemble!` head |
+|---|---:|---:|---:|---:|
+| `scale_float64` | 1138.0 (1131.7 to 1189.5) | 1140.9 (1134.3 to 1162.6) | 894.7 (882.6 to 931.5) | 913.7 (888.1 to 935.7) |
+| `scale_float32` | 1171.2 (1126.5 to 1195.7) | 1174.5 (1141.4 to 1227.2) | 876.8 (868.9 to 904.6) | 889.0 (879.5 to 912.7) |
+| `scale_pi` | 1194.0 (1151.0 to 1262.0) | 1181.0 (1140.6 to 1195.2) | 923.1 (914.5 to 925.4) | 887.0 (881.6 to 924.2) |
+| `scale_rational` | 1118.2 (1101.1 to 1210.1) | 1199.4 (1156.6 to 1284.3) | 878.9 (872.0 to 901.1) | 895.4 (879.6 to 901.9) |
+| `scalar_2d` (control) | 1224.8 (1202.2 to 1290.3) | 1154.6 (1115.1 to 1258.8) | 831.0 (829.1 to 875.0) | 822.9 (817.7 to 826.2) |
+
+Reading, with "inside the spread" meaning head's median lies within base's min to max:
+
+- `assemble`: head is inside base's spread for all four spellings at both sizes.
+- `assemble!` at 400x400: inside for `scale_float64`, `scale_float32` and `scale_rational`.
+  `scale_pi` is outside, but on the fast side (887.0 against 914.5 to 925.4, -4%).
+- `assemble!` at 200x200: inside for `scale_float64` and `scale_float32`. `scale_pi` is
+  outside on the fast side (219.6 against 223.0 to 231.0, -2%). `scale_rational` is outside
+  on the slow side: median 235.1 against 214.1 to 215.0 (+10%), head's best child 218.7,
+  its worst 246.1. Base's spread there is 0.9 µs wide, so a head floor 2% above it counts as
+  outside. It does not reproduce at 400x400, where `scale_rational` is inside.
+- On head the four spellings' best `assemble!` children sit at 218.0 to 218.7 µs (200x200),
+  one value: all four reach the same `Float64` path. On base they spread over 211.0 to
+  223.8.
+- The control `scalar_2d` moves -1% to -6% (head faster) at both sizes.
+- `scale_float64`, identical AST on both trees, moves +0.8% (200x200) and +2.1% (400x400) in
+  `assemble!`, inside base's spread both times.
+
+Case (1) of the decision rule holds. Head lies inside base's spread for each spelling in
+warm `assemble`, at both sizes. In warm `assemble!` it does so in five of eight cells. Of
+the three outside, two are `scale_pi` (faster on head, at both sizes) and one is
+`scale_rational` at 200x200 (slower: +10% in the median, +2% in the best child). That
+cell does not reproduce at 400x400, and no spelling is slower on head at both sizes, so
+case (3) is not met. `scale_float64` itself does not shift, so case (2) is not needed. The
+9x11 shifts above (+16% to +37% in `assemble!`) are placement noise of sub-microsecond
+rows: the control moved -33% there, and `scale_float64`, unchanged by S2, moved +16%.
+
+The instances that `π`, `2.0f0` and `1 // 2` still add over `2.0` on head (the 19 to 30 of
+the instances table) are front-end passes on the pre-conversion AST: `*`, `OperatorScale`,
+`_validate_form_expression`, `resolve_ast`, `simplify_ast`, `_lower_signs`,
+`_resolve_surfaces_for_space`, `_check_bilinear_terms`, the gate and the walk, `form` and
+`_bilinear_form`. None is an `assemble` kernel (itemised for `π`: 25 instances).
+
+### JET
+
+On `bool_audit`'s elasticity row (`μ` and `λ` captured in the closure, a form that is
+already not concrete on base), `jet_form_reports` read 38 on base, 32 on the `div` tree
+(S1) and 39 on head, from S3.1's files `v4.1.4_div_bool_audit_{base,div,head}.toml`.
+The 7 reports head has over `div` (39 against 32) are runtime dispatches
+inside `_normalise_scalars`, `_normalised` and `_normalised_in`. None is in the gate. With
+literal coefficients `report_opt(form)` is 0 on head. `jet_assemble_reports` is 0 on all
+three.

@@ -366,8 +366,10 @@ Base.@constprop :aggressive function _bilinear_form(Wₕ, Vₕ, raw_ast)
     D = dim(Wₕ)
     _check_bilinear_terms(raw_ast)  # rank_one.jl
     resolved = _resolve_surfaces_for_space(resolve_ast(raw_ast), Vₕ, Wₕ)
-    ast = _split_restricted_products(_lower_signs(simplify_ast(resolved)),
-        promote_type(eltype(Wₕ), eltype(Vₕ)))
+    E = promote_type(eltype(Wₕ), eltype(Vₕ))
+    N = _join_eltype(_leaf_eltype(Wₕ), _leaf_eltype(Vₕ))
+    ast = _split_restricted_products(
+        _normalise_scalars(_lower_signs(simplify_ast(resolved)), N), E)
     _check_space_components(ast, Wₕ, trial_component_or_nothing, "trial")
     _check_space_components(ast, Vₕ, test_component_or_nothing, "test")
     _check_form_meshes(ast, Wₕ, Vₕ)  # linear.jl (gpena/Bramble.jl#629, #685)
@@ -382,6 +384,121 @@ end
 _check_space_components(ast, space, side_component, side) = _check_scalar_components(
     ast, side_component, side)
 _check_space_components(ast, ::CompositeGridSpace, side_component, side) = nothing
+
+# --- Real coefficients converted once (gpena/Bramble.jl#912) ------------------------ #
+#
+# On a Float64 space a constant scale whose scalar is a Base `AbstractFloat`, `Irrational`
+# or `Rational` is stored as a `Float64`: `2.0f0`, `π`, `1 // 2` and `2.0` give one AST
+# type and `assemble` compiles once for them. That keeps the matrix bit for bit only where
+# the scalar's first product is with a `Float64`, which holds in a form where
+#
+#   - every leaf of both spaces is a `Float64` one (a Float32 component of `W × Wf` meets
+#     `1 // 3` as a `Float32`): on a Float32 mesh `1 // 3` beside a `2.0` (the term
+#     widened to `Float64`) and `π` on a transposed pair (`_term_scale`, symmetry.jl, forms
+#     `π * true` in `Float64`) were each rounded once, in `Float64`;
+#   - no product meets two constant scales, an `Int` or a `Ref` among them: the scalars
+#     then multiply each other first (`2.0f0 * (1 // 3)` is a `Float32`), and two nested
+#     `Rational`s, which `simplify_ast` never folds (#633), partner a transposed term by
+#     their exact product (`_same_scalings`), `(A / 3) / 3` with `A' / 9`;
+#   - every scalar promotes with `Float64` to `Float64` (no `BigFloat`, complex or dual
+#     one) and every data value is a `Float64` (no function thunk, whose type is unknown):
+#     a `Float32` grid function times `π` is a `Float32`.
+#
+# Any other form is kept as built, its scalars of every type. `form` runs this after
+# `simplify_ast`, whose folding is then as it was, and before
+# `_split_restricted_products`, whose type questions then see one scalar type. All of it
+# is read off the type, so a form left as built comes back as itself and compiles nothing
+# past the question.
+#
+# Only Base's own fixed numbers convert, the set `_ConstantNumber` (bilinear_traversal.jl)
+# trusts for #876: an `Irrational` takes any symbol and a user's may read a global
+# (test/ghost/allocations.jl), and a user's `AbstractFloat` may too, so freezing either at
+# `form` would hide a later change of its value.
+const _LooseScalar = Union{Float16, Float32, Rational{<:Base.BitInteger}, Irrational{:π},
+    Irrational{:ℯ}, Irrational{:γ}, Irrational{:φ}, Irrational{:catalan}}
+
+# Whether `T` holds a constant scale whose scalar is a `_LooseScalar` other than `Float64`.
+function _type_loose_scalars(T)
+    T isa DataType || return false
+    if T <: OperatorScale
+        S = T.parameters[2]
+        S isa Type && S <: _LooseScalar && S !== Float64 && return true
+    end
+    for p in T.parameters
+        p isa Type && _type_loose_scalars(p) && return true
+    end
+    return false
+end
+
+# The most constant scales any product of `T` meets: those around it and on its two sides.
+function _type_scale_depth(T)
+    T isa DataType || return 0
+    T <: OperatorScale && return 1 + _type_scale_depth(T.parameters[3])
+    T <: Union{BilinearProduct, LinearProduct} && return _type_scale_depth(T.parameters[3]) +
+           _type_scale_depth(T.parameters[4])
+    return maximum(p -> p isa Type ? _type_scale_depth(p) : 0, T.parameters; init = 0)
+end
+
+# Whether every scalar of `T` promotes with `Float64` to `Float64` and every data value
+# of `T` is a `Float64`.
+function _float64_scalar(S)
+    S isa DataType &&
+        (S <: Base.RefValue ? _float64_scalar(S.parameters[1]) :
+         S <: Real && promote_type(Float64, S) === Float64)
+end
+function _float64_data(V)
+    V === Float64 && return true
+    return V isa DataType && V <: AbstractArray && eltype(V) === Float64
+end
+function _type_float64_values(T)
+    T isa DataType || return true
+    T <: Union{SourceFunction, DiracSource} && return false
+    T <: OperatorScale && !_float64_scalar(T.parameters[2]) && return false
+    T <: GridFunctionScale && !_float64_data(T.parameters[2]) && return false
+    T <: SourceVector && !_float64_data(T.parameters[2]) && return false
+    T <: SourceConstant && !_float64_data(T.parameters[2]) && return false
+    for p in T.parameters
+        p isa Type && !_type_float64_values(p) && return false
+    end
+    return true
+end
+precompile(_type_loose_scalars, (Any,))
+precompile(_type_scale_depth, (Any,))
+precompile(_type_float64_values, (Any,))
+@generated _holds_loose_scalar(::T) where {T} = _type_loose_scalars(T)
+@generated _normalisable(::T, ::Type{E}) where {T, E} = E === Float64 &&
+                                                        _type_loose_scalars(T) &&
+                                                        _type_scale_depth(T) <= 1 &&
+                                                        _type_float64_values(T)
+
+# The element type every leaf space of `Wₕ` has, `Nothing` where two differ: a composite's
+# `eltype` is its first leaf's, so `W × Wf` answers `Float64` for its Float32 component.
+@inline _leaf_eltype(Wₕ) = eltype(Wₕ)
+@inline _leaf_eltype(Wₕ::CompositeGridSpace) = _join_eltype(map(_leaf_eltype, Wₕ.spaces)...)
+@inline _join_eltype(T) = T
+@inline _join_eltype(T, U, rest...) = T === U ? _join_eltype(T, rest...) : Nothing
+
+# `ast` with its loose scalars converted where that keeps the matrix (above), for spaces
+# whose every leaf has element type `E` (`Nothing` where two leaves' differ).
+@inline _normalise_scalars(ast, ::Type{E}) where {E} = _normalisable(ast, E) ?
+                                                       _normalised(ast) : ast
+@inline _normalised_in(op) = _holds_loose_scalar(op) ? _normalised(op) : op
+@inline _normalised(op) = op
+@inline _normalised(op::UnaryWrapper) = _rewrap_inner(op, _normalised_in(op.inner_op))
+@inline _normalised(op::OperatorScale) = OperatorScale(
+    _normalised_scalar(op.scalar), _normalised_in(op.inner_op))
+@inline _normalised(op::OperatorAdd) = OperatorAdd(
+    _normalised_in(op.left_op), _normalised_in(op.right_op))
+@inline function _normalised(op::BilinearProduct{D, W}) where {D, W}
+    l, r = _normalised_in(op.left_op), _normalised_in(op.right_op)
+    return BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+end
+@inline function _normalised(op::LinearProduct{D, W}) where {D, W}
+    l, r = _normalised_in(op.left_op), _normalised_in(op.right_op)
+    return LinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+end
+@inline _normalised_scalar(c) = c
+@inline _normalised_scalar(c::_LooseScalar) = Float64(c)
 
 # --- At most two restricted summands per product (gpena/Bramble.jl#727) ------------- #
 #

@@ -162,6 +162,25 @@ end
         @test_opt target_modules = TM mul!(y, op, x)
     end
 
+    # The elasticity form (#921): `divₘₕ` built each term with a `foldl` over a filtered
+    # `1:D`, so its node type was not inferred and the 3D `form` inferred `Any`. Graded
+    # meshes; test/form/vector_calculus.jl owns the assembled values.
+    @testset "Elasticity form" begin
+        g(n, a) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * a)
+        f = (u, v) -> 2.0 * inner₊(εₕ(u), εₕ(v)) + 3.0 * inner₊(divₘₕ(u), divₘₕ(v))
+        for (bx, n) in ((box((0.0, 0.0), (1.0, 1.0)), (9, 11)),
+            (box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)), (5, 5, 5)))
+            D = length(n)
+            Ωₕ = mesh(domain(bx), n)
+            Bramble.change_points!(Ωₕ, ntuple(d -> g(n[d], d), D))
+            W = gridspace(Ωₕ)^Val(D)
+            u = Bramble.trial_function(W)
+            @test isconcretetype(only(Base.return_types(divₘₕ, (typeof(u),))))
+            @test isconcretetype(only(Base.return_types(εₕ, (typeof(u),))))
+            @test @inferred(form(W, W, f)) isa Bramble.BilinearForm
+        end
+    end
+
     # The polygon path (#202): the closure in `mesh`, the masked spaces and the exact
     # signed distance, in both precisions (a Float32 polygon once threw in the closure).
     @testset "Polygon" begin
