@@ -362,20 +362,26 @@ end
 @inline _mf_sink_geom(_, _) = nothing
 
 # `mul!(y, op, x, true, false)` computed on the rows of the walk `walk` alone (`_WalkRows`,
-# a form on ghost spaces whose test closure reads those rows only): a serial operator walks
-# the walk's points and gathers its rows; every other row of `y` is zero or a sum of some of
-# its entries, which no reader of `y` reads. A threaded operator, or the whole grid
-# (`nothing`), takes `mul!`.
+# a form on ghost spaces whose test closure reads those rows only): the operator walks the
+# walk's points and gathers its rows, serially or in the bands of its fused sweep, each band
+# over the walk's rows and points in its slab (`_mf_visit_band!`); every other row of `y` is
+# zero or a sum of some of its entries, which no reader of `y` reads. The whole grid
+# (`nothing`) takes `mul!`.
 _mf_walked_mul!(y, op::MatrixFreeOperator, x, ::Nothing) = mul!(y, op, x, true, false)
 function _mf_walked_mul!(y, op::MatrixFreeOperator, x, walk::_WalkRows)
-    (walk.whole || !(op.policy isa CpuSerial)) && return mul!(y, op, x, true, false)
+    walk.whole && return mul!(y, op, x, true, false)
     (length(x) == op.ncols && length(y) == op.nrows) ||
         _throw_matrix_free_dimmismatch(op, x, y)
     fill!(y, zero(eltype(y)))
     mask = _mf_mask(op)
     a = op.form
-    _mf_apply_parts!(op.policy, ActionSink(y, x, true, mask, op.geom), trial_space(a),
-        test_space(a), a.ast, walk)
+    if op.policy isa CpuSerial
+        _mf_apply_parts!(op.policy, ActionSink(y, x, true, mask, op.geom), trial_space(a),
+            test_space(a), a.ast, walk)
+    else
+        _mf_product!(op.plan, op.policy,
+            ActionSink(y, x, true, mask, _mf_sink_geom(op.policy, op.geom)), a, walk)
+    end
     _mf_identity_rows!(y, x, true, mask)
     return y
 end
@@ -640,10 +646,14 @@ end
 end
 
 # One point of a threaded sweep (`_sweep_point!`, bilinear_execution.jl): the stencil at `I`,
-# through the guarded entry walk. The sink carries its own `α`.
+# through the guarded entry walk. The sink carries its own `α`. A batched target reaches a
+# point only where a cut walk too short to band walks on one thread (`_sweep_bilinear!`).
 @inline _sweep_point!(
     s::_ActionTarget, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, _) = _replay_point!(
     s, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset)
+@inline _sweep_point!(t::_BatchedAction, term, sp, I, lin_indices, mesh_markers, row_offset,
+    col_offset, α) = _sweep_point!(
+    t.s, term, sp, I, lin_indices, mesh_markers, row_offset, col_offset, α)
 
 # `CpuPolyester`'s bands and colours, through the same hooks the threaded replay uses
 # (`_batch_bilinear_band_replay!`, `_batch_bilinear_colour_replay!`), filled by
@@ -653,9 +663,11 @@ end
         ::CpuPolyester, s::_ActionTarget, sp, term::TERM, ax, bidx, nbands::Int, rest,
         lin_indices, mesh_markers, row_offset::Int, col_offset::Int, _
 ) where {TERM}
+    wsp, wax, wrest = _batch_walk(sp, ax, rest, nbands)
     return _late(
         _batch_bilinear_band_replay!,
-        s, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, row_offset, col_offset
+        s, wsp, term, wax, bidx, nbands, wrest, lin_indices, mesh_markers, row_offset,
+        col_offset
     )
 end
 
@@ -1447,6 +1459,33 @@ end
     return nothing
 end
 
+# The same over a cut walk (`_RowRestricted`, #884), on the band's slices moved to balance
+# the walk's points (`_walk_own`): the walk's rows of the owned slices gathered, and its
+# points of each region cut to `lo`, `core` and `hi` as below, each piece then cut to the
+# walk's line pieces (`_each_piece`) in the region's own order, so a row the walk keeps
+# still takes its entries in the serial cut walk's order.
+@inline function _mf_visit_band!(
+        p::_MFPass, s, term::TERM, rsp::_RowRestricted, ro::Int, co::Int) where {TERM}
+    sp = rsp.space
+    dims = size(indices(mesh(sp)))
+    len = last(dims)
+    stride = prod(Base.front(dims))
+    own = _walk_own(rsp.walk, p.own)
+    a, b = first(own), last(own)
+    vlo, vhi = max(1, a - p.omax), min(len, b - p.omin)
+    clo, chi = max(vlo, a - p.omin), min(vhi, b - p.omax)
+    owned = _mf_owned(s, (a - 1) * stride + 1, b * stride, ro, co)
+    lo, core, hi = clo > chi ? (vlo:vhi, 1:0, 1:0) : (vlo:(clo - 1), clo:chi, (chi + 1):vhi)
+    if _mf_gathers(term) && _peelable(axes(indices(mesh(sp))), _stencil_margin(term))
+        _mf_gather_unit!(s, term, sp, ro, co, own, rsp.walk.rows)
+        _mf_whole(s.geom, term, sp) ||
+            _mf_visit_shell!(s, owned, term, rsp, ro, co, lo, core, hi)
+    else
+        _mf_visit_slab!(s, owned, term, rsp, ro, co, lo, core, hi)
+    end
+    return nothing
+end
+
 # `visit_bilinear_stencil` restricted to the points of `sp`'s grid whose last index lies in
 # `lo`, `core` or `hi`: the interior box and each boundary slab of the whole grid, in the
 # whole-grid walk's order, each cut to the three ranges in turn, the interior unguarded.
@@ -1499,7 +1538,64 @@ end
     return nothing
 end
 
-# One piece of the whole-grid walk (`front` by `r`), cut to the last-axis range `cut`.
+# `_mf_visit_slab!` and `_mf_visit_shell!` over the points of a cut walk alone, read through
+# the leaf's walk state (`_walk_space`), as the serial cut walk reads them.
+@noinline function _mf_visit_slab!(
+        s::SINK, owned::OWNED, term::TERM, rsp::_RowRestricted, ro::Int, co::Int,
+        lo::UnitRange{Int}, core::UnitRange{Int}, hi::UnitRange{Int}
+) where {SINK, OWNED, TERM}
+    bound, mesh_markers = _mf_bind_walk(term, rsp.space)
+    sp = _walk_space(rsp.space)
+    pts = rsp.walk.points
+    grid_inds = indices(mesh(sp))
+    lin_indices = LinearIndices(grid_inds)
+    margin = _stencil_margin(term)
+    ax = axes(grid_inds)
+    if _peelable(ax, margin)
+        interior = map(r -> _interior_range(r, margin), ax)
+        front, r = Base.front(interior), last(interior)
+        _mf_piece!(owned, bound, sp, mesh_markers, lin_indices, front, r, lo, ro, co, true,
+            pts)
+        _mf_piece!(s, bound, sp, mesh_markers, lin_indices, front, r, core, ro, co, true,
+            pts)
+        _mf_piece!(owned, bound, sp, mesh_markers, lin_indices, front, r, hi, ro, co, true,
+            pts)
+        _mf_visit_shell!(s, owned, term, rsp, ro, co, lo, core, hi)
+    else
+        front, r = map(_full_range, Base.front(ax)), _full_range(last(ax))
+        _mf_piece!(owned, bound, sp, mesh_markers, lin_indices, front, r, lo, ro, co, false,
+            pts)
+        _mf_piece!(s, bound, sp, mesh_markers, lin_indices, front, r, core, ro, co, false,
+            pts)
+        _mf_piece!(owned, bound, sp, mesh_markers, lin_indices, front, r, hi, ro, co, false,
+            pts)
+    end
+    return nothing
+end
+
+@noinline function _mf_visit_shell!(
+        s::SINK, owned::OWNED, term::TERM, rsp::_RowRestricted, ro::Int, co::Int,
+        lo::UnitRange{Int}, core::UnitRange{Int}, hi::UnitRange{Int}
+) where {SINK, OWNED, TERM}
+    bound, mesh_markers = _mf_bind_walk(term, rsp.space)
+    sp = _walk_space(rsp.space)
+    pts = rsp.walk.points
+    grid_inds = indices(mesh(sp))
+    lin_indices = LinearIndices(grid_inds)
+    @inbounds for shell in _boundary_shell_slabs(axes(grid_inds), _stencil_margin(term))
+        front, r = Base.front(shell.indices), last(shell.indices)
+        _mf_piece!(owned, bound, sp, mesh_markers, lin_indices, front, r, lo, ro, co, false,
+            pts)
+        _mf_piece!(s, bound, sp, mesh_markers, lin_indices, front, r, core, ro, co, false,
+            pts)
+        _mf_piece!(owned, bound, sp, mesh_markers, lin_indices, front, r, hi, ro, co, false,
+            pts)
+    end
+    return nothing
+end
+
+# One piece of the whole-grid walk (`front` by `r`), cut to the last-axis range `cut`, and
+# to the line pieces of the walk's points `pts` (`_GridLines`) when given.
 @inline function _mf_piece!(
         sink, term, sp, mesh_markers, lin_indices, front, r, cut, ro, co, unguarded::Bool
 )
@@ -1512,34 +1608,65 @@ end
     end
     return nothing
 end
+@inline function _mf_piece!(
+        sink, term, sp, mesh_markers, lin_indices, front, r, cut, ro, co, unguarded::Bool,
+        pts::_GridLines
+)
+    region = CartesianIndices((front..., intersect(r, cut)))
+    isempty(region) && return nothing
+    _each_piece(region, pts) do piece
+        if unguarded
+            _mf_interior_piece!(sink, term, sp, mesh_markers, lin_indices, piece, ro, co)
+        else
+            _visit_guarded_region!(sink, term, sp, mesh_markers, lin_indices, piece, ro, co)
+        end
+    end
+    return nothing
+end
+
+# An unguarded piece, behind a call of its own as the guarded walk is: inlined into the
+# piece loop of a `CpuPolyester` band, the stencil's evaluation was left out of line and the
+# cut product ran 2 times slower than over the whole grid.
+@noinline function _mf_interior_piece!(
+        sink, term, sp, mesh_markers, lin_indices, piece, ro, co)
+    _visit_interior!(sink, term, sp, mesh_markers, lin_indices, piece, ro, co)
+    return nothing
+end
 
 # One product. Without a plan, the unit walk under the operator's own policy: serial, or the
 # per-unit threaded sweep. A plan whose form is not `a` (an operator rebuilt around
-# another form) walks per unit too, since its bands would read the wrong form.
-@inline _mf_product!(::Nothing, policy, s, a::BilinearForm) = _mf_apply!(policy, s, a)
+# another form) walks per unit too, since its bands would read the wrong form. `walk` cuts
+# every unit to its points (`_mf_walked_mul!`), or is `nothing`.
+@inline function _mf_product!(::Nothing, policy, s, a::BilinearForm, walk = nothing)
+    return _mf_apply_parts!(policy, s, trial_space(a), test_space(a), a.ast, walk)
+end
 
-function _mf_product!(plan::_MFFusedPlan{D}, policy, s::ActionSink, a::BilinearForm) where {D}
-    plan.form === a || return _mf_apply!(policy, s, a)
-    len = plan.dims[D]
-    nbands = min(Threads.nthreads(), len)
-    _mf_run_bands!(plan.policy, s, a, plan, nbands)
-    plan.interp && _mf_apply!(_MFPass(_MF_SERIAL, 1:0, 0, 0, _MF_NO_COLLECT), s, a)
+function _mf_product!(plan::_MFFusedPlan{D}, policy, s::ActionSink, a::BilinearForm,
+        walk = nothing) where {D}
+    plan.form === a ||
+        return _mf_apply_parts!(policy, s, trial_space(a), test_space(a), a.ast, walk)
+    nbands = _mf_nbands(plan)
+    _mf_run_bands!(plan.policy, s, a, plan, nbands, walk)
+    plan.interp && _mf_apply_parts!(_MFPass(_MF_SERIAL, 1:0, 0, 0, _MF_NO_COLLECT), s,
+        trial_space(a), test_space(a), a.ast, walk)
     return nothing
 end
 
 # Task `k` of `ntasks` (`_run_bands!`'s trailing pair): bands `k`, `k + ntasks`, ... of
 # `nbands`, every unit walked over each. `y` is `s.y`, first for `_run_bands!`'s sake. The
-# form is the plan's (`_MFFusedPlan`); the third argument is ignored, `nothing` under
-# `_run_bands!`. `CpuPolyester` runs `_batch_mf_bands!` instead, which captures no plan.
+# form is the plan's (`_MFFusedPlan`); the third argument is the walk each unit is cut to
+# (`_WalkRows`), or `nothing`. `CpuPolyester` runs `_batch_mf_bands!` instead, which
+# captures no plan.
 @noinline function _mf_band_task!(
-        _y, s, _, plan::_MFFusedPlan{D}, nbands::Int, ntasks::Int, k::Int
+        _y, s, walk, plan::_MFFusedPlan{D}, nbands::Int, ntasks::Int, k::Int
 ) where {D}
     a = plan.form
     s = _mf_with_geom(s, plan.geom)
     len = plan.dims[D]
     for b in k:ntasks:nbands
         own = _band_range(1:len, nbands, b)
-        _mf_apply!(_MFPass(_MF_BAND, own, plan.omin, plan.omax, _MF_NO_COLLECT), s, a)
+        _mf_apply_parts!(_MFPass(_MF_BAND, own, plan.omin, plan.omax, _MF_NO_COLLECT), s,
+            trial_space(a), test_space(a), a.ast, walk)
     end
     return nothing
 end
@@ -1600,10 +1727,16 @@ function _mf_prebound(op::Union{BilinearProduct, LinearProduct, OperatorAdd})
 end
 _mf_prebound(_) = false
 
-# Band `b` of a `CpuThreaded` fused product, from the sink and plan its spawn shares.
-@noinline function _mf_spawned_band!(shared::Base.RefValue, nbands::Int, b::Int)
+# The fused product's band count.
+@inline _mf_nbands(plan::_MFFusedPlan{D}) where {D} = min(Threads.nthreads(), plan.dims[D])
+
+# Band `b` of a `CpuThreaded` fused product, from the sink and plan its spawn shares, cut to
+# `walk`. Its band count is the plan's (`_mf_nbands`), taken here rather than captured, so
+# the walk leaves a spawned task's closure no larger than a whole walk's.
+@noinline function _mf_spawned_band!(shared::Base.RefValue, walk, b::Int)
     s, plan = shared[]
-    _mf_band_task!(s.y, s, nothing, plan, nbands, nbands, b)
+    nbands = _mf_nbands(plan)
+    _mf_band_task!(s.y, s, walk, plan, nbands, nbands, b)
     return nothing
 end
 
@@ -1623,31 +1756,32 @@ end
 # rows, in the serial order, so the result does not depend on where a band runs. The
 # spawned tasks share one `Ref` to the sink and the plan, which holds the form and its
 # geometry inline, so each task's closure holds a pointer rather than a copy of them.
-@inline _mf_run_bands!(policy::CpuPolicy, s, _, plan, nbands::Int) = _run_bands!(
-    policy, _mf_band_task!, s.y, s, nothing, plan, nbands)
+@inline function _mf_run_bands!(policy::CpuPolicy, s, _, plan, nbands::Int, walk = nothing)
+    return _run_bands!(policy, _mf_band_task!, s.y, s, walk, plan, nbands)
+end
 
-@noinline _mf_run_bands!(::CpuPolyester, s, _, plan, nbands::Int) = _late(
-    _batch_mf_bands!, s, plan, nbands)
+@noinline _mf_run_bands!(::CpuPolyester, s, _, plan, nbands::Int, walk = nothing) = _late(
+    _batch_mf_bands!, s, plan, nbands, _walk_cut(walk))
 
 """
-    _batch_mf_bands!(s::ActionSink, plan::_MFFusedPlan, nbands::Int) -> Nothing
+    _batch_mf_bands!(s::ActionSink, plan::_MFFusedPlan, nbands::Int, walk) -> Nothing
 
 [`CpuPolyester`](@ref)'s fused sweep, filled by `BramblePolyesterExt`: one `Polyester.@batch`
-task per band of `nbands`, each walking every unit of `plan`'s form over its band, as
-`_mf_band_task!` does. Its `src/` method only throws, naming Polyester;
-`BramblePolyesterExt` defines the one that runs.
+task per band of `nbands`, each walking every unit of `plan`'s form over its band, cut to
+`walk` (`_WalkCut`, or `nothing`), as `_mf_band_task!` does. Its `src/` method only throws,
+naming Polyester; `BramblePolyesterExt` defines the one that runs.
 """
-@noinline function _batch_mf_bands!(s, plan, nbands::Int)
+@noinline function _batch_mf_bands!(s, plan, nbands::Int, walk)
     return _throw_cpubatch_without_polyester(:_batch_mf_bands!)
 end
 
-@noinline function _mf_run_bands!(::CpuThreaded, s, a, plan, nbands::Int)
+@noinline function _mf_run_bands!(::CpuThreaded, s, a, plan, nbands::Int, walk = nothing)
     shared = Ref((s, plan))
     @sync begin
         for b in 2:nbands
-            Threads.@spawn _mf_spawned_band!(shared, nbands, b)
+            Threads.@spawn _mf_spawned_band!(shared, walk, b)
         end
-        _mf_band_task!(s.y, s, nothing, plan, nbands, nbands, 1)
+        _mf_band_task!(s.y, s, walk, plan, nbands, nbands, 1)
     end
     return nothing
 end

@@ -44,9 +44,11 @@ whenever `A_pad` and the two closures are.
 
 When the test closure skips rows, as on polygon and level-set spaces, which read the
 interior nodes only, `A_pad` stores the rows the closure reads and assembly walks only the
-points those rows need, under `CpuSerial`; the matrix-free product walks the same points.
-A threaded policy, or a walk that would keep more than 7/8 of the points, walks the whole
-padded grid. The whole-grid padded matrix is `assemble(a.padded)`.
+points those rows need; the matrix-free product walks the same points. Under `CpuThreaded`
+and `CpuPolyester` each band of the threaded walk visits the walk's points in its own slab,
+the slabs cut to hold about as many points each. A walk that would keep more than 7/8 of
+the points walks the whole padded grid. The whole-grid padded matrix is
+`assemble(a.padded)`.
 
 `dirichlet` and `symmetrize` replace rows of the reduced system when its unknowns are the
 physical nodes in mesh order (every ghost eliminated, no node fixed by a Dirichlet
