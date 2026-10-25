@@ -85,7 +85,7 @@ function measure(name, n, A, a, opf)
 end
 
 meshseed(dom, ns, pol) = (Random.seed!(2);
-mesh(dom, ns, (false, false); backend = Bramble.backend(policy = pol)))
+    mesh(dom, ns, (false, false); backend = Bramble.backend(policy = pol)))
 
 function polygon_row(name, Ωₕ, label)
     U, V = polygon_spaces(Ωₕ, label, x -> 0.0)
