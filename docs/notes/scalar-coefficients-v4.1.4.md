@@ -234,6 +234,82 @@ degree of freedom: the warm times here say that no spelling got slower than the 
 by more than a quarter of a microsecond, and nothing more. A warm A/B on a mesh large
 enough to take tens of µs would settle it.
 
+### Warm on a larger mesh
+
+The 9x11 rows above are too short to decide the criterion: they take about 1 µs, and rows
+that short move by tens of percent with code placement alone (the control `scalar_2d` moved
+-33% for a form S2 cannot touch, and `scale_float64`, whose AST is identical on both trees
+because S2's gate returns it unchanged, moved +16%). So the warm times were retaken on a
+graded 200x200 mesh (the same `graded` as `snoop_instances.jl`), where warm `assemble!`
+takes about 0.2 ms, and on 400x400 (about 0.9 ms) as a second size. A scratch script outside
+the repository (`~/bramble-scratch/v414sd/s32/warm_big.jl`) builds the mesh and the form in
+a fresh child process, warms up (one `form`, one `assemble`, then three rounds of both),
+then times warm `assemble(a)` and `assemble!(A, a)` as the min of 5, results kept live
+with `Base.donotdelete`. Rows: the four spellings of `c * inner₊(∇ₕ(u), ∇ₕ(v))` and, as a
+control, `inner₊(∇ₕ(u), ∇ₕ(v))` (`scalar_2d`'s form) on the same mesh. 5 rounds per size, in
+each round the five rows in turn and each row base then head, so the load drifts through
+both trees together. Figures are the median over the 5 children, then min to max, in µs.
+
+Conditions: both trees as in "Method and conditions" above, alone at 4 threads
+(`julia_slot.sh 4`, `BRAMBLE_JULIA_SLOTS=4`), default `-O`, under `caffeinate -dims`. On AC
+(battery 100%, charging). `gate_preflight.sh --timing` passed at 21:06 (load 1.91, no other
+julia, nothing above 50% CPU; OneDrive running, not paused, its ASK line). The 1-minute
+load was 1.92 at the start of the run (21:06) and 3.04 at its end (21:11), the last of
+which includes the run itself. Not "under load". Raw rows:
+`~/bramble-scratch/v414sd/s32/big.txt`.
+
+Mesh 200x200:
+
+| row | `assemble` base | `assemble` head | `assemble!` base | `assemble!` head |
+|---|---:|---:|---:|---:|
+| `scale_float64` | 320.4 (269.4 to 327.7) | 280.1 (274.2 to 321.8) | 217.0 (211.0 to 245.7) | 218.7 (218.0 to 219.1) |
+| `scale_float32` | 282.8 (269.5 to 320.8) | 288.5 (273.5 to 356.2) | 215.2 (214.5 to 238.6) | 218.5 (218.0 to 219.2) |
+| `scale_pi` | 291.6 (280.9 to 374.3) | 321.8 (271.0 to 334.2) | 223.8 (223.0 to 231.0) | 219.6 (218.6 to 220.6) |
+| `scale_rational` | 278.8 (264.8 to 370.8) | 310.3 (284.2 to 336.7) | 214.2 (214.1 to 215.0) | 235.1 (218.7 to 246.1) |
+| `scalar_2d` (control) | 275.3 (270.6 to 304.5) | 268.4 (264.8 to 273.5) | 205.3 (201.2 to 206.1) | 201.2 (197.3 to 202.9) |
+
+Mesh 400x400:
+
+| row | `assemble` base | `assemble` head | `assemble!` base | `assemble!` head |
+|---|---:|---:|---:|---:|
+| `scale_float64` | 1138.0 (1131.7 to 1189.5) | 1140.9 (1134.3 to 1162.6) | 894.7 (882.6 to 931.5) | 913.7 (888.1 to 935.7) |
+| `scale_float32` | 1171.2 (1126.5 to 1195.7) | 1174.5 (1141.4 to 1227.2) | 876.8 (868.9 to 904.6) | 889.0 (879.5 to 912.7) |
+| `scale_pi` | 1194.0 (1151.0 to 1262.0) | 1181.0 (1140.6 to 1195.2) | 923.1 (914.5 to 925.4) | 887.0 (881.6 to 924.2) |
+| `scale_rational` | 1118.2 (1101.1 to 1210.1) | 1199.4 (1156.6 to 1284.3) | 878.9 (872.0 to 901.1) | 895.4 (879.6 to 901.9) |
+| `scalar_2d` (control) | 1224.8 (1202.2 to 1290.3) | 1154.6 (1115.1 to 1258.8) | 831.0 (829.1 to 875.0) | 822.9 (817.7 to 826.2) |
+
+Reading, with "inside the spread" meaning head's median lies within base's min to max:
+
+- `assemble`: head is inside base's spread for all four spellings at both sizes.
+- `assemble!` at 400x400: inside for `scale_float64`, `scale_float32` and `scale_rational`.
+  `scale_pi` is outside, but on the fast side (887.0 against 914.5 to 925.4, -4%).
+- `assemble!` at 200x200: inside for `scale_float64` and `scale_float32`. `scale_pi` is
+  outside on the fast side (219.6 against 223.0 to 231.0, -2%). `scale_rational` is outside
+  on the slow side: median 235.1 against 214.1 to 215.0 (+10%), head's best child 218.7,
+  its worst 246.1. Base's spread there is 0.9 µs wide, so a head floor 2% above it counts as
+  outside. It does not reproduce at 400x400, where `scale_rational` is inside.
+- On head the four spellings' best `assemble!` children sit at 218.0 to 218.7 µs (200x200),
+  one value: all four reach the same `Float64` path. On base they spread over 211.0 to
+  223.8.
+- The control `scalar_2d` moves -1% to -6% (head faster) at both sizes.
+- `scale_float64`, identical AST on both trees, moves +0.8% (200x200) and +2.1% (400x400) in
+  `assemble!`, inside base's spread both times.
+
+Case (1) of the decision rule holds. Head lies inside base's spread for each spelling in
+warm `assemble`, at both sizes. In warm `assemble!` it does so in five of eight cells. Of
+the three outside, two are `scale_pi` (faster on head, at both sizes) and one is
+`scale_rational` at 200x200 (slower: +10% in the median, +2% in the best child). That
+cell does not reproduce at 400x400, and no spelling is slower on head at both sizes, so
+case (3) is not met. `scale_float64` itself does not shift, so case (2) is not needed. The
+9x11 shifts above (+16% to +37% in `assemble!`) are placement noise of sub-microsecond
+rows: the control moved -33% there, and `scale_float64`, unchanged by S2, moved +16%.
+
+The instances that `π`, `2.0f0` and `1 // 2` still add over `2.0` on head (the 19 to 30 of
+the instances table) are front-end passes on the pre-conversion AST: `*`, `OperatorScale`,
+`_validate_form_expression`, `resolve_ast`, `simplify_ast`, `_lower_signs`,
+`_resolve_surfaces_for_space`, `_check_bilinear_terms`, the gate and the walk, `form` and
+`_bilinear_form`. None is an `assemble` kernel (itemised for `π`: 25 instances).
+
 ### JET
 
 On `bool_audit`'s elasticity row (`μ` and `λ` captured in the closure, a form that is
