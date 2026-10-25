@@ -1033,14 +1033,14 @@ end
     return nothing
 end
 
-# The point reads the leaf through its walk state (`_walk_space`), built here in the task:
-# held in the point, the state's meshes grew the closure of an L-shaped 13×13 refill to
-# 1008 bytes.
+# The point reads the leaf as the walk does (`_walk_space`), built here in the task: through
+# its walk state, or the space itself for a term reading a component. Held in the point,
+# the state's meshes grew the closure of an L-shaped 13×13 refill to 1008 bytes.
 @inline function _cut_band!(point, nbands::Int, span::Int, b::Int)
     ax = axes(point.lin_indices)
     slices = _cut_slices(point.sp.walk, length(last(ax)), nbands, span, b)
     band = CartesianIndices((Base.front(ax)..., slices))
-    rsp = _RowRestricted(_walk_space(point.sp.space), point.sp.walk)
+    rsp = _RowRestricted(_walk_space(point.sp.space, typeof(point.term)), point.sp.walk)
     p = _BilinearPoint(point.target, rsp, point.term, point.lin_indices, point.mesh_markers,
         point.row_offset, point.col_offset, point.α)
     _each_walked(p, rsp, band)
@@ -1262,7 +1262,7 @@ function _sweep_bilinear_serial!(
     lin_indices = LinearIndices(grid_inds)
     bound, mesh_markers = _bind_walk(term, sp)
     walked = _has_marks(typeof(bound)) ? _split_term(A, bound, term, grid_inds) : bound
-    wrsp = _RowRestricted(_walk_space(sp), rsp.walk)
+    wrsp = _RowRestricted(_walk_space(sp, typeof(walked)), rsp.walk)
     point = _BilinearPoint(
         A, wrsp, walked, lin_indices, mesh_markers, row_offset, col_offset, α)
     _each_walked(point, wrsp, grid_inds)
@@ -1288,11 +1288,11 @@ function _sweep_bilinear!(
 end
 
 # The bands of a cut walk (`_RowRestricted`, #884): the bands and colours of the whole grid,
-# each band walking only the walk's points in it (`_each_walked`) and reading the leaf
-# through its walk state (`_cut_band!`), as the serial cut walk does. Bands still own whole
-# slices of the last axis, each holding about as many points (`_cut_slices`). A grid too
-# short to band walks its points on one thread, because a point colour is strided and the
-# walk's line pieces do not cut it.
+# each band walking only the walk's points in it (`_each_walked`) and reading the leaf as
+# the serial cut walk does (`_cut_band!`): through its walk state, or the space itself for
+# a term reading a component. Bands still own whole slices of the last axis, each holding
+# about as many points (`_cut_slices`). A grid too short to band walks its points on one
+# thread, because a point colour is strided and the walk's line pieces do not cut it.
 function _sweep_bilinear!(
         A, rsp::_RowRestricted, term::TERM, strides, row_offset::Int, col_offset::Int,
         α = true

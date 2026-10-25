@@ -1121,6 +1121,27 @@ See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
     return ScalarGridSpace{D, T, VT, typeof(s)}(s, sp.weights)
 end
 
+# The space a walk of a term of type `T` reads: `sp` itself for a term reading a component
+# of a composite space (`u(i)`, `v(i)`), whose every tap re-evaluates its operand out of
+# line (`_wraps_leaf`, `ast/common.jl`) and so passes the space to a call per tap. A
+# `GhostMesh` passes as a pointer, but its walk state is an immutable of nested states,
+# copied at each such call: 2D padded vector Laplacian, 200x200 random, warm `assemble!`,
+# 2.62 ms through the state and 1.23 ms through `sp`, the plain composite 0.97 ms (#876).
+# A scalar term's taps on a bare leaf are inlined and keep the state.
+@inline _walk_space(sp, ::Type{T}) where {T} = _reads_component(T) ? sp : _walk_space(sp)
+
+# Whether a term of type `T` holds a component leaf, walking its fields and tuples of them.
+# A type it cannot see through answers `true`, so the walk reads `sp`.
+Base.@nospecializeinfer Base.@assume_effects :foldable function _reads_component(
+        @nospecialize(T))
+    (T isa DataType && isconcretetype(T)) || return true
+    T <: Union{IndexedTrialFunction, IndexedTestFunction} && return true
+    for F in fieldtypes(T)
+        (F <: LazyOp || F <: Tuple) && _reads_component(F) && return true
+    end
+    return false
+end
+
 # The walk itself, which the replay calls directly: one method instance per (sink, term)
 # where the two `visit_bilinear_stencil` methods above, the one calling the other, compiled
 # two.
@@ -1138,7 +1159,7 @@ end
     weights(sp)
     bound, mesh_markers = _may_restrict(typeof(term)) ? _bind_walk(term, mesh(sp)) :
                           (term, nothing)
-    wsp = _walk_space(sp)
+    wsp = _walk_space(sp, TERM)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     ax = axes(grid_inds)
@@ -1379,7 +1400,7 @@ end
     weights(sp)
     bound, mesh_markers = _may_restrict(typeof(term)) ? _bind_walk(term, mesh(sp)) :
                           (term, nothing)
-    wsp = _walk_space(sp)
+    wsp = _walk_space(sp, TERM)
     grid_inds = indices(Ωₕ)
     lin_indices = LinearIndices(grid_inds)
     ax = axes(grid_inds)

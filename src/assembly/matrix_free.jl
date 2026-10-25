@@ -794,7 +794,7 @@ end
         s::SINK, term::TERM, rsp::_RowRestricted, ro::Int, co::Int) where {SINK, TERM}
     sp = rsp.space
     bound, mesh_markers = _mf_bind_walk(term, sp)
-    wsp = _walk_space(sp)
+    wsp = _walk_space(sp, TERM)
     grid_inds = indices(mesh(sp))
     lin_indices = LinearIndices(grid_inds)
     for slab in _boundary_shell_slabs(axes(grid_inds), _stencil_margin(term))
@@ -833,14 +833,15 @@ end
 # loop is compiled into, so that they are constants there. Weights are live. When the
 # operator's cached geometry `geom` answers the term (`_mf_evaluator`), they come from it
 # instead, over every point with a stencil (`_mf_whole_box`), and no shell is left to scatter.
-# The stencils read a ghost space through its walk state (`_walk_space`), as the walk does.
+# The stencils read a ghost space as the walk does (`_walk_space`): through its walk state,
+# or the space itself for a term reading a component.
 @noinline function _mf_gather!(
         y, x, α, mask, geom, term::TERM, sp0, rs::Int, cs::Int, tr::Val,
         cut::UnitRange{Int}, live = nothing
 ) where {TERM}
     Ωₕ = mesh(sp0)
     bound, mesh_markers = _mf_bind_walk(term, sp0)
-    sp = _walk_space(sp0)
+    sp = _walk_space(sp0, TERM)
     grid_inds = indices(Ωₕ)
     lin = LinearIndices(grid_inds)
     margin = _stencil_margin(term)
@@ -1538,14 +1539,14 @@ end
     return nothing
 end
 
-# `_mf_visit_slab!` and `_mf_visit_shell!` over the points of a cut walk alone, read through
-# the leaf's walk state (`_walk_space`), as the serial cut walk reads them.
+# `_mf_visit_slab!` and `_mf_visit_shell!` over the points of a cut walk alone, reading the
+# leaf as the serial cut walk does (`_walk_space`).
 @noinline function _mf_visit_slab!(
         s::SINK, owned::OWNED, term::TERM, rsp::_RowRestricted, ro::Int, co::Int,
         lo::UnitRange{Int}, core::UnitRange{Int}, hi::UnitRange{Int}
 ) where {SINK, OWNED, TERM}
     bound, mesh_markers = _mf_bind_walk(term, rsp.space)
-    sp = _walk_space(rsp.space)
+    sp = _walk_space(rsp.space, TERM)
     pts = rsp.walk.points
     grid_inds = indices(mesh(sp))
     lin_indices = LinearIndices(grid_inds)
@@ -1578,7 +1579,7 @@ end
         lo::UnitRange{Int}, core::UnitRange{Int}, hi::UnitRange{Int}
 ) where {SINK, OWNED, TERM}
     bound, mesh_markers = _mf_bind_walk(term, rsp.space)
-    sp = _walk_space(rsp.space)
+    sp = _walk_space(rsp.space, TERM)
     pts = rsp.walk.points
     grid_inds = indices(mesh(sp))
     lin_indices = LinearIndices(grid_inds)
