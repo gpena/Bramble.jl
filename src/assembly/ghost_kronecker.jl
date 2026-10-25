@@ -135,8 +135,8 @@ end
 # `_kron_project` with the given axis spaces: the factors of `term` on the padded axes.
 _ghost_kron_project(::LazyOp, ::Any, ::Any) = nothing
 
-function _ghost_kron_project(term::BilinearProduct{D, I}, Ωp::MeshnD{D}, spaces) where {D, I}
-    inners = _kron_inners(I, Ωp)
+function _ghost_kron_project(term::BilinearProduct{D}, Ωp::MeshnD{D}, spaces) where {D}
+    inners = _kron_inners(term.inner, Ωp)
     inners === nothing && return nothing
     ls = _kron_split(term.left_op)
     ls === nothing || (ls = _kron_coefs(ls, Ωp))
@@ -279,9 +279,10 @@ end
 
 # What in `term` has no factors on the padded axes: the node `_kron_refused_node` names,
 # or, when every node projects, a region restriction, which the padded axes do not carry.
-function _ghost_kron_refused_node(term::BilinearProduct{D, I}, Ωp) where {D, I}
+function _ghost_kron_refused_node(term::BilinearProduct, Ωp)
     projects(side) = (c = _kron_split(side); c !== nothing && _kron_coefs(c, Ωp) !== nothing)
-    _kron_inners(I, Ωp) !== nothing && projects(term.left_op) && projects(term.right_op) &&
+    _kron_inners(term.inner, Ωp) !== nothing && projects(term.left_op) &&
+        projects(term.right_op) &&
         return "a region restriction, which the padded axes have no factors for,"
     return _kron_refused_node(term, Ωp) * ", which has no projection onto the padded axes,"
 end

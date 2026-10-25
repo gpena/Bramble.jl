@@ -512,6 +512,34 @@ using Bramble:
             @test issuccess(F)
         end
     end
+
+    # A surface weight holds its faces as data (#895), so an `:xmin` and an `:xmax` term
+    # share a weight type: a transposed pair needs equal weights, not equal types.
+    @testset "Surface pairs on different faces (#895)" begin
+        Ωs = domain(interval(0.0, 1.0) × interval(0.0, 2.0))
+        Ωr = (Random.seed!(7); mesh(Ωs, (7, 6), (false, false)))
+        Wr = gridspace(Ωr)
+        Vr = Wr × Wr
+        apart = (
+            (Wr, (u, v) -> inner_Γ(D₋ₓ(u), v; markers = :xmin) +
+                           inner_Γ(u, D₋ₓ(v); markers = :xmax)),
+            (Wr, (u, v) -> inner_Γ(D₋ᵧ(u), D₋ₓ(v); markers = :ymin) +
+                           inner_Γ(D₋ₓ(u), D₋ᵧ(v); markers = :ymax)),
+            (Wr, (u, v) -> 2.0 * inner_Γ(D₋ₓ(u), v; markers = (:xmin, :ymin)) +
+                           2.0 * inner_Γ(u, D₋ₓ(v); markers = :boundary)),
+            (Vr, (u, v) -> inner_Γ(u(1), v(2); markers = :xmin) +
+                           inner_Γ(u(2), v(1); markers = :xmax)))
+        for (S, f) in apart
+            a = form(S, S, f)
+            @test !issymmetric(Matrix(assemble(a)))
+            @test !issymmetric(a)
+        end
+        # Control: the same pair on one face is still a transposed pair.
+        same = form(Wr, Wr, (u, v) -> inner_Γ(D₋ₓ(u), v; markers = :xmin) +
+                                      inner_Γ(u, D₋ₓ(v); markers = :xmin))
+        @test issymmetric(same)
+        @test issymmetric(Matrix(assemble(same)))
+    end
 end
 
 end # module FormSymmetryTests

@@ -134,7 +134,7 @@ end
 # where each face contributes its own component of `F` with its own sign.
 #
 # So `dot(F, η)` records the tuple, and `inner_Γ` expands it, at the builder, into one
-# ordinary product per direction carrying `InnerGammaNormal{MASK, d}` -- the signed
+# ordinary product per direction carrying `InnerGammaNormal{M, d}` -- the signed
 # transverse measure of the faces with normal `d`. No new node type, no new stencil path, and
 # the resulting AST is the sum a caller would have written by hand.
 
@@ -179,23 +179,33 @@ end
 # and is the facet operator `∂ₙ` further down.
 
 """
-    InnerGammaNormal{MASK, DIM} <: AbstractInnerProduct
+    InnerGammaNormal{M, DIM} <: AbstractInnerProduct
 
 The quadrature weight of the faces whose normal points along `DIM`, signed by which side of
 the axis the point sits on: `-∏_{e ≠ DIM} ĥ_e` on the `min` face, `+` on the `max` one, and
 zero anywhere else.
 
 The directional counterpart of [`InnerGamma`](@ref), which lumps every incident face into one
-number. Both are resolved once, when `form` is called, and carried as type parameters.
+number. Both hold their labels in `mask` until `form` resolves them, once, into the face
+mask, a field as `InnerGamma`'s is.
 """
-struct InnerGammaNormal{MASK, DIM} <: AbstractInnerProduct end
+struct InnerGammaNormal{M, DIM} <: AbstractInnerProduct
+    mask::M
+end
+
+# Built from the labels type or face mask `M`, as `InnerGamma{M}()` is (operators/inner.jl).
+@inline function (::Type{InnerGammaNormal{M, DIM}})() where {M, DIM}
+    m = _mask_instance(M)
+    return InnerGammaNormal{typeof(m), DIM}(m)
+end
 
 @inline function compute_weight(
-        ::InnerGammaNormal{MASK, DIM}, space, I::CartesianIndex{D}, lin_idx::Int
-) where {MASK, DIM, D}
+        w::InnerGammaNormal{M, DIM}, space, I::CartesianIndex{D}, lin_idx::Int
+) where {M, DIM, D}
     Ωₕ = mesh(space)
-    MASK[DIM][1] && _on_facet(Ωₕ, I, DIM, 1) && return -_facet_measure(Ωₕ, I, Val(DIM))
-    MASK[DIM][2] && _on_facet(Ωₕ, I, DIM, 2) && return _facet_measure(Ωₕ, I, Val(DIM))
+    mask = w.mask
+    mask[DIM][1] && _on_facet(Ωₕ, I, DIM, 1) && return -_facet_measure(Ωₕ, I, Val(DIM))
+    mask[DIM][2] && _on_facet(Ωₕ, I, DIM, 2) && return _facet_measure(Ωₕ, I, Val(DIM))
     return zero(eltype(Ωₕ))
 end
 
@@ -240,9 +250,9 @@ end
     return _SurfaceLabels{labels}
 end
 
-function _resolved_inner(
-        ::Type{InnerGammaNormal{_SurfaceLabels{L}, DIM}}, Ωₕ) where {L, DIM}
-    return InnerGammaNormal{_surface_mask(Ωₕ, L), DIM}
+function _resolved_inner(::InnerGammaNormal{_SurfaceLabels{L}, DIM}, Ωₕ) where {L, DIM}
+    mask = _surface_mask(Ωₕ, L)
+    return InnerGammaNormal{typeof(mask), DIM}(mask)
 end
 _surface_labels(::Type{InnerGammaNormal{_SurfaceLabels{L}, DIM}}) where {L, DIM} = L
 
@@ -689,32 +699,42 @@ end
 @inline Base.:-(u::LazyOp{D}, F::FacetOperator{D}) where {D} = _map_facets(op -> u - op, F)
 
 """
-    InnerGammaFacet{MASK, DIM, SIDE, G} <: AbstractInnerProduct
+    InnerGammaFacet{M, DIM, SIDE, G} <: AbstractInnerProduct
 
 The quadrature weight of one facet: the transverse measure `∏_{e ≠ DIM} ĥ_e` at the nodes of
-the facet of normal axis `DIM`, side `SIDE` (1 the minimum, 2 the maximum), when `MASK`
+the facet of normal axis `DIM`, side `SIDE` (1 the minimum, 2 the maximum), when `mask`
 selects it, and zero anywhere else. Unsigned, since a `FacetOperator` carries its
 outward sign. `G[e]` says whether the term may read the ghosts along axis `e` (the facet's
 own for `e == DIM`, both `e` facets' at its corners otherwise): the facet operator's
 structural reach, which no weight reads. `form` checks it on the product's operands,
 skipping an axis `e ≠ DIM` that each conormal term there reads through a zero `K[DIM, e]`.
+`mask` holds the labels, then the face mask, as `InnerGamma`'s does.
 """
-struct InnerGammaFacet{MASK, DIM, SIDE, G} <: AbstractInnerProduct end
+struct InnerGammaFacet{M, DIM, SIDE, G} <: AbstractInnerProduct
+    mask::M
+end
+
+# Built from the labels type or face mask `M`, as `InnerGamma{M}()` is (operators/inner.jl).
+@inline function (::Type{InnerGammaFacet{M, DIM, SIDE, G}})() where {M, DIM, SIDE, G}
+    m = _mask_instance(M)
+    return InnerGammaFacet{typeof(m), DIM, SIDE, G}(m)
+end
 
 @inline function compute_weight(
-        ::InnerGammaFacet{MASK, DIM, SIDE}, space, I::CartesianIndex{D}, lin_idx::Int
-) where {MASK, DIM, SIDE, D}
+        w::InnerGammaFacet{M, DIM, SIDE}, space, I::CartesianIndex{D}, lin_idx::Int
+) where {M, DIM, SIDE, D}
     Ωₕ = mesh(space)
-    MASK[DIM][SIDE] && _on_facet(Ωₕ, I, DIM, SIDE) && return _facet_measure(Ωₕ, I, Val(DIM))
+    w.mask[DIM][SIDE] && _on_facet(Ωₕ, I, DIM, SIDE) &&
+        return _facet_measure(Ωₕ, I, Val(DIM))
     return zero(eltype(Ωₕ))
 end
 
-function _resolved_inner(::Type{InnerGammaFacet{_SurfaceLabels{L}, DIM, SIDE, G}}, Ωₕ,
+function _resolved_inner(::InnerGammaFacet{_SurfaceLabels{L}, DIM, SIDE, G}, Ωₕ,
         product) where {L, DIM, SIDE, G}
     mask = _surface_mask(Ωₕ, L)
     operands = (product.left_op, product.right_op)
     mask[DIM][SIDE] && _check_facet_reach(Ωₕ, G, DIM, SIDE, operands)
-    return InnerGammaFacet{mask, DIM, SIDE, G}
+    return InnerGammaFacet{typeof(mask), DIM, SIDE, G}(mask)
 end
 function _surface_labels(
         ::Type{InnerGammaFacet{_SurfaceLabels{L}, DIM, SIDE, G}}) where {L, DIM, SIDE, G}

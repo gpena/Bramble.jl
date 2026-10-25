@@ -209,22 +209,24 @@ end
 # --- The 1D inner products on each axis --------------------------------------------- #
 
 """
-    _kron_inners(I::Type, Ωₕ::MeshnD{D}) -> Union{Nothing, Tuple}
+    _kron_inners(w, Ωₕ::MeshnD{D}) -> Union{Nothing, Tuple}
 
-One `NTuple{D}` of 1D inner products per Kronecker term the weight `I` expands into, the
+One `NTuple{D}` of 1D inner products per Kronecker term the weight `w`, an instance or a
+singleton type, expands into, the
 entry on axis `d` the product the factor on that axis is assembled with. `nothing` for a
 weight with no such expansion.
 
 `InnerH` weighs every axis by its own `innerₕ` weights; `InnerPlus{Dim}` uses `inner₊` on
 `Dim` and `innerₕ` elsewhere, the factorisation `kronecker_operator` already relies on.
-`InnerGamma{MASK}` is a sum over the faces `MASK` names, each one Kronecker term: the 1D
+`InnerGamma` is a sum over the faces its `mask` names, each one Kronecker term: the 1D
 `inner_Γ` on that face's endpoint along its axis (weight 1 there, 0 elsewhere) and `innerₕ`
 on every other axis, whose weights multiply to the face's transverse measure. A point on two
 faces (a corner, a 3D edge) weighs the sum of its faces' measures (`_surface_weight`), so
-the face terms add with no correction. `MASK` is geometric, resolved from the face symbols
+the face terms add with no correction. `mask` is geometric, resolved from the face symbols
 when the form was built, so a domain that redefines `:xmin` does not change it.
 """
 _kron_inners(::Type, ::MeshnD) = nothing
+_kron_inners(w::AbstractInnerProduct, Ωₕ::MeshnD) = _kron_inners(typeof(w), Ωₕ)
 _kron_inners(::Type{InnerH}, ::MeshnD{D}) where {D} = (ntuple(_ -> innerₕ, Val(D)),)
 function _kron_inners(::Type{InnerPlus{Dim}}, ::MeshnD{D}) where {Dim, D}
     1 <= Dim <= D || return nothing
@@ -233,12 +235,13 @@ end
 
 _kron_face_inner(side::Int) = (l, r) -> inner_Γ(l, r; markers = side == 1 ? :xmin : :xmax)
 
-function _kron_inners(::Type{InnerGamma{MASK}}, Ωₕ::MeshnD{D}) where {MASK, D}
+function _kron_inners(w::InnerGamma, Ωₕ::MeshnD{D}) where {D}
     np = npoints(Ωₕ, Tuple)
+    mask = w.mask
     # On a one-point axis both faces are the same point, which the D-dimensional weight
     # counts once and two face terms would count twice.
-    any(d -> MASK[d][1] && MASK[d][2] && np[d] < 2, 1:D) && return nothing
-    faces = [(d, s) for d in 1:D for s in 1:2 if MASK[d][s]]
+    any(d -> mask[d][1] && mask[d][2] && np[d] < 2, 1:D) && return nothing
+    faces = [(d, s) for d in 1:D for s in 1:2 if mask[d][s]]
     return Tuple(map(faces) do (d, s)
         ntuple(e -> e == d ? _kron_face_inner(s) : innerₕ, Val(D))
     end)
@@ -301,8 +304,8 @@ factors without any error.
 """
 _kron_project(::LazyOp, ::Any) = nothing
 
-function _kron_project(term::BilinearProduct{D, I}, Ωₕ::MeshnD{D}) where {D, I}
-    inners = _kron_inners(I, Ωₕ)
+function _kron_project(term::BilinearProduct{D}, Ωₕ::MeshnD{D}) where {D}
+    inners = _kron_inners(term.inner, Ωₕ)
     inners === nothing && return nothing
     ls = _kron_split(term.left_op)
     ls === nothing || (ls = _kron_coefs(ls, Ωₕ))

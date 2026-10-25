@@ -110,7 +110,8 @@ projection, for the error `kronecker_operator` throws.
 """
 _kron_refused_node(term::LazyOp, ::Any) = "the node $(nameof(typeof(term)))"
 function _kron_refused_node(term::BilinearProduct{D, I}, Ωₕ) where {D, I}
-    _kron_inners(I, Ωₕ) === nothing && return "the inner-product weight $(nameof(I))"
+    _kron_inners(term.inner, Ωₕ) === nothing &&
+        return "the inner-product weight $(nameof(I))"
     for side in (term.left_op, term.right_op)
         chains = _kron_split(side)
         chains === nothing && return "the node $(_kron_refused_split(side))"
