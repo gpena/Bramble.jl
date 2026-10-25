@@ -525,8 +525,9 @@ using Bramble:
                            inner_Γ(u, D₋ₓ(v); markers = :xmax)),
             (Wr, (u, v) -> inner_Γ(D₋ᵧ(u), D₋ₓ(v); markers = :ymin) +
                            inner_Γ(D₋ₓ(u), D₋ᵧ(v); markers = :ymax)),
-            (Wr, (u, v) -> 2.0 * inner_Γ(D₋ₓ(u), v; markers = (:xmin, :ymin)) +
-                           2.0 * inner_Γ(u, D₋ₓ(v); markers = :boundary)),
+            (Wr,
+                (u, v) -> 2.0 * inner_Γ(D₋ₓ(u), v; markers = (:xmin, :ymin)) +
+                          2.0 * inner_Γ(u, D₋ₓ(v); markers = :boundary)),
             (Vr, (u, v) -> inner_Γ(u(1), v(2); markers = :xmin) +
                            inner_Γ(u(2), v(1); markers = :xmax)))
         for (S, f) in apart

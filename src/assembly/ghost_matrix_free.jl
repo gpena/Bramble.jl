@@ -148,6 +148,7 @@ function _closure_columns!(y, Et::SparseMatrixCSC, x, cols::_GridLines)
     @inbounds for J in CartesianIndices(Base.tail(axes(cols.grid)))
         l = cols.lines[J]
         for t in cols.ptr[l]:(cols.ptr[l + 1] - 1), i in cols.lo[t]:cols.hi[t]
+
             r = lin[CartesianIndex(i, Tuple(J)...)]
             s = zero(T)
             for k in cp[r]:(cp[r + 1] - 1)
