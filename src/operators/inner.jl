@@ -60,27 +60,41 @@ wrote `S` in.
 struct InnerPlusSet{S} <: AbstractInnerProduct end
 
 """
-    InnerGamma{MASK} <: AbstractInnerProduct
+    InnerGamma{M} <: AbstractInnerProduct
 
-Quadrature weights for the \$(D-1)\$-dimensional surface integral over the grid faces `MASK`
+Quadrature weights for the \$(D-1)\$-dimensional surface integral over the grid faces `mask`
 names (gpena/Bramble.jl#157).
 
-`MASK` is the per-axis `(min, max)` face mask `_surface_mask` (mesh/queries.jl) resolves the
-form's `markers` into, carried as a type parameter rather than a field so the node stays a
-singleton and `compute_weight` reads a compile-time literal.
-Building the node holds the labels (`_SurfaceLabels`); `form` resolves them once, against
-the mesh of the test space (`_resolve_surfaces`).
+Building the node holds the labels, `mask::_SurfaceLabels{L}`; `form` resolves them once,
+against the mesh of the test space (`_resolve_surfaces`), into the per-axis `(min, max)`
+face mask `_surface_mask` (mesh/queries.jl) answers, `mask::NTuple{D, NTuple{2, Bool}}`.
+The mask is a field, not a type parameter, so the resolved type is fixed by `D` and `form`
+infers whatever faces the labels name (gpena/Bramble.jl#895).
 """
-struct InnerGamma{MASK} <: AbstractInnerProduct end
+struct InnerGamma{M} <: AbstractInnerProduct
+    mask::M
+end
+
+# The weight of the labels type or face mask `M`, written as a type parameter:
+# `InnerGamma{_SurfaceLabels{L}}()` holds the labels, `InnerGamma{((true, false),)}()`
+# the mask.
+# `InnerGammaNormal` and `InnerGammaFacet` (operators/normal.jl) are built the same way.
+@inline _mask_instance(::Type{M}) where {M} = M()
+@inline _mask_instance(m) = m
+@inline (::Type{InnerGamma{M}})() where {M} = InnerGamma(_mask_instance(M))
 
 """
     BilinearProduct{D,InnerType,LeftType,RightType} <: LazyOp{D}
 
 An AST node representing a bilinear integration term \$(u, v)\$ in a bilinear form.
+
+`inner` is the weight, an instance of `InnerType`; the walks read it, and `InnerType` stays
+the type parameter dispatch reads.
 """
 struct BilinearProduct{
     D, InnerType <: AbstractInnerProduct, LeftType <: LazyOp{D}, RightType <: LazyOp{D}
 } <: LazyOp{D}
+    inner::InnerType
     left_op::LeftType
     right_op::RightType
 end
@@ -89,10 +103,13 @@ end
     LinearProduct{D,InnerType,LeftType,RightType} <: LazyOp{D}
 
 An AST node representing a linear integration term \$(f, v)\$ in a linear form.
+
+`inner` is the weight, an instance of `InnerType`, as for [`BilinearProduct`](@ref).
 """
 struct LinearProduct{
     D, InnerType <: AbstractInnerProduct, LeftType <: LazyOp{D}, RightType <: LazyOp{D}
 } <: LazyOp{D}
+    inner::InnerType
     left_op::LeftType
     right_op::RightType
 end
@@ -136,8 +153,8 @@ end
 # answers for the numeric `inner_Γ`, so the two layers agree by construction rather than by
 # two implementations being written to match.
 @inline compute_weight(
-    ::InnerGamma{MASK}, space, I::CartesianIndex{D}, lin_idx::Int
-) where {MASK, D} = _surface_weight(mesh(space), MASK, I)
+    w::InnerGamma, space, I::CartesianIndex{D}, lin_idx::Int
+) where {D} = _surface_weight(mesh(space), w.mask, I)
 
 # ==============================================================================
 # User-Facing API & Overloads
@@ -200,10 +217,10 @@ end
 ) where {W <: AbstractInnerProduct, D}
     _check_direction(w, Val(D))
     return if _is_source_only(left)
-        LinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+        LinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
     else
         _check_one_interpolated_side(left, right)
-        BilinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+        BilinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
     end
 end
 
@@ -244,7 +261,7 @@ end
 @inline function _linear_source(w::W, l, r::LazyOp{D}) where {W <: AbstractInnerProduct, D}
     _check_direction(w, Val(D))
     sf = _as_source(l, Val(D))
-    return LinearProduct{D, W, typeof(sf), typeof(r)}(sf, r)
+    return LinearProduct{D, W, typeof(sf), typeof(r)}(w, sf, r)
 end
 
 @inline _inner_source(w::AbstractInnerProduct, l, r::LazyOp, markers) = _restrict_by_markers(_linear_source(w, l, r), markers)
@@ -369,9 +386,9 @@ end
 @inline _as_labels(t::NTuple{N, Symbol}) where {N} = t
 
 # The node holds its labels until `form`, which knows the mesh a label is defined on
-# (gpena/Bramble.jl#660): resolving them there is a runtime computation producing a *type*,
-# made once per form, not once per grid point, and the node that comes out is as concrete
-# as any other weight.
+# (gpena/Bramble.jl#660): resolving them there is a runtime computation producing the face
+# mask, made once per form, not once per grid point, held as a field so the node that comes
+# out has a type the labels' type fixes (gpena/Bramble.jl#895).
 @inline function _inner_gamma(::Val{D}, markers) where {D}
     labels = _as_labels(markers)
     isempty(labels) && _throw_no_surface_labels()
@@ -385,8 +402,7 @@ struct _SurfaceLabels{L} end
 # The faces of every surface product in `ast`, resolved on the mesh of the leaf its sweep
 # walks: a leaf of the test space `Vₕ`, or of the trial space `Wₕ` when the product
 # interpolates on the test side (`_walked_leaf`, operators/interpolation.jl). A linear form
-# passes its test space twice. Runs before `simplify_ast`, so terms naming the same faces
-# fold.
+# passes its test space twice. Runs before `simplify_ast`.
 @inline function _resolve_surfaces_for_space(ast, Vₕ, Wₕ = Vₕ)
     _has_surface_labels(ast) || return ast
     resolved = _resolve_surfaces(ast, (Wₕ, Vₕ))
@@ -411,15 +427,15 @@ end
 function _resolve_surfaces(op::RegionRestriction, spaces)
     return _rebuild_restriction(op, op.region, _resolve_surfaces(op.inner_op, spaces))
 end
-function _resolve_surfaces(op::BilinearProduct{D, W}, spaces) where {D, W}
-    R = _resolved_on_walked(op, W, spaces...)
-    return BilinearProduct{D, R, typeof(op.left_op), typeof(op.right_op)}(
-        op.left_op, op.right_op)
+function _resolve_surfaces(op::BilinearProduct{D}, spaces) where {D}
+    w = _resolved_on_walked(op, op.inner, spaces...)
+    return BilinearProduct{D, typeof(w), typeof(op.left_op), typeof(op.right_op)}(
+        w, op.left_op, op.right_op)
 end
-function _resolve_surfaces(op::LinearProduct{D, W}, spaces) where {D, W}
-    R = _resolved_on_walked(op, W, spaces...)
-    return LinearProduct{D, R, typeof(op.left_op), typeof(op.right_op)}(
-        op.left_op, op.right_op)
+function _resolve_surfaces(op::LinearProduct{D}, spaces) where {D}
+    w = _resolved_on_walked(op, op.inner, spaces...)
+    return LinearProduct{D, typeof(w), typeof(op.left_op), typeof(op.right_op)}(
+        w, op.left_op, op.right_op)
 end
 
 # Routed as `_check_centered_meshes` (assembly/linear.jl) routes: a product naming a
@@ -427,43 +443,43 @@ end
 # diagonal blocks, so each leaf it walks there has to read its labels as the same faces. A
 # product naming a component of the other side alone is resolved on the first leaf, and the
 # block routing refuses it at assembly, by name.
-function _resolved_on_walked(op, W, Wₕ, Vₕ)
-    _has_surface_labels(op) || return W
+function _resolved_on_walked(op, w, Wₕ, Vₕ)
+    _has_surface_labels(op) || return w
     unnamed = trial_component_or_nothing(op) === nothing &&
               test_component_or_nothing(op) === nothing
     nmax = unnamed ? min(leaf_count(Wₕ), leaf_count(Vₕ)) : 1
     _has_test_interp(op) &&
-        return _resolved_on_side(op, W, Wₕ, trial_component_or_nothing, nmax)
-    return _resolved_on_side(op, W, Vₕ, test_component_or_nothing, nmax)
+        return _resolved_on_side(op, w, Wₕ, trial_component_or_nothing, nmax)
+    return _resolved_on_side(op, w, Vₕ, test_component_or_nothing, nmax)
 end
 
-_resolved_on_side(op, W, space, side_component::F, nmax) where {F} = _resolved_inner(
-    W, mesh(space), op)
+_resolved_on_side(op, w, space, side_component::F, nmax) where {F} = _resolved_inner(
+    w, mesh(space), op)
 
 # A component outside the space is resolved on the first `nmax` leaves, and left to the
 # block routing to refuse by name.
 function _resolved_on_side(
-        op, W, space::CompositeGridSpace, side_component::F, nmax) where {F}
+        op, w, space::CompositeGridSpace, side_component::F, nmax) where {F}
     leaves = leaf_spaces_offsets(space)
     k = side_component(op)
     if k isa Int && 1 <= k <= length(leaves)
-        return _resolved_inner(W, mesh(first(leaves[k])), op)
+        return _resolved_inner(w, mesh(first(leaves[k])), op)
     end
-    R = _resolved_inner(W, mesh(first(first(leaves))), op)
+    r = _resolved_inner(w, mesh(first(first(leaves))), op)
     for c in 2:min(nmax, length(leaves))
-        _resolved_inner(W, mesh(first(leaves[c])), op) === R ||
-            _throw_surface_leaves_disagree(W, 1, c)
+        _resolved_inner(w, mesh(first(leaves[c])), op) === r ||
+            _throw_surface_leaves_disagree(typeof(w), 1, c)
     end
-    return R
+    return r
 end
 
-# The weight `W` of the product `op`, resolved on `Ωₕ`. A weight that checks the
+# The weight `w` of the product `op`, resolved on `Ωₕ`. A weight that checks the
 # product's operands (`InnerGammaFacet`, operators/normal.jl) reads `op`; the others need
 # only the mesh.
-_resolved_inner(::Type{W}, Ωₕ, op) where {W} = _resolved_inner(W, Ωₕ)
-_resolved_inner(::Type{W}, Ωₕ) where {W} = W
-function _resolved_inner(::Type{InnerGamma{_SurfaceLabels{L}}}, Ωₕ) where {L}
-    return InnerGamma{_surface_mask(Ωₕ, L)}
+_resolved_inner(w, Ωₕ, op) = _resolved_inner(w, Ωₕ)
+_resolved_inner(w, Ωₕ) = w
+function _resolved_inner(::InnerGamma{_SurfaceLabels{L}}, Ωₕ) where {L}
+    return InnerGamma(_surface_mask(Ωₕ, L))
 end
 
 # Whether a type holds a `_SurfaceLabels` anywhere in its parameters. Decided when `form` is
@@ -976,7 +992,7 @@ end
 @inline function local_stencil(
         op::BilinearProduct{D, InnerType}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D, InnerType}
-    vol = compute_weight(InnerType(), space, I, lin_idx)
+    vol = compute_weight(op.inner, space, I, lin_idx)
     if _same_operator_shape(op.left_op, op.right_op)
         stencil = local_stencil(op.left_op, space, I, markers, lin_idx)
         return multiply_stencils_bilinear_symmetric(stencil, vol)
@@ -1033,7 +1049,7 @@ end
 ) where {D, InnerType}
     left_stencil = _contracted_left_stencil(op.left_op, space, I, markers, lin_idx)
     right_stencil = local_stencil(op.right_op, space, I, markers, lin_idx)
-    vol = _is_dirac(op.left_op) ? 1 : compute_weight(InnerType(), space, I, lin_idx)
+    vol = _is_dirac(op.left_op) ? 1 : compute_weight(op.inner, space, I, lin_idx)
     return multiply_stencils_linear(left_stencil, right_stencil, vol)
 end
 
@@ -1045,12 +1061,12 @@ end
 function resolve_ast(op::BilinearProduct{D, InnerType}) where {D, InnerType}
     left = resolve_ast(op.left_op)
     right = resolve_ast(op.right_op)
-    return BilinearProduct{D, InnerType, typeof(left), typeof(right)}(left, right)
+    return BilinearProduct{D, InnerType, typeof(left), typeof(right)}(op.inner, left, right)
 end
 function resolve_ast(op::LinearProduct{D, InnerType}) where {D, InnerType}
     left = resolve_ast(op.left_op)
     right = resolve_ast(op.right_op)
-    return LinearProduct{D, InnerType, typeof(left), typeof(right)}(left, right)
+    return LinearProduct{D, InnerType, typeof(left), typeof(right)}(op.inner, left, right)
 end
 
 # Disambiguation for the empty tuple.
@@ -1092,8 +1108,8 @@ function _product_expression(inner::InnerPlusSet{S}, left, right) where {S}
 end
 
 function expression(op::BilinearProduct{D, InnerType}) where {D, InnerType}
-    _product_expression(InnerType(), op.left_op, op.right_op)
+    _product_expression(op.inner, op.left_op, op.right_op)
 end
 function expression(op::LinearProduct{D, InnerType}) where {D, InnerType}
-    _product_expression(InnerType(), op.left_op, op.right_op)
+    _product_expression(op.inner, op.left_op, op.right_op)
 end

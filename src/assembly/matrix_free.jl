@@ -1583,7 +1583,7 @@ function _mf_tag_regions(op::OperatorAdd{D}) where {D}
 end
 function _mf_tag_regions(op::BilinearProduct{D, W}) where {D, W}
     left, right = _mf_tag_regions(op.left_op), _mf_tag_regions(op.right_op)
-    return BilinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+    return BilinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
 end
 
 # A walk entry's `_bind_walk`, but a term `_mf_host_ast` bound passes through, with the

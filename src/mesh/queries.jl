@@ -351,7 +351,7 @@ an `h/2` that must not be there.
 The face set is carried as a mask, `NTuple{D, NTuple{2, Bool}}` -- per axis, whether the
 `min` and the `max` face belong to the surface. Its *type* is fixed by `D` alone, so the
 weight is type-stable and allocation-free whether the mask is a runtime value (the numeric
-`inner_Γ`) or a type parameter (the symbolic `InnerGamma`, operators/inner.jl).
+`inner_Γ`) or the field of the symbolic `InnerGamma` (operators/inner.jl).
 =#
 
 # The `(axis, side)` of the face `s` names, canonical symbol or alias, or `nothing`. Read from

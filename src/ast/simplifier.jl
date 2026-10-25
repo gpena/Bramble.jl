@@ -413,10 +413,10 @@ function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
         return simplify_ast(
             OperatorAdd(
             BilinearProduct{D, W, typeof(left), typeof(right.left_op)}(
-                left, right.left_op
+                op.inner, left, right.left_op
             ),
             BilinearProduct{D, W, typeof(left), typeof(right.right_op)}(
-                left, right.right_op
+                op.inner, left, right.right_op
             )
         ),
         )
@@ -425,10 +425,10 @@ function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
         return simplify_ast(
             OperatorAdd(
             BilinearProduct{D, W, typeof(left.left_op), typeof(right)}(
-                left.left_op, right
+                op.inner, left.left_op, right
             ),
             BilinearProduct{D, W, typeof(left.right_op), typeof(right)}(
-                left.right_op, right
+                op.inner, left.right_op, right
             )
         ),
         )
@@ -440,7 +440,7 @@ function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
     # nothing else sits between the product and its two arguments.
     cl, al = _scale_parts(left)
     cr, ar = _scale_parts(right)
-    inner = BilinearProduct{D, W, typeof(al), typeof(ar)}(al, ar)
+    inner = BilinearProduct{D, W, typeof(al), typeof(ar)}(op.inner, al, ar)
     return _lift_scalars(cl, cr, inner)
 end
 
@@ -456,9 +456,9 @@ function simplify_ast(op::LinearProduct{D, W}) where {D, W}
     if right isa OperatorAdd && _mixes_components(right.left_op, right.right_op)
         return simplify_ast(
             OperatorAdd(
-            LinearProduct{D, W, typeof(left), typeof(right.left_op)}(left, right.left_op),
+            LinearProduct{D, W, typeof(left), typeof(right.left_op)}(op.inner, left, right.left_op),
             LinearProduct{D, W, typeof(left), typeof(right.right_op)}(
-                left, right.right_op
+                op.inner, left, right.right_op
             )
         ),
         )
@@ -472,7 +472,7 @@ function simplify_ast(op::LinearProduct{D, W}) where {D, W}
         return _lift_scalars(cl, cr, _split_dirac_sum(op, al, ar))
     end
     _any_dirac(al) && !_is_dirac(al) && _throw_mixed_dirac_source()
-    inner = LinearProduct{D, W, typeof(al), typeof(ar)}(al, ar)
+    inner = LinearProduct{D, W, typeof(al), typeof(ar)}(op.inner, al, ar)
     return _lift_scalars(cl, cr, inner)
 end
 
@@ -491,9 +491,9 @@ end
 end
 @inline _split_dirac_sum(op::LinearProduct, a::LazyOp, ar) = _dirac_piece(op, a, ar)
 
-@inline function _dirac_piece(::LinearProduct{D, W}, a, ar) where {D, W}
+@inline function _dirac_piece(op::LinearProduct{D, W}, a, ar) where {D, W}
     _any_dirac(a) && !_is_dirac(a) && _throw_mixed_dirac_source()
-    return LinearProduct{D, W, typeof(a), typeof(ar)}(a, ar)
+    return LinearProduct{D, W, typeof(a), typeof(ar)}(op.inner, a, ar)
 end
 
 # --- Stencil shifts: simplified inside, never folded --------------------------------- #
@@ -589,9 +589,9 @@ end
 end
 @inline function _lower_signs(op::BilinearProduct{D, W}) where {D, W}
     l, r = _lower_signs(op.left_op), _lower_signs(op.right_op)
-    return BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
+    return BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
 end
 @inline function _lower_signs(op::LinearProduct{D, W}) where {D, W}
     l, r = _lower_signs(op.left_op), _lower_signs(op.right_op)
-    return LinearProduct{D, W, typeof(l), typeof(r)}(l, r)
+    return LinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
 end

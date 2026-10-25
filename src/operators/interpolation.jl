@@ -1159,7 +1159,7 @@ function _bind_interp_spaces(
 ) where {D, InnerType}
     left = _bind_interp_spaces(op.left_op, trial_leaf, test_leaf)
     right = _bind_interp_spaces(op.right_op, trial_leaf, test_leaf)
-    return BilinearProduct{D, InnerType, typeof(left), typeof(right)}(left, right)
+    return BilinearProduct{D, InnerType, typeof(left), typeof(right)}(op.inner, left, right)
 end
 
 function _bind_interp_spaces(ops::NTuple{N, Any}, trial_leaf, test_leaf) where {N}

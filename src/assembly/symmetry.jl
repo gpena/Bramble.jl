@@ -146,8 +146,10 @@ end
 # same object on both sides.
 
 # Whether `q` is `p` with its two sides swapped (trial and test exchanged at the leaves).
+# The weights must be equal, not only of one type: a surface weight holds its faces as data
+# (`InnerGamma`, operators/inner.jl), so an `:xmin` term and an `:xmax` one share a type.
 function _is_transposed_pair(p::BilinearProduct{D, K}, q::BilinearProduct{D, K}) where {D, K}
-    return _same_operator_shape(p.left_op, q.right_op) &&
+    return p.inner == q.inner && _same_operator_shape(p.left_op, q.right_op) &&
            _same_operator_shape(q.left_op, p.right_op)
 end
 _is_transposed_pair(p, q) = false
@@ -158,7 +160,7 @@ _is_transposed_pair(p, q) = false
 _side_summands(op::OperatorAdd) = (_side_summands(op.left_op)..., _side_summands(op.right_op)...)
 _side_summands(op) = (op,)
 function _expand_product(p::BilinearProduct{D, K}) where {D, K}
-    return [BilinearProduct{D, K, typeof(l), typeof(r)}(l, r)
+    return [BilinearProduct{D, K, typeof(l), typeof(r)}(p.inner, l, r)
             for l in _side_summands(p.left_op) for r in _side_summands(p.right_op)]
 end
 
