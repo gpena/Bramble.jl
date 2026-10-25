@@ -121,7 +121,7 @@ than assuming every node caps out at 1.
 
 One exception: a marked function (`_FacetExtrapolated`) answers its function's margin, as
 its reads by extrapolation go inward from a ghost to the three nodes `_marked_ghost`
-requires; the walk widens the marked faces itself (`_face_margins`).
+requires; the walk's interior reads no marked ghost without widening (`_face_margins`).
 """
 _stencil_margin(op::TrialFunction) = 0
 _stencil_margin(op::TestFunction) = 0

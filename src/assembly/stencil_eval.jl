@@ -513,7 +513,7 @@ function _unmark(op::OperatorAdd{D}) where {D}
 end
 function _unmark(op::BilinearProduct{D, W}) where {D, W}
     left, right = _interior_term(op.left_op), _interior_term(op.right_op)
-    return BilinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+    return BilinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
 end
 
 """
@@ -552,7 +552,7 @@ function _mark(op::OperatorAdd{D}, facets) where {D}
 end
 function _mark(op::BilinearProduct{D, W}, facets) where {D, W}
     left = _mark(op.left_op, facets)
-    return BilinearProduct{D, W, typeof(left), typeof(op.right_op)}(left, op.right_op)
+    return BilinearProduct{D, W, typeof(left), typeof(op.right_op)}(op.inner, left, op.right_op)
 end
 _mark(op::UnaryWrapper, facets) = _rewrap_inner(op, _mark(op.inner_op, facets))
 function _mark(op::_FirstDifference{D, Dim}, facets) where {D, Dim}
@@ -649,8 +649,8 @@ end
 @noinline function _check_absent_reads(
         op::BilinearProduct{D, InnerType}, space, I::CartesianIndex{D}, lin_idx::Int
 ) where {D, InnerType}
-    iszero(compute_weight(InnerType(), space, I, lin_idx)) && return false
-    facet = _facet_inner(InnerType())
+    iszero(compute_weight(op.inner, space, I, lin_idx)) && return false
+    facet = _facet_inner(op.inner)
     (_reads_at(op.left_op, space, I, facet) || _reads_at(op.right_op, space, I, facet)) &&
         _throw_absent_read(op, I - CartesianIndex(mesh(space).lo))
     return false
@@ -664,9 +664,9 @@ end
     if _is_dirac(op.left_op)
         I in physical_indices(mesh(space)) || return false
     else
-        iszero(compute_weight(InnerType(), space, I, lin_idx)) && return false
+        iszero(compute_weight(op.inner, space, I, lin_idx)) && return false
     end
-    _reads_at(op.right_op, space, I, _facet_inner(InnerType())) &&
+    _reads_at(op.right_op, space, I, _facet_inner(op.inner)) &&
         _throw_absent_read(op, I - CartesianIndex(mesh(space).lo))
     return false
 end

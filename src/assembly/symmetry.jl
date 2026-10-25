@@ -158,7 +158,7 @@ _is_transposed_pair(p, q) = false
 _side_summands(op::OperatorAdd) = (_side_summands(op.left_op)..., _side_summands(op.right_op)...)
 _side_summands(op) = (op,)
 function _expand_product(p::BilinearProduct{D, K}) where {D, K}
-    return [BilinearProduct{D, K, typeof(l), typeof(r)}(l, r)
+    return [BilinearProduct{D, K, typeof(l), typeof(r)}(p.inner, l, r)
             for l in _side_summands(p.left_op) for r in _side_summands(p.right_op)]
 end
 

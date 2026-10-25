@@ -479,13 +479,13 @@ function _split_product(op::BilinearProduct{D, W}, l, r, ls, rs) where {D, W}
     length(ls) * length(rs) > 16 && return op
     if _mixed_scales(l) || _mixed_scales(r)
         return l === op.left_op && r === op.right_op ? op :
-               BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
+               BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
     end
     if length(ls) == 1 && length(rs) == 1
         l = _hoisted(l, ls)
         r = _hoisted(r, rs)
         return l === op.left_op && r === op.right_op ? op :
-               BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
+               BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
     end
     return _product_sum(op, ls, rs)
 end
@@ -692,7 +692,7 @@ end
 function _widened_product(op::BilinearProduct{D, W}, ::Type{E}) where {D, W, E}
     l = _bits_uniform_scales(op.left_op, E)
     r = _bits_uniform_scales(op.right_op, E)
-    return BilinearProduct{D, W, typeof(l), typeof(r)}(l, r)
+    return BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
 end
 _bits_uniform_scales(op, ::Type{E}) where {E} = isbitstype(_value_type(op, E)) ?
                                                 _uniform_scales(op, E) : op
@@ -1000,7 +1000,7 @@ end
 # walk over the form is inferred over them. A grid function scale's type is long, and
 # sixteen scaled pieces summed left-deep took the first `assemble` 4.6 s.
 function _product_sum_expr(D::Int, W, Ls::Vector{Any}, Rs::Vector{Any})
-    exs = Any[:(BilinearProduct{$D, $W, $(Ls[i]), $(Rs[j])}(ls[$i], rs[$j]))
+    exs = Any[:(BilinearProduct{$D, $W, $(Ls[i]), $(Rs[j])}(op.inner, ls[$i], rs[$j]))
               for i in 1:length(Ls) for j in 1:length(Rs)]
     while length(exs) > 1
         exs = Any[k < length(exs) ? :(OperatorAdd($(exs[k]), $(exs[k + 1]))) : exs[k]

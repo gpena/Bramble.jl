@@ -42,8 +42,8 @@ function _kron_unindex(op::LazyOp)
 end
 
 _kron_rebuild(::OperatorAdd{D}, l, r) where {D} = OperatorAdd{D, typeof(l), typeof(r)}(l, r)
-function _kron_rebuild(::BilinearProduct{D, I}, l, r) where {D, I}
-    return BilinearProduct{D, I, typeof(l), typeof(r)}(l, r)
+function _kron_rebuild(op::BilinearProduct{D, I}, l, r) where {D, I}
+    return BilinearProduct{D, I, typeof(l), typeof(r)}(op.inner, l, r)
 end
 
 """

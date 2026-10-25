@@ -479,13 +479,13 @@ end
 function _bind_marker_ids(op::BilinearProduct{D, W}, Ωₕ::AbstractMeshType) where {D, W}
     left = _bind_marker_ids(op.left_op, Ωₕ)
     right = _bind_marker_ids(op.right_op, Ωₕ)
-    return BilinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+    return BilinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
 end
 
 function _bind_marker_ids(op::LinearProduct{D, W}, Ωₕ::AbstractMeshType) where {D, W}
     left = _bind_marker_ids(op.left_op, Ωₕ)
     right = _bind_marker_ids(op.right_op, Ωₕ)
-    return LinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+    return LinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
 end
 
 @inline function _region_ids(label::Symbol, Ωₕ::AbstractMeshType)

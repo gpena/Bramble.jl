@@ -792,7 +792,7 @@ Base.@propagate_inbounds function _factored_product!(
         sink, op::BilinearProduct{D, InnerType}, scales::Tuple, sp, I, markers,
         lin_indices, lin_idx::Int, row_offset::Int, col_offset::Int, slot::Int, g::Val
 ) where {D, InnerType}
-    vol = compute_weight(InnerType(), sp, I, lin_idx)
+    vol = compute_weight(op.inner, sp, I, lin_idx)
     left = local_stencil(op.left_op, sp, I, markers, lin_idx)
     if _same_operator_shape(op.left_op, op.right_op)
         _loops_symmetric(left) && return _product_entries(
@@ -938,8 +938,8 @@ end
 # regression, for exactly the sizes where peeling would not be safe.
 
 @inline _interior_range(r::AbstractUnitRange{Int}, margin::Int) = (first(r) + margin):(last(r) - margin)
-# A margin per face, `(low, high)` (`_face_margins`): the facet rule widens only the faces
-# it extrapolates across (#813). The `Int` forms are the one margin on every face.
+# A margin per face, `(low, high)` (`_face_margins`), today the term's one margin on every
+# face: the facet rule widens none (#902). The `Int` forms are the one margin on every face.
 @inline _interior_range(r::AbstractUnitRange{Int}, m::NTuple{2, Int}) = (first(r) + m[1]):(last(r) - m[2])
 @inline _interior_box(ax::NTuple{D, AbstractUnitRange{Int}}, margin::Int) where {D} = CartesianIndices(
     map(r -> _interior_range(r, margin), ax))

@@ -210,7 +210,7 @@ end
 function _lower_sources(op::LinearProduct{D, W}, space) where {D, W}
     left = _lower_sources(op.left_op, space)
     return left === op.left_op ? op :
-           LinearProduct{D, W, typeof(left), typeof(op.right_op)}(left, op.right_op)
+           LinearProduct{D, W, typeof(left), typeof(op.right_op)}(op.inner, left, op.right_op)
 end
 
 function _lower_sources(op::ShiftNode{D, Dim}, space) where {D, Dim}
@@ -339,7 +339,7 @@ end
 function _typed_restrictions(op::LinearProduct{D, W}, sp, reach) where {D, W}
     left = _typed_restrictions(op.left_op, sp, reach)
     return left === op.left_op ? op :
-           LinearProduct{D, W, typeof(left), typeof(op.right_op)}(left, op.right_op)
+           LinearProduct{D, W, typeof(left), typeof(op.right_op)}(op.inner, left, op.right_op)
 end
 
 function _typed_restrictions(op::RegionRestriction, sp, reach)
@@ -520,14 +520,14 @@ function _split_restricted_products(op::LinearProduct{D, W}, ::Type{E}) where {D
     if length(rs) == 1 || _mixed_scales(r)
         _mixed_scales(r) || (r = _hoisted(r, rs))
         return r === op.right_op ? op :
-               LinearProduct{D, W, typeof(op.left_op), typeof(r)}(op.left_op, r)
+               LinearProduct{D, W, typeof(op.left_op), typeof(r)}(op.inner, op.left_op, r)
     end
     return _linear_product_sum(op, rs)
 end
 
 function _widened_product(op::LinearProduct{D, W}, ::Type{E}) where {D, W, E}
     r = _bits_uniform_scales(op.right_op, E)
-    return LinearProduct{D, W, typeof(op.left_op), typeof(r)}(op.left_op, r)
+    return LinearProduct{D, W, typeof(op.left_op), typeof(r)}(op.inner, op.left_op, r)
 end
 
 # One `LinearProduct` per group, summed left to right; recursive on the tuple's type, so the
@@ -536,7 +536,7 @@ end
 @inline _linear_product_sum(op::LinearProduct, rs::Tuple) = OperatorAdd(
     _linear_product_sum(op, Base.front(rs)), _linear_piece(op, rs[end]))
 @inline _linear_piece(op::LinearProduct{D, W}, r) where {D, W} = LinearProduct{
-    D, W, typeof(op.left_op), typeof(r)}(op.left_op, r)
+    D, W, typeof(op.left_op), typeof(r)}(op.inner, op.left_op, r)
 
 # --- A VectorElement source must live on the leaf it is read on --- #
 #
@@ -1678,7 +1678,7 @@ end
 function _host_sources(op::LinearProduct{D, W}) where {D, W}
     left = _host_sources(op.left_op)
     right = _host_sources(op.right_op)
-    return LinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+    return LinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
 end
 
 # The nodes holding one `inner_op` and nothing to copy: `OperatorScale`, `ShiftNode`,

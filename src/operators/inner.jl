@@ -77,10 +77,14 @@ struct InnerGamma{MASK} <: AbstractInnerProduct end
     BilinearProduct{D,InnerType,LeftType,RightType} <: LazyOp{D}
 
 An AST node representing a bilinear integration term \$(u, v)\$ in a bilinear form.
+
+`inner` is the weight, an instance of `InnerType`; the walks read it, and `InnerType` stays
+the type parameter dispatch reads.
 """
 struct BilinearProduct{
     D, InnerType <: AbstractInnerProduct, LeftType <: LazyOp{D}, RightType <: LazyOp{D}
 } <: LazyOp{D}
+    inner::InnerType
     left_op::LeftType
     right_op::RightType
 end
@@ -89,10 +93,13 @@ end
     LinearProduct{D,InnerType,LeftType,RightType} <: LazyOp{D}
 
 An AST node representing a linear integration term \$(f, v)\$ in a linear form.
+
+`inner` is the weight, an instance of `InnerType`, as for [`BilinearProduct`](@ref).
 """
 struct LinearProduct{
     D, InnerType <: AbstractInnerProduct, LeftType <: LazyOp{D}, RightType <: LazyOp{D}
 } <: LazyOp{D}
+    inner::InnerType
     left_op::LeftType
     right_op::RightType
 end
@@ -200,10 +207,10 @@ end
 ) where {W <: AbstractInnerProduct, D}
     _check_direction(w, Val(D))
     return if _is_source_only(left)
-        LinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+        LinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
     else
         _check_one_interpolated_side(left, right)
-        BilinearProduct{D, W, typeof(left), typeof(right)}(left, right)
+        BilinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
     end
 end
 
@@ -244,7 +251,7 @@ end
 @inline function _linear_source(w::W, l, r::LazyOp{D}) where {W <: AbstractInnerProduct, D}
     _check_direction(w, Val(D))
     sf = _as_source(l, Val(D))
-    return LinearProduct{D, W, typeof(sf), typeof(r)}(sf, r)
+    return LinearProduct{D, W, typeof(sf), typeof(r)}(w, sf, r)
 end
 
 @inline _inner_source(w::AbstractInnerProduct, l, r::LazyOp, markers) = _restrict_by_markers(_linear_source(w, l, r), markers)
@@ -414,13 +421,18 @@ end
 function _resolve_surfaces(op::BilinearProduct{D, W}, spaces) where {D, W}
     R = _resolved_on_walked(op, W, spaces...)
     return BilinearProduct{D, R, typeof(op.left_op), typeof(op.right_op)}(
-        op.left_op, op.right_op)
+        _resolved_weight(op.inner, R), op.left_op, op.right_op)
 end
 function _resolve_surfaces(op::LinearProduct{D, W}, spaces) where {D, W}
     R = _resolved_on_walked(op, W, spaces...)
     return LinearProduct{D, R, typeof(op.left_op), typeof(op.right_op)}(
-        op.left_op, op.right_op)
+        _resolved_weight(op.inner, R), op.left_op, op.right_op)
 end
+
+# The product's weight kept when resolving leaves its type as it was; a resolved surface
+# weight is a new singleton, built from the type `_resolved_on_walked` answers.
+_resolved_weight(w::W, ::Type{W}) where {W} = w
+_resolved_weight(_, ::Type{R}) where {R} = R()
 
 # Routed as `_check_centered_meshes` (assembly/linear.jl) routes: a product naming a
 # component of the walked side is resolved on that leaf's mesh; one naming none reaches the
@@ -976,7 +988,7 @@ end
 @inline function local_stencil(
         op::BilinearProduct{D, InnerType}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D, InnerType}
-    vol = compute_weight(InnerType(), space, I, lin_idx)
+    vol = compute_weight(op.inner, space, I, lin_idx)
     if _same_operator_shape(op.left_op, op.right_op)
         stencil = local_stencil(op.left_op, space, I, markers, lin_idx)
         return multiply_stencils_bilinear_symmetric(stencil, vol)
@@ -1033,7 +1045,7 @@ end
 ) where {D, InnerType}
     left_stencil = _contracted_left_stencil(op.left_op, space, I, markers, lin_idx)
     right_stencil = local_stencil(op.right_op, space, I, markers, lin_idx)
-    vol = _is_dirac(op.left_op) ? 1 : compute_weight(InnerType(), space, I, lin_idx)
+    vol = _is_dirac(op.left_op) ? 1 : compute_weight(op.inner, space, I, lin_idx)
     return multiply_stencils_linear(left_stencil, right_stencil, vol)
 end
 
@@ -1045,12 +1057,12 @@ end
 function resolve_ast(op::BilinearProduct{D, InnerType}) where {D, InnerType}
     left = resolve_ast(op.left_op)
     right = resolve_ast(op.right_op)
-    return BilinearProduct{D, InnerType, typeof(left), typeof(right)}(left, right)
+    return BilinearProduct{D, InnerType, typeof(left), typeof(right)}(op.inner, left, right)
 end
 function resolve_ast(op::LinearProduct{D, InnerType}) where {D, InnerType}
     left = resolve_ast(op.left_op)
     right = resolve_ast(op.right_op)
-    return LinearProduct{D, InnerType, typeof(left), typeof(right)}(left, right)
+    return LinearProduct{D, InnerType, typeof(left), typeof(right)}(op.inner, left, right)
 end
 
 # Disambiguation for the empty tuple.
@@ -1092,8 +1104,8 @@ function _product_expression(inner::InnerPlusSet{S}, left, right) where {S}
 end
 
 function expression(op::BilinearProduct{D, InnerType}) where {D, InnerType}
-    _product_expression(InnerType(), op.left_op, op.right_op)
+    _product_expression(op.inner, op.left_op, op.right_op)
 end
 function expression(op::LinearProduct{D, InnerType}) where {D, InnerType}
-    _product_expression(InnerType(), op.left_op, op.right_op)
+    _product_expression(op.inner, op.left_op, op.right_op)
 end

@@ -222,7 +222,7 @@ _as_test(::TrialFunction{D, N}) where {D, N} = TestFunction{D, N}()
 _as_test(op::IndexedTrialFunction{D}) where {D} = IndexedTestFunction{D}(op.component_idx)
 function _as_test(op::LinearProduct{D, W, L}) where {D, W, L}
     r = _as_test(op.right_op)
-    return LinearProduct{D, W, L, typeof(r)}(op.left_op, r)
+    return LinearProduct{D, W, L, typeof(r)}(op.inner, op.left_op, r)
 end
 _as_test(op::OperatorAdd) = OperatorAdd(_as_test(op.left_op), _as_test(op.right_op))
 _as_test(op::UnaryWrapper) = _rewrap_inner(op, _as_test(op.inner_op))
