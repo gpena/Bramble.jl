@@ -387,8 +387,8 @@ _check_space_components(ast, ::CompositeGridSpace, side_component, side) = nothi
 
 # --- Real coefficients converted once (gpena/Bramble.jl#912) ------------------------ #
 #
-# On a Float64 space a constant scale whose scalar is an `AbstractFloat`, an `Irrational`
-# or a `Rational` is stored as a `Float64`: `2.0f0`, `π`, `1 // 2` and `2.0` give one AST
+# On a Float64 space a constant scale whose scalar is a Base `AbstractFloat`, `Irrational`
+# or `Rational` is stored as a `Float64`: `2.0f0`, `π`, `1 // 2` and `2.0` give one AST
 # type and `assemble` compiles once for them. That keeps the matrix bit for bit only where
 # the scalar's first product is with a `Float64`, which holds in a form where
 #
@@ -409,7 +409,13 @@ _check_space_components(ast, ::CompositeGridSpace, side_component, side) = nothi
 # `_split_restricted_products`, whose type questions then see one scalar type. All of it
 # is read off the type, so a form left as built comes back as itself and compiles nothing
 # past the question.
-const _LooseScalar = Union{AbstractFloat, Irrational, Rational}
+#
+# Only Base's own fixed numbers convert, the set `_ConstantNumber` (bilinear_traversal.jl)
+# trusts for #876: an `Irrational` takes any symbol and a user's may read a global
+# (test/ghost/allocations.jl), and a user's `AbstractFloat` may too, so freezing either at
+# `form` would hide a later change of its value.
+const _LooseScalar = Union{Float16, Float32, Rational{<:Base.BitInteger}, Irrational{:π},
+    Irrational{:ℯ}, Irrational{:γ}, Irrational{:φ}, Irrational{:catalan}}
 
 # Whether `T` holds a constant scale whose scalar is a `_LooseScalar` other than `Float64`.
 function _type_loose_scalars(T)
