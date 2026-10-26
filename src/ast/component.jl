@@ -75,12 +75,8 @@ end
 end
 
 # A source has no component to name, and neither identity nor zero depends on one.
-@inline component(op::SourceFunction, ::Int) = op
-@inline component(op::SourceVector, ::Int) = op
-@inline component(op::SourceConstant, ::Int) = op
-@inline component(op::DiracSource, ::Int) = op
-@inline component(op::IdentityOperator, ::Int) = op
-@inline component(op::ZeroOperator, ::Int) = op
+@inline component(op::Union{SourceFunction, SourceVector, SourceConstant, DiracSource,
+    IdentityOperator, ZeroOperator}, ::Int) = op
 
 # --- the operators, rebuilt around an indexed argument ----------------------------- #
 

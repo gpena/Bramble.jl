@@ -387,6 +387,7 @@ _carries_data(::LazyOp) = false
 _carries_data(op::UnaryWrapper) = _carries_data(op.inner_op)
 _carries_data(::GridFunctionScale) = true
 _carries_data(::OperatorScale) = true
+# Only the source leaves of `_LeafNode`: the others hold no value of their own.
 _carries_data(::Union{SourceFunction, SourceVector, SourceConstant, DiracSource}) = true
 _carries_data(op::OperatorAdd) = _carries_data(op.left_op) || _carries_data(op.right_op)
 

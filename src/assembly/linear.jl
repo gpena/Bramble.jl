@@ -1118,10 +1118,7 @@ argument carries no difference) strides by 1 in every dimension, resulting in a 
     return (lo, hi)
 end
 
-@inline _row_bounds(::Union{
-    TrialFunction{D}, TestFunction{D}, IndexedTrialFunction{D}, IndexedTestFunction{D},
-    SourceFunction{D}, SourceVector{D}, SourceConstant{D}, DiracSource{D},
-    IdentityOperator{D}, ZeroOperator{D}}) where {D} = (ntuple(_ -> 0, D), ntuple(_ -> 0, D))
+@inline _row_bounds(op::_LeafNode) = (z = ntuple(_ -> 0, Val(_dim(op))); (z, z))
 
 @inline function _moved_bounds(
         (lo, hi)::NTuple{2, NTuple{D, Int}}, ::Val{Dim}, steps::Tuple
