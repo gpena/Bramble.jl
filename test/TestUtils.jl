@@ -1097,6 +1097,28 @@ robin_pairs(u, rels) = map(keys(rels)) do F
     F => r.α * u + r.β * Bramble.∂ₙ(u) => r.g
 end
 
+# Shared coefficient functions, so a closure body repeated across test files is compiled
+# once rather than once per file (test compile reuse, see docs/notes/test-closure-reuse.md).
+# Only closures whose body is byte-identical are replaced by these. Each is a singleton
+# type, as a non-capturing closure is: Bramble folds like terms and pairs symmetric
+# summands only for singleton node types (`simplify_ast`, `_pairable_type`). `_Const`
+# carries its value in the type, so `1` and `1.0`, `0.0` and `-0.0` stay distinct types.
+struct _Const{C} <: Function end
+(::_Const{C})(x) where {C} = C
+_Const(c) = _Const{c}()
+
+_x1(x) = x[1]
+_x2(x) = x[2]
+_x3(x) = x[3]
+_one_plus_x1(x) = 1 + x[1]
+_x1_lt_half(x) = x[1] < 0.5
+_x1_plus_x2(x) = x[1] + x[2]
+_sin_x1_times_x2(x) = sin(x[1]) * x[2]
+_x1_times_x2(x) = x[1] * x[2]
+_exp_x1(x) = exp(x[1])
+_x1_squared(x) = x[1]^2
+_sin_x1(x) = sin(x[1])
+
 end # module TestUtils
 
 # Installs the per-file trace by overriding Main's own `include`, once, when this file loads
