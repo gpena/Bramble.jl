@@ -696,6 +696,42 @@ end
 @inline _masked_cart(::AbstractVector) = nothing
 @inline _masked_term(s, u, w, v, i, ::Type{T}, ::Nothing) where {T} = _dot_term(s, u, w, v, i, T)
 
+# The dense bands' sum (`_dot_band` below, `_separable_line_band` and
+# `_separable_block_band` in src/space/inner_product.jl). `step(s, i)` adds the `i`-th term
+# to `s` through `_band_madd`. Eight running sums take every eighth index, the leftover
+# indices go on the first in turn, and the eight are combined as a fixed tree. There is no
+# `@simd` and no `muladd`. LLVM reassociates a `@simd` sum when it vectorizes it, at `-O2`
+# and not at `-O1`, and a `muladd` may fuse at one level and not another, so the same band
+# gave different last bits from package images built at different levels
+# (gpena/Bramble.jl#942). LLVM may still pack the eight sums into vector lanes, which keeps
+# the order. `step` reads its arrays under its own `@inbounds`, which does not reach
+# through this call.
+@inline function _fixed_order_sum(step::F, rng::AbstractUnitRange, ::Type{T}) where {F, T}
+    s₁ = s₂ = s₃ = s₄ = s₅ = s₆ = s₇ = s₈ = zero(T)
+    i = first(rng)
+    l = last(rng)
+    while i <= l - 7
+        s₁ = step(s₁, i)
+        s₂ = step(s₂, i + 1)
+        s₃ = step(s₃, i + 2)
+        s₄ = step(s₄, i + 3)
+        s₅ = step(s₅, i + 4)
+        s₆ = step(s₆, i + 5)
+        s₇ = step(s₇, i + 6)
+        s₈ = step(s₈, i + 7)
+        i += 8
+    end
+    while i <= l
+        s₁ = step(s₁, i)
+        i += 1
+    end
+    return ((s₁ + s₂) + (s₃ + s₄)) + ((s₅ + s₆) + (s₇ + s₈))
+end
+
+# `s + a * b` for the bands above, rounded the same at every optimisation level: a plain
+# multiply and add.
+@inline _band_madd(s, a, b) = s + a * b
+
 """
     _dot(u::AbstractVector, w::AbstractVector, v::AbstractVector) -> Number
 
@@ -808,10 +844,12 @@ end
 
 [`CpuThreaded`](@ref)'s own counterpart of [`_dot`](@ref): partitions `1:length(u)` into
 `Threads.nthreads()` static bands via [`_band_range`](@ref), each `Threads.@threads :static`
-task accumulating its own `muladd`/`@simd` partial sum, landed in a fixed
+task accumulating its own partial sum in a fixed order, landed in a fixed
 `Threads.nthreads()`-length buffer and summed serially once every task has returned. Where
 a `:static` loop cannot start ([`_static_or_serial`](@ref)) the same bands run in turn on
 the calling task, through the same [`_dot_band`](@ref), so the value is unchanged bitwise.
+At one thread there is a single band, and it returns [`_dot`](@ref)`(u, w, v)` itself, so
+`CpuSerial`, `CpuThreaded` and `CpuPolyester` agree bitwise there.
 
 The buffer's size depends only on the thread count, never on `length(u)`, so allocation is
 independent of vector length rather than zero. No size threshold falls back to the serial
@@ -829,6 +867,7 @@ Kept in an isolated function, the same reason [`_threaded_for!`](@ref) is, to ke
     T = promote_type(eltype(u), eltype(w), eltype(v))
     n = length(u)
     nchunks = Threads.nthreads()
+    nchunks == 1 && return _dot(u, w, v)
     partials = zeros(T, nchunks)
     ax = 1:n
     _static_or_serial(
@@ -845,15 +884,17 @@ the serial one [`_static_or_serial`](@ref) falls back to, so the two return the 
 sums bitwise. `BramblePolyesterExt` runs `_dot_band` and keeps a copy of
 [`_dot_masked_band`](@ref) over the mask's words (`_masked_words_band`), so a change here
 must be made there too (gpena/Bramble.jl#473).
+
+The band sums through `_fixed_order_sum`, so its value does not depend on the optimisation
+level of the package image (gpena/Bramble.jl#942), and can differ in the last bit from
+[`_dot`](@ref)'s `@simd` sum.
 """
 @noinline function _dot_band(u, w, v, ax, nchunks::Int, k::Int)
     T = promote_type(eltype(u), eltype(w), eltype(v))
     rng = _band_range(ax, nchunks, k)
-    s = zero(T)
-    @inbounds @simd for i in rng
-        s = _dot_term(s, u, w, v, i, T)
+    return _fixed_order_sum(rng, T) do s, i
+        return @inbounds _band_madd(s, conj(T(u[i])) * T(w[i]), T(v[i]))
     end
-    return s
 end
 
 """

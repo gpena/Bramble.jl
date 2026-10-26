@@ -22,6 +22,8 @@ using Bramble: CpuPolyester, CpuSerial, CpuThreaded, MarkedIndicesUnion, VectorE
 using Polyester
 using Random
 
+include(joinpath(@__DIR__, "polyester_parity_repro.jl"))
+
 const _PP_RANGES = (9:-1:1, 9:-2:1, 1:-1:2, UInt(9):-1:UInt(1), UInt(9):-2:UInt(1))
 
 @testset "Polyester descending-range parity" begin
@@ -224,6 +226,22 @@ end
         @test p isa Float32
         @test _red_nested(Wp, u -> innerₕ(u, u), up) == _red_expected(Wp, p)
         @test _red_bytes(u -> innerₕ(u, u), up) == 0
+    end
+end
+
+# The 1D reductions in a child process that loads an `-O2` Bramble image beside an `-O1`
+# extension image, the state in which the ext group failed about half its runs
+# (gpena/Bramble.jl#942, test/ext/polyester_parity_repro.jl): this process's own images are
+# whatever the depot held, so the testset above cannot pin it. `Repro942.run` checks that
+# the child loaded those images, and puts back the depot's image times. About a minute.
+@testset "1D parity at split image levels (#942)" begin
+    if Threads.nthreads() >= Repro942.NTHREADS
+        n = 20
+        r = Repro942.run(n)
+        @test r.ran == n
+        @test r.mismatches == 0
+    else
+        @test_skip "Repro942 needs $(Repro942.NTHREADS) threads"
     end
 end
 

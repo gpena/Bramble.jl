@@ -101,7 +101,7 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
                ReplaySink, _PairReplaySink, _DiagonalReplayTarget, ActionSink,
                _PairActionSink, _batch_split, _batch_rebuild, _MFFusedPlan, _MFPass,
                _MF_BAND, _MF_NO_COLLECT, _mf_apply_parts!, _mf_host_ast, _batch_splittable,
-               _dot_band, _last_axis_chunks,
+               _dot_band, _threaded_dot, _last_axis_chunks,
                _separable_line_band, _separable_block_band
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
@@ -117,7 +117,12 @@ using PrecompileTools: @setup_workload, @compile_workload
 # on how many workers `@batch` finds free: a reduction nested in another `CpuPolyester`
 # sweep, which runs every band on one worker, returns the top-level value bitwise
 # (gpena/Bramble.jl#473). A `@batch reduction=((+, s),)` would not: it splits the range by
-# the free workers and adds their sums, so a nested call associated differently.
+# the free workers and adds their sums, so a nested call associated differently. The bands
+# run here on the `PtrArray`s `@batch` makes, compiled into this extension's image, and
+# under `CpuThreaded` on the arrays, from Bramble's. Their sum order is fixed in the source
+# (`_fixed_order_sum`), whatever level each image is built at (gpena/Bramble.jl#942). At
+# one thread the unmasked hooks call `_threaded_dot`, which runs `CpuSerial`'s `_dot`, so
+# the three policies agree bitwise.
 #
 # `partials` is this task's own `Vector{T}` of `Threads.nthreads()` entries, built on the
 # task's first reduction of eltype `T` and reused after (`_partials`), so a warm call
@@ -144,9 +149,10 @@ end
 # `VectorElement`, say) crosses inside `_Opaque`, which `@batch` passes through untouched,
 # and each band unwraps it (`_take`, whose other methods read back a `_SlotRef` below).
 # Otherwise the top-level call would run the band body on a strided `PtrArray`, and a nested
-# one, which `@batch` runs on the host without converting, on the view itself: the two
-# `@simd` loops associate differently (gpena/Bramble.jl#473). The opaque form costs a
-# heap-boxed argument tuple per call, never a different sum.
+# one, which `@batch` runs on the host without converting, on the view itself: two compiled
+# bodies, which associated differently while the bands were `@simd` loops
+# (gpena/Bramble.jl#473; their order is fixed in the source since #942). The opaque form
+# costs a heap-boxed argument tuple per call, never a different sum.
 const _PtrAlike = Union{DenseVector, Base.FastContiguousSubArray{<:Any, 1, <:DenseVector}}
 
 struct _Opaque{A}
@@ -162,6 +168,7 @@ function Bramble._batch_dot(u::AbstractVector, v::AbstractVector, w::AbstractVec
         _throw_dot_dim_error(length(u), length(v), length(w))
     T = promote_type(eltype(u), eltype(v), eltype(w))
     nb = Threads.nthreads()
+    nb == 1 && return _threaded_dot(u, v, w)
     partials = _partials(T)
     ax = 1:length(u)
     hu, hv, hw = _hand_arrays((u, v, w))
@@ -261,6 +268,7 @@ function Bramble._batch_dot(u::AbstractVector, w::SeparableWeights{D}, v::Abstra
     (length(u) == n == length(v)) || _throw_dot_dim_error(length(u), n, length(v))
     T = promote_type(eltype(u), eltype(w), eltype(v))
     nb = Threads.nthreads()
+    nb == 1 && return _threaded_dot(u, w, v)
     partials = _partials(T)
     dims = w.dims
     hu, hf, hv = _hand_arrays((u, w.factors, v))
