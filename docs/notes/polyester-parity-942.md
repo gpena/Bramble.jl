@@ -52,9 +52,13 @@ optimisation levels and loaded from two different package images.
   session" (`Pkg/src/Pkg.jl`, line 411). `test.sh` passes none, so every image involved has
   `check_bounds=0`, as the cache flags below show.
 
-Only the `@simd` bodies are exposed. The masked reductions (`innerₕ :a`, `:a :b`) walk the
-mask's words in a `while` loop without `@simd`, which LLVM may not reassociate at any
-level, so their sum order is the same in every copy; they never failed. Why the 2D and 3D
+Only the `@simd` bodies failed. The masked reductions (`innerₕ :a`, `:a :b`) walk the
+mask's words in a `while` loop without `@simd`, which LLVM may not reassociate, and they
+never failed. Their sum is still not the same in every copy: each term is a `muladd`, which
+on aarch64 fuses from `-O1` up but not at `-O0`. So an `-O0` extension image loaded beside
+an `-O2` Bramble image sums a mask differently. The ext group and CI run at
+`--optimize=1`, no gate exercises that pairing, and it is not fixed (a known gap, stated
+beside `_masked_words_band` in `ext/BramblePolyesterExt.jl`). Why the 2D and 3D
 grids, whose `_separable_block_band` has an `@simd` line loop too, passed in the failing
 runs is not established.
 
@@ -134,7 +138,13 @@ process running at the same time does to those files, and the times of files cre
 the call are not touched. A call that is killed outright (no `finally`) leaves the touches
 in place.
 
-On base (2026-10-26, 4 threads, `n = 20`):
+Since S2.2, `test/ext/polyester_parity.jl` includes the file, and its testset "1D parity at
+split image levels (#942)" calls `Repro942.run(20)` and expects `ran == 20` and
+`mismatches == 0`. The testset is thread-gated: below `Repro942.NTHREADS` it records a
+`@test_skip`. It adds about 60 s to each ext run, and about 222 s when no `-O2` Bramble
+image exists yet.
+
+On base, before S2.2 (2026-10-26, 4 threads, `n = 20`):
 
 - from a caller at the default level (the PROBE's flags): `(ran = 20, mismatches = 20)`;
 - from a caller at `--optimize=1` (the `ext` group's flags): `(ran = 20, mismatches = 20)`;
@@ -152,24 +162,43 @@ On base (2026-10-26, 4 threads, `n = 20`):
 
 ## The fix (S2.2)
 
-The reductions' sums must not depend on how the compiler vectorizes the band body, since
-the process cannot choose which images it loads. The `@simd` band bodies the reductions
-share should fix their association in the source: a fixed number of accumulators combined
-in a fixed order, no `@simd`, and the multiply-add written so that it cannot contract at one
-level and not another (`muladd` may or may not fuse; `fma` or a separate multiply and add
-cannot). Files:
+S2.2 (commits b32a7ef4 and fb0b9d3f) fixed the bands' sum order in the source, since a
+process cannot choose which images it loads.
 
-- `src/space/inner_product.jl`: `_separable_line_band` (the failing body) and
-  `_separable_block_band` (its inner `@simd` line loop: the same construct, though no run
-  has failed on it).
-- `src/utils/linear_algebra.jl`: `_dot_band` (`@simd` over `_dot_term`, the dense-weight
-  reduction `_batch_dot` also runs).
-- `test/ext/polyester_parity.jl`: the new testset, which calls `Repro942.run` (it spawns its
-  own children, so it runs at the group's `--optimize=1` and leaves the group's process
-  untouched).
+- `src/utils/linear_algebra.jl` gained `_fixed_order_sum`. It keeps eight running sums,
+  each taking every eighth index, puts the leftover indices on the first, and combines the
+  eight as a fixed tree. Each term goes through `_band_madd(s, a, b) = s + a * b`, a plain
+  multiply and add. There is no `@simd`, which LLVM reassociates when it vectorizes at
+  `-O2`, and no `muladd`, which may fuse at one level and not another. LLVM may still pack
+  the eight sums into vector lanes, which keeps the order.
+- `_dot_band` (`src/utils/linear_algebra.jl`) and `_separable_line_band` and
+  `_separable_block_band` (`src/space/inner_product.jl`) sum through it. The block band
+  had the same `@simd` line loop, though no run had failed on it.
+- The one-band shortcut: at `Threads.nthreads() == 1`, `_threaded_dot` returns `_dot(u, w, v)`,
+  `CpuSerial`'s `@simd` kernel, and the unmasked `_batch_dot` hooks in
+  `ext/BramblePolyesterExt.jl` call `_threaded_dot` (a new import there, declared in
+  `test/quality/explicit_imports.jl`). A single fixed-order band would differ in the last
+  bit from `CpuSerial`'s sum, so without the shortcut the three policies would no longer
+  agree bitwise at one thread.
+- `ext/BramblePolyesterExt.jl` also states the masked-band gap at `-O0` (see Cause), which
+  is not fixed.
+- `test/ext/polyester_parity.jl` gained the testset that runs `Repro942.run(20)` and
+  expects `mismatches == 0` (see Reproduction).
 
-`ext/BramblePolyesterExt.jl` needs no change: its masked band copies have no `@simd`. Handing
-the `Vector`s to the tasks instead (`_Opaque`), so that one specialization serves both
-paths, was considered and is worse: it boxes the argument tuple on every call (the 0 B
-allocation tests), and a `CpuSerial` or `CpuThreaded` sum would still depend on the image's
-level.
+Rejected: handing the `Vector`s to the tasks (`_Opaque`), so that one specialization serves
+both paths. It boxes the argument tuple on every call, which breaks the 0 B allocation tests,
+and the `CpuSerial` and `CpuThreaded` sums would still depend on the image's level. An `fma`
+variant of `_band_madd` for `Float32` and `Float64` was measured and not adopted (see Cost).
+
+## Cost
+
+The user accepted a slowdown of the `@simd` reductions this replaced:
+
+- `CpuPolyester` 1D, 100001 points, `innerₕ`: 6.6 to 9.1 µs (+38%); the dense `_dot`
+  over 100001 points: 7.5 to 10.5 µs.
+- `CpuPolyester` 2D, 1001², `innerₕ`: 52 to 59 µs (+14%).
+- `CpuThreaded` 2D: about 65-72 to 83-86 µs.
+- `CpuSerial` is unchanged (it keeps `_dot`'s `@simd` kernel), and so are the allocations.
+
+The `fma` variant recovered only about 30% of the 1D gap, though all of the 2D gap, and was
+not adopted.
