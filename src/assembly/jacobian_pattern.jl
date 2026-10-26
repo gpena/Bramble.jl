@@ -186,8 +186,8 @@ pattern = jacobian_pattern(a, U -> Mₕ(πₕ(U)))
 ```
 """
 function jacobian_pattern(
-        form::BilinearForm{D, TrialSpace, TestSpace, AST}, coefficient_dependencies::Function...
-) where {D, TrialSpace, TestSpace, AST}
+        form::BilinearForm{D}, coefficient_dependencies::Function...
+) where {D}
     # A composite space on either side is walked block by block, as `assemble` walks it.
     _is_block_pair(form.trial_space, form.test_space) &&
         return _jacobian_pattern_blocks(form, coefficient_dependencies...)

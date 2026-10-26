@@ -320,8 +320,7 @@ end
 @inline _diagonal_banded(::Nothing, _) = false
 @inline _diagonal_banded(plan::_MFFusedPlan, a) = plan.form === a && !plan.interp
 
-@inline _diagonal_bands(plan::_MFFusedPlan{D}) where {D} = min(
-    Threads.nthreads(), plan.dims[D])
+@inline _diagonal_bands(plan::_MFFusedPlan) = min(Threads.nthreads(), last(plan.dims))
 
 # The diagonal of a plain form into `s.d`, under `policy`.
 function _diagonal_walk!(policy, plan, s::DiagonalSink, a::BilinearForm)
@@ -335,10 +334,10 @@ end
 
 # Task `k` of `ntasks`: bands `k`, `k + ntasks`, ... of `nbands`, into `d`.
 @noinline function _diagonal_band_task!(
-        d, a, plan::_MFFusedPlan{D}, nbands::Int, ntasks::Int, k::Int) where {D}
+        d, a, plan::_MFFusedPlan, nbands::Int, ntasks::Int, k::Int)
     s = DiagonalSink(d)
     for b in k:ntasks:nbands
-        own = _band_range(1:plan.dims[D], nbands, b)
+        own = _band_range(1:last(plan.dims), nbands, b)
         _mf_apply!(_DiagonalBand(own, plan.omin, plan.omax), s, a)
     end
     return nothing
@@ -365,9 +364,9 @@ end
 
 # Task `k` of `ntasks`: band `b` of `nbands` adds into `parts[b]`.
 @noinline function _reduced_band_task!(
-        parts, Ev, Eu, a, plan::_MFFusedPlan{D}, nbands::Int, ntasks::Int, k::Int) where {D}
+        parts, Ev, Eu, a, plan::_MFFusedPlan, nbands::Int, ntasks::Int, k::Int)
     for b in k:ntasks:nbands
-        own = _band_range(1:plan.dims[D], nbands, b)
+        own = _band_range(1:last(plan.dims), nbands, b)
         s = _reduced_diagonal_sink(parts[b], Ev, Eu)
         _mf_apply!(_DiagonalBand(own, plan.omin, plan.omax), s, a)
     end

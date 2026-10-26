@@ -422,14 +422,14 @@ nothing and `Threads.@threads` can partition it directly.
 Blocks differ in length by at most one slice: the remainder is spread over the first of
 them rather than left on the last, so no thread receives a double-sized tail.
 """
-struct _LastAxisChunks{D, R <: Tuple, A <: AbstractRange}
+struct _LastAxisChunks{R <: Tuple, A <: AbstractRange}
     rest::R
     ax::A
     n::Int
 end
 
 """
-    _last_axis_chunks(idxs::CartesianIndices{D}, n::Integer) -> _LastAxisChunks{D}
+    _last_axis_chunks(idxs::CartesianIndices{D}, n::Integer) -> _LastAxisChunks
 
 Return `idxs` split into at most `n` blocks along its last axis, clamped to the length of
 that axis so no block is empty.
@@ -439,14 +439,14 @@ that axis so no block is empty.
     ax = inds[D]
     nblocks = max(1, min(Int(n), length(ax)))
     rest = Base.front(inds)
-    return _LastAxisChunks{D, typeof(rest), typeof(ax)}(rest, ax, nblocks)
+    return _LastAxisChunks{typeof(rest), typeof(ax)}(rest, ax, nblocks)
 end
 
 @inline Base.length(c::_LastAxisChunks) = c.n
 @inline Base.firstindex(::_LastAxisChunks) = 1
 @inline Base.lastindex(c::_LastAxisChunks) = c.n
 
-@inline function Base.getindex(c::_LastAxisChunks{D}, k::Int) where {D}
+@inline function Base.getindex(c::_LastAxisChunks, k::Int)
     return CartesianIndices((c.rest..., _band_range(c.ax, c.n, k)))
 end
 

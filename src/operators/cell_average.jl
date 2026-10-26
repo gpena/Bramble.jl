@@ -163,15 +163,14 @@ end
 # No accumulator seed is built here: `_cell_average` seeds itself from its first weighted
 # term, so the sum's type is the promotion of `T` and `f`'s return type from the first
 # step on (gpena/Bramble.jl#148, #523).
-struct _AvgKernel{F, X, IX, NQ, T}
+struct _AvgKernel{F, X, IX, Q <: Tuple}
     f::F
     x::X
     idxs::IX
-    nodes::NTuple{NQ, T}
-    wts::NTuple{NQ, T}
+    nodes::Q
+    wts::Q
 end
-@inline (k::_AvgKernel{F, X, IX, NQ, T})(i) where {F, X, IX, NQ, T} = _cell_average(
-    k.f, k.x, k.idxs[i], k.nodes, k.wts)
+@inline (k::_AvgKernel)(i) = _cell_average(k.f, k.x, k.idxs[i], k.nodes, k.wts)
 
 # `CellAverage`'s side of the `project!` contract (`operators/projection.jl`). The rule
 # carries the quadrature order; the driver decides the space's shape, the masking and the

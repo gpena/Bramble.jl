@@ -1201,24 +1201,6 @@ end
 # `resolve_ast` for both is generated with the families above.
 
 # ==============================================================================
-# Direct integration helpers for the form AST (ast.jl)
-# ==============================================================================
-
-"""
-    DifferenceNode{D, Dim}
-
-Either one-sided difference node over a `D`-dimensional space, differencing along `Dim`.
-
-The two carry the same parameters, so anything that reads only the *direction* off the
-node is written against this alias and stays symmetric between them by construction.
-
-Not everything can be: `inner₊` takes backward differences alone, because the staggered
-weights it carries are the ones the summation-by-parts identity pairs with a backward
-difference. Use this alias where the distinction genuinely does not arise.
-"""
-const DifferenceNode{D, Dim} = Union{BackwardDifference{D, Dim}, ForwardDifference{D, Dim}}
-
-# ==============================================================================
 # The remaining difference families
 # ==============================================================================
 #
@@ -1442,19 +1424,6 @@ end
     b = I[Dim] == 1 ? zero(a) : c / h
     return (a, -(a + b), b)
 end
-
-# --- Traits ----------------------------------------------------------------------- #
-
-"""
-    ExtendedDifferenceNode{D, Dim}
-
-The three difference nodes that are neither one-sided nor a jump, differencing along `Dim`.
-Grouped so that everything reading only the direction off a node covers all of them at
-once, as `DifferenceNode` does for the one-sided pair.
-"""
-const ExtendedDifferenceNode{D, Dim} = Union{
-    CenteredDifference{D, Dim}, StarDifference{D, Dim}, CrossWeightedDifference{D, Dim}
-}
 
 # ==============================================================================
 # Composite trial/test functions: ∇ₕ, ∇₊ₕ, εₕ, divₕ, divₘₕ over several leaves at once

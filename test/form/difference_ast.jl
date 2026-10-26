@@ -13,7 +13,6 @@ using Bramble:
                TestFunction,
                BackwardDifference,
                ForwardDifference,
-               DifferenceNode,
                is_symbolic,
                resolve_ast,
                trial_component_or_nothing,
@@ -50,7 +49,7 @@ using Bramble:
     @testset "Backward vs forward parity" begin
         # A structural guard rather than a list of cases: whatever generic function has a
         # method mentioning one node must have one mentioning the other. A method written
-        # against the `DifferenceNode` alias satisfies it for both at once.
+        # against a union holding both satisfies it for both at once.
         function mentioning(needle)
             found = Set{Symbol}()
             for nm in names(Bramble; all = true)
@@ -111,8 +110,8 @@ using Bramble:
             @test is_symbolic(bwd) == is_symbolic(fwd) == false
             @test resolve_ast(bwd) isa BackwardDifference
             @test resolve_ast(fwd) isa ForwardDifference
-            @test bwd isa DifferenceNode
-            @test fwd isa DifferenceNode
+            @test bwd isa Bramble._DifferenceNode
+            @test fwd isa Bramble._DifferenceNode
         end
 
         # a symbolic leaf makes the whole node symbolic, either way round

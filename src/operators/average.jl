@@ -672,21 +672,6 @@ end
     CenteredAverage{D, Dim, <:_BareLeaf}, ShiftNode{D, Dim, <:_BareLeaf}}) where {D, Dim} = true
 
 # ==============================================================================
-# AST Resolution
-# ==============================================================================
-
-"""
-    AverageNode{D, Dim}
-
-Any average node over a `D`-dimensional space, averaging along `Dim`.
-
-The three carry the same parameters and differ only in which neighbour it reaches, so
-anything reading the direction rather than choosing a stencil is written against this alias.
-"""
-const AverageNode{D, Dim} = Union{
-    BackwardAverage{D, Dim}, ForwardAverage{D, Dim}, CenteredAverage{D, Dim}}
-
-# ==============================================================================
 # Expression rendering (gpena/Bramble.jl#274)
 # ==============================================================================
 

@@ -1,7 +1,6 @@
 # semidiscrete_constraints.jl: how a semidiscretization's Dirichlet boundary values are
-# carried and applied. `AbstractSemidiscretization` is the shared supertype this all
-# dispatches on, so that `Semidiscretization` (`semidiscrete.jl`) reuses it instead of
-# carrying its own copy -- see its own docstring below for why it lives here.
+# carried and applied. These functions take the semidiscretisation untyped and dispatch on
+# the constraint carrier: `Semidiscretization` (`semidiscrete.jl`) is defined after this file.
 
 # --- How the source's boundary values are reached at each step ---------------------- #
 #
@@ -113,52 +112,21 @@ end
 
 # --- The semidiscretisation --------------------------------------------------------- #
 
-"""
-    AbstractSemidiscretization
-
-Common supertype of the semidiscretisations: [`Semidiscretization`](@ref)
-(`M u_h' = F(t) - A u_h`) is its only subtype.
-
-Everything about how the source's boundary values are reached at each step --
-[`NoConstraints`](@ref)/[`LabelsOnly`](@ref)/[`StaticConstraints`](@ref)/
-[`TimeDependentConstraints`](@ref)/[`TimeParamDependentConstraints`](@ref),
-`_source_constraints`, `_assemble_source!`, `_apply_initial_constraints!` -- only ever
-touches `space`/`labels`/`components`/`constraints`/`source`, never the operator matrices,
-so it lives apart from the concrete type.
-"""
-abstract type AbstractSemidiscretization end
-
-"""
-    space(sd::AbstractSemidiscretization)
-
-Return the test space the semidiscretisation was built on.
-"""
-@inline space(sd::AbstractSemidiscretization) = sd.space
+# Everything about how the source's boundary values are reached at each step --
+# `NoConstraints`/`LabelsOnly`/`StaticConstraints`/`TimeDependentConstraints`/
+# `TimeParamDependentConstraints`, `_source_constraints`, `_assemble_source!`,
+# `_apply_initial_constraints!` -- only ever touches `space`/`labels`/`components`/
+# `constraints`/`source`, never the operator matrices, so it lives apart from the concrete
+# type.
 
 # --- Consistent initial conditions -------------------------------------------------- #
 
-"""
-    dirichlet_bc!(u::AbstractVector, sd::AbstractSemidiscretization, t::Number, p = nothing) -> u
-
-Write `sd`'s Dirichlet values at time `t` (and, for a parameter-dependent condition,
-parameter `p`) into `u` and return it.
-
-An index-1 differential-algebraic system needs its initial condition to satisfy the
-algebraic rows already: a `u` disagreeing with `g(x, 0)` on the boundary is inconsistent,
-and a stiff solver either rejects it or absorbs it into the first step.
-[`ode_problem`](@ref) applies this to a copy of the initial condition it is handed,
-forwarding whatever `p` the caller gave the `ODEProblem`.
-"""
-function dirichlet_bc!(u::AbstractVector, sd::AbstractSemidiscretization, t::Number, p = nothing)
-    return _apply_initial_constraints!(u, sd, sd.constraints, p, t)
-end
-
 @inline _apply_initial_constraints!(
-    u::AbstractVector, sd::AbstractSemidiscretization, ::NoConstraints, p, t
+    u::AbstractVector, sd, ::NoConstraints, p, t
 ) = u
 
 function _apply_initial_constraints!(
-        u::AbstractVector, sd::AbstractSemidiscretization, ::LabelsOnly, p, t
+        u::AbstractVector, sd, ::LabelsOnly, p, t
 )
     _each_dirichlet_row(sd.space, sd.labels, sd.components) do i
         return @inbounds u[i] = zero(eltype(u))
@@ -167,15 +135,15 @@ function _apply_initial_constraints!(
 end
 
 @inline _apply_initial_constraints!(
-    u::AbstractVector, sd::AbstractSemidiscretization, c::StaticConstraints, p, t
+    u::AbstractVector, sd, c::StaticConstraints, p, t
 ) = dirichlet_bc!(u, sd.space, c.constraints, sd.labels...; components = sd.components)
 
 @inline _apply_initial_constraints!(
-    u::AbstractVector, sd::AbstractSemidiscretization, c::TimeDependentConstraints, p, t
+    u::AbstractVector, sd, c::TimeDependentConstraints, p, t
 ) = dirichlet_bc!(u, sd.space, c.constraints(t), sd.labels...; components = sd.components)
 
 @inline _apply_initial_constraints!(
-    u::AbstractVector, sd::AbstractSemidiscretization, c::TimeParamDependentConstraints, p, t
+    u::AbstractVector, sd, c::TimeParamDependentConstraints, p, t
 ) = dirichlet_bc!(u, sd.space, c.constraints(t, p), sd.labels...; components = sd.components)
 
 # --- Constraint descriptions --------------------------------------------------------- #
@@ -183,7 +151,7 @@ end
 # Dispatches on the constraint-carrier types above, so it lives here rather than beside
 # `Semidiscretization`'s own `Base.show` (`semidiscrete.jl`), which calls this.
 
-function _constraints_description(sd::AbstractSemidiscretization)
+function _constraints_description(sd)
     # A ghost space has no labels: its relations are the constraints.
     sd.constraints isa GhostConstraints && return _constraint_description(sd.constraints)
     isempty(sd.labels) && return "none"

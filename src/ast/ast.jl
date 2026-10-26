@@ -16,19 +16,12 @@ directly rather than defining separate unexported aliases.
 =#
 
 """
-    OperatorType
-
-Supertype of everything the form layer treats as an operator.
-"""
-abstract type OperatorType end
-
-"""
-    LazyOp{D} <: OperatorType
+    LazyOp{D}
 
 A node of the symbolic operator tree over a `D`-dimensional space. Records an operation
 without performing it, so that a form can be written as an expression and assembled later.
 """
-abstract type LazyOp{D} <: OperatorType end
+abstract type LazyOp{D} end
 
 # `space` is implemented only by nodes that carry a concrete space reference (`IdentityOperator`,
 # `ZeroOperator`), whereas purely algebraic or symbolic nodes (`TestFunction`, `TrialFunction`)

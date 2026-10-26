@@ -338,7 +338,7 @@ end
     weights(Wₕ::ScalarGridSpace) -> SpaceWeights
     weights(Wₕ::ScalarGridSpace, ::Innerh) -> AbstractVector
     weights(Wₕ::ScalarGridSpace, ::Innerplus) -> NTuple{D, AbstractVector}
-    weights(Wₕ::ScalarGridSpace, ::InnerProductType, i::Int) -> AbstractVector
+    weights(Wₕ::ScalarGridSpace, ::Union{Innerh, Innerplus}, i::Int) -> AbstractVector
     weights(Wₕ::ScalarGridSpace{D}, ::Val{S}) where {D, S} -> AbstractVector
 
 Returns the precomputed weight vectors for discrete inner products.

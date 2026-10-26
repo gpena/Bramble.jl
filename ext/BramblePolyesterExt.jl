@@ -1211,13 +1211,13 @@ end
 end
 
 function Bramble._batch_mf_bands!(
-        s::ActionSink, plan::_MFFusedPlan{D}, nbands::Int, walk) where {D}
+        s::ActionSink, plan::_MFFusedPlan, nbands::Int, walk)
     a = plan.form
     y, x = s.y, s.x
     skel, arrays = _split_or_whole(
         ((s.α, s.mask), a.trial_space, a.test_space, _mf_host_ast(a), plan.geom, walk), y,
         x)
-    len, omin, omax = plan.dims[D], plan.omin, plan.omax
+    len, omin, omax = last(plan.dims), plan.omin, plan.omax
     failed = false
     @batch reduction=((|, failed),) for b in 1:nbands
         failed |= _mf_band_threw(skel, arrays, y, x, len, nbands, b, omin, omax)

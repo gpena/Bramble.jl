@@ -210,7 +210,7 @@ end
         terms = map(K.terms) do t
             line = t.line isa Bramble._KronTridiag ? t.factors[1] : t.line
             Bramble.KroneckerTerm{
-                2, typeof(t.scales), typeof(t.factors), typeof(line), typeof(t.rows)
+                typeof(t.scales), typeof(t.factors), typeof(line), typeof(t.rows)
             }(t.scales, t.factors, line, t.rows, t.symmetric)
         end
         Kcsc = KroneckerLinearOperator{eltype(K), 2, typeof(terms)}(terms, K.dims, K.n)

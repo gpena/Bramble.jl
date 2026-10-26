@@ -5,7 +5,7 @@ Core abstractions for function spaces on structured grids.
 
 ## Overview
 
-- Abstract types: `AbstractSpaceType`, `InnerProductType`.
+- Abstract types: `AbstractSpaceType`.
 - Element types: `VectorElement`, a wrapper for grid functions.
 - Interface functions: the methods any concrete space implementation must provide.
 
@@ -14,7 +14,7 @@ Core abstractions for function spaces on structured grids.
 The space framework uses Julia's type system and multiple dispatch to:
 1. Maintain type stability through compile-time information (`Val`, type parameters)
 2. Enable specialized implementations for scalar vs vector fields via `AbstractSpaceType{N}`
-3. Support different discrete inner products (`InnerProductType`)
+3. Support different discrete inner products (`Innerh`, `Innerplus`)
 4. Keep data (vectors/matrices) and context (spaces) separate
 
 ## Usage
@@ -104,47 +104,7 @@ function VectorElement(data::VT, space::S) where {S, T, VT <: AbstractVector{T}}
 end
 
 """
-    InnerProductType
-
-Abstract type for selecting which discrete inner product formula to use.
-
-Different inner product types correspond to different weight distributions on the grid,
-used in various finite difference schemes and stability analyses. The choice of inner
-product affects energy estimates and numerical stability properties.
-
-# Subtypes
-
-- [`Innerh`](@ref): Standard ``L^2`` inner product using cell measures (volumes)
-- [`Innerplus`](@ref): Modified inner product using staggered grid spacings
-
-# Background
-
-In finite difference methods, different inner products arise naturally from:
-- Summation-by-parts (SBP) operators
-- Energy method stability analysis
-- Discrete integration formulas
-
-The standard inner product (`Innerh`) uses cell volumes as weights, while the 
-modified inner products (`Innerplus`) use combinations of forward/backward spacings,
-appearing in discrete energy estimates for difference operators.
-
-# Usage
-
-```julia
-using Bramble: inner₊ₓ
-# Compute standard L² inner product
-result = innerₕ(uₕ, vₕ)  # Uses Innerh() internally
-
-# Compute modified inner product in x-direction
-result = inner₊ₓ(uₕ, vₕ)  # Uses Innerplus() internally
-```
-
-See also: [`Innerh`](@ref), [`Innerplus`](@ref), [`innerₕ`](@ref), [`inner₊ₓ`](@ref)
-"""
-abstract type InnerProductType end
-
-"""
-    Innerplus <: InnerProductType
+    Innerplus
 
 Selector for modified discrete ``L^2`` inner products using staggered grid spacings.
 
@@ -173,12 +133,12 @@ result_x = inner₊ₓ(uₕ, vₕ)  # Modified inner product, x-direction
 result_y = inner₊ᵧ(uₕ, vₕ)  # Modified inner product, y-direction
 ```
 
-See also: [`InnerProductType`](@ref), [`Innerh`](@ref), [`inner₊ₓ`](@ref), [`weights`](@ref)
+See also: [`Innerh`](@ref), [`inner₊ₓ`](@ref), [`weights`](@ref)
 """
-struct Innerplus <: InnerProductType end
+struct Innerplus end
 
 """
-    Innerh <: InnerProductType
+    Innerh
 
 Selector for the standard discrete ``L^2`` inner product weighted by cell measures.
 
@@ -205,9 +165,9 @@ result = innerₕ(uₕ, vₕ)  # Uses Innerh() internally
 norm_value = normₕ(uₕ)  # Equivalent to sqrt(innerₕ(uₕ, uₕ))
 ```
 
-See also: [`InnerProductType`](@ref), [`Innerplus`](@ref), [`innerₕ`](@ref), [`normₕ`](@ref)
+See also: [`Innerplus`](@ref), [`innerₕ`](@ref), [`normₕ`](@ref)
 """
-struct Innerh <: InnerProductType end
+struct Innerh end
 
 #=
 The following functions define the **mandatory interface** for any concrete subtype
