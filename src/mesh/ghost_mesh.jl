@@ -58,6 +58,8 @@ mutable struct GhostMesh{D, M <: AbstractMeshType{D}, P <: AbstractMeshType{D}} 
     physical::M
     "the padded mesh, a real mesh of its own with the physical labels on its facet nodes."
     padded::P
+    "the `CartesianIndices` of the padded grid."
+    indices::CartesianIndices{D, NTuple{D, Base.OneTo{Int}}}
     "the physical point counts."
     n::NTuple{D, Int}
     "the ghost layers below each axis, 0 or 1: the padded index of physical node `I` is `I + lo`."
@@ -79,7 +81,7 @@ end
 
 The immutable walk state of a [`GhostMesh`](@ref), built on demand by [`_walk_mesh`](@ref)
 once the padded mesh is brought up to date with the physical one, so it is never stale: the
-walk states of the physical and padded meshes and the facet tuples. It
+walk states of the physical and padded meshes, the padded indices and the facet tuples. It
 answers each accessor and ghost query a `GhostMesh` does; its version, identity (`uid`) and
 marker words are the padded state's. The state types `M` and `P` are parameters so a rebuilt
 state can hold other array types ([`_batch_rebuild`](@ref)).
@@ -90,6 +92,8 @@ struct GhostMeshState{D, M <: AbstractMeshType{D}, P <: AbstractMeshType{D}} <:
     physical::M
     "the walk state of the padded mesh."
     padded::P
+    "the `CartesianIndices` of the padded grid."
+    indices::CartesianIndices{D, NTuple{D, Base.OneTo{Int}}}
     "the physical point counts."
     n::NTuple{D, Int}
     "the ghost layers below each axis, 0 or 1: the padded index of physical node `I` is `I + lo`."
@@ -210,7 +214,7 @@ function GhostMesh(Ωₕ::Union{Mesh1D, MeshnD}; ghosts = :boundary)
     subs = ntuple(d -> _padded_axis(Ωₕ(d), pts[d], active[d][1] || active[d][2]), Val(D))
     padded = _padded_mesh(Ωₕ, subs, idxs)
     G = GhostMesh{D, typeof(Ωₕ), typeof(padded)}(
-        Ωₕ, padded, n, lo, active, offset, starts[end],
+        Ωₕ, padded, idxs, n, lo, active, offset, starts[end],
         _mesh_version(Ωₕ), _marker_stamp(Ωₕ))
     _store_markers!(padded, _padded_markers(G))
     return G
@@ -232,7 +236,7 @@ end
 # The state of `G`, taken after `_padded` brings the padded mesh up to date.
 @inline function _walk_mesh(G::GhostMesh)
     p = _walk_mesh(_padded(G))
-    return GhostMeshState(_walk_mesh(G.physical), p, G.n, G.lo, G.active,
+    return GhostMeshState(_walk_mesh(G.physical), p, G.indices, G.n, G.lo, G.active,
         G.offset, G.nghosts, p.uid)
 end
 @inline _walk_mesh(s::GhostMeshState) = s
@@ -269,7 +273,7 @@ end
 # `:boundary` and `:interior` where it holds none.
 function _padded_markers(G::GhostMesh)
     mm = MeshMarkers()
-    plin = LinearIndices(size(indices(G)))
+    plin = LinearIndices(size(G.indices))
     phys = CartesianIndices(G.n)
     shift = CartesianIndex(G.lo)
     for (label, bits) in markers(G.physical)
@@ -443,9 +447,9 @@ end
 @inline spacing(G::_GhostMeshLike, i, dim::Int) = spacing(_padded(G), i, dim)
 @inline forward_spacing(G::_GhostMeshLike, i, dim::Int) = forward_spacing(_padded(G), i, dim)
 
-@inline npoints(G::_GhostMeshLike) = prod(size(indices(G)))
-@inline npoints(G::_GhostMeshLike, ::Type{Tuple}) = size(indices(G))
-@inline indices(G::_GhostMeshLike) = indices(G.padded)
+@inline npoints(G::_GhostMeshLike) = prod(size(G.indices))
+@inline npoints(G::_GhostMeshLike, ::Type{Tuple}) = size(G.indices)
+@inline indices(G::_GhostMeshLike) = G.indices
 @inline eltype(::Type{<:GhostMesh{D, M}}) where {D, M} = eltype(M)
 @inline eltype(::Type{<:GhostMeshState{D, M}}) where {D, M} = eltype(M)
 
@@ -497,7 +501,7 @@ end
 function _ensure_geometric_markers!(
         mesh_markers::MeshMarkers, G::_GhostMeshLike; warn_marker_mismatch::Bool = true
 )
-    linear = LinearIndices(size(indices(G)))
+    linear = LinearIndices(size(G.indices))
     boundary_set = falses(length(linear))
     for idxs in boundary_indices(G)
         _mark_indices!(boundary_set, linear, idxs)

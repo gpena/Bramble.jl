@@ -205,3 +205,64 @@ figure where base has it; the S2 files alone move it up by most of the wave 1 sh
 covers). The shift follows S2 (`src/mesh/ghost_mesh.jl`, `src/utils/batch_split.jl`), not
 S4.1. That wave 1 sits a little above `s2only` leaves room for a small share from the
 files in neither tree; it was not tested.
+
+## S11
+
+Question: does restoring the stored `indices` field remove the `ghost_2d` `mul!` shift
+that the bisect put on S2? Candidate A puts the stored `indices` field back into
+`GhostMesh` and `GhostMeshState`, without bringing back the `CI` parameter. The public type
+stays `GhostMesh{D, M, P}`. The field is typed
+`CartesianIndices{D, NTuple{D, Base.OneTo{Int}}}`, the type `generate_indices` gives every
+padded mesh. The constructor stores the padded indices, `_walk_mesh` copies them into the
+state, `indices(G::_GhostMeshLike) = G.indices` again, and `npoints`, `_padded_markers` and
+`_ensure_geometric_markers!` read `size(G.indices)`. Only `src/mesh/ghost_mesh.jl`
+changes, and `src/utils/batch_split.jl` stays as S2 left it.
+
+Trees: base `d64ab24a`, head the branch at `31f5354e` (its `src/` differs from `9f3ed728`
+in whitespace only), and A, a detached tree at `7a74c2ff` with the change above. `diff -rq`
+of `src/` against head lists only `src/mesh/ghost_mesh.jl`, plus the two files `31f5354e`
+reflows. Method of the bisect: `type_cleanups_ab.jl --rows ghost_2d --launches 1`, 4
+threads, default `-O`, `BRAMBLE_JULIA_SLOTS=4`, nothing else running, a quiet minute
+between rounds. Ten rounds ran in the cycle base, head, A, with the starting tree rotated
+each round. Five more ran in the reversed cycle A, head, base, also rotated. A pair is the
+two launches of the same round. Figures are in ns per DOF and are in the TOML under
+`s11.rotated` and `s11.reversed`, each tree with its per-launch arrays, min, median, max,
+`round_position` and `load_1min_before`.
+
+Machine state: AC power, no other julia, cpu check OK, onedrive `ASK` (the user said sync
+is paused). The preflight passed after about five minutes of waiting, when macOS indexing
+daemons had settled. The 1-minute load before each launch ran from 1.41 to 2.96, mostly
+1.6 to 2.3, so these figures are under load like the earlier ones.
+
+| run | tree | mul! launches | min | median | max | above base |
+|---|---|---|---:|---:|---:|---:|
+| rotated | base | 9.622, 9.619, 9.618, 9.348, 9.593, 9.612, 9.621, 11.596, 9.622, 9.619 | 9.348 | 9.619 | 11.596 | n/a |
+| rotated | head | 9.702, 9.715, 9.729, 9.467, 9.707, 9.704, 9.736, 9.722, 9.697, 9.766 | 9.467 | 9.711 | 9.766 | 9 of 10 |
+| rotated | A | 9.631, 9.610, 9.623, 9.597, 9.608, 9.592, 9.600, 9.590, 9.597, 9.614 | 9.590 | 9.604 | 9.631 | 4 of 10 |
+| reversed | base | 9.608, 9.614, 9.351, 9.623, 9.617 | 9.351 | 9.614 | 9.623 | n/a |
+| reversed | head | 9.715, 9.721, 9.709, 9.698, 9.713 | 9.698 | 9.713 | 9.721 | 5 of 5 |
+| reversed | A | 9.622, 9.616, 9.608, 9.597, 9.595 | 9.595 | 9.608 | 9.622 | 3 of 5 |
+
+Ratios against base, rotated rounds: head minima 1.0128, medians 1.0096; A minima 1.0259,
+medians 0.9985. Reversed rounds: head minima 1.0371, medians 1.0102; A minima 1.0261,
+medians 0.9994. The ratio of minima is not a good measure here: base's minima are its two
+low launches (9.348 and 9.351, both base starting its round, as in S8.2), and A never had
+a low launch. Base's 11.596 (round 7) is a single high launch like the ones in the bisect.
+A is below head in 9 of 10 rotated pairs and 5 of 5 reversed pairs.
+
+`assemble!` (for reference; the change does not touch it): medians base 10.158, head
+10.320, A 10.323 in the rotated rounds, and 10.267, 10.344, 10.339 in the reversed ones.
+Head and A are alike and both have their minimum inside base's range (10.079 to 10.687).
+Allocations are those of S8.2 on all three trees (`mul!` 0 bytes, `assemble!` 48 bytes).
+
+The control worked: head without A showed the shift again (9 of 10 and 5 of 5 pairs above
+base, median ratio about 1.010, as in S8.2 and the bisect), so this run could detect the
+shift.
+
+Verdict against the MANUAL criterion: met. A's median (9.604) lies inside base's min to max
+(9.348 to 11.596), and also inside base's eight launches other than the two low ones and
+the high one (9.593 to 9.622). A is above base in 4 of 10 pairs, which is at most 6. In
+the reversed order it is 3 of 5. The stored field brings `ghost_2d` `mul!` back to base's
+level. The mechanism is not identified: the indices are read once per product, not per
+point, so the extra indirection of `indices(G.padded)` alone does not explain about 1%.
+The struct layout or code placement that the stored field changes may. Not pinned further.
