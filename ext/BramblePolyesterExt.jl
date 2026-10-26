@@ -199,8 +199,11 @@ end
 
 # The masked band bodies: `_dot_masked_band` with a vector weight and with a
 # `SeparableWeights` one (src/utils/linear_algebra.jl, src/space/inner_product.jl) over the
-# mask's words rather than the mask, the same walk and the same `muladd`s in the same order,
-# so the same sums.
+# mask's words rather than the mask, the same walk and the same `muladd`s in the same order.
+# The sums agree when both copies fuse alike, as from `-O1` up, the gate's level. On
+# aarch64 a `muladd` does not fuse at `-O0`, so an `-O0` extension image loaded beside an
+# `-O2` Bramble image sums a mask differently; that gap is known and no gate exercises it
+# (gpena/Bramble.jl#942).
 # The `muladd` stays spelled out here: calling `_dot_term` (utils/linear_algebra.jl) from
 # this `@batch` body ran the boundary-mask reduction about 6% slower (2 threads, 401²).
 @noinline function _masked_words_band(u, v, w, chunks::Tuple, ax, nb::Int, b::Int)
