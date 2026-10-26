@@ -206,8 +206,6 @@ const _FirstDifference{D, Dim} = Union{
     CrossWeightedDifference{D, Dim}
 }
 
-const _Scale = Union{OperatorScale, GridFunctionScale}
-
 # The terms of a difference's operand, in the order its stencil concatenates them: sums
 # flattened, and a scale over a sum distributed over the summands.
 @inline _rule_terms(op::OperatorAdd) = (_rule_terms(op.left_op)..., _rule_terms(op.right_op)...)
@@ -780,7 +778,7 @@ end
 # as each padded zero is one more product that allocates (`Mₓ(D₋ₓ(g * (Rₕ(:l, u) +
 # Rₕ(:r, u))))` with `g` a `BigFloat` grid function 557808 B as it was, 816576 B fixed).
 @inline _fixes_restriction(op::RegionRestriction) = !_is_source_only(op)
-@inline _fixes_restriction(op::Union{OperatorScale, GridFunctionScale}) = !_is_source_only(op) &&
+@inline _fixes_restriction(op::_Scale) = !_is_source_only(op) &&
                                                                           (_scales_restriction(op) ||
                                                                            op.inner_op isa TappedNode &&
                                                                            _fixes_restriction(op.inner_op))
@@ -789,7 +787,7 @@ end
                                               _fixes_restriction(op.right_op)
 @inline _fixes_restriction(::Any) = false
 @inline _fixes_operand(op) = _fixes_restriction(op)
-@inline _fixes_operand(op::Union{OperatorScale, GridFunctionScale}) = _fixes_restriction(op) ||
+@inline _fixes_operand(op::_Scale) = _fixes_restriction(op) ||
                                                                       !_is_source_only(op) &&
                                                                       op.inner_op isa OperatorAdd &&
                                                                       _bits_weight(op) &&
@@ -908,7 +906,7 @@ end
 end
 
 # Whether `lin` lies outside a restriction of the chain of scales and restrictions at `op`.
-@inline _chain_out(op::Union{OperatorScale, GridFunctionScale}, markers, lin::Int) = _chain_out(
+@inline _chain_out(op::_Scale, markers, lin::Int) = _chain_out(
     op.inner_op, markers, lin)
 @inline function _chain_out(op::RegionRestriction, markers, lin::Int)
     _in_region(op, markers, lin) || return true
@@ -917,7 +915,7 @@ end
 
 # The chain at `J`, every restriction on it holding `J`: scaled at `J`, and below the last
 # restriction a sum or a tapped node fixed in turn, anything else shifted by zero there.
-@inline _chain_in(op::Union{OperatorScale, GridFunctionScale}, space, J, markers, lin::Int,
+@inline _chain_in(op::_Scale, space, J, markers, lin::Int,
     vdim, off) = scale_stencil(
     _chain_in(op.inner_op, space, J, markers, lin, vdim, off), _scale_value(op, lin))
 @inline function _chain_in(op::RegionRestriction, space, J, markers, lin::Int, vdim, off)

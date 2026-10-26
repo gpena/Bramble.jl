@@ -531,7 +531,7 @@ end
 # unit. A grid function scale inside a product's operand is distributed only as the
 # product is split (`_product_summands`).
 function _split_restricted_products(
-        op::Union{OperatorScale, GridFunctionScale}, ::Type{E}) where {E}
+        op::_Scale, ::Type{E}) where {E}
     _needs_rewrite(op, E) || return op
     inner = _split_restricted_products(op.inner_op, E)
     return inner === op.inner_op ? op : _distribute_scale(op, inner)
@@ -653,7 +653,7 @@ function _type_mixed_scales(T, E)
                                    _type_scales_differ(T.parameters[4], E)
     T <: OperatorAdd && return _type_mixed_scales(T.parameters[2], E) ||
                                _type_mixed_scales(T.parameters[3], E)
-    T <: Union{OperatorScale, GridFunctionScale} &&
+    T <: _Scale &&
         return _type_mixed_scales(T.parameters[3], E)
     return false
 end
@@ -882,7 +882,7 @@ function _type_nested_restriction(T)
     T isa DataType || return false
     if T <: RegionRestriction
         I = fieldtype(T, :inner_op)
-        while I isa DataType && I <: Union{OperatorScale, GridFunctionScale}
+        while I isa DataType && I <: _Scale
             I = fieldtype(I, :inner_op)
         end
         I isa DataType && I <: RegionRestriction && return true
@@ -1039,7 +1039,7 @@ end
 # `v + Rₕ(:t, D₋ₓ(v))`, `D₋ₓ(u) + D₋ₓ(Rₕ(:l, u))` and `u + D₋ₓ(u) + Rₕ(:l, u)` boxed
 # 11152 B to 16704 B (gpena/Bramble.jl#759).
 function _joins_restriction(P, K)
-    while K <: Union{OperatorScale, GridFunctionScale}
+    while K <: _Scale
         K = fieldtype(K, :inner_op)
     end
     return K <: RegionRestriction && _type_core(K) === _type_core(P)

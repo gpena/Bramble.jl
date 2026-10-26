@@ -197,7 +197,7 @@ See also: [`JacobiSmoother`](@ref), [`smooth!`](@ref), [`chebyshev_smoother`](@r
 [`red_black_gauss_seidel`](@ref).
 """
 function jacobi_smoother(
-        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        a::_AnyBilinearForm; dirichlet = nothing,
         dirichlet_components = nothing, policy = _default_policy(a), ω = nothing,
         sweeps::Integer = 1
 )
@@ -290,7 +290,7 @@ true
 See also: [`ChebyshevSmoother`](@ref), [`smooth!`](@ref), [`chebyshev_preconditioner`](@ref).
 """
 function chebyshev_smoother(
-        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        a::_AnyBilinearForm; dirichlet = nothing,
         dirichlet_components = nothing, policy = _default_policy(a), degree::Integer = 2,
         λmax = nothing
 )
@@ -386,7 +386,7 @@ true
 See also: [`RedBlackGaussSeidel`](@ref), [`smooth!`](@ref), [`jacobi_smoother`](@ref).
 """
 function red_black_gauss_seidel(
-        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        a::_AnyBilinearForm; dirichlet = nothing,
         policy = _default_policy(a), sweeps::Integer = 1
 )
     op = matrix_free_operator(a; dirichlet = dirichlet, policy = policy)

@@ -116,7 +116,7 @@ true
 See also: [`JacobiPreconditioner`](@ref), [`matrix_free_operator`](@ref).
 """
 function jacobi_preconditioner(
-        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        a::_AnyBilinearForm; dirichlet = nothing,
         dirichlet_components = nothing, policy = _default_policy(a)
 )
     op = matrix_free_operator(

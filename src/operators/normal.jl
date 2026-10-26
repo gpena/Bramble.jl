@@ -671,10 +671,8 @@ end
 
 # Scalars and sums, facet by facet: `α * u + β * ∂ₙ(u)` is `α u + β η_F Dc_d(u)` on each
 # facet, and `c * ∂ₙ(u)` scales every facet's operator.
-const _FacetScalar = Union{Number, Base.RefValue{<:Number}}
-
-@inline Base.:*(c::_FacetScalar, F::FacetOperator) = _map_facets(op -> c * op, F)
-@inline Base.:*(F::FacetOperator, c::_FacetScalar) = c * F
+@inline Base.:*(c::_NormalScalar, F::FacetOperator) = _map_facets(op -> c * op, F)
+@inline Base.:*(F::FacetOperator, c::_NormalScalar) = c * F
 @inline Base.:/(F::FacetOperator, c::Number) = _map_facets(op -> op / c, F)
 @inline Base.:/(::FacetOperator, ::Base.RefValue{<:Number}) = _throw_facet_ref_divisor()
 

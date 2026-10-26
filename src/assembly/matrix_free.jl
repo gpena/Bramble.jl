@@ -733,12 +733,12 @@ const _MF_LONG = 1 << 20
 const _MFLeaf = Union{TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFunction}
 _mf_entries(::_MFLeaf) = 1
 _mf_entries(op::TappedNode) = length(_stencil_taps(op)) * _mf_tapped(op.inner_op)
-_mf_entries(op::Union{OperatorScale, GridFunctionScale}) = _mf_entries(op.inner_op)
+_mf_entries(op::_Scale) = _mf_entries(op.inner_op)
 _mf_entries(op::BilinearProduct) = min(_mf_entries(op.left_op) * _mf_entries(op.right_op), _MF_LONG)
 _mf_entries(_) = _MF_LONG
 # The operand of a tap: a leaf, or a scaled one, counts one entry; anything else is long.
 _mf_tapped(::_MFLeaf) = 1
-_mf_tapped(op::Union{OperatorScale, GridFunctionScale}) = _mf_tapped(op.inner_op)
+_mf_tapped(op::_Scale) = _mf_tapped(op.inner_op)
 _mf_tapped(_) = _MF_LONG
 
 # A serial unit: the interior gathered and the shell scattered, or, when it cannot be

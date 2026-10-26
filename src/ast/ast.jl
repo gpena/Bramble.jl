@@ -105,6 +105,9 @@ end
 @inline GridFunctionScale(grid_function::V, op::LazyOp{D}) where {D, V} = GridFunctionScale{D, V, typeof(op)}(grid_function, op)
 @inline OperatorAdd(left::LazyOp{D}, right::LazyOp{D}) where {D} = OperatorAdd{D, typeof(left), typeof(right)}(left, right)
 
+# A scale node: a scalar or a grid function times an operator.
+const _Scale = Union{OperatorScale, GridFunctionScale}
+
 """
     DiracSource{D, P, S} <: LazyOp{D}
 

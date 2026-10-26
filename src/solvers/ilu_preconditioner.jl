@@ -65,7 +65,7 @@ function ilu_preconditioner(A::AbstractMatrix; kwargs...)
 end
 
 function ilu_preconditioner(
-        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        a::_AnyBilinearForm; dirichlet = nothing,
         dirichlet_components = nothing, kwargs...
 )
     A = assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)

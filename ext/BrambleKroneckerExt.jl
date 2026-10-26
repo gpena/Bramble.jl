@@ -1043,9 +1043,12 @@ function _schur_solve!(y::Vector, f::_SchurFactorization, k::Int, off::Int, α, 
     return y
 end
 
-Base.size(f::Union{_FDMFactorization, _SchurFactorization}) = (f.n, f.n)
+# Either factorisation the Kronecker route builds.
+const _AnyFactorization = Union{_FDMFactorization, _SchurFactorization}
+
+Base.size(f::_AnyFactorization) = (f.n, f.n)
 # As `Base` sizes an `AbstractMatrix`: 1 past the second dimension, a `BoundsError` below 1.
-Base.size(f::Union{_FDMFactorization, _SchurFactorization}, i::Integer) = i <= 2 ? size(f)[i] : 1
+Base.size(f::_AnyFactorization, i::Integer) = i <= 2 ? size(f)[i] : 1
 
 # `x = K \ F` on full-length host vectors, the `_FDMFactorization` method's contract: gather,
 # apply every `Q_d'`, back-substitute, apply every `Z_d`, scatter the real part.
@@ -1632,7 +1635,7 @@ function _fdm_refill!(f::Union{_FDMFactorization{T, D}, _SchurFactorization{T, D
 end
 
 # `K` of any dimension and eltype, so that a mismatch is refused by name, not by dispatch.
-function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization},
+function Bramble.fdm_factorize!(f::_AnyFactorization,
         K::KroneckerLinearOperator)
     Bramble._kron_check_fresh(K)
     _fdm_check_shape(f, K)
@@ -1664,7 +1667,7 @@ end
 # The form `f` was built or last refilled from, with only scalar or `Ref` coefficients
 # changed, refills from its recorded operator, allocating nothing; any other form is
 # checked as `fdm_factorize(a)` checks it, projected again, and recorded.
-function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization}, a::BilinearForm)
+function Bramble.fdm_factorize!(f::_AnyFactorization, a::BilinearForm)
     (Bramble.trial_space(a) isa Bramble.CompositeGridSpace ||
      Bramble.test_space(a) isa Bramble.CompositeGridSpace) && _throw_fdm_composite()
     f.form[] === a && _fdm_cached!(f, f.op[]) && return f
@@ -1675,7 +1678,7 @@ function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization}
     return _fdm_record!(f, a, K)
 end
 
-function Bramble.fdm_solve!(x::AbstractVector, f::Union{_FDMFactorization, _SchurFactorization},
+function Bramble.fdm_solve!(x::AbstractVector, f::_AnyFactorization,
         F::AbstractVector)
     _fdm_ldiv!(x, f, F, false)
     return x
@@ -1765,7 +1768,7 @@ function Bramble.fdm_factorize(a::Bramble.GhostBilinearForm; dirichlet = nothing
     return _fdm_record!(_fdm_factorize(K, nothing), a, K)
 end
 
-function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization},
+function Bramble.fdm_factorize!(f::_AnyFactorization,
         a::Bramble.GhostBilinearForm)
     f.form[] === a && _fdm_cached!(f, f.op[]) && return f
     K = _fdm_ghost_operator(a, nothing; caller = "fdm_factorize!")

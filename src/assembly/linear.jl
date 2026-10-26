@@ -1062,7 +1062,7 @@ end
 # stored is not changed, so the scale is rebuilt per summand only here, in the walk.
 @inline _walk_summands(op::OperatorAdd) = (
     _walk_summands(op.left_op)..., _walk_summands(op.right_op)...)
-@inline function _walk_summands(op::Union{OperatorScale, GridFunctionScale})
+@inline function _walk_summands(op::_Scale)
     ts = _walk_summands(op.inner_op)
     return ts isa Tuple{Any} ? (op,) : map(t -> _rewrap_inner(op, t), ts)
 end

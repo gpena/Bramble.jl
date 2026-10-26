@@ -683,7 +683,7 @@ Base.@nospecializeinfer Base.@assume_effects :foldable function _factored_type(
         @nospecialize(T))
     T isa DataType || return false
     T <: BilinearProduct && return true
-    T <: Union{OperatorScale, GridFunctionScale} &&
+    T <: _Scale &&
         return _factored_type(fieldtype(T, :inner_op))
     T <: OperatorAdd &&
         return _factored_type(fieldtype(T, :left_op)) && _factored_type(fieldtype(T, :right_op))
@@ -750,7 +750,7 @@ end
 # expression reaching it from `path` and the expressions reaching the scales above it,
 # innermost first, a sum's summands left to right as `_summands` flattens them.
 function _factored_products!(acc::Vector{Any}, @nospecialize(T), path, scales::Vector{Any})
-    if T <: Union{OperatorScale, GridFunctionScale}
+    if T <: _Scale
         _factored_products!(
             acc, fieldtype(T, :inner_op), :($path.inner_op), Any[path, scales...])
     elseif T <: OperatorAdd
