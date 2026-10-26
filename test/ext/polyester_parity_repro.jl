@@ -123,6 +123,7 @@ function _image_times(depots)
     times = Dict{String, NTuple{4, Int64}}()
     buf = zeros(Int64, ccall(:jl_sizeof_stat, Int32, ()) ÷ 8)
     for d in depots, name in ("Bramble", _EXT)
+
         dir = _compiled(d, name)
         isdir(dir) || continue
         for f in readdir(dir; join = true)
