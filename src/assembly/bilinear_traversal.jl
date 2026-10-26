@@ -363,10 +363,10 @@ the serial path.
 end
 
 # Whether an earlier entry already named the same pair of offsets. `entries` is anything
-# whose `k`-th element starts with `(off_u, off_v)`: `entry_offsets(stencil)`
-# (ast/common.jl) from `_visit_entries`, which keeps offsets and weights in separate
-# containers for Enzyme's sake, or the stencil itself from the pattern builders in
-# jacobian_pattern.jl, which never read a weight at all.
+# whose `k`-th element starts with `(off_u, off_v)`. The callers are the two pattern
+# builders in jacobian_pattern.jl, which pass the raw stencil and never read a weight;
+# `entry_offsets(stencil)` (ast/common.jl), which keeps offsets and weights in separate
+# containers for Enzyme's sake, is the other accepted shape.
 @inline function _offsets_seen_before(entries, k::Int, off_u, off_v)
     @inbounds for l in 1:(k - 1)
         entries[l][1] == off_u && entries[l][2] == off_v && return true
@@ -520,8 +520,8 @@ grid and reads an [`AbsoluteColumn`](@ref) directly, since an interpolation entr
 source column rather than an offset from `I`. Both are then shifted into the block by
 `row_offset` and `col_offset`.
 
-`(0, 0)` is a sentinel rather than `nothing` so the return type stays concrete on the
-assembly hot path.
+`(0, 0)` is a sentinel rather than `nothing` so the return type stays concrete. This is
+the reference form the tests pin; it is not on the hot path, where `_step_entry!` fuses it.
 
 # Returns
 - `Tuple{Int,Int}`: The `(row, col)` to write, or `(0, 0)` to skip the entry.
@@ -1061,7 +1061,7 @@ that lands inside the matrix to a sink.
 
 The walk that five separate sweeps used to re-derive: mesh, markers, linear indices, the
 loop over grid points, the stencil evaluation, and the decision of where each entry lands
-([`_entry_target`](@ref)). A sink supplies only what to do with an entry, so the pattern
+([`_step_entry!`](@ref), which fuses [`_entry_target`](@ref)). A sink supplies only what to do with an entry, so the pattern
 passes and the value passes share one traversal instead of agreeing by coincidence.
 
 The fifth argument handed to `local_stencil` is the *leaf's* linear index. A term routed to
@@ -1169,7 +1169,7 @@ end
 
     # `@inbounds` here (and inside `_visit_guarded_region!`/`_visit_interior!`) is what the
     # hand-written sweeps had wrapping their whole nested loop. It does not cross a function
-    # call on its own, so `_visit_entries`, `_visit_entries_unguarded`, `_entry_target` and
+    # call on its own, so `_visit_entries`, `_visit_entries_unguarded`, `_step_entry!` and
     # `_trial_column` are `Base.@propagate_inbounds` to inherit it -- without that, the bounds
     # checks come back and the replay path costs 8-17% more.
     if _peelable(ax, margins)

@@ -208,7 +208,7 @@ See also: [`half_points`](@ref).
 """
     half_points(Wₕ::AbstractSpaceType)
 
-Forwards to [`half_points`](@ref)`(mesh(Wₕ))`: the precomputed cell centers (half-points) of
+Forwards to [`half_points`](@ref)`(mesh(Wₕ))`: the precomputed cell boundaries (half-points) of
 the mesh underlying `Wₕ`.
 """
 @inline half_points(Wₕ::AbstractSpaceType) = half_points(mesh(Wₕ))

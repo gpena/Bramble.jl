@@ -440,6 +440,11 @@ struct ShiftNode{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
+@noinline function _throw_shift_dim_type_error(dim)
+    what = dim isa Bool ? "an integer, not a Bool" : "an integer"
+    throw(ArgumentError("the stencil direction must be $what, got $(repr(dim)) of type $(typeof(dim))"))
+end
+
 """
     shift_op(op::LazyOp{D}, ::Val{Dim}, amount::Int) where {D, Dim}
     shift_op(op::LazyOp{D}, dim::Int, amount::Int) where D
@@ -449,11 +454,6 @@ direction that is a `Bool`, not an integer, or outside `1:D` throws an `Argument
 The `Int` direction forwards to the `Val` form, so a literal direction still gives a
 concrete node type.
 """
-@noinline function _throw_shift_dim_type_error(dim)
-    what = dim isa Bool ? "an integer, not a Bool" : "an integer"
-    throw(ArgumentError("the stencil direction must be $what, got $(repr(dim)) of type $(typeof(dim))"))
-end
-
 @inline function shift_op(op::LazyOp{D}, ::Val{Dim}, amount::Int) where {D, Dim}
     # `Val(true)` or `Val(1.0)` would pass the range check and fail later, far from here;
     # `Int(Dim)` makes `Val(Int32(2))` the same node as `Val(2)`, which assembly expects
@@ -508,7 +508,7 @@ end
 # A chain of shifts down to a bare leaf is re-evaluated inline, as the leaf itself is
 # (`_wraps_leaf`, `ast/common.jl`): each link has one tap, so inlining grows the code by the
 # chain's length, not taps^depth. Out of line, `S₊ₓ(S₊ₓ(u))` paid a call per link per point.
-# The one-link case is the Union method in `average.jl`.
+# The one-link case is the `StencilNode{D, Dim, <:_BareLeaf}` method in `average.jl`.
 @inline _wraps_leaf(op::ShiftNode{D, Dim, <:ShiftNode}) where {D, Dim} = _wraps_leaf(op.inner_op)
 
 @inline _shift_node_stencil(

@@ -65,8 +65,9 @@ end
 # and its `SparseMatrixCSC` path needs random-access `getindex` on the result (`index_in_marker[j]`
 # for an arbitrary column `j`, not a walk), which a lazy union can't offer without also
 # duplicating `BitVector`'s own bit-indexing math. So this stays eager; `_combined_marked_indices`
-# below is the innerₕ-only, allocation-free replacement (gpena/Bramble.jl#149), used solely by
-# code that only ever walks the result instead of indexing into it.
+# below is the allocation-free replacement (gpena/Bramble.jl#149) for its two callers,
+# `inner₊(..., ::Val{S})` and `_reaction_marked` (postprocessing/reaction.jl), which only walk
+# the result instead of indexing into it.
 function _combined_mask(Ωₕ, markers::NTuple{N, Symbol}) where {N}
     mask = copy(index_in_marker(Ωₕ, markers[1]))
     for k in 2:N
@@ -79,10 +80,10 @@ end
     return index_in_marker(Ωₕ, markers[1])
 end
 
-# `N > 1`: only ever handed to `_dot_masked`, which walks it and never indexes into it, so
-# the union can stay a lazy `MarkedIndicesUnion` (utils/linear_algebra.jl) instead of a
-# freshly allocated `BitVector` -- unlike `_combined_mask` above, this has exactly one
-# caller family (`innerₕ`/`_directional_inner_plus` below) and can afford to (gpena/Bramble.jl#149).
+# `N > 1`: both callers, `inner₊(..., ::Val{S})` below and `_reaction_marked`
+# (postprocessing/reaction.jl), only walk the result and never index into it, so the union
+# can stay a lazy `MarkedIndicesUnion` (utils/linear_algebra.jl) instead of a freshly
+# allocated `BitVector` -- unlike `_combined_mask` above (gpena/Bramble.jl#149).
 @inline function _combined_marked_indices(Ωₕ, markers::NTuple{N, Symbol}) where {N}
     return MarkedIndicesUnion(ntuple(k -> index_in_marker(Ωₕ, markers[k]), Val(N)))
 end

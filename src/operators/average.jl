@@ -662,7 +662,7 @@ end
     return (q, 2q, q)
 end
 
-# The wrappers whose operand is a bare trial or test leaf (see `_wraps_leaf`, form/common.jl).
+# The wrappers whose operand is a bare trial or test leaf (see `_wraps_leaf`, ast/common.jl).
 @inline _wraps_leaf(::StencilNode{D, Dim, <:_BareLeaf}) where {D, Dim} = true
 
 # ==============================================================================

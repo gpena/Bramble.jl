@@ -18,7 +18,7 @@ sparse LU system, supporting in-place solves via `LinearAlgebra.ldiv!`, back-sub
 abstract type SparspakFactorization{T} <: Factorization{T} end
 
 """
-    sparspak_factorize(A::AbstractMatrix) -> SparspakFactorization
+    sparspak_factorize(A::SparseMatrixCSC) -> SparspakFactorization
     sparspak_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -> SparspakFactorization
 
 Compute the pure-Julia sparse direct LU factorization of `A` (or the assembled matrix of `a`)

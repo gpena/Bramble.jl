@@ -128,7 +128,7 @@ function _init_mesh_markers(
     process_label_for_mesh!(npts, markers_mesh, label_tuples(domain_markers))
     process_label_for_mesh!(npts, markers_mesh, label_conditions(domain_markers))
     for m in regions(domain_markers)
-        process_label_for_mesh!(npts, markers_mesh, _polygon_labels(m))
+        process_label_for_mesh!(npts, markers_mesh, _region_marker_labels(m))
     end
 
     return markers_mesh
@@ -142,7 +142,7 @@ Evaluate domain markers onto mesh points, creating `BitVector` indicators for ea
 Supports five classes of domain markers:
   1. Symbol markers, the predefined boundary labels (`:left`, `:right`, etc.).
   2. Tuple markers, the unions of boundary symbols.
-  3. Function markers, the level-set boolean predicates `x -> Bool`.
+  3. Function markers, the boolean predicates `x -> Bool`.
   4. Polygon markers `:L => polygon(V)`, which split the nodes of a 2D mesh into `L`
      (inside), `L_boundary` and `L_exterior` (outside); see [`markers`](@ref) for the
      boundary tolerance.
@@ -209,7 +209,7 @@ function _set_markers!(Ωₕ::AbstractMeshType, domain_markers, fitted::Tuple;
     # points leaves them stale, which `change_points!(Ωₕ, pts)` refuses rather than lets pass.
     position_labels = Symbol[m.label for m in conditions(domain_markers)]
     for m in regions(domain_markers)
-        append!(position_labels, _polygon_labels(m))
+        append!(position_labels, _region_marker_labels(m))
     end
     _store_markers!(Ωₕ, mesh_markers, position_labels)
     return nothing
@@ -375,7 +375,7 @@ end
 """
     __process_condition!(mesh_marker::BitVector, identifier, Ωₕ::AbstractMeshType) -> Nothing
 
-Core logic for evaluating a function-based (level-set) marker predicate across all mesh points.
+Core logic for evaluating a function-based marker predicate across all mesh points.
 
 Reads coordinates once through [`host_points`](@ref) rather than [`point`](@ref)`(Ωₕ, idx)`
 per point, so `identifier` -- an arbitrary user predicate that must keep running on the
@@ -453,7 +453,7 @@ function _set_markers_regions!(mesh_markers::MeshMarkers, regions, fitted::Tuple
     length(fitted) == length(regions) || throw(DimensionMismatch("one fitted polygon per region"))
     pts = host_points(Ωₕ)
     for (marker, fit) in zip(regions, fitted)
-        Li, Lb, Le = _polygon_labels(marker)
+        Li, Lb, Le = _region_marker_labels(marker)
         inside, on, outside = mesh_markers[Li], mesh_markers[Lb], mesh_markers[Le]
         _label_region!(inside, on, outside, identifier(marker), fit, Ωₕ, pts, label(marker))
     end

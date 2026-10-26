@@ -28,7 +28,7 @@ or static work partitioning across threads for [`CpuThreaded`](@ref); a
 under a `CpuPolicy` -- throws via [`_throw_locality_mismatch`](@ref) rather than indexing `v`
 element by element or reaching for a device sweep that does not exist.
 
-The four-argument method is the seam; the three-argument method is the thin wrapper every
+The five-argument method is the seam; the four-argument method is the thin wrapper every
 caller actually uses, deriving `loc` from the destination array itself
 (`locality(typeof(v))`) so callers pass a policy alone and never compute a locality.
 
@@ -101,7 +101,7 @@ end
 end
 
 """
-    _throw_gpu_in_cpu_loop(policy)
+    _throw_no_device_sweep(policy)
 
 Throw the `ArgumentError` [`_gpu_for!`](@ref)/[`_gpu_scatter_for!`](@ref) give when no device
 sweep implementation is available at all -- a case [`_throw_locality_mismatch`](@ref) never
@@ -113,7 +113,7 @@ reaches, since it is only called once locality has already been checked to agree
 # Throws
 - `ArgumentError`: always.
 """
-@noinline function _throw_gpu_in_cpu_loop(policy)
+@noinline function _throw_no_device_sweep(policy)
     throw(
         ArgumentError(
         "execution policy $(typeof(policy)) is a GpuPolicy, but no device sweep is loaded " *
@@ -132,7 +132,7 @@ end
 # `_launch_half_points!` fallback idiom (`src/utils/device_kernels.jl`,
 # `src/mesh/mesh1d.jl`) -- so `ext/BrambleKernelAbstractionsExt.jl` can add a strictly more
 # specific method (typed on `AbstractArray`) instead of overwriting this one. Without that
-# extension loaded, both fall straight through to the same `_throw_gpu_in_cpu_loop` message
+# extension loaded, both fall straight through to the same `_throw_no_device_sweep` message
 # CPU callers have always seen, so the diagnostic never regresses into a bare `MethodError`.
 #===========================================================================#
 
@@ -152,9 +152,9 @@ GPU execution.
 
 # Throws
 - `ArgumentError`: no `KernelAbstractions` extension is loaded, so there is no device sweep
-  to reach ([`_throw_gpu_in_cpu_loop`](@ref)).
+  to reach ([`_throw_no_device_sweep`](@ref)).
 """
-@noinline _gpu_for!(policy, v, idxs, f) = _throw_gpu_in_cpu_loop(policy)
+@noinline _gpu_for!(policy, v, idxs, f) = _throw_no_device_sweep(policy)
 
 """
     _gpu_scatter_for!(policy::GpuPolicy, mats::Tuple, idxs, g::Function) -> Nothing
@@ -165,16 +165,16 @@ tuple-valued `g` across `idxs` and scatters the results into `mats` with a
 GPU-compilability requirement on `g` as [`_gpu_for!`](@ref).
 
 # Throws
-- `ArgumentError`: no `KernelAbstractions` extension is loaded ([`_throw_gpu_in_cpu_loop`](@ref)).
+- `ArgumentError`: no `KernelAbstractions` extension is loaded ([`_throw_no_device_sweep`](@ref)).
 """
-@noinline _gpu_scatter_for!(policy, mats, idxs, g) = _throw_gpu_in_cpu_loop(policy)
+@noinline _gpu_scatter_for!(policy, mats, idxs, g) = _throw_no_device_sweep(policy)
 
 # The message every `CpuPolyester` hook gives without `Polyester` loaded (gpena/Bramble.jl#190).
 # `CpuPolyester`'s own sweeps have no `src/` implementation -- `BramblePolyesterExt` adds
 # it -- so a `CpuPolyester` backend used without that extension loaded stops here, named, rather
 # than silently falling through to `CpuThreaded`'s `Threads.@threads` code (which would
 # defeat the whole point of choosing `CpuPolyester`) or a bare `MethodError`. Mirrors
-# `_throw_gpu_in_cpu_loop` above and `_metal_backend` (`src/utils/backend.jl`).
+# `_throw_no_device_sweep` above and `_metal_backend` (`src/utils/backend.jl`).
 @noinline function _throw_cpubatch_without_polyester(fname::Symbol)
     throw(
         ArgumentError(

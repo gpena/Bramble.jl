@@ -512,7 +512,7 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
 
             # per-leaf entries: the per-label masks, offset, size and selection of each leaf
             entries = Base.invokelatest(
-                Bramble._reaction_leaf_entries!, leaves, (:left, :right), nothing)
+                Bramble._reaction_leaf_entries, leaves, (:left, :right), nothing)
             @test length(entries) == 1
             masks, off, nn, active = entries[1]
             @test findall(masks[1]) == rows(Ω₁, :left, 0)

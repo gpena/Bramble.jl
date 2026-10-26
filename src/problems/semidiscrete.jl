@@ -61,7 +61,7 @@ Built by [`semidiscretize`](@ref); read back with [`mass_matrix`](@ref) and
 [`operator_matrix`](@ref).
 
 # Fields
-- `operator`: spatial [`BilinearForm`](@ref) (or a ghost-space form), assembled into `A`.
+- `operator`: spatial [`BilinearForm`](@ref) (or a ghost-space form), assembled into `A`; for a time-dependent operator, a `TypeCachedOperator` wrapping the form builder.
 - `source`: source [`LinearForm`](@ref), assembled into `F(t)` at each step.
 - `space`: the test space both forms share.
 - `operator_matrix`: `A`, with `eₖ` rows on the constrained degrees of freedom (none on a ghost space, whose relations eliminate them).

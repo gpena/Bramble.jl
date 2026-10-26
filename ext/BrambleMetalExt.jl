@@ -39,7 +39,9 @@ ka_device(::Backend{<:MtlVector, MT, EP}) where {MT, EP} = MetalBackend()
 #
 # Locality is derived from storage, not from a caller's intent: an array living in Metal
 # device memory answers `DeviceLocality()`, overriding the `HostLocality()` fallback in
-# src/utils/backend.jl. This is the one method a GPU extension adds.
+# src/utils/backend.jl. The generic `AbstractGPUArray` method there already answers
+# `DeviceLocality()` for `MtlVector`/`MtlMatrix`, so these two are redundant;
+# the sparse-type methods below are kept for the types it does not cover.
 
 Bramble.locality(::Type{<:MtlVector}) = Bramble.DeviceLocality()
 Bramble.locality(::Type{<:MtlMatrix}) = Bramble.DeviceLocality()

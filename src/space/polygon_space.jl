@@ -62,7 +62,7 @@ normₕ(e), snorm₁ₕ(e), norminf(e)
     `U` is no test space, and so does `dirichlet =` in `assemble`: `g` fixes the boundary.
 """
 function polygon_spaces(Ωₕ::MeshnD{2}, label::Symbol, g)
-    labels = _polygon_labels(label)
+    labels = _region_marker_labels(label)
     m = markers(Ωₕ)
     all(L -> haskey(m, L), labels) || _throw_polygon_label(label)
     inn, Γ = BitVector(m[labels[1]]), BitVector(m[labels[2]])

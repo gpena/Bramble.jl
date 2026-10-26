@@ -111,9 +111,10 @@ end
 # already builds instead of `_combined_mask`'s eager one (a fresh `copy` + `.|=` per call,
 # gpena/Bramble.jl#149) -- `reaction!`/`reaction_density!` must allocate zero bytes even with
 # several marker labels, which that eager union can't give. `MarkedIndicesUnion` has no
-# `offset` field of its own (its only prior caller, `innerₕ`, never needed one), so
-# `_ReactionMarked` adds it here rather than in `linear_algebra.jl`. Both walks visit a point
-# shared by two markers exactly once, same as `_combined_mask`'s union.
+# `offset` field of its own (`_combined_marked_indices` has two callers, this and
+# `inner₊(..., ::Val{S})`, and the latter never needed one), so `_ReactionMarked` adds it here
+# rather than in `linear_algebra.jl`. Both walks visit a point shared by two markers exactly
+# once, same as `_combined_mask`'s union.
 @inline _reaction_marked(Ωₕ, markers::NTuple{1, Symbol}, offset::Int) = MarkedIndices(index_in_marker(Ωₕ, markers[1]), offset)
 @inline _reaction_marked(Ωₕ, markers::NTuple{N, Symbol}, offset::Int) where {N} = _ReactionMarked(
     _combined_marked_indices(Ωₕ, markers), offset)
@@ -197,7 +198,7 @@ end
 
 # Answers `r[j] = (A * u)[j] - F[j]` at just the rows `_restricted_matvec` kept -- every `j`
 # `_reaction_over_leaves`/`_reaction_density_over_leaves!` ever ask for is one of them, since
-# both walk the same marked points `_reaction_leaf_entries!` was built from.
+# both walk the same marked points `_reaction_leaf_entries` was built from.
 struct _RestrictedResidual{T, Fv <: AbstractVector}
     acc::Dict{Int, T}
     F::Fv
@@ -284,18 +285,18 @@ end
 # `_reaction_row_marked`, so no label ever gets unioned into a fresh `BitVector`. One entry
 # per leaf, always (mirrors `_leaf_entries`, dirichlet_constraints.jl): the tuple's shape is
 # independent of `components`, so the recursion below stays fully unrolled.
-@inline _reaction_leaf_entries!(leaves::Tuple, markers, components) = _reaction_leaf_entries_impl!(leaves, markers, components, 1)
-@inline _reaction_leaf_entries_impl!(
+@inline _reaction_leaf_entries(leaves::Tuple, markers, components) = _reaction_leaf_entries_impl(leaves, markers, components, 1)
+@inline _reaction_leaf_entries_impl(
     ::Tuple{}, markers::NTuple{N, Symbol}, components, i::Int
 ) where {N} = ()
-@inline function _reaction_leaf_entries_impl!(
+@inline function _reaction_leaf_entries_impl(
         leaves::Tuple, markers::NTuple{N, Symbol}, components, i::Int
 ) where {N}
     sp, offset = first(leaves)
     masks = ntuple(k -> index_in_marker(mesh(sp), markers[k]), Val(N))
     entry = (masks, offset, ndofs(sp), _leaf_selected(components, i))
     return (
-        entry, _reaction_leaf_entries_impl!(Base.tail(leaves), markers, components, i + 1)...
+        entry, _reaction_leaf_entries_impl(Base.tail(leaves), markers, components, i + 1)...
     )
 end
 
@@ -325,7 +326,7 @@ function _reaction_residual!(
         leaves::Tuple, markers, components
 )
     _zero_marked!(scratch, leaves, markers, components, 1)
-    entries = _reaction_leaf_entries!(leaves, markers, components)
+    entries = _reaction_leaf_entries(leaves, markers, components)
     _marked_column_sweep!(A, u, entries) do row, v, uj
         @inbounds scratch[row] = muladd(v, uj, scratch[row])
     end
@@ -400,7 +401,7 @@ function reaction(
     _validate_dirichlet_components(components, length(leaves))
 
     markers = _reaction_markers(marker)
-    entries = _reaction_leaf_entries!(leaves, markers, components)
+    entries = _reaction_leaf_entries(leaves, markers, components)
     r = _reaction_residual(A, F, parent(uₕ), entries)
     return _reaction_over_leaves(leaves, r, markers, components, 1, zero(eltype(r)))
 end
@@ -513,7 +514,7 @@ function reaction_density(
     _validate_dirichlet_components(components, length(leaves))
 
     markers = _reaction_markers(marker)
-    entries = _reaction_leaf_entries!(leaves, markers, components)
+    entries = _reaction_leaf_entries(leaves, markers, components)
     r = _reaction_residual(A, F, parent(uₕ), entries)
     dens = zeros(eltype(r), ndofs(sp))
     _reaction_density_over_leaves!(dens, leaves, r, markers, components, 1)

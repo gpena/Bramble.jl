@@ -751,7 +751,7 @@ struct TestSide end
 @inline _interp_slot(::Type{TestSide}) = AbsoluteRow
 
 # The side as a value, read off the type. Every side-dependent query goes through this rather
-# than dispatching on the parameter directly: `UnaryWrapper` (form/stencil_eval.jl) names
+# than dispatching on the parameter directly: `UnaryWrapper` (assembly/stencil_eval.jl) names
 # `InterpolationNode{D}`, and a method fixing a *later* parameter than `D` is neither more
 # nor less specific than that union, which makes the pair ambiguous. One method on the
 # unparameterized type is not, and the branch still folds away, since `Side` is in the type.
@@ -921,12 +921,12 @@ end
 end
 
 # `_collect_region_labels` for `InterpolationNode` comes from its `UnaryWrapper` membership
-# (form/block_extract.jl); it recursed the same way and needed no override.
+# (assembly/block_extract.jl); it recursed the same way and needed no override.
 
 # The reach on the mesh being walked is the inner leaf's (a single point). The columns this
 # node names are on the other mesh and are not offsets, so they have no place in an
 # offset set; a bilinear term's colouring only ever reads its test factor's reach anyway
-# (`stencil_offsets(::BilinearProduct)`, form/stencil_pattern.jl), and an interpolation
+# (`stencil_offsets(::BilinearProduct)`, ast/stencil_pattern.jl), and an interpolation
 # names a trial-side space, not a test one.
 stencil_offsets(op::InterpolationNode) = stencil_offsets(op.inner_op)
 
@@ -945,7 +945,7 @@ end
 
 # --- The shift trait: which nodes carry something a relabelled offset cannot express -- #
 #
-# `stencil_shift_trait`'s base method (form/common.jl) indicates translation invariance, which
+# `stencil_shift_trait`'s base method (ast/common.jl) indicates translation invariance, which
 # holds for a trial or test function regardless of wrapper depth. An interpolation is not: its
 # entries name absolute columns determined by `locate_cell` from the point's own coordinates, and
 # adding one to an offset indicates nothing about which columns the neighbour reaches. This ladder
@@ -965,20 +965,21 @@ stencil_shift_trait(::DiracSource) = PointDependentStencil()
 # A `GridFunctionScale` is point-dependent in its own right, whatever it wraps: the
 # coefficient it reads varies from point to point exactly like a source's value does, so a
 # neighbour's contribution needs the coefficient re-read there, not relabelled here. Without
-# this, `UnaryWrapper`'s fallback (`stencil_shift_trait(op.inner_op)`, form/stencil_eval.jl)
+# this, `UnaryWrapper`'s fallback (`stencil_shift_trait(op.inner_op)`, assembly/stencil_eval.jl)
 # forwards to whatever the wrapped trial/test function reports -- translation-invariant --
 # and `D₋ₓ(cₕ * u)` reads the coefficient at the point being visited instead of the point
 # the difference's tap reaches.
 #
 # This line alone is not enough, and briefly worse than the bug it targets: the generic
-# `PointDependentStencil` branch (form/common.jl) discards the operand's own stencil and
+# `PointDependentStencil` branch (ast/common.jl) discards the operand's own stencil and
 # re-evaluates the whole node at the shifted point, which for a `GridFunctionScale` loses
 # the trial or test column the operand contributed -- `local_stencil(GridFunctionScale(c, u),
 # ..., Ishift)` returns a single entry at offset zero, not the trial column shifted by
-# `delta`. The two `shifted_inner_stencil` overrides in form/common.jl are what make this
-# line correct: they shift the operand by its own rule and read the coefficient at the
-# shifted point separately, instead of asking the trait's two stock branches to do both at
-# once.
+# `delta`. The five `shifted_inner_stencil` overrides (`GridFunctionScale` and `OperatorAdd`
+# in ast/common.jl, `RegionRestriction` and `OperatorScale` in operators/region_restriction.jl,
+# `TappedNode` in assembly/stencil_eval.jl) are what make this line correct: they shift the
+# operand by its own rule and read the coefficient at the shifted point separately, instead
+# of asking the trait's two stock branches to do both at once.
 stencil_shift_trait(::GridFunctionScale) = PointDependentStencil()
 
 function stencil_shift_trait(op::OperatorAdd)

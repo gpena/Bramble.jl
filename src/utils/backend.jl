@@ -275,8 +275,8 @@ const Parallel = CpuThreaded
 # index element by element, and host storage under a GpuPolicy has no device to schedule
 # against, so neither combination can execute anything. Lives in the inner constructor below
 # rather than in `backend`'s keyword functions, so a direct `Backend{VT, MT, EP}()` spelling
-# is caught too, not only the keyword paths. Kept distinct from `_throw_gpu_in_cpu_loop`
-# (`src/utils/linear_algebra.jl`), which is about a host loop reached at call time, not a
+# is caught too, not only the keyword paths. Kept distinct from `_throw_no_device_sweep`
+# (`src/utils/linear_algebra.jl`), which is thrown when no device sweep is loaded, not for a
 # backend that should never have been constructed.
 @noinline function _throw_backend_locality_mismatch(VT, EP)
     throw(

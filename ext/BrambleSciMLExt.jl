@@ -286,7 +286,7 @@ _preconditioner_operator(preconditioner, ::AbstractMatrix) = preconditioner
 # to `::Any` there -- an arbitrary user function has no Bramble type to narrow to, unlike
 # `BilinearForm`/`Semidiscretization` above. Narrowing on either argument is a strict
 # specialisation of `Bramble.jl`'s `_nonlinear_problem(residual, ::Any; kwargs...)` fallback,
-# which is all the method-overwrite check needs (form/nonlinear_problem.jl explains).
+# which is all the method-overwrite check needs (problems/nonlinear_problem.jl explains).
 #
 # No `_jac_closure`-style wrapping needed: unlike `jacobian!` above, which needs `sd` closed
 # over it, a `jacobian` passed here is already the user's own `jac(J, u, p)`/`J = jac(u, p)`,

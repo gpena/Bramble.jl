@@ -396,7 +396,7 @@ end
 # Unmasked stays the bare kernel, so the common path carries no mask check at all.
 @inline _apply_mask(kernel, Ωₕ, ::NTuple{0, Symbol}, zeroval) = kernel
 @inline _apply_mask(kernel, Ωₕ, markers::NTuple{N, Symbol}, zeroval) where {N} = _MaskedKernel(
-    kernel, _marker_masks(Ωₕ, markers), _zero_of(zeroval))
+    kernel, _marker_masks(Ωₕ, markers), _mask_zero_value(zeroval))
 
-@inline _zero_of(::Type{T}) where {T} = zero(T)
-@inline _zero_of(z::Tuple) = z
+@inline _mask_zero_value(::Type{T}) where {T} = zero(T)
+@inline _mask_zero_value(z::Tuple) = z

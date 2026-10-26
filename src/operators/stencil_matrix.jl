@@ -33,7 +33,7 @@ the value, decides the pattern.
 
 # --- Host mirror for the dense fallback's per-point weight reads --------------------- #
 #
-# `_stencil_weights` reads its mesh through four queries alone (checked against all nine
+# `_stencil_weights` reads its mesh through four queries alone (checked against all ten
 # methods below): the spacing at a point, the spacing to its forward neighbour, the point
 # count along one axis, and the element type. For a device-backed mesh (Metal.jl), reading
 # spacing straight off the mesh scalar-indexes a device array and is refused outright by the
@@ -83,7 +83,7 @@ explicitly.
 `Ωₕ` is typed as `Union{AbstractMeshType, _HostAxisSpacings}` rather than `AbstractMeshType`
 alone: every method below reads its mesh through `_axis_spacing`/`_axis_forward_spacing`/
 `_axis_npoints`/`_axis_eltype` only, and `_HostAxisSpacings` answers exactly those
-four without claiming to be a mesh (see its own docstring).
+four without claiming to be a mesh (see the comment above it).
 """
 @inline _stencil_weights(
     ::UnscaledBackwardDiffOp, Ωₕ::Union{AbstractMeshType, _HostAxisSpacings}, I::CartesianIndex

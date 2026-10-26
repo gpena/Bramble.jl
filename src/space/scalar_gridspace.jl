@@ -317,7 +317,8 @@ function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
     T = eltype(VT)
 
     # `innerh` and every `innerplus[i]` are lazy products of `aligned`/`cellfactor`, so
-    # `space_weights` allocates only the `2D` per-axis vectors above.
+    # `space_weights` allocates the `D` `aligned` vectors; `cellfactor` is the mesh's own
+    # vector, zero-copy, except in 1D and on one-point axes.
     innerh = SeparableWeights{D, T, VT}(cellfactor, npts_tuple)
     innerplus = ntuple(Val(D)) do i
         factors = ntuple(k -> k == i ? aligned[k] : cellfactor[k], Val(D))
@@ -523,8 +524,8 @@ function _host_mirror_mesh(::DeviceLocality, Ωₕ::MeshnD{D}) where {D}
 end
 
 # One bulk `Array(...)` per per-axis factor -- `aligned`/`cellfactor` are length
-# `npoints(Ωₕ, d)`, not the full grid (gpena/Bramble.jl#115) -- reusing `space_weights`'s own
-# `innerh`/`innerplus` construction shape rather than a second copy of that rule, just fed
+# `npoints(Ωₕ, d)`, not the full grid (gpena/Bramble.jl#115) -- mirroring `space_weights`'s own
+# `innerh`/`innerplus` construction (the `SeparableWeights` lines at its end), just fed
 # from the already-computed factors instead of the mesh's spacings.
 function _host_space_weights(w::SpaceWeights{D, T}) where {D, T}
     haligned = map(Array, w.aligned)

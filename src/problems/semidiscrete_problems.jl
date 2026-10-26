@@ -4,11 +4,15 @@
 
 # --- SciMLBase handoff -------------------------------------------------------------- #
 #
-# The three entry points below need SciMLBase and are implemented in `BrambleSciMLExt`. Each
-# forwards to an `_`-prefixed fallback whose first argument is `::Any` rather than the
-# concrete type, so the extension's method is a strict specialisation: an identical signature
-# would overwrite a method during precompilation, which Julia refuses. Same idiom as
+# Three entry points have an `_`-prefixed fallback (`ode_function`, `ode_problem`,
+# `linear_problem`): they need SciMLBase and are implemented in `BrambleSciMLExt`. Each
+# forwards to that fallback, whose first argument is `::Any` rather than the concrete type, so the
+# extension's method is a strict specialisation: an identical signature would overwrite a
+# method during precompilation, which Julia refuses. Same idiom as
 # `ast_sparsity_detector`/`_ast_sparsity_detector` and `export_vtk`/`_export_vtk`.
+#
+# `adjoint_sensitivities` is the fourth entry point, with no `_` fallback: it needs
+# SciMLSensitivity and is implemented in `BrambleSciMLSensitivityExt`.
 
 """
     ode_function(sd::Semidiscretization; kwargs...) -> ODEFunction
