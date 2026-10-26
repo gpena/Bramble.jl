@@ -120,7 +120,7 @@ end
 #
 # The whole `pairs` tuple must agree on one shape, not mix them: `semidiscretize` decides
 # once, for the *entire* constraint set, whether to route through `TimeDependentConstraints`
-# or `TimeParamDependentConstraints` (`form/semidiscrete_constraints.jl`), by checking that every
+# or `TimeParamDependentConstraints` (`problems/semidiscrete_constraints.jl`), by checking that every
 # condition has the same arity. A mix would silently fall through to neither and only fail
 # once a residual call actually invoked the wrong-arity closure -- caught here instead, at
 # the point that already knows every condition's arity.
@@ -522,11 +522,11 @@ end
 
 @inline function _check_labels_have_conditions(markers::Tuple, labels::Tuple)
     all(lbl -> _has_condition(markers, lbl), labels) ||
-        _throw_labels_without_condition(markers, labels)
+        _throw_bcs_missing_labels(markers, labels)
     return nothing
 end
 
-@noinline function _throw_labels_without_condition(markers::Tuple, labels::Tuple)
+@noinline function _throw_bcs_missing_labels(markers::Tuple, labels::Tuple)
     missing_labels = filter(lbl -> !_has_condition(markers, lbl), labels)
     have = map(label, markers)
     throw(

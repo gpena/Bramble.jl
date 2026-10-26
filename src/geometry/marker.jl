@@ -79,7 +79,7 @@ end
 
 # The three mesh labels of the polygon marker labelled `L`: its interior, boundary and
 # exterior nodes.
-@inline _polygon_labels(L::Symbol) = (L, Symbol(L, :_boundary), Symbol(L, :_exterior))
+@inline _region_marker_labels(L::Symbol) = (L, Symbol(L, :_boundary), Symbol(L, :_exterior))
 
 # A region marker `:L => P` (a `Polygon`) or `:L => levelset(φ)` (a `LevelSet`). Its three
 # mesh labels are built once, here, so that reading them (`labels`, `set_markers!`)
@@ -90,12 +90,12 @@ struct _RegionMarker{I <: Union{Polygon, LevelSet}}
     labels::NTuple{3, Symbol}
 end
 function _RegionMarker(L::Symbol, R::Union{Polygon, LevelSet})
-    return _RegionMarker(L, R, _polygon_labels(L))
+    return _RegionMarker(L, R, _region_marker_labels(L))
 end
 
 @inline label(m::_RegionMarker) = m.label
 @inline identifier(m::_RegionMarker) = m.identifier
-@inline _polygon_labels(m::_RegionMarker) = m.labels
+@inline _region_marker_labels(m::_RegionMarker) = m.labels
 
 """
     symbols(domain_markers::DomainMarkers) -> Tuple
@@ -274,8 +274,8 @@ function _check_polygon_label_clash(pairs::Tuple)
                       _throw_levelset_marker_error
         for (j, q) in enumerate(pairs)
             i == j && continue
-            theirs = q.second isa _RegionIdentifier ? _polygon_labels(q.first) : (q.first,)
-            for L in _polygon_labels(p.first)
+            theirs = q.second isa _RegionIdentifier ? _region_marker_labels(q.first) : (q.first,)
+            for L in _region_marker_labels(p.first)
                 L in theirs && throw_clash(p.first,
                     "its label :$L is also the label of marker :$(q.first)")
             end
@@ -592,7 +592,7 @@ category alone, [`label_symbols`](@ref), [`label_tuples`](@ref), or
 
 @inline _region_mesh_labels(::Tuple{}) = ()
 @inline function _region_mesh_labels(rs::Tuple)
-    return (_polygon_labels(first(rs))..., _region_mesh_labels(Base.tail(rs))...)
+    return (_region_marker_labels(first(rs))..., _region_mesh_labels(Base.tail(rs))...)
 end
 
 @inline labels(markers::_MarkerCollection) = label_identifiers(markers)

@@ -19,7 +19,7 @@ only its `version` tells it is stale. The marker `Dict` stays on the `Mesh1D`
   - `indices`: `CartesianIndices{1}` of the grid points.
   - `backend`: the linear algebra [`Backend`](@ref).
   - `pts`: grid points ``x_i``, ``i = 1, \\dots, N``.
-  - `half_pts`: cell centers ``x_{i+1/2}``, ``i = 1, \\dots, N+1``.
+  - `half_pts`: cell boundaries ``x_{i+1/2}``, ``i = 1, \\dots, N+1``.
   - `half_spacings`: cell widths ``h_{i+1/2}``, ``i = 1, \\dots, N``.
   - `spacings`: backward spacings ``h_i = x_i - x_{i-1}``, with ``h_1 = x_2 - x_1``.
   - `collapsed`: whether the interval is degenerate (a single point).
@@ -42,7 +42,7 @@ struct Mesh1DState{BT <: Backend, CI <: CartesianIndices{1}, VT <: AbstractVecto
     backend::BT
     "a vector holding the coordinates of the grid points, ``x_i``."
     pts::VT
-    "a vector of pre-computed cell centers (midpoints), ``x_{i+1/2}``."
+    "a vector of pre-computed cell boundaries (midpoints between grid points), ``x_{i+1/2}``."
     half_pts::VT
     "a vector of pre-computed cell widths, ``h_{i+1/2}``."
     half_spacings::VT
@@ -65,7 +65,7 @@ end
 
 One-dimensional grid discretizing a 1D [`CartesianProduct`](@ref) interval.
 
-The geometry lives in an immutable [`Mesh1DState`](@ref) (points, cell centers
+The geometry lives in an immutable [`Mesh1DState`](@ref) (points, cell boundaries
 `half_pts`, cell measures `half_spacings`, backward `spacings`, indices, set, backend,
 version, uniformity flag and marker words); every mutation (`set_points!`,
 `set_markers!`, refinement) replaces it whole. The mesh itself keeps the public marker
@@ -171,7 +171,7 @@ end
 @inline function _computed_uniform(s::Mesh1DState)
     p = host_points(s)
     mag = max(abs(first(p)), abs(last(p)))
-    return _uniform_default_tol(host_spacings(s), eltype(s), mag)
+    return _uniform_at_default_tol(host_spacings(s), eltype(s), mag)
 end
 
 @inline _marker_words(Ωₕ::_Mesh1DLike) = _st(Ωₕ).words
@@ -1069,7 +1069,7 @@ function _points!(x::AbstractVector, I::CartesianProduct{1}, unif::Bool, backend
     return nothing
 end
 
-# Calculates the "half points" (cell centers) for a 1D mesh.
+# Calculates the "half points" (cell boundaries) for a 1D mesh.
 @inline function half_points!(x::Array, Ωₕ)
     n = npoints(Ωₕ)
     pts = points(Ωₕ)
@@ -1255,7 +1255,7 @@ function _mesh(
     # Allocate a vector for the grid points using the specified backend.
     pts = vector(backend, n_points)
 
-    # Allocate vectors for derived quantities (cell centers and widths).
+    # Allocate vectors for derived quantities (cell boundaries and widths).
     _half_pts = vector(backend, n_points + 1)
     _half_spacings = vector(backend, n_points)
     _spacings = vector(backend, n_points)

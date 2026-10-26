@@ -40,7 +40,7 @@ function exact_labels(W, Ωₕ)
     return BitVector(vec(cls .== -1)), BitVector(vec(cls .== 0)), BitVector(vec(cls .== 1))
 end
 
-marker_triple(Ωₕ, L) = map(l -> Bramble.markers(Ωₕ)[l], Bramble._polygon_labels(L))
+marker_triple(Ωₕ, L) = map(l -> Bramble.markers(Ωₕ)[l], Bramble._region_marker_labels(L))
 
 @testset "Polygon node classification" begin
     @testset "Uniform grid matches exact oracle" begin

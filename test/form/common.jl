@@ -126,7 +126,7 @@ using Bramble:
     end
 
     @testset "Offsets and weights split apart (#249)" begin
-        # `_visit_entries` (form/bilinear_traversal.jl) reads a stencil entry's offsets and
+        # `_visit_entries` (assembly/bilinear_traversal.jl) reads a stencil entry's offsets and
         # its weight from these two containers rather than from the entry's own mixed
         # `Int`/`Float64` tuple, which is what lets Enzyme differentiate assembly with
         # respect to an operator's coefficient. `test/ext/chainrules_enzyme_ext.jl` checks
@@ -169,9 +169,9 @@ using Bramble:
         @test _split_bytes(b) == 0
         @test _split_bytes(l) == 0
 
-        # `_offsets_seen_before` is called with both shapes: `entry_offsets(stencil)` from
-        # the traversal, and the raw stencil from the pattern builders in
-        # form/jacobian_pattern.jl, which never read a weight. Both have to answer the same.
+        # `_offsets_seen_before` is called with both shapes: the raw stencil from the
+        # pattern builders in assembly/jacobian_pattern.jl, which never read a weight, and
+        # `entry_offsets(stencil)`. Both have to answer the same.
         dup = ((O, (0, 1), 1.0), ((1, 0), (0, 1), 2.0), (O, (0, 1), 4.0))
         for k in eachindex(dup)
             @test _offsets_seen_before(entry_offsets(dup), k, dup[k][1], dup[k][2]) ==

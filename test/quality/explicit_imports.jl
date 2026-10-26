@@ -197,6 +197,10 @@ using Kronecker: Kronecker
                 :_last_axis_chunks,
                 :_separable_line_band,
                 :_separable_block_band,
+                # `_threaded_dot` (src/utils/linear_algebra.jl, src/space/inner_product.jl):
+                # the `CpuThreaded` reduction, which the unmasked `_batch_dot` hooks return at
+                # one thread, so the three CPU policies agree bitwise there.
+                :_threaded_dot,
                 # `BlasInt`, `@blasfunc`, `libblastrampoline` (BrambleKroneckerExt): the `ccall`
                 # vocabulary of its direct LAPACK bindings (`sygvd`, `potrf`, `gges3`, which
                 # `LinearAlgebra.LAPACK` does not wrap for the shapes the fast diagonalisation

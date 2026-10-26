@@ -1,7 +1,7 @@
 # sparse_solvers.jl
 #
 # Unified interface for sparse linear solvers and factorization reuse:
-# - `sparse_factorize`: dispatches to SuiteSparse, AppleAccelerate, or MUMPS
+# - `sparse_factorize`: dispatches to SuiteSparse, AppleAccelerate, MUMPS, or Sparspak
 # - `sparse_refactor!`: recomputes numerical factorization in-place reusing symbolic analysis
 
 """

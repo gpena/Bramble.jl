@@ -1560,8 +1560,6 @@ function _assemble_linear!(
     space = form.test_space
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
 
-    # A genuine 3-way dispatch, not a binary `isa CpuSerial` check:
-    # `CpuPolyester` is neither `CpuSerial` nor `CpuThreaded`'s `Threads.@threads` path, and
     # Two branches, not three: `CpuSerial` runs the serial core, and everything else goes
     # to `_assemble_linear_parallel_core!`, whose own `_sweep_parallel!` computes the
     # effective policy and dispatches to `Threads.@threads` for `CpuThreaded` or to the
@@ -1640,12 +1638,12 @@ end
 # says nothing about where its storage lives, so its `parent` decides; the copy is a plain
 # `Vector`, which `_grid_function_value` indexes the same way). The walk covers the nodes a
 # source reaches through (`_lower_sources`'s own set plus `RegionRestriction`) and every
-# `@node_family` node, so a coefficient under `Mₓ(u * v)` or `D₋ₓ(u * v)` is reached too
-#; a node outside it is returned as it is, and device data left inside
+# `@node_family` node, so a coefficient under `Mₓ(u * v)` or `D₋ₓ(u * v)` is reached too;
+# a node outside it is returned as it is, and device data left inside
 # one fails loudly at its first scalar read rather than assembling wrong numbers.
 @inline _host_sources(op) = op
 
-# The same, keyed on where the space lives: only a device space's AST is walked.
+# The 1-arg walk, tagged with the locality; its only caller is `_assemble_linear_device!`.
 @inline _host_sources(::DeviceLocality, op) = _host_sources(op)
 
 @inline _host_array(x) = x

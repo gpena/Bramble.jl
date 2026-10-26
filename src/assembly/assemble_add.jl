@@ -46,8 +46,8 @@ mistake (the constrained row stops reading `u_k = g_k` and starts reading `u_k =
 `assemble_add!` first, and apply `dirichlet_bc!`/`symmetrize!` last, exactly once.
 =#
 
-@inline _scale_value(α::Base.RefValue) = α[]
-@inline _scale_value(α::Number) = α
+@inline _coefficient_value(α::Base.RefValue) = α[]
+@inline _coefficient_value(α::Number) = α
 
 """
     assemble_add!(A::AbstractMatrix, a::BilinearForm) -> AbstractMatrix
@@ -115,7 +115,7 @@ function assemble_add!(A::AbstractMatrix, a::BilinearForm)
 end
 
 function assemble_add!(A::AbstractMatrix, a::BilinearForm, α)
-    αv = _scale_value(α)
+    αv = _coefficient_value(α)
     if execution_policy(a.trial_space) isa CpuSerial
         _assemble_bilinear_core_cached!(A, a.trial_space, a.test_space, a.ast, a.cache, αv)
     else
@@ -155,7 +155,7 @@ function assemble_add!(F::AbstractVector, l::LinearForm)
 end
 
 function assemble_add!(F::AbstractVector, l::LinearForm, α)
-    αv = _scale_value(α)
+    αv = _coefficient_value(α)
     _check_linear_length(F, test_space(l))
     return _assemble_add_linear!(locality(backend(test_space(l))), F, test_space(l), l.ast, αv)
 end

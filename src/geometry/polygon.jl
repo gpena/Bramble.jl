@@ -64,7 +64,7 @@ end
 @inline _orient(a, b, c) = (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1])
 
 # Whether `c`, collinear with `a` and `b`, lies in the closed bounding box of segment `ab`.
-@inline function _in_box(a, b, c)
+@inline function _in_segment_box(a, b, c)
     return min(a[1], b[1]) <= c[1] <= max(a[1], b[1]) && min(a[2], b[2]) <= c[2] <= max(a[2], b[2])
 end
 
@@ -98,9 +98,9 @@ function _edges_meet(W, V, i, j, k, m)
     o1, o2 = _orient_sign(W, V, i, j, k), _orient_sign(W, V, i, j, m)
     o3, o4 = _orient_sign(W, V, k, m, i), _orient_sign(W, V, k, m, j)
     (o1 * o2 < 0 && o3 * o4 < 0) && return true
-    # The float comparisons of `_in_box` are exact.
-    return (iszero(o1) && _in_box(a, b, c)) || (iszero(o2) && _in_box(a, b, d)) ||
-           (iszero(o3) && _in_box(c, d, a)) || (iszero(o4) && _in_box(c, d, b))
+    # The float comparisons of `_in_segment_box` are exact.
+    return (iszero(o1) && _in_segment_box(a, b, c)) || (iszero(o2) && _in_segment_box(a, b, d)) ||
+           (iszero(o3) && _in_segment_box(c, d, a)) || (iszero(o4) && _in_segment_box(c, d, b))
 end
 
 # Validate the vertices `W` and return the sign of the enclosed area (positive when `W` runs

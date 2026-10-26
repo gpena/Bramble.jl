@@ -467,7 +467,7 @@ function half_points end
 """
     half_point(Ωₕ::AbstractMeshType, idx)
 
-Return the cell center (half-point) coordinate corresponding to index `idx`.
+Return the cell boundary (half-point) coordinate corresponding to index `idx`.
 """
 function half_point end
 

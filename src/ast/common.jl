@@ -459,22 +459,23 @@ shifted point and relabels its offsets (a bare trial or test leaf relabels `inne
 offsets only when they are offsets (`_has_relative_offsets`): not for an interpolation's
 absolute columns or a source's value.
 
-Two node types override this default outright rather than answering through the trait alone,
-because the trait's two stock branches cannot express what they need: re-evaluating the
-whole subtree at the shifted point is exact for a source, which carries only a value, but
-wrong for anything that also carries a trial or test column, since that column has to move
-by relabelling while whatever multiplies it has to be read at the new point:
+Five node types override this default outright rather than answering through the trait
+alone. Two are below; the others are `RegionRestriction` and `OperatorScale`
+(operators/region_restriction.jl) and `TappedNode` (assembly/stencil_eval.jl). The trait's two
+stock branches cannot express what the two below need. Re-evaluating the whole subtree at
+the shifted point is exact for a source, which carries only a value, but wrong for anything
+that also carries a trial or test column, since that column has to move by relabelling while
+whatever multiplies it has to be read at the new point:
 
   - `GridFunctionScale` shifts its operand by the operand's own rule (a recursive call to
     this same function), then reads its coefficient at the shifted point and scales by it,
-    so `D₋ₓ(cₕ * u)` moves the trial column *and* re-reads `cₕ` at the tap
-   .
+    so `D₋ₓ(cₕ * u)` moves the trial column *and* re-reads `cₕ` at the tap.
   - `OperatorAdd` recurses into each summand and `concatenate_stencils` the two results,
     since a sum can mix a point-dependent summand (one carrying a `GridFunctionScale`) with
     a translation-invariant one, and the generic point-dependent branch would re-evaluate
     the translation-invariant summand at the shifted point too, discarding its trial column.
 
-Every branch -- the two default ones and these two overrides -- produces a tuple of the same
+Every branch -- the two default ones and the overrides -- produces a tuple of the same
 static length, since it is the same operator either way, so the callers' `concatenate_stencils`
 sees exactly the shape it always did.
 """

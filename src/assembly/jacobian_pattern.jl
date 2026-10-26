@@ -9,7 +9,7 @@
 # `αvals = α.(Mₕ(uₕ))`. `∂residual/∂u` therefore has two contributions at every entry `a`'s
 # own pattern reaches: `A` acting on the explicit `u` (that's `a`'s own sparsity, already
 # exact -- see allocate_system_matrix), plus the chain-rule term through `αvals`'s own
-# dependence on `u`. `local_stencil`'s `GridFunctionScale` case (form/common.jl) reads that
+# dependence on `u`. `local_stencil`'s `GridFunctionScale` case (assembly/stencil_eval.jl) reads that
 # coefficient at the point the node is evaluated at, which an operator outside it shifts:
 # `D₋ₓ(c * U)` reads `c` at `I` and at `I - eₓ` (gpena/Bramble.jl#536). The second
 # contribution's reach is therefore every such read point -- the reach of the operators
@@ -274,7 +274,7 @@ end
 # A dependency op's own reach (`stencil_offsets`) is unchanged by which leaf it names --
 # `Mₕ(U(2))`'s reach is exactly `Mₕ(U)`'s, since `component` only replaces the leaf type,
 # never wraps it in anything `stencil_offsets` sees. What is new is *where* that reach
-# lands: `trial_component_or_nothing` (form/block_extract.jl) reads which leaf a resolved
+# lands: `trial_component_or_nothing` (assembly/block_extract.jl) reads which leaf a resolved
 # op names, `nothing` meaning "the block currently being widened, not a different one."
 
 # One resolved dependency: which leaf it targets (`nothing` = the block's own trial leaf)
@@ -424,9 +424,8 @@ function _push_point_dependency!(
 end
 
 # One term's contribution to one block, mirroring the coordinate walk (`_coord_walk!`,
-# form/bilinear_pattern.jl) for the base pattern, plus the same per-point coefficient widening
-# the scalar `jacobian_pattern`
-# does above -- resolved once per block (not per point) into `(lin_indices, col_offset)`
+# assembly/bilinear_pattern.jl) for the base pattern, plus the same per-point coefficient
+# widening the scalar `jacobian_pattern` does above -- resolved once per block (not per point) into `(lin_indices, col_offset)`
 # pairs, since neither depends on the grid point being visited.
 function _pattern_term_jacobian!(
         I_vec::Vector{Int},
@@ -501,8 +500,8 @@ function _pattern_term_jacobian!(
     return nothing
 end
 
-# Recursion shape shared via `_visit_operator_add3` (form/common.jl), the same one
-# `_foreach_unit` (form/bilinear_pattern.jl) uses for the base (non-Jacobian) pattern.
+# Recursion shape shared via `_visit_operator_add3` (assembly/stencil_eval.jl), the same one
+# `_foreach_unit` (assembly/bilinear_execution.jl) uses for the base (non-Jacobian) pattern.
 function _pattern_blocks_jacobian!(
         I_vec::Vector{Int},
         J_vec::Vector{Int},
@@ -537,7 +536,7 @@ function _pattern_blocks_jacobian!(
     return nothing
 end
 
-# Any pair `_is_block_pair` (form/bilinear_execution.jl) accepts: composite on both sides, or
+# Any pair `_is_block_pair` (assembly/bilinear_execution.jl) accepts: composite on both sides, or
 # on one side with the scalar side as a one-leaf composite (`leaf_spaces_offsets`), the same
 # walk `assemble` makes. The scalar path's `_walked_leaf` would pick one whole space and could
 # not name the component a term reads on the composite side.

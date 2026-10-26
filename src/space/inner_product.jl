@@ -65,8 +65,9 @@ end
 # and its `SparseMatrixCSC` path needs random-access `getindex` on the result (`index_in_marker[j]`
 # for an arbitrary column `j`, not a walk), which a lazy union can't offer without also
 # duplicating `BitVector`'s own bit-indexing math. So this stays eager; `_combined_marked_indices`
-# below is the innerₕ-only, allocation-free replacement (gpena/Bramble.jl#149), used solely by
-# code that only ever walks the result instead of indexing into it.
+# below is the allocation-free replacement (gpena/Bramble.jl#149) for its two callers,
+# `inner₊(..., ::Val{S})` and `_reaction_marked` (postprocessing/reaction.jl), which only walk
+# the result instead of indexing into it.
 function _combined_mask(Ωₕ, markers::NTuple{N, Symbol}) where {N}
     mask = copy(index_in_marker(Ωₕ, markers[1]))
     for k in 2:N
@@ -79,10 +80,10 @@ end
     return index_in_marker(Ωₕ, markers[1])
 end
 
-# `N > 1`: only ever handed to `_dot_masked`, which walks it and never indexes into it, so
-# the union can stay a lazy `MarkedIndicesUnion` (utils/linear_algebra.jl) instead of a
-# freshly allocated `BitVector` -- unlike `_combined_mask` above, this has exactly one
-# caller family (`innerₕ`/`_directional_inner_plus` below) and can afford to (gpena/Bramble.jl#149).
+# `N > 1`: both callers, `inner₊(..., ::Val{S})` below and `_reaction_marked`
+# (postprocessing/reaction.jl), only walk the result and never index into it, so the union
+# can stay a lazy `MarkedIndicesUnion` (utils/linear_algebra.jl) instead of a freshly
+# allocated `BitVector` -- unlike `_combined_mask` above (gpena/Bramble.jl#149).
 @inline function _combined_marked_indices(Ωₕ, markers::NTuple{N, Symbol}) where {N}
     return MarkedIndicesUnion(ntuple(k -> index_in_marker(Ωₕ, markers[k]), Val(N)))
 end
@@ -608,15 +609,16 @@ end
 # The dense method splits `CartesianIndices(Base.tail(w.dims))` along its last axis into
 # `Threads.nthreads()` static bands via `_last_axis_chunks` (`src/utils/linear_algebra.jl`,
 # already used by `_threaded_axis_for!` to split the same way), each band's task
-# walking its lines with the exact serial line-sum structure -- the trailing-factor product
-# `c` and the `@inbounds @simd` line over axis 1 -- and landing one partial sum in a fixed
-# `Threads.nthreads()`-length buffer, summed serially at the end (the same shape
-# `_threaded_dot` in `src/utils/linear_algebra.jl` uses). A line's offset into `u`/`v` is
-# `(LinearIndices(tail_dims)[J] - 1) * n₁`, computed directly from `J` rather than
-# accumulated across iterations as the serial loop does, since bands are visited out of
-# order. `D == 1` has no tail axis to split -- `Base.tail((n₁,))` is `()` -- so that case
-# instead splits the single line itself (`1:n₁`) into bands via `_band_range`, with the
-# trailing product `c` fixed at `one(T)`.
+# walking its lines with the serial line-sum structure -- the trailing-factor product `c`
+# and a line sum over axis 1, in a fixed order (`_separable_block_band` below) -- and
+# landing one partial sum in a fixed `Threads.nthreads()`-length buffer, summed serially at
+# the end (the same shape `_threaded_dot` in `src/utils/linear_algebra.jl` uses). A line's
+# offset into `u`/`v` is `(LinearIndices(tail_dims)[J] - 1) * n₁`, computed directly from
+# `J` rather than accumulated across iterations as the serial loop does, since bands are
+# visited out of order. `D == 1` has no tail axis to split -- `Base.tail((n₁,))` is `()` --
+# so that case instead splits the single line itself (`1:n₁`) into bands via `_band_range`,
+# with the trailing product `c` fixed at `one(T)`. At one thread both return the serial
+# `_dot` above, as the vector-weight method does.
 #
 # The masked reduction is `_threaded_dot_masked` (`src/utils/linear_algebra.jl`) itself: its
 # band reads `w` through a `CartesianIndex` (`w[cart[i]]`), never the linear `Int` `getindex`
@@ -631,6 +633,7 @@ end
     T = promote_type(eltype(u), eltype(w), eltype(v))
     n₁ = first(w.dims)
     nchunks = Threads.nthreads()
+    nchunks == 1 && return _dot(u, w, v)
     partials = zeros(T, nchunks)
 
     if D == 1
@@ -652,16 +655,15 @@ end
 # (src/utils/linear_algebra.jl) falls back to, so both return the same partial sums bitwise.
 # `BramblePolyesterExt`'s `_batch_dot` runs them too, one band per `@batch` iteration, which
 # is what makes a `CpuPolyester` reduction equal `CpuThreaded`'s bitwise
-# (gpena/Bramble.jl#473): a change here changes both policies.
+# (gpena/Bramble.jl#473): a change here changes both policies. They sum through
+# `_fixed_order_sum` (src/utils/linear_algebra.jl, gpena/Bramble.jl#942).
 @noinline function _separable_line_band(u, w::SeparableWeights, v, ax, nchunks::Int, b::Int)
     T = promote_type(eltype(u), eltype(w), eltype(v))
     f₁ = first(w.factors)
     rng = _band_range(ax, nchunks, b)
-    s = zero(T)
-    @inbounds @simd for i₁ in rng
-        s = muladd(conj(T(u[i₁])) * T(v[i₁]), T(f₁[i₁]), s)
+    return _fixed_order_sum(rng, T) do s, i₁
+        return @inbounds _band_madd(s, conj(T(u[i₁])) * T(v[i₁]), T(f₁[i₁]))
     end
-    return s
 end
 
 @noinline function _separable_block_band(
@@ -678,12 +680,11 @@ end
             c *= T(w.factors[d][J[d - 1]])
         end
         offset = (lin[J] - 1) * n₁
-        line_sum = zero(T)
-        @simd for i₁ in 1:n₁
+        line_sum = _fixed_order_sum(1:n₁, T) do t, i₁
             k = offset + i₁
-            line_sum = muladd(conj(T(u[k])) * T(v[k]), T(f₁[i₁]), line_sum)
+            return @inbounds _band_madd(t, conj(T(u[k])) * T(v[k]), T(f₁[i₁]))
         end
-        s = muladd(c, line_sum, s)
+        s = _band_madd(s, c, line_sum)
     end
     return s
 end

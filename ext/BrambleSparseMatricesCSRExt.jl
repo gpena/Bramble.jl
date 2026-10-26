@@ -62,9 +62,7 @@ function Bramble._csr_backend(::Type{T}, policy::ExecutionPolicy) where {T <: Nu
 end
 
 # `SparseMatrixCSR` has neither an `(undef, n, m)` nor an `(n, m)` constructor, so
-# `_undef_or_sized` (backend.jl) cannot reach it -- the same reason `Tridiagonal` and
-# `SymTridiagonal` get their own `matrix`/`_backend_eye`/`_backend_zeros` methods there
-# instead of relying on `supports_undef_construction`. An empty (all-zero, no stored
+# `_undef_or_sized` (backend.jl) cannot reach it. An empty (all-zero, no stored
 # entries) `n × m` matrix: `rowptr` all `1` means every row's segment is empty.
 @inline function Bramble.matrix(
         ::Backend{VT, MT, EP}, n::Integer, m::Integer

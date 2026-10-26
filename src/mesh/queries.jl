@@ -43,7 +43,7 @@ end
 
 # The default-tolerance answer for the host spacings `h` of a mesh of element type `T` whose
 # end points have magnitude at most `mag`: what a `Mesh1DState` stores as `uniform`.
-@inline function _uniform_default_tol(h, ::Type{T}, mag) where {T}
+@inline function _uniform_at_default_tol(h, ::Type{T}, mag) where {T}
     n = length(h)
     n <= 1 && return true
     h_ref = h[1]
