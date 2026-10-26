@@ -414,8 +414,10 @@ _check_space_components(ast, ::CompositeGridSpace, side_component, side) = nothi
 # trusts for #876: an `Irrational` takes any symbol and a user's may read a global
 # (test/ghost/allocations.jl), and a user's `AbstractFloat` may too, so freezing either at
 # `form` would hide a later change of its value.
-const _LooseScalar = Union{Float16, Float32, Rational{<:Base.BitInteger}, Irrational{:π},
-    Irrational{:ℯ}, Irrational{:γ}, Irrational{:φ}, Irrational{:catalan}}
+const _LooseScalar = Union{Float16, Float32,
+    Rational{<:Union{Int8, Int16, Int32, Int64, Int128, UInt8, UInt16, UInt32, UInt64,
+        UInt128}}, Irrational{:π}, Irrational{:ℯ}, Irrational{:γ}, Irrational{:φ},
+    Irrational{:catalan}}
 
 # Whether `T` holds a constant scale whose scalar is a `_LooseScalar` other than `Float64`.
 function _type_loose_scalars(T)
