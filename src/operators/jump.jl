@@ -131,7 +131,7 @@ AST node representing the jump across interfaces along dimension `Dim`, ``u_{i+1
 Not truncated at the far end: the absent `u_{i+1}` is taken as zero, yielding `-uᵢ` there.
 This matches the space-layer matrix convention, whose boundary row preserves `-1`.
 """
-struct JumpNode{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct JumpNode{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 

@@ -133,7 +133,7 @@ function _rebackend(Ωₕ::Mesh1D, be::Backend, f::F) where {F}
 end
 
 # Both a `Mesh1D` and its state answer the geometric accessors below, reading the state.
-const _Mesh1DLike{BT, CI, VT, T} = Union{Mesh1D{BT, CI, VT, T}, Mesh1DState{BT, CI, VT, T}}
+const _Mesh1DLike{BT} = Union{Mesh1D{BT}, Mesh1DState{BT}}
 
 @inline _st(Ωₕ::Mesh1D) = getfield(Ωₕ, :state)
 @inline _st(s::Mesh1DState) = s

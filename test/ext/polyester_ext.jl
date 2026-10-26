@@ -377,10 +377,11 @@ function _pa_threads_hits()
     code = """
     using Bramble, Polyester
     const HITS = Ref(0)
-    @eval Bramble @noinline function _mf_run_bands!(::CpuThreaded, s, a, plan, nbands::Int)
+    @eval Bramble @noinline function _mf_run_bands!(::CpuThreaded, s, a, plan, nbands::Int,
+            walk = nothing)
         Main.HITS[] += 1
         for b in 1:nbands
-            _mf_band_task!(s.y, s, a, plan, nbands, nbands, b)
+            _mf_band_task!(s.y, s, walk, plan, nbands, nbands, b)
         end
         return nothing
     end

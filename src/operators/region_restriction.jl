@@ -136,7 +136,7 @@ const _ChainLink{D} = Union{_ProbedRestriction{D}, OperatorScale{D}, GridFunctio
 
 # Whether `op` reaches a probed restriction through scales and probed restrictions only.
 @inline _reaches_probed(::_ProbedRestriction) = true
-@inline _reaches_probed(op::Union{OperatorScale, GridFunctionScale}) = _reaches_probed(
+@inline _reaches_probed(op::_Scale) = _reaches_probed(
     op.inner_op)
 @inline _reaches_probed(::Any) = false
 
@@ -164,7 +164,7 @@ end
     return _probed_chain(op.inner_op, space, I, markers, lin_idx)
 end
 @inline function _probed_chain(
-        op::Union{OperatorScale, GridFunctionScale}, space, I, markers, lin_idx
+        op::_Scale, space, I, markers, lin_idx
 )
     s, outside = _probed_chain(op.inner_op, space, I, markers, lin_idx)
     return (scale_stencil(s, _scale_value(op, lin_idx)), outside)
@@ -243,7 +243,7 @@ end
 # (`D̽ₓ(2 * restrict_to(:l, v))`) concatenate to more stencil shapes than inference splits,
 # so the walk boxed on every refill. Any other scale keeps the trait path; the branch folds.
 @inline _scales_restriction(::RegionRestriction) = true
-@inline _scales_restriction(op::Union{OperatorScale, GridFunctionScale}) = _scales_restriction(
+@inline _scales_restriction(op::_Scale) = _scales_restriction(
     op.inner_op)
 @inline _scales_restriction(::Any) = false
 
@@ -272,7 +272,7 @@ end
 # outside any restriction on the way down. Scales multiply in their value there; the
 # innermost restriction shifts its operand by its own rule above.
 @inline function _shifted_chain(
-        op::Union{OperatorScale, GridFunctionScale}, space, I, markers, vdim, delta,
+        op::_Scale, space, I, markers, vdim, delta,
         lin_shift::Int
 )
     s, outside = _shifted_chain(op.inner_op, space, I, markers, vdim, delta, lin_shift)

@@ -464,10 +464,7 @@ function _relation_matrix(P::CompositeGridSpace{N}, op::FacetOperator{D, G}, a::
 end
 
 # The nodes a term's split passes through, applying each to every term of its operand.
-const _SplitWrapper{D} = Union{BackwardDifference{D}, ForwardDifference{D},
-    CenteredDifference{D}, StarDifference{D}, CrossWeightedDifference{D},
-    SecondDifference{D}, JumpNode{D}, BackwardAverage{D}, ForwardAverage{D},
-    CenteredAverage{D}, ShiftNode{D}, OperatorScale{D}, GridFunctionScale{D}}
+const _SplitWrapper{D} = Union{StencilNode{D}, OperatorScale{D}, GridFunctionScale{D}}
 
 # The terms of `op`, by type: its sums split, but for conormal blocks
 # (`_conormal_coefficients`), and a difference, average, shift or scale of a sum applied to

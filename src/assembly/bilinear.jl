@@ -531,7 +531,7 @@ end
 # unit. A grid function scale inside a product's operand is distributed only as the
 # product is split (`_product_summands`).
 function _split_restricted_products(
-        op::Union{OperatorScale, GridFunctionScale}, ::Type{E}) where {E}
+        op::_Scale, ::Type{E}) where {E}
     _needs_rewrite(op, E) || return op
     inner = _split_restricted_products(op.inner_op, E)
     return inner === op.inner_op ? op : _distribute_scale(op, inner)
@@ -619,7 +619,7 @@ function _type_scale_in_node(T, under::Bool = false)
     T isa DataType || return false
     under && T <: OperatorScale &&
         _type_holds_restriction(fieldtype(T, :inner_op)) && return true
-    T <: _StencilNode && return _type_scale_in_node(fieldtype(T, :inner_op), true)
+    T <: StencilNode && return _type_scale_in_node(fieldtype(T, :inner_op), true)
     T <: UnaryWrapper && return _type_scale_in_node(fieldtype(T, :inner_op), under)
     T <: OperatorAdd && return _type_scale_in_node(T.parameters[2], under) ||
            _type_scale_in_node(T.parameters[3], under)
@@ -653,7 +653,7 @@ function _type_mixed_scales(T, E)
                                    _type_scales_differ(T.parameters[4], E)
     T <: OperatorAdd && return _type_mixed_scales(T.parameters[2], E) ||
                                _type_mixed_scales(T.parameters[3], E)
-    T <: Union{OperatorScale, GridFunctionScale} &&
+    T <: _Scale &&
         return _type_mixed_scales(T.parameters[3], E)
     return false
 end
@@ -669,7 +669,7 @@ function _type_scales_differ(T, E)
         S = _type_value(T, E)
         isconcretetype(S) || return false
         return _type_summands_differ(T, S, _type_scalar_join(T), E)
-    elseif T <: _StencilNode && _type_taps_differ(fieldtype(T, :inner_op), E)
+    elseif T <: StencilNode && _type_taps_differ(fieldtype(T, :inner_op), E)
         return true
     elseif T <: UnaryWrapper
         return _type_scales_differ(fieldtype(T, :inner_op), E)
@@ -771,7 +771,7 @@ precompile(_type_tap_scalar, (Any, Any))
 # `Float32(π)` on a Float32 mesh, the value `π * x` takes for every `Float32` `x`, so only
 # an entry once computed in `Float64` from a leaf's `Int` weight moves, by about one
 # Float32 rounding, and the matrix keeps its element type.
-@inline _widened(op::_StencilNode, ::Type{E}) where {E} = _rewrap_inner(
+@inline _widened(op::StencilNode, ::Type{E}) where {E} = _rewrap_inner(
     op, _tap_scales(_uniform_scales(op.inner_op, E), E))
 @inline _tap_scales(op, ::Type) = op
 @inline _tap_scales(op::OperatorAdd, ::Type{E}) where {E} = OperatorAdd(
@@ -861,13 +861,13 @@ end
 # is `D₋ₓ(Rₕ(:c, v)) + D₋ₓ(Rₕ(:c, Rₕ(:l, v)))`, and `Mₓ(D₊ᵧ(Rₕ(:l, v) + Rₕ(:r, v)))` is
 # `Mₓ(D₊ᵧ(Rₕ(:l, v))) + Mₓ(D₊ᵧ(Rₕ(:r, v)))` (gpena/Bramble.jl#759). An operand with no
 # restriction is left whole, so an unrestricted one compiles nothing new. The node list,
-# `_StencilNode`, is the simplifier's too (ast/stencil_nodes.jl). A scale between the node
+# `StencilNode`, is the simplifier's too (node_family.jl). A scale between the node
 # and the sum is distributed with it, so `D₋ₓ(2.0 * (Rₕ(:l, v) + Rₕ(:r, v)))` is
 # `D₋ₓ(2.0 * Rₕ(:l, v)) + D₋ₓ(2.0 * Rₕ(:r, v))`. Left whole, the scaled sum boxed the
 # fixed-length stencil of a difference over a restriction (16704 B on a 7x9 grid, 53424 B
 # for `D₋ᵧ(D₊ᵧ(…))`, 52560 B for `Mₓ(D₊ᵧ(…))`; `D₋ₓ(g * (Rₕ(:l, u) + Rₕ(:r, u)))` on both
 # sides 21600 B).
-@inline function _summands_of(op::_StencilNode, paired)
+@inline function _summands_of(op::StencilNode, paired)
     _holds_restriction(op.inner_op) && !_whole_shift(op) || return (op,)
     return map(x -> _rewrap_inner(op, x), _scaled_summands(op.inner_op, paired))
 end
@@ -882,7 +882,7 @@ function _type_nested_restriction(T)
     T isa DataType || return false
     if T <: RegionRestriction
         I = fieldtype(T, :inner_op)
-        while I isa DataType && I <: Union{OperatorScale, GridFunctionScale}
+        while I isa DataType && I <: _Scale
             I = fieldtype(I, :inner_op)
         end
         I isa DataType && I <: RegionRestriction && return true
@@ -989,7 +989,7 @@ function _type_shape_bits(T, nested::Bool = true)
         fieldtype(T, :zero_stencil) === Nothing || return inner
         nested && inner > 0 && _type_restricted_stencil(I) && return inner + 1
         return max(1, inner)
-    elseif nested && T <: _StencilNode
+    elseif nested && T <: StencilNode
         I = fieldtype(T, :inner_op)
         inner = _type_shape_bits(I)
         return inner > 0 && _type_restricted_stencil(I) ? inner + 1 : inner
@@ -1005,7 +1005,7 @@ end
 # Whether `T` holds, under any wrapper or sum, a difference, average, jump or shift over a
 # restriction.
 function _type_restricted_stencil(T)
-    if T <: _StencilNode
+    if T <: StencilNode
         return _type_shape_bits(fieldtype(T, :inner_op)) > 0
     elseif T <: UnaryWrapper
         return _type_restricted_stencil(fieldtype(T, :inner_op))
@@ -1017,7 +1017,7 @@ function _type_restricted_stencil(T)
 end
 # The same count at run time, read off the type, so a linear form walks two such summands
 # apart (`_unit_bits`, linear.jl): walked as one, `D₋ₓ(D₊ᵧ(Rₕ(:l, v) + Rₕ(:r, v)))` boxed.
-@generated _shape_bits(::T) where {T <: _StencilNode} = _type_shape_bits(T)
+@generated _shape_bits(::T) where {T <: StencilNode} = _type_shape_bits(T)
 
 # `T` with every scale and restriction around it peeled off: what a summand's full stencil
 # is built from, entry for entry, so two summands with the same core have stencils of the
@@ -1039,7 +1039,7 @@ end
 # `v + Rₕ(:t, D₋ₓ(v))`, `D₋ₓ(u) + D₋ₓ(Rₕ(:l, u))` and `u + D₋ₓ(u) + Rₕ(:l, u)` boxed
 # 11152 B to 16704 B (gpena/Bramble.jl#759).
 function _joins_restriction(P, K)
-    while K <: Union{OperatorScale, GridFunctionScale}
+    while K <: _Scale
         K = fieldtype(K, :inner_op)
     end
     return K <: RegionRestriction && _type_core(K) === _type_core(P)

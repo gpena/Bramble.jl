@@ -105,11 +105,12 @@ identity over the scalars, grid functions and components involved. The one excep
     isone(c) && return A
     return OperatorScale(c, A)
 end
-@inline _wrap_scale(c::Number, A::LazyOp) = OperatorScale(c, A)
-# The sign `_MinusOne` (ast.jl) is neither zero nor one, read off its type.
-@inline _wrap_scale(c::_MinusOne, A::LazyOp) = OperatorScale(c, A)
-# A `RefValue` coefficient is never statically zero or one; wrap unconditionally.
-@inline _wrap_scale(c::Base.RefValue, A::LazyOp) = OperatorScale(c, A)
+# Any other coefficient wraps unconditionally: a non-`Integer` `Number`, the sign `_MinusOne`
+# (ast.jl, neither zero nor one by its type) and a `RefValue` (never statically zero or one).
+# The `Union` keeps a `MethodError` for any other scalar (a `Symbol`, a function, `nothing`).
+@inline function _wrap_scale(c::Union{Number, _MinusOne, Base.RefValue}, A::LazyOp)
+    return OperatorScale(c, A)
+end
 
 # Whether a coefficient may be multiplied into another at simplify time, decided by its
 # type. A `RefValue` may not: its value can change after the form is built. Nor may a
@@ -252,16 +253,14 @@ function simplify_ast(op::OperatorScale)
         isone(op.scalar) && return inner
     end
 
-    if op.scalar isa Union{Number, _MinusOne}
-        # `c1 * (c2 * A) -> (c1 * c2) * A`, only when both scalars are static numbers: a
-        # `RefValue` on either side can change after construction, so folding through one
-        # would bake in whatever value it happened to hold right now. Type-stable whatever
-        # the values are: both operands' types are known here, so `_wrap_scale` dispatches
-        # on a known type and the product's type follows from them alone. A `Rational` on
-        # either side does not fold either (`_folds`).
-        if inner isa OperatorScale && _folds(op.scalar) && _folds(inner.scalar)
-            return _wrap_scale(_fold_mul(op.scalar, inner.scalar), inner.inner_op)
-        end
+    # `c1 * (c2 * A) -> (c1 * c2) * A`, only when both scalars are static numbers: a
+    # `RefValue` on either side can change after construction, so folding through one
+    # would bake in whatever value it happened to hold right now. Type-stable whatever
+    # the values are: both operands' types are known here, so `_wrap_scale` dispatches
+    # on a known type and the product's type follows from them alone. A `Rational` on
+    # either side does not fold either (`_folds`).
+    if inner isa OperatorScale && _folds(op.scalar) && _folds(inner.scalar)
+        return _wrap_scale(_fold_mul(op.scalar, inner.scalar), inner.inner_op)
     end
 
     return inner === op.inner_op ? op : OperatorScale(op.scalar, inner)
@@ -526,9 +525,9 @@ end
 # other gates do, and its form infers the distributed tree too before the literal folds.
 # `InterpolationNode` is linear too but is left whole. Its source space is bound per block,
 # by the leaf it wraps (`_bind_interp_spaces`), and that path is not exercised here. The
-# stencil nodes are the list `_summands_of` splits over too (stencil_nodes.jl); a shift
+# stencil nodes are the list `_summands_of` splits over too (node_family.jl); a shift
 # keeps its own `simplify_ast` above, which simplifies its operand first.
-const _LinearWrapper = Union{_StencilNode, RegionRestriction}
+const _LinearWrapper = Union{StencilNode, RegionRestriction}
 
 # Whether `op` names more than one component on either side. Only a sum can, so an operand
 # whose type holds none (`_may_hold_sum`) answers `false` without compiling the class

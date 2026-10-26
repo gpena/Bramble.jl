@@ -130,8 +130,7 @@ end
 
 # `Eᵀ (F_pad(t) − A_pad d(t))`. `d(t)` goes into the carrier's buffer through the space's
 # stored data buffer, or, for a time whose type they cannot hold, into buffers of that type.
-function _assemble_source!(F::AbstractVector, sd::AbstractSemidiscretization,
-        c::GhostConstraints, p, t)
+function _assemble_source!(F::AbstractVector, sd, c::GhostConstraints, p, t)
     return _assemble_ghost_load!(F, sd.operator, sd.source, _ghost_affine!(c, sd.space, t))
 end
 
@@ -145,8 +144,7 @@ end
 end
 
 # Relations eliminate every algebraic row, so the initial condition needs no correction.
-@inline _apply_initial_constraints!(u::AbstractVector, ::AbstractSemidiscretization,
-    ::GhostConstraints, p, t) = u
+@inline _apply_initial_constraints!(u::AbstractVector, _, ::GhostConstraints, p, t) = u
 
 @inline _constraint_description(::GhostConstraints) = "relations"
 

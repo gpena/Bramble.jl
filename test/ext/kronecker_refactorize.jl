@@ -274,7 +274,7 @@ end
         Ks = K(W, sym)
         dterms = map(Ks.terms) do t
             fd = map(dev, t.factors)
-            return Bramble.KroneckerTerm{2, typeof(t.scales), typeof(fd), Nothing, Nothing}(
+            return Bramble.KroneckerTerm{typeof(t.scales), typeof(fd), Nothing, Nothing}(
                 t.scales, fd, nothing, nothing, t.symmetric)
         end
         Kd = Bramble.KroneckerLinearOperator{Float64, 2, typeof(dterms), typeof(Ks.policy)}(

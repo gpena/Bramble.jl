@@ -162,16 +162,16 @@ See also: [`inner_Γ`](@ref), [`normal_vector`](@ref), [`∂ₙ`](@ref)
 const η = NormalSymbol()
 
 """
-    NormalContraction{D, T}
+    NormalContraction{T}
 
 `dot(F, η)`: the tuple `F`, held until [`inner_Γ`](@ref) expands it into one product per
 direction. Not a `LazyOp`, deliberately -- see the note at the head of this file.
 """
-struct NormalContraction{D, T <: Tuple}
+struct NormalContraction{T <: Tuple}
     terms::T
 end
 
-@inline dot(F::NTuple{D, Any}, ::NormalSymbol) where {D} = NormalContraction{D, typeof(F)}(F)
+@inline dot(F::NTuple{D, Any}, ::NormalSymbol) where {D} = NormalContraction(F)
 @inline dot(::NormalSymbol, F::NTuple{D, Any}) where {D} = dot(F, η)
 
 # `dot(F, η)` needs no ghosts: `F` is a field whose values are already known at every point,
@@ -237,7 +237,8 @@ Expanded here, at the builder, into one ordinary product per direction, each car
 direction's signed transverse measure. The term is the sum a caller would otherwise write out,
 so nothing downstream of `form` learns a new node.
 """
-function inner_Γ(F::NormalContraction{D}, right::LazyOp{D}; markers = ()) where {D}
+function inner_Γ(
+        F::NormalContraction{<:NTuple{D, Any}}, right::LazyOp{D}; markers = ()) where {D}
     mask = _normal_mask(Val(D), markers)
     return _normal_terms(F.terms, right, Val(mask), Val(D))
 end
@@ -380,7 +381,8 @@ end
 @inline _normal_terms_of(c::NormalComponent) = (_normal_product(1, c),)
 @inline _normal_terms_of(p::NormalComponentProduct) = (p,)
 @inline _normal_terms_of(s::NormalComponentSum) = s.terms
-@inline function _normal_terms_of(c::NormalContraction{D}) where {D}
+@inline function _normal_terms_of(c::NormalContraction)
+    D = length(c.terms)
     return ntuple(d -> _normal_product(c.terms[d], NormalComponent{d}()), Val(D))
 end
 @inline _as_normal_sum(t) = NormalComponentSum(_normal_terms_of(t))
@@ -669,10 +671,8 @@ end
 
 # Scalars and sums, facet by facet: `α * u + β * ∂ₙ(u)` is `α u + β η_F Dc_d(u)` on each
 # facet, and `c * ∂ₙ(u)` scales every facet's operator.
-const _FacetScalar = Union{Number, Base.RefValue{<:Number}}
-
-@inline Base.:*(c::_FacetScalar, F::FacetOperator) = _map_facets(op -> c * op, F)
-@inline Base.:*(F::FacetOperator, c::_FacetScalar) = c * F
+@inline Base.:*(c::_NormalScalar, F::FacetOperator) = _map_facets(op -> c * op, F)
+@inline Base.:*(F::FacetOperator, c::_NormalScalar) = c * F
 @inline Base.:/(F::FacetOperator, c::Number) = _map_facets(op -> op / c, F)
 @inline Base.:/(::FacetOperator, ::Base.RefValue{<:Number}) = _throw_facet_ref_divisor()
 

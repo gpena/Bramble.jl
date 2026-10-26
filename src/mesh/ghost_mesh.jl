@@ -20,7 +20,7 @@
 # See also: `Mesh1D`, `MeshnD`, `MeshnDState`
 
 """
-    GhostMesh{D, M, P, CI} <: AbstractMeshType{D}
+    GhostMesh{D, M, P} <: AbstractMeshType{D}
 
 A physical mesh with one ghost point beyond each node of the facets it names.
 
@@ -52,14 +52,14 @@ npoints(G, Tuple)            # (7, 9)
 Bramble.nghosts(G)           # 24
 ```
 """
-mutable struct GhostMesh{D, M <: AbstractMeshType{D}, P <: AbstractMeshType{D},
-    CI <: CartesianIndices{D}} <: AbstractMeshType{D}
+mutable struct GhostMesh{D, M <: AbstractMeshType{D}, P <: AbstractMeshType{D}} <:
+               AbstractMeshType{D}
     "the physical mesh."
     physical::M
     "the padded mesh, a real mesh of its own with the physical labels on its facet nodes."
     padded::P
     "the `CartesianIndices` of the padded grid."
-    indices::CI
+    indices::CartesianIndices{D, NTuple{D, Base.OneTo{Int}}}
     "the physical point counts."
     n::NTuple{D, Int}
     "the ghost layers below each axis, 0 or 1: the padded index of physical node `I` is `I + lo`."
@@ -77,7 +77,7 @@ mutable struct GhostMesh{D, M <: AbstractMeshType{D}, P <: AbstractMeshType{D},
 end
 
 """
-    GhostMeshState{D, M, P, CI} <: AbstractMeshType{D}
+    GhostMeshState{D, M, P} <: AbstractMeshType{D}
 
 The immutable walk state of a [`GhostMesh`](@ref), built on demand by [`_walk_mesh`](@ref)
 once the padded mesh is brought up to date with the physical one, so it is never stale: the
@@ -86,14 +86,14 @@ answers each accessor and ghost query a `GhostMesh` does; its version, identity 
 marker words are the padded state's. The state types `M` and `P` are parameters so a rebuilt
 state can hold other array types ([`_batch_rebuild`](@ref)).
 """
-struct GhostMeshState{D, M <: AbstractMeshType{D}, P <: AbstractMeshType{D},
-    CI <: CartesianIndices{D}} <: AbstractMeshType{D}
+struct GhostMeshState{D, M <: AbstractMeshType{D}, P <: AbstractMeshType{D}} <:
+       AbstractMeshType{D}
     "the walk state of the physical mesh."
     physical::M
     "the walk state of the padded mesh."
     padded::P
     "the `CartesianIndices` of the padded grid."
-    indices::CI
+    indices::CartesianIndices{D, NTuple{D, Base.OneTo{Int}}}
     "the physical point counts."
     n::NTuple{D, Int}
     "the ghost layers below each axis, 0 or 1: the padded index of physical node `I` is `I + lo`."
@@ -213,7 +213,7 @@ function GhostMesh(Ωₕ::Union{Mesh1D, MeshnD}; ghosts = :boundary)
     pts = ntuple(d -> _padded_axis_points(host_points(Ωₕ(d)), active[d]...), Val(D))
     subs = ntuple(d -> _padded_axis(Ωₕ(d), pts[d], active[d][1] || active[d][2]), Val(D))
     padded = _padded_mesh(Ωₕ, subs, idxs)
-    G = GhostMesh{D, typeof(Ωₕ), typeof(padded), typeof(idxs)}(
+    G = GhostMesh{D, typeof(Ωₕ), typeof(padded)}(
         Ωₕ, padded, idxs, n, lo, active, offset, starts[end],
         _mesh_version(Ωₕ), _marker_stamp(Ωₕ))
     _store_markers!(padded, _padded_markers(G))

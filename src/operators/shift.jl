@@ -435,7 +435,7 @@ Built by `shift_op` and, with `shift_amount` ``\\pm 1``, by the public shifts
 `S₊ₓ(op)`, `S₋ᵧ(op)`, ... on a symbolic operand. A neighbour off the grid reads 0, as for a
 grid function.
 """
-struct ShiftNode{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct ShiftNode{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     shift_amount::Int
     inner_op::OpType
 end
@@ -508,7 +508,7 @@ end
 # A chain of shifts down to a bare leaf is re-evaluated inline, as the leaf itself is
 # (`_wraps_leaf`, `ast/common.jl`): each link has one tap, so inlining grows the code by the
 # chain's length, not taps^depth. Out of line, `S₊ₓ(S₊ₓ(u))` paid a call per link per point.
-@inline _wraps_leaf(::ShiftNode{D, Dim, <:_BareLeaf}) where {D, Dim} = true
+# The one-link case is the Union method in `average.jl`.
 @inline _wraps_leaf(op::ShiftNode{D, Dim, <:ShiftNode}) where {D, Dim} = _wraps_leaf(op.inner_op)
 
 @inline _shift_node_stencil(

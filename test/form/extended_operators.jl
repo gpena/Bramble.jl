@@ -17,7 +17,6 @@ using Bramble:
                CenteredDifference,
                StarDifference,
                CrossWeightedDifference,
-               ExtendedDifferenceNode,
                local_stencil,
                resolve_ast,
                is_symbolic,
@@ -289,12 +288,12 @@ end
             "the stencil direction must be between 1 and 2, got 3") D̃₂(id)
         @test_throws ArgumentError D̃₂(u)
 
-        # the three without a matrix form are grouped, so anything reading only the
-        # direction covers all of them
-        @test Dcₓ(id) isa ExtendedDifferenceNode
-        @test D̃ᵧ(id) isa ExtendedDifferenceNode
-        @test D̽ₓ(id) isa ExtendedDifferenceNode
-        @test !(jumpₓ(id) isa ExtendedDifferenceNode)   # the jump has a matrix
+        # the three without a matrix form; the jump has one
+        Extended = Union{CenteredDifference, StarDifference, CrossWeightedDifference}
+        @test Dcₓ(id) isa Extended
+        @test D̃ᵧ(id) isa Extended
+        @test D̽ₓ(id) isa Extended
+        @test !(jumpₓ(id) isa Extended)   # the jump has a matrix
     end
 
     @testset "Composite space" begin

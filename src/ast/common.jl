@@ -530,6 +530,10 @@ const _BareLeaf = Union{TrialFunction, TestFunction}
 # A trial or test function, of a scalar space or a component of a composite one (`u(i)`):
 # what the corner rule (`assembly/stencil_eval.jl`) takes as a mixed difference's operand.
 const _AnyLeaf = Union{_BareLeaf, IndexedTrialFunction, IndexedTestFunction}
+# Every leaf of the tree: a node with no child, a single entry on the diagonal. The source,
+# identity and zero leaves are defined in `ast.jl` and above, so all ten exist by now.
+const _LeafNode = Union{_AnyLeaf, SourceFunction, SourceVector, SourceConstant, DiracSource,
+    IdentityOperator, ZeroOperator}
 @inline _wraps_leaf(::Any) = false
 @inline _wraps_leaf(::Union{
     OperatorScale{D, S, <:_BareLeaf}, GridFunctionScale{D, S, <:_BareLeaf}}) where {D, S} = true

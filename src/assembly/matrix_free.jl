@@ -733,12 +733,12 @@ const _MF_LONG = 1 << 20
 const _MFLeaf = Union{TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFunction}
 _mf_entries(::_MFLeaf) = 1
 _mf_entries(op::TappedNode) = length(_stencil_taps(op)) * _mf_tapped(op.inner_op)
-_mf_entries(op::Union{OperatorScale, GridFunctionScale}) = _mf_entries(op.inner_op)
+_mf_entries(op::_Scale) = _mf_entries(op.inner_op)
 _mf_entries(op::BilinearProduct) = min(_mf_entries(op.left_op) * _mf_entries(op.right_op), _MF_LONG)
 _mf_entries(_) = _MF_LONG
 # The operand of a tap: a leaf, or a scaled one, counts one entry; anything else is long.
 _mf_tapped(::_MFLeaf) = 1
-_mf_tapped(op::Union{OperatorScale, GridFunctionScale}) = _mf_tapped(op.inner_op)
+_mf_tapped(op::_Scale) = _mf_tapped(op.inner_op)
 _mf_tapped(_) = _MF_LONG
 
 # A serial unit: the interior gathered and the shell scattered, or, when it cannot be
@@ -1642,8 +1642,8 @@ end
     return _mf_apply_parts!(policy, s, trial_space(a), test_space(a), a.ast, walk)
 end
 
-function _mf_product!(plan::_MFFusedPlan{D}, policy, s::ActionSink, a::BilinearForm,
-        walk = nothing) where {D}
+function _mf_product!(plan::_MFFusedPlan, policy, s::ActionSink, a::BilinearForm,
+        walk = nothing)
     plan.form === a ||
         return _mf_apply_parts!(policy, s, trial_space(a), test_space(a), a.ast, walk)
     nbands = _mf_nbands(plan)
@@ -1659,11 +1659,11 @@ end
 # (`_WalkRows`), or `nothing`. `CpuPolyester` runs `_batch_mf_bands!` instead, which
 # captures no plan.
 @noinline function _mf_band_task!(
-        _y, s, walk, plan::_MFFusedPlan{D}, nbands::Int, ntasks::Int, k::Int
-) where {D}
+        _y, s, walk, plan::_MFFusedPlan, nbands::Int, ntasks::Int, k::Int
+)
     a = plan.form
     s = _mf_with_geom(s, plan.geom)
-    len = plan.dims[D]
+    len = last(plan.dims)
     for b in k:ntasks:nbands
         own = _band_range(1:len, nbands, b)
         _mf_apply_parts!(_MFPass(_MF_BAND, own, plan.omin, plan.omax, _MF_NO_COLLECT), s,
@@ -1729,7 +1729,7 @@ end
 _mf_prebound(_) = false
 
 # The fused product's band count.
-@inline _mf_nbands(plan::_MFFusedPlan{D}) where {D} = min(Threads.nthreads(), plan.dims[D])
+@inline _mf_nbands(plan::_MFFusedPlan) = min(Threads.nthreads(), last(plan.dims))
 
 # Band `b` of a `CpuThreaded` fused product, from the sink and plan its spawn shares, cut to
 # `walk`. Its band count is the plan's (`_mf_nbands`), taken here rather than captured, so

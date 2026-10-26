@@ -35,16 +35,7 @@ function stencil_offsets end
 # --- the leaves: a single entry on the diagonal ------------------------------------ #
 _origin(::LazyOp{D}) where {D} = [ntuple(_ -> 0, D)]
 
-stencil_offsets(op::TrialFunction) = _origin(op)
-stencil_offsets(op::TestFunction) = _origin(op)
-stencil_offsets(op::IndexedTrialFunction) = _origin(op)
-stencil_offsets(op::IndexedTestFunction) = _origin(op)
-stencil_offsets(op::SourceFunction) = _origin(op)
-stencil_offsets(op::SourceVector) = _origin(op)
-stencil_offsets(op::SourceConstant) = _origin(op)
-stencil_offsets(op::DiracSource) = _origin(op)
-stencil_offsets(op::IdentityOperator) = _origin(op)
-stencil_offsets(op::ZeroOperator) = _origin(op)
+stencil_offsets(op::_LeafNode) = _origin(op)
 
 # --- combining what a node's child reaches ----------------------------------------- #
 
@@ -123,16 +114,7 @@ One exception: a marked function (`_FacetExtrapolated`) answers its function's m
 its reads by extrapolation go inward from a ghost to the three nodes `_marked_ghost`
 requires; the walk's interior reads no marked ghost without widening (`_face_margins`).
 """
-_stencil_margin(op::TrialFunction) = 0
-_stencil_margin(op::TestFunction) = 0
-_stencil_margin(op::IndexedTrialFunction) = 0
-_stencil_margin(op::IndexedTestFunction) = 0
-_stencil_margin(op::SourceFunction) = 0
-_stencil_margin(op::SourceVector) = 0
-_stencil_margin(op::SourceConstant) = 0
-_stencil_margin(op::DiracSource) = 0
-_stencil_margin(op::IdentityOperator) = 0
-_stencil_margin(op::ZeroOperator) = 0
+_stencil_margin(op::_LeafNode) = 0
 
 # A tapped node's own step is always exactly 1: every `_stencil_taps` entry across every
 # difference, average and jump is drawn from `{-1, 0, 1}` (the `_stencil_taps` methods in

@@ -197,12 +197,13 @@ end
 # --- KroneckerTerm: one addend's per-axis factors ------------------------------------ #
 
 """
-    KroneckerTerm{D, S <: Tuple, F <: Tuple, L, R}
+    KroneckerTerm{S <: Tuple, F <: Tuple, L, R}
 
-One separable addend's `D` one-dimensional factor matrices and the (possibly still-`Ref`)
-scalar coefficients multiplying it: [`KroneckerLinearOperator`](@ref)'s building block, not
-exported. Build one with `_kron_term`, never directly. `factors[d]` is the axis-`d` factor
-(a `Diagonal`, or any other matrix), in the order the caller gave them; `scales` is read at
+One separable addend's one-dimensional factor matrices, one per axis, and the (possibly
+still-`Ref`) scalar coefficients multiplying it: [`KroneckerLinearOperator`](@ref)'s
+building block, not exported. Build one with `_kron_term`, never directly. `factors[d]` is
+the axis-`d` factor (a `Diagonal`, or any other matrix), in the order the caller gave them;
+its dimension is `length(factors)`. `scales` is read at
 `mul!` time through `_kron_coeff` so a `Ref` coefficient stays live, matching a
 `BilinearForm`'s own contract. The host `mul!` reads only `rows` and `line`: `rows[d]` is
 `factors[d]` itself when it is a `Diagonal` or a symmetric `SparseMatrixCSC`, and otherwise
@@ -211,7 +212,7 @@ axis-1 factor as the line kernels apply it (see `_kron_line_operator`). `symmetr
 whether every factor is exactly symmetric. On a device-backed operator `line` and `rows`
 are `nothing`.
 """
-struct KroneckerTerm{D, S <: Tuple, F <: Tuple, L, R}
+struct KroneckerTerm{S <: Tuple, F <: Tuple, L, R}
     scales::S
     factors::F
     line::L
@@ -226,7 +227,7 @@ _kron_rows(F::SparseMatrixCSC, sym::Bool) = sym ? F : copy(transpose(F))
 _kron_rows(F::AbstractMatrix, sym::Bool) = _kron_rows(sparse(F), sym)
 
 """
-    _kron_term(scales::Tuple, factors::NTuple{D, AbstractMatrix}) -> KroneckerTerm{D}
+    _kron_term(scales::Tuple, factors::NTuple{D, AbstractMatrix}) -> KroneckerTerm
 
 The one way to build a host [`KroneckerTerm`](@ref): `scales` times the Kronecker product
 of `factors` (axis 1 first). Each factor is checked for exact symmetry once; a non-diagonal
@@ -241,7 +242,7 @@ function _kron_term(scales::Tuple, factors::NTuple{D, AbstractMatrix}) where {D}
     sym = map(F -> F isa Diagonal || issymmetric(F), factors)
     rows = map(_kron_rows, factors, sym)
     line = _kron_line_operator(rows[1], sym[1])
-    return KroneckerTerm{D, typeof(scales), typeof(factors), typeof(line), typeof(rows)}(
+    return KroneckerTerm{typeof(scales), typeof(factors), typeof(line), typeof(rows)}(
         scales, factors, line, rows, all(sym)
     )
 end
@@ -686,9 +687,9 @@ end
 
 # A host term's factors moved to the device; the host kernels' `line` and `rows` stay
 # behind.
-function _kron_to_storage(loc::DeviceLocality, be, t::KroneckerTerm{D}) where {D}
+function _kron_to_storage(loc::DeviceLocality, be, t::KroneckerTerm)
     F = map(f -> _kron_to_storage(loc, be, f), t.factors)
-    return KroneckerTerm{D, typeof(t.scales), typeof(F), Nothing, Nothing}(
+    return KroneckerTerm{typeof(t.scales), typeof(F), Nothing, Nothing}(
         t.scales, F, nothing, nothing, t.symmetric
     )
 end
@@ -1016,7 +1017,7 @@ _kron_host_raw(t::KroneckerTerm) = (map(_kron_host_raw, t.rows), _kron_host_raw(
 @inline function _kron_host_rebuild(r::Tuple{Tuple, Any})
     F = map(_kron_host_rebuild, r[1])
     L = _kron_host_rebuild(r[2])
-    return KroneckerTerm{length(F), Tuple{}, typeof(F), typeof(L), typeof(F)}((), F, L, F, false)
+    return KroneckerTerm{Tuple{}, typeof(F), typeof(L), typeof(F)}((), F, L, F, false)
 end
 
 """

@@ -481,6 +481,7 @@ function _type_value(T, E, L = E)
             *, Base.promote_op(*, _type_value(T.parameters[3], E, L),
                 _type_value(T.parameters[4], E, L)), E)
     elseif T <: Union{_DifferenceNode, _AverageNode}
+        # every stencil node but a shift, which moves its operand's weights and scales none
         return Base.promote_op(*, E, _type_value(fieldtype(T, :inner_op), E, L))
     elseif T <: UnaryWrapper
         return _type_value(fieldtype(T, :inner_op), E, L)
@@ -821,10 +822,7 @@ end
 @inline _leaf_eltype(T, op, sp) = T
 
 # One operand, and nothing of its own that is not already in `T` (the space's spacings).
-const _ELTYPE_WRAPPERS = Union{
-    ShiftNode, InterpolationNode, BackwardDifference, ForwardDifference,
-    CenteredDifference, StarDifference, CrossWeightedDifference, SecondDifference,
-    BackwardAverage, ForwardAverage, CenteredAverage, JumpNode}
+const _ELTYPE_WRAPPERS = Union{StencilNode, InterpolationNode}
 
 @inline _leaf_eltype(T, op::_ELTYPE_WRAPPERS, sp) = _leaf_eltype(T, op.inner_op, sp)
 
@@ -1062,7 +1060,7 @@ end
 # stored is not changed, so the scale is rebuilt per summand only here, in the walk.
 @inline _walk_summands(op::OperatorAdd) = (
     _walk_summands(op.left_op)..., _walk_summands(op.right_op)...)
-@inline function _walk_summands(op::Union{OperatorScale, GridFunctionScale})
+@inline function _walk_summands(op::_Scale)
     ts = _walk_summands(op.inner_op)
     return ts isa Tuple{Any} ? (op,) : map(t -> _rewrap_inner(op, t), ts)
 end
@@ -1118,10 +1116,7 @@ argument carries no difference) strides by 1 in every dimension, resulting in a 
     return (lo, hi)
 end
 
-@inline _row_bounds(::Union{
-    TrialFunction{D}, TestFunction{D}, IndexedTrialFunction{D}, IndexedTestFunction{D},
-    SourceFunction{D}, SourceVector{D}, SourceConstant{D}, DiracSource{D},
-    IdentityOperator{D}, ZeroOperator{D}}) where {D} = (ntuple(_ -> 0, D), ntuple(_ -> 0, D))
+@inline _row_bounds(op::_LeafNode) = (z = ntuple(_ -> 0, Val(_dim(op))); (z, z))
 
 @inline function _moved_bounds(
         (lo, hi)::NTuple{2, NTuple{D, Int}}, ::Val{Dim}, steps::Tuple

@@ -175,6 +175,10 @@ struct GhostBilinearForm{D, F <: BilinearForm{D}, WT <: GhostGridSpace,
     walk::RW
 end
 
+# Either bilinear form; the solver and problem methods that take both name it here, as
+# `_AnyMatrixFreeOperator` (solvers/chebyshev.jl) names the two matrix-free operators.
+const _AnyBilinearForm = Union{BilinearForm, GhostBilinearForm}
+
 """
     GhostLinearForm
 

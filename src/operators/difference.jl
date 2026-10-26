@@ -1121,7 +1121,7 @@ end
 
 An AST node representing a backward finite difference operator acting in dimension `Dim`.
 """
-struct BackwardDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct BackwardDifference{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -1130,7 +1130,7 @@ end
 
 An AST node representing a forward finite difference operator acting in dimension `Dim`.
 """
-struct ForwardDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct ForwardDifference{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -1201,24 +1201,6 @@ end
 # `resolve_ast` for both is generated with the families above.
 
 # ==============================================================================
-# Direct integration helpers for the form AST (ast.jl)
-# ==============================================================================
-
-"""
-    DifferenceNode{D, Dim}
-
-Either one-sided difference node over a `D`-dimensional space, differencing along `Dim`.
-
-The two carry the same parameters, so anything that reads only the *direction* off the
-node is written against this alias and stays symmetric between them by construction.
-
-Not everything can be: `inner₊` takes backward differences alone, because the staggered
-weights it carries are the ones the summation-by-parts identity pairs with a backward
-difference. Use this alias where the distinction genuinely does not arise.
-"""
-const DifferenceNode{D, Dim} = Union{BackwardDifference{D, Dim}, ForwardDifference{D, Dim}}
-
-# ==============================================================================
 # The remaining difference families
 # ==============================================================================
 #
@@ -1244,7 +1226,7 @@ Dc(u)_i = \\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}
 
 Truncated at both ends of `Dim`, having no neighbour on one side.
 """
-struct CenteredDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct CenteredDifference{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -1260,7 +1242,7 @@ An AST node for the forward difference over the averaged spacing along `Dim`,
 The forward difference over the *averaged* spacing rather than the forward one, which is
 what makes the discrete integration by parts close. Truncated at the far end of `Dim`.
 """
-struct StarDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct StarDifference{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -1280,7 +1262,7 @@ The same two one-sided differences the centered difference combines, weighted by
 each collapses to the one-sided difference its near side still defines, `D₊` at the first
 point and `D₋` at the last.
 """
-struct CrossWeightedDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct CrossWeightedDifference{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -1401,7 +1383,7 @@ first, where `D₋` is: entry for entry the composition `D̃ₓ(D₋ₓ(u))`, bu
 [`Δₕ`](@ref) once per axis. One node, so its operand is evaluated once per tap rather than
 once per tap of a nested inner stencil.
 """
-struct SecondDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct SecondDifference{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -1442,19 +1424,6 @@ end
     b = I[Dim] == 1 ? zero(a) : c / h
     return (a, -(a + b), b)
 end
-
-# --- Traits ----------------------------------------------------------------------- #
-
-"""
-    ExtendedDifferenceNode{D, Dim}
-
-The three difference nodes that are neither one-sided nor a jump, differencing along `Dim`.
-Grouped so that everything reading only the direction off a node covers all of them at
-once, as `DifferenceNode` does for the one-sided pair.
-"""
-const ExtendedDifferenceNode{D, Dim} = Union{
-    CenteredDifference{D, Dim}, StarDifference{D, Dim}, CrossWeightedDifference{D, Dim}
-}
 
 # ==============================================================================
 # Composite trial/test functions: ∇ₕ, ∇₊ₕ, εₕ, divₕ, divₘₕ over several leaves at once

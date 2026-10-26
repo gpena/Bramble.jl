@@ -40,12 +40,11 @@ Nothing on this page needs SciMLBase: a [`Semidiscretization`](@ref) is a callab
 `ODEFunction`/`ODEProblem`. Keeping the logic here means the main test suite covers it
 without the weak dependency loaded, and only the wrapper is gated.
 
-The Dirichlet constraint carriers (`NoConstraints`/`LabelsOnly`/`StaticConstraints`/...),
-`AbstractSemidiscretization` and their application to a vector live in
-`semidiscrete_constraints.jl`, included just before this file. The matrix-free explicit
-right-hand side (`SemidiscretizeRHS`) and the `ODEFunction`/`ODEProblem`/`LinearProblem`
-construction glue live in `semidiscrete_rhs.jl` and `semidiscrete_problems.jl`, included
-just after.
+The Dirichlet constraint carriers (`NoConstraints`/`LabelsOnly`/`StaticConstraints`/...)
+and their application to a vector live in `semidiscrete_constraints.jl`, included just
+before this file. The matrix-free explicit right-hand side (`SemidiscretizeRHS`) and the
+`ODEFunction`/`ODEProblem`/`LinearProblem` construction glue live in `semidiscrete_rhs.jl`
+and `semidiscrete_problems.jl`, included just after.
 
 See also: [`semidiscretize`](@ref), [`ode_function`](@ref), [`ode_problem`](@ref)
 =#
@@ -75,7 +74,7 @@ Built by [`semidiscretize`](@ref); read back with [`mass_matrix`](@ref) and
 - `update_coefficients`: callable invoked with `t` (or, wrapped in `ParametricUpdate`, with `t` and the residual's own `p`) before assembly, or `nothing`.
 - `reassemble`: `Val(true)` to refill `A` at every step.
 """
-struct Semidiscretization{A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R} <: AbstractSemidiscretization
+struct Semidiscretization{A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R}
     operator::A
     source::L
     space::S
@@ -88,6 +87,29 @@ struct Semidiscretization{A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R} <: Abstrac
     state::ST
     update_coefficients::TR
     reassemble::Val{R}
+end
+
+"""
+    space(sd::Semidiscretization)
+
+Return the test space the semidiscretisation was built on.
+"""
+@inline space(sd::Semidiscretization) = sd.space
+
+"""
+    dirichlet_bc!(u::AbstractVector, sd::Semidiscretization, t::Number, p = nothing) -> u
+
+Write `sd`'s Dirichlet values at time `t` (and, for a parameter-dependent condition,
+parameter `p`) into `u` and return it.
+
+An index-1 differential-algebraic system needs its initial condition to satisfy the
+algebraic rows already: a `u` disagreeing with `g(x, 0)` on the boundary is inconsistent,
+and a stiff solver either rejects it or absorbs it into the first step.
+[`ode_problem`](@ref) applies this to a copy of the initial condition it is handed,
+forwarding whatever `p` the caller gave the `ODEProblem`.
+"""
+function dirichlet_bc!(u::AbstractVector, sd::Semidiscretization, t::Number, p = nothing)
+    return _apply_initial_constraints!(u, sd, sd.constraints, p, t)
 end
 
 """
@@ -489,19 +511,19 @@ end
 
 # `eltype(F)` and `T` are both fixed by the argument types, so the comparison folds away and
 # only one branch is ever compiled into a given specialisation.
-@inline function _source_buffer(sd::AbstractSemidiscretization, du::AbstractVector, t)
+@inline function _source_buffer(sd::Semidiscretization, du::AbstractVector, t)
     T = promote_type(eltype(du), typeof(t))
     F = sd.source_vector
     return eltype(F) === T ? F : similar(du, T)
 end
 
-@inline _assemble_source!(F::AbstractVector, sd::AbstractSemidiscretization, ::NoConstraints, p, t) = assemble!(F, sd.source)
+@inline _assemble_source!(F::AbstractVector, sd, ::NoConstraints, p, t) = assemble!(F, sd.source)
 
 # The conditions are applied through `apply_dirichlet_conditions!` with the labels
 # `semidiscretize` normalised once, rather than through `assemble!`'s `dirichlet` keyword,
 # which would normalise them again on every step.
 @inline function _assemble_source!(
-        F::AbstractVector, sd::AbstractSemidiscretization, c::StaticConstraints, p, t
+        F::AbstractVector, sd, c::StaticConstraints, p, t
 )
     assemble!(F, sd.source)
     return apply_dirichlet_conditions!(
@@ -510,7 +532,7 @@ end
 end
 
 @inline function _assemble_source!(
-        F::AbstractVector, sd::AbstractSemidiscretization, c::TimeDependentConstraints, p, t
+        F::AbstractVector, sd, c::TimeDependentConstraints, p, t
 )
     assemble!(F, sd.source)
     return apply_dirichlet_conditions!(
@@ -519,7 +541,7 @@ end
 end
 
 @inline function _assemble_source!(
-        F::AbstractVector, sd::AbstractSemidiscretization, c::TimeParamDependentConstraints, p, t
+        F::AbstractVector, sd, c::TimeParamDependentConstraints, p, t
 )
     assemble!(F, sd.source)
     return apply_dirichlet_conditions!(
@@ -529,7 +551,7 @@ end
 
 # Labels without values constrain `u_h` to zero, which `assemble!` cannot express: handed a
 # bare label it has nothing to write and raises. The rows are cleared here instead.
-function _assemble_source!(F::AbstractVector, sd::AbstractSemidiscretization, ::LabelsOnly, p, t)
+function _assemble_source!(F::AbstractVector, sd, ::LabelsOnly, p, t)
     assemble!(F, sd.source)
     _each_dirichlet_row(sd.space, sd.labels, sd.components) do i
         return @inbounds F[i] = zero(eltype(F))

@@ -3,7 +3,7 @@
 # `src/assembly/kronecker.jl`.
 #
 # Two independent pieces, both read `KroneckerLinearOperator`'s own `terms` (each a
-# `KroneckerTerm{D}` of `scales` and `factors`, `src/assembly/kronecker.jl`) rather than
+# `KroneckerTerm` of `scales` and `factors`, `src/assembly/kronecker.jl`) rather than
 # re-walking the form's AST:
 #
 #   1. `Kronecker.kronecker(K)`: the same object as `SparseMatrixCSC(K)`
@@ -794,12 +794,12 @@ end
 # The LAPACK workspace of one axis's complex generalised Schur form (`xgges3`), sized by a
 # query at build so that `_fdm_decompose!` allocates nothing: `vsl`, `vsr` receive `Q_d`,
 # `Z_d`; `sdim` and `info` are LAPACK's one-element outputs.
-struct _Gges3Work{R, C}
-    alpha::Vector{C}
-    beta::Vector{C}
-    vsl::Matrix{C}
-    vsr::Matrix{C}
-    work::Vector{C}
+struct _Gges3Work{R}
+    alpha::Vector{Complex{R}}
+    beta::Vector{Complex{R}}
+    vsl::Matrix{Complex{R}}
+    vsr::Matrix{Complex{R}}
+    work::Vector{Complex{R}}
     rwork::Vector{R}
     sdim::Vector{BlasInt}
     info::Vector{BlasInt}
@@ -815,28 +815,28 @@ end
 # and `c_m`, through the LAPACK workspaces `lapack`; `Λ` serves only the singularity
 # refusal. `fdm_factorize!` refills `M`, `A` and `c_m` by replaying `recipe`; `valid`,
 # `form` and `op` as in `_FDMFactorization`, mutable for the same reason.
-mutable struct _SchurFactorization{T, D, C <: Complex{T}}
+mutable struct _SchurFactorization{T, D}
     n::Int
     boundary::Bool
     interior::Vector{Int}
-    Qc::NTuple{D, Matrix{C}}
-    Zt::NTuple{D, Matrix{C}}
-    S::NTuple{D, Matrix{C}}
-    Tr::NTuple{D, Matrix{C}}
-    c_m::Base.RefValue{C}
+    Qc::NTuple{D, Matrix{Complex{T}}}
+    Zt::NTuple{D, Matrix{Complex{T}}}
+    S::NTuple{D, Matrix{Complex{T}}}
+    Tr::NTuple{D, Matrix{Complex{T}}}
+    c_m::Base.RefValue{Complex{T}}
     dims::NTuple{D, Int}
     stride::Vector{Int}
-    r::Vector{Vector{C}}
-    p::Vector{Vector{C}}
-    u::Vector{C}
-    w::Vector{C}
-    u3::NTuple{D, Array{C, 3}}
-    w3::NTuple{D, Array{C, 3}}
+    r::Vector{Vector{Complex{T}}}
+    p::Vector{Vector{Complex{T}}}
+    u::Vector{Complex{T}}
+    w::Vector{Complex{T}}
+    u3::NTuple{D, Array{Complex{T}, 3}}
+    w3::NTuple{D, Array{Complex{T}, 3}}
     M::NTuple{D, Matrix{T}}
     A::NTuple{D, Matrix{T}}
-    Λ::Array{C, D}
+    Λ::Array{Complex{T}, D}
     precond::Bool
-    lapack::NTuple{D, _Gges3Work{T, C}}
+    lapack::NTuple{D, _Gges3Work{T}}
     recipe::_FDMRecipe{T, D}
     valid::Base.RefValue{Bool}
     form::Base.RefValue{Any}
@@ -892,16 +892,16 @@ end
 # `(A, B) = (Q S Z', Q T Z')` in place: `A` becomes `S`, `B` becomes `T`, `g.vsl` `Q` and
 # `g.vsr` `Z`. The call `LinearAlgebra.LAPACK.gges3!` makes (so the factors are the ones
 # `schur` returns under the same LAPACK), with `g`'s stored buffers. Returns LAPACK's `info`.
-function _gges3!(fptr::Ptr{Cvoid}, A::Matrix{C}, B::Matrix{C}, g::_Gges3Work{R, C},
-        lwork::BlasInt) where {R <: Union{Float64, Float32}, C <: Complex{R}}
+function _gges3!(fptr::Ptr{Cvoid}, A::Matrix{Complex{R}}, B::Matrix{Complex{R}},
+        g::_Gges3Work{R}, lwork::BlasInt) where {R <: Union{Float64, Float32}}
     n = size(A, 1)
     ld = max(1, n)
     ccall(fptr, Cvoid,
         (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ptr{Cvoid},
-            Ref{BlasInt}, Ptr{C}, Ref{BlasInt}, Ptr{C},
-            Ref{BlasInt}, Ptr{BlasInt}, Ptr{C}, Ptr{C},
-            Ptr{C}, Ref{BlasInt}, Ptr{C}, Ref{BlasInt},
-            Ptr{C}, Ref{BlasInt}, Ptr{R}, Ptr{Cvoid},
+            Ref{BlasInt}, Ptr{Complex{R}}, Ref{BlasInt}, Ptr{Complex{R}},
+            Ref{BlasInt}, Ptr{BlasInt}, Ptr{Complex{R}}, Ptr{Complex{R}},
+            Ptr{Complex{R}}, Ref{BlasInt}, Ptr{Complex{R}}, Ref{BlasInt},
+            Ptr{Complex{R}}, Ref{BlasInt}, Ptr{R}, Ptr{Cvoid},
             Ptr{BlasInt}, Clong, Clong, Clong),
         'V', 'V', 'N', C_NULL,
         n, A, ld, B,
@@ -928,12 +928,13 @@ end
 end
 
 # The workspace for an `n x n` axis, `A`, `B` its (unread) inputs.
-function _Gges3Work(A::Matrix{C}, B::Matrix{C}) where {R, C <: Complex{R}}
+function _Gges3Work(A::Matrix{Complex{R}}, B::Matrix{Complex{R}}) where {R}
     n = size(A, 1)
     ld = max(1, n)
-    g = _Gges3Work{R, C}(Vector{C}(undef, n), Vector{C}(undef, n), Matrix{C}(undef, ld, n),
-        Matrix{C}(undef, ld, n), Vector{C}(undef, 1), Vector{R}(undef, 8n),
-        zeros(BlasInt, 1), zeros(BlasInt, 1))
+    g = _Gges3Work{R}(Vector{Complex{R}}(undef, n), Vector{Complex{R}}(undef, n),
+        Matrix{Complex{R}}(undef, ld, n), Matrix{Complex{R}}(undef, ld, n),
+        Vector{Complex{R}}(undef, 1), Vector{R}(undef, 8n), zeros(BlasInt, 1),
+        zeros(BlasInt, 1))
     n == 0 && return g
     # `lwork = -1` returns the optimal size in `work[1]`.
     fptr, openblas = _gges3_ptr(R)
@@ -952,7 +953,7 @@ function _schur_factorize(n::Int, boundary::Bool, interior::Vector{Int},
     stride = [prod(dims[1:(k - 1)]; init = 1) for k in 1:(D + 1)]
     u = Vector{C}(undef, prod(dims))
     w = similar(u)
-    f = _SchurFactorization{T, D, C}(n, boundary, interior, map(similar, S),
+    f = _SchurFactorization{T, D}(n, boundary, interior, map(similar, S),
         map(similar, S), S, Tr, Ref(C(c_m)), dims, stride,
         [Vector{C}(undef, stride[k]) for k in 1:D], [Vector{C}(undef, stride[k]) for k in 1:D],
         u, w, _fdm_slabs(u, dims), _fdm_slabs(w, dims), M, A, Array{C}(undef, dims), precond,
@@ -1042,9 +1043,12 @@ function _schur_solve!(y::Vector, f::_SchurFactorization, k::Int, off::Int, α, 
     return y
 end
 
-Base.size(f::Union{_FDMFactorization, _SchurFactorization}) = (f.n, f.n)
+# Either factorisation the Kronecker route builds.
+const _AnyFactorization = Union{_FDMFactorization, _SchurFactorization}
+
+Base.size(f::_AnyFactorization) = (f.n, f.n)
 # As `Base` sizes an `AbstractMatrix`: 1 past the second dimension, a `BoundsError` below 1.
-Base.size(f::Union{_FDMFactorization, _SchurFactorization}, i::Integer) = i <= 2 ? size(f)[i] : 1
+Base.size(f::_AnyFactorization, i::Integer) = i <= 2 ? size(f)[i] : 1
 
 # `x = K \ F` on full-length host vectors, the `_FDMFactorization` method's contract: gather,
 # apply every `Q_d'`, back-substitute, apply every `Z_d`, scatter the real part.
@@ -1631,7 +1635,7 @@ function _fdm_refill!(f::Union{_FDMFactorization{T, D}, _SchurFactorization{T, D
 end
 
 # `K` of any dimension and eltype, so that a mismatch is refused by name, not by dispatch.
-function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization},
+function Bramble.fdm_factorize!(f::_AnyFactorization,
         K::KroneckerLinearOperator)
     Bramble._kron_check_fresh(K)
     _fdm_check_shape(f, K)
@@ -1663,7 +1667,7 @@ end
 # The form `f` was built or last refilled from, with only scalar or `Ref` coefficients
 # changed, refills from its recorded operator, allocating nothing; any other form is
 # checked as `fdm_factorize(a)` checks it, projected again, and recorded.
-function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization}, a::BilinearForm)
+function Bramble.fdm_factorize!(f::_AnyFactorization, a::BilinearForm)
     (Bramble.trial_space(a) isa Bramble.CompositeGridSpace ||
      Bramble.test_space(a) isa Bramble.CompositeGridSpace) && _throw_fdm_composite()
     f.form[] === a && _fdm_cached!(f, f.op[]) && return f
@@ -1674,7 +1678,7 @@ function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization}
     return _fdm_record!(f, a, K)
 end
 
-function Bramble.fdm_solve!(x::AbstractVector, f::Union{_FDMFactorization, _SchurFactorization},
+function Bramble.fdm_solve!(x::AbstractVector, f::_AnyFactorization,
         F::AbstractVector)
     _fdm_ldiv!(x, f, F, false)
     return x
@@ -1764,7 +1768,7 @@ function Bramble.fdm_factorize(a::Bramble.GhostBilinearForm; dirichlet = nothing
     return _fdm_record!(_fdm_factorize(K, nothing), a, K)
 end
 
-function Bramble.fdm_factorize!(f::Union{_FDMFactorization, _SchurFactorization},
+function Bramble.fdm_factorize!(f::_AnyFactorization,
         a::Bramble.GhostBilinearForm)
     f.form[] === a && _fdm_cached!(f, f.op[]) && return f
     K = _fdm_ghost_operator(a, nothing; caller = "fdm_factorize!")

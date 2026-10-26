@@ -48,12 +48,12 @@ the value, decides the pattern.
 # Neither an `AbstractMeshType` nor a `spacing`/`npoints` overload: either one made JET's
 # `report_package` widen unrelated mesh calls to include it (gpena/Bramble.jl#94).
 # The `_axis_*` accessors are called by nothing else.
-struct _HostAxisSpacings{T, Dim}
+struct _HostAxisSpacings{T}
     h::Vector{T}
 end
 
 @inline _axis_eltype(Ωₕ::AbstractMeshType) = eltype(Ωₕ)
-@inline _axis_eltype(::_HostAxisSpacings{T, Dim}) where {T, Dim} = T
+@inline _axis_eltype(::_HostAxisSpacings{T}) where {T} = T
 
 @inline _axis_npoints(Ωₕ::AbstractMeshType, dim::Int) = npoints(Ωₕ, Tuple)[dim]
 @inline _axis_npoints(m::_HostAxisSpacings, ::Int) = length(m.h)
@@ -370,7 +370,7 @@ function _stencil_matrix(
     # see `_shift_ones` for the same trade). `mirror` (above) is what makes `_stencil_weights`
     # itself safe to call in this loop despite `Ωₕ` possibly being device-backed.
     h = host_spacings(Ωₕ(Dim))
-    mirror = _HostAxisSpacings{eltype(h), Dim}(h)
+    mirror = _HostAxisSpacings(h)
     host = zeros(T, N, N)
     @inbounds for I in CartesianIndices(dims)
         idim = I[Dim]

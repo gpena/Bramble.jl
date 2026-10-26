@@ -114,7 +114,7 @@ end
 # One method for the plain and the ghost pair: `semidiscretize` dispatches on the pair, and
 # a mixed pair reaches its refusal there.
 Base.@constprop :aggressive function ode_problem(
-        a::Union{BilinearForm, GhostBilinearForm},
+        a::_AnyBilinearForm,
         l::Union{LinearForm, GhostLinearForm},
         u₀,
         I;

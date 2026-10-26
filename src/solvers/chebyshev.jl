@@ -132,7 +132,7 @@ See also: [`ChebyshevPreconditioner`](@ref), [`max_eigenvalue_estimate`](@ref),
 [`jacobi_preconditioner`](@ref).
 """
 function chebyshev_preconditioner(
-        a::Union{BilinearForm, GhostBilinearForm}; dirichlet = nothing,
+        a::_AnyBilinearForm; dirichlet = nothing,
         dirichlet_components = nothing, policy = _default_policy(a), degree::Integer = 4,
         λmax = nothing, ratio::Real = 30
 )

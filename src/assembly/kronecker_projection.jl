@@ -108,7 +108,7 @@ end
 # of its chain, but folded into a factor it would be read once, where a `Ref` coefficient
 # must stay live: `_kron_live` takes it out of the chain, and `_kron_project` returns it
 # beside the factors. Any other scalar is refused.
-_kron_split(op::OperatorScale{D, <:Union{Number, Base.RefValue{<:Number}}}) where {D} = _kron_split_wrapped(op)
+_kron_split(op::OperatorScale{D, <:_NormalScalar}) where {D} = _kron_split_wrapped(op)
 function _kron_rewrap(op::OperatorScale{D}, x::LazyOp{D}) where {D}
     return OperatorScale{D, typeof(op.scalar), typeof(x)}(op.scalar, x)
 end

@@ -1,0 +1,34 @@
+[closures_fresh]
+added_instances = 177
+commit = "9f3ed728"
+fresh_assemble_s = 0.105470333
+fresh_form_s = 0.135990167
+fresh_inference_s = 0.3465700149536133
+fresh_instances = 216
+julia = "1.13.2"
+launches = 3
+load_1min = 3.16
+load_1min_after = 3.49
+repeat_instances = 0
+second_assemble_s = 1.834e-6
+second_form_s = 0.117428583
+second_inference_s = 0.16767090559005737
+sequence_instances = 393
+sequence_position = 2
+threads = 4
+
+[scale_float64]
+added_instances = 6
+commit = "9f3ed728"
+fresh_assemble_s = 0.011125875
+fresh_form_s = 0.012166125
+fresh_inference_s = 0.02232074737548828
+fresh_instances = 6
+julia = "1.13.2"
+launches = 3
+load_1min = 3.16
+load_1min_after = 3.49
+repeat_instances = 0
+sequence_instances = 6
+sequence_position = 1
+threads = 4

@@ -1,6 +1,3 @@
-# Abstract supertype for all domain-related types
-abstract type DomainBaseType end
-
 """
     Domain(set::SetType, markers::MarkersType)
 
@@ -12,7 +9,7 @@ Computational domain pairing a geometric set (e.g. [`CartesianProduct`](@ref)) w
 
 See also: [`domain`](@ref), [`CartesianProduct`](@ref), [`DomainMarkers`](@ref).
 """
-struct Domain{SetType, MarkersType} <: DomainBaseType
+struct Domain{SetType, MarkersType}
     set::SetType
     markers::MarkersType
 end

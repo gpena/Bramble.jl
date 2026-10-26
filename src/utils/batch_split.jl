@@ -56,8 +56,8 @@ end
 _batch_state_type(::Type{T}) where {T <: MeshnDState} = T
 # A `GhostMesh`'s state holds its physical and padded meshes' states, so the rebuilt space
 # still takes the ghost methods (the absent-point checks, the physical facets).
-function _batch_state_type(::Type{GhostMesh{D, M, P, CI}}) where {D, M, P, CI}
-    return GhostMeshState{D, _batch_state_type(M), _batch_state_type(P), CI}
+function _batch_state_type(::Type{GhostMesh{D, M, P}}) where {D, M, P}
+    return GhostMeshState{D, _batch_state_type(M), _batch_state_type(P)}
 end
 _batch_state_type(::Type{T}) where {T <: GhostMeshState} = T
 
