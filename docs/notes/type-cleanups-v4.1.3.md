@@ -138,6 +138,8 @@ to 1.0219 (leaving out `kron_2d_mf`), the same size as the spread over launches 
 tree on those rows. Allocations did not change. The instance count of `closures_fresh`
 is lower on head (216 against 221), which meets the criterion.
 
+The `ghost_2d` `mul!` slowdown above was addressed afterwards by restoring the stored `indices` field (S11). The three-tree measurement and its outcome are in `## S11`: medians, measured under load, base 9.619, branch without the fix 9.711 and with it 9.604 ns per DOF.
+
 ## Bisect
 
 Question: which part of the branch carries the `ghost_2d` `mul!` shift. Single row
