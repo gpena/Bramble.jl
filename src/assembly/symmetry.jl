@@ -364,22 +364,7 @@ function _is_real_side(::Union{TrialFunction, TestFunction, IndexedTrialFunction
         IdentityOperator, ZeroOperator})
     true
 end
-for W in (
-    :BackwardDifference,
-    :ForwardDifference,
-    :CenteredDifference,
-    :StarDifference,
-    :CrossWeightedDifference,
-    :SecondDifference,
-    :BackwardAverage,
-    :ForwardAverage,
-    :CenteredAverage,
-    :JumpNode,
-    :ShiftNode,
-    :RegionRestriction
-)
-    @eval _is_real_side(op::$W) = _is_real_side(op.inner_op)
-end
+_is_real_side(op::Union{StencilNode, RegionRestriction}) = _is_real_side(op.inner_op)
 _is_real_side(op::OperatorAdd) = _is_real_side(op.left_op) && _is_real_side(op.right_op)
 _is_real_side(op::OperatorScale) = _is_real_scale(op.scalar) && _is_real_side(op.inner_op)
 function _is_real_side(op::GridFunctionScale)
