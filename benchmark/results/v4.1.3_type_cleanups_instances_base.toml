@@ -1,0 +1,34 @@
+[closures_fresh]
+added_instances = 180
+commit = "d64ab24a"
+fresh_assemble_s = 0.112943
+fresh_form_s = 0.136735292
+fresh_inference_s = 0.36198103427886963
+fresh_instances = 221
+julia = "1.13.2"
+launches = 3
+load_1min = 2.64
+load_1min_after = 3.17
+repeat_instances = 0
+second_assemble_s = 1.792e-6
+second_form_s = 0.121256959
+second_inference_s = 0.17327284812927246
+sequence_instances = 401
+sequence_position = 2
+threads = 4
+
+[scale_float64]
+added_instances = 6
+commit = "d64ab24a"
+fresh_assemble_s = 0.011099625
+fresh_form_s = 0.012606333
+fresh_inference_s = 0.022638022899627686
+fresh_instances = 6
+julia = "1.13.2"
+launches = 3
+load_1min = 2.64
+load_1min_after = 3.17
+repeat_instances = 0
+sequence_instances = 6
+sequence_position = 1
+threads = 4

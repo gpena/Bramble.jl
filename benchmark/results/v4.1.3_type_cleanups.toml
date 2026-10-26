@@ -1,0 +1,756 @@
+
+[swapped_order.base.ghost_2d]
+mul_bytes_launches = [0, 0, 0, 0, 0]
+assemble_ns_per_dof_min = 10.236206140350877
+mul_ns_per_dof_launches = [9.38733552631579, 9.614396929824562, 9.593837719298246, 9.601151315789474, 9.624451754385966]
+load_1min_before = [2.32, 2.26, 2.32, 2.35, 2.18]
+mul_ns_per_dof_median = 9.601151315789474
+launches = 5
+assemble_ns_per_dof_launches = [10.31844298245614, 10.285087719298245, 10.236206140350877, 10.30016447368421, 10.354539473684211]
+assemble_bytes_launches = [48, 48, 48, 48, 48]
+assemble_ns_per_dof_max = 10.354539473684211
+assemble_ns_per_dof_median = 10.30016447368421
+mul_ns_per_dof_min = 9.38733552631579
+mul_ns_per_dof_max = 9.624451754385966
+
+[swapped_order.head.ghost_2d]
+mul_bytes_launches = [0, 0, 0, 0, 0]
+assemble_ns_per_dof_min = 10.15578947368421
+mul_ns_per_dof_launches = [9.724046052631579, 9.708980263157894, 9.707609649122807, 9.692061403508772, 9.746436403508772]
+load_1min_before = [2.27, 2.28, 2.48, 2.38, 2.28]
+mul_ns_per_dof_median = 9.708980263157894
+launches = 5
+assemble_ns_per_dof_launches = [10.303355263157895, 10.250361842105264, 10.277785087719298, 10.15578947368421, 10.29422149122807]
+assemble_bytes_launches = [48, 48, 48, 48, 48]
+assemble_ns_per_dof_max = 10.303355263157895
+assemble_ns_per_dof_median = 10.277785087719298
+mul_ns_per_dof_min = 9.692061403508772
+mul_ns_per_dof_max = 9.746436403508772
+
+[base.plain_2d]
+dofs = 90000
+threads = 4
+
+    [base.plain_2d.set1]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.559266666666667
+    mul_ns_per_dof_launches = [5.574533333333333, 5.449066666666667, 5.718055555555556, 5.506477777777777, 5.567133333333334]
+    load_1min_before = [2.09, 2.28, 2.48, 2.9, 2.82]
+    mul_ns_per_dof_median = 5.567133333333334
+    launches = 5
+    assemble_ns_per_dof_launches = [6.753244444444444, 6.565277777777778, 6.586111111111111, 6.575922222222222, 6.559266666666667]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.753244444444444
+    assemble_ns_per_dof_median = 6.575922222222222
+    mul_ns_per_dof_min = 5.449066666666667
+    mul_ns_per_dof_max = 5.718055555555556
+
+    [base.plain_2d.all]
+    mul_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.558333333333334
+    mul_ns_per_dof_launches = [5.574533333333333, 5.449066666666667, 5.718055555555556, 5.506477777777777, 5.567133333333334, 5.717588888888889, 5.576388888888889, 5.726388888888889, 5.5676, 5.570366666666666]
+    load_1min_before = [2.09, 2.28, 2.48, 2.9, 2.82, 1.64, 2.83, 3.29, 3.19, 2.82]
+    mul_ns_per_dof_median = 5.57245
+    launches = 10
+    assemble_ns_per_dof_launches = [6.753244444444444, 6.565277777777778, 6.586111111111111, 6.575922222222222, 6.559266666666667, 7.013888888888889, 6.558333333333334, 6.559255555555556, 6.777777777777778, 6.583333333333333]
+    assemble_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 7.013888888888889
+    assemble_ns_per_dof_median = 6.579627777777778
+    mul_ns_per_dof_min = 5.449066666666667
+    mul_ns_per_dof_max = 5.726388888888889
+
+    [base.plain_2d.set2]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.558333333333334
+    mul_ns_per_dof_launches = [5.717588888888889, 5.576388888888889, 5.726388888888889, 5.5676, 5.570366666666666]
+    load_1min_before = [1.64, 2.83, 3.29, 3.19, 2.82]
+    mul_ns_per_dof_median = 5.576388888888889
+    launches = 5
+    assemble_ns_per_dof_launches = [7.013888888888889, 6.558333333333334, 6.559255555555556, 6.777777777777778, 6.583333333333333]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 7.013888888888889
+    assemble_ns_per_dof_median = 6.583333333333333
+    mul_ns_per_dof_min = 5.5676
+    mul_ns_per_dof_max = 5.726388888888889
+
+[base.kron_2d_mf]
+dofs = 90000
+threads = 4
+
+    [base.kron_2d_mf.set1]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 5.936577777777778
+    mul_ns_per_dof_launches = [1.6902777777777778, 1.7379666666666667, 1.7370333333333334, 1.7333333333333334, 1.7347222222222223]
+    load_1min_before = [2.09, 2.28, 2.48, 2.9, 2.82]
+    mul_ns_per_dof_median = 1.7347222222222223
+    launches = 5
+    assemble_ns_per_dof_launches = [5.936577777777778, 6.093055555555556, 6.063422222222222, 6.0699, 6.0963]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.0963
+    assemble_ns_per_dof_median = 6.0699
+    mul_ns_per_dof_min = 1.6902777777777778
+    mul_ns_per_dof_max = 1.7379666666666667
+
+    [base.kron_2d_mf.all]
+    mul_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 5.936577777777778
+    mul_ns_per_dof_launches = [1.6902777777777778, 1.7379666666666667, 1.7370333333333334, 1.7333333333333334, 1.7347222222222223, 1.7347222222222223, 1.7356444444444445, 1.738888888888889, 1.7351777777777777, 1.7379666666666667]
+    load_1min_before = [2.09, 2.28, 2.48, 2.9, 2.82, 1.64, 2.83, 3.29, 3.19, 2.82]
+    mul_ns_per_dof_median = 1.735411111111111
+    launches = 10
+    assemble_ns_per_dof_launches = [5.936577777777778, 6.093055555555556, 6.063422222222222, 6.0699, 6.0963, 6.078233333333333, 6.0838, 6.200922222222222, 6.090744444444445, 6.096755555555555]
+    assemble_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.200922222222222
+    assemble_ns_per_dof_median = 6.087272222222222
+    mul_ns_per_dof_min = 1.6902777777777778
+    mul_ns_per_dof_max = 1.738888888888889
+
+    [base.kron_2d_mf.set2]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.078233333333333
+    mul_ns_per_dof_launches = [1.7347222222222223, 1.7356444444444445, 1.738888888888889, 1.7351777777777777, 1.7379666666666667]
+    load_1min_before = [1.64, 2.83, 3.29, 3.19, 2.82]
+    mul_ns_per_dof_median = 1.7356444444444445
+    launches = 5
+    assemble_ns_per_dof_launches = [6.078233333333333, 6.0838, 6.200922222222222, 6.090744444444445, 6.096755555555555]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.200922222222222
+    assemble_ns_per_dof_median = 6.090744444444445
+    mul_ns_per_dof_min = 1.7347222222222223
+    mul_ns_per_dof_max = 1.738888888888889
+
+[base.plain_3d]
+dofs = 64000
+threads = 4
+
+    [base.plain_3d.set1]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 10.3268125
+    mul_ns_per_dof_launches = [22.710296875, 23.429046875, 23.409515625, 23.373703125, 23.386078125]
+    load_1min_before = [2.09, 2.28, 2.48, 2.9, 2.82]
+    mul_ns_per_dof_median = 23.386078125
+    launches = 5
+    assemble_ns_per_dof_launches = [10.3268125, 10.613921875, 10.640625, 10.59765625, 10.64321875]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 10.64321875
+    assemble_ns_per_dof_median = 10.613921875
+    mul_ns_per_dof_min = 22.710296875
+    mul_ns_per_dof_max = 23.429046875
+
+    [base.plain_3d.all]
+    mul_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 10.3268125
+    mul_ns_per_dof_launches = [22.710296875, 23.429046875, 23.409515625, 23.373703125, 23.386078125, 22.697921875, 23.352203125, 23.41665625, 23.3685, 23.333328125]
+    load_1min_before = [2.09, 2.28, 2.48, 2.9, 2.82, 1.64, 2.83, 3.29, 3.19, 2.82]
+    mul_ns_per_dof_median = 23.3711015625
+    launches = 10
+    assemble_ns_per_dof_launches = [10.3268125, 10.613921875, 10.640625, 10.59765625, 10.64321875, 10.60221875, 10.612625, 10.639328125, 10.583328125, 10.615234375]
+    assemble_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 10.64321875
+    assemble_ns_per_dof_median = 10.6132734375
+    mul_ns_per_dof_min = 22.697921875
+    mul_ns_per_dof_max = 23.429046875
+
+    [base.plain_3d.set2]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 10.583328125
+    mul_ns_per_dof_launches = [22.697921875, 23.352203125, 23.41665625, 23.3685, 23.333328125]
+    load_1min_before = [1.64, 2.83, 3.29, 3.19, 2.82]
+    mul_ns_per_dof_median = 23.352203125
+    launches = 5
+    assemble_ns_per_dof_launches = [10.60221875, 10.612625, 10.639328125, 10.583328125, 10.615234375]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 10.639328125
+    assemble_ns_per_dof_median = 10.612625
+    mul_ns_per_dof_min = 22.697921875
+    mul_ns_per_dof_max = 23.41665625
+
+[base.kron_2d]
+dofs = 90000
+threads = 4
+
+    [base.kron_2d.set1]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 5.996755555555556
+    mul_ns_per_dof_launches = [1.2768555555555556, 1.2398111111111112, 1.2370333333333334, 1.2379555555555555, 1.2365666666666666]
+    load_1min_before = [2.09, 2.28, 2.48, 2.9, 2.82]
+    mul_ns_per_dof_median = 1.2379555555555555
+    launches = 5
+    assemble_ns_per_dof_launches = [6.275455555555555, 5.996755555555556, 6.089355555555556, 6.083333333333333, 6.070833333333334]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.275455555555555
+    assemble_ns_per_dof_median = 6.083333333333333
+    mul_ns_per_dof_min = 1.2365666666666666
+    mul_ns_per_dof_max = 1.2768555555555556
+
+    [base.kron_2d.all]
+    mul_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 5.996755555555556
+    mul_ns_per_dof_launches = [1.2768555555555556, 1.2398111111111112, 1.2370333333333334, 1.2379555555555555, 1.2365666666666666, 1.2060111111111111, 1.2402777777777778, 1.2338, 1.2379666666666667, 1.2421333333333333]
+    load_1min_before = [2.09, 2.28, 2.48, 2.9, 2.82, 1.64, 2.83, 3.29, 3.19, 2.82]
+    mul_ns_per_dof_median = 1.237961111111111
+    launches = 10
+    assemble_ns_per_dof_launches = [6.275455555555555, 5.996755555555556, 6.089355555555556, 6.083333333333333, 6.070833333333334, 6.211111111111111, 6.071288888888889, 6.093977777777778, 6.114811111111111, 6.062033333333333]
+    assemble_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.275455555555555
+    assemble_ns_per_dof_median = 6.086344444444444
+    mul_ns_per_dof_min = 1.2060111111111111
+    mul_ns_per_dof_max = 1.2768555555555556
+
+    [base.kron_2d.set2]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.062033333333333
+    mul_ns_per_dof_launches = [1.2060111111111111, 1.2402777777777778, 1.2338, 1.2379666666666667, 1.2421333333333333]
+    load_1min_before = [1.64, 2.83, 3.29, 3.19, 2.82]
+    mul_ns_per_dof_median = 1.2379666666666667
+    launches = 5
+    assemble_ns_per_dof_launches = [6.211111111111111, 6.071288888888889, 6.093977777777778, 6.114811111111111, 6.062033333333333]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.211111111111111
+    assemble_ns_per_dof_median = 6.093977777777778
+    mul_ns_per_dof_min = 1.2060111111111111
+    mul_ns_per_dof_max = 1.2421333333333333
+
+[base.ghost_2d]
+dofs = 91200
+threads = 4
+
+    [base.ghost_2d.set1]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 10.159901315789474
+    mul_ns_per_dof_launches = [9.149758771929825, 9.35718201754386, 9.375910087719298, 9.364035087719298, 9.36266447368421]
+    load_1min_before = [2.09, 2.28, 2.48, 2.9, 2.82]
+    mul_ns_per_dof_median = 9.36266447368421
+    launches = 5
+    assemble_ns_per_dof_launches = [10.159901315789474, 10.625921052631579, 10.614495614035087, 10.546875, 10.66748903508772]
+    assemble_bytes_launches = [48, 48, 48, 48, 48]
+    assemble_ns_per_dof_max = 10.66748903508772
+    assemble_ns_per_dof_median = 10.614495614035087
+    mul_ns_per_dof_min = 9.149758771929825
+    mul_ns_per_dof_max = 9.375910087719298
+
+    [base.ghost_2d.all]
+    mul_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 10.159901315789474
+    mul_ns_per_dof_launches = [9.149758771929825, 9.35718201754386, 9.375910087719298, 9.364035087719298, 9.36266447368421, 9.157993421052632, 9.372258771929825, 9.37453947368421, 9.369517543859649, 9.353070175438596]
+    load_1min_before = [2.09, 2.28, 2.48, 2.9, 2.82, 1.64, 2.83, 3.29, 3.19, 2.82]
+    mul_ns_per_dof_median = 9.363349780701753
+    launches = 10
+    assemble_ns_per_dof_launches = [10.159901315789474, 10.625921052631579, 10.614495614035087, 10.546875, 10.66748903508772, 10.643267543859649, 10.650581140350877, 10.556008771929825, 10.402510964912281, 11.05857456140351]
+    assemble_bytes_launches = [48, 48, 48, 48, 48, 48, 48, 48, 48, 48]
+    assemble_ns_per_dof_max = 11.05857456140351
+    assemble_ns_per_dof_median = 10.620208333333334
+    mul_ns_per_dof_min = 9.149758771929825
+    mul_ns_per_dof_max = 9.375910087719298
+
+    [base.ghost_2d.set2]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 10.402510964912281
+    mul_ns_per_dof_launches = [9.157993421052632, 9.372258771929825, 9.37453947368421, 9.369517543859649, 9.353070175438596]
+    load_1min_before = [1.64, 2.83, 3.29, 3.19, 2.82]
+    mul_ns_per_dof_median = 9.369517543859649
+    launches = 5
+    assemble_ns_per_dof_launches = [10.643267543859649, 10.650581140350877, 10.556008771929825, 10.402510964912281, 11.05857456140351]
+    assemble_bytes_launches = [48, 48, 48, 48, 48]
+    assemble_ns_per_dof_max = 11.05857456140351
+    assemble_ns_per_dof_median = 10.643267543859649
+    mul_ns_per_dof_min = 9.157993421052632
+    mul_ns_per_dof_max = 9.37453947368421
+
+[bisect.split.s41only]
+mul_bytes_launches = [0, 0, 0, 0, 0]
+assemble_ns_per_dof_min = 10.40203947368421
+mul_ns_per_dof_launches = [9.36358552631579, 9.617149122807017, 9.617138157894736, 9.631304824561404, 9.608453947368421]
+load_1min_before = [1.25, 1.48, 1.73, 1.91, 1.78]
+mul_ns_per_dof_median = 9.617138157894736
+launches = 5
+assemble_ns_per_dof_launches = [10.40203947368421, 10.415296052631579, 10.546875, 10.45093201754386, 10.429923245614034]
+assemble_bytes_launches = [48, 48, 48, 48, 48]
+assemble_ns_per_dof_max = 10.546875
+round_position = [3, 2, 1, 0, 3]
+threads = 4
+assemble_ns_per_dof_median = 10.429923245614034
+mul_ns_per_dof_min = 9.36358552631579
+mul_ns_per_dof_max = 9.631304824561404
+
+[bisect.split.d64ab24a]
+mul_bytes_launches = [0, 0, 0, 0, 0]
+assemble_ns_per_dof_min = 10.157620614035087
+mul_ns_per_dof_launches = [9.363125, 9.629473684210526, 9.618059210526315, 11.575745614035087, 9.599780701754385]
+load_1min_before = [1.35, 1.48, 1.73, 1.77, 1.81]
+mul_ns_per_dof_median = 9.618059210526315
+launches = 5
+assemble_ns_per_dof_launches = [10.514440789473683, 10.297872807017544, 10.345855263157894, 10.157620614035087, 10.533618421052632]
+assemble_bytes_launches = [48, 48, 48, 48, 48]
+assemble_ns_per_dof_max = 10.533618421052632
+round_position = [0, 3, 2, 1, 0]
+threads = 4
+assemble_ns_per_dof_median = 10.345855263157894
+mul_ns_per_dof_min = 9.363125
+mul_ns_per_dof_max = 11.575745614035087
+
+[bisect.split.s2only]
+mul_bytes_launches = [0, 0, 0, 0, 0]
+assemble_ns_per_dof_min = 10.243048245614036
+mul_ns_per_dof_launches = [9.465921052631579, 9.696184210526315, 9.695274122807017, 9.722214912280702, 9.719024122807017]
+load_1min_before = [1.27, 1.29, 1.68, 1.79, 1.76]
+mul_ns_per_dof_median = 9.696184210526315
+launches = 5
+assemble_ns_per_dof_launches = [10.243048245614036, 10.307017543859649, 10.465559210526315, 10.301074561403508, 10.329857456140351]
+assemble_bytes_launches = [48, 48, 48, 48, 48]
+assemble_ns_per_dof_max = 10.465559210526315
+round_position = [2, 1, 0, 3, 2]
+threads = 4
+assemble_ns_per_dof_median = 10.307017543859649
+mul_ns_per_dof_min = 9.465921052631579
+mul_ns_per_dof_max = 9.722214912280702
+
+[bisect.split.669fbbbb]
+mul_bytes_launches = [0, 0, 0, 0, 0]
+assemble_ns_per_dof_min = 10.353618421052632
+mul_ns_per_dof_launches = [9.722214912280702, 9.692532894736843, 9.752828947368421, 9.722225877192983, 9.695723684210526]
+load_1min_before = [1.3, 1.29, 1.91, 1.77, 1.82]
+mul_ns_per_dof_median = 9.722214912280702
+launches = 5
+assemble_ns_per_dof_launches = [10.375997807017544, 10.524024122807017, 10.353618421052632, 10.386962719298246, 10.473322368421053]
+assemble_bytes_launches = [48, 48, 48, 48, 48]
+assemble_ns_per_dof_max = 10.524024122807017
+round_position = [1, 0, 3, 2, 1]
+threads = 4
+assemble_ns_per_dof_median = 10.386962719298246
+mul_ns_per_dof_min = 9.692532894736843
+mul_ns_per_dof_max = 9.752828947368421
+
+[bisect.sweep.2b49c763]
+mul_bytes_launches = [0, 0, 0, 0, 0]
+assemble_ns_per_dof_min = 10.346304824561404
+mul_ns_per_dof_launches = [9.459978070175438, 9.731359649122806, 9.74780701754386, 9.722675438596491, 9.746436403508772]
+load_1min_before = [1.91, 2.1, 2.29, 2.07, 2.07]
+mul_ns_per_dof_median = 9.731359649122806
+launches = 5
+assemble_ns_per_dof_launches = [10.346304824561404, 10.503015350877194, 10.500734649122807, 10.406611842105264, 10.441798245614034]
+assemble_bytes_launches = [48, 48, 48, 48, 48]
+assemble_ns_per_dof_max = 10.503015350877194
+round_position = [3, 2, 1, 0, 4]
+threads = 4
+assemble_ns_per_dof_median = 10.441798245614034
+mul_ns_per_dof_min = 9.459978070175438
+mul_ns_per_dof_max = 9.74780701754386
+
+[bisect.sweep.d64ab24a]
+mul_bytes_launches = [0, 0, 0, 0, 0]
+assemble_ns_per_dof_min = 10.189605263157894
+mul_ns_per_dof_launches = [9.355811403508772, 9.629484649122807, 9.616228070175438, 9.606173245614036, 9.605263157894736]
+load_1min_before = [1.99, 2.08, 2.17, 2.28, 2.2]
+mul_ns_per_dof_median = 9.606173245614036
+launches = 5
+assemble_ns_per_dof_launches = [10.583881578947368, 10.254934210526315, 10.311578947368421, 10.189605263157894, 10.346765350877194]
+assemble_bytes_launches = [48, 48, 48, 48, 48]
+assemble_ns_per_dof_max = 10.583881578947368
+round_position = [0, 4, 3, 2, 1]
+threads = 4
+assemble_ns_per_dof_median = 10.311578947368421
+mul_ns_per_dof_min = 9.355811403508772
+mul_ns_per_dof_max = 9.629484649122807
+
+[bisect.sweep.9f3ed728]
+mul_bytes_launches = [0, 0, 0, 0, 0]
+assemble_ns_per_dof_min = 10.3125
+mul_ns_per_dof_launches = [9.72998903508772, 9.701666666666666, 9.733640350877193, 9.73501096491228, 9.745515350877193]
+load_1min_before = [1.92, 2.08, 2.19, 2.3, 2.21]
+mul_ns_per_dof_median = 9.733640350877193
+launches = 5
+assemble_ns_per_dof_launches = [10.313870614035087, 10.335350877192983, 10.3125, 10.313870614035087, 10.319813596491228]
+assemble_bytes_launches = [48, 48, 48, 48, 48]
+assemble_ns_per_dof_max = 10.335350877192983
+round_position = [4, 3, 2, 1, 0]
+threads = 4
+assemble_ns_per_dof_median = 10.313870614035087
+mul_ns_per_dof_min = 9.701666666666666
+mul_ns_per_dof_max = 9.745515350877193
+
+[bisect.sweep.ca3ebec0]
+mul_bytes_launches = [0, 0, 0, 0, 0]
+assemble_ns_per_dof_min = 10.234824561403508
+mul_ns_per_dof_launches = [9.762883771929825, 9.73593201754386, 9.708969298245615, 9.733651315789473, 9.709890350877194]
+load_1min_before = [1.99, 1.85, 2.32, 2.23, 2.17]
+mul_ns_per_dof_median = 9.733651315789473
+launches = 5
+assemble_ns_per_dof_launches = [10.234824561403508, 10.37875, 10.364583333333334, 10.245339912280702, 10.311589912280702]
+assemble_bytes_launches = [48, 48, 48, 48, 48]
+assemble_ns_per_dof_max = 10.37875
+round_position = [2, 1, 0, 4, 3]
+threads = 4
+assemble_ns_per_dof_median = 10.311589912280702
+mul_ns_per_dof_min = 9.708969298245615
+mul_ns_per_dof_max = 9.762883771929825
+
+[bisect.sweep.669fbbbb]
+mul_bytes_launches = [0, 0, 0, 0, 0]
+assemble_ns_per_dof_min = 10.413464912280702
+mul_ns_per_dof_launches = [9.688410087719298, 9.728618421052632, 11.756206140350876, 9.704868421052632, 9.758322368421053]
+load_1min_before = [1.99, 1.85, 2.16, 2.25, 2.18]
+mul_ns_per_dof_median = 9.728618421052632
+launches = 5
+assemble_ns_per_dof_launches = [10.505756578947368, 10.502565789473683, 10.413464912280702, 10.502554824561404, 10.503475877192983]
+assemble_bytes_launches = [48, 48, 48, 48, 48]
+assemble_ns_per_dof_max = 10.505756578947368
+round_position = [1, 0, 4, 3, 2]
+threads = 4
+assemble_ns_per_dof_median = 10.502565789473683
+mul_ns_per_dof_min = 9.688410087719298
+mul_ns_per_dof_max = 11.756206140350876
+
+[summary.kron_2d_mf_assemble_ns_per_dof]
+ratio_of_minima_set1 = 1.0232401009185987
+ratio_of_minima_all = 1.0232401009185987
+head_spread_all = 0.4865666666666666
+ratio_of_medians_all = 1.0049812495836028
+head_min_minus_base_max = -0.12637777777777792
+head_above_pairs_set2 = 4
+base_spread_all = 0.26434444444444427
+ratio_of_minima_set2 = 1.0028206295323385
+head_above_pairs_of_10 = 8
+head_above_pairs_set1 = 4
+
+[summary.ghost_2d_assemble_ns_per_dof]
+ratio_of_minima_set1 = 1.0352110928001053
+ratio_of_minima_all = 1.002743413164282
+head_spread_all = 0.8584649122807022
+ratio_of_medians_all = 1.0006876166031533
+head_min_minus_base_max = -0.8708004385964934
+head_above_pairs_set2 = 2
+base_spread_all = 0.8986732456140363
+ratio_of_minima_set2 = 0.97935721069369
+head_above_pairs_of_10 = 6
+head_above_pairs_set1 = 4
+
+[summary.plain_2d_assemble_ns_per_dof]
+ratio_of_minima_set1 = 0.9763540639705658
+ratio_of_minima_all = 0.9764930114358322
+head_spread_all = 0.2060111111111107
+ratio_of_medians_all = 0.9974677729996546
+head_min_minus_base_max = -0.6097222222222225
+head_above_pairs_set2 = 2
+base_spread_all = 0.4555555555555557
+ratio_of_minima_set2 = 0.9827750952986023
+head_above_pairs_of_10 = 6
+head_above_pairs_set1 = 4
+
+[summary.kron_2d_mf_mul_ns_per_dof]
+ratio_of_minima_set1 = 1.0145143796220213
+ratio_of_minima_all = 0.8263533278553821
+head_spread_all = 0.3435111111111111
+ratio_of_medians_all = 1.0001344542119384
+head_min_minus_base_max = -0.3421222222222222
+head_above_pairs_set2 = 2
+base_spread_all = 0.04861111111111116
+ratio_of_minima_set2 = 0.805181745396317
+head_above_pairs_of_10 = 5
+head_above_pairs_set1 = 3
+
+[summary.plain_3d_assemble_ns_per_dof]
+ratio_of_minima_set1 = 1.0264799157532878
+ratio_of_minima_all = 1.0264799157532878
+head_spread_all = 0.06965624999999953
+ratio_of_medians_all = 1.001012882600576
+head_min_minus_base_max = -0.04295312500000037
+head_above_pairs_set2 = 3
+base_spread_all = 0.31640625
+ratio_of_minima_set2 = 1.001968012779534
+head_above_pairs_of_10 = 7
+head_above_pairs_set1 = 4
+
+[summary.kron_2d_assemble_ns_per_dof]
+ratio_of_minima_set1 = 1.015904896721931
+ratio_of_minima_all = 1.0152878964180632
+head_spread_all = 0.0842444444444439
+ratio_of_medians_all = 1.0048295729419774
+head_min_minus_base_max = -0.18702222222222176
+head_above_pairs_set2 = 2
+base_spread_all = 0.2786999999999997
+ratio_of_minima_set2 = 1.004354974403528
+head_above_pairs_of_10 = 6
+head_above_pairs_set1 = 4
+
+[summary.ghost_2d_mul_ns_per_dof]
+ratio_of_minima_set1 = 1.0332551188915438
+ratio_of_minima_all = 1.0332551188915438
+head_spread_all = 0.04980263157894704
+ratio_of_medians_all = 1.0118568396399035
+head_min_minus_base_max = 0.078125
+head_above_pairs_set2 = 5
+base_spread_all = 0.22615131578947256
+ratio_of_minima_set2 = 1.0338226719300199
+head_above_pairs_of_10 = 10
+head_above_pairs_set1 = 5
+
+[summary.plain_3d_mul_ns_per_dof]
+ratio_of_minima_set1 = 1.007424358031427
+ratio_of_minima_all = 1.0079736099188596
+head_spread_all = 0.6328125
+ratio_of_medians_all = 0.9997212101884638
+head_min_minus_base_max = -0.5501406250000009
+head_above_pairs_set2 = 3
+base_spread_all = 0.7311250000000022
+ratio_of_minima_set2 = 1.0264740645998016
+head_above_pairs_of_10 = 5
+head_above_pairs_set1 = 2
+
+[summary.kron_2d_mul_ns_per_dof]
+ratio_of_minima_set1 = 0.999631596445355
+ratio_of_minima_all = 1.0218903455836965
+head_spread_all = 0.0050888888888889205
+ratio_of_medians_all = 0.9986896016299202
+head_min_minus_base_max = -0.04444444444444451
+head_above_pairs_set2 = 2
+base_spread_all = 0.07084444444444449
+ratio_of_minima_set2 = 1.0218903455836965
+head_above_pairs_of_10 = 4
+head_above_pairs_set1 = 2
+
+[summary.swapped_ghost_2d_mul_ns_per_dof]
+head_above_pairs_of_5 = 5
+ratio_of_minima = 1.0324613812235364
+
+[summary.plain_2d_mul_ns_per_dof]
+ratio_of_minima_set1 = 1.022515578610812
+ratio_of_minima_all = 1.0214960360184007
+head_spread_all = 0.2254666666666667
+ratio_of_medians_all = 1.000873344160408
+head_min_minus_base_max = -0.1601888888888885
+head_above_pairs_set2 = 2
+base_spread_all = 0.2773222222222218
+ratio_of_minima_set2 = 0.999748545154106
+head_above_pairs_of_10 = 6
+head_above_pairs_set1 = 4
+
+[head.plain_2d]
+dofs = 90000
+threads = 4
+
+    [head.plain_2d.set1]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.404166666666667
+    mul_ns_per_dof_launches = [5.710177777777778, 5.571755555555556, 5.713888888888889, 5.719444444444444, 5.582866666666667]
+    load_1min_before = [1.99, 2.31, 2.51, 2.76, 2.78]
+    mul_ns_per_dof_median = 5.710177777777778
+    launches = 5
+    assemble_ns_per_dof_launches = [6.404166666666667, 6.597677777777778, 6.5870444444444445, 6.6101777777777775, 6.587033333333333]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.6101777777777775
+    assemble_ns_per_dof_median = 6.5870444444444445
+    mul_ns_per_dof_min = 5.571755555555556
+    mul_ns_per_dof_max = 5.719444444444444
+
+    [head.plain_2d.all]
+    mul_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.404166666666667
+    mul_ns_per_dof_launches = [5.710177777777778, 5.571755555555556, 5.713888888888889, 5.719444444444444, 5.582866666666667, 5.791666666666667, 5.571766666666667, 5.5662, 5.568055555555556, 5.567133333333334]
+    load_1min_before = [1.99, 2.31, 2.51, 2.76, 2.78, 2.14, 2.79, 3.13, 3.06, 2.63]
+    mul_ns_per_dof_median = 5.5773166666666665
+    launches = 10
+    assemble_ns_per_dof_launches = [6.404166666666667, 6.597677777777778, 6.5870444444444445, 6.6101777777777775, 6.587033333333333, 6.445366666666667, 6.566211111111111, 6.559722222222222, 6.557877777777778, 6.558333333333334]
+    assemble_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.6101777777777775
+    assemble_ns_per_dof_median = 6.562966666666666
+    mul_ns_per_dof_min = 5.5662
+    mul_ns_per_dof_max = 5.791666666666667
+
+    [head.plain_2d.set2]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.445366666666667
+    mul_ns_per_dof_launches = [5.791666666666667, 5.571766666666667, 5.5662, 5.568055555555556, 5.567133333333334]
+    load_1min_before = [2.14, 2.79, 3.13, 3.06, 2.63]
+    mul_ns_per_dof_median = 5.568055555555556
+    launches = 5
+    assemble_ns_per_dof_launches = [6.445366666666667, 6.566211111111111, 6.559722222222222, 6.557877777777778, 6.558333333333334]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.566211111111111
+    assemble_ns_per_dof_median = 6.558333333333334
+    mul_ns_per_dof_min = 5.5662
+    mul_ns_per_dof_max = 5.791666666666667
+
+[head.kron_2d_mf]
+dofs = 90000
+threads = 4
+
+    [head.kron_2d_mf.set1]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.074544444444444
+    mul_ns_per_dof_launches = [1.714811111111111, 1.7351777777777777, 1.7361111111111112, 1.7342555555555557, 1.7370444444444444]
+    load_1min_before = [1.99, 2.31, 2.51, 2.76, 2.78]
+    mul_ns_per_dof_median = 1.7351777777777777
+    launches = 5
+    assemble_ns_per_dof_launches = [6.1199111111111115, 6.3375, 6.074544444444444, 6.175922222222222, 6.076388888888889]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.3375
+    assemble_ns_per_dof_median = 6.1199111111111115
+    mul_ns_per_dof_min = 1.714811111111111
+    mul_ns_per_dof_max = 1.7370444444444444
+
+    [head.kron_2d_mf.all]
+    mul_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.074544444444444
+    mul_ns_per_dof_launches = [1.714811111111111, 1.7351777777777777, 1.7361111111111112, 1.7342555555555557, 1.7370444444444444, 1.7361111111111112, 1.7402777777777778, 1.7361111111111112, 1.3967666666666667, 1.4509333333333334]
+    load_1min_before = [1.99, 2.31, 2.51, 2.76, 2.78, 2.14, 2.79, 3.13, 3.06, 2.63]
+    mul_ns_per_dof_median = 1.7356444444444445
+    launches = 10
+    assemble_ns_per_dof_launches = [6.1199111111111115, 6.3375, 6.074544444444444, 6.175922222222222, 6.076388888888889, 6.095377777777777, 6.115277777777778, 6.101855555555556, 6.561111111111111, 6.330555555555556]
+    assemble_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.561111111111111
+    assemble_ns_per_dof_median = 6.117594444444444
+    mul_ns_per_dof_min = 1.3967666666666667
+    mul_ns_per_dof_max = 1.7402777777777778
+
+    [head.kron_2d_mf.set2]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.095377777777777
+    mul_ns_per_dof_launches = [1.7361111111111112, 1.7402777777777778, 1.7361111111111112, 1.3967666666666667, 1.4509333333333334]
+    load_1min_before = [2.14, 2.79, 3.13, 3.06, 2.63]
+    mul_ns_per_dof_median = 1.7361111111111112
+    launches = 5
+    assemble_ns_per_dof_launches = [6.095377777777777, 6.115277777777778, 6.101855555555556, 6.561111111111111, 6.330555555555556]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.561111111111111
+    assemble_ns_per_dof_median = 6.115277777777778
+    mul_ns_per_dof_min = 1.3967666666666667
+    mul_ns_per_dof_max = 1.7402777777777778
+
+[head.plain_3d]
+dofs = 64000
+threads = 4
+
+    [head.plain_3d.set1]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 10.600265625
+    mul_ns_per_dof_launches = [22.87890625, 23.51171875, 23.373046875, 23.3515625, 23.356125]
+    load_1min_before = [1.99, 2.31, 2.51, 2.76, 2.78]
+    mul_ns_per_dof_median = 23.356125
+    launches = 5
+    assemble_ns_per_dof_launches = [10.600265625, 10.66796875, 10.669921875, 10.627609375, 10.634125]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 10.669921875
+    assemble_ns_per_dof_median = 10.634125
+    mul_ns_per_dof_min = 22.87890625
+    mul_ns_per_dof_max = 23.51171875
+
+    [head.plain_3d.all]
+    mul_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 10.600265625
+    mul_ns_per_dof_launches = [22.87890625, 23.51171875, 23.373046875, 23.3515625, 23.356125, 23.356125, 23.298828125, 23.376953125, 23.418625, 23.414703125]
+    load_1min_before = [1.99, 2.31, 2.51, 2.76, 2.78, 2.14, 2.79, 3.13, 3.06, 2.63]
+    mul_ns_per_dof_median = 23.3645859375
+    launches = 10
+    assemble_ns_per_dof_launches = [10.600265625, 10.66796875, 10.669921875, 10.627609375, 10.634125, 10.630203125, 10.61459375, 10.60415625, 10.6204375, 10.61003125]
+    assemble_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 10.669921875
+    assemble_ns_per_dof_median = 10.6240234375
+    mul_ns_per_dof_min = 22.87890625
+    mul_ns_per_dof_max = 23.51171875
+
+    [head.plain_3d.set2]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 10.60415625
+    mul_ns_per_dof_launches = [23.356125, 23.298828125, 23.376953125, 23.418625, 23.414703125]
+    load_1min_before = [2.14, 2.79, 3.13, 3.06, 2.63]
+    mul_ns_per_dof_median = 23.376953125
+    launches = 5
+    assemble_ns_per_dof_launches = [10.630203125, 10.61459375, 10.60415625, 10.6204375, 10.61003125]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 10.630203125
+    assemble_ns_per_dof_median = 10.61459375
+    mul_ns_per_dof_min = 23.298828125
+    mul_ns_per_dof_max = 23.418625
+
+[head.kron_2d]
+dofs = 90000
+threads = 4
+
+    [head.kron_2d.set1]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.092133333333333
+    mul_ns_per_dof_launches = [1.2365666666666666, 1.2361111111111112, 1.2375, 1.2365666666666666, 1.2375]
+    load_1min_before = [1.99, 2.31, 2.51, 2.76, 2.78]
+    mul_ns_per_dof_median = 1.2365666666666666
+    launches = 5
+    assemble_ns_per_dof_launches = [6.092133333333333, 6.133333333333334, 6.105555555555555, 6.095833333333333, 6.1726777777777775]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.1726777777777775
+    assemble_ns_per_dof_median = 6.105555555555555
+    mul_ns_per_dof_min = 1.2361111111111112
+    mul_ns_per_dof_max = 1.2375
+
+    [head.kron_2d.all]
+    mul_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.088433333333334
+    mul_ns_per_dof_launches = [1.2365666666666666, 1.2361111111111112, 1.2375, 1.2365666666666666, 1.2375, 1.2365777777777778, 1.2361111111111112, 1.2361111111111112, 1.2324111111111111, 1.2342555555555557]
+    load_1min_before = [1.99, 2.31, 2.51, 2.76, 2.78, 2.14, 2.79, 3.13, 3.06, 2.63]
+    mul_ns_per_dof_median = 1.2363388888888889
+    launches = 10
+    assemble_ns_per_dof_launches = [6.092133333333333, 6.133333333333334, 6.105555555555555, 6.095833333333333, 6.1726777777777775, 6.1601888888888885, 6.125922222222222, 6.088433333333334, 6.098611111111111, 6.170366666666666]
+    assemble_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.1726777777777775
+    assemble_ns_per_dof_median = 6.115738888888888
+    mul_ns_per_dof_min = 1.2324111111111111
+    mul_ns_per_dof_max = 1.2375
+
+    [head.kron_2d.set2]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 6.088433333333334
+    mul_ns_per_dof_launches = [1.2365777777777778, 1.2361111111111112, 1.2361111111111112, 1.2324111111111111, 1.2342555555555557]
+    load_1min_before = [2.14, 2.79, 3.13, 3.06, 2.63]
+    mul_ns_per_dof_median = 1.2361111111111112
+    launches = 5
+    assemble_ns_per_dof_launches = [6.1601888888888885, 6.125922222222222, 6.088433333333334, 6.098611111111111, 6.170366666666666]
+    assemble_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_max = 6.170366666666666
+    assemble_ns_per_dof_median = 6.125922222222222
+    mul_ns_per_dof_min = 1.2324111111111111
+    mul_ns_per_dof_max = 1.2365777777777778
+
+[head.ghost_2d]
+dofs = 91200
+threads = 4
+
+    [head.ghost_2d.set1]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 10.51764254385965
+    mul_ns_per_dof_launches = [9.454046052631579, 9.464089912280702, 9.479166666666666, 9.469572368421053, 9.454035087719298]
+    load_1min_before = [1.99, 2.31, 2.51, 2.76, 2.78]
+    mul_ns_per_dof_median = 9.464089912280702
+    launches = 5
+    assemble_ns_per_dof_launches = [10.755208333333334, 11.04623903508772, 10.707697368421053, 10.580679824561404, 10.51764254385965]
+    assemble_bytes_launches = [48, 48, 48, 48, 48]
+    assemble_ns_per_dof_max = 11.04623903508772
+    assemble_ns_per_dof_median = 10.707697368421053
+    mul_ns_per_dof_min = 9.454035087719298
+    mul_ns_per_dof_max = 9.479166666666666
+
+    [head.ghost_2d.all]
+    mul_bytes_launches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 10.187774122807017
+    mul_ns_per_dof_launches = [9.454046052631579, 9.464089912280702, 9.479166666666666, 9.469572368421053, 9.454035087719298, 9.503837719298245, 9.479616228070176, 9.48876096491228, 9.491041666666666, 9.467741228070176]
+    load_1min_before = [1.99, 2.31, 2.51, 2.76, 2.78, 2.14, 2.79, 3.13, 3.06, 2.63]
+    mul_ns_per_dof_median = 9.47436951754386
+    launches = 10
+    assemble_ns_per_dof_launches = [10.755208333333334, 11.04623903508772, 10.707697368421053, 10.580679824561404, 10.51764254385965, 10.694440789473685, 10.266359649122807, 10.674342105263158, 10.187774122807017, 10.398848684210526]
+    assemble_bytes_launches = [48, 48, 48, 48, 48, 48, 48, 48, 48, 48]
+    assemble_ns_per_dof_max = 11.04623903508772
+    assemble_ns_per_dof_median = 10.62751096491228
+    mul_ns_per_dof_min = 9.454035087719298
+    mul_ns_per_dof_max = 9.503837719298245
+
+    [head.ghost_2d.set2]
+    mul_bytes_launches = [0, 0, 0, 0, 0]
+    assemble_ns_per_dof_min = 10.187774122807017
+    mul_ns_per_dof_launches = [9.503837719298245, 9.479616228070176, 9.48876096491228, 9.491041666666666, 9.467741228070176]
+    load_1min_before = [2.14, 2.79, 3.13, 3.06, 2.63]
+    mul_ns_per_dof_median = 9.48876096491228
+    launches = 5
+    assemble_ns_per_dof_launches = [10.694440789473685, 10.266359649122807, 10.674342105263158, 10.187774122807017, 10.398848684210526]
+    assemble_bytes_launches = [48, 48, 48, 48, 48]
+    assemble_ns_per_dof_max = 10.694440789473685
+    assemble_ns_per_dof_median = 10.398848684210526
+    mul_ns_per_dof_min = 9.467741228070176
+    mul_ns_per_dof_max = 9.503837719298245
