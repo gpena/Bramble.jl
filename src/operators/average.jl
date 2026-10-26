@@ -566,7 +566,7 @@ end
 
 An AST node representing a backward spatial averaging operator acting in dimension `Dim`.
 """
-struct BackwardAverage{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct BackwardAverage{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -575,7 +575,7 @@ end
 
 An AST node representing a forward spatial averaging operator acting in dimension `Dim`.
 """
-struct ForwardAverage{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct ForwardAverage{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -585,7 +585,7 @@ end
 An AST node representing the centered spatial averaging operator acting in dimension `Dim`,
 ``(u_{i-1} + 2 u_{i} + u_{i+1})/4``, zero on both end slices of `Dim`.
 """
-struct CenteredAverage{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct CenteredAverage{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -663,13 +663,7 @@ end
 end
 
 # The wrappers whose operand is a bare trial or test leaf (see `_wraps_leaf`, form/common.jl).
-@inline _wraps_leaf(::Union{
-    BackwardDifference{D, Dim, <:_BareLeaf}, ForwardDifference{D, Dim, <:_BareLeaf},
-    CenteredDifference{D, Dim, <:_BareLeaf}, StarDifference{D, Dim, <:_BareLeaf},
-    CrossWeightedDifference{D, Dim, <:_BareLeaf}, SecondDifference{D, Dim, <:_BareLeaf},
-    JumpNode{D, Dim, <:_BareLeaf},
-    BackwardAverage{D, Dim, <:_BareLeaf}, ForwardAverage{D, Dim, <:_BareLeaf},
-    CenteredAverage{D, Dim, <:_BareLeaf}, ShiftNode{D, Dim, <:_BareLeaf}}) where {D, Dim} = true
+@inline _wraps_leaf(::StencilNode{D, Dim, <:_BareLeaf}) where {D, Dim} = true
 
 # ==============================================================================
 # Expression rendering (gpena/Bramble.jl#274)

@@ -435,7 +435,7 @@ Built by `shift_op` and, with `shift_amount` ``\\pm 1``, by the public shifts
 `S₊ₓ(op)`, `S₋ᵧ(op)`, ... on a symbolic operand. A neighbour off the grid reads 0, as for a
 grid function.
 """
-struct ShiftNode{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct ShiftNode{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     shift_amount::Int
     inner_op::OpType
 end

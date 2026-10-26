@@ -80,6 +80,7 @@ end
 
 # --- the operators, rebuilt around an indexed argument ----------------------------- #
 
+# Every stencil node but `ShiftNode`, whose `shift_amount` field the method below keeps.
 for T in (
     :BackwardDifference,
     :ForwardDifference,

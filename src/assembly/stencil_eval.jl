@@ -87,19 +87,13 @@ Products and sums are not members. `BilinearProduct` and `LinearProduct` hold tw
 with different roles -- trial on the left, test on the right -- so a query about the test
 component reads `right_op` alone, and `OperatorAdd` has to reconcile both sides. Those stay
 written out, which is the point: what is left explicit is what genuinely differs.
+
+The stencil nodes are a member as `StencilNode{D}`, not one by one: a method on
+`StencilNode` (`_widened`, bilinear.jl) must stay more specific than one on this union,
+and a list of the eleven nodes outranks the abstract type (gpena/Bramble.jl#930).
 """
 const UnaryWrapper{D} = Union{
-    BackwardDifference{D},
-    ForwardDifference{D},
-    CenteredDifference{D},
-    StarDifference{D},
-    CrossWeightedDifference{D},
-    SecondDifference{D},
-    JumpNode{D},
-    BackwardAverage{D},
-    ForwardAverage{D},
-    CenteredAverage{D},
-    ShiftNode{D},
+    StencilNode{D},
     OperatorScale{D},
     GridFunctionScale{D},
     RegionRestriction{D},

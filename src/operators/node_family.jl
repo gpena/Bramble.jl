@@ -18,7 +18,7 @@ all. `@node_family` is that text, once (gpena/Bramble.jl#74).
 
 What stays hand-written is what actually differs per family: `_stencil_taps` and
 `_stencil_weights`, which are the arithmetic, and `ShiftNode`, which carries a second field
-and so is not this shape.
+and so is not this shape, though it subtypes `StencilNode` (below) like every family here.
 
 The dimensional entry point is the reason the collapse happens here rather than in its own
 issue. `Dim` is a type parameter, so a node's direction has to be known to the compiler:
@@ -29,6 +29,11 @@ rather than a type, so branching over literal `Val`s recovers a single return ty
 halves are methods of the same function: `D₋(uₕ, Val(1))` differences a grid function and
 `D₋(U, Val(1))` builds a node, and the argument says which.
 =#
+
+# The supertype of every stencil node: the differences, averages and jump this macro
+# generates, and the hand-written `ShiftNode`. A method or union meaning every stencil node
+# names it, so a new node is one supertype declaration (gpena/Bramble.jl#930).
+abstract type StencilNode{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D} end
 
 """
     _node_dimensional_expr(node_name, alias_name, alias_stem, what; source = nothing)

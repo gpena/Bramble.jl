@@ -481,6 +481,7 @@ function _type_value(T, E, L = E)
             *, Base.promote_op(*, _type_value(T.parameters[3], E, L),
                 _type_value(T.parameters[4], E, L)), E)
     elseif T <: Union{_DifferenceNode, _AverageNode}
+        # every stencil node but a shift, which moves its operand's weights and scales none
         return Base.promote_op(*, E, _type_value(fieldtype(T, :inner_op), E, L))
     elseif T <: UnaryWrapper
         return _type_value(fieldtype(T, :inner_op), E, L)
@@ -821,10 +822,7 @@ end
 @inline _leaf_eltype(T, op, sp) = T
 
 # One operand, and nothing of its own that is not already in `T` (the space's spacings).
-const _ELTYPE_WRAPPERS = Union{
-    ShiftNode, InterpolationNode, BackwardDifference, ForwardDifference,
-    CenteredDifference, StarDifference, CrossWeightedDifference, SecondDifference,
-    BackwardAverage, ForwardAverage, CenteredAverage, JumpNode}
+const _ELTYPE_WRAPPERS = Union{StencilNode, InterpolationNode}
 
 @inline _leaf_eltype(T, op::_ELTYPE_WRAPPERS, sp) = _leaf_eltype(T, op.inner_op, sp)
 

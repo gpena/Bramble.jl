@@ -525,9 +525,9 @@ end
 # other gates do, and its form infers the distributed tree too before the literal folds.
 # `InterpolationNode` is linear too but is left whole. Its source space is bound per block,
 # by the leaf it wraps (`_bind_interp_spaces`), and that path is not exercised here. The
-# stencil nodes are the list `_summands_of` splits over too (stencil_nodes.jl); a shift
+# stencil nodes are the list `_summands_of` splits over too (node_family.jl); a shift
 # keeps its own `simplify_ast` above, which simplifies its operand first.
-const _LinearWrapper = Union{_StencilNode, RegionRestriction}
+const _LinearWrapper = Union{StencilNode, RegionRestriction}
 
 # Whether `op` names more than one component on either side. Only a sum can, so an operand
 # whose type holds none (`_may_hold_sum`) answers `false` without compiling the class

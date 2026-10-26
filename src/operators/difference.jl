@@ -1121,7 +1121,7 @@ end
 
 An AST node representing a backward finite difference operator acting in dimension `Dim`.
 """
-struct BackwardDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct BackwardDifference{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -1130,7 +1130,7 @@ end
 
 An AST node representing a forward finite difference operator acting in dimension `Dim`.
 """
-struct ForwardDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct ForwardDifference{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -1226,7 +1226,7 @@ Dc(u)_i = \\frac{u_{i+1} - u_{i-1}}{h_i + h_{i+1}}
 
 Truncated at both ends of `Dim`, having no neighbour on one side.
 """
-struct CenteredDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct CenteredDifference{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -1242,7 +1242,7 @@ An AST node for the forward difference over the averaged spacing along `Dim`,
 The forward difference over the *averaged* spacing rather than the forward one, which is
 what makes the discrete integration by parts close. Truncated at the far end of `Dim`.
 """
-struct StarDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct StarDifference{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -1262,7 +1262,7 @@ The same two one-sided differences the centered difference combines, weighted by
 each collapses to the one-sided difference its near side still defines, `D₊` at the first
 point and `D₋` at the last.
 """
-struct CrossWeightedDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct CrossWeightedDifference{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
@@ -1383,7 +1383,7 @@ first, where `D₋` is: entry for entry the composition `D̃ₓ(D₋ₓ(u))`, bu
 [`Δₕ`](@ref) once per axis. One node, so its operand is evaluated once per tap rather than
 once per tap of a nested inner stencil.
 """
-struct SecondDifference{D, Dim, OpType <: LazyOp{D}} <: LazyOp{D}
+struct SecondDifference{D, Dim, OpType <: LazyOp{D}} <: StencilNode{D, Dim, OpType}
     inner_op::OpType
 end
 
