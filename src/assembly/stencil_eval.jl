@@ -773,19 +773,19 @@ end
 # Rₕ(:r, u))))` with `g` a `BigFloat` grid function 557808 B as it was, 816576 B fixed).
 @inline _fixes_restriction(op::RegionRestriction) = !_is_source_only(op)
 @inline _fixes_restriction(op::_Scale) = !_is_source_only(op) &&
-                                                                          (_scales_restriction(op) ||
-                                                                           op.inner_op isa TappedNode &&
-                                                                           _fixes_restriction(op.inner_op))
+                                         (_scales_restriction(op) ||
+                                          op.inner_op isa TappedNode &&
+                                          _fixes_restriction(op.inner_op))
 @inline _fixes_restriction(op::TappedNode) = _fixes_operand(op.inner_op)
 @inline _fixes_restriction(op::OperatorAdd) = _fixes_restriction(op.left_op) ||
                                               _fixes_restriction(op.right_op)
 @inline _fixes_restriction(::Any) = false
 @inline _fixes_operand(op) = _fixes_restriction(op)
 @inline _fixes_operand(op::_Scale) = _fixes_restriction(op) ||
-                                                                      !_is_source_only(op) &&
-                                                                      op.inner_op isa OperatorAdd &&
-                                                                      _bits_weight(op) &&
-                                                                      _fixes_restriction(op.inner_op)
+                                     !_is_source_only(op) &&
+                                     op.inner_op isa OperatorAdd &&
+                                     _bits_weight(op) &&
+                                     _fixes_restriction(op.inner_op)
 @inline _bits_weight(op::OperatorScale) = isbits(_scale_value(op, 0))
 @inline _bits_weight(op::GridFunctionScale) = _bits_values(op.grid_function)
 @inline _bits_values(g::AbstractArray) = isbitstype(eltype(g))
