@@ -202,8 +202,10 @@ end
 end
 
 # A functional alone in a bilinear form is linear in one argument only. Refused at `form`
-# rather than at the walk, which has no stencil for it.
-@inline _check_bilinear_terms(op) = _holds_functional(op) ? _throw_lone_functional() : nothing
+# rather than at the walk, which has no stencil for it. `::Bool`: JET saw a runtime dispatch
+# on a `UnionAll` operand here (#913); every method of the predicate returns `Bool`.
+@inline _check_bilinear_terms(op) = _holds_functional(op)::Bool ? _throw_lone_functional() :
+                                    nothing
 
 @noinline function _throw_lone_functional()
     throw(
