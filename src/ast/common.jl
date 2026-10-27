@@ -679,7 +679,12 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 # its type (gpena/Bramble.jl#917); any other keeps `typeof(f)`. Only there: a source the
 # assembly reads at every point (under `restrict_to`, a difference or an average, built with
 # `source_function` above; under `markers`; or in a composite term naming no component) keeps
-# its type, as the walk calls it, and a form holding it infers.
+# its type, as the walk calls it, and a form holding it infers. The limit: the choice is made
+# when the term is built, before any outer `restrict_to` wraps it, so a form whose term is
+# restricted afterwards (`restrict_to(:interior, innerₕ(f, v))`, a restricted sum of such
+# terms, a restricted composite term on `v(2)`) holds an erased source `form` gives its type
+# back at run time (`_specialised_sources`, assembly/linear.jl), and infers no concrete type;
+# its values, element type and allocation-free `assemble!` are main's.
 @inline _erased_source(f, ::Val{D}) where {D} = _keeps_precision(f, Val(D)) ?
                                                 SourceFunction{D, Function}(f) :
                                                 SourceFunction{D, typeof(f)}(f)
