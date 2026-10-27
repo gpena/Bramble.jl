@@ -184,3 +184,78 @@ and `_holds_functional`. Whether those seven call sites warrant step 2 is for th
 decide. The baseline for "do not rise" is `form` 38 and `assemble` 0 for `elasticity`,
 `form` 5 and `assemble` 0 for `sum40`, as the script reports them (one `julia` per row,
 `assemble` run before JET).
+
+## After #939
+
+Retaken on `perf/v4.1.4-followups` at `6ee42fb0` (S1, which unwraps a builder's sum under a
+restriction), Julia 1.13.2, 1 thread, one `julia` for both rows:
+
+```
+julia --startup-file=no --project=test benchmark/bool_audit.jl --control \
+    --rows elasticity,sum40 --out benchmark/results/v4.1.4_bool_audit_after939.toml
+```
+
+The result is `benchmark/results/v4.1.4_bool_audit_after939.toml`. The earlier table above
+stays as measured. A second run of each row alone in its own process (a temporary script
+outside the repository, not kept) gave the same counts and the same site list, so sharing
+the process did not change them. The positive control finds `AuditControl.isp` and not `isq`,
+as before.
+
+### JET counts against the original table
+
+| row | summands | `form` reports, before | `form` reports, after | `assemble` reports, before | `assemble` reports, after |
+|---|---|---|---|---|---|
+| `elasticity` | 35 | 38 | 0 | 0 | 0 |
+| `sum40` | 40 | 5 | 7 | 0 | 0 |
+
+`elasticity` is clean: the 38 reports all traced to the non-concrete tuples of `εₕ` and
+`divₘₕ` and to the abstract `OperatorAdd` tree of `foldl`, and none is left.
+
+`sum40` rises by 2, so its count does not fall. The 7 reports are the 5 of the original
+table (the `Any` callee, `_bilinear_form`, `_holds_rank_one` from `form`, `_holds_functional`
+from `_check_bilinear_terms`, one `OperatorAdd` constructor dispatch in `+`) and two new
+ones: runtime dispatches to `_normalisable` and to `_normalised`, both with `Bramble._normalise_scalars`
+as innermost frame. `_normalise_scalars` came with #912 (`ab551efe`, 2026-10-25), after the
+original table's commit `96ff3a4c` (2026-10-24), so the two are not an effect of #939. The
+cause is the one the original table gives for `sum40`: the 40-term `foldl` returns an abstract
+`OperatorAdd` type, so the AST that reaches `_normalise_scalars` infers `Any`.
+
+### Sites still leaking
+
+The detector lists 20 sites for each row (original: 26 for `elasticity`, 21 for `sum40`),
+with no caller named by any JET report. A detector run right after `using Bramble`, before
+any mesh or form exists, lists the same 20. All 20 are abstract-signature instances of the
+package image, classed apart as before: `_shares_one_mesh`, `_ghost_kron_reads_absent`,
+`_kron_is_fresh` (2), `_marks_only_face`, `_mf_gathers` (2), `_pairable_type` (3), `_peelable`,
+`_same_mesh` (2), `_storage_collapsed` and `_type_holds` (6). The original 21 had one more,
+`_near_edge(GhostMesh{1, …}, CartesianIndex{1}, Int64)`, which no longer appears at load. Which
+change removed it was not traced (97 commits separate `96ff3a4c` from this head).
+
+The 5 elasticity-only sites (`_is_source_only` (2), `_has_test_interp` (1),
+`_has_trial_interp` (2)) are gone. They traced to the non-concrete AST, as the original
+table said, and the elasticity form is now concrete.
+
+So no detector site leaks from either form: every site left is an image instance.
+
+### Predicate call sites JET still reports
+
+`elasticity` has none. `sum40` has three predicate call sites reached through a runtime
+dispatch. None is a detector site, since the instances that return are `Bool` or generated.
+
+| function | file | inferred type at the call | caller |
+|---|---|---|---|
+| `Bramble._holds_rank_one` | `src/assembly/bilinear.jl:357` | `Any` (dispatch on the abstract `OperatorAdd` union) | `form` |
+| `Bramble._holds_functional` | `src/assembly/rank_one.jl:206` | `Any` | `Bramble._check_bilinear_terms` |
+| `Bramble._normalisable` | `src/assembly/bilinear.jl:485` | `Any` (argument `ast::Any`) | `Bramble._normalise_scalars` |
+
+The inferred type is that of the call expression, read from the JET report's runtime
+dispatch (the callee has an abstract argument); it was not read per call from the
+inference result. All three come from the abstract term type that the 40-term `foldl`
+returns, not from #939 or from a concrete AST.
+
+### Site list for S4.2
+
+Site list after #939: for `elasticity` empty; for `sum40` the three JET-only predicate call
+sites `_holds_rank_one` (`src/assembly/bilinear.jl:357`), `_holds_functional`
+(`src/assembly/rank_one.jl:206`) and `_normalisable` (`src/assembly/bilinear.jl:485`), with
+no detector site leaking from either row.
