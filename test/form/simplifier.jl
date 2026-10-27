@@ -865,6 +865,37 @@ _label_tree(::Bramble._ComponentSum{D, P}) where {D, P} = P
     @test simplify_ast(2.5 * s) isa OperatorAdd   # the fallback distributes this sum
 end
 
+# Wherever a builder's sum sits, `form` stores no `_ComponentSum` and assembles what the
+# plain sum assembles, bit for bit; the unsimplified tree prints as the plain one. A
+# restriction keeps an operand naming one component as built, so the builder's sum must
+# name more than one for the restriction to unwrap it (the three forms that crashed).
+_bits(A) = (A.colptr, A.rowval, reinterpret(UInt64, A.nzval))
+_strain(u, v) = inner₊(εₕ(u), εₕ(v))
+_div(u, v) = inner₊(divₘₕ(u), divₘₕ(v))
+_wrapped_builders = ((_strain, b -> Bramble.restrict_to(:interior, 1.5 * b)),
+    (_div, b -> 1.5 * Bramble.restrict_to(:interior, b)),
+    (_strain, b -> Bramble.restrict_to(:interior, b)),
+    (_div, b -> b + 2.0 * (1.5 * b)))
+
+@testset "builder sums: never stored (#939)" begin
+    Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (7, 8))
+    W = gridspace(Ωₕ)^Val(2)
+    for (build, wrap) in _wrapped_builders
+        a = form(W, W, (u, v) -> wrap(build(u, v)))
+        @test !occursin("_ComponentSum", string(typeof(a)))
+        @test _bits(assemble(a)) == _bits(assemble(form(W, W, (u, v) -> wrap(build(u, v).sum))))
+    end
+    u, v = trial_function(W), test_function(W)
+    for build in (_strain, _div)
+        @test Bramble.expression(2.0 * build(u, v)) == Bramble.expression(2.0 * build(u, v).sum)
+        @test Bramble.expression(build(u, v) + innerₕ(u(1), v(1))) ==
+              Bramble.expression(build(u, v).sum + innerₕ(u(1), v(1)))
+    end
+    # One term names one pair: nothing to label, the plain term.
+    W₁ = gridspace(mesh(domain(interval(0.0, 1.0)), 9))^Val(1)
+    @test !(_strain(trial_function(W₁), test_function(W₁)) isa Bramble._ComponentSum)
+end
+
 # The sign `-u` and `a - b` store (`_MinusOne`, src/ast/ast.jl) is decided by its type, so
 # `simplify_ast` folds it whatever the operator's values. It is not a number: `form` lowers
 # what is left of it to the `Int` `-1`, so every reader of the stored tree (assembly,

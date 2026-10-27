@@ -1696,9 +1696,6 @@ function _divergence_label_tree(D::Int)
 end
 @generated _divergence_labels(::Val{D}) where {D} = _divergence_label_tree(D)
 
-# A builder's sum prints as the sum it holds.
-expression(op::_ComponentSum) = expression(op.sum)
-
 # --- divcₕ, εcₕ: centered divergence and strain over composite functions ---------------- #
 #
 # The centered difference is collocated: every `Dc` term sits on the grid point itself, so

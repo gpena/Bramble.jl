@@ -170,6 +170,9 @@ struct _MixedComponents end
         _test_component_class(op.left_op), _test_component_class(op.right_op)
     )
 end
+# A builder's sum (`_ComponentSum`, ast.jl) names what the sum it holds names, so a wrapper
+# over it distributes and simplifies it, which unwraps it (`_LinearWrapper` below).
+@inline _test_component_class(op::_ComponentSum) = _test_component_class(op.sum)
 @inline _test_component_class(::Any) = nothing
 
 @inline _trial_component_class(op::IndexedTrialFunction) = op.component_idx
@@ -180,6 +183,7 @@ end
         _trial_component_class(op.left_op), _trial_component_class(op.right_op)
     )
 end
+@inline _trial_component_class(op::_ComponentSum) = _trial_component_class(op.sum)
 @inline _trial_component_class(::Any) = nothing
 
 # Whether the router could route `a` and `b` as one opaque term. So a rewrite may hide
@@ -206,6 +210,10 @@ end
 # the sum of the `εₕ`/`divₕ`/`divₘₕ` builders, which carries its terms' component pairs in
 # its type (`_ComponentSum`, ast.jl), so that gate is answered by type
 # (`_scale_labelled_sum` below) with the tree literal indices give (gpena/Bramble.jl#939).
+# That covers a scalar directly over one builder (`μ * inner₊(εₕ(u), εₕ(v))`), sums of such
+# terms, and such a term plus a user's. A scale meeting the already distributed sum (`2 *
+# (μ * X)`, `-(μ * X)`, `μ * (X + Y)` over two builders) and an `Int` coefficient (#240)
+# take the value gate as before.
 # The gradient tuple's `inner₊(∇ₕ(u), ∇ₕ(v))` gets plain tuples and no pairs, so a captured
 # coefficient over it keeps this gate (concrete in 2D through constant propagation, a
 # `Union` in 3D).
