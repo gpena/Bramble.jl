@@ -42,7 +42,7 @@ using Bramble:
                jumpₓ,
                weights
 using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const, _x1, _x2,
-    _x1_plus_x2, _exp_x1, _sin_x1, _one_plus_x1
+                   _x1_plus_x2, _exp_x1, _sin_x1, _one_plus_x1
 
 # Assembling the right-hand side of a system.
 #

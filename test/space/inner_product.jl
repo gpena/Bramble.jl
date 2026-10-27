@@ -1141,7 +1141,8 @@ end
             # an element of a non-uniform (5, 5) mesh, on either side, is on another mesh
             # (#701); storage that is not one value per point of the mesh, on either side
             # or with equal lengths wrong for the mesh, is a size error
-            u5 = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5),
+            u5 = Rₕ(
+                gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5),
                     (false, true))), _Const(1.0))
             @test_throws ArgumentError inner_Γ(u5, one_h, :ymin)
             @test_throws ArgumentError inner_Γ(one_h, u5, :ymax)

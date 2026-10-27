@@ -27,7 +27,7 @@ using Bramble:
                Mₓ,
                jumpₓ
 using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS, _Const,
-    _one_plus_x1, _x1_lt_half
+                   _one_plus_x1, _x1_lt_half
 
 # The linear-form tests of restricted sums and scales: the refill allocation contract and the
 # scaled and nested cases. Split from linear.jl, whose single module took 0.95 GB of the
