@@ -300,7 +300,6 @@ end
 
 @inline _inner(w::AbstractInnerProduct, left::LazyOp, right::LazyOp, markers) = _restrict_by_markers(_product(w, left, right), markers)
 
-# Through `source_function`, which erases a plain function's type (ast/common.jl).
 @inline _as_source(l::Function, ::Val{D}) where {D} = source_function(l, Val(D))
 @inline _as_source(l::Number, ::Val{D}) where {D} = source_number(l, Val(D))
 # The VectorElement itself, not its `parent` storage: its space names the mesh it lives on,
@@ -309,20 +308,42 @@ end
 @inline _as_source(l::VectorElement, ::Val{D}) where {D} = SourceVector{D, typeof(l)}(l)
 @inline _as_source(d::DiracSource{D}, ::Val{D}) where {D} = d
 
-@inline function _linear_source(w::W, l, r::LazyOp{D}) where {W <: AbstractInnerProduct, D}
+# A plain function's type is erased (`_erased_source`, ast/common.jl) where `form` samples it
+# once: no `markers` restrict the term, and its test side is one leaf's (a scalar space's test
+# function, or a component of a composite one). Elsewhere the assembly calls it at every point,
+# so it keeps its type and the form infers.
+@inline _as_source(l, ::Val{D}, r, markers) where {D} = _as_source(l, Val(D))
+@inline _as_source(l::Function, ::Val{D}, r, ::Tuple{}) where {D} = _on_one_leaf(typeof(r)) ?
+                                                                     _erased_source(l, Val(D)) :
+                                                                     _as_source(l, Val(D))
+
+# Whether a test side of type `R` is read on one leaf: it holds a component (`v(i)`, an
+# `IndexedTestFunction`) or the test function of a one-leaf space. Decided from the type, so
+# `_as_source` above folds.
+# The generator, defined first: a generated body runs in the world its method was defined in.
+function _holds_one_leaf(T)
+    T isa DataType || return false
+    T <: IndexedTestFunction && return true
+    T <: TestFunction && return T.parameters[2] === 1
+    return T <: LazyOp && any(_holds_one_leaf, fieldtypes(T))
+end
+@generated _on_one_leaf(::Type{R}) where {R} = _holds_one_leaf(R)
+
+@inline function _linear_source(
+        w::W, l, r::LazyOp{D}, markers = ()) where {W <: AbstractInnerProduct, D}
     _check_direction(w, Val(D))
-    sf = _as_source(l, Val(D))
+    sf = _as_source(l, Val(D), r, markers)
     return LinearProduct{D, W, typeof(sf), typeof(r)}(w, sf, r)
 end
 
-@inline _inner_source(w::AbstractInnerProduct, l, r::LazyOp, markers) = _restrict_by_markers(_linear_source(w, l, r), markers)
+@inline _inner_source(w::AbstractInnerProduct, l, r::LazyOp, markers) = _restrict_by_markers(_linear_source(w, l, r, markers), markers)
 
 # One directional source term per dimension, summed, with the sum restricted once. `Val(D)`
 # is what keeps `dim` a compile-time literal, so `InnerPlus{dim}` stays a type instead of
 # becoming a runtime value -- the same reason `inner_plus` below builds its weights on `Val`.
 @inline function _inner_source_tuple(l, r::NTuple{D, LazyOp{D}}, markers) where {D}
     terms = ntuple(Val(D)) do dim
-        _linear_source(InnerPlus{dim}(), l[dim], r[dim])
+        _linear_source(InnerPlus{dim}(), l[dim], r[dim], markers)
     end
     return _restrict_by_markers(foldl(+, terms), markers)
 end
@@ -941,7 +962,7 @@ function inner₊(
         l::Union{Function, Number, VectorElement}, r::LazyOp{D};
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {D, N}
-    return inner₊(_as_source(l, Val(D)), r; markers = markers)
+    return inner₊(_as_source(l, Val(D), r, markers), r; markers = markers)
 end
 
 function inner₊(

@@ -667,15 +667,22 @@ Constructs a `TestFunction` of dimension `D` or for a specific grid `space`.
 @inline test_function(space::AbstractSpaceType) = TestFunction{dim(space), leaf_count(space)}()
 
 """
-    source_function(f, ::Val{D}) -> SourceFunction{D}
+    source_function(f, ::Val{D}) -> SourceFunction{D, typeof(f)}
 
-Constructs a `SourceFunction` wrapping function `f`. A function returning a `Float64` at a
-`Float64` point and a `Float32` at a `Float32` one is stored as a `Function`, so the form's
-AST does not carry its type (gpena/Bramble.jl#917); any other keeps `typeof(f)`.
+Constructs a `SourceFunction` wrapping function `f`.
 """
-@inline source_function(f, ::Val{D}) where {D} = _keeps_precision(f, Val(D)) ?
-                                                 SourceFunction{D, Function}(f) :
-                                                 SourceFunction{D, typeof(f)}(f)
+source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
+
+# The source a plain function passed to an inner product becomes when `form` samples it once
+# (`_as_source`, operators/inner.jl): a function returning a `Float64` at a `Float64` point and
+# a `Float32` at a `Float32` one is stored as a `Function`, so the form's AST does not carry
+# its type (gpena/Bramble.jl#917); any other keeps `typeof(f)`. Only there: a source the
+# assembly reads at every point (under `restrict_to`, a difference or an average, built with
+# `source_function` above; under `markers`; or in a composite term naming no component) keeps
+# its type, as the walk calls it, and a form holding it infers.
+@inline _erased_source(f, ::Val{D}) where {D} = _keeps_precision(f, Val(D)) ?
+                                                SourceFunction{D, Function}(f) :
+                                                SourceFunction{D, typeof(f)}(f)
 
 # Whether `f`'s value type is its point's, read off inference for the two element types a
 # backend holds, so the branch above folds. Erased, a source's lowered vector has the space's

@@ -1015,19 +1015,16 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             ast = Bramble.simplify_ast(Bramble.resolve_ast(raw))
             @test @inferred(Bramble._lower_sources_for_space(ast, Vt)) isa Bramble.LazyOp
         end
-        # The same for a source whose type `form` erases (#917): the term naming a component
-        # is sampled at a type known from the space. The one naming none is read at every
-        # assembly, so it gets its function's type back at `form` and infers no concrete
-        # type; it is checked for that type instead.
+        # The same for a source whose type `form` erases (#917), on the term naming a
+        # component, sampled at a type known from the space. The term naming none is read
+        # at every assembly, so it keeps its function's type from the start.
         erased = Bramble.simplify_ast(Bramble.resolve_ast(innerₕ(x -> 2 * x[1], vt(1))))
         @test erased.left_op isa Bramble.SourceFunction{2, Function}
         @test @inferred(Bramble._lower_sources_for_space(erased, Vt)).left_op isa
               Bramble.SourceVector{2, Vector{Float64}}
         shared = Bramble.simplify_ast(Bramble.resolve_ast(innerₕ(x -> 2 * x[1], vt)))
-        @test shared.left_op isa Bramble.SourceFunction{2, Function}
-        lowered = Bramble._lower_sources_for_space(shared, Vt)
-        @test !(lowered.left_op isa Bramble.SourceFunction{2, Function})
-        @test lowered.left_op.func === shared.left_op.func
+        @test !(shared.left_op isa Bramble.SourceFunction{2, Function})
+        @test @inferred(Bramble._lower_sources_for_space(shared, Vt)) === shared
 
         # while a valid one still works, so the guard is not simply rejecting everything
         @test sum(assemble(form(Vt, v -> innerₕ(1.0, v(2))))) ≈ 1.0

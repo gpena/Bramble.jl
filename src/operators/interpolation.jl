@@ -670,8 +670,8 @@ end
 @inline _fill_type(outside::Number) = typeof(outside)
 @inline _fill_type(::OutsidePolicy) = Union{}
 
-# Never erased by `source_function` (ast/common.jl): the methods below dispatch on its type.
-@inline source_function(f::GridInterpolant, ::Val{D}) where {D} = SourceFunction{
+# Never erased (`_erased_source`, ast/common.jl): the methods below dispatch on its type.
+@inline _erased_source(f::GridInterpolant, ::Val{D}) where {D} = SourceFunction{
     D, typeof(f)}(f)
 
 # Read at every fill instead of sampled once into a `SourceVector`:

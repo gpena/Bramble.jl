@@ -862,17 +862,21 @@ using Bramble:
         end
     end
 
-    # A plain function keeping its point's precision is stored as a `Function`, so a form
-    # built from a new closure compiles nothing before `_lower_sources` samples it.
+    # A plain function keeping its point's precision, passed to an inner product whose term
+    # `form` samples once, is stored as a `Function`: a form built from a new closure
+    # compiles nothing before `_lower_sources` samples it.
     @testset "Erased source type (#917)" begin
         Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 9, false))
+        t = Bramble.test_function(Wₕ)
         f1 = x -> x^2 + sin(3x)
         f2 = x -> 2x
+        erased(f, D = 1) = Bramble._erased_source(f, Val(D))
         @testset "erased at construction" begin
-            @test source_function(f1, Val(1)) isa SourceFunction{1, Function}
-            @test typeof(source_function(sin, Val(1))) === SourceFunction{1, Function}
-            @test source_function((x -> x[1] * x[2]), Val(2)) isa SourceFunction{2, Function}
-            t = Bramble.test_function(Wₕ)
+            @test erased(f1) isa SourceFunction{1, Function}
+            @test typeof(erased(sin)) === SourceFunction{1, Function}
+            @test erased(x -> x[1] * x[2], 2) isa SourceFunction{2, Function}
+            @test innerₕ(f1, t).left_op isa SourceFunction{1, Function}
+            @test inner₊(f1, D₋ₓ(t)).left_op isa SourceFunction{1, Function}
             ast(f) = Bramble.simplify_ast(Bramble.resolve_ast(innerₕ(f, t)))
             @test typeof(ast(f1)) === typeof(ast(f2))
             @test typeof(form(Wₕ, v -> innerₕ(f1, v))) === typeof(form(Wₕ, v -> innerₕ(f2, v)))
@@ -884,10 +888,10 @@ using Bramble:
             # `Float64`), a `Union` and a function that only throws
             for f in (x -> d * x, x -> x * im, x -> 1.0, x -> x > 0 ? 1.0 : 1,
                 x -> throw(DomainError(x)))
-                @test typeof(source_function(f, Val(1))) === SourceFunction{1, typeof(f)}
+                @test typeof(erased(f)) === SourceFunction{1, typeof(f)}
             end
             uₕ = Rₕ(Wₕ, x -> x)
-            @test πₕ(uₕ).func isa Bramble.GridInterpolant
+            @test erased(πₕ(uₕ).func) isa SourceFunction{1, <:Bramble.GridInterpolant}
             b = assemble(form(Wₕ, v -> innerₕ(x -> d * x, v)))
             @test eltype(b) == typeof(d)
         end
@@ -904,28 +908,47 @@ using Bramble:
             @test assemble(l32) == parent(Rₕ(W32, f2)) .* weights(W32, Innerh())
         end
 
-        # Read at every assembly, an unsampled source gets its type back at `form`.
-        @testset "unsampled: typed again" begin
-            l = form(Wₕ, v -> innerₕ(D₋ₓ(source_function(f2, Val(1))), v))
-            @test resolve_form_ast(l).left_op.inner_op isa SourceFunction{1, typeof(f2)}
-            r = form(Wₕ, v -> innerₕ(restrict_to(:boundary, source_function(f2, Val(1))), v))
-            @test resolve_form_ast(r).left_op.inner_op isa SourceFunction{1, typeof(f2)}
-            Vₕ = Wₕ^Val(2)
-            c = form(Vₕ, v -> innerₕ(f2, v))
-            @test resolve_form_ast(c).left_op isa SourceFunction{1, typeof(f2)}
+        # A source the assembly reads at every point keeps its type, so the form infers:
+        # under `markers`, `restrict_to`, a difference or an average, or in a composite term
+        # naming no component.
+        @testset "read per point: typed" begin
+            g(n, a) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * a)
             function refill_bytes(lf)
                 b = assemble(lf)
                 assemble!(b, lf)                  # warm up
                 return @allocated assemble!(b, lf)
             end
-            @test refill_bytes(l) == 0
-            @test refill_bytes(r) == 0
-            @test refill_bytes(c) == 0
+            for T in (Float64, Float32)
+                Ω = mesh(domain(interval(T(0), T(1)) × interval(T(0), T(1))), (9, 11),
+                    (false, false))
+                Bramble.change_points!(Ω, (T.(g(9, 1)), T.(g(11, 2))))
+                W = gridspace(Ω)
+                f = x -> x[1]^2 + x[2]
+                sf = source_function(f, Val(2))
+                @test sf isa SourceFunction{2, typeof(f)}
+                forms = (
+                    @inferred(form(W, v -> innerₕ(f, v; markers = (:boundary,)))),
+                    @inferred(form(W, v -> inner₊(f, D₋ₓ(v); markers = (:boundary,)))),
+                    # not inferred on main either: `restrict_to` with a label is not concrete
+                    form(W, v -> innerₕ(restrict_to(:boundary, sf), v)),
+                    @inferred(form(W, v -> innerₕ(D₋ₓ(sf), v))),
+                    @inferred(form(W, v -> innerₕ(Mₓ(3 * sf), v))),
+                    @inferred(form(W^Val(2), v -> innerₕ(f, v))))
+                for lf in forms
+                    @test !occursin("Function}", string(typeof(lf)))
+                    @test refill_bytes(lf) == 0
+                end
+                # the markers term holds the values of the unrestricted one on its region
+                b = assemble(forms[1])
+                full = assemble(form(W, v -> innerₕ(f, v)))
+                on = vec(Bramble.index_in_marker(Ω, :boundary))
+                @test b[on] == full[on] && all(iszero, b[.!on])
+            end
         end
 
         @testset "expression" begin
-            @test Bramble.expression(source_function(sin, Val(1))) == "sin"
-            @test Bramble.expression(source_function(f1, Val(1))) == "f"
+            @test Bramble.expression(erased(sin)) == "sin"
+            @test Bramble.expression(erased(f1)) == "f"
             @test Bramble.expression(πₕ(Rₕ(Wₕ, x -> x))) == "f"
         end
     end
