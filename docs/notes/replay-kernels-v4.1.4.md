@@ -285,3 +285,75 @@ What the table says:
      the hot loop. Dropping `mesh_markers`, `lin_indices` or `region` merges 0 of its 382
      concrete instances, and `sp` merges 23. The 42 form-added instances follow the (sink,
      term) pairs the loop is specialised on.
+
+## Step 3 measured
+
+Answers #916 "each tried change measured". There are two trees, detached checkouts of the
+branch. The base is `f674c310` (before S5.1) and change 1 is `5a23aea1` (S5.1 alone, the
+per-term-type layers of the scalar-sum replay kernels deleted and the summands handed
+straight to the unit).
+`benchmark/snoop_instances.jl` ran three launches per tree, one launch per call,
+interleaved base, change 1, base, ... with `--threads 4`, default `-O`, the machine alone
+on AC with OneDrive paused (1-minute load 1.7 to 2.5), rows `scalar_multiterm`,
+`elasticity` and `sum40`. Medians of the three launches; the spread is max minus min over
+them. Raw launches, loads and counts: `benchmark/results/v4.1.4_replay_step3.toml`.
+
+| row | tree | instances | first `assemble` (s) | spread | warm `assemble` | spread |
+|---|---|---:|---:|---:|---:|---:|
+| `scalar_multiterm` | base | 192 | 0.3501 | 0.0190 | 1.375 µs | 0.17 µs |
+| `scalar_multiterm` | change 1 | 188 | 0.3527 | 0.0078 | 1.209 µs | 0.001 µs |
+| `elasticity` | base | 3719 | 16.457 | 0.064 | 167.9 µs | 2.1 µs |
+| `elasticity` | change 1 | 3719 | 16.552 | 0.240 | 168.0 µs | 4.7 µs |
+| `sum40` | base | 448 | 0.6770 | 0.0093 | 47.81 µs | 0.06 µs |
+| `sum40` | change 1 | 448 | 0.7134 | 0.0098 | 42.29 µs | 0.15 µs |
+
+`instances` are the Bramble method instances the first `form` and `assemble` infer in the
+process, the same count in all three launches. Only `elasticity` and `scalar_multiterm`
+gate the first-call rule; only `elasticity` (base warm time 168 µs, at or above 50 µs)
+gates the warm clause. The warm times of `scalar_multiterm` (1.2 µs) and `sum40` (48 µs)
+are reported and never gated: rows this short move 8 to 19% with code placement alone.
+
+Per kernel, one fresh process per tree and row, after one `form` and `assemble`, every
+method of the kernel through `Base.specializations`. Each cell is all instances, then the
+ones with native code (`all/compiled`).
+
+| kernel | elasticity base | elasticity change 1 | scalar base | scalar change 1 |
+|---|---:|---:|---:|---:|
+| `_foreach_summand_unit` | 162/154 | 38/34 | 165/157 | 39/35 |
+| `_foreach_block_unit` | 53/21 | 53/21 | 40/8 | 40/8 |
+| `_replay_summands!` | 172/164 | 51/35 | 175/167 | 52/36 |
+| `_replay_blocks!` | 27/21 | 27/21 | 14/8 | 14/8 |
+| `_replay_pair!` | 0/0 | 0/0 | 0/0 | 0/0 |
+| `_foreach_pair_block_unit` | 9/9 | 9/9 | 0/0 | 0/0 |
+| `_replay_pair_blocks!` | 9/9 | 9/9 | 0/0 | 0/0 |
+| `_replay_unit!` | 145/5 | 161/5 | 135/5 | 151/5 |
+| `_replay_pair_unit!` | 9/0 | 9/0 | 0/0 | 0/0 |
+| `_visit_guarded_region!` | 360/336 | 366/336 | 322/298 | 328/298 |
+
+Over all methods, `_foreach_summand_unit` falls from 162 to 38 instances (elasticity) and
+165 to 39 (scalar), `_replay_summands!` from 172 to 51 and 175 to 52; compiled, from 154 to
+34 and 157 to 35, and 164 to 35 and 167 to 36. The `_replay_unit!` compiled count stays at 5
+in both trees; its inferred-only instances rise by 16 (145 to 161, 135 to 151), the
+callee now inferred from the unit's caller. The kernels the change does not touch keep
+their counts. These counts are in the process, the image included: the first `assemble`
+infers 4 fewer Bramble instances on `scalar_multiterm` (192 to 188) and none fewer on
+`elasticity` (3719 both), whose composite space takes the block path.
+
+Verdict. The first-call `assemble` median of change 1 is not below the base's on
+`scalar_multiterm` (0.3527 s against 0.3501 s, +2.7 ms, spreads 0.0078 and 0.0190 s) nor
+on `elasticity` (16.552 s against 16.457 s, +95 ms, spreads 0.240 and 0.064 s): the head is
+higher on both, inside the spreads, so no gain is shown and the criterion cannot be decided
+beyond the spread. Under the undecided clause the change is kept only if the instances fall
+and the rest of the rule holds; the instances fall on `scalar_multiterm` (192 to 188) and
+do not on `elasticity` (3719), so the clause does not keep it. The warm clause holds on
+`elasticity` (167.9 against 168.0 µs, inside the spread). Change 1 is **reverted**:
+`bilinear_execution.jl` is back to `f674c310`. `sum40` (not gated) shows a first `assemble`
+of 0.7134 s against 0.6770 s, +5.4%, beyond both spreads; its warm time falls from 47.81 to
+42.29 µs, reported only.
+
+Rejected before timing, recorded for #916: S5.1's first attempt (`@nospecialize` on the
+term of `_foreach_summand_unit`, `c3d64b2f`, reverted at `c34e7d05`) failed the quality
+group's zero-dispatch pins (`jet.jl:57`, `alloccheck.jl:261`), and three variants of the
+`_replay_summands!` term method (all `@nospecialize(term)`; the body calling `_replay_unit!`,
+the serial branch calling `_replay_segment!` directly, an extra barrier passing `segments`
+and `next`) broke the 0 B warm `assemble!` pins (432 to 624 B), so none was committed.

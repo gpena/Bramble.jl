@@ -1,0 +1,259 @@
+# #916 step 3 (S5.3): S5.1's change measured against its base. Written by hand from six
+# runs of benchmark/snoop_instances.jl (--launches 1 each, interleaved base/head, --threads 4,
+# default -O), medians of 3 launches; spread = max - min over the launches. Counts from one
+# fresh process per tree and row (Base.specializations over all methods): `kernels` tables.
+
+[verdict]
+change1 = "reverted"
+rule = "first-call assemble below the base by more than both spreads on scalar_multiterm and elasticity: not met (head higher on both, inside the spreads); instances fall on scalar_multiterm (192 to 188) and not on elasticity (3719 both); warm elasticity within the spread"
+commit_base = "f674c310"
+commit_change1 = "5a23aea1"
+launches = 3
+threads = 4
+
+[scalar_multiterm.base]
+instances = 192
+first_assemble_s = 0.35006675
+first_assemble_spread_s = 0.0189808
+first_form_s = 0.027816583
+first_form_spread_s = 0.000839875
+first_inference_s = 0.458949327
+first_inference_spread_s = 0.0775148
+warm_assemble_s = 1.375e-06
+warm_assemble_spread_s = 1.67e-07
+first_assemble_launches_s = [0.340023833, 0.359004667, 0.35006675]
+warm_assemble_launches_s = [1.5e-06, 1.333e-06, 1.375e-06]
+load_1min = [1.66, 2.34, 2.35]
+
+[scalar_multiterm.change1]
+instances = 188
+first_assemble_s = 0.352681791
+first_assemble_spread_s = 0.00780071
+first_form_s = 0.027821167
+first_form_spread_s = 0.00218296
+first_inference_s = 0.462504506
+first_inference_spread_s = 0.011256
+warm_assemble_s = 1.2085e-06
+warm_assemble_spread_s = 5e-10
+first_assemble_launches_s = [0.353554542, 0.345753834, 0.352681791]
+warm_assemble_launches_s = [1.208e-06, 1.2085e-06, 1.2085e-06]
+load_1min = [1.8, 2.01, 2.51]
+
+[elasticity.base]
+instances = 3719
+first_assemble_s = 16.4573057
+first_assemble_spread_s = 0.0640855
+first_form_s = 4.49815121
+first_form_spread_s = 0.0683225
+first_inference_s = 21.9912705
+first_inference_spread_s = 0.243514
+warm_assemble_s = 0.000167896
+warm_assemble_spread_s = 2.0625e-06
+first_assemble_launches_s = [16.4917636, 16.4276781, 16.4573057]
+warm_assemble_launches_s = [0.00016975, 0.000167896, 0.000167688]
+load_1min = [1.66, 2.34, 2.35]
+
+[elasticity.change1]
+instances = 3719
+first_assemble_s = 16.5516455
+first_assemble_spread_s = 0.240346
+first_form_s = 4.61504829
+first_form_spread_s = 0.153535
+first_inference_s = 22.0060738
+first_inference_spread_s = 0.264275
+warm_assemble_s = 0.0001679585
+warm_assemble_spread_s = 4.666e-06
+first_assemble_launches_s = [16.6340975, 16.5516455, 16.3937518]
+warm_assemble_launches_s = [0.000167354, 0.000172021, 0.000167959]
+load_1min = [1.8, 2.01, 2.51]
+
+[sum40.base]
+instances = 448
+first_assemble_s = 0.677037792
+first_assemble_spread_s = 0.00933721
+first_form_s = 0.242292375
+first_form_spread_s = 0.0120073
+first_inference_s = 1.02278936
+first_inference_spread_s = 0.0616589
+warm_assemble_s = 4.78125e-05
+warm_assemble_spread_s = 6.25e-08
+first_assemble_launches_s = [0.678478667, 0.669141458, 0.677037792]
+warm_assemble_launches_s = [4.78335e-05, 4.78125e-05, 4.7771e-05]
+load_1min = [1.66, 2.34, 2.35]
+
+[sum40.change1]
+instances = 448
+first_assemble_s = 0.713411709
+first_assemble_spread_s = 0.00982058
+first_form_s = 0.246827916
+first_form_spread_s = 0.0153458
+first_inference_s = 1.01481766
+first_inference_spread_s = 0.0606287
+warm_assemble_s = 4.2292e-05
+warm_assemble_spread_s = 1.45e-07
+first_assemble_launches_s = [0.714255583, 0.713411709, 0.704435]
+warm_assemble_launches_s = [4.2292e-05, 4.22505e-05, 4.23955e-05]
+load_1min = [1.8, 2.01, 2.51]
+
+# Base.specializations over all methods of each kernel after one form and assemble in a
+# fresh process: `all` = instances, `compiled` = those with native code.
+
+[kernels.scalar_multiterm.base."_foreach_summand_unit"]
+all = 165
+compiled = 157
+
+[kernels.scalar_multiterm.change1."_foreach_summand_unit"]
+all = 39
+compiled = 35
+
+[kernels.scalar_multiterm.base."_foreach_block_unit"]
+all = 40
+compiled = 8
+
+[kernels.scalar_multiterm.change1."_foreach_block_unit"]
+all = 40
+compiled = 8
+
+[kernels.scalar_multiterm.base."_replay_summands!"]
+all = 175
+compiled = 167
+
+[kernels.scalar_multiterm.change1."_replay_summands!"]
+all = 52
+compiled = 36
+
+[kernels.scalar_multiterm.base."_replay_blocks!"]
+all = 14
+compiled = 8
+
+[kernels.scalar_multiterm.change1."_replay_blocks!"]
+all = 14
+compiled = 8
+
+[kernels.scalar_multiterm.base."_replay_pair!"]
+all = 0
+compiled = 0
+
+[kernels.scalar_multiterm.change1."_replay_pair!"]
+all = 0
+compiled = 0
+
+[kernels.scalar_multiterm.base."_foreach_pair_block_unit"]
+all = 0
+compiled = 0
+
+[kernels.scalar_multiterm.change1."_foreach_pair_block_unit"]
+all = 0
+compiled = 0
+
+[kernels.scalar_multiterm.base."_replay_pair_blocks!"]
+all = 0
+compiled = 0
+
+[kernels.scalar_multiterm.change1."_replay_pair_blocks!"]
+all = 0
+compiled = 0
+
+[kernels.scalar_multiterm.base."_replay_unit!"]
+all = 135
+compiled = 5
+
+[kernels.scalar_multiterm.change1."_replay_unit!"]
+all = 151
+compiled = 5
+
+[kernels.scalar_multiterm.base."_replay_pair_unit!"]
+all = 0
+compiled = 0
+
+[kernels.scalar_multiterm.change1."_replay_pair_unit!"]
+all = 0
+compiled = 0
+
+[kernels.scalar_multiterm.base."_visit_guarded_region!"]
+all = 322
+compiled = 298
+
+[kernels.scalar_multiterm.change1."_visit_guarded_region!"]
+all = 328
+compiled = 298
+
+[kernels.elasticity.base."_foreach_summand_unit"]
+all = 162
+compiled = 154
+
+[kernels.elasticity.change1."_foreach_summand_unit"]
+all = 38
+compiled = 34
+
+[kernels.elasticity.base."_foreach_block_unit"]
+all = 53
+compiled = 21
+
+[kernels.elasticity.change1."_foreach_block_unit"]
+all = 53
+compiled = 21
+
+[kernels.elasticity.base."_replay_summands!"]
+all = 172
+compiled = 164
+
+[kernels.elasticity.change1."_replay_summands!"]
+all = 51
+compiled = 35
+
+[kernels.elasticity.base."_replay_blocks!"]
+all = 27
+compiled = 21
+
+[kernels.elasticity.change1."_replay_blocks!"]
+all = 27
+compiled = 21
+
+[kernels.elasticity.base."_replay_pair!"]
+all = 0
+compiled = 0
+
+[kernels.elasticity.change1."_replay_pair!"]
+all = 0
+compiled = 0
+
+[kernels.elasticity.base."_foreach_pair_block_unit"]
+all = 9
+compiled = 9
+
+[kernels.elasticity.change1."_foreach_pair_block_unit"]
+all = 9
+compiled = 9
+
+[kernels.elasticity.base."_replay_pair_blocks!"]
+all = 9
+compiled = 9
+
+[kernels.elasticity.change1."_replay_pair_blocks!"]
+all = 9
+compiled = 9
+
+[kernels.elasticity.base."_replay_unit!"]
+all = 145
+compiled = 5
+
+[kernels.elasticity.change1."_replay_unit!"]
+all = 161
+compiled = 5
+
+[kernels.elasticity.base."_replay_pair_unit!"]
+all = 9
+compiled = 0
+
+[kernels.elasticity.change1."_replay_pair_unit!"]
+all = 9
+compiled = 0
+
+[kernels.elasticity.base."_visit_guarded_region!"]
+all = 360
+compiled = 336
+
+[kernels.elasticity.change1."_visit_guarded_region!"]
+all = 366
+compiled = 336
