@@ -862,6 +862,74 @@ using Bramble:
         end
     end
 
+    # A plain function keeping its point's precision is stored as a `Function`, so a form
+    # built from a new closure compiles nothing before `_lower_sources` samples it.
+    @testset "Erased source type (#917)" begin
+        Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 9, false))
+        f1 = x -> x^2 + sin(3x)
+        f2 = x -> 2x
+        @testset "erased at construction" begin
+            @test source_function(f1, Val(1)) isa SourceFunction{1, Function}
+            @test typeof(source_function(sin, Val(1))) === SourceFunction{1, Function}
+            @test source_function((x -> x[1] * x[2]), Val(2)) isa SourceFunction{2, Function}
+            t = Bramble.test_function(Wₕ)
+            ast(f) = Bramble.simplify_ast(Bramble.resolve_ast(innerₕ(f, t)))
+            @test typeof(ast(f1)) === typeof(ast(f2))
+            @test typeof(form(Wₕ, v -> innerₕ(f1, v))) === typeof(form(Wₕ, v -> innerₕ(f2, v)))
+        end
+
+        @testset "typed: value type not the point's" begin
+            d = ForwardDiff.Dual{:t}(1.0, 1.0)
+            # a `Dual`, a complex, a `Float64` constant (a `Float32` point gives a
+            # `Float64`), a `Union` and a function that only throws
+            for f in (x -> d * x, x -> x * im, x -> 1.0, x -> x > 0 ? 1.0 : 1,
+                x -> throw(DomainError(x)))
+                @test typeof(source_function(f, Val(1))) === SourceFunction{1, typeof(f)}
+            end
+            uₕ = Rₕ(Wₕ, x -> x)
+            @test πₕ(uₕ).func isa Bramble.GridInterpolant
+            b = assemble(form(Wₕ, v -> innerₕ(x -> d * x, v)))
+            @test eltype(b) == typeof(d)
+        end
+
+        @testset "lowered bits and type" begin
+            w = weights(Wₕ, Innerh())
+            l = form(Wₕ, v -> innerₕ(f1, v))
+            @test resolve_form_ast(l).left_op isa SourceVector{1, Vector{Float64}}
+            @test assemble(l) == parent(Rₕ(Wₕ, f1)) .* w
+            # a `Float32` mesh lowers to its own type, inferred
+            W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 9, false))
+            l32 = @inferred form(W32, v -> innerₕ(f2, v))
+            @test resolve_form_ast(l32).left_op isa SourceVector{1, Vector{Float32}}
+            @test assemble(l32) == parent(Rₕ(W32, f2)) .* weights(W32, Innerh())
+        end
+
+        # Read at every assembly, an unsampled source gets its type back at `form`.
+        @testset "unsampled: typed again" begin
+            l = form(Wₕ, v -> innerₕ(D₋ₓ(source_function(f2, Val(1))), v))
+            @test resolve_form_ast(l).left_op.inner_op isa SourceFunction{1, typeof(f2)}
+            r = form(Wₕ, v -> innerₕ(restrict_to(:boundary, source_function(f2, Val(1))), v))
+            @test resolve_form_ast(r).left_op.inner_op isa SourceFunction{1, typeof(f2)}
+            Vₕ = Wₕ^Val(2)
+            c = form(Vₕ, v -> innerₕ(f2, v))
+            @test resolve_form_ast(c).left_op isa SourceFunction{1, typeof(f2)}
+            function refill_bytes(lf)
+                b = assemble(lf)
+                assemble!(b, lf)                  # warm up
+                return @allocated assemble!(b, lf)
+            end
+            @test refill_bytes(l) == 0
+            @test refill_bytes(r) == 0
+            @test refill_bytes(c) == 0
+        end
+
+        @testset "expression" begin
+            @test Bramble.expression(source_function(sin, Val(1))) == "sin"
+            @test Bramble.expression(source_function(f1, Val(1))) == "f"
+            @test Bramble.expression(πₕ(Rₕ(Wₕ, x -> x))) == "f"
+        end
+    end
+
     @testset "Function * VectorElement (#197)" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
         Wₕ = gridspace(Ωₕ)

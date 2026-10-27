@@ -262,7 +262,7 @@ end
 
 function _lower_sources_over_leaves(term::TERM, leaves) where {TERM}
     target = _routed_target(term, length(leaves))
-    target === nothing && return term
+    target === nothing && return _specialised_sources(term)
     return _at_leaf(leaf -> _lower_term(term, first(leaf)), leaves, target)
 end
 
@@ -270,7 +270,27 @@ end
 # sources typed against the same leaf. Host spaces only: the probe reads a point and a
 # source value one at a time, a scalar read a device array refuses.
 _lower_term(term, sp) = _typed_restrictions(
-    locality(backend(sp)), _lower_sources(term, sp), sp)
+    locality(backend(sp)), _specialised_sources(_lower_sources(term, sp)), sp)
+
+# An erased source (`source_function`, ast/common.jl) that `_lower_sources` leaves unsampled
+# (under a restriction, a difference or an average, or in a composite term naming no
+# component) is called at every point of every assembly, so it gets its type back here, at
+# `form`: the walk calls it as it calls any other source, with no dispatch per point. A form
+# holding one infers no concrete type; one without is returned as it was.
+_specialised_sources(op) = op
+_specialised_sources(op::SourceFunction{D, Function}) where {D} = _specialised(op)
+function _specialised_sources(op::OperatorAdd)
+    left = _specialised_sources(op.left_op)
+    right = _specialised_sources(op.right_op)
+    return left === op.left_op && right === op.right_op ? op : OperatorAdd(left, right)
+end
+function _specialised_sources(op::LinearProduct{D, W}) where {D, W}
+    left = _specialised_sources(op.left_op)
+    return left === op.left_op ? op :
+           LinearProduct{D, W, typeof(left), typeof(op.right_op)}(op.inner, left, op.right_op)
+end
+_specialised_sources(op::UnaryWrapper) = _rewrap_inner(
+    op, _specialised_sources(op.inner_op))
 function _typed_restrictions(::HostLocality, op, sp)
     _any_restriction(op) || return op
     return _typed_restrictions(op, sp, trues(length(indices(mesh(sp)))))

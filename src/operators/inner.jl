@@ -300,7 +300,8 @@ end
 
 @inline _inner(w::AbstractInnerProduct, left::LazyOp, right::LazyOp, markers) = _restrict_by_markers(_product(w, left, right), markers)
 
-@inline _as_source(l::Function, ::Val{D}) where {D} = SourceFunction{D, typeof(l)}(l)
+# Through `source_function`, which erases a plain function's type (ast/common.jl).
+@inline _as_source(l::Function, ::Val{D}) where {D} = source_function(l, Val(D))
 @inline _as_source(l::Number, ::Val{D}) where {D} = source_number(l, Val(D))
 # The VectorElement itself, not its `parent` storage: its space names the mesh it lives on,
 # which `form` checks against the leaf it is read on (`_check_source_meshes`,

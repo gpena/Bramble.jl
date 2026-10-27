@@ -670,6 +670,10 @@ end
 @inline _fill_type(outside::Number) = typeof(outside)
 @inline _fill_type(::OutsidePolicy) = Union{}
 
+# Never erased by `source_function` (ast/common.jl): the methods below dispatch on its type.
+@inline source_function(f::GridInterpolant, ::Val{D}) where {D} = SourceFunction{
+    D, typeof(f)}(f)
+
 # Read at every fill instead of sampled once into a `SourceVector`:
 # sampling would keep `uₕ`'s old values after `uₕ .= ...`, and never see its mesh move.
 @inline _lower_sources(op::SourceFunction{D, <:GridInterpolant}, space) where {D} = op
