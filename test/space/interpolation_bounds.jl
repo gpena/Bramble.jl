@@ -4,6 +4,7 @@ using Test
 using Bramble
 using Bramble: interpolation_matrix, locate_cell, weights
 using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
+using ..TestUtils: _Const, _x1, _x1_plus_x2, _x1_squared, _x1_times_x2
 
 # `interpolate_at` used to extrapolate silently past the mesh boundary: `locate_cell`
 # clamps which *cell* is read, but the fraction within it was never clamped, so a point
@@ -17,7 +18,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
     @testset "Default :error names point and extent" begin
         @testset "1D" begin
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
-            uₕ = Rₕ(gridspace(Ωₕ), x -> x[1]^2)
+            uₕ = Rₕ(gridspace(Ωₕ), _x1_squared)
             err = @test_throws ArgumentError interpolate_at(uₕ, 5.0)
             msg = sprint(showerror, err.value)
             @test occursin("5.0", msg)
@@ -27,7 +28,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
 
         @testset "2D" begin
             Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (6, 6), (true, true))
-            uₕ = Rₕ(gridspace(Ωₕ), x -> x[1] + x[2])
+            uₕ = Rₕ(gridspace(Ωₕ), _x1_plus_x2)
             @test_throws ArgumentError interpolate_at(uₕ, (5.0, 0.5))   # x out, y in
             @test_throws ArgumentError interpolate_at(uₕ, (0.5, -2.0)) # x in, y out
         end
@@ -85,7 +86,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
     # A floating-point epsilon past the boundary is on it, under every policy.
     @testset "Epsilon past the boundary is inside" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
-        uₕ = Rₕ(gridspace(Ωₕ), x -> x[1]^2)
+        uₕ = Rₕ(gridspace(Ωₕ), _x1_squared)
         x_ulp = nextfloat(1.0)   # 1.0, up by one ULP -- not a value a caller chose on purpose
 
         @test interpolate_at(uₕ, x_ulp) ≈ interpolate_at(uₕ, 1.0)          # :error: no throw
@@ -160,7 +161,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
     # It must be one of `:error`, `:clamp`, `:extrapolate`, or a Number.
     @testset "outside rejects unknown values" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
-        uₕ = Rₕ(gridspace(Ωₕ), x -> x[1])
+        uₕ = Rₕ(gridspace(Ωₕ), _x1)
         @test_throws ArgumentError interpolate_at(uₕ, 0.5; outside = :bogus)
         @test_throws ArgumentError interpolate_at(uₕ, 0.5; outside = "clamp")
     end
@@ -210,7 +211,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
         signs = (-1, 1)
 
         @testset "1D" begin
-            u = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0)), 11, true)), x -> 1.0)
+            u = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0)), 11, true)), _Const(1.0))
             for s in signs
                 @test far(u, s * 1e20) == 1.0
             end
@@ -219,7 +220,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
         @testset "2D, uniform and non-uniform" begin
             dom = domain(box((0.0, 0.0), (1.0, 1.0)))
             for unif in ((true, true), (false, false))
-                u = Rₕ(gridspace(mesh(dom, (11, 65), unif)), x -> 1.0)
+                u = Rₕ(gridspace(mesh(dom, (11, 65), unif)), _Const(1.0))
                 for s1 in signs, s2 in signs
 
                     @test far(u, (s1 * 1e20, s2 * 1e20)) == 1.0
@@ -231,7 +232,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
         # 3D only: built in `slow` and by the nightly run (gpena/Bramble.jl#650).
         WITH_3D_TESTS && @testset "3D" begin
             dom = domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)))
-            u = Rₕ(gridspace(mesh(dom, (5, 5, 5), (true, true, true))), x -> 1.0)
+            u = Rₕ(gridspace(mesh(dom, (5, 5, 5), (true, true, true))), _Const(1.0))
             for s1 in signs, s2 in signs, s3 in signs
                 @test far(u, (s1 * 1e20, s2 * 1e20, s3 * 1e20)) == 1.0
             end
@@ -241,7 +242,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
 
         @testset "Float32, moderately far" begin
             dom = domain(box((0.0f0, 0.0f0), (1.0f0, 1.0f0)))
-            u = Rₕ(gridspace(mesh(dom, (11, 11), (true, true))), x -> 1.0f0)
+            u = Rₕ(gridspace(mesh(dom, (11, 11), (true, true))), _Const(1.0f0))
             # t ≈ 1e5 per axis: the weights' rounding was ~1e3 times the constant
             @test far(u, (1.0f4, -1.0f4)) === 1.0f0
         end
@@ -314,20 +315,20 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
 
     @testset "In-domain path allocates nothing, infers" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 101, true)
-        uₕ = Rₕ(gridspace(Ωₕ), x -> x[1]^2)
+        uₕ = Rₕ(gridspace(Ωₕ), _x1_squared)
         x0 = 0.55
         @test_allocs interpolate_at(uₕ, x0)
         @test alloc_test(interpolate_at, uₕ, x0; outside = :clamp) == 0
 
         Ω2 = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (11, 11), (true, true))
-        u2 = Rₕ(gridspace(Ω2), x -> x[1] * x[2])
+        u2 = Rₕ(gridspace(Ω2), _x1_times_x2)
         @test_allocs interpolate_at(u2, (0.3, 0.7))
         @test alloc_test(interpolate_at, uₕ, 1e20; outside = :extrapolate) == 0
         @test alloc_test(interpolate_at, u2, (1e20, -1e20); outside = :extrapolate) == 0
         # The 3D mesh is built in `slow` and by the nightly run (gpena/Bramble.jl#650).
         if WITH_3D_TESTS
             Ω3 = mesh(domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (5, 5, 5), (true, true, true))
-            u3 = Rₕ(gridspace(Ω3), x -> x[1] * x[2])
+            u3 = Rₕ(gridspace(Ω3), _x1_times_x2)
             @test alloc_test(interpolate_at, u3, (1e20, 0.5, -1e20); outside = :extrapolate) == 0
             @test @inferred(interpolate_at(u3, (1e20, 0.5, -1e20); outside = :extrapolate)) isa
                   Float64

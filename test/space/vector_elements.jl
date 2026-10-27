@@ -12,6 +12,7 @@ using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
 using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
+using ..TestUtils: _Const, _sin_x1, _x1, _x1_squared, _x2
 
 _idx_read2(u, i, j) = u[CartesianIndex(i, j)]
 _idx_read2_inb(u, i, j) = @inbounds u[CartesianIndex(i, j)]
@@ -579,12 +580,12 @@ end
         @test all(==(25.0), mats[2])
 
         # Multi-component Rₕ
-        Rₕ!(u_vec, (x -> x[1], x -> x[2]))
+        Rₕ!(u_vec, (_x1, _x2))
         @test mats[1][1, 1] ≈ m[1, 1][1]
         @test mats[2][1, 1] ≈ m[1, 1][2]
 
         # Multi-component avgₕ
-        u_avg = avgₕ(V, (x -> 2.0, x -> 5.0))
+        u_avg = avgₕ(V, (_Const(2.0), _Const(5.0)))
         mats_avg = reshape(u_avg)
         @test mats_avg[1][2, 2] ≈ 2.0
         @test mats_avg[2][2, 2] ≈ 5.0
@@ -809,25 +810,25 @@ end
         # Restriction and cell-averaging, one function per leaf: independent of shared
         # structure, so this exercises the heterogeneous nesting directly.
         r1 = element(Wn)
-        Rₕ!(r1, (x -> 1.0, x -> 2.0, x -> 3.0))
+        Rₕ!(r1, (_Const(1.0), _Const(2.0), _Const(3.0)))
         @test parent(r1(1)) == fill(1.0, 5)
         @test parent(r1(3)) == fill(3.0, 9)
 
         # Two functions match the child count but not the leaf count (#506).
-        @test_throws DimensionMismatch Rₕ!(element(Wn), (x -> 1.0, x -> 2.0))
-        @test_throws DimensionMismatch avgₕ!(element(Wn), (x -> 1.0, x -> 2.0))
+        @test_throws DimensionMismatch Rₕ!(element(Wn), (_Const(1.0), _Const(2.0)))
+        @test_throws DimensionMismatch avgₕ!(element(Wn), (_Const(1.0), _Const(2.0)))
 
         a1 = element(Wn)
-        avgₕ!(a1, (x -> 1.0, x -> 2.0, x -> 3.0))
+        avgₕ!(a1, (_Const(1.0), _Const(2.0), _Const(3.0)))
         @test all(≈(1.0), parent(a1(1)))
         @test all(≈(3.0), parent(a1(3)))
 
         # Masked, one function per leaf, on the heterogeneous nesting.
         r3 = element(Wn)
-        Rₕ!(r3, (x -> 10.0, x -> 20.0, x -> 30.0); markers = (:boundary,))
+        Rₕ!(r3, (_Const(10.0), _Const(20.0), _Const(30.0)); markers = (:boundary,))
         @test parent(r3(1)) == [10.0, 0.0, 0.0, 0.0, 10.0]
         a3 = element(Wn)
-        avgₕ!(a3, (x -> 10.0, x -> 20.0, x -> 30.0); markers = (:boundary,))
+        avgₕ!(a3, (_Const(10.0), _Const(20.0), _Const(30.0)); markers = (:boundary,))
         @test a3(1).data[1] ≈ 10.0 && a3(1).data[end] ≈ 10.0
         @test all(iszero, a3(1).data[2:(end - 1)])
 
@@ -837,13 +838,13 @@ end
         Wn2 = (W9 × W9) × W9
         r4 = element(Wn2)
         r5 = element(Wn2)
-        Rₕ!(r4, (x -> 1.0, x -> 2.0, x -> 3.0))
+        Rₕ!(r4, (_Const(1.0), _Const(2.0), _Const(3.0)))
         Rₕ!(r5, x -> (1.0, 2.0, 3.0))
         @test parent(r4) == parent(r5)
 
         a4 = element(Wn2)
         a5 = element(Wn2)
-        avgₕ!(a4, (x -> 1.0, x -> 2.0, x -> 3.0))
+        avgₕ!(a4, (_Const(1.0), _Const(2.0), _Const(3.0)))
         avgₕ!(a5, x -> (1.0, 2.0, 3.0))
         @test parent(a4) ≈ parent(a5)
 
@@ -853,7 +854,7 @@ end
         # dispatch to at all -- this failed outright before the fix, rather than computing
         # a wrong answer.
         un2 = element(Wn2, 0.0)
-        Rₕ!(un2, (x -> sin(x[1]), x -> cos(x[1]), x -> x[1]^2))
+        Rₕ!(un2, (_sin_x1, x -> cos(x[1]), _x1_squared))
         Dn2 = D₋ₓ(un2)
         @test parent(Dn2(1)) == parent(D₋ₓ(un2(1)))
         @test parent(Dn2(2)) == parent(D₋ₓ(un2(2)))
@@ -914,8 +915,8 @@ end
         # heterogeneous `Wn`: innerₕ asks only that each pair of leaves share a mesh (#701).
         u_const = element(Wn)
         v_ones = element(Wn)
-        Rₕ!(u_const, (x -> 1.0, x -> 2.0, x -> 3.0))
-        Rₕ!(v_ones, (x -> 1.0, x -> 1.0, x -> 1.0))
+        Rₕ!(u_const, (_Const(1.0), _Const(2.0), _Const(3.0)))
+        Rₕ!(v_ones, (_Const(1.0), _Const(1.0), _Const(1.0)))
         @test innerₕ(u_const, v_ones) ≈ 6.0
 
         # The leaf-count mismatch check has to compare leaf counts, not the space's own
@@ -962,7 +963,7 @@ end
     @testset "One-tuple functions" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
         W = gridspace(Ωₕ)
-        f = x -> 2.0
+        f = _Const(2.0)
 
         u1 = element(W)
         u2 = element(W)
@@ -983,8 +984,8 @@ end
         V = W^Val(2)
         u = element(W)
         uv = element(V)
-        f = x -> 1.0
-        ft = (x -> 1.0, x -> 2.0)
+        f = _Const(1.0)
+        ft = (_Const(1.0), _Const(2.0))
         fv = x -> (1.0, 2.0)
 
         @test Rₕ!(u, f) === u
@@ -1013,20 +1014,20 @@ end
         @test index_in_marker(Ωₕ, :left) == Bool[1, 0, 0, 0, 0, 0]
 
         u = element(W)
-        Rₕ!(u, x -> 1.0; markers = (:left,))
+        Rₕ!(u, _Const(1.0); markers = (:left,))
         @test parent(u) == [1.0, 0, 0, 0, 0, 0]
 
         # several markers act as a union
-        Rₕ!(u, x -> 1.0; markers = (:left, :right))
+        Rₕ!(u, _Const(1.0); markers = (:left, :right))
         @test parent(u) == [1.0, 0, 0, 0, 0, 1.0]
 
         # avgₕ takes the same keyword
         v = element(W)
-        avgₕ!(v, x -> 1.0; markers = (:right,))
+        avgₕ!(v, _Const(1.0); markers = (:right,))
         @test parent(v)[1:5] == zeros(5)
         @test parent(v)[6] ≈ 1.0
 
-        w = avgₕ(W, x -> 1.0; markers = (:left,))
+        w = avgₕ(W, _Const(1.0); markers = (:left,))
         @test w[1] ≈ 1.0
         @test parent(w)[2:6] == zeros(5)
     end
@@ -1199,7 +1200,7 @@ end
 
         # a tuple of functions takes the per-component route with the same result
         wv = element(V)
-        Rₕ!(wv, (x -> 1.0, x -> 2.0); markers = (:left,))
+        Rₕ!(wv, (_Const(1.0), _Const(2.0)); markers = (:left,))
         @test parent(wv) == parent(uv)
     end
 
@@ -1209,7 +1210,7 @@ end
         Wh = gridspace(Ωh)
 
         u = element(Wh)
-        avgₕ!(u, x -> 1.0; markers = (:bottom,))
+        avgₕ!(u, _Const(1.0); markers = (:bottom,))
         marked = index_in_marker(Ωh, :bottom)
         @test all(parent(u)[i] ≈ 1.0 for i in eachindex(parent(u)) if marked[i])
         @test all(parent(u)[i] == 0.0 for i in eachindex(parent(u)) if !marked[i])
@@ -1236,7 +1237,7 @@ end
         (
         "2D",
         mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false)),
-        (x -> sin(x[1]), x -> cos(x[2])),
+        (_sin_x1, x -> cos(x[2])),
         x -> (sin(x[1]), cos(x[2]))
     ),
     # The 3D case is built only where `WITH_3D_TESTS` holds (not under `unit`).
@@ -1248,7 +1249,7 @@ end
             (5, 4, 6),
             (true, true, false)
         ),
-        (x -> sin(x[1]), x -> cos(x[3])),
+        (_sin_x1, x -> cos(x[3])),
         x -> (sin(x[1]), cos(x[3]))
     ),) :
          ())...
@@ -1280,7 +1281,7 @@ end
     # composite space's own dispatch produces) combined with the keyword form.
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
     Vₕ = gridspace(Ωₕ, Val(2))
-    fs = (x -> sin(x[1]), x -> cos(x[2]))
+    fs = (_sin_x1, x -> cos(x[2]))
     f_all = x -> (sin(x[1]), cos(x[2]))
 
     u_tuple = element(Vₕ)
@@ -1453,7 +1454,7 @@ end
     c2 = element(V2)
     avgₕ!(c2, x -> (sin(x[1]), cos(x[2])); markers = (:bottom,))
     t2 = element(V2)
-    avgₕ!(t2, (x -> sin(x[1]), x -> cos(x[2])); markers = (:bottom,))
+    avgₕ!(t2, (_sin_x1, x -> cos(x[2])); markers = (:bottom,))
     @test parent(c2) ≈ parent(t2)
 end
 
@@ -1573,7 +1574,7 @@ WITH_SLOW_TESTS && @testset "Cell average reproduction (Supposition)" begin
 end
 
 @testset "One-argument show (#700)" begin
-    uₕ = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0)), 5, false)), x -> x)
+    uₕ = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0)), 5, false)), identity)
     printed = mktemp() do path, io
         redirect_stdout(io) do
             show(uₕ)
