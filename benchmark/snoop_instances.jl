@@ -6,7 +6,7 @@
 # `MethodInstance`s of Bramble or one of its submodules in `SnoopCompile.flatten`, the
 # root excluded, summed over `form` and `assemble`.
 #
-# Rows, in two groups:
+# Rows, in three groups:
 #   scale_float64, scale_float32, scale_pi, scale_rational
 #       `form` of `c * inner₊(∇ₕ(u), ∇ₕ(v))` for c = 2.0, 2.0f0, π, 1 // 2, then
 #       `assemble`.
@@ -14,6 +14,13 @@
 #       a three-term linear form whose three sources are function coefficients, built twice
 #       with the same `form` call. The second build takes three new anonymous closures
 #       (`fresh`) or the same three named functions (`named`).
+#
+#   scalar_multiterm
+#       `form` of `innerₕ(u, v) + 2.0 * inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(D₋ₓ(u), v) +
+#       innerₕ(u, D₋ᵧ(v))` on the graded 9x11 space, then `assemble`.
+#   elasticity, sum40
+#       built as benchmark/bool_audit.jl builds them (`μ, λ` captured): a graded 5x5x5 mesh
+#       with `gridspace(Ωₕ)^Val(3)`, and a graded 9x11 scalar space with 40 summands.
 #
 # Per row, in the TOML table and the markdown one
 #   fresh_instances, fresh_form_s, fresh_assemble_s, fresh_inference_s
@@ -30,6 +37,9 @@
 #       the wall times of `form` and `assemble` and the inference time of the second build,
 #       medians over the launches. Inference carries the positive control: fresh closures
 #       infer the second build again (`added_instances` > 0), named functions do not (0).
+#   warm_assemble_s
+#       the median of 20 `assemble!` calls into the first build's matrix, after the snoops,
+#       in the same child; median over the launches.
 #   repeat_instances
 #       the row's last call repeated in the same process. It must be 0, being the control of
 #       the counting oracle, and the script stops when it is not.
@@ -58,7 +68,7 @@ if CHILD
     using Bramble
     using SnoopCompileCore
     using SnoopCompile
-    import Bramble: change_points!
+    import Bramble: change_points!, D₋ₓ, D₋ᵧ
 end
 
 # The macro `@snoop_inference` is expanded when its top-level statement is lowered, so the
@@ -77,11 +87,15 @@ if CHILD
             # The points of an axis: the exponent differs per axis, so no two axes agree.
             graded(n, axis) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * axis)
 
-            function setup()
-                n = (9, 11)
-                Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), n)
-                change_points!(Ωₕ, ntuple(d -> graded(n[d], d), 2))
-                return gridspace(Ωₕ)
+            # The graded 9x11 scalar space of every row but `elasticity`, which takes the
+            # graded 5x5x5 mesh and `gridspace(Ωₕ)^Val(3)` of benchmark/bool_audit.jl.
+            function setup(row)
+                n = row == "elasticity" ? (5, 5, 5) : (9, 11)
+                dim = length(n)
+                Ωₕ = mesh(domain(box(ntuple(_ -> 0.0, dim), ntuple(_ -> 1.0, dim))), n)
+                change_points!(Ωₕ, ntuple(d -> graded(n[d], d), dim))
+                W = gridspace(Ωₕ)
+                return row == "elasticity" ? W^Val(3) : W
             end
 
             function in_bramble(m::Module)
@@ -117,10 +131,36 @@ if CHILD
                 f = phase(build)
                 a = phase(() -> assemble(f.value))
                 return (; set = union(f.set, a.set), form_s = f.wall, assemble_s = a.wall,
-                    inference_s = f.inference + a.inference)
+                    inference_s = f.inference + a.inference, form = f.value, matrix = a.value)
+            end
+
+            # The median of 20 warm `assemble!` calls into the matrix of the first build, after
+            # the snoops.
+            function warm_assemble_s(A, f)
+                t = sort!([@elapsed(assemble!(A, f)) for _ in 1:20])
+                return (t[10] + t[11]) / 2
             end
 
             scale_form(W, c) = form(W, W, (u, v) -> c * inner₊(∇ₕ(u), ∇ₕ(v)))
+
+            # The rows `scalar_multiterm`, `elasticity` and `sum40`: the form's function, built
+            # as benchmark/bool_audit.jl builds the last two, `μ` and `λ` captured. The
+            # multi-term form is none of the precompile workload's.
+            function multiterm_fun()
+                return (u, v) -> innerₕ(u, v) + 2.0 * inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                 innerₕ(D₋ₓ(u), v) + innerₕ(u, D₋ᵧ(v))
+            end
+            function elasticity_fun()
+                μ, λ = 1.0, 2.0
+                return (u, v) -> 2μ * inner₊(εₕ(u), εₕ(v)) +
+                                 λ * inner₊(divₘₕ(u), divₘₕ(v))
+            end
+            function sum40_fun()
+                return (u, v) -> foldl(+,
+                    ntuple(k -> (k + 0.5) * inner₊(∇ₕ(u), ∇ₕ(v)), Val(40)))
+            end
+            const FORM_FUNS = Dict("scalar_multiterm" => multiterm_fun,
+                "elasticity" => elasticity_fun, "sum40" => sum40_fun)
 
             # Three source coefficients as test/form/linear.jl writes them, one call that builds
             # the form from any three. The form's closure captures them, so its type follows
@@ -143,7 +183,7 @@ if CHILD
 
             function run_child()
                 check_default_opt()
-                W = setup()
+                W = setup(first(rows))
                 if mode == "sequence"
                     seen = Set{Core.MethodInstance}()
                     for (i, row) in enumerate(rows)
@@ -160,7 +200,17 @@ if CHILD
                     r = form_assemble(() -> scale_form(W, c))
                     again = form_assemble(() -> scale_form(W, c))
                     println("FRESH ", length(r.set), " ", r.form_s, " ", r.assemble_s, " ",
-                        r.inference_s, " ", length(again.set))
+                        r.inference_s, " ", length(again.set), " ",
+                        warm_assemble_s(r.matrix, r.form))
+                    return nothing
+                end
+                if haskey(FORM_FUNS, row)
+                    fun = FORM_FUNS[row]()
+                    r = form_assemble(() -> form(W, W, fun))
+                    again = form_assemble(() -> form(W, W, fun))
+                    println("FRESH ", length(r.set), " ", r.form_s, " ", r.assemble_s, " ",
+                        r.inference_s, " ", length(again.set), " ",
+                        warm_assemble_s(r.matrix, r.form))
                     return nothing
                 end
                 named = (named_1, named_2, named_3)
@@ -170,7 +220,8 @@ if CHILD
                 s = form_assemble(() -> sources_form(W, second_set...))
                 again = form_assemble(() -> sources_form(W, second_set...))
                 println("FRESH ", length(r.set), " ", r.form_s, " ", r.assemble_s, " ",
-                    r.inference_s, " ", length(again.set))
+                    r.inference_s, " ", length(again.set), " ",
+                    warm_assemble_s(r.matrix, r.form))
                 println("SEQUENCE ", row, " 2 ", length(s.set), " ",
                     length(union(r.set, s.set)), " ", s.form_s, " ", s.assemble_s, " ",
                     s.inference_s)
@@ -186,7 +237,8 @@ using TOML
 
 const SCALE_ROWS = ["scale_float64", "scale_float32", "scale_pi", "scale_rational"]
 const CLOSURE_ROWS = ["closures_fresh", "closures_named"]
-const ROWS = [SCALE_ROWS; CLOSURE_ROWS]
+const FORM_ROWS = ["scalar_multiterm", "elasticity", "sum40"]
+const ROWS = [SCALE_ROWS; CLOSURE_ROWS; FORM_ROWS]
 
 function arg(name, default)
     i = findfirst(==(name), ARGS)
@@ -246,6 +298,7 @@ function fresh_table(tree, row, n, threads)
     table["fresh_inference_s"] = median([parse(Float64, f[5]) for f in freshes])
     rep = agree("repeat_instances", row, [parse(Int, f[6]) for f in freshes])
     table["repeat_instances"] = rep
+    table["warm_assemble_s"] = median([parse(Float64, f[7]) for f in freshes])
     rep == 0 || error("the repeat of $row inferred $rep Bramble instances in the same " *
           "process; the counting oracle is broken")
     if row in CLOSURE_ROWS
@@ -270,15 +323,15 @@ fmt(x) = string(round(x; sigdigits = 4))
 function print_table(title, rows, tables)
     println("\n### ", title, "\n")
     println("| row | fresh | added | sequence | position | repeat | form_s | assemble_s " *
-            "| inference_s |")
-    println("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+            "| inference_s | warm_s |")
+    println("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for r in rows
         t = tables[r]
         println("| `", r, "` | ", t["fresh_instances"], " | ",
             get(t, "added_instances", ""), " | ", get(t, "sequence_instances", ""), " | ",
             get(t, "sequence_position", ""), " | ", t["repeat_instances"], " | ",
             fmt(t["fresh_form_s"]), " | ", fmt(t["fresh_assemble_s"]), " | ",
-            fmt(t["fresh_inference_s"]), " |")
+            fmt(t["fresh_inference_s"]), " | ", fmt(t["warm_assemble_s"]), " |")
     end
     return nothing
 end
@@ -329,6 +382,8 @@ function main()
     any(in(SCALE_ROWS), rows) && print_table("scale rows", scale, tables)
     any(in(CLOSURE_ROWS), rows) &&
         print_table("closure rows", filter(in(CLOSURE_ROWS), rows), tables)
+    any(in(FORM_ROWS), rows) &&
+        print_table("form rows", filter(in(FORM_ROWS), rows), tables)
     write_out(out, tables)
     return nothing
 end
