@@ -136,9 +136,9 @@ exceed the wall time. Tests is the figure of the table header. It is equal in bo
 testsets in both), and neither trace holds a failure or an error.
 
 Load readings (`check_power_load.sh`, 1-minute average on 8 logical cores): 1.46 at the start
-of the before run, 2.63 between the two runs, 2.90 at the end of the after run. The unit-gate
-figure in `CLAUDE.md` is about 11 minutes at `-O0`: both runs took about 13.5 minutes here,
-about 14 percent more, the same in both trees. A first before-launch was killed by
+of the before run, 2.63 between the two runs, 2.90 at the end of the after run. Both runs took about 13.5 minutes, the same in both trees. The unit gate of 2026-10-23 ran
+27752 tests; the tree now runs 30102 (the 155 commits since added about 2800 test lines), so
+`CLAUDE.md`'s 11 minutes is not a like-for-like figure. A first before-launch was killed by
 `julia_slot.sh` at an 11 GB footprint (its cap is 10 GB) in `quality/alloccheck.jl`, file 158
 of 159, so both recorded runs were launched with `BRAMBLE_JULIA_MAX_GB=14`. Swap use was the same
 before and after the runs (1261 MB). The killed run is not used.
