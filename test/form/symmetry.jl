@@ -381,12 +381,13 @@ using Bramble:
         @test !issymmetric(form(Wr, Wr, mixed))
         @test !issymmetric(mat(mixed))
 
-        # A zero inside a difference is compared by its space, as `IdentityOperator` is.
+        # A zero inside a difference keeps only its dimension: zeros over two spaces of one
+        # dimension are the same operator, unlike two `IdentityOperator`s.
         z = form(Wr, Wr, (u, v) -> innerₕ(D₋ₓ(ZeroOperator(Wr)), D₋ₓ(ZeroOperator(Wr))))
         @test issymmetric(z)
         @test isposdef(z)
         Wr2 = gridspace(Ωr)
-        @test !issymmetric(form(
+        @test issymmetric(form(
             Wr, Wr, (u, v) -> innerₕ(D₋ₓ(ZeroOperator(Wr)), D₋ₓ(ZeroOperator(Wr2)))))
     end
 

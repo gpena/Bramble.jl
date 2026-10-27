@@ -12,10 +12,10 @@ post-`simplify_ast` AST stored in `form.ast`) as a string in Bramble's own opera
 e.g. `innerₕ(D₋ₓ(u), v)`, instead of the raw nested struct type.
 
 One `expression` method per node type, dispatched on the node's concrete type. This file
-covers only the algebra nodes (`OperatorAdd`, `OperatorScale`, `GridFunctionScale`) and the two
-space leaves (`IdentityOperator`, `ZeroOperator`); every other node type (trial/test functions,
-inner products, directional differences, interpolation, restriction, ...) is added by later
-files, each adding its own `expression` methods without touching this one.
+covers only the algebra nodes (`OperatorAdd`, `OperatorScale`, `GridFunctionScale`), the
+space leaf `IdentityOperator` and the zero `ZeroOperator`; every other node type (trial/test
+functions, inner products, directional differences, interpolation, restriction, ...) is added
+by later files, each adding its own `expression` methods without touching this one.
 =#
 
 """
