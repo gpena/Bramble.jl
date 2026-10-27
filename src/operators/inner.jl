@@ -314,8 +314,8 @@ end
 # so it keeps its type and the form infers.
 @inline _as_source(l, ::Val{D}, r, markers) where {D} = _as_source(l, Val(D))
 @inline _as_source(l::Function, ::Val{D}, r, ::Tuple{}) where {D} = _on_one_leaf(typeof(r)) ?
-                                                                     _erased_source(l, Val(D)) :
-                                                                     _as_source(l, Val(D))
+                                                                    _erased_source(l, Val(D)) :
+                                                                    _as_source(l, Val(D))
 
 # Whether a test side of type `R` is read on one leaf: it holds a component (`v(i)`, an
 # `IndexedTestFunction`) or the test function of a one-leaf space. Decided from the type, so
@@ -495,6 +495,10 @@ end
 function _resolve_surfaces(op::GridFunctionScale{D}, spaces) where {D}
     i = _resolve_surfaces(op.inner_op, spaces)
     return GridFunctionScale{D, typeof(op.grid_function), typeof(i)}(op.grid_function, i)
+end
+function _resolve_surfaces(op::_ComponentSum{D, P}, spaces) where {D, P}
+    s = _resolve_surfaces(op.sum, spaces)
+    return _ComponentSum{D, P, typeof(s)}(s)
 end
 function _resolve_surfaces(op::RegionRestriction, spaces)
     return _rebuild_restriction(op, op.region, _resolve_surfaces(op.inner_op, spaces))
@@ -1139,6 +1143,11 @@ function resolve_ast(op::LinearProduct{D, InnerType}) where {D, InnerType}
     left = resolve_ast(op.left_op)
     right = resolve_ast(op.right_op)
     return LinearProduct{D, InnerType, typeof(left), typeof(right)}(op.inner, left, right)
+end
+# Kept around its resolved sum: `resolve_ast(::Any)` would return it with `sum` unresolved.
+function resolve_ast(op::_ComponentSum{D, P}) where {D, P}
+    s = resolve_ast(op.sum)
+    return _ComponentSum{D, P, typeof(s)}(s)
 end
 
 # Disambiguation for the empty tuple.

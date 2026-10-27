@@ -1606,8 +1606,20 @@ end
         )
     end
     )
-    return foldl(+, terms)
+    return _component_sum(foldl(+, terms), Val(_strain_labels(Val(D))))
 end
+
+# The component pairs of `inner₊(::_StrainTensor, ::_StrainTensor)`'s terms, in its order
+# (entries `i`, `j`, then `_cross_terms`' pieces `a` of `u`, `b` of `v`), as the left-folded
+# tree `_ComponentSum` (ast.jl) reads: the piece of `ε_ij` built on `u(k)` names `k`
+# (`_strain_pieces`). `u(k)` puts `k` on every indexed leaf of `u`, so the pair holds
+# whatever `u` is. A function of `D` alone, a constant through the generated method below.
+function _strain_label_tree(D::Int)
+    pieces(i, j) = i == j ? (i,) : (i, j)
+    leaves = [(a, b) for i in 1:D for j in 1:D for a in pieces(i, j) for b in pieces(i, j)]
+    return foldl((l, r) -> (l, r), leaves)
+end
+@generated _strain_labels(::Val{D}) where {D} = _strain_label_tree(D)
 
 """
     Bramble._DivergenceTerms{D}
@@ -1664,14 +1676,26 @@ end
 
 @inline function inner₊(left::_DivergenceTerms{D}, right::_DivergenceTerms{D}) where {D}
     S = Val(ntuple(identity, Val(D)))
-    return foldl(
+    sum = foldl(
         +, ntuple(Val(D)) do i
             foldl(+, ntuple(Val(D)) do j
                 inner₊(left.terms[i], right.terms[j], S)
             end)
         end
     )
+    return _component_sum(sum, Val(_divergence_labels(Val(D))))
 end
+
+# The component pairs of the sum above, as `_strain_labels` gives the strain's: term `i` of
+# a divergence is built on `u(i)`, and the pairs nest as the two `foldl`s do.
+function _divergence_label_tree(D::Int)
+    row(i) = foldl((l, r) -> (l, r), [(i, j) for j in 1:D])
+    return foldl((l, r) -> (l, r), [row(i) for i in 1:D])
+end
+@generated _divergence_labels(::Val{D}) where {D} = _divergence_label_tree(D)
+
+# A builder's sum prints as the sum it holds.
+expression(op::_ComponentSum) = expression(op.sum)
 
 # --- divcₕ, εcₕ: centered divergence and strain over composite functions ---------------- #
 #

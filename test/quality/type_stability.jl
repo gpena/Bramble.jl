@@ -36,6 +36,11 @@ end
 _diffusion(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
 _load(W) = form(W, v -> innerₕ(1.0, v))
 
+# Form closures capturing their coefficients from these functions' arguments (#939).
+_captured_elasticity(μ, λ) = (u, v) -> 2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₘₕ(u), divₘₕ(v))
+_captured_divergence(λ) = (u, v) -> λ * inner₊(divₘₕ(u), divₘₕ(v))
+_captured_gradient(μ) = (u, v) -> μ * inner₊(∇ₕ(u), ∇ₕ(v))
+
 # Functions of the ForwardDiff parameter, so the dual type flows through assembly.
 _fd_bilinear(W, s) = assemble(form(W, W, (u, v) -> innerₕ(u, v) + Ref(s) * inner₊(∇ₕ(u), ∇ₕ(v))))
 _fd_linear(W, s) = assemble(form(W, v -> innerₕ(1.0, v) + Ref(s) * innerₕ(x -> 1.0 + x[1], v)))
@@ -178,6 +183,27 @@ end
             @test isconcretetype(only(Base.return_types(divₘₕ, (typeof(u),))))
             @test isconcretetype(only(Base.return_types(εₕ, (typeof(u),))))
             @test @inferred(form(W, W, f)) isa Bramble.BilinearForm
+        end
+    end
+
+    # Coefficients captured from a function's scope (#939), not literals: no constant reaches
+    # `form`, so a scale over a sum infers only if its distribution follows from types. The
+    # 3D vector Laplacian is left out: `∇ₕ(u)` gives plain tuples, which name no components
+    # in their types, and that form stays a `Union` (`_mixes_components`'s comment).
+    @testset "Captured coefficients" begin
+        g(n, a) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * a)
+        for (bx, n) in ((box((0.0, 0.0), (1.0, 1.0)), (9, 11)),
+            (box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)), (5, 5, 5)))
+            D = length(n)
+            Ωₕ = mesh(domain(bx), n)
+            Bramble.change_points!(Ωₕ, ntuple(d -> g(n[d], d), D))
+            S = gridspace(Ωₕ)
+            W = S^Val(D)
+            @test @inferred(form(W, W, _captured_elasticity(1.0, 3.0))) isa Bramble.BilinearForm
+            @test @inferred(form(W, W, _captured_divergence(3.0))) isa Bramble.BilinearForm
+            @test @inferred(form(S, S, _captured_gradient(2.0))) isa Bramble.BilinearForm
+            D == 2 && @test @inferred(form(W, W, _captured_gradient(2.0))) isa
+                            Bramble.BilinearForm
         end
     end
 
