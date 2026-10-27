@@ -21,7 +21,7 @@ using LinearAlgebra: dot, norm
 using SparseArrays: blockdiag, sparse
 using Random: Xoshiro
 
-using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, _Const, _one_plus_x1, _x1, _x2, _x3
 
 isdefined(Main, :GhostOracleND) ||
     Base.include(Main, joinpath(pkgdir(Bramble), "test", "ghost", "GhostOracleND.jl"))
@@ -71,15 +71,15 @@ const GH = (:xmin, :xmax, :ymin)
 # Neumann, Robin with data, Neumann with data, Dirichlet `u => g` on the unghosted facet.
 function space_a(S)
     constrained(S,
-        u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => 2.0 * u + ∂ₙ(u) => x -> x[2],
-            :ymin => ∂ₙ(u) => 0.5, :ymax => u => x -> x[1]))
+        u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => 2.0 * u + ∂ₙ(u) => _x2,
+            :ymin => ∂ₙ(u) => 0.5, :ymax => u => _x1))
 end
 
 # Robin, Neumann, Robin with data, and the unghosted facet left free.
 function space_b(S)
     constrained(S,
         u -> (:xmin => 2.0 * u + ∂ₙ(u) => 0.5, :xmax => ∂ₙ(u) => 0.0,
-            :ymin => u + ∂ₙ(u) => x -> x[1]))
+            :ymin => u + ∂ₙ(u) => _x1))
 end
 
 # The mixed difference reads the ghosts beside the corners; at a corner node of a padded
@@ -87,7 +87,7 @@ end
 const fa2 = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(-1.0 * Δₕ(u(2)), v(2)) +
                       0.5 * innerₕ(u(2), v(2)) + innerₕ(u(2), v(1)) +
                       innerₕ(D₋ₓ(D₊ᵧ(u(1))), v(2))
-const fl2 = v -> innerₕ(x -> 1 + x[1], v(1)) + innerₕ(x -> x[2]^2, v(2))
+const fl2 = v -> innerₕ(_one_plus_x1, v(1)) + innerₕ(x -> x[2]^2, v(2))
 
 # --- The product and its layout -------------------------------------------------------- #
 
@@ -181,7 +181,7 @@ end
         # three copies of one space, every pair coupled
         fa3 = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(-1.0 * Δₕ(u(2)), v(3)) +
                         innerₕ(u(3), v(2)) + 2.0 * innerₕ(u(3), v(3)) + innerₕ(u(1), v(2))
-        fl3 = v -> innerₕ(x -> x[1], v(1)) + innerₕ(x -> 1.0, v(3))
+        fl3 = v -> innerₕ(_x1, v(1)) + innerₕ(_Const(1.0), v(3))
         check_assembly(Ca^Val(3), Ca^Val(3), fa3, fl3)
 
         # 1D: a constrained component beside a selection space that keeps its ghosts
@@ -190,7 +190,7 @@ end
             u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => 2.0))
         S1 = gridspace(Ω1; ghosts = :boundary)
         fa1 = (u, v) -> innerₕ(-1.0 * Δₕ(u(1)), v(1)) + innerₕ(u(2), v(2)) + innerₕ(u(1), v(2))
-        fl1 = v -> innerₕ(x -> x, v(1)) + innerₕ(x -> 1.0, v(2))
+        fl1 = v -> innerₕ(identity, v(1)) + innerₕ(_Const(1.0), v(2))
         check_assembly(C1 × S1, C1 × S1, fa1, fl1)
     end
 
@@ -228,11 +228,11 @@ end
     if WITH_3D_TESTS
         Ω3 = O.make_mesh(:random, 0; dim = 3, n0 = 5)
         C3 = constrained(gridspace(Ω3; ghosts = (:xmin, :zmax)),
-            u -> (:xmin => ∂ₙ(u) => 1.0, :zmax => u + ∂ₙ(u) => x -> x[2],
+            u -> (:xmin => ∂ₙ(u) => 1.0, :zmax => u + ∂ₙ(u) => _x2,
                 :ymin => u => 0.0))
         fa33 = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(-1.0 * Δₕ(u(2)), v(2)) +
                          innerₕ(u(2), v(1))
-        fl33 = v -> innerₕ(x -> x[3], v(1)) + innerₕ(x -> 1.0, v(2))
+        fl33 = v -> innerₕ(_x3, v(1)) + innerₕ(_Const(1.0), v(2))
         check_assembly(C3^2, C3^2, fa33, fl33; zero_alloc = false)
     end
 end
@@ -373,7 +373,7 @@ end
             :ymax => u => gD))
     fa = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + innerₕ(-1.0 * Δₕ(u(2)), v(2)) +
                    0.5 * innerₕ(u(2), v(1)) + innerₕ(u(1), v(2)) + innerₕ(u(2), v(2))
-    fl = v -> innerₕ(x -> 1.0, v(1)) + innerₕ(x -> x[1], v(2))
+    fl = v -> innerₕ(_Const(1.0), v(1)) + innerₕ(_x1, v(2))
     V = Ce × Cd
     a, l = form(V, V, fa), form(V, fl)
     Aref, Fref = block_reference(V, V, fa, fl)
@@ -554,7 +554,7 @@ end
     sets = "ghost different facets"
     Cy = gridspace(Ωₕ; ghosts = (:ymax,))
     @test refuses(() -> form(S × Cy, S × Cy, (u, v) -> innerₕ(u(1), v(1))), sets)
-    @test refuses(() -> form(S × Cy, v -> innerₕ(x -> 1.0, v(1))), sets)
+    @test refuses(() -> form(S × Cy, v -> innerₕ(_Const(1.0), v(1))), sets)
     @test refuses(() -> form(S × S, Cy × Cy, (u, v) -> innerₕ(u(1), v(1))), sets)
     S9 = gridspace(O.make_mesh(:random, 0; dim = 2, n0 = 9); ghosts = GH)
     @test refuses(() -> form(S × S9, S × S9, (u, v) -> innerₕ(u(1), v(1))), sets)
@@ -586,9 +586,9 @@ end
         form(C × C, C × C, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2))))
     Ωg = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 17), (true, true))
     @test refuses(() -> gmg_preconditioner(build, Ωg), "must return a BilinearForm")
-    @test refuses(() -> Rₕ(V, x -> 1.0), "Rₕ or avgₕ")
-    @test refuses(() -> avgₕ(V, x -> 1.0), "Rₕ or avgₕ")
-    @test refuses(() -> Rₕ(V, (x -> 1.0, x -> 2.0)), "Rₕ or avgₕ")
+    @test refuses(() -> Rₕ(V, _Const(1.0)), "Rₕ or avgₕ")
+    @test refuses(() -> avgₕ(V, _Const(1.0)), "Rₕ or avgₕ")
+    @test refuses(() -> Rₕ(V, (_Const(1.0), _Const(2.0))), "Rₕ or avgₕ")
     @test refuses(() -> Rₕ(Ca^2, x -> (1.0, 2.0)), "Rₕ or avgₕ")
     @test refuses(() -> matrix_free_operator(a), yet)
     @test refuses(() -> jacobi_preconditioner(a), "jacobi_preconditioner on a composite")
@@ -598,7 +598,7 @@ end
     @test refuses(() -> Bramble.evaluate!(zeros(ndofs(V)), l, v), "assemble(a, l)")
     @test refuses(() -> l(ones(ndofs(V))), "not a bare vector")
     @test refuses(() -> Bramble.reaction(a, l, v; marker = :boundary), "reaction reads")
-    lp = form(W, w -> innerₕ(x -> 1.0, w))
+    lp = form(W, w -> innerₕ(_Const(1.0), w))
     @test refuses(() -> semidiscretize(a, lp), "semidiscretize on a composite")
     @test refuses(() -> semidiscretize(Wl -> a, l), "semidiscretize on a composite")
     @test refuses(() -> ode_problem(a, lp, zeros(ndofs(V)), (0.0, 1.0)),
