@@ -275,7 +275,11 @@ end
     return nothing
 end
 
-@noinline function _foreach_summand_unit(f::F, term::TERM, sp) where {F, TERM}
+# One instance for every term, not one per term type: the body only hands `term` and `sp`
+# to `f`, and `f` (`_CoordPass`, `bilinear_pattern.jl`) is specialised on the term itself.
+Base.@nospecializeinfer @noinline function _foreach_summand_unit(
+        f::F, @nospecialize(term), @nospecialize(sp)
+) where {F}
     f(term, sp, 0, 0, 0, 0, -1)
     return nothing
 end
