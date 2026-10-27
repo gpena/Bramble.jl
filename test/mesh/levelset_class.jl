@@ -141,6 +141,7 @@ end
     end
 
     @testset "A nonnegative φ throws the empty error" begin
+        # `p -> 1.0` stays a closure: it is the level set the classifier is tested on
         B = ((0.0, 1.0), (0.0, 1.0))
         @test occursin("nonnegative at every sampled point of the box ((0.0, 1.0), (0.0, 1.0))",
             message(p -> 1.0, B))

@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: normal_vector
 using LinearAlgebra: dot
-using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
+using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, _Const, _x1, _x2
 
 # The outward normal, as a discrete grid function and as a symbol inside a form.
 #
@@ -44,8 +44,8 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
         Wₕ = gridspace(Ωₕ)
         # F = (1, 0), so the flux is +1 through the x-max face, -1 through the x-min face, and 0
         # through the two y faces, each times the length of the edge, which is 1 here
-        F = (x -> 1.0, x -> 0.0)
-        ones_ = Rₕ(Wₕ, x -> 1.0)
+        F = (_Const(1.0), _Const(0.0))
+        ones_ = Rₕ(Wₕ, _Const(1.0))
         flux(markers) = dot(
             assemble(form(Wₕ, v -> inner_Γ(dot(F, η), v; markers = markers))), parent(ones_)
         )
@@ -62,10 +62,10 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
         # ∮ F·η ds = ∫ div F dx. With F = (x, y) that is 2·area = 2 on the unit square, and
         # the lumped weights make it exact rather than convergent: F is linear on each face
         # and the trapezoidal weight integrates a linear function exactly.
-        F = (x -> x[1], x -> x[2])
+        F = (_x1, _x2)
         for n_pts in ((9, 8), (17, 21), (33, 12))
             Wₕ = gridspace(mesh(Ω, n_pts, (true, true)))
-            ones_ = Rₕ(Wₕ, x -> 1.0)
+            ones_ = Rₕ(Wₕ, _Const(1.0))
             l = form(Wₕ, v -> inner_Γ(dot(F, η), v; markers = (:boundary,)))
             @test dot(assemble(l), parent(ones_)) ≈ 2.0
         end
@@ -73,17 +73,17 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
         # and on a non-uniform mesh, where a weight that silently assumed uniform spacing
         # would show up
         Wₕ = gridspace(mesh(Ω, (13, 11), (false, false)))
-        ones_ = Rₕ(Wₕ, x -> 1.0)
+        ones_ = Rₕ(Wₕ, _Const(1.0))
         l = form(Wₕ, v -> inner_Γ(dot(F, η), v; markers = (:boundary,)))
         @test dot(assemble(l), parent(ones_)) ≈ 2.0
     end
 
     @testset "dot(F, η) with a known field" begin
         Wₕ = gridspace(mesh(Ω, (9, 8), (true, true)))
-        ones_ = Rₕ(Wₕ, x -> 1.0)
+        ones_ = Rₕ(Wₕ, _Const(1.0))
 
         # F = (x, 0): F·η is +x on :xmax, so the integral over that edge is 1
-        F = (x -> x[1], x -> 0.0)
+        F = (_x1, _Const(0.0))
         l = form(Wₕ, v -> inner_Γ(dot(F, η), v; markers = (:xmax,)))
         @test dot(assemble(l), parent(ones_)) ≈ 1.0
         # and -x on :xmin, where x = 0
@@ -91,7 +91,7 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
             parent(ones_)) ≈ 0.0 atol=1e-14
 
         # grid functions work the same way, and `dot(η, F)` is the same term
-        Fₕ = (Rₕ(Wₕ, x -> x[1]), Rₕ(Wₕ, x -> 0.0))
+        Fₕ = (Rₕ(Wₕ, _x1), Rₕ(Wₕ, _Const(0.0)))
         @test dot(assemble(form(Wₕ, v -> inner_Γ(dot(Fₕ, η), v; markers = (:xmax,)))),
             parent(ones_)) ≈ 1.0
         @test assemble(form(Wₕ, v -> inner_Γ(dot(η, F), v; markers = (:xmax,)))) ≈
@@ -159,7 +159,7 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
         for (S, L, sz) in cases
             D = length(L)
             Wₕ = gridspace(mesh(S, sz, ntuple(_ -> false, D)))
-            ones_ = parent(Rₕ(Wₕ, x -> 1.0))
+            ones_ = parent(Rₕ(Wₕ, _Const(1.0)))
             g = x -> 1.0 + x[1] + 2x[2] + (D == 3 ? 3x[3] : 0.0)
             gₕ = parent(Rₕ(Wₕ, g))
             lin(h, m) = assemble(form(Wₕ, v -> inner_Γ(h, v; markers = m)))
@@ -213,7 +213,7 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
             # a bare component is the component times one, alone or in a sum
             for d in 1:D
                 @test dot(lin(comps[d], (labels[d][2],)), ones_) ≈
-                      face_flux(L, d, 2, d, x -> 1.0) atol=1e-12
+                      face_flux(L, d, 2, d, _Const(1.0)) atol=1e-12
             end
             @test lin(comps[1] + g * comps[2], m) ≈ lin(1.0 * comps[1], m) + lin(g * comps[2], m)
         end
@@ -351,7 +351,7 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
             (11, 9), (false, false)))
         same(n1, n2) = all(parent(n1[d]) == parent(n2[d]) for d in 1:2)
         surface(W, m) = findall(!iszero,
-            assemble(form(W, v -> inner_Γ(x -> 1.0, v; markers = m))))
+            assemble(form(W, v -> inner_Γ(_Const(1.0), v; markers = m))))
 
         W = mk(:left => :ymin)
         nl = normal_vector(W, :left)
@@ -395,13 +395,13 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS
     @testset "Refusals" begin
         Wₕ = gridspace(mesh(Ω, (7, 7), (true, true)))
         v = Bramble.TestFunction{2}()
-        F = (x -> 1.0, x -> 0.0)
+        F = (_Const(1.0), _Const(0.0))
         @test_throws ArgumentError form(Wₕ, w -> inner_Γ(dot(F, η), w; markers = (:inlet,)))
         @test_throws ArgumentError form(Wₕ, w -> inner_Γ(F[1] * η[1], w; markers = :inlet))
         @test_throws ArgumentError inner_Γ(dot(F, η), v)
         @test_throws ArgumentError normal_vector(Wₕ, :inlet)
         # a component of η is refused outside inner_Γ, by name, and past the form's dimension
-        f = x -> 1.0
+        f = _Const(1.0)
         ηₓ = η[1]
         @test_throws ArgumentError innerₕ(f * ηₓ, v)
         @test_throws ArgumentError innerₕ(v, f * ηₓ)

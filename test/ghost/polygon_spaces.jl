@@ -21,6 +21,8 @@ using Bramble: lift, polygon, polygon_spaces, Dcₓ, Dcᵧ
 using LinearSolve: KrylovJL_GMRES, solve
 using Kronecker: Kronecker
 
+using ..TestUtils: _Const
+
 # Figure 1 of the paper, its three oblique edges of slope ±1 apart; the V-notch, a reflex
 # vertex at (1, 2) between two oblique edges; an L without oblique edges.
 const FIG1 = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0), (4.0, 3.0),
@@ -74,7 +76,7 @@ end
         U, W = polygon_spaces(Ωₕ, :P, uq)
         I, Γ = labels(Ωₕ)
         f_a = (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.4 * mixed(w), v)
-        A, F = assemble(form(U, W, f_a), form(W, v -> innerₕ(x -> -4.0, v)))
+        A, F = assemble(form(U, W, f_a), form(W, v -> innerₕ(_Const(-4.0), v)))
         @test size(A) == (count(I), count(I))
         uh = lift(U, A \ F).data
         uex = Rₕ(gridspace(Ωₕ), uq).data
@@ -86,7 +88,7 @@ end
         # The test side must be the interior selection: with the trial closure there, the
         # extended rows join the interior ones.
         @test_throws ArgumentError form(U, U, f_a)
-        @test_throws ArgumentError form(U, v -> innerₕ(x -> -4.0, v))
+        @test_throws ArgumentError form(U, v -> innerₕ(_Const(-4.0), v))
     end
 
     @testset "rows match the plain-matrix oracle" begin
@@ -107,7 +109,7 @@ end
     @testset "DOF k is the k-th interior node" begin
         Random.seed!(3)
         Ωₕ = fig1_mesh((8, 7), (false, false))
-        U, W = polygon_spaces(Ωₕ, :P, x -> 0.0)
+        U, W = polygon_spaces(Ωₕ, :P, _Const(0.0))
         I, _ = labels(Ωₕ)
         keep = findall(I)
         for k in (1, 7, length(keep))
@@ -160,7 +162,7 @@ end
                 for i in 2:(n[1] - 1), j in 2:(n[2] - 1)]
         full = zeros(n)
         full[2:(end - 1), 2:(end - 1)] .= area
-        F = assemble(form(W, v -> innerₕ(x -> 1.0, v)))
+        F = assemble(form(W, v -> innerₕ(_Const(1.0), v)))
         @test F ≈ vec(full)[I] rtol = 1e-14
     end
 
@@ -172,7 +174,7 @@ end
         I, Γ = labels(Ωₕ)
         @test !any(U.rows.extended)
         A, F = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v)),
-            form(W, v -> innerₕ(x -> -4.0, v)))
+            form(W, v -> innerₕ(_Const(-4.0), v)))
         uh = lift(U, A \ F).data
         @test maximum(abs, uh[I] .- Rₕ(gridspace(Ωₕ), uq).data[I]) < 1e-10
         @test all(iszero, uh[.!(I .| Γ)])
@@ -185,13 +187,13 @@ end
         I, _ = labels(Ωₕ)
         @test findall(U.rows.conflict) == [LinearIndices((5, 5))[1, 3]]
         uex = Rₕ(gridspace(Ωₕ), g).data[I]
-        l = form(W, v -> innerₕ(x -> -4.0, v))
+        l = form(W, v -> innerₕ(_Const(-4.0), v))
         A, F = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v)), l)
         @test maximum(abs, A \ F .- uex) < 1e-12
         # Reader rows by hand: interior nodes 1 = (1, 1) and 6 = (1, 3) both read (0, 2).
-        U0, W0 = polygon_spaces(Ωₕ, :P, x -> 0.0)
+        U0, W0 = polygon_spaces(Ωₕ, :P, _Const(0.0))
         AM, _ = assemble(form(U0, W0, (w, v) -> innerₕ(mixed(w), v)),
-            form(W0, v -> innerₕ(x -> 0.0, v)))
+            form(W0, v -> innerₕ(_Const(0.0), v)))
         @test AM[1, 1] ≈ 0.5 && AM[6, 6] ≈ -0.5
         @test AM[1, 4] ≈ 0.5 && AM[6, 4] ≈ -0.5
         @test AM[6, 1] == 0 && AM[1, 6] == 0
@@ -217,7 +219,7 @@ end
         @test maximum(abs, F .- Foracle) < 1e-12 * maximum(abs, Foracle)
         # Constant b: exact for the separable quadratic.
         A2, F2 = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.5 * mixed(w), v)),
-            form(W, v -> innerₕ(x -> -4.0, v)))
+            form(W, v -> innerₕ(_Const(-4.0), v)))
         @test maximum(abs, A2 \ F2 .- Rₕ(gridspace(Ωₕ), uq).data[I]) < 1e-10
     end
 
@@ -226,7 +228,7 @@ end
         Ωₕ = vnotch_mesh((7, 6), (false, false))
         U, W = polygon_spaces(Ωₕ, :P, uq)
         a = form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.5 * mixed(w), v))
-        l = form(W, v -> innerₕ(x -> -4.0, v))
+        l = form(W, v -> innerₕ(_Const(-4.0), v))
         A, F = assemble(a, l)
         assemble!(A, F, a, l)
         @test (@allocated assemble!(A, F, a, l)) == 0
@@ -237,13 +239,13 @@ end
         Ω = domain(interval(0.0, 6.0) × interval(0.0, 5.0), :P => polygon(FIG1))
         Ωₕ = mesh(Ω, (10, 9), (false, false))
         U, W = polygon_spaces(Ωₕ, :P, uq)
-        l = form(W, v -> innerₕ(x -> -4.0, v))
+        l = form(W, v -> innerₕ(_Const(-4.0), v))
         # Dcₓ(Dcₓ(u)) reads two nodes along x, beyond the scheme's stencil.
         @test_throws ArgumentError form(U, W, (w, v) -> innerₕ(Dcₓ(Dcₓ(w)), v))
         @test_throws ArgumentError assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v)),
             l; dirichlet = (:P_boundary => uq,))
         e = @test_throws ArgumentError form(U, W,
-            (w, v) -> innerₕ(w, v) + 2.0 * innerₕ(x -> 1.0, w) * innerₕ(x -> 1.0, v))
+            (w, v) -> innerₕ(w, v) + 2.0 * innerₕ(_Const(1.0), w) * innerₕ(_Const(1.0), v))
         @test occursin("RankOneUpdate", e.value.msg) && occursin("without it", e.value.msg)
         # A grid line the closure would not give: y = 1.3 crosses the oblique edges off
         # the nodes.
@@ -269,7 +271,7 @@ end
         @test Bramble.ndofs(U) > 0
         I, _ = labels(Ωₕ)
         A, F = assemble(form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.5 * mixed(w), v)),
-            form(W, v -> innerₕ(x -> -4.0, v)))
+            form(W, v -> innerₕ(_Const(-4.0), v)))
         @test maximum(abs, A \ F .- Rₕ(gridspace(Ωₕ), uq).data[I]) < 1e-8
     end
 
@@ -277,7 +279,7 @@ end
         # It gives every exterior node 0, so a form reading one throws; a form reading the
         # boundary nodes reads them as 0, the trial space with g = 0.
         Ωₕ = fig1_mesh((7, 6), (true, true))
-        U0, W = polygon_spaces(Ωₕ, :P, x -> 0.0)
+        U0, W = polygon_spaces(Ωₕ, :P, _Const(0.0))
         @test_throws ArgumentError form(W, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - mixed(w), v))
         f_a = (w, v) -> innerₕ(-1.0 * Δₕ(w), v)
         @test assemble(form(W, W, f_a)) == assemble(form(U0, W, f_a))
@@ -290,12 +292,12 @@ end
             f_a = (w, v) -> innerₕ(-1.0 * Δₕ(w[1]) - 0.5 * mixed(w[1]), v[1]) +
                             innerₕ(w[2], v[2])
             @test_throws ArgumentError form(U × U, W × W, f_a)
-            @test_throws ArgumentError form(W × W, v -> innerₕ(x -> 1.0, v[1]))
+            @test_throws ArgumentError form(W × W, v -> innerₕ(_Const(1.0), v[1]))
             # Beside a plain ghost space: refused before the polygon check, as a polygon
             # space ghosts no facet and the plain one does.
             G = gridspace(Ωₕ; ghosts = :boundary)
             @test_throws ArgumentError form(U × G, W × G, f_a)
-            @test_throws ArgumentError form(W × G, v -> innerₕ(x -> 1.0, v[1]))
+            @test_throws ArgumentError form(W × G, v -> innerₕ(_Const(1.0), v[1]))
         end
     end
 
@@ -306,7 +308,7 @@ end
         U, W = polygon_spaces(Ωₕ, :P, uq)
         @test !any(U.rows.conflict)
         a = form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.4 * mixed(w), v))
-        l = form(W, v -> innerₕ(x -> -4.0, v))
+        l = form(W, v -> innerₕ(_Const(-4.0), v))
         A = assemble(a)
         x, y = rand(rng, size(A, 2)), rand(rng, size(A, 1))
         z = similar(y)
@@ -317,7 +319,7 @@ end
 
         # On the V-notch the matrix-free product would miss the substitution of the conflict
         # node a mixed form reads; a form that does not read it applies.
-        UN, WN = polygon_spaces(vnotch_mesh((5, 5), (true, true)), :P, x -> 0.0)
+        UN, WN = polygon_spaces(vnotch_mesh((5, 5), (true, true)), :P, _Const(0.0))
         am = form(UN, WN, (w, v) -> innerₕ(mixed(w), v))
         @test_throws ArgumentError Bramble.matrix_free_operator(am)
         xm, ym = rand(rng, Bramble.ndofs(UN)), rand(rng, Bramble.ndofs(WN))
@@ -336,7 +338,7 @@ end
         Ωₕ = fig1_mesh((10, 9), (false, false))
         U, W = polygon_spaces(Ωₕ, :P, uq)
         a = form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.4 * mixed(w), v))
-        l = form(W, v -> innerₕ(x -> -4.0, v))
+        l = form(W, v -> innerₕ(_Const(-4.0), v))
         A, F = assemble(a, l)
         prob = linear_problem(a, l)
         @test prob.A == A && prob.b == F
@@ -355,7 +357,7 @@ end
         Ωₕ = fig1_mesh((10, 9), (false, false))
         U, W = polygon_spaces(Ωₕ, :P, uq)
         a = form(U, W, (w, v) -> innerₕ(-1.0 * Δₕ(w), v))
-        F = assemble(a, form(W, v -> innerₕ(x -> -4.0, v)))[2]
+        F = assemble(a, form(W, v -> innerₕ(_Const(-4.0), v)))[2]
         # The facet-ghost messages name relations per facet and `constrained`, neither of
         # which a polygon space has.
         polygon_msg(e) = occursin("polygon spaces", e.value.msg) &&
