@@ -16,7 +16,7 @@ using Bramble:
                semidiscretize_rhs,
                set_points!,
                type_cached_assemble!
-using ..TestUtils: WITH_AD_TESTS, _sd_problem
+using ..TestUtils: WITH_AD_TESTS, _sd_problem, _Const, _x1
 
 # `semidiscretize` and the residual it returns (src/problems/semidiscrete.jl) need no SciMLBase:
 # a `Semidiscretization` is a callable with the `(du, u, p, t)` signature plus two matrices.
@@ -37,13 +37,13 @@ _sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
     Ωₕ, Wₕ, fₕ, a, l = _sd_problem(21)
     n = ndofs(Wₕ)
     I = Bramble.interval(0.0, 1.0)
-    Rₕ!(fₕ, x -> 1.0)
+    Rₕ!(fₕ, _Const(1.0))
 
     # The constraint carrier is chosen once, by shape and arity.
     @testset "constraint carrier: shape and arity" begin
         @test semidiscretize(a, l).constraints isa Bramble.NoConstraints
         @test semidiscretize(a, l; dirichlet = :boundary).constraints isa Bramble.LabelsOnly
-        @test semidiscretize(a, l; dirichlet = :boundary => x -> 0.0).constraints isa
+        @test semidiscretize(a, l; dirichlet = :boundary => _Const(0.0)).constraints isa
               Bramble.StaticConstraints
 
         # A time domain is not what marks constraints as time dependent -- the conditions'
@@ -58,7 +58,7 @@ _sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
         @test semidiscretize(a, l; dirichlet = bcs_tp).constraints isa
               Bramble.TimeParamDependentConstraints
 
-        bcs_x = dirichlet_constraints(Ωₕ, :boundary => x -> 1.0)
+        bcs_x = dirichlet_constraints(Ωₕ, :boundary => _Const(1.0))
         @test semidiscretize(a, l; dirichlet = bcs_x).constraints isa
               Bramble.StaticConstraints
 
@@ -115,7 +115,7 @@ _sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
 
     @testset "residual, Jacobian, and allocations" begin
         bcs = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 2t)
-        for dirichlet in (nothing, :boundary, :boundary => x -> 0.5, bcs)
+        for dirichlet in (nothing, :boundary, :boundary => _Const(0.5), bcs)
             sd = semidiscretize(a, l; dirichlet = dirichlet)
             A = operator_matrix(sd)
             u = collect(range(0.25, 1.75; length = n))
@@ -161,7 +161,7 @@ _sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
         sd_zero(F, zeros(n), nothing, 0.0)
         @test iszero(F[1]) && iszero(F[n])
 
-        sd_static = semidiscretize(a, l; dirichlet = :boundary => x -> 7.0)
+        sd_static = semidiscretize(a, l; dirichlet = :boundary => _Const(7.0))
         sd_static(F, zeros(n), nothing, 0.0)
         @test F[1] ≈ 7.0 && F[n] ≈ 7.0
 
@@ -217,7 +217,7 @@ _sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
         @test seen == [2.5]
         # `l` is `innerₕ(fₕ, v)`, so an fₕ set to t scales the assembled source by t.
         G = zeros(n)
-        Rₕ!(fₕ, x -> 1.0)
+        Rₕ!(fₕ, _Const(1.0))
         assemble!(G, l)
         @test F ≈ 2.5 .* G
     end
@@ -232,7 +232,7 @@ _sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
         sd(F, zeros(n), 3.0, 2.5)
         @test seen == [(2.5, 3.0)]
         G = zeros(n)
-        Rₕ!(fₕ, x -> 1.0)
+        Rₕ!(fₕ, _Const(1.0))
         assemble!(G, l)
         @test F ≈ (2.5 * 3.0) .* G
 
@@ -378,7 +378,7 @@ _sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
         )
         W32 = gridspace(Ω32)
         n32 = ndofs(W32)
-        l32 = form(W32, v -> innerₕ(x -> 1.0f0, v))
+        l32 = form(W32, v -> innerₕ(_Const(1.0f0), v))
         A₀32 = assemble(form(W32, W32, (u, v) -> innerₕ(u, v)))
         # Nonzero, so `du = F - A u` sees `A`, not the source alone.
         u32 = collect(range(0.2f0, 1.7f0; length = n32))
@@ -468,7 +468,7 @@ _sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
             sprint(
                 show,
                 MIME"text/plain"(),
-                semidiscretize(a, l; dirichlet = :boundary => x -> 0.0)
+                semidiscretize(a, l; dirichlet = :boundary => _Const(0.0))
             )
         )
         @test occursin(
@@ -501,7 +501,7 @@ end
     Wc, Wd = gridspace(Ωc), gridspace(Ωd)
 
     function _sd_forms(W)
-        fₕ = Rₕ(W, x -> 1.0)
+        fₕ = Rₕ(W, _Const(1.0))
         a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         l = form(W, v -> innerₕ(fₕ, v))
         return a, l
@@ -586,7 +586,7 @@ end
         )
         Wₕ = gridspace(Ωₕ)
         fₕ = Bramble.element(Wₕ, 0.0)
-        Rₕ!(fₕ, x -> 1.0)
+        Rₕ!(fₕ, _Const(1.0))
         K = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         l = form(Wₕ, v -> innerₕ(fₕ, v))
         return Wₕ, K, l
@@ -614,12 +614,12 @@ end
     n = ndofs(Vₕ)
     nleaf = ndofs(Wₕ)
 
-    cₕ = Rₕ(Wₕ, x -> 1.0)
+    cₕ = Rₕ(Wₕ, _Const(1.0))
     a = form(Vₕ, Vₕ, (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))))
     # Distinct values per component, so a residual that mixed the blocks could not pass.
     l = form(Vₕ, v -> innerₕ(cₕ, v(1)) + 3 * innerₕ(cₕ, v(2)))
 
-    sd = semidiscretize(a, l; dirichlet = :boundary => x -> 0.0)
+    sd = semidiscretize(a, l; dirichlet = :boundary => _Const(0.0))
     u = collect(range(0.5, 2.5; length = n))
     du = zeros(n)
     F = zeros(n)
@@ -640,7 +640,7 @@ end
 
     # dirichlet_components binds the labels to one leaf.
     @testset "dirichlet_components: one leaf" begin
-        sd₁ = semidiscretize(a, l; dirichlet = :boundary => x -> 0.0, dirichlet_components = 1)
+        sd₁ = semidiscretize(a, l; dirichlet = :boundary => _Const(0.0), dirichlet_components = 1)
         M₁ = mass_matrix(sd₁)
         @test iszero(M₁[1, 1]) && iszero(M₁[nleaf, nleaf])
         @test !iszero(M₁[nleaf + 1, nleaf + 1]) && !iszero(M₁[n, n])
@@ -661,7 +661,7 @@ end
     stiff(X) = form(X, X, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     mass(X) = form(X, X, (u, v) -> innerₕ(u, v))
     a = stiff(W)
-    l = form(W, v -> innerₕ(x -> 1.0, v))
+    l = form(W, v -> innerₕ(_Const(1.0), v))
     errmsg(f) =
         try
             f()
@@ -692,7 +692,7 @@ end
     @testset "composite: checked leaf by leaf" begin
         V = W × W
         Vₘ = W × Wᵤ
-        lᵥ = form(V, v -> innerₕ(x -> 1.0, v(1)) + innerₕ(x -> 1.0, v(2)))
+        lᵥ = form(V, v -> innerₕ(_Const(1.0), v(1)) + innerₕ(_Const(1.0), v(2)))
         aᵥ(X) = form(X, X, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
         @test semidiscretize(aᵥ(V), lᵥ) isa Bramble.Semidiscretization
         @test occursin("mesh", errmsg(() -> semidiscretize(aᵥ(Vₘ), lᵥ)))
@@ -704,10 +704,10 @@ end
 
     @testset "one mesh, two gridspaces, rebuilt mesh" begin
         W₁, W₂ = gridspace(Ωₙ), gridspace(Ωₙ)
-        sd = semidiscretize(stiff(W₁), form(W₂, v -> innerₕ(x -> 1.0, v)); mass = mass(W₂))
+        sd = semidiscretize(stiff(W₁), form(W₂, v -> innerₕ(_Const(1.0), v)); mass = mass(W₂))
         @test size(mass_matrix(sd)) == (11, 11)
         Wᵣ = gridspace(Bramble.mesh(D, 11, true))
-        @test semidiscretize(stiff(Wᵣ), form(Wᵤ, v -> innerₕ(x -> 1.0, v))) isa
+        @test semidiscretize(stiff(Wᵣ), form(Wᵤ, v -> innerₕ(_Const(1.0), v))) isa
               Bramble.Semidiscretization
     end
 end
@@ -720,7 +720,7 @@ end
 # semidiscretize_rhs builds a matrix-free explicit right-hand side.
 @testset "semidiscretize_rhs: matrix-free RHS" begin
     Ωₕ, Wₕ, fₕ, a, l = _sd_problem(21)
-    Rₕ!(fₕ, x -> 1.0)
+    Rₕ!(fₕ, _Const(1.0))
     n = ndofs(Wₕ)
     h = Bramble.weights(Wₕ).innerh
 
@@ -737,7 +737,7 @@ end
 
     # Any Dirichlet row makes M singular there, so NoConstraints is required.
     @testset "rhs: requires NoConstraints" begin
-        sd_static = semidiscretize(a, l; dirichlet = :boundary => x -> 0.0)
+        sd_static = semidiscretize(a, l; dirichlet = :boundary => _Const(0.0))
         @test_throws ArgumentError semidiscretize_rhs(sd_static)
 
         sd_labels = semidiscretize(a, l; dirichlet = :boundary)
@@ -761,7 +761,7 @@ end
     @testset "rhs: requires nonzero diagonal" begin
         # Diagonal, but exactly zero at the left boundary point (x = 0) -- no coupling
         # term, so this does not hit the non-diagonal case above; it is its own check.
-        cₕ = Rₕ(Wₕ, x -> x[1])
+        cₕ = Rₕ(Wₕ, _x1)
         mass_zero = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
         sd_zero = semidiscretize(a, l; mass = mass_zero)
         @test iszero(mass_matrix(sd_zero)[1, 1])
@@ -785,7 +785,7 @@ end
     w = Bramble.weights(Wd).innerh
     @test !all(≈(w[2]), w[2:(n - 1)])   # the mesh really is non-uniform
 
-    fₕ = Rₕ(Wd, x -> 1.0)
+    fₕ = Rₕ(Wd, _Const(1.0))
     K = form(Wd, Wd, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     l = form(Wd, v -> innerₕ(fₕ, v))
     bcs = dirichlet_constraints(Ωd, I, :boundary => (x, t, p) -> p[1] * t + x[1])
@@ -826,6 +826,7 @@ function _sd_child_messages(code)
 end
 
 @testset "SciML entry points without the extension" begin
+    # a child process script: the shared test helpers are not defined there
     code = """
     using Bramble
     Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 5)
