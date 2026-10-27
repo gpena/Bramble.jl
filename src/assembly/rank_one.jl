@@ -260,7 +260,7 @@ function _rank_one_form(Wₕ, Vₕ, raw_ast)
     t = only(terms)
     ft = _as_test(t.trial)
     D = dim(Wₕ)
-    a = _bilinear_form(Wₕ, Vₕ, rest === nothing ? ZeroOperator{D, Nothing}(nothing) : rest)
+    a = _bilinear_form(Wₕ, Vₕ, rest === nothing ? ZeroOperator{D}() : rest)
     ls = form(Vₕ, Returns(t.test))
     lt = form(Wₕ, Returns(ft))
     return RankOneForm{D, typeof(a), typeof(t.scale), typeof(ls), typeof(lt)}(

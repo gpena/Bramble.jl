@@ -23,9 +23,9 @@ without performing it, so that a form can be written as an expression and assemb
 """
 abstract type LazyOp{D} end
 
-# `space` is implemented only by nodes that carry a concrete space reference (`IdentityOperator`,
-# `ZeroOperator`), whereas purely algebraic or symbolic nodes (`TestFunction`, `TrialFunction`)
-# receive space context during form assembly.
+# `space` is implemented only by the node that carries a concrete space reference
+# (`IdentityOperator`), whereas purely algebraic or symbolic nodes (`TestFunction`,
+# `TrialFunction`) receive space context during form assembly.
 
 # --- The nodes ------------------------------------------------------------------- #
 
@@ -41,17 +41,15 @@ end
 """
     ZeroOperator(Wₕ::AbstractSpaceType)
 
-The zero operator on `Wₕ`, as a symbolic node. Absorbs multiplication by a scalar.
+The zero operator on `Wₕ`, as a symbolic node. Absorbs multiplication by a scalar. Keeps
+only the dimension of `Wₕ`: two zero operators of one dimension are the same node.
 """
-struct ZeroOperator{D, S} <: LazyOp{D}
-    space::S
-end
+struct ZeroOperator{D} <: LazyOp{D} end
 
 @inline IdentityOperator(space::AbstractSpaceType) = IdentityOperator{dim(space), typeof(space)}(space)
 
 @inline space(op::IdentityOperator) = op.space
-@inline space(op::ZeroOperator) = op.space
-@inline ZeroOperator(space::AbstractSpaceType) = ZeroOperator{dim(space), typeof(space)}(space)
+@inline ZeroOperator(space::AbstractSpaceType) = ZeroOperator{dim(space)}()
 
 """
     OperatorScale(α, op::LazyOp)

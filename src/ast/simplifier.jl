@@ -80,13 +80,9 @@ identity over the scalars, grid functions and components involved. The one excep
 
 # --- Zero/identity recognition ------------------------------------------------------ #
 
-# Synthesized only here, for a subtree whose concrete space is not known generically.
-# Every consumer of a `ZeroOperator` (`local_stencil`, `stencil_offsets`, `component`,
-# `_is_source_only`'s fallback) reads only its `D` type parameter, never `.space` --
-# except `_same_operator_shape` (`symmetry.jl`), which compares `a.space === b.space`, and
-# `nothing === nothing` settles that the same way two zero operators over the same space
-# would: they are the same operator.
-@inline _zero_of(::LazyOp{D}) where {D} = ZeroOperator{D, Nothing}(nothing)
+# The zero operator of a subtree's dimension. A `ZeroOperator` carries no space, only `D`,
+# so the one synthesised here is `===` to `ZeroOperator(Wₕ)` for any `Wₕ` of dimension `D`.
+@inline _zero_of(::LazyOp{D}) where {D} = ZeroOperator{D}()
 
 # `(scalar, inner)` for a node the lifting rule can read a coefficient from. A bare
 # (non-`OperatorScale`) node is `1 * itself`. The scalar is returned exactly as stored -- a
