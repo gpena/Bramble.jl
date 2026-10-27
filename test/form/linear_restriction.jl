@@ -26,7 +26,8 @@ using Bramble:
                D₋ₓ,
                Mₓ,
                jumpₓ
-using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS
+using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS, _Const,
+    _one_plus_x1, _x1_lt_half
 
 # The linear-form tests of restricted sums and scales: the refill allocation contract and the
 # scaled and nested cases. Split from linear.jl, whose single module took 0.95 GB of the
@@ -65,7 +66,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS
         # must be the terms' assembled apart.
         R = restrict_to
         Ωm = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :l => :left, :r => :right,
-            :b => :bottom, :t => :top, :c => x -> x[1] < 0.5)
+            :b => :bottom, :t => :top, :c => _x1_lt_half)
         W = gridspace(mesh(Ωm, (7, 9), (false, false)))
         labels = (:l, :r, :b, :t, :c)
         g = element(W)
@@ -85,10 +86,10 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS
         end
         # Tuples of four and five summands compile their own forms: they run in `slow`.
         for k in 3:(WITH_SLOW_TESTS ? 5 : 3)
-            on(s) = v -> innerₕ(x -> 1 + x[1], R(s, v))
+            on(s) = v -> innerₕ(_one_plus_x1, R(s, v))
             b, parts = _check_split(Tuple(on(s) for s in labels[1:k]))
             @test b == parts
-            _check_split((v -> innerₕ(x -> 1 + x[1], v), Tuple(on(s) for s in labels[1:k])...))
+            _check_split((v -> innerₕ(_one_plus_x1, v), Tuple(on(s) for s in labels[1:k])...))
             # Each its own source, so `simplify_ast` folds nothing: k products, one walk each.
             _check_split(Tuple(v -> innerₕ(i * g, R(labels[i], v)) for i in 1:k))
             _check_split((v -> innerₕ(1.0, v),
@@ -98,7 +99,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS
         # are widened to the type of their product with the element weight, never narrowed
         # (12816 B for `2.0R + 3R` before).
         _check_split((v -> innerₕ(g, R(:c, v + R(:l, v) + R(:r, v))), v -> innerₕ(g, R(:b, v))))
-        _check_split((v -> innerₕ(x -> 1.0, 2.0 * R(:l, v)), v -> innerₕ(x -> 1.0, 3 * R(:r, v))))
+        _check_split((v -> innerₕ(_Const(1.0), 2.0 * R(:l, v)), v -> innerₕ(_Const(1.0), 3 * R(:r, v))))
         _check_split((v -> innerₕ(g, v), v -> innerₕ(g, 2.0 * R(:l, v)),
             v -> innerₕ(g, 3 * R(:r, v)), v -> innerₕ(g, (1 // 2) * R(:b, v))))
         # A complex scale on a Float64 mesh widens the form to ComplexF64, which refills
@@ -125,7 +126,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS
                 b2 = zero(b)
                 assemble_parallel!(b2, lf)
                 @test b2 == b
-                vₕ = Rₕ(Ws, x -> 1 + x[1])
+                vₕ = Rₕ(Ws, _one_plus_x1)
                 @test lf(vₕ) ≈ c * sum(parts .* parent(vₕ))
             end
         end
@@ -144,7 +145,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS
         _scale_types(op) = ()
         I32 = interval(0.0f0, 1.0f0)
         W32 = gridspace(mesh(domain(I32 × I32), (7, 9), (false, false); backend = backend(Float32)))
-        f32 = x -> 1 + x[1]
+        f32 = _one_plus_x1
         for (S, h) in ((W, v -> innerₕ(g, 2.0 * v + 3.0 * D₋ₓ(v))),
             (W32, v -> innerₕ(f32, 2 * v + 3 * D₋ₓ(v))),
             (W32, v -> innerₕ(f32, 0.1 * v + 0.3 * D₋ₓ(v)) + innerₕ(1.0, v)))
@@ -350,11 +351,11 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS
         # stored 270 entries, not 189, with zeros left at the point).
         Wu = gridspace(mesh(
             domain(I1 × I1, :l => :left, :r => :right, :b => :bottom,
-                :t => :top, :c => x -> x[1] < 0.5),
+                :t => :top, :c => _x1_lt_half),
             (7, 9), (true, true)))
         m(f) = Rₕ(Wu, x -> f(x) ? 1.0 : 0.0)
         ml, mr = m(x -> x[1] == 0), m(x -> x[1] == 1)
-        mb, mt, mc = m(x -> x[2] == 0), m(x -> x[2] == 1), m(x -> x[1] < 0.5)
+        mb, mt, mc = m(x -> x[2] == 0), m(x -> x[2] == 1), m(_x1_lt_half)
         LR(X) = R(:l, X) + R(:r, X)
         BT(X) = R(:b, X) + R(:t, X)
         for (n, f, fm, k) in (
@@ -400,7 +401,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS
             assemble!(y, l)
             return y
         end
-        f = x -> 1 + x[1]
+        f = _one_plus_x1
         for T in (Float32, Float64), D in TEST_DIMS
             # Each element type and dimension compiles its own forms: unit keeps the 1D
             # Float64 case, and the others run in `slow`.
@@ -410,7 +411,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS
             Bramble._seed_mesh1d_rng!(20261017)
             W = try
                 Ω = domain(foldl(×, ntuple(_ -> I, D)), :l => :left, :r => :right,
-                    :c => x -> x[1] < 0.5)
+                    :c => _x1_lt_half)
                 gridspace(D == 1 ? mesh(Ω, 11, false; backend = backend(T)) :
                           mesh(Ω, (7, 9, 5)[1:D], ntuple(_ -> false, D);
                     backend = backend(T)))
@@ -487,7 +488,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS
                 Wb = try
                     gridspace(mesh(
                         domain(I × I, :l => :left, :r => :right, :b => :bottom,
-                            :c => x -> x[1] < 0.5), (7, 9), (false, false)))
+                            :c => _x1_lt_half), (7, 9), (false, false)))
                 finally
                     Bramble._unseed_mesh1d_rng!()
                 end

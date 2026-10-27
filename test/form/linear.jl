@@ -41,7 +41,8 @@ using Bramble:
                inner₊ₓ,
                jumpₓ,
                weights
-using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
+using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const, _x1, _x2,
+    _x1_plus_x2, _exp_x1, _sin_x1, _one_plus_x1
 
 # Assembling the right-hand side of a system.
 #
@@ -62,7 +63,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
     )
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(2))
-    uₕ = Rₕ(Wₕ, x -> x[1] + x[2])
+    uₕ = Rₕ(Wₕ, _x1_plus_x2)
     n = ndofs(Wₕ)
 
     @testset "Construction" begin
@@ -88,11 +89,11 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         @test sum(b) ≈ 1.0
 
         # a constant source integrates to the area
-        @test sum(assemble(form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 3.0), v)))) ≈ 3.0
+        @test sum(assemble(form(Wₕ, v -> innerₕ(Rₕ(Wₕ, _Const(3.0)), v)))) ≈ 3.0
 
         # and a number or a function on the left works the same way
         @test sum(assemble(form(Wₕ, v -> innerₕ(2.0, v)))) ≈ 2.0
-        @test sum(assemble(form(Wₕ, v -> innerₕ(x -> x[1], v)))) ≈ 0.5
+        @test sum(assemble(form(Wₕ, v -> innerₕ(_x1, v)))) ≈ 0.5
 
         # in place, into a vector the caller owns
         b2 = zeros(n)
@@ -111,7 +112,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # every component: ∫x over the unit square is 0.5, and the assembled vector sums to
         # 1.0 across the two blocks. Giving each component a different integrand needs the
         # indexed trial and test functions, which is the coupled path in bilinear.jl.
-        uv = Rₕ(Vₕ, (x -> x[1], x -> x[2]))
+        uv = Rₕ(Vₕ, (_x1, _x2))
         lf = form(Vₕ, v -> innerₕ(uv(1), v))
         b = assemble(lf)
         @test length(b) == ndofs(Vₕ)
@@ -209,7 +210,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # composite core assembled one AST into every block, which is the opposite of what a
         # per-component form means.
         m = ndofs(Wₕ)
-        uv = Rₕ(Vₕ, (x -> x[1], x -> 10 * x[1]))
+        uv = Rₕ(Vₕ, (_x1, x -> 10 * x[1]))
         nblocks = ndofs(Vₕ) ÷ m
         blocks(b) = [sum(b[(k * m + 1):((k + 1) * m)]) for k in 0:(nblocks - 1)]
 
@@ -250,7 +251,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
                     domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8), (true, true)
                 )
                 V = gridspace(Ω, Val(3))
-                u = Rₕ(V, ntuple(_ -> (x -> x[1] + x[2]), 3))
+                u = Rₕ(V, ntuple(_ -> _x1_plus_x2, 3))
                 lf = form(V, mk(u))
                 b = zeros(ndofs(V))
                 assemble!(b, lf)
@@ -281,7 +282,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
 
         @testset "Scalar" begin
             g1 = Rₕ(Wf, x -> x[1] + 2x[2])
-            g2 = Rₕ(Wf, x -> exp(x[1]))
+            g2 = Rₕ(Wf, _exp_x1)
             g3 = Rₕ(Wf, x -> 1 + x[2]^2)
             w = Rₕ(Wf, x -> sin(3x[1]) * cos(2x[2]) + 1)
 
@@ -303,7 +304,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         end                                   # being zero
 
         @testset "Composite shorthand" begin
-            gv = Rₕ(Vf, (x -> x[1] + 2x[2], x -> exp(x[1]), x -> 1 + x[2]^2))
+            gv = Rₕ(Vf, (x -> x[1] + 2x[2], _exp_x1, x -> 1 + x[2]^2))
             wv = Rₕ(Vf, (x -> sin(3x[1]) + 1, x -> cos(2x[2]) + 2, x -> x[1] * x[2] + 1))
 
             b = assemble(form(Vf, v -> innerₕ(gv, v + 2 * D₋ₓ(v) - Mₓ(v))))
@@ -318,7 +319,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
 
         @testset "Shorthand equivalence" begin
             # Which is the property that makes it a shorthand rather than a second meaning.
-            uv = Rₕ(Vf, (x -> x[1], x -> 100 * x[1], x -> x[2]))
+            uv = Rₕ(Vf, (_x1, x -> 100 * x[1], _x2))
             # Any: each closure pair is its own type
             for (short, long) in Any[
                 (
@@ -358,11 +359,11 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
                 ),
                 (
                     v -> innerₕ(
-                        (x -> x[1], x -> 100 * x[1], x -> x[2]), v; markers = (:boundary,)
+                        (_x1, x -> 100 * x[1], _x2), v; markers = (:boundary,)
                     ),
-                    v -> innerₕ(x -> x[1], v(1); markers = (:boundary,)) +
+                    v -> innerₕ(_x1, v(1); markers = (:boundary,)) +
                          innerₕ(x -> 100 * x[1], v(2); markers = (:boundary,)) +
-                         innerₕ(x -> x[2], v(3); markers = (:boundary,))
+                         innerₕ(_x2, v(3); markers = (:boundary,))
                 ),
                 (
                     v -> inner_Γ(uv, v; markers = (:boundary,)),
@@ -410,13 +411,13 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             @test v(1)(2) === IndexedTestFunction{2}(2)      # re-indexing replaces
 
             # a sum inside one product takes the component its sides agree on
-            @test test_component_or_nothing(innerₕ(Rₕ(Wf, x -> 1.0), v(2) + D₋ₓ(v(2)))) == 2
-            @test test_component_or_nothing(innerₕ(Rₕ(Wf, x -> 1.0), v + D₋ₓ(v))) ===
+            @test test_component_or_nothing(innerₕ(Rₕ(Wf, _Const(1.0)), v(2) + D₋ₓ(v(2)))) == 2
+            @test test_component_or_nothing(innerₕ(Rₕ(Wf, _Const(1.0)), v + D₋ₓ(v))) ===
                   nothing
 
             # and sides naming different components are ill-formed rather than ambiguous
             @test_throws ArgumentError test_component_or_nothing(
-                innerₕ(Rₕ(Wf, x -> 1.0), v(1) + v(2))
+                innerₕ(Rₕ(Wf, _Const(1.0)), v(1) + v(2))
             )
         end
     end
@@ -454,7 +455,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # Any: each space and source is its own type
         for (nm, sp, u) in Any[
             ("scalar", Wₕ, uₕ),
-            ("composite", Vₕ, Rₕ(Vₕ, (x -> sin(x[1]), x -> cos(x[2])))(1))
+            ("composite", Vₕ, Rₕ(Vₕ, (_sin_x1, x -> cos(x[2])))(1))
         ]
             lf = form(sp, v -> innerₕ(u, v))
             bs = assemble(lf)
@@ -540,7 +541,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             # written out per component, the shorthand that sums them, a routed term
             # carrying operators, and a term whose source and test components differ
             Vb = gridspace(Ωb, Val(2))
-            uv2 = Rₕ(Vb, (x -> x[1], x -> 10 * x[1]))
+            uv2 = Rₕ(Vb, (_x1, x -> 10 * x[1]))
             cv = components(uv2)
             # Any: each closure is its own type
             for (cnm, g) in Any[
@@ -612,7 +613,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
             backend = backend(policy = Parallel())
         )
         W_par = gridspace(Ω_par)
-        u_par = Rₕ(W_par, x -> x[1] + x[2])
+        u_par = Rₕ(W_par, _x1_plus_x2)
         @test execution_policy(W_par) isa Parallel
 
         lf_serial = form(Wₕ, v -> innerₕ(uₕ, v))
@@ -640,7 +641,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # The AST is stored on the form and references the underlying VectorElement arrays,
         # so updating an element in-place via `parent(us) .= ...` or `Rₕ!(us, ...)` is
         # automatically seen without allocating a new AST.
-        us = Rₕ(Wₕ, x -> 1.0)
+        us = Rₕ(Wₕ, _Const(1.0))
         lfs = form(Wₕ, v -> innerₕ(us, v))
 
         first_sum = sum(assemble(lfs))
@@ -651,7 +652,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # `α = Ref(2.0)` with `α * v` or `α * innerₕ(...)`. Mutating `α[] = 10.0`
         # is seen live during assembly with zero allocations.
         α_ref = Ref(2.0)
-        ua_scalar = Rₕ(Wₕ, x -> 1.0)
+        ua_scalar = Rₕ(Wₕ, _Const(1.0))
         lfa_scalar = form(Wₕ, v -> α_ref * innerₕ(ua_scalar, v))
         at_two = sum(assemble(lfa_scalar))
         α_ref[] = 10.0
@@ -689,8 +690,8 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # Every arrangement has to agree with assembling and contracting by hand, not just
         # the simple one: the composite cores are separate code from the scalar one.
         Vc = gridspace(Ωₕ, Val(3))
-        uc = Rₕ(Vc, (x -> 1.0, x -> 100.0, x -> 10000.0))
-        wc = Rₕ(Vc, (x -> 2.0, x -> 3.0, x -> 5.0))
+        uc = Rₕ(Vc, (_Const(1.0), _Const(100.0), _Const(10000.0)))
+        wc = Rₕ(Vc, (_Const(2.0), _Const(3.0), _Const(5.0)))
         cc = components(uc)
         # Any: each closure is its own type
         for (nm, g) in Any[
@@ -730,8 +731,8 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # Everything above went through `assemble`. Evaluation is the other way a form gets
         # used, and it has to agree: `l(vₕ)` and `evaluate!` both resolve from `f`, so a
         # coefficient changed between two calls is read again.
-        uev = Rₕ(Wₕ, x -> 1.0)
-        wₕ = Rₕ(Wₕ, x -> 1.0)
+        uev = Rₕ(Wₕ, _Const(1.0))
+        wₕ = Rₕ(Wₕ, _Const(1.0))
         lfe = form(Wₕ, v -> innerₕ(uev, v))
 
         first_value = lfe(wₕ)
@@ -740,7 +741,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
 
         # a live scalar via RefValue, through evaluation rather than assembly
         α_eval = Ref(2.0)
-        us = Rₕ(Wₕ, x -> 1.0)
+        us = Rₕ(Wₕ, _Const(1.0))
         lfes = form(Wₕ, v -> α_eval * innerₕ(us, v))
         at_two = lfes(wₕ)
         α_eval[] = 10.0
@@ -752,10 +753,10 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         @test evaluate!(scratch, lfe, wₕ) ≈ lfe(wₕ)
 
         # In-place evaluation writes through
-        ul = Rₕ(Wₕ, x -> 1.0)
+        ul = Rₕ(Wₕ, _Const(1.0))
         lfl = form(Wₕ, v -> innerₕ(ul, v))
         loop_first = evaluate!(scratch, lfl, wₕ)
-        Rₕ!(ul, x -> 5.0)
+        Rₕ!(ul, _Const(5.0))
         @test evaluate!(scratch, lfl, wₕ) ≈ 5 * loop_first
     end
 
@@ -770,7 +771,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         @test eltype(assemble(form(Wc, v -> innerₕ(1, v)))) === Float64
 
         # and they mix with a grid-function source in one form
-        gₕ = Rₕ(Wc, x -> 3.0)
+        gₕ = Rₕ(Wc, _Const(3.0))
         @test sum(assemble(form(Wc, v -> innerₕ(1.0, v) + innerₕ(gₕ, v)))) ≈ 4.0
 
         Vt = gridspace(Ωₕ, Val(2))
@@ -784,7 +785,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
 
         # A tuple reads one entry per component, the way `Rₕ(Vₕ, (f, g))` already does.
         @test blk(assemble(form(Vt, v -> innerₕ((1.0, 2.0), v)))) ≈ [1.0, 2.0]
-        @test blk(assemble(form(Vt, v -> innerₕ((x -> 1.0, x -> 2.0), v)))) ≈ [1.0, 2.0]
+        @test blk(assemble(form(Vt, v -> innerₕ((_Const(1.0), _Const(2.0)), v)))) ≈ [1.0, 2.0]
 
         # which agrees with writing the components out
         @test assemble(form(Vt, v -> innerₕ((1.0, 2.0), v))) ≈
@@ -800,7 +801,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         Ωd = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
         uni(n) = gridspace(mesh(Ωd, (n, n), (true, true)))
         W9 = uni(9)
-        one_on(W) = Rₕ(W, x -> 1.0)
+        one_on(W) = Rₕ(W, _Const(1.0))
         elsewhere = "lives on another mesh than the space it is read on"
         for (label, s) in (("finer", one_on(uni(11))), ("coarser", one_on(uni(5))),
             ("graded", one_on(gridspace(_graded_mesh((9, 9))))))
@@ -836,7 +837,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         b9 = assemble(form(Vm, v -> innerₕ(s9, v(1))))
         @test sum(b9[1:ndofs(W9)]) ≈ 1.0 && iszero(b9[(ndofs(W9) + 1):end])
         # a composite source, split per leaf, with its second leaf on another mesh
-        @test_throws elsewhere form(W9 × W9, v -> innerₕ(Rₕ(Vm, (x -> 1.0, x -> 1.0)), v))
+        @test_throws elsewhere form(W9 × W9, v -> innerₕ(Rₕ(Vm, (_Const(1.0), _Const(1.0))), v))
         @test_throws elsewhere form(W9 × W9, v -> innerₕ((s9, one_on(uni(11))), v))
 
         # The same points on a distinct mesh object are the same mesh, uniform or graded,
@@ -858,7 +859,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         graded(n) = (Ωg = mesh(Ω1, n, true);
             Bramble.change_points!(Ωg, range(0.0, 1.0; length = n) .^ 1.5); Ωg)
         W = gridspace(graded(11))
-        fₕ = Rₕ(W, x -> x)
+        fₕ = Rₕ(W, identity)
         elsewhere = "lives on another mesh than the space it is read on"
         for n in (21, 6)
             Wo = gridspace(graded(n))
@@ -949,7 +950,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # thunk call with a `MethodError` naming no cause (gpena/Bramble.jl#761). Plain,
         # restricted and summed terms all resolve through one check, which names the fixes.
         W1 = gridspace(mesh(domain(interval(0.0, 1.0)), (9,), (true,)))
-        f = x -> 1 + x[1]
+        f = _one_plus_x1
         for (label, g) in Any[("plain", v -> f * innerₕ(1.0, v)),
             ("restricted", v -> f * innerₕ(1.0, restrict_to(:boundary, v))),
             ("summed", v -> f * (innerₕ(1.0, v) + innerₕ(2.0, v)))]
@@ -994,7 +995,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         @test_throws ArgumentError form(Vt, v -> innerₕ(1.0, v(3)))
         raw_ast = innerₕ(1.0, IndexedTestFunction{2}(3))
         lf3 = Bramble.LinearForm{2, typeof(Vt), typeof(raw_ast)}(Vt, raw_ast)
-        wt = Rₕ(Vt, (x -> 1.0, x -> 1.0))
+        wt = Rₕ(Vt, (_Const(1.0), _Const(1.0)))
         @test_throws ArgumentError assemble!(b, lf3)
         @test_throws ArgumentError lf3(wt)
         @test_throws ArgumentError assemble_parallel!(b, lf3)
@@ -1005,12 +1006,13 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # `v(1)(3)` passes the range check `v(3)` meets when the expression is built, and
         # names component 3; a function source is lowered per leaf at `form`, so that is
         # where it throws now. It used to fall through unlowered and throw only at assembly.
-        @test_throws ArgumentError form(Vt, v -> innerₕ(x -> 1.0, v(1)(3)))
+        @test_throws ArgumentError form(Vt, v -> innerₕ(_Const(1.0), v(1)(3)))
         # Lowering a term naming a component infers one type, not a Union of the lowered and
         # unlowered term (#551). Built from a runtime AST, not through `form`, whose constants
         # would fold it away. The term naming no component was already concrete; it stays as
         # the other branch's guard.
         vt = Bramble.test_function(Vt)
+        # closures kept: the inference check is on their own type
         for raw in (innerₕ(x -> 1.0, vt(1)), innerₕ(x -> 1.0, vt))
             ast = Bramble.simplify_ast(Bramble.resolve_ast(raw))
             @test @inferred(Bramble._lower_sources_for_space(ast, Vt)) isa Bramble.LazyOp
@@ -1150,7 +1152,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
     end
 
     @testset "Dirichlet conditions" begin
-        bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 5.0))
+        bcs = dirichlet_constraints(Ωₕ, :bottom => _Const(5.0))
         marked = index_in_marker(Ωₕ, :bottom)
         @test any(marked)
 
@@ -1158,7 +1160,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         @test all(b[marked] .≈ 5.0)
 
         # the same constraint, spelled as a Tuple of pairs rather than pre-built constraints
-        b2 = assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = (:bottom => (x -> 5.0),))
+        b2 = assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = (:bottom => _Const(5.0),))
         @test b2 ≈ b
 
         # no dirichlet at all is the unconstrained assembly
@@ -1188,9 +1190,9 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
     end
 
     @testset "dirichlet_components restriction" begin
-        bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 5.0))
+        bcs = dirichlet_constraints(Ωₕ, :bottom => _Const(5.0))
         marked = index_in_marker(Ωₕ, :bottom)
-        uv = Rₕ(Vₕ, (x -> sin(x[1]), x -> cos(x[2])))
+        uv = Rₕ(Vₕ, (_sin_x1, x -> cos(x[2])))
         l = form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
 
         b = assemble(l; dirichlet = bcs, dirichlet_components = 1)
@@ -1218,7 +1220,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         function counts(N)
             Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N), (true, true))
             W = gridspace(Ω)
-            u = Rₕ(W, x -> x[1] + x[2])
+            u = Rₕ(W, _x1_plus_x2)
             lf = form(W, v -> innerₕ(u, v))
             b = zeros(ndofs(W))
 
@@ -1235,7 +1237,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         function composite_bytes(N)
             Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N), (true, true))
             V = gridspace(Ω, Val(3))
-            uv = Rₕ(V, ntuple(_ -> (x -> x[1] + x[2]), 3))
+            uv = Rₕ(V, ntuple(_ -> _x1_plus_x2, 3))
             lf = form(V, v -> innerₕ(uv(1), v))
             b = zeros(ndofs(V))
             assemble!(b, lf)
@@ -1259,7 +1261,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
                 (true, true)
             )
             V = Bramble.CompositeGridSpace((gridspace(Ωbig), gridspace(Ωsmall)))
-            uv = Rₕ(V, (x -> x[1] + x[2], x -> x[1] - x[2]))
+            uv = Rₕ(V, (_x1_plus_x2, x -> x[1] - x[2]))
             lf = form(V, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
             b = zeros(ndofs(V))
             assemble!(b, lf)
@@ -1282,12 +1284,12 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         end
         Ωhc = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8), (true, true))
         Vhomo = gridspace(Ωhc, Val(2))
-        uhomo = Rₕ(Vhomo, (x -> x[1] + x[2], x -> x[1] - x[2]))
+        uhomo = Rₕ(Vhomo, (_x1_plus_x2, x -> x[1] - x[2]))
         Ωhc_small = mesh(
             domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true)
         )
         Vhet_alloc = Bramble.CompositeGridSpace((gridspace(Ωhc), gridspace(Ωhc_small)))
-        uhet_alloc = Rₕ(Vhet_alloc, (x -> x[1] + x[2], x -> x[1] - x[2]))
+        uhet_alloc = Rₕ(Vhet_alloc, (_x1_plus_x2, x -> x[1] - x[2]))
 
         # On Julia nightly specifically (never on a release build, across many
         # repeated runs), a single measurement drifts by one or two
@@ -1342,7 +1344,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         end
 
         @testset "Constrained Jacobian" begin
-            bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 0.0))
+            bcs = dirichlet_constraints(Ωₕ, :bottom => _Const(0.0))
             res(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v)); dirichlet = bcs)
             Jb = ForwardDiff.jacobian(res, u0)
             @test size(Jb) == (n, n)
@@ -1368,8 +1370,8 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh
         # on a composite space, where the components have to line up with the blocks rather
         # than merely add up to the right length
         Vc = gridspace(Ωₕ, Val(2))
-        uc = Rₕ(Vc, (x -> 1.0, x -> 3.0))
-        wc = Rₕ(Vc, (x -> 2.0, x -> 5.0))
+        uc = Rₕ(Vc, (_Const(1.0), _Const(3.0)))
+        wc = Rₕ(Vc, (_Const(2.0), _Const(5.0)))
         lfv = form(Vc, v -> innerₕ(uc, v))
         @test_throws ArgumentError lfv(parent(wc))
 
