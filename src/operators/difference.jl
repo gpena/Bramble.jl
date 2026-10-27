@@ -1493,7 +1493,8 @@ end
 # consumes it is the `inner₊` method beside each struct, which expands immediately -- inside
 # the closure `form` resolves, before `simplify_ast` ever runs -- into the sum of ordinary
 # single-block `BilinearProduct`s a user would write by hand
-# (`test/form/vector_calculus.jl`'s hand-expanded reference is exactly that sum). Nothing
+# (`test/form/vector_calculus.jl`'s hand-expanded reference is exactly that sum), held in a
+# `_ComponentSum` naming each term's component pair (ast.jl, gpena/Bramble.jl#939). Nothing
 # here is a `LazyOp`, so nothing here ever reaches assembly, `local_stencil` or `block_of`
 # directly: the architecture stays "every `LazyOp` is scalar-valued, expansion happens at
 # the builder" (gpena/Bramble.jl#234).
@@ -1553,7 +1554,8 @@ end
 Builder-only container for [`εₕ`](@ref)'s `D × D` entries, each held as its additive pieces
 (`Bramble._strain_pieces`) rather than their sum. Never reaches assembly or an AST walker:
 [`inner₊`](@ref) on two of these expands immediately into the sum of single-block products a
-user would write out by hand.
+user would write out by hand, held in a `Bramble._ComponentSum` that names each term's
+component pairs.
 """
 struct _StrainTensor{D, T}
     entries::T
