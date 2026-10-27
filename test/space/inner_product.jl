@@ -11,6 +11,7 @@ using Supposition
 using ForwardDiff
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, @test_allocs, _nonuniform_points
 using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle, bits_eq
+using ..TestUtils: _Const, _x1, _x2, _x3, _one_plus_x1, _x1_plus_x2, _sin_x1_times_x2
 using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
 
 @testset "Inner products & norms" begin
@@ -143,7 +144,7 @@ using ..SpaceVectorElementsTests: setup_test_grid, valid_interior_range
 
         u2 = u1 * 2.0
         uz = similar(u1)
-        Rₕ!(uz, x -> x[3])
+        Rₕ!(uz, _x3)
 
         @testset "L² and modified L²" begin
             @test innerₕ(u1, u2) ≈ 2.0 * domain_volume
@@ -286,7 +287,7 @@ end
             (5, 4, 6), (true, true, false))
         Wₕ = gridspace(Ωₕ)
         u = Rₕ(Wₕ, x -> x[1] * x[2] + x[3])
-        v = Rₕ(Wₕ, x -> 1.0)
+        v = Rₕ(Wₕ, _Const(1.0))
 
         @test inner₊(u, v, Val(())) === innerₕ(u, v)
         @test inner₊(u, v, Val((1,))) === inner₊ₓ(u, v)
@@ -298,8 +299,8 @@ end
         S = interval(0.0, 1.0) × interval(0.0, 1.0)
         Ωₕ = mesh(domain(S, :bottom => :bottom, :left => :left), (6, 6), (true, true))
         Wₕ = gridspace(Ωₕ)
-        u = Rₕ(Wₕ, x -> 1.0)
-        v = Rₕ(Wₕ, x -> 1.0)
+        u = Rₕ(Wₕ, _Const(1.0))
+        v = Rₕ(Wₕ, _Const(1.0))
 
         w12 = weights(Wₕ, Val((1, 2)))
         mask = Bramble.index_in_marker(Ωₕ, :bottom)
@@ -316,8 +317,8 @@ end
     @testset "Zero allocation, 2D subsets" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true))
         Wₕ = gridspace(Ωₕ)
-        u = Rₕ(Wₕ, x -> x[1])
-        v = Rₕ(Wₕ, x -> 1.0)
+        u = Rₕ(Wₕ, _x1)
+        v = Rₕ(Wₕ, _Const(1.0))
 
         @test_allocs inner₊(u, v, Val(()))
         @test_allocs inner₊(u, v, Val((1,)))
@@ -329,8 +330,8 @@ end
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
             (6, 5, 4), (true, true, true))
         Wₕ = gridspace(Ωₕ)
-        u = Rₕ(Wₕ, x -> x[1])
-        v = Rₕ(Wₕ, x -> 1.0)
+        u = Rₕ(Wₕ, _x1)
+        v = Rₕ(Wₕ, _Const(1.0))
 
         @test_allocs inner₊(u, v, Val(()))
         @test_allocs inner₊(u, v, Val((1,)))
@@ -389,7 +390,7 @@ end
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false))
     Wₕ = gridspace(Ωₕ)
     u = Rₕ(Wₕ, x -> x[1]^2 + 0.5x[2])
-    v = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
+    v = Rₕ(Wₕ, _sin_x1_times_x2)
 
     @testset "Numeric selector matches the aliases" begin
         @test inner₊(u, v, :x) == inner₊ₓ(u, v)
@@ -401,8 +402,8 @@ end
         S = interval(0.0, 1.0) × interval(0.0, 2.0)
         Ωm = mesh(domain(S, :bottom => :bottom), (6, 6), (true, true))
         Wm = gridspace(Ωm)
-        um = Rₕ(Wm, x -> 1.0)
-        vm = Rₕ(Wm, x -> 1.0)
+        um = Rₕ(Wm, _Const(1.0))
+        vm = Rₕ(Wm, _Const(1.0))
         @test inner₊(um, vm, :x; markers = (:bottom,)) ≈
               inner₊ₓ(um, vm; markers = (:bottom,))
     end
@@ -534,9 +535,9 @@ end
     W2 = gridspace(
         mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
     )
-    u1 = Rₕ(W1, x -> x)
-    u2 = Rₕ(W2, x -> x[1])
-    v2 = Rₕ(W2, x -> x[2])
+    u1 = Rₕ(W1, identity)
+    u2 = Rₕ(W2, _x1)
+    v2 = Rₕ(W2, _x2)
 
     @testset "get_dimension_from_type" begin
         @test get_dimension_from_type(typeof((u2, u2))) == 2
@@ -634,7 +635,7 @@ end
             # the H¹ norm is built from the two of them
             @test norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
             # a constant has zero gradient, so zero seminorm
-            @test snorm₁ₕ(Rₕ(Wₕ, x -> 1.0)) ≈ 0.0 atol = 1e-14
+            @test snorm₁ₕ(Rₕ(Wₕ, _Const(1.0))) ≈ 0.0 atol = 1e-14
         end
     end
 
@@ -727,7 +728,7 @@ end
         @test !(norm₊((w, c1)) ≈ norm₊((c1, w)))
 
         # the same values as the homogeneous NTuple of plain copies
-        c1plain = Rₕ(W, x -> x[1])
+        c1plain = Rₕ(W, _x1)
         @test inner₊((c1, w), (v, w)) ≈ inner₊((c1plain, w), (v, w))
         @test inner₊((c1, w), (v, w)) ≈ inner₊ₓ(c1, v) + inner₊ᵧ(w, w)
         @test inner₊((c1, w), (c1, v), Tuple) == (inner₊ₓ(c1, c1), inner₊ᵧ(w, v))
@@ -754,8 +755,8 @@ end
         # natural definition across product components.
         Ωc = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (12, 12), (true, true))
         Vc = gridspace(Ωc, Val(3))
-        uv = Rₕ(Vc, (x -> x[1], x -> x[2], x -> 1.0))
-        vv = Rₕ(Vc, (x -> 1.0, x -> 1.0, x -> 1.0))
+        uv = Rₕ(Vc, (_x1, _x2, _Const(1.0)))
+        vv = Rₕ(Vc, (_Const(1.0), _Const(1.0), _Const(1.0)))
 
         byhand = sum(
             innerₕ(Bramble.components(uv)[c], Bramble.components(vv)[c]) for c in 1:3
@@ -769,12 +770,12 @@ end
 
         # a mismatch in the number of components is an error rather than a silent answer
         V2 = gridspace(Ωc, Val(2))
-        @test_throws DimensionMismatch innerₕ(uv, Rₕ(V2, (x -> 1.0, x -> 1.0)))
+        @test_throws DimensionMismatch innerₕ(uv, Rₕ(V2, (_Const(1.0), _Const(1.0))))
 
         # and the scalar case is untouched
         Wc = gridspace(Ωc)
-        u1 = Rₕ(Wc, x -> x[1])
-        @test innerₕ(u1, Rₕ(Wc, x -> 1.0)) ≈ 0.5
+        u1 = Rₕ(Wc, _x1)
+        @test innerₕ(u1, Rₕ(Wc, _Const(1.0))) ≈ 0.5
     end
 
     @testset "Composite H¹ norm and seminorm" begin
@@ -889,8 +890,8 @@ end
         # the answer is exactly 1.0 and does not depend on the number of points.
         Ω1 = mesh(domain(interval(0.0, 1.0)), 11, true)
         W1 = gridspace(Ω1)
-        @test norminf(Rₕ(W1, x -> x[1])) ≈ 1.0
-        @test norm(Rₕ(W1, x -> x[1]), "∞") == norminf(Rₕ(W1, x -> x[1]))
+        @test norminf(Rₕ(W1, _x1)) ≈ 1.0
+        @test norm(Rₕ(W1, _x1), "∞") == norminf(Rₕ(W1, _x1))
         u1 = Rₕ(W1, x -> sin(3x[1]))
         @test norm(u1, "h") == normₕ(u1)
         @test norm(u1, "1h") == norm₁ₕ(u1)
@@ -922,15 +923,15 @@ end
         @test norminf(Rₕ(W1, x -> -2.0 - x[1])) ≈ 3.0
 
         # the zero element is the only one with zero norm
-        @test norminf(Rₕ(W1, x -> 0.0)) == 0.0
+        @test norminf(Rₕ(W1, _Const(0.0))) == 0.0
 
         Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 9), (true, true))
         W2 = gridspace(Ω2)
-        @test norminf(Rₕ(W2, x -> x[1] + x[2])) ≈ 3.0        # attained at (1, 2)
+        @test norminf(Rₕ(W2, _x1_plus_x2)) ≈ 3.0        # attained at (1, 2)
         @test norminf(Rₕ(W2, x -> -x[2])) ≈ 2.0
 
         # a single spike dominates everything else, wherever it sits
-        uₕ = Rₕ(W2, x -> 0.1)
+        uₕ = Rₕ(W2, _Const(0.1))
         parent(uₕ)[7] = -42.0
         @test norminf(uₕ) ≈ 42.0
 
@@ -940,10 +941,10 @@ end
                 domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 3.0)),
                 (5, 5, 6), (true, true, true))
             W3 = gridspace(Ω3)
-            @test norminf(Rₕ(W3, x -> x[3])) ≈ 3.0
+            @test norminf(Rₕ(W3, _x3)) ≈ 3.0
 
             # a single spike dominates everything else, wherever it sits
-            uₕ = Rₕ(W3, x -> 0.1)
+            uₕ = Rₕ(W3, _Const(0.1))
             parent(uₕ)[7] = -42.0
             @test norminf(uₕ) ≈ 42.0
         end
@@ -954,15 +955,15 @@ end
         # of a restricted function fixed once the extremum sits on a grid point
         Ωa = mesh(domain(interval(0.0, 1.0)), 9, true)
         Ωb = mesh(domain(interval(0.0, 1.0)), 33, false)
-        @test norminf(Rₕ(gridspace(Ωa), x -> x[1])) ≈
-              norminf(Rₕ(gridspace(Ωb), x -> x[1]))
+        @test norminf(Rₕ(gridspace(Ωa), _x1)) ≈
+              norminf(Rₕ(gridspace(Ωb), _x1))
     end
 
     @testset "Composite: maximum across components" begin
         # distinct values per component, so a wrong component cannot pass
         Ωc = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (12, 12), (true, true))
         Vc = gridspace(Ωc, Val(3))
-        uv = Rₕ(Vc, (x -> 2.0 * x[1], x -> -5.0 * x[2], x -> 0.25))
+        uv = Rₕ(Vc, (x -> 2.0 * x[1], x -> -5.0 * x[2], _Const(0.25)))
 
         @test norminf(uv) ≈ 5.0
         @test norminf(uv) ≈ maximum(norminf, Bramble.components(uv))
@@ -977,8 +978,8 @@ end
         # what the vectorial aliases return: ∇ₕ(uₕ) is an NTuple{D, VectorElement} in 2D
         Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))
         W2 = gridspace(Ω2)
-        aₕ = Rₕ(W2, x -> 1.5)
-        bₕ = Rₕ(W2, x -> -4.0)
+        aₕ = Rₕ(W2, _Const(1.5))
+        bₕ = Rₕ(W2, _Const(-4.0))
         @test norminf((aₕ, bₕ)) ≈ 4.0
         @test norminf((aₕ,)) ≈ norminf(aₕ)
     end
@@ -991,8 +992,8 @@ end
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
     Ωₕ = mesh(domain(S, :bottom => :bottom, :left => :left), (5, 5), (true, true))
     Wₕ = gridspace(Ωₕ)
-    uₕ = Rₕ(Wₕ, x -> 1.0)
-    vₕ = Rₕ(Wₕ, x -> 1.0)
+    uₕ = Rₕ(Wₕ, _Const(1.0))
+    vₕ = Rₕ(Wₕ, _Const(1.0))
 
     @testset "Figure match" begin
         # Masked sum on a 5×5 mesh restricted to :bottom evaluates to 0.125, distinguished
@@ -1038,7 +1039,7 @@ end
         vals = map((5, 10, 20, 40)) do n
             Ω = mesh(domain(S, :bottom => :bottom), (n, n), (true, true))
             W = gridspace(Ω)
-            w = Rₕ(W, x -> 1.0)
+            w = Rₕ(W, _Const(1.0))
             innerₕ(w, w; markers = (:bottom,))
         end
         @test issorted(vals; rev = true)
@@ -1055,7 +1056,7 @@ end
             Ω2 = domain(interval(0.0, 2.0) × interval(0.0, 3.0))
             for n in ((5, 5), (9, 9), (17, 16))
                 W = gridspace(mesh(Ω2, n, (true, true)))
-                one_h = Rₕ(W, x -> 1.0)
+                one_h = Rₕ(W, _Const(1.0))
                 @test inner_Γ(one_h, one_h, :ymin) ≈ 2.0          # the bottom edge
                 @test inner_Γ(one_h, one_h, :xmax) ≈ 3.0          # the right edge
                 @test inner_Γ(one_h, one_h, :boundary) ≈ 10.0     # 2(2 + 3)
@@ -1069,7 +1070,7 @@ end
             # counted twice and none is missed.
             W = gridspace(mesh(domain(interval(0.0, 2.0) × interval(0.0, 3.0)), (7, 6),
                 (true, true)))
-            one_h = Rₕ(W, x -> 1.0)
+            one_h = Rₕ(W, _Const(1.0))
             @test inner_Γ(one_h, one_h, :ymin) + inner_Γ(one_h, one_h, :xmin) ≈
                   inner_Γ(one_h, one_h, :ymin, :xmin)
             @test inner_Γ(one_h, one_h, :left) ≈ inner_Γ(one_h, one_h, :xmin)
@@ -1101,7 +1102,7 @@ end
             for n in (5, 9, 33), uniform in (true, false)
 
                 W = gridspace(mesh(domain(interval(0.0, 1.0)), n, uniform))
-                one_h = Rₕ(W, x -> 1.0)
+                one_h = Rₕ(W, _Const(1.0))
                 @test inner_Γ(one_h, one_h, :boundary) ≈ 2.0
                 @test inner_Γ(one_h, one_h, :xmin) ≈ 1.0
             end
@@ -1113,7 +1114,7 @@ end
                 domain(interval(0.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 3.0)),
                 (5, 6, 7), (true, true, true))
             W = gridspace(Ωₕ)
-            one_h = Rₕ(W, x -> 1.0)
+            one_h = Rₕ(W, _Const(1.0))
             @test inner_Γ(one_h, one_h, :boundary) ≈ 2 * (1 * 2 + 1 * 3 + 2 * 3)
             @test inner_Γ(one_h, one_h, :zmax) ≈ 1 * 2
         end
@@ -1130,7 +1131,7 @@ end
         @testset "Refusals" begin
             W = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 7),
                 (true, true)))
-            one_h = Rₕ(W, x -> 1.0)
+            one_h = Rₕ(W, _Const(1.0))
             # a marker that does not name a whole coordinate face
             @test_throws ArgumentError inner_Γ(one_h, one_h, :inlet)
             @test_throws ArgumentError inner_Γ(one_h, one_h, :interior)
@@ -1140,8 +1141,9 @@ end
             # an element of a non-uniform (5, 5) mesh, on either side, is on another mesh
             # (#701); storage that is not one value per point of the mesh, on either side
             # or with equal lengths wrong for the mesh, is a size error
-            u5 = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5),
-                    (false, true))), x -> 1.0)
+            u5 = Rₕ(
+                gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5),
+                    (false, true))), _Const(1.0))
             @test_throws ArgumentError inner_Γ(u5, one_h, :ymin)
             @test_throws ArgumentError inner_Γ(one_h, u5, :ymax)
             ub = Bramble.VectorElement(ones(49), space(u5))
@@ -1153,7 +1155,7 @@ end
             # axis, both of its faces together cover every grid point
             Wc = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (2, 2),
                 (true, true)))
-            oc = Rₕ(Wc, x -> 1.0)
+            oc = Rₕ(Wc, _Const(1.0))
             @test_throws ArgumentError inner_Γ(oc, oc, :boundary)
             # one face of that axis alone is still a surface
             @test inner_Γ(oc, oc, :ymin) ≈ 1.0
@@ -1212,7 +1214,7 @@ end
 
             # on a one-point axis a marker covers both of its faces; the face name picks one
             W1 = gridspace(mesh(domain(S, :bottom => :ymin), (5, 1), (true, true)))
-            u1, o1 = Rₕ(W1, x -> 1 + x[1]), element(W1, 1.0)
+            u1, o1 = Rₕ(W1, _one_plus_x1), element(W1, 1.0)
             @test_throws ArgumentError inner_Γ(u1, o1, :bottom)
             @test isfinite(inner_Γ(u1, o1, :ymin))
             @test inner_Γ(u1, o1, :ymin) ≈ 1.5
@@ -1342,7 +1344,7 @@ _run_generated(ex) = Core.eval(@__MODULE__, ex)
 # the body it returns throws when run, rather than generating a wrong sum.
 @testset "inner₊ body for an unknown result kind" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (false, false))
-    T = typeof(Rₕ(gridspace(Ωₕ), x -> 1.0))
+    T = typeof(Rₕ(gridspace(Ωₕ), _Const(1.0)))
     body = Bramble._generate_inner_plus_body(T, T, :neither)
     @test_throws ArgumentError _run_generated(body)
     @test_throws "Invalid result kind" _run_generated(body)
