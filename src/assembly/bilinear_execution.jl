@@ -222,7 +222,11 @@ function _replay_bilinear_core!(
     # it rebuilds a host mesh and weights, which per unit made a multi-term refill slower than
     # the search it replaces. A no-op on a host leaf.
     sp = _restrict_walk(host_weights(_walked_leaf(bound, trial_space, test_space)), walk)
-    _replay_summands!(mode, A, bound, sp, segments, 0, α)
+    if bound isa OperatorAdd
+        _replay_summands!(mode, A, bound, sp, segments, 0, α)
+    else
+        _replay_unit!(mode, A, bound, sp, 0, 0, segments[1], α)
+    end
     return nothing
 end
 
@@ -261,22 +265,24 @@ function _foreach_unit(f::F, trial_space, test_space, ast) where {F}
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
     sp = _walked_leaf(bound, trial_space, test_space)
-    _foreach_summand_unit(f, bound, sp)
+    if bound isa OperatorAdd
+        _foreach_summand_unit(f, bound, sp)
+    else
+        f(bound, sp, 0, 0, 0, 0, -1)
+    end
     return nothing
 end
 
+# A scalar sum's summand is no unit of its own: each is handed straight to `f`, with no
+# method between the walk and `f` (`_CoordPass`, itself specialised on the term) that would
+# compile once per term type for nothing. The replay walk below does the same.
 @noinline function _foreach_summand_unit(f::F, op::OperatorAdd, sp) where {F}
     _foldl_pairs(
-        (_, t) -> _foreach_summand_unit(f, t, sp),
+        (_, t) -> f(t, sp, 0, 0, 0, 0, -1),
         (_, t1, t2) -> f(_bare_product(t1), sp, 0, 0, 0, 0, 0),
         nothing,
         _summands(op)
     )
-    return nothing
-end
-
-@noinline function _foreach_summand_unit(f::F, term::TERM, sp) where {F, TERM}
-    f(term, sp, 0, 0, 0, 0, -1)
     return nothing
 end
 
@@ -326,20 +332,14 @@ end
         segments::Vector{Segment{D}}, next::Int, α
 ) where {D}
     return _foldl_pairs(
-        (n, t) -> _replay_summands!(mode, A, t, sp, segments, n, α),
+        (n, t) -> begin
+            _replay_unit!(mode, A, t, sp, 0, 0, segments[n + 1], α)
+            return n + 1
+        end,
         (n, t1, t2) -> _replay_pair!(mode, A, t1, t2, sp, segments, n, α),
         next,
         _summands(op)
     )
-end
-
-@noinline function _replay_summands!(
-        mode::_ReplayMode, A::AbstractMatrix, term::TERM, sp,
-        segments::Vector{Segment{D}}, next::Int, α
-) where {TERM, D}
-    next += 1
-    _replay_unit!(mode, A, term, sp, 0, 0, segments[next], α)
-    return next
 end
 
 @noinline function _replay_blocks!(
