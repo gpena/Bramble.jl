@@ -259,3 +259,70 @@ Site list after #939: for `elasticity` empty; for `sum40` the three JET-only pre
 sites `_holds_rank_one` (`src/assembly/bilinear.jl:357`), `_holds_functional`
 (`src/assembly/rank_one.jl:206`) and `_normalisable` (`src/assembly/bilinear.jl:485`), with
 no detector site leaking from either row.
+
+## Assertions measured
+
+#913 step 2 added `::Bool` assertions at the three sites above (`62f409c7`, S4.2). This
+section measures them: first-call `form` and `assemble`, the warm `assemble`, and the JET
+`form` counts, base against head. The result is `benchmark/results/v4.1.4_bool_assert_ab.toml`,
+tables `elasticity` and `sum40`, each with `base` and `head`.
+
+### Method
+
+- Base `3cc7d4bc` (the branch commit before S4.2), head `62f409c7`. The diff between them is
+  `src/assembly/bilinear.jl` and `src/assembly/rank_one.jl`, 10 lines added and 6 removed.
+  Base is a detached worktree.
+- Timing: `benchmark/snoop_instances.jl --rows elasticity,sum40 --launches 1 --threads 4`,
+  one run per tree per launch, three launches interleaved (base, head, base, head, base,
+  head), each through `julia_slot.sh 4`, default `-O`. The script is head's copy for both
+  trees. One fresh child per row and launch measures the first `form`, the first `assemble`
+  and, after the snoops, the median of 20 warm `assemble!` calls. Medians are over the three
+  launches, a spread is the maximum minus the minimum, and the raw launches are in the TOML.
+- JET: `benchmark/bool_audit.jl --rows <row>`, one `julia` per row and tree, 1 thread, run
+  after the timing and never in the timing process (JET's own inference fills the code cache).
+- Julia 1.13.2, Apple M2, 8 cores, AC power, OneDrive paused, no other `julia`. The
+  1-minute load was 2.14 before the first launch and 3.1 to 3.4 during the run, which took
+  2 min 40 s: the load average includes the run's own 4 threads, and the machine had
+  been at 4 to 5 for a few minutes before from the two precompile runs, so the first launch
+  started after the load had fallen below 2.2. The first launches did not differ from the
+  later ones beyond the spread.
+
+### First-call and warm times
+
+Medians over three launches, spread in brackets:
+
+| row | metric | base | head | change |
+|---|---|---:|---:|---|
+| `elasticity` | first `form` | 2.0054 s (0.0067) | 2.0200 s (0.0499) | none (+0.015 s, inside the spread) |
+| `elasticity` | first `assemble` | 17.234 s (0.108) | 17.237 s (0.151) | none (+0.003 s) |
+| `elasticity` | warm `assemble` | 167.6 us (0.81) | 168.5 us (4.6) | none (+0.9 us, +0.5%) |
+| `elasticity` | instances | 3605 (0) | 3605 (0) | none |
+| `sum40` | first `form` | 0.2582 s (0.0027) | 0.2567 s (0.0189) | none (-0.0015 s) |
+| `sum40` | first `assemble` | 0.7295 s (0.0200) | 0.7416 s (0.0125) | none (+0.012 s, inside the spreads) |
+| `sum40` | warm `assemble`, reported only | 43.06 us (1.5) | 47.85 us (1.0) | +4.8 us (+11%), beyond the spread, not gated |
+| `sum40` | instances | 448 (0) | 448 (0) | none |
+
+Warm `assemble` is gated on `elasticity` only (base 167.6 us, above 50 us): head is within
+base's spread. `sum40`'s warm time (about 43 to 48 us, below 50 us) is reported and not
+gated. It is 11% higher on head, more than the launch spread of 1 to 1.5 us, but the 8 to 19%
+that code placement moves such a short row per rebuild is of the same size, and the change
+touches only the form-building path, not `assemble!`. The figure is not attributed to the
+asserts.
+
+### JET counts
+
+| row | `form` reports, base | `form` reports, head | `assemble` reports, base | `assemble` reports, head |
+|---|---:|---:|---:|---:|
+| `elasticity` | 0 | 0 | 0 | 0 |
+| `sum40` | 7 | 5 | 0 | 0 |
+
+The counts do not rise. `sum40` falls by the two dispatches in `_normalise_scalars` (to
+`_normalisable` and `_normalised`). The `_holds_rank_one` and `_holds_functional` assertions
+removed no report, as S4.2 recorded: the dispatch there is on the call's argument.
+
+### Verdict
+
+First-call `form` and `assemble` do not change on either row beyond the spread, and the
+instance counts are equal; `elasticity`'s warm `assemble` does not change (168.5 against
+167.6 us); JET `form` reports on `sum40` fall from 7 to 5 and stay 0 on `elasticity`. The
+assertions cost no first-call or warm time that the measurement can resolve.
