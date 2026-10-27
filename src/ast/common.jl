@@ -684,8 +684,8 @@ AST does not carry its type (gpena/Bramble.jl#917); any other keeps `typeof(f)`.
 # only throws) keeps the type of `f`, and lowering samples it as before.
 @inline _keeps_precision(f, d::Val) = f isa Function && _returns_own(f, Float64, d) &&
                                       _returns_own(f, Float32, d)
-@inline _returns_own(f::F, ::Type{T}, ::Val{D}) where {F, T, D} = Core.Compiler.return_type(
-    f, Tuple{_point_type(T, Val(D))}) === T
+@inline _returns_own(f::F, ::Type{T}, ::Val{D}) where {F, T, D} = Base.promote_op(
+    f, _point_type(T, Val(D))) === T
 
 # A 1D mesh's point is a scalar, a `D`-dimensional one's an `NTuple{D}`.
 @inline _point_type(::Type{T}, ::Val{1}) where {T} = T
