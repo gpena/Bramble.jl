@@ -1097,6 +1097,33 @@ robin_pairs(u, rels) = map(keys(rels)) do F
     F => r.α * u + r.β * Bramble.∂ₙ(u) => r.g
 end
 
+# Shared coefficient functions for the closure bodies that recur across the test files. Each
+# `x -> body` literal is its own anonymous type, so every file that writes one makes Julia
+# compile the same method again; a named function here is compiled once and reused (see
+# docs/notes/test-closure-reuse.md). Only closures whose body is byte-identical to the one
+# below are replaced, so a test computes exactly what it did before. The identity closure
+# `x -> x` is `Base.identity`, not defined here.
+#
+# `_Const(c)` stands for `x -> c`: every `Float64` constant shares one type, where each
+# closure would be a type of its own. It is a `Function` because Bramble dispatches
+# coefficients and markers on `::Function`.
+struct _Const{T} <: Function
+    c::T
+end
+(f::_Const)(x) = f.c
+
+_x1(x) = x[1]
+_x2(x) = x[2]
+_x3(x) = x[3]
+_one_plus_x1(x) = 1 + x[1]
+_x1_lt_half(x) = x[1] < 0.5
+_x1_plus_x2(x) = x[1] + x[2]
+_sin_x1_times_x2(x) = sin(x[1]) * x[2]
+_x1_times_x2(x) = x[1] * x[2]
+_exp_x1(x) = exp(x[1])
+_x1_squared(x) = x[1]^2
+_sin_x1(x) = sin(x[1])
+
 end # module TestUtils
 
 # Installs the per-file trace by overriding Main's own `include`, once, when this file loads
