@@ -3,6 +3,7 @@ module MeshLevelSetClassTests
 using Test
 using LinearAlgebra
 using Bramble
+using ..TestUtils: _Const
 
 # `Bramble._levelset_class(φ, box)` sorts a curve φ = 0 into the closure path (the crossing
 # map T = σₕ∘σᵥ has finite order), the orbit path (T conjugate to an irrational rotation)
@@ -143,8 +144,8 @@ end
     @testset "A nonnegative φ throws the empty error" begin
         B = ((0.0, 1.0), (0.0, 1.0))
         @test occursin("nonnegative at every sampled point of the box ((0.0, 1.0), (0.0, 1.0))",
-            message(p -> 1.0, B))
-        @test_throws ArgumentError Bramble._levelset_class(p -> 1.0, B)
+            message(_Const(1.0), B))
+        @test_throws ArgumentError Bramble._levelset_class(_Const(1.0), B)
     end
 
     @testset "The box-side test ignores φ's scale" begin

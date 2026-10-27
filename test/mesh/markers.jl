@@ -3,7 +3,8 @@ module MeshMarkersTests
 using Test
 using Bramble
 using Random: Random
-using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs, _half_spacing_oracle
+using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs, _half_spacing_oracle,
+    _Const, _x1_lt_half
 
 # `:boundary`/`:interior` are reserved markers every mesh now carries automatically,
 # computed from the mesh's own shape (see `_ensure_geometric_markers!`
@@ -41,8 +42,8 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs, _half_spacing_oracle
         # `:boundary` key silently made that "true everywhere".
         Ωₕ = mesh(domain(S, :bottom => :bottom), (4, 4), (true, true))
         Wₕ = gridspace(Ωₕ)
-        u = Rₕ(Wₕ, x -> 1.0)
-        v = Rₕ(Wₕ, x -> 1.0)
+        u = Rₕ(Wₕ, _Const(1.0))
+        v = Rₕ(Wₕ, _Const(1.0))
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(Bramble.restrict_to(:interior, u), v))
         interior_sum = Bramble.dot(v.data, assemble(a) * u.data)
         full_sum = innerₕ(u, v)
@@ -95,14 +96,14 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs, _half_spacing_oracle
         @test Bramble.markers(Ωₕ2)[:interior] == Bramble.markers(Ωₕ_default)[:interior]
 
         # a custom, non-reserved condition marker is untouched by any of this
-        Ωₕ3 = mesh(domain(S, :left_half => (x -> x[1] < 0.5)), (4, 4), (true, true))
+        Ωₕ3 = mesh(domain(S, :left_half => _x1_lt_half), (4, 4), (true, true))
         @test haskey(Bramble.markers(Ωₕ3), :left_half)
         @test haskey(Bramble.markers(Ωₕ3), :boundary)
         @test haskey(Bramble.markers(Ωₕ3), :interior)
 
         # a condition meaning something else under a reserved name warns, keeps its own value
         Ωₕ4 = @test_logs (:warn, r"boundary") mesh(
-            domain(S, :boundary => (x -> x[1] < 0.5)), (4, 4), (true, true)
+            domain(S, :boundary => _x1_lt_half), (4, 4), (true, true)
         )
         @test sum(Bramble.markers(Ωₕ4)[:boundary]) == 8   # x[1] < 0.5 on a 4x4 grid
     end
@@ -252,11 +253,11 @@ end
 
     W, Wr = gridspace(Ωh), gridspace(Ωr)
     a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-    l = form(W, v -> innerₕ(x -> 1.0, v))
+    l = form(W, v -> innerₕ(_Const(1.0), v))
     ar = form(Wr, Wr, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-    lr = form(Wr, v -> innerₕ(x -> 1.0, v))
-    A, F = assemble(a, l; dirichlet = :xmin => x -> 7.0)
-    Ar, Fr = assemble(ar, lr; dirichlet = :xm => x -> 7.0)
+    lr = form(Wr, v -> innerₕ(_Const(1.0), v))
+    A, F = assemble(a, l; dirichlet = :xmin => _Const(7.0))
+    Ar, Fr = assemble(ar, lr; dirichlet = :xm => _Const(7.0))
     @test A == Ar
     @test F == Fr
 
@@ -308,9 +309,9 @@ end
         Ωh = mesh(Ω, (6, 5), (false, false))
         W = gridspace(Ωh)
         a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-        l = form(W, v -> innerₕ(x -> 1.0, v))
+        l = form(W, v -> innerₕ(_Const(1.0), v))
         u = Rₕ(W, x -> 1 + x[1] + 2x[2])
-        A, F = assemble(a, l; dirichlet = :xmin => x -> 7.0)
+        A, F = assemble(a, l; dirichlet = :xmin => _Const(7.0))
         sd = semidiscretize(a, l; dirichlet = :xmin)
         du = zeros(30)
         sd(du, collect(range(0.25, 1.75; length = 30)), nothing, 0.0)
