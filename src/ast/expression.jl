@@ -12,10 +12,10 @@ post-`simplify_ast` AST stored in `form.ast`) as a string in Bramble's own opera
 e.g. `innerₕ(D₋ₓ(u), v)`, instead of the raw nested struct type.
 
 One `expression` method per node type, dispatched on the node's concrete type. This file
-covers only the algebra nodes (`OperatorAdd`, `OperatorScale`, `GridFunctionScale`) and the two
-space leaves (`IdentityOperator`, `ZeroOperator`); every other node type (trial/test functions,
-inner products, directional differences, interpolation, restriction, ...) is added by later
-files, each adding its own `expression` methods without touching this one.
+covers only the algebra nodes (`OperatorAdd`, `OperatorScale`, `GridFunctionScale`), the
+space leaf `IdentityOperator` and the zero `ZeroOperator`; every other node type (trial/test
+functions, inner products, directional differences, interpolation, restriction, ...) is added
+by later files, each adding its own `expression` methods without touching this one.
 =#
 
 """
@@ -53,6 +53,7 @@ _sign_as_int(c) = c
 # An `OperatorAdd` nested inside an `OperatorAdd`/`OperatorScale` needs parens to keep
 # precedence unambiguous; a scale or a leaf never does (its own rendering already delimits it).
 _paren_if_add(op::OperatorAdd) = "($(expression(op)))"
+_paren_if_add(op::_ComponentSum) = _paren_if_add(op.sum)  # a builder's sum (ast.jl)
 _paren_if_add(op::LazyOp) = expression(op)
 
 # --- Space leaves ------------------------------------------------------------------- #
@@ -70,6 +71,9 @@ end
 
 # No name to recover for an arbitrary vector/function coefficient -- always the placeholder.
 expression(op::GridFunctionScale) = "vₕ * $(expression(op.inner_op))"
+
+# A builder's sum (`_ComponentSum`, ast.jl) prints as the sum it holds.
+expression(op::_ComponentSum) = expression(op.sum)
 
 # --- Sum nodes ------------------------------------------------------------------------ #
 

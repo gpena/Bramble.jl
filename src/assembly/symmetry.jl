@@ -102,7 +102,7 @@ end
 function _same_operator_shape(a::IdentityOperator{D}, b::IdentityOperator{D}) where {D}
     return a.space === b.space
 end
-_same_operator_shape(a::ZeroOperator{D}, b::ZeroOperator{D}) where {D} = a.space === b.space
+_same_operator_shape(::ZeroOperator{D}, ::ZeroOperator{D}) where {D} = true
 
 # Anything else: different node types, a Trial/Test pair with mismatched indices, or a
 # shape this does not recognise, is not verified as the same operator.

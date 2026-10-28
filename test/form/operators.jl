@@ -431,6 +431,14 @@ const _ORIGIN_2D = (0, 0)
         z = ZeroOperator(Wₕ)
         @test z isa LazyOp{2}
         @test sprint(show, z) == "0"
+        # The zero keeps only the dimension: no field, no `space`, so the zero of any
+        # 2D space, composite or not, and the one `simplify_ast` synthesises are one node.
+        @test fieldcount(typeof(z)) == 0
+        @test z === ZeroOperator{2}()
+        @test z === ZeroOperator(Vₕ)
+        @test z === Bramble._zero_of(id)
+        @test ZeroOperator(gridspace(mesh(domain(interval(0.0, 1.0)), 5, false))) !== z
+        @test !hasmethod(Bramble.space, Tuple{typeof(z)})
         @test sprint(show, id) == "I"
     end
 end

@@ -184,3 +184,145 @@ and `_holds_functional`. Whether those seven call sites warrant step 2 is for th
 decide. The baseline for "do not rise" is `form` 38 and `assemble` 0 for `elasticity`,
 `form` 5 and `assemble` 0 for `sum40`, as the script reports them (one `julia` per row,
 `assemble` run before JET).
+
+## After #939
+
+Retaken on `perf/v4.1.4-followups` at `6ee42fb0` (S1, which unwraps a builder's sum under a
+restriction), Julia 1.13.2, 1 thread, one `julia` for both rows:
+
+```
+julia --startup-file=no --project=test benchmark/bool_audit.jl --control \
+    --rows elasticity,sum40 --out benchmark/results/v4.1.4_bool_audit_after939.toml
+```
+
+The result is `benchmark/results/v4.1.4_bool_audit_after939.toml`. The earlier table above
+stays as measured. A second run of each row alone in its own process (a temporary script
+outside the repository, not kept) gave the same counts and the same site list, so sharing
+the process did not change them. The positive control finds `AuditControl.isp` and not `isq`,
+as before.
+
+### JET counts against the original table
+
+| row | summands | `form` reports, before | `form` reports, after | `assemble` reports, before | `assemble` reports, after |
+|---|---|---|---|---|---|
+| `elasticity` | 35 | 38 | 0 | 0 | 0 |
+| `sum40` | 40 | 5 | 7 | 0 | 0 |
+
+`elasticity` is clean: the 38 reports all traced to the non-concrete tuples of `εₕ` and
+`divₘₕ` and to the abstract `OperatorAdd` tree of `foldl`, and none is left.
+
+`sum40` rises by 2, so its count does not fall. The 7 reports are the 5 of the original
+table (the `Any` callee, `_bilinear_form`, `_holds_rank_one` from `form`, `_holds_functional`
+from `_check_bilinear_terms`, one `OperatorAdd` constructor dispatch in `+`) and two new
+ones: runtime dispatches to `_normalisable` and to `_normalised`, both with `Bramble._normalise_scalars`
+as innermost frame. `_normalise_scalars` came with #912 (`ab551efe`, 2026-10-25), after the
+original table's commit `96ff3a4c` (2026-10-24), so the two are not an effect of #939. The
+cause is the one the original table gives for `sum40`: the 40-term `foldl` returns an abstract
+`OperatorAdd` type, so the AST that reaches `_normalise_scalars` infers `Any`.
+
+### Sites still leaking
+
+The detector lists 20 sites for each row (original: 26 for `elasticity`, 21 for `sum40`),
+with no caller named by any JET report. A detector run right after `using Bramble`, before
+any mesh or form exists, lists the same 20. All 20 are abstract-signature instances of the
+package image, classed apart as before: `_shares_one_mesh`, `_ghost_kron_reads_absent`,
+`_kron_is_fresh` (2), `_marks_only_face`, `_mf_gathers` (2), `_pairable_type` (3), `_peelable`,
+`_same_mesh` (2), `_storage_collapsed` and `_type_holds` (6). The original 21 had one more,
+`_near_edge(GhostMesh{1, …}, CartesianIndex{1}, Int64)`, which no longer appears at load. Which
+change removed it was not traced (97 commits separate `96ff3a4c` from this head).
+
+The 5 elasticity-only sites (`_is_source_only` (2), `_has_test_interp` (1),
+`_has_trial_interp` (2)) are gone. They traced to the non-concrete AST, as the original
+table said, and the elasticity form is now concrete.
+
+So no detector site leaks from either form: every site left is an image instance.
+
+### Predicate call sites JET still reports
+
+`elasticity` has none. `sum40` has three predicate call sites reached through a runtime
+dispatch. None is a detector site, since the instances that return are `Bool` or generated.
+
+| function | file | inferred type at the call | caller |
+|---|---|---|---|
+| `Bramble._holds_rank_one` | `src/assembly/bilinear.jl:357` | `Any` (dispatch on the abstract `OperatorAdd` union) | `form` |
+| `Bramble._holds_functional` | `src/assembly/rank_one.jl:206` | `Any` | `Bramble._check_bilinear_terms` |
+| `Bramble._normalisable` | `src/assembly/bilinear.jl:485` | `Any` (argument `ast::Any`) | `Bramble._normalise_scalars` |
+
+The inferred type is that of the call expression, read from the JET report's runtime
+dispatch (the callee has an abstract argument); it was not read per call from the
+inference result. All three come from the abstract term type that the 40-term `foldl`
+returns, not from #939 or from a concrete AST.
+
+### Site list for S4.2
+
+Site list after #939: for `elasticity` empty; for `sum40` the three JET-only predicate call
+sites `_holds_rank_one` (`src/assembly/bilinear.jl:357`), `_holds_functional`
+(`src/assembly/rank_one.jl:206`) and `_normalisable` (`src/assembly/bilinear.jl:485`), with
+no detector site leaking from either row.
+
+## Assertions measured
+
+#913 step 2 added `::Bool` assertions at the three sites above (`62f409c7`, S4.2). This
+section measures them: first-call `form` and `assemble`, the warm `assemble`, and the JET
+`form` counts, base against head. The result is `benchmark/results/v4.1.4_bool_assert_ab.toml`,
+tables `elasticity` and `sum40`, each with `base` and `head`.
+
+### Method
+
+- Base `3cc7d4bc` (the branch commit before S4.2), head `62f409c7`. The diff between them is
+  `src/assembly/bilinear.jl` and `src/assembly/rank_one.jl`, 10 lines added and 6 removed.
+  Base is a detached worktree.
+- Timing: `benchmark/snoop_instances.jl --rows elasticity,sum40 --launches 1 --threads 4`,
+  one run per tree per launch, three launches interleaved (base, head, base, head, base,
+  head), each through `julia_slot.sh 4`, default `-O`. The script is head's copy for both
+  trees. One fresh child per row and launch measures the first `form`, the first `assemble`
+  and, after the snoops, the median of 20 warm `assemble!` calls. Medians are over the three
+  launches, a spread is the maximum minus the minimum, and the raw launches are in the TOML.
+- JET: `benchmark/bool_audit.jl --rows <row>`, one `julia` per row and tree, 1 thread, run
+  after the timing and never in the timing process (JET's own inference fills the code cache).
+- Julia 1.13.2, Apple M2, 8 cores, AC power, OneDrive paused, no other `julia`. The
+  1-minute load was 2.14 before the first launch and 3.1 to 3.4 during the run, which took
+  2 min 40 s: the load average includes the run's own 4 threads, and the machine had
+  been at 4 to 5 for a few minutes before from the two precompile runs, so the first launch
+  started after the load had fallen below 2.2. The first launches did not differ from the
+  later ones beyond the spread.
+
+### First-call and warm times
+
+Medians over three launches, spread in brackets:
+
+| row | metric | base | head | change |
+|---|---|---:|---:|---|
+| `elasticity` | first `form` | 2.0054 s (0.0067) | 2.0200 s (0.0499) | none (+0.015 s, inside the spread) |
+| `elasticity` | first `assemble` | 17.234 s (0.108) | 17.237 s (0.151) | none (+0.003 s) |
+| `elasticity` | warm `assemble` | 167.6 us (0.81) | 168.5 us (4.6) | none (+0.9 us, +0.5%) |
+| `elasticity` | instances | 3605 (0) | 3605 (0) | none |
+| `sum40` | first `form` | 0.2582 s (0.0027) | 0.2567 s (0.0189) | none (-0.0015 s) |
+| `sum40` | first `assemble` | 0.7295 s (0.0200) | 0.7416 s (0.0125) | none (+0.012 s, inside the spreads) |
+| `sum40` | warm `assemble`, reported only | 43.06 us (1.5) | 47.85 us (1.0) | +4.8 us (+11%), beyond the spread, not gated |
+| `sum40` | instances | 448 (0) | 448 (0) | none |
+
+Warm `assemble` is gated on `elasticity` only (base 167.6 us, above 50 us): head is within
+base's spread. `sum40`'s warm time (about 43 to 48 us, below 50 us) is reported and not
+gated. It is 11% higher on head, more than the launch spread of 1 to 1.5 us, but the 8 to 19%
+that code placement moves such a short row per rebuild is of the same size, and the change
+touches only the form-building path, not `assemble!`. The figure is not attributed to the
+asserts.
+
+### JET counts
+
+| row | `form` reports, base | `form` reports, head | `assemble` reports, base | `assemble` reports, head |
+|---|---:|---:|---:|---:|
+| `elasticity` | 0 | 0 | 0 | 0 |
+| `sum40` | 7 | 5 | 0 | 0 |
+
+The counts do not rise. `sum40` falls by the two dispatches in `_normalise_scalars` (to
+`_normalisable` and `_normalised`). The `_holds_rank_one` and `_holds_functional` assertions
+removed no report, as S4.2 recorded: the dispatch there is on the call's argument.
+
+### Verdict
+
+First-call `form` and `assemble` do not change on either row beyond the spread, and the
+instance counts are equal; `elasticity`'s warm `assemble` does not change (168.5 against
+167.6 us); JET `form` reports on `sum40` fall from 7 to 5 and stay 0 on `elasticity`. The
+assertions cost no first-call or warm time that the measurement can resolve.

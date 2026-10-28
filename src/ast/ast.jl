@@ -23,9 +23,9 @@ without performing it, so that a form can be written as an expression and assemb
 """
 abstract type LazyOp{D} end
 
-# `space` is implemented only by nodes that carry a concrete space reference (`IdentityOperator`,
-# `ZeroOperator`), whereas purely algebraic or symbolic nodes (`TestFunction`, `TrialFunction`)
-# receive space context during form assembly.
+# `space` is implemented only by the node that carries a concrete space reference
+# (`IdentityOperator`), whereas purely algebraic or symbolic nodes (`TestFunction`,
+# `TrialFunction`) receive space context during form assembly.
 
 # --- The nodes ------------------------------------------------------------------- #
 
@@ -41,17 +41,15 @@ end
 """
     ZeroOperator(Wₕ::AbstractSpaceType)
 
-The zero operator on `Wₕ`, as a symbolic node. Absorbs multiplication by a scalar.
+The zero operator on `Wₕ`, as a symbolic node. Absorbs multiplication by a scalar. Keeps
+only the dimension of `Wₕ`: two zero operators of one dimension are the same node.
 """
-struct ZeroOperator{D, S} <: LazyOp{D}
-    space::S
-end
+struct ZeroOperator{D} <: LazyOp{D} end
 
 @inline IdentityOperator(space::AbstractSpaceType) = IdentityOperator{dim(space), typeof(space)}(space)
 
 @inline space(op::IdentityOperator) = op.space
-@inline space(op::ZeroOperator) = op.space
-@inline ZeroOperator(space::AbstractSpaceType) = ZeroOperator{dim(space), typeof(space)}(space)
+@inline ZeroOperator(space::AbstractSpaceType) = ZeroOperator{dim(space)}()
 
 """
     OperatorScale(α, op::LazyOp)
@@ -82,6 +80,33 @@ struct OperatorAdd{D, LeftType <: LazyOp{D}, RightType <: LazyOp{D}} <: LazyOp{D
     left_op::LeftType
     right_op::RightType
 end
+
+# A sum built by the `εₕ`/`divₕ`/`divₘₕ` `inner₊` builders (operators/difference.jl), with
+# the component pair of each term in its type. `P` mirrors the `OperatorAdd`s of `sum`, a
+# leaf `(i, j)` for a term whose trial leaves are all `u(i)` and test leaves all `v(j)`, a
+# join `(L, R)` for a `+`. `simplify_ast` (simplifier.jl) reads `P` to distribute a scalar
+# over the sum by type where `_mixes_components` compares runtime indices, so a captured
+# coefficient gives `form` one type (gpena/Bramble.jl#939); an unscaled one is just `sum`.
+#
+# Nothing past `simplify_ast` sees it. `resolve_ast` and `_resolve_surfaces` (inner.jl)
+# rebuild it around their result, and the other walkers before them read its type or return
+# it as built. Only a sum whose pairs differ is wrapped, and such a sum names more than one
+# component, so a difference, average or restriction over it distributes and simplifies its
+# operand (`_LinearWrapper`, simplifier.jl) rather than keep it whole, marker and all.
+struct _ComponentSum{D, P, S <: LazyOp{D}} <: LazyOp{D}
+    sum::S
+end
+
+@inline function _component_sum(s::LazyOp{D}, ::Val{P}) where {D, P}
+    return _pairs_differ(P) ? _ComponentSum{D, P, typeof(s)}(s) : s
+end
+
+# Whether the leaves of the label tree `P` hold two different pairs. Folds: `P` is a constant.
+@inline _pairs_differ(P) = _differs_from(P, _first_pair(P))
+@inline _first_pair(P::Tuple{Int, Int}) = P
+@inline _first_pair(P::Tuple) = _first_pair(P[1])
+@inline _differs_from(P::Tuple{Int, Int}, q) = P !== q
+@inline _differs_from(P::Tuple, q) = _differs_from(P[1], q) || _differs_from(P[2], q)
 
 # A scale node: a scalar or a grid function times an operator.
 const _Scale = Union{OperatorScale, GridFunctionScale}

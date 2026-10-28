@@ -1073,7 +1073,11 @@ end
                inner₊(b(u), b(v), S) + inner₊(b(u), a(v), S) +
                inner₊(a(u), b(v), S) + inner₊(a(u), a(v), S) +
                inner₊(D₋ᵧ(u(2)), D₋ᵧ(v(2)), Val((2,)))
-        @test inner₊(εₕ(u), εₕ(v)) === hand
+        # The builder wraps its sum in a `_ComponentSum` naming each term's component pair,
+        # which `simplify_ast` reads to scale it by type (#939); the sum inside is `hand`.
+        built = inner₊(εₕ(u), εₕ(v))
+        @test built isa Bramble._ComponentSum
+        @test built.sum === hand
     end
 
     @testset "divcₕ, div̽ₕ" begin

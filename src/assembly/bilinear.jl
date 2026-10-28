@@ -353,8 +353,9 @@ function form(Wₕ, Vₕ, f)
     # Behind an inference barrier: the branch is a constant `false` for an expression of known
     # type without the term, so such a form still infers as its `BilinearForm`. Where the
     # type is not known (generic code over abstract spaces) the result infers as `Any`, not
-    # as a union every caller taking only a `BilinearForm` would have to accept.
-    _holds_rank_one(raw_ast) &&
+    # as a union every caller taking only a `BilinearForm` would have to accept. `::Bool`:
+    # JET saw a runtime dispatch on a `UnionAll` operand here (#913); every method is `Bool`.
+    _holds_rank_one(raw_ast)::Bool &&
         return Base.inferencebarrier(_rank_one_form)(Wₕ, Vₕ, raw_ast)  # rank_one.jl
     return _bilinear_form(Wₕ, Vₕ, raw_ast)
 end
@@ -481,8 +482,9 @@ precompile(_type_float64_values, (Any,))
 @inline _join_eltype(T, U, rest...) = T === U ? _join_eltype(T, rest...) : Nothing
 
 # `ast` with its loose scalars converted where that keeps the matrix (above), for spaces
-# whose every leaf has element type `E` (`Nothing` where two leaves' differ).
-@inline _normalise_scalars(ast, ::Type{E}) where {E} = _normalisable(ast, E) ?
+# whose every leaf has element type `E` (`Nothing` where two leaves' differ). `::Bool`:
+# JET saw a runtime dispatch on an `Any` operand here (#913); every method is `Bool`.
+@inline _normalise_scalars(ast, ::Type{E}) where {E} = _normalisable(ast, E)::Bool ?
                                                        _normalised(ast) : ast
 @inline _normalised_in(op) = _holds_loose_scalar(op) ? _normalised(op) : op
 @inline _normalised(op) = op

@@ -59,6 +59,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_3D_TESTS
         idop, zop = IdentityOperator(Wₕ), ZeroOperator(Wₕ)
         @test idop(4) === idop
         @test zop(4) === zop
+        @test zop === ZeroOperator{2}()
 
         sf = source_function(x -> x[1] + x[2], Val(2))
         @test sf(4) === sf

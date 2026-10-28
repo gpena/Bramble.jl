@@ -80,13 +80,9 @@ identity over the scalars, grid functions and components involved. The one excep
 
 # --- Zero/identity recognition ------------------------------------------------------ #
 
-# Synthesized only here, for a subtree whose concrete space is not known generically.
-# Every consumer of a `ZeroOperator` (`local_stencil`, `stencil_offsets`, `component`,
-# `_is_source_only`'s fallback) reads only its `D` type parameter, never `.space` --
-# except `_same_operator_shape` (`symmetry.jl`), which compares `a.space === b.space`, and
-# `nothing === nothing` settles that the same way two zero operators over the same space
-# would: they are the same operator.
-@inline _zero_of(::LazyOp{D}) where {D} = ZeroOperator{D, Nothing}(nothing)
+# The zero operator of a subtree's dimension. A `ZeroOperator` carries no space, only `D`,
+# so the one synthesised here is `===` to `ZeroOperator(Wₕ)` for any `Wₕ` of dimension `D`.
+@inline _zero_of(::LazyOp{D}) where {D} = ZeroOperator{D}()
 
 # `(scalar, inner)` for a node the lifting rule can read a coefficient from. A bare
 # (non-`OperatorScale`) node is `1 * itself`. The scalar is returned exactly as stored -- a
@@ -174,6 +170,9 @@ struct _MixedComponents end
         _test_component_class(op.left_op), _test_component_class(op.right_op)
     )
 end
+# A builder's sum (`_ComponentSum`, ast.jl) names what the sum it holds names, so a wrapper
+# over it distributes and simplifies it, which unwraps it (`_LinearWrapper` below).
+@inline _test_component_class(op::_ComponentSum) = _test_component_class(op.sum)
 @inline _test_component_class(::Any) = nothing
 
 @inline _trial_component_class(op::IndexedTrialFunction) = op.component_idx
@@ -184,6 +183,7 @@ end
         _trial_component_class(op.left_op), _trial_component_class(op.right_op)
     )
 end
+@inline _trial_component_class(op::_ComponentSum) = _trial_component_class(op.sum)
 @inline _trial_component_class(::Any) = nothing
 
 # Whether the router could route `a` and `b` as one opaque term. So a rewrite may hide
@@ -206,7 +206,17 @@ end
 # when every term names the same `i` (gpena/Bramble.jl#529). Separate inner products, each
 # with its own coefficient, never reach those gates and infer concretely. Kept on purpose:
 # distributing every sum that names a component would infer concretely, but costs a sweep
-# for every same-component sum (`v(1) + D₋ₓ(v(1))`).
+# for every same-component sum (`v(1) + D₋ₓ(v(1))`). The one exception is a scalar over
+# the sum of the `εₕ`/`divₕ`/`divₘₕ` builders, which carries its terms' component pairs in
+# its type (`_ComponentSum`, ast.jl), so that gate is answered by type
+# (`_scale_labelled_sum` below) with the tree literal indices give (gpena/Bramble.jl#939).
+# That covers a scalar directly over one builder (`μ * inner₊(εₕ(u), εₕ(v))`), sums of such
+# terms, and such a term plus a user's. A scale meeting the already distributed sum (`2 *
+# (μ * X)`, `-(μ * X)`, `μ * (X + Y)` over two builders) and an `Int` coefficient (#240)
+# take the value gate as before.
+# The gradient tuple's `inner₊(∇ₕ(u), ∇ₕ(v))` gets plain tuples and no pairs, so a captured
+# coefficient over it keeps this gate (concrete in 2D through constant propagation, a
+# `Union` in 3D).
 @inline function _mixes_components(a::LazyOp, b::LazyOp)
     trial = _component_combine(_trial_component_class(a), _trial_component_class(b))
     test = _component_combine(_test_component_class(a), _test_component_class(b))
@@ -227,8 +237,12 @@ unchanged; `form(Wₕ, Vₕ, f)`/`form(Wₕ, f)` call this immediately after `re
 """
 @inline simplify_ast(op::LazyOp) = op
 
-function simplify_ast(op::OperatorScale)
-    inner = simplify_ast(op.inner_op)
+simplify_ast(op::OperatorScale) = _scale_simplified(op, simplify_ast(op.inner_op))
+
+# `simplify_ast(op)` once `op.inner_op` is simplified to `inner`. Split out so a scale over a
+# builder's sum (`_ComponentSum`, below) reaches the same rules when its labels cannot say
+# whether the sum mixes components.
+@inline function _scale_simplified(op::OperatorScale, inner::LazyOp)
     inner isa ZeroOperator && return inner  # `c * 0 == 0`, whatever `c` is.
 
     if inner isa OperatorAdd && _mixes_components(inner.left_op, inner.right_op)
@@ -244,7 +258,12 @@ function simplify_ast(op::OperatorScale)
         )
         return _scale_over_sum(op.scalar, inner)
     end
+    return _scale_kept(op, inner)
+end
 
+# The end of `_scale_simplified`, past the distribution: `c * inner` kept as one term, with
+# rules 3 and 4.
+@inline function _scale_kept(op::OperatorScale, inner::LazyOp)
     # `Integer`, not `Number`, and for the reason `_wrap_scale` spells out: collapsing on the
     # value of a `Float64` coefficient makes this method's return type depend on a number the
     # compiler may not know (gpena/Bramble.jl#240).
@@ -373,6 +392,103 @@ end
     end
     return OperatorScale(c, x)
 end
+
+# --- A scale over a builder's sum (gpena/Bramble.jl#939) ---------------------------- #
+
+# `_mixes_components` compares runtime indices, so a scalar captured by the form closure over
+# `inner₊(εₕ(u), εₕ(v))` left `form` a `Union` of trees. The builders know each term's
+# component pair and record it in `_ComponentSum`'s type (ast.jl); the methods below answer
+# the gates of `_scale_simplified` and `_distributed_expr` from those pairs and the types of
+# the simplified sum, mirroring `_trial_component_class`/`_test_component_class` with every
+# indexed leaf of a term read as its pair's index. So the tree is the one the literal-index
+# path builds, and a user-written sum, which carries no pairs, keeps #529's value gate.
+# `nothing` from a query stands for "the pairs do not fit the tree", and the value path runs.
+_side_index(P::Tuple{Int, Int}, side::Symbol) = side === :trial ? P[1] : P[2]
+
+# The class of a subtree of type `T`, every indexed leaf of `side` in it naming `k`.
+function _typed_class(@nospecialize(T), side::Symbol, k::Int)
+    T isa DataType || return nothing
+    leaf = side === :trial ? IndexedTrialFunction : IndexedTestFunction
+    T <: leaf && return k
+    T <: UnaryWrapper && return _typed_class(fieldtype(T, :inner_op), side, k)
+    side === :trial && T <: BilinearProduct &&
+        return _typed_class(fieldtype(T, :left_op), side, k)
+    side === :test && T <: Union{BilinearProduct, LinearProduct} &&
+        return _typed_class(fieldtype(T, :right_op), side, k)
+    if T <: OperatorAdd
+        l = _typed_class(fieldtype(T, :left_op), side, k)
+        r = _typed_class(fieldtype(T, :right_op), side, k)
+        return _known_combine(l, r)
+    end
+    return _NoComponent()
+end
+
+# `nothing` is taken by "unknown" above, so a class naming no component is this.
+struct _NoComponent end
+
+_known_combine(l, r) = l === nothing || r === nothing ? nothing : _component_combine(l, r)
+
+# The class of the subtree of type `T` labelled `P`: a leaf pair, or a join over a sum.
+function _labelled_class(@nospecialize(T), P, side::Symbol)
+    P isa Tuple{Int, Int} && return _typed_class(T, side, _side_index(P, side))
+    T isa DataType && T <: OperatorAdd || return nothing
+    return _known_combine(_labelled_class(fieldtype(T, :left_op), P[1], side),
+        _labelled_class(fieldtype(T, :right_op), P[2], side))
+end
+
+# The labels of a sum's two operands: a join's own two, or a leaf's pair for both.
+_operand_labels(P) = P isa Tuple{Int, Int} ? (P, P) : P
+
+# `_mixes_components(x.left_op, x.right_op)` for a sum `x` of type `T` labelled `P`.
+function _labelled_mixes(@nospecialize(T), P)
+    Pl, Pr = _operand_labels(P)
+    L, R = fieldtype(T, :left_op), fieldtype(T, :right_op)
+    trial = _known_combine(_labelled_class(L, Pl, :trial), _labelled_class(R, Pr, :trial))
+    test = _known_combine(_labelled_class(L, Pl, :test), _labelled_class(R, Pr, :test))
+    (trial === nothing || test === nothing) && return nothing
+    return trial isa _MixedComponents || test isa _MixedComponents
+end
+
+# `_distributed_expr` with each gate answered from the labels, or `nothing` where they do
+# not fit the tree.
+function _labelled_distributed_expr(@nospecialize(T), P, path)
+    T <: OperatorAdd || return :(_scale_piece(c, $path))
+    mixes = _labelled_mixes(T, P)
+    mixes === nothing && return nothing
+    mixes || return :(_scale_piece(c, $path))
+    Pl, Pr = _operand_labels(P)
+    le = _labelled_distributed_expr(fieldtype(T, :left_op), Pl, :($path.left_op))
+    re = _labelled_distributed_expr(fieldtype(T, :right_op), Pr, :($path.right_op))
+    (le === nothing || re === nothing) && return nothing
+    l, r = gensym(:l), gensym(:r)
+    return quote
+        $l = $le
+        $r = $re
+        $(_sum_dropping_zeros(l, r))
+    end
+end
+
+# `_scale_simplified(op, inner)` for `inner` the simplified sum of a `_ComponentSum`
+# labelled `P`, with every gate folded. A sum the labels do not fit, or one simplifying it
+# again could change (`_resimplify_moves`), takes `_scale_simplified` itself.
+@generated function _scale_labelled_sum(op::OperatorScale, inner::LazyOp, ::Val{P}) where {P}
+    inner <: ZeroOperator && return :inner
+    inner <: OperatorAdd || return :(_scale_kept(op, inner))
+    mixes = _labelled_mixes(inner, P)
+    mixes === nothing && return :(_scale_simplified(op, inner))
+    mixes || return :(_scale_kept(op, inner))
+    _resimplify_moves(inner) && return :(_scale_simplified(op, inner))
+    ex = _labelled_distributed_expr(inner, P, :inner)
+    ex === nothing && return :(_scale_simplified(op, inner))
+    return :(c = op.scalar; $ex)
+end
+
+function simplify_ast(op::OperatorScale{D, C, <:_ComponentSum{D, P}}) where {D, C, P}
+    return _scale_labelled_sum(op, simplify_ast(op.inner_op.sum), Val(P))
+end
+
+# Anywhere else the builder's sum is the sum it holds.
+simplify_ast(op::_ComponentSum) = simplify_ast(op.sum)
 
 # --- Dirac sources inside a sum ------------------------------------------------------ #
 

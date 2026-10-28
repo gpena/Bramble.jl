@@ -1,0 +1,181 @@
+[captured_linear_form]
+base_concrete = true
+code = "a = x -> x[1]^2 + x[2]; form(W, v -> innerₕ(a, v))"
+head_concrete = true
+
+[closures_fresh.base]
+first_assemble_s = 0.105070333
+first_assemble_s_launches = [0.10416425, 0.105070333, 0.105089125]
+first_assemble_s_spread = 0.0009248750000000056
+first_form_s = 0.115087834
+first_form_s_launches = [0.114746708, 0.115326125, 0.115087834]
+first_form_s_spread = 0.0005794169999999987
+first_instances = 216
+first_instances_launches = [216, 216, 216]
+first_instances_spread = 0
+load_1min_launches = [1.64, 1.78, 1.91]
+repeat_instances = 0
+repeat_instances_launches = [0, 0, 0]
+repeat_instances_spread = 0
+second_assemble_s = 2.5e-6
+second_assemble_s_launches = [2.25e-6, 2.5e-6, 3.125e-6]
+second_assemble_s_spread = 8.750000000000001e-7
+second_form_s = 0.166934875
+second_form_s_launches = [0.167140084, 0.166661417, 0.166934875]
+second_form_s_spread = 0.0004786669999999882
+second_inference_s = 0.2169368863105774
+second_inference_s_launches = [0.21754467487335205, 0.21661794185638428, 0.2169368863105774]
+second_inference_s_spread = 0.0009267330169677734
+second_instances = 177
+second_instances_launches = [177, 177, 177]
+second_instances_spread = 0
+sequence_instances = 393
+sequence_instances_launches = [393, 393, 393]
+sequence_instances_spread = 0
+tree = "fa760198 with fda62e7f ef26801f 2f035064 9b80cec9 fa760198 reverted (working tree; script records commit fa760198)"
+warm_assemble_s = 1.875e-7
+warm_assemble_s_launches = [1.875e-7, 1.67e-7, 2.08e-7]
+warm_assemble_s_spread = 4.100000000000001e-8
+
+[closures_fresh.head]
+first_assemble_s = 0.103562209
+first_assemble_s_launches = [0.104007, 0.103562209, 0.103245875]
+first_assemble_s_spread = 0.0007611250000000014
+first_form_s = 0.074628959
+first_form_s_launches = [0.074320875, 0.074634333, 0.074628959]
+first_form_s_spread = 0.00031345800000000257
+first_instances = 140
+first_instances_launches = [140, 140, 140]
+first_instances_spread = 0
+load_1min_launches = [1.58, 1.71, 1.91]
+repeat_instances = 0
+repeat_instances_launches = [0, 0, 0]
+repeat_instances_spread = 0
+second_assemble_s = 1.542e-6
+second_assemble_s_launches = [1.542e-6, 2.042e-6, 1.417e-6]
+second_assemble_s_spread = 6.250000000000002e-7
+second_form_s = 0.052755291
+second_form_s_launches = [0.052110709, 0.052755291, 0.05419075]
+second_form_s_spread = 0.0020800410000000047
+second_inference_s = 0.05835556983947754
+second_inference_s_launches = [0.0577237606048584, 0.05835556983947754, 0.0601884126663208]
+second_inference_s_spread = 0.0024646520614624023
+second_instances = 70
+second_instances_launches = [70, 70, 70]
+second_instances_spread = 0
+sequence_instances = 210
+sequence_instances_launches = [210, 210, 210]
+sequence_instances_spread = 0
+tree = "fa760198"
+warm_assemble_s = 1.875e-7
+warm_assemble_s_launches = [1.875e-7, 1.875e-7, 2.08e-7]
+warm_assemble_s_spread = 2.0500000000000005e-8
+
+[closures_named.base]
+first_assemble_s = 0.099554416
+first_assemble_s_launches = [0.099427, 0.100870417, 0.099554416]
+first_assemble_s_spread = 0.0014434170000000024
+first_form_s = 0.111741
+first_form_s_launches = [0.110925625, 0.117688208, 0.111741]
+first_form_s_spread = 0.0067625830000000026
+first_instances = 216
+first_instances_launches = [216, 216, 216]
+first_instances_spread = 0
+load_1min_launches = [1.64, 1.78, 1.91]
+repeat_instances = 0
+repeat_instances_launches = [0, 0, 0]
+repeat_instances_spread = 0
+second_assemble_s = 1.0e-6
+second_assemble_s_launches = [1.0e-6, 1.0e-6, 1.167e-6]
+second_assemble_s_spread = 1.6700000000000005e-7
+second_form_s = 0.004705625
+second_form_s_launches = [0.004545375, 0.004705625, 0.004726458]
+second_form_s_spread = 0.00018108300000000029
+second_inference_s = 0.00436025857925415
+second_inference_s_launches = [0.00421828031539917, 0.00436025857925415, 0.004405498504638672]
+second_inference_s_spread = 0.00018721818923950195
+second_instances = 0
+second_instances_launches = [0, 0, 0]
+second_instances_spread = 0
+sequence_instances = 216
+sequence_instances_launches = [216, 216, 216]
+sequence_instances_spread = 0
+tree = "fa760198 with fda62e7f ef26801f 2f035064 9b80cec9 fa760198 reverted (working tree; script records commit fa760198)"
+warm_assemble_s = 1.67e-7
+warm_assemble_s_launches = [1.67e-7, 1.67e-7, 1.875e-7]
+warm_assemble_s_spread = 2.0500000000000005e-8
+
+[closures_named.head]
+first_assemble_s = 0.099758
+first_assemble_s_launches = [0.235065584, 0.099642125, 0.099758]
+first_assemble_s_spread = 0.135423459
+first_form_s = 0.072199417
+first_form_s_launches = [0.076261917, 0.072199417, 0.072129958]
+first_form_s_spread = 0.0041319590000000045
+first_instances = 140
+first_instances_launches = [140, 140, 140]
+first_instances_spread = 0
+load_1min_launches = [1.58, 1.71, 1.91]
+repeat_instances = 0
+repeat_instances_launches = [0, 0, 0]
+repeat_instances_spread = 0
+second_assemble_s = 7.5e-7
+second_assemble_s_launches = [1.458e-6, 7.09e-7, 7.5e-7]
+second_assemble_s_spread = 7.49e-7
+second_form_s = 0.004953583
+second_form_s_launches = [0.005290708, 0.0049225, 0.004953583]
+second_form_s_spread = 0.0003682080000000001
+second_inference_s = 0.00452423095703125
+second_inference_s_launches = [0.00476527214050293, 0.0044977664947509766, 0.00452423095703125]
+second_inference_s_spread = 0.0002675056457519531
+second_instances = 0
+second_instances_launches = [0, 0, 0]
+second_instances_spread = 0
+sequence_instances = 140
+sequence_instances_launches = [140, 140, 140]
+sequence_instances_spread = 0
+tree = "fa760198"
+warm_assemble_s = 1.67e-7
+warm_assemble_s_launches = [1.67e-7, 2.08e-7, 1.67e-7]
+warm_assemble_s_spread = 4.100000000000001e-8
+
+[erased_class_check]
+base_ast_types_equal_a_b = false
+base_erased = 0
+head_ast_types_equal_a_b = true
+head_erased = 3
+what = "simplify_ast(resolve_ast(innerₕ(a, t) + innerₕ(b, t) + innerₕ(c, t))) with closures_fresh's anonymous_a/b: count of SourceFunction{2, Function} leaves"
+
+[inline_linear_form]
+base_concrete = true
+code = "form(W, v -> innerₕ(x -> x[1]^2, v))"
+head_concrete = true
+literal_x_squared_base_concrete = false
+literal_x_squared_head_concrete = false
+note = "the literal x -> x^2 throws a MethodError on a 2D point on both trees, so its return type is not concrete"
+
+[restrict_outer_linear_form]
+base_concrete = true
+code = "form(W, v -> restrict_to(:interior, innerₕ(x -> x[1]^2, v)))"
+head_concrete = false
+literal_x_squared_base_concrete = true
+literal_x_squared_head_concrete = true
+note = "x -> x^2 on a 2D point (a tuple) has no Float64 result, so it is never erased and is no test of the loss; x -> x[1]^2 is the erased-class closure"
+
+[run]
+date = "2026-10-27"
+julia = "1.13.2"
+launches = 3
+machine = "Apple M2, 8 cores, AC power, OneDrive not running, gate_preflight.sh --timing passed (load 1.72)"
+optimize = "default (-O2)"
+order = "interleaved base, head per launch; one snoop_instances.jl --launches 1 run per side per launch"
+script = "benchmark/snoop_instances.jl (identical in both trees)"
+threads = 4
+
+[verdict]
+form_below_by_more_than_spreads = true
+instances_at_most_half = true
+rule = "ship if head closures_fresh second_instances <= base/2, and base-head second_form_s median > both spreads, and warm assemble within max(base spread, 3%) on rows whose base warm time >= 50 us (shorter rows reported, not gated); else reverted"
+s6_1 = "shipped"
+warm_gated_rows = []
+warm_within_bound = true

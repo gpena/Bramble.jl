@@ -40,7 +40,7 @@ using Bramble:
             @test !is_symbolic(x0)
 
             z0 = ZeroOperator(W)
-            @test space(z0) === W
+            @test fieldcount(typeof(z0)) == 0
             @test !is_symbolic(z0)
 
             # Scalar scaling

@@ -204,13 +204,12 @@ like terms `c1 * A + c2 * A -> (c1 + c2) * A`, a common `Integer` factor
 27-term 3D scalar form but made its steady-state `assemble!` five times slower. The table,
 the trade-offs and the driver are in `docs/notes/internals/simplify_rules.md`.
 
-`ZeroOperator{D,Nothing}(nothing)` is synthesized for the zero case rather than reusing a
-concrete space, because a `LazyOp{D}` subtree in general carries no space to read back.
-`space(op)` is only ever implemented for `IdentityOperator`/`ZeroOperator` themselves. Every
-consumer of `ZeroOperator` (`local_stencil`, `stencil_offsets`, `component`) reads only its
-`D` type parameter; the one exception, `symmetry.jl`'s `_same_operator_shape` comparing
-`a.space === b.space`, settles `nothing === nothing` the same way two zero operators over
-the same space would.
+`ZeroOperator{D}` has no field: it keeps only the dimension, since a `LazyOp{D}` subtree in
+general carries no space to read back. The zero `simplify_ast` synthesises,
+`ZeroOperator{D}()`, is therefore `===` to `ZeroOperator(Wₕ)` for any `Wₕ` of dimension `D`.
+`space(op)` is implemented only for `IdentityOperator`. Every consumer of `ZeroOperator`
+(`local_stencil`, `stencil_offsets`, `component`) reads only `D`, and `symmetry.jl`'s
+`_same_operator_shape` is `true` for any two zeros of one `D`: they are the same operator.
 
 Every rewrite here is an algebraic identity, so the assembled matrix or vector is unaffected
 up to floating-point association. Each rule also chooses the node type it returns from

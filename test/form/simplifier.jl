@@ -821,6 +821,81 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
           2.0 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))))
 end
 
+# The `εₕ` and `divₘₕ` builders name each term's component pair in their sum's type
+# (`_ComponentSum`, gpena/Bramble.jl#939), and a scale over it distributes by those pairs.
+# The pairs must agree with the runtime classes of every node, and the tree must be the one
+# the value gates build from the plain sum: the same tree, so the same matrix.
+function _labels_agree(op, P)
+    for side in (:trial, :test)
+        cls = side === :trial ? Bramble._trial_component_class(op) :
+              Bramble._test_component_class(op)
+        expected = cls === nothing ? Bramble._NoComponent() : cls
+        Bramble._labelled_class(typeof(op), P, side) === expected || return false
+    end
+    P isa Tuple{Int, Int} && return true
+    return _labels_agree(op.left_op, P[1]) && _labels_agree(op.right_op, P[2])
+end
+_label_tree(::Bramble._ComponentSum{D, P}) where {D, P} = P
+
+@testset "builder sums: scaled by type (#939)" begin
+    for D in (WITH_3D_TESTS ? (2, 3) : (2,))
+        Ωₕ = mesh(domain(box(ntuple(_ -> 0.0, D), ntuple(_ -> 1.0, D))), ntuple(d -> 4 + d, D))
+        W = gridspace(Ωₕ)^Val(D)
+        u, v = trial_function(W), test_function(W)
+        for built in (inner₊(εₕ(u), εₕ(v)), inner₊(divₘₕ(u), divₘₕ(v)))
+            @test built isa Bramble._ComponentSum
+            @test _labels_agree(built.sum, _label_tree(built))
+            res(x) = resolve_ast(x)
+            for c in (2.5, 2, -1, Ref(2.5))
+                @test simplify_ast(res(c * built)) === simplify_ast(res(c * built.sum))
+            end
+            @test simplify_ast(res(-built)) === simplify_ast(res(-built.sum))
+            @test simplify_ast(res(0 * built)) === simplify_ast(res(0 * built.sum))
+            @test simplify_ast(res(built)) === simplify_ast(res(built.sum))
+        end
+    end
+
+    # Labels that do not fit the tree fall back to the value gates, with the same result.
+    Ω₁ = mesh(domain(interval(0.0, 1.0)), 11, true)
+    V₂ = gridspace(Ω₁)^Val(2)
+    u, v = trial_function(V₂), test_function(V₂)
+    s = innerₕ(u(1), v(1)) + innerₕ(u(2), v(2))
+    wrapped = Bramble._component_sum(s, Val(((1, 1), ((1, 1), (2, 2)))))
+    @test simplify_ast(2.5 * wrapped) === simplify_ast(2.5 * s)
+    @test simplify_ast(2.5 * s) isa OperatorAdd   # the fallback distributes this sum
+end
+
+# Wherever a builder's sum sits, `form` stores no `_ComponentSum` and assembles what the
+# plain sum assembles, bit for bit; the unsimplified tree prints as the plain one. A
+# restriction keeps an operand naming one component as built, so the builder's sum must
+# name more than one for the restriction to unwrap it (the three forms that crashed).
+_bits(A) = (A.colptr, A.rowval, reinterpret(UInt64, A.nzval))
+_strain(u, v) = inner₊(εₕ(u), εₕ(v))
+_div(u, v) = inner₊(divₘₕ(u), divₘₕ(v))
+_wrapped_builders = ((_strain, b -> Bramble.restrict_to(:interior, 1.5 * b)),
+    (_div, b -> 1.5 * Bramble.restrict_to(:interior, b)),
+    (_strain, b -> Bramble.restrict_to(:interior, b)),
+    (_div, b -> b + 2.0 * (1.5 * b)))
+
+@testset "builder sums: never stored (#939)" begin
+    Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (7, 8))
+    W = gridspace(Ωₕ)^Val(2)
+    for (build, wrap) in _wrapped_builders
+        a = form(W, W, (u, v) -> wrap(build(u, v)))
+        @test !occursin("_ComponentSum", string(typeof(a)))
+        @test _bits(assemble(a)) == _bits(assemble(form(W, W, (u, v) -> wrap(build(u, v).sum))))
+    end
+    u, v = trial_function(W), test_function(W)
+    for build in (_strain, _div)
+        @test Bramble.expression(2.0 * build(u, v)) == Bramble.expression(2.0 * build(u, v).sum)
+        @test Bramble.expression(build(u, v) + innerₕ(u(1), v(1))) ==
+              Bramble.expression(build(u, v).sum + innerₕ(u(1), v(1)))
+    end
+    # One term names one pair: nothing to label, the plain term.
+    W₁ = gridspace(mesh(domain(interval(0.0, 1.0)), 9))^Val(1)
+    @test !(_strain(trial_function(W₁), test_function(W₁)) isa Bramble._ComponentSum)
+end
+
 # The sign `-u` and `a - b` store (`_MinusOne`, src/ast/ast.jl) is decided by its type, so
 # `simplify_ast` folds it whatever the operator's values. It is not a number: `form` lowers
 # what is left of it to the `Int` `-1`, so every reader of the stored tree (assembly,

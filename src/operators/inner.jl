@@ -474,6 +474,10 @@ function _resolve_surfaces(op::GridFunctionScale{D}, spaces) where {D}
     i = _resolve_surfaces(op.inner_op, spaces)
     return GridFunctionScale{D, typeof(op.grid_function), typeof(i)}(op.grid_function, i)
 end
+function _resolve_surfaces(op::_ComponentSum{D, P}, spaces) where {D, P}
+    s = _resolve_surfaces(op.sum, spaces)
+    return _ComponentSum{D, P, typeof(s)}(s)
+end
 function _resolve_surfaces(op::RegionRestriction, spaces)
     return _rebuild_restriction(op, op.region, _resolve_surfaces(op.inner_op, spaces))
 end
@@ -1117,6 +1121,11 @@ function resolve_ast(op::LinearProduct{D, InnerType}) where {D, InnerType}
     left = resolve_ast(op.left_op)
     right = resolve_ast(op.right_op)
     return LinearProduct{D, InnerType, typeof(left), typeof(right)}(op.inner, left, right)
+end
+# Kept around its resolved sum: `resolve_ast(::Any)` would return it with `sum` unresolved.
+function resolve_ast(op::_ComponentSum{D, P}) where {D, P}
+    s = resolve_ast(op.sum)
+    return _ComponentSum{D, P, typeof(s)}(s)
 end
 
 # Disambiguation for the empty tuple.

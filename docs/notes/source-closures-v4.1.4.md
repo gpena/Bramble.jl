@@ -3,8 +3,8 @@
 Answers #917 step 1: how many method instances of Bramble a second build of a 3-term
 linear form adds when its three source coefficients are new anonymous closures, against
 the same three named functions again. The gap between the two is what the prototype of
-#917 (an erased source function in the AST) has to close. This note records figures. It
-makes no decision on the prototype, which is the user's, in the issue.
+#917 (an erased source function in the AST) has to close. The prototype's decision, by
+S6.2's fixed rule, is in "Prototype measured" at the end.
 
 ## Method and conditions
 
@@ -154,3 +154,119 @@ counts should be retaken with them, since those changes may alter them too.
 - Not recorded: the split of the 178 instances between `form` and `assemble` (the times
   put the gap in `form`), warm `assemble` on a non-uniform mesh, and any `Dual`-valued
   source.
+
+## Prototype measured
+
+Question: does S6.1, the erased source function of #917, cut what a second build of
+`closures_fresh` costs enough to keep? The rule was fixed before the run (plan S6.2, with
+the user's ruling of 2026-10-27 on warm times): ship if head's second-build instances are
+at most half of base's, its second-build `form` median is below base's by more than both
+trees' launch spreads, and warm `assemble` is within base's spread or +3%, whichever is
+larger, on rows whose base warm time is 50 us or more. A shorter row's warm time is
+reported, not gated.
+
+### Method
+
+- Head: `fa760198` (S6.1 shipped; it also holds S3 and S5.1). Base: the same commit with
+  S6.1's five commits (`fda62e7f`, `ef26801f`, `2f035064`, `9b80cec9`, `fa760198`)
+  reverted in a detached tree, since S3's and S6.1's commits interleave. The script
+  records `fa760198` for both trees, the base's revert being uncommitted.
+- `benchmark/snoop_instances.jl` (the same file in both trees), rows `closures_fresh` and
+  `closures_named`, 4 threads per child, default `-O`, three launches interleaved: base,
+  head, base, head, base, head, each one `--launches 1` run through `julia_slot.sh 4`.
+- Julia 1.13.2, Apple M2, 8 cores, on AC, OneDrive not running, no other `julia`.
+  `check_power_load.sh` passed, and `gate_preflight.sh --timing` passed at a 1-minute
+  load of 1.72. The load was 1.58 to 1.91 over the run, which took 36 s.
+- Raw launches, medians and spreads (max minus min over the three launches) are in
+  `benchmark/results/v4.1.4_source_closures_ab.toml`.
+
+### Erased-class check
+
+S6.1 erases a source only when it returns its point's precision, its test side is one leaf
+and it has no `markers`. Before timing, a one-thread probe built `closures_fresh`'s AST,
+`simplify_ast(resolve_ast(innerₕ(a, t) + innerₕ(b, t) + innerₕ(c, t)))` on the graded 9x11
+space, from `anonymous_a()` and from `anonymous_b()`. On head all three leaves are
+`SourceFunction{2, Function}` and the two ASTs have one type. On base no leaf is erased,
+each names its closure, and the two types differ. So the row measures the change.
+
+### Figures
+
+Second build (the new closures of `anonymous_b()`, or the same named functions again):
+
+| row | tree | instances | `form`, s (spread) | inference, s (spread) |
+|---|---|---:|---:|---:|
+| `closures_fresh` | base | 177 | 0.1669 (0.0005) | 0.2169 (0.0009) |
+| `closures_fresh` | head | 70 | 0.0528 (0.0021) | 0.0584 (0.0025) |
+| `closures_named` | base | 0 | 0.0047 (0.0002) | 0.0044 (0.0002) |
+| `closures_named` | head | 0 | 0.0050 (0.0004) | 0.0045 (0.0003) |
+
+The instance counts were the same in all three launches on each tree. The first build
+also falls, 216 instances to 140 on both rows. Its `form` time falls from 0.115 s to
+0.075 s on `closures_fresh`, and from 0.112 s to 0.072 s on `closures_named`.
+
+Warm `assemble!`, median of 20 calls, median over launches:
+
+| row | base, s (spread) | head, s (spread) |
+|---|---:|---:|
+| `closures_fresh` | 1.88e-7 (4.1e-8) | 1.88e-7 (2.1e-8) |
+| `closures_named` | 1.67e-7 (2.1e-8) | 1.67e-7 (4.1e-8) |
+
+Both are far below 50 us, so warm time is reported and not gated. It does not move.
+
+The rule, clause by clause:
+
+- Instances: 70 against 177, at most 88.5. Holds.
+- Second-build `form`: 0.0528 s against 0.1669 s, a gap of 0.114 s, larger than both
+  spreads (0.0005 s and 0.0021 s). Holds.
+- Warm `assemble`: no row is gated (base 0.19 us and 0.17 us). Holds.
+
+**Verdict: S6.1 shipped.** (Reverted afterwards: see `## Outcome: reverted` at the end.)
+
+The 70 instances left (69 in a direct count of the second build's flattened tree on head)
+are per closure, three of each: `innerₕ`, `_as_source`, `_erased_source`,
+`_keeps_precision`, `_returns_own` (Float64 and Float32), `SourceFunction`, and the
+sampling of each closure in `_lower_sources` (`Rₕ!`, `_RₕKernel`, `project!`,
+`_sweep_for!`, `_device_project!`, `PointValue`). What is gone is the instances of every
+pass over the AST and of `assemble`, which no longer see the closure's type. The rest
+grows with the number of closures, not with the form, and the closure must still be
+compiled to be sampled. The gap to `closures_named` is not closed: 70 instances and
+0.048 s of `form` remain.
+
+### Inference of inline-closure forms
+
+`isconcretetype(only(Base.return_types(f, (typeof(W),))))` with the closures built inside
+`f`, on the graded 9x11 2D scalar space:
+
+| form | base | head |
+|---|---|---|
+| `captured_linear_form`: `a = x -> x[1]^2 + x[2]; form(W, v -> innerₕ(a, v))` | concrete | concrete |
+| `restrict_outer_linear_form`: `form(W, v -> restrict_to(:interior, innerₕ(x -> x[1]^2, v)))` | concrete | **not concrete** |
+| `form(W, v -> innerₕ(x -> x[1]^2, v))` | concrete | concrete |
+
+The plan wrote these with `x -> x^2`. On a 2D point, which is a tuple, that closure has no
+`Float64` result, so it is never erased and is no test of the change. As written, the outer
+`restrict_to` form is concrete on both trees, and the plain form throws a `MethodError` on
+both and so is not concrete. The table uses `x -> x[1]^2`, which head erases and base
+does not (checked, as is the captured `a`). The
+outer-`restrict_to` loss is the one S6.1's critic found and the user accepted if the rule
+says ship. The assembled values and the 0 B warm assembly do not change (S6.1's critic).
+
+### Scope
+
+The erasure is conditional, so the benefit covers only a source closure that returns its
+point's precision (`Float64` at a `Float64` point, `Float32` at a `Float32` point), with
+its test side on one leaf and no `markers`. A closure that returns a constant such as
+`x -> 1.0`, a `Dual`, a complex, or a `Union`, or one under `markers`, keeps its type and
+still costs a second build what base does. Under an outer `restrict_to`, a restricted sum
+or a composite term, an erased source gets its type back at `form`, and that `form` no
+longer infers a concrete type.
+
+## Outcome: reverted (2026-10-28)
+
+The erasure was not kept. Its verdict above ("S6.1 shipped") held by the fixed rule, but the rule did not weigh two requirements the maintainer then set: a `form` that infers a concrete type under an outer `restrict_to`, and a restricted source closure called at every assembly, as on main. The two together cost more than the erasure saved.
+
+- Concrete `form` under `restrict_to` needs the erased source sampled once at `form`, behind a `SourceVector` over a sampled array (S6.3). That fixes inference but freezes the source's values at `form`, which main does not do for a restricted closure.
+- Keeping it live as well (S6.4) means refreshing the samples at every host assembly, through one `invokelatest` barrier. Values stayed bit-identical to main over 344 shapes and 273 liveness rows, the serial warm `assemble!` stayed at 0 B, and the instance and `form` gains held (`closures_fresh` adds 70 instances, `closures_named` 0, second-build `form` 0.0547 s against 0.1669 s on base). But a warm `assemble!` of a restricted form with an erased closure, on a 401x401 graded mesh, took 0.384 to 0.392 ms against 0.287 to 0.303 ms on main (+30% to +36%): the closure is called in a pass of its own and the sweep then reads the array, where main calls it inside the one sweep. A restricted form with a closure that keeps its type, and an unrestricted erased form, ran at parity.
+
+The maintainer chose main's speed and semantics. S6.1, S6.3 and S6.4 are reverted, so a form built from a plain source closure infers as it did before S6.1 and a second build with new closures costs 177 instances, not 70. The figures above stay as the measurement of what the erasure buys; #917 stays open. A route that avoids the second pass would have to call the closure inside the sweep without naming its type in the form, which a type-erased closure cannot do without a dynamic call per point.
+
