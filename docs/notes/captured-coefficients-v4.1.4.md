@@ -83,7 +83,7 @@ design choices are in the comment above `simplify_ast(::OperatorScale)` in
 | `divₘₕ` only, 3D (`diag939c.jl`) | non-concrete | concrete |
 | scalar Laplacian, 2D and 3D | concrete | concrete |
 | 2D vector Laplacian | concrete | concrete |
-| 3D vector Laplacian | non-concrete | non-concrete (out of scope) |
+| 3D vector Laplacian | non-concrete | non-concrete here; concrete since #958 (see The 3D gradient (#958)) |
 | literal coefficients (`flit`) | concrete | concrete |
 
 The `[form_inference]` tables read, base then head: `elasticity_2d` false then true,
@@ -95,11 +95,12 @@ is concrete on both trees, so it has no key (see Surprising).
 - `divₘₕ`-only in 2D already infers concretely on base: the planning notes saw the 2D
   gradient and `divₘₕ` forms inferred through constant propagation alone. The 3D `divₘₕ`
   form is the one that leaked, and head fixes it.
-- The 3D vector Laplacian, `μ * inner₊(∇ₕ(u), ∇ₕ(v))`, stays a `Union` on head. The gradient
-  `inner₊` works on plain tuples (`foldl(+, map(inner₊, left, right))`), so nothing in the
-  types says which component each tuple entry is, and a type-level answer would need a
-  tagged container from `∇ₕ(composite)`, a public API change. The user ruled it out of S1.
-  It stays under the value gate: concrete in 2D by constant propagation, a `Union` in 3D.
+- The 3D vector Laplacian, `μ * inner₊(∇ₕ(u), ∇ₕ(v))`, stayed a `Union` on head 6ee42fb0. The
+  gradient `inner₊` works on plain tuples (`foldl(+, map(inner₊, left, right))`), so nothing
+  in the types says which component each tuple entry is. A type-level answer needed a tagged
+  container from `∇ₕ(composite)`, a public API change, which the user ruled out of S1. The
+  user later took that route (2026-10-28) and #958 built it: see "The 3D gradient (#958)"
+  below. At 6ee42fb0 the form was concrete in 2D by constant propagation and a `Union` in 3D.
 - What also stays a `Union`: a scale meeting an already distributed sum (`2 * (μ * X)`,
   `-(μ * X)`, `μ * (X + Y)` over two builders), an `Int` coefficient (#240), and a
   user-written sum that mixes components under one shared runtime coefficient. These take
@@ -133,3 +134,77 @@ which S4.1 retakes on head.
 - The 2D `divₘₕ`-only form infers concretely on base through constant propagation, so it
   cannot show the change. The third `[form_inference]` key is the 3D `divₘₕ`-only form, which
   is non-concrete on base. The elasticity forms are non-concrete on base in 2D and 3D.
+
+## The 3D gradient (#958)
+
+The 3D vector Laplacian was the one vector-calculus form left a `Union` above. The user ruled
+on 2026-10-28 to take the route the paragraph above set aside: `∇ₕ` and `∇₊ₕ` of a composite
+trial or test function return a tagged container. This section records that change and
+supersedes the "out of scope" row of the table above.
+
+### The container and why
+
+`Bramble._GradientRows{D, N, T}` holds the N-tuple of D-tuples that `∇ₕ(composite)` returned
+before. It is internal, but it is the return type of a public operator. `inner₊` of two of
+them forms the same sum as before (`foldl(+, map(inner₊, rows, rows))`, same order) and holds
+it in a `_ComponentSum` whose pairs are `(c, c)` for row `c`. Row `c` of `∇ₕ(u)` is `∇ₕ(u(c))`,
+so every trial leaf in it is `u(c)` and every test leaf is `v(c)`: the labels are true by
+construction, and `_scale_labelled_sum` (S1 of #939) gives the tree the literal path gives.
+Only a composite whose components are all scalar leaves is wrapped; a nested composite, `D == 1`
+and a scalar space return what they did.
+
+The builder is the right place because `∇ₕ(u)` is the one call that knows the rows. The
+alternative, a label on the plain-tuple `inner₊`, cannot know them. The planning findings on
+main 8ce4b1b0 (scripts `e958.jl`, `e958b.jl`, `e958c.jl`) show it is unsafe for a hand-built
+tuple, and these assemble on main:
+
+- A repeated component, `∇ₕ((u(1), u(1), u(2)))`, and a permuted one,
+  `∇ₕ((u(2), u(1), u(3)))`, are `Union`s that assemble. A positional label would distribute
+  rows that share a component, so the bits would move.
+- One row that mixes components within it is concrete on main; two such rows are a `Union`
+  that assembles (nnz 1375). A positional label would treat a mixed row as unroutable, and a
+  runtime guard against it would throw on tuples that assemble today.
+
+Two routes with no API change were tried by redefining methods in-process and both stayed a
+`Union` with unchanged bits: an unrolled row sum in place of `foldl(+, map(...))`, and
+`Base.@constprop :aggressive` on `simplify_ast(::OperatorScale)`. A hand-built tuple, a
+`∇ₕ(components(u))` and a container meeting a plain tuple keep the plain-tuple path, so they
+keep their bits and their inference (a `Union` in 3D for the repeated and mixed cases).
+
+### Inference of `form`, before and after
+
+`form(W, W, f)` with `μ` captured, graded meshes (9, 11) and (5, 5, 5), Julia 1.13.
+
+| form | main 8ce4b1b0 | after S1 of #958 |
+|---|---|---|
+| `μ * inner₊(∇ₕ(u), ∇ₕ(v))`, 3D | `Union` | concrete |
+| `μ * inner₊(∇₊ₕ(u), ∇₊ₕ(v))`, 3D | `Union` | concrete |
+| the same two, 2D | concrete | concrete |
+| scalar Laplacian, 2D and 3D | concrete | concrete |
+| `restrict_to(:interior, μ * inner₊(∇ₕ(u), ∇ₕ(v)))`, outer, 2D | not recorded | concrete |
+| the same outer `restrict_to`, 3D | `Union` | still a `Union` |
+| `μ * restrict_to(:interior, inner₊(...))`, 3D | concrete | concrete |
+| `μ * inner₊(...; markers = (:boundary,))`, 3D | concrete | concrete |
+
+The `restrict_to` rows were not asked for by #958. The outer one, concrete in 2D after the
+change, stays a `Union` in 3D; its bits are unchanged. The two rows with the scale outside
+the `restrict_to` or with `markers` were concrete on main and must stay so.
+
+### Bits and types are unchanged
+
+Assembled matrices are bit-identical to main in every row above, in 2D and 3D, and captured
+equals literal. The check used a non-dyadic `0.7`, so a distributed tree and a kept tree would
+hash differently; the captured and literal `form` types are equal (`===`). The hand-built
+repeated and mixed-row tuples assemble to main's bits as well. The only change in the
+before and after comparison of type, bits, matrix-free and Kronecker assembly is `conc=false`
+becoming `conc=true`.
+
+### What no longer holds on a composite gradient
+
+A composite `∇ₕ(u)` or `∇₊ₕ(u)` is no longer `isa Tuple`, a public break in a patch release
+that the user accepted. These work as before: `∇ₕ(u)[c][d]`, `length`, iteration, `map` and
+broadcast over it, and `Tuple(∇ₕ(u))`. These need `Tuple(∇ₕ(u))`: `==`, `isequal`, `hash`,
+`eltype`, `reverse`, range indexing, `eachindex` and `keys`, `show`, `convert(Tuple, .)`,
+and a `map` that mixes the container with a plain tuple (it returns a `Vector`). No caller in
+`src/`, `ext/`, `test/` or `docs/` used any of them. `c * ∇ₕ(u)` and `∇ₕ(u) + ∇ₕ(w)` on a
+composite were a `MethodError` on main and stay one.
