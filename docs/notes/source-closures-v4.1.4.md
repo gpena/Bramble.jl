@@ -346,6 +346,18 @@ S6.3 made there is gone. The values outside `reach` are `NaN`, and a read of a `
 point is outside the mask throws an internal error: a value that is not the source's is
 never returned. A `NaN` the source returns at a point of `reach` is read as it is.
 
+The pass costs time main does not spend. Warm `assemble!` on a 401x401 graded mesh,
+`restrict_to(:interior, innerₕ(f, v))` with a `Ref`-capturing erased closure, median of 60,
+4 threads, three interleaved rounds alone on AC. origin/main took 0.282-0.291 ms, head
+0.389-0.416 ms (0 B both), from 0.583-0.590 ms before this change. Both call the closure
+159201 times per assembly, once per interior point. Two changes made the cut. The refresh
+reads the mask a word at a time (skipping empty words, no test in full ones), and
+`getindex` lost the late call, which was never taken but cost the sweep 14%. On one
+thread, sampling every point alone takes 0.126 ms (the call, the point and the store), the
+refresh 0.16-0.17 ms, and the sweep over the sampled array about 0.22 ms, against 0.19 ms
+for a plain `SourceVector`. Main calls the closure inside its one
+sweep; a form whose type names no closure cannot, so the second pass over the points stays.
+
 `_unrouted_term` gives main's handling back on a one-leaf composite: a term naming no
 component keeps a typed source (`SourceFunction{D, F}`, `F` concrete) as main left it, and
 the walk calls it. Only an erased source there goes through `_ReachSamples`, over every
