@@ -220,7 +220,7 @@ The rule, clause by clause:
   spreads (0.0005 s and 0.0021 s). Holds.
 - Warm `assemble`: no row is gated (base 0.19 us and 0.17 us). Holds.
 
-**Verdict: S6.1 shipped.**
+**Verdict: S6.1 shipped.** (Reverted afterwards: see `## Outcome: reverted` at the end.)
 
 The 70 instances left (69 in a direct count of the second build's flattened tree on head)
 are per closure, three of each: `innerₕ`, `_as_source`, `_erased_source`,
@@ -258,138 +258,15 @@ point's precision (`Float64` at a `Float64` point, `Float32` at a `Float32` poin
 its test side on one leaf and no `markers`. A closure that returns a constant such as
 `x -> 1.0`, a `Dual`, a complex, or a `Union`, or one under `markers`, keeps its type and
 still costs a second build what base does. Under an outer `restrict_to`, a restricted sum
-or a composite term, an erased source got its type back at `form`, and that `form` no
-longer inferred a concrete type; the next section samples it instead, on a host space.
+or a composite term, an erased source gets its type back at `form`, and that `form` no
+longer infers a concrete type.
 
-## S6.3: an outer restriction keeps the form concrete
+## Outcome: reverted (2026-10-28)
 
-The `restrict_outer_linear_form` row of the inference table above now reads concrete on
-head as well. The loss came from the order of two decisions: `innerₕ` erases the source when
-it builds the term, and an outer `restrict_to` wraps that term afterwards. `_lower_sources`
-does not sample a source under a restriction, because sampling it everywhere would call it
-at points no assembly reads (#643, #524), so `form` gave it its type back
-(`_specialised_sources`) and inferred a `Union`.
+The erasure was not kept. Its verdict above ("S6.1 shipped") held by the fixed rule, but the rule did not weigh two requirements the maintainer then set: a `form` that infers a concrete type under an outer `restrict_to`, and a restricted source closure called at every assembly, as on main. The two together cost more than the erasure saved.
 
-`form` now samples such a source where the walk reads it. `_typed_restrictions` already
-carries `reach`, the points at which the walk evaluates each node, narrowed by every
-enclosing restriction and moved by every enclosing shift. On a host space it fills the
-source's values at those points, behind the same `invokelatest` barrier as an unrestricted
-erased source, and stores them as a `SourceVector` over a `_ReachSamples` array, whose type
-names no closure. The walk reads that array, so the form infers a concrete type and a warm
-`assemble!` stays at 0 B. A point outside `reach` (a region that `markers!` moved after
-`form`) calls the source when it is read, through the barrier, and allocates there. A
-shift, a difference, an average or a jump over the restricted term (directly, or through
-scales and sums) reads that term at each of its points and at every tap's clamped
-neighbour, inside the region or not, as it reads a typed source, so `reach` there takes all
-of those points and the restriction narrows none (`_typed_taps`). The same holds with no
-restriction between the operator and the term (`restrict_to(:A, D₊ₓ(innerₕ(f, v)))`): a
-tap's neighbour can lie outside `:A`, and a shift at the mesh's edge reads the clamped
-point, so over an erased source `reach` takes them too. Form-time memory is one value vector
-per sampled source, its `reach` mask shared, with no index vector.
+- Concrete `form` under `restrict_to` needs the erased source sampled once at `form`, behind a `SourceVector` over a sampled array (S6.3). That fixes inference but freezes the source's values at `form`, which main does not do for a restricted closure.
+- Keeping it live as well (S6.4) means refreshing the samples at every host assembly, through one `invokelatest` barrier. Values stayed bit-identical to main over 344 shapes and 273 liveness rows, the serial warm `assemble!` stayed at 0 B, and the instance and `form` gains held (`closures_fresh` adds 70 instances, `closures_named` 0, second-build `form` 0.0547 s against 0.1669 s on base). But a warm `assemble!` of a restricted form with an erased closure, on a 401x401 graded mesh, took 0.384 to 0.392 ms against 0.287 to 0.303 ms on main (+30% to +36%): the closure is called in a pass of its own and the sweep then reads the array, where main calls it inside the one sweep. A restricted form with a closure that keeps its type, and an unrestricted erased form, ran at parity.
 
-The one-leaf composite case lowered through `_unrouted_term`: a term naming no component on
-a composite space with one leaf lowered against that leaf, as a scalar space's term does,
-so a typed source there was sampled at `form` too, where main read it at each assembly
-(the next section gives main's handling back).
+The maintainer chose main's speed and semantics. S6.1, S6.3 and S6.4 are reverted, so a form built from a plain source closure infers as it did before S6.1 and a second build with new closures costs 177 instances, not 70. The figures above stay as the measurement of what the erasure buys; #917 stays open. A route that avoids the second pass would have to call the closure inside the sweep without naming its type in the form, which a type-erased closure cannot do without a dynamic call per point.
 
-Shapes checked against a typed `source_function` of the same closure (main's path), bit
-for bit, on the graded 9x11 mesh in `Float64` and `Float32`: an outer restriction, a
-restricted sum, nested restrictions, a shift inside and outside the restriction, an
-average over a scaled restriction, an empty region, a one-leaf composite term naming no component (red on head before this change,
-with a closure capturing an `Int`), and a restricted `v(2)` on a two-leaf composite space.
-`markers` and a `Dual` source are not erased, as before.
-
-What changed for the user at S6.3: a restricted plain function was read at `form` only,
-as an unrestricted one already was, so a closure that reads mutable state, or a mesh moved
-by `change_points!`, was not seen again at its sampled points. The user rejected that, and
-the next section samples it again at every assembly. A device space, and a term
-naming no component on a composite space with several leaves, still give the source its
-type back at `form` and do not infer a concrete type. The instance figures are the
-integrator's to take.
-
-## S6.4: a sampled source is read live at every assembly
-
-The user rejected S6.3's sampling once at `form`. Main calls a restricted source, and a
-typed source in a one-leaf composite term naming no component, at every assembly, so a
-closure that reads a `Ref` or a moved mesh sees the new state. This change keeps S6.3's
-`_ReachSamples` and the concrete `form`, and samples the source again at the `reach` points
-at the start of every host assembly, in one serial pass before the sweep
-(`_refresh_reach_samples!`, assembly/linear.jl). The pass goes through the barrier S6.3
-built (`_sample_reach!`, `invokelatest` into `_sample_reach_typed!`), so it compiles no new
-method instance per closure: that instance is the one `form` already compiled. Whether a
-form holds a `_ReachSamples` is read off its type (`_holds_reach_samples`, generated, as
-`_holds_erased`), so a form without one compiles no walk, and the pass is a no-op there.
-A warm `assemble!`, `assemble_add!` and `assemble_add!` with `α` stay at 0 B on the
-restricted forms (`restricted_bytes` in test/form/linear_restriction.jl), as on fd7f13aa.
-
-The pass runs once per call, before any threaded sweep, at the four host entry points that
-sweep a linear form's AST: `_assemble_linear!` (behind `assemble`, `assemble!` and
-`evaluate!`), `_assemble_linear_parallel!` (behind `assemble_parallel!`),
-`_assemble_add_linear!` (behind `assemble_add!` with and without `α`), and
-`_contract_linear` (behind `l(vₕ)`). A device space reaches the host walk through
-`_assemble_linear_device!`, but its AST holds no `_ReachSamples`: device spaces keep
-`_specialised_sources`. Nothing in `src/problems/` or `ext/` sweeps a `LinearForm`'s AST
-directly; the ghost forms call `assemble!` on their padded form.
-
-`reach` follows the markers. Each `_ReachSamples` keeps the mesh's marker stamp its mask
-was computed at; when `markers!` has redrawn it, the pass first computes every term's
-`reach` again from the current marker words, by `form`'s rules (`_rereach!`: narrowed by
-each restriction, widened by each shift and tap), into the stored masks, and only then
-samples. A shrunk region is never sampled at the points it left, so a source undefined
-there (#643) does not throw, and a grown one is sampled at its new points, so no read falls
-outside `reach` and a warm refill stays at 0 B. That first assembly after `markers!`
-allocates the masks it computes; the next ones do not. The first round of this section
-fixed `reach` at `form`, and the critic found the shrink case throwing at x = 0.379 where
-the base returned its vector, and 1056 B per warm `assemble!` after a grow (base 0 B).
-Since `reach` follows the markers, no walk reads a value outside it, and the late call
-S6.3 made there is gone. The values outside `reach` are `NaN`, and a read of a `NaN` whose
-point is outside the mask throws an internal error: a value that is not the source's is
-never returned. A `NaN` the source returns at a point of `reach` is read as it is.
-
-The pass costs time main does not spend. Warm `assemble!` on a 401x401 graded mesh,
-`restrict_to(:interior, innerₕ(f, v))` with a `Ref`-capturing erased closure, median of 60,
-4 threads, three interleaved rounds alone on AC. origin/main took 0.282-0.291 ms, head
-0.389-0.416 ms (0 B both), from 0.583-0.590 ms before this change. Both call the closure
-159201 times per assembly, once per interior point. Two changes made the cut. The refresh
-reads the mask a word at a time (skipping empty words, no test in full ones), and
-`getindex` lost the late call, which was never taken but cost the sweep 14%. On one
-thread, sampling every point alone takes 0.126 ms (the call, the point and the store), the
-refresh 0.16-0.17 ms, and the sweep over the sampled array about 0.22 ms, against 0.19 ms
-for a plain `SourceVector`. Main calls the closure inside its one
-sweep; a form whose type names no closure cannot, so the second pass over the points stays.
-
-`_unrouted_term` gives main's handling back on a one-leaf composite: a term naming no
-component keeps a typed source (`SourceFunction{D, F}`, `F` concrete) as main left it, and
-the walk calls it. Only an erased source there goes through `_ReachSamples`, over every
-point of the one leaf, narrowed and widened by any restriction, shift or tap in the term as
-on a scalar space. Unrestricted erased sources that `_lower_sources` samples into a plain
-`SourceVector` are left alone: main sampled those once at `form` too.
-
-Tests: the `Ref` liveness shapes (an outer restriction, a restricted sum, a `D₊ₓ` and a
-shift under a restriction, a one-leaf composite term with an erased and with a typed
-source, a restricted one-leaf composite term) through `assemble`, `assemble!`,
-`assemble_parallel!`, `assemble_add!` with and without `α` and `l(vₕ)`, on `Serial` and
-`Parallel` backends, and a `markers!` case (test/form/source_operators.jl,
-`outer restriction: live per assembly`); the S6.3 call-set test now expects the
-`reach` points called at every assembly.
-
-Hazards:
-
-- Two tasks assembling one form at once race on the `_ReachSamples` values: each pass
-  writes the same vectors the other task's sweep reads. There are precedents: a
-  `GhostLinearForm`'s `F_pad` (assembly/ghost_assembly.jl), the padded load vector every
-  assembly of that linear form fills, and the bilinear replay cache (`a.cache`, read and
-  re-recorded by `_assemble_bilinear_core_cached!` behind `assemble!` and `assemble_add!`,
-  assembly/assemble_add.jl). Both are per-form scratch an assembly mutates, so one such form
-  is not safe to assemble from two tasks at once either. A threaded sweep inside one call is
-  safe: the pass ends before it starts.
-- The closure is still called once at `form` at the `reach` points, where main did not call
-  a restricted source at `form`, only at assembly.
-- A threaded policy (`Parallel()`) does not refill at 0 B on base or here: the threaded
-  sweep copies the AST into each task's closure, so its bytes grow with the AST's width.
-  An immutable `_ReachSamples` put its fields inline and added 32 B per sampled source
-  (the critic's `par.jl`, one thread: 704 B with one source and 784 B with three, against
-  672 B and 688 B on 37a311b2). It is now mutable, one pointer wide: 688 B and 704 B. The
-  serial refill is 0 B.
-
-The instance figures are the integrator's to take.

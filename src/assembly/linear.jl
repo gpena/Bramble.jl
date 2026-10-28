@@ -50,7 +50,6 @@ end
     ast = form.ast
     space = form.test_space
     T = promote_type(_assembled_eltype(ast, space), eltype(v))
-    _refresh_reach_samples!(ast, space)
 
     return _contract_linear_core(space, ast, v, zero(T))
 end
@@ -227,8 +226,7 @@ end
 # component lowers against that leaf's own space; a term naming none goes to *every* leaf,
 # which may have different meshes, so there is no single space to sample against and lowering
 # is skipped for it -- the same `SourceFunction` it already was, evaluated fresh per leaf at
-# assembly time. A space with one leaf has one mesh, so there an erased source is sampled
-# against it at each assembly (`_unrouted_term`).
+# assembly time.
 # Missing this optimisation for that one shape is the safe choice: sampling against the wrong
 # leaf's mesh would silently assemble the wrong numbers, not merely run slower. A component
 # outside the space throws here, at `form`, through `_routed_target`'s check; returning the
@@ -264,54 +262,15 @@ end
 
 function _lower_sources_over_leaves(term::TERM, leaves) where {TERM}
     target = _routed_target(term, length(leaves))
-    target === nothing && return _unrouted_term(term, leaves)
+    target === nothing && return term
     return _at_leaf(leaf -> _lower_term(term, first(leaf)), leaves, target)
 end
 
-# A term naming no component goes to every leaf, and its sources are read at every
-# assembly, as on a scalar space under a restriction. With one leaf there is one mesh, so on
-# a host space an erased source becomes a `_ReachSamples` over every point the walk reads it
-# at, refreshed at each assembly (`_refresh_reach_samples!`); a typed one is left to the walk.
-# With more leaves an erased source gets its type back.
-function _unrouted_term(term, leaves::Tuple{Any})
-    _holds_erased(term) || return term
-    sp = first(only(leaves))
-    return _specialised_sources(_reach_sampled(locality(backend(sp)), term, sp))
-end
-_unrouted_term(term, leaves) = _specialised_sources(term)
-
-_reach_sampled(::HostLocality, op, sp) = _typed_restrictions(
-    op, sp, trues(length(indices(mesh(sp)))))
-_reach_sampled(::DeviceLocality, op, sp) = op
-
 # A term's sources lowered against the leaf `sp` it assembles on, then its restricted
-# sources typed against the same leaf, an erased one sampled where the walk reads it
-# (`_typed_restrictions` below). Host spaces only: the probe reads a point and a source
-# value one at a time, a scalar read a device array refuses.
-_lower_term(term, sp) = _specialised_sources(
-    _typed_restrictions(locality(backend(sp)), _lower_sources(term, sp), sp))
-
-# An erased source (`_erased_source`, ast/common.jl) that neither `_lower_sources` nor
-# `_typed_restrictions` samples (on a device space, or in a term naming no component of a
-# composite space with several leaves) is called at every point of every assembly, so it
-# gets its type back here, at `form`: the walk calls it as it calls any other source, with
-# no dispatch per point. A form holding one infers no concrete type; one without is
-# returned as it was, and on a host space every erased source under a restriction is
-# sampled before this runs.
-_specialised_sources(op) = op
-_specialised_sources(op::SourceFunction{D, Function}) where {D} = _specialised(op)
-function _specialised_sources(op::OperatorAdd)
-    left = _specialised_sources(op.left_op)
-    right = _specialised_sources(op.right_op)
-    return left === op.left_op && right === op.right_op ? op : OperatorAdd(left, right)
-end
-function _specialised_sources(op::LinearProduct{D, W}) where {D, W}
-    left = _specialised_sources(op.left_op)
-    return left === op.left_op ? op :
-           LinearProduct{D, W, typeof(left), typeof(op.right_op)}(op.inner, left, op.right_op)
-end
-_specialised_sources(op::UnaryWrapper) = _rewrap_inner(
-    op, _specialised_sources(op.inner_op))
+# sources typed against the same leaf. Host spaces only: the probe reads a point and a
+# source value one at a time, a scalar read a device array refuses.
+_lower_term(term, sp) = _typed_restrictions(
+    locality(backend(sp)), _lower_sources(term, sp), sp)
 function _typed_restrictions(::HostLocality, op, sp)
     _any_restriction(op) || return op
     return _typed_restrictions(op, sp, trues(length(indices(mesh(sp)))))
@@ -343,298 +302,21 @@ _typed_restrictions(::DeviceLocality, op, sp) = op
 # points (linear indices) at which the walk evaluates the node, narrowed by every enclosing
 # restriction and moved by every enclosing `ShiftNode`, so a source undefined outside its
 # region, or outside an enclosing one, is never called there. No such point (an empty
-# region, a label the mesh lacks yet) leaves the node as it was, answering `()`. A source
-# with its type is not sampled: it is called again at every point of its region on every
-# assembly. An erased one is (`_ReachSamples` below). Nested restrictions are typed inner
-# first, so an outer probe outside an inner region reads the inner zero stencil.
+# region, a label the mesh lacks yet) leaves the node as it was, answering `()`. The source
+# itself is not sampled: it is called again at every point of its region on every assembly.
+# Nested restrictions are typed inner first, so an outer probe outside an inner region reads
+# the inner zero stencil.
 _typed_restrictions(op, sp, reach) = op
-
-# --- An erased source under a restriction is sampled where the walk reads it --- #
-#
-# An erased source (`_erased_source`, ast/common.jl) is decided when `innerₕ` builds its
-# term, before an outer `restrict_to` wraps it, so `_lower_sources` meets it under the
-# restriction and leaves it, since sampled everywhere it would be called at points no
-# assembly reads (gpena/Bramble.jl#643, #524). Here `reach` is exactly the points the walk
-# reads it at, so it is sampled there behind the same barrier as `_fill_erased!`, and
-# becomes a `SourceVector` whose type names no closure, so the form infers a concrete type
-# and the walk reads an array. Every host assembly samples it again at those points before
-# its sweep (`_refresh_reach_samples!`), so a closure reading mutable state, or a mesh moved
-# by `change_points!`, is seen at each assembly, as a typed restricted source is. `reach`
-# follows the regions as `markers!` moves them (`_rereach!`), so no walk reads a value
-# outside it. The values there are `NaN`, and a read of one throws (`getindex` below): a
-# loud internal error rather than a stale value, at the cost of one comparison per read.
-#
-# Mutable, so a node holding it is one pointer wide: a threaded sweep copies the AST into
-# each task's closure, and inline fields made that copy grow with every sampled source.
-mutable struct _ReachSamples{T, M} <: AbstractVector{T}
-    const values::Vector{T}
-    const sampled::BitVector
-    const func::Function
-    const mesh::M
-    "the mesh's marker stamp `sampled` was computed at (`_rereach!`)."
-    stamp::UInt64
-end
-
-Base.size(s::_ReachSamples) = size(s.values)
-Base.IndexStyle(::Type{<:_ReachSamples}) = IndexLinear()
-
-# The mask is read only for a `NaN`, which a source may return at a point of `reach` too.
-# The slow path throws rather than calling the source: a call there, never taken, cost the
-# sweep 14% on a 401x401 mesh, where a throw costs nothing.
-@inline function Base.getindex(s::_ReachSamples, lin::Int)
-    @boundscheck checkbounds(s, lin)
-    v = @inbounds s.values[lin]
-    (isnan(v) && !(@inbounds s.sampled[lin])) || return v
-    _throw_unsampled(lin)
-end
-
-@noinline _throw_unsampled(lin::Int) = throw(
-    ErrorException("internal error: a sampled source was read at point $lin, outside the " *
-                   "points its assembly samples; please report it to Bramble.jl"))
-
-# Shown without reading it: a value outside `reach` is not the source's.
-function Base.show(io::IO, s::_ReachSamples)
-    print(io, "source sampled at ", count(s.sampled), " of ", length(s), " points")
-end
-Base.show(io::IO, ::MIME"text/plain", s::_ReachSamples) = show(io, s)
-
-# On a mesh whose points are `Float32` or `Float64` the value type is the coordinates'; any
-# other leaves the source to `_specialised_sources`. Decided by the mesh's type, so it folds.
-function _typed_restrictions(op::SourceFunction{D, Function}, sp, reach) where {D}
-    Ωₕ = mesh(sp)
-    T = eltype(Ωₕ)
-    T <: Union{Float32, Float64} || return op
-    values = fill(T(NaN), length(reach))
-    _sample_reach!(values, op.func, Ωₕ, reach)
-    vec = _ReachSamples{T, typeof(Ωₕ)}(values, reach, op.func, Ωₕ, _marker_stamp(Ωₕ))
-    return SourceVector{D, typeof(vec)}(vec)
-end
-
-@noinline _sample_reach!(values, f::Function, Ωₕ, reach) = (
-    Base.invokelatest(_sample_reach_typed!, values, f, Ωₕ, reach); nothing)
-
-# The mask a word at a time: an empty word is skipped and a full one swept without a test,
-# so a region's interior costs about what sampling every point does.
-function _sample_reach_typed!(values, f::F, Ωₕ, reach::BitVector) where {F}
-    cart = CartesianIndices(indices(Ωₕ))
-    for (c, w) in enumerate(reach.chunks)
-        w == 0 && continue
-        base = (c - 1) << 6
-        if w == typemax(UInt64)
-            for lin in (base + 1):(base + 64)
-                @inbounds values[lin] = f(point(Ωₕ, cart[lin]))
-            end
-        else
-            while w != 0
-                lin = base + trailing_zeros(w) + 1
-                @inbounds values[lin] = f(point(Ωₕ, cart[lin]))
-                w &= w - one(w)
-            end
-        end
-    end
-    return nothing
-end
-
-# --- `_ReachSamples` read live: sampled again at every host assembly --- #
-#
-# One serial pass before the sweep, at each host entry point (`_assemble_linear!`,
-# `_assemble_linear_parallel!`, `_assemble_add_linear!`, `_contract_linear`), through the
-# barrier above, so a new closure compiles nothing here. Whether a form holds a
-# `_ReachSamples` is read off its type and folds: a form without one compiles no walk.
-# `reach` follows the regions: when `markers!` has moved them since it was computed (the
-# mesh's marker stamp differs), it is computed again from the current marker words, as
-# `form` computed it, into the stored masks (`_rereach!`), so a source is sampled at the
-# points the walk reads now and never at a point a region left. Only then does it allocate.
-function _reach_samples_in(T)
-    T isa DataType || return false
-    T <: SourceVector && return T.parameters[2] <: _ReachSamples
-    return (T <: LazyOp || T <: Tuple) && any(_reach_samples_in, fieldtypes(T))
-end
-@generated _holds_reach_samples(::T) where {T} = _reach_samples_in(T)
-
-@inline function _refresh_reach_samples!(ast, space)
-    _holds_reach_samples(ast) || return nothing
-    _reach_stale(ast) && _rereach!(ast, space)
-    _refresh_fields!(ast)
-    return nothing
-end
-
-@inline function _refresh_fields!(op::SourceVector{D, <:_ReachSamples}) where {D}
-    s = op.vec
-    _sample_reach!(s.values, s.func, s.mesh, s.sampled)
-    return true
-end
-@generated function _refresh_fields!(op::T) where {T}
-    calls = [:(_refresh_fields!(getfield(op, $i)))
-             for i in 1:fieldcount(T) if _reach_samples_in(fieldtype(T, i))]
-    return Expr(:block, calls..., true)
-end
-
-@inline _reach_stale(op::SourceVector{D, <:_ReachSamples}) where {D} = op.vec.stamp !=
-                                                                       _marker_stamp(op.vec.mesh)
-@generated function _reach_stale(op::T) where {T}
-    calls = [:(_reach_stale(getfield(op, $i)))
-             for i in 1:fieldcount(T) if _reach_samples_in(fieldtype(T, i))]
-    return foldl((x, y) -> :($x || $y), calls; init = false)
-end
-
-# The reach of every term, routed to its leaf as `_lower_sources_for_space` routes it, from
-# all of the leaf's points down, by the rules `_typed_restrictions` applies at `form`. A node
-# holding no `_ReachSamples` is skipped, so the branches for a node that held no erased
-# source there are never needed here.
-@noinline _rereach!(ast, space) = _rereach_term!(ast, mesh(space))
-@noinline _rereach!(ast, space::CompositeGridSpace) = _rereach_over_leaves!(
-    ast, leaf_spaces_offsets(space))
-
-function _rereach_over_leaves!(op::OperatorAdd, leaves)
-    _rereach_over_leaves!(op.left_op, leaves)
-    _rereach_over_leaves!(op.right_op, leaves)
-    return nothing
-end
-function _rereach_over_leaves!(term, leaves)
-    _holds_reach_samples(term) || return nothing
-    target = _routed_target(term, length(leaves))
-    # a term naming no component holds samples on a one-leaf space only (`_unrouted_term`)
-    target === nothing && return _rereach_term!(term, mesh(first(first(leaves))))
-    return _at_leaf(leaf -> _rereach_term!(term, mesh(first(leaf))), leaves, target)
-end
-
-_rereach_term!(term, Ωₕ) = _rereach!(term, Ωₕ, trues(length(indices(Ωₕ))))
-
-_rereach!(op, Ωₕ, reach) = nothing
-function _rereach!(op::SourceVector{D, <:_ReachSamples}, Ωₕ, reach) where {D}
-    s = op.vec
-    copyto!(s.sampled, reach)
-    for lin in eachindex(reach)
-        reach[lin] || (s.values[lin] = NaN)
-    end
-    s.stamp = _marker_stamp(s.mesh)
-    return nothing
-end
-function _rereach!(op::UnaryWrapper, Ωₕ, reach)
-    _holds_reach_samples(op) && _rereach!(op.inner_op, Ωₕ, reach)
-    return nothing
-end
-function _rereach!(op::ShiftNode{D, Dim}, Ωₕ, reach) where {D, Dim}
-    _holds_reach_samples(op) || return nothing
-    deltas = (op.shift_amount,)
-    _reads_unrestricted(op.inner_op) && return _rereach_chain!(
-        op.inner_op, Ωₕ, _tapped_reach(Ωₕ, Val(Dim), deltas, reach, true))
-    return _rereach!(op.inner_op, Ωₕ, _tapped_reach(Ωₕ, Val(Dim), deltas, reach, false))
-end
-function _rereach!(op::TappedNode{D, Dim}, Ωₕ, reach) where {D, Dim}
-    _holds_reach_samples(op) || return nothing
-    wide = _tapped_reach(Ωₕ, Val(Dim), map(_shift_delta, _stencil_taps(op)), reach, true)
-    _reads_unrestricted(op.inner_op) && return _rereach_chain!(op.inner_op, Ωₕ, wide)
-    return _rereach!(op.inner_op, Ωₕ, wide)
-end
-function _rereach!(op::OperatorAdd, Ωₕ, reach)
-    _rereach!(op.left_op, Ωₕ, reach)
-    _rereach!(op.right_op, Ωₕ, reach)
-    return nothing
-end
-_rereach!(op::LinearProduct, Ωₕ, reach) = _rereach!(op.left_op, Ωₕ, reach)
-function _rereach!(op::RegionRestriction, Ωₕ, reach)
-    _holds_reach_samples(op) || return nothing
-    inside = _probe_reach(_marker_words(Ωₕ), _probe_ids(op.region, Ωₕ), reach)
-    return _rereach!(op.inner_op, Ωₕ, inside)
-end
-
-# `_tapped_chain`'s rules: no restriction on the chain narrows the tapped reach.
-_rereach_chain!(op, Ωₕ, wide) = _rereach!(op, Ωₕ, wide)
-_rereach_chain!(op::_Scale, Ωₕ, wide) = _rereach_chain!(op.inner_op, Ωₕ, wide)
-function _rereach_chain!(op::OperatorAdd, Ωₕ, wide)
-    _rereach_chain!(op.left_op, Ωₕ, wide)
-    _rereach_chain!(op.right_op, Ωₕ, wide)
-    return nothing
-end
-function _rereach_chain!(op::RegionRestriction, Ωₕ, wide)
-    _reads_unrestricted(op) || return _rereach!(op, Ωₕ, wide)
-    return _rereach_chain!(op.inner_op, Ωₕ, wide)
-end
 
 function _typed_restrictions(op::UnaryWrapper, sp, reach)
     return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, reach))
 end
 
-# A shift evaluates its operand at `I + shift` for each `I` it is evaluated at. Over an
-# erased source it reads the clamped point where that leaves the grid, and zeroes it
-# (`_shift_node_stencil`, operators/shift.jl), so the source's reach is the clamped one.
+# A shift evaluates its operand at `I + shift` for each `I` it is evaluated at.
 function _typed_restrictions(op::ShiftNode{D, Dim}, sp, reach) where {D, Dim}
-    _reads_unrestricted(op.inner_op) && return _typed_taps(op, (op.shift_amount,), sp, reach)
-    if _holds_erased(op.inner_op)
-        moved = _tapped_reach(mesh(sp), Val(Dim), (op.shift_amount,), reach, false)
-        return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, moved))
-    end
     step = _stencil_step(Val(Dim), Val(D)) * op.shift_amount
     moved = _shift_reach(CartesianIndices(indices(mesh(sp))), step, reach)
     return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, moved))
-end
-
-# A tapped node evaluates its operand at each of its points (`_tapped_stencil`,
-# assembly/stencil_eval.jl) and again at every tap's clamped neighbour, so over an erased
-# source the source's reach is all of them.
-function _typed_restrictions(op::TappedNode{D, Dim}, sp, reach) where {D, Dim}
-    taps = map(_shift_delta, _stencil_taps(op))
-    _reads_unrestricted(op.inner_op) && return _typed_taps(op, taps, sp, reach)
-    _holds_erased(op.inner_op) || return _rewrap_inner(
-        op, _typed_restrictions(op.inner_op, sp, reach))
-    wide = _tapped_reach(mesh(sp), Val(Dim), taps, reach, true)
-    return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, wide))
-end
-
-# Whether an erased source (`_erased_source`, ast/common.jl) lies anywhere under `op`. Read
-# off the type, so the branches above fold; a node that holds none keeps its reach as main
-# computed it.
-function _erased_in(T)
-    T isa DataType || return false
-    T <: SourceFunction && return T.parameters[2] === Function
-    return T <: LazyOp && any(_erased_in, fieldtypes(T))
-end
-@generated _holds_erased(::T) where {T} = _erased_in(T)
-
-# A shift or a tapped node over a restriction whose operand is not source-only, directly or
-# through scales, sums and further such restrictions, reads that operand at each of its own
-# points and at the clamped neighbour of every tap, inside the region or not
-# (`shifted_inner_stencil`, operators/region_restriction.jl), so the operand's reach is all
-# of them, and no restriction on the chain narrows it.
-@inline _reads_unrestricted(op::RegionRestriction) = !_is_source_only(op.inner_op)
-@inline _reads_unrestricted(op::_Scale) = _reads_unrestricted(op.inner_op)
-@inline _reads_unrestricted(op::OperatorAdd) = _reads_unrestricted(op.left_op) ||
-                                               _reads_unrestricted(op.right_op)
-@inline _reads_unrestricted(::Any) = false
-
-function _typed_taps(op::StencilNode{D, Dim}, deltas, sp, reach) where {D, Dim}
-    wide = _tapped_reach(mesh(sp), Val(Dim), deltas, reach, true)
-    return _rewrap_inner(op, _tapped_chain(op.inner_op, sp, wide))
-end
-
-_tapped_chain(op, sp, wide) = _typed_restrictions(op, sp, wide)
-_tapped_chain(op::_Scale, sp, wide) = _rewrap_inner(op, _tapped_chain(op.inner_op, sp, wide))
-function _tapped_chain(op::OperatorAdd{D}, sp, wide) where {D}
-    left = _tapped_chain(op.left_op, sp, wide)
-    right = _tapped_chain(op.right_op, sp, wide)
-    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
-end
-function _tapped_chain(op::RegionRestriction, sp, wide)
-    _reads_unrestricted(op) || return _typed_restrictions(op, sp, wide)
-    return _rebuild_restriction(op, op.region, _tapped_chain(op.inner_op, sp, wide))
-end
-
-# The clamped neighbours of `reach` along `Dim` for each of `deltas`, and `reach` itself when
-# `keep`.
-@noinline function _tapped_reach(
-        Ωₕ, ::Val{Dim}, deltas, reach::BitVector, keep::Bool) where {Dim}
-    cart = CartesianIndices(indices(Ωₕ))
-    lin_of = LinearIndices(cart)
-    wide = keep ? copy(reach) : falses(length(reach))
-    for lin in eachindex(reach)
-        reach[lin] || continue
-        for δ in deltas
-            wide[lin_of[_clamped_shift(Ωₕ, cart[lin], Val(Dim), δ)]] = true
-        end
-    end
-    return wide
 end
 
 @noinline function _shift_reach(cart::CartesianIndices, step::CartesianIndex, reach::BitVector)
@@ -741,19 +423,6 @@ no such point at `form` keeps the empty stencil. In return:
     shift, a difference, an average or a sum holding the restricted source (directly over
     the restriction, or over restrictions and scales nested in it, it still gives 0);
   - [`assemble_add!`](@ref) into entries holding `-0.0` may turn them into `+0.0` there.
-
-A plain function `f` whose term is restricted from outside, as in
-`restrict_to(:interior, innerₕ(f, v))`, is sampled here too, on a host space, when it
-returns its point's precision (a `Float64` at a `Float64` point and a `Float32` at a
-`Float32` one), its test side reads one leaf (a scalar space's test function or a component
-`v(i)`) and no `markers` are given: at every point the assembly reads it and nowhere else,
-here and again at the start of every assembly, then read as an array, so a closure reading
-mutable state is seen at each assembly. Those are the points of its region. Under a shift,
-a difference, an average or a jump they are instead the points the operator is evaluated at
-(inside every region around it) and the neighbour each of its taps reads there, clamped at
-the mesh's edge, whether or not a region between the operator and the term holds them.
-After `markers!` moves a region, the next assembly finds those points again under the new
-markers. Any other restricted function is called at every assembly.
 
 # Examples
 
@@ -1890,7 +1559,6 @@ function _assemble_linear!(
     fill!(b, zero(eltype(b)))
     space = form.test_space
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
-    _refresh_reach_samples!(ast, space)
 
     # Two branches, not three: `CpuSerial` runs the serial core, and everything else goes
     # to `_assemble_linear_parallel_core!`, whose own `_sweep_parallel!` computes the
@@ -2038,7 +1706,6 @@ end
 
 function _assemble_linear_parallel!(::HostLocality, b::AbstractVector, space, ast)
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
-    _refresh_reach_samples!(ast, space)
 
     fill!(b, zero(eltype(b)))
     _assemble_linear_parallel_core!(b, space, ast)

@@ -1017,29 +1017,6 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const
             ast = Bramble.simplify_ast(Bramble.resolve_ast(raw))
             @test @inferred(Bramble._lower_sources_for_space(ast, Vt)) isa Bramble.LazyOp
         end
-        # The same for a source whose type `form` erases (#917), on the term naming a
-        # component, sampled at a type known from the space. The term naming none is read
-        # at every assembly, so it keeps its function's type from the start.
-        erased = Bramble.simplify_ast(Bramble.resolve_ast(innerₕ(x -> 2 * x[1], vt(1))))
-        @test erased.left_op isa Bramble.SourceFunction{2, Function}
-        @test @inferred(Bramble._lower_sources_for_space(erased, Vt)).left_op isa
-              Bramble.SourceVector{2, Vector{Float64}}
-        shared = Bramble.simplify_ast(Bramble.resolve_ast(innerₕ(x -> 2 * x[1], vt)))
-        @test !(shared.left_op isa Bramble.SourceFunction{2, Function})
-        @test @inferred(Bramble._lower_sources_for_space(shared, Vt)) === shared
-        # On a one-leaf composite space the term naming no component is erased, and it is
-        # sampled against the one leaf at every assembly, inferred: the source used to get
-        # its type back. A typed source there is left to the walk, which calls it.
-        V1 = Bramble.CompositeGridSpace((gridspace(Ωₕ),))
-        one_leaf = Bramble.simplify_ast(Bramble.resolve_ast(
-            innerₕ(x -> 2 * x[1], Bramble.test_function(V1))))
-        @test one_leaf.left_op isa Bramble.SourceFunction{2, Function}
-        @test @inferred(Bramble._lower_sources_for_space(one_leaf, V1)).left_op isa
-              Bramble.SourceVector{2, <:Bramble._ReachSamples{Float64}}
-        typed_leaf = Bramble.simplify_ast(Bramble.resolve_ast(
-            innerₕ(x -> 1.0, Bramble.test_function(V1))))
-        @test !(typed_leaf.left_op isa Bramble.SourceFunction{2, Function})
-        @test @inferred(Bramble._lower_sources_for_space(typed_leaf, V1)) === typed_leaf
 
         # while a valid one still works, so the guard is not simply rejecting everything
         @test sum(assemble(form(Vt, v -> innerₕ(1.0, v(2))))) ≈ 1.0

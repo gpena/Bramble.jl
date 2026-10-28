@@ -6,7 +6,7 @@ runs. Every open question of the issue has a section below, and `## Decision` gi
 verdict.
 
 The base is `perf/v4.1.4-followups` at `63ecf980`, which already holds S1 (#939,
-`_ComponentSum`), S3 (#912), S4 (`::Bool` asserts), S5 and S6.1 (#917). The prototype is an
+`_ComponentSum`), S3 (#912), S4 (`::Bool` asserts), S5 and S6.1 (#917). S6.1 was reverted afterwards (`docs/notes/source-closures-v4.1.4.md`, `## Outcome: reverted`), so the figures below that depend on the erased source type were measured with it and a head without it infers those forms as base does. The prototype is an
 uncommitted change on top of `63ecf980`, run from detached scratch worktrees and kept as a
 patch (see the end of `## Decision`; not on this branch). The figure from the time of #914
 comes from a third worktree at `9c34251c`, the main commit #914 and #915 measured.

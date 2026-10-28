@@ -673,38 +673,6 @@ Constructs a `SourceFunction` wrapping function `f`.
 """
 source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 
-# The source a plain function passed to an inner product becomes when `form` samples it once
-# (`_as_source`, operators/inner.jl): a function returning a `Float64` at a `Float64` point and
-# a `Float32` at a `Float32` one is stored as a `Function`, so the form's AST does not carry
-# its type (gpena/Bramble.jl#917); any other keeps `typeof(f)`. Only there: a source the
-# assembly reads at every point (under `restrict_to`, a difference or an average, built with
-# `source_function` above; under `markers`; or in a composite term naming no component) keeps
-# its type, as the walk calls it, and a form holding it infers. The choice is made when the
-# term is built, before any outer `restrict_to` wraps it, so a term restricted afterwards
-# (`restrict_to(:interior, innerₕ(f, v))`, a restricted sum of such terms, a restricted
-# composite term on `v(2)`) holds an erased source `_lower_sources` does not sample. `form`
-# samples it where the walk reads it (`_typed_restrictions`, assembly/linear.jl), and the
-# form infers. Only on a device space, or in a term naming no component of a composite space
-# with several leaves, does `form` give it its type back at run time
-# (`_specialised_sources`, assembly/linear.jl), and infer no concrete type.
-@inline _erased_source(f, ::Val{D}) where {D} = _keeps_precision(f, Val(D)) ?
-                                                SourceFunction{D, Function}(f) :
-                                                SourceFunction{D, typeof(f)}(f)
-
-# Whether `f`'s value type is its point's, read off inference for the two element types a
-# backend holds, so the branch above folds. Erased, a source's lowered vector has the space's
-# element type (`_lower_sources` below) without calling `f` to find it. Any other return
-# (a `Dual`, a complex, a `Float64` constant on a `Float32` mesh, a `Union`, a function that
-# only throws) keeps the type of `f`, and lowering samples it as before.
-@inline _keeps_precision(f, d::Val) = f isa Function && _returns_own(f, Float64, d) &&
-                                      _returns_own(f, Float32, d)
-@inline _returns_own(f::F, ::Type{T}, ::Val{D}) where {F, T, D} = Base.promote_op(
-    f, _point_type(T, Val(D))) === T
-
-# A 1D mesh's point is a scalar, a `D`-dimensional one's an `NTuple{D}`.
-@inline _point_type(::Type{T}, ::Val{1}) where {T} = T
-@inline _point_type(::Type{T}, ::Val{D}) where {T, D} = NTuple{D, T}
-
 # --- Eager spatial lowering of source functions ------------- #
 #
 # `local_stencil(op::SourceFunction, space, I, markers, lin_idx)` calls `op.func(point(mesh(
@@ -741,32 +709,6 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
     vec = parent(Rₕ(space, op.func))
     return SourceVector{D, typeof(vec)}(vec)
 end
-
-# An erased source (`source_function` above) returns its point's element type, so on a
-# `Float32` or `Float64` backend its vector is the space's own element: allocated here, at a
-# type inference knows, and filled by the one call that sees `f`'s type. Another backend type
-# says nothing about `f`'s value, so the source gets its type back and lowers as above.
-@inline function _lower_sources(op::SourceFunction{D, Function}, space) where {D}
-    T = eltype(backend(space))
-    T <: Union{Float32, Float64} || return _lower_sources(_specialised(op), space)
-    uₕ = element(space, T)
-    _fill_erased!(uₕ, op.func)
-    vec = parent(uₕ)
-    return SourceVector{D, typeof(vec)}(vec)
-end
-
-# The barrier: `Rₕ!` specialises on `f`'s own type, as `Rₕ` does for an unerased source.
-# Through `invokelatest`, so JET's optimisation analysis stops here: called directly, it
-# walks `Rₕ!` with `f::Function` and reports every dispatch inside (5 reports in the
-# relation forms `constrained` builds, test/quality/jet.jl).
-@noinline _fill_erased!(uₕ, f::Function) = (Base.invokelatest(Rₕ!, uₕ, f); nothing)
-
-# An erased source with its type back, for a node read at every assembly rather than sampled
-# (`_specialised_sources`, assembly/linear.jl), on a device space or in a term naming no
-# component of a composite space with several leaves.
-@inline _specialised(op::SourceFunction{D, Function}) where {D} = _typed_source(
-    op.func, Val(D))
-@noinline _typed_source(f::F, ::Val{D}) where {F, D} = SourceFunction{D, F}(f)
 
 function _lower_sources(op::OperatorScale, space)
     inner = _lower_sources(op.inner_op, space)
