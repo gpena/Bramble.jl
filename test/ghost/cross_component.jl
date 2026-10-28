@@ -27,7 +27,7 @@ using LinearAlgebra: Diagonal, dot, eigvals, norm
 using SparseArrays: SparseMatrixCSC, nnz, sparse
 using Random: Xoshiro
 
-using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, _Const, _x1, _x2, _x1_times_x2
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 
 isdefined(Main, :GhostOracleND) ||
     Base.include(Main, joinpath(pkgdir(Bramble), "test", "ghost", "GhostOracleND.jl"))
@@ -54,11 +54,11 @@ const K2 = [1.0 -0.25; -0.25 3.0]
 const CASES = (
     sides = (ghosts = (:xmin, :xmax),
         r1 = u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => 0.0,
-            :ymin => u => 0.0, :ymax => u => _x1),
+            :ymin => u => 0.0, :ymax => u => x -> x[1]),
         r2 = u -> (:xmin => 2.0 * u + ∂ₙ(u) => 50.0, :xmax => ∂ₙ(u) => x -> 100.0 * x[2],
             :ymin => u => 100.0, :ymax => u => x -> 100.0 + x[1]^2)),
     boundary = (ghosts = :boundary,
-        r1 = u -> (:xmin => ∂ₙ(u; K = K1) => 1.0, :xmax => ∂ₙ(u; K = K1) => _x2,
+        r1 = u -> (:xmin => ∂ₙ(u; K = K1) => 1.0, :xmax => ∂ₙ(u; K = K1) => x -> x[2],
             :ymin => u + ∂ₙ(u; K = K1) => 0.0, :ymax => ∂ₙ(u; K = K1) => 2.0),
         r2 = u -> (:xmin => ∂ₙ(u; K = K2) => 100.0, :xmax => ∂ₙ(u; K = K2) => 0.0,
             :ymin => ∂ₙ(u; K = K2) => x -> 100.0 * x[1],
@@ -74,7 +74,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
 @testset "Cross-component ghost relations" begin
     fa = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + 100.0 * inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) +
                    0.5 * innerₕ(u(1), v(2)) + innerₕ(u(2), v(1))
-    fl = v -> innerₕ(_Const(1.0), v(1)) + innerₕ(x -> 100.0 * x[2], v(2))
+    fl = v -> innerₕ(x -> 1.0, v(1)) + innerₕ(x -> 100.0 * x[2], v(2))
 
     @testset "Whole equals product: $kind, $name" for kind in KINDS,
         name in (WITH_SLOW_TESTS ? keys(CASES) : (:sides,))
@@ -173,7 +173,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         # the rows route: `dirichlet`, `dirichlet_bc!` and `symmetrize!`
         rows = "does not take them"
         @test refuses(() -> assemble(a; dirichlet = :ymin), rows)
-        gD = :ymin => (_Const(0.0))
+        gD = :ymin => (x -> 0.0)
         @test refuses(() -> assemble(a, l; dirichlet = gD), rows)
         @test refuses(() -> assemble(l; dirichlet = gD), rows)
         A, F = assemble(a, l)
@@ -181,7 +181,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         @test refuses(() -> dirichlet_bc!(copy(A), C, :ymin), rows)
         @test refuses(
             () -> dirichlet_bc!(copy(F), C,
-                Bramble.dirichlet_constraints(Ωₕ, :boundary => (_Const(0.0))), :boundary),
+                Bramble.dirichlet_constraints(Ωₕ, :boundary => (x -> 0.0)), :boundary),
             rows)
         @test refuses(() -> symmetrize!(copy(A), copy(F), C, :ymin), rows)
         @test refuses(() -> assemble(form(C, X2(S, c), fa); dirichlet = :ymin), rows)
@@ -199,10 +199,10 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         @test refuses(
             () -> lift!(lift(S, zeros(Bramble.ndofs(S))), C,
                 zeros(Bramble.ndofs(C))), "lives on another space")
-        @test refuses(() -> Rₕ(C, _x1), "Rₕ or avgₕ")
-        @test refuses(() -> Rₕ!(element(C), _x1), "Rₕ or avgₕ")
-        @test refuses(() -> avgₕ(C, _x1), "Rₕ or avgₕ")
-        @test refuses(() -> avgₕ!(element(C), _x1), "Rₕ or avgₕ")
+        @test refuses(() -> Rₕ(C, x -> x[1]), "Rₕ or avgₕ")
+        @test refuses(() -> Rₕ!(element(C), x -> x[1]), "Rₕ or avgₕ")
+        @test refuses(() -> avgₕ(C, x -> x[1]), "Rₕ or avgₕ")
+        @test refuses(() -> avgₕ!(element(C), x -> x[1]), "Rₕ or avgₕ")
         @test refuses(() -> form(C, S, (u, v) -> innerₕ(u, v)), "takes such a composite")
         @test refuses(() -> semidiscretize(a, l), "semidiscretize")
 
@@ -230,12 +230,12 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
     Kt(i, j) = [λ * (i == d) * (j == e) + μ * ((i == j) * (d == e) + (i == e) * (j == d))
                 for d in 1:2, e in 1:2]
     t(u, i) = ∂ₙ(u(1); K = Kt(i, 1)) + ∂ₙ(u(2); K = Kt(i, 2))
-    gd = (_x1_times_x2, x -> 100.0 + x[1])
+    gd = (x -> x[1] * x[2], x -> 100.0 + x[1])
     disp(F) = u -> (F => u(1) => gd[1], F => u(2) => gd[2], F => ∂ₙₙ(u(1)) => 0.0,
         F => ∂ₙₙ(u(2)) => 0.0)
     # The traction data `tg[F][i]`, distinct per facet and component.
     tg = (xmin = (x -> 1.0 + x[2], 0.5), xmax = (-2.0, x -> 50.0 * x[2]^2),
-        ymin = (_x1, -1.0), ymax = (3.0, x -> 10.0 * x[1]))
+        ymin = (x -> x[1], -1.0), ymax = (3.0, x -> 10.0 * x[1]))
     TRACTIONS = (
         one = (facets = (:xmin,), others = (:ymin, :xmax, :ymax)),
         apart = (facets = (:xmin, :xmax), others = (:ymin, :ymax)))
@@ -429,7 +429,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         for i in 1:2, j in 1:2)
         Kf(i, j) = Ka[(i, j)]
         ta(u, i) = ∂ₙ(u(1); K = Kf(i, 1)) + ∂ₙ(u(2); K = Kf(i, 2))
-        g = (xmin = (1.0, 0.0), ymin = (0.0, _x1))
+        g = (xmin = (1.0, 0.0), ymin = (0.0, x -> x[1]))
         C = constrained(V,
             u -> (:xmin => ta(u, 1) => g.xmin[1],
                 :xmin => ta(u, 2) => g.xmin[2], :ymin => ta(u, 1) => g.ymin[1],
@@ -455,7 +455,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         Ωₕ = O.make_mesh(kind, 0; dim = 2, n0 = 7)
         S = gridspace(Ωₕ; ghosts = :boundary)
         r1 = u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => ∂ₙ(u) => 0.0, :ymin => ∂ₙ(u) => 0.0,
-            :ymax => ∂ₙ(u) => _x1)
+            :ymax => ∂ₙ(u) => x -> x[1])
         r2 = u -> (:xmin => ∂ₙ(u) => 2.0, :xmax => ∂ₙ(u) => x -> 100.0 * x[2])
         X = constrained(S, r1) × constrained(S, r2)
         C = constrained(S × S, whole(r1, r2))
@@ -600,7 +600,7 @@ X2(S, c) = constrained(S, c.r1) × constrained(S, c.r2)
         Ka, Kb = [2.0 0.6; 0.6 1.0], [1.0 0.3; 0.3 1.0]
         C = constrained(V,
             u -> (traction(:xmin)(u)..., :ymin => ∂ₙ(u(1); K = Ka) => 0.0,
-                :ymin => ∂ₙ(u(2); K = Kb) => _x1, disp(:xmax)(u)...,
+                :ymin => ∂ₙ(u(2); K = Kb) => x -> x[1], disp(:xmax)(u)...,
                 disp(:ymax)(u)...))
         @test C.facets == ((true, false), (false, false))
         E = Matrix(first(Bramble.closure(C)))

@@ -17,12 +17,12 @@ using Bramble: RankOneUpdate, padded_space, closure, D₋ₓ
 using LinearAlgebra: norm, dot, I
 using SparseArrays: SparseMatrixCSC, nonzeros, nnz
 using Random: seed!
-using ..TestUtils: WITH_3D_TESTS, _Const, _one_plus_x1, _x1, _x2
+using ..TestUtils: WITH_3D_TESTS
 
 relerr(A, B) = norm(A - B) / max(norm(B), eps(real(eltype(B))))
 
 lap(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
-const gt = _one_plus_x1           # trial functional data
+const gt = x -> 1 + x[1]          # trial functional data
 const hs = x -> 2 - x[end]        # test functional data
 const fl = x -> x[1] + 1          # load data
 
@@ -89,10 +89,10 @@ function cases(D, T)
     elseif D == 2
         W = gridspace(Ωₕ; ghosts = (:xmin, :xmax, :ymin))
         Cmix = constrained(W,
-            u -> (:xmin => ∂ₙ(u) => o, :xmax => two * u + ∂ₙ(u) => _x2,
-                :ymin => ∂ₙ(u) => T(0.5), :ymax => u => _x1))
+            u -> (:xmin => ∂ₙ(u) => o, :xmax => two * u + ∂ₙ(u) => x -> x[2],
+                :ymin => ∂ₙ(u) => T(0.5), :ymax => u => x -> x[1]))
         Cv = constrained(W, u -> (:xmin => u + ∂ₙ(u) => o, :xmax => ∂ₙ(u) => o,
-            :ymin => ∂ₙ(u) => -o, :ymax => u => _x1))
+            :ymin => ∂ₙ(u) => -o, :ymax => u => x -> x[1]))
         K = T[2 1; 1 2]
         Wb = gridspace(Ωₕ; ghosts = :boundary)
         Ccon = constrained(Wb, u -> map(F -> F => ∂ₙ(u; K) => x -> x[1] - x[2],
@@ -101,7 +101,7 @@ function cases(D, T)
             ("conormal", Ccon, Ccon))
     else
         W = gridspace(Ωₕ; ghosts = (:xmin, :zmax))
-        C = constrained(W, u -> (:xmin => ∂ₙ(u) => o, :zmax => u + ∂ₙ(u) => _x2,
+        C = constrained(W, u -> (:xmin => ∂ₙ(u) => o, :zmax => u + ∂ₙ(u) => x -> x[2],
             :ymin => u => o))
         return (("Neumann, Robin and u => g", C, C),)
     end
@@ -150,7 +150,7 @@ end
     # the matrix is rectangular, so swapping the two closures or vectors cannot fit.
     Ωₕ = rmesh(2, Float64)
     W = gridspace(Ωₕ; ghosts = (:xmin, :xmax))
-    Cu = constrained(W, u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u => _x2,
+    Cu = constrained(W, u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u => x -> x[2],
         :xmax => ∂ₙ(u) => 0.5))
     Cv = constrained(W, u -> (:xmin => 2.0 * u + ∂ₙ(u) => 1.0, :xmax => ∂ₙ(u) => 0.0))
     @test Bramble.ndofs(Cu) != Bramble.ndofs(Cv)
@@ -170,7 +170,7 @@ end
 
 @testset "term alone, live Ref scale" begin
     Ωₕ = rmesh(2, Float64; seed = 3)
-    C = constrained(gridspace(Ωₕ; ghosts = (:ymax,)), u -> :ymax => u + ∂ₙ(u) => _x1)
+    C = constrained(gridspace(Ωₕ; ghosts = (:ymax,)), u -> :ymax => u + ∂ₙ(u) => x -> x[1])
     zero_form = (u, v) -> 0.0 * innerₕ(u, v)
     ref = reference(C, C, 1.5; f = zero_form)
     a = form(C, C, (u, v) -> 1.5 * innerₕ(gt, u) * innerₕ(hs, v))
@@ -202,7 +202,7 @@ end
     # beyond the domain give the same system as data of 1 there.
     Ωₕ = rmesh(2, Float64; seed = 11)
     C = constrained(gridspace(Ωₕ; ghosts = (:xmin, :ymax)),
-        u -> (:xmin => ∂ₙ(u) => 1.0, :ymax => u + ∂ₙ(u) => 0.5, :xmax => u => _x2))
+        u -> (:xmin => ∂ₙ(u) => 1.0, :ymax => u + ∂ₙ(u) => 0.5, :xmax => u => x -> x[2]))
     P = padded_space(C)
     G = Bramble.mesh(P)
     lin = LinearIndices(Bramble.npoints(G, Tuple))
@@ -227,12 +227,12 @@ end
     # Rows are the physical nodes: every ghost eliminated, no `u => g`.
     Ωₕ = rmesh(2, Float64; seed = 5)
     C = constrained(gridspace(Ωₕ; ghosts = (:xmin, :ymax)),
-        u -> (:xmin => ∂ₙ(u) => 1.0, :ymax => u + ∂ₙ(u) => _x1))
+        u -> (:xmin => ∂ₙ(u) => 1.0, :ymax => u + ∂ₙ(u) => x -> x[1]))
     σ = 4.0
     ref = reference(C, C, σ)
     a = rank_form(C, C, σ)
     l = form(C, v -> innerₕ(fl, v))
-    gD = _Const(3.0)
+    gD = x -> 3.0
     Ω0 = Bramble.physical_mesh(Bramble.mesh(C))
     n = Bramble.npoints(Ω0, Tuple)
     mask = vec([J[1] == n[1] for J in CartesianIndices(n)])
@@ -290,7 +290,7 @@ end
         Ωₕ = rmesh(D, Float64; seed = 5)
         C = constrained(gridspace(Ωₕ; ghosts = (:xmin, :xmax)),
             u -> (:xmin => 3.0 * u + ∂ₙ(u) => 1.0, :xmax => ∂ₙ(u) => 4.0))
-        gD = u -> innerₕ(_one_plus_x1, D₋ₓ(u))
+        gD = u -> innerₕ(x -> 1 + x[1], D₋ₓ(u))
         a = form(C, C, (u, v) -> lap(u, v) + 2.0 * gD(u) * innerₕ(hs, v))
         l = form(C, v -> innerₕ(fl, v))
         P = padded_space(C)
@@ -301,11 +301,11 @@ end
         Fr = E' * (assemble(form(P, v -> innerₕ(fl, v))) - Ar * d)
         n = Bramble.npoints(Bramble.physical_mesh(Bramble.mesh(C)), Tuple)
         mask = vec([J[1] == n[1] for J in CartesianIndices(n)])
-        K, F = assemble(a, l; dirichlet = :xmax => (_Const(7.0)))
+        K, F = assemble(a, l; dirichlet = :xmax => (x -> 7.0))
         @test all(==(7.0), F[mask])
         @test relerr(F[.!mask], Fr[.!mask]) <= 1e-12
         poison!(K, F)
-        assemble!(K, F, a, l; dirichlet = :xmax => (_Const(7.0)))
+        assemble!(K, F, a, l; dirichlet = :xmax => (x -> 7.0))
         @test all(==(7.0), F[mask])
         @test relerr(F[.!mask], Fr[.!mask]) <= 1e-12
     end
@@ -345,9 +345,9 @@ end
         msg(() -> matrix_free_operator(a)))
     # `dirichlet` on a space whose unknowns are not the physical nodes
     @test occursin("given both ways", msg(() -> assemble(a; dirichlet = :xmax)))
-    @test occursin("given both ways", msg(() -> assemble(a, l; dirichlet = :xmax => (_Const(2.0)))))
+    @test occursin("given both ways", msg(() -> assemble(a, l; dirichlet = :xmax => (x -> 2.0))))
     @test occursin("given both ways",
-        msg(() -> assemble!(K, F, a, l; dirichlet = :xmax => (_Const(2.0)))))
+        msg(() -> assemble!(K, F, a, l; dirichlet = :xmax => (x -> 2.0))))
     @test occursin("given both ways", msg(() -> symmetrize!(K, F, C, :xmax)))
     @test occursin("without", msg(() -> assemble(a, l; symmetrize = true)))
     # a refill target of another pattern, or a load of a narrower type

@@ -12,7 +12,7 @@ using SparseArrays: sparse, nnz, nonzeros, rowvals, SparseMatrixCSC
 using Random
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS, WITH_AD_TESTS, TEST_DIMS, @test_allocs
-using ..TestUtils: _nonuniform_points, _Const, _x1, _sin_x1, _x1_lt_half
+using ..TestUtils: _nonuniform_points
 using Bramble:
                BilinearForm,
                form,
@@ -113,7 +113,7 @@ using Bramble:
         @test test_space(a) === Wₕ
 
         # the functor contracts as vᵀ A u
-        uₕ = Rₕ(Wₕ, _sin_x1)
+        uₕ = Rₕ(Wₕ, x -> sin(x[1]))
         vₕ = Rₕ(Wₕ, x -> x[2] + 1)
         @test a(uₕ, vₕ) ≈ dot(parent(vₕ), Matrix(Apar) * parent(uₕ))
 
@@ -590,7 +590,7 @@ using Bramble:
         # The pattern is the expensive half and does not change between assemblies, so the
         # intended shape of a loop is `assemble` once and `assemble!` after. This pins that
         # the second path costs nothing.
-        cₕ = Rₕ(Wₕ, _Const(1.0))
+        cₕ = Rₕ(Wₕ, x -> 1.0)
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
 
         A = assemble(a)
@@ -684,7 +684,7 @@ using Bramble:
         # product into products of at most two (gpena/Bramble.jl#727). The pattern must be
         # what the terms assembled apart give: zero entries padded in would grow it.
         Ωm = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :l => :left, :r => :right,
-            :b => :bottom, :t => :top, :c => _x1_lt_half)
+            :b => :bottom, :t => :top, :c => x -> x[1] < 0.5)
         W = gridspace(mesh(Ωm, (7, 9), (false, false)))
         labels = (:l, :r, :b, :t, :c)
         function _check_split(terms; bytes = 0)
@@ -1184,7 +1184,7 @@ using Bramble:
             Bramble._seed_mesh1d_rng!(20261017)
             W = try
                 Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,
-                    :c => _x1_lt_half)
+                    :c => x -> x[1] < 0.5)
                 gridspace(D == 1 ? mesh(Ω, 11, false; backend = backend(T)) :
                           mesh(Ω, (7, 9, 5)[1:D], ntuple(_ -> false, D);
                     backend = backend(T)))
@@ -1274,7 +1274,7 @@ using Bramble:
                 Wb = try
                     gridspace(mesh(
                         domain(Iv × Iv, :l => :left, :r => :right, :b => :bottom,
-                            :c => _x1_lt_half), (7, 9), (false, false)))
+                            :c => x -> x[1] < 0.5), (7, 9), (false, false)))
                 finally
                     Bramble._unseed_mesh1d_rng!()
                 end
@@ -1333,7 +1333,7 @@ using Bramble:
             Bramble._seed_mesh1d_rng!(20261017)
             W = try
                 Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,
-                    :c => _x1_lt_half)
+                    :c => x -> x[1] < 0.5)
                 gridspace(D == 1 ? mesh(Ω, 11, false; backend = backend(T)) :
                           mesh(Ω, (7, 9, 5)[1:D], ntuple(_ -> false, D);
                     backend = backend(T)))
@@ -1421,7 +1421,7 @@ using Bramble:
             Iv = interval(zero(T), one(T))
             Random.seed!(20261017)
             W = gridspace(mesh(domain(Iv × Iv, :l => :left, :r => :right,
-                    :c => _x1_lt_half),
+                    :c => x -> x[1] < 0.5),
                 (7, 9), (false, false); backend = backend(T)))
             RR(w) = R(:l, w) + R(:r, w)
             tol = T === Float32 ? 8 * eps(Float32) : 1.0e-12
@@ -1487,7 +1487,7 @@ using Bramble:
             Random.seed!(20261017)
             Iv = interval(0.0, 1.0)
             Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,
-                :c => _x1_lt_half)
+                :c => x -> x[1] < 0.5)
             W = gridspace(D == 1 ? mesh(Ω, 11, false) : mesh(Ω, (7, 9), (false, false)))
             r = Ref(0.1)
             L(w) = R(:l, w)
@@ -1612,7 +1612,7 @@ using Bramble:
         end
 
         @testset "Live coefficients update under replay" begin
-            cₕ = Rₕ(Wₕ, _Const(1.0))
+            cₕ = Rₕ(Wₕ, x -> 1.0)
             a = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
             A = assemble(a)                 # record
             s1 = sum(A)
@@ -2329,7 +2329,7 @@ end
 @testset "symbolic and source-only leaves" begin
     u, v = TrialFunction{2}(), TestFunction{2}()
     ui, vi = Bramble.IndexedTrialFunction{2}(1), Bramble.IndexedTestFunction{2}(2)
-    sf = Bramble.source_function(_x1, Val(2))
+    sf = Bramble.source_function(x -> x[1], Val(2))
     sv = Bramble.SourceVector{2, Vector{Float64}}([1.0])
     sc = Bramble.SourceConstant{2, Float64}(2.0)
     δ = Bramble.dirac((0.5, 0.5))

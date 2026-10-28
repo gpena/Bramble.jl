@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: RankOneUpdate, BilinearForm, is_uniform, index_in_marker, D₋ₓ
 using LinearAlgebra, SparseArrays, Random
-using ..TestUtils: WITH_3D_TESTS, alloc_test, _Const, _x1, _one_plus_x1
+using ..TestUtils: WITH_3D_TESTS, alloc_test
 
 # Rank-one penalty terms `σ * innerₕ(g, u) * innerₕ(h, v)` (#780).
 #
@@ -34,7 +34,7 @@ function data_pairs(W)
     gₕ = element(W)
     parent(gₕ) .= 1 .+ rand(length(gₕ))
     return (("constant", 2, x -> 2 - x[1]),
-        ("function", _one_plus_x1, x -> 2 - x[1]),
+        ("function", x -> 1 + x[1], x -> 2 - x[1]),
         ("grid function", gₕ, 1))
 end
 
@@ -46,7 +46,7 @@ function rectangular_spaces()
     return W, W × W
 end
 
-rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2))
+rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(1, v(2))
 
 @testset "Rank-one terms" begin
     @testset "values against a dense reference" begin
@@ -85,7 +85,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
     @testset "where the scalars sit" begin
         W = nonuniform_space(2, Float64)
         A0 = Matrix(assemble(form(W, W, lap)))
-        g = _one_plus_x1
+        g = x -> 1 + x[1]
         wt, ws = functional(W, g), functional(W, 1)
         ref(σ) = A0 + σ * ws * wt'
         forms = (("canonical", 2.5, (u, v) -> lap(u, v) + 2.5 * innerₕ(g, u) * innerₕ(1, v)),
@@ -173,7 +173,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
             parent(gₕ) .= 1 .+ rand(T, length(gₕ))
             r = Ref(T(2))
             for (name, f) in (("constant", (u, v) -> lap(u, v) + 2 * innerₕ(1, u) * innerₕ(1, v)),
-                ("function", (u, v) -> lap(u, v) + innerₕ(_one_plus_x1, u) * innerₕ(2, v)),
+                ("function", (u, v) -> lap(u, v) + innerₕ(x -> 1 + x[1], u) * innerₕ(2, v)),
                 ("grid function", (u, v) -> lap(u, v) + r * innerₕ(gₕ, u) * innerₕ(gₕ, v)))
                 @testset "$(D)D $T, $name" begin
                     a = form(W, W, f)
@@ -194,7 +194,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
 
     @testset "products, adjoint and transpose" begin
         W = nonuniform_space(2, Float64)
-        a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + 1.5 * innerₕ(_x1, u) * innerₕ(1, v))
+        a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), v) + 1.5 * innerₕ(x -> x[1], u) * innerₕ(1, v))
         K = assemble(a)
         M = Matrix(K)
         @test !issymmetric(M)
@@ -291,7 +291,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
         Wu, Wv = rectangular_spaces()
         K = assemble(form(Wu, Wv, rectangular))
         A0 = Matrix(assemble(form(Wu, Wv, (u, v) -> innerₕ(u, v(1)))))
-        wt = functional(Wu, _x1)
+        wt = functional(Wu, x -> x[1])
         ws = assemble(form(Wv, v -> innerₕ(1, v(2))))
         @test size(K) == (ndofs(Wv), ndofs(Wu)) == (length(ws), length(wt))
         @test size(K, 1) != size(K, 2)
@@ -317,10 +317,10 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
         V = W × W
         a = form(V, V,
             (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)) +
-                      2.0 * innerₕ(_x1, u(1)) * innerₕ(1, v(2)))
+                      2.0 * innerₕ(x -> x[1], u(1)) * innerₕ(1, v(2)))
         K = assemble(a)
         A0 = Matrix(assemble(form(V, V, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))))
-        wt = assemble(form(V, v -> innerₕ(_x1, v(1))))
+        wt = assemble(form(V, v -> innerₕ(x -> x[1], v(1))))
         ws = assemble(form(V, v -> innerₕ(1, v(2))))
         n = ndofs(W)
         @test iszero(wt[(n + 1):end]) && iszero(ws[1:n])
@@ -328,8 +328,8 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
         # a trial functional of the second component, a test functional of the first
         a2 = form(V, V,
             (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)) +
-                      2.0 * innerₕ(_x1, u(2)) * innerₕ(1, v(1)))
-        wt2 = assemble(form(V, v -> innerₕ(_x1, v(2))))
+                      2.0 * innerₕ(x -> x[1], u(2)) * innerₕ(1, v(1)))
+        wt2 = assemble(form(V, v -> innerₕ(x -> x[1], v(2))))
         ws2 = assemble(form(V, v -> innerₕ(1, v(1))))
         @test iszero(wt2[1:n]) && iszero(ws2[(n + 1):end])
         @test Matrix(assemble(a2)) ≈ A0 + 2.0 * ws2 * wt2'
@@ -345,12 +345,12 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
             W = nonuniform_space(D, Float64)
             Ωₕ = mesh(W)
             σ = 3.0 / hₘₐₓ(Ωₕ)
-            a = form(W, W, (u, v) -> lap(u, v) + σ * innerₕ(_one_plus_x1, u) * innerₕ(2, v))
+            a = form(W, W, (u, v) -> lap(u, v) + σ * innerₕ(x -> 1 + x[1], u) * innerₕ(2, v))
             K = assemble(a; dirichlet = :boundary)
             bd = findall(index_in_marker(Ωₕ, :boundary))
             N = ndofs(W)
             M = Matrix(assemble(form(W, W, lap))) +
-                σ * functional(W, 2) * functional(W, _one_plus_x1)'
+                σ * functional(W, 2) * functional(W, x -> 1 + x[1])'
             # the reference: identity rows on Γ_D, every column kept
             Mref = copy(M)
             for i in bd
@@ -411,7 +411,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
         S = interval(0.0, 1.0) × interval(0.0, 1.0)
         W2 = gridspace(mesh(domain(S, :l => x -> x[1] == 0, :t => x -> x[2] == 1), (7, 9),
             (false, false)))
-        a2 = form(W2, W2, (u, v) -> lap(u, v) + σ * innerₕ(_one_plus_x1, u) * innerₕ(1, v))
+        a2 = form(W2, W2, (u, v) -> lap(u, v) + σ * innerₕ(x -> 1 + x[1], u) * innerₕ(1, v))
         l2 = form(W2, v -> innerₕ(x -> x[1] + 1, v))
         dir = (:l => gD, :t => gD)
         K2, F2 = assemble(a2, l2; dirichlet = dir)
@@ -453,8 +453,8 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
             return issymmetric(K)
         end
         @test sym((u, v) -> lap(u, v) + 2.0 * innerₕ(1, u) * innerₕ(1, v))
-        @test !sym((u, v) -> lap(u, v) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v))
-        @test sym((u, v) -> lap(u, v) + 0.0 * innerₕ(_x1, u) * innerₕ(1, v))
+        @test !sym((u, v) -> lap(u, v) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(1, v))
+        @test sym((u, v) -> lap(u, v) + 0.0 * innerₕ(x -> x[1], u) * innerₕ(1, v))
         @test !sym((u, v) -> innerₕ(D₋ₓ(u), v) + 2.0 * innerₕ(1, u) * innerₕ(1, v))
         # `ws` a multiple of `wt`: the matrix is symmetric, the structural test says no
         b = (u, v) -> lap(u, v) + innerₕ(2, u) * innerₕ(1, v)
@@ -490,7 +490,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
 
     @testset "similar and copy" begin
         W = nonuniform_space(2, Float64)
-        a = form(W, W, (u, v) -> lap(u, v) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v))
+        a = form(W, W, (u, v) -> lap(u, v) + 2.0 * innerₕ(x -> x[1], u) * innerₕ(1, v))
         K = assemble(a)
         S = similar(K)
         @test S isa RankOneUpdate{Float64} && size(S) == size(K)
@@ -529,7 +529,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
         a = @inferred form(W, W, lap)
         @test a isa BilinearForm
         @test assemble(a) isa SparseMatrixCSC
-        @test functional(W, 1) ≈ assemble(form(W, v -> innerₕ(_Const(1.0), v)))
+        @test functional(W, 1) ≈ assemble(form(W, v -> innerₕ(x -> 1.0, v)))
     end
 
     @testset "refusals" begin
@@ -550,7 +550,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
         @test occursin("left factor, a OperatorAdd",
             fails((u, v) -> (innerₕ(1, u) + innerₕ(1, v)) * innerₕ(1, v)))
         @test occursin("left factor, a GridFunctionScale",
-            fails((u, v) -> _Const(2.0) * innerₕ(1, u) * innerₕ(1, v)))
+            fails((u, v) -> (x -> 2.0) * innerₕ(1, u) * innerₕ(1, v)))
         @test occursin("left factor, a LinearProduct",
             fails((u, v) -> innerₕ(1, u + v) * innerₕ(1, v)))
         @test occursin("left factor, a LinearProduct",

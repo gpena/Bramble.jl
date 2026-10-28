@@ -50,7 +50,7 @@ using Bramble:
 using LinearAlgebra: hypot
 using Random
 using Supposition
-using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask, _Const, _x1
+using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask
 
 # --- Test Suite ---
 @testset "Multi-dimensional meshes" begin
@@ -662,7 +662,7 @@ using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask, _Const, _x1
                 Wₕ = gridspace(Ωₕ)
                 msg = "a centered difference along direction 2 needs at least 3 points " *
                       "there, got 1"
-                f = source_function(_x1, Val(2))
+                f = source_function(x -> x[1], Val(2))
                 @test_throws ArgumentError(msg) form(
                     Wₕ, Wₕ, (u, v) -> inner₊ᵧ(Dcᵧ(u), Dcᵧ(v)))
                 @test_throws ArgumentError(msg) form(Wₕ, Wₕ, (u, v) -> innerₕ(Dcᵧ(u), v))
@@ -684,7 +684,7 @@ using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask, _Const, _x1
                    "there, got 2"
             @test_throws ArgumentError(msg1) form(W2, W2, (u, v) -> innerₕ(Dcₓ(u), v))
             @test_throws ArgumentError(msg1) form(
-                W2, v -> innerₕ(Dcₓ(source_function(_x1, Val(1))), v))
+                W2, v -> innerₕ(Dcₓ(source_function(x -> x[1], Val(1))), v))
 
             # Three points along y are enough: the same form builds, assembles nonzero, and
             # the check, run once at `form`, leaves the refill allocation-free.
@@ -781,7 +781,7 @@ using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask, _Const, _x1
             Wₕ_line = gridspace(Ωₕ_line)
 
             uₕ = Rₕ(Wₕ_line, x -> sin(pi * x[1]) + x[2])
-            vₕ = Rₕ(Wₕ_line, _Const(1.0))
+            vₕ = Rₕ(Wₕ_line, x -> 1.0)
 
             # cell_measure along the collapsed axis is coerced to 1 (`_apply_hs_logic`), so
             # the measure is exactly the live axis's own cell width, never zero or NaN/Inf.

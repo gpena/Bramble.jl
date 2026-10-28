@@ -22,7 +22,7 @@ import Bramble:
 using Bramble: set
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS, alloc_test
-using ..TestUtils: _tri, _sd_problem, _Const, _x1
+using ..TestUtils: _tri, _sd_problem
 
 @testset "Dirichlet constraints" begin
     # --- Setup ---
@@ -307,7 +307,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
     end
 
     @testset "Vector values" begin
-        bcs = dirichlet_constraints(Ωₕ, :bottom => (_Const(7.0)))
+        bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
 
         v = fill(-1.0, nW)
         @test dirichlet_bc!(v, Wₕ, bcs, :bottom) === v
@@ -454,7 +454,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         end
 
         @testset "Vector (single leaf)" begin
-            bcs = dirichlet_constraints(Ωₕ, :bottom => (_Const(7.0)))
+            bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
             w = fill(-1.0, nV)
             @test dirichlet_bc!(w, Vₕ, bcs, :bottom; components = 2) === w
             for c in 0:2
@@ -603,7 +603,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         @test any(shared)   # the (0,0) corner is marked by both
 
         bcs_left_last = dirichlet_constraints(
-            set(Ωo), :bottom => (_Const(1.0)), :left => (_Const(2.0))
+            set(Ωo), :bottom => (x -> 1.0), :left => (x -> 2.0)
         )
         v = fill(-1.0, no)
         dirichlet_bc!(v, Wo, bcs_left_last, :bottom, :left)
@@ -615,7 +615,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         # `dirichlet_constraints` in the opposite order: the winner flips, so precedence
         # tracks construction order, not the order given to `dirichlet_bc!`.
         bcs_bottom_last = dirichlet_constraints(
-            set(Ωo), :left => (_Const(2.0)), :bottom => (_Const(1.0))
+            set(Ωo), :left => (x -> 2.0), :bottom => (x -> 1.0)
         )
         w = fill(-1.0, no)
         dirichlet_bc!(w, Wo, bcs_bottom_last, :bottom, :left)
@@ -628,7 +628,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         @test dirichlet_bc!(A1, Wₕ) === A1                 # no labels at all
         @test A1 == A0
         v0 = fill(3.0, nW)
-        bcs = dirichlet_constraints(Ωₕ, :bottom => (_Const(7.0)))
+        bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
         @test dirichlet_bc!(v0, Wₕ, bcs) === v0            # no labels
         @test all(==(3.0), v0)
 
@@ -640,7 +640,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
             (false, false)
         )
         Wm, Vm = gridspace(Ωm), gridspace(Ωm, Val(2))
-        bm = dirichlet_constraints(Ωm, :xmin => (_Const(7.0)))
+        bm = dirichlet_constraints(Ωm, :xmin => (x -> 7.0))
         for (target, n) in ((Ωm, 20), (Wm, 20), (Vm, 40))
             F = fill(3.0, n)
             @test_throws ArgumentError dirichlet_bc!(F, target, bm, :xmin, :xmax)
@@ -664,15 +664,15 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         # with a refusal that named neither.
         @test_throws ArgumentError dirichlet_constraints(Ωm, :xmin => 2.0)
         @test_throws "2.0" dirichlet_constraints(Ωm, :xmin => 2.0)
-        @test_throws ":xmax" dirichlet_constraints(Ωm, :xmin => (_Const(1.0)), :xmax => 2.0)
+        @test_throws ":xmax" dirichlet_constraints(Ωm, :xmin => (x -> 1.0), :xmax => 2.0)
         @test_throws ArgumentError dirichlet_constraints(Ωm, Iₜ, :xmin => 2.0)
-        @test_throws ":xmax" dirichlet_constraints(Ωm, :xmin => :xmax, :xmax => (_Const(1.0)))
+        @test_throws ":xmax" dirichlet_constraints(Ωm, :xmin => :xmax, :xmax => (x -> 1.0))
         lm = form(Wm, v -> innerₕ(1.0, v))
         @test_throws ArgumentError assemble(lm; dirichlet = :xmin => 0.0)
         @test_throws "0.0" assemble(lm; dirichlet = :xmin => 0.0)
         @test_throws ":xmax" assemble(lm; dirichlet = :xmin => :xmax)
-        @test_throws "2.0" assemble(lm; dirichlet = (:xmin => (_Const(1.0)), :xmax => 2.0))
-        @test count(==(7.0), assemble(lm; dirichlet = :xmin => (_Const(7.0)))) == 4
+        @test_throws "2.0" assemble(lm; dirichlet = (:xmin => (x -> 1.0), :xmax => 2.0))
+        @test count(==(7.0), assemble(lm; dirichlet = :xmin => (x -> 7.0))) == 4
     end
 
     @testset "Set/mesh/space construction" begin
@@ -687,7 +687,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         )
         Wₕ = gridspace(Ωₕ)
         Vₕ = gridspace(Ωₕ, Val(3))
-        g = _Const(7.0)
+        g = x -> 7.0
 
         from_set = dirichlet_constraints(Ωₕ, :bottom => g)
         for src in (Ωₕ, Wₕ, Vₕ)
@@ -736,7 +736,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         # the flat four-component space gets the same values (the matrix rows are pinned
         # against it in test/form/symmetrize.jl)
         flat = gridspace(Ωₕ, Val(4))
-        bcs = dirichlet_constraints(Ωₕ, :bottom => (_Const(7.0)))
+        bcs = dirichlet_constraints(Ωₕ, :bottom => (x -> 7.0))
         vn, vf = fill(3.0, 4n), fill(3.0, 4n)
         dirichlet_bc!(vn, nested, bcs, :bottom)
         dirichlet_bc!(vf, flat, bcs, :bottom)
@@ -761,7 +761,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
                 (true, true)
             )
             W, V = gridspace(Ω), gridspace(Ω, Val(3))
-            bcs = dirichlet_constraints(Ω, :bottom => (_Const(7.0)))
+            bcs = dirichlet_constraints(Ω, :bottom => (x -> 7.0))
 
             Aw, Av = _eye(ndofs(W)), _eye(ndofs(V))
             vw, vv = zeros(ndofs(W)), zeros(ndofs(V))
@@ -832,8 +832,8 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         Ωm = domain(
             interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom, :top => :top
         )
-        bcs_single = dirichlet_constraints(Ωm, :bottom => (_Const(7.0)))
-        bcs_multi = dirichlet_constraints(Ωm, :bottom => (_Const(7.0)), :top => (_x1))
+        bcs_single = dirichlet_constraints(Ωm, :bottom => (x -> 7.0))
+        bcs_multi = dirichlet_constraints(Ωm, :bottom => (x -> 7.0), :top => (x -> x[1]))
 
         for bcs in (bcs_single, bcs_multi)
             c = marker_read_bytes(bcs)

@@ -12,7 +12,6 @@ using Supposition
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 using Bramble: components, star_spacings, StarSpacings, submeshes
 using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points, _zero_boundary!
-using ..TestUtils: _Const, _x1, _x1_times_x2
 using ..SpaceDifferenceTests: test_operator_matrix_equivalence
 
 # The averaged-spacing forward difference (D̃) and the identity it exists for.
@@ -89,7 +88,7 @@ star_ops(::Val{3}) = (D̃ₓ, D̃ᵧ, D̃₂)
         Wₕ = gridspace(Ωₕ)
         n = npoints(Ωₕ, Tuple)
 
-        @test all(iszero, parent(D̃ₓ(Rₕ(Wₕ, _Const(3.0)))))
+        @test all(iszero, parent(D̃ₓ(Rₕ(Wₕ, x -> 3.0))))
 
         for (d, op) in ((1, D̃ₓ), (2, D̃ᵧ), (3, D̃₂))
             # a function constant along d differences to zero along d
@@ -107,7 +106,7 @@ star_ops(::Val{3}) = (D̃ₓ, D̃ᵧ, D̃₂)
         Vₕ = gridspace(Ωₕ, Val(2))
 
         # composite grid functions apply componentwise, as the other operators do
-        fs = (_x1, x -> x[2]^2)
+        fs = (x -> x[1], x -> x[2]^2)
         cₕ = Rₕ(Vₕ, fs)
         scalars = (Rₕ(Wₕ, fs[1]), Rₕ(Wₕ, fs[2]))
         rₕ = D̃ₓ(cₕ)
@@ -121,7 +120,7 @@ star_ops(::Val{3}) = (D̃ₓ, D̃ᵧ, D̃₂)
         Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 33, false)
         Ωₕ2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 8), (true, false))
         u1 = Rₕ(gridspace(Ωₕ1), sin)
-        u2 = Rₕ(gridspace(Ωₕ2), _x1_times_x2)
+        u2 = Rₕ(gridspace(Ωₕ2), x -> x[1] * x[2])
 
         @test @inferred(D̃ₓ(u1)) isa VectorElement
         @test @inferred(D̃ᵧ(u2)) isa VectorElement

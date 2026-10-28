@@ -4,7 +4,6 @@ using Test
 using Bramble
 using LinearAlgebra: Diagonal, diag, dot, mul!
 using ..TestUtils: @test_allocs, WITH_3D_TESTS, random_mesh
-using ..TestUtils: _Const, _x1, _x2, _x3, _one_plus_x1
 using Bramble:
                IdentityOperator,
                TrialFunction,
@@ -154,7 +153,7 @@ using Bramble:
         p3 = inner₊₂(u3, v3)
         @test p3 isa BilinearProduct
         @test typeof(p3).parameters[2] === InnerPlus{3}
-        @test typeof(inner₊₂(_x3, v3)).parameters[2] === InnerPlus{3}
+        @test typeof(inner₊₂(x -> x[3], v3)).parameters[2] === InnerPlus{3}
         @test typeof(inner₊(u3, v3, 3)).parameters[2] === InnerPlus{3}
     end
 
@@ -167,7 +166,7 @@ using Bramble:
             () -> inner₊ᵧ(u1, v1),
             () -> inner₊(u1, v1, 2),
             () -> inner₊(u1, v1, :y),
-            () -> inner₊ᵧ(_x1, v1),
+            () -> inner₊ᵧ(x -> x[1], v1),
             () -> inner₊ᵧ(2.0, v1),
             () -> inner₊₂(u, v),
             () -> inner₊(u, v, 3),
@@ -195,7 +194,7 @@ using Bramble:
 
     @testset "Tuple forms" begin
         # a tuple of scalars, functions or grid functions on the left, against a gradient
-        for l in ((2.0, 3.0), ((_x1), (_x2)), (uₕ, uₕ))
+        for l in ((2.0, 3.0), ((x -> x[1]), (x -> x[2])), (uₕ, uₕ))
             p = inner₊(l, ∇ₕ(v))
             @test p isa Bramble.OperatorAdd
             @test is_symbolic(p)
@@ -232,7 +231,7 @@ using Bramble:
             u3, v3 = TrialFunction{3}(), TestFunction{3}()
             I1 = interval(0.0, 1.0)
             W3 = gridspace(mesh(domain(I1 × I1 × I1), (4, 4, 4), (false, false, false)))
-            @inferred inner₊(Rₕ(W3, _one_plus_x1) * ∇ₕ(u3), ∇ₕ(v3))
+            @inferred inner₊(Rₕ(W3, x -> 1 + x[1]) * ∇ₕ(u3), ∇ₕ(v3))
         end
     end
 
@@ -473,7 +472,7 @@ end
 
         # it is diagonal, and carries a nonzero only on the face
         @test A ≈ Diagonal(diag(A))
-        one_h = Rₕ(Wₕ, _Const(1.0))
+        one_h = Rₕ(Wₕ, x -> 1.0)
         @test sum(diag(A)) ≈ inner_Γ(one_h, one_h, :ymin)
 
         # corner sharing survives assembly: the two faces' diagonals add to the union's
@@ -503,7 +502,7 @@ end
 
         # a number and a grid function on the left work the same way
         @test assemble(form(Wₕ, v -> inner_Γ(2.0, v; markers = (:ymin,)))) ≈
-              assemble(form(Wₕ, v -> inner_Γ(_Const(2.0), v; markers = (:ymin,))))
+              assemble(form(Wₕ, v -> inner_Γ(x -> 2.0, v; markers = (:ymin,))))
         @test assemble(form(Wₕ, v -> inner_Γ(Rₕ(Wₕ, g), v; markers = (:ymin,)))) ≈ F
     end
 
@@ -697,12 +696,12 @@ end
     @testset "A marker on a one-point axis" begin
         S = interval(0.0, 1.0) × interval(0.0, 1.0)
         W = gridspace(mesh(domain(S, :l => :ymin), (5, 1), (false, false)))
-        oₕ = Rₕ(W, _Const(1.0))
+        oₕ = Rₕ(W, x -> 1.0)
         @test_throws "not (D-1)-dimensional" inner_Γ(oₕ, oₕ, :l)
         @test_throws "not (D-1)-dimensional" inner_Γ(oₕ, oₕ, :boundary)
         @test inner_Γ(oₕ, oₕ, :ymin) ≈ 1.0
 
-        lin(m) = assemble(form(W, v -> inner_Γ(_Const(1.0), v; markers = m)))
+        lin(m) = assemble(form(W, v -> inner_Γ(x -> 1.0, v; markers = m)))
         bil(m) = assemble(form(W, W, (u, v) -> inner_Γ(u, v; markers = m)))
         Fy = lin(:ymin)
         @test sum(Fy) ≈ inner_Γ(oₕ, oₕ, :ymin)
