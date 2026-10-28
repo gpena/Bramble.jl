@@ -281,7 +281,11 @@ names no closure. The walk reads that array, so the form infers a concrete type 
 shift, a difference, an average or a jump over the restricted term (directly, or through
 scales and sums) reads that term at each of its points and at every tap's clamped
 neighbour, inside the region or not, as it reads a typed source, so `reach` there takes all
-of those points and the restriction narrows none (`_typed_taps`).
+of those points and the restriction narrows none (`_typed_taps`). The same holds with no
+restriction between the operator and the term (`restrict_to(:A, D₊ₓ(innerₕ(f, v)))`): a
+tap's neighbour can lie outside `:A`, and a shift at the mesh's edge reads the clamped
+point, so over an erased source `reach` takes them too. Form-time memory is one value vector
+per sampled source, its `reach` mask shared, with no index vector.
 
 The one-leaf composite case lowers through `_unrouted_term`: a term naming no component on
 a composite space with one leaf now lowers against that leaf, as a scalar space's term does,

@@ -965,13 +965,24 @@ using Bramble:
             R = restrict_to
             for T in (Float64, Float32)
                 dom = domain(interval(T(0), T(1)) × interval(T(0), T(1)),
-                    :corner => x -> x[1] < 0.5, :none => x -> x[1] > 2)
+                    :corner => x -> x[1] < 0.5, :none => x -> x[1] > 2,
+                    :upper => x -> x[2] > 0.3, :edge => x -> x[1] > 1 - 1.0e-6)
                 Ω = mesh(dom, (9, 11), (false, false))
                 Bramble.change_points!(Ω, Bramble.markers(dom), (T.(g(9, 1)), T.(g(11, 2))))
                 W = gridspace(Ω)
                 V1 = CompositeGridSpace((W,))
                 V2 = CompositeGridSpace((W, W))
+                Wg = gridspace(Ω; ghosts = :boundary)
+                # a tap or a shift reads the term at its clamped neighbours too, and a
+                # region not anchored at the mesh's edge leaves some of them outside it
                 shapes = (
+                    (W, (s, v) -> R(:corner, D₊ₓ(innerₕ(s, v)))),
+                    (W, (s, v) -> R(:upper, D₋ᵧ(innerₕ(s, v)))),
+                    (W, (s, v) -> R(:corner, Bramble.Mcₓ(innerₕ(s, v)))),
+                    (W, (s, v) -> R(:corner, jumpₓ(innerₕ(s, v)))),
+                    (W, (s, v) -> R(:corner, D₋ₓ(D₊ₓ(innerₕ(s, v))))),
+                    (W, (s, v) -> R(:edge, shift_op(innerₕ(s, v), 1, 1))),
+                    (Wg, (s, v) -> R(:corner, D₊ₓ(innerₕ(s, v)))),
                     (W, (s, v) -> R(:interior, innerₕ(s, v))),
                     (W, (s, v) -> R(:interior, innerₕ(s, v) + innerₕ(s, Mₓ(v)))),
                     (W, (s, v) -> R(:interior, R(:corner, innerₕ(s, v)))),
@@ -1043,6 +1054,15 @@ using Bramble:
             @test sort!(unique(calls)) == x[0.3 .< x .<= 0.5]
             @test isequal(b, ref(rh))
             @test !all(iszero, b[0.3 .< x .<= 0.5])
+            # a tap reads its clamped neighbour outside the region too: sampled there, so a
+            # warm refill makes no call
+            lt = form(Wm, v -> rh(D₋ₓ(innerₕ(rec, v))))
+            bt = assemble(lt)
+            assemble!(bt, lt)
+            empty!(calls)
+            assemble!(bt, lt)
+            @test isempty(calls)
+            @test isequal(bt, ref(op -> rh(D₋ₓ(op))))
             # a `Dual` source is not erased: typed, inferred and read at every assembly
             d = ForwardDiff.Dual{:t}(1.0, 1.0)
             fd = y -> d * y

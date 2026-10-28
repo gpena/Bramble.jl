@@ -386,7 +386,7 @@ function _typed_restrictions(op::SourceFunction{D, Function}, sp, reach) where {
     T <: Union{Float32, Float64} || return op
     values = zeros(T, length(reach))
     _sample_reach!(values, op.func, Ωₕ, reach)
-    vec = _ReachSamples{T, typeof(Ωₕ)}(values, copy(reach), op.func, Ωₕ)
+    vec = _ReachSamples{T, typeof(Ωₕ)}(values, reach, op.func, Ωₕ)
     return SourceVector{D, typeof(vec)}(vec)
 end
 
@@ -395,8 +395,8 @@ end
 
 function _sample_reach_typed!(values, f::F, Ωₕ, reach) where {F}
     cart = CartesianIndices(indices(Ωₕ))
-    for lin in findall(reach)
-        values[lin] = f(point(Ωₕ, cart[lin]))
+    for lin in eachindex(reach)
+        reach[lin] && (values[lin] = f(point(Ωₕ, cart[lin])))
     end
     return nothing
 end
@@ -405,19 +405,41 @@ function _typed_restrictions(op::UnaryWrapper, sp, reach)
     return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, reach))
 end
 
-# A shift evaluates its operand at `I + shift` for each `I` it is evaluated at.
+# A shift evaluates its operand at `I + shift` for each `I` it is evaluated at. Over an
+# erased source it reads the clamped point where that leaves the grid, and zeroes it
+# (`_shift_node_stencil`, operators/shift.jl), so the source's reach is the clamped one.
 function _typed_restrictions(op::ShiftNode{D, Dim}, sp, reach) where {D, Dim}
     _reads_unrestricted(op.inner_op) && return _typed_taps(op, (op.shift_amount,), sp, reach)
+    if _holds_erased(op.inner_op)
+        moved = _tapped_reach(mesh(sp), Val(Dim), (op.shift_amount,), reach, false)
+        return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, moved))
+    end
     step = _stencil_step(Val(Dim), Val(D)) * op.shift_amount
     moved = _shift_reach(CartesianIndices(indices(mesh(sp))), step, reach)
     return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, moved))
 end
 
-function _typed_restrictions(op::TappedNode, sp, reach)
-    _reads_unrestricted(op.inner_op) &&
-        return _typed_taps(op, map(_shift_delta, _stencil_taps(op)), sp, reach)
-    return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, reach))
+# A tapped node evaluates its operand at each of its points (`_tapped_stencil`,
+# assembly/stencil_eval.jl) and again at every tap's clamped neighbour, so over an erased
+# source the source's reach is all of them.
+function _typed_restrictions(op::TappedNode{D, Dim}, sp, reach) where {D, Dim}
+    taps = map(_shift_delta, _stencil_taps(op))
+    _reads_unrestricted(op.inner_op) && return _typed_taps(op, taps, sp, reach)
+    _holds_erased(op.inner_op) || return _rewrap_inner(
+        op, _typed_restrictions(op.inner_op, sp, reach))
+    wide = _tapped_reach(mesh(sp), Val(Dim), taps, reach, true)
+    return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, wide))
 end
+
+# Whether an erased source (`_erased_source`, ast/common.jl) lies anywhere under `op`. Read
+# off the type, so the branches above fold; a node that holds none keeps its reach as main
+# computed it.
+function _erased_in(T)
+    T isa DataType || return false
+    T <: SourceFunction && return T.parameters[2] === Function
+    return T <: LazyOp && any(_erased_in, fieldtypes(T))
+end
+@generated _holds_erased(::T) where {T} = _erased_in(T)
 
 # A shift or a tapped node over a restriction whose operand is not source-only, directly or
 # through scales, sums and further such restrictions, reads that operand at each of its own
@@ -431,7 +453,7 @@ end
 @inline _reads_unrestricted(::Any) = false
 
 function _typed_taps(op::StencilNode{D, Dim}, deltas, sp, reach) where {D, Dim}
-    wide = _tapped_reach(mesh(sp), Val(Dim), deltas, reach)
+    wide = _tapped_reach(mesh(sp), Val(Dim), deltas, reach, true)
     return _rewrap_inner(op, _tapped_chain(op.inner_op, sp, wide))
 end
 
@@ -447,12 +469,18 @@ function _tapped_chain(op::RegionRestriction, sp, wide)
     return _rebuild_restriction(op, op.region, _tapped_chain(op.inner_op, sp, wide))
 end
 
-@noinline function _tapped_reach(Ωₕ, ::Val{Dim}, deltas, reach::BitVector) where {Dim}
+# The clamped neighbours of `reach` along `Dim` for each of `deltas`, and `reach` itself when
+# `keep`.
+@noinline function _tapped_reach(
+        Ωₕ, ::Val{Dim}, deltas, reach::BitVector, keep::Bool) where {Dim}
     cart = CartesianIndices(indices(Ωₕ))
     lin_of = LinearIndices(cart)
-    wide = copy(reach)
-    for lin in findall(reach), δ in deltas
-        wide[lin_of[_clamped_shift(Ωₕ, cart[lin], Val(Dim), δ)]] = true
+    wide = keep ? copy(reach) : falses(length(reach))
+    for lin in eachindex(reach)
+        reach[lin] || continue
+        for δ in deltas
+            wide[lin_of[_clamped_shift(Ωₕ, cart[lin], Val(Dim), δ)]] = true
+        end
     end
     return wide
 end
@@ -567,8 +595,10 @@ A plain function `f` whose term is restricted from outside, as in
 returns its point's precision (a `Float64` at a `Float64` point and a `Float32` at a
 `Float32` one), its test side reads one leaf (a scalar space's test function or a component
 `v(i)`) and no `markers` are given: at every point the assembly reads it and nowhere else,
-then read as an array. Those are the points of its region, or, under a shift, a difference
-or an average, every point the operator reaches, inside the region or not. A point that `markers!` adds later is evaluated at each assembly
+then read as an array. Those are the points of its region. Under a shift, a difference, an
+average or a jump they are instead the points the operator is evaluated at (inside every
+region around it) and the neighbour each of its taps reads there, clamped at the mesh's
+edge, whether or not a region between the operator and the term holds them. A point that `markers!` adds later is evaluated at each assembly
 instead. Any other restricted function is called at every assembly.
 
 # Examples
