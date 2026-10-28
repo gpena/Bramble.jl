@@ -287,9 +287,10 @@ tap's neighbour can lie outside `:A`, and a shift at the mesh's edge reads the c
 point, so over an erased source `reach` takes them too. Form-time memory is one value vector
 per sampled source, its `reach` mask shared, with no index vector.
 
-The one-leaf composite case lowers through `_unrouted_term`: a term naming no component on
-a composite space with one leaf now lowers against that leaf, as a scalar space's term does,
-so a typed source there is sampled at `form` too, where head read it at each assembly.
+The one-leaf composite case lowered through `_unrouted_term`: a term naming no component on
+a composite space with one leaf lowered against that leaf, as a scalar space's term does,
+so a typed source there was sampled at `form` too, where main read it at each assembly
+(the next section gives main's handling back).
 
 Shapes checked against a typed `source_function` of the same closure (main's path), bit
 for bit, on the graded 9x11 mesh in `Float64` and `Float32`: an outer restriction, a
@@ -298,9 +299,69 @@ average over a scaled restriction, an empty region, a one-leaf composite term na
 with a closure capturing an `Int`), and a restricted `v(2)` on a two-leaf composite space.
 `markers` and a `Dual` source are not erased, as before.
 
-What changes for the user: a restricted plain function is now read at `form`, as an
-unrestricted one already was, so a closure that reads mutable state, or a mesh moved by
-`change_points!`, is not seen again at its sampled points. A device space, and a term
+What changed for the user at S6.3: a restricted plain function was read at `form` only,
+as an unrestricted one already was, so a closure that reads mutable state, or a mesh moved
+by `change_points!`, was not seen again at its sampled points. The user rejected that, and
+the next section samples it again at every assembly. A device space, and a term
 naming no component on a composite space with several leaves, still give the source its
 type back at `form` and do not infer a concrete type. The instance figures are the
 integrator's to take.
+
+## S6.4: a sampled source is read live at every assembly
+
+The user rejected S6.3's sampling once at `form`. Main calls a restricted source, and a
+typed source in a one-leaf composite term naming no component, at every assembly, so a
+closure that reads a `Ref` or a moved mesh sees the new state. This change keeps S6.3's
+`_ReachSamples` and the concrete `form`, and samples the source again at the `reach` points
+at the start of every host assembly, in one serial pass before the sweep
+(`_refresh_reach_samples!`, assembly/linear.jl). The pass goes through the barrier S6.3
+built (`_sample_reach!`, `invokelatest` into `_sample_reach_typed!`), so it compiles no new
+method instance per closure: that instance is the one `form` already compiled. Whether a
+form holds a `_ReachSamples` is read off its type (`_holds_reach_samples`, generated, as
+`_holds_erased`), so a form without one compiles no walk, and the pass is a no-op there.
+A warm `assemble!`, `assemble_add!` and `assemble_add!` with `α` stay at 0 B on the
+restricted forms (`restricted_bytes` in test/form/linear_restriction.jl), as on fd7f13aa.
+
+The pass runs once per call, before any threaded sweep, at the four host entry points that
+sweep a linear form's AST: `_assemble_linear!` (behind `assemble`, `assemble!` and
+`evaluate!`), `_assemble_linear_parallel!` (behind `assemble_parallel!`),
+`_assemble_add_linear!` (behind `assemble_add!` with and without `α`), and
+`_contract_linear` (behind `l(vₕ)`). A device space reaches the host walk through
+`_assemble_linear_device!`, but its AST holds no `_ReachSamples`: device spaces keep
+`_specialised_sources`. Nothing in `src/problems/` or `ext/` sweeps a `LinearForm`'s AST
+directly; the ghost forms call `assemble!` on their padded form.
+
+A point outside `reach` (a region `markers!` widened after `form`) is still called when the
+walk reads it, through `_late_sample`, so every value a walk reads is the closure's at that
+assembly: the sampled and the late values no longer mix states.
+
+`_unrouted_term` gives main's handling back on a one-leaf composite: a term naming no
+component keeps a typed source (`SourceFunction{D, F}`, `F` concrete) as main left it, and
+the walk calls it. Only an erased source there goes through `_ReachSamples`, over every
+point of the one leaf, narrowed and widened by any restriction, shift or tap in the term as
+on a scalar space. Unrestricted erased sources that `_lower_sources` samples into a plain
+`SourceVector` are left alone: main sampled those once at `form` too.
+
+Tests: the `Ref` liveness shapes (an outer restriction, a restricted sum, a `D₊ₓ` and a
+shift under a restriction, a one-leaf composite term with an erased and with a typed
+source, a restricted one-leaf composite term) through `assemble`, `assemble!`,
+`assemble_parallel!`, `assemble_add!` with and without `α` and `l(vₕ)`, on `Serial` and
+`Parallel` backends, and a `markers!` case (test/form/source_operators.jl,
+`outer restriction: live per assembly`); the S6.3 call-set test now expects the
+`reach` points called at every assembly.
+
+Hazards:
+
+- Two tasks assembling one form at once race on the `_ReachSamples` values: each pass
+  writes the same vectors the other task's sweep reads. There is a precedent: the bilinear
+  replay cache (`a.cache`, read and re-recorded by `_assemble_bilinear_core_cached!` behind
+  `assemble!` and `assemble_add!`, assembly/assemble_add.jl) is per-form scratch an assembly
+  mutates, so one form is not safe to assemble from two tasks at once there either. A
+  threaded sweep inside one call is safe: the pass ends before it starts.
+- The closure is still called once at `form` at the `reach` points, where main did not call
+  a restricted source at `form`, only at assembly.
+- After `markers!` shrinks a region, the pass still calls the source at the points it left:
+  `reach` is fixed at `form`. A source undefined there (#643) throws at assembly, where main
+  would not call it.
+
+The instance figures are the integrator's to take.

@@ -1013,8 +1013,9 @@ using Bramble:
             end
         end
 
-        # The source is called where the walk reads it, at `form`, and nowhere else; a point
-        # `markers!` adds to the region later is called at each assembly, through a barrier.
+        # The source is called where the walk reads it, at `form` and again at every
+        # assembly, and nowhere else; a point `markers!` adds to the region later is called
+        # when the walk reads it, through a barrier.
         @testset "outer restriction: call set" begin
             n = 9
             dom = domain(interval(0.0, 1.0), :half => x -> x[1] > 0.5)
@@ -1025,43 +1026,53 @@ using Bramble:
             rec = y -> (push!(calls, y); y + 1)
             ref(r) = assemble(form(Wm, v -> r(innerₕ(source_function(y -> y + 1, Val(1)), v))))
             rh(op) = restrict_to(:half, op)
+            # the points main's typed source is called at
+            function typed_calls(r)
+                c = Float64[]
+                src = source_function(y -> (push!(c, y); y + 1), Val(1))
+                assemble(form(Wm, v -> r(innerₕ(src, v))))
+                return c
+            end
             l = form(Wm, v -> rh(innerₕ(rec, v)))
             @test resolve_form_ast(l).inner_op.left_op isa SourceVector
             @test sort(calls) == x[x .> 0.5]
             empty!(calls)
             @test isequal(assemble(l), ref(rh))
-            @test isempty(calls)
+            @test sort(calls) == x[x .> 0.5]
             # a shift over the restricted term reads it at each row's point and the one to
             # its left, inside the region or not, as it reads main's typed source: sampled
-            # at those points, at `form`
+            # at those points, at `form` and at each assembly
             tcalls = Float64[]
             trec = source_function(y -> (push!(tcalls, y); y + 1), Val(1))
             assemble(form(Wm, v -> shift_op(rh(innerₕ(trec, v)), 1, -1)))
+            empty!(calls)
             ls = form(Wm, v -> shift_op(rh(innerₕ(rec, v)), 1, -1))
             @test sort(calls) == sort!(unique(tcalls)) == x
             empty!(calls)
             @test isequal(assemble(ls), ref(op -> shift_op(rh(op), 1, -1)))
-            @test isempty(calls)
+            @test sort(calls) == x
             # a source throwing outside its region is never called there (#643)
             th = y -> y > 0.5 ? y + 1 : throw(DomainError(y))
             @test isequal(assemble(form(Wm, v -> rh(innerₕ(th, v)))), ref(rh))
-            # the region moved after `form`: only the added points are called, each assembly
+            # the region moved after `form`: the sampled points are sampled again and the
+            # added ones called when read, so each is called at every assembly
             m = copy(Bramble.markers(Ωm))
             m[:half] = [xi > 0.3 for xi in x]
             Bramble.markers!(Ωm, m)
             empty!(calls)
             b = assemble(l)
-            @test sort!(unique(calls)) == x[0.3 .< x .<= 0.5]
+            @test sort!(unique(calls)) == x[x .> 0.3]
             @test isequal(b, ref(rh))
             @test !all(iszero, b[0.3 .< x .<= 0.5])
             # a tap reads its clamped neighbour outside the region too: sampled there, so a
-            # warm refill makes no call
+            # warm refill calls it there once each, with no late call
             lt = form(Wm, v -> rh(D₋ₓ(innerₕ(rec, v))))
             bt = assemble(lt)
             assemble!(bt, lt)
             empty!(calls)
             assemble!(bt, lt)
-            @test isempty(calls)
+            @test allunique(calls)
+            @test sort(calls) == sort!(unique(typed_calls(op -> rh(D₋ₓ(op)))))
             @test isequal(bt, ref(op -> rh(D₋ₓ(op))))
             # a `Dual` source is not erased: typed, inferred and read at every assembly
             d = ForwardDiff.Dual{:t}(1.0, 1.0)
@@ -1072,6 +1083,68 @@ using Bramble:
             @test isconcretetype(only(Base.return_types(built, (typeof(Wm), typeof(d)))))
             @test eltype(assemble(bd)) == typeof(d)
             @test ForwardDiff.partials(assemble(bd)[n])[1] == weights(Wm, Innerh())[n] * x[n]
+        end
+
+        # A sampled source is sampled again at every assembly, so a closure scaling by a
+        # `Ref` set from 1 to 2 doubles the vector through every entry point, serial or
+        # threaded (gpena/Bramble.jl#917, S6.4).
+        @testset "outer restriction: live per assembly" begin
+            g(n, a) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * a)
+            # erased: returns its point's precision; typed: a `Float64` at any point
+            mk(t) = x -> oftype(x[1], t[]) * x[1]^2
+            mt(t) = x -> t[] * x[1]^2
+            R = restrict_to
+            shapes = (
+                (:W, mk, (s, v) -> R(:interior, innerₕ(s, v))),
+                (:W, mk, (s, v) -> R(:interior, innerₕ(s, v) + innerₕ(s, Mₓ(v)))),
+                (:W, mk, (s, v) -> R(:interior, D₊ₓ(innerₕ(s, v)))),
+                (:W, mk, (s, v) -> R(:interior, shift_op(innerₕ(s, v), 1, 1))),
+                (:V1, mk, (s, v) -> innerₕ(s, v)),
+                (:V1, mt, (s, v) -> innerₕ(s, v)),
+                (:V1, mk, (s, v) -> R(:interior, innerₕ(s, v))))
+            for policy in (Bramble.Serial(), Bramble.Parallel())
+                Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11),
+                    (false, false); backend = Bramble.backend(policy = policy))
+                Bramble.change_points!(Ω, (g(9, 1), g(11, 2)))
+                W = gridspace(Ω)
+                spaces = (W = W, V1 = CompositeGridSpace((W,)))
+                for (k, m, sh) in shapes
+                    S = spaces[k]
+                    built = (S, t) -> form(S, v -> sh(m(t), v))
+                    @test isconcretetype(only(Base.return_types(built, (typeof(S),
+                        typeof(Ref(1.0))))))
+                    t = Ref(1.0)
+                    l = built(S, t)
+                    b1 = assemble(l)
+                    @test !all(iszero, b1)
+                    t[] = 2.0
+                    @test assemble(l) ≈ 2 .* b1
+                    c = zeros(length(b1))
+                    @test assemble!(c, l) ≈ 2 .* b1
+                    fill!(c, 0)
+                    @test Bramble.assemble_parallel!(c, l) ≈ 2 .* b1
+                    d = copy(b1)
+                    @test assemble_add!(d, l) ≈ 3 .* b1
+                    @test assemble_add!(d, l, 0.5) ≈ 4 .* b1
+                    t[] = 3.0
+                    @test l(Bramble.element(S, 1.0)) ≈ 3 * sum(b1)
+                end
+            end
+            # `markers!` widens the region after `form`: the added points are called when
+            # read, the sampled ones sampled again, and both see the closure's state
+            dom = domain(interval(0.0, 1.0), :half => x -> x[1] > 0.5)
+            Ωm = mesh(dom, 9, true)
+            Wm = gridspace(Ωm)
+            x = points(Ωm)
+            t = Ref(1.0)
+            l = form(Wm, v -> restrict_to(:half, innerₕ(y -> oftype(y, t[]) * y, v)))
+            m = copy(Bramble.markers(Ωm))
+            m[:half] = [xi > 0.3 for xi in x]
+            Bramble.markers!(Ωm, m)
+            b1 = assemble(l)
+            @test !all(iszero, b1[0.3 .< x .<= 0.5]) && !all(iszero, b1[x .> 0.5])
+            t[] = 2.0
+            @test assemble(l) ≈ 2 .* b1
         end
 
         @testset "expression" begin

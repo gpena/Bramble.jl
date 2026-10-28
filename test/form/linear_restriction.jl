@@ -60,18 +60,35 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS, _Const
         end
 
         # A plain function's term restricted from outside: `form` samples its erased source
-        # where the walk reads it (gpena/Bramble.jl#917), so the refill reads an array.
+        # where the walk reads it (gpena/Bramble.jl#917), and every assembly samples it there
+        # again, before its sweep, so the refill reads an array the closure's state reaches.
         let
             g(n, a) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * a)
             Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (false, false))
             Bramble.change_points!(Ω, (g(9, 1), g(11, 2)))
             W = gridspace(Ω)
+            V1 = Bramble.CompositeGridSpace((W,))
             b = zeros(ndofs(W))
-            for lf in (form(W, v -> restrict_to(:interior, innerₕ(x -> x[1]^2, v))),
-                form(W, v -> restrict_to(:interior,
-                innerₕ(x -> x[1]^2, v) + innerₕ(x -> x[2], v))))
+            t = Ref(1.0)
+            mk(t) = x -> oftype(x[1], t[]) * x[1]^2
+            for (lf, live) in ((form(W, v -> restrict_to(:interior, innerₕ(x -> x[1]^2, v))), false),
+                (form(W, v -> restrict_to(:interior,
+                    innerₕ(x -> x[1]^2, v) + innerₕ(x -> x[2], v))), false),
+                (form(W, v -> restrict_to(:interior, D₊ₓ(innerₕ(mk(t), v)))), true),
+                (form(V1, v -> innerₕ(mk(t), v)), true))
                 @test restricted_bytes(b, lf) == 0
+                assemble_add!(b, lf)
+                assemble_add!(b, lf, 0.5)
+                @test (@allocated assemble_add!(b, lf)) == 0
+                @test (@allocated assemble_add!(b, lf, 0.5)) == 0
                 @test !occursin("SourceFunction", string(typeof(lf)))
+                live || continue
+                t[] = 1.0
+                b1 = assemble(lf)
+                @test !all(iszero, b1)
+                t[] = 2.0
+                @test assemble!(b, lf) ≈ 2 .* b1
+                t[] = 1.0
             end
         end
 

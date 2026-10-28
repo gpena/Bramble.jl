@@ -164,6 +164,7 @@ end
 # did before the locality split.
 function _assemble_add_linear!(::HostLocality, F::AbstractVector, space, ast, αv...)
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
+    _refresh_reach_samples!(ast)
     if execution_policy(space) isa CpuSerial
         _assemble_linear_core!(F, space, ast, αv...)
     else

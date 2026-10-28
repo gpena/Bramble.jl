@@ -50,6 +50,7 @@ end
     ast = form.ast
     space = form.test_space
     T = promote_type(_assembled_eltype(ast, space), eltype(v))
+    _refresh_reach_samples!(ast)
 
     return _contract_linear_core(space, ast, v, zero(T))
 end
@@ -226,8 +227,8 @@ end
 # component lowers against that leaf's own space; a term naming none goes to *every* leaf,
 # which may have different meshes, so there is no single space to sample against and lowering
 # is skipped for it -- the same `SourceFunction` it already was, evaluated fresh per leaf at
-# assembly time. A space with one leaf has one mesh, so there the term lowers against it
-# (`_unrouted_term`).
+# assembly time. A space with one leaf has one mesh, so there an erased source is sampled
+# against it at each assembly (`_unrouted_term`).
 # Missing this optimisation for that one shape is the safe choice: sampling against the wrong
 # leaf's mesh would silently assemble the wrong numbers, not merely run slower. A component
 # outside the space throws here, at `form`, through `_routed_target`'s check; returning the
@@ -267,10 +268,21 @@ function _lower_sources_over_leaves(term::TERM, leaves) where {TERM}
     return _at_leaf(leaf -> _lower_term(term, first(leaf)), leaves, target)
 end
 
-# A term naming no component goes to every leaf. With one leaf there is no wrong mesh to
-# sample against, so it lowers as a routed term does; with more it keeps its sources.
-_unrouted_term(term, leaves::Tuple{Any}) = _lower_term(term, first(only(leaves)))
+# A term naming no component goes to every leaf, and its sources are read at every
+# assembly, as on a scalar space under a restriction. With one leaf there is one mesh, so on
+# a host space an erased source becomes a `_ReachSamples` over every point the walk reads it
+# at, refreshed at each assembly (`_refresh_reach_samples!`); a typed one is left to the walk.
+# With more leaves an erased source gets its type back.
+function _unrouted_term(term, leaves::Tuple{Any})
+    _holds_erased(term) || return term
+    sp = first(only(leaves))
+    return _specialised_sources(_reach_sampled(locality(backend(sp)), term, sp))
+end
 _unrouted_term(term, leaves) = _specialised_sources(term)
+
+_reach_sampled(::HostLocality, op, sp) = _typed_restrictions(
+    op, sp, trues(length(indices(mesh(sp)))))
+_reach_sampled(::DeviceLocality, op, sp) = op
 
 # A term's sources lowered against the leaf `sp` it assembles on, then its restricted
 # sources typed against the same leaf, an erased one sampled where the walk reads it
@@ -343,12 +355,13 @@ _typed_restrictions(op, sp, reach) = op
 # term, before an outer `restrict_to` wraps it, so `_lower_sources` meets it under the
 # restriction and leaves it, since sampled everywhere it would be called at points no
 # assembly reads (gpena/Bramble.jl#643, #524). Here `reach` is exactly the points the walk
-# reads it at, so it is sampled there, once, behind the same barrier as `_fill_erased!`, and
+# reads it at, so it is sampled there behind the same barrier as `_fill_erased!`, and
 # becomes a `SourceVector` whose type names no closure, so the form infers a concrete type
-# and the walk reads an array. A point outside `reach` (a region `markers!` moved after
-# `form`) is called when read, through the barrier, and allocates there. Its values are the
-# source's at `form`, as an unrestricted source's are, so a closure reading mutable state,
-# or a mesh moved by `change_points!`, is not seen again at the sampled points.
+# and the walk reads an array. Every host assembly samples it again at those points before
+# its sweep (`_refresh_reach_samples!`), so a closure reading mutable state, or a mesh moved
+# by `change_points!`, is seen at each assembly, as a typed restricted source is. A point
+# outside `reach` (a region `markers!` moved after `form`) is called when read, through the
+# barrier, and allocates there.
 struct _ReachSamples{T, M} <: AbstractVector{T}
     values::Vector{T}
     sampled::BitVector
@@ -399,6 +412,33 @@ function _sample_reach_typed!(values, f::F, Ωₕ, reach) where {F}
         reach[lin] && (values[lin] = f(point(Ωₕ, cart[lin])))
     end
     return nothing
+end
+
+# --- `_ReachSamples` read live: sampled again at every host assembly --- #
+#
+# One serial pass before the sweep, at each host entry point (`_assemble_linear!`,
+# `_assemble_linear_parallel!`, `_assemble_add_linear!`, `_contract_linear`), through the
+# barrier above, so a new closure compiles nothing here. Whether a form holds a
+# `_ReachSamples` is read off its type and folds: a form without one compiles no walk.
+function _reach_samples_in(T)
+    T isa DataType || return false
+    T <: SourceVector && return T.parameters[2] <: _ReachSamples
+    return (T <: LazyOp || T <: Tuple) && any(_reach_samples_in, fieldtypes(T))
+end
+@generated _holds_reach_samples(::T) where {T} = _reach_samples_in(T)
+
+@inline _refresh_reach_samples!(ast) = (
+    _holds_reach_samples(ast) && _refresh_fields!(ast); nothing)
+
+@inline function _refresh_fields!(op::SourceVector{D, <:_ReachSamples}) where {D}
+    s = op.vec
+    _sample_reach!(s.values, s.func, s.mesh, s.sampled)
+    return true
+end
+@generated function _refresh_fields!(op::T) where {T}
+    calls = [:(_refresh_fields!(getfield(op, $i)))
+             for i in 1:fieldcount(T) if _reach_samples_in(fieldtype(T, i))]
+    return Expr(:block, calls..., true)
 end
 
 function _typed_restrictions(op::UnaryWrapper, sp, reach)
@@ -1736,6 +1776,7 @@ function _assemble_linear!(
     fill!(b, zero(eltype(b)))
     space = form.test_space
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
+    _refresh_reach_samples!(ast)
 
     # Two branches, not three: `CpuSerial` runs the serial core, and everything else goes
     # to `_assemble_linear_parallel_core!`, whose own `_sweep_parallel!` computes the
@@ -1883,6 +1924,7 @@ end
 
 function _assemble_linear_parallel!(::HostLocality, b::AbstractVector, space, ast)
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
+    _refresh_reach_samples!(ast)
 
     fill!(b, zero(eltype(b)))
     _assemble_linear_parallel_core!(b, space, ast)
