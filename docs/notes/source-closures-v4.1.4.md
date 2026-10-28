@@ -331,9 +331,17 @@ sweep a linear form's AST: `_assemble_linear!` (behind `assemble`, `assemble!` a
 `_specialised_sources`. Nothing in `src/problems/` or `ext/` sweeps a `LinearForm`'s AST
 directly; the ghost forms call `assemble!` on their padded form.
 
-A point outside `reach` (a region `markers!` widened after `form`) is still called when the
-walk reads it, through `_late_sample`, so every value a walk reads is the closure's at that
-assembly: the sampled and the late values no longer mix states.
+`reach` follows the markers. Each `_ReachSamples` keeps the mesh's marker stamp its mask
+was computed at; when `markers!` has redrawn it, the pass first computes every term's
+`reach` again from the current marker words, by `form`'s rules (`_rereach!`: narrowed by
+each restriction, widened by each shift and tap), into the stored masks, and only then
+samples. A shrunk region is never sampled at the points it left, so a source undefined
+there (#643) does not throw, and a grown one is sampled at its new points, so no read falls
+outside `reach` and a warm refill stays at 0 B. That first assembly after `markers!`
+allocates the masks it computes; the next ones do not. The first round of this section
+fixed `reach` at `form`, and the critic found the shrink case throwing at x = 0.379 where
+the base returned its vector, and 1056 B per warm `assemble!` after a grow (base 0 B).
+`_late_sample` stays, for a read outside `reach`, which no path now makes.
 
 `_unrouted_term` gives main's handling back on a one-leaf composite: a term naming no
 component keeps a typed source (`SourceFunction{D, F}`, `F` concrete) as main left it, and
@@ -362,14 +370,11 @@ Hazards:
   safe: the pass ends before it starts.
 - The closure is still called once at `form` at the `reach` points, where main did not call
   a restricted source at `form`, only at assembly.
-- Open, for the integrator: after `markers!` shrinks a region, the pass still calls the
-  source at the points the region left, because `reach` is fixed at `form`. On a 9-point 1D
-  mesh with `:half` shrunk from `x > 0.5` to `x > 0.7` after `form`, a warm `assemble!` calls
-  a typed source (main's path) at 0.75, 0.875 and 1.0, and the erased one at 0.625 as well;
-  the vectors agree bit for bit, since the walk does not read the value at 0.625. A source
-  undefined at the dropped points (#643) throws at assembly where main would not call it.
-  S6.3 did not call it there: it only read the stored value, and the walk skipped it.
-  Without a `markers!` shrink after `form`, an assembly calls the source only at the points
-  its walk reads (`reach`).
+- A threaded policy (`Parallel()`) does not refill at 0 B on base or here: the threaded
+  sweep copies the AST into each task's closure, so its bytes grow with the AST's width.
+  An immutable `_ReachSamples` put its fields inline and added 32 B per sampled source
+  (the critic's `par.jl`, one thread: 704 B with one source and 784 B with three, against
+  672 B and 688 B on 37a311b2). It is now mutable, one pointer wide: 688 B and 704 B. The
+  serial refill is 0 B.
 
 The instance figures are the integrator's to take.

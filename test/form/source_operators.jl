@@ -1054,8 +1054,8 @@ using Bramble:
             # a source throwing outside its region is never called there (#643)
             th = y -> y > 0.5 ? y + 1 : throw(DomainError(y))
             @test isequal(assemble(form(Wm, v -> rh(innerₕ(th, v)))), ref(rh))
-            # the region moved after `form`: the sampled points are sampled again and the
-            # added ones called when read, so each is called at every assembly
+            # the region moved after `form`: `reach` follows it, so each point of the new
+            # region is sampled at every assembly
             m = copy(Bramble.markers(Ωm))
             m[:half] = [xi > 0.3 for xi in x]
             Bramble.markers!(Ωm, m)
@@ -1145,6 +1145,59 @@ using Bramble:
             @test !all(iszero, b1[0.3 .< x .<= 0.5]) && !all(iszero, b1[x .> 0.5])
             t[] = 2.0
             @test assemble(l) ≈ 2 .* b1
+        end
+
+        # `markers!` moves the region after `form`: the source is sampled where the walk reads
+        # it under the current markers, so a shrunk region never calls it at the points it
+        # left (#643), a grown one calls it at the new points with no late call, and a warm
+        # refill stays at 0 B. Main's typed source is the oracle for the call set.
+        @testset "outer restriction: markers! moved" begin
+            dom = domain(interval(0.0, 1.0), :half => x -> x[1] > 0.5)
+            Ωm = mesh(dom, 9, true)
+            Wm = gridspace(Ωm)
+            x = points(Ωm)
+            lim = Ref(0.5)
+            # room for every call, so a refill's `push!` never grows it
+            calls = sizehint!(Float64[], 64)
+            # defined on the region only, like the source of #643
+            th = y -> (push!(calls, y); y > oftype(y, lim[]) ? y + one(y) : throw(DomainError(y)))
+            @test Bramble._keeps_precision(th, Val(1))
+            rh(op) = restrict_to(:half, op)
+            function refill_bytes(b, d, l)
+                assemble!(b, l)
+                assemble_add!(d, l)
+                return (@allocated(assemble!(b, l)), @allocated(assemble_add!(d, l)))
+            end
+            # a tap reads its neighbour outside the region, as main's walk does: no throw there
+            for (sh, strict) in ((op -> rh(op), true), (op -> rh(rh(op)), true),
+                (op -> rh(D₋ₓ(op)), false))
+                m = copy(Bramble.markers(Ωm))
+                m[:half] = [xi > 0.5 for xi in x]
+                Bramble.markers!(Ωm, m)
+                lim[] = strict ? 0.5 : -1.0
+                l = form(Wm, v -> sh(innerₕ(th, v)))
+                lt = form(Wm, v -> sh(innerₕ(source_function(th, Val(1)), v)))
+                b = assemble(l)
+                # `assemble` reads a typed source at the mesh's middle point for the vector's
+                # element type, outside this region: the oracle refills through `assemble!`
+                bt = zeros(length(b))
+                for cut in (0.7, 0.2)           # shrink, then grow past the form's region
+                    m[:half] = [xi > cut for xi in x]
+                    Bramble.markers!(Ωm, m)
+                    lim[] = strict ? cut : -1.0
+                    empty!(calls)
+                    assemble!(bt, lt)
+                    typed = sort(calls)
+                    empty!(calls)
+                    assemble!(b, l)
+                    @test allunique(calls)
+                    @test sort(calls) == unique(typed)
+                    @test isequal(b, bt)
+                    d = copy(b)
+                    @test isequal(assemble_add!(d, l), 2 .* bt)
+                    @test refill_bytes(b, d, l) == (0, 0)
+                end
+            end
         end
 
         @testset "expression" begin

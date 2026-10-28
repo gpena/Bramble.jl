@@ -50,7 +50,7 @@ end
     ast = form.ast
     space = form.test_space
     T = promote_type(_assembled_eltype(ast, space), eltype(v))
-    _refresh_reach_samples!(ast)
+    _refresh_reach_samples!(ast, space)
 
     return _contract_linear_core(space, ast, v, zero(T))
 end
@@ -359,14 +359,19 @@ _typed_restrictions(op, sp, reach) = op
 # becomes a `SourceVector` whose type names no closure, so the form infers a concrete type
 # and the walk reads an array. Every host assembly samples it again at those points before
 # its sweep (`_refresh_reach_samples!`), so a closure reading mutable state, or a mesh moved
-# by `change_points!`, is seen at each assembly, as a typed restricted source is. A point
-# outside `reach` (a region `markers!` moved after `form`) is called when read, through the
-# barrier, and allocates there.
-struct _ReachSamples{T, M} <: AbstractVector{T}
-    values::Vector{T}
-    sampled::BitVector
-    func::Function
-    mesh::M
+# by `change_points!`, is seen at each assembly, as a typed restricted source is. `reach`
+# follows the regions as `markers!` moves them (`_rereach!`). A read outside it calls the
+# source, through the barrier; no walk makes one.
+#
+# Mutable, so a node holding it is one pointer wide: a threaded sweep copies the AST into
+# each task's closure, and inline fields made that copy grow with every sampled source.
+mutable struct _ReachSamples{T, M} <: AbstractVector{T}
+    const values::Vector{T}
+    const sampled::BitVector
+    const func::Function
+    const mesh::M
+    "the mesh's marker stamp `sampled` was computed at (`_rereach!`)."
+    stamp::UInt64
 end
 
 Base.size(s::_ReachSamples) = size(s.values)
@@ -399,7 +404,7 @@ function _typed_restrictions(op::SourceFunction{D, Function}, sp, reach) where {
     T <: Union{Float32, Float64} || return op
     values = zeros(T, length(reach))
     _sample_reach!(values, op.func, Ωₕ, reach)
-    vec = _ReachSamples{T, typeof(Ωₕ)}(values, reach, op.func, Ωₕ)
+    vec = _ReachSamples{T, typeof(Ωₕ)}(values, reach, op.func, Ωₕ, _marker_stamp(Ωₕ))
     return SourceVector{D, typeof(vec)}(vec)
 end
 
@@ -420,6 +425,10 @@ end
 # `_assemble_linear_parallel!`, `_assemble_add_linear!`, `_contract_linear`), through the
 # barrier above, so a new closure compiles nothing here. Whether a form holds a
 # `_ReachSamples` is read off its type and folds: a form without one compiles no walk.
+# `reach` follows the regions: when `markers!` has moved them since it was computed (the
+# mesh's marker stamp differs), it is computed again from the current marker words, as
+# `form` computed it, into the stored masks (`_rereach!`), so a source is sampled at the
+# points the walk reads now and never at a point a region left. Only then does it allocate.
 function _reach_samples_in(T)
     T isa DataType || return false
     T <: SourceVector && return T.parameters[2] <: _ReachSamples
@@ -427,8 +436,12 @@ function _reach_samples_in(T)
 end
 @generated _holds_reach_samples(::T) where {T} = _reach_samples_in(T)
 
-@inline _refresh_reach_samples!(ast) = (
-    _holds_reach_samples(ast) && _refresh_fields!(ast); nothing)
+@inline function _refresh_reach_samples!(ast, space)
+    _holds_reach_samples(ast) || return nothing
+    _reach_stale(ast) && _rereach!(ast, space)
+    _refresh_fields!(ast)
+    return nothing
+end
 
 @inline function _refresh_fields!(op::SourceVector{D, <:_ReachSamples}) where {D}
     s = op.vec
@@ -439,6 +452,85 @@ end
     calls = [:(_refresh_fields!(getfield(op, $i)))
              for i in 1:fieldcount(T) if _reach_samples_in(fieldtype(T, i))]
     return Expr(:block, calls..., true)
+end
+
+@inline _reach_stale(op::SourceVector{D, <:_ReachSamples}) where {D} = op.vec.stamp !=
+                                                                       _marker_stamp(op.vec.mesh)
+@generated function _reach_stale(op::T) where {T}
+    calls = [:(_reach_stale(getfield(op, $i)))
+             for i in 1:fieldcount(T) if _reach_samples_in(fieldtype(T, i))]
+    return foldl((x, y) -> :($x || $y), calls; init = false)
+end
+
+# The reach of every term, routed to its leaf as `_lower_sources_for_space` routes it, from
+# all of the leaf's points down, by the rules `_typed_restrictions` applies at `form`. A node
+# holding no `_ReachSamples` is skipped, so the branches for a node that held no erased
+# source there are never needed here.
+@noinline _rereach!(ast, space) = _rereach_term!(ast, mesh(space))
+@noinline _rereach!(ast, space::CompositeGridSpace) = _rereach_over_leaves!(
+    ast, leaf_spaces_offsets(space))
+
+function _rereach_over_leaves!(op::OperatorAdd, leaves)
+    _rereach_over_leaves!(op.left_op, leaves)
+    _rereach_over_leaves!(op.right_op, leaves)
+    return nothing
+end
+function _rereach_over_leaves!(term, leaves)
+    _holds_reach_samples(term) || return nothing
+    target = _routed_target(term, length(leaves))
+    # a term naming no component holds samples on a one-leaf space only (`_unrouted_term`)
+    target === nothing && return _rereach_term!(term, mesh(first(first(leaves))))
+    return _at_leaf(leaf -> _rereach_term!(term, mesh(first(leaf))), leaves, target)
+end
+
+_rereach_term!(term, Ωₕ) = _rereach!(term, Ωₕ, trues(length(indices(Ωₕ))))
+
+_rereach!(op, Ωₕ, reach) = nothing
+function _rereach!(op::SourceVector{D, <:_ReachSamples}, Ωₕ, reach) where {D}
+    copyto!(op.vec.sampled, reach)
+    op.vec.stamp = _marker_stamp(op.vec.mesh)
+    return nothing
+end
+function _rereach!(op::UnaryWrapper, Ωₕ, reach)
+    _holds_reach_samples(op) && _rereach!(op.inner_op, Ωₕ, reach)
+    return nothing
+end
+function _rereach!(op::ShiftNode{D, Dim}, Ωₕ, reach) where {D, Dim}
+    _holds_reach_samples(op) || return nothing
+    deltas = (op.shift_amount,)
+    _reads_unrestricted(op.inner_op) && return _rereach_chain!(
+        op.inner_op, Ωₕ, _tapped_reach(Ωₕ, Val(Dim), deltas, reach, true))
+    return _rereach!(op.inner_op, Ωₕ, _tapped_reach(Ωₕ, Val(Dim), deltas, reach, false))
+end
+function _rereach!(op::TappedNode{D, Dim}, Ωₕ, reach) where {D, Dim}
+    _holds_reach_samples(op) || return nothing
+    wide = _tapped_reach(Ωₕ, Val(Dim), map(_shift_delta, _stencil_taps(op)), reach, true)
+    _reads_unrestricted(op.inner_op) && return _rereach_chain!(op.inner_op, Ωₕ, wide)
+    return _rereach!(op.inner_op, Ωₕ, wide)
+end
+function _rereach!(op::OperatorAdd, Ωₕ, reach)
+    _rereach!(op.left_op, Ωₕ, reach)
+    _rereach!(op.right_op, Ωₕ, reach)
+    return nothing
+end
+_rereach!(op::LinearProduct, Ωₕ, reach) = _rereach!(op.left_op, Ωₕ, reach)
+function _rereach!(op::RegionRestriction, Ωₕ, reach)
+    _holds_reach_samples(op) || return nothing
+    inside = _probe_reach(_marker_words(Ωₕ), _probe_ids(op.region, Ωₕ), reach)
+    return _rereach!(op.inner_op, Ωₕ, inside)
+end
+
+# `_tapped_chain`'s rules: no restriction on the chain narrows the tapped reach.
+_rereach_chain!(op, Ωₕ, wide) = _rereach!(op, Ωₕ, wide)
+_rereach_chain!(op::_Scale, Ωₕ, wide) = _rereach_chain!(op.inner_op, Ωₕ, wide)
+function _rereach_chain!(op::OperatorAdd, Ωₕ, wide)
+    _rereach_chain!(op.left_op, Ωₕ, wide)
+    _rereach_chain!(op.right_op, Ωₕ, wide)
+    return nothing
+end
+function _rereach_chain!(op::RegionRestriction, Ωₕ, wide)
+    _reads_unrestricted(op) || return _rereach!(op, Ωₕ, wide)
+    return _rereach_chain!(op.inner_op, Ωₕ, wide)
 end
 
 function _typed_restrictions(op::UnaryWrapper, sp, reach)
@@ -635,11 +727,13 @@ A plain function `f` whose term is restricted from outside, as in
 returns its point's precision (a `Float64` at a `Float64` point and a `Float32` at a
 `Float32` one), its test side reads one leaf (a scalar space's test function or a component
 `v(i)`) and no `markers` are given: at every point the assembly reads it and nowhere else,
-then read as an array. Those are the points of its region. Under a shift, a difference, an
-average or a jump they are instead the points the operator is evaluated at (inside every
-region around it) and the neighbour each of its taps reads there, clamped at the mesh's
-edge, whether or not a region between the operator and the term holds them. A point that `markers!` adds later is evaluated at each assembly
-instead. Any other restricted function is called at every assembly.
+here and again at the start of every assembly, then read as an array, so a closure reading
+mutable state is seen at each assembly. Those are the points of its region. Under a shift,
+a difference, an average or a jump they are instead the points the operator is evaluated at
+(inside every region around it) and the neighbour each of its taps reads there, clamped at
+the mesh's edge, whether or not a region between the operator and the term holds them.
+After `markers!` moves a region, the next assembly finds those points again under the new
+markers. Any other restricted function is called at every assembly.
 
 # Examples
 
@@ -1776,7 +1870,7 @@ function _assemble_linear!(
     fill!(b, zero(eltype(b)))
     space = form.test_space
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
-    _refresh_reach_samples!(ast)
+    _refresh_reach_samples!(ast, space)
 
     # Two branches, not three: `CpuSerial` runs the serial core, and everything else goes
     # to `_assemble_linear_parallel_core!`, whose own `_sweep_parallel!` computes the
@@ -1924,7 +2018,7 @@ end
 
 function _assemble_linear_parallel!(::HostLocality, b::AbstractVector, space, ast)
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
-    _refresh_reach_samples!(ast)
+    _refresh_reach_samples!(ast, space)
 
     fill!(b, zero(eltype(b)))
     _assemble_linear_parallel_core!(b, space, ast)
