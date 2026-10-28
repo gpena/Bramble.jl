@@ -940,6 +940,7 @@ _fgrad(u, v) = inner₊(∇₊ₕ(u), ∇₊ₕ(v))
     Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (7, 8))
     W = gridspace(Ωₕ)^Val(2)
     for build in (_grad, _fgrad), (_, wrap) in _wrapped_builders
+
         a = form(W, W, (u, v) -> wrap(build(u, v)))
         @test !occursin("_ComponentSum", string(typeof(a)))
         @test !occursin("_GradientRows", string(typeof(a)))
