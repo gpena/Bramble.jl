@@ -2,7 +2,7 @@ module FormSourceOperatorsTests
 
 using Test
 using Bramble
-using ..TestUtils: WITH_AD_TESTS, WITH_3D_TESTS
+using ..TestUtils: WITH_AD_TESTS, WITH_3D_TESTS, _Const, _x2, _x1_plus_x2, _x1_squared
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, M₊ₓ, M₊ᵧ
 using ForwardDiff
@@ -140,8 +140,8 @@ using Bramble:
 
         # a sum of two differently-operated copies of the same source, and of two different
         # sources: the addends are contracted independently
-        gf = source_function(x -> x[2], Val(2))
-        gₕ = Rₕ(Wₕ, x -> x[2])
+        gf = source_function(_x2, Val(2))
+        gₕ = Rₕ(Wₕ, _x2)
         @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + Mₓ(sf), v))) ≈
               (parent(D₋ₓ(fₕ)) .+ parent(Mₓ(fₕ))) .* w
         @test assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf) + D₋ᵧ(gf), v))) ≈
@@ -361,6 +361,7 @@ using Bramble:
                 return @allocated assemble!(b, l)
             end
             @test refill_bytes(ri(sf) + rb(sf) + rh(sf)) == 0
+            # the closure is the source whose allocation is pinned: it stays
             @test refill_bytes(source_function(x -> 3, Val(1)) + ri(sf)) == 0
             @test refill_bytes(ri(dirac(0.4)) + sf) == 0
             @test refill_bytes(u_end * (-ri(sf))) == 0
@@ -440,7 +441,7 @@ using Bramble:
 
         @testset "positive zero outside the region" begin
             F = fill(-0.0, n)
-            assemble_add!(F, form(Wₕ, v -> innerₕ(ri(source_function(x -> -1.0, Val(1))), v)))
+            assemble_add!(F, form(Wₕ, v -> innerₕ(ri(source_function(_Const(-1.0), Val(1))), v)))
             @test F[1] === 0.0 && F[n] === 0.0
             @test F[2] == -w[2]
         end
@@ -520,7 +521,7 @@ using Bramble:
 
             # a term naming no component on a composite: never typed at `form`
             WW = Wₕ × Wₕ
-            ok = source_function(y -> 2.0, Val(1))
+            ok = source_function(_Const(2.0), Val(1))
             bWW = assemble(form(WW, v -> innerₕ(rb(thrown_rhs), v)))
             @test eltype(bWW) == Float64
             @test isequal(bWW, assemble(form(WW, v -> innerₕ(rb(ok), v))))
@@ -613,7 +614,7 @@ using Bramble:
         Ωbig = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8), (true, true))
         Ωsmall = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true))
         Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
-        f = x -> x[1] + x[2]
+        f = _x1_plus_x2
         us = Rₕ(Wsmall, f)
         w = weights(Wbig, Innerh())
 
@@ -627,7 +628,7 @@ using Bramble:
     @testset "Plain source regression" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 6), (true, true))
         Wₕ = gridspace(Ωₕ)
-        f = x -> x[1] + x[2]
+        f = _x1_plus_x2
         sf = source_function(f, Val(2))
         fₕ = Rₕ(Wₕ, f)
         w = weights(Wₕ, Innerh())
@@ -793,7 +794,7 @@ using Bramble:
         @testset "composite: per-component term lowers" begin
             Wleaf = gridspace(mesh(domain(interval(0.0, 1.0)), 21, true))
             Vₕ = Wleaf^Val(2)
-            f = x -> x[1]^2
+            f = _x1_squared
             l = form(Vₕ, v -> innerₕ(f, v(2)))
             ast = resolve_form_ast(l)
             @test ast.left_op isa SourceVector
@@ -833,14 +834,14 @@ using Bramble:
             Wₕ = gridspace(Ωₕ)
 
             α = Ref(1.0)
-            uₕ = Rₕ(Wₕ, x -> 1.0)
+            uₕ = Rₕ(Wₕ, _Const(1.0))
             l = form(Wₕ, v -> α * innerₕ(uₕ, v))
             b1 = assemble(l)
             α[] = 3.0
             b2 = assemble(l)
             @test b2 ≈ 3 .* b1
 
-            vₕ = Rₕ(Wₕ, x -> 1.0)
+            vₕ = Rₕ(Wₕ, _Const(1.0))
             l2 = form(Wₕ, v -> innerₕ(vₕ, v))
             c1 = assemble(l2)
             vₕ .= 2.0
@@ -865,7 +866,8 @@ using Bramble:
     @testset "Function * VectorElement (#197)" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
         Wₕ = gridspace(Ωₕ)
-        uₕ = Rₕ(Wₕ, x -> 1.0)
+        uₕ = Rₕ(Wₕ, _Const(1.0))
+        # `Function * VectorElement` testset: `cond` stays a closure
         cond = x -> x[1] < 0.5
 
         left = cond * uₕ
@@ -904,6 +906,7 @@ using Bramble:
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 11, true)
         Wₕ = gridspace(Ωₕ)
         uₕ = element(Wₕ, 1.0)
+        # allocation pinned per closure type: `cond` stays a closure
         cond = x -> x[1] < 0.5
 
         # Each product goes through a one-line wrapper, so the call is measured from

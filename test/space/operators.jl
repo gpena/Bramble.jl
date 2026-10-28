@@ -9,6 +9,7 @@ using Bramble: index_in_marker, jumpᵧ, jump₂, jumpₓ
 using SparseArrays: SparseMatrixCSC, nnz
 using LinearAlgebra: Diagonal
 using ..TestUtils: MockDeviceArray, TEST_DIMS, WITH_3D_TESTS
+using ..TestUtils: _Const, _x1, _x1_plus_x2, _sin_x1_times_x2, _x1_times_x2
 using Bramble: components, restrict_to
 # Internal: defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, D₊₂, D₊, div₊ₕ, curl₊ₕ, forward_star_difference
@@ -32,7 +33,7 @@ using Bramble:
             M = mesh(X, ntuple(_ -> 4, Val(D)), ntuple(_ -> false, Val(D)))
             W = gridspace(M)
             u = element(W)
-            Rₕ!(u, x -> 1.0)
+            Rₕ!(u, _Const(1.0))
 
             x0 = IdentityOperator(W)
             @test space(x0) === W
@@ -118,7 +119,7 @@ end
 
     @testset "Δₕ! matches Δₕ and refuses to alias" begin
         Wₕ = gridspace(mesh(Ω2, (9, 8), (true, true)))
-        uₕ = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
+        uₕ = Rₕ(Wₕ, _sin_x1_times_x2)
         vₕ = element(Wₕ)
         @test parent(Δₕ!(vₕ, uₕ)) == parent(Δₕ(uₕ))
         @test Δₕ!(vₕ, uₕ) === vₕ
@@ -153,14 +154,14 @@ end
         Ωₕ = mesh(Ω2, (9, 8), (false, false))
         Wₕ = gridspace(Ωₕ)
         u1 = Rₕ(Wₕ, x -> x[1]^2 + x[2])
-        u2 = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
+        u2 = Rₕ(Wₕ, _sin_x1_times_x2)
 
         @test parent(divₕ((u1, u2))) == parent(D₋ₓ(u1)) .+ parent(D₋ᵧ(u2))
         @test parent(div₊ₕ((u1, u2))) == parent(D₊ₓ(u1)) .+ parent(D₊ᵧ(u2))
 
         # a composite grid function is the same field, spelled the other way
         Vₕ = gridspace(Ωₕ, Val(2))
-        cₕ = Rₕ(Vₕ, (x -> x[1]^2 + x[2], x -> sin(x[1]) * x[2]))
+        cₕ = Rₕ(Vₕ, (x -> x[1]^2 + x[2], _sin_x1_times_x2))
         @test parent(divₕ(cₕ)) == parent(divₕ((u1, u2)))
 
         # and the in-place form writes the same thing
@@ -176,7 +177,7 @@ end
         Ωₕ = mesh(Ω2, (9, 8), (false, false))
         Wₕ = gridspace(Ωₕ)
         u1 = Rₕ(Wₕ, x -> x[1]^2 + x[2])
-        u2 = Rₕ(Wₕ, x -> sin(x[1]) * x[2])
+        u2 = Rₕ(Wₕ, _sin_x1_times_x2)
         @test parent(curlₕ((u1, u2))) == parent(D₋ₓ(u2)) .- parent(D₋ᵧ(u1))
         @test parent(curl₊ₕ((u1, u2))) == parent(D₊ₓ(u2)) .- parent(D₊ᵧ(u1))
 
@@ -198,7 +199,7 @@ end
         # three components, each the right combination
         Ω3ₕ = mesh(Ω3, (8, 7, 6), (false, false, false))
         W3 = gridspace(Ω3ₕ)
-        f = (Rₕ(W3, x -> sin(x[1]) * x[2]), Rₕ(W3, x -> x[3]^2),
+        f = (Rₕ(W3, _sin_x1_times_x2), Rₕ(W3, x -> x[3]^2),
             Rₕ(W3, x -> cos(x[2]) * x[1]))
         c = curlₕ(f)
         @test length(c) == 3
@@ -388,7 +389,7 @@ end
         # the zeros are copied back over whatever the destination held.
         u = element(Wₕ)
         parent(u) .= 1
-        @test Rₕ!(u, x -> x[1] + x[2]; markers = (:interior,)) === u
+        @test Rₕ!(u, _x1_plus_x2; markers = (:interior,)) === u
         @test parent(u) == zeros(Float32, ndofs(Wₕ))
         # the composite's leaves are views into one vector: each is copied back on its own
         c = element(Vₕ)
@@ -413,7 +414,7 @@ end
         # An unmasked fill needs the device kernel, which only the KernelAbstractions
         # extension provides: refused by name, not by a scalar-indexing failure.
         msg = try
-            Rₕ!(element(Wₕ), x -> x[1])
+            Rₕ!(element(Wₕ), _x1)
             ""
         catch e
             sprint(showerror, e)
@@ -428,7 +429,7 @@ end
         # Exact cell averages of a quadratic and a bilinear function over [a₁, b₁] × [a₂, b₂],
         # the cell between consecutive half points; two Gauss points integrate both exactly.
         f = x -> x[1]^2 + 3.0 * x[2]
-        g = x -> x[1] * x[2]
+        g = _x1_times_x2
         cells = CartesianIndices((6, 5))
         ref_f = [(x1[I[1] + 1]^3 - x1[I[1]]^3) / (3 * (x1[I[1] + 1] - x1[I[1]])) +
                  1.5 * (x2[I[2]] + x2[I[2] + 1]) for I in cells][:]
