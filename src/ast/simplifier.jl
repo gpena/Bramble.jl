@@ -214,9 +214,11 @@ end
 # terms, and such a term plus a user's. A scale meeting the already distributed sum (`2 *
 # (μ * X)`, `-(μ * X)`, `μ * (X + Y)` over two builders) and an `Int` coefficient (#240)
 # take the value gate as before.
-# The gradient tuple's `inner₊(∇ₕ(u), ∇ₕ(v))` gets plain tuples and no pairs, so a captured
-# coefficient over it keeps this gate (concrete in 2D through constant propagation, a
-# `Union` in 3D).
+# `inner₊(∇ₕ(u), ∇ₕ(v))` of a composite `u` and `v` is such a builder too, since `∇ₕ(u)`
+# labels row `c` as built on `u(c)` (`_GradientRows`, operators/difference.jl), so a
+# captured coefficient over it is answered by type in 3D as well (gpena/Bramble.jl#958). A
+# tuple of gradient tuples a user builds carries no pairs and keeps this gate (concrete in
+# 2D through constant propagation, a `Union` in 3D).
 @inline function _mixes_components(a::LazyOp, b::LazyOp)
     trial = _component_combine(_trial_component_class(a), _trial_component_class(b))
     test = _component_combine(_test_component_class(a), _test_component_class(b))

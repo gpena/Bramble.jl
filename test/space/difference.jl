@@ -1049,12 +1049,41 @@ end
     u, v = trial_function(Vₕ), test_function(Vₕ)
 
     @testset "∇₊ₕ" begin
-        @test ∇₊ₕ(u) === ((D₊ₓ(u(1)), D₊ᵧ(u(1))), (D₊ₓ(u(2)), D₊ᵧ(u(2))))
-        @test ∇₊ₕ(v) === ((D₊ₓ(v(1)), D₊ᵧ(v(1))), (D₊ₓ(v(2)), D₊ᵧ(v(2))))
+        # A composite's rows come labelled by component (`Bramble._GradientRows`, #958), so
+        # the tuple they hold is what is compared; indexing and iteration act on that tuple.
+        @test ∇₊ₕ(u) isa Bramble._GradientRows
+        @test Tuple(∇₊ₕ(u)) === ((D₊ₓ(u(1)), D₊ᵧ(u(1))), (D₊ₓ(u(2)), D₊ᵧ(u(2))))
+        @test Tuple(∇₊ₕ(v)) === ((D₊ₓ(v(1)), D₊ᵧ(v(1))), (D₊ₓ(v(2)), D₊ᵧ(v(2))))
+        g = ∇₊ₕ(v)
+        @test g[2][1] === D₊ₓ(v(2)) && first(g) === ∇₊ₕ(v(1)) && last(g) === ∇₊ₕ(v(2))
+        @test length(g) == 2 && collect(g) == [∇₊ₕ(v(1)), ∇₊ₕ(v(2))]
         us = trial_function(Wₕ)
         @test ∇₊ₕ(us) === (D₊ₓ(us), D₊ᵧ(us))
         u1 = trial_function(gridspace(mesh(domain(interval(0.0, 1.0)), 7, false)))
         @test ∇₊ₕ(u1) === D₊ₓ(u1)
+    end
+
+    # `map` and broadcasting act on the labelled rows as on the plain tuple and return
+    # it, so a form scaling the rows before `inner₊` assembles what the tuple spelling
+    # assembles.
+    @testset "∇ₕ rows: map and broadcast" begin
+        Ωₙ = mesh(domain(box((0.0, 0.0), (1.0, 2.0))), (6, 5), (false, false))
+        Bramble.change_points!(Ωₙ, (collect(range(0.0, 1.0; length = 6)) .^ 1.3,
+            2 .* collect(range(0.0, 1.0; length = 5)) .^ 1.5))
+        V = gridspace(Ωₙ)^Val(2)
+        uu, vv = trial_function(V), test_function(V)
+        plain = Tuple(∇ₕ(uu))
+        @test map(identity, ∇ₕ(uu)) === plain
+        @test map(r -> 2.0 * r, ∇ₕ(uu)) === map(r -> 2.0 * r, plain)
+        @test map(tuple, ∇ₕ(uu), ∇ₕ(vv)) === map(tuple, plain, Tuple(∇ₕ(vv)))
+        @test 2.0 .* ∇ₕ(uu) === 2.0 .* plain
+        @test (2.0 .* ∇ₕ(uu)) isa Tuple
+        asm(f) = Matrix(assemble(form(V, V, f)))
+        ref = asm((u, v) -> inner₊(map(r -> 2.0 * r, Tuple(∇ₕ(u))), Tuple(∇ₕ(v))))
+        @test maximum(abs, ref) > 0.1
+        @test ref ≈ asm((u, v) -> 2.0 * inner₊(∇ₕ(u), ∇ₕ(v)))
+        @test asm((u, v) -> inner₊(map(r -> 2.0 * r, ∇ₕ(u)), ∇ₕ(v))) == ref
+        @test asm((u, v) -> inner₊(2.0 .* ∇ₕ(u), ∇ₕ(v))) == ref
     end
 
     @testset "εₕ and inner₊" begin

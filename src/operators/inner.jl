@@ -721,9 +721,14 @@ end
 
 Vector-field `inner₊`: sums per-component inner products.
 Used when `left` and `right` are **tuples of gradient tuples**, e.g.
-`inner₊(∇ₕ(u), ∇ₕ(v))` where `u = (u1, u2)` is a velocity tuple.
+`inner₊(∇ₕ(components(u)), ∇ₕ(components(v)))` where `u` is a velocity.
 Each element pair `(left[k], right[k])` is a `D`-tuple of `LazyOp` (a gradient),
 which dispatches to the existing `inner₊(::NTuple{D,LazyOp}, ::NTuple{D,LazyOp})`.
+
+`inner₊(∇ₕ(u), ∇ₕ(v))` on a composite `u` and `v` builds the same sum, in the same order.
+There `∇ₕ` returns rows labelled by component (`Bramble._GradientRows`), and the sum
+records those labels, so a coefficient captured over it leaves `form` one concrete type
+in 3D as well. One side labelled and the other a plain tuple takes this method.
 
 This overload is intentionally restricted to `NTuple{N,<:Tuple}` so it does **not**
 interfere with `inner₊(NTuple{D,VectorElement}, NTuple{D,VectorElement})` handled by
@@ -740,6 +745,35 @@ function inner₊(
         markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
 ) where {N, M}
     return _restrict_by_markers(foldl(+, map(inner₊, left, right)), markers)
+end
+
+# The gradients of a composite trial and test function (difference.jl): the sum above,
+# with row `c`'s pair `(c, c)` in a `_ComponentSum` (ast.jl, gpena/Bramble.jl#958).
+function inner₊(
+        left::_GradientRows{D, N},
+        right::_GradientRows{D, N};
+        markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
+) where {D, N, M}
+    sum = foldl(+, map(inner₊, left.rows, right.rows))
+    return _restrict_by_markers(_component_sum(sum, Val(_gradient_labels(Val(N)))), markers)
+end
+
+# Anything else with a labelled side is the plain tuple's, as it was before the labels.
+function inner₊(
+        left::_GradientRows, right::_GradientRows;
+        markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
+) where {M}
+    return inner₊(Tuple(left), Tuple(right); markers)
+end
+function inner₊(
+        left::_GradientRows, right::Tuple; markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
+) where {M}
+    return inner₊(Tuple(left), right; markers)
+end
+function inner₊(
+        left::Tuple, right::_GradientRows; markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
+) where {M}
+    return inner₊(left, Tuple(right); markers)
 end
 
 # ==============================================================================

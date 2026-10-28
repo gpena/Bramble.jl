@@ -1446,6 +1446,59 @@ end
 # `_∇ₕ_noncomposite`/`_∇₊ₕ_noncomposite` below, rather than falling through to it, since our
 # own method is the more specific one for every `N` and would otherwise shadow the scalar
 # case too.
+#
+# For `D >= 2` the tensor comes back in a `_GradientRows`. Indexing, `length`, iteration,
+# `map`, broadcasting and `Tuple(g)` act on the tuple it holds; nothing else does. It
+# tells `inner₊` (inner.jl) that row `c` is built on component `c` alone, since every leaf
+# of `∇ₕ(u(c))` is `u(c)`, and `inner₊` of two of them records that pair in a
+# `_ComponentSum` (ast.jl), so a captured coefficient over the sum distributes by type, as
+# over the `εₕ` and `divₘₕ` builders below, and `form` infers one type in 3D
+# (gpena/Bramble.jl#958). A plain tuple of gradient tuples promises nothing (a user may
+# repeat or mix components in it) and keeps #529's value gates. Every component of a
+# `TrialFunction` or `TestFunction` is an `IndexedTrialFunction`/`IndexedTestFunction`
+# (`component`, component.jl), a nested space's included, so the labels always hold.
+
+"""
+    Bramble._GradientRows{D, N, T}
+
+The `N`-tuple of `D`-tuples [`∇ₕ`](@ref) and [`∇₊ₕ`](@ref) return for a composite trial or
+test function, held so that [`inner₊`](@ref) can name the component of each row. Indexing
+`g[c][d]`, `length`, iteration, `map` and broadcasting give what the tuple it holds gives,
+and `Tuple(g)` is that tuple; anything else tuple-like needs `Tuple(g)`. `map` takes only
+these containers: with a plain tuple among its arguments, pass `Tuple(g)`. It is not a
+`LazyOp` and never reaches assembly: `inner₊` on two of them builds the sum of the rows'
+products, held in a `Bramble._ComponentSum` that names each row's component pair.
+"""
+struct _GradientRows{D, N, T <: NTuple{N, NTuple{D, LazyOp{D}}}}
+    rows::T
+end
+
+@inline Base.Tuple(g::_GradientRows) = g.rows
+@inline Base.getindex(g::_GradientRows, i::Integer) = g.rows[i]
+@inline Base.length(::_GradientRows{D, N}) where {D, N} = N
+@inline Base.firstindex(::_GradientRows) = 1
+@inline Base.lastindex(::_GradientRows{D, N}) where {D, N} = N
+@inline Base.iterate(g::_GradientRows, state...) = iterate(g.rows, state...)
+# A form may scale the rows before `inner₊` (`map(r -> κ * r, ∇ₕ(u))`, `κ .* ∇ₕ(u)`); both
+# give the plain tuple, as on the tuple `∇ₕ(components(u))`, and so lose the labels.
+@inline function Base.map(f, g::_GradientRows, rest::_GradientRows...)
+    return map(f, g.rows, map(Tuple, rest)...)
+end
+@inline Base.Broadcast.broadcastable(g::_GradientRows) = g.rows
+
+# Rows of `D`-tuples (`D >= 2`) are labelled; the rows of a 1D gradient are the differences
+# themselves and stay a plain tuple.
+@inline _gradient_rows(rows) = rows
+@inline function _gradient_rows(
+        rows::Tuple{NTuple{D, LazyOp{D}}, Vararg{NTuple{D, LazyOp{D}}}}
+) where {D}
+    return _GradientRows{D, length(rows), typeof(rows)}(rows)
+end
+
+# The component pairs of `inner₊(::_GradientRows, ::_GradientRows)`'s sum, as the left fold
+# over its rows nests them: row `c` names `(c, c)`, whatever its own `D` terms are.
+_gradient_label_tree(N::Int) = foldl((l, r) -> (l, r), [(c, c) for c in 1:N])
+@generated _gradient_labels(::Val{N}) where {N} = _gradient_label_tree(N)
 
 @inline _∇ₕ_noncomposite(op::LazyOp{1}) = D₋ₓ(op)
 @inline _∇ₕ_noncomposite(op::LazyOp{D}) where {D} = ntuple(dim -> D₋(op, Val(dim)), Val(D))
@@ -1453,16 +1506,23 @@ end
 """
     ∇ₕ(u::Union{TrialFunction, TestFunction})
 
-The backward gradient tensor of a composite trial or test function `u`: an `N`-tuple (one
-per component of `u`) of `D`-tuples (one per spatial direction), `∇ₕ(u)[c][d]` the backward
+The backward gradient tensor of a composite trial or test function `u`: `N` rows (one per
+component of `u`) of `D`-tuples (one per spatial direction), `∇ₕ(u)[c][d]` the backward
 difference of component `c` along direction `d`.
 
-Equivalent to `∇ₕ(components(u))`, spelled without the explicit `components` call so `u`
-alone can be passed to a vectorial operator. On a scalar space (one component) this is the
-same `D`-tuple `∇ₕ` already returns for any operator.
+For `D >= 2` the rows come in a `Bramble._GradientRows`, which is not a `Tuple`.
+`∇ₕ(u)[c][d]`, `length`, iteration, `map` and broadcasting give what they give on
+`∇ₕ(components(u))`, and `Tuple(∇ₕ(u))` is that tuple; anything else tuple-like needs
+`Tuple(∇ₕ(u))`. `map` needs every argument to be such a container; with a plain tuple
+among them, pass `Tuple(∇ₕ(u))`. The container also tells [`inner₊`](@ref) that row `c` is built on
+component `c` alone, so a captured coefficient over `inner₊(∇ₕ(u), ∇ₕ(v))` gives `form` one
+concrete type in 3D, which the plain tuple `∇ₕ(components(u))` does not; both assemble the
+same matrix. In 1D the result is the tuple of `D₋ₓ`s `∇ₕ(components(u))` returns. On a
+scalar space (one component) this is the same `D`-tuple `∇ₕ` already returns for any
+operator.
 """
 @inline function ∇ₕ(op::Union{TrialFunction{D, N}, TestFunction{D, N}}) where {D, N}
-    (N isa Integer && N > 1) && return map(∇ₕ, components(op))
+    (N isa Integer && N > 1) && return _gradient_rows(map(∇ₕ, components(op)))
     return _∇ₕ_noncomposite(op)
 end
 
@@ -1475,7 +1535,7 @@ end
 The forward twin of [`∇ₕ`](@ref)`(u::Union{TrialFunction,TestFunction})`.
 """
 @inline function ∇₊ₕ(op::Union{TrialFunction{D, N}, TestFunction{D, N}}) where {D, N}
-    (N isa Integer && N > 1) && return map(∇₊ₕ, components(op))
+    (N isa Integer && N > 1) && return _gradient_rows(map(∇₊ₕ, components(op)))
     return _∇₊ₕ_noncomposite(op)
 end
 
@@ -1498,6 +1558,9 @@ end
 # here is a `LazyOp`, so nothing here ever reaches assembly, `local_stencil` or `block_of`
 # directly: the architecture stays "every `LazyOp` is scalar-valued, expansion happens at
 # the builder" (gpena/Bramble.jl#234).
+# `_GradientRows` above is built the same way for `∇ₕ`/`∇₊ₕ` (gpena/Bramble.jl#958), but
+# indexes, iterates, maps and broadcasts as the tuple it holds, since `∇ₕ(u)[c][d]` is a
+# documented spelling.
 #
 # `divₕ(u)` of a trial or test function is the symbolic twin of the *runtime* `divₕ` of
 # `operators/vector_calculus.jl` (gpena/Bramble.jl#158): the same formula, so `inner₊(divₕ(u),

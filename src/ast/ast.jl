@@ -81,12 +81,14 @@ struct OperatorAdd{D, LeftType <: LazyOp{D}, RightType <: LazyOp{D}} <: LazyOp{D
     right_op::RightType
 end
 
-# A sum built by the `εₕ`/`divₕ`/`divₘₕ` `inner₊` builders (operators/difference.jl), with
-# the component pair of each term in its type. `P` mirrors the `OperatorAdd`s of `sum`, a
-# leaf `(i, j)` for a term whose trial leaves are all `u(i)` and test leaves all `v(j)`, a
-# join `(L, R)` for a `+`. `simplify_ast` (simplifier.jl) reads `P` to distribute a scalar
-# over the sum by type where `_mixes_components` compares runtime indices, so a captured
-# coefficient gives `form` one type (gpena/Bramble.jl#939); an unscaled one is just `sum`.
+# A sum built by the `εₕ`/`divₕ`/`divₘₕ` `inner₊` builders (operators/difference.jl), or by
+# `inner₊` of two composite gradients (`_GradientRows`, inner.jl, gpena/Bramble.jl#958),
+# with the component pair of each term in its type. `P` mirrors the `OperatorAdd`s of
+# `sum`, a leaf `(i, j)` for a term whose trial leaves are all `u(i)` and test leaves all
+# `v(j)`, a join `(L, R)` for a `+`. `simplify_ast` (simplifier.jl) reads `P` to
+# distribute a scalar over the sum by type where `_mixes_components` compares runtime
+# indices, so a captured coefficient gives `form` one type (gpena/Bramble.jl#939); an
+# unscaled one is just `sum`.
 #
 # Nothing past `simplify_ast` sees it. `resolve_ast` and `_resolve_surfaces` (inner.jl)
 # rebuild it around their result, and the other walkers before them read its type or return
