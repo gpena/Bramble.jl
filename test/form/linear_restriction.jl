@@ -69,7 +69,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS, _Const
             b = zeros(ndofs(W))
             for lf in (form(W, v -> restrict_to(:interior, innerₕ(x -> x[1]^2, v))),
                 form(W, v -> restrict_to(:interior,
-                    innerₕ(x -> x[1]^2, v) + innerₕ(x -> x[2], v))))
+                innerₕ(x -> x[1]^2, v) + innerₕ(x -> x[2], v))))
                 @test restricted_bytes(b, lf) == 0
                 @test !occursin("SourceFunction", string(typeof(lf)))
             end
