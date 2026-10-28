@@ -360,8 +360,9 @@ _typed_restrictions(op, sp, reach) = op
 # and the walk reads an array. Every host assembly samples it again at those points before
 # its sweep (`_refresh_reach_samples!`), so a closure reading mutable state, or a mesh moved
 # by `change_points!`, is seen at each assembly, as a typed restricted source is. `reach`
-# follows the regions as `markers!` moves them (`_rereach!`). A read outside it calls the
-# source, through the barrier; no walk makes one.
+# follows the regions as `markers!` moves them (`_rereach!`), so no walk reads a value
+# outside it. The values there are `NaN`, and a read of one throws (`getindex` below): a
+# loud internal error rather than a stale value, at the cost of one comparison per read.
 #
 # Mutable, so a node holding it is one pointer wide: a threaded sweep copies the AST into
 # each task's closure, and inline fields made that copy grow with every sampled source.
@@ -377,20 +378,21 @@ end
 Base.size(s::_ReachSamples) = size(s.values)
 Base.IndexStyle(::Type{<:_ReachSamples}) = IndexLinear()
 
+# The mask is read only for a `NaN`, which a source may return at a point of `reach` too.
+# The slow path throws rather than calling the source: a call there, never taken, cost the
+# sweep 14% on a 401x401 mesh, where a throw costs nothing.
 @inline function Base.getindex(s::_ReachSamples, lin::Int)
     @boundscheck checkbounds(s, lin)
-    @inbounds s.sampled[lin] && return s.values[lin]
-    return _late_sample(s, lin)
+    v = @inbounds s.values[lin]
+    (isnan(v) && !(@inbounds s.sampled[lin])) || return v
+    _throw_unsampled(lin)
 end
 
-# The value type is the point's (`_keeps_precision`), so the assertion holds.
-@noinline function _late_sample(s::_ReachSamples{T}, lin::Int) where {T}
-    x = point(s.mesh, CartesianIndices(indices(s.mesh))[lin])
-    return Base.invokelatest(s.func, x)::T
-end
+@noinline _throw_unsampled(lin::Int) = throw(
+    ErrorException("internal error: a sampled source was read at point $lin, outside the " *
+                   "points its assembly samples; please report it to Bramble.jl"))
 
-# Shown without reading it: a value outside `reach` would call the source where no
-# assembly does.
+# Shown without reading it: a value outside `reach` is not the source's.
 function Base.show(io::IO, s::_ReachSamples)
     print(io, "source sampled at ", count(s.sampled), " of ", length(s), " points")
 end
@@ -402,7 +404,7 @@ function _typed_restrictions(op::SourceFunction{D, Function}, sp, reach) where {
     Ωₕ = mesh(sp)
     T = eltype(Ωₕ)
     T <: Union{Float32, Float64} || return op
-    values = zeros(T, length(reach))
+    values = fill(T(NaN), length(reach))
     _sample_reach!(values, op.func, Ωₕ, reach)
     vec = _ReachSamples{T, typeof(Ωₕ)}(values, reach, op.func, Ωₕ, _marker_stamp(Ωₕ))
     return SourceVector{D, typeof(vec)}(vec)
@@ -411,10 +413,24 @@ end
 @noinline _sample_reach!(values, f::Function, Ωₕ, reach) = (
     Base.invokelatest(_sample_reach_typed!, values, f, Ωₕ, reach); nothing)
 
-function _sample_reach_typed!(values, f::F, Ωₕ, reach) where {F}
+# The mask a word at a time: an empty word is skipped and a full one swept without a test,
+# so a region's interior costs about what sampling every point does.
+function _sample_reach_typed!(values, f::F, Ωₕ, reach::BitVector) where {F}
     cart = CartesianIndices(indices(Ωₕ))
-    for lin in eachindex(reach)
-        reach[lin] && (values[lin] = f(point(Ωₕ, cart[lin])))
+    for (c, w) in enumerate(reach.chunks)
+        w == 0 && continue
+        base = (c - 1) << 6
+        if w == typemax(UInt64)
+            for lin in (base + 1):(base + 64)
+                @inbounds values[lin] = f(point(Ωₕ, cart[lin]))
+            end
+        else
+            while w != 0
+                lin = base + trailing_zeros(w) + 1
+                @inbounds values[lin] = f(point(Ωₕ, cart[lin]))
+                w &= w - one(w)
+            end
+        end
     end
     return nothing
 end
@@ -487,8 +503,12 @@ _rereach_term!(term, Ωₕ) = _rereach!(term, Ωₕ, trues(length(indices(Ωₕ)
 
 _rereach!(op, Ωₕ, reach) = nothing
 function _rereach!(op::SourceVector{D, <:_ReachSamples}, Ωₕ, reach) where {D}
-    copyto!(op.vec.sampled, reach)
-    op.vec.stamp = _marker_stamp(op.vec.mesh)
+    s = op.vec
+    copyto!(s.sampled, reach)
+    for lin in eachindex(reach)
+        reach[lin] || (s.values[lin] = NaN)
+    end
+    s.stamp = _marker_stamp(s.mesh)
     return nothing
 end
 function _rereach!(op::UnaryWrapper, Ωₕ, reach)

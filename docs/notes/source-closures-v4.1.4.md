@@ -341,7 +341,10 @@ outside `reach` and a warm refill stays at 0 B. That first assembly after `marke
 allocates the masks it computes; the next ones do not. The first round of this section
 fixed `reach` at `form`, and the critic found the shrink case throwing at x = 0.379 where
 the base returned its vector, and 1056 B per warm `assemble!` after a grow (base 0 B).
-`_late_sample` stays, for a read outside `reach`, which no path now makes.
+Since `reach` follows the markers, no walk reads a value outside it, and the late call
+S6.3 made there is gone. The values outside `reach` are `NaN`, and a read of a `NaN` whose
+point is outside the mask throws an internal error: a value that is not the source's is
+never returned. A `NaN` the source returns at a point of `reach` is read as it is.
 
 `_unrouted_term` gives main's handling back on a one-leaf composite: a term naming no
 component keeps a typed source (`SourceFunction{D, F}`, `F` concrete) as main left it, and

@@ -1147,6 +1147,27 @@ using Bramble:
             @test assemble(l) ≈ 2 .* b1
         end
 
+        # The refresh reads the mask a word at a time: a 1D mesh of 400 points has full,
+        # partial and empty words for a region in its middle, and every value matches main's
+        # typed source. A value outside the samples is never returned: reading one throws.
+        @testset "outer restriction: mask words" begin
+            dom = domain(interval(0.0, 1.0), :mid => x -> 0.2 < x[1] < 0.6)
+            Ωw = mesh(dom, 400, true)
+            Ww = gridspace(Ωw)
+            t = Ref(1.0)
+            f = y -> oftype(y, t[]) * y^2
+            l = form(Ww, v -> restrict_to(:mid, innerₕ(f, v)))
+            lt = form(Ww, v -> restrict_to(:mid, innerₕ(source_function(f, Val(1)), v)))
+            s = resolve_form_ast(l).inner_op.left_op.vec
+            words = s.sampled.chunks
+            @test any(==(typemax(UInt64)), words) && any(iszero, words) &&
+                  any(w -> !iszero(w) && w != typemax(UInt64), words)
+            t[] = 3.0
+            @test isequal(assemble(l), assemble(lt))
+            @test_throws ErrorException s[1]
+            @test s[160] == 3 * points(Ωw)[160]^2
+        end
+
         # `markers!` moves the region after `form`: the source is sampled where the walk reads
         # it under the current markers, so a shrunk region never calls it at the points it
         # left (#643), a grown one calls it at the new points with no late call, and a warm
