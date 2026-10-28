@@ -353,15 +353,23 @@ source, a restricted one-leaf composite term) through `assemble`, `assemble!`,
 Hazards:
 
 - Two tasks assembling one form at once race on the `_ReachSamples` values: each pass
-  writes the same vectors the other task's sweep reads. There is a precedent: the bilinear
-  replay cache (`a.cache`, read and re-recorded by `_assemble_bilinear_core_cached!` behind
-  `assemble!` and `assemble_add!`, assembly/assemble_add.jl) is per-form scratch an assembly
-  mutates, so one form is not safe to assemble from two tasks at once there either. A
-  threaded sweep inside one call is safe: the pass ends before it starts.
+  writes the same vectors the other task's sweep reads. There are precedents: a
+  `GhostLinearForm`'s `F_pad` (assembly/ghost_assembly.jl), the padded load vector every
+  assembly of that linear form fills, and the bilinear replay cache (`a.cache`, read and
+  re-recorded by `_assemble_bilinear_core_cached!` behind `assemble!` and `assemble_add!`,
+  assembly/assemble_add.jl). Both are per-form scratch an assembly mutates, so one such form
+  is not safe to assemble from two tasks at once either. A threaded sweep inside one call is
+  safe: the pass ends before it starts.
 - The closure is still called once at `form` at the `reach` points, where main did not call
   a restricted source at `form`, only at assembly.
-- After `markers!` shrinks a region, the pass still calls the source at the points it left:
-  `reach` is fixed at `form`. A source undefined there (#643) throws at assembly, where main
-  would not call it.
+- Open, for the integrator: after `markers!` shrinks a region, the pass still calls the
+  source at the points the region left, because `reach` is fixed at `form`. On a 9-point 1D
+  mesh with `:half` shrunk from `x > 0.5` to `x > 0.7` after `form`, a warm `assemble!` calls
+  a typed source (main's path) at 0.75, 0.875 and 1.0, and the erased one at 0.625 as well;
+  the vectors agree bit for bit, since the walk does not read the value at 0.625. A source
+  undefined at the dropped points (#643) throws at assembly where main would not call it.
+  S6.3 did not call it there: it only read the stored value, and the walk skipped it.
+  Without a `markers!` shrink after `form`, an assembly calls the source only at the points
+  its walk reads (`reach`).
 
 The instance figures are the integrator's to take.
