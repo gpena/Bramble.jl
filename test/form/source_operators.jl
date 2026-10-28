@@ -949,6 +949,111 @@ using Bramble:
             end
         end
 
+        # An outer `restrict_to` wraps the term after `innerₕ` erased its source, so `form`
+        # samples the source where the walk reads it: the form infers, and its vector is the
+        # typed source's (`source_function`, main's path) bit for bit.
+        @testset "outer restriction: sampled, inferred" begin
+            g(n, a) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * a)
+            # a captured `Int` keeps the point's precision, and hides the closure from
+            # constant propagation, which infers a capture-free one either way
+            mk(c) = x -> c * x[1]^2 + x[2]
+            function refill_bytes(lf)
+                b = assemble(lf)
+                assemble!(b, lf)                  # warm up
+                return @allocated assemble!(b, lf)
+            end
+            R = restrict_to
+            for T in (Float64, Float32)
+                dom = domain(interval(T(0), T(1)) × interval(T(0), T(1)),
+                    :corner => x -> x[1] < 0.5, :none => x -> x[1] > 2)
+                Ω = mesh(dom, (9, 11), (false, false))
+                Bramble.change_points!(Ω, Bramble.markers(dom), (T.(g(9, 1)), T.(g(11, 2))))
+                W = gridspace(Ω)
+                V1 = CompositeGridSpace((W,))
+                V2 = CompositeGridSpace((W, W))
+                shapes = (
+                    (W, (s, v) -> R(:interior, innerₕ(s, v))),
+                    (W, (s, v) -> R(:interior, innerₕ(s, v) + innerₕ(s, Mₓ(v)))),
+                    (W, (s, v) -> R(:interior, R(:corner, innerₕ(s, v)))),
+                    (W, (s, v) -> R(:interior, shift_op(innerₕ(s, v), 1, 1))),
+                    (W, (s, v) -> shift_op(R(:corner, innerₕ(s, v)), 1, -1)),
+                    (W, (s, v) -> Mₓ(2 * R(:corner, innerₕ(s, v)))),
+                    (W, (s, v) -> D₋ₓ(R(:corner, innerₕ(s, v)) + innerₕ(s, v))),
+                    (W, (s, v) -> R(:none, innerₕ(s, v))),
+                    (V1, (s, v) -> innerₕ(s, v)),
+                    (V1, (s, v) -> R(:corner, innerₕ(s, v))),
+                    (V2, (s, v) -> R(:interior, innerₕ(s, v(2)))))
+                for (S, sh) in shapes
+                    built = (S, c) -> form(S, v -> sh(mk(c), v))
+                    @test isconcretetype(only(Base.return_types(built, (typeof(S), Int))))
+                    l = built(S, 3)
+                    @test !occursin("SourceFunction", string(typeof(l)))
+                    typed = form(S, v -> sh(source_function(mk(3), Val(2)), v))
+                    b = assemble(l)
+                    @test eltype(b) === T
+                    @test isequal(b, assemble(typed))
+                    @test refill_bytes(l) == 0
+                end
+                # `markers` keeps the source typed, and holds the same values
+                f = mk(3)
+                lm = @inferred form(W, v -> innerₕ(f, v; markers = (:interior,)))
+                @test resolve_form_ast(lm).inner_op.left_op isa SourceFunction{2, typeof(f)}
+                @test isequal(assemble(lm), assemble(form(W, v -> R(:interior, innerₕ(f, v)))))
+            end
+        end
+
+        # The source is called where the walk reads it, at `form`, and nowhere else; a point
+        # `markers!` adds to the region later is called at each assembly, through a barrier.
+        @testset "outer restriction: call set" begin
+            n = 9
+            dom = domain(interval(0.0, 1.0), :half => x -> x[1] > 0.5)
+            Ωm = mesh(dom, n, true)
+            Wm = gridspace(Ωm)
+            x = points(Ωm)
+            calls = Float64[]
+            rec = y -> (push!(calls, y); y + 1)
+            ref(r) = assemble(form(Wm, v -> r(innerₕ(source_function(y -> y + 1, Val(1)), v))))
+            rh(op) = restrict_to(:half, op)
+            l = form(Wm, v -> rh(innerₕ(rec, v)))
+            @test resolve_form_ast(l).inner_op.left_op isa SourceVector
+            @test sort(calls) == x[x .> 0.5]
+            empty!(calls)
+            @test isequal(assemble(l), ref(rh))
+            @test isempty(calls)
+            # a shift over the restricted term reads it at each row's point and the one to
+            # its left, inside the region or not, as it reads main's typed source: sampled
+            # at those points, at `form`
+            tcalls = Float64[]
+            trec = source_function(y -> (push!(tcalls, y); y + 1), Val(1))
+            assemble(form(Wm, v -> shift_op(rh(innerₕ(trec, v)), 1, -1)))
+            ls = form(Wm, v -> shift_op(rh(innerₕ(rec, v)), 1, -1))
+            @test sort(calls) == sort!(unique(tcalls)) == x
+            empty!(calls)
+            @test isequal(assemble(ls), ref(op -> shift_op(rh(op), 1, -1)))
+            @test isempty(calls)
+            # a source throwing outside its region is never called there (#643)
+            th = y -> y > 0.5 ? y + 1 : throw(DomainError(y))
+            @test isequal(assemble(form(Wm, v -> rh(innerₕ(th, v)))), ref(rh))
+            # the region moved after `form`: only the added points are called, each assembly
+            m = copy(Bramble.markers(Ωm))
+            m[:half] = [xi > 0.3 for xi in x]
+            Bramble.markers!(Ωm, m)
+            empty!(calls)
+            b = assemble(l)
+            @test sort!(unique(calls)) == x[0.3 .< x .<= 0.5]
+            @test isequal(b, ref(rh))
+            @test !all(iszero, b[0.3 .< x .<= 0.5])
+            # a `Dual` source is not erased: typed, inferred and read at every assembly
+            d = ForwardDiff.Dual{:t}(1.0, 1.0)
+            fd = y -> d * y
+            bd = form(Wm, v -> rh(innerₕ(fd, v)))
+            @test resolve_form_ast(bd).inner_op.left_op isa SourceFunction{1, typeof(fd)}
+            built = (S, e) -> form(S, v -> rh(innerₕ(y -> e * y, v)))
+            @test isconcretetype(only(Base.return_types(built, (typeof(Wm), typeof(d)))))
+            @test eltype(assemble(bd)) == typeof(d)
+            @test ForwardDiff.partials(assemble(bd)[n])[1] == weights(Wm, Innerh())[n] * x[n]
+        end
+
         @testset "expression" begin
             @test Bramble.expression(erased(sin)) == "sin"
             @test Bramble.expression(erased(f1)) == "f"

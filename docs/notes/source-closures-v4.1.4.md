@@ -258,5 +258,45 @@ point's precision (`Float64` at a `Float64` point, `Float32` at a `Float32` poin
 its test side on one leaf and no `markers`. A closure that returns a constant such as
 `x -> 1.0`, a `Dual`, a complex, or a `Union`, or one under `markers`, keeps its type and
 still costs a second build what base does. Under an outer `restrict_to`, a restricted sum
-or a composite term, an erased source gets its type back at `form`, and that `form` no
-longer infers a concrete type.
+or a composite term, an erased source got its type back at `form`, and that `form` no
+longer inferred a concrete type; the next section samples it instead, on a host space.
+
+## S6.3: an outer restriction keeps the form concrete
+
+The `restrict_outer_linear_form` row of the inference table above now reads concrete on
+head as well. The loss came from the order of two decisions: `innerₕ` erases the source when
+it builds the term, and an outer `restrict_to` wraps that term afterwards. `_lower_sources`
+does not sample a source under a restriction, because sampling it everywhere would call it
+at points no assembly reads (#643, #524), so `form` gave it its type back
+(`_specialised_sources`) and inferred a `Union`.
+
+`form` now samples such a source where the walk reads it. `_typed_restrictions` already
+carries `reach`, the points at which the walk evaluates each node, narrowed by every
+enclosing restriction and moved by every enclosing shift. On a host space it fills the
+source's values at those points, behind the same `invokelatest` barrier as an unrestricted
+erased source, and stores them as a `SourceVector` over a `_ReachSamples` array, whose type
+names no closure. The walk reads that array, so the form infers a concrete type and a warm
+`assemble!` stays at 0 B. A point outside `reach` (a region that `markers!` moved after
+`form`) calls the source when it is read, through the barrier, and allocates there. A
+shift, a difference, an average or a jump over the restricted term (directly, or through
+scales and sums) reads that term at each of its points and at every tap's clamped
+neighbour, inside the region or not, as it reads a typed source, so `reach` there takes all
+of those points and the restriction narrows none (`_typed_taps`).
+
+The one-leaf composite case lowers through `_unrouted_term`: a term naming no component on
+a composite space with one leaf now lowers against that leaf, as a scalar space's term does,
+so a typed source there is sampled at `form` too, where head read it at each assembly.
+
+Shapes checked against a typed `source_function` of the same closure (main's path), bit
+for bit, on the graded 9x11 mesh in `Float64` and `Float32`: an outer restriction, a
+restricted sum, nested restrictions, a shift inside and outside the restriction, an
+average over a scaled restriction, an empty region, a one-leaf composite term naming no component (red on head before this change,
+with a closure capturing an `Int`), and a restricted `v(2)` on a two-leaf composite space.
+`markers` and a `Dual` source are not erased, as before.
+
+What changes for the user: a restricted plain function is now read at `form`, as an
+unrestricted one already was, so a closure that reads mutable state, or a mesh moved by
+`change_points!`, is not seen again at its sampled points. A device space, and a term
+naming no component on a composite space with several leaves, still give the source its
+type back at `form` and do not infer a concrete type. The instance figures are the
+integrator's to take.

@@ -59,6 +59,22 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, WITH_SLOW_TESTS, TEST_DIMS, _Const
             @test b ≈ parts
         end
 
+        # A plain function's term restricted from outside: `form` samples its erased source
+        # where the walk reads it (gpena/Bramble.jl#917), so the refill reads an array.
+        let
+            g(n, a) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * a)
+            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (false, false))
+            Bramble.change_points!(Ω, (g(9, 1), g(11, 2)))
+            W = gridspace(Ω)
+            b = zeros(ndofs(W))
+            for lf in (form(W, v -> restrict_to(:interior, innerₕ(x -> x[1]^2, v))),
+                form(W, v -> restrict_to(:interior,
+                    innerₕ(x -> x[1]^2, v) + innerₕ(x -> x[2], v))))
+                @test restricted_bytes(b, lf) == 0
+                @test !occursin("SourceFunction", string(typeof(lf)))
+            end
+        end
+
         # Past two restricted summands the `Union` is not split and every point boxed
         # (16400, 20256 and 38800 B for three, four and five summands on this 7x9 grid):
         # `form` now splits such a product into products of at most two, and a form with

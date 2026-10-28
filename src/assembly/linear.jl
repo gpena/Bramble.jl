@@ -226,7 +226,8 @@ end
 # component lowers against that leaf's own space; a term naming none goes to *every* leaf,
 # which may have different meshes, so there is no single space to sample against and lowering
 # is skipped for it -- the same `SourceFunction` it already was, evaluated fresh per leaf at
-# assembly time.
+# assembly time. A space with one leaf has one mesh, so there the term lowers against it
+# (`_unrouted_term`).
 # Missing this optimisation for that one shape is the safe choice: sampling against the wrong
 # leaf's mesh would silently assemble the wrong numbers, not merely run slower. A component
 # outside the space throws here, at `form`, through `_routed_target`'s check; returning the
@@ -262,21 +263,29 @@ end
 
 function _lower_sources_over_leaves(term::TERM, leaves) where {TERM}
     target = _routed_target(term, length(leaves))
-    target === nothing && return _specialised_sources(term)
+    target === nothing && return _unrouted_term(term, leaves)
     return _at_leaf(leaf -> _lower_term(term, first(leaf)), leaves, target)
 end
 
-# A term's sources lowered against the leaf `sp` it assembles on, then its restricted
-# sources typed against the same leaf. Host spaces only: the probe reads a point and a
-# source value one at a time, a scalar read a device array refuses.
-_lower_term(term, sp) = _typed_restrictions(
-    locality(backend(sp)), _specialised_sources(_lower_sources(term, sp)), sp)
+# A term naming no component goes to every leaf. With one leaf there is no wrong mesh to
+# sample against, so it lowers as a routed term does; with more it keeps its sources.
+_unrouted_term(term, leaves::Tuple{Any}) = _lower_term(term, first(only(leaves)))
+_unrouted_term(term, leaves) = _specialised_sources(term)
 
-# An erased source (`source_function`, ast/common.jl) that `_lower_sources` leaves unsampled
-# (under a restriction, a difference or an average, or in a composite term naming no
-# component) is called at every point of every assembly, so it gets its type back here, at
-# `form`: the walk calls it as it calls any other source, with no dispatch per point. A form
-# holding one infers no concrete type; one without is returned as it was.
+# A term's sources lowered against the leaf `sp` it assembles on, then its restricted
+# sources typed against the same leaf, an erased one sampled where the walk reads it
+# (`_typed_restrictions` below). Host spaces only: the probe reads a point and a source
+# value one at a time, a scalar read a device array refuses.
+_lower_term(term, sp) = _specialised_sources(
+    _typed_restrictions(locality(backend(sp)), _lower_sources(term, sp), sp))
+
+# An erased source (`_erased_source`, ast/common.jl) that neither `_lower_sources` nor
+# `_typed_restrictions` samples (on a device space, or in a term naming no component of a
+# composite space with several leaves) is called at every point of every assembly, so it
+# gets its type back here, at `form`: the walk calls it as it calls any other source, with
+# no dispatch per point. A form holding one infers no concrete type; one without is
+# returned as it was, and on a host space every erased source under a restriction is
+# sampled before this runs.
 _specialised_sources(op) = op
 _specialised_sources(op::SourceFunction{D, Function}) where {D} = _specialised(op)
 function _specialised_sources(op::OperatorAdd)
@@ -322,11 +331,75 @@ _typed_restrictions(::DeviceLocality, op, sp) = op
 # points (linear indices) at which the walk evaluates the node, narrowed by every enclosing
 # restriction and moved by every enclosing `ShiftNode`, so a source undefined outside its
 # region, or outside an enclosing one, is never called there. No such point (an empty
-# region, a label the mesh lacks yet) leaves the node as it was, answering `()`. The source
-# itself is not sampled: it is called again at every point of its region on every assembly.
-# Nested restrictions are typed inner first, so an outer probe outside an inner region reads
-# the inner zero stencil.
+# region, a label the mesh lacks yet) leaves the node as it was, answering `()`. A source
+# with its type is not sampled: it is called again at every point of its region on every
+# assembly. An erased one is (`_ReachSamples` below). Nested restrictions are typed inner
+# first, so an outer probe outside an inner region reads the inner zero stencil.
 _typed_restrictions(op, sp, reach) = op
+
+# --- An erased source under a restriction is sampled where the walk reads it --- #
+#
+# An erased source (`_erased_source`, ast/common.jl) is decided when `innerₕ` builds its
+# term, before an outer `restrict_to` wraps it, so `_lower_sources` meets it under the
+# restriction and leaves it, since sampled everywhere it would be called at points no
+# assembly reads (gpena/Bramble.jl#643, #524). Here `reach` is exactly the points the walk
+# reads it at, so it is sampled there, once, behind the same barrier as `_fill_erased!`, and
+# becomes a `SourceVector` whose type names no closure, so the form infers a concrete type
+# and the walk reads an array. A point outside `reach` (a region `markers!` moved after
+# `form`) is called when read, through the barrier, and allocates there. Its values are the
+# source's at `form`, as an unrestricted source's are, so a closure reading mutable state,
+# or a mesh moved by `change_points!`, is not seen again at the sampled points.
+struct _ReachSamples{T, M} <: AbstractVector{T}
+    values::Vector{T}
+    sampled::BitVector
+    func::Function
+    mesh::M
+end
+
+Base.size(s::_ReachSamples) = size(s.values)
+Base.IndexStyle(::Type{<:_ReachSamples}) = IndexLinear()
+
+@inline function Base.getindex(s::_ReachSamples, lin::Int)
+    @boundscheck checkbounds(s, lin)
+    @inbounds s.sampled[lin] && return s.values[lin]
+    return _late_sample(s, lin)
+end
+
+# The value type is the point's (`_keeps_precision`), so the assertion holds.
+@noinline function _late_sample(s::_ReachSamples{T}, lin::Int) where {T}
+    x = point(s.mesh, CartesianIndices(indices(s.mesh))[lin])
+    return Base.invokelatest(s.func, x)::T
+end
+
+# Shown without reading it: a value outside `reach` would call the source where no
+# assembly does.
+function Base.show(io::IO, s::_ReachSamples)
+    print(io, "source sampled at ", count(s.sampled), " of ", length(s), " points")
+end
+Base.show(io::IO, ::MIME"text/plain", s::_ReachSamples) = show(io, s)
+
+# On a mesh whose points are `Float32` or `Float64` the value type is the coordinates'; any
+# other leaves the source to `_specialised_sources`. Decided by the mesh's type, so it folds.
+function _typed_restrictions(op::SourceFunction{D, Function}, sp, reach) where {D}
+    Ωₕ = mesh(sp)
+    T = eltype(Ωₕ)
+    T <: Union{Float32, Float64} || return op
+    values = zeros(T, length(reach))
+    _sample_reach!(values, op.func, Ωₕ, reach)
+    vec = _ReachSamples{T, typeof(Ωₕ)}(values, copy(reach), op.func, Ωₕ)
+    return SourceVector{D, typeof(vec)}(vec)
+end
+
+@noinline _sample_reach!(values, f::Function, Ωₕ, reach) = (
+    Base.invokelatest(_sample_reach_typed!, values, f, Ωₕ, reach); nothing)
+
+function _sample_reach_typed!(values, f::F, Ωₕ, reach) where {F}
+    cart = CartesianIndices(indices(Ωₕ))
+    for lin in findall(reach)
+        values[lin] = f(point(Ωₕ, cart[lin]))
+    end
+    return nothing
+end
 
 function _typed_restrictions(op::UnaryWrapper, sp, reach)
     return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, reach))
@@ -334,9 +407,54 @@ end
 
 # A shift evaluates its operand at `I + shift` for each `I` it is evaluated at.
 function _typed_restrictions(op::ShiftNode{D, Dim}, sp, reach) where {D, Dim}
+    _reads_unrestricted(op.inner_op) && return _typed_taps(op, (op.shift_amount,), sp, reach)
     step = _stencil_step(Val(Dim), Val(D)) * op.shift_amount
     moved = _shift_reach(CartesianIndices(indices(mesh(sp))), step, reach)
     return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, moved))
+end
+
+function _typed_restrictions(op::TappedNode, sp, reach)
+    _reads_unrestricted(op.inner_op) &&
+        return _typed_taps(op, map(_shift_delta, _stencil_taps(op)), sp, reach)
+    return _rewrap_inner(op, _typed_restrictions(op.inner_op, sp, reach))
+end
+
+# A shift or a tapped node over a restriction whose operand is not source-only, directly or
+# through scales, sums and further such restrictions, reads that operand at each of its own
+# points and at the clamped neighbour of every tap, inside the region or not
+# (`shifted_inner_stencil`, operators/region_restriction.jl), so the operand's reach is all
+# of them, and no restriction on the chain narrows it.
+@inline _reads_unrestricted(op::RegionRestriction) = !_is_source_only(op.inner_op)
+@inline _reads_unrestricted(op::_Scale) = _reads_unrestricted(op.inner_op)
+@inline _reads_unrestricted(op::OperatorAdd) = _reads_unrestricted(op.left_op) ||
+                                               _reads_unrestricted(op.right_op)
+@inline _reads_unrestricted(::Any) = false
+
+function _typed_taps(op::StencilNode{D, Dim}, deltas, sp, reach) where {D, Dim}
+    wide = _tapped_reach(mesh(sp), Val(Dim), deltas, reach)
+    return _rewrap_inner(op, _tapped_chain(op.inner_op, sp, wide))
+end
+
+_tapped_chain(op, sp, wide) = _typed_restrictions(op, sp, wide)
+_tapped_chain(op::_Scale, sp, wide) = _rewrap_inner(op, _tapped_chain(op.inner_op, sp, wide))
+function _tapped_chain(op::OperatorAdd{D}, sp, wide) where {D}
+    left = _tapped_chain(op.left_op, sp, wide)
+    right = _tapped_chain(op.right_op, sp, wide)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+function _tapped_chain(op::RegionRestriction, sp, wide)
+    _reads_unrestricted(op) || return _typed_restrictions(op, sp, wide)
+    return _rebuild_restriction(op, op.region, _tapped_chain(op.inner_op, sp, wide))
+end
+
+@noinline function _tapped_reach(Ωₕ, ::Val{Dim}, deltas, reach::BitVector) where {Dim}
+    cart = CartesianIndices(indices(Ωₕ))
+    lin_of = LinearIndices(cart)
+    wide = copy(reach)
+    for lin in findall(reach), δ in deltas
+        wide[lin_of[_clamped_shift(Ωₕ, cart[lin], Val(Dim), δ)]] = true
+    end
+    return wide
 end
 
 @noinline function _shift_reach(cart::CartesianIndices, step::CartesianIndex, reach::BitVector)
@@ -443,6 +561,15 @@ no such point at `form` keeps the empty stencil. In return:
     shift, a difference, an average or a sum holding the restricted source (directly over
     the restriction, or over restrictions and scales nested in it, it still gives 0);
   - [`assemble_add!`](@ref) into entries holding `-0.0` may turn them into `+0.0` there.
+
+A plain function `f` whose term is restricted from outside, as in
+`restrict_to(:interior, innerₕ(f, v))`, is sampled here too, on a host space, when it
+returns its point's precision (a `Float64` at a `Float64` point and a `Float32` at a
+`Float32` one), its test side reads one leaf (a scalar space's test function or a component
+`v(i)`) and no `markers` are given: at every point the assembly reads it and nowhere else,
+then read as an array. Those are the points of its region, or, under a shift, a difference
+or an average, every point the operator reaches, inside the region or not. A point that `markers!` adds later is evaluated at each assembly
+instead. Any other restricted function is called at every assembly.
 
 # Examples
 

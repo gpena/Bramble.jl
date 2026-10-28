@@ -1027,6 +1027,14 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const
         shared = Bramble.simplify_ast(Bramble.resolve_ast(innerₕ(x -> 2 * x[1], vt)))
         @test !(shared.left_op isa Bramble.SourceFunction{2, Function})
         @test @inferred(Bramble._lower_sources_for_space(shared, Vt)) === shared
+        # On a one-leaf composite space the term naming no component is erased, and it
+        # lowers against the one leaf, inferred: the source used to get its type back.
+        V1 = Bramble.CompositeGridSpace((gridspace(Ωₕ),))
+        one_leaf = Bramble.simplify_ast(Bramble.resolve_ast(
+            innerₕ(x -> 2 * x[1], Bramble.test_function(V1))))
+        @test one_leaf.left_op isa Bramble.SourceFunction{2, Function}
+        @test @inferred(Bramble._lower_sources_for_space(one_leaf, V1)).left_op isa
+              Bramble.SourceVector{2, Vector{Float64}}
 
         # while a valid one still works, so the guard is not simply rejecting everything
         @test sum(assemble(form(Vt, v -> innerₕ(1.0, v(2))))) ≈ 1.0

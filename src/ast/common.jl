@@ -679,12 +679,14 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 # its type (gpena/Bramble.jl#917); any other keeps `typeof(f)`. Only there: a source the
 # assembly reads at every point (under `restrict_to`, a difference or an average, built with
 # `source_function` above; under `markers`; or in a composite term naming no component) keeps
-# its type, as the walk calls it, and a form holding it infers. The limit: the choice is made
-# when the term is built, before any outer `restrict_to` wraps it, so a form whose term is
-# restricted afterwards (`restrict_to(:interior, innerₕ(f, v))`, a restricted sum of such
-# terms, a restricted composite term on `v(2)`) holds an erased source `form` gives its type
-# back at run time (`_specialised_sources`, assembly/linear.jl), and infers no concrete type;
-# its values, element type and allocation-free `assemble!` are main's.
+# its type, as the walk calls it, and a form holding it infers. The choice is made when the
+# term is built, before any outer `restrict_to` wraps it, so a term restricted afterwards
+# (`restrict_to(:interior, innerₕ(f, v))`, a restricted sum of such terms, a restricted
+# composite term on `v(2)`) holds an erased source `_lower_sources` does not sample. `form`
+# samples it where the walk reads it (`_typed_restrictions`, assembly/linear.jl), and the
+# form infers. Only on a device space, or in a term naming no component of a composite space
+# with several leaves, does `form` give it its type back at run time
+# (`_specialised_sources`, assembly/linear.jl), and infer no concrete type.
 @inline _erased_source(f, ::Val{D}) where {D} = _keeps_precision(f, Val(D)) ?
                                                 SourceFunction{D, Function}(f) :
                                                 SourceFunction{D, typeof(f)}(f)
@@ -760,7 +762,8 @@ end
 @noinline _fill_erased!(uₕ, f::Function) = (Base.invokelatest(Rₕ!, uₕ, f); nothing)
 
 # An erased source with its type back, for a node read at every assembly rather than sampled
-# (`_specialised_sources`, assembly/linear.jl).
+# (`_specialised_sources`, assembly/linear.jl), on a device space or in a term naming no
+# component of a composite space with several leaves.
 @inline _specialised(op::SourceFunction{D, Function}) where {D} = _typed_source(
     op.func, Val(D))
 @noinline _typed_source(f::F, ::Val{D}) where {F, D} = SourceFunction{D, F}(f)
