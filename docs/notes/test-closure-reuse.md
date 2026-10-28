@@ -204,3 +204,17 @@ the range the untouched files show between two launches with nothing changed (0.
 the untouched files rose by 4.5 s, a gap of about five points between the two groups, which
 one pair of launches cannot separate from the single-file spread of 12 to 22 percent. No
 speedup is claimed. The rewrite leaves the pass count unchanged (30102 in both runs).
+
+## After reverting the source-closure erasure (2026-10-28)
+
+The baselines above were taken with the erasure of #917 (S6.1) in the tree. The erasure was reverted afterwards (`docs/notes/source-closures-v4.1.4.md`, `## Outcome: reverted`), which removed its tests from `test/form/linear.jl`, `test/form/linear_restriction.jl` and `test/form/source_operators.jl` and changed what other test files compile, so the stored baseline counts no longer describe either tree. The comparison was redone on the reverted source: the control is the rewritten files reverted to their pre-#888 text, the head is the files as they are, both run through `CompileReuse.measure` on the same `src/` in the S8.3 groups.
+
+| group | passes (control, head) | `mis` control | `mis` head | `mis_coef` control | `mis_coef` head | `mis_coef_shared` head |
+|---|---|---:|---:|---:|---:|---:|
+| S8.3.1 form linear and source | 2115, 2115 | 86328 | 83006 | 27126 | 17201 | 78 |
+| S8.3.2 form bilinear and the rest | 3688, 3688 | 129467 | 125890 | 16016 | 9259 | 0 |
+| S8.3.3 space | 2198, 2198 | 10978 | 9311 | 6833 | 4804 | 0 |
+| S8.3.4 mesh | 1210, 1210 | 5822 | 5386 | 2452 | 1650 | 0 |
+| S8.3.5 ghost | 935, 935 | 51579 | 48161 | 10829 | 5811 | 0 |
+
+The pass count is unchanged by the rewrites in every group, `mis_coef` falls in every group (to 63%, 58%, 70%, 67% and 54% of the control), and `mis` does not rise. Against the stored baseline, whose pass counts the revert moved, the same probes fail on those counts alone.
