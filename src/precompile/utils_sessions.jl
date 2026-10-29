@@ -1,6 +1,6 @@
 # precompile/utils_sessions.jl: backend array construction, the weighted dot products and
-# the sweep seam (src/utils/). Ordinary methods, so PrecompileTools caches them along with
-# everything they call.
+# the serial loop (src/utils/). Ordinary methods, so PrecompileTools caches them along with
+# everything they call. The sweep seam is warmed by the kernels in parallel_sessions.jl.
 
 # None of this is reachable from mesh construction, which only allocates vectors.
 function _pc_linear_algebra(be)
@@ -25,7 +25,5 @@ function _pc_linear_algebra(be)
     _dot_masked(u, w, v, BitVector([true, false, true, false]))
 
     _serial_for!(similar(u), 1:4, i -> Float64(i))
-    _sweep_for!(Serial(), similar(u), 1:4, i -> Float64(i))
-    _sweep_for!(Parallel(), similar(u), 1:4, i -> Float64(i))
     return nothing
 end
