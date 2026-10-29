@@ -660,7 +660,7 @@ end
 # double loop forms each entry where it is added and stores nothing. The entries are the
 # same, in the same order (left-major, as `multiply_stencils_bilinear` lays them out), with
 # the same arithmetic, `(l * r) * vol` and then each scale above the product, innermost
-# first, as `scale_stencil` applies them. A symmetric product (`_same_operator_shape`)
+# first, as `scale_stencil` applies them. A symmetric product (`_same_stencil_shape`)
 # evaluates its one factor once, as `multiply_stencils_bilinear_symmetric` does, and its
 # mirrored entry `r * l` is `l * r` bit for bit, since floating-point multiplication
 # commutes. So the matrix is unchanged, bit for bit. Warm `assemble!` of the 3D elasticity
@@ -794,7 +794,7 @@ Base.@propagate_inbounds function _factored_product!(
 ) where {D, InnerType}
     vol = compute_weight(op.inner, sp, I, lin_idx)
     left = local_stencil(op.left_op, sp, I, markers, lin_idx)
-    if _same_operator_shape(op.left_op, op.right_op)
+    if _same_stencil_shape(op.left_op, op.right_op)
         _loops_symmetric(left) && return _product_entries(
             sink, left, left, vol, scales, lin_indices, I, row_offset, col_offset, slot, g)
         return _stencil_entries(sink, multiply_stencils_bilinear_symmetric(left, vol),

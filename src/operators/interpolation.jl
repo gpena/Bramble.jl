@@ -938,9 +938,9 @@ stencil_offsets(op::InterpolationNode) = stencil_offsets(op.inner_op)
 # side only must not read as symmetric.
 # Two interpolations on opposite sides are never the same shape either: one names columns and
 # the other rows, so the symmetry fast path must not read such a product as symmetric.
-function _same_operator_shape(a::InterpolationNode{D}, b::InterpolationNode{D}) where {D}
+function _same_operator_shape(a::InterpolationNode{D}, b::InterpolationNode{D}, m) where {D}
     return _interp_side(a) === _interp_side(b) && a.src_space === b.src_space &&
-           a.outside === b.outside && _same_operator_shape(a.inner_op, b.inner_op)
+           a.outside === b.outside && _same_operator_shape(a.inner_op, b.inner_op, m)
 end
 
 # --- The shift trait: which nodes carry something a relabelled offset cannot express -- #
