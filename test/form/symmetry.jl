@@ -145,8 +145,8 @@ using Bramble:
         p = product(e)
         @test p.left_op isa
               Bramble.BackwardDifference{<:Any, <:Any, <:Bramble.IndexedTrialFunction}
-        ci = only(code_typed(Bramble._same_stencil_shape,
-            (typeof(p.left_op), typeof(p.right_op))))[1]
+        ci = only(code_typed(Bramble._same_operator_shape,
+            (typeof(p.left_op), typeof(p.right_op), Bramble._SameStencil)))[1]
         @test length(ci.code) == 1 && ci.code[1] isa Core.ReturnNode &&
               ci.code[1].val === true
         @test !Bramble._same_operator_shape(p.left_op, p.right_op)
@@ -158,7 +158,7 @@ using Bramble:
         onesₕ = Rₕ(gridspace(Ωn), x -> 1.0)
         e_general = form(Vₕ, Vₕ, (u, v) -> innerₕ(D₋ₓ(u(1)), onesₕ * D₋ₓ(v(2))))
         q = product(e_general)
-        @test !Bramble._same_stencil_shape(q.left_op, q.right_op)
+        @test !Bramble._same_operator_shape(q.left_op, q.right_op, Bramble._SameStencil())
         @test Matrix(assemble(e)) == Matrix(assemble(e_general))
         @test !iszero(Matrix(assemble(e)))
     end

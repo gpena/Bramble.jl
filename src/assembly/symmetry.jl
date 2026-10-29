@@ -53,7 +53,6 @@ struct _SameOperator end
 struct _SameStencil end
 
 _same_operator_shape(a, b) = _same_operator_shape(a, b, _SameOperator())
-_same_stencil_shape(a, b) = _same_operator_shape(a, b, _SameStencil())
 
 function _same_operator_shape(
         ::TrialFunction{D, N}, ::TestFunction{D, M}, _
@@ -137,7 +136,7 @@ _same_operator_shape(a, b, _) = false
 
 # ==============================================================================
 # The assembly-level consumer: skip half the multiplications `multiply_stencils_bilinear`
-# does when the two sides are known (by `_same_stencil_shape`, in
+# does when the two sides are known (by `_same_operator_shape` with `_SameStencil()`, in
 # `local_stencil(::BilinearProduct, …)`, operators/inner.jl) to produce the same stencil.
 # ==============================================================================
 

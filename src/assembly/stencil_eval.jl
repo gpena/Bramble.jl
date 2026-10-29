@@ -605,8 +605,10 @@ end
 
 # The absent-read check of a product at `I`, which the stencil walk above and the factored
 # walk (`_factored_product!`, `bilinear_traversal.jl`) both make before reading a factor.
-# Off a ghost space there is nothing to check.
-@inline _check_product_reads(op, space, I, lin_idx::Int) = nothing
+# Off a ghost space there is nothing to check, and the no-op infers once, not once per
+# product type (21 instances of the 3D elasticity's first `assemble`, #855).
+Base.@nospecializeinfer @inline _check_product_reads(
+    @nospecialize(op), @nospecialize(space), I, lin_idx::Int) = nothing
 @inline function _check_product_reads(
         op::BilinearProduct{D}, space::_GhostSpace{D}, I::CartesianIndex{D}, lin_idx::Int
 ) where {D}

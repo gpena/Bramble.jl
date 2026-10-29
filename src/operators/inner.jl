@@ -1082,14 +1082,15 @@ end
 # Zero-Allocation Stencil Evaluators
 # ==============================================================================
 
-# When both sides give the same stencil (`_same_stencil_shape`, assembly/symmetry.jl), the
-# symmetric product computes each of the `N(N+1)/2` distinct products once. The test is
-# structural only and holds whatever spaces the trial and test range over.
+# When both sides give the same stencil (`_same_operator_shape` with `_SameStencil()`,
+# assembly/symmetry.jl), the symmetric product computes each of the `N(N+1)/2` distinct
+# products once. The test is structural only and holds whatever spaces the trial and test
+# range over.
 @inline function local_stencil(
         op::BilinearProduct{D, InnerType}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D, InnerType}
     vol = _stencil_weight(op.inner, space, I, lin_idx)
-    if _same_stencil_shape(op.left_op, op.right_op)
+    if _same_operator_shape(op.left_op, op.right_op, _SameStencil())
         stencil = local_stencil(op.left_op, space, I, markers, lin_idx)
         return multiply_stencils_bilinear_symmetric(stencil, vol)
     end

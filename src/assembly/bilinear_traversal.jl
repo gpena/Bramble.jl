@@ -660,12 +660,12 @@ end
 # double loop forms each entry where it is added and stores nothing. The entries are the
 # same, in the same order (left-major, as `multiply_stencils_bilinear` lays them out), with
 # the same arithmetic, `(l * r) * vol` and then each scale above the product, innermost
-# first, as `scale_stencil` applies them. A symmetric product (`_same_stencil_shape`)
-# evaluates its one factor once, as `multiply_stencils_bilinear_symmetric` does, and its
-# mirrored entry `r * l` is `l * r` bit for bit, since floating-point multiplication
-# commutes. So the matrix is unchanged, bit for bit. Warm `assemble!` of the 3D elasticity
-# form on 31x30x29 points, one thread: 1674 ns per unknown with the product stencil, 839
-# factored; 46x45x44 points: 1736 and 920 (#765).
+# first, as `scale_stencil` applies them. A symmetric product (`_same_operator_shape` with
+# `_SameStencil()`) evaluates its one factor once, as `multiply_stencils_bilinear_symmetric`
+# does, and its mirrored entry `r * l` is `l * r` bit for bit, since floating-point
+# multiplication commutes. So the matrix is unchanged, bit for bit. Warm `assemble!` of the
+# 3D elasticity form on 31x30x29 points, one thread: 1674 ns per unknown with the product
+# stencil, 839 factored; 46x45x44 points: 1736 and 920 (#765).
 #
 # Taken by the recording and the value replays only (`_factored_walk`): the coordinate walk
 # and the replays must enumerate one unit's entries identically, and they do either way, but
@@ -794,7 +794,7 @@ Base.@propagate_inbounds function _factored_product!(
 ) where {D, InnerType}
     vol = compute_weight(op.inner, sp, I, lin_idx)
     left = local_stencil(op.left_op, sp, I, markers, lin_idx)
-    if _same_stencil_shape(op.left_op, op.right_op)
+    if _same_operator_shape(op.left_op, op.right_op, _SameStencil())
         _loops_symmetric(left) && return _product_entries(
             sink, left, left, vol, scales, lin_indices, I, row_offset, col_offset, slot, g)
         return _stencil_entries(sink, multiply_stencils_bilinear_symmetric(left, vol),
@@ -1127,8 +1127,14 @@ end
 # `GhostMesh` passes as a pointer, but its walk state is an immutable of nested states,
 # copied at each such call: 2D padded vector Laplacian, 200x200 random, warm `assemble!`,
 # 2.62 ms through the state and 1.23 ms through `sp`, the plain composite 0.97 ms (#876).
-# A scalar term's taps on a bare leaf are inlined and keep the state.
-@inline _walk_space(sp, ::Type{T}) where {T} = _reads_component(T) ? sp : _walk_space(sp)
+# A scalar term's taps on a bare leaf are inlined and keep the state. Any other space is
+# its own walk space whatever `T`, so that method infers once, not once per term type
+# (21 instances of the 3D elasticity's first `assemble`, #855).
+Base.@nospecializeinfer @inline _walk_space(sp, @nospecialize(T::Type)) = sp
+@inline function _walk_space(
+        sp::ScalarGridSpace{D, E, VT, <:GhostMesh}, ::Type{T}) where {D, E, VT, T}
+    _reads_component(T) ? sp : _walk_space(sp)
+end
 
 # Whether a term of type `T` holds a component leaf, walking its fields and tuples of them.
 # A type it cannot see through answers `true`, so the walk reads `sp`.
