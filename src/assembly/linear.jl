@@ -218,6 +218,17 @@ function _lower_sources(op::ShiftNode{D, Dim}, space) where {D, Dim}
     return inner === op.inner_op ? op : ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
 end
 
+# Every other one-operand node (differences, averages, jumps) lowers its operand, as
+# `_lower_signs` does: the node reads its operand at the same points either way.
+_lower_sources(op::UnaryWrapper, space) = _rewrap_inner(op, _lower_sources(op.inner_op, space))
+
+# Two exceptions. A restricted source is called only at the points its region reaches, on
+# every assembly (`_typed_restrictions`, below): it may be undefined outside the region, and
+# `markers!` can move the region after `form`, so sampling it once here would break both.
+# An interpolation node keeps its operand as built.
+_lower_sources(op::RegionRestriction, space) = op
+_lower_sources(op::InterpolationNode, space) = op
+
 # --- Eager source lowering across a CompositeGridSpace's leaves --- #
 #
 # A non-composite space has exactly one leaf -- itself -- so `_lower_sources` (ast/common.jl,

@@ -700,14 +700,15 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 # only `interpolate_at` at fill time can see `uₕ`'s mesh move and refuse it; its type
 # depends on `uₕ`'s element type only, so it costs no recompilation either.
 #
-# The pass descends only `OperatorScale`, `GridFunctionScale` and `OperatorAdd` here, and
-# `ShiftNode` and `LinearProduct` in `assembly/linear.jl` (whose `_lower_sources_for_space`
-# routes `LinearProduct`/`OperatorAdd` across a `CompositeGridSpace`'s leaves). Every other
-# node is returned unchanged, including the stencil nodes (differences, averages, jumps) and
-# `RegionRestriction`, which can hold a `SourceFunction`: `innerₕ(D₋ₓ(sf), v)` keeps `sf`
-# unlowered, so its closure stays in the AST's type and is re-invoked at every fill. That is
-# a missed optimisation, not a wrong value (test/form/source_operators.jl, "wrapped source:
-# unlowered").
+# The pass descends `OperatorScale`, `GridFunctionScale` and `OperatorAdd` here, and
+# `LinearProduct` and every `UnaryWrapper` (differences, averages, jumps, shifts) in
+# `assembly/linear.jl` (whose `_lower_sources_for_space` routes `LinearProduct`/`OperatorAdd`
+# across a `CompositeGridSpace`'s leaves), so `innerₕ(D₋ₓ(sf), v)` samples `sf` under the
+# difference. Two wrappers are left unchanged. A `RegionRestriction` keeps its
+# `SourceFunction`, called only where its region reaches, on every assembly: the source may
+# be undefined outside the region, and `markers!` can move the region after `form`. An
+# `InterpolationNode` keeps its operand too (test/form/source_operators.jl, "wrapped source:
+# lowered under the node" and "restricted source: unlowered").
 @inline _lower_sources(op::LazyOp, space) = op
 
 @inline function _lower_sources(op::SourceFunction{D}, space) where {D}
