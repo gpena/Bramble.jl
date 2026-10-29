@@ -16,7 +16,7 @@ function _pc_solver_session()
     Ωₕ = mesh(Ω, 5, false)
     Wₕ = gridspace(Ωₕ)
     a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-    fₕ = Rₕ(Wₕ, x -> 1.0)
+    fₕ = element(Wₕ, 1.0)
     l = form(Wₕ, v -> innerₕ(fₕ, v))
 
     A = assemble(a; dirichlet = :boundary)

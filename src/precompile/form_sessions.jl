@@ -342,10 +342,10 @@ function _pc_form_assembly(
     # `_lower_sources_over_leaves`' target-known branch, sampling against that leaf's own
     # space -- a different path from the shared-across-leaves one right below it.
     _pc_assemble_composite(Vₕ, v -> innerₕ(f, v(1)), bv)
-    # A raw closure source naming no component: goes to every leaf, and is deliberately left
-    # unlowered (`_lower_sources_over_leaves`'s `target === nothing` branch) since leaves may
-    # not share a mesh -- checked here so that branch's own code path is precompiled too.
-    _pc_assemble_composite(Vₕ, v -> innerₕ(f, v), bv)
+    # A raw source naming no component also splits `(1, v)` of the whole composite test
+    # function (`_scale_parts`). Named here by type, so no closure source keys an instance.
+    precompile(Base.indexed_iterate, (Tuple{Int, TestFunction{D, 2}}, Int))
+    precompile(Base.indexed_iterate, (Tuple{Int, TestFunction{D, 2}}, Int, Int))
 
     # and the constrained right-hand side, which is a different path from the bare one
     bcs = dirichlet_constraints(Ωₕ, label => f)
@@ -409,7 +409,7 @@ end
 
 function _pc_form_reaction(Wₕ::ScalarGridSpace)
     a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-    fₕ = Rₕ(Wₕ, x -> 1.0)
+    fₕ = element(Wₕ, 1.0)
     l = form(Wₕ, v -> innerₕ(fₕ, v))
     A = assemble(a)
     F = assemble(l)
@@ -512,7 +512,7 @@ function _pc_form_nested(Ωₕ::AbstractMeshType, dim_val::Val)
 end
 
 function _pc_nested_plain(Wₕ::ScalarGridSpace, dim_val::Val)
-    fₕ = Rₕ(Wₕ, x -> 1.0)
+    fₕ = element(Wₕ, 1.0)
     assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Δₕ(u), v)))
     assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, Δₕ(v))))
     assemble(form(Wₕ, v -> innerₕ(fₕ, Δₕ(v))))

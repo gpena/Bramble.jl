@@ -135,7 +135,7 @@ function _pc_interpolation_session(Ω_src, Ω_dest)
     W_src = gridspace(Ω_src)
     W_dest = gridspace(Ω_dest)
 
-    u_src = Rₕ(W_src, x -> 1.0)
+    u_src = element(W_src, 1.0)
     u_dest = element(W_dest)
 
     interpolate_at(u_src, point(Ω_dest, first(indices(Ω_dest))))

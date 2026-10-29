@@ -49,7 +49,7 @@
 # the residual, `jacobian!`, `jacobian_prototype` and display paths against each.
 function _pc_semidiscretize_session(Wₕ::ScalarGridSpace, label::Symbol)
     a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-    fₕ = Rₕ(Wₕ, x -> 1.0)
+    fₕ = element(Wₕ, 1.0)
     l = form(Wₕ, v -> innerₕ(fₕ, v))
 
     n = ndofs(Wₕ)
@@ -112,7 +112,7 @@ end
 
 function _pc_rhs_session(Wₕ::ScalarGridSpace)
     a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-    fₕ = Rₕ(Wₕ, x -> 1.0)
+    fₕ = element(Wₕ, 1.0)
     l = form(Wₕ, v -> innerₕ(fₕ, v))
 
     n = ndofs(Wₕ)
