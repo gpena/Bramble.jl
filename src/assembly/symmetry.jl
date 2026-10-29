@@ -166,7 +166,8 @@ end
 
 # Every summand of `op` as `(scalings, term)`, the scalings being every `OperatorScale`
 # factor above the term, outermost first. `false` when a summand is neither a product nor a
-# collapsed zero.
+# collapsed zero. This and `_is_symmetric_sum` are query-time only, one call per
+# `issymmetric`, hence the `Vector{Any}` storage.
 function _collect_scaled_terms!(out::Vector{Tuple{Vector{Any}, Any}}, scales::Vector{Any}, op)
     if op isa OperatorAdd
         return _collect_scaled_terms!(out, scales, op.left_op) &&
