@@ -142,16 +142,8 @@ function _pc_form_dirichlet(Ωₕ::AbstractMeshType, Wₕ, Vₕ, be, label::Symb
     conditions(bcs)
 
     n, nv = ndofs(Wₕ), ndofs(Vₕ)
-    A = matrix(be, n, n)
-    A .= 0
-    for i in 1:n
-        A[i, i] = 1.0
-    end
-    Av = matrix(be, nv, nv)
-    Av .= 0
-    for i in 1:nv
-        Av[i, i] = 1.0
-    end
+    A = backend_eye(be, n)
+    Av = backend_eye(be, nv)
     F, Fv = ones(n), ones(nv)
 
     dirichlet_bc!(A, Ωₕ, label)

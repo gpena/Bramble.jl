@@ -45,12 +45,19 @@
 # non-uniform mesh, single whole-boundary label) a caller building a non-uniform mesh (the
 # common case, bramble-verification's "non-uniform is the point") actually hits.
 
-# One space, one `a`/`l` pair, the two constraint kinds precompiling actually helps, plus
-# the residual, `jacobian!`, `jacobian_prototype` and display paths against each.
-function _pc_semidiscretize_session(Wₕ::ScalarGridSpace, label::Symbol)
+# The scalar Poisson pair both sessions below assemble, written once so the two share one
+# closure type each for `form` (gpena/Bramble.jl#1081).
+function _pc_poisson(Wₕ::ScalarGridSpace)
     a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     fₕ = element(Wₕ, 1.0)
     l = form(Wₕ, v -> innerₕ(fₕ, v))
+    return a, l
+end
+
+# One space, one `a`/`l` pair, the two constraint kinds precompiling actually helps, plus
+# the residual, `jacobian!`, `jacobian_prototype` and display paths against each.
+function _pc_semidiscretize_session(Wₕ::ScalarGridSpace, label::Symbol)
+    a, l = _pc_poisson(Wₕ)
 
     n = ndofs(Wₕ)
     du = zeros(n)
@@ -111,9 +118,7 @@ function _pc_rhs_session(::Val{2})
 end
 
 function _pc_rhs_session(Wₕ::ScalarGridSpace)
-    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-    fₕ = element(Wₕ, 1.0)
-    l = form(Wₕ, v -> innerₕ(fₕ, v))
+    a, l = _pc_poisson(Wₕ)
 
     n = ndofs(Wₕ)
     u = zeros(n)

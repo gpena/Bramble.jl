@@ -76,7 +76,6 @@ function _pc_space_session(Ωₕ, f, g, marker::Symbol)
     # `values`/`values!`, not the deprecated names themselves.
     copyto!(uₕ, parent(bₕ))
     copyto!(uₕ, bₕ)
-    copyto!(uₕ, parent(bₕ))
 
     uₕ[1]
     uₕ[2] = 99.0
