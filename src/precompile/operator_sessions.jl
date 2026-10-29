@@ -181,7 +181,8 @@ function _pc_operator_session(uₕ, cₕ, dim_val::Val)
     # Float64 only: the Float32 2D session below would otherwise rebuild the same
     # Float64 mesh a second time for no extra coverage.
     dim_val isa Val{2} && eltype(uₕ) === Float64 && _pc_strain_tensor_session()
-    eltype(uₕ) === Float64 && _pc_shift_form_session(dim_val)
+    # Not 3D: as form_sessions.jl says, a 3D form costs 78-114 ms of build each (#1023)
+    !(dim_val isa Val{3}) && eltype(uₕ) === Float64 && _pc_shift_form_session(dim_val)
     return nothing
 end
 
@@ -202,27 +203,27 @@ end
 # The index shifts. Only the form session below is cached: a first call of a shift on a grid
 # function costs about 7 ms, too little to pay for its share of the package build, so the
 # grid-function shifts are left to first use.
-const _PC_SHIFTS = (S₊ₓ, S₋ₓ, S₊ᵧ, S₋ᵧ, S₊₂, S₋₂)
+# Forward only: `S₋ₓ(u)` builds the same `ShiftNode` type as `S₊ₓ(u)`, the amount a field.
+const _PC_SHIFTS = (S₊ₓ, S₊ᵧ)
 
 # The index shifts inside a form: the form session reaches no `ShiftNode` otherwise, only
-# `shift_op(id, 1, 1)` as a stencil that is never assembled. On a non-uniform mesh of each
-# dimension, along each direction. Two forms are built. One is the neighbour sum written with
+# `shift_op(id, 1, 1)` as a stencil that is never assembled. On a non-uniform mesh in 1D
+# and 2D, along each direction. Two forms are built. One is the neighbour sum written with
 # the exported vectorial aliases, `S₊ₕ(u)[d] + S₋ₕ(u)[d]` (in 1D, `[1]` takes a component of
-# the single node rather than a direction, a node of its own). The other is, per shift, the
-# shifted unknown alone, `innerₕ(S(u), v)`, as its own form. Assembly specializes on the
-# whole form, so the sum does not cache the single term.
+# the single node rather than a direction, a node of its own). The other is, per direction,
+# the forward-shifted unknown alone, `innerₕ(S(u), v)`, as its own form. Assembly
+# specializes on the whole form, so the sum does not cache the single term.
 # Compositions (`S(D₋ₓ(u))`, `S(jumpₓ(u))`, ...) are left to first use: each is a form type
 # of its own, and caching one would be picking the tests' cases. Float64 only, as the tests
 # and the solvers assemble.
 function _pc_shift_form_session(::Val{D}) where {D}
     X, n = D == 1 ? (interval(0.0, 1.0), 6) :
-           D == 2 ? (interval(0.0, 1.0) × interval(0.0, 1.0), (5, 4)) :
-           (box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)), (4, 3, 3))
+           (interval(0.0, 1.0) × interval(0.0, 1.0), (5, 4))
     Wₕ = gridspace(mesh(domain(X), n, map(_ -> false, n)))
     # `map` over the tuples rather than a loop: each direction and each shift is its own
     # type, and `map` hands each one on with that type known
     map(dim_val -> _pc_neighbour_sum(Wₕ, dim_val), ntuple(Val, Val(D)))
-    map(S -> _pc_shift_form(Wₕ, S), ntuple(k -> _PC_SHIFTS[k], Val(2D)))
+    map(S -> _pc_shift_form(Wₕ, S), ntuple(k -> _PC_SHIFTS[k], Val(D)))
     return nothing
 end
 
