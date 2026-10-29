@@ -1361,7 +1361,8 @@ contract into an accumulator, sweep threaded. It is now written once
 here, and the three consumers differ only in what they do per leaf.
 
 Recursing the tree rather than flattening it into a vector of terms first avoids allocation
-(see `_visit_operator_add2` and `_fold_operator_add` in assembly/stencil_eval.jl).
+(see `_summands` and `_visit_operator_add2` in assembly/stencil_eval.jl, and
+`_fold_summands` above).
 =#
 
 # Which leaves a term goes to. Resolved once per term, not once per (term, leaf).
@@ -1445,7 +1446,9 @@ function _contract_term(
 end
 
 function _route_terms_contract(op::OperatorAdd, acc, leaves, v)
-    return _fold_operator_add(_route_terms_contract, op, acc, leaves, v)
+    return _fold_summands(_summands(op), acc) do term, a
+        return _route_terms_contract(term, a, leaves, v)
+    end
 end
 
 function _route_terms_contract(term::TERM, acc::T, leaves, v) where {TERM, T}

@@ -614,7 +614,7 @@ function _derivative_weights!(
     return nothing
 end
 
-const _DIFFERENCE_OP_CONFIGS = [
+const _DIFFERENCE_OP_CONFIGS = (
     (
         direction = Forward(),
         diff_name = :forward_difference,
@@ -651,7 +651,7 @@ const _DIFFERENCE_OP_CONFIGS = [
         unscaled_stencil_op = :UnscaledBackwardDiffOp,
         finite_stencil_op = :BackwardFiniteDiffOp
     )
-]
+)
 
 for config in _DIFFERENCE_OP_CONFIGS
     dir_instance = config.direction
