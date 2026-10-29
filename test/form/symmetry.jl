@@ -147,8 +147,9 @@ using Bramble:
               Bramble.BackwardDifference{<:Any, <:Any, <:Bramble.IndexedTrialFunction}
         ci = only(code_typed(Bramble._same_operator_shape,
             (typeof(p.left_op), typeof(p.right_op), Bramble._SameStencil)))[1]
-        @test length(ci.code) == 1 && ci.code[1] isa Core.ReturnNode &&
-              ci.code[1].val === true
+        # A coverage run (CI) adds a `code_coverage_effect` per line ahead of the return
+        code = filter(s -> !Meta.isexpr(s, :code_coverage_effect), ci.code)
+        @test length(code) == 1 && code[1] isa Core.ReturnNode && code[1].val === true
         @test !Bramble._same_operator_shape(p.left_op, p.right_op)
         @test !issymmetric(e)
         @test !isposdef(e)
