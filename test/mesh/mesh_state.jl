@@ -6,7 +6,8 @@ using Bramble
 using Bramble: markers, markers!, index_in_marker, is_uniform, change_points!, set_points!,
                iterative_refinement!, points, npoints, spacing, half_spacing, cell_measure,
                point, indices, half_points, spacings, half_spacings, _walk_mesh,
-               _marker_words, _marker_id, _mesh_version, Mesh1D, Mesh1DState, MeshnDState
+               _marker_words, _marker_id, _marker_stamp, _mesh_version, Mesh1D, Mesh1DState,
+               MeshnDState, set_markers!, restrict_to
 using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
 
 # The immutable mesh state (gpena/Bramble.jl#437): geometry, version, uniformity flag and
@@ -40,6 +41,18 @@ function _meshes()
              (mesh(domain(I × I × I, :c => x -> x[1] < 0.5), (5, 4, 6), (false, true, false)),) :
              ())...))
 end
+
+# Sets and predicates for re-marking a mesh after its points move, 3D in `slow` as above.
+_c1(x) = x < 0.4
+_c2(x) = x[1] + x[2] < 0.7
+_c3(x) = x[1] < 0.5
+# A second predicate, of another type: re-marking walks a heterogeneous tuple of them.
+_d(x) = first(x) > 0.8
+_remark_cases() = ((I, _c1), (I × I, _c2), (WITH_3D_TESTS ? ((I × I × I, _c3),) : ())...)
+# `f` on each axis of a mesh's points, a vector in 1D and a tuple of vectors otherwise.
+_axes_map(f, p) = p isa Tuple ? map(f, p) : f(p)
+# `c` at every point of `Ωₕ`, in linear order.
+_evaluated(c, Ωₕ) = BitVector(vec([c(point(Ωₕ, i)) for i in indices(Ωₕ)]))
 
 @testset "Mesh state (#437)" begin
     @testset "State: plain, immutable, typed" begin
@@ -345,6 +358,52 @@ end
             @test_allocs is_uniform(Ωₕ)
             @test_allocs index_in_marker(Ωₕ, :c)
             @test_allocs _marker_id(Ωₕ, :c)
+        end
+    end
+
+    @testset "Re-marking keeps the storage" begin
+        for (X, c) in _remark_cases(), k in (1, 4)
+
+            D = Bramble.dim(X)
+            Ω = domain(X, :l => :left, :w => (:left, :right), :c => c, :d => _d)
+            dm = markers(Ω)
+            Ωₕ = D == 1 ? mesh(Ω, 9k, false) : mesh(Ω, ntuple(d -> 3k + d, D), ntuple(_ -> false, D))
+            mm, W = markers(Ωₕ), _marker_words(Ωₕ)
+            cbits = mm[:c]
+
+            # Uniform points, then their square roots: every point but the ends moves right
+            # and `:c` shrinks, so a stale bit would survive without a clear.
+            u = _axes_map(q -> collect(range(0.0, 1.0; length = length(q))), points(Ωₕ))
+            change_points!(Ωₕ, dm, u)
+            c0 = copy(mm[:c])
+            p = _axes_map(q -> sqrt.(q), u)
+            change_points!(Ωₕ, dm, p)
+            @test markers(Ωₕ) === mm && mm[:c] === cbits && _marker_words(Ωₕ) === W
+            @test mm[:c] == _evaluated(c, Ωₕ)
+            @test mm[:c] != c0
+            @test mm[:interior] == .!mm[:boundary] && count(mm[:l]) > 0
+            @test words_agree(Ωₕ)
+
+            @test_allocs set_markers!(Ωₕ, dm)
+            @test_allocs change_points!(Ωₕ, dm, p)
+
+            # The stamp is still redrawn, so a cached assembly re-reads the emptied region.
+            Wₕ = gridspace(Ωₕ)
+            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(restrict_to(:c, u), v))
+            A = assemble(a)
+            s0 = _marker_stamp(Ωₕ)
+            nowhere = _ -> false
+            set_markers!(Ωₕ, markers(domain(X, :l => :left, :w => (:left, :right), :c => nowhere, :d => _d)))
+            @test markers(Ωₕ) === mm && mm[:c] == _evaluated(nowhere, Ωₕ)
+            @test mm[:c] != _evaluated(c, Ωₕ)
+            @test _marker_stamp(Ωₕ) != s0
+            assemble!(A, a)
+            @test A == assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(restrict_to(:c, u), v)))
+
+            # A different label set still rebuilds the table.
+            set_markers!(Ωₕ, markers(domain(X, :r => :right)))
+            @test markers(Ωₕ) !== mm && haskey(markers(Ωₕ), :r) && !haskey(markers(Ωₕ), :c)
+            @test words_agree(Ωₕ)
         end
     end
 end

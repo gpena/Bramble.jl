@@ -152,6 +152,11 @@ Supports five classes of domain markers:
 
 Also seeds the default geometric markers `:boundary` and `:interior` if not already defined.
 
+When `domain_markers` holds the labels `Ωₕ` already has, at its current point count, they are
+re-evaluated into the stored `BitVector`s rather than into new ones, so a `BitVector` read
+from [`markers`](@ref) before the call holds the new set after it. A changed label set
+builds the markers afresh.
+
 # Arguments
 
   - `Ωₕ`: Target mesh whose `markers` field is populated.
@@ -195,6 +200,7 @@ end
 # (`fitted`, one entry per region, `nothing` for a polygon marker, whose own polygon labels).
 function _set_markers!(Ωₕ::AbstractMeshType, domain_markers, fitted::Tuple;
         warn_marker_mismatch::Bool = true)
+    _remark_in_place!(Ωₕ, domain_markers, fitted) && return nothing
     mesh_markers = _init_mesh_markers(Ωₕ, domain_markers)
 
     _set_markers_symbols!(mesh_markers, symbols(domain_markers), Ωₕ)
@@ -216,12 +222,90 @@ function _set_markers!(Ωₕ::AbstractMeshType, domain_markers, fitted::Tuple;
 end
 
 #=
+Re-marking in place. When `domain_markers` names the labels `Ωₕ` already stores, at the
+point count its `BitVector`s and word matrix were built for, and the same predicate labels,
+the labels are re-evaluated into the stored `BitVector`s and copied into their word columns:
+the dictionary, the label table, the word matrix and every label's column stay where they
+are, so `change_points!(Ωₕ, markers(Ω), pts)` in a time loop allocates nothing. Only the
+marker stamp is redrawn, which tells cached assemblies to re-read the labels. A label-set
+change, and a domain that defines `:boundary` or `:interior` itself (whose mismatch check
+needs the geometric set beside the custom one), take the rebuild above.
+=#
+
+# A `GhostMesh` always rebuilds; `Mesh1D` and `MeshnD` take `_remark_markers!` (their files).
+_remark_in_place!(::AbstractMeshType, domain_markers, fitted::Tuple) = false
+
+function _remark_markers!(Ωₕ::AbstractMeshType, domain_markers, fitted::Tuple)
+    _same_marker_layout(Ωₕ, domain_markers) || return false
+    mm = markers(Ωₕ)
+    for bits in values(mm)
+        fill!(bits, false)
+    end
+    _set_markers_symbols!(mm, symbols(domain_markers), Ωₕ)
+    _set_markers_symbols!(mm, tuples(domain_markers), Ωₕ)
+    _set_markers_conditions!(mm, conditions(domain_markers), Ωₕ)
+    _set_markers_regions!(mm, regions(domain_markers), fitted, Ωₕ)
+
+    boundary = mm[:boundary]
+    linear_indices = LinearIndices(npoints(Ωₕ, Tuple))
+    for idxs in boundary_indices(Ωₕ)
+        _mark_indices!(boundary, linear_indices, idxs)
+    end
+    map!(!, mm[:interior], boundary)
+
+    words = _marker_words(Ωₕ)
+    nwords = size(words, 1)
+    for (l, j) in _marker_ids(Ωₕ)
+        copyto!(words, (j - 1) * nwords + 1, mm[l].chunks, 1, nwords)
+    end
+    setfield!(Ωₕ, :marker_stamp, _next_mesh_uid())
+    return true
+end
+
+# Whether `domain_markers` re-marks `Ωₕ` without changing its storage: the stored labels are
+# exactly the domain's plus `:boundary` and `:interior`, every `BitVector` and word column
+# is sized for the current points, and the predicate labels are the stored ones, in order.
+function _same_marker_layout(Ωₕ::AbstractMeshType, domain_markers)
+    mm, ids, words = markers(Ωₕ), _marker_ids(Ωₕ), _marker_words(Ωₕ)
+    n = npoints(Ωₕ)
+    (words isa Matrix{UInt64} && size(words) == (cld(n, 64), length(mm)) &&
+     length(ids) == length(mm)) || return false
+    (haskey(ids, :boundary) && haskey(ids, :interior)) || return false
+
+    syms = map(label, symbols(domain_markers))
+    tups = map(label, tuples(domain_markers))
+    conds = map(label, conditions(domain_markers))
+    regs = map(_region_marker_labels, regions(domain_markers))
+    stored(l) = l !== :boundary && l !== :interior && haskey(ids, l) &&
+                length(mm[l]) == n
+    (all(stored, syms) && all(stored, tups) && all(stored, conds) &&
+     all(r -> all(stored, r), regs)) || return false
+    named(l) = l === :boundary || l === :interior || l in syms || l in tups || l in conds ||
+               any(r -> l in r, regs)
+    all(named, keys(mm)) || return false
+
+    plabels = _predicate_labels(Ωₕ)
+    length(plabels) == length(conds) + 3 * length(regs) || return false
+    for (k, l) in enumerate(conds)
+        plabels[k] === l || return false
+    end
+    k = length(conds)
+    for r in regs, l in r
+
+        k += 1
+        plabels[k] === l || return false
+    end
+    return true
+end
+
+#=
 The marker word matrix (gpena/Bramble.jl#437). A mesh keeps its public `MeshMarkers`
 dictionary, whose `BitVector`s `markers(Ωₕ)` and `index_in_marker` return as they are, and
 beside it a label-to-column table and one `Matrix{UInt64}` holding the same bits: column
 `_marker_id(Ωₕ, label)` is that label's `BitVector` chunks. Only the matrix and the integer
 ids cross a task boundary. All three are built together by `_marker_table`, whenever the
-label set is stored (`set_markers!`, `markers!`); the matrix is never resized in place.
+label set is stored (`set_markers!`, `markers!`); the matrix is never resized in place. A
+`set_markers!` that keeps the label set overwrites the columns instead (`_remark_markers!`).
 =#
 
 """
@@ -415,12 +499,13 @@ end
 
 Iterate through all function-based markers and evaluate them across the mesh.
 """
-function _set_markers_conditions!(mesh_markers::MeshMarkers, conditions, Ωₕ)
-    for marker in conditions
-        (; label, identifier) = marker
-        __process_condition!(mesh_markers[label], identifier, Ωₕ)
-    end
-    return nothing
+function _set_markers_conditions!(mesh_markers::MeshMarkers, conditions::Tuple, Ωₕ)
+    isempty(conditions) && return nothing
+    # Unrolled by recursion: each predicate is its own closure type, and a loop over the
+    # heterogeneous tuple would box them.
+    (; label, identifier) = first(conditions)
+    __process_condition!(mesh_markers[label], identifier, Ωₕ)
+    return _set_markers_conditions!(mesh_markers, Base.tail(conditions), Ωₕ)
 end
 
 #=

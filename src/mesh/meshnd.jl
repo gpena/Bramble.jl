@@ -178,6 +178,10 @@ function _store_markers!(Ωₕ::MeshnD, mesh_markers, predicate_labels = Symbol[
     return nothing
 end
 
+# Re-marks in place when the label set is unchanged (`_remark_markers!`, marker.jl).
+_remark_in_place!(Ωₕ::MeshnD, domain_markers, fitted::Tuple) = _remark_markers!(
+    Ωₕ, domain_markers, fitted)
+
 """
     submeshes(Ω::Domain, npts, unif, backend) -> NTuple{D, Mesh1D}
 
