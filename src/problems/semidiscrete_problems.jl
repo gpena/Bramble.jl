@@ -56,7 +56,9 @@ function ode_function(sd::Semidiscretization; kwargs...)
     return _ode_function(sd; kwargs...)
 end
 
-function ode_function(
+# `@constprop` carries a literal `reassemble` through `kwargs...` into `semidiscretize`, which
+# lifts it into the `Semidiscretization` type; without it the result is a `UnionAll` (#981).
+Base.@constprop :aggressive function ode_function(
         a::BilinearForm, l::LinearForm;
         jacobian = jacobian!, jac_prototype = nothing, tgrad = nothing, kwargs...
 )

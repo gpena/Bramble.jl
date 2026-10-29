@@ -5,6 +5,7 @@ using Bramble
 using Bramble: MatrixFreeOperator, VectorElement, trial_space, test_space, restrict_to, πₕ, jumpₓ, M₊ₓ, D₋ₓ, D₊ₓ, D₋ᵧ,
                D₊ᵧ
 using LinearAlgebra: mul!, norm, dot
+using ForwardDiff
 using Random
 using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _graded_mesh, _grid_sample
 
@@ -639,6 +640,64 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
                 @test _mf_alloc3(zeros(2m), opd, x) == 0
             end
         end
+    end
+
+    # An `Integer` or `Bool` α enters the walk in the operator's element type, so it
+    # compiles no walk instance beyond a float α's and gives its bits (#991); a float or
+    # `Dual` α keeps its type, a `Float64` one on a `Float32` operator unrounded.
+    @testset "Integer and Bool α (#991)" begin
+        g(n, k) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2k)
+        Ω = mesh(domain(Bramble.box((0.0, 0.0), (1.0, 1.0))), (9, 11))
+        Bramble.change_points!(Ω, (g(9, 1), g(11, 2)))
+        W = gridspace(Ω)
+        a = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(D₋ᵧ(u), v) +
+                                 3.0 * innerₕ(u, v))
+        op = matrix_free_operator(a; dirichlet = :boundary)
+        n = size(op, 1)
+        x = collect(range(0.1, 1.0; length = n))
+        y0 = collect(range(-1.0, 1.0; length = n))
+        walks() = sum(m -> count(!isnothing, Base.specializations(m)),
+            [collect(methods(Bramble._mf_gather!));
+             collect(methods(Bramble._mf_scatter_shell!))])
+        yf = copy(y0)
+        mul!(yf, op, x, -1.0, 1.0)
+        c = walks()
+        yi = copy(y0)
+        mul!(yi, op, x, -1, 1)
+        yb = copy(y0)
+        mul!(yb, op, x, true, true)
+        y3 = zeros(n)
+        mul!(y3, op, x)
+        @test walks() == c
+        @test yi == yf
+        yt = copy(y0)
+        mul!(yt, op, x, 1.0, 1.0)
+        @test yb == yt
+        @test y3 == op * x
+        @test y3 == mul!(zeros(n), op, x, 1.0, 0.0)
+
+        # `false` stays a strong zero on every row, `NaN` in `x` or not, and a `BigInt` α
+        # widens the product as `big(3) * w` does, rounding once on store.
+        xn = copy(x)
+        xn[50] = NaN
+        yz = mul!(copy(y0), op, xn, false, true)
+        @test yz == y0
+        ybig = mul!(fill(1.0, n), op, x, big(3), 1)
+        @test ybig == mul!(fill(1.0, n), op, x, big(3.0), 1)
+        @test ybig != mul!(fill(1.0, n), op, x, 3.0, 1)
+
+        @test Bramble._mf_alpha(Float64, -1) === -1.0
+        @test Bramble._mf_alpha(Float32, true) === 1.0f0
+        @test Bramble._mf_alpha(Float64, big(3)) == big(3)
+        @test Bramble._mf_alpha(Float64, big(3)) isa BigInt
+        @test Bramble._mf_alpha(Float32, 0.1) === 0.1
+        @test Bramble._mf_alpha(Float64, 0.5f0) === 0.5f0
+        @test Bramble._mf_alpha(Float64, 2.0im) === 2.0im
+        d = ForwardDiff.Dual(2.0, 1.0)
+        @test Bramble._mf_alpha(Float64, d) === d
+        yd = mul!(zeros(typeof(d), n), op, x, d, false)
+        @test ForwardDiff.value.(yd) == mul!(zeros(n), op, x, 2.0, false)
+        @test ForwardDiff.partials.(yd, 1) == mul!(zeros(n), op, x, 1.0, false)
     end
 
     # Both `show` forms print one line, never the dense printer's one product per entry.

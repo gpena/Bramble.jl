@@ -5,12 +5,17 @@ using Test
 # #763 step 3. The first `assemble` of 3D elasticity compiled 2611 method instances
 # module-wide at a70e3159 (2643 on 8065ffb3), most of them per term type in the block and
 # pair walks, the marker scans, the type-level pair plan and the element-type fold through
-# every prefix of the sum. The bound is three quarters of 2611. Counting method instances
-# is a deterministic proxy for the inference half of compile time, which a shared runner
-# cannot time. It runs in a fresh process, so earlier test files cannot have compiled any of
-# them already. The matrix is checked against `nnz` and `norm` pinned to what 8bf56e95,
-# before this change, assembles, and against `assemble_parallel!`'s matrix, whose threaded
-# replay evaluates each point through `_replay_point!`, not the serial walk.
+# every prefix of the sum. The bound is three quarters of 2611. Under the nightly's flags
+# (`--optimize=1 --check-bounds=yes --inline=yes`) the count was 1924 at 9c34251c and 1977
+# at bda0619d, over the bound: a no-op `_check_product_reads` off a ghost space (29119591),
+# a `_walk_space(sp, ::Type{T})` on a plain space (e2e8df7f) and a forwarding
+# `_same_stencil_shape` (6db0596d) each specialised once per term, 21 apiece. With the
+# three removed it is 1914 (#855). Counting method instances is a deterministic proxy for
+# the inference half of compile time, which a shared runner cannot time. It runs in a
+# fresh process, so earlier test files cannot have compiled any of them already. The matrix
+# is checked against `nnz` and `norm` pinned to what 8bf56e95, before this change,
+# assembles, and against `assemble_parallel!`'s matrix, whose threaded replay evaluates
+# each point through `_replay_point!`, not the serial walk.
 # `matrix_free_operator` would not do: it walks through `visit_bilinear_stencil` too.
 const ELASTICITY_COUNT = raw"""
 using Bramble, Random, LinearAlgebra, SparseArrays

@@ -442,12 +442,20 @@ end
 @inline function _inner_gamma(::Val{D}, markers) where {D}
     labels = _as_labels(markers)
     isempty(labels) && _throw_no_surface_labels()
-    return InnerGamma{_SurfaceLabels{labels}}()
+    return InnerGamma{_canonical_labels(_SurfaceLabels{labels})}()
 end
 
 # The labels a surface weight names, before `form` resolves them to faces through
 # `_surface_mask` (mesh/queries.jl), the resolution the numeric `inner_Γ` makes.
 struct _SurfaceLabels{L} end
+
+# One type per label set, whatever the order or repeats: `L` sorted and de-duplicated on
+# the type, so the constant the builder propagates folds through it and `form` compiles
+# once for `(:xmax, :ymax)` and `(:ymax, :xmax)` (gpena/Bramble.jl#1001). Sorting the
+# runtime tuple instead may stop that propagation and leave `form` a `Union`.
+@generated function _canonical_labels(::Type{_SurfaceLabels{L}}) where {L}
+    return _SurfaceLabels{Tuple(sort!(unique(collect(L))))}
+end
 
 # The faces of every surface product in `ast`, resolved on the mesh of the leaf its sweep
 # walks: a leaf of the test space `Vₕ`, or of the trial space `Wₕ` when the product
@@ -1074,14 +1082,15 @@ end
 # Zero-Allocation Stencil Evaluators
 # ==============================================================================
 
-# When both sides are the same operator chain (`_same_operator_shape`), their stencils
-# are equal, so the symmetric product computes each of the `N(N+1)/2` distinct products
-# once. The test is structural only and holds whatever spaces the trial and test range over.
+# When both sides give the same stencil (`_same_operator_shape` with `_SameStencil()`,
+# assembly/symmetry.jl), the symmetric product computes each of the `N(N+1)/2` distinct
+# products once. The test is structural only and holds whatever spaces the trial and test
+# range over.
 @inline function local_stencil(
         op::BilinearProduct{D, InnerType}, space, I::CartesianIndex{D}, markers, lin_idx::Int
 ) where {D, InnerType}
     vol = _stencil_weight(op.inner, space, I, lin_idx)
-    if _same_operator_shape(op.left_op, op.right_op)
+    if _same_operator_shape(op.left_op, op.right_op, _SameStencil())
         stencil = local_stencil(op.left_op, space, I, markers, lin_idx)
         return multiply_stencils_bilinear_symmetric(stencil, vol)
     end

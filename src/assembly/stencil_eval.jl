@@ -605,8 +605,10 @@ end
 
 # The absent-read check of a product at `I`, which the stencil walk above and the factored
 # walk (`_factored_product!`, `bilinear_traversal.jl`) both make before reading a factor.
-# Off a ghost space there is nothing to check.
-@inline _check_product_reads(op, space, I, lin_idx::Int) = nothing
+# Off a ghost space there is nothing to check, and the no-op infers once, not once per
+# product type (21 instances of the 3D elasticity's first `assemble`, #855).
+Base.@nospecializeinfer @inline _check_product_reads(
+    @nospecialize(op), @nospecialize(space), I, lin_idx::Int) = nothing
 @inline function _check_product_reads(
         op::BilinearProduct{D}, space::_GhostSpace{D}, I::CartesianIndex{D}, lin_idx::Int
 ) where {D}
@@ -1288,18 +1290,4 @@ end
 @inline function _visit_operator_add3(f::F, a1, a2, op::OperatorAdd, rest...) where {F}
     map(t -> f(a1, a2, t, rest...), _summands(op))
     return nothing
-end
-
-# `op` first, an accumulator threaded through both children and returned:
-# `_route_terms_contract` (`assembly/linear.jl`).
-#
-# The `_visit_operator_add*` members above each return one of their own arguments unchanged,
-# so they walk for side effects and cannot fold a value. Contraction threads an accumulator,
-# so it hand-recursed instead. The family had a hole and its one folding caller quietly
-# stepped around it rather than the family gaining this (gpena/Bramble.jl#55). The
-# accumulator is the second positional argument, mirroring `_visit_operator_add2`'s
-# `first_arg` slot, so the walk order reads the same across the family.
-@inline function _fold_operator_add(f::F, op::OperatorAdd, acc, rest...) where {F}
-    acc = f(op.left_op, acc, rest...)
-    return f(op.right_op, acc, rest...)
 end

@@ -76,7 +76,6 @@ function _pc_space_session(Ωₕ, f, g, marker::Symbol)
     # `values`/`values!`, not the deprecated names themselves.
     copyto!(uₕ, parent(bₕ))
     copyto!(uₕ, bₕ)
-    copyto!(uₕ, parent(bₕ))
 
     uₕ[1]
     uₕ[2] = 99.0
@@ -135,7 +134,7 @@ function _pc_interpolation_session(Ω_src, Ω_dest)
     W_src = gridspace(Ω_src)
     W_dest = gridspace(Ω_dest)
 
-    u_src = Rₕ(W_src, x -> 1.0)
+    u_src = element(W_src, 1.0)
     u_dest = element(W_dest)
 
     interpolate_at(u_src, point(Ω_dest, first(indices(Ω_dest))))

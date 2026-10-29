@@ -204,7 +204,7 @@ function _ghost_mf_bands!(y, op::GhostMatrixFreeOperator, x, α, β)
     _closure_columns_band!(op.xpad, SparseArrays.getcolptr(Et), rowvals(Et), nonzeros(Et),
         x, cols.ptr, cols.lo, cols.hi, cols.grid, cols.lines, 1, 1)
     fill!(op.ypad, zero(eltype(op.ypad)))
-    s = ActionSink(op.ypad, op.xpad, true, nothing, nothing)
+    s = ActionSink(op.ypad, op.xpad, _mf_alpha(eltype(op.padded), true), nothing, nothing)
     shared = Ref((y, op, α, β, s))
     @sync begin
         for b in 2:nb

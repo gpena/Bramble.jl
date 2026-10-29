@@ -218,6 +218,17 @@ function _lower_sources(op::ShiftNode{D, Dim}, space) where {D, Dim}
     return inner === op.inner_op ? op : ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
 end
 
+# Every other one-operand node (differences, averages, jumps) lowers its operand, as
+# `_lower_signs` does: the node reads its operand at the same points either way.
+_lower_sources(op::UnaryWrapper, space) = _rewrap_inner(op, _lower_sources(op.inner_op, space))
+
+# Two exceptions. A restricted source is called only at the points its region reaches, on
+# every assembly (`_typed_restrictions`, below): it may be undefined outside the region, and
+# `markers!` can move the region after `form`, so sampling it once here would break both.
+# An interpolation node keeps its operand as built.
+_lower_sources(op::RegionRestriction, space) = op
+_lower_sources(op::InterpolationNode, space) = op
+
 # --- Eager source lowering across a CompositeGridSpace's leaves --- #
 #
 # A non-composite space has exactly one leaf -- itself -- so `_lower_sources` (ast/common.jl,
@@ -1361,7 +1372,8 @@ contract into an accumulator, sweep threaded. It is now written once
 here, and the three consumers differ only in what they do per leaf.
 
 Recursing the tree rather than flattening it into a vector of terms first avoids allocation
-(see `_visit_operator_add2` and `_fold_operator_add` in assembly/stencil_eval.jl).
+(see `_summands` and `_visit_operator_add2` in assembly/stencil_eval.jl, and
+`_fold_summands` above).
 =#
 
 # Which leaves a term goes to. Resolved once per term, not once per (term, leaf).
@@ -1445,7 +1457,9 @@ function _contract_term(
 end
 
 function _route_terms_contract(op::OperatorAdd, acc, leaves, v)
-    return _fold_operator_add(_route_terms_contract, op, acc, leaves, v)
+    return _fold_summands(_summands(op), acc) do term, a
+        return _route_terms_contract(term, a, leaves, v)
+    end
 end
 
 function _route_terms_contract(term::TERM, acc::T, leaves, v) where {TERM, T}

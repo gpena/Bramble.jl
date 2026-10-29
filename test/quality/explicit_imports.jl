@@ -643,6 +643,11 @@ using Kronecker: Kronecker
                 # workload's static calls and never cached standalone. The documented
                 # lowering target of a keyword call, but not declared public in `Core`.
                 :kwcall,
+                # `Base.indexed_iterate`: named in `precompile(Base.indexed_iterate, ...)`
+                # in `src/precompile/form_sessions.jl`, caching the `(1, v)` destructure of
+                # `simplify_ast`'s `_scale_parts` for a raw source naming no component.
+                # Lowering target of tuple destructuring, not declared public in `Base`.
+                :indexed_iterate,
                 # `Base.deepcopy_internal` (src/mesh/mesh1d.jl): the method `deepcopy`
                 # documents for a type that needs its own deep copy; a deep-copied mesh takes
                 # a fresh identity there.

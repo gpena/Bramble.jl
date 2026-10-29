@@ -347,12 +347,35 @@ function mul!(
         yd .*= β
     end
     mask = _mf_mask(op)
-    _mf_product!(
-        op.plan, op.policy, ActionSink(yd, xd, α, mask, _mf_sink_geom(op.policy, op.geom)),
-        op.form)
+    # A `false` α walks with its own `Bool` sink, a strong zero as before (#991), reached
+    # through `invokelatest`, which inference does not enter, so the `true` of the
+    # three-argument `mul!` compiles no such walk.
+    if α === false
+        Base.invokelatest(_mf_sink_product!, yd, op, xd, false, mask)
+    else
+        _mf_sink_product!(yd, op, xd, _mf_alpha(eltype(op), α), mask)
+    end
     _mf_identity_rows!(yd, xd, α, mask)
     return y
 end
+
+function _mf_sink_product!(yd, op::MatrixFreeOperator, xd, α, mask)
+    _mf_product!(
+        op.plan, op.policy, ActionSink(yd, xd, α, mask, _mf_sink_geom(op.policy, op.geom)),
+        op.form)
+    return nothing
+end
+
+# The `α` a product's sink carries: an `Integer` or `true` in the operator's element
+# type `T`, so `mul!(y, op, x, -1, 1)` and the `true` of the three-argument `mul!` walk
+# the instance a `T` scale compiled (#991); `Int * w` promotes `Int` to `T` anyway, so no
+# bit moves. `mul!` keeps a `false` α away from here. A `BigInt` passes through, since
+# `big(3) * w` widens before the one rounding on store, and so does a float, `Dual` or
+# complex `α`: converting a `Float64` one to a `Float32` operator's type would round it.
+@inline _mf_alpha(::Type{T}, α::Integer) where {T} = convert(T, α)
+@inline _mf_alpha(::Type, α::BigInt) = α
+@inline _mf_alpha(::Type{T}, ::Bool) where {T} = one(T)
+@inline _mf_alpha(_, α) = α
 
 # The geometry the product's sink carries: the operator's on a serial policy, `nothing`
 # otherwise. A threaded product's sink crosses into its tasks (`Polyester.@batch` copies it
@@ -375,12 +398,13 @@ function _mf_walked_mul!(y, op::MatrixFreeOperator, x, walk::_WalkRows)
     fill!(y, zero(eltype(y)))
     mask = _mf_mask(op)
     a = op.form
+    α = _mf_alpha(eltype(op), true)
     if op.policy isa CpuSerial
-        _mf_apply_parts!(op.policy, ActionSink(y, x, true, mask, op.geom), trial_space(a),
+        _mf_apply_parts!(op.policy, ActionSink(y, x, α, mask, op.geom), trial_space(a),
             test_space(a), a.ast, walk)
     else
         _mf_product!(op.plan, op.policy,
-            ActionSink(y, x, true, mask, _mf_sink_geom(op.policy, op.geom)), a, walk)
+            ActionSink(y, x, α, mask, _mf_sink_geom(op.policy, op.geom)), a, walk)
     end
     _mf_identity_rows!(y, x, true, mask)
     return y

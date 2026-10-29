@@ -420,7 +420,7 @@ end
 @inline function _accumulate_direction!(
         pol, vₕ, comps, Ωₕ, dims, dir, ::Val{d}, ::Val{D}
 ) where {d, D}
-    _accumulate_one!(pol, parent(vₕ), parent(comps[d]), Ωₕ, dims, dir, Val(d), true)
+    _accumulate_one!(pol, parent(vₕ), parent(comps[d]), Ωₕ, dims, dir, Val(d), 1)
     _accumulate_direction!(pol, vₕ, comps, Ωₕ, dims, dir, Val(d - 1), Val(D))
     return nothing
 end
@@ -531,8 +531,8 @@ function _curl!(vₕ::VectorElement, uₕ, dir, op::String)
     else
         fill!(out, zero(eltype(out)))
         pol = execution_policy(Wₕ)
-        _accumulate_one!(pol, out, parent(comps[2]), Ωₕ, dims, dir, Val(1), true)
-        _accumulate_one!(pol, out, parent(comps[1]), Ωₕ, dims, dir, Val(2), -true)
+        _accumulate_one!(pol, out, parent(comps[2]), Ωₕ, dims, dir, Val(1), 1)
+        _accumulate_one!(pol, out, parent(comps[1]), Ωₕ, dims, dir, Val(2), -1)
     end
     return vₕ
 end
@@ -561,12 +561,12 @@ function _curl!(vₕ::NTuple{3, VectorElement}, uₕ, dir, op::String)
             fill!(outs[k], zero(eltype(outs[k])))
         end
         pol = execution_policy(Wₕ)
-        _accumulate_one!(pol, outs[1], parent(comps[3]), Ωₕ, dims, dir, Val(2), true)
-        _accumulate_one!(pol, outs[1], parent(comps[2]), Ωₕ, dims, dir, Val(3), -true)
-        _accumulate_one!(pol, outs[2], parent(comps[1]), Ωₕ, dims, dir, Val(3), true)
-        _accumulate_one!(pol, outs[2], parent(comps[3]), Ωₕ, dims, dir, Val(1), -true)
-        _accumulate_one!(pol, outs[3], parent(comps[2]), Ωₕ, dims, dir, Val(1), true)
-        _accumulate_one!(pol, outs[3], parent(comps[1]), Ωₕ, dims, dir, Val(2), -true)
+        _accumulate_one!(pol, outs[1], parent(comps[3]), Ωₕ, dims, dir, Val(2), 1)
+        _accumulate_one!(pol, outs[1], parent(comps[2]), Ωₕ, dims, dir, Val(3), -1)
+        _accumulate_one!(pol, outs[2], parent(comps[1]), Ωₕ, dims, dir, Val(3), 1)
+        _accumulate_one!(pol, outs[2], parent(comps[3]), Ωₕ, dims, dir, Val(1), -1)
+        _accumulate_one!(pol, outs[3], parent(comps[2]), Ωₕ, dims, dir, Val(1), 1)
+        _accumulate_one!(pol, outs[3], parent(comps[1]), Ωₕ, dims, dir, Val(2), -1)
     end
     return vₕ
 end

@@ -21,6 +21,7 @@ using Bramble:
                innerₕ,
                dirichlet_constraints,
                semidiscretize,
+               semidiscretize_rhs,
                ode_problem,
                ode_function,
                linear_problem,
@@ -305,6 +306,18 @@ end
 # reaches them. The mesh/space/form/`semidiscretize` setup above `@compile_workload` is
 # already covered by the core workload; kept here only to build the `Semidiscretization`
 # and `BilinearForm`/`LinearForm` pair these calls need.
+# The residual and Jacobian go through `prob.f` and `prob.p` as a solver calls them, so they
+# are warmed for `SciMLBase.NullParameters`, the `p` of a problem built without one. The core
+# workload (`src/precompile/semidiscretize_sessions.jl`) keeps its `nothing` calls for direct
+# callers.
+function _warm_problem(prob)
+    u = copy(prob.u0)
+    du = similar(u)
+    prob.f(du, u, prob.p, 0.0)
+    prob.f.jac === nothing || prob.f.jac(copy(prob.f.jac_prototype), u, prob.p, 0.0)
+    return nothing
+end
+
 if Bramble.PRECOMPILE_WORKLOAD
     @setup_workload begin
         I0 = interval(0.0, 1.0)
@@ -322,15 +335,20 @@ if Bramble.PRECOMPILE_WORKLOAD
             # Bare labels (`LabelsOnly`), the Semidiscretization type a user's own call
             # reaches; a TimeDependentConstraints one carries this file's closure in its type.
             # With an element and a plain Vector u0, the `p`/`specialize` keywords, and in 2D.
-            ode_problem(semidiscretize(a, l), u0, I_time)
+            _warm_problem(ode_problem(semidiscretize(a, l), u0, I_time))
             sdL = semidiscretize(a, l; dirichlet = :boundary)
-            ode_problem(sdL, u0, I_time)
-            ode_problem(sdL, parent(u0), I_time)
+            _warm_problem(ode_problem(sdL, u0, I_time))
+            _warm_problem(ode_problem(sdL, parent(u0), I_time))
             ode_problem(sdL, parent(u0), I_time; p = [0.3], specialize = SciMLBase.FullSpecialize)
             W2 = gridspace(mesh(domain(Bramble.box((0.0, 0.0), (1.0, 1.0))), (4, 4), (false, false)))
             a2 = form(W2, W2, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
             l2 = form(W2, v -> innerₕ(Bramble.element(W2, 1.0), v))
-            ode_problem(semidiscretize(a2, l2; dirichlet = :boundary), Bramble.element(W2, 0.0), I_time)
+            u02 = Bramble.element(W2, 0.0)
+            _warm_problem(ode_problem(semidiscretize(a2, l2; dirichlet = :boundary), u02, I_time))
+            _warm_problem(ode_problem(semidiscretize(a2, l2), u02, I_time))
+            for (sdr, ur) in ((semidiscretize(a, l), parent(u0)), (semidiscretize(a2, l2), parent(u02)))
+                semidiscretize_rhs(sdr)(similar(ur), ur, SciMLBase.NullParameters(), 0.0)
+            end
             ode_function(sd)
             linear_problem(a, l)
             nonlinear_problem((u, p) -> u, u0)

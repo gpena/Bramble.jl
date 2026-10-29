@@ -484,6 +484,25 @@ end
         @test assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = :ymin))) ≈ A
     end
 
+    # The labels are a set: their order and repeats change neither the node's type, so a
+    # form compiles once per set, nor what it assembles (gpena/Bramble.jl#1001).
+    @testset "Label order and repeats: one type" begin
+        Wₕ = gridspace(random_mesh((9, 11); seed = 7))
+        u, v = Bramble.trial_function(Wₕ), Bramble.test_function(Wₕ)
+        γ(m) = inner_Γ(u, v; markers = m)
+        @test typeof(γ((:xmax, :ymax))) === typeof(γ((:ymax, :xmax)))
+        @test typeof(γ((:xmax, :xmax))) === typeof(γ(:xmax))
+        ff = (u, v) -> inner_Γ(u, v; markers = (:ymax, :xmax))
+        sig = (typeof(Wₕ), typeof(Wₕ), typeof(ff))
+        @test isconcretetype(only(Base.return_types(form, sig)))
+        A = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = (:xmax, :ymax))))
+        @test assemble(form(Wₕ, Wₕ, ff)) == A
+        Ax = assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(u, v; markers = (:xmax,))))
+        twice = (u, v) -> inner_Γ(u, v; markers = (:xmax, :xmax))
+        @test assemble(form(Wₕ, Wₕ, twice)) == Ax
+        @test A != Ax
+    end
+
     # As anywhere else.
     @testset "A coefficient scales it" begin
         Wₕ = gridspace(mesh(Ω, (7, 7), (true, true)))

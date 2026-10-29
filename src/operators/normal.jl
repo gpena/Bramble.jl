@@ -244,11 +244,11 @@ function inner_Γ(
 end
 
 # The labels, held until `form` resolves them to faces as it does `InnerGamma`'s
-# (`_resolve_surfaces`, operators/inner.jl).
+# (`_resolve_surfaces`, operators/inner.jl), in the one order `_canonical_labels` gives.
 @inline function _normal_mask(::Val{D}, markers) where {D}
     labels = _as_labels(markers)
     isempty(labels) && _throw_no_surface_labels()
-    return _SurfaceLabels{labels}
+    return _canonical_labels(_SurfaceLabels{labels})
 end
 
 function _resolved_inner(::InnerGammaNormal{_SurfaceLabels{L}, DIM}, Ωₕ) where {L, DIM}
@@ -257,14 +257,14 @@ function _resolved_inner(::InnerGammaNormal{_SurfaceLabels{L}, DIM}, Ωₕ) wher
 end
 _surface_labels(::Type{InnerGammaNormal{_SurfaceLabels{L}, DIM}}) where {L, DIM} = L
 
-# The sum is built with `ntuple(Val(D))` so each weight is a type rather than a runtime value,
-# the same reason `_inner_source_tuple` is written that way.
+# The sum maps over `ntuple(Val, Val(D))` so each direction, and with it each weight, is a type
+# rather than a runtime value: `ntuple(d -> ..., Val(D))` leaves `d` an `Int` the compiler
+# need not constant-fold, and a `Function` and a grid-function entry in `terms` then widen
+# the tuple to a `Union` (gpena/Bramble.jl#973, the #146 shape `skew.jl` fixes the same way).
 @inline function _normal_terms(terms, right, ::Val{MASK}, ::Val{D}) where {MASK, D}
-    return sum(
-        ntuple(Val(D)) do d
-        _normal_term(InnerGammaNormal{MASK, d}(), terms[d], right)
-    end
-    )
+    return _tuple_sum(map(ntuple(Val, Val(D))) do e
+        _normal_term(InnerGammaNormal{MASK, _val(e)}(), terms[_val(e)], right)
+    end)
 end
 
 @inline _normal_term(w, left::LazyOp, right::LazyOp) = _product(w, left, right)
@@ -383,7 +383,9 @@ end
 @inline _normal_terms_of(s::NormalComponentSum) = s.terms
 @inline function _normal_terms_of(c::NormalContraction)
     D = length(c.terms)
-    return ntuple(d -> _normal_product(c.terms[d], NormalComponent{d}()), Val(D))
+    return map(ntuple(Val, Val(D))) do e
+        _normal_product(c.terms[_val(e)], NormalComponent{_val(e)}())
+    end
 end
 @inline _as_normal_sum(t) = NormalComponentSum(_normal_terms_of(t))
 

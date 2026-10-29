@@ -776,19 +776,39 @@ using Bramble:
             @test b ≈ parent(fₕ) .* w
         end
 
-        @testset "wrapped source: unlowered" begin
-            # D₋ₓ(sf) builds a node type `_lower_sources` has no method for, so it falls
-            # through to the generic leaf fallback -- unchanged, not incorrectly rewritten.
-            # A missed optimisation, not a correctness gap: "1D numeric equivalence" above
-            # checks its values.
+        @testset "wrapped source: lowered under the node" begin
+            # A difference, average or jump keeps its node and samples the source under it
+            # at `form`; "1D numeric equivalence" above checks the values.
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
             Wₕ = gridspace(Ωₕ)
             f = x -> x^2 + sin(3x)
             sf = source_function(f, Val(1))
-            l = form(Wₕ, v -> innerₕ(D₋ₓ(sf), v))
-            ast = resolve_form_ast(l)
-            @test ast.left_op isa Bramble.BackwardDifference
+            cases = ((D₋ₓ, Bramble.BackwardDifference), (Mₓ, Bramble.BackwardAverage),
+                (jumpₓ, Bramble.JumpNode))
+            for (op, node) in cases
+                ast = resolve_form_ast(form(Wₕ, v -> innerₕ(op(sf), v)))
+                @test ast.left_op isa node
+                @test ast.left_op.inner_op isa SourceVector
+                @test ast.left_op.inner_op.vec == parent(Rₕ(Wₕ, f))
+            end
+        end
+
+        @testset "restricted source: unlowered" begin
+            # A restricted source is called only where its region reaches, on every
+            # assembly: it may be undefined outside the region, and `markers!` can move the
+            # region after `form`. Sampling it at `form` would break both, so it stays a
+            # `SourceFunction`, under a difference too.
+            Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+            Wₕ = gridspace(Ωₕ)
+            sf = source_function(x -> x^2 + sin(3x), Val(1))
+            ast = resolve_form_ast(form(Wₕ, v -> innerₕ(restrict_to(:interior, sf), v)))
+            @test ast.left_op isa Bramble.RegionRestriction
             @test ast.left_op.inner_op isa SourceFunction
+            ast = resolve_form_ast(form(Wₕ,
+                v -> innerₕ(D₋ₓ(restrict_to(:interior, sf)), v)))
+            @test ast.left_op isa Bramble.BackwardDifference
+            @test ast.left_op.inner_op isa Bramble.RegionRestriction
+            @test ast.left_op.inner_op.inner_op isa SourceFunction
         end
 
         @testset "composite: per-component term lowers" begin

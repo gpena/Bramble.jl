@@ -2,9 +2,8 @@
 # per-type assembly caching (src/ast/, src/assembly/).
 #
 # The symbolic layer is not reachable from the mesh/space/operator sessions: a `LazyOp`
-# tree is built from `IdentityOperator` and the trial/test leaves rather than from a grid
-# function, so none of its constructors, stencil evaluators or traits are inferred by
-# anything else there.
+# tree is built from the trial/test leaves rather than from a grid function, so none of its
+# constructors, stencil evaluators or traits are inferred by anything else there.
 
 # Every display path a type has: the two-argument `show` (the embeddable one-liner), the
 # `MIME"text/plain"` block, and `summary`, which array headers reach for independently of
@@ -29,15 +28,15 @@ function _pc_form_ast_interp(Wₕ::ScalarGridSpace, u)
 end
 _pc_form_ast_interp(::AbstractSpaceType, u) = nothing
 
-# Every node kind, built over one space, plus the traits each one answers. Returns `id` and
-# the trial and test leaves, so the caller can build the products.
+# Every node kind, built over one space, plus the traits each one answers. Returns the
+# trial and test leaves, so the caller can build the products. The trees are the ones a
+# user writes, over `TrialFunction`/`TestFunction` leaves.
 function _pc_form_ast(Wₕ, ::Val{D}) where {D}
-    id = IdentityOperator(Wₕ)
     z = ZeroOperator(Wₕ)
     u, v = TrialFunction{D}(), TestFunction{D}()
     p, q = IndexedTrialFunction{D}(1), IndexedTestFunction{D}(1)
 
-    for leaf in (id, z, u, v, p, q, source_function(x -> 1.0, Val(D)))
+    for leaf in (z, u, v, p, q, source_function(x -> 1.0, Val(D)))
         is_symbolic(leaf)
         resolve_ast(leaf)
     end
@@ -45,74 +44,65 @@ function _pc_form_ast(Wₕ, ::Val{D}) where {D}
     _pc_form_ast_interp(Wₕ, u)
 
     # the one-sided families, the averages, the shift and the restriction
-    for op in (D₋ₓ(id), D₊ₓ(id), Mₓ(id), M₊ₓ(id), jumpₓ(id), Dcₓ(id), D̃ₓ(id), D̽ₓ(id))
+    for op in (D₋ₓ(u), D₊ₓ(u), Mₓ(u), M₊ₓ(u), jumpₓ(u), Dcₓ(u), D̃ₓ(u), D̽ₓ(u))
         is_symbolic(op)
         resolve_ast(op)
         stencil_offsets(op)
     end
-    shift_op(id, 1, 1)
-    restrict_to(:interior, D₋ₓ(id))
+    shift_op(u, 1, 1)
+    restrict_to(:interior, D₋ₓ(u))
 
-    scaled = 3 * D₋ₓ(id)
-    summed = D₋ₓ(id) + D₊ₓ(id)
+    scaled = 3 * D₋ₓ(u)
+    summed = D₋ₓ(u) + D₊ₓ(u)
     resolve_ast(scaled)
     resolve_ast(summed)
     stencil_offsets(summed)
-    ∇ₕ(id)
-    ∇₊ₕ(id)
-    D̽ₕ(id)
-    jumpₕ(id)
-    Dcₕ(id)
-    D̃ₕ(id)
-    Mₕ(id)
-    M₊ₕ(id)
+    ∇ₕ(u)
+    ∇₊ₕ(u)
+    D̽ₕ(u)
+    jumpₕ(u)
+    Dcₕ(u)
+    D̃ₕ(u)
+    Mₕ(u)
+    M₊ₕ(u)
 
-    return id, u, v
+    return u, v
 end
 
-# The products, and the stencils they evaluate to. This is the path assembly will take.
-#
-# `id` is annotated where the other operands are not: `_pc_form_ast` builds it from an
-# untyped space, so it arrives here as `Any`, and `D₋ₓ(id)` then has both the symbolic node
-# and the operator matrix as candidate results. The two products below are defined on the
-# symbolic node alone, so JET reports the matrix half of that union as a missing method --
-# a node this workload never builds. `IdentityOperator` is what every caller passes.
-function _pc_form_stencils(
-        Ωₕ::AbstractMeshType, Wₕ, id::IdentityOperator, u, v, label::Symbol
-)
-    idx = indices(Ωₕ)
-    lin = LinearIndices(idx)
-    I = first(idx)
-    mk = _marker_words(Ωₕ)
+# One form's resolved tree evaluated at a point, as a walk evaluates it: `_bind_walk` binds
+# a restriction to `Ωₕ`'s marker ids and passes the word matrix, and passes `nothing` for a
+# tree restricting nothing. One call per shape, as for the assembly shapes below.
+function _pc_form_stencil(Ωₕ::AbstractMeshType, Wₕ, g)
+    ast = resolve_form_ast(form(Wₕ, Wₕ, g))
+    I = first(indices(Ωₕ))
+    bound, mk = _bind_walk(ast, Wₕ)
+    local_stencil(bound, Wₕ, I, mk, LinearIndices(indices(Ωₕ))[I])
+    stencil_offsets(ast)
+    return nothing
+end
 
-    # Bilinear and linear products for each weight kind.
-    for prod in (innerₕ(D₋ₓ(id), D₋ₓ(id)), inner₊ₓ(Mₓ(id), Mₓ(id)), innerₕ(id, D₋ₓ(id)))
-        local_stencil(prod, Wₕ, I, nothing, lin[I])
-        local_stencil(prod, Wₕ, I, mk, lin[I])
-        resolve_ast(prod)
-    end
+# The products, and the stencils they evaluate to: the path assembly takes. `innerₕ(u, v)`
+# is absent, its stencil being warm from the assembly shapes below.
+function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, u, v, label::Symbol)
+    # Bilinear products for each weight kind.
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> inner₊ₓ(Mₓ(u), Mₓ(v)))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(u, D₋ₓ(v)))
 
-    # Every node kind evaluated once, with and without a marker table: restriction is
-    # the only node that reads it, and `nothing` is a separate method there. With the
-    # table, a restriction is evaluated bound to `Ωₕ`'s marker ids, as every walk does.
-    for op in (
-        id,
-        D₋ₓ(id),
-        D₊ₓ(id),
-        Mₓ(id),
-        jumpₓ(id),
-        Dcₓ(id),
-        D̃ₓ(id),
-        D̽ₓ(id),
-        shift_op(id, 1, 1),
-        3 * D₋ₓ(id),
-        D₋ₓ(id) + D₊ₓ(id),
-        restrict_to(:interior, id),
-        restrict_to(label, id)
-    )
-        local_stencil(op, Wₕ, I, nothing, lin[I])
-        local_stencil(_bind_marker_ids(op, Ωₕ), Wₕ, I, mk, lin[I])
-    end
+    # Every node kind on the trial side. Restriction is the only node that reads the marker
+    # table, so it is the one evaluated with it, bound to `Ωₕ`'s marker ids.
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D₊ₓ(u), v))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(Mₓ(u), v))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(jumpₓ(u), v))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(Dcₓ(u), v))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D̃ₓ(u), v))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D̽ₓ(u), v))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(shift_op(u, 1, 1), v))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(3 * D₋ₓ(u), v))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u) + D₊ₓ(u), v))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(restrict_to(:interior, u), v))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(restrict_to(label, u), v))
 
     # Symbolic inner products over trial and test leaves, including tuple forms.
     innerₕ(u, v)
@@ -152,16 +142,8 @@ function _pc_form_dirichlet(Ωₕ::AbstractMeshType, Wₕ, Vₕ, be, label::Symb
     conditions(bcs)
 
     n, nv = ndofs(Wₕ), ndofs(Vₕ)
-    A = matrix(be, n, n)
-    A .= 0
-    for i in 1:n
-        A[i, i] = 1.0
-    end
-    Av = matrix(be, nv, nv)
-    Av .= 0
-    for i in 1:nv
-        Av[i, i] = 1.0
-    end
+    A = backend_eye(be, n)
+    Av = backend_eye(be, nv)
     F, Fv = ones(n), ones(nv)
 
     dirichlet_bc!(A, Ωₕ, label)
@@ -342,10 +324,10 @@ function _pc_form_assembly(
     # `_lower_sources_over_leaves`' target-known branch, sampling against that leaf's own
     # space -- a different path from the shared-across-leaves one right below it.
     _pc_assemble_composite(Vₕ, v -> innerₕ(f, v(1)), bv)
-    # A raw closure source naming no component: goes to every leaf, and is deliberately left
-    # unlowered (`_lower_sources_over_leaves`'s `target === nothing` branch) since leaves may
-    # not share a mesh -- checked here so that branch's own code path is precompiled too.
-    _pc_assemble_composite(Vₕ, v -> innerₕ(f, v), bv)
+    # A raw source naming no component also splits `(1, v)` of the whole composite test
+    # function (`_scale_parts`). Named here by type, so no closure source keys an instance.
+    precompile(Base.indexed_iterate, (Tuple{Int, TestFunction{D, 2}}, Int))
+    precompile(Base.indexed_iterate, (Tuple{Int, TestFunction{D, 2}}, Int, Int))
 
     # and the constrained right-hand side, which is a different path from the bare one
     bcs = dirichlet_constraints(Ωₕ, label => f)
@@ -409,7 +391,7 @@ end
 
 function _pc_form_reaction(Wₕ::ScalarGridSpace)
     a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-    fₕ = Rₕ(Wₕ, x -> 1.0)
+    fₕ = element(Wₕ, 1.0)
     l = form(Wₕ, v -> innerₕ(fₕ, v))
     A = assemble(a)
     F = assemble(l)
@@ -455,16 +437,13 @@ function _pc_form_session(
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(2))
 
-    id, u, v = _pc_form_ast(Wₕ, dim_val)
-    _pc_form_stencils(Ωₕ, Wₕ, id, u, v, label)
+    u, v = _pc_form_ast(Wₕ, dim_val)
+    _pc_form_stencils(Ωₕ, Wₕ, u, v, label)
     _pc_form_blocks(Vₕ, dim_val)
     _pc_form_dirichlet(Ωₕ, Wₕ, Vₕ, be, label, f, ft, I_time)
     _pc_form_assembly(Ωₕ, Wₕ, Vₕ, label, f, dim_val)
     _pc_form_reaction(dim_val)
     _pc_form_nested(dim_val)
-
-    # the composite space reaches the same nodes through a different space type
-    _pc_form_ast(Vₕ, dim_val)
     return nothing
 end
 
@@ -512,7 +491,7 @@ function _pc_form_nested(Ωₕ::AbstractMeshType, dim_val::Val)
 end
 
 function _pc_nested_plain(Wₕ::ScalarGridSpace, dim_val::Val)
-    fₕ = Rₕ(Wₕ, x -> 1.0)
+    fₕ = element(Wₕ, 1.0)
     assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Δₕ(u), v)))
     assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, Δₕ(v))))
     assemble(form(Wₕ, v -> innerₕ(fₕ, Δₕ(v))))

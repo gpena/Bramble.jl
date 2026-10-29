@@ -128,6 +128,42 @@ using Bramble:
         @test !isposdef(g)
     end
 
+    @testset "Indexed stencil test folds (#1030)" begin
+        # The product shortcut asks whether both sides give the same stencil, and an indexed
+        # leaf's stencil is the identity tap whatever its component: `u(1)` against `v(2)`
+        # answers `true` by type, so the test folds to a constant. `issymmetric` still asks
+        # whether they are the same operator, and they are not.
+        Ωn = mesh(domain(S), (9, 11), (true, true))
+        pts(n, a) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2a)
+        Bramble.change_points!(Ωn, (pts(9, 1), pts(11, 2)))
+        Vₕ = gridspace(Ωn)^Val(2)
+        product(a) = only(l[2]
+        for l in Bramble._kron_leaves(Bramble.resolve_form_ast(a), ())
+        if l[2] isa Bramble.BilinearProduct)
+
+        e = form(Vₕ, Vₕ, (u, v) -> innerₕ(D₋ₓ(u(1)), D₋ₓ(v(2))))
+        p = product(e)
+        @test p.left_op isa
+              Bramble.BackwardDifference{<:Any, <:Any, <:Bramble.IndexedTrialFunction}
+        ci = only(code_typed(Bramble._same_operator_shape,
+            (typeof(p.left_op), typeof(p.right_op), Bramble._SameStencil)))[1]
+        # A coverage run (CI) adds a `code_coverage_effect` per line ahead of the return
+        code = filter(s -> !Meta.isexpr(s, :code_coverage_effect), ci.code)
+        @test length(code) == 1 && code[1] isa Core.ReturnNode && code[1].val === true
+        @test !Bramble._same_operator_shape(p.left_op, p.right_op)
+        @test !issymmetric(e)
+        @test !isposdef(e)
+
+        # The shortcut's values: a coefficient of ones on the test side forces the general
+        # product path, which must assemble the same matrix.
+        onesₕ = Rₕ(gridspace(Ωn), x -> 1.0)
+        e_general = form(Vₕ, Vₕ, (u, v) -> innerₕ(D₋ₓ(u(1)), onesₕ * D₋ₓ(v(2))))
+        q = product(e_general)
+        @test !Bramble._same_operator_shape(q.left_op, q.right_op, Bramble._SameStencil())
+        @test Matrix(assemble(e)) == Matrix(assemble(e_general))
+        @test !iszero(Matrix(assemble(e)))
+    end
+
     @testset "Region restriction" begin
         # `:boundary`/`:interior` exist on every mesh regardless of its own markers.
         h = form(

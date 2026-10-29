@@ -35,13 +35,39 @@ indexing. So both predicates below check `trial_space(a) === test_space(a)` befo
 the expression at all, and answer `false` immediately otherwise.
 =#
 
-function _same_operator_shape(::TrialFunction{D, N}, ::TestFunction{D, M}) where {D, N, M}
+# Two questions share this walk. `issymmetric` asks whether the two sides are the same
+# operator (`_SameOperator`); the product shortcuts (`local_stencil(::BilinearProduct, …)`,
+# operators/inner.jl, and `_factored_product!`, bilinear_traversal.jl) ask only whether they
+# give the same stencil at every point (`_SameStencil`). They differ at the indexed leaves
+# alone. The `local_stencil` of an `IndexedTrialFunction`/`IndexedTestFunction` is the
+# identity tap whatever `component_idx`, and the walk's row/column offsets carry the
+# components, so `u(i)` against `v(j)` gives the same stencil by type. One method family
+# takes the mode, so the two questions cannot drift apart. The stencil question folds to a
+# constant for a vector term as it does for a scalar one, except where a field changes the
+# stencil and stays a runtime test by design (`ShiftNode.shift_amount`,
+# `RegionRestriction.region`, `OperatorScale.scalar` when `simplify_ast` has not hoisted it,
+# `GridFunctionScale` identity and the `InterpolationNode` fields; gpena/Bramble.jl#1030).
+# The component index is not a type parameter, nor the mode a flag chosen at build time,
+# since either makes `form` return a `Union` (#958).
+struct _SameOperator end
+struct _SameStencil end
+
+_same_operator_shape(a, b) = _same_operator_shape(a, b, _SameOperator())
+
+function _same_operator_shape(
+        ::TrialFunction{D, N}, ::TestFunction{D, M}, _
+) where {D, N, M}
     (N === M || N === nothing || M === nothing)
 end
 function _same_operator_shape(
-        a::IndexedTrialFunction{D}, b::IndexedTestFunction{D}
+        a::IndexedTrialFunction{D}, b::IndexedTestFunction{D}, ::_SameOperator
 ) where {D}
     return a.component_idx == b.component_idx
+end
+function _same_operator_shape(
+        ::IndexedTrialFunction{D}, ::IndexedTestFunction{D}, ::_SameStencil
+) where {D}
+    return true
 end
 
 # Every other node wraps one (or two) inner operators, and that inner operator is exactly
@@ -63,7 +89,7 @@ for W in (
     :CenteredAverage,
     :JumpNode
 )
-    @eval _same_operator_shape(a::$W{D, Dim}, b::$W{D, Dim}) where {D, Dim} = _same_operator_shape(a.inner_op, b.inner_op)
+    @eval _same_operator_shape(a::$W{D, Dim}, b::$W{D, Dim}, m) where {D, Dim} = _same_operator_shape(a.inner_op, b.inner_op, m)
 end
 
 # `shift_amount` is a field, not a type parameter, so, like `RegionRestriction.region` and
@@ -72,45 +98,45 @@ end
 # the generic loop above compared only `D`/`Dim`, so `shift_op(u, 1, 1)` and
 # `shift_op(v, 1, 2)` read as identical, and the fast path this trait guards then evaluates
 # one side only and mirrors it into a matrix that is not what the form asked for.
-function _same_operator_shape(a::ShiftNode{D, Dim}, b::ShiftNode{D, Dim}) where {D, Dim}
-    return a.shift_amount == b.shift_amount && _same_operator_shape(a.inner_op, b.inner_op)
+function _same_operator_shape(a::ShiftNode{D, Dim}, b::ShiftNode{D, Dim}, m) where {D, Dim}
+    return a.shift_amount == b.shift_amount && _same_operator_shape(a.inner_op, b.inner_op, m)
 end
 
 # The region a restriction names is a field, not a type parameter with a fixed set of
 # values, so it is compared explicitly rather than folded into the `where` clause.
-function _same_operator_shape(a::RegionRestriction{D}, b::RegionRestriction{D}) where {D}
-    return a.region === b.region && _same_operator_shape(a.inner_op, b.inner_op)
+function _same_operator_shape(a::RegionRestriction{D}, b::RegionRestriction{D}, m) where {D}
+    return a.region === b.region && _same_operator_shape(a.inner_op, b.inner_op, m)
 end
 
-function _same_operator_shape(a::OperatorScale{D}, b::OperatorScale{D}) where {D}
-    return a.scalar == b.scalar && _same_operator_shape(a.inner_op, b.inner_op)
+function _same_operator_shape(a::OperatorScale{D}, b::OperatorScale{D}, m) where {D}
+    return a.scalar == b.scalar && _same_operator_shape(a.inner_op, b.inner_op, m)
 end
 
 # By identity, not value: a coefficient compares equal here only when both sides close over
 # the identical object, which is what happens when `L` is written once and applied twice:
 # see the module-level note above. A numerically equal but distinct array is not this case.
-function _same_operator_shape(a::GridFunctionScale{D}, b::GridFunctionScale{D}) where {D}
+function _same_operator_shape(a::GridFunctionScale{D}, b::GridFunctionScale{D}, m) where {D}
     return a.grid_function === b.grid_function &&
-           _same_operator_shape(a.inner_op, b.inner_op)
+           _same_operator_shape(a.inner_op, b.inner_op, m)
 end
 
-function _same_operator_shape(a::OperatorAdd{D}, b::OperatorAdd{D}) where {D}
-    return _same_operator_shape(a.left_op, b.left_op) &&
-           _same_operator_shape(a.right_op, b.right_op)
+function _same_operator_shape(a::OperatorAdd{D}, b::OperatorAdd{D}, m) where {D}
+    return _same_operator_shape(a.left_op, b.left_op, m) &&
+           _same_operator_shape(a.right_op, b.right_op, m)
 end
 
-function _same_operator_shape(a::IdentityOperator{D}, b::IdentityOperator{D}) where {D}
+function _same_operator_shape(a::IdentityOperator{D}, b::IdentityOperator{D}, _) where {D}
     return a.space === b.space
 end
-_same_operator_shape(::ZeroOperator{D}, ::ZeroOperator{D}) where {D} = true
+_same_operator_shape(::ZeroOperator{D}, ::ZeroOperator{D}, _) where {D} = true
 
 # Anything else: different node types, a Trial/Test pair with mismatched indices, or a
 # shape this does not recognise, is not verified as the same operator.
-_same_operator_shape(a, b) = false
+_same_operator_shape(a, b, _) = false
 
 # ==============================================================================
 # The assembly-level consumer: skip half the multiplications `multiply_stencils_bilinear`
-# does when the two sides are known (by `_same_operator_shape`, in
+# does when the two sides are known (by `_same_operator_shape` with `_SameStencil()`, in
 # `local_stencil(::BilinearProduct, …)`, operators/inner.jl) to produce the same stencil.
 # ==============================================================================
 
@@ -166,7 +192,8 @@ end
 
 # Every summand of `op` as `(scalings, term)`, the scalings being every `OperatorScale`
 # factor above the term, outermost first. `false` when a summand is neither a product nor a
-# collapsed zero.
+# collapsed zero. This and `_is_symmetric_sum` are query-time only, one call per
+# `issymmetric`, hence the `Vector{Any}` storage.
 function _collect_scaled_terms!(out::Vector{Tuple{Vector{Any}, Any}}, scales::Vector{Any}, op)
     if op isa OperatorAdd
         return _collect_scaled_terms!(out, scales, op.left_op) &&

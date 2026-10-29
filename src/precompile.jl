@@ -132,8 +132,7 @@ if PRECOMPILE_WORKLOAD
             _pc_operator_session(e2_32, c2_32, Val(2))
 
             # The symbolic layer. Not reachable from the space sessions: a LazyOp tree is
-            # built from IdentityOperator and the trial/test leaves, not from a grid
-            # function.
+            # built from the trial/test leaves, not from a grid function.
             _pc_form_session(
                 Ωₕ1, be, :left, x -> x + 1.0, (x, t) -> (x + 1.0) * t, I_time, Val(1)
             )

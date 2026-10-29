@@ -445,6 +445,43 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, _Con
             W2 × W1, flux)
     end
 
+    # `dot(F, η)` with a `Function` and a grid-function `LazyOp` entry: built as
+    # `ntuple(d -> ..., Val(D))` each direction was a runtime `Int`, and both the held sum and
+    # `inner_Γ`'s expansion inferred a `Union` (gpena/Bramble.jl#973). `D₋ₓ` of the unknown
+    # in place of `D₋ₓ(fₕ)` inferred concretely even then, so the entry must carry data.
+    @testset "dot(F, η) infers concretely, $(D)D" for D in filter(≥(2), TEST_DIMS)
+        S = foldl(×, ntuple(_ -> interval(0.0, 1.0), D))
+        Wₕ = gridspace(mesh(domain(S), ntuple(_ -> 5, D), ntuple(_ -> false, D)))
+        fₕ = Rₕ(Wₕ, x -> 1 + x[1] * x[2])
+        F = D == 2 ? (_x1, Bramble.D₋ₓ(fₕ)) : (_x1, Bramble.D₋ₓ(fₕ), _x2)
+        c = dot(F, η)
+        @test isconcretetype(only(Base.return_types(Bramble._as_normal_sum, (typeof(c),))))
+        v = Bramble.TestFunction{D}()
+        mask = Bramble._normal_mask(Val(D), (:boundary,))
+        sig = (typeof(F), typeof(v), Val{mask}, Val{D})
+        @test isconcretetype(only(Base.return_types(Bramble._normal_terms, sig)))
+    end
+
+    # The labels are a set, for the normal expansion and the facet weight as for
+    # `InnerGamma`: their order and repeats leave one type per set (gpena/Bramble.jl#1001).
+    @testset "dot(F, η): one type per label set" begin
+        Ωₕ = mesh(Ω, (9, 11), (false, false))
+        g(n, a) = range(0.0, 1.0; length = n) .^ a
+        Bramble.change_points!(Ωₕ, (g(9, 1.4), g(11, 1.6)))
+        Wₕ = gridspace(Ωₕ)
+        u, v = Bramble.trial_function(Wₕ), Bramble.test_function(Wₕ)
+        F = (_x1, _x2)
+        n(m) = inner_Γ(dot(F, η), v; markers = m)
+        @test typeof(n((:xmax, :ymax))) === typeof(n((:ymax, :xmax)))
+        @test typeof(n((:ymin, :ymin))) === typeof(n(:ymin))
+        ηₓ, ηᵧ = η
+        c(m) = inner_Γ(u * ηₓ + u * ηᵧ, v; markers = m)
+        @test typeof(c((:xmax, :ymin))) === typeof(c((:ymin, :xmax)))
+        l(m) = assemble(form(Wₕ, w -> inner_Γ(dot(F, η), w; markers = m)))
+        @test l((:ymax, :xmax)) == l((:xmax, :ymax))
+        @test l((:xmax, :xmax)) == l((:xmax,))
+    end
+
     @testset "The normal is named η, not n (#341)" begin
         @test !isdefined(Bramble, :n)
         @test Base.isexported(Bramble, :η)
