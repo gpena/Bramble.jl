@@ -68,7 +68,8 @@ One-dimensional grid discretizing a 1D [`CartesianProduct`](@ref) interval.
 The geometry lives in an immutable [`Mesh1DState`](@ref) (points, cell boundaries
 `half_pts`, cell measures `half_spacings`, backward `spacings`, indices, set, backend,
 version, uniformity flag and marker words); every mutation (`set_points!`,
-`set_markers!`, refinement) replaces it whole. The mesh itself keeps the public marker
+`set_markers!`, refinement) replaces it whole, except a `set_markers!` that keeps the label
+set, which rewrites the marker words in place. The mesh itself keeps the public marker
 dictionary and the label-to-column table of the state's marker words.
 
 # Fields
@@ -199,6 +200,10 @@ function _store_markers!(Ωₕ::Mesh1D, mesh_markers, predicate_labels = Symbol[
     setfield!(Ωₕ, :marker_stamp, _next_mesh_uid())
     return nothing
 end
+
+# Re-marks in place when the label set is unchanged (`_remark_markers!`, marker.jl).
+_remark_in_place!(Ωₕ::Mesh1D, domain_markers, fitted::Tuple) = _remark_markers!(
+    Ωₕ, domain_markers, fitted)
 
 @inline set(Ωₕ::Mesh1D) = _st(Ωₕ).set
 @inline indices(Ωₕ::Mesh1D) = _st(Ωₕ).indices

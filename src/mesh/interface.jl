@@ -88,7 +88,7 @@ Return the [`ExecutionPolicy`](@ref) ([`Serial`](@ref) or [`Parallel`](@ref)) of
 Return the [`MeshMarkers`](@ref) dictionary associated with mesh `Ωₕ`.
 
 The dictionary and its `BitVector`s are read-only views of the mesh's labels. Change labels
-with `markers!` or `set_markers!`, which rebuild the marker state assembly reads; an edit
+with `markers!` or `set_markers!`, which update the marker state assembly reads; an edit
 made in place is not seen by assembly.
 """
 @inline markers(Ωₕ::AbstractMeshType) = Ωₕ.markers
@@ -109,7 +109,7 @@ still gives the xmin points. A label that is neither a marker nor a face name wh
 is a marker throws a `KeyError`.
 
 The `BitVector` is a read-only view of the mesh's labels. Change labels with `markers!` or
-`set_markers!`, which rebuild the marker state assembly reads; an edit made in place is not
+`set_markers!`, which update the marker state assembly reads; an edit made in place is not
 seen by assembly.
 """
 @inline function index_in_marker(Ωₕ::AbstractMeshType, label::Symbol)
@@ -204,8 +204,14 @@ Override the markers dictionary in `Ωₕ`. Used internally during mesh refineme
 [`set_points!`](@ref) when it changes the point count, where the old dictionary is sized
 for the old grid and is replaced outright rather than merged into. The label table and the
 marker word matrix are rebuilt with it.
+
+The mesh stores copies of the `BitVector`s, never `mesh_markers`'s own:
+[`set_markers!`](@ref) re-evaluates a mesh's labels in place, and a `BitVector` shared with
+another mesh or dictionary would change under it.
 """
-@inline markers!(Ωₕ::AbstractMeshType, mesh_markers) = (_store_markers!(Ωₕ, mesh_markers); return nothing)
+@inline markers!(Ωₕ::AbstractMeshType, mesh_markers) = (
+    _store_markers!(
+        Ωₕ, MeshMarkers(l => copy(bits) for (l, bits) in mesh_markers)); return nothing)
 
 """
     is_collapsed(Ωₕ::AbstractMeshType) -> Bool

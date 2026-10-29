@@ -159,8 +159,8 @@ function _stamp_submeshes!(submeshes::Tuple, labels::Vector{Symbol})
     return nothing
 end
 
-# A `MeshnD` is nobody's submesh.
-@inline _parent_predicate_labels(::MeshnD) = Symbol[]
+# A `MeshnD` is nobody's submesh: no labels, and no vector built to say so.
+@inline _parent_predicate_labels(::MeshnD) = ()
 
 # Replaces the marker dictionary, its label table and the word matrix together. A label set
 # may change after construction; the word matrix is rebuilt, never resized.
@@ -177,6 +177,10 @@ function _store_markers!(Ωₕ::MeshnD, mesh_markers, predicate_labels = Symbol[
     Ωₕ.marker_stamp = _next_mesh_uid()
     return nothing
 end
+
+# Re-marks in place when the label set is unchanged (`_remark_markers!`, marker.jl).
+_remark_in_place!(Ωₕ::MeshnD, domain_markers, fitted::Tuple) = _remark_markers!(
+    Ωₕ, domain_markers, fitted)
 
 """
     submeshes(Ω::Domain, npts, unif, backend) -> NTuple{D, Mesh1D}
