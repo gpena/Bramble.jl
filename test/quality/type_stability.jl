@@ -40,6 +40,7 @@ _load(W) = form(W, v -> innerₕ(1.0, v))
 _captured_elasticity(μ, λ) = (u, v) -> 2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₘₕ(u), divₘₕ(v))
 _captured_divergence(λ) = (u, v) -> λ * inner₊(divₘₕ(u), divₘₕ(v))
 _captured_gradient(μ) = (u, v) -> μ * inner₊(∇ₕ(u), ∇ₕ(v))
+_captured_forward_gradient(μ) = (u, v) -> μ * inner₊(∇₊ₕ(u), ∇₊ₕ(v))
 
 # Functions of the ForwardDiff parameter, so the dual type flows through assembly.
 _fd_bilinear(W, s) = assemble(form(W, W, (u, v) -> innerₕ(u, v) + Ref(s) * inner₊(∇ₕ(u), ∇ₕ(v))))
@@ -188,8 +189,7 @@ end
 
     # Coefficients captured from a function's scope (#939), not literals: no constant reaches
     # `form`, so a scale over a sum infers only if its distribution follows from types. The
-    # 3D vector Laplacian is left out: `∇ₕ(u)` gives plain tuples, which name no components
-    # in their types, and that form stays a `Union` (`_mixes_components`'s comment).
+    # vector Laplacian's `∇ₕ(u)` labels its rows by component for that (#958).
     @testset "Captured coefficients" begin
         g(n, a) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * a)
         for (bx, n) in ((box((0.0, 0.0), (1.0, 1.0)), (9, 11)),
@@ -202,8 +202,9 @@ end
             @test @inferred(form(W, W, _captured_elasticity(1.0, 3.0))) isa Bramble.BilinearForm
             @test @inferred(form(W, W, _captured_divergence(3.0))) isa Bramble.BilinearForm
             @test @inferred(form(S, S, _captured_gradient(2.0))) isa Bramble.BilinearForm
-            D == 2 && @test @inferred(form(W, W, _captured_gradient(2.0))) isa
-                            Bramble.BilinearForm
+            @test @inferred(form(W, W, _captured_gradient(2.0))) isa Bramble.BilinearForm
+            @test @inferred(form(W, W, _captured_forward_gradient(2.0))) isa
+                  Bramble.BilinearForm
         end
     end
 

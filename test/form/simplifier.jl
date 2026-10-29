@@ -37,6 +37,7 @@ using Bramble:
                D₊ₓ,
                Dcₓ,
                D₊ᵧ,
+               ∇₊ₕ,
                Mₓ,
                jumpₓ,
                inner₊ᵧ,
@@ -894,6 +895,57 @@ _wrapped_builders = ((_strain, b -> Bramble.restrict_to(:interior, 1.5 * b)),
     # One term names one pair: nothing to label, the plain term.
     W₁ = gridspace(mesh(domain(interval(0.0, 1.0)), 9))^Val(1)
     @test !(_strain(trial_function(W₁), test_function(W₁)) isa Bramble._ComponentSum)
+end
+
+# `∇ₕ`/`∇₊ₕ` of a composite label their rows (`Bramble._GradientRows`, #958), since
+# row `c` is built on `u(c)` and `v(c)` alone, so `inner₊` of two of them names `(c, c)` for
+# it, and a scale over that sum builds the plain sum's tree. A tuple of gradient tuples a
+# user builds may repeat or mix components, so it, and a labelled side meeting it, is not
+# labelled; and `form` stores no wrapper, assembling the plain sum's bits.
+_grad(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
+_fgrad(u, v) = inner₊(∇₊ₕ(u), ∇₊ₕ(v))
+
+@testset "gradient rows: labelled (#958)" begin
+    for D in (WITH_3D_TESTS ? (2, 3) : (2,))
+        Ωₕ = mesh(domain(box(ntuple(_ -> 0.0, D), ntuple(_ -> 1.0, D))), ntuple(d -> 4 + d, D))
+        W = gridspace(Ωₕ)^Val(D)
+        u, v = trial_function(W), test_function(W)
+        for ∇ in (∇ₕ, ∇₊ₕ)
+            built = inner₊(∇(u), ∇(v))
+            plain = inner₊(Tuple(∇(u)), Tuple(∇(v)))
+            @test built isa Bramble._ComponentSum
+            @test _label_tree(built) === foldl((l, r) -> (l, r), ntuple(c -> (c, c), D))
+            @test _labels_agree(built.sum, _label_tree(built))
+            @test built.sum === plain
+            @test !(plain isa Bramble._ComponentSum)
+            @test inner₊(∇(u), Tuple(∇(v))) === plain
+            @test inner₊(Tuple(∇(u)), ∇(v)) === plain
+            @test inner₊(∇(u), ∇(v); markers = (:boundary,)) ===
+                  Bramble.restrict_to(:boundary, built)
+            res(x) = resolve_ast(x)
+            for c in (2.5, 2, -1, Ref(2.5))
+                @test simplify_ast(res(c * built)) === simplify_ast(res(c * plain))
+            end
+            @test simplify_ast(res(built)) === simplify_ast(res(plain))
+        end
+        # Hand-built tuples: a repeated component, and rows mixing components within them.
+        pick(c) = c == D ? 2 : 1
+        rep = inner₊(∇ₕ(ntuple(c -> u(pick(c)), D)), ∇ₕ(ntuple(c -> v(pick(c)), D)))
+        @test !(rep isa Bramble._ComponentSum)
+        mixed = inner₊((ntuple(d -> D₋ₓ(u(d)), D), ntuple(d -> D₋ₓ(u(1)), D)),
+            (ntuple(d -> D₋ₓ(v(d)), D), ntuple(d -> D₋ₓ(v(1)), D)))
+        @test !(mixed isa Bramble._ComponentSum)
+    end
+
+    Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (7, 8))
+    W = gridspace(Ωₕ)^Val(2)
+    for build in (_grad, _fgrad), (_, wrap) in _wrapped_builders
+
+        a = form(W, W, (u, v) -> wrap(build(u, v)))
+        @test !occursin("_ComponentSum", string(typeof(a)))
+        @test !occursin("_GradientRows", string(typeof(a)))
+        @test _bits(assemble(a)) == _bits(assemble(form(W, W, (u, v) -> wrap(build(u, v).sum))))
+    end
 end
 
 # The sign `-u` and `a - b` store (`_MinusOne`, src/ast/ast.jl) is decided by its type, so
