@@ -33,32 +33,7 @@ const _PC_OPS_Z = (diff₋₂, diff₊₂, D₋₂, D₊₂, jump₂, M₂, M₊
 # so both returns get compiled.
 const _PC_OPS_ALL = (∇ₕ, ∇₊ₕ, diff₋ₕ, diff₊ₕ, jumpₕ, Mₕ, M₊ₕ, D̃ₕ, Dcₕ, D̽ₕ)
 
-# Applied with a plain loop over the tuple. The loop variable `op` is inferred as
-# `Any`, so each call dispatches at run time: deliberate, because every operator is
-# then compiled and cached as a standalone method instance that a user's first call
-# reuses. The `foreach` variant, which afoldl unrolls into a static chain, caches
-# the chain as one instance instead and every alias costs its compile again on first use.
-function _pc_apply_each(ops, uₕ)
-    for op in ops
-        op(uₕ)
-    end
-    return nothing
-end
-
-# The directional aliases per coordinate. One method per dimension rather than a
-# runtime branch, so that inference never sees D₋ᵧ applied to a 1D element.
-_pc_directional_ops(uₕ, ::Val{1}) = _pc_apply_each(_PC_OPS_X, uₕ)
-
-function _pc_directional_ops(uₕ, ::Val{2})
-    _pc_directional_ops(uₕ, Val(1))
-    return _pc_apply_each(_PC_OPS_Y, uₕ)
-end
-
-function _pc_directional_ops(uₕ, ::Val{3})
-    _pc_directional_ops(uₕ, Val(2))
-    return _pc_apply_each(_PC_OPS_Z, uₕ)
-end
-
+# The in-place forms, applied as op(vₕ, uₕ).
 const _PC_OPS_X_INPLACE = (
     diff₋ₓ!, diff₊ₓ!, D₋ₓ!, D₊ₓ!, jumpₓ!, Mₓ!, M₊ₓ!, D̃ₓ!, Dcₓ!, D̽ₓ!
 )
@@ -69,25 +44,36 @@ const _PC_OPS_Z_INPLACE = (
     diff₋₂!, diff₊₂!, D₋₂!, D₊₂!, jump₂!, M₂!, M₊₂!, D̃₂!, Dc₂!, D̽₂!
 )
 
-function _pc_apply_each_inplace(ops, vₕ, uₕ)
+# One table triple per form, walked by `_pc_directional_ops`.
+const _PC_OPS_TABLES = (_PC_OPS_X, _PC_OPS_Y, _PC_OPS_Z)
+const _PC_OPS_TABLES_INPLACE = (_PC_OPS_X_INPLACE, _PC_OPS_Y_INPLACE, _PC_OPS_Z_INPLACE)
+
+# Applied with a plain loop over the tuple. The loop variable `op` is inferred as
+# `Any`, so each call dispatches at run time: deliberate, because every operator is
+# then compiled and cached as a standalone method instance that a user's first call
+# reuses. The `foreach` variant, which afoldl unrolls into a static chain, caches
+# the chain as one instance instead and every alias costs its compile again on first use.
+# `args` is what each operator is called with: (uₕ) out of place, (vₕ, uₕ) in place.
+function _pc_apply_each(ops, args...)
     for op in ops
-        op(vₕ, uₕ)
+        op(args...)
     end
     return nothing
 end
 
-function _pc_directional_ops_inplace(vₕ, uₕ, ::Val{1})
-    return _pc_apply_each_inplace(_PC_OPS_X_INPLACE, vₕ, uₕ)
+# The directional aliases per coordinate, over a triple of tables. One method per
+# dimension rather than a runtime branch, so that inference never sees D₋ᵧ applied to
+# a 1D element.
+_pc_directional_ops(tables, ::Val{1}, args...) = _pc_apply_each(tables[1], args...)
+
+function _pc_directional_ops(tables, ::Val{2}, args...)
+    _pc_directional_ops(tables, Val(1), args...)
+    return _pc_apply_each(tables[2], args...)
 end
 
-function _pc_directional_ops_inplace(vₕ, uₕ, ::Val{2})
-    _pc_directional_ops_inplace(vₕ, uₕ, Val(1))
-    return _pc_apply_each_inplace(_PC_OPS_Y_INPLACE, vₕ, uₕ)
-end
-
-function _pc_directional_ops_inplace(vₕ, uₕ, ::Val{3})
-    _pc_directional_ops_inplace(vₕ, uₕ, Val(2))
-    return _pc_apply_each_inplace(_PC_OPS_Z_INPLACE, vₕ, uₕ)
+function _pc_directional_ops(tables, ::Val{3}, args...)
+    _pc_directional_ops(tables, Val(2), args...)
+    return _pc_apply_each(tables[3], args...)
 end
 
 _pc_vectorial_ops(uₕ) = _pc_apply_each(_PC_OPS_ALL, uₕ)
@@ -160,22 +146,22 @@ end
 # its components are scalar grid functions over a contiguous view, which is a
 # distinct element type from the one above and so a distinct set of instances.
 function _pc_operator_session(uₕ, cₕ, dim_val::Val)
-    _pc_directional_ops(uₕ, dim_val)
+    _pc_directional_ops(_PC_OPS_TABLES, dim_val, uₕ)
     _pc_vectorial_ops(uₕ)
     _pc_inner_products(uₕ, dim_val)
     _pc_vector_calculus(uₕ, dim_val)
 
     v_out = similar(uₕ)
-    _pc_directional_ops_inplace(v_out, uₕ, dim_val)
+    _pc_directional_ops(_PC_OPS_TABLES_INPLACE, dim_val, v_out, uₕ)
 
-    _pc_directional_ops(cₕ, dim_val)
+    _pc_directional_ops(_PC_OPS_TABLES, dim_val, cₕ)
     _pc_vectorial_ops(cₕ)
 
     vc_out = similar(cₕ)
-    _pc_directional_ops_inplace(vc_out, cₕ, dim_val)
+    _pc_directional_ops(_PC_OPS_TABLES_INPLACE, dim_val, vc_out, cₕ)
 
     kₕ = components(cₕ)[1]
-    _pc_directional_ops(kₕ, dim_val)
+    _pc_directional_ops(_PC_OPS_TABLES, dim_val, kₕ)
     _pc_inner_products(kₕ, dim_val)
 
     # Float64 only: the Float32 2D session below would otherwise rebuild the same
