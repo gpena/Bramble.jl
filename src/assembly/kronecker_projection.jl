@@ -59,21 +59,22 @@ _kron_rewrap(op::RegionRestriction, x::LazyOp) = restrict_to(op.region, x)
 # --- Projecting a chain onto one axis ------------------------------------------------ #
 
 """
-    _kron_axis(op::LazyOp, d::Int, leaf::LazyOp{1}) -> LazyOp{1}
+    _kron_axis(op::LazyOp, ::Val{d}, leaf::LazyOp{1}) -> LazyOp{1}
 
 The 1D chain that `op`, a sum-free chain from `_kron_split`, becomes on axis `d`, with its
 trial or test function replaced by `leaf`: a node along `d` becomes its 1D counterpart, a
 node along another axis becomes the identity, and an `:interior` restriction stays one.
 That last step is only exact when the mesh's `:interior` marker is the product of the axes'
 own, which a domain can break by redefining `:interior`; `_kron_interior_is_tensor` checks
-it before `_kron_project` uses this.
+it before `_kron_project` uses this. The axis is a `Val`, so that whether a node lies along
+it is known when the chain is compiled and the 1D chain has one type.
 """
-_kron_axis(::Union{TrialFunction, TestFunction}, ::Int, leaf::LazyOp{1}) = leaf
-_kron_axis(op::RegionRestriction, d::Int, leaf::LazyOp{1}) = restrict_to(
-    op.region, _kron_axis(op.inner_op, d, leaf))
+_kron_axis(::Union{TrialFunction, TestFunction}, ::Val, leaf::LazyOp{1}) = leaf
+_kron_axis(op::RegionRestriction, vd::Val, leaf::LazyOp{1}) = restrict_to(
+    op.region, _kron_axis(op.inner_op, vd, leaf))
 
-function _kron_axis(op::ShiftNode{D, Dim}, d::Int, leaf::LazyOp{1}) where {D, Dim}
-    x = _kron_axis(op.inner_op, d, leaf)
+function _kron_axis(op::ShiftNode{D, Dim}, vd::Val{d}, leaf::LazyOp{1}) where {D, Dim, d}
+    x = _kron_axis(op.inner_op, vd, leaf)
     return d == Dim ? ShiftNode{1, 1, typeof(x)}(op.shift_amount, x) : x
 end
 
@@ -92,8 +93,8 @@ for N in (:BackwardDifference, :ForwardDifference, :CenteredDifference, :Backwar
             return 1 <= Dim <= D ? _kron_split_wrapped(op) : nothing
         end
         _kron_rewrap(::$N{D, Dim}, x::LazyOp{D}) where {D, Dim} = $N{D, Dim, typeof(x)}(x)
-        function _kron_axis(op::$N{D, Dim}, d::Int, leaf::LazyOp{1}) where {D, Dim}
-            x = _kron_axis(op.inner_op, d, leaf)
+        function _kron_axis(op::$N{D, Dim}, vd::Val{d}, leaf::LazyOp{1}) where {D, Dim, d}
+            x = _kron_axis(op.inner_op, vd, leaf)
             return d == Dim ? $N{1, 1, typeof(x)}(x) : x
         end
     end
@@ -112,8 +113,8 @@ _kron_split(op::OperatorScale{D, <:_NormalScalar}) where {D} = _kron_split_wrapp
 function _kron_rewrap(op::OperatorScale{D}, x::LazyOp{D}) where {D}
     return OperatorScale{D, typeof(op.scalar), typeof(x)}(op.scalar, x)
 end
-function _kron_axis(op::OperatorScale, d::Int, leaf::LazyOp{1})
-    x = _kron_axis(op.inner_op, d, leaf)
+function _kron_axis(op::OperatorScale, vd::Val{d}, leaf::LazyOp{1}) where {d}
+    x = _kron_axis(op.inner_op, vd, leaf)
     return d == 1 ? OperatorScale{1, typeof(op.scalar), typeof(x)}(op.scalar, x) : x
 end
 
@@ -148,8 +149,9 @@ function _kron_rewrap(op::GridFunctionScale{D, V}, x::LazyOp{D}) where {D, V}
     return GridFunctionScale{D, V, typeof(x)}(op.grid_function, x)
 end
 
-function _kron_axis(op::GridFunctionScale{D, <:_KronCoef}, d::Int, leaf::LazyOp{1}) where {D}
-    x = _kron_axis(op.inner_op, d, leaf)
+function _kron_axis(
+        op::GridFunctionScale{D, <:_KronCoef}, vd::Val{d}, leaf::LazyOp{1}) where {D, d}
+    x = _kron_axis(op.inner_op, vd, leaf)
     c = op.grid_function
     return d == c.axis ? GridFunctionScale(c.values, x) : x
 end
@@ -173,8 +175,10 @@ function _kron_coef(g::AbstractVector, Ωₕ::MeshnD{D}) where {D}
     np = npoints(Ωₕ, Tuple)
     length(g) == prod(np) || return nothing
     A = reshape(collect(g), np)
-    first_slice(e) = selectdim(A, e, 1:1)
-    varying = filter(e -> !all(isequal.(A, first_slice(e))), 1:D)
+    # Whether every value equals the one at index 1 along axis `e`, the same point otherwise.
+    same_along(e) = all(
+        I -> isequal(A[I], A[ntuple(k -> k == e ? 1 : I[k], Val(D))...]), CartesianIndices(A))
+    varying = filter(e -> !same_along(e), 1:D)
     length(varying) > 1 && return nothing
     d = isempty(varying) ? 1 : only(varying)
     return _KronCoef(d, A[ntuple(e -> e == d ? Colon() : 1, Val(D))...])
@@ -203,17 +207,19 @@ end
 # Each chain with its coefficients replaced, or `nothing` when one chain has none.
 function _kron_coefs(chains::Tuple, Ωₕ::MeshnD)
     out = map(op -> _kron_coefs(op, Ωₕ), chains)
-    return any(isnothing, out) ? nothing : out
+    # `something` drops `Nothing` from each entry's type, as no entry is `nothing` there.
+    return any(isnothing, out) ? nothing : map(something, out)
 end
 
 # --- The 1D inner products on each axis --------------------------------------------- #
 
 """
-    _kron_inners(w, Ωₕ::MeshnD{D}) -> Union{Nothing, Tuple}
+    _kron_inners(w, Ωₕ::MeshnD{D}) -> Union{Nothing, Tuple, Vector}
 
 One `NTuple{D}` of 1D inner products per Kronecker term the weight `w`, an instance or a
 singleton type, expands into, the
-entry on axis `d` the product the factor on that axis is assembled with. `nothing` for a
+entry on axis `d` the product the factor on that axis is assembled with: a tuple of them, a
+vector for `InnerGamma`, whose number of faces is known at run time. `nothing` for a
 weight with no such expansion.
 
 `InnerH` weighs every axis by its own `innerₕ` weights; `InnerPlus{Dim}` uses `inner₊` on
@@ -233,7 +239,13 @@ function _kron_inners(::Type{InnerPlus{Dim}}, ::MeshnD{D}) where {Dim, D}
     return (ntuple(d -> d == Dim ? inner₊ : innerₕ, Val(D)),)
 end
 
-_kron_face_inner(side::Int) = (l, r) -> inner_Γ(l, r; markers = side == 1 ? :xmin : :xmax)
+# The 1D product on one axis of an `inner_Γ` face term: `inner_Γ` on the face endpoint
+# `side` (1 the minimum, 2 the maximum), or `innerₕ` for `side == 0`. One type for every
+# entry, so the faces of a mask, which are known only at run time, share one tuple type;
+# `_kron_axis_assemble` turns `side` into a product of one type before it builds a form.
+struct _KronFaceInner
+    side::Int
+end
 
 function _kron_inners(w::InnerGamma, Ωₕ::MeshnD{D}) where {D}
     np = npoints(Ωₕ, Tuple)
@@ -241,10 +253,9 @@ function _kron_inners(w::InnerGamma, Ωₕ::MeshnD{D}) where {D}
     # On a one-point axis both faces are the same point, which the D-dimensional weight
     # counts once and two face terms would count twice.
     any(d -> mask[d][1] && mask[d][2] && np[d] < 2, 1:D) && return nothing
-    faces = [(d, s) for d in 1:D for s in 1:2 if mask[d][s]]
-    return Tuple(map(faces) do (d, s)
-        ntuple(e -> e == d ? _kron_face_inner(s) : innerₕ, Val(D))
-    end)
+    faces = [ntuple(e -> _KronFaceInner(e == d ? s : 0), Val(D))
+             for d in 1:D for s in 1:2 if mask[d][s]]
+    return faces
 end
 
 # --- The `:interior` marker -------------------------------------------------------- #
@@ -317,13 +328,48 @@ function _kron_project(term::BilinearProduct{D}, Ωₕ::MeshnD{D}) where {D}
         _kron_interior_is_tensor(Ωₕ) || return nothing
     end
     spaces = ntuple(d -> _kron_axis_space(Ωₕ, d), Val(D))
-    terms = vec([(_kron_live(l), _kron_live(r), w) for l in ls, r in rs, w in inners])
-    return Tuple(map(terms) do ((ls_, l), (rs_, r), w)
-        factors = ntuple(Val(D)) do d
-            Wd = spaces[d]
-            f = (u, v) -> w[d](_kron_axis(l, d, u), _kron_axis(r, d, v))
-            assemble(form(Wd, Wd, f))
-        end
-        ((ls_..., rs_...), factors)
-    end)
+    return _kron_project_terms(ls, rs, inners, spaces)
+end
+
+# The `(scales, factors)` pair of every chain `l` of `ls`, `r` of `rs` and weight `w` of
+# `inners`, `l` fastest and `w` slowest, each factor assembled on its space of `spaces`.
+# The pairs are built over tuples, the axis as a `Val`, so that every factor's form has one
+# type; the faces of an `inner_Γ` weight, a vector, are splatted into the tuple once.
+function _kron_project_terms(
+        ls::Tuple, rs::Tuple, inners, spaces::Tuple{Vararg{Any, D}}) where {D}
+    axes_v = ntuple(Val, Val(D))
+    pair(l, r, w) = _kron_project_pair(_kron_live(l), _kron_live(r), w, spaces, axes_v)
+    per_w(w) = _kron_cat(map(r -> map(l -> pair(l, r, w), ls), rs)...)
+    return _kron_cat_each(per_w, inners)
+end
+
+function _kron_project_pair((ls_, l), (rs_, r), w, spaces, axes_v)
+    factors = map((Wd, vd) -> _kron_axis_factor(Wd, w, l, r, vd), spaces, axes_v)
+    return ((ls_..., rs_...), factors)
+end
+
+# The tuple of `f(x)`'s entries for every `x` of `t`, in order: entry by entry over a
+# tuple, and over a vector (the faces of `inner_Γ`, known at run time) one splat at the end.
+_kron_cat_each(f, t::Tuple) = _kron_cat(map(f, t)...)
+_kron_cat_each(f, t::Vector) = (Iterators.flatten(map(f, t))...,)
+
+_kron_cat() = ()
+_kron_cat(a::Tuple, b::Tuple...) = (a..., _kron_cat(b...)...)
+
+"""
+    _kron_axis_factor(Wd, w, l, r, ::Val{d}) -> SparseMatrixCSC
+
+The factor on axis `d` of the term `w[d](L, R)`: the 1D form on `Wd` whose sides are the
+chains `l` and `r` project to on `d` (`_kron_axis`), assembled.
+"""
+_kron_axis_factor(Wd, w, l, r, vd::Val{d}) where {d} = _kron_axis_assemble(Wd, w[d], l, r, vd)
+
+function _kron_axis_assemble(Wd, inner, l, r, vd::Val)
+    return assemble(form(Wd, Wd, (u, v) -> inner(_kron_axis(l, vd, u), _kron_axis(r, vd, v))))
+end
+function _kron_axis_assemble(Wd, w::_KronFaceInner, l, r, vd::Val)
+    w.side == 0 && return _kron_axis_assemble(Wd, innerₕ, l, r, vd)
+    w.side == 1 &&
+        return _kron_axis_assemble(Wd, (a, b) -> inner_Γ(a, b; markers = :xmin), l, r, vd)
+    return _kron_axis_assemble(Wd, (a, b) -> inner_Γ(a, b; markers = :xmax), l, r, vd)
 end

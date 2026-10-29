@@ -145,15 +145,7 @@ function _ghost_kron_project(term::BilinearProduct{D}, Ωp::MeshnD{D}, spaces) w
     rs === nothing || (rs = _kron_coefs(rs, Ωp))
     rs === nothing && return nothing
     (any(_kron_restricts, ls) || any(_kron_restricts, rs)) && return nothing
-    terms = vec([(_kron_live(l), _kron_live(r), w) for l in ls, r in rs, w in inners])
-    return Tuple(map(terms) do ((ls_, l), (rs_, r), w)
-        factors = ntuple(Val(D)) do d
-            Wd = spaces[d]
-            f = (u, v) -> w[d](_kron_axis(l, d, u), _kron_axis(r, d, v))
-            assemble(form(Wd, Wd, f))
-        end
-        ((ls_..., rs_...), factors)
-    end)
+    return _kron_project_terms(ls, rs, inners, spaces)
 end
 
 # Whether the padded factors of one Kronecker term reach an absent padded point: some row,
