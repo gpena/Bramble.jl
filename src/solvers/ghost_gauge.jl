@@ -186,7 +186,7 @@ function _node_kernel!(Zi::Vector{Int}, Zj::Vector{Int}, Zv::Vector{T}, k::Int,
     end
     # A block with no nonzero row (the form never reads these ghosts) is all kernel.
     σ, V = isempty(rows) ? (real(T)[], Matrix{T}(I, m, m)) :
-           (F = svd(B; full = true); (F.S, F.V))
+           (F = svd(B; full = true); (F.S, Matrix(F.V)))
     σ₁ = isempty(σ) ? zero(real(T)) : first(σ)
     for i in 1:m
         i <= length(σ) && σ[i] > max(atol, rtol * σ₁) && continue
