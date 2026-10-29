@@ -235,7 +235,9 @@ needs the geometric set beside the custom one), take the rebuild above.
 # A `GhostMesh` always rebuilds; `Mesh1D` and `MeshnD` take `_remark_markers!` (their files).
 _remark_in_place!(::AbstractMeshType, domain_markers, fitted::Tuple) = false
 
-function _remark_markers!(Ωₕ::AbstractMeshType, domain_markers, fitted::Tuple)
+function _remark_markers!(
+        Ωₕ::AbstractMeshType, domain_markers::Union{DomainMarkers, EvaluatedDomainMarkers},
+        fitted::Tuple)
     _same_marker_layout(Ωₕ, domain_markers) || return false
     mm = markers(Ωₕ)
     for bits in values(mm)
@@ -265,7 +267,8 @@ end
 # Whether `domain_markers` re-marks `Ωₕ` without changing its storage: the stored labels are
 # exactly the domain's plus `:boundary` and `:interior`, every `BitVector` and word column
 # is sized for the current points, and the predicate labels are the stored ones, in order.
-function _same_marker_layout(Ωₕ::AbstractMeshType, domain_markers)
+function _same_marker_layout(
+        Ωₕ::AbstractMeshType, domain_markers::Union{DomainMarkers, EvaluatedDomainMarkers})
     mm, ids, words = markers(Ωₕ), _marker_ids(Ωₕ), _marker_words(Ωₕ)
     n = npoints(Ωₕ)
     (words isa Matrix{UInt64} && size(words) == (cld(n, 64), length(mm)) &&
