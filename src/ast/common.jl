@@ -705,10 +705,10 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 # `assembly/linear.jl` (whose `_lower_sources_for_space` routes `LinearProduct`/`OperatorAdd`
 # across a `CompositeGridSpace`'s leaves), so `innerₕ(D₋ₓ(sf), v)` samples `sf` under the
 # difference. Two wrappers are left unchanged. A `RegionRestriction` keeps its
-# `SourceFunction`, called only where its region reaches, on every assembly: the source may
-# be undefined outside the region, and `markers!` can move the region after `form`. An
-# `InterpolationNode` keeps its operand too (test/form/source_operators.jl, "wrapped source:
-# lowered under the node" and "restricted source: unlowered").
+# `SourceFunction`, called only where its region reaches, on every assembly, since the
+# source may be undefined outside the region and `markers!` can move the region after
+# `form`. An `InterpolationNode` keeps its operand too (test/form/source_operators.jl,
+# "wrapped source: lowered under the node" and "restricted source: unlowered").
 @inline _lower_sources(op::LazyOp, space) = op
 
 @inline function _lower_sources(op::SourceFunction{D}, space) where {D}
