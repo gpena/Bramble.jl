@@ -244,11 +244,11 @@ function inner_Γ(
 end
 
 # The labels, held until `form` resolves them to faces as it does `InnerGamma`'s
-# (`_resolve_surfaces`, operators/inner.jl).
+# (`_resolve_surfaces`, operators/inner.jl), in the one order `_canonical_labels` gives.
 @inline function _normal_mask(::Val{D}, markers) where {D}
     labels = _as_labels(markers)
     isempty(labels) && _throw_no_surface_labels()
-    return _SurfaceLabels{labels}
+    return _canonical_labels(_SurfaceLabels{labels})
 end
 
 function _resolved_inner(::InnerGammaNormal{_SurfaceLabels{L}, DIM}, Ωₕ) where {L, DIM}

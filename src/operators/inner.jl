@@ -442,12 +442,20 @@ end
 @inline function _inner_gamma(::Val{D}, markers) where {D}
     labels = _as_labels(markers)
     isempty(labels) && _throw_no_surface_labels()
-    return InnerGamma{_SurfaceLabels{labels}}()
+    return InnerGamma{_canonical_labels(_SurfaceLabels{labels})}()
 end
 
 # The labels a surface weight names, before `form` resolves them to faces through
 # `_surface_mask` (mesh/queries.jl), the resolution the numeric `inner_Γ` makes.
 struct _SurfaceLabels{L} end
+
+# One type per label set, whatever the order or repeats: `L` sorted and de-duplicated on
+# the type, so the constant the builder propagates folds through it and `form` compiles
+# once for `(:xmax, :ymax)` and `(:ymax, :xmax)` (gpena/Bramble.jl#1001). Sorting the
+# runtime tuple instead may stop that propagation and leave `form` a `Union`.
+@generated function _canonical_labels(::Type{_SurfaceLabels{L}}) where {L}
+    return _SurfaceLabels{Tuple(sort!(unique(collect(L))))}
+end
 
 # The faces of every surface product in `ast`, resolved on the mesh of the leaf its sweep
 # walks: a leaf of the test space `Vₕ`, or of the trial space `Wₕ` when the product

@@ -462,6 +462,26 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, _Con
         @test isconcretetype(only(Base.return_types(Bramble._normal_terms, sig)))
     end
 
+    # The labels are a set, for the normal expansion and the facet weight as for
+    # `InnerGamma`: their order and repeats leave one type per set (gpena/Bramble.jl#1001).
+    @testset "dot(F, η): one type per label set" begin
+        Ωₕ = mesh(Ω, (9, 11), (false, false))
+        g(n, a) = range(0.0, 1.0; length = n) .^ a
+        Bramble.change_points!(Ωₕ, (g(9, 1.4), g(11, 1.6)))
+        Wₕ = gridspace(Ωₕ)
+        u, v = Bramble.trial_function(Wₕ), Bramble.test_function(Wₕ)
+        F = (_x1, _x2)
+        n(m) = inner_Γ(dot(F, η), v; markers = m)
+        @test typeof(n((:xmax, :ymax))) === typeof(n((:ymax, :xmax)))
+        @test typeof(n((:ymin, :ymin))) === typeof(n(:ymin))
+        ηₓ, ηᵧ = η
+        c(m) = inner_Γ(u * ηₓ + u * ηᵧ, v; markers = m)
+        @test typeof(c((:xmax, :ymin))) === typeof(c((:ymin, :xmax)))
+        l(m) = assemble(form(Wₕ, w -> inner_Γ(dot(F, η), w; markers = m)))
+        @test l((:ymax, :xmax)) == l((:xmax, :ymax))
+        @test l((:xmax, :xmax)) == l((:xmax,))
+    end
+
     @testset "The normal is named η, not n (#341)" begin
         @test !isdefined(Bramble, :n)
         @test Base.isexported(Bramble, :η)
