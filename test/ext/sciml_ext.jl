@@ -81,6 +81,13 @@ using LinearSolve: KrylovJL_GMRES, LUFactorization
 
         # The two-form method builds the semidiscretisation on the way.
         @test ode_function(a, l; dirichlet = :boundary) isa SciMLBase.ODEFunction
+
+        # A literal `reassemble` must reach `semidiscretize` as a constant through the
+        # forwarded keywords, or the `Val` it becomes leaves the type a `UnionAll` (#981).
+        g(a, l) = ode_function(a, l; dirichlet = :boundary, reassemble = true)
+        R = only(Base.return_types(g, (typeof(a), typeof(l))))
+        @test isconcretetype(R)
+        @test R === typeof(g(a, l))
     end
 
     # ode_problem keeps the time domain and a copied, consistent u₀.

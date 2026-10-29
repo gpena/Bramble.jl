@@ -647,6 +647,30 @@ end
     end
 end
 
+# The `Semidiscretization` type is concrete at the call site for each constraint carrier,
+# and the leaf-by-leaf mesh check infers `Bool` across leaves of unlike types (#981).
+@testset "semidiscretize: concrete type (#981)" begin
+    Ωₕ, Wₕ, fₕ, a, l = _sd_problem(9)
+    I = Bramble.interval(0.0, 1.0)
+    sd_closure(a, l, b) = semidiscretize(a, l; dirichlet = b)
+    for b in (
+        dirichlet_constraints(Ωₕ, :boundary => x -> 0.0),
+        dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> t),
+        dirichlet_constraints(Ωₕ, I, :boundary => (x, t, p) -> p[1] * t)
+    )
+        R = only(Base.return_types(sd_closure, (typeof(a), typeof(l), typeof(b))))
+        @test isconcretetype(R)
+        @test R === typeof(sd_closure(a, l, b))
+    end
+
+    D = Bramble.domain(Bramble.interval(0.0, 1.0))
+    Wp = gridspace(Bramble.mesh(D, 7, false; backend = Bramble.backend(policy = Parallel())))
+    @test typeof(Bramble.mesh(Wp)) != typeof(Bramble.mesh(Wₕ))
+    V = Wₕ × Wp
+    @test @inferred(Bramble._same_leaf_meshes(V, V)) === true
+    @test @inferred(Bramble._same_leaf_meshes(V, Wp × Wₕ)) === false
+end
+
 # Every form handed to `semidiscretize` is posed on `l`'s space: `mass` of another
 # size (#705), and `a` or `mass` on another mesh with as many points (#706), are
 # refused at construction, while two `gridspace` calls over one mesh still pass.
