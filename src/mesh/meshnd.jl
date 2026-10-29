@@ -159,8 +159,8 @@ function _stamp_submeshes!(submeshes::Tuple, labels::Vector{Symbol})
     return nothing
 end
 
-# A `MeshnD` is nobody's submesh.
-@inline _parent_predicate_labels(::MeshnD) = Symbol[]
+# A `MeshnD` is nobody's submesh: no labels, and no vector built to say so.
+@inline _parent_predicate_labels(::MeshnD) = ()
 
 # Replaces the marker dictionary, its label table and the word matrix together. A label set
 # may change after construction; the word matrix is rebuilt, never resized.
