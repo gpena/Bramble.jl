@@ -40,7 +40,7 @@ half the larger extent of the vertices.
   - `ArgumentError`: the errors of `_levelset_class` and of `_levelset_orbit_grid`, or, on
     the closure path, "check failed" or `_grid_closure`'s cap error.
 """
-function _levelset_grid(φ, xs::AbstractVector, ys::AbstractVector)
+function _levelset_grid(φ::F, xs::AbstractVector, ys::AbstractVector) where {F}
     B = _levelset_box(xs, ys)
     path, ρ = _levelset_class(φ, B)
     path === :orbit && return _levelset_orbit_grid(φ, xs, ys, ρ)
@@ -99,7 +99,8 @@ samples the conjugacy from orbits started at equally spaced angles.
     many lines" when no `N` up to `4 nin` costs at most `cmax`, "check failed" when both
     grids fail the post-check.
 """
-function _levelset_orbit_grid(φ, xs::AbstractVector, ys::AbstractVector, ρ::Real; cmax::Real = 2.0)
+function _levelset_orbit_grid(φ::F, xs::AbstractVector, ys::AbstractVector, ρ::Real;
+        cmax::Real = 2.0) where {F}
     B = _levelset_box(xs, ys)
     sx, sy = unique!(sort!(Float64.(collect(xs)))), unique!(sort!(Float64.(collect(ys))))
     c, _ = _levelset_centre(φ, B)
@@ -183,7 +184,7 @@ end
 # Sorted polar angles of K points of T-orbits: one orbit, or, when ρ = p/q with q ≤ 60, K/q
 # orbits of length q started at equally spaced angles. Their empirical distribution is the
 # conjugacy H of T to the rotation by ρ.
-function _levelset_conjugacy(φ, B, c::NTuple{2, Float64}, ρ::Float64, K::Int)
+function _levelset_conjugacy(φ::F, B, c::NTuple{2, Float64}, ρ::Float64, K::Int) where {F}
     q = something(findfirst(q -> abs(q * ρ - round(q * ρ)) < 1e-12, 1:60), K)
     s = K ÷ q
     θs = Float64[]
@@ -212,7 +213,7 @@ end
 # The vertical lines X, horizontal lines Y and vertices V of N = m q lines per axis inside
 # the extent (width w in units of the curve's length scale): m periodic orbits of T, each
 # closed by `_levelset_close!`.
-function _levelset_orbits(φ, B, c, θₗ::Float64, ρ::Float64, N::Int, w::Float64)
+function _levelset_orbits(φ::F, B, c, θₗ::Float64, ρ::Float64, N::Int, w::Float64) where {F}
     m = gcd(N, round(Int, N * ρ))
     q = N ÷ m
     p = round(Int, N * ρ) ÷ m

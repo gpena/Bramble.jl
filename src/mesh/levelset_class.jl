@@ -39,7 +39,7 @@ end
 
 # The other crossing of φ = 0 on the line {x_axis = p[axis]} through the crossing p; p itself
 # when the line does not meet the curve twice (a tangent line).
-function _levelset_σ(φ, box, axis::Int, p::NTuple{2, Float64})
+function _levelset_σ(φ::F, box, axis::Int, p::NTuple{2, Float64}) where {F}
     lo, hi = box[3 - axis]
     r = _crossings(φ, axis, p[axis], lo, hi)
     length(r) == 2 || return p
@@ -47,7 +47,7 @@ function _levelset_σ(φ, box, axis::Int, p::NTuple{2, Float64})
     return axis == 1 ? (p[1], o) : (o, p[2])
 end
 
-_levelset_T(φ, box, p) = _levelset_σ(φ, box, 2, _levelset_σ(φ, box, 1, p))
+_levelset_T(φ::F, box, p) where {F} = _levelset_σ(φ, box, 2, _levelset_σ(φ, box, 1, p))
 
 # Polar angle of p about c in [0, 2π).
 _levelset_angle(c, p) = mod(atan(p[2] - c[2], p[1] - c[1]), 2π)
@@ -79,7 +79,7 @@ function _levelset_ray(φ, box, c::NTuple{2, Float64}, θ::Float64; M::Int = 129
 end
 
 # Whether T^q = id, to `tol`, at every point of `pts`.
-function _levelset_periodic(φ, box, pts, q::Int, tol::Float64)
+function _levelset_periodic(φ::F, box, pts, q::Int, tol::Float64) where {F}
     for p in pts
         x = p
         for _ in 1:q
@@ -94,7 +94,8 @@ end
 # of 2001 samples has φ ≤ 0, or golden section around a sampled local minimum finds
 # φ ≤ 1e-10 of the largest |φ| at the samples bracketing it (a curve tangent to the side
 # between two samples). Non-finite samples are skipped, so neither test reads NaN or Inf.
-function _levelset_side_touches(φ, axis::Int, v::Float64, lo::Float64, hi::Float64; M::Int = 2001)
+function _levelset_side_touches(φ::F, axis::Int, v::Float64, lo::Float64, hi::Float64;
+        M::Int = 2001) where {F}
     f = t -> φ(axis == 1 ? (v, t) : (t, v))
     ts = range(lo, hi; length = M)
     fs = map(f, ts)
@@ -105,14 +106,14 @@ function _levelset_side_touches(φ, axis::Int, v::Float64, lo::Float64, hi::Floa
         a, b = ts[max(k - 1, 1)], ts[min(k + 1, M)]
         spread = maximum(j -> isfinite(fs[j]) ? abs(fs[j]) : 0.0, max(k - 1, 1):min(k + 1, M))
         # A tie keeps [m1, m2], so φ rounded flat near a tangency cannot drift the bracket.
-        g = Inf
+        g = Ref{promote_type(Float64, eltype(fs))}(Inf)
         _golden_min(a, b; keep_ties = true) do t
             ft = f(t)
             isnan(ft) && return Inf   # a NaN probe never wins
-            isfinite(ft) && (g = min(g, ft))
+            isfinite(ft) && (g[] = min(g[], ft))
             return ft
         end
-        g <= 1e-10 * spread && return true
+        g[] <= 1e-10 * spread && return true
     end
     return false
 end
@@ -219,7 +220,7 @@ function _levelset_class(φ, box)
 end
 
 # The rotation number p/q of a T of order q, from the angle T turns p through in q steps.
-function _levelset_ρq(φ, box, c, p, q::Int)
+function _levelset_ρq(φ::F, box, c, p, q::Int) where {F}
     s = 0.0
     for _ in 1:q
         p₂ = _levelset_T(φ, box, p)

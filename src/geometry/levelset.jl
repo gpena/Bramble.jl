@@ -89,7 +89,8 @@ function _crossings(φ, axis::Integer, v::Real, lo::Real, hi::Real; M::Integer =
     (axis == 1 || axis == 2) || throw(ArgumentError("levelset crossings: axis must be 1 or 2, got $axis."))
     M >= 3 || throw(ArgumentError("levelset crossings: need at least 3 samples, got $M."))
     T = float(promote_type(typeof(v), typeof(lo), typeof(hi)))
-    f = axis == 1 ? t -> φ((T(v), t)) : t -> φ((t, T(v)))
+    vT = T(v)
+    f = t -> φ(axis == 1 ? (vT, t) : (t, vT))
     ts = range(T(lo), T(hi); length = M)
     fs = map(f, ts)
     out = T[]
