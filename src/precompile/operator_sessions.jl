@@ -185,8 +185,9 @@ function _pc_operator_session(uₕ, cₕ, dim_val::Val)
     return nothing
 end
 
-# εₕ/εₕ! dispatch on the field's grid space, which is keyed by the domain's marker names,
-# so it needs its own mesh rather than reusing uₕ/cₕ above, built small and standalone here.
+# εₕ/εₕ! on a 2D composite field, built small and standalone here. The grid space's type
+# carries no marker names, so the separate mesh is for independence from the session's
+# fields above, not for type coverage.
 function _pc_strain_tensor_session()
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
     Ω = domain(S, :boundary => boundary_symbols(S))

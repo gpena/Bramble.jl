@@ -688,8 +688,9 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 # construction, and every later `assemble!`/`assemble` call is a flat array read like any
 # other `SourceVector`, regardless of how novel the closure's type is.
 #
-# So a `SourceFunction` closure is sampled once, at `form`; it is never re-invoked. A source
-# that changes afterwards goes through `update_coefficients!` and a `VectorElement`
+# So a `SourceFunction` closure reachable through the nodes this pass descends (below) is
+# sampled once, at `form`, and never re-invoked. A source that changes afterwards goes
+# through `update_coefficients!` and a `VectorElement`
 # (`semidiscretize`'s docstring). `VectorElement` and `Ref` coefficients are never wrapped in
 # a `SourceFunction` and stay live.
 #
@@ -699,10 +700,14 @@ source_function(f, ::Val{D}) where {D} = SourceFunction{D, typeof(f)}(f)
 # only `interpolate_at` at fill time can see `uₕ`'s mesh move and refuse it; its type
 # depends on `uₕ`'s element type only, so it costs no recompilation either.
 #
-# Every node type not named here is a leaf as far as this pass is concerned (it can never
-# contain a `SourceFunction`, or lowering inside it is handled by its own caller -- see
-# `_lower_sources_for_space` in `assembly/linear.jl` for `LinearProduct`/`OperatorAdd` routing
-# across a `CompositeGridSpace`'s leaves) and is returned unchanged.
+# The pass descends only `OperatorScale`, `GridFunctionScale` and `OperatorAdd` here, and
+# `ShiftNode` and `LinearProduct` in `assembly/linear.jl` (whose `_lower_sources_for_space`
+# routes `LinearProduct`/`OperatorAdd` across a `CompositeGridSpace`'s leaves). Every other
+# node is returned unchanged, including the stencil nodes (differences, averages, jumps) and
+# `RegionRestriction`, which can hold a `SourceFunction`: `innerₕ(D₋ₓ(sf), v)` keeps `sf`
+# unlowered, so its closure stays in the AST's type and is re-invoked at every fill. That is
+# a missed optimisation, not a wrong value (test/form/source_operators.jl, "wrapped source:
+# unlowered").
 @inline _lower_sources(op::LazyOp, space) = op
 
 @inline function _lower_sources(op::SourceFunction{D}, space) where {D}
