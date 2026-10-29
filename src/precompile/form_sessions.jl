@@ -382,12 +382,11 @@ end
 # `leaf_spaces_offsets` (gpena/Bramble.jl#283).
 #
 # Builds its own non-uniform mesh with a single `:boundary` marker covering the whole
-# boundary, rather than reusing the session's mesh/label: `markers(Ωₕ)` is a `NamedTuple`
-# keyed by label, so a caller whose domain names its boundary `:boundary` (one label) rather
-# than `:left`/`:right`/`:wall` (this file's other sessions) hits fresh method instances --
-# reusing `label`/`Ωₕ` from the caller left this cold even though the AST/stencil shapes
-# were already warm. The Laplacian/`innerₕ` shapes here match what a caller reaching for a
-# net-flux boundary quantity actually writes.
+# boundary, the label a caller reaching for a net-flux boundary quantity usually passes as
+# `marker`. Labels do not enter the mesh or space types (`markers(Ωₕ)` is a
+# `Dict{Symbol, BitVector}`), so a private mesh is not needed for type coverage; it only keeps
+# this session independent of the caller's mesh. The Laplacian/`innerₕ` shapes here match
+# what such a caller actually writes.
 # Split by dimension (rather than branching on `D` inside one method) so JET resolves each
 # call concretely instead of analysing both branches together against a single generic `D`:
 # a `Wₕ` inferred over the `Union` of the 1D/2D grid space types lets the union-split analysis

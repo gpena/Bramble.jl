@@ -97,7 +97,7 @@ function _launch_uniform_mesh1d_init!(
 end
 
 # ---------------------------------------------------------------------------
-# `half_points!` (src/mesh/mesh1d.jl:347-352 is the CPU original)
+# `half_points!` (the CPU original is `half_points!(x::Array, Ωₕ)` in src/mesh/mesh1d.jl)
 # ---------------------------------------------------------------------------
 
 @kernel function _half_points_kernel!(x, @Const(pts), n)
@@ -117,7 +117,7 @@ function _launch_half_points!(x::AbstractVector, pts, n::Int, dev)
 end
 
 # ---------------------------------------------------------------------------
-# `spacing!` (src/mesh/mesh1d.jl:375-378 is the CPU original)
+# `spacing!` (the CPU original is `spacing!(x::Array, Ωₕ)` in src/mesh/mesh1d.jl)
 # ---------------------------------------------------------------------------
 
 @kernel function _spacing_kernel!(x, @Const(pts), n)
@@ -135,7 +135,7 @@ function _launch_spacing!(x::AbstractVector, pts, n::Int, dev)
 end
 
 # ---------------------------------------------------------------------------
-# `half_spacing!` (src/mesh/mesh1d.jl:388-394 is the CPU original)
+# `half_spacing!` (CPU original: `half_spacing!(x::Array, Ωₕ)`, src/mesh/mesh1d.jl)
 # ---------------------------------------------------------------------------
 
 @kernel function _half_spacing_kernel!(x, @Const(h), n)
@@ -213,7 +213,7 @@ function _launch_nonuniform_mesh1d_metrics!(
 end
 
 # ---------------------------------------------------------------------------
-# `_refine_indices!` (src/mesh/mesh1d.jl:486-489 is the CPU original)
+# `_refine_indices!` (CPU original: `_refine_indices_fill!(::Array, ...)`, mesh/mesh1d.jl)
 # ---------------------------------------------------------------------------
 
 @kernel function _refine_indices_kernel!(new_points, @Const(old_points), N_old)
