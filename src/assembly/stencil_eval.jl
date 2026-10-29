@@ -1278,7 +1278,7 @@ _is_source_only(::LazyOp) = false
 end
 
 # `op` second, one mutated argument returned unchanged: `_route_terms!`,
-# `_route_terms_parallel!`, `_assemble_blocks!`.
+# `_route_terms_parallel!`.
 @inline function _visit_operator_add2(f::F, first_arg, op::OperatorAdd, rest...) where {F}
     map(t -> f(first_arg, t, rest...), _summands(op))
     return first_arg

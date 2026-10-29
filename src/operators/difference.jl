@@ -502,11 +502,13 @@ end
 # `_apply_stencil!` reaches these once `execution_policy` names a `GpuPolicy`, instead of
 # `_difference_engine!`'s scalar-indexing CPU sweep above, which a device array refuses.
 # `ext/BrambleKernelAbstractionsExt.jl` fills in the two launchers with a
-# `KernelAbstractions.@kernel` that calls the very `_compute_difference` methods above, once
-# per grid point, so the device and host answers stay identical by construction rather than
-# by two implementations agreeing -- the same reasoning `avgₕ!`'s device path
-# (`operators/cell_average.jl`) documents. Without that extension loaded, the launcher
-# throws a named diagnostic instead of failing several frames later on a scalar index.
+# `KernelAbstractions.@kernel` that calls the `_compute_difference` methods above at the
+# boundary points and for every unscaled or cross-weighted difference. The scaled one-sided
+# and centered interiors (`D₋ₓ`, `D₊ₓ`, `D̃ₓ`, `Dcₓ`) instead multiply by a reciprocal spacing
+# computed once per launch, so on the device they can differ from the host's division in the
+# last bit (the extension's "Reciprocal spacing" note). Without that extension loaded, the
+# launcher throws a named diagnostic instead of failing several frames later on a scalar
+# index.
 #------------------------------------------------------------------------------------------#
 
 @noinline function _throw_no_ka_stencil_kernel(fname::String)
