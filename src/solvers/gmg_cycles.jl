@@ -192,7 +192,7 @@ the grid size.
 - `ArgumentError`: the coarsest level has more than 4096 points: `Ωₕ`'s point counts minus
   one need a larger power of two as a factor.
 - `ArgumentError`: the backend's policy is a [`GpuPolicy`](@ref); device execution is
-  tracked on milestone v4.4.0.
+  tracked on milestone v4.11.0.
 
 # Examples
 The V-cycle is symmetric.

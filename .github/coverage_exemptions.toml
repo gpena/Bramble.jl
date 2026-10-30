@@ -33,11 +33,11 @@ reason = "The session functions are called only by the precompile workload, whil
 
 [[exempt]]
 path = "ext/BrambleSparseADExt.jl"
-reason = "Its tests are in the AD group (ext/sparse_ad_ext.jl), switched off until v4.3.0 (BRAMBLE_TEST_AD): the AD packages are not in the test environment, so no CI leg reaches it."
+reason = "Its tests are in the AD group (ext/sparse_ad_ext.jl), switched off until v4.5.0 (BRAMBLE_TEST_AD): the AD packages are not in the test environment, so no CI leg reaches it."
 
 [[exempt]]
 path = "src/assembly/jacobian_pattern.jl"
-reason = "ast_sparsity_detector, its one entry the CI leg no longer reaches, is exercised only through BrambleSparseADExt, whose tests are in the switched-off AD group (v4.3.0). Exempt as a whole file: the exemption list matches files, not lines."
+reason = "ast_sparsity_detector, its one entry the CI leg no longer reaches, is exercised only through BrambleSparseADExt, whose tests are in the switched-off AD group (v4.5.0). Exempt as a whole file: the exemption list matches files, not lines."
 
 [[exempt_function]]
 path = "src/assembly/bilinear_traversal.jl"

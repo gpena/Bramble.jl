@@ -190,7 +190,7 @@ end
     throw(
         ArgumentError(
         "matrix_free_operator does not run on a GpuPolicy ($(typeof(policy))): a device " *
-        "matrix-free mul! is tracked on milestone v4.4.0. Use a CPU policy, or assemble " *
+        "matrix-free mul! is tracked on milestone v4.11.0. Use a CPU policy, or assemble " *
         "the matrix with `assemble`.",
     ),
     )
@@ -235,7 +235,7 @@ operator per task. `dirichlet` there takes what `assemble(a; dirichlet)` takes.
 
 # Throws
 - `ArgumentError`: `policy` is a [`GpuPolicy`](@ref); device execution is tracked on
-  milestone v4.4.0.
+  milestone v4.11.0.
 - `ArgumentError`: `dirichlet_components` names a leaf the test space does not have.
 - `ArgumentError`: `dirichlet` on ghost spaces whose unknowns are not the physical nodes,
   as for `assemble(a; dirichlet)`.

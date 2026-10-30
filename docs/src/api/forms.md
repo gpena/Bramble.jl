@@ -123,7 +123,7 @@ coefficient,
 without AD tracing. `ast_sparsity_detector` wraps it as an
 `ADTypes.AbstractSparsityDetector`, ready to hand `AutoSparse` directly (requires
 [ADTypes.jl](https://github.com/SciML/ADTypes.jl)). No test runs the `AutoSparse`
-wrapper until v4.3.0, when the AD backends return.
+wrapper until v4.5.0, when the AD backends return.
 
 ```@docs
 jacobian_pattern

@@ -238,7 +238,7 @@ end
     throw(
         ArgumentError(
         "the index shifts (S₊ₓ, S₊ᵧ, S₊₂, S₋ₓ, S₋ᵧ, S₋₂, S₊ₕ, S₋ₕ) have no device kernel: " *
-        "one is tracked on milestone v4.4.0. Apply them to a host-backed VectorElement.",
+        "one is tracked on milestone v4.11.0. Apply them to a host-backed VectorElement.",
     ),
     )
 end
@@ -317,7 +317,7 @@ matrix of `forward_shift` is the transpose of that of [`backward_shift`](@ref).
 # Throws
 - `ArgumentError`: `dim_val` is not between 1 and the mesh (or operand) dimension; or `uₕ` is
   device-backed or its space has a [`GpuPolicy`](@ref) (no device kernel yet, tracked on
-  milestone v4.4.0).
+  milestone v4.11.0).
 
 # Examples
 ```jldoctest
@@ -368,7 +368,7 @@ that of [`forward_shift`](@ref).
 # Throws
 - `ArgumentError`: `dim_val` is not between 1 and the mesh (or operand) dimension; or `uₕ` is
   device-backed or its space has a [`GpuPolicy`](@ref) (no device kernel yet, tracked on
-  milestone v4.4.0).
+  milestone v4.11.0).
 
 # Examples
 ```jldoctest

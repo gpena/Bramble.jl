@@ -1273,7 +1273,7 @@ that of the all-displacement problem.
    fallback.
 9. **Time-dependent conditions.** `semidiscretize` with time-dependent `g` on a constrained
    space: `d` depends on `t`. Not prototyped.
-10. **Device support.** Out of scope here (v4.4.0): device storage for `GhostVector`, the
+10. **Device support.** Out of scope here (v4.11.0): device storage for `GhostVector`, the
     ghost-aware stencils and `update_ghosts!` kernels belong to the GPU issue.
 11. **Nested `Δₕ` rows at facet nodes.** `Δₕ(Δₕ(u))` rows at a ghosted facet node read a second
     ghost layer that does not exist; zeroing it is the existing off-grid rule, but its

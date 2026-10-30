@@ -235,10 +235,10 @@ function _refusal(f)
     catch e
         e
     end
-    return err isa ArgumentError && occursin("v4.4.0", sprint(showerror, err))
+    return err isa ArgumentError && occursin("v4.11.0", sprint(showerror, err))
 end
 
-@testset "shift: device refused (v4.4.0)" begin
+@testset "shift: device refused (v4.11.0)" begin
     Wₕ = gridspace(_mesh(2))
     uₕ = Rₕ(Wₕ, _f)
     out = similar(parent(uₕ))
