@@ -129,7 +129,9 @@ _evaluated(c, Ωₕ) = BitVector(vec([c(point(Ωₕ, i)) for i in indices(Ωₕ)
         markers!(Ωₕ, mm)
         set_points!(Ωₕ, q)
         s2 = _walk_mesh(Ωₕ)
-        @test points(s2) === q && npoints(s2) == 9 && length(indices(s2)) == 9
+        # The mesh stores its own copy of `q` (gpena/Bramble.jl#983).
+        @test points(s2) == q && points(s2) !== q
+        @test npoints(s2) == 9 && length(indices(s2)) == 9
         @test points(s0) !== q && length(points(s0)) == 70
         # The markers and words follow the new grid; `cld(n, 64)` alone would not tell
         # (70 and 9 points both fit one word), so the lengths are asserted too.

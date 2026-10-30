@@ -12,8 +12,9 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
 # is ≈ 0 on interior rows and, on a constrained row, exactly the discrete flux there.
 #
 # Sign/scaling convention (see src/postprocessing/reaction.jl): `reaction` returns `-r` summed over
-# the marker -- positive is flux leaving the domain along the outward normal, so summing
-# over every boundary marker recovers the net source `∫_Ω f` directly, no rescaling.
+# the marker -- positive is flux leaving the domain along the outward normal, so one call
+# over `:boundary` or a tuple of side markers recovers the net source `∫_Ω f` directly, no
+# rescaling. Separate per-side calls double-count the corners the sides share.
 #
 # Manufactured problem used throughout: -Δu = f, u = 0 on ∂Ω, u = sin(πx) (1D) or
 # sin(πx)sin(πy) (2D) / sin(πx)sin(πy)sin(πz) (3D). Physical outward flux q·n = -∂u/∂n is
@@ -66,7 +67,30 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
 
         total_src = sum(assemble(l))
         @test reaction(a, l, uₕ; marker = :boundary) ≈ total_src atol = 1e-9
-        @test sum(reaction(a, l, uₕ; marker = s) for s in sides) ≈ total_src atol = 1e-9
+        @test reaction(a, l, uₕ; marker = sides) ≈ total_src atol = 1e-9
+    end
+
+    @testset "Tuple of sides counts corners once" begin
+        # f = 1, zero data: every corner residual is h²/4, nonzero, so per-side sums that
+        # double-count a shared corner are told apart from the tuple form.
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ω = domain(S, :xmin => :xmin, :xmax => :xmax, :ymin => :ymin, :ymax => :ymax)
+        sides = (:xmin, :xmax, :ymin, :ymax)
+        Wₕ = gridspace(mesh(Ω, (21, 21), (true, true)))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 1.0), v))
+        A, F = assemble(a, l; dirichlet = :boundary => (x -> 0.0))
+        uₕ = element(Wₕ)
+        uₕ .= A \ F
+
+        total_src = sum(assemble(l))
+        @test reaction(a, l, uₕ; marker = sides) ≈ total_src atol = 1e-9
+        @test reaction(a, l, uₕ; marker = :boundary) ≈ total_src atol = 1e-9
+
+        # Each of the 4 corners is on two sides, so the per-side sum counts it twice.
+        per_side = sum(reaction(a, l, uₕ; marker = s) for s in sides)
+        h = 1 / 20
+        @test per_side ≈ total_src + 4 * h^2 / 4 atol = 1e-9
     end
 
     # The net flux exists and matches a manufactured solution. 3D only: runs nightly (`slow`).
@@ -269,20 +293,26 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
         @test errs[2] < errs[1] / 3
         @test errs[2] < 0.01
 
-        # non-uniform: integrating the density over the faces recovers the reaction
+        # non-uniform: integrating the density over every face recovers the reaction; a
+        # one-face marker's corners divide by the total surface weight, as `:boundary` does
+        # there (#989), so on x = 0 the two densities agree, corners included
         Ωₕ = mesh(Ω, (13, 11), (false, false))
         Wₕ, a, l, uₕ = solved(Ωₕ)
         one_ = element(Wₕ, 1.0)
         d = reaction_density(a, l, uₕ; marker = :xmin)
-        @test inner_Γ(d, one_, :xmin) ≈ reaction(a, l, uₕ; marker = :xmin)
         db = reaction_density(a, l, uₕ; marker = :boundary)
         @test inner_Γ(db, one_, :boundary) ≈ reaction(a, l, uₕ; marker = :boundary)
+        @test reshape(parent(d), 13, 11)[1, :] ≈ reshape(parent(db), 13, 11)[1, :]
+        @test all(iszero, reshape(parent(d), 13, 11)[2:end, :])
 
-        # by hand: -r over the surface weight, a mid-face point and a corner on two faces
+        # by hand: -r over the surface weight over every face, at a mid-face point and at
+        # a corner of the one-face marker (both faces' weights, not only x = 0's)
         r = reshape(assemble(a) * parent(uₕ) - assemble(l), 13, 11)
         x, y = points(Ωₕ(1)), points(Ωₕ(2))
+        ω₁₁ = (y[2] - y[1]) / 2 + (x[2] - x[1]) / 2
         @test reshape(parent(d), 13, 11)[1, 5] ≈ -r[1, 5] / ((y[6] - y[4]) / 2)
-        @test reshape(parent(db), 13, 11)[1, 1] ≈ -r[1, 1] / ((y[2] - y[1]) / 2 + (x[2] - x[1]) / 2)
+        @test reshape(parent(d), 13, 11)[1, 1] ≈ -r[1, 1] / ω₁₁
+        @test reshape(parent(db), 13, 11)[1, 1] ≈ -r[1, 1] / ω₁₁
 
         # the faces come from the marked points, not the label's name: a label defined as
         # another face never divides by zero
@@ -295,14 +325,14 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
             nothing
         end
         @test dm === nothing || all(isfinite, dm)
-        dm === nothing || @test inner_Γ(element(Wm, dm), element(Wm, 1.0), :ymin) ≈
-                                reaction(am, lm, um; marker = :left)
+        dbm = reshape(parent(reaction_density(am, lm, um; marker = :boundary)), 13, 11)
+        dm === nothing || @test reshape(dm, 13, 11)[:, 1] ≈ dbm[:, 1]
 
         # a user-named whole face
         Ωi = domain(S, :inflow => :xmin, :boundary => B)
         Wi, ai, li, ui = solved(mesh(Ωi, (13, 11), (false, false)))
-        @test inner_Γ(reaction_density(ai, li, ui; marker = :inflow), element(Wi, 1.0), :xmin) ≈
-              reaction(ai, li, ui; marker = :inflow)
+        @test reshape(parent(reaction_density(ai, li, ui; marker = :inflow)), 13, 11)[1, :] ≈
+              reshape(parent(reaction_density(ai, li, ui; marker = :boundary)), 13, 11)[1, :]
 
         # a face with its corners left out still selects that face
         Ωo = domain(S, :open => x -> x[1] == 1 && 0 < x[2] < 1, :boundary => B)
@@ -595,6 +625,24 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
         @test reaction(A, Matrix(A) * parent(uₕ), uₕ; marker = :boundary) isa Float64
         @test reaction(Matrix(A), ones(ndofs(Wₕ)), uₕ; marker = :boundary) ≈
               reaction(A, ones(ndofs(Wₕ)), uₕ; marker = :boundary)
+    end
+
+    # The docstring example is run as written, so it cannot drift from the docs.
+    @testset "Docstring example returns pi" begin
+        src_text = read(joinpath(pkgdir(Bramble), "src", "postprocessing", "reaction.jl"), String)
+        i = last(findfirst("# Examples\n\n```julia\n", src_text))
+        j = first(findnext("```", src_text, i + 1))
+        lines = split(replace(src_text[(i + 1):(j - 1)], "\\\\" => "\\"), '\n'; keepempty = false)
+        k = findfirst(startswith("reaction("), lines)
+        @test k !== nothing
+        @test length(lines) - k + 1 == 2
+        m = Module(:ReactionDoc)
+        Core.eval(m, :(using Bramble; using Bramble: reaction))
+        Base.include_string(m, join(lines[1:(k - 1)], '\n'))
+        for (line, side) in zip(lines[k:end], (:left, :right))
+            @test occursin("marker = :$side", line)
+            @test isapprox(Base.include_string(m, line), π; rtol = 1.0e-2)
+        end
     end
 end
 

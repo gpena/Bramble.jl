@@ -23,9 +23,12 @@ conductivity) satisfies `∮_Γ q·n = ∫_Ω f`.
 ## Sign convention
 
 `reaction` returns `-r` summed over the marker: positive means flux leaving the domain
-along the outward normal, so that summing `reaction` over every boundary marker recovers
-the net source, `∫_Ω f`, to round-off -- not its negative. This was checked, not assumed:
-see the note above `reaction` itself.
+along the outward normal. The net source, `∫_Ω f`, is `reaction(...; marker = :boundary)`,
+or one call over a tuple of side markers, to round-off -- not its negative. Marker overlap
+is a union, so those forms count a corner once. Separate per-side calls do not: each counts
+every corner it contains, so summing them double-counts any corner two sides share, and the
+sum misses `∫_Ω f` by those corner residuals. This was checked, not assumed: see the note
+above `reaction` itself.
 
 ## Scaling
 
@@ -33,10 +36,10 @@ see the note above `reaction` itself.
 `weights(space, Innerh())` returns), so `reaction`'s net (already-integrated) quantity is
 `-r` summed directly, with **no** further rescaling. The pointwise density
 ([`reaction_density`](@ref)) is the opposite: dividing each marked entry by its *surface*
-weight `ω` on the marker's faces (`_surface_weight`, mesh/queries.jl, the weight `inner_Γ`
-uses) recovers the flux density `q·n`, which converges under refinement. The cell measure
-`weights(space, Innerh())` is the wrong divisor: it carries a normal half-spacing, so the
-quotient grows like `1/h` (gpena/Bramble.jl#546).
+weight `ω` over every boundary face (`_surface_weight`, mesh/queries.jl, the weight
+`inner_Γ` uses) recovers the flux density `q·n`, which converges under refinement. The
+cell measure `weights(space, Innerh())` is the wrong divisor: it carries a normal
+half-spacing, so the quotient grows like `1/h` (gpena/Bramble.jl#546).
 
 ## Overlap and components
 
@@ -373,7 +376,7 @@ see [`reaction_density`](@ref) for the pointwise quantity that does.
 # Examples
 
 ```julia
-Ωₕ = mesh(domain(interval(0.0, 1.0)), 41)
+Ωₕ = mesh(domain(interval(0.0, 1.0), :left => :xmin, :right => :xmax), 41)
 Wₕ = gridspace(Ωₕ)
 sol(x) = sin(pi * x[1])
 src(x) = pi^2 * sin(pi * x[1])
@@ -467,9 +470,9 @@ end
 
 # Same recursion shape as `_reaction_over_leaves`, writing the per-point density into a
 # preallocated `dens` (zero outside the marker) instead of accumulating a scalar. The faces
-# come from the marked points (`_marked_face_mask`, mesh/queries.jl), not the label's name,
-# and each point divides by its surface weight on them (`_surface_weight`), the weight
-# `inner_Γ` integrates with.
+# the marked points cover (`_marked_face_mask`, mesh/queries.jl) only decide whether a point
+# lies on a face; each point divides by its surface weight over every boundary face, so a
+# corner of a one-face marker gets the value `:boundary` gives there (#989).
 @inline _reaction_density_over_leaves!(dens, ::Tuple{}, r, markers, components, i) = dens
 @inline function _reaction_density_over_leaves!(dens, leaves::Tuple, r, markers, components, i)
     sp, offset = first(leaves)
@@ -478,11 +481,12 @@ end
         bits = map(s -> index_in_marker(Ωₕ, s), markers)
         mask = _marked_face_mask(Ωₕ, k -> _any_marked_bit(bits, k))
         _check_surface_is_thin(Ωₕ, mask)
+        every_face = ntuple(_ -> (true, true), Val(dim(Ωₕ)))
         cis = indices(Ωₕ)
         @inbounds for j in _reaction_marked(Ωₕ, markers, offset)
-            ω = _surface_weight(Ωₕ, mask, cis[j - offset])
-            iszero(ω) && _throw_density_off_faces(j - offset)
-            dens[j] = -r[j] / ω
+            I = cis[j - offset]
+            iszero(_surface_weight(Ωₕ, mask, I)) && _throw_density_off_faces(j - offset)
+            dens[j] = -r[j] / _surface_weight(Ωₕ, every_face, I)
         end
     end
     return _reaction_density_over_leaves!(dens, Base.tail(leaves), r, markers, components, i + 1)
@@ -493,16 +497,19 @@ end
 
 The pointwise counterpart of [`reaction`](@ref): a grid function, zero away from `marker`,
 equal at each marked point to the boundary flux density `q·n` there, which converges
-under refinement. It is `reaction`'s summand divided by the point's surface weight on the
-faces the marker covers, the weight [`inner_Γ`](@ref) integrates with, so
-`inner_Γ(element(space, 1.0), density, faces...)` recovers [`reaction`](@ref)'s scalar.
+under refinement. It is `reaction`'s summand divided by the point's surface weight over
+every boundary face, the weight [`inner_Γ`](@ref) integrates with, so a marked corner or
+edge gets the value `marker = :boundary` gives there, whatever the marker. When every
+marked corner and edge lies only on marked faces (`:boundary`, or a tuple of all the
+sides), `inner_Γ(element(space, 1.0), density, faces...)` recovers [`reaction`](@ref)'s
+scalar; a one-face marker's corners carry only part of its flux, so it does not.
 Meant to be exported and plotted, e.g.
 `export_vtk(filename, Ωₕ, "reaction" => reaction_density(...))`.
 
 The faces are read off the marked points, not the label's name: a face counts when every
-point of it is marked, except possibly its edges and corners. A corner on two such faces
-divides by the sum of their weights. A marked point on no such face (an interior marker, or
-part of a face) throws `ArgumentError`; [`reaction`](@ref) still gives its net flux.
+point of it is marked, except possibly its edges and corners. A marked point on no such
+face (an interior marker, or part of a face) throws `ArgumentError`; [`reaction`](@ref)
+still gives its net flux.
 """
 function reaction_density(
         A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;

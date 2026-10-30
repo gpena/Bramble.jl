@@ -118,6 +118,16 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs, _half_spacing_oracle
         @test Bramble.index_in_marker(Ωₕ, :empty) isa BitVector
     end
 
+    @testset "Empty symbol tuple stays a Set (#988)" begin
+        # `Set(())` is a `Set{Union{}}`, which `show` took for a predicate marker.
+        mk = only(Bramble.tuples(Bramble.markers(interval(0, 1), :a => ())))
+        @test Bramble.identifier(mk) isa Set{Symbol}
+        @test isempty(Bramble.identifier(mk))
+        @test sprint(show, mk) == "Marker(:a => ())"
+        mk2 = only(Bramble.tuples(Bramble.markers(interval(0, 1), :b => (:left, :right))))
+        @test Bramble.identifier(mk2) == Set([:left, :right])
+    end
+
     @testset "Zero-allocation marker setup (#124)" begin
         # `_ensure_geometric_markers!` and `_set_markers_symbols!` used to route every
         # boundary-facet lookup through `boundary_symbol_to_dict`, allocating a fresh

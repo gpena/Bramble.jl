@@ -204,6 +204,33 @@ end
             check_single_block_leaves(a_compact, 2)
         end
     end
+
+    # A plain 1D tuple's gradient has the composite's 1-tuple rows, so `inner₊` takes it
+    # alone or against the composite one (#1096), on a non-uniform mesh.
+    @testset "1D plain-tuple ∇ₕ and ∇₊ₕ rows (#1096)" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
+        Bramble.change_points!(Ωₕ, collect(range(0.0, 1.0; length = 9)) .^ 1.3)
+        Vₕ = gridspace(Ωₕ)^Val(2)
+        for (grad, Dx) in ((∇ₕ, D₋ₓ), (∇₊ₕ, Bramble.D₊ₓ))
+            u = Bramble.TrialFunction{1, 2}()
+            rows = grad((u(1) + u(2), u(2)))
+            @test rows isa Tuple{Tuple{Bramble.LazyOp{1}}, Tuple{Bramble.LazyOp{1}}}
+            @test grad(Bramble.components(u)) == Tuple(grad(u))
+            A_plain = assemble(form(Vₕ, Vₕ,
+                (u, v) -> inner₊(grad((u(1) + u(2), u(2))), grad((v(1) + v(2), v(2))))))
+            A_hand = assemble(form(Vₕ, Vₕ,
+                (u, v) -> inner₊(Dx(u(1) + u(2)), Dx(v(1) + v(2))) +
+                          inner₊(Dx(u(2)), Dx(v(2)))))
+            @test A_plain == A_hand
+            @test !iszero(Matrix(A_plain)[:, 1:(size(A_plain, 1) ÷ 2)])
+            A_mixed = assemble(form(Vₕ, Vₕ,
+                (u, v) -> inner₊(grad(u), grad(Bramble.components(v)))))
+            A_sum = assemble(form(Vₕ, Vₕ,
+                (u, v) -> inner₊(Dx(u(1)), Dx(v(1))) + inner₊(Dx(u(2)), Dx(v(2)))))
+            @test A_mixed == A_sum
+            @test count(!iszero, A_mixed) > 0
+        end
+    end
 end
 
 # A form's `divₕ(u)` is the runtime `divₕ`, and the staggered form-only divergence is

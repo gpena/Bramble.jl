@@ -592,6 +592,14 @@ _mark_leaves(op, facets) = op
 # volume product's operand truncated at the edge of the padded grid is the plain mesh's
 # closure there and stands. Off a ghost space the stock `local_stencil` methods
 # (`operators/inner.jl`) are the only ones, so a plain mesh compiles as before.
+#
+# The same rule holds for `πₕ`'s outside check (#1099): a ghost point lies outside the
+# domain, so the default `:error` would throw wherever the walk reads `πₕ` there, even in
+# `innerₕ(πₕ(u), v)`, whose weight at every ghost point is zero. At a node where the
+# product's weight is zero, its operands are read under `:clamp` in place of `:error`
+# (`_quiet_outside`), and the zero weight discards the values. Only near the edge of the
+# padded grid, where a read can reach a ghost point, and only for a term holding an
+# interpolation, so every other term compiles as before.
 const _GhostSpace{D} = ScalarGridSpace{D, <:Any, <:Any, <:_GhostMeshLike}
 
 @inline function local_stencil(
@@ -599,8 +607,19 @@ const _GhostSpace{D} = ScalarGridSpace{D, <:Any, <:Any, <:_GhostMeshLike}
         markers, lin_idx::Int
 ) where {D, InnerType}
     _check_product_reads(op, space, I, lin_idx)
-    return @invoke local_stencil(op::BilinearProduct{D, InnerType}, space::Any,
+    p = _zero_weight_interp(op, space, I, lin_idx) ? _quiet_outside(op) : op
+    return @invoke local_stencil(p::BilinearProduct{D, InnerType}, space::Any,
         I::CartesianIndex{D}, markers::Any, lin_idx::Int)
+end
+
+# Whether `op` holds an interpolation and its weight at `I`, near the padded grid's edge, is
+# zero. The first test is on the type, so it folds.
+@inline function _zero_weight_interp(
+        op::BilinearProduct{D}, space::_GhostSpace{D}, I::CartesianIndex{D}, lin_idx::Int
+) where {D}
+    _interp_free_type(typeof(op)) && return false
+    _near_edge(mesh(space), I, _stencil_margin(op)) || return false
+    return iszero(compute_weight(op.inner, space, I, lin_idx))
 end
 
 # The absent-read check of a product at `I`, which the stencil walk above and the factored

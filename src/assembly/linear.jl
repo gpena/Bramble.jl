@@ -571,6 +571,7 @@ _check_source_meshes(ast, Wₕ) = _check_walked_meshes(_check_source_mesh, ast, 
 _check_source_mesh(op, Ωₕ) = nothing
 
 function _check_source_mesh(op::SourceVector{D, <:VectorElement}, Ωₕ) where {D}
+    _check_not_ghost(space(op.vec))
     Ωs = mesh(space(op.vec))
     _same_mesh(Ωs, Ωₕ) || _throw_source_mesh(Ωs, Ωₕ)
     return nothing
@@ -578,6 +579,7 @@ end
 
 function _check_source_mesh(op::GridFunctionScale{D, <:VectorElement}, Ωₕ) where {D}
     _is_multi_block(space(op.grid_function)) && _throw_composite_coefficient()
+    _check_not_ghost(space(op.grid_function))
     Ωs = mesh(space(op.grid_function))
     _same_mesh(Ωs, Ωₕ) || _throw_source_mesh(Ωs, Ωₕ)
     return _check_source_mesh(op.inner_op, Ωₕ)
@@ -592,6 +594,24 @@ end
 # The operand of an `InterpolationNode` lives on another mesh, so it is not entered.
 _check_source_mesh(op::InterpolationNode, Ωₕ) = nothing
 _check_source_mesh(op::UnaryWrapper, Ωₕ) = _check_source_mesh(op.inner_op, Ωₕ)
+
+# An element of a `GhostGridSpace` holds one value per degree of freedom (physical nodes,
+# then ghosts by facet), while the walk reads one per padded point, so it reads past its
+# end or at the wrong points. Refused rather than lifted at each assembly (dense work in
+# three walks) or snapshotted at `form` (stale under `update_coefficients!`). A composite
+# view of ghost leaves reaches here through its components.
+_check_not_ghost(Wₕ) = Wₕ isa GhostGridSpace && _throw_ghost_coefficient()
+
+@noinline function _throw_ghost_coefficient()
+    throw(
+        ArgumentError(
+        "a grid function of a ghost space cannot be a coefficient or source of a form: its " *
+        "values are one per degree of freedom, while the form reads one per padded point. " *
+        "Use an element of the padded space, `element(padded_space(Wₕ), …)`, or " *
+        "`lift(Wₕ, u)` for the padded values of a solution.",
+    ),
+    )
+end
 
 # A coefficient is read as one value per point, and an element of a composite space holds
 # one block per component, so it has no single value to scale by (gpena/Bramble.jl#978).
