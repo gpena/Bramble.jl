@@ -830,9 +830,11 @@ accepts only `:error` (the default), `:clamp` and `:extrapolate` -- see
 [`InterpolationNode`](@ref)'s own docstring for why a fill value is refused here.
 
 On a [`GhostGridSpace`](@ref) the blend reads the physical nodes, as
-[`interpolate_at`](@ref) does, and a ghost point lies outside the domain. The assembly
-walk visits the ghost points, so on a ghost space the default `:error` throws, even in
-`innerₕ(πₕ(u), v)`, whose weight at every ghost point is zero. Pass `outside = :clamp` or
+[`interpolate_at`](@ref) does, and a ghost point lies outside the domain. Where the
+product's weight is zero, as at every ghost point in `innerₕ(πₕ(u), v)`, the value is
+discarded and `outside` is not consulted, so the default `:error` assembles there. It
+throws where a ghost value enters a row: `inner_Γ(∂ₙ(πₕ(u)), v)` and `D₋ₓ(πₕ(u))` read
+`πₕ` at a ghost point from a physical node. Pass `outside = :clamp` or
 `outside = :extrapolate` there.
 """
 function πₕ(op::LazyOp{D}; outside = :error) where {D}
@@ -1174,6 +1176,32 @@ function _bind_interp_spaces(
     return InterpolationNode{D, typeof(src), typeof(inner), TestSide}(
         src, inner, op.outside
     )
+end
+
+# The same walk rebinds a term's interpolations with `:clamp` in place of `:error`, for the
+# product on a ghost space to read at a node its zero weight discards (`local_stencil` on a
+# `_GhostSpace`, `assembly/stencil_eval.jl`, #1099). The sentinel passes through every
+# node's rebuild as the two leaves do; the nodes keep their bound source, so the term's
+# type is unchanged.
+struct _QuietOutside end
+
+@inline _quiet_outside(op) = _bind_interp_spaces(op, _QuietOutside(), _QuietOutside())
+
+@inline _quiet_policy(policy::OutsidePolicy) = ifelse(
+    policy === OutsideError, OutsideClamp, policy)
+
+function _bind_interp_spaces(
+        op::InterpolationNode{D, S, OpType, TrialSide}, ::_QuietOutside, ::_QuietOutside
+) where {D, S, OpType}
+    return InterpolationNode{D, S, OpType, TrialSide}(
+        op.src_space, op.inner_op, _quiet_policy(op.outside))
+end
+
+function _bind_interp_spaces(
+        op::InterpolationNode{D, S, OpType, TestSide}, ::_QuietOutside, ::_QuietOutside
+) where {D, S, OpType}
+    return InterpolationNode{D, S, OpType, TestSide}(
+        op.src_space, op.inner_op, _quiet_policy(op.outside))
 end
 
 function _bind_interp_spaces(op::OperatorAdd{D}, trial_leaf, test_leaf) where {D}

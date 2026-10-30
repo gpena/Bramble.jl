@@ -193,35 +193,56 @@ function jacobian_pattern(
         return _jacobian_pattern_blocks(form, coefficient_dependencies...)
     ast = _bind_interp_spaces(form.ast, form.trial_space, form.test_space)
     _check_block_meshes(ast, form.trial_space, form.test_space)
-    space = _walked_leaf(ast, form.trial_space, form.test_space)
-    Ωₕ = mesh(space)
-    _validate_term_markers(ast, markers(Ωₕ), "the form's space")
-    bound, mesh_markers = _bind_walk(ast, space)
-    lin_indices = LinearIndices(indices(Ωₕ))
 
     nodes = _dependency_nodes(coefficient_dependencies, TrialFunction{D}())
     foreach(_scalar_dependency_component, nodes)
     coeff_offsets = _coefficient_offsets(Val(D), _relative_nodes(nodes))
-    isempty(coeff_offsets) || _same_mesh_or_throw(nothing, form.trial_space, Ωₕ)
-    point_deps = map(_point_dependent_nodes(nodes)) do op
-        return _bind_point_dependency(op, nothing, form.trial_space, 0, Ωₕ)
-    end
     anchors = _coefficient_anchors(ast)
 
+    # Each summand walks its own leaf (`_summand_leaves`, `_walked_leaf`), as `assemble`
+    # does: one leaf for the whole sum walked `⟨πₕu, v⟩ + ⟨u, πₕv⟩` between a fine and a
+    # coarse space on one grid, rows past the other space's count (#1100). The anchors stay
+    # the whole sum's, so a sum whose summands share a leaf keeps the pattern it had.
+    trs, tes = _summand_leaves(identity, ast, form.trial_space, form.test_space)
     I_vec = Int[]
     J_vec = Int[]
-    hint = _pattern_size_hint(bound, space, mesh_markers, lin_indices) *
-           (1 + length(anchors) * length(coeff_offsets))
-    sizehint!(I_vec, hint)
-    sizehint!(J_vec, hint)
-    _scalar_jacobian_walk!(
-        I_vec, J_vec, bound, space, mesh_markers, lin_indices, coeff_offsets, anchors,
-        point_deps
-    )
+    map(_summands(ast)) do term
+        return _scalar_jacobian_term!(
+            I_vec, J_vec, term, _walked_leaf(term, trs, tes), form.trial_space, nodes,
+            coeff_offsets, anchors
+        )
+    end
 
     n = ndofs(form.test_space)
     m = ndofs(form.trial_space)
     return sparse!(I_vec, J_vec, fill(true, length(I_vec)), n, m, |)
+end
+
+# One summand of the scalar path, walked on `space`, the leaf it takes (`_walked_leaf`).
+# `space` is typed as `_pattern_size_hint` types it (assembly/bilinear_pattern.jl): left
+# generic, JET checks this method on its own and reaches that call with a mesh.
+function _scalar_jacobian_term!(
+        I_vec, J_vec, term, space::ScalarGridSpace, trial_space, nodes, coeff_offsets,
+        anchors
+)
+    Ωₕ = mesh(space)
+    _validate_term_markers(term, markers(Ωₕ), "the form's space")
+    bound, mesh_markers = _bind_walk(term, space)
+    lin_indices = LinearIndices(indices(Ωₕ))
+    isempty(coeff_offsets) || _same_mesh_or_throw(nothing, trial_space, Ωₕ)
+    point_deps = map(_point_dependent_nodes(nodes)) do op
+        return _bind_point_dependency(op, nothing, trial_space, 0, Ωₕ)
+    end
+
+    hint = _pattern_size_hint(bound, space, mesh_markers, lin_indices) *
+           (1 + length(anchors) * length(coeff_offsets))
+    sizehint!(I_vec, length(I_vec) + hint)
+    sizehint!(J_vec, length(J_vec) + hint)
+    _scalar_jacobian_walk!(
+        I_vec, J_vec, bound, space, mesh_markers, lin_indices, coeff_offsets, anchors,
+        point_deps
+    )
+    return nothing
 end
 
 # The scalar path's point walk, behind a function barrier: `jacobian_pattern` is not

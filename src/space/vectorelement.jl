@@ -26,8 +26,19 @@ This zero-argument form is specific to `VectorElement` and does not conflict wit
 `reshape(A, dims)`; it does shadow `Base.reshape(A) = reshape(A, ())`'s 0-dimensional
 result for this type specifically, in favor of the shape a grid function actually has.
 """
-@inline Base.reshape(uₕ::VectorElement{<:ScalarGridSpace}) = Base.ReshapedArray(parent(uₕ), npoints(mesh(space(uₕ)), Tuple), ())
+@inline function Base.reshape(uₕ::VectorElement{<:ScalarGridSpace})
+    dims = npoints(mesh(space(uₕ)), Tuple)
+    # The constructor accepts a coefficient vector of any length (the `_dot` kernels rely on
+    # it to report `DimensionMismatch`), so the grid shape is checked here, not there.
+    length(parent(uₕ)) == prod(dims) || _throw_reshape_length(uₕ, dims)
+    return Base.ReshapedArray(parent(uₕ), dims, ())
+end
 @inline Base.reshape(uₕ::VectorElement{<:CompositeGridSpace}) = map(reshape, components(uₕ))
+
+@noinline function _throw_reshape_length(uₕ::VectorElement, dims::Tuple)
+    n = length(parent(uₕ))
+    throw(DimensionMismatch(lazy"cannot reshape a VectorElement of length $n to the grid shape $dims"))
+end
 
 """
     space(uₕ::VectorElement) -> AbstractSpaceType
@@ -281,7 +292,10 @@ end
 @inline function Base.checkbounds(
         ::Type{Bool}, uₕ::VectorElement{<:ScalarGridSpace}, I::CartesianIndex
 )
-    return checkbounds(Bool, LinearIndices(indices(mesh(uₕ))), I)
+    # A grid coordinate in range still has to land inside the coefficient vector, which
+    # the constructor does not size against the mesh.
+    li = LinearIndices(indices(mesh(uₕ)))
+    return checkbounds(Bool, li, I) && checkbounds(Bool, uₕ.data, li[I])
 end
 
 """

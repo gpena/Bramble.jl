@@ -7,7 +7,7 @@ import Bramble: D₊ₓ
 # Named, not bare: a bare `using LinearAlgebra` here would export its own `×` (cross
 # product) into this shared Main session, ambiguous with Bramble's own `×` for every
 # file included afterward -- the same trap flagged elsewhere in this suite.
-using LinearAlgebra: Diagonal, dot, I
+using LinearAlgebra: Diagonal, dot, I, mul!
 using SparseArrays
 using Random: seed!
 using ForwardDiff
@@ -317,7 +317,8 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             # mesh and a twin with the same points give one matrix, values and pattern,
             # constrained or not; the rule firing there gives `∂ₙ(πₕ(u))` the ghost column's
             # weights instead (max |A - R| 17.3). A ghost point is outside the domain, so
-            # every form here names its policy: the default `:error` throws there.
+            # every form here that reads `πₕ` there under a nonzero weight names its policy:
+            # the default `:error` throws there.
             same_matrix(A, R) = rowvals(A) == rowvals(R) && A.colptr == R.colptr &&
                                 bits.(nonzeros(A)) == bits.(nonzeros(R))
             normal = (u, v) -> inner_Γ(∂ₙ(πₕ(u; outside = :extrapolate)), v;
@@ -389,13 +390,27 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
                     ghost)
                 @test_throws ArgumentError stencil(:error, first(ghost))
                 @test_throws ArgumentError at(:error, first(ghost))
-                @test_throws ArgumentError assemble(form(X, X, normal))
-                # the walk visits the ghost points, so even a plain mass term throws by
-                # default; its weight is zero there, so either policy gives one matrix
+                # `πₕ`'s own refusal, not the absent-read one (#809), also an `ArgumentError`
+                refused(f) = try
+                    assemble(form(X, X, f))
+                    false
+                catch e
+                    e isa ArgumentError &&
+                        occursin("lies outside the domain", sprint(showerror, e))
+                end
+                @test refused(normal)
+                # the walk visits the ghost points, where a mass term's weight is zero: the
+                # policy is not consulted there, so the default assembles, and every policy
+                # gives one matrix (#1099)
                 mass(p) = (u, v) -> innerₕ(πₕ(u; outside = p), v)
-                @test_throws ArgumentError assemble(form(X, X, (u, v) -> innerₕ(πₕ(u), v)))
                 Ac = assemble(form(X, X, mass(:clamp)))
                 @test nnz(Ac) > 0 && Ac == assemble(form(X, X, mass(:extrapolate)))
+                ad = form(X, X, (u, v) -> innerₕ(πₕ(u), v))
+                @test findnz(assemble(ad)) == findnz(Ac)
+                x = sin.(1:ndofs(X))
+                @test mul!(similar(x), matrix_free_operator(ad), x) ≈ Ac * x
+                # a difference at a physical node reads `πₕ` at a ghost point: still refused
+                @test refused((u, v) -> innerₕ(D₋ₓ(πₕ(u)), v))
             end
         end
 

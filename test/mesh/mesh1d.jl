@@ -269,6 +269,35 @@ import Base: diff
             @test_throws "point 1 is Inf" set_points!(Ω32, [1.0e39])
             @test points(Ω32) == Float32[0, 1]
 
+            # Strict increase is judged on the stored values too: 0.5 and 0.5 + 1e-9 are
+            # distinct in Float64 but one Float32, a zero spacing (gpena/Bramble.jl#969).
+            # The message shows the stored values, never the raw 0.500000001.
+            Ω32₄ = mesh(create_test_domain(0.0f0, 1.0f0), 4, true;
+                backend = backend(Float32))
+            p32 = copy(points(Ω32₄))
+            v32 = Bramble._mesh_version(Ω32₄)
+            tie32 = [0.0, 0.5, 0.5 + 1.0e-9, 1.0]
+            @test Float32(tie32[3]) == Float32(tie32[2])
+            err = try
+                set_points!(Ω32₄, tie32)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            msg = sprint(showerror, err)
+            @test occursin("strictly increasing once stored as Float32", msg)
+            @test occursin("point 3, stored as 0.5", msg)
+            @test !occursin("0.500000001", msg)
+            @test points(Ω32₄) == p32
+            @test Bramble._mesh_version(Ω32₄) == v32
+            @test_throws "point 3, stored as 0.5" change_points!(Ω32₄, tie32)
+            @test points(Ω32₄) == p32
+            # the same list is accepted on a Float64 mesh, where it stays increasing
+            Ω64₄ = mesh(create_test_domain(0.0, 1.0), 4, true; backend = backend())
+            set_points!(Ω64₄, tie32)
+            @test points(Ω64₄) == tie32
+
             # The cell measure is checked as the mesh computes it, (h₁ + h₂) * 0.5: here
             # x₃ - x₁ is floatmax, but the rounded h₁ + h₂ ties up to Inf.
             x_tie = [-2.0^1023, nextfloat(2.0^970), 2.0^1023 - 2.0^971]

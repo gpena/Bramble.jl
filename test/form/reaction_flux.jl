@@ -269,20 +269,26 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
         @test errs[2] < errs[1] / 3
         @test errs[2] < 0.01
 
-        # non-uniform: integrating the density over the faces recovers the reaction
+        # non-uniform: integrating the density over every face recovers the reaction; a
+        # one-face marker's corners divide by the total surface weight, as `:boundary` does
+        # there (#989), so on x = 0 the two densities agree, corners included
         Ωₕ = mesh(Ω, (13, 11), (false, false))
         Wₕ, a, l, uₕ = solved(Ωₕ)
         one_ = element(Wₕ, 1.0)
         d = reaction_density(a, l, uₕ; marker = :xmin)
-        @test inner_Γ(d, one_, :xmin) ≈ reaction(a, l, uₕ; marker = :xmin)
         db = reaction_density(a, l, uₕ; marker = :boundary)
         @test inner_Γ(db, one_, :boundary) ≈ reaction(a, l, uₕ; marker = :boundary)
+        @test reshape(parent(d), 13, 11)[1, :] ≈ reshape(parent(db), 13, 11)[1, :]
+        @test all(iszero, reshape(parent(d), 13, 11)[2:end, :])
 
-        # by hand: -r over the surface weight, a mid-face point and a corner on two faces
+        # by hand: -r over the surface weight over every face, at a mid-face point and at
+        # a corner of the one-face marker (both faces' weights, not only x = 0's)
         r = reshape(assemble(a) * parent(uₕ) - assemble(l), 13, 11)
         x, y = points(Ωₕ(1)), points(Ωₕ(2))
+        ω₁₁ = (y[2] - y[1]) / 2 + (x[2] - x[1]) / 2
         @test reshape(parent(d), 13, 11)[1, 5] ≈ -r[1, 5] / ((y[6] - y[4]) / 2)
-        @test reshape(parent(db), 13, 11)[1, 1] ≈ -r[1, 1] / ((y[2] - y[1]) / 2 + (x[2] - x[1]) / 2)
+        @test reshape(parent(d), 13, 11)[1, 1] ≈ -r[1, 1] / ω₁₁
+        @test reshape(parent(db), 13, 11)[1, 1] ≈ -r[1, 1] / ω₁₁
 
         # the faces come from the marked points, not the label's name: a label defined as
         # another face never divides by zero
@@ -295,14 +301,14 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
             nothing
         end
         @test dm === nothing || all(isfinite, dm)
-        dm === nothing || @test inner_Γ(element(Wm, dm), element(Wm, 1.0), :ymin) ≈
-                                reaction(am, lm, um; marker = :left)
+        dbm = reshape(parent(reaction_density(am, lm, um; marker = :boundary)), 13, 11)
+        dm === nothing || @test reshape(dm, 13, 11)[:, 1] ≈ dbm[:, 1]
 
         # a user-named whole face
         Ωi = domain(S, :inflow => :xmin, :boundary => B)
         Wi, ai, li, ui = solved(mesh(Ωi, (13, 11), (false, false)))
-        @test inner_Γ(reaction_density(ai, li, ui; marker = :inflow), element(Wi, 1.0), :xmin) ≈
-              reaction(ai, li, ui; marker = :inflow)
+        @test reshape(parent(reaction_density(ai, li, ui; marker = :inflow)), 13, 11)[1, :] ≈
+              reshape(parent(reaction_density(ai, li, ui; marker = :boundary)), 13, 11)[1, :]
 
         # a face with its corners left out still selects that face
         Ωo = domain(S, :open => x -> x[1] == 1 && 0 < x[2] < 1, :boundary => B)

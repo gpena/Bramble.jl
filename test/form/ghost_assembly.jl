@@ -328,6 +328,21 @@ end
     c = Ref(Dual(1.0, 1.0))
     @test_throws ArgumentError form(Wg, Wg, (u, v) -> innerₕ(c * u, v))
     @test_throws ArgumentError form(Wg, v -> innerₕ(c * v, v))
+    # gpena/Bramble.jl#1097: an element of `Wg` holds one value per DOF, while the walk
+    # reads one per padded point, as a coefficient or as a source
+    eg = element(Wg)
+    eg .= 1.0
+    for call in (() -> form(Wg, Wg, (u, v) -> innerₕ(eg * u, v)),
+        () -> form(Wg, v -> innerₕ(eg, v)))
+        err = try
+            call()
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("padded_space", sprint(showerror, err))
+    end
 end
 
 # gpena/Bramble.jl#818: two ghost spaces on meshes of one size and other points have equal

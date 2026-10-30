@@ -1477,8 +1477,8 @@ The rows come in a `Bramble._GradientRows`, which is not a `Tuple`.
 among them, pass `Tuple(∇ₕ(u))`. The container also tells [`inner₊`](@ref) that row `c` is built on
 component `c` alone, so a captured coefficient over `inner₊(∇ₕ(u), ∇ₕ(v))` gives `form` one
 concrete type in 3D, which the plain tuple `∇ₕ(components(u))` does not; both assemble the
-same matrix. In 1D, where `∇ₕ(components(u))[c]` is a bare `D₋ₓ(u(c))`, each row is the
-1-tuple `(D₋ₓ(u(c)),)` instead, so `∇ₕ(u)[c][1]` is that difference. On a scalar space
+same matrix. In 1D each row is the 1-tuple `(D₋ₓ(u(c)),)`, as in `∇ₕ(components(u))`,
+so `∇ₕ(u)[c][1]` is that difference and the two spellings mix. On a scalar space
 (one component) this is the same `D`-tuple `∇ₕ` already returns for any
 operator.
 
