@@ -3,8 +3,14 @@ module FormCrossMeshBlocksTests
 using Test
 using Bramble
 using LinearAlgebra: Diagonal
+using ..TestUtils: alloc_ok, alloc_test, WITH_3D_TESTS
 using Bramble:
                CompositeGridSpace,
+               CpuThreaded,
+               backend,
+               boundary_indices,
+               indices,
+               πₕ,
                form,
                assemble,
                assemble!,
@@ -128,6 +134,106 @@ using Bramble:
         # 6×6, so the block is the same whichever leaf's weights it is built from
         @test At[1:n, (n + 1):(2n)] ≈ H(Wbig)
         @test count(!iszero, At) == n
+    end
+end
+
+# A scalar form between two spaces on different meshes whose summands interpolate on
+# different sides, `⟨πₕu, v⟩ + ⟨u, πₕv⟩` (gpena/Bramble.jl#398). Each summand walks its own
+# leaf: the test leaf for a trial-side `πₕ`, the trial leaf for a test-side one. The sum was
+# walked on one leaf for every summand, so the trial-side term wrote rows past the test
+# space's count (`ArgumentError` from `sparse!`), though each term assembled alone.
+@testset "Trial- and test-side πₕ summed" begin
+    f1 = (u, v) -> innerₕ(πₕ(u), v)
+    f2 = (u, v) -> innerₕ(u, πₕ(v))
+    # a difference operator beside each interpolation, so the sum composes two operators
+    g1 = (u, v) -> inner₊ₓ(D₋ₓ(πₕ(u)), D₋ₓ(v))
+    g2 = (u, v) -> innerₕ(Mₓ(u), πₕ(v))
+    unit = interval(0.0, 1.0)
+    cases = Any[
+        (domain(unit), 9, 5, true),
+        (domain(unit), 13, 8, false),
+        (domain(unit × unit), (9, 5), (5, 3), true),
+        (domain(unit × unit), (9, 6), (5, 4), false)
+    ]
+    # 3D only outside the unit group (#650); it runs in `slow`
+    WITH_3D_TESTS && push!(cases, (domain(unit × unit × unit), (5, 4, 5), (3, 3, 2), false))
+
+    @testset "$(length(nf))D, uniform = $unif" for (Ω, nf, nc, unif) in cases
+        D = length(nf)
+        flags = ntuple(_ -> unif, D)
+        Wf = gridspace(mesh(Ω, nf, flags))
+        Wc = gridspace(mesh(Ω, nc, flags))
+        # fine trial and coarse test, then the other way round
+        for (Wu, Wv) in ((Wf, Wc), (Wc, Wf)), (a1, a2) in ((f1, f2), (g1, g2))
+
+            A1 = Matrix(assemble(form(Wu, Wv, a1)))
+            A2 = Matrix(assemble(form(Wu, Wv, a2)))
+            # each term alone is nonzero, so a sum that dropped one cannot match
+            @test !iszero(A1) && !iszero(A2)
+            a = form(Wu, Wv, (u, v) -> a1(u, v) + a2(u, v))
+            A = assemble(a)
+            @test size(A) == (ndofs(Wv), ndofs(Wu))
+            @test Matrix(A) ≈ A1 + A2
+            # the composite path walks a leaf per block: the same matrix, entry for entry
+            Vu, Vv = CompositeGridSpace((Wu,)), CompositeGridSpace((Wv,))
+            @test Matrix(A) == Matrix(assemble(form(Vu, Vv, (u, v) -> a1(u, v) + a2(u, v))))
+            # the refills replay the recording the first fill made
+            B = copy(A)
+            @test assemble!(A, a) === A
+            @test A == B
+            @test assemble_parallel!(A, a) === A
+            @test Matrix(A) ≈ Matrix(B)
+            # one summand per order, so the first unit is walked on either leaf
+            A21 = assemble(form(Wu, Wv, (u, v) -> a2(u, v) + a1(u, v)))
+            @test Matrix(A21) ≈ A1 + A2
+        end
+    end
+
+    Ω = domain(unit × unit)
+    Wf = gridspace(mesh(Ω, (9, 6), (false, false)))
+    Wc = gridspace(mesh(Ω, (5, 4), (false, false)))
+    sumf = (u, v) -> f1(u, v) + f2(u, v)
+
+    @testset "Threaded backend" begin
+        be = backend(policy = CpuThreaded())
+        Tf = gridspace(mesh(Ω, (9, 6), (false, false); backend = be))
+        Tc = gridspace(mesh(Ω, (5, 4), (false, false); backend = be))
+        ref = Matrix(assemble(form(Wf, Wc, sumf)))
+        a = form(Tf, Tc, sumf)
+        A = assemble(a)
+        @test Matrix(A) ≈ ref
+        @test assemble!(A, a) === A
+        @test Matrix(A) ≈ ref
+    end
+
+    @testset "Dirichlet rows" begin
+        # a Dirichlet row is the test space's: rows on the coarse boundary are those the
+        # single term's Dirichlet assembly writes, every other row is the plain sum's
+        a = form(Wf, Wc, sumf)
+        AD = Matrix(assemble(a; dirichlet = :boundary))
+        A1D = Matrix(assemble(form(Wf, Wc, f1); dirichlet = :boundary))
+        S = Matrix(assemble(a))
+        lin = LinearIndices(indices(mesh(Wc)))
+        bnd = sort!(unique!([lin[I] for f in boundary_indices(mesh(Wc)) for I in f]))
+        inner = setdiff(1:ndofs(Wc), bnd)
+        @test !isempty(bnd) && !isempty(inner)
+        @test AD[bnd, :] == A1D[bnd, :]
+        @test AD[inner, :] == S[inner, :]
+        @test AD[bnd, :] != S[bnd, :]
+        A = assemble(a; dirichlet = :boundary)
+        @test assemble!(A, a; dirichlet = :boundary) === A
+        @test Matrix(A) == AD
+    end
+
+    @testset "Warm refill allocations" begin
+        # the mixed sum, and a sum whose summands share one leaf (both trial-side), refill
+        # in place as a single-leaf sum always has
+        same = (u, v) -> f1(u, v) + g1(u, v)
+        for g in (sumf, same)
+            a = form(Wf, Wc, g)
+            A = assemble(a)
+            @test alloc_ok(alloc_test(assemble!, A, a))
+        end
     end
 end
 

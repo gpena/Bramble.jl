@@ -34,12 +34,36 @@ const _RankScalar = Union{Number, Base.RefValue{<:Number}, _MinusOne}
 # `σ`'s value: the number times every `Ref`'s current value, so a `Ref` stays live.
 @inline _rank_scale_value(s::Tuple) = _rank_scale_value(s[1], Base.tail(s)...)
 @inline _rank_scale_value(c::Number) = c
-@inline _rank_scale_value(c::Number, r::Base.RefValue, rs...) = _rank_scale_value(c * r[], rs...)
+@inline _rank_scale_value(c::Number, r::Base.RefValue, rs...) = _rank_scale_value(
+    _scale_mul(c, r[]), rs...)
 
-@inline _push_scale(s::Tuple, c::Number) = (s[1] * c, Base.tail(s)...)
+# Two constant factors of `σ` as one, `a * b` unless a sign meets an unsigned factor
+# (`_sign_clash_types`, simplifier.jl): that product is taken in the unsigned type and wraps,
+# so both convert first to a signed integer type at least as wide as `Int` and multiply
+# checked. The types alone decide, by dispatch, so the test compiles to a constant and
+# `assemble!` allocates nothing for it, and `σ`'s type still follows from its factors' types.
+@inline function _scale_mul(a, b)
+    _sign_clash_types(typeof(a), typeof(b)) || return a * b
+    S = _clash_type(a, b)
+    return _fold_mul(_as_signed(S, a), _as_signed(S, b))
+end
+@inline _clash_type(a, b) = promote_type(Int,
+    signed(promote_type(real(typeof(a)), real(typeof(b)))))
+@inline _as_signed(::Type{S}, x::Real) where {S} = S(x)
+@inline _as_signed(::Type{S}, x::Complex) where {S} = Complex{S}(x)
+
+# The start of each side's `σ` before any factor is peeled: the `1` of an unscaled side, a
+# type of its own so that `1` never counts as a sign beside an unsigned factor.
+struct _NoScale end
+@inline _scale_mul(::_NoScale, b) = 1 * b
+@inline _scale_mul(a, ::_NoScale) = a * 1
+@inline _scale_mul(::_NoScale, ::_NoScale) = 1
+
+@inline _push_scale(s::Tuple, c::Number) = (_scale_mul(s[1], c), Base.tail(s)...)
 @inline _push_scale(s::Tuple, ::_MinusOne) = _push_scale(s, -1)
 @inline _push_scale(s::Tuple, r::Base.RefValue) = (s..., r)
-@inline _join_scales(a::Tuple, b::Tuple) = (a[1] * b[1], Base.tail(a)..., Base.tail(b)...)
+@inline _join_scales(a::Tuple, b::Tuple) = (
+    _scale_mul(a[1], b[1]), Base.tail(a)..., Base.tail(b)...)
 
 # The constant and `Ref` factors around a functional, peeled off into `σ`.
 @inline _peel_scales(op::OperatorScale{D, <:_RankScalar}, s::Tuple) where {D} = _peel_scales(
@@ -99,8 +123,8 @@ end
 # is no functional (a bilinear product, a bare trial or test function, a rank-one term),
 # throw an `ArgumentError` naming the form a rank-one term takes.
 @inline function Base.:*(a::LazyOp{D}, b::LazyOp{D}) where {D}
-    sa, fa = _peel_scales(a, (1,))
-    sb, fb = _peel_scales(b, (1,))
+    sa, fa = _peel_scales(a, (_NoScale(),))
+    sb, fb = _peel_scales(b, (_NoScale(),))
     return _rank_one_product(_functional_side(fa), _functional_side(fb), sa, sb, fa, fb)
 end
 

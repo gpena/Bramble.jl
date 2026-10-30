@@ -448,6 +448,13 @@ whose relation data depend on time, `d` is its value at `t = 0`, and
 @inline mesh(Wₕ::GhostGridSpace) = mesh(Wₕ.padded)
 @inline mesh_type(::Type{<:GhostGridSpace{D, T, S}}) where {D, T, S} = mesh_type(S)
 @inline mesh_type(Wₕ::GhostGridSpace) = mesh_type(typeof(Wₕ))
+
+# A flat composite of ghost spaces, `Cₕ × Cₕ` or `Cₕ^N`: the one kind of composite with a
+# ghost component that has a closure (assembly/ghost_composite.jl). Its norms go component
+# by component (inner_product.jl).
+const _GhostCompositeSpace = CompositeGridSpace{<:Any,
+    <:Tuple{GhostGridSpace, Vararg{GhostGridSpace}}}
+
 @inline backend(Wₕ::GhostGridSpace) = backend(Wₕ.padded)
 # The policy element broadcasts run under, as on a plain space: `uₕ - vₕ` on one space.
 @inline execution_policy(Wₕ::GhostGridSpace) = execution_policy(backend(Wₕ))

@@ -120,9 +120,7 @@ the matrix originally factored. A singular `A` throws a `SingularException` with
 
 See also [`refactor!`](@ref), [`sparspak_factorize`](@ref).
 """
-function sparspak_refactor!(fact::SparspakFactorization, A::SparseMatrixCSC)
-    return _sparspak_refactor!(fact, A)
-end
+function sparspak_refactor! end
 
 function _sparspak_factorize(A)
     _ext_loaded(:BrambleSparspakExt) && _throw_unsupported_matrix("sparspak_factorize", A)
@@ -138,7 +136,8 @@ function _sparspak_solve(A, ::Any)
     )
 end
 
-function _sparspak_refactor!(::Any, ::Any)
+function sparspak_refactor!(::SparspakFactorization, A)
+    _ext_loaded(:BrambleSparspakExt) && _throw_unsupported_matrix("sparspak_refactor!", A)
     return error(
         "sparspak_refactor! requires Sparspak.jl. Add `using Sparspak` before calling this function.",
     )

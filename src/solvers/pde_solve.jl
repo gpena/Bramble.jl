@@ -35,6 +35,15 @@ function _default_wants_accelerate(A, sym)
         (sym === :auto && issymmetric(A))
 end
 
+# Accelerate factors `Float32`, `Float64` and their complex types only. `:default` sends it
+# nothing else: an integer or `BigFloat` system goes to the next route (`A \ F` or `lu`),
+# which converts an integer one to `Float64` and refuses a type it cannot factor. `T` is the
+# matrix's element type and `S` the solution's.
+_accelerate_eltype(::Type{T}) where {T} = T <: Union{Float32, Float64, ComplexF32, ComplexF64}
+function _default_accelerate_eltypes(::Type{T}, ::Type{S}) where {T, S}
+    return _accelerate_eltype(T) && _accelerate_eltype(S)
+end
+
 """
     pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver = :default, sym = :auto, mean_zero = nothing, gauge = nothing, kwargs...) -> Vector
     pde_solve(fact::Factorization, F::AbstractVector) -> Vector
@@ -60,7 +69,11 @@ chain differentiable.
   convection-diffusion one. This only ever narrows which solver runs on macOS; Linux and
   Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws
   from `accelerate_solve` exactly as `solver = :accelerate` would -- `:default` never silently
-  falls back to `\\` after picking Accelerate. `:suitesparse` (CHOLMOD/UMFPACK), `:spqr`
+  falls back to `\\` after picking Accelerate. It picks Accelerate only for `Float32`,
+  `Float64` and their complex types (the element type of `A` and of the solution): an integer
+  `A` goes to `A \\ F`, or in the `mean_zero`/`gauge` solve to `lu`, which converts it to
+  `Float64`, and a type that backend cannot factor (`BigFloat`) throws an `ArgumentError`
+  naming it. `:suitesparse` (CHOLMOD/UMFPACK), `:spqr`
   (sparse QR, for a least-squares or rectangular `A`), `:accelerate` (Apple `libSparse`, needs
   `AppleAccelerate.jl`, honoured unconditionally regardless of symmetry), `:mumps` (needs
   `MUMPS.jl`), `:sparspak` (pure Julia, needs `Sparspak.jl`).
@@ -119,7 +132,7 @@ solve and to the adjoint solve of `sparse(A')`, so `solver` and `sym` apply to `
 and a `sym` hint must hold for `Aᴴ` too. A `SparseMatrixCSR` `A` has no rule (ChainRules sees
 a method with no `rrule`, and differentiates the conversion and the solver's internals).
 `using Enzyme` is enough for the same adjoint through `BrambleEnzymeExt`'s native
-`EnzymeRules` rule, which takes no keywords (it cannot run before v4.3.0); do not
+`EnzymeRules` rule, which takes no keywords (it cannot run before v4.5.0); do not
 call `Enzyme.@import_rrule`, whose bridge drops the cotangent's explicit zeros from `nzval`
 and returns a wrong gradient without any error. The Enzyme rule keeps the unconjugated
 `-λ uᵀ` and is not validated for complex `A`, whose convention differs. `Mooncake` cannot
@@ -167,6 +180,7 @@ function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :defa
     if solver === :default
         _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
         if Sys.isapple() && Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
+           _default_accelerate_eltypes(eltype(A), float(promote_type(eltype(A), eltype(F)))) &&
            _default_wants_accelerate(A, sym)
             return accelerate_solve(A, F; sym = sym, kwargs...)
         end
@@ -271,7 +285,8 @@ function _bordered_solve(A::SparseMatrixCSC, F::AbstractVector, r,
     if solver === :default
         _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
         x = if bsym === :symmetric && Sys.isapple() &&
-               Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing
+               Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
+               _default_accelerate_eltypes(T, S)
             accelerate_solve(B, b; sym = bsym, kwargs...)
         else
             lu(B) \ b

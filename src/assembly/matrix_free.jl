@@ -190,7 +190,7 @@ end
     throw(
         ArgumentError(
         "matrix_free_operator does not run on a GpuPolicy ($(typeof(policy))): a device " *
-        "matrix-free mul! is tracked on milestone v4.4.0. Use a CPU policy, or assemble " *
+        "matrix-free mul! is tracked on milestone v4.11.0. Use a CPU policy, or assemble " *
         "the matrix with `assemble`.",
     ),
     )
@@ -235,7 +235,7 @@ operator per task. `dirichlet` there takes what `assemble(a; dirichlet)` takes.
 
 # Throws
 - `ArgumentError`: `policy` is a [`GpuPolicy`](@ref); device execution is tracked on
-  milestone v4.4.0.
+  milestone v4.11.0.
 - `ArgumentError`: `dirichlet_components` names a leaf the test space does not have.
 - `ArgumentError`: `dirichlet` on ghost spaces whose unknowns are not the physical nodes,
   as for `assemble(a; dirichlet)`.
@@ -486,23 +486,26 @@ function _mf_apply_parts!(policy, s, Wu, Wv, ast, walk = nothing)
     end
     bound = _bind_interp_spaces(ast, Wu, Wv)
     _check_block_meshes(bound, Wu, Wv)
-    sp = _restrict_walk(host_weights(_walked_leaf(bound, Wu, Wv)), walk)
-    _mf_summands!(policy, s, bound, sp)
+    # Each summand walks its own leaf (`_summand_leaves`, `_walked_leaf`), as the assembly
+    # replay does: one leaf for the whole sum walked `⟨πₕu, v⟩ + ⟨u, πₕv⟩` between a fine
+    # and a coarse space on the fine grid, rows past the coarse space's count (#398).
+    trs, tes = _summand_leaves(leaf -> _restrict_walk(host_weights(leaf), walk), bound, Wu, Wv)
+    _mf_summands!(policy, s, bound, trs, tes)
     return nothing
 end
 
-@noinline function _mf_summands!(policy, s, op::OperatorAdd, sp)
+@noinline function _mf_summands!(policy, s, op::OperatorAdd, trs, tes)
     _foldl_pairs(
-        (_, t) -> _mf_summands!(policy, s, t, sp),
-        (_, t1, t2) -> _mf_pair!(policy, s, t1, t2, sp),
+        (_, t) -> _mf_summands!(policy, s, t, trs, tes),
+        (_, t1, t2) -> _mf_pair!(policy, s, t1, t2, _walked_leaf(t1, trs, tes)),
         nothing,
         _summands(op)
     )
     return nothing
 end
 
-@noinline function _mf_summands!(policy, s, term::TERM, sp) where {TERM}
-    _mf_visit!(policy, s, term, sp, 0, 0)
+@noinline function _mf_summands!(policy, s, term::TERM, trs, tes) where {TERM}
+    _mf_visit!(policy, s, term, _walked_leaf(term, trs, tes), 0, 0)
     return nothing
 end
 
@@ -513,8 +516,8 @@ end
 end
 
 @noinline function _mf_pair!(policy, s, t1, t2, sp)
-    _mf_summands!(policy, s, t1, sp)
-    _mf_summands!(policy, s, t2, sp)
+    _mf_summands!(policy, s, t1, sp, sp)
+    _mf_summands!(policy, s, t2, sp, sp)
     return nothing
 end
 
@@ -1696,20 +1699,29 @@ end
     return nothing
 end
 
-# The AST a `CpuPolyester` band task walks (`_batch_mf_bands!`): `a`'s, with its regions
-# bound on the host to the walked leaf's marker ids (`_bind_walk`, which also checks the
-# leaf's weights), since a task's rebuilt walk state has no label table to bind against. A
-# composite form's AST is returned as it is: with regions, it has no plan under
-# `CpuPolyester` (`_mf_plan`).
+# The AST a `CpuPolyester` band task walks (`_batch_mf_bands!`): `a`'s, with each summand's
+# regions bound on the host to the marker ids of the leaf that summand walks (`_bind_walk`,
+# which also checks the leaf's weights), since a task's rebuilt walk state has no label
+# table to bind against. Bound against one leaf, `⟨πₕu, restrict_to(:r, v)⟩ + ⟨u, πₕv⟩`
+# read one mesh's marker words with the other's ids (#398). A composite form's AST is
+# returned as it is: with regions, it has no plan under `CpuPolyester` (`_mf_plan`).
 function _mf_host_ast(a::BilinearForm)
     Wu, Wv = trial_space(a), test_space(a)
     _is_block_pair(Wu, Wv) && return a.ast
     # Typed for the reason `_pattern_size_hint` gives (`bilinear_pattern.jl`): an untyped leaf
     # lets JET reach `_bind_walk(::Any, ::SeparableWeights)` through `host_weights`.
-    leaf = _walked_leaf(_bind_interp_spaces(a.ast, Wu, Wv), Wu, Wv)::ScalarGridSpace
-    sp = host_weights(leaf)
-    return _mf_tag_regions(first(_bind_walk(a.ast, sp)))
+    trs, tes = _summand_leaves(
+        leaf -> host_weights(leaf::ScalarGridSpace), _bind_interp_spaces(a.ast, Wu, Wv), Wu, Wv)
+    return _mf_tag_regions(_mf_host_bind(a.ast, trs, tes))
 end
+
+# `op` with each summand's regions bound against its own leaf (`_walked_leaf`), splitting
+# at `OperatorAdd` as `_has_test_interp` does.
+function _mf_host_bind(op::OperatorAdd{D}, trs, tes) where {D}
+    left, right = _mf_host_bind(op.left_op, trs, tes), _mf_host_bind(op.right_op, trs, tes)
+    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
+end
+_mf_host_bind(term, trs, tes) = first(_bind_walk(term, _walked_leaf(term, trs, tes)))
 
 # A region `_mf_host_ast` bound on the host: its marker ids, in a type nothing else makes,
 # so a walk entry tells it from a bare id. `restrict_to(1, u)` is refused at construction,

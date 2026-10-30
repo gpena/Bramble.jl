@@ -96,7 +96,7 @@ of the threaded cut, which is why the diagonal is the same bits under each.
 
 # Throws
 - `ArgumentError`: `policy` is a [`GpuPolicy`](@ref); device execution is tracked on
-  milestone v4.4.0.
+  milestone v4.11.0.
 - `ArgumentError`: `dirichlet_components` names a leaf the test space does not have.
 - `DimensionMismatch`: `A` is not square.
 

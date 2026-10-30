@@ -129,10 +129,34 @@ end
 @inline _fold_mul(::_MinusOne, b) = _fold_mul(-1, b)
 @inline _fold_mul(a, ::_MinusOne) = _fold_mul(a, -1)
 
+# Whether two coefficients may be folded into one, decided by their types. A sign, or any
+# `Signed`, never folds with an `Unsigned`, since `-1 * UInt(2)` promotes to `UInt` and
+# throws `InexactError` (and `checked_mul` would too). The parts of a `Complex` count, as
+# `-1 * Complex{UInt}(0, 2)` multiplies part by part in `UInt` and wraps silently. Nor do
+# two integer `Complex`es fold when one has `Unsigned` parts, because their product
+# subtracts and `im * Complex{UInt}(0, 2)` wraps too. A `Bool` part is neither. Left nested,
+# each converts to the space's element type on its own when assembled. Decided by dispatch
+# on the types, so it compiles to a constant: as `isa` tests on the values, the `Union`s
+# were built at run time and `form` allocated 512 B more for one grid-function coefficient.
+@inline _folds(a, b) = _folds(a) && _folds(b) && !_sign_clash(a, b)
+@inline _unsigned_parts(::Type) = false
+@inline _unsigned_parts(::Type{<:Union{Unsigned, Complex{<:Unsigned}}}) = true
+@inline _signed_parts(::Type) = false
+@inline _signed_parts(::Type{<:Union{Signed, _MinusOne, Complex{<:Signed}}}) = true
+@inline _integer_complex(::Type) = false
+@inline _integer_complex(::Type{<:Complex{<:Integer}}) = true
+@inline _sign_clash(a, b) = _sign_clash_types(typeof(a), typeof(b))
+@inline function _sign_clash_types(A::Type, B::Type)
+    _unsigned_parts(A) && _signed_parts(B) && return true
+    _signed_parts(A) && _unsigned_parts(B) && return true
+    return _integer_complex(A) && _integer_complex(B) &&
+           (_unsigned_parts(A) || _unsigned_parts(B))
+end
+
 # Two coefficients just lifted out of the two arguments of one inner product, wrapped around
 # the product they were lifted from.
 @inline function _lift_scalars(cl, cr, inner::LazyOp)
-    _folds(cl) && _folds(cr) && return _wrap_scale(_fold_mul(cl, cr), inner)
+    _folds(cl, cr) && return _wrap_scale(_fold_mul(cl, cr), inner)
     return _wrap_scale(cl, _wrap_scale(cr, inner))
 end
 
@@ -190,7 +214,7 @@ end
 # `OperatorAdd(a, b)` inside a scale or a grid-function scaling only when this answers
 # `false`; when it answers `true`, distributing over `a`/`b` is the only routing-safe
 # shape -- and, since it never throws, that distribution itself is what eventually turns
-# every mixing subtree into single-component leaves, the recursion `simplify_ast` already
+# every mixing subtree into single-component leaves, the distribution `simplify_ast` already
 # performs (`OperatorScale`, `GridFunctionScale`, `BilinearProduct`) reaching a fixed point
 # where `_component_class` on every remaining node is a plain `Int` or `nothing`, never
 # `Mixed()` -- at which point `block_of`'s own throwing query is the one that runs, and only
@@ -280,7 +304,7 @@ end
     # the values are: both operands' types are known here, so `_wrap_scale` dispatches
     # on a known type and the product's type follows from them alone. A `Rational` on
     # either side does not fold either (`_folds`).
-    if inner isa OperatorScale && _folds(op.scalar) && _folds(inner.scalar)
+    if inner isa OperatorScale && _folds(op.scalar, inner.scalar)
         return _wrap_scale(_fold_mul(op.scalar, inner.scalar), inner.inner_op)
     end
 
@@ -293,7 +317,10 @@ function simplify_ast(op::GridFunctionScale)
 
     if inner isa OperatorAdd && _mixes_components(inner.left_op, inner.right_op)
         # Same reasoning as `OperatorScale` above: a grid-function coefficient distributes
-        # over a component-mixing sum rather than hiding it from the router.
+        # over a component-mixing sum rather than hiding it from the router, in one generated
+        # body unless simplifying the pieces again could change them.
+        _resimplify_moves(typeof(inner)) ||
+            return _grid_scale_over_sum(op.grid_function, inner)
         return simplify_ast(
             OperatorAdd(
             GridFunctionScale(op.grid_function, inner.left_op),
@@ -334,19 +361,30 @@ _sum_dropping_zeros(l, r) = :($l isa ZeroOperator ? $r :
     return _simplified_sum_expr(op, :op)
 end
 
-function _distributed_expr(@nospecialize(T), path)
-    T <: OperatorAdd || return :(_scale_piece(c, $path))
+# The expression distributing over every sum in the node of type `T` reached as `path` that
+# mixes components, `piece(p)` the expression for each piece `p` left. By default a piece is
+# scaled by `c` (`_scale_over_sum`).
+function _distributed_expr(@nospecialize(T), path, piece = p -> :(_scale_piece(c, $p)))
+    T <: OperatorAdd || return piece(path)
     l, r = gensym(:l), gensym(:r)
     return quote
         if _mixes_components($path.left_op, $path.right_op)
-            $l = $(_distributed_expr(fieldtype(T, :left_op), :($path.left_op)))
-            $r = $(_distributed_expr(fieldtype(T, :right_op), :($path.right_op)))
+            $l = $(_distributed_expr(fieldtype(T, :left_op), :($path.left_op), piece))
+            $r = $(_distributed_expr(fieldtype(T, :right_op), :($path.right_op), piece))
             $(_sum_dropping_zeros(l, r))
         else
-            _scale_piece(c, $path)
+            $(piece(path))
         end
     end
 end
+
+# A generated body marked for inlining. The gates in it compare `component_idx` values
+# (`_mixes_components`), so they fold only where the indices reach them as constants, and a
+# coefficient or source holding run-time data (a `Ref`, a grid function) leaves the tree
+# around those indices non-constant. Inlined into the caller, the gates read the indices
+# there; called, they did not past a few terms, and `form` inferred a `Union`
+# (gpena/Bramble.jl#804). The pass is not recursive: inlining it bounds no recursion.
+_inlined(ex) = Expr(:block, Expr(:meta, :inline), ex)
 
 # `simplify_ast(c * x)` for a sum `x` already simplified whose two operands mix components:
 # `c` goes into every sum in `x` that mixes them, and each piece left is scaled by
@@ -355,7 +393,7 @@ end
 # only where simplifying `x` again returns it, which `_resimplify_moves` answers before
 # this is called. One generated body for the whole of `x`.
 @generated function _scale_over_sum(c, x::OperatorAdd)
-    return _distributed_expr(x, :x)
+    return _inlined(_distributed_expr(x, :x))
 end
 
 # Whether simplifying again a tree of type `T`, itself the output of `simplify_ast`, may
@@ -389,11 +427,22 @@ end
         isone(c) && return x
     end
     x isa ZeroOperator && return x
-    if x isa OperatorScale && _folds(c) && _folds(x.scalar)
+    if x isa OperatorScale && _folds(c, x.scalar)
         return _wrap_scale(_fold_mul(c, x.scalar), x.inner_op)
     end
     return OperatorScale(c, x)
 end
+
+# `simplify_ast(GridFunctionScale(g, x))` for a sum `x` already simplified whose operands mix
+# components, as `_scale_over_sum` is for a scalar (gpena/Bramble.jl#804): one generated body,
+# where simplifying the rebuilt sum of `GridFunctionScale`s recursed through `simplify_ast`
+# deeper than inference follows. `_resimplify_moves` is answered before this is called.
+@generated function _grid_scale_over_sum(g, x::OperatorAdd)
+    return _inlined(_distributed_expr(x, :x, p -> :(_grid_scale_piece(g, $p))))
+end
+
+@inline _grid_scale_piece(g, x::LazyOp) = GridFunctionScale(g, x)
+@inline _grid_scale_piece(g, x::ZeroOperator) = x
 
 # --- A scale over a builder's sum (gpena/Bramble.jl#939) ---------------------------- #
 
@@ -525,8 +574,13 @@ function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
     # Distribute over a component-mixing sum on either side: `⟨u, v(i) + v(j)⟩ ->
     # ⟨u, v(i)⟩ + ⟨u, v(j)⟩` for `i ≠ j`. This is the only case that fires -- a
     # same-component (or component-free) sum is left as the single term it already is, so
-    # `innerₕ(uₕ, v + 2 * D₋ₓ(v))` keeps assembling as one sweep.
+    # `innerₕ(uₕ, v + 2 * D₋ₓ(v))` keeps assembling as one sweep. One generated body
+    # distributes both sides (`_product_over_sums`) unless simplifying a piece again could
+    # change it; simplifying the rebuilt sum of products instead recursed through
+    # `simplify_ast` deeper than inference follows past two terms (gpena/Bramble.jl#804).
+    moves = _resimplify_moves(typeof(left)) || _resimplify_moves(typeof(right))
     if right isa OperatorAdd && _mixes_components(right.left_op, right.right_op)
+        moves || return _product_over_sums(op, left, right)
         return simplify_ast(
             OperatorAdd(
             BilinearProduct{D, W, typeof(left), typeof(right.left_op)}(
@@ -539,6 +593,7 @@ function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
         )
     end
     if left isa OperatorAdd && _mixes_components(left.left_op, left.right_op)
+        moves || return _product_over_sums(op, left, right)
         return simplify_ast(
             OperatorAdd(
             BilinearProduct{D, W, typeof(left.left_op), typeof(right)}(
@@ -550,15 +605,29 @@ function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
         ),
         )
     end
+    return _bilinear_lifted(op, left, right)
+end
 
-    # Lift a scalar (static or `Ref`) out of either argument: `⟨c * u, v⟩ -> c * ⟨u, v⟩`,
-    # `⟨u, c * v⟩ -> c * ⟨u, v⟩`. Exposes it to the nested-scale fold, and to
-    # `symmetry.jl`'s `_same_operator_shape`, which only recognises `⟨L(u), L(v)⟩` when
-    # nothing else sits between the product and its two arguments.
+# Lift a scalar (static or `Ref`) out of either argument: `⟨c * u, v⟩ -> c * ⟨u, v⟩`,
+# `⟨u, c * v⟩ -> c * ⟨u, v⟩`. Exposes it to the nested-scale fold, and to
+# `symmetry.jl`'s `_same_operator_shape`, which only recognises `⟨L(u), L(v)⟩` when
+# nothing else sits between the product and its two arguments. `left` and `right` are
+# simplified and neither is a sum mixing components.
+@inline function _bilinear_lifted(op::BilinearProduct{D, W}, left, right) where {D, W}
+    left isa ZeroOperator && return _zero_of(op)
+    right isa ZeroOperator && return _zero_of(op)
     cl, al = _scale_parts(left)
     cr, ar = _scale_parts(right)
     inner = BilinearProduct{D, W, typeof(al), typeof(ar)}(op.inner, al, ar)
     return _lift_scalars(cl, cr, inner)
+end
+
+# `simplify_ast(op)` for simplified operands `left` and `right`, at least one a sum mixing
+# components, that simplifying again leaves as they are: the test side distributed first,
+# then the trial side of each piece, as the recursion through `simplify_ast` orders them.
+@generated function _product_over_sums(op::BilinearProduct, left, right)
+    return _inlined(_distributed_expr(right, :right,
+        r -> _distributed_expr(left, :left, l -> :(_bilinear_lifted(op, $l, $r)))))
 end
 
 function simplify_ast(op::LinearProduct{D, W}) where {D, W}
@@ -571,6 +640,8 @@ function simplify_ast(op::LinearProduct{D, W}) where {D, W}
     # As `BilinearProduct` above; only the test side can name a component here, since a
     # `LinearProduct`'s left side is always a source (`_is_source_only`).
     if right isa OperatorAdd && _mixes_components(right.left_op, right.right_op)
+        _resimplify_moves(typeof(left)) || _resimplify_moves(typeof(right)) ||
+            return _linear_over_sum(op, left, right)
         return simplify_ast(
             OperatorAdd(
             LinearProduct{D, W, typeof(left), typeof(right.left_op)}(op.inner, left, right.left_op),
@@ -580,7 +651,13 @@ function simplify_ast(op::LinearProduct{D, W}) where {D, W}
         ),
         )
     end
+    return _linear_lifted(op, left, right)
+end
 
+# `_bilinear_lifted` for a `LinearProduct`, splitting a source sum that holds a Dirac term.
+@inline function _linear_lifted(op::LinearProduct{D, W}, left, right) where {D, W}
+    left isa ZeroOperator && return _zero_of(op)
+    right isa ZeroOperator && return _zero_of(op)
     cl, al = _scale_parts(left)
     cr, ar = _scale_parts(right)
     # `⟨a + b, v⟩ -> ⟨a, v⟩ + ⟨b, v⟩` when the sum holds a Dirac source, so each term gets
@@ -591,6 +668,11 @@ function simplify_ast(op::LinearProduct{D, W}) where {D, W}
     _any_dirac(al) && !_is_dirac(al) && _throw_mixed_dirac_source()
     inner = LinearProduct{D, W, typeof(al), typeof(ar)}(op.inner, al, ar)
     return _lift_scalars(cl, cr, inner)
+end
+
+# `_product_over_sums` for a `LinearProduct`, whose test side alone is distributed.
+@generated function _linear_over_sum(op::LinearProduct, left, right)
+    return _inlined(_distributed_expr(right, :right, r -> :(_linear_lifted(op, left, $r))))
 end
 
 # `⟨a, v⟩` distributed over every sum in `a` that holds a Dirac source, keeping each

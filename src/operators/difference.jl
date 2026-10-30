@@ -1449,7 +1449,7 @@ end
 # own method is the more specific one for every `N` and would otherwise shadow the scalar
 # case too.
 #
-# For `D >= 2` the tensor comes back in a `_GradientRows`. Indexing, `length`, iteration,
+# The tensor comes back in a `_GradientRows`. Indexing, `length`, iteration,
 # `map`, broadcasting and `Tuple(g)` act on the tuple it holds; nothing else does. It
 # tells `inner₊` (inner.jl) that row `c` is built on component `c` alone, since every leaf
 # of `∇ₕ(u(c))` is `u(c)`, and `inner₊` of two of them records that pair in a
@@ -1488,9 +1488,12 @@ end
 end
 @inline Base.Broadcast.broadcastable(g::_GradientRows) = g.rows
 
-# Rows of `D`-tuples (`D >= 2`) are labelled; the rows of a 1D gradient are the differences
-# themselves and stay a plain tuple.
+# Rows of `D`-tuples are labelled. In 1D `∇ₕ` of a component is the bare `D₋ₓ`, so
+# `_as_dtuple` wraps it in a 1-tuple first: the rows then sum per leaf like any other
+# (gpena/Bramble.jl#965), rather than reaching `inner₊` as one `N`-tuple of differences.
 @inline _gradient_rows(rows) = rows
+@inline _as_dtuple(op::LazyOp{1}) = (op,)
+@inline _as_dtuple(row::Tuple) = row
 @inline function _gradient_rows(
         rows::Tuple{NTuple{D, LazyOp{D}}, Vararg{NTuple{D, LazyOp{D}}}}
 ) where {D}
@@ -1512,19 +1515,20 @@ The backward gradient tensor of a composite trial or test function `u`: `N` rows
 component of `u`) of `D`-tuples (one per spatial direction), `∇ₕ(u)[c][d]` the backward
 difference of component `c` along direction `d`.
 
-For `D >= 2` the rows come in a `Bramble._GradientRows`, which is not a `Tuple`.
+The rows come in a `Bramble._GradientRows`, which is not a `Tuple`.
 `∇ₕ(u)[c][d]`, `length`, iteration, `map` and broadcasting give what they give on
 `∇ₕ(components(u))`, and `Tuple(∇ₕ(u))` is that tuple; anything else tuple-like needs
 `Tuple(∇ₕ(u))`. `map` needs every argument to be such a container; with a plain tuple
 among them, pass `Tuple(∇ₕ(u))`. The container also tells [`inner₊`](@ref) that row `c` is built on
 component `c` alone, so a captured coefficient over `inner₊(∇ₕ(u), ∇ₕ(v))` gives `form` one
 concrete type in 3D, which the plain tuple `∇ₕ(components(u))` does not; both assemble the
-same matrix. In 1D the result is the tuple of `D₋ₓ`s `∇ₕ(components(u))` returns. On a
-scalar space (one component) this is the same `D`-tuple `∇ₕ` already returns for any
+same matrix. In 1D, where `∇ₕ(components(u))[c]` is a bare `D₋ₓ(u(c))`, each row is the
+1-tuple `(D₋ₓ(u(c)),)` instead, so `∇ₕ(u)[c][1]` is that difference. On a scalar space
+(one component) this is the same `D`-tuple `∇ₕ` already returns for any
 operator.
 """
 @inline function ∇ₕ(op::Union{TrialFunction{D, N}, TestFunction{D, N}}) where {D, N}
-    (N isa Integer && N > 1) && return _gradient_rows(map(∇ₕ, components(op)))
+    (N isa Integer && N > 1) && return _gradient_rows(map(_as_dtuple ∘ ∇ₕ, components(op)))
     return _∇ₕ_noncomposite(op)
 end
 
@@ -1537,7 +1541,7 @@ end
 The forward twin of [`∇ₕ`](@ref)`(u::Union{TrialFunction,TestFunction})`.
 """
 @inline function ∇₊ₕ(op::Union{TrialFunction{D, N}, TestFunction{D, N}}) where {D, N}
-    (N isa Integer && N > 1) && return _gradient_rows(map(∇₊ₕ, components(op)))
+    (N isa Integer && N > 1) && return _gradient_rows(map(_as_dtuple ∘ ∇₊ₕ, components(op)))
     return _∇₊ₕ_noncomposite(op)
 end
 

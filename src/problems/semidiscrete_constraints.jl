@@ -58,31 +58,44 @@ end
 
 # Time/parameter dependence is read off the conditions' arity through `_accepts`
 # (geometry/marker.jl), which sees through a `Fix` or a composition to the function it
-# wraps. The three-argument test comes first, then the two-argument one, so
-# `(x, t, p) -> ...` is parametric, `(x, t = 0.0) -> ...` is time-dependent and `x -> ...`
-# is static.
-function _dirichlet_is_time_dependent(constraints::ConstraintMarkers)
-    conds = conditions(constraints)
-    isempty(conds) && return false
-    return all(m -> _accepts(identifier(m), Val(2)), conds)
-end
+# wraps. A condition of `x` alone is spatial and passes unchanged through `_fix_time` and
+# `_fix_time_param`; any other condition makes the set time-dependent. `(x, t, p) -> ...`
+# and `(x, t = 0.0, p = 1) -> ...` are parametric. `(x, t) -> ...` and `(x, t = 0.0) -> ...`
+# are time-dependent, and the parametric evaluation would call them with a `p` they cannot
+# take. So a set holding both kinds throws here, at construction.
+@inline _dirichlet_is_time_dependent(constraints::ConstraintMarkers) = any(m -> !_is_spatial(identifier(m)), conditions(constraints))
 
-function _dirichlet_is_time_param_dependent(constraints::ConstraintMarkers)
+@inline _dirichlet_is_time_param_dependent(constraints::ConstraintMarkers) = any(
+    m -> _accepts(identifier(m), Val(3)), conditions(constraints))
+
+function _validate_dirichlet_arity_mix(constraints::ConstraintMarkers)
     conds = conditions(constraints)
-    isempty(conds) && return false
-    return all(m -> _accepts(identifier(m), Val(3)), conds)
+    parametric = filter(m -> _accepts(identifier(m), Val(3)), conds)
+    isempty(parametric) && return nothing
+    timed = filter(m -> !_is_spatial(identifier(m)) && !_accepts(identifier(m), Val(3)), conds)
+    isempty(timed) && return nothing
+    throw(
+        ArgumentError(
+        "semidiscretize: Dirichlet conditions cannot mix (x, t) and (x, t, p) arities; " *
+        "labels $(map(label, timed)) accept (x, t) only, labels $(map(label, parametric)) " *
+        "accept (x, t, p). Give every time-dependent condition the same arity " *
+        "(a condition of `x` alone may stay beside them).",
+    ),
+    )
 end
 
 @inline _source_constraints(::Nothing, ::Nothing) = NoConstraints()
 @inline _source_constraints(::Any, ::Nothing) = LabelsOnly()
-@inline _source_constraints(::Any, constraints) =
-    if _dirichlet_is_time_param_dependent(constraints)
+@inline function _source_constraints(::Any, constraints)
+    _validate_dirichlet_arity_mix(constraints)
+    return if _dirichlet_is_time_param_dependent(constraints)
         TimeParamDependentConstraints(constraints)
     elseif _dirichlet_is_time_dependent(constraints)
         TimeDependentConstraints(constraints)
     else
         StaticConstraints(constraints)
     end
+end
 
 # --- Walking the constrained rows --------------------------------------------------- #
 

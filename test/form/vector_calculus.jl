@@ -184,6 +184,26 @@ end
             check_single_block_leaves(a_compact, D)
         end
     end
+
+    # In 1D `∇ₕ` of a component is a bare `D₋ₓ`; the composite gradient wraps each in a
+    # 1-tuple, so `inner₊` sums per component rather than refusing the pair (#965).
+    @testset "inner₊ of 1D composite ∇ₕ and ∇₊ₕ (#965)" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+        Vₕ = gridspace(Ωₕ)^Val(2)
+        for (grad, Dx) in ((∇ₕ, D₋ₓ), (∇₊ₕ, Bramble.D₊ₓ))
+            u = grad(Bramble.TrialFunction{1, 2}())
+            @test length(u) == 2
+            @test u[1] isa Tuple{Bramble.LazyOp{1}}
+            a_compact = form(Vₕ, Vₕ, (u, v) -> inner₊(grad(u), grad(v)))
+            a_hand = form(
+                Vₕ, Vₕ, (u, v) -> inner₊(Dx(u(1)), Dx(v(1))) + inner₊(Dx(u(2)), Dx(v(2)))
+            )
+            A_compact = assemble(a_compact)
+            @test A_compact == assemble(a_hand)
+            @test count(!iszero, A_compact) > 0
+            check_single_block_leaves(a_compact, 2)
+        end
+    end
 end
 
 # A form's `divₕ(u)` is the runtime `divₕ`, and the staggered form-only divergence is

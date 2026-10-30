@@ -6,6 +6,7 @@ using Bramble: AbstractMatrixFreePreconditioner, JacobiPreconditioner, Chebyshev
                restrict_to, jumpₓ, M₊ₓ, D₋ₓ, Dcₓ, CpuSerial, CpuThreaded
 using LinearAlgebra: LinearAlgebra, ldiv!, diag, norm, cond, Symmetric, eigmax, isposdef
 using LinearSolve: LinearProblem, KrylovJL_CG, solve
+using AlgebraicMultigrid: AlgebraicMultigrid
 using Random
 using ..TestUtils: TEST_DIMS, WITH_3D_TESTS, ZeroBasedVector
 
@@ -185,7 +186,7 @@ end
             e
         end
         @test err isa ArgumentError
-        @test occursin("v4.4.0", sprint(showerror, err))
+        @test occursin("v4.11.0", sprint(showerror, err))
         Wf = gridspace(mesh(domain(interval(0.0, 1.0)), 9, false))
         @test_throws DimensionMismatch jacobi_preconditioner(form(Wf, W, (u, v) -> innerₕ(πₕ(u), v)))
         P = jacobi_preconditioner(a)
@@ -331,6 +332,24 @@ end
                 @test 2 * i1 <= i0
             end
         end
+    end
+end
+
+# With the extension loaded, an argument it does not take (not an `AbstractMatrix`) must get
+# the unsupported-type error, as ILU's stubs give, not "requires AlgebraicMultigrid.jl".
+@testset "AMG stubs with the extension loaded" begin
+    @test Base.get_extension(Bramble, :BrambleAlgebraicMultigridExt) !== nothing
+    for f in (Bramble._amg_preconditioner, Bramble._amg_operator)
+        e = try
+            f(nothing)
+            nothing
+        catch err
+            err
+        end
+        @test e isa ArgumentError
+        msg = e isa ArgumentError ? e.msg : ""
+        @test occursin("takes an AbstractMatrix; got a Nothing", msg)
+        @test !occursin("requires", msg)
     end
 end
 

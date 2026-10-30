@@ -239,7 +239,7 @@ using Bramble:
         # `inner₊` names two different things. Given grid functions it computes a number
         # (`src/space/inner_product.jl`), and given operators it builds an AST node
         # (`src/operators/inner.jl`). What keeps the two families from colliding is the
-        # `NTuple{N,<:Tuple}` restriction on the symbolic tuple overload.
+        # `Tuple{Vararg{Tuple}}` restriction on the symbolic tuple overload.
         #
         # These assert the *resolution* rather than the result, so widening either
         # signature fails here instead of silently returning the wrong kind of thing.
@@ -256,8 +256,13 @@ using Bramble:
         # The restriction itself: a tuple of grid functions is not a tuple of tuples, and
         # that is the only reason the symbolic tuple overload does not swallow the numeric
         # one. Widen it to `NTuple{N,Any}` and both of these flip.
-        @test !(typeof((uₕ, uₕ)) <: NTuple{2, <:Tuple})
-        @test typeof(grads) <: NTuple{2, <:Tuple}
+        @test !(typeof((uₕ, uₕ)) <: Tuple{Vararg{Tuple}})
+        @test typeof(grads) <: Tuple{Vararg{Tuple}}
+
+        # Rows of different types are still a tuple of tuples (#959).
+        mixed = (∇ₕ(IndexedTrialFunction{2}(1) + IndexedTrialFunction{2}(2)), grads[2])
+        @test !(typeof(mixed) <: NTuple{2, <:Tuple})
+        @test numeric_file(Tuple{typeof(mixed), typeof(mixed)}) == "inner.jl"
 
         # And the two families really do return different kinds of thing, which is what
         # makes a mis-resolution worth catching.
@@ -729,6 +734,29 @@ end
         @test findall(!iszero, lin(:l)) == 1:5
         @test bil(:l) == bil(:boundary)
     end
+end
+
+@testset "Gradient rows of different types (#959)" begin
+    # `∇ₕ((u(1) + u(2), u(2)))` has rows of two types; `inner₊` of two of them is the sum
+    # of the row products, on a non-uniform mesh where a wrong weight would show.
+    W = gridspace(random_mesh((7, 6); seed = 3))^Val(2)
+    rows(w) = ∇ₕ((w(1) + w(2), w(2)))
+    A = assemble(form(W, W, (u, v) -> inner₊(rows(u), rows(v))))
+    B = assemble(form(W, W,
+        (u, v) -> inner₊(∇ₕ(u(1) + u(2)), ∇ₕ(v(1) + v(2))) +
+                  inner₊(∇ₕ(u(2)), ∇ₕ(v(2)))))
+    @test Matrix(A) == Matrix(B)
+    @test !iszero(Matrix(A)[:, 1:(size(A, 1) ÷ 2)])   # the u(1) block is not dropped
+
+    # Unequal row counts name both.
+    @test_throws DimensionMismatch form(W, W, (u, v) -> inner₊(rows(u), ∇ₕ((v(1),))))
+    msg = try
+        form(W, W, (u, v) -> inner₊(∇ₕ((u(1),)), rows(v)))
+        ""
+    catch e
+        sprint(showerror, e)
+    end
+    @test occursin("1 on the left and 2 on the right", msg)
 end
 
 @testset "One-sided block term (#356)" begin

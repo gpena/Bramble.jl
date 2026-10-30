@@ -135,6 +135,48 @@ end
         end
 
         # Exercises factorization reuse and accelerate_refactor!.
+        # gpena/Bramble.jl#819: `:default` handed Accelerate every symmetric system, so an
+        # integer one died in `AASparseMatrix` with a `MethodError`. A `kind` Accelerate
+        # rejects throws only where Accelerate is taken (`A \\ F` and `lu` ignore it), which
+        # tells the routes apart.
+        @testset ":default element types (#819)" begin
+            Ai = sparse([4 1 0; 1 4 1; 0 1 4])
+            Fi = [1, 2, 3]
+            wi = [1, 1, 1]
+            Ad = sparse(float.(Ai))
+            ref = [Ad wi; wi' 0.0] \ [float.(Fi); 0.0]
+
+            # Float64 still takes Accelerate, plain and bordered.
+            @test_throws ArgumentError pde_solve(Ad, float.(Fi); kind = :nonsense)
+            # The bordered `LDLᵀ` ignores `kind`; on this matrix Accelerate's result is
+            # repeatable and differs from `lu`'s in the last bits, so equality shows the route.
+            B = [Ad wi; wi' 0.0]
+            b = [float.(Fi); 0.0]
+            u0 = pde_solve(Ad, float.(Fi); mean_zero = float.(wi))
+            @test isapprox(u0, ref[1:3]; atol = 1.0e-12)
+            @test u0 == accelerate_solve(B, b; sym = :symmetric)[1:3]
+            @test u0 != (lu(B) \ b)[1:3]
+
+            # An integer system is floated and solved by the next route, not Accelerate.
+            @test pde_solve(Ai, Fi; kind = :nonsense) isa Vector{Float64}
+            @test isapprox(pde_solve(Ai, Fi; kind = :nonsense), Ad \ float.(Fi); atol = 1.0e-12)
+            u = pde_solve(Ai, Fi; mean_zero = wi, kind = :nonsense)
+            @test u isa Vector{Float64}
+            @test isapprox(u, ref[1:3]; atol = 1.0e-12)
+
+            # A type no backend factors is refused with an `ArgumentError`, not a `MethodError`
+            # from Accelerate.
+            Ab = sparse(BigFloat[4 1; 1 4])
+            err = try
+                pde_solve(Ab, BigFloat[1, 2]; mean_zero = BigFloat[1, 1])
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin("BigFloat", err.msg)
+        end
+
         @testset "factorization reuse, refactor" begin
             p = poisson_system(Val(2), 8; source = x -> 1.0)
 

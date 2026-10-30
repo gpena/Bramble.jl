@@ -109,7 +109,7 @@ operator applies one product at a time, so neither it nor `P` may be shared betw
 - `ArgumentError`: `degree < 1`, `ratio <= 1`, or `λmax` (given or estimated) not finite and
   positive.
 - `ArgumentError`: `policy` is a [`GpuPolicy`](@ref); device execution is tracked on
-  milestone v4.4.0.
+  milestone v4.11.0.
 - `ArgumentError`: `dirichlet_components` names a leaf the test space does not have.
 - `DimensionMismatch`: `A` is not square.
 

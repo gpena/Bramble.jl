@@ -524,9 +524,9 @@ and passes through unchanged, a `ComposedFunction` or `Base.Fix1`/`Base.Fix2` be
 by what it wraps, as in the method above. Any other predicate is fixed at `(t, p)` as
 `x -> f(x, t, p)`, so `(x, t = 0, p = 1) -> ...` is fixed at both. An `(x, t)` predicate is
 not fixed at `t` alone, and its wrapper throws a `MethodError` when called;
-`dirichlet_constraints` and `semidiscretize` never send one here, since they route only
-uniformly `(x, t, p)` conditions
-to this path.
+`dirichlet_constraints` and `semidiscretize` never send one here: a set holding an `(x, t)`
+condition beside an `(x, t, p)` one is refused, so only `(x, t, p)` conditions, with any
+spatial `x` ones beside them, route to this path.
 
 `Base.Fix{N}` generalizes `Base.Fix1`/`Base.Fix2` to insert its fixed value at position `N`
 of *whatever args a given call supplies*, not at position `N` of `f`'s own argument list

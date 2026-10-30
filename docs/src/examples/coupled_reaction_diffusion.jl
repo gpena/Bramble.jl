@@ -20,7 +20,7 @@
 # already, so homogeneous Dirichlet data is all that is needed.
 #
 # The boundary stays Dirichlet-only here because forms on a ghost space refuse the automatic
-# differentiation that Newton's Jacobian needs, which arrives with milestone v4.3.0
+# differentiation that Newton's Jacobian needs, which arrives with milestone v4.5.0
 # (automatic differentiation and form correctness on the CPU).
 #
 # ## Mesh, space and load

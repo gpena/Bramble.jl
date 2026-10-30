@@ -1050,6 +1050,59 @@ _rt_negated(W) = form(W, W, (u, v) -> innerₕ(u, v) - innerₕ(D₋ₓ(u), v))
     @test dM ≈ -sum(A₁) / 2
 end
 
+# A sign or a `Signed` folded into an `Unsigned` threw `InexactError` (gpena/Bramble.jl#980):
+# `-1 * UInt(2)` promotes to `UInt`. The two scales stay nested, each converted on assembly.
+@testset "sign beside an unsigned scale (#980)" begin
+    Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 6))
+    u, v = trial_function(Wₕ), test_function(Wₕ)
+    S = innerₕ(u, v)
+    mass = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
+    asm(f) = Matrix(assemble(form(Wₕ, Wₕ, f)))
+    @test asm((u, v) -> innerₕ(u, v) - UInt(2) * innerₕ(u, v)) ≈ -mass
+    @test asm((u, v) -> -(UInt(2) * innerₕ(u, v))) ≈ -2mass
+    @test asm((u, v) -> innerₕ(-u, UInt(2) * v)) ≈ -2mass
+    @test asm((u, v) -> 3 * (UInt(2) * innerₕ(u, v))) ≈ 6mass
+    @test asm((u, v) -> innerₕ(UInt(2) * u, Int8(-3) * v)) ≈ -6mass
+    # each fold site leaves the two scales nested
+    for t in (simplify_ast(-(UInt(2) * S)), simplify_ast(innerₕ(-u, UInt(2) * v)),
+        simplify_ast(3 * (UInt(2) * S)))
+        @test t isa OperatorScale && t.inner_op isa OperatorScale
+        @test (t.scalar isa Unsigned) != (t.inner_op.scalar isa Unsigned)
+    end
+    # the sign distributed over a sum mixing components meets each unsigned scale
+    Vₕ = Wₕ^Val(2)
+    mixed(a, b) = (u, v) -> -(a * innerₕ(u(1), v(1)) + b * innerₕ(u(2), v(2)))
+    ast = resolve_form_ast(form(Vₕ, Vₕ, mixed(UInt(2), UInt(3))))
+    @test ast isa OperatorAdd && ast.left_op.inner_op isa OperatorScale
+    @test Matrix(assemble(form(Vₕ, Vₕ, mixed(UInt(2), UInt(3))))) ≈
+          Matrix(assemble(form(Vₕ, Vₕ, mixed(2, 3))))
+    # unsigned with unsigned, and signed with signed, still fold to one literal
+    c = simplify_ast(UInt(3) * (UInt(2) * S))
+    @test c isa OperatorScale && c.scalar === UInt(6) && c.inner_op === S
+    c = simplify_ast(-(2 * S))
+    @test c isa OperatorScale && c.scalar === -2 && c.inner_op === S
+    c = simplify_ast(innerₕ(-u, 3 * v))
+    @test c isa OperatorScale && c.scalar === -3 && c.inner_op === S
+    c = simplify_ast(2.0 * (UInt(2) * S))
+    @test c isa OperatorScale && c.scalar === 4.0 && c.inner_op === S
+
+    # The parts of a `Complex` count: these wrapped silently to ~1e18 when folded.
+    Wₙ = gridspace(mesh(domain(interval(0.0, 1.0)), 6, false))
+    uₙ, vₙ = trial_function(Wₙ), test_function(Wₙ)
+    Mₙ = Matrix(assemble(form(Wₙ, Wₙ, (u, v) -> innerₕ(u, v))))
+    asmₙ(f) = Matrix(assemble(form(Wₙ, Wₙ, f)))
+    @test asmₙ((u, v) -> -(im * (UInt(2) * innerₕ(u, v)))) ≈ -2im .* Mₙ
+    @test asmₙ((u, v) -> -(Complex{UInt}(0, 2) * innerₕ(u, v))) ≈ -2im .* Mₙ
+    @test asmₙ((u, v) -> Complex(-1, 0) * (UInt(2) * innerₕ(u, v))) ≈ -2 .* Mₙ
+    @test asmₙ((u, v) -> im * (Complex{UInt}(0, 2) * innerₕ(u, v))) ≈ -2 .* Mₙ
+    @test asmₙ((u, v) -> innerₕ(-u, Complex{UInt}(0, 2) * v)) ≈ -2im .* Mₙ
+    t = simplify_ast(-(im * (UInt(2) * innerₕ(uₙ, vₙ))))
+    @test t isa OperatorScale && t.inner_op.scalar === Complex{UInt}(0, 2)
+    # unsigned parts beside a `Bool` one, or a real, still fold
+    c = simplify_ast(im * (UInt(2) * S))
+    @test c isa OperatorScale && c.scalar === Complex{UInt}(0, 2) && c.inner_op === S
+end
+
 # The `same_mesh` rule of gpena/Bramble.jl#771 (`_same_mesh_stencil`,
 # operators/interpolation.jl) acts in the stencil, after this pass: `πₕ(u)` stays in the
 # stored tree, which is the same tree, of the same type, whether or not the two spaces
@@ -1066,6 +1119,94 @@ _rt_interp(W1, W2) = form(W1, W2, (u, v) -> innerₕ(πₕ(u), v) + inner₊ₓ(
     @test typeof(a.ast) === typeof(_rt_interp(W, W2).ast) === typeof(_rt_interp(W2, W).ast)
     @test a.ast.left_op.left_op isa InterpolationNode
     @test a.ast.right_op.left_op.inner_op isa InterpolationNode
+end
+
+# A coefficient over a sum of three or more terms naming different components, inside one
+# product (gpena/Bramble.jl#804). The product distributed over the scaled sum by simplifying
+# a rebuilt sum of products, a recursion through `simplify_ast` deeper than inference
+# follows, so these forms inferred a non-concrete type; two terms inferred.
+_rt_mix3_diff(V) = form(V, V, (u, v) -> innerₕ(3 * (u(1) + u(2) + D₋ₓ(u(1))), v(1)))
+_rt_mix3_same(V) = form(V, V, (u, v) -> innerₕ(3 * (u(1) + u(2) + u(1)), v(1)))
+_rt_mix3_grid(V, g) = form(V, V, (u, v) -> innerₕ(g * (u(1) + u(2) + D₋ₓ(u(1))), v(1)))
+_rt_mix3_linear(V) = form(V, v -> innerₕ(1.0, 3 * (v(1) + v(2) + D₋ₓ(v(1)))))
+_rt_mix3_both(V) = form(V, V, (u, v) -> innerₕ(2 * (u(1) + u(2)), 3 * (v(2) + v(1) + v(2))))
+
+@testset "scaled 3-term mixing sum infers (#804)" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
+    Bramble.change_points!(Ωₕ, collect(range(0.0, 1.0; length = 9)) .^ 1.4)
+    W = gridspace(Ωₕ)
+    V = W^Val(2)
+    gₕ = Rₕ(W, x -> 1.0 + x[1]^2)
+    @test (@inferred _rt_mix3_diff(V)) isa Bramble.BilinearForm
+    @test (@inferred _rt_mix3_same(V)) isa Bramble.BilinearForm
+    @test (@inferred _rt_mix3_grid(V, gₕ)) isa Bramble.BilinearForm
+    @test (@inferred _rt_mix3_linear(V)) isa Bramble.LinearForm
+    @test (@inferred _rt_mix3_both(V)) isa Bramble.BilinearForm
+
+    # Values: the unscaled form times the coefficient, and the grid-function coefficient
+    # against each term scaled on its own.
+    M(f) = Matrix(assemble(form(V, V, f)))
+    @test Matrix(assemble(_rt_mix3_diff(V))) ≈
+          3 .* M((u, v) -> innerₕ(u(1) + u(2) + D₋ₓ(u(1)), v(1)))
+    @test Matrix(assemble(_rt_mix3_same(V))) ≈ 3 .* M((u, v) -> innerₕ(u(1) + u(2) + u(1), v(1)))
+    @test Matrix(assemble(_rt_mix3_grid(V, gₕ))) ≈
+          M((u, v) -> innerₕ(gₕ * u(1), v(1)) + innerₕ(gₕ * u(2), v(1)) +
+                      innerₕ(gₕ * D₋ₓ(u(1)), v(1)))
+    @test assemble(_rt_mix3_linear(V)) ≈
+          3 .* assemble(form(V, v -> innerₕ(1.0, v(1) + v(2) + D₋ₓ(v(1)))))
+    @test Matrix(assemble(_rt_mix3_both(V))) ≈
+          6 .* M((u, v) -> innerₕ(u(1) + u(2), v(2) + v(1) + v(2)))
+    # The distributed pieces: one product per term, each with its coefficient lifted.
+    a = _rt_mix3_diff(V).ast
+    @test a isa OperatorAdd && a.left_op isa OperatorAdd
+    @test all(t -> t isa OperatorScale && t.scalar === 3 && t.inner_op isa BilinearProduct,
+        (a.left_op.left_op, a.left_op.right_op, a.right_op))
+end
+
+# The same distribution under a coefficient or source holding run-time data, a `Ref` or a grid
+# function: the tree around the literal indices is not a constant, and the gates fold only
+# inside the caller that holds them. A grid-function source with two terms inferred before
+# #804's distribution was split out; it pins that, and the sums below pin up to eight terms.
+_terms8(u) = (u(1), u(2), u(3), D₋ₓ(u(1)), 2 * u(2), D₋ₓ(u(3)), 0.5 * u(1), D₋ₓ(u(2)))
+_rt_lin2_src(V, g) = form(V, v -> innerₕ(g, 3.0 * (v(1) + v(2))))
+_rt_lin3_src(V, g) = form(V, v -> innerₕ(g, 3.0 * (v(1) + v(2) + v(3))))
+_rt_mix5(V, c) = form(V, V,
+    (u, v) -> innerₕ(c * (u(1) + u(2) + u(3) + D₋ₓ(u(1)) + 2 * u(2)), v(1)))
+function _rt_mix8(V, c)
+    form(V, V,
+        (u, v) -> innerₕ(
+            c * (u(1) + u(2) + u(3) + D₋ₓ(u(1)) + 2 * u(2) + D₋ₓ(u(3)) + 0.5 * u(1) +
+                 D₋ₓ(u(2))),
+            v(1)))
+end
+
+@testset "run-time coefficient, mixing sum (#804)" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
+    Bramble.change_points!(Ωₕ, collect(range(0.0, 1.0; length = 8)) .^ 1.4)
+    W = gridspace(Ωₕ)
+    V = W^Val(3)
+    gₕ = Rₕ(W, x -> 1.0 + x[1]^2)
+    r = Ref(2.0)
+    @test (@inferred _rt_lin2_src(V, gₕ)) isa Bramble.LinearForm
+    @test (@inferred _rt_lin3_src(V, gₕ)) isa Bramble.LinearForm
+    for c in (r, gₕ)
+        @test (@inferred _rt_mix5(V, c)) isa Bramble.BilinearForm
+        @test (@inferred _rt_mix8(V, c)) isa Bramble.BilinearForm
+    end
+
+    # Values: each against its terms one product at a time.
+    L(f) = assemble(form(V, f))
+    M(f) = Matrix(assemble(form(V, V, f)))
+    @test assemble(_rt_lin2_src(V, gₕ)) ≈
+          L(v -> innerₕ(gₕ, 3.0 * v(1)) + innerₕ(gₕ, 3.0 * v(2)))
+    @test assemble(_rt_lin3_src(V, gₕ)) ≈
+          L(v -> innerₕ(gₕ, 3.0 * v(1)) + innerₕ(gₕ, 3.0 * v(2)) + innerₕ(gₕ, 3.0 * v(3)))
+    termwise(c, n) = M((u, v) -> foldl(+, map(t -> innerₕ(c * t, v(1)), _terms8(u)[1:n])))
+    for c in (r, gₕ)
+        @test Matrix(assemble(_rt_mix5(V, c))) ≈ termwise(c, 5)
+        @test Matrix(assemble(_rt_mix8(V, c))) ≈ termwise(c, 8)
+    end
+    @test termwise(r, 8) ≈ 2.0 .* M((u, v) -> innerₕ(foldl(+, _terms8(u)), v(1)))
 end
 
 end # module FormSimplifierTests

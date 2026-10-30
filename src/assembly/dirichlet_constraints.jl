@@ -35,7 +35,7 @@ const ConstraintMarkers = Union{DomainMarkers, EvaluatedDomainMarkers}
 
 Create Dirichlet boundary constraints.
 
-Each `pair` is of the form `:label => func`, where `:label` identifies the boundary region and `func` defines the Dirichlet values. If the optional time domain `I` is provided, `func` must be a time-dependent function `func(x, t)`, or a time- and parameter-dependent one `func(x, t, p)` for a value that a [`semidiscretize`](@ref) residual's own `p` should reach; this is checked by arity, since nothing about `func` itself can be evaluated at construction time. Every `pair` given alongside `I` must agree on which of the two shapes it uses.
+Each `pair` is of the form `:label => func`, where `:label` identifies the boundary region and `func` defines the Dirichlet values. If the optional time domain `I` is provided, `func` must be a time-dependent function `func(x, t)`, or a time- and parameter-dependent one `func(x, t, p)` for a value that a [`semidiscretize`](@ref) residual's own `p` should reach; this is checked by arity, since nothing about `func` itself can be evaluated at construction time. The time-dependent pairs given alongside `I` must agree on which of the two shapes they use, and at least one pair must be time-dependent. A pair whose `func` takes `x` alone may stay beside them: it is kept as it is at every `t`, as [`semidiscretize`](@ref) and the `dirichlet` keyword do.
 
 `I` is used only to require the time-dependent shape of `func`: it is not stored, and nothing compares it with the time span of an [`ode_problem`](@ref). The conditions are evaluated at whatever `t` the solver passes, so `I` need not match the time span, and a time span that reaches outside `I` evaluates `func` outside `I` without a warning. Pass the same interval to both so that `func` is only called on the time span it was written for.
 
@@ -113,24 +113,26 @@ end
     )
 end
 
-# A time domain `I` promises that every `func` accepts `(x, t)` or, uniformly, `(x, t, p)`:
-# `(dm::DomainMarkers)(t[, p])` wraps it with `Fix2` (and `Fix{3}`), which builds regardless of
-# arity and fails only when assembly calls it. Checked here by arity alone, never by calling
-# `func`.
+# A time domain `I` promises time dependence: at least one `func` accepts `(x, t)` or
+# `(x, t, p)`. `(dm::DomainMarkers)(t[, p])` wraps it with `Fix2` (and `Fix{3}`), which builds
+# regardless of arity and fails only when assembly calls it. Checked here by arity alone,
+# never by calling `func`.
 #
-# The whole `pairs` tuple must agree on one shape, not mix them: `semidiscretize` decides
-# once, for the *entire* constraint set, whether to route through `TimeDependentConstraints`
-# or `TimeParamDependentConstraints` (`problems/semidiscrete_constraints.jl`), by checking that every
-# condition has the same arity. A mix would silently fall through to neither and only fail
-# once a residual call actually invoked the wrong-arity closure -- caught here instead, at
-# the point that already knows every condition's arity.
+# This is the same classification `semidiscretize` reads off the conditions
+# (`problems/semidiscrete_constraints.jl`), through the same `_accepts`/`_is_spatial`, so the
+# keyword, `I`-less and `I` routes agree. A spatial `x -> ...` condition may sit beside timed
+# ones: `_fix_time` and `_fix_time_param` pass it through unchanged. The timed conditions must
+# share one shape, `(x, t)` or `(x, t, p)`, because the parametric evaluation would call an
+# `(x, t)` closure with a `p` it cannot take, and that failure would otherwise surface only
+# once a residual call invoked it. An all-spatial set is refused, as `I` would then promise a
+# time dependence nothing has. Both are caught here, at the point that knows every arity.
 function _validate_time_dependent_arity(pairs::Tuple{Vararg{Pair}})
-    n2 = count(pair -> hasmethod(last(pair), Tuple{Any, Any}), pairs)
-    n3 = count(pair -> hasmethod(last(pair), Tuple{Any, Any, Any}), pairs)
-    n2 == length(pairs) && return nothing
-    n3 == length(pairs) && return nothing
-    for (lbl, func) in pairs
-        hasmethod(func, Tuple{Any, Any}) || hasmethod(func, Tuple{Any, Any, Any}) ||
+    funcs = map(last, pairs)
+    param = map(f -> _accepts(f, Val(3)), funcs)
+    timed = map((f, p) -> p || _accepts(f, Val(2)), funcs, param)
+    spatial = map(f -> _is_spatial(f), funcs)
+    for (i, (lbl, func)) in enumerate(pairs)
+        (timed[i] || spatial[i]) ||
             throw(
                 ArgumentError(
                 "dirichlet_constraints: condition for label `:$lbl` must accept (x, t) or " *
@@ -138,12 +140,23 @@ function _validate_time_dependent_arity(pairs::Tuple{Vararg{Pair}})
             ),
             )
     end
-    throw(
-        ArgumentError(
-        "dirichlet_constraints: conditions must uniformly accept (x, t) or uniformly " *
-        "accept (x, t, p); got a mix across labels $(map(first, pairs)).",
-    ),
-    )
+    any(timed) ||
+        throw(
+            ArgumentError(
+            "dirichlet_constraints: at least one condition must accept (x, t) or (x, t, p) " *
+            "since a time domain was given; labels $(map(first, pairs)) are all spatial.",
+        ),
+        )
+    if any(param) && any(i -> timed[i] && !param[i], eachindex(pairs))
+        throw(
+            ArgumentError(
+            "dirichlet_constraints: timed conditions must uniformly accept (x, t) or " *
+            "uniformly accept (x, t, p); got a mix across labels $(map(first, pairs)). " *
+            "A condition of `x` alone may stay beside them.",
+        ),
+        )
+    end
+    return nothing
 end
 
 @inline _constraint_domain(input::ScalarGridSpace) = set(mesh(input))

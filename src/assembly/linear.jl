@@ -577,6 +577,7 @@ function _check_source_mesh(op::SourceVector{D, <:VectorElement}, Ωₕ) where {
 end
 
 function _check_source_mesh(op::GridFunctionScale{D, <:VectorElement}, Ωₕ) where {D}
+    _is_multi_block(space(op.grid_function)) && _throw_composite_coefficient()
     Ωs = mesh(space(op.grid_function))
     _same_mesh(Ωs, Ωₕ) || _throw_source_mesh(Ωs, Ωₕ)
     return _check_source_mesh(op.inner_op, Ωₕ)
@@ -591,6 +592,23 @@ end
 # The operand of an `InterpolationNode` lives on another mesh, so it is not entered.
 _check_source_mesh(op::InterpolationNode, Ωₕ) = nothing
 _check_source_mesh(op::UnaryWrapper, Ωₕ) = _check_source_mesh(op.inner_op, Ωₕ)
+
+# A coefficient is read as one value per point, and an element of a composite space holds
+# one block per component, so it has no single value to scale by (gpena/Bramble.jl#978).
+# Checked here, after `resolve_ast`, so the thunk spelling `(() -> wₕ) * u` is caught too.
+# A constrained composite is a multi-block space as well; its type is defined later
+# (ghost_assembly.jl), which a method body may name, as it binds at call time.
+_is_multi_block(Wₕ) = Wₕ isa Union{CompositeGridSpace, ConstrainedCompositeSpace}
+
+@noinline function _throw_composite_coefficient()
+    throw(
+        ArgumentError(
+        "a grid function of a composite space cannot scale a term: it holds one block " *
+        "per component, not one value per point. Scale by one of its components, as in " *
+        "`wₕ(i) * u(i)`.",
+    ),
+    )
+end
 
 @noinline function _throw_source_mesh(Ωs, Ωₕ)
     ns, nh = npoints(Ωs, Tuple), npoints(Ωₕ, Tuple)

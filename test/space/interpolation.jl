@@ -6,6 +6,7 @@ using Bramble: D₋ₓ, Mₓ, interpolation_matrix, change_points!
 using SparseArrays: sparse
 using LinearAlgebra: Diagonal, issymmetric
 using ..TestUtils: TEST_DIMS
+using ForwardDiff
 using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunction,
                TestFunction, IndexedTrialFunction, IndexedTestFunction, InterpolationNode,
                SourceVector, SourceConstant, component, stencil_offsets, expression,
@@ -244,6 +245,44 @@ using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunctio
         # the pointwise operator under a fill value: zero exactly where the point is outside
         @test parent(πₕ(Wdest, src; outside = 0.0)) ≈
               [0.0 <= x <= 1.0 ? g1(x) : 0.0 for x in xd]
+    end
+
+    # The numeric `πₕ`'s element type comes from `src`, `Wₕ` and the fill, never from
+    # whichever node is probed first: a `Float32` destination whose first node lies outside
+    # the `Float64` source (fill `0f0`) and one wholly inside it both give `Float64` (#1028).
+    # A `Dual`-valued source under `outside = NaN` keeps its partials in the result, with the
+    # fill converted to a `Dual` wherever the destination leaves the source's domain.
+    @testset "Element type from src and space" begin
+        be32 = backend(vector_type = Vector{Float32})
+        W32a = gridspace(mesh(domain(interval(-0.5, 2.0)), 6, false; backend = be32))
+        W32b = gridspace(mesh(domain(interval(0.2, 0.9)), 6, false; backend = be32))
+        u64 = Rₕ(gridspace(mesh(domain(interval(0.0, 1.0)), 8, false)), x -> 2x + 3)
+        g(x) = 0.0 <= x <= 1.0 ? 2x + 3 : 0.0
+        for W in (W32a, W32b)
+            r = πₕ(W, u64; outside = 0.0f0)
+            @test eltype(r) === Float64
+            @test parent(r) ≈ g.(Float64.(points(mesh(W))))
+            dest = Bramble.element(W, Float64)
+            @test parent(@inferred(πₕ!(dest, u64; outside = 0.0f0))) == parent(r)
+        end
+        @test eltype(@inferred(πₕ(W32a, u64; outside = 0.0f0))) === Float64
+
+        Ws = gridspace(mesh(domain(interval(0.0, 1.0)), 7, false))
+        Wd = gridspace(mesh(domain(interval(-0.5, 2.0)), 9, false))
+        D = ForwardDiff.Dual{Nothing, Float64, 1}
+        us = Bramble.element(Ws, D)
+        xs = points(mesh(Ws))
+        parent(us) .= D.(2 .* xs .+ 3, ForwardDiff.Partials.(tuple.(xs)))
+        rd = πₕ(Wd, us; outside = NaN)
+        @test eltype(rd) === D
+        xd = points(mesh(Wd))
+        inside = 0.0 .<= xd .<= 1.0
+        @test ForwardDiff.value.(parent(rd))[inside] ≈ 2 .* xd[inside] .+ 3
+        @test ForwardDiff.partials.(parent(rd), 1)[inside] ≈ xd[inside]
+        @test all(isnan ∘ ForwardDiff.value, parent(rd)[.!inside])
+        @test all(iszero, ForwardDiff.partials.(parent(rd), 1)[.!inside])
+        dd = Bramble.element(Wd, D)
+        @test isequal(parent(@inferred(πₕ!(dd, us; outside = NaN))), parent(rd))
     end
 
     # `_interp_cell_frac` given the coordinates explicitly: `host_points` is what

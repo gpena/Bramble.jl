@@ -46,6 +46,12 @@ _captured_forward_gradient(μ) = (u, v) -> μ * inner₊(∇₊ₕ(u), ∇₊ₕ
 _fd_bilinear(W, s) = assemble(form(W, W, (u, v) -> innerₕ(u, v) + Ref(s) * inner₊(∇ₕ(u), ∇ₕ(v))))
 _fd_linear(W, s) = assemble(form(W, v -> innerₕ(1.0, v) + Ref(s) * innerₕ(x -> 1.0 + x[1], v)))
 
+# A coefficient over a sum of three terms naming different components, inside one product
+# (#804): the distribution recursed through `simplify_ast` past what inference follows.
+_mix3_bilinear(V) = form(V, V, (u, v) -> innerₕ(3 * (u(1) + u(2) + D₋ₓ(u(1))), v(1)))
+_mix3_linear(V) = form(V, v -> innerₕ(1.0, 3 * (v(1) + v(2) + D₋ₓ(v(1)))))
+_mix3_grid(V, g) = form(V, V, (u, v) -> innerₕ(g * (u(1) + u(2) + D₋ₓ(u(1))), v(1)))
+
 # Oracle controls: a local function with a deliberate runtime dispatch (a `Vector{Any}`
 # element added to an Int), and a closure returning through a `Ref{Any}`.
 module Control
@@ -166,6 +172,13 @@ end
         @test_opt target_modules = TM assemble(aᵥ)
         @test_opt target_modules = TM assemble!(A, aᵥ)
         @test_opt target_modules = TM mul!(y, op, x)
+    end
+
+    @testset "Scaled sum of three mixing terms" begin
+        Vₕ = Wₕ1 × Wₕ1
+        @test_opt target_modules = TM _mix3_bilinear(Vₕ)
+        @test_opt target_modules = TM _mix3_linear(Vₕ)
+        @test_opt target_modules = TM _mix3_grid(Vₕ, uₕ1)
     end
 
     # The elasticity form (#921): `divₘₕ` built each term with a `foldl` over a filtered

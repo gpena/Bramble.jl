@@ -83,14 +83,18 @@ function amg_preconditioner(
     return _amg_preconditioner(A; kwargs...)
 end
 
-function _amg_preconditioner(::Any; kwargs...)
+function _amg_preconditioner(A; kwargs...)
+    _ext_loaded(:BrambleAlgebraicMultigridExt) &&
+        _throw_unsupported_matrix("amg_preconditioner", A, "an AbstractMatrix")
     return error(
         "amg_preconditioner requires AlgebraicMultigrid.jl. Add `using AlgebraicMultigrid` " *
         "before calling this function.",
     )
 end
 
-function _amg_operator(::Any; kwargs...)
+function _amg_operator(A; kwargs...)
+    _ext_loaded(:BrambleAlgebraicMultigridExt) &&
+        _throw_unsupported_matrix("preconditioner = :amg", A, "an AbstractMatrix")
     return error(
         "preconditioner = :amg requires AlgebraicMultigrid.jl. Add `using AlgebraicMultigrid` " *
         "before calling this function.",

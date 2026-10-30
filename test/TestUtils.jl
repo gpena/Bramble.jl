@@ -173,16 +173,16 @@ if !WITH_3D_TESTS
 end
 
 # Automatic differentiation and GPU tests are switched off in every group until the
-# milestones that own them: AD until v4.3.0, which decides which backends Bramble keeps, and
-# GPU until v4.4.0, which brings the device path to parity with the CPU. The files stay in
+# milestones that own them: AD until v4.5.0, which decides which backends Bramble keeps, and
+# GPU until v4.11.0, which brings the device path to parity with the CPU. The files stay in
 # the tree, and their packages are not in test/Project.toml. With AD off, one ForwardDiff
 # smoke test (form/forwarddiff_smoke.jl) still runs in `unit`, so assembly with dual numbers
 # cannot silently regress.
 #
-# Switched off until v4.3.0 (AD). To turn back on, add Enzyme, Mooncake,
+# Switched off until v4.5.0 (AD). To turn back on, add Enzyme, Mooncake,
 # SparseConnectivityTracer, SparseMatrixColorings, DifferentiationInterface,
 # SciMLSensitivity and ChainRulesCore (whichever the file loads) to test/Project.toml and set
-# `BRAMBLE_TEST_AD=true`, then remove this switch once v4.3.0 settles the backends.
+# `BRAMBLE_TEST_AD=true`, then remove this switch once v4.5.0 settles the backends.
 #   whole files, `unit` (and slow/full/all)
 #     space/autodiff.jl, space/autodiff_backends.jl   test/runtests.jl
 #     form/autodiff.jl                                test/form/runtests.jl
@@ -205,10 +205,10 @@ end
 #     propagates"; form/reaction_flux.jl "reaction: Dual load vector";
 #     ext/sparspak_ext.jl `if` (generic-eltype AD through Sparspak).
 #
-# Switched off until v4.4.0 (GPU). To turn back on, add Metal, GPUArrays and
+# Switched off until v4.11.0 (GPU). To turn back on, add Metal, GPUArrays and
 # KernelAbstractions to test/Project.toml, set `BRAMBLE_TEST_GPU=true` and run the `gpu`
 # group on an Apple Silicon Mac (outside CI, or with `CI` unset, where `_run_gpu_tests()` below
-# skips device kernels on a CI runner), then remove this switch once v4.4.0 lands.
+# skips device kernels on a CI runner), then remove this switch once v4.11.0 lands.
 #   whole files, group `gpu`, ext/metal_ext.jl (which now also holds the "Metal GPU
 #     backend" testset that used to sit inline in utils/backends.jl),
 #     ext/metal_fullstack.jl, ext/metal_assembly_replay.jl, ext/metal_form_assembly.jl.

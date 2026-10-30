@@ -12,7 +12,7 @@
 # does not render. Lines marked `#src` here are the assertions; Literate.jl drops them from a
 # rendered page. The script is not part of the published manual. It needs `Enzyme` and runs
 # behind the `ad`/`full` test groups (with `BRAMBLE_TEST_AD=true`), unlike the other example
-# pages -- see that test file for why. No test runs this page until v4.3.0, when the AD
+# pages -- see that test file for why. No test runs this page until v4.5.0, when the AD
 # backends return.
 #
 # ## Problem
@@ -29,7 +29,7 @@
 # that is given.
 #
 # The boundary stays Dirichlet-only here because forms on a ghost space refuse the automatic
-# differentiation the adjoint gradient needs, which arrives with milestone v4.3.0
+# differentiation the adjoint gradient needs, which arrives with milestone v4.5.0
 # (automatic differentiation and form correctness on the CPU).
 #
 # !!! note "What used to block this"

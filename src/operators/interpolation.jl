@@ -372,6 +372,26 @@ end
     return _interp_cell_frac(Ωₕ, ntuple(d -> points(Ωₕ(d)), Val(D)), x, outside)
 end
 
+# A ghost mesh resolves `x` against its physical mesh, as `interpolate_at` on a ghost space
+# does: the padded points reach past the domain, so against them a ghost point is inside and
+# `outside` never applies. The cell is then shifted into the padded index space the stencil
+# columns name. `_padded` first brings the padded mesh up to date with the physical one, as
+# `locate_cell` does.
+@inline function _interp_cell_frac(G::_GhostMeshLike{1}, x, outside)
+    _padded(G)
+    frac = _interp_cell_frac(physical_mesh(G), x, outside)
+    frac === nothing && return nothing
+    i, t = frac
+    return i + G.lo[1], t
+end
+@inline function _interp_cell_frac(G::_GhostMeshLike{D}, x, outside) where {D}
+    _padded(G)
+    frac = _interp_cell_frac(physical_mesh(G), x, outside)
+    frac === nothing && return nothing
+    idx, ts = frac
+    return idx + CartesianIndex(G.lo), ts
+end
+
 # The multilinear weight of one corner: `tᵈ` where the corner is on the far side of
 # direction `d`, `1 - tᵈ` where it is on the near side. Over all `2ᴰ` corners these sum to
 # one, which is what keeps the interpolant from overshooting.
@@ -417,9 +437,12 @@ fill value (`outside::Number`, meaningless as a linear map) throws the same
     return _πₕ!(locality(typeof(parent(dest))), locality(typeof(parent(src))), dest, src, outside)
 end
 
-@inline _πₕ!(::HostLocality, ::HostLocality, dest, src, outside) = Rₕ!(
-    dest, x -> interpolate_at(src, x; outside)
-)
+# Through `GridInterpolant`, not a closure: a fill converts to the blend's type, so the
+# call never returns a `Union` and the result's type never hangs on which node is probed.
+@inline function _πₕ!(::HostLocality, ::HostLocality, dest, src, outside)
+    _validate_outside(outside)
+    return Rₕ!(dest, GridInterpolant(src, _outside_policy(outside)))
+end
 
 # At least one of dest/src is device-backed: assemble the matrix once and reuse the
 # mul!-based method below rather than launching a host closure inside a device kernel.
@@ -497,11 +520,13 @@ Evaluates `Rₕ(Wₕ, x -> interpolate_at(src, x; outside))`; see [`πₕ!`](@re
 by multiple dispatch from the one-argument symbolic wrapper `πₕ(uₕ)`, defined below. The
 element type is promoted from `Wₕ`'s and `src`'s own, so interpolating a `Dual`-valued
 `src` yields a `Dual`-valued result on an undifferentiated `Wₕ`. `outside` is forwarded to
-[`interpolate_at`](@ref) unchanged.
+[`interpolate_at`](@ref) unchanged; a fill value joins that promotion and is converted to
+the result's element type, whichever grid points fall outside `src`'s domain.
 """
-@inline πₕ(Wₕ::ScalarGridSpace, src::VectorElement; outside = :error) = Rₕ(
-    Wₕ, x -> interpolate_at(src, x; outside)
-)
+@inline function πₕ(Wₕ::ScalarGridSpace, src::VectorElement; outside = :error)
+    _validate_outside(outside)
+    return Rₕ(Wₕ, GridInterpolant(src, _outside_policy(outside)))
+end
 
 # --- Triplet assembly shared by both dimensionalities of interpolation_matrix ---
 #
@@ -803,6 +828,12 @@ quadrature weight.
 `op` must be a trial- or test-function leaf, plain or indexed. `outside`
 accepts only `:error` (the default), `:clamp` and `:extrapolate` -- see
 [`InterpolationNode`](@ref)'s own docstring for why a fill value is refused here.
+
+On a [`GhostGridSpace`](@ref) the blend reads the physical nodes, as
+[`interpolate_at`](@ref) does, and a ghost point lies outside the domain. The assembly
+walk visits the ghost points, so on a ghost space the default `:error` throws, even in
+`innerₕ(πₕ(u), v)`, whose weight at every ghost point is zero. Pass `outside = :clamp` or
+`outside = :extrapolate` there.
 """
 function πₕ(op::LazyOp{D}; outside = :error) where {D}
     _is_interp_leaf(op) || _throw_interp_inner(op)

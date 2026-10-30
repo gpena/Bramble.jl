@@ -24,6 +24,11 @@ using Bramble: refactor!, sparse_factorize, sparse_refactor!, sparspak_factorize
     # 1. Alias equivalence
     @test sparse_refactor! === refactor!
 
+    # The extensions extend the public `X_refactor!` themselves: no `_X_refactor!` layer between.
+    for n in (:suitesparse, :sparspak, :mumps, :accelerate)
+        @test !isdefined(Bramble, Symbol(:_, n, :_refactor!))
+    end
+
     # 2. Default pde_solve
     u_default = pde_solve(A, F)
     @test isapprox(u_default, Matrix(A) \ F; atol = 1e-12)
