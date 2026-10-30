@@ -350,12 +350,14 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         Wf = gridspace(mesh(domain(sq, :east => :right), (13, 11), (false, false)))
         cases = Any[]
         for (U, V, o) in ((Wc, Wf, "coarse trial"), (Wf, Wc, "fine trial")), r in (:boundary, :east)
+
             push!(cases, ("$o, $r", form(U, V, (u, v) -> innerₕ(πₕ(u), restrict_to(r, v)) + innerₕ(u, πₕ(v)))))
         end
         push!(cases,
             ("fine trial, coarse-only label",
                 form(Wf, Wc, (u, v) -> innerₕ(πₕ(u), restrict_to(:aa, v)) + innerₕ(u, πₕ(v)))))
         for (name, a) in cases, p in (Bramble.CpuSerial(), Parallel(), Bramble.CpuPolyester())
+
             @testset "$name, $(nameof(typeof(p)))" begin
                 A = assemble(a)
                 op = matrix_free_operator(a; policy = p)
