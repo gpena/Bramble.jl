@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Difference, jump and average operators — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d655ef2c">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=42b2415c">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Difference, jump and average operators — Bramble.jl">
   <meta property="og:title" content="Difference, jump and average operators — Bramble.jl">
@@ -251,7 +251,7 @@
 <pre><code class="language-julia">∇ₕ(u::Union{TrialFunction, TestFunction})</code></pre>
 </div>
 <p>The backward gradient tensor of a composite trial or test function <code class="md-code-inline">u</code>: <code class="md-code-inline">N</code> rows (one per component of <code class="md-code-inline">u</code>) of <code class="md-code-inline">D</code>-tuples (one per spatial direction), <code class="md-code-inline">∇ₕ(u)[c][d]</code> the backward difference of component <code class="md-code-inline">c</code> along direction <code class="md-code-inline">d</code>.</p>
-<p>The rows come in a <code class="md-code-inline">Bramble._GradientRows</code>, which is not a <code class="md-code-inline">Tuple</code>. <code class="md-code-inline">∇ₕ(u)[c][d]</code>, <code class="md-code-inline">length</code>, iteration, <code class="md-code-inline">map</code> and broadcasting give what they give on <code class="md-code-inline">∇ₕ(components(u))</code>, and <code class="md-code-inline">Tuple(∇ₕ(u))</code> is that tuple; anything else tuple-like needs <code class="md-code-inline">Tuple(∇ₕ(u))</code>. <code class="md-code-inline">map</code> needs every argument to be such a container; with a plain tuple among them, pass <code class="md-code-inline">Tuple(∇ₕ(u))</code>. The container also tells <a href="../../api/inner_products/#Bramble.inner₊"><code class="md-code-inline">inner₊</code></a> that row <code class="md-code-inline">c</code> is built on component <code class="md-code-inline">c</code> alone, so a captured coefficient over <code class="md-code-inline">inner₊(∇ₕ(u), ∇ₕ(v))</code> gives <code class="md-code-inline">form</code> one concrete type in 3D, which the plain tuple <code class="md-code-inline">∇ₕ(components(u))</code> does not; both assemble the same matrix. In 1D, where <code class="md-code-inline">∇ₕ(components(u))[c]</code> is a bare <code class="md-code-inline">D₋ₓ(u(c))</code>, each row is the 1-tuple <code class="md-code-inline">(D₋ₓ(u(c)),)</code> instead, so <code class="md-code-inline">∇ₕ(u)[c][1]</code> is that difference. On a scalar space (one component) this is the same <code class="md-code-inline">D</code>-tuple <code class="md-code-inline">∇ₕ</code> already returns for any operator.</p>
+<p>The rows come in a <code class="md-code-inline">Bramble._GradientRows</code>, which is not a <code class="md-code-inline">Tuple</code>. <code class="md-code-inline">∇ₕ(u)[c][d]</code>, <code class="md-code-inline">length</code>, iteration, <code class="md-code-inline">map</code> and broadcasting give what they give on <code class="md-code-inline">∇ₕ(components(u))</code>, and <code class="md-code-inline">Tuple(∇ₕ(u))</code> is that tuple; anything else tuple-like needs <code class="md-code-inline">Tuple(∇ₕ(u))</code>. <code class="md-code-inline">map</code> needs every argument to be such a container; with a plain tuple among them, pass <code class="md-code-inline">Tuple(∇ₕ(u))</code>. The container also tells <a href="../../api/inner_products/#Bramble.inner₊"><code class="md-code-inline">inner₊</code></a> that row <code class="md-code-inline">c</code> is built on component <code class="md-code-inline">c</code> alone, so a captured coefficient over <code class="md-code-inline">inner₊(∇ₕ(u), ∇ₕ(v))</code> gives <code class="md-code-inline">form</code> one concrete type in 3D, which the plain tuple <code class="md-code-inline">∇ₕ(components(u))</code> does not; both assemble the same matrix. In 1D each row is the 1-tuple <code class="md-code-inline">(D₋ₓ(u(c)),)</code>, as in <code class="md-code-inline">∇ₕ(components(u))</code>, so <code class="md-code-inline">∇ₕ(u)[c][1]</code> is that difference and the two spellings mix. On a scalar space (one component) this is the same <code class="md-code-inline">D</code>-tuple <code class="md-code-inline">∇ₕ</code> already returns for any operator.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.D₊ₓ">
@@ -950,7 +950,7 @@
 <div class="md-docstring" id="Bramble.divₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.divₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1707-L1721" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1711-L1725" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -996,7 +996,7 @@ divₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.divₘₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.divₘₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1727-L1742" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1731-L1746" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1044,7 +1044,7 @@ div₊ₕ!(vₕ::VectorElement, uₕ) -&gt; VectorElement</code></pre>
 <div class="md-docstring" id="Bramble.divcₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.divcₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1784-L1799" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1788-L1803" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1078,7 +1078,7 @@ divcₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.divcₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.divcₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1784-L1799" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1788-L1803" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1096,7 +1096,7 @@ divcₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.div̽ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.div̽ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1883-L1898" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1887-L1902" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1130,7 +1130,7 @@ div̽ₕ!(vₕ::VectorElement, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.div̽ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.div̽ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1883-L1898" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1887-L1902" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1412,7 +1412,7 @@ v = update_ghosts!(GhostVector(Cₕ, rand(35)), Cₕ)
 <div class="md-docstring" id="Bramble.εₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.εₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1633-L1650" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1637-L1654" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1465,7 +1465,7 @@ v = update_ghosts!(GhostVector(Cₕ, rand(35)), Cₕ)
 <div class="md-docstring" id="Bramble.εcₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.εcₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1822-L1838" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1826-L1842" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1502,7 +1502,7 @@ v = update_ghosts!(GhostVector(Cₕ, rand(35)), Cₕ)
 <div class="md-docstring" id="Bramble.εcₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.εcₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1822-L1838" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1826-L1842" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1522,7 +1522,7 @@ v = update_ghosts!(GhostVector(Cₕ, rand(35)), Cₕ)
 <div class="md-docstring" id="Bramble.ε̽ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ε̽ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1903-L1921" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1907-L1925" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1561,7 +1561,7 @@ v = update_ghosts!(GhostVector(Cₕ, rand(35)), Cₕ)
 <div class="md-docstring" id="Bramble.ε̽ₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ε̽ₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1903-L1921" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/difference.jl#L1907-L1925" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2628,7 +2628,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 </ul>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dim_val</code> is not between 1 and the mesh (or operand) dimension; or <code class="md-code-inline">uₕ</code> is device-backed or its space has a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> (no device kernel yet, tracked on milestone v4.11.0).</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dim_val</code> is not between 1 and the mesh (or operand) dimension; or <code class="md-code-inline">uₕ</code> is device-backed or its space has a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> (no device kernel yet, tracked on milestone v4.7.0).</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -2805,7 +2805,7 @@ parent(forward_shift(uₕ, Val(1)))
 </ul>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dim_val</code> is not between 1 and the mesh (or operand) dimension; or <code class="md-code-inline">uₕ</code> is device-backed or its space has a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> (no device kernel yet, tracked on milestone v4.11.0).</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dim_val</code> is not between 1 and the mesh (or operand) dimension; or <code class="md-code-inline">uₕ</code> is device-backed or its space has a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a> (no device kernel yet, tracked on milestone v4.7.0).</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -2926,6 +2926,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=d655ef2c"></script>
+  <script src="../../assets/materialdocs.js?v=42b2415c"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML, AD and solvers — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=75decd96">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=d3bb9f65">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
@@ -497,7 +497,7 @@ sol = solve(prob, NewtonRaphson())</code></pre>
 </div>
 </div>
 <h2 id="Adjoint-sensitivities-for-a-transient-solve" class="md-heading">Adjoint sensitivities for a transient solve<a href="#Adjoint-sensitivities-for-a-transient-solve" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>No test runs this until v4.5.0, when the AD backends return.</p>
+<p>No test runs this until v4.2.0, when the AD backends return.</p>
 <div class="md-docstring" id="Bramble.adjoint_sensitivities">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.adjoint_sensitivities</code></h4>
@@ -559,7 +559,7 @@ pde_solve(fact::Factorization, F::AbstractVector) -&gt; Vector</code></pre>
 <p>With no keyword arguments this is <code class="md-code-inline">A \ F</code>, unless <code class="md-code-inline">AppleAccelerate.jl</code> is loaded on macOS <em>and</em> the system is symmetric (see <code class="md-code-inline">:default</code> below), in which case it is <code class="md-code-inline">accelerate_solve(A, F; sym)</code>. The name exists so that reverse-mode AD tools have one function to attach an adjoint rule to, which is what makes a whole <code class="md-code-inline">θ -&gt; assemble -&gt; pde_solve -&gt; J(u)</code> chain differentiable.</p>
 <p><strong>Keywords</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">solver</code>: <code class="md-code-inline">:default</code> – <code class="md-code-inline">A \ F</code> on Linux, Windows, macOS without <code class="md-code-inline">AppleAccelerate.jl</code> loaded, and macOS on an unsymmetric <code class="md-code-inline">A</code>; on macOS with <code class="md-code-inline">using AppleAccelerate</code> in effect and <code class="md-code-inline">A</code> symmetric, dispatches to <code class="md-code-inline">accelerate_solve</code> instead (same as passing <code class="md-code-inline">solver = :accelerate</code> explicitly). Symmetry is <code class="md-code-inline">issymmetric(A)</code> under <code class="md-code-inline">sym = :auto</code> (the default), or trusted outright from an explicit <code class="md-code-inline">sym = :spd</code>/<code class="md-code-inline">:definite</code>/<code class="md-code-inline">:symmetric</code> (and conversely <code class="md-code-inline">:unsymmetric</code> skips straight to <code class="md-code-inline">A \ F</code>) – the caller has already asserted the property, so it is not checked again. The narrowing exists because Accelerate is only a win on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ). On forms assembled on 2D grid spaces it won on a symmetric Poisson-plus-mass system and lost on an unsymmetric convection-diffusion one. This only ever narrows which solver runs on macOS; Linux and Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws from <code class="md-code-inline">accelerate_solve</code> exactly as <code class="md-code-inline">solver = :accelerate</code> would – <code class="md-code-inline">:default</code> never silently falls back to <code class="md-code-inline">\</code> after picking Accelerate. It picks Accelerate only for <code class="md-code-inline">Float32</code>, <code class="md-code-inline">Float64</code> and their complex types (the element type of <code class="md-code-inline">A</code> and of the solution): an integer <code class="md-code-inline">A</code> goes to <code class="md-code-inline">A \ F</code>, or in the <code class="md-code-inline">mean_zero</code>/<code class="md-code-inline">gauge</code> solve to <code class="md-code-inline">lu</code>, which converts it to <code class="md-code-inline">Float64</code>, and a type that backend cannot factor (<code class="md-code-inline">BigFloat</code>) throws an <code class="md-code-inline">ArgumentError</code> naming it. <code class="md-code-inline">:suitesparse</code> (CHOLMOD/UMFPACK), <code class="md-code-inline">:spqr</code> (sparse QR, for a least-squares or rectangular <code class="md-code-inline">A</code>), <code class="md-code-inline">:accelerate</code> (Apple <code class="md-code-inline">libSparse</code>, needs <code class="md-code-inline">AppleAccelerate.jl</code>, honoured unconditionally regardless of symmetry), <code class="md-code-inline">:mumps</code> (needs <code class="md-code-inline">MUMPS.jl</code>), <code class="md-code-inline">:sparspak</code> (pure Julia, needs <code class="md-code-inline">Sparspak.jl</code>).</p>
+<li><p><code class="md-code-inline">solver</code>: <code class="md-code-inline">:default</code> – <code class="md-code-inline">A \ F</code> on Linux, Windows, macOS without <code class="md-code-inline">AppleAccelerate.jl</code> loaded, and macOS on an unsymmetric <code class="md-code-inline">A</code>; on macOS with <code class="md-code-inline">using AppleAccelerate</code> in effect and <code class="md-code-inline">A</code> symmetric, dispatches to <code class="md-code-inline">accelerate_solve</code> instead (same as passing <code class="md-code-inline">solver = :accelerate</code> explicitly). Symmetry is <code class="md-code-inline">issymmetric(A)</code> under <code class="md-code-inline">sym = :auto</code> (the default), or trusted outright from an explicit <code class="md-code-inline">sym = :spd</code>/<code class="md-code-inline">:definite</code>/<code class="md-code-inline">:symmetric</code> (and conversely <code class="md-code-inline">:unsymmetric</code> skips straight to <code class="md-code-inline">A \ F</code>) – the caller has already asserted the property, so it is not checked again. The narrowing exists because Accelerate is only a win on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ). On forms assembled on 2D grid spaces it won on a symmetric Poisson-plus-mass system and lost on an unsymmetric convection-diffusion one. This only ever narrows which solver runs on macOS; Linux and Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws from <code class="md-code-inline">accelerate_solve</code> exactly as <code class="md-code-inline">solver = :accelerate</code> would – <code class="md-code-inline">:default</code> never silently falls back to <code class="md-code-inline">\</code> after picking Accelerate. It picks Accelerate only for <code class="md-code-inline">Float32</code>, <code class="md-code-inline">Float64</code> and their complex types (the element type of <code class="md-code-inline">A</code> and of the solution), so an integer <code class="md-code-inline">A</code> goes to <code class="md-code-inline">A \ F</code>, or in the <code class="md-code-inline">mean_zero</code>/<code class="md-code-inline">gauge</code> solve to <code class="md-code-inline">lu</code>, which converts it to <code class="md-code-inline">Float64</code>, and a type that backend cannot factor (<code class="md-code-inline">BigFloat</code>) throws an <code class="md-code-inline">ArgumentError</code> naming it. <code class="md-code-inline">:suitesparse</code> (CHOLMOD/UMFPACK), <code class="md-code-inline">:spqr</code> (sparse QR, for a least-squares or rectangular <code class="md-code-inline">A</code>), <code class="md-code-inline">:accelerate</code> (Apple <code class="md-code-inline">libSparse</code>, needs <code class="md-code-inline">AppleAccelerate.jl</code>, honoured unconditionally regardless of symmetry), <code class="md-code-inline">:mumps</code> (needs <code class="md-code-inline">MUMPS.jl</code>), <code class="md-code-inline">:sparspak</code> (pure Julia, needs <code class="md-code-inline">Sparspak.jl</code>).</p>
 </li>
 <li><p><code class="md-code-inline">kwargs</code>: passed to the chosen backend (for <code class="md-code-inline">:accelerate</code> and <code class="md-code-inline">:mumps</code> the keywords of <a href="../api_sciml/#Bramble.accelerate_solve"><code class="md-code-inline">accelerate_solve</code></a> and <a href="../api_sciml/#Bramble.mumps_solve"><code class="md-code-inline">mumps_solve</code></a>), which throws on one it does not take. <code class="md-code-inline">:default</code> takes only <code class="md-code-inline">kind</code> and <code class="md-code-inline">:sparspak</code> takes none. Both throw an <code class="md-code-inline">ArgumentError</code> on any other keyword. <code class="md-code-inline">kind</code> and <code class="md-code-inline">sym</code> are read only when the Accelerate route runs. On <code class="md-code-inline">A \ F</code> they are accepted and ignored, so <code class="md-code-inline">kind = :bogus</code> throws only where Accelerate is taken.</p>
 </li>
@@ -577,7 +577,7 @@ pde_solve(fact::Factorization, F::AbstractVector) -&gt; Vector</code></pre>
 </ul>
 <p>A <code class="md-code-inline">SparseMatrixCSR</code> (<code class="md-code-inline">SparseMatricesCSR.jl</code>) <code class="md-code-inline">A</code> is also accepted: converted to <code class="md-code-inline">SparseMatrixCSC</code> first (see <code class="md-code-inline">docs/src/internals/csr_solvers.md</code>), then solved exactly as above.</p>
 <p><strong>Reverse-mode differentiation</strong></p>
-<p>With <code class="md-code-inline">ChainRulesCore.jl</code> loaded, <code class="md-code-inline">BrambleChainRulesExt</code>&#39;s <code class="md-code-inline">rrule</code> solves the adjoint system <code class="md-code-inline">Aᴴ λ = ∂J/∂u</code> once and returns <code class="md-code-inline">∂J/∂A = -λ u&#39;</code> (conjugate transpose, the ChainRules convention for a complex <code class="md-code-inline">A</code>; <code class="md-code-inline">-λ uᵀ</code> for real data) restricted to <code class="md-code-inline">A</code>&#39;s sparsity (never densified) and <code class="md-code-inline">∂J/∂F = λ</code>. Without keywords the adjoint solve reuses the forward solve&#39;s own factorisation. The rule accepts the keywords of <code class="md-code-inline">pde_solve</code>: it forwards them to the primal solve and to the adjoint solve of <code class="md-code-inline">sparse(A&#39;)</code>, so <code class="md-code-inline">solver</code> and <code class="md-code-inline">sym</code> apply to <code class="md-code-inline">Aᴴ</code> as well, and a <code class="md-code-inline">sym</code> hint must hold for <code class="md-code-inline">Aᴴ</code> too. A <code class="md-code-inline">SparseMatrixCSR</code> <code class="md-code-inline">A</code> has no rule (ChainRules sees a method with no <code class="md-code-inline">rrule</code>, and differentiates the conversion and the solver&#39;s internals). <code class="md-code-inline">using Enzyme</code> is enough for the same adjoint through <code class="md-code-inline">BrambleEnzymeExt</code>&#39;s native <code class="md-code-inline">EnzymeRules</code> rule, which takes no keywords (it cannot run before v4.5.0); do not call <code class="md-code-inline">Enzyme.@import_rrule</code>, whose bridge drops the cotangent&#39;s explicit zeros from <code class="md-code-inline">nzval</code> and returns a wrong gradient without any error. The Enzyme rule keeps the unconjugated <code class="md-code-inline">-λ uᵀ</code> and is not validated for complex <code class="md-code-inline">A</code>, whose convention differs. <code class="md-code-inline">Mooncake</code> cannot represent a <code class="md-code-inline">SparseMatrixCSC</code> cotangent at all and is unsupported.</p>
+<p>With <code class="md-code-inline">ChainRulesCore.jl</code> loaded, <code class="md-code-inline">BrambleChainRulesExt</code>&#39;s <code class="md-code-inline">rrule</code> solves the adjoint system <code class="md-code-inline">Aᴴ λ = ∂J/∂u</code> once and returns <code class="md-code-inline">∂J/∂A = -λ u&#39;</code> (conjugate transpose, the ChainRules convention for a complex <code class="md-code-inline">A</code>; <code class="md-code-inline">-λ uᵀ</code> for real data) restricted to <code class="md-code-inline">A</code>&#39;s sparsity (never densified) and <code class="md-code-inline">∂J/∂F = λ</code>. Without keywords the adjoint solve reuses the forward solve&#39;s own factorisation. The rule accepts the keywords of <code class="md-code-inline">pde_solve</code>: it forwards them to the primal solve and to the adjoint solve of <code class="md-code-inline">sparse(A&#39;)</code>, so <code class="md-code-inline">solver</code> and <code class="md-code-inline">sym</code> apply to <code class="md-code-inline">Aᴴ</code> as well, and a <code class="md-code-inline">sym</code> hint must hold for <code class="md-code-inline">Aᴴ</code> too. A <code class="md-code-inline">SparseMatrixCSR</code> <code class="md-code-inline">A</code> has no rule (ChainRules sees a method with no <code class="md-code-inline">rrule</code>, and differentiates the conversion and the solver&#39;s internals). <code class="md-code-inline">using Enzyme</code> is enough for the same adjoint through <code class="md-code-inline">BrambleEnzymeExt</code>&#39;s native <code class="md-code-inline">EnzymeRules</code> rule, which takes no keywords (it cannot run before v4.2.0); do not call <code class="md-code-inline">Enzyme.@import_rrule</code>, whose bridge drops the cotangent&#39;s explicit zeros from <code class="md-code-inline">nzval</code> and returns a wrong gradient without any error. The Enzyme rule keeps the unconjugated <code class="md-code-inline">-λ uᵀ</code> and is not validated for complex <code class="md-code-inline">A</code>, whose convention differs. <code class="md-code-inline">Mooncake</code> cannot represent a <code class="md-code-inline">SparseMatrixCSC</code> cotangent at all and is unsupported.</p>
 <p>A closure capturing a grid space or a form needs <code class="md-code-inline">Enzyme.Const(f)</code> and <code class="md-code-inline">Enzyme.set_runtime_activity(Enzyme.Reverse)</code>, as the automatic differentiation tutorial describes for every other path. A gradient with respect to a <em>runtime</em> scalar coefficient of the form should be a <code class="md-code-inline">Float64</code> or a <code class="md-code-inline">Ref</code>: an <code class="md-code-inline">Integer</code> coefficient known only at run time costs <code class="md-code-inline">form</code> its inferred return type, which Enzyme&#39;s type analysis rejects.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
@@ -850,7 +850,7 @@ jacobi_preconditioner(op::Bramble.GhostMatrixFreeOperator) -&gt; JacobiPrecondit
 </ul>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.7.0.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet_components</code> names a leaf the test space does not have.</p>
 </li>
@@ -938,7 +938,7 @@ chebyshev_preconditioner(op::Bramble.GhostMatrixFreeOperator; degree = 4, λmax 
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">degree &lt; 1</code>, <code class="md-code-inline">ratio &lt;= 1</code>, or <code class="md-code-inline">λmax</code> (given or estimated) not finite and positive.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.7.0.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet_components</code> names a leaf the test space does not have.</p>
 </li>
@@ -1159,7 +1159,7 @@ true</code></pre>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">xf</code> or <code class="md-code-inline">xc</code> is not 1-based, or the two may alias.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: the backend&#39;s policy is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device transfers are tracked on milestone v4.11.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: the backend&#39;s policy is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device transfers are tracked on milestone v4.7.0.</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -1214,7 +1214,7 @@ true</code></pre>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">xf</code> or <code class="md-code-inline">xc</code> is not 1-based, or the two may alias.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: the backend&#39;s policy is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device transfers are tracked on milestone v4.11.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: the backend&#39;s policy is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device transfers are tracked on milestone v4.7.0.</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -1365,7 +1365,7 @@ jacobi_smoother(op::Bramble.GhostMatrixFreeOperator; ω = nothing, sweeps = 1) -
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">sweeps &lt; 1</code>, or <code class="md-code-inline">ω</code> not finite and positive.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.7.0.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet_components</code> names a leaf the test space does not have.</p>
 </li>
@@ -1431,7 +1431,7 @@ chebyshev_smoother(op::Bramble.GhostMatrixFreeOperator; degree = 2, λmax = noth
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">degree &lt; 1</code>, or <code class="md-code-inline">λmax</code> (given or estimated) not finite and positive.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.7.0.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet_components</code> names a leaf the test space does not have.</p>
 </li>
@@ -1496,7 +1496,7 @@ red_black_gauss_seidel(op::MatrixFreeOperator; sweeps = 1) -&gt; RedBlackGaussSe
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">a</code> is a form on ghost spaces, or <code class="md-code-inline">op</code> its operator, whose closure couples a facet node to nodes of its own colour; use <a href="../api_sciml/#Bramble.jacobi_smoother"><code class="md-code-inline">jacobi_smoother</code></a> or <a href="../api_sciml/#Bramble.chebyshev_smoother"><code class="md-code-inline">chebyshev_smoother</code></a>.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.7.0.</p>
 </li>
 <li><p><code class="md-code-inline">DimensionMismatch</code>: <code class="md-code-inline">A</code> is not square.</p>
 </li>
@@ -1630,7 +1630,7 @@ true</code></pre>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: the coarsest level has more than 4096 points: <code class="md-code-inline">Ωₕ</code>&#39;s point counts minus one need a larger power of two as a factor.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: the backend&#39;s policy is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: the backend&#39;s policy is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.7.0.</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -2437,7 +2437,7 @@ u = sparspak_solve(A, F)</code></pre>
 </div>
 </div>
 <h2 id="Caching-a-coefficient-dependent-assembly-by-element-type" class="md-heading">Caching a coefficient-dependent assembly by element type<a href="#Caching-a-coefficient-dependent-assembly-by-element-type" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A Newton residual generic over <code class="md-code-inline">T</code> (<code class="md-code-inline">Float64</code> on a plain call, <code class="md-code-inline">ForwardDiff.Dual</code> while an AD backend&#39;s sparse Jacobian sweep is probing it) cannot preallocate one matrix the way a Picard loop can. <code class="md-code-inline">type_cached_assemble!</code> gives the sparsity pattern a place to live per element type it is ever reached at instead, so only the very first call at a given type pays for it. No test runs the AD sweep until v4.5.0, when the AD backends return.</p>
+<p>A Newton residual generic over <code class="md-code-inline">T</code> (<code class="md-code-inline">Float64</code> on a plain call, <code class="md-code-inline">ForwardDiff.Dual</code> while an AD backend&#39;s sparse Jacobian sweep is probing it) cannot preallocate one matrix the way a Picard loop can. <code class="md-code-inline">type_cached_assemble!</code> gives the sparsity pattern a place to live per element type it is ever reached at instead, so only the very first call at a given type pays for it. No test runs the AD sweep until v4.2.0, when the AD backends return.</p>
 <div class="md-docstring" id="Bramble.type_cached_assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.type_cached_assemble!</code></h4>
@@ -2574,6 +2574,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=75decd96"></script>
+  <script src="../assets/materialdocs.js?v=d3bb9f65"></script>
 </body>
 </html>

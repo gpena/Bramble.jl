@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3547fa7f">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=c506736b">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -265,7 +265,7 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.assemble">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L784-L797" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L804-L817" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -332,7 +332,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1521-L1554" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1541-L1574" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -404,7 +404,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.assemble_parallel!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_parallel!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1723-L1732" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1743-L1752" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -813,7 +813,7 @@ matrix_free_operator(a::GhostBilinearForm; dirichlet = nothing, dirichlet_compon
 </ul>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.7.0.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet_components</code> names a leaf the test space does not have.</p>
 </li>
@@ -903,7 +903,7 @@ assemble_add!(F, l_source, θ)   # F += θ[] * l_source&#39;s contribution</code
 </div>
 </div>
 <h2 id="Jacobian-sparsity" class="md-heading">Jacobian sparsity<a href="#Jacobian-sparsity" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>For a Newton residual built from a <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> with a live nonlinear coefficient, <code class="md-code-inline">jacobian_pattern</code> reads the Jacobian&#39;s sparsity pattern directly off the form&#39;s AST, without AD tracing. <code class="md-code-inline">ast_sparsity_detector</code> wraps it as an <code class="md-code-inline">ADTypes.AbstractSparsityDetector</code>, ready to hand <code class="md-code-inline">AutoSparse</code> directly (requires <a href="https://github.com/SciML/ADTypes.jl">ADTypes.jl</a>). No test runs the <code class="md-code-inline">AutoSparse</code> wrapper until v4.5.0, when the AD backends return.</p>
+<p>For a Newton residual built from a <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> with a live nonlinear coefficient, <code class="md-code-inline">jacobian_pattern</code> reads the Jacobian&#39;s sparsity pattern directly off the form&#39;s AST, without AD tracing. <code class="md-code-inline">ast_sparsity_detector</code> wraps it as an <code class="md-code-inline">ADTypes.AbstractSparsityDetector</code>, ready to hand <code class="md-code-inline">AutoSparse</code> directly (requires <a href="https://github.com/SciML/ADTypes.jl">ADTypes.jl</a>). No test runs the <code class="md-code-inline">AutoSparse</code> wrapper until v4.2.0, when the AD backends return.</p>
 <div class="md-docstring" id="Bramble.jacobian_pattern">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian_pattern</code></h4>
@@ -948,7 +948,7 @@ pattern = jacobian_pattern(a, U -&gt; Mₕ(πₕ(U)))</code></pre>
 <div class="md-docstring" id="Bramble.ast_sparsity_detector">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ast_sparsity_detector</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/jacobian_pattern.jl#L572-L588" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/jacobian_pattern.jl#L593-L609" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1124,7 +1124,7 @@ symmetrize!(A, F, Vₕ::CompositeGridSpace, labels::Symbol...; components = noth
 <div class="md-docstring" id="Bramble.reaction">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L354-L393" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L357-L396" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1138,7 +1138,7 @@ symmetrize!(A, F, Vₕ::CompositeGridSpace, labels::Symbol...; components = noth
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0)), 41)
+<pre><code class="language-julia">Ωₕ = mesh(domain(interval(0.0, 1.0), :left =&gt; :xmin, :right =&gt; :xmax), 41)
 Wₕ = gridspace(Ωₕ)
 sol(x) = sin(pi * x[1])
 src(x) = pi^2 * sin(pi * x[1])
@@ -1173,7 +1173,7 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <div class="md-docstring" id="Bramble.reaction!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L426-L436" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L429-L439" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1186,15 +1186,15 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <div class="md-docstring" id="Bramble.reaction_density">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction_density</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L491-L506" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L495-L513" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">reaction_density(A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement; marker, components = nothing) -&gt; VectorElement</code></pre>
 </div>
-<p>The pointwise counterpart of <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>: a grid function, zero away from <code class="md-code-inline">marker</code>, equal at each marked point to the boundary flux density <code class="md-code-inline">q·n</code> there, which converges under refinement. It is <code class="md-code-inline">reaction</code>&#39;s summand divided by the point&#39;s surface weight on the faces the marker covers, the weight <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a> integrates with, so <code class="md-code-inline">inner_Γ(element(space, 1.0), density, faces...)</code> recovers <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>&#39;s scalar. Meant to be exported and plotted, e.g. <code class="md-code-inline">export_vtk(filename, Ωₕ, &quot;reaction&quot; =&gt; reaction_density(...))</code>.</p>
-<p>The faces are read off the marked points, not the label&#39;s name: a face counts when every point of it is marked, except possibly its edges and corners. A corner on two such faces divides by the sum of their weights. A marked point on no such face (an interior marker, or part of a face) throws <code class="md-code-inline">ArgumentError</code>; <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a> still gives its net flux.</p>
+<p>The pointwise counterpart of <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>: a grid function, zero away from <code class="md-code-inline">marker</code>, equal at each marked point to the boundary flux density <code class="md-code-inline">q·n</code> there, which converges under refinement. It is <code class="md-code-inline">reaction</code>&#39;s summand divided by the point&#39;s surface weight over every boundary face, the weight <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a> integrates with, so a marked corner or edge gets the value <code class="md-code-inline">marker = :boundary</code> gives there, whatever the marker. When every marked corner and edge lies only on marked faces (<code class="md-code-inline">:boundary</code>, or a tuple of all the sides), <code class="md-code-inline">inner_Γ(element(space, 1.0), density, faces...)</code> recovers <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>&#39;s scalar; a one-face marker&#39;s corners carry only part of its flux, so it does not. Meant to be exported and plotted, e.g. <code class="md-code-inline">export_vtk(filename, Ωₕ, &quot;reaction&quot; =&gt; reaction_density(...))</code>.</p>
+<p>The faces are read off the marked points, not the label&#39;s name: a face counts when every point of it is marked, except possibly its edges and corners. A marked point on no such face (an interior marker, or part of a face) throws <code class="md-code-inline">ArgumentError</code>; <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a> still gives its net flux.</p>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1207,7 +1207,7 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <div class="md-docstring" id="Bramble.reaction_density!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction_density!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L540-L550" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L547-L557" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1254,6 +1254,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=3547fa7f"></script>
+  <script src="../../assets/materialdocs.js?v=c506736b"></script>
 </body>
 </html>

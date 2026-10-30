@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=80b28689">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=5155ea97">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -99,7 +99,7 @@
 <div class="md-docstring" id="Bramble._batch_linear_band_sweep!-NTuple{11, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_linear_band_sweep!</code> — <span class="md-docstring-sig">NTuple{11, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1282-L1289" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1302-L1309" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -112,7 +112,7 @@
 <div class="md-docstring" id="Bramble._batch_linear_colour_sweep!-NTuple{8, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_linear_colour_sweep!</code> — <span class="md-docstring-sig">NTuple{8, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1314-L1320" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1334-L1340" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -670,7 +670,7 @@ trial_function(space::AbstractSpaceType) -&gt; TrialFunction{dim(space), leaf_co
 <div class="md-docstring" id="Bramble._is_source_only-Tuple{Union{Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StencilNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._is_source_only</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StencilNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/stencil_eval.jl#L1195-L1215" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/stencil_eval.jl#L1214-L1234" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1350,7 +1350,7 @@ assemble!(b, l) # zero allocations, evaluates with α = 2.5</code></pre>
 <div class="md-docstring" id="Bramble._colour_strides-Union{Tuple{Array{NTuple{D, Int64}, 1}}, Tuple{D}} where D">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._colour_strides</code> — <span class="md-docstring-sig">Union{Tuple{Array{NTuple{D, Int64}, 1}}, Tuple{D}} where D</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1112-L1125" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1132-L1145" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1365,7 +1365,7 @@ assemble!(b, l) # zero allocations, evaluates with α = 2.5</code></pre>
 <div class="md-docstring" id="Bramble._scatter_linear_point!-Union{Tuple{TERM}, Tuple{AbstractVector, Any, TERM, CartesianIndex, Any, Any, Int64}, Tuple{AbstractVector, Any, TERM, CartesianIndex, Any, Any, Int64, Any}} where TERM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._scatter_linear_point!</code> — <span class="md-docstring-sig">Union{Tuple{TERM}, Tuple{AbstractVector, Any, TERM, CartesianIndex, Any, Any, Int64}, Tuple{AbstractVector, Any, TERM, CartesianIndex, Any, Any, Int64, Any}} where TERM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1185-L1191" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1205-L1211" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1379,7 +1379,7 @@ assemble!(b, l) # zero allocations, evaluates with α = 2.5</code></pre>
 <div class="md-docstring" id="Bramble._sweep_linear_band_colour!-Union{Tuple{TERM}, Tuple{Bramble.CpuThreaded, AbstractVector, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64}, Tuple{Bramble.CpuThreaded, AbstractVector, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64, Any}} where TERM">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._sweep_linear_band_colour!</code> — <span class="md-docstring-sig">Union{Tuple{TERM}, Tuple{Bramble.CpuThreaded, AbstractVector, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64}, Tuple{Bramble.CpuThreaded, AbstractVector, Any, TERM, Any, Any, Int64, Any, Any, Any, Int64, Any}} where TERM</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1234-L1243" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1254-L1263" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2067,6 +2067,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=80b28689"></script>
+  <script src="../../assets/materialdocs.js?v=5155ea97"></script>
 </body>
 </html>

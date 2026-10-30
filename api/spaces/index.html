@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b52db82c">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=4d3a3417">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces — Bramble.jl">
   <meta property="og:title" content="Grid spaces — Bramble.jl">
@@ -420,7 +420,7 @@ VectorElement{S, T, VT}(data::VT, space::S)</code></pre>
 <div class="md-docstring" id="Bramble.element">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.element</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L171-L177" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L182-L188" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -483,7 +483,7 @@ element(Wₕ::AbstractSpaceType, α::Number) -&gt; VectorElement</code></pre>
 <div class="md-docstring" id="Bramble.components">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.components</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L156-L161" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L167-L172" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -505,7 +505,7 @@ components(op::LazyOp, space::AbstractSpaceType) -&gt; Tuple</code></pre>
 <div class="md-docstring" id="Bramble.component_range">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.component_range</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L89-L96" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L100-L107" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -518,7 +518,7 @@ components(op::LazyOp, space::AbstractSpaceType) -&gt; Tuple</code></pre>
 <div class="md-docstring" id="Bramble.component_ranges">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.component_ranges</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L104-L111" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L115-L122" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -819,7 +819,7 @@ end</code></pre>
 <p>Operators wrap it from the outside, acting on the mesh being integrated over: <code class="md-code-inline">inner₊(D₋ₓ(πₕ(u)), D₋ₓ(v))</code> is <code class="md-code-inline">D_x^⊤ H_+ D_x P</code>. Writing an operator inside is a different operation and is refused, since it would difference on the source mesh instead.</p>
 <p><code class="md-code-inline">innerₕ(u, πₕ(w))</code> is the mirror: the test side interpolates, so the <em>trial</em> mesh is the one integrated over and the entries name absolute rows instead of absolute columns. The assembled matrix is <code class="md-code-inline">Pᵀ · H · (trial factor)</code>. A single term interpolating both sides is refused – one side has to stay native, since it is the side whose mesh carries the quadrature weight.</p>
 <p><code class="md-code-inline">op</code> must be a trial- or test-function leaf, plain or indexed. <code class="md-code-inline">outside</code> accepts only <code class="md-code-inline">:error</code> (the default), <code class="md-code-inline">:clamp</code> and <code class="md-code-inline">:extrapolate</code> – see <a href="../../internals/space/#Bramble.InterpolationNode"><code class="md-code-inline">InterpolationNode</code></a>&#39;s own docstring for why a fill value is refused here.</p>
-<p>On a <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a> the blend reads the physical nodes, as <a href="../../api/spaces/#Bramble.interpolate_at"><code class="md-code-inline">interpolate_at</code></a> does, and a ghost point lies outside the domain. The assembly walk visits the ghost points, so on a ghost space the default <code class="md-code-inline">:error</code> throws, even in <code class="md-code-inline">innerₕ(πₕ(u), v)</code>, whose weight at every ghost point is zero. Pass <code class="md-code-inline">outside = :clamp</code> or <code class="md-code-inline">outside = :extrapolate</code> there.</p>
+<p>On a <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a> the blend reads the physical nodes, as <a href="../../api/spaces/#Bramble.interpolate_at"><code class="md-code-inline">interpolate_at</code></a> does, and a ghost point lies outside the domain. Where the product&#39;s weight is zero, as at every ghost point in <code class="md-code-inline">innerₕ(πₕ(u), v)</code>, the value is discarded and <code class="md-code-inline">outside</code> is not consulted, so the default <code class="md-code-inline">:error</code> assembles there. It throws where a ghost value enters a row: <code class="md-code-inline">inner_Γ(∂ₙ(πₕ(u)), v)</code> and <code class="md-code-inline">D₋ₓ(πₕ(u))</code> read <code class="md-code-inline">πₕ</code> at a ghost point from a physical node. Pass <code class="md-code-inline">outside = :clamp</code> or <code class="md-code-inline">outside = :extrapolate</code> there.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.interpolation_matrix">
@@ -1170,6 +1170,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=b52db82c"></script>
+  <script src="../../assets/materialdocs.js?v=4d3a3417"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear and bilinear forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1e6e639e">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=85f468cd">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Linear and bilinear forms — Bramble.jl">
   <meta property="og:title" content="Linear and bilinear forms — Bramble.jl">
@@ -133,7 +133,7 @@ l = form(Wₕ, v -&gt; innerₕ(fₕ, v))</code></pre>
 <pre><code class="language-julia">b = assemble(l)
 length(b), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808495)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808496)</code></pre>
 </div>
 <p>In a time loop the allocation is the part worth avoiding. <code class="md-code-inline">assemble!</code> refills a vector that already exists with zero allocations:</p>
 <div class="md-multi-output">
@@ -142,7 +142,7 @@ length(b), sum(b)</code></pre>
 <pre><code class="language-julia">assemble!(b, l)
 sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808495</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808496</code></pre>
 </div>
 <h3 id="Live-grid-coefficients-and-dynamic-scalars" class="md-heading">Live grid coefficients and dynamic scalars<a href="#Live-grid-coefficients-and-dynamic-scalars" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>A form keeps direct references to its coefficient arrays. Overwrite a grid function in place with <code class="md-code-inline">Rₕ!(fₕ, ...)</code> or <code class="md-code-inline">parent(fₕ) .= ...</code> between steps, and the next <code class="md-code-inline">assemble!(b, l)</code> reads the new values with no allocation and no rebuilt form.</p>
@@ -167,7 +167,7 @@ sum(b_dyn) ≈ 2 * sum(b)</code></pre>
 <pre><code class="language-julia">oneₕ = Rₕ(Wₕ, x -&gt; 1.0)
 l(oneₕ), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808495)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808496)</code></pre>
 </div>
 <p>Against the all-ones grid function a linear form is the sum of its assembled vector. The difference is that <code class="md-code-inline">l(oneₕ)</code> builds no vector and allocates nothing, so prefer it when the result is a scalar.</p>
 <p><code class="md-code-inline">evaluate!</code> is the middle case. It takes a scratch vector, fills it with the assembled vector and returns the contraction:</p>
@@ -976,7 +976,7 @@ bad, bad_warnings = check_compatibility(0.2)
 
 (ok.compatible, ok.defect), (bad.compatible, bad.λ, bad.second_ratio)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">((true, 7.309780343599364e-6), (false, 0.2000631200513299, 1.0000182239908741))</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((true, 7.309780343599365e-6), (false, 0.2000631200513299, 1.0000182239908744))</code></pre>
 </div>
 <p>The compatible problem raises no warning and its relative defect is below <span class="md-math md-math-inline">\(10^{-4}\)</span>. The shifted one warns once. Its <span class="md-math md-math-inline">\(\lambda\)</span> is <span class="md-math md-math-inline">\(0.2\)</span>, the shift, on the mesh and on both refinements, so the ratio of the removed loads is <span class="md-math md-math-inline">\(1\)</span> where a quadrature error would give about <span class="md-math md-math-inline">\(4\)</span>. The mesh <code class="md-code-inline">Ωₕ</code> is not modified, and a mesh that carries markers of its own needs the domain&#39;s <code class="md-code-inline">markers(Ω)</code> as a third argument so that the refinement can evaluate them again.</p>
 <p>The check has limits. A defect on the refined mesh below <code class="md-code-inline">5e-3</code> counts as rounding, so a small incompatibility is not detected. Compatible data with a singular flux at a boundary point, whose quadrature error falls slower than the factor of four, can be reported incompatible. When the defect is above the floor the problem is built on a mesh with 16 times the points of <code class="md-code-inline">Ωₕ</code>.</p>
@@ -1027,7 +1027,7 @@ rel_dense = norm(u_pen - u_dense) / norm(u_dense)
 
 rel_mz, rel_dense</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0, 5.648025058533923e-15)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0, 5.594892379526002e-15)</code></pre>
 </div>
 <p>The difference from the <code class="md-code-inline">mean_zero</code> solve is about <span class="md-math md-math-inline">\(10^{-15}\)</span> for <span class="md-math md-math-inline">\(\gamma \ge 1\)</span> and grows as <span class="md-math md-math-inline">\(1/\gamma\)</span>: a small <span class="md-math md-math-inline">\(\sigma\)</span> makes <span class="md-math md-math-inline">\(-1/\sigma\)</span> large against the entries of <code class="md-code-inline">A</code> and costs digits, so take <span class="md-math md-math-inline">\(\gamma \ge 10^{-2}\)</span>. A large <span class="md-math md-math-inline">\(\sigma\)</span> costs nothing. The <a href="../../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a> docstring gives the measured figures.</p>
 <p>Three rules apply to the term. The <code class="md-code-inline">σ</code> is read when the form is assembled, so with a <code class="md-code-inline">Ref</code> factor call <code class="md-code-inline">assemble!(K_pen, a_pen)</code> after changing it, before the next solve. With <code class="md-code-inline">dirichlet</code>, the Dirichlet rows of <code class="md-code-inline">K_pen</code> are identity rows and the penalty&#39;s row vector is zeroed there. One rank-one term per form: the sum of two is refused with an <code class="md-code-inline">ArgumentError</code>, so add the scalars when they share the functionals. On a ghost space the rank-one term is covered by the <a href="../../internals/space/">support table</a>.</p>
@@ -1272,6 +1272,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=1e6e639e"></script>
+  <script src="../../assets/materialdocs.js?v=85f468cd"></script>
 </body>
 </html>
