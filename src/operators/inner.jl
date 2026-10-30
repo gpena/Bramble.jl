@@ -366,6 +366,14 @@ is unconditionally a source, so those overloads build a `LinearProduct` directly
 `left` arrives already wrapped (`πₕ(uₕ)` or `D₋ₓ(πₕ(uₕ))`), this check ensures the correct
 linear AST node is constructed.
 
+A composite `VectorElement` source (or a tuple of sources, one per component) with an
+unindexed composite test function `v` expands per component: `innerₕ(fₕ, v)` is
+`Σᵢ innerₕ(fₕ(i), v(i))`. An indexed `v(i)` in that position throws an `ArgumentError`, as
+it names one component while the call sums over all of them. For a single component write
+`innerₕ(fₕ(i), v(i))`. `inner₊`, `inner₊ₓ`, `inner₊ᵧ` and `inner₊₂` take both the
+`VectorElement` and the tuple source; [`inner_Γ`](@ref) takes the composite `VectorElement`
+source only. All of them refuse the indexed `v(i)`.
+
 `markers` restricts the assembled term to the union of the labelled regions: a mask on
 which grid points it contributes to at all.
 """

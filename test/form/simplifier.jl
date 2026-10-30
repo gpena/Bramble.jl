@@ -1121,4 +1121,92 @@ _rt_interp(W1, W2) = form(W1, W2, (u, v) -> innerₕ(πₕ(u), v) + inner₊ₓ(
     @test a.ast.right_op.left_op.inner_op isa InterpolationNode
 end
 
+# A coefficient over a sum of three or more terms naming different components, inside one
+# product (gpena/Bramble.jl#804). The product distributed over the scaled sum by simplifying
+# a rebuilt sum of products, a recursion through `simplify_ast` deeper than inference
+# follows, so these forms inferred a non-concrete type; two terms inferred.
+_rt_mix3_diff(V) = form(V, V, (u, v) -> innerₕ(3 * (u(1) + u(2) + D₋ₓ(u(1))), v(1)))
+_rt_mix3_same(V) = form(V, V, (u, v) -> innerₕ(3 * (u(1) + u(2) + u(1)), v(1)))
+_rt_mix3_grid(V, g) = form(V, V, (u, v) -> innerₕ(g * (u(1) + u(2) + D₋ₓ(u(1))), v(1)))
+_rt_mix3_linear(V) = form(V, v -> innerₕ(1.0, 3 * (v(1) + v(2) + D₋ₓ(v(1)))))
+_rt_mix3_both(V) = form(V, V, (u, v) -> innerₕ(2 * (u(1) + u(2)), 3 * (v(2) + v(1) + v(2))))
+
+@testset "scaled 3-term mixing sum infers (#804)" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
+    Bramble.change_points!(Ωₕ, collect(range(0.0, 1.0; length = 9)) .^ 1.4)
+    W = gridspace(Ωₕ)
+    V = W^Val(2)
+    gₕ = Rₕ(W, x -> 1.0 + x[1]^2)
+    @test (@inferred _rt_mix3_diff(V)) isa Bramble.BilinearForm
+    @test (@inferred _rt_mix3_same(V)) isa Bramble.BilinearForm
+    @test (@inferred _rt_mix3_grid(V, gₕ)) isa Bramble.BilinearForm
+    @test (@inferred _rt_mix3_linear(V)) isa Bramble.LinearForm
+    @test (@inferred _rt_mix3_both(V)) isa Bramble.BilinearForm
+
+    # Values: the unscaled form times the coefficient, and the grid-function coefficient
+    # against each term scaled on its own.
+    M(f) = Matrix(assemble(form(V, V, f)))
+    @test Matrix(assemble(_rt_mix3_diff(V))) ≈
+          3 .* M((u, v) -> innerₕ(u(1) + u(2) + D₋ₓ(u(1)), v(1)))
+    @test Matrix(assemble(_rt_mix3_same(V))) ≈ 3 .* M((u, v) -> innerₕ(u(1) + u(2) + u(1), v(1)))
+    @test Matrix(assemble(_rt_mix3_grid(V, gₕ))) ≈
+          M((u, v) -> innerₕ(gₕ * u(1), v(1)) + innerₕ(gₕ * u(2), v(1)) +
+                      innerₕ(gₕ * D₋ₓ(u(1)), v(1)))
+    @test assemble(_rt_mix3_linear(V)) ≈
+          3 .* assemble(form(V, v -> innerₕ(1.0, v(1) + v(2) + D₋ₓ(v(1)))))
+    @test Matrix(assemble(_rt_mix3_both(V))) ≈
+          6 .* M((u, v) -> innerₕ(u(1) + u(2), v(2) + v(1) + v(2)))
+    # The distributed pieces: one product per term, each with its coefficient lifted.
+    a = _rt_mix3_diff(V).ast
+    @test a isa OperatorAdd && a.left_op isa OperatorAdd
+    @test all(t -> t isa OperatorScale && t.scalar === 3 && t.inner_op isa BilinearProduct,
+        (a.left_op.left_op, a.left_op.right_op, a.right_op))
+end
+
+# The same distribution under a coefficient or source holding run-time data, a `Ref` or a grid
+# function: the tree around the literal indices is not a constant, and the gates fold only
+# inside the caller that holds them. A grid-function source with two terms inferred before
+# #804's distribution was split out; it pins that, and the sums below pin up to eight terms.
+_terms8(u) = (u(1), u(2), u(3), D₋ₓ(u(1)), 2 * u(2), D₋ₓ(u(3)), 0.5 * u(1), D₋ₓ(u(2)))
+_rt_lin2_src(V, g) = form(V, v -> innerₕ(g, 3.0 * (v(1) + v(2))))
+_rt_lin3_src(V, g) = form(V, v -> innerₕ(g, 3.0 * (v(1) + v(2) + v(3))))
+_rt_mix5(V, c) = form(V, V,
+    (u, v) -> innerₕ(c * (u(1) + u(2) + u(3) + D₋ₓ(u(1)) + 2 * u(2)), v(1)))
+function _rt_mix8(V, c)
+    form(V, V,
+        (u, v) -> innerₕ(
+            c * (u(1) + u(2) + u(3) + D₋ₓ(u(1)) + 2 * u(2) + D₋ₓ(u(3)) + 0.5 * u(1) +
+                 D₋ₓ(u(2))),
+            v(1)))
+end
+
+@testset "run-time coefficient, mixing sum (#804)" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
+    Bramble.change_points!(Ωₕ, collect(range(0.0, 1.0; length = 8)) .^ 1.4)
+    W = gridspace(Ωₕ)
+    V = W^Val(3)
+    gₕ = Rₕ(W, x -> 1.0 + x[1]^2)
+    r = Ref(2.0)
+    @test (@inferred _rt_lin2_src(V, gₕ)) isa Bramble.LinearForm
+    @test (@inferred _rt_lin3_src(V, gₕ)) isa Bramble.LinearForm
+    for c in (r, gₕ)
+        @test (@inferred _rt_mix5(V, c)) isa Bramble.BilinearForm
+        @test (@inferred _rt_mix8(V, c)) isa Bramble.BilinearForm
+    end
+
+    # Values: each against its terms one product at a time.
+    L(f) = assemble(form(V, f))
+    M(f) = Matrix(assemble(form(V, V, f)))
+    @test assemble(_rt_lin2_src(V, gₕ)) ≈
+          L(v -> innerₕ(gₕ, 3.0 * v(1)) + innerₕ(gₕ, 3.0 * v(2)))
+    @test assemble(_rt_lin3_src(V, gₕ)) ≈
+          L(v -> innerₕ(gₕ, 3.0 * v(1)) + innerₕ(gₕ, 3.0 * v(2)) + innerₕ(gₕ, 3.0 * v(3)))
+    termwise(c, n) = M((u, v) -> foldl(+, map(t -> innerₕ(c * t, v(1)), _terms8(u)[1:n])))
+    for c in (r, gₕ)
+        @test Matrix(assemble(_rt_mix5(V, c))) ≈ termwise(c, 5)
+        @test Matrix(assemble(_rt_mix8(V, c))) ≈ termwise(c, 8)
+    end
+    @test termwise(r, 8) ≈ 2.0 .* M((u, v) -> innerₕ(foldl(+, _terms8(u)), v(1)))
+end
+
 end # module FormSimplifierTests

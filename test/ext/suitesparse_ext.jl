@@ -53,6 +53,23 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         @test isapprox(u_auto, cd.u_ref; atol = 1.0e-12)
     end
 
+    # UMFPACK widens a Float32 matrix to Float64; the solve must come back as Float32.
+    @testset "Float32 system returns Float32" begin
+        n = 12
+        T = spdiagm(-1 => fill(-1.0f0, n - 1), 0 => fill(2.0f0, n), 1 => fill(-1.0f0, n - 1))
+        Au = T + spdiagm(1 => fill(0.3f0, n - 1))
+        F = ones(Float32, n)
+        for A in (T, Au)
+            u = @inferred pde_solve(A, F; solver = :suitesparse)
+            @test u isa Vector{Float32}
+            @test A * u ≈ F atol = 1.0f-5
+            # Float64 data stays Float64, also a Float64 rhs on a Float32 matrix.
+            @test pde_solve(Float64.(A), Float64.(F); solver = :suitesparse) isa Vector{Float64}
+            @test pde_solve(A, Float64.(F); solver = :suitesparse) isa Vector{Float64}
+            @test pde_solve(A, complex.(F); solver = :suitesparse) isa Vector{ComplexF32}
+        end
+    end
+
     # Exercises factorization reuse and suitesparse_refactor!.
     @testset "factorization reuse, refactor" begin
         p = poisson_system(Val(2), 8; source = x -> 1.0)

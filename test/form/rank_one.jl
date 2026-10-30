@@ -46,6 +46,18 @@ function rectangular_spaces()
     return W, W × W
 end
 
+# A number type of the user's, defined after Bramble is loaded, with no `zero`: a scale of
+# it folds beside a sign as any other number does.
+struct RankNum <: Number
+    x::Float64
+end
+Base.:*(a::Int, b::RankNum) = RankNum(a * b.x)
+Base.:*(b::RankNum, a::Int) = RankNum(a * b.x)
+Base.:*(a::RankNum, b::Float64) = a.x * b
+Base.:*(b::Float64, a::RankNum) = a.x * b
+Base.promote_rule(::Type{RankNum}, ::Type{Float64}) = Float64
+Base.convert(::Type{Float64}, a::RankNum) = a.x
+
 rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2))
 
 @testset "Rank-one terms" begin
@@ -114,6 +126,84 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
                 @test Matrix(K) ≈ A + σ * ws * wt'
             end
         end
+    end
+
+    # A sign beside an unsigned factor folds in a signed or float type, not `UInt`, which
+    # wraps `-2` to `2^64 - 2`. The reference is the same σ spelled with signed numbers.
+    @testset "a sign beside an unsigned scale" begin
+        W = nonuniform_space(2, Float64)
+        @test !is_uniform(mesh(W))
+        A0 = Matrix(assemble(form(W, W, lap)))
+        g = _one_plus_x1
+        wt, ws = functional(W, g), functional(W, 1)
+        cu = Complex(UInt(1), UInt(2))
+        forms = (("negated", -2, (u, v) -> -(UInt(2) * innerₕ(g, u) * innerₕ(1, v))),
+            ("subtracted", -2, (u, v) -> lap(u, v) - UInt(2) * innerₕ(g, u) * innerₕ(1, v)),
+            ("a factor on each side", -6,
+                (u, v) -> lap(u, v) + (UInt(2) * innerₕ(g, u)) * (-3 * innerₕ(1, v))),
+            ("an unsigned factor after a sign", -2,
+                (u, v) -> lap(u, v) + UInt(2) * (-innerₕ(g, u)) * innerₕ(1, v)),
+            ("complex, im outside", -2im,
+                (u, v) -> lap(u, v) - (im * (UInt(2) * innerₕ(g, u) * innerₕ(1, v)))),
+            ("complex unsigned parts", im * (1 + 2im),
+                (u, v) -> lap(u, v) + im * (cu * innerₕ(g, u) * innerₕ(1, v))),
+            ("complex unsigned parts, negated", -(1 + 2im),
+                (u, v) -> lap(u, v) - cu * innerₕ(g, u) * innerₕ(1, v)),
+            ("a Ref beside a sign", -2,
+                (u, v) -> lap(u, v) - Ref(UInt(2)) * innerₕ(g, u) * innerₕ(1, v)),
+            ("a Ref on one side, a sign on the other", -6,
+                (u, v) -> lap(u, v) + (-3 * innerₕ(g, u)) * (Ref(UInt(2)) * innerₕ(1, v))))
+        for (name, σ, f) in forms
+            @testset "$name" begin
+                a = form(W, W, f)
+                K = assemble(a)
+                @test K.σ == σ
+                A = name == "negated" ? zero(A0) : A0
+                @test Matrix(K) ≈ A + σ * ws * wt'
+                @test alloc_test(assemble!, K, a) == 0
+            end
+        end
+        # the form's own scale: signed and float ones keep their type and value
+        for (σ, f) in ((-2, (u, v) -> -(2 * innerₕ(g, u) * innerₕ(1, v))),
+            (-2.5, (u, v) -> -(2.5 * innerₕ(g, u) * innerₕ(1, v))),
+            (-6, (u, v) -> (2 * innerₕ(g, u)) * (-3 * innerₕ(1, v))))
+            @test form(W, W, f).scale === (σ,)
+        end
+        # an unsigned scale with no sign folds as it always did
+        @test form(W, W, (u, v) -> UInt(2) * innerₕ(g, u) * innerₕ(1, v)).scale === (UInt(2),)
+        # in other element types the matrix is the signed spelling's, bit for bit, so σ is
+        # neither widened to Float64 nor rounded through it
+        n = 2^60 + 1
+        pairs = (((u, v) -> UInt(2) * innerₕ(g, u) * innerₕ(1, v),
+                (u, v) -> 2 * innerₕ(g, u) * innerₕ(1, v)),
+            ((u, v) -> lap(u, v) - UInt(n) * innerₕ(g, u) * innerₕ(1, v),
+                (u, v) -> lap(u, v) - n * innerₕ(g, u) * innerₕ(1, v)),
+            ((u, v) -> lap(u, v) - Ref(UInt(n)) * innerₕ(g, u) * innerₕ(1, v),
+                (u, v) -> lap(u, v) - Ref(n) * innerₕ(g, u) * innerₕ(1, v)))
+        for T in (Float32, BigFloat), (fu, fs) in pairs
+
+            WT = nonuniform_space(2, T)
+            K, Ks = assemble(form(WT, WT, fu)), assemble(form(WT, WT, fs))
+            @test eltype(K) == eltype(Ks) == T
+            @test K.σ == Ks.σ
+            @test Matrix(K) == Matrix(Ks)
+        end
+        # a number type of the user's, beside a sign and in a `Ref`
+        for (scale, σ, f) in ((RankNum(-6.0), -6.0,
+            (u, v) -> lap(u, v) + (RankNum(2.0) * innerₕ(g, u)) * (-3 * innerₕ(1, v))),
+            (-1, -2.0, (u, v) -> lap(u, v) - Ref(RankNum(2.0)) * innerₕ(g, u) * innerₕ(1, v)),
+            (RankNum(2.0), 3.0,
+            (u, v) -> lap(u, v) + (Ref(1.5) * innerₕ(g, u)) * (RankNum(2.0) * innerₕ(1, v))))
+            a = form(W, W, f)
+            K = assemble(a)
+            @test a.scale[1] === scale
+            @test K.σ == σ
+            @test Matrix(K) ≈ A0 + σ * ws * wt'
+            @test alloc_test(assemble!, K, a) == 0
+        end
+        WB = nonuniform_space(2, BigFloat)
+        f = (u, v) -> lap(u, v) - UInt(n) * innerₕ(g, u) * innerₕ(1, v)
+        @test assemble(form(WB, WB, f)).σ == -(big(2)^60 + 1)
     end
 
     @testset "functionals of operands" begin

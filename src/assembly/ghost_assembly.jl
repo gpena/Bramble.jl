@@ -994,7 +994,8 @@ time-dependent (pose the problem with `semidiscretize`), for `symmetrize = true`
 `dirichlet`, for `A` that is not a `SparseMatrixCSC` with the reduced pattern of `a`, for a
 `dirichlet` the rows of the space do not allow, and for an `F` whose element type cannot
 hold the load's. A `DimensionMismatch` follows an `F` of the wrong length and forms whose
-test spaces differ: not the same space, and closures `(E, d)` that are not equal.
+test spaces differ: not the same space, and meshes with other points or closures `(E, d)`
+that are not equal.
 """
 function assemble!(A::AbstractMatrix, F::AbstractVector, a::_AnyGhostBilinearForm,
         l::_AnyGhostLinearForm; dirichlet = nothing, dirichlet_components = nothing,
@@ -1031,15 +1032,26 @@ function _check_pair(a::_AnyGhostBilinearForm, l::_AnyGhostLinearForm, labels,
 end
 
 # Whether two test sides reduce alike: one space (a pointer compare, so a warm `assemble!`
-# stays 0 B), or closures `(E, d)` equal entry by entry, as two spaces built alike give.
-# Equal sizes are not enough: Dirichlet relations on different facets keep as many nodes,
-# different ones. A composite side compares the space its `_CompositeClosure` was built
-# from, since `form` builds a closure per call.
+# stays 0 B), or spaces on one mesh with closures `(E, d)` equal entry by entry, as two
+# spaces built alike give. Equal sizes are not enough. Dirichlet relations on different
+# facets keep as many nodes, different ones, and equal closures on meshes with other points
+# put the load's entries at the wrong places (gpena/Bramble.jl#818). A composite side
+# compares the space its `_CompositeClosure` was built from, since `form` builds a closure
+# per call, and the mesh of every padded leaf, since `mesh` of a composite reads its first
+# leaf and its components may sit on different meshes.
 @inline function _same_closure(W::GhostGridSpace, V::GhostGridSpace)
-    return W === V || _equal_closure(W, V)
+    return W === V || (_same_mesh(mesh(W), mesh(V)) && _equal_closure(W, V))
 end
 @inline function _same_closure(W::_CompositeClosure, V::_CompositeClosure)
-    return W.space === V.space || _equal_closure(W, V)
+    return W.space === V.space ||
+           (_same_leaf_meshes(W.padded.spaces, V.padded.spaces) && _equal_closure(W, V))
+end
+@inline _same_leaf_meshes(::Tuple{}, ::Tuple{}) = true
+@inline _same_leaf_meshes(::Tuple{}, ::Tuple) = false
+@inline _same_leaf_meshes(::Tuple, ::Tuple{}) = false
+@inline function _same_leaf_meshes(W::Tuple, V::Tuple)
+    return _same_mesh(mesh(first(W)), mesh(first(V))) &&
+           _same_leaf_meshes(Base.tail(W), Base.tail(V))
 end
 _same_closure(::_GhostSide, ::_GhostSide) = false   # a scalar side and a composite one
 # Static closures only: a space with data in time stores `d(0)`, which a static space with
@@ -1052,8 +1064,8 @@ end
     throw(
         DimensionMismatch(
         "the forms' test spaces differ: $(a.test_space) and $(l.test_space), whose " *
-        "closures (E, d) are not equal. Build the linear form on the bilinear form's " *
-        "test space, form(test_space(a), f).",
+        "meshes or closures (E, d) are not equal. Build the linear form on the bilinear " *
+        "form's test space, form(test_space(a), f).",
     ),
     )
 end

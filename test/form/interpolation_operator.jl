@@ -312,22 +312,27 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
 
         @testset "ghost leaves" begin
             # Not on a ghost space (`_same_mesh_rule`): the operator outside `πₕ` reads the
-            # ghost layer, where `πₕ` is no identity, since it reads the clamped physical
-            # nodes instead of the ghost column. So the walked mesh and a twin with the same
-            # points give one matrix, values and pattern, constrained or not; the rule firing
-            # there gives `∂ₙ(πₕ(u))` the ghost column's weights instead (max |A - R| 17.3).
+            # ghost layer, where `πₕ` is no identity, since it reads the physical nodes
+            # `outside` clamps or extrapolates to instead of the ghost column. So the walked
+            # mesh and a twin with the same points give one matrix, values and pattern,
+            # constrained or not; the rule firing there gives `∂ₙ(πₕ(u))` the ghost column's
+            # weights instead (max |A - R| 17.3). A ghost point is outside the domain, so
+            # every form here names its policy: the default `:error` throws there.
             same_matrix(A, R) = rowvals(A) == rowvals(R) && A.colptr == R.colptr &&
                                 bits.(nonzeros(A)) == bits.(nonzeros(R))
-            normal = (u, v) -> inner_Γ(∂ₙ(πₕ(u)), v; markers = :boundary)
+            normal = (u, v) -> inner_Γ(∂ₙ(πₕ(u; outside = :extrapolate)), v;
+                markers = :boundary)
             clamped = (u, v) -> innerₕ(Dcₓ(πₕ(u; outside = :clamp)), v)
             Δclamped = (u, v) -> innerₕ(Δₕ(πₕ(u; outside = :clamp)), v)
             test_clamped = (u, v) -> innerₕ(u, Dcₓ(πₕ(v; outside = :clamp)))
+            trial_clamped = (u, v) -> innerₕ(πₕ(u; outside = :clamp), v) +
+                                      inner₊ₓ(D₋ₓ(πₕ(u; outside = :clamp)), D₋ₓ(v))
             M1, Mt1 = twins(domain(unit), 9)
             M2, Mt2 = twins(domain(unit × unit), (9, 8))
             rel1(u) = (:xmin => ∂ₙ(u) => 0.0, :xmax => ∂ₙ(u) => 0.0)
             rel2(u) = map(F -> F => ∂ₙ(u) => 0.0, (:xmin, :xmax, :ymin, :ymax))
             cases = [(M1, Mt1, rel1, (normal, clamped, Δclamped, test_clamped)),
-                (M2, Mt2, rel2, (trial_side, normal, Δclamped))]
+                (M2, Mt2, rel2, (trial_clamped, normal, Δclamped))]
             @testset "$(dim(M))D, $(nameof(wrap))" for (M, Mt, rel, fs) in cases,
                 wrap in (identity, constrained)
 
@@ -342,6 +347,55 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
                     @test same_matrix(A, assemble(form(twin..., f)))
                     @test_allocs assemble!(A, a)
                 end
+            end
+        end
+
+        @testset "ghost taps honour outside" begin
+            # On a ghost space `πₕ` reads the physical mesh, as `interpolate_at` does: the
+            # padded points reach past the domain, and read against them a ghost point is
+            # inside, so `:clamp` and `:error` extrapolated. The stencil at each padded
+            # point, applied to a grid function, is `interpolate_at` there. The source
+            # mesh has other points than the walked one, and its ghost values are `NaN`:
+            # a cell not shifted past the ghost layer, or a ghost column, shows.
+            normal = (u, v) -> inner_Γ(∂ₙ(πₕ(u)), v; markers = :boundary)
+            @testset "$(dim(Ω))D" for (Ω, n, ns) in ((domain(unit), 9, 7),
+                (domain(unit × unit), (9, 8), (6, 7)))
+                seed!(771)
+                M, Ms = nonuniform(Ω, n), nonuniform(Ω, ns)
+                X, Xs = gridspace(M; ghosts = :boundary), gridspace(Ms; ghosts = :boundary)
+                P, Ps = Bramble.padded_space(X), Bramble.padded_space(Xs)
+                G, Gs = mesh(P), mesh(Ps)
+                us = Bramble.element(Xs, rand(ndofs(Xs)))
+                lis = LinearIndices(indices(Gs))
+                up = fill(NaN, npoints(Gs))
+                for (k, I) in enumerate(Bramble.physical_indices(Gs))
+                    up[lis[I]] = us[k]
+                end
+                li = LinearIndices(indices(G))
+                walked = [J for J in indices(G) if !Bramble.is_absent(G, J)]
+                ghost = [J for J in walked if !(J in Bramble.physical_indices(G))]
+                @test !isempty(ghost)
+                stencil(p, J) = local_stencil(
+                    _bind_interp_spaces(πₕ(TrialFunction{dim(Ω)}(); outside = p), Ps, P),
+                    P, J, markers(G), li[J])
+                apply(st) = sum(w * up[c.col] for (c, w) in st)
+                at(p, J) = interpolate_at(us, Bramble.point(G, J); outside = p)
+                for p in (:clamp, :extrapolate)
+                    @test all(J -> isapprox(apply(stencil(p, J)), at(p, J); rtol = 1e-12),
+                        walked)
+                end
+                # the policy is read at the ghost points, and only there
+                @test all(J -> apply(stencil(:clamp, J)) != apply(stencil(:extrapolate, J)),
+                    ghost)
+                @test_throws ArgumentError stencil(:error, first(ghost))
+                @test_throws ArgumentError at(:error, first(ghost))
+                @test_throws ArgumentError assemble(form(X, X, normal))
+                # the walk visits the ghost points, so even a plain mass term throws by
+                # default; its weight is zero there, so either policy gives one matrix
+                mass(p) = (u, v) -> innerₕ(πₕ(u; outside = p), v)
+                @test_throws ArgumentError assemble(form(X, X, (u, v) -> innerₕ(πₕ(u), v)))
+                Ac = assemble(form(X, X, mass(:clamp)))
+                @test nnz(Ac) > 0 && Ac == assemble(form(X, X, mass(:extrapolate)))
             end
         end
 

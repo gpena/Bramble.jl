@@ -142,8 +142,12 @@ function LinearAlgebra.ldiv!(
     return uₕ
 end
 
-function Base.:\(fact::ConcreteSuiteSparseFactorization, b::AbstractVector)
-    return fact.fact \ b
+# UMFPACK factors only `Float64` and `ComplexF64`: `lu` of a `Float32` matrix widens it, and
+# so does its solve. The result is converted back to the promoted type of the factorization
+# and `b`, as the Accelerate extension does, so a `Float32` system returns `Float32`.
+function Base.:\(fact::ConcreteSuiteSparseFactorization{T}, b::AbstractVector) where {T}
+    S = float(promote_type(T, eltype(b)))
+    return convert(Vector{S}, fact.fact \ b)
 end
 
 # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real

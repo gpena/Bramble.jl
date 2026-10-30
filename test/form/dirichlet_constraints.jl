@@ -90,6 +90,53 @@ using ..TestUtils: _tri, _sd_problem, _Const, _x1
             )
         end
 
+        @testset "Time domain accepts spatial beside timed" begin
+            # The `I` route agrees with the keyword and `I`-less routes: a spatial `x`
+            # condition may sit beside one timed shape, so long as one condition is timed.
+            Ω1 = mesh(domain(interval(0.0, 1.0), :left => :left, :right => :right), 11)
+            W1 = gridspace(Ω1)
+            a1 = form(W1, W1, (u, v) -> Bramble.inner₊(Bramble.D₋ₓ(u), Bramble.D₋ₓ(v)))
+            l1 = form(W1, v -> Bramble.innerₕ(1.0, v))
+            n1 = ndofs(W1)
+
+            for mixed in (
+                (:left => (x, t) -> t, :right => x -> 3.0),
+                (:left => (x, t, p) -> p * t, :right => x -> 3.0)
+            )
+                viaI = dirichlet_constraints(Ω1, I, mixed...)
+                @test viaI isa DirichletConstraint
+                @test length(conditions(viaI)) == 2
+                sd_keyword = semidiscretize(a1, l1; dirichlet = mixed)
+                sd_I = semidiscretize(a1, l1; dirichlet = viaI)
+                @test typeof(sd_I.constraints) == typeof(sd_keyword.constraints)
+                for t in (2.0, 5.0)
+                    du_keyword = zeros(n1)
+                    du_I = zeros(n1)
+                    sd_keyword(du_keyword, zeros(n1), 4.0, t)
+                    sd_I(du_I, zeros(n1), 4.0, t)
+                    @test du_I == du_keyword
+                    @test du_I[n1] == 3.0
+                    @test du_I[1] != 0.0
+                end
+            end
+
+            # (x, t) beside (x, t, p) is still refused, with or without a spatial one
+            @test_throws "uniformly accept" dirichlet_constraints(
+                Ω1, I, :left => (x, t) -> t, :right => (x, t, p) -> p
+            )
+            @test_throws "uniformly accept" dirichlet_constraints(
+                Ω1, I, :left => (x, t) -> t, :right => (x, t, p) -> p, :left => x -> 0.0
+            )
+            # `I` promises time dependence, so an all-spatial set is refused
+            @test_throws "at least one condition" dirichlet_constraints(
+                Ω1, I, :left => x -> 0.0, :right => x -> 0.0
+            )
+            # a condition taking neither `x` alone nor `(x, t[, p])` is refused by name
+            @test_throws "condition for label `:right`" dirichlet_constraints(
+                Ω1, I, :left => (x, t) -> t, :right => () -> 0.0
+            )
+        end
+
         # For every accepted `input` type.
         @testset "Label validation, every `input` type" begin
             # A mistyped or nonexistent label used to pass `dirichlet_constraints`

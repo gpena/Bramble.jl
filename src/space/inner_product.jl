@@ -413,7 +413,8 @@ holds for `gridspace(Ωₕ; ghosts)` and for a [`constrained`](@ref) space whose
 carry no data and fix no node. A constrained space whose degrees of freedom omit the fixed
 nodes or whose relations carry data has no grid function in a vector of its degrees of
 freedom: `normₕ` throws an `ArgumentError`, and `normₕ(Bramble.lift(Cₕ, u))` is the norm
-of the lifted grid function.
+of the lifted grid function. On a composite of ghost spaces it is the square root of the sum
+of the components' squared norms over their physical nodes.
 
 On the trial space `U` of [`Bramble.polygon_spaces`](@ref) it is the norm over Ω̄ₕ of the
 grid function that is `uₕ` at the interior nodes, its degrees of freedom, and 0 at the
@@ -429,16 +430,23 @@ value of the solution. The test space `W` throws an `ArgumentError`.
 # the weights of the padded space, which are 0 at every ghost: the ghost values never enter.
 # A space whose degrees of freedom are not a grid function refuses (`_physical_values`).
 # A polygon trial space measures its grid function on Ω̄ₕ (`_polygon_element`).
-function normₕ(uₕ::VectorElement{<:GhostGridSpace})
+# A composite of ghost spaces sums the components' squares, as `norm₁ₕ` does.
+normₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_normₕ_sq(uₕ)))
+normₕ(uₕ::VectorElement{<:_GhostCompositeSpace}) = sqrt(real(sum(_normₕ_sq, components(uₕ))))
+
+function _normₕ_sq(uₕ::VectorElement{<:GhostGridSpace})
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_ghost_norm(parent(uₕ))
-    _is_polygon_trial(uₕ.space) && return normₕ(_polygon_element(uₕ))
+    if _is_polygon_trial(uₕ.space)
+        e = _polygon_element(uₕ)
+        return innerₕ(e, e)
+    end
     u = _physical_values(:normₕ, uₕ)
     w = weights(uₕ.space.padded, Innerh())   # throws once the mesh has moved
     acc = zero(promote_type(eltype(uₕ), eltype(w)))
     for (k, J) in enumerate(physical_indices(mesh(uₕ.space)))
         @inbounds acc += conj(u[k]) * u[k] * w[J]
     end
-    return sqrt(real(acc))
+    return acc
 end
 
 @noinline function _throw_no_scalar_ghost_norm(x)
