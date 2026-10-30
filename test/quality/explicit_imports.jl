@@ -489,6 +489,9 @@ using Kronecker: Kronecker
                 # ghost-space form): the form type the extension dispatches on to read the
                 # padded form it was built from. Not public.
                 :GhostBilinearForm,
+                # `GhostLinearForm` (BrambleSciMLExt): the ghost-space linear form
+                # `linear_problem` accepts beside `LinearForm`. Not public.
+                :GhostLinearForm,
                 # `LinearAlgebra.BLAS.get_config`, `LinearAlgebra.LAPACK.chklapackerror`,
                 # `chkargsok`, `Base.Libc.Libdl` (BrambleKroneckerExt): the extension finds
                 # the loaded LAPACK by name and looks up `zgges3_`/`cgges3_` in it, reporting
