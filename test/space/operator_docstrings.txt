@@ -1470,15 +1470,16 @@ The backward gradient tensor of a composite trial or test function `u`: `N` rows
 component of `u`) of `D`-tuples (one per spatial direction), `∇ₕ(u)[c][d]` the backward
 difference of component `c` along direction `d`.
 
-For `D >= 2` the rows come in a `Bramble._GradientRows`, which is not a `Tuple`.
+The rows come in a `Bramble._GradientRows`, which is not a `Tuple`.
 `∇ₕ(u)[c][d]`, `length`, iteration, `map` and broadcasting give what they give on
 `∇ₕ(components(u))`, and `Tuple(∇ₕ(u))` is that tuple; anything else tuple-like needs
 `Tuple(∇ₕ(u))`. `map` needs every argument to be such a container; with a plain tuple
 among them, pass `Tuple(∇ₕ(u))`. The container also tells [`inner₊`](@ref) that row `c` is built on
 component `c` alone, so a captured coefficient over `inner₊(∇ₕ(u), ∇ₕ(v))` gives `form` one
 concrete type in 3D, which the plain tuple `∇ₕ(components(u))` does not; both assemble the
-same matrix. In 1D the result is the tuple of `D₋ₓ`s `∇ₕ(components(u))` returns. On a
-scalar space (one component) this is the same `D`-tuple `∇ₕ` already returns for any
+same matrix. In 1D, where `∇ₕ(components(u))[c]` is a bare `D₋ₓ(u(c))`, each row is the
+1-tuple `(D₋ₓ(u(c)),)` instead, so `∇ₕ(u)[c][1]` is that difference. On a scalar space
+(one component) this is the same `D`-tuple `∇ₕ` already returns for any
 operator.
 
 ### end ∇ₕ
