@@ -1491,9 +1491,13 @@ end
 # Rows of `D`-tuples are labelled. In 1D `∇ₕ` of a component is the bare `D₋ₓ`, so
 # `_as_dtuple` wraps it in a 1-tuple first: the rows then sum per leaf like any other
 # (gpena/Bramble.jl#965), rather than reaching `inner₊` as one `N`-tuple of differences.
+# A plain 1D tuple gets the same 1-tuple rows, unlabelled, so both spellings meet the
+# tuple-of-tuples `inner₊` and mix (gpena/Bramble.jl#1096).
 @inline _gradient_rows(rows) = rows
 @inline _as_dtuple(op::LazyOp{1}) = (op,)
 @inline _as_dtuple(row::Tuple) = row
+@inline ∇ₕ(ops::Tuple{LazyOp{1}, Vararg{LazyOp{1}}}) = map(_as_dtuple ∘ ∇ₕ, ops)
+@inline ∇₊ₕ(ops::Tuple{LazyOp{1}, Vararg{LazyOp{1}}}) = map(_as_dtuple ∘ ∇₊ₕ, ops)
 @inline function _gradient_rows(
         rows::Tuple{NTuple{D, LazyOp{D}}, Vararg{NTuple{D, LazyOp{D}}}}
 ) where {D}
@@ -1522,8 +1526,8 @@ The rows come in a `Bramble._GradientRows`, which is not a `Tuple`.
 among them, pass `Tuple(∇ₕ(u))`. The container also tells [`inner₊`](@ref) that row `c` is built on
 component `c` alone, so a captured coefficient over `inner₊(∇ₕ(u), ∇ₕ(v))` gives `form` one
 concrete type in 3D, which the plain tuple `∇ₕ(components(u))` does not; both assemble the
-same matrix. In 1D, where `∇ₕ(components(u))[c]` is a bare `D₋ₓ(u(c))`, each row is the
-1-tuple `(D₋ₓ(u(c)),)` instead, so `∇ₕ(u)[c][1]` is that difference. On a scalar space
+same matrix. In 1D each row is the 1-tuple `(D₋ₓ(u(c)),)`, as in `∇ₕ(components(u))`,
+so `∇ₕ(u)[c][1]` is that difference and the two spellings mix. On a scalar space
 (one component) this is the same `D`-tuple `∇ₕ` already returns for any
 operator.
 """

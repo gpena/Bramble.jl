@@ -362,20 +362,43 @@ _sum_dropping_zeros(l, r) = :($l isa ZeroOperator ? $r :
 end
 
 # The expression distributing over every sum in the node of type `T` reached as `path` that
-# mixes components, `piece(p)` the expression for each piece `p` left. By default a piece is
-# scaled by `c` (`_scale_over_sum`).
-function _distributed_expr(@nospecialize(T), path, piece = p -> :(_scale_piece(c, $p)))
-    T <: OperatorAdd || return piece(path)
+# mixes components, `piece(p)` the expression for each piece `p` left and `node(l, r)` the
+# one joining two distributed operands. By default a piece is scaled by `c`
+# (`_scale_over_sum`) and two operands are summed.
+function _distributed_expr(@nospecialize(T), path, piece = p -> :(_scale_piece(c, $p)),
+        node = _sum_dropping_zeros)
+    classes = Expr(:block)
+    ex = _gated_expr!(classes, T, path, piece, node)[1]
+    return Expr(:block, classes.args..., ex)
+end
+
+# `_distributed_expr`'s expression for the node of type `T` at `path`, and the names its
+# trial and test classes are bound to by the statements pushed to `classes`, bottom-up. A
+# sum's class joins its operands' (`_trial_component_class(::OperatorAdd)`), so each gate
+# joins two names already bound, where `_mixes_components` walked the whole subtree again
+# and a left-nested sum of `N` terms held `N²` class calls (gpena/Bramble.jl#1098).
+function _gated_expr!(classes, @nospecialize(T), path, piece, node)
+    t, s = gensym(:trial), gensym(:test)
+    if !(T <: OperatorAdd)
+        push!(classes.args, :($t = _trial_component_class($path)),
+            :($s = _test_component_class($path)))
+        return piece(path), t, s
+    end
+    le, lt, ls = _gated_expr!(classes, fieldtype(T, :left_op), :($path.left_op), piece, node)
+    re, rt, rs = _gated_expr!(classes, fieldtype(T, :right_op), :($path.right_op), piece, node)
+    push!(classes.args, :($t = _component_combine($lt, $rt)),
+        :($s = _component_combine($ls, $rs)))
     l, r = gensym(:l), gensym(:r)
-    return quote
-        if _mixes_components($path.left_op, $path.right_op)
-            $l = $(_distributed_expr(fieldtype(T, :left_op), :($path.left_op), piece))
-            $r = $(_distributed_expr(fieldtype(T, :right_op), :($path.right_op), piece))
-            $(_sum_dropping_zeros(l, r))
+    ex = quote
+        if $t isa _MixedComponents || $s isa _MixedComponents
+            $l = $le
+            $r = $re
+            $(node(l, r))
         else
             $(piece(path))
         end
     end
+    return ex, t, s
 end
 
 # A generated body marked for inlining. The gates in it compare `component_idx` values
@@ -625,9 +648,47 @@ end
 # `simplify_ast(op)` for simplified operands `left` and `right`, at least one a sum mixing
 # components, that simplifying again leaves as they are: the test side distributed first,
 # then the trial side of each piece, as the recursion through `simplify_ast` orders them.
+# The trial side is split once (`_mixing_split`). Each piece of the test side then meets
+# that split (`_product_over_split`), so the gates grow linearly with the terms; nesting the
+# trial side's gates in every piece of the test side made one body quadratic in them, and a
+# form mixing on both sides took 39 s to compile at 16 terms (gpena/Bramble.jl#1098). A
+# run-time component index leaves a gate unfolded: each piece then meets a `Union` of
+# splits, and `form` infers the `Union` it did.
 @generated function _product_over_sums(op::BilinearProduct, left, right)
-    return _inlined(_distributed_expr(right, :right,
-        r -> _distributed_expr(left, :left, l -> :(_bilinear_lifted(op, $l, $r)))))
+    return _inlined(quote
+        ls = _mixing_split(left)
+        $(_distributed_expr(right, :right, r -> :(_product_over_split(op, ls, $r))))
+    end)
+end
+
+# The pieces `_distributed_expr` would leave in `x`, as a `_Split` at each sum it distributes
+# over and the piece itself elsewhere: a piece is a `LazyOp`, never a `_Split`, so the type
+# of the split records where the gates fired. A struct, not a pair: where a gate does not
+# fold (a run-time component index), inference merges two tuples into one abstract tuple, but
+# keeps two structs as a `Union`, as it keeps the two sums the gate would build.
+struct _Split{L, R}
+    left::L
+    right::R
+end
+
+@generated function _mixing_split(x)
+    return _inlined(_distributed_expr(x, :x, identity, (l, r) -> :(_Split($l, $r))))
+end
+
+# `_distributed_expr` over the trial side's split `ls` for one piece `r` of the test side,
+# without gates: every piece of `ls` meets `r` in `_bilinear_lifted`.
+@generated function _product_over_split(op::BilinearProduct, ls, r)
+    return _inlined(_split_expr(ls, :ls, l -> :(_bilinear_lifted(op, $l, r))))
+end
+
+function _split_expr(@nospecialize(T), path, piece)
+    T <: _Split || return piece(path)
+    l, r = gensym(:l), gensym(:r)
+    return quote
+        $l = $(_split_expr(fieldtype(T, :left), :($path.left), piece))
+        $r = $(_split_expr(fieldtype(T, :right), :($path.right), piece))
+        $(_sum_dropping_zeros(l, r))
+    end
 end
 
 function simplify_ast(op::LinearProduct{D, W}) where {D, W}
@@ -783,8 +844,24 @@ end
     return OperatorScale(-1, _lower_signs(op.inner_op))
 end
 @inline _lower_signs(op::UnaryWrapper) = _rewrap_inner(op, _lower_signs(op.inner_op))
+# A sum from one generated body, as `simplify_ast(::OperatorAdd)`: one method per partial sum
+# took 1.5 s to infer over the 256 products of a form mixing 16 terms on both sides
+# (gpena/Bramble.jl#1098). The generator is defined before it, as the precompile run needs.
+function _lowered_sum_expr(@nospecialize(T), path)
+    T <: OperatorAdd || return :(_lower_signs($path))
+    return :(OperatorAdd($(_lowered_sum_expr(fieldtype(T, :left_op), :($path.left_op))),
+        $(_lowered_sum_expr(fieldtype(T, :right_op), :($path.right_op)))))
+end
+
+# The recursion it unrolls is kept for a sum whose type is not concrete, where a generator
+# cannot run and inference would give up on the whole tree: `form` with run-time component
+# indices infers a `Union` holding such a sum.
 @inline function _lower_signs(op::OperatorAdd)
-    return OperatorAdd(_lower_signs(op.left_op), _lower_signs(op.right_op))
+    if @generated
+        return _inlined(_lowered_sum_expr(op, :op))
+    else
+        return OperatorAdd(_lower_signs(op.left_op), _lower_signs(op.right_op))
+    end
 end
 @inline function _lower_signs(op::BilinearProduct{D, W}) where {D, W}
     l, r = _lower_signs(op.left_op), _lower_signs(op.right_op)

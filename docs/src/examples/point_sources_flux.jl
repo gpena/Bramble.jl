@@ -198,7 +198,7 @@ flux_total, flux_total - Q
 sides = (:left, :right, :bottom, :top)
 per_side = [reaction(a, l, uₕ; marker = m) for m in sides]
 
-@test sum(per_side) ≈ flux_total                                                           #src
+@test reaction(a, l, uₕ; marker = sides) ≈ flux_total                                      #src
 @test all(>(0.0), per_side)                                                                #src
 @test per_side[1] ≈ per_side[4] && per_side[2] ≈ per_side[3] && per_side[1] > 2 * per_side[2] #src
 
