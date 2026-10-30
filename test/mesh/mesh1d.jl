@@ -150,6 +150,19 @@ import Base: diff
             Ω = create_test_domain(-1.0e308, 1.0e308)
             @test_throws ArgumentError mesh(Ω, 2, false)
             @test_throws "spacing overflow Float64" mesh(Ω, 2, false)
+            # The 3-point uniform mesh is refused too, by the uniform-fill check (#970).
+            @test_throws ArgumentError mesh(Ω, 3)
+        end
+
+        @testset "Cell measure overflow" begin
+            # Points, half-points and spacings finite in Float32, but the middle cell
+            # measure (h₂ + h₃) / 2 overflows in the sum 3f38 + 3f38 (#970).
+            Ω = create_test_domain(-3.0e38, 3.0e38)
+            @test_throws ArgumentError mesh(Ω, 3; backend = backend(Float32))
+            @test_throws "cell measure overflow Float32" mesh(
+                Ω, 3; backend = backend(Float32))
+            # Float64 storage holds the same cell measure.
+            @test all(isfinite, half_spacings(mesh(Ω, 3)))
         end
 
         @testset "Storage-eltype collapse" begin

@@ -1342,6 +1342,11 @@ function _mesh(
         a, b = extrema(set)
         _throw_spacing_overflow(n_points, a, b, eltype(pts))
     end
+    # A cell measure sums two finite half-spacings and overflows on its own (#970).
+    if !all(isfinite, half_spacings(mesh))
+        a, b = extrema(set)
+        _throw_cell_measure_overflow(n_points, a, b, eltype(pts))
+    end
 
     # Finally, apply the domain markers to the mesh points.
     set_markers!(mesh, markers; warn_marker_mismatch)
@@ -1357,6 +1362,12 @@ end
 @noinline function _throw_spacing_overflow(n, a, b, T)
     msg = "a mesh of $n points in [$a, $b] with eltype $T makes a spacing overflow " *
           "$T. Use a wider eltype"
+    throw(ArgumentError(msg))
+end
+
+@noinline function _throw_cell_measure_overflow(n, a, b, T)
+    msg = "a mesh of $n points in [$a, $b] with eltype $T makes a cell measure " *
+          "overflow $T. Use a wider eltype"
     throw(ArgumentError(msg))
 end
 

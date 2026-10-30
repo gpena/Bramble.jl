@@ -626,6 +626,24 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
         @test reaction(Matrix(A), ones(ndofs(Wₕ)), uₕ; marker = :boundary) ≈
               reaction(A, ones(ndofs(Wₕ)), uₕ; marker = :boundary)
     end
+
+    # The docstring example is run as written, so it cannot drift from the docs.
+    @testset "Docstring example returns pi" begin
+        src_text = read(joinpath(pkgdir(Bramble), "src", "postprocessing", "reaction.jl"), String)
+        i = last(findfirst("# Examples\n\n```julia\n", src_text))
+        j = first(findnext("```", src_text, i + 1))
+        lines = split(replace(src_text[(i + 1):(j - 1)], "\\\\" => "\\"), '\n'; keepempty = false)
+        k = findfirst(startswith("reaction("), lines)
+        @test k !== nothing
+        @test length(lines) - k + 1 == 2
+        m =Module(:ReactionDoc)
+        Core.eval(m, :(using Bramble; using Bramble: reaction))
+        Base.include_string(m, join(lines[1:(k - 1)], '\n'))
+        for (line, side) in zip(lines[k:end], (:left, :right))
+            @test occursin("marker = :$side", line)
+            @test isapprox(Base.include_string(m, line), π; rtol = 1.0e-2)
+        end
+    end
 end
 
 end # module

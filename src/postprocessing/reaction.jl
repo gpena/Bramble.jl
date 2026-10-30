@@ -376,7 +376,7 @@ see [`reaction_density`](@ref) for the pointwise quantity that does.
 # Examples
 
 ```julia
-Ωₕ = mesh(domain(interval(0.0, 1.0)), 41)
+Ωₕ = mesh(domain(interval(0.0, 1.0), :left => :xmin, :right => :xmax), 41)
 Wₕ = gridspace(Ωₕ)
 sol(x) = sin(pi * x[1])
 src(x) = pi^2 * sin(pi * x[1])
