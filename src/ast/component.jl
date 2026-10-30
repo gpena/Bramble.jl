@@ -201,6 +201,25 @@ end
 # one is invisible to `innerₕ(uₕ, v; markers = m)`, which then fell back to the scalar
 # overload and the wrong answer above. `inner_Γ` gets its own method after the loop, with
 # the keyword untyped as in operators/inner.jl, since a bare `Symbol` is a valid label there.
+#
+# `r` must not already name a component. `component(r, c)` re-indexes, so `innerₕ(fₕ, v(2))`
+# used to read as `Σ_c innerₕ(fₕ(c), v(c))`, every component, whatever `v(2)` asked for
+# (gpena/Bramble.jl#979). Each method below refuses such an `r` before indexing it.
+# Bare `inner₊` of a bare test function names no direction past 1D, so the spelling the
+# message suggests for it is a directional one, which forms in any dimension.
+@noinline function _throw_indexed_shorthand(f::Symbol)
+    g = f === :inner₊ ? "inner₊ₓ" : string(f)
+    bare = f === :inner₊ ?
+           " (bare `inner₊` reads its direction off a difference in `r`; past 1D a bare " *
+           "test function needs `inner₊ₓ`, `inner₊ᵧ` or `inner₊₂`)" : ""
+    throw(
+        ArgumentError(
+        "`$f(fₕ, r)` with a composite `fₕ` sums over every component, indexing `r` " *
+        "itself, but `r` already names a component. Write `$g(fₕ(i), v(i))` for one " *
+        "component, or pass the unindexed test function to sum over all of them$bare.",
+    ),
+    )
+end
 
 for (f, W) in (
     (:innerₕ, :InnerH),
@@ -217,6 +236,7 @@ for (f, W) in (
             l::VectorElement{<:CompositeGridSpace}, r::LazyOp{D};
             markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
     ) where {D, N}
+        _test_component_class(r) === nothing || _throw_indexed_shorthand($(QuoteNode(f)))
         comps = components(l)
         return foldl(
             +, ntuple(c -> $f(comps[c], component(r, c); markers), Val(length(comps)))
@@ -236,6 +256,7 @@ for (f, W) in (
             l::NTuple{NC, Any}, r::LazyOp{D};
             markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
     ) where {NC, D, N}
+        _test_component_class(r) === nothing || _throw_indexed_shorthand($(QuoteNode(f)))
         return foldl(+, ntuple(c -> $f(l[c], component(r, c); markers), Val(NC)))
     end
 
@@ -258,6 +279,7 @@ end
 @inline function inner_Γ(
         l::VectorElement{<:CompositeGridSpace}, r::LazyOp{D}; markers = ()
 ) where {D}
+    _test_component_class(r) === nothing || _throw_indexed_shorthand(:inner_Γ)
     comps = components(l)
     return foldl(
         +, ntuple(c -> inner_Γ(comps[c], component(r, c); markers), Val(length(comps)))

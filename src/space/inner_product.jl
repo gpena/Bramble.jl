@@ -493,10 +493,7 @@ end
 
 # A flat composite of ghost spaces, `Cₕ × Cₕ` or `Cₕ^N`: its norms go component by component,
 # since the generic composite methods would read the ghosts of the concatenated vector.
-const _CompositeOfGhosts = CompositeGridSpace{<:Any,
-    <:Tuple{GhostGridSpace, Vararg{GhostGridSpace}}}
-
-@inline norminf(uₕ::VectorElement{<:_CompositeOfGhosts}) = maximum(norminf, components(uₕ))
+@inline norminf(uₕ::VectorElement{<:_GhostCompositeSpace}) = maximum(norminf, components(uₕ))
 
 @inline norminf(uₕ::NTuple{<:Any, VectorElement}) = maximum(norminf, uₕ)
 
@@ -1421,7 +1418,7 @@ norm of the product space of those grid functions. On the trial space of
 @inline norm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
 @inline norm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
 norm₁ₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_norm₁ₕ_sq(uₕ)))
-norm₁ₕ(uₕ::VectorElement{<:_CompositeOfGhosts}) = sqrt(real(sum(_norm₁ₕ_sq, components(uₕ))))
+norm₁ₕ(uₕ::VectorElement{<:_GhostCompositeSpace}) = sqrt(real(sum(_norm₁ₕ_sq, components(uₕ))))
 
 function _norm₁ₕ_sq(uₕ::VectorElement{<:GhostGridSpace})
     e = _physical_element(:norm₁ₕ, uₕ)

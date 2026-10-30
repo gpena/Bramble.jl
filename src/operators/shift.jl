@@ -52,10 +52,13 @@ See also: [`shift`](@ref)
 # The three-way dispatch mirrors `_backend_eye` (backend.jl): a fast path for
 # `SparseMatrixCSC` and for dense `Matrix`, and a generic fallback for anything else.
 # `spdiagm` alone carries the offset arithmetic, so the two fast paths only differ in
-# whether the sparse result is converted afterwards.
+# what the sparse result is converted to. `spdiagm` always returns `Int` indices, so the
+# sparse path converts to the backend's `Ti` as well; without it every `kron` factor, and so
+# every shift, came back `Int64` on an `Int32` backend. Hence `convert`. The constructor
+# would copy even an `Int` result that needs nothing.
 @inline _shift_ones(
     ::Type{<:SparseMatrixCSC{T, Ti}}, npts::Int, i::Int, nz::Int
-) where {T, Ti} = spdiagm(npts, npts, i => fill(one(T), nz))
+) where {T, Ti} = convert(SparseMatrixCSC{T, Ti}, spdiagm(npts, npts, i => fill(one(T), nz)))
 @inline _shift_ones(::Type{<:Matrix{T}}, npts::Int, i::Int, nz::Int) where {T} = Matrix{T}(spdiagm(npts, npts, i =>
     fill(one(T), nz)))
 # The generic fallback (gpena/Bramble.jl#94): `nz` scalar `setindex!` calls straight into a

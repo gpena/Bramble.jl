@@ -98,6 +98,10 @@ function ConstrainedCompositeSpace(space::CompositeGridSpace{N},
         space, padded, E, d, Et, facets)
 end
 
+@inline mesh(Vₕ::ConstrainedCompositeSpace) = mesh(Vₕ.padded)
+@inline mesh_type(Vₕ::ConstrainedCompositeSpace) = mesh_type(typeof(Vₕ))
+@inline mesh_type(::Type{<:ConstrainedCompositeSpace{N, S, P}}) where {N, S, P} = mesh_type(P)
+
 """
     _CompositeClosure
 

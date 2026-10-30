@@ -417,9 +417,12 @@ fill value (`outside::Number`, meaningless as a linear map) throws the same
     return _πₕ!(locality(typeof(parent(dest))), locality(typeof(parent(src))), dest, src, outside)
 end
 
-@inline _πₕ!(::HostLocality, ::HostLocality, dest, src, outside) = Rₕ!(
-    dest, x -> interpolate_at(src, x; outside)
-)
+# Through `GridInterpolant`, not a closure: a fill converts to the blend's type, so the
+# call never returns a `Union` and the result's type never hangs on which node is probed.
+@inline function _πₕ!(::HostLocality, ::HostLocality, dest, src, outside)
+    _validate_outside(outside)
+    return Rₕ!(dest, GridInterpolant(src, _outside_policy(outside)))
+end
 
 # At least one of dest/src is device-backed: assemble the matrix once and reuse the
 # mul!-based method below rather than launching a host closure inside a device kernel.
@@ -497,11 +500,13 @@ Evaluates `Rₕ(Wₕ, x -> interpolate_at(src, x; outside))`; see [`πₕ!`](@re
 by multiple dispatch from the one-argument symbolic wrapper `πₕ(uₕ)`, defined below. The
 element type is promoted from `Wₕ`'s and `src`'s own, so interpolating a `Dual`-valued
 `src` yields a `Dual`-valued result on an undifferentiated `Wₕ`. `outside` is forwarded to
-[`interpolate_at`](@ref) unchanged.
+[`interpolate_at`](@ref) unchanged; a fill value joins that promotion and is converted to
+the result's element type, whichever grid points fall outside `src`'s domain.
 """
-@inline πₕ(Wₕ::ScalarGridSpace, src::VectorElement; outside = :error) = Rₕ(
-    Wₕ, x -> interpolate_at(src, x; outside)
-)
+@inline function πₕ(Wₕ::ScalarGridSpace, src::VectorElement; outside = :error)
+    _validate_outside(outside)
+    return Rₕ(Wₕ, GridInterpolant(src, _outside_policy(outside)))
+end
 
 # --- Triplet assembly shared by both dimensionalities of interpolation_matrix ---
 #

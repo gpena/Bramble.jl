@@ -212,12 +212,7 @@ Hermitian with an `ArgumentError` and keeps its old factors, as every kind does 
 
 See also [`refactor!`](@ref), [`accelerate_factorize`](@ref).
 """
-function accelerate_refactor!(fact::AccelerateFactorization, A::SparseMatrixCSC)
-    if !Sys.isapple()
-        throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
-    end
-    return _accelerate_refactor!(fact, A)
-end
+function accelerate_refactor! end
 
 function _accelerate_factorize(A; kwargs...)
     _ext_loaded(:BrambleAppleAccelerateExt) && _throw_unsupported_matrix("accelerate_factorize", A)
@@ -233,7 +228,11 @@ function _accelerate_solve(A, ::Any; kwargs...)
     )
 end
 
-function _accelerate_refactor!(::Any, ::Any)
+function accelerate_refactor!(::AccelerateFactorization, A)
+    if !Sys.isapple()
+        throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
+    end
+    _ext_loaded(:BrambleAppleAccelerateExt) && _throw_unsupported_matrix("accelerate_refactor!", A)
     return error(
         "accelerate_refactor! requires AppleAccelerate.jl. Add `using AppleAccelerate` before calling this function.",
     )

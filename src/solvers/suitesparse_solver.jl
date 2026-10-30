@@ -105,9 +105,7 @@ sparsity pattern as the matrix originally factored.
 
 See also [`refactor!`](@ref), [`suitesparse_factorize`](@ref).
 """
-function suitesparse_refactor!(fact::SuiteSparseFactorization, A::SparseMatrixCSC)
-    return _suitesparse_refactor!(fact, A)
-end
+function suitesparse_refactor! end
 
 function _suitesparse_factorize(A; kwargs...)
     _ext_loaded(:BrambleSuiteSparseExt) && _throw_unsupported_matrix("suitesparse_factorize", A)
@@ -123,7 +121,8 @@ function _suitesparse_solve(A, ::Any; kwargs...)
     )
 end
 
-function _suitesparse_refactor!(::Any, ::Any)
+function suitesparse_refactor!(::SuiteSparseFactorization, A)
+    _ext_loaded(:BrambleSuiteSparseExt) && _throw_unsupported_matrix("suitesparse_refactor!", A)
     return error(
         "suitesparse_refactor! requires SuiteSparse.jl. Add `using SuiteSparse` before calling this function.",
     )

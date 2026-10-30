@@ -124,7 +124,7 @@ function Base.:\(
     return complex.(fact \ real(b), fact \ imag(b))
 end
 
-function Bramble._sparspak_refactor!(fact::ConcreteSparspakFactorization, A::SparseMatrixCSC)
+function Bramble.sparspak_refactor!(fact::ConcreteSparspakFactorization, A::SparseMatrixCSC)
     m, n = size(A)
     (m == fact.dim && n == fact.dim) || throw(
         DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),

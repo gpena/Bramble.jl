@@ -146,13 +146,13 @@ _as_csc(A) = _is_csr(A) ? _csr_to_csc(A) : A
 # O(n²), once per solve, on a matrix whose assembly is already O(n²).
 _as_csc(A::Matrix) = sparse(A)
 
-# The `_X_factorize`/`_X_solve` fallbacks of the backend solvers (and the ILU ones) say
-# "requires X.jl" only when the extension is missing. With it loaded, a matrix type its
+# The `_X_factorize`/`_X_solve` fallbacks of the backend solvers (and the ILU and AMG ones) say
+# "requires X.jl" only when the extension is missing. With it loaded, an argument type its
 # methods do not take (a `Diagonal`, say) gets this error naming the type instead.
 _ext_loaded(ext::Symbol) = Base.get_extension(Bramble, ext) !== nothing
 
-function _throw_unsupported_matrix(name::String, A)
-    throw(ArgumentError("$name takes a SparseMatrixCSC; got a $(typeof(A))."))
+function _throw_unsupported_matrix(name::String, A, expected::String = "a SparseMatrixCSC")
+    throw(ArgumentError("$name takes $expected; got a $(typeof(A))."))
 end
 
 # Only a `SparseMatrixCSC` is supported (test/solvers/sparse_solvers.jl keeps the `MethodError`).

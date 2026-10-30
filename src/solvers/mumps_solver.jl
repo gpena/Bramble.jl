@@ -140,9 +140,7 @@ sparsity pattern as the matrix originally factored.
 
 See also [`refactor!`](@ref), [`mumps_factorize`](@ref).
 """
-function mumps_refactor!(fact::MUMPSFactorization, A::SparseMatrixCSC)
-    return _mumps_refactor!(fact, A)
-end
+function mumps_refactor! end
 
 function _mumps_factorize(A; kwargs...)
     _ext_loaded(:BrambleMUMPSExt) && _throw_unsupported_matrix("mumps_factorize", A)
@@ -158,7 +156,8 @@ function _mumps_solve(A, ::Any; kwargs...)
     )
 end
 
-function _mumps_refactor!(::Any, ::Any)
+function mumps_refactor!(::MUMPSFactorization, A)
+    _ext_loaded(:BrambleMUMPSExt) && _throw_unsupported_matrix("mumps_refactor!", A)
     return error(
         "mumps_refactor! requires MUMPS.jl. Add `using MUMPS` before calling this function.",
     )

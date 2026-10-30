@@ -129,10 +129,27 @@ end
 @inline _fold_mul(::_MinusOne, b) = _fold_mul(-1, b)
 @inline _fold_mul(a, ::_MinusOne) = _fold_mul(a, -1)
 
+# Whether two coefficients may be folded into one, decided by their types. A sign, or any
+# `Signed`, never folds with an `Unsigned`, since `-1 * UInt(2)` promotes to `UInt` and
+# throws `InexactError` (and `checked_mul` would too). The parts of a `Complex` count, as
+# `-1 * Complex{UInt}(0, 2)` multiplies part by part in `UInt` and wraps silently. Nor do
+# two integer `Complex`es fold when one has `Unsigned` parts, because their product
+# subtracts and `im * Complex{UInt}(0, 2)` wraps too. A `Bool` part is neither. Left nested,
+# each converts to the space's element type on its own when assembled.
+@inline _folds(a, b) = _folds(a) && _folds(b) && !_sign_clash(a, b)
+@inline _unsigned_parts(c) = c isa Union{Unsigned, Complex{<:Unsigned}}
+@inline _signed_parts(c) = c isa Union{Signed, _MinusOne, Complex{<:Signed}}
+@inline function _sign_clash(a, b)
+    _unsigned_parts(a) && _signed_parts(b) && return true
+    _signed_parts(a) && _unsigned_parts(b) && return true
+    return a isa Complex{<:Integer} && b isa Complex{<:Integer} &&
+           (_unsigned_parts(a) || _unsigned_parts(b))
+end
+
 # Two coefficients just lifted out of the two arguments of one inner product, wrapped around
 # the product they were lifted from.
 @inline function _lift_scalars(cl, cr, inner::LazyOp)
-    _folds(cl) && _folds(cr) && return _wrap_scale(_fold_mul(cl, cr), inner)
+    _folds(cl, cr) && return _wrap_scale(_fold_mul(cl, cr), inner)
     return _wrap_scale(cl, _wrap_scale(cr, inner))
 end
 
@@ -280,7 +297,7 @@ end
     # the values are: both operands' types are known here, so `_wrap_scale` dispatches
     # on a known type and the product's type follows from them alone. A `Rational` on
     # either side does not fold either (`_folds`).
-    if inner isa OperatorScale && _folds(op.scalar) && _folds(inner.scalar)
+    if inner isa OperatorScale && _folds(op.scalar, inner.scalar)
         return _wrap_scale(_fold_mul(op.scalar, inner.scalar), inner.inner_op)
     end
 
@@ -389,7 +406,7 @@ end
         isone(c) && return x
     end
     x isa ZeroOperator && return x
-    if x isa OperatorScale && _folds(c) && _folds(x.scalar)
+    if x isa OperatorScale && _folds(c, x.scalar)
         return _wrap_scale(_fold_mul(c, x.scalar), x.inner_op)
     end
     return OperatorScale(c, x)

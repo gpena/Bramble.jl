@@ -48,11 +48,6 @@
 #
 # See also: `GhostGridSpace`, `CompositeGridSpace`, `_CompositeClosure`
 
-# A flat composite of ghost spaces, the one kind of composite with a ghost component that
-# has a closure.
-const _GhostCompositeSpace = CompositeGridSpace{<:Any,
-    <:Tuple{GhostGridSpace, Vararg{GhostGridSpace}}}
-
 # Either kind of composite of ghost spaces a form takes as a side.
 const _GhostCompositeSide = Union{_GhostCompositeSpace, ConstrainedCompositeSpace}
 

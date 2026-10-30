@@ -1050,6 +1050,59 @@ _rt_negated(W) = form(W, W, (u, v) -> innerₕ(u, v) - innerₕ(D₋ₓ(u), v))
     @test dM ≈ -sum(A₁) / 2
 end
 
+# A sign or a `Signed` folded into an `Unsigned` threw `InexactError` (gpena/Bramble.jl#980):
+# `-1 * UInt(2)` promotes to `UInt`. The two scales stay nested, each converted on assembly.
+@testset "sign beside an unsigned scale (#980)" begin
+    Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 6))
+    u, v = trial_function(Wₕ), test_function(Wₕ)
+    S = innerₕ(u, v)
+    mass = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
+    asm(f) = Matrix(assemble(form(Wₕ, Wₕ, f)))
+    @test asm((u, v) -> innerₕ(u, v) - UInt(2) * innerₕ(u, v)) ≈ -mass
+    @test asm((u, v) -> -(UInt(2) * innerₕ(u, v))) ≈ -2mass
+    @test asm((u, v) -> innerₕ(-u, UInt(2) * v)) ≈ -2mass
+    @test asm((u, v) -> 3 * (UInt(2) * innerₕ(u, v))) ≈ 6mass
+    @test asm((u, v) -> innerₕ(UInt(2) * u, Int8(-3) * v)) ≈ -6mass
+    # each fold site leaves the two scales nested
+    for t in (simplify_ast(-(UInt(2) * S)), simplify_ast(innerₕ(-u, UInt(2) * v)),
+        simplify_ast(3 * (UInt(2) * S)))
+        @test t isa OperatorScale && t.inner_op isa OperatorScale
+        @test (t.scalar isa Unsigned) != (t.inner_op.scalar isa Unsigned)
+    end
+    # the sign distributed over a sum mixing components meets each unsigned scale
+    Vₕ = Wₕ^Val(2)
+    mixed(a, b) = (u, v) -> -(a * innerₕ(u(1), v(1)) + b * innerₕ(u(2), v(2)))
+    ast = resolve_form_ast(form(Vₕ, Vₕ, mixed(UInt(2), UInt(3))))
+    @test ast isa OperatorAdd && ast.left_op.inner_op isa OperatorScale
+    @test Matrix(assemble(form(Vₕ, Vₕ, mixed(UInt(2), UInt(3))))) ≈
+          Matrix(assemble(form(Vₕ, Vₕ, mixed(2, 3))))
+    # unsigned with unsigned, and signed with signed, still fold to one literal
+    c = simplify_ast(UInt(3) * (UInt(2) * S))
+    @test c isa OperatorScale && c.scalar === UInt(6) && c.inner_op === S
+    c = simplify_ast(-(2 * S))
+    @test c isa OperatorScale && c.scalar === -2 && c.inner_op === S
+    c = simplify_ast(innerₕ(-u, 3 * v))
+    @test c isa OperatorScale && c.scalar === -3 && c.inner_op === S
+    c = simplify_ast(2.0 * (UInt(2) * S))
+    @test c isa OperatorScale && c.scalar === 4.0 && c.inner_op === S
+
+    # The parts of a `Complex` count: these wrapped silently to ~1e18 when folded.
+    Wₙ = gridspace(mesh(domain(interval(0.0, 1.0)), 6, false))
+    uₙ, vₙ = trial_function(Wₙ), test_function(Wₙ)
+    Mₙ = Matrix(assemble(form(Wₙ, Wₙ, (u, v) -> innerₕ(u, v))))
+    asmₙ(f) = Matrix(assemble(form(Wₙ, Wₙ, f)))
+    @test asmₙ((u, v) -> -(im * (UInt(2) * innerₕ(u, v)))) ≈ -2im .* Mₙ
+    @test asmₙ((u, v) -> -(Complex{UInt}(0, 2) * innerₕ(u, v))) ≈ -2im .* Mₙ
+    @test asmₙ((u, v) -> Complex(-1, 0) * (UInt(2) * innerₕ(u, v))) ≈ -2 .* Mₙ
+    @test asmₙ((u, v) -> im * (Complex{UInt}(0, 2) * innerₕ(u, v))) ≈ -2 .* Mₙ
+    @test asmₙ((u, v) -> innerₕ(-u, Complex{UInt}(0, 2) * v)) ≈ -2im .* Mₙ
+    t = simplify_ast(-(im * (UInt(2) * innerₕ(uₙ, vₙ))))
+    @test t isa OperatorScale && t.inner_op.scalar === Complex{UInt}(0, 2)
+    # unsigned parts beside a `Bool` one, or a real, still fold
+    c = simplify_ast(im * (UInt(2) * S))
+    @test c isa OperatorScale && c.scalar === Complex{UInt}(0, 2) && c.inner_op === S
+end
+
 # The `same_mesh` rule of gpena/Bramble.jl#771 (`_same_mesh_stencil`,
 # operators/interpolation.jl) acts in the stencil, after this pass: `πₕ(u)` stays in the
 # stored tree, which is the same tree, of the same type, whether or not the two spaces

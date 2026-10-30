@@ -237,6 +237,51 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_3D_TESTS
         @test_throws ArgumentError form(Vₕ, v -> inner₊((), v))
     end
 
+    @testset "Shorthand refuses indexed test (#979)" begin
+        # the shorthand indexes `r` itself; an `r` that already names a component used to be
+        # re-indexed in silence, so `innerₕ(fₕ, v(2))` assembled every component
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (false, true))
+        Vₕ = gridspace(Ωₕ, Val(2))
+        fₕ = Rₕ(Vₕ, (x -> x[1] + 1, x -> 100 * x[2] + 3))
+        m = (:boundary,)
+        message(g) =
+            try
+                g()
+                ""
+            catch e
+                e isa ArgumentError ? e.msg : "not an ArgumentError: $(typeof(e))"
+            end
+
+        for r in (v -> v(2), v -> v(1) + v(2), v -> 2 * D₋ₓ(v(1)), v -> v + v(2))
+            @test_throws ArgumentError form(Vₕ, v -> innerₕ(fₕ, r(v)))
+            @test_throws ArgumentError form(Vₕ, v -> inner₊ₓ(fₕ, r(v)))
+            @test_throws ArgumentError form(Vₕ, v -> inner_Γ(fₕ, r(v); markers = m))
+            @test_throws ArgumentError form(Vₕ, v -> innerₕ((1.0, 2.0), r(v)))
+        end
+        @test occursin("innerₕ(fₕ(i), v(i))", message(() -> form(Vₕ, v -> innerₕ(fₕ, v(2)))))
+        @test occursin("inner_Γ(fₕ(i), v(i))",
+            message(() -> form(Vₕ, v -> inner_Γ(fₕ, v(1); markers = m))))
+        # bare `inner₊` in 2D: the suggested spelling is directional, and it forms
+        m₊ = message(() -> form(Vₕ, v -> inner₊(fₕ, v(2))))
+        @test occursin("inner₊ₓ(fₕ(i), v(i))", m₊)
+        @test !occursin("`inner₊(fₕ(i)", m₊)
+        @test_throws ArgumentError form(Vₕ, v -> inner₊(fₕ(2), v(2)))
+        @test !iszero(assemble(form(Vₕ, v -> inner₊ₓ(fₕ(2), v(2))))[31:60])
+
+        # the unindexed test function still sums over the components, bit for bit
+        for (short, long) in (
+            (v -> innerₕ(fₕ, v), v -> innerₕ(fₕ(1), v(1)) + innerₕ(fₕ(2), v(2))),
+            (
+            v -> inner_Γ(fₕ, v; markers = m),
+            v -> inner_Γ(fₕ(1), v(1); markers = m) + inner_Γ(fₕ(2), v(2); markers = m)
+        )
+        )
+            b = assemble(form(Vₕ, short))
+            @test b == assemble(form(Vₕ, long))
+            @test !iszero(b[1:30]) && !iszero(b[31:60])
+        end
+    end
+
     @testset "Bracket indexing, destructuring (#153)" begin
         p = TrialFunction{2, 2}()
         q = TestFunction{2, 2}()

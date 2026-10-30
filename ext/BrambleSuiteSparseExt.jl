@@ -156,7 +156,7 @@ function Base.:\(
     return complex.(fact \ real(b), fact \ imag(b))
 end
 
-function Bramble._suitesparse_refactor!(fact::ConcreteSuiteSparseFactorization, A::SparseMatrixCSC)
+function Bramble.suitesparse_refactor!(fact::ConcreteSuiteSparseFactorization, A::SparseMatrixCSC)
     m, n = size(A)
     (m == fact.dim && n == fact.dim) || throw(
         DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),

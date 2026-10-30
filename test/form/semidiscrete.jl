@@ -4,6 +4,7 @@ using Test
 using Bramble
 using Bramble: matrix_type
 using SparseArrays
+using SciMLBase: SciMLBase # loads the `ode_problem` extension
 using ForwardDiff: Dual, value
 using Bramble:
                D₋ₓ,
@@ -203,6 +204,74 @@ _sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
         )
         @test_throws ArgumentError dirichlet_constraints(
             Ωₕ2, I, :left => (x, t) -> t, :right => (x, t, p) -> p * t
+        )
+    end
+
+    # A time-dependent condition may sit beside a spatial one, and the keyword, `I`-less
+    # constraint routes and `ode_problem` agree. The (x, t) and (x, t, p) arities still do
+    # not mix: `semidiscretize` refuses that itself.
+    @testset "boundary arity: spatial beside timed" begin
+        Ωₕ2 = Bramble.mesh(
+            Bramble.domain(Bramble.interval(0.0, 1.0), :left => :left, :right => :right), 11
+        )
+        W2 = gridspace(Ωₕ2)
+        a2 = Bramble.form(
+            W2, W2, (u, v) -> Bramble.inner₊(Bramble.D₋ₓ(u), Bramble.D₋ₓ(v))
+        )
+        l2 = Bramble.form(W2, v -> Bramble.innerₕ(1.0, v))
+        n2 = ndofs(W2)
+        mixed = (:left => (x, t) -> t, :right => x -> 3.0)
+        for dirichlet in (mixed, dirichlet_constraints(Ωₕ2, mixed...))
+            sd = semidiscretize(a2, l2; dirichlet = dirichlet)
+            @test sd.constraints isa Bramble.TimeDependentConstraints
+            du = zeros(n2)
+            sd(du, zeros(n2), nothing, 2.0)
+            @test du[1] ≈ 2.0
+            @test du[n2] ≈ 3.0
+            sd(du, zeros(n2), nothing, 5.0)
+            @test du[1] ≈ 5.0
+            @test du[n2] ≈ 3.0
+            u = zeros(n2)
+            @test dirichlet_bc!(u, sd, 2.0) === u
+            @test u[1] ≈ 2.0
+            @test u[n2] ≈ 3.0
+        end
+
+        # With no spatial condition the `I` route builds the same set, and agrees too.
+        timed = (:left => (x, t) -> t, :right => (x, t) -> 3.0)
+        for dirichlet in (timed, dirichlet_constraints(Ωₕ2, timed...), dirichlet_constraints(Ωₕ2, I, timed...))
+            sd = semidiscretize(a2, l2; dirichlet = dirichlet)
+            @test sd.constraints isa Bramble.TimeDependentConstraints
+            du = zeros(n2)
+            sd(du, zeros(n2), nothing, 2.0)
+            @test du[1] ≈ 2.0
+            @test du[n2] ≈ 3.0
+        end
+
+        # `ode_problem` forwards the keyword to `semidiscretize`.
+        prob = Bramble.ode_problem(a2, l2, zeros(n2), (0.0, 1.0); dirichlet = mixed)
+        du = zeros(n2)
+        prob.f(du, zeros(n2), prob.p, 2.0)
+        @test du[1] ≈ 2.0
+        @test du[n2] ≈ 3.0
+
+        # A spatial condition beside an (x, t, p) one reaches the parametric carrier.
+        sd_p = semidiscretize(
+            a2, l2; dirichlet = (:left => (x, t, p) -> p * t, :right => x -> 3.0)
+        )
+        @test sd_p.constraints isa Bramble.TimeParamDependentConstraints
+        du = zeros(n2)
+        sd_p(du, zeros(n2), 2.0, 4.0)
+        @test du[1] ≈ 8.0
+        @test du[n2] ≈ 3.0
+
+        # An (x, t) condition beside an (x, t, p) one is refused at construction.
+        @test_throws ArgumentError semidiscretize(
+            a2, l2; dirichlet = (:left => (x, t) -> t, :right => (x, t, p) -> p)
+        )
+        @test_throws ArgumentError Bramble.ode_problem(
+            a2, l2, zeros(n2), (0.0, 1.0);
+            dirichlet = (:left => (x, t) -> t, :right => (x, t, p) -> p)
         )
     end
 

@@ -633,10 +633,12 @@ function matrix(::Backend{VT, MT, EP}, n::Integer, m::Integer) where {VT, MT, EP
     return _undef_or_sized(MT, n, m, _throw_matrix_error)
 end
 
-# Specialized zero-overhead methods for dense (CPU/GPU) and sparse matrix types
+# Specialized zero-overhead methods for `Matrix{T}` and sparse matrix types. Other
+# `DenseMatrix` types go through `_undef_or_sized`, which honours their
+# `supports_undef_construction`; `MtlMatrix` and `SparseMatrixCSR` have their own methods.
 @inline matrix(
     ::Backend{VT, MT, EP}, n::Integer, m::Integer
-) where {VT, T, MT <: DenseMatrix{T}, EP} = MT(undef, n, m)
+) where {VT, T, MT <: Matrix{T}, EP} = MT(undef, n, m)
 @inline matrix(
     ::Backend{VT, MT, EP}, n::Integer, m::Integer
 ) where {VT, T, Ti, MT <: SparseMatrixCSC{T, Ti}, EP} = spzeros(T, Ti, n, m)

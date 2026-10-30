@@ -280,6 +280,29 @@ end
         @test jacobian_pattern(a) == (A .!= 0)
     end
 
+    # A scalar trial space is its own one component (#1057): `U(1)` is `U`, any other is
+    # refused by name, with or without πₕ, as the block path refuses it.
+    @testset "scalar trial space: missing component" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, false)
+        Wₕ = gridspace(Ωₕ)
+        a = form(Wₕ, Wₕ, (U, V) -> inner₊(D₋ₓ(U), D₋ₓ(V)))
+        @test jacobian_pattern(a, U -> U(1)) == jacobian_pattern(a, U -> U)
+
+        @testset "$name" for (name, dep, k) in (
+            ("U(2)", U -> U(2), 2), ("πₕ(U(3))", U -> πₕ(U(3)), 3)
+        )
+            err = try
+                jacobian_pattern(a, dep)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            msg = err isa ArgumentError ? sprint(showerror, err) : ""
+            @test occursin("component $k", msg) && occursin("has 1 component.", msg)
+        end
+    end
+
     # Multiple independent nonlinear coefficients.
     @testset "independent nonlinear coefficients" begin
         # -(α(Mₕ(u))u')' + β(D₋ₓ(u))u = g: two terms, each nonlinear through a
