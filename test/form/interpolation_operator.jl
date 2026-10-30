@@ -391,13 +391,14 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
                 @test_throws ArgumentError stencil(:error, first(ghost))
                 @test_throws ArgumentError at(:error, first(ghost))
                 # `πₕ`'s own refusal, not the absent-read one (#809), also an `ArgumentError`
-                refused(f) = try
-                    assemble(form(X, X, f))
-                    false
-                catch e
-                    e isa ArgumentError &&
-                        occursin("lies outside the domain", sprint(showerror, e))
-                end
+                refused(f) =
+                    try
+                        assemble(form(X, X, f))
+                        false
+                    catch e
+                        e isa ArgumentError &&
+                            occursin("lies outside the domain", sprint(showerror, e))
+                    end
                 @test refused(normal)
                 # the walk visits the ghost points, where a mass term's weight is zero: the
                 # policy is not consulted there, so the default assembles, and every policy

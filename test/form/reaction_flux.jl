@@ -636,7 +636,7 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
         k = findfirst(startswith("reaction("), lines)
         @test k !== nothing
         @test length(lines) - k + 1 == 2
-        m =Module(:ReactionDoc)
+        m = Module(:ReactionDoc)
         Core.eval(m, :(using Bramble; using Bramble: reaction))
         Base.include_string(m, join(lines[1:(k - 1)], '\n'))
         for (line, side) in zip(lines[k:end], (:left, :right))
