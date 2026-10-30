@@ -70,7 +70,7 @@ chain differentiable.
   Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws
   from `accelerate_solve` exactly as `solver = :accelerate` would -- `:default` never silently
   falls back to `\\` after picking Accelerate. It picks Accelerate only for `Float32`,
-  `Float64` and their complex types (the element type of `A` and of the solution): an integer
+  `Float64` and their complex types (the element type of `A` and of the solution), so an integer
   `A` goes to `A \\ F`, or in the `mean_zero`/`gauge` solve to `lu`, which converts it to
   `Float64`, and a type that backend cannot factor (`BigFloat`) throws an `ArgumentError`
   naming it. `:suitesparse` (CHOLMOD/UMFPACK), `:spqr`
