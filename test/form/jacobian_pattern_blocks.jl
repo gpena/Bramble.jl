@@ -233,4 +233,37 @@ end
     end
 end
 
+# A sum whose summands interpolate on opposite sides walks each summand on its own
+# leaf, as `assemble` does (#1100): one leaf for the whole sum named rows of the wrong
+# space. Both orientations, on non-uniform meshes, with and without an operator
+# outside πₕ.
+@testset "fine/coarse πₕ sum (#1100)" begin
+    d2 = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+    nu(n) = collect(range(0.0, 1.0; length = n)) .^ 1.3
+    Mc = mesh(d2, (5, 3), (true, true))
+    Mf = mesh(d2, (9, 5), (true, true))
+    Bramble.change_points!(Mc, (nu(5), nu(3)))
+    Bramble.change_points!(Mf, (nu(9), nu(5)))
+    Wc = gridspace(Mc)
+    Wf = gridspace(Mf)
+    # Each summand alone is one unit on its own leaf already, so the sum's pattern is
+    # their union; it must also hold every entry `assemble` writes.
+    second = (u, v) -> innerₕ(u, πₕ(v))
+    firsts = (
+        ("⟨πₕu, v⟩ + ⟨u, πₕv⟩", (u, v) -> innerₕ(πₕ(u), v)),
+        ("⟨D₋ₓπₕu, v⟩ + ⟨u, πₕv⟩", (u, v) -> innerₕ(D₋ₓ(πₕ(u)), v))
+    )
+    @testset "$name, $(ndofs(U)) → $(ndofs(V))" for (name, first) in firsts,
+        (U, V) in ((Wc, Wf), (Wf, Wc))
+
+        a = form(U, V, (u, v) -> first(u, v) + second(u, v))
+        P = jacobian_pattern(a)
+        @test size(P) == (ndofs(V), ndofs(U))
+        @test P == (jacobian_pattern(form(U, V, first)) .|
+                    jacobian_pattern(form(U, V, second)))
+        A = assemble(a)
+        @test all(I -> P[I], findall(!iszero, A))
+    end
+end
+
 end # module

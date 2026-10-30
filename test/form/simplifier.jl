@@ -1209,4 +1209,66 @@ end
     @test termwise(r, 8) ≈ 2.0 .* M((u, v) -> innerₕ(foldl(+, _terms8(u)), v(1)))
 end
 
+# Both sides of one product mixing components (gpena/Bramble.jl#1098). The trial side's gates
+# were nested in every piece of the test side, one generated body quadratic in the terms: a
+# form of 16 terms a side took 39 s to compile. The trial side is now split once, with one
+# gate per sum reading classes already bound, and each piece of the test side meets the split
+# without gates. Eight terms a side keep the test short; the counts below grow with them.
+_rt_both8(V, c) = form(V, V,
+    (u, v) -> innerₕ(c * foldl(+, _terms8(u)), 3 * foldl(+, _terms8(v))))
+_rt_both_rt(V, i, j) = form(V, V, (u, v) -> innerₕ(u(i) + u(j), v(i) + v(j)))
+_rt_left_rt(V, i, j) = form(V, V, (u, v) -> innerₕ(u(i) + u(j) + D₋ₓ(u(i)), v(1)))
+
+# How many statements of the lowered body of `f` for `types` name the global `name`.
+function _lowered_refs(f, types, name)
+    named(a) = a isa GlobalRef && a.name === name
+    code = only(code_lowered(f, types)).code
+    return count(st -> named(st) || (st isa Expr && any(named, st.args)), code)
+end
+
+_sum_terms(op::OperatorAdd) = _sum_terms(op.left_op) + _sum_terms(op.right_op)
+_sum_terms(op) = 1
+
+@testset "both-sides mixing, linear body (#1098)" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
+    Bramble.change_points!(Ωₕ, collect(range(0.0, 1.0; length = 8)) .^ 1.4)
+    W = gridspace(Ωₕ)
+    V = W^Val(3)
+    op = resolve_ast(innerₕ(2 * foldl(+, _terms8(trial_function(V))),
+        3 * foldl(+, _terms8(test_function(V)))))
+    left, right = simplify_ast(op.left_op), simplify_ast(op.right_op)
+    # One gate per sum of the test side in the product's body, one per sum of the trial side
+    # in its split, and none where the two meet; each reads bound classes rather than walking
+    # its subtree through `_mixes_components`.
+    T = (typeof(op), typeof(left), typeof(right))
+    @test _lowered_refs(Bramble._product_over_sums, T, :_MixedComponents) == 2 * 7
+    @test _lowered_refs(Bramble._product_over_sums, T, :_mixes_components) == 0
+    @test _lowered_refs(Bramble._mixing_split, Tuple{typeof(left)}, :_MixedComponents) == 2 * 7
+    @test _lowered_refs(Bramble._mixing_split, Tuple{typeof(left)}, :_mixes_components) == 0
+    ls = Bramble._mixing_split(left)
+    S = (typeof(op), typeof(ls), typeof(right.right_op))
+    @test _lowered_refs(Bramble._product_over_split, S, :_MixedComponents) == 0
+    @test _lowered_refs(Bramble._product_over_split, S, :_mixes_components) == 0
+
+    # A `Ref` coefficient: the tree around the literal indices is not a constant (#804).
+    c = Ref(2.0)
+    a = @inferred _rt_both8(V, c)
+    # 8 × 8 products, none merged: the pieces of both sides are single components.
+    @test _sum_terms(a.ast) == 64
+    # Against the form summed a trial term at a time: only the test side mixes in these.
+    M(f) = Matrix(assemble(form(V, V, f)))
+    sides = map(s -> M((u, v) -> innerₕ(c * s(u), 3 * foldl(+, _terms8(v)))),
+        ntuple(i -> u -> _terms8(u)[i], 8))
+    @test Matrix(assemble(a)) ≈ sum(sides)
+
+    # Run-time indices leave the gates to run time, and `form` infers the `Union` of the
+    # trees they may build, as before: a split held as a tuple widened it to one abstract type.
+    U(f) = Base.uniontypes(Base.infer_return_type(f, Tuple{typeof(V), Int, Int}))
+    @test length(U(_rt_both_rt)) == 2 && count(isconcretetype, U(_rt_both_rt)) == 1
+    @test length(U(_rt_left_rt)) == 3 && all(isconcretetype, U(_rt_left_rt))
+    @test Matrix(assemble(_rt_both_rt(V, 1, 2))) ≈
+          M((u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(1)) + innerₕ(u(1), v(2)) +
+                      innerₕ(u(2), v(2)))
+end
+
 end # module FormSimplifierTests

@@ -479,9 +479,10 @@ Override the grid coordinates in `Ωₕ`. Recalculates cached [`spacings`](@ref)
 unchanged, then replaces the mesh's [`Mesh1DState`](@ref) with one carrying the new version
 and the uniformity of the new points.
 
-The points must be finite, strictly increasing and at least one, and a collapsed mesh (a degenerate
-interval) takes a single point; anything else throws an `ArgumentError` naming the first
-offending point, before anything changes.
+The points must be finite, strictly increasing once converted to the mesh's element type
+and at least one, and a collapsed mesh (a degenerate interval) takes a single point;
+anything else throws an `ArgumentError` naming the first offending point, before anything
+changes.
 
 A new point count also rebuilds the `:boundary` and `:interior` markers (and the marker
 words assembly reads) for the new grid. A mesh carrying any other label has no domain here
@@ -527,7 +528,11 @@ function _set_points!(Ωₕ::Mesh1D, pts)
         "set_points!(Ωₕ, pts) was asked to change the point count of",
         "Build mesh(Ω, length(pts)) and call change_points!(Ωₕ, markers(Ω), pts) instead.")
 
-    _set_points_geometry!(Ωₕ, pts)
+    # The new state stores what `convert` returns; when that is the caller's own vector it
+    # is copied, so mutating `pts` later cannot move the mesh (gpena/Bramble.jl#983).
+    owned = convert(typeof(_st(Ωₕ).pts), pts)
+    owned === pts && (owned = copy(pts))
+    _set_points_geometry!(Ωₕ, owned)
     fresh_markers = MeshMarkers()
     _ensure_geometric_markers!(fresh_markers, Ωₕ)
     markers!(Ωₕ, fresh_markers)
@@ -536,11 +541,12 @@ end
 
 # Refuse, before any mutation, points `set_points!` would turn into a wrong geometry: no
 # points at all; several points on a collapsed mesh, whose spacings stay zero
-# (gpena/Bramble.jl#696); points that are not finite and strictly increasing, which give
-# negative weights and a wrong `locate_cell` (#698); points whose value, spacing
-# `x[k] - x[k-1]`, half-point `(x[k] + x[k-1]) * 0.5` or cell measure
-# `(h[k-1] + h[k]) * 0.5` overflows the storage eltype (#867). One O(n) scan of one host
-# copy at most, as the constructor. `MeshnD` calls it per axis before mutating any.
+# (gpena/Bramble.jl#696); points that are not finite and strictly increasing once
+# converted to `T`, which give negative or zero weights and a wrong `locate_cell` (#698,
+# #969); points whose value, spacing `x[k] - x[k-1]`, half-point `(x[k] + x[k-1]) * 0.5`
+# or cell measure `(h[k-1] + h[k]) * 0.5` overflows the storage eltype (#867). One O(n)
+# scan of one host copy at most, as the constructor. `MeshnD` calls it per axis before
+# mutating any.
 function _check_set_points(Ωₕ::Mesh1D, pts)
     n = length(pts)
     n == 0 && _throw_set_points_empty()
@@ -556,8 +562,8 @@ function _check_set_points(Ωₕ::Mesh1D, pts)
         xₖ = convert(T, x[k])
         isfinite(xₖ) || _throw_set_points_not_finite(k, xₖ)
         k > k₀ || continue
-        x[k] <= x[k - 1] && _throw_set_points_not_increasing(k, x)
         xₖ₋₁ = convert(T, x[k - 1])
+        xₖ <= xₖ₋₁ && _throw_set_points_not_increasing(k, xₖ, xₖ₋₁, T)
         hₖ = xₖ - xₖ₋₁
         isfinite(hₖ) || _throw_set_points_overflow("spacing", k, x, T)
         isfinite(convert(T, (xₖ + xₖ₋₁) * 0.5)) ||
@@ -591,9 +597,10 @@ end
     throw(ArgumentError(msg))
 end
 
-@noinline function _throw_set_points_not_increasing(k, x)
-    msg = "set_points! needs strictly increasing points, but point $k ($(x[k])) does " *
-          "not exceed point $(k - 1) ($(x[k - 1])); the mesh is left unchanged"
+@noinline function _throw_set_points_not_increasing(k, xₖ, xₖ₋₁, T)
+    msg = "set_points! needs points strictly increasing once stored as $T, but point " *
+          "$k, stored as $xₖ, does not exceed point $(k - 1), stored as $xₖ₋₁; the mesh " *
+          "is left unchanged"
     throw(ArgumentError(msg))
 end
 
@@ -1335,6 +1342,11 @@ function _mesh(
         a, b = extrema(set)
         _throw_spacing_overflow(n_points, a, b, eltype(pts))
     end
+    # A cell measure sums two finite half-spacings and overflows on its own (#970).
+    if !all(isfinite, half_spacings(mesh))
+        a, b = extrema(set)
+        _throw_cell_measure_overflow(n_points, a, b, eltype(pts))
+    end
 
     # Finally, apply the domain markers to the mesh points.
     set_markers!(mesh, markers; warn_marker_mismatch)
@@ -1350,6 +1362,12 @@ end
 @noinline function _throw_spacing_overflow(n, a, b, T)
     msg = "a mesh of $n points in [$a, $b] with eltype $T makes a spacing overflow " *
           "$T. Use a wider eltype"
+    throw(ArgumentError(msg))
+end
+
+@noinline function _throw_cell_measure_overflow(n, a, b, T)
+    msg = "a mesh of $n points in [$a, $b] with eltype $T makes a cell measure " *
+          "overflow $T. Use a wider eltype"
     throw(ArgumentError(msg))
 end
 

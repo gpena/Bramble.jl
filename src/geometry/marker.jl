@@ -369,7 +369,7 @@ end
     tuple_pairs = filter(p -> p.second isa _SymbolCollection, pairs)
 
     return map(p -> Marker(p.first, p.second), symbol_pairs),
-    map(p -> Marker(p.first, Set(p.second)), tuple_pairs)
+    map(p -> Marker(p.first, Set{Symbol}(p.second)), tuple_pairs)
 end
 
 # Construct DomainMarkers from label-identifier pairs, extracting symbol and tuple sets

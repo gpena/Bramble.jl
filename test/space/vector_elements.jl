@@ -15,6 +15,7 @@ using ..TestUtils: alloc_test, @test_allocs, _nonuniform_points
 using ..TestUtils: _Const, _x1, _x2, _x1_squared, _sin_x1
 
 _idx_read2(u, i, j) = u[CartesianIndex(i, j)]
+_reshape_read(u, i, j) = reshape(u)[i, j]
 _idx_read2_inb(u, i, j) = @inbounds u[CartesianIndex(i, j)]
 _idx_write2!(u, val, i, j) = (u[CartesianIndex(i, j)] = val; u)
 _idx_write2_inb!(u, val, i, j) = (@inbounds u[CartesianIndex(i, j)] = val; u)
@@ -268,6 +269,19 @@ end
         @test_allocs _idx_read_ci_inb(u_2d, CartesianIndex(2, 3))
         @test_allocs _idx_write_ci!(u_2d, 5.0, CartesianIndex(2, 3))
         @test_allocs _idx_write_ci_inb!(u_2d, 5.0, CartesianIndex(2, 3))
+        @test_allocs _reshape_read(u_2d, 2, 3)
+
+        # A wrong-length element (the constructor does not size it, #968): a grid coordinate
+        # past the coefficient vector is out of bounds, and `reshape` refuses the grid shape.
+        u_short = VectorElement(zeros(3), W_2d)
+        @test checkbounds(Bool, u_short, CartesianIndex(3, 1))
+        @test !checkbounds(Bool, u_short, CartesianIndex(4, 1))
+        @test !checkbounds(Bool, u_short, CartesianIndex(5, 6))
+        @test !checkbounds(Bool, u_short, CartesianIndex(6, 1))
+        @test_throws BoundsError u_short[CartesianIndex(4, 1)]
+        @test_throws BoundsError (u_short[CartesianIndex(5, 6)] = 1.0)
+        @test_throws DimensionMismatch reshape(u_short)
+        @test_throws DimensionMismatch reshape(VectorElement(zeros(31), W_2d))
 
         if WITH_3D_TESTS
             # 3D Multidimensional & Cartesian indexing (#155)

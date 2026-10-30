@@ -117,6 +117,35 @@ using ..TestUtils: @test_allocs, WITH_3D_TESTS
         end
     end
 
+    @testset "a ghost-space field is refused (#1097)" begin
+        # its values are one per degree of freedom, the walk reads one per padded point
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
+        S = gridspace(Ω; ghosts = :boundary)
+        e = element(S)
+        e .= 1.0
+        ec = element(S × S)
+        ec .= 1.0
+        for w in (e, (e, e), ec)
+            err = try
+                form(S, S, skew_symmetric(w))
+                nothing
+            catch x
+                x
+            end
+            @test err isa ArgumentError
+            @test occursin("padded_space", sprint(showerror, err))
+        end
+        # the padded space's element is the spelling the refusal names: Eᵀ A_pad E
+        P = Bramble.padded_space(S)
+        c = Rₕ(P, x -> 1.0 + x[1])
+        E, _ = Bramble.closure(S)
+        M = Matrix(assemble(form(S, S, skew_symmetric(c))))
+        Mp = Matrix(assemble(form(P, P, skew_symmetric(c))))
+        @test size(M) == (ndofs(S), ndofs(S))
+        @test M ≈ E' * Mp * E
+        @test norm(M) > 0
+    end
+
     @testset "It composes with a symmetric term" begin
         # added to a diffusion term, the symmetric part of the sum is the diffusion alone:
         # the convective part contributes nothing to it, which is the whole point

@@ -358,6 +358,17 @@ using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask, _Const, _x1
             @test points(Ω(1)) == good_x
             @test points(Ω(2)) == [0.0, 0.25, 0.5, 1.0]
             @test Bramble._mesh_version(Ω) > v0
+            # strict increase is judged in the storage eltype: 0.5 + 1e-9 is 0.5 in
+            # Float32, a zero spacing on axis 1, refused before axis 2 moves (#969)
+            I32 = interval(0.0f0, 1.0f0)
+            Ω32 = mesh(domain(I32 × I32), (4, 4), (true, true); backend = backend(Float32))
+            before = map(i -> copy(points(Ω32(i))), (1, 2))
+            v0 = Bramble._mesh_version(Ω32)
+            @test_throws "strictly increasing once stored as Float32" change_points!(Ω32,
+                ([0.0, 0.5, 0.5 + 1.0e-9, 1.0], [0.0, 0.3, 0.6, 1.0]))
+            @test points(Ω32(1)) == before[1]
+            @test points(Ω32(2)) == before[2]
+            @test Bramble._mesh_version(Ω32) == v0
             # three axes, the refusal on the last one (3D meshes: slow, gpena/Bramble.jl#650)
             if WITH_3D_TESTS
                 Ω3 = mesh(domain(I × I × I), (3, 4, 5), (false, false, false))

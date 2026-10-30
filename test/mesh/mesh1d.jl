@@ -150,6 +150,19 @@ import Base: diff
             Ω = create_test_domain(-1.0e308, 1.0e308)
             @test_throws ArgumentError mesh(Ω, 2, false)
             @test_throws "spacing overflow Float64" mesh(Ω, 2, false)
+            # The 3-point uniform mesh is refused too, by the uniform-fill check (#970).
+            @test_throws ArgumentError mesh(Ω, 3)
+        end
+
+        @testset "Cell measure overflow" begin
+            # Points, half-points and spacings finite in Float32, but the middle cell
+            # measure (h₂ + h₃) / 2 overflows in the sum 3f38 + 3f38 (#970).
+            Ω = create_test_domain(-3.0e38, 3.0e38)
+            @test_throws ArgumentError mesh(Ω, 3; backend = backend(Float32))
+            @test_throws "cell measure overflow Float32" mesh(
+                Ω, 3; backend = backend(Float32))
+            # Float64 storage holds the same cell measure.
+            @test all(isfinite, half_spacings(mesh(Ω, 3)))
         end
 
         @testset "Storage-eltype collapse" begin
@@ -202,7 +215,7 @@ import Base: diff
             set_points!(Ωₕ, new_pts)
             set_indices!(Ωₕ, new_indices) # Need to update indices if npts changes via set_points!
 
-            @test points(Ωₕ) === new_pts # Check identity for mutable struct
+            @test points(Ωₕ) == new_pts
             @test npoints(Ωₕ) == 4
             @test indices(Ωₕ) == new_indices
 
@@ -226,6 +239,32 @@ import Base: diff
             # the same count only moves the points, so it needs no domain
             set_points!(Ωc, [0.0, 0.3, 1.0])
             @test points(Ωc) == [0.0, 0.3, 1.0]
+        end
+
+        # #983: a new point count stored the caller's vector, so editing it moved the mesh
+        @testset "set_points! does not alias" begin
+            Ωₕ = mesh(create_test_domain(0.0, 1.0), 5, true; backend = backend())
+            x = collect(range(0.0, 1.0; length = 7))
+            x0 = copy(x)
+            set_points!(Ωₕ, x)
+            @test points(Ωₕ) !== x
+            x[2] = 0.9
+            @test points(Ωₕ) == x0
+            # the next resize must not write into the vector stored before it
+            set_points!(Ωₕ, collect(range(0.0, 1.0; length = 9)) .^ 2)
+            @test x[2] == 0.9 && x[3:end] == x0[3:end]
+            # same count: copied in place
+            y = collect(range(0.0, 1.0; length = 9))
+            set_points!(Ωₕ, y)
+            y[2] = 0.9
+            @test points(Ωₕ)[2] == 0.125
+            # a converting call (Float32 into Float64 storage) stores a fresh vector
+            set_points!(Ωₕ, Float32[0, 0.25, 1])
+            @test points(Ωₕ) == [0.0, 0.25, 1.0]
+            # change_points! refuses a count change, so it cannot store `pts` either
+            z = [0.0, 0.5, 1.0, 1.5]
+            @test_throws DimensionMismatch change_points!(Ωₕ, z)
+            @test npoints(Ωₕ) == 3
         end
 
         @testset "set_points! refuses invalid points" begin
@@ -268,6 +307,35 @@ import Base: diff
             # a point that overflows only on conversion, even alone
             @test_throws "point 1 is Inf" set_points!(Ω32, [1.0e39])
             @test points(Ω32) == Float32[0, 1]
+
+            # Strict increase is judged on the stored values too: 0.5 and 0.5 + 1e-9 are
+            # distinct in Float64 but one Float32, a zero spacing (gpena/Bramble.jl#969).
+            # The message shows the stored values, never the raw 0.500000001.
+            Ω32₄ = mesh(create_test_domain(0.0f0, 1.0f0), 4, true;
+                backend = backend(Float32))
+            p32 = copy(points(Ω32₄))
+            v32 = Bramble._mesh_version(Ω32₄)
+            tie32 = [0.0, 0.5, 0.5 + 1.0e-9, 1.0]
+            @test Float32(tie32[3]) == Float32(tie32[2])
+            err = try
+                set_points!(Ω32₄, tie32)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            msg = sprint(showerror, err)
+            @test occursin("strictly increasing once stored as Float32", msg)
+            @test occursin("point 3, stored as 0.5", msg)
+            @test !occursin("0.500000001", msg)
+            @test points(Ω32₄) == p32
+            @test Bramble._mesh_version(Ω32₄) == v32
+            @test_throws "point 3, stored as 0.5" change_points!(Ω32₄, tie32)
+            @test points(Ω32₄) == p32
+            # the same list is accepted on a Float64 mesh, where it stays increasing
+            Ω64₄ = mesh(create_test_domain(0.0, 1.0), 4, true; backend = backend())
+            set_points!(Ω64₄, tie32)
+            @test points(Ω64₄) == tie32
 
             # The cell measure is checked as the mesh computes it, (h₁ + h₂) * 0.5: here
             # x₃ - x₁ is floatmax, but the rounded h₁ + h₂ ties up to Inf.
