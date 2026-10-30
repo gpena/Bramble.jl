@@ -71,6 +71,8 @@ using Kronecker: Kronecker
     #   in a field or method signature, none of them exported.
     # - `trial_space` (BrambleSciMLExt): read back off a `BilinearForm` to unwrap a
     #   `LinearSolution` into a `VectorElement` over the right space.
+    # - `semidiscretize_rhs` (BrambleSciMLExt): the `(du, u, p, t)` residual the extension
+    #   warms with `NullParameters`; not declared `public` in Bramble.
     # - `_vtk_axes`, `_vtk_data` (BrambleVTKExt, BrambleVTKSciMLExt): reshape a mesh/field
     #   into what `vtk_grid`/`vtk[name] = ...` want. Neither touches a WriteVTK type, so both
     #   live in core `Bramble` (src/exporters/vtk_export.jl) rather than in either extension,
@@ -223,6 +225,7 @@ using Kronecker: Kronecker
                 # the same "internal type in a field signature" shape as `BilinearForm` above.
                 :_DeviceSparseMirror,
                 :trial_space,
+                :semidiscretize_rhs,
                 :_vtk_axes,
                 :_vtk_data,
                 :AbstractSpaceType,
