@@ -528,7 +528,11 @@ function _set_points!(Ωₕ::Mesh1D, pts)
         "set_points!(Ωₕ, pts) was asked to change the point count of",
         "Build mesh(Ω, length(pts)) and call change_points!(Ωₕ, markers(Ω), pts) instead.")
 
-    _set_points_geometry!(Ωₕ, pts)
+    # The new state stores what `convert` returns; when that is the caller's own vector it
+    # is copied, so mutating `pts` later cannot move the mesh (gpena/Bramble.jl#983).
+    owned = convert(typeof(_st(Ωₕ).pts), pts)
+    owned === pts && (owned = copy(pts))
+    _set_points_geometry!(Ωₕ, owned)
     fresh_markers = MeshMarkers()
     _ensure_geometric_markers!(fresh_markers, Ωₕ)
     markers!(Ωₕ, fresh_markers)

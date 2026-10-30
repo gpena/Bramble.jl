@@ -202,7 +202,7 @@ import Base: diff
             set_points!(Ωₕ, new_pts)
             set_indices!(Ωₕ, new_indices) # Need to update indices if npts changes via set_points!
 
-            @test points(Ωₕ) === new_pts # Check identity for mutable struct
+            @test points(Ωₕ) == new_pts
             @test npoints(Ωₕ) == 4
             @test indices(Ωₕ) == new_indices
 
@@ -226,6 +226,32 @@ import Base: diff
             # the same count only moves the points, so it needs no domain
             set_points!(Ωc, [0.0, 0.3, 1.0])
             @test points(Ωc) == [0.0, 0.3, 1.0]
+        end
+
+        # #983: a new point count stored the caller's vector, so editing it moved the mesh
+        @testset "set_points! does not alias" begin
+            Ωₕ = mesh(create_test_domain(0.0, 1.0), 5, true; backend = backend())
+            x = collect(range(0.0, 1.0; length = 7))
+            x0 = copy(x)
+            set_points!(Ωₕ, x)
+            @test points(Ωₕ) !== x
+            x[2] = 0.9
+            @test points(Ωₕ) == x0
+            # the next resize must not write into the vector stored before it
+            set_points!(Ωₕ, collect(range(0.0, 1.0; length = 9)) .^ 2)
+            @test x[2] == 0.9 && x[3:end] == x0[3:end]
+            # same count: copied in place
+            y = collect(range(0.0, 1.0; length = 9))
+            set_points!(Ωₕ, y)
+            y[2] = 0.9
+            @test points(Ωₕ)[2] == 0.125
+            # a converting call (Float32 into Float64 storage) stores a fresh vector
+            set_points!(Ωₕ, Float32[0, 0.25, 1])
+            @test points(Ωₕ) == [0.0, 0.25, 1.0]
+            # change_points! refuses a count change, so it cannot store `pts` either
+            z = [0.0, 0.5, 1.0, 1.5]
+            @test_throws DimensionMismatch change_points!(Ωₕ, z)
+            @test npoints(Ωₕ) == 3
         end
 
         @testset "set_points! refuses invalid points" begin

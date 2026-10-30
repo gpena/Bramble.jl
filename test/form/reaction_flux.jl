@@ -12,8 +12,9 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
 # is ≈ 0 on interior rows and, on a constrained row, exactly the discrete flux there.
 #
 # Sign/scaling convention (see src/postprocessing/reaction.jl): `reaction` returns `-r` summed over
-# the marker -- positive is flux leaving the domain along the outward normal, so summing
-# over every boundary marker recovers the net source `∫_Ω f` directly, no rescaling.
+# the marker -- positive is flux leaving the domain along the outward normal, so one call
+# over `:boundary` or a tuple of side markers recovers the net source `∫_Ω f` directly, no
+# rescaling. Separate per-side calls double-count the corners the sides share.
 #
 # Manufactured problem used throughout: -Δu = f, u = 0 on ∂Ω, u = sin(πx) (1D) or
 # sin(πx)sin(πy) (2D) / sin(πx)sin(πy)sin(πz) (3D). Physical outward flux q·n = -∂u/∂n is
@@ -66,7 +67,30 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
 
         total_src = sum(assemble(l))
         @test reaction(a, l, uₕ; marker = :boundary) ≈ total_src atol = 1e-9
-        @test sum(reaction(a, l, uₕ; marker = s) for s in sides) ≈ total_src atol = 1e-9
+        @test reaction(a, l, uₕ; marker = sides) ≈ total_src atol = 1e-9
+    end
+
+    @testset "Tuple of sides counts corners once" begin
+        # f = 1, zero data: every corner residual is h²/4, nonzero, so per-side sums that
+        # double-count a shared corner are told apart from the tuple form.
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ω = domain(S, :xmin => :xmin, :xmax => :xmax, :ymin => :ymin, :ymax => :ymax)
+        sides = (:xmin, :xmax, :ymin, :ymax)
+        Wₕ = gridspace(mesh(Ω, (21, 21), (true, true)))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> 1.0), v))
+        A, F = assemble(a, l; dirichlet = :boundary => (x -> 0.0))
+        uₕ = element(Wₕ)
+        uₕ .= A \ F
+
+        total_src = sum(assemble(l))
+        @test reaction(a, l, uₕ; marker = sides) ≈ total_src atol = 1e-9
+        @test reaction(a, l, uₕ; marker = :boundary) ≈ total_src atol = 1e-9
+
+        # Each of the 4 corners is on two sides, so the per-side sum counts it twice.
+        per_side = sum(reaction(a, l, uₕ; marker = s) for s in sides)
+        h = 1 / 20
+        @test per_side ≈ total_src + 4 * h^2 / 4 atol = 1e-9
     end
 
     # The net flux exists and matches a manufactured solution. 3D only: runs nightly (`slow`).
