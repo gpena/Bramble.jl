@@ -14,7 +14,7 @@ using Bramble
 import Bramble
 using Bramble: change_points!, OperatorScale, restrict_to, D₋ₓ
 using LinearAlgebra: issymmetric
-using ..TestUtils: WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS, OPTIMIZED, alloc_test
 
 grading(n, a) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * a)
 
@@ -187,6 +187,23 @@ end
         e = @test_throws ArgumentError mk(C, S, wg)
         @test occursin("wₕ(i) * u(i)", sprint(showerror, e.value))
     end
+end
+
+# `form` with a grid-function coefficient, and a linear form whose grid source meets a
+# scaled two-component sum, allocate as on main (160 B and 0 B, at `-O1` up): the sign
+# test `_sign_clash` (simplifier.jl) once took them to 672 B and 1216 B (#978).
+grid_coefficient_form(W, c) = form(W, W, (u, v) -> innerₕ(c * u, v))
+grid_source_form(V, g) = form(V, v -> innerₕ(g, 3.0 * (v(1) + v(2))))
+least_allocs(f, args...) = minimum(alloc_test(f, args...) for _ in 1:5)
+
+@testset "Form construction allocations (#978)" begin
+    Ω = mesh(domain(interval(0.0, 1.0)), 9, false)
+    change_points!(Ω, grading(9, 1))
+    W = gridspace(Ω)
+    c = Rₕ(W, x -> 1.0 + x[1])
+    g = Rₕ(W, x -> 2.0)
+    @test !OPTIMIZED || least_allocs(grid_coefficient_form, W, c) <= 160
+    @test !OPTIMIZED || least_allocs(grid_source_form, W × W, g) == 0
 end
 
 @testset "2D strain, 1 // 2 and 0.5 (#912)" begin

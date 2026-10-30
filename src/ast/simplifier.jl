@@ -135,15 +135,22 @@ end
 # `-1 * Complex{UInt}(0, 2)` multiplies part by part in `UInt` and wraps silently. Nor do
 # two integer `Complex`es fold when one has `Unsigned` parts, because their product
 # subtracts and `im * Complex{UInt}(0, 2)` wraps too. A `Bool` part is neither. Left nested,
-# each converts to the space's element type on its own when assembled.
+# each converts to the space's element type on its own when assembled. Decided by dispatch
+# on the types, so it compiles to a constant: as `isa` tests on the values, the `Union`s
+# were built at run time and `form` allocated 512 B more for one grid-function coefficient.
 @inline _folds(a, b) = _folds(a) && _folds(b) && !_sign_clash(a, b)
-@inline _unsigned_parts(c) = c isa Union{Unsigned, Complex{<:Unsigned}}
-@inline _signed_parts(c) = c isa Union{Signed, _MinusOne, Complex{<:Signed}}
-@inline function _sign_clash(a, b)
-    _unsigned_parts(a) && _signed_parts(b) && return true
-    _signed_parts(a) && _unsigned_parts(b) && return true
-    return a isa Complex{<:Integer} && b isa Complex{<:Integer} &&
-           (_unsigned_parts(a) || _unsigned_parts(b))
+@inline _unsigned_parts(::Type) = false
+@inline _unsigned_parts(::Type{<:Union{Unsigned, Complex{<:Unsigned}}}) = true
+@inline _signed_parts(::Type) = false
+@inline _signed_parts(::Type{<:Union{Signed, _MinusOne, Complex{<:Signed}}}) = true
+@inline _integer_complex(::Type) = false
+@inline _integer_complex(::Type{<:Complex{<:Integer}}) = true
+@inline _sign_clash(a, b) = _sign_clash_types(typeof(a), typeof(b))
+@inline function _sign_clash_types(A::Type, B::Type)
+    _unsigned_parts(A) && _signed_parts(B) && return true
+    _signed_parts(A) && _unsigned_parts(B) && return true
+    return _integer_complex(A) && _integer_complex(B) &&
+           (_unsigned_parts(A) || _unsigned_parts(B))
 end
 
 # Two coefficients just lifted out of the two arguments of one inner product, wrapped around

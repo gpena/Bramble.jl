@@ -38,11 +38,12 @@ const _RankScalar = Union{Number, Base.RefValue{<:Number}, _MinusOne}
     _scale_mul(c, r[]), rs...)
 
 # Two constant factors of `σ` as one, `a * b` unless a sign meets an unsigned factor
-# (`_sign_clash`, simplifier.jl): that product is taken in the unsigned type and wraps, so
-# both convert first to a signed integer type at least as wide as `Int` and multiply checked.
-# The types alone decide, so `σ`'s type still follows from its factors' types.
+# (`_sign_clash_types`, simplifier.jl): that product is taken in the unsigned type and wraps,
+# so both convert first to a signed integer type at least as wide as `Int` and multiply
+# checked. The types alone decide, by dispatch, so the test compiles to a constant and
+# `assemble!` allocates nothing for it, and `σ`'s type still follows from its factors' types.
 @inline function _scale_mul(a, b)
-    _clashes(a, b) || return a * b
+    _sign_clash_types(typeof(a), typeof(b)) || return a * b
     S = _clash_type(a, b)
     return _fold_mul(_as_signed(S, a), _as_signed(S, b))
 end
@@ -50,22 +51,6 @@ end
     signed(promote_type(real(typeof(a)), real(typeof(b)))))
 @inline _as_signed(::Type{S}, x::Real) where {S} = S(x)
 @inline _as_signed(::Type{S}, x::Complex) where {S} = Complex{S}(x)
-# `_sign_clash`'s rule (simplifier.jl) by dispatch on the two types, so it compiles to a
-# constant: called in `assemble!`, `_sign_clash`'s `isa` tests build their `Union`s at run
-# time and allocate. A sign or a `Signed` part clashes with an `Unsigned` part, and two
-# integer `Complex`es clash when either has `Unsigned` parts; a `Bool` part is neither.
-@inline _clashes(a, b) = _clash_types(typeof(a), typeof(b))
-@inline function _clash_types(A::Type, B::Type)
-    _unsigned_type(A) && _signed_type(B) && return true
-    _signed_type(A) && _unsigned_type(B) && return true
-    return _complex_int(A) && _complex_int(B) && (_unsigned_type(A) || _unsigned_type(B))
-end
-@inline _unsigned_type(::Type) = false
-@inline _unsigned_type(::Type{<:Union{Unsigned, Complex{<:Unsigned}}}) = true
-@inline _signed_type(::Type) = false
-@inline _signed_type(::Type{<:Union{Signed, _MinusOne, Complex{<:Signed}}}) = true
-@inline _complex_int(::Type) = false
-@inline _complex_int(::Type{<:Complex{<:Integer}}) = true
 
 # The start of each side's `σ` before any factor is peeled: the `1` of an unscaled side, a
 # type of its own so that `1` never counts as a sign beside an unsigned factor.
