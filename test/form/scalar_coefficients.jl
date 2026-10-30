@@ -175,12 +175,13 @@ end
     @testset "Constrained composite, $name" for (name, mk) in (
         "on a component" => (C, S, wg) -> form(C, C, (u, v) -> innerₕ(wg * u(2), v(2))),
         "as a thunk" => (C, S, wg) -> form(C, C,
-            (u, v) -> innerₕ((() -> wg) * u(2), v(2))),
+        (u, v) -> innerₕ((() -> wg) * u(2), v(2))),
         "in a linear form" => (C, S, wg) -> form(C, v -> innerₕ(1.0, wg * v(1))),
         "on its leaf space" => (C, S, wg) -> form(S, S, (u, v) -> innerₕ(wg * u, v)))
         S = gridspace(mesh(graded_space((7, 8))); ghosts = (:xmin, :xmax))
-        C = constrained(S × S, u -> (:xmin => ∂ₙ(u(1)) => 0.0, :xmax => ∂ₙ(u(1)) => 0.0,
-            :xmin => ∂ₙ(u(2)) => 0.0, :xmax => ∂ₙ(u(2)) => 0.0))
+        C = constrained(S × S,
+            u -> (:xmin => ∂ₙ(u(1)) => 0.0, :xmax => ∂ₙ(u(1)) => 0.0,
+                :xmin => ∂ₙ(u(2)) => 0.0, :xmax => ∂ₙ(u(2)) => 0.0))
         wg = element(C)
         wg .= 1.0
         e = @test_throws ArgumentError mk(C, S, wg)
