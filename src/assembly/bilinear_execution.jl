@@ -218,13 +218,31 @@ function _replay_bilinear_core!(
     end
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
-    # `host_weights` once per fill for every summand, never once per unit: on a device leaf
-    # it rebuilds a host mesh and weights, which per unit made a multi-term refill slower than
-    # the search it replaces. A no-op on a host leaf.
-    sp = _restrict_walk(host_weights(_walked_leaf(bound, trial_space, test_space)), walk)
-    _replay_summands!(mode, A, bound, sp, segments, 0, α)
+    # `host_weights` once per fill for each leaf the summands walk, never once per unit: on a
+    # device leaf it rebuilds a host mesh and weights, which per unit made a multi-term refill
+    # slower than the search it replaces. A no-op on a host leaf.
+    trs, tes = _summand_leaves(
+        s -> _restrict_walk(host_weights(s), walk), bound, trial_space, test_space)
+    _replay_summands!(mode, A, bound, trs, tes, segments, 0, α)
     return nothing
 end
+
+# The leaves a scalar sum's summands walk, each prepared by `prep` once: the trial leaf if
+# some summand interpolates on the test side, the test leaf if some summand does not, and
+# `nothing` for a leaf no summand walks. Each summand then takes its own (`_walked_leaf`), as
+# a block unit does: one leaf for the whole sum walked `⟨πₕu, v⟩ + ⟨u, πₕv⟩` between a fine
+# and a coarse space on the fine grid, rows past the coarse space's count (#398). A sum
+# whose summands agree prepares the one leaf it prepared before. Decided by type alone.
+@inline function _summand_leaves(prep::P, bound, trial_space, test_space) where {P}
+    trs = _has_test_interp(bound) ? prep(trial_space) : nothing
+    tes = _all_test_interp(bound) ? nothing : prep(test_space)
+    return trs, tes
+end
+
+# Whether every summand (split at `OperatorAdd`, as `_has_test_interp` recurses) interpolates
+# on the test side.
+_all_test_interp(op::OperatorAdd) = _all_test_interp(op.left_op) && _all_test_interp(op.right_op)
+_all_test_interp(op) = _has_test_interp(op)
 
 # --- The (term, block) units, in segment order ---------------------------------------- #
 #
@@ -260,23 +278,23 @@ function _foreach_unit(f::F, trial_space, test_space, ast) where {F}
     end
     bound = _bind_interp_spaces(ast, trial_space, test_space)
     _check_block_meshes(bound, trial_space, test_space)
-    sp = _walked_leaf(bound, trial_space, test_space)
-    _foreach_summand_unit(f, bound, sp)
+    trs, tes = _summand_leaves(identity, bound, trial_space, test_space)
+    _foreach_summand_unit(f, bound, trs, tes)
     return nothing
 end
 
-@noinline function _foreach_summand_unit(f::F, op::OperatorAdd, sp) where {F}
+@noinline function _foreach_summand_unit(f::F, op::OperatorAdd, trs, tes) where {F}
     _foldl_pairs(
-        (_, t) -> _foreach_summand_unit(f, t, sp),
-        (_, t1, t2) -> f(_bare_product(t1), sp, 0, 0, 0, 0, 0),
+        (_, t) -> _foreach_summand_unit(f, t, trs, tes),
+        (_, t1, t2) -> f(_bare_product(t1), _walked_leaf(t1, trs, tes), 0, 0, 0, 0, 0),
         nothing,
         _summands(op)
     )
     return nothing
 end
 
-@noinline function _foreach_summand_unit(f::F, term::TERM, sp) where {F, TERM}
-    f(term, sp, 0, 0, 0, 0, -1)
+@noinline function _foreach_summand_unit(f::F, term::TERM, trs, tes) where {F, TERM}
+    f(term, _walked_leaf(term, trs, tes), 0, 0, 0, 0, -1)
     return nothing
 end
 
@@ -322,23 +340,24 @@ end
 # `mode` reaches only the leaves (`_replay_unit!`/`_replay_pair_unit!`), so the serial and
 # the threaded replay match units to segments by the very same walk.
 @noinline function _replay_summands!(
-        mode::_ReplayMode, A::AbstractMatrix, op::OperatorAdd, sp,
+        mode::_ReplayMode, A::AbstractMatrix, op::OperatorAdd, trs, tes,
         segments::Vector{Segment{D}}, next::Int, α
 ) where {D}
     return _foldl_pairs(
-        (n, t) -> _replay_summands!(mode, A, t, sp, segments, n, α),
-        (n, t1, t2) -> _replay_pair!(mode, A, t1, t2, sp, segments, n, α),
+        (n, t) -> _replay_summands!(mode, A, t, trs, tes, segments, n, α),
+        (n, t1, t2) -> _replay_pair!(
+            mode, A, t1, t2, _walked_leaf(t1, trs, tes), segments, n, α),
         next,
         _summands(op)
     )
 end
 
 @noinline function _replay_summands!(
-        mode::_ReplayMode, A::AbstractMatrix, term::TERM, sp,
+        mode::_ReplayMode, A::AbstractMatrix, term::TERM, trs, tes,
         segments::Vector{Segment{D}}, next::Int, α
 ) where {TERM, D}
     next += 1
-    _replay_unit!(mode, A, term, sp, 0, 0, segments[next], α)
+    _replay_unit!(mode, A, term, _walked_leaf(term, trs, tes), 0, 0, segments[next], α)
     return next
 end
 

@@ -6,8 +6,8 @@
 # they take grid functions and compute a **number**. CONTEXT.md draws that line at the
 # domain level: a form is symbolic, a grid function is data.
 #
-# What keeps the two families from colliding is the `NTuple{N,<:Tuple}` restriction on the
-# tuple overload below: a tuple of grid functions is not a tuple of tuples, so it cannot
+# What keeps the two families from colliding is the `Tuple{Vararg{Tuple}}` restriction on
+# the tuple overload below: a tuple of grid functions is not a tuple of tuples, so it cannot
 # reach this file's method. Widen it, or add a `VectorElement`-shaped overload here, and
 # the collision is real. The constraint is asserted in `test/form/inner_products.jl`,
 # testset "Symbolic and numeric families stay apart" (gpena/Bramble.jl#60), rather than
@@ -365,6 +365,14 @@ This applies specifically when `left` is a `LazyOp`: a bare `Function`/`Number`/
 is unconditionally a source, so those overloads build a `LinearProduct` directly. When
 `left` arrives already wrapped (`πₕ(uₕ)` or `D₋ₓ(πₕ(uₕ))`), this check ensures the correct
 linear AST node is constructed.
+
+A composite `VectorElement` source (or a tuple of sources, one per component) with an
+unindexed composite test function `v` expands per component: `innerₕ(fₕ, v)` is
+`Σᵢ innerₕ(fₕ(i), v(i))`. An indexed `v(i)` in that position throws an `ArgumentError`, as
+it names one component while the call sums over all of them. For a single component write
+`innerₕ(fₕ(i), v(i))`. `inner₊`, `inner₊ₓ`, `inner₊ᵧ` and `inner₊₂` take both the
+`VectorElement` and the tuple source; [`inner_Γ`](@ref) takes the composite `VectorElement`
+source only. All of them refuse the indexed `v(i)`.
 
 `markers` restricts the assembled term to the union of the labelled regions: a mask on
 which grid points it contributes to at all.
@@ -725,7 +733,7 @@ rather than an error the caller can read.
 end
 
 """
-    inner₊(left::NTuple{N,<:Tuple}, right::NTuple{N,<:Tuple}) where N
+    inner₊(left::Tuple{Vararg{Tuple}}, right::Tuple{Vararg{Tuple}})
 
 Vector-field `inner₊`: sums per-component inner products.
 Used when `left` and `right` are **tuples of gradient tuples**, e.g.
@@ -738,7 +746,10 @@ There `∇ₕ` returns rows labelled by component (`Bramble._GradientRows`), and
 records those labels, so a coefficient captured over it leaves `form` one concrete type
 in 3D as well. One side labelled and the other a plain tuple takes this method.
 
-This overload is intentionally restricted to `NTuple{N,<:Tuple}` so it does **not**
+The rows may differ in type (`∇ₕ((u(1) + u(2), u(2)))`), but both sides need the same
+number of them, or it throws a `DimensionMismatch` naming both counts.
+
+This overload is intentionally restricted to tuples of tuples so it does **not**
 interfere with `inner₊(NTuple{D,VectorElement}, NTuple{D,VectorElement})` handled by
 the `@generated` method in `inner_product.jl`. That restriction is what separates this
 file's symbolic family from that file's numeric one; it is asserted in
@@ -748,11 +759,21 @@ file's symbolic family from that file's numeric one; it is asserted in
 [`innerₕ`](@ref).
 """
 function inner₊(
-        left::NTuple{N, <:Tuple},
-        right::NTuple{N, <:Tuple};
+        left::Tuple{Vararg{Tuple}},
+        right::Tuple{Vararg{Tuple}};
         markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
-) where {N, M}
+) where {M}
+    length(left) == length(right) || _inner₊_row_count_mismatch(length(left), length(right))
     return _restrict_by_markers(foldl(+, map(inner₊, left, right)), markers)
+end
+
+@noinline function _inner₊_row_count_mismatch(nl::Int, nr::Int)
+    throw(
+        DimensionMismatch(
+        "inner₊ of tuples of gradient tuples needs as many rows on each side, got " *
+        "$nl on the left and $nr on the right.",
+    ),
+    )
 end
 
 # The gradients of a composite trial and test function (difference.jl): the sum above,

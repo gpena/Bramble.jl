@@ -6,6 +6,7 @@ using Bramble: AbstractMatrixFreePreconditioner, JacobiPreconditioner, Chebyshev
                restrict_to, jumpₓ, M₊ₓ, D₋ₓ, Dcₓ, CpuSerial, CpuThreaded
 using LinearAlgebra: LinearAlgebra, ldiv!, diag, norm, cond, Symmetric, eigmax, isposdef
 using LinearSolve: LinearProblem, KrylovJL_CG, solve
+using AlgebraicMultigrid: AlgebraicMultigrid
 using Random
 using ..TestUtils: TEST_DIMS, WITH_3D_TESTS, ZeroBasedVector
 
@@ -331,6 +332,24 @@ end
                 @test 2 * i1 <= i0
             end
         end
+    end
+end
+
+# With the extension loaded, an argument it does not take (not an `AbstractMatrix`) must get
+# the unsupported-type error, as ILU's stubs give, not "requires AlgebraicMultigrid.jl".
+@testset "AMG stubs with the extension loaded" begin
+    @test Base.get_extension(Bramble, :BrambleAlgebraicMultigridExt) !== nothing
+    for f in (Bramble._amg_preconditioner, Bramble._amg_operator)
+        e = try
+            f(nothing)
+            nothing
+        catch err
+            err
+        end
+        @test e isa ArgumentError
+        msg = e isa ArgumentError ? e.msg : ""
+        @test occursin("takes an AbstractMatrix; got a Nothing", msg)
+        @test !occursin("requires", msg)
     end
 end
 

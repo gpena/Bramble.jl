@@ -4,7 +4,7 @@ using Bramble: Bramble, AccelerateFactorization
 using LinearAlgebra: LinearAlgebra, ldiv!, ishermitian, diag, opnorm, norm
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
-# This module implements only the *sparse* `_accelerate_factorize`/`_accelerate_refactor!`
+# This module implements only the *sparse* `_accelerate_factorize`/`accelerate_refactor!`
 # hooks below, over AppleAccelerate.jl's `libSparse` bindings (`AAFactorization` and
 # friends). There is no dense counterpart here, and none is needed: AppleAccelerate.jl
 # (v0.7.0) has no dense `lu`/`cholesky`/LAPACK entry points to hook. Its `__init__` instead
@@ -296,7 +296,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         return complex.(fact \ real(b), fact \ imag(b))
     end
 
-    function Bramble._accelerate_refactor!(fact::ConcreteAccelerateFactorization, A::SparseMatrixCSC)
+    function Bramble.accelerate_refactor!(fact::ConcreteAccelerateFactorization, A::SparseMatrixCSC)
         m, n = size(A)
         (m == fact.dim && n == fact.dim) || throw(
             DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
@@ -350,7 +350,7 @@ else
         throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
     end
 
-    function Bramble._accelerate_refactor!(fact, ::SparseMatrixCSC)
+    function Bramble.accelerate_refactor!(::AccelerateFactorization, ::SparseMatrixCSC)
         throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
     end
 end

@@ -6,6 +6,7 @@ using Bramble: MatrixFreeOperator, VectorElement, trial_space, test_space, restr
                D₊ᵧ
 using LinearAlgebra: mul!, norm, dot
 using ForwardDiff
+using Polyester
 using Random
 using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _graded_mesh, _grid_sample
 
@@ -258,7 +259,10 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
                 form(V, V, (u, v) -> innerₕ(D₋ᵧ(u(1)), v(2)) + 3.0 * innerₕ(u(2), D₋ᵧ(v(1))) +
                                      inner₊(∇ₕ(u(1)), ∇ₕ(v(1)))),
                 :boundary, (-1, 0)),
-            ("test interpolation", form(Wc, Wf, (u, v) -> innerₕ(πₕ(u), v) + innerₕ(u, πₕ(v))), nothing, (0, 0))
+            ("test interpolation", form(Wc, Wf, (u, v) -> innerₕ(πₕ(u), v) + innerₕ(u, πₕ(v))), nothing, (0, 0)),
+            # Each summand walks its own leaf: the fine one, then the coarse one (#398).
+            ("test interpolation, fine trial", form(Wf, Wc, (u, v) -> innerₕ(πₕ(u), v) + innerₕ(u, πₕ(v))),
+                nothing, (0, 0))
         ]
         if WITH_3D_TESTS  # the one 3D case runs nightly
             Ω3 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4, 6), false)
@@ -269,7 +273,8 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         # Unit keeps the cases that differ in the plan: the two-sided reach, the transposed pair,
         # a composite, the interpolation and the two fallbacks. `wide`, `diffusion` and
         # `pointwise` run under slow, their plans being the same as the kept ones'.
-        fused_unit = ("union", "pair", "composite pair", "no interior", "short axis", "test interpolation")
+        fused_unit = ("union", "pair", "composite pair", "no interior", "short axis", "test interpolation",
+            "test interpolation, fine trial")
         for (name, a, dl, reach) in cases
             WITH_SLOW_TESTS || name in fused_unit || continue
             @testset "$name" begin
@@ -279,13 +284,13 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
                 @test op.plan === nothing
                 @test opt.plan isa Bramble._MFFusedPlan
                 @test (opt.plan.omin, opt.plan.omax) == reach
-                @test opt.plan.interp == (name == "test interpolation")
+                @test opt.plan.interp == startswith(name, "test interpolation")
                 x = randn(size(op, 2))
                 ref = op * x
                 @test _mf_agree(ref, _mf_mat(a, dl) * x)
                 # Each row receives its entries in the serial order: bitwise the serial
                 # product, except where a term runs serially after the bands.
-                same = name == "test interpolation" ? _mf_agree : (==)
+                same = startswith(name, "test interpolation") ? _mf_agree : (==)
                 y = similar(ref)
                 @test all(1:50) do _
                     mul!(y, opt, x)
@@ -334,6 +339,41 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         @test bytes[1] == bytes[2]
     end
 
+    # A sum interpolating on both sides walks each summand on its own leaf, and binds each
+    # summand's region to that leaf's marker ids: under `CpuPolyester` on the host
+    # (`_mf_host_ast`), the two meshes' label sets differing (#398). `:aa` labels the coarse
+    # mesh alone, so only a summand walking the coarse leaf may restrict to it.
+    @testset "matrix-free: region per summand" begin
+        Random.seed!(MF_SEED)
+        sq = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Wc = gridspace(mesh(domain(sq, :aa => :left, :ab => :bottom, :east => :right), (7, 6), (false, false)))
+        Wf = gridspace(mesh(domain(sq, :east => :right), (13, 11), (false, false)))
+        cases = Any[]
+        for (U, V, o) in ((Wc, Wf, "coarse trial"), (Wf, Wc, "fine trial")), r in (:boundary, :east)
+
+            push!(cases, ("$o, $r", form(U, V, (u, v) -> innerₕ(πₕ(u), restrict_to(r, v)) + innerₕ(u, πₕ(v)))))
+        end
+        push!(cases,
+            ("fine trial, coarse-only label",
+                form(Wf, Wc, (u, v) -> innerₕ(πₕ(u), restrict_to(:aa, v)) + innerₕ(u, πₕ(v)))))
+        for (name, a) in cases, p in (Bramble.CpuSerial(), Parallel(), Bramble.CpuPolyester())
+
+            @testset "$name, $(nameof(typeof(p)))" begin
+                A = assemble(a)
+                op = matrix_free_operator(a; policy = p)
+                @test (op.plan isa Bramble._MFFusedPlan) == !(p isa Bramble.CpuSerial)
+                x = randn(size(A, 2))
+                y0 = randn(size(A, 1))
+                @test !iszero(A * x)
+                @test _mf_agree(op * x, A * x)
+                y = copy(y0)
+                mul!(y, op, x, 0.5, 2.0)
+                @test _mf_agree(y, 0.5 * (A * x) + 2.0 * y0)
+                p isa Bramble.CpuSerial && @test _mf_alloc5(y, op, x) == 0
+            end
+        end
+    end
+
     # An action sink's unit gathers each interior row from the points it reads, carrying a
     # point's stencil along axis 1 (`D₋ₓ` and `D₊ₓ` read the previous row's point, a pair's
     # transposed half by its trial offsets), and scatters only the shell. Grids wide enough
@@ -371,6 +411,8 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
             ("restricted", form(W2, W2, (u, v) -> innerₕ(D₋ₓ(u), v) + innerₕ(κ2 * u, restrict_to(:boundary, v))),
                 nothing, false),
             ("test interpolation", form(W2, Wf, (u, v) -> innerₕ(D₋ₓ(πₕ(u)), v) + innerₕ(u, πₕ(v))), nothing, false),
+            ("test interpolation, fine trial",
+                form(Wf, W2, (u, v) -> innerₕ(D₋ₓ(πₕ(u)), v) + innerₕ(u, πₕ(v))), nothing, false),
             ("short axis", lap(Ws), :boundary, true),
             ("empty interior box", lap(Wt), :boundary, true),
             ("no peel", form(Ws, Ws, (u, v) -> innerₕ(u, D₋ᵧ(D₋ᵧ(v))) + innerₕ(D₋ₓ(u), v)), :boundary, false),
@@ -412,7 +454,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
                     opt = dl === nothing ? matrix_free_operator(a; policy = Parallel()) :
                           matrix_free_operator(a; dirichlet = dl, policy = Parallel())
                     @test opt.plan isa Bramble._MFFusedPlan
-                    same = name == "test interpolation" ? _mf_agree : (==)
+                    same = startswith(name, "test interpolation") ? _mf_agree : (==)
                     yt = similar(ref)
                     @test all(1:20) do _
                         mul!(yt, opt, x)

@@ -527,6 +527,20 @@ const fe = (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + inner₊(∇ₕ(u(2)
     @test refuses(() -> dirichlet_bc!(zeros(2, 2), Ta, :ymin), "dirichlet = (:ymin,)")
 end
 
+@testset "Constrained composite mesh and mesh_type" begin
+    Ωₕ = mesh2d()
+    S = gridspace(Ωₕ; ghosts = GH)
+    whole = u -> (:xmin => ∂ₙ(u(1)) => 0.0, :xmax => ∂ₙ(u(1)) => 0.0,
+        :ymin => ∂ₙ(u(1)) => 0.0, :xmin => ∂ₙ(u(2)) => 0.0, :xmax => ∂ₙ(u(2)) => 0.0,
+        :ymin => ∂ₙ(u(2)) => 0.0)
+    C = constrained(S × S, whole)
+    @test C isa Bramble.ConstrainedCompositeSpace
+    @test mesh(C) === mesh(S)
+    @test mesh(C) === mesh(C.space)
+    @test Bramble.mesh_type(C) === typeof(mesh(S))
+    @test Bramble.mesh_type(typeof(C)) === typeof(mesh(S))
+end
+
 @testset "Composite ghost refusals" begin
     Ωₕ = mesh2d()
     S = gridspace(Ωₕ; ghosts = GH)

@@ -467,6 +467,23 @@ end
         be_fail = backend(
             vector_type = UnconstructibleVec{Float64}, matrix_type = UnconstructibleMat{Float64}
         )
+        # A DenseMatrix type opting out of undef must not hit the Matrix fast path
+        struct SizeConstructibleDense{T} <: DenseMatrix{T}
+            data::Matrix{T}
+        end
+        SizeConstructibleDense{T}(n::Integer, m::Integer) where {T} = SizeConstructibleDense{T}(zeros(T, n, m))
+        Base.size(a::SizeConstructibleDense) = size(a.data)
+        Base.getindex(a::SizeConstructibleDense, i::Int...) = a.data[i...]
+        Base.setindex!(a::SizeConstructibleDense, v, i::Int...) = (a.data[i...] = v)
+        Bramble.supports_undef_construction(::Type{<:SizeConstructibleDense}) = false
+
+        be_dense = backend(matrix_type = SizeConstructibleDense{Float64})
+        Md = matrix(be_dense, 3, 4)
+        @test Md isa SizeConstructibleDense{Float64}
+        @test size(Md) == (3, 4)
+        @test @inferred(matrix(be_dense, 3, 4)) isa SizeConstructibleDense{Float64}
+        @test @inferred(matrix(backend(matrix_type = Matrix{Float64}), 3, 4)) isa Matrix{Float64}
+
         @test_throws ErrorException vector(be_fail, 5)
         @test_throws ErrorException matrix(be_fail, 3, 4)
         @test_throws ErrorException backend_zeros(be_fail, 4)

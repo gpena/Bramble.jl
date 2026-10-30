@@ -629,4 +629,32 @@ end
     end
 end
 
+# A facet product refuses a step past the padded grid even where the plain truncation gives
+# it weight zero (38a20af9); a volume product keeps the truncation. On a space ghosted on
+# xmin, the +1 x-step at the unghosted xmax and the -1 y-step at the unghosted ymin are such
+# steps, so `Δₕ` and its nested pair refuse alike under `inner_Γ` and agree under `innerₕ`
+# (#809).
+@testset "Δₕ and its nesting refuse alike" begin
+    D̃ₓ, D̃ᵧ, D₋ₓ = Bramble.D̃ₓ, Bramble.D̃ᵧ, Bramble.D₋ₓ
+    lap(u) = Δₕ(u)
+    nested(u) = D̃ₓ(D₋ₓ(u)) + D̃ᵧ(D₋ᵧ(u))
+    Ωₕ = random_mesh((9, 8); seed = 7)
+    for ghosts in ((:xmin,), (:xmin, :ymax))
+        P = gridspace(Ωₕ; ghosts)
+        msgs = map((lap, nested)) do L
+            try
+                assemble(form(P, P, (u, v) -> inner_Γ(L(u), v; markers = (:xmax,))))
+                nothing
+            catch e
+                e isa ArgumentError ? sprint(showerror, e) : e
+            end
+        end
+        @test all(m -> m isa String && occursin("does not exist", m), msgs)
+        @test msgs[1] == msgs[2]
+        A = assemble(form(P, P, (u, v) -> innerₕ(lap(u), v)))
+        B = assemble(form(P, P, (u, v) -> innerₕ(nested(u), v)))
+        @test nnz(A) > 0 && norm(A - B) <= tol * norm(A)
+    end
+end
+
 end # module FormGhostFacetOperatorsTests

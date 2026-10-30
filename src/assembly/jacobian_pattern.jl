@@ -200,6 +200,7 @@ function jacobian_pattern(
     lin_indices = LinearIndices(indices(Ωₕ))
 
     nodes = _dependency_nodes(coefficient_dependencies, TrialFunction{D}())
+    foreach(_scalar_dependency_component, nodes)
     coeff_offsets = _coefficient_offsets(Val(D), _relative_nodes(nodes))
     isempty(coeff_offsets) || _same_mesh_or_throw(nothing, form.trial_space, Ωₕ)
     point_deps = map(_point_dependent_nodes(nodes)) do op
@@ -321,7 +322,7 @@ end
     throw(
         ArgumentError(
         "a coefficient dependency named component $target of the trial space, which has " *
-        "$ncomponents components.",
+        "$ncomponents component$(ncomponents == 1 ? "" : "s").",
     ),
     )
 end
@@ -332,6 +333,14 @@ end
     1 <= target <= length(trial_leaves) ||
         _throw_dependency_component(target, length(trial_leaves))
     return trial_leaves[target]
+end
+
+# A scalar trial space is its own single component: a dependency naming any other
+# (`U -> U(2)`, `U -> πₕ(U(3))`) is refused as the block path refuses one.
+@inline function _scalar_dependency_component(op)
+    target = trial_component_or_nothing(op)
+    target === nothing || target == 1 || _throw_dependency_component(target, 1)
+    return nothing
 end
 
 # `nothing` -> the block's own trial leaf. An explicit component -> that leaf, looked up

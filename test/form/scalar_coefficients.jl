@@ -14,7 +14,7 @@ using Bramble
 import Bramble
 using Bramble: change_points!, OperatorScale, restrict_to, D₋ₓ
 using LinearAlgebra: issymmetric
-using ..TestUtils: WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS, OPTIMIZED, alloc_test
 
 grading(n, a) = collect(range(0.0, 1.0; length = n)) .^ (1.2 + 0.2 * a)
 
@@ -140,6 +140,70 @@ function check_strain(V)
     b = form(V, V, (u, v) -> inner₊(strain_half(u), strain_half(v)))
     @test Rational{Int} in scalar_types(typeof(a.ast))
     @test assemble(a) == assemble(b)
+end
+
+# An element of a composite space holds one block per component, so as a coefficient it
+# is refused at `form`, in every spelling, and its component is the spelling that works.
+@testset "Composite coefficient refused (#978)" begin
+    # `graded_space` passes a tuple of points, which a 1D mesh refuses.
+    Ω₁ = mesh(domain(interval(0.0, 1.0)), 9, false)
+    change_points!(Ω₁, grading(9, 1))
+    @testset "$(dim(W))D" for W in (gridspace(Ω₁), graded_space((9, 11)))
+        V = W × W
+        w = element(V)
+        w(1) .= 1.0
+        w(2) .= 2.0
+        refused = (
+            "on a component" => () -> form(V, V, (u, v) -> innerₕ(w * u(2), v(2))),
+            "on a plain space" => () -> form(W, W, (u, v) -> innerₕ(w * u, v)),
+            "as a thunk" => () -> form(W, W, (u, v) -> innerₕ((() -> w) * u, v)),
+            "on the right" => () -> form(W, W, (u, v) -> innerₕ(u * w, v)),
+            "under a gradient" => () -> form(W, W,
+                (u, v) -> inner₊(w * ∇ₕ(u), ∇ₕ(v))),
+            "in a linear form" => () -> form(W, v -> innerₕ(1.0, w * v)))
+        @testset "$name" for (name, mk) in refused
+            e = @test_throws ArgumentError mk()
+            @test occursin("wₕ(i) * u(i)", sprint(showerror, e.value))
+        end
+        a = assemble(form(V, V, (u, v) -> innerₕ(w(2) * u(2), v(2))))
+        b = assemble(form(W, W, (u, v) -> innerₕ(2.0 * u, v)))
+        @test a[(ndofs(W) + 1):end, (ndofs(W) + 1):end] == b
+    end
+
+    # A constrained composite's mesh is its padded leaf mesh, which passes the mesh check,
+    # so its element was read across the block boundary before it was refused.
+    @testset "Constrained composite, $name" for (name, mk) in (
+        "on a component" => (C, S, wg) -> form(C, C, (u, v) -> innerₕ(wg * u(2), v(2))),
+        "as a thunk" => (C, S, wg) -> form(C, C,
+        (u, v) -> innerₕ((() -> wg) * u(2), v(2))),
+        "in a linear form" => (C, S, wg) -> form(C, v -> innerₕ(1.0, wg * v(1))),
+        "on its leaf space" => (C, S, wg) -> form(S, S, (u, v) -> innerₕ(wg * u, v)))
+        S = gridspace(mesh(graded_space((7, 8))); ghosts = (:xmin, :xmax))
+        C = constrained(S × S,
+            u -> (:xmin => ∂ₙ(u(1)) => 0.0, :xmax => ∂ₙ(u(1)) => 0.0,
+                :xmin => ∂ₙ(u(2)) => 0.0, :xmax => ∂ₙ(u(2)) => 0.0))
+        wg = element(C)
+        wg .= 1.0
+        e = @test_throws ArgumentError mk(C, S, wg)
+        @test occursin("wₕ(i) * u(i)", sprint(showerror, e.value))
+    end
+end
+
+# `form` with a grid-function coefficient, and a linear form whose grid source meets a
+# scaled two-component sum, allocate as on main (160 B and 0 B, at `-O1` up): the sign
+# test `_sign_clash` (simplifier.jl) once took them to 672 B and 1216 B (#978).
+grid_coefficient_form(W, c) = form(W, W, (u, v) -> innerₕ(c * u, v))
+grid_source_form(V, g) = form(V, v -> innerₕ(g, 3.0 * (v(1) + v(2))))
+least_allocs(f, args...) = minimum(alloc_test(f, args...) for _ in 1:5)
+
+@testset "Form construction allocations (#978)" begin
+    Ω = mesh(domain(interval(0.0, 1.0)), 9, false)
+    change_points!(Ω, grading(9, 1))
+    W = gridspace(Ω)
+    c = Rₕ(W, x -> 1.0 + x[1])
+    g = Rₕ(W, x -> 2.0)
+    @test !OPTIMIZED || least_allocs(grid_coefficient_form, W, c) <= 160
+    @test !OPTIMIZED || least_allocs(grid_source_form, W × W, g) == 0
 end
 
 @testset "2D strain, 1 // 2 and 0.5 (#912)" begin

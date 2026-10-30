@@ -65,6 +65,11 @@ See also: [`innerₕ`](@ref), [`Dcₓ`](@ref)
 end
 
 @inline skew_symmetric(wₕ::VectorElement) = skew_symmetric(_advection_operator((wₕ,)))
+# A composite field is the tuple of its components: without this it is one `VectorElement`
+# and the 1-tuple method above applies, which sums a single direction.
+@inline skew_symmetric(wₕ::VectorElement{<:CompositeGridSpace}) = skew_symmetric(
+    components(wₕ)
+)
 @inline skew_symmetric(wₕ::NTuple{D, VectorElement}) where {D} = skew_symmetric(
     _advection_operator(wₕ)
 )

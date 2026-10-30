@@ -300,6 +300,9 @@ end
             for Cg in (Wg × Wg, Wg^2)
                 ug = element(Cg)
                 ug .= vcat(parent(a1), parent(a2))
+                @test normₕ(ug) ≈ normₕ(up) ≈ hypot(normₕ(p1), normₕ(p2))
+                @test norm(ug, "h") ≈ normₕ(up)
+                @test normₕ(ug) < SENTINEL
                 @test norminf(ug) == maximum(abs, v2)
                 @test norm(ug, "∞") == maximum(abs, v2)
                 @test snorm₁ₕ(ug) ≈ snorm₁ₕ(up) ≈ hypot(snorm₁ₕ(p1), snorm₁ₕ(p2))
@@ -317,6 +320,12 @@ end
         normₕ(ug)
         interpolate_at(ug, (0.4, 0.4))
         @test (@allocated normₕ(ug)) == 0
+        # a composite of ghost spaces sums per-leaf squares; warm, it allocates no more than
+        # 16 bytes (measured)
+        cg = element(Wg × Wg)
+        cg .= 1.0
+        normₕ(cg)
+        @test (@allocated normₕ(cg)) <= 32
         @test (@allocated interpolate_at(ug, (0.4, 0.4))) == 0
         Ω1 = O1.make_mesh(:random, 0; n0 = 6, seed = 3)
         W1 = gridspace(Ω1; ghosts = :boundary)

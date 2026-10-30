@@ -330,6 +330,64 @@ end
     @test_throws ArgumentError form(Wg, v -> innerₕ(c * v, v))
 end
 
+# gpena/Bramble.jl#818: two ghost spaces on meshes of one size and other points have equal
+# closures, so the closure check alone paired a load with the wrong mesh's points.
+@testset "Pair on another mesh is refused" begin
+    Ωa = O.make_mesh(:random, 0; seed = 1)
+    Ωb = O.make_mesh(:random, 0; seed = 2)
+    Ωc = O.make_mesh(:random, 0; seed = 1)   # rebuilt alike: other object, same points
+    @test npoints(Ωa, Tuple) == npoints(Ωb, Tuple) && points(Ωa) != points(Ωb)
+    @test Ωa !== Ωc && points(Ωa) == points(Ωc)
+    f = (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v)
+    fl = v -> innerₕ(x -> 1.0 + x[1] * x[2], v)
+    Wa, Wb, Wc = (gridspace(Ω; ghosts = :boundary) for Ω in (Ωa, Ωb, Ωc))
+    @test Bramble.closure(Wa) == Bramble.closure(Wb)   # only the mesh tells them apart
+    a = form(Wa, Wa, f)
+    A, F = assemble(a, form(Wa, fl))
+    lb = form(Wb, fl)
+    @test_throws DimensionMismatch assemble(a, lb)
+    @test_throws DimensionMismatch assemble!(copy(A), copy(F), a, lb)
+    # the same refusal on a composite side
+    Va, Vb = Wa × Wa, Wb × Wb
+    fv = (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2))
+    flv = v -> innerₕ(x -> 1.0, v(1)) + innerₕ(x -> x[1], v(2))
+    av = form(Va, Va, fv)
+    Av, Fv = assemble(av, form(Va, flv))
+    @test_throws DimensionMismatch assemble(av, form(Vb, flv))
+    @test_throws DimensionMismatch assemble!(copy(Av), copy(Fv), av, form(Vb, flv))
+    @test assemble(av, form(Wc × Wc, flv))[2] == Fv
+    # only the second component on another mesh: `mesh` of a composite reads the first
+    for lv in (form(Wa × Wb, flv), form(Wb × Wa, flv))
+        @test_throws DimensionMismatch assemble(av, lv)
+        @test_throws DimensionMismatch assemble!(copy(Av), copy(Fv), av, lv)
+    end
+    # and on a space constrained as a whole
+    Xa, Xb = (gridspace(Ω; ghosts = (:xmin, :xmax)) for Ω in (Ωa, Ωb))
+    rels = u -> (:xmin => ∂ₙ(u(1)) => 0.0, :xmax => ∂ₙ(u(1)) => 0.0,
+        :xmin => ∂ₙ(u(2)) => 0.0, :xmax => ∂ₙ(u(2)) => 0.0)
+    Ca, Cb = constrained(Xa × Xa, rels), constrained(Xa × Xb, rels)
+    @test Bramble.closure(Ca) == Bramble.closure(Cb)
+    ac = form(Ca, Ca, fv)
+    Ac, Fc = assemble(ac, form(Ca, flv))
+    @test_throws DimensionMismatch assemble(ac, form(Cb, flv))
+    @test_throws DimensionMismatch assemble!(copy(Ac), copy(Fc), ac, form(Cb, flv))
+    Cc = constrained(Xa × gridspace(Ωc; ghosts = (:xmin, :xmax)), rels)
+    @test assemble(ac, form(Cc, flv))[2] == Fc
+    # a mesh rebuilt alike pairs, with the same load; one space stays 0 B warm
+    lc = form(Wc, fl)
+    @test assemble(a, lc)[2] == F
+    la = form(Wa, fl)
+    assemble!(A, F, a, la)
+    @test (@allocated assemble!(A, F, a, la)) == 0
+    # DECISION (#818): plain spaces keep today's behaviour. Their pair, `assemble(a, l)` in
+    # bilinear.jl, assembles each form alone and shares no helper with `_check_pair`, so a
+    # load on another mesh, even of another size, is still accepted.
+    P = gridspace(Ωa)
+    Ps = gridspace(O.make_mesh(:random, 0; seed = 3, n0 = 5))
+    Ap, Fp = assemble(form(P, P, f), form(Ps, fl))
+    @test size(Ap, 1) != length(Fp)
+end
+
 # --- O6: operator rows read the ghost at a ghosted facet ------------------------------ #
 
 @testset "1D operator rows against oracle" begin

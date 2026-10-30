@@ -93,6 +93,37 @@ _in_place_bytes(f!, v, u) = (f!(v, u); @allocated f!(v, u))
     end
 end
 
+# `spdiagm` returns `Int` indices whatever the backend asked for, so the shift
+# matrices on an `Int32` sparse backend came back `Int64`: the backend's index type must
+# survive every `kron` factor, and the values match the default backend's.
+@testset "shift: Int32 sparse index type kept" begin
+    MT = SparseMatrixCSC{Float32, Int32}
+    be = backend(vector_type = Vector{Float32}, matrix_type = MT)
+    @test Bramble._Eye(be, 5, Val(1)) isa MT
+    @test Bramble._Eye(be, 5, Val(-1)) isa MT
+    @test Bramble._Eye(be, 5, Val(1)) == spdiagm(5, 5, 1 => ones(Float32, 4))
+    for D in TEST_DIMS
+        n = D == 1 ? 7 : ntuple(i -> 4 + i, D)
+        unif = D == 1 ? false : ntuple(_ -> false, D)
+        Random.seed!(352)
+        Ωₕ = mesh(_domain(D), n, unif; backend = be)
+        Ωₕ⁰ = _mesh(D)
+        for d in 1:D, op in (S₊ₕ[d], S₋ₕ[d])
+
+            A = op(Ωₕ)
+            @test A isa MT
+            @test A == op(Ωₕ⁰)
+            @test op(Ωₕ⁰) isa SparseMatrixCSC{Float64, Int}
+        end
+    end
+    # the conversion must not copy a matrix that already has the backend's index type
+    be⁰ = backend()
+    eye_bytes(n) = minimum(@allocated(Bramble._Eye(be⁰, n, Val(1))) for _ in 1:3)
+    diag_bytes(n) = minimum(@allocated(spdiagm(n, n, 1 => ones(n - 1))) for _ in 1:3)
+    eye_bytes(1000), diag_bytes(1000)
+    @test eye_bytes(1000) <= diag_bytes(1000)
+end
+
 @testset "shift: transpose and jump" begin
     for D in TEST_DIMS
         Ωₕ = _mesh(D)

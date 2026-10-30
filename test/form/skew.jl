@@ -41,6 +41,9 @@ using ..TestUtils: @test_allocs, WITH_3D_TESTS
             N2 = Matrix(assemble(form(W2, W2,
                 (u, v) -> innerₕ(w2[1] * Dcₓ(u) + w2[2] * Dcᵧ(u), v))))
             @test M2 ≈ 0.5 * (N2 - N2')
+            # a composite field is its components, every direction summed
+            wc2 = Rₕ(W2^Val(2), x -> (sin(x[2]), cos(x[1])))
+            @test Matrix(assemble(form(W2, W2, skew_symmetric(wc2)))) ≈ M2
 
             # The 3D half runs nightly (`slow`).
             if WITH_3D_TESTS
@@ -53,6 +56,8 @@ using ..TestUtils: @test_allocs, WITH_3D_TESTS
                 N3 = Matrix(assemble(form(W3, W3,
                     (u, v) -> innerₕ(w3[1] * Dcₓ(u) + w3[2] * Dcᵧ(u) + w3[3] * Dc₂(u), v))))
                 @test M3 ≈ 0.5 * (N3 - N3')
+                wc3 = Rₕ(W3^Val(3), x -> (x[2], x[3], x[1]))
+                @test Matrix(assemble(form(W3, W3, skew_symmetric(wc3)))) ≈ M3
             end
         end
 
