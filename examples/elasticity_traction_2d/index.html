@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Elasticity with a traction condition — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=905f73e3">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f2452296">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Elasticity with a traction condition — Bramble.jl">
   <meta property="og:title" content="Elasticity with a traction condition — Bramble.jl">
@@ -249,7 +249,7 @@ Pchk = Bramble.padded_space(gridspace(Ωchk; ghosts = :boundary)^Val(2))
 resid = (facet_residual(Ωchk, Pchk, Uchk, :xmin, 1),
     facet_residual(Ωchk, Pchk, Uchk, :xmin, 2))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.220446049250313e-16, 1.734723475976807e-17)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(3.3306690738754696e-16, 1.3877787807814457e-17)</code></pre>
 </div>
 <p>The traction-free side <code class="md-code-inline">ymin</code> holds the same way, with zero data:</p>
 <div class="md-multi-output">
@@ -258,7 +258,7 @@ resid = (facet_residual(Ωchk, Pchk, Uchk, :xmin, 1),
 <pre><code class="language-julia">resid_free = (facet_residual(Ωchk, Pchk, Uchk, :ymin, 1),
     facet_residual(Ωchk, Pchk, Uchk, :ymin, 2))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.6479873021779667e-17, 1.0736923653206419e-16)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.5829351718288365e-17, 1.0249831010885452e-16)</code></pre>
 </div>
 <p>Both are rounding, not discretisation error: the relation is an identity of the lifted values, whatever the accuracy of the solution.</p>
 <h3 id="The-corner-of-the-two-tractions" class="md-heading">The corner of the two tractions<a href="#The-corner-of-the-two-tractions" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
@@ -294,7 +294,7 @@ cornerx = [corner_relation(xschk, Uchk, i, 1, tractiondata(:xmin, i)((0.0, 0.0))
 cornery = [corner_relation(xschk, Uchk, i, 2, 0.0) for i in 1:2]
 maximum(abs, first.(cornerx))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">1.3183898417423734e-16</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.6020852139652106e-16</code></pre>
 </div>
 <p>Rounding again, at the corner too. The <code class="md-code-inline">ymin</code> relation has zero datum and is homogeneous, so its residual is exactly zero and is not printed; the <code class="md-code-inline">xmin</code> relation of component 1 carries a datum and terms of order one (component 2 has a small datum there):</p>
 <h2 id="Second-order-on-graded-grids" class="md-heading">Second order on graded grids<a href="#Second-order-on-graded-grids" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -320,7 +320,7 @@ hs = [hₘₐₓ(Ωₕ) for Ωₕ in levels]
 errs = [component_errors(Ωₕ) for Ωₕ in levels]
 err1, err2 = getindex.(errs, 1), getindex.(errs, 2)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.03651435151947136, 0.010050012228596056, 0.00252750225677717], [0.030490709747483646, 0.008669459750689704, 0.0021886332144131883])</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.03651435151947087, 0.010050012228595282, 0.0025275022567770216], [0.030490709747483174, 0.00866945975068836, 0.0021886332144139395])</code></pre>
 </div>
 <p>The order is the least-squares slope of <span class="md-math md-math-inline">\(\log e\)</span> against <span class="md-math md-math-inline">\(\log h_{\max}\)</span> over the three levels:</p>
 <div class="md-multi-output">
@@ -335,7 +335,7 @@ end
 order1, order2 = lsq_order(hs, err1), lsq_order(hs, err2)
 (order1, order2)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.0623371551213965, 2.0344583771868)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.0623371551214307, 2.0344583771865192)</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -395,6 +395,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=905f73e3"></script>
+  <script src="../../assets/materialdocs.js?v=f2452296"></script>
 </body>
 </html>

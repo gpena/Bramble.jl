@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML, AD and solvers — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=b99d18fd">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=75decd96">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
@@ -104,7 +104,7 @@
 <div class="md-docstring" id="Bramble.semidiscretize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.semidiscretize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L107-L164" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L129-L186" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -200,7 +200,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <div class="md-docstring" id="Bramble.Semidiscretization">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Semidiscretization</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L55-L77" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L54-L76" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -211,7 +211,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <p>Built by <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>; read back with <a href="../api_sciml/#Bramble.mass_matrix"><code class="md-code-inline">mass_matrix</code></a> and <a href="../api_sciml/#Bramble.operator_matrix"><code class="md-code-inline">operator_matrix</code></a>.</p>
 <p><strong>Fields</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">operator</code>: spatial <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> (or a ghost-space form), assembled into <code class="md-code-inline">A</code>.</p>
+<li><p><code class="md-code-inline">operator</code>: spatial <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> (or a ghost-space form), assembled into <code class="md-code-inline">A</code>; for a time-dependent operator, a <code class="md-code-inline">TypeCachedOperator</code> wrapping the form builder.</p>
 </li>
 <li><p><code class="md-code-inline">source</code>: source <a href="../internals/form/#Bramble.LinearForm"><code class="md-code-inline">LinearForm</code></a>, assembled into <code class="md-code-inline">F(t)</code> at each step.</p>
 </li>
@@ -281,7 +281,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.mass_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.mass_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L93-L97" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L115-L119" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -294,7 +294,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.operator_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.operator_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L100-L104" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L122-L126" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -307,7 +307,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.jacobian!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L580-L592" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L602-L614" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -322,7 +322,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.jacobian_prototype">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian_prototype</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L623-L634" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L645-L656" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -337,7 +337,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.ode_function">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ode_function</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L13-L50" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L17-L54" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -370,7 +370,7 @@ ode_function(a::BilinearForm, l::LinearForm; kwargs...) -&gt; ODEFunction</code>
 <div class="md-docstring" id="Bramble.ode_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ode_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L70-L109" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L76-L115" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -428,7 +428,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.linear_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.linear_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L199-L228" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L205-L234" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -497,11 +497,11 @@ sol = solve(prob, NewtonRaphson())</code></pre>
 </div>
 </div>
 <h2 id="Adjoint-sensitivities-for-a-transient-solve" class="md-heading">Adjoint sensitivities for a transient solve<a href="#Adjoint-sensitivities-for-a-transient-solve" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>No test runs this until v4.3.0, when the AD backends return.</p>
+<p>No test runs this until v4.5.0, when the AD backends return.</p>
 <div class="md-docstring" id="Bramble.adjoint_sensitivities">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.adjoint_sensitivities</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L178-L191" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L184-L197" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -547,7 +547,7 @@ du0, dp = Bramble.adjoint_sensitivities(sol, FBDF(); t = ts, dgdu_discrete = dgd
 <div class="md-docstring" id="Bramble.pde_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.pde_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/pde_solve.jl#L38-L160" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/pde_solve.jl#L47-L173" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -559,7 +559,7 @@ pde_solve(fact::Factorization, F::AbstractVector) -&gt; Vector</code></pre>
 <p>With no keyword arguments this is <code class="md-code-inline">A \ F</code>, unless <code class="md-code-inline">AppleAccelerate.jl</code> is loaded on macOS <em>and</em> the system is symmetric (see <code class="md-code-inline">:default</code> below), in which case it is <code class="md-code-inline">accelerate_solve(A, F; sym)</code>. The name exists so that reverse-mode AD tools have one function to attach an adjoint rule to, which is what makes a whole <code class="md-code-inline">θ -&gt; assemble -&gt; pde_solve -&gt; J(u)</code> chain differentiable.</p>
 <p><strong>Keywords</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">solver</code>: <code class="md-code-inline">:default</code> – <code class="md-code-inline">A \ F</code> on Linux, Windows, macOS without <code class="md-code-inline">AppleAccelerate.jl</code> loaded, and macOS on an unsymmetric <code class="md-code-inline">A</code>; on macOS with <code class="md-code-inline">using AppleAccelerate</code> in effect and <code class="md-code-inline">A</code> symmetric, dispatches to <code class="md-code-inline">accelerate_solve</code> instead (same as passing <code class="md-code-inline">solver = :accelerate</code> explicitly). Symmetry is <code class="md-code-inline">issymmetric(A)</code> under <code class="md-code-inline">sym = :auto</code> (the default), or trusted outright from an explicit <code class="md-code-inline">sym = :spd</code>/<code class="md-code-inline">:definite</code>/<code class="md-code-inline">:symmetric</code> (and conversely <code class="md-code-inline">:unsymmetric</code> skips straight to <code class="md-code-inline">A \ F</code>) – the caller has already asserted the property, so it is not checked again. The narrowing exists because Accelerate is only a win on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ). On forms assembled on 2D grid spaces it won on a symmetric Poisson-plus-mass system and lost on an unsymmetric convection-diffusion one. This only ever narrows which solver runs on macOS; Linux and Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws from <code class="md-code-inline">accelerate_solve</code> exactly as <code class="md-code-inline">solver = :accelerate</code> would – <code class="md-code-inline">:default</code> never silently falls back to <code class="md-code-inline">\</code> after picking Accelerate. <code class="md-code-inline">:suitesparse</code> (CHOLMOD/UMFPACK), <code class="md-code-inline">:spqr</code> (sparse QR, for a least-squares or rectangular <code class="md-code-inline">A</code>), <code class="md-code-inline">:accelerate</code> (Apple <code class="md-code-inline">libSparse</code>, needs <code class="md-code-inline">AppleAccelerate.jl</code>, honoured unconditionally regardless of symmetry), <code class="md-code-inline">:mumps</code> (needs <code class="md-code-inline">MUMPS.jl</code>), <code class="md-code-inline">:sparspak</code> (pure Julia, needs <code class="md-code-inline">Sparspak.jl</code>).</p>
+<li><p><code class="md-code-inline">solver</code>: <code class="md-code-inline">:default</code> – <code class="md-code-inline">A \ F</code> on Linux, Windows, macOS without <code class="md-code-inline">AppleAccelerate.jl</code> loaded, and macOS on an unsymmetric <code class="md-code-inline">A</code>; on macOS with <code class="md-code-inline">using AppleAccelerate</code> in effect and <code class="md-code-inline">A</code> symmetric, dispatches to <code class="md-code-inline">accelerate_solve</code> instead (same as passing <code class="md-code-inline">solver = :accelerate</code> explicitly). Symmetry is <code class="md-code-inline">issymmetric(A)</code> under <code class="md-code-inline">sym = :auto</code> (the default), or trusted outright from an explicit <code class="md-code-inline">sym = :spd</code>/<code class="md-code-inline">:definite</code>/<code class="md-code-inline">:symmetric</code> (and conversely <code class="md-code-inline">:unsymmetric</code> skips straight to <code class="md-code-inline">A \ F</code>) – the caller has already asserted the property, so it is not checked again. The narrowing exists because Accelerate is only a win on the symmetric factorisations it reaches (SPD/Cholesky, LDLᵀ). On forms assembled on 2D grid spaces it won on a symmetric Poisson-plus-mass system and lost on an unsymmetric convection-diffusion one. This only ever narrows which solver runs on macOS; Linux and Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws from <code class="md-code-inline">accelerate_solve</code> exactly as <code class="md-code-inline">solver = :accelerate</code> would – <code class="md-code-inline">:default</code> never silently falls back to <code class="md-code-inline">\</code> after picking Accelerate. It picks Accelerate only for <code class="md-code-inline">Float32</code>, <code class="md-code-inline">Float64</code> and their complex types (the element type of <code class="md-code-inline">A</code> and of the solution): an integer <code class="md-code-inline">A</code> goes to <code class="md-code-inline">A \ F</code>, or in the <code class="md-code-inline">mean_zero</code>/<code class="md-code-inline">gauge</code> solve to <code class="md-code-inline">lu</code>, which converts it to <code class="md-code-inline">Float64</code>, and a type that backend cannot factor (<code class="md-code-inline">BigFloat</code>) throws an <code class="md-code-inline">ArgumentError</code> naming it. <code class="md-code-inline">:suitesparse</code> (CHOLMOD/UMFPACK), <code class="md-code-inline">:spqr</code> (sparse QR, for a least-squares or rectangular <code class="md-code-inline">A</code>), <code class="md-code-inline">:accelerate</code> (Apple <code class="md-code-inline">libSparse</code>, needs <code class="md-code-inline">AppleAccelerate.jl</code>, honoured unconditionally regardless of symmetry), <code class="md-code-inline">:mumps</code> (needs <code class="md-code-inline">MUMPS.jl</code>), <code class="md-code-inline">:sparspak</code> (pure Julia, needs <code class="md-code-inline">Sparspak.jl</code>).</p>
 </li>
 <li><p><code class="md-code-inline">kwargs</code>: passed to the chosen backend (for <code class="md-code-inline">:accelerate</code> and <code class="md-code-inline">:mumps</code> the keywords of <a href="../api_sciml/#Bramble.accelerate_solve"><code class="md-code-inline">accelerate_solve</code></a> and <a href="../api_sciml/#Bramble.mumps_solve"><code class="md-code-inline">mumps_solve</code></a>), which throws on one it does not take. <code class="md-code-inline">:default</code> takes only <code class="md-code-inline">kind</code> and <code class="md-code-inline">:sparspak</code> takes none. Both throw an <code class="md-code-inline">ArgumentError</code> on any other keyword. <code class="md-code-inline">kind</code> and <code class="md-code-inline">sym</code> are read only when the Accelerate route runs. On <code class="md-code-inline">A \ F</code> they are accepted and ignored, so <code class="md-code-inline">kind = :bogus</code> throws only where Accelerate is taken.</p>
 </li>
@@ -577,7 +577,7 @@ pde_solve(fact::Factorization, F::AbstractVector) -&gt; Vector</code></pre>
 </ul>
 <p>A <code class="md-code-inline">SparseMatrixCSR</code> (<code class="md-code-inline">SparseMatricesCSR.jl</code>) <code class="md-code-inline">A</code> is also accepted: converted to <code class="md-code-inline">SparseMatrixCSC</code> first (see <code class="md-code-inline">docs/src/internals/csr_solvers.md</code>), then solved exactly as above.</p>
 <p><strong>Reverse-mode differentiation</strong></p>
-<p>With <code class="md-code-inline">ChainRulesCore.jl</code> loaded, <code class="md-code-inline">BrambleChainRulesExt</code>&#39;s <code class="md-code-inline">rrule</code> solves the adjoint system <code class="md-code-inline">Aᴴ λ = ∂J/∂u</code> once and returns <code class="md-code-inline">∂J/∂A = -λ u&#39;</code> (conjugate transpose, the ChainRules convention for a complex <code class="md-code-inline">A</code>; <code class="md-code-inline">-λ uᵀ</code> for real data) restricted to <code class="md-code-inline">A</code>&#39;s sparsity (never densified) and <code class="md-code-inline">∂J/∂F = λ</code>. Without keywords the adjoint solve reuses the forward solve&#39;s own factorisation. The rule accepts the keywords of <code class="md-code-inline">pde_solve</code>: it forwards them to the primal solve and to the adjoint solve of <code class="md-code-inline">sparse(A&#39;)</code>, so <code class="md-code-inline">solver</code> and <code class="md-code-inline">sym</code> apply to <code class="md-code-inline">Aᴴ</code> as well, and a <code class="md-code-inline">sym</code> hint must hold for <code class="md-code-inline">Aᴴ</code> too. A <code class="md-code-inline">SparseMatrixCSR</code> <code class="md-code-inline">A</code> has no rule (ChainRules sees a method with no <code class="md-code-inline">rrule</code>, and differentiates the conversion and the solver&#39;s internals). <code class="md-code-inline">using Enzyme</code> is enough for the same adjoint through <code class="md-code-inline">BrambleEnzymeExt</code>&#39;s native <code class="md-code-inline">EnzymeRules</code> rule, which takes no keywords (it cannot run before v4.3.0); do not call <code class="md-code-inline">Enzyme.@import_rrule</code>, whose bridge drops the cotangent&#39;s explicit zeros from <code class="md-code-inline">nzval</code> and returns a wrong gradient without any error. The Enzyme rule keeps the unconjugated <code class="md-code-inline">-λ uᵀ</code> and is not validated for complex <code class="md-code-inline">A</code>, whose convention differs. <code class="md-code-inline">Mooncake</code> cannot represent a <code class="md-code-inline">SparseMatrixCSC</code> cotangent at all and is unsupported.</p>
+<p>With <code class="md-code-inline">ChainRulesCore.jl</code> loaded, <code class="md-code-inline">BrambleChainRulesExt</code>&#39;s <code class="md-code-inline">rrule</code> solves the adjoint system <code class="md-code-inline">Aᴴ λ = ∂J/∂u</code> once and returns <code class="md-code-inline">∂J/∂A = -λ u&#39;</code> (conjugate transpose, the ChainRules convention for a complex <code class="md-code-inline">A</code>; <code class="md-code-inline">-λ uᵀ</code> for real data) restricted to <code class="md-code-inline">A</code>&#39;s sparsity (never densified) and <code class="md-code-inline">∂J/∂F = λ</code>. Without keywords the adjoint solve reuses the forward solve&#39;s own factorisation. The rule accepts the keywords of <code class="md-code-inline">pde_solve</code>: it forwards them to the primal solve and to the adjoint solve of <code class="md-code-inline">sparse(A&#39;)</code>, so <code class="md-code-inline">solver</code> and <code class="md-code-inline">sym</code> apply to <code class="md-code-inline">Aᴴ</code> as well, and a <code class="md-code-inline">sym</code> hint must hold for <code class="md-code-inline">Aᴴ</code> too. A <code class="md-code-inline">SparseMatrixCSR</code> <code class="md-code-inline">A</code> has no rule (ChainRules sees a method with no <code class="md-code-inline">rrule</code>, and differentiates the conversion and the solver&#39;s internals). <code class="md-code-inline">using Enzyme</code> is enough for the same adjoint through <code class="md-code-inline">BrambleEnzymeExt</code>&#39;s native <code class="md-code-inline">EnzymeRules</code> rule, which takes no keywords (it cannot run before v4.5.0); do not call <code class="md-code-inline">Enzyme.@import_rrule</code>, whose bridge drops the cotangent&#39;s explicit zeros from <code class="md-code-inline">nzval</code> and returns a wrong gradient without any error. The Enzyme rule keeps the unconjugated <code class="md-code-inline">-λ uᵀ</code> and is not validated for complex <code class="md-code-inline">A</code>, whose convention differs. <code class="md-code-inline">Mooncake</code> cannot represent a <code class="md-code-inline">SparseMatrixCSC</code> cotangent at all and is unsupported.</p>
 <p>A closure capturing a grid space or a form needs <code class="md-code-inline">Enzyme.Const(f)</code> and <code class="md-code-inline">Enzyme.set_runtime_activity(Enzyme.Reverse)</code>, as the automatic differentiation tutorial describes for every other path. A gradient with respect to a <em>runtime</em> scalar coefficient of the form should be a <code class="md-code-inline">Float64</code> or a <code class="md-code-inline">Ref</code>: an <code class="md-code-inline">Integer</code> coefficient known only at run time costs <code class="md-code-inline">form</code> its inferred return type, which Enzyme&#39;s type analysis rejects.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
@@ -800,7 +800,7 @@ uₕ = solve(a, l; dirichlet = bcs, preconditioner = :ilu0, solver = KrylovJL_GM
 <div class="md-docstring" id="Bramble.AbstractMatrixFreePreconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.AbstractMatrixFreePreconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L13-L26" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L14-L27" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -819,7 +819,7 @@ uₕ = solve(a, l; dirichlet = bcs, preconditioner = :ilu0, solver = KrylovJL_GM
 <div class="md-docstring" id="Bramble.jacobi_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobi_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L63-L113" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L64-L117" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -829,8 +829,8 @@ jacobi_preconditioner(a::Bramble.GhostBilinearForm; dirichlet = nothing, dirichl
 jacobi_preconditioner(op::MatrixFreeOperator) -&gt; JacobiPreconditioner
 jacobi_preconditioner(op::Bramble.GhostMatrixFreeOperator) -&gt; JacobiPreconditioner</code></pre>
 </div>
-<p>The Jacobi preconditioner of <code class="md-code-inline">A = assemble(a; dirichlet, dirichlet_components)</code>, or of the matrix <code class="md-code-inline">op</code> stands for, from its diagonal alone: one walk of the form&#39;s stencil keeps the entries with <code class="md-code-inline">row == col</code>, and <code class="md-code-inline">A</code> is never built. Construction allocates the diagonal and the Dirichlet row mask, both of length <code class="md-code-inline">ndofs</code>. The walk runs on the calling task under any CPU policy.</p>
-<p>On a form over ghost spaces (<a href="../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a>), <code class="md-code-inline">A</code> is the reduced matrix <code class="md-code-inline">E_vᵀ A_pad E_u</code> that <code class="md-code-inline">assemble(a)</code> returns, and <code class="md-code-inline">op</code> the operator <a href="../api/forms/#Bramble.matrix_free_operator"><code class="md-code-inline">matrix_free_operator</code></a><code class="md-code-inline">(a)</code> returns for it: one walk of the padded form sums, for each degree of freedom, the padded entries whose row and column closures both reach it, so neither <code class="md-code-inline">A_pad</code> nor <code class="md-code-inline">A</code> is built. <code class="md-code-inline">policy</code> defaults to the padded space&#39;s.</p>
+<p>The Jacobi preconditioner of <code class="md-code-inline">A = assemble(a; dirichlet, dirichlet_components)</code>, or of the matrix <code class="md-code-inline">op</code> stands for, from its diagonal alone: one walk of the form&#39;s stencil keeps the entries with <code class="md-code-inline">row == col</code>, and <code class="md-code-inline">A</code> is never built. Construction allocates the diagonal and the Dirichlet row mask, both of length <code class="md-code-inline">ndofs</code>. The walk runs under the operator&#39;s policy: under <a href="../api/utilities/#Bramble.CpuThreaded"><code class="md-code-inline">CpuThreaded</code></a> or <a href="../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> its bands each own their rows, so the diagonal is the same, bit for bit, under every CPU policy at one thread count.</p>
+<p>On a form over ghost spaces (<a href="../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a>), <code class="md-code-inline">A</code> is the reduced matrix <code class="md-code-inline">E_vᵀ A_pad E_u</code> that <code class="md-code-inline">assemble(a)</code> returns, and <code class="md-code-inline">op</code> the operator <a href="../api/forms/#Bramble.matrix_free_operator"><code class="md-code-inline">matrix_free_operator</code></a><code class="md-code-inline">(a)</code> returns for it: one walk of the padded form sums, for each degree of freedom, the padded entries whose row and column closures both reach it, so neither <code class="md-code-inline">A_pad</code> nor <code class="md-code-inline">A</code> is built. <code class="md-code-inline">policy</code> defaults to the padded space&#39;s. Under every policy, <a href="../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a> included, the walk keeps one vector of length <code class="md-code-inline">ndofs</code> per band of the threaded cut, which is why the diagonal is the same bits under each.</p>
 <p><strong>Arguments</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">a</code>: A square bilinear form (<a href="../api/spaces/#Bramble.ndofs"><code class="md-code-inline">ndofs</code></a> of trial and test space equal), on scalar, composite or ghost spaces.</p>
@@ -850,7 +850,7 @@ jacobi_preconditioner(op::Bramble.GhostMatrixFreeOperator) -&gt; JacobiPrecondit
 </ul>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.4.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet_components</code> names a leaf the test space does not have.</p>
 </li>
@@ -876,7 +876,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.JacobiPreconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.JacobiPreconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L36-L51" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L37-L52" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -938,7 +938,7 @@ chebyshev_preconditioner(op::Bramble.GhostMatrixFreeOperator; degree = 4, λmax 
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">degree &lt; 1</code>, <code class="md-code-inline">ratio &lt;= 1</code>, or <code class="md-code-inline">λmax</code> (given or estimated) not finite and positive.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.4.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet_components</code> names a leaf the test space does not have.</p>
 </li>
@@ -1028,7 +1028,7 @@ sol = solve(LinearProblem(A, F), KrylovJL_GMRES(); Pl = P)</code></pre>
 <div class="md-docstring" id="Bramble.FDMPreconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.FDMPreconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L181-L196" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/matrix_free_preconditioners.jl#L183-L198" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1159,7 +1159,7 @@ true</code></pre>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">xf</code> or <code class="md-code-inline">xc</code> is not 1-based, or the two may alias.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: the backend&#39;s policy is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device transfers are tracked on milestone v4.4.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: the backend&#39;s policy is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device transfers are tracked on milestone v4.11.0.</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -1214,7 +1214,7 @@ true</code></pre>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">xf</code> or <code class="md-code-inline">xc</code> is not 1-based, or the two may alias.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: the backend&#39;s policy is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device transfers are tracked on milestone v4.4.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: the backend&#39;s policy is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device transfers are tracked on milestone v4.11.0.</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -1365,7 +1365,7 @@ jacobi_smoother(op::Bramble.GhostMatrixFreeOperator; ω = nothing, sweeps = 1) -
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">sweeps &lt; 1</code>, or <code class="md-code-inline">ω</code> not finite and positive.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.4.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet_components</code> names a leaf the test space does not have.</p>
 </li>
@@ -1431,7 +1431,7 @@ chebyshev_smoother(op::Bramble.GhostMatrixFreeOperator; degree = 2, λmax = noth
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">degree &lt; 1</code>, or <code class="md-code-inline">λmax</code> (given or estimated) not finite and positive.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.4.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">dirichlet_components</code> names a leaf the test space does not have.</p>
 </li>
@@ -1496,7 +1496,7 @@ red_black_gauss_seidel(op::MatrixFreeOperator; sweeps = 1) -&gt; RedBlackGaussSe
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">a</code> is a form on ghost spaces, or <code class="md-code-inline">op</code> its operator, whose closure couples a facet node to nodes of its own colour; use <a href="../api_sciml/#Bramble.jacobi_smoother"><code class="md-code-inline">jacobi_smoother</code></a> or <a href="../api_sciml/#Bramble.chebyshev_smoother"><code class="md-code-inline">chebyshev_smoother</code></a>.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.4.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: <code class="md-code-inline">policy</code> is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
 </li>
 <li><p><code class="md-code-inline">DimensionMismatch</code>: <code class="md-code-inline">A</code> is not square.</p>
 </li>
@@ -1630,7 +1630,7 @@ true</code></pre>
 </li>
 <li><p><code class="md-code-inline">ArgumentError</code>: the coarsest level has more than 4096 points: <code class="md-code-inline">Ωₕ</code>&#39;s point counts minus one need a larger power of two as a factor.</p>
 </li>
-<li><p><code class="md-code-inline">ArgumentError</code>: the backend&#39;s policy is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.4.0.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: the backend&#39;s policy is a <a href="../api/utilities/#Bramble.GpuPolicy"><code class="md-code-inline">GpuPolicy</code></a>; device execution is tracked on milestone v4.11.0.</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -2079,7 +2079,7 @@ suitesparse_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet
 <div class="md-docstring" id="Bramble.suitesparse_qr_factorize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.suitesparse_qr_factorize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/suitesparse_solver.jl#L136-L161" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/suitesparse_solver.jl#L135-L160" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2105,7 +2105,7 @@ u = fact \ F</code></pre>
 <div class="md-docstring" id="Bramble.suitesparse_qr_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.suitesparse_qr_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/suitesparse_solver.jl#L176-L187" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/suitesparse_solver.jl#L175-L186" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2373,7 +2373,7 @@ u = mumps_solve(A, F)</code></pre>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">sparspak_factorize(A::AbstractMatrix) -&gt; SparspakFactorization
+<pre><code class="language-julia">sparspak_factorize(A::SparseMatrixCSC) -&gt; SparspakFactorization
 sparspak_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -&gt; SparspakFactorization</code></pre>
 </div>
 <p>Compute the pure-Julia sparse direct LU factorization of <code class="md-code-inline">A</code> (or the assembled matrix of <code class="md-code-inline">a</code>) using <a href="https://github.com/JuliaSparse/Sparspak.jl">Sparspak.jl</a>.</p>
@@ -2437,7 +2437,7 @@ u = sparspak_solve(A, F)</code></pre>
 </div>
 </div>
 <h2 id="Caching-a-coefficient-dependent-assembly-by-element-type" class="md-heading">Caching a coefficient-dependent assembly by element type<a href="#Caching-a-coefficient-dependent-assembly-by-element-type" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A Newton residual generic over <code class="md-code-inline">T</code> (<code class="md-code-inline">Float64</code> on a plain call, <code class="md-code-inline">ForwardDiff.Dual</code> while an AD backend&#39;s sparse Jacobian sweep is probing it) cannot preallocate one matrix the way a Picard loop can. <code class="md-code-inline">type_cached_assemble!</code> gives the sparsity pattern a place to live per element type it is ever reached at instead, so only the very first call at a given type pays for it. No test runs the AD sweep until v4.3.0, when the AD backends return.</p>
+<p>A Newton residual generic over <code class="md-code-inline">T</code> (<code class="md-code-inline">Float64</code> on a plain call, <code class="md-code-inline">ForwardDiff.Dual</code> while an AD backend&#39;s sparse Jacobian sweep is probing it) cannot preallocate one matrix the way a Picard loop can. <code class="md-code-inline">type_cached_assemble!</code> gives the sparsity pattern a place to live per element type it is ever reached at instead, so only the very first call at a given type pays for it. No test runs the AD sweep until v4.5.0, when the AD backends return.</p>
 <div class="md-docstring" id="Bramble.type_cached_assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.type_cached_assemble!</code></h4>
@@ -2574,6 +2574,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=b99d18fd"></script>
+  <script src="../assets/materialdocs.js?v=75decd96"></script>
 </body>
 </html>

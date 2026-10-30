@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear and bilinear forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=70a50237">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1e6e639e">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Linear and bilinear forms — Bramble.jl">
   <meta property="og:title" content="Linear and bilinear forms — Bramble.jl">
@@ -133,7 +133,7 @@ l = form(Wₕ, v -&gt; innerₕ(fₕ, v))</code></pre>
 <pre><code class="language-julia">b = assemble(l)
 length(b), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808496)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808495)</code></pre>
 </div>
 <p>In a time loop the allocation is the part worth avoiding. <code class="md-code-inline">assemble!</code> refills a vector that already exists with zero allocations:</p>
 <div class="md-multi-output">
@@ -142,7 +142,7 @@ length(b), sum(b)</code></pre>
 <pre><code class="language-julia">assemble!(b, l)
 sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808496</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808495</code></pre>
 </div>
 <h3 id="Live-grid-coefficients-and-dynamic-scalars" class="md-heading">Live grid coefficients and dynamic scalars<a href="#Live-grid-coefficients-and-dynamic-scalars" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>A form keeps direct references to its coefficient arrays. Overwrite a grid function in place with <code class="md-code-inline">Rₕ!(fₕ, ...)</code> or <code class="md-code-inline">parent(fₕ) .= ...</code> between steps, and the next <code class="md-code-inline">assemble!(b, l)</code> reads the new values with no allocation and no rebuilt form.</p>
@@ -167,7 +167,7 @@ sum(b_dyn) ≈ 2 * sum(b)</code></pre>
 <pre><code class="language-julia">oneₕ = Rₕ(Wₕ, x -&gt; 1.0)
 l(oneₕ), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808496)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808495)</code></pre>
 </div>
 <p>Against the all-ones grid function a linear form is the sum of its assembled vector. The difference is that <code class="md-code-inline">l(oneₕ)</code> builds no vector and allocates nothing, so prefer it when the result is a scalar.</p>
 <p><code class="md-code-inline">evaluate!</code> is the middle case. It takes a scratch vector, fills it with the assembled vector and returns the contraction:</p>
@@ -408,7 +408,7 @@ ratio = ghost_error(33) / ghost_error(65)
 
 ratio</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">4.000864772047653</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4.00086477356136</code></pre>
 </div>
 <p>The relations a facet takes:</p>
 <div class="md-table-wrap">
@@ -509,8 +509,8 @@ end
 flux_norms</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
- 0.22737124178043056
- 1.2320209368156171e-17</code></pre>
+ 0.22737124178043053
+ 2.0715720339371974e-17</code></pre>
 </div>
 <p>The block ends on the largest traction row of each component. On this seeded mesh it is about 0.23 for component 1, which carries the datum, and rounding for component 2, whose datum is zero. Take a component of the lifted displacement as <code class="md-code-inline">Bramble.lift(Cₕ, u)(i)</code>; a component view of the constrained space itself is refused, because the closure couples the components. On a facet with a traction, the mixed differences of the form do not read that facet&#39;s ghosts but extrapolate to them from the three nodes inward. The refusals and this rule are listed in the <a href="../../internals/space/">space internals</a>.</p>
 <h3 id="Dirichlet-conditions-beside-ghost-relations" class="md-heading">Dirichlet conditions beside ghost relations<a href="#Dirichlet-conditions-beside-ghost-relations" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
@@ -875,7 +875,7 @@ err_sq = maximum(abs, u_sol - u_ex)
 
 abs(dot(w_sq, u_sol)), err_sq</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(6.765421556309548e-17, 0.008916806046415426)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(7.222311128058517e-17, 0.008916806046414205)</code></pre>
 </div>
 <p>The residual of the system is <span class="md-math md-math-inline">\(F - \lambda w\)</span> with <span class="md-math md-math-inline">\(\lambda = \sum F / \sum w\)</span>, because <span class="md-math md-math-inline">\(\mathbf{1}^T A = 0\)</span>. The compatibility of the data holds only to the quadrature error, so <span class="md-math md-math-inline">\(\lambda\)</span> is small, not zero. The error is the discrete difference to the exact solution shifted to the same mean.</p>
 <h4 id="A-kernel-in-the-ghosts" class="md-heading">A kernel in the ghosts<a href="#A-kernel-in-the-ghosts" class="md-heading-anchor" aria-label="Link to this section">#</a></h4>
@@ -899,7 +899,7 @@ n_phys = npoints(Ωₕ_rect)
 
 size(Z_rect), norm(A_rect * Z_rect, Inf)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">((139, 4), 2.1316282072803006e-14)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((139, 4), 2.842170943040401e-14)</code></pre>
 </div>
 <p>The kernel has 4 columns, each supported on the two ghosts of a corner, and <code class="md-code-inline">A * Z</code> vanishes to rounding. The physical values come first in the vector of unknowns, then the ghosts. To check the solve, choose a physical vector, set the ghosts to zero, and form the load <code class="md-code-inline">F = A x</code>. The gauged solve returns the physical values of <code class="md-code-inline">x</code>, and the load of a vector shifted by any combination of the kernel columns gives the same answer:</p>
 <div class="md-multi-output">
@@ -922,7 +922,7 @@ u_shifted = pde_solve(A_rect, A_rect * (x_ghost0 + Z_rect * [1.0, -2.0, 3.0, 0.5
 
 maximum(abs, u_gauged[1:n_phys] - x_phys), norm(Z_rect&#39; * u_gauged, Inf)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(3.548286109378296e-10, 3.841829816480246e-17)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.8467839197077183e-10, 9.453534337892915e-18)</code></pre>
 </div>
 <p>The physical error is about <span class="md-math md-math-inline">\(10^{-10}\)</span> here. <code class="md-code-inline">ghost_kernel</code> finds corner kernels only; others are left out, and the gauged solve still gives the physical part, to about <span class="md-math md-math-inline">\(10^{-8}\)</span> relative in general (see <a href="../../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a>). With <code class="md-code-inline">mean_zero = w</code> as well, the border is <code class="md-code-inline">[w Z]</code>.</p>
 <h4 id="Checking-that-the-data-are-compatible" class="md-heading">Checking that the data are compatible<a href="#Checking-that-the-data-are-compatible" class="md-heading-anchor" aria-label="Link to this section">#</a></h4>
@@ -976,7 +976,7 @@ bad, bad_warnings = check_compatibility(0.2)
 
 (ok.compatible, ok.defect), (bad.compatible, bad.λ, bad.second_ratio)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">((true, 7.309780343141524e-6), (false, 0.2000631200513218, 1.0000182239919038))</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((true, 7.309780343599364e-6), (false, 0.2000631200513299, 1.0000182239908741))</code></pre>
 </div>
 <p>The compatible problem raises no warning and its relative defect is below <span class="md-math md-math-inline">\(10^{-4}\)</span>. The shifted one warns once. Its <span class="md-math md-math-inline">\(\lambda\)</span> is <span class="md-math md-math-inline">\(0.2\)</span>, the shift, on the mesh and on both refinements, so the ratio of the removed loads is <span class="md-math md-math-inline">\(1\)</span> where a quadrature error would give about <span class="md-math md-math-inline">\(4\)</span>. The mesh <code class="md-code-inline">Ωₕ</code> is not modified, and a mesh that carries markers of its own needs the domain&#39;s <code class="md-code-inline">markers(Ω)</code> as a third argument so that the refinement can evaluate them again.</p>
 <p>The check has limits. A defect on the refined mesh below <code class="md-code-inline">5e-3</code> counts as rounding, so a small incompatibility is not detected. Compatible data with a singular flux at a boundary point, whose quadrature error falls slower than the factor of four, can be reported incompatible. When the defect is above the floor the problem is built on a mesh with 16 times the points of <code class="md-code-inline">Ωₕ</code>.</p>
@@ -1027,7 +1027,7 @@ rel_dense = norm(u_pen - u_dense) / norm(u_dense)
 
 rel_mz, rel_dense</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(5.626517153311884e-16, 4.337538229063866e-15)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0, 5.648025058533923e-15)</code></pre>
 </div>
 <p>The difference from the <code class="md-code-inline">mean_zero</code> solve is about <span class="md-math md-math-inline">\(10^{-15}\)</span> for <span class="md-math md-math-inline">\(\gamma \ge 1\)</span> and grows as <span class="md-math md-math-inline">\(1/\gamma\)</span>: a small <span class="md-math md-math-inline">\(\sigma\)</span> makes <span class="md-math md-math-inline">\(-1/\sigma\)</span> large against the entries of <code class="md-code-inline">A</code> and costs digits, so take <span class="md-math md-math-inline">\(\gamma \ge 10^{-2}\)</span>. A large <span class="md-math md-math-inline">\(\sigma\)</span> costs nothing. The <a href="../../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a> docstring gives the measured figures.</p>
 <p>Three rules apply to the term. The <code class="md-code-inline">σ</code> is read when the form is assembled, so with a <code class="md-code-inline">Ref</code> factor call <code class="md-code-inline">assemble!(K_pen, a_pen)</code> after changing it, before the next solve. With <code class="md-code-inline">dirichlet</code>, the Dirichlet rows of <code class="md-code-inline">K_pen</code> are identity rows and the penalty&#39;s row vector is zeroed there. One rank-one term per form: the sum of two is refused with an <code class="md-code-inline">ArgumentError</code>, so add the scalars when they share the functionals. On a ghost space the rank-one term is covered by the <a href="../../internals/space/">support table</a>.</p>
@@ -1272,6 +1272,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=70a50237"></script>
+  <script src="../../assets/materialdocs.js?v=1e6e639e"></script>
 </body>
 </html>

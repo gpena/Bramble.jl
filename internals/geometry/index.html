@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d44ee7b3">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3a961245">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -418,7 +418,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <pre><code class="language-julia">conditions(edm::EvaluatedParametricDomainMarkers) -&gt; Tuple</code></pre>
 </div>
 <p>Return condition markers evaluated at <code class="md-code-inline">edm.evaluation_time</code> and <code class="md-code-inline">edm.p</code>, each a spatial predicate of <code class="md-code-inline">x</code>.</p>
-<p>A predicate <code class="md-code-inline">f</code> with a one-argument method and no two- or three-argument method is spatial and passes through unchanged, a <code class="md-code-inline">ComposedFunction</code> or <code class="md-code-inline">Base.Fix1</code>/<code class="md-code-inline">Base.Fix2</code> being judged by what it wraps, as in the method above. Any other predicate is fixed at <code class="md-code-inline">(t, p)</code> as <code class="md-code-inline">x -&gt; f(x, t, p)</code>, so <code class="md-code-inline">(x, t = 0, p = 1) -&gt; ...</code> is fixed at both. An <code class="md-code-inline">(x, t)</code> predicate is not fixed at <code class="md-code-inline">t</code> alone, and its wrapper throws a <code class="md-code-inline">MethodError</code> when called; <code class="md-code-inline">dirichlet_constraints</code> and <code class="md-code-inline">semidiscretize</code> never send one here, since they route only uniformly <code class="md-code-inline">(x, t, p)</code> conditions to this path.</p>
+<p>A predicate <code class="md-code-inline">f</code> with a one-argument method and no two- or three-argument method is spatial and passes through unchanged, a <code class="md-code-inline">ComposedFunction</code> or <code class="md-code-inline">Base.Fix1</code>/<code class="md-code-inline">Base.Fix2</code> being judged by what it wraps, as in the method above. Any other predicate is fixed at <code class="md-code-inline">(t, p)</code> as <code class="md-code-inline">x -&gt; f(x, t, p)</code>, so <code class="md-code-inline">(x, t = 0, p = 1) -&gt; ...</code> is fixed at both. An <code class="md-code-inline">(x, t)</code> predicate is not fixed at <code class="md-code-inline">t</code> alone, and its wrapper throws a <code class="md-code-inline">MethodError</code> when called; <code class="md-code-inline">dirichlet_constraints</code> and <code class="md-code-inline">semidiscretize</code> never send one here: a set holding an <code class="md-code-inline">(x, t)</code> condition beside an <code class="md-code-inline">(x, t, p)</code> one is refused, so only <code class="md-code-inline">(x, t, p)</code> conditions, with any spatial <code class="md-code-inline">x</code> ones beside them, route to this path.</p>
 <p><code class="md-code-inline">Base.Fix{N}</code> generalizes <code class="md-code-inline">Base.Fix1</code>/<code class="md-code-inline">Base.Fix2</code> to insert its fixed value at position <code class="md-code-inline">N</code> of <em>whatever args a given call supplies</em>, not at position <code class="md-code-inline">N</code> of <code class="md-code-inline">f</code>&#39;s own argument list (<code class="md-code-inline">Base.Fix</code>&#39;s own docstring example: <code class="md-code-inline">Fix{1}(Fix{2}(f, 4), 4)</code> fixes the first and second arg, not the first and fourth). So <code class="md-code-inline">Base.Fix{3}(f, p)</code> first, fixing <code class="md-code-inline">f</code>&#39;s own third argument to <code class="md-code-inline">p</code> and leaving a 2-argument <code class="md-code-inline">(x, t) -&gt; f(x, t, p)</code>; <code class="md-code-inline">Base.Fix2</code> on <em>that</em> then fixes its second argument to <code class="md-code-inline">t</code>, landing on <code class="md-code-inline">x -&gt; f(x, t, p)</code>. Reversing the order – <code class="md-code-inline">Base.Fix2(Base.Fix2(f, p), t)</code>, the tempting reading of &quot;fix p, then fix t&quot; – instead inserts <code class="md-code-inline">p</code> at position 2 and shoves <code class="md-code-inline">t</code> to position 3, calling <code class="md-code-inline">f(x, p, t)</code> (caught by the test that checks a <code class="md-code-inline">(1.0, 3.0)</code> vs a swapped-order failure, not by inspection).</p>
 </div>
 </div>
@@ -560,7 +560,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.Domain">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Domain</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L4-L14" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L1-L11" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -581,7 +581,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.Domain-Tuple{Number}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Domain</code> — <span class="md-docstring-sig">Tuple{Number}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L122-L132" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L119-L129" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -595,7 +595,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Base.eltype-Tuple{Bramble.Domain}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.eltype</code> — <span class="md-docstring-sig">Tuple{Bramble.Domain}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L158-L163" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L155-L160" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -609,7 +609,7 @@ eltype(::Type{&lt;:Domain{SetType}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Base.extrema-Tuple{Bramble.Domain}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.extrema</code> — <span class="md-docstring-sig">Tuple{Bramble.Domain}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L193-L198" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L190-L195" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -623,7 +623,7 @@ extrema(Ω::Domain, i::Integer) -&gt; Tuple{T, T}</code></pre>
 <div class="md-docstring" id="Base.in-Tuple{Any, Bramble.Domain}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.in</code> — <span class="md-docstring-sig">Tuple{Any, Bramble.Domain}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L186-L190" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L183-L187" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -636,7 +636,7 @@ extrema(Ω::Domain, i::Integer) -&gt; Tuple{T, T}</code></pre>
 <div class="md-docstring" id="Bramble.conditions-Tuple{Bramble.Domain}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.conditions</code> — <span class="md-docstring-sig">Tuple{Bramble.Domain}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L41-L45" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L38-L42" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -649,7 +649,7 @@ extrema(Ω::Domain, i::Integer) -&gt; Tuple{T, T}</code></pre>
 <div class="md-docstring" id="Bramble.is_collapsed-Tuple{Bramble.Domain}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.is_collapsed</code> — <span class="md-docstring-sig">Tuple{Bramble.Domain}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L202-L208" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L199-L205" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -663,7 +663,7 @@ is_collapsed(Ω::Domain, i::Integer) -&gt; Bool</code></pre>
 <div class="md-docstring" id="Bramble.marker_identifiers-Tuple{Bramble.Domain}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.marker_identifiers</code> — <span class="md-docstring-sig">Tuple{Bramble.Domain}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L57-L73" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L54-L70" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -683,7 +683,7 @@ is_collapsed(Ω::Domain, i::Integer) -&gt; Bool</code></pre>
 <div class="md-docstring" id="Bramble.point_type-Tuple{Bramble.Domain}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.point_type</code> — <span class="md-docstring-sig">Tuple{Bramble.Domain}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L167-L172" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L164-L169" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -697,7 +697,7 @@ point_type(::Type{&lt;:Domain{SetType}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.set-Tuple{Bramble.Domain}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.set</code> — <span class="md-docstring-sig">Tuple{Bramble.Domain}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L135-L139" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L132-L136" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -710,7 +710,7 @@ point_type(::Type{&lt;:Domain{SetType}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.symbols-Tuple{Bramble.Domain}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.symbols</code> — <span class="md-docstring-sig">Tuple{Bramble.Domain}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L27-L31" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L24-L28" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -723,7 +723,7 @@ point_type(::Type{&lt;:Domain{SetType}}) -&gt; Type</code></pre>
 <div class="md-docstring" id="Bramble.tuples-Tuple{Bramble.Domain}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.tuples</code> — <span class="md-docstring-sig">Tuple{Bramble.Domain}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L34-L38" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L31-L35" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1020,6 +1020,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=d44ee7b3"></script>
+  <script src="../../assets/materialdocs.js?v=3a961245"></script>
 </body>
 </html>

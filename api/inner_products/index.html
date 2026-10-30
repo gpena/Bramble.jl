@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Inner products and norms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=47deb6f8">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=17c35d86">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Inner products and norms — Bramble.jl">
   <meta property="og:title" content="Inner products and norms — Bramble.jl">
@@ -98,7 +98,7 @@
 <div class="md-docstring" id="Bramble.innerₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.innerₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L90-L147" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L91-L148" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -152,15 +152,16 @@ true</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">innerₕ(left::LazyOp{D}, right::LazyOp{D}; markers = ()) -&gt; LazyOp{D}</code></pre>
 </div>
-<p>Constructs a symbolic <span class="md-math md-math-inline">\(L^2\)</span> inner product between <code class="md-code-inline">left</code> and <code class="md-code-inline">right</code>: a <code class="md-code-inline">LinearProduct</code> (source × test) if <code class="md-code-inline">left</code> is source-only (<a href="../../internals/form/#Bramble._is_source_only-Tuple{Union{Bramble.BackwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.BackwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CrossWeightedDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.JumpNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.SecondDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ShiftNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StarDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}"><code class="md-code-inline">_is_source_only</code></a>: a source, or a source wrapped in differences/averages/shifts/jumps/restrictions/scales, never a trial function), or a <code class="md-code-inline">BilinearProduct</code> (trial × test) otherwise.</p>
+<p>Constructs a symbolic <span class="md-math md-math-inline">\(L^2\)</span> inner product between <code class="md-code-inline">left</code> and <code class="md-code-inline">right</code>: a <code class="md-code-inline">LinearProduct</code> (source × test) if <code class="md-code-inline">left</code> is source-only (<a href="../../internals/form/#Bramble._is_source_only-Tuple{Union{Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StencilNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}"><code class="md-code-inline">_is_source_only</code></a>: a source, or a source wrapped in differences/averages/shifts/jumps/restrictions/scales, never a trial function), or a <code class="md-code-inline">BilinearProduct</code> (trial × test) otherwise.</p>
 <p>This applies specifically when <code class="md-code-inline">left</code> is a <code class="md-code-inline">LazyOp</code>: a bare <code class="md-code-inline">Function</code>/<code class="md-code-inline">Number</code>/<code class="md-code-inline">VectorElement</code> is unconditionally a source, so those overloads build a <code class="md-code-inline">LinearProduct</code> directly. When <code class="md-code-inline">left</code> arrives already wrapped (<code class="md-code-inline">πₕ(uₕ)</code> or <code class="md-code-inline">D₋ₓ(πₕ(uₕ))</code>), this check ensures the correct linear AST node is constructed.</p>
+<p>A composite <code class="md-code-inline">VectorElement</code> source (or a tuple of sources, one per component) with an unindexed composite test function <code class="md-code-inline">v</code> expands per component: <code class="md-code-inline">innerₕ(fₕ, v)</code> is <code class="md-code-inline">Σᵢ innerₕ(fₕ(i), v(i))</code>. An indexed <code class="md-code-inline">v(i)</code> in that position throws an <code class="md-code-inline">ArgumentError</code>, as it names one component while the call sums over all of them. For a single component write <code class="md-code-inline">innerₕ(fₕ(i), v(i))</code>. <code class="md-code-inline">inner₊</code>, <code class="md-code-inline">inner₊ₓ</code>, <code class="md-code-inline">inner₊ᵧ</code> and <code class="md-code-inline">inner₊₂</code> take both the <code class="md-code-inline">VectorElement</code> and the tuple source; <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a> takes the composite <code class="md-code-inline">VectorElement</code> source only. All of them refuse the indexed <code class="md-code-inline">v(i)</code>.</p>
 <p><code class="md-code-inline">markers</code> restricts the assembled term to the union of the labelled regions: a mask on which grid points it contributes to at all.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.inner_Γ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner_Γ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L177-L246" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L178-L247" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -298,7 +299,7 @@ a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)) + skew_symmetri
 <div class="md-docstring" id="Bramble.inner₊">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner₊</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L783-L828" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L789-L834" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -400,7 +401,7 @@ inner₊(left::NTuple{D,LazyOp{D}}, right::NTuple{D,LazyOp{D}}; markers = ()) wh
 <p><code class="md-code-inline">inner₊</code> of two backward differences taken along the same direction, which is the weight the product carries: <code class="md-code-inline">InnerPlus{Dim}</code>.</p>
 <p>In one dimension there is only one direction, so <code class="md-code-inline">inner₊(left, right)</code> already answers. Above one dimension a bare <code class="md-code-inline">inner₊</code> of two operators names no direction, and the weights are directional: the direction is read off the nodes. This is what makes <code class="md-code-inline">inner₊(D₋ₓ(u), D₋ₓ(v))</code> mean what it reads as.</p>
 <p>Backward differences only, as everywhere <code class="md-code-inline">inner₊</code> meets a difference: the weights are those of the summation-by-parts identity, which pairs them with a backward difference.</p>
-<p>Constructs a <code class="md-code-inline">LinearProduct</code> (source × test) if <code class="md-code-inline">left</code> is source-only (<a href="../../internals/form/#Bramble._is_source_only-Tuple{Union{Bramble.BackwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.BackwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CrossWeightedDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.JumpNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.SecondDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ShiftNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StarDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}"><code class="md-code-inline">_is_source_only</code></a>), or a <code class="md-code-inline">BilinearProduct</code> otherwise, matching <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
+<p>Constructs a <code class="md-code-inline">LinearProduct</code> (source × test) if <code class="md-code-inline">left</code> is source-only (<a href="../../internals/form/#Bramble._is_source_only-Tuple{Union{Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StencilNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}"><code class="md-code-inline">_is_source_only</code></a>), or a <code class="md-code-inline">BilinearProduct</code> otherwise, matching <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
 <p><code class="md-code-inline">markers</code> restricts the sum as it does for <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
 </div>
 <div class="md-docstring-content">
@@ -422,7 +423,7 @@ inner₊(left::BackwardDifference{D,Dim}, right::LazyOp{D}) -&gt; LazyOp{D}</cod
 <p>This is what <code class="md-code-inline">inner₊(u, D₋ₓ(v))</code> means: the common form, and the one the coupled pressure-velocity terms are written in, <code class="md-code-inline">inner₊(p, D₋ₓ(v[1]))</code> with <code class="md-code-inline">p</code> a symbolic scalar field. It is not restricted to indexed leaves: a plain <code class="md-code-inline">TrialFunction</code> reads the direction off the difference just as an <code class="md-code-inline">IndexedTrialFunction</code> does.</p>
 <p>Backward differences only, as everywhere <code class="md-code-inline">inner₊</code> meets a difference.</p>
 <p>A <code class="md-code-inline">Function</code>, <code class="md-code-inline">Number</code> or <code class="md-code-inline">VectorElement</code> on the left is the source it stands for and reads its direction the same way, so above one dimension <code class="md-code-inline">inner₊(f, v)</code> throws.</p>
-<p>A <code class="md-code-inline">LinearProduct</code> if <code class="md-code-inline">left</code> is source-only (<a href="../../internals/form/#Bramble._is_source_only-Tuple{Union{Bramble.BackwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.BackwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CrossWeightedDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.JumpNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.SecondDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ShiftNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StarDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}"><code class="md-code-inline">_is_source_only</code></a>), a <code class="md-code-inline">BilinearProduct</code> otherwise, matching <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
+<p>A <code class="md-code-inline">LinearProduct</code> if <code class="md-code-inline">left</code> is source-only (<a href="../../internals/form/#Bramble._is_source_only-Tuple{Union{Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StencilNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}"><code class="md-code-inline">_is_source_only</code></a>), a <code class="md-code-inline">BilinearProduct</code> otherwise, matching <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
 <p><code class="md-code-inline">markers</code> restricts the sum as it does for <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
 </div>
 <div class="md-docstring-content">
@@ -436,10 +437,12 @@ inner₊(left::BackwardDifference{D,Dim}, right::LazyOp{D}) -&gt; LazyOp{D}</cod
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">inner₊(left::NTuple{N,&lt;:Tuple}, right::NTuple{N,&lt;:Tuple}) where N</code></pre>
+<pre><code class="language-julia">inner₊(left::Tuple{Vararg{Tuple}}, right::Tuple{Vararg{Tuple}})</code></pre>
 </div>
-<p>Vector-field <code class="md-code-inline">inner₊</code>: sums per-component inner products. Used when <code class="md-code-inline">left</code> and <code class="md-code-inline">right</code> are <strong>tuples of gradient tuples</strong>, e.g. <code class="md-code-inline">inner₊(∇ₕ(u), ∇ₕ(v))</code> where <code class="md-code-inline">u = (u1, u2)</code> is a velocity tuple. Each element pair <code class="md-code-inline">(left[k], right[k])</code> is a <code class="md-code-inline">D</code>-tuple of <code class="md-code-inline">LazyOp</code> (a gradient), which dispatches to the existing <code class="md-code-inline">inner₊(::NTuple{D,LazyOp}, ::NTuple{D,LazyOp})</code>.</p>
-<p>This overload is intentionally restricted to <code class="md-code-inline">NTuple{N,&lt;:Tuple}</code> so it does <strong>not</strong> interfere with <code class="md-code-inline">inner₊(NTuple{D,VectorElement}, NTuple{D,VectorElement})</code> handled by the <code class="md-code-inline">@generated</code> method in <code class="md-code-inline">inner_product.jl</code>. That restriction is what separates this file&#39;s symbolic family from that file&#39;s numeric one; it is asserted in <code class="md-code-inline">test/form/inner_products.jl</code>, testset &quot;Symbolic and numeric families stay apart&quot;.</p>
+<p>Vector-field <code class="md-code-inline">inner₊</code>: sums per-component inner products. Used when <code class="md-code-inline">left</code> and <code class="md-code-inline">right</code> are <strong>tuples of gradient tuples</strong>, e.g. <code class="md-code-inline">inner₊(∇ₕ(components(u)), ∇ₕ(components(v)))</code> where <code class="md-code-inline">u</code> is a velocity. Each element pair <code class="md-code-inline">(left[k], right[k])</code> is a <code class="md-code-inline">D</code>-tuple of <code class="md-code-inline">LazyOp</code> (a gradient), which dispatches to the existing <code class="md-code-inline">inner₊(::NTuple{D,LazyOp}, ::NTuple{D,LazyOp})</code>.</p>
+<p><code class="md-code-inline">inner₊(∇ₕ(u), ∇ₕ(v))</code> on a composite <code class="md-code-inline">u</code> and <code class="md-code-inline">v</code> builds the same sum, in the same order. There <code class="md-code-inline">∇ₕ</code> returns rows labelled by component (<code class="md-code-inline">Bramble._GradientRows</code>), and the sum records those labels, so a coefficient captured over it leaves <code class="md-code-inline">form</code> one concrete type in 3D as well. One side labelled and the other a plain tuple takes this method.</p>
+<p>The rows may differ in type (<code class="md-code-inline">∇ₕ((u(1) + u(2), u(2)))</code>), but both sides need the same number of them, or it throws a <code class="md-code-inline">DimensionMismatch</code> naming both counts.</p>
+<p>This overload is intentionally restricted to tuples of tuples so it does <strong>not</strong> interfere with <code class="md-code-inline">inner₊(NTuple{D,VectorElement}, NTuple{D,VectorElement})</code> handled by the <code class="md-code-inline">@generated</code> method in <code class="md-code-inline">inner_product.jl</code>. That restriction is what separates this file&#39;s symbolic family from that file&#39;s numeric one; it is asserted in <code class="md-code-inline">test/form/inner_products.jl</code>, testset &quot;Symbolic and numeric families stay apart&quot;.</p>
 <p><code class="md-code-inline">markers</code> restricts the whole sum, not each component separately, as it does for <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
 </div>
 <div class="md-docstring-content">
@@ -450,7 +453,7 @@ inner₊(left::BackwardDifference{D,Dim}, right::LazyOp{D}) -&gt; LazyOp{D}</cod
 <p>Constructs the symbolic modified <span class="md-math md-math-inline">\(L^2_+\)</span> inner product staggered in the direction set <code class="md-code-inline">S ⊆ 1:D</code> (gpena/Bramble.jl#115, #234): the weight at grid index <code class="md-code-inline">I</code> is <span class="md-math md-math-inline">\(\prod_{d \in S} h_d(I_d) \cdot \prod_{d \notin S} h_d(I_d + 1/2)\)</span>, matching <a href="../../api/spaces/#Bramble.weights"><code class="md-code-inline">weights</code></a><code class="md-code-inline">(Wₕ, Val(S))</code>.</p>
 <p>This is the general entry point <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a> (<code class="md-code-inline">S = ()</code>) and <a href="../../api/inner_products/#Bramble.inner₊ₓ"><code class="md-code-inline">inner₊ₓ</code></a>/<a href="../../api/inner_products/#Bramble.inner₊ᵧ"><code class="md-code-inline">inner₊ᵧ</code></a>/<a href="../../api/inner_products/#Bramble.inner₊₂"><code class="md-code-inline">inner₊₂</code></a> (<code class="md-code-inline">S</code> a singleton) are aliases of: for those two shapes it builds exactly the same <a href="../../internals/form/#Bramble.InnerH"><code class="md-code-inline">InnerH</code></a>/<a href="../../internals/form/#Bramble.InnerPlus"><code class="md-code-inline">InnerPlus</code></a> node they do, not a new node under a shared name, so a term written either way folds the same way in the simplifier and resolves to the same <code class="md-code-inline">which(inner₊, ...).file</code>. Every other <code class="md-code-inline">S</code> (<code class="md-code-inline">|S| ≥ 2</code>) builds an <a href="../../internals/form/#Bramble.InnerPlusSet"><code class="md-code-inline">InnerPlusSet</code></a> node, whose weight at assembly comes from the lazy <code class="md-code-inline">SeparableWeights</code> <a href="../../api/spaces/#Bramble.weights"><code class="md-code-inline">weights</code></a><code class="md-code-inline">(Wₕ, Val(S))</code> returns for those sets.</p>
 <p><code class="md-code-inline">S</code> must be a subset of <code class="md-code-inline">1:D</code> with no axis repeated, and is accepted in any order – <code class="md-code-inline">Val((1,2))</code> and <code class="md-code-inline">Val((2,1))</code> build the identical node. Its entries may be any integer type but <code class="md-code-inline">Bool</code> (<code class="md-code-inline">Val((Int32(1), Int32(2)))</code> builds the node <code class="md-code-inline">Val((1, 2))</code> does); a <code class="md-code-inline">Bool</code> entry throws an <code class="md-code-inline">ArgumentError</code>.</p>
-<p>Constructs a <code class="md-code-inline">LinearProduct</code> if <code class="md-code-inline">left</code> is source-only (<a href="../../internals/form/#Bramble._is_source_only-Tuple{Union{Bramble.BackwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.BackwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CrossWeightedDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.JumpNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.SecondDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ShiftNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StarDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}"><code class="md-code-inline">_is_source_only</code></a>), a <code class="md-code-inline">BilinearProduct</code> otherwise, matching <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
+<p>Constructs a <code class="md-code-inline">LinearProduct</code> if <code class="md-code-inline">left</code> is source-only (<a href="../../internals/form/#Bramble._is_source_only-Tuple{Union{Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StencilNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}"><code class="md-code-inline">_is_source_only</code></a>), a <code class="md-code-inline">BilinearProduct</code> otherwise, matching <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
 <p><code class="md-code-inline">markers</code> restricts the sum as it does for <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
@@ -475,7 +478,7 @@ inner₊(u, v, Val((1,)))        # what inner₊ₓ(u, v) is</code></pre>
 <div class="md-docstring" id="Bramble.inner₊ₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner₊ₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L876-L907" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L882-L913" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -516,7 +519,7 @@ inner₊ᵧ(left::LazyOp{D}, right::LazyOp{D}) where D
 inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 </div>
 <p>Constructs directional modified <span class="md-math md-math-inline">\(L^2_+\)</span> inner products in x, y, and z directions.</p>
-<p>A <code class="md-code-inline">LinearProduct</code> if <code class="md-code-inline">left</code> is <em>source-only</em> (<a href="../../internals/form/#Bramble._is_source_only-Tuple{Union{Bramble.BackwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.BackwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CenteredDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.CrossWeightedDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardAverage{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ForwardDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.JumpNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.SecondDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.ShiftNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StarDifference{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}"><code class="md-code-inline">_is_source_only</code></a>), a <code class="md-code-inline">BilinearProduct</code> otherwise, exactly as <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a> decides.</p>
+<p>A <code class="md-code-inline">LinearProduct</code> if <code class="md-code-inline">left</code> is <em>source-only</em> (<a href="../../internals/form/#Bramble._is_source_only-Tuple{Union{Bramble.GridFunctionScale{D, VType, OpType} where {VType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.InterpolationNode{D, S, OpType} where {S, OpType&lt;:Bramble.LazyOp{D}}, Bramble.OperatorScale{D, ScalarType, OpType} where {ScalarType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.RegionRestriction{D, RegionType, OpType} where {RegionType, OpType&lt;:Bramble.LazyOp{D}}, Bramble.StencilNode{D, Dim, OpType} where {Dim, OpType&lt;:Bramble.LazyOp{D}}, Bramble._FacetExtrapolated{D, OpType} where OpType&lt;:Bramble.LazyOp{D}} where D}"><code class="md-code-inline">_is_source_only</code></a>), a <code class="md-code-inline">BilinearProduct</code> otherwise, exactly as <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a> decides.</p>
 <p><code class="md-code-inline">markers</code> restricts the sum as it does for <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>.</p>
 <p>A direction beyond <code class="md-code-inline">D</code> throws an <code class="md-code-inline">ArgumentError</code> at the call: <code class="md-code-inline">inner₊ᵧ</code> in 1D, <code class="md-code-inline">inner₊₂</code> below 3D.</p>
 </div>
@@ -524,7 +527,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.inner₊ᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner₊ᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L914-L940" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L920-L946" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -554,7 +557,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.inner₊₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner₊₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L947-L962" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L953-L968" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -572,7 +575,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.normₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.normₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L392-L423" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L393-L425" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -585,14 +588,14 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 </div>
 <p>On a <a href="../../api/spaces/#Bramble.CompositeGridSpace"><code class="md-code-inline">CompositeGridSpace</code></a> it is the norm of the product space, which follows from the inner product there: the square root of the sum of the components&#39; squared norms.</p>
 <p>The result has the real type of the element type (gpena/Bramble.jl#644): a <code class="md-code-inline">Float64</code> for <code class="md-code-inline">Float64</code> or <code class="md-code-inline">ComplexF64</code> data on a <code class="md-code-inline">Float64</code> mesh, a <code class="md-code-inline">Dual</code> for <code class="md-code-inline">ForwardDiff.Dual</code> data. The inner product of a complex <code class="md-code-inline">uₕ</code> with itself is real up to a zero imaginary part, which is dropped before the square root.</p>
-<p>On a <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a> it is the norm over the physical nodes, the first <code class="md-code-inline">npoints(Ωₕ)</code> degrees of freedom: the ghost values never enter, whatever they hold. That holds for <code class="md-code-inline">gridspace(Ωₕ; ghosts)</code> and for a <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> space whose relations carry no data and fix no node. A constrained space whose degrees of freedom omit the fixed nodes or whose relations carry data has no grid function in a vector of its degrees of freedom: <code class="md-code-inline">normₕ</code> throws an <code class="md-code-inline">ArgumentError</code>, and <code class="md-code-inline">normₕ(Bramble.lift(Cₕ, u))</code> is the norm of the lifted grid function.</p>
+<p>On a <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a> it is the norm over the physical nodes, the first <code class="md-code-inline">npoints(Ωₕ)</code> degrees of freedom: the ghost values never enter, whatever they hold. That holds for <code class="md-code-inline">gridspace(Ωₕ; ghosts)</code> and for a <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> space whose relations carry no data and fix no node. A constrained space whose degrees of freedom omit the fixed nodes or whose relations carry data has no grid function in a vector of its degrees of freedom: <code class="md-code-inline">normₕ</code> throws an <code class="md-code-inline">ArgumentError</code>, and <code class="md-code-inline">normₕ(Bramble.lift(Cₕ, u))</code> is the norm of the lifted grid function. On a composite of ghost spaces it is the square root of the sum of the components&#39; squared norms over their physical nodes.</p>
 <p>On the trial space <code class="md-code-inline">U</code> of <a href="../../api/spaces/#Bramble.polygon_spaces"><code class="md-code-inline">Bramble.polygon_spaces</code></a> it is the norm over Ω̄ₕ of the grid function that is <code class="md-code-inline">uₕ</code> at the interior nodes, its degrees of freedom, and 0 at the boundary nodes: each interior node weighs its dual cell, and no exterior node enters. The error of a solve is <code class="md-code-inline">normₕ(element(U, u) - Rₕ(U, u_exact))</code>; the norm of <code class="md-code-inline">Bramble.lift(U, u)</code> would sum the (3.2) extension at the exterior nodes, which holds no value of the solution. The test space <code class="md-code-inline">W</code> throws an <code class="md-code-inline">ArgumentError</code>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.norm₁ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.norm₁ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1396-L1419" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1402-L1425" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -613,7 +616,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.snorm₁ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.snorm₁ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1356-L1385" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1362-L1391" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -634,7 +637,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.norm₊">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.norm₊</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1208-L1232" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1214-L1238" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -658,7 +661,7 @@ norm₊(uₕ::NTuple{D, VectorElement}) -&gt; Number</code></pre>
 <div class="md-docstring" id="Bramble.norminf">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.norminf</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L453-L482" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L462-L491" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -679,7 +682,7 @@ norminf(uₕ::NTuple{D, VectorElement}) -&gt; Real</code></pre>
 <div class="md-docstring" id="LinearAlgebra.norm-Tuple{Bramble.VectorElement, AbstractString}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>LinearAlgebra.norm</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement, AbstractString}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L502-L516" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L508-L522" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -716,6 +719,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=47deb6f8"></script>
+  <script src="../../assets/materialdocs.js?v=17c35d86"></script>
 </body>
 </html>

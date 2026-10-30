@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=66f99d5f">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3d04a4b8">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -137,7 +137,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.point">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.point</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L447-L455" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L453-L461" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -204,7 +204,7 @@ box(a::Tuple{Vararg{Number, D}}, b::Tuple{Vararg{Number, D}}) -&gt; CartesianPro
 <div class="md-docstring" id="Bramble.dim">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.dim</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L271-L276" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L231-L236" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -380,13 +380,13 @@ true</code></pre>
 <pre><code class="language-julia">markers(Ωₕ::AbstractMeshType) -&gt; MeshMarkers</code></pre>
 </div>
 <p>Return the <a href="../../internals/mesh/#Bramble.MeshMarkers"><code class="md-code-inline">MeshMarkers</code></a> dictionary associated with mesh <code class="md-code-inline">Ωₕ</code>.</p>
-<p>The dictionary and its <code class="md-code-inline">BitVector</code>s are read-only views of the mesh&#39;s labels. Change labels with <code class="md-code-inline">markers!</code> or <code class="md-code-inline">set_markers!</code>, which rebuild the marker state assembly reads; an edit made in place is not seen by assembly.</p>
+<p>The dictionary and its <code class="md-code-inline">BitVector</code>s are read-only views of the mesh&#39;s labels. Change labels with <code class="md-code-inline">markers!</code> or <code class="md-code-inline">set_markers!</code>, which update the marker state assembly reads; an edit made in place is not seen by assembly.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.domain">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.domain</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L88-L115" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L85-L112" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -426,7 +426,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.labels">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.labels</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L48-L54" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/domain.jl#L45-L51" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -530,6 +530,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=66f99d5f"></script>
+  <script src="../../assets/materialdocs.js?v=3d04a4b8"></script>
 </body>
 </html>

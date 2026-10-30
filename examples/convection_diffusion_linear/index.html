@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Convection-diffusion equation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=36b7e56a">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=95d89334">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Convection-diffusion equation — Bramble.jl">
   <meta property="og:title" content="Convection-diffusion equation — Bramble.jl">
@@ -176,7 +176,7 @@ end
 residuals = [flux_residual(Ωₕ, Cₕ, A \ F, axis) for axis in (1, 2)]</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
- 0.0002478185736274341
+ 0.0002478185736558558
  0.0010144662635300783</code></pre>
 </div>
 <p>This is the truncation error of the one-sided difference plus the error of the solution itself, so it is small but not round-off. It falls as <span class="md-math md-math-inline">\(h^2\)</span>: the same random mesh at 12 points per side, then split once, gives</p>
@@ -197,7 +197,7 @@ end</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
  0.030187781962067728
- 0.007263770683523241</code></pre>
+ 0.0072637706835516624</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -841,7 +841,7 @@ end</code></pre>
   const data = [{
   name: "1D",
   x: [0.4537346574443589,0.22686732872217952,0.11343366436108976,0.05671683218054491,0.028358416090272454,0.014179208045136282,0.007089604022568197],
-  y: [0.041751727375782546,0.010442370789977548,0.0026108129618809188,0.0006527160839195175,0.0001631798092496307,4.0795001533414595e-5,1.0198754683248187e-5],
+  y: [0.041751727375782546,0.010442370789976207,0.0026108129618809188,0.000652716083915612,0.0001631798092496307,4.0795001533414595e-5,1.0198754683248187e-5],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
@@ -849,7 +849,7 @@ end</code></pre>
 {
   name: "2D",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114,0.0227543707220516],
-  y: [0.0807422622869329,0.021725967323596065,0.00556540364440444,0.0014024909204807044,0.00035151265646708615,8.79464121361441e-5],
+  y: [0.08074226228693267,0.021725967323594945,0.005565403644405923,0.0014024909204681613,0.00035151265644661663,8.794641213902576e-5],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#0E7C86", size: 8 },
@@ -857,7 +857,7 @@ end</code></pre>
 {
   name: "3D",
   x: [0.918047411794347,0.4590237058971735,0.22951185294858678,0.1147559264742934],
-  y: [0.12163655667331259,0.038190441990852114,0.010303362339363758,0.0026415213948853145],
+  y: [0.12163655667331273,0.03819044199085216,0.010303362339364401,0.0026415213948843518],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#B26A00", size: 8 },
@@ -939,6 +939,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=36b7e56a"></script>
+  <script src="../../assets/materialdocs.js?v=95d89334"></script>
 </body>
 </html>

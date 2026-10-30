@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=81448979">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b52db82c">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces — Bramble.jl">
   <meta property="og:title" content="Grid spaces — Bramble.jl">
@@ -263,7 +263,7 @@ gridspace(Ωₕ::AbstractMeshType, N::Int) -&gt; CompositeGridSpace{N}</code></p
 <div class="md-docstring" id="Bramble.ndofs">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ndofs</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L279-L296" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L239-L256" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -283,7 +283,7 @@ ndofs(Wₕ::AbstractSpaceType, ::Type{Tuple}) -&gt; NTuple{N, Int}</code></pre>
 <div class="md-docstring" id="Bramble.weights">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.weights</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L337-L414" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L338-L415" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -291,7 +291,7 @@ ndofs(Wₕ::AbstractSpaceType, ::Type{Tuple}) -&gt; NTuple{N, Int}</code></pre>
 <pre><code class="language-julia">weights(Wₕ::ScalarGridSpace) -&gt; SpaceWeights
 weights(Wₕ::ScalarGridSpace, ::Innerh) -&gt; AbstractVector
 weights(Wₕ::ScalarGridSpace, ::Innerplus) -&gt; NTuple{D, AbstractVector}
-weights(Wₕ::ScalarGridSpace, ::InnerProductType, i::Int) -&gt; AbstractVector
+weights(Wₕ::ScalarGridSpace, ::Union{Innerh, Innerplus}, i::Int) -&gt; AbstractVector
 weights(Wₕ::ScalarGridSpace{D}, ::Val{S}) where {D, S} -&gt; AbstractVector</code></pre>
 </div>
 <p>Returns the precomputed weight vectors for discrete inner products.</p>
@@ -332,7 +332,7 @@ result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product</code></pre>
 </div>
 <p>Defined for a <a href="../../api/spaces/#Bramble.ScalarGridSpace"><code class="md-code-inline">ScalarGridSpace</code></a> only, the same rule <a href="../../api/inner_products/#Bramble.normₕ"><code class="md-code-inline">normₕ</code></a>/<a href="../../api/inner_products/#Bramble.norm₊"><code class="md-code-inline">norm₊</code></a> follow: a composite grid space&#39;s leaves can have different meshes and therefore different weights, so there is no single vector that could correctly answer for the whole composite. A <a href="../../api/spaces/#Bramble.CompositeGridSpace"><code class="md-code-inline">CompositeGridSpace</code></a> raises a <code class="md-code-inline">MethodError</code>; take a scalar component of it with <a href="../../api/spaces/#Bramble.components"><code class="md-code-inline">components</code></a> first.</p>
 <p><strong>Staleness (gpena/Bramble.jl#221)</strong></p>
-<p>Every method here funnels through the one-argument form, which checks <code class="md-code-inline">Wₕ</code>&#39;s stored <a href="../../internals/space/#Bramble.SpaceWeights"><code class="md-code-inline">SpaceWeights</code></a> against <code class="md-code-inline">mesh(Wₕ)</code>&#39;s <em>current</em> <a href="../../internals/mesh/#Bramble._mesh_version-Tuple{Union{Bramble.Mesh1D{BT, CI, VT, T}, Bramble.Mesh1DState{BT, CI, VT, T}} where {BT, CI, VT, T}}"><code class="md-code-inline">_mesh_version</code></a> and throws naming the mismatch if an in-place mutator (<code class="md-code-inline">set_points!</code>, <code class="md-code-inline">change_points!</code>, <code class="md-code-inline">iterative_refinement!</code>) has run on the mesh since these weights were built – rather than <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">inner₊*</code>/every norm silently computing against weights for a mesh that no longer exists. Call <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a> again to get a space that reads the mutated mesh. On a <code class="md-code-inline">CompositeGridSpace</code> this is checked per leaf, the moment <code class="md-code-inline">innerₕ</code>/etc. recurse into it – there is no separate composite-level check to keep in step.</p>
+<p>Every method here funnels through the one-argument form, which checks <code class="md-code-inline">Wₕ</code>&#39;s stored <a href="../../internals/space/#Bramble.SpaceWeights"><code class="md-code-inline">SpaceWeights</code></a> against <code class="md-code-inline">mesh(Wₕ)</code>&#39;s <em>current</em> <a href="../../internals/mesh/#Bramble._mesh_version-Tuple{Union{Bramble.Mesh1D{BT}, Bramble.Mesh1DState{BT}} where BT}"><code class="md-code-inline">_mesh_version</code></a> and throws naming the mismatch if an in-place mutator (<code class="md-code-inline">set_points!</code>, <code class="md-code-inline">change_points!</code>, <code class="md-code-inline">iterative_refinement!</code>) has run on the mesh since these weights were built – rather than <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">inner₊*</code>/every norm silently computing against weights for a mesh that no longer exists. Call <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a> again to get a space that reads the mutated mesh. On a <code class="md-code-inline">CompositeGridSpace</code> this is checked per leaf, the moment <code class="md-code-inline">innerₕ</code>/etc. recurse into it – there is no separate composite-level check to keep in step.</p>
 <p>Form assembly checks once per walk rather than at every point: each walk entry (<code class="md-code-inline">assemble</code>, an <code class="md-code-inline">assemble!</code> refill, a matrix-free product, a linear form&#39;s assembly, once per leaf of a composite) checks the leaf it walks before its first point, with the same error, and the per-point stencil then reads the stored weights unchecked (gpena/Bramble.jl#437). A bilinear walk entry also checks its trial leaf, which may sit on another mesh (gpena/Bramble.jl#466).</p>
 <p>See also: <a href="../../internals/space/#Bramble.SpaceWeights"><code class="md-code-inline">SpaceWeights</code></a>, <a href="../../internals/space/#Bramble.SeparableWeights"><code class="md-code-inline">SeparableWeights</code></a>, <a href="../../internals/space/#Bramble.Innerh"><code class="md-code-inline">Innerh</code></a>, <a href="../../internals/space/#Bramble.Innerplus"><code class="md-code-inline">Innerplus</code></a>, <code class="md-code-inline">innerₕ</code></p>
 </div>
@@ -340,7 +340,7 @@ result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product</code></pre>
 <div class="md-docstring" id="Bramble.spaces">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.spaces</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L312-L316" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L272-L276" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -353,7 +353,7 @@ result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product</code></pre>
 <div class="md-docstring" id="Bramble.space">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.space</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L221-L225" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L181-L185" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -372,7 +372,7 @@ result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product</code></pre>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">space(sd::AbstractSemidiscretization)</code></pre>
+<pre><code class="language-julia">space(sd::Semidiscretization)</code></pre>
 </div>
 <p>Return the test space the semidiscretisation was built on.</p>
 </div>
@@ -380,7 +380,7 @@ result = dot(uₕ.data, w_h, vₕ.data)  # Weighted inner product</code></pre>
 <div class="md-docstring" id="Bramble.ncomponents">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ncomponents</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L299-L308" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/gridspace.jl#L259-L268" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -460,9 +460,9 @@ element(Wₕ::AbstractSpaceType, α::Number) -&gt; VectorElement</code></pre>
 <p>Returns the coefficient vector containing the degrees of freedom of <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> <code class="md-code-inline">uₕ</code>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s37&quot;, T} where {var&quot;#s37&quot;&lt;:Bramble.ScalarGridSpace, T}}">
+<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s39&quot;, T} where {var&quot;#s39&quot;&lt;:Bramble.ScalarGridSpace, T}}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s37&quot;, T} where {var&quot;#s37&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
+<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s39&quot;, T} where {var&quot;#s39&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
 <a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L17-L28" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
@@ -532,7 +532,7 @@ components(op::LazyOp, space::AbstractSpaceType) -&gt; Tuple</code></pre>
 <div class="md-docstring" id="Base.:*-Tuple{Function, Bramble.VectorElement}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.:*</code> — <span class="md-docstring-sig">Tuple{Function, Bramble.VectorElement}</span></h4>
-<a class="md-docstring-source" href="https://github.com/JuliaLang/julia/blob/45b6d15e34bbd2003a31acce0b1847b63dad029c/base/docs/basedocs.jl#L3281-L3316" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/JuliaLang/julia/blob/67ac47b9cd855e02134d41d5428ac9f2a73f2694/base/docs/basedocs.jl#L3281-L3316" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -757,7 +757,7 @@ avgₕ!(uₕ::VectorElement, f, quad_points::Val) -&gt; VectorElement</code></pr
 <div class="md-docstring" id="Bramble.πₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.πₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L386-L415" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L406-L435" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -791,14 +791,14 @@ end</code></pre>
 <div class="md-docstring" id="Bramble.πₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.πₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L493-L501" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L516-L525" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">πₕ(Wₕ::ScalarGridSpace, src::VectorElement; outside = :error) -&gt; VectorElement</code></pre>
 </div>
-<p>Evaluates <code class="md-code-inline">Rₕ(Wₕ, x -&gt; interpolate_at(src, x; outside))</code>; see <a href="../../api/spaces/#Bramble.πₕ!"><code class="md-code-inline">πₕ!</code></a>. Distinguished by multiple dispatch from the one-argument symbolic wrapper <code class="md-code-inline">πₕ(uₕ)</code>, defined below. The element type is promoted from <code class="md-code-inline">Wₕ</code>&#39;s and <code class="md-code-inline">src</code>&#39;s own, so interpolating a <code class="md-code-inline">Dual</code>-valued <code class="md-code-inline">src</code> yields a <code class="md-code-inline">Dual</code>-valued result on an undifferentiated <code class="md-code-inline">Wₕ</code>. <code class="md-code-inline">outside</code> is forwarded to <a href="../../api/spaces/#Bramble.interpolate_at"><code class="md-code-inline">interpolate_at</code></a> unchanged.</p>
+<p>Evaluates <code class="md-code-inline">Rₕ(Wₕ, x -&gt; interpolate_at(src, x; outside))</code>; see <a href="../../api/spaces/#Bramble.πₕ!"><code class="md-code-inline">πₕ!</code></a>. Distinguished by multiple dispatch from the one-argument symbolic wrapper <code class="md-code-inline">πₕ(uₕ)</code>, defined below. The element type is promoted from <code class="md-code-inline">Wₕ</code>&#39;s and <code class="md-code-inline">src</code>&#39;s own, so interpolating a <code class="md-code-inline">Dual</code>-valued <code class="md-code-inline">src</code> yields a <code class="md-code-inline">Dual</code>-valued result on an undifferentiated <code class="md-code-inline">Wₕ</code>. <code class="md-code-inline">outside</code> is forwarded to <a href="../../api/spaces/#Bramble.interpolate_at"><code class="md-code-inline">interpolate_at</code></a> unchanged; a fill value joins that promotion and is converted to the result&#39;s element type, whichever grid points fall outside <code class="md-code-inline">src</code>&#39;s domain.</p>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -819,12 +819,13 @@ end</code></pre>
 <p>Operators wrap it from the outside, acting on the mesh being integrated over: <code class="md-code-inline">inner₊(D₋ₓ(πₕ(u)), D₋ₓ(v))</code> is <code class="md-code-inline">D_x^⊤ H_+ D_x P</code>. Writing an operator inside is a different operation and is refused, since it would difference on the source mesh instead.</p>
 <p><code class="md-code-inline">innerₕ(u, πₕ(w))</code> is the mirror: the test side interpolates, so the <em>trial</em> mesh is the one integrated over and the entries name absolute rows instead of absolute columns. The assembled matrix is <code class="md-code-inline">Pᵀ · H · (trial factor)</code>. A single term interpolating both sides is refused – one side has to stay native, since it is the side whose mesh carries the quadrature weight.</p>
 <p><code class="md-code-inline">op</code> must be a trial- or test-function leaf, plain or indexed. <code class="md-code-inline">outside</code> accepts only <code class="md-code-inline">:error</code> (the default), <code class="md-code-inline">:clamp</code> and <code class="md-code-inline">:extrapolate</code> – see <a href="../../internals/space/#Bramble.InterpolationNode"><code class="md-code-inline">InterpolationNode</code></a>&#39;s own docstring for why a fill value is refused here.</p>
+<p>On a <a href="../../api/spaces/#Bramble.GhostGridSpace"><code class="md-code-inline">GhostGridSpace</code></a> the blend reads the physical nodes, as <a href="../../api/spaces/#Bramble.interpolate_at"><code class="md-code-inline">interpolate_at</code></a> does, and a ghost point lies outside the domain. The assembly walk visits the ghost points, so on a ghost space the default <code class="md-code-inline">:error</code> throws, even in <code class="md-code-inline">innerₕ(πₕ(u), v)</code>, whose weight at every ghost point is zero. Pass <code class="md-code-inline">outside = :clamp</code> or <code class="md-code-inline">outside = :extrapolate</code> there.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.interpolation_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.interpolation_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L564-L590" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/interpolation.jl#L589-L615" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -935,7 +936,7 @@ Tₕ = constrained(Wₕ × Wₕ, u -&gt; (:xmin =&gt; t(u, 1) =&gt; 1.0, :xmin =
 <div class="md-docstring" id="Bramble.lift">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.lift</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L467-L515" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L474-L522" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -980,7 +981,7 @@ lift(Vₕ::CompositeGridSpace, u::AbstractVector, t::Number) -&gt; VectorElement
 <div class="md-docstring" id="Bramble.lift!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.lift!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L538-L568" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_gridspace.jl#L545-L575" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1088,7 +1089,7 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 <div class="md-docstring" id="Bramble.assemble!-Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code> — <span class="md-docstring-sig">Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L859-L879" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L978-L999" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1098,7 +1099,7 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 </div>
 <p>Refill <code class="md-code-inline">A</code> and <code class="md-code-inline">F</code> with the matrix and the load that <code class="md-code-inline">A, F = assemble(a, l)</code> returns, and return <code class="md-code-inline">A, F</code>. <code class="md-code-inline">A</code> keeps the pattern and <code class="md-code-inline">F</code> the element type that <code class="md-code-inline">assemble(a, l)</code> gave, so call that once and refill its two outputs. The call allocates nothing warm.</p>
 <p>Both forms are assembled together because, when the closure of the trial space has an affine part <code class="md-code-inline">d ≠ 0</code>, the load is <code class="md-code-inline">E_vᵀ(F − A d)</code> and reads the matrix. <code class="md-code-inline">assemble!(b, l)</code> alone refuses a test space with <code class="md-code-inline">d ≠ 0</code>, which is exact when both sides are one space: on a pair whose trial space has data and whose test space has none, it gives <code class="md-code-inline">E_vᵀ F</code> without the lift. <code class="md-code-inline">dirichlet</code>, <code class="md-code-inline">dirichlet_components</code> and <code class="md-code-inline">symmetrize</code> act as in <code class="md-code-inline">assemble(a, l)</code>.</p>
-<p>It throws an <code class="md-code-inline">ArgumentError</code> when the trial space of <code class="md-code-inline">a</code> or the test space of <code class="md-code-inline">l</code> is time-dependent (pose the problem with <code class="md-code-inline">semidiscretize</code>), for <code class="md-code-inline">symmetrize = true</code> without <code class="md-code-inline">dirichlet</code>, for <code class="md-code-inline">A</code> that is not a <code class="md-code-inline">SparseMatrixCSC</code> with the reduced pattern of <code class="md-code-inline">a</code>, for a <code class="md-code-inline">dirichlet</code> the rows of the space do not allow, and for an <code class="md-code-inline">F</code> whose element type cannot hold the load&#39;s. A <code class="md-code-inline">DimensionMismatch</code> follows an <code class="md-code-inline">F</code> of the wrong length and forms whose test spaces differ: not the same space, and closures <code class="md-code-inline">(E, d)</code> that are not equal.</p>
+<p>It throws an <code class="md-code-inline">ArgumentError</code> when the trial space of <code class="md-code-inline">a</code> or the test space of <code class="md-code-inline">l</code> is time-dependent (pose the problem with <code class="md-code-inline">semidiscretize</code>), for <code class="md-code-inline">symmetrize = true</code> without <code class="md-code-inline">dirichlet</code>, for <code class="md-code-inline">A</code> that is not a <code class="md-code-inline">SparseMatrixCSC</code> with the reduced pattern of <code class="md-code-inline">a</code>, for a <code class="md-code-inline">dirichlet</code> the rows of the space do not allow, and for an <code class="md-code-inline">F</code> whose element type cannot hold the load&#39;s. A <code class="md-code-inline">DimensionMismatch</code> follows an <code class="md-code-inline">F</code> of the wrong length and forms whose test spaces differ: not the same space, and meshes with other points or closures <code class="md-code-inline">(E, d)</code> that are not equal.</p>
 </div>
 </div>
 <h2 id="Polygon-spaces" class="md-heading">Polygon spaces<a href="#Polygon-spaces" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -1169,6 +1170,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=81448979"></script>
+  <script src="../../assets/materialdocs.js?v=b52db82c"></script>
 </body>
 </html>
