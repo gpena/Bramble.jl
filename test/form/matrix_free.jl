@@ -753,7 +753,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         @test sprint(print, op) == s2
     end
 
-    @testset "GpuPolicy refused (v4.11.0)" begin
+    @testset "GpuPolicy refused (v4.7.0)" begin
         W = _mf_spaces()[1]
         a = form(W, W, (u, v) -> innerₕ(u, v))
         err = try
@@ -763,7 +763,7 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
             e
         end
         @test err isa ArgumentError
-        @test occursin("v4.11.0", sprint(showerror, err))
+        @test occursin("v4.7.0", sprint(showerror, err))
     end
 end
 

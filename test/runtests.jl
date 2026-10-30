@@ -44,7 +44,7 @@ const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full"
 # platforms daily. TestUtils holds the definition (WITH_SLOW_TESTS, read by the subsystem
 # runtests.jl files and test files), and the list, with measured costs.
 
-# AD and GPU tests are off in every group until v4.5.0 and v4.11.0; TestUtils holds the
+# AD and GPU tests are off in every group until v4.2.0 and v4.7.0; TestUtils holds the
 # switches and says how to turn them back on.
 const __bramble_with_ad_tests = TestUtils.WITH_AD_TESTS
 const __bramble_with_gpu_tests = TestUtils.WITH_GPU_TESTS

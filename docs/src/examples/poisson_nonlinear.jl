@@ -20,7 +20,7 @@
 # it is exactly satisfied.
 #
 # The boundary stays Dirichlet-only here because forms on a ghost space refuse the automatic
-# differentiation that Newton's Jacobian needs, which arrives with milestone v4.5.0
+# differentiation that Newton's Jacobian needs, which arrives with milestone v4.2.0
 # (automatic differentiation and form correctness on the CPU).
 #
 # ## The mesh and the load

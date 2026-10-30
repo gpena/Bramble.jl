@@ -501,7 +501,7 @@ else
             e
         end
         @test err isa ArgumentError
-        @test occursin("v4.11.0", sprint(showerror, err))
+        @test occursin("v4.7.0", sprint(showerror, err))
     end
 end
 
