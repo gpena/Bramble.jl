@@ -185,7 +185,7 @@ end
             e
         end
         @test err isa ArgumentError
-        @test occursin("v4.4.0", sprint(showerror, err))
+        @test occursin("v4.11.0", sprint(showerror, err))
         Wf = gridspace(mesh(domain(interval(0.0, 1.0)), 9, false))
         @test_throws DimensionMismatch jacobi_preconditioner(form(Wf, W, (u, v) -> innerₕ(πₕ(u), v)))
         P = jacobi_preconditioner(a)

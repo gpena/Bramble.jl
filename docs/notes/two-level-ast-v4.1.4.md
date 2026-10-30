@@ -361,7 +361,7 @@ rest of the form. Every other reader takes the stored tree, which is the lowered
 
 So the layer would touch no extension and no device path. The cost it imposes lands on the
 callers of `form`, through its return type, not on the code after it. Metal and
-KernelAbstractions were not run, since the `gpu` group is off until v4.4.0. The claim rests
+KernelAbstractions were not run, since the `gpu` group is off until v4.11.0. The claim rests
 on the grep and on the lowered tree being `===` in type to the base's.
 
 ## Decision

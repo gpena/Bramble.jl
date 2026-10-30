@@ -22,11 +22,11 @@ name: Weekly
 # test leg here; the jobs that stay on ubuntu-latest (`changed`, `coverage-floor`,
 # `security-audit`) run no Julia tests.
 #
-# AD and GPU tests are switched off in every group until v4.3.0 and v4.4.0 respectively
+# AD and GPU tests are switched off in every group until v4.5.0 and v4.11.0 respectively
 # (test/TestUtils.jl, `WITH_AD_TESTS` and `WITH_GPU_TESTS`, and the `ad` and `gpu` groups).
 # Each comes back by setting `BRAMBLE_TEST_AD` or `BRAMBLE_TEST_GPU` in this workflow's env
 # and adding its packages: the step that installed Enzyme, Mooncake, PolyesterForwardDiff
-# and SciMLSensitivity for the `backends` group is gone, and v4.3.0 restores it from git
+# and SciMLSensitivity for the `backends` group is gone, and v4.5.0 restores it from git
 # history together with the AD tests.
 #
 # This is a canary rather than a gate: it is not required for a merge, and a failure here
