@@ -22,12 +22,12 @@ conductivity) satisfies `∮_Γ q·n = ∫_Ω f`.
 
 ## Sign convention
 
-`reaction` returns `-r` summed over the marker: positive means flux leaving the domain
+`reaction` returns `-r` summed over the marker, so positive means flux leaving the domain
 along the outward normal. The net source, `∫_Ω f`, is `reaction(...; marker = :boundary)`,
 or one call over a tuple of side markers, to round-off -- not its negative. Marker overlap
 is a union, so those forms count a corner once. Separate per-side calls do not: each counts
 every corner it contains, so summing them double-counts any corner two sides share, and the
-sum misses `∫_Ω f` by those corner residuals. This was checked, not assumed: see the note
+sum misses `∫_Ω f` by those corner residuals. This was checked, not assumed; see the note
 above `reaction` itself.
 
 ## Scaling
