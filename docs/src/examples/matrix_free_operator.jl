@@ -124,8 +124,8 @@ bytes_matrix = Base.summarysize(A)
 #
 # - **CPU policies only.** [`CpuSerial`](@ref) walks on the calling task; any other CPU
 #   policy, such as [`CpuThreaded`](@ref), threads the walk. A [`GpuPolicy`](@ref) is refused
-#   when the operator is built, with an `ArgumentError` that names milestone v4.11.0, where
-#   the device product is tracked. The test `GpuPolicy refused (v4.11.0)` in
+#   when the operator is built, with an `ArgumentError` that names milestone v4.7.0, where
+#   the device product is tracked. The test `GpuPolicy refused (v4.7.0)` in
 #   `test/form/matrix_free.jl` pins the message; here the refusal itself:
 
 W₁ = gridspace(mesh(domain(interval(0.0, 1.0)), 11, false))

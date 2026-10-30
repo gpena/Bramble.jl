@@ -53,7 +53,7 @@ transfers on one hierarchy may run from several tasks at once.
 - `DimensionMismatch`: `xf` or `xc` has the wrong length.
 - `ArgumentError`: `xf` or `xc` is not 1-based, or the two may alias.
 - `ArgumentError`: the backend's policy is a [`GpuPolicy`](@ref); device transfers are
-  tracked on milestone v4.11.0.
+  tracked on milestone v4.7.0.
 
 # Examples
 Interpolation reproduces a linear function on a non-uniform mesh.
@@ -114,7 +114,7 @@ tasks at once.
 - `DimensionMismatch`: `xf` or `xc` has the wrong length.
 - `ArgumentError`: `xf` or `xc` is not 1-based, or the two may alias.
 - `ArgumentError`: the backend's policy is a [`GpuPolicy`](@ref); device transfers are
-  tracked on milestone v4.11.0.
+  tracked on milestone v4.7.0.
 
 # Examples
 The rows of `P` sum to one, so `Pᵀ` preserves the sum of a fine grid function.
@@ -176,7 +176,7 @@ end
     throw(
         ArgumentError(
         "$fname does not run on a GpuPolicy ($(typeof(policy))): device multigrid transfers " *
-        "are tracked on milestone v4.11.0. Use a CPU backend.",
+        "are tracked on milestone v4.7.0. Use a CPU backend.",
     ),
     )
 end

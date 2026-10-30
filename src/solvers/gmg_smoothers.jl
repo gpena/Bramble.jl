@@ -174,7 +174,7 @@ random). Mesh non-uniformity with large cell aspect ratios slows every point smo
 # Throws
 - `ArgumentError`: `sweeps < 1`, or `ω` not finite and positive.
 - `ArgumentError`: `policy` is a [`GpuPolicy`](@ref); device execution is tracked on
-  milestone v4.11.0.
+  milestone v4.7.0.
 - `ArgumentError`: `dirichlet_components` names a leaf the test space does not have.
 - `DimensionMismatch`: `A` is not square.
 
@@ -269,7 +269,7 @@ Construction allocates four vectors of length `ndofs` and, when `λmax` is not g
 # Throws
 - `ArgumentError`: `degree < 1`, or `λmax` (given or estimated) not finite and positive.
 - `ArgumentError`: `policy` is a [`GpuPolicy`](@ref); device execution is tracked on
-  milestone v4.11.0.
+  milestone v4.7.0.
 - `ArgumentError`: `dirichlet_components` names a leaf the test space does not have.
 - `DimensionMismatch`: `A` is not square.
 
@@ -364,7 +364,7 @@ cycle's pre- and post-smoothing counts sweep counts.
   couples a facet node to nodes of its own colour; use [`jacobi_smoother`](@ref) or
   [`chebyshev_smoother`](@ref).
 - `ArgumentError`: `policy` is a [`GpuPolicy`](@ref); device execution is tracked on
-  milestone v4.11.0.
+  milestone v4.7.0.
 - `DimensionMismatch`: `A` is not square.
 
 # Examples

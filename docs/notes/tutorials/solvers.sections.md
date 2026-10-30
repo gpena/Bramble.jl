@@ -128,7 +128,7 @@ to 129³, were measured on meshes with bounded aspect ratio (uniform points jitt
 [#394](https://github.com/gpena/Bramble.jl/issues/394). With Dirichlet rows, CG needs a
 right-hand side that is zero on those rows. Device execution of the operator, the
 preconditioners and the cycles is tracked on milestone
-[v4.11.0](https://github.com/gpena/Bramble.jl/milestone/38).
+[v4.7.0](https://github.com/gpena/Bramble.jl/milestone/38).
 
 
 # Passages removed from the remaining sections of `docs/src/tutorials/solvers.md`

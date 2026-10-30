@@ -18,7 +18,7 @@
 # them from a rendered page. The script is not part of the published manual. It needs
 # `SciMLSensitivity` and runs behind the `ad`/`full` test groups (with
 # `BRAMBLE_TEST_AD=true`), unlike the every-push example pages -- see that test file for why.
-# No test runs this page until v4.5.0, when the AD backends return.
+# No test runs this page until v4.2.0, when the AD backends return.
 #
 # ## Problem
 #
@@ -33,7 +33,7 @@
 # of `u`, taken at five different times, are all that is given.
 #
 # The boundary stays Dirichlet-only here because forms on a ghost space refuse automatic
-# differentiation (milestone v4.5.0) and `semidiscretize` takes no `dirichlet` keyword on a
+# differentiation (milestone v4.2.0) and `semidiscretize` takes no `dirichlet` keyword on a
 # ghost space, which the parameter-dependent boundary ramp below relies on.
 #
 # ## Discretisation and the initial condition

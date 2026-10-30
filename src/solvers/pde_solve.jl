@@ -70,7 +70,7 @@ chain differentiable.
   Windows are never affected, and a matrix Accelerate cannot factor (e.g. non-square) throws
   from `accelerate_solve` exactly as `solver = :accelerate` would -- `:default` never silently
   falls back to `\\` after picking Accelerate. It picks Accelerate only for `Float32`,
-  `Float64` and their complex types (the element type of `A` and of the solution): an integer
+  `Float64` and their complex types (the element type of `A` and of the solution), so an integer
   `A` goes to `A \\ F`, or in the `mean_zero`/`gauge` solve to `lu`, which converts it to
   `Float64`, and a type that backend cannot factor (`BigFloat`) throws an `ArgumentError`
   naming it. `:suitesparse` (CHOLMOD/UMFPACK), `:spqr`
@@ -132,7 +132,7 @@ solve and to the adjoint solve of `sparse(A')`, so `solver` and `sym` apply to `
 and a `sym` hint must hold for `Aᴴ` too. A `SparseMatrixCSR` `A` has no rule (ChainRules sees
 a method with no `rrule`, and differentiates the conversion and the solver's internals).
 `using Enzyme` is enough for the same adjoint through `BrambleEnzymeExt`'s native
-`EnzymeRules` rule, which takes no keywords (it cannot run before v4.5.0); do not
+`EnzymeRules` rule, which takes no keywords (it cannot run before v4.2.0); do not
 call `Enzyme.@import_rrule`, whose bridge drops the cotangent's explicit zeros from `nzval`
 and returns a wrong gradient without any error. The Enzyme rule keeps the unconjugated
 `-λ uᵀ` and is not validated for complex `A`, whose convention differs. `Mooncake` cannot

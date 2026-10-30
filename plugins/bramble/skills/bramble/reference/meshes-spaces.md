@@ -52,6 +52,37 @@ Bramble.set_points!(Ωₕ, new_points), Bramble.change_points!(Ωₕ, new_points
 `set_markers!` built from a predicate of position (`:c => x -> x[1] < 0.5`): the set would stay
 stale. Use `change_points!(Ωₕ, domain_markers, pts)`, which sets the markers again; face labels are fine.
 
+## Polygon and level-set domains (2D)
+
+`polygon(V)` and `levelset(φ)` are exported; `Bramble.signed_distance`, `Bramble.polygon_spaces`
+and `Bramble.lift` are `public`. Either is a marker value: `:P => polygon(V)` makes `mesh` close
+the grid lines (every line meeting an edge or the curve gets a node on it, so the count can
+exceed the request) and label the nodes `:P` (interior), `:P_boundary`, `:P_exterior`.
+`polygon_spaces(Ωₕ, :P, g)` returns trial and test spaces whose unknowns are the interior nodes;
+the nodes on the boundary carry the Dirichlet data `g`, so `assemble` takes no `dirichlet`.
+`lift(U, x)` puts a solution back on the whole grid.
+
+```julia
+using Bramble
+using Bramble: polygon_spaces, lift, signed_distance, D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ
+
+V = [(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0), (1.0, 2.0), (0.0, 2.0)]  # L-shape
+Ω = domain(interval(0.0, 2.0) × interval(0.0, 2.0), :P => polygon(V))
+Ωₕ = mesh(Ω, (21, 21), (true, true))
+U, W = polygon_spaces(Ωₕ, :P, p -> p[1]^2 + p[2]^2)
+fₕ = element(gridspace(Ωₕ), -4.0)
+A, F = assemble(form(U, W, (u, v) -> innerₕ(-D̃ₓ(D₋ₓ(u)) - D̃ᵧ(D₋ᵧ(u)), v)),
+                form(W, v -> innerₕ(fₕ, v)))
+uₕ = lift(U, A \ F)                       # whole-grid element
+signed_distance(polygon(V), (0.5, 0.5))   # -0.5: negative inside, positive outside
+```
+
+`levelset(φ)`: `φ(x)` returns a real (not a `Bool`), negative inside, zero on the curve, and
+need not be a signed distance; the labels are `:D`, `:D_boundary`, `:D_exterior` for
+`:D => levelset(φ)`. `polygon_spaces(Ωₕ, :D, g)` works the same. Traps: polygon vertices are
+validated (at least three, no zero-length edge, simple boundary); `polygon_spaces` refuses
+composite spaces; a polygon marker needs a 2D mesh.
+
 ## Discrete spaces & vector elements
 
 ```julia
