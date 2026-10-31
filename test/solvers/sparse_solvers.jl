@@ -5,6 +5,9 @@ using Bramble
 using LinearAlgebra
 using SparseArrays
 using Random
+import ForwardDiff
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using ..TestUtils: WITH_SLOW_TESTS
 using Bramble: refactor!, sparse_factorize, sparse_refactor!, sparspak_factorize, sparspak_solve,
                sparspak_refactor!, mumps_factorize, mumps_solve, mumps_refactor!, suitesparse_factorize,
@@ -320,6 +323,19 @@ end
     @test !_default_wants_accelerate(N, :auto)
     @test !_default_wants_accelerate(S, :unsymmetric)
     @test !_default_wants_accelerate(S, 0)
+end
+
+# The default `pde_solve` carries a `ForwardDiff.Dual` matrix through its factorization and
+# solve: the DI derivative matches central differences at m = 2 and m = 50 (issue #1114).
+# Oracle: the step-difference quotient, which uses no Dual arithmetic.
+@testset "pde_solve ForwardDiff derivative" begin
+    for m in (2, 50)
+        A0 = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.0, m - 1))
+        f(θ) = sum(pde_solve(A0 + θ * spdiagm(0 => ones(m)), ones(m)))
+        h = 1e-6
+        fd = (f(h) - f(-h)) / (2h)
+        @test DI.derivative(f, AutoForwardDiff(), 0.0) ≈ fd rtol = 1e-6
+    end
 end
 
 end # module

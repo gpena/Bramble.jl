@@ -86,7 +86,8 @@ end
 
 """
     semidiscretize(a::GhostBilinearForm, l::GhostLinearForm; mass, dirichlet,
-        dirichlet_components, state, update_coefficients!, reassemble) -> Semidiscretization
+        dirichlet_components, state, update_coefficients!, hook_reads_state, reassemble) ->
+        Semidiscretization
 
 Semidiscretise `M u' = F(t) − A u` for forms posed on one constrained ghost space `Cₕ`,
 whose relation data may depend on time. With `(E, d(t))` the closure of `Cₕ`, `A = Eᵀ A_pad E`,
@@ -96,7 +97,7 @@ whose relation data may depend on time. With `(E, d(t))` the closure of `Cₕ`, 
 # Keywords
 - `mass`: a form on `Cₕ` defining `M` (default `innerₕ(u, v)`, diagonal and positive). A mass that couples a degree of freedom to a point where `d` depends on time is refused: its term `Eᵀ M_pad d′(t)` needs the time derivative of the data.
 - `state`: a grid function on `Bramble.padded_space(Cₕ)` that receives `lift(Cₕ, u, t)` before each assembly, for forms whose coefficients read it (default `nothing`). A `u` it cannot hold (a `ForwardDiff.Dual`) is lifted into a padded buffer of its own type, read by the forms rebound to it, as on a plain space.
-- `update_coefficients!`, `reassemble`: as for plain forms.
+- `update_coefficients!`, `hook_reads_state`, `reassemble`: as for plain forms.
 
 The `dirichlet` and `dirichlet_components` keywords are refused: give a Dirichlet condition as `:F => u => g(x, t)` in
 [`constrained`](@ref). So are a space that keeps ghosts as unknowns (their mass rows
@@ -111,6 +112,7 @@ Base.@constprop :aggressive function semidiscretize(
         dirichlet_components = nothing,
         state = nothing,
         (update_coefficients!) = nothing,
+        hook_reads_state::Bool = true,
         reassemble::Bool = false
 )
     (dirichlet === nothing && dirichlet_components === nothing) ||
@@ -145,7 +147,7 @@ Base.@constprop :aggressive function semidiscretize(
         (),
         nothing,
         _ghost_state(state, Cₕ),
-        _wrap_update(update_coefficients!),
+        _wrap_update(update_coefficients!, hook_reads_state),
         Val(reassemble),
         Dict{DataType, Any}()
     )
