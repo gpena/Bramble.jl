@@ -322,12 +322,9 @@ end
     @test_throws ArgumentError assemble(l; dirichlet = :boundary => x -> 0.0)
     @test_throws ArgumentError assemble(a, l; dirichlet = :boundary => x -> 0.0)
     @test_throws ArgumentError assemble(a, l; symmetrize = true)
-    # a matrix of another pattern, and an AD element type
+    # a matrix of another pattern
     @test_throws ArgumentError assemble!(assemble(form(W, W, f)), a)
     @test_throws ArgumentError assemble!(Matrix(assemble(a)), a)
-    c = Ref(Dual(1.0, 1.0))
-    @test_throws ArgumentError form(Wg, Wg, (u, v) -> innerₕ(c * u, v))
-    @test_throws ArgumentError form(Wg, v -> innerₕ(c * v, v))
     # gpena/Bramble.jl#1097: an element of `Wg` holds one value per DOF, while the walk
     # reads one per padded point, as a coefficient or as a source
     eg = element(Wg)
@@ -342,6 +339,122 @@ end
         end
         @test err isa ArgumentError
         @test occursin("padded_space", sprint(showerror, err))
+    end
+end
+
+# gpena/Bramble.jl#462: a `Dual` coefficient assembles on the ghost matrix path, and the
+# `Dual` or complex data of a relation reach the load through `d`, widening it. Each
+# derivative is judged against a central difference, on a random mesh.
+@testset "Dual and complex data on ghost spaces" begin
+    Ω = O.make_mesh(:random, 0)
+    Wg = gridspace(Ω; ghosts = (:xmax, :ymax))
+    h = 1e-6
+    cdiff(f, θ) = (f(θ + h) - f(θ - h)) / 2h
+    @testset "Dual coefficient in a bilinear form" begin
+        M = assemble(form(Wg, Wg, (u, v) -> innerₕ(u, v)))
+        A(θ) = assemble(form(Wg, Wg, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + θ * innerₕ(u, v)))
+        Ad = A(Dual(0.7, 1.0))
+        @test relerr(map(x -> x.value, Ad), A(0.7)) <= tol
+        @test relerr(map(x -> x.partials[1], Ad), M) <= tol
+        @test relerr(map(x -> x.partials[1], Ad), cdiff(A, 0.7)) <= 1e-7
+        c = Ref(Dual(1.0, 1.0))
+        @test eltype(form(Wg, v -> innerₕ(c * v, v)).F_pad) == typeof(c[])
+    end
+    @testset "Scalar relation data" begin
+        rels(θ) = u -> (:xmin => u => (x -> θ * x[2]), :xmax => ∂ₙ(u) => 0.0,
+            :ymin => u => 0.0, :ymax => ∂ₙ(u) => 1.0)
+        fa = (u, v) -> innerₕ(-Δₕ(u), v)
+        fl = v -> innerₕ(x -> 1.0 + x[1], v)
+        load(θ) = (C = constrained(Wg, rels(θ)); assemble(form(C, C, fa), form(C, fl))[2])
+        F, Fd = load(1.3), load(Dual(1.3, 1.0))
+        @test eltype(F) == Float64
+        @test eltype(Bramble.closure(constrained(Wg, rels(1.3)))[2]) == Float64
+        @test eltype(Fd) <: Dual
+        @test relerr(map(x -> x.value, Fd), F) <= tol
+        dF = map(x -> x.partials[1], Fd)
+        @test norm(dF) > 1e-3 * norm(F)       # θ reaches the load
+        @test relerr(dF, cdiff(load, 1.3)) <= 1e-6
+        Fc = load(1.3 + 0.5im)
+        @test eltype(Fc) == ComplexF64
+        @test relerr(Fc, F + 0.5im * dF) <= 1e-12   # the load is affine in θ
+        # with data depending on time beside it, the static `Dual` datum widens `d(t)`
+        trels(θ) = u -> (:xmin => u => (x -> θ * x[2]), :xmax => ∂ₙ(u) => 0.0,
+            :ymin => u => 0.0, :ymax => ∂ₙ(u) => (x, t) -> 1.0 + t * x[1])
+        dt(θ, t) = (C = constrained(Wg, trels(θ));
+            Bramble.lift(C, zeros(Bramble.ndofs(C)), t))
+        dd = parent(dt(Dual(1.3, 1.0), 0.4))
+        @test eltype(dd) <: Dual
+        @test relerr(map(x -> x.value, dd), parent(dt(1.3, 0.4))) <= tol
+        @test relerr(map(x -> x.partials[1], dd),
+            (parent(dt(1.3 + h, 0.4)) - parent(dt(1.3 - h, 0.4))) / 2h) <= 1e-6
+        @test norm(map(x -> x.partials[1], dd)) > 0
+    end
+    @testset "Relation data with a rank-one term" begin
+        rels(θ) = u -> (:xmin => u => (x -> θ * x[2]), :xmax => ∂ₙ(u) => θ,
+            :ymin => u => 0.0, :ymax => u + ∂ₙ(u) => 1.0)
+        fa = (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) +
+                       2.0 * innerₕ(x -> 1.0, u) * innerₕ(x -> 2.0 - x[2], v)
+        fl = v -> innerₕ(x -> 1.0 + x[1], v)
+        load(θ) = (C = constrained(Wg, rels(θ)); assemble(form(C, C, fa), form(C, fl))[2])
+        F, Fd = load(1.3), load(Dual(1.3, 1.0))
+        @test eltype(F) == Float64
+        @test eltype(Fd) <: Dual
+        @test relerr(map(x -> x.value, Fd), F) <= tol
+        dF = map(x -> x.partials[1], Fd)
+        @test norm(dF) > 1e-3 * norm(F)       # θ reaches the load
+        @test relerr(dF, cdiff(load, 1.3)) <= 1e-6
+        Fc = load(1.3 + 0.5im)
+        @test eltype(Fc) == ComplexF64
+        @test relerr(Fc, F + 0.5im * dF) <= 1e-12   # the load is affine in θ
+        # the refill holds the widened load, and refuses one it cannot hold
+        C = constrained(Wg, rels(Dual(1.3, 1.0)))
+        a, l = form(C, C, fa), form(C, fl)
+        K, Fr = assemble(a, l)
+        R = assemble!(K, fill!(Fr, 0), a, l)[2]
+        @test R == Fd && map(x -> x.partials[1], R) == dF
+        @test_throws ArgumentError assemble!(K, zeros(length(Fr)), a, l)
+    end
+    @testset "Composite relation data" begin
+        # Dirichlet data agree at the corners they share
+        rels(θ) = u -> (:xmin => u(1) => (x -> θ * x[2]),
+            :xmax => ∂ₙ(u(1)) => 0.0, :ymin => u(1) => 0.0, :ymax => ∂ₙ(u(1)) => 1.0,
+            :xmin => u(2) => 0.0, :xmax => ∂ₙ(u(2)) => 0.0,
+            :ymin => u(2) => (x -> 100.0 * x[1]), :ymax => ∂ₙ(u(2)) => 0.0)
+        fa = (u, v) -> innerₕ(-Δₕ(u(1)), v(1)) + innerₕ(-Δₕ(u(2)), v(2))
+        fl = v -> innerₕ(x -> 1.0, v(1)) + innerₕ(x -> 2.0 + x[1], v(2))
+        load(θ) = (C = constrained(Wg × Wg, rels(θ)); assemble(form(C, C, fa), form(C, fl))[2])
+        F, Fd = load(1.3), load(Dual(1.3, 1.0))
+        @test eltype(F) == Float64
+        @test eltype(Fd) <: Dual
+        @test relerr(map(x -> x.value, Fd), F) <= tol
+        dF = map(x -> x.partials[1], Fd)
+        @test norm(dF) > 1e-3 * norm(F)       # θ reaches the load
+        @test relerr(dF, cdiff(load, 1.3)) <= 1e-6
+        Fc = load(1.3 + 0.5im)
+        @test eltype(Fc) == ComplexF64
+        @test relerr(Fc, F + 0.5im * dF) <= 1e-12   # the load is affine in θ
+        # the refill holds the widened load, and refuses one it cannot hold
+        C = constrained(Wg × Wg, rels(Dual(1.3, 1.0)))
+        a, l = form(C, C, fa), form(C, fl)
+        K, Fr = assemble(a, l)
+        R = assemble!(K, fill!(Fr, 0), a, l)[2]
+        @test R == Fd && map(x -> x.partials[1], R) == dF
+        @test_throws ArgumentError assemble!(K, zeros(length(Fr)), a, l)
+    end
+    @testset "Real data defined on its own facet only" begin
+        bc = x -> sqrt(-x[1])                  # real at x₁ = 0 only
+        fl = v -> innerₕ(x -> 1.0, v)
+        C = constrained(Wg, u -> (:xmin => u => bc, :xmax => ∂ₙ(u) => 0.0,
+            :ymin => u => 0.0, :ymax => ∂ₙ(u) => 1.0))
+        @test eltype(assemble(form(C, C, (u, v) -> innerₕ(-Δₕ(u), v)), form(C, fl))[2]) ==
+              Float64
+        rc = u -> (:xmin => u(1) => bc, :xmax => ∂ₙ(u(1)) => 0.0, :ymin => u(1) => 0.0,
+            :ymax => ∂ₙ(u(1)) => 0.0, :xmin => u(2) => 0.0, :xmax => ∂ₙ(u(2)) => 0.0,
+            :ymin => u(2) => 0.0, :ymax => ∂ₙ(u(2)) => 0.0)
+        Cc = constrained(Wg × Wg, rc)
+        fa = (u, v) -> innerₕ(-Δₕ(u(1)), v(1)) + innerₕ(-Δₕ(u(2)), v(2))
+        F = assemble(form(Cc, Cc, fa), form(Cc, v -> innerₕ(x -> 1.0, v(1))))[2]
+        @test eltype(F) == Float64 && all(isfinite, F)
     end
 end
 

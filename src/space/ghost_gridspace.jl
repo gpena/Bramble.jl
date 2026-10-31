@@ -73,12 +73,12 @@ E, d = Bramble.closure(Wₕ)    # E is 63 × 59, d = 0
 ```
 """
 struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix{T},
-    DT <: AbstractArray{T, 1}, TD, GU} <: AbstractSpaceType{1}
+    DT <: AbstractVector, TD, GU} <: AbstractSpaceType{1}
     "the space on the padded mesh, with physical-only weights."
     padded::S
     "the `N_pad × ndofs` closure matrix: the padded values are `E * u + d`."
     E::ET
-    "the affine part of the closure, one entry per padded point."
+    "the affine part of the closure, one entry per padded point, in the data's type."
     d::DT
     "the transpose of `E`, whose columns give `lift` its padded rows."
     Et::ET
@@ -344,6 +344,16 @@ function _closure_matrix(be, ::Type{T}, E::SparseMatrixCSC) where {T}
     MT = matrix_type(be)
     Ec = SparseMatrixCSC{T, Int}(E)::SparseMatrixCSC{T, Int}
     return MT <: SparseMatrixCSC ? convert(MT, Ec)::MT : Ec
+end
+
+# The element type of the affine part of a closure on a space of element type `T` whose
+# relations' data have type `S`: real data keep the space's precision, as before, complex
+# data its complex type, and any other type, such as a `ForwardDiff.Dual`, widens it.
+@inline _closure_data_eltype(::Type{T}, ::Type{S}) where {T, S} = promote_type(T, S)
+@inline _closure_data_eltype(::Type{T}, ::Type{<:Union{AbstractFloat, Integer}}) where {T} = T
+@inline function _closure_data_eltype(::Type{T},
+        ::Type{<:Complex{<:Union{AbstractFloat, Integer}}}) where {T}
+    return complex(T)
 end
 
 # The affine part of a closure, in the backend's vector type, which `be` and `T` decide.

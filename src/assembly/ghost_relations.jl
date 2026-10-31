@@ -841,15 +841,18 @@ function _constrained_space(Wₕ::GhostGridSpace, rels::Tuple, drels::Tuple)
     keep = _kept_points(G, ghosts, fixed)
     T = eltype(P)
     be = backend(P)
+    # `d` keeps the type of the relations' data: a `Dual` or complex value widens it.
+    S = _closure_data_eltype(T, promote_type(eltype(b), eltype(g)))
     if !_any_time(rels) && !_any_time(drels)
         E, d, _ = _relation_closure(G, R, b, ghosts, keep, fixed, g)
-        return GhostGridSpace(P, _closure_matrix(be, T, E), _closure_data(be, T, d))
+        return GhostGridSpace(P, _closure_matrix(be, T, E),
+            _closure_data(be, _closure_data_eltype(S, eltype(d)), d))
     end
     timed = map(_is_time_relation, rels)
     w = map(k -> timed[rel[k]] ? b[k] : one(eltype(b)), eachindex(b))
     E, _, L = _relation_closure(G, R, b, ghosts, keep, fixed, g, (w, order))
-    td = _time_data(be, T, G, L, rels, drels, b, ghosts, rel, g, order, owner)
-    d = _backend_vector(be, T, size(E, 1))
+    td = _time_data(be, T, S, G, L, rels, drels, b, ghosts, rel, g, order, owner)
+    d = _backend_vector(be, S, size(E, 1))
     W = GhostGridSpace(P, _closure_matrix(be, T, E), d, td)
     _lift_affine!(d, W, zero(real(T)))      # the stored `d` is `d(0)`
     return W
@@ -907,11 +910,11 @@ end
 # each relation with data depending on time gets a group of its sources, which are
 # contiguous: a facet's ghosts follow one another, and so do the points a Dirichlet
 # relation fixes first.
-function _time_data(be, ::Type{T}, G::GhostMesh, L::SparseMatrixCSC, rels, drels, b,
-        ghosts, rel, gfix, order, owner) where {T}
+function _time_data(be, ::Type{T}, ::Type{S}, G::GhostMesh, L::SparseMatrixCSC, rels,
+        drels, b, ghosts, rel, gfix, order, owner) where {T, S}
     Ωₕ = physical_mesh(G)
     m = length(ghosts)
-    g = zeros(T, m + length(order))
+    g = zeros(S, m + length(order))   # the static data, of their own type `S`
     timed, dtimed = map(_is_time_relation, rels), map(_is_time_relation, drels)
     for k in 1:m
         timed[rel[k]] || (g[k] = b[k])
