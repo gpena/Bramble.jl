@@ -180,8 +180,8 @@ end
 # cannot silently regress.
 #
 # Switched off until v4.2.0 (AD). To turn back on, add Enzyme, Mooncake,
-# SparseConnectivityTracer, SparseMatrixColorings, DifferentiationInterface,
-# SciMLSensitivity and ChainRulesCore (whichever the file loads) to test/Project.toml and set
+# SparseConnectivityTracer, SparseMatrixColorings, DifferentiationInterface
+# and ChainRulesCore (whichever the file loads) to test/Project.toml and set
 # `BRAMBLE_TEST_AD=true`, then remove this switch once v4.2.0 settles the backends.
 #   whole files, `unit` (and slow/full/all)
 #     space/autodiff.jl, space/autodiff_backends.jl   test/runtests.jl
@@ -189,8 +189,7 @@ end
 #     form/jacobian_pattern.jl (also needs `slow`)    test/form/runtests.jl
 #   whole files, groups `ad`, `full`, `backends` ("AD backends (expensive)" in runtests.jl)
 #     space/autodiff_heavy.jl, space/autodiff_policies.jl, ext/chainrules_enzyme_ext.jl,
-#     examples/inverse_diffusion.jl, ext/sparse_ad_ext.jl, ext/ad_backend_verification.jl,
-#     ext/sciml_sensitivity_ext.jl, examples/transient_inverse_problem.jl
+#     examples/inverse_diffusion.jl, ext/sparse_ad_ext.jl, ext/ad_backend_verification.jl
 #   not gated: ext/chainrules_ext.jl runs in the `ext` group (it needs only ChainRulesCore)
 #   inline blocks, gated with `WITH_AD_TESTS` at the site
 #     form/bilinear.jl "Matrix differentiation", "Dual arguments";

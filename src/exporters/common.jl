@@ -15,8 +15,7 @@ function _require_one_mesh(fname, uₕ::VectorElement{<:CompositeGridSpace})
     )
 end
 
-# The Plots and Makie extensions share code only through Bramble, so both refuse a grid
-# function they cannot plot through this one pair. A composite element has no single
+# The Makie extension refuses a grid function it cannot plot through this pair. A composite element has no single
 # reading as one curve or one grid, so plot each of its components(...) separately.
 @noinline function _throw_plot_composite()
     throw(
@@ -27,9 +26,8 @@ end
     )
 end
 
-# Only 1D curves and 2D grids are wired up. Plots.jl's `surface`/`heatmap` plot a height
-# field over a 2D domain, not a true 3D volume, and Makie could render one (`Makie.volume`),
-# so for Makie this is a scope decision, not a limit. See `export_vtk`.
+# Only 1D curves and 2D grids are wired up. Makie could render a true 3D volume
+# (`Makie.volume`), so this is a scope decision, not a limit. See `export_vtk`.
 @noinline function _throw_plot_dim(D)
     throw(
         ArgumentError(

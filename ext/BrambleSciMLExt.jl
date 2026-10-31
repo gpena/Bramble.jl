@@ -109,9 +109,6 @@ end
 #
 # `specialize` defaults to `nothing`, leaving `ODEProblem`'s own specialization choice
 # untouched -- existing callers get exactly the problem they always did.
-# `Bramble.adjoint_sensitivities` (`BrambleSciMLSensitivityExt`) does not need
-# `SciMLBase.FullSpecialize` on any backend: it unwraps the function wrappers the default
-# specialization adds before it calls SciMLSensitivity.
 # The type-parameterized `ODEProblem{iip, specialize}` constructor is the only one that
 # accepts a choice of specialization at all -- there is no keyword for it on the plain one.
 Base.@constprop :aggressive function Bramble._ode_problem(

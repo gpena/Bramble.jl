@@ -14,8 +14,7 @@ using Kronecker: Kronecker
 # this runs. `BramblePolyesterExt` and `BrambleKroneckerExt` are always checked: this file
 # loads `Polyester` and `Kronecker` itself, then asserts both extensions are there.
 # `test/utils/backends.jl` loads Metal incidentally on Apple Silicon even in the unit group,
-# so `BrambleMetalExt` is usually checked too; the rest -- now including
-# `BrambleSciMLSensitivityExt` -- are reached only when the "ext"/"full" group has loaded
+# so `BrambleMetalExt` is usually checked too; the rest are reached only when the "ext"/"full" group has loaded
 # their triggers earlier in the same process. Every ignore entry below was verified against
 # all of them loaded together, so the check is exact under "full" and a (harmless) subset of
 # it otherwise -- an ignored name never encountered is not an error.
@@ -39,22 +38,13 @@ using Kronecker: Kronecker
         @test check_no_stale_explicit_imports(Bramble) === nothing
     end
 
-    # `BrownFullBasicInit` (BrambleSciMLSensitivityExt): `SciMLSensitivity`'s own `using
-    # OrdinaryDiffEqCore: ..., BrownFullBasicInit, ...` brings it in without re-exporting it,
-    # so `Base.which` traces the true owner past `SciMLSensitivity` -- to `OrdinaryDiffEqCore`
-    # in some resolutions, further still to `DiffEqBase` in others, since `OrdinaryDiffEqCore`
-    # itself only re-exports it too. `SciMLSensitivity` is the intended, documented way to
-    # reach it (the same "reached through a re-export" shape as `MPI`/`Init`/`Initialized`
-    # below, from MUMPS's own re-export of its MPI submodule); depending on either deeper
-    # package directly, just to import one name past what actually uses it, would be worse.
-    #
     # `libblastrampoline` (BrambleKroneckerExt): `LinearAlgebra.BLAS` re-exports the library
     # name `ccall` wants from `libblastrampoline_jll`, which Bramble does not depend on and
     # should not just to spell one `ccall` target; `LinearAlgebra.BLAS` is where the manual
     # documents it.
     @testset "Imports come from the owning module" begin
         @test check_all_explicit_imports_via_owners(
-            Bramble; ignore = (:BrownFullBasicInit, :libblastrampoline)
+            Bramble; ignore = (:libblastrampoline,)
         ) === nothing
     end
 
@@ -89,10 +79,6 @@ using Kronecker: Kronecker
     #   `AASparseMatrix`, `ATT_ORDINARY`: build LU's and QR's untagged full storage (#653).
     # - `finalize!`, `get_sol!`, `set_cntl!`, `set_icntl!`, `suppress_display!`
     #   (BrambleMUMPSExt): MUMPS's own solver-control API, none of it public there.
-    # - `BrownFullBasicInit` (BrambleSciMLSensitivityExt): brought into `SciMLSensitivity`'s
-    #   own namespace from `OrdinaryDiffEqCore` without being re-exported (the "owners" check
-    #   above has the full chain) -- reached the same way `MPI`/`Init`/`Initialized` below
-    #   reach MUMPS's un-exported MPI submodule.
     @testset "Non-public imports are the declared ones" begin
         @test check_all_explicit_imports_are_public(
             Bramble;
@@ -229,7 +215,6 @@ using Kronecker: Kronecker
                 :_vtk_axes,
                 :_vtk_data,
                 :AbstractSpaceType,
-                :BrownFullBasicInit,
                 :CHOLMOD,
                 :UMFPACK,
                 :AAFactorization,
@@ -306,20 +291,8 @@ using Kronecker: Kronecker
     #   (BrambleEnzymeExt): the custom-rule interface `EnzymeRules` documents extending this
     #   way, none of it exported (an exported `reverse` would shadow `Base`'s own for anyone
     #   who `using`s `EnzymeRules` directly). Which of the five this check actually flags
-    #   depends on exactly what else is loaded alongside `Enzyme` when it runs -- `reverse`
-    #   alone with `SciMLSensitivity` loaded but not `Enzyme`/`ChainRulesCore` directly
-    #   (`EnzymeCore` only transitively), `augmented_primal` too once `Enzyme` itself joins
-    #   -- so all five are listed together rather than chased one at a time as the loaded
-    #   set shifts. Nothing about `BrambleEnzymeExt` changed; only what else was loaded
-    #   alongside it did, once `SciMLSensitivity` (BrambleSciMLSensitivityExt) joined the
-    #   "ext" group's set.
-    # - `adjoint_sensitivities` (BrambleSciMLSensitivityExt): the one entry point not
-    #   `_`-prefixed -- `Bramble.adjoint_sensitivities` is meant to be called, just not
-    #   exported, since `SciMLSensitivity` exports a function of the exact same name and
-    #   `using Bramble, SciMLSensitivity` together would collide on the bare name regardless
-    #   of what Bramble does (the stub's own docstring, `form/semidiscrete_problems.jl`, has the
-    #   reasoning). Its core fallback still gives the same helpful error the `_`-prefixed ones
-    #   below do.
+    #   depends on exactly what else is loaded alongside `Enzyme` when it runs, so all five
+    #   are listed together rather than chased one at a time as the loaded set shifts.
     # - `_ast_sparsity_detector` (BrambleSparseADExt), `_ode_function`/`_ode_problem`/
     #   `_linear_problem`/`_nonlinear_problem` (BrambleSciMLExt), `_export_vtk`
     #   (BrambleVTKExt): the `_`-prefixed fallback idiom every weak-dependency entry point
@@ -342,10 +315,6 @@ using Kronecker: Kronecker
     # - `_export_vtk_collection` (BrambleVTKExt), `_export_vtk_solution`
     #   (BrambleVTKSciMLExt): the same `_`-prefixed fallback idiom as `_export_vtk` above, one
     #   entry point per `export_vtk` method that needs a weak dependency.
-    # - `apply_recipe` (BramblePlotsExt): the function `@recipe` generates methods on;
-    #   warmed by name in the precompile workload rather than through a plotting call, which
-    #   this coverage-dependent check had simply not caught loaded alongside the others
-    #   before.
     # - `_sparspak_factorize`, `_sparspak_refactor!`, `_sparspak_solve` (BrambleSparspakExt):
     #   the preconditioner-building hooks its `factorize`/`refactor!`/`\` methods reach,
     #   the same `_`-prefixed fallback idiom as `_amg_operator` above.
@@ -387,8 +356,8 @@ using Kronecker: Kronecker
                 :_each_marked,
                 :_kron_coeff,
                 :_kron_scalar,
-                # `_throw_plot_composite`, `_throw_plot_dim` (BramblePlotsExt, BrambleMakieExt):
-                # the shared refusals each plotting extension raises for a composite or a
+                # `_throw_plot_composite`, `_throw_plot_dim` (BrambleMakieExt):
+                # the shared refusals the plotting extension raises for a composite or a
                 # non-2D element, called as `Bramble.name(...)`. Not a user call.
                 :_throw_plot_composite,
                 :_throw_plot_dim,
@@ -552,7 +521,6 @@ using Kronecker: Kronecker
                 :width,
                 :needs_primal,
                 :needs_shadow,
-                :adjoint_sensitivities,
                 :_ast_sparsity_detector,
                 :CartesianProduct,
                 :_linear_problem,
@@ -572,7 +540,6 @@ using Kronecker: Kronecker
                 :_ilu_preconditioner,
                 :_export_vtk_collection,
                 :_export_vtk_solution,
-                :apply_recipe,
                 :_sparspak_factorize,
                 :sparspak_refactor!,
                 :_sparspak_solve,

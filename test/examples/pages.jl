@@ -16,8 +16,8 @@ using ..TestUtils: _run_example_page
 # variable-coefficient operator no page uses -- stays in convergence.jl.
 #
 # More pages run from test/examples/ext_pages.jl, in this same `examples` group, for what
-# they load rather than what they assert, and two more behind a differentiation backend
-# (test/examples/inverse_diffusion.jl, test/examples/transient_inverse_problem.jl).
+# they load rather than what they assert, and one more behind a differentiation backend
+# (test/examples/inverse_diffusion.jl).
 
 @testset "Worked example pages" begin
     @testset "Linear Poisson" begin

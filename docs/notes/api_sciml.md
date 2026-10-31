@@ -2,20 +2,6 @@
 
 As they stood. The headings and `@docs` blocks stay on the published page.
 
-## Adjoint sensitivities for a transient solve
-
-[`Bramble.adjoint_sensitivities`](@ref) is the transient counterpart of [`pde_solve`](@ref)'s
-steady-state adjoint rule (see [the API reference](api.md)): the gradient of a scalar
-functional of a [`Semidiscretization`](@ref)'s solved trajectory with respect to its initial
-condition and its `p`, from one backward solve regardless of how many parameters or how many
-saved steps. It wraps `SciMLSensitivity.adjoint_sensitivities` and requires
-[SciMLSensitivity.jl](https://github.com/SciML/SciMLSensitivity.jl) -- see [the worked
-example](examples/transient_inverse_problem.md).
-
-```@docs
-Bramble.adjoint_sensitivities
-```
-
 ## Differentiable linear solve (adjoint gradients)
 
 `pde_solve(A, F)` is `A \ F` under a name `ChainRulesCore.rrule` can attach an adjoint rule

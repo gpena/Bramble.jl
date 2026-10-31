@@ -909,7 +909,7 @@ end
     end
 end
 
-# The SciMLBase/SciMLSensitivity entry points are fallbacks that only run while the
+# The SciMLBase entry points are fallbacks that only run while the
 # extension is not loaded, which the test environment always loads. A child process on the
 # root project (no extension) runs them; `Base.julia_cmd()` carries this process's coverage
 # flag, so its hits count.
@@ -1074,7 +1074,6 @@ end
         () -> Bramble.ode_problem(sd, u0, (0.0, 1.0)),
         () -> Bramble.linear_problem(a, l),
         () -> Bramble.nonlinear_problem((r, u, p) -> r, u0),
-        () -> Bramble.adjoint_sensitivities(nothing, nothing),
     )
     for f in calls
         try
@@ -1089,8 +1088,7 @@ end
         "ode_function requires SciMLBase",
         "ode_problem requires SciMLBase",
         "linear_problem requires SciMLBase",
-        "nonlinear_problem requires SciMLBase",
-        "adjoint_sensitivities requires SciMLSensitivity"
+        "nonlinear_problem requires SciMLBase"
     ]
 end
 

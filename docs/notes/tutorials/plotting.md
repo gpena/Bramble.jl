@@ -4,13 +4,13 @@ CurrentModule = Bramble
 
 # Plotting directly
 
-**What you will learn.** How to plot a grid function straight inside a Julia session, as a curve in 1D or a colour map in 2D, with Makie or Plots.jl.
+**What you will learn.** How to plot a grid function straight inside a Julia session, as a curve in 1D or a colour map in 2D, with Makie.
 
 **What you need first.** The [mesh tutorial](@ref tutorial_mesh) and the [space tutorial](@ref tutorial_space), for the mesh and grid space the plotted element lives on.
 
 **Where next.** The [VTK export tutorial](vtk_export.md) writes the same fields to a file for ParaView.
 
-[`export_vtk`](@ref) and [`export_pgfplots`](@ref) write a file for another tool to open. Sometimes a plot straight inside the current Julia session is what you want instead. Two package extensions provide it, and you need no code beyond loading a plotting package.
+[`export_vtk`](@ref) and [`export_pgfplots`](@ref) write a file for another tool to open. Sometimes a plot straight inside the current Julia session is what you want instead. A package extension provides it, and you need no code beyond loading Makie.
 
 The code on this page is not executed as part of the documentation build: plotting
 backends are heavy dependencies, and building the documentation should not need to install
@@ -58,20 +58,8 @@ lines(components(vₕ)[1])
 lines(components(vₕ)[2])
 ```
 
-## Plots.jl
-
-`RecipesBase` covers `Plots.jl` and anything else built on it, the same way:
-
-```julia
-using Bramble, Plots
-
-plot(uₕ)     # a line by default, the same field as above
-heatmap(u2)  # same 2D field as above
-```
-
 ## What is not covered
 
-Both extensions are scoped to 1D and 2D. Makie genuinely can render a true 3D volume
-(`Makie.volume`), unlike PGFPlots, which cannot represent one at all, but that path is not
-wired up here; a 3D [`VectorElement`](@ref) raises an `ArgumentError` naming
-[`export_vtk`](@ref) as the tool for it, in both extensions.
+The extension is scoped to 1D and 2D. Makie can render a true 3D volume (`Makie.volume`),
+but that path is not wired up here; a 3D [`VectorElement`](@ref) raises an `ArgumentError`
+naming [`export_vtk`](@ref) as the tool for it.

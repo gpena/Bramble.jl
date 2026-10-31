@@ -14,9 +14,8 @@ using ..TestUtils: _run_example_page
 # `LinearSolve` with `AlgebraicMultigrid` for the preconditioning comparison. This file is
 # included after pages.jl in the `examples` group.
 #
-# The two pages behind the `ad` group for a *backend* rather than a solver --
-# inverse_diffusion (Enzyme) and transient_inverse_problem (SciMLSensitivity) -- keep their
-# own files: each guards on `_have` and skips rather than runs when the backend is absent.
+# The page behind the `ad` group for a *backend* rather than a solver --
+# inverse_diffusion (Enzyme) -- keeps its own file: it guards on `_have` and skips rather than runs when the backend is absent.
 
 @testset "Worked example pages (extensions)" begin
     # Steps a differential-algebraic system with `FBDF`. Pins the second-order rate the

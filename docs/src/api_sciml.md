@@ -52,14 +52,6 @@ linear_problem
 nonlinear_problem
 ```
 
-## Adjoint sensitivities for a transient solve
-
-No test runs this until v4.2.0, when the AD backends return.
-
-```@docs
-Bramble.adjoint_sensitivities
-```
-
 ## Differentiable linear solve (adjoint gradients)
 
 ```@docs

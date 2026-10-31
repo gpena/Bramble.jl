@@ -53,8 +53,8 @@ const __bramble_with_gpu_tests = TestUtils.WITH_GPU_TESTS
 # AD tests are switched on. Their packages are not in test/Project.toml; each file skips a
 # backend absent from the environment, so the group reports a skip rather than an error.
 #
-# The AD extension files (sparse AD, the AD backend verification, SciMLSensitivity, the
-# pde_solve rrule and the transient-inverse-problem page) run here too, not under `ext`, so
+# The AD extension files (sparse AD, the AD backend verification and the
+# pde_solve rrule) run here too, not under `ext`, so
 # that `ext` is CPU extensions only.
 #
 # `backends` is `ad` plus `ext` with no unit suite: Weekly.yml runs it as one half of the
@@ -62,7 +62,7 @@ const __bramble_with_gpu_tests = TestUtils.WITH_GPU_TESTS
 const __bramble_with_ad_backends = __bramble_with_ad_tests &&
                                    __bramble_test_group in ("ad", "full", "backends")
 
-# The Makie/Meshes/RecipesBase weak deps: `test/Project.toml` lists them (so
+# The Makie/Meshes weak deps: `test/Project.toml` lists them (so
 # `Pkg.instantiate()` always resolves and can precompile them), but they are only ever
 # `using`-d, and so only ever pay their compile cost, behind this group -- every push
 # otherwise gets none of that weight. CPU extensions only: the AD extension files run in
@@ -249,10 +249,6 @@ if __bramble_with_ad_backends
         # The AD extension files, moved here from "Package extensions" so `ext` is CPU only.
         include("ext/sparse_ad_ext.jl")
         include("ext/ad_backend_verification.jl")
-        include("ext/sciml_sensitivity_ext.jl")
-        # Runs the transient-inverse-problem page itself, whose #src assertions need
-        # `SciMLSensitivity`, same as `inverse_diffusion.jl` needing `Enzyme` above.
-        include("examples/transient_inverse_problem.jl")
     end
 end
 
@@ -273,7 +269,6 @@ if __bramble_with_ext_backends
         isdefined(Main, :ExtSolverContracts) || include("ext/SolverContracts.jl")
 
         if TestUtils.in_shard("ext-solvers")
-            include("ext/plots_ext.jl")
             include("ext/makie_ext.jl")
             include("ext/meshes_ext.jl")
             include("ext/sciml_ext.jl")
