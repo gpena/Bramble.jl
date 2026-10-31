@@ -4,7 +4,7 @@ using Test
 using Random
 using ForwardDiff
 using Bramble
-using ..TestUtils: WITH_AD_TESTS, WITH_3D_TESTS
+using ..TestUtils: WITH_3D_TESTS
 using Bramble: reaction, reaction!, reaction_density, reaction_density!
 
 # `reaction` extracts the boundary flux a Dirichlet constraint had
@@ -602,7 +602,7 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
         end
     end
 
-    WITH_AD_TESTS && @testset "reaction: Dual load vector" begin
+    @testset "reaction: Dual load vector" begin
         # A Dual load against a Float64 matrix must not be rounded to Float64.
         Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 7, false))
         A = assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))

@@ -45,6 +45,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("symmetrize.jl")
         TestUtils.WITH_AD_TESTS && include("autodiff.jl")
         include("forwarddiff_smoke.jl")
+        # A grid-function coefficient swapped in a built form, Dual included (#985).
+        include("rebind.jl")
         include("common.jl")
         include("simplifier.jl")
         # Real coefficients converted once at `form`, one AST type per value (#912).

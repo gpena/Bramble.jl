@@ -19,7 +19,9 @@
 # `GhostConstraints` makes `_assemble_source!` write `Eᵀ (F_pad(t) − A_pad d(t))` with the
 # banded load of `ghost_assembly.jl`, `A_pad` as the operator last filled it. Its buffers
 # are preallocated, so a residual at the space's element type allocates nothing; a wider
-# time (a `ForwardDiff.Dual`) gets buffers of its own type for that call.
+# time (a `ForwardDiff.Dual`) gets buffers of its own type for that call. A `u` the padded
+# state cannot hold (a `Dual`) goes to a twin, as on a plain space: a padded state of its
+# type, the forms rebound to it, and the operator's own `A` and `A_pad`, which the load reads.
 #
 # Refused, each naming the alternative: the `dirichlet` keyword, a space keeping ghosts as
 # unknowns, a time-dependent operator built by a function, a form on a ghost space with
@@ -46,18 +48,32 @@ end
 
 function _sync_state!(s::_GhostState, u, t)
     S = promote_type(eltype(u), _affine_eltype(s.space, t))
-    promote_type(eltype(s.v), S) === eltype(s.v) || _throw_ghost_state_eltype(s.v, S)
+    promote_type(eltype(s.v), S) === eltype(s.v) || _throw_ghost_state_eltype(s.v, u, S)
     lift!(s.v, s.space, u, t)
     return nothing
 end
 
-@noinline function _throw_ghost_state_eltype(v, S::Type)
+@inline _state_element(s::_GhostState) = s.v
+@inline _twin_state(s::_GhostState, v::VectorElement) = _GhostState(v, s.space)
+
+# A ghost form assembles without the `dirichlet` keywords: its relations hold them.
+_twin_matrix(sd, ::Val{true}, a::GhostBilinearForm) = assemble(a)
+
+# The residual sends a non-plain `u` the state cannot hold to a twin (`_state_holds`), so
+# a time, or a wider plain `u`, reaches this; `jacobian!` lifts any `u` into the state.
+@noinline function _throw_ghost_state_eltype(v, u, S::Type)
+    if _holds(eltype(v), eltype(u))
+        by = "a ForwardDiff time: give the Rosenbrock solver an explicit tgrad, or use a " *
+             "solver that does not differentiate in t (FBDF)."
+    else
+        by = "a u of element type $(nameof(eltype(u))): pass u at the state's type, " *
+             "or, for a ForwardDiff Dual, evaluate the residual, which gives it a state " *
+             "of its own type."
+    end
     throw(
         ArgumentError(
         "the state of a semidiscretization on a ghost space receives lift(Cₕ, u, t), of " *
-        "element type $S here, and it holds $(eltype(v)). A time-dependent state cannot " *
-        "follow a ForwardDiff time: give the Rosenbrock solver an explicit tgrad, or use " *
-        "a solver that does not differentiate in t (FBDF).",
+        "element type $(nameof(S)) here, and it holds $(eltype(v)). It cannot follow $by",
     ),
     )
 end
@@ -73,7 +89,7 @@ whose relation data may depend on time. With `(E, d(t))` the closure of `Cₕ`, 
 
 # Keywords
 - `mass`: a form on `Cₕ` defining `M` (default `innerₕ(u, v)`, diagonal and positive). A mass that couples a degree of freedom to a point where `d` depends on time is refused: its term `Eᵀ M_pad d′(t)` needs the time derivative of the data.
-- `state`: a grid function on `Bramble.padded_space(Cₕ)` that receives `lift(Cₕ, u, t)` before each assembly, for forms whose coefficients read it (default `nothing`).
+- `state`: a grid function on `Bramble.padded_space(Cₕ)` that receives `lift(Cₕ, u, t)` before each assembly, for forms whose coefficients read it (default `nothing`). A `u` it cannot hold (a `ForwardDiff.Dual`) is lifted into a padded buffer of its own type, read by the forms rebound to it, as on a plain space.
 - `update_coefficients!`, `reassemble`: as for plain forms.
 
 The `dirichlet` and `dirichlet_components` keywords are refused: give a Dirichlet condition as `:F => u => g(x, t)` in
@@ -122,7 +138,8 @@ Base.@constprop :aggressive function semidiscretize(
         nothing,
         _ghost_state(state, Cₕ),
         _wrap_update(update_coefficients!),
-        Val(reassemble)
+        Val(reassemble),
+        Dict{DataType, Any}()
     )
 end
 

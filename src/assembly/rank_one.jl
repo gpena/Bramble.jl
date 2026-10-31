@@ -652,6 +652,9 @@ function assemble(
     if symmetrize
         labels, _ = _normalize_dirichlet(dirichlet)
         labels === nothing && _throw_symmetrize_without_dirichlet()
+        # A real load takes a complex or `Dual` `K`'s Dirichlet columns: widen it first.
+        T = promote_type(eltype(F), eltype(K))
+        T === eltype(F) || (F = copyto!(similar(F, T), F))
         symmetrize!(K, F, test_space(a), labels...; components = dirichlet_components)
     end
     return K, F
@@ -771,7 +774,7 @@ function assemble(a::_GhostRankOneForm, l::GhostLinearForm; dirichlet = nothing,
         _rank_scale_value(a.scale),
         similar(a.test_functional.F_pad, ndofs(test_space(a))),
         similar(a.trial_functional.F_pad, ndofs(trial_space(a))))
-    F = similar(l.F_pad, promote_type(eltype(l.F_pad), eltype(K)), ndofs(l.test_space))
+    F = similar(l.F_pad, _pair_load_eltype(a.bilinear, l, K), ndofs(l.test_space))
     return _assemble_rank_one_pair!(K, F, a, l, dirichlet, dirichlet_components, symmetrize)
 end
 
@@ -782,7 +785,7 @@ function assemble!(K::RankOneUpdate, F::AbstractVector, a::_GhostRankOneForm,
     _check_pair(a.bilinear, l, labels, symmetrize, "assemble!(K, F, a, l)")
     _check_reduced_pattern(K.A, a.bilinear)
     _check_linear_length(F, l.test_space)
-    T = promote_type(eltype(l.F_pad), eltype(K))
+    T = _pair_load_eltype(a.bilinear, l, K)
     promote_type(eltype(F), T) === eltype(F) || _throw_pair_eltype(F, T)
     return _assemble_rank_one_pair!(K, F, a, l, dirichlet, dirichlet_components, symmetrize)
 end

@@ -539,9 +539,10 @@ function _check_ghost_host(Wₕ::GhostGridSpace)
     return nothing
 end
 
-# Plain real and complex floating-point entries only: AD types are out of scope.
-_check_ghost_eltype(::Type{<:Union{AbstractFloat, Complex{<:AbstractFloat}}}) = nothing
-_check_ghost_eltype(T::Type) = _throw_ghost_unsupported("the element type $T (AD)")
+# Any number type: floats, complex numbers and AD types such as `ForwardDiff.Dual`. The
+# reduction only multiplies and adds entries, so it needs no BLAS type.
+_check_ghost_eltype(::Type{<:Number}) = nothing
+_check_ghost_eltype(T::Type) = _throw_ghost_unsupported("the element type $T")
 
 @noinline function _throw_ghost_unsupported(what)
     throw(ArgumentError("forms on a ghost space do not support $what yet."))
@@ -971,7 +972,7 @@ function assemble(a::_AnyGhostBilinearForm, l::_AnyGhostLinearForm; dirichlet = 
     labels, bcs = _normalize_dirichlet(dirichlet)
     _check_pair(a, l, labels, symmetrize, "assemble(a, l)", dirichlet_components)
     A = _reduced_matrix(a.A_pad, a)
-    F = similar(l.F_pad, promote_type(eltype(l.F_pad), eltype(A)), ndofs(l.test_space))
+    F = similar(l.F_pad, _pair_load_eltype(a, l, A), ndofs(l.test_space))
     return _assemble_pair!(A, F, a, l, labels, bcs, dirichlet_components, symmetrize)
 end
 
@@ -1004,9 +1005,17 @@ function assemble!(A::AbstractMatrix, F::AbstractVector, a::_AnyGhostBilinearFor
     _check_pair(a, l, labels, symmetrize, "assemble!(A, F, a, l)", dirichlet_components)
     _check_reduced_pattern(A, a)
     _check_linear_length(F, l.test_space)
-    T = promote_type(eltype(l.F_pad), eltype(A))
+    T = _pair_load_eltype(a, l, A)
     promote_type(eltype(F), T) === eltype(F) || _throw_pair_eltype(F, T)
     return _assemble_pair!(A, F, a, l, labels, bcs, dirichlet_components, symmetrize)
+end
+
+# The element type of the load `E_vᵀ(F_pad − A_pad d_u)`: the relations' boundary values
+# reach it through `d_u` alone, evaluated on their own points when the space was built, so
+# a `Dual` or complex value there widens the load and real data keep the form's type.
+@inline function _pair_load_eltype(a::_AnyGhostBilinearForm, l::_AnyGhostLinearForm,
+        A::AbstractMatrix)
+    return promote_type(eltype(l.F_pad), eltype(A), eltype(a.trial_space.d))
 end
 
 # The refusal of a load whose lift depends on time (there is no single `d`).

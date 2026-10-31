@@ -1369,6 +1369,9 @@ function assemble(
         dirichlet_labels === nothing && _throw_symmetrize_without_dirichlet()
         locality(typeof(A)) isa DeviceLocality &&
             throw(ArgumentError("symmetrize = true is not supported for a matrix in device memory."))
+        # A real load takes a complex or `Dual` `A`'s Dirichlet columns: widen it first.
+        T = promote_type(eltype(F), eltype(A))
+        T === eltype(F) || (F = copyto!(similar(F, T), F))
         symmetrize!(
             A, F, test_space(a), dirichlet_labels...; components = dirichlet_components
         )

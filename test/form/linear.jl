@@ -1201,6 +1201,87 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const
         @test all(view(b_both, (n + 1):(2n))[i] ≈ 5.0 for i in 1:n if marked[i])
     end
 
+    @testset "Dirichlet value widens the vector" begin
+        # `assemble` sized its vector from the form alone, so a boundary value of a wider
+        # type (a `ForwardDiff.Dual`, a complex number) failed in `dirichlet_bc!`'s
+        # `setindex!` before anything was solved. Each derivative is checked against a
+        # central difference, so a wrong one fails rather than merely not crashing.
+        h = 1e-6
+        θ0 = 1.3
+        l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, _Const(1.0)), v))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        marked = index_in_marker(Ωₕ, :bottom)
+
+        b(θ) = assemble(l; dirichlet = :bottom => x -> θ * (1 + x[1]))
+        @test ForwardDiff.derivative(b, θ0)≈(b(θ0 + h) - b(θ0 - h)) / 2h rtol=1e-6
+        # the derivative lives on the boundary rows only
+        @test all(iszero, ForwardDiff.derivative(b, θ0)[.!marked])
+        @test any(!iszero, ForwardDiff.derivative(b, θ0)[marked])
+
+        # the path the original crash traced to: `assemble(a, l; dirichlet, symmetrize)`
+        g(θ) = assemble(
+            a, l; dirichlet = :bottom => x -> θ * x[1], symmetrize = true)[2]
+        @test ForwardDiff.derivative(g, θ0)≈(g(θ0 + h) - g(θ0 - h)) / 2h rtol=1e-6
+
+        # a complex value widens to `ComplexF64`; a real one leaves `Float64` alone
+        @test eltype(assemble(l; dirichlet = :bottom => x -> 1.0im)) == ComplexF64
+        @test eltype(assemble(l; dirichlet = :bottom => x -> 1.0)) == Float64
+        @test eltype(assemble(l)) == Float64
+        bc = assemble(l; dirichlet = :bottom => x -> 2.0im)
+        @test all(bc[marked] .== 2.0im)
+        @test bc[.!marked] == assemble(l)[.!marked]
+
+        # `assemble!` keeps the caller's element type: a complex vector takes the complex
+        # value, a real one still refuses it
+        bz = zeros(ComplexF64, n)
+        assemble!(bz, l; dirichlet = :bottom => x -> 2.0im)
+        @test bz == bc
+        @test_throws InexactError assemble!(
+            zeros(n), l; dirichlet = :bottom => x -> 2.0im)
+
+        # composite: components 1, 100 and 10000 cannot be confused, and `components = 2`
+        # binds the value to the second leaf only, so the derivative is zero on the first
+        uv = Rₕ(Vₕ, (_Const(1.0), _Const(100.0)))
+        lv = form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
+        c(θ) = assemble(lv; dirichlet = :bottom => x -> θ * 10000 * x[1],
+            dirichlet_components = 2)
+        dc = ForwardDiff.derivative(c, θ0)
+        @test dc≈(c(θ0 + h) - c(θ0 - h)) / 2h rtol=1e-6
+        @test iszero(dc[1:n])
+        @test any(!iszero, dc[(n + 1):end])
+        # `components = 1` is the mirror image, and the unrestricted value reaches both
+        c1(θ) = assemble(lv; dirichlet = :bottom => x -> θ * x[1],
+            dirichlet_components = 1)
+        dc1 = ForwardDiff.derivative(c1, θ0)
+        @test any(!iszero, dc1[1:n]) && iszero(dc1[(n + 1):end])
+        c12(θ) = assemble(lv; dirichlet = :bottom => x -> θ * x[1])
+        dc12 = ForwardDiff.derivative(c12, θ0)
+        @test any(!iszero, dc12[1:n]) && any(!iszero, dc12[(n + 1):end])
+        # a complex value restricted to leaf 2 still widens the whole vector
+        @test eltype(assemble(lv; dirichlet = :bottom => x -> 1.0im,
+            dirichlet_components = 2)) == ComplexF64
+        @test_throws ArgumentError assemble(
+            lv; dirichlet = :bottom => x -> 1.0, dirichlet_components = 3)
+
+        # a real condition defined only on its own label is probed there, not at the
+        # first mesh point: neither of these may throw off `:right`
+        Ωr = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0), :right => :right,
+                :top => :top),
+            (8, 8), (true, true)
+        )
+        Wr = gridspace(Ωr)
+        lr = form(Wr, v -> innerₕ(Rₕ(Wr, _Const(1.0)), v))
+        mr = index_in_marker(Ωr, :right)
+        @test any(mr)
+        br = assemble(lr; dirichlet = :right => x -> sqrt(x[1] - 0.5))
+        bref = assemble!(zeros(ndofs(Wr)), lr; dirichlet = :right => x -> sqrt(x[1] - 0.5))
+        @test eltype(br) == Float64
+        @test br == bref
+        @test assemble(lr; dirichlet = :right => x -> (x[1] == 1.0 ? 1.0 : error("off :right"))) isa
+              Vector{Float64}
+    end
+
     @testset "Allocation contract" begin
         # This is what a time loop calls every step. The assembly kernel itself is
         # allocation free -- `form.ast` is a field read, not a resolution, so there is
