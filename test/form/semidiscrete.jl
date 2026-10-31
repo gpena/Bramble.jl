@@ -5,7 +5,8 @@ using Bramble
 using Bramble: matrix_type
 using SparseArrays
 using SciMLBase: SciMLBase # loads the `ode_problem` extension
-using ForwardDiff: Dual, value
+using ForwardDiff: ForwardDiff, Dual, value
+using FiniteDiff: FiniteDiff
 using Bramble:
                D₋ₓ,
                Mₓ,
@@ -17,7 +18,7 @@ using Bramble:
                semidiscretize_rhs,
                set_points!,
                type_cached_assemble!
-using ..TestUtils: WITH_AD_TESTS, _sd_problem, _Const, _x1
+using ..TestUtils: WITH_AD_TESTS, _sd_problem, _Const, _x1, _graded_mesh
 
 # `semidiscretize` and the residual it returns (src/problems/semidiscrete.jl) need no SciMLBase:
 # a `Semidiscretization` is a callable with the `(du, u, p, t)` signature plus two matrices.
@@ -916,6 +917,146 @@ function _sd_child_messages(code)
     root = pkgdir(Bramble)
     cmd = `$(Base.julia_cmd()) --project=$root --startup-file=no --threads=1 -e $code`
     return split(readchomp(pipeline(cmd; stderr = devnull)), '\n')
+end
+
+# A `Dual` `u` the state cannot hold goes to a twin of the semidiscretization at its type: a
+# state buffer of that type, the forms rebound to it and their own operator matrix, so the
+# AD Jacobian carries `-(∂A/∂u) u` (#985). The oracle is a central difference of the Float64
+# residual, and the Picard `-A` is checked to differ from it, so a twin reading a stale
+# state could not pass. Graded 2D mesh, its boundary constrained to data.
+_sd_jac(sd, u, t) = ForwardDiff.jacobian((du, v) -> sd(du, v, nothing, t), zero(u), u)
+function _sd_jac_fd(sd, u, t)
+    n = length(u)
+    return FiniteDiff.finite_difference_jacobian(v -> sd(zeros(n), v, nothing, t), u,
+        Val(:central))
+end
+
+@testset "Dual state: exact AD Jacobian (#985)" begin
+    Ωₕ = _graded_mesh((6, 7))
+    Wₕ = gridspace(Ωₕ)
+    n = ndofs(Wₕ)
+    u0 = collect(range(0.5, 2.0; length = n))
+    bc = :boundary => x -> 1.0 + x[2]
+
+    @testset "operator reads the state, reassembled" begin
+        sₕ = Bramble.element(Wₕ, 3.0)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(x -> 1.0 + x[1], v))
+        sd = semidiscretize(a, l; state = sₕ, reassemble = true, dirichlet = bc)
+        # one function object, so both Jacobian calls below share one Dual type
+        f! = (du, v) -> sd(du, v, nothing, 0.0)
+        J = ForwardDiff.jacobian(f!, zeros(n), u0)
+        D = only(keys(sd.twins))
+        # the user's state never receives a Dual
+        @test eltype(parent(sₕ)) === Float64
+        @test all(==(3.0), parent(sₕ))
+
+        Jfd = _sd_jac_fd(sd, u0, 0.0)
+        @test isapprox(J, Jfd; rtol = 1e-6)
+        # the Picard `-A` at u0 is not the Jacobian
+        sd(zeros(n), u0, nothing, 0.0)
+        @test !isapprox(J, -Matrix(operator_matrix(sd)); rtol = 1e-3)
+
+        # a Dual residual's values are the Float64 residual's
+        ud = D.(u0)
+        rd = sd(zeros(D, n), ud, nothing, 0.0)
+        @test value.(rd) ≈ sd(zeros(n), u0, nothing, 0.0) rtol = 1e-14
+
+        # built once per element type: a second Jacobian reuses the twin and its matrix
+        twin = sd.twins[D]
+        Atwin = operator_matrix(twin)
+        @test length(sd.twins) == 1
+        @test ForwardDiff.jacobian(f!, zeros(n), u0) == J
+        @test length(sd.twins) == 1
+        @test sd.twins[D] === twin
+        @test operator_matrix(twin) === Atwin
+        @test eltype(Atwin) === D
+
+        # the Float64 residual still allocates nothing beside the twin
+        du, u = zeros(n), copy(u0)
+        sd(du, u, nothing, 0.0)
+        @test _sd_residual_allocs(sd, du, u, 0.0) == 0
+        @test parent(sₕ) == u
+    end
+
+    # Without `reassemble` the operator never followed the state: the twin keeps `A`, and
+    # only the source, which reads the state here, is rebound.
+    @testset "source reads the state, operator fixed" begin
+        sₕ = Bramble.element(Wₕ, 2.0)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(sₕ, v))
+        sd = semidiscretize(a, l; state = sₕ)
+        J = _sd_jac(sd, u0, 0.0)
+        @test isapprox(J, _sd_jac_fd(sd, u0, 0.0); rtol = 1e-6)
+        @test !isapprox(J, -Matrix(operator_matrix(sd)); rtol = 1e-3)
+        twin = only(values(sd.twins))
+        @test operator_matrix(twin) === operator_matrix(sd)
+        @test twin.operator === sd.operator
+        @test twin.source !== sd.source
+    end
+
+    # A plain number type always takes the `copyto!` path: a Float64 `u` into a Float32
+    # state is converted there, as before, with no twin and no allocation.
+    @testset "plain u wider than the state: copied" begin
+        sₕ = Bramble.element(Wₕ, Float32)
+        fill!(parent(sₕ), 1.0f0)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(x -> 1.0 + x[1], v))
+        sd = semidiscretize(a, l; state = sₕ, reassemble = true)
+        du, u = zeros(n), copy(u0)
+        sd(du, u, nothing, 0.0)
+        @test parent(sₕ) == Float32.(u)
+        @test isempty(sd.twins)
+        @test _sd_residual_allocs(sd, du, u, 0.0) == 0
+    end
+
+    # A state no form reads in its expression cannot follow a Dual: refused, never the
+    # Picard `-A` passed off as the Jacobian.
+    @testset "state the forms do not rebind: refused" begin
+        sₕ = Bramble.element(Wₕ, 1.0)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(x -> 1.0 + x[1], v))
+        sd = semidiscretize(a, l; state = sₕ, reassemble = true)
+        @test_throws ArgumentError _sd_jac(sd, u0, 0.0)
+        @test isempty(sd.twins)
+
+        # a `build`-based operator is opaque to the rebind
+        mk(t) = (form(Wₕ, Wₕ, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v))), t -> nothing)
+        sdb = semidiscretize(mk, l; state = sₕ)
+        err = try
+            _sd_jac(sdb, u0, 0.0)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("build", sprint(showerror, err))
+
+        # a hook may read the user's state, which a Dual `u` never reaches: refused
+        fₕ = Bramble.element(Wₕ, 0.0)
+        ah = form(Wₕ, Wₕ, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v)))
+        sdh = semidiscretize(ah, form(Wₕ, v -> innerₕ(fₕ, v)); state = sₕ,
+            reassemble = true, (update_coefficients!) = t -> (parent(fₕ) .= parent(sₕ) .^ 2))
+        err = try
+            _sd_jac(sdh, u0, 0.0)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("update_coefficients!", sprint(showerror, err))
+        @test isempty(sdh.twins)
+
+        # a composite state is read through component views, which are not rebound
+        Vₕ = Wₕ × Wₕ
+        cₕ = Bramble.element(Vₕ, 1.0)
+        av = form(Vₕ, Vₕ, (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))))
+        lv = form(Vₕ, v -> innerₕ(cₕ(1), v(1)) + 100 * innerₕ(cₕ(2), v(2)))
+        sdv = semidiscretize(av, lv; state = cₕ)
+        uv = collect(range(0.5, 2.0; length = ndofs(Vₕ)))
+        @test_throws ArgumentError _sd_jac(sdv, uv, 0.0)
+        @test all(==(1.0), parent(cₕ))
+    end
 end
 
 @testset "SciML entry points without the extension" begin

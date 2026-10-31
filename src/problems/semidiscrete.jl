@@ -73,6 +73,7 @@ Built by [`semidiscretize`](@ref); read back with [`mass_matrix`](@ref) and
 - `state`: [`VectorElement`](@ref) receiving `u` before assembly, or `nothing`.
 - `update_coefficients`: callable invoked with `t` (or, wrapped in `ParametricUpdate`, with `t` and the residual's own `p`) before assembly, or `nothing`.
 - `reassemble`: `Val(true)` to refill `A` at every step.
+- `twins`: by element type of `u`, the semidiscretisations a `u` the state cannot hold (a `ForwardDiff.Dual`) is evaluated by: a state buffer of that type, the forms rebound to it and their own operator matrix, built at the first call there.
 """
 struct Semidiscretization{A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R}
     operator::A
@@ -87,6 +88,7 @@ struct Semidiscretization{A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R}
     state::ST
     update_coefficients::TR
     reassemble::Val{R}
+    twins::Dict{DataType, Any}
 end
 
 """
@@ -139,7 +141,7 @@ returned system solves `A u_h = F`.
 - `mass`: [`BilinearForm`](@ref) defining `M` (default `innerₕ(u, v)`, the discrete `L²` inner product, which is diagonal).
 - `dirichlet`: constrained labels and, where they carry values, the values -- every form [`assemble`](@ref) accepts, including time-dependent constraints from [`dirichlet_constraints`](@ref)`(Ωₕ, I, :label => (x, t) -> ...)`, or parameter-dependent ones from `(x, t, p) -> ...` for a value reached by the residual's own `p` (default `nothing`).
 - `dirichlet_components`: leaf components of a composite space the labels bind to (default `nothing`, all leaves).
-- `state`: [`VectorElement`](@ref) the current `u` is copied into before each assembly, for forms whose coefficients read it (default `nothing`).
+- `state`: [`VectorElement`](@ref) the current `u` is copied into before each assembly, for forms whose coefficients read it (default `nothing`). A `u` of an element type the state cannot hold (a `ForwardDiff.Dual`, from automatic differentiation of the residual) goes into a buffer of its own type instead, read by the forms rebound to it, so the user's state never receives it and `-(∂A/∂u) u` enters the Jacobian. Only the state written in the forms' expressions is rebound: one read inside a Julia function (`x -> uₕ(x)`), through a component view (`uₕ(1)`) or by a `build`-based operator is not, and such a `u` is refused with an `ArgumentError` where nothing is rebound; so is any such `u` beside an `update_coefficients!` hook, which may read the user's state. A plain number type (a real or complex float or integer) is always copied into the state, converted to its element type.
 - `update_coefficients!`: called with the current `t` before each assembly, for coefficients that vary in time -- `t -> Rₕ!(fₕ, x -> f(x, t))` for a time-dependent source, or `t -> (α[] = t)` for a scalar `Ref` (default `nothing`). A two-argument `(t, p) -> ...` also reaches the residual's own `p`, the same way a three-argument Dirichlet condition does.
 - `reassemble`: refill `A` at every step, for an operator whose coefficients change with `t` or `u` (default `false`).
 
@@ -218,7 +220,8 @@ Base.@constprop :aggressive function semidiscretize(
         dirichlet_components,
         state,
         _wrap_update(update_coefficients!),
-        Val(reassemble)
+        Val(reassemble),
+        Dict{DataType, Any}()
     )
 end
 
@@ -315,7 +318,8 @@ Base.@constprop :aggressive function semidiscretize(
         dirichlet_components,
         state,
         _wrap_update(update_coefficients!),
-        Val(reassemble)
+        Val(reassemble),
+        Dict{DataType, Any}()
     )
 end
 
@@ -439,12 +443,23 @@ call. On a `build`-based operator, a step at any element type other than the pro
 goes through an untyped operator cache, and allocates on every call (as does
 [`jacobian!`](@ref)).
 
+A `u` of a non-plain element type `state` cannot hold (a `ForwardDiff.Dual` `u`, from
+automatic differentiation of the residual) is evaluated by a twin of `sd` at that type, built once and
+cached: a state buffer of that type, the operator and the source rebound to it, and the
+operator's own matrix (`A` itself without `reassemble`). The user's state keeps its values.
+The call reaches the twin through an untyped cache, so it allocates.
+
 `p` reaches [`update_coefficients!`](@ref semidiscretize) and a time-dependent Dirichlet
 condition written as `(x, t, p) -> ...`, if either was given one of those shapes; otherwise
 it is unused, exactly as before this was possible. See the "`p` reaches only the source"
 note on [`semidiscretize`](@ref).
 """
 function (sd::Semidiscretization)(du::AbstractVector, u::AbstractVector, p, t)
+    # Folded at compile time: a `u` the state holds takes the path below, unchanged.
+    if !_state_holds(sd.state, u)
+        _state_twin(sd, eltype(u))(du, u, p, t)
+        return du
+    end
     _sync_state!(sd.state, u, t)
     _update_coefficients!(sd.update_coefficients, p, t)
 
@@ -465,6 +480,98 @@ function (sd::Semidiscretization)(du::AbstractVector, u::AbstractVector, p, t)
     copyto!(du, F)
     mul!(du, A, u, -1, 1)
     return du
+end
+
+# Whether `u` copies into the state as it is: a plain number (a real or complex float or
+# integer) always does, converted as `copyto!` converts it, and any other `u` (a `Dual`) a
+# state of its element type holds.
+@inline _state_holds(::Nothing, u) = true
+@inline function _state_holds(state, u)
+    return _plain_number(eltype(u)) || _holds(eltype(_state_element(state)), eltype(u))
+end
+@inline _holds(::Type{S}, ::Type{U}) where {S, U} = promote_type(S, U) === S
+@inline _plain_number(::Type) = false
+@inline _plain_number(::Type{<:Union{AbstractFloat, Integer}}) = true
+@inline _plain_number(::Type{Complex{T}}) where {T} = _plain_number(T)
+
+# The user's element inside the state (a ghost space wraps it with its space), and the
+# same state around another element.
+@inline _state_element(state::VectorElement) = state
+@inline _twin_state(::VectorElement, v::VectorElement) = v
+
+# The twin of `sd` at element type `T`, built at the first call there. Untyped, so the
+# barrier keeps it out of the residual's typed path.
+@noinline function _state_twin(sd::Semidiscretization, ::Type{T}) where {T}
+    twin = get(sd.twins, T, nothing)
+    twin === nothing || return twin
+    twin = _build_state_twin(sd, T)
+    sd.twins[T] = twin
+    return twin
+end
+
+# A state buffer of type `T` holding the state's values (the pattern walk of a new matrix
+# must read no uninitialised `Dual`), the source rebound to it and, under `reassemble`, the
+# operator and its own matrix; without it the operator and `A` stay, as they never followed
+# the state (a ghost load reads the operator's `A_pad`, filled at construction). A twin
+# reading no rebound form would give `-A` as the Jacobian while the forms read the state
+# some other way, so it is refused.
+function _build_state_twin(sd::Semidiscretization, ::Type{T}) where {T}
+    sd.update_coefficients === nothing || _throw_state_hook(T)
+    old = _state_element(sd.state)
+    new = element(old.space, T)
+    copyto!(parent(new), parent(old))
+    a = _twin_operator(sd.reassemble, sd.operator, old => new)
+    l = _replace_grid_function(sd.source, old => new)
+    a === sd.operator && l === sd.source && _throw_state_unread(T)
+    A = _twin_matrix(sd, sd.reassemble, a)
+    F = similar(sd.source_vector, T)
+    return Semidiscretization(a, l, sd.space, A, sd.mass_matrix, F, sd.constraints,
+        sd.labels, sd.components, _twin_state(sd.state, new), sd.update_coefficients,
+        sd.reassemble, Dict{DataType, Any}())
+end
+
+@inline _twin_operator(::Val{false}, a, p::Pair) = a
+@inline _twin_operator(::Val{true}, a, p::Pair) = _replace_grid_function(a, p)
+@noinline function _twin_operator(::Val{true}, ::TypeCachedOperator, p::Pair)
+    throw(
+        ArgumentError(
+        "semidiscretize(build, l; state): the operator `build` returns reads the state " *
+        "in a form this cannot rebind, so a u of element type " *
+        "$(nameof(eltype(p.second))) cannot reach it. Pass the jacobian to the solver, " *
+        "or semidiscretize a form reading the state.",
+    ),
+    )
+end
+
+_twin_matrix(sd, ::Val{false}, a) = sd.operator_matrix
+function _twin_matrix(sd, ::Val{true}, a)
+    return assemble(a; dirichlet = sd.labels, dirichlet_components = sd.components)
+end
+
+# The hook may read the user's state, which a `u` of type `T` never reaches: its
+# derivative would be lost without a trace, so the pair is refused.
+@noinline function _throw_state_hook(T::Type)
+    throw(
+        ArgumentError(
+        "semidiscretize: u has element type $(nameof(T)), which the state cannot hold, " *
+        "and update_coefficients! may read the state, which only receives u at the " *
+        "state's own element type: the hook's dependence on u would be lost from the " *
+        "derivative. Use a finite-difference Jacobian, or the Picard jacobian! with " *
+        "u at the state's type.",
+    ),
+    )
+end
+
+@noinline function _throw_state_unread(T::Type)
+    throw(
+        ArgumentError(
+        "semidiscretize: u has element type $(nameof(T)), which the state cannot hold, " *
+        "and no form rebuilt around a state buffer of that type reads it: the state is " *
+        "read inside a Julia function, a component view, update_coefficients! or a form " *
+        "not reassembled. Write the state itself in the form's expression " *
+        "(uₕ * ∇ₕ(u)) with reassemble = true, or pass the jacobian to the solver.",
+    ),
+    )
 end
 
 # The state at `t`: a plain state ignores it, a ghost space's lifts `u` at `t`.
@@ -608,7 +715,9 @@ Exact whenever the operator's coefficients do not read `u` -- that is, whenever 
 built without `state`. With a `state` the operator also varies with `u`, the term
 `-(∂A/∂u) u` is missing, and this is a Picard linearisation rather than a Jacobian: pass
 `jacobian = nothing` to [`ode_function`](@ref) and let the solver build it by sparse
-automatic differentiation instead, seeded from [`jacobian_pattern`](@ref).
+automatic differentiation instead, seeded from [`jacobian_pattern`](@ref). That one is
+exact: a `ForwardDiff.Dual` `u` goes into a state buffer of its own type, read by the forms
+rebound to it (see the `state` keyword of [`semidiscretize`](@ref)).
 
 See also [`jacobian_prototype`](@ref).
 """

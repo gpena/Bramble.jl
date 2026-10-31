@@ -12,6 +12,7 @@ import Bramble
 using Bramble: CpuSerial, CpuThreaded
 using LinearAlgebra: norm, isdiag, diag
 using ForwardDiff: ForwardDiff
+using FiniteDiff: FiniteDiff
 using SciMLBase: solve
 using OrdinaryDiffEqBDF: FBDF
 
@@ -178,6 +179,85 @@ end
         end
         @test err isa ArgumentError
         @test occursin("tgrad", sprint(showerror, err))
+    end
+
+    # A Dual `u` lifts into a padded state of its own type, read by the forms rebound to
+    # it, whose own `A_pad` the load reads (#985). The data depend on time, so `A_pad d(t)`
+    # carries a u-derivative a twin with only its matrix swapped would drop. The oracle is a
+    # central difference of the Float64 residual; the Picard `-A` is checked to differ.
+    @testset "Dual state: exact AD Jacobian (#985)" begin
+        W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = GHOSTS2)
+        C = constrained(W, rel2(nothing))
+        sₕ = element(Bramble.padded_space(C), 3.0)
+        a = form(C, C, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v)))
+        sd = semidiscretize(a, form(C, source); state = sₕ, reassemble = true)
+        m = Bramble.ndofs(C)
+        u0 = collect(range(0.5, 2.0; length = m))
+        t = 0.4
+        f! = (du, u) -> sd(du, u, nothing, t)
+        J = ForwardDiff.jacobian(f!, zeros(m), u0)
+        D = only(keys(sd.twins))
+        # the user's state never receives a Dual
+        @test eltype(parent(sₕ)) === Float64
+        @test all(==(3.0), parent(sₕ))
+        Jfd = FiniteDiff.finite_difference_jacobian(u -> sd(zeros(m), u, nothing, t), u0,
+            Val(:central))
+        @test relerr(J, Jfd) <= 1e-6
+        sd(zeros(m), u0, nothing, t)
+        @test relerr(J, -Matrix(Bramble.operator_matrix(sd))) > 1e-3
+        rd = sd(zeros(D, m), D.(u0), nothing, t)
+        @test relerr(ForwardDiff.value.(rd), sd(zeros(m), u0, nothing, t)) <= 1e-14
+
+        # built once: a second Jacobian reuses the twin, its matrix and its padded state
+        twin = sd.twins[D]
+        Atwin = Bramble.operator_matrix(twin)
+        @test eltype(Atwin) === D
+        @test twin.state.v !== sₕ
+        @test ForwardDiff.jacobian(f!, zeros(m), u0) == J
+        @test length(sd.twins) == 1
+        @test sd.twins[D] === twin
+        @test Bramble.operator_matrix(twin) === Atwin
+
+        # `jacobian!` lifts `u` into the user's state: a Dual one is refused, naming `u`
+        Jp = Bramble.jacobian_prototype(sd)
+        s0 = copy(parent(sₕ))
+        err = try
+            Bramble.jacobian!(Jp, sd, D.(u0), nothing, t)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("a u of element type Dual", msg)
+        @test !occursin("ForwardDiff time", msg)
+        @test parent(sₕ) == s0
+
+        # the Float64 residual still allocates nothing beside the twin
+        u, du = copy(u0), zeros(m)
+        @test alloc(() -> sd(du, u, nothing, t)) == 0
+        @test parent(sₕ) ≈ parent(Bramble.lift(C, u, t)) rtol = 1e-14
+    end
+
+    # Without `reassemble` the twin keeps the operator, whose `A_pad` the load reads, and
+    # only the source, reading the state here, is rebound.
+    @testset "Dual state: source reads it (#985)" begin
+        W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = GHOSTS2)
+        C = constrained(W, rel2(nothing))
+        sₕ = element(Bramble.padded_space(C), 2.0)
+        sd = semidiscretize(form(C, C, laplacian), form(C, v -> innerₕ(sₕ, v));
+            state = sₕ)
+        m = Bramble.ndofs(C)
+        u0 = collect(range(0.5, 2.0; length = m))
+        t = 0.4
+        J = ForwardDiff.jacobian((du, u) -> sd(du, u, nothing, t), zeros(m), u0)
+        Jfd = FiniteDiff.finite_difference_jacobian(u -> sd(zeros(m), u, nothing, t), u0,
+            Val(:central))
+        @test relerr(J, Jfd) <= 1e-6
+        @test relerr(J, -Matrix(Bramble.operator_matrix(sd))) > 1e-3
+        twin = only(values(sd.twins))
+        @test twin.operator === sd.operator
+        @test Bramble.operator_matrix(twin) === Bramble.operator_matrix(sd)
     end
 
     @testset "show names the relations" begin
