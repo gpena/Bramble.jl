@@ -38,12 +38,14 @@ does instead of a closure (`Semidiscretization` itself, `TypeCachedOperator`).
 
 The `csr` field holds the compressed-row pattern of `A` that a [`CpuPolyester`](@ref) space
 with `reassemble = false` multiplies by (see [`semidiscretize_rhs`](@ref)), and is
-`nothing` otherwise.
+`nothing` otherwise. The `twins` field caches, per element type of a `u` the state cannot
+hold (a `ForwardDiff.Dual`), the right-hand side of the residual's twin at that type.
 """
 struct SemidiscretizeRHS{S <: Semidiscretization, V <: AbstractVector, C}
     sd::S
     inv_mass_diag::V
     csr::C
+    twins::Dict{DataType, Any}
 end
 
 # `M`'s own storage, not `weights(space(sd))`: `mass` is a caller-supplied keyword to
@@ -146,7 +148,19 @@ function semidiscretize_rhs(sd::Semidiscretization)
         ArgumentError("semidiscretize_rhs: the assembled mass matrix has a zero diagonal entry."),
     )
     A = operator_matrix(sd)
-    return SemidiscretizeRHS(sd, inv.(d), _rhs_csr(execution_policy(sd.space), sd.reassemble, A))
+    return SemidiscretizeRHS(sd, inv.(d), _rhs_csr(execution_policy(sd.space), sd.reassemble, A),
+        Dict{DataType, Any}())
+end
+
+# The right-hand side of the residual's twin at element type `T` (`_state_twin`), built at
+# the first call there with its own inverse mass diagonal and pattern. Untyped, so the
+# barrier keeps it out of the typed path.
+@noinline function _rhs_twin(rhs::SemidiscretizeRHS, ::Type{T}) where {T}
+    twin = get(rhs.twins, T, nothing)
+    twin === nothing || return twin
+    twin = semidiscretize_rhs(_state_twin(rhs.sd, T))
+    rhs.twins[T] = twin
+    return twin
 end
 
 # The compressed-row pattern of `A` the `CpuPolyester` product walks: `rowptr[i]:rowptr[i +
@@ -217,9 +231,19 @@ underlying [`Semidiscretization`](@ref) residual does: `eltype(du)` and `typeof(
 matching the assembled element type. Under [`CpuPolyester`](@ref) a warm call allocates
 nothing either: its sweeps pass `@batch` only plain arrays and isbits values, so Polyester's
 argument box stays on the stack.
+
+A `u` the state cannot hold (a `ForwardDiff.Dual` `u`) is evaluated by the right-hand side
+of the residual's twin at that type, built once and cached, so automatic differentiation
+gives the Jacobian of `M⁻¹(F(t) - A u)`; it is refused where the residual's is. That call
+reaches the twin through an untyped cache, so it allocates.
 """
 function (rhs::SemidiscretizeRHS)(du::AbstractVector, u::AbstractVector, p, t)
     sd = rhs.sd
+    # Folded at compile time: a `u` the state holds takes the path below, unchanged.
+    if !_state_holds(sd.state, u)
+        _rhs_twin(rhs, eltype(u))(du, u, p, t)
+        return du
+    end
     _sync_state!(sd.state, u)
     _update_coefficients!(sd.update_coefficients, p, t)
 

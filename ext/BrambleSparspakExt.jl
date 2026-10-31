@@ -108,9 +108,13 @@ function LinearAlgebra.ldiv!(
     return uₕ
 end
 
-function Base.:\(fact::ConcreteSparspakFactorization, b::AbstractVector)
+# Sparspak's triangular solve takes a right-hand side of the matrix's own element type only,
+# so a real load against a `Dual` (or other wider) matrix is promoted first. A load that
+# already has that type is passed as is: the all-`Float64` path copies it once, as before.
+function Base.:\(fact::ConcreteSparspakFactorization{T}, b::AbstractVector) where {T}
     finite_rhs = all(isfinite, b)
-    x = _singular_on_empty(() -> fact.lu \ b, fact.dim)
+    b′ = convert(AbstractVector{promote_type(T, eltype(b))}, b)
+    x = _singular_on_empty(() -> fact.lu \ b′, fact.dim)
     return _check_finite_solution(x, finite_rhs)
 end
 

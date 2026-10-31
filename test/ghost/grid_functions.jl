@@ -339,6 +339,21 @@ end
         @test_throws ArgumentError norm₁ₕ(ug)
         @test_throws ArgumentError interpolate_at(ug, (0.4, 0.4))
     end
+
+    @testset "update_ghosts! real vector, complex" begin
+        # the relation data are complex, so the ghosts are ComplexF64: a Float64 vector
+        # cannot hold them, and the refusal names both types
+        Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
+        C = constrained(gridspace(Ωₕ; ghosts = :boundary),
+            u -> (:xmin => ∂ₙ(u) => 1.0im, :xmax => ∂ₙ(u) => 0.0))
+        v = GhostVector(C, zeros(9))
+        @test_throws ArgumentError update_ghosts!(v, C)
+        msg = message(() -> update_ghosts!(v, C))
+        @test msg !== nothing && occursin("ComplexF64", msg) && occursin("Float64", msg)
+        # a complex vector holds them
+        w = GhostVector(C, zeros(ComplexF64, 9))
+        @test update_ghosts!(w, C) === w
+    end
 end
 
 end # module GhostGridFunctionsTests

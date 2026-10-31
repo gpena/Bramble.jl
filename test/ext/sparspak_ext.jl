@@ -17,7 +17,8 @@ using Bramble: sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using Sparspak
-using ForwardDiff
+using DifferentiationInterface: DifferentiationInterface, AutoForwardDiff
+using ForwardDiff: ForwardDiff
 
 # The direct-solver contract this backend shares with SuiteSparse, MUMPS and
 # AppleAccelerate lives in test/ext/SolverContracts.jl, which test/runtests.jl includes
@@ -27,7 +28,7 @@ using ForwardDiff
 using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system,
                             poisson_solve_contract, refactor_contract,
                             unsymmetric_refactor_contract, validation_contract
-using ..TestUtils: _fd, WITH_AD_TESTS
+using ..TestUtils: _fd, alloc_test
 
 @testset "Sparspak extension" begin
     @testset "1D/2D/3D Poisson" begin
@@ -72,7 +73,7 @@ using ..TestUtils: _fd, WITH_AD_TESTS
     # Sparspak has no binary dependency, so non-Float64 element types work.
     @testset "non-Float64 element types" begin
         p = poisson_system(Val(2), 8; source = x -> 1.0)
-        Wₕ, l, A, F = p.Wₕ, p.l, p.A, p.F
+        Wₕ, A, F = p.Wₕ, p.A, p.F
 
         # Float32
         A32 = SparseMatrixCSC{Float32}(A)
@@ -85,19 +86,42 @@ using ..TestUtils: _fd, WITH_AD_TESTS
         # type (`sparspaklu(m::SparseMatrixCSC{FT,IT}; ...) where {FT,IT}`), so a matrix
         # assembled from a `Dual`-valued coefficient factors and solves directly, which
         # SuiteSparse/MUMPS cannot do (both require `Float64`/`ComplexF64` matrix entries).
-        # Sparspak's triangular solve additionally requires the right-hand side to share
-        # the matrix's own element type exactly, hence the explicit `eltype(Aθ).(...)`.
-        if WITH_AD_TESTS
-            function g(θ)
-                aθ = form(Wₕ, Wₕ, (u, v) -> (1.0 + θ) * inner₊(∇ₕ(u), ∇ₕ(v)))
-                Aθ, Fθ0 = assemble(aθ, l; dirichlet = ZERO_BC)
-                Fθ = eltype(Aθ).(Fθ0)
-                uθ = sparspak_solve(Aθ, Fθ)
-                return sum(uθ)
-            end
-            d = ForwardDiff.derivative(g, 1.0)
-            @test isapprox(d, _fd(g, 1.0); atol = 1.0e-6, rtol = 1.0e-6)
+        # The load stays real: the extension promotes it to the matrix's element type
+        # before Sparspak's triangular solve, which takes no other.
+        function g(θ)
+            aθ = form(Wₕ, Wₕ, (u, v) -> (1.0 + θ) * inner₊(∇ₕ(u), ∇ₕ(v)))
+            Aθ = assemble(aθ; dirichlet = ZERO_BC)
+            return sum(pde_solve(Aθ, F; solver = :sparspak))
         end
+        @test eltype(F) == Float64
+        d = DifferentiationInterface.derivative(g, AutoForwardDiff(), 1.0)
+        @test isapprox(d, _fd(g, 1.0); atol = 1.0e-6, rtol = 1.0e-6)
+    end
+
+    # A real load against a `Dual` matrix: `pde_solve`, `sparspak_solve` and `\` on the
+    # factorization all promote the load, and the derivative matches the dense solve's.
+    @testset "Dual matrix, real load" begin
+        b = [1.0, 1.0]
+        Aθ(θ) = sparse([2.0+θ 0.5; 0.5 1.0])
+        dense(θ) = sum(Matrix(Aθ(θ)) \ b)
+        for solve in (θ -> pde_solve(Aθ(θ), b; solver = :sparspak),
+                      θ -> sparspak_solve(Aθ(θ), b),
+                      θ -> sparspak_factorize(Aθ(θ)) \ b)
+            d = DifferentiationInterface.derivative(θ -> sum(solve(θ)), AutoForwardDiff(), 1.0)
+            @test isapprox(d, _fd(dense, 1.0); rtol = 1.0e-6)
+        end
+    end
+
+    # The promotion copies nothing when the load already has the matrix's element type: a
+    # Float64 solve allocates what an in-place solve of a copy does, short of one more
+    # load-sized vector (32 KiB here, far above any `-O0` boxing).
+    @testset "Float64 solve allocates no extra copy" begin
+        n = 4096
+        A = sparse(SymTridiagonal(fill(4.0, n), fill(-1.0, n - 1)))
+        b = ones(n)
+        fact = sparspak_factorize(A)
+        in_place = alloc_test((f, v) -> ldiv!(f, copy(v)), fact, b)
+        @test alloc_test(\, fact, b) - in_place < sizeof(b)
     end
 
     # Sparspak factors BigFloat matrices, which SuiteSparse, MUMPS and Accelerate cannot

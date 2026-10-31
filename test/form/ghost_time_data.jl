@@ -14,6 +14,8 @@ using Bramble: CpuSerial, CpuThreaded
 using LinearAlgebra: norm
 using SparseArrays: nonzeros
 using ForwardDiff: ForwardDiff
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 
 using ..TestUtils: WITH_3D_TESTS, ghost_mesh
 
@@ -243,14 +245,60 @@ end
     ref = Bramble.closure(constrained(W, rels(x -> cos(t0) * (1 + x[2]),
         x -> 2t0 * x[2], x -> -exp(-t0) * x[1])))[2]
     u = collect(range(-1.0, 1.0; length = Bramble.ndofs(C)))
-    dlift = ForwardDiff.derivative(t -> parent(Bramble.lift(C, u, t)), t0)
+    dlift = DI.derivative(t -> parent(Bramble.lift(C, u, t)), AutoForwardDiff(), t0)
     @test relerr(dlift, ref) <= 1e-12
-    daff = ForwardDiff.derivative(t -> Bramble._lift_affine!(similar(C.d, typeof(t)), C, t),
-        t0)
+    daff = DI.derivative(t -> Bramble._lift_affine!(similar(C.d, typeof(t)), C, t),
+        AutoForwardDiff(), t0)
     @test relerr(daff, ref) <= 1e-12
     # The stored buffer still serves a plain time afterwards.
     @test relerr(Bramble._lift_affine!(similar(C.d), C, t0),
         parent(Bramble.lift(C, zeros(Bramble.ndofs(C)), t0))) == 0
+end
+
+# Data in time carrying a `Dual` or a complex number widen the stored `d` and data buffer
+# (#1111). Every datum is `θ` times a fixed one, so `∂d(t)/∂θ` is `d(t)` at `θ = 1`,
+# exactly; a complex datum `p + im q` gives `d_p(t) + im d_q(t)`.
+@testset "Dual and complex data in time" begin
+    W = gridspace(ghost_mesh(CpuSerial(), (6, 7); seed = 4); ghosts = (:xmin, :xmax, :ymax))
+    rels(θ) = u -> (:xmin => ∂ₙ(u) => (x, s) -> θ * (sin(s) + x[2]),
+        :xmax => u + 0.5 * ∂ₙ(u) => (x, s) -> θ * s * x[2],
+        :ymin => u => (x, s) -> θ * exp(-s) * x[1], :ymax => ∂ₙₙ(u) => 0.0)
+    t = 0.9
+    function d(θ)
+        C = constrained(W, rels(θ))
+        return Bramble._lift_affine!(similar(C.d), C, t)
+    end
+    ref = d(1.0)
+    @test norm(ref) > 0.1
+    @test relerr(DI.derivative(d, AutoForwardDiff(), 3.0), ref) <= 1e-13
+    Cz = constrained(W, rels(1.0 + 0.5im))
+    @test eltype(Cz.d) === ComplexF64 && eltype(Cz.td.g) === ComplexF64
+    @test relerr(Bramble._lift_affine!(similar(Cz.d), Cz, t), (1.0 + 0.5im) * ref) <= 1e-13
+    u = collect(range(-1.0, 1.0; length = Bramble.ndofs(Cz)))
+    @test relerr(parent(Bramble.lift(Cz, u, t)),
+        parent(Bramble.lift(constrained(W, rels(1.0)), u, t)) + 0.5im * ref) <= 1e-13
+    # A datum `0.0` at the first point or at t = 0 and a `Dual` or complex number elsewhere:
+    # its inferred type, not its value there, widens the buffer. Linear in θ, as above.
+    ramps = (θ -> (x, s) -> s < 0.5 ? 0.0 : θ * (s - 0.5),
+        θ -> (x, s) -> x[2] < 1.0 ? 0.0 : θ * s)
+    for ramp in ramps
+        rr(θ) = u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => u + ∂ₙ(u) => ramp(θ),
+            :ymin => u => 0.0, :ymax => ∂ₙ(u) => 0.0)
+        function dr(θ)
+            C = constrained(W, rr(θ))
+            return Bramble._lift_affine!(similar(C.d), C, t)
+        end
+        rref = dr(1.0)
+        @test norm(rref) > 0.1
+        @test relerr(DI.derivative(dr, AutoForwardDiff(), 3.0), rref) <= 1e-13
+        @test relerr(dr(0.5im), 0.5im * rref) <= 1e-13
+    end
+    # Float32 data in time on a Float32 space keep its type
+    W32 = gridspace(ghost_mesh(CpuSerial(), (6, 7); seed = 4, T = Float32);
+        ghosts = (:xmin, :xmax, :ymax))
+    C64 = constrained(W32, rels(1.0))   # Float64 data
+    @test eltype(C64.d) === Float32 && eltype(C64.td.g) === Float32
+    @test eltype(constrained(W32, rels(1.0f0 + 0.5f0im)).td.g) === ComplexF32
 end
 
 @testset "Concurrent lifts at two times" begin

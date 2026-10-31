@@ -26,17 +26,20 @@ Propagating derivatives through discrete operators requires that allocations do 
    ```
 3. **Quadrature evaluation in `avgₕ`**: Cell averaging builds Gauss-Legendre quadrature rules in the coordinate type of the mesh, while evaluating the integrand at those real nodes. Sensitivities present in the integrand propagate into the destination element without requiring dual-valued quadrature tables.
 
-## Supported automatic differentiation backends
+## AD backends
 
-Bramble's runtime kernels mutate destination buffers using `setindex!`. AD backends that support array mutation work out of the box:
+Bramble's runtime kernels mutate destination buffers using `setindex!`, so a backend has to support array mutation. `Zygote` does not and is not supported. Two backends are kept, both reached through [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl). For setup and runnable examples, see the [Automatic differentiation tutorial](../tutorials/autodiff.md).
 
-- **ForwardDiff**: Dual numbers propagate through coefficients, difference operators, weak forms, and boundary conditions.
-- **PolyesterForwardDiff**: The same forward-mode propagation, chunked across threads.
-- **ReverseDiff**: Tracked arrays and scalars propagate through space operators and form assembly.
-- **Mooncake & Enzyme**: Differentiate operator evaluations and space methods.
-- **Zygote**: Not supported directly because it disallows array mutation (`setindex!`).
+| Backend | Use | `CpuSerial` | `CpuThreaded` | `CpuPolyester` |
+| :--- | :--- | :--- | :--- | :--- |
+| ForwardDiff | few parameters, directional derivatives, sparse Jacobians | works | works | works |
+| Enzyme | reverse mode with many parameters, the `pde_solve` adjoint | works | in progress (this milestone) | in progress (this milestone) |
 
-In practice, using [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl) allows swapping between forward and reverse backends through a unified API. For setup instructions and runnable examples across all 5 supported backends, see the [Automatic differentiation tutorial](../tutorials/autodiff.md).
+The two `in progress` cells are the ones the v4.2.0 follow-up plan fills in, so replace them there and nowhere else.
+
+ForwardDiff propagates dual numbers through coefficients, difference operators, weak forms and boundary conditions. Enzyme differentiates `Float64` code, so no buffer widens to `Dual`, and `BrambleEnzymeExt` supplies the `pde_solve` adjoint.
+
+Three backends were dropped: PolyesterForwardDiff, ReverseDiff and Mooncake. PolyesterForwardDiff matches ForwardDiff wherever it runs and throws a `cfunction` error at 16 or more parameters on the aarch64 host. ReverseDiff is the slowest reverse-mode backend at every parameter count, has no `pde_solve` adjoint, and timed out on the sparse Jacobian. Mooncake is slower than Enzyme and has no `pde_solve` adjoint because it rejects the `SparseMatrixCSC` tangent. The measurements and the full reasoning are in [`ad_backend_evaluation.md`](ad_backend_evaluation.md).
 
 ## Calling AD libraries
 

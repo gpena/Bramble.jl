@@ -48,7 +48,8 @@ end
 
 function _sync_state!(s::_GhostState, u, t)
     S = promote_type(eltype(u), _affine_eltype(s.space, t))
-    promote_type(eltype(s.v), S) === eltype(s.v) || _throw_ghost_state_eltype(s.v, u, S)
+    promote_type(eltype(s.v), S) === eltype(s.v) ||
+        _throw_ghost_state_eltype(s.v, u, eltype(s.space.d), S)
     lift!(s.v, s.space, u, t)
     return nothing
 end
@@ -60,15 +61,20 @@ end
 _twin_matrix(sd, ::Val{true}, a::GhostBilinearForm) = assemble(a)
 
 # The residual sends a non-plain `u` the state cannot hold to a twin (`_state_holds`), so
-# a time, or a wider plain `u`, reaches this; `jacobian!` lifts any `u` into the state.
-@noinline function _throw_ghost_state_eltype(v, u, S::Type)
-    if _holds(eltype(v), eltype(u))
-        by = "a ForwardDiff time: give the Rosenbrock solver an explicit tgrad, or use a " *
-             "solver that does not differentiate in t (FBDF)."
-    else
+# a time, relation data `D` wider than the state, or a wider plain `u` reaches this;
+# `jacobian!` lifts any `u` into the state.
+@noinline function _throw_ghost_state_eltype(v, u, ::Type{D}, S::Type) where {D}
+    if !_holds(eltype(v), eltype(u))
         by = "a u of element type $(nameof(eltype(u))): pass u at the state's type, " *
              "or, for a ForwardDiff Dual, evaluate the residual, which gives it a state " *
              "of its own type."
+    elseif !_holds(eltype(v), D)
+        by = "relation data of element type $(nameof(D)): build the state at that " *
+             "type, element(Bramble.padded_space(Cₕ), T) with T = $(nameof(D)), as the " *
+             "data are."
+    else
+        by = "a ForwardDiff time: give the Rosenbrock solver an explicit tgrad, or use a " *
+             "solver that does not differentiate in t (FBDF)."
     end
     throw(
         ArgumentError(
@@ -122,8 +128,10 @@ Base.@constprop :aggressive function semidiscretize(
     _check_ghost_mass(mform.A_pad, Cₕ)
 
     # Of `A`'s element type, as on a plain space: a Float32 space with a Float64 datum in
-    # the load steps at Float32.
-    F = similar(l.F_pad, eltype(A), ndofs(Cₕ))
+    # the load steps at Float32. A non-plain load or relation datum (`_pair_load_eltype`),
+    # a `Dual` or a complex number, widens it as `_closure_data_eltype` widens `d`.
+    F = similar(l.F_pad, _closure_data_eltype(eltype(A), _pair_load_eltype(a, l, A)),
+        ndofs(Cₕ))
     constraints = GhostConstraints(similar(Cₕ.d))
 
     return Semidiscretization(

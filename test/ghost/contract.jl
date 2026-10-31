@@ -12,6 +12,9 @@ import Bramble
 using Bramble: evaluate!, lift
 using LinearAlgebra: dot, norm
 using Random: Xoshiro
+import ForwardDiff
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 
 using ..TestUtils: WITH_3D_TESTS
 
@@ -256,6 +259,35 @@ end
     A_ref, _ = reference(C, f_c)
     @test a(u, v) ≈ dot(parent(v), A_ref * parent(u)) rtol = 1e-12
     @test a(u, v) ≈ dot(parent(v), assemble(a) * parent(u)) rtol = 1e-12
+end
+
+# A `dirichlet` value richer than the form widens the load the call allocates: a complex
+# value gives a complex load, and a `ForwardDiff.Dual` one differentiates it. The load is
+# affine in the value, so `F(i) = F(0) + i (F(1) − F(0))` and `dF/dg = F(1) − F(0)`.
+@testset "Ghost contract: Dirichlet widens load" begin
+    Ωₕ = nonuniform_mesh(1)
+    C = constrained(gridspace(Ωₕ; ghosts = :boundary),
+        u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => ∂ₙ(u) => 0.0))
+    a, l = form(C, C, f_a), form(C, f_l)
+    for sym in (false, true)
+        F(g) = assemble(a, l; dirichlet = :xmin => x -> g, symmetrize = sym)[2]
+        F0, F1, Fi = F(0.0), F(1.0), F(1.0im)
+        @test eltype(F0) == Float64 && eltype(Fi) == ComplexF64
+        @test real(Fi) == F0
+        @test imag(Fi) ≈ F1 - F0 rtol = 1e-14
+        @test count(!iszero, F1 - F0) == (sym ? 2 : 1)
+        dF = DI.derivative(F, AutoForwardDiff(), 1.0)
+        @test dF ≈ F1 - F0 rtol = 1e-14
+    end
+    # the load alone, and a composite whose condition binds its second component only
+    b(g) = assemble(l; dirichlet = :xmin => x -> g)
+    @test eltype(b(1.0im)) == ComplexF64 && imag(b(1.0im)) == b(1.0) - b(0.0)
+    @test DI.derivative(b, AutoForwardDiff(), 2.0) == b(1.0) - b(0.0)
+    V = C × C
+    lV = form(V, v -> innerₕ(x -> 1.0, v(1)) + innerₕ(x -> 1.0, v(2)))
+    bV = assemble(lV; dirichlet = :xmin => x -> 1.0im, dirichlet_components = 2)
+    @test eltype(bV) == ComplexF64
+    @test findall(!iszero, imag(bV)) == [ndofs(C) + 1]
 end
 
 # One ghost at the end of a 1D mesh is the last padded point, the last degree of freedom:

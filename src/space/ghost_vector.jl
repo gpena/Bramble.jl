@@ -167,7 +167,7 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5
 """
 function update_ghosts!(v::GhostVector, Cₕ::GhostGridSpace)
     _is_time_dependent(Cₕ) && _throw_update_needs_time(Cₕ)
-    gu = _check_update(v, Cₕ, eltype(Cₕ))
+    gu = _check_update(v, Cₕ, eltype(Cₕ.d))
     isempty(gu.slot) && return v
     _run_bands!(execution_policy(Cₕ.padded), _ghost_update_band!, v.ghosts, v.physical,
         gu.slot, gu.colptr, gu.rowval, gu.nz)

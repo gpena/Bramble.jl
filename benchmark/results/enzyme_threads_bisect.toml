@@ -1,0 +1,320 @@
+[bisect]
+endpoints = ["0.13.204", "0.13.216"]
+julia_1_12_7 = "0.13.204 run on 1.12.7 as an extra data point"
+pair = ["0.13.204", "0.13.216"]
+pair_good = [false, false]
+reason = "no sampled 0.13.x version works on dynamic"
+
+[meta]
+arch = "aarch64"
+commit = "027ef5ee-dirty"
+cpu = "Apple M2"
+date = "2026-10-31T18:26:56"
+julia = "1.13.3"
+julia_1_13_0 = "not installed (juliaup status); not run"
+juliaup_versions = ["1.12.7", "1.13.3", "1.14.0", "1.15.0"]
+load1 = 3.99
+os = "Darwin"
+power = "ac"
+script = "enzyme_threads_bisect.jl"
+script_sha = "5a5cf792db581a7f0e6d5c4d95036299658c8fb4"
+smoke = false
+threads = 2
+
+[[run]]
+enzyme = "0.13.204"
+enzyme_jll = "0.0.293+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "max |dx - 2x| = 0.0"
+schedule = "serial"
+seconds = 3.9339120388031006
+status = "ok"
+[[run]]
+enzyme = "0.13.204"
+enzyme_jll = "0.0.293+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "AssertionError: mi2 !== nothing"
+schedule = "dynamic"
+seconds = 8.358987092971802
+status = "throws"
+[[run]]
+enzyme = "0.13.204"
+enzyme_jll = "0.0.293+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "AssertionError: mi2 !== nothing"
+schedule = "static"
+seconds = 8.477818965911865
+status = "throws"
+[[run]]
+enzyme = "0.13.216"
+enzyme_jll = "0.0.303+1"
+enzymecore = "0.8.26"
+gpucompiler = "2.10.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "max |dx - 2x| = 0.0"
+schedule = "serial"
+seconds = 3.002715826034546
+status = "ok"
+[[run]]
+enzyme = "0.13.216"
+enzyme_jll = "0.0.303+1"
+enzymecore = "0.8.26"
+gpucompiler = "2.10.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "AssertionError: mi2 !== nothing"
+schedule = "dynamic"
+seconds = 6.0807318687438965
+status = "throws"
+[[run]]
+enzyme = "0.13.216"
+enzyme_jll = "0.0.303+1"
+enzymecore = "0.8.26"
+gpucompiler = "2.10.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "AssertionError: mi2 !== nothing"
+schedule = "static"
+seconds = 6.006891965866089
+status = "throws"
+[[run]]
+enzyme = "0.13.198"
+enzyme_jll = "0.0.289+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "max |dx - 2x| = 0.0"
+schedule = "serial"
+seconds = 3.6249961853027344
+status = "ok"
+[[run]]
+enzyme = "0.13.198"
+enzyme_jll = "0.0.289+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "AssertionError: VERSION < v\"1.13\""
+schedule = "dynamic"
+seconds = 2.1907598972320557
+status = "throws"
+[[run]]
+enzyme = "0.13.198"
+enzyme_jll = "0.0.289+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "AssertionError: VERSION < v\"1.13\""
+schedule = "static"
+seconds = 2.206752061843872
+status = "throws"
+[[run]]
+enzyme = "0.13.190"
+enzyme_jll = "0.0.288+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "max |dx - 2x| = 0.0"
+schedule = "serial"
+seconds = 3.648491859436035
+status = "ok"
+[[run]]
+enzyme = "0.13.190"
+enzyme_jll = "0.0.288+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "AssertionError: VERSION < v\"1.13\""
+schedule = "dynamic"
+seconds = 2.4902288913726807
+status = "throws"
+[[run]]
+enzyme = "0.13.190"
+enzyme_jll = "0.0.288+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "AssertionError: VERSION < v\"1.13\""
+schedule = "static"
+seconds = 2.455160140991211
+status = "throws"
+[[run]]
+enzyme = "0.13.180"
+enzyme_jll = "0.0.280+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "max |dx - 2x| = 0.0"
+schedule = "serial"
+seconds = 2.267909049987793
+status = "ok"
+[[run]]
+enzyme = "0.13.180"
+enzyme_jll = "0.0.280+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "AssertionError: VERSION < v\"1.13\""
+schedule = "dynamic"
+seconds = 2.4754300117492676
+status = "throws"
+[[run]]
+enzyme = "0.13.180"
+enzyme_jll = "0.0.280+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "AssertionError: VERSION < v\"1.13\""
+schedule = "static"
+seconds = 2.427839994430542
+status = "throws"
+[[run]]
+enzyme = "0.13.150"
+enzyme_jll = "0.0.263+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "max |dx - 2x| = 0.0"
+schedule = "serial"
+seconds = 2.253943920135498
+status = "ok"
+[[run]]
+enzyme = "0.13.150"
+enzyme_jll = "0.0.263+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "AssertionError: VERSION < v\"1.13\""
+schedule = "dynamic"
+seconds = 2.6653590202331543
+status = "throws"
+[[run]]
+enzyme = "0.13.150"
+enzyme_jll = "0.0.263+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "AssertionError: VERSION < v\"1.13\""
+schedule = "static"
+seconds = 2.4111528396606445
+status = "throws"
+[[run]]
+enzyme = "0.13.100"
+enzyme_jll = "0.0.211+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.9.1"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "Taking the type of an opaque pointer is illegal"
+schedule = "serial"
+seconds = 7.502312183380127
+status = "throws"
+[[run]]
+enzyme = "0.13.100"
+enzyme_jll = "0.0.211+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.9.1"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "Taking the type of an opaque pointer is illegal"
+schedule = "dynamic"
+seconds = 10.022874116897583
+status = "throws"
+[[run]]
+enzyme = "0.13.100"
+enzyme_jll = "0.0.211+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.9.1"
+julia = "1.13.3"
+llvm = "9.13.2"
+message = "Taking the type of an opaque pointer is illegal"
+schedule = "static"
+seconds = 10.039912939071655
+status = "throws"
+[[run]]
+enzyme = "0.13.0"
+enzyme_jll = ""
+enzymecore = ""
+gpucompiler = ""
+julia = "1.13.3"
+llvm = ""
+message = "Unsatisfiable requirements detected for package GPUCompiler [61eb1bfa]:  GPUCompiler [61eb1bfa] log:  ├─possible versions are: 0.1.0 - 2.19.0 or uninstalled  ├─restricted by julia compatibility requir"
+schedule = "serial"
+seconds = 0.0
+status = "unresolvable"
+[[run]]
+enzyme = "0.13.0"
+enzyme_jll = ""
+enzymecore = ""
+gpucompiler = ""
+julia = "1.13.3"
+llvm = ""
+message = "Unsatisfiable requirements detected for package GPUCompiler [61eb1bfa]:  GPUCompiler [61eb1bfa] log:  ├─possible versions are: 0.1.0 - 2.19.0 or uninstalled  ├─restricted by julia compatibility requir"
+schedule = "dynamic"
+seconds = 0.0
+status = "unresolvable"
+[[run]]
+enzyme = "0.13.0"
+enzyme_jll = ""
+enzymecore = ""
+gpucompiler = ""
+julia = "1.13.3"
+llvm = ""
+message = "Unsatisfiable requirements detected for package GPUCompiler [61eb1bfa]:  GPUCompiler [61eb1bfa] log:  ├─possible versions are: 0.1.0 - 2.19.0 or uninstalled  ├─restricted by julia compatibility requir"
+schedule = "static"
+seconds = 0.0
+status = "unresolvable"
+[[run]]
+enzyme = "0.13.204"
+enzyme_jll = "0.0.293+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.12.7"
+llvm = "9.13.2"
+message = "max |dx - 2x| = 0.0"
+schedule = "serial"
+seconds = 2.9104669094085693
+status = "ok"
+[[run]]
+enzyme = "0.13.204"
+enzyme_jll = "0.0.293+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.12.7"
+llvm = "9.13.2"
+message = "max |dx - 2x| = 0.0"
+schedule = "dynamic"
+seconds = 8.86628007888794
+status = "ok"
+[[run]]
+enzyme = "0.13.204"
+enzyme_jll = "0.0.293+0"
+enzymecore = "0.8.26"
+gpucompiler = "1.23.0"
+julia = "1.12.7"
+llvm = "9.13.2"
+message = "max |dx - 2x| = 0.0"
+schedule = "static"
+seconds = 8.701298236846924
+status = "ok"

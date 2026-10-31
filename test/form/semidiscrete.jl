@@ -995,6 +995,39 @@ end
         @test twin.source !== sd.source
     end
 
+    # `semidiscretize_rhs` routes a Dual `u` to the right-hand side of the residual's twin:
+    # its Jacobian is the central difference of the Float64 `M⁻¹(F - A u)`, not the Picard
+    # `-M⁻¹A`, the twin is built once, and the Float64 call still allocates nothing.
+    @testset "semidiscretize_rhs: Dual u" begin
+        sₕ = Bramble.element(Wₕ, 3.0)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(x -> 1.0 + x[1], v))
+        rhs = semidiscretize_rhs(semidiscretize(a, l; state = sₕ, reassemble = true))
+        f! = (du, v) -> rhs(du, v, nothing, 0.0)
+        J = ForwardDiff.jacobian(f!, zeros(n), u0)
+        @test all(==(3.0), parent(sₕ))
+        Jfd = FiniteDiff.finite_difference_jacobian(v -> rhs(zeros(n), v, nothing, 0.0),
+            u0, Val(:central))
+        @test isapprox(J, Jfd; rtol = 1e-6)
+        rhs(zeros(n), u0, nothing, 0.0)
+        @test !isapprox(J, -rhs.inv_mass_diag .* Matrix(operator_matrix(rhs.sd)); rtol = 1e-3)
+
+        twin = only(values(rhs.twins))
+        @test ForwardDiff.jacobian(f!, zeros(n), u0) == J
+        @test only(values(rhs.twins)) === twin
+
+        du, u = zeros(n), copy(u0)
+        rhs(du, u, nothing, 0.0)
+        @test _sd_rhs_allocs(rhs, du, u, 0.0) == 0
+
+        # refused where the residual is: no form reads the state
+        a0 = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        rhs0 = semidiscretize_rhs(semidiscretize(a0, l; state = sₕ, reassemble = true))
+        @test_throws ArgumentError ForwardDiff.jacobian(
+            (du, v) -> rhs0(du, v, nothing, 0.0), zeros(n), u0)
+        @test isempty(rhs0.twins)
+    end
+
     # A plain number type always takes the `copyto!` path: a Float64 `u` into a Float32
     # state is converted there, as before, with no twin and no allocation.
     @testset "plain u wider than the state: copied" begin
