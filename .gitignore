@@ -144,3 +144,6 @@ check_*_check_*
 graphify-out/
 # v4.2.0 AD backend evaluation (gpena/Bramble.jl#369)
 !benchmark/ad_backend_evaluation.jl
+# v4.2.0 DI against direct AD calls (gpena/Bramble.jl#1117)
+!benchmark/ad_di_vs_direct.jl
+!benchmark/di_upstream_mwe.jl
