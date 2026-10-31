@@ -38,6 +38,20 @@ Bramble's runtime kernels mutate destination buffers using `setindex!`. AD backe
 
 In practice, using [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl) allows swapping between forward and reverse backends through a unified API. For setup instructions and runnable examples across all 5 supported backends, see the [Automatic differentiation tutorial](../tutorials/autodiff.md).
 
+## Calling AD libraries
+
+Calls that differentiate Bramble go through [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl) (DI), with three named exceptions. The evidence, the call census and the cost measurements are in [`ad_di_evaluation.md`](ad_di_evaluation.md).
+
+The exceptions stay as they are:
+
+- `test/ext/chainrules_enzyme_ext.jl` calls Enzyme directly. DI differentiates one argument, and the file needs `A` and `F` active together and calls Enzyme's own entry points so that the `pde_solve` rule fires.
+- Hand-built `ForwardDiff.Dual`, `value` and `partials` sites stay. They are not differentiation calls, and ForwardDiff stays a test dependency.
+- The closed-form calculus helpers in `docs/src/examples/elasticity_3d.jl` and `elasticity_traction_2d.jl` stay as they are, because they differentiate no Bramble code.
+
+The extensions keep their backend-native rules (`ChainRulesCore.rrule` and the Enzyme rule), which DI picks up. `src/` takes no DI dependency.
+
+The Enzyme failures under `CpuThreaded` and `CpuPolyester` belong to the backend, since direct calls fail the same way, so they are not an exception to this policy.
+
 ## Differentiating forms and linear systems
 
 Sensitivities can appear in the differential operator, the source term, or the boundary data:
