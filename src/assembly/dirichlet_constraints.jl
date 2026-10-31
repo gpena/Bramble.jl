@@ -578,8 +578,8 @@ parameter-evaluated constraint set (see [`EvaluatedParametricDomainMarkers`](@re
 A separate method rather than a third member of [`ConstraintMarkers`](@ref): the body is
 otherwise identical to the `bcs::ConstraintMarkers` method above, but widening that `Union`
 is exactly the shape of change gpena/Bramble.jl#240 removed from the assembly path for
-Enzyme's sake, and this method sits on the same residual Enzyme/SciMLSensitivity
-differentiate for a `p`-dependent boundary value.
+Enzyme's sake, and this method sits on the same residual Enzyme
+differentiates for a `p`-dependent boundary value.
 """
 @inline function dirichlet_bc!(
         v::AbstractVector,

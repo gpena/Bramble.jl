@@ -1,6 +1,6 @@
 # semidiscrete_problems.jl: the SciMLBase handoff for a `Semidiscretization`/
 # `SemidiscretizeRHS` (`semidiscrete.jl`/`semidiscrete_rhs.jl`) -- `ode_function`,
-# `ode_problem`, `adjoint_sensitivities`, `linear_problem`.
+# `ode_problem`, `linear_problem`.
 
 # --- SciMLBase handoff -------------------------------------------------------------- #
 #
@@ -10,9 +10,6 @@
 # extension's method is a strict specialisation: an identical signature would overwrite a
 # method during precompilation, which Julia refuses. Same idiom as
 # `ast_sparsity_detector`/`_ast_sparsity_detector` and `export_vtk`/`_export_vtk`.
-#
-# `adjoint_sensitivities` is the fourth entry point, with no `_` fallback: it needs
-# SciMLSensitivity and is implemented in `BrambleSciMLSensitivityExt`.
 
 """
     ode_function(sd::Semidiscretization; kwargs...) -> ODEFunction
@@ -88,9 +85,7 @@ Keywords are those of [`ode_function`](@ref), plus:
 - `p` (default `SciMLBase.NullParameters()`) for a residual whose `update_coefficients!` or
   Dirichlet conditions were given a parameter-dependent, `(t, p)`/`(x, t, p)` form (see
   [`semidiscretize`](@ref)'s own keywords).
-- `specialize` (default `nothing`, `ODEProblem`'s own choice untouched). The solved
-  trajectory goes to `Bramble.adjoint_sensitivities` with any specialization:
-  `SciMLBase.FullSpecialize` is not needed for the adjoint on any backend.
+- `specialize` (default `nothing`, `ODEProblem`'s own choice untouched).
 
 The two-form method, for plain forms and for forms on one constrained ghost space,
 forwards its other keywords to [`semidiscretize`](@ref).
@@ -178,27 +173,6 @@ function _ode_problem(::Any, u₀, I; kwargs...)
     return error(
         "ode_problem requires SciMLBase.jl. Add `using SciMLBase` (or a package that " *
         "loads it, such as OrdinaryDiffEq) before calling this function.",
-    )
-end
-
-"""
-    adjoint_sensitivities(sol::ODESolution, alg; kwargs...) -> (du0, dp)
-
-Adjoint sensitivities of a [`Semidiscretization`](@ref)'s solved trajectory, via
-`SciMLSensitivity.adjoint_sensitivities` with two Bramble-specific corrections applied.
-Full documentation lives on `BrambleSciMLSensitivityExt`'s own method, the only one that
-exists once `SciMLSensitivity` is loaded -- this stub exists so that method has a function to
-extend, and so calling this without `SciMLSensitivity` loaded gives a clear error rather than
-`UndefVarError`.
-
-Deliberately not exported, unlike [`pde_solve`](@ref): `SciMLSensitivity` itself exports a
-function of this exact name, so `using Bramble, SciMLSensitivity` together would collide on
-the bare name regardless of what Bramble does. Call this one as `Bramble.adjoint_sensitivities`.
-"""
-function adjoint_sensitivities(sol, alg; kwargs...)
-    return error(
-        "adjoint_sensitivities requires SciMLSensitivity.jl. Add `using SciMLSensitivity` " *
-        "before calling this function.",
     )
 end
 
