@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 420" width="880" height="420" font-family="sans-serif" font-size="12" role="img" aria-labelledby="t d">
+<title id="t">Per-call gradient cost against parameter count, five AD backends</title>
+<desc id="d">Log-log plot of seconds per call against parameter count for the dense gradient and the adjoint solve. Only cells with status ok are drawn.</desc>
+<rect width="880" height="420" fill="#ffffff"/>
+<text x="250.0" y="30" text-anchor="middle" font-size="14" fill="#222">Dense gradient, CpuSerial, n = 1156</text>
+<line x1="70" y1="340.0" x2="430" y2="340.0" stroke="#ddd"/>
+<text x="64" y="344.0" text-anchor="end" fill="#444">1e-6</text>
+<line x1="70" y1="270.0" x2="430" y2="270.0" stroke="#ddd"/>
+<text x="64" y="274.0" text-anchor="end" fill="#444">1e-5</text>
+<line x1="70" y1="200.0" x2="430" y2="200.0" stroke="#ddd"/>
+<text x="64" y="204.0" text-anchor="end" fill="#444">1e-4</text>
+<line x1="70" y1="130.0" x2="430" y2="130.0" stroke="#ddd"/>
+<text x="64" y="134.0" text-anchor="end" fill="#444">1e-3</text>
+<line x1="70" y1="60.0" x2="430" y2="60.0" stroke="#ddd"/>
+<text x="64" y="64.0" text-anchor="end" fill="#444">1e-2</text>
+<line x1="70.0" y1="60" x2="70.0" y2="340" stroke="#ddd"/>
+<text x="70.0" y="356" text-anchor="middle" fill="#444">1</text>
+<line x1="179.1" y1="60" x2="179.1" y2="340" stroke="#ddd"/>
+<text x="179.1" y="356" text-anchor="middle" fill="#444">10</text>
+<line x1="288.1" y1="60" x2="288.1" y2="340" stroke="#ddd"/>
+<text x="288.1" y="356" text-anchor="middle" fill="#444">100</text>
+<line x1="397.2" y1="60" x2="397.2" y2="340" stroke="#ddd"/>
+<text x="397.2" y="356" text-anchor="middle" fill="#444">1000</text>
+<rect x="70" y="60" width="360" height="280" fill="none" stroke="#888"/>
+<text x="250.0" y="376" text-anchor="middle" fill="#222">parameters np</text>
+<text transform="translate(18 200.0) rotate(-90)" text-anchor="middle" fill="#222">seconds per call</text>
+<polyline points="102.8,281.9 135.7,272.4 201.3,221.6 267.0,184.1 332.6,143.6 398.3,94.8" fill="none" stroke="#1f77b4" stroke-width="2"/>
+<circle cx="102.8" cy="281.9" r="3.5" fill="#1f77b4"/>
+<circle cx="135.7" cy="272.4" r="3.5" fill="#1f77b4"/>
+<circle cx="201.3" cy="221.6" r="3.5" fill="#1f77b4"/>
+<circle cx="267.0" cy="184.1" r="3.5" fill="#1f77b4"/>
+<circle cx="332.6" cy="143.6" r="3.5" fill="#1f77b4"/>
+<circle cx="398.3" cy="94.8" r="3.5" fill="#1f77b4"/>
+<polyline points="102.8,281.8 135.7,271.2" fill="none" stroke="#17becf" stroke-width="2" stroke-dasharray="6 3"/>
+<circle cx="102.8" cy="281.8" r="3.5" fill="#17becf"/>
+<circle cx="135.7" cy="271.2" r="3.5" fill="#17becf"/>
+<polyline points="102.8,151.6 135.7,141.5 201.3,133.6 267.0,125.4 332.6,109.4 398.3,88.3" fill="none" stroke="#2ca02c" stroke-width="2"/>
+<circle cx="102.8" cy="151.6" r="3.5" fill="#2ca02c"/>
+<circle cx="135.7" cy="141.5" r="3.5" fill="#2ca02c"/>
+<circle cx="201.3" cy="133.6" r="3.5" fill="#2ca02c"/>
+<circle cx="267.0" cy="125.4" r="3.5" fill="#2ca02c"/>
+<circle cx="332.6" cy="109.4" r="3.5" fill="#2ca02c"/>
+<circle cx="398.3" cy="88.3" r="3.5" fill="#2ca02c"/>
+<polyline points="102.8,199.1 135.7,197.8 201.3,198.1 267.0,198.4 332.6,197.5 398.3,193.8" fill="none" stroke="#d62728" stroke-width="2"/>
+<circle cx="102.8" cy="199.1" r="3.5" fill="#d62728"/>
+<circle cx="135.7" cy="197.8" r="3.5" fill="#d62728"/>
+<circle cx="201.3" cy="198.1" r="3.5" fill="#d62728"/>
+<circle cx="267.0" cy="198.4" r="3.5" fill="#d62728"/>
+<circle cx="332.6" cy="197.5" r="3.5" fill="#d62728"/>
+<circle cx="398.3" cy="193.8" r="3.5" fill="#d62728"/>
+<polyline points="102.8,247.8 135.7,249.1 201.3,249.4 267.0,247.7 332.6,248.4 398.3,244.8" fill="none" stroke="#9467bd" stroke-width="2"/>
+<circle cx="102.8" cy="247.8" r="3.5" fill="#9467bd"/>
+<circle cx="135.7" cy="249.1" r="3.5" fill="#9467bd"/>
+<circle cx="201.3" cy="249.4" r="3.5" fill="#9467bd"/>
+<circle cx="267.0" cy="247.7" r="3.5" fill="#9467bd"/>
+<circle cx="332.6" cy="248.4" r="3.5" fill="#9467bd"/>
+<circle cx="398.3" cy="244.8" r="3.5" fill="#9467bd"/>
+<text x="670.0" y="30" text-anchor="middle" font-size="14" fill="#222">Adjoint solve, CpuSerial, n = 1156</text>
+<line x1="490" y1="340.0" x2="850" y2="340.0" stroke="#ddd"/>
+<text x="484" y="344.0" text-anchor="end" fill="#444">1e-3</text>
+<line x1="490" y1="246.7" x2="850" y2="246.7" stroke="#ddd"/>
+<text x="484" y="250.7" text-anchor="end" fill="#444">1e-2</text>
+<line x1="490" y1="153.3" x2="850" y2="153.3" stroke="#ddd"/>
+<text x="484" y="157.3" text-anchor="end" fill="#444">1e-1</text>
+<line x1="490" y1="60.0" x2="850" y2="60.0" stroke="#ddd"/>
+<text x="484" y="64.0" text-anchor="end" fill="#444">1e0</text>
+<line x1="490.0" y1="60" x2="490.0" y2="340" stroke="#ddd"/>
+<text x="490.0" y="356" text-anchor="middle" fill="#444">1</text>
+<line x1="599.1" y1="60" x2="599.1" y2="340" stroke="#ddd"/>
+<text x="599.1" y="356" text-anchor="middle" fill="#444">10</text>
+<line x1="708.1" y1="60" x2="708.1" y2="340" stroke="#ddd"/>
+<text x="708.1" y="356" text-anchor="middle" fill="#444">100</text>
+<line x1="817.2" y1="60" x2="817.2" y2="340" stroke="#ddd"/>
+<text x="817.2" y="356" text-anchor="middle" fill="#444">1000</text>
+<rect x="490" y="60" width="360" height="280" fill="none" stroke="#888"/>
+<text x="670.0" y="376" text-anchor="middle" fill="#222">parameters np</text>
+<text transform="translate(438 200.0) rotate(-90)" text-anchor="middle" fill="#222">seconds per call</text>
+<polyline points="555.7,325.5 621.3,291.9 687.0,241.3 752.6,183.5 818.3,127.8" fill="none" stroke="#1f77b4" stroke-width="2"/>
+<circle cx="555.7" cy="325.5" r="3.5" fill="#1f77b4"/>
+<circle cx="621.3" cy="291.9" r="3.5" fill="#1f77b4"/>
+<circle cx="687.0" cy="241.3" r="3.5" fill="#1f77b4"/>
+<circle cx="752.6" cy="183.5" r="3.5" fill="#1f77b4"/>
+<circle cx="818.3" cy="127.8" r="3.5" fill="#1f77b4"/>
+<circle cx="555.7" cy="326.2" r="3.5" fill="#17becf"/>
+<polyline points="555.7,290.6 621.3,291.6 687.0,291.5 752.6,290.4 818.3,288.6" fill="none" stroke="#9467bd" stroke-width="2"/>
+<circle cx="555.7" cy="290.6" r="3.5" fill="#9467bd"/>
+<circle cx="621.3" cy="291.6" r="3.5" fill="#9467bd"/>
+<circle cx="687.0" cy="291.5" r="3.5" fill="#9467bd"/>
+<circle cx="752.6" cy="290.4" r="3.5" fill="#9467bd"/>
+<circle cx="818.3" cy="288.6" r="3.5" fill="#9467bd"/>
+<line x1="70" y1="394" x2="94" y2="394" stroke="#1f77b4" stroke-width="2"/>
+<circle cx="82" cy="394" r="3.5" fill="#1f77b4"/>
+<text x="100" y="398" fill="#222">ForwardDiff</text>
+<line x1="235" y1="394" x2="259" y2="394" stroke="#17becf" stroke-width="2" stroke-dasharray="6 3"/>
+<circle cx="247" cy="394" r="3.5" fill="#17becf"/>
+<text x="265" y="398" fill="#222">PolyesterForwardDiff</text>
+<line x1="400" y1="394" x2="424" y2="394" stroke="#2ca02c" stroke-width="2"/>
+<circle cx="412" cy="394" r="3.5" fill="#2ca02c"/>
+<text x="430" y="398" fill="#222">ReverseDiff</text>
+<line x1="565" y1="394" x2="589" y2="394" stroke="#d62728" stroke-width="2"/>
+<circle cx="577" cy="394" r="3.5" fill="#d62728"/>
+<text x="595" y="398" fill="#222">Mooncake</text>
+<line x1="730" y1="394" x2="754" y2="394" stroke="#9467bd" stroke-width="2"/>
+<circle cx="742" cy="394" r="3.5" fill="#9467bd"/>
+<text x="760" y="398" fill="#222">Enzyme</text>
+</svg>
