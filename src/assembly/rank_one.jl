@@ -652,6 +652,9 @@ function assemble(
     if symmetrize
         labels, _ = _normalize_dirichlet(dirichlet)
         labels === nothing && _throw_symmetrize_without_dirichlet()
+        # A real load takes a complex or `Dual` `K`'s Dirichlet columns: widen it first.
+        T = promote_type(eltype(F), eltype(K))
+        T === eltype(F) || (F = copyto!(similar(F, T), F))
         symmetrize!(K, F, test_space(a), labels...; components = dirichlet_components)
     end
     return K, F

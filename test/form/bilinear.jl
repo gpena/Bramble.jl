@@ -2384,4 +2384,30 @@ end
     @test l(vh) ≈ sum(w .* (1 .+ x) .* v1) + sum(w .* 100.0 .* v2)
 end
 
+@testset "bilinear: symmetrize widens load (#1027)" begin
+    Random.seed!(1027)
+    W = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (false, true)))
+    gD = x -> 1 + x[1] * x[2]
+    l = form(W, v -> innerₕ(x -> x[1] + 1, v))
+    bc = :boundary => gD
+    # a complex form: the Dirichlet columns moved into the real load are complex
+    a = form(W, W, (u, v) -> inner₊((1.0 + 1.0im) * ∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+    A0, F0 = assemble(a, l; dirichlet = bc)
+    A, F = assemble(a, l; dirichlet = bc, symmetrize = true)
+    @test eltype(F0) == Float64 && eltype(F) == ComplexF64
+    @test transpose(A) == A
+    @test Matrix(A) \ F ≈ Matrix(A0) \ F0
+    # a `Dual` coefficient: the derivative of the load matches central differences
+    f(s) = sum(assemble(form(W, W, (u, v) -> inner₊(s * ∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v)), l;
+        dirichlet = bc, symmetrize = true)[2])
+    h = 1e-6
+    d = ForwardDiff.derivative(f, 0.7)
+    @test !iszero(d)
+    @test d ≈ (f(0.7 + h) - f(0.7 - h)) / 2h rtol = 1e-6
+    # real data keeps a real load
+    _, Fr = assemble(form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))), l; dirichlet = bc,
+        symmetrize = true)
+    @test eltype(Fr) == Float64
+end
+
 end # module FormBilinearTests

@@ -113,6 +113,8 @@ include("assembly/ghost_matrix_free.jl")
 include("assembly/ghost_kronecker.jl")
 include("assembly/ghost_composite.jl")
 include("assembly/ghost_contract.jl")
+# After the form types it rebuilds, plain and ghost.
+include("ast/rebind.jl")
 include("problems/semidiscrete_constraints.jl")
 include("problems/semidiscrete.jl")
 include("problems/semidiscrete_rhs.jl")

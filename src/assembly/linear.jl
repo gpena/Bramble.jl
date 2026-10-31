@@ -819,9 +819,55 @@ function assemble(
         form::LinearForm; dirichlet = nothing, dirichlet_components = nothing
 )
     space = test_space(form)
+    _, dirichlet_conditions = _normalize_dirichlet(dirichlet)
+    T = _dirichlet_probed_eltype(
+        dirichlet_conditions, space, dirichlet_components, _assembled_eltype(form.ast, space)
+    )
     # `parent(element(space, T))` reuses the space's backend container type.
-    b = parent(element(space, _assembled_eltype(form.ast, space)))
+    b = parent(element(space, T))
     return _assemble_linear!(b, form, form.ast, dirichlet, dirichlet_components)
+end
+
+# A Dirichlet condition can return a richer type than the form does: a boundary value built
+# from a `ForwardDiff.Dual` or a complex number, say, while every weight in the form stays
+# `Float64`. Each condition is evaluated once, at the first point of its label on each leaf it
+# binds (every leaf, or those `dirichlet_components` names), and the vector's element type is
+# promoted against it, so `dirichlet_bc!` writes it without a failed `setindex!`. An
+# `assemble!` into the caller's vector never comes here: the caller chose its element type.
+@inline _dirichlet_probed_eltype(::Nothing, space, components, T) = T
+
+function _dirichlet_probed_eltype(
+        dirichlet_conditions::ConstraintMarkers, space, components, T
+)
+    leaves = _leaves_of(space)
+    _validate_dirichlet_components(components, length(leaves))
+    return _leaves_probed_eltype(
+        conditions(dirichlet_conditions), leaves, components, T, 1
+    )
+end
+
+@inline _leaves_probed_eltype(markers, ::Tuple{}, components, T, i::Int) = T
+
+@inline function _leaves_probed_eltype(markers, leaves::Tuple, components, T, i::Int)
+    if _leaf_selected(components, i)
+        T = _conditions_probed_eltype(markers, mesh(first(first(leaves))), T)
+    end
+    return _leaves_probed_eltype(markers, Base.tail(leaves), components, T, i + 1)
+end
+
+@inline _conditions_probed_eltype(::Tuple{}, Ωₕ, T) = T
+
+# A condition may be defined on its own region only, so it is evaluated at the first point
+# its label marks on the leaf (the set `dirichlet_bc!` writes), never elsewhere. A label
+# marking no point there writes nothing and widens nothing.
+@inline function _conditions_probed_eltype(markers::Tuple, Ωₕ, T)
+    marker = first(markers)
+    i = findfirst(index_in_marker(Ωₕ, label(marker)))
+    if i !== nothing
+        x = point(Ωₕ, indices(Ωₕ)[i])
+        T = promote_type(T, typeof(identifier(marker)(x)))
+    end
+    return _conditions_probed_eltype(Base.tail(markers), Ωₕ, T)
 end
 
 # The element type of the assembled vector is the one the form's own weights have, promoted

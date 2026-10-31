@@ -4,6 +4,7 @@ using Test
 using Bramble
 using Bramble: RankOneUpdate, BilinearForm, is_uniform, index_in_marker, D₋ₓ
 using LinearAlgebra, SparseArrays, Random
+using ForwardDiff
 using ..TestUtils: WITH_3D_TESTS, alloc_test, _Const, _x1, _one_plus_x1
 
 # Rank-one penalty terms `σ * innerₕ(g, u) * innerₕ(h, v)` (#780).
@@ -532,6 +533,32 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
         @test iszero(K.wt[bd]) && !iszero(K.wt[setdiff(axes(K.wt, 1), bd)])
         # the same solution, the eliminated columns moved into the load
         @test Matrix(K) \ F ≈ Matrix(K0) \ F0
+    end
+
+    @testset "symmetrize widens a real load (#1027)" begin
+        W = nonuniform_space(2, Float64)
+        gD = x -> 1 + x[1] * x[2]
+        l = form(W, v -> innerₕ(x -> x[1] + 1, v))
+        bc = :boundary => gD
+        # a complex σ: the Dirichlet columns moved into the real load are complex
+        a = form(W, W, (u, v) -> lap(u, v) + (1.5 - 2.0im) * innerₕ(1, u) * innerₕ(1, v))
+        K0, F0 = assemble(a, l; dirichlet = bc)
+        K, F = assemble(a, l; dirichlet = bc, symmetrize = true)
+        @test eltype(F0) == Float64 && eltype(F) == ComplexF64
+        bd = findall(index_in_marker(mesh(W), :boundary))
+        @test iszero(K.wt[bd]) && iszero(K.ws[bd])
+        @test Matrix(K) \ F ≈ Matrix(K0) \ F0
+        # a `Dual` σ: the derivative of the load matches central differences
+        f(s) = sum(assemble(form(W, W, (u, v) -> lap(u, v) + s * innerₕ(1, u) * innerₕ(1, v)),
+            l; dirichlet = bc, symmetrize = true)[2])
+        h = 1e-6
+        d = ForwardDiff.derivative(f, 0.7)
+        @test !iszero(d)
+        @test d ≈ (f(0.7 + h) - f(0.7 - h)) / 2h rtol = 1e-6
+        # real data keeps a real load
+        Kr, Fr = assemble(form(W, W, (u, v) -> lap(u, v) + 2.0 * innerₕ(1, u) * innerₕ(1, v)),
+            l; dirichlet = bc, symmetrize = true)
+        @test eltype(Fr) == Float64
     end
 
     @testset "issymmetric" begin
