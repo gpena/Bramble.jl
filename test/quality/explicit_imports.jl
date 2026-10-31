@@ -342,10 +342,6 @@ using Kronecker: Kronecker
     # - `_export_vtk_collection` (BrambleVTKExt), `_export_vtk_solution`
     #   (BrambleVTKSciMLExt): the same `_`-prefixed fallback idiom as `_export_vtk` above, one
     #   entry point per `export_vtk` method that needs a weak dependency.
-    # - `apply_recipe` (BramblePlotsExt): the function `@recipe` generates methods on;
-    #   warmed by name in the precompile workload rather than through a plotting call, which
-    #   this coverage-dependent check had simply not caught loaded alongside the others
-    #   before.
     # - `_sparspak_factorize`, `_sparspak_refactor!`, `_sparspak_solve` (BrambleSparspakExt):
     #   the preconditioner-building hooks its `factorize`/`refactor!`/`\` methods reach,
     #   the same `_`-prefixed fallback idiom as `_amg_operator` above.
@@ -387,8 +383,8 @@ using Kronecker: Kronecker
                 :_each_marked,
                 :_kron_coeff,
                 :_kron_scalar,
-                # `_throw_plot_composite`, `_throw_plot_dim` (BramblePlotsExt, BrambleMakieExt):
-                # the shared refusals each plotting extension raises for a composite or a
+                # `_throw_plot_composite`, `_throw_plot_dim` (BrambleMakieExt):
+                # the shared refusals the plotting extension raises for a composite or a
                 # non-2D element, called as `Bramble.name(...)`. Not a user call.
                 :_throw_plot_composite,
                 :_throw_plot_dim,
@@ -572,7 +568,6 @@ using Kronecker: Kronecker
                 :_ilu_preconditioner,
                 :_export_vtk_collection,
                 :_export_vtk_solution,
-                :apply_recipe,
                 :_sparspak_factorize,
                 :sparspak_refactor!,
                 :_sparspak_solve,

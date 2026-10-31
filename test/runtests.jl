@@ -62,7 +62,7 @@ const __bramble_with_gpu_tests = TestUtils.WITH_GPU_TESTS
 const __bramble_with_ad_backends = __bramble_with_ad_tests &&
                                    __bramble_test_group in ("ad", "full", "backends")
 
-# The Makie/Meshes/RecipesBase weak deps: `test/Project.toml` lists them (so
+# The Makie/Meshes weak deps: `test/Project.toml` lists them (so
 # `Pkg.instantiate()` always resolves and can precompile them), but they are only ever
 # `using`-d, and so only ever pay their compile cost, behind this group -- every push
 # otherwise gets none of that weight. CPU extensions only: the AD extension files run in
@@ -273,7 +273,6 @@ if __bramble_with_ext_backends
         isdefined(Main, :ExtSolverContracts) || include("ext/SolverContracts.jl")
 
         if TestUtils.in_shard("ext-solvers")
-            include("ext/plots_ext.jl")
             include("ext/makie_ext.jl")
             include("ext/meshes_ext.jl")
             include("ext/sciml_ext.jl")
