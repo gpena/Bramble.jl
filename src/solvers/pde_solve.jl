@@ -3,10 +3,10 @@
 # `pde_solve`: the solve entry point, a plain `A \ F` unless `solver` or the macOS
 # Accelerate route says otherwise, and the one function a reverse-mode adjoint rule attaches to.
 #
-# No source-level AD tool -- forward or reverse, `ForwardDiff`, `ReverseDiff`, `Mooncake`,
-# `Enzyme` -- can differentiate through `\` itself: it dispatches into compiled
-# BLAS/SuiteSparse code, opaque to every one of them, the same reason none can differentiate
-# through any other library call written in C or Fortran. Everything *around* the solve --
+# No source-level AD tool -- forward or reverse, `ForwardDiff`, `Enzyme` -- can differentiate
+# through `\` itself: it dispatches into compiled BLAS/SuiteSparse code, opaque to every one
+# of them, the same reason none can differentiate through any other library call written in C
+# or Fortran. Everything *around* the solve --
 # `assemble`, `dirichlet_bc!` -- is already reverse-mode-differentiable (`docs/notes/internals/
 # autodiff.md`), so this one function is the entire gap between "Bramble can be forward-mode
 # differentiated" (true today) and "Bramble can be used inside a gradient-based inverse
@@ -18,13 +18,7 @@
 # `ChainRulesCore.rrule`, and `BrambleEnzymeExt` a native `EnzymeRules` rule -- Enzyme gets
 # its own rather than a bridged one because `Enzyme.@import_rrule`'s bridge corrupts the
 # shadow of a sparse `A` whenever the cotangent carries an explicit zero
-# (gpena/Bramble.jl#240, and this file's docstring below). `Mooncake` cannot currently be bridged
-# this way at all: `Mooncake.@from_rrule`/`build_rrule` both accept the bridge without
-# complaint, but the first time the rule actually *runs* it needs a real tangent value for
-# the `SparseMatrixCSC` argument, and `Mooncake` has no `increment_and_get_rdata!` for that
-# type combination (verified directly, not assumed) -- a real gap in `Mooncake.jl` itself,
-# not something this package can route around, so it is left unsupported and documented
-# rather than worked around.
+# (gpena/Bramble.jl#240, and this file's docstring below).
 
 # `:default` takes `accelerate_solve` on macOS only for a symmetric `A`: Accelerate loses on
 # unsymmetric systems. An explicit `sym` hint is trusted unchecked, and `:unsymmetric` is the
@@ -135,8 +129,7 @@ a method with no `rrule`, and differentiates the conversion and the solver's int
 `EnzymeRules` rule, which takes no keywords (it cannot run before v4.2.0); do not
 call `Enzyme.@import_rrule`, whose bridge drops the cotangent's explicit zeros from `nzval`
 and returns a wrong gradient without any error. The Enzyme rule keeps the unconjugated
-`-λ uᵀ` and is not validated for complex `A`, whose convention differs. `Mooncake` cannot
-represent a `SparseMatrixCSC` cotangent at all and is unsupported.
+`-λ uᵀ` and is not validated for complex `A`, whose convention differs.
 
 A closure capturing a grid space or a form needs `Enzyme.Const(f)` and
 `Enzyme.set_runtime_activity(Enzyme.Reverse)`, as the automatic

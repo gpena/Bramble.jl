@@ -330,9 +330,7 @@ Base.size(op::MatrixFreeOperator) = (op.nrows, op.ncols)
 end
 
 # Only the five-argument method: `LinearAlgebra`'s three-argument `mul!` and `*` both reach
-# it (with `α = true, β = false`), and a three-argument method here would be ambiguous
-# against `ReverseDiff`'s `mul!(::TrackedArray, ::AbstractMatrix, ::TrackedArray)`, as
-# `KroneckerLinearOperator`'s is. `β == 0` overwrites `y`, so a `NaN` in it does not survive.
+# it (with `α = true, β = false`). `β == 0` overwrites `y`, so a `NaN` in it does not survive.
 function mul!(
         y::AbstractVector, op::MatrixFreeOperator, x::AbstractVector, α::Number, β::Number
 )

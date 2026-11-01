@@ -194,8 +194,7 @@ end
 # by `β` here; the first block on a test leaf's rows applies `β` to them and every later one
 # accumulates. The locality is `y`'s, passed down because each block sees a view
 # (`_kron_apply!`). No three-argument method: `LinearAlgebra`'s own forwards here with
-# `α = true, β = false`, and one of ours would be ambiguous against ReverseDiff's (see
-# `kronecker.jl`).
+# `α = true, β = false`.
 function mul!(
         y::AbstractVector, K::KroneckerBlockOperator, x::AbstractVector, α::Number, β::Number
 )
