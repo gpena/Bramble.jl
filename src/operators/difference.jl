@@ -458,6 +458,229 @@ end
     return nothing
 end
 
+#------------------------------------------------------------------------------------------#
+# Transposed and linearised band kernels
+#
+# `_difference_band!` is linear in `in_ref`: `out = A(h) in_ref`. A reverse-mode derivative
+# rule needs `Aᵀ` applied to the cotangent of `out` and, when the spacing is differentiated
+# too, the cotangent of `h`; a forward-mode rule needs the tangent through `h`. The three
+# kernels below are plain loops over the bands `_difference_band!` cuts, each in gather form:
+# every entry of the result is written by one band, so all bands may run concurrently.
+#
+# The weights of `A` are read off `_compute_difference` itself, evaluated on unit values.
+# The kernel is linear in the grid values it takes, so `_compute_difference(dir, Val(false),
+# 1, 0, h, k)` is the weight of `cur` in the output at index `k` along `DIM`, and so on. No
+# family (one-sided, unscaled, `D̃`, `Dc`, `D̽ₕ`) needs a transposed formula of its own.
+#------------------------------------------------------------------------------------------#
+
+# The offsets along `DIM`, in grid points, at which `out[m]` reads `in_ref`.
+@inline _difference_taps(::Forward) = (0, 1)
+@inline _difference_taps(::Backward) = (0, -1)
+@inline _difference_taps(::CenteredStencil) = (-1, 0, 1)
+
+# Whether the point at index `k` of `n` along `DIM` has the neighbour a one-sided stencil
+# reads: the interior of `_stencil_ranges`.
+@inline _has_neighbour(::Forward, k::Int, n::Int) = k < n
+@inline _has_neighbour(::Backward, k::Int, n::Int) = k > 1
+
+# Whether `out[m]`, at index `k` of `n` along `DIM`, reads the spacing `h(k)`; only `D̽ₕ`'s
+# interior reads `h(k + 1)` as well.
+@inline _reads_spacing(dir::Union{Forward, Backward}, k::Int, n::Int) = _has_neighbour(dir, k, n)
+@inline _reads_spacing(::CenteredStencil, k::Int, n::Int) = 1 < k < n
+@inline _reads_spacing(::CrossWeighted, k::Int, n::Int) = true
+@inline _reads_next_spacing(::GridDirection, k::Int, n::Int) = false
+@inline _reads_next_spacing(::CrossWeighted, k::Int, n::Int) = 1 < k < n
+
+# The weight of `in_ref[m + t * step]` in `out[m]`, with `m` at index `k` of `n` along `DIM`.
+@inline @propagate_inbounds function _difference_weight(
+        dir::Union{Forward, Backward}, h, k::Int, n::Int, t::Int, ::Type{T}
+) where {T}
+    o, z = one(T), zero(T)
+    if _has_neighbour(dir, k, n)
+        t == 0 && return _compute_difference(dir, Val(false), o, z, h, k)
+        t == last(_difference_taps(dir)) &&
+            return _compute_difference(dir, Val(false), z, o, h, k)
+        return z
+    end
+    t == 0 && return _compute_difference(dir, Val(true), o, h, k)
+    return z
+end
+
+# A centred stencil's end point keeps the one neighbour still on the grid (`side`).
+@inline @propagate_inbounds function _difference_weight(
+        dir::CenteredStencil, h, k::Int, n::Int, t::Int, ::Type{T}
+) where {T}
+    o, z = one(T), zero(T)
+    if 1 < k < n
+        t == -1 && return _compute_difference(dir, Val(false), o, z, z, h, k)
+        t == 0 && return _compute_difference(dir, Val(false), z, o, z, h, k)
+        return _compute_difference(dir, Val(false), z, z, o, h, k)
+    end
+    side = k == 1 ? 1 : -1
+    t == 0 && return _compute_difference(dir, Val(true), o, z, h, k)
+    t == side && return _compute_difference(dir, Val(true), z, o, h, k)
+    return z
+end
+
+"""
+    _difference_band_adjoint!(d_in, d_out, h, dims::NTuple{D, Int}, dir::GridDirection, dim_val::Val, nbands::Int, b::Int) -> Nothing
+
+The transpose of [`_difference_band!`](@ref), in gather form. For every point `j` of the
+`b`-th of `nbands` slabs, adds to `d_in[j]` what `d_out` carries back through each output
+that reads `in_ref[j]`: the one at `j` and its neighbours along `DIM`. Only the band owning
+`j` writes `d_in[j]`, so every band may run concurrently. `d_out` is read, never cleared.
+"""
+@inline function _difference_band_adjoint!(
+        d_in, d_out, h::H, dims::NTuple{D, Int}, dir::GridDirection, ::Val{DIM},
+        nbands::Int, b::Int
+) where {H, D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    n = dims[DIM]
+    T = eltype(d_out)
+    slab = _band_slab(axes(li), _band_range(axes(li, D), nbands, b))
+
+    @inbounds for J in CartesianIndices(slab)
+        k = J[DIM]
+        acc = zero(T)
+        for t in _difference_taps(dir)
+            1 <= k - t <= n || continue
+            acc += _difference_weight(dir, h, k - t, n, t, T) * d_out[li[J - t * step]]
+        end
+        d_in[li[J]] += acc
+    end
+
+    return nothing
+end
+
+# `out[m]` at the point `I`, index `k` of `n` along `DIM`, recomputed from `in_ref`, gives
+# its partial derivatives in the spacings it reads, `(∂/∂h(k), ∂/∂h(k + 1))`. Called only
+# where `_reads_spacing` holds. Every stencil but `D̽ₕ`'s interior divides by the single
+# spacing `h(k)`, so its partial is `-out[m] / h(k)`.
+@inline @propagate_inbounds function _difference_spacing_partials(
+        dir::Union{Forward, Backward}, in_ref, li, I, step, h, k::Int, n::Int
+)
+    v = _compute_difference(
+        dir, Val(false), in_ref[li[I]], in_ref[li[_neighbour(dir, I, step)]], h, k)
+    return (-v / _get_h_val(h, k), zero(v))
+end
+
+@inline @propagate_inbounds function _difference_spacing_partials(
+        dir::CenteredStencil, in_ref, li, I, step, h, k::Int, n::Int
+)
+    v = _compute_difference(dir, Val(false), in_ref[li[I - step]], in_ref[li[I]],
+        in_ref[li[I + step]], h, k)
+    return (-v / _get_h_val(h, k), zero(v))
+end
+
+# `D̽ₕ`'s interior is `(hᵢ Δ₊ / hᵢ₊₁ + hᵢ₊₁ Δ₋ / hᵢ) / (hᵢ + hᵢ₊₁)` with `Δ₊ = u_{i+1} - u_i`
+# and `Δ₋ = u_i - u_{i-1}`; its end points are one-sided differences over `h(k)`.
+@inline @propagate_inbounds function _difference_spacing_partials(
+        dir::CrossWeighted, in_ref, li, I, step, h, k::Int, n::Int
+)
+    cur = in_ref[li[I]]
+    if 1 < k < n
+        hᵢ, hᵢ₊₁ = _get_h_val(h, k), _get_h_val(h, k + 1)
+        Δ₊, Δ₋ = in_ref[li[I + step]] - cur, cur - in_ref[li[I - step]]
+        s = hᵢ + hᵢ₊₁
+        v = (hᵢ * Δ₊ / hᵢ₊₁ + hᵢ₊₁ * Δ₋ / hᵢ) / s
+        return ((Δ₊ / hᵢ₊₁ - hᵢ₊₁ * Δ₋ / hᵢ^2 - v) / s,
+            (Δ₋ / hᵢ - hᵢ * Δ₊ / hᵢ₊₁^2 - v) / s)
+    end
+    neighbour = in_ref[li[k == 1 ? I + step : I - step]]
+    v = _compute_difference(dir, Val(true), cur, neighbour, h, k)
+    return (-v / _get_h_val(h, k), zero(v))
+end
+
+# The slice of the grid at index `k` along `DIM`.
+@inline function _dim_slice(full::NTuple{D, Any}, ::Val{DIM}, k::Int) where {D, DIM}
+    return ntuple(d -> d == DIM ? (k:k) : UnitRange(full[d]), Val(D))
+end
+
+"""
+    _difference_spacing_adjoint!(d_h, in_ref, d_out, h, dims::NTuple{D, Int}, dir::GridDirection, dim_val::Val, nbands::Int, b::Int) -> Nothing
+
+The cotangent of the spacing values that [`_difference_band!`](@ref) reads, in gather form.
+For every `q` of the `b`-th of `nbands` bands of `eachindex(d_h)`, adds to `d_h[q]` the sum,
+over the outputs reading `h(q)` (the slice at `q` along `DIM`, and for `D̽ₕ` the interior
+slice at `q - 1`), of `d_out` times the output's partial derivative in `h(q)`. `d_h` is
+indexed as `h` is. Only the band owning `q` writes `d_h[q]`.
+"""
+@inline function _difference_spacing_adjoint!(
+        d_h, in_ref, d_out, h::H, dims::NTuple{D, Int}, dir::GridDirection, ::Val{DIM},
+        nbands::Int, b::Int
+) where {H, D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    n = dims[DIM]
+
+    @inbounds for q in _band_range(Base.OneTo(length(d_h)), nbands, b)
+        acc = zero(eltype(d_h))
+        if q <= n && _reads_spacing(dir, q, n)
+            for I in CartesianIndices(_dim_slice(axes(li), Val(DIM), q))
+                p = first(_difference_spacing_partials(dir, in_ref, li, I, step, h, q, n))
+                acc += p * d_out[li[I]]
+            end
+        end
+        if q > 1 && _reads_next_spacing(dir, q - 1, n)
+            for I in CartesianIndices(_dim_slice(axes(li), Val(DIM), q - 1))
+                p = last(_difference_spacing_partials(dir, in_ref, li, I, step, h, q - 1, n))
+                acc += p * d_out[li[I]]
+            end
+        end
+        d_h[q] += acc
+    end
+
+    return nothing
+end
+
+"""
+    _difference_band_spacing_tangent!(d_out, in_ref, h, d_h, dims::NTuple{D, Int}, dir::GridDirection, dim_val::Val, nbands::Int, b::Int) -> Nothing
+
+Adds to `d_out`, on the `b`-th of `nbands` slabs of the grid, the tangent of
+[`_difference_band!`](@ref)'s output along the spacing tangent `d_h`, read as `h` is
+(`_get_h_val`). Each point is written by the band owning it.
+"""
+@inline function _difference_band_spacing_tangent!(
+        d_out, in_ref, h::H, d_h, dims::NTuple{D, Int}, dir::GridDirection, ::Val{DIM},
+        nbands::Int, b::Int
+) where {H, D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    n = dims[DIM]
+    slab = _band_slab(axes(li), _band_range(axes(li, D), nbands, b))
+
+    @inbounds for I in CartesianIndices(slab)
+        k = I[DIM]
+        _reads_spacing(dir, k, n) || continue
+        p, p₊ = _difference_spacing_partials(dir, in_ref, li, I, step, h, k, n)
+        δ = p * _get_h_val(d_h, k)
+        _reads_next_spacing(dir, k, n) && (δ += p₊ * _get_h_val(d_h, k + 1))
+        d_out[li[I]] += δ
+    end
+
+    return nothing
+end
+
+"""
+    _star_spacings_adjoint!(d_h, d_s, nbands::Int, b::Int) -> Nothing
+
+Adds the cotangent `d_s` of a [`StarSpacings`](@ref) view's entries to the cotangent `d_h` of
+the spacings it averages, for every `q` of the `b`-th of `nbands` bands of `eachindex(d_h)`.
+Entry `i` of the view is ``(h_i + h_{i+1})/2``, so `d_h[q]` gathers half of `d_s[q - 1]` and
+of `d_s[q]`, each where it exists.
+"""
+@inline function _star_spacings_adjoint!(d_h, d_s, nbands::Int, b::Int)
+    m = length(d_s)
+    @inbounds for q in _band_range(Base.OneTo(length(d_h)), nbands, b)
+        acc = zero(eltype(d_h))
+        q <= m && (acc += d_s[q] / 2)
+        1 < q <= m + 1 && (acc += d_s[q - 1] / 2)
+        d_h[q] += acc
+    end
+    return nothing
+end
+
 """
     _threaded_difference_engine!(out, in_ref, h, dims::Tuple, dir::GridDirection, dim_val::Val) -> Nothing
 

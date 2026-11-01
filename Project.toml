@@ -43,6 +43,7 @@ BrambleAlgebraicMultigridExt = "AlgebraicMultigrid"
 BrambleAppleAccelerateExt = "AppleAccelerate"
 BrambleChainRulesExt = "ChainRulesCore"
 BrambleEnzymeExt = "Enzyme"
+BrambleEnzymePolyesterExt = ["Enzyme", "Polyester"]
 BrambleILUZeroExt = "ILUZero"
 BrambleKernelAbstractionsExt = "KernelAbstractions"
 BrambleKroneckerExt = "Kronecker"

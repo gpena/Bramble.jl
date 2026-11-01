@@ -18,6 +18,14 @@
 # through DifferentiationInterface; the Enzyme reverse call stays direct, because this file
 # tests the Enzyme rules themselves.
 #
+# Two more modes, `BATCH_MODES`, run Enzyme directly at width `BATCH_WIDTH`, as DI's sparse
+# Jacobians do when they seed several colours per pass: `:batch_forward` pushes distinct
+# tangents of the parameters through one `BatchDuplicated` call, and `:batch_reverse` pulls
+# distinct cotangents of the value through one. Each lane must match the ForwardDiff oracle
+# to 1e-10, and under a threaded policy the hook's own rule must have been entered
+# (`_rule_entries` of a Bramble Enzyme extension, status `"bypassed"` otherwise). `check`
+# takes the hook and the policy as names too: `check(:_batch_for!; policy = :CpuPolyester)`.
+#
 # Each builder keeps the parameters small (`NPARAM`) and expands them into the field with a
 # seeded basis, so a builder's own work is not a stack of other hooks.
 
@@ -40,6 +48,9 @@ Threads.nthreads() >= 2 ||
     error("enzyme_policy_cases.jl needs at least 2 threads, got $(Threads.nthreads())")
 
 const MODES = (:reverse, :di_reverse, :forward)
+const BATCH_MODES = (:batch_forward, :batch_reverse)
+const BATCH_WIDTH = 3
+const BATCH_COTANGENTS = (1.0, -0.5, 2.0)
 const TOL = 1e-10
 const N = 41
 const NPARAM = 4
@@ -296,11 +307,45 @@ const THREADED = (
     (hook = "_mf_run_bands!", kind = "fixed", build = _build_mf)
 )
 
-function case(hook::AbstractString)
-    for c in CASES
-        c.hook == hook && return c
+# `_batch_for!` under a user closure that captures an array and a `Float64`, the shape whose
+# by-value call fails Enzyme's calling convention unless `_sweep_for!` passes the kernel
+# behind a `Ref`. `rule` names the hook whose rule must be entered.
+function _capture(policy, a::A) where {A}
+    function f(p)
+        v = zeros(eltype(p), N)
+        c = a(p)
+        _sweep_for!(policy, v, 1:N, i -> c * p[mod1(i, NPARAM)] * sin(i))
+        return sum(abs2, v)
     end
-    for c in THREADED
+    return f, _start()
+end
+
+# A constant `Float64`, and one computed from the parameters (a `MixedDuplicated` closure).
+_build_const_capture(policy) = _capture(policy, p -> 2.0)
+_build_mixed_capture(policy) = _capture(policy, p -> p[1]^2)
+
+# A closure that reads the vector `_batch_for!` writes, nonlinearly and times a parameter: the
+# reverse pass must see `v` as it was before the call.
+function _build_reads_v(policy)
+    function f(p)
+        v = [p[mod1(i, NPARAM)] * i / N for i in 1:N]
+        _sweep_for!(policy, v, 1:N, i -> sin(v[i]) * v[i] * p[1])
+        return sum(abs2, v)
+    end
+    return f, _start()
+end
+
+const CAPTURES = (
+    (hook = "_batch_for_const_capture", kind = "closure", build = _build_const_capture,
+        rule = "_batch_for!"),
+    (hook = "_batch_for_mixed_capture", kind = "closure", build = _build_mixed_capture,
+        rule = "_batch_for!"),
+    (hook = "_batch_for_reads_v", kind = "closure", build = _build_reads_v,
+        rule = "_batch_for!")
+)
+
+function case(hook::AbstractString)
+    for c in (CASES..., THREADED..., CAPTURES...)
         c.hook == hook && return c
     end
     throw(ArgumentError("no Enzyme case for hook \"$hook\""))
@@ -338,40 +383,86 @@ function _gradient(f, x, mode::Symbol)
     return DI.gradient(f, _di(mode), x)
 end
 
+# Distinct tangents of the parameters, one per lane of `:batch_forward`.
+_batch_tangents(x) = ntuple(k -> randn(MersenneTwister(SEED + k), length(x)), BATCH_WIDTH)
+
+# Each lane's derivative and the oracle's value for it: a directional derivative of `f` for
+# `:batch_forward`, a cotangent times the gradient for `:batch_reverse`.
+function _batch(f, x, ref, mode::Symbol)
+    if mode === :batch_forward
+        seeds = _batch_tangents(x)
+        r = Enzyme.autodiff(Enzyme.set_runtime_activity(Enzyme.Forward), Enzyme.Const(f),
+            Enzyme.BatchDuplicated(copy(x), seeds))
+        return [[d] for d in values(first(r))], [[dot(ref, s)] for s in seeds]
+    end
+    g!(y, p) = (y[1] = f(p); nothing)
+    dys = ntuple(k -> [BATCH_COTANGENTS[k]], BATCH_WIDTH)
+    dxs = ntuple(_ -> zero(x), BATCH_WIDTH)
+    Enzyme.autodiff(Enzyme.set_runtime_activity(Enzyme.Reverse), Enzyme.Const(g!),
+        Enzyme.Const, Enzyme.BatchDuplicated(zeros(1), dys),
+        Enzyme.BatchDuplicated(copy(x), dxs))
+    return collect(dxs), [c .* ref for c in BATCH_COTANGENTS]
+end
+
+# How many times a rule for `hook` has been entered, summed over the Bramble extensions that
+# count their rules' entries.
+function _rule_entries(hook::AbstractString)
+    n = 0
+    for name in (:BrambleEnzymePolyesterExt, :BrambleEnzymeExt)
+        ext = Base.get_extension(Bramble, name)
+        if ext !== nothing && isdefined(ext, :_rule_entries)
+            n += ext._rule_entries(Symbol(hook))
+        end
+    end
+    return n
+end
+
 """
     evaluate(c; policy, mode) -> NamedTuple
 
-Run one mode of the case `c` under `policy` and compare its gradient with the ForwardDiff
-oracle. Returns `status` (`"ok"` within `TOL`, `"wrong"` otherwise, `"throws"` when the mode
-raises), `relerr` and the first `error` text.
+Run one mode of the case `c` under `policy` and compare its derivative with the ForwardDiff
+oracle, lane by lane for a batch mode. Returns `status` (`"ok"` within `TOL`, `"wrong"`
+otherwise, `"throws"` when the mode raises, `"bypassed"` when a batch mode under a threaded
+policy never entered the hook's rule), `relerr` (the worst lane's) and the first `error` text.
 """
 function evaluate(c; policy, mode::Symbol)
-    mode in MODES || throw(ArgumentError("mode must be one of $MODES, got :$mode"))
+    modes = (MODES..., BATCH_MODES...)
+    mode in modes || throw(ArgumentError("mode must be one of $modes, got :$mode"))
     f, x = c.build(policy)
     ref = DI.gradient(f, AutoForwardDiff(), x)
-    g = try
-        _gradient(f, x, mode)
+    rule = get(c, :rule, c.hook)
+    entries = _rule_entries(rule)
+    got, want = try
+        mode in BATCH_MODES ? _batch(f, x, ref, mode) : ([_gradient(f, x, mode)], [ref])
     catch err
         err isa InterruptException && rethrow()
         return (status = "throws", relerr = NaN, error = _summary(err))
     end
-    r = _relerr(g, ref)
-    return (status = isfinite(r) && r <= TOL ? "ok" : "wrong", relerr = r, error = "")
+    r = maximum(_relerr(g, w) for (g, w) in zip(got, want))
+    entered = !(mode in BATCH_MODES) || policy isa CpuSerial || _rule_entries(rule) > entries
+    status = !(isfinite(r) && r <= TOL) ? "wrong" : entered ? "ok" : "bypassed"
+    return (status = status, relerr = r, error = "")
 end
+
+_policy(p::Symbol) = getfield(Bramble, p)()
+_policy(p) = p
 
 """
     check(hook; policy = CpuPolyester(), modes = MODES) -> Nothing
 
-Throw unless every mode of the case for `hook` returns `"ok"` under `policy`.
+Throw unless every mode of the case for `hook` returns `"ok"` under `policy`. `hook` is a
+string or a `Symbol`; `policy` an execution policy or the `Symbol` naming one.
 """
 function check(hook::AbstractString; policy = CpuPolyester(), modes = MODES)
     c = case(hook)
+    p = _policy(policy)
     for mode in modes
-        r = evaluate(c; policy, mode)
-        r.status == "ok" || error("$hook under $(nameof(typeof(policy))), mode :$mode: " *
+        r = evaluate(c; policy = p, mode)
+        r.status == "ok" || error("$hook under $(nameof(typeof(p))), mode :$mode: " *
               "$(r.status), relerr $(r.relerr). $(r.error)")
     end
     return nothing
 end
+check(hook::Symbol; kwargs...) = check(String(hook); kwargs...)
 
 end # module

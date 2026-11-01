@@ -249,6 +249,8 @@ if __bramble_with_ad_backends
         # The AD extension files, moved here from "Package extensions" so `ext` is CPU only.
         include("ext/sparse_ad_ext.jl")
         include("ext/ad_backend_verification.jl")
+        # Enzyme's rules for the CpuPolyester hooks; its first testset needs no Enzyme.
+        include("ext/enzyme_polyester_ext.jl")
     end
 end
 

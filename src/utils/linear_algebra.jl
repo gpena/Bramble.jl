@@ -42,7 +42,8 @@ caller actually uses, deriving `loc` from the destination array itself
 """
 @inline _sweep_for!(::HostLocality, ::CpuSerial, v, idxs, f::F) where {F} = _serial_for!(v, idxs, f)
 @inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs, f::F) where {F} = _threaded_for!(v, idxs, f)
-@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs, f::F) where {F} = _late(_batch_for!, v, idxs, f)
+@inline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs, f::F) where {F} = _late(
+    _batch_for!, v, idxs, Ref(f))
 @noinline _sweep_for!(::DeviceLocality, policy::GpuPolicy, v, idxs, f::F) where {F} = _gpu_for!(policy, v, idxs, f)
 @noinline _sweep_for!(loc::Locality, policy, v, idxs, f::F) where {F} = _throw_locality_mismatch(loc, policy)
 
@@ -207,6 +208,17 @@ Polyester; `BramblePolyesterExt` defines the one that runs.
 @noinline function _batch_for!(v, idxs, f)
     return _throw_cpubatch_without_polyester(:_batch_for!)
 end
+
+# `_sweep_for!` hands `_batch_for!` its kernel behind a `Ref`. An Enzyme rule cannot take a
+# by-value closure that mixes arrays with plain numbers (`i -> a * p[i]`, `a::Float64`): the
+# call fails Enzyme's calling convention before the rule runs, and a `Ref` passes it
+# (BrambleEnzymePolyesterExt). This method unwraps it for `BramblePolyesterExt`'s sweep. It
+# inlines, so a plain call builds no `Ref` and allocates nothing; Enzyme does not inline a
+# call that has a rule, so a differentiated call reaches the rule with the `Ref`.
+# `_sweep_for!`'s `CpuPolyester` method inlines too, so the `Ref` is built in its caller:
+# built inside a non-inlined method that took the closure by value, a closure capturing a
+# `Float32` beside an array stops Enzyme's compiler ("Illegal replace ficticious phi").
+@inline _batch_for!(v::AbstractArray, idxs, r::Base.RefValue) = _late(_batch_for!, v, idxs, r[])
 
 """
     _batch_axis_for!(v::AbstractArray, idxs::CartesianIndices, f::Function) -> Nothing
