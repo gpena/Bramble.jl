@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML, AD and solvers — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=d3bb9f65">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=d5b6caf6">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
@@ -104,7 +104,7 @@
 <div class="md-docstring" id="Bramble.semidiscretize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.semidiscretize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L129-L186" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L131-L188" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -121,7 +121,7 @@
 </li>
 <li><p><code class="md-code-inline">dirichlet_components</code>: leaf components of a composite space the labels bind to (default <code class="md-code-inline">nothing</code>, all leaves).</p>
 </li>
-<li><p><code class="md-code-inline">state</code>: <a href="../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> the current <code class="md-code-inline">u</code> is copied into before each assembly, for forms whose coefficients read it (default <code class="md-code-inline">nothing</code>).</p>
+<li><p><code class="md-code-inline">state</code>: <a href="../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> the current <code class="md-code-inline">u</code> is copied into before each assembly, for forms whose coefficients read it (default <code class="md-code-inline">nothing</code>). A <code class="md-code-inline">u</code> of an element type the state cannot hold (a <code class="md-code-inline">ForwardDiff.Dual</code>, from automatic differentiation of the residual) goes into a buffer of its own type instead, read by the forms rebound to it, so the user&#39;s state never receives it and <code class="md-code-inline">-(∂A/∂u) u</code> enters the Jacobian. Only the state written in the forms&#39; expressions is rebound: one read inside a Julia function (<code class="md-code-inline">x -&gt; uₕ(x)</code>), through a component view (<code class="md-code-inline">uₕ(1)</code>) or by a <code class="md-code-inline">build</code>-based operator is not, and such a <code class="md-code-inline">u</code> is refused with an <code class="md-code-inline">ArgumentError</code> where nothing is rebound; so is any such <code class="md-code-inline">u</code> beside an <code class="md-code-inline">update_coefficients!</code> hook, which may read the user&#39;s state. A plain number type (a real or complex float or integer) is always copied into the state, converted to its element type.</p>
 </li>
 <li><p><code class="md-code-inline">update_coefficients!</code>: called with the current <code class="md-code-inline">t</code> before each assembly, for coefficients that vary in time – <code class="md-code-inline">t -&gt; Rₕ!(fₕ, x -&gt; f(x, t))</code> for a time-dependent source, or <code class="md-code-inline">t -&gt; (α[] = t)</code> for a scalar <code class="md-code-inline">Ref</code> (default <code class="md-code-inline">nothing</code>). A two-argument <code class="md-code-inline">(t, p) -&gt; ...</code> also reaches the residual&#39;s own <code class="md-code-inline">p</code>, the same way a three-argument Dirichlet condition does.</p>
 </li>
@@ -189,7 +189,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">mass</code>: a form on <code class="md-code-inline">Cₕ</code> defining <code class="md-code-inline">M</code> (default <code class="md-code-inline">innerₕ(u, v)</code>, diagonal and positive). A mass that couples a degree of freedom to a point where <code class="md-code-inline">d</code> depends on time is refused: its term <code class="md-code-inline">Eᵀ M_pad d′(t)</code> needs the time derivative of the data.</p>
 </li>
-<li><p><code class="md-code-inline">state</code>: a grid function on <code class="md-code-inline">Bramble.padded_space(Cₕ)</code> that receives <code class="md-code-inline">lift(Cₕ, u, t)</code> before each assembly, for forms whose coefficients read it (default <code class="md-code-inline">nothing</code>).</p>
+<li><p><code class="md-code-inline">state</code>: a grid function on <code class="md-code-inline">Bramble.padded_space(Cₕ)</code> that receives <code class="md-code-inline">lift(Cₕ, u, t)</code> before each assembly, for forms whose coefficients read it (default <code class="md-code-inline">nothing</code>). A <code class="md-code-inline">u</code> it cannot hold (a <code class="md-code-inline">ForwardDiff.Dual</code>) is lifted into a padded buffer of its own type, read by the forms rebound to it, as on a plain space.</p>
 </li>
 <li><p><code class="md-code-inline">update_coefficients!</code>, <code class="md-code-inline">reassemble</code>: as for plain forms.</p>
 </li>
@@ -200,7 +200,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <div class="md-docstring" id="Bramble.Semidiscretization">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Semidiscretization</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L54-L76" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L54-L77" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -234,6 +234,8 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <li><p><code class="md-code-inline">update_coefficients</code>: callable invoked with <code class="md-code-inline">t</code> (or, wrapped in <code class="md-code-inline">ParametricUpdate</code>, with <code class="md-code-inline">t</code> and the residual&#39;s own <code class="md-code-inline">p</code>) before assembly, or <code class="md-code-inline">nothing</code>.</p>
 </li>
 <li><p><code class="md-code-inline">reassemble</code>: <code class="md-code-inline">Val(true)</code> to refill <code class="md-code-inline">A</code> at every step.</p>
+</li>
+<li><p><code class="md-code-inline">twins</code>: by element type of <code class="md-code-inline">u</code>, the semidiscretisations a <code class="md-code-inline">u</code> the state cannot hold (a <code class="md-code-inline">ForwardDiff.Dual</code>) is evaluated by: a state buffer of that type, the forms rebound to it and their own operator matrix, built at the first call there.</p>
 </li>
 </ul>
 </div>
@@ -281,7 +283,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.mass_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.mass_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L115-L119" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L117-L121" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -294,7 +296,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.operator_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.operator_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L122-L126" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L124-L128" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -307,7 +309,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.jacobian!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L602-L614" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L709-L723" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -315,14 +317,14 @@ sol = solve(prob, Tsit5())</code></pre>
 <pre><code class="language-julia">jacobian!(J, sd::Semidiscretization, u, p, t) -&gt; J</code></pre>
 </div>
 <p>Fill <code class="md-code-inline">J</code> with <code class="md-code-inline">∂/∂u (F(t) - A u) = -A</code> and return it.</p>
-<p>Exact whenever the operator&#39;s coefficients do not read <code class="md-code-inline">u</code> – that is, whenever <code class="md-code-inline">sd</code> was built without <code class="md-code-inline">state</code>. With a <code class="md-code-inline">state</code> the operator also varies with <code class="md-code-inline">u</code>, the term <code class="md-code-inline">-(∂A/∂u) u</code> is missing, and this is a Picard linearisation rather than a Jacobian: pass <code class="md-code-inline">jacobian = nothing</code> to <a href="../api_sciml/#Bramble.ode_function"><code class="md-code-inline">ode_function</code></a> and let the solver build it by sparse automatic differentiation instead, seeded from <a href="../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a>.</p>
+<p>Exact whenever the operator&#39;s coefficients do not read <code class="md-code-inline">u</code> – that is, whenever <code class="md-code-inline">sd</code> was built without <code class="md-code-inline">state</code>. With a <code class="md-code-inline">state</code> the operator also varies with <code class="md-code-inline">u</code>, the term <code class="md-code-inline">-(∂A/∂u) u</code> is missing, and this is a Picard linearisation rather than a Jacobian: pass <code class="md-code-inline">jacobian = nothing</code> to <a href="../api_sciml/#Bramble.ode_function"><code class="md-code-inline">ode_function</code></a> and let the solver build it by sparse automatic differentiation instead, seeded from <a href="../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a>. That one is exact: a <code class="md-code-inline">ForwardDiff.Dual</code> <code class="md-code-inline">u</code> goes into a state buffer of its own type, read by the forms rebound to it (see the <code class="md-code-inline">state</code> keyword of <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>).</p>
 <p>See also <a href="../api_sciml/#Bramble.jacobian_prototype"><code class="md-code-inline">jacobian_prototype</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.jacobian_prototype">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian_prototype</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L645-L656" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L754-L765" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -337,7 +339,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.ode_function">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ode_function</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L17-L54" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L14-L51" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -370,7 +372,7 @@ ode_function(a::BilinearForm, l::LinearForm; kwargs...) -&gt; ODEFunction</code>
 <div class="md-docstring" id="Bramble.ode_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ode_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L76-L115" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L73-L110" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -385,7 +387,7 @@ ode_problem(a::Bramble.GhostBilinearForm, l::Bramble.GhostLinearForm, u₀, I; k
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">p</code> (default <code class="md-code-inline">SciMLBase.NullParameters()</code>) for a residual whose <code class="md-code-inline">update_coefficients!</code> or Dirichlet conditions were given a parameter-dependent, <code class="md-code-inline">(t, p)</code>/<code class="md-code-inline">(x, t, p)</code> form (see <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>&#39;s own keywords).</p>
 </li>
-<li><p><code class="md-code-inline">specialize</code> (default <code class="md-code-inline">nothing</code>, <code class="md-code-inline">ODEProblem</code>&#39;s own choice untouched). The solved trajectory goes to <code class="md-code-inline">Bramble.adjoint_sensitivities</code> with any specialization: <code class="md-code-inline">SciMLBase.FullSpecialize</code> is not needed for the adjoint on any backend.</p>
+<li><p><code class="md-code-inline">specialize</code> (default <code class="md-code-inline">nothing</code>, <code class="md-code-inline">ODEProblem</code>&#39;s own choice untouched).</p>
 </li>
 </ul>
 <p>The two-form method, for plain forms and for forms on one constrained ghost space, forwards its other keywords to <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>.</p>
@@ -428,7 +430,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.linear_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.linear_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L205-L234" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L179-L208" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -494,53 +496,6 @@ prob = nonlinear_problem(residual!, zeros(ndofs(Wₕ)))
 sol = solve(prob, NewtonRaphson())</code></pre>
 </div>
 <p>See also <a href="../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a>, <a href="../api_sciml/#Bramble.linear_problem"><code class="md-code-inline">linear_problem</code></a>, <a href="../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a>.</p>
-</div>
-</div>
-<h2 id="Adjoint-sensitivities-for-a-transient-solve" class="md-heading">Adjoint sensitivities for a transient solve<a href="#Adjoint-sensitivities-for-a-transient-solve" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>No test runs this until v4.2.0, when the AD backends return.</p>
-<div class="md-docstring" id="Bramble.adjoint_sensitivities">
-<div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Bramble.adjoint_sensitivities</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L184-L197" title="View source">source</a>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">adjoint_sensitivities(sol::ODESolution, alg; kwargs...) -&gt; (du0, dp)</code></pre>
-</div>
-<p>Adjoint sensitivities of a <a href="../api_sciml/#Bramble.Semidiscretization"><code class="md-code-inline">Semidiscretization</code></a>&#39;s solved trajectory, via <code class="md-code-inline">SciMLSensitivity.adjoint_sensitivities</code> with two Bramble-specific corrections applied. Full documentation lives on <code class="md-code-inline">BrambleSciMLSensitivityExt</code>&#39;s own method, the only one that exists once <code class="md-code-inline">SciMLSensitivity</code> is loaded – this stub exists so that method has a function to extend, and so calling this without <code class="md-code-inline">SciMLSensitivity</code> loaded gives a clear error rather than <code class="md-code-inline">UndefVarError</code>.</p>
-<p>Deliberately not exported, unlike <a href="../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a>: <code class="md-code-inline">SciMLSensitivity</code> itself exports a function of this exact name, so <code class="md-code-inline">using Bramble, SciMLSensitivity</code> together would collide on the bare name regardless of what Bramble does. Call this one as <code class="md-code-inline">Bramble.adjoint_sensitivities</code>.</p>
-</div>
-<div class="md-docstring-content">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Bramble.adjoint_sensitivities(sol::ODESolution, alg; kwargs...) -&gt; (du0, dp)</code></pre>
-</div>
-<p>Adjoint sensitivities of a <a href="../api_sciml/#Bramble.Semidiscretization"><code class="md-code-inline">Semidiscretization</code></a>&#39;s solved trajectory <code class="md-code-inline">sol</code> (from <a href="../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">Bramble.ode_problem</code></a>/<code class="md-code-inline">solve</code>) with respect to its initial condition (<code class="md-code-inline">du0</code>) and its <code class="md-code-inline">p</code> (<code class="md-code-inline">dp</code>), via <code class="md-code-inline">SciMLSensitivity.adjoint_sensitivities</code> – one backward solve for <em>every</em> parameter at once, the same O(1)-in-parameter-count trade <a href="../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">Bramble.pde_solve</code></a>&#39;s own adjoint rule makes for the steady case.</p>
-<p><strong>Keywords</strong></p>
-<p>Every keyword <code class="md-code-inline">SciMLSensitivity.adjoint_sensitivities</code> takes, plus these two defaults chosen for a <code class="md-code-inline">Semidiscretization</code>&#39;s index-1 DAE specifically (both overridable):</p>
-<ul class="md-list-tight">
-<li><p><code class="md-code-inline">sensealg</code>: <code class="md-code-inline">InterpolatingAdjoint(autojacvec = false)</code> when <code class="md-code-inline">sol.prob.p</code> is set, and <code class="md-code-inline">QuadratureAdjoint(autojacvec = false)</code> when it is not – <code class="md-code-inline">autojacvec = false</code> uses <a href="../api_sciml/#Bramble.jacobian!"><code class="md-code-inline">Bramble.jacobian!</code></a>&#39;s own exact <code class="md-code-inline">-A</code> for the <code class="md-code-inline">u</code>-vjp, so no AD tool ever needs to differentiate through the residual&#39;s mutating buffers for that half. On a problem with no <code class="md-code-inline">p</code> whose mass matrix is singular (Dirichlet rows), every <code class="md-code-inline">InterpolatingAdjoint</code> variant fails inside SciMLSensitivity (SciML/SciMLSensitivity.jl#1703), which is why the p-less default is the quadrature variant. An explicit <code class="md-code-inline">InterpolatingAdjoint</code> on such a problem is passed through unchanged and hits that error.</p>
-</li>
-<li><p><code class="md-code-inline">initializealg</code>: <code class="md-code-inline">BrownFullBasicInit()</code> – restores the adjoint&#39;s own algebraic consistency at <code class="md-code-inline">t = T</code> rather than merely checking it (the default <code class="md-code-inline">CheckInit</code> rejects a constrained problem&#39;s seed outright); see this file&#39;s own module-level comment for why.</p>
-</li>
-</ul>
-<p><strong>Requirements on <code class="md-code-inline">sol</code></strong></p>
-<p><code class="md-code-inline">sol.prob</code> may be built with or without <code class="md-code-inline">p</code>: with no <code class="md-code-inline">p</code>, <code class="md-code-inline">dp</code> is <code class="md-code-inline">nothing</code>. It needs no particular specialization: <code class="md-code-inline">FullSpecialize</code> is not needed for the adjoint on any backend, because the function wrappers the default specialization adds are unwrapped before SciMLSensitivity sees <code class="md-code-inline">sol</code>. A <code class="md-code-inline">u₀</code>-only adjoint gets the <code class="md-code-inline">Mᵀ</code> correction too, because the correction unwraps the function wrapper before it looks at the residual.</p>
-<p><strong>Examples</strong></p>
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">using Bramble, SciMLBase, SciMLSensitivity, OrdinaryDiffEqBDF
-
-bcs = dirichlet_constraints(Ωₕ, I, :boundary =&gt; (x, t, p) -&gt; p[1] * t)
-sd = semidiscretize(a, l; dirichlet = bcs)
-prob = ode_problem(sd, u₀, I; p = [0.7])
-sol = solve(prob, FBDF(); saveat = ts)
-
-dgdu!(out, u, p, t, i) = (@. out = 2 * (u - obs[i]); nothing)
-du0, dp = Bramble.adjoint_sensitivities(sol, FBDF(); t = ts, dgdu_discrete = dgdu!)</code></pre>
-</div>
-<p>See also <a href="../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">Bramble.ode_problem</code></a>, <a href="../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">Bramble.pde_solve</code></a> for the steady-state adjoint this mirrors.</p>
 </div>
 </div>
 <h2 id="Differentiable-linear-solve-(adjoint-gradients)" class="md-heading">Differentiable linear solve (adjoint gradients)<a href="#Differentiable-linear-solve-(adjoint-gradients)" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -2539,7 +2494,6 @@ fact = suitesparse_factorize(A; sym = :spd, perm = Int.(perm))</code></pre>
       <div class="md-toc-inner">
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#Time-dependent-problems-and-the-SciML-stack">Time-dependent problems and the SciML stack</a>
-          <a class="md-toc-link md-toc-h2" href="#Adjoint-sensitivities-for-a-transient-solve">Adjoint sensitivities for a transient solve</a>
           <a class="md-toc-link md-toc-h2" href="#Differentiable-linear-solve-(adjoint-gradients)">Differentiable linear solve (adjoint gradients)</a>
           <a class="md-toc-link md-toc-h2" href="#Algebraic-multigrid-preconditioning">Algebraic multigrid preconditioning</a>
           <a class="md-toc-link md-toc-h2" href="#Zero-fill-ILU-preconditioning-for-convection-dominated-systems">Zero-fill ILU preconditioning for convection-dominated systems</a>
@@ -2574,6 +2528,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=d3bb9f65"></script>
+  <script src="../assets/materialdocs.js?v=d5b6caf6"></script>
 </body>
 </html>

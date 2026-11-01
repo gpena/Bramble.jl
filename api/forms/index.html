@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=c506736b">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=23ae2fd9">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -332,7 +332,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1541-L1574" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1587-L1620" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -404,7 +404,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.assemble_parallel!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_parallel!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1743-L1752" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1789-L1798" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1056,7 +1056,7 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only</code></
 <pre><code class="language-julia">dirichlet_bc!(v::AbstractVector, Ωₕ::AbstractMeshType, bcs::EvaluatedParametricDomainMarkers, labels::Symbol...) -&gt; AbstractVector</code></pre>
 </div>
 <p>Write Dirichlet values into <code class="md-code-inline">v</code> at the points marked by <code class="md-code-inline">labels</code>, from a time- and parameter-evaluated constraint set (see <a href="../../internals/geometry/#Bramble.EvaluatedParametricDomainMarkers"><code class="md-code-inline">EvaluatedParametricDomainMarkers</code></a>).</p>
-<p>A separate method rather than a third member of <a href="../../internals/form/#Bramble.ConstraintMarkers"><code class="md-code-inline">ConstraintMarkers</code></a>: the body is otherwise identical to the <code class="md-code-inline">bcs::ConstraintMarkers</code> method above, but widening that <code class="md-code-inline">Union</code> is exactly the shape of change gpena/Bramble.jl#240 removed from the assembly path for Enzyme&#39;s sake, and this method sits on the same residual Enzyme/SciMLSensitivity differentiate for a <code class="md-code-inline">p</code>-dependent boundary value.</p>
+<p>A separate method rather than a third member of <a href="../../internals/form/#Bramble.ConstraintMarkers"><code class="md-code-inline">ConstraintMarkers</code></a>: the body is otherwise identical to the <code class="md-code-inline">bcs::ConstraintMarkers</code> method above, but widening that <code class="md-code-inline">Union</code> is exactly the shape of change gpena/Bramble.jl#240 removed from the assembly path for Enzyme&#39;s sake, and this method sits on the same residual Enzyme differentiates for a <code class="md-code-inline">p</code>-dependent boundary value.</p>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1254,6 +1254,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=c506736b"></script>
+  <script src="../../assets/materialdocs.js?v=23ae2fd9"></script>
 </body>
 </html>

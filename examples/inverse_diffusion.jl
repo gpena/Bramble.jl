@@ -136,7 +136,5 @@ ad_check = Enzyme.gradient(mode, Enzyme.Const(loss), 0.5)[1]                    
 #
 #   - [`pde_solve`](@ref) in the [API reference](../api.md).
 #   - [Linear Poisson](poisson_linear.md) for the forward problem this inverts.
-#   - [Recovering parameters from a trajectory](transient_inverse_problem.md) for the
-#     transient version, with two parameters and a different adjoint.
 #   - [Automatic differentiation](../tutorials/autodiff.md) for the differentiation tools
 #     this page relies on.
