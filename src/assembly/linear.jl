@@ -1341,7 +1341,7 @@ end
 ) where {TERM}
     return _late(
         _batch_linear_band_sweep!,
-        b, sp, term, ax, bidx, nbands, rest, lin_indices, mesh_markers, offset, α
+        b, Ref((sp, term, mesh_markers, α)), ax, bidx, nbands, rest, lin_indices, offset
     )
 end
 
@@ -1359,6 +1359,18 @@ runs.
     return _throw_cpubatch_without_polyester(:_batch_linear_band_sweep!)
 end
 
+# Both sweep hooks take the parts `(sp, term, mesh_markers, α)` behind a `Ref` from their
+# `CpuPolyester` callers, for Enzyme's calling convention, as the replay hooks take theirs
+# (`_batch_bilinear_colour_replay!`, bilinear_execution.jl). These methods unwrap them; they
+# inline, so a plain call builds no `Ref` and allocates nothing.
+@inline function _batch_linear_band_sweep!(
+        b, parts::Base.RefValue{<:Tuple}, ax, bidx, nbands, rest, lin_indices, offset
+)
+    sp, term, mesh_markers, α = parts[]
+    return _late(_batch_linear_band_sweep!, b, sp, term, ax, bidx, nbands, rest,
+        lin_indices, mesh_markers, offset, α)
+end
+
 # Dispatches on the *effective* execution policy (`_sweep_parallel!` computes it):
 # `CpuThreaded` runs the shared `Threads.@threads` loop; `CpuPolyester` reaches its own hook
 # instead, so it never silently threads with the wrong mechanism.
@@ -1374,7 +1386,9 @@ end
 @noinline function _sweep_colour!(
         ::CpuPolyester, b::AbstractVector, sp, term::TERM, idxs, lin_indices, mesh_markers, offset::Int, α = true
 ) where {TERM}
-    return _late(_batch_linear_colour_sweep!, b, sp, term, idxs, lin_indices, mesh_markers, offset, α)
+    return _late(
+        _batch_linear_colour_sweep!, b, Ref((sp, term, mesh_markers, α)), idxs, lin_indices,
+        offset)
 end
 
 """
@@ -1386,6 +1400,14 @@ naming Polyester; `BramblePolyesterExt` defines the one that runs.
 """
 @noinline function _batch_linear_colour_sweep!(b, sp, term, idxs, lin_indices, mesh_markers, offset, α)
     return _throw_cpubatch_without_polyester(:_batch_linear_colour_sweep!)
+end
+
+# The `Ref` method, as `_batch_linear_band_sweep!`'s above.
+@inline function _batch_linear_colour_sweep!(
+        b, parts::Base.RefValue{<:Tuple}, idxs, lin_indices, offset)
+    sp, term, mesh_markers, α = parts[]
+    return _late(_batch_linear_colour_sweep!, b, sp, term, idxs, lin_indices, mesh_markers,
+        offset, α)
 end
 
 # Every colour in turn (`_sweep_coloured!`, bilinear_execution.jl). `policy` is the

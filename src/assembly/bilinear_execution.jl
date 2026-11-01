@@ -1150,7 +1150,7 @@ end
 ) where {TERM}
     return _late(
         _batch_bilinear_colour_replay!,
-        target, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
+        Ref(target), Ref((sp, term, mesh_markers)), idxs, lin_indices, row_offset, col_offset
     )
 end
 
@@ -1170,6 +1170,22 @@ Polyester; `BramblePolyesterExt` defines the one that runs.
         target, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
 )
     return _throw_cpubatch_without_polyester(:_batch_bilinear_colour_replay!)
+end
+
+# Both replay hooks take the target and the parts `(sp, term, mesh_markers)` behind a `Ref`
+# from their `CpuPolyester` callers. An Enzyme rule cannot take a by-value struct that mixes
+# arrays with plain values (the target, the term's functor): the call fails Enzyme's calling
+# convention before the rule runs, and a `Ref` passes it (BrambleEnzymePolyesterExt). These
+# methods unwrap them for `BramblePolyesterExt`'s sweep. They inline, so a plain call builds
+# no `Ref` and allocates nothing; Enzyme does not inline a call that has a rule, so a
+# differentiated call reaches the rule with the `Ref`s.
+@inline function _batch_bilinear_colour_replay!(
+        target::Base.RefValue, parts::Base.RefValue{<:Tuple}, idxs, lin_indices,
+        row_offset, col_offset
+)
+    sp, term, mesh_markers = parts[]
+    return _late(_batch_bilinear_colour_replay!, target[], sp, term, idxs, lin_indices,
+        mesh_markers, row_offset, col_offset)
 end
 
 """
@@ -1222,8 +1238,8 @@ end
     wsp, wax, wrest = _batch_walk(sp, ax, rest, nbands)
     return _late(
         _batch_bilinear_band_replay!,
-        target, wsp, term, wax, bidx, nbands, wrest, lin_indices, mesh_markers, row_offset,
-        col_offset
+        Ref(target), Ref((wsp, term, mesh_markers)), wax, bidx, nbands, wrest, lin_indices,
+        row_offset, col_offset
     )
 end
 
@@ -1243,6 +1259,16 @@ naming Polyester; `BramblePolyesterExt` defines the one that runs.
         col_offset
 )
     return _throw_cpubatch_without_polyester(:_batch_bilinear_band_replay!)
+end
+
+# The `Ref` method, as `_batch_bilinear_colour_replay!`'s above.
+@inline function _batch_bilinear_band_replay!(
+        target::Base.RefValue, parts::Base.RefValue{<:Tuple}, ax, bidx, nbands, rest,
+        lin_indices, row_offset, col_offset
+)
+    sp, term, mesh_markers = parts[]
+    return _late(_batch_bilinear_band_replay!, target[], sp, term, ax, bidx, nbands, rest,
+        lin_indices, mesh_markers, row_offset, col_offset)
 end
 
 # The serial fallback for a term whose rows are not a fixed reach from the point being

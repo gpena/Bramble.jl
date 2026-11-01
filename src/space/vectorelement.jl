@@ -516,7 +516,7 @@ end
 # band, run under `Polyester.@batch` by `_batch_broadcast!` instead of `_static_or_serial`.
 @noinline function _polyester_broadcast!(v::AbstractVector, bc::Broadcast.Broadcasted)
     bc′ = _prepared_broadcast(v, bc)
-    return _late(_batch_broadcast!, v, bc′, axes(v, 1))
+    return _late(_batch_broadcast!, v, Ref(bc′), axes(v, 1))
 end
 
 """
@@ -529,6 +529,12 @@ naming Polyester; `BramblePolyesterExt` defines the one that runs.
 @noinline function _batch_broadcast!(v, bc, ax)
     return _throw_cpubatch_without_polyester(:_batch_broadcast!)
 end
+
+# The `Broadcasted` behind a `Ref` (see `_polyester_broadcast!`): an Enzyme rule takes it as a
+# mutable box, not by value (its arrays and plain values fail Enzyme's calling convention), and
+# this method unwraps it for `BramblePolyesterExt`'s method, so the primal is the same call.
+@inline _batch_broadcast!(v::AbstractVector, r::Base.RefValue, ax) = _late(
+    _batch_broadcast!, v, r[], ax)
 
 # What `_batch_broadcast!` hands `Polyester.@batch` in place of the `Broadcasted` tree:
 # nested tuples holding only its styles, functions, leaf arrays and scalars, each node

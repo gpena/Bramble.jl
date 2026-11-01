@@ -1,5 +1,10 @@
 # sweeps.jl: Enzyme rules for `_batch_for!` (src/utils/linear_algebra.jl), which writes
-# `v[i] = f(i)` for `i` in `idxs`, `f` a closure the caller passes.
+# `v[i] = f(i)` for `i` in `idxs`, `f` a closure the caller passes, and for the hooks that
+# share its slab shape: `_batch_axis_for!` (a `CartesianIndices`), `_batch_scatter_for!`
+# (`mats[k][i] = g(i)[k]`, a tuple of destinations) and `_batch_broadcast!` (`v[i] = bc[i]`,
+# a `Broadcasted` behind a `Ref`). The rules of the four share `_hook_forward`,
+# `_hook_augmented` and `_hook_reverse`; each hook's kernels sit in `_FOR_OPS` or
+# `_SCATTER_OPS`.
 #
 # Each rule cuts `idxs` into `Threads.nthreads()` slabs (`_rule_slab`) and runs one Enzyme
 # derivative per slab, one slab per `@batch` task. Enzyme compiles a thunk on first use, so
@@ -65,10 +70,14 @@ end
 @inline _kernel(f) = f
 @inline _kernel(r::Base.RefValue) = r[]
 
+# The value of kernel `k` at `i`: a closure's call, or a `Broadcasted`'s element.
+@inline _at(k, i) = k(i)
+@inline _at(bc::Base.Broadcast.Broadcasted, i) = @inbounds bc[i]
+
 @inline function _fill_slab!(v, f::F, r) where {F}
     k = _kernel(f)
     for i in r
-        @inbounds v[i] = k(i)
+        @inbounds v[i] = _at(k, i)
     end
     return nothing
 end
@@ -77,7 +86,7 @@ end
     k = _kernel(f)
     s = zero(eltype(d_v))
     for i in r
-        s += k(i) * @inbounds(d_v[i])
+        s += _at(k, i) * @inbounds(d_v[i])
     end
     return s
 end
@@ -88,6 +97,11 @@ end
     for i in r
         @inbounds d_v[i] = zero(eltype(d_v))
     end
+    return nothing
+end
+# A scatter lane is a tuple of destination shadows; an empty one is an inactive destination.
+@inline function _clear_lane!(d::Tuple, r)
+    foreach(c -> isempty(c) || _clear_lane!(c, r), d)
     return nothing
 end
 
@@ -112,10 +126,58 @@ end
     error("a CpuPolyester derivative task failed without an exception")
 end
 
+# --- Scatter kernels ----------------------------------------------------------------- #
+#
+# `_batch_scatter_for!` writes `mats[k][i] = g(i)[k]` for every component `k`. Its destinations
+# are one tuple (`Duplicated` or `BatchDuplicated` as a whole), so a lane is a tuple of
+# destination shadows. A destination inactive in a lane (its shadow is itself, under runtime
+# activity) is an empty placeholder of its own type: it keeps every lane one type, and no slab
+# index reaches it, so the kernels skip it by `isempty`.
+
+@inline function _fill_scatter_slab!(mats, f::F, r) where {F}
+    k = _kernel(f)
+    for i in r
+        @inbounds Bramble._write_components!(mats, k(i), i)
+    end
+    return nothing
+end
+
+# The slab's sum of `g(i)[k] * d_mats[k][i]` over the live components.
+@inline function _dot_scatter(f::F, d_mats, r) where {F}
+    k = _kernel(f)
+    s = zero(_lane_eltype(d_mats))
+    for i in r
+        s += _dot_components(d_mats, k(i), i)
+    end
+    return s
+end
+
+@inline _dot_components(::Tuple{}, ::Tuple, i) = false
+@inline function _dot_components(ds::Tuple, vals::Tuple, i)
+    d = ds[1]
+    head = isempty(d) ? zero(vals[1]) : vals[1] * @inbounds(d[i])
+    return head + _dot_components(Base.tail(ds), Base.tail(vals), i)
+end
+
+# The lanes of a scatter's destinations, one per `W`: `nothing` in a lane where every
+# destination is inactive.
+@inline _mats_lanes(x, ::Val{W}) where {W} = ntuple(w -> _mats_lane(x, w), Val(W))
+@inline _mats_lane(x::Const, w::Int) = nothing
+@inline _mats_lane(x::Union{Duplicated, DuplicatedNoNeed}, w::Int) = _live_mats(x.dval, x.val)
+@inline function _mats_lane(x::Union{BatchDuplicated, BatchDuplicatedNoNeed}, w::Int)
+    return _live_mats(x.dval[w], x.val)
+end
+@inline function _live_mats(ds::Tuple, ms::Tuple)
+    all(map(===, ds, ms)) && return nothing
+    return map((d, m) -> d === m ? _empty_like(m) : d, ds, ms)
+end
+_empty_like(m::AbstractArray) = reshape(similar(m, 0), ntuple(_ -> 0, ndims(m)))
+
 # --- Forward ----------------------------------------------------------------------- #
 
-struct _ForwardSlabs{TH, V, F, I}
+struct _ForwardSlabs{TH, BD, V, F, I}
     thunk::TH
+    body::BD
     v::V
     f::F
     idxs::I
@@ -124,7 +186,7 @@ end
 
 @noinline function _forward_slab_threw(p::_ForwardSlabs, n::Int, b::Int)
     try
-        p.thunk(Const(_fill_slab!), p.v, p.f, Const(_rule_slab(p.idxs, n, b)))
+        p.thunk(Const(p.body), p.v, p.f, Const(_rule_slab(p.idxs, n, b)))
     catch e
         p.errs[b] = e
         return true
@@ -140,29 +202,31 @@ end
     return failed
 end
 
-function _batch_for_forward!(handed::HD, take::TK, mode::M, v::VA, idxs,
-        f::FA) where {HD, TK, M, VA, FA}
+function _batch_for_forward!(handed::HD, take::TK, mode::M, body::BD, v::VA, idxs,
+        f::FA) where {HD, TK, M, BD, VA, FA}
     n = Threads.nthreads()
     R = typeof(_rule_slab(idxs, n, 1))
-    thunk = Enzyme.autodiff_thunk(mode, Const{typeof(_fill_slab!)}, Const, VA, FA, Const{R})
-    p = _ForwardSlabs(thunk, v, f, idxs, Vector{Any}(nothing, n))
+    thunk = Enzyme.autodiff_thunk(mode, Const{BD}, Const, VA, FA, Const{R})
+    p = _ForwardSlabs(thunk, body, v, f, idxs, Vector{Any}(nothing, n))
     handed(_forward_run!, p, take, n) && _rethrow_first(p.errs)
     return nothing
 end
 
-function EnzymeRules.forward(config::FwdConfig, func::Const{_BatchFor}, ::Type{RT},
-        v::Annotation{<:AbstractArray}, idxs::Annotation, f::Annotation) where {RT}
-    _entered!(:_batch_for!)
+# The forward rule of a hook. `prim()` runs its primal, `ops` its kernels (`_FOR_OPS`,
+# `_SCATTER_OPS`), `v` the destination annotation (a `mats` tuple for a scatter), `idxs` the
+# index collection and `f` the closure, or the `Ref` the hook's call site passes for it.
+function _hook_forward(config::FwdConfig, hook::Symbol, ops, prim::P, v, idxs, f) where {P}
+    _entered!(hook)
     if v isa Const || f isa Const
-        func.val(v.val, idxs.val, f.val)
-        d_vs = _lanes(v, Val(EnzymeRules.width(config)))
+        prim()
+        d_vs = ops.lanes(v, Val(EnzymeRules.width(config)))
         all(isnothing, d_vs) || _zero_slabs!(d_vs, idxs.val)
         return nothing
     end
     # A `BatchDuplicated` `v` and `f` make a batched thunk: each task runs every lane.
     mode = Enzyme.set_runtime_activity(Enzyme.Forward, EnzymeRules.runtime_activity(config))
     pe = _polyester_ext()
-    _batch_for_forward!(pe._handed, pe._take, mode, v, idxs.val, f)
+    _batch_for_forward!(pe._handed, pe._take, mode, ops.body, v, idxs.val, f)
     return nothing
 end
 
@@ -170,9 +234,10 @@ end
 
 # `dfs[b]` holds task `b`'s zeroed copy of each lane's closure shadow (`nothing` in a lane
 # where the closure is inactive), `d_vs` each lane's `d_v`.
-struct _ReverseSlabs{FW, RV, F, DFS, DVS, I}
+struct _ReverseSlabs{FW, RV, D, F, DFS, DVS, I}
     fwd::FW
     rev::RV
+    dot::D
     f::F
     dfs::Vector{DFS}
     d_vs::DVS
@@ -183,12 +248,16 @@ end
 @inline _task_annotation(f, df) = Duplicated(f, df)
 @inline _task_annotation(f::F, df::Base.RefValue{F}) where {F} = MixedDuplicated(f, df)
 
+# The scalar type of a lane: its array's element type, or a scatter lane's first one.
+_lane_eltype(d::AbstractArray) = eltype(d)
+_lane_eltype(d::Tuple) = _lane_eltype(d[1])
+
 @inline function _reverse_lane!(p::_ReverseSlabs, d_v, df, r)
     d_v === nothing && return nothing
     if df !== nothing
         fa = _task_annotation(p.f, df)
-        tape, _, _ = p.fwd(Const(_slab_dot), fa, Const(d_v), Const(r))
-        p.rev(Const(_slab_dot), fa, Const(d_v), Const(r), one(eltype(d_v)), tape)
+        tape, _, _ = p.fwd(Const(p.dot), fa, Const(d_v), Const(r))
+        p.rev(Const(p.dot), fa, Const(d_v), Const(r), one(_lane_eltype(d_v)), tape)
     end
     return _clear_lane!(d_v, r)
 end
@@ -214,15 +283,14 @@ end
 
 # Every lane runs in each task of one `@batch` launch, through a width-1 thunk per lane:
 # a lane's seed is its own `d_v`, so the lanes share no batched call.
-function _batch_for_reverse!(handed::HD, take::TK, mode::M, d_vs, idxs, fp::F, f0::F,
-        dfl, ::Type{FA}) where {HD, TK, M, F, FA}
+function _batch_for_reverse!(handed::HD, take::TK, mode::M, dot::D, d_vs, idxs, fp::F,
+        f0::F, dfl, ::Type{FA}) where {HD, TK, M, D, F, FA}
     n = Threads.nthreads()
     R = typeof(_rule_slab(idxs, n, 1))
     DV = typeof(something(d_vs...))
-    fwd, rev = Enzyme.autodiff_thunk(mode, Const{typeof(_slab_dot)}, Active, FA, Const{DV},
-        Const{R})
+    fwd, rev = Enzyme.autodiff_thunk(mode, Const{D}, Active, FA, Const{DV}, Const{R})
     dfs = [map(df -> df === nothing ? nothing : _graph_copy(df, true), dfl) for _ in 1:n]
-    p = _ReverseSlabs(fwd, rev, fp, dfs, d_vs, idxs, Vector{Any}(nothing, n))
+    p = _ReverseSlabs(fwd, rev, dot, fp, dfs, d_vs, idxs, Vector{Any}(nothing, n))
     handed(_reverse_run!, p, take, n) && _rethrow_first(p.errs)
     for task in dfs
         map((df, d) -> df === nothing ? nothing : _accumulate!(df, d, f0), dfl, task)
@@ -390,27 +458,33 @@ end
 # the closure finds every route, so whenever `v` carries a shadow its values are kept from
 # before the primal (one copy of `v` per call), and put back in `v` for the reverse. A closure
 # whose data may change later is copied whole, before the primal too.
-function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_BatchFor},
-        ::Type{RT}, v::Annotation{<:AbstractArray}, idxs::Annotation,
-        f::Annotation) where {RT}
-    _entered!(:_batch_for!)
-    shadowed = !all(isnothing, _lanes(v, Val(EnzymeRules.width(config))))
-    f_tape = !(f isa Const) && EnzymeRules.overwritten(config)[4] ?
-             _graph_copy(f.val, false) : nothing
-    v_tape = shadowed ? copy(v.val) : nothing
-    func.val(v.val, idxs.val, f.val)
+# The augmented primal of a hook: `prim()` runs it, `f_overwritten` says whether the closure
+# is overwritten later (its position in the call's `overwritten` tuple).
+function _hook_augmented(config::RevConfig, hook::Symbol, ops, prim::P, f_overwritten::Bool,
+        v, idxs, f) where {P}
+    _entered!(hook)
+    shadowed = !all(isnothing, ops.lanes(v, Val(EnzymeRules.width(config))))
+    f_tape = !(f isa Const) && f_overwritten ? _graph_copy(f.val, false) : nothing
+    v_tape = shadowed ? _snapshot(v.val) : nothing
+    prim()
     return AugmentedReturn(nothing, nothing, (f_tape, v_tape))
 end
+
+# A destination's values as the primal began: an array's copy, or a tuple of them.
+_snapshot(v::AbstractArray) = copy(v)
+_snapshot(v::Tuple) = map(copy, v)
+_restore!(v::AbstractArray, before) = copyto!(v, before)
+_restore!(v::Tuple, before::Tuple) = foreach(_restore!, v, before)
 
 # Runs `run!()` with `v` holding `before`, its values when the primal began, and puts the
 # primal's values back after, whatever `run!` does.
 function _with_values(run!::R, v, before) where {R}
-    after = copy(v)
-    copyto!(v, before)
+    after = _snapshot(v)
+    _restore!(v, before)
     try
         run!()
     finally
-        copyto!(v, after)
+        _restore!(v, after)
     end
     return nothing
 end
@@ -426,11 +500,12 @@ end
         a closure that captures an array, not an active $(typeof(f.val)) of plain numbers"))
 end
 
-function EnzymeRules.reverse(config::RevConfig, func::Const{_BatchFor}, ::Type{RT}, tape,
-        v::Annotation{<:AbstractArray}, idxs::Annotation, f::Annotation) where {RT}
+# The reverse rule of a hook: the lanes of `v`, the closure's shadow per lane (`f` as the
+# `Ref` the call site passes, for a hook that takes one) and the augmented primal's tape.
+function _hook_reverse(config::RevConfig, ops, tape, v, idxs, f)
     W = Val(EnzymeRules.width(config))
-    d_vs = _lanes(v, W)
-    all(isnothing, d_vs) && return (nothing, nothing, nothing)
+    d_vs = ops.lanes(v, W)
+    all(isnothing, d_vs) && return nothing
     dfl = ntuple(w -> _closure_shadow(f, w), W)
     if all(isnothing, dfl)
         _zero_slabs!(d_vs, idxs.val)
@@ -442,9 +517,102 @@ function EnzymeRules.reverse(config::RevConfig, func::Const{_BatchFor}, ::Type{R
         mode = Enzyme.set_runtime_activity(Enzyme.ReverseSplitNoPrimal,
             EnzymeRules.runtime_activity(config))
         pe = _polyester_ext()
-        run!() = _batch_for_reverse!(pe._handed, pe._take, mode, d_vs, idxs.val, fp, f.val,
-            dfl, FA)
+        run!() = _batch_for_reverse!(pe._handed, pe._take, mode, ops.dot, d_vs, idxs.val,
+            fp, f.val, dfl, FA)
         v_tape === nothing ? run!() : _with_values(run!, v.val, v_tape)
     end
+    return nothing
+end
+
+# --- The hooks ---------------------------------------------------------------------- #
+#
+# Each hook's rules pass its operands to the generic rules in their closure order: the
+# destination `v`, the index collection `idxs` and the closure `f` (for `_batch_broadcast!`,
+# `ax` and `bc`). `prim` is that hook's own primal call, so a call that takes its operands in
+# another order still reaches the hook as it is called.
+
+const _FOR_OPS = (body = _fill_slab!, dot = _slab_dot, lanes = _lanes)
+const _SCATTER_OPS = (body = _fill_scatter_slab!, dot = _dot_scatter, lanes = _mats_lanes)
+
+function EnzymeRules.forward(config::FwdConfig, func::Const{_BatchFor}, ::Type{RT},
+        v::Annotation{<:AbstractArray}, idxs::Annotation, f::Annotation) where {RT}
+    return _hook_forward(config, :_batch_for!, _FOR_OPS, () -> func.val(v.val, idxs.val, f.val),
+        v, idxs, f)
+end
+
+function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_BatchFor},
+        ::Type{RT}, v::Annotation{<:AbstractArray}, idxs::Annotation,
+        f::Annotation) where {RT}
+    return _hook_augmented(config, :_batch_for!, _FOR_OPS,
+        () -> func.val(v.val, idxs.val, f.val), EnzymeRules.overwritten(config)[4], v, idxs, f)
+end
+
+function EnzymeRules.reverse(config::RevConfig, ::Const{_BatchFor}, ::Type{RT}, tape,
+        v::Annotation{<:AbstractArray}, idxs::Annotation, f::Annotation) where {RT}
+    _hook_reverse(config, _FOR_OPS, tape, v, idxs, f)
+    return (nothing, nothing, nothing)
+end
+
+const _AxisFor = typeof(Bramble._batch_axis_for!)
+
+function EnzymeRules.forward(config::FwdConfig, func::Const{_AxisFor}, ::Type{RT},
+        v::Annotation{<:AbstractArray}, idxs::Annotation, f::Annotation) where {RT}
+    return _hook_forward(config, :_batch_axis_for!, _FOR_OPS,
+        () -> func.val(v.val, idxs.val, f.val), v, idxs, f)
+end
+
+function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_AxisFor},
+        ::Type{RT}, v::Annotation{<:AbstractArray}, idxs::Annotation,
+        f::Annotation) where {RT}
+    return _hook_augmented(config, :_batch_axis_for!, _FOR_OPS,
+        () -> func.val(v.val, idxs.val, f.val), EnzymeRules.overwritten(config)[4], v, idxs, f)
+end
+
+function EnzymeRules.reverse(config::RevConfig, ::Const{_AxisFor}, ::Type{RT}, tape,
+        v::Annotation{<:AbstractArray}, idxs::Annotation, f::Annotation) where {RT}
+    _hook_reverse(config, _FOR_OPS, tape, v, idxs, f)
+    return (nothing, nothing, nothing)
+end
+
+const _ScatterFor = typeof(Bramble._batch_scatter_for!)
+
+function EnzymeRules.forward(config::FwdConfig, func::Const{_ScatterFor}, ::Type{RT},
+        mats::Annotation{<:Tuple}, idxs::Annotation, g::Annotation) where {RT}
+    return _hook_forward(config, :_batch_scatter_for!, _SCATTER_OPS,
+        () -> func.val(mats.val, idxs.val, g.val), mats, idxs, g)
+end
+
+function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_ScatterFor},
+        ::Type{RT}, mats::Annotation{<:Tuple}, idxs::Annotation, g::Annotation) where {RT}
+    return _hook_augmented(config, :_batch_scatter_for!, _SCATTER_OPS,
+        () -> func.val(mats.val, idxs.val, g.val), EnzymeRules.overwritten(config)[4], mats,
+        idxs, g)
+end
+
+function EnzymeRules.reverse(config::RevConfig, ::Const{_ScatterFor}, ::Type{RT}, tape,
+        mats::Annotation{<:Tuple}, idxs::Annotation, g::Annotation) where {RT}
+    _hook_reverse(config, _SCATTER_OPS, tape, mats, idxs, g)
+    return (nothing, nothing, nothing)
+end
+
+# `_batch_broadcast!(v, bc, ax)`: the `Broadcasted` arrives behind a `Ref` (the call site's
+# `_late`), so the destination, `ax` and `bc` are passed on in the rules' order.
+const _BroadcastFor = typeof(Bramble._batch_broadcast!)
+
+function EnzymeRules.forward(config::FwdConfig, func::Const{_BroadcastFor}, ::Type{RT},
+        v::Annotation{<:AbstractVector}, bc::Annotation, ax::Annotation) where {RT}
+    return _hook_forward(config, :_batch_broadcast!, _FOR_OPS,
+        () -> func.val(v.val, bc.val, ax.val), v, ax, bc)
+end
+
+function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_BroadcastFor},
+        ::Type{RT}, v::Annotation{<:AbstractVector}, bc::Annotation, ax::Annotation) where {RT}
+    return _hook_augmented(config, :_batch_broadcast!, _FOR_OPS,
+        () -> func.val(v.val, bc.val, ax.val), EnzymeRules.overwritten(config)[3], v, ax, bc)
+end
+
+function EnzymeRules.reverse(config::RevConfig, ::Const{_BroadcastFor}, ::Type{RT}, tape,
+        v::Annotation{<:AbstractVector}, bc::Annotation, ax::Annotation) where {RT}
+    _hook_reverse(config, _FOR_OPS, tape, v, ax, bc)
     return (nothing, nothing, nothing)
 end

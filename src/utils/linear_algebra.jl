@@ -56,7 +56,7 @@ caller actually uses, deriving `loc` from the destination array itself
 @inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs::CartesianIndices, f::F) where {F} = _threaded_axis_for!(
     v, idxs, f)
 @noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs::CartesianIndices, f::F) where {F} = _late(
-    _batch_axis_for!, v, idxs, f)
+    _batch_axis_for!, v, idxs, Ref(f))
 
 """
     _throw_locality_mismatch(loc::Locality, policy)
@@ -230,6 +230,12 @@ end
 @noinline function _batch_axis_for!(v, idxs::CartesianIndices, f)
     return _throw_cpubatch_without_polyester(:_batch_axis_for!)
 end
+
+# The kernel behind a `Ref`, as `_batch_for!` takes it (see there): the Enzyme rules see the
+# `Ref`, and this method unwraps it for `BramblePolyesterExt`'s method, so the primal is the
+# same call.
+@inline _batch_axis_for!(v::AbstractArray, idxs::CartesianIndices, r::Base.RefValue) = _late(
+    _batch_axis_for!, v, idxs, r[])
 
 """
     _effective_parallel_policy(sp) -> CpuPolicy
@@ -540,7 +546,7 @@ end
 @inline _sweep_scatter_for!(::HostLocality, ::CpuThreaded, mats::Tuple, idxs, g::G) where {G} = _threaded_scatter_for!(
     mats, idxs, g)
 @noinline _sweep_scatter_for!(::HostLocality, ::CpuPolyester, mats::Tuple, idxs, g::G) where {G} = _late(
-    _batch_scatter_for!, mats, idxs, g)
+    _batch_scatter_for!, mats, idxs, Ref(g))
 @noinline _sweep_scatter_for!(
     ::DeviceLocality, policy::GpuPolicy, mats::Tuple, idxs, g::G) where {G} = _gpu_scatter_for!(
     policy, mats, idxs, g)
@@ -586,6 +592,14 @@ end
 @noinline function _batch_scatter_for!(mats::Tuple, idxs, g)
     return _throw_cpubatch_without_polyester(:_batch_scatter_for!)
 end
+
+# The kernel behind a `Ref` (see `_batch_for!`), for the two index shapes the extension's
+# methods take: a range (`project!`'s `1:n`) and any array, a `CartesianIndices` included. Each
+# is more specific than the extension's method in its index argument, so neither is ambiguous.
+@inline _batch_scatter_for!(mats::Tuple, idxs::AbstractRange, r::Base.RefValue) = _late(
+    _batch_scatter_for!, mats, idxs, r[])
+@inline _batch_scatter_for!(mats::Tuple, idxs::AbstractArray, r::Base.RefValue) = _late(
+    _batch_scatter_for!, mats, idxs, r[])
 
 #===========================================================================#
 # Walking a boundary mask
