@@ -4,14 +4,14 @@
 # the cases in test/ext/enzyme_policy_cases.jl. Every measurement runs in a child process, so
 # a crash is recorded, not fatal:
 #
-#   1. a reach pass per hook: counting stub Enzyme rules on all 17 `_batch_*` hooks, then one
-#      direct reverse gradient of the case under CpuPolyester, so `hits` names every hook the
-#      builder's call enters (`reaches` is true when the case's own hook is among them).
-#      Enzyme 0.13 cannot compile a custom rule on a hook whose argument is a by-value struct,
-#      tuple or closure that mixes an array with isbits fields (`CallingConventionMismatchError`
-#      before the stub runs; docs/notes/internals/enzyme_policies.md). When that error is the
-#      stub's whole outcome, the pass is repeated as a primal call (no Enzyme) that counts the
-#      hook entries through `Bramble._late`, and `reach_by` says "primal";
+#   1. a reach pass per hook: one direct reverse gradient of the case under CpuPolyester, with
+#      the extension's own rule counter (`_rule_entries`, read for all 17 hooks before and after
+#      the call), so `hits` names every hook whose rule the builder's call entered
+#      (`reaches` is true when the case's own hook is among them). No stub rules are defined:
+#      they would replace the extension's rules, and the counter is what the rules keep. A
+#      hook whose rule the call never enters (zero hits) is repeated as a primal call (no
+#      Enzyme) that counts the hook entries through `Bramble._late`, and `reach_by` says
+#      "primal";
 #   2. one status pass per mode (`reverse`, `di_reverse`, `forward`) under CpuPolyester, with
 #      the real hook rules;
 #   3. a serial control: the direct reverse gradient under CpuSerial.
@@ -87,32 +87,11 @@ function enzyme_env()
     return dir
 end
 
-# Stub rules on every `_batch_*` hook: each counts its entries and then runs the hook
-# unchanged, with a reverse rule that gives no gradient. They are defined only in the reach
-# child, because a stub replaces the hook's derivative for the rest of its process.
-function define_stubs!(mod)
-    Core.eval(mod, :(const HITS = Dict{String, Int}()))
-    for h in HOOKS
-        T = typeof(getfield(Base.invokelatest(getfield, mod, :Bramble), Symbol(h)))
-        Core.eval(mod, :(HITS[$h] = 0))
-        Core.eval(mod, quote
-            function EnzymeRules.augmented_primal(
-                    config::RevConfig, func::Enzyme.Const{$T}, ::Type{RT}, args...
-            ) where {RT}
-                HITS[$h] += 1
-                r = func.val(map(a -> a.val, args)...)
-                primal = EnzymeRules.needs_primal(config) ? r : nothing
-                shadow = EnzymeRules.needs_shadow(config) && r isa Number ? zero(r) : nothing
-                return AugmentedReturn(primal, shadow, nothing)
-            end
-            function EnzymeRules.reverse(
-                    config::RevConfig, func::Enzyme.Const{$T}, dret, tape, args...
-            )
-                return map(_ -> nothing, args)
-            end
-        end)
-    end
-    return nothing
+# How many times each hook's rule has been entered so far: the harness reads the Bramble
+# Enzyme extensions' counters (`_rule_entries`). A reach pass takes the delta across one call.
+function rule_entries_now(mod)
+    ec = getfield(mod, :EnzymePolicyCases)
+    return Dict{String, Int}(h => ec._rule_entries(h) for h in HOOKS)
 end
 
 clean(text) = first(filter(isprint, text), ERROR_CHARS)
@@ -167,10 +146,17 @@ function measure!(cell, mod, kind, hook, policy_name, mode_name)
     cell["relerr"] = r.relerr
     cell["error"] = r.error
     cell["versions"] = versions_now()
-    if kind == "reach"
-        hits = getfield(mod, :HITS)
-        cell["hits"] = Dict{String, Any}(h => hits[h] for h in HOOKS)
-    end
+    return cell
+end
+
+# The reach pass: one reverse gradient of the case, with every hook's rule counter read
+# before and after it. `hits` holds each hook's delta, so the case's own hook is among them
+# when its rule ran.
+function measure_reach!(cell, mod, hook, policy_name, mode_name)
+    before = Base.invokelatest(rule_entries_now, mod)
+    measure!(cell, mod, "reach", hook, policy_name, mode_name)
+    after = Base.invokelatest(rule_entries_now, mod)
+    cell["hits"] = Dict{String, Any}(h => after[h] - before[h] for h in HOOKS)
     return cell
 end
 
@@ -225,10 +211,11 @@ function child_main(args)
         return nothing
     end
     Base.include(mod, HARNESS)
-    kind == "reach" && Base.invokelatest(define_stubs!, mod)
     if kind == "primal"
         Base.invokelatest(define_late_counters!, mod)
         Base.invokelatest(measure_primal!, cell, mod, args[2])
+    elseif kind == "reach"
+        Base.invokelatest(measure_reach!, cell, mod, args[2:4]...)
     else
         Base.invokelatest(measure!, cell, mod, kind, args[2:4]...)
     end
@@ -351,9 +338,8 @@ function case_row(dir, index, hook)
     hits = get(reach, "hits", nothing)
     reach_by = "rule"
     reach_error = ""
-    if hits !== nothing && hits[hook] == 0 &&
-       occursin("CallingConventionMismatchError", get(reach, "error", ""))
-        reach_error = reach["error"]
+    if hits !== nothing && hits[hook] == 0
+        reach_error = get(reach, "error", "")
         reach = run_child(dir, index * 10 + 5, "primal", hook)
         hits = get(reach, "hits", nothing)
         reach_by = "primal"

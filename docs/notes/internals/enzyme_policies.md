@@ -20,27 +20,20 @@ Every measurement is a child process (`julia --threads=2`) loading Enzyme from a
 environment whose `Manifest.toml` is a copy of the root one, so a crash is recorded and not
 fatal. Per hook:
 
-1. A reach pass. Counting stub rules (`EnzymeRules.augmented_primal` and `reverse`) sit on all
-   17 hooks, and one direct reverse gradient of the case runs under `CpuPolyester`. `hits`
-   counts the hook's entries and `also_reaches` lists every other hook the call entered.
-2. A status pass per mode (`reverse`, `di_reverse`, `forward`) under `CpuPolyester`, with no
-   stubs, so Enzyme meets the real hook bodies.
+1. A reach pass. One direct reverse gradient of the case runs under `CpuPolyester`, with the
+   extension's rule counters read before and after it: each hook's rule counts its entries
+   (`_entered!` in `ext/BrambleEnzymePolyesterExt/`, read through the harness's
+   `_rule_entries`). `hits` is the per-hook delta, and `reaches` is true when the case's own
+   hook's delta is positive. A case whose own rule was not entered is measured again by a
+   primal call (no Enzyme), counting the hook entries through `Bramble._late` (the route of
+   every `src/` call into a hook); `reach_by` says `primal` then. No stub rules are defined.
+   An earlier census put counting stub rules on the hook types. With the extension's rules
+   loaded those stubs were never entered (every counter read 0 while the gradients were
+   right), and the stubs were not meant to coexist with the real rules, so the census counts
+   through the rules' own counters instead. Why the stubs were never entered was not isolated.
+2. A status pass per mode (`reverse`, `di_reverse`, `forward`) under `CpuPolyester`, so Enzyme
+   meets the real hook rules and bodies.
 3. A serial control: the direct reverse gradient under `CpuSerial`.
-
-The stub that worked for 15 hooks:
-
-```julia
-function EnzymeRules.augmented_primal(config::RevConfig, func::Const{typeof(hook)},
-        ::Type{RT}, args...) where {RT}
-    COUNT[] += 1
-    r = func.val(map(a -> a.val, args)...)
-    primal = EnzymeRules.needs_primal(config) ? r : nothing
-    shadow = EnzymeRules.needs_shadow(config) && r isa Number ? zero(r) : nothing
-    return AugmentedReturn(primal, shadow, nothing)
-end
-EnzymeRules.reverse(config::RevConfig, func::Const{typeof(hook)}, dret, tape, args...) =
-    map(_ -> nothing, args)
-```
 
 ## Census
 
@@ -63,8 +56,8 @@ call. The three modes of a hook fail with the same message, so one column carrie
 | `_batch_average_engine!` | `Mₓ(u)` | true (rule) | throws | throws | throws | ok | IllegalTypeAnalysisException, in `_batch_average_engine!` |
 | `_batch_centered_average_engine!` | `Mcₓ(u)` | true (rule) | throws | throws | throws | ok | IllegalTypeAnalysisException, in `_batch_centered_average_engine!` |
 | `_batch_run_bands!` | `S₊(u, 1)` | true (rule) | throws | throws | throws | ok | IllegalTypeAnalysisException, in `_batch_run_bands!` |
-| `_batch_mf_bands!` | `mul!` with a `matrix_free_operator` | true (primal) | throws | throws | throws | ok | IllegalTypeAnalysisException, in `_batch_mf_bands!` |
-| `_batch_broadcast!` | `u .= v .+ 1.0` | true (primal) | throws | throws | throws | ok | IllegalTypeAnalysisException, in `_batch_broadcast!` |
+| `_batch_mf_bands!` | `mul!` with a `matrix_free_operator` | true (rule) | throws | throws | throws | ok | IllegalTypeAnalysisException, in `_batch_mf_bands!` |
+| `_batch_broadcast!` | `u .= v .+ 1.0` | true (rule) | throws | throws | throws | ok | IllegalTypeAnalysisException, in `_batch_broadcast!` |
 | `_batch_kron_lines!` | `mul!` with a `kronecker_operator` | true (rule) | throws | throws | throws | ok | IllegalTypeAnalysisException, in `_batch_kron_lines!` |
 | `_batch_csr_spmv!` | `semidiscretize_rhs(sd)(du, u, nothing, 0.0)` | true (rule) | throws | throws | throws | ok | IllegalTypeAnalysisException, in `_batch_csr_spmv!` |
 
@@ -99,11 +92,11 @@ call. The three modes of a hook fail with the same message, so one column carrie
 
 ### `_batch_mf_bands!` and `_batch_broadcast!`: rules need a different argument convention
 
-With the stub above, both hooks stop with `CallingConventionMismatchError` at the hook call,
-before the stub runs, so `reach_by` is `primal` in the TOML: a second pass counts the hook
-entries through `Bramble._late` (the route of every `src/` call into a hook) on a plain call of
-the case, without Enzyme. The error is not the rule's signature. Enzyme's full message for
-`_batch_broadcast!` names the cause:
+In the earlier stub census both hooks stopped with `CallingConventionMismatchError` at the hook
+call, before the stub ran, and their reach came from a primal pass (`reach_by` is `primal`
+in the TOML): the hook entries counted through `Bramble._late` (the route of every `src/`
+call into a hook) on a plain call of the case, without Enzyme. The error is not the rule's
+signature. Enzyme's full message for `_batch_broadcast!` names the cause:
 
 ```text
 Custom rule for method argument 2 of type Base.Broadcast.Broadcasted{...} has mismatch
@@ -113,8 +106,8 @@ between roots_activep (DFT_DUP_ARG) and activep (DFT_CONSTANT).
 ```
 
 A plain-Enzyme probe, without Bramble, shows what a custom rule accepts in Enzyme 0.13.216 on
-Julia 1.13.3. The hook is `h(v, x, n)`, `x` built from the differentiated parameters, and the
-stub rule above sits on `h`:
+Julia 1.13.3. The hook is `h(v, x, n)`, `x` built from the differentiated parameters, and a
+counting rule (the stub of the earlier census) sits on `h`:
 
 | argument `x` of the hook | result |
 |:--|:--|

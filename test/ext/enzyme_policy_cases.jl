@@ -57,11 +57,20 @@ const NPARAM = 4
 const SEED = 1234
 const ERROR_CHARS = 400
 
-# A non-uniform N x N mesh on the unit square, on `policy`.
-function _mesh(policy)
-    return mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N), (false, false);
-        backend = backend(policy = policy))
+# A non-uniform mesh of `ns` nodes on the unit square, on `policy`. Its interior nodes come
+# from the package-local RNG, seeded, so a failing relerr reproduces across processes.
+function _seeded_mesh(ns::NTuple{2, Int}, policy)
+    Bramble._seed_mesh1d_rng!(SEED)
+    try
+        return mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), ns, (false, false);
+            backend = backend(policy = policy))
+    finally
+        Bramble._unseed_mesh1d_rng!()
+    end
 end
+
+# A non-uniform N x N mesh on the unit square, on `policy`.
+_mesh(policy) = _seeded_mesh((N, N), policy)
 
 # The field of a space is `B * p`, with `B` seeded, so every policy differentiates the same
 # nodal values.
@@ -135,10 +144,7 @@ policy_α(u) = 3 + 1 / (1 + u^2)
 
 # A thin last axis, so `_band_count` is 0 and the bilinear and linear sweeps take their
 # point-coloured path. The band cases keep the N x N mesh.
-function _thin_mesh(policy)
-    mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, 3), (false, false);
-        backend = backend(policy = policy))
-end
+_thin_mesh(policy) = _seeded_mesh((N, 3), policy)
 
 # A diffusion form whose coefficient is averaged from the parameters, the residual the
 # sparse Enzyme cells of test/space/autodiff_policies.jl use.
@@ -361,6 +367,28 @@ function _build_mf_coef(policy)
     return f, _start()
 end
 
+# A fused matrix-free product whose coefficient is held by reference in `κ * U`, not copied
+# as `Mₕ(κ)` copies. `κ` is scaled by `_KAPPA` so the term it enters dominates `y`, and it is
+# overwritten after `mul!`: a reverse that replays the parts after that (no parts tape) then
+# misses the coefficient's derivative by far more than `TOL`.
+const _KAPPA = 1e4
+function _build_mf_overwrite_coef(policy)
+    W = gridspace(_mesh(policy))
+    B = _basis(W)
+    B2 = reverse(B; dims = 1)
+    function f(p)
+        κ = _load(W, _KAPPA .* B, p)
+        x = B2 * p
+        op = matrix_free_operator(form(W, W,
+            (U, V) -> innerₕ(κ * U, V) + inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, D₋ᵧ(V))))
+        y = zeros(eltype(p), size(op, 1))
+        mul!(y, op, x)
+        parent(κ) .= 0
+        return sum(abs2, y)
+    end
+    return f, _start()
+end
+
 # The per-unit matrix-free walk, which an operator without a fused plan takes: an action
 # sink through the bilinear replay hooks, banded on the N x N mesh and coloured on the thin
 # one. No public operator lacks a plan on one mesh, so the walk is called directly.
@@ -472,7 +500,9 @@ const CAPTURES = (
     (hook = "_batch_kron_scaled", kind = "fixed", build = _build_kron_scaled,
         rule = "_batch_kron_lines!"),
     (hook = "_batch_csr_values", kind = "fixed", build = _build_csr_values,
-        rule = "_batch_csr_spmv!")
+        rule = "_batch_csr_spmv!"),
+    (hook = "_batch_mf_overwrite_coef", kind = "closure", build = _build_mf_overwrite_coef,
+        rule = "_batch_mf_bands!")
 )
 
 function case(hook::AbstractString)

@@ -12,7 +12,7 @@ module ExtEnzymePolyesterExtTests
 
 using Test
 using Bramble
-using Bramble: CpuPolyester, CpuSerial, StarSpacings, Forward, Backward, Centered,
+using Bramble: CpuPolyester, CpuSerial, D₋ₓ, StarSpacings, Forward, Backward, Centered,
                CrossWeighted, _difference_band!, _difference_band_adjoint!,
                _difference_spacing_adjoint!, _difference_band_spacing_tangent!,
                _star_spacings_adjoint!, _difference_engine!, _sweep_for!
@@ -20,6 +20,8 @@ using ForwardDiff
 using LinearAlgebra: dot
 using Polyester
 using Random
+using Sparspak
+import DifferentiationInterface as DI
 using ..TestUtils: _have
 
 const RUN_ENZYME = _have(:Enzyme) && Threads.nthreads() >= 2
@@ -218,8 +220,91 @@ function _list_case(p, policy, list)
     return sum(abs2, v)
 end
 
+# Workload 1: a functional of the nodal field of `κₕ` (its derivative, its norm and an
+# assembled load) on the seeded 41 x 41 mesh of `EnzymePolicyCases`, under `policy`.
+function _dense_functional(policy)
+    W = gridspace(EnzymePolicyCases._mesh(policy))
+    function f(x)
+        κₕ = element(W, eltype(x))
+        κₕ .= x
+        l = form(W, v -> innerₕ(κₕ, v))
+        return sum(abs2, parent(D₋ₓ(κₕ))) + normₕ(κₕ)^2 + sum(abs2, assemble(l))
+    end
+    return f, [1.0 + 0.5 * sin(0.37k)^2 for k in 1:ndofs(W)]
+end
+
+# Workload 2: the misfit of `pde_solve` of the diffusion system against data, in the 16
+# nodal values `idx` of the coefficient. `fd` is the same misfit solved by Sparspak, the oracle's
+# route, since ForwardDiff does not go through the default solver.
+function _pde_inverse(policy)
+    W = gridspace(EnzymePolicyCases._mesh(policy))
+    n = ndofs(W)
+    gₕ = element(W)
+    avgₕ!(gₕ, x -> exp(x[1] * x[2]))
+    F = assemble(form(W, v -> innerₕ(gₕ, v)); dirichlet = :boundary => x -> 0.0)
+    diffusion = κₕ -> form(W, W, (U, V) -> inner₊(Mₕ(κₕ) * ∇ₕ(U), ∇ₕ(V)))
+    function sys(κ)
+        κₕ = element(W, eltype(κ))
+        κₕ .= κ
+        return assemble(diffusion(κₕ); dirichlet = :boundary)
+    end
+    κ0 = [1.0 + 0.5 * sin(0.37k)^2 for k in 1:n]
+    interior = [i + (j - 1) * 41 for j in 2:40 for i in 2:40]
+    idx = interior[round.(Int, range(1, 39^2; length = 16))]
+    kap = p -> (κ = zeros(eltype(p), n); copyto!(κ, κ0); κ[idx] .= p; κ)
+    d = pde_solve(sys(κ0 .* [1 + 0.3 * cos(0.11k) for k in 1:n]), F)
+    f = p -> sum(abs2, pde_solve(sys(kap(p)), F) .- d)
+    fd = p -> (A = sys(kap(p)); sum(abs2, pde_solve(A, convert(Vector{eltype(A)}, F);
+        solver = :sparspak) .- d))
+    return f, fd, κ0[idx]
+end
+
+# A DI `AutoEnzyme` in `mode` with runtime activity, the function annotated `ann`.
+function _auto(mode, ann)
+    return DI.AutoEnzyme(; mode = Enzyme.set_runtime_activity(mode),
+        function_annotation = ann)
+end
+
+# The relative errors of workload 1 against ForwardDiff under `CpuSerial`, in three groups:
+# DI's reverse and forward gradients, a closure writing its input into a captured buffer
+# (`Duplicated`), and the plain `AutoEnzyme` gradients, which may throw (a throw leaves the
+# group empty: a gradient that comes back must be right).
+function _dense_errors()
+    f, x = _dense_functional(CpuPolyester())
+    f0, _ = _dense_functional(CpuSerial())
+    ref = ForwardDiff.gradient(f0, x)
+    modes = (Enzyme.Reverse, Enzyme.Forward)
+    di = [DI.gradient(f, _auto(m, Enzyme.Const), x) for m in modes]
+    buf = zeros(length(x))
+    fc = y -> (buf .= y; f(buf))
+    dup = [DI.gradient(fc, _auto(m, Enzyme.Duplicated), x) for m in modes]
+    plain = Float64[]
+    for m in modes
+        g = try
+            DI.gradient(f, DI.AutoEnzyme(; mode = m), x)
+        catch err
+            err isa InterruptException && rethrow()
+            nothing
+        end
+        g === nothing || push!(plain, _relerr(g, ref))
+    end
+    return (di = [_relerr(g, ref) for g in di], dup = [_relerr(g, ref) for g in dup],
+        plain = plain)
+end
+
+# The relative error of workload 2's reverse gradient against the Sparspak misfit's.
+function _pde_errors()
+    f, _, x = _pde_inverse(CpuPolyester())
+    _, fd, _ = _pde_inverse(CpuSerial())
+    ref = ForwardDiff.gradient(fd, x)
+    return _relerr(DI.gradient(f, _auto(Enzyme.Reverse, Enzyme.Const), x), ref)
+end
+
 @testset "Enzyme rules under CpuPolyester" begin
     if RUN_ENZYME
+        # Each evaluation leaves its garbage in the process footprint until a collection, so the
+        # testsets that evaluate many cases collect after each one (25 Policy evaluations peak
+        # at 3.6 GB without it and 2.0 GB with it; julia_slot caps a process at 10 GB).
         @testset "Policy cases" begin
             modes = (EnzymePolicyCases.MODES..., EnzymePolicyCases.BATCH_MODES...)
             for hook in ("_batch_difference_engine!", "_batch_for!",
@@ -228,8 +313,22 @@ end
                     c = EnzymePolicyCases.case(hook)
                     r = EnzymePolicyCases.evaluate(c; policy = CpuPolyester(), mode)
                     @test r.status == "ok"
+                    GC.gc(true)
                 end
             end
+        end
+
+        @testset "Workload: dense functional" begin
+            e = _dense_errors()
+            @test all(<=(TOL), e.di)
+            @test all(<=(TOL), e.dup)
+            @test all(<=(TOL), e.plain)
+            GC.gc(true)
+        end
+
+        @testset "Workload: pde_solve inverse problem" begin
+            @test _pde_errors() <= 1e-8
+            GC.gc(true)
         end
 
         @testset "Difference engine, reused output" begin
