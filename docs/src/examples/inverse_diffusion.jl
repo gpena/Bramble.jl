@@ -84,25 +84,30 @@ loss(κ::Real) = sum(abs2, forward(κ)[obs_idx[k]] - u_obs[k] for k in eachindex
 # ## Gradient descent, driven by the adjoint
 #
 # `using Enzyme` is all the setup this needs: `BrambleEnzymeExt` defines a native
-# `EnzymeRules` reverse rule for [`pde_solve`](@ref), so `Enzyme.gradient` reaches the adjoint
-# directly. Do *not* add `Enzyme.@import_rrule(typeof(pde_solve), ...)` here -- besides
+# `EnzymeRules` reverse rule for [`pde_solve`](@ref), so Enzyme's reverse mode reaches the
+# adjoint directly, and DifferentiationInterface.jl (`DI`) calls it through an `AutoEnzyme`
+# backend. Do *not* add `Enzyme.@import_rrule(typeof(pde_solve), ...)` here -- besides
 # defining a second rule for the same signature, that bridge corrupts Enzyme's shadow of a
 # sparse `A` whenever the cotangent carries an explicit zero, and returns a wrong gradient
 # with no error at all (`pde_solve`'s own docstring, gpena/Bramble.jl#240).
 #
-# `loss` closes over `Wₕ`/`l`, which Enzyme cannot prove read-only on its own, so the function
-# argument is wrapped `Const` -- the same annotation `docs/notes/tutorials/autodiff.md` and
-# `test/space/autodiff_heavy.jl` already document for the ordinary (non-solve) path.
+# `loss` closes over `Wₕ`/`l`, which Enzyme cannot prove read-only on its own, so the backend
+# wraps the function `Const` (`function_annotation`) and sets `set_runtime_activity` -- the same
+# annotation `docs/notes/tutorials/autodiff.md` and `test/space/autodiff_heavy.jl` already
+# document for the ordinary (non-solve) path.
 
 using Enzyme
+import DifferentiationInterface as DI
 
-mode = Enzyme.set_runtime_activity(Enzyme.Reverse)
+backend = DI.AutoEnzyme(;
+    mode = Enzyme.set_runtime_activity(Enzyme.Reverse),
+    function_annotation = Enzyme.Const)
 
 κ = 0.3   # deliberately far from κ_true = 0.7
 history = Float64[κ]
 step = 0.02
 for _ in 1:100
-    g = Enzyme.gradient(mode, Enzyme.Const(loss), κ)[1]
+    g = DI.gradient(loss, backend, κ)
     global κ -= step * g
     push!(history, κ)
 end
@@ -114,12 +119,12 @@ end
 @test isapprox(κ, κ_true; atol = 0.02)                                                #src
 @test loss(κ) < loss(0.3)                                                             #src
 fd_check = (loss(0.5 + 1e-6) - loss(0.5 - 1e-6)) / 2e-6                               #src
-ad_check = Enzyme.gradient(mode, Enzyme.Const(loss), 0.5)[1]                          #src
+ad_check = DI.gradient(loss, backend, 0.5)                                            #src
 @test ad_check ≈ fd_check rtol = 1e-6                                                 #src
 
 # ## Cost: one extra solve, not one per parameter
 #
-# The point of the adjoint rule: `Enzyme.gradient` above costs one forward solve plus one
+# The point of the adjoint rule: `DI.gradient` above costs one forward solve plus one
 # adjoint solve, regardless of how many parameters `κ` were -- a coefficient *field* with one
 # value per grid point would cost the same two solves, where forward-mode differentiation
 # through the same model would cost one solve per parameter. A direct timing comparison against
