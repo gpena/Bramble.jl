@@ -14,11 +14,20 @@
 #   (src/operators/difference.jl).
 # - `sweeps.jl`: `_batch_for!`, a closure kernel. Each `@batch` task runs an Enzyme
 #   derivative of its slab, through a thunk built on the host.
-# - `engines.jl`, `reductions.jl`, `assembly.jl`, `operators.jl`: the hooks still to come.
+# - `engines.jl`: the average engines (`_batch_average_engine!`,
+#   `_batch_centered_average_engine!`), fixed kernels with gather-form adjoints, and
+#   `_batch_run_bands!`, a closure kernel on the route of `sweeps.jl`.
+# - `reductions.jl`: the inner products `_batch_dot` and `_batch_dot_masked`.
+# - `assembly.jl`: the bilinear replays and linear sweeps of assembly
+#   (`_batch_bilinear_band_replay!`, `_batch_bilinear_colour_replay!`,
+#   `_batch_linear_band_sweep!`, `_batch_linear_colour_sweep!`) with a replay target.
+# - `operators.jl`: the operator products, `_batch_mf_bands!` and the two bilinear replays
+#   with a matrix-free action target, `_batch_kron_lines!` and `_batch_csr_spmv!`.
 #
 # A rule's argument convention follows what Enzyme 0.13 accepts at a custom rule: arrays and
 # scalars as separate arguments, never a by-value struct mixing the two. A closure kernel
-# reaches `_batch_for!` behind a `Ref` for that reason (`_sweep_for!`).
+# reaches `_batch_for!` behind a `Ref` for that reason (`_sweep_for!`), as do a replay or
+# action target, a matrix-free plan and the Kronecker terms at their hooks.
 module BrambleEnzymePolyesterExt
 
 using Bramble: Bramble, StarSpacings, _band_range, _difference_band_adjoint!,
@@ -28,7 +37,9 @@ using Enzyme: Enzyme, Annotation, Const, Active, Duplicated, DuplicatedNoNeed,
               BatchDuplicated, BatchDuplicatedNoNeed, MixedDuplicated,
               BatchMixedDuplicated
 using Enzyme.EnzymeRules: EnzymeRules, RevConfig, FwdConfig, AugmentedReturn
+using LinearAlgebra: Diagonal
 using Polyester: @batch
+using SparseArrays: SparseMatrixCSC, nonzeros, sparse
 
 # The shadow of `x` in lane `w`, or `nothing` where `x` is inactive: a `Const`, or under
 # runtime activity a shadow that is the primal itself, Enzyme's mark of inactive data.

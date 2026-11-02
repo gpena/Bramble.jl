@@ -32,7 +32,7 @@
 module EnzymePolicyCases
 
 using Bramble
-using Bramble: CpuPolyester, CpuSerial, D₋ₓ, D₋ᵧ, Mₓ, Mcₓ, S₊, semidiscretize_rhs
+using Bramble: CpuPolyester, CpuSerial, D₋ₓ, D₋ᵧ, Mₓ, Mᵧ, Mcₓ, Mcᵧ, S₊, semidiscretize_rhs
 using Bramble: _sweep_for!
 using Enzyme
 using ForwardDiff
@@ -194,19 +194,26 @@ function _build_difference(policy)
     return f, _start()
 end
 
-# `_batch_average_engine!`, through `Mₓ`.
+# `_batch_average_engine!`, through `Mₓ` and `Mᵧ`: the averaged axis across the bands and
+# along them (the last axis, which the bands cut), whose adjoints differ.
 function _build_average(policy)
     W = gridspace(_mesh(policy))
     B = _basis(W)
-    f(p) = sum(abs2, parent(Mₓ(_load(W, B, p))))
+    function f(p)
+        u = _load(W, B, p)
+        return sum(abs2, parent(Mₓ(u))) + sum(abs2, parent(Mᵧ(u)))
+    end
     return f, _start()
 end
 
-# `_batch_centered_average_engine!`, through `Mcₓ`.
+# `_batch_centered_average_engine!`, through `Mcₓ` and `Mcᵧ`, both axes as above.
 function _build_centered(policy)
     W = gridspace(_mesh(policy))
     B = _basis(W)
-    f(p) = sum(abs2, parent(Mcₓ(_load(W, B, p))))
+    function f(p)
+        u = _load(W, B, p)
+        return sum(abs2, parent(Mcₓ(u))) + sum(abs2, parent(Mcᵧ(u)))
+    end
     return f, _start()
 end
 
@@ -218,11 +225,14 @@ function _build_run_bands(policy)
     return f, _start()
 end
 
+# A form whose matrix is not symmetric, so a reverse that applied `A` for `Aᵀ` is caught.
+_nonsymmetric(W) = form(W, W, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, D₋ᵧ(V)))
+
 # `_batch_mf_bands!`: `mul!` with a matrix-free operator.
 function _build_mf(policy)
     W = gridspace(_mesh(policy))
     B = _basis(W)
-    op = matrix_free_operator(form(W, W, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V))))
+    op = matrix_free_operator(_nonsymmetric(W))
     function f(p)
         y = zeros(eltype(p), size(op, 1))
         mul!(y, op, parent(_load(W, B, p)))
@@ -248,7 +258,7 @@ end
 function _build_kron(policy)
     W = gridspace(_mesh(policy))
     B = _basis(W)
-    K = kronecker_operator(form(W, W, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V))))
+    K = kronecker_operator(_nonsymmetric(W))
     function f(p)
         y = zeros(eltype(p), size(K, 1))
         mul!(y, K, parent(_load(W, B, p)))
@@ -262,7 +272,7 @@ function _build_csr(policy)
     W = gridspace(_mesh(policy))
     B = _basis(W)
     w = _fixed(W)
-    sd = semidiscretize(form(W, W, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V))), form(W, v -> innerₕ(w, v)))
+    sd = semidiscretize(_nonsymmetric(W), form(W, v -> innerₕ(w, v)))
     rhs = semidiscretize_rhs(sd)
     function f(p)
         du = zeros(eltype(p), ndofs(W))
@@ -286,7 +296,7 @@ const CASES = (
     (hook = "_batch_difference_engine!", kind = "fixed", build = _build_difference),
     (hook = "_batch_average_engine!", kind = "fixed", build = _build_average),
     (hook = "_batch_centered_average_engine!", kind = "fixed", build = _build_centered),
-    (hook = "_batch_run_bands!", kind = "fixed", build = _build_run_bands),
+    (hook = "_batch_run_bands!", kind = "closure", build = _build_run_bands),
     (hook = "_batch_mf_bands!", kind = "fixed", build = _build_mf),
     (hook = "_batch_broadcast!", kind = "fixed", build = _build_broadcast),
     (hook = "_batch_kron_lines!", kind = "fixed", build = _build_kron),
@@ -335,13 +345,134 @@ function _build_reads_v(policy)
     return f, _start()
 end
 
+# `_batch_mf_bands!` with the form's coefficient computed from the parameters: the reverse
+# reaches the coefficient through the plan's form.
+function _build_mf_coef(policy)
+    W = gridspace(_mesh(policy))
+    B = _basis(W)
+    x = parent(_fixed(W))
+    function f(p)
+        κ = _load(W, B, p)
+        op = matrix_free_operator(form(W, W, (U, V) -> inner₊(Mₕ(κ) * ∇ₕ(U), ∇ₕ(V))))
+        y = zeros(eltype(p), size(op, 1))
+        mul!(y, op, x)
+        return sum(abs2, y)
+    end
+    return f, _start()
+end
+
+# The per-unit matrix-free walk, which an operator without a fused plan takes: an action
+# sink through the bilinear replay hooks, banded on the N x N mesh and coloured on the thin
+# one. No public operator lacks a plan on one mesh, so the walk is called directly.
+function _unit_action(M)
+    W = gridspace(M)
+    B = _basis(W)
+    a = _nonsymmetric(W)
+    policy = Bramble.execution_policy(W)
+    function f(p)
+        y = zeros(eltype(p), ndofs(W))
+        x = parent(_load(W, B, p))
+        Bramble._mf_apply_parts!(policy, Bramble.ActionSink(y, x, one(eltype(p)), nothing), W,
+            W, a.ast)
+        return sum(abs2, y)
+    end
+    return f, _start()
+end
+_build_unit_band(policy) = _unit_action(_mesh(policy))
+_build_unit_colour(policy) = _unit_action(_thin_mesh(policy))
+
+# The per-unit band walk with `x` overwritten after it, the sink's `α` a parameter: the
+# derivative in `α` reads `x`, which the reverse must take from the rule's own copy.
+function _build_unit_overwrite_x(policy)
+    W = gridspace(_mesh(policy))
+    B = _basis(W)
+    a = form(W, W, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, D₋ᵧ(V)))
+    function f(p)
+        y = zeros(eltype(p), ndofs(W))
+        x = B * p
+        s = Bramble.ActionSink(y, x, p[1], nothing)
+        Bramble._mf_apply_parts!(policy, s, W, W, a.ast)
+        x .= 0
+        return sum(abs2, y)
+    end
+    return f, _start()
+end
+
+# `_batch_mf_bands!` with a scalar parameter in the form, the operator built in `f`: its
+# derivative sits in the AST itself, not in an array. With `overwrite`, `x` (a function of
+# the parameters too) is overwritten after the product.
+function _mf_scalar(policy, overwrite::Bool)
+    W = gridspace(_mesh(policy))
+    B = _basis(W)
+    function f(p)
+        op = matrix_free_operator(
+            form(W, W, (U, V) -> p[1] * inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, D₋ᵧ(V))))
+        x = B * p
+        y = zeros(eltype(p), size(op, 1))
+        mul!(y, op, x)
+        overwrite && (x .= 0)
+        return sum(abs2, y)
+    end
+    return f, _start()
+end
+_build_mf_scalar_param(policy) = _mf_scalar(policy, false)
+_build_mf_overwrite_x(policy) = _mf_scalar(policy, true)
+
+# `_batch_kron_lines!` with the coefficients and `β` computed from the parameters: the
+# five-argument `mul!`, `α K x + β y`.
+function _build_kron_scaled(policy)
+    W = gridspace(_mesh(policy))
+    B = _basis(W)
+    K = kronecker_operator(_nonsymmetric(W))
+    w = parent(_fixed(W))
+    function f(p)
+        y = w .* p[4]
+        mul!(y, K, parent(_load(W, B, p)), p[1]^2, p[2])
+        return sum(abs2, y)
+    end
+    return f, _start()
+end
+
+# `_batch_csr_spmv!` with the matrix values computed from the parameters, through the
+# right-hand side's product on the pattern `semidiscretize_rhs` builds.
+function _build_csr_values(policy)
+    W = gridspace(_mesh(policy))
+    B = _basis(W)
+    A0 = assemble(_nonsymmetric(W))
+    csr = Bramble._rhs_csr(policy, Val(false), A0)
+    C = randn(MersenneTwister(SEED + 1), nnz(A0), NPARAM)
+    function f(p)
+        A = SparseMatrixCSC(size(A0)..., A0.colptr, A0.rowval, nonzeros(A0) .* (C * p))
+        du = zeros(eltype(p), ndofs(W))
+        Bramble._rhs_spmv!(du, A, csr, parent(_load(W, B, p)))
+        return sum(abs2, du)
+    end
+    return f, _start()
+end
+
 const CAPTURES = (
     (hook = "_batch_for_const_capture", kind = "closure", build = _build_const_capture,
         rule = "_batch_for!"),
     (hook = "_batch_for_mixed_capture", kind = "closure", build = _build_mixed_capture,
         rule = "_batch_for!"),
     (hook = "_batch_for_reads_v", kind = "closure", build = _build_reads_v,
-        rule = "_batch_for!")
+        rule = "_batch_for!"),
+    (hook = "_batch_mf_bands_coef", kind = "closure", build = _build_mf_coef,
+        rule = "_batch_mf_bands!"),
+    (hook = "_batch_mf_unit_band", kind = "closure", build = _build_unit_band,
+        rule = "_batch_bilinear_band_replay!"),
+    (hook = "_batch_mf_unit_colour", kind = "closure", build = _build_unit_colour,
+        rule = "_batch_bilinear_colour_replay!"),
+    (hook = "_batch_mf_scalar_param", kind = "closure", build = _build_mf_scalar_param,
+        rule = "_batch_mf_bands!"),
+    (hook = "_batch_mf_overwrite_x", kind = "closure", build = _build_mf_overwrite_x,
+        rule = "_batch_mf_bands!"),
+    (hook = "_batch_mf_unit_overwrite_x", kind = "closure", build = _build_unit_overwrite_x,
+        rule = "_batch_bilinear_band_replay!"),
+    (hook = "_batch_kron_scaled", kind = "fixed", build = _build_kron_scaled,
+        rule = "_batch_kron_lines!"),
+    (hook = "_batch_csr_values", kind = "fixed", build = _build_csr_values,
+        rule = "_batch_csr_spmv!")
 )
 
 function case(hook::AbstractString)
@@ -464,5 +595,7 @@ function check(hook::AbstractString; policy = CpuPolyester(), modes = MODES)
     return nothing
 end
 check(hook::Symbol; kwargs...) = check(String(hook); kwargs...)
+# An entry of `CASES`, `THREADED` or `CAPTURES` itself.
+check(c::NamedTuple; kwargs...) = check(c.hook; kwargs...)
 
 end # module

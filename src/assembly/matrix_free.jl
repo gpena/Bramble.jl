@@ -683,7 +683,9 @@ end
 # `CpuPolyester`'s bands and colours, through the same hooks the threaded replay uses
 # (`_batch_bilinear_band_replay!`, `_batch_bilinear_colour_replay!`), filled by
 # `BramblePolyesterExt` for an action target too: `y` and `x` cross `@batch` as top-level
-# arguments, the sink's other fields with the split space and term.
+# arguments, the sink's other fields with the split space and term. The sink and the parts
+# go behind a `Ref`, as a replay target's do (bilinear_execution.jl), for Enzyme's calling
+# convention; the hooks' `Ref` methods unwrap them.
 @noinline function _sweep_band_colour!(
         ::CpuPolyester, s::_ActionTarget, sp, term::TERM, ax, bidx, nbands::Int, rest,
         lin_indices, mesh_markers, row_offset::Int, col_offset::Int, _
@@ -691,8 +693,8 @@ end
     wsp, wax, wrest = _batch_walk(sp, ax, rest, nbands)
     return _late(
         _batch_bilinear_band_replay!,
-        s, wsp, term, wax, bidx, nbands, wrest, lin_indices, mesh_markers, row_offset,
-        col_offset
+        Ref(s), Ref((wsp, term, mesh_markers)), wax, bidx, nbands, wrest, lin_indices,
+        row_offset, col_offset
     )
 end
 
@@ -702,7 +704,7 @@ end
 ) where {TERM}
     return _late(
         _batch_bilinear_colour_replay!,
-        s, sp, term, idxs, lin_indices, mesh_markers, row_offset, col_offset
+        Ref(s), Ref((sp, term, mesh_markers)), idxs, lin_indices, row_offset, col_offset
     )
 end
 
@@ -1765,8 +1767,8 @@ _mf_prebound(_) = false
 # The fused product's band count.
 @inline _mf_nbands(plan::_MFFusedPlan) = min(Threads.nthreads(), last(plan.dims))
 
-# Band `b` of a `CpuThreaded` fused product, from the sink and plan its spawn shares, cut to
-# `walk`. Its band count is the plan's (`_mf_nbands`), taken here rather than captured, so
+# Band `b` of a `CpuThreaded` fused product, from the sink and plan its spawn shares (the
+# `Ref` also holds the walk), cut to `walk`. Its band count is the plan's (`_mf_nbands`), taken here rather than captured, so
 # the walk leaves a spawned task's closure no larger than a whole walk's.
 @noinline function _mf_spawned_band!(shared::Base.RefValue, walk, b::Int)
     s, plan = shared[]
@@ -1789,14 +1791,29 @@ end
 # (`_static_or_serial`), so no fallback is needed. `@sync` waits by yielding, and the waiting
 # thread runs the bands itself if every other one is busy. Each band writes only its own
 # rows, in the serial order, so the result does not depend on where a band runs. The
-# spawned tasks share one `Ref` to the sink and the plan, which holds the form and its
-# geometry inline, so each task's closure holds a pointer rather than a copy of them.
+# spawned tasks share one `Ref` to the sink, the plan and the walk; the plan holds the form
+# and its geometry inline, so each task's closure holds a pointer rather than a copy of them.
 @inline function _mf_run_bands!(policy::CpuPolicy, s, _, plan, nbands::Int, walk = nothing)
     return _run_bands!(policy, _mf_band_task!, s.y, s, walk, plan, nbands)
 end
 
-@noinline _mf_run_bands!(::CpuPolyester, s, _, plan, nbands::Int, walk = nothing) = _late(
-    _batch_mf_bands!, s, plan, nbands, _walk_cut(walk))
+# The sink, the plan with its walk, and the form's walked parts (its spaces and AST) each
+# cross behind a `Ref`: an Enzyme rule cannot take a by-value struct that mixes arrays with
+# plain values (the sink, the plan), which fails Enzyme's calling convention before the rule
+# runs (BrambleEnzymePolyesterExt). The form `a` is the plan's own (`_mf_product!` checked
+# it); its parts cross on their own so that a rule reads the coefficients through the
+# form's derivative, not the plan's, and never copies the whole form (its assembly cache).
+# The `Ref` method below unwraps them and inlines, so a plain call allocates nothing.
+@noinline _mf_run_bands!(::CpuPolyester, s, a, plan, nbands::Int, walk = nothing) = _late(
+    _batch_mf_bands!, Ref(s), Ref((plan, _walk_cut(walk))),
+    Ref((trial_space(a), test_space(a), a.ast)), nbands)
+
+@inline function _batch_mf_bands!(
+        s::Base.RefValue{<:ActionSink}, parts::Base.RefValue{<:Tuple},
+        ::Base.RefValue{<:Tuple}, nbands::Int)
+    plan, walk = parts[]
+    return _late(_batch_mf_bands!, s[], plan, nbands, walk)
+end
 
 """
     _batch_mf_bands!(s::ActionSink, plan::_MFFusedPlan, nbands::Int, walk) -> Nothing
@@ -1810,12 +1827,19 @@ naming Polyester; `BramblePolyesterExt` defines the one that runs.
     return _throw_cpubatch_without_polyester(:_batch_mf_bands!)
 end
 
-@noinline function _mf_run_bands!(::CpuThreaded, s, a, plan, nbands::Int, walk = nothing)
-    shared = Ref((s, plan))
+# The sink, the plan and the walk reach the spawning method behind one `Ref`, the one the
+# spawned tasks share: an Enzyme rule cannot take the sink or the plan by value (Enzyme's
+# calling convention, as `_batch_mf_bands!`'s call above), and this method inlines.
+@inline _mf_run_bands!(p::CpuThreaded, s, a, plan, nbands::Int, walk = nothing) = _mf_run_bands!(
+    p, Ref((s, plan, walk)), nbands)
+
+@noinline function _mf_run_bands!(::CpuThreaded, shared::Base.RefValue, nbands::Int)
+    walk = shared[][3]
     @sync begin
         for b in 2:nbands
             Threads.@spawn _mf_spawned_band!(shared, walk, b)
         end
+        s, plan = shared[]
         _mf_band_task!(s.y, s, walk, plan, nbands, nbands, 1)
     end
     return nothing
