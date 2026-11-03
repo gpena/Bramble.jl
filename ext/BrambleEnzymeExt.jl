@@ -6,7 +6,7 @@ using Bramble: Bramble, pde_solve, CpuThreaded, KroneckerLinearOperator, StarSpa
 using Enzyme: Enzyme, Const, Annotation, Active, Duplicated, DuplicatedNoNeed,
               BatchDuplicated, BatchDuplicatedNoNeed, MixedDuplicated, BatchMixedDuplicated
 using Enzyme.EnzymeRules: EnzymeRules, RevConfig, FwdConfig, AugmentedReturn
-using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange
+using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange, sparse
 using LinearAlgebra: lu
 
 # A native Enzyme reverse rule for `pde_solve`, used instead of `Enzyme.@import_rrule`
@@ -49,17 +49,31 @@ using LinearAlgebra: lu
     )
 end
 
+# The forward solve and the adjoint solve, dispatched on the keywords' type so each call
+# site has one concrete tape type. Without keywords the forward solve's own factorisation
+# serves the adjoint. With them the primal is `pde_solve(A, F; kwargs...)`, no factorisation
+# is kept (`fact` is `nothing`), and the adjoint is `pde_solve(Aᴴ, ū; kwargs...)`, as
+# `BrambleChainRulesExt`'s rrule does.
+function _forward_solve(A, F, ::@NamedTuple{})
+    fact = lu(A)
+    return fact, fact \ F
+end
+_forward_solve(A, F, kwargs::NamedTuple) = nothing, pde_solve(A, F; kwargs...)
+
+_adjoint_solve(fact, _, ū, ::@NamedTuple{}) = fact' \ ū
+_adjoint_solve(::Nothing, A, ū, kwargs::NamedTuple) = pde_solve(sparse(A'), ū; kwargs...)
+
 function EnzymeRules.augmented_primal(
         config::RevConfig,
         ::Const{typeof(pde_solve)},
         ::Type{RT},
         A::Annotation{<:SparseMatrixCSC},
-        F::Annotation{<:AbstractVector}
+        F::Annotation{<:AbstractVector};
+        kwargs...
 ) where {RT}
     EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
 
-    fact = lu(A.val)
-    u = fact \ F.val
+    fact, u = _forward_solve(A.val, F.val, values(kwargs))
     # The return's own cotangent accumulates here, and `reverse` reads it back off the tape:
     # allocated once, in the pass that knows `u`'s size, rather than reconstructed later.
     ū = zero(u)
@@ -75,21 +89,22 @@ function EnzymeRules.reverse(
         ::Type{RT},
         tape,
         A::Annotation{<:SparseMatrixCSC},
-        F::Annotation{<:AbstractVector}
+        F::Annotation{<:AbstractVector};
+        kwargs...
 ) where {RT}
     fact, u, ū = tape
 
     # `fact'` reuses the forward solve's own LU factors, exact whether or not `A` is
     # symmetric -- `dirichlet_bc!`'s `eₖ` row replacement makes even a symmetric form
     # structurally asymmetric, so this is not an optimisation for a special case.
-    λ = fact' \ ū
+    λ = _adjoint_solve(fact, A.val, ū, values(kwargs))
 
     if !(A isa Const)
         Āv = nonzeros(A.dval)
         rows = rowvals(A.val)
         @inbounds for j in axes(A.val, 2), k in nzrange(A.val, j)
 
-            Āv[k] -= λ[rows[k]] * u[j]
+            Āv[k] -= λ[rows[k]] * conj(u[j])
         end
     end
 
