@@ -31,14 +31,6 @@ reason = "The precompile workload runs while the package precompiles, not in the
 path = "src/precompile/*_sessions.jl"
 reason = "The session functions are called only by the precompile workload, while precompiling."
 
-[[exempt]]
-path = "ext/BrambleSparseADExt.jl"
-reason = "Its tests are in the AD group (ext/sparse_ad_ext.jl), switched off until v4.2.0 (BRAMBLE_TEST_AD): the AD packages are not in the test environment, so no CI leg reaches it."
-
-[[exempt]]
-path = "src/assembly/jacobian_pattern.jl"
-reason = "ast_sparsity_detector, its one entry the CI leg no longer reaches, is exercised only through BrambleSparseADExt, whose tests are in the switched-off AD group (v4.2.0). Exempt as a whole file: the exemption list matches files, not lines."
-
 [[exempt_function]]
 path = "src/assembly/bilinear_traversal.jl"
 functions = ["_scatter_position_mirror", "_scatter_add_mirror!"]

@@ -14,10 +14,10 @@ name: Nightly
 # test/TestUtils.jl's `WITH_SLOW_TESTS` for the list and the measurement. The `convergence`
 # job runs the convergence studies (test/convergence/), as CI.yml's `convergence` leg does
 # on every PR. The worked-example pages are not in `slow` any more: they are the `examples` group, which docs-on-demand.yml
-# runs before every docs build. AD and GPU tests are off in every group until v4.2.0 and
-# v4.7.0 respectively (test/TestUtils.jl, `WITH_AD_TESTS` and `WITH_GPU_TESTS`); each comes
-# back by setting `BRAMBLE_TEST_AD` or `BRAMBLE_TEST_GPU` in a job's env here and adding its
-# packages. Julia nightly
+# runs before every docs build. GPU tests are off in every group until v4.7.0
+# (test/TestUtils.jl, `WITH_GPU_TESTS`); they come back by setting `BRAMBLE_TEST_GPU` in a
+# job's env here and adding their packages. The Enzyme tests run in Weekly.yml, not here;
+# the ForwardDiff and DifferentiationInterface ones are in `unit`. Julia nightly
 # changes underneath every push regardless of what Bramble does, so gating on it meant the
 # same kind of unrelated red gate. Formatting and quality (Aqua & JET) are
 # not canaries in that sense, but moving them off every push trades same-push feedback for a

@@ -11,9 +11,8 @@
 # This script runs under `test/examples/inverse_diffusion.jl` with the assertions that it
 # does not render. Lines marked `#src` here are the assertions; Literate.jl drops them from a
 # rendered page. The script is not part of the published manual. It needs `Enzyme` and runs
-# behind the `ad`/`full` test groups (with `BRAMBLE_TEST_AD=true`), unlike the other example
-# pages -- see that test file for why. No test runs this page until v4.2.0, when the AD
-# backends return.
+# in the `ad`/`full`/`backends` test groups, in a Julia process of its own, unlike the other
+# example pages -- see that test file for why.
 #
 # ## Problem
 #
@@ -83,10 +82,10 @@ loss(κ::Real) = sum(abs2, forward(κ)[obs_idx[k]] - u_obs[k] for k in eachindex
 
 # ## Gradient descent, driven by the adjoint
 #
-# `using Enzyme` is all the setup this needs: `BrambleEnzymeExt` defines a native
-# `EnzymeRules` reverse rule for [`pde_solve`](@ref), so Enzyme's reverse mode reaches the
-# adjoint directly, and DifferentiationInterface.jl (`DI`) calls it through an `AutoEnzyme`
-# backend. Do *not* add `Enzyme.@import_rrule(typeof(pde_solve), ...)` here -- besides
+# `using Enzyme` and `import DifferentiationInterface as DI` are all the setup this needs:
+# `BrambleEnzymeExt` defines a native `EnzymeRules` reverse rule for [`pde_solve`](@ref), so
+# Enzyme's reverse mode reaches the adjoint directly, and DifferentiationInterface.jl (`DI`)
+# calls it through an `AutoEnzyme` backend. Do *not* add `Enzyme.@import_rrule(typeof(pde_solve), ...)` here -- besides
 # defining a second rule for the same signature, that bridge corrupts Enzyme's shadow of a
 # sparse `A` whenever the cotangent carries an explicit zero, and returns a wrong gradient
 # with no error at all (`pde_solve`'s own docstring, gpena/Bramble.jl#240).
