@@ -2,10 +2,12 @@ module FormSourceOperatorsTests
 
 using Test
 using Bramble
-using ..TestUtils: WITH_AD_TESTS, WITH_3D_TESTS, _Const, _x2, _x1_plus_x2, _x1_squared
+using ..TestUtils: WITH_3D_TESTS, _Const, _x2, _x1_plus_x2, _x1_squared
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, M₊ₓ, M₊ᵧ
-using ForwardDiff
+using ForwardDiff: ForwardDiff
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using Bramble:
                source_function,
                SourceVector,
@@ -721,7 +723,7 @@ using Bramble:
         end
     end
 
-    WITH_AD_TESTS && @testset "Source differentiation" begin
+    @testset "Source differentiation" begin
         # the element type comes from the data, so a Dual-valued source stays Dual through
         # the value path exactly as it does through the stencil path
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
@@ -732,7 +734,7 @@ using Bramble:
             sf = source_function(x -> p[1] * x^2, Val(1))
             sum(assemble(form(Wₕ, v -> innerₕ(D₋ₓ(sf), v))))
         end
-        g = ForwardDiff.gradient(resid, [2.0])
+        g = DI.gradient(resid, AutoForwardDiff(), [2.0])
         # linear in p, so the gradient is the residual at p = 1
         @test g[1] ≈ resid([1.0])
         @test isfinite(g[1])
@@ -869,14 +871,14 @@ using Bramble:
             @test c2 ≈ 2 .* c1
         end
 
-        WITH_AD_TESTS && @testset "lowered source: Dual propagates" begin
+        @testset "lowered source: Dual propagates" begin
             # Distinct from "Source differentiation" above, which wraps its source in
             # D₋ₓ and so never reaches the lowering path this checks.
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)
             Wₕ = gridspace(Ωₕ)
 
             resid(p) = sum(assemble(form(Wₕ, v -> innerₕ(x -> p[1] * x[1]^2, v))))
-            g = ForwardDiff.gradient(resid, [2.0])
+            g = DI.gradient(resid, AutoForwardDiff(), [2.0])
             @test g[1] ≈ resid([1.0])
             @test isfinite(g[1])
             @test !iszero(g[1])

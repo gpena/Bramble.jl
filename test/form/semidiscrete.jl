@@ -5,7 +5,7 @@ using Bramble
 using Bramble: matrix_type
 using SparseArrays
 using SciMLBase: SciMLBase # loads the `ode_problem` extension
-using ForwardDiff: ForwardDiff, Dual, value
+using ForwardDiff: Dual, value
 using FiniteDiff: FiniteDiff
 using DifferentiationInterface: AutoForwardDiff
 import DifferentiationInterface as DI
@@ -20,7 +20,7 @@ using Bramble:
                semidiscretize_rhs,
                set_points!,
                type_cached_assemble!
-using ..TestUtils: WITH_AD_TESTS, _sd_problem, _Const, _x1, _graded_mesh, ghost_mesh
+using ..TestUtils: _sd_problem, _Const, _x1, _graded_mesh, ghost_mesh
 
 # `semidiscretize` and the residual it returns (src/problems/semidiscrete.jl) need no SciMLBase:
 # a `Semidiscretization` is a callable with the `(du, u, p, t)` signature plus two matrices.
@@ -417,28 +417,28 @@ _sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
         @test _sd_rhs_allocs(rhs, du_bc, u0, 3.0) == 0
         @test isempty(sd.operator.cache)
 
-        if WITH_AD_TESTS
-            # A `ForwardDiff.Dual` `t` -- the same thing a Rosenbrock stepper's `tgrad` reaches
-            # for -- rebuilds once at that new element type, and never throws `InexactError`
-            # trying to write a `Dual` into the `Float64` matrix the classic `BilinearForm` path
-            # would have kept.
-            t_dual = Dual(3.0, 1.0)
-            u_dual = Dual.(u0, 0.0)
-            du_dual = similar(u_dual)
-            sd(du_dual, u_dual, nothing, t_dual)
-            @test build_calls[] == 2
-            @test value.(du_dual) ≈ du64
+        # A `ForwardDiff.Dual` `t` -- the same thing a Rosenbrock stepper's `tgrad` reaches
+        # for -- rebuilds once at that new element type, and never throws `InexactError`
+        # trying to write a `Dual` into the `Float64` matrix the classic `BilinearForm` path
+        # would have kept. `sd_bc` above ran `build` once more at construction, so the
+        # count is taken from here, and the Dual `t` adds exactly one build.
+        built = build_calls[]
+        t_dual = Dual(3.0, 1.0)
+        u_dual = Dual.(u0, 0.0)
+        du_dual = similar(u_dual)
+        sd(du_dual, u_dual, nothing, t_dual)
+        @test build_calls[] == built + 1
+        @test value.(du_dual) ≈ du64
 
-            # Calling again at the already-seen `Dual` type refills without rebuilding.
-            sd(du_dual, u_dual, nothing, t_dual)
-            @test build_calls[] == 2
+        # Calling again at the already-seen `Dual` type refills without rebuilding.
+        sd(du_dual, u_dual, nothing, t_dual)
+        @test build_calls[] == built + 1
 
-            # The `Float64` path stays exactly as before, unaffected by the Dual excursion in
-            # between: same cached entry, refilled at its own `t` rather than rebuilt.
-            sd(zeros(n), zeros(n), nothing, 1.0)
-            @test operator_matrix(sd) ≈ 2 .* A₀      # α(1.0) = 1 + 1 = 2
-            @test build_calls[] == 2
-        end
+        # The `Float64` path stays exactly as before, unaffected by the Dual excursion in
+        # between: same cached entry, refilled at its own `t` rather than rebuilt.
+        sd(zeros(n), zeros(n), nothing, 1.0)
+        @test operator_matrix(sd) ≈ 2 .* A₀      # α(1.0) = 1 + 1 = 2
+        @test build_calls[] == built + 1
     end
 
     @testset "type-cached: Float32 space (#555)" begin
@@ -926,7 +926,7 @@ end
 # AD Jacobian carries `-(∂A/∂u) u` (#985). The oracle is a central difference of the Float64
 # residual, and the Picard `-A` is checked to differ from it, so a twin reading a stale
 # state could not pass. Graded 2D mesh, its boundary constrained to data.
-_sd_jac(sd, u, t) = ForwardDiff.jacobian((du, v) -> sd(du, v, nothing, t), zero(u), u)
+_sd_jac(sd, u, t) = DI.jacobian((du, v) -> sd(du, v, nothing, t), zero(u), AutoForwardDiff(), u)
 function _sd_jac_fd(sd, u, t)
     n = length(u)
     return FiniteDiff.finite_difference_jacobian(v -> sd(zeros(n), v, nothing, t), u,
@@ -947,7 +947,7 @@ end
         sd = semidiscretize(a, l; state = sₕ, reassemble = true, dirichlet = bc)
         # one function object, so both Jacobian calls below share one Dual type
         f! = (du, v) -> sd(du, v, nothing, 0.0)
-        J = ForwardDiff.jacobian(f!, zeros(n), u0)
+        J = DI.jacobian(f!, zeros(n), AutoForwardDiff(), u0)
         D = only(keys(sd.twins))
         # the user's state never receives a Dual
         @test eltype(parent(sₕ)) === Float64
@@ -968,7 +968,7 @@ end
         twin = sd.twins[D]
         Atwin = operator_matrix(twin)
         @test length(sd.twins) == 1
-        @test ForwardDiff.jacobian(f!, zeros(n), u0) == J
+        @test DI.jacobian(f!, zeros(n), AutoForwardDiff(), u0) == J
         @test length(sd.twins) == 1
         @test sd.twins[D] === twin
         @test operator_matrix(twin) === Atwin
@@ -1006,7 +1006,7 @@ end
         l = form(Wₕ, v -> innerₕ(x -> 1.0 + x[1], v))
         rhs = semidiscretize_rhs(semidiscretize(a, l; state = sₕ, reassemble = true))
         f! = (du, v) -> rhs(du, v, nothing, 0.0)
-        J = ForwardDiff.jacobian(f!, zeros(n), u0)
+        J = DI.jacobian(f!, zeros(n), AutoForwardDiff(), u0)
         @test all(==(3.0), parent(sₕ))
         Jfd = FiniteDiff.finite_difference_jacobian(v -> rhs(zeros(n), v, nothing, 0.0),
             u0, Val(:central))
@@ -1015,7 +1015,7 @@ end
         @test !isapprox(J, -rhs.inv_mass_diag .* Matrix(operator_matrix(rhs.sd)); rtol = 1e-3)
 
         twin = only(values(rhs.twins))
-        @test ForwardDiff.jacobian(f!, zeros(n), u0) == J
+        @test DI.jacobian(f!, zeros(n), AutoForwardDiff(), u0) == J
         @test only(values(rhs.twins)) === twin
 
         du, u = zeros(n), copy(u0)
@@ -1025,8 +1025,8 @@ end
         # refused where the residual is: no form reads the state
         a0 = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
         rhs0 = semidiscretize_rhs(semidiscretize(a0, l; state = sₕ, reassemble = true))
-        @test_throws ArgumentError ForwardDiff.jacobian(
-            (du, v) -> rhs0(du, v, nothing, 0.0), zeros(n), u0)
+        @test_throws ArgumentError DI.jacobian(
+            (du, v) -> rhs0(du, v, nothing, 0.0), zeros(n), AutoForwardDiff(), u0)
         @test isempty(rhs0.twins)
     end
 

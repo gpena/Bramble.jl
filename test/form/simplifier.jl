@@ -5,7 +5,9 @@ using Bramble
 using LinearAlgebra: Diagonal, issymmetric, isposdef
 using SparseArrays: nnz
 using Random: seed!
-using ForwardDiff: ForwardDiff
+using ForwardDiff: ForwardDiff # loads DifferentiationInterface's ForwardDiff backend
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using Kronecker: Kronecker
 using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
 using Bramble:
@@ -1038,15 +1040,18 @@ _rt_negated(W) = form(W, W, (u, v) -> innerₕ(u, v) - innerₕ(D₋ₓ(u), v))
     # d/ds of `s A - A` is `A`, and of `(s - 1) b` is `b`: their sums are the mass's.
     A₁ = assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))
     b₁ = assemble(form(Wₕ, v -> innerₕ(1.0, v)))
-    dA = ForwardDiff.derivative(
-        s -> sum(assemble(form(Wₕ, Wₕ, (u, v) -> s * innerₕ(u, v) - innerₕ(u, v)))), 1.0)
-    db = ForwardDiff.derivative(
-        s -> sum(assemble(form(Wₕ, v -> innerₕ(s, v) - innerₕ(1.0, v)))), 1.0)
+    dA = DI.derivative(
+        s -> sum(assemble(form(Wₕ, Wₕ, (u, v) -> s * innerₕ(u, v) - innerₕ(u, v)))),
+        AutoForwardDiff(), 1.0)
+    db = DI.derivative(
+        s -> sum(assemble(form(Wₕ, v -> innerₕ(s, v) - innerₕ(1.0, v)))),
+        AutoForwardDiff(), 1.0)
     @test dA ≈ sum(A₁)
     @test db ≈ sum(b₁)
     # and of `-(s u) / 2` is `-M / 2`.
-    dM = ForwardDiff.derivative(
-        s -> sum(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(-(s * u) / 2, v)))), 1.0)
+    dM = DI.derivative(
+        s -> sum(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(-(s * u) / 2, v)))),
+        AutoForwardDiff(), 1.0)
     @test dM ≈ -sum(A₁) / 2
 end
 
