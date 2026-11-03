@@ -14,12 +14,13 @@ using ..TestUtils: _heat_uex, _sciml_setup
 using NonlinearSolve: NewtonRaphson
 using ADTypes: AutoFiniteDiff, AutoForwardDiff
 using ForwardDiff: ForwardDiff
+using DifferentiationInterface: DifferentiationInterface
 using WriteVTK: WriteVTK
 using LightXML: parse_file, root, find_element, child_elements, attribute, free
 
 # Every `NewtonRaphson` below names its Jacobian backend. Left to choose, NonlinearSolve
-# picks `AutoPolyesterForwardDiff` whenever PolyesterForwardDiff is loaded (the `full`
-# group loads it), and Polyester's closure path fails on the macOS CI runners with
+# picks the Polyester-threaded ForwardDiff backend whenever that package is loaded (the
+# `full` group once did), and Polyester's closure path fails on the macOS CI runners with
 # "closures are not supported on this platform" -- two errors in every Weekly macOS leg
 # since v3.4.0, from a choice that depends on which packages happen to be loaded.
 const _NEWTON = NewtonRaphson(; autodiff = AutoForwardDiff())
@@ -179,10 +180,12 @@ using LinearSolve: KrylovJL_GMRES, LUFactorization
         # `p`-dependent boundary values, so the derivative through `ode_problem` is exact.
         sd_d = semidiscretize(a, l; dirichlet = bcs)
         z = zeros(n)
-        @test ForwardDiff.gradient(θ -> ode_problem(sd_d, z, I; p = θ).u0[1], [1.0, 2.0]) ==
-              [1.0, 0.0]
-        @test ForwardDiff.gradient(θ -> ode_problem(sd_d, z, I; p = θ).u0[n], [1.0, 2.0]) ==
-              [1.0, 0.0]
+        @test DifferentiationInterface.gradient(
+                  θ -> ode_problem(sd_d, z, I; p = θ).u0[1], AutoForwardDiff(), [1.0, 2.0]
+              ) == [1.0, 0.0]
+        @test DifferentiationInterface.gradient(
+                  θ -> ode_problem(sd_d, z, I; p = θ).u0[n], AutoForwardDiff(), [1.0, 2.0]
+              ) == [1.0, 0.0]
 
         # The widening is for a non-float `p` only: a `Float32` u₀ with a `Float64` `p`
         # stays `Float32`, and a `Float64` u₀ with a `Float32` `p` stays `Float64`.
