@@ -116,7 +116,9 @@ function _jacobian_and_pattern(Wu, mk, coeff, c₀, dep)
         xₕ .= x
         return assemble(mk(coeff(xₕ))) * x
     end
-    J = ForwardDiff.jacobian(residual, 0.5 .+ sin.(1:ndofs(Wu)) .^ 2)
+    J = DifferentiationInterface.jacobian(
+        residual, AutoForwardDiff(), 0.5 .+ sin.(1:ndofs(Wu)) .^ 2
+    )
     return J, jacobian_pattern(mk(c₀), dep)
 end
 

@@ -43,7 +43,7 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("marker_ids.jl")
         include("extended_operators.jl")
         include("symmetrize.jl")
-        TestUtils.WITH_AD_TESTS && include("autodiff.jl")
+        include("autodiff.jl")
         include("forwarddiff_smoke.jl")
         # A grid-function coefficient swapped in a built form, Dual included (#985).
         include("rebind.jl")
@@ -78,9 +78,7 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         # 1D, 2D and 3D. That is a cross-check against another package, so it moves when that
         # package or the simplifier moves rather than when an operator does. Daily on both
         # platforms, and in any run with no group set, including this file's own standalone one.
-        # It is also behind the AD switch (TestUtils.WITH_AD_TESTS), which is off in every group
-        # until v4.2.0, so for now it runs nowhere.
-        TestUtils.WITH_SLOW_TESTS && TestUtils.WITH_AD_TESTS && include("jacobian_pattern.jl")
+        TestUtils.WITH_SLOW_TESTS && include("jacobian_pattern.jl")
         # Mixed composite/scalar pairs: dependency-free, so on every push.
         include("jacobian_pattern_blocks.jl")
         include("type_cached_assemble.jl")

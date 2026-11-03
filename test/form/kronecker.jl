@@ -8,9 +8,11 @@ using LinearAlgebra: I, Diagonal, issymmetric, kron, mul!
 using SparseArrays: SparseMatrixCSC, sparse, spdiagm, nnz, findnz, dropzeros
 using Random
 using LinearSolve: LinearProblem, solve, KrylovJL_CG
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using ForwardDiff
 using Polyester
-using ..TestUtils: WITH_3D_TESTS, WITH_AD_TESTS, _graded_mesh
+using ..TestUtils: WITH_3D_TESTS, _graded_mesh
 
 # `is_separable`/`kronecker_operator`: a bilinear form whose
 # resolved AST is a sum of `innerₕ(u, v)`/`inner₊(∇ₕ(u), ∇ₕ(v))`-shaped terms over a
@@ -150,12 +152,10 @@ end
             end
             @test all(isapprox(ys[i], A * xs[i]; rtol = 1e-12, atol = 1e-12) for i in 1:32)
 
-            if WITH_AD_TESTS
-                # ForwardDiff Duals flow through the promoted scratch.
-                x0, v = rand(n), rand(n)
-                dK = ForwardDiff.derivative(t -> K * (x0 .+ t .* v), 0.0)
-                @test isapprox(dK, A * v; rtol = 1e-12, atol = 1e-12)
-            end
+            # ForwardDiff Duals flow through the promoted scratch.
+            x0, v = rand(n), rand(n)
+            dK = DI.derivative(t -> K * (x0 .+ t .* v), AutoForwardDiff(), 0.0)
+            @test isapprox(dK, A * v; rtol = 1e-12, atol = 1e-12)
 
             # Five-argument `mul!`: `y = α * K * x + β * y`, Int/Bool/Float α and β.
             M = Matrix(A)

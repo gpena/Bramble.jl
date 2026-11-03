@@ -6,12 +6,14 @@ using Bramble: matrix_type, execution_policy
 # Internal names: defined and documented, not exported.
 import Bramble: M₊ᵧ
 using ForwardDiff
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using LinearAlgebra: Diagonal, I, diag, dot
 import SparseArrays
 using SparseArrays: sparse, nnz, nonzeros, rowvals, SparseMatrixCSC
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS, WITH_AD_TESTS, TEST_DIMS, @test_allocs
+using ..TestUtils: WITH_SLOW_TESTS, TEST_DIMS, @test_allocs
 using ..TestUtils: _nonuniform_points, _Const, _x1, _x1_lt_half, _sin_x1
 using Bramble:
                BilinearForm,
@@ -547,7 +549,7 @@ using Bramble:
         end
     end
 
-    WITH_AD_TESTS && @testset "Matrix differentiation" begin
+    @testset "Matrix differentiation" begin
         # A coefficient in the integrand: a(u, v) = ∫ c·u·v, so A = H·diag(c) and the
         # derivative of `sum(A)` with respect to `cᵢ` is `Hᵢᵢ`. Checked against that rather
         # than against itself, so a gradient of the wrong thing cannot pass.
@@ -555,7 +557,7 @@ using Bramble:
         c1 = fill(1.0, n)
         scalar_form(w) = form(Wₕ, Wₕ, (u, v) -> innerₕ(Bramble.element(Wₕ, w) * u, v))
 
-        @test ForwardDiff.gradient(w -> sum(assemble(scalar_form(w))), c1) ≈ diag(H)
+        @test DI.gradient(w -> sum(assemble(scalar_form(w))), AutoForwardDiff(), c1) ≈ diag(H)
 
         # the element type follows the data: the matrix has to be able to hold a Dual, and
         # taking it from the space instead is what made this impossible
@@ -563,27 +565,27 @@ using Bramble:
         @test eltype(assemble(scalar_form(wd))) <: ForwardDiff.Dual
 
         # the serial path as well as the threaded one
-        @test ForwardDiff.gradient(c1) do w
+        function sum_in_place(w)
             a = scalar_form(w)
             A = allocate_system_matrix(a)
             assemble!(A, a)
-            sum(A)
-        end ≈ diag(H)
+            return sum(A)
+        end
+        @test DI.gradient(sum_in_place, AutoForwardDiff(), c1) ≈ diag(H)
 
         # and through the block routing, where a wrong component would show up as a
         # derivative in a block that should not have one
-        @test ForwardDiff.gradient(c1) do w
-            sum(
-                assemble(
-                form(
-                Vₕ,
-                Vₕ,
-                (u, v) -> innerₕ(Bramble.element(Wₕ, w) * u(1), v(1)) +
-                          innerₕ(u(2), v(2))
-            ),
-            ),
-            )
-        end ≈ diag(H)
+        routed_sum(w) = sum(
+            assemble(
+            form(
+            Vₕ,
+            Vₕ,
+            (u, v) -> innerₕ(Bramble.element(Wₕ, w) * u(1), v(1)) +
+                      innerₕ(u(2), v(2))
+        ),
+        ),
+        )
+        @test DI.gradient(routed_sum, AutoForwardDiff(), c1) ≈ diag(H)
     end
 
     @testset "In-place reassembly" begin
@@ -2229,10 +2231,10 @@ end
     @test_throws DimensionMismatch a(zeros(ndofs(W) - 1), v)
     @test_throws DimensionMismatch a(v, zeros(ndofs(W) + 1))
 
-    WITH_AD_TESTS && @testset "Dual arguments (#326)" begin
+    @testset "Dual arguments (#326)" begin
         u = randn(ndofs(W))
         vv = parent(v)
-        g = ForwardDiff.gradient(w -> a(w, vv), u)
+        g = DI.gradient(w -> a(w, vv), AutoForwardDiff(), u)
         @test g ≈ transpose(assemble(a)) * vv rtol = 1e-12
     end
 end
@@ -2401,7 +2403,7 @@ end
     f(s) = sum(assemble(form(W, W, (u, v) -> inner₊(s * ∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v)), l;
         dirichlet = bc, symmetrize = true)[2])
     h = 1e-6
-    d = ForwardDiff.derivative(f, 0.7)
+    d = DI.derivative(f, AutoForwardDiff(), 0.7)
     @test !iszero(d)
     @test d ≈ (f(0.7 + h) - f(0.7 - h)) / 2h rtol = 1e-6
     # real data keeps a real load

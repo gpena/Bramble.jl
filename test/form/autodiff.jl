@@ -3,8 +3,8 @@ module FormAutodiffTests
 using Test
 using Bramble
 using ForwardDiff
-using ReverseDiff
-using DifferentiationInterface
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using SparseArrays
 using LinearAlgebra: issymmetric, norm
 using Bramble: D₋ₓ, inner₊ₓ, restrict_to
@@ -140,7 +140,7 @@ using ..TestUtils: _tri, _matches_fd
             return sum(abs2, v)
         end
         p0 = [1.3, 0.7]
-        g = ForwardDiff.gradient(J, p0)
+        g = DI.gradient(J, AutoForwardDiff(), p0)
         @test length(g) == 2
         for k in 1:2
             e = zeros(2)
@@ -216,16 +216,13 @@ using ..TestUtils: _tri, _matches_fd
     end
 end
 
-@testset "Reverse-mode residual" begin
-    # The backend survey in test/space/autodiff_backends.jl establishes that ReverseDiff can
-    # differentiate the *space* layer (`Rₕ` and an operator). It says nothing about the form
-    # layer, and assembly is a different proposition: `assemble` allocates its vector from
-    # `_assembled_eltype` and then a stencil engine writes into it point by point, so the
-    # tracked type has to survive both the allocation and the scatter.
+@testset "Residual gradient through assemble" begin
+    # `assemble` allocates its vector from `_assembled_eltype` and then a stencil engine
+    # writes into it point by point, so the tracked type has to survive both the
+    # allocation and the scatter. The space layer has its own survey in
+    # test/space/autodiff_backends.jl.
     #
-    # Written through DifferentiationInterface for the same reason the survey is: it is the
-    # layer a caller reaches for, and adding a backend is one more entry rather than another
-    # block speaking another API.
+    # Written through DifferentiationInterface, the layer a caller reaches for.
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
     Wₕ = gridspace(Ωₕ)
 
@@ -239,12 +236,9 @@ end
     h = 1e-6
     fd = [(resid(p0 .+ h .* (1:2 .== i)) - resid(p0 .- h .* (1:2 .== i))) / 2h for i in 1:2]
 
-    gf = DifferentiationInterface.gradient(resid, AutoForwardDiff(), p0)
-    gr = DifferentiationInterface.gradient(resid, AutoReverseDiff(), p0)
+    gf = DI.gradient(resid, AutoForwardDiff(), p0)
 
     @test isapprox(gf, fd; rtol = 1e-5)
-    @test isapprox(gr, fd; rtol = 1e-5)
-    @test isapprox(gf, gr; rtol = 1e-10)
 end
 
 @testset "Coupled routing Jacobian" begin
@@ -266,27 +260,23 @@ end
         )
     end
 
-    Jf = DifferentiationInterface.jacobian(routed, AutoForwardDiff(), w0)
-    Jr = DifferentiationInterface.jacobian(routed, AutoReverseDiff(), w0)
+    Jf = DI.jacobian(routed, AutoForwardDiff(), w0)
 
     @test size(Jf) == (ndofs(Vₕ), ndofs(Vₕ))
-    @test isapprox(Jf, Jr; rtol = 1e-10)
 
     # the off-diagonal blocks are empty, exactly
     @test norm(Jf[1:n, (n + 1):(2n)]) == 0
     @test norm(Jf[(n + 1):(2n), 1:n]) == 0
-    @test norm(Jr[1:n, (n + 1):(2n)]) == 0
-    @test norm(Jr[(n + 1):(2n), 1:n]) == 0
 
     # and the assertion above bites: a form that deliberately crosses the blocks puts its
-    # mass off the diagonal and none on it. Without this the four tests above would pass on
+    # mass off the diagonal and none on it. Without this the two tests above would pass on
     # a Jacobian that was empty for some other reason.
     crossed = w -> begin
         c = element(Vₕ, eltype(w))
         parent(c) .= w
         return assemble(form(Vₕ, v -> innerₕ(c(2), v(1))))
     end
-    Jx = DifferentiationInterface.jacobian(crossed, AutoForwardDiff(), w0)
+    Jx = DI.jacobian(crossed, AutoForwardDiff(), w0)
 
     @test norm(Jx[1:n, (n + 1):(2n)]) > 0
     @test norm(Jx[1:n, 1:n]) == 0
@@ -312,15 +302,15 @@ function _check_restricted_eltype(Wₕ, m)
                                                  Ref(ForwardDiff.Dual(2.0, 1.0)) *
                                                  innerₕ(u, restrict_to(m, v))))) <: ForwardDiff.Dual
     @test !iszero(Ar)
-    @test ForwardDiff.derivative(bilinear, 2.0) ≈ Ar rtol = 1e-12
+    @test DI.derivative(bilinear, AutoForwardDiff(), 2.0) ≈ Ar rtol = 1e-12
 
     br = assemble(form(Wₕ, v -> innerₕ(f, restrict_to(m, v))))
     linear = s -> assemble(form(Wₕ, v -> innerₕ(1.0, v) + Ref(s) * innerₕ(f, restrict_to(m, v))))
     @test !iszero(br)
-    @test ForwardDiff.derivative(linear, 2.0) ≈ br rtol = 1e-12
+    @test DI.derivative(linear, AutoForwardDiff(), 2.0) ≈ br rtol = 1e-12
     # A Dual inside a function of position, seen only through its value.
     thunk = s -> assemble(form(Wₕ, v -> innerₕ(1.0, v) + innerₕ(x -> s * f(x), restrict_to(m, v))))
-    @test ForwardDiff.derivative(thunk, 2.0) ≈ br rtol = 1e-12
+    @test DI.derivative(thunk, AutoForwardDiff(), 2.0) ≈ br rtol = 1e-12
 end
 
 @testset "AD: restricted-term eltype" begin
@@ -351,7 +341,7 @@ end
         bilinear = s -> Matrix(assemble(form(Vₕ, Vₕ,
             (u, v) -> innerₕ(u(1), v(1)) + 10000.0 * innerₕ(u(2), v(2)) +
                       Ref(s) * innerₕ(u(2), restrict_to(:boundary, v(2))))))
-        dA = ForwardDiff.derivative(bilinear, 2.0)
+        dA = DI.derivative(bilinear, AutoForwardDiff(), 2.0)
         @test !iszero(Ar[(n + 1):(2n), (n + 1):(2n)])
         @test dA ≈ Ar rtol = 1e-12
         @test iszero(dA[1:n, :]) && iszero(dA[:, 1:n])
@@ -359,7 +349,7 @@ end
         br = assemble(form(Vₕ, v -> innerₕ(f, restrict_to(:boundary, v(2)))))
         linear = s -> assemble(form(Vₕ,
             v -> innerₕ(1.0, v(1)) + Ref(s) * innerₕ(f, restrict_to(:boundary, v(2)))))
-        db = ForwardDiff.derivative(linear, 2.0)
+        db = DI.derivative(linear, AutoForwardDiff(), 2.0)
         @test !iszero(br[(n + 1):(2n)])
         @test db ≈ br rtol = 1e-12
         @test iszero(db[1:n])
@@ -374,8 +364,8 @@ end
     W2 = b -> gridspace(mesh(domain(interval(0.0, b)), 11, true))
     A = b -> sum(assemble(form(W1 × W2(b), W1 × W2(b), (u, v) -> innerₕ(u(2), v(2)))))
     L = b -> sum(assemble(form(W1 × W2(b), v -> innerₕ(1.0, v(2)))))
-    @test ForwardDiff.derivative(A, 2.0) ≈ 1.0 rtol = 1e-12
-    @test ForwardDiff.derivative(L, 2.0) ≈ 1.0 rtol = 1e-12
+    @test DI.derivative(A, AutoForwardDiff(), 2.0) ≈ 1.0 rtol = 1e-12
+    @test DI.derivative(L, AutoForwardDiff(), 2.0) ≈ 1.0 rtol = 1e-12
 
     # A Float64 second leaf behind a Float32 first one keeps its exact entries.
     W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 11, false))
@@ -396,13 +386,13 @@ end
     W2 = b -> gridspace(mesh(domain(interval(0.0, b)), 11, true))
     A = b -> sum(assemble(form(W1 × W2(b), W1 × W2(b), (u, v) -> innerₕ(u, v))))
     L = b -> sum(assemble(form(W1 × W2(b), v -> innerₕ(1.0, v))))
-    @test ForwardDiff.derivative(A, 2.0) ≈ 1.0 rtol = 1e-12
-    @test ForwardDiff.derivative(L, 2.0) ≈ 1.0 rtol = 1e-12
+    @test DI.derivative(A, AutoForwardDiff(), 2.0) ≈ 1.0 rtol = 1e-12
+    @test DI.derivative(L, AutoForwardDiff(), 2.0) ≈ 1.0 rtol = 1e-12
 
     # Unnamed beside named: only the unnamed term reaches the Dual leaf.
     AL = b -> sum(assemble(form(W1 × W2(b), W1 × W2(b),
         (u, v) -> 100.0 * innerₕ(u(1), v(1)) + innerₕ(u, v))))
-    @test ForwardDiff.derivative(AL, 2.0) ≈ 1.0 rtol = 1e-12
+    @test DI.derivative(AL, AutoForwardDiff(), 2.0) ≈ 1.0 rtol = 1e-12
 
     W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 11, false))
     W64 = gridspace(mesh(domain(interval(0.0, 1.0 / 3)), 11, false))
@@ -436,7 +426,7 @@ end
         assemble(form(Wₕ, v -> innerₕ(D₋ₓ(πₕ(uₛ; outside = 0.0)), v)))
     end
     @test !iszero(g(1.0))
-    @test ForwardDiff.derivative(g, 2.0) ≈ g(1.0) rtol = 1e-12
+    @test DI.derivative(g, AutoForwardDiff(), 2.0) ≈ g(1.0) rtol = 1e-12
 
     W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 21, false))
     u64 = Rₕ(Ws, x -> 1 / 3 + x[1])
