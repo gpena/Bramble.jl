@@ -363,10 +363,18 @@ Fill `v[idx]` with `f(idx)` across threads, statically partitioning `idxs`, or s
 where a `:static` loop cannot start ([`_static_or_serial`](@ref)).
 
 The `Threads.@threads` loop is kept in an isolated function to prevent closure boxing
-allocations on paths that execute serially.
+allocations on paths that execute serially. The threaded branch hands the kernel to
+`_static_for!` behind a `Ref`, as `_sweep_for!` hands it to `_batch_for!`:
+`BrambleEnzymeExt`'s rule for `_static_for!` cannot take a by-value closure that captures an
+array and a plain value (Enzyme's calling convention).
 """
 @noinline _threaded_for!(v, idxs, f::F) where {F} = _static_or_serial(
-    _static_for!, _serial_for!, v, idxs, f)
+    _static_for_ref!, _serial_for!, v, idxs, f)
+
+# The `Ref` is built inside the threaded branch, past `_static_or_serial`'s `try`, and the
+# `Ref` method unwraps it, both inlined: built before the `try`, it cost 8 bytes a call.
+@inline _static_for_ref!(v, idxs, f::F) where {F} = _static_for!(v, idxs, Ref(f))
+@inline _static_for!(v, idxs, r::Base.RefValue) = _static_for!(v, idxs, r[])
 
 @noinline function _static_for!(v, idxs, f::F) where {F}
     # Static partitioning distributes work evenly across available threads
@@ -563,10 +571,16 @@ Evaluate tuple-valued `g` across `idxs` and scatter the results into `mats`, sta
 partitioning `idxs` across threads.
 
 Kept in an isolated function to prevent `Threads.@threads` closure boxing allocations on
-paths that execute serially.
+paths that execute serially. The threaded branch hands the kernel to `_static_scatter_for!`
+behind a `Ref`, as [`_threaded_for!`](@ref) does.
 """
 @noinline _threaded_scatter_for!(mats::Tuple, idxs, g::G) where {G} = _static_or_serial(
-    _static_scatter_for!, _serial_scatter_for!, mats, idxs, g)
+    _static_scatter_ref!, _serial_scatter_for!, mats, idxs, g)
+
+@inline _static_scatter_ref!(mats::Tuple, idxs, g::G) where {G} = _static_scatter_for!(
+    mats, idxs, Ref(g))
+@inline _static_scatter_for!(mats::Tuple, idxs, r::Base.RefValue) = _static_scatter_for!(
+    mats, idxs, r[])
 
 @noinline function _static_scatter_for!(mats::Tuple, idxs, g::G) where {G}
     Threads.@threads :static for idx in idxs

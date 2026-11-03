@@ -1827,19 +1827,28 @@ naming Polyester; `BramblePolyesterExt` defines the one that runs.
     return _throw_cpubatch_without_polyester(:_batch_mf_bands!)
 end
 
-# The sink, the plan and the walk reach the spawning method behind one `Ref`, the one the
-# spawned tasks share: an Enzyme rule cannot take the sink or the plan by value (Enzyme's
-# calling convention, as `_batch_mf_bands!`'s call above), and this method inlines.
+# The sink, the plan with its walk, and the form's walked parts (its spaces and AST) each
+# reach the `CpuThreaded` method behind a `Ref`, as `_batch_mf_bands!`'s do above: an Enzyme
+# rule cannot take the sink or the plan by value (Enzyme's calling convention), and
+# `BrambleEnzymeExt`'s rule reads the coefficients through the form's parts, not the plan's,
+# whose build it treats as inactive. Both methods inline, so a plain call allocates no `Ref`
+# of its own; the primal walks the plan's form in `_mf_spawn_bands!`, as before.
 @inline _mf_run_bands!(p::CpuThreaded, s, a, plan, nbands::Int, walk = nothing) = _mf_run_bands!(
-    p, Ref((s, plan, walk)), nbands)
+    p, Ref(s), Ref((plan, walk)), Ref((trial_space(a), test_space(a), a.ast)), nbands)
 
-@noinline function _mf_run_bands!(::CpuThreaded, shared::Base.RefValue, nbands::Int)
-    walk = shared[][3]
+@inline function _mf_run_bands!(::CpuThreaded, sink::Base.RefValue, parts::Base.RefValue,
+        ::Base.RefValue, nbands::Int)
+    plan, walk = parts[]
+    return _mf_spawn_bands!(sink[], plan, walk, nbands)
+end
+
+# The spawned tasks share one `Ref` to the sink and the plan.
+@noinline function _mf_spawn_bands!(s, plan, walk, nbands::Int)
+    shared = Ref((s, plan))
     @sync begin
         for b in 2:nbands
             Threads.@spawn _mf_spawned_band!(shared, walk, b)
         end
-        s, plan = shared[]
         _mf_band_task!(s.y, s, walk, plan, nbands, nbands, 1)
     end
     return nothing

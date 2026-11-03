@@ -1,8 +1,11 @@
 module BrambleEnzymeExt
 
-using Bramble: Bramble, pde_solve
-using Enzyme: Enzyme, Const, Annotation
-using Enzyme.EnzymeRules: EnzymeRules, RevConfig, AugmentedReturn
+using Bramble: Bramble, pde_solve, CpuThreaded, KroneckerLinearOperator, StarSpacings,
+               _band_range, _difference_band_adjoint!, _difference_spacing_adjoint!,
+               _difference_band_spacing_tangent!, _star_spacings_adjoint!
+using Enzyme: Enzyme, Const, Annotation, Active, Duplicated, DuplicatedNoNeed,
+              BatchDuplicated, BatchDuplicatedNoNeed, MixedDuplicated, BatchMixedDuplicated
+using Enzyme.EnzymeRules: EnzymeRules, RevConfig, FwdConfig, AugmentedReturn
 using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange
 using LinearAlgebra: lu
 
@@ -100,5 +103,8 @@ function EnzymeRules.reverse(
 
     return (nothing, nothing)
 end
+
+# The `CpuThreaded` engine entries' rules (gpena/Bramble.jl#369).
+include("BrambleEnzymeExt/threaded.jl")
 
 end

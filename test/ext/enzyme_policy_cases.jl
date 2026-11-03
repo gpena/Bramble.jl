@@ -26,6 +26,9 @@
 # (`_rule_entries` of a Bramble Enzyme extension, status `"bypassed"` otherwise). `check`
 # takes the hook and the policy as names too: `check(:_batch_for!; policy = :CpuPolyester)`.
 #
+# Two more, `NESTED_MODES`, take the reverse or forward gradient inside a user's
+# `Threads.@threads` loop, where the `CpuThreaded` entries cannot start a `:static` loop.
+#
 # Each builder keeps the parameters small (`NPARAM`) and expands them into the field with a
 # seeded basis, so a builder's own work is not a stack of other hooks.
 
@@ -49,6 +52,7 @@ Threads.nthreads() >= 2 ||
 
 const MODES = (:reverse, :di_reverse, :forward)
 const BATCH_MODES = (:batch_forward, :batch_reverse)
+const NESTED_MODES = (:nested_reverse, :nested_forward)
 const BATCH_WIDTH = 3
 const BATCH_COTANGENTS = (1.0, -0.5, 2.0)
 const TOL = 1e-10
@@ -505,8 +509,75 @@ const CAPTURES = (
         rule = "_batch_mf_bands!")
 )
 
+# An element broadcast whose operand is overwritten after it: the reverse must read `κ` as
+# the broadcast did, though `κ` reaches the rule inside a `Broadcasted`.
+function _build_broadcast_overwrite(policy)
+    W = gridspace(_mesh(policy))
+    B = _basis(W)
+    B2 = reverse(B; dims = 1)
+    function f(p)
+        κ = _load(W, B, p)
+        w = _load(W, B2, p)
+        u = element(W, eltype(p))
+        u .= κ .* w
+        parent(κ) .= 0
+        return sum(abs2, parent(u))
+    end
+    return f, _start()
+end
+
+# A ghost-space difference after `update_ghosts!`, with conormal relations: the band engines
+# take the relations' `_FacetFix` pairs as `Active` tuples (`_run_bands!` under `CpuThreaded`).
+const _CONORMAL_K = [2.0 1.0; 1.0 2.0]
+function _conormal(u)
+    return (:xmin => ∂ₙ(u; K = _CONORMAL_K) => 1.0,
+        :xmax => u + ∂ₙ(u; K = _CONORMAL_K) => x -> x[2],
+        :ymin => ∂ₙ(u; K = _CONORMAL_K) => 0.0,
+        :ymax => 2.0 * u + ∂ₙ(u; K = _CONORMAL_K) => 1.0)
+end
+function _ghost(policy, op!::F) where {F}
+    Random.seed!(11)
+    Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (9, 11), (false, false);
+        backend = backend(policy = policy))
+    C = constrained(gridspace(Ω; ghosts = :boundary), _conormal)
+    n = 99
+    B, w = randn(MersenneTwister(2), n, NPARAM), randn(MersenneTwister(3), n)
+    function f(p)
+        v = update_ghosts!(GhostVector(C, B * p), C)
+        o = zeros(eltype(p), n)
+        op!(o, v, Val(1))
+        return sum(w .* o .^ 2)
+    end
+    return f, [0.4, -0.3, 0.8, 1.2]
+end
+_build_ghost_backward(policy) = _ghost(policy, Bramble.backward_finite_difference!)
+_build_ghost_star(policy) = _ghost(policy, Bramble.forward_star_difference!)
+
+# The cases test/ext/enzyme_threaded_ext.jl runs under `CpuThreaded` besides `THREADED`, each
+# naming the `CpuThreaded` rule it must enter: the critic's reproducers of S2.2 (an operand
+# overwritten after the call, `Active` scalars, the ghost operators' tuples, a scalar in a
+# matrix-free form).
+const THREADED_CASES = (
+    (hook = "_threaded_broadcast_overwrite", kind = "fixed",
+        build = _build_broadcast_overwrite, rule = "_static_bands!"),
+    (hook = "_threaded_unit_overwrite_x", kind = "closure", build = _build_unit_overwrite_x,
+        rule = "_static_band_colour!"),
+    (hook = "_threaded_kron_scaled", kind = "fixed", build = _build_kron_scaled,
+        rule = "_kron_fused!"),
+    (hook = "_threaded_ghost_backward", kind = "fixed", build = _build_ghost_backward,
+        rule = "_run_bands!"),
+    (hook = "_threaded_ghost_star", kind = "fixed", build = _build_ghost_star,
+        rule = "_run_bands!"),
+    (hook = "_threaded_mf_scalar_param", kind = "closure", build = _build_mf_scalar_param,
+        rule = "_mf_run_bands!"),
+    (hook = "_threaded_nested_shift", kind = "fixed", build = _build_run_bands,
+        rule = "_run_bands!"),
+    (hook = "_threaded_nested_kron", kind = "fixed", build = _build_kron_scaled,
+        rule = "_kron_fused!")
+)
+
 function case(hook::AbstractString)
-    for c in (CASES..., THREADED..., CAPTURES...)
+    for c in (CASES..., THREADED..., CAPTURES..., THREADED_CASES...)
         c.hook == hook && return c
     end
     throw(ArgumentError("no Enzyme case for hook \"$hook\""))
@@ -565,6 +636,18 @@ function _batch(f, x, ref, mode::Symbol)
     return collect(dxs), [c .* ref for c in BATCH_COTANGENTS]
 end
 
+# `:nested_reverse` and `:nested_forward`: the reverse or forward gradient taken inside a
+# user's `Threads.@threads` loop, once per iteration, where a `:static` loop cannot start and
+# the threaded entries run their bands in order (`_static_or_serial`).
+function _nested(f, x, ref, mode::Symbol)
+    base = mode === :nested_reverse ? :reverse : :forward
+    got = Vector{Any}(undef, 2)
+    Threads.@threads for k in 1:2
+        got[k] = _gradient(f, x, base)
+    end
+    return got, [ref, ref]
+end
+
 # How many times a rule for `hook` has been entered, summed over the Bramble extensions that
 # count their rules' entries.
 function _rule_entries(hook::AbstractString)
@@ -579,30 +662,32 @@ function _rule_entries(hook::AbstractString)
 end
 
 """
-    evaluate(c; policy, mode) -> NamedTuple
+    evaluate(c; policy, mode, rule) -> NamedTuple
 
 Run one mode of the case `c` under `policy` and compare its derivative with the ForwardDiff
 oracle, lane by lane for a batch mode. Returns `status` (`"ok"` within `TOL`, `"wrong"`
 otherwise, `"throws"` when the mode raises, `"bypassed"` when a batch mode under a threaded
-policy never entered the hook's rule), `relerr` (the worst lane's) and the first `error` text.
+policy never entered the hook's rule), `relerr` (the worst lane's), the first `error` text, and
+`entered`, whether `rule` (the case's own by default) ran during this mode.
 """
-function evaluate(c; policy, mode::Symbol)
-    modes = (MODES..., BATCH_MODES...)
+function evaluate(c; policy, mode::Symbol, rule::AbstractString = get(c, :rule, c.hook))
+    modes = (MODES..., BATCH_MODES..., NESTED_MODES...)
     mode in modes || throw(ArgumentError("mode must be one of $modes, got :$mode"))
     f, x = c.build(policy)
     ref = DI.gradient(f, AutoForwardDiff(), x)
-    rule = get(c, :rule, c.hook)
     entries = _rule_entries(rule)
     got, want = try
-        mode in BATCH_MODES ? _batch(f, x, ref, mode) : ([_gradient(f, x, mode)], [ref])
+        mode in BATCH_MODES ? _batch(f, x, ref, mode) :
+        mode in NESTED_MODES ? _nested(f, x, ref, mode) : ([_gradient(f, x, mode)], [ref])
     catch err
         err isa InterruptException && rethrow()
-        return (status = "throws", relerr = NaN, error = _summary(err))
+        return (status = "throws", relerr = NaN, error = _summary(err), entered = false)
     end
     r = maximum(_relerr(g, w) for (g, w) in zip(got, want))
-    entered = !(mode in BATCH_MODES) || policy isa CpuSerial || _rule_entries(rule) > entries
+    ran = _rule_entries(rule) > entries
+    entered = !(mode in (BATCH_MODES..., NESTED_MODES...)) || policy isa CpuSerial || ran
     status = !(isfinite(r) && r <= TOL) ? "wrong" : entered ? "ok" : "bypassed"
-    return (status = status, relerr = r, error = "")
+    return (status = status, relerr = r, error = "", entered = ran)
 end
 
 _policy(p::Symbol) = getfield(Bramble, p)()
@@ -627,5 +712,83 @@ end
 check(hook::Symbol; kwargs...) = check(String(hook); kwargs...)
 # An entry of `CASES`, `THREADED` or `CAPTURES` itself.
 check(c::NamedTuple; kwargs...) = check(c.hook; kwargs...)
+
+# --- Cases in child processes ------------------------------------------------------- #
+#
+# One case's Enzyme compile can peak near 7 GB, and compiled code stays resident, so a test
+# file that runs many cases runs each in a child Julia process of its own, under julia_slot's
+# 10 GB cap. The child takes the parent's project, thread count and optimisation level, loads
+# Enzyme through a temporary environment and this file, and prints one `CASE_RESULT` line per
+# mode: the hook, the mode, the status, the relative error and whether the rule ran.
+
+const HARNESS_PATH = @__FILE__
+const ENZYME_TOML = "[deps]\nEnzyme = \"7da242da-08ed-463a-9acd-ee780be4f1d9\"\n"
+
+# The source of one child: its Enzyme environment, this file, then one line per mode.
+function _child_source(hook::AbstractString, modes, policy::Symbol, rule::AbstractString)
+    return """
+        _e = mktempdir()
+        write(joinpath(_e, "Project.toml"), $(repr(ENZYME_TOML)))
+        push!(LOAD_PATH, _e)
+        using Bramble, Polyester, Enzyme, ForwardDiff
+        Base.include(Main, $(repr(HARNESS_PATH)))
+        for m in $(repr(Tuple(modes)))
+            r = EnzymePolicyCases.evaluate(EnzymePolicyCases.case($(repr(hook)));
+                policy = getfield(Bramble, $(repr(policy)))(), mode = m, rule = $(repr(rule)))
+            println("CASE_RESULT ", $(repr(hook)), " ", m, " ", r.status, " ", r.relerr, " ",
+                r.entered)
+            flush(stdout)
+        end
+        """
+end
+
+"""
+    run_child(hook, modes; policy, rule) -> (exitcode, results)
+
+Run the case for `hook` in a child Julia process, every mode of `modes` in turn, under the
+policy named `policy`, with the parent's project, thread count and `--optimize`. `results`
+maps each mode the child reported to `(status, relerr, entered)`; a mode the child did not
+reach is missing from it. A child that fails prints the end of its output as a warning.
+"""
+function run_child(hook::AbstractString, modes; policy::Symbol,
+        rule::AbstractString = get(case(hook), :rule, hook))
+    opt = max(Base.JLOptions().opt_level, 0)
+    julia = Base.julia_cmd()
+    src = _child_source(hook, modes, policy, rule)
+    cmd = `$julia --startup-file=no --project=$(Base.active_project()) --threads=$(Threads.nthreads()) --optimize=$opt -e $src`
+    out = IOBuffer()
+    p = run(pipeline(ignorestatus(cmd); stdout = out, stderr = out))
+    text = String(take!(out))
+    results = Dict{Symbol, @NamedTuple{status::Symbol, relerr::Float64, entered::Bool}}()
+    for line in split(text, '\n')
+        startswith(line, "CASE_RESULT ") || continue
+        _, _, mode, status, relerr, entered = split(line)
+        results[Symbol(mode)] = (status = Symbol(status), relerr = parse(Float64, relerr),
+            entered = parse(Bool, entered))
+    end
+    p.exitcode == 0 ||
+        @warn "child for $hook $(Tuple(modes)) exited with $(p.exitcode)" tail = last(text, 2000)
+    return p.exitcode, results
+end
+
+"""
+    run_isolated(hook, modes; policy, separate = (), rule) -> (exitcodes, results)
+
+`run_child` for `hook`, all `modes` in one child, or one child per mode when `hook` is in
+`separate` (a case whose modes together peak above 7 GB). Returns every child's exit code
+and the results of all of them.
+"""
+function run_isolated(hook::AbstractString, modes; policy::Symbol, separate = (),
+        rule::AbstractString = get(case(hook), :rule, hook))
+    groups = hook in separate ? [(m,) for m in modes] : [Tuple(modes)]
+    codes = Int[]
+    results = Dict{Symbol, @NamedTuple{status::Symbol, relerr::Float64, entered::Bool}}()
+    for g in groups
+        code, got = run_child(hook, g; policy, rule)
+        push!(codes, code)
+        merge!(results, got)
+    end
+    return codes, results
+end
 
 end # module

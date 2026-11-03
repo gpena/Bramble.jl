@@ -251,6 +251,9 @@ if __bramble_with_ad_backends
         include("ext/ad_backend_verification.jl")
         # Enzyme's rules for the CpuPolyester hooks; its first testset needs no Enzyme.
         include("ext/enzyme_polyester_ext.jl")
+        include("ext/enzyme_polyester_hooks.jl")
+        # Enzyme's rules for the CpuThreaded engine entries; it runs nothing without Enzyme.
+        include("ext/enzyme_threaded_ext.jl")
     end
 end
 

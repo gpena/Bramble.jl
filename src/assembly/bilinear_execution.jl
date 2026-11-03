@@ -1024,9 +1024,16 @@ end
     return nothing
 end
 
-# One band colour, or one point colour, under `CpuThreaded`.
+# One band colour, or one point colour, under `CpuThreaded`. The threaded branch hands the
+# point to its runner behind a `Ref`, built past `_static_or_serial`'s `try` and unwrapped
+# inline, so a plain call allocates nothing for it: `BrambleEnzymeExt`'s rule cannot take
+# a by-value point whose target holds an active `α` (Enzyme's calling convention).
 @inline _threaded_bands!(point::P, ax, bidx, nbands::Int, rest) where {P} = _static_or_serial(
-    _static_band_colour!, _serial_band_colour!, point, ax, bidx, nbands, rest)
+    _static_band_colour_ref!, _serial_band_colour!, point, ax, bidx, nbands, rest)
+@inline _static_band_colour_ref!(point::P, ax, bidx, nbands, rest) where {P} = _static_band_colour!(
+    Ref(point), ax, bidx, nbands, rest)
+@inline _static_band_colour!(r::Base.RefValue, ax, bidx, nbands, rest) = _static_band_colour!(
+    r[], ax, bidx, nbands, rest)
 
 # A cut walk's band colour (#884): each band balanced (`_cut_slices`), its slab visiting
 # the walk's points in it alone (`_each_walked`). Its tasks take the band from the walk the
@@ -1035,8 +1042,12 @@ end
 @inline function _threaded_bands!(point::_BilinearPoint{T, <:_RowRestricted},
         ax::_CutAxis, bidx, nbands::Int, _) where {T}
     return _static_or_serial(
-        _static_cut_band_colour!, _serial_cut_band_colour!, point, ax.span, bidx, nbands)
+        _static_cut_band_colour_ref!, _serial_cut_band_colour!, point, ax.span, bidx, nbands)
 end
+@inline _static_cut_band_colour_ref!(point::P, span, bidx, nbands) where {P} = _static_cut_band_colour!(
+    Ref(point), span, bidx, nbands)
+@inline _static_cut_band_colour!(r::Base.RefValue, span, bidx, nbands) = _static_cut_band_colour!(
+    r[], span, bidx, nbands)
 
 @noinline function _static_cut_band_colour!(point::P, span, bidx, nbands) where {P}
     Threads.@threads :static for b in bidx
@@ -1066,7 +1077,9 @@ end
     return nothing
 end
 @inline _threaded_colour!(point::P, idxs) where {P} = _static_or_serial(
-    _static_colour!, _serial_colour!, point, idxs)
+    _static_colour_ref!, _serial_colour!, point, idxs)
+@inline _static_colour_ref!(point::P, idxs) where {P} = _static_colour!(Ref(point), idxs)
+@inline _static_colour!(r::Base.RefValue, idxs) = _static_colour!(r[], idxs)
 
 """
     _sweep_coloured!(policy, point, grid_inds::CartesianIndices, strides) -> Nothing
