@@ -172,6 +172,7 @@ if __bramble_with_unit_tests
                 include("space/element_type.jl")
                 include("space/autodiff.jl")
                 include("space/autodiff_backends.jl")
+                include("space/ad_coverage.jl")
             end
         end
 
@@ -228,8 +229,13 @@ end
 # `check_backend` and `_ad_problems`, so autodiff_backends.jl comes first (the unit suite
 # has already included it when it runs in the same process). Every Enzyme file is reached
 # through that list, never by its own `include` here: ext/enzyme_forward_assembly.jl (#1124)
-# included directly would run a second time, in the parent process.
+# included directly would run a second time, in the parent process. The unit suite includes
+# space/ad_coverage.jl for its ForwardDiff half, so a parent that ran it already (the `rest`
+# shard is in this process) skips the second include; the Enzyme half runs only in the file's
+# own child.
 function __bramble_include_enzyme_file(file)
+    file == "space/ad_coverage.jl" && isempty(TestUtils.TEST_FILE) &&
+        __bramble_with_unit_tests && TestUtils.in_shard("rest") && return nothing
     file == "space/autodiff_heavy.jl" && !__bramble_with_unit_tests &&
         include("space/autodiff_backends.jl")
     include(file)

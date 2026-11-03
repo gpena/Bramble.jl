@@ -33,9 +33,9 @@ Bramble's runtime kernels mutate destination buffers using `setindex!`, so a bac
 | Backend | Use | `CpuSerial` | `CpuThreaded` | `CpuPolyester` |
 | :--- | :--- | :--- | :--- | :--- |
 | ForwardDiff | few parameters, directional derivatives, sparse Jacobians | works | works | works |
-| Enzyme | reverse mode with many parameters, the `pde_solve` adjoint | works | in progress (this milestone) | in progress (this milestone) |
+| Enzyme | reverse mode with many parameters, the `pde_solve` adjoint | works | works, with the limits in [`ad_coverage.md`](ad_coverage.md) | works, with the limits in [`ad_coverage.md`](ad_coverage.md) |
 
-The two `in progress` cells are the ones the v4.2.0 follow-up plan fills in, so replace them there and nowhere else.
+[`ad_coverage.md`](ad_coverage.md) lists, per feature and policy, what each backend differentiates and what it excludes.
 
 ForwardDiff propagates dual numbers through coefficients, difference operators, weak forms and boundary conditions. Enzyme differentiates `Float64` code, so no buffer widens to `Dual`, and `BrambleEnzymeExt` supplies the `pde_solve` adjoint.
 

@@ -181,6 +181,7 @@ end
 # absent skips (`_have(:Enzyme)`) rather than erroring.
 #   whole files, `unit` (and slow/full/all)
 #     space/autodiff.jl, space/autodiff_backends.jl   test/runtests.jl
+#     space/ad_coverage.jl (its ForwardDiff half; the Enzyme half is an `ENZYME_FILES` entry)
 #     form/autodiff.jl                                test/form/runtests.jl
 #     form/jacobian_pattern.jl (also needs `slow`)    test/form/runtests.jl
 #   whole files, groups `ad`, `full`, `backends` ("AD backends (expensive)" in runtests.jl)
@@ -439,6 +440,7 @@ const ENZYME_FILES = (
     "ext/chainrules_enzyme_ext.jl",
     "space/autodiff_policies.jl",
     "space/autodiff_heavy.jl",
+    "space/ad_coverage.jl",
     "examples/inverse_diffusion.jl"
 )
 const TEST_FILE = get(ENV, "BRAMBLE_TEST_FILE", "")
