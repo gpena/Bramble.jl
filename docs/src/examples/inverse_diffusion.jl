@@ -3,8 +3,7 @@
 # Every other worked example goes forward: known parameters in, a solution out. This one goes
 # backward -- noisy observations of a solution in, the parameter that produced them out --
 # the shape of a parameter-estimation problem, and of "a neural network predicts a PDE
-# parameter, a real solve runs on it, the loss trains the network" (gpena/Bramble.jl#228's own
-# motivation). What makes it tractable for more than a handful of parameters is
+# parameter, a real solve runs on it, the loss trains the network". What makes it tractable for more than a handful of parameters is
 # [`pde_solve`](@ref)'s adjoint rule: one extra linear solve gives the gradient with respect
 # to *every* parameter at once, instead of one extra solve *per* parameter.
 #
@@ -26,22 +25,6 @@
 # diffusion coefficient scaling the stiffness operator itself, not a boundary or source value
 # -- is unknown; a handful of noisy point observations of ``u`` at the true ``\kappa`` are all
 # that is given.
-#
-# The boundary stays Dirichlet-only here because forms on a ghost space refuse the automatic
-# differentiation the adjoint gradient needs, which arrives with milestone v4.2.0
-# (automatic differentiation and form correctness on the CPU).
-#
-# !!! note "What used to block this"
-#     A gradient with respect to a *Dirichlet boundary value or source term* reaches only `F`,
-#     filled by `dirichlet_bc!`'s own value-writing path; it never touched `assemble`'s
-#     recording engine and always worked. A gradient with respect to the operator's own
-#     coefficient, as `κ` is here, does reach that engine, and until gpena/Bramble.jl#240 it
-#     raised `IllegalTypeAnalysisException` from a fully inferred call site: `simplify_ast`
-#     decided some of its rewrites by reading a coefficient's *value*, which left a `Union` of
-#     rewritten and unrewritten `BilinearForm` types wherever the compiler could not fold the
-#     comparison, and Enzyme's strict-aliasing type analysis rejects a `Union` outright.
-#     Restricting those rewrites to `Integer` coefficients fixed it -- [`pde_solve`](@ref)'s
-#     own docstring has the details.
 #
 # ## Discretisation and the forward solve
 
@@ -88,7 +71,7 @@ loss(κ::Real) = sum(abs2, forward(κ)[obs_idx[k]] - u_obs[k] for k in eachindex
 # calls it through an `AutoEnzyme` backend. Do *not* add `Enzyme.@import_rrule(typeof(pde_solve), ...)` here -- besides
 # defining a second rule for the same signature, that bridge corrupts Enzyme's shadow of a
 # sparse `A` whenever the cotangent carries an explicit zero, and returns a wrong gradient
-# with no error at all (`pde_solve`'s own docstring, gpena/Bramble.jl#240).
+# with no error at all (`pde_solve`'s own docstring).
 #
 # `loss` closes over `Wₕ`/`l`, which Enzyme cannot prove read-only on its own, so the backend
 # wraps the function `Const` (`function_annotation`) and sets `set_runtime_activity` -- the same

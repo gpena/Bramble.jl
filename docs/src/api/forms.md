@@ -122,8 +122,7 @@ coefficient,
 `jacobian_pattern` reads the Jacobian's sparsity pattern directly off the form's AST,
 without AD tracing. `ast_sparsity_detector` wraps it as an
 `ADTypes.AbstractSparsityDetector`, ready to hand `AutoSparse` directly (requires
-[ADTypes.jl](https://github.com/SciML/ADTypes.jl)). No test runs the `AutoSparse`
-wrapper until v4.2.0, when the AD backends return.
+[ADTypes.jl](https://github.com/SciML/ADTypes.jl)).
 
 ```@docs
 jacobian_pattern

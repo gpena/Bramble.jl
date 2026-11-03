@@ -9,35 +9,27 @@ using Enzyme.EnzymeRules: EnzymeRules, RevConfig, FwdConfig, AugmentedReturn
 using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange, sparse
 using LinearAlgebra: lu
 
-# A native Enzyme reverse rule for `pde_solve`, used instead of `Enzyme.@import_rrule`
-# (gpena/Bramble.jl#240).
+# A native Enzyme reverse rule for `pde_solve`, used instead of `Enzyme.@import_rrule`.
 #
-# The maths is the same adjoint `BrambleChainRulesExt`'s `ChainRulesCore.rrule` states: solve
+# The maths is the adjoint `BrambleChainRulesExt`'s `ChainRulesCore.rrule` states: solve
 # `Aᵀ λ = ∂J/∂u` once against the forward solve's own factorisation, then `∂J/∂A = -λuᵀ` on
-# `A`'s stored pattern and `∂J/∂F = λ`. What changes is *how the cotangent reaches Enzyme*,
-# and that is the entire reason this file exists.
+# `A`'s stored pattern and `∂J/∂F = λ`. The two rules differ in how the cotangent reaches
+# Enzyme.
 #
-# `@import_rrule`'s bridge takes the `SparseMatrixCSC` the rrule *returns* and merges it into
+# `@import_rrule`'s bridge takes the `SparseMatrixCSC` the rrule returns and merges it into
 # Enzyme's own shadow of `A`. That merge drops the cotangent's explicit zeros from `nzval`
-# while leaving `colptr`/`rowval` untouched, so the shadow stops being a well-formed
-# `SparseMatrixCSC`: measured directly on a 31-nonzero operator whose cotangent had 4 exact
-# zeros, the shadow came back with `length(nzval) == 27` against `colptr[end] - 1 == 31`, and
-# `Matrix(shadow)` then fails its own `_goodbuffers` assertion. Nothing errors during
-# differentiation; the gradient is simply wrong, and wrong only when the cotangent happens to
-# contain an exact zero -- which a homogeneous Dirichlet problem produces routinely (a
-# constrained row's solution entry is exactly its boundary value, so `u[j] == 0` makes a whole
-# column of `-λuᵀ` exactly zero). That is why an inverse problem recovering a *diffusion
-# coefficient* returned a confidently wrong gradient while the same rule checked by hand, and
-# every `F`-only (Dirichlet-value) gradient, stayed correct.
+# but leaves `colptr` and `rowval`, so the shadow is no longer a well-formed
+# `SparseMatrixCSC` and the gradient is wrong without any error. The cotangent has explicit
+# zeros whenever some `u[j]` is exactly zero, which a homogeneous Dirichlet problem produces:
+# a constrained row's solution entry is its boundary value, so a whole column of `-λuᵀ`
+# vanishes. A gradient with respect to a diffusion coefficient is then wrong, while an
+# `F`-only (Dirichlet-value) gradient stays correct.
 #
-# This rule never builds a cotangent object for the bridge to merge. It accumulates straight
-# into `A.dval`'s own `nzval`, entry by entry, on the pattern Enzyme already allocated -- so
-# there is nothing to restructure and no explicit zero to drop.
-#
-# `BrambleChainRulesExt`'s rrule stays exactly as it was: it is still what `Zygote` and any
-# other `ChainRulesCore` consumer uses, and it is still checked against finite differences on
-# its own. A caller on Enzyme must *not* also call `@import_rrule` now -- that would define a
-# second rule for this same signature.
+# This rule never builds a cotangent object for the bridge to merge. It accumulates into
+# `A.dval`'s own `nzval`, entry by entry, on the pattern Enzyme already allocated, so there
+# is no explicit zero to drop. A caller on Enzyme must not also call `@import_rrule`: that
+# defines a second rule for the same signature. The rrule serves every other
+# `ChainRulesCore` consumer.
 
 @noinline function _throw_batched(width)
     throw(
@@ -119,7 +111,7 @@ function EnzymeRules.reverse(
     return (nothing, nothing)
 end
 
-# The `CpuThreaded` engine entries' rules (gpena/Bramble.jl#369).
+# The `CpuThreaded` engine entries' rules.
 include("BrambleEnzymeExt/threaded.jl")
 
 end

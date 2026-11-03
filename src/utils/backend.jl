@@ -93,19 +93,17 @@ function locality end
 
 Abstract supertype for backend execution policies.
 
-Two regimes sit under it, and the split is the point: [`CpuPolicy`](@ref)
-for work a CPU loop drives, [`GpuPolicy`](@ref) for work a device schedules. Before the split
-there was only "serial or threaded", which had no way to say *where*: a GPU backend was
-constructed with `Serial()`, a policy that says a single CPU thread walks the array element by
-element -- the one thing a device array refuses.
+Two regimes sit under it: [`CpuPolicy`](@ref) for work a CPU loop drives, [`GpuPolicy`](@ref)
+for work a device schedules. A policy says *where* the work runs: `CpuSerial` walks the array
+element by element on one CPU thread, the one thing a device array refuses.
 """
 abstract type ExecutionPolicy end
 
 """
     CpuPolicy <: ExecutionPolicy
 
-Abstract supertype for the policies a CPU loop executes: [`CpuSerial`](@ref) and
-[`CpuThreaded`](@ref).
+Abstract supertype for the policies a CPU loop executes: [`CpuSerial`](@ref),
+[`CpuThreaded`](@ref) and [`CpuPolyester`](@ref).
 
 The CPU sweeps dispatch on this rather than on each concrete policy, so a `GpuPolicy` reaching
 one is a method error with a message rather than a scalar-indexing failure several frames in.
@@ -124,8 +122,7 @@ Sequential execution policy.
 Directs grid operations and form assembly to execute via single-threaded loops.
 This is the default execution policy.
 
-Spelled `Serial()` as often as not: `const Serial = CpuSerial`, kept because it is what every
-call site, every test and every benchmark key in this repository already says.
+Also spelled `Serial()`: `const Serial = CpuSerial`.
 
 The grid sizes at which [`CpuThreaded`](@ref) and [`CpuPolyester`](@ref) start beating this policy
 were measured per workload rather than assumed -- see their own docstrings for the numbers.
@@ -143,7 +140,7 @@ Directs grid operations and form assembly to execute across CPU threads via stat
 Execution is unconditional: no per-call size thresholds are imposed. For workloads dominated
 by small, frequently repeated calls, use [`CpuSerial`](@ref).
 
-Spelled `Parallel()` as often as not: `const Parallel = CpuThreaded`.
+Also spelled `Parallel()`: `const Parallel = CpuThreaded`.
 
 A call made from inside another threaded region, such as the body of a user's own
 `Threads.@threads` loop, or from a spawned task while another task's threaded region runs,
@@ -180,8 +177,7 @@ whose per-call overhead is low enough to pay off on grids where [`CpuThreaded`](
 `Threads.@threads` does not. The sweeps this policy selects are
 implemented in the `BramblePolyesterExt` package extension, not here: `using Polyester` must
 be loaded before this policy reaches one of them, or the call errors naming the package,
-matching [`metal_backend`](@ref)'s precedent. `Parallel()` is untouched and keeps meaning
-`Threads.@threads`.
+matching [`metal_backend`](@ref)'s precedent. `Parallel()` means `Threads.@threads`.
 
 Its crossover against `CpuSerial` falls at smaller sizes than [`CpuThreaded`](@ref)'s for
 every workload measured, `D₋ₓ!` and the warmed broadcast axpy `vₕ .= a .* uₕ .+ wₕ`

@@ -6,11 +6,10 @@ using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange, sparse
 using LinearAlgebra: lu
 using PrecompileTools: @setup_workload, @compile_workload
 
-# Gated on `ChainRulesCore` alone -- no `SciMLBase`/`LinearSolve` coupling, so a caller who
-# only wants gradients through a Bramble solve never needs either. `pde_solve`'s own docstring
-# (`src/solvers/pde_solve.jl`) explains why this one function is the entire adjoint story: nothing
-# else in the assemble/Dirichlet path needs a hand-written rule, since it is already
-# reverse-mode-differentiable on its own.
+# Gated on `ChainRulesCore` alone, with no `SciMLBase` or `LinearSolve` coupling, so a caller
+# who only wants gradients through a Bramble solve needs neither. `pde_solve`'s own docstring
+# (`src/solvers/pde_solve.jl`) explains why this one function carries the whole adjoint:
+# nothing else in the assemble/Dirichlet path needs a hand-written rule.
 
 """
     ChainRulesCore.rrule(::typeof(pde_solve), A::SparseMatrixCSC, F::AbstractVector; kwargs...)

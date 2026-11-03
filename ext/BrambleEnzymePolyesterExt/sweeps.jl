@@ -452,10 +452,10 @@ end
 #   closure capturing a constant array otherwise throws `EnzymeRuntimeActivityError`.
 #
 # The reverse pass evaluates the closure again, so it must see the closure's captured data as
-# it was before this call. Two things can change it: later code (`overwritten`, which counts
-# `func` first, so `f` is entry 4), and this very call, when the closure reads `v`
-# (`i -> v[i]^2`) by any route: a capture, a view, a `Dict`, a `Memory`, a global. No walk of
-# the closure finds every route, so whenever `v` carries a shadow its values are kept from
+# it was before this call. Two things can change it. Later code can (`overwritten`, which
+# counts `func` first, so `f` is entry 4). So can this very call, when the closure reads `v`
+# (`i -> v[i]^2`) by any route: a capture, a view, a `Dict`, a `Memory` or a global. No walk
+# of the closure finds every route, so whenever `v` carries a shadow its values are kept from
 # before the primal (one copy of `v` per call), and put back in `v` for the reverse. A closure
 # whose data may change later is copied whole, before the primal too.
 # The augmented primal of a hook: `prim()` runs it, `f_overwritten` says whether the closure

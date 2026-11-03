@@ -19,10 +19,6 @@
 # and the manufactured solution ``u_{\text{exact}}(x) = e^{x}``, with ``g`` calculated so that
 # it is exactly satisfied.
 #
-# The boundary stays Dirichlet-only here because forms on a ghost space refuse the automatic
-# differentiation that Newton's Jacobian needs, which arrives with milestone v4.2.0
-# (automatic differentiation and form correctness on the CPU).
-#
 # ## The mesh and the load
 
 using Bramble
@@ -123,7 +119,7 @@ extrema(picard_ratios)
 # residual below cannot use that same trick directly: `T` is `Float64` on a plain call but a
 # `ForwardDiff.Dual` while `prepare_jacobian`/`jacobian` are probing it, and a matrix allocated
 # for one element type cannot hold values of the other, so `diffusion_matrix` builds a fresh,
-# `T`-typed matrix (pattern included) on every call, the same way it always did:
+# `T`-typed matrix (pattern included) on every call:
 
 using ForwardDiff, DifferentiationInterface
 import SparseConnectivityTracer, SparseMatrixColorings
@@ -166,15 +162,11 @@ length(newton_residuals), newton_residuals
 @test length(newton_residuals) < 8                                                          #src
 @test newton_residuals[end] < 1e-10                                                         #src
 
-# Close to allocation-free, not quite: the two rebuilds this step avoids, the Jacobian's
-# sparsity pattern, and the diffusion matrix's own pattern inside `assemble`, were the two
-# largest costs, but `diffusion_matrix` still rebuilds a *fresh* matrix, values and pattern
-# both, on every call, because `residual` has to stay generic over `T`
-# (`Float64` on a plain call, `ForwardDiff.Dual` while `jacobian!` is probing it) and a matrix
-# allocated for one element type cannot hold the other. A plain `residual(u)` call rebuilds
-# `A` once, at `T = Float64`; a full Newton step rebuilds it again at `T = Dual` for every
-# colour `jacobian!`'s sparse sweep needs. The cost of a call is measured further down, next
-# to its cached counterpart.
+# Preparing the Jacobian once spares its sparsity pattern, but `diffusion_matrix` still
+# builds a fresh matrix, values and pattern both, on every call, for the reason given above.
+# A plain `residual(u)` call builds `A` once, at `T = Float64`; a full Newton step builds it
+# again at `T = Dual` for every colour `jacobian!`'s sparse sweep needs. The cost of a call
+# is measured further down, next to its cached counterpart.
 #
 # Quadratic convergence means the residual's correct digits roughly *double* each step, against
 # Picard's roughly constant gain of one, and it shows directly in how fast that list reaches
@@ -192,10 +184,10 @@ norm₁ₕ(uₕ_newton .- uexact), norm₁ₕ(uₙ .- uexact)
 
 # ## Closing the gap: caching the diffusion matrix by element type
 #
-# `diffusion_matrix` rebuilds its pattern on every call for a real reason, since `T` differs between
-# a plain call and a `jacobian!` sweep and a `Float64` matrix cannot hold a `Dual`. The
-# *pattern* itself is exactly as fixed across element types as it is across Newton iterations,
-# though. Only `α`'s values differ, and only because they were evaluated at a different `T`.
+# `diffusion_matrix` rebuilds its pattern on every call because `T` differs between a plain
+# call and a `jacobian!` sweep. The *pattern* itself is as fixed across element types as it
+# is across Newton iterations: only `α`'s values differ, because they were evaluated at a
+# different `T`.
 # [`type_cached_assemble!`](@ref) gives that pattern a place to live per type it is ever reached
 # at, instead of rebuilding it from nothing every time. `build_diffusion` is named and defined
 # once, the same reason `a` above is built once outside the Picard loop rather than inside it;
@@ -387,8 +379,8 @@ end                                                                             
 #  #src
 # A comparison worth showing rather than only claiming: Picard from the top of this page  #src
 # against `nonlinear_problem` plus `NewtonRaphson`, each wrapped in its own top-level function  #src
-# so the timing is behind a function barrier, never over top-level globals  #src
-# (bramble-verification). Both reuse a sparsity pattern already computed once above rather than  #src
+# so the timing is behind a function barrier, never over top-level globals.  #src
+# Both reuse a sparsity pattern already computed once above rather than  #src
 # rediscovering it on every call -- `run_picard` refills `A`/`a` from the Picard section at the  #src
 # top of this page, `run_nonlinearsolve` reuses `J_native` -- so this measures the cost either  #src
 # method pays *given* a known pattern, not first-time pattern discovery for either one. Both  #src
@@ -425,20 +417,11 @@ b_picard = @allocated run_picard()  #src
 b_ns = @allocated run_nonlinearsolve()  #src
 (picard_ms = 1000t_picard, nonlinearsolve_ms = 1000t_ns, picard_bytes = b_picard, nonlinearsolve_bytes = b_ns)  #src
 #src
-# A single machine, single process, `ntrials`-sample minimum of each, informative as a ratio  #src
-# between the two methods measured together, not as an absolute number to compare against a  #src
-# different run (bramble-benchmarks is the formal, commit-indexed baseline for that, and this  #src
-# machine was on battery power when these numbers were taken, which a same-run ratio cancels  #src
-# but an absolute number would not). `nonlinear_problem` came out both faster and lighter than  #src
-# the hand-written Picard loop here -- 0.156 ms against 0.237 ms (0.66x), 321,232 B against  #src
-# 595,792 B (0.54x) -- `NewtonRaphson`'s quadratic convergence reaching machine precision in  #src
-# fewer steps than Picard's linear rate needs, each step no more expensive than Picard's own  #src
-# `assemble!`/solve now that the sparse AD Jacobian is exactly as targeted as the hand-built  #src
-# one above.  #src
-#  #src
-# Bounded loosely (an order of magnitude either way), not pinned to today's ratio: the point  #src
-# is that neither method is orders of magnitude slower than the other on this problem, not    #src
-# today's precise multiplier, which a different machine or Julia version can shift.           #src
+# The minimum of `ntrials` samples of each, in one process: informative as a ratio between  #src
+# the two methods measured together, not as an absolute number. The bound is loose (an       #src
+# order of magnitude either way): the point is that neither method is orders of magnitude    #src
+# slower than the other on this problem, not the exact multiplier, which a different        #src
+# machine or Julia version shifts.                                                           #src
 @test 0.1 < t_ns / t_picard < 10                                                             #src
 @test 0.1 < b_ns / b_picard < 10                                                             #src
 #

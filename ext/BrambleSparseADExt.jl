@@ -15,9 +15,8 @@ using ADTypes: ADTypes
 using PrecompileTools: @setup_workload, @compile_workload
 
 # Wraps a `BilinearForm` and the coefficient dependencies `jacobian_pattern` needs, so the
-# pattern can be recomputed on demand rather than materialized once and stored: cheap either
-# way (see the timings on `docs/src/examples/poisson_nonlinear.md`), and this way a caller
-# never has to remember to rebuild the detector if `a`'s coefficients change identity.
+# pattern is computed on demand, not stored: it costs one walk of the grid, and a caller
+# never has to rebuild the detector if `a`'s coefficients change identity.
 struct ASTSparsityDetector{F <: BilinearForm, D <: Tuple} <: ADTypes.AbstractSparsityDetector
     form::F
     coefficient_dependencies::D

@@ -51,7 +51,7 @@
 # cannot avoid on its own) but hurts `@batch`, which already does the equivalent split
 # internally -- chunking on top would split twice. The reductions are the exception: they
 # run `CpuThreaded`'s own bands (`_last_axis_chunks` included), so their sums equal
-# `CpuThreaded`'s bitwise (gpena/Bramble.jl#473).
+# `CpuThreaded`'s bitwise.
 #
 # Allocation. A warm `CpuPolyester` call allocates 0 B, on any grid, bar the limits
 # below. Polyester's argument box is the only source, bar a task's first reduction of an
@@ -86,8 +86,8 @@
 # (`_batch_splittable`), and a reduction over storage other than a dense vector or a
 # contiguous view of one (`_Opaque`). A task body runs under an exception guard (`@_task`
 # below), so a throw inside a task reaches the caller with `CpuSerial`'s exception type and
-# text, never as a crash. No `CpuPolyester` call reaches `Threads.@threads` or `Threads.@spawn`
-# (gpena/Bramble.jl#400).
+# text, never as a crash. No `CpuPolyester` call reaches `Threads.@threads` or
+# `Threads.@spawn`.
 module BramblePolyesterExt
 
 using Bramble
@@ -115,12 +115,12 @@ using PrecompileTools: @setup_workload, @compile_workload
 # iteration, stores each band's sum in `partials[b]`, and sums `partials` on the host as
 # `CpuThreaded` does. So the result depends on the data and `Threads.nthreads()` only, never
 # on how many workers `@batch` finds free: a reduction nested in another `CpuPolyester`
-# sweep, which runs every band on one worker, returns the top-level value bitwise
-# (gpena/Bramble.jl#473). A `@batch reduction=((+, s),)` would not: it splits the range by
+# sweep, which runs every band on one worker, returns the top-level value bitwise. A
+# `@batch reduction=((+, s),)` would not: it splits the range by
 # the free workers and adds their sums, so a nested call associated differently. The bands
 # run here on the `PtrArray`s `@batch` makes, compiled into this extension's image, and
 # under `CpuThreaded` on the arrays, from Bramble's. Their sum order is fixed in the source
-# (`_fixed_order_sum`), whatever level each image is built at (gpena/Bramble.jl#942). At
+# (`_fixed_order_sum`), whatever level each image is built at. At
 # one thread the unmasked hooks call `_threaded_dot`, which runs `CpuSerial`'s `_dot`, so
 # the three policies agree bitwise.
 #
@@ -151,7 +151,7 @@ end
 # Otherwise the top-level call would run the band body on a strided `PtrArray`, and a nested
 # one, which `@batch` runs on the host without converting, on the view itself: two compiled
 # bodies, which associated differently while the bands were `@simd` loops
-# (gpena/Bramble.jl#473; their order is fixed in the source since #942). The opaque form
+# (their order is fixed in the source). The opaque form
 # costs a heap-boxed argument tuple per call, never a different sum.
 const _PtrAlike = Union{DenseVector, Base.FastContiguousSubArray{<:Any, 1, <:DenseVector}}
 
@@ -202,8 +202,7 @@ end
 # mask's words rather than the mask, the same walk and the same `muladd`s in the same order.
 # The sums agree when both copies fuse alike, as from `-O1` up, the gate's level. On
 # aarch64 a `muladd` does not fuse at `-O0`, so an `-O0` extension image loaded beside an
-# `-O2` Bramble image sums a mask differently; that gap is known and no gate exercises it
-# (gpena/Bramble.jl#942).
+# `-O2` Bramble image sums a mask differently; that gap is known and no gate exercises it.
 # The `muladd` stays spelled out here: calling `_dot_term` (utils/linear_algebra.jl) from
 # this `@batch` body ran the boundary-mask reduction about 6% slower (2 threads, 401²).
 @noinline function _masked_words_band(u, v, w, chunks::Tuple, ax, nb::Int, b::Int)
@@ -384,8 +383,7 @@ end
 #
 # Limits fall back to boxing, never to a wrong result: an isbits kernel (whose box stays
 # on the stack anyway), a kernel type arriving when 256 types have slots already, and a
-# call finding all 64 slots of its type taken or retired all cross whole as before
-# gpena/Bramble.jl#476.
+# call finding all 64 slots of its type taken or retired all cross whole.
 #
 # Ordering: the kernel is stored before `@batch` launches its tasks, and Polyester's launch
 # is a release that each task's acquire pairs with; the host clears the slot only after the
@@ -630,7 +628,7 @@ function _batch_for_bands!(v::AbstractArray, idxs::Union{AbstractUnitRange, Cart
 end
 
 # The split sweeps' `@batch` loop is typed on nothing that depends on the kernel, so a new
-# user function compiles no Polyester method (#503). The guarded task and its arguments
+# user function compiles no Polyester method. The guarded task and its arguments
 # (split kernel, its arrays, the destinations, the index range) are encoded as one isbits
 # payload: isbits values as they are, each mutable object as its address (`_Obj`), a tuple
 # element by element, and any other immutable value (a `SubArray`) field by field
@@ -717,8 +715,8 @@ end
     b -> _for_fill!(v, f, idxs, n, b), 1:n)
 
 # A whole kernel's loop runs one guarded slab per iteration, not one guarded index: a
-# guarded call per index ran an `avgₕ!` closure over an array 5% slower than the parent
-# of gpena/Bramble.jl#433. Its box should stay no bigger than the parent's, which captured
+# guarded call per index ran an `avgₕ!` closure over an array 5% slower than a loop that
+# captured the whole kernel. Its box should stay no bigger than that loop's, which captured
 # `v`, the kernel and `idxs`. When `idxs` covers `v` (every `Rₕ!`/`avgₕ!` sweep), the loop
 # runs over `Base.OneTo(Threads.nthreads())` and each task rebuilds its slab from `v`'s own
 # indices (`_full`), so it captures `v`, the kernel and that range, and no `idxs`. Any other
@@ -952,9 +950,8 @@ end
 # Neither hook lets `@batch` capture the target, the space or the term whole: each holds GC
 # references (a mesh, a sink's vectors), which put the argument box on the heap. The target's
 # storage, `nzval` for a replay target and `y`, `x` for an action target, crosses as
-# top-level loop arguments (`_replay_parts`): wrapped in a struct, a `PtrArray` ran 1.11×
-# slower in the prototype (commit f0f2d538; gpena/Bramble.jl#437 item 3).
-# The target's other fields cross with `sp`, `term` and `mesh_markers` as one
+# top-level loop arguments (`_replay_parts`). A `PtrArray` wrapped in a struct ran 1.11×
+# slower. The target's other fields cross with `sp`, `term` and `mesh_markers` as one
 # `_batch_split`, and each task rebuilds the four (`_batch_rebuild`) and joins the target
 # back around its storage (`_replay_join`). A single-iteration `@batch` runs its body
 # inline on the plain `Vector`s, which the rebuild and the join accept as well. The caller
@@ -962,9 +959,8 @@ end
 #
 # A value `_batch_split` cannot take apart (a `BigFloat` coefficient, an array of
 # `BigFloat`s) does not throw: `_split_or_whole` decides from the types, at compile time,
-# that the split does not apply, and the loop captures the parts whole, which boxes as every
-# hook did before gpena/Bramble.jl#437. The storage vectors join the test (`hot`), so a
-# `BigFloat` matrix or vector falls back too.
+# that the split does not apply, and the loop captures the parts whole, which boxes. The
+# storage vectors join the test (`hot`), so a `BigFloat` matrix or vector falls back too.
 # The skeleton of parts that cross `@batch` whole (`_split_or_whole`).
 struct _Whole end
 
@@ -1211,7 +1207,7 @@ end
 # single-iteration `@batch` runs its body inline on the plain `Vector`s, which the rebuild
 # accepts as well. The caller (`_mf_product!`) has checked on the host that the plan is the
 # product's form's. Parts that do not split cross whole, the host-bound AST among them
-# (`_split_or_whole` above). The walk each unit is cut to (`_WalkCut`, #884, or `nothing`)
+# (`_split_or_whole` above). The walk each unit is cut to (`_WalkCut`, or `nothing`)
 # crosses with them, its line ranges as `PtrArray`s.
 @_task function _mf_band!(skel, arrays, y, x, len, nbands, b, omin, omax)
     (α, mask), Wu, Wv, ast, geom, walk = _rejoin(skel, arrays)
@@ -1369,7 +1365,7 @@ if Bramble.PRECOMPILE_WORKLOAD
                 op = matrix_free_operator(_pw_form(Wp); dirichlet = :boundary)
                 mul!(y, op, x)
                 mul!(y, op, x, 0.5, 2.0)
-                # The other paths whose first call paid 100 ms or more (#434). Cheaper paths
+                # The other paths whose first call paid 100 ms or more. Cheaper paths
                 # stay out: each precompiled `@batch` signature adds about four binding-edge
                 # invalidations.
                 g(x) = sum(x)

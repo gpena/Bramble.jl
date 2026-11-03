@@ -3,22 +3,24 @@
 # `pde_solve`: the solve entry point, a plain `A \ F` unless `solver` or the macOS
 # Accelerate route says otherwise, and the one function a reverse-mode adjoint rule attaches to.
 #
-# No source-level AD tool -- forward or reverse, `ForwardDiff`, `Enzyme` -- can differentiate
-# through `\` itself: it dispatches into compiled BLAS/SuiteSparse code, opaque to every one
-# of them, the same reason none can differentiate through any other library call written in C
-# or Fortran. Everything *around* the solve --
-# `assemble`, `dirichlet_bc!` -- is already reverse-mode-differentiable (`docs/notes/internals/
-# autodiff.md`), so this one function is the entire gap between "Bramble can be forward-mode
-# differentiated" (true today) and "Bramble can be used inside a gradient-based inverse
-# problem or a PDE-constrained training loop without paying one factorisation per parameter"
-# (what closes gpena/Bramble.jl#228).
+# No source-level AD tool can differentiate through `\` itself: it dispatches into compiled
+# BLAS/SuiteSparse code, opaque to every one of them, the same reason none can differentiate
+# through any other library call written in C or Fortran. Everything *around* the solve,
+# `assemble` and `dirichlet_bc!`, differentiates on its own (`docs/notes/internals/
+# autodiff.md`), so this one function is the gap between differentiating Bramble and using it
+# inside a gradient-based inverse problem or a PDE-constrained training loop without paying
+# one factorisation per parameter.
+#
+# Through `pde_solve`, Enzyme reverse has the adjoint rule below. ForwardDiff overflows the
+# stack in the sparse `lu` of a `Dual` matrix, and Enzyme forward throws
+# `IllegalTypeAnalysisException` (`docs/notes/internals/ad_coverage.md`).
 #
 # `pde_solve` itself needs no weak dependency: without `ChainRulesCore` it is the same solve,
 # just not differentiable. `BrambleChainRulesExt` supplies the
 # `ChainRulesCore.rrule`, and `BrambleEnzymeExt` a native `EnzymeRules` rule -- Enzyme gets
 # its own rather than a bridged one because `Enzyme.@import_rrule`'s bridge corrupts the
 # shadow of a sparse `A` whenever the cotangent carries an explicit zero
-# (gpena/Bramble.jl#240, and this file's docstring below).
+# (this file's docstring below).
 
 # `:default` takes `accelerate_solve` on macOS only for a symmetric `A`: Accelerate loses on
 # unsymmetric systems. An explicit `sym` hint is trusted unchecked, and `:unsymmetric` is the
@@ -126,10 +128,11 @@ solve and to the adjoint solve of `sparse(A')`, so `solver` and `sym` apply to `
 and a `sym` hint must hold for `Aᴴ` too. A `SparseMatrixCSR` `A` has no rule (ChainRules sees
 a method with no `rrule`, and differentiates the conversion and the solver's internals).
 `using Enzyme` is enough for the same adjoint through `BrambleEnzymeExt`'s native
-`EnzymeRules` rule, which takes no keywords (it cannot run before v4.2.0); do not
-call `Enzyme.@import_rrule`, whose bridge drops the cotangent's explicit zeros from `nzval`
-and returns a wrong gradient without any error. The Enzyme rule keeps the unconjugated
-`-λ uᵀ` and is not validated for complex `A`, whose convention differs.
+`EnzymeRules` rule. It takes a `SparseMatrixCSC` `A`, a vector `F` and the keywords of
+`pde_solve`, forwarded as the rrule forwards them, and differentiates in reverse mode at
+width 1: a batched reverse throws an `ArgumentError`. It conjugates `u` as the rrule does.
+Do not call `Enzyme.@import_rrule`, whose bridge drops the cotangent's explicit zeros from
+`nzval` and returns a wrong gradient without any error.
 
 A closure capturing a grid space or a form needs `Enzyme.Const(f)` and
 `Enzyme.set_runtime_activity(Enzyme.Reverse)`, as the automatic

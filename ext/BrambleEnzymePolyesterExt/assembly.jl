@@ -32,8 +32,8 @@
 # Batch width: forward passes `BatchDuplicated` arguments through, so each task runs every
 # lane in one call. Reverse runs a width-1 thunk per lane in each task of one launch.
 #
-# A matrix-free product reaches the bilinear hooks with an action target, not behind a `Ref`
-# (src/assembly/matrix_free.jl): no rule here covers it.
+# A matrix-free product reaches the bilinear hooks with an action target behind a `Ref`
+# (src/assembly/matrix_free.jl). Its rules are in operators.jl and reuse these slabs.
 
 const _AsmBandReplay = typeof(Bramble._batch_bilinear_band_replay!)
 const _AsmColourReplay = typeof(Bramble._batch_bilinear_colour_replay!)
