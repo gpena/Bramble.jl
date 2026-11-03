@@ -435,6 +435,7 @@ const ENZYME_FILES = (
     "ext/enzyme_polyester_ext.jl",
     "ext/enzyme_polyester_hooks.jl",
     "ext/enzyme_threaded_ext.jl",
+    "ext/enzyme_forward_assembly.jl",
     "ext/chainrules_enzyme_ext.jl",
     "space/autodiff_policies.jl",
     "space/autodiff_heavy.jl",

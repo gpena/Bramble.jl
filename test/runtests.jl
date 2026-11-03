@@ -226,7 +226,9 @@ end
 
 # One file of the `ENZYME_FILES`, with what it needs. `autodiff_heavy.jl` reuses
 # `check_backend` and `_ad_problems`, so autodiff_backends.jl comes first (the unit suite
-# has already included it when it runs in the same process).
+# has already included it when it runs in the same process). Every Enzyme file is reached
+# through that list, never by its own `include` here: ext/enzyme_forward_assembly.jl (#1124)
+# included directly would run a second time, in the parent process.
 function __bramble_include_enzyme_file(file)
     file == "space/autodiff_heavy.jl" && !__bramble_with_unit_tests &&
         include("space/autodiff_backends.jl")
