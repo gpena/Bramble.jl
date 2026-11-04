@@ -32,8 +32,8 @@ Bramble's runtime kernels mutate destination buffers using `setindex!`, so a bac
 
 | Backend | `CpuSerial` | `CpuThreaded` | `CpuPolyester` |
 | :--- | :--- | :--- | :--- |
-| ForwardDiff | works | works | works |
-| Enzyme | works | works, with limits | works, with limits |
+| ForwardDiff | works, with limits | works, with limits | works, with limits |
+| Enzyme | works, with limits | works, with limits | works, with limits |
 
 [`ad_coverage.md`](ad_coverage.md) lists, per feature and policy, what each backend differentiates, what it excludes, and the limits.
 
@@ -53,7 +53,7 @@ The exceptions stay as they are:
 
 The extensions keep their backend-native rules (`ChainRulesCore.rrule` and the Enzyme rule), which DI picks up. `src/` takes no DI dependency.
 
-The Enzyme failures under `CpuThreaded` and `CpuPolyester` belong to the backend, since direct calls fail the same way, so they are not an exception to this policy.
+The Enzyme failures belong to the backend, since direct calls fail the same way, so they are not an exception to this policy.
 
 ## Differentiating forms and linear systems
 
