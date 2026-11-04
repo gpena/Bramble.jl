@@ -3,7 +3,7 @@ CurrentModule = Bramble
 CollapsedDocStrings = false
 ```
 
-# AD coverage: every public feature under each kept backend and policy (gpena/Bramble.jl#1102)
+# AD coverage: every public feature under each kept backend and policy
 
 [`ad_backend_evaluation.md`](ad_backend_evaluation.md) chose the AD backends, and
 [`ad_di_evaluation.md`](ad_di_evaluation.md) chose to call them through
@@ -25,8 +25,8 @@ gradient.
 
 | Item | Value |
 |:--|:--|
-| Date | 2026-11-03 |
-| Tree | branch `v4-2-0-followup` at `476c6134`, with the S1 to S6 working tree |
+| Date | 2026-11-03; the three-summand cells 2026-11-04 |
+| Tree | branch `v4-2-0-followup`; the three-summand cells with the `_allocate_walked` fix |
 | Machine | Apple M2, Julia 1.13.3 |
 | Enzyme | 0.13.216 |
 | Threads | 2, so both threaded policies run on 2 threads |
@@ -39,7 +39,8 @@ cannot run (rel. 1e-5).
 ## Kept backends
 
 ForwardDiff, through DI, and Enzyme, called directly and through DI. PolyesterForwardDiff,
-ReverseDiff and Mooncake are dropped (gpena/Bramble.jl#369, `ad_backend_evaluation.md`).
+ReverseDiff and Mooncake are dropped by the AD backend evaluation
+(`ad_backend_evaluation.md`).
 
 ## The matrix
 
@@ -59,14 +60,14 @@ policy. Each Enzyme cell holds both modes, reverse then forward, unless it says 
 | assemble | the same with `Mₕ(κ)` | works | works | works | works |
 | assemble | `assemble(a, l; dirichlet)`, 1D | works | works | works | works |
 | assemble | the same in 2D | works | reverse excluded: aborts (`needsCacheWholeAllocation`), forward works | not run | not run |
-| assemble | three summands, the third scaled by a constant | works | reverse works, forward open (#1124) | reverse excluded: `EnzymeInternalError`, forward open (#1124) | reverse excluded: `EnzymeInternalError`, forward open (#1124) |
+| assemble | three summands, the third scaled by a constant | works | reverse works, forward open (#1124) | reverse works, forward open (#1124) | reverse works, forward open (#1124) |
 | pde_solve | `pde_solve(A, F)` with `A` from a 1D `assemble` of `κ` | excluded: `StackOverflowError` on a `Dual` matrix | reverse works, forward excluded: `IllegalTypeAnalysisException` | reverse works, forward excluded: `IllegalTypeAnalysisException` | reverse works, forward excluded: `IllegalTypeAnalysisException` |
 | semidiscretize | `semidiscretize_rhs(sd)(du, u, p, t)` | works | works | works | works |
 | matrix_free | `mul!` with `matrix_free_operator` | works | works | works | works |
 | kronecker | `mul!` with `kronecker_operator` | works | works | works | works |
 | ghost | `assemble(a, l)` on a constrained ghost space, parameters scale the form's coefficients | works | reverse excluded: `EnzymeInternalError`, forward not run | not run | not run |
 | ghost | the same with `inner₊` and `innerₕ` terms only | works | reverse excluded: `EnzymeInternalError`, forward not run | not run | not run |
-| ghost | relation data that depend on the parameter | works | excluded: fails (S2.2 measurement, see the limits) | excluded: fails (S2.2 measurement) | excluded: fails (S2.2 measurement) |
+| ghost | relation data that depend on the parameter | works | excluded: fails (measured outside this test, see the limits) | excluded: fails (measured outside this test) | excluded: fails (measured outside this test) |
 | ghost | a Robin coefficient that depends on the parameter | excluded: `MethodError` (`Float64(::Dual)`) | not run | not run | not run |
 | ghost | `Δₕ!` on a `GhostVector` | works | reverse excluded: `EnzymeNoDerivativeError`, forward excluded: segmentation fault | reverse excluded: `CompositeException`, forward not run | reverse excluded: `EnzymeNoDerivativeError`, forward not run |
 | sparse Jacobian | `AutoSparse` with `ast_sparsity_detector`, 1D diffusion residual | works | works | works | works |
@@ -83,8 +84,10 @@ Three more facts about the table:
 Enzyme differentiates `CpuSerial`, `CpuThreaded` and `CpuPolyester`, and the derivative runs
 threaded too. It never enters a `Threads.@threads` or `@batch` body: each engine hook has
 its own forward and reverse rule in `ext/BrambleEnzymeExt.jl`, and the rule runs the
-derivative threaded itself. The evidence is `test/ext/enzyme_threaded_ext.jl` (194 passing),
-`test/ext/enzyme_polyester_hooks.jl` (66 passing) and the table above, where every feature
+derivative threaded itself. The evidence is `test/ext/enzyme_threaded_ext.jl` (196
+passing in its last full run; its three-summand reverse cases, added after, pass in their
+own run under both threaded policies), `test/ext/enzyme_polyester_hooks.jl` (66 passing)
+and the table above, where every feature
 that ran under `CpuSerial` also ran under both threaded policies, except the cells marked
 `not run`.
 
@@ -139,11 +142,12 @@ so a sparse cell's verdict is its inner backend's.
   segmentation fault.
 - **Ghost spaces whose boundary data depends on the parameter fail.** Under `CpuSerial`
   Enzyme throws `Illegal calling convention fixup` in reverse and `EnzymeNoDerivativeError`
-  in forward (dgetrf), measured by the S2.2 critic on 2026-11-02. This page's own
-  `ghost_data` cell was started in reverse and stopped after more than 100 minutes of
-  compile with no result, so it is recorded from the S2.2 measurement and is not in the
-  test. ForwardDiff differentiates the data and fails on a Robin coefficient with
-  `MethodError: Float64(::Dual)`.
+  in forward (dgetrf), measured on 2026-11-02 by a review of the `CpuThreaded` rules,
+  on a ghost space whose boundary data takes the parameter. This page's own `ghost_data`
+  cell was started in reverse and stopped after more than 100 minutes of compile with no
+  result, so it is recorded from that measurement and is not in the test. ForwardDiff
+  differentiates the data and fails on a Robin coefficient with `MethodError:
+  Float64(::Dual)`.
 - **Ghost assembly fails in Enzyme reverse under `CpuSerial`.** The parameters scale the
   form's coefficients and nothing else depends on them. Both ghost assembly cells throw
   `EnzymeInternalError` after a compile of 22 and 29 minutes. The forward mode and the
@@ -154,8 +158,9 @@ so a sparse cell's verdict is its inner backend's.
   works there. Under `CpuThreaded` the reverse call was still compiling after 22 minutes
   and was stopped, so the threaded policies are not run.
 - **Plan geometry is inactive.** The plans that carry the mesh geometry (the replay plans of
-  the threaded assembly and the matrix-free plan `_mf_plan`) are inactive for Enzyme (S2.2
-  notes), so a coordinate read only through a plan gets no derivative. The `mesh` row that
+  the threaded assembly and the matrix-free plan `_mf_plan`) are inactive for Enzyme
+  (`EnzymeRules.inactive` on `_mf_plan` in `ext/BrambleEnzymeExt/threaded.jl`), so a
+  coordinate read only through a plan gets no derivative. The `mesh` row that
   assembles in the endpoint `b` works under `CpuSerial` in both modes (6e-10 and 2e-10
   against ForwardDiff); that route was not measured through a matrix-free operator or under
   the threaded policies.
@@ -165,23 +170,25 @@ so a sparse cell's verdict is its inner backend's.
   3D meshes are allowed (not in the `unit` group).
 - **Compile memory.** `_batch_mf_bands_coef`, the matrix-free reverse with a coefficient,
   compiles at 5.96 GB and 747 s under `CpuPolyester`, against 2.46 GB and 215 s under
-  `CpuSerial` (S1.4 measurement, 2026-11-02, not re-run here).
+  `CpuSerial`, measured on 2026-11-02 by the `CpuPolyester` matrix-free rule's own memory
+  run, and not re-run here.
 
-## Failures without an issue
+## Open failures
 
-These cells fail and no issue is filed for them yet. The user files issues through
-`/create-issue`, each with a milestone.
-
-- Enzyme reverse of the three-summand assembly under `CpuThreaded` and `CpuPolyester`:
-  `EnzymeInternalError`. It works under `CpuSerial`.
+- Enzyme reverse of the 2D and 3D Dirichlet assembly
+  ([gpena/Bramble.jl#1126](https://github.com/gpena/Bramble.jl/issues/1126)):
+  `needsCacheWholeAllocation` abort.
+- Ghost assembly in Enzyme reverse, `Δₕ!` on a `GhostVector`, and the Robin coefficient
+  ([gpena/Bramble.jl#1127](https://github.com/gpena/Bramble.jl/issues/1127)).
+- 3D `assemble` with `Mₕ(κ)` in Enzyme: `EnzymeNoTypeError`
+  ([gpena/Bramble.jl#1128](https://github.com/gpena/Bramble.jl/issues/1128)).
+- Enzyme forward through `pde_solve`: `IllegalTypeAnalysisException`; reverse has the
+  adjoint rule ([gpena/Bramble.jl#1129](https://github.com/gpena/Bramble.jl/issues/1129)).
 - ForwardDiff through `pde_solve`: `StackOverflowError` from the sparse `lu` of a
-  `Dual`-valued matrix. The tutorial's workaround is `Matrix(A) \ F`.
-- Enzyme forward through `pde_solve`: `IllegalTypeAnalysisException`. Reverse has the
-  adjoint rule.
-- Ghost assembly in Enzyme reverse: `EnzymeInternalError` after 22 minutes and more.
-- `Δₕ!` on a `GhostVector` in Enzyme forward: segmentation fault.
-- 3D `assemble` with `Mₕ(κ)` in Enzyme: `EnzymeNoTypeError`.
-- Enzyme reverse of the 2D Dirichlet assembly: `needsCacheWholeAllocation` abort.
+  `Dual`-valued matrix; the tutorial's workaround is `Matrix(A) \ F`
+  ([gpena/Bramble.jl#1130](https://github.com/gpena/Bramble.jl/issues/1130)).
+- ForwardDiff on a mesh built with `backend(policy = …)`
+  ([gpena/Bramble.jl#1131](https://github.com/gpena/Bramble.jl/issues/1131)).
 
 ## Compile cost of the cells
 

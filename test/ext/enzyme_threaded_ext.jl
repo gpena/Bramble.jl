@@ -122,12 +122,39 @@ function _scatter_case(p, policy, kind)
     return sum(abs2, v) + sum(w)
 end
 
-# Runs `hook`'s case of enzyme_policy_cases.jl under `CpuThreaded` in child processes
-# (`run_isolated`) and checks every mode: the child exited cleanly, reported the mode, matched
-# ForwardDiff and entered the `CpuThreaded` rule the case names.
-function _check_children(hook, modes; separate = ())
-    codes, results = EnzymePolicyCases.run_isolated(hook, modes; policy = :CpuThreaded,
-        separate)
+# A banded broadcast whose tree mixes an array with a `Float64` (`2.0 .* u`), into a
+# `VectorElement` and through `2.0 * Mₕ(u)`, the shape `inner₊(2.0 * Mₕ(κ) * ∇ₕ(U), ∇ₕ(V))`
+# builds. By value, such a `Broadcasted` fails Enzyme's calling convention at the
+# `_static_bands!` rule, so the call site passes it behind a `Ref`. `spaces` holds a
+# non-uniform grid space per policy, `B` a fixed basis.
+function _broadcast_case(p, policy, spaces, B)
+    W = policy isa CpuThreaded ? spaces[2] : spaces[1]
+    u = element(W, eltype(p))
+    parent(u) .= 1.0 .+ B * p
+    v = element(W, eltype(p))
+    v .= 2.0 .* u .+ u .^ 2
+    m = 2.0 * Mₕ(u)
+    return sum(abs2, parent(v)) + sum(c -> sum(abs2, parent(c)), m)
+end
+
+# One mesh per policy, each from the same seed, so both have the same nodes.
+function _broadcast_spaces()
+    Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+    return map((Serial(), Parallel())) do policy
+        Bramble._seed_mesh1d_rng!(1)
+        try
+            gridspace(mesh(Ω, DIMS, (false, false); backend = backend(; policy)))
+        finally
+            Bramble._unseed_mesh1d_rng!()
+        end
+    end
+end
+
+# Runs `hook`'s case of enzyme_policy_cases.jl under `policy` in child processes
+# (`run_isolated`) and checks every mode: the child exited cleanly, reported the mode,
+# matched ForwardDiff and entered the rule the case names.
+function _check_children(hook, modes; separate = (), policy = :CpuThreaded)
+    codes, results = EnzymePolicyCases.run_isolated(hook, modes; policy, separate)
     @test all(==(0), codes)
     for m in modes
         @test haskey(results, m)
@@ -160,6 +187,15 @@ end
             @test _entries(:_static_for!) > n
         end
 
+        @testset "Broadcast mixing an array and a scalar" begin
+            p = [0.3, -0.2, 0.5, 0.7]
+            spaces = _broadcast_spaces()
+            B = randn(MersenneTwister(2), prod(DIMS), length(p))
+            n = _entries(:_static_bands!)
+            @test all(<=(TOL), _gradients((q, pol) -> _broadcast_case(q, pol, spaces, B), p))
+            @test _entries(:_static_bands!) > n
+        end
+
         @testset "Closure capture shapes" begin
             p = [0.3, -0.2, 0.5, 0.7]
             for kind in (Val(:active), Val(:constant), Val(:ref))
@@ -172,9 +208,10 @@ end
             end
         end
 
-        # The critic's reproducers of S2.2, and the `THREADED` engine entries, each in child
-        # processes of its own: one case's Enzyme compile can peak near 7 GB, and compiled
-        # code stays resident, so they cannot share this process under julia_slot's 10 GB cap.
+        # The reproducers from the rules' review, and the `THREADED` engine entries, each in
+        # a child process of its own: one case's Enzyme compile can peak near 7 GB, and
+        # compiled code stays resident, so they cannot share this process under julia_slot's
+        # 10 GB cap.
         @testset "Reproducers in child processes" begin
             for c in EnzymePolicyCases.THREADED_CASES
                 # The two nested cases differentiate inside a user's `Threads.@threads` loop,
@@ -203,6 +240,19 @@ end
                     _check_children(c.hook, modes;
                         separate = ("_static_band_colour!", "_static_colour!"))
                 end
+            end
+        end
+    end
+end
+
+# Reverse through an assembly of three summands under both threaded policies, in child
+# processes: each must match ForwardDiff and enter its policy's bilinear rule.
+@testset "Three-summand assembly reverse" begin
+    if RUN_ENZYME
+        for c in EnzymePolicyCases.ASSEMBLY_REVERSE_CASES
+            @testset "$(c.hook)" begin
+                _check_children(c.hook, (:reverse, :di_reverse); policy = c.policy,
+                    separate = (c.hook,))
             end
         end
     end

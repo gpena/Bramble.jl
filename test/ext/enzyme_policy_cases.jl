@@ -576,8 +576,35 @@ const THREADED_CASES = (
         rule = "_kron_fused!")
 )
 
+# Three summands assembled into one matrix on a 9 x 9 non-uniform mesh, the coefficient from
+# the parameters. Off `CpuSerial`, Enzyme reverse fails here ("Illegal replace ficticious
+# phi" in `_allocate_walked`) unless that function tests the policy before it compares
+# `ast === form.ast`.
+function _build_three_summands(policy)
+    W = gridspace(_seeded_mesh((9, 9), policy))
+    B = randn(MersenneTwister(SEED), ndofs(W), 3)
+    function f(p::AbstractVector{T}) where {T}
+        κ = element(W, T)
+        parent(κ) .= 2.0 .+ B * p
+        a = form(W, W,
+            (U, V) -> inner₊(κ * ∇ₕ(U), ∇ₕ(V)) + innerₕ(κ * U, V) + innerₕ(κ * U, 0.5 * D₋ᵧ(V)))
+        return sum(abs2, nonzeros(assemble(a)))
+    end
+    return f, [0.5 + 0.3 * sin(k) for k in 1:3]
+end
+
+# The three-summand assembly under each threaded policy, reverse modes only (its forward
+# mode is wrong under every policy, gpena/Bramble.jl#1124), with the bilinear rule each
+# policy must enter. test/ext/enzyme_threaded_ext.jl runs them.
+const ASSEMBLY_REVERSE_CASES = (
+    (hook = "_threaded_three_summands", kind = "closure", build = _build_three_summands,
+        rule = "_static_band_colour!", policy = :CpuThreaded),
+    (hook = "_batch_three_summands", kind = "closure", build = _build_three_summands,
+        rule = "_batch_bilinear_band_replay!", policy = :CpuPolyester)
+)
+
 function case(hook::AbstractString)
-    for c in (CASES..., THREADED..., CAPTURES..., THREADED_CASES...)
+    for c in (CASES..., THREADED..., CAPTURES..., THREADED_CASES..., ASSEMBLY_REVERSE_CASES...)
         c.hook == hook && return c
     end
     throw(ArgumentError("no Enzyme case for hook \"$hook\""))
@@ -609,24 +636,28 @@ function _di(mode::Symbol)
         function_annotation = Enzyme.Const)
 end
 
-function _gradient(f, x, mode::Symbol)
-    mode === :reverse && return Enzyme.gradient(
-        Enzyme.set_runtime_activity(Enzyme.Reverse), Enzyme.Const(f), x)[1]
-    return DI.gradient(f, _di(mode), x)
+# Each mode sits behind a `Val` (`_gradient`, `_batch`, `_mode_run`): Enzyme compiles a
+# derivative when the call to it is inferred, so with `mode` a runtime `Symbol` one mode of
+# `evaluate` compiled every mode's derivative of `f`.
+_gradient(f, x, mode::Symbol) = _gradient(f, x, Val(mode))
+function _gradient(f, x, ::Val{:reverse})
+    return Enzyme.gradient(Enzyme.set_runtime_activity(Enzyme.Reverse), Enzyme.Const(f), x)[1]
 end
+_gradient(f, x, ::Val{M}) where {M} = DI.gradient(f, _di(M), x)
 
 # Distinct tangents of the parameters, one per lane of `:batch_forward`.
 _batch_tangents(x) = ntuple(k -> randn(MersenneTwister(SEED + k), length(x)), BATCH_WIDTH)
 
 # Each lane's derivative and the oracle's value for it: a directional derivative of `f` for
 # `:batch_forward`, a cotangent times the gradient for `:batch_reverse`.
-function _batch(f, x, ref, mode::Symbol)
-    if mode === :batch_forward
-        seeds = _batch_tangents(x)
-        r = Enzyme.autodiff(Enzyme.set_runtime_activity(Enzyme.Forward), Enzyme.Const(f),
-            Enzyme.BatchDuplicated(copy(x), seeds))
-        return [[d] for d in values(first(r))], [[dot(ref, s)] for s in seeds]
-    end
+_batch(f, x, ref, mode::Symbol) = _batch(f, x, ref, Val(mode))
+function _batch(f, x, ref, ::Val{:batch_forward})
+    seeds = _batch_tangents(x)
+    r = Enzyme.autodiff(Enzyme.set_runtime_activity(Enzyme.Forward), Enzyme.Const(f),
+        Enzyme.BatchDuplicated(copy(x), seeds))
+    return [[d] for d in values(first(r))], [[dot(ref, s)] for s in seeds]
+end
+function _batch(f, x, ref, ::Val{:batch_reverse})
     g!(y, p) = (y[1] = f(p); nothing)
     dys = ntuple(k -> [BATCH_COTANGENTS[k]], BATCH_WIDTH)
     dxs = ntuple(_ -> zero(x), BATCH_WIDTH)
@@ -677,8 +708,7 @@ function evaluate(c; policy, mode::Symbol, rule::AbstractString = get(c, :rule, 
     ref = DI.gradient(f, AutoForwardDiff(), x)
     entries = _rule_entries(rule)
     got, want = try
-        mode in BATCH_MODES ? _batch(f, x, ref, mode) :
-        mode in NESTED_MODES ? _nested(f, x, ref, mode) : ([_gradient(f, x, mode)], [ref])
+        _mode_run(f, x, ref, Val(mode))
     catch err
         err isa InterruptException && rethrow()
         return (status = "throws", relerr = NaN, error = _summary(err), entered = false)
@@ -689,6 +719,12 @@ function evaluate(c; policy, mode::Symbol, rule::AbstractString = get(c, :rule, 
     status = !(isfinite(r) && r <= TOL) ? "wrong" : entered ? "ok" : "bypassed"
     return (status = status, relerr = r, error = "", entered = ran)
 end
+
+_mode_run(f, x, ref, ::Val{M}) where {M} = ([_gradient(f, x, Val(M))], [ref])
+_mode_run(f, x, ref, m::Val{:batch_forward}) = _batch(f, x, ref, m)
+_mode_run(f, x, ref, m::Val{:batch_reverse}) = _batch(f, x, ref, m)
+_mode_run(f, x, ref, ::Val{:nested_reverse}) = _nested(f, x, ref, :nested_reverse)
+_mode_run(f, x, ref, ::Val{:nested_forward}) = _nested(f, x, ref, :nested_forward)
 
 _policy(p::Symbol) = getfield(Bramble, p)()
 _policy(p) = p

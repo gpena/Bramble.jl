@@ -406,9 +406,13 @@ function _allocate_walked(form::BilinearForm{D}, ast, walk) where {D}
     nrows = ndofs(form.test_space)
     ncols = ndofs(form.trial_space)
     # The walk's coordinates are the replay cache's positions too, once searched in the new
-    # matrix, so a serial sparse form keeps them: its first fill is then a replay.
-    keep = MT <: SparseMatrixCSC && ast === form.ast &&
-           (walk !== nothing || execution_policy(form.trial_space) isa CpuSerial)
+    # matrix, so a serial sparse form keeps them: its first fill is then a replay. The policy
+    # test comes before `ast === form.ast`: off `CpuSerial`, Enzyme reverse of a form with
+    # three summands fails ("Illegal replace ficticious phi") when the identity test runs
+    # first.
+    keep = MT <: SparseMatrixCSC &&
+           (walk !== nothing || execution_policy(form.trial_space) isa CpuSerial) &&
+           ast === form.ast
     keep || return _allocate_from_pattern(MT, nrows, ncols, p.I, p.J, V)
     A = _allocate_keeping(MT, nrows, ncols, p.I, p.J, V)
     _coordinates_to_positions!(A, p, ast)

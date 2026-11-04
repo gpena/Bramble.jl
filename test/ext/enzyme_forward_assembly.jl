@@ -7,9 +7,8 @@ module ExtEnzymeForwardAssemblyTests
 # policy. Reverse mode and the two-summand forms are exact. The wrong shadow exists before
 # assembly runs, since a `@noinline` reader of `_summands(form.ast)[3]` alone returns tangent
 # plus primal. So the cause is an Enzyme (0.13.216) miscompile, and three restructurings of
-# the replay did not avoid it. The upstream report is drafted in the S10 handback of the
-# v4-2-0-followup plan, not filed. When Enzyme fixes it, the `@test_broken`s below pass
-# unexpectedly and fail the run; flip them to `@test` then.
+# the replay did not avoid it; gpena/Bramble.jl#1124 tracks it. When Enzyme fixes it, the
+# `@test_broken`s below pass unexpectedly and fail the run; flip them to `@test` then.
 #
 # `m + m + 0.25m` is not pinned. It was wrong when written as a literal closure, and exact
 # when passed as a function, as below: the miscompile follows how the closure compiles.
@@ -69,8 +68,8 @@ function _functional(terms, policy)
     return f
 end
 
-# A relative error, `Inf` when the derivative throws (reverse mode through `Mₕ` under
-# `CpuThreaded` does), so a throw fails a `@test` and counts as broken in a `@test_broken`.
+# A relative error, `Inf` when the derivative throws, so a throw fails a `@test` and counts
+# as broken in a `@test_broken`.
 function _report(io, key, thunk)
     r = try
         thunk()
@@ -144,14 +143,7 @@ else
                     code, r = _run_child(policy)
                     @test code == 0
                     @test_broken get(r, :diffusion_forward, Inf) < TOL
-                    # Reverse through `Mₕ(κ)` under `CpuThreaded` throws Enzyme's
-                    # `CallingConventionMismatchError` in the `_static_bands!` rule of the
-                    # broadcast in `similar`, a separate bug from #1124.
-                    if policy isa CpuThreaded
-                        @test_broken get(r, :diffusion_reverse, Inf) < TOL
-                    else
-                        @test get(r, :diffusion_reverse, Inf) < TOL
-                    end
+                    @test get(r, :diffusion_reverse, Inf) < TOL
                     @test get(r, :mass2_forward, Inf) < TOL
                     @test get(r, :react2_forward, Inf) < TOL
                     policy isa CpuSerial &&
