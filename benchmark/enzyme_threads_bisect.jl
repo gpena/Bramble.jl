@@ -158,7 +158,7 @@ end
 # printed if it exited cleanly, else `crash`.
 function child(
         args::Vector{String}, env::AbstractString, log::AbstractString, exe::Cmd
-    )
+)
     cmd = addenv(
         `$exe --startup-file=no --threads=2 $SCRIPT $args`,
         "JULIA_PROJECT" => env, "JULIA_LOAD_PATH" => "@:@stdlib",
@@ -173,7 +173,7 @@ function child(
         return (String(results[end][1]), String(results[end][2]), seconds)
     end
     why = state[1] == :timeout ? "timeout after $TIMEOUT_S s" :
-        state[1] == :signal ? "killed by signal $(state[2])" : "exit code $(state[2])"
+          state[1] == :signal ? "killed by signal $(state[2])" : "exit code $(state[2])"
     tail = isempty(text) ? "" : last(split(strip(text), '\n'))
     return ("crash", "$why; last line: $tail", seconds)
 end
@@ -193,7 +193,7 @@ function probe_on(version::AbstractString, exe::Cmd, jver::AbstractString)
         ["setup", version], env, joinpath(WORK[], "setup-$version-$jver.log"), exe
     )
     resolved = setup_status == "ok" ? TOML.parsefile(joinpath(env, "resolved.toml")) :
-        Dict{String, Any}()
+               Dict{String, Any}()
     statuses = Dict{String, String}()
     for form in FORMS
         if setup_status == "ok"
@@ -247,7 +247,7 @@ function write_results(bisect_info::Dict{String, Any})
     meta["script_sha"] = strip(read(sha, String))
     meta["juliaup_versions"] = juliaup_versions()
     meta["julia_1_13_0"] = "1.13.0" in meta["juliaup_versions"] ? "installed" :
-        "not installed (juliaup status); not run"
+                           "not installed (juliaup status); not run"
     data = Dict{String, Any}("meta" => meta, "bisect" => bisect_info, "run" => ROWS)
     mkpath(dirname(RESULTS))
     open(io -> TOML.print(io, data; sorted = true), RESULTS, "w")

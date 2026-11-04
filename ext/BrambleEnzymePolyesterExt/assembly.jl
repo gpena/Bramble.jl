@@ -255,6 +255,7 @@ function _asm_reverse!(config, run!::R, slab::F, n::Int, len::Int, out, parts, p
     pe = _polyester_ext()
     pe._handed(run!, p, pe._take, n) && _rethrow_first(p.errs)
     for (j, w) in enumerate(live), b in 1:n
+
         a = args[j, b]
         _asm_add_output!(_shadow(out, w), a[1])
         d_parts[w] === nothing || _accumulate!(d_parts[w], a[2].dval, parts.val)

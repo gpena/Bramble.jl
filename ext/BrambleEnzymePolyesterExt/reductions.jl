@@ -195,8 +195,7 @@ end
 end
 
 # The weight's shadow in each lane: a vector's, or the factor shadows of a `SeparableWeights`.
-@inline _weight_shadows(w::Annotation{<:AbstractVector}, ::Val{W}, ::Type{T}) where {W, T} =
-    _lanes(w, Val(W))
+@inline _weight_shadows(w::Annotation{<:AbstractVector}, ::Val{W}, ::Type{T}) where {W, T} = _lanes(w, Val(W))
 @inline function _weight_shadows(w::Annotation{<:Bramble.SeparableWeights}, ::Val{W},
         ::Type{T}) where {W, T}
     return map(s -> _factor_shadows(s, w.val, T), _lanes(w, Val(W)))

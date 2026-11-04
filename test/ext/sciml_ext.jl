@@ -181,11 +181,11 @@ using LinearSolve: KrylovJL_GMRES, LUFactorization
         sd_d = semidiscretize(a, l; dirichlet = bcs)
         z = zeros(n)
         @test DifferentiationInterface.gradient(
-                  θ -> ode_problem(sd_d, z, I; p = θ).u0[1], AutoForwardDiff(), [1.0, 2.0]
-              ) == [1.0, 0.0]
+            θ -> ode_problem(sd_d, z, I; p = θ).u0[1], AutoForwardDiff(), [1.0, 2.0]
+        ) == [1.0, 0.0]
         @test DifferentiationInterface.gradient(
-                  θ -> ode_problem(sd_d, z, I; p = θ).u0[n], AutoForwardDiff(), [1.0, 2.0]
-              ) == [1.0, 0.0]
+            θ -> ode_problem(sd_d, z, I; p = θ).u0[n], AutoForwardDiff(), [1.0, 2.0]
+        ) == [1.0, 0.0]
 
         # The widening is for a non-float `p` only: a `Float32` u₀ with a `Float64` `p`
         # stays `Float32`, and a `Float64` u₀ with a `Float32` `p` stays `Float64`.

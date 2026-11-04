@@ -153,10 +153,12 @@ function _solve_parts(
     Y = reshape(reinterpret(R, y), :, n)
     for k in axes(parts, 2)
         for j in 1:n, i in axes(parts, 1)
+
             Y[i, j] = B[parts[i, k], j]
         end
         _singular_on_empty(() -> ldiv!(fact.lu, y), fact.dim)
         for j in 1:n, i in axes(parts, 1)
+
             X[parts[i, k], j] = Y[i, j]
         end
     end

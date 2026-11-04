@@ -126,8 +126,8 @@ Base.:(==)(x::Iv, y::Iv) = x.lo == y.lo && x.hi == y.hi
         Aθ(θ) = sparse([2.0+θ 0.5; 0.5 1.0])
         dense(θ) = sum(Matrix(Aθ(θ)) \ b)
         for solve in (θ -> pde_solve(Aθ(θ), b; solver = :sparspak),
-                      θ -> sparspak_solve(Aθ(θ), b),
-                      θ -> sparspak_factorize(Aθ(θ)) \ b)
+            θ -> sparspak_solve(Aθ(θ), b),
+            θ -> sparspak_factorize(Aθ(θ)) \ b)
             d = DifferentiationInterface.derivative(θ -> sum(solve(θ)), AutoForwardDiff(), 1.0)
             @test isapprox(d, _fd(dense, 1.0); rtol = 1.0e-6)
         end

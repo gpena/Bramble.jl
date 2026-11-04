@@ -55,9 +55,11 @@ end
 
 const POINTS = (derivative = 1.3, gradient = [1.3, 0.7], assembly = [1.3, 0.7])
 
-differentiate(name, f, ad, x) = name === :derivative ?
-                                DifferentiationInterface.derivative(f, ad, x) :
-                                DifferentiationInterface.gradient(f, ad, x)
+function differentiate(name, f, ad, x)
+    name === :derivative ?
+    DifferentiationInterface.derivative(f, ad, x) :
+    DifferentiationInterface.gradient(f, ad, x)
+end
 
 # The residual test/ext/sparse_ad_ext.jl drives Newton with: `A(u) u - F` for
 # `α(u) = 3 + 1/(1+u²)`, whose Jacobian is what a sparse backend exists to compute.
@@ -91,9 +93,11 @@ detectors(prob) = (
     ast = ast_sparsity_detector(prob.form, U -> Mₕ(U))
 )
 
-sparse_backend(inner, detector) = AutoSparse(
-    inner; sparsity_detector = detector, coloring_algorithm = GreedyColoringAlgorithm()
-)
+function sparse_backend(inner, detector)
+    AutoSparse(
+        inner; sparsity_detector = detector, coloring_algorithm = GreedyColoringAlgorithm()
+    )
+end
 
 const POLICIES = (CpuSerial = Serial(), CpuThreaded = Parallel(), CpuPolyester = CpuPolyester())
 
@@ -216,8 +220,8 @@ end
                             _check_cell(
                                 () -> Matrix(
                                     DifferentiationInterface.jacobian(
-                                        prob.residual, ad, prob.u
-                                    )
+                                    prob.residual, ad, prob.u
+                                )
                                 ),
                                 J_ref; rtol = 1e-8, atol = 1e-8
                             )
