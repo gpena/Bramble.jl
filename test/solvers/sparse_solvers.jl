@@ -325,8 +325,10 @@ end
     @test !_default_wants_accelerate(S, 0)
 end
 
-# The default `pde_solve` carries a `ForwardDiff.Dual` matrix through its factorization and
-# solve: the DI derivative matches central differences at m = 2 and m = 50 (issue #1114).
+# The default `pde_solve` differentiates through a `ForwardDiff.Dual` matrix: it factors the
+# `Float64` values once and solves each partial against them (the Dual route in
+# BrambleForwardDiffExt; a `Dual` factor is built only by a direct `sparspak_factorize` call).
+# The DI derivative matches central differences at m = 2 and m = 50 (issue #1114).
 # Oracle: the step-difference quotient, which uses no Dual arithmetic.
 @testset "pde_solve ForwardDiff derivative" begin
     for m in (2, 50)

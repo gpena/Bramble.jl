@@ -542,6 +542,19 @@ using Kronecker: Kronecker
                 :sparspak_refactor!,
                 :_sparspak_solve,
                 :_linear_in_parts,
+                # `_solve_promoted` (core `pde_solve`'s dispatch point on the promoted element
+                # type, which BrambleForwardDiffExt adds the `Dual` method to) and
+                # `_primal_factorize` (the `Float64` factorization that method solves against):
+                # the extension's own `Bramble` hooks, neither public.
+                :_solve_promoted,
+                :_primal_factorize,
+                # `value`, `partials`, `npartials`, `Partials` (BrambleForwardDiffExt): the
+                # accessors and partials constructor of a dual number, which ForwardDiff does
+                # not declare public. The Dual solve reads the parts level by level.
+                :value,
+                :partials,
+                :npartials,
+                :Partials,
                 :_accelerate_factorize,
                 :accelerate_refactor!,
                 :_accelerate_solve,

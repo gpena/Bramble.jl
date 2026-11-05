@@ -11,9 +11,10 @@
 # inside a gradient-based inverse problem or a PDE-constrained training loop without paying
 # one factorisation per parameter.
 #
-# Through `pde_solve`, Enzyme reverse has the adjoint rule below. ForwardDiff overflows the
-# stack in the sparse `lu` of a `Dual` matrix, and Enzyme forward throws
-# `IllegalTypeAnalysisException` (`docs/notes/internals/ad_coverage.md`).
+# Through `pde_solve`, Enzyme reverse has the adjoint rule below, and ForwardDiff a solve of a
+# `Dual` matrix or load over the `Float64` factor of its values (`_solve_promoted`, added by
+# `BrambleForwardDiffExt`). Enzyme forward throws `IllegalTypeAnalysisException`
+# (`docs/notes/internals/ad_coverage.md`).
 #
 # `pde_solve` itself needs no weak dependency: without `ChainRulesCore` it is the same solve,
 # just not differentiable. `BrambleChainRulesExt` supplies the
@@ -141,6 +142,17 @@ respect to a *runtime* scalar coefficient of the form should be a `Float64` or a
 `Integer` coefficient known only at run time costs `form` its inferred return type, which
 Enzyme's type analysis rejects.
 
+# Forward-mode differentiation
+
+With `ForwardDiff.jl` loaded, a `Dual` matrix or load of the plain solve is solved by
+`BrambleForwardDiffExt`, which factors the `Float64` values of `A` once, by the route the
+`Float64` solve of the same keywords takes, and solves every partial against that factor:
+with ``A₀ = value.(A)`` and ``b₀ = value.(F)``, the value is ``x₀ = A₀⁻¹b₀`` and the partial
+``k`` is ``xₖ = A₀⁻¹(bₖ − Aₖx₀)``. A nested `Dual` recurses through the same factor. A
+non-square `Dual` matrix throws an `ArgumentError`: a least-squares solve has a residual term
+that this derivative omits. The bordered solve (`mean_zero`, `gauge`) and `pde_solve(fact, F)`
+are unchanged, so with a `Dual` matrix they take the route they always took.
+
 # Examples
 
 ```julia
@@ -173,6 +185,18 @@ function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :defa
     (mean_zero === nothing && gauge === nothing) ||
         return _bordered_solve(A, F, nothing, mean_zero, gauge, solver, kwargs)
     _warn_if_annihilates_constants(A)
+    return _solve_promoted(promote_type(eltype(A), eltype(F)), A, F; solver = solver, sym = sym, kwargs...)
+end
+
+# The one dispatch point of the plain solve, on the promoted element type `P` of `A` and `F`.
+# A `Float64` solve reaches the routing below unchanged. `BrambleForwardDiffExt` adds the
+# `ForwardDiff.Dual` method, which factors the values of `A` once and solves every partial
+# against that factor (`_primal_factorize`).
+function _solve_promoted(::Type, A, F; solver::Symbol, sym, kwargs...)
+    _solve_routed(A, F; solver = solver, sym = sym, kwargs...)
+end
+
+function _solve_routed(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol, sym, kwargs...)
     if solver === :default
         _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
         if Sys.isapple() && Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
@@ -202,6 +226,40 @@ function pde_solve(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol = :defa
 end
 
 pde_solve(fact::Factorization, F::AbstractVector) = fact \ F
+
+# The factorization that the `Float64` solve of `A` takes with the same keywords, route for
+# route: `:default` takes Accelerate on macOS for a symmetric `A` (the test of the routing
+# above, with `S`, the element type of the load, in place of `F`'s) and `factorize`, the
+# structure-aware factorization that `A \ F` uses, otherwise. `BrambleForwardDiffExt` factors
+# the values of a `Dual` matrix here once, and solves each partial against the result.
+function _primal_factorize(A::SparseMatrixCSC, ::Type{S}, solver::Symbol, sym, kwargs) where {S}
+    if solver === :default
+        _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
+        if Sys.isapple() && Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
+           _default_accelerate_eltypes(eltype(A), float(promote_type(eltype(A), S))) &&
+           _default_wants_accelerate(A, sym)
+            return accelerate_factorize(A; sym = sym, kwargs...)
+        end
+        return factorize(A)
+    elseif solver === :suitesparse
+        return suitesparse_factorize(A; sym = sym, kwargs...)
+    elseif solver === :spqr
+        return suitesparse_qr_factorize(A; kwargs...)
+    elseif solver === :accelerate
+        return accelerate_factorize(A; sym = sym, kwargs...)
+    elseif solver === :mumps
+        return mumps_factorize(A; sym = sym, kwargs...)
+    elseif solver === :sparspak
+        _reject_unknown_kwargs(:pde_solve, "solver = :sparspak", kwargs)
+        return sparspak_factorize(A)
+    else
+        throw(
+            ArgumentError(
+            "Unknown solver: $solver. Expected :default, :suitesparse, :spqr, :accelerate, :mumps, or :sparspak.",
+        ),
+        )
+    end
+end
 
 # A pure-Neumann matrix sends the constant vector to zero, so `A \ F` is singular: one product
 # `A 1` detects it, and the warning names the keyword that fixes the constant. Not an error,

@@ -33,7 +33,9 @@ using [Sparspak.jl](https://github.com/JuliaSparse/Sparspak.jl).
 
 Sparspak has no binary dependency, so it factors matrices whose entries are not
 `Float64`/`ComplexF64` -- `Float32`, `BigFloat`, or a `ForwardDiff.Dual` -- where SuiteSparse
-and MUMPS cannot.
+and MUMPS cannot. `pde_solve` does not hand it a `Dual` matrix: it factors the `Float64`
+values of that matrix once and solves each partial against them (see [`pde_solve`](@ref)),
+so a `Dual` factor is built only by a direct call.
 
 A singular matrix throws a `SingularException`, as it does for SuiteSparse, MUMPS and
 Accelerate, from the factorization or from the solve: a rank-deficient or structurally
