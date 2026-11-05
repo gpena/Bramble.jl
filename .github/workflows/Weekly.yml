@@ -156,7 +156,11 @@ jobs:
       # Dropped: `force_latest_compatible_version` (the action sets it to true only for
       # Dependabot/CompatHelper jobs, which these triggers are not) and `annotate` (off by
       # default). `JULIA_NUM_THREADS` comes from the job-level `env`.
-      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
+      # The `ad-*` shards run at `--check-bounds=auto`, Julia's default, the flags a user
+      # differentiates under: forced bounds checks change what Enzyme's type analysis sees
+      # (gpena/Bramble.jl#1134) and every AD cell in test/space/ad_coverage.jl is recorded
+      # without them. The other shards keep `yes`, the setting the action passed.
+      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=${{ startsWith(matrix.shard, 'ad-') && 'auto' || 'yes' }}"])'
         env:
           BRAMBLE_TEST_GROUP: backends
           BRAMBLE_TEST_SHARD: ${{ matrix.shard }}
