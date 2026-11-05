@@ -106,15 +106,13 @@ ad_check = DI.gradient(loss, backend, 0.5)                                      
 # The point of the adjoint rule: `DI.gradient` above costs one forward solve plus one
 # adjoint solve, regardless of how many parameters `κ` were -- a coefficient *field* with one
 # value per grid point would cost the same two solves, where forward-mode differentiation
-# through the same model would cost one solve per parameter. A direct timing comparison against
-# a naive `ForwardDiff`-through-the-solve baseline is not run on this page, because that
-# baseline fails outright here for an unrelated reason. UMFPACK's sparse factorisation only
-# accepts `Float64`/`ComplexF64`, so `A \ F` for a `Dual`-valued `F` errors regardless of this
-# scaling question; `docs/notes/tutorials/autodiff.md` §5 documents this and recommends a dense
-# conversion or an iterative solver as the forward-mode workaround. See
-# `test/ext/chainrules_ext.jl` for the scaling measurement itself, which compares the adjoint
-# rule's own pullback cost against `nθ` separate forward solves, the per-parameter cost a
-# naive forward-mode scheme pays.
+# through the same model would cost one solve per parameter. That is why the page uses reverse
+# mode. With `ForwardDiff` loaded, `pde_solve` does run on a `Dual` matrix: it factors the
+# `Float64` values once, and each parameter's partial is one solve against that factor. Forward
+# mode therefore runs here, with one solve per parameter, where the adjoint needs one for all
+# of them. No timings are shown on this page. See `test/ext/chainrules_ext.jl` for the scaling
+# measurement itself, which compares the adjoint rule's own pullback cost against `nθ` separate
+# forward solves.
 #
 # ## Where to go next
 #

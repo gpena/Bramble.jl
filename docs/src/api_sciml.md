@@ -128,7 +128,7 @@ Bramble provides dedicated, first-class extensions for high-performance sparse l
 - **SuiteSparse** gives CHOLMOD Cholesky for symmetric positive-definite systems and UMFPACK LU for unsymmetric systems via `SuiteSparse.jl`, plus SPQR sparse QR (below) which needs only `SparseArrays`.
 - **Apple Accelerate** gives native macOS `libSparse` Cholesky, $\mathrm{LDL}^T$, and LUTPP via `AppleAccelerate.jl` (on Apple Silicon / darwin).
 - **MUMPS** is a parallel multifrontal direct solver for large 2D/3D systems via `MUMPS.jl`.
-- **Sparspak** is a pure-Julia sparse direct LU (George & Liu's Waterloo package) via `Sparspak.jl` -- zero binary dependency, so it factors matrices whose entries are `BigFloat` or a `ForwardDiff.Dual`, which the other three backends cannot: they take only BLAS floating-point types (MUMPS and Accelerate accept `Float32` as well as `Float64`).
+- **Sparspak** is a pure-Julia sparse direct LU (George & Liu's Waterloo package) via `Sparspak.jl` -- zero binary dependency, so it factors matrices whose entries are `BigFloat` or a `ForwardDiff.Dual` directly. The other three take only BLAS floating-point types (MUMPS and Accelerate accept `Float32` as well as `Float64`). With `ForwardDiff` loaded, the `BrambleForwardDiffExt` extension lets [`pde_solve`](@ref) solve a `Dual` matrix or load on every backend: it factors the `Float64` values once, by the route the `Float64` solve takes, and solves each partial against that factor. A `Dual` matrix passed to a backend's own factorisation still fails.
 
 All four solvers support symbolic reuse via the unified [`refactor!`](@ref) driver for transient PDE time loops and Newton iterations.
 
