@@ -17,7 +17,8 @@ using Bramble: sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using Sparspak
-using ForwardDiff
+using DifferentiationInterface: DifferentiationInterface, AutoForwardDiff
+using ForwardDiff: ForwardDiff
 
 # The direct-solver contract this backend shares with SuiteSparse, MUMPS and
 # AppleAccelerate lives in test/ext/SolverContracts.jl, which test/runtests.jl includes
@@ -27,7 +28,28 @@ using ForwardDiff
 using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system,
                             poisson_solve_contract, refactor_contract,
                             unsymmetric_refactor_contract, validation_contract
-using ..TestUtils: _fd, WITH_AD_TESTS
+using ..TestUtils: _fd, alloc_test
+
+# An interval `[lo, hi]`: a number whose two fields have type Float64 but are not parts a
+# solve may treat apart (`-[1, 2]` is `[-2, -1]`, not `lo = -1, hi = -2`), so a load of it
+# against a Float64 matrix must take the refactor path (#1122).
+struct Iv <: Real
+    lo::Float64
+    hi::Float64
+end
+Iv(x::Real) = Iv(x, x)
+Base.promote_rule(::Type{Iv}, ::Type{Float64}) = Iv
+Base.convert(::Type{Iv}, x::Real) = Iv(x)
+Base.convert(::Type{Iv}, x::Iv) = x
+Base.isfinite(x::Iv) = isfinite(x.lo) && isfinite(x.hi)
+Base.zero(::Type{Iv}) = Iv(0.0)
+Base.one(::Type{Iv}) = Iv(1.0)
+Base.:+(x::Iv, y::Iv) = Iv(x.lo + y.lo, x.hi + y.hi)
+Base.:-(x::Iv, y::Iv) = Iv(x.lo - y.hi, x.hi - y.lo)
+Base.:-(x::Iv) = Iv(-x.hi, -x.lo)
+Base.:*(x::Iv, y::Iv) = Iv(extrema((x.lo * y.lo, x.lo * y.hi, x.hi * y.lo, x.hi * y.hi))...)
+Base.:/(x::Iv, y::Iv) = x * Iv(extrema((1 / y.lo, 1 / y.hi))...)
+Base.:(==)(x::Iv, y::Iv) = x.lo == y.lo && x.hi == y.hi
 
 @testset "Sparspak extension" begin
     @testset "1D/2D/3D Poisson" begin
@@ -72,7 +94,7 @@ using ..TestUtils: _fd, WITH_AD_TESTS
     # Sparspak has no binary dependency, so non-Float64 element types work.
     @testset "non-Float64 element types" begin
         p = poisson_system(Val(2), 8; source = x -> 1.0)
-        Wₕ, l, A, F = p.Wₕ, p.l, p.A, p.F
+        Wₕ, A, F = p.Wₕ, p.A, p.F
 
         # Float32
         A32 = SparseMatrixCSC{Float32}(A)
@@ -85,19 +107,129 @@ using ..TestUtils: _fd, WITH_AD_TESTS
         # type (`sparspaklu(m::SparseMatrixCSC{FT,IT}; ...) where {FT,IT}`), so a matrix
         # assembled from a `Dual`-valued coefficient factors and solves directly, which
         # SuiteSparse/MUMPS cannot do (both require `Float64`/`ComplexF64` matrix entries).
-        # Sparspak's triangular solve additionally requires the right-hand side to share
-        # the matrix's own element type exactly, hence the explicit `eltype(Aθ).(...)`.
-        if WITH_AD_TESTS
-            function g(θ)
-                aθ = form(Wₕ, Wₕ, (u, v) -> (1.0 + θ) * inner₊(∇ₕ(u), ∇ₕ(v)))
-                Aθ, Fθ0 = assemble(aθ, l; dirichlet = ZERO_BC)
-                Fθ = eltype(Aθ).(Fθ0)
-                uθ = sparspak_solve(Aθ, Fθ)
-                return sum(uθ)
-            end
-            d = ForwardDiff.derivative(g, 1.0)
-            @test isapprox(d, _fd(g, 1.0); atol = 1.0e-6, rtol = 1.0e-6)
+        # The load stays real: the extension promotes it to the matrix's element type
+        # before Sparspak's triangular solve, which takes no other.
+        function g(θ)
+            aθ = form(Wₕ, Wₕ, (u, v) -> (1.0 + θ) * inner₊(∇ₕ(u), ∇ₕ(v)))
+            Aθ = assemble(aθ; dirichlet = ZERO_BC)
+            return sum(pde_solve(Aθ, F; solver = :sparspak))
         end
+        @test eltype(F) == Float64
+        d = DifferentiationInterface.derivative(g, AutoForwardDiff(), 1.0)
+        @test isapprox(d, _fd(g, 1.0); atol = 1.0e-6, rtol = 1.0e-6)
+    end
+
+    # A real load against a `Dual` matrix: `pde_solve`, `sparspak_solve` and `\` on the
+    # factorization all promote the load, and the derivative matches the dense solve's.
+    @testset "Dual matrix, real load" begin
+        b = [1.0, 1.0]
+        Aθ(θ) = sparse([2.0+θ 0.5; 0.5 1.0])
+        dense(θ) = sum(Matrix(Aθ(θ)) \ b)
+        for solve in (θ -> pde_solve(Aθ(θ), b; solver = :sparspak),
+            θ -> sparspak_solve(Aθ(θ), b),
+            θ -> sparspak_factorize(Aθ(θ)) \ b)
+            d = DifferentiationInterface.derivative(θ -> sum(solve(θ)), AutoForwardDiff(), 1.0)
+            @test isapprox(d, _fd(dense, 1.0); rtol = 1.0e-6)
+        end
+    end
+
+    # A load wider than the matrix (#1122). A `Dual` or complex load splits into parts of
+    # the matrix's type, each solved with the one factorization; a load with no such split
+    # (Float32 matrix, Float64 load) is solved against the matrix refactored at its type,
+    # not in Float32: `[1/3, 0.1]` is not exact in Float32, so only that passes 1e-14.
+    @testset "load wider than the matrix (#1122)" begin
+        DI, ad = DifferentiationInterface, AutoForwardDiff()
+        A = sparse([2.0 0.5; 0.5 1.0])
+        Aθ(θ) = sparse([2.0+θ 0.5; 0.5 1.0])
+        dense(θ) = Matrix(Aθ(θ))
+
+        d = DI.derivative(θ -> sum(pde_solve(A, [θ, 1.0]; solver = :sparspak)), ad, 1.0)
+        @test isapprox(d, sum(Matrix(A) \ [1.0, 0.0]); rtol = 1.0e-12)
+        d = DI.derivative(θ -> sum(sparspak_factorize(A) \ [θ, 1.0]), ad, 1.0)
+        @test isapprox(d, sum(Matrix(A) \ [1.0, 0.0]); rtol = 1.0e-12)
+
+        # Nested AD with the matrix on the inner tag: the load multiplies both, then only
+        # the outer one.
+        for load in ((ψ, θ) -> [ψ * θ, 1.0], (ψ, θ) -> [ψ, 1.0])
+            H(solve) = DI.derivative(
+                ψ -> DI.derivative(θ -> sum(solve(θ, load(ψ, θ))), ad, 1.0), ad, 1.0
+            )
+            Hd = H((θ, b) -> dense(θ) \ b)
+            @test isapprox(H((θ, b) -> pde_solve(Aθ(θ), b; solver = :sparspak)), Hd;
+                rtol = 1.0e-10)
+            @test isapprox(H((θ, b) -> sparspak_factorize(Aθ(θ)) \ b), Hd; rtol = 1.0e-10)
+        end
+
+        A32 = sparse(Float32[2 0.5; 0.5 1])
+        for b in ([1 / 3, 0.1], ComplexF64[1 / 3 + 0.1im, 0.1 - 1im])
+            exact = Float64.(Matrix(A32)) \ b
+            for x in (pde_solve(A32, b; solver = :sparspak), sparspak_factorize(A32) \ b)
+                @test eltype(x) == eltype(b)
+                @test isapprox(x, exact; rtol = 1.0e-14)
+            end
+        end
+        # The refactor at the load's type takes the matrix last given to `refactor!`.
+        fact = sparspak_factorize(sparse(Float32[1 0.5; 0.5 4]))
+        sparspak_refactor!(fact, A32)
+        @test isapprox(fact \ [1 / 3, 0.1], Float64.(Matrix(A32)) \ [1 / 3, 0.1];
+            rtol = 1.0e-14)
+
+        # The factorization is one operator: overwriting the factored matrix changes neither
+        # the split nor the refactor path's answer.
+        M = sparse(Float32[2 0.5; 0.5 1])
+        fact = sparspak_factorize(M)
+        M.nzval .*= 10
+        exact = Float64.(Matrix(A32)) \ [1 / 3, 0.1]
+        @test isapprox(fact \ [1 / 3, 0.1], exact; rtol = 1.0e-14)
+        @test isapprox(fact \ Float32[1 / 3, 0.1], exact; rtol = 1.0e-6)
+        # Its pattern too: an entry moved, the count kept.
+        M = sparse([1, 3, 2, 3], [1, 1, 2, 3], Float32[2, 0.3, 2, 2])
+        exact = Float64.(Matrix(M)) \ ones(3)
+        fact = sparspak_factorize(M)
+        M[3, 1] = 0
+        dropzeros!(M)
+        M[1, 2] = 0.7f0
+        @test isapprox(fact \ ones(3), exact; rtol = 1.0e-14)
+        @test isapprox(fact \ ones(Float32, 3), exact; rtol = 1.0e-6)
+
+        # A number that is not linear in its fields is never split.
+        Aiv = sparse([-1.0 0; 0 2.0])
+        biv = [Iv(1.0, 2.0), Iv(1.0, 2.0)]
+        for x in (pde_solve(Aiv, biv; solver = :sparspak), sparspak_factorize(Aiv) \ biv)
+            @test x == [Iv(-2.0, -1.0), Iv(0.5, 1.0)]
+        end
+
+        b32 = ComplexF32[1 + 2im, -1im]
+        x = pde_solve(A, b32; solver = :sparspak)
+        @test eltype(x) == ComplexF64
+        @test isapprox(x, Matrix(A) \ ComplexF64.(b32); rtol = 1.0e-14)
+
+        # Which loads split, so the Dual loads above take one factorization, not one each.
+        parts = Base.get_extension(Bramble, :BrambleSparspakExt)._parts
+        D(V, N) = ForwardDiff.Dual{Nothing, V, N}
+        E(V, N) = ForwardDiff.Dual{Int, V, N}
+        @test size(parts(D(Float64, 2), Float64)) == (1, 3)
+        @test size(parts(ComplexF64, Float64)) == (1, 2)
+        @test size(parts(E(D(Float64, 1), 3), D(Float64, 1))) == (2, 4)
+        @test size(parts(D(E(Float64, 3), 1), D(Float64, 1))) == (2, 4)
+        @test size(parts(Complex{D(Float64, 1)}, Complex{Float64})) == (2, 2)
+        @test parts(Float64, Float32) === nothing
+        @test parts(Iv, Float64) === nothing
+        @test parts(D(Iv, 1), D(Float64, 1)) === nothing
+        @test parts(ComplexF64, Float32) === nothing
+        @test parts(D(Float64, 1), E(Float64, 1)) === nothing
+    end
+
+    # The promotion copies nothing when the load already has the matrix's element type: a
+    # Float64 solve allocates what an in-place solve of a copy does, short of one more
+    # load-sized vector (32 KiB here, far above any `-O0` boxing).
+    @testset "Float64 solve allocates no extra copy" begin
+        n = 4096
+        A = sparse(SymTridiagonal(fill(4.0, n), fill(-1.0, n - 1)))
+        b = ones(n)
+        fact = sparspak_factorize(A)
+        in_place = alloc_test((f, v) -> ldiv!(f, copy(v)), fact, b)
+        @test alloc_test(\, fact, b) - in_place < sizeof(b)
     end
 
     # Sparspak factors BigFloat matrices, which SuiteSparse, MUMPS and Accelerate cannot

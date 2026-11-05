@@ -5,7 +5,9 @@ using Bramble
 using Bramble: execution_policy
 # Internal names: defined and documented, not exported.
 import Bramble: M₊ᵧ
-using ForwardDiff
+using ForwardDiff: ForwardDiff # loads DifferentiationInterface's ForwardDiff backend
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using LinearAlgebra: Diagonal, diag, dot, I
 using Bramble:
                LinearForm,
@@ -41,8 +43,8 @@ using Bramble:
                inner₊ₓ,
                jumpₓ,
                weights
-using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const, _x1, _x2,
-                   _exp_x1, _sin_x1, _x1_plus_x2
+using ..TestUtils: alloc_test, @test_allocs, _graded_mesh, _Const, _x1, _x2, _exp_x1,
+                   _sin_x1, _x1_plus_x2
 
 # Assembling the right-hand side of a system.
 #
@@ -473,7 +475,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const
         assemble_parallel!(br, lfr)
         @test br ≈ first_pass
 
-        WITH_AD_TESTS && @testset "Parallel differentiation" begin
+        @testset "Parallel differentiation" begin
             # The per-thread buffers this path used to carry were `Vector{Float64}`
             # outright, so a Dual-valued assembly could not take it at all. Nothing in the
             # sweep names an element type now, so it can.
@@ -488,8 +490,9 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const
                 sum(bb)
             end
             w0 = fill(0.5, ndofs(Wa))
-            gp = ForwardDiff.gradient(w -> resid(w, assemble_parallel!), w0)
-            gs = ForwardDiff.gradient(w -> resid(w, (bb, f) -> assemble!(bb, f)), w0)
+            gp = DI.gradient(w -> resid(w, assemble_parallel!), AutoForwardDiff(), w0)
+            gs = DI.gradient(
+                w -> resid(w, (bb, f) -> assemble!(bb, f)), AutoForwardDiff(), w0)
 
             @test gp ≈ gs
             @test all(isfinite, gp)
@@ -1110,36 +1113,34 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const
         @test assemble(form(Wₕ, v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)))) ≈
               Hh * uu + transpose(Dx) * (Hpx * uu)
 
-        if WITH_AD_TESTS
-            # and the Jacobian of a nonlinear residual is the same expression with the
-            # nonlinearity's own derivative on the diagonal. This is the shape a Newton step
-            # needs, so it is worth pinning: differentiating the assembly agrees with assembling
-            # the derivative.
-            resid(g) = w -> begin
-                b = zeros(eltype(w), n)
-                assemble!(b, form(Wₕ, v -> g(element(Wₕ, w .^ 2), v)))
-                b
-            end
-            w0 = collect(range(0.3, 1.7; length = n))
-            dg = Diagonal(2 .* w0)
-
-            @test ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, v)), w0) ≈ Hh * dg
-            @test ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), w0) ≈
-                  transpose(Dx) * Hh * dg
-            @test ForwardDiff.jacobian(resid((s, v) -> inner₊ₓ(s, D₋ₓ(v))), w0) ≈
-                  transpose(Dx) * Hpx * dg
-
-            # the Jacobian's sparsity is the stencil's, which is what makes a sparse-AD colouring
-            # unnecessary here: the pattern is known from the AST before anything is evaluated
-            Jd = ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, v)), w0)
-            Jw = ForwardDiff.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), w0)
-            offs_d = length(stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, v)))))
-            offs_w = length(
-                stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)))))
-            )
-            @test maximum(i -> count(!iszero, Jd[i, :]), 1:n) == offs_d
-            @test maximum(i -> count(!iszero, Jw[i, :]), 1:n) == offs_w
+        # and the Jacobian of a nonlinear residual is the same expression with the
+        # nonlinearity's own derivative on the diagonal. This is the shape a Newton step
+        # needs, so it is worth pinning: differentiating the assembly agrees with assembling
+        # the derivative.
+        resid(g) = w -> begin
+            b = zeros(eltype(w), n)
+            assemble!(b, form(Wₕ, v -> g(element(Wₕ, w .^ 2), v)))
+            b
         end
+        w0 = collect(range(0.3, 1.7; length = n))
+        dg = Diagonal(2 .* w0)
+
+        @test DI.jacobian(resid((s, v) -> innerₕ(s, v)), AutoForwardDiff(), w0) ≈ Hh * dg
+        @test DI.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), AutoForwardDiff(), w0) ≈
+              transpose(Dx) * Hh * dg
+        @test DI.jacobian(resid((s, v) -> inner₊ₓ(s, D₋ₓ(v))), AutoForwardDiff(), w0) ≈
+              transpose(Dx) * Hpx * dg
+
+        # the Jacobian's sparsity is the stencil's, which is what makes a sparse-AD colouring
+        # unnecessary here: the pattern is known from the AST before anything is evaluated
+        Jd = DI.jacobian(resid((s, v) -> innerₕ(s, v)), AutoForwardDiff(), w0)
+        Jw = DI.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), AutoForwardDiff(), w0)
+        offs_d = length(stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, v)))))
+        offs_w = length(
+            stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)))))
+        )
+        @test maximum(i -> count(!iszero, Jd[i, :]), 1:n) == offs_d
+        @test maximum(i -> count(!iszero, Jw[i, :]), 1:n) == offs_w
     end
 
     @testset "Dirichlet conditions" begin
@@ -1213,15 +1214,15 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const
         marked = index_in_marker(Ωₕ, :bottom)
 
         b(θ) = assemble(l; dirichlet = :bottom => x -> θ * (1 + x[1]))
-        @test ForwardDiff.derivative(b, θ0)≈(b(θ0 + h) - b(θ0 - h)) / 2h rtol=1e-6
+        @test DI.derivative(b, AutoForwardDiff(), θ0)≈(b(θ0 + h) - b(θ0 - h)) / 2h rtol=1e-6
         # the derivative lives on the boundary rows only
-        @test all(iszero, ForwardDiff.derivative(b, θ0)[.!marked])
-        @test any(!iszero, ForwardDiff.derivative(b, θ0)[marked])
+        @test all(iszero, DI.derivative(b, AutoForwardDiff(), θ0)[.!marked])
+        @test any(!iszero, DI.derivative(b, AutoForwardDiff(), θ0)[marked])
 
         # the path the original crash traced to: `assemble(a, l; dirichlet, symmetrize)`
         g(θ) = assemble(
             a, l; dirichlet = :bottom => x -> θ * x[1], symmetrize = true)[2]
-        @test ForwardDiff.derivative(g, θ0)≈(g(θ0 + h) - g(θ0 - h)) / 2h rtol=1e-6
+        @test DI.derivative(g, AutoForwardDiff(), θ0)≈(g(θ0 + h) - g(θ0 - h)) / 2h rtol=1e-6
 
         # a complex value widens to `ComplexF64`; a real one leaves `Float64` alone
         @test eltype(assemble(l; dirichlet = :bottom => x -> 1.0im)) == ComplexF64
@@ -1245,17 +1246,17 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const
         lv = form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
         c(θ) = assemble(lv; dirichlet = :bottom => x -> θ * 10000 * x[1],
             dirichlet_components = 2)
-        dc = ForwardDiff.derivative(c, θ0)
+        dc = DI.derivative(c, AutoForwardDiff(), θ0)
         @test dc≈(c(θ0 + h) - c(θ0 - h)) / 2h rtol=1e-6
         @test iszero(dc[1:n])
         @test any(!iszero, dc[(n + 1):end])
         # `components = 1` is the mirror image, and the unrestricted value reaches both
         c1(θ) = assemble(lv; dirichlet = :bottom => x -> θ * x[1],
             dirichlet_components = 1)
-        dc1 = ForwardDiff.derivative(c1, θ0)
+        dc1 = DI.derivative(c1, AutoForwardDiff(), θ0)
         @test any(!iszero, dc1[1:n]) && iszero(dc1[(n + 1):end])
         c12(θ) = assemble(lv; dirichlet = :bottom => x -> θ * x[1])
-        dc12 = ForwardDiff.derivative(c12, θ0)
+        dc12 = DI.derivative(c12, AutoForwardDiff(), θ0)
         @test any(!iszero, dc12[1:n]) && any(!iszero, dc12[(n + 1):end])
         # a complex value restricted to leaf 2 still widens the whole vector
         @test eltype(assemble(lv; dirichlet = :bottom => x -> 1.0im,
@@ -1378,7 +1379,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const
         @test abs(het - homo) <= 256
     end
 
-    WITH_AD_TESTS && @testset "Assembled residual differentiation" begin
+    @testset "Assembled residual differentiation" begin
         # The shape a nonlinear solve has: build the residual of a form, and let the solver
         # differentiate it with respect to the coefficient vector to get a Jacobian.
         #
@@ -1394,7 +1395,8 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const
             J(a) = sum(assemble(form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> a * (x[1] + x[2])), v))))
             h = 1e-6
             @test isapprox(
-                ForwardDiff.derivative(J, 1.3), (J(1.3 + h) - J(1.3 - h)) / 2h; rtol = 1e-5
+                DI.derivative(J, AutoForwardDiff(), 1.3), (J(1.3 + h) - J(1.3 - h)) / 2h;
+                rtol = 1e-5
             )
         end
 
@@ -1403,7 +1405,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const
             # diagonal with 2 |□ᵢ| uᵢ. Checked against that closed form rather than against
             # a finite difference, which is a stronger statement.
             residual(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v)))
-            Jm = ForwardDiff.jacobian(residual, u0)
+            Jm = DI.jacobian(residual, AutoForwardDiff(), u0)
 
             @test size(Jm) == (n, n)
             @test Jm ≈ Diagonal(diag(Jm))
@@ -1418,7 +1420,7 @@ using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, _graded_mesh, _Const
         @testset "Constrained Jacobian" begin
             bcs = dirichlet_constraints(Ωₕ, :bottom => _Const(0.0))
             res(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v)); dirichlet = bcs)
-            Jb = ForwardDiff.jacobian(res, u0)
+            Jb = DI.jacobian(res, AutoForwardDiff(), u0)
             @test size(Jb) == (n, n)
 
             # a pinned value does not depend on the coefficients, so its row is zero:

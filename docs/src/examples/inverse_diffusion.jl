@@ -3,17 +3,15 @@
 # Every other worked example goes forward: known parameters in, a solution out. This one goes
 # backward -- noisy observations of a solution in, the parameter that produced them out --
 # the shape of a parameter-estimation problem, and of "a neural network predicts a PDE
-# parameter, a real solve runs on it, the loss trains the network" (gpena/Bramble.jl#228's own
-# motivation). What makes it tractable for more than a handful of parameters is
+# parameter, a real solve runs on it, the loss trains the network". What makes it tractable for more than a handful of parameters is
 # [`pde_solve`](@ref)'s adjoint rule: one extra linear solve gives the gradient with respect
 # to *every* parameter at once, instead of one extra solve *per* parameter.
 #
 # This script runs under `test/examples/inverse_diffusion.jl` with the assertions that it
 # does not render. Lines marked `#src` here are the assertions; Literate.jl drops them from a
 # rendered page. The script is not part of the published manual. It needs `Enzyme` and runs
-# behind the `ad`/`full` test groups (with `BRAMBLE_TEST_AD=true`), unlike the other example
-# pages -- see that test file for why. No test runs this page until v4.2.0, when the AD
-# backends return.
+# in the `ad`/`full`/`backends` test groups, in a Julia process of its own, unlike the other
+# example pages -- see that test file for why.
 #
 # ## Problem
 #
@@ -27,22 +25,6 @@
 # diffusion coefficient scaling the stiffness operator itself, not a boundary or source value
 # -- is unknown; a handful of noisy point observations of ``u`` at the true ``\kappa`` are all
 # that is given.
-#
-# The boundary stays Dirichlet-only here because forms on a ghost space refuse the automatic
-# differentiation the adjoint gradient needs, which arrives with milestone v4.2.0
-# (automatic differentiation and form correctness on the CPU).
-#
-# !!! note "What used to block this"
-#     A gradient with respect to a *Dirichlet boundary value or source term* reaches only `F`,
-#     filled by `dirichlet_bc!`'s own value-writing path; it never touched `assemble`'s
-#     recording engine and always worked. A gradient with respect to the operator's own
-#     coefficient, as `κ` is here, does reach that engine, and until gpena/Bramble.jl#240 it
-#     raised `IllegalTypeAnalysisException` from a fully inferred call site: `simplify_ast`
-#     decided some of its rewrites by reading a coefficient's *value*, which left a `Union` of
-#     rewritten and unrewritten `BilinearForm` types wherever the compiler could not fold the
-#     comparison, and Enzyme's strict-aliasing type analysis rejects a `Union` outright.
-#     Restricting those rewrites to `Integer` coefficients fixed it -- [`pde_solve`](@ref)'s
-#     own docstring has the details.
 #
 # ## Discretisation and the forward solve
 
@@ -83,26 +65,31 @@ loss(κ::Real) = sum(abs2, forward(κ)[obs_idx[k]] - u_obs[k] for k in eachindex
 
 # ## Gradient descent, driven by the adjoint
 #
-# `using Enzyme` is all the setup this needs: `BrambleEnzymeExt` defines a native
-# `EnzymeRules` reverse rule for [`pde_solve`](@ref), so `Enzyme.gradient` reaches the adjoint
-# directly. Do *not* add `Enzyme.@import_rrule(typeof(pde_solve), ...)` here -- besides
+# `using Enzyme` and `import DifferentiationInterface as DI` are all the setup this needs:
+# `BrambleEnzymeExt` defines a native `EnzymeRules` reverse rule for [`pde_solve`](@ref), so
+# Enzyme's reverse mode reaches the adjoint directly, and DifferentiationInterface.jl (`DI`)
+# calls it through an `AutoEnzyme` backend. Do *not* add `Enzyme.@import_rrule(typeof(pde_solve), ...)` here -- besides
 # defining a second rule for the same signature, that bridge corrupts Enzyme's shadow of a
 # sparse `A` whenever the cotangent carries an explicit zero, and returns a wrong gradient
-# with no error at all (`pde_solve`'s own docstring, gpena/Bramble.jl#240).
+# with no error at all (`pde_solve`'s own docstring).
 #
-# `loss` closes over `Wₕ`/`l`, which Enzyme cannot prove read-only on its own, so the function
-# argument is wrapped `Const` -- the same annotation `docs/notes/tutorials/autodiff.md` and
-# `test/space/autodiff_heavy.jl` already document for the ordinary (non-solve) path.
+# `loss` closes over `Wₕ`/`l`, which Enzyme cannot prove read-only on its own, so the backend
+# wraps the function `Const` (`function_annotation`) and sets `set_runtime_activity` -- the same
+# annotation `docs/notes/tutorials/autodiff.md` and `test/space/autodiff_heavy.jl` already
+# document for the ordinary (non-solve) path.
 
 using Enzyme
+import DifferentiationInterface as DI
 
-mode = Enzyme.set_runtime_activity(Enzyme.Reverse)
+backend = DI.AutoEnzyme(;
+    mode = Enzyme.set_runtime_activity(Enzyme.Reverse),
+    function_annotation = Enzyme.Const)
 
 κ = 0.3   # deliberately far from κ_true = 0.7
 history = Float64[κ]
 step = 0.02
 for _ in 1:100
-    g = Enzyme.gradient(mode, Enzyme.Const(loss), κ)[1]
+    g = DI.gradient(loss, backend, κ)
     global κ -= step * g
     push!(history, κ)
 end
@@ -114,12 +101,12 @@ end
 @test isapprox(κ, κ_true; atol = 0.02)                                                #src
 @test loss(κ) < loss(0.3)                                                             #src
 fd_check = (loss(0.5 + 1e-6) - loss(0.5 - 1e-6)) / 2e-6                               #src
-ad_check = Enzyme.gradient(mode, Enzyme.Const(loss), 0.5)[1]                          #src
+ad_check = DI.gradient(loss, backend, 0.5)                                            #src
 @test ad_check ≈ fd_check rtol = 1e-6                                                 #src
 
 # ## Cost: one extra solve, not one per parameter
 #
-# The point of the adjoint rule: `Enzyme.gradient` above costs one forward solve plus one
+# The point of the adjoint rule: `DI.gradient` above costs one forward solve plus one
 # adjoint solve, regardless of how many parameters `κ` were -- a coefficient *field* with one
 # value per grid point would cost the same two solves, where forward-mode differentiation
 # through the same model would cost one solve per parameter. A direct timing comparison against

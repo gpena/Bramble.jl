@@ -942,8 +942,45 @@ end
 function assemble(l::_AnyGhostLinearForm; dirichlet = nothing,
         dirichlet_components = nothing)
     _is_time_dependent(l.test_space) && _throw_ghost_time("assemble(l)")
-    b = similar(l.F_pad, ndofs(l.test_space))
+    labels, bcs = _normalize_dirichlet(dirichlet)
+    _check_rows(l, labels, dirichlet_components)
+    T = _ghost_dirichlet_eltype(bcs, l, dirichlet_components, eltype(l.F_pad))
+    b = similar(l.F_pad, T, ndofs(l.test_space))
     return assemble!(b, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
+end
+
+# A `dirichlet` value can be richer than the load: a `ForwardDiff.Dual` or a complex number
+# against a `Float64` form. As `_dirichlet_probed_eltype` (linear.jl) does, each condition
+# is evaluated once, at the first node of its label on the physical mesh of each leaf it
+# binds (the mask `_rows_conditions!` writes), and the load's type is promoted against it.
+@inline _ghost_dirichlet_eltype(::Nothing, l, components, T) = T
+@inline function _ghost_dirichlet_eltype(bcs::ConstraintMarkers, l::GhostLinearForm,
+        components, T)
+    return _ghost_probed_eltype(conditions(bcs), l.test_space, T)
+end
+@inline function _ghost_dirichlet_eltype(bcs::ConstraintMarkers,
+        l::GhostCompositeLinearForm, components, T)
+    leaves = _row_leaves(test_space(l))
+    return _ghost_leaves_eltype(conditions(bcs), leaves, components, T, 1)
+end
+
+@inline _ghost_leaves_eltype(markers, ::Tuple{}, components, T, i::Int) = T
+@inline function _ghost_leaves_eltype(markers, leaves::Tuple, components, T, i::Int)
+    if _leaf_selected(components, i)
+        T = _ghost_probed_eltype(markers, first(first(leaves)), T)
+    end
+    return _ghost_leaves_eltype(markers, Base.tail(leaves), components, T, i + 1)
+end
+
+@inline _ghost_probed_eltype(::Tuple{}, C, T) = T
+@inline function _ghost_probed_eltype(markers::Tuple, C, T)
+    m = first(markers)
+    Ωₕ = physical_mesh(mesh(C))
+    i = findfirst(_label_mask(Ωₕ, C.rows, label(m)))
+    if i !== nothing
+        T = promote_type(T, typeof(identifier(m)(point(Ωₕ, indices(Ωₕ)[i]))))
+    end
+    return _ghost_probed_eltype(Base.tail(markers), C, T)
 end
 
 function assemble!(b::AbstractVector, l::_AnyGhostLinearForm; dirichlet = nothing,
@@ -972,7 +1009,8 @@ function assemble(a::_AnyGhostBilinearForm, l::_AnyGhostLinearForm; dirichlet = 
     labels, bcs = _normalize_dirichlet(dirichlet)
     _check_pair(a, l, labels, symmetrize, "assemble(a, l)", dirichlet_components)
     A = _reduced_matrix(a.A_pad, a)
-    F = similar(l.F_pad, _pair_load_eltype(a, l, A), ndofs(l.test_space))
+    T = _ghost_dirichlet_eltype(bcs, l, dirichlet_components, _pair_load_eltype(a, l, A))
+    F = similar(l.F_pad, T, ndofs(l.test_space))
     return _assemble_pair!(A, F, a, l, labels, bcs, dirichlet_components, symmetrize)
 end
 

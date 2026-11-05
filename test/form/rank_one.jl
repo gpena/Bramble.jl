@@ -4,7 +4,9 @@ using Test
 using Bramble
 using Bramble: RankOneUpdate, BilinearForm, is_uniform, index_in_marker, D₋ₓ
 using LinearAlgebra, SparseArrays, Random
-using ForwardDiff
+using ForwardDiff: ForwardDiff # loads DifferentiationInterface's ForwardDiff backend
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using ..TestUtils: WITH_3D_TESTS, alloc_test, _Const, _x1, _one_plus_x1
 
 # Rank-one penalty terms `σ * innerₕ(g, u) * innerₕ(h, v)` (#780).
@@ -552,7 +554,7 @@ rectangular(u, v) = innerₕ(u, v(1)) + 2.0 * innerₕ(_x1, u) * innerₕ(1, v(2
         f(s) = sum(assemble(form(W, W, (u, v) -> lap(u, v) + s * innerₕ(1, u) * innerₕ(1, v)),
             l; dirichlet = bc, symmetrize = true)[2])
         h = 1e-6
-        d = ForwardDiff.derivative(f, 0.7)
+        d = DI.derivative(f, AutoForwardDiff(), 0.7)
         @test !iszero(d)
         @test d ≈ (f(0.7 + h) - f(0.7 - h)) / 2h rtol = 1e-6
         # real data keeps a real load

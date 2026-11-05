@@ -73,7 +73,7 @@ round.(g_forward, digits = 4)
 ```
 
 !!! tip "Try this"
-    With many parameters, swap `AutoForwardDiff()` for a reverse-mode backend such as `AutoReverseDiff()` (after `using ReverseDiff`). The definition of `loss` does not change and the gradient agrees. The [backend table](@ref autodiff_backends) below says when each is worth it.
+    With many parameters, swap `AutoForwardDiff()` for the reverse-mode `AutoEnzyme` backend, with the annotations described [below](@ref autodiff_backends) (after `using Enzyme`). The definition of `loss` does not change and the gradient agrees. The [backend table](@ref autodiff_backends) says when each is worth it.
 
 ## Differentiate through a linear solve
 
@@ -171,15 +171,12 @@ J == J_native
 
 ## [Reference: choosing a backend](@id autodiff_backends)
 
-The stencil kernels write into preallocated arrays, so a backend has to support array mutation. That rules out `Zygote.jl`. These five work:
+The stencil kernels write into preallocated arrays, so a backend has to support array mutation. That rules out `Zygote.jl`. These two work:
 
 | Backend | Mode | Reach for it when | Construction |
 | :--- | :--- | :--- | :--- |
 | ForwardDiff | forward | $\le 20$ parameters or Jacobian colours | `AutoForwardDiff()` |
-| PolyesterForwardDiff | forward | the same, with chunks spread over threads | `AutoPolyesterForwardDiff()` |
-| ReverseDiff | reverse | a scalar loss over many parameters, compiled in under a second | `AutoReverseDiff()` |
-| Mooncake | reverse | the same, source-to-source, no tape recorded up front | `AutoMooncake(; config = nothing)` |
-| Enzyme | reverse | many parameters and the tightest reverse-mode cost | see below |
+| Enzyme | reverse | many parameters, a scalar loss, the tightest reverse-mode cost | see below |
 
 Enzyme needs two annotations whenever the differentiated closure captures a mesh or a grid space, which in this package it almost always does:
 
@@ -193,6 +190,6 @@ enzyme_backend = AutoEnzyme(;
 
 `set_runtime_activity` lets Enzyme track activity through the captured geometry, and `Enzyme.Const` declares the function object itself, which holds those references, as not differentiated. [`pde_solve`](@ref) carries its own `EnzymeRules` adjoint, so differentiating through a linear solve needs nothing beyond `using Enzyme`.
 
-Use ForwardDiff for a handful of parameters, a directional derivative, or a colour-compressed sparse Jacobian. Use ReverseDiff, Mooncake or Enzyme once the parameter count passes a few dozen and the objective is scalar, because one reverse sweep then replaces one forward sweep per parameter. Enzyme is the fastest of the three and the one with an adjoint rule for `pde_solve`. ReverseDiff compiles fastest.
+Use ForwardDiff for a handful of parameters, a directional derivative, or a colour-compressed sparse Jacobian. Use Enzyme once the parameter count passes a few dozen and the objective is scalar, because one reverse sweep then replaces one forward sweep per parameter. Enzyme is the one with an adjoint rule for `pde_solve`. Its first call compiles for several seconds, and much longer through a linear solve, so it pays off over many gradient calls. The [AD backends](../internals/autodiff.md) note lists which backends work under each execution policy and why PolyesterForwardDiff, ReverseDiff and Mooncake are not offered.
 
 Sparse forward mode stays competitive far longer than the parameter count suggests, because the colour count is set by the stencil rather than the mesh: a Cartesian difference stencil needs the same handful of colours at every resolution. Once storing or factorizing the Jacobian is the binding constraint, the [solvers tutorial](solvers.md) covers the linear system itself.

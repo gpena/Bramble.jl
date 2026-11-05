@@ -14,6 +14,7 @@ module TestUtils
 
 using Test
 using SparseArrays: SparseMatrixCSC, nonzeros, spdiagm
+using DifferentiationInterface: AutoForwardDiff, derivative
 using ForwardDiff
 using Printf: @sprintf
 using Random: Random, Xoshiro
@@ -31,14 +32,16 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 # `BRAMBLE_TEST_SHARD` narrows the `unit` block to one of four parts, so CI can run each on
 # its own runner: `forms-1` and `forms-2` are the two halves of test/form/, `ghost` is
 # test/ghost/, and `rest` is the remainder of the unit block. It also narrows the package
-# extensions block (the `ext` and `backends` groups) to one of two parts, which Weekly.yml
-# runs on separate runners: `ext-solvers` is the plotting, solver and Kronecker files and
-# `ext-polyester` the Polyester files. Unset runs everything, which is what every local run
-# does; the quality, ad, gpu, examples and grids blocks ignore it. The gate sits at the
-# include sites in test/runtests.jl and test/form/runtests.jl, through `in_shard`.
+# extensions block (the `ext` and `backends` groups) to one of two parts, and the `backends`
+# group's AD block to one of four more, which Weekly.yml runs on separate runners: `ext-solvers`
+# is the plotting, solver and Kronecker files, `ext-polyester` the Polyester files, and `ad-1`
+# to `ad-4` the AD files (`ENZYME_FILE_SHARDS`). Unset runs everything, which is what every local run does; the quality, gpu,
+# examples and grids blocks ignore it. The gate sits at the include sites in
+# test/runtests.jl and test/form/runtests.jl, through `in_shard`.
 const TEST_SHARD = get(ENV, "BRAMBLE_TEST_SHARD", "")
 
-const TEST_SHARDS = ("forms-1", "forms-2", "ghost", "rest", "ext-solvers", "ext-polyester")
+const TEST_SHARDS = ("forms-1", "forms-2", "ghost", "rest", "ext-solvers", "ext-polyester", "ad-1",
+    "ad-2", "ad-3", "ad-4")
 
 """
     in_shard(name)
@@ -72,8 +75,6 @@ end
 #                                        use it. The expensive half is a cross-check against
 #                                        another package, and it moves when that package or
 #                                        the simplifier moves, not when an operator does.
-#                                        Also behind WITH_AD_TESTS (below), so it is off
-#                                        in every group until that switch comes back on.
 #   form/nested_operators.jl             the full operator-pair grid (81/135 pairs, ~309s
 #                                        locally). The cyclic cover of the same pairs
 #                                        stays in `unit`.
@@ -172,37 +173,22 @@ if !WITH_3D_TESTS
     end
 end
 
-# Automatic differentiation and GPU tests are switched off in every group until the
-# milestones that own them: AD until v4.2.0, which decides which backends Bramble keeps, and
-# GPU until v4.7.0, which brings the device path to parity with the CPU. The files stay in
-# the tree, and their packages are not in test/Project.toml. With AD off, one ForwardDiff
-# smoke test (form/forwarddiff_smoke.jl) still runs in `unit`, so assembly with dual numbers
-# cannot silently regress.
-#
-# Switched off until v4.2.0 (AD). To turn back on, add Enzyme, Mooncake,
-# SparseConnectivityTracer, SparseMatrixColorings, DifferentiationInterface
-# and ChainRulesCore (whichever the file loads) to test/Project.toml and set
-# `BRAMBLE_TEST_AD=true`, then remove this switch once v4.2.0 settles the backends.
+# GPU tests are switched off in every group until v4.7.0, which brings the device path to
+# parity with the CPU (below). Automatic differentiation tests run. The ForwardDiff and
+# DifferentiationInterface ones are in `unit`, their packages being in test/Project.toml. The
+# Enzyme ones are in the `backends` group, each file that needs Enzyme in its own Julia
+# process (`ENZYME_FILES` below, test/runtests.jl). Enzyme is not in test/Project.toml, so
+# Weekly.yml installs it for the `backends` group's `ad-*` shards, and a file run where it is
+# absent skips (`_have(:Enzyme)`) rather than erroring.
 #   whole files, `unit` (and slow/full/all)
 #     space/autodiff.jl, space/autodiff_backends.jl   test/runtests.jl
+#     space/ad_coverage.jl (its ForwardDiff half; the Enzyme half is an `ENZYME_FILES` entry)
 #     form/autodiff.jl                                test/form/runtests.jl
 #     form/jacobian_pattern.jl (also needs `slow`)    test/form/runtests.jl
 #   whole files, groups `ad`, `full`, `backends` ("AD backends (expensive)" in runtests.jl)
-#     space/autodiff_heavy.jl, space/autodiff_policies.jl, ext/chainrules_enzyme_ext.jl,
-#     examples/inverse_diffusion.jl, ext/sparse_ad_ext.jl, ext/ad_backend_verification.jl
+#     the `ENZYME_FILES`, plus ext/sparse_ad_ext.jl and ext/ad_backend_verification.jl, which
+#     need no Enzyme and run in the parent process
 #   not gated: ext/chainrules_ext.jl runs in the `ext` group (it needs only ChainRulesCore)
-#   inline blocks, gated with `WITH_AD_TESTS` at the site
-#     form/bilinear.jl "Matrix differentiation", "Dual arguments";
-#     form/linear.jl "Parallel differentiation", the nonlinear residual Jacobian `if`,
-#     "Assembled residual differentiation"; form/dirac.jl three `if`s (ForwardDiff through
-#     Dirac strengths); form/kronecker.jl `if` (Duals through the Kronecker scratch);
-#     form/interpolation_operator.jl "Differentiation"; form/type_cached_assemble.jl
-#     "matches direct, Float64 and Dual", "structural: pattern matches assemble(a)",
-#     "Newton solve matches direct"; form/semidiscrete.jl `if` (Dual `t` rebuild);
-#
-#     form/source_operators.jl "Source differentiation", "lowered source: Dual
-#     propagates"; form/reaction_flux.jl "reaction: Dual load vector";
-#     ext/sparspak_ext.jl `if` (generic-eltype AD through Sparspak).
 #
 # Switched off until v4.7.0 (GPU). To turn back on, add Metal, GPUArrays and
 # KernelAbstractions to test/Project.toml, set `BRAMBLE_TEST_GPU=true` and run the `gpu`
@@ -211,7 +197,6 @@ end
 #   whole files, group `gpu`, ext/metal_ext.jl (which now also holds the "Metal GPU
 #     backend" testset that used to sit inline in utils/backends.jl),
 #     ext/metal_fullstack.jl, ext/metal_assembly_replay.jl, ext/metal_form_assembly.jl.
-const WITH_AD_TESTS = get(ENV, "BRAMBLE_TEST_AD", "false") == "true"
 const WITH_GPU_TESTS = get(ENV, "BRAMBLE_TEST_GPU", "false") == "true"
 
 # Per-file trace, active only under CI (which sets `CI=true`) or `BRAMBLE_TEST_TRACE=1`,
@@ -442,6 +427,46 @@ _fd(f, a; h = 1e-6) = (f(a + h) - f(a - h)) / (2h)
 # space/autodiff_backends.jl, which autodiff_heavy.jl then imported by name, coupling the
 # two files' include order to a one-line predicate.
 _have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
+
+# The files that load Enzyme, relative to test/. One Enzyme rule file alone peaks near 7 GB and
+# its compiled code stays resident, so the `ad-*` shards run each in a Julia process of its
+# own: the parent (test/runtests.jl) spawns one child per file with `BRAMBLE_TEST_FILE` set to
+# the file's name, and `TEST_FILE` is that name in the child, empty in the parent. A name
+# outside this list throws, so a misspelt file cannot select nothing and pass green.
+const ENZYME_FILES = (
+    "ext/enzyme_polyester_ext.jl",
+    "ext/enzyme_polyester_hooks.jl",
+    "ext/enzyme_threaded_ext.jl",
+    "ext/enzyme_forward_assembly.jl",
+    "ext/chainrules_enzyme_ext.jl",
+    "space/autodiff_policies.jl",
+    "space/autodiff_heavy.jl",
+    "space/ad_coverage.jl",
+    "examples/inverse_diffusion.jl"
+)
+const TEST_FILE = get(ENV, "BRAMBLE_TEST_FILE", "")
+isempty(TEST_FILE) || TEST_FILE in ENZYME_FILES ||
+    throw(ArgumentError("unknown BRAMBLE_TEST_FILE $(repr(TEST_FILE)); expected one of $ENZYME_FILES"))
+
+# The `ad-*` shard of each of the `ENZYME_FILES`, balanced by the 2026-11-04 Weekly run, where
+# the one `ad` shard reached its 150-minute limit: about 37 minutes of setup per runner,
+# enzyme_polyester_hooks.jl 76 minutes, enzyme_polyester_ext.jl 12, and ad_coverage.jl about
+# 90 locally (docs/notes/internals/ad_coverage.md). `ad-4` also runs ext/sparse_ad_ext.jl and
+# ext/ad_backend_verification.jl, which need no Enzyme.
+const AD_SHARDS = ("ad-1", "ad-2", "ad-3", "ad-4")
+const ENZYME_FILE_SHARDS = Dict(
+    "ext/enzyme_polyester_hooks.jl" => "ad-1",
+    "space/ad_coverage.jl" => "ad-2",
+    "ext/enzyme_polyester_ext.jl" => "ad-3",
+    "ext/enzyme_threaded_ext.jl" => "ad-3",
+    "ext/enzyme_forward_assembly.jl" => "ad-4",
+    "ext/chainrules_enzyme_ext.jl" => "ad-4",
+    "space/autodiff_policies.jl" => "ad-4",
+    "space/autodiff_heavy.jl" => "ad-4",
+    "examples/inverse_diffusion.jl" => "ad-4"
+)
+issetequal(keys(ENZYME_FILE_SHARDS), ENZYME_FILES) ||
+    error("ENZYME_FILE_SHARDS must give every one of the ENZYME_FILES a shard")
 
 # Should a GPU-backed testset actually run its device kernels? test/ext/metal_ext.jl and
 # metal_fullstack.jl used to gate solely on `Metal.functional()`, on the assumption that a
@@ -674,7 +699,7 @@ _field(u, D) = D == 1 ? u[1] : u
 # in space/autodiff.jl and `_matches_fd` in form/autodiff.jl (same body, two names, so no
 # overwrite warning pointed at it).
 function _matches_fd(f, a = 1.3; rtol = 1e-5)
-    return isapprox(ForwardDiff.derivative(f, a), _fd(f, a); rtol = rtol)
+    return isapprox(derivative(f, AutoForwardDiff(), a), _fd(f, a); rtol = rtol)
 end
 
 # --- Thread spy ------------------------------------------------------------------------ #

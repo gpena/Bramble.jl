@@ -2,7 +2,9 @@ module FormReactionFluxTests
 
 using Test
 using Random
-using ForwardDiff
+using ForwardDiff: ForwardDiff # loads DifferentiationInterface's ForwardDiff backend
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using Bramble
 using ..TestUtils: WITH_3D_TESTS
 using Bramble: reaction, reaction!, reaction_density, reaction_density!
@@ -609,19 +611,19 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
         uₕ = Rₕ(Wₕ, x -> x[1]^2)
         g(s) = reaction(A, s .* ones(ndofs(Wₕ)), uₕ; marker = :boundary)
         h(s) = sum(parent(reaction_density(A, s .* ones(ndofs(Wₕ)), uₕ; marker = :boundary)))
-        @test ForwardDiff.derivative(g, 2.0) ≈ g(3.0) - g(2.0)
-        @test ForwardDiff.derivative(h, 2.0) ≈ h(3.0) - h(2.0)
+        @test DI.derivative(g, AutoForwardDiff(), 2.0) ≈ g(3.0) - g(2.0)
+        @test DI.derivative(h, AutoForwardDiff(), 2.0) ≈ h(3.0) - h(2.0)
         gd(s) = reaction(Matrix(A), s .* ones(ndofs(Wₕ)), uₕ; marker = :boundary)
-        @test ForwardDiff.derivative(gd, 2.0) ≈ ForwardDiff.derivative(g, 2.0)
+        @test DI.derivative(gd, AutoForwardDiff(), 2.0) ≈ DI.derivative(g, AutoForwardDiff(), 2.0)
         # the dense in-place variants: d reaction/ds = 2 (the two marked ends)
         n = ndofs(Wₕ)
         gi(s) = (F = s .* ones(n); reaction!(similar(F), Matrix(A), F, uₕ; marker = :boundary))
-        @test ForwardDiff.derivative(gi, 2.0) ≈ 2.0
+        @test DI.derivative(gi, AutoForwardDiff(), 2.0) ≈ 2.0
         hd(s) = (F = s .* ones(n);
             sum(reaction_density!(zero(F), Matrix(A), F, uₕ; marker = :boundary)))
         hs(s) = (F = s .* ones(n); sum(reaction_density!(zero(F), A, F, uₕ; marker = :boundary)))
-        @test ForwardDiff.derivative(hd, 2.0) ≈ ForwardDiff.derivative(hs, 2.0)
-        @test ForwardDiff.derivative(hd, 2.0) > 0
+        @test DI.derivative(hd, AutoForwardDiff(), 2.0) ≈ DI.derivative(hs, AutoForwardDiff(), 2.0)
+        @test DI.derivative(hd, AutoForwardDiff(), 2.0) > 0
         @test reaction(A, Matrix(A) * parent(uₕ), uₕ; marker = :boundary) isa Float64
         @test reaction(Matrix(A), ones(ndofs(Wₕ)), uₕ; marker = :boundary) ≈
               reaction(A, ones(ndofs(Wₕ)), uₕ; marker = :boundary)

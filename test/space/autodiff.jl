@@ -7,6 +7,7 @@ using Bramble: Dcₓ, D̃ₓ, D̽ₓ, D₋ₓ, Mₓ, inner₊ᵧ, inner₊ₓ, j
 # Internal since v3.0 (gpena/Bramble.jl#211): defined and documented, not exported.
 import Bramble: diff₋ₓ, diff₊ₓ, D₊ₓ, ∇₊ₕ, M₊ₓ
 using ForwardDiff
+using DifferentiationInterface
 using Bramble: components, diff₋ₓ, diff₊ₓ
 using ..TestUtils: _matches_fd
 
@@ -224,7 +225,7 @@ end
             return normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
         end
         p0 = [1.3, 0.7]
-        g = ForwardDiff.gradient(J, p0)
+        g = DifferentiationInterface.gradient(J, AutoForwardDiff(), p0)
         @test length(g) == 2
         for k in 1:2
             e = zeros(2)

@@ -6,11 +6,10 @@ using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange, sparse
 using LinearAlgebra: lu
 using PrecompileTools: @setup_workload, @compile_workload
 
-# Gated on `ChainRulesCore` alone -- no `SciMLBase`/`LinearSolve` coupling, so a caller who
-# only wants gradients through a Bramble solve never needs either. `pde_solve`'s own docstring
-# (`src/solvers/pde_solve.jl`) explains why this one function is the entire adjoint story: nothing
-# else in the assemble/Dirichlet path needs a hand-written rule, since it is already
-# reverse-mode-differentiable on its own.
+# Gated on `ChainRulesCore` alone, with no `SciMLBase` or `LinearSolve` coupling, so a caller
+# who only wants gradients through a Bramble solve needs neither. `pde_solve`'s own docstring
+# (`src/solvers/pde_solve.jl`) explains why this one function carries the whole adjoint:
+# nothing else in the assemble/Dirichlet path needs a hand-written rule.
 
 """
     ChainRulesCore.rrule(::typeof(pde_solve), A::SparseMatrixCSC, F::AbstractVector; kwargs...)
@@ -27,17 +26,20 @@ makes even a naturally symmetric form structurally asymmetric). With keywords (`
 and the backend's own) the primal is `pde_solve(A, F; kwargs...)` and the adjoint solve is
 `pde_solve(sparse(A'), ∂J/∂u; kwargs...)`, so the same backend and hint apply to `Aᴴ`. A `sym`
 hint must therefore hold for `Aᴴ` as well as `A`, which it does for the symmetric, Hermitian
-and positive definite cases it describes.
+and positive definite cases it describes. The adjoint solve conjugates `mean_zero` and `gauge`,
+the border of `Aᴴ`'s bordered system. A rectangular `A` (a `solver = :spqr` least-squares
+solve) throws an `ArgumentError`: its pullback has a residual term this adjoint omits.
 """
 function ChainRulesCore.rrule(
         ::typeof(pde_solve), A::SparseMatrixCSC, F::AbstractVector; kwargs...)
+    Bramble._check_square_for_adjoint(A)
     if isempty(kwargs)
         fact = lu(A)
         u = fact \ F
         adjoint_solve = ȳ -> fact' \ ȳ
     else
         u = pde_solve(A, F; kwargs...)
-        adjoint_solve = ȳ -> pde_solve(sparse(A'), ȳ; kwargs...)
+        adjoint_solve = ȳ -> Bramble._pde_solve_adjoint(A, ȳ; kwargs...)
     end
     function pde_solve_pullback(ȳ)
         λ = adjoint_solve(unthunk(ȳ))

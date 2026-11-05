@@ -5,8 +5,10 @@ using Bramble
 using Bramble: matrix_type
 using SparseArrays
 using SciMLBase: SciMLBase # loads the `ode_problem` extension
-using ForwardDiff: ForwardDiff, Dual, value
+using ForwardDiff: Dual, value
 using FiniteDiff: FiniteDiff
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using Bramble:
                D₋ₓ,
                Mₓ,
@@ -18,7 +20,7 @@ using Bramble:
                semidiscretize_rhs,
                set_points!,
                type_cached_assemble!
-using ..TestUtils: WITH_AD_TESTS, _sd_problem, _Const, _x1, _graded_mesh
+using ..TestUtils: _sd_problem, _Const, _x1, _graded_mesh, ghost_mesh
 
 # `semidiscretize` and the residual it returns (src/problems/semidiscrete.jl) need no SciMLBase:
 # a `Semidiscretization` is a callable with the `(du, u, p, t)` signature plus two matrices.
@@ -415,28 +417,28 @@ _sd_negate_allocs(J, A) = @allocated Bramble._negate_into!(J, A)
         @test _sd_rhs_allocs(rhs, du_bc, u0, 3.0) == 0
         @test isempty(sd.operator.cache)
 
-        if WITH_AD_TESTS
-            # A `ForwardDiff.Dual` `t` -- the same thing a Rosenbrock stepper's `tgrad` reaches
-            # for -- rebuilds once at that new element type, and never throws `InexactError`
-            # trying to write a `Dual` into the `Float64` matrix the classic `BilinearForm` path
-            # would have kept.
-            t_dual = Dual(3.0, 1.0)
-            u_dual = Dual.(u0, 0.0)
-            du_dual = similar(u_dual)
-            sd(du_dual, u_dual, nothing, t_dual)
-            @test build_calls[] == 2
-            @test value.(du_dual) ≈ du64
+        # A `ForwardDiff.Dual` `t` -- the same thing a Rosenbrock stepper's `tgrad` reaches
+        # for -- rebuilds once at that new element type, and never throws `InexactError`
+        # trying to write a `Dual` into the `Float64` matrix the classic `BilinearForm` path
+        # would have kept. `sd_bc` above ran `build` once more at construction, so the
+        # count is taken from here, and the Dual `t` adds exactly one build.
+        built = build_calls[]
+        t_dual = Dual(3.0, 1.0)
+        u_dual = Dual.(u0, 0.0)
+        du_dual = similar(u_dual)
+        sd(du_dual, u_dual, nothing, t_dual)
+        @test build_calls[] == built + 1
+        @test value.(du_dual) ≈ du64
 
-            # Calling again at the already-seen `Dual` type refills without rebuilding.
-            sd(du_dual, u_dual, nothing, t_dual)
-            @test build_calls[] == 2
+        # Calling again at the already-seen `Dual` type refills without rebuilding.
+        sd(du_dual, u_dual, nothing, t_dual)
+        @test build_calls[] == built + 1
 
-            # The `Float64` path stays exactly as before, unaffected by the Dual excursion in
-            # between: same cached entry, refilled at its own `t` rather than rebuilt.
-            sd(zeros(n), zeros(n), nothing, 1.0)
-            @test operator_matrix(sd) ≈ 2 .* A₀      # α(1.0) = 1 + 1 = 2
-            @test build_calls[] == 2
-        end
+        # The `Float64` path stays exactly as before, unaffected by the Dual excursion in
+        # between: same cached entry, refilled at its own `t` rather than rebuilt.
+        sd(zeros(n), zeros(n), nothing, 1.0)
+        @test operator_matrix(sd) ≈ 2 .* A₀      # α(1.0) = 1 + 1 = 2
+        @test build_calls[] == built + 1
     end
 
     @testset "type-cached: Float32 space (#555)" begin
@@ -924,7 +926,7 @@ end
 # AD Jacobian carries `-(∂A/∂u) u` (#985). The oracle is a central difference of the Float64
 # residual, and the Picard `-A` is checked to differ from it, so a twin reading a stale
 # state could not pass. Graded 2D mesh, its boundary constrained to data.
-_sd_jac(sd, u, t) = ForwardDiff.jacobian((du, v) -> sd(du, v, nothing, t), zero(u), u)
+_sd_jac(sd, u, t) = DI.jacobian((du, v) -> sd(du, v, nothing, t), zero(u), AutoForwardDiff(), u)
 function _sd_jac_fd(sd, u, t)
     n = length(u)
     return FiniteDiff.finite_difference_jacobian(v -> sd(zeros(n), v, nothing, t), u,
@@ -945,7 +947,7 @@ end
         sd = semidiscretize(a, l; state = sₕ, reassemble = true, dirichlet = bc)
         # one function object, so both Jacobian calls below share one Dual type
         f! = (du, v) -> sd(du, v, nothing, 0.0)
-        J = ForwardDiff.jacobian(f!, zeros(n), u0)
+        J = DI.jacobian(f!, zeros(n), AutoForwardDiff(), u0)
         D = only(keys(sd.twins))
         # the user's state never receives a Dual
         @test eltype(parent(sₕ)) === Float64
@@ -966,7 +968,7 @@ end
         twin = sd.twins[D]
         Atwin = operator_matrix(twin)
         @test length(sd.twins) == 1
-        @test ForwardDiff.jacobian(f!, zeros(n), u0) == J
+        @test DI.jacobian(f!, zeros(n), AutoForwardDiff(), u0) == J
         @test length(sd.twins) == 1
         @test sd.twins[D] === twin
         @test operator_matrix(twin) === Atwin
@@ -993,6 +995,39 @@ end
         @test operator_matrix(twin) === operator_matrix(sd)
         @test twin.operator === sd.operator
         @test twin.source !== sd.source
+    end
+
+    # `semidiscretize_rhs` routes a Dual `u` to the right-hand side of the residual's twin:
+    # its Jacobian is the central difference of the Float64 `M⁻¹(F - A u)`, not the Picard
+    # `-M⁻¹A`, the twin is built once, and the Float64 call still allocates nothing.
+    @testset "semidiscretize_rhs: Dual u" begin
+        sₕ = Bramble.element(Wₕ, 3.0)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(x -> 1.0 + x[1], v))
+        rhs = semidiscretize_rhs(semidiscretize(a, l; state = sₕ, reassemble = true))
+        f! = (du, v) -> rhs(du, v, nothing, 0.0)
+        J = DI.jacobian(f!, zeros(n), AutoForwardDiff(), u0)
+        @test all(==(3.0), parent(sₕ))
+        Jfd = FiniteDiff.finite_difference_jacobian(v -> rhs(zeros(n), v, nothing, 0.0),
+            u0, Val(:central))
+        @test isapprox(J, Jfd; rtol = 1e-6)
+        rhs(zeros(n), u0, nothing, 0.0)
+        @test !isapprox(J, -rhs.inv_mass_diag .* Matrix(operator_matrix(rhs.sd)); rtol = 1e-3)
+
+        twin = only(values(rhs.twins))
+        @test DI.jacobian(f!, zeros(n), AutoForwardDiff(), u0) == J
+        @test only(values(rhs.twins)) === twin
+
+        du, u = zeros(n), copy(u0)
+        rhs(du, u, nothing, 0.0)
+        @test _sd_rhs_allocs(rhs, du, u, 0.0) == 0
+
+        # refused where the residual is: no form reads the state
+        a0 = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        rhs0 = semidiscretize_rhs(semidiscretize(a0, l; state = sₕ, reassemble = true))
+        @test_throws ArgumentError DI.jacobian(
+            (du, v) -> rhs0(du, v, nothing, 0.0), zeros(n), AutoForwardDiff(), u0)
+        @test isempty(rhs0.twins)
     end
 
     # A plain number type always takes the `copyto!` path: a Float64 `u` into a Float32
@@ -1056,6 +1091,125 @@ end
         uv = collect(range(0.5, 2.0; length = ndofs(Vₕ)))
         @test_throws ArgumentError _sd_jac(sdv, uv, 0.0)
         @test all(==(1.0), parent(cₕ))
+    end
+
+    # `hook_reads_state = false` asserts the source hook reads no state, so the Dual `u`
+    # may reach the forms through a twin beside it. The hook writes a time-dependent
+    # source, which the central difference of the Float64 residual reproduces; the Picard
+    # `-A` is checked to differ, so a twin reading a stale state could not pass.
+    @testset "hook_reads_state=false: Dual u" begin
+        sₕ = Bramble.element(Wₕ, 3.0)
+        fₕ = Bramble.element(Wₕ, 0.0)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(fₕ, v))
+        hook = t -> Rₕ!(fₕ, x -> x[1] * t)
+        sd = semidiscretize(a, l; state = sₕ, reassemble = true,
+            (update_coefficients!) = hook, hook_reads_state = false)
+        t = 0.5
+        f! = (du, v) -> sd(du, v, nothing, t)
+        J = DI.jacobian(f!, zeros(n), AutoForwardDiff(), u0)
+        D = only(keys(sd.twins))
+        @test sd.update_coefficients isa Bramble._StateFreeUpdate
+        @test eltype(parent(sₕ)) === Float64
+        @test all(==(3.0), parent(sₕ))
+        @test isapprox(J, _sd_jac_fd(sd, u0, t); rtol = 1e-6)
+        sd(zeros(n), u0, nothing, t)
+        @test !isapprox(J, -Matrix(operator_matrix(sd)); rtol = 1e-3)
+
+        # the hook ran on the Dual call: the source holds `x₁ t`, in the Dual residual too
+        rd = sd(zeros(D, n), D.(u0), nothing, t)
+        @test value.(rd) ≈ sd(zeros(n), u0, nothing, t) rtol = 1e-14
+        @test any(!=(0.0), parent(fₕ))
+
+        # built once, and the Float64 residual still allocates nothing
+        twin = sd.twins[D]
+        @test DI.jacobian(f!, zeros(n), AutoForwardDiff(), u0) == J
+        @test sd.twins[D] === twin
+        du, u = zeros(n), copy(u0)
+        sd(du, u, nothing, t)
+        @test _sd_residual_allocs(sd, du, u, t) == 0
+        @test parent(sₕ) == u
+    end
+
+    # A two-argument hook keeps reaching `p` inside the marker.
+    @testset "hook_reads_state=false: (t, p)" begin
+        sₕ = Bramble.element(Wₕ, 3.0)
+        fₕ = Bramble.element(Wₕ, 0.0)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v)))
+        sd = semidiscretize(a, form(Wₕ, v -> innerₕ(fₕ, v)); state = sₕ,
+            reassemble = true, hook_reads_state = false,
+            (update_coefficients!) = (t, p) -> Rₕ!(fₕ, x -> p * x[1] * t))
+        @test sd.update_coefficients isa Bramble._StateFreeUpdate
+        @test sd.update_coefficients.f isa Bramble.ParametricUpdate
+        du = zeros(n)
+        sd(du, u0, 2.0, 0.5)
+        r1 = copy(du)
+        sd(du, u0, 4.0, 0.5)
+        @test du != r1
+        J = DI.jacobian((du, v) -> sd(du, v, 2.0, 0.5), zeros(n), AutoForwardDiff(), u0)
+        Jfd = FiniteDiff.finite_difference_jacobian(v -> sd(zeros(n), v, 2.0, 0.5), u0,
+            Val(:central))
+        @test isapprox(J, Jfd; rtol = 1e-6)
+    end
+
+    # Without the keyword, or with it `true`, the pair is refused as before; with no hook
+    # the keyword changes nothing.
+    @testset "hook_reads_state: default refuses" begin
+        sₕ = Bramble.element(Wₕ, 3.0)
+        fₕ = Bramble.element(Wₕ, 0.0)
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v)))
+        l = form(Wₕ, v -> innerₕ(fₕ, v))
+        hook = t -> Rₕ!(fₕ, x -> x[1] * t)
+        for kw in ((;), (; hook_reads_state = true))
+            sd = semidiscretize(a, l; state = sₕ, reassemble = true,
+                (update_coefficients!) = hook, kw...)
+            @test !(sd.update_coefficients isa Bramble._StateFreeUpdate)
+            err = try
+                _sd_jac(sd, u0, 0.5)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin("hook_reads_state = false", sprint(showerror, err))
+            @test isempty(sd.twins)
+        end
+        sd0 = semidiscretize(a, l; state = sₕ, hook_reads_state = false)
+        @test sd0.update_coefficients === nothing
+    end
+
+    # The ghost semidiscretization shares the twin, so it takes the keyword too: its source
+    # is lifted at the padded state, and the hook writes a padded grid function.
+    @testset "hook_reads_state=false: ghost" begin
+        Wg = gridspace(ghost_mesh(Bramble.CpuSerial(), (6, 7));
+            ghosts = (:xmin, :xmax, :ymax))
+        C = constrained(Wg,
+            u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => u + ∂ₙ(u) => ((x, t) -> t * x[2]),
+                :ymin => u => ((x, t) -> sin(t) * x[1]), :ymax => ∂ₙ(u) => 1.0))
+        sₕ = Bramble.element(Bramble.padded_space(C), 3.0)
+        fₕ = Bramble.element(Bramble.padded_space(C), 0.0)
+        a = form(C, C, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v)))
+        l = form(C, v -> innerₕ(fₕ, v))
+        hook = t -> Rₕ!(fₕ, x -> (1.0 + x[1]) * t)
+        m = ndofs(C)
+        ug = collect(range(0.5, 2.0; length = m))
+        t = 0.4
+        sdr = semidiscretize(a, l; state = sₕ, reassemble = true,
+            (update_coefficients!) = hook)
+        @test_throws ArgumentError DI.jacobian(
+            (du, v) -> sdr(du, v, nothing, t), zeros(m), AutoForwardDiff(), ug)
+
+        sd = semidiscretize(a, l; state = sₕ, reassemble = true,
+            (update_coefficients!) = hook, hook_reads_state = false)
+        f! = (du, v) -> sd(du, v, nothing, t)
+        J = DI.jacobian(f!, zeros(m), AutoForwardDiff(), ug)
+        Jfd = FiniteDiff.finite_difference_jacobian(v -> sd(zeros(m), v, nothing, t), ug,
+            Val(:central))
+        @test isapprox(J, Jfd; rtol = 1e-6)
+        sd(zeros(m), ug, nothing, t)
+        @test !isapprox(J, -Matrix(operator_matrix(sd)); rtol = 1e-3)
+        @test eltype(parent(sₕ)) === Float64
+        @test length(sd.twins) == 1
     end
 end
 

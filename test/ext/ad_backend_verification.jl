@@ -1,3 +1,7 @@
+# `nonlinear_diffusion_problem` comes from sparse_ad_ext.jl, which the ext group includes
+# first; the guard lets this file run alone too (as `verify_subplan.sh` lists it).
+isdefined(Main, :ExtSparseAdExtTests) || include("sparse_ad_ext.jl")
+
 module ExtADBackendVerificationTests
 
 using Test
@@ -5,9 +9,8 @@ using Bramble
 using Bramble: KroneckerLinearOperator
 using Bramble: jacobian_pattern
 using ADTypes
-using ForwardDiff, ReverseDiff, FiniteDiff, DifferentiationInterface
+using ForwardDiff, FiniteDiff, DifferentiationInterface
 using Random
-using LinearAlgebra: mul!
 using ..ExtSparseAdExtTests: nonlinear_diffusion_problem
 
 # Verifies two things gpena/Bramble.jl#122 asks for: that `jacobian_pattern` never misses a
@@ -31,13 +34,12 @@ using ..ExtSparseAdExtTests: nonlinear_diffusion_problem
 #
 # ForwardDiff is the reference in every comparison below, not because it is assumed correct,
 # but because it is the backend already established (bramble-performance §8) to work
-# unconditionally through Bramble's mutating operators; agreement with two independent
-# backends (ReverseDiff, a different differentiation direction; FiniteDiff, no
-# differentiation machinery at all) is what actually corroborates it.
+# unconditionally through Bramble's mutating operators; agreement with FiniteDiff, which has
+# no differentiation machinery at all, is what actually corroborates it.
 
 # The scalar nonlinear problem is sparse_ad_ext.jl's `nonlinear_diffusion_problem`, which
 # the ext group includes first -- at n = 8 here, small enough for the dense
-# `ForwardDiff.jacobian` reference below to cost nothing.
+# `AutoForwardDiff` reference below to cost nothing.
 function _scalar_residual_problem(n = 8)
     p = nonlinear_diffusion_problem(n)
     return p.residual, p.a, ndofs(p.Wₕ)
@@ -105,7 +107,7 @@ end
             residual, a_for_pattern, n = _scalar_residual_problem()
             pattern = jacobian_pattern(a_for_pattern, U -> Mₕ(U))
             for _ in 1:3
-                J = ForwardDiff.jacobian(residual, rand(n))
+                J = DifferentiationInterface.jacobian(residual, AutoForwardDiff(), rand(n))
                 @test all(iszero(J[i, j]) || pattern[i, j] for i in axes(J, 1), j in axes(J, 2))
             end
         end
@@ -114,22 +116,20 @@ end
             residual, a_for_pattern, n = _composite_residual_problem()
             pattern = jacobian_pattern(a_for_pattern, U -> U(2), U -> U(1))
             for _ in 1:3
-                J = ForwardDiff.jacobian(residual, rand(n))
+                J = DifferentiationInterface.jacobian(residual, AutoForwardDiff(), rand(n))
                 @test all(iszero(J[i, j]) || pattern[i, j] for i in axes(J, 1), j in axes(J, 2))
             end
         end
     end
 
-    # ForwardDiff, ReverseDiff and FiniteDiff must produce the same Jacobian.
+    # ForwardDiff and FiniteDiff must produce the same Jacobian.
     @testset "AD backends agree on the Jacobian" begin
         Random.seed!(20260914)
 
         @testset "scalar" begin
             residual, _, n = _scalar_residual_problem()
             u0 = rand(n)
-            Jref = ForwardDiff.jacobian(residual, u0)
-            @test DifferentiationInterface.jacobian(residual, AutoReverseDiff(), u0) ≈
-                  Jref rtol=1e-8
+            Jref = DifferentiationInterface.jacobian(residual, AutoForwardDiff(), u0)
             @test DifferentiationInterface.jacobian(residual, AutoFiniteDiff(), u0) ≈
                   Jref rtol=1e-4
         end
@@ -137,44 +137,10 @@ end
         @testset "composite (coupled species)" begin
             residual, _, n = _composite_residual_problem()
             w0 = rand(n)
-            Jref = ForwardDiff.jacobian(residual, w0)
-            @test DifferentiationInterface.jacobian(residual, AutoReverseDiff(), w0) ≈
-                  Jref rtol=1e-8
+            Jref = DifferentiationInterface.jacobian(residual, AutoForwardDiff(), w0)
             @test DifferentiationInterface.jacobian(residual, AutoFiniteDiff(), w0) ≈
                   Jref rtol=1e-4
         end
-    end
-end
-
-# A tracked mul! into a KroneckerLinearOperator must not hit a method ambiguity.
-@testset "ReverseDiff: Kronecker mul! (#295)" begin
-    # A small non-uniform 2D separable form -- `is_separable`'s own recognised shape
-    # (`innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))`, see src/assembly/kronecker.jl). Exercises exactly
-    # what `ext/BrambleReverseDiffExt.jl`'s disambiguating `mul!` needs to get right: the
-    # extension only loads (and only needs to resolve the ambiguity) once `ReverseDiff` --
-    # already `using`'d above -- is loaded alongside Bramble.
-    @assert Base.get_extension(Bramble, :BrambleReverseDiffExt) !== nothing "BrambleReverseDiffExt did not load"
-
-    Random.seed!(20260923)
-    Ω = domain(Bramble.interval(0.0, 1.0) × Bramble.interval(0.0, 1.0))
-    Ωₕ = mesh(Ω, (9, 7), (false, false))
-    Wₕ = gridspace(Ωₕ)
-    a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
-    K = kronecker_operator(a)
-    A = assemble(a)
-    n = size(K, 1)
-    x0 = rand(n)
-
-    @testset "tracked mul!" begin
-        ty = ReverseDiff.track(zeros(n))
-        tx = ReverseDiff.track(x0)
-        mul!(ty, K, tx)
-        @test ReverseDiff.value(ty) ≈ A * x0
-    end
-
-    @testset "gradient through K * x" begin
-        g = ReverseDiff.gradient(x -> sum(abs2, K * x), x0)
-        @test g ≈ 2 * (A' * (A * x0))
     end
 end
 

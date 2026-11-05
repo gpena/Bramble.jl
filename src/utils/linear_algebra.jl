@@ -42,7 +42,8 @@ caller actually uses, deriving `loc` from the destination array itself
 """
 @inline _sweep_for!(::HostLocality, ::CpuSerial, v, idxs, f::F) where {F} = _serial_for!(v, idxs, f)
 @inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs, f::F) where {F} = _threaded_for!(v, idxs, f)
-@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs, f::F) where {F} = _late(_batch_for!, v, idxs, f)
+@inline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs, f::F) where {F} = _late(
+    _batch_for!, v, idxs, Ref(f))
 @noinline _sweep_for!(::DeviceLocality, policy::GpuPolicy, v, idxs, f::F) where {F} = _gpu_for!(policy, v, idxs, f)
 @noinline _sweep_for!(loc::Locality, policy, v, idxs, f::F) where {F} = _throw_locality_mismatch(loc, policy)
 
@@ -55,7 +56,7 @@ caller actually uses, deriving `loc` from the destination array itself
 @inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs::CartesianIndices, f::F) where {F} = _threaded_axis_for!(
     v, idxs, f)
 @noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs::CartesianIndices, f::F) where {F} = _late(
-    _batch_axis_for!, v, idxs, f)
+    _batch_axis_for!, v, idxs, Ref(f))
 
 """
     _throw_locality_mismatch(loc::Locality, policy)
@@ -208,6 +209,17 @@ Polyester; `BramblePolyesterExt` defines the one that runs.
     return _throw_cpubatch_without_polyester(:_batch_for!)
 end
 
+# `_sweep_for!` hands `_batch_for!` its kernel behind a `Ref`. An Enzyme rule cannot take a
+# by-value closure that mixes arrays with plain numbers (`i -> a * p[i]`, `a::Float64`): the
+# call fails Enzyme's calling convention before the rule runs, and a `Ref` passes it
+# (BrambleEnzymePolyesterExt). This method unwraps it for `BramblePolyesterExt`'s sweep. It
+# inlines, so a plain call builds no `Ref` and allocates nothing; Enzyme does not inline a
+# call that has a rule, so a differentiated call reaches the rule with the `Ref`.
+# `_sweep_for!`'s `CpuPolyester` method inlines too, so the `Ref` is built in its caller:
+# built inside a non-inlined method that took the closure by value, a closure capturing a
+# `Float32` beside an array stops Enzyme's compiler ("Illegal replace ficticious phi").
+@inline _batch_for!(v::AbstractArray, idxs, r::Base.RefValue) = _late(_batch_for!, v, idxs, r[])
+
 """
     _batch_axis_for!(v::AbstractArray, idxs::CartesianIndices, f::Function) -> Nothing
 
@@ -218,6 +230,12 @@ end
 @noinline function _batch_axis_for!(v, idxs::CartesianIndices, f)
     return _throw_cpubatch_without_polyester(:_batch_axis_for!)
 end
+
+# The kernel behind a `Ref`, as `_batch_for!` takes it (see there): the Enzyme rules see the
+# `Ref`, and this method unwraps it for `BramblePolyesterExt`'s method, so the primal is the
+# same call.
+@inline _batch_axis_for!(v::AbstractArray, idxs::CartesianIndices, r::Base.RefValue) = _late(
+    _batch_axis_for!, v, idxs, r[])
 
 """
     _effective_parallel_policy(sp) -> CpuPolicy
@@ -345,10 +363,18 @@ Fill `v[idx]` with `f(idx)` across threads, statically partitioning `idxs`, or s
 where a `:static` loop cannot start ([`_static_or_serial`](@ref)).
 
 The `Threads.@threads` loop is kept in an isolated function to prevent closure boxing
-allocations on paths that execute serially.
+allocations on paths that execute serially. The threaded branch hands the kernel to
+`_static_for!` behind a `Ref`, as `_sweep_for!` hands it to `_batch_for!`:
+`BrambleEnzymeExt`'s rule for `_static_for!` cannot take a by-value closure that captures an
+array and a plain value (Enzyme's calling convention).
 """
 @noinline _threaded_for!(v, idxs, f::F) where {F} = _static_or_serial(
-    _static_for!, _serial_for!, v, idxs, f)
+    _static_for_ref!, _serial_for!, v, idxs, f)
+
+# The `Ref` is built inside the threaded branch, past `_static_or_serial`'s `try`, and the
+# `Ref` method unwraps it, both inlined: built before the `try`, it cost 8 bytes a call.
+@inline _static_for_ref!(v, idxs, f::F) where {F} = _static_for!(v, idxs, Ref(f))
+@inline _static_for!(v, idxs, r::Base.RefValue) = _static_for!(v, idxs, r[])
 
 @noinline function _static_for!(v, idxs, f::F) where {F}
     # Static partitioning distributes work evenly across available threads
@@ -528,7 +554,7 @@ end
 @inline _sweep_scatter_for!(::HostLocality, ::CpuThreaded, mats::Tuple, idxs, g::G) where {G} = _threaded_scatter_for!(
     mats, idxs, g)
 @noinline _sweep_scatter_for!(::HostLocality, ::CpuPolyester, mats::Tuple, idxs, g::G) where {G} = _late(
-    _batch_scatter_for!, mats, idxs, g)
+    _batch_scatter_for!, mats, idxs, Ref(g))
 @noinline _sweep_scatter_for!(
     ::DeviceLocality, policy::GpuPolicy, mats::Tuple, idxs, g::G) where {G} = _gpu_scatter_for!(
     policy, mats, idxs, g)
@@ -545,10 +571,16 @@ Evaluate tuple-valued `g` across `idxs` and scatter the results into `mats`, sta
 partitioning `idxs` across threads.
 
 Kept in an isolated function to prevent `Threads.@threads` closure boxing allocations on
-paths that execute serially.
+paths that execute serially. The threaded branch hands the kernel to `_static_scatter_for!`
+behind a `Ref`, as [`_threaded_for!`](@ref) does.
 """
 @noinline _threaded_scatter_for!(mats::Tuple, idxs, g::G) where {G} = _static_or_serial(
-    _static_scatter_for!, _serial_scatter_for!, mats, idxs, g)
+    _static_scatter_ref!, _serial_scatter_for!, mats, idxs, g)
+
+@inline _static_scatter_ref!(mats::Tuple, idxs, g::G) where {G} = _static_scatter_for!(
+    mats, idxs, Ref(g))
+@inline _static_scatter_for!(mats::Tuple, idxs, r::Base.RefValue) = _static_scatter_for!(
+    mats, idxs, r[])
 
 @noinline function _static_scatter_for!(mats::Tuple, idxs, g::G) where {G}
     Threads.@threads :static for idx in idxs
@@ -574,6 +606,14 @@ end
 @noinline function _batch_scatter_for!(mats::Tuple, idxs, g)
     return _throw_cpubatch_without_polyester(:_batch_scatter_for!)
 end
+
+# The kernel behind a `Ref` (see `_batch_for!`), for the two index shapes the extension's
+# methods take: a range (`project!`'s `1:n`) and any array, a `CartesianIndices` included. Each
+# is more specific than the extension's method in its index argument, so neither is ambiguous.
+@inline _batch_scatter_for!(mats::Tuple, idxs::AbstractRange, r::Base.RefValue) = _late(
+    _batch_scatter_for!, mats, idxs, r[])
+@inline _batch_scatter_for!(mats::Tuple, idxs::AbstractArray, r::Base.RefValue) = _late(
+    _batch_scatter_for!, mats, idxs, r[])
 
 #===========================================================================#
 # Walking a boundary mask

@@ -21,8 +21,8 @@ using SparseMatrixColorings: SparseMatrixColorings
 
 # The scalar nonlinear problem `A(u) u = F` with `α(u) = 3 + 1/(1+u²)`, whose residual is
 # what every sparse-AD check here differentiates. `n` is a parameter because
-# ad_backend_verification.jl wants it small enough for a dense `ForwardDiff.jacobian`
-# reference to cost nothing, where this file wants a realistic size; it imports this
+# ad_backend_verification.jl wants it small enough for a dense `AutoForwardDiff`
+# Jacobian reference to cost nothing, where this file wants a realistic size; it imports this
 # function rather than building the problem a second time (STANDARDS.md, Tests).
 sol(x) = exp(x[1])
 α(u) = 3 + 1 / (1 + u^2)

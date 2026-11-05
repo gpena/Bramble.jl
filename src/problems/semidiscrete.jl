@@ -71,7 +71,7 @@ Built by [`semidiscretize`](@ref); read back with [`mass_matrix`](@ref) and
 - `labels`: constrained boundary labels.
 - `components`: leaf components the labels bind to, or `nothing` for all.
 - `state`: [`VectorElement`](@ref) receiving `u` before assembly, or `nothing`.
-- `update_coefficients`: callable invoked with `t` (or, wrapped in `ParametricUpdate`, with `t` and the residual's own `p`) before assembly, or `nothing`.
+- `update_coefficients`: callable invoked with `t` (or, wrapped in `ParametricUpdate`, with `t` and the residual's own `p`) before assembly, or `nothing`. Wrapped in `Bramble._StateFreeUpdate` when the user declared `hook_reads_state = false`.
 - `reassemble`: `Val(true)` to refill `A` at every step.
 - `twins`: by element type of `u`, the semidiscretisations a `u` the state cannot hold (a `ForwardDiff.Dual`) is evaluated by: a state buffer of that type, the forms rebound to it and their own operator matrix, built at the first call there.
 """
@@ -143,6 +143,7 @@ returned system solves `A u_h = F`.
 - `dirichlet_components`: leaf components of a composite space the labels bind to (default `nothing`, all leaves).
 - `state`: [`VectorElement`](@ref) the current `u` is copied into before each assembly, for forms whose coefficients read it (default `nothing`). A `u` of an element type the state cannot hold (a `ForwardDiff.Dual`, from automatic differentiation of the residual) goes into a buffer of its own type instead, read by the forms rebound to it, so the user's state never receives it and `-(∂A/∂u) u` enters the Jacobian. Only the state written in the forms' expressions is rebound: one read inside a Julia function (`x -> uₕ(x)`), through a component view (`uₕ(1)`) or by a `build`-based operator is not, and such a `u` is refused with an `ArgumentError` where nothing is rebound; so is any such `u` beside an `update_coefficients!` hook, which may read the user's state. A plain number type (a real or complex float or integer) is always copied into the state, converted to its element type.
 - `update_coefficients!`: called with the current `t` before each assembly, for coefficients that vary in time -- `t -> Rₕ!(fₕ, x -> f(x, t))` for a time-dependent source, or `t -> (α[] = t)` for a scalar `Ref` (default `nothing`). A two-argument `(t, p) -> ...` also reaches the residual's own `p`, the same way a three-argument Dirichlet condition does.
+- `hook_reads_state`: whether `update_coefficients!` may read the `state` (default `true`). With `state`, a `ForwardDiff.Dual` `u` reaches the forms through a buffer of its own type and never the user's state, so a hook reading the state would lose its dependence on `u` from the derivative, and the pair is refused with an `ArgumentError`. Give `false` to assert that the hook reads no state (a source depending on `t` alone) and the `Dual` Jacobian is exact; the assertion is not checked, and a hook that does read the state then gets a Jacobian missing that part.
 - `reassemble`: refill `A` at every step, for an operator whose coefficients change with `t` or `u` (default `false`).
 
 Time and parameter dependence of the Dirichlet values is detected by arity, exactly as
@@ -177,7 +178,7 @@ sd = semidiscretize(a, l; dirichlet = bcs)
 Forms posed on a constrained ghost space, whose relation data may depend on time
 (`(x, t) -> ...`, see [`constrained`](@ref)), are taken too, by the method
 `semidiscretize(a::GhostBilinearForm, l::GhostLinearForm; mass, state,
-update_coefficients!, reassemble)`: the relations eliminate the ghosts and the Dirichlet
+update_coefficients!, hook_reads_state, reassemble)`: the relations eliminate the ghosts and the Dirichlet
 nodes, so the mass has no zero rows, and the source at `t` carries the lift of the data at
 `t`. That method refuses the `dirichlet` keyword (give `:F => u => g(x, t)` in
 `constrained`), a space keeping ghosts as unknowns, a mass coupling a degree of freedom to a
@@ -194,6 +195,7 @@ Base.@constprop :aggressive function semidiscretize(
         dirichlet_components = nothing,
         state = nothing,
         (update_coefficients!) = nothing,
+        hook_reads_state::Bool = true,
         reassemble::Bool = false
 )
     sp = test_space(l)
@@ -219,7 +221,7 @@ Base.@constprop :aggressive function semidiscretize(
         labels === nothing ? () : labels,
         dirichlet_components,
         state,
-        _wrap_update(update_coefficients!),
+        _wrap_update(update_coefficients!, hook_reads_state),
         Val(reassemble),
         Dict{DataType, Any}()
     )
@@ -516,7 +518,7 @@ end
 # reading no rebound form would give `-A` as the Jacobian while the forms read the state
 # some other way, so it is refused.
 function _build_state_twin(sd::Semidiscretization, ::Type{T}) where {T}
-    sd.update_coefficients === nothing || _throw_state_hook(T)
+    _reads_state(sd.update_coefficients) && _throw_state_hook(T)
     old = _state_element(sd.state)
     new = element(old.space, T)
     copyto!(parent(new), parent(old))
@@ -549,15 +551,16 @@ function _twin_matrix(sd, ::Val{true}, a)
 end
 
 # The hook may read the user's state, which a `u` of type `T` never reaches: its
-# derivative would be lost without a trace, so the pair is refused.
+# derivative would be lost without a trace, so the pair is refused, unless the user
+# declared the hook state-free (`hook_reads_state = false`, `_StateFreeUpdate`).
 @noinline function _throw_state_hook(T::Type)
     throw(
         ArgumentError(
         "semidiscretize: u has element type $(nameof(T)), which the state cannot hold, " *
         "and update_coefficients! may read the state, which only receives u at the " *
         "state's own element type: the hook's dependence on u would be lost from the " *
-        "derivative. Use a finite-difference Jacobian, or the Picard jacobian! with " *
-        "u at the state's type.",
+        "derivative. Give hook_reads_state = false if it reads no state, or use a " *
+        "finite-difference Jacobian, or the Picard jacobian! with u at the state's type.",
     ),
     )
 end
@@ -603,6 +606,22 @@ end
     return (!_accepts(f, Val(1)) && _accepts(f, Val(2))) ? ParametricUpdate(f) : f
 end
 
+# `hook_reads_state = false`: the user asserts the hook reads no state, so a `Dual` `u`
+# may reach the forms through a twin beside it. Wraps the hook `_wrap_update` returns, once
+# at construction; `_update_coefficients!` calls through it, so the call path is unchanged.
+struct _StateFreeUpdate{F}
+    f::F
+end
+
+@inline function _wrap_update(f, hook_reads_state::Bool)
+    g = _wrap_update(f)
+    return (hook_reads_state || g === nothing) ? g : _StateFreeUpdate(g)
+end
+
+@inline _reads_state(::Nothing) = false
+@inline _reads_state(::_StateFreeUpdate) = false
+@inline _reads_state(_) = true
+
 @inline _update_coefficients!(::Nothing, p, t) = nothing
 # The existing one-argument path, untouched: a concrete `ParametricUpdate` method is more
 # specific than this `where {F}` fallback, so wrapping only the new case above does not
@@ -614,6 +633,9 @@ end
 @inline function _update_coefficients!(update!::ParametricUpdate, p, t)
     update!.f(t, p)
     return nothing
+end
+@inline function _update_coefficients!(update!::_StateFreeUpdate, p, t)
+    return _update_coefficients!(update!.f, p, t)
 end
 
 # `eltype(F)` and `T` are both fixed by the argument types, so the comparison folds away and

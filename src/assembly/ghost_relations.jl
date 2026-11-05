@@ -852,7 +852,7 @@ function _constrained_space(Wₕ::GhostGridSpace, rels::Tuple, drels::Tuple)
     w = map(k -> timed[rel[k]] ? b[k] : one(eltype(b)), eachindex(b))
     E, _, L = _relation_closure(G, R, b, ghosts, keep, fixed, g, (w, order))
     td = _time_data(be, T, S, G, L, rels, drels, b, ghosts, rel, g, order, owner)
-    d = _backend_vector(be, S, size(E, 1))
+    d = _backend_vector(be, eltype(td.g), size(E, 1))
     W = GhostGridSpace(P, _closure_matrix(be, T, E), d, td)
     _lift_affine!(d, W, zero(real(T)))      # the stored `d` is `d(0)`
     return W
@@ -909,19 +909,13 @@ end
 # facet-weighted data `b[k]` of a static relation and the value of a static Dirichlet datum;
 # each relation with data depending on time gets a group of its sources, which are
 # contiguous: a facet's ghosts follow one another, and so do the points a Dirichlet
-# relation fixes first.
+# relation fixes first. The buffers take `S`, the static data's type, widened by each
+# group's value at `t = 0` (`_group_eltype`), so a `Dual` or complex datum in time fits.
 function _time_data(be, ::Type{T}, ::Type{S}, G::GhostMesh, L::SparseMatrixCSC, rels,
         drels, b, ghosts, rel, gfix, order, owner) where {T, S}
     Ωₕ = physical_mesh(G)
     m = length(ghosts)
-    g = zeros(S, m + length(order))   # the static data, of their own type `S`
     timed, dtimed = map(_is_time_relation, rels), map(_is_time_relation, drels)
-    for k in 1:m
-        timed[rel[k]] || (g[k] = b[k])
-    end
-    for (q, p) in enumerate(order)
-        dtimed[owner[q]] || (g[m + q] = gfix[p])
-    end
     ghost_groups = _time_groups(rels, 1) do r, i
         ks = findall(==(i), rel)
         pts = [point(Ωₕ, first(boundary_node(G, ghosts[k]))) for k in ks]
@@ -934,11 +928,41 @@ function _time_data(be, ::Type{T}, ::Type{S}, G::GhostMesh, L::SparseMatrixCSC, 
         pts = [point(Ωₕ, pin[order[q]] - phys) for q in qs]
         return _time_group(be, r.data, pts, m + (isempty(qs) ? 1 : first(qs)))
     end
-    Lt = sparse(transpose(SparseMatrixCSC{T, Int}(L)::SparseMatrixCSC{T, Int}))
+    groups = (ghost_groups..., fixed_groups...)
+    Sg = _closure_data_eltype(S, _group_eltype(S, groups, zero(real(T))))
+    g = zeros(Sg, m + length(order))   # the static data, 0 at the sources in time
+    for k in 1:m
+        timed[rel[k]] || (g[k] = b[k])
+    end
+    for (q, p) in enumerate(order)
+        dtimed[owner[q]] || (g[m + q] = gfix[p])
+    end
+    # `L` reads the facet weights `w`, whose vector a `Dual` or complex static datum widens.
+    TL = _closure_data_eltype(T, eltype(L))
+    Lt = sparse(transpose(SparseMatrixCSC{TL, Int}(L)::SparseMatrixCSC{TL, Int}))
     stored(x) = copyto!(_backend_vector(be, eltype(x), length(x)), x)
-    return _TimeData((ghost_groups..., fixed_groups...), stored(SparseArrays.getcolptr(Lt)),
-        stored(rowvals(Lt)), stored(nonzeros(Lt)), stored(g), stored(g))
+    return _TimeData(groups, stored(SparseArrays.getcolptr(Lt)), stored(rowvals(Lt)),
+        stored(nonzeros(Lt)), stored(g), stored(g))
 end
+
+# `S` promoted with the type of each group's values: the type inferred for the datum, its
+# `Union` members promoted, so a datum that is `0.0` at some points or times and a `Dual`
+# at others widens it, and the type of its value at `t` at its first point (read on the
+# host, whatever the backend), which alone counts where inference gives an abstract type.
+# A group without points adds nothing.
+@inline _group_eltype(::Type{S}, ::Tuple{}, t) where {S} = S
+@inline function _group_eltype(::Type{S}, groups::Tuple, t) where {S}
+    grp = first(groups)
+    rest = _group_eltype(S, Base.tail(groups), t)
+    isempty(grp.points) && return rest
+    x = first(Array(grp.points))
+    V = typeof(grp.f(x, t))
+    R = _union_promoted(Base.promote_op(grp.f, typeof(x), typeof(t)))
+    return promote_type(isconcretetype(R) ? R : V, V, rest)
+end
+
+_union_promoted(R::Union) = promote_type(_union_promoted(R.a), _union_promoted(R.b))
+_union_promoted(R::Type) = R
 
 # `f(r, i)` for each relation `r` of `rels` with data depending on time, `i` its index in
 # `rels`, as a tuple: unrolled, so each group keeps its datum's type. A relation that fixes

@@ -2,46 +2,20 @@ module SpaceAutodiffHeavyTests
 
 using Test
 using Bramble
-using ForwardDiff
 using DifferentiationInterface
 using ..SpaceAutodiffBackendsTests: check_backend, _ad_problems
 using ..TestUtils: _have
 
-# The two backends that are expensive to run, and the one that cannot run at all.
+# Enzyme is the expensive backend to compile, and Zygote is the one that cannot run at all.
 #
-# Mooncake and Enzyme cost 25.1 s and 33.2 s of first-call compilation, against 0.5 s for
-# ReverseDiff, which runs per push. What they establish changes when a
-# *backend* changes rather than when Bramble does, so they sit behind the `ad` group and the
-# weekly workflow rather than running on every push.
+# Enzyme's first-call compilation is what makes it expensive, so it sits behind the
+# `backends` group and the weekly workflow rather than running on every push. What it
+# establishes changes when a *backend* changes rather than when Bramble does.
 #
 # `check_backend` comes from autodiff_backends.jl, which the group includes first; `_have`
 # is TestUtils'.
 
 @testset "AD backends (slow)" begin
-    @testset "PolyesterForwardDiff" begin
-        # Here rather than in the per-push group for two reasons. It exercises no Bramble
-        # path ForwardDiff does not (the same Dual arithmetic, chunked across threads), so
-        # its marginal coverage is close to nothing. And it nests its own threading inside
-        # kernels that already thread, which is the kind of thing that behaves differently
-        # on a CI runner than on a laptop: it passes here at one and four threads and
-        # errored on the macOS runner.
-        if _have(:PolyesterForwardDiff)
-            @eval import PolyesterForwardDiff
-            check_backend("AutoPolyesterForwardDiff", AutoPolyesterForwardDiff())
-        else
-            @test_skip "PolyesterForwardDiff not in this environment"
-        end
-    end
-
-    @testset "Mooncake" begin
-        if _have(:Mooncake)
-            @eval import Mooncake
-            check_backend("AutoMooncake", AutoMooncake(config = nothing))
-        else
-            @test_skip "Mooncake not in this environment"
-        end
-    end
-
     @testset "Enzyme annotations" begin
         if _have(:Enzyme)
             @eval import Enzyme

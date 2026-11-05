@@ -8,7 +8,9 @@ using Bramble: AbstractSmoother, JacobiSmoother, ChebyshevSmoother, RedBlackGaus
 using Bramble: GMGPreconditioner, AbstractMatrixFreePreconditioner, VectorElement, v_cycle!, w_cycle!, fmg!
 using LinearAlgebra: LinearAlgebra, dot, norm, diag, LowerTriangular, UpperTriangular, ldiv!, Symmetric, eigmin
 using LinearSolve: LinearProblem, KrylovJL_CG, solve
-using ForwardDiff: ForwardDiff
+using ForwardDiff: ForwardDiff # loads DifferentiationInterface's ForwardDiff backend
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using Random
 using ..TestUtils: MG_SEED, TEST_DIMS, WITH_3D_TESTS, ZeroBasedVector, _mg_jitter_mesh, _mg_spd,
                    _mg_transfer_meshes, alloc_ok
@@ -199,8 +201,10 @@ end
     Ωf, L = _mg_transfer_meshes()[2]
     H = GeometricMeshHierarchy(Ωf, L)
     P = _mg_oracle(H[3], H[2])
-    Jp = ForwardDiff.jacobian(x -> prolongate!(similar(x, npoints(H[3])), H, 3, x), randn(npoints(H[2])))
-    Jc = ForwardDiff.jacobian(y -> coarsen!(similar(y, npoints(H[2])), H, 3, y), randn(npoints(H[3])))
+    Jp = DI.jacobian(x -> prolongate!(similar(x, npoints(H[3])), H, 3, x), AutoForwardDiff(),
+        randn(npoints(H[2])))
+    Jc = DI.jacobian(y -> coarsen!(similar(y, npoints(H[2])), H, 3, y), AutoForwardDiff(),
+        randn(npoints(H[3])))
     @test _mg_agree(Jp, Matrix(P)) && _mg_agree(Jc, Matrix(P'))
 
     # Float32 levels transfer in Float32.

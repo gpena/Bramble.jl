@@ -2,6 +2,7 @@ module SpaceWeightsStalenessTests
 
 using Test
 using ForwardDiff
+using DifferentiationInterface
 using Bramble
 using Bramble: norm₊
 using Bramble: change_points!, set_points!, weights
@@ -241,7 +242,8 @@ end
             assemble(form(Wₕ, v -> innerₕ(πₕ(uₛ; outside = 0.0), v)))
         end
         @test !iszero(g(1.0))
-        @test ForwardDiff.derivative(g, 2.0) ≈ g(1.0) rtol = 1.0e-12
+        dg = DifferentiationInterface.derivative(g, AutoForwardDiff(), 2.0)
+        @test dg ≈ g(1.0) rtol = 1.0e-12
 
         W32 = gridspace(mesh(domain(interval(0.0f0, 1.0f0)), 21, true))
         u64 = Rₕ(Ws, x -> 1 / 3 + x[1])

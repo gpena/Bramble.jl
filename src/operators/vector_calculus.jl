@@ -126,8 +126,17 @@ runs.
     return _throw_cpubatch_without_polyester(:_batch_run_bands!)
 end
 
+# `_run_bands!` hands `_batch_run_bands!` its kernel behind a `Ref`, as `_sweep_for!` does
+# `_batch_for!`'s (utils/linear_algebra.jl): an Enzyme rule cannot take a by-value kernel
+# that mixes arrays with plain numbers (BrambleEnzymePolyesterExt). The method below unwraps
+# it for `BramblePolyesterExt`'s sweep; it inlines, so a plain call allocates no `Ref`.
 @noinline function _run_bands!(::CpuPolyester, f::F, args::Vararg{Any, N}) where {F, N}
-    return _late(_batch_run_bands!, f, Threads.nthreads(), args...)
+    return _late(_batch_run_bands!, Ref(f), Threads.nthreads(), args...)
+end
+
+@inline function _batch_run_bands!(
+        r::Base.RefValue, nbands::Int, out::AbstractVector, rest::Vararg{Any, N}) where {N}
+    return _late(_batch_run_bands!, r[], nbands, out, rest...)
 end
 
 @inline function _accumulate_backward!(

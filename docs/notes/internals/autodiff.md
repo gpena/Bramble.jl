@@ -5,7 +5,7 @@ CollapsedDocStrings = false
 
 # Automatic differentiation
 
-`Bramble.jl` is designed so that grid functions, operators, and form assemblies can be differentiated end-to-end using Julia's automatic differentiation (AD) ecosystem.
+Grid functions, operators and form assemblies differentiate end to end through Julia's automatic differentiation (AD) ecosystem.
 
 ## Separation of geometry and coefficients
 
@@ -26,17 +26,20 @@ Propagating derivatives through discrete operators requires that allocations do 
    ```
 3. **Quadrature evaluation in `avgₕ`**: Cell averaging builds Gauss-Legendre quadrature rules in the coordinate type of the mesh, while evaluating the integrand at those real nodes. Sensitivities present in the integrand propagate into the destination element without requiring dual-valued quadrature tables.
 
-## Supported automatic differentiation backends
+## AD backends
 
-Bramble's runtime kernels mutate destination buffers using `setindex!`. AD backends that support array mutation work out of the box:
+Bramble's runtime kernels mutate destination buffers using `setindex!`, so a backend has to support array mutation. Two backends do, both reached through [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl). The [Automatic differentiation tutorial](../tutorials/autodiff.md) has the setup, runnable examples and the choice between them.
 
-- **ForwardDiff**: Dual numbers propagate through coefficients, difference operators, weak forms, and boundary conditions.
-- **PolyesterForwardDiff**: The same forward-mode propagation, chunked across threads.
-- **ReverseDiff**: Tracked arrays and scalars propagate through space operators and form assembly.
-- **Mooncake & Enzyme**: Differentiate operator evaluations and space methods.
-- **Zygote**: Not supported directly because it disallows array mutation (`setindex!`).
+| Backend | `CpuSerial` | `CpuThreaded` | `CpuPolyester` |
+| :--- | :--- | :--- | :--- |
+| ForwardDiff | works, with limits | works, with limits | works, with limits |
+| Enzyme | works, with limits | works, with limits | works, with limits |
 
-In practice, using [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl) allows swapping between forward and reverse backends through a unified API. For setup instructions and runnable examples across all 5 supported backends, see the [Automatic differentiation tutorial](../tutorials/autodiff.md).
+[`ad_coverage.md`](ad_coverage.md) lists, per feature and policy, what each backend differentiates, what it excludes, and the limits.
+
+ForwardDiff propagates dual numbers through coefficients, difference operators, weak forms and boundary conditions. Enzyme differentiates `Float64` code, so no buffer widens to `Dual`, and `BrambleEnzymeExt` supplies the `pde_solve` adjoint.
+
+Three backends are not offered: PolyesterForwardDiff, ReverseDiff and Mooncake. PolyesterForwardDiff matches ForwardDiff wherever it runs and throws a `cfunction` error at 16 or more parameters on the aarch64 host. ReverseDiff is the slowest reverse-mode backend at every parameter count, has no `pde_solve` adjoint, and timed out on the sparse Jacobian. Mooncake is slower than Enzyme and has no `pde_solve` adjoint because it rejects the `SparseMatrixCSC` tangent. The measurements and the full reasoning are in [`ad_backend_evaluation.md`](ad_backend_evaluation.md).
 
 ## Calling AD libraries
 
@@ -50,7 +53,7 @@ The exceptions stay as they are:
 
 The extensions keep their backend-native rules (`ChainRulesCore.rrule` and the Enzyme rule), which DI picks up. `src/` takes no DI dependency.
 
-The Enzyme failures under `CpuThreaded` and `CpuPolyester` belong to the backend, since direct calls fail the same way, so they are not an exception to this policy.
+The Enzyme failures belong to the backend, since direct calls fail the same way, so they are not an exception to this policy.
 
 ## Differentiating forms and linear systems
 

@@ -239,7 +239,7 @@ A Newton residual generic over `T` (`Float64` on a plain call, `ForwardDiff.Dual
 AD backend's sparse Jacobian sweep is probing it) cannot preallocate one matrix the way a
 Picard loop can. `type_cached_assemble!` gives the sparsity pattern a place to live per
 element type it is ever reached at instead, so only the very first call at a given type
-pays for it. No test runs the AD sweep until v4.2.0, when the AD backends return.
+pays for it.
 
 ```@docs
 type_cached_assemble!

@@ -501,9 +501,19 @@ end
 # bitwise.
 @noinline function _threaded_broadcast!(v::AbstractVector, bc::Broadcast.Broadcasted)
     bc′ = _prepared_broadcast(v, bc)
-    return _static_or_serial(
-        _static_bands!, _serial_bands!, _broadcast_band!, Threads.nthreads(), v, bc′, axes(v, 1))
+    return _static_or_serial(_static_broadcast_ref!, _serial_bands!, _broadcast_band!,
+        Threads.nthreads(), v, bc′, axes(v, 1))
 end
+
+# The threaded branch passes the `Broadcasted` behind a `Ref`, as `_polyester_broadcast!`
+# does: by value, a tree that mixes an array with a plain value (`2.0 .* κ`) fails Enzyme's
+# calling convention at the `_static_bands!` rule. Built here, past `_static_or_serial`'s
+# check, the serial branch (a user's threaded region) keeps the `Broadcasted` unboxed.
+@inline _static_broadcast_ref!(f::F, nbands::Int, v, bc, ax) where {F} = _static_bands!(
+    f, nbands, v, Ref(bc), ax)
+
+@inline _broadcast_band!(v, r::Base.RefValue, ax, nbands::Int, b::Int) = _broadcast_band!(
+    v, r[], ax, nbands, b)
 
 @noinline function _broadcast_band!(v, bc, ax, nbands::Int, b::Int)
     @inbounds @simd for i in _band_range(ax, nbands, b)
@@ -516,7 +526,7 @@ end
 # band, run under `Polyester.@batch` by `_batch_broadcast!` instead of `_static_or_serial`.
 @noinline function _polyester_broadcast!(v::AbstractVector, bc::Broadcast.Broadcasted)
     bc′ = _prepared_broadcast(v, bc)
-    return _late(_batch_broadcast!, v, bc′, axes(v, 1))
+    return _late(_batch_broadcast!, v, Ref(bc′), axes(v, 1))
 end
 
 """
@@ -529,6 +539,12 @@ naming Polyester; `BramblePolyesterExt` defines the one that runs.
 @noinline function _batch_broadcast!(v, bc, ax)
     return _throw_cpubatch_without_polyester(:_batch_broadcast!)
 end
+
+# The `Broadcasted` behind a `Ref` (see `_polyester_broadcast!`): an Enzyme rule takes it as a
+# mutable box, not by value (its arrays and plain values fail Enzyme's calling convention), and
+# this method unwraps it for `BramblePolyesterExt`'s method, so the primal is the same call.
+@inline _batch_broadcast!(v::AbstractVector, r::Base.RefValue, ax) = _late(
+    _batch_broadcast!, v, r[], ax)
 
 # What `_batch_broadcast!` hands `Polyester.@batch` in place of the `Broadcasted` tree:
 # nested tuples holding only its styles, functions, leaf arrays and scalars, each node

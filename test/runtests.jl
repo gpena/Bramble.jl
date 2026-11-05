@@ -44,23 +44,20 @@ const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full"
 # platforms daily. TestUtils holds the definition (WITH_SLOW_TESTS, read by the subsystem
 # runtests.jl files and test files), and the list, with measured costs.
 
-# AD and GPU tests are off in every group until v4.2.0 and v4.7.0; TestUtils holds the
-# switches and says how to turn them back on.
-const __bramble_with_ad_tests = TestUtils.WITH_AD_TESTS
+# GPU tests are off in every group until v4.7.0; TestUtils holds the switch and says how to
+# turn them back on.
 const __bramble_with_gpu_tests = TestUtils.WITH_GPU_TESTS
 
-# The expensive differentiation backends (Enzyme, Mooncake, and the policy crossings), when
-# AD tests are switched on. Their packages are not in test/Project.toml; each file skips a
-# backend absent from the environment, so the group reports a skip rather than an error.
+# The expensive differentiation backends (Enzyme and the policy crossings). Enzyme is not in
+# test/Project.toml: Weekly.yml installs it for the `ad-*` shards, and each file skips when it is
+# absent, so a local run reports a skip rather than an error.
 #
-# The AD extension files (sparse AD, the AD backend verification and the
-# pde_solve rrule) run here too, not under `ext`, so
-# that `ext` is CPU extensions only.
+# The AD extension files (sparse AD and the AD backend verification) run here too, not under
+# `ext`, so that `ext` is CPU extensions only.
 #
 # `backends` is `ad` plus `ext` with no unit suite: Weekly.yml runs it as one half of the
 # full suite and `slow` as the other, since the Julia 1.12 legs outgrew one 90-minute job.
-const __bramble_with_ad_backends = __bramble_with_ad_tests &&
-                                   __bramble_test_group in ("ad", "full", "backends")
+const __bramble_with_ad_backends = __bramble_test_group in ("ad", "full", "backends")
 
 # The Makie/Meshes weak deps: `test/Project.toml` lists them (so
 # `Pkg.instantiate()` always resolves and can precompile them), but they are only ever
@@ -173,10 +170,9 @@ if __bramble_with_unit_tests
                 include("space/interpolation_outside.jl")
                 include("space/inference_allocation.jl")
                 include("space/element_type.jl")
-                if __bramble_with_ad_tests
-                    include("space/autodiff.jl")
-                    include("space/autodiff_backends.jl")
-                end
+                include("space/autodiff.jl")
+                include("space/autodiff_backends.jl")
+                include("space/ad_coverage.jl")
             end
         end
 
@@ -229,26 +225,66 @@ if __bramble_with_quality
     end
 end
 
-if __bramble_with_ad_backends
+# One file of the `ENZYME_FILES`, with what it needs. `autodiff_heavy.jl` reuses
+# `check_backend` and `_ad_problems`, so autodiff_backends.jl comes first (the unit suite
+# has already included it when it runs in the same process). Every Enzyme file is reached
+# through that list, never by its own `include` here: ext/enzyme_forward_assembly.jl (#1124)
+# included directly would run a second time, in the parent process. The unit suite includes
+# space/ad_coverage.jl for its ForwardDiff half, so a parent that ran it already (the `rest`
+# shard is in this process) skips the second include; the Enzyme half runs only in the file's
+# own child.
+function __bramble_include_enzyme_file(file)
+    file == "space/ad_coverage.jl" && isempty(TestUtils.TEST_FILE) &&
+        __bramble_with_unit_tests && TestUtils.in_shard("rest") && return nothing
+    file == "space/autodiff_heavy.jl" && !__bramble_with_unit_tests &&
+        include("space/autodiff_backends.jl")
+    include(file)
+    return nothing
+end
+
+# The `ENZYME_FILES` of this run's `ad-*` shard, or all of them when no shard is set.
+function __bramble_shard_enzyme_files()
+    filter(
+        file -> TestUtils.in_shard(TestUtils.ENZYME_FILE_SHARDS[file]), TestUtils.ENZYME_FILES)
+end
+
+# Each Enzyme file in a Julia process of its own, never all in one: one rule file alone peaks
+# near 7 GB and what it compiles stays resident (TestUtils, `ENZYME_FILES`). The child is this
+# script again, with `BRAMBLE_TEST_FILE` set and the group `ad`, so it runs that one file and
+# nothing else. `Base.julia_cmd()` carries this process's flags (coverage, `--optimize`,
+# `--check-bounds`, threads), and `--project` its test environment.
+function __bramble_run_enzyme_files()
+    script = @__FILE__
+    for file in __bramble_shard_enzyme_files()
+        cmd = `$(Base.julia_cmd()) --project=$(Base.active_project()) -e "include(ARGS[1])" $script`
+        cmd = addenv(cmd, "BRAMBLE_TEST_GROUP" => "ad",
+            "BRAMBLE_TEST_SHARD" => TestUtils.ENZYME_FILE_SHARDS[file], "BRAMBLE_TEST_FILE" => file)
+        @testset "$file" begin
+            @test success(pipeline(cmd; stdout = stdout, stderr = stderr))
+        end
+    end
+    return nothing
+end
+
+if __bramble_with_ad_backends &&
+   (!isempty(TestUtils.TEST_FILE) || any(TestUtils.in_shard, TestUtils.AD_SHARDS))
     @testset verbose=true "AD backends (expensive)" begin
-        # autodiff_backends.jl first: it defines `check_backend` and `_ad_problems`, which
-        # this reuses so both files check every backend the same way. (`_have` used to come
-        # from here too and is now TestUtils'.)
-        __bramble_with_unit_tests || include("space/autodiff_backends.jl")
-        include("space/autodiff_heavy.jl")
-        # The same backends crossed with the Parallel() and CpuPolyester() policies, dense
-        # and sparse; it reuses nothing from the two files above.
-        include("space/autodiff_policies.jl")
-        # pde_solve's rrule (ext/chainrules_ext.jl, "Package extensions" below) composed with
-        # a real reverse-mode backend -- Enzyme; Mooncake pinned as currently unsupported.
-        # Self-contained, independent of that file's own run.
-        include("ext/chainrules_enzyme_ext.jl")
-        # The boundary-condition-recovery worked example needs Enzyme, unlike every other
-        # example page -- run here rather than in "Worked examples"/"Package extensions".
-        include("examples/inverse_diffusion.jl")
-        # The AD extension files, moved here from "Package extensions" so `ext` is CPU only.
-        include("ext/sparse_ad_ext.jl")
-        include("ext/ad_backend_verification.jl")
+        if !isempty(TestUtils.TEST_FILE)
+            # A child of `__bramble_run_enzyme_files`: this one file.
+            __bramble_include_enzyme_file(TestUtils.TEST_FILE)
+        else
+            # The files that need no Enzyme, in this process.
+            if TestUtils.in_shard("ad-4")
+                include("ext/sparse_ad_ext.jl")
+                include("ext/ad_backend_verification.jl")
+            end
+            if TestUtils._have(:Enzyme)
+                __bramble_run_enzyme_files()
+            else
+                # Each file skips its Enzyme parts and runs the rest here.
+                foreach(__bramble_include_enzyme_file, __bramble_shard_enzyme_files())
+            end
+        end
     end
 end
 

@@ -37,7 +37,7 @@ Problems are written as bilinear and linear forms built from discrete operators,
 - **Coupled systems.** Composite spaces (`Wₕ^Val(N)`) and vector spaces, with block assembly addressed by component.
 - **Time-dependent problems.** `semidiscretize` and `ode_problem` hand a first-order system `M u' = F(t) - A u` to OrdinaryDiffEq and the rest of SciML; a wave equation is written as one for the pair `(u, u̇)`.
 - **Solvers.** `pde_solve` with sparse direct factorizations (SuiteSparse, Apple Accelerate, MUMPS, Sparspak), preconditioners (algebraic multigrid, ILU(0), Jacobi, Chebyshev) and geometric multigrid (`gmg_solve`).
-- **Automatic differentiation.** Forward-mode differentiation (ForwardDiff) through operators, assembly and nonlinear residuals. Reverse-mode (ReverseDiff, Enzyme, ChainRules), sparse Jacobians and SciMLSensitivity adjoints ship as extensions whose tests are off until v4.3.0.
+- **Automatic differentiation.** Forward-mode differentiation (ForwardDiff) through operators, assembly and nonlinear residuals. Reverse-mode (Enzyme, ChainRules), sparse Jacobians and SciMLSensitivity adjoints ship as extensions whose tests are off until v4.3.0.
 - **Backends.** Serial, threaded (Polyester) and experimental GPU (Metal) execution, with CSC or CSR storage chosen through `backend`. The GPU tests are off until v4.4.0.
 - **Visualization and export.** Plots and Makie recipes, VTK output for ParaView (`export_vtk`) and PGFPlots/TikZ output for LaTeX (`export_pgfplots`).
 

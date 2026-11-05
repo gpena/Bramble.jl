@@ -215,6 +215,71 @@ along its last axis, as [`_difference_band!`](@ref) does for the difference.
     return nothing
 end
 
+# Whether the two-point average's output at index `i` of `n` along `DIM` reads `in_ref` at
+# all: the one boundary slice with no neighbour is zero. The outputs that read a point are
+# the difference's (`_difference_taps`, operators/difference.jl), the same two-point stencil.
+@inline _average_reads(::Forward, i::Int, n::Int) = i < n
+@inline _average_reads(::Backward, i::Int, n::Int) = i > 1
+
+"""
+    _average_band_adjoint!(d_in, d_out, dims::NTuple{D, Int}, dir::Union{Forward, Backward}, dim_val::Val, nbands::Int, b::Int) -> Nothing
+
+The transpose of [`_average_band!`](@ref), in gather form. For every point `j` of the `b`-th
+of `nbands` slabs, adds to `d_in[j]` half of `d_out` at each output that reads `in_ref[j]`:
+`j` itself and its neighbour along `DIM`, where that output is not the zeroed boundary slice.
+Only the band owning `j` writes `d_in[j]`, so every band may run concurrently. `d_out` is
+read, never cleared.
+"""
+@inline function _average_band_adjoint!(
+        d_in, d_out, dims::NTuple{D, Int}, dir::Union{Forward, Backward}, ::Val{DIM},
+        nbands::Int, b::Int
+) where {D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    n = dims[DIM]
+    slab = _band_slab(axes(li), _band_range(axes(li, D), nbands, b))
+
+    @inbounds for J in CartesianIndices(slab)
+        k = J[DIM]
+        acc = zero(eltype(d_out))
+        for t in _difference_taps(dir)
+            i = k - t
+            1 <= i <= n && _average_reads(dir, i, n) || continue
+            acc += d_out[li[J - t * step]]
+        end
+        d_in[li[J]] += acc / 2
+    end
+
+    return nothing
+end
+
+"""
+    _centered_average_band_adjoint!(d_in, d_out, dims::NTuple{D, Int}, dim_val::Val, nbands::Int, b::Int) -> Nothing
+
+The transpose of [`_centered_average_band!`](@ref), in gather form: for every point `j` of
+the `b`-th of `nbands` slabs, adds to `d_in[j]` the weights `1/4, 1/2, 1/4` times `d_out` at
+the interior outputs `j - 1`, `j`, `j + 1` along `DIM` (both end slices are zero and read
+nothing). Only the band owning `j` writes `d_in[j]`; `d_out` is read, never cleared.
+"""
+@inline function _centered_average_band_adjoint!(
+        d_in, d_out, dims::NTuple{D, Int}, ::Val{DIM}, nbands::Int, b::Int
+) where {D, DIM}
+    li = LinearIndices(dims)
+    step = _stencil_step(Val(DIM), Val(D))
+    n = dims[DIM]
+    slab = _band_slab(axes(li), _band_range(axes(li, D), nbands, b))
+
+    @inbounds for J in CartesianIndices(slab)
+        k = J[DIM]
+        mid = 1 < k < n ? 2 * d_out[li[J]] : zero(eltype(d_out))
+        lo = k > 2 ? d_out[li[J - step]] : zero(eltype(d_out))
+        hi = k < n - 1 ? d_out[li[J + step]] : zero(eltype(d_out))
+        d_in[li[J]] += (lo + mid + hi) / 4
+    end
+
+    return nothing
+end
+
 """
     _threaded_average_engine!(out, in_ref, dims::Tuple, dir::GridDirection, dim_val::Val) -> Nothing
 

@@ -196,10 +196,6 @@ using Kronecker: Kronecker
                 :BlasInt,
                 Symbol("@blasfunc"),
                 :libblastrampoline,
-                # `TrackedArray` (BrambleReverseDiffExt, commit c5ae771f): the argument type of the
-                # `mul!` method that resolves the ambiguity with `KroneckerLinearOperator`
-                #. ReverseDiff exports no public name for it.
-                :TrackedArray,
                 :Backend,
                 :_backend_eye,
                 :_backend_zeros,
@@ -606,9 +602,6 @@ using Kronecker: Kronecker
                 # BramblePolyesterExt, `_rerun_bands!`/`_rerun_scatter!` sit behind it, so a
                 # split sweep's caller does not infer the host rerun over the user function.
                 :inferencebarrier,
-                # `ReverseDiff.record_mul!`: records the tape entry
-                # for that `mul!`; ReverseDiff has no public equivalent.
-                :record_mul!,
                 # `Core.kwcall`: named in `precompile(Core.kwcall,
                 # (...))` directives in `src/precompile/solver_sessions.jl` and
                 # `src/precompile/form_sessions.jl`, caching the keyword-call entry

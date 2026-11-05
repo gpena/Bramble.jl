@@ -994,8 +994,17 @@ end
     dims = K.dims
     ss = Base.front(cumprod(dims))::Tuple{Vararg{Int}}
     lines = CartesianIndices(Base.tail(dims))
-    _late(_batch_kron_lines!, y, K.terms, cs, x, β, ss, lines, dims[1])
+    _late(_batch_kron_lines!, y, Ref(K.terms), cs, x, β, ss, lines, dims[1])
     return y
+end
+
+# `_kron_fused!` hands the terms behind a `Ref`: a term mixes arrays with a `Bool`, and such
+# a by-value argument fails Enzyme's calling convention before a rule runs
+# (BrambleEnzymePolyesterExt). This method unwraps them and inlines, so a plain call
+# allocates nothing.
+@inline function _batch_kron_lines!(
+        y, terms::Base.RefValue{<:Tuple}, cs, x, β, ss, lines, m)
+    return _late(_batch_kron_lines!, y, terms[], cs, x, β, ss, lines, m)
 end
 
 # What a term's line kernels read (its `rows` and `line`), as plain arrays only: a diagonal
@@ -1087,11 +1096,8 @@ end
     )
 end
 
-# The three-argument method below is ambiguous against
-# `ReverseDiff.mul!(::TrackedArray, ::AbstractMatrix, ::TrackedArray)`: each wins on a different
-# argument. It stays (`mul!` is the primitive, and callers may pass any `AbstractVector`);
-# `ext/BrambleReverseDiffExt.jl` (#295) defines the disambiguating method, forwarding to
-# `ReverseDiff.record_mul!`.
+# The three-argument method below stays (`mul!` is the primitive, and callers may pass any
+# `AbstractVector`).
 #
 # `scratch` is accepted and ignored: the fused pass above needs no work vectors, so a serial
 # host `mul!` allocates nothing with or without it, and callers that pass one keep working.

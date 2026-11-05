@@ -10,6 +10,8 @@ import Bramble: D₊ₓ
 using LinearAlgebra: Diagonal, dot, I, mul!
 using SparseArrays
 using Random: seed!
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using ForwardDiff
 using Bramble:
                CompositeGridSpace,
@@ -50,7 +52,7 @@ using Bramble:
                backward_shift,
                Dcₓ,
                Δₕ
-using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS, WITH_3D_TESTS
+using ..TestUtils: alloc_test, @test_allocs, WITH_3D_TESTS
 
 # The interpolation operator: `πₕ(u)` over a trial function, as opposed to
 # `πₕ(uₕ)` over a grid function whose values are known (test/form/interpolation.jl).
@@ -857,7 +859,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         end
     end
 
-    WITH_AD_TESTS && @testset "Differentiation" begin
+    @testset "Differentiation" begin
         # A coefficient in the integrand, differentiated through the assembly: the block is
         # `H·diag(c)·P`, so `d sum(A) / d cᵢ` is `Hᵢᵢ` times row `i` of `P` summed. Checked
         # against that, not against itself, so a gradient of the wrong thing cannot pass.
@@ -875,18 +877,19 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         want = collect(weights(Wt, Innerh())) .* vec(sum(Matrix(P), dims = 2))
 
         f(w) = form(Ws, Wt, (u, v) -> innerₕ(Bramble.element(Wt, w) * πₕ(u), v))
-        @test ForwardDiff.gradient(w -> sum(assemble(f(w))), c0) ≈ want
+        @test DI.gradient(w -> sum(assemble(f(w))), AutoForwardDiff(), c0) ≈ want
 
         # the matrix has to be able to hold a `Dual` at all
         @test eltype(assemble(f(ForwardDiff.Dual.(c0, 1.0)))) <: ForwardDiff.Dual
 
         # and the in-place path, which allocates the matrix separately
-        @test ForwardDiff.gradient(c0) do w
+        function sum_in_place(w)
             a = f(w)
             A = allocate_system_matrix(a)
             assemble!(A, a)
-            sum(A)
-        end ≈ want
+            return sum(A)
+        end
+        @test DI.gradient(sum_in_place, AutoForwardDiff(), c0) ≈ want
 
         # through the re-evaluation path, where the outer difference evaluates the
         # interpolation twice rather than relabelling it.
@@ -901,7 +904,7 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
         sv = [cospi(i / 5) for i in 1:ndofs(Ws)]
         Dx = D₋ₓ(Wt)
         want_d = (Dx * r) .* collect(weights(Wt, Innerplus(), 1)) .* (Dx * (P * sv))
-        @test ForwardDiff.gradient(w -> dot(r, assemble(fd(w)) * sv), c0) ≈ want_d
+        @test DI.gradient(w -> dot(r, assemble(fd(w)) * sv), AutoForwardDiff(), c0) ≈ want_d
         # and the oracle is not itself zero, which is the mistake above
         @test maximum(abs, want_d) > 0.1
     end

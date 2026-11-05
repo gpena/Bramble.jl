@@ -12,6 +12,8 @@ import Bramble
 using Bramble: CpuSerial, CpuThreaded
 using LinearAlgebra: norm, isdiag, diag
 using ForwardDiff: ForwardDiff
+using DifferentiationInterface: AutoForwardDiff
+import DifferentiationInterface as DI
 using FiniteDiff: FiniteDiff
 using SciMLBase: solve
 using OrdinaryDiffEqBDF: FBDF
@@ -109,6 +111,11 @@ end
         u, du = residual_matches(sd, C, frozen; tol = 1e-5)
         @test eltype(du) == Float32
         @test eltype(Bramble.mass_matrix(sd)) == Float32
+        # Float64 data and load keep the Float32 source, static and in time (#1111)
+        @test eltype(sd.source_vector) === Float32
+        rs = t -> u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => u + ∂ₙ(u) => x -> x[2],
+            :ymin => u => x -> x[1], :ymax => ∂ₙ(u) => 0.5)
+        @test eltype(build(W, rs)[2].source_vector) === Float32
         @test alloc(() -> sd(du, u, nothing, 0.3f0)) == 0
     end
 
@@ -161,7 +168,7 @@ end
         u = collect(range(-1, 2; length = Bramble.ndofs(C)))
         t = 0.4
         r(t) = sd(zeros(typeof(t), length(u)), u, nothing, t)
-        dr = ForwardDiff.derivative(r, t)
+        dr = DI.derivative(r, AutoForwardDiff(), t)
         h = 1e-6
         @test relerr(dr, (r(t + h) - r(t - h)) / 2h) <= 1e-6
         @test norm(dr) > 0.1
@@ -195,7 +202,7 @@ end
         u0 = collect(range(0.5, 2.0; length = m))
         t = 0.4
         f! = (du, u) -> sd(du, u, nothing, t)
-        J = ForwardDiff.jacobian(f!, zeros(m), u0)
+        J = DI.jacobian(f!, zeros(m), AutoForwardDiff(), u0)
         D = only(keys(sd.twins))
         # the user's state never receives a Dual
         @test eltype(parent(sₕ)) === Float64
@@ -213,7 +220,7 @@ end
         Atwin = Bramble.operator_matrix(twin)
         @test eltype(Atwin) === D
         @test twin.state.v !== sₕ
-        @test ForwardDiff.jacobian(f!, zeros(m), u0) == J
+        @test DI.jacobian(f!, zeros(m), AutoForwardDiff(), u0) == J
         @test length(sd.twins) == 1
         @test sd.twins[D] === twin
         @test Bramble.operator_matrix(twin) === Atwin
@@ -239,6 +246,55 @@ end
         @test parent(sₕ) ≈ parent(Bramble.lift(C, u, t)) rtol = 1e-14
     end
 
+    # Relation data and load carrying a `Dual` or a complex number, static and in time
+    # (#1111). Every datum is `θ` times a fixed one, so `∂r/∂θ` is the residual at `θ = 1`
+    # and `u = 0`, exactly; a complex datum `p + im q` gives `r_p(u) + im r_q(0)`.
+    @testset "Dual and complex relation data (#1111)" begin
+        W = gridspace(ghost_mesh(CpuSerial(), (7, 6); seed = 5); ghosts = GHOSTS2)
+        rs(θ) = u -> (:xmin => ∂ₙ(u) => θ, :xmax => u + ∂ₙ(u) => x -> θ * x[2],
+            :ymin => u => x -> θ * x[1], :ymax => ∂ₙ(u) => 0.0)
+        rt(θ) = u -> (:xmin => ∂ₙ(u) => θ, :xmax => u + ∂ₙ(u) => (x, t) -> θ * t * x[2],
+            :ymin => u => (x, t) -> θ * sin(t) * x[1], :ymax => ∂ₙ(u) => 0.0)
+        t = 0.7
+        for rels in (rs, rt)
+            C1 = constrained(W, rels(1.0))
+            m = Bramble.ndofs(C1)
+            u0 = collect(range(-1.0, 2.0; length = m))
+            function r(θ, u)
+                C = constrained(W, rels(θ))
+                sd = semidiscretize(form(C, C, laplacian), form(C, v -> innerₕ(x -> θ, v)))
+                return sd(zeros(promote_type(typeof(θ), eltype(u)), m), u, nothing, t)
+            end
+            ref = r(1.0, zeros(m))
+            @test norm(ref) > 0.1
+            @test relerr(DI.derivative(θ -> r(θ, u0), AutoForwardDiff(), 2.0), ref) <= 1e-13
+            p, q = r(1.0, u0), r(1.0, zeros(m))
+            @test relerr(r(1.0 + 0.5im, u0), p + 0.5im * q) <= 1e-13
+        end
+        # a Float64 state cannot hold complex relation data: the message names the data
+        Cz = constrained(W, rt(1.0 + 0.5im))
+        sₕ = element(Bramble.padded_space(Cz), 2.0)
+        sdz = semidiscretize(form(Cz, Cz, laplacian), form(Cz, v -> innerₕ(sₕ, v));
+            state = sₕ)
+        mz = Bramble.ndofs(Cz)
+        @test_throws ArgumentError sdz(zeros(ComplexF64, mz), ones(mz), nothing, t)
+        err = try
+            sdz(zeros(ComplexF64, mz), ones(mz), nothing, t)
+            nothing
+        catch e
+            sprint(showerror, e)
+        end
+        @test occursin("relation data of element type Complex", err)
+        @test !occursin("ForwardDiff time", err)
+        # a state of the data's type receives lift(Cz, u, t)
+        sₕz = element(Bramble.padded_space(Cz), ComplexF64)
+        sdz = semidiscretize(form(Cz, Cz, laplacian), form(Cz, v -> innerₕ(sₕz, v));
+            state = sₕz)
+        sdz(zeros(ComplexF64, mz), ones(mz), nothing, t)
+        @test relerr(parent(sₕz), parent(Bramble.lift(Cz, ones(mz), t))) <= 1e-14
+        @test norm(imag(parent(sₕz))) > 0.1
+    end
+
     # Without `reassemble` the twin keeps the operator, whose `A_pad` the load reads, and
     # only the source, reading the state here, is rebound.
     @testset "Dual state: source reads it (#985)" begin
@@ -250,7 +306,8 @@ end
         m = Bramble.ndofs(C)
         u0 = collect(range(0.5, 2.0; length = m))
         t = 0.4
-        J = ForwardDiff.jacobian((du, u) -> sd(du, u, nothing, t), zeros(m), u0)
+        J = DI.jacobian((du, u) -> sd(du, u, nothing, t), zeros(m), AutoForwardDiff(),
+            u0)
         Jfd = FiniteDiff.finite_difference_jacobian(u -> sd(zeros(m), u, nothing, t), u0,
             Val(:central))
         @test relerr(J, Jfd) <= 1e-6

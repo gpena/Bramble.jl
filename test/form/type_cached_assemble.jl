@@ -8,7 +8,7 @@ using SparseMatrixColorings: SparseMatrixColorings
 using SparseArrays: nnz
 using Random
 using Bramble: Mₓ!, type_cached_assemble!
-using ..TestUtils: alloc_test, @test_allocs, WITH_AD_TESTS
+using ..TestUtils: alloc_test, @test_allocs
 
 # `type_cached_assemble!` (assembly/type_cached_assemble.jl): caches a
 # coefficient-dependent BilinearForm's sparsity pattern per element type, so a Newton
@@ -64,7 +64,7 @@ const _traced_ad = AutoSparse(
     end
 
     # Matches the direct (uncached) result, at Float64 and at Dual.
-    WITH_AD_TESTS && @testset "matches direct, Float64 and Dual" begin
+    @testset "matches direct, Float64 and Dual" begin
         cache = Dict{DataType, Any}()
         diffusion_matrix_cached(uₕ) = type_cached_assemble!(_build_diffusion, cache, uₕ; dirichlet = :boundary)
 
@@ -105,7 +105,7 @@ const _traced_ad = AutoSparse(
     end
 
     # Matches assemble(a)'s own pattern, at every type seen.
-    WITH_AD_TESTS && @testset "structural: pattern matches assemble(a)" begin
+    @testset "structural: pattern matches assemble(a)" begin
         # SparseConnectivityTracer's own tracer element type: the one case that would
         # crash outright (UndefRefError) if `refill!` ran after allocate_system_matrix
         # instead of before, since a tracer is not `isbits` and starts genuinely
@@ -189,7 +189,7 @@ const _traced_ad = AutoSparse(
     end
 
     # Drives a full Newton solve to the same answer as the direct approach.
-    WITH_AD_TESTS && @testset "Newton solve matches direct" begin
+    @testset "Newton solve matches direct" begin
         sol(x) = exp(x[1])
         dαdu(u) = -2u / (1 + u^2)^2
         rhs(x) = -dαdu(sol(x)) * sol(x)^2 - α(sol(x)) * sol(x)
