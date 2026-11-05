@@ -181,6 +181,7 @@ end
 
 # Line number of the single line of the method matched by `prefix` whose stripped text is `text`.
 function method_line(file::AbstractString, prefix::AbstractString, text::AbstractString)
+    isfile(file) || error("exempt_function: source file not found: $file")
     src = readlines(file)
     hits = filter(l -> strip(src[l]) == text, method_lines(file, prefix))
     length(hits) == 1 ||

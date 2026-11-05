@@ -45,6 +45,27 @@ end
             @test occursin("matches 0 definitions", output)
         end
     end
+
+    @testset "A moved file is reported with the rest" begin
+        mktempdir() do dir
+            stale = joinpath(dir, "moved.toml")
+            write(stale, """
+                [[exempt_function]]
+                path = "src/no_such_file.jl"
+                lines = [{ method = "f(", text = "x" }]
+                reason = "uncounted: a file that does not exist"
+
+                [[exempt_function]]
+                path = "src/Bramble.jl"
+                methods = ["no_such_method_for_the_positive_control("]
+                reason = "uncounted: a method that does not exist"
+                """)
+            ok, output = _check_exempt(stale)
+            @test !ok
+            @test occursin("source file not found: src/no_such_file.jl", output)
+            @test occursin("no_such_method_for_the_positive_control(", output)
+        end
+    end
 end
 
 end # module
