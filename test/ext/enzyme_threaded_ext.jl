@@ -153,8 +153,10 @@ end
 # Runs `hook`'s case of enzyme_policy_cases.jl under `policy` in child processes
 # (`run_isolated`) and checks every mode: the child exited cleanly, reported the mode,
 # matched ForwardDiff and entered the rule the case names.
-function _check_children(hook, modes; separate = (), policy = :CpuThreaded)
-    codes, results = EnzymePolicyCases.run_isolated(hook, modes; policy, separate)
+function _check_children(hook, modes; separate = (), policy = :CpuThreaded,
+        check_bounds = nothing)
+    codes, results = EnzymePolicyCases.run_isolated(hook, modes; policy, separate,
+        check_bounds)
     @test all(==(0), codes)
     for m in modes
         @test haskey(results, m)
@@ -255,6 +257,17 @@ end
                     separate = (c.hook,))
             end
         end
+    end
+end
+
+# The CpuThreaded case again with bounds checks forced on in the child. Inlined into its
+# task, the band-colour slab loop then copied the point to the stack with a memset Enzyme's
+# type analysis cannot type (gpena/Bramble.jl#1134). The ad shards run at `auto`, so only
+# this testset fails if `_band_slab!`'s barrier goes.
+@testset "Three-summand reverse, bounds forced" begin
+    if RUN_ENZYME
+        _check_children("_threaded_three_summands", (:reverse, :di_reverse);
+            separate = ("_threaded_three_summands",), check_bounds = "yes")
     end
 end
 
