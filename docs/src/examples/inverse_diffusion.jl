@@ -74,8 +74,8 @@ loss(κ::Real) = sum(abs2, forward(κ)[obs_idx[k]] - u_obs[k] for k in eachindex
 #
 # `loss` closes over `Wₕ`/`l`, which Enzyme cannot prove read-only on its own, so the backend
 # wraps the function `Const` (`function_annotation`) and sets `set_runtime_activity` -- the same
-# annotation `docs/notes/tutorials/autodiff.md` and `test/space/autodiff_heavy.jl` already
-# document for the ordinary (non-solve) path.
+# annotation the [automatic differentiation tutorial](@ref tutorial_autodiff) and
+# `test/space/autodiff_heavy.jl` already document for the ordinary (non-solve) path.
 
 using Enzyme
 import DifferentiationInterface as DI

@@ -455,8 +455,7 @@ convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), 
 #
 #   - [Coupled reaction-diffusion](coupled_reaction_diffusion.md) for the same Newton setup
 #     over a composite space, with two species.
-#   - [Choosing a solver](@ref tutorial_solvers) and
-#     [Solvers by problem](@ref tutorial_solvers_by_problem) for the linear solves inside
-#     each iteration.
+#   - The solver tutorials ("Choosing a solver" and "Solvers by problem") for the linear
+#     solves inside each iteration.
 #   - [`nonlinear_problem`](@ref) in the [API reference](../api.md) for the
 #     NonlinearSolve.jl wrapper used above.

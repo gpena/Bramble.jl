@@ -350,4 +350,4 @@ convergence_plot([(hs, erru, "u", "#5B5FC7"), (hs, errv, "v", "#0E7C86")]; title
 #   - The [coupled systems tutorial](@ref tutorial_coupled) for composite spaces and the
 #     block structure of their matrices, and the [space tutorial](@ref space_composite) for
 #     vector elements.
-#   - [Choosing a solver](@ref tutorial_solvers) for the linear solve inside each Newton step.
+#   - The "Choosing a solver" tutorial for the linear solve inside each Newton step.

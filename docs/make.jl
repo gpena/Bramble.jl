@@ -14,11 +14,14 @@ const LITERATE_EXAMPLES = [
     "poisson_linear.jl",
     "poisson_polygon.jl",
     "poisson_circle.jl",
+    "poisson_nonlinear.jl",
     "convection_diffusion_linear.jl",
     "heat_equation.jl",
     "neumann_robin_poisson.jl",
     "ghost_heat_equation.jl",
-    "elasticity_traction_2d.jl"
+    "elasticity_traction_2d.jl",
+    "coupled_reaction_diffusion.jl",
+    "inverse_diffusion.jl"
 ]
 
 if Threads.nthreads() == 1
@@ -68,15 +71,21 @@ forms = "Forms and assembly" => [
     "tutorials/form.md",
     "tutorials/coupled_systems.md"
 ]
+solvers = "Solvers and AD" => [
+    "tutorials/autodiff.md"
+]
 examples = "Examples" => [
     "examples/poisson_linear.md",
     "examples/poisson_polygon.md",
     "examples/poisson_circle.md",
+    "examples/poisson_nonlinear.md",
     "examples/convection_diffusion_linear.md",
     "examples/heat_equation.md",
     "examples/neumann_robin_poisson.md",
     "examples/ghost_heat_equation.md",
-    "examples/elasticity_traction_2d.md"
+    "examples/elasticity_traction_2d.md",
+    "examples/coupled_reaction_diffusion.md",
+    "examples/inverse_diffusion.md"
 ]
 internals = "Internals" => [
     "internals/utils.md",
@@ -110,7 +119,7 @@ documentation = "Documentation" => [
 #     ```@meta
 #     CurrentModule = Bramble
 #     ```
-allpages = [home, getting_started, foundations, forms, examples, documentation]
+allpages = [home, getting_started, foundations, forms, solvers, examples, documentation]
 
 # Every `jldoctest` in a docstring, on a page or not; a failure throws and stops the build.
 # Some call internal names bare, which no page's `CurrentModule = Bramble` reaches here.
