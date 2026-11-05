@@ -6,7 +6,7 @@ using Bramble: Bramble, pde_solve, CpuThreaded, KroneckerLinearOperator, StarSpa
 using Enzyme: Enzyme, Const, Annotation, Active, Duplicated, DuplicatedNoNeed,
               BatchDuplicated, BatchDuplicatedNoNeed, MixedDuplicated, BatchMixedDuplicated
 using Enzyme.EnzymeRules: EnzymeRules, RevConfig, FwdConfig, AugmentedReturn
-using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange, sparse
+using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange
 using LinearAlgebra: lu
 
 # A native Enzyme reverse rule for `pde_solve`, used instead of `Enzyme.@import_rrule`.
@@ -44,8 +44,8 @@ end
 # The forward solve and the adjoint solve, dispatched on the keywords' type so each call
 # site has one concrete tape type. Without keywords the forward solve's own factorisation
 # serves the adjoint. With them the primal is `pde_solve(A, F; kwargs...)`, no factorisation
-# is kept (`fact` is `nothing`), and the adjoint is `pde_solve(Aᴴ, ū; kwargs...)`, as
-# `BrambleChainRulesExt`'s rrule does.
+# is kept (`fact` is `nothing`), and the adjoint is `pde_solve(Aᴴ, ū; kwargs...)` with the
+# border conjugated (`Bramble._pde_solve_adjoint`), as `BrambleChainRulesExt`'s rrule does.
 function _forward_solve(A, F, ::@NamedTuple{})
     fact = lu(A)
     return fact, fact \ F
@@ -53,7 +53,7 @@ end
 _forward_solve(A, F, kwargs::NamedTuple) = nothing, pde_solve(A, F; kwargs...)
 
 _adjoint_solve(fact, _, ū, ::@NamedTuple{}) = fact' \ ū
-_adjoint_solve(::Nothing, A, ū, kwargs::NamedTuple) = pde_solve(sparse(A'), ū; kwargs...)
+_adjoint_solve(::Nothing, A, ū, kwargs::NamedTuple) = Bramble._pde_solve_adjoint(A, ū; kwargs...)
 
 function EnzymeRules.augmented_primal(
         config::RevConfig,
@@ -64,15 +64,20 @@ function EnzymeRules.augmented_primal(
         kwargs...
 ) where {RT}
     EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    Bramble._check_square_for_adjoint(A.val)
 
     fact, u = _forward_solve(A.val, F.val, values(kwargs))
+    # Without a factorisation the adjoint reads `A`'s values, so the forward matrix goes on the
+    # tape: a caller may overwrite `A` after the solve, and `EnzymeRules.overwritten` does not
+    # flag a matrix scaled in place after the call.
+    Aₜ = fact === nothing ? copy(A.val) : nothing
     # The return's own cotangent accumulates here, and `reverse` reads it back off the tape:
     # allocated once, in the pass that knows `u`'s size, rather than reconstructed later.
     ū = zero(u)
 
     primal = EnzymeRules.needs_primal(config) ? u : nothing
     shadow = EnzymeRules.needs_shadow(config) ? ū : nothing
-    return AugmentedReturn(primal, shadow, (fact, u, ū))
+    return AugmentedReturn(primal, shadow, (fact, Aₜ, u, ū))
 end
 
 function EnzymeRules.reverse(
@@ -84,17 +89,18 @@ function EnzymeRules.reverse(
         F::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    fact, u, ū = tape
+    fact, Aₜ, u, ū = tape
+    A₀ = Aₜ === nothing ? A.val : Aₜ
 
     # `fact'` reuses the forward solve's own LU factors, exact whether or not `A` is
     # symmetric -- `dirichlet_bc!`'s `eₖ` row replacement makes even a symmetric form
     # structurally asymmetric, so this is not an optimisation for a special case.
-    λ = _adjoint_solve(fact, A.val, ū, values(kwargs))
+    λ = _adjoint_solve(fact, A₀, ū, values(kwargs))
 
     if !(A isa Const)
         Āv = nonzeros(A.dval)
-        rows = rowvals(A.val)
-        @inbounds for j in axes(A.val, 2), k in nzrange(A.val, j)
+        rows = rowvals(A₀)
+        @inbounds for j in axes(A₀, 2), k in nzrange(A₀, j)
 
             Āv[k] -= λ[rows[k]] * conj(u[j])
         end

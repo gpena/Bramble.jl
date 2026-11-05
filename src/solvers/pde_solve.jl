@@ -253,6 +253,31 @@ end
                         "Use :default, :suitesparse, :accelerate or :mumps."))
 end
 
+# The adjoint solve of `pde_solve(A, F; kwargs...)` for the AD rules in `BrambleChainRulesExt`
+# and `BrambleEnzymeExt`: `pde_solve(Aᴴ, ū; kwargs...)`, with `mean_zero` and `gauge`
+# conjugated. The primal borders `A` as `[A C; Cᵀ 0]`, whose adjoint is `[Aᴴ conj(C); Cᴴ 0]`.
+function _pde_solve_adjoint(A::SparseMatrixCSC, ū::AbstractVector; mean_zero = nothing,
+        gauge = nothing, kwargs...)
+    return pde_solve(sparse(A'), ū; mean_zero = _conj_border(mean_zero),
+        gauge = _conj_border(gauge), kwargs...)
+end
+
+_conj_border(::Nothing) = nothing
+_conj_border(C::AbstractArray) = conj(C)
+
+# The AD rules' adjoint is that of a square solve. A rectangular `A` (`solver = :spqr`) is a
+# least-squares solve, whose pullback has a residual term that adjoint omits.
+function _check_square_for_adjoint(A::SparseMatrixCSC)
+    size(A, 1) == size(A, 2) || _throw_rectangular_adjoint(size(A))
+    return nothing
+end
+
+@noinline function _throw_rectangular_adjoint(sz)
+    throw(ArgumentError("differentiating pde_solve needs a square A, got size $sz: the " *
+                        "adjoint rule is that of a square solve, and a least-squares " *
+                        "solve's pullback has a residual term it omits."))
+end
+
 # `mean_zero = w` and `gauge = Z` solve the bordered system `[A C; Cᵀ 0] [u; μ] = [F; 0]`
 # with `C = [w Z]` (either part absent when its keyword is `nothing`) and return `u`. The
 # border is never added to `A` as a low-rank term, which would be dense. The bordered matrix is

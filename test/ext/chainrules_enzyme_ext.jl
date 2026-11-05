@@ -3,7 +3,7 @@ module ExtChainRulesEnzymeExtTests
 using Test
 using Bramble
 using ChainRulesCore
-using SparseArrays: SparseMatrixCSC, nnz, sparse
+using SparseArrays: SparseMatrixCSC, nnz, nonzeros, sparse
 using LinearAlgebra: I
 import DifferentiationInterface as DI
 using ..TestUtils: _fd, _have
@@ -328,6 +328,23 @@ end
             end
             # Kept a direct Enzyme call, since the pin is on Enzyme's own exception.
             @test_throws Exception Enzyme.gradient(mode, Enzyme.Const(loss_no_rule), θ0)
+
+            # With keywords the rule keeps no factorisation, so it keeps `A` itself when the
+            # caller overwrites it after the solve. `u = diag(2, 4) \ [θ, 1]`, then `A` doubles:
+            # `d(sum(u))/dθ = 1/2`, where the doubled matrix would give 1/4. Direct Enzyme
+            # calls, since DI's closures would not overwrite the solve's own `A`.
+            function loss_overwritten(θ)
+                A = sparse([2.0 0.0; 0.0 4.0])
+                u = Bramble.pde_solve(A, [θ, 1.0]; solver = :suitesparse)
+                nonzeros(A) .*= 2
+                return sum(u)
+            end
+            @test Enzyme.gradient(mode, Enzyme.Const(loss_overwritten), 0.3)[1] ≈ 0.5
+
+            # A rectangular `A` (a `:spqr` least-squares solve) is refused.
+            loss_rect(θ) = sum(Bramble.pde_solve(sparse([1.0 0.0; 0.0 2.0; 1.0 1.0]),
+                [θ, 2.0, 0.0]; solver = :spqr))
+            @test_throws ArgumentError Enzyme.gradient(mode, Enzyme.Const(loss_rect), 0.3)
         else
             @test_skip "Enzyme not in this environment"
         end

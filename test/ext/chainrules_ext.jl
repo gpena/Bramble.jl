@@ -160,6 +160,41 @@ using ..TestUtils: _fd
         @test_throws ArgumentError rrule(Bramble.pde_solve, real_spd, collect(1.0:n); bogus = 1)
     end
 
+    # The bordered solve's adjoint is `[Aᴴ conj(w); wᴴ 0]`: with a complex `w`, passing `w`
+    # unconjugated to the adjoint solve gives wrong cotangents. Oracle: central differences of
+    # the keyword solve itself, real and imaginary steps.
+    @testset "rrule: complex mean_zero" begin
+        n = 5
+        h = 1e-6
+        A = sparse(Tridiagonal(fill(-1.5 + 0.4im, n - 1), fill(4.0 + 0.3im, n),
+            fill(-0.5 - 0.2im, n - 1)))
+        F = ComplexF64.(1:n) .+ 0.5im
+        w = ComplexF64[1, 2 - im, 0.5im, 1 + im, 3]
+        J(B, f) = sum(abs2, Bramble.pde_solve(B, f; mean_zero = w))
+        u, pullback = rrule(Bramble.pde_solve, A, F; mean_zero = w)
+        _, Ā, F̄ = pullback(2 .* u)
+        for k in 1:nnz(A)
+            bump(δ) = (B = copy(A); nonzeros(B)[k] += δ; B)
+            fd = (J(bump(h), F) - J(bump(-h), F)) / 2h +
+                 im * (J(bump(im * h), F) - J(bump(-im * h), F)) / 2h
+            @test nonzeros(Ā)[k]≈fd atol=1e-5
+        end
+        for i in 1:n
+            e = zeros(ComplexF64, n)
+            e[i] = h
+            fd = (J(A, F .+ e) - J(A, F .- e)) / 2h +
+                 im * (J(A, F .+ im .* e) - J(A, F .- im .* e)) / 2h
+            @test F̄[i]≈fd atol=1e-5
+        end
+    end
+
+    # A rectangular `A` (a `:spqr` least-squares solve) is refused: the square adjoint omits
+    # the residual term of the least-squares pullback.
+    @testset "rrule: rectangular A throws" begin
+        A = sparse([1.0 0.0; 0.0 2.0; 1.0 1.0])
+        @test_throws ArgumentError rrule(Bramble.pde_solve, A, [1.0, 2.0, 0.0]; solver = :spqr)
+    end
+
     # ∂J/∂A must match a central difference when A(θ) genuinely varies with θ.
     @testset "rrule: ∂J/∂A on a varying A(θ)" begin
         n = 6
