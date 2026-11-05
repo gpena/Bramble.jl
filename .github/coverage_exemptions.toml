@@ -166,12 +166,10 @@ methods = [
     "_host_array(::DeviceLocality, v::VectorElement",
     "_assemble_linear_parallel!(::DeviceLocality",
     "_host_sources(op::SourceVector",
-    "_host_sources(op::OperatorScale",
+    "_host_sources(op::Union{OperatorScale",
     "_host_sources(op::GridFunctionScale",
     "_host_sources(op::OperatorAdd",
     "_host_sources(op::LinearProduct",
-    "_host_sources(op::ShiftNode",
-    "_host_sources(op::RegionRestriction",
 ]
 reason = "device-only: the ::DeviceLocality methods take device-resident storage, and the _host_sources(op::...) walk is called only from the device assembly paths (_assemble_linear_device!, _assemble_linear_parallel!(::DeviceLocality), _assemble_add_linear!(::DeviceLocality)) to copy device data to the host."
 
@@ -221,7 +219,6 @@ methods = [
     "_host_space_weights(w::SpaceWeights",
     "_innerh_weights!(u::AbstractVector, Ωₕ::AbstractMeshType{1}",
     "_innerplus_weights!(u::AbstractVector",
-    "_innerplus_mean_weights!(u::AbstractVector",
 ]
 reason = "device-only: the ::DeviceLocality methods copy device-resident weights to the host (_host_space_weights is called only by them), the AbstractVector weight fills are the non-Array counterparts a host Array never dispatches to, and _throw_device_scalar_weights fires only for a device-backed factor."
 
@@ -260,7 +257,6 @@ path = "src/assembly/stencil_eval.jl"
 headers = [
     "_point_strength_val(s)",
     "_visit_operator_add2(f::F",
-    "_fold_operator_add(f::F",
 ]
 reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
 
@@ -316,7 +312,7 @@ path = "src/operators/region_restriction.jl"
 headers = [
     "_is_marked(words::AbstractMatrix{UInt64}, ids::NTuple",
     "_probed_chain(op::_ProbedRestriction",
-    "_probed_chain(op::Union{OperatorScale, GridFunctionScale}",
+    "_probed_chain(op::_Scale",
     "_source_stencil_at(op::RegionRestriction",
     "shifted_inner_stencil(inner_op::RegionRestriction",
 ]
@@ -340,11 +336,8 @@ reason = "uncounted: Julia's line table has no counter for a one-line inlined me
 
 [[exempt_function]]
 path = "src/ast/stencil_pattern.jl"
-methods = [
-    "_stencil_margin(op::TrialFunction)",
-    "_stencil_margin(op::TestFunction)",
-]
-reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; a test calls each (test/form/bilinear.jl, test/form/common.jl, test/form/interpolation.jl, test/form/semidiscrete.jl)"
+methods = ["_stencil_margin(op::_LeafNode)"]
+reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; a test calls it on the trial and test leaves (test/form/bilinear.jl, `_stencil_margin reads composed reach`)"
 
 [[exempt_function]]
 path = "src/operators/normal.jl"
@@ -362,8 +355,7 @@ reason = "uncounted: Julia's line table has no counter for the header line of an
 [[exempt_function]]
 path = "src/operators/interpolation.jl"
 headers = [
-    "_interp_in_domain(Ωₕ::AbstractMeshType{D}",
-    "_interp_cell_frac(Ωₕ::AbstractMeshType{D}",
+    "_interp_in_domain(pts::NTuple{D}",
     "_interp_corner_weight(ts::NTuple",
     "(f::GridInterpolant)(x)",
 ]
@@ -379,7 +371,6 @@ path = "src/solvers/accelerate_solver.jl"
 methods = [
     "_accelerate_factorize(A; kwargs...)",
     "_accelerate_solve(A, ::Any; kwargs...)",
-    "_accelerate_refactor!(::Any, ::Any",
 ]
 lines = [
     { method = "accelerate_factorize(A::SparseMatrixCSC; kwargs...)", text = "return _accelerate_factorize(A; kwargs...)" },
@@ -392,6 +383,5 @@ lines = [
     { method = "accelerate_solve(a::BilinearForm", text = "A = _as_csc(A)" },
     { method = "accelerate_solve(a::BilinearForm", text = "u = _accelerate_solve(A, F; sym = sym, kind = kind, kwargs...)" },
     { method = "accelerate_solve(a::BilinearForm", text = "return element(trial_space(a), u)" },
-    { method = "accelerate_refactor!(fact::AccelerateFactorization, A::SparseMatrixCSC)", text = "return _accelerate_refactor!(fact, A)" },
 ]
 reason = "os-specific: runs only on macOS (after the Sys.isapple() guard, or when BrambleAppleAccelerateExt is absent on macOS); no coverage leg runs macOS with it"

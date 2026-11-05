@@ -1,6 +1,7 @@
 # Per-file coverage report over one or more lcov files.
 #
 #     julia coverage_floor.jl --floor <pct> [--exempt <toml>] [--compare <before.info>] [--prefix <dir/>] [--fail] <lcov>...
+#     julia coverage_floor.jl --check-exempt <toml>
 #
 # A line counts as covered if any input covers it, so split uploads (the Weekly `suite` and
 # `backends` halves) merge. Prints `<pct> <path> [exempt|BELOW|DROPPED]` per file, sorted by
@@ -30,6 +31,11 @@
 # exactly as for `methods`, and the one line of it whose stripped text equals `text` leaves the
 # total, for a line only another OS runs inside a method the others do run. Zero or two such
 # lines is an error naming the path, prefix and text. `path` is relative to the working directory.
+# Every entry is resolved before the first error is raised, so a stale TOML names all its bad
+# entries at once. `--check-exempt <toml>` does only that: it resolves every `functions`,
+# `methods`, `headers` and `lines` entry against the source, needs no `--floor` or lcov, prints
+# one line per failure (path, prefix or name, match count) and exits 1 if any, 0 with a count
+# line if none.
 # `--prefix <dir/>` limits the BELOW and DROPPED flags, the `below=` and `dropped=` counts and
 # `--fail` to files whose path starts with it; every file is still listed. Exits 1 only with
 # `--fail` and a BELOW or DROPPED file.
@@ -175,11 +181,48 @@ end
 
 # Line number of the single line of the method matched by `prefix` whose stripped text is `text`.
 function method_line(file::AbstractString, prefix::AbstractString, text::AbstractString)
+    isfile(file) || error("exempt_function: source file not found: $file")
     src = readlines(file)
     hits = filter(l -> strip(src[l]) == text, method_lines(file, prefix))
     length(hits) == 1 ||
         error("exempt_function: method `$prefix` has $(length(hits)) lines with text `$text` in $file")
     return only(hits)
+end
+
+# Resolves every function, method, header and line entry of `entries` (the `exempt_function`
+# tuples of `main`) against the source. Returns the dropped line numbers per entry and one
+# message per entry that failed, so one run names every bad entry.
+function resolve_exempt(entries)
+    drops = Set{Int}[]
+    failures = String[]
+    for (path, names, methods, headers, exlines) in entries
+        drop = Set{Int}()
+        attempt(f) = try
+            f()
+        catch e
+            e isa ErrorException || rethrow()
+            push!(failures, e.msg)
+            nothing
+        end
+        for name in names
+            r = attempt(() -> function_lines(path, name))
+            r === nothing || union!(drop, r)
+        end
+        for prefix in methods
+            r = attempt(() -> method_lines(path, prefix))
+            r === nothing || union!(drop, r)
+        end
+        for h in headers
+            r = attempt(() -> method_lines(path, h))
+            r === nothing || push!(drop, first(r))
+        end
+        for (m, t) in exlines
+            r = attempt(() -> method_line(path, m, t))
+            r === nothing || push!(drop, r)
+        end
+        push!(drops, drop)
+    end
+    return drops, failures
 end
 
 function main(args)
@@ -189,13 +232,15 @@ function main(args)
     prefix = ""
     compare = nothing
     fail = false
+    check = false
     inputs = String[]
     i = 1
     while i <= length(args)
         a = args[i]
         if a == "--floor"
             floor = parse(Float64, args[i += 1])
-        elseif a == "--exempt"
+        elseif a == "--exempt" || a == "--check-exempt"
+            check |= a == "--check-exempt"
             toml = TOML.parsefile(args[i += 1])
             for e in get(toml, "exempt", [])
                 push!(exempt, glob_regex(e["path"]))
@@ -218,25 +263,22 @@ function main(args)
         end
         i += 1
     end
+    if check
+        _, failures = resolve_exempt(exempt_functions)
+        foreach(m -> println(stderr, m), failures)
+        n = sum(e -> length(e[2]) + length(e[3]) + length(e[4]) + length(e[5]), exempt_functions; init = 0)
+        isempty(failures) || (println(stderr, "exempt: $(length(failures)) of $n entries failed"); return 1)
+        println("exempt: $n entries resolve")
+        return 0
+    end
     floor === nothing && error("--floor <pct> is required")
     isempty(inputs) && error("no lcov input given")
 
     lines = Dict{String,Dict{Int,Bool}}()
     foreach(f -> read_lcov!(lines, f), inputs)
-    for (path, names, methods, headers, exlines) in exempt_functions
-        drop = Set{Int}()
-        for name in names
-            union!(drop, function_lines(path, name))
-        end
-        for prefix in methods
-            union!(drop, method_lines(path, prefix))
-        end
-        for h in headers
-            push!(drop, first(method_lines(path, h)))
-        end
-        for (m, t) in exlines
-            push!(drop, method_line(path, m, t))
-        end
+    drops, failures = resolve_exempt(exempt_functions)
+    isempty(failures) || error("exempt_function: $(length(failures)) bad entries:\n" * join(failures, "\n"))
+    for ((path, _...), drop) in zip(exempt_functions, drops)
         for (p, d) in lines
             (p == path || endswith(p, "/" * path)) && foreach(l -> delete!(d, l), drop)
         end

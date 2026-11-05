@@ -219,6 +219,7 @@ if __bramble_with_quality
         include("quality/test_env.jl")
         include("quality/invalidations.jl")
         include("quality/claude_plugin.jl")
+        include("quality/coverage_exemptions.jl")
         # Already run above with the unit group; included here so a `quality`-only run
         # (nightly's second job) still covers it, without running it twice for `all`.
         __bramble_with_unit_tests || include("quality/alloccheck.jl")
