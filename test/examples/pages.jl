@@ -3,17 +3,16 @@ module ExamplesPagesTests
 using Test
 using ..TestUtils: _run_example_page
 
-# The three worked-example pages that need nothing beyond the every-push test environment.
-# Each is a Literate script under docs/src/examples/, run here through `_run_example_page`
+# The worked-example pages that need nothing beyond the every-push test environment. Each is
+# a Literate script under docs/src/examples/, run here through `_run_example_page`
 # (test/runtests.jl), which is where its `#src` assertions execute: the convergence rates the
-# pages print, the iteration counts Picard and Newton reach, and the errors against each
-# manufactured solution.
+# pages print and the errors against each manufactured solution.
 #
 # This replaces test/examples/convergence.jl's "Linear Poisson" and "Convection-diffusion"
 # testsets and the whole of nonlinear_convergence.jl, which mirrored these pages line by line
 # so that the rendered numbers were checked somewhere. There is no second copy to keep in
-# step now. What those files covered that the pages do not -- a
-# variable-coefficient operator no page uses -- stays in convergence.jl.
+# step now. What those files covered that the pages do not -- a variable-coefficient
+# operator no page uses -- is test/convergence/variable_coefficient_poisson.jl.
 #
 # More pages run from test/examples/ext_pages.jl, in this same `examples` group, for what
 # they load rather than what they assert, and one more behind a differentiation backend
