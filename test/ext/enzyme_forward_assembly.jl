@@ -128,8 +128,11 @@ function _run_child(policy)
         _, key, value = split(line)
         results[Symbol(key)] = parse(Float64, value)
     end
-    p.exitcode == 0 || @warn "child for $policy exited with $(p.exitcode)" tail = last(text,
-        2000)
+    # A derivative that threw reports `Inf`, its warning in `text`: shown unless the key is
+    # one the testset below marks broken.
+    broken = (:diffusion_forward, :diffusion_batch2)
+    (p.exitcode == 0 && all(isfinite(v) for (k, v) in results if !(k in broken))) ||
+        @warn "child for $policy: exit $(p.exitcode), results $results" tail = last(text, 4000)
     return p.exitcode, results
 end
 

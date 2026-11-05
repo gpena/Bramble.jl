@@ -773,6 +773,7 @@ function _child_source(hook::AbstractString, modes, policy::Symbol, rule::Abstra
                 policy = getfield(Bramble, $(repr(policy)))(), mode = m, rule = $(repr(rule)))
             println("CASE_RESULT ", $(repr(hook)), " ", m, " ", r.status, " ", r.relerr, " ",
                 r.entered)
+            isempty(r.error) || println("CASE_ERROR ", m, ": ", r.error)
             flush(stdout)
         end
         """
@@ -784,14 +785,17 @@ end
 Run the case for `hook` in a child Julia process, every mode of `modes` in turn, under the
 policy named `policy`, with the parent's project, thread count and `--optimize`. `results`
 maps each mode the child reported to `(status, relerr, entered)`; a mode the child did not
-reach is missing from it. A child that fails prints the end of its output as a warning.
+reach is missing from it. A child that fails prints the end of its output as a warning, and
+each mode that raised its error, so a CI log names it. `check_bounds` (`"yes"`, `"no"`)
+overrides the bounds-check setting the child otherwise takes from the parent.
 """
 function run_child(hook::AbstractString, modes; policy::Symbol,
-        rule::AbstractString = get(case(hook), :rule, hook))
+        rule::AbstractString = get(case(hook), :rule, hook), check_bounds = nothing)
     opt = max(Base.JLOptions().opt_level, 0)
     julia = Base.julia_cmd()
     src = _child_source(hook, modes, policy, rule)
-    cmd = `$julia --startup-file=no --project=$(Base.active_project()) --threads=$(Threads.nthreads()) --optimize=$opt -e $src`
+    cb = check_bounds === nothing ? `` : `--check-bounds=$check_bounds`
+    cmd = `$julia $cb --startup-file=no --project=$(Base.active_project()) --threads=$(Threads.nthreads()) --optimize=$opt -e $src`
     out = IOBuffer()
     p = run(pipeline(ignorestatus(cmd); stdout = out, stderr = out))
     text = String(take!(out))
@@ -804,6 +808,9 @@ function run_child(hook::AbstractString, modes; policy::Symbol,
     end
     p.exitcode == 0 ||
         @warn "child for $hook $(Tuple(modes)) exited with $(p.exitcode)" tail = last(text, 2000)
+    for line in split(text, '\n')
+        startswith(line, "CASE_ERROR ") && @warn "child for $hook under $policy, $(line[12:end])"
+    end
     return p.exitcode, results
 end
 
@@ -815,12 +822,12 @@ end
 and the results of all of them.
 """
 function run_isolated(hook::AbstractString, modes; policy::Symbol, separate = (),
-        rule::AbstractString = get(case(hook), :rule, hook))
+        rule::AbstractString = get(case(hook), :rule, hook), check_bounds = nothing)
     groups = hook in separate ? [(m,) for m in modes] : [Tuple(modes)]
     codes = Int[]
     results = Dict{Symbol, @NamedTuple{status::Symbol, relerr::Float64, entered::Bool}}()
     for g in groups
-        code, got = run_child(hook, g; policy, rule)
+        code, got = run_child(hook, g; policy, rule, check_bounds)
         push!(codes, code)
         merge!(results, got)
     end
