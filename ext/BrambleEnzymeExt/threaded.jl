@@ -335,8 +335,16 @@ end
 end
 
 @inline function _band_colour_task(n::Int, k::Int, point::P, ax, bidx, nbands, rest) where {P}
-    pt = _unref(point)
-    for I in CartesianIndices((rest..., _band_range(ax, nbands, @inbounds bidx[k])))
+    _band_slab!(_unref(point), _band_range(ax, nbands, @inbounds bidx[k]), rest)
+    return nothing
+end
+
+# The slab loop behind its own barrier. Inlined into the task under `--check-bounds=yes`,
+# the point unwrapped from its `Ref` was copied to the stack with its pointer fields set
+# to -1 (a `memset` Enzyme's type analysis cannot type: `EnzymeNoTypeError`); passed as an
+# argument it is not.
+@noinline function _band_slab!(pt::P, band, rest) where {P}
+    for I in CartesianIndices((rest..., band))
         pt(I)
     end
     return nothing

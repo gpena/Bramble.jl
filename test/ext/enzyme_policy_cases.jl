@@ -773,6 +773,7 @@ function _child_source(hook::AbstractString, modes, policy::Symbol, rule::Abstra
                 policy = getfield(Bramble, $(repr(policy)))(), mode = m, rule = $(repr(rule)))
             println("CASE_RESULT ", $(repr(hook)), " ", m, " ", r.status, " ", r.relerr, " ",
                 r.entered)
+            isempty(r.error) || println("CASE_ERROR ", m, ": ", r.error)
             flush(stdout)
         end
         """
@@ -784,7 +785,8 @@ end
 Run the case for `hook` in a child Julia process, every mode of `modes` in turn, under the
 policy named `policy`, with the parent's project, thread count and `--optimize`. `results`
 maps each mode the child reported to `(status, relerr, entered)`; a mode the child did not
-reach is missing from it. A child that fails prints the end of its output as a warning.
+reach is missing from it. A child that fails prints the end of its output as a warning, and
+each mode that raised its error, so a CI log names it.
 """
 function run_child(hook::AbstractString, modes; policy::Symbol,
         rule::AbstractString = get(case(hook), :rule, hook))
@@ -804,6 +806,9 @@ function run_child(hook::AbstractString, modes; policy::Symbol,
     end
     p.exitcode == 0 ||
         @warn "child for $hook $(Tuple(modes)) exited with $(p.exitcode)" tail = last(text, 2000)
+    for line in split(text, '\n')
+        startswith(line, "CASE_ERROR ") && @warn "child for $hook under $policy, $(line[12:end])"
+    end
     return p.exitcode, results
 end
 
