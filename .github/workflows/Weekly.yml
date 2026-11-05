@@ -24,8 +24,8 @@ name: Weekly
 #
 # GPU tests are switched off in every group until v4.7.0 (test/TestUtils.jl, `WITH_GPU_TESTS`,
 # and the `gpu` group). The AD tests run: ForwardDiff and DifferentiationInterface in the unit
-# group, Enzyme in the `backends` group's `ad` shard. Enzyme is not in test/Project.toml, so
-# that shard installs it at run time (the "Add Enzyme" step) and no other test run resolves it.
+# group, Enzyme in the `backends` group's `ad-*` shards. Enzyme is not in test/Project.toml,
+# so those shards install it at run time (the "Add Enzyme" step) and no other test run resolves it.
 #
 # This is a canary rather than a gate: it is not required for a merge, and a failure here
 # most often means an upstream release moved rather than that Bramble regressed. Read it
@@ -83,10 +83,12 @@ jobs:
     # took 33 and 52 minutes, `ext-polyester` with 19 minutes of tests, so the limit is 90
     # rather than 60: a runner slower by a sixth would have timed it out.
     #
-    # The `ad` shard runs each Enzyme file in a Julia process of its own (test/runtests.jl),
-    # each compiling Enzyme and its rules afresh, so its limit is higher. Not measured yet:
-    # read the first run's time and set it.
-    timeout-minutes: ${{ matrix.shard == 'ad' && 150 || 90 }}
+    # The `ad-*` shards run each Enzyme file in a Julia process of its own (test/runtests.jl),
+    # each compiling Enzyme and its rules afresh, so their limit is higher. As one `ad` shard
+    # (2026-11-04) it reached 150 minutes with three of nine files run: 37 minutes of setup,
+    # then 76 for enzyme_polyester_hooks.jl alone. Four shards (`ENZYME_FILE_SHARDS`,
+    # test/TestUtils.jl) put about an hour and a half of tests on each.
+    timeout-minutes: ${{ startsWith(matrix.shard, 'ad-') && 180 || 90 }}
     # Nothing here gates a merge, but a red run should still mean something specific.
     # Julia nightly is not in this matrix (see below), so a failure here is Bramble's own —
     # on the 1.13 release.
@@ -111,8 +113,8 @@ jobs:
         # red leg here noise rather than signal.
         version: ["1.13"]
         # `BRAMBLE_TEST_SHARD`, test/TestUtils.jl: the plotting, solver and Kronecker files, the
-        # Polyester files, and the AD files.
-        shard: [ext-solvers, ext-polyester, ad]
+        # Polyester files, and the AD files in four parts.
+        shard: [ext-solvers, ext-polyester, ad-1, ad-2, ad-3, ad-4]
     steps:
       - uses: actions/checkout@v7
 
@@ -133,13 +135,13 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
 
       # Enzyme is not in test/Project.toml, so no other run resolves it or compiles its
-      # extension; the `ad` shard adds it here. It is the only heavy backend the tests use,
+      # extension; the `ad-*` shards add it here. It is the only heavy backend the tests use,
       # and the step carries no fallback: a failed add must fail the job, since each Enzyme
       # file skips when it cannot load Enzyme and the shard would pass having tested nothing.
       # Each Enzyme file then runs in its own Julia process, because one rule file alone
       # peaks near 7 GB (test/runtests.jl).
       - name: Add Enzyme
-        if: matrix.shard == 'ad'
+        if: startsWith(matrix.shard, 'ad-')
         run: julia --project=test -e 'using Pkg; Pkg.add("Enzyme")'
 
       # Coverage is collected on every shard, each uploading its part; the `slow` half comes
@@ -213,7 +215,7 @@ jobs:
         env:
           BRAMBLE_TEST_GROUP: grids
 
-  # Per-file coverage floor over the two coverage halves merged: the three
+  # Per-file coverage floor over the two coverage halves merged: the six
   # `lcov-backends-<shard>` parts from this run, and the five `lcov-suite-<part>` parts (the
   # four `slow` shards and the `convergence` job) from the newest nightly.yml run on this
   # run's commit. The halves
@@ -281,7 +283,7 @@ jobs:
           fi
           # One part per backends shard; with one missing the floor would fail the files
           # that shard covers.
-          if [ "$(find lcov -path 'lcov/lcov-backends-*/lcov.info' | wc -l)" -ne 3 ]; then
+          if [ "$(find lcov -path 'lcov/lcov-backends-*/lcov.info' | wc -l)" -ne 6 ]; then
             echo "::warning::A backends shard uploaded no lcov part; skipping the coverage floor."
             echo "A \`lcov-backends\` part is missing; floor not computed." >> "$GITHUB_STEP_SUMMARY"
             exit 0

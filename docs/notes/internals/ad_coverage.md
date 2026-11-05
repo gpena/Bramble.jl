@@ -229,6 +229,6 @@ paragraph and the table's `open` cells are updated.
 julia --project=test -t 2 -e 'using Test; include("test/TestUtils.jl"); include("test/space/ad_coverage.jl")'
 ```
 
-With Enzyme in the environment (the weekly `ad` shard installs it), the same file runs the
+With Enzyme in the environment (the weekly `ad-2` shard installs it), the same file runs the
 Enzyme cells in child processes. `BRAMBLE_AD_COVERAGE_SLOW=true` adds the cells that
 compile for tens of minutes before Enzyme fails.

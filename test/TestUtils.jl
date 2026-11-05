@@ -33,14 +33,15 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 # its own runner: `forms-1` and `forms-2` are the two halves of test/form/, `ghost` is
 # test/ghost/, and `rest` is the remainder of the unit block. It also narrows the package
 # extensions block (the `ext` and `backends` groups) to one of two parts, and the `backends`
-# group's AD block to a third, which Weekly.yml runs on separate runners: `ext-solvers` is the
-# plotting, solver and Kronecker files, `ext-polyester` the Polyester files and `ad` the AD
-# files. Unset runs everything, which is what every local run does; the quality, gpu,
+# group's AD block to one of four more, which Weekly.yml runs on separate runners: `ext-solvers`
+# is the plotting, solver and Kronecker files, `ext-polyester` the Polyester files, and `ad-1`
+# to `ad-4` the AD files (`ENZYME_FILE_SHARDS`). Unset runs everything, which is what every local run does; the quality, gpu,
 # examples and grids blocks ignore it. The gate sits at the include sites in
 # test/runtests.jl and test/form/runtests.jl, through `in_shard`.
 const TEST_SHARD = get(ENV, "BRAMBLE_TEST_SHARD", "")
 
-const TEST_SHARDS = ("forms-1", "forms-2", "ghost", "rest", "ext-solvers", "ext-polyester", "ad")
+const TEST_SHARDS = ("forms-1", "forms-2", "ghost", "rest", "ext-solvers", "ext-polyester", "ad-1",
+    "ad-2", "ad-3", "ad-4")
 
 """
     in_shard(name)
@@ -177,7 +178,7 @@ end
 # DifferentiationInterface ones are in `unit`, their packages being in test/Project.toml. The
 # Enzyme ones are in the `backends` group, each file that needs Enzyme in its own Julia
 # process (`ENZYME_FILES` below, test/runtests.jl). Enzyme is not in test/Project.toml, so
-# Weekly.yml installs it for the `backends` group's `ad` shard, and a file run where it is
+# Weekly.yml installs it for the `backends` group's `ad-*` shards, and a file run where it is
 # absent skips (`_have(:Enzyme)`) rather than erroring.
 #   whole files, `unit` (and slow/full/all)
 #     space/autodiff.jl, space/autodiff_backends.jl   test/runtests.jl
@@ -428,7 +429,7 @@ _fd(f, a; h = 1e-6) = (f(a + h) - f(a - h)) / (2h)
 _have(mod::Symbol) = Base.identify_package(String(mod)) !== nothing
 
 # The files that load Enzyme, relative to test/. One Enzyme rule file alone peaks near 7 GB and
-# its compiled code stays resident, so the `ad` shard runs each in a Julia process of its
+# its compiled code stays resident, so the `ad-*` shards run each in a Julia process of its
 # own: the parent (test/runtests.jl) spawns one child per file with `BRAMBLE_TEST_FILE` set to
 # the file's name, and `TEST_FILE` is that name in the child, empty in the parent. A name
 # outside this list throws, so a misspelt file cannot select nothing and pass green.
@@ -446,6 +447,26 @@ const ENZYME_FILES = (
 const TEST_FILE = get(ENV, "BRAMBLE_TEST_FILE", "")
 isempty(TEST_FILE) || TEST_FILE in ENZYME_FILES ||
     throw(ArgumentError("unknown BRAMBLE_TEST_FILE $(repr(TEST_FILE)); expected one of $ENZYME_FILES"))
+
+# The `ad-*` shard of each of the `ENZYME_FILES`, balanced by the 2026-11-04 Weekly run, where
+# the one `ad` shard reached its 150-minute limit: about 37 minutes of setup per runner,
+# enzyme_polyester_hooks.jl 76 minutes, enzyme_polyester_ext.jl 12, and ad_coverage.jl about
+# 90 locally (docs/notes/internals/ad_coverage.md). `ad-4` also runs ext/sparse_ad_ext.jl and
+# ext/ad_backend_verification.jl, which need no Enzyme.
+const AD_SHARDS = ("ad-1", "ad-2", "ad-3", "ad-4")
+const ENZYME_FILE_SHARDS = Dict(
+    "ext/enzyme_polyester_hooks.jl" => "ad-1",
+    "space/ad_coverage.jl" => "ad-2",
+    "ext/enzyme_polyester_ext.jl" => "ad-3",
+    "ext/enzyme_threaded_ext.jl" => "ad-3",
+    "ext/enzyme_forward_assembly.jl" => "ad-4",
+    "ext/chainrules_enzyme_ext.jl" => "ad-4",
+    "space/autodiff_policies.jl" => "ad-4",
+    "space/autodiff_heavy.jl" => "ad-4",
+    "examples/inverse_diffusion.jl" => "ad-4"
+)
+issetequal(keys(ENZYME_FILE_SHARDS), ENZYME_FILES) ||
+    error("ENZYME_FILE_SHARDS must give every one of the ENZYME_FILES a shard")
 
 # Should a GPU-backed testset actually run its device kernels? test/ext/metal_ext.jl and
 # metal_fullstack.jl used to gate solely on `Metal.functional()`, on the assumption that a

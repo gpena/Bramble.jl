@@ -49,7 +49,7 @@ const __bramble_with_unit_tests = __bramble_test_group in ("all", "unit", "full"
 const __bramble_with_gpu_tests = TestUtils.WITH_GPU_TESTS
 
 # The expensive differentiation backends (Enzyme and the policy crossings). Enzyme is not in
-# test/Project.toml: Weekly.yml installs it for the `ad` shard, and each file skips when it is
+# test/Project.toml: Weekly.yml installs it for the `ad-*` shards, and each file skips when it is
 # absent, so a local run reports a skip rather than an error.
 #
 # The AD extension files (sparse AD and the AD backend verification) run here too, not under
@@ -242,6 +242,12 @@ function __bramble_include_enzyme_file(file)
     return nothing
 end
 
+# The `ENZYME_FILES` of this run's `ad-*` shard, or all of them when no shard is set.
+function __bramble_shard_enzyme_files()
+    filter(
+        file -> TestUtils.in_shard(TestUtils.ENZYME_FILE_SHARDS[file]), TestUtils.ENZYME_FILES)
+end
+
 # Each Enzyme file in a Julia process of its own, never all in one: one rule file alone peaks
 # near 7 GB and what it compiles stays resident (TestUtils, `ENZYME_FILES`). The child is this
 # script again, with `BRAMBLE_TEST_FILE` set and the group `ad`, so it runs that one file and
@@ -249,10 +255,10 @@ end
 # `--check-bounds`, threads), and `--project` its test environment.
 function __bramble_run_enzyme_files()
     script = @__FILE__
-    for file in TestUtils.ENZYME_FILES
+    for file in __bramble_shard_enzyme_files()
         cmd = `$(Base.julia_cmd()) --project=$(Base.active_project()) -e "include(ARGS[1])" $script`
-        cmd = addenv(cmd, "BRAMBLE_TEST_GROUP" => "ad", "BRAMBLE_TEST_SHARD" => "ad",
-            "BRAMBLE_TEST_FILE" => file)
+        cmd = addenv(cmd, "BRAMBLE_TEST_GROUP" => "ad",
+            "BRAMBLE_TEST_SHARD" => TestUtils.ENZYME_FILE_SHARDS[file], "BRAMBLE_TEST_FILE" => file)
         @testset "$file" begin
             @test success(pipeline(cmd; stdout = stdout, stderr = stderr))
         end
@@ -260,20 +266,23 @@ function __bramble_run_enzyme_files()
     return nothing
 end
 
-if __bramble_with_ad_backends && (!isempty(TestUtils.TEST_FILE) || TestUtils.in_shard("ad"))
+if __bramble_with_ad_backends &&
+   (!isempty(TestUtils.TEST_FILE) || any(TestUtils.in_shard, TestUtils.AD_SHARDS))
     @testset verbose=true "AD backends (expensive)" begin
         if !isempty(TestUtils.TEST_FILE)
             # A child of `__bramble_run_enzyme_files`: this one file.
             __bramble_include_enzyme_file(TestUtils.TEST_FILE)
         else
             # The files that need no Enzyme, in this process.
-            include("ext/sparse_ad_ext.jl")
-            include("ext/ad_backend_verification.jl")
+            if TestUtils.in_shard("ad-4")
+                include("ext/sparse_ad_ext.jl")
+                include("ext/ad_backend_verification.jl")
+            end
             if TestUtils._have(:Enzyme)
                 __bramble_run_enzyme_files()
             else
                 # Each file skips its Enzyme parts and runs the rest here.
-                foreach(__bramble_include_enzyme_file, TestUtils.ENZYME_FILES)
+                foreach(__bramble_include_enzyme_file, __bramble_shard_enzyme_files())
             end
         end
     end
