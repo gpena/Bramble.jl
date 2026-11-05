@@ -61,7 +61,7 @@ policy. Each Enzyme cell holds both modes, reverse then forward, unless it says 
 | assemble | `assemble(a, l; dirichlet)`, 1D | works | works | works | works |
 | assemble | the same in 2D | works | reverse excluded: aborts (`needsCacheWholeAllocation`), forward works | not run | not run |
 | assemble | three summands, the third scaled by a constant | works | reverse works, forward open (#1124) | reverse works, forward open (#1124) | reverse works, forward open (#1124) |
-| pde_solve | `pde_solve(A, F)` with `A` from a 1D `assemble` of `κ` | excluded: `StackOverflowError` on a `Dual` matrix | reverse works, forward excluded: `IllegalTypeAnalysisException` | reverse works, forward excluded: `IllegalTypeAnalysisException` | reverse works, forward excluded: `IllegalTypeAnalysisException` |
+| pde_solve | `pde_solve(A, F)` with `A` from a 1D `assemble` of `κ` | excluded: `StackOverflowError` on a `Dual` matrix | reverse works, forward excluded: `EnzymeNoDerivativeError` | reverse works, forward excluded: `EnzymeNoDerivativeError` | reverse works, forward excluded: `EnzymeNoDerivativeError` |
 | semidiscretize | `semidiscretize_rhs(sd)(du, u, p, t)` | works | works | works | works |
 | matrix_free | `mul!` with `matrix_free_operator` | works | works | works | works |
 | kronecker | `mul!` with `kronecker_operator` | works | works | works | works |
@@ -182,8 +182,9 @@ so a sparse cell's verdict is its inner backend's.
   ([gpena/Bramble.jl#1127](https://github.com/gpena/Bramble.jl/issues/1127)).
 - 3D `assemble` with `Mₕ(κ)` in Enzyme: `EnzymeNoTypeError`
   ([gpena/Bramble.jl#1128](https://github.com/gpena/Bramble.jl/issues/1128)).
-- Enzyme forward through `pde_solve`: `IllegalTypeAnalysisException`; reverse has the
-  adjoint rule ([gpena/Bramble.jl#1129](https://github.com/gpena/Bramble.jl/issues/1129)).
+- Enzyme forward through `pde_solve`: `EnzymeNoDerivativeError` (no forward rule for UMFPACK's
+  `umfpack_dl_defaults`); reverse has the adjoint rule
+  ([gpena/Bramble.jl#1129](https://github.com/gpena/Bramble.jl/issues/1129)).
 - ForwardDiff through `pde_solve`: `StackOverflowError` from the sparse `lu` of a
   `Dual`-valued matrix; the tutorial's workaround is `Matrix(A) \ F`
   ([gpena/Bramble.jl#1130](https://github.com/gpena/Bramble.jl/issues/1130)).

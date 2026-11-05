@@ -401,7 +401,7 @@ const CELLS = (
         fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
         rev_err = "needsCacheWholeAllocation", kinds = (:nonuniform,)),
     cell(:pde_solve, "pde_solve", :solve, build_pde_solve, fd = :throws,
-        fd_err = "StackOverflowError", fwd = :throws, fwd_err = "IllegalTypeAnalysisException"),
+        fd_err = "StackOverflowError", fwd = :throws, fwd_err = "EnzymeNoDerivativeError"),
     cell(:semidiscretize, "semidiscretize", :solve, build_semidiscretize),
     cell(:matrix_free, "matrix_free", :operators, build_matrix_free),
     cell(:kronecker, "kronecker", :operators, build_kronecker),
