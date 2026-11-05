@@ -25,12 +25,10 @@ using ..TestUtils: _run_example_page
         _run_example_page(:heat_equation)
     end
 
-    # Pins the Picard and manual-Newton iteration counts and errors, that
+    # Pins the Picard and manual-Newton iteration counts and errors, the type-cached
+    # Newton loop and the AST-derived sparsity pattern against the tracer's, and that
     # `nonlinear_problem`'s NewtonRaphson solve agrees with the manual Newton loop to
-    # machine precision, and that the Picard-vs-NonlinearSolve timing/allocation ratio the
-    # page prints is finite and positive -- not a specific value, since a single-run
-    # wall-clock ratio is not something to pin a regression threshold to
-    # (bramble-verification).
+    # machine precision. The page prints no timings or allocations, so none is asserted.
     @testset "Nonlinear Poisson page" begin
         _run_example_page(:poisson_nonlinear)
     end

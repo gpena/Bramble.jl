@@ -971,7 +971,8 @@ function _check_broadcast_equal(n, policy)
     end
 end
 
-# Runs one worked-example page. The pages under docs/src/examples/ are Literate scripts:
+# Runs one worked-example page. The pages under docs/src/examples/ (or `dir`, for the ones kept
+# in docs/notes/examples/) are Literate scripts:
 # docs/make.jl renders each to the markdown Documenter publishes, and the suite runs the same
 # file, so the numbers a reader sees are the numbers asserted here. Their `#src` lines are
 # those assertions -- stripped on the way to the page, executed from here.
@@ -981,8 +982,9 @@ end
 # that would collide across pages, and the ext group shares one `Main` with Meshes.jl, which
 # exports three of those names itself. Anchored to `Main` explicitly rather than the calling
 # module, since the caller is now its own per-file test module rather than `Main` itself.
-function _run_example_page(name::Symbol)
-    path = joinpath(@__DIR__, "..", "docs", "src", "examples", string(name, ".jl"))
+function _run_example_page(
+        name::Symbol, dir::AbstractString = joinpath(@__DIR__, "..", "docs", "src", "examples"))
+    path = joinpath(dir, string(name, ".jl"))
     @test isfile(path)
     @eval Main module $(Symbol(:Page_, name))
     using Test

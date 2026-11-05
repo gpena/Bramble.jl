@@ -40,8 +40,11 @@ using ..TestUtils: _run_example_page
         _run_example_page(:convection_diffusion_linear)
     end
 
+    # Kept in docs/notes/examples/, not published, and run from there. It stays in the
+    # `examples` group: the `unit` group has no 3D meshes (#650).
     @testset "3D linear elasticity" begin
-        _run_example_page(:elasticity_3d)
+        _run_example_page(:elasticity_3d,
+            joinpath(@__DIR__, "..", "..", "docs", "notes", "examples"))
     end
 
     # Point sources and the flux the Dirichlet condition supplies: its `#src` assertions

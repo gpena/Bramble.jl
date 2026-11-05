@@ -17,6 +17,13 @@ sparse LU system, supporting in-place solves via `LinearAlgebra.ldiv!`, back-sub
 """
 abstract type SparspakFactorization{T} <: Factorization{T} end
 
+# Whether a number of type `S` is linear in its parts, so a Sparspak solve may treat them
+# apart. A `Complex` is, and a ForwardDiff `Dual` is by the method BrambleForwardDiffExt
+# adds. Any other number is not assumed so, even when its fields have the matrix's type.
+# A double-double's (hi, lo) or an interval's (lo, hi) solved apart gives a wrong answer,
+# so such a load takes the refactor path.
+_linear_in_parts(S::Type) = S <: Complex
+
 """
     sparspak_factorize(A::SparseMatrixCSC) -> SparspakFactorization
     sparspak_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -> SparspakFactorization

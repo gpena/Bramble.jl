@@ -51,6 +51,13 @@ Base.:*(x::Iv, y::Iv) = Iv(extrema((x.lo * y.lo, x.lo * y.hi, x.hi * y.lo, x.hi 
 Base.:/(x::Iv, y::Iv) = x * Iv(extrema((1 / y.lo, 1 / y.hi))...)
 Base.:(==)(x::Iv, y::Iv) = x.lo == y.lo && x.hi == y.hi
 
+# A look-alike of `ForwardDiff.Dual` with the same fields, named `Dual` but not defined
+# by ForwardDiff. It is not linear in its parts, so a load of it takes the refactor path.
+struct Dual{T, V, N} <: Real
+    value::V
+    partials::NTuple{N, V}
+end
+
 @testset "Sparspak extension" begin
     @testset "1D/2D/3D Poisson" begin
         poisson_solve_contract(;
@@ -218,6 +225,8 @@ Base.:(==)(x::Iv, y::Iv) = x.lo == y.lo && x.hi == y.hi
         @test parts(D(Iv, 1), D(Float64, 1)) === nothing
         @test parts(ComplexF64, Float32) === nothing
         @test parts(D(Float64, 1), E(Float64, 1)) === nothing
+        @test parts(Dual{Nothing, Float64, 2}, Float64) === nothing
+        @test !Bramble._linear_in_parts(Dual{Nothing, Float64, 2})
     end
 
     # The promotion copies nothing when the load already has the matrix's element type: a
