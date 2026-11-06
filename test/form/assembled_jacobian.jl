@@ -6,9 +6,11 @@ using ForwardDiff: ForwardDiff
 using Polyester: Polyester
 using Random: Random
 using SparseArrays: nnz
-using Bramble: D₊ₓ, D₊ᵧ, D₋ₓ, Mₓ!, Mᵧ!, jumpₓ, restrict_to, LazyOp, TrialFunction,
-               OperatorAdd, OperatorScale, GridFunctionScale, BilinearProduct, ShiftNode, JumpNode,
-               RegionRestriction, CenteredAverage, ForwardDifference, BackwardAverage,
+using Bramble: D₊ₓ, D₊ᵧ, D₋ₓ, Mₓ!, Mᵧ!, jumpₓ, jumpₙ, η, restrict_to, LazyOp,
+               TrialFunction, OperatorAdd, OperatorScale, GridFunctionScale,
+               BilinearProduct, ShiftNode, JumpNode, RegionRestriction, CenteredAverage,
+               ForwardDifference, BackwardAverage, InnerPlus, InnerGamma, InnerGammaNormal,
+               InnerGammaFacet,
                jacobian_form, jacobian_prototype, jacobian!, MissingJacobianRule,
                allocate_system_matrix, CpuSerial, CpuThreaded, CpuPolyester
 using ..TestUtils: alloc_ok, alloc_test
@@ -141,6 +143,60 @@ const _RULES = (
     end
 end
 
+# Boundary terms (#1142): products under the three surface weights, read without Dirichlet
+# labels, which would zero the boundary rows they live in. The node is the weight reached.
+const _BOUNDARY = (
+    ("Robin, inner_Γ", InnerGamma,
+        c -> (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)) + inner_Γ(c * U, V; markers = :boundary)),
+    ("Robin on two faces", InnerGamma,
+        c -> (U, V) -> innerₕ(U, V) + inner_Γ(c * U, V; markers = (:xmax, :ymin))),
+    ("inner_Γ, D₋ above the coefficient", InnerGamma,
+        c -> (U, V) -> innerₕ(U, V) + inner_Γ(D₋ₓ(c * U), V; markers = :boundary)),
+    ("inner_Γ, η component", InnerGammaNormal,
+        c -> (U, V) -> innerₕ(U, V) + inner_Γ((c * D₋ₓ(U)) * η[1], V; markers = :boundary)),
+    ("inner_Γ, jumpₙ above the coefficient", InnerGammaFacet,
+        c -> (U, V) -> innerₕ(U, V) + inner_Γ(jumpₙ(c * U), V; markers = :boundary)),
+    ("inner_Γ, jumpₙ on the test side", InnerGammaFacet,
+        c -> (U, V) -> innerₕ(U, V) + inner_Γ(c * U, jumpₙ(V); markers = :boundary))
+)
+
+# A coefficient scaling the whole test side moves to the trial side (#1142), under scalars
+# and the other weights too.
+const _TEST_SIDE = (
+    ("inner₊, c * ∇ₕ(V)", InnerPlus,
+        c -> (U, V) -> innerₕ(U, V) + inner₊(∇ₕ(U)[2], c * ∇ₕ(V)[2])),
+    ("innerₕ, scalar over c", GridFunctionScale,
+        c -> (U, V) -> innerₕ(U, V) + innerₕ(D₋ₓ(U), 2.5 * (c * D₋ₓ(V)))),
+    ("inner_Γ, c * V", InnerGamma,
+        c -> (U, V) -> innerₕ(U, V) + inner_Γ(U, c * V; markers = :boundary)),
+    ("inner_Γ, jumpₙ(U) against c * V", InnerGammaFacet,
+        c -> (U, V) -> innerₕ(U, V) + inner_Γ(jumpₙ(U), c * V; markers = :boundary))
+)
+
+@testset "jacobian_form: Robin, test side" begin
+    W = _space()
+    for (name, node, mk) in (_BOUNDARY..., _TEST_SIDE...)
+        r = _errors(W, c -> form(W, W, mk(c)), (_r,))
+        @test _has_node(r.ast, node)
+        @test r.jac < 1e-12
+        @test r.picard > 1e-3
+        @test r.written
+    end
+    for policy in (CpuSerial(), CpuThreaded(), CpuPolyester())
+        W = _space(policy)
+        robin(c, d) = form(W, W, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)) +
+                                           inner_Γ(c * U, V; markers = :boundary) +
+                                           inner₊(∇ₕ(U)[1], d * ∇ₕ(V)[1]))
+        r = _errors(W, robin, (_r, _α))
+        @test r.jac < 1e-12
+        @test r.picard > 1e-3
+        r = _errors(W, c -> form(W, W, (U, V) -> inner₊(∇ₕ(U)[1], c * ∇ₕ(V)[1])), (_α,);
+            dirichlet = :boundary)
+        @test r.jac < 1e-12
+        @test r.picard > 1e-3
+    end
+end
+
 # Two coefficients, one inside the other's operand: the outer β reads the inner one at
 # neighbouring points. A forward read (`D₊`) reaches points a one-pass refill has not yet
 # written, in x within a band and in y across band edges, so these pin the two sweeps.
@@ -223,11 +279,16 @@ end
     c, e = element(W, 1.0), element(W, 1.0)
     dec = c => (U -> U, _r)
 
-    test_side = form(W, W, (U, V) -> inner₊(∇ₕ(U)[1], c * ∇ₕ(V)[1]))
-    err = _refusal(() -> jacobian_form(test_side, dec))
-    @test err isa MissingJacobianRule
-    @test err.node === :BilinearProduct
-    @test occursin("BilinearProduct", sprint(showerror, err))
+    # A coefficient under an operator on the test side: the derivative would put the trial
+    # function under that operator.
+    for (b, under) in (((U, V) -> inner₊(∇ₕ(U)[1], D₋ₓ(c * V)), "BackwardDifference"),
+        ((U, V) -> inner₊(∇ₕ(U)[1], 2.0 * D₋ₓ(c * ∇ₕ(V)[1])), "BackwardDifference"),
+        ((U, V) -> inner_Γ(U, jumpₙ(c * V); markers = :boundary), "JumpNode"))
+        err = _refusal(() -> jacobian_form(form(W, W, b), dec))
+        @test err isa MissingJacobianRule
+        @test err.node === :BilinearProduct
+        @test occursin("test side, under $under", sprint(showerror, err))
+    end
 
     # The walk itself, on nodes `form` would not take: a `NamedTuple`, a `Vector` and a
     # closure holding the coefficient are all found, and an unrelated grid function is not.

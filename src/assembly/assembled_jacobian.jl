@@ -178,15 +178,30 @@ function _dterm(op::RegionRestriction{D, R}, w::_JFWalk) where {D, R}
     return RegionRestriction{D, R, typeof(d)}(op.region, d)
 end
 
-# Trial side only: on the test side the derivative would put the trial function under the
-# test side's operators.
+# Every weight multiplies the two sides at the same point, `w_I (L u)_I (R v)_I`, so a
+# scale at the top of the test side (no operator above it) moves to the trial side:
+# `(L u, c ⊙ R v) = (c ⊙ L u, R v)`. A Robin term under `inner_Γ` is one of these
+# products, its weight the face's measure, and needs no rule of its own. Below an operator
+# on the test side, the derivative would put the trial function under that operator:
+# refused.
 function _dterm(op::BilinearProduct{D, W}, w::_JFWalk) where {D, W}
-    _holds_coefficient(op.right_op, w.coefficients) &&
-        throw(MissingJacobianRule(:BilinearProduct, "coefficient on the test side"))
     _check_other_fields(op, w, (:left_op, :right_op), "a coefficient in the weight")
-    d = _dterm(op.left_op, w)
+    left, right = _jf_to_trial(op.left_op, op.right_op, w)
+    d = _dterm(left, w)
     d === nothing && return nothing
-    return BilinearProduct{D, W, typeof(d), typeof(op.right_op)}(op.inner, d, op.right_op)
+    return BilinearProduct{D, W, typeof(d), typeof(right)}(op.inner, d, right)
+end
+
+# The pair `(left, right)` with the test side's top scales moved onto the trial side, as
+# long as the test side holds a declared coefficient.
+function _jf_to_trial(left, right, w::_JFWalk)
+    _holds_coefficient(right, w.coefficients) || return left, right
+    right isa GridFunctionScale &&
+        return _jf_to_trial(GridFunctionScale(right.grid_function, left), right.inner_op, w)
+    right isa OperatorScale &&
+        return _jf_to_trial(OperatorScale(right.scalar, left), right.inner_op, w)
+    throw(MissingJacobianRule(:BilinearProduct,
+        "coefficient on the test side, under $(nameof(typeof(right)))"))
 end
 
 @noinline function _throw_jf_dependency(k::Int, what::String)
@@ -280,12 +295,14 @@ The refill runs under the mesh's execution policy.
 The derivative is built by a walk over `a`'s AST: the product rule where a declared
 coefficient scales an operator, and every node above it (scales, sums, differences,
 averages, jumps, shifts, region restrictions, the trial side of an inner product) rebuilt
-around the derivative of its operand. A declared coefficient under a node with no such
-rule, on the test side of an inner product, or in any field a rule does not read, throws
-[`MissingJacobianRule`](@ref) naming the node. A declared coefficient the form never reads
-throws an `ArgumentError`, and so does a dependency `L` that reads a declared coefficient
-(itself included): `L` may read only the state and constant grid functions. Scalar grid
-spaces only.
+around the derivative of its operand. Every inner product's weight is pointwise, so a
+boundary term such as a Robin term `inner_Γ(c * U, V; markers)` needs nothing more, and a
+coefficient scaling the whole test side, `inner₊(∇ₕ(U)[1], c * ∇ₕ(V)[1])`, is moved to the
+trial side. A declared coefficient under a node with no such rule, under an operator on the
+test side, or in any field a rule does not read, throws [`MissingJacobianRule`](@ref)
+naming the node. A declared coefficient the form never reads throws an `ArgumentError`, and
+so does a dependency `L` that reads a declared coefficient (itself included): `L` may read
+only the state and constant grid functions. Scalar grid spaces only.
 """
 function jacobian_form(
         a::BilinearForm{D}, coefficients::Pair...; dirichlet = nothing) where {D}
