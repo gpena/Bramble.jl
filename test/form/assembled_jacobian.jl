@@ -118,9 +118,12 @@ const _RULES = (
         c -> (U, V) -> innerₕ(jumpₓ(c * U), V) + innerₕ(U, V)),
     # Shifted forward and backward, so both ends of the grid read off it (#352).
     ("ShiftNode, S₊ (off-grid read)", ShiftNode,
-        c -> (U, V) -> inner₊(S₊ₕ(c * ∇ₕ(U)[1])[1], ∇ₕ(V)[1]) + innerₕ(U, V)),
+        c -> (U, V) -> innerₕ(S₊ₕ(c * D₋ₓ(U))[1], V) + innerₕ(U, V)),
     ("ShiftNode, S₋ (off-grid read)", ShiftNode,
         c -> (U, V) -> innerₕ(S₋ₕ(c * D₋ₓ(U))[1], V) + innerₕ(U, V)),
+    # Two operators composed above the coefficient: a difference over a shift.
+    ("D₊ over a shift, composed", ShiftNode,
+        c -> (U, V) -> innerₕ(D₊ₓ(S₋ₕ(c * D₋ₓ(U))[1]), V) + innerₕ(U, V)),
     ("RegionRestriction above", RegionRestriction,
         c -> (U, V) -> innerₕ(restrict_to(:interior, c * U), V) + innerₕ(U, V)),
     ("RegionRestriction below", RegionRestriction,
