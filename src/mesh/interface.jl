@@ -139,6 +139,21 @@ end
     return _throw_unknown_marker_label(Ωₕ, label)
 end
 
+# The face `(axis, side)` names, `boundary_indices(Ωₕ)[2axis - 2 + side]`, built as one
+# `CartesianIndices` from the corners of the box the faces bound. Indexing the tuple of all
+# `2D` faces with a run-time value aborts Enzyme's reverse pass (gpena/Bramble.jl#1126).
+@inline function _face_indices(Ωₕ::AbstractMeshType{D}, axis::Int, side::Int) where {D}
+    faces = boundary_indices(Ωₕ)
+    lo = first(faces[1])
+    hi = last(faces[2])
+    return CartesianIndices(
+        ntuple(
+        d -> d == axis ? (side == 1 ? (lo[d]:lo[d]) : (hi[d]:hi[d])) : (lo[d]:hi[d]),
+        Val(D)
+    ),
+    )
+end
+
 # Calls `f(offset + i)` for every point `i` that `index_in_marker(Ωₕ, label)` marks, in
 # increasing order, without building the `BitVector` a face name may fall back to: the
 # per-stage residual of a semidiscretisation walks its labels through here and allocates
@@ -148,7 +163,7 @@ end
     bits === nothing || return _each_marked(f, bits, offset)
     axis, side = _face_of_symbol(Val(D), label)
     lin = LinearIndices(indices(Ωₕ))
-    for I in boundary_indices(Ωₕ)[2axis - 2 + side]
+    for I in _face_indices(Ωₕ, axis, side)
         f(offset + @inbounds lin[I])
     end
     return nothing
@@ -159,7 +174,7 @@ end
 # arithmetic only, so it allocates nothing.
 @inline function _marks_only_face(Ωₕ::AbstractMeshType{D}, bits::BitVector, label::Symbol) where {D}
     axis, side = _face_of_symbol(Val(D), label)
-    face = boundary_indices(Ωₕ)[2axis - 2 + side]
+    face = _face_indices(Ωₕ, axis, side)
     lin = LinearIndices(indices(Ωₕ))
     n = 0
     for I in face
@@ -171,7 +186,7 @@ end
 # The face `label` names, as a fresh `BitVector` over the mesh points.
 @noinline function _geometric_face_bits(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
     axis, side = _face_of_symbol(Val(D), label)
-    face = boundary_indices(Ωₕ)[2axis - 2 + side]
+    face = _face_indices(Ωₕ, axis, side)
     lin = LinearIndices(indices(Ωₕ))
     bits = falses(length(lin))
     for I in face
