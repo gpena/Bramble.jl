@@ -12,8 +12,8 @@
 # one factorisation per parameter.
 #
 # Through `pde_solve`, Enzyme reverse has the adjoint rule below, and ForwardDiff a solve of a
-# `Dual` matrix or load over the `Float64` factor of its values (`_solve_promoted`, added by
-# `BrambleForwardDiffExt`). Enzyme forward throws `EnzymeNoDerivativeError` at the UMFPACK
+# `Dual` matrix or load over the `Float64` factor of its values (`_solve_promoted` and, for the
+# bordered solve, `_bordered_promoted`, added by `BrambleForwardDiffExt`). Enzyme forward throws `EnzymeNoDerivativeError` at the UMFPACK
 # call (`docs/notes/internals/ad_coverage.md`).
 #
 # `pde_solve` itself needs no weak dependency: without `ChainRulesCore` it is the same solve,
@@ -150,8 +150,15 @@ With `ForwardDiff.jl` loaded, a `Dual` matrix or load of the plain solve is solv
 with ``A₀ = value.(A)`` and ``b₀ = value.(F)``, the value is ``x₀ = A₀⁻¹b₀`` and the partial
 ``k`` is ``xₖ = A₀⁻¹(bₖ − Aₖx₀)``. A nested `Dual` recurses through the same factor. A
 non-square `Dual` matrix throws an `ArgumentError`: a least-squares solve has a residual term
-that this derivative omits. The bordered solve (`mean_zero`, `gauge`) and `pde_solve(fact, F)`
-are unchanged, so with a `Dual` matrix they take the route they always took.
+that this derivative omits.
+
+The bordered solve (`mean_zero`, `gauge`, and the rank-one term of a `Bramble.RankOneUpdate`)
+differentiates the same way on the bordered matrix: the primal bordered system of the values
+is factored once, by the route the `Float64` solve takes, and each partial solves its bordered
+right-hand side ``[Fₖ − Aₖu₀; 0]`` against that factor. `w` and `gauge`'s `Z` are
+constants: a `Dual` one throws an `ArgumentError` naming it, as does a `RankOneUpdate` over
+a `Dual` matrix, whose `σ` takes the matrix's element type. `pde_solve(fact, F)` is
+unchanged, so with a `Dual` load it takes the route it always took.
 
 # Examples
 
@@ -356,11 +363,29 @@ function _bordered_solve(A::SparseMatrixCSC, F::AbstractVector, r,
      (Z === nothing || size(Z, 1) == n)) || _throw_bordered_size(A, F, w, Z)
     solver === :spqr && (r === nothing ? _throw_bordered_spqr() : _throw_rank_one_spqr())
     solver === :sparspak && Z !== nothing && _throw_gauge_sparspak()
-    T = promote_type(eltype(A), _border_eltype(w), _border_eltype(Z), _rank_one_eltype(r))
+    T = _bordered_eltype(A, r, w, Z)
     S = float(promote_type(T, eltype(F)))  # an all-`Int` system has a fractional solution
     n == 0 && return S[]
-    C = hcat(_border_columns(T, n, w), _border_columns(T, n, Z))
-    B, bsym = _bordered_matrix(T, A, C, r)
+    return _bordered_promoted(S, T, A, F, r, w, Z, solver, kwargs)
+end
+
+# The common element type of the bordered system, and the system itself: `[A C; Cᵀ 0]` with
+# `C = [w Z]` (or with the rank-one term `r`), at element type `T`, and its symmetry.
+_bordered_eltype(A, r, w, Z) = promote_type(eltype(A), _border_eltype(w), _border_eltype(Z),
+    _rank_one_eltype(r))
+
+function _bordered_system(::Type{T}, A, r, w, Z) where {T}
+    C = hcat(_border_columns(T, size(A, 1), w), _border_columns(T, size(A, 1), Z))
+    return _bordered_matrix(T, A, C, r)
+end
+
+# The one dispatch point of the bordered solve, on its solution's element type `S`. A real
+# one reaches the routing below unchanged. `BrambleForwardDiffExt` adds the
+# `ForwardDiff.Dual` method, which factors the bordered matrix of the values once and solves
+# every partial against that factor (`_bordered_factorize`).
+function _bordered_promoted(::Type{S}, ::Type{T}, A, F, r, w, Z, solver, kwargs) where {S, T}
+    n = size(A, 1)
+    B, bsym = _bordered_system(T, A, r, w, Z)
     k = size(B, 1) - n
     b = zeros(S, n + k)::Vector{S}  # dense: the factorisations take no sparse `F`
     b[1:n] .= F
@@ -394,6 +419,36 @@ function _bordered_solve(A::SparseMatrixCSC, F::AbstractVector, r,
     u = Vector{S}(undef, n)
     copyto!(u, 1, x, 1, n)
     return u
+end
+
+# The factorization of the bordered matrix `B` that the solve above takes, route for route:
+# `BrambleForwardDiffExt` factors the values of a `Dual` system here once. `T` is the
+# matrix's element type and `S` the solution's.
+function _bordered_factorize(B, bsym, ::Type{T}, ::Type{S}, solver::Symbol, kwargs) where {T, S}
+    if solver === :default
+        _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
+        if bsym === :symmetric && Sys.isapple() &&
+           Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
+           _default_accelerate_eltypes(T, S)
+            return accelerate_factorize(B; sym = bsym, kwargs...)
+        end
+        return lu(B)
+    elseif solver === :suitesparse
+        return suitesparse_factorize(B; sym = :unsymmetric, kwargs...)
+    elseif solver === :accelerate
+        return accelerate_factorize(B; sym = bsym, kwargs...)
+    elseif solver === :mumps
+        return mumps_factorize(B; sym = bsym, kwargs...)
+    elseif solver === :sparspak
+        _reject_unknown_kwargs(:pde_solve, "solver = :sparspak", kwargs)
+        return sparspak_factorize(B)
+    else
+        throw(
+            ArgumentError(
+            "Unknown solver: $solver. Expected :default, :suitesparse, :accelerate, :mumps, or :sparspak.",
+        ),
+        )
+    end
 end
 
 # The bordered matrix and its symmetry: `[A C; Cᵀ 0]`, or with a rank-one term

@@ -552,6 +552,15 @@ using Kronecker: Kronecker
                 # the extension's own `Bramble` hooks, neither public.
                 :_solve_promoted,
                 :_primal_factorize,
+                # `_bordered_promoted`, `_bordered_factorize`, `_bordered_system` and
+                # `_bordered_eltype` (the same, for the bordered solve of `mean_zero` and
+                # `gauge`): the dispatch point, the factor of the primal bordered matrix, and
+                # the bordered system and element type that method builds, none public.
+                :_bordered_promoted,
+                :_bordered_factorize,
+                :_bordered_system,
+                :_bordered_eltype,
+                :_rank_one_eltype,
                 # `value`, `partials`, `npartials`, `Partials` (BrambleForwardDiffExt): the
                 # accessors and partials constructor of a dual number, which ForwardDiff does
                 # not declare public. The Dual solve reads the parts level by level.

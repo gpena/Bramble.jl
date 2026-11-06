@@ -170,6 +170,136 @@ end
         @test RELEASED[] == before + 2
     end
 
+    # The bordered solve (`mean_zero`, `gauge`) of a `Dual` matrix and load: the bordered
+    # matrix of the values is factored once and each partial solves its bordered right-hand
+    # side, with `w` and `Z` constants. The oracle is ForwardDiff through the dense bordered
+    # matrix, which factors a `Dual` matrix with generic LU and shares no code with the sparse
+    # route. The parameters are `p = (t, s)`: the matrix is `A₀ + t A₁` (`A₁` keeps the kernel
+    # of `A₀`, so the border stays valid) and the load `F₀ + s F₁`.
+    @testset "bordered solve, Dual matrix and load" begin
+        bordered_oracle(A0, A1, F0, F1, C, p) = begin
+            Cm = Matrix(reshape(C, size(A0, 1), :))
+            k = size(Cm, 2)
+            B = [Matrix(A0) + p[1] * Matrix(A1) Cm; transpose(Cm) zeros(k, k)]
+            return (B \ [F0 + p[2] * F1; zeros(k)])[1:size(A0, 1)]
+        end
+        sparse_route(A0, A1, F0, F1, p; kwargs...) =
+            pde_solve(A0 + p[1] * A1, F0 + p[2] * F1; kwargs...)
+
+        # pure Neumann: the Laplacian of a conductance `c` has the constants in its kernel
+        lap(c) = spdiagm(0 => [c[1]; c[1:(end - 1)] .+ c[2:end]; c[end]], 1 => -c, -1 => -c)
+        c0 = 1.0 .+ 0.5 .* sin.(1:(m - 1))
+        c1 = 0.3 .+ 0.2 .* cos.(1:(m - 1))
+        L0, L1 = lap(c0), lap(c1)
+        F0 = cos.(1:m)
+        F1 = sin.(2 .* (1:m))
+        w = collect(1.0 .+ 0.1 .* (1:m))
+        p = [0.4, 1.1]
+        solvers = [:default, :suitesparse, :sparspak]
+        Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
+            push!(solvers, :accelerate)
+        Base.get_extension(Bramble, :BrambleMUMPSExt) !== nothing && push!(solvers, :mumps)
+        expected = ForwardDiff.jacobian(q -> bordered_oracle(L0, L1, F0, F1, w, q), p)
+        for solver in solvers
+            J = ForwardDiff.jacobian(
+                q -> sparse_route(L0, L1, F0, F1, q; mean_zero = w, solver = solver), p)
+            @test J ≈ expected rtol = 1.0e-9
+        end
+        # a Dual matrix with a `Float64` load, and a Dual load with a `Float64` matrix
+        Jt = ForwardDiff.jacobian(
+            q -> pde_solve(L0 + q[1] * L1, F0 + p[2] * F1; mean_zero = w), [p[1]])
+        @test Jt ≈ expected[:, 1:1] rtol = 1.0e-9
+        Js = ForwardDiff.jacobian(q -> pde_solve(L0 + p[1] * L1, F0 + q[1] * F1; mean_zero = w),
+            [p[2]])
+        @test Js ≈ expected[:, 2:2] rtol = 1.0e-9
+
+        # a ghost-only kernel: `gauge`, then `mean_zero` and `gauge` together
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 7), (true, true))
+        Wg = gridspace(Ω; ghosts = :boundary)
+        Ag0 = assemble(form(Wg, Wg, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+        Ag1 = assemble(form(Wg, Wg, (u, v) -> innerₕ(u, v)))
+        Zg = Bramble.ghost_kernel(Ag0, Wg)
+        ng = size(Ag0, 1)
+        G0 = cos.(1:ng)
+        G1 = sin.(2 .* (1:ng))
+        gexpected = ForwardDiff.jacobian(q -> bordered_oracle(Ag0, Ag1, G0, G1, Zg, q), p)
+        for solver in (:default, :suitesparse)
+            J = ForwardDiff.jacobian(
+                q -> sparse_route(Ag0, Ag1, G0, G1, q; gauge = Zg, solver = solver), p)
+            @test J ≈ gexpected rtol = 1.0e-5
+        end
+
+        Cn = constrained(Wg, u -> (:xmax => ∂ₙ(u) => 0.0, :ymin => ∂ₙ(u) => 0.0))
+        Bn0 = assemble(form(Cn, Cn, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + inner₊(∇ₕ(u), ∇ₕ(v))))
+        Bn1 = assemble(form(Cn, Cn, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
+        wn = assemble(form(Cn, v -> innerₕ(x -> 1.0, v)))
+        Zn = Bramble.ghost_kernel(Bn0, Cn)
+        nn = size(Bn0, 1)
+        H0 = cos.(1:nn)
+        H1 = sin.(2 .* (1:nn))
+        nexpected = ForwardDiff.jacobian(
+            q -> bordered_oracle(Bn0, Bn1, H0, H1, [wn Zn], q), p)
+        for solver in (:default, :suitesparse)
+            J = ForwardDiff.jacobian(
+                q -> sparse_route(
+                    Bn0, Bn1, H0, H1, q; mean_zero = wn, gauge = Zn, solver = solver), p)
+            @test J ≈ nexpected rtol = 1.0e-5
+        end
+
+        # the rank-one term of a `RankOneUpdate` is a constant: a real one takes the bordered
+        # route with a `Dual` load (over a `Dual` matrix `σ` is `Dual`, refused below)
+        ws, wt = collect(1.0 .+ 0.1 .* (1:m)), cos.(1:m)
+        σ = 0.7
+        K = Bramble.RankOneUpdate(A0, σ, ws, wt)
+        dK = ForwardDiff.derivative(t -> pde_solve(K, b .+ t .* F1), 0.4)
+        @test dK ≈ (Matrix(A0) + σ * ws * transpose(wt)) \ F1 rtol = 1.0e-9
+    end
+
+    # The bordered primal system is factored once: a Dual with N partials costs N solves.
+    # Factoring the bordered matrix of this ghost space allocates about 3 MB and a partial
+    # about 0.5 MB, so the bound of half a factorization per partial fails a refactor on
+    # every partial.
+    @testset "bordered solve, one factorization" begin
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (30, 30), (true, true))
+        Wg = gridspace(Ω; ghosts = :boundary)
+        Ag = assemble(form(Wg, Wg, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+        A1 = assemble(form(Wg, Wg, (u, v) -> innerₕ(u, v)))
+        Zg = Bramble.ghost_kernel(Ag, Wg)
+        k = size(Zg, 2)
+        dual(N) = Ag + ForwardDiff.Dual{Nothing, Float64, N}(
+            0.0, ForwardDiff.Partials(ntuple(float, N))) * A1
+        rhs = ones(size(Ag, 1))
+        solve(A) = pde_solve(A, rhs; gauge = Zg)
+        per_partial = (alloc_test(solve, dual(8)) - alloc_test(solve, dual(1))) / 7
+        factor = alloc_test(lu, [Ag Zg; transpose(Zg) zeros(k, k)])
+        @test per_partial < factor / 2
+    end
+
+    @testset "bordered solve refuses a Dual border" begin
+        w = ones(m)
+        Z = reshape(ones(m), m, 1)
+        wd = D.(w, w)
+        @test_throws ArgumentError pde_solve(Ad, b; mean_zero = wd)
+        @test_throws ArgumentError pde_solve(A0, b; mean_zero = wd)
+        @test_throws ArgumentError pde_solve(Ad, b; gauge = D.(Z, Z))
+        err = try
+            pde_solve(Ad, b; mean_zero = wd)
+        catch e
+            e
+        end
+        @test occursin("mean_zero", sprint(showerror, err))
+        K = Bramble.RankOneUpdate(Ad, 0.7, w, w)
+        @test_throws ArgumentError pde_solve(K, b)
+        @test occursin("RankOneUpdate", sprint(showerror, try
+            pde_solve(K, b)
+        catch e
+            e
+        end))
+        @test_throws ArgumentError pde_solve(Ad, b; mean_zero = w, solver = :bogus)
+        @test_throws ArgumentError pde_solve(Ad, b; mean_zero = w, solver = :spqr)
+        @test_throws DimensionMismatch pde_solve(Ad, b; mean_zero = w[1:(end - 1)])
+    end
+
     @testset "the Dual route refuses bad input" begin
         rect = SparseMatrixCSC(3, 2, [1, 3, 5], [1, 2, 2, 3],
             D.([1.0, 0.5, 2.0, 1.0], [1.0, 0.0, 0.0, 1.0]))
