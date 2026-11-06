@@ -129,6 +129,18 @@ jacobian_pattern
 ast_sparsity_detector
 ```
 
+## Assembled Jacobian
+
+`jacobian_form` builds the exact Jacobian of such a residual as one form, `a + ∂a`, from
+the form's AST and a declaration of each coefficient (`values => (U -> L(U), f)`). Each
+Jacobian is then one `assemble!`, with no `Dual` passing through assembly. A coefficient
+under a node with no derivative rule throws `MissingJacobianRule`.
+
+```@docs
+jacobian_form
+MissingJacobianRule
+```
+
 Time integration, differentiable linear solves, and the sparse/iterative solver backends
 move to their own [scientific computing reference](../api_sciml.md): the SciML stack
 (`semidiscretize`, `ode_problem`, `linear_problem`, `nonlinear_problem`, ...),

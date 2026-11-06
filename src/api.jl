@@ -130,6 +130,7 @@ public max_eigenvalue_estimate
 public AbstractSmoother, JacobiSmoother, ChebyshevSmoother, RedBlackGaussSeidel
 public GMGPreconditioner, v_cycle!, w_cycle!, fmg!
 public jacobian!, jacobian_prototype, jacobian_pattern, ast_sparsity_detector
+public jacobian_form, MissingJacobianRule
 public reaction, reaction_density, reaction!, reaction_density!
 public allocate_system_matrix, type_cached_assemble!, evaluate!, assemble_parallel!
 public Semidiscretization, SemidiscretizeRHS

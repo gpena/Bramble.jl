@@ -9,6 +9,17 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
 # split a `Dual` load into one solve per part (src/solvers/sparspak_solver.jl).
 Bramble._linear_in_parts(::Type{<:ForwardDiff.Dual}) = true
 
+# `(f(x), f′(x))` from one `Dual` evaluation of `f`, for `jacobian_form`'s refill
+# (src/assembly/assembled_jacobian.jl). `f::F` so each coefficient function is specialised
+# on. An `f` returning a plain number (a constant) has derivative zero.
+@inline function Bramble._value_and_derivative(f::F, x::Real) where {F}
+    T = typeof(ForwardDiff.Tag(f, typeof(x)))
+    return _value_and_partial(f(ForwardDiff.Dual{T}(x, one(x))))
+end
+
+@inline _value_and_partial(y::ForwardDiff.Dual) = (ForwardDiff.value(y), ForwardDiff.partials(y, 1))
+@inline _value_and_partial(y::Real) = (y, zero(y))
+
 # The plain solve of a `Dual` matrix or load (`pde_solve(A, F)`, src/solvers/pde_solve.jl).
 # The solution's value is `A₀⁻¹ b₀`, where `A₀` is the innermost `Float64` values of `A`,
 # and its partial `k` is `A₀⁻¹(b_k − A_k x₀)`. So `A₀` is factored once, by the route of
