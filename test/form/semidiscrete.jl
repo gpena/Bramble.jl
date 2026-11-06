@@ -3,6 +3,7 @@ module FormSemidiscreteTests
 using Test
 using Bramble
 using Bramble: matrix_type
+using LinearAlgebra: diag
 using SparseArrays
 using SciMLBase: SciMLBase # loads the `ode_problem` extension
 using ForwardDiff: Dual, value
@@ -1211,6 +1212,140 @@ end
         @test eltype(parent(sₕ)) === Float64
         @test length(sd.twins) == 1
     end
+end
+
+# `coefficients` (#1143): the declared coefficients are refilled from `u` before every
+# assembly, and `jacobian!` writes the exact `-(A + ∂A)` from `jacobian_form`. The oracle is
+# a dense ForwardDiff Jacobian of `A(u) u` with the averages computed by `Mₓ!`/`Mᵧ!` from a
+# `Dual` state, on a graded 2D mesh; `αx` reads the y-average and `αy` the x-average, so the
+# exact pattern is wider than `A`'s. The coefficients hold garbage before each call, so a
+# refill that is missing or runs after the assembly cannot pass.
+_cf_α(s) = 3 + 1 / (1 + s^2)
+_cf_relerr(A, B) = maximum(abs, A - B) / maximum(abs, B)
+function _cf_form(W, ax, ay)
+    return form(W, W, (U, V) -> inner₊((ax * ∇ₕ(U)[1], ay * ∇ₕ(U)[2]), ∇ₕ(V)))
+end
+function _cf_Au(W, x; dirichlet)
+    T = eltype(x)
+    uₕ = Bramble.element(W, T)
+    uₕ .= x
+    Mx, My, ax, ay = ntuple(_ -> Bramble.element(W, T), 4)
+    Bramble.Mₓ!(Mx, uₕ)
+    Bramble.Mᵧ!(My, uₕ)
+    ax .= _cf_α.(My)
+    ay .= _cf_α.(Mx)
+    return assemble(_cf_form(W, ax, ay); dirichlet = dirichlet) * x
+end
+function _cf_sd(W; dirichlet, kwargs...)
+    gₕ = Bramble.element(W)
+    avgₕ!(gₕ, x -> 1 + x[1] * x[2])
+    ax, ay = Bramble.element(W), Bramble.element(W)
+    sd = semidiscretize(_cf_form(W, ax, ay), form(W, v -> innerₕ(gₕ, v));
+        dirichlet = dirichlet, kwargs...,
+        coefficients = (ax => (U -> Mₕ(U)[2], _cf_α), ay => (U -> Mₕ(U)[1], _cf_α)))
+    return sd, ax, ay
+end
+_cf_garbage!(ax, ay) = (fill!(parent(ax), 1.0e3); fill!(parent(ay), -7.0); nothing)
+
+@testset "coefficients: exact Jacobian (#1143)" begin
+    W = gridspace(_graded_mesh((9, 12)))
+    n = ndofs(W)
+    u = [0.3 + 0.7 * sin(0.37 * i) for i in 1:n]
+    Jex = -DI.jacobian(x -> _cf_Au(W, x; dirichlet = :boundary), AutoForwardDiff(), u)
+    sd, ax, ay = _cf_sd(W; dirichlet = :boundary)
+    @test sd.reassemble === Val(true)
+
+    # F read back at u = 0, where `A(0) 0 = 0` whatever the coefficients
+    F = zeros(n)
+    sd(F, zeros(n), nothing, 0.0)
+    du = zeros(n)
+    _cf_garbage!(ax, ay)
+    sd(du, u, nothing, 0.0)
+    @test isapprox(du, F - _cf_Au(W, u; dirichlet = :boundary); rtol = 1e-12)
+
+    J = jacobian_prototype(sd)
+    @test nnz(J) > nnz(operator_matrix(sd))
+    _cf_garbage!(ax, ay)
+    Bramble.jacobian!(J, sd, u, nothing, 0.0)
+    @test _cf_relerr(J, Jex) < 1e-12
+    @test _sd_residual_allocs(sd, du, u, 0.0) == 0
+    @test _sd_jacobian_allocs(J, sd, u, 0.0) == 0
+    # the Picard `-A(u)` the residual just assembled is not the Jacobian
+    sd(du, u, nothing, 0.0)
+    @test _cf_relerr(-operator_matrix(sd), Jex) > 1e-3
+
+    # AD through the coefficients is refused, with or without a `state`: a twin would
+    # read stale coefficients and miss their derivative
+    @test_throws ArgumentError DI.jacobian((d, x) -> sd(d, x, nothing, 0.0), zeros(n),
+        AutoForwardDiff(), u)
+    @test_throws ArgumentError Bramble.jacobian!(J, sd, Dual.(u, 1.0), nothing, 0.0)
+    sₕ = Bramble.element(W)
+    sds, _, _ = _cf_sd(W; dirichlet = :boundary, state = sₕ)
+    @test_throws ArgumentError DI.jacobian((d, x) -> sds(d, x, nothing, 0.0), zeros(n),
+        AutoForwardDiff(), u)
+    @test isempty(sds.twins)
+end
+
+# A source or mass reading a declared coefficient would depend on `u` through the refill,
+# and `jacobian!` would miss that derivative: refused at construction. An undeclared grid
+# function in the source (`_cf_sd`'s `gₕ`) is accepted, as every testset above shows.
+@testset "coefficients: read outside a (#1143)" begin
+    W = gridspace(_graded_mesh((7, 8)))
+    ax, ay = Bramble.element(W), Bramble.element(W)
+    cs = (ax => (U -> Mₕ(U)[2], _cf_α), ay => (U -> Mₕ(U)[1], _cf_α))
+    a = _cf_form(W, ax, ay)
+    gₕ = Bramble.element(W, 1.0)
+    @test_throws ArgumentError semidiscretize(a, form(W, v -> innerₕ(ax, v));
+        dirichlet = :boundary, coefficients = cs)
+    @test_throws ArgumentError semidiscretize(a, form(W, v -> innerₕ(gₕ, v));
+        mass = form(W, W, (U, V) -> innerₕ(ay * U, V)), coefficients = cs)
+    # the same mass reading an undeclared grid function is accepted
+    sd = semidiscretize(a, form(W, v -> innerₕ(gₕ, v));
+        mass = form(W, W, (U, V) -> innerₕ(gₕ * U, V)), coefficients = cs)
+    @test sd.jacobian_form !== nothing
+end
+
+# The refill reads `u` with the first leaf's indices, so on a composite space a coefficient
+# declared on component 2 would be set from component 1: refused at construction.
+@testset "coefficients: composite refused (#1143)" begin
+    W = gridspace(_graded_mesh((9, 12)))
+    Vc = W^Val(2)
+    c = Bramble.element(W)
+    a = form(Vc, Vc, (P, Q) -> inner₊(∇ₕ(P(1)), ∇ₕ(Q(1))) + innerₕ(c * P(1), Q(1)) +
+                               inner₊(∇ₕ(P(2)), ∇ₕ(Q(2))))
+    l = form(Vc, Q -> innerₕ(1.0, Q(1)) + innerₕ(1.0, Q(2)))
+    err = try
+        semidiscretize(a, l; coefficients = c => (U -> U(2), _cf_α))
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("scalar grid spaces", sprint(showerror, err))
+end
+
+@testset "coefficients: semidiscretize_rhs (#1143)" begin
+    W = gridspace(_graded_mesh((7, 8)))
+    n = ndofs(W)
+    u = [0.3 + 0.7 * sin(0.37 * i) for i in 1:n]
+    sd, ax, ay = _cf_sd(W; dirichlet = nothing)
+    rhs = semidiscretize_rhs(sd)
+    F = zeros(n)
+    rhs(F, zeros(n), nothing, 0.0)
+    du = zeros(n)
+    _cf_garbage!(ax, ay)
+    rhs(du, u, nothing, 0.0)
+    expected = F - _cf_Au(W, u; dirichlet = nothing) ./ diag(mass_matrix(sd))
+    @test isapprox(du, expected; rtol = 1e-12)
+    @test_throws ArgumentError DI.jacobian((d, x) -> rhs(d, x, nothing, 0.0), zeros(n),
+        AutoForwardDiff(), u)
+end
+
+@testset "coefficients: absent, as before (#1143)" begin
+    Ωₕ, Wₕ, fₕ, a, l = _sd_problem(9)
+    sd = semidiscretize(a, l)
+    @test sd.jacobian_form === nothing
+    @test sd.reassemble === Val(false)
 end
 
 @testset "SciML entry points without the extension" begin

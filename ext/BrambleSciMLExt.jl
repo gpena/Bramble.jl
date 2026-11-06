@@ -280,20 +280,31 @@ function _preconditioner_operator(preconditioner::Symbol, A::AbstractMatrix)
 end
 _preconditioner_operator(preconditioner, ::AbstractMatrix) = preconditioner
 
+# A `JacobianForm` from `jacobian_form` is Bramble's own exact Jacobian, so it becomes `jac`
+# here, in the convention `residual` uses: `isinplace(residual, 3)` is the test
+# `NonlinearFunction` applies to pick its own. The prototype defaults to the form's pattern.
+# Any other `jacobian` is the user's own `jac(J, u, p)`/`J = jac(u, p)`, exactly
+# `NonlinearFunction`'s signature, and passes straight through.
+_nonlinear_jacobian(jacobian, residual, jac_prototype) = (jacobian, jac_prototype)
+function _nonlinear_jacobian(jf::Bramble.JacobianForm, residual, jac_prototype)
+    jac = SciMLBase.isinplace(residual, 3) ?
+          (J, u, p) -> jacobian!(J, jf, u) :
+          (u, p) -> jacobian!(jacobian_prototype(jf), jf, u)
+    proto = jac_prototype === nothing ? jacobian_prototype(jf) : jac_prototype
+    return jac, proto
+end
+
 # `u0` narrows to `AbstractVector` (a `VectorElement` already is one) rather than `residual`
 # to `::Any` there -- an arbitrary user function has no Bramble type to narrow to, unlike
 # `BilinearForm`/`Semidiscretization` above. Narrowing on either argument is a strict
 # specialisation of `Bramble.jl`'s `_nonlinear_problem(residual, ::Any; kwargs...)` fallback,
 # which is all the method-overwrite check needs (problems/nonlinear_problem.jl explains).
-#
-# No `_jac_closure`-style wrapping needed: unlike `jacobian!` above, which needs `sd` closed
-# over it, a `jacobian` passed here is already the user's own `jac(J, u, p)`/`J = jac(u, p)`,
-# exactly `NonlinearFunction`'s own signature -- passed straight through.
 function Bramble._nonlinear_problem(
         residual, u0::AbstractVector;
         jacobian = nothing, jac_prototype = nothing, kwargs...
 )
-    f = NonlinearFunction(residual; jac = jacobian, jac_prototype = jac_prototype)
+    jac, proto = _nonlinear_jacobian(jacobian, residual, jac_prototype)
+    f = NonlinearFunction(residual; jac = jac, jac_prototype = proto)
     return NonlinearProblem(f, _initial_vector(u0); kwargs...)
 end
 

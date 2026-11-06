@@ -313,6 +313,9 @@ using Kronecker: Kronecker
     #   entry point per `export_vtk` method that needs a weak dependency.
     # - `_linear_in_parts` (BrambleSparspakExt, BrambleForwardDiffExt): the per-number-type
     #   hook the Sparspak split consults, which ForwardDiff's extension extends for `Dual`.
+    # - `_value_and_derivative` (BrambleForwardDiffExt): `jacobian_form`'s hook for a
+    #   coefficient function's value and derivative, whose `src/` method throws naming
+    #   ForwardDiff; the same `_`-prefixed fallback idiom.
     # - `_sparspak_factorize`, `_sparspak_refactor!`, `_sparspak_solve` (BrambleSparspakExt):
     #   the preconditioner-building hooks its `factorize`/`refactor!`/`\` methods reach,
     #   the same `_`-prefixed fallback idiom as `_amg_operator` above.
@@ -542,6 +545,7 @@ using Kronecker: Kronecker
                 :sparspak_refactor!,
                 :_sparspak_solve,
                 :_linear_in_parts,
+                :_value_and_derivative,
                 # `_solve_promoted` (core `pde_solve`'s dispatch point on the promoted element
                 # type, which BrambleForwardDiffExt adds the `Dual` method to) and
                 # `_primal_factorize` (the `Float64` factorization that method solves against):
@@ -555,6 +559,9 @@ using Kronecker: Kronecker
                 :partials,
                 :npartials,
                 :Partials,
+                # `Tag` (BrambleForwardDiffExt): the tag of the one `Dual` evaluation
+                # `_value_and_derivative` makes, built as `ForwardDiff.derivative` builds it.
+                :Tag,
                 :_accelerate_factorize,
                 :accelerate_refactor!,
                 :_accelerate_solve,

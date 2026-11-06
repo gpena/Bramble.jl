@@ -74,8 +74,9 @@ Built by [`semidiscretize`](@ref); read back with [`mass_matrix`](@ref) and
 - `update_coefficients`: callable invoked with `t` (or, wrapped in `ParametricUpdate`, with `t` and the residual's own `p`) before assembly, or `nothing`. Wrapped in `Bramble._StateFreeUpdate` when the user declared `hook_reads_state = false`.
 - `reassemble`: `Val(true)` to refill `A` at every step.
 - `twins`: by element type of `u`, the semidiscretisations a `u` the state cannot hold (a `ForwardDiff.Dual`) is evaluated by: a state buffer of that type, the forms rebound to it and their own operator matrix, built at the first call there.
+- `jacobian_form`: the form `a + ∂a` of [`jacobian_form`](@ref) built from the `coefficients` keyword, whose refills set each declared coefficient from `u` before every assembly, or `nothing`.
 """
-struct Semidiscretization{A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R}
+struct Semidiscretization{A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R, JF}
     operator::A
     source::L
     space::S
@@ -89,6 +90,14 @@ struct Semidiscretization{A, L, S, MT, MM, VT, BC, LB, CP, ST, TR, R}
     update_coefficients::TR
     reassemble::Val{R}
     twins::Dict{DataType, Any}
+    jacobian_form::JF
+end
+
+# Without declared coefficients: every constructor but `semidiscretize(a, l; coefficients)`.
+function Semidiscretization(a, l, sp, A, M, F, constraints, labels, components, state,
+        update, reassemble::Val, twins::Dict{DataType, Any})
+    return Semidiscretization(a, l, sp, A, M, F, constraints, labels, components, state,
+        update, reassemble, twins, nothing)
 end
 
 """
@@ -145,6 +154,7 @@ returned system solves `A u_h = F`.
 - `update_coefficients!`: called with the current `t` before each assembly, for coefficients that vary in time -- `t -> Rₕ!(fₕ, x -> f(x, t))` for a time-dependent source, or `t -> (α[] = t)` for a scalar `Ref` (default `nothing`). A two-argument `(t, p) -> ...` also reaches the residual's own `p`, the same way a three-argument Dirichlet condition does.
 - `hook_reads_state`: whether `update_coefficients!` may read the `state` (default `true`). With `state`, a `ForwardDiff.Dual` `u` reaches the forms through a buffer of its own type and never the user's state, so a hook reading the state would lose its dependence on `u` from the derivative, and the pair is refused with an `ArgumentError`. Give `false` to assert that the hook reads no state (a source depending on `t` alone) and the `Dual` Jacobian is exact; the assertion is not checked, and a hook that does read the state then gets a Jacobian missing that part.
 - `reassemble`: refill `A` at every step, for an operator whose coefficients change with `t` or `u` (default `false`).
+- `coefficients`: the coefficients of `a` that depend on `u`, declared as [`jacobian_form`](@ref) takes them, `(cᵢ => (U -> Lᵢ(U), fᵢ), ...)` with `cᵢ` the grid function `a` reads (default `nothing`). Before each assembly of the residual every `cᵢ` is set to `fᵢ.(Lᵢ(u))` from `u` itself, after `update_coefficients!` and the `state`, and `A` is reassembled (`reassemble` is then `true` whatever it was given). [`jacobian!`](@ref) then writes the exact Jacobian `-(A + ∂A)` at `u` and [`jacobian_prototype`](@ref) carries its pattern, wider than `A`'s where a coefficient reads neighbouring points (`using ForwardDiff` differentiates each `fᵢ`). A source `l` or a `mass` reading a declared coefficient is refused with an `ArgumentError`, since `jacobian!` would miss its derivative. A `u` of a non-plain element type (a `ForwardDiff.Dual`) is refused by the residual, [`semidiscretize_rhs`](@ref) and [`jacobian!`](@ref) alike, with or without `state`: automatic differentiation through the coefficients is not supported, and the exact Jacobian is `jacobian!`'s. Scalar grid spaces only: `a` on a composite space is refused with an `ArgumentError`, and the `build` method and ghost spaces do not take it.
 
 Time and parameter dependence of the Dirichlet values is detected by arity, exactly as
 [`dirichlet_constraints`](@ref) validates it: conditions accepting `(x, t, p)` are evaluated
@@ -196,7 +206,8 @@ Base.@constprop :aggressive function semidiscretize(
         state = nothing,
         (update_coefficients!) = nothing,
         hook_reads_state::Bool = true,
-        reassemble::Bool = false
+        reassemble::Bool = false,
+        coefficients = nothing
 )
     sp = test_space(l)
     _validate_semidiscrete_spaces(a, l; mass = mass)
@@ -204,6 +215,7 @@ Base.@constprop :aggressive function semidiscretize(
     labels, constraint_values = _normalize_dirichlet(dirichlet)
     constraints = _source_constraints(labels, constraint_values)
 
+    jf = _sd_jacobian_form(a, coefficients, labels, l, mass)
     A = assemble(a; dirichlet = labels, dirichlet_components = dirichlet_components)
     M = _assemble_mass_matrix(
         mass === nothing ? _default_mass_form(sp) : mass, labels, dirichlet_components
@@ -222,9 +234,41 @@ Base.@constprop :aggressive function semidiscretize(
         dirichlet_components,
         state,
         _wrap_update(update_coefficients!, hook_reads_state),
-        Val(reassemble),
-        Dict{DataType, Any}()
+        Val(reassemble || jf !== nothing),
+        Dict{DataType, Any}(),
+        jf
     )
+end
+
+# The `coefficients` keyword as a `jacobian_form`, with the labels `A` is assembled with.
+# A source or mass reading a declared coefficient is refused: the refill would make it
+# depend on `u`, and `jacobian!` assembles only `a + ∂a`.
+_sd_jacobian_form(a, ::Nothing, labels, l, mass) = nothing
+function _sd_jacobian_form(a, c::Pair, labels, l, mass)
+    return _sd_jacobian_form(a, (c,), labels, l, mass)
+end
+function _sd_jacobian_form(a, c::Tuple, labels, l, mass)
+    # The refill reads `u` with the first leaf's indices: on a composite space it would set
+    # every coefficient from component 1, whatever its dependency names.
+    trial_space(a) isa ScalarGridSpace || throw(
+        ArgumentError(
+        "semidiscretize: `coefficients` is taken on scalar grid spaces only, and `a` is " *
+        "defined on a $(nameof(typeof(trial_space(a)))).",
+    ),
+    )
+    jf = jacobian_form(a, c...; dirichlet = labels === nothing ? () : labels)
+    for k in eachindex(c)
+        declared = ((; values = c[k].first),)
+        for (name, x) in (("the source `l`", l), ("`mass`", mass))
+            _holds_coefficient(x, declared) && throw(
+                ArgumentError(
+                "semidiscretize: $name reads declared coefficient $k, so jacobian! would " *
+                "miss its derivative; only `a` may read the declared coefficients.",
+            ),
+            )
+        end
+    end
+    return jf
 end
 
 """
@@ -260,7 +304,7 @@ coefficient buffer of the space's element type, which cannot hold a `Dual` and t
 
 # Keywords
 Same as the `BilinearForm` method, except `reassemble` defaults to `true` -- a `build`-based
-operator exists specifically to be rebuilt at every step.
+operator exists specifically to be rebuilt at every step -- and `coefficients` is not taken.
 
 # Examples
 
@@ -455,8 +499,12 @@ The call reaches the twin through an untyped cache, so it allocates.
 condition written as `(x, t, p) -> ...`, if either was given one of those shapes; otherwise
 it is unused, exactly as before this was possible. See the "`p` reaches only the source"
 note on [`semidiscretize`](@ref).
+
+With `coefficients`, each declared coefficient is set from `u` before `A` is reassembled,
+after `update_coefficients!`, so the residual and [`jacobian!`](@ref) read the same values.
 """
 function (sd::Semidiscretization)(du::AbstractVector, u::AbstractVector, p, t)
+    _sd_check_plain(sd.jacobian_form, u)
     # Folded at compile time: a `u` the state holds takes the path below, unchanged.
     if !_state_holds(sd.state, u)
         _state_twin(sd, eltype(u))(du, u, p, t)
@@ -464,6 +512,7 @@ function (sd::Semidiscretization)(du::AbstractVector, u::AbstractVector, p, t)
     end
     _sync_state!(sd.state, u, t)
     _update_coefficients!(sd.update_coefficients, p, t)
+    _sd_refill_coefficients!(sd.jacobian_form, u)
 
     # The operator before the source: on a ghost space the source reads the padded matrix
     # the operator's assembly fills (`ghost_semidiscrete.jl`), and a `build` whose
@@ -573,6 +622,58 @@ end
         "read inside a Julia function, a component view, update_coefficients! or a form " *
         "not reassembled. Write the state itself in the form's expression " *
         "(uₕ * ∇ₕ(u)) with reassemble = true, or pass the jacobian to the solver.",
+    ),
+    )
+end
+
+# The declared coefficients `cᵢ = fᵢ.(Lᵢ u)` from `u`, before the operator is reassembled.
+# Values only, unlike `jacobian!(J, ::JacobianForm, u)`: no derivative is needed here. A
+# coefficient read twice has one refill writing it (`writes_values`).
+@inline _sd_refill_coefficients!(::Nothing, u) = nothing
+@inline function _sd_refill_coefficients!(jf::JacobianForm, u)
+    W = jf.form.trial_space
+    Ωₕ = mesh(W)
+    _sd_coefficient_values!(jf.refills, execution_policy(Ωₕ), W, size(indices(Ωₕ)), u)
+    return nothing
+end
+
+_sd_coefficient_values!(::Tuple{}, policy, W, dims, u) = nothing
+function _sd_coefficient_values!(refills::Tuple, policy, W, dims, u)
+    r = first(refills)
+    r.writes_values &&
+        _run_bands!(policy, _sd_coefficient_band!, r.values, r.L, r.markers_L, r.f, W,
+            dims, u)
+    return _sd_coefficient_values!(Base.tail(refills), policy, W, dims, u)
+end
+
+# `f::F`: passed on uncalled, `f` would not be specialised on.
+@inline function _sd_coefficient_band!(
+        values, L, mk, f::F, W, dims::NTuple{D, Int}, u, nbands::Int, b::Int
+) where {F, D}
+    li = LinearIndices(dims)
+    slab = _band_slab(axes(li), _band_range(axes(li, D), nbands, b))
+    @inbounds for I in CartesianIndices(slab)
+        i = li[I]
+        values[i] = f(_jf_dot(local_stencil(L, W, I, mk, i), I, li, u))
+    end
+    return nothing
+end
+
+# With `coefficients`, a `u` of a non-plain element type (a `Dual`) is refused, `state` or
+# not: the twin's coefficients are neither refilled nor differentiated, so automatic
+# differentiation through them would be wrong without a trace. Folded at compile time.
+@inline _sd_check_plain(::Nothing, u) = nothing
+@inline function _sd_check_plain(::JacobianForm, u)
+    _plain_number(eltype(u)) || _throw_coefficients_dual(eltype(u))
+    return nothing
+end
+
+@noinline function _throw_coefficients_dual(T::Type)
+    throw(
+        ArgumentError(
+        "semidiscretize(...; coefficients): u has element type $(nameof(T)); automatic " *
+        "differentiation through the declared coefficients is not supported. The exact " *
+        "Jacobian comes from jacobian!(J, sd, u, p, t).",
     ),
     )
 end
@@ -731,23 +832,41 @@ end
 """
     jacobian!(J, sd::Semidiscretization, u, p, t) -> J
 
-Fill `J` with `∂/∂u (F(t) - A u) = -A` and return it.
+Fill `J` with `∂/∂u (F(t) - A(u) u)` and return it.
 
-Exact whenever the operator's coefficients do not read `u` -- that is, whenever `sd` was
-built without `state`. With a `state` the operator also varies with `u`, the term
-`-(∂A/∂u) u` is missing, and this is a Picard linearisation rather than a Jacobian: pass
-`jacobian = nothing` to [`ode_function`](@ref) and let the solver build it by sparse
-automatic differentiation instead, seeded from [`jacobian_pattern`](@ref). That one is
-exact: a `ForwardDiff.Dual` `u` goes into a state buffer of its own type, read by the forms
-rebound to it (see the `state` keyword of [`semidiscretize`](@ref)).
+Without `coefficients` this is `-A`, exact whenever the operator's coefficients do not read
+`u` -- that is, whenever `sd` was built without `state`. With a `state` the operator also
+varies with `u`, the term `-(∂A/∂u) u` is missing, and this is a Picard linearisation
+rather than a Jacobian: declare the coefficients that read `u` with the `coefficients`
+keyword of [`semidiscretize`](@ref), or pass `jacobian = nothing` to
+[`ode_function`](@ref) and let the solver build it by sparse automatic differentiation
+instead, seeded from [`jacobian_pattern`](@ref). That one is exact: a `ForwardDiff.Dual`
+`u` goes into a state buffer of its own type, read by the forms rebound to it (see the
+`state` keyword of [`semidiscretize`](@ref)).
+
+With `coefficients` it is the exact Jacobian `-(A + ∂A)` at `u`, assembled from the form
+`a + ∂a` of [`jacobian_form`](@ref) after every declared coefficient is set from `u`, so
+`J` must carry [`jacobian_prototype`](@ref)`(sd)`'s pattern. `using ForwardDiff` is needed.
 
 See also [`jacobian_prototype`](@ref).
 """
 function jacobian!(J, sd::Semidiscretization, u, p, t)
+    _sd_check_plain(sd.jacobian_form, u)
     _sync_state!(sd.state, u, t)
     _update_coefficients!(sd.update_coefficients, p, t)
+    return _sd_jacobian!(J, sd.jacobian_form, sd, u, t)
+end
+
+@inline function _sd_jacobian!(J, ::Nothing, sd, u, t)
     A = _refresh_operator!(sd, sd.reassemble, u, t)
     return _negate_into!(J, A)
+end
+
+# `jacobian!` of the form sets the coefficients from `u` and assembles `A + ∂A` into `J`
+# with `A`'s Dirichlet rows; negated in place, where the pattern check always matches.
+@inline function _sd_jacobian!(J, jf::JacobianForm, sd, u, t)
+    jacobian!(J, jf, u)
+    return _negate_into!(J, J)
 end
 
 # Same pattern by construction (`jacobian_prototype` hands the solver a copy of `A`, a CSC
@@ -780,12 +899,16 @@ Return a matrix carrying the sparsity of `∂/∂u (F(t) - A u)`, for a solver t
 Jacobian cache.
 
 This is the pattern of the assembled operator, Dirichlet rows included, which is what the
-system's Jacobian has -- [`jacobian_pattern`](@ref) answers the different question of what a
+system's Jacobian has when the operator does not read `u`. With `coefficients` it is the
+pattern of `a + ∂a` ([`jacobian_form`](@ref)), wider than `A`'s where a coefficient reads
+neighbouring points. [`jacobian_pattern`](@ref) answers the different question of what a
 *Newton residual*'s Jacobian looks like when the form's coefficients depend on the solution.
 
 See also [`jacobian!`](@ref).
 """
-@inline jacobian_prototype(sd::Semidiscretization) = copy(sd.operator_matrix)
+@inline jacobian_prototype(sd::Semidiscretization) = _sd_prototype(sd.jacobian_form, sd)
+@inline _sd_prototype(::Nothing, sd) = copy(sd.operator_matrix)
+@inline _sd_prototype(jf::JacobianForm, sd) = jacobian_prototype(jf)
 
 # The storage `_ode_function` hands OrdinaryDiffEq for the Jacobian prototype and the mass
 # matrix. Identity here; the `SparseMatricesCSR` extension converts a `SparseMatrixCSR` to

@@ -182,6 +182,46 @@ norm₁ₕ(uₕ_newton .- uexact), norm₁ₕ(uₙ .- uexact)
 @test 1.0e-6 < norm₁ₕ(uₕ_newton .- uexact) < 1.0e-2                                          #src
 @test maximum(abs, parent(uₕ_newton) .- parent(uₙ)) < 1e-8                                  #src
 
+# ## The assembled Jacobian
+#
+# [`Bramble.jacobian_form`](@ref) builds the same Jacobian from the form's AST, as one form
+# `a + ∂a` assembled once per state. The state enters through one coefficient, `αx`, declared
+# with the operator it is computed from, `U -> Mₕ(U)`, and the scalar function `α`, so that
+# `αx == α.(Mₕ(u))` at every state:
+
+αx = element(Wₕ)
+a_asm = form(Wₕ, Wₕ, (U, V) -> inner₊(αx * ∇ₕ(U), ∇ₕ(V)))
+jf = Bramble.jacobian_form(a_asm, αx => (U -> Mₕ(U), α); dirichlet = :boundary)
+J_assembled = Bramble.jacobian_prototype(jf)
+Bramble.jacobian!(J_assembled, jf, u)
+J_fd = DifferentiationInterface.jacobian(residual, prep, sparse_ad, u)
+maximum(abs, J_assembled - J_fd) / maximum(abs, J_fd)
+
+# No `Dual` passes through assembly, and the sparse AD above needs one sweep per colour. Prefer
+# the assembled Jacobian when assembly must stay in `Float64`, or when the solver spends most of
+# each step building the Jacobian. This page does not time either route.
+#
+# Newton with the assembled Jacobian reaches the same solution in the same number of iterations:
+
+u_asm = zeros(ndofs(Wₕ))
+J_newton = Bramble.jacobian_prototype(jf)
+asm_residuals = Float64[]
+for it in 1:20
+    r = residual(u_asm)
+    push!(asm_residuals, sqrt(sum(abs2, r)))
+    asm_residuals[end] < 1e-10 && break
+    Bramble.jacobian!(J_newton, jf, u_asm)
+    u_asm .-= J_newton \ r
+end
+length(asm_residuals), maximum(abs, u_asm .- u)
+
+# The assembled Jacobian must agree with the sparse-FD one to rounding, and Newton with it     #src
+# must take the same number of iterations to the same solution. The error is relative to the  #src
+# largest entry of `J_fd`.                                                                    #src
+@test maximum(abs, J_assembled - J_fd) / maximum(abs, J_fd) < 1e-12                          #src
+@test length(asm_residuals) == length(newton_residuals)                                       #src
+@test maximum(abs, u_asm .- u) < 1e-10                                                        #src
+
 # ## Closing the gap: caching the diffusion matrix by element type
 #
 # `diffusion_matrix` rebuilds its pattern on every call because `T` differs between a plain

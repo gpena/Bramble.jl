@@ -29,9 +29,12 @@ system.
 
   - `jacobian`: `jac(J, u, p)` if `residual` is in-place, or `J = jac(u, p)` if it is not --
     the two conventions cannot be mixed, the same requirement `NonlinearFunction` itself
-    enforces. Default `nothing`: the solver differentiates `residual` itself.
+    enforces. Or a [`jacobian_form`](@ref) `jf`, whose exact Jacobian `jacobian!(J, jf, u)`
+    is then used in that same convention, with `jac_prototype` defaulting to
+    `jacobian_prototype(jf)`. Default `nothing`: the solver differentiates `residual` itself.
   - `jac_prototype`: sparsity for the solver's Jacobian cache, e.g. built from
-    [`jacobian_pattern`](@ref). Default `nothing` (dense).
+    [`jacobian_pattern`](@ref). Default `nothing` (dense), or `jacobian_prototype(jf)` when
+    `jacobian` is a `jacobian_form`.
   - Every other keyword forwards to `NonlinearProblem`.
 
 Requires [SciMLBase.jl](https://github.com/SciML/SciMLBase.jl); call `using SciMLBase` (or
