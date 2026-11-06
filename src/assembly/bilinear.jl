@@ -789,7 +789,22 @@ precompile(_type_tap_scalar, (Any, Any))
     convert(S, op.scalar), _tap_scales(op.inner_op, E))
 @generated _tap_scalar(::T, ::Type{E}) where {T, E} = _type_tap_scalar(T, E)
 @inline _widened(op::OperatorAdd, ::Type{E}) where {E} = _widen_summands(
-    op, _value_type(op, E), E)
+    op, _joined_value_type(op, E), E)
+# `_value_type` is read off the types in the world Bramble was loaded in, which has no `*`
+# for a number type defined by a package loaded later (a `ForwardDiff.Dual`): it took
+# `β * u + ∂ₙ(u)` to `Float64` and `convert` then failed (gpena/Bramble.jl#1127). An
+# outermost scalar whose type `promote_type`, read at run time, does not take to that type
+# widens it, so the scale keeps its value; `π` beside an `Int` on a Float32 mesh fits
+# `Float32` and keeps it.
+@inline _joined_value_type(op, ::Type{E}) where {E} = _join_scalars(
+    _value_type(op, E), op)
+@inline _join_scalars(::Type{S}, op::OperatorAdd) where {S} = _join_scalars(
+    _join_scalars(S, op.left_op), op.right_op)
+@inline _join_scalars(::Type{S}, op::OperatorScale) where {S} = _join_scalar(
+    S, promote_type(_scalar_type(op.scalar), S))
+@inline _join_scalars(::Type{S}, ::Any) where {S} = S
+@inline _join_scalar(::Type{S}, ::Type{S}) where {S} = S
+@inline _join_scalar(::Type, ::Type{P}) where {P} = P
 @inline _widen_summands(op::OperatorAdd, ::Type{S}, ::Type{E}) where {S, E} = OperatorAdd(
     _widen_summands(op.left_op, S, E), _widen_summands(op.right_op, S, E))
 @inline function _widen_summands(op, ::Type{S}, ::Type{E}) where {S, E}
@@ -815,7 +830,7 @@ function _widened_product(op::BilinearProduct{D, W}, ::Type{E}) where {D, W, E}
     r = _bits_uniform_scales(op.right_op, E)
     return BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
 end
-_bits_uniform_scales(op, ::Type{E}) where {E} = isbitstype(_value_type(op, E)) ?
+_bits_uniform_scales(op, ::Type{E}) where {E} = isbitstype(_joined_value_type(op, E)) ?
                                                 _uniform_scales(op, E) : op
 # Scales still of several types after that would keep the walk boxing whatever the split
 # does, and a split then only adds walks (45648 B against 39680 B on a Float32 mesh when it

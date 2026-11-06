@@ -841,7 +841,7 @@ function constrained(Vₕ::_GhostCompositeSpace, relations)
     rels = _composite_relations(map(first, comps), relations(trial_function(P)))
     E, d = _composite_closure(P, comps, _ghost_relations(rels), _dirichlet_relations(rels))
     T, be = eltype(P), backend(P)
-    Ec = _closure_matrix(be, T, E)
+    Ec = _closure_matrix(be, _closure_data_eltype(T, eltype(E)), E)
     # `d` keeps the type of the relations' data: a `Dual` or complex value widens it.
     D = _closure_data(be, _closure_data_eltype(T, eltype(d)), d)
     return ConstrainedCompositeSpace(Vₕ, P, Ec, D,

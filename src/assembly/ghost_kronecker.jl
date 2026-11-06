@@ -202,14 +202,17 @@ function _ghost_kron_closures(Wₕ::GhostGridSpace{D, T}) where {D, T}
     loc = ntuple(d -> Dict(p => j for (j, p) in enumerate(kept[d])), Val(D))
     dof = LinearIndices(m)
     all(((P, j),) -> j == dof[ntuple(d -> loc[d][P[d]], Val(D))...], units) || refuse()
+    # The 1D closures hold `E`'s entries, of the closure's type: a `Dual` Robin coefficient
+    # makes them `Dual` on a `Float64` space (`_closure_matrix`).
+    S = eltype(E)
     Es = ntuple(Val(D)) do d
         rows = Int[]
         cols = Int[]
-        vals = T[]
+        vals = S[]
         for (j, p) in enumerate(kept[d])
             push!(rows, p)
             push!(cols, j)
-            push!(vals, one(T))
+            push!(vals, one(S))
         end
         for g in 1:pd[d]
             g in phys.indices[d] && continue
