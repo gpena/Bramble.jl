@@ -1305,6 +1305,25 @@ end
     @test sd.jacobian_form !== nothing
 end
 
+# The refill reads `u` with the first leaf's indices, so on a composite space a coefficient
+# declared on component 2 would be set from component 1: refused at construction.
+@testset "coefficients: composite refused (#1143)" begin
+    W = gridspace(_graded_mesh((9, 12)))
+    Vc = W^Val(2)
+    c = Bramble.element(W)
+    a = form(Vc, Vc, (P, Q) -> inner₊(∇ₕ(P(1)), ∇ₕ(Q(1))) + innerₕ(c * P(1), Q(1)) +
+                               inner₊(∇ₕ(P(2)), ∇ₕ(Q(2))))
+    l = form(Vc, Q -> innerₕ(1.0, Q(1)) + innerₕ(1.0, Q(2)))
+    err = try
+        semidiscretize(a, l; coefficients = c => (U -> U(2), _cf_α))
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("scalar grid spaces", sprint(showerror, err))
+end
+
 @testset "coefficients: semidiscretize_rhs (#1143)" begin
     W = gridspace(_graded_mesh((7, 8)))
     n = ndofs(W)

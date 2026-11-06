@@ -154,7 +154,7 @@ returned system solves `A u_h = F`.
 - `update_coefficients!`: called with the current `t` before each assembly, for coefficients that vary in time -- `t -> Rₕ!(fₕ, x -> f(x, t))` for a time-dependent source, or `t -> (α[] = t)` for a scalar `Ref` (default `nothing`). A two-argument `(t, p) -> ...` also reaches the residual's own `p`, the same way a three-argument Dirichlet condition does.
 - `hook_reads_state`: whether `update_coefficients!` may read the `state` (default `true`). With `state`, a `ForwardDiff.Dual` `u` reaches the forms through a buffer of its own type and never the user's state, so a hook reading the state would lose its dependence on `u` from the derivative, and the pair is refused with an `ArgumentError`. Give `false` to assert that the hook reads no state (a source depending on `t` alone) and the `Dual` Jacobian is exact; the assertion is not checked, and a hook that does read the state then gets a Jacobian missing that part.
 - `reassemble`: refill `A` at every step, for an operator whose coefficients change with `t` or `u` (default `false`).
-- `coefficients`: the coefficients of `a` that depend on `u`, declared as [`jacobian_form`](@ref) takes them, `(cᵢ => (U -> Lᵢ(U), fᵢ), ...)` with `cᵢ` the grid function `a` reads (default `nothing`). Before each assembly of the residual every `cᵢ` is set to `fᵢ.(Lᵢ(u))` from `u` itself, after `update_coefficients!` and the `state`, and `A` is reassembled (`reassemble` is then `true` whatever it was given). [`jacobian!`](@ref) then writes the exact Jacobian `-(A + ∂A)` at `u` and [`jacobian_prototype`](@ref) carries its pattern, wider than `A`'s where a coefficient reads neighbouring points (`using ForwardDiff` differentiates each `fᵢ`). A source `l` or a `mass` reading a declared coefficient is refused with an `ArgumentError`, since `jacobian!` would miss its derivative. A `u` of a non-plain element type (a `ForwardDiff.Dual`) is refused by the residual, [`semidiscretize_rhs`](@ref) and [`jacobian!`](@ref) alike, with or without `state`: automatic differentiation through the coefficients is not supported, and the exact Jacobian is `jacobian!`'s. Scalar grid spaces only; the `build` method and ghost spaces do not take it.
+- `coefficients`: the coefficients of `a` that depend on `u`, declared as [`jacobian_form`](@ref) takes them, `(cᵢ => (U -> Lᵢ(U), fᵢ), ...)` with `cᵢ` the grid function `a` reads (default `nothing`). Before each assembly of the residual every `cᵢ` is set to `fᵢ.(Lᵢ(u))` from `u` itself, after `update_coefficients!` and the `state`, and `A` is reassembled (`reassemble` is then `true` whatever it was given). [`jacobian!`](@ref) then writes the exact Jacobian `-(A + ∂A)` at `u` and [`jacobian_prototype`](@ref) carries its pattern, wider than `A`'s where a coefficient reads neighbouring points (`using ForwardDiff` differentiates each `fᵢ`). A source `l` or a `mass` reading a declared coefficient is refused with an `ArgumentError`, since `jacobian!` would miss its derivative. A `u` of a non-plain element type (a `ForwardDiff.Dual`) is refused by the residual, [`semidiscretize_rhs`](@ref) and [`jacobian!`](@ref) alike, with or without `state`: automatic differentiation through the coefficients is not supported, and the exact Jacobian is `jacobian!`'s. Scalar grid spaces only: `a` on a composite space is refused with an `ArgumentError`, and the `build` method and ghost spaces do not take it.
 
 Time and parameter dependence of the Dirichlet values is detected by arity, exactly as
 [`dirichlet_constraints`](@ref) validates it: conditions accepting `(x, t, p)` are evaluated
@@ -248,6 +248,14 @@ function _sd_jacobian_form(a, c::Pair, labels, l, mass)
     return _sd_jacobian_form(a, (c,), labels, l, mass)
 end
 function _sd_jacobian_form(a, c::Tuple, labels, l, mass)
+    # The refill reads `u` with the first leaf's indices: on a composite space it would set
+    # every coefficient from component 1, whatever its dependency names.
+    trial_space(a) isa ScalarGridSpace || throw(
+        ArgumentError(
+        "semidiscretize: `coefficients` is taken on scalar grid spaces only, and `a` is " *
+        "defined on a $(nameof(typeof(trial_space(a)))).",
+    ),
+    )
     jf = jacobian_form(a, c...; dirichlet = labels === nothing ? () : labels)
     for k in eachindex(c)
         declared = ((; values = c[k].first),)
