@@ -173,20 +173,6 @@ makedocs(;
     doctest = false
 )
 
-# MaterialDocs 0.2.0 writes the search index with its own JSON escaper, which escapes only
-# `\`, `"`, `\n`, `\r` and `\t`. The coloured `show` output of some `@example` blocks puts raw
-# ANSI escape characters into the index, the browser's `JSON.parse` rejects the file, and the
-# search box answers "No results" to every query. The colour codes carry nothing a search
-# needs, so they are dropped, and any control character left is escaped as JSON requires.
-let path = joinpath(@__DIR__, "build", "assets", "search-index.json")
-    if isfile(path)
-        index = replace(read(path, String), r"\e\[[0-9;]*m" => "")
-        index = replace(index,
-            r"[\x00-\x1f]" => c -> "\\u" * string(Int(c[1]); base = 16, pad = 4))
-        write(path, index)
-    end
-end
-
 # MaterialDocs 0.2.0 writes a Markdown image's `src` as Documenter resolves it, relative to
 # the root of the build (`assets/x.svg`), and does not prefix the way back up from the page.
 # The image then loads only on a top-level page: on `tutorials/geometry/index.html` the
