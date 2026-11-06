@@ -209,6 +209,12 @@ function _dterm(op::GridFunctionScale{D}, w::_JFWalk) where {D}
     L isa LazyOp{D} ||
         _throw_jf_dependency(k, "must return one operator, got a $(typeof(L))")
     _has_trial_interp(L) && _throw_jf_dependency(k, "reads through πₕ, not supported here")
+    # `L` is applied to `u` alone: a declared coefficient inside it (itself included) would
+    # be read stale by the refill, and its own derivative lost from the chain rule.
+    j = findfirst(x -> _holds_coefficient(L, (x,)), w.coefficients)
+    j === nothing || _throw_jf_dependency(k,
+        "reads declared coefficient $j; a dependency may read only the state and " *
+        "undeclared (constant) grid functions")
     first_read = !w.reached[k]
     w.reached[k] = true
     β = element(w.space, zero(eltype(backend(w.space))))
@@ -277,7 +283,9 @@ averages, jumps, shifts, region restrictions, the trial side of an inner product
 around the derivative of its operand. A declared coefficient under a node with no such
 rule, on the test side of an inner product, or in any field a rule does not read, throws
 [`MissingJacobianRule`](@ref) naming the node. A declared coefficient the form never reads
-throws an `ArgumentError`. Scalar grid spaces only.
+throws an `ArgumentError`, and so does a dependency `L` that reads a declared coefficient
+(itself included): `L` may read only the state and constant grid functions. Scalar grid
+spaces only.
 """
 function jacobian_form(
         a::BilinearForm{D}, coefficients::Pair...; dirichlet = nothing) where {D}

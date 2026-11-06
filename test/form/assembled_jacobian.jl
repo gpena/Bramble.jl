@@ -6,8 +6,8 @@ using ForwardDiff: ForwardDiff
 using Polyester: Polyester
 using Random: Random
 using SparseArrays: nnz
-using Bramble: D₊ₓ, D₋ₓ, Mₓ!, Mᵧ!, jumpₓ, restrict_to, LazyOp, TrialFunction, OperatorAdd,
-               OperatorScale, GridFunctionScale, BilinearProduct, ShiftNode, JumpNode,
+using Bramble: D₊ₓ, D₊ᵧ, D₋ₓ, Mₓ!, Mᵧ!, jumpₓ, restrict_to, LazyOp, TrialFunction,
+               OperatorAdd, OperatorScale, GridFunctionScale, BilinearProduct, ShiftNode, JumpNode,
                RegionRestriction, CenteredAverage, ForwardDifference, BackwardAverage,
                jacobian_form, jacobian_prototype, jacobian!, MissingJacobianRule,
                allocate_system_matrix, CpuSerial, CpuThreaded, CpuPolyester
@@ -141,13 +141,56 @@ const _RULES = (
     end
 end
 
+# Two coefficients, one inside the other's operand: the outer β reads the inner one at
+# neighbouring points. A forward read (`D₊`) reaches points a one-pass refill has not yet
+# written, in x within a band and in y across band edges, so these pin the two sweeps.
+const _NESTED = (
+    (W, c, d) -> form(W, W, (U, V) -> inner₊(c * D₋ₓ(d * U), ∇ₕ(V)[1]) + innerₕ(U, V)),
+    (W, c, d) -> form(W, W, (U, V) -> innerₕ(c * D₊ₓ(d * U), V) + innerₕ(U, V)),
+    (W, c, d) -> form(W, W, (U, V) -> innerₕ(c * D₊ᵧ(d * U), V) + innerₕ(U, V))
+)
+
 @testset "jacobian_form: coefficient nested" begin
-    # Two coefficients, one inside the other's operand: the outer β reads the inner one.
+    for policy in (CpuSerial(), CpuThreaded(), CpuPolyester()), mk in _NESTED
+
+        W = _space(policy)
+        r = _errors(W, (c, d) -> mk(W, c, d), (_r, _α))
+        @test r.jac < 1e-12
+        @test r.picard > 1e-3
+    end
+end
+
+@testset "jacobian_form: dependency reads" begin
     W = _space()
-    mk(c, d) = form(W, W, (U, V) -> inner₊(c * D₋ₓ(d * U), ∇ₕ(V)[1]) + innerₕ(U, V))
-    r = _errors(W, mk, (_r, _α))
-    @test r.jac < 1e-12
-    @test r.picard > 1e-3
+    c, d, e = element(W, 0.0), element(W, 0.0), element(W, 0.0)
+    e .= 1 .+ 0.5 .* sin.(1:ndofs(W))
+    mk(c, d) = form(W, W, (U, V) -> innerₕ(c * U, V) + innerₕ(d * U, V) + innerₕ(U, V))
+    # A declared coefficient inside a dependency, another one or itself, is refused.
+    for (Lc, j) in ((U -> d * U, 2), (U -> c * U, 1))
+        err = try
+            jacobian_form(mk(c, d), c => (Lc, _r), d => (U -> U, _α))
+        catch ex
+            ex
+        end
+        @test err isa ArgumentError
+        @test occursin("reads declared coefficient $j", sprint(showerror, err))
+    end
+    # An undeclared grid function in a dependency is a constant: accepted, and exact.
+    u = _state(W)
+    function R(x)
+        T = eltype(x)
+        cx, dx = element(W, T), element(W, T)
+        cx .= _r.(e .* x)
+        dx .= _α.(x)
+        return assemble(mk(cx, dx)) * x
+    end
+    Jfd = ForwardDiff.jacobian(R, u)
+    a = mk(c, d)
+    jf = jacobian_form(a, c => (U -> e * U, _r), d => (U -> U, _α))
+    J = jacobian_prototype(jf)
+    jacobian!(J, jf, u)
+    @test _relerr(J, Jfd) < 1e-12
+    @test _relerr(assemble(a), Jfd) > 1e-3
 end
 
 @testset "jacobian_form: β refill threaded" begin
