@@ -19,6 +19,9 @@
 # `MissingJacobianRule`, naming it. A subtree holding no registered coefficient contributes
 # nothing; `_holds_coefficient` decides that by walking every field of every node and of
 # every container below it, so a coefficient cannot hide in a field a rule does not read.
+#
+# On a composite space `T` and `L` each name a component (`_jf_leaves`), read their own
+# slices of `u`, and `β ⊙ L(δu)` lands in `L`'s column block, routed by `assemble`.
 
 """
     MissingJacobianRule(node::Symbol, reason::String)
@@ -232,18 +235,46 @@ function _dterm(op::GridFunctionScale{D}, w::_JFWalk) where {D}
         "undeclared (constant) grid functions")
     first_read = !w.reached[k]
     w.reached[k] = true
-    β = element(w.space, zero(eltype(backend(w.space))))
-    T, mT = _bind_walk(op.inner_op, w.space)
-    Lb, mL = _bind_walk(L, w.space)
-    push!(w.refills, _JFRefill(β, c.values, Lb, mL, T, mT, c.f, first_read))
+    sT, oT, sL, oL = _jf_leaves(w.space, op.inner_op, L, k)
+    β = element(sT, zero(eltype(backend(sT))))
+    T, mT = _bind_walk(op.inner_op, sT)
+    Lb, mL = _bind_walk(L, sL)
+    push!(w.refills, _JFRefill(β, c.values, Lb, mL, T, mT, c.f, first_read, sL, oL, sT, oT))
     return _jf_add(own, β * L)
+end
+
+# The leaf each of `T` and `L` reads and its offset into `u`: `(sT, oT, sL, oL)`. A scalar
+# space is both, at no offset (`nothing`, so its refill reads `u` itself). On a composite
+# space each names its component, as `jacobian_pattern` resolves a dependency
+# (`_dependency_component`); β lives on `T`'s leaf, the grid every block it scales walks,
+# and the term `β * L` lands in `L`'s column block, `assemble` routing it.
+_jf_leaves(W::ScalarGridSpace, T, L, k::Int) = (W, nothing, W, nothing)
+function _jf_leaves(W::CompositeGridSpace, T, L, k::Int)
+    leaves = leaf_spaces_offsets(W)
+    tc = trial_component_or_nothing(T)
+    tc === nothing && throw(
+        ArgumentError(
+        "jacobian_form: coefficient $k scales a trial function naming no component of " *
+        "the composite space, so its derivative differs in every diagonal block; scale " *
+        "each component, `c * U(i)`.",
+    ),
+    )
+    target = trial_component_or_nothing(L)
+    target === nothing && _throw_jf_dependency(k,
+        "names no component of the composite space; name one, as in `U -> U(2)`")
+    sT, oT = _dependency_component(leaves, tc)
+    sL, oL = _dependency_component(leaves, target)
+    _same_mesh_or_throw(target, sL, mesh(sT))
+    # A composite space's leaves are scalar: a ghost leaf throws in `leaf_spaces_offsets`.
+    return sT::ScalarGridSpace, oT, sL::ScalarGridSpace, oL
 end
 
 # --- The refill ------------------------------------------------------------------------ #
 
 # One coefficient read: `β = f′(L u) ⊙ T(u)` into `beta`, and, at the coefficient's first
-# read, `values = f(L u)`. `L` and `T` are bound to the mesh's marker ids (`_bind_walk`).
-struct _JFRefill{B, C, L, ML, T, MT, F}
+# read, `values = f(L u)`. `L` and `T` are bound to the mesh's marker ids (`_bind_walk`)
+# and read `u` on their leaves, `space_L`/`space_T`, at `offset_L`/`offset_T` (`_jf_leaves`).
+struct _JFRefill{B, C, L, ML, T, MT, F, SL, OL, ST, OT}
     beta::B
     values::C
     L::L
@@ -252,6 +283,10 @@ struct _JFRefill{B, C, L, ML, T, MT, F}
     markers_T::MT
     f::F
     writes_values::Bool
+    space_L::SL
+    offset_L::OL
+    space_T::ST
+    offset_T::OT
 end
 
 # What `jacobian_form` returns: the form `a + ∂a`, its refills and its Dirichlet labels.
@@ -302,14 +337,28 @@ trial side. A declared coefficient under a node with no such rule, under an oper
 test side, or in any field a rule does not read, throws [`MissingJacobianRule`](@ref)
 naming the node. A declared coefficient the form never reads throws an `ArgumentError`, and
 so does a dependency `L` that reads a declared coefficient (itself included): `L` may read
-only the state and constant grid functions. Scalar grid spaces only.
+only the state and constant grid functions. Composite spaces are routed per block.
+
+The trial and test spaces are both scalar grid spaces or both composite ones. On a
+composite space each declared coefficient scales one component, `c * U(i)`, and its
+dependency names the component it reads, `U -> L(U(j))`; the derivative term of
+`c * U(i)` in the equation of component `k` then lands in block `(k, j)`, so a coefficient
+reading another component couples the two. A coefficient scaling a trial function with no
+component, or a dependency naming none, throws an `ArgumentError`, and so does a dependency
+naming a component on another mesh.
 """
 function jacobian_form(
         a::BilinearForm{D}, coefficients::Pair...; dirichlet = nothing) where {D}
     W = a.trial_space
-    (_is_block_pair(W, a.test_space) || !(W isa ScalarGridSpace)) && throw(
-        ArgumentError("jacobian_form: scalar grid spaces only, got a composite space."),
-    )
+    scalar = W isa ScalarGridSpace && !_is_block_pair(W, a.test_space)
+    scalar || (W isa CompositeGridSpace && a.test_space isa CompositeGridSpace) ||
+        throw(
+            ArgumentError(
+            "jacobian_form: the trial and test spaces must both be scalar grid spaces or " *
+            "both composite ones, got a $(nameof(typeof(W))) and a " *
+            "$(nameof(typeof(a.test_space))).",
+        ),
+        )
     coeffs = ntuple(k -> _jf_coefficient(k, coefficients[k]), length(coefficients))
     for k in eachindex(coeffs), j in 1:(k - 1)
 
@@ -343,30 +392,35 @@ function jacobian!(J, jf::JacobianForm, u::AbstractVector)
         "jacobian!: u has length $(length(u)), the space has $(ndofs(W)) dofs.",
     ),
     )
-    Ωₕ = mesh(W)
-    policy = execution_policy(Ωₕ)
-    dims = size(indices(Ωₕ))
+    policy = execution_policy(mesh(W))
     # Every coefficient first, then every β: a β reads the coefficients its `T` holds at
     # neighbouring points, so they must all be written before any β is.
-    _jf_values!(jf.refills, policy, W, dims, u)
-    _jf_betas!(jf.refills, policy, W, dims, u)
+    _jf_values!(jf.refills, policy, u)
+    _jf_betas!(jf.refills, policy, u)
     assemble!(J, jf.form; dirichlet = jf.dirichlet)
     return J
 end
 
-_jf_values!(::Tuple{}, policy, W, dims, u) = nothing
-function _jf_values!(refills::Tuple, policy, W, dims, u)
+# The slice of `u` a leaf at `offset` holds: `u` itself on a scalar space.
+@inline _jf_slice(u, ::Nothing, sp) = u
+@inline _jf_slice(u, offset::Int, sp) = view(u, (offset + 1):(offset + ndofs(sp)))
+
+_jf_values!(::Tuple{}, policy, u) = nothing
+function _jf_values!(refills::Tuple, policy, u)
     r = first(refills)
+    W = r.space_L
     _run_bands!(policy, _jf_value_band!, r.beta, r.values, r.L, r.markers_L, r.f,
-        r.writes_values, W, dims, u)
-    return _jf_values!(Base.tail(refills), policy, W, dims, u)
+        r.writes_values, W, size(indices(mesh(W))), _jf_slice(u, r.offset_L, W))
+    return _jf_values!(Base.tail(refills), policy, u)
 end
 
-_jf_betas!(::Tuple{}, policy, W, dims, u) = nothing
-function _jf_betas!(refills::Tuple, policy, W, dims, u)
+_jf_betas!(::Tuple{}, policy, u) = nothing
+function _jf_betas!(refills::Tuple, policy, u)
     r = first(refills)
-    _run_bands!(policy, _jf_beta_band!, r.beta, r.T, r.markers_T, W, dims, u)
-    return _jf_betas!(Base.tail(refills), policy, W, dims, u)
+    W = r.space_T
+    _run_bands!(policy, _jf_beta_band!, r.beta, r.T, r.markers_T, W,
+        size(indices(mesh(W))), _jf_slice(u, r.offset_T, W))
+    return _jf_betas!(Base.tail(refills), policy, u)
 end
 
 # Σ weight·u over a point's stencil. An entry off the grid reads 0, as assembly drops it.

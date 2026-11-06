@@ -83,6 +83,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("jacobian_pattern_blocks.jl")
         # The exact Jacobian assembled from the form's AST, `a + ∂a` (#1141).
         include("assembled_jacobian.jl")
+        # The same on composite spaces, routed per block (#1144).
+        include("assembled_jacobian_blocks.jl")
         include("type_cached_assemble.jl")
         include("semidiscrete.jl")
         # v3.3.0 plan (memory scaling): the dependency-free Kronecker operator (S5.1). It
