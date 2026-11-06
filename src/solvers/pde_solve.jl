@@ -13,8 +13,8 @@
 #
 # Through `pde_solve`, Enzyme reverse has the adjoint rule below, and ForwardDiff a solve of a
 # `Dual` matrix or load over the `Float64` factor of its values (`_solve_promoted`, added by
-# `BrambleForwardDiffExt`). Enzyme forward throws `IllegalTypeAnalysisException`
-# (`docs/notes/internals/ad_coverage.md`).
+# `BrambleForwardDiffExt`). Enzyme forward throws `EnzymeNoDerivativeError` at the UMFPACK
+# call (`docs/notes/internals/ad_coverage.md`).
 #
 # `pde_solve` itself needs no weak dependency: without `ChainRulesCore` it is the same solve,
 # just not differentiable. `BrambleChainRulesExt` supplies the
