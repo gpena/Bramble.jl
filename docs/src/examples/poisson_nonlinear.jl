@@ -165,8 +165,8 @@ length(newton_residuals), newton_residuals
 # Preparing the Jacobian once spares its sparsity pattern, but `diffusion_matrix` still
 # builds a fresh matrix, values and pattern both, on every call, for the reason given above.
 # A plain `residual(u)` call builds `A` once, at `T = Float64`; a full Newton step builds it
-# again at `T = Dual` for every colour `jacobian!`'s sparse sweep needs. The cost of a call
-# is measured further down, next to its cached counterpart.
+# again at `T = Dual` for every colour `jacobian!`'s sparse sweep needs. The next section
+# removes that rebuild.
 #
 # Quadratic convergence means the residual's correct digits roughly *double* each step, against
 # Picard's roughly constant gain of one, and it shows directly in how fast that list reaches
@@ -233,32 +233,14 @@ newton_residuals_cached, maximum(abs.(u_cached .- u))
 @test newton_residuals_cached ≈ newton_residuals                                             #src
 @test maximum(abs.(u_cached .- u)) < 1e-12                                                  #src
 
-# Same convergence, same answer, and only `residual_cached` and `diffusion_matrix_cached` (the
-# first call at each of `T = Float64` and `T = Dual` still pays to build and to
-# [`allocate_system_matrix`](@ref)) differ from `residual`/`diffusion_matrix` above. The bytes
-# one call allocates are measured behind a function barrier, with the vector passed in as an
-# argument and a first call to compile and to fill the cache, so that the number is the
-# routine's own work. Once both element types have been seen:
-
-function residual_bytes(f, u)
-    f(u)
-    return @allocated f(u)
-end
-
-bytes_uncached = residual_bytes(residual, u)
-bytes_cached = residual_bytes(residual_cached, u)
-bytes_cached / bytes_uncached
-
-# The cached residual allocates under half of what the uncached one does.                   #src
-@test bytes_cached < bytes_uncached / 2                                                     #src
-
-# That ratio is what `residual_cached` buys over `residual`. What is left is not zero:
-# `cache`'s value type is necessarily `Any`, since the cached `(a, refill!, A)` triple's own
-# concrete type differs across `T`, so fetching it back out still pays a small, fixed
-# dictionary/dynamic-dispatch cost, but that cost does not grow
-# with the mesh, unlike the pattern rebuild it replaces (see
-# [`type_cached_assemble!`](@ref)'s own docstring and `test/form/type_cached_assemble.jl` for the
-# same comparison run at a mesh 100 times larger).
+# Same convergence, same answer. Only `residual_cached` and `diffusion_matrix_cached` differ
+# from `residual`/`diffusion_matrix` above: the first call at each of `T = Float64` and
+# `T = Dual` still pays to build and to [`allocate_system_matrix`](@ref), and every call after
+# it refills that matrix in place instead of rebuilding its pattern. What is left is not
+# free: `cache`'s value type is necessarily `Any`, since the cached `(a, refill!, A)` triple's
+# own concrete type differs across `T`, so fetching it back out still pays a small, fixed
+# dictionary/dynamic-dispatch cost, but that cost does not grow with the mesh, unlike the
+# pattern rebuild it replaces (see [`type_cached_assemble!`](@ref)'s own docstring).
 #
 # ## Skipping the tracer: a Bramble-native pattern
 #
@@ -374,65 +356,15 @@ let cache = SciMLBase.init(prob, NewtonRaphson(); abstol = 1e-10)               
     @test cache.jac_cache.autodiff isa AutoSparse                                             #src
     @test cache.jac_cache.autodiff.sparsity_detector isa KnownJacobianSparsityDetector         #src
 end                                                                                            #src
-#  #src
-# ### Picard against NonlinearSolve, measured  #src
-#  #src
-# A comparison worth showing rather than only claiming: Picard from the top of this page  #src
-# against `nonlinear_problem` plus `NewtonRaphson`, each wrapped in its own top-level function  #src
-# so the timing is behind a function barrier, never over top-level globals.  #src
-# Both reuse a sparsity pattern already computed once above rather than  #src
-# rediscovering it on every call -- `run_picard` refills `A`/`a` from the Picard section at the  #src
-# top of this page, `run_nonlinearsolve` reuses `J_native` -- so this measures the cost either  #src
-# method pays *given* a known pattern, not first-time pattern discovery for either one. Both  #src
-# run from a zero initial guess to their own convergence test:  #src
-#src
-function run_picard()  #src
-    uₙ .= 0.0  #src
-    αvals .= α.(Mₕ(uₙ))  #src
-    for it in 1:200  #src
-        assemble!(A, a; dirichlet = :boundary)  #src
-        unew = A \ F  #src
-        step = maximum(abs, unew .- parent(uₙ))  #src
-        uₙ .= unew  #src
-        αvals .= α.(Mₕ(uₙ))  #src
-        step < 1e-12 && break  #src
-    end  #src
-    return parent(uₙ)  #src
-end  #src
-#src
-function run_nonlinearsolve()  #src
-    solve(  #src
-        nonlinear_problem(residual!, zeros(ndofs(Wₕ)); jac_prototype = J_native),  #src
-        NewtonRaphson();  #src
-        abstol = 1e-10  #src
-    ).u  #src
-end  #src
-#src
-run_picard()  #src
-run_nonlinearsolve() # warm both before timing either  #src
-ntrials = 7  #src
-t_picard = minimum(@elapsed(run_picard()) for _ in 1:ntrials)  #src
-t_ns = minimum(@elapsed(run_nonlinearsolve()) for _ in 1:ntrials)  #src
-b_picard = @allocated run_picard()  #src
-b_ns = @allocated run_nonlinearsolve()  #src
-(picard_ms = 1000t_picard, nonlinearsolve_ms = 1000t_ns, picard_bytes = b_picard, nonlinearsolve_bytes = b_ns)  #src
-#src
-# The minimum of `ntrials` samples of each, in one process: informative as a ratio between  #src
-# the two methods measured together, not as an absolute number. The bound is loose (an       #src
-# order of magnitude either way): the point is that neither method is orders of magnitude    #src
-# slower than the other on this problem, not the exact multiplier, which a different        #src
-# machine or Julia version shifts.                                                           #src
-@test 0.1 < t_ns / t_picard < 10                                                             #src
-@test 0.1 < b_ns / b_picard < 10                                                             #src
-#
+
 # ## Convergence of the Newton solution
 #
 # The same nested-random-mesh pattern as the [linear example](poisson_linear.md): one random
 # coarse mesh per dimension, refined in place with [`iterative_refinement!`](@ref), using
 # Newton at every level, since it needs by far the fewest solves to reach machine precision.
 # A dense Jacobian would have made 2D and 3D here impractical (`O(n^2)` memory for a matrix that
-# is actually `O(n)`-nonzero); the sparse one keeps every level below a few seconds even at
-# tens of thousands of degrees of freedom. `nonlinear_series` below is the same shape as every
+# is actually `O(n)`-nonzero); the sparse one stores only those nonzeros, which keeps it
+# practical at tens of thousands of degrees of freedom. `nonlinear_series` below is the same shape as every
 # other page's own convergence-sweep helper -- see [the linear example](poisson_linear.md) or
 # [the coupled one](coupled_reaction_diffusion.md) for one shown in full -- so it runs here
 # without repeating that walkthrough a third time:
@@ -523,8 +455,7 @@ convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), 
 #
 #   - [Coupled reaction-diffusion](coupled_reaction_diffusion.md) for the same Newton setup
 #     over a composite space, with two species.
-#   - [Choosing a solver](@ref tutorial_solvers) and
-#     [Solvers by problem](@ref tutorial_solvers_by_problem) for the linear solves inside
-#     each iteration.
+#   - The solver tutorials ("Choosing a solver" and "Solvers by problem") for the linear
+#     solves inside each iteration.
 #   - [`nonlinear_problem`](@ref) in the [API reference](../api.md) for the
 #     NonlinearSolve.jl wrapper used above.

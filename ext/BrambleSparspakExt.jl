@@ -165,16 +165,6 @@ function _solve_parts(
     return x
 end
 
-# Whether a number of type `S` is linear in its parts, so a solve may treat them apart: a
-# `Complex`, or a ForwardDiff `Dual` (recognised by name and module, ForwardDiff not being a
-# dependency). Any other number is not assumed so, even when its fields have the matrix's
-# type: a double-double's (hi, lo) or an interval's (lo, hi) solved apart gives a wrong
-# answer, so such a load takes the refactor path.
-function _linear_in_parts(S::DataType)
-    S <: Complex && return true
-    return nameof(S) === :Dual && nameof(parentmodule(S)) === :ForwardDiff
-end
-
 # The primitive type every leaf of the bits type `T` has, or `nothing` if they differ.
 function _leaf_type(T::Type)
     isprimitivetype(T) && return T
@@ -201,7 +191,7 @@ end
 
 function _split(S::DataType, T::DataType, R::DataType)
     S === T && return reshape(collect(1:_nleaves(T, R)), :, 1)
-    S <: Number && !_linear_in_parts(S) && return nothing
+    S <: Number && !Bramble._linear_in_parts(S) && return nothing
     isprimitivetype(S) && return nothing
     outer = _split_fields(S, T, R)
     outer === nothing || return outer

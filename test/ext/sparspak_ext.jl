@@ -51,6 +51,13 @@ Base.:*(x::Iv, y::Iv) = Iv(extrema((x.lo * y.lo, x.lo * y.hi, x.hi * y.lo, x.hi 
 Base.:/(x::Iv, y::Iv) = x * Iv(extrema((1 / y.lo, 1 / y.hi))...)
 Base.:(==)(x::Iv, y::Iv) = x.lo == y.lo && x.hi == y.hi
 
+# A look-alike of `ForwardDiff.Dual` with the same fields, named `Dual` but not defined
+# by ForwardDiff. It is not linear in its parts, so a load of it takes the refactor path.
+struct Dual{T, V, N} <: Real
+    value::V
+    partials::NTuple{N, V}
+end
+
 @testset "Sparspak extension" begin
     @testset "1D/2D/3D Poisson" begin
         poisson_solve_contract(;
@@ -103,12 +110,14 @@ Base.:(==)(x::Iv, y::Iv) = x.lo == y.lo && x.hi == y.hi
         u_sp32 = sparspak_solve(A32, F32)
         @test isapprox(u_sp32, u_ref32; atol = 1.0f-3)
 
-        # ForwardDiff.Dual: Sparspak's factorization is generic over the matrix element
+        # ForwardDiff.Dual. Sparspak's factorization is generic over the matrix element
         # type (`sparspaklu(m::SparseMatrixCSC{FT,IT}; ...) where {FT,IT}`), so a matrix
         # assembled from a `Dual`-valued coefficient factors and solves directly, which
         # SuiteSparse/MUMPS cannot do (both require `Float64`/`ComplexF64` matrix entries).
-        # The load stays real: the extension promotes it to the matrix's element type
-        # before Sparspak's triangular solve, which takes no other.
+        # `pde_solve` does not factor that `Dual` matrix: it factors the `Float64` values
+        # and solves each partial against them (test/ext/forwarddiff_ext.jl). The load
+        # stays real: `sparspak_factorize` and `sparspak_solve` promote it to the matrix's
+        # element type before Sparspak's triangular solve, which takes no other.
         function g(θ)
             aθ = form(Wₕ, Wₕ, (u, v) -> (1.0 + θ) * inner₊(∇ₕ(u), ∇ₕ(v)))
             Aθ = assemble(aθ; dirichlet = ZERO_BC)
@@ -119,8 +128,9 @@ Base.:(==)(x::Iv, y::Iv) = x.lo == y.lo && x.hi == y.hi
         @test isapprox(d, _fd(g, 1.0); atol = 1.0e-6, rtol = 1.0e-6)
     end
 
-    # A real load against a `Dual` matrix: `pde_solve`, `sparspak_solve` and `\` on the
-    # factorization all promote the load, and the derivative matches the dense solve's.
+    # A real load against a `Dual` matrix: `pde_solve` (which factors the values of the
+    # matrix, see test/ext/forwarddiff_ext.jl), `sparspak_solve` and `\` on the factorization
+    # all promote the load, and the derivative matches the dense solve's.
     @testset "Dual matrix, real load" begin
         b = [1.0, 1.0]
         Aθ(θ) = sparse([2.0+θ 0.5; 0.5 1.0])
@@ -218,6 +228,8 @@ Base.:(==)(x::Iv, y::Iv) = x.lo == y.lo && x.hi == y.hi
         @test parts(D(Iv, 1), D(Float64, 1)) === nothing
         @test parts(ComplexF64, Float32) === nothing
         @test parts(D(Float64, 1), E(Float64, 1)) === nothing
+        @test parts(Dual{Nothing, Float64, 2}, Float64) === nothing
+        @test !Bramble._linear_in_parts(Dual{Nothing, Float64, 2})
     end
 
     # The promotion copies nothing when the load already has the matrix's element type: a

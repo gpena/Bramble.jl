@@ -784,10 +784,10 @@ end
 
 Run the case for `hook` in a child Julia process, every mode of `modes` in turn, under the
 policy named `policy`, with the parent's project, thread count and `--optimize`. `results`
-maps each mode the child reported to `(status, relerr, entered)`; a mode the child did not
-reach is missing from it. A child that fails prints the end of its output as a warning, and
-each mode that raised its error, so a CI log names it. `check_bounds` (`"yes"`, `"no"`)
-overrides the bounds-check setting the child otherwise takes from the parent.
+maps each mode the child reported to `(status, relerr, entered)`. A mode the child did not
+reach is missing. When the child fails, it prints the end of its output as a warning, plus
+the error each mode raised, so a CI log names the failure. Bounds checking follows the
+parent unless `check_bounds` (`"yes"`, `"no"`) overrides it.
 """
 function run_child(hook::AbstractString, modes; policy::Symbol,
         rule::AbstractString = get(case(hook), :rule, hook), check_bounds = nothing)

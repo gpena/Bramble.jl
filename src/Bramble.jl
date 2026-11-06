@@ -5,7 +5,7 @@ import Base: show, first, last, getindex, setindex!, iterate, size, firstindex, 
 
 using SparseArrays: SparseArrays, SparseMatrixCSC, spdiagm, spzeros, rowvals, nonzeros, nzrange, sparse, sparse!
 
-using LinearAlgebra: I, Diagonal, svd, Adjoint, Transpose
+using LinearAlgebra: I, Diagonal, svd, Adjoint, Transpose, factorize
 import LinearAlgebra: mul!, issymmetric, isposdef, ldiv!, Factorization, ×, qr, dot, lu, cholesky, ⋅, norm, ishermitian
 
 import Base: copy

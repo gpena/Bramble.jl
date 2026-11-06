@@ -311,6 +311,8 @@ using Kronecker: Kronecker
     # - `_export_vtk_collection` (BrambleVTKExt), `_export_vtk_solution`
     #   (BrambleVTKSciMLExt): the same `_`-prefixed fallback idiom as `_export_vtk` above, one
     #   entry point per `export_vtk` method that needs a weak dependency.
+    # - `_linear_in_parts` (BrambleSparspakExt, BrambleForwardDiffExt): the per-number-type
+    #   hook the Sparspak split consults, which ForwardDiff's extension extends for `Dual`.
     # - `_sparspak_factorize`, `_sparspak_refactor!`, `_sparspak_solve` (BrambleSparspakExt):
     #   the preconditioner-building hooks its `factorize`/`refactor!`/`\` methods reach,
     #   the same `_`-prefixed fallback idiom as `_amg_operator` above.
@@ -539,6 +541,20 @@ using Kronecker: Kronecker
                 :_sparspak_factorize,
                 :sparspak_refactor!,
                 :_sparspak_solve,
+                :_linear_in_parts,
+                # `_solve_promoted` (core `pde_solve`'s dispatch point on the promoted element
+                # type, which BrambleForwardDiffExt adds the `Dual` method to) and
+                # `_primal_factorize` (the `Float64` factorization that method solves against):
+                # the extension's own `Bramble` hooks, neither public.
+                :_solve_promoted,
+                :_primal_factorize,
+                # `value`, `partials`, `npartials`, `Partials` (BrambleForwardDiffExt): the
+                # accessors and partials constructor of a dual number, which ForwardDiff does
+                # not declare public. The Dual solve reads the parts level by level.
+                :value,
+                :partials,
+                :npartials,
+                :Partials,
                 :_accelerate_factorize,
                 :accelerate_refactor!,
                 :_accelerate_solve,
@@ -588,6 +604,9 @@ using Kronecker: Kronecker
                 :AbstractGPUSparseMatrixCSC,
                 :Adapt,
                 :GPUArrays,
+                # `Dual` (BrambleForwardDiffExt): ForwardDiff declares no public type for its
+                # dual numbers, and the extension must dispatch on `ForwardDiff.Dual` itself.
+                :Dual,
                 # `_KronDeviceDiagonal`, `_KronDeviceSparse` (BrambleKroneckerExt, commit
                 # ece71258): the device-resident factor types `mul!` dispatches on, named in
                 # the extension's method signatures. Plain internals, not a launch hook.

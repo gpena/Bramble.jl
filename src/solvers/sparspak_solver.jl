@@ -17,6 +17,13 @@ sparse LU system, supporting in-place solves via `LinearAlgebra.ldiv!`, back-sub
 """
 abstract type SparspakFactorization{T} <: Factorization{T} end
 
+# Whether a number of type `S` is linear in its parts, so a Sparspak solve may treat them
+# apart. A `Complex` is, and a ForwardDiff `Dual` is by the method BrambleForwardDiffExt
+# adds. Any other number is not assumed so, even when its fields have the matrix's type.
+# A double-double's (hi, lo) or an interval's (lo, hi) solved apart gives a wrong answer,
+# so such a load takes the refactor path.
+_linear_in_parts(S::Type) = S <: Complex
+
 """
     sparspak_factorize(A::SparseMatrixCSC) -> SparspakFactorization
     sparspak_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -> SparspakFactorization
@@ -26,7 +33,9 @@ using [Sparspak.jl](https://github.com/JuliaSparse/Sparspak.jl).
 
 Sparspak has no binary dependency, so it factors matrices whose entries are not
 `Float64`/`ComplexF64` -- `Float32`, `BigFloat`, or a `ForwardDiff.Dual` -- where SuiteSparse
-and MUMPS cannot.
+and MUMPS cannot. `pde_solve` does not hand it a `Dual` matrix: it factors the `Float64`
+values of that matrix once and solves each partial against them (see [`pde_solve`](@ref)),
+so a `Dual` factor is built only by a direct call.
 
 A singular matrix throws a `SingularException`, as it does for SuiteSparse, MUMPS and
 Accelerate, from the factorization or from the solve: a rank-deficient or structurally

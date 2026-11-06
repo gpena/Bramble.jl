@@ -315,6 +315,9 @@ if __bramble_with_ext_backends
             include("ext/appleaccelerate_ext.jl")
             include("ext/mumps_ext.jl")
             include("ext/sparspak_ext.jl")
+            # The `ForwardDiff.Dual` route of `pde_solve` (BrambleForwardDiffExt): the primal
+            # factored once for every partial. Sparspak and SuiteSparse above load its oracles.
+            include("ext/forwarddiff_ext.jl")
             # The memory-scaling milestone's own backend/operator extensions (v3.3.0 plan S3.1,
             # S5.2, S7.2): SparseMatrixCSR assembly and the Kronecker.jl fast-diagonalisation
             # solve; the Polyester-backed CpuPolyester sweeps follow in their own shard.

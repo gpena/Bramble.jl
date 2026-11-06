@@ -39,7 +39,7 @@ Bramble's runtime kernels mutate destination buffers using `setindex!`, so a bac
 
 ForwardDiff propagates dual numbers through coefficients, difference operators, weak forms and boundary conditions. Enzyme differentiates `Float64` code, so no buffer widens to `Dual`, and `BrambleEnzymeExt` supplies the `pde_solve` adjoint.
 
-Three backends are not offered: PolyesterForwardDiff, ReverseDiff and Mooncake. PolyesterForwardDiff matches ForwardDiff wherever it runs and throws a `cfunction` error at 16 or more parameters on the aarch64 host. ReverseDiff is the slowest reverse-mode backend at every parameter count, has no `pde_solve` adjoint, and timed out on the sparse Jacobian. Mooncake is slower than Enzyme and has no `pde_solve` adjoint because it rejects the `SparseMatrixCSC` tangent. The measurements and the full reasoning are in [`ad_backend_evaluation.md`](ad_backend_evaluation.md).
+Other AD backends are not offered. The measurements and the full reasoning are in [`ad_backend_evaluation.md`](ad_backend_evaluation.md).
 
 ## Calling AD libraries
 
@@ -60,7 +60,7 @@ The Enzyme failures belong to the backend, since direct calls fail the same way,
 Sensitivities can appear in the differential operator, the source term, or the boundary data:
 
 ### Dual matrix systems
-Bilinear forms assembled with `assemble(a)` or refilled in-place with `assemble!(A, a)` produce sparse matrices whose entries match the form's coefficient type. When solving `A \ F`, standard linear algebra solvers propagate sensitivities into the solution vector.
+Bilinear forms assembled with `assemble(a)` or refilled in-place with `assemble!(A, a)` produce sparse matrices whose entries match the form's coefficient type. With ForwardDiff loaded, `pde_solve(A, F)` on a `Dual` matrix or load is solved by `BrambleForwardDiffExt`. The extension factors the `Float64` values `A₀ = value.(A)` once, by the route the `Float64` solve of the same keywords takes, then solves every partial against that factor: the value is `x₀ = A₀⁻¹b₀` and partial `k` is `xₖ = A₀⁻¹(bₖ − Aₖx₀)`. Nested `Dual` levels reuse the same factor. A non-square `Dual` matrix throws an `ArgumentError`. The bordered solve (`mean_zero`, `gauge`) and `pde_solve(fact, F)` keep their route.
 
 ### Dirichlet boundary conditions
 Boundary conditions constructed with `dirichlet_constraints` store raw closures without type erasure. When boundary data depends on a differentiated parameter:

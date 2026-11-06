@@ -257,7 +257,7 @@ coupled_reaction_diffusion_widget(uₕ, vₕ; title = "Coupled reaction-diffusio
 # `ForwardDiff.jacobian` over two coupled species would cost `(2n)^2` against the scalar
 # examples' `n^2`, and was what forced this example to stay at three small refinement levels
 # before switching to sparse AD; with it, this reaches five levels, 8,450 unknowns on the
-# finest (``2 \times 65^2``), in about a second per level:
+# finest (``2 \times 65^2``):
 
 Random.seed!(20260903)
 
@@ -350,4 +350,4 @@ convergence_plot([(hs, erru, "u", "#5B5FC7"), (hs, errv, "v", "#0E7C86")]; title
 #   - The [coupled systems tutorial](@ref tutorial_coupled) for composite spaces and the
 #     block structure of their matrices, and the [space tutorial](@ref space_composite) for
 #     vector elements.
-#   - [Choosing a solver](@ref tutorial_solvers) for the linear solve inside each Newton step.
+#   - The "Choosing a solver" tutorial for the linear solve inside each Newton step.

@@ -15,7 +15,7 @@ using Random: Random
 #
 #   1. the compact 3D elasticity form `2μ * inner₊(εₕ(u), εₕ(v)) + λ * inner₊(divₘₕ(u), divₘₕ(v))`
 #      assembles to the same matrix, entry for entry, as the hand-expanded form
-#      `docs/src/examples/elasticity_3d.jl` uses (transcribed below under different names, so
+#      `docs/notes/examples/elasticity_3d.jl` uses (transcribed below under different names, so
 #      as not to shadow the package's own `εₕ`/`divₘₕ`); same in 2D.
 #   2. `inner₊(∇ₕ(u), ∇ₕ(v))` over a composite trial/test function agrees with the same sum
 #      written out term by term.
@@ -23,8 +23,8 @@ using Random: Random
 # and that every leaf of the assembled AST still answers `block_of`: the architecture promises
 # no new node type, so the expansion must bottom out in ordinary single-block products.
 
-# --- Transcribed from docs/src/examples/elasticity_3d.jl (S6.6 owns that file; not imported
-# from it, since it is a `#src`-driven documentation page, not a library module) ------------ #
+# --- Transcribed from docs/notes/examples/elasticity_3d.jl (not imported from it, since it
+# is a `#src`-driven documentation page, not a library module) ---------------------------- #
 
 const _Dm3 = (D₋ₓ, D₋ᵧ, D₋₂)
 const _Mm3 = (Mₓ, Mᵧ, M₂)
@@ -33,7 +33,7 @@ const _Mm2 = (Mₓ, Mᵧ)
 
 # `scale * wₛ / wₕ` as a grid function, where `wₛ` is the quadrature weight of a quantity
 # staggered in the directions `S` and `wₕ` is the one `innerₕ` carries -- the same ratio
-# `docs/src/examples/elasticity_3d.jl`'s `stagger_ratio` builds, generalised over `D` here
+# `docs/notes/examples/elasticity_3d.jl`'s `stagger_ratio` builds, generalised over `D` here
 # since this file needs it in both 2D and 3D.
 function hand_stagger_ratio(Wₕ, S, scale, ::Val{D}) where {D}
     Ωₕ = mesh(Wₕ)
@@ -62,7 +62,7 @@ end
 
 # The 27-term (3D) / 8-term (2D) hand-expanded elasticity form: every `(i, j)` pair of the
 # strain and the divergence written out as its own `innerₕ` against a precomputed weight
-# ratio, exactly as `docs/src/examples/elasticity_3d.jl`'s `elasticity_form` does.
+# ratio, exactly as `docs/notes/examples/elasticity_3d.jl`'s `elasticity_form` does.
 function hand_elasticity_form(Vₕ, μ, λ, Dm, Mm, ::Val{D}) where {D}
     Wₕ = first(spaces(Vₕ))
     cε = Dict(

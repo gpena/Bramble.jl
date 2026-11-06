@@ -1,7 +1,7 @@
 # # Linear elasticity in three dimensions
 #
-# A beam clamped at one end and sagging under its own weight. It is the first example on this
-# site with a *free* surface, and that is what makes it worth writing out: a scheme can be
+# A beam clamped at one end and sagging under its own weight. It is the one worked example with
+# a *free* surface, and that is what makes it worth writing out: a scheme can be
 # second order on a fully clamped problem and still be wrong by two orders of magnitude the
 # moment a face is left traction-free. Every number and the plot below were produced by the code
 # shown.
@@ -47,7 +47,7 @@
 # ```
 #
 # whose right-hand side is a vector Laplacian plus a divergence term, each of which is easy to
-# write with the operators the [forms tutorial](@ref tutorial_form) introduces. It holds only
+# write with the operators the forms tutorial introduces. It holds only
 # up to a boundary term. For a fully clamped solid that term vanishes and the two forms are the
 # same operator; on a free surface they are different operators, and the convenient one stiffens
 # this beam by roughly two orders of magnitude. The strain form is the one to discretise.
@@ -85,12 +85,12 @@
 #
 # where ``S_{ij} = \{i\}`` for ``i = j`` and ``\{i,j\}`` otherwise.
 #
-# ``S = \emptyset`` is [`innerₕ`](@ref), the three singletons are [`inner₊ₓ`](@ref),
-# [`inner₊ᵧ`](@ref) and [`inner₊₂`](@ref), and the pairs and the triple that ``\varepsilon^{ij}_h``
-# and ``\mathrm{div}_h`` need are the rest of the same [`inner₊`](@ref)`(u, v, Val(S))` family
+# ``S = \emptyset`` is `innerₕ`, the three singletons are `inner₊ₓ`,
+# `inner₊ᵧ` and `inner₊₂`, and the pairs and the triple that ``\varepsilon^{ij}_h``
+# and ``\mathrm{div}_h`` need are the rest of the same `inner₊(u, v, Val(S))` family
 # ([#234](https://github.com/gpena/Bramble.jl/issues/234)); the transverse-factor bug that used to
 # make the singletons wrong on a free surface is fixed too
-# ([#236](https://github.com/gpena/Bramble.jl/issues/236)). [`εₕ`](@ref) and [`divₘₕ`](@ref) build
+# ([#236](https://github.com/gpena/Bramble.jl/issues/236)). `εₕ` and `divₘₕ` build
 # the placements above directly from a composite trial or test function (one call each, over
 # ``u`` as a whole rather than component by component), placing ``\varepsilon^{ii}_h`` on the face
 # centre normal to ``i``, ``\varepsilon^{ij}_h`` on the edge centre the pair ``\{i,j\}`` shares,
@@ -207,7 +207,7 @@ order_1h = log(err_1h[end - 1] / err_1h[end]) / log(hs[end - 1] / hs[end])
 (order_h, order_1h)
 
 # The grid is randomly perturbed and each level is a refinement of the one before, the same
-# pattern the [linear Poisson example](poisson_linear.md) uses and for the same reason: a
+# pattern the linear Poisson example (`docs/src/examples/poisson_linear.jl`) uses and for the same reason: a
 # uniform grid can make a manufactured solution far more accurate than the scheme deserves, and
 # independently drawn random grids give an ``h`` sequence too erratic to read a rate from. A
 # non-uniform grid also makes the staggered weights `inner₊` reads for `εₕ`/`divₘₕ` non-trivial,
@@ -222,7 +222,7 @@ order_1h = log(err_1h[end - 1] / err_1h[end]) / log(hs[end - 1] / hs[end])
 
 #-
 
-include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
+include(joinpath(@__DIR__, "..", "..", "src", "convergence_plot.jl")) # hide
 convergence_plot([(hs, err_h, "‖·‖ₕ", "#5B5FC7"), (hs, err_1h, "‖·‖₁ₕ", "#0E7C86")];
     title = "3D elasticity, clamped cube") # hide
 
@@ -279,7 +279,7 @@ round.(tips ./ (-δ_eb), digits = 3)
 
 # ## The deformed solid
 #
-# The stress to colour it by is recovered at the nodes with [`D̽ₓ`](@ref) and its siblings
+# The stress to colour it by is recovered at the nodes with `D̽ₓ` and its siblings
 # rather than the staggered differences the form uses: `∇̽ₕ` collapses to a one-sided difference
 # at the boundary instead of truncating to zero, and the boundary is the part being drawn.
 
@@ -341,7 +341,7 @@ max_rotation = maximum(maximum(abs, 0.5 .* (G[i][j] .- G[j][i])) for i in 1:3, j
 # that matters in a bending beam varies through the *thickness*, tension along the top fibre and
 # compression along the bottom, and on an opaque solid none of that reaches the surface.
 
-include(joinpath(@__DIR__, "..", "deformed_plot.jl")) # hide
+include(joinpath(@__DIR__, "..", "..", "src", "deformed_plot.jl")) # hide
 deformed_plot(uₕ, vm; label = "von Mises σ", scale = 1.0,
     cut = (x, y, z) -> !(x < 0.4L && y < W / 2),
     title = "Cantilever under self-weight") # hide
@@ -354,10 +354,10 @@ deformed_plot(uₕ, vm; label = "von Mises σ", scale = 1.0,
 #
 # ## Where to go next
 #
-#   - [Linear Poisson](poisson_linear.md) for the scalar problem whose random-grid convergence
+#   - `docs/src/examples/poisson_linear.jl` for the scalar problem whose random-grid convergence
 #     check this page reuses.
-#   - The [coupled systems tutorial](@ref tutorial_coupled) and the
-#     [space tutorial](@ref space_composite) for the composite space that carries the three
+#   - The coupled systems tutorial and the
+#     space tutorial for the composite space that carries the three
 #     displacement components.
-#   - [`εₕ`](@ref) and [`divₘₕ`](@ref) in the [API reference](../api.md) for the staggered
+#   - `εₕ` and `divₘₕ` in the API reference for the staggered
 #     strain and divergence used here.

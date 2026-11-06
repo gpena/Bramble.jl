@@ -120,7 +120,7 @@ end
 # by hand from the mesh points.
 
 function relation_residual(Ωₕ, P, U, F, i)
-    m = prod(Bramble.size(Ωₕ) .+ 2)
+    m = prod(size(Ωₕ) .+ 2)
     R = assemble(form(P, P,
         (w, v) -> inner_Γ(∂ₙ(w(1); K = K(i, 1)), v(i); markers = (F,)) +
                   inner_Γ(∂ₙ(w(2); K = K(i, 2)), v(i); markers = (F,))))
@@ -136,7 +136,7 @@ end
 function facet_residual(Ωₕ, P, U, F, i)
     r, flux = relation_residual(Ωₕ, P, U, F, i)
     keep = trues(length(r))
-    keep[LinearIndices(Bramble.size(Ωₕ) .+ 2)[2, 2]] = false
+    keep[LinearIndices(size(Ωₕ) .+ 2)[2, 2]] = false
     return maximum(abs, r[keep]) / max(1.0, maximum(abs, flux[keep]))
 end
 
@@ -223,7 +223,7 @@ maximum(abs, first.(cornerx))
 
 function component_errors(Ωₕ)
     _, U = solve_on(Ωₕ)
-    n = Bramble.size(Ωₕ)
+    n = size(Ωₕ)
     m = prod(n .+ 2)
     W = gridspace(Ωₕ)
     return ntuple(2) do i
