@@ -387,7 +387,7 @@ end
     end
     # The same coefficient on the Kronecker path: the 1D closures hold `Dual` entries. The
     # forward difference at the `:xmax` node reads the ghost, so β reaches the operator.
-    @testset "Dual Robin coefficient, Kronecker operator" begin
+    @testset "Dual Robin β, Kronecker operator" begin
         rels(β) = u -> (:xmin => u => 0.0, :xmax => β * u + ∂ₙ(u) => 1.0,
             :ymin => u => 0.0, :ymax => ∂ₙ(u) => 1.0)
         fa = (u, v) -> innerₕ(D₊ₓ(u), v) + inner₊(∇ₕ(u), ∇ₕ(v))
