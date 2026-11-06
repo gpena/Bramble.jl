@@ -190,7 +190,7 @@ function evaluate!(route::SparseADRoute, u)
     return DI.jacobian!(route.residual, route.matrix, route.prep, route.backend, u)
 end
 
-# --- Newton–Krylov ----------------------------------------------------------------------- #
+# --- Newton-Krylov ----------------------------------------------------------------------- #
 
 # One linear solve: ILU(0) of `J` (rebuilt from this Jacobian), then GMRES to GMRES_RTOL.
 # A GMRES that stops short of the tolerance is an error: its time is not a Newton step.
