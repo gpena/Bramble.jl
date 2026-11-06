@@ -187,6 +187,18 @@ const F32_BACKEND = backend(;
             @test isapprox(g, r; rtol = 1e-12)
             @test isapprox(g, c; rtol = 1e-6)
         end
+
+        # Unseeded, a non-uniform axis draws from `Random.default_rng()`, which has no
+        # sampler for `Dual`: the draw is in `Float64`, converted.
+        for p in (CpuSerial(), CpuThreaded(), CpuPolyester())
+            Ω = domain(interval(0.0, ForwardDiff.Dual(1.3, 1.0)) × interval(0.0, 1.0))
+            M = mesh(Ω, 7; uniform = (false, true), backend = backend(; policy = p))
+            x = points(M(1))
+            @test eltype(M) === D
+            @test issorted(x) && allunique(x)
+            @test first(x) == 0 && last(x) == ForwardDiff.Dual(1.3, 1.0)
+            @test all(ForwardDiff.partials(xi, 1) ≈ ForwardDiff.value(xi) / 1.3 for xi in x)
+        end
     end
 end
 
