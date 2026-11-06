@@ -163,10 +163,17 @@ jobs:
       # differentiates under: forced bounds checks change what Enzyme's type analysis sees
       # (gpena/Bramble.jl#1134) and every AD cell in test/space/ad_coverage.jl is recorded
       # without them. The other shards keep `yes`, the setting the action passed.
+      #
+      # `Pkg.test` precompiles the whole test environment before it runs anything: 571
+      # packages, 29 to 33 minutes on each `ad-*` shard (2026-11-05). The AD files load 111 of
+      # them, about a quarter of that compile time; NonlinearSolve, OrdinaryDiffEq, JET and
+      # Makie are never loaded. `JULIA_PKG_PRECOMPILE_AUTO=0` skips that pass on the `ad-*`
+      # shards, so each package compiles when a test first loads it.
       - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=${{ startsWith(matrix.shard, 'ad-') && 'auto' || 'yes' }}"])'
         env:
           BRAMBLE_TEST_GROUP: backends
           BRAMBLE_TEST_SHARD: ${{ matrix.shard }}
+          JULIA_PKG_PRECOMPILE_AUTO: ${{ startsWith(matrix.shard, 'ad-') && '0' || '1' }}
 
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v7
