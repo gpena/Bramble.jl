@@ -361,6 +361,65 @@ using LinearSolve: KrylovJL_GMRES, LUFactorization
         @test nonlinear_problem(residual, zeros(n); jacobian = manual_jac).f.jac === manual_jac
     end
 
+    # `jacobian = jf` takes the exact Jacobian of a state-dependent form from `jacobian_form`,
+    # in the convention `residual` uses. The oracle is `jacobian!` on the same form, which
+    # test/form/assembled_jacobian.jl already pins against finite differences, so this
+    # testset checks the wiring: which `jac` the problem holds, and that it follows `u`.
+    @testset "nonlinear_problem: jacobian_form" begin
+        Ω2 = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+        W2 = gridspace(mesh(Ω2, (9, 12), (false, false)))
+        α(s) = 3 + 1 / (1 + s^2)
+        ax = element(W2)
+        ay = element(W2)
+        a2 = form(W2, W2, (U, V) -> inner₊((ax * ∇ₕ(U)[1], ay * ∇ₕ(U)[2]), ∇ₕ(V)))
+        jf = Bramble.jacobian_form(
+            a2, ax => (U -> Mₕ(U)[1], α), ay => (U -> Mₕ(U)[2], α); dirichlet = :boundary
+        )
+        n2 = ndofs(W2)
+        u = [0.3 + 0.7 * sin(0.37 * i) for i in 1:n2]
+        u_other = [0.5 + 0.2 * cos(0.11 * i) for i in 1:n2]
+        expected = Bramble.jacobian_prototype(jf)
+        Bramble.jacobian!(expected, jf, u)
+        @test maximum(abs, expected) > 0
+
+        # The residual's own values do not enter the Jacobian the problem carries.
+        function res!(r, u, p)
+            r .= u
+            return r
+        end
+        res(u, p) = u
+
+        # In-place: `jac(J, u, p)` fills `J` with the exact Jacobian at `u`, whatever `u`
+        # the previous call saw, because the coefficients are written from `u` on each call.
+        prob = nonlinear_problem(res!, zeros(n2); jacobian = jf)
+        @test prob isa NonlinearProblem
+        J = copy(prob.f.jac_prototype)
+        prob.f.jac(J, u, nothing)
+        @test J == expected
+        prob.f.jac(J, u_other, nothing)
+        J_other = Bramble.jacobian_prototype(jf)
+        Bramble.jacobian!(J_other, jf, u_other)
+        @test J == J_other
+        @test J != expected
+
+        # The prototype defaults to the form's own pattern, and a caller's one is kept.
+        @test prob.f.jac_prototype isa SparseMatrixCSC
+        @test size(prob.f.jac_prototype) == size(expected)
+        @test nnz(prob.f.jac_prototype) == nnz(expected)
+        proto = spdiagm(0 => ones(n2))
+        kept = nonlinear_problem(res!, zeros(n2); jacobian = jf, jac_prototype = proto)
+        @test kept.f.jac_prototype === proto
+
+        # Out-of-place: `J = jac(u, p)` returns the same Jacobian at `u`.
+        prob_oop = nonlinear_problem(res, zeros(n2); jacobian = jf)
+        @test prob_oop.f.jac(u, nothing) == expected
+
+        # Default unchanged: no `jacobian` leaves `jac` and the prototype unset.
+        prob_default = nonlinear_problem(res!, zeros(n2))
+        @test prob_default.f.jac === nothing
+        @test prob_default.f.jac_prototype === nothing
+    end
+
     # `semidiscretize(build, l; ...)` (src/problems/semidiscrete.jl) is the other half of the above:
     # an operator that genuinely depends on `t` -- not just the source -- built fresh per
     # element type instead of one fixed `Float64`-typed matrix. This is what lets `Rodas5P`'s
