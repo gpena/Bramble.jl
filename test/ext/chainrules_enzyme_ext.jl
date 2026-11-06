@@ -3,8 +3,12 @@ module ExtChainRulesEnzymeExtTests
 using Test
 using Bramble
 using ChainRulesCore
-using SparseArrays: SparseMatrixCSC, nnz, nonzeros, sparse
+using SparseArrays: SparseMatrixCSC, nnz, nonzeros, sparse, spdiagm
 using LinearAlgebra: I
+using Polyester
+using ForwardDiff
+using SuiteSparse
+using Bramble: CpuSerial, CpuThreaded, CpuPolyester
 import DifferentiationInterface as DI
 using ..TestUtils: _fd, _have
 
@@ -58,19 +62,32 @@ function loss_two_fields_2d(θ::Real)
 end
 """
 
+# `loss_no_rule`, for `_child_gradient`: `A \ F` on the assembled system, no `pde_solve`.
+const CHILD_LOSS_NO_RULE = """
+Ω1 = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 21, true)
+W1 = gridspace(Ω1)
+a1 = form(W1, W1, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+function loss_no_rule(θ::Real)
+    gₕ = Bramble.element(W1, zero(θ))
+    A, F = assemble(a1, form(W1, v -> innerₕ(gₕ, v)); dirichlet = :boundary => x -> θ)
+    return sum(abs2, A \\ F)
+end
+"""
+
 const ENZYME_TOML = "[deps]\nEnzyme = \"7da242da-08ed-463a-9acd-ee780be4f1d9\"\n"
 
-# `name`'s direct Enzyme gradient at 0.7 and a central difference of it, from a child Julia
-# process with the parent's project, thread count and optimisation level (Enzyme comes from
-# a temporary environment, as in `enzyme_policy_cases.jl`). Returns the exit code, the two
-# values (`NaN` when the child died before printing them) and the child's whole output.
-function _child_gradient(name::AbstractString)
+# `name`'s direct Enzyme gradient (`name` is defined by the source `losses`) at 0.7 and a
+# central difference of it, from a child Julia process with the parent's project, thread
+# count, bounds checking and optimisation level (Enzyme comes from a temporary environment,
+# as in `enzyme_policy_cases.jl`). Returns the exit code, the two values (`NaN` when the
+# child died before printing them) and the child's whole output.
+function _child_gradient(name::AbstractString; losses::AbstractString = CHILD_LOSSES_2D)
     src = """
         _e = mktempdir()
         write(joinpath(_e, "Project.toml"), $(repr(ENZYME_TOML)))
         push!(LOAD_PATH, _e)
         using Bramble, Enzyme
-        $CHILD_LOSSES_2D
+        $losses
         f = $name
         g = Enzyme.gradient(Enzyme.set_runtime_activity(Enzyme.Reverse), Enzyme.Const(f), 0.7)[1]
         h = 1e-6
@@ -87,6 +104,121 @@ function _child_gradient(name::AbstractString)
 end
 
 @testset "BrambleChainRulesExt + Enzyme" begin
+    @testset "Enzyme forward: pde_solve rule" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            fwd = Enzyme.set_runtime_activity(Enzyme.Forward)
+            ext = Base.get_extension(Bramble, :BrambleEnzymeExt)
+
+            # The rule's own cases on a small system, against the tangent in closed form
+            # (`u̇ = A⁻¹(Ḟ − Ȧ u)`, dense) and, where the `Dual` solve supports the keyword,
+            # against ForwardDiff. `Ȧ` shares `A`'s pattern, as an Enzyme shadow does.
+            n = 6
+            A0 = sparse(spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.5, n),
+                1 => fill(-1.2, n - 1)))
+            F0 = collect(1.0:n)
+            dA = sparse(spdiagm(-1 => cos.(1.0:(n - 1)), 0 => sin.(1.0:n),
+                1 => cos.(2.0:n)))
+            dA2 = 0.5 .* dA .+ sparse(spdiagm(0 => fill(0.1, n)))
+            dF = cos.(1.0:n)
+            dF2 = sin.(2.0:(n + 1))
+            u0 = Matrix(A0) \ F0
+            tangent(dA, dF) = Matrix(A0) \ (dF - dA * u0)
+
+            solve_plain(A, F) = Bramble.pde_solve(A, F)
+            @test only(Enzyme.autodiff(fwd, Enzyme.Const(solve_plain), Enzyme.Duplicated,
+                Enzyme.Duplicated(copy(A0), copy(dA)), Enzyme.Duplicated(copy(F0), copy(dF)))) ≈
+                  tangent(dA, dF) rtol=1e-12
+
+            # One of the two inputs constant: the tangent is the other's alone.
+            @test only(Enzyme.autodiff(fwd, Enzyme.Const(solve_plain), Enzyme.Duplicated,
+                Enzyme.Const(A0), Enzyme.Duplicated(copy(F0), copy(dF)))) ≈
+                  tangent(0 .* dA, dF) rtol=1e-12
+            @test only(Enzyme.autodiff(fwd, Enzyme.Const(solve_plain), Enzyme.Duplicated,
+                Enzyme.Duplicated(copy(A0), copy(dA)), Enzyme.Const(F0))) ≈
+                  tangent(dA, 0 .* dF) rtol=1e-12
+
+            # The primal comes back with the tangent, as `ForwardWithPrimal` asks.
+            der, val = Enzyme.autodiff(Enzyme.set_runtime_activity(Enzyme.ForwardWithPrimal),
+                Enzyme.Const(solve_plain), Enzyme.Duplicated, Enzyme.Duplicated(copy(A0), copy(dA)),
+                Enzyme.Duplicated(copy(F0), copy(dF)))
+            @test val ≈ u0 rtol=1e-12
+            @test der ≈ tangent(dA, dF) rtol=1e-12
+
+            # Width 2: two tangents, one factorisation. The count is the rule's own entry
+            # counter, read around the call.
+            factors() = ext._rule_entries(:pde_solve_factor)
+            before = factors()
+            bat = only(Enzyme.autodiff(fwd, Enzyme.Const(solve_plain), Enzyme.BatchDuplicated,
+                Enzyme.BatchDuplicated(copy(A0), (copy(dA), copy(dA2))),
+                Enzyme.BatchDuplicated(copy(F0), (copy(dF), copy(dF2)))))
+            @test factors() - before == 1
+            @test collect(values(bat)) ≈ [tangent(dA, dF), tangent(dA2, dF2)] rtol=1e-12
+            bat_c = only(Enzyme.autodiff(fwd, Enzyme.Const(solve_plain), Enzyme.BatchDuplicated,
+                Enzyme.Const(A0), Enzyme.BatchDuplicated(copy(F0), (copy(dF), copy(dF2)))))
+            @test collect(values(bat_c)) ≈ [tangent(0 .* dA, dF), tangent(0 .* dA, dF2)] rtol=1e-12
+
+            # Keywords: no factorisation is kept, and each tangent is a solve with the same
+            # keywords. `mean_zero` borders a singular Neumann matrix; its tangent equals
+            # ForwardDiff's bordered solve.
+            An = sparse(spdiagm(-1 => fill(-1.0, n - 1), 0 => [1.0; fill(2.0, n - 2); 1.0],
+                1 => fill(-1.0, n - 1)))
+            Fn = F0 .- sum(F0) / n
+            dAn = sparse(spdiagm(0 => sin.(1.0:n))) + 0.1 * (sparse(spdiagm(0 => cos.(1.0:n))) * An)
+            w = ones(n)
+            solve_mz(A, F) = Bramble.pde_solve(A, F; mean_zero = w)
+            ref_mz = ForwardDiff.derivative(
+                t -> Bramble.pde_solve(An + t * dAn, Fn + t * dF; mean_zero = w), 0.0)
+            before = factors()
+            got_mz = only(Enzyme.autodiff(fwd, Enzyme.Const(solve_mz), Enzyme.Duplicated,
+                Enzyme.Duplicated(copy(An), copy(dAn)), Enzyme.Duplicated(copy(Fn), copy(dF))))
+            @test got_mz ≈ ref_mz rtol=1e-10
+            @test factors() == before
+
+            solve_ss(A, F) = Bramble.pde_solve(A, F; solver = :suitesparse, sym = :auto)
+            @test only(Enzyme.autodiff(fwd, Enzyme.Const(solve_ss), Enzyme.Duplicated,
+                Enzyme.Duplicated(copy(A0), copy(dA)), Enzyme.Duplicated(copy(F0), copy(dF)))) ≈
+                  tangent(dA, dF) rtol=1e-10
+            bat_ss = only(Enzyme.autodiff(fwd, Enzyme.Const(solve_ss), Enzyme.BatchDuplicated,
+                Enzyme.BatchDuplicated(copy(A0), (copy(dA), copy(dA2))),
+                Enzyme.BatchDuplicated(copy(F0), (copy(dF), copy(dF2)))))
+            @test collect(values(bat_ss)) ≈ [tangent(dA, dF), tangent(dA2, dF2)] rtol=1e-10
+
+            # A rectangular `A` (a `:spqr` least-squares solve) is refused, as in reverse.
+            solve_rect(A, F) = Bramble.pde_solve(A, F; solver = :spqr)
+            Ar = sparse([1.0 0.0; 0.0 2.0; 1.0 1.0])
+            @test_throws ArgumentError Enzyme.autodiff(fwd, Enzyme.Const(solve_rect),
+                Enzyme.Duplicated, Enzyme.Duplicated(copy(Ar), copy(Ar)),
+                Enzyme.Duplicated([1.0, 2.0, 0.0], zeros(3)))
+
+            # Through `assemble`, a field coefficient in `A` and a parameter in `F`, one
+            # right-hand side and a width-2 batch, under the three CPU policies.
+            for policy in (CpuSerial(), CpuThreaded(), CpuPolyester())
+                Wp = gridspace(mesh(domain(interval(0.0, 1.0)), 17, false;
+                    backend = backend(policy = policy)))
+                B = [sin(i * j) for i in 1:ndofs(Wp), j in 1:2]
+                function loss(q)
+                    κ = element(Wp, eltype(q))
+                    parent(κ) .= 2.0 .+ B * q
+                    a = form(Wp, Wp, (U, V) -> inner₊(κ * ∇ₕ(U), ∇ₕ(V)))
+                    l = form(Wp, v -> innerₕ(x -> 1.0 + x[1], v))
+                    AF = assemble(a, l; dirichlet = :boundary => x -> 0.0)
+                    return sum(abs2, Bramble.pde_solve(AF[1], q[2] .* AF[2]))
+                end
+                q0 = [0.4, 0.7]
+                ref = ForwardDiff.gradient(loss, q0)
+                one_dir = [only(Enzyme.autodiff(fwd, Enzyme.Const(loss),
+                               Enzyme.Duplicated(copy(q0), Float64.(1:2 .== k)))) for k in 1:2]
+                @test one_dir ≈ ref rtol=1e-8
+                batched = only(Enzyme.autodiff(fwd, Enzyme.Const(loss),
+                    Enzyme.BatchDuplicated(copy(q0), ([1.0, 0.0], [0.0, 1.0]))))
+                @test collect(values(batched)) ≈ ref rtol=1e-8
+            end
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
     @testset "Enzyme: native BrambleEnzymeExt rule" begin
         if _have(:Enzyme)
             @eval import Enzyme
@@ -232,20 +364,16 @@ end
             # The 2D cases are stiffness, a `VectorElement` coefficient inside the form (what
             # recovering a diffusion *field* needs), and two *distinct* coefficient fields on
             # same-shaped terms in one sum (once an `IllegalTypeAnalysisException`, fixed by
-            # removing the like-term rule, gpena/Bramble.jl#771). Enzyme's compiler now aborts
-            # on all three, with no Julia exception. The LLVM assertion is
-            # `needsCacheWholeAllocation` (GradientUtils.cpp:10433), reached through
-            # `_dirichlet_probed_eltype` in `assemble`, and it is the same one that
-            # `docs/notes/internals/enzyme_policies.md` records for a keyword `innerₕ` call.
-            # The limit is Enzyme's and the plan accepts it. The same file at `HEAD`, before
-            # the keyword rule existed, aborts at `loss_stiff_2d` identically, and the 3D
-            # stiffness loss above compiles. An abort ends the whole process, so each loss runs
-            # in a child and `@test_broken` pins it. A fixed Enzyme turns that into an
-            # unexpected pass, which says so.
+            # removing the like-term rule, gpena/Bramble.jl#771). They then aborted Enzyme's
+            # compiler with no Julia exception (the LLVM assertion `needsCacheWholeAllocation`,
+            # reached through `_dirichlet_probed_eltype` in `assemble`), until
+            # gpena/Bramble.jl#1126's fix: `src/mesh/interface.jl` no longer indexes the tuple
+            # of faces at run time. They abort no more and the gradient matches a central
+            # difference. Each loss still runs in a child, so a regression that brings the
+            # abort back fails the test and does not end the whole process.
             for name in ("loss_stiff_2d", "loss_field_2d", "loss_two_fields_2d")
-                code, d_ad, d_cd, text = _child_gradient(name)
-                @test code == 0 || occursin("needsCacheWholeAllocation", text)
-                @test_broken code == 0 && isapprox(d_ad, d_cd; rtol = 1e-3)
+                code, d_ad, d_cd, _ = _child_gradient(name)
+                @test code == 0 && isapprox(d_ad, d_cd; rtol = 1e-3)
             end
 
             # A 1D sum of three terms: the other shape that used to fail, at the same
@@ -316,18 +444,18 @@ end
             @test sum(real.(conj.(dAc.nzval) .* Ev)) ≈ fd_dir rtol=1e-6
 
             # Pinned failure: handed `A \ F` directly rather than `pde_solve`, Enzyme has no
-            # rule to reach and tries to trace into CHOLMOD/UMFPACK's own internals, raising
-            # `IllegalTypeAnalysisException` on a `Union` type it cannot strictly alias -- if
-            # a future Enzyme release handles that on its own, this test starts failing and
-            # says so, the same "pin it so a fix is noticed" discipline `autodiff_heavy.jl`
-            # already follows for its own two annotations.
-            function loss_no_rule(θ::Real)
-                A, F = assemble(a, form(Wₕ, v -> innerₕ(Bramble.element(Wₕ, zero(θ)), v));
-                    dirichlet = :boundary => x -> θ)
-                return sum(abs2, A \ F)
-            end
-            # Kept a direct Enzyme call, since the pin is on Enzyme's own exception.
-            @test_throws Exception Enzyme.gradient(mode, Enzyme.Const(loss_no_rule), θ0)
+            # rule to reach and traces into CHOLMOD's own internals. On Enzyme 0.13.218 the
+            # compiler dies in LLVM's verifier (`function failed verification`, `PHI nodes
+            # not grouped at top of basic block` in `preprocess_julia__extract_args_*`),
+            # which aborts the process, so no exception is thrown to catch: gpena/Bramble.jl
+            # #1135, reported upstream as https://github.com/EnzymeAD/Enzyme.jl/issues/3961.
+            # The loss runs in a child with the parent's `--check-bounds` and `--optimize`
+            # (`Base.julia_cmd()` carries the first; `_child_gradient` the second), the flags
+            # the weekly ad-4 shard sees. `@test_broken` on the child's success turns an
+            # upstream fix into an unexpected pass, which says so.
+            code, d_ad, d_cd, text = _child_gradient("loss_no_rule"; losses = CHILD_LOSS_NO_RULE)
+            @test code == 0 || occursin("function failed verification", text)
+            @test_broken code == 0 && isapprox(d_ad, d_cd; rtol = 1e-3)
 
             # With keywords the rule keeps no factorisation, so it keeps `A` itself when the
             # caller overwrites it after the solve. `u = diag(2, 4) \ [θ, 1]`, then `A` doubles:

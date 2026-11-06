@@ -47,6 +47,7 @@ end
 # is kept (`fact` is `nothing`), and the adjoint is `pde_solve(Aᴴ, ū; kwargs...)` with the
 # border conjugated (`Bramble._pde_solve_adjoint`), as `BrambleChainRulesExt`'s rrule does.
 function _forward_solve(A, F, ::@NamedTuple{})
+    _entered!(:pde_solve_factor)
     fact = lu(A)
     return fact, fact \ F
 end
@@ -115,6 +116,53 @@ function EnzymeRules.reverse(
     fill!(ū, zero(eltype(ū)))
 
     return (nothing, nothing)
+end
+
+# The forward rule: the primal solve is the reverse rule's (`_forward_solve`), and the tangent
+# of `A u = F` is `A u̇ = Ḟ − Ȧ u`. Without keywords every tangent solves against the primal's
+# own factorisation, so a call factors `A` once whatever the width. With keywords no
+# factorisation is kept and each tangent is `pde_solve(A, Ḟ − Ȧ u; kwargs...)`: the bordered
+# system `[A C; Cᵀ 0]` has a constant border, so its tangent is the bordered solve of a
+# right-hand side with a zero border, and the keywords carry over unchanged. The rule is native,
+# not `Enzyme.@import_frule` (the reverse rule avoids the import route too). Without it Enzyme
+# differentiates UMFPACK's `lu` and stops on `umfpack_dl_defaults`.
+
+# Lane `i` of the shadow of `x`: `nothing` for a `Const`.
+_lane(::Const, ::Int) = nothing
+_lane(x::Annotation, i::Int) = x.dval
+_lane(x::Union{BatchDuplicated, BatchDuplicatedNoNeed}, i::Int) = x.dval[i]
+
+# `Ḟ − Ȧ u` for one lane; a lane with neither a shadow of `A` nor of `F` has a zero tangent.
+_tangent_rhs(::Nothing, ::Nothing, u) = zero(u)
+_tangent_rhs(Ȧ, ::Nothing, u) = -(Ȧ * u)
+_tangent_rhs(::Nothing, Ḟ, u) = Ḟ
+_tangent_rhs(Ȧ, Ḟ, u) = Ḟ - Ȧ * u
+
+_tangent_solve(fact, _, rhs, ::@NamedTuple{}) = fact \ rhs
+_tangent_solve(::Nothing, A, rhs, kwargs::NamedTuple) = pde_solve(A, rhs; kwargs...)
+
+function EnzymeRules.forward(
+        config::FwdConfig,
+        ::Const{typeof(pde_solve)},
+        ::Type{RT},
+        A::Annotation{<:SparseMatrixCSC},
+        F::Annotation{<:AbstractVector};
+        kwargs...
+) where {RT}
+    Bramble._check_square_for_adjoint(A.val)
+    fact, u = _forward_solve(A.val, F.val, values(kwargs))
+    RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
+    W = EnzymeRules.width(config)
+    shadows = ntuple(Val(W)) do i
+        rhs = _tangent_rhs(_lane(A, i), _lane(F, i), u)
+        return _tangent_solve(fact, A.val, rhs, values(kwargs))
+    end
+    needs_primal = EnzymeRules.needs_primal(config)
+    needs_shadow = EnzymeRules.needs_shadow(config)
+    needs_shadow || return needs_primal ? u : nothing
+    shadow = W == 1 ? only(shadows) : shadows
+    return needs_primal ?
+           (W == 1 ? Duplicated(u, shadow) : BatchDuplicated(u, shadow)) : shadow
 end
 
 # The `CpuThreaded` engine entries' rules.
