@@ -24,7 +24,7 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
-MaterialDocs = "0.2"
+MaterialDocs = "0.2.2"
 
 [sources]
 Bramble = {path = ".."}
