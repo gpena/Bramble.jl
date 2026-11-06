@@ -246,6 +246,7 @@ function (rhs::SemidiscretizeRHS)(du::AbstractVector, u::AbstractVector, p, t)
     end
     _sync_state!(sd.state, u)
     _update_coefficients!(sd.update_coefficients, p, t)
+    _sd_refill_coefficients!(sd.jacobian_form, u)
 
     # The operator before the source, as in the `Semidiscretization` residual: a `build`
     # whose `refill!` also sets data the source reads would otherwise leave `F` at the
