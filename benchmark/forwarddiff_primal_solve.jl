@@ -45,7 +45,7 @@ const SCRIPT = @__FILE__
 const PATHS = ("new", "new_sparspak", "old")
 const SETTINGS = (
     smoke = (sizes = (32, 64), partials = (1, 4), runs = 1, timeout = 900),
-    full = (sizes = (64, 128, 256, 512, 1000), partials = (1, 4), runs = 3, timeout = 3600),
+    full = (sizes = (64, 128, 256, 512, 1000), partials = (1, 4), runs = 3, timeout = 3600)
 )
 const CAP_MB = 1024 * parse(Float64, get(ENV, "BRAMBLE_JULIA_MAX_GB", "10"))
 
@@ -129,7 +129,7 @@ function child_main(m::Int, path::String, B::Int)
     pnorm = sqrt(sum(k -> sum(abs2, ForwardDiff.partials.(x, k)), 1:B))
     println(
         "RESULT m=$m path=$path B=$B dofs=$(length(F)) t=$t before_mb=$before ",
-        "after_mb=$after symmetric=$sym accelerate=$accelerate vnorm=$vnorm pnorm=$pnorm",
+        "after_mb=$after symmetric=$sym accelerate=$accelerate vnorm=$vnorm pnorm=$pnorm"
     )
     return nothing
 end
@@ -192,7 +192,7 @@ function run_case(m, path, B, timeout)
         symmetric = get(fields, "symmetric", "?"),
         accelerate = get(fields, "accelerate", "?"),
         vnorm = status == "ok" ? parse(Float64, fields["vnorm"]) : NaN,
-        pnorm = status == "ok" ? parse(Float64, fields["pnorm"]) : NaN,
+        pnorm = status == "ok" ? parse(Float64, fields["pnorm"]) : NaN
     )
 end
 
@@ -212,7 +212,7 @@ function driver_main(settings)
             println(
                 "run m=$m dofs=$(m^2) B=$B path=$(rpad(path, 12)) ",
                 "status=$(rpad(r.status, 18)) t=$t s before=$before MB peak=$peak MB ",
-                "sym=$(r.symmetric) acc=$(r.accelerate)",
+                "sym=$(r.symmetric) acc=$(r.accelerate)"
             )
             flush(stdout)
         end
@@ -232,32 +232,25 @@ function print_table(rows)
         peaks = [r.peak for r in row.results]
         peak = @sprintf("%.0f (%.0f)", median(peaks), maximum(peaks))
         if isempty(oks)
-            @printf(
-                "| %d | %d | %s | — | — | %s | %s |\n",
-                row.m^2, row.B, row.path, peak, status,
-            )
+            @printf("| %d | %d | %s | — | — | %s | %s |\n",
+                row.m^2, row.B, row.path, peak, status,)
         else
             ts = [r.t for r in oks]
             spread = 100 * (maximum(ts) - minimum(ts)) / median(ts)
-            @printf(
-                "| %d | %d | %s | %.2f | %.1f %% (%d runs) | %s | %s |\n",
-                row.m^2, row.B, row.path, median(ts), spread, length(oks), peak, status,
-            )
+            @printf("| %d | %d | %s | %.2f | %.1f %% (%d runs) | %s | %s |\n",
+                row.m^2, row.B, row.path, median(ts), spread, length(oks), peak, status,)
         end
     end
     println("\nfingerprints (vnorm, pnorm) of the ok runs, relative spread across paths:")
     for m in unique(row.m for row in rows), B in unique(row.B for row in rows)
-        oks = [
-            r for row in rows if row.m == m && row.B == B
-                for r in row.results if r.status == "ok"
-        ]
+
+        oks = [r for row in rows if row.m == m && row.B == B
+               for r in row.results if r.status == "ok"]
         isempty(oks) && continue
         v = [r.vnorm for r in oks]
         p = [r.pnorm for r in oks]
-        @printf(
-            "m=%d B=%d  vnorm rel spread %.2e  pnorm rel spread %.2e\n", m, B,
-            (maximum(v) - minimum(v)) / maximum(v), (maximum(p) - minimum(p)) / maximum(p),
-        )
+        @printf("m=%d B=%d  vnorm rel spread %.2e  pnorm rel spread %.2e\n", m, B,
+            (maximum(v) - minimum(v)) / maximum(v), (maximum(p) - minimum(p)) / maximum(p),)
     end
     return nothing
 end

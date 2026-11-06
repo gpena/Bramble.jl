@@ -310,9 +310,11 @@ end
 
 _coefficients(αx, αy, κv, ::Val{:flux}) = (
     Coefficient(αx, U -> Mₕ(U)[1], α), Coefficient(αy, U -> Mₕ(U)[2], α))
-_coefficients(αx, αy, κv, ::Val{:strong}) = (
-    Coefficient(αx, U -> Mₕ(U)[1], α), Coefficient(αy, U -> Mₕ(U)[2], α),
-    Coefficient(κv, U -> U, κ))
+function _coefficients(αx, αy, κv, ::Val{:strong})
+    (
+        Coefficient(αx, U -> Mₕ(U)[1], α), Coefficient(αy, U -> Mₕ(U)[2], α),
+        Coefficient(κv, U -> U, κ))
+end
 
 _dependencies(::Val{:flux}) = (U -> Mₕ(U),)
 _dependencies(::Val{:strong}) = (U -> Mₕ(U), U -> U)
@@ -639,6 +641,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     function _driver(sizes, runs)
         rows = []
         for m in sizes, name in ("CpuSerial", "CpuThreaded")
+
             results = [_run(m, name) for _ in 1:runs]
             for r in results
                 println("run m=$m policy=$name ", join(("$k=$(round(r[k]; sigdigits = 4))" for k in keys(r)), " "))
