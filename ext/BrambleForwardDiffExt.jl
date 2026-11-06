@@ -2,6 +2,7 @@ module BrambleForwardDiffExt
 
 using Bramble: Bramble
 using ForwardDiff: ForwardDiff
+using LinearAlgebra: rank
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
 # A `ForwardDiff.Dual` is linear in its parts (value and partials), so a Sparspak solve may
@@ -26,8 +27,37 @@ function Bramble._solve_promoted(
     end
     P = promote_type(eltype(A), eltype(F))
     fact = Bramble._primal_factorize(_innermost(A), eltype(_innermost(F)), solver, sym, kwargs)
-    An = eltype(A) === P ? A : SparseMatrixCSC{P}(A)
-    return _dual_solve(fact, An, convert(Vector{P}, F))
+    return _run_and_finalize(fact) do fact
+        # A rank-deficient least-squares `Dual` solve has a value that is not smooth in the
+        # parameter, so the formula below would be silently wrong: refuse it.
+        eltype(A) <: ForwardDiff.Dual && solver === :spqr &&
+            _check_full_rank(fact, size(A, 2))
+        An = eltype(A) === P ? A : SparseMatrixCSC{P}(A)
+        _dual_solve(fact, An, convert(Vector{P}, F))
+    end
+end
+
+# Runs `f(fact)` and then releases `fact` with `finalize`, also when `f` throws. A native
+# factor (MUMPS) is freed here, as `_mumps_solve` frees its own, rather than when the GC
+# reaches it. A factor without a finalizer is unaffected.
+function _run_and_finalize(f, fact)
+    try
+        return f(fact)
+    finally
+        finalize(fact)
+    end
+end
+
+function _check_full_rank(fact, n::Integer)
+    r = rank(fact)
+    r == n || throw(
+        ArgumentError(
+        "pde_solve of a ForwardDiff.Dual matrix with solver = :spqr needs a full-rank A, got " *
+        "rank $r of $n: the forward derivative of a rank-deficient least-squares solve is not " *
+        "the one this formula gives.",
+    ),
+    )
+    return nothing
 end
 
 # The innermost values: `value` taken until the element type is no longer a `Dual`.

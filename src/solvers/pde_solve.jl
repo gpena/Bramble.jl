@@ -251,7 +251,10 @@ function _primal_factorize(A::SparseMatrixCSC, ::Type{S}, solver::Symbol, sym, k
         return mumps_factorize(A; sym = sym, kwargs...)
     elseif solver === :sparspak
         _reject_unknown_kwargs(:pde_solve, "solver = :sparspak", kwargs)
-        return sparspak_factorize(A)
+        # At the common scalar type of the matrix and the load (as `_sparspak_solve` does):
+        # a load wider than the factor would otherwise refactor the matrix for every partial.
+        T = float(promote_type(eltype(A), S))
+        return sparspak_factorize(eltype(A) === T ? A : SparseMatrixCSC{T}(A))
     else
         throw(
             ArgumentError(

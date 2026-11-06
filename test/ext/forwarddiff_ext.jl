@@ -16,6 +16,15 @@ if Sys.isapple()
     using AppleAccelerate
 end
 
+# A stand-in for a native factor: its finalizer counts the releases.
+mutable struct ReleaseProbe end
+const RELEASED = Ref(0)
+function release_probe()
+    p = ReleaseProbe()
+    finalizer(_ -> RELEASED[] += 1, p)
+    return p
+end
+
 # The `ForwardDiff.Dual` route of `pde_solve` (`BrambleForwardDiffExt`): the `Float64`
 # values of the matrix are factored once, by the route the `Float64` solve takes, and each
 # partial is one solve against that factor. The oracles are the direct Sparspak factor of
@@ -105,6 +114,60 @@ end
         per_partial = (alloc_test(solve, dual(8)) - alloc_test(solve, dual(1))) / 7
         factor = alloc_test(sparspak_factorize, T0)
         @test per_partial < factor / 2
+    end
+
+    # A rank-deficient `A` under `:spqr` is a least-squares solve whose value is not smooth in
+    # the parameter: for `[1 0; t 0]` and `F = [0, 1]` the solution is `x₁ = t / (1 + t²)`,
+    # with derivative 1 at `t = 0`, and the forward formula gives 0. A `Dual` matrix of rank
+    # below its size is refused, naming the rank. A real rank-deficient matrix with a `Dual`
+    # load is linear in the load, so it stays allowed.
+    @testset "rank-deficient spqr refuses" begin
+        At = SparseMatrixCSC(2, 2, [1, 3, 3], [1, 2], [D(1.0, 0.0), D(0.0, 1.0)])
+        err = try
+            pde_solve(At, [0.0, 1.0]; solver = :spqr)
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("rank 1", sprint(showerror, err))
+        Ar = SparseMatrixCSC(2, 2, [1, 2, 2], [1], [1.0])
+        @test pde_solve(Ar, D.([0.0, 1.0], [1.0, 0.0]); solver = :spqr) isa Vector
+    end
+
+    # A `Float32` matrix with a `Float64`-partials load: the primal factor is built at the
+    # common scalar type, `Float64`, so each partial is a solve against it. A factor left at
+    # `Float32` would be refactored at `Float64` for every partial. The oracle is the dense
+    # solve of the same matrix in `Float64`.
+    @testset "Float32 matrix, Float64 Dual load" begin
+        A32 = SparseMatrixCSC{Float32}(A0)
+        A64 = Float64.(A32)
+        x = pde_solve(A32, D.(b, collect(1.0:m)); solver = :sparspak)
+        @test ForwardDiff.value.(x) ≈ A64 \ b rtol = 1.0e-12
+        @test ForwardDiff.partials.(x, 1) ≈ A64 \ collect(1.0:m) rtol = 1.0e-12
+
+        n = 3000
+        T0 = spdiagm(0 => fill(4.0f0, n), 1 => fill(-1.0f0, n - 1), -1 => fill(-1.0f0, n - 1))
+        dual(N) = [ForwardDiff.Dual{Nothing, Float64, N}(1.0, ForwardDiff.Partials(
+                       ntuple(k -> float(k), N))) for _ in 1:n]
+        solve(rhs) = pde_solve(T0, rhs; solver = :sparspak)
+        per_partial = (alloc_test(solve, dual(8)) - alloc_test(solve, dual(1))) / 7
+        factor = alloc_test(sparspak_factorize, Float64.(T0))
+        @test per_partial < factor / 2
+    end
+
+    # The primal factor is released once the solve is done, as `_mumps_solve` releases its
+    # native factor, and also when the solve throws: otherwise native MUMPS factors outlive
+    # the gradient call. MUMPS is in the test environment, but a finalizer on a probe object
+    # tests the release without a MUMPS factor: `_run_and_finalize` is the helper that
+    # `BrambleForwardDiffExt` runs its work through.
+    @testset "primal factor released after the solve" begin
+        ext = Base.get_extension(Bramble, :BrambleForwardDiffExt)
+        before = RELEASED[]
+        @test ext._run_and_finalize(_ -> 42, release_probe()) == 42
+        @test RELEASED[] == before + 1
+        @test_throws ErrorException ext._run_and_finalize(
+            _ -> error("solve failed"), release_probe())
+        @test RELEASED[] == before + 2
     end
 
     @testset "the Dual route refuses bad input" begin
