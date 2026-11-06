@@ -239,6 +239,7 @@ reaches the twin through an untyped cache, so it allocates.
 """
 function (rhs::SemidiscretizeRHS)(du::AbstractVector, u::AbstractVector, p, t)
     sd = rhs.sd
+    _sd_check_plain(sd.jacobian_form, u)
     # Folded at compile time: a `u` the state holds takes the path below, unchanged.
     if !_state_holds(sd.state, u)
         _rhs_twin(rhs, eltype(u))(du, u, p, t)

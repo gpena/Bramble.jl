@@ -154,7 +154,7 @@ returned system solves `A u_h = F`.
 - `update_coefficients!`: called with the current `t` before each assembly, for coefficients that vary in time -- `t -> Rₕ!(fₕ, x -> f(x, t))` for a time-dependent source, or `t -> (α[] = t)` for a scalar `Ref` (default `nothing`). A two-argument `(t, p) -> ...` also reaches the residual's own `p`, the same way a three-argument Dirichlet condition does.
 - `hook_reads_state`: whether `update_coefficients!` may read the `state` (default `true`). With `state`, a `ForwardDiff.Dual` `u` reaches the forms through a buffer of its own type and never the user's state, so a hook reading the state would lose its dependence on `u` from the derivative, and the pair is refused with an `ArgumentError`. Give `false` to assert that the hook reads no state (a source depending on `t` alone) and the `Dual` Jacobian is exact; the assertion is not checked, and a hook that does read the state then gets a Jacobian missing that part.
 - `reassemble`: refill `A` at every step, for an operator whose coefficients change with `t` or `u` (default `false`).
-- `coefficients`: the coefficients of `a` that depend on `u`, declared as [`jacobian_form`](@ref) takes them, `(cᵢ => (U -> Lᵢ(U), fᵢ), ...)` with `cᵢ` the grid function `a` reads (default `nothing`). Before each assembly of the residual every `cᵢ` is set to `fᵢ.(Lᵢ(u))` from `u` itself, after `update_coefficients!` and the `state`, and `A` is reassembled (`reassemble` is then `true` whatever it was given). [`jacobian!`](@ref) then writes the exact Jacobian `-(A + ∂A)` at `u` and [`jacobian_prototype`](@ref) carries its pattern, wider than `A`'s where a coefficient reads neighbouring points (`using ForwardDiff` differentiates each `fᵢ`). A `u` the refill cannot write into the coefficients (a `ForwardDiff.Dual`) goes to the `state`'s twin as before, whose coefficients are not refilled, and is refused without a `state`. Scalar grid spaces only; the `build` method and ghost spaces do not take it.
+- `coefficients`: the coefficients of `a` that depend on `u`, declared as [`jacobian_form`](@ref) takes them, `(cᵢ => (U -> Lᵢ(U), fᵢ), ...)` with `cᵢ` the grid function `a` reads (default `nothing`). Before each assembly of the residual every `cᵢ` is set to `fᵢ.(Lᵢ(u))` from `u` itself, after `update_coefficients!` and the `state`, and `A` is reassembled (`reassemble` is then `true` whatever it was given). [`jacobian!`](@ref) then writes the exact Jacobian `-(A + ∂A)` at `u` and [`jacobian_prototype`](@ref) carries its pattern, wider than `A`'s where a coefficient reads neighbouring points (`using ForwardDiff` differentiates each `fᵢ`). A source `l` or a `mass` reading a declared coefficient is refused with an `ArgumentError`, since `jacobian!` would miss its derivative. A `u` of a non-plain element type (a `ForwardDiff.Dual`) is refused by the residual, [`semidiscretize_rhs`](@ref) and [`jacobian!`](@ref) alike, with or without `state`: automatic differentiation through the coefficients is not supported, and the exact Jacobian is `jacobian!`'s. Scalar grid spaces only; the `build` method and ghost spaces do not take it.
 
 Time and parameter dependence of the Dirichlet values is detected by arity, exactly as
 [`dirichlet_constraints`](@ref) validates it: conditions accepting `(x, t, p)` are evaluated
@@ -215,7 +215,7 @@ Base.@constprop :aggressive function semidiscretize(
     labels, constraint_values = _normalize_dirichlet(dirichlet)
     constraints = _source_constraints(labels, constraint_values)
 
-    jf = _sd_jacobian_form(a, coefficients, labels)
+    jf = _sd_jacobian_form(a, coefficients, labels, l, mass)
     A = assemble(a; dirichlet = labels, dirichlet_components = dirichlet_components)
     M = _assemble_mass_matrix(
         mass === nothing ? _default_mass_form(sp) : mass, labels, dirichlet_components
@@ -241,10 +241,26 @@ Base.@constprop :aggressive function semidiscretize(
 end
 
 # The `coefficients` keyword as a `jacobian_form`, with the labels `A` is assembled with.
-_sd_jacobian_form(a, ::Nothing, labels) = nothing
-_sd_jacobian_form(a, c::Pair, labels) = _sd_jacobian_form(a, (c,), labels)
-function _sd_jacobian_form(a, c::Tuple, labels)
-    return jacobian_form(a, c...; dirichlet = labels === nothing ? () : labels)
+# A source or mass reading a declared coefficient is refused: the refill would make it
+# depend on `u`, and `jacobian!` assembles only `a + ∂a`.
+_sd_jacobian_form(a, ::Nothing, labels, l, mass) = nothing
+function _sd_jacobian_form(a, c::Pair, labels, l, mass)
+    return _sd_jacobian_form(a, (c,), labels, l, mass)
+end
+function _sd_jacobian_form(a, c::Tuple, labels, l, mass)
+    jf = jacobian_form(a, c...; dirichlet = labels === nothing ? () : labels)
+    for k in eachindex(c)
+        declared = ((; values = c[k].first),)
+        for (name, x) in (("the source `l`", l), ("`mass`", mass))
+            _holds_coefficient(x, declared) && throw(
+                ArgumentError(
+                "semidiscretize: $name reads declared coefficient $k, so jacobian! would " *
+                "miss its derivative; only `a` may read the declared coefficients.",
+            ),
+            )
+        end
+    end
+    return jf
 end
 
 """
@@ -480,6 +496,7 @@ With `coefficients`, each declared coefficient is set from `u` before `A` is rea
 after `update_coefficients!`, so the residual and [`jacobian!`](@ref) read the same values.
 """
 function (sd::Semidiscretization)(du::AbstractVector, u::AbstractVector, p, t)
+    _sd_check_plain(sd.jacobian_form, u)
     # Folded at compile time: a `u` the state holds takes the path below, unchanged.
     if !_state_holds(sd.state, u)
         _state_twin(sd, eltype(u))(du, u, p, t)
@@ -606,7 +623,6 @@ end
 # coefficient read twice has one refill writing it (`writes_values`).
 @inline _sd_refill_coefficients!(::Nothing, u) = nothing
 @inline function _sd_refill_coefficients!(jf::JacobianForm, u)
-    _plain_number(eltype(u)) || _throw_coefficients_dual(eltype(u))
     W = jf.form.trial_space
     Ωₕ = mesh(W)
     _sd_coefficient_values!(jf.refills, execution_policy(Ωₕ), W, size(indices(Ωₕ)), u)
@@ -635,14 +651,21 @@ end
     return nothing
 end
 
-# A `Dual` `u` with a `state` goes to the twin before the refill; without one it would
-# reach coefficients of the space's element type.
+# With `coefficients`, a `u` of a non-plain element type (a `Dual`) is refused, `state` or
+# not: the twin's coefficients are neither refilled nor differentiated, so automatic
+# differentiation through them would be wrong without a trace. Folded at compile time.
+@inline _sd_check_plain(::Nothing, u) = nothing
+@inline function _sd_check_plain(::JacobianForm, u)
+    _plain_number(eltype(u)) || _throw_coefficients_dual(eltype(u))
+    return nothing
+end
+
 @noinline function _throw_coefficients_dual(T::Type)
     throw(
         ArgumentError(
-        "semidiscretize(...; coefficients): u has element type $(nameof(T)), which the " *
-        "declared coefficients cannot hold. Use jacobian! for the exact Jacobian, or " *
-        "give a state so that such a u reaches a twin of the forms.",
+        "semidiscretize(...; coefficients): u has element type $(nameof(T)); automatic " *
+        "differentiation through the declared coefficients is not supported. The exact " *
+        "Jacobian comes from jacobian!(J, sd, u, p, t).",
     ),
     )
 end
@@ -820,6 +843,7 @@ With `coefficients` it is the exact Jacobian `-(A + ∂A)` at `u`, assembled fro
 See also [`jacobian_prototype`](@ref).
 """
 function jacobian!(J, sd::Semidiscretization, u, p, t)
+    _sd_check_plain(sd.jacobian_form, u)
     _sync_state!(sd.state, u, t)
     _update_coefficients!(sd.update_coefficients, p, t)
     return _sd_jacobian!(J, sd.jacobian_form, sd, u, t)

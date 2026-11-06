@@ -1274,9 +1274,35 @@ _cf_garbage!(ax, ay) = (fill!(parent(ax), 1.0e3); fill!(parent(ay), -7.0); nothi
     sd(du, u, nothing, 0.0)
     @test _cf_relerr(-operator_matrix(sd), Jex) > 1e-3
 
-    # a `Dual` `u` reaches no twin without a `state`
+    # AD through the coefficients is refused, with or without a `state`: a twin would
+    # read stale coefficients and miss their derivative
     @test_throws ArgumentError DI.jacobian((d, x) -> sd(d, x, nothing, 0.0), zeros(n),
         AutoForwardDiff(), u)
+    @test_throws ArgumentError Bramble.jacobian!(J, sd, Dual.(u, 1.0), nothing, 0.0)
+    sₕ = Bramble.element(W)
+    sds, _, _ = _cf_sd(W; dirichlet = :boundary, state = sₕ)
+    @test_throws ArgumentError DI.jacobian((d, x) -> sds(d, x, nothing, 0.0), zeros(n),
+        AutoForwardDiff(), u)
+    @test isempty(sds.twins)
+end
+
+# A source or mass reading a declared coefficient would depend on `u` through the refill,
+# and `jacobian!` would miss that derivative: refused at construction. An undeclared grid
+# function in the source (`_cf_sd`'s `gₕ`) is accepted, as every testset above shows.
+@testset "coefficients: read outside a (#1143)" begin
+    W = gridspace(_graded_mesh((7, 8)))
+    ax, ay = Bramble.element(W), Bramble.element(W)
+    cs = (ax => (U -> Mₕ(U)[2], _cf_α), ay => (U -> Mₕ(U)[1], _cf_α))
+    a = _cf_form(W, ax, ay)
+    gₕ = Bramble.element(W, 1.0)
+    @test_throws ArgumentError semidiscretize(a, form(W, v -> innerₕ(ax, v));
+        dirichlet = :boundary, coefficients = cs)
+    @test_throws ArgumentError semidiscretize(a, form(W, v -> innerₕ(gₕ, v));
+        mass = form(W, W, (U, V) -> innerₕ(ay * U, V)), coefficients = cs)
+    # the same mass reading an undeclared grid function is accepted
+    sd = semidiscretize(a, form(W, v -> innerₕ(gₕ, v));
+        mass = form(W, W, (U, V) -> innerₕ(gₕ * U, V)), coefficients = cs)
+    @test sd.jacobian_form !== nothing
 end
 
 @testset "coefficients: semidiscretize_rhs (#1143)" begin
@@ -1292,6 +1318,8 @@ end
     rhs(du, u, nothing, 0.0)
     expected = F - _cf_Au(W, u; dirichlet = nothing) ./ diag(mass_matrix(sd))
     @test isapprox(du, expected; rtol = 1e-12)
+    @test_throws ArgumentError DI.jacobian((d, x) -> rhs(d, x, nothing, 0.0), zeros(n),
+        AutoForwardDiff(), u)
 end
 
 @testset "coefficients: absent, as before (#1143)" begin
