@@ -87,8 +87,11 @@ jobs:
     # each compiling Enzyme and its rules afresh, so their limit is higher. As one `ad` shard
     # (2026-11-04) it reached 150 minutes with three of nine files run: 37 minutes of setup,
     # then 76 for enzyme_polyester_hooks.jl alone. Four shards (`ENZYME_FILE_SHARDS`,
-    # test/TestUtils.jl) put about an hour and a half of tests on each.
-    timeout-minutes: ${{ startsWith(matrix.shard, 'ad-') && 180 || 90 }}
+    # test/TestUtils.jl) put about an hour and a half of tests on each, except `ad-2`, whose
+    # space/ad_coverage.jl alone ran 2 h 20 min. On slower runners (2026-11-05: 31 minutes
+    # of precompilation against 22) it passed 180 minutes unfinished, so the limit is 300,
+    # under GitHub's 360.
+    timeout-minutes: ${{ startsWith(matrix.shard, 'ad-') && 300 || 90 }}
     # Nothing here gates a merge, but a red run should still mean something specific.
     # Julia nightly is not in this matrix (see below), so a failure here is Bramble's own —
     # on the 1.13 release.
