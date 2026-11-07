@@ -92,8 +92,8 @@ end
 # The slabs of `fixes` in band `b` of `nbands` along the last axis: each facet node is
 # written by the one band holding it, and a node on two facets (a corner) by that band in
 # the order of `fixes`, so every policy gives the serial values. The visit is unrolled with
-# `ntuple(Val(F))`: a loop indexing `fixes` at run time aborts Enzyme in both modes
-# (gpena/Bramble.jl#1127).
+# `ntuple(Val(F))`: under a `for` loop over `fixes`, Enzyme fails on the loop's trip count
+# (`llvm.smax`) in reverse mode and crashes in forward mode (gpena/Bramble.jl#1127).
 @noinline function _ghost_facet_band!(out, x, gb, kind::K, n::NTuple{D, Int},
         fixes::NTuple{F, _FacetFix{T}}, nbands::Int, b::Int) where {K, D, F, T}
     li = LinearIndices(n)
