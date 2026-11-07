@@ -274,6 +274,31 @@ end
     @test (@allocated Bramble._assemble_ghost_load!(Fr, ar, lr)) == 0
 end
 
+# The padded mesh refreshes through a dynamic call (#1127, `_padded`): a form built before
+# `markers!` assembles the load of one built after, and allocates nothing once fresh.
+@testset "Load follows markers! (refresh)" begin
+    fl = v -> innerₕ(x -> 1.0 + x[1] * x[2], v; markers = (:left,))
+    seeded = function ()
+        Bramble._seed_mesh1d_rng!(11)
+        m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0), :left => :xmin), (7, 6),
+            (false, false))
+        Bramble._unseed_mesh1d_rng!()
+        return m
+    end
+    Ω1, Ω2 = seeded(), seeded()
+    l1 = form(gridspace(Ω1; ghosts = (:xmin, :ymax)), fl)
+    b0 = assemble(l1)
+    mm = copy(markers(Ω1))
+    mm[:left] = .!mm[:left] .& mm[:boundary]
+    Bramble.markers!(Ω1, mm)
+    Bramble.markers!(Ω2, copy(mm))
+    b = assemble(l1)
+    @test relerr(b, assemble(form(gridspace(Ω2; ghosts = (:xmin, :ymax)), fl))) <= tol
+    @test relerr(b, b0) > 1e-3   # the new labels reached the load
+    assemble!(b, l1)
+    @test (@allocated assemble!(b, l1)) == 0
+end
+
 @testset "Mixed-precision trial and test spaces" begin
     Ω64 = mesh(domain(interval(0.0, 1.0)), 9, false)
     Ω32 = mesh(domain(interval(0.0f0, 1.0f0)), 9, false)
