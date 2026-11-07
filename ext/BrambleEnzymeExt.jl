@@ -165,6 +165,13 @@ function EnzymeRules.forward(
            (W == 1 ? Duplicated(u, shadow) : BatchDuplicated(u, shadow)) : shadow
 end
 
+# A ghost mesh's refresh rebuilds the padded mesh's geometry and labels from the physical
+# mesh. No Enzyme path differentiates geometry: the mesh is `Const`, and coordinates are
+# differentiated by ForwardDiff only (#1131). Without this rule, an assembly into a constant
+# buffer is an inactive call whose nofree copies reach the marker warning's `@warn`, whose
+# logger lookup calls `strcmp`, which Enzyme cannot copy (#1127).
+EnzymeRules.inactive(::typeof(Bramble._refresh!), args...) = nothing
+
 # The `CpuThreaded` engine entries' rules.
 include("BrambleEnzymeExt/threaded.jl")
 

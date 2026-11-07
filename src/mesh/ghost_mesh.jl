@@ -225,15 +225,12 @@ end
 #------------------------------------------------------------------------------------------#
 
 # The padded mesh, brought up to date with the physical one: its points after a
-# `change_points!`, its labels after a marker change. The refresh is a dynamic call, out of
-# the static call graph of every walk (#1127): it reaches the marker warning's `@warn`,
-# whose logger lookup sorts `Symbol`s with `strcmp`, and Enzyme, which copies each callee of
-# an inactive call (an assembly into a constant buffer) without frees, cannot copy that.
-# Only a stale mesh takes it.
+# `change_points!`, its labels after a marker change. Only a stale mesh takes the refresh;
+# Enzyme treats it as inactive (BrambleEnzymeExt, #1127).
 @inline function _padded(G::GhostMesh)
     p = G.physical
     (_mesh_version(p) == G.version && _marker_stamp(p) == G.marker_stamp) ||
-        Base.inferencebarrier(_refresh!)(G)
+        _refresh!(G)
     return G.padded
 end
 @inline _padded(s::GhostMeshState) = s.padded
