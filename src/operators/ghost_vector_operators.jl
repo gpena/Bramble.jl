@@ -91,22 +91,29 @@ end
 
 # The slabs of `fixes` in band `b` of `nbands` along the last axis: each facet node is
 # written by the one band holding it, and a node on two facets (a corner) by that band in
-# the order of `fixes`, so every policy gives the serial values.
+# the order of `fixes`, so every policy gives the serial values. The visit is unrolled with
+# `ntuple(Val(F))`: a loop indexing `fixes` at run time aborts Enzyme in both modes
+# (gpena/Bramble.jl#1127).
 @noinline function _ghost_facet_band!(out, x, gb, kind::K, n::NTuple{D, Int},
         fixes::NTuple{F, _FacetFix{T}}, nbands::Int, b::Int) where {K, D, F, T}
     li = LinearIndices(n)
     band = _band_range(1:n[D], nbands, b)
-    for f in fixes
-        f.on || continue
-        d = f.d
-        slab = _band_slab(ntuple(e -> e == d ? (f.i:f.i) : (1:n[e]), Val(D)), band)
-        lt = LinearIndices(ntuple(e -> e == d ? 1 : n[e], Val(D)))
-        inward = (f.min ? 1 : -1) * prod(ntuple(e -> e < d ? n[e] : 1, Val(D)))
-        @inbounds for I in CartesianIndices(slab)
-            idx = li[I]
-            g = gb[f.off + lt[CartesianIndex(ntuple(e -> e == d ? 1 : I[e], Val(D)))]]
-            out[idx] = _ghost_slab(kind, f.min, out[idx], x[idx], g, x[idx + inward], f.h)
-        end
+    ntuple(k -> _ghost_facet_slab!(out, x, gb, kind, n, li, band, fixes[k]), Val(F))
+    return nothing
+end
+
+# The slab of the one facet `f` within `band`.
+@inline function _ghost_facet_slab!(out, x, gb, kind::K, n::NTuple{D, Int}, li, band,
+        f::_FacetFix) where {K, D}
+    f.on || return nothing
+    d = f.d
+    slab = _band_slab(ntuple(e -> e == d ? (f.i:f.i) : (1:n[e]), Val(D)), band)
+    lt = LinearIndices(ntuple(e -> e == d ? 1 : n[e], Val(D)))
+    inward = (f.min ? 1 : -1) * prod(ntuple(e -> e < d ? n[e] : 1, Val(D)))
+    @inbounds for I in CartesianIndices(slab)
+        idx = li[I]
+        g = gb[f.off + lt[CartesianIndex(ntuple(e -> e == d ? 1 : I[e], Val(D)))]]
+        out[idx] = _ghost_slab(kind, f.min, out[idx], x[idx], g, x[idx + inward], f.h)
     end
     return nothing
 end
