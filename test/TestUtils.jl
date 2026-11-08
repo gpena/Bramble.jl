@@ -30,9 +30,13 @@ using Bramble: indices, point
 const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 
 # `BRAMBLE_TEST_SHARD` narrows the `unit` block to one of four parts, so CI can run each on
-# its own runner: `forms-1` and `forms-2` are the two halves of test/form/, `ghost` is
-# test/ghost/, and `rest` is the remainder of the unit block. It also narrows the package
-# extensions block (the `ext` and `backends` groups) to one of two parts, and the `backends`
+# its own runner: `forms-1` and `forms-2` are the two halves of test/form/ (minus four ghost
+# files), `ghost` is test/ghost/ with test/solvers/ and those four test/form/ghost_*.jl
+# files, and `rest` is the remainder of the unit block. Whole files move between shards to
+# even the leaf wall time. Per leg on CI run 42442957618 it was 24.3 min for forms-1, 14.6
+# for forms-2, 7.6 for ghost and 20.3 for rest, and the moves bring that to about 18.4,
+# 17.4, 14.9 and 16.1. It
+# also narrows the package extensions block (the `ext` and `backends` groups) to one of two parts, and the `backends`
 # group's AD block to one of four more, which Weekly.yml runs on separate runners: `ext-solvers`
 # is the plotting, solver and Kronecker files, `ext-polyester` the Polyester files, and `ad-1`
 # to `ad-4` the AD files (`ENZYME_FILE_SHARDS`). Unset runs everything, which is what every local run does; the quality, gpu,

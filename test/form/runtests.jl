@@ -23,8 +23,6 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("interpolation.jl")
         include("bilinear.jl")
         include("assemble_add.jl")
-        # The threaded refill replays the recorded nzval positions.
-        include("threaded_replay.jl")
         # Replay sinks hold the storage vector and array-parametric positions (#437).
         include("replay_sinks.jl")
         # A refill after `markers!` re-records instead of replaying stale positions (#465).
@@ -48,7 +46,6 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         # A grid-function coefficient swapped in a built form, Dual included (#985).
         include("rebind.jl")
         include("common.jl")
-        include("simplifier.jl")
         # Real coefficients converted once at `form`, one AST type per value (#912).
         include("scalar_coefficients.jl")
         include("block_extract.jl")
@@ -56,15 +53,11 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("centered_average.jl")
         include("nested_operators.jl")
         include("centered_vector_calculus.jl")
-        # The ghost-point plan (v4.0.0): its files are split between the two shards by cost.
+        # The ghost-point plan (v4.0.0): its files are split between the three shards by cost.
         include("laplacian_form.jl")
         # A stencil of more than 32 entries stays on the unrolled paths (#853).
         include("long_stencil_allocations.jl")
         include("repeated_assemble.jl")
-        include("ghost_mode_a.jl")
-        include("ghost_corners.jl")
-        include("ghost_constrained.jl")
-        include("ghost_time_data.jl")
         include("rank_one.jl")
         include("padding_zero.jl")
         include("vector_sums.jl")
@@ -121,7 +114,18 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("ghost_rank_one.jl")
         include("two_spaces.jl")
         include("warm_composite.jl")
+        # The threaded refill replays the recorded nzval positions.
+        include("threaded_replay.jl")
+        include("simplifier.jl")
         # Behind `slow`, like compile_scaling.jl: a compile bound on the assembly pipeline.
         TestUtils.WITH_SLOW_TESTS && include("compile_assembly.jl")
+    end
+
+    # The ghost shard also runs test/ghost/, which compiles the ghost paths these files use.
+    if TestUtils.in_shard("ghost")
+        include("ghost_mode_a.jl")
+        include("ghost_corners.jl")
+        include("ghost_constrained.jl")
+        include("ghost_time_data.jl")
     end
 end
