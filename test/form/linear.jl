@@ -57,1676 +57,1682 @@ using ..TestUtils: alloc_test, @test_allocs, _graded_mesh, _Const, _x1, _x2, _ex
 # assembles the vector whose entries are ``|□ᵢ| uᵢ``, so summing it gives ``∫ u`` over the
 # domain to the accuracy of the quadrature (exactly, for the cases below).
 
-@testset "Linear forms" begin
-    Ωₕ = mesh(
+# One Dual tag for every `DI.*` call below. A backend built without a tag takes a fresh one
+# per closure, so element, broadcast and assembly code recompiles for each call; a tag
+# fixed here is compiled once. DI skips its tag check when the backend carries a tag, and
+# no call nests a second derivative, so one tag is safe.
+const AD_BACKEND = AutoForwardDiff(; tag = ForwardDiff.Tag(nothing, Float64))
+
+# Shared setup, at module level so each testset below is its own top-level testset with
+# its own clock instead of one body that compiles before any clock starts.
+const Ωₕ = mesh(
+    domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
+    (8, 8),
+    (true, true)
+)
+const Wₕ = gridspace(Ωₕ)
+const Vₕ = gridspace(Ωₕ, Val(2))
+const uₕ = Rₕ(Wₕ, _x1_plus_x2)
+const n = ndofs(Wₕ)
+
+@testset "Construction" begin
+    lf = form(Wₕ, v -> innerₕ(uₕ, v))
+    @test lf isa LinearForm
+    @test test_space(lf) === Wₕ
+    @test resolve_form_ast(lf) isa LinearProduct
+
+    # No `restrict_to`, so `form` builds no point mask for typing restrictions: it
+    # allocates nothing whatever the grid size.
+    function _form_bytes(W, f)
+        form(W, v -> innerₕ(f, v))
+        return @allocated form(W, v -> innerₕ(f, v))
+    end
+    @test _form_bytes(Wₕ, uₕ) == 0
+end
+
+@testset "Assembly" begin
+    # ∫(x + y) over the unit square is 1, and the assembled vector's entries are the
+    # cell measures times the coefficients, so it sums to exactly that.
+    b = assemble(form(Wₕ, v -> innerₕ(uₕ, v)))
+    @test length(b) == n
+    @test sum(b) ≈ 1.0
+
+    # a constant source integrates to the area
+    @test sum(assemble(form(Wₕ, v -> innerₕ(Rₕ(Wₕ, _Const(3.0)), v)))) ≈ 3.0
+
+    # and a number or a function on the left works the same way
+    @test sum(assemble(form(Wₕ, v -> innerₕ(2.0, v)))) ≈ 2.0
+    @test sum(assemble(form(Wₕ, v -> innerₕ(_x1, v)))) ≈ 0.5
+
+    # in place, into a vector the caller owns
+    b2 = zeros(n)
+    returned = assemble!(b2, form(Wₕ, v -> innerₕ(uₕ, v)))
+    @test returned === b2
+    @test b2 ≈ b
+
+    # assembling twice into the same vector does not accumulate
+    assemble!(b2, form(Wₕ, v -> innerₕ(uₕ, v)))
+    @test b2 ≈ b
+end
+
+@testset "Composite space" begin
+    # The composite core walks the components and assembles the *same* AST into each
+    # block at its offset. So a form written against one source puts that source in
+    # every component: ∫x over the unit square is 0.5, and the assembled vector sums to
+    # 1.0 across the two blocks. Giving each component a different integrand needs the
+    # indexed trial and test functions, which is the coupled path in bilinear.jl.
+    uv = Rₕ(Vₕ, (_x1, _x2))
+    lf = form(Vₕ, v -> innerₕ(uv(1), v))
+    b = assemble(lf)
+    @test length(b) == ndofs(Vₕ)
+    @test sum(b) ≈ 2 * 0.5
+
+    # and each block holds the same thing, which is what "the same AST" means
+    m = ndofs(Wₕ)
+    @test b[1:m] ≈ b[(m + 1):(2m)]
+end
+
+@testset "Nested composite space" begin
+    # The cores used to walk `space.spaces`, the top-level components, and reserve
+    # `ndofs(sp)` for each. For a component that is itself composite that reserved the
+    # whole nested block while `indices(mesh(sp))` covered one leaf's grid, so the
+    # assembly wrote into a fraction of the range. Walking the leaves fixes it, and the
+    # check is that a nested space and a flat one of the same size now agree.
+    inner = gridspace(Ωₕ, Val(2))
+    nested = Bramble.CompositeGridSpace((Wₕ, inner, Wₕ))
+    flat = gridspace(Ωₕ, Val(4))
+    @test ndofs(nested) == ndofs(flat)
+
+    bn = assemble(form(nested, v -> innerₕ(uₕ, v)))
+    bf = assemble(form(flat, v -> innerₕ(uₕ, v)))
+    @test bn ≈ bf
+    @test sum(bn) ≈ 4 * 1.0            # four blocks, each integrating to 1
+
+    # and the parallel core walks the leaves the same way
+    bp = similar(bn)
+    assemble_parallel!(bp, form(nested, v -> innerₕ(uₕ, v)))
+    @test bp ≈ bn
+end
+
+@testset "Heterogeneous composite spaces" begin
+    # `lin_indices`/`mesh_markers` used to be built once from the composite space's
+    # first leaf and handed to every leaf's own assembly walk. For a homogeneous
+    # composite every leaf shares one size, so nothing caught it; for a genuinely
+    # heterogeneous one (built directly from a tuple of differently-sized leaves,
+    # bypassing `gridspace(Ω, Val(N))`, which always broadcasts one shared mesh), any
+    # leaf past the first ran its own indices through leaf 1's (smaller or larger)
+    # `LinearIndices` and either threw `BoundsError` or, worse, read the wrong leaf's
+    # data at a coincidentally in-bounds index.
+    Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (true, true))
+    Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true))
+    Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
+    Vh = Bramble.CompositeGridSpace((Wbig, Wsmall))
+    @test ndofs(Vh) == ndofs(Wbig) + ndofs(Wsmall)
+
+    # non-constant, and different per leaf, so an index mix-up would misread a value
+    # rather than merely surviving by coincidence
+    uv = Rₕ(Vh, (x -> x[1] + 2x[2], x -> 2x[1] - x[2]))
+
+    # leaf 1 alone: already worked before this fix, kept as the reference case
+    b1 = assemble(form(Vh, v -> innerₕ(uv(1), v(1))))
+    # entrywise, not summed: a permuted read keeps the sum on these uniform leaves
+    @test b1[1:ndofs(Wbig)] ≈
+          parent(Rₕ(Wbig, x -> x[1] + 2x[2])) .* weights(Wbig, Innerh())
+    @test all(iszero, b1[(ndofs(Wbig) + 1):end])   # leaf 2's block untouched
+
+    # leaf 2 alone: this is exactly what used to throw BoundsError
+    b2 = assemble(form(Vh, v -> innerₕ(uv(2), v(2))))
+    @test b2[(ndofs(Wbig) + 1):end] ≈
+          parent(Rₕ(Wsmall, x -> 2x[1] - x[2])) .* weights(Wsmall, Innerh())
+    @test all(iszero, b2[1:ndofs(Wbig)])            # leaf 1's block untouched
+
+    # both together, routed: each block gets its own leaf's own answer
+    lboth = form(Vh, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
+    bboth = assemble(lboth)
+    @test bboth[1:ndofs(Wbig)] ≈ b1[1:ndofs(Wbig)]
+    @test bboth[(ndofs(Wbig) + 1):end] ≈ b2[(ndofs(Wbig) + 1):end]
+
+    # contraction takes the same walk, so it needs the same fix independently:
+    # l(uv) = Σᵢ bᵢ uvᵢ, not Σᵢ bᵢ (uv is not constant here on purpose)
+    @test lboth(uv) ≈ dot(bboth, parent(uv))
+
+    # assemble! into a pre-allocated vector: the everyday, allocation-free call
+    b3 = similar(bboth)
+    assemble!(b3, lboth)
+    @test b3 ≈ bboth
+
+    # the parallel core walks leaves the same way and needs its own leaf's mesh too
+    bp = similar(bboth)
+    assemble_parallel!(bp, lboth)
+    @test bp ≈ bboth
+end
+
+@testset "Coupled right-hand side" begin
+    # `v(i)` gives the i-th component of the symbolic test function, so a coupled form
+    # reads the way an indexed grid function does:
+    #
+    #     form(Vₕ, v -> innerₕ(uₕ(1), v(1)) + innerₕ(uₕ(2), v(2)))
+    #
+    # Three things had to exist for that. `TestFunction` was not callable at all.
+    # `block_extract.jl` routed a `BilinearProduct` to its block but not a
+    # `LinearProduct`, so a coupled *right-hand side* could not be routed. And the
+    # composite core assembled one AST into every block, which is the opposite of what a
+    # per-component form means.
+    m = ndofs(Wₕ)
+    uv = Rₕ(Vₕ, (_x1, x -> 10 * x[1]))
+    nblocks = ndofs(Vₕ) ÷ m
+    blocks(b) = [sum(b[(k * m + 1):((k + 1) * m)]) for k in 0:(nblocks - 1)]
+
+    @testset "Indexed test function" begin
+        v = TestFunction{2}()
+        @test v(2) === IndexedTestFunction{2}(2)
+        @test TrialFunction{2}()(1) === IndexedTrialFunction{2}(1)
+    end
+
+    @testset "Block placement" begin
+        # ∫x = 0.5 into the first block, ∫10x = 5.0 into the second
+        b = assemble(form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2))))
+        @test blocks(b) ≈ [0.5, 5.0]
+
+        # one term alone reaches only its own block
+        @test blocks(assemble(form(Vₕ, v -> innerₕ(uv(2), v(2))))) ≈ [0.0, 5.0]
+    end
+
+    @testset "Unindexed broadcast" begin
+        # The two spellings mix, because routing is decided per term
+        mixed = assemble(form(Vₕ, v -> innerₕ(uv(1), v) + innerₕ(uv(2), v(2))))
+        @test blocks(mixed) ≈ [0.5, 0.5 + 5.0]
+    end
+
+    @testset "Routing query" begin
+        v = TestFunction{2}()
+        @test test_component_or_nothing(innerₕ(uv(1), v(2))) == 2
+        @test test_component_or_nothing(innerₕ(uv(1), v)) === nothing
+        @test test_component_or_nothing(innerₕ(uv(1), D₋ₓ(v(2)))) == 2
+    end
+
+    @testset "Zero-cost routing" begin
+        # The routing recurses the AST rather than flattening it first, which answers
+        # with a Vector{Any}: that allocated 544 B per assembly and made every term a
+        # dynamic read.
+        function bytes(mk)
+            Ω = mesh(
+                domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8), (true, true)
+            )
+            V = gridspace(Ω, Val(3))
+            u = Rₕ(V, ntuple(_ -> _x1_plus_x2, 3))
+            lf = form(V, mk(u))
+            b = zeros(ndofs(V))
+            assemble!(b, lf)
+            return @allocated assemble!(b, lf)
+        end
+        @test bytes(u -> (v -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))) == 0
+    end
+end
+
+@testset "Linear combination of products" begin
+    # The shape a linear form actually has: a linear combination of inner products, and
+    # inside each one a linear combination of operators applied to the test function.
+    #
+    # This testset exists because the simpler cases all passed while this one was
+    # silently wrong. `innerₕ(uₕ, v)` on a composite space was right; adding an operator
+    # sum inside the argument was not, because `test_component_or_nothing` had no
+    # `OperatorAdd` method, so a sum *inside* one product routed to no component and
+    # broadcast to every block. It summed to a plausible number.
+    #
+    # The check is the defining property of an assembled right-hand side rather than a
+    # hand-computed integral: b is the vector for which bᵀw is the form evaluated at w,
+    # so the same combination applied numerically through the space layer to a grid
+    # function must give bᵀw. That validates the whole path (routing, offsets, weights
+    # and truncation) against code that has nothing to do with assembly.
+    Ωf = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (true, false))
+    Wf = gridspace(Ωf)
+    Vf = gridspace(Ωf, Val(3))
+
+    @testset "Scalar" begin
+        g1 = Rₕ(Wf, x -> x[1] + 2x[2])
+        g2 = Rₕ(Wf, _exp_x1)
+        g3 = Rₕ(Wf, x -> 1 + x[2]^2)
+        w = Rₕ(Wf, x -> sin(3x[1]) * cos(2x[2]) + 1)
+
+        b = assemble(
+            form(
+            Wf,
+            v -> innerₕ(g1, v + 2 * D₋ₓ(v) - Mₓ(v)) +
+                 inner₊ₓ(g2, D₋ᵧ(v) + jumpₓ(v)) +
+                 innerₕ(g3, 3 * M₊ᵧ(v) - D̽ₓ(v))
+        ),
+        )
+
+        reference = innerₕ(g1, w + 2 * D₋ₓ(w) - Mₓ(w)) +
+                    inner₊ₓ(g2, D₋ᵧ(w) + jumpₓ(w)) +
+                    innerₕ(g3, 3 * M₊ᵧ(w) - D̽ₓ(w))
+
+        @test dot(b, parent(w)) ≈ reference
+        @test !iszero(reference)          # the identity is not being met by both sides
+    end                                   # being zero
+
+    @testset "Composite shorthand" begin
+        gv = Rₕ(Vf, (x -> x[1] + 2x[2], _exp_x1, x -> 1 + x[2]^2))
+        wv = Rₕ(Vf, (x -> sin(3x[1]) + 1, x -> cos(2x[2]) + 2, x -> x[1] * x[2] + 1))
+
+        b = assemble(form(Vf, v -> innerₕ(gv, v + 2 * D₋ₓ(v) - Mₓ(v))))
+        reference = sum(
+            innerₕ(components(gv)[c], (w = components(wv)[c]; w + 2 * D₋ₓ(w) - Mₓ(w)))
+        for c in 1:3
+        )
+
+        @test dot(b, parent(wv)) ≈ reference
+        @test !iszero(reference)
+    end
+
+    @testset "Shorthand equivalence" begin
+        # Which is the property that makes it a shorthand rather than a second meaning.
+        uv = Rₕ(Vf, (_x1, x -> 100 * x[1], _x2))
+        # Any: each closure pair is its own type
+        for (short, long) in Any[
+            (
+                v -> innerₕ(uv, v),
+                v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)) + innerₕ(uv(3), v(3))
+            ),
+            (
+                v -> innerₕ(uv, v + D₋ₓ(v)),
+                v -> innerₕ(uv(1), v(1) + D₋ₓ(v(1))) +
+                     innerₕ(uv(2), v(2) + D₋ₓ(v(2))) +
+                     innerₕ(uv(3), v(3) + D₋ₓ(v(3)))
+            ),
+            (
+                v -> innerₕ(uv, v + 2 * D₋ₓ(v) - Mₓ(v)),
+                v -> innerₕ(uv(1), v(1) + 2 * D₋ₓ(v(1)) - Mₓ(v(1))) +
+                     innerₕ(uv(2), v(2) + 2 * D₋ₓ(v(2)) - Mₓ(v(2))) +
+                     innerₕ(uv(3), v(3) + 2 * D₋ₓ(v(3)) - Mₓ(v(3)))
+            ),
+            (
+                v -> inner₊ₓ(uv, v - M₊ᵧ(v)),
+                v -> inner₊ₓ(uv(1), v(1) - M₊ᵧ(v(1))) +
+                     inner₊ₓ(uv(2), v(2) - M₊ᵧ(v(2))) +
+                     inner₊ₓ(uv(3), v(3) - M₊ᵧ(v(3)))
+            ),
+            # with `markers`, which once routed every call to the scalar overload
+            (
+                v -> innerₕ(uv, v; markers = (:boundary,)),
+                v -> innerₕ(uv(1), v(1); markers = (:boundary,)) +
+                     innerₕ(uv(2), v(2); markers = (:boundary,)) +
+                     innerₕ(uv(3), v(3); markers = (:boundary,))
+            ),
+            (
+                v -> inner₊ₓ(uv, v; markers = (:boundary,)),
+                v -> inner₊ₓ(uv(1), v(1); markers = (:boundary,)) +
+                     inner₊ₓ(uv(2), v(2); markers = (:boundary,)) +
+                     inner₊ₓ(uv(3), v(3); markers = (:boundary,))
+            ),
+            (
+                v -> innerₕ(
+                    (_x1, x -> 100 * x[1], _x2), v; markers = (:boundary,)
+                ),
+                v -> innerₕ(_x1, v(1); markers = (:boundary,)) +
+                     innerₕ(x -> 100 * x[1], v(2); markers = (:boundary,)) +
+                     innerₕ(_x2, v(3); markers = (:boundary,))
+            ),
+            (
+                v -> inner_Γ(uv, v; markers = (:boundary,)),
+                v -> inner_Γ(uv(1), v(1); markers = (:boundary,)) +
+                     inner_Γ(uv(2), v(2); markers = (:boundary,)) +
+                     inner_Γ(uv(3), v(3); markers = (:boundary,))
+            ),
+            (
+                v -> inner_Γ(uv, v; markers = :xmax),
+                v -> inner_Γ(uv(1), v(1); markers = :xmax) +
+                     inner_Γ(uv(2), v(2); markers = :xmax) +
+                     inner_Γ(uv(3), v(3); markers = :xmax)
+            )
+        ]
+            @test assemble(form(Vf, short)) ≈ assemble(form(Vf, long))
+        end
+
+        # and the components really are distinguishable, so the check has teeth: the
+        # bug it guards against put every component into every block, which agrees with
+        # the truth whenever the components integrate to the same thing
+        b = assemble(form(Vf, v -> innerₕ(uv, v)))
+        m = ndofs(Wf)
+        @test [sum(b[(k * m + 1):((k + 1) * m)]) for k in 0:2] ≈ [0.5, 50.0, 0.5]
+
+        # likewise with `markers`: the second block holds 100 times the first, not a copy
+        bm = assemble(form(Vf, v -> innerₕ(uv, v; markers = (:boundary,))))
+        @test !iszero(sum(bm[1:m]))
+        @test sum(bm[(m + 1):(2m)]) ≈ 100 * sum(bm[1:m])
+
+        # an empty tuple keeps its own message when `markers` is given
+        err = try
+            form(Vf, v -> innerₕ((), v; markers = (:boundary,)))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError && occursin("empty tuple", sprint(showerror, err))
+    end
+
+    @testset "Index distribution" begin
+        v = TestFunction{2}()
+        @test (v + D₋ₓ(v))(1) == v(1) + D₋ₓ(v(1))
+        @test (3 * Mᵧ(v))(2) == 3 * Mᵧ(v(2))
+        @test (v + 2 * D₋ₓ(v) - Mₓ(v))(2) == v(2) + 2 * D₋ₓ(v(2)) - Mₓ(v(2))
+        @test v(1)(2) === IndexedTestFunction{2}(2)      # re-indexing replaces
+
+        # a sum inside one product takes the component its sides agree on
+        @test test_component_or_nothing(innerₕ(Rₕ(Wf, _Const(1.0)), v(2) + D₋ₓ(v(2)))) == 2
+        @test test_component_or_nothing(innerₕ(Rₕ(Wf, _Const(1.0)), v + D₋ₓ(v))) ===
+              nothing
+
+        # and sides naming different components are ill-formed rather than ambiguous
+        @test_throws ArgumentError test_component_or_nothing(
+            innerₕ(Rₕ(Wf, _Const(1.0)), v(1) + v(2))
+        )
+    end
+end
+
+@testset "Parallel vs serial agreement" begin
+    # Note what this does and does not establish. `Pkg.test()` runs on one thread unless
+    # the environment says otherwise, and on one thread the sweep is a degenerate case:
+    # the colours never actually run concurrently, so nothing can race. CI sets
+    # JULIA_NUM_THREADS=auto, so it is exercised there. The concurrent assertions below
+    # are skipped rather than passed when only one thread is available, so a
+    # single-threaded run cannot claim to have tested concurrency.
+    # @info "parallel assembly tested on $(Threads.nthreads()) thread(s)"
+
+    @testset "Sweep colouring" begin
+        # Two points of one colour must have disjoint write footprints, so the stride is
+        # the span of the reach plus one.
+        @test _colour_strides([(0,)]) == (1,)
+        @test _colour_strides([(0,), (-1,)]) == (2,)
+        @test _colour_strides([(-1, 0), (0, 0), (1, 0)]) == (3, 1)
+        @test _colour_strides([(0, -1), (0, 0)]) == (1, 2)
+        @test _colour_strides(NTuple{2, Int}[]) == (1, 1)
+
+        # and read off a real form, an operator reaching only its own point gives one
+        # colour (the whole grid in a single flat pass), while a difference gives two
+        plain = _colour_strides(
+            stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, v))))
+        )
+        wide = _colour_strides(
+            stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)))))
+        )
+        @test prod(plain) == 1
+        @test prod(wide) == 2
+    end
+
+    # Any: each space and source is its own type
+    for (nm, sp, u) in Any[
+        ("scalar", Wₕ, uₕ),
+        ("composite", Vₕ, Rₕ(Vₕ, (_sin_x1, x -> cos(x[2])))(1))
+    ]
+        lf = form(sp, v -> innerₕ(u, v))
+        bs = assemble(lf)
+        bp = similar(bs)
+        @test assemble_parallel!(bp, lf) === bp
+        @test bp ≈ bs
+    end
+
+    # The sweep accumulates where the version before it overwrote from a reduction, so a
+    # vector assembled into twice has to give the same answer and not double it.
+    lfr = form(Wₕ, v -> innerₕ(uₕ, v))
+    br = zeros(ndofs(Wₕ))
+    assemble_parallel!(br, lfr)
+    first_pass = copy(br)
+    assemble_parallel!(br, lfr)
+    @test br ≈ first_pass
+
+    @testset "Parallel differentiation" begin
+        # The per-thread buffers this path used to carry were `Vector{Float64}`
+        # outright, so a Dual-valued assembly could not take it at all. Nothing in the
+        # sweep names an element type now, so it can.
+        Ωa = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (12, 12), (true, true)
+        )
+        Wa = gridspace(Ωa)
+        resid(w, into!) = begin
+            uu = element(Wa, w)
+            bb = zeros(eltype(w), ndofs(Wa))
+            into!(bb, form(Wa, v -> innerₕ(uu, v)))
+            sum(bb)
+        end
+        w0 = fill(0.5, ndofs(Wa))
+        gp = DI.gradient(w -> resid(w, assemble_parallel!), AD_BACKEND, w0)
+        gs = DI.gradient(
+            w -> resid(w, (bb, f) -> assemble!(bb, f)), AD_BACKEND, w0)
+
+        @test gp ≈ gs
+        @test all(isfinite, gp)
+        @test !all(iszero, gp)
+    end
+
+    if Threads.nthreads() > 1
+        # More work than threads, so every thread gets a chunk of every colour. A race
+        # in the scatter shows here and nowhere else.
+        Ωb = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (40, 40), (true, true)
+        )
+        Wb = gridspace(Ωb)
+        ub = Rₕ(Wb, x -> x[1] * x[2] + 1)
+        lfb = form(Wb, v -> innerₕ(ub, v))
+        bs = assemble(lfb)
+        bp = similar(bs)
+        assemble_parallel!(bp, lfb)
+        @test bp ≈ bs
+
+        # repeated runs agree with each other, which a race would break
+        bp2 = similar(bs)
+        assemble_parallel!(bp2, lfb)
+        @test bp2 == bp
+
+        # A form whose test argument carries differences colours into more than one
+        # group, so the sweep takes the strided path rather than the single flat pass.
+        # Every one of these is a distinct arrangement of the routing, and the
+        # single-colour cases above exercise none of them.
+        # Any: each closure is its own type
+        for (cnm, g) in Any[
+            ("one difference", v -> innerₕ(ub, D₋ₓ(v))),
+            ("a linear combination", v -> innerₕ(ub, v + 2 * D₋ₓ(v) - Mₓ(v))),
+            ("innerₕ and inner₊ mixed", v -> innerₕ(ub, v) + inner₊(ub, D₋ₓ(v))),
+            (
+                "differences in both directions",
+                v -> innerₕ(ub, D₋ₓ(v)) + innerₕ(ub, D₋ᵧ(v))
+            )
+        ]
+            lfw = form(Wb, g)
+            @test prod(_colour_strides(stencil_offsets(resolve_form_ast(lfw)))) > 1
+            bw = assemble(lfw)
+            bwp = similar(bw)
+            assemble_parallel!(bwp, lfw)
+            @test bwp ≈ bw
+        end
+
+        # and the coupled path under threads, in each of its arrangements: the terms
+        # written out per component, the shorthand that sums them, a routed term
+        # carrying operators, and a term whose source and test components differ
+        Vb = gridspace(Ωb, Val(2))
+        uv2 = Rₕ(Vb, (_x1, x -> 10 * x[1]))
+        cv = components(uv2)
+        # Any: each closure is its own type
+        for (cnm, g) in Any[
+            ("per component", v -> innerₕ(cv[1], v(1)) + innerₕ(cv[2], v(2))),
+            ("the shorthand", v -> innerₕ(uv2, v)),
+            ("the shorthand with operators", v -> innerₕ(uv2, v + D₋ₓ(v))),
+            (
+                "routed, with operators",
+                v -> innerₕ(cv[1], v(1) + 2 * D₋ₓ(v(1))) + innerₕ(cv[2], v(2))
+            ),
+            ("crossed components", v -> innerₕ(cv[1], v(2))),
+            (
+                "a routed term beside an unrouted one",
+                v -> innerₕ(cv[1], v(1)) + innerₕ(uv2, v)
+            )
+        ]
+            lfc = form(Vb, g)
+            bc = assemble(lfc)
+            bcp = similar(bc)
+            assemble_parallel!(bcp, lfc)
+            @test bcp ≈ bc
+        end
+
+        # A heterogeneous leaf under real concurrency, same "more work than
+        # threads" sizing as the homogeneous stress case above: a race in the scatter,
+        # or a colour built from the wrong leaf's `LinearIndices`, would show here.
+        Ωb_small = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 17), (true, true)
+        )
+        Vhet = Bramble.CompositeGridSpace((Wb, gridspace(Ωb_small)))
+        uhet = Rₕ(Vhet, (x -> x[1] * x[2] + 1, x -> x[1] - 2x[2]))
+        # Any: each closure is its own type
+        for (cnm, g) in Any[
+            ("per component", v -> innerₕ(uhet(1), v(1)) + innerₕ(uhet(2), v(2))),
+            (
+                "routed, with operators",
+                v -> innerₕ(uhet(1), v(1) + 2 * D₋ₓ(v(1))) + innerₕ(uhet(2), v(2))
+            )
+        ]
+            lfh = form(Vhet, g)
+            bh = assemble(lfh)
+            bhp = similar(bh)
+            assemble_parallel!(bhp, lfh)
+            @test bhp ≈ bh
+
+            # repeated runs agree, which a race would break
+            bhp2 = similar(bh)
+            assemble_parallel!(bhp2, lfh)
+            @test bhp2 == bhp
+        end
+    else
+        @test_skip "concurrency not exercised: only one thread available"
+        @test_skip "repeatability under threads not exercised"
+        @test_skip "multi-colour parallel path under threads not exercised"
+        @test_skip "coupled parallel path under threads not exercised"
+        @test_skip "heterogeneous composite parallel path under threads not exercised"
+    end
+end
+
+@testset "Backend policy" begin
+    # assemble!/assemble no longer hardcode serial: they read test_space(form)'s
+    # execution_policy and dispatch to the same serial/parallel cores assemble_parallel!
+    # uses, so a Parallel()-backend form threads through the plain assemble!/assemble
+    # call, not only through the separate assemble_parallel! entry point.
+    Ω_par = mesh(
         domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
         (8, 8),
-        (true, true)
+        (true, true);
+        backend = backend(policy = Parallel())
     )
-    Wₕ = gridspace(Ωₕ)
-    Vₕ = gridspace(Ωₕ, Val(2))
-    uₕ = Rₕ(Wₕ, _x1_plus_x2)
+    W_par = gridspace(Ω_par)
+    u_par = Rₕ(W_par, _x1_plus_x2)
+    @test execution_policy(W_par) isa Parallel
+
+    lf_serial = form(Wₕ, v -> innerₕ(uₕ, v))
+    lf_parallel = form(W_par, v -> innerₕ(u_par, v))
+
+    b_default = assemble(lf_serial)
+    b_via_policy = assemble(lf_parallel)
+    @test b_via_policy ≈ b_default
+
+    bang_default = zeros(ndofs(Wₕ))
+    bang_via_policy = zeros(ndofs(W_par))
+    assemble!(bang_default, lf_serial)
+    assemble!(bang_via_policy, lf_parallel)
+    @test bang_via_policy ≈ bang_default
+
+    # Directly against assemble_parallel!, the lower-level entry point that always
+    # threads regardless of the backend's policy: a Parallel()-backend assemble! must
+    # agree with it exactly, not merely with the serial answer up to tolerance.
+    b_forced_parallel = similar(bang_via_policy)
+    assemble_parallel!(b_forced_parallel, lf_parallel)
+    @test bang_via_policy ≈ b_forced_parallel
+end
+
+@testset "Reassembly" begin
+    # The AST is stored on the form and references the underlying VectorElement arrays,
+    # so updating an element in-place via `parent(us) .= ...` or `Rₕ!(us, ...)` is
+    # automatically seen without allocating a new AST.
+    us = Rₕ(Wₕ, _Const(1.0))
+    lfs = form(Wₕ, v -> innerₕ(us, v))
+
+    first_sum = sum(assemble(lfs))
+    parent(us) .= 5.0
+    @test sum(assemble(lfs)) ≈ 5 * first_sum
+
+    # Dynamic scalar coefficients use Julia-native RefValue:
+    # `α = Ref(2.0)` with `α * v` or `α * innerₕ(...)`. Mutating `α[] = 10.0`
+    # is seen live during assembly with zero allocations.
+    α_ref = Ref(2.0)
+    ua_scalar = Rₕ(Wₕ, _Const(1.0))
+    lfa_scalar = form(Wₕ, v -> α_ref * innerₕ(ua_scalar, v))
+    at_two = sum(assemble(lfa_scalar))
+    α_ref[] = 10.0
+    @test sum(assemble(lfa_scalar)) ≈ 5 * at_two
+
+    # both at once: a dynamic Ref scalar and in-place element update
+    α_ref[] = 3.0
+    parent(ua_scalar) .= 2.0
+    @test sum(assemble(lfa_scalar)) ≈ 3 * at_two   # 3 x 2 against 2 x 1
+
+    # In-place assembly allocates zero bytes
+    d = zeros(ndofs(Wₕ))
+    @test_allocs assemble!(d, lfa_scalar)
+end
+
+@testset "Direct contraction" begin
+    # `l(vₕ)` answers with a number, and used to allocate a whole right-hand side to
+    # get it: `dot(assemble(form), parent(vₕ))`. The walk now multiplies each stencil
+    # weight by `v` at the row it would have written to, so the same sum is taken as it
+    # goes and no vector is built.
     n = ndofs(Wₕ)
+    lfc = form(Wₕ, v -> innerₕ(uₕ, v))
+    astc = resolve_form_ast(lfc)
+    b = assemble(lfc)
 
-    @testset "Construction" begin
-        lf = form(Wₕ, v -> innerₕ(uₕ, v))
-        @test lf isa LinearForm
-        @test test_space(lf) === Wₕ
-        @test resolve_form_ast(lf) isa LinearProduct
+    @test lfc(uₕ) ≈ sum(b .* parent(uₕ))
 
-        # No `restrict_to`, so `form` builds no point mask for typing restrictions: it
-        # allocates nothing whatever the grid size.
-        function _form_bytes(W, f)
-            form(W, v -> innerₕ(f, v))
-            return @allocated form(W, v -> innerₕ(f, v))
-        end
-        @test _form_bytes(Wₕ, uₕ) == 0
+    # The functor takes no `ast` on purpose, so it resolves every call and cannot be
+    # allocation free. What it must not do is build a full-length vector, which is what
+    # this pins: the bound is a fraction of one, not zero. Behind a barrier, because at
+    # top level over globals the call itself reports bytes it does not spend.
+    @test alloc_test(lfc, uₕ) < 8 * n ÷ 100
+    @test assemble(lfc) ≈ b                     # and the vector path still works
+
+    # Every arrangement has to agree with assembling and contracting by hand, not just
+    # the simple one: the composite cores are separate code from the scalar one.
+    Vc = gridspace(Ωₕ, Val(3))
+    uc = Rₕ(Vc, (_Const(1.0), _Const(100.0), _Const(10000.0)))
+    wc = Rₕ(Vc, (_Const(2.0), _Const(3.0), _Const(5.0)))
+    cc = components(uc)
+    # Any: each closure is its own type
+    for (nm, g) in Any[
+        ("scalar, a difference", v -> innerₕ(uₕ, D₋ₓ(v))),
+        ("scalar, a linear combination", v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v))),
+        ("scalar, two kinds summed", v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)))
+    ]
+        lfx = form(Wₕ, g)
+        @test lfx(uₕ) ≈ sum(assemble(lfx) .* parent(uₕ))
+    end
+    for (nm, g) in Any[
+        ("composite shorthand", v -> innerₕ(uc, v)),
+        ("composite per component", v -> innerₕ(cc[1], v(1)) + innerₕ(cc[2], v(2))),
+        (
+            "composite routed with operators",
+            v -> innerₕ(cc[1], v(1) + D₋ₓ(v(1))) + innerₕ(cc[3], v(3))
+        ),
+        ("composite crossed", v -> innerₕ(cc[1], v(2)))
+    ]
+        lfx = form(Vc, g)
+        @test lfx(wc) ≈ sum(assemble(lfx) .* parent(wc))
     end
 
-    @testset "Assembly" begin
-        # ∫(x + y) over the unit square is 1, and the assembled vector's entries are the
-        # cell measures times the coefficients, so it sums to exactly that.
-        b = assemble(form(Wₕ, v -> innerₕ(uₕ, v)))
-        @test length(b) == n
-        @test sum(b) ≈ 1.0
+    # A source carrying an operator is evaluated into an element during form construction
+    lfd = form(Wₕ, v -> innerₕ(D₋ₓ(uₕ), v))
+    @test lfd(uₕ) ≈ sum(assemble(lfd) .* parent(uₕ))
+    @test alloc_test(lfd, uₕ) < 8 * n ÷ 100
 
-        # a constant source integrates to the area
-        @test sum(assemble(form(Wₕ, v -> innerₕ(Rₕ(Wₕ, _Const(3.0)), v)))) ≈ 3.0
+    # and hoisting the operator out of the form agrees
+    duₕ = D₋ₓ(uₕ)
+    lfh = form(Wₕ, v -> innerₕ(duₕ, v))
+    @test lfh(uₕ) ≈ lfd(uₕ)
+    @test alloc_test(lfh, uₕ) < 8 * n ÷ 100
+end
 
-        # and a number or a function on the left works the same way
-        @test sum(assemble(form(Wₕ, v -> innerₕ(2.0, v)))) ≈ 2.0
-        @test sum(assemble(form(Wₕ, v -> innerₕ(_x1, v)))) ≈ 0.5
+@testset "Live coefficient evaluation" begin
+    # Everything above went through `assemble`. Evaluation is the other way a form gets
+    # used, and it has to agree: `l(vₕ)` and `evaluate!` both resolve from `f`, so a
+    # coefficient changed between two calls is read again.
+    uev = Rₕ(Wₕ, _Const(1.0))
+    wₕ = Rₕ(Wₕ, _Const(1.0))
+    lfe = form(Wₕ, v -> innerₕ(uev, v))
 
-        # in place, into a vector the caller owns
-        b2 = zeros(n)
-        returned = assemble!(b2, form(Wₕ, v -> innerₕ(uₕ, v)))
-        @test returned === b2
-        @test b2 ≈ b
+    first_value = lfe(wₕ)
+    parent(uev) .= 5.0
+    @test lfe(wₕ) ≈ 5 * first_value
 
-        # assembling twice into the same vector does not accumulate
-        assemble!(b2, form(Wₕ, v -> innerₕ(uₕ, v)))
-        @test b2 ≈ b
-    end
+    # a live scalar via RefValue, through evaluation rather than assembly
+    α_eval = Ref(2.0)
+    us = Rₕ(Wₕ, _Const(1.0))
+    lfes = form(Wₕ, v -> α_eval * innerₕ(us, v))
+    at_two = lfes(wₕ)
+    α_eval[] = 10.0
+    @test lfes(wₕ) ≈ 5 * at_two
 
-    @testset "Composite space" begin
-        # The composite core walks the components and assembles the *same* AST into each
-        # block at its offset. So a form written against one source puts that source in
-        # every component: ∫x over the unit square is 0.5, and the assembled vector sums to
-        # 1.0 across the two blocks. Giving each component a different integrand needs the
-        # indexed trial and test functions, which is the coupled path in bilinear.jl.
-        uv = Rₕ(Vₕ, (_x1, _x2))
-        lf = form(Vₕ, v -> innerₕ(uv(1), v))
-        b = assemble(lf)
-        @test length(b) == ndofs(Vₕ)
-        @test sum(b) ≈ 2 * 0.5
+    # `evaluate!` agrees with the functor
+    scratch = zeros(ndofs(Wₕ))
+    @test evaluate!(scratch, lfes, wₕ) ≈ lfes(wₕ)
+    @test evaluate!(scratch, lfe, wₕ) ≈ lfe(wₕ)
 
-        # and each block holds the same thing, which is what "the same AST" means
-        m = ndofs(Wₕ)
-        @test b[1:m] ≈ b[(m + 1):(2m)]
-    end
+    # In-place evaluation writes through
+    ul = Rₕ(Wₕ, _Const(1.0))
+    lfl = form(Wₕ, v -> innerₕ(ul, v))
+    loop_first = evaluate!(scratch, lfl, wₕ)
+    Rₕ!(ul, _Const(5.0))
+    @test evaluate!(scratch, lfl, wₕ) ≈ 5 * loop_first
+end
 
-    @testset "Nested composite space" begin
-        # The cores used to walk `space.spaces`, the top-level components, and reserve
-        # `ndofs(sp)` for each. For a component that is itself composite that reserved the
-        # whole nested block while `indices(mesh(sp))` covered one leaf's grid, so the
-        # assembly wrote into a fraction of the range. Walking the leaves fixes it, and the
-        # check is that a nested space and a flat one of the same size now agree.
-        inner = gridspace(Ωₕ, Val(2))
-        nested = Bramble.CompositeGridSpace((Wₕ, inner, Wₕ))
-        flat = gridspace(Ωₕ, Val(4))
-        @test ndofs(nested) == ndofs(flat)
+@testset "Source variants" begin
+    # The source of a linear form need not be a grid function. A number and a function
+    # both work, and an integer promotes rather than forcing the output's element type:
+    # the same rule that lets a Dual through.
+    Wc = gridspace(Ωₕ)
+    one_over_Ω = 1.0                       # the mesh has measure 1, so ∫c = c
 
-        bn = assemble(form(nested, v -> innerₕ(uₕ, v)))
-        bf = assemble(form(flat, v -> innerₕ(uₕ, v)))
-        @test bn ≈ bf
-        @test sum(bn) ≈ 4 * 1.0            # four blocks, each integrating to 1
+    @test sum(assemble(form(Wc, v -> innerₕ(1, v)))) ≈ one_over_Ω
+    @test eltype(assemble(form(Wc, v -> innerₕ(1, v)))) === Float64
 
-        # and the parallel core walks the leaves the same way
-        bp = similar(bn)
-        assemble_parallel!(bp, form(nested, v -> innerₕ(uₕ, v)))
-        @test bp ≈ bn
-    end
+    # and they mix with a grid-function source in one form
+    gₕ = Rₕ(Wc, _Const(3.0))
+    @test sum(assemble(form(Wc, v -> innerₕ(1.0, v) + innerₕ(gₕ, v)))) ≈ 4.0
 
-    @testset "Heterogeneous composite spaces" begin
-        # `lin_indices`/`mesh_markers` used to be built once from the composite space's
-        # first leaf and handed to every leaf's own assembly walk. For a homogeneous
-        # composite every leaf shares one size, so nothing caught it; for a genuinely
-        # heterogeneous one (built directly from a tuple of differently-sized leaves,
-        # bypassing `gridspace(Ω, Val(N))`, which always broadcasts one shared mesh), any
-        # leaf past the first ran its own indices through leaf 1's (smaller or larger)
-        # `LinearIndices` and either threw `BoundsError` or, worse, read the wrong leaf's
-        # data at a coincidentally in-bounds index.
-        Ωbig = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (8, 8), (true, true))
-        Ωsmall = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (4, 4), (true, true))
-        Wbig, Wsmall = gridspace(Ωbig), gridspace(Ωsmall)
-        Vh = Bramble.CompositeGridSpace((Wbig, Wsmall))
-        @test ndofs(Vh) == ndofs(Wbig) + ndofs(Wsmall)
+    Vt = gridspace(Ωₕ, Val(2))
+    nb = ndofs(Wc)
+    blk(b) = [sum(b[((k - 1) * nb + 1):(k * nb)]) for k in 1:(length(b) ÷ nb)]
 
-        # non-constant, and different per leaf, so an index mix-up would misread a value
-        # rather than merely surviving by coincidence
-        uv = Rₕ(Vh, (x -> x[1] + 2x[2], x -> 2x[1] - x[2]))
+    # On a composite space a source naming no component goes to every block, which is
+    # the rule that lets the two spellings mix.
+    @test blk(assemble(form(Vt, v -> innerₕ(1.0, v)))) ≈ [1.0, 1.0]
+    @test blk(assemble(form(Vt, v -> innerₕ(1.0, v(1))))) ≈ [1.0, 0.0]
 
-        # leaf 1 alone: already worked before this fix, kept as the reference case
-        b1 = assemble(form(Vh, v -> innerₕ(uv(1), v(1))))
-        # entrywise, not summed: a permuted read keeps the sum on these uniform leaves
-        @test b1[1:ndofs(Wbig)] ≈
-              parent(Rₕ(Wbig, x -> x[1] + 2x[2])) .* weights(Wbig, Innerh())
-        @test all(iszero, b1[(ndofs(Wbig) + 1):end])   # leaf 2's block untouched
+    # A tuple reads one entry per component, the way `Rₕ(Vₕ, (f, g))` already does.
+    @test blk(assemble(form(Vt, v -> innerₕ((1.0, 2.0), v)))) ≈ [1.0, 2.0]
+    @test blk(assemble(form(Vt, v -> innerₕ((_Const(1.0), _Const(2.0)), v)))) ≈ [1.0, 2.0]
 
-        # leaf 2 alone: this is exactly what used to throw BoundsError
-        b2 = assemble(form(Vh, v -> innerₕ(uv(2), v(2))))
-        @test b2[(ndofs(Wbig) + 1):end] ≈
-              parent(Rₕ(Wsmall, x -> 2x[1] - x[2])) .* weights(Wsmall, Innerh())
-        @test all(iszero, b2[1:ndofs(Wbig)])            # leaf 1's block untouched
+    # which agrees with writing the components out
+    @test assemble(form(Vt, v -> innerₕ((1.0, 2.0), v))) ≈
+          assemble(form(Vt, v -> innerₕ(1.0, v(1)) + innerₕ(2.0, v(2))))
 
-        # both together, routed: each block gets its own leaf's own answer
-        lboth = form(Vh, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
-        bboth = assemble(lboth)
-        @test bboth[1:ndofs(Wbig)] ≈ b1[1:ndofs(Wbig)]
-        @test bboth[(ndofs(Wbig) + 1):end] ≈ b2[(ndofs(Wbig) + 1):end]
+    # an empty tuple names nothing, and says so
+    @test_throws ArgumentError form(Vt, v -> innerₕ((), v))
 
-        # contraction takes the same walk, so it needs the same fix independently:
-        # l(uv) = Σᵢ bᵢ uvᵢ, not Σᵢ bᵢ (uv is not constant here on purpose)
-        @test lboth(uv) ≈ dot(bboth, parent(uv))
-
-        # assemble! into a pre-allocated vector: the everyday, allocation-free call
-        b3 = similar(bboth)
-        assemble!(b3, lboth)
-        @test b3 ≈ bboth
-
-        # the parallel core walks leaves the same way and needs its own leaf's mesh too
-        bp = similar(bboth)
-        assemble_parallel!(bp, lboth)
-        @test bp ≈ bboth
-    end
-
-    @testset "Coupled right-hand side" begin
-        # `v(i)` gives the i-th component of the symbolic test function, so a coupled form
-        # reads the way an indexed grid function does:
-        #
-        #     form(Vₕ, v -> innerₕ(uₕ(1), v(1)) + innerₕ(uₕ(2), v(2)))
-        #
-        # Three things had to exist for that. `TestFunction` was not callable at all.
-        # `block_extract.jl` routed a `BilinearProduct` to its block but not a
-        # `LinearProduct`, so a coupled *right-hand side* could not be routed. And the
-        # composite core assembled one AST into every block, which is the opposite of what a
-        # per-component form means.
-        m = ndofs(Wₕ)
-        uv = Rₕ(Vₕ, (_x1, x -> 10 * x[1]))
-        nblocks = ndofs(Vₕ) ÷ m
-        blocks(b) = [sum(b[(k * m + 1):((k + 1) * m)]) for k in 0:(nblocks - 1)]
-
-        @testset "Indexed test function" begin
-            v = TestFunction{2}()
-            @test v(2) === IndexedTestFunction{2}(2)
-            @test TrialFunction{2}()(1) === IndexedTrialFunction{2}(1)
-        end
-
-        @testset "Block placement" begin
-            # ∫x = 0.5 into the first block, ∫10x = 5.0 into the second
-            b = assemble(form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2))))
-            @test blocks(b) ≈ [0.5, 5.0]
-
-            # one term alone reaches only its own block
-            @test blocks(assemble(form(Vₕ, v -> innerₕ(uv(2), v(2))))) ≈ [0.0, 5.0]
-        end
-
-        @testset "Unindexed broadcast" begin
-            # The two spellings mix, because routing is decided per term
-            mixed = assemble(form(Vₕ, v -> innerₕ(uv(1), v) + innerₕ(uv(2), v(2))))
-            @test blocks(mixed) ≈ [0.5, 0.5 + 5.0]
-        end
-
-        @testset "Routing query" begin
-            v = TestFunction{2}()
-            @test test_component_or_nothing(innerₕ(uv(1), v(2))) == 2
-            @test test_component_or_nothing(innerₕ(uv(1), v)) === nothing
-            @test test_component_or_nothing(innerₕ(uv(1), D₋ₓ(v(2)))) == 2
-        end
-
-        @testset "Zero-cost routing" begin
-            # The routing recurses the AST rather than flattening it first, which answers
-            # with a Vector{Any}: that allocated 544 B per assembly and made every term a
-            # dynamic read.
-            function bytes(mk)
-                Ω = mesh(
-                    domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8), (true, true)
-                )
-                V = gridspace(Ω, Val(3))
-                u = Rₕ(V, ntuple(_ -> _x1_plus_x2, 3))
-                lf = form(V, mk(u))
-                b = zeros(ndofs(V))
-                assemble!(b, lf)
-                return @allocated assemble!(b, lf)
-            end
-            @test bytes(u -> (v -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))) == 0
+    # A grid-function source is read at the test space's own linear indices, so one from
+    # another mesh named other points: a finer one was read silently, a coarser one past
+    # its end. `form` now refuses it. Same counts with other (graded) points is the case
+    # a length check would let through.
+    Ωd = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+    uni(n) = gridspace(mesh(Ωd, (n, n), (true, true)))
+    W9 = uni(9)
+    one_on(W) = Rₕ(W, _Const(1.0))
+    elsewhere = "lives on another mesh than the space it is read on"
+    for (label, s) in (("finer", one_on(uni(11))), ("coarser", one_on(uni(5))),
+        ("graded", one_on(gridspace(_graded_mesh((9, 9))))))
+        @testset "$label" begin
+            @test_throws elsewhere form(W9, v -> innerₕ(s, v))
+            @test_throws elsewhere form(W9, v -> inner_Γ(s, v; markers = (:ymin,)))
+            @test_throws elsewhere form(W9, v -> inner₊ₓ(s, v))
+            @test_throws elsewhere form(W9, v -> inner₊((s, s), ∇ₕ(v)))
+            # inside a sum, a scale and a difference too
+            @test_throws elsewhere form(W9, v -> innerₕ(1.0, v) + 2 * innerₕ(s, D₋ₓ(v)))
         end
     end
+    @test_throws ArgumentError form(W9, v -> innerₕ(one_on(uni(11)), v))
+    # the message names both meshes' point counts
+    @test_throws "the source's mesh has (11, 11) points and the one it is read on (9, 9)" form(
+        W9, v -> innerₕ(one_on(uni(11)), v))
+    # equal counts on other points: the message names the shared shape instead
+    @test_throws "the source is on another mesh of the same shape, (9, 9) points" form(
+        W9, v -> innerₕ(one_on(gridspace(_graded_mesh((9, 9)))), v))
 
-    @testset "Linear combination of products" begin
-        # The shape a linear form actually has: a linear combination of inner products, and
-        # inside each one a linear combination of operators applied to the test function.
-        #
-        # This testset exists because the simpler cases all passed while this one was
-        # silently wrong. `innerₕ(uₕ, v)` on a composite space was right; adding an operator
-        # sum inside the argument was not, because `test_component_or_nothing` had no
-        # `OperatorAdd` method, so a sum *inside* one product routed to no component and
-        # broadcast to every block. It summed to a plausible number.
-        #
-        # The check is the defining property of an assembled right-hand side rather than a
-        # hand-computed integral: b is the vector for which bᵀw is the form evaluated at w,
-        # so the same combination applied numerically through the space layer to a grid
-        # function must give bᵀw. That validates the whole path (routing, offsets, weights
-        # and truncation) against code that has nothing to do with assembly.
-        Ωf = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (true, false))
-        Wf = gridspace(Ωf)
-        Vf = gridspace(Ωf, Val(3))
+    # In 1D, where a bare test function in inner₊ reaches the source path
+    Ω1 = domain(interval(0.0, 1.0))
+    W1 = gridspace(mesh(Ω1, 9, true))
+    @test_throws elsewhere form(W1, v -> inner₊(one_on(gridspace(mesh(Ω1, 13, true))), v))
+    @test sum(assemble(form(W1, v -> inner₊(one_on(W1), v)))) ≈ 1.0
 
-        @testset "Scalar" begin
-            g1 = Rₕ(Wf, x -> x[1] + 2x[2])
-            g2 = Rₕ(Wf, _exp_x1)
-            g3 = Rₕ(Wf, x -> 1 + x[2]^2)
-            w = Rₕ(Wf, x -> sin(3x[1]) * cos(2x[2]) + 1)
+    # A composite form checks a source against every leaf it goes to: one naming no
+    # component goes to both, and the second leaf is on another mesh.
+    Vm = W9 × uni(11)
+    s9 = one_on(W9)
+    @test_throws elsewhere form(Vm, v -> innerₕ(s9, v))
+    @test_throws elsewhere form(Vm, v -> innerₕ(s9, v(2)))
+    b9 = assemble(form(Vm, v -> innerₕ(s9, v(1))))
+    @test sum(b9[1:ndofs(W9)]) ≈ 1.0 && iszero(b9[(ndofs(W9) + 1):end])
+    # a composite source, split per leaf, with its second leaf on another mesh
+    @test_throws elsewhere form(W9 × W9, v -> innerₕ(Rₕ(Vm, (_Const(1.0), _Const(1.0))), v))
+    @test_throws elsewhere form(W9 × W9, v -> innerₕ((s9, one_on(uni(11))), v))
 
-            b = assemble(
-                form(
-                Wf,
-                v -> innerₕ(g1, v + 2 * D₋ₓ(v) - Mₓ(v)) +
-                     inner₊ₓ(g2, D₋ᵧ(v) + jumpₓ(v)) +
-                     innerₕ(g3, 3 * M₊ᵧ(v) - D̽ₓ(v))
-            ),
-            )
+    # The same points on a distinct mesh object are the same mesh, uniform or graded,
+    # and the own-mesh value is ∫1 = 1.
+    @test sum(assemble(form(W9, v -> innerₕ(s9, v)))) ≈ 1.0
+    @test sum(assemble(form(W9, v -> innerₕ(one_on(uni(9)), v)))) ≈ 1.0
+    Wg = gridspace(_graded_mesh((9, 9)))
+    @test sum(assemble(form(Wg, v -> innerₕ(one_on(gridspace(_graded_mesh((9, 9)))), v)))) ≈
+          1.0
+end
 
-            reference = innerₕ(g1, w + 2 * D₋ₓ(w) - Mₓ(w)) +
-                        inner₊ₓ(g2, D₋ᵧ(w) + jumpₓ(w)) +
-                        innerₕ(g3, 3 * M₊ᵧ(w) - D̽ₓ(w))
-
-            @test dot(b, parent(w)) ≈ reference
-            @test !iszero(reference)          # the identity is not being met by both sides
-        end                                   # being zero
-
-        @testset "Composite shorthand" begin
-            gv = Rₕ(Vf, (x -> x[1] + 2x[2], _exp_x1, x -> 1 + x[2]^2))
-            wv = Rₕ(Vf, (x -> sin(3x[1]) + 1, x -> cos(2x[2]) + 2, x -> x[1] * x[2] + 1))
-
-            b = assemble(form(Vf, v -> innerₕ(gv, v + 2 * D₋ₓ(v) - Mₓ(v))))
-            reference = sum(
-                innerₕ(components(gv)[c], (w = components(wv)[c]; w + 2 * D₋ₓ(w) - Mₓ(w)))
-            for c in 1:3
-            )
-
-            @test dot(b, parent(wv)) ≈ reference
-            @test !iszero(reference)
-        end
-
-        @testset "Shorthand equivalence" begin
-            # Which is the property that makes it a shorthand rather than a second meaning.
-            uv = Rₕ(Vf, (_x1, x -> 100 * x[1], _x2))
-            # Any: each closure pair is its own type
-            for (short, long) in Any[
-                (
-                    v -> innerₕ(uv, v),
-                    v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)) + innerₕ(uv(3), v(3))
-                ),
-                (
-                    v -> innerₕ(uv, v + D₋ₓ(v)),
-                    v -> innerₕ(uv(1), v(1) + D₋ₓ(v(1))) +
-                         innerₕ(uv(2), v(2) + D₋ₓ(v(2))) +
-                         innerₕ(uv(3), v(3) + D₋ₓ(v(3)))
-                ),
-                (
-                    v -> innerₕ(uv, v + 2 * D₋ₓ(v) - Mₓ(v)),
-                    v -> innerₕ(uv(1), v(1) + 2 * D₋ₓ(v(1)) - Mₓ(v(1))) +
-                         innerₕ(uv(2), v(2) + 2 * D₋ₓ(v(2)) - Mₓ(v(2))) +
-                         innerₕ(uv(3), v(3) + 2 * D₋ₓ(v(3)) - Mₓ(v(3)))
-                ),
-                (
-                    v -> inner₊ₓ(uv, v - M₊ᵧ(v)),
-                    v -> inner₊ₓ(uv(1), v(1) - M₊ᵧ(v(1))) +
-                         inner₊ₓ(uv(2), v(2) - M₊ᵧ(v(2))) +
-                         inner₊ₓ(uv(3), v(3) - M₊ᵧ(v(3)))
-                ),
-                # with `markers`, which once routed every call to the scalar overload
-                (
-                    v -> innerₕ(uv, v; markers = (:boundary,)),
-                    v -> innerₕ(uv(1), v(1); markers = (:boundary,)) +
-                         innerₕ(uv(2), v(2); markers = (:boundary,)) +
-                         innerₕ(uv(3), v(3); markers = (:boundary,))
-                ),
-                (
-                    v -> inner₊ₓ(uv, v; markers = (:boundary,)),
-                    v -> inner₊ₓ(uv(1), v(1); markers = (:boundary,)) +
-                         inner₊ₓ(uv(2), v(2); markers = (:boundary,)) +
-                         inner₊ₓ(uv(3), v(3); markers = (:boundary,))
-                ),
-                (
-                    v -> innerₕ(
-                        (_x1, x -> 100 * x[1], _x2), v; markers = (:boundary,)
-                    ),
-                    v -> innerₕ(_x1, v(1); markers = (:boundary,)) +
-                         innerₕ(x -> 100 * x[1], v(2); markers = (:boundary,)) +
-                         innerₕ(_x2, v(3); markers = (:boundary,))
-                ),
-                (
-                    v -> inner_Γ(uv, v; markers = (:boundary,)),
-                    v -> inner_Γ(uv(1), v(1); markers = (:boundary,)) +
-                         inner_Γ(uv(2), v(2); markers = (:boundary,)) +
-                         inner_Γ(uv(3), v(3); markers = (:boundary,))
-                ),
-                (
-                    v -> inner_Γ(uv, v; markers = :xmax),
-                    v -> inner_Γ(uv(1), v(1); markers = :xmax) +
-                         inner_Γ(uv(2), v(2); markers = :xmax) +
-                         inner_Γ(uv(3), v(3); markers = :xmax)
-                )
-            ]
-                @test assemble(form(Vf, short)) ≈ assemble(form(Vf, long))
-            end
-
-            # and the components really are distinguishable, so the check has teeth: the
-            # bug it guards against put every component into every block, which agrees with
-            # the truth whenever the components integrate to the same thing
-            b = assemble(form(Vf, v -> innerₕ(uv, v)))
-            m = ndofs(Wf)
-            @test [sum(b[(k * m + 1):((k + 1) * m)]) for k in 0:2] ≈ [0.5, 50.0, 0.5]
-
-            # likewise with `markers`: the second block holds 100 times the first, not a copy
-            bm = assemble(form(Vf, v -> innerₕ(uv, v; markers = (:boundary,))))
-            @test !iszero(sum(bm[1:m]))
-            @test sum(bm[(m + 1):(2m)]) ≈ 100 * sum(bm[1:m])
-
-            # an empty tuple keeps its own message when `markers` is given
-            err = try
-                form(Vf, v -> innerₕ((), v; markers = (:boundary,)))
-                nothing
-            catch e
-                e
-            end
-            @test err isa ArgumentError && occursin("empty tuple", sprint(showerror, err))
-        end
-
-        @testset "Index distribution" begin
-            v = TestFunction{2}()
-            @test (v + D₋ₓ(v))(1) == v(1) + D₋ₓ(v(1))
-            @test (3 * Mᵧ(v))(2) == 3 * Mᵧ(v(2))
-            @test (v + 2 * D₋ₓ(v) - Mₓ(v))(2) == v(2) + 2 * D₋ₓ(v(2)) - Mₓ(v(2))
-            @test v(1)(2) === IndexedTestFunction{2}(2)      # re-indexing replaces
-
-            # a sum inside one product takes the component its sides agree on
-            @test test_component_or_nothing(innerₕ(Rₕ(Wf, _Const(1.0)), v(2) + D₋ₓ(v(2)))) == 2
-            @test test_component_or_nothing(innerₕ(Rₕ(Wf, _Const(1.0)), v + D₋ₓ(v))) ===
-                  nothing
-
-            # and sides naming different components are ill-formed rather than ambiguous
-            @test_throws ArgumentError test_component_or_nothing(
-                innerₕ(Rₕ(Wf, _Const(1.0)), v(1) + v(2))
-            )
-        end
-    end
-
-    @testset "Parallel vs serial agreement" begin
-        # Note what this does and does not establish. `Pkg.test()` runs on one thread unless
-        # the environment says otherwise, and on one thread the sweep is a degenerate case:
-        # the colours never actually run concurrently, so nothing can race. CI sets
-        # JULIA_NUM_THREADS=auto, so it is exercised there. The concurrent assertions below
-        # are skipped rather than passed when only one thread is available, so a
-        # single-threaded run cannot claim to have tested concurrency.
-        # @info "parallel assembly tested on $(Threads.nthreads()) thread(s)"
-
-        @testset "Sweep colouring" begin
-            # Two points of one colour must have disjoint write footprints, so the stride is
-            # the span of the reach plus one.
-            @test _colour_strides([(0,)]) == (1,)
-            @test _colour_strides([(0,), (-1,)]) == (2,)
-            @test _colour_strides([(-1, 0), (0, 0), (1, 0)]) == (3, 1)
-            @test _colour_strides([(0, -1), (0, 0)]) == (1, 2)
-            @test _colour_strides(NTuple{2, Int}[]) == (1, 1)
-
-            # and read off a real form, an operator reaching only its own point gives one
-            # colour (the whole grid in a single flat pass), while a difference gives two
-            plain = _colour_strides(
-                stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, v))))
-            )
-            wide = _colour_strides(
-                stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)))))
-            )
-            @test prod(plain) == 1
-            @test prod(wide) == 2
-        end
-
-        # Any: each space and source is its own type
-        for (nm, sp, u) in Any[
-            ("scalar", Wₕ, uₕ),
-            ("composite", Vₕ, Rₕ(Vₕ, (_sin_x1, x -> cos(x[2])))(1))
-        ]
-            lf = form(sp, v -> innerₕ(u, v))
-            bs = assemble(lf)
-            bp = similar(bs)
-            @test assemble_parallel!(bp, lf) === bp
-            @test bp ≈ bs
-        end
-
-        # The sweep accumulates where the version before it overwrote from a reduction, so a
-        # vector assembled into twice has to give the same answer and not double it.
-        lfr = form(Wₕ, v -> innerₕ(uₕ, v))
-        br = zeros(ndofs(Wₕ))
-        assemble_parallel!(br, lfr)
-        first_pass = copy(br)
-        assemble_parallel!(br, lfr)
-        @test br ≈ first_pass
-
-        @testset "Parallel differentiation" begin
-            # The per-thread buffers this path used to carry were `Vector{Float64}`
-            # outright, so a Dual-valued assembly could not take it at all. Nothing in the
-            # sweep names an element type now, so it can.
-            Ωa = mesh(
-                domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (12, 12), (true, true)
-            )
-            Wa = gridspace(Ωa)
-            resid(w, into!) = begin
-                uu = element(Wa, w)
-                bb = zeros(eltype(w), ndofs(Wa))
-                into!(bb, form(Wa, v -> innerₕ(uu, v)))
-                sum(bb)
-            end
-            w0 = fill(0.5, ndofs(Wa))
-            gp = DI.gradient(w -> resid(w, assemble_parallel!), AutoForwardDiff(), w0)
-            gs = DI.gradient(
-                w -> resid(w, (bb, f) -> assemble!(bb, f)), AutoForwardDiff(), w0)
-
-            @test gp ≈ gs
-            @test all(isfinite, gp)
-            @test !all(iszero, gp)
-        end
-
-        if Threads.nthreads() > 1
-            # More work than threads, so every thread gets a chunk of every colour. A race
-            # in the scatter shows here and nowhere else.
-            Ωb = mesh(
-                domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (40, 40), (true, true)
-            )
-            Wb = gridspace(Ωb)
-            ub = Rₕ(Wb, x -> x[1] * x[2] + 1)
-            lfb = form(Wb, v -> innerₕ(ub, v))
-            bs = assemble(lfb)
-            bp = similar(bs)
-            assemble_parallel!(bp, lfb)
-            @test bp ≈ bs
-
-            # repeated runs agree with each other, which a race would break
-            bp2 = similar(bs)
-            assemble_parallel!(bp2, lfb)
-            @test bp2 == bp
-
-            # A form whose test argument carries differences colours into more than one
-            # group, so the sweep takes the strided path rather than the single flat pass.
-            # Every one of these is a distinct arrangement of the routing, and the
-            # single-colour cases above exercise none of them.
-            # Any: each closure is its own type
-            for (cnm, g) in Any[
-                ("one difference", v -> innerₕ(ub, D₋ₓ(v))),
-                ("a linear combination", v -> innerₕ(ub, v + 2 * D₋ₓ(v) - Mₓ(v))),
-                ("innerₕ and inner₊ mixed", v -> innerₕ(ub, v) + inner₊(ub, D₋ₓ(v))),
-                (
-                    "differences in both directions",
-                    v -> innerₕ(ub, D₋ₓ(v)) + innerₕ(ub, D₋ᵧ(v))
-                )
-            ]
-                lfw = form(Wb, g)
-                @test prod(_colour_strides(stencil_offsets(resolve_form_ast(lfw)))) > 1
-                bw = assemble(lfw)
-                bwp = similar(bw)
-                assemble_parallel!(bwp, lfw)
-                @test bwp ≈ bw
-            end
-
-            # and the coupled path under threads, in each of its arrangements: the terms
-            # written out per component, the shorthand that sums them, a routed term
-            # carrying operators, and a term whose source and test components differ
-            Vb = gridspace(Ωb, Val(2))
-            uv2 = Rₕ(Vb, (_x1, x -> 10 * x[1]))
-            cv = components(uv2)
-            # Any: each closure is its own type
-            for (cnm, g) in Any[
-                ("per component", v -> innerₕ(cv[1], v(1)) + innerₕ(cv[2], v(2))),
-                ("the shorthand", v -> innerₕ(uv2, v)),
-                ("the shorthand with operators", v -> innerₕ(uv2, v + D₋ₓ(v))),
-                (
-                    "routed, with operators",
-                    v -> innerₕ(cv[1], v(1) + 2 * D₋ₓ(v(1))) + innerₕ(cv[2], v(2))
-                ),
-                ("crossed components", v -> innerₕ(cv[1], v(2))),
-                (
-                    "a routed term beside an unrouted one",
-                    v -> innerₕ(cv[1], v(1)) + innerₕ(uv2, v)
-                )
-            ]
-                lfc = form(Vb, g)
-                bc = assemble(lfc)
-                bcp = similar(bc)
-                assemble_parallel!(bcp, lfc)
-                @test bcp ≈ bc
-            end
-
-            # A heterogeneous leaf under real concurrency, same "more work than
-            # threads" sizing as the homogeneous stress case above: a race in the scatter,
-            # or a colour built from the wrong leaf's `LinearIndices`, would show here.
-            Ωb_small = mesh(
-                domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (17, 17), (true, true)
-            )
-            Vhet = Bramble.CompositeGridSpace((Wb, gridspace(Ωb_small)))
-            uhet = Rₕ(Vhet, (x -> x[1] * x[2] + 1, x -> x[1] - 2x[2]))
-            # Any: each closure is its own type
-            for (cnm, g) in Any[
-                ("per component", v -> innerₕ(uhet(1), v(1)) + innerₕ(uhet(2), v(2))),
-                (
-                    "routed, with operators",
-                    v -> innerₕ(uhet(1), v(1) + 2 * D₋ₓ(v(1))) + innerₕ(uhet(2), v(2))
-                )
-            ]
-                lfh = form(Vhet, g)
-                bh = assemble(lfh)
-                bhp = similar(bh)
-                assemble_parallel!(bhp, lfh)
-                @test bhp ≈ bh
-
-                # repeated runs agree, which a race would break
-                bhp2 = similar(bh)
-                assemble_parallel!(bhp2, lfh)
-                @test bhp2 == bhp
-            end
-        else
-            @test_skip "concurrency not exercised: only one thread available"
-            @test_skip "repeatability under threads not exercised"
-            @test_skip "multi-colour parallel path under threads not exercised"
-            @test_skip "coupled parallel path under threads not exercised"
-            @test_skip "heterogeneous composite parallel path under threads not exercised"
-        end
-    end
-
-    @testset "Backend policy" begin
-        # assemble!/assemble no longer hardcode serial: they read test_space(form)'s
-        # execution_policy and dispatch to the same serial/parallel cores assemble_parallel!
-        # uses, so a Parallel()-backend form threads through the plain assemble!/assemble
-        # call, not only through the separate assemble_parallel! entry point.
-        Ω_par = mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 1.0), :bottom => :bottom),
-            (8, 8),
-            (true, true);
-            backend = backend(policy = Parallel())
-        )
-        W_par = gridspace(Ω_par)
-        u_par = Rₕ(W_par, _x1_plus_x2)
-        @test execution_policy(W_par) isa Parallel
-
-        lf_serial = form(Wₕ, v -> innerₕ(uₕ, v))
-        lf_parallel = form(W_par, v -> innerₕ(u_par, v))
-
-        b_default = assemble(lf_serial)
-        b_via_policy = assemble(lf_parallel)
-        @test b_via_policy ≈ b_default
-
-        bang_default = zeros(ndofs(Wₕ))
-        bang_via_policy = zeros(ndofs(W_par))
-        assemble!(bang_default, lf_serial)
-        assemble!(bang_via_policy, lf_parallel)
-        @test bang_via_policy ≈ bang_default
-
-        # Directly against assemble_parallel!, the lower-level entry point that always
-        # threads regardless of the backend's policy: a Parallel()-backend assemble! must
-        # agree with it exactly, not merely with the serial answer up to tolerance.
-        b_forced_parallel = similar(bang_via_policy)
-        assemble_parallel!(b_forced_parallel, lf_parallel)
-        @test bang_via_policy ≈ b_forced_parallel
-    end
-
-    @testset "Reassembly" begin
-        # The AST is stored on the form and references the underlying VectorElement arrays,
-        # so updating an element in-place via `parent(us) .= ...` or `Rₕ!(us, ...)` is
-        # automatically seen without allocating a new AST.
-        us = Rₕ(Wₕ, _Const(1.0))
-        lfs = form(Wₕ, v -> innerₕ(us, v))
-
-        first_sum = sum(assemble(lfs))
-        parent(us) .= 5.0
-        @test sum(assemble(lfs)) ≈ 5 * first_sum
-
-        # Dynamic scalar coefficients use Julia-native RefValue:
-        # `α = Ref(2.0)` with `α * v` or `α * innerₕ(...)`. Mutating `α[] = 10.0`
-        # is seen live during assembly with zero allocations.
-        α_ref = Ref(2.0)
-        ua_scalar = Rₕ(Wₕ, _Const(1.0))
-        lfa_scalar = form(Wₕ, v -> α_ref * innerₕ(ua_scalar, v))
-        at_two = sum(assemble(lfa_scalar))
-        α_ref[] = 10.0
-        @test sum(assemble(lfa_scalar)) ≈ 5 * at_two
-
-        # both at once: a dynamic Ref scalar and in-place element update
-        α_ref[] = 3.0
-        parent(ua_scalar) .= 2.0
-        @test sum(assemble(lfa_scalar)) ≈ 3 * at_two   # 3 x 2 against 2 x 1
-
-        # In-place assembly allocates zero bytes
-        d = zeros(ndofs(Wₕ))
-        @test_allocs assemble!(d, lfa_scalar)
-    end
-
-    @testset "Direct contraction" begin
-        # `l(vₕ)` answers with a number, and used to allocate a whole right-hand side to
-        # get it: `dot(assemble(form), parent(vₕ))`. The walk now multiplies each stencil
-        # weight by `v` at the row it would have written to, so the same sum is taken as it
-        # goes and no vector is built.
-        n = ndofs(Wₕ)
-        lfc = form(Wₕ, v -> innerₕ(uₕ, v))
-        astc = resolve_form_ast(lfc)
-        b = assemble(lfc)
-
-        @test lfc(uₕ) ≈ sum(b .* parent(uₕ))
-
-        # The functor takes no `ast` on purpose, so it resolves every call and cannot be
-        # allocation free. What it must not do is build a full-length vector, which is what
-        # this pins: the bound is a fraction of one, not zero. Behind a barrier, because at
-        # top level over globals the call itself reports bytes it does not spend.
-        @test alloc_test(lfc, uₕ) < 8 * n ÷ 100
-        @test assemble(lfc) ≈ b                     # and the vector path still works
-
-        # Every arrangement has to agree with assembling and contracting by hand, not just
-        # the simple one: the composite cores are separate code from the scalar one.
-        Vc = gridspace(Ωₕ, Val(3))
-        uc = Rₕ(Vc, (_Const(1.0), _Const(100.0), _Const(10000.0)))
-        wc = Rₕ(Vc, (_Const(2.0), _Const(3.0), _Const(5.0)))
-        cc = components(uc)
-        # Any: each closure is its own type
-        for (nm, g) in Any[
-            ("scalar, a difference", v -> innerₕ(uₕ, D₋ₓ(v))),
-            ("scalar, a linear combination", v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v))),
-            ("scalar, two kinds summed", v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)))
-        ]
-            lfx = form(Wₕ, g)
-            @test lfx(uₕ) ≈ sum(assemble(lfx) .* parent(uₕ))
-        end
-        for (nm, g) in Any[
-            ("composite shorthand", v -> innerₕ(uc, v)),
-            ("composite per component", v -> innerₕ(cc[1], v(1)) + innerₕ(cc[2], v(2))),
-            (
-                "composite routed with operators",
-                v -> innerₕ(cc[1], v(1) + D₋ₓ(v(1))) + innerₕ(cc[3], v(3))
-            ),
-            ("composite crossed", v -> innerₕ(cc[1], v(2)))
-        ]
-            lfx = form(Vc, g)
-            @test lfx(wc) ≈ sum(assemble(lfx) .* parent(wc))
-        end
-
-        # A source carrying an operator is evaluated into an element during form construction
-        lfd = form(Wₕ, v -> innerₕ(D₋ₓ(uₕ), v))
-        @test lfd(uₕ) ≈ sum(assemble(lfd) .* parent(uₕ))
-        @test alloc_test(lfd, uₕ) < 8 * n ÷ 100
-
-        # and hoisting the operator out of the form agrees
-        duₕ = D₋ₓ(uₕ)
-        lfh = form(Wₕ, v -> innerₕ(duₕ, v))
-        @test lfh(uₕ) ≈ lfd(uₕ)
-        @test alloc_test(lfh, uₕ) < 8 * n ÷ 100
-    end
-
-    @testset "Live coefficient evaluation" begin
-        # Everything above went through `assemble`. Evaluation is the other way a form gets
-        # used, and it has to agree: `l(vₕ)` and `evaluate!` both resolve from `f`, so a
-        # coefficient changed between two calls is read again.
-        uev = Rₕ(Wₕ, _Const(1.0))
-        wₕ = Rₕ(Wₕ, _Const(1.0))
-        lfe = form(Wₕ, v -> innerₕ(uev, v))
-
-        first_value = lfe(wₕ)
-        parent(uev) .= 5.0
-        @test lfe(wₕ) ≈ 5 * first_value
-
-        # a live scalar via RefValue, through evaluation rather than assembly
-        α_eval = Ref(2.0)
-        us = Rₕ(Wₕ, _Const(1.0))
-        lfes = form(Wₕ, v -> α_eval * innerₕ(us, v))
-        at_two = lfes(wₕ)
-        α_eval[] = 10.0
-        @test lfes(wₕ) ≈ 5 * at_two
-
-        # `evaluate!` agrees with the functor
-        scratch = zeros(ndofs(Wₕ))
-        @test evaluate!(scratch, lfes, wₕ) ≈ lfes(wₕ)
-        @test evaluate!(scratch, lfe, wₕ) ≈ lfe(wₕ)
-
-        # In-place evaluation writes through
-        ul = Rₕ(Wₕ, _Const(1.0))
-        lfl = form(Wₕ, v -> innerₕ(ul, v))
-        loop_first = evaluate!(scratch, lfl, wₕ)
-        Rₕ!(ul, _Const(5.0))
-        @test evaluate!(scratch, lfl, wₕ) ≈ 5 * loop_first
-    end
-
-    @testset "Source variants" begin
-        # The source of a linear form need not be a grid function. A number and a function
-        # both work, and an integer promotes rather than forcing the output's element type:
-        # the same rule that lets a Dual through.
-        Wc = gridspace(Ωₕ)
-        one_over_Ω = 1.0                       # the mesh has measure 1, so ∫c = c
-
-        @test sum(assemble(form(Wc, v -> innerₕ(1, v)))) ≈ one_over_Ω
-        @test eltype(assemble(form(Wc, v -> innerₕ(1, v)))) === Float64
-
-        # and they mix with a grid-function source in one form
-        gₕ = Rₕ(Wc, _Const(3.0))
-        @test sum(assemble(form(Wc, v -> innerₕ(1.0, v) + innerₕ(gₕ, v)))) ≈ 4.0
-
-        Vt = gridspace(Ωₕ, Val(2))
-        nb = ndofs(Wc)
-        blk(b) = [sum(b[((k - 1) * nb + 1):(k * nb)]) for k in 1:(length(b) ÷ nb)]
-
-        # On a composite space a source naming no component goes to every block, which is
-        # the rule that lets the two spellings mix.
-        @test blk(assemble(form(Vt, v -> innerₕ(1.0, v)))) ≈ [1.0, 1.0]
-        @test blk(assemble(form(Vt, v -> innerₕ(1.0, v(1))))) ≈ [1.0, 0.0]
-
-        # A tuple reads one entry per component, the way `Rₕ(Vₕ, (f, g))` already does.
-        @test blk(assemble(form(Vt, v -> innerₕ((1.0, 2.0), v)))) ≈ [1.0, 2.0]
-        @test blk(assemble(form(Vt, v -> innerₕ((_Const(1.0), _Const(2.0)), v)))) ≈ [1.0, 2.0]
-
-        # which agrees with writing the components out
-        @test assemble(form(Vt, v -> innerₕ((1.0, 2.0), v))) ≈
-              assemble(form(Vt, v -> innerₕ(1.0, v(1)) + innerₕ(2.0, v(2))))
-
-        # an empty tuple names nothing, and says so
-        @test_throws ArgumentError form(Vt, v -> innerₕ((), v))
-
-        # A grid-function source is read at the test space's own linear indices, so one from
-        # another mesh named other points: a finer one was read silently, a coarser one past
-        # its end. `form` now refuses it. Same counts with other (graded) points is the case
-        # a length check would let through.
-        Ωd = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
-        uni(n) = gridspace(mesh(Ωd, (n, n), (true, true)))
-        W9 = uni(9)
-        one_on(W) = Rₕ(W, _Const(1.0))
-        elsewhere = "lives on another mesh than the space it is read on"
-        for (label, s) in (("finer", one_on(uni(11))), ("coarser", one_on(uni(5))),
-            ("graded", one_on(gridspace(_graded_mesh((9, 9))))))
-            @testset "$label" begin
-                @test_throws elsewhere form(W9, v -> innerₕ(s, v))
-                @test_throws elsewhere form(W9, v -> inner_Γ(s, v; markers = (:ymin,)))
-                @test_throws elsewhere form(W9, v -> inner₊ₓ(s, v))
-                @test_throws elsewhere form(W9, v -> inner₊((s, s), ∇ₕ(v)))
-                # inside a sum, a scale and a difference too
-                @test_throws elsewhere form(W9, v -> innerₕ(1.0, v) + 2 * innerₕ(s, D₋ₓ(v)))
-            end
-        end
-        @test_throws ArgumentError form(W9, v -> innerₕ(one_on(uni(11)), v))
-        # the message names both meshes' point counts
-        @test_throws "the source's mesh has (11, 11) points and the one it is read on (9, 9)" form(
-            W9, v -> innerₕ(one_on(uni(11)), v))
-        # equal counts on other points: the message names the shared shape instead
-        @test_throws "the source is on another mesh of the same shape, (9, 9) points" form(
-            W9, v -> innerₕ(one_on(gridspace(_graded_mesh((9, 9)))), v))
-
-        # In 1D, where a bare test function in inner₊ reaches the source path
-        Ω1 = domain(interval(0.0, 1.0))
-        W1 = gridspace(mesh(Ω1, 9, true))
-        @test_throws elsewhere form(W1, v -> inner₊(one_on(gridspace(mesh(Ω1, 13, true))), v))
-        @test sum(assemble(form(W1, v -> inner₊(one_on(W1), v)))) ≈ 1.0
-
-        # A composite form checks a source against every leaf it goes to: one naming no
-        # component goes to both, and the second leaf is on another mesh.
-        Vm = W9 × uni(11)
-        s9 = one_on(W9)
-        @test_throws elsewhere form(Vm, v -> innerₕ(s9, v))
-        @test_throws elsewhere form(Vm, v -> innerₕ(s9, v(2)))
-        b9 = assemble(form(Vm, v -> innerₕ(s9, v(1))))
-        @test sum(b9[1:ndofs(W9)]) ≈ 1.0 && iszero(b9[(ndofs(W9) + 1):end])
-        # a composite source, split per leaf, with its second leaf on another mesh
-        @test_throws elsewhere form(W9 × W9, v -> innerₕ(Rₕ(Vm, (_Const(1.0), _Const(1.0))), v))
-        @test_throws elsewhere form(W9 × W9, v -> innerₕ((s9, one_on(uni(11))), v))
-
-        # The same points on a distinct mesh object are the same mesh, uniform or graded,
-        # and the own-mesh value is ∫1 = 1.
-        @test sum(assemble(form(W9, v -> innerₕ(s9, v)))) ≈ 1.0
-        @test sum(assemble(form(W9, v -> innerₕ(one_on(uni(9)), v)))) ≈ 1.0
-        Wg = gridspace(_graded_mesh((9, 9)))
-        @test sum(assemble(form(Wg, v -> innerₕ(one_on(gridspace(_graded_mesh((9, 9)))), v)))) ≈
-              1.0
-    end
-
-    @testset "Coefficient on another mesh" begin
-        # A grid-function coefficient is read at the walked leaf's own linear indices, as a
-        # source is, so one from another mesh was read at other points: on a finer mesh
-        # `diag(A) ./ diag(M)` came out as `gf[1:11]`, not `1 .+ points`, and on a coarser
-        # one past its end. `form` now refuses it, bilinear and linear alike
-        # (gpena/Bramble.jl#685). Graded meshes, so equal counts would not hide a mismatch.
-        Ω1 = domain(interval(0.0, 1.0))
-        graded(n) = (Ωg = mesh(Ω1, n, true);
-            Bramble.change_points!(Ωg, range(0.0, 1.0; length = n) .^ 1.5); Ωg)
-        W = gridspace(graded(11))
-        fₕ = Rₕ(W, identity)
-        elsewhere = "lives on another mesh than the space it is read on"
-        for n in (21, 6)
-            Wo = gridspace(graded(n))
-            gf = Rₕ(Wo, x -> 1 + x)
-            @testset "$n points" begin
-                @test_throws elsewhere form(W, W, (u, v) -> innerₕ(gf * u, v))
-                @test_throws elsewhere form(W, v -> innerₕ(fₕ, gf * v))
-                # inside a difference, a sum and a scale too
-                @test_throws elsewhere form(
-                    W, W, (u, v) -> innerₕ(D₋ₓ(gf * u), D₋ₓ(v)))
-                @test_throws elsewhere form(
-                    W, W, (u, v) -> innerₕ(u, v) + 2 * innerₕ(gf * u, v))
-                counts = "the source's mesh has ($n,) points and the one it is read on (11,)"
-                @test_throws counts form(W, W, (u, v) -> innerₕ(gf * u, v))
-                # Interpolated onto `W` first, it assembles, and reads 1 + x at W's points.
-                gi = πₕ(W, gf)
-                A = assemble(form(W, W, (u, v) -> innerₕ(gi * u, v)))
-                M = assemble(form(W, W, (u, v) -> innerₕ(u, v)))
-                @test diag(A) ./ diag(M) ≈ 1 .+ points(mesh(W))
-                @test assemble(form(W, v -> innerₕ(fₕ, gi * v))) ≈
-                      assemble(form(W, v -> innerₕ(fₕ .* (1 .+ points(mesh(W))), v)))
-            end
-        end
-
-        # On the coefficient's own mesh, or a rebuilt one with its points, it assembles.
-        gc = Rₕ(W, x -> 1 + x)
-        gr = Rₕ(gridspace(graded(11)), x -> 1 + x)
-        M = assemble(form(W, W, (u, v) -> innerₕ(u, v)))
-        for g in (gc, gr)
-            A = assemble(form(W, W, (u, v) -> innerₕ(g * u, v)))
+@testset "Coefficient on another mesh" begin
+    # A grid-function coefficient is read at the walked leaf's own linear indices, as a
+    # source is, so one from another mesh was read at other points: on a finer mesh
+    # `diag(A) ./ diag(M)` came out as `gf[1:11]`, not `1 .+ points`, and on a coarser
+    # one past its end. `form` now refuses it, bilinear and linear alike
+    # (gpena/Bramble.jl#685). Graded meshes, so equal counts would not hide a mismatch.
+    Ω1 = domain(interval(0.0, 1.0))
+    graded(n) = (Ωg = mesh(Ω1, n, true);
+        Bramble.change_points!(Ωg, range(0.0, 1.0; length = n) .^ 1.5); Ωg)
+    W = gridspace(graded(11))
+    fₕ = Rₕ(W, identity)
+    elsewhere = "lives on another mesh than the space it is read on"
+    for n in (21, 6)
+        Wo = gridspace(graded(n))
+        gf = Rₕ(Wo, x -> 1 + x)
+        @testset "$n points" begin
+            @test_throws elsewhere form(W, W, (u, v) -> innerₕ(gf * u, v))
+            @test_throws elsewhere form(W, v -> innerₕ(fₕ, gf * v))
+            # inside a difference, a sum and a scale too
+            @test_throws elsewhere form(
+                W, W, (u, v) -> innerₕ(D₋ₓ(gf * u), D₋ₓ(v)))
+            @test_throws elsewhere form(
+                W, W, (u, v) -> innerₕ(u, v) + 2 * innerₕ(gf * u, v))
+            counts = "the source's mesh has ($n,) points and the one it is read on (11,)"
+            @test_throws counts form(W, W, (u, v) -> innerₕ(gf * u, v))
+            # Interpolated onto `W` first, it assembles, and reads 1 + x at W's points.
+            gi = πₕ(W, gf)
+            A = assemble(form(W, W, (u, v) -> innerₕ(gi * u, v)))
+            M = assemble(form(W, W, (u, v) -> innerₕ(u, v)))
             @test diag(A) ./ diag(M) ≈ 1 .+ points(mesh(W))
-            @test sum(assemble(form(W, v -> innerₕ(1.0, g * v)))) ≈ 1.5
+            @test assemble(form(W, v -> innerₕ(fₕ, gi * v))) ≈
+                  assemble(form(W, v -> innerₕ(fₕ .* (1 .+ points(mesh(W))), v)))
         end
-
-        # The coefficient is checked on the mesh the form walks: the test mesh, so one on
-        # the trial mesh of `c * πₕ(u)` is refused and one on the test mesh assembles.
-        Ws = gridspace(graded(7))
-        @test_throws elsewhere form(
-            Ws, W, (u, v) -> innerₕ(Rₕ(Ws, x -> 1 + x) * πₕ(u), v))
-        @test size(assemble(form(Ws, W, (u, v) -> innerₕ(gc * πₕ(u), v)))) == (11, 7)
-
-        # On a composite, against the leaf its term is routed to.
-        Vc = W × Ws
-        @test_throws elsewhere form(Vc, Vc, (U, V) -> innerₕ(gc * U(2), V(2)))
-        Ac = assemble(form(Vc, Vc, (U, V) -> innerₕ(gc * U(1), V(1))))
-        @test diag(Ac)[1:11] ./ diag(M) ≈ 1 .+ points(mesh(W))
-        @test iszero(Ac[12:end, :])
     end
 
-    @testset "Malformed expression names its form" begin
-        # A bilinear expression that returned a value, or one built from another space's
-        # arguments, was reported as "a linear form's expression" with a `v -> …` example
-        # (gpena/Bramble.jl#686). Each kind now names itself; the linear text is unchanged.
-        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 11, false))
-        W2 = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), false))
-        function msg(f)
+    # On the coefficient's own mesh, or a rebuilt one with its points, it assembles.
+    gc = Rₕ(W, x -> 1 + x)
+    gr = Rₕ(gridspace(graded(11)), x -> 1 + x)
+    M = assemble(form(W, W, (u, v) -> innerₕ(u, v)))
+    for g in (gc, gr)
+        A = assemble(form(W, W, (u, v) -> innerₕ(g * u, v)))
+        @test diag(A) ./ diag(M) ≈ 1 .+ points(mesh(W))
+        @test sum(assemble(form(W, v -> innerₕ(1.0, g * v)))) ≈ 1.5
+    end
+
+    # The coefficient is checked on the mesh the form walks: the test mesh, so one on
+    # the trial mesh of `c * πₕ(u)` is refused and one on the test mesh assembles.
+    Ws = gridspace(graded(7))
+    @test_throws elsewhere form(
+        Ws, W, (u, v) -> innerₕ(Rₕ(Ws, x -> 1 + x) * πₕ(u), v))
+    @test size(assemble(form(Ws, W, (u, v) -> innerₕ(gc * πₕ(u), v)))) == (11, 7)
+
+    # On a composite, against the leaf its term is routed to.
+    Vc = W × Ws
+    @test_throws elsewhere form(Vc, Vc, (U, V) -> innerₕ(gc * U(2), V(2)))
+    Ac = assemble(form(Vc, Vc, (U, V) -> innerₕ(gc * U(1), V(1))))
+    @test diag(Ac)[1:11] ./ diag(M) ≈ 1 .+ points(mesh(W))
+    @test iszero(Ac[12:end, :])
+end
+
+@testset "Malformed expression names its form" begin
+    # A bilinear expression that returned a value, or one built from another space's
+    # arguments, was reported as "a linear form's expression" with a `v -> …` example
+    # (gpena/Bramble.jl#686). Each kind now names itself; the linear text is unchanged.
+    W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 11, false))
+    W2 = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), false))
+    function msg(f)
+        e = try
+            f()
+            nothing
+        catch err
+            err
+        end
+        @test e isa ArgumentError
+        return e isa ArgumentError ? sprint(showerror, e) : ""
+    end
+    value_bi = msg(() -> form(W1, W1, (u, v) -> 1.0))
+    @test occursin("the expression of a bilinear form", value_bi)
+    @test occursin("(u, v) -> innerₕ(u, v)", value_bi)
+    @test occursin("returned a Float64", value_bi)
+    @test !occursin("linear form's", value_bi)
+    value_li = msg(() -> form(W1, v -> 1.0))
+    @test value_li ==
+          "ArgumentError: a linear form's expression has to build an operator over its " *
+          "test argument, and this one returned a Float64. Write it as a function of " *
+          "the test argument (`v -> innerₕ(fₕ, v)`) rather than as a value."
+    # 1D operators in a form over a 2D space: the dimension message, per kind
+    u1, v1 = Bramble.trial_function(W1), Bramble.test_function(W1)
+    dim_bi = msg(() -> form(W2, W2, (u, v) -> innerₕ(u1, v1)))
+    @test occursin("the expression of a bilinear form is 1-dimensional", dim_bi)
+    @test !occursin("linear form's", dim_bi)
+    dim_li = msg(() -> form(W2, v -> innerₕ(1.0, v1)))
+    @test occursin("a linear form's expression is 1-dimensional and its test space is 2",
+        dim_li)
+end
+
+@testset "Function of position times a term" begin
+    # `f * op` reads `f` as a zero-argument thunk; a function of position failed in the
+    # thunk call with a `MethodError` naming no cause (gpena/Bramble.jl#761). Plain,
+    # restricted and summed terms all resolve through one check, which names the fixes.
+    W1 = gridspace(mesh(domain(interval(0.0, 1.0)), (9,), (true,)))
+    # closure-handling testset: `f` stays a closure
+    f = x -> 1 + x[1]
+    for (label, g) in Any[("plain", v -> f * innerₕ(1.0, v)),
+        ("restricted", v -> f * innerₕ(1.0, restrict_to(:boundary, v))),
+        ("summed", v -> f * (innerₕ(1.0, v) + innerₕ(2.0, v)))]
+        @testset "$label" begin
             e = try
-                f()
+                form(W1, g)
                 nothing
             catch err
                 err
             end
             @test e isa ArgumentError
-            return e isa ArgumentError ? sprint(showerror, e) : ""
+            msg = e isa ArgumentError ? sprint(showerror, e) : ""
+            @test occursin("zero-argument", msg)
+            @test occursin("innerₕ(f, v)", msg)
+            @test occursin("Rₕ(W, f) * op", msg)
         end
-        value_bi = msg(() -> form(W1, W1, (u, v) -> 1.0))
-        @test occursin("the expression of a bilinear form", value_bi)
-        @test occursin("(u, v) -> innerₕ(u, v)", value_bi)
-        @test occursin("returned a Float64", value_bi)
-        @test !occursin("linear form's", value_bi)
-        value_li = msg(() -> form(W1, v -> 1.0))
-        @test value_li ==
-              "ArgumentError: a linear form's expression has to build an operator over its " *
-              "test argument, and this one returned a Float64. Write it as a function of " *
-              "the test argument (`v -> innerₕ(fₕ, v)`) rather than as a value."
-        # 1D operators in a form over a 2D space: the dimension message, per kind
-        u1, v1 = Bramble.trial_function(W1), Bramble.test_function(W1)
-        dim_bi = msg(() -> form(W2, W2, (u, v) -> innerₕ(u1, v1)))
-        @test occursin("the expression of a bilinear form is 1-dimensional", dim_bi)
-        @test !occursin("linear form's", dim_bi)
-        dim_li = msg(() -> form(W2, v -> innerₕ(1.0, v1)))
-        @test occursin("a linear form's expression is 1-dimensional and its test space is 2",
-            dim_li)
+    end
+    # a thunk still scales, and both suggested spellings give the same source
+    vals = collect(1.0:Float64(ndofs(W1)))
+    @test assemble(form(W1, v -> (() -> vals) * innerₕ(1.0, v))) ≈
+          vals .* assemble(form(W1, v -> innerₕ(1.0, v)))
+    @test assemble(form(W1, v -> innerₕ(f, v))) ≈
+          assemble(form(W1, v -> innerₕ(Rₕ(W1, f), v)))
+end
+
+@testset "Invalid component error" begin
+    # It used to contribute nothing, in silence. On a two-block space
+    # `innerₕ(1.0, v(3))` assembled to zeros, and summed with a valid term it dropped
+    # itself and kept the other, so a form written for a wider space quietly produced a
+    # narrower answer instead of complaining.
+    Vt = gridspace(Ωₕ, Val(2))
+    b = zeros(ndofs(Vt))
+
+    @test_throws ArgumentError assemble(form(Vt, v -> innerₕ(1.0, v(3))))
+    @test_throws ArgumentError assemble(form(Vt, v -> innerₕ(1.0, v(0))))
+    @test_throws ArgumentError assemble(
+        form(Vt, v -> innerₕ(1.0, v(1)) + innerₕ(2.0, v(9)))
+    )
+
+    # every route has to agree: the vector, the in-place vector, the contraction, and
+    # the threaded sweep are four separate walks over the same terms
+    @test_throws ArgumentError form(Vt, v -> innerₕ(1.0, v(3)))
+    raw_ast = innerₕ(1.0, IndexedTestFunction{2}(3))
+    lf3 = Bramble.LinearForm{2, typeof(Vt), typeof(raw_ast)}(Vt, raw_ast)
+    wt = Rₕ(Vt, (_Const(1.0), _Const(1.0)))
+    @test_throws ArgumentError assemble!(b, lf3)
+    @test_throws ArgumentError lf3(wt)
+    @test_throws ArgumentError assemble_parallel!(b, lf3)
+
+    # and a tuple longer than the space is the same mistake, caught the same way
+    @test_throws ArgumentError assemble(form(Vt, v -> innerₕ((1.0, 2.0, 3.0), v)))
+
+    # `v(1)(3)` passes the range check `v(3)` meets when the expression is built, and
+    # names component 3; a function source is lowered per leaf at `form`, so that is
+    # where it throws now. It used to fall through unlowered and throw only at assembly.
+    @test_throws ArgumentError form(Vt, v -> innerₕ(_Const(1.0), v(1)(3)))
+    # Lowering a term naming a component infers one type, not a Union of the lowered and
+    # unlowered term (#551). Built from a runtime AST, not through `form`, whose constants
+    # would fold it away. The term naming no component was already concrete; it stays as
+    # the other branch's guard.
+    vt = Bramble.test_function(Vt)
+    # `@inferred` on the closure-typed lowering: the closures stay
+    for raw in (innerₕ(x -> 1.0, vt(1)), innerₕ(x -> 1.0, vt))
+        ast = Bramble.simplify_ast(Bramble.resolve_ast(raw))
+        @test @inferred(Bramble._lower_sources_for_space(ast, Vt)) isa Bramble.LazyOp
     end
 
-    @testset "Function of position times a term" begin
-        # `f * op` reads `f` as a zero-argument thunk; a function of position failed in the
-        # thunk call with a `MethodError` naming no cause (gpena/Bramble.jl#761). Plain,
-        # restricted and summed terms all resolve through one check, which names the fixes.
-        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), (9,), (true,)))
-        # closure-handling testset: `f` stays a closure
-        f = x -> 1 + x[1]
-        for (label, g) in Any[("plain", v -> f * innerₕ(1.0, v)),
-            ("restricted", v -> f * innerₕ(1.0, restrict_to(:boundary, v))),
-            ("summed", v -> f * (innerₕ(1.0, v) + innerₕ(2.0, v)))]
-            @testset "$label" begin
-                e = try
-                    form(W1, g)
-                    nothing
-                catch err
-                    err
+    # while a valid one still works, so the guard is not simply rejecting everything
+    @test sum(assemble(form(Vt, v -> innerₕ(1.0, v(2))))) ≈ 1.0
+end
+
+@testset "Wrong-length vector refused" begin
+    # The sweep writes with `@inbounds`, so a short vector would be written out of
+    # bounds and a long one would keep a stale tail. Every linear entry
+    # point checks the length before writing anything, so the vector comes back
+    # untouched.
+    # Any: each mesh, space and closure is its own type
+    for (Ωw, dim) in Any[(mesh(domain(interval(0.0, 1.0)), 13, false), "1D"),
+        (mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (false, false)),
+            "2D")]
+        Ww = gridspace(Ωw)
+        for (label, sp, l) in Any[("scalar", Ww, v -> innerₕ(1.0, v)),
+            ("composite", Ww × Ww, V -> innerₕ(1.0, V[1]) + innerₕ(2.0, V[2]))]
+            lw = form(sp, l)
+            @test execution_policy(sp) isa Bramble.CpuSerial
+            for m in (ndofs(sp) - 5, ndofs(sp) + 5)
+                @testset "$dim $label, length $m" begin
+                    b = fill(7.0, m)
+                    @test_throws DimensionMismatch assemble!(b, lw)
+                    @test all(==(7.0), b)
+                    @test_throws DimensionMismatch Bramble.assemble_add!(b, lw)
+                    @test all(==(7.0), b)
+                    @test_throws DimensionMismatch Bramble.assemble_add!(b, lw, 2.0)
+                    @test all(==(7.0), b)
+                    @test_throws DimensionMismatch assemble_parallel!(b, lw)
+                    @test all(==(7.0), b)
                 end
-                @test e isa ArgumentError
-                msg = e isa ArgumentError ? sprint(showerror, e) : ""
-                @test occursin("zero-argument", msg)
-                @test occursin("innerₕ(f, v)", msg)
-                @test occursin("Rₕ(W, f) * op", msg)
             end
         end
-        # a thunk still scales, and both suggested spellings give the same source
-        vals = collect(1.0:Float64(ndofs(W1)))
-        @test assemble(form(W1, v -> (() -> vals) * innerₕ(1.0, v))) ≈
-              vals .* assemble(form(W1, v -> innerₕ(1.0, v)))
-        @test assemble(form(W1, v -> innerₕ(f, v))) ≈
-              assemble(form(W1, v -> innerₕ(Rₕ(W1, f), v)))
+    end
+end
+
+@testset "Wrong-length element refused" begin
+    # `l(vₕ)` reads `vₕ` with `@inbounds` at every row it reaches, so an element of a
+    # coarser space would be read out of bounds and one of a finer space summed short.
+    # Any: each mesh, space and closure is its own type
+    for (label, mk, l) in Any[("scalar", gridspace, v -> innerₕ(1.0, v)),
+        ("composite", M -> gridspace(M) × gridspace(M),
+            V -> innerₕ(1.0, V[1]) + innerₕ(2.0, V[2]))]
+        lw = form(mk(mesh(domain(interval(0.0, 1.0)), 11, false)), l)
+        for n in (6, 21)
+            @testset "$label, $n points" begin
+                wrong = element(mk(mesh(domain(interval(0.0, 1.0)), n, false)), 1.0)
+                @test_throws DimensionMismatch lw(wrong)
+            end
+        end
+        @test lw(element(test_space(lw), 1.0)) ≈ sum(assemble(lw))
+    end
+end
+
+@testset "Expression validation" begin
+    # The `ast` field stores the pre-resolved tree; the expression itself is not kept
+    # since nothing downstream ever calls it again.
+    @test fieldnames(typeof(form(Wₕ, v -> innerₕ(uₕ, v)))) == (:test_space, :ast)
+
+    @test_throws ArgumentError form(Wₕ, v -> 42)
+    @test_throws ArgumentError form(Wₕ, v -> "not an operator")
+
+    # and an expression built over a different dimension than the space it is given
+    @test_throws ArgumentError form(Wₕ, v -> innerₕ(uₕ, TestFunction{3}()))
+end
+
+@testset "Matrix expression equivalence" begin
+    # A linear form is `v -> (Au, v)` for some operator `A` and inner product, so its
+    # assembled vector has to be `Aᵀ H u` exactly: `H` the diagonal weight matrix of the
+    # inner product, `A` the operator's own sparse matrix. Both are built by code that
+    # shares nothing with `local_stencil`, which is what makes this an independent check
+    # rather than a restatement: the two agree or one of them is wrong.
+    n = ndofs(Wₕ)
+    uu = parent(uₕ)
+    Hh = Diagonal(collect(weights(Wₕ, Innerh())))
+    Hpx = Diagonal(collect(weights(Wₕ, Innerplus(), 1)))
+    Dx = Matrix(D₋ₓ(Wₕ))
+    Mx = Matrix(Mₓ(Wₕ))
+    Idm = Matrix(1.0I, n, n)
+
+    @test assemble(form(Wₕ, v -> innerₕ(uₕ, v))) ≈ Hh * uu
+    @test assemble(form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)))) ≈ transpose(Dx) * (Hh * uu)
+    @test assemble(form(Wₕ, v -> innerₕ(uₕ, Mₓ(v)))) ≈ transpose(Mx) * (Hh * uu)
+    @test assemble(form(Wₕ, v -> inner₊ₓ(uₕ, D₋ₓ(v)))) ≈ transpose(Dx) * (Hpx * uu)
+
+    # a linear combination of operators in the test argument is the same combination of
+    # their matrices, and inner products of different kinds add
+    @test assemble(form(Wₕ, v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v)))) ≈
+          transpose(Idm + 2 * Dx - Mx) * (Hh * uu)
+    @test assemble(form(Wₕ, v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)))) ≈
+          Hh * uu + transpose(Dx) * (Hpx * uu)
+
+    # and the Jacobian of a nonlinear residual is the same expression with the
+    # nonlinearity's own derivative on the diagonal. This is the shape a Newton step
+    # needs, so it is worth pinning: differentiating the assembly agrees with assembling
+    # the derivative.
+    resid(g) = w -> begin
+        b = zeros(eltype(w), n)
+        assemble!(b, form(Wₕ, v -> g(element(Wₕ, w .^ 2), v)))
+        b
+    end
+    w0 = collect(range(0.3, 1.7; length = n))
+    dg = Diagonal(2 .* w0)
+
+    @test DI.jacobian(resid((s, v) -> innerₕ(s, v)), AD_BACKEND, w0) ≈ Hh * dg
+    @test DI.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), AD_BACKEND, w0) ≈
+          transpose(Dx) * Hh * dg
+    @test DI.jacobian(resid((s, v) -> inner₊ₓ(s, D₋ₓ(v))), AD_BACKEND, w0) ≈
+          transpose(Dx) * Hpx * dg
+
+    # the Jacobian's sparsity is the stencil's, which is what makes a sparse-AD colouring
+    # unnecessary here: the pattern is known from the AST before anything is evaluated
+    Jd = DI.jacobian(resid((s, v) -> innerₕ(s, v)), AD_BACKEND, w0)
+    Jw = DI.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), AD_BACKEND, w0)
+    offs_d = length(stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, v)))))
+    offs_w = length(
+        stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)))))
+    )
+    @test maximum(i -> count(!iszero, Jd[i, :]), 1:n) == offs_d
+    @test maximum(i -> count(!iszero, Jw[i, :]), 1:n) == offs_w
+end
+
+@testset "Dirichlet conditions" begin
+    bcs = dirichlet_constraints(Ωₕ, :bottom => _Const(5.0))
+    marked = index_in_marker(Ωₕ, :bottom)
+    @test any(marked)
+
+    b = assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = bcs)
+    @test all(b[marked] .≈ 5.0)
+
+    # the same constraint, spelled as a Tuple of pairs rather than pre-built constraints
+    b2 = assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = (:bottom => _Const(5.0),))
+    @test b2 ≈ b
+
+    # no dirichlet at all is the unconstrained assembly
+    plain = assemble(form(Wₕ, v -> innerₕ(uₕ, v)))
+    @test assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = nothing) ≈ plain
+
+    # naming a label alone, with no values, is a usage error rather than a silent
+    # no-op: a linear form has nowhere to read boundary values from.
+    @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = :bottom)
+    msg = try
+        assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = :bottom)
+    catch e
+        sprint(showerror, e)
+    end
+    @test occursin("carries no values", msg)
+
+    # and a value dirichlet does not know how to normalize is rejected before
+    # anything is assembled
+    @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = 3)
+
+    # `apply_dirichlet_conditions!` takes a lone label `Symbol` as well as a Tuple of
+    # them, from callers that normalised the labels themselves
+    lsym = form(Wₕ, v -> innerₕ(uₕ, v))
+    b_sym = apply_dirichlet_conditions!(copy(plain), lsym, bcs, :bottom)
+    @test b_sym ≈ b
+    @test b_sym[.!marked] ≈ plain[.!marked]
+end
+
+@testset "dirichlet_components restriction" begin
+    bcs = dirichlet_constraints(Ωₕ, :bottom => _Const(5.0))
+    marked = index_in_marker(Ωₕ, :bottom)
+    uv = Rₕ(Vₕ, (_sin_x1, x -> cos(x[2])))
+    l = form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
+
+    b = assemble(l; dirichlet = bcs, dirichlet_components = 1)
+    plain = assemble(l)
+
+    leaf1, leaf2 = view(b, 1:n), view(b, (n + 1):(2n))
+    plain2 = view(plain, (n + 1):(2n))
+
+    @test all(leaf1[i] ≈ 5.0 for i in 1:n if marked[i])   # leaf 1 constrained
+    @test leaf2 == plain2                                  # leaf 2 untouched
+    @test any(i -> marked[i] && leaf1[i] != view(plain, 1:n)[i], 1:n) # leaf 1 changed
+
+    # without dirichlet_components, the same labels bind to both leaves
+    b_both = assemble(l; dirichlet = bcs)
+    @test all(view(b_both, (n + 1):(2n))[i] ≈ 5.0 for i in 1:n if marked[i])
+end
+
+@testset "Dirichlet value widens the vector" begin
+    # `assemble` sized its vector from the form alone, so a boundary value of a wider
+    # type (a `ForwardDiff.Dual`, a complex number) failed in `dirichlet_bc!`'s
+    # `setindex!` before anything was solved. Each derivative is checked against a
+    # central difference, so a wrong one fails rather than merely not crashing.
+    h = 1e-6
+    θ0 = 1.3
+    l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, _Const(1.0)), v))
+    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    marked = index_in_marker(Ωₕ, :bottom)
+
+    b(θ) = assemble(l; dirichlet = :bottom => x -> θ * (1 + x[1]))
+    @test DI.derivative(b, AD_BACKEND, θ0)≈(b(θ0 + h) - b(θ0 - h)) / 2h rtol=1e-6
+    # the derivative lives on the boundary rows only
+    @test all(iszero, DI.derivative(b, AD_BACKEND, θ0)[.!marked])
+    @test any(!iszero, DI.derivative(b, AD_BACKEND, θ0)[marked])
+
+    # the path the original crash traced to: `assemble(a, l; dirichlet, symmetrize)`
+    g(θ) = assemble(
+        a, l; dirichlet = :bottom => x -> θ * x[1], symmetrize = true)[2]
+    @test DI.derivative(g, AD_BACKEND, θ0)≈(g(θ0 + h) - g(θ0 - h)) / 2h rtol=1e-6
+
+    # a complex value widens to `ComplexF64`; a real one leaves `Float64` alone
+    @test eltype(assemble(l; dirichlet = :bottom => x -> 1.0im)) == ComplexF64
+    @test eltype(assemble(l; dirichlet = :bottom => x -> 1.0)) == Float64
+    @test eltype(assemble(l)) == Float64
+    bc = assemble(l; dirichlet = :bottom => x -> 2.0im)
+    @test all(bc[marked] .== 2.0im)
+    @test bc[.!marked] == assemble(l)[.!marked]
+
+    # `assemble!` keeps the caller's element type: a complex vector takes the complex
+    # value, a real one still refuses it
+    bz = zeros(ComplexF64, n)
+    assemble!(bz, l; dirichlet = :bottom => x -> 2.0im)
+    @test bz == bc
+    @test_throws InexactError assemble!(
+        zeros(n), l; dirichlet = :bottom => x -> 2.0im)
+
+    # composite: components 1, 100 and 10000 cannot be confused, and `components = 2`
+    # binds the value to the second leaf only, so the derivative is zero on the first
+    uv = Rₕ(Vₕ, (_Const(1.0), _Const(100.0)))
+    lv = form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
+    c(θ) = assemble(lv; dirichlet = :bottom => x -> θ * 10000 * x[1],
+        dirichlet_components = 2)
+    dc = DI.derivative(c, AD_BACKEND, θ0)
+    @test dc≈(c(θ0 + h) - c(θ0 - h)) / 2h rtol=1e-6
+    @test iszero(dc[1:n])
+    @test any(!iszero, dc[(n + 1):end])
+    # `components = 1` is the mirror image, and the unrestricted value reaches both
+    c1(θ) = assemble(lv; dirichlet = :bottom => x -> θ * x[1],
+        dirichlet_components = 1)
+    dc1 = DI.derivative(c1, AD_BACKEND, θ0)
+    @test any(!iszero, dc1[1:n]) && iszero(dc1[(n + 1):end])
+    c12(θ) = assemble(lv; dirichlet = :bottom => x -> θ * x[1])
+    dc12 = DI.derivative(c12, AD_BACKEND, θ0)
+    @test any(!iszero, dc12[1:n]) && any(!iszero, dc12[(n + 1):end])
+    # a complex value restricted to leaf 2 still widens the whole vector
+    @test eltype(assemble(lv; dirichlet = :bottom => x -> 1.0im,
+        dirichlet_components = 2)) == ComplexF64
+    @test_throws ArgumentError assemble(
+        lv; dirichlet = :bottom => x -> 1.0, dirichlet_components = 3)
+
+    # a real condition defined only on its own label is probed there, not at the
+    # first mesh point: neither of these may throw off `:right`
+    Ωr = mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0), :right => :right,
+            :top => :top),
+        (8, 8), (true, true)
+    )
+    Wr = gridspace(Ωr)
+    lr = form(Wr, v -> innerₕ(Rₕ(Wr, _Const(1.0)), v))
+    mr = index_in_marker(Ωr, :right)
+    @test any(mr)
+    br = assemble(lr; dirichlet = :right => x -> sqrt(x[1] - 0.5))
+    bref = assemble!(zeros(ndofs(Wr)), lr; dirichlet = :right => x -> sqrt(x[1] - 0.5))
+    @test eltype(br) == Float64
+    @test br == bref
+    @test assemble(lr; dirichlet = :right => x -> (x[1] == 1.0 ? 1.0 : error("off :right"))) isa
+          Vector{Float64}
+end
+
+@testset "Allocation contract" begin
+    # This is what a time loop calls every step. The assembly kernel itself is
+    # allocation free -- `form.ast` is a field read, not a resolution, so there is
+    # nothing left to hoist out of the call: `assemble!(b, lf)` measures 0 bytes.
+    #
+    # Measured inside a function on concrete locals: read from a non-const global, the
+    # arguments box at the call boundary and the reading is of the box.
+    function counts(N)
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N), (true, true))
+        W = gridspace(Ω)
+        u = Rₕ(W, _x1_plus_x2)
+        lf = form(W, v -> innerₕ(u, v))
+        b = zeros(ndofs(W))
+
+        assemble!(b, lf)                      # warm up
+        return @allocated assemble!(b, lf)
     end
 
-    @testset "Invalid component error" begin
-        # It used to contribute nothing, in silence. On a two-block space
-        # `innerₕ(1.0, v(3))` assembled to zeros, and summed with a valid term it dropped
-        # itself and kept the other, so a form written for a wider space quietly produced a
-        # narrower answer instead of complaining.
-        Vt = gridspace(Ωₕ, Val(2))
-        b = zeros(ndofs(Vt))
+    for N in (8, 24)          # 9x the degrees of freedom apart
+        @test counts(N) == 0
+    end
 
-        @test_throws ArgumentError assemble(form(Vt, v -> innerₕ(1.0, v(3))))
-        @test_throws ArgumentError assemble(form(Vt, v -> innerₕ(1.0, v(0))))
-        @test_throws ArgumentError assemble(
-            form(Vt, v -> innerₕ(1.0, v(1)) + innerₕ(2.0, v(9)))
+    # the composite path too. It used to allocate a Vector of dof offsets on every
+    # call (128 B, constant in the grid but paid every step of a time loop).
+    function composite_bytes(N)
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N), (true, true))
+        V = gridspace(Ω, Val(3))
+        uv = Rₕ(V, ntuple(_ -> _x1_plus_x2, 3))
+        lf = form(V, v -> innerₕ(uv(1), v))
+        b = zeros(ndofs(V))
+        assemble!(b, lf)
+        return @allocated assemble!(b, lf)
+    end
+    @test composite_bytes(8) == 0
+    @test composite_bytes(16) == 0
+
+    # a heterogeneous leaf costs the same zero bytes: `_scatter_term!` now
+    # builds its own `LinearIndices`/`markers` from `mesh(sp)` per leaf instead of
+    # receiving them from the caller, once per leaf per term (not once per grid
+    # point), so it must not reopen the door to a per-point allocation the homogeneous
+    # case above doesn't have.
+    function heterogeneous_bytes(N)
+        Ωbig = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N), (true, true)
         )
-
-        # every route has to agree: the vector, the in-place vector, the contraction, and
-        # the threaded sweep are four separate walks over the same terms
-        @test_throws ArgumentError form(Vt, v -> innerₕ(1.0, v(3)))
-        raw_ast = innerₕ(1.0, IndexedTestFunction{2}(3))
-        lf3 = Bramble.LinearForm{2, typeof(Vt), typeof(raw_ast)}(Vt, raw_ast)
-        wt = Rₕ(Vt, (_Const(1.0), _Const(1.0)))
-        @test_throws ArgumentError assemble!(b, lf3)
-        @test_throws ArgumentError lf3(wt)
-        @test_throws ArgumentError assemble_parallel!(b, lf3)
-
-        # and a tuple longer than the space is the same mistake, caught the same way
-        @test_throws ArgumentError assemble(form(Vt, v -> innerₕ((1.0, 2.0, 3.0), v)))
-
-        # `v(1)(3)` passes the range check `v(3)` meets when the expression is built, and
-        # names component 3; a function source is lowered per leaf at `form`, so that is
-        # where it throws now. It used to fall through unlowered and throw only at assembly.
-        @test_throws ArgumentError form(Vt, v -> innerₕ(_Const(1.0), v(1)(3)))
-        # Lowering a term naming a component infers one type, not a Union of the lowered and
-        # unlowered term (#551). Built from a runtime AST, not through `form`, whose constants
-        # would fold it away. The term naming no component was already concrete; it stays as
-        # the other branch's guard.
-        vt = Bramble.test_function(Vt)
-        # `@inferred` on the closure-typed lowering: the closures stay
-        for raw in (innerₕ(x -> 1.0, vt(1)), innerₕ(x -> 1.0, vt))
-            ast = Bramble.simplify_ast(Bramble.resolve_ast(raw))
-            @test @inferred(Bramble._lower_sources_for_space(ast, Vt)) isa Bramble.LazyOp
-        end
-
-        # while a valid one still works, so the guard is not simply rejecting everything
-        @test sum(assemble(form(Vt, v -> innerₕ(1.0, v(2))))) ≈ 1.0
-    end
-
-    @testset "Wrong-length vector refused" begin
-        # The sweep writes with `@inbounds`, so a short vector would be written out of
-        # bounds and a long one would keep a stale tail. Every linear entry
-        # point checks the length before writing anything, so the vector comes back
-        # untouched.
-        # Any: each mesh, space and closure is its own type
-        for (Ωw, dim) in Any[(mesh(domain(interval(0.0, 1.0)), 13, false), "1D"),
-            (mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 11), (false, false)),
-                "2D")]
-            Ww = gridspace(Ωw)
-            for (label, sp, l) in Any[("scalar", Ww, v -> innerₕ(1.0, v)),
-                ("composite", Ww × Ww, V -> innerₕ(1.0, V[1]) + innerₕ(2.0, V[2]))]
-                lw = form(sp, l)
-                @test execution_policy(sp) isa Bramble.CpuSerial
-                for m in (ndofs(sp) - 5, ndofs(sp) + 5)
-                    @testset "$dim $label, length $m" begin
-                        b = fill(7.0, m)
-                        @test_throws DimensionMismatch assemble!(b, lw)
-                        @test all(==(7.0), b)
-                        @test_throws DimensionMismatch Bramble.assemble_add!(b, lw)
-                        @test all(==(7.0), b)
-                        @test_throws DimensionMismatch Bramble.assemble_add!(b, lw, 2.0)
-                        @test all(==(7.0), b)
-                        @test_throws DimensionMismatch assemble_parallel!(b, lw)
-                        @test all(==(7.0), b)
-                    end
-                end
-            end
-        end
-    end
-
-    @testset "Wrong-length element refused" begin
-        # `l(vₕ)` reads `vₕ` with `@inbounds` at every row it reaches, so an element of a
-        # coarser space would be read out of bounds and one of a finer space summed short.
-        # Any: each mesh, space and closure is its own type
-        for (label, mk, l) in Any[("scalar", gridspace, v -> innerₕ(1.0, v)),
-            ("composite", M -> gridspace(M) × gridspace(M),
-                V -> innerₕ(1.0, V[1]) + innerₕ(2.0, V[2]))]
-            lw = form(mk(mesh(domain(interval(0.0, 1.0)), 11, false)), l)
-            for n in (6, 21)
-                @testset "$label, $n points" begin
-                    wrong = element(mk(mesh(domain(interval(0.0, 1.0)), n, false)), 1.0)
-                    @test_throws DimensionMismatch lw(wrong)
-                end
-            end
-            @test lw(element(test_space(lw), 1.0)) ≈ sum(assemble(lw))
-        end
-    end
-
-    @testset "Expression validation" begin
-        # The `ast` field stores the pre-resolved tree; the expression itself is not kept
-        # since nothing downstream ever calls it again.
-        @test fieldnames(typeof(form(Wₕ, v -> innerₕ(uₕ, v)))) == (:test_space, :ast)
-
-        @test_throws ArgumentError form(Wₕ, v -> 42)
-        @test_throws ArgumentError form(Wₕ, v -> "not an operator")
-
-        # and an expression built over a different dimension than the space it is given
-        @test_throws ArgumentError form(Wₕ, v -> innerₕ(uₕ, TestFunction{3}()))
-    end
-
-    @testset "Matrix expression equivalence" begin
-        # A linear form is `v -> (Au, v)` for some operator `A` and inner product, so its
-        # assembled vector has to be `Aᵀ H u` exactly: `H` the diagonal weight matrix of the
-        # inner product, `A` the operator's own sparse matrix. Both are built by code that
-        # shares nothing with `local_stencil`, which is what makes this an independent check
-        # rather than a restatement: the two agree or one of them is wrong.
-        n = ndofs(Wₕ)
-        uu = parent(uₕ)
-        Hh = Diagonal(collect(weights(Wₕ, Innerh())))
-        Hpx = Diagonal(collect(weights(Wₕ, Innerplus(), 1)))
-        Dx = Matrix(D₋ₓ(Wₕ))
-        Mx = Matrix(Mₓ(Wₕ))
-        Idm = Matrix(1.0I, n, n)
-
-        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v))) ≈ Hh * uu
-        @test assemble(form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)))) ≈ transpose(Dx) * (Hh * uu)
-        @test assemble(form(Wₕ, v -> innerₕ(uₕ, Mₓ(v)))) ≈ transpose(Mx) * (Hh * uu)
-        @test assemble(form(Wₕ, v -> inner₊ₓ(uₕ, D₋ₓ(v)))) ≈ transpose(Dx) * (Hpx * uu)
-
-        # a linear combination of operators in the test argument is the same combination of
-        # their matrices, and inner products of different kinds add
-        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v)))) ≈
-              transpose(Idm + 2 * Dx - Mx) * (Hh * uu)
-        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)))) ≈
-              Hh * uu + transpose(Dx) * (Hpx * uu)
-
-        # and the Jacobian of a nonlinear residual is the same expression with the
-        # nonlinearity's own derivative on the diagonal. This is the shape a Newton step
-        # needs, so it is worth pinning: differentiating the assembly agrees with assembling
-        # the derivative.
-        resid(g) = w -> begin
-            b = zeros(eltype(w), n)
-            assemble!(b, form(Wₕ, v -> g(element(Wₕ, w .^ 2), v)))
-            b
-        end
-        w0 = collect(range(0.3, 1.7; length = n))
-        dg = Diagonal(2 .* w0)
-
-        @test DI.jacobian(resid((s, v) -> innerₕ(s, v)), AutoForwardDiff(), w0) ≈ Hh * dg
-        @test DI.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), AutoForwardDiff(), w0) ≈
-              transpose(Dx) * Hh * dg
-        @test DI.jacobian(resid((s, v) -> inner₊ₓ(s, D₋ₓ(v))), AutoForwardDiff(), w0) ≈
-              transpose(Dx) * Hpx * dg
-
-        # the Jacobian's sparsity is the stencil's, which is what makes a sparse-AD colouring
-        # unnecessary here: the pattern is known from the AST before anything is evaluated
-        Jd = DI.jacobian(resid((s, v) -> innerₕ(s, v)), AutoForwardDiff(), w0)
-        Jw = DI.jacobian(resid((s, v) -> innerₕ(s, D₋ₓ(v))), AutoForwardDiff(), w0)
-        offs_d = length(stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, v)))))
-        offs_w = length(
-            stencil_offsets(resolve_form_ast(form(Wₕ, v -> innerₕ(uₕ, D₋ₓ(v)))))
+        Ωsmall = mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+            (max(N ÷ 2, 3), max(N ÷ 2, 3)),
+            (true, true)
         )
-        @test maximum(i -> count(!iszero, Jd[i, :]), 1:n) == offs_d
-        @test maximum(i -> count(!iszero, Jw[i, :]), 1:n) == offs_w
+        V = Bramble.CompositeGridSpace((gridspace(Ωbig), gridspace(Ωsmall)))
+        uv = Rₕ(V, (_x1_plus_x2, x -> x[1] - x[2]))
+        lf = form(V, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
+        b = zeros(ndofs(V))
+        assemble!(b, lf)
+        return @allocated assemble!(b, lf)
+    end
+    het8, het16 = heterogeneous_bytes(8), heterogeneous_bytes(16)
+    @test het8 == 0
+    @test het16 == 0
+    @test het8 == composite_bytes(8)         # literally the same as the homogeneous case
+    @test het16 == composite_bytes(16)
+
+    # and the parallel path's per-call cost doesn't grow just because the leaves
+    # differ in size: same thread-set allocation either way, not asserted at zero
+    # (that's tracked, not guaranteed, the same way the benchmark suite treats it)
+    function parallel_bytes(space, u1, u2)
+        lf = form(space, v -> innerₕ(u1(1), v(1)) + innerₕ(u2(2), v(2)))
+        b = zeros(ndofs(space))
+        assemble_parallel!(b, lf)               # warm up
+        return @allocated assemble_parallel!(b, lf)
+    end
+    Ωhc = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8), (true, true))
+    Vhomo = gridspace(Ωhc, Val(2))
+    uhomo = Rₕ(Vhomo, (_x1_plus_x2, x -> x[1] - x[2]))
+    Ωhc_small = mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true)
+    )
+    Vhet_alloc = Bramble.CompositeGridSpace((gridspace(Ωhc), gridspace(Ωhc_small)))
+    uhet_alloc = Rₕ(Vhet_alloc, (_x1_plus_x2, x -> x[1] - x[2]))
+
+    # On Julia nightly specifically (never on a release build, across many
+    # repeated runs), a single measurement drifts by one or two
+    # 64-byte quanta, nondeterministically, in either direction: the thread-spawn
+    # machinery's own scheduling noise, not anything the composite-space routing does
+    # differently per leaf. Neither the minimum over repeats nor an exact equality
+    # converged alone (it still flaked after 5 repeats), so the two are
+    # combined: the minimum rejects one-off spikes, then a tolerance allows the
+    # genuine floor-level noise that remains; the property under test is that the count is constant,
+    # not bit-for-bit reproducible, which nightly's scheduler does not promise.
+    min_parallel_bytes(space, u1, u2) = minimum(ntuple(_ -> parallel_bytes(space, u1, u2), 5))
+    het = min_parallel_bytes(Vhet_alloc, uhet_alloc, uhet_alloc)
+    homo = min_parallel_bytes(Vhomo, uhomo, uhomo)
+    @test abs(het - homo) <= 256
+end
+
+@testset "Assembled residual differentiation" begin
+    # The shape a nonlinear solve has: build the residual of a form, and let the solver
+    # differentiate it with respect to the coefficient vector to get a Jacobian.
+    #
+    # This did not work. `assemble` allocated its output with `eltype(test_space(form))`
+    # (the space's element type), so a Float64 space could only assemble a Float64
+    # right-hand side, and writing a Dual weight into it met
+    # `MethodError: no method matching Float64(::Dual)`. The type now comes from the
+    # form's own weights, promoted against the space's, which is the rule `Rₕ` already
+    # used and the same defect `dirichlet_constraints` had.
+    u0 = parent(uₕ)
+
+    @testset "Source parameter differentiation" begin
+        J(a) = sum(assemble(form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> a * (x[1] + x[2])), v))))
+        h = 1e-6
+        @test isapprox(
+            DI.derivative(J, AD_BACKEND, 1.3), (J(1.3 + h) - J(1.3 - h)) / 2h;
+            rtol = 1e-5
+        )
     end
 
-    @testset "Dirichlet conditions" begin
-        bcs = dirichlet_constraints(Ωₕ, :bottom => _Const(5.0))
+    @testset "Nonlinear residual Jacobian" begin
+        # innerₕ(u², v) assembles the vector with entries |□ᵢ| uᵢ², so its Jacobian is
+        # diagonal with 2 |□ᵢ| uᵢ. Checked against that closed form rather than against
+        # a finite difference, which is a stronger statement.
+        residual(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v)))
+        Jm = DI.jacobian(residual, AD_BACKEND, u0)
+
+        @test size(Jm) == (n, n)
+        @test Jm ≈ Diagonal(diag(Jm))
+
+        measures = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, ones(n)), v)))
+        @test diag(Jm) ≈ 2 .* measures .* u0
+
+        # and the undifferentiated path is untouched
+        @test eltype(residual(u0)) === Float64
+    end
+
+    @testset "Constrained Jacobian" begin
+        bcs = dirichlet_constraints(Ωₕ, :bottom => _Const(0.0))
+        res(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v)); dirichlet = bcs)
+        Jb = DI.jacobian(res, AD_BACKEND, u0)
+        @test size(Jb) == (n, n)
+
+        # a pinned value does not depend on the coefficients, so its row is zero:
+        # which is what a solver needs in order not to move it
         marked = index_in_marker(Ωₕ, :bottom)
         @test any(marked)
-
-        b = assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = bcs)
-        @test all(b[marked] .≈ 5.0)
-
-        # the same constraint, spelled as a Tuple of pairs rather than pre-built constraints
-        b2 = assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = (:bottom => _Const(5.0),))
-        @test b2 ≈ b
-
-        # no dirichlet at all is the unconstrained assembly
-        plain = assemble(form(Wₕ, v -> innerₕ(uₕ, v)))
-        @test assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = nothing) ≈ plain
-
-        # naming a label alone, with no values, is a usage error rather than a silent
-        # no-op: a linear form has nowhere to read boundary values from.
-        @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = :bottom)
-        msg = try
-            assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = :bottom)
-        catch e
-            sprint(showerror, e)
-        end
-        @test occursin("carries no values", msg)
-
-        # and a value dirichlet does not know how to normalize is rejected before
-        # anything is assembled
-        @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = 3)
-
-        # `apply_dirichlet_conditions!` takes a lone label `Symbol` as well as a Tuple of
-        # them, from callers that normalised the labels themselves
-        lsym = form(Wₕ, v -> innerₕ(uₕ, v))
-        b_sym = apply_dirichlet_conditions!(copy(plain), lsym, bcs, :bottom)
-        @test b_sym ≈ b
-        @test b_sym[.!marked] ≈ plain[.!marked]
+        @test all(iszero, Jb[marked, :])
     end
+end
 
-    @testset "dirichlet_components restriction" begin
-        bcs = dirichlet_constraints(Ωₕ, :bottom => _Const(5.0))
-        marked = index_in_marker(Ωₕ, :bottom)
-        uv = Rₕ(Vₕ, (_sin_x1, x -> cos(x[2])))
-        l = form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
+@testset "Vector contraction" begin
+    lf = form(Wₕ, v -> innerₕ(uₕ, v))
+    b = assemble(lf)
 
-        b = assemble(l; dirichlet = bcs, dirichlet_components = 1)
-        plain = assemble(l)
+    # A bare vector is refused rather than contracted. Its length carries no claim about
+    # whether its blocks match the components a form routes to, so accepting one would
+    # make a composite mismatch silent.
+    @test_throws ArgumentError lf(parent(uₕ))
+    @test_throws ArgumentError lf(fill(1.0, ndofs(Wₕ)))
 
-        leaf1, leaf2 = view(b, 1:n), view(b, (n + 1):(2n))
-        plain2 = view(plain, (n + 1):(2n))
+    # on a composite space, where the components have to line up with the blocks rather
+    # than merely add up to the right length
+    Vc = gridspace(Ωₕ, Val(2))
+    uc = Rₕ(Vc, (_Const(1.0), _Const(3.0)))
+    wc = Rₕ(Vc, (_Const(2.0), _Const(5.0)))
+    lfv = form(Vc, v -> innerₕ(uc, v))
+    @test_throws ArgumentError lfv(parent(wc))
 
-        @test all(leaf1[i] ≈ 5.0 for i in 1:n if marked[i])   # leaf 1 constrained
-        @test leaf2 == plain2                                  # leaf 2 untouched
-        @test any(i -> marked[i] && leaf1[i] != view(plain, 1:n)[i], 1:n) # leaf 1 changed
+    # `evaluate!` agrees, and reuses its scratch rather than assembling afresh
+    scratch = zeros(ndofs(Wₕ))
+    @test evaluate!(scratch, lf, uₕ) ≈ lf(uₕ)
+    @test scratch ≈ b                          # the scratch holds the assembled vector
 
-        # without dirichlet_components, the same labels bind to both leaves
-        b_both = assemble(l; dirichlet = bcs)
-        @test all(view(b_both, (n + 1):(2n))[i] ≈ 5.0 for i in 1:n if marked[i])
+    # repeatable, so the scratch is rewritten rather than accumulated into
+    @test evaluate!(scratch, lf, uₕ) ≈ evaluate!(scratch, lf, uₕ)
+
+    scratchv = zeros(ndofs(Vc))
+    @test evaluate!(scratchv, lfv, wc) ≈ lfv(wc)
+    @test_throws ArgumentError evaluate!(scratchv, lfv, parent(wc))
+
+    # a complex source: `l(vₕ)` contracts without conjugating, and `evaluate!` must too.
+    # `dot(scratch, v)` would return the conjugate, which the `!=` twin rejects.
+    lc = form(Wₕ, v -> innerₕ(x -> (1.0 + 2.0im) * (x[1] + 1), v))
+    bc = assemble(lc)
+    scratchc = similar(bc)
+    valc = evaluate!(scratchc, lc, uₕ)
+    @test valc ≈ lc(uₕ)
+    @test valc ≈ sum(bc .* parent(uₕ))
+    @test !(valc ≈ conj(lc(uₕ)))
+
+    # and it allocates nothing per call, once warmed.
+    #
+    # Behind a barrier, like every other allocation assertion here: measured at testset
+    # top level this reports the bytes of the surrounding closure rather than of the
+    # call.
+    #
+    # One callsite, measured three times, and the steady state is what is asserted.
+    #
+    # On Julia nightly the first measurement at any given callsite carries a one-time
+    # 16 bytes and every later one is 0. The raw triples:
+    #
+    #     1.14.0-DEV.3077  (16, 0, 0)
+    #     1.13.0-rc3       ( 0, 0, 0)
+    #     1.12.7           ( 0, 0, 0)
+    #
+    # The cost is per-callsite, not per-process, which is why neither of the simpler
+    # fixes works. A plain warmup call does not absorb it (the warmup's return value is
+    # unused, so the `dot` inside it can be optimised away), and neither does a
+    # discarded `@allocated` written as a second statement, because that is a different
+    # callsite and pays its own one-time 16 bytes. Repeating one callsite is what
+    # reaches the steady state.
+    #
+    # It is `dot`, and it is upstream rather than anything here: a bare
+    # `dot(::Vector{Float64}, ::Vector{Float64})` reproduces the identical (16, 0, 0)
+    # with no Bramble in the picture, and `@allocated` over a non-allocating expression
+    # is 0 on all three, so it is not the macro.
+    #
+    # What is under test is that a time loop calling this does not allocate, and the
+    # steady state is exactly that property.
+    function _evaluate_bytes(scratch, lf, v)
+        evaluate!(scratch, lf, v)
+        return minimum(ntuple(_ -> @allocated(evaluate!(scratch, lf, v)), 3))
     end
+    @test _evaluate_bytes(scratch, lf, uₕ) == 0
+    @test _evaluate_bytes(scratchc, lc, uₕ) == 0
+end
 
-    @testset "Dirichlet value widens the vector" begin
-        # `assemble` sized its vector from the form alone, so a boundary value of a wider
-        # type (a `ForwardDiff.Dual`, a complex number) failed in `dirichlet_bc!`'s
-        # `setindex!` before anything was solved. Each derivative is checked against a
-        # central difference, so a wrong one fails rather than merely not crashing.
-        h = 1e-6
-        θ0 = 1.3
-        l = form(Wₕ, v -> innerₕ(Rₕ(Wₕ, _Const(1.0)), v))
-        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-        marked = index_in_marker(Ωₕ, :bottom)
+@testset "Point-coloured sweep on a collapsed axis" begin
+    # `_sweep_parallel!` bands the last axis whenever it can hold two slabs, which every
+    # mesh above can, so its point-coloured fallback never ran. A collapsed last axis (one
+    # point) cannot be banded, and the sweep walks colours instead: one flat colour for a
+    # term reaching only its own point, `prod(strides)` strided colours for a difference.
+    # The x axis is non-uniform. Two oracles: the Serial sweep, and the defining identity
+    # bᵀw = l(w), evaluated through the space layer, which shares nothing with assembly.
+    Ωc = mesh(domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (9, 1), (false, true))
+    Wc = gridspace(Ωc)
+    @test size(Bramble.indices(Ωc)) == (9, 1)
+    uc = Rₕ(Wc, x -> 1 + x[1]^2)
+    wc = Rₕ(Wc, x -> sin(3x[1]) + 2)
 
-        b(θ) = assemble(l; dirichlet = :bottom => x -> θ * (1 + x[1]))
-        @test DI.derivative(b, AutoForwardDiff(), θ0)≈(b(θ0 + h) - b(θ0 - h)) / 2h rtol=1e-6
-        # the derivative lives on the boundary rows only
-        @test all(iszero, DI.derivative(b, AutoForwardDiff(), θ0)[.!marked])
-        @test any(!iszero, DI.derivative(b, AutoForwardDiff(), θ0)[marked])
-
-        # the path the original crash traced to: `assemble(a, l; dirichlet, symmetrize)`
-        g(θ) = assemble(
-            a, l; dirichlet = :bottom => x -> θ * x[1], symmetrize = true)[2]
-        @test DI.derivative(g, AutoForwardDiff(), θ0)≈(g(θ0 + h) - g(θ0 - h)) / 2h rtol=1e-6
-
-        # a complex value widens to `ComplexF64`; a real one leaves `Float64` alone
-        @test eltype(assemble(l; dirichlet = :bottom => x -> 1.0im)) == ComplexF64
-        @test eltype(assemble(l; dirichlet = :bottom => x -> 1.0)) == Float64
-        @test eltype(assemble(l)) == Float64
-        bc = assemble(l; dirichlet = :bottom => x -> 2.0im)
-        @test all(bc[marked] .== 2.0im)
-        @test bc[.!marked] == assemble(l)[.!marked]
-
-        # `assemble!` keeps the caller's element type: a complex vector takes the complex
-        # value, a real one still refuses it
-        bz = zeros(ComplexF64, n)
-        assemble!(bz, l; dirichlet = :bottom => x -> 2.0im)
-        @test bz == bc
-        @test_throws InexactError assemble!(
-            zeros(n), l; dirichlet = :bottom => x -> 2.0im)
-
-        # composite: components 1, 100 and 10000 cannot be confused, and `components = 2`
-        # binds the value to the second leaf only, so the derivative is zero on the first
-        uv = Rₕ(Vₕ, (_Const(1.0), _Const(100.0)))
-        lv = form(Vₕ, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
-        c(θ) = assemble(lv; dirichlet = :bottom => x -> θ * 10000 * x[1],
-            dirichlet_components = 2)
-        dc = DI.derivative(c, AutoForwardDiff(), θ0)
-        @test dc≈(c(θ0 + h) - c(θ0 - h)) / 2h rtol=1e-6
-        @test iszero(dc[1:n])
-        @test any(!iszero, dc[(n + 1):end])
-        # `components = 1` is the mirror image, and the unrestricted value reaches both
-        c1(θ) = assemble(lv; dirichlet = :bottom => x -> θ * x[1],
-            dirichlet_components = 1)
-        dc1 = DI.derivative(c1, AutoForwardDiff(), θ0)
-        @test any(!iszero, dc1[1:n]) && iszero(dc1[(n + 1):end])
-        c12(θ) = assemble(lv; dirichlet = :bottom => x -> θ * x[1])
-        dc12 = DI.derivative(c12, AutoForwardDiff(), θ0)
-        @test any(!iszero, dc12[1:n]) && any(!iszero, dc12[(n + 1):end])
-        # a complex value restricted to leaf 2 still widens the whole vector
-        @test eltype(assemble(lv; dirichlet = :bottom => x -> 1.0im,
-            dirichlet_components = 2)) == ComplexF64
-        @test_throws ArgumentError assemble(
-            lv; dirichlet = :bottom => x -> 1.0, dirichlet_components = 3)
-
-        # a real condition defined only on its own label is probed there, not at the
-        # first mesh point: neither of these may throw off `:right`
-        Ωr = mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 1.0), :right => :right,
-                :top => :top),
-            (8, 8), (true, true)
+    # Any: each closure is its own type
+    for (nm, g, gw, ncolours) in Any[
+        ("one colour", v -> innerₕ(uc, v), w -> innerₕ(uc, w), 1),
+        (
+            "strided colours", v -> innerₕ(uc, v + 2 * D₋ₓ(v) - Mₓ(v)),
+            w -> innerₕ(uc, w + 2 * D₋ₓ(w) - Mₓ(w)), 2
         )
-        Wr = gridspace(Ωr)
-        lr = form(Wr, v -> innerₕ(Rₕ(Wr, _Const(1.0)), v))
-        mr = index_in_marker(Ωr, :right)
-        @test any(mr)
-        br = assemble(lr; dirichlet = :right => x -> sqrt(x[1] - 0.5))
-        bref = assemble!(zeros(ndofs(Wr)), lr; dirichlet = :right => x -> sqrt(x[1] - 0.5))
-        @test eltype(br) == Float64
-        @test br == bref
-        @test assemble(lr; dirichlet = :right => x -> (x[1] == 1.0 ? 1.0 : error("off :right"))) isa
-              Vector{Float64}
+    ]
+        lc = form(Wc, g)
+        @test prod(_colour_strides(stencil_offsets(resolve_form_ast(lc)))) == ncolours
+        bs = assemble(lc)
+        reference = gw(wc)
+        @test dot(bs, parent(wc)) ≈ reference
+        @test !iszero(reference)
+
+        bp = fill(7.0, ndofs(Wc))
+        @test assemble_parallel!(bp, lc) === bp
+        @test bp ≈ bs
+
+        # inside a threaded region a `:static` loop cannot start, so each colour runs
+        # in order on the calling task (`_serial_colour!`), to the same answer
+        bt = fill(7.0, ndofs(Wc))
+        Threads.@threads for _ in 1:1
+            assemble_parallel!(bt, lc)
+        end
+        @test bt ≈ bs
     end
 
-    @testset "Allocation contract" begin
-        # This is what a time loop calls every step. The assembly kernel itself is
-        # allocation free -- `form.ast` is a field read, not a resolution, so there is
-        # nothing left to hoist out of the call: `assemble!(b, lf)` measures 0 bytes.
-        #
-        # Measured inside a function on concrete locals: read from a non-const global, the
-        # arguments box at the call boundary and the reading is of the box.
-        function counts(N)
-            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N), (true, true))
-            W = gridspace(Ω)
-            u = Rₕ(W, _x1_plus_x2)
-            lf = form(W, v -> innerₕ(u, v))
-            b = zeros(ndofs(W))
+    # the composite sweep hands each leaf to the same fallback at its offset; values
+    # 1 and 100 apart so a block landing in the wrong place cannot pass
+    Vc2 = gridspace(Ωc, Val(2))
+    uv = Rₕ(Vc2, (x -> 1 + x[1]^2, x -> 100 * (2 - x[1])))
+    lv = form(Vc2, v -> innerₕ(uv(1), v(1) + 2 * D₋ₓ(v(1))) + innerₕ(uv(2), v(2)))
+    bvs = assemble(lv)
+    bvp = similar(bvs)
+    assemble_parallel!(bvp, lv)
+    m = ndofs(Wc)
+    @test bvp[1:m] ≈ bvs[1:m]
+    @test bvp[(m + 1):(2m)] ≈ bvs[(m + 1):(2m)]
+    @test bvs[(m + 1):(2m)] ≈ parent(components(uv)[2]) .* weights(Wc, Innerh())
+end
 
-            assemble!(b, lf)                      # warm up
-            return @allocated assemble!(b, lf)
-        end
-
-        for N in (8, 24)          # 9x the degrees of freedom apart
-            @test counts(N) == 0
-        end
-
-        # the composite path too. It used to allocate a Vector of dof offsets on every
-        # call (128 B, constant in the grid but paid every step of a time loop).
-        function composite_bytes(N)
-            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N), (true, true))
-            V = gridspace(Ω, Val(3))
-            uv = Rₕ(V, ntuple(_ -> _x1_plus_x2, 3))
-            lf = form(V, v -> innerₕ(uv(1), v))
-            b = zeros(ndofs(V))
-            assemble!(b, lf)
-            return @allocated assemble!(b, lf)
-        end
-        @test composite_bytes(8) == 0
-        @test composite_bytes(16) == 0
-
-        # a heterogeneous leaf costs the same zero bytes: `_scatter_term!` now
-        # builds its own `LinearIndices`/`markers` from `mesh(sp)` per leaf instead of
-        # receiving them from the caller, once per leaf per term (not once per grid
-        # point), so it must not reopen the door to a per-point allocation the homogeneous
-        # case above doesn't have.
-        function heterogeneous_bytes(N)
-            Ωbig = mesh(
-                domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (N, N), (true, true)
-            )
-            Ωsmall = mesh(
-                domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
-                (max(N ÷ 2, 3), max(N ÷ 2, 3)),
-                (true, true)
-            )
-            V = Bramble.CompositeGridSpace((gridspace(Ωbig), gridspace(Ωsmall)))
-            uv = Rₕ(V, (_x1_plus_x2, x -> x[1] - x[2]))
-            lf = form(V, v -> innerₕ(uv(1), v(1)) + innerₕ(uv(2), v(2)))
-            b = zeros(ndofs(V))
-            assemble!(b, lf)
-            return @allocated assemble!(b, lf)
-        end
-        het8, het16 = heterogeneous_bytes(8), heterogeneous_bytes(16)
-        @test het8 == 0
-        @test het16 == 0
-        @test het8 == composite_bytes(8)         # literally the same as the homogeneous case
-        @test het16 == composite_bytes(16)
-
-        # and the parallel path's per-call cost doesn't grow just because the leaves
-        # differ in size: same thread-set allocation either way, not asserted at zero
-        # (that's tracked, not guaranteed, the same way the benchmark suite treats it)
-        function parallel_bytes(space, u1, u2)
-            lf = form(space, v -> innerₕ(u1(1), v(1)) + innerₕ(u2(2), v(2)))
-            b = zeros(ndofs(space))
-            assemble_parallel!(b, lf)               # warm up
-            return @allocated assemble_parallel!(b, lf)
-        end
-        Ωhc = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 8), (true, true))
-        Vhomo = gridspace(Ωhc, Val(2))
-        uhomo = Rₕ(Vhomo, (_x1_plus_x2, x -> x[1] - x[2]))
-        Ωhc_small = mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (4, 4), (true, true)
-        )
-        Vhet_alloc = Bramble.CompositeGridSpace((gridspace(Ωhc), gridspace(Ωhc_small)))
-        uhet_alloc = Rₕ(Vhet_alloc, (_x1_plus_x2, x -> x[1] - x[2]))
-
-        # On Julia nightly specifically (never on a release build, across many
-        # repeated runs), a single measurement drifts by one or two
-        # 64-byte quanta, nondeterministically, in either direction: the thread-spawn
-        # machinery's own scheduling noise, not anything the composite-space routing does
-        # differently per leaf. Neither the minimum over repeats nor an exact equality
-        # converged alone (it still flaked after 5 repeats), so the two are
-        # combined: the minimum rejects one-off spikes, then a tolerance allows the
-        # genuine floor-level noise that remains; the property under test is that the count is constant,
-        # not bit-for-bit reproducible, which nightly's scheduler does not promise.
-        min_parallel_bytes(space, u1, u2) = minimum(ntuple(_ -> parallel_bytes(space, u1, u2), 5))
-        het = min_parallel_bytes(Vhet_alloc, uhet_alloc, uhet_alloc)
-        homo = min_parallel_bytes(Vhomo, uhomo, uhomo)
-        @test abs(het - homo) <= 256
-    end
-
-    @testset "Assembled residual differentiation" begin
-        # The shape a nonlinear solve has: build the residual of a form, and let the solver
-        # differentiate it with respect to the coefficient vector to get a Jacobian.
-        #
-        # This did not work. `assemble` allocated its output with `eltype(test_space(form))`
-        # (the space's element type), so a Float64 space could only assemble a Float64
-        # right-hand side, and writing a Dual weight into it met
-        # `MethodError: no method matching Float64(::Dual)`. The type now comes from the
-        # form's own weights, promoted against the space's, which is the rule `Rₕ` already
-        # used and the same defect `dirichlet_constraints` had.
-        u0 = parent(uₕ)
-
-        @testset "Source parameter differentiation" begin
-            J(a) = sum(assemble(form(Wₕ, v -> innerₕ(Rₕ(Wₕ, x -> a * (x[1] + x[2])), v))))
-            h = 1e-6
-            @test isapprox(
-                DI.derivative(J, AutoForwardDiff(), 1.3), (J(1.3 + h) - J(1.3 - h)) / 2h;
-                rtol = 1e-5
-            )
-        end
-
-        @testset "Nonlinear residual Jacobian" begin
-            # innerₕ(u², v) assembles the vector with entries |□ᵢ| uᵢ², so its Jacobian is
-            # diagonal with 2 |□ᵢ| uᵢ. Checked against that closed form rather than against
-            # a finite difference, which is a stronger statement.
-            residual(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v)))
-            Jm = DI.jacobian(residual, AutoForwardDiff(), u0)
-
-            @test size(Jm) == (n, n)
-            @test Jm ≈ Diagonal(diag(Jm))
-
-            measures = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, ones(n)), v)))
-            @test diag(Jm) ≈ 2 .* measures .* u0
-
-            # and the undifferentiated path is untouched
-            @test eltype(residual(u0)) === Float64
-        end
-
-        @testset "Constrained Jacobian" begin
-            bcs = dirichlet_constraints(Ωₕ, :bottom => _Const(0.0))
-            res(u) = assemble(form(Wₕ, v -> innerₕ(element(Wₕ, u .* u), v)); dirichlet = bcs)
-            Jb = DI.jacobian(res, AutoForwardDiff(), u0)
-            @test size(Jb) == (n, n)
-
-            # a pinned value does not depend on the coefficients, so its row is zero:
-            # which is what a solver needs in order not to move it
-            marked = index_in_marker(Ωₕ, :bottom)
-            @test any(marked)
-            @test all(iszero, Jb[marked, :])
-        end
-    end
-
-    @testset "Vector contraction" begin
-        lf = form(Wₕ, v -> innerₕ(uₕ, v))
-        b = assemble(lf)
-
-        # A bare vector is refused rather than contracted. Its length carries no claim about
-        # whether its blocks match the components a form routes to, so accepting one would
-        # make a composite mismatch silent.
-        @test_throws ArgumentError lf(parent(uₕ))
-        @test_throws ArgumentError lf(fill(1.0, ndofs(Wₕ)))
-
-        # on a composite space, where the components have to line up with the blocks rather
-        # than merely add up to the right length
-        Vc = gridspace(Ωₕ, Val(2))
-        uc = Rₕ(Vc, (_Const(1.0), _Const(3.0)))
-        wc = Rₕ(Vc, (_Const(2.0), _Const(5.0)))
-        lfv = form(Vc, v -> innerₕ(uc, v))
-        @test_throws ArgumentError lfv(parent(wc))
-
-        # `evaluate!` agrees, and reuses its scratch rather than assembling afresh
-        scratch = zeros(ndofs(Wₕ))
-        @test evaluate!(scratch, lf, uₕ) ≈ lf(uₕ)
-        @test scratch ≈ b                          # the scratch holds the assembled vector
-
-        # repeatable, so the scratch is rewritten rather than accumulated into
-        @test evaluate!(scratch, lf, uₕ) ≈ evaluate!(scratch, lf, uₕ)
-
-        scratchv = zeros(ndofs(Vc))
-        @test evaluate!(scratchv, lfv, wc) ≈ lfv(wc)
-        @test_throws ArgumentError evaluate!(scratchv, lfv, parent(wc))
-
-        # a complex source: `l(vₕ)` contracts without conjugating, and `evaluate!` must too.
-        # `dot(scratch, v)` would return the conjugate, which the `!=` twin rejects.
-        lc = form(Wₕ, v -> innerₕ(x -> (1.0 + 2.0im) * (x[1] + 1), v))
-        bc = assemble(lc)
-        scratchc = similar(bc)
-        valc = evaluate!(scratchc, lc, uₕ)
-        @test valc ≈ lc(uₕ)
-        @test valc ≈ sum(bc .* parent(uₕ))
-        @test !(valc ≈ conj(lc(uₕ)))
-
-        # and it allocates nothing per call, once warmed.
-        #
-        # Behind a barrier, like every other allocation assertion here: measured at testset
-        # top level this reports the bytes of the surrounding closure rather than of the
-        # call.
-        #
-        # One callsite, measured three times, and the steady state is what is asserted.
-        #
-        # On Julia nightly the first measurement at any given callsite carries a one-time
-        # 16 bytes and every later one is 0. The raw triples:
-        #
-        #     1.14.0-DEV.3077  (16, 0, 0)
-        #     1.13.0-rc3       ( 0, 0, 0)
-        #     1.12.7           ( 0, 0, 0)
-        #
-        # The cost is per-callsite, not per-process, which is why neither of the simpler
-        # fixes works. A plain warmup call does not absorb it (the warmup's return value is
-        # unused, so the `dot` inside it can be optimised away), and neither does a
-        # discarded `@allocated` written as a second statement, because that is a different
-        # callsite and pays its own one-time 16 bytes. Repeating one callsite is what
-        # reaches the steady state.
-        #
-        # It is `dot`, and it is upstream rather than anything here: a bare
-        # `dot(::Vector{Float64}, ::Vector{Float64})` reproduces the identical (16, 0, 0)
-        # with no Bramble in the picture, and `@allocated` over a non-allocating expression
-        # is 0 on all three, so it is not the macro.
-        #
-        # What is under test is that a time loop calling this does not allocate, and the
-        # steady state is exactly that property.
-        function _evaluate_bytes(scratch, lf, v)
-            evaluate!(scratch, lf, v)
-            return minimum(ntuple(_ -> @allocated(evaluate!(scratch, lf, v)), 3))
-        end
-        @test _evaluate_bytes(scratch, lf, uₕ) == 0
-        @test _evaluate_bytes(scratchc, lc, uₕ) == 0
-    end
-
-    @testset "Point-coloured sweep on a collapsed axis" begin
-        # `_sweep_parallel!` bands the last axis whenever it can hold two slabs, which every
-        # mesh above can, so its point-coloured fallback never ran. A collapsed last axis (one
-        # point) cannot be banded, and the sweep walks colours instead: one flat colour for a
-        # term reaching only its own point, `prod(strides)` strided colours for a difference.
-        # The x axis is non-uniform. Two oracles: the Serial sweep, and the defining identity
-        # bᵀw = l(w), evaluated through the space layer, which shares nothing with assembly.
-        Ωc = mesh(domain(interval(0.0, 1.0) × interval(0.5, 0.5)), (9, 1), (false, true))
-        Wc = gridspace(Ωc)
-        @test size(Bramble.indices(Ωc)) == (9, 1)
-        uc = Rₕ(Wc, x -> 1 + x[1]^2)
-        wc = Rₕ(Wc, x -> sin(3x[1]) + 2)
-
-        # Any: each closure is its own type
-        for (nm, g, gw, ncolours) in Any[
-            ("one colour", v -> innerₕ(uc, v), w -> innerₕ(uc, w), 1),
-            (
-                "strided colours", v -> innerₕ(uc, v + 2 * D₋ₓ(v) - Mₓ(v)),
-                w -> innerₕ(uc, w + 2 * D₋ₓ(w) - Mₓ(w)), 2
-            )
-        ]
-            lc = form(Wc, g)
-            @test prod(_colour_strides(stencil_offsets(resolve_form_ast(lc)))) == ncolours
-            bs = assemble(lc)
-            reference = gw(wc)
-            @test dot(bs, parent(wc)) ≈ reference
-            @test !iszero(reference)
-
-            bp = fill(7.0, ndofs(Wc))
-            @test assemble_parallel!(bp, lc) === bp
-            @test bp ≈ bs
-
-            # inside a threaded region a `:static` loop cannot start, so each colour runs
-            # in order on the calling task (`_serial_colour!`), to the same answer
-            bt = fill(7.0, ndofs(Wc))
-            Threads.@threads for _ in 1:1
-                assemble_parallel!(bt, lc)
-            end
-            @test bt ≈ bs
-        end
-
-        # the composite sweep hands each leaf to the same fallback at its offset; values
-        # 1 and 100 apart so a block landing in the wrong place cannot pass
-        Vc2 = gridspace(Ωc, Val(2))
-        uv = Rₕ(Vc2, (x -> 1 + x[1]^2, x -> 100 * (2 - x[1])))
-        lv = form(Vc2, v -> innerₕ(uv(1), v(1) + 2 * D₋ₓ(v(1))) + innerₕ(uv(2), v(2)))
-        bvs = assemble(lv)
-        bvp = similar(bvs)
-        assemble_parallel!(bvp, lv)
-        m = ndofs(Wc)
-        @test bvp[1:m] ≈ bvs[1:m]
-        @test bvp[(m + 1):(2m)] ≈ bvs[(m + 1):(2m)]
-        @test bvs[(m + 1):(2m)] ≈ parent(components(uv)[2]) .* weights(Wc, Innerh())
-    end
-
-    @testset "CpuPolyester colour hooks" begin
-        # `CpuPolyester` sweeps reach the `_batch_*` hooks, never `Threads.@threads`. Without
-        # `BramblePolyesterExt` the hooks raise naming Polyester; with it they fill `b`. A
-        # one-colour form, so the whole grid is one race-free colour.
-        Ωp = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, true))
-        Wp = gridspace(Ωp)
-        up = Rₕ(Wp, x -> 1 + x[1] * x[2])
-        lp = form(Wp, v -> innerₕ(up, v))
-        astp = resolve_form_ast(lp)
-        idxs = Bramble.indices(Ωp)
-        lin = LinearIndices(idxs)
-        mk = Bramble.markers(Ωp)
-        bpol = zeros(ndofs(Wp))
-        if Base.get_extension(Bramble, :BramblePolyesterExt) === nothing
-            err = try
-                Bramble._sweep_colour!(
-                    Bramble.CpuPolyester(), bpol, Wp, astp, idxs, lin, mk, 0, true)
-                nothing
-            catch e
-                e
-            end
-            @test err isa ArgumentError
-            @test occursin("Polyester", err.msg)
-            @test all(iszero, bpol)
-        else
+@testset "CpuPolyester colour hooks" begin
+    # `CpuPolyester` sweeps reach the `_batch_*` hooks, never `Threads.@threads`. Without
+    # `BramblePolyesterExt` the hooks raise naming Polyester; with it they fill `b`. A
+    # one-colour form, so the whole grid is one race-free colour.
+    Ωp = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, true))
+    Wp = gridspace(Ωp)
+    up = Rₕ(Wp, x -> 1 + x[1] * x[2])
+    lp = form(Wp, v -> innerₕ(up, v))
+    astp = resolve_form_ast(lp)
+    idxs = Bramble.indices(Ωp)
+    lin = LinearIndices(idxs)
+    mk = Bramble.markers(Ωp)
+    bpol = zeros(ndofs(Wp))
+    if Base.get_extension(Bramble, :BramblePolyesterExt) === nothing
+        err = try
             Bramble._sweep_colour!(
                 Bramble.CpuPolyester(), bpol, Wp, astp, idxs, lin, mk, 0, true)
-            @test bpol ≈ assemble(lp)
+            nothing
+        catch e
+            e
         end
-
-        # Untyped arguments reach the `src/` stubs even when the extension is loaded.
-        for (hook, nargs) in ((Bramble._batch_linear_colour_sweep!, 8),
-            (Bramble._batch_linear_band_sweep!, 11))
-            err = try
-                hook(ntuple(_ -> nothing, nargs)...)
-                nothing
-            catch e
-                e
-            end
-            @test err isa ArgumentError
-            @test occursin("Polyester", err.msg)
-        end
+        @test err isa ArgumentError
+        @test occursin("Polyester", err.msg)
+        @test all(iszero, bpol)
+    else
+        Bramble._sweep_colour!(
+            Bramble.CpuPolyester(), bpol, Wp, astp, idxs, lin, mk, 0, true)
+        @test bpol ≈ assemble(lp)
     end
 
-    @testset "Shifted source lowering" begin
-        # `form` samples a `SourceFunction` once, through a `ShiftNode` too: the stored AST
-        # holds a `SourceVector` under the shift, and the assembled entry at a point is the
-        # source one point up in y times the point's weight (zero past the top row).
-        # Non-uniform in both axes, so a shift read off the wrong axis would differ.
-        Ωs = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
-        Ws = gridspace(Ωs)
-        f = x -> 1 + x[1] + 3x[2]^2
-        sf = Bramble.source_function(f, Val(2))
-        ls = form(Ws, v -> innerₕ(Bramble.shift_op(sf, 2, 1), v))
-        asts = resolve_form_ast(ls)
-        @test asts isa LinearProduct
-        @test asts.left_op isa Bramble.ShiftNode
-        @test asts.left_op.inner_op isa Bramble.SourceVector
-
-        F = reshape(parent(Rₕ(Ws, f)), 7, 6)
-        w = reshape(collect(weights(Ws, Innerh())), 7, 6)
-        expected = [j < 6 ? F[i, j + 1] * w[i, j] : 0.0 for i in 1:7, j in 1:6]
-        @test assemble(ls) ≈ vec(expected)
-    end
-
-    @testset "Unnamed source, heterogeneous composite" begin
-        # A term naming no component is not lowered on a composite space (its leaves may
-        # have different meshes), so `assemble` sizes its vector by sampling the function
-        # on each leaf. Non-uniform leaves of different sizes; the routed second term adds
-        # 100 to the second block only.
-        Ωa = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (7, 9), (false, false))
-        Ωb = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (5, 4), (false, true))
-        Wa, Wb = gridspace(Ωa), gridspace(Ωb)
-        Vh = Bramble.CompositeGridSpace((Wa, Wb))
-        f = x -> x[1] + 2x[2]
-        lh = form(Vh, v -> innerₕ(f, v) + innerₕ(100.0, v(2)))
-        bh = assemble(lh)
-        na = ndofs(Wa)
-        @test eltype(bh) === Float64
-        @test bh[1:na] ≈ parent(Rₕ(Wa, f)) .* weights(Wa, Innerh())
-        @test bh[(na + 1):end] ≈ (parent(Rₕ(Wb, f)) .+ 100.0) .* weights(Wb, Innerh())
-        # the trapezoidal sums are exact for a bilinear integrand: ∫(x + 2y) = 1.5
-        @test sum(bh[1:na]) ≈ 1.5
-        @test sum(bh[(na + 1):end]) ≈ 101.5
-    end
-
-    @testset "Point sources with Ref strengths" begin
-        # A `Vector` of `Ref` strengths reads its type off the element type, and stays live:
-        # multilinear spreading preserves each point's total, so the vector sums to the sum
-        # of the strengths, before and after one is changed. Non-uniform mesh, off-grid points.
-        # The interior points are random, so the mesh is seeded: an unseeded draw can put both
-        # points in one cell, or in cells sharing corners, and the 8-entry count fails.
-        Bramble._seed_mesh1d_rng!(1)
-        Ωd = try
-            mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 7), (false, false))
-        finally
-            Bramble._unseed_mesh1d_rng!()
+    # Untyped arguments reach the `src/` stubs even when the extension is loaded.
+    for (hook, nargs) in ((Bramble._batch_linear_colour_sweep!, 8),
+        (Bramble._batch_linear_band_sweep!, 11))
+        err = try
+            hook(ntuple(_ -> nothing, nargs)...)
+            nothing
+        catch e
+            e
         end
-        Wd = gridspace(Ωd)
-        strengths = [Ref(2.0), Ref(3.0)]
-        ld = form(Wd, v -> innerₕ(dirac([(0.31, 0.42), (0.77, 0.18)], strengths), v))
-        bd = assemble(ld)
-        @test eltype(bd) === Float64
-        @test sum(bd) ≈ 5.0
-        @test count(!iszero, bd) == 8         # 4 corners per point, no overlap
-        strengths[1][] = 10.0
-        assemble!(bd, ld)
-        @test sum(bd) ≈ 13.0
+        @test err isa ArgumentError
+        @test occursin("Polyester", err.msg)
+    end
+end
+
+@testset "Shifted source lowering" begin
+    # `form` samples a `SourceFunction` once, through a `ShiftNode` too: the stored AST
+    # holds a `SourceVector` under the shift, and the assembled entry at a point is the
+    # source one point up in y times the point's weight (zero past the top row).
+    # Non-uniform in both axes, so a shift read off the wrong axis would differ.
+    Ωs = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
+    Ws = gridspace(Ωs)
+    f = x -> 1 + x[1] + 3x[2]^2
+    sf = Bramble.source_function(f, Val(2))
+    ls = form(Ws, v -> innerₕ(Bramble.shift_op(sf, 2, 1), v))
+    asts = resolve_form_ast(ls)
+    @test asts isa LinearProduct
+    @test asts.left_op isa Bramble.ShiftNode
+    @test asts.left_op.inner_op isa Bramble.SourceVector
+
+    F = reshape(parent(Rₕ(Ws, f)), 7, 6)
+    w = reshape(collect(weights(Ws, Innerh())), 7, 6)
+    expected = [j < 6 ? F[i, j + 1] * w[i, j] : 0.0 for i in 1:7, j in 1:6]
+    @test assemble(ls) ≈ vec(expected)
+end
+
+@testset "Unnamed source, heterogeneous composite" begin
+    # A term naming no component is not lowered on a composite space (its leaves may
+    # have different meshes), so `assemble` sizes its vector by sampling the function
+    # on each leaf. Non-uniform leaves of different sizes; the routed second term adds
+    # 100 to the second block only.
+    Ωa = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (7, 9), (false, false))
+    Ωb = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (5, 4), (false, true))
+    Wa, Wb = gridspace(Ωa), gridspace(Ωb)
+    Vh = Bramble.CompositeGridSpace((Wa, Wb))
+    f = x -> x[1] + 2x[2]
+    lh = form(Vh, v -> innerₕ(f, v) + innerₕ(100.0, v(2)))
+    bh = assemble(lh)
+    na = ndofs(Wa)
+    @test eltype(bh) === Float64
+    @test bh[1:na] ≈ parent(Rₕ(Wa, f)) .* weights(Wa, Innerh())
+    @test bh[(na + 1):end] ≈ (parent(Rₕ(Wb, f)) .+ 100.0) .* weights(Wb, Innerh())
+    # the trapezoidal sums are exact for a bilinear integrand: ∫(x + 2y) = 1.5
+    @test sum(bh[1:na]) ≈ 1.5
+    @test sum(bh[(na + 1):end]) ≈ 101.5
+end
+
+@testset "Point sources with Ref strengths" begin
+    # A `Vector` of `Ref` strengths reads its type off the element type, and stays live:
+    # multilinear spreading preserves each point's total, so the vector sums to the sum
+    # of the strengths, before and after one is changed. Non-uniform mesh, off-grid points.
+    # The interior points are random, so the mesh is seeded: an unseeded draw can put both
+    # points in one cell, or in cells sharing corners, and the 8-entry count fails.
+    Bramble._seed_mesh1d_rng!(1)
+    Ωd = try
+        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (8, 7), (false, false))
+    finally
+        Bramble._unseed_mesh1d_rng!()
+    end
+    Wd = gridspace(Ωd)
+    strengths = [Ref(2.0), Ref(3.0)]
+    ld = form(Wd, v -> innerₕ(dirac([(0.31, 0.42), (0.77, 0.18)], strengths), v))
+    bd = assemble(ld)
+    @test eltype(bd) === Float64
+    @test sum(bd) ≈ 5.0
+    @test count(!iszero, bd) == 8         # 4 corners per point, no overlap
+    strengths[1][] = 10.0
+    assemble!(bd, ld)
+    @test sum(bd) ≈ 13.0
+end
+
+@testset "Element type helpers" begin
+    # a thunk reveals its type through its value, and anything that is not a number,
+    # `Ref`, array or thunk promotes by its own type
+    @test Bramble._value_eltype(Float32, () -> 2.0) === Float64
+    @test Bramble._value_eltype(Float64, () -> Float32[1, 2]) === Float64
+    @test Bramble._value_eltype(Float32, nothing) === Union{Nothing, Float32}
+
+    # the diagonal blocks of a test side shorter than its trial side are the test
+    # side's own leaves
+    @test Bramble._paired((1, 2), (:a, :b, :c)) == (1, 2)
+    @test Bramble._paired((), (:a,)) == ()
+    V2, V3 = gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(3))
+    @test Bramble._test_side_eltype(
+        Bramble._summands(resolve_form_ast(form(V2, v -> innerₕ(1.0f0, v)))),
+        V2, V3) === Float64
+end
+
+@testset "Host mirror helpers" begin
+    # The device paths assemble on a host mirror of the test space, into a host buffer,
+    # and copy it into the storage of `b`. On a host space each helper is the identity
+    # or an equal copy, which is what lets the mirror assemble the same vector.
+    Ωm = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 8), (false, true))
+    Wm = gridspace(Ωm)
+    Vm = Bramble.CompositeGridSpace((Wm, gridspace(Ωₕ)))
+    um = Rₕ(Wm, x -> 1 + x[1] - x[2]^2)
+    # Any: each space and closure is its own type
+    for (sp, g) in Any[(Wm, v -> innerₕ(um, v + D₋ₓ(v))),
+        (Vm, v -> innerₕ(um, v(1) + D₋ₓ(v(1))) + innerₕ(100.0, v(2)))]
+        lm = form(sp, g)
+        hs = Bramble._host_mirror_space(sp)
+        @test ndofs(hs) == ndofs(sp)
+        astm = resolve_form_ast(lm)
+        hform = LinearForm{2, typeof(hs), typeof(astm)}(hs, astm)
+        hb = zeros(ndofs(sp))
+        Bramble._assemble_linear!(
+            Bramble.HostLocality(), hb, hform, astm, nothing, nothing)
+        @test hb ≈ assemble(lm)
     end
 
-    @testset "Element type helpers" begin
-        # a thunk reveals its type through its value, and anything that is not a number,
-        # `Ref`, array or thunk promotes by its own type
-        @test Bramble._value_eltype(Float32, () -> 2.0) === Float64
-        @test Bramble._value_eltype(Float64, () -> Float32[1, 2]) === Float64
-        @test Bramble._value_eltype(Float32, nothing) === Union{Nothing, Float32}
+    v_plain = zeros(ndofs(Wm))
+    @test Bramble._vector_storage(v_plain) === v_plain
+    @test Bramble._vector_storage(um) === parent(um)
+    @test Bramble._host_array(2.5) === 2.5
 
-        # the diagonal blocks of a test side shorter than its trial side are the test
-        # side's own leaves
-        @test Bramble._paired((1, 2), (:a, :b, :c)) == (1, 2)
-        @test Bramble._paired((), (:a,)) == ()
-        V2, V3 = gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(3))
-        @test Bramble._test_side_eltype(
-            Bramble._summands(resolve_form_ast(form(V2, v -> innerₕ(1.0f0, v)))),
-            V2, V3) === Float64
-    end
-
-    @testset "Host mirror helpers" begin
-        # The device paths assemble on a host mirror of the test space, into a host buffer,
-        # and copy it into the storage of `b`. On a host space each helper is the identity
-        # or an equal copy, which is what lets the mirror assemble the same vector.
-        Ωm = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 8), (false, true))
-        Wm = gridspace(Ωm)
-        Vm = Bramble.CompositeGridSpace((Wm, gridspace(Ωₕ)))
-        um = Rₕ(Wm, x -> 1 + x[1] - x[2]^2)
-        # Any: each space and closure is its own type
-        for (sp, g) in Any[(Wm, v -> innerₕ(um, v + D₋ₓ(v))),
-            (Vm, v -> innerₕ(um, v(1) + D₋ₓ(v(1))) + innerₕ(100.0, v(2)))]
-            lm = form(sp, g)
-            hs = Bramble._host_mirror_space(sp)
-            @test ndofs(hs) == ndofs(sp)
-            astm = resolve_form_ast(lm)
-            hform = LinearForm{2, typeof(hs), typeof(astm)}(hs, astm)
-            hb = zeros(ndofs(sp))
-            Bramble._assemble_linear!(
-                Bramble.HostLocality(), hb, hform, astm, nothing, nothing)
-            @test hb ≈ assemble(lm)
-        end
-
-        v_plain = zeros(ndofs(Wm))
-        @test Bramble._vector_storage(v_plain) === v_plain
-        @test Bramble._vector_storage(um) === parent(um)
-        @test Bramble._host_array(2.5) === 2.5
-
-        # every `@node_family` node is rebuilt around its walked operand, here the test
-        # function, which the walk returns untouched
-        v = TestFunction{2}()
-        @test Bramble._host_sources(v) === v
-        for N in (:BackwardDifference, :ForwardDifference, :CenteredDifference,
-            :StarDifference, :CrossWeightedDifference, :BackwardAverage, :ForwardAverage,
-            :CenteredAverage, :JumpNode)
-            node = getfield(Bramble, N){2, 1, typeof(v)}(v)
-            @test Bramble._host_sources(node) === node
-        end
+    # every `@node_family` node is rebuilt around its walked operand, here the test
+    # function, which the walk returns untouched
+    v = TestFunction{2}()
+    @test Bramble._host_sources(v) === v
+    for N in (:BackwardDifference, :ForwardDifference, :CenteredDifference,
+        :StarDifference, :CrossWeightedDifference, :BackwardAverage, :ForwardAverage,
+        :CenteredAverage, :JumpNode)
+        node = getfield(Bramble, N){2, 1, typeof(v)}(v)
+        @test Bramble._host_sources(node) === node
     end
 end
 
