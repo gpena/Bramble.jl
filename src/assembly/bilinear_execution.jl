@@ -991,7 +991,15 @@ end
 # The `Threads.@threads :static` loop over the slabs of one band colour and the same bands
 # run in order on the calling task, the pair `_static_or_serial` picks between. `point` is
 # the sweep's per-point functor.
-@noinline function _static_band_colour!(point::P, ax, bidx, nbands, rest) where {P}
+#
+# Each threaded runner hands its loop to a `_launch_*` function of the same arguments.
+# `BrambleEnzymeExt` rules the runner and marks the launch inactive: a differentiated call
+# meets the runner's rule, and an inactive one (a ghost form's constant `A_pad` replay)
+# lets Enzyme clone the runner without frees, stopping at the launch rather than in Base's
+# scheduler, whose runtime calls it cannot clone (gpena/Bramble.jl#1157).
+@noinline _static_band_colour!(point::P, ax, bidx, nbands, rest) where {P} = _launch_band_colour!(
+    point, ax, bidx, nbands, rest)
+@noinline function _launch_band_colour!(point::P, ax, bidx, nbands, rest) where {P}
     Threads.@threads :static for b in bidx
         for I in CartesianIndices((rest..., _band_range(ax, nbands, b)))
             point(I)
@@ -1010,7 +1018,8 @@ end
 end
 
 # The same pair over the points of one colour.
-@noinline function _static_colour!(point::P, idxs) where {P}
+@noinline _static_colour!(point::P, idxs) where {P} = _launch_colour!(point, idxs)
+@noinline function _launch_colour!(point::P, idxs) where {P}
     Threads.@threads :static for I in idxs
         point(I)
     end
@@ -1049,7 +1058,9 @@ end
 @inline _static_cut_band_colour!(r::Base.RefValue, span, bidx, nbands) = _static_cut_band_colour!(
     r[], span, bidx, nbands)
 
-@noinline function _static_cut_band_colour!(point::P, span, bidx, nbands) where {P}
+@noinline _static_cut_band_colour!(point::P, span, bidx, nbands) where {P} = _launch_cut_band_colour!(
+    point, span, bidx, nbands)
+@noinline function _launch_cut_band_colour!(point::P, span, bidx, nbands) where {P}
     Threads.@threads :static for b in bidx
         _cut_band!(point, nbands, span, b)
     end
@@ -1197,7 +1208,18 @@ end
         row_offset, col_offset
 )
     sp, term, mesh_markers = parts[]
-    return _late(_batch_bilinear_colour_replay!, target[], sp, term, idxs, lin_indices,
+    return _launch_colour_replay!(target[], sp, term, idxs, lin_indices, mesh_markers,
+        row_offset, col_offset)
+end
+
+# The hook's call into `BramblePolyesterExt`'s sweep, out of line for the reason the
+# `CpuThreaded` launches are (`_launch_band_colour!`): `BrambleEnzymePolyesterExt` marks it
+# inactive, so where the replay is inactive Enzyme's clone without frees stops here, not in
+# the `@batch` scheduler (gpena/Bramble.jl#1157). Its arguments are the unwrapped values,
+# each typed so the method specializes on it and `_late` keeps its static call.
+@noinline function _launch_colour_replay!(target::T, sp::S, term::M, idxs::I,
+        lin_indices::L, mesh_markers::K, row_offset, col_offset) where {T, S, M, I, L, K}
+    return _late(_batch_bilinear_colour_replay!, target, sp, term, idxs, lin_indices,
         mesh_markers, row_offset, col_offset)
 end
 
@@ -1280,7 +1302,15 @@ end
         lin_indices, row_offset, col_offset
 )
     sp, term, mesh_markers = parts[]
-    return _late(_batch_bilinear_band_replay!, target[], sp, term, ax, bidx, nbands, rest,
+    return _launch_band_replay!(target[], sp, term, ax, bidx, nbands, rest, lin_indices,
+        mesh_markers, row_offset, col_offset)
+end
+
+# The band hook's launch, as `_launch_colour_replay!`.
+@noinline function _launch_band_replay!(target::T, sp::S, term::M, ax::A, bidx::B, nbands,
+        rest::R, lin_indices::L, mesh_markers::K, row_offset, col_offset
+) where {T, S, M, A, B, R, L, K}
+    return _late(_batch_bilinear_band_replay!, target, sp, term, ax, bidx, nbands, rest,
         lin_indices, mesh_markers, row_offset, col_offset)
 end
 
