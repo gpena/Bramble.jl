@@ -212,6 +212,16 @@ jobs:
           # TestUtils.jl) before the runner just kills the job. Coverage is on here, as it was
           # by default.
           BRAMBLE_TEST_MAXRSS_FRACTION: 0.7
+          # Pkg.test precompiles the whole test environment, in parallel, before it runs
+          # anything (gated by `should_autoprecompile()`, which reads this variable). Each
+          # leg paid for 25 to 165 packages there, Makie alone 70 to 211 s, though only the
+          # ext test files load Makie or Meshes, and the groups run here include none. With
+          # it at 0, `using` compiles only what the run loads. Risk: on a stale cache (the
+          # 165-package case) what `unit` loads compiles serially instead of in parallel. If
+          # setup grows, the fallback is a prior step running `Pkg.precompile` on the test
+          # environment minus the Makie stack, under the same flags. Nightly keeps the
+          # default, so the cache it saves is unchanged.
+          JULIA_PKG_PRECOMPILE_AUTO: "0"
 
   # The check branch protection requires, for the reason release-gate.yml's `result` job
   # gives: `test` is a matrix job skipped by its `if:` when no code changed, and a skipped
