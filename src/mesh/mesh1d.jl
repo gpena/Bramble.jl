@@ -828,8 +828,12 @@ end
         draws = Vector{Float64}(undef, length(v))
         rand!(_MESH1D_RNG, draws)
         v .= draws
-    else
+    elseif eltype(v) <: AbstractFloat
         rand!(v)
+    else
+        # A coordinate type `Random` has no sampler for (a `ForwardDiff.Dual`, #1131) takes
+        # `Float64` draws converted, as the seeded branch does; floats keep their stream.
+        v .= rand(Float64, length(v))
     end
     return nothing
 end

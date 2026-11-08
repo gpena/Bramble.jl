@@ -48,6 +48,45 @@ function Bramble._solve_promoted(
     end
 end
 
+# The bordered solve of a `Dual` matrix or load (`pde_solve(A, F; mean_zero, gauge)`, or a
+# `RankOneUpdate`). `B = [A C; Cᵀ 0]` carries a `Dual` only through `A`, since the border
+# `C = [w Z]` and the rank-one term are constants. With `B₀` the bordered matrix of the
+# innermost values, factored once by the route of its `Float64` solve, partial `k` of
+# `[u; μ]` is `B₀⁻¹([Fₖ; 0] − Bₖ[u₀; μ₀])`. A `Dual` border has no such formula and is
+# refused. So is a `RankOneUpdate` over a `Dual` matrix, whose `σ` takes the matrix's
+# element type.
+function Bramble._bordered_promoted(
+        ::Type{S}, ::Type{T}, A, F, r, w, Z, solver, kwargs) where {S <: ForwardDiff.Dual, T}
+    _check_constant_border(w, Z, r)
+    n = size(A, 1)
+    A0 = _innermost(A)
+    T0 = Bramble._bordered_eltype(A0, r, w, Z)
+    B0, bsym = Bramble._bordered_system(T0, A0, r, w, Z)
+    S0 = float(promote_type(T0, eltype(_innermost(F))))
+    fact = Bramble._bordered_factorize(B0, bsym, T0, S0, solver, kwargs)
+    return _run_and_finalize(fact) do fact
+        B, _ = Bramble._bordered_system(S, A, r, w, Z)
+        b = zeros(S, size(B, 1))
+        b[1:n] .= F
+        x = _dual_solve(fact, B, b)
+        return x[1:n]
+    end
+end
+
+function _check_constant_border(w, Z, r)
+    w !== nothing && eltype(w) <: ForwardDiff.Dual && _throw_dual_border("mean_zero = w")
+    Z !== nothing && eltype(Z) <: ForwardDiff.Dual && _throw_dual_border("gauge = Z")
+    r !== nothing && Bramble._rank_one_eltype(r) <: ForwardDiff.Dual &&
+        _throw_dual_border("the rank-one term of a RankOneUpdate")
+    return nothing
+end
+
+@noinline function _throw_dual_border(what)
+    throw(ArgumentError("pde_solve of a ForwardDiff.Dual system takes $what as a constant, " *
+                        "got a ForwardDiff.Dual one: the bordered derivative holds the " *
+                        "border fixed."))
+end
+
 # Runs `f(fact)` and then releases `fact` with `finalize`, also when `f` throws. A native
 # factor (MUMPS) is freed here, as `_mumps_solve` frees its own, rather than when the GC
 # reaches it. A factor without a finalizer is unaffected.

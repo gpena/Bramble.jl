@@ -841,11 +841,12 @@ function _constrained_space(Wₕ::GhostGridSpace, rels::Tuple, drels::Tuple)
     keep = _kept_points(G, ghosts, fixed)
     T = eltype(P)
     be = backend(P)
-    # `d` keeps the type of the relations' data: a `Dual` or complex value widens it.
+    # `d` keeps the type of the relations' data: a `Dual` or complex value widens it, and
+    # `E` the type of their operators' coefficients (a `Dual` Robin `β * u + ∂ₙ(u)`).
     S = _closure_data_eltype(T, promote_type(eltype(b), eltype(g)))
     if !_any_time(rels) && !_any_time(drels)
         E, d, _ = _relation_closure(G, R, b, ghosts, keep, fixed, g)
-        return GhostGridSpace(P, _closure_matrix(be, T, E),
+        return GhostGridSpace(P, _closure_matrix(be, _closure_data_eltype(T, eltype(E)), E),
             _closure_data(be, _closure_data_eltype(S, eltype(d)), d))
     end
     timed = map(_is_time_relation, rels)
@@ -853,7 +854,7 @@ function _constrained_space(Wₕ::GhostGridSpace, rels::Tuple, drels::Tuple)
     E, _, L = _relation_closure(G, R, b, ghosts, keep, fixed, g, (w, order))
     td = _time_data(be, T, S, G, L, rels, drels, b, ghosts, rel, g, order, owner)
     d = _backend_vector(be, eltype(td.g), size(E, 1))
-    W = GhostGridSpace(P, _closure_matrix(be, T, E), d, td)
+    W = GhostGridSpace(P, _closure_matrix(be, _closure_data_eltype(T, eltype(E)), E), d, td)
     _lift_affine!(d, W, zero(real(T)))      # the stored `d` is `d(0)`
     return W
 end

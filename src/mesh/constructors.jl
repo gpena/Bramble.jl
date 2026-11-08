@@ -13,6 +13,19 @@
 @inline _expand_uniform(u::Bool, ::Val{D}) where {D} = ntuple(_ -> u, Val(D))
 @inline _expand_uniform(u::NTuple{D, Bool}, ::Val{D}) where {D} = u
 
+# A coordinate type the backend's eltype cannot hold without dropping data (a
+# `ForwardDiff.Dual`, which is no `AbstractFloat`) rebuilds the backend's storage types for
+# it through `similar`, as `element(W, T)` does, keeping the policy. Any float coordinate
+# keeps the backend as given, so a Float32 backend still stores a Float64 domain in Float32.
+# The test is on types alone: the float branch folds to `return b`.
+@inline function _coordinate_backend(b::Backend{VT, MT, EP}, ::Type{T}) where {VT, MT, EP, T}
+    S = promote_type(eltype(b), T)
+    (S === eltype(b) || S <: AbstractFloat) && return b
+    v = similar(vector(b, 0), S, 0)
+    m = similar(matrix(b, 0, 0), S)
+    return Backend{typeof(v), typeof(m), EP}()
+end
+
 # The backend defaults to one over the domain's own element type rather than always to
 # Float64, so a Float32 domain gives a Float32 mesh. The element type is a property of the
 # storage, and the storage should follow the geometry it is built on; passing `backend`
@@ -65,6 +78,8 @@ a mesh, as the polygon is not kept.
 
   - `uniform`: Convenience keyword alternative to positional `unif`. Accepts a `Bool` or an `NTuple{D, Bool}`. Defaults to `true` across all axes.
   - `backend`: Linear algebra and memory storage [`Backend`](@ref). Defaults to `backend(eltype(Ω))`.
+    A domain whose coordinates are not floats the backend can hold (a `ForwardDiff.Dual`)
+    gets the backend's vector and matrix types rebuilt for that type, under the same policy.
   - `warn_marker_mismatch::Bool = true`: warn if `Ω` carries a custom `:boundary`/`:interior`
     marker that disagrees with this mesh's own geometric one. The custom marker is kept
     either way; set to `false` for a deliberate redefinition you don't want flagged.
@@ -102,7 +117,8 @@ X = interval(0, 1) × interval(4, 5)
     unif::Union{Bool, NTuple{D, Bool}};
     backend = backend(eltype(Ω)),
     warn_marker_mismatch::Bool = true
-) where {D} = _mesh(Ω, npts, _expand_uniform(unif, Val(D)), backend; warn_marker_mismatch)
+) where {D} = _mesh(
+    Ω, npts, _expand_uniform(unif, Val(D)), _coordinate_backend(backend, eltype(Ω)); warn_marker_mismatch)
 
 @inline mesh(
     Ω::Domain,
@@ -110,7 +126,8 @@ X = interval(0, 1) × interval(4, 5)
     uniform::Union{Bool, NTuple{D, Bool}} = true,
     backend = backend(eltype(Ω)),
     warn_marker_mismatch::Bool = true
-) where {D} = _mesh(Ω, npts, _expand_uniform(uniform, Val(D)), backend; warn_marker_mismatch)
+) where {D} = _mesh(
+    Ω, npts, _expand_uniform(uniform, Val(D)), _coordinate_backend(backend, eltype(Ω)); warn_marker_mismatch)
 
 @inline mesh(
     Ω::Domain{<:CartesianProduct{D}},

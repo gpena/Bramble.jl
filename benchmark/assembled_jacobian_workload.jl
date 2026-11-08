@@ -256,7 +256,7 @@ function smoke()
         n_fd = newton!(u_fd, r, p, fd)
         n_ast.newton == n_fd.newton ||
             error("Newton iterations differ: assembled $(n_ast.newton), " *
-              "sparse AD $(n_fd.newton)")
+                  "sparse AD $(n_fd.newton)")
         sol_diff = maximum(abs, u_ast - u_fd)
         sol_diff < 1.0e-6 || error("Newton solutions differ by $sol_diff")
         return (policy = string(typeof(policy)), err = err, newton = n_ast.newton,
@@ -383,6 +383,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     function _driver(sizes, runs)
         rows = []
         for m in sizes, name in ("CpuSerial", "CpuThreaded")
+
             results = [_run(m, name) for _ in 1:runs]
             for r in results
                 pairs_text = join(("$k=$(_fmt(r[k]))" for k in keys(r)), " ")

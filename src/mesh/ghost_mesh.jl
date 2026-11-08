@@ -225,10 +225,12 @@ end
 #------------------------------------------------------------------------------------------#
 
 # The padded mesh, brought up to date with the physical one: its points after a
-# `change_points!`, its labels after a marker change.
+# `change_points!`, its labels after a marker change. Only a stale mesh takes the refresh;
+# Enzyme treats it as inactive (BrambleEnzymeExt, #1127).
 @inline function _padded(G::GhostMesh)
     p = G.physical
-    (_mesh_version(p) == G.version && _marker_stamp(p) == G.marker_stamp) || _refresh!(G)
+    (_mesh_version(p) == G.version && _marker_stamp(p) == G.marker_stamp) ||
+        _refresh!(G)
     return G.padded
 end
 @inline _padded(s::GhostMeshState) = s.padded

@@ -9,14 +9,17 @@ using Bramble: norminf, spacings
 import Bramble: diff₋ₓ, diff₊ₓ, D₊ₓ, ∇₊ₕ, M₊ₓ, M₊ᵧ
 using SparseArrays
 using ForwardDiff
+using Polyester: @batch
+using Bramble: CpuSerial, CpuThreaded, CpuPolyester
 using Bramble: divₕ, div₊ₕ, divcₕ, diṽₕ, div̽ₕ, curlₕ, curl₊ₕ, curlcₕ, curl̃ₕ, curl̽ₕ
 using Bramble: εₕ, εcₕ, ε₊ₕ, ε̽ₕ
 using Bramble: hₘᵢₙ, diff₋ₓ, diff₊ₓ, half_spacings, cell_measures
 
 # The element type of the backend survives the whole library.
 #
-# The backend decides the numeric type: the domain's own eltype does not propagate, so a
-# Float32 run is asked for by constructing the backend with Float32 array types. From
+# The backend decides the numeric type: the domain's own eltype does not propagate (a
+# `Dual` domain excepted, see the last testset), so a Float32 run is asked for by
+# constructing the backend with Float32 array types. From
 # there every mesh, grid space, grid function, operator, matrix and inner product must
 # stay in that type.
 #
@@ -144,6 +147,58 @@ const F32_BACKEND = backend(;
         @test norminf(gₕ) isa Float32
         @test inner₊ₓ(uₕ, uₕ) isa Float32
         @test inner₊ᵧ(uₕ, uₕ) isa Float32
+    end
+
+    # A `Dual` domain under a policy-only backend (gpena/Bramble.jl#1131): the mesh rebuilds
+    # the backend's storage for `Dual`, keeping the policy, and differentiates exactly as a
+    # backend built with `Dual` storage does. A float domain keeps the backend it was given.
+    @testset "Dual coordinates, policy-only backend" begin
+        function _dual_mesh(b, be, u, d)
+            Bramble._seed_mesh1d_rng!(1234)
+            Ω = d == 1 ? domain(interval(0.0, b)) :
+                domain(interval(0.0, b) × interval(0.0, 1.0))
+            M = mesh(Ω, ntuple(_ -> 9, d), u; backend = be)
+            Bramble._unseed_mesh1d_rng!()
+            return M
+        end
+        function _dual_value(b, be, u, d)
+            W = gridspace(_dual_mesh(b, be, u, d))
+            uₕ = Rₕ(W, x -> sin(x[1]) * x[d]^2 + x[1])
+            A = assemble(form(W, W, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V))))
+            return sum(abs2, parent(D₋ₓ(uₕ))) + sum(abs2, nonzeros(A))
+        end
+        _dual_backend(T, p) = backend(; vector_type = Vector{T},
+            matrix_type = SparseMatrixCSC{T, Int}, policy = p)
+
+        D = typeof(ForwardDiff.Dual(1.3, 1.0))
+        for p in (CpuSerial(), CpuThreaded(), CpuPolyester()), d in (1, 2), u in (true, false)
+            be = backend(; policy = p)
+            @test backend(_dual_mesh(1.3, be, u, d)) === be
+            M = _dual_mesh(ForwardDiff.Dual(1.3, 1.0), be, u, d)
+            @test typeof(backend(M)) === typeof(_dual_backend(D, p))
+            @test eltype(M) === D
+
+            g = ForwardDiff.derivative(b -> _dual_value(b, be, u, d), 1.3)
+            r = ForwardDiff.derivative(
+                b -> _dual_value(b, _dual_backend(typeof(b), p), u, d), 1.3)
+            c = (_dual_value(1.3 + 1e-5, be, u, d) - _dual_value(1.3 - 1e-5, be, u, d)) /
+                2e-5
+            @test g != 0
+            @test isapprox(g, r; rtol = 1e-12)
+            @test isapprox(g, c; rtol = 1e-6)
+        end
+
+        # Unseeded, a non-uniform axis draws from `Random.default_rng()`, which has no
+        # sampler for `Dual`: the draw is in `Float64`, converted.
+        for p in (CpuSerial(), CpuThreaded(), CpuPolyester())
+            Ω = domain(interval(0.0, ForwardDiff.Dual(1.3, 1.0)) × interval(0.0, 1.0))
+            M = mesh(Ω, 7; uniform = (false, true), backend = backend(; policy = p))
+            x = points(M(1))
+            @test eltype(M) === D
+            @test issorted(x) && allunique(x)
+            @test first(x) == 0 && last(x) == ForwardDiff.Dual(1.3, 1.0)
+            @test all(ForwardDiff.partials(xi, 1) ≈ ForwardDiff.value(xi) / 1.3 for xi in x)
+        end
     end
 end
 

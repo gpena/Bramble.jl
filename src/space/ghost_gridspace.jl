@@ -72,11 +72,11 @@ ndofs(Wₕ)                     # 35 physical nodes + 24 ghosts
 E, d = Bramble.closure(Wₕ)    # E is 63 × 59, d = 0
 ```
 """
-struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix{T},
+struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix,
     DT <: AbstractVector, TD, GU} <: AbstractSpaceType{1}
     "the space on the padded mesh, with physical-only weights."
     padded::S
-    "the `N_pad × ndofs` closure matrix: the padded values are `E * u + d`."
+    "the `N_pad × ndofs` closure matrix, `E * u + d` the padded values, in the data's type."
     E::ET
     "the affine part of the closure, one entry per padded point, in the data's type."
     d::DT
@@ -337,13 +337,16 @@ function _gridspace_ghosts(Ωₕ::Union{Mesh1D, MeshnD},
     return GhostGridSpace(P, _closure_matrix(be, T, _ghost_selection(G, T)), d)
 end
 
-# The closure matrix in the backend's matrix type. A type that is not a `SparseMatrixCSC`
-# is left as built: forms on it are refused by `_check_ghost_host`. The result's type
-# follows from `be` and `T` alone, whatever the type of `E` inference sees.
+# The closure matrix with entries of type `T`, in the backend's matrix type when that holds
+# `T`. A type that is not a `SparseMatrixCSC` is left as built: forms on it are refused by
+# `_check_ghost_host`. A `T` wider than the space's, the type a `Dual` Robin coefficient
+# gives the relations (`_closure_data_eltype`), keeps a `SparseMatrixCSC{T, Int}` while the
+# mesh and the padded space keep theirs. The result's type follows from `be` and `T` alone,
+# whatever the type of `E` inference sees.
 function _closure_matrix(be, ::Type{T}, E::SparseMatrixCSC) where {T}
     MT = matrix_type(be)
     Ec = SparseMatrixCSC{T, Int}(E)::SparseMatrixCSC{T, Int}
-    return MT <: SparseMatrixCSC ? convert(MT, Ec)::MT : Ec
+    return MT <: SparseMatrixCSC{T} ? convert(MT, Ec)::MT : Ec
 end
 
 # The element type of the affine part of a closure on a space of element type `T` whose

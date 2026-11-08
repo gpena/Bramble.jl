@@ -274,6 +274,31 @@ end
     @test (@allocated Bramble._assemble_ghost_load!(Fr, ar, lr)) == 0
 end
 
+# The padded mesh refreshes through a dynamic call (#1127, `_padded`): a form built before
+# `markers!` assembles the load of one built after, and allocates nothing once fresh.
+@testset "Load follows markers! (refresh)" begin
+    fl = v -> innerₕ(x -> 1.0 + x[1] * x[2], v; markers = (:left,))
+    seeded = function ()
+        Bramble._seed_mesh1d_rng!(11)
+        m = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0), :left => :xmin), (7, 6),
+            (false, false))
+        Bramble._unseed_mesh1d_rng!()
+        return m
+    end
+    Ω1, Ω2 = seeded(), seeded()
+    l1 = form(gridspace(Ω1; ghosts = (:xmin, :ymax)), fl)
+    b0 = assemble(l1)
+    mm = copy(markers(Ω1))
+    mm[:left] = .!mm[:left] .& mm[:boundary]
+    Bramble.markers!(Ω1, mm)
+    Bramble.markers!(Ω2, copy(mm))
+    b = assemble(l1)
+    @test relerr(b, assemble(form(gridspace(Ω2; ghosts = (:xmin, :ymax)), fl))) <= tol
+    @test relerr(b, b0) > 1e-3   # the new labels reached the load
+    assemble!(b, l1)
+    @test (@allocated assemble!(b, l1)) == 0
+end
+
 @testset "Mixed-precision trial and test spaces" begin
     Ω64 = mesh(domain(interval(0.0, 1.0)), 9, false)
     Ω32 = mesh(domain(interval(0.0f0, 1.0f0)), 9, false)
@@ -359,6 +384,48 @@ end
         @test relerr(map(x -> x.partials[1], Ad), cdiff(A, 0.7)) <= 1e-7
         c = Ref(Dual(1.0, 1.0))
         @test eltype(form(Wg, v -> innerₕ(c * v, v)).F_pad) == typeof(c[])
+    end
+    # gpena/Bramble.jl#1127: a `Dual` Robin coefficient gives the closure `Dual` entries
+    # while the space keeps its element type. `A` is affine in β, so a difference of step 1
+    # is exact up to rounding.
+    @testset "Dual Robin coefficient" begin
+        rels(β) = u -> (:xmin => u => 0.0, :xmax => β * u + ∂ₙ(u) => 1.0,
+            :ymin => u => 0.0, :ymax => ∂ₙ(u) => 1.0)
+        fa = (u, v) -> innerₕ(-Δₕ(u), v) + innerₕ(u, v)
+        fl = v -> innerₕ(x -> 1.0 + x[1], v)
+        sys(β) = (C = constrained(Wg, rels(β)); assemble(form(C, C, fa), form(C, fl)))
+        E = Bramble.closure(constrained(Wg, rels(1.3)))[1]
+        @test E isa SparseMatrixCSC{Float64, Int}
+        Cd = constrained(Wg, rels(Dual(1.3, 1.0)))
+        @test eltype(Cd) == Float64
+        @test eltype(Bramble.closure(Cd)[1]) <: Dual
+        (A, F), (Ad, Fd) = sys(1.3), sys(Dual(1.3, 1.0))
+        @test A isa SparseMatrixCSC{Float64, Int}
+        @test eltype(Ad) <: Dual && eltype(Fd) <: Dual
+        @test relerr(map(x -> x.value, Ad), A) <= tol
+        @test relerr(map(x -> x.value, Fd), F) <= tol
+        dA = map(x -> x.partials[1], Ad)
+        @test norm(dA) > 1e-3
+        @test relerr(dA, (sys(2.3)[1] - sys(0.3)[1]) / 2) <= 1e-10
+        # β enters `E` at the ghost rows only, which the load weighs 0
+        @test all(iszero, map(x -> x.partials[1], Fd)) && sys(2.3)[2] ≈ sys(0.3)[2]
+    end
+    # The same coefficient on the Kronecker path: the 1D closures hold `Dual` entries. The
+    # forward difference at the `:xmax` node reads the ghost, so β reaches the operator.
+    @testset "Dual Robin β, Kronecker operator" begin
+        rels(β) = u -> (:xmin => u => 0.0, :xmax => β * u + ∂ₙ(u) => 1.0,
+            :ymin => u => 0.0, :ymax => ∂ₙ(u) => 1.0)
+        fa = (u, v) -> innerₕ(D₊ₓ(u), v) + inner₊(∇ₕ(u), ∇ₕ(v))
+        K(β) = (C = constrained(Wg, rels(β)); Bramble.kronecker_operator(form(C, C, fa)))
+        A = (C = constrained(Wg, rels(1.3)); assemble(form(C, C, fa)))
+        K0, Kd = K(1.3), K(Dual(1.3, 1.0))
+        @test K0 isa Bramble.KroneckerLinearOperator && eltype(K0) == Float64
+        @test Kd isa Bramble.KroneckerLinearOperator && eltype(Kd) <: Dual
+        M = SparseMatrixCSC(Kd)
+        @test relerr(map(x -> x.value, M), A) <= tol
+        dK = map(x -> x.partials[1], M)
+        @test norm(dK) > 1e-3
+        @test relerr(dK, (SparseMatrixCSC(K(2.3)) - SparseMatrixCSC(K(0.3))) / 2) <= 1e-10
     end
     @testset "Scalar relation data" begin
         rels(θ) = u -> (:xmin => u => (x -> θ * x[2]), :xmax => ∂ₙ(u) => 0.0,
