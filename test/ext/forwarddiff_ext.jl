@@ -183,8 +183,7 @@ end
             B = [Matrix(A0) + p[1] * Matrix(A1) Cm; transpose(Cm) zeros(k, k)]
             return (B \ [F0 + p[2] * F1; zeros(k)])[1:size(A0, 1)]
         end
-        sparse_route(A0, A1, F0, F1, p; kwargs...) =
-            pde_solve(A0 + p[1] * A1, F0 + p[2] * F1; kwargs...)
+        sparse_route(A0, A1, F0, F1, p; kwargs...) = pde_solve(A0 + p[1] * A1, F0 + p[2] * F1; kwargs...)
 
         # pure Neumann: the Laplacian of a conductance `c` has the constants in its kernel
         lap(c) = spdiagm(0 => [c[1]; c[1:(end - 1)] .+ c[2:end]; c[end]], 1 => -c, -1 => -c)

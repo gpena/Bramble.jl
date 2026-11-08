@@ -239,7 +239,8 @@ loss_robin(p) = sum(abs2, nonzeros(constrained_with(p, :robin).E))
 
 const LOSSES = Dict("runtime" => loss_runtime, "assemble" => loss_assemble,
     "inner" => loss_inner, "padded" => loss_padded, "plain" => loss_plain,
-    "mass" => loss_mass, "pairmass" => loss_pairmass, "formonly" => loss_formonly, "load" => loss_load, "loadbuffer" => loss_loadbuffer,
+    "mass" => loss_mass, "pairmass" => loss_pairmass, "formonly" => loss_formonly, "load" => loss_load, "loadbuffer" =>
+        loss_loadbuffer,
     "mapsonly" => loss_mapsonly, "data" => loss_data, "robin" => loss_robin)
 const LOSS = LOSSES[CASE]
 

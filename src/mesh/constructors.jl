@@ -117,7 +117,8 @@ X = interval(0, 1) × interval(4, 5)
     unif::Union{Bool, NTuple{D, Bool}};
     backend = backend(eltype(Ω)),
     warn_marker_mismatch::Bool = true
-) where {D} = _mesh(Ω, npts, _expand_uniform(unif, Val(D)), _coordinate_backend(backend, eltype(Ω)); warn_marker_mismatch)
+) where {D} = _mesh(
+    Ω, npts, _expand_uniform(unif, Val(D)), _coordinate_backend(backend, eltype(Ω)); warn_marker_mismatch)
 
 @inline mesh(
     Ω::Domain,
@@ -125,7 +126,8 @@ X = interval(0, 1) × interval(4, 5)
     uniform::Union{Bool, NTuple{D, Bool}} = true,
     backend = backend(eltype(Ω)),
     warn_marker_mismatch::Bool = true
-) where {D} = _mesh(Ω, npts, _expand_uniform(uniform, Val(D)), _coordinate_backend(backend, eltype(Ω)); warn_marker_mismatch)
+) where {D} = _mesh(
+    Ω, npts, _expand_uniform(uniform, Val(D)), _coordinate_backend(backend, eltype(Ω)); warn_marker_mismatch)
 
 @inline mesh(
     Ω::Domain{<:CartesianProduct{D}},
