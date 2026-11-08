@@ -1,5 +1,12 @@
 # Assembling a nonlinear form's exact Jacobian from its AST: design spike (gpena/Bramble.jl#1118)
 
+> **Status, 2026-11-08:** a historical record of the #1118 spike, not the current rule set.
+> Some rules it marks refused have since shipped in v4.2.1 (#1141, #1142, #1144); each such
+> Prototype cell says so. The current truth is the docstring of
+> [`jacobian_form`](https://github.com/gpena/Bramble.jl/blob/main/src/assembly/assembled_jacobian.jl).
+> The Jacobian-bound timings are in [`assembled_jacobian_workload.md`](assembled_jacobian_workload.md)
+> (#1145).
+
 A prototype and its measurements, so the maintainer can decide go or no-go. No
 implementation follows from this page alone. The prototype is
 [`benchmark/assembled_jacobian_spike.jl`](https://github.com/gpena/Bramble.jl/blob/main/benchmark/assembled_jacobian_spike.jl)
@@ -199,18 +206,18 @@ composite per block):
 | `OperatorScale` | rebuild `s * dT` | implemented | XS |
 | `OperatorAdd` | sum of the summands' derivatives, as written (no combining, `bramble-form` §1) | implemented | XS |
 | `BilinearProduct`, trial side, any weight (`InnerH`, `InnerPlus{Dim}`, `InnerPlusSet`) | rebuild with `dT` on the left, the test side unchanged | implemented, `InnerH` and `InnerPlus` tested | XS |
-| `BilinearProduct` with `InnerGamma`, `InnerGammaNormal`, `InnerGammaFacet` (boundary terms, `src/operators/inner.jl`, `normal.jl`) | the same rule; `T(u)` read at facet points | generic method; boundary terms **not tested** | S |
-| `BilinearProduct`, coefficient on the test side | if no operator sits above the coefficient on the test side, move it to the trial side (the weight is pointwise); otherwise none: the derivative would multiply trial and test functions under one operator | **refused by name** | S (pointwise case); otherwise stays refused |
+| `BilinearProduct` with `InnerGamma`, `InnerGammaNormal`, `InnerGammaFacet` (boundary terms, `src/operators/inner.jl`, `normal.jl`) | the same rule; `T(u)` read at facet points | generic method; boundary terms **not tested** in the spike; shipped in v4.2.1 (#1142), all three tested in `test/form/assembled_jacobian.jl` | S |
+| `BilinearProduct`, coefficient on the test side | if no operator sits above the coefficient on the test side, move it to the trial side (the weight is pointwise); otherwise none: the derivative would multiply trial and test functions under one operator | **refused by name** in the spike. Partly shipped in v4.2.1 (#1142): pointwise only; an operator above the test-side coefficient is still refused | S (pointwise case); otherwise stays refused |
 | Differences: `BackwardDifference`, `ForwardDifference`, `CenteredDifference`, `StarDifference`, `CrossWeightedDifference`, `SecondDifference` | linear: rebuild around `dT` (`_rebuilt_around`) | implemented (`TappedNode`); `D₊` above the coefficient tested (`:strong`) | XS |
 | Averages: `BackwardAverage`, `ForwardAverage`, `CenteredAverage` | linear: rebuild | implemented (`TappedNode`) | XS |
 | `JumpNode` | linear: rebuild | implemented (`TappedNode`), not tested | XS |
-| `ShiftNode` | linear: rebuild. The value read off the grid must match what assembly reads for `c` there (a shift reads 0 off the grid, #352) | **refused by name** | XS |
-| `RegionRestriction` (`markers`) | linear: rebuild; the β refill walks `_bind_walk`'s bound term | refused (generic) | S |
+| `ShiftNode` | linear: rebuild. The value read off the grid must match what assembly reads for `c` there (a shift reads 0 off the grid, #352) | shipped in v4.2.1 (#1141); the spike's prototype did not cover it | XS |
+| `RegionRestriction` (`markers`) | linear: rebuild; the β refill walks `_bind_walk`'s bound term | refused (generic) in the spike; shipped in v4.2.1 (#1141) | S |
 | `InterpolationNode` (`πₕ`), above or below the coefficient | above: rebuild. Below: `T(u)` and `L u` are read on the source mesh through `_bind_interp_spaces`; the dependency goes through `πₕ`, as `jacobian_pattern` already takes it (`U -> Mₕ(πₕ(U))`) | refused (generic) | M |
 | `LinearProduct` (a load that reads the state, `innerₕ(f(u), v)`) | becomes a `BilinearProduct`, `-innerₕ(f′(L u) * L(U), V)`, in the Jacobian form. This changes the shape: the linear form contributes to the bilinear `∂a` | refused (generic) | M |
 | `SourceVector`, `SourceFunction`, `SourceConstant`, `DiracSource` | none: a leaf the AST cannot see into. A `SourceVector` registered as a coefficient falls under `LinearProduct` above | not needed | XS |
 | `TrialFunction`, `TestFunction`, `IdentityOperator`, `ZeroOperator` | none: no state below them | not needed | none |
-| `IndexedTrialFunction`, `IndexedTestFunction`, `_ComponentSum` (composite spaces) | the dependency names another component's leaf (`U -> U(2)`), so `β * L(U(2))` lands in an off-diagonal block. `T(u)` and `L u` read their components' slices of `u`; block routing as in `jacobian_pattern`'s `_jacobian_pattern_blocks` | refused (generic) | M–L (`bramble-form` §4 traps) |
+| `IndexedTrialFunction`, `IndexedTestFunction`, `_ComponentSum` (composite spaces) | the dependency names another component's leaf (`U -> U(2)`), so `β * L(U(2))` lands in an off-diagonal block. `T(u)` and `L u` read their components' slices of `u`; block routing as in `jacobian_pattern`'s `_jacobian_pattern_blocks` | refused (generic) in the spike; shipped in v4.2.1 (#1144), routed per block | M–L (`bramble-form` §4 traps) |
 | `_FacetExtrapolated`, ghost forms (`GhostBilinearForm`, `GhostCompositeBilinearForm`: a padded form plus relations) | the rule applies to the padded AST; the relations do not depend on the state, so they carry over. A Robin coefficient that reads the state is a `GridFunctionScale` under `InnerGamma*` | not attempted | M |
 | `RankOneTerm` (`src/assembly/rank_one.jl`) | a coefficient inside a rank-one factor: the product rule on an outer product, not attempted | not attempted | L, or refuse |
 | Dirichlet constraints | rows replaced by the identity in `a + ∂a`, as in `A`. Exact while the boundary data does not read the state | implemented, tested | none |
@@ -244,7 +251,9 @@ How the refusal works:
 
 So a node type added later is refused until it gets a rule, never skipped. In the full rule
 set, `ShiftNode` gets a one-line rule. The test-side coefficient under an operator is the
-refusal that stays.
+refusal that stays. Shipped in v4.2.1 (#1141), `jacobian_form` no longer refuses `ShiftNode`,
+so the first message above no longer applies; it still refuses the test-side coefficient
+under an operator.
 
 ## Recommendation
 
