@@ -2,14 +2,14 @@ module SpaceAdCoverageTests
 
 using Test
 using Bramble
-using Bramble: D₋ₓ, D₋ᵧ, Mₓ, Mᵧ, εₕ, Δₕ!, CpuPolyester, CpuSerial, CpuThreaded, GhostVector,
-               update_ghosts!, semidiscretize_rhs, ast_sparsity_detector
+using Bramble: D₋ₓ, D₋ᵧ, D₋₂, Mₓ, Mᵧ, M₂, εₕ, Δₕ!, CpuPolyester, CpuSerial, CpuThreaded,
+               GhostVector, update_ghosts!, semidiscretize_rhs, ast_sparsity_detector
 using DifferentiationInterface
 using ForwardDiff
 using LinearAlgebra: mul!
 using Polyester
 using Random
-using SparseArrays: SparseMatrixCSC, nonzeros
+using SparseArrays: nonzeros
 using SparseConnectivityTracer: TracerSparsityDetector
 using SparseMatrixColorings: GreedyColoringAlgorithm
 using ..TestUtils: _fd, _have, ghost_mesh, TEST_FILE, WITH_3D_TESTS
@@ -49,8 +49,7 @@ function _mesh(policy, kind::Symbol, dims::NTuple{2, Int} = DIMS, b = 1.0)
     try
         return mesh(domain(interval(0.0, b) × interval(0.0, 1.0)), dims,
             kind === :uniform ? (true, true) : (false, false);
-            backend = backend(; vector_type = Vector{typeof(b)},
-                matrix_type = SparseMatrixCSC{typeof(b), Int}, policy))
+            backend = backend(policy = policy))
     finally
         Bramble._unseed_mesh1d_rng!()
     end
@@ -60,6 +59,18 @@ function _mesh1d(policy, kind::Symbol, n = 17)
     Bramble._seed_mesh1d_rng!(SEED)
     try
         return mesh(domain(interval(0.0, 1.0)), n, kind === :uniform;
+            backend = backend(policy = policy))
+    finally
+        Bramble._unseed_mesh1d_rng!()
+    end
+end
+
+# A 5 x 5 x 5 mesh on the unit cube (#1128), uniform or seeded non-uniform, under `policy`.
+function _mesh3d(policy, kind::Symbol)
+    Bramble._seed_mesh1d_rng!(SEED)
+    try
+        return mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)),
+            (5, 5, 5), kind === :uniform ? (true, true, true) : (false, false, false);
             backend = backend(policy = policy))
     finally
         Bramble._unseed_mesh1d_rng!()
@@ -181,21 +192,46 @@ end
 
 # `Mₕ(κ)` on a 3D mesh.
 function build_assemble_averaged_3d(policy, kind)
-    Bramble._seed_mesh1d_rng!(SEED)
-    Ωₕ = try
-        mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5, 5),
-            kind === :uniform ? (true, true, true) : (false, false, false);
-            backend = backend(policy = policy))
-    finally
-        Bramble._unseed_mesh1d_rng!()
-    end
-    W = gridspace(Ωₕ)
+    W = gridspace(_mesh3d(policy, kind))
     B = _basis(ndofs(W))
     function f(p)
         κ = _field(W, B, p; shift = 2.0)
         return sum(abs2, nonzeros(assemble(form(W, W, (U, V) -> inner₊(Mₕ(κ) * ∇ₕ(U), ∇ₕ(V))))))
     end
     return f, _start()
+end
+
+# The 3D linear form, `inner₊(κ∇U, ∇V)` and the difference operators on a grid function
+# (#1128): the calls that work in 3D once `Mₕ(κ)` is set aside.
+function build_assemble_linear_3d(policy, kind)
+    W = gridspace(_mesh3d(policy, kind))
+    B = _basis(ndofs(W))
+    return p -> (u = _field(W, B, p); sum(abs2, assemble(form(W, v -> innerₕ(u, v))))), _start()
+end
+
+function build_assemble_diffusion_3d(policy, kind)
+    W = gridspace(_mesh3d(policy, kind))
+    B = _basis(ndofs(W))
+    function f(p)
+        κ = _field(W, B, p; shift = 2.0)
+        return sum(abs2, nonzeros(assemble(form(W, W, (U, V) -> inner₊(κ * ∇ₕ(U), ∇ₕ(V))))))
+    end
+    return f, _start()
+end
+
+function build_difference_3d(policy, kind)
+    W = gridspace(_mesh3d(policy, kind))
+    B = _basis(ndofs(W))
+    return p -> (u = _field(W, B, p); sum(abs2, parent(D₋ₓ(u))) + sum(abs2, parent(D₋₂(u)))),
+    _start()
+end
+
+# The averaging operator `M₂` (the third axis) on a grid function: the reverse mode is
+# `EnzymeNoTypeError` (gpena/Bramble.jl#1155), the forward mode a gradient.
+function build_average_z_3d(policy, kind)
+    W = gridspace(_mesh3d(policy, kind))
+    B = _basis(ndofs(W))
+    return p -> sum(abs2, parent(M₂(_field(W, B, p)))), _start()
 end
 
 function build_assemble_dirichlet(policy, kind)
@@ -327,6 +363,19 @@ end
 build_ghost_data(policy, kind) = build_ghost_param(policy, kind, :data)
 build_ghost_robin(policy, kind) = build_ghost_param(policy, kind, :robin)
 
+# The load alone: the form is constant and the parameters enter only the linear form, so the
+# derivative must reach the load's own buffer (gpena/Bramble.jl#1127, the load half).
+function build_ghost_load(policy, kind)
+    C = _ghost_space(policy, kind)
+    a = form(C, C, (U, V) -> innerₕ(U, V))
+    function f(p)
+        l = form(C, v -> innerₕ(x -> p[1] * (1.0 + x[1]) + p[2], v))
+        _, F = assemble(a, l)
+        return p[3] * sum(F) + sum(abs2, F)
+    end
+    return f, _start()
+end
+
 # The runtime operator on a `GhostVector`, in place.
 function build_ghost_runtime(policy, kind)
     C = _ghost_space(policy, kind)
@@ -387,39 +436,70 @@ const CELLS = (
     cell(:assemble_linear, "assemble", :assemble, build_assemble_linear),
     cell(:assemble_diffusion, "assemble", :assemble, build_assemble_diffusion),
     cell(:assemble_averaged, "assemble", :assemble, build_assemble_averaged),
-    cell(:assemble_three, "assemble", :assemble, build_assemble_three, fwd = :wrong),
+    # Forward mode is wrong under all three policies (relative error 0.17 uniform, 0.10
+    # non-uniform, measured 2026-11-07), gpena/Bramble.jl#1124. A child of its own, like
+    # `boundary`: with the other `assemble` cells, `CpuThreaded` peaks at 10 GB.
+    cell(:assemble_three, "assemble", :three, build_assemble_three, fwd = :wrong),
     cell(:assemble_dirichlet, "assemble", :assemble, build_assemble_dirichlet),
     cell(:assemble_mesh, "mesh", :geometry, build_assemble_mesh,
         rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
         fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
-    cell(:assemble_averaged_3d, "assemble", :threed, build_assemble_averaged_3d,
+    # 3D (#1128). `Mₕ(κ)` needs `Enzyme.API.maxtypeoffset!(1024)`, which the threed child sets.
+    cell(:assemble_linear_3d, "assemble", :threed, build_assemble_linear_3d,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
+    cell(:assemble_diffusion_3d, "assemble", :threed, build_assemble_diffusion_3d,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
+    cell(:difference_3d, "operator", :threed, build_difference_3d,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
+    # `M₂` on a grid function: the reverse memset is gpena/Bramble.jl#1155.
+    cell(:average_z_3d, "operator", :threed, build_average_z_3d,
         rev = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
-        fwd = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
-        rev_err = "EnzymeNoTypeError"),
-    cell(:assemble_dirichlet_2d, "assemble", :assemble, build_assemble_dirichlet_2d,
-        rev = (CpuSerial = :aborts, CpuThreaded = :skip, CpuPolyester = :skip),
         fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
-        rev_err = "needsCacheWholeAllocation", kinds = (:nonuniform,)),
-    cell(:pde_solve, "pde_solve", :solve, build_pde_solve,
-        fwd = :throws, fwd_err = "EnzymeNoDerivativeError"),
+        rev_err = "EnzymeNoTypeError"),
+    cell(:assemble_averaged_3d, "assemble", :threed, build_assemble_averaged_3d,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
+    # Reverse was an abort (gpena/Bramble.jl#1126), fixed in v4.2.2; the threaded cells
+    # are the same form under the other policies. A child of its own: with the `assemble`
+    # cells, `CpuThreaded` peaks at 11 GB (3.2 GB alone, measured 2026-11-07).
+    cell(:assemble_dirichlet_2d, "assemble", :boundary, build_assemble_dirichlet_2d,
+        rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
+        fwd = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok), kinds = (:nonuniform,)),
+    # Forward was `EnzymeNoDerivativeError` (gpena/Bramble.jl#1129), fixed in v4.2.2.
+    cell(:pde_solve, "pde_solve", :solve, build_pde_solve),
     cell(:semidiscretize, "semidiscretize", :solve, build_semidiscretize),
     cell(:matrix_free, "matrix_free", :operators, build_matrix_free),
     cell(:kronecker, "kronecker", :operators, build_kronecker),
-    cell(:ghost_assemble, "ghost", :ghost_slow, build_ghost_assemble,
-        rev = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip,
-        rev_err = "EnzymeInternalError", kinds = (:nonuniform,), slow = true),
-    cell(:ghost_inner, "ghost", :ghost_slow, build_ghost_inner,
-        rev = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip,
-        rev_err = "EnzymeInternalError", kinds = (:nonuniform,), slow = true),
+    # `Δₕ` in the form and the parameters in its coefficients: reverse works under `CpuSerial`
+    # (366 s and 4.8 GB, measured 2026-11-07; it threw `EnzymeInternalError` before, #1152).
+    cell(:ghost_assemble, "ghost", :ghost_fast, build_ghost_assemble,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip,
+        kinds = (:nonuniform,)),
+    # The parameters scale the matrix and there is no `Δₕ`: reverse works under `CpuSerial`
+    # (370 s and 4.9 GB, measured 2026-11-07).
+    cell(:ghost_inner, "ghost", :ghost_fast, build_ghost_inner,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip,
+        kinds = (:nonuniform,)),
+    # Relation data that depend on the parameter: not run, the compile is over 100 minutes
+    # (gpena/Bramble.jl#1153, see the page's limits).
     cell(:ghost_data, "ghost", :ghost_slow, build_ghost_data, rev = :skip, fwd = :skip,
         kinds = (:nonuniform,), slow = true),
-    cell(:ghost_robin, "ghost", :ghost_fast, build_ghost_robin, fd = :throws,
-        fd_err = "MethodError", rev = :skip, fwd = :skip, kinds = (:nonuniform,)),
-    cell(:ghost_runtime, "ghost", :ghost_fast, build_ghost_runtime, rev = :throws,
-        fwd = (CpuSerial = :aborts, CpuThreaded = :skip, CpuPolyester = :skip),
-        fwd_err = "Segmentation fault",
-        rev_err = (CpuSerial = "EnzymeNoDerivativeError", CpuThreaded = "CompositeException",
-            CpuPolyester = "EnzymeNoDerivativeError"),
+    # The Robin coefficient's ForwardDiff half works (gpena/Bramble.jl#1127).
+    cell(:ghost_robin, "ghost", :ghost_fast, build_ghost_robin, rev = :skip, fwd = :skip,
+        kinds = (:nonuniform,)),
+    # The load of `assemble(a, l)` alone, reverse only (gpena/Bramble.jl#1127).
+    cell(:ghost_load, "ghost", :ghost_fast, build_ghost_load,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip,
+        kinds = (:nonuniform,)),
+    # `Δₕ!` on a `GhostVector` (gpena/Bramble.jl#1127). Reverse under `CpuPolyester` is a
+    # `ReverseRuleReturnError` (measured 2026-11-07), not the old `EnzymeNoDerivativeError`.
+    cell(:ghost_runtime, "ghost", :ghost_fast, build_ghost_runtime,
+        rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :throws),
+        fwd = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
+        rev_err = (CpuSerial = "", CpuThreaded = "", CpuPolyester = "ReverseRuleReturnError"),
         kinds = (:nonuniform,))
 )
 
@@ -534,6 +614,9 @@ function child_main(spec::AbstractString)
     pname, group, only, only_kind, only_mode = (split(spec, ':')..., "", "", "")[1:5]
     policy = Symbol(pname)
     pol = POLICIES[policy]
+    # A 3D form with averaged coefficients needs a wider type-analysis bound (#1128). The test
+    # sets it here and not in the extension, so a user's Enzyme session keeps its own value.
+    group == "threed" && Enzyme.API.maxtypeoffset!(1024)
     if group == "settings"
         for (name, build, mode, activity, annotation) in SETTINGS
             f, x = build(pol, :nonuniform)
@@ -666,7 +749,7 @@ if CHILD == ""
         if !RUN_ENZYME
             @test_skip "Enzyme is not in this environment"
         else
-            groups = (:dense, :assemble, :geometry, :solve, :operators, :ghost_fast)
+            groups = (:dense, :assemble, :three, :boundary, :geometry, :solve, :operators, :ghost_fast)
             WITH_3D_TESTS && (groups = (groups..., :threed))
             SLOW && (groups = (groups..., :ghost_slow))
             for pname in keys(POLICIES)
