@@ -33,6 +33,10 @@ end
 
 _state(W) = [0.3 + 0.7 * sin(0.37 * i) for i in 1:ndofs(W)]
 
+# One `Tag{Nothing}` for every oracle: a per-call closure would give each case its own Dual
+# type and compile the assembly again. Safe because no oracle nests a derivative.
+_jac(R, u) = ForwardDiff.jacobian(R, u, ForwardDiff.JacobianConfig(nothing, u), Val(false))
+
 # Whether a node of type `T` appears anywhere in `x`, so each case is known to reach the rule
 # it names (the simplifier may restructure a written form).
 function _has_node(x, ::Type{T}) where {T}
@@ -51,7 +55,7 @@ function _errors(W, build, fs; dirichlet = nothing)
         cs = map(f -> (c = element(W, T); c .= f.(x); c), fs)
         return assemble(build(cs...); dirichlet = dirichlet) * x
     end
-    Jfd = ForwardDiff.jacobian(R, u)
+    Jfd = _jac(R, u)
     cs = map(_ -> element(W, 0.0), fs)
     a = build(cs...)
     jf = jacobian_form(a, map((c, f) -> c => (U -> U, f), cs, fs)...; dirichlet = dirichlet)
@@ -79,7 +83,7 @@ function _flux_errors(W; dirichlet = :boundary)
         ay .= _α.(Mx)
         return assemble(_flux(W, ax, ay); dirichlet = dirichlet) * x
     end
-    Jfd = ForwardDiff.jacobian(R, u)
+    Jfd = _jac(R, u)
     ax, ay = element(W, 0.0), element(W, 0.0)
     a = _flux(W, ax, ay)
     jf = jacobian_form(a, ax => (U -> Mₕ(U)[2], _α), ay => (U -> Mₕ(U)[1], _α);
@@ -240,7 +244,7 @@ end
         dx .= _α.(x)
         return assemble(mk(cx, dx)) * x
     end
-    Jfd = ForwardDiff.jacobian(R, u)
+    Jfd = _jac(R, u)
     a = mk(c, d)
     jf = jacobian_form(a, c => (U -> e * U, _r), d => (U -> U, _α))
     J = jacobian_prototype(jf)
