@@ -52,6 +52,10 @@ using Bramble:
 # `multiply_stencils_bilinear` is how a trial stencil and a test stencil become matrix
 # entries, and none of them had ever run.
 
+# `@elapsed` forces the compile of the whole enclosing top-level thunk, so the timed
+# product lives in a function of its own.
+_mul_seconds(y, b, x) = @elapsed mul!(y, matrix_free_operator(b), x)
+
 @testset "AST and stencil algebra" begin
     Ωₕ1 = mesh(domain(interval(0.0, 1.0)), 9, false)
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 6), (true, false))
@@ -224,7 +228,7 @@ using Bramble:
         b = form(W79, W79, (u, v) -> innerₕ(D̽ᵧ(D̽ₓ(D̃ₓ(u))), D̽ᵧ(D̽ₓ(D̃ₓ(v)))))
         B = assemble(b)
         y = similar(x)
-        t = @elapsed mul!(y, matrix_free_operator(b), x)
+        t = _mul_seconds(y, b, x)
         @test t < 20
         @test y ≈ B * x
         @test bytes(assemble!, B, b) == 0

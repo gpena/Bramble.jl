@@ -34,6 +34,10 @@ using Bramble:
                Mₓ,
                πₕ
 
+# `@allocated` forces the compile of the whole enclosing top-level thunk, so each
+# measurement lives in a function of its own, taking the testset locals as arguments.
+_bytes(f, args...) = @allocated f(args...)
+
 @testset "Dirac Point Sources (#226)" begin
     @testset "1D point source (uniform, non-uniform)" begin
         # 1. On-grid point source (uniform grid)
@@ -87,7 +91,7 @@ using Bramble:
         @test sum(b_buf) ≈ 4.2
 
         # Zero allocation verification on replay
-        allocs = @allocated assemble!(b_buf, l_ref)
+        allocs = _bytes(assemble!, b_buf, l_ref)
         @test allocs == 0
     end
 
@@ -156,7 +160,7 @@ using Bramble:
 
         buf = similar(b_sum)
         assemble!(buf, l_sum)
-        @test (@allocated assemble!(buf, l_sum)) == 0
+        @test _bytes(assemble!, buf, l_sum) == 0
     end
 
     # 3D only: runs nightly (`slow`).
@@ -308,7 +312,7 @@ using Bramble:
                     total = src.strengths isa AbstractVector ? sum(src.strengths) : src.strengths
                     @test sum(b) ≈ total rtol = 1.0f-5
                     assemble!(b, l)
-                    @test (@allocated assemble!(b, l)) == 0
+                    @test _bytes(assemble!, b, l) == 0
                 end
                 # Float32 weights round the Float64 ones, nothing more.
                 b32 = assemble(form(W32, v -> innerₕ(dirac(p1, 2.0f0), v)))

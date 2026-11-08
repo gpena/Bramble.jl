@@ -57,6 +57,10 @@ using Bramble:
 # `parent(Op(Rₕ(Wₕ, f))) .* weights`. Each is paired with a negative control, because a zero
 # vector satisfies `isfinite`, `isa` and `≈ 0` alike: that is exactly how this went unnoticed.
 
+# `@allocated` forces the compile of the whole enclosing top-level thunk, so each
+# measurement lives in a function of its own, taking the testset locals as arguments.
+_bytes(f, args...) = @allocated f(args...)
+
 @testset "Source operators" begin
     @testset "1D numeric equivalence" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
@@ -310,7 +314,7 @@ using Bramble:
         l = form(Wₕ, v -> innerₕ(shift_op(rg, 1, 1), v))
         bl = assemble(l)
         assemble!(bl, l)                            # warm up
-        @test (@allocated assemble!(bl, l)) == 0
+        @test _bytes(assemble!, bl, l) == 0
     end
 
     @testset "Restricted source keeps one type (#639)" begin
@@ -941,8 +945,8 @@ using Bramble:
         left(cond, uₕ)
         right(uₕ, cond)
         project(Wₕ, cond)
-        @test @allocated(left(cond, uₕ)) <= @allocated(project(Wₕ, cond))
-        @test @allocated(right(uₕ, cond)) <= @allocated(project(Wₕ, cond))
+        @test _bytes(left, cond, uₕ) <= _bytes(project, Wₕ, cond)
+        @test _bytes(right, uₕ, cond) <= _bytes(project, Wₕ, cond)
     end
 end
 

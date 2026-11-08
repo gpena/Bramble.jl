@@ -36,6 +36,10 @@ const C = Main.GhostCorners
 
 const tol = 1e-12
 
+# `@allocated` forces the compile of the whole enclosing top-level thunk, so each
+# measurement lives in a function of its own, taking the testset locals as arguments.
+_bytes(f, args...) = @allocated f(args...)
+
 relerr(A, B) = norm(A - B) / norm(B)
 
 #------------------------------------------------------------------------------------------#
@@ -412,7 +416,7 @@ matrix(P, f) = assemble(form(P, P, f))
             A = assemble(a)
             @test relerr(A, R) <= tol
             assemble!(A, a)
-            @test (@allocated assemble!(A, a)) == 0
+            @test _bytes(assemble!, A, a) == 0
         end
         @test_throws ArgumentError matrix(P, (u, v) -> innerₕ(M₊ₓ(Dc₂(u)), v))
     end

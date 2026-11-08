@@ -22,6 +22,10 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
 # sin(πx)sin(πy) (2D) / sin(πx)sin(πy)sin(πz) (3D). Physical outward flux q·n = -∂u/∂n is
 # worked out by hand for each side below, not merely asserted.
 
+# `@allocated` forces the compile of the whole enclosing top-level thunk, so each
+# measurement lives in a function of its own, taking the testset locals as arguments.
+_bytes(f, scratch, A, F, uₕ, marker) = @allocated f(scratch, A, F, uₕ; marker = marker)
+
 @testset "Reaction / boundary flux (#227)" begin
     # The two ends together carry the discrete net source `(f_h, 1)_h`, to round-off, on a
     # non-uniform mesh. That sum is not the integral: it reaches `2π` only at second order.
@@ -499,8 +503,8 @@ using Bramble: reaction, reaction!, reaction_density, reaction_density!
             for marker in (:left, (:left, :right))
                 reaction!(scratch, A, F, uₕ; marker = marker)
                 reaction_density!(scratch, A, F, uₕ; marker = marker)
-                @test (@allocated reaction!(scratch, A, F, uₕ; marker = marker)) == 0
-                @test (@allocated reaction_density!(scratch, A, F, uₕ; marker = marker)) == 0
+                @test _bytes(reaction!, scratch, A, F, uₕ, marker) == 0
+                @test _bytes(reaction_density!, scratch, A, F, uₕ, marker) == 0
             end
         end
 

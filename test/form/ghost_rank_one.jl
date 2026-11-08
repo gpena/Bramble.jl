@@ -69,6 +69,9 @@ end
 refill(K, a) = (assemble!(K, a); assemble!(K, a); @allocated assemble!(K, a))
 refill(K, F, a, l) = (assemble!(K, F, a, l); assemble!(K, F, a, l);
     @allocated assemble!(K, F, a, l))
+# The warm refill under a Dirichlet label, measured outside any testset body.
+refill_dirichlet(K, a, dir) = (assemble!(K, a; dirichlet = dir); @allocated assemble!(K, a; dirichlet = dir))
+
 function refill_rows(K, F, a, l, dir)
     (assemble!(K, F, a, l; dirichlet = dir, symmetrize = true);
         @allocated assemble!(K, F, a, l; dirichlet = dir, symmetrize = true))
@@ -249,7 +252,7 @@ end
     poison!(K)
     assemble!(K, a; dirichlet = :xmax)
     @test relerr(Matrix(K), Kd) <= 1e-12
-    @test (assemble!(K, a; dirichlet = :xmax); @allocated assemble!(K, a; dirichlet = :xmax)) == 0
+    @test refill_dirichlet(K, a, :xmax) == 0
     # the pair: the load's Dirichlet rows hold the data, the others the lifted load
     Kp, F = assemble(a, l; dirichlet = :xmax => gD)
     @test relerr(Matrix(Kp), Kd) <= 1e-12
