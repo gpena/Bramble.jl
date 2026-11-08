@@ -366,5 +366,10 @@ if __bramble_with_grids
         include("form/nested_operators.jl")
         include("form/operators.jl")
         include("form/matrix_free.jl")
+        # Each file below holds a grid whose non-cover rows run only here: the cover runs
+        # in unit or slow (`_grid_sample`, TestUtils).
+        include("form/bilinear.jl")     # combinatorial tables, #759 caps per row
+        include("form/simplifier.jl")   # the #759 composition grid
+        include("ext/polyester_ext.jl") # stencil and D x shape grids; loads Polyester
     end
 end
