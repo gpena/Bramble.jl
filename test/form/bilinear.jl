@@ -60,1624 +60,1615 @@ using Bramble:
 # built by code that shares nothing with `local_stencil`: the operator's own sparse form and
 # the inner product's own weights, so the two agree or one of them is wrong.
 
-@testset "Bilinear forms" begin
-    S = interval(0.0, 1.0) × interval(0.0, 1.0)
-    Ωₕ = mesh(domain(S, :walls => boundary_symbols(S)), (9, 7), (true, true))
-    Wₕ = gridspace(Ωₕ)
-    n = ndofs(Wₕ)
+const S = interval(0.0, 1.0) × interval(0.0, 1.0)
+const Ωₕ = mesh(domain(S, :walls => boundary_symbols(S)), (9, 7), (true, true))
+const Wₕ = gridspace(Ωₕ)
+const n = ndofs(Wₕ)
 
-    H = Matrix(Diagonal(collect(weights(Wₕ, Innerh()))))
-    Hx = Matrix(Diagonal(collect(weights(Wₕ, Innerplus(), 1))))
-    Dx = Matrix(D₋ₓ(Wₕ))
-    Mx = Matrix(Mₓ(Wₕ))
-    Idm = Matrix(1.0I, n, n)
+const H = Matrix(Diagonal(collect(weights(Wₕ, Innerh()))))
+const Hx = Matrix(Diagonal(collect(weights(Wₕ, Innerplus(), 1))))
+const Dx = Matrix(D₋ₓ(Wₕ))
+const Mx = Matrix(Mₓ(Wₕ))
+const Idm = Matrix(1.0I, n, n)
 
-    @testset "Matrix expression equivalence" begin
-        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))) ≈ H
-        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v)))) ≈ H * Dx
-        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, D₋ₓ(v))))) ≈
-              transpose(Dx) * H
-        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Mₓ(u), v)))) ≈ H * Mx
+@testset "Matrix expression equivalence" begin
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v)))) ≈ H
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v)))) ≈ H * Dx
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, D₋ₓ(v))))) ≈
+          transpose(Dx) * H
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Mₓ(u), v)))) ≈ H * Mx
 
-        # the stiffness matrix, which is the reason the package exists
-        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
-              transpose(Dx) * Hx * Dx
+    # the stiffness matrix, which is the reason the package exists
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
+          transpose(Dx) * Hx * Dx
 
-        # a sum of two kinds, and a linear combination inside one argument
-        @test Matrix(
-            assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))
-        ) ≈ H + transpose(Dx) * Hx * Dx
-        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v + 2 * D₋ₓ(v))))) ≈
-              transpose(Idm + 2 * Dx) * H
+    # a sum of two kinds, and a linear combination inside one argument
+    @test Matrix(
+        assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))
+    ) ≈ H + transpose(Dx) * Hx * Dx
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v + 2 * D₋ₓ(v))))) ≈
+          transpose(Idm + 2 * Dx) * H
 
-        # unary minus on a whole form, on one operator and on the gradient tuple
-        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> -inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
-              -(transpose(Dx) * Hx * Dx)
-        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(-D₋ₓ(u), v)))) ≈ -(H * Dx)
-        G = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))))
-        @test !iszero(G)
-        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> -inner₊(∇ₕ(u), ∇ₕ(v))))) ≈ -G
-        @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(-∇ₕ(u), ∇ₕ(v))))) ≈ -G
+    # unary minus on a whole form, on one operator and on the gradient tuple
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> -inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
+          -(transpose(Dx) * Hx * Dx)
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(-D₋ₓ(u), v)))) ≈ -(H * Dx)
+    G = Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))))
+    @test !iszero(G)
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> -inner₊(∇ₕ(u), ∇ₕ(v))))) ≈ -G
+    @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> inner₊(-∇ₕ(u), ∇ₕ(v))))) ≈ -G
 
-        # the `-1` is an Integer literal, so a Float32 space stays Float32
-        Ω32 = mesh(domain(interval(0.0f0, 1.0f0)), 9, false; backend = backend(Float32))
-        W32 = gridspace(Ω32)
-        K32 = assemble(form(W32, W32, (u, v) -> -innerₕ(D₋ₓ(u), D₋ₓ(v))))
-        @test eltype(K32) === Float32
-        @test K32 ≈ -assemble(form(W32, W32, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))))
+    # the `-1` is an Integer literal, so a Float32 space stays Float32
+    Ω32 = mesh(domain(interval(0.0f0, 1.0f0)), 9, false; backend = backend(Float32))
+    W32 = gridspace(Ω32)
+    K32 = assemble(form(W32, W32, (u, v) -> -innerₕ(D₋ₓ(u), D₋ₓ(v))))
+    @test eltype(K32) === Float32
+    @test K32 ≈ -assemble(form(W32, W32, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v))))
+end
+
+@testset "Entry point agreement" begin
+    a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+    Apar = assemble(a)
+
+    @test trial_space(a) === Wₕ
+    @test test_space(a) === Wₕ
+
+    # the functor contracts as vᵀ A u
+    uₕ = Rₕ(Wₕ, _sin_x1)
+    vₕ = Rₕ(Wₕ, x -> x[2] + 1)
+    @test a(uₕ, vₕ) ≈ dot(parent(vₕ), Matrix(Apar) * parent(uₕ))
+
+    # Dirichlet rows are pinned
+    Abc = assemble(a; dirichlet = :walls)
+    marked = index_in_marker(Ωₕ, :walls)
+    for i in 1:n
+        marked[i] || continue
+        @test Abc[i, i] ≈ 1.0
+        @test count(!iszero, Abc[i, :]) == 1
+    end
+end
+
+@testset "Composite blocks" begin
+    Vₕ = gridspace(Ωₕ, Val(2))
+    blk(A, i, j) = Matrix(A)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
+
+    # A term naming neither side is the same integrand on every diagonal block, because
+    # Σᵢ innerₕ(uᵢ, vᵢ) is block diagonal and not full.
+    Ad = assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v)))
+    @test blk(Ad, 1, 1) ≈ H
+    @test blk(Ad, 2, 2) ≈ H
+    @test all(iszero, blk(Ad, 1, 2))
+    @test all(iszero, blk(Ad, 2, 1))
+
+    # A term naming both sides is one block, off-diagonal included. This is what used to
+    # vanish: the pattern held diagonal blocks only and `add_to_sparse!` returns quietly
+    # when an entry is missing, so the contribution was dropped without a word.
+    Ao = assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(2))))
+    @test blk(Ao, 2, 1) ≈ H          # row from the test component, column from the trial
+    @test all(iszero, blk(Ao, 1, 1))
+    @test all(iszero, blk(Ao, 2, 2))
+    @test all(iszero, blk(Ao, 1, 2))
+
+    # a full 2x2 system
+    Af = assemble(
+        form(
+        Vₕ,
+        Vₕ,
+        (u, v) -> innerₕ(u(1), v(1)) +
+                  innerₕ(u(1), v(2)) +
+                  innerₕ(u(2), v(1)) +
+                  innerₕ(u(2), v(2))
+    ),
+    )
+    for i in 1:2, j in 1:2
+
+        @test blk(Af, i, j) ≈ H
     end
 
-    @testset "Entry point agreement" begin
+    # blocks carrying operators, which is what a real coupled system looks like
+    Aop = assemble(
+        form(Vₕ, Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)))
+    )
+    @test blk(Aop, 1, 1) ≈ transpose(Dx) * Hx * Dx
+    @test blk(Aop, 1, 2) ≈ H
+    @test all(iszero, blk(Aop, 2, 2))
+
+    # Leaves of different types, a Float64 leaf beside a Float32 one on different graded
+    # meshes, and a third leaf of the first's type, so a named block sits past a leaf of
+    # another type. Every block is the static walk's (#553), checked against the same
+    # form assembled on the scalar leaf spaces.
+    @testset "Mixed-type leaves (#553)" begin
+        m = 7
+        Ω1 = mesh(domain(interval(0.0, 1.0)), m, false)
+        set_points!(Ω1, collect(range(0.0, 1.0; length = m)) .^ 1.5)
+        Ω2 = mesh(domain(interval(0.0f0, 1.0f0)), m, false; backend = backend(Float32))
+        set_points!(Ω2, Float32.(collect(range(0.0, 1.0; length = m)) .^ 2))
+        Ω3 = mesh(domain(interval(0.0, 1.0)), m, false)
+        set_points!(Ω3, collect(range(0.0, 1.0; length = m)) .^ 3)
+        W1, W2, W3 = gridspace(Ω1), gridspace(Ω2), gridspace(Ω3)
+        Vm = W1 × W2 × W3
+        leaves = leaf_spaces_offsets(Vm)
+        mblk(A, i, j) = Matrix(A)[((i - 1) * m + 1):(i * m), ((j - 1) * m + 1):(j * m)]
+        k(u, v) = innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v))
+        # Assembled on the scalar leaves: trial `Wu`, test `Wv`, the block's own mesh.
+        ref(f, Wu, Wv) = Matrix(assemble(form(Wu, Wv, f)))
+        _alloc(A, a) = (assemble!(A, a); @allocated assemble!(A, a))
+        terms(op::Bramble.OperatorAdd) = (terms(op.left_op)..., terms(op.right_op)...)
+        terms(op) = (op,)
+
+        cases = (
+            # every diagonal block, each on its own leaf
+            ((u, v) -> k(u, v),
+                ((1, 1) => ref(k, W1, W1), (2, 2) => ref(k, W2, W2),
+                    (3, 3) => ref(k, W3, W3))),
+            # a transposed pair across the Float64 and Float32 leaves, then a named
+            # block after it, distinct scales so no block passes for another
+            ((u, v) -> innerₕ(u(1), v(2)) + 3 * innerₕ(u(2), v(1)) +
+                       100 * innerₕ(u(3), v(2)),
+                ((2, 1) => ref(innerₕ, W1, W2), (1, 2) => 3 * ref(innerₕ, W2, W1),
+                    (2, 3) => 100 * ref(innerₕ, W3, W2))),
+            # one named block, on the last leaf
+            ((u, v) -> inner₊ₓ(D₋ₓ(u(3)), D₋ₓ(v(3))),
+                ((3, 3) => ref((u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), W3, W3),))
+        )
+        # A named block over these leaves is resolved lazily; the fields
+        # jacobian_pattern.jl reads off it still name the right leaves and offsets.
+        named = innerₕ(TrialFunction{1}()(3), TestFunction{1}()(2))
+        nb = only(blocks(named, leaves, leaves))
+        @test nb.trial_leaf === W3 && nb.test_leaf === W2
+        @test nb.row_offset == m && nb.col_offset == 2m
+
+        # A linear form naming the Float32 leaf between the two Float64 ones: the
+        # literal component folds the leaf walk to that leaf, so `form` stays concrete
+        # with three leaves (two fold even without the walk being inlined).
+        src(x) = 1 + x^2
+        l = @inferred form(Vm, v -> innerₕ(src, v(2)))
+        b = assemble(l)
+        @test isapprox(b[(m + 1):(2m)], assemble(form(W2, v -> innerₕ(src, v)));
+            rtol = 1e-6)
+        @test all(iszero, b[1:m]) && all(iszero, b[(2m + 1):(3m)])
+
+        for (f, expected) in cases
+            a = form(Vm, Vm, f)
+            for term in terms(a.ast)
+                R = only(Base.return_types(blocks, map(typeof, (term, leaves, leaves))))
+                @test isconcretetype(R)
+            end
+            A = assemble(a)
+            want = Dict(expected)
+            # Float32 tolerance: a block reaching leaf 2 is computed in its precision.
+            for i in 1:3, j in 1:3
+
+                @test isapprox(mblk(A, i, j), get(want, (i, j), zeros(m, m)); rtol = 1e-6)
+            end
+            @test any(!iszero, A)
+            @test _alloc(A, a) == 0
+        end
+    end
+end
+
+@testset "dirichlet_components restriction" begin
+    # The motivating case: a Stokes-style system where leaf 1 ("velocity") gets a
+    # boundary condition and leaf 2 ("pressure") stays completely free. Before
+    # `dirichlet_components` existed, `dirichlet` bound to every leaf sharing the
+    # named marker: there was no way to say "this leaf only" through `assemble`/
+    # `assemble!` at all.
+    Vₕ = gridspace(Ωₕ, Val(2))
+    a = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
+    marked = index_in_marker(Ωₕ, :walls)
+
+    A = assemble(a; dirichlet = :walls, dirichlet_components = 1)
+    blk(i, j) = Matrix(A)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
+
+    for i in 1:n
+        if marked[i]
+            @test blk(1, 1)[i, i] ≈ 1.0
+            @test count(!iszero, blk(1, 1)[i, :]) == 1
+        end
+    end
+    # leaf 2 (pressure) is untouched: still exactly the assembled H, no pinned rows
+    @test blk(2, 2) ≈ H
+
+    # assemble! into a pre-allocated matrix follows the same keyword
+    A2 = allocate_system_matrix(a)
+    assemble!(A2, a; dirichlet = :walls, dirichlet_components = 1)
+    @test Matrix(A2) ≈ Matrix(A)
+
+    # without dirichlet_components, the same labels bind to every leaf that has the
+    # marker (this is the pre-existing, still-default behaviour, confirmed unchanged).
+    Aboth = assemble(a; dirichlet = :walls)
+    blk2(i, j) = Matrix(Aboth)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
+    for i in 1:n
+        if marked[i]
+            @test blk2(2, 2)[i, i] ≈ 1.0    # leaf 2 pinned too, unlike above
+        end
+    end
+end
+
+# Dirichlet labels pin the test space's rows, not the trial space's.
+@testset "Dirichlet pins TEST-space rows (#48)" begin
+    # `apply_dirichlet_labels!` used to call `dirichlet_bc!(A, trial_space(form), ...)`.
+    # Rows are indexed by the test function (see the file header), so that pinned the
+    # wrong rows whenever trial_space and test_space disagree on leaf layout. On a
+    # square, same-space form (trial === test, the overwhelmingly common case, and every
+    # other test in this file) the two spaces' leaf offsets coincide and the bug is
+    # numerically invisible. Catching it needs trial and test spaces that are genuinely
+    # different: built from leaves of different sizes, in reversed order, so pinning
+    # against the wrong space's offsets lands on different rows entirely rather than
+    # merely fewer or more of the same ones.
+    n1, n2 = 5, 7
+    W1 = gridspace(mesh(domain(interval(0.0, 1.0)), n1, true))   # leaf size n1
+    W2 = gridspace(mesh(domain(interval(0.0, 1.0)), n2, true))   # leaf size n2
+
+    trial = W1 × W2   # leaf 1 has size n1 (offset 0), leaf 2 size n2 (offset n1)
+    test = W2 × W1   # leaf 1 has size n2 (offset 0), leaf 2 size n1 (offset n2)
+
+    # Cross terms, so each pairing is same-size (required by `_check_block_meshes`) and
+    # lands off the "obvious" diagonal: trial leaf 1 (W1, n1) pairs with test leaf 2
+    # (W1, n1); trial leaf 2 (W2, n2) pairs with test leaf 1 (W2, n2).
+    a = form(trial, test, (u, v) -> innerₕ(u(1), v(2)) + innerₕ(u(2), v(1)))
+    @test trial_space(a) !== test_space(a)
+
+    N = n1 + n2
+    @test size(assemble(a)) == (N, N)   # square: total ndofs agree, just laid out differently
+
+    # `:boundary` is reserved and auto-computed on every mesh: index 1 and index n. So
+    # each leaf contributes exactly two marked rows/columns, with no domain setup needed.
+    Abc = assemble(a; dirichlet = :boundary)
+
+    # The two candidate row sets, computed directly rather than re-derived from the fix:
+    # pin using test_space's own offsets (what the interface promises), and, separately,
+    # what the pre-fix code actually pinned (trial_space's offsets). If these coincided
+    # the test would prove nothing; with n1 ≠ n2 and the leaves in reversed order, they
+    # do not.
+    A_using_test = Matrix(dirichlet_bc!(assemble(a), test_space(a), :boundary))
+    A_using_trial = Matrix(dirichlet_bc!(assemble(a), trial_space(a), :boundary))
+    @test A_using_test != A_using_trial   # the two spaces really do disagree
+
+    pinned_rows(A) = [i for i in 1:N if A[i, i] ≈ 1.0 && count(!iszero, A[i, :]) == 1]
+    correct_rows = sort!(union(1, n2, n2 + 1, N))          # test leaves: offsets 0, n2
+    buggy_rows = sort!(union(1, n1, n1 + 1, N))          # trial leaves: offsets 0, n1
+    @test correct_rows != buggy_rows   # n1 ≠ n2 makes the two sets genuinely different
+
+    @test pinned_rows(A_using_test) == correct_rows
+    @test pinned_rows(A_using_trial) == buggy_rows
+
+    # The fixed `assemble` must agree with test_space's own pinning, not trial_space's.
+    @test Matrix(Abc) ≈ A_using_test
+    @test !(Matrix(Abc) ≈ A_using_trial)
+
+    # `assemble!` into a pre-allocated matrix takes the same path and must agree.
+    A2 = allocate_system_matrix(a)
+    assemble!(A2, a; dirichlet = :boundary)
+    @test Matrix(A2) ≈ Matrix(Abc)
+
+    # `dirichlet_components` on an asymmetric form restricts by TEST leaf, since that is
+    # what the rows mean: component 1 is test's leaf 1 (W2, offset 0, size n2).
+    A1 = Matrix(assemble(a; dirichlet = :boundary, dirichlet_components = 1))
+    @test pinned_rows(A1) == [1, n2]              # only test leaf 1's marked rows
+    @test !(1 + n2 in pinned_rows(A1))              # test leaf 2 untouched
+end
+
+@testset "Serial vs parallel agreement" begin
+    # The serial and threaded paths are separate walks over the same terms, so a break in
+    # the serial path is invisible unless it is compared against the other. It was, once.
+    # `assemble_parallel!` always threads regardless of the backend's policy,
+    # which is what makes it the right fixed reference here; `assemble!` on `Wₕ`'s
+    # default Serial() backend gives the serial answer.
+    Vₕ = gridspace(Ωₕ, Val(2))
+    V3 = gridspace(Ωₕ, Val(3))
+
+    # Any: each space and closure is its own type
+    for (nm, sp, g) in Any[
+        ("scalar", Wₕ, (u, v) -> innerₕ(u, v)),
+        ("scalar with operators", Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v))),
+        ("composite, diagonal", Vₕ, (u, v) -> innerₕ(u, v)),
+        ("composite, off-diagonal", Vₕ, (u, v) -> innerₕ(u(1), v(2))),
+        ("composite, mixed spellings", Vₕ, (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2))),
+        (
+            "three components, crossed",
+            V3,
+            (u, v) -> innerₕ(u(1), v(3)) + innerₕ(u(3), v(1))
+        ),
+        (
+            "blocks with operators",
+            Vₕ,
+            (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(2))
+        )
+    ]
+        a = form(sp, sp, g)
+        Aser = assemble(a)
+        Apar = similar(sparse(Aser))
+        assemble_parallel!(Apar, a)
+        @test Matrix(Aser) ≈ Matrix(Apar)
+    end
+end
+
+@testset "Determinism under threads" begin
+    # `≈` above tolerates float summation reordering; the claim here is stronger --
+    # bit-for-bit identical `nzval`, which only a genuine absence of a race across the
+    # multi-colour scatter can guarantee run after run. Only meaningful with more than
+    # one thread actually available: on one thread the colours
+    # never run concurrently, so nothing could race in the first place, and CI already
+    # runs with JULIA_NUM_THREADS=auto (see the @warn in test/runtests.jl for a local,
+    # single-threaded `Pkg.test()`).
+    #
+    # A small mesh gives each colour very few points, which is exactly where a race at
+    # a boundary phase transition is most likely to surface -- a larger mesh averages
+    # rare timing windows away. Repeated 50 times against one fixed serial reference,
+    # since an intermittent race need not show on the first run.
+    if Threads.nthreads() > 1
+        Ω5 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
+        W5 = gridspace(Ω5)
+        a5 = form(W5, W5, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)))
+        Aser5 = sparse(assemble(a5))
+        reference = copy(Aser5.nzval)
+
+        for _ in 1:50
+            Apar5 = similar(Aser5)
+            assemble_parallel!(Apar5, a5)
+            @test Apar5.nzval == reference
+        end
+    else
+        @test_skip "bit-for-bit determinism under threads not exercised: only one thread available"
+    end
+end
+
+@testset "Backend policy" begin
+    # assemble!/assemble do not hardcode parallel. Both read form.trial_space's
+    # execution_policy, defaulting to Serial() like the vector form.
+    @test execution_policy(Wₕ) isa Serial
+    Ω_par = mesh(
+        domain(S, :walls => boundary_symbols(S)),
+        (9, 7),
+        (true, true);
+        backend = backend(policy = Parallel())
+    )
+    W_par = gridspace(Ω_par)
+    @test execution_policy(W_par) isa Parallel
+
+    a_serial = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
+    a_parallel = form(W_par, W_par, (u, v) -> innerₕ(u, v))
+
+    A_default = assemble(a_serial)
+    A_via_policy = assemble(a_parallel)
+    @test Matrix(A_via_policy) ≈ Matrix(A_default)
+
+    # Directly against assemble_parallel!, the lower-level entry point that always
+    # threads regardless of the backend's policy: a Parallel()-backend assemble must
+    # agree with it exactly.
+    A_forced_parallel = similar(sparse(A_via_policy))
+    assemble_parallel!(A_forced_parallel, a_parallel)
+    @test Matrix(A_via_policy) ≈ Matrix(A_forced_parallel)
+end
+
+@testset "Nested leaf traversal" begin
+    # A composite of composites needs no separate type and no separate constructor. Its
+    # blocks are numbered by leaf, so a two-by-two nesting is four blocks addressed
+    # `u(1)` through `u(4)`: the same spelling a flat space uses, and the same one
+    # `linear.jl` uses for a right-hand side.
+    #
+    # There used to be a `CoupledBilinearForm` reached only when a space was
+    # hierarchical, taking its expression as nested tuples: `((u, p), (v, q)) -> ...`.
+    # It was the only way to reach an off-diagonal block, which is why a flat space
+    # could not have one.
+    nested = Bramble.CompositeGridSpace((gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(2))))
+    @test length(Bramble.leaf_spaces_offsets(nested)) == 4
+    @test ndofs(nested) == 4n
+
+    blk(A, i, j) = Matrix(A)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
+
+    A = assemble(form(nested, nested, (u, v) -> innerₕ(u(1), v(3))))
+    @test blk(A, 3, 1) ≈ H
+    for i in 1:4, j in 1:4
+
+        (i == 3 && j == 1) && continue
+        @test all(iszero, blk(A, i, j))
+    end
+
+    Ad = assemble(form(nested, nested, (u, v) -> innerₕ(u, v)))
+    for i in 1:4
+        @test blk(Ad, i, i) ≈ H
+    end
+
+    a = form(nested, nested, (u, v) -> innerₕ(u(2), v(4)) + innerₕ(u, v))
+    Ap = assemble(a)
+    As = similar(sparse(Ap))
+    assemble!(As, a)
+    @test Matrix(As) ≈ Matrix(Ap)
+
+    # and the range check counts leaves, not top-level components
+    @test_throws ArgumentError assemble(
+        form(nested, nested, (u, v) -> innerₕ(u(1), v(5)))
+    )
+end
+
+@testset "Component naming rules" begin
+    Vₕ = gridspace(Ωₕ, Val(2))
+
+    # `innerₕ(u(1), v)` is not something written in a variational formulation, and
+    # reading it as a whole row or column of blocks would be a guess.
+    @test_throws ArgumentError assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v)))
+    @test_throws ArgumentError assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v(2))))
+
+    # and a component the space does not have is an error rather than an empty block
+    @test_throws ArgumentError assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(5))))
+    @test_throws ArgumentError assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u(0), v(1))))
+end
+
+@testset "Block resolution (#49)" begin
+    # `blocks(term, trial_leaves, test_leaves)` is the one place the trial/test row/
+    # column asymmetry is resolved, and is testable directly against `leaf_spaces_offsets`
+    # without assembling a matrix; the other way to see a wrong offset is in an assembled
+    # matrix's numbers. Asymmetric leaf sizes and reversed order, as in the test
+    # above, so a row/column offset mix-up lands on the wrong number rather than the same
+    # one by coincidence.
+    n1, n2 = 5, 7
+    W1 = gridspace(mesh(domain(interval(0.0, 1.0)), n1, true))
+    W2 = gridspace(mesh(domain(interval(0.0, 1.0)), n2, true))
+
+    trial = W1 × W2   # leaf 1 is W1 at offset 0, leaf 2 is W2 at offset n1
+    test = W2 × W1    # leaf 1 is W2 at offset 0, leaf 2 is W1 at offset n2
+
+    trial_leaves = leaf_spaces_offsets(trial)
+    test_leaves = leaf_spaces_offsets(test)
+
+    u1 = Bramble.TrialFunction{1}()
+    v1 = Bramble.TestFunction{1}()
+
+    # Row from the test leaf, column from the trial leaf.
+    @testset "Named block: test row, trial column" begin
+        bs = blocks(innerₕ(u1(1), v1(2)), trial_leaves, test_leaves)
+        @test length(bs) == 1
+        blk = only(bs)
+        @test blk isa Block
+        @test blk.trial_leaf === W1        # trial leaf 1
+        @test blk.test_leaf === W1         # test leaf 2 is also W1
+        @test blk.row_offset == n2          # test leaf 2's own offset, not trial's
+        @test blk.col_offset == 0           # trial leaf 1's own offset
+    end
+
+    # One Block per diagonal leaf pair.
+    @testset "Unrouted: one Block per diagonal pair" begin
+        bs = blocks(innerₕ(u1, v1), trial_leaves, test_leaves)
+        @test length(bs) == 2
+        @test bs[1].trial_leaf === W1 && bs[1].test_leaf === W2
+        @test bs[1].row_offset == 0 && bs[1].col_offset == 0
+        @test bs[2].trial_leaf === W2 && bs[2].test_leaf === W1
+        @test bs[2].row_offset == n2 && bs[2].col_offset == n1
+    end
+
+    @testset "Zero allocations" begin
+        _named() = blocks(innerₕ(u1(1), v1(2)), trial_leaves, test_leaves)
+        _diag() = blocks(innerₕ(u1, v1), trial_leaves, test_leaves)
+        _named()
+        _diag()
+        _bytes(f) = @allocated f()
+        @test _bytes(_named) == 0
+        @test _bytes(_diag) == 0
+    end
+end
+
+@testset "Matrix differentiation" begin
+    # A coefficient in the integrand: a(u, v) = ∫ c·u·v, so A = H·diag(c) and the
+    # derivative of `sum(A)` with respect to `cᵢ` is `Hᵢᵢ`. Checked against that rather
+    # than against itself, so a gradient of the wrong thing cannot pass.
+    Vₕ = gridspace(Ωₕ, Val(2))
+    c1 = fill(1.0, n)
+    scalar_form(w) = form(Wₕ, Wₕ, (u, v) -> innerₕ(Bramble.element(Wₕ, w) * u, v))
+
+    @test DI.gradient(w -> sum(assemble(scalar_form(w))), AutoForwardDiff(), c1) ≈ diag(H)
+
+    # the element type follows the data: the matrix has to be able to hold a Dual, and
+    # taking it from the space instead is what made this impossible
+    wd = ForwardDiff.Dual.(c1, 1.0)
+    @test eltype(assemble(scalar_form(wd))) <: ForwardDiff.Dual
+
+    # the serial path as well as the threaded one
+    function sum_in_place(w)
+        a = scalar_form(w)
+        A = allocate_system_matrix(a)
+        assemble!(A, a)
+        return sum(A)
+    end
+    @test DI.gradient(sum_in_place, AutoForwardDiff(), c1) ≈ diag(H)
+
+    # and through the block routing, where a wrong component would show up as a
+    # derivative in a block that should not have one
+    routed_sum(w) = sum(
+        assemble(
+        form(
+        Vₕ,
+        Vₕ,
+        (u, v) -> innerₕ(Bramble.element(Wₕ, w) * u(1), v(1)) +
+                  innerₕ(u(2), v(2))
+    ),
+    ),
+    )
+    @test DI.gradient(routed_sum, AutoForwardDiff(), c1) ≈ diag(H)
+end
+
+@testset "In-place reassembly" begin
+    # The pattern is the expensive half and does not change between assemblies, so the
+    # intended shape of a loop is `assemble` once and `assemble!` after. This pins that
+    # the second path costs nothing.
+    cₕ = Rₕ(Wₕ, _Const(1.0))
+    a = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
+
+    A = assemble(a)
+
+    # assemble! uses the pre-resolved ast stored in the form and allocates 0 bytes.
+    @test_allocs assemble!(A, a)
+
+    # Coefficients with operators pre-resolve at form construction time and also allocate 0 bytes during assembly
+    dcₕ = D₋ₓ(cₕ)
+    aop = form(Wₕ, Wₕ, (u, v) -> innerₕ(dcₕ * u, v))
+    Aop = assemble(aop)
+    @test_allocs assemble!(Aop, aop)
+
+    ainline = form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(cₕ) * u, v))
+    Ain = assemble(ainline)
+    @test_allocs assemble!(Ain, ainline)
+    @test Matrix(Ain) ≈ Matrix(Aop)              # and the two agree
+end
+
+# In-place reassembly.
+@testset "Composite reassembly allocates nothing" begin
+    # The checks above only exercise the scalar core. The block-routing core (going through
+    # `blocks`) needs its own guard, so a routing change cannot
+    # reintroduce an allocation (e.g. from building an intermediate `Block` per term).
+    Vₕ = gridspace(Ωₕ, Val(2))
+
+    a_diag = form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v))          # blk === nothing path
+    @test_allocs assemble!(assemble(a_diag), a_diag)
+
+    a_off = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(2)))     # named-block path
+    @test_allocs assemble!(assemble(a_off), a_off)
+
+    a_mixed = form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2))) # both, one term each
+    @test_allocs assemble!(assemble(a_mixed), a_mixed)
+end
+
+@testset "Diagonal-segment replay: no allocation" begin
+    # The third replay shape, alongside the scalar and composite cores above: a term
+    # whose recorded positions come out as a constant per-tap stride, which
+    # `_try_diagonal_segment` repackages so `DiagonalReplaySink` can walk the interior
+    # by arithmetic instead of reading a position list. The entry loops both replay shapes share
+    # (`_visit_entries`/`_visit_entries_unguarded`, form/bilinear_traversal.jl).
+    #
+    # The assertion on `is_diagonal` is what makes this test about that path rather
+    # than a fourth copy of the flat one: a stencil-margin or peeling change that
+    # stopped producing diagonal segments would otherwise leave this quietly measuring
+    # the flat replay again.
+    # A 1D uniform mesh, not this file's 2D `Wₕ`: the repackaging needs a constant
+    # per-tap stride across the interior, which a 2D stiffness term does not have (its
+    # recorded positions jump by a row's worth at each row boundary) -- `assemble` on
+    # `Wₕ` records a flat segment, and asserting otherwise is what the first version of
+    # this test got wrong.
+    Ω1d = mesh(domain(interval(0.0, 1.0)), 41, true)
+    W1d = gridspace(Ω1d)
+    a_stiff = form(W1d, W1d, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    A_stiff = assemble(a_stiff)
+    assemble!(A_stiff, a_stiff)
+    @test a_stiff.cache.segments[1].is_diagonal
+
+    @test_allocs assemble!(A_stiff, a_stiff)
+end
+
+@testset "Restricted in-place reassembly allocs" begin
+    # A `RegionRestriction`'s stencil is `()` or a full tuple depending on the point's
+    # marker. Inside a sum (`v + restrict_to(:boundary, v)` below, what the simplifier
+    # folds the two terms into) that `Union` used to be collected by a `map` over the
+    # summands into a tuple with a non-concrete element, boxed at every grid point: 864 B
+    # on the 1D grid and 6720 B on the 2D one, where the unrestricted form allocated
+    # nothing. The refill must also match the two terms assembled apart.
+    function _loop_bytes(A, a)
+        assemble!(A, a)
+        assemble!(A, a)
+        return @allocated assemble!(A, a)
+    end
+    # Not specialised on the closure: `form` then compiles inside the clock, as the bounds
+    # below expect (the first form's compile is what they were written to catch).
+    _form_timed(@nospecialize(args...)) = @timed form(args...)
+    Ω1d = mesh(domain(interval(0.0, 1.0)), 11, true)
+    Ω2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, true))
+    for Ω in (Ω1d, Ω2d)
+        WITH_SLOW_TESTS || Ω === Ω1d || continue
+        W = gridspace(Ω)
+        a = form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(u, restrict_to(:boundary, v)))
+        A = assemble(a)
+        @test _loop_bytes(A, a) == 0
+        parts = assemble(form(W, W, (u, v) -> innerₕ(u, v))) +
+                assemble(form(W, W, (u, v) -> innerₕ(u, restrict_to(:boundary, v))))
+        @test Matrix(A) ≈ Matrix(parts)
+    end
+
+    # Past two restricted summands in one product the compiler stops splitting the
+    # `Union` and every point boxed again (30528 B with an unrestricted `v` beside
+    # three, 14240 B with three alone, on this 7x9 grid); `form` now splits such a
+    # product into products of at most two (gpena/Bramble.jl#727). The pattern must be
+    # what the terms assembled apart give: zero entries padded in would grow it.
+    Ωm = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :l => :left, :r => :right,
+        :b => :bottom, :t => :top, :c => _x1_lt_half)
+    W = gridspace(mesh(Ωm, (7, 9), (false, false)))
+    labels = (:l, :r, :b, :t, :c)
+    function _check_split(terms; bytes = 0)
+        a = form(W, W, (u, v) -> sum(t(u, v) for t in terms))
+        A = assemble(a)
+        bytes === nothing || @test _loop_bytes(A, a) == bytes
+        parts = sum(assemble(form(W, W, t)) for t in terms)
+        @test Matrix(A) ≈ Matrix(parts)
+        @test nnz(A) == nnz(parts)
+    end
+    for k in 3:5
+        WITH_SLOW_TESTS || k == 3 || continue
+        test_side = Tuple((u, v) -> innerₕ(u, restrict_to(s, v)) for s in labels[1:k])
+        _check_split(test_side)
+        _check_split(((u, v) -> innerₕ(u, v), test_side...))
+        _check_split(Tuple((u, v) -> innerₕ(restrict_to(s, u), v) for s in labels[1:k]))
+        _check_split((
+            (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)),
+            Tuple((u, v) -> 2.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(restrict_to(s, v)))
+            for s in labels[1:k])...))
+    end
+    # Restricted summands on both sides, in one product as written.
+    a = form(W, W, (u, v) -> innerₕ(u + restrict_to(:l, u) + restrict_to(:r, u),
+        v + restrict_to(:b, v) + restrict_to(:t, v)))
+    A = assemble(a)
+    @test _loop_bytes(A, a) == 0
+    parts = sum(assemble(form(W, W, (u, v) -> innerₕ(f(u), g(v))))
+    for f in (identity, u -> restrict_to(:l, u), u -> restrict_to(:r, u))
+    for g in (identity, v -> restrict_to(:b, v), v -> restrict_to(:t, v)))
+    @test Matrix(A) ≈ Matrix(parts)
+    @test nnz(A) == nnz(parts)
+
+    # A restriction over a sum hides its summands from the count unless distributed
+    # over them (33392 B and 11552 B before). Constant scales of different types in one
+    # sum boxed even with two restricted summands (12816 B for `2.0R + 3R`, 28800 B
+    # with a third, Rational, one); `form` converts them to their common type.
+    R = restrict_to
+    _check_split(((u, v) -> innerₕ(u, R(:c, v + R(:l, v) + R(:r, v))),
+        (u, v) -> innerₕ(u, R(:b, v))))
+    _check_split(((u, v) -> innerₕ(u, R(:c, R(:l, v) + R(:r, v) + R(:b, v))),))
+    # A difference is distributed over a restricted sum the same way, every difference
+    # node alike: `D₋ₓ(R(:c, v + R(:l, v) + R(:r, v)))` allocated 70272 B and
+    # `D₋ₓ(v + R(:l, v) + R(:r, v) + R(:b, v))` 116528 B (gpena/Bramble.jl#759). The
+    # pattern is the unsplit product's, which keeps the zero weights of the restricted
+    # entries the parts drop: the seeded mesh pins it.
+    Random.seed!(20261014)
+    Wd = gridspace(mesh(Ωm, (7, 9), (false, false)))
+    for (Dop, nnz_a, nnz_b) in ((D₋ₓ, 90, 117), (Bramble.D₊ᵧ, 92, 119),
+        (Bramble.Dcₓ, 108, 108), (Bramble.D̃ₓ, 90, 117), (Bramble.D̽ᵧ, 148, 175))
+        for (whole, parts, nnz_whole) in (
+            ((u, v) -> innerₕ(u, Dop(R(:c, v + R(:l, v) + R(:r, v)))),
+            Tuple((u, v) -> innerₕ(u, Dop(R(:c, g(v))))
+            for g in (identity, v -> R(:l, v), v -> R(:r, v))), nnz_a),
+            ((u, v) -> innerₕ(u, Dop(v + R(:l, v) + R(:r, v) + R(:b, v))),
+            Tuple((u, v) -> innerₕ(u, Dop(g(v)))
+            for g in (identity, v -> R(:l, v), v -> R(:r, v), v -> R(:b, v))),
+            nnz_b))
+            a = form(Wd, Wd, whole)
+            A = assemble(a)
+            @test _loop_bytes(A, a) == 0
+            P = sum(assemble(form(Wd, Wd, p)) for p in parts)
+            @test Matrix(A) ≈ Matrix(P)
+            @test nnz(A) == nnz_whole
+        end
+    end
+    # A difference over a restricted difference has more stencil shapes than one
+    # restriction: `D₋ₓ(D₊ᵧ(R(:l, v)))` and its `:r` twin paired in one product boxed
+    # (62496 B, 78624 B under `R(:c, …)`, 25776 B for the linear form), so each such
+    # summand takes a product of its own, at any depth: three levels split in two too.
+    # Past 16 products they pair as before rather than leave the product whole (673104
+    # B paired, 3413584 B whole, seventeen summands).
+    DD = v -> D₋ₓ(Bramble.D₊ᵧ(v))
+    for (whole, parts, nnz_whole) in (
+        ((u, v) -> innerₕ(u, DD(R(:l, v) + R(:r, v))),
+        ((u, v) -> innerₕ(u, DD(R(:l, v))), (u, v) -> innerₕ(u, DD(R(:r, v)))), 131),
+        ((u, v) -> innerₕ(u, DD(R(:c, v + R(:l, v) + R(:r, v)))),
+        Tuple((u, v) -> innerₕ(u, DD(R(:c, g(v))))
+        for g in (identity, v -> R(:l, v), v -> R(:r, v))), 176),
+        ((u, v) -> innerₕ(DD(R(:l, u) + R(:r, u)), v),
+        ((u, v) -> innerₕ(DD(R(:l, u)), v), (u, v) -> innerₕ(DD(R(:r, u)), v)), 131))
+        a = form(Wd, Wd, whole)
+        A = assemble(a)
+        @test _loop_bytes(A, a) == 0
+        P = sum(assemble(form(Wd, Wd, p)) for p in parts)
+        @test Matrix(A) ≈ Matrix(P)
+        @test nnz(A) == nnz_whole
+    end
+    fd = element(Wd)
+    fd .= 1.0 .+ (1:length(fd)) ./ 11
+    l = form(Wd, v -> innerₕ(fd, DD(R(:l, v) + R(:r, v))))
+    b = assemble(l)
+    @test _loop_bytes(b, l) == 0
+    @test b ≈ assemble(form(Wd, v -> innerₕ(fd, DD(R(:l, v))))) +
+              assemble(form(Wd, v -> innerₕ(fd, DD(R(:r, v)))))
+    _products(op::Bramble.OperatorAdd) = _products(op.left_op) + _products(op.right_op)
+    _products(op::Bramble.BilinearProduct) = 1
+    DDD = v -> Bramble.D₊ₓ(DD(v))
+    @test _products(resolve_form_ast(form(Wd, Wd,
+        (u, v) -> innerₕ(u, DDD(R(:l, v) + R(:r, v)))))) == 2
+    @test _products(resolve_form_ast(form(Wd, Wd,
+        (u, v) -> innerₕ(u, DD(foldl(+, (R(:l, v) for _ in 1:17))))))) == 9
+    # Averages and jumps are distributed and counted as differences are, in any mix:
+    # `Mₓ(D₊ᵧ(R(:l, v) + R(:r, v)))` and `D₋ₓ(M₊ᵧ(…))` refilled 38304 B, the four-summand
+    # average 244976 B, the linear form 122880 B, though each piece refilled with 0 B.
+    Mav = Bramble.Mₓ
+    for (outer, inner, nnz_c) in ((Mav, Bramble.D₊ᵧ, 176), (D₋ₓ, M₊ᵧ, 176),
+        (Bramble.jumpₓ, Bramble.D₊ᵧ, 167), (Mav, M₊ᵧ, 176))
+        W2 = v -> outer(inner(v))
+        for (whole, gs, nnz_whole) in (
+            ((u, v) -> innerₕ(u, W2(R(:l, v) + R(:r, v))),
+            (v -> R(:l, v), v -> R(:r, v)), 131),
+            ((u, v) -> innerₕ(u, W2(R(:c, v + R(:l, v) + R(:r, v)))),
+            (v -> R(:c, v), v -> R(:c, R(:l, v)), v -> R(:c, R(:r, v))), nnz_c))
+            a = form(Wd, Wd, whole)
+            A = assemble(a)
+            @test _loop_bytes(A, a) == 0
+            P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(u, W2(g(v))))) for g in gs)
+            @test Matrix(A) ≈ Matrix(P)
+            @test nnz(A) == nnz_whole
+        end
+    end
+    R4 = v -> R(:l, v) + R(:r, v) + R(:b, v) + R(:t, v)
+    a = form(Wd, Wd, (u, v) -> innerₕ(u, Mav(Bramble.D₊ᵧ(R4(v)))))
+    A = assemble(a)
+    @test _loop_bytes(A, a) == 0
+    MD = v -> Mav(Bramble.D₊ᵧ(v))
+    P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(u, MD(R(s, v)))))
+    for s in (:l, :r, :b, :t))
+    @test Matrix(A) ≈ Matrix(P)
+    l = form(Wd, v -> innerₕ(fd, MD(R(:l, v) + R(:r, v))))
+    b = assemble(l)
+    @test _loop_bytes(b, l) == 0
+    @test b ≈ sum(assemble(form(Wd, v -> innerₕ(fd, MD(R(s, v))))) for s in (:l, :r))
+    # With restricted summands on both sides an average is left whole, as before: its
+    # pieces box there whatever the split, and each adds a walk. Distributed there, or
+    # kept whole beside a split difference, the forms below refilled more than these
+    # caps, their bytes before averages were distributed (157600 B against 130512 B).
+    whole = (u, v) -> innerₕ(MD(R(:l, u) + R(:r, u)), MD(R(:b, v) + R(:t, v)))
+    @test _products(resolve_form_ast(form(Wd, Wd, whole))) == 1
+    P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(MD(R(s, u)), MD(R(t, v)))))
+    for s in (:l, :r) for t in (:b, :t))
+    @test Matrix(assemble(form(Wd, Wd, whole))) ≈ Matrix(P)
+    RL = u -> R(:l, u) + R(:r, u)
+    RB = v -> R(:b, v) + R(:t, v)
+    JD = v -> Bramble.jumpₓ(Bramble.D₊ᵧ(v))
+    for (whole, cap) in (
+        ((u, v) -> innerₕ(DD(R4(u)), DD(RB(v))), 278560),
+        ((u, v) -> innerₕ(DD(R(:c, u + RL(u))), DD(R(:c, v + RB(v)))), 382032),
+        ((u, v) -> innerₕ(MD(RL(u)), MD(RB(v)) + v), 130512),
+        ((u, v) -> innerₕ(MD(RL(u)) + u, MD(RB(v))), 129952),
+        ((u, v) -> innerₕ(MD(RL(u)) + JD(RB(u)), MD(RB(v)) + JD(RL(v))), 368176))
+        a = form(Wd, Wd, whole)
+        A = assemble(a)
+        @test _loop_bytes(A, a) <= cap
+    end
+    l = form(Wd, v -> innerₕ(fd, R(:c, MD(RL(v)))))
+    b = assemble(l)
+    @test _loop_bytes(b, l) <= 74928
+    @test b ≈ sum(assemble(form(Wd, v -> innerₕ(fd, R(:c, MD(R(s, v)))))) for s in (:l, :r))
+
+    # With restrictions on both sides, a plain summand beside a restriction of another
+    # operand (`v + R(:t, D₋ₓ(v))`, or `D₋ₓ(u)` beside `D₋ₓ(R(:l, u))`) gave stencils of
+    # four lengths and boxed: 11152, 15104, 33056 and 16480 B, and 16704 B for one piece
+    # of the third form (gpena/Bramble.jl#759). The plain summand now takes a product of
+    # its own; the pattern is the products', which keep the restricted entries' zeros.
+    # Where that group would take a product past 16 pieces, the plain summand joins a
+    # restricted one as before, not leaving the product whole: the last two forms
+    # refilled 1205744 and 88544 B whole, and must keep the bytes they had split.
+    L3 = (D₋ₓ, u -> D₋ₓ(R(:l, u)), u -> D₋ₓ(R(:t, u)))
+    R3 = (D₋ₓ, v -> D₋ₓ(R(:b, v)), v -> D₋ₓ(R(:r, v)))
+    L5 = (D₋ₓ, (u -> D₋ₓ(R(s, u)) for s in (:l, :r, :b, :t))...)
+    U5 = (identity, (u -> R(s, u) for s in (:l, :r, :b, :t))...)
+    V5 = (identity, (v -> R(s, D₋ₓ(v)) for s in (:l, :r, :b, :t))...)
+    for (lhs, rhs, nnz_whole, max_bytes) in (
+        ((identity, u -> R(:l, u)), (identity, v -> R(:t, D₋ₓ(v))), 69, 0),
+        ((D₋ₓ, u -> R(:l, D₋ₓ(u))), (identity, v -> R(:t, D₋ₓ(v))), 123, 0),
+        (L3, R3, 171, 0),
+        ((identity, D₋ₓ, u -> R(:l, u)), (identity, v -> R(:t, v)), 117, 0),
+        ((D₋ₓ, u -> D₋ₓ(R(:l, u))), (v -> D₋ₓ(R(:r, v)),), 126, 0),
+        (L5, L5[1:4], 171, 82848),
+        (U5, V5, 82, 11952))
+        a = form(Wd, Wd, (u, v) -> innerₕ(sum(f(u) for f in lhs), sum(g(v) for g in rhs)))
+        A = assemble(a)
+        @test _loop_bytes(A, a) <= max_bytes
+        P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), g(v))))
+        for f in lhs for g in rhs)
+        @test Matrix(A) ≈ Matrix(P)
+        @test nnz(A) == nnz_whole
+    end
+    _check_split(((u, v) -> innerₕ(u, 2.0 * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v))))
+    _check_split((
+        (u, v) -> innerₕ(u, v), (u, v) -> innerₕ(u, 2.0 * R(:l, v)),
+        (u, v) -> innerₕ(u, 3 * R(:r, v)), (u, v) -> innerₕ(u, (1 // 2) * R(:b, v))))
+    # A negated or scaled restriction under a difference beside other summands boxed at
+    # every refill though each piece refilled with 0 B (gpena/Bramble.jl#759): 52608 B
+    # for the negated D₋ₓ sum, 49248 B for each D̽ᵧ form; 0 B since 1ed87350, which
+    # shifts a constant scale over a restriction by the restriction's rule. The pattern
+    # keeps the unsplit product's zero weights, so it is bounded, not equal.
+    for (whole, parts, nnz_max) in (
+        ((u, v) -> innerₕ(u, D₋ₓ(-R(:l, v) + R(:r, v) - R(:b, v) + v)),
+        ((u, v) -> innerₕ(u, D₋ₓ(-R(:l, v))), (u, v) -> innerₕ(u, D₋ₓ(R(:r, v))),
+            (u, v) -> innerₕ(u, D₋ₓ(-R(:b, v))), (u, v) -> innerₕ(u, D₋ₓ(v))), 117),
+        ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(v - R(:l, v))),
+        ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(v)),
+            (u, v) -> innerₕ(u, Bramble.D̽ᵧ(-R(:l, v)))), 175),
+        ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v) + v)),
+        ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v))),
+            (u, v) -> innerₕ(u, Bramble.D̽ᵧ(v))), 175))
+        a = form(Wd, Wd, whole)
+        A = assemble(a)
+        @test _loop_bytes(A, a) == 0
+        P = sum(assemble(form(Wd, Wd, p)) for p in parts)
+        @test Matrix(A) ≈ Matrix(P)
+        @test nnz(A) <= nnz_max
+    end
+    # A complex scale on a Float64 mesh widens the others to ComplexF64, as scales are
+    # never narrowed: the form refills with 0 B (15680 B when left mixed), its values
+    # those of the mixed form bit for bit, and it agrees with its parts.
+    _check_split((
+        (u, v) -> innerₕ(u, (1.0 + 2.0im) * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v)),
+        (u, v) -> innerₕ(u, 2.0 * R(:b, v))))
+    # A `Ref` scale is left in place, so the matrix still follows it.
+    k = Ref(2.0)
+    a = form(W, W, (u, v) -> innerₕ(u, k * R(:l, v)) + innerₕ(u, 3 * R(:r, v)))
+    A = assemble(a)
+    @test _loop_bytes(A, a) == 0
+    k[] = -5.0
+    assemble!(A, a)
+    @test Matrix(A) ≈ Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, -5.0 * R(:l, v)) +
+                                                           innerₕ(u, 3 * R(:r, v)))))
+
+    # A product with at most two restricted summands and uniform scales folds to
+    # itself at compile time, so `form` compiles no split for it.
+    for f in ((u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)),
+        (u, v) -> innerₕ(u, v + 2.0 * R(:l, v)))
+        ast = resolve_form_ast(form(W, W, f))
+        @test Base.return_types(
+            Bramble._split_restricted_products, (typeof(ast), Type{Float64})) ==
+              Any[typeof(ast)]
+    end
+
+    # A form holding no restriction comes back as `simplify_ast` built it when its
+    # scales agree in type. When they differ they are only ever widened, to the type of
+    # their products with a weight of the mesh's (`π` beside an Int on a Float32 mesh
+    # stays Float32, a Float64 literal stays Float64, an Int past 2^53 converts as
+    # `Int * Float64` does): each form keeps the unsplit one's element type and values,
+    # and refills with 0 B (9072 B on the Float32 mesh when left mixed).
+    _built(S, f) = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+        resolve_ast(f(Bramble.trial_function(S), Bramble.test_function(S))), S, S))
+    _scale_types(op::Bramble.OperatorAdd) = (
+        _scale_types(op.left_op)..., _scale_types(op.right_op)...)
+    _scale_types(op::Bramble.OperatorScale) = (typeof(op.scalar),)
+    _scale_types(op) = ()
+    Ω32u = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))
+    W32u = gridspace(mesh(Ω32u, (7, 9), (false, false); backend = backend(Float32)))
+    for (S, f) in ((W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))),
+        (W, (u, v) -> innerₕ(u, 2.0 * v + 3.0 * D₋ₓ(v))),
+        (W32u, (u, v) -> innerₕ(u, 2 * v + 3 * D₋ₓ(v))),
+        (W32u, (u, v) -> innerₕ(u, 0.1 * v + 0.3 * D₋ₓ(v))))
+        ast = _built(S, f)
+        @test Bramble._split_restricted_products(ast, eltype(S)) === ast
+    end
+    for (S, f, T, exact) in (
+        (W, (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v)), Float64,
+        true),
+        (W, (u, v) -> innerₕ(u, (2^53 + 1) * v + 0.5 * D₋ₓ(v)), Float64, true),
+        (W32u, (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v)), Float64, false),
+        (W32u, (u, v) -> innerₕ(0.1 * u + 3 * D₋ₓ(u), v), Float64, false),
+        (W32u, (u, v) -> innerₕ(u, π * v + 3 * D₋ₓ(v)), Float32, false))
+        ast = _built(S, f)
+        split = Bramble._split_restricted_products(ast, eltype(S))
+        for (side, op) in ((ast.left_op, split.left_op), (ast.right_op, split.right_op))
+            side isa Bramble.OperatorAdd || continue
+            @test all(==(T), _scale_types(op))
+            @test all(t -> promote_type(t, T) === T, _scale_types(side))
+        end
+        a = form(S, S, f)
+        A = assemble(a)
+        U = assemble(Bramble.BilinearForm{2, typeof(S), typeof(S), typeof(ast)}(
+            S, S, ast, Bramble._AssemblyCache{2}(ast)))
+        @test eltype(A) === eltype(U) === T
+        @test _loop_bytes(A, a) == 0
+        @test exact ? Matrix(A) == Matrix(U) :
+              isapprox(Matrix(A), Matrix(U); rtol = 1e-6)
+    end
+    # Scales joining to a type that is not bits are left mixed: every product with a
+    # BigFloat allocates, and converting the Int or Float64 to one took the refill from
+    # 56688 and 63744 B to 106368 B. A BigFloat allocates differently on x64: the second
+    # form took 65760 B on Linux, so its cap leaves room and stays well under 106368 B.
+    for (f, cap) in (((u, v) -> innerₕ(u, big(0.1) * v + 3 * D₋ₓ(v)), 56688),
+        ((u, v) -> innerₕ(u, big(3) * v + 0.5 * D₋ₓ(v)), 72000))
+        ast = _built(W, f)
+        @test Bramble._split_restricted_products(ast, Float64) === ast
+        a = form(W, W, f)
+        A = assemble(a)
+        @test eltype(A) === BigFloat
+        @test _loop_bytes(A, a) <= cap
+    end
+
+    # A grid function scale over a restricted sum is distributed over its summands as
+    # the product splits. Left whole, `g * (R(:l, u) + R(:r, u))` was one summand of two
+    # bits, and one on each side boxed (11872 B; 19024 B for four summands on the test
+    # side alone). Distributed over the split products' nested sums instead, `form`
+    # took 12.8 s to compile the first form below, and over four summands LLVM never
+    # finished.
+    g = element(W)
+    g .= 1.0 .+ (1:length(g)) ./ 7
+    t = _form_timed(W, W, (u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v)) + R(:b, v))).time
+    @test t < 2.0
+    t = _form_timed(W, W,
+        (u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v) + R(:b, v) + R(:t, v)))).time
+    @test t < 2.0
+    function _check_scaled(whole, lhs, rhs; nnz_equal = true)
+        a = form(W, W, whole)
+        A = assemble(a)
+        @test _loop_bytes(A, a) == 0
+        P = sum(assemble(form(W, W, (u, v) -> innerₕ(f(u), h(v))))
+        for f in lhs for h in rhs)
+        @test Matrix(A) ≈ Matrix(P)
+        nnz_equal && @test nnz(A) == nnz(P)
+        return A, P
+    end
+    gR(s) = u -> g * R(s, u)
+    _check_scaled(
+        (u, v) -> innerₕ(g * (R(:l, u) + R(:r, u)), g * (R(:b, v) + R(:t, v))),
+        (gR(:l), gR(:r)), (gR(:b), gR(:t)))
+    _check_scaled((u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v) + R(:b, v) + R(:t, v))),
+        (identity,), Tuple(gR(s) for s in (:l, :r, :b, :t)))
+    # A plain summand beside the restrictions stays where `_joins_restriction` puts it:
+    # left whole, these two boxed 55232 and 158432 B.
+    RD(s) = u -> R(s, D₋ₓ(u))
+    gRD(s) = u -> g * R(s, D₋ₓ(u))
+    _check_scaled(
+        (u, v) -> innerₕ(u + R(:l, D₋ₓ(u)), g * (v + R(:t, D₋ₓ(v)) + R(:b, v))),
+        (identity, RD(:l)), (v -> g * v, gRD(:t), gR(:b)); nnz_equal = false)
+    _check_scaled(
+        (u, v) -> innerₕ(u + R(:l, D₋ₓ(u)) + R(:r, D₋ₓ(u)) + R(:b, D₋ₓ(u)) +
+                         R(:t, D₋ₓ(u)),
+            g * (v + R(:l, D₋ₓ(v)) + R(:r, D₋ₓ(v)) + R(:b, D₋ₓ(v)))),
+        (identity, (RD(s) for s in (:l, :r, :b, :t))...),
+        (v -> g * v, (gRD(s) for s in (:l, :r, :b))...); nnz_equal = false)
+    # With such a sum too long to split on both sides, each plain summand keeps a
+    # product of its own, as before the scale was distributed: joined to the sum, the
+    # first form refilled 135520 B against 71792 B on a grid with one more marker.
+    gd = element(Wd)
+    parent(gd) .= parent(g)
+    for (lhs, rhs, max_bytes) in (
+        ((identity, u -> gd * (R(:l, u) + R(:r, u) + R(:c, u))),
+        (identity, v -> gd * (R(:b, v) + R(:t, v) + R(:c, v))), 72800),
+        ((u -> u + R(:c, D₋ₓ(u)), u -> gd * (R(:l, u) + R(:r, u) + R(:t, u))),
+        (identity, v -> gd * (R(:b, D₋ₓ(v)) + R(:t, v) + R(:c, v))), 91376))
+        a = form(Wd, Wd, (u, v) -> innerₕ(lhs[1](u) + lhs[2](u), rhs[1](v) + rhs[2](v)))
+        A = assemble(a)
+        @test _loop_bytes(A, a) <= max_bytes
+        P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), h(v))))
+        for f in lhs for h in rhs)
+        @test Matrix(A) ≈ Matrix(P)
+    end
+    # An infinite value of `g` stays where its parts put it, and no finite entry
+    # becomes NaN.
+    gi = copy(g)
+    gi[1] = Inf
+    a = form(W, W,
+        (u, v) -> innerₕ(gi * (R(:l, u) + R(:r, u)), gi * (R(:b, v) + R(:t, v))))
+    A = Matrix(assemble(a))
+    P = sum(Matrix(assemble(form(W, W, (u, v) -> innerₕ(gi * R(s, u), gi * R(z, v)))))
+    for s in (:l, :r) for z in (:b, :t))
+    @test any(isinf, P) && !any(isnan, P)
+    @test isequal(A, P)
+    # With such sums on both sides, every piece carries two grid functions' types: past
+    # four pieces the product stays whole, as it was, since sixteen took the first
+    # `assemble` 4.0 s against 0.51 s whole.
+    for k in 3:4
+        WITH_SLOW_TESTS || k == 3 || continue
+        labels_k = labels[1:k]
+        f = (u, v) -> innerₕ(g * sum(R(s, u) for s in labels_k),
+            g * sum(R(s, v) for s in reverse(labels_k)))
+        r = _form_timed(W, W, f)
+        t, a = r.time, r.value
+        @test t < 2.0
+        @test _products(resolve_form_ast(a)) == 1
+        P = sum(assemble(form(W, W, (u, v) -> innerₕ(g * R(s, u), g * R(z, v))))
+        for s in labels_k for z in labels_k)
+        @test Matrix(assemble(a)) ≈ Matrix(P)
+    end
+
+    # On a Float32 mesh a Float64 literal beside an Int widens the Int to Float64, never
+    # narrows the literal to Float32, and `π` beside an Int goes to Float32, as `π * 1f0`
+    # does, not to the Float64 `promote_type` gives the two: each matrix keeps the
+    # unsplit form's element type and its parts' values up to the rounding of the
+    # products' order, and refills with 0 B (39680 B for the first when left mixed).
+    Ω32 = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0), :l => :left,
+        :r => :right, :b => :bottom)
+    W32 = gridspace(mesh(Ω32, (7, 9), (false, false); backend = backend(Float32)))
+    for (c, T) in ((0.1, Float64), (π, Float32))
+        terms = ((u, v) -> innerₕ(u, c * R(:l, v)), (u, v) -> innerₕ(u, 3 * D₋ₓ(v)),
+            (u, v) -> innerₕ(u, R(:r, v)), (u, v) -> innerₕ(u, R(:b, v)))
+        f = (u, v) -> innerₕ(u, c * R(:l, v) + 3 * D₋ₓ(v) + R(:r, v) + R(:b, v))
+        a = form(W32, W32, f)
+        A = assemble(a)
+        ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+            resolve_ast(f(Bramble.trial_function(W32), Bramble.test_function(W32))),
+            W32, W32))
+        unsplit = Bramble.BilinearForm{2, typeof(W32), typeof(W32), typeof(ast)}(
+            W32, W32, ast, Bramble._AssemblyCache{2}(ast))
+        U = assemble(unsplit)
+        parts = sum(assemble(form(W32, W32, t)) for t in terms)
+        @test eltype(A) === eltype(U) === T
+        @test _loop_bytes(A, a) == 0
+        @test isapprox(Matrix(A), Matrix(U); rtol = 1e-6)
+        @test isapprox(Matrix(A), Matrix(parts); rtol = 1e-6)
+        @test nnz(A) == nnz(U)
+    end
+
+    # Scales of different types whose common type is not `E` but promotes to it (`Int`
+    # with `Rational` on a Float64 mesh) are converted to `E` too, as `Int * Float64`
+    # and `Rational * Float64` convert the same way: no boxing (15024 B before), and
+    # the matrix is the unsplit one's, bit for bit.
+    f = (u, v) -> innerₕ(u, 2 * R(:l, v) + (1 // 2) * R(:r, v) + R(:b, v))
+    a = form(W, W, f)
+    A = assemble(a)
+    ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+        resolve_ast(f(Bramble.trial_function(W), Bramble.test_function(W))), W, W))
+    unsplit = Bramble.BilinearForm{2, typeof(W), typeof(W), typeof(ast)}(
+        W, W, ast, Bramble._AssemblyCache{2}(ast))
+    U = assemble(unsplit)
+    @test _loop_bytes(A, a) == 0
+    @test Matrix(A) == Matrix(U)
+    @test nnz(A) == nnz(U)
+
+    # Two restricted summands share a product only when their types agree: a scaled
+    # and an unscaled one together boxed (12816 B for `2.0R + R + R`, 11984 B for the
+    # last pair below), and whether they met depended on the order they were written.
+    _check_split(((u, v) -> innerₕ(u, 2.0 * R(:l, v)), (u, v) -> innerₕ(u, R(:r, v)),
+        (u, v) -> innerₕ(u, R(:b, v))))
+    _check_split(((u, v) -> innerₕ(u, R(:l, v)), (u, v) -> innerₕ(u, R(:r, v)),
+        (u, v) -> innerₕ(u, 2.0 * R(:b, v))))
+    _check_split((
+        (u, v) -> innerₕ(u, v), (u, v) -> innerₕ(u, 2 * R(:l, v)),
+        (u, v) -> innerₕ(u, 0.5 * R(:r, v)), (u, v) -> innerₕ(u, (1 // 3) * R(:b, v)),
+        (u, v) -> innerₕ(u, R(:t, v))))
+    _check_split(((u, v) -> innerₕ(u, g * R(:l, v)), (u, v) -> innerₕ(u, R(:r, v)),
+        (u, v) -> innerₕ(u, R(:b, v))))
+
+    # The split is decided from the summand types, so it infers its concrete result:
+    # grouped at run time, five grid-function-scaled restrictions inferred `Any` and
+    # took `form` about 3 s.
+    f = (u, v) -> innerₕ(u, g * R(:l, v) + g * R(:r, v) + g * R(:b, v) + g * R(:t, v) +
+                            g * R(:c, v))
+    ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+        resolve_ast(f(Bramble.trial_function(W), Bramble.test_function(W))), W, W))
+    rt = Base.return_types(Bramble._split_restricted_products, (typeof(ast), Type{Float64}))
+    @test length(rt) == 1 && isconcretetype(only(rt))
+
+    # Restrictions on both sides multiply the products: six distinct types a side would
+    # make 36, slower to compile and walk than the one product, which is kept past 16.
+    ops = (identity, D₋ₓ, D₋ᵧ, x -> 2.0 * x, x -> g * x, x -> g * D₋ᵧ(x))
+    regions = (:l, :r, :b, :t, :c, :l)
+    side(w) = foldl(+, (R(regions[i], ops[i](w)) for i in 1:6))
+    f = (u, v) -> innerₕ(u + side(u), v + side(v))
+    a = form(W, W, f)
+    ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+        resolve_ast(f(Bramble.trial_function(W), Bramble.test_function(W))), W, W))
+    unsplit = Bramble.BilinearForm{2, typeof(W), typeof(W), typeof(ast)}(
+        W, W, ast, Bramble._AssemblyCache{2}(ast))
+    A = assemble(a)
+    U = assemble(unsplit)
+    @test Matrix(A) ≈ Matrix(U)
+    @test nnz(A) == nnz(U)
+    @test _loop_bytes(A, a) <= _loop_bytes(U, unsplit)
+end
+
+@testset "Weights of several types refill with 0 B" begin
+    # Mixed weight types boxed. An unscaled, grid-function-scaled or `Ref`-scaled
+    # summand beside a Float64 literal on a Float32 mesh, or a sum under a grid
+    # function scale, refilled 9072 B on a 7x9 grid. A constant scale between a
+    # difference or average and a restricted sum boxed on a Float64 mesh too
+    # (`u, D₋ₓ(2.0 * (R + R))` 16704 B, `Mₓ(D₊ᵧ(…))` 52560 B, and with the sum on both
+    # sides `D₋ₓ(g * (R + R))` 21600 B, `g * (2.0 * (R + R))` 7920 B). Each form must
+    # refill a NaN-filled matrix with what its terms give assembled apart, keep their
+    # promoted element type, and read a `Ref` live. The rewrite infers. On a Float64
+    # mesh the tolerance is rounding, which a scale converted through Float32 misses;
+    # on a Float32 one it is a few eps, since a term once computed in Float32 is now
+    # computed in Float64.
+    R = restrict_to
+    bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
+    function refilled(a)
+        A = assemble(a)
+        fill!(nonzeros(A), NaN)
+        assemble!(A, a)
+        return Matrix(A)
+    end
+    for T in (Float32, Float64), D in TEST_DIMS
+
+        WITH_SLOW_TESTS || (T === Float64 && D == 1) || continue
+
+        Iv = interval(zero(T), one(T))
+        Bramble._seed_mesh1d_rng!(20261017)
+        W = try
+            Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,
+                :c => _x1_lt_half)
+            gridspace(D == 1 ? mesh(Ω, 11, false; backend = backend(T)) :
+                      mesh(Ω, (7, 9, 5)[1:D], ntuple(_ -> false, D);
+                backend = backend(T)))
+        finally
+            Bramble._unseed_mesh1d_rng!()
+        end
+        g = element(W)
+        g .= 1 .+ (1:length(g)) ./ 7
+        r = Ref(T(0.1))
+        L(w) = R(:l, w)
+        Rr(w) = R(:r, w)
+        RR(w) = L(w) + Rr(w)
+        # Both sides restricted: the four products of one summand a side.
+        both(N) = Tuple((u, v) -> innerₕ(N(P(u)), N(Q(v))) for P in (L, Rr), Q in (L, Rr))
+        tol = T === Float32 ? 8 * eps(Float32) : 1.0e-12
+        forms = Any[
+            ("u, (1//3)v + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, (1 // 3) * v + 0.5 * D₋ₓ(v)),
+                ((u, v) -> innerₕ(u, (1 // 3) * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
+            ("u, πv + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, π * v + 0.5 * D₋ₓ(v)),
+                ((u, v) -> innerₕ(u, π * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
+            ("u, 0.1f0v + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, 0.1f0 * v + 0.5 * D₋ₓ(v)),
+                ((u, v) -> innerₕ(u, 0.1f0 * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
+            ("u, (1//3)L(v) + 2.0Rr(v) + 0.5v",
+                (u, v) -> innerₕ(u, (1 // 3) * L(v) + 2.0 * Rr(v) + 0.5 * v),
+                ((u, v) -> innerₕ(u, (1 // 3) * L(v)), (u, v) -> innerₕ(u, 2.0 * Rr(v)),
+                    (u, v) -> innerₕ(u, 0.5 * v))),
+            ("u, v + 0.1D₋ₓ(v)", (u, v) -> innerₕ(u, v + 0.1 * D₋ₓ(v)),
+                ((u, v) -> innerₕ(u, v), (u, v) -> innerₕ(u, 0.1 * D₋ₓ(v)))),
+            ("u, g*v + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, g * v + 0.5 * D₋ₓ(v)),
+                ((u, v) -> innerₕ(u, g * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
+            ("u, r*v + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, r * v + 0.5 * D₋ₓ(v)),
+                ((u, v) -> innerₕ(u, r[] * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
+            ("u, g*(0.1v + 3D₋ₓ(v))", (u, v) -> innerₕ(u, g * (0.1 * v + 3 * D₋ₓ(v))),
+                ((u, v) -> innerₕ(u, g * (0.1 * v)),
+                    (u, v) -> innerₕ(u, g * (3 * D₋ₓ(v))))),
+            ("u, D₋ₓ(2.0RR(v))", (u, v) -> innerₕ(u, D₋ₓ(2.0 * RR(v))),
+                ((u, v) -> innerₕ(u, D₋ₓ(2.0 * L(v))),
+                    (u, v) -> innerₕ(u, D₋ₓ(2.0 * Rr(v))))),
+            ("u, D₊ₓ(D₋ₓ(2.0RR(v)))", (u, v) -> innerₕ(u, Bramble.D₊ₓ(D₋ₓ(2.0 * RR(v)))),
+                ((u, v) -> innerₕ(u, 2.0 * Bramble.D₊ₓ(D₋ₓ(L(v)))),
+                    (u, v) -> innerₕ(u, 2.0 * Bramble.D₊ₓ(D₋ₓ(Rr(v)))))),
+            ("D₋ₓ(g*RR(u)), D₋ₓ(g*RR(v))",
+                (u, v) -> innerₕ(D₋ₓ(g * RR(u)), D₋ₓ(g * RR(v))),
+                both(w -> D₋ₓ(g * w))),
+            ("g*(2.0RR(u)), g*(2.0RR(v))",
+                (u, v) -> innerₕ(g * (2.0 * RR(u)), g * (2.0 * RR(v))),
+                both(w -> g * (2.0 * w)))]
+        if D >= 2
+            for c in (2.0, 2)
+                push!(forms,
+                    ("u, Mₓ(D₊ᵧ($(c)RR(v)))",
+                        (u, v) -> innerₕ(u, Mₓ(Bramble.D₊ᵧ(c * RR(v)))),
+                        ((u, v) -> innerₕ(u, c * Mₓ(Bramble.D₊ᵧ(L(v)))),
+                            (u, v) -> innerₕ(u, c * Mₓ(Bramble.D₊ᵧ(Rr(v)))))))
+            end
+        end
+        for (n, whole, parts) in forms
+            @testset "$(T) $(D)D $n" begin
+                ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
+                    resolve_ast(whole(Bramble.trial_function(W),
+                        Bramble.test_function(W))), W, W))
+                @inferred Bramble._split_restricted_products(ast, T)
+                a = form(W, W, whole)
+                pieces = [assemble(form(W, W, p)) for p in parts]
+                want = sum(Matrix, pieces)
+                A = refilled(a)
+                @test eltype(A) === mapreduce(eltype, promote_type, pieces)
+                @test count(!iszero, want) > 0
+                @test isapprox(A, want; rtol = tol)
+                @test bytes(assemble(a), a) == 0
+            end
+        end
+        a = form(W, W, (u, v) -> innerₕ(u, r * v + 0.5 * D₋ₓ(v)))
+        r[] = T(0.7)
+        want = Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, T(0.7) * v)))) +
+               Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))))
+        @test isapprox(refilled(a), want; rtol = tol)
+        # Under a restriction a scale over a restricted sum is distributed, each piece a
+        # restriction over a difference over a restriction, a product of its own (two
+        # such pieces in one product boxed, 32400 B; kept whole 24912 B). A `BigFloat`
+        # scale stays whole, as its pieces each allocate (`D₋ₓ(big(2) * (R + R))`
+        # 77856 B against 40704 B, with a third summand 152832 B against 89760 B). The
+        # `BigFloat` caps are their bytes on 7x9 with room, as it allocates differently
+        # on x64.
+        if T === Float64 && D == 2
+            Bramble._seed_mesh1d_rng!(20261017)
+            Wb = try
+                gridspace(mesh(
+                    domain(Iv × Iv, :l => :left, :r => :right, :b => :bottom,
+                        :c => _x1_lt_half), (7, 9), (false, false)))
+            finally
+                Bramble._unseed_mesh1d_rng!()
+            end
+            B(w) = R(:b, w)
+            for (f, parts, cap) in (
+                ((u, v) -> innerₕ(u, R(:c, D₋ₓ(2.0 * RR(v)))),
+                ((u, v) -> innerₕ(u, R(:c, D₋ₓ(2.0 * L(v)))),
+                    (u, v) -> innerₕ(u, R(:c, D₋ₓ(2.0 * Rr(v))))), 0),
+                ((u, v) -> innerₕ(u, D₋ₓ(big(2.0) * RR(v))),
+                ((u, v) -> innerₕ(u, D₋ₓ(big(2.0) * L(v))),
+                    (u, v) -> innerₕ(u, D₋ₓ(big(2.0) * Rr(v)))), 56000),
+                ((u, v) -> innerₕ(u, D₋ₓ(big(2.0) * (RR(v) + B(v)))),
+                ((u, v) -> innerₕ(u, D₋ₓ(big(2.0) * L(v))),
+                    (u, v) -> innerₕ(u, D₋ₓ(big(2.0) * Rr(v))),
+                    (u, v) -> innerₕ(u, D₋ₓ(big(2.0) * B(v)))), 120000),
+            # A restriction over a difference over a restricted sum, distributed: each
+            # piece counts two bits, so it is a product of its own (24912 B and
+            # 32400 B when they shared one).
+                ((u, v) -> innerₕ(u, R(:c, D₋ₓ(RR(v)))),
+                ((u, v) -> innerₕ(u, R(:c, D₋ₓ(L(v)))),
+                    (u, v) -> innerₕ(u, R(:c, D₋ₓ(Rr(v))))), 0),
+                ((u, v) -> innerₕ(u, R(:c, D₋ₓ(RR(v) + B(v)))),
+                ((u, v) -> innerₕ(u, R(:c, D₋ₓ(L(v)))),
+                    (u, v) -> innerₕ(u, R(:c, D₋ₓ(Rr(v)))),
+                    (u, v) -> innerₕ(u, R(:c, D₋ₓ(B(v))))), 0),
+                ((u, v) -> innerₕ(u, R(:c, 2.0 * D₋ₓ(RR(v)))),
+                ((u, v) -> innerₕ(u, R(:c, 2.0 * D₋ₓ(L(v)))),
+                    (u, v) -> innerₕ(u, R(:c, 2.0 * D₋ₓ(Rr(v))))), 0))
+                a = form(Wb, Wb, f)
+                A = assemble(a)
+                @test bytes(A, a) <= cap
+                want = sum(p -> Matrix(assemble(form(Wb, Wb, p))), parts)
+                @test count(!iszero, want) > 0
+                @test isapprox(refilled(a), want; rtol = tol)
+            end
+        end
+    end
+end
+
+@testset "Restricted sums under nodes refill 0 B" begin
+    # Each of these boxed: a jump's `Int` weights beside the shifted tap's element
+    # type (`jumpₓ(Rₕ(:l, v)) + jumpₓ(Rₕ(:r, v))` 27360 B on 7x9), a scale over a
+    # restricted sum under an average left whole (`Mₓ(D₋ₓ(π * (R + R)))` 105264 B) or
+    # under a difference (`Ref`, 16704 B), and on a Float32 mesh `π` over a
+    # restriction under a difference (`D₋ₓ(π * R) + D₋ₓ(π * R)` 29952 B). Each is
+    # compared with its terms assembled apart, the scales applied to their matrices,
+    # so the reference never meets the scale it checks.
+    R = restrict_to
+    J = Bramble.jumpₓ
+    bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
+    for T in (Float32, Float64), D in TEST_DIMS
+
+        WITH_SLOW_TESTS || (T === Float64 && D == 1) || continue
+
+        Iv = interval(zero(T), one(T))
+        Bramble._seed_mesh1d_rng!(20261017)
+        W = try
+            Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,
+                :c => _x1_lt_half)
+            gridspace(D == 1 ? mesh(Ω, 11, false; backend = backend(T)) :
+                      mesh(Ω, (7, 9, 5)[1:D], ntuple(_ -> false, D);
+                backend = backend(T)))
+        finally
+            Bramble._unseed_mesh1d_rng!()
+        end
+        g = element(W)
+        g .= 1 .+ (1:length(g)) ./ 7
+        r = Ref(T(0.1))
+        L(w) = R(:l, w)
+        Rr(w) = R(:r, w)
+        RR(w) = L(w) + Rr(w)
+        tol = T === Float32 ? 8 * eps(Float32) : 1.0e-12
+        # (name, form, (scales, term) pairs it equals)
+        forms = Any[
+            ("jumpₓ(R(:c, v + L(v) + Rr(v)))",
+                (u, v) -> innerₕ(u, J(R(:c, v + L(v) + Rr(v)))),
+                ((1, (u, v) -> innerₕ(u, J(R(:c, v)))),
+                    (1, (u, v) -> innerₕ(u, J(R(:c, L(v))))),
+                    (1, (u, v) -> innerₕ(u, J(R(:c, Rr(v))))))),
+            ("jumpₓ(L(v)) + jumpₓ(Rr(v))", (u, v) -> innerₕ(u, J(L(v)) + J(Rr(v))),
+                ((1, (u, v) -> innerₕ(u, J(L(v)))),
+                    (1, (u, v) -> innerₕ(u, J(Rr(v)))))),
+            ("u, D₋ₓ(r RR(v)) + 0.5v", (u, v) -> innerₕ(u, D₋ₓ(r * RR(v)) + 0.5 * v),
+                ((r[], (u, v) -> innerₕ(u, D₋ₓ(L(v)))),
+                    (r[], (u, v) -> innerₕ(u, D₋ₓ(Rr(v)))),
+                    (0.5, (u, v) -> innerₕ(u, v)))),
+            ("u, D₋ₓ(π RR(v)) + 2v", (u, v) -> innerₕ(u, D₋ₓ(π * RR(v)) + 2 * v),
+                ((π, (u, v) -> innerₕ(u, D₋ₓ(L(v)))),
+                    (π, (u, v) -> innerₕ(u, D₋ₓ(Rr(v)))),
+                    (2, (u, v) -> innerₕ(u, v)))),
+            ("u, D₋ₓ(R(:c, π L(v))) + D₋ₓ(R(:c, π Rr(v)))",
+                (u, v) -> innerₕ(u, D₋ₓ(R(:c, π * L(v))) + D₋ₓ(R(:c, π * Rr(v)))),
+                ((π, (u, v) -> innerₕ(u, D₋ₓ(R(:c, L(v))))),
+                    (π, (u, v) -> innerₕ(u, D₋ₓ(R(:c, Rr(v))))))),
+            ("u, D₋ₓ(g (π L(v))) + D₋ₓ(g (π Rr(v)))",
+                (u, v) -> innerₕ(u, D₋ₓ(g * (π * L(v))) + D₋ₓ(g * (π * Rr(v)))),
+                ((π, (u, v) -> innerₕ(u, D₋ₓ(g * L(v)))),
+                    (π, (u, v) -> innerₕ(u, D₋ₓ(g * Rr(v))))))]
+        for c in (π, 2.0, r)
+            push!(forms,
+                ("Mₓ(D₋ₓ($(c isa Ref ? "r" : c) RR(u))), D₋ₓ(2RR(v)))",
+                    (u, v) -> innerₕ(Mₓ(D₋ₓ(c * RR(u))), D₋ₓ(2 * RR(v))),
+                    Tuple(((2, c isa Ref ? c[] : c),
+                              (u, v) -> innerₕ(Mₓ(D₋ₓ(P(u))), D₋ₓ(Q(v))))
+                    for P in (L, Rr), Q in (L, Rr))))
+        end
+        push!(forms,
+            ("Mₓ(D₋ₓ(g RR(u))), D₋ₓ(RR(v))",
+                (u, v) -> innerₕ(Mₓ(D₋ₓ(g * RR(u))), D₋ₓ(RR(v))),
+                Tuple((1, (u, v) -> innerₕ(Mₓ(D₋ₓ(g * P(u))), D₋ₓ(Q(v))))
+                for P in (L, Rr), Q in (L, Rr))))
+        # A distributed `Ref` scale is still read live.
+        a = form(W, W, forms[3][2])
+        A = assemble(a)
+        r[] = T(0.7)
+        assemble!(A, a)
+        @test Matrix(A) ≈ Matrix(assemble(form(W, W, forms[3][2])))
+        r[] = T(0.1)
+        for (n, whole, parts) in forms
+            @testset "$(T) $(D)D $n" begin
+                a = form(W, W, whole)
+                pieces = [(s isa Tuple ? s : (s,), assemble(form(W, W, p)))
+                          for (s, p) in parts]
+                want = sum(prod(s) * Matrix{Float64}(P) for (s, P) in pieces)
+                A = assemble(a)
+                @test eltype(A) === mapreduce(
+                    ((s, P),) -> typeof(foldl(*, s; init = one(eltype(P)))),
+                    promote_type, pieces)
+                @test count(!iszero, want) > 0
+                fill!(nonzeros(A), NaN)
+                assemble!(A, a)
+                @test isapprox(Matrix(A), want; rtol = tol)
+                @test bytes(A, a) == 0
+            end
+        end
+    end
+
+    # A `BigFloat` scale allocates at every product, so no form holding one refills
+    # 0 B; a sum's scalars are not converted to one (71808 B with `1 // 3` converted
+    # to a `BigFloat`), and a `BigFloat` grid function over a restricted sum is not
+    # padded to one length (816576 B padded against 557808 B on 7x9).
+    for T in (Float32, Float64)
+        WITH_SLOW_TESTS || T === Float64 || continue
+        Iv = interval(zero(T), one(T))
+        Random.seed!(20261017)
+        W = gridspace(mesh(domain(Iv × Iv, :l => :left, :r => :right,
+                :c => _x1_lt_half),
+            (7, 9), (false, false); backend = backend(T)))
+        RR(w) = R(:l, w) + R(:r, w)
+        tol = T === Float32 ? 8 * eps(Float32) : 1.0e-12
+        a = form(W, W, (u, v) -> innerₕ(u, D₋ₓ(big(2.0) * RR(v)) + 1 // 3 * R(:c, v)))
+        want = 2 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, D₋ₓ(RR(v)))))) +
+               Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, R(:c, v))))) / 3
+        A = assemble(a)
+        @test isapprox(Matrix(A), want; rtol = tol)
+        @test bytes(A, a) <= (T === Float64 ? 45888 : 44160) + 8000
+        # A `Ref` to a `BigFloat` is not distributed under a node (102912 B against
+        # 40704 B whole, 447648 B against 118176 B under an average).
+        if T === Float64
+            rb = Ref(big(2.0))
+            D2RR = 2 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, D₋ₓ(RR(v))))))
+            for (f, want, cap) in (
+                ((u, v) -> innerₕ(u, D₋ₓ(rb * RR(v))), D2RR, 40704),
+                ((u, v) -> innerₕ(u, D₋ₓ(rb * RR(v)) + 0.5 * v),
+                D2RR + 0.5 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, v)))),
+                62160),
+                ((u, v) -> innerₕ(u, Mₓ(D₋ₓ(rb * RR(v)))),
+                2 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, Mₓ(D₋ₓ(RR(v))))))),
+                118176))
+                a = form(W, W, f)
+                A = assemble(a)
+                @test isapprox(Matrix(A), want; rtol = tol)
+                @test bytes(A, a) <= cap + 8000
+            end
+            # A fixed stencil shifts a scale over a restriction by the restriction
+            # rule, which zeroes it outside the region before the scale: shifted as a
+            # scaled sum, an infinite scale gave 99 NaN entries, not 18.
+            A = assemble(form(W, W, (u, v) -> innerₕ(u, Mₓ(Mₓ(Inf * R(:l, v))))))
+            @test count(isnan, nonzeros(A)) <= 18
+        end
+        # A sum under a `BigFloat` scale is still made one type (78144 B left mixed).
+        a = form(W, W,
+            (u, v) -> innerₕ(u, M₊ᵧ(big(2.0) * (2.0 * R(:l, v) + 3 * R(:r, v)))))
+        want = 4 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, M₊ᵧ(R(:l, v)))))) +
+               6 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, M₊ᵧ(R(:r, v))))))
+        A = assemble(a)
+        @test isapprox(Matrix(A), want; rtol = tol)
+        @test bytes(A, a) <= 42864 + 8000
+        gw = element(W)
+        gw .= 1 .+ (1:length(gw)) ./ 7
+        gb = big.(Vector(gw))
+        a = form(W, W, (u, v) -> innerₕ(Mₓ(D₋ₓ(gb * RR(u))), D₋ₓ(RR(v))))
+        want = sum(Matrix(assemble(form(W, W,
+                       (u, v) -> innerₕ(Mₓ(D₋ₓ(gb * P(u))), D₋ₓ(Q(v))))))
+        for P in (w -> R(:l, w), w -> R(:r, w)),
+        Q in (w -> R(:l, w), w -> R(:r, w)))
+        A = assemble(a)
+        @test isapprox(Matrix(A), want; rtol = tol)
+        T === Float64 && @test bytes(A, a) <= 557808 + 60000
+    end
+
+    # Forms that boxed before these changes refill at most what they did then
+    # (a70e3159, 7x9 and 11 points): the padded taps of a node directly over a scaled
+    # sum and a `Ref` distributed under a restriction boxed more (49536 -> 63072 B,
+    # 27216 -> 27792 B), and a shift over two nested restrictions distributed onto
+    # pieces that box (0 -> 13824 B, kept whole now). The jump form assembles to a
+    # zero matrix on these grids; its bytes are still pinned.
+    for D in (1, 2)
+        WITH_SLOW_TESTS || D == 1 || continue
+        Random.seed!(20261017)
+        Iv = interval(0.0, 1.0)
+        Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,
+            :c => _x1_lt_half)
+        W = gridspace(D == 1 ? mesh(Ω, 11, false) : mesh(Ω, (7, 9), (false, false)))
+        r = Ref(0.1)
+        L(w) = R(:l, w)
+        Rr(w) = R(:r, w)
+        C(w) = R(:c, w)
+        CR(w) = C(Rr(w))
+        RR(w) = L(w) + Rr(w)
+        S = Bramble.S₊ₓ
+        Dp = Bramble.D₊ₓ
+        forms = Any[
+            ("Mₓ(r(u+L(u))), D₋ₓ(2.0L+3Rr)",
+                (u, v) -> innerₕ(Mₓ(r * (u + L(u))), D₋ₓ(2.0 * L(v) + 3 * Rr(v))),
+                [(r[] * b, (u, v) -> innerₕ(Mₓ(P(u)), D₋ₓ(Q(v))))
+                 for P in (identity, L), (b, Q) in ((2.0, L), (3, Rr))],
+                (3440, 30384), true),
+            ("Mₓ(L+Rr+u+0.5u), C(jumpₓ(2.0(L+C(Rr))))",
+                (u, v) -> innerₕ(Mₓ(L(u) + Rr(u) + u + 0.5 * u),
+                    C(J(2.0 * (L(v) + CR(v))))),
+                [(2.0 * a, (u, v) -> innerₕ(Mₓ(P(u)), C(J(Q(v)))))
+                 for (a, P) in ((1, L), (1, Rr), (1.5, identity)), Q in (L, CR)],
+                (6000, 48096), false),
+            ("Mₓ(L+C(Rr)), C(r(L+Rr+v))",
+                (u, v) -> innerₕ(Mₓ(L(u) + CR(u)), C(r * (L(v) + Rr(v) + v))),
+                [(r[], (u, v) -> innerₕ(Mₓ(P(u)), C(Q(v))))
+                 for P in (L, CR), Q in (L, Rr, identity)],
+                (2896, 27216), true),
+            ("u, S₊ₓ(C(C(v+L)))", (u, v) -> innerₕ(u, S(C(C(v + L(v))))),
+                [(1, (u, v) -> innerₕ(u, S(C(C(Q(v)))))) for Q in (identity, L)],
+                (0, 0), true),
+            ("u, S₊ₓ(C(C(L+Rr+v)))", (u, v) -> innerₕ(u, S(C(C(L(v) + Rr(v) + v)))),
+                [(1, (u, v) -> innerₕ(u, S(C(C(Q(v)))))) for Q in (L, Rr, identity)],
+                (2256, 21168), true),
+            ("D₊ₓ(L+Rr+u), S₊ₓ(C(C(L+Rr+v)))",
+                (u, v) -> innerₕ(Dp(L(u) + Rr(u) + u), S(C(C(L(v) + Rr(v) + v)))),
+                [(1, (u, v) -> innerₕ(Dp(P(u)), S(C(C(Q(v))))))
+                 for P in (L, Rr, identity), Q in (L, Rr, identity)],
+                (6768, 63504), true)]
+        if D == 2
+            append!(forms,
+                Any[
+                    ("2D₊ₓ(2.0L+3Rr), M₊ᵧ(2.0RR)",
+                        (u, v) -> innerₕ(2 * Dp(2.0 * L(u) + 3 * Rr(u)), M₊ᵧ(2.0 * RR(v))),
+                        [(4.0 * a, (u, v) -> innerₕ(Dp(P(u)), M₊ᵧ(Q(v))))
+                         for (a, P) in ((2.0, L), (3, Rr)), Q in (L, Rr)],
+                        (0, 49536), true),
+                    ("M₊ᵧ(L+C(Rr)), M₊ᵧ((1//3)(L+C(Rr)))",
+                        (u, v) -> innerₕ(M₊ᵧ(L(u) + CR(u)), M₊ᵧ((1 // 3) * (L(v) + CR(v)))),
+                        [(1 / 3, (u, v) -> innerₕ(M₊ᵧ(P(u)), M₊ᵧ(Q(v))))
+                         for P in (L, CR), Q in (L, CR)],
+                        (0, 20736), true)])
+        end
+        # (name, form, (scale, term) pairs it equals, caps 1D and 2D, nonzero)
+        for (n, whole, parts, caps, nonzero) in forms
+            @testset "$(D)D $n" begin
+                a = form(W, W, whole)
+                want = sum(s * Matrix(assemble(form(W, W, p))) for (s, p) in parts)
+                A = assemble(a)
+                @test count(!iszero, want) > 0 || !nonzero
+                fill!(nonzeros(A), NaN)
+                assemble!(A, a)
+                @test isapprox(Matrix(A), want; rtol = 1.0e-12, atol = 1.0e-12)
+                @test bytes(A, a) <= caps[D]
+            end
+        end
+    end
+
+    # Under a stencil node only a scalar that gives an `Int` leaf weight and an
+    # element-type one different types is converted, to the type it has times the
+    # element type; a scale over no restriction, or at an operand's top, is kept.
+    W = gridspace(mesh(domain(interval(0.0f0, 1.0f0), :l => :left), 5, true;
+        backend = backend(Float32)))
+    v = Bramble.test_function(W)
+    tap(x, E) = Bramble._type_tap_scalar(typeof(x), E)
+    @test tap(π * R(:l, v), Float32) === Float32
+    @test tap(π * R(:l, v), Float64) === Union{}
+    @test tap(2 * R(:l, v), Float32) === Union{}
+    @test tap((1 // 3) * R(:l, v), Float32) === Union{}
+    @test tap(2.0 * R(:l, v), Float32) === Union{}
+    @test tap(Ref(2.0f0) * R(:l, v), Float32) === Union{}
+    @test tap(π * D₋ₓ(v), Float32) === Union{}
+    # A `Ref` to a bits value distributes as a bits scalar does; a `BigFloat` does not.
+    pieces(x) = length(Bramble._summands_of(x, Val(false)))
+    @test pieces(D₋ₓ(Ref(2.0f0) * (R(:l, v) + R(:r, v)))) == 2
+    @test pieces(D₋ₓ(big(2.0) * (R(:l, v) + R(:r, v)))) == 1
+    # A shift over one restriction level splits; over a restriction directly over
+    # another, through scales too, it stays whole.
+    S = Bramble.S₊ₓ
+    @test pieces(S(R(:l, v) + R(:r, v))) == 2
+    @test pieces(S(R(:c, v + R(:l, v)))) == 2
+    @test pieces(S(R(:c, R(:c, v + R(:l, v))))) == 1
+    @test pieces(S(R(:c, 2.0 * R(:c, v + R(:l, v))))) == 1
+    @test pieces(D₋ₓ(R(:c, R(:c, v + R(:l, v))))) == 2
+    # A restriction over a restricted stencil counts the extra bit only where nested
+    # stencils count (`_groups_expr`'s fallback past 16 groups counts neither).
+    bits(x, nested) = Bramble._type_shape_bits(typeof(x), nested)
+    @test bits(R(:c, D₋ₓ(R(:l, v))), true) == 2
+    @test bits(R(:c, D₋ₓ(R(:l, v))), false) == 1
+    @test bits(R(:c, R(:l, v)), true) == 1
+    differ(x) = Bramble._type_scales_differ(typeof(x), Float32)
+    @test differ(D₋ₓ(R(:c, π * R(:l, v))))
+    @test differ(D₋ₓ(element(W) * (π * R(:l, v))))
+    @test differ(D₋ₓ(R(:c, D₋ₓ(π * R(:l, v)))))
+    @test !differ(π * D₋ₓ(R(:l, v)))
+    @test !differ(D₋ₓ(π * v))
+end
+
+@testset "Cached nzval positions (#26)" begin
+    # `assemble!` used to search for every scattered entry's nzval position on every
+    # call. It now records that search's result the first time a given matrix is
+    # assembled into and replays it thereafter -- these exercise both paths and the
+    # points where they meet (a matrix swap, a changed `ast`), not just a single
+    # before/after allocation count.
+
+    @testset "Replay matches search, repeated calls" begin
         a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
-        Apar = assemble(a)
+        A = assemble(a)                 # record, inside assemble's own call
+        reference = copy(A.nzval)
+        for _ in 1:5                    # several replay calls, not just one
+            assemble!(A, a)
+            @test A.nzval ≈ reference
+        end
+    end
 
-        @test trial_space(a) === Wₕ
-        @test test_space(a) === Wₕ
+    @testset "Live coefficients update under replay" begin
+        cₕ = Rₕ(Wₕ, _Const(1.0))
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
+        A = assemble(a)                 # record
+        s1 = sum(A)
+        nnz_before = nnz(A)
+        for factor in (3.0, -2.0, 5.0)
+            Rₕ!(cₕ, x -> factor)
+            assemble!(A, a)              # replay, each time with a different live value
+            @test sum(A) ≈ factor * s1
+            @test nnz(A) == nnz_before   # the pattern is untouched by it
+        end
+    end
 
-        # the functor contracts as vᵀ A u
-        uₕ = Rₕ(Wₕ, _sin_x1)
-        vₕ = Rₕ(Wₕ, x -> x[2] + 1)
-        @test a(uₕ, vₕ) ≈ dot(parent(vₕ), Matrix(Apar) * parent(uₕ))
-
-        # Dirichlet rows are pinned
-        Abc = assemble(a; dirichlet = :walls)
+    @testset "Dirichlet applied after cached replay" begin
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+        A = assemble(a)                             # record, unconstrained
+        assemble!(A, a)                             # replay, unconstrained
+        assemble!(A, a; dirichlet = :walls)   # replay core, then Dirichlet applied
         marked = index_in_marker(Ωₕ, :walls)
         for i in 1:n
             marked[i] || continue
-            @test Abc[i, i] ≈ 1.0
-            @test count(!iszero, Abc[i, :]) == 1
+            @test A[i, i] ≈ 1.0
+            @test count(!iszero, A[i, :]) == 1
         end
     end
 
-    @testset "Composite blocks" begin
+    # Rebuilds rather than corrupting the replay.
+    @testset "Switching matrices rebuilds the cache" begin
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
+        A1 = assemble(a)
+        A2 = similar(sparse(A1))
+        assemble!(A2, a)    # different matrix object: must record again, not reuse A1's cache
+        @test A2.nzval ≈ A1.nzval
+        assemble!(A1, a)    # back to A1: must record again (cache now points at A2)
+        @test A1.nzval ≈ A2.nzval
+        assemble!(A1, a)    # each is still independently replayable afterwards
+        assemble!(A2, a)
+        @test A1.nzval ≈ A2.nzval
+    end
+
+    # Diagonal, off-diagonal, mixed and nested blocks all replay correctly.
+    @testset "Composite: every block kind replays" begin
         Vₕ = gridspace(Ωₕ, Val(2))
-        blk(A, i, j) = Matrix(A)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
-
-        # A term naming neither side is the same integrand on every diagonal block, because
-        # Σᵢ innerₕ(uᵢ, vᵢ) is block diagonal and not full.
-        Ad = assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v)))
-        @test blk(Ad, 1, 1) ≈ H
-        @test blk(Ad, 2, 2) ≈ H
-        @test all(iszero, blk(Ad, 1, 2))
-        @test all(iszero, blk(Ad, 2, 1))
-
-        # A term naming both sides is one block, off-diagonal included. This is what used to
-        # vanish: the pattern held diagonal blocks only and `add_to_sparse!` returns quietly
-        # when an entry is missing, so the contribution was dropped without a word.
-        Ao = assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(2))))
-        @test blk(Ao, 2, 1) ≈ H          # row from the test component, column from the trial
-        @test all(iszero, blk(Ao, 1, 1))
-        @test all(iszero, blk(Ao, 2, 2))
-        @test all(iszero, blk(Ao, 1, 2))
-
-        # a full 2x2 system
-        Af = assemble(
-            form(
-            Vₕ,
-            Vₕ,
-            (u, v) -> innerₕ(u(1), v(1)) +
-                      innerₕ(u(1), v(2)) +
-                      innerₕ(u(2), v(1)) +
-                      innerₕ(u(2), v(2))
-        ),
-        )
-        for i in 1:2, j in 1:2
-
-            @test blk(Af, i, j) ≈ H
-        end
-
-        # blocks carrying operators, which is what a real coupled system looks like
-        Aop = assemble(
-            form(Vₕ, Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1)))
-        )
-        @test blk(Aop, 1, 1) ≈ transpose(Dx) * Hx * Dx
-        @test blk(Aop, 1, 2) ≈ H
-        @test all(iszero, blk(Aop, 2, 2))
-
-        # Leaves of different types, a Float64 leaf beside a Float32 one on different graded
-        # meshes, and a third leaf of the first's type, so a named block sits past a leaf of
-        # another type. Every block is the static walk's (#553), checked against the same
-        # form assembled on the scalar leaf spaces.
-        @testset "Mixed-type leaves (#553)" begin
-            m = 7
-            Ω1 = mesh(domain(interval(0.0, 1.0)), m, false)
-            set_points!(Ω1, collect(range(0.0, 1.0; length = m)) .^ 1.5)
-            Ω2 = mesh(domain(interval(0.0f0, 1.0f0)), m, false; backend = backend(Float32))
-            set_points!(Ω2, Float32.(collect(range(0.0, 1.0; length = m)) .^ 2))
-            Ω3 = mesh(domain(interval(0.0, 1.0)), m, false)
-            set_points!(Ω3, collect(range(0.0, 1.0; length = m)) .^ 3)
-            W1, W2, W3 = gridspace(Ω1), gridspace(Ω2), gridspace(Ω3)
-            Vm = W1 × W2 × W3
-            leaves = leaf_spaces_offsets(Vm)
-            mblk(A, i, j) = Matrix(A)[((i - 1) * m + 1):(i * m), ((j - 1) * m + 1):(j * m)]
-            k(u, v) = innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v))
-            # Assembled on the scalar leaves: trial `Wu`, test `Wv`, the block's own mesh.
-            ref(f, Wu, Wv) = Matrix(assemble(form(Wu, Wv, f)))
-            _alloc(A, a) = (assemble!(A, a); @allocated assemble!(A, a))
-            terms(op::Bramble.OperatorAdd) = (terms(op.left_op)..., terms(op.right_op)...)
-            terms(op) = (op,)
-
-            cases = (
-                # every diagonal block, each on its own leaf
-                ((u, v) -> k(u, v),
-                    ((1, 1) => ref(k, W1, W1), (2, 2) => ref(k, W2, W2),
-                        (3, 3) => ref(k, W3, W3))),
-                # a transposed pair across the Float64 and Float32 leaves, then a named
-                # block after it, distinct scales so no block passes for another
-                ((u, v) -> innerₕ(u(1), v(2)) + 3 * innerₕ(u(2), v(1)) +
-                           100 * innerₕ(u(3), v(2)),
-                    ((2, 1) => ref(innerₕ, W1, W2), (1, 2) => 3 * ref(innerₕ, W2, W1),
-                        (2, 3) => 100 * ref(innerₕ, W3, W2))),
-                # one named block, on the last leaf
-                ((u, v) -> inner₊ₓ(D₋ₓ(u(3)), D₋ₓ(v(3))),
-                    ((3, 3) => ref((u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), W3, W3),))
-            )
-            # A named block over these leaves is resolved lazily; the fields
-            # jacobian_pattern.jl reads off it still name the right leaves and offsets.
-            named = innerₕ(TrialFunction{1}()(3), TestFunction{1}()(2))
-            nb = only(blocks(named, leaves, leaves))
-            @test nb.trial_leaf === W3 && nb.test_leaf === W2
-            @test nb.row_offset == m && nb.col_offset == 2m
-
-            # A linear form naming the Float32 leaf between the two Float64 ones: the
-            # literal component folds the leaf walk to that leaf, so `form` stays concrete
-            # with three leaves (two fold even without the walk being inlined).
-            src(x) = 1 + x^2
-            l = @inferred form(Vm, v -> innerₕ(src, v(2)))
-            b = assemble(l)
-            @test isapprox(b[(m + 1):(2m)], assemble(form(W2, v -> innerₕ(src, v)));
-                rtol = 1e-6)
-            @test all(iszero, b[1:m]) && all(iszero, b[(2m + 1):(3m)])
-
-            for (f, expected) in cases
-                a = form(Vm, Vm, f)
-                for term in terms(a.ast)
-                    R = only(Base.return_types(blocks, map(typeof, (term, leaves, leaves))))
-                    @test isconcretetype(R)
-                end
-                A = assemble(a)
-                want = Dict(expected)
-                # Float32 tolerance: a block reaching leaf 2 is computed in its precision.
-                for i in 1:3, j in 1:3
-
-                    @test isapprox(mblk(A, i, j), get(want, (i, j), zeros(m, m)); rtol = 1e-6)
-                end
-                @test any(!iszero, A)
-                @test _alloc(A, a) == 0
-            end
-        end
-    end
-
-    @testset "dirichlet_components restriction" begin
-        # The motivating case: a Stokes-style system where leaf 1 ("velocity") gets a
-        # boundary condition and leaf 2 ("pressure") stays completely free. Before
-        # `dirichlet_components` existed, `dirichlet` bound to every leaf sharing the
-        # named marker: there was no way to say "this leaf only" through `assemble`/
-        # `assemble!` at all.
-        Vₕ = gridspace(Ωₕ, Val(2))
-        a = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
-        marked = index_in_marker(Ωₕ, :walls)
-
-        A = assemble(a; dirichlet = :walls, dirichlet_components = 1)
-        blk(i, j) = Matrix(A)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
-
-        for i in 1:n
-            if marked[i]
-                @test blk(1, 1)[i, i] ≈ 1.0
-                @test count(!iszero, blk(1, 1)[i, :]) == 1
-            end
-        end
-        # leaf 2 (pressure) is untouched: still exactly the assembled H, no pinned rows
-        @test blk(2, 2) ≈ H
-
-        # assemble! into a pre-allocated matrix follows the same keyword
-        A2 = allocate_system_matrix(a)
-        assemble!(A2, a; dirichlet = :walls, dirichlet_components = 1)
-        @test Matrix(A2) ≈ Matrix(A)
-
-        # without dirichlet_components, the same labels bind to every leaf that has the
-        # marker (this is the pre-existing, still-default behaviour, confirmed unchanged).
-        Aboth = assemble(a; dirichlet = :walls)
-        blk2(i, j) = Matrix(Aboth)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
-        for i in 1:n
-            if marked[i]
-                @test blk2(2, 2)[i, i] ≈ 1.0    # leaf 2 pinned too, unlike above
-            end
-        end
-    end
-
-    # Dirichlet labels pin the test space's rows, not the trial space's.
-    @testset "Dirichlet pins TEST-space rows (#48)" begin
-        # `apply_dirichlet_labels!` used to call `dirichlet_bc!(A, trial_space(form), ...)`.
-        # Rows are indexed by the test function (see the file header), so that pinned the
-        # wrong rows whenever trial_space and test_space disagree on leaf layout. On a
-        # square, same-space form (trial === test, the overwhelmingly common case, and every
-        # other test in this file) the two spaces' leaf offsets coincide and the bug is
-        # numerically invisible. Catching it needs trial and test spaces that are genuinely
-        # different: built from leaves of different sizes, in reversed order, so pinning
-        # against the wrong space's offsets lands on different rows entirely rather than
-        # merely fewer or more of the same ones.
-        n1, n2 = 5, 7
-        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), n1, true))   # leaf size n1
-        W2 = gridspace(mesh(domain(interval(0.0, 1.0)), n2, true))   # leaf size n2
-
-        trial = W1 × W2   # leaf 1 has size n1 (offset 0), leaf 2 size n2 (offset n1)
-        test = W2 × W1   # leaf 1 has size n2 (offset 0), leaf 2 size n1 (offset n2)
-
-        # Cross terms, so each pairing is same-size (required by `_check_block_meshes`) and
-        # lands off the "obvious" diagonal: trial leaf 1 (W1, n1) pairs with test leaf 2
-        # (W1, n1); trial leaf 2 (W2, n2) pairs with test leaf 1 (W2, n2).
-        a = form(trial, test, (u, v) -> innerₕ(u(1), v(2)) + innerₕ(u(2), v(1)))
-        @test trial_space(a) !== test_space(a)
-
-        N = n1 + n2
-        @test size(assemble(a)) == (N, N)   # square: total ndofs agree, just laid out differently
-
-        # `:boundary` is reserved and auto-computed on every mesh: index 1 and index n. So
-        # each leaf contributes exactly two marked rows/columns, with no domain setup needed.
-        Abc = assemble(a; dirichlet = :boundary)
-
-        # The two candidate row sets, computed directly rather than re-derived from the fix:
-        # pin using test_space's own offsets (what the interface promises), and, separately,
-        # what the pre-fix code actually pinned (trial_space's offsets). If these coincided
-        # the test would prove nothing; with n1 ≠ n2 and the leaves in reversed order, they
-        # do not.
-        A_using_test = Matrix(dirichlet_bc!(assemble(a), test_space(a), :boundary))
-        A_using_trial = Matrix(dirichlet_bc!(assemble(a), trial_space(a), :boundary))
-        @test A_using_test != A_using_trial   # the two spaces really do disagree
-
-        pinned_rows(A) = [i for i in 1:N if A[i, i] ≈ 1.0 && count(!iszero, A[i, :]) == 1]
-        correct_rows = sort!(union(1, n2, n2 + 1, N))          # test leaves: offsets 0, n2
-        buggy_rows = sort!(union(1, n1, n1 + 1, N))          # trial leaves: offsets 0, n1
-        @test correct_rows != buggy_rows   # n1 ≠ n2 makes the two sets genuinely different
-
-        @test pinned_rows(A_using_test) == correct_rows
-        @test pinned_rows(A_using_trial) == buggy_rows
-
-        # The fixed `assemble` must agree with test_space's own pinning, not trial_space's.
-        @test Matrix(Abc) ≈ A_using_test
-        @test !(Matrix(Abc) ≈ A_using_trial)
-
-        # `assemble!` into a pre-allocated matrix takes the same path and must agree.
-        A2 = allocate_system_matrix(a)
-        assemble!(A2, a; dirichlet = :boundary)
-        @test Matrix(A2) ≈ Matrix(Abc)
-
-        # `dirichlet_components` on an asymmetric form restricts by TEST leaf, since that is
-        # what the rows mean: component 1 is test's leaf 1 (W2, offset 0, size n2).
-        A1 = Matrix(assemble(a; dirichlet = :boundary, dirichlet_components = 1))
-        @test pinned_rows(A1) == [1, n2]              # only test leaf 1's marked rows
-        @test !(1 + n2 in pinned_rows(A1))              # test leaf 2 untouched
-    end
-
-    @testset "Serial vs parallel agreement" begin
-        # The serial and threaded paths are separate walks over the same terms, so a break in
-        # the serial path is invisible unless it is compared against the other. It was, once.
-        # `assemble_parallel!` always threads regardless of the backend's policy,
-        # which is what makes it the right fixed reference here; `assemble!` on `Wₕ`'s
-        # default Serial() backend gives the serial answer.
-        Vₕ = gridspace(Ωₕ, Val(2))
-        V3 = gridspace(Ωₕ, Val(3))
-
-        # Any: each space and closure is its own type
-        for (nm, sp, g) in Any[
-            ("scalar", Wₕ, (u, v) -> innerₕ(u, v)),
-            ("scalar with operators", Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v))),
-            ("composite, diagonal", Vₕ, (u, v) -> innerₕ(u, v)),
-            ("composite, off-diagonal", Vₕ, (u, v) -> innerₕ(u(1), v(2))),
-            ("composite, mixed spellings", Vₕ, (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2))),
-            (
-                "three components, crossed",
-                V3,
-                (u, v) -> innerₕ(u(1), v(3)) + innerₕ(u(3), v(1))
-            ),
-            (
-                "blocks with operators",
-                Vₕ,
-                (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(2))
-            )
+        # Any: each closure is its own type
+        for g in Any[
+            (u, v) -> innerₕ(u, v),
+            (u, v) -> innerₕ(u(1), v(2)),
+            (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2)),
+            (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1))
         ]
-            a = form(sp, sp, g)
-            Aser = assemble(a)
-            Apar = similar(sparse(Aser))
-            assemble_parallel!(Apar, a)
-            @test Matrix(Aser) ≈ Matrix(Apar)
-        end
-    end
-
-    @testset "Determinism under threads" begin
-        # `≈` above tolerates float summation reordering; the claim here is stronger --
-        # bit-for-bit identical `nzval`, which only a genuine absence of a race across the
-        # multi-colour scatter can guarantee run after run. Only meaningful with more than
-        # one thread actually available: on one thread the colours
-        # never run concurrently, so nothing could race in the first place, and CI already
-        # runs with JULIA_NUM_THREADS=auto (see the @warn in test/runtests.jl for a local,
-        # single-threaded `Pkg.test()`).
-        #
-        # A small mesh gives each colour very few points, which is exactly where a race at
-        # a boundary phase transition is most likely to surface -- a larger mesh averages
-        # rare timing windows away. Repeated 50 times against one fixed serial reference,
-        # since an intermittent race need not show on the first run.
-        if Threads.nthreads() > 1
-            Ω5 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 5), (true, true))
-            W5 = gridspace(Ω5)
-            a5 = form(W5, W5, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)) + inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)))
-            Aser5 = sparse(assemble(a5))
-            reference = copy(Aser5.nzval)
-
-            for _ in 1:50
-                Apar5 = similar(Aser5)
-                assemble_parallel!(Apar5, a5)
-                @test Apar5.nzval == reference
-            end
-        else
-            @test_skip "bit-for-bit determinism under threads not exercised: only one thread available"
-        end
-    end
-
-    @testset "Backend policy" begin
-        # assemble!/assemble do not hardcode parallel. Both read form.trial_space's
-        # execution_policy, defaulting to Serial() like the vector form.
-        @test execution_policy(Wₕ) isa Serial
-        Ω_par = mesh(
-            domain(S, :walls => boundary_symbols(S)),
-            (9, 7),
-            (true, true);
-            backend = backend(policy = Parallel())
-        )
-        W_par = gridspace(Ω_par)
-        @test execution_policy(W_par) isa Parallel
-
-        a_serial = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-        a_parallel = form(W_par, W_par, (u, v) -> innerₕ(u, v))
-
-        A_default = assemble(a_serial)
-        A_via_policy = assemble(a_parallel)
-        @test Matrix(A_via_policy) ≈ Matrix(A_default)
-
-        # Directly against assemble_parallel!, the lower-level entry point that always
-        # threads regardless of the backend's policy: a Parallel()-backend assemble must
-        # agree with it exactly.
-        A_forced_parallel = similar(sparse(A_via_policy))
-        assemble_parallel!(A_forced_parallel, a_parallel)
-        @test Matrix(A_via_policy) ≈ Matrix(A_forced_parallel)
-    end
-
-    @testset "Nested leaf traversal" begin
-        # A composite of composites needs no separate type and no separate constructor. Its
-        # blocks are numbered by leaf, so a two-by-two nesting is four blocks addressed
-        # `u(1)` through `u(4)`: the same spelling a flat space uses, and the same one
-        # `linear.jl` uses for a right-hand side.
-        #
-        # There used to be a `CoupledBilinearForm` reached only when a space was
-        # hierarchical, taking its expression as nested tuples: `((u, p), (v, q)) -> ...`.
-        # It was the only way to reach an off-diagonal block, which is why a flat space
-        # could not have one.
-        nested = Bramble.CompositeGridSpace((gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(2))))
-        @test length(Bramble.leaf_spaces_offsets(nested)) == 4
-        @test ndofs(nested) == 4n
-
-        blk(A, i, j) = Matrix(A)[((i - 1) * n + 1):(i * n), ((j - 1) * n + 1):(j * n)]
-
-        A = assemble(form(nested, nested, (u, v) -> innerₕ(u(1), v(3))))
-        @test blk(A, 3, 1) ≈ H
-        for i in 1:4, j in 1:4
-
-            (i == 3 && j == 1) && continue
-            @test all(iszero, blk(A, i, j))
-        end
-
-        Ad = assemble(form(nested, nested, (u, v) -> innerₕ(u, v)))
-        for i in 1:4
-            @test blk(Ad, i, i) ≈ H
-        end
-
-        a = form(nested, nested, (u, v) -> innerₕ(u(2), v(4)) + innerₕ(u, v))
-        Ap = assemble(a)
-        As = similar(sparse(Ap))
-        assemble!(As, a)
-        @test Matrix(As) ≈ Matrix(Ap)
-
-        # and the range check counts leaves, not top-level components
-        @test_throws ArgumentError assemble(
-            form(nested, nested, (u, v) -> innerₕ(u(1), v(5)))
-        )
-    end
-
-    @testset "Component naming rules" begin
-        Vₕ = gridspace(Ωₕ, Val(2))
-
-        # `innerₕ(u(1), v)` is not something written in a variational formulation, and
-        # reading it as a whole row or column of blocks would be a guess.
-        @test_throws ArgumentError assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v)))
-        @test_throws ArgumentError assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v(2))))
-
-        # and a component the space does not have is an error rather than an empty block
-        @test_throws ArgumentError assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(5))))
-        @test_throws ArgumentError assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u(0), v(1))))
-    end
-
-    @testset "Block resolution (#49)" begin
-        # `blocks(term, trial_leaves, test_leaves)` is the one place the trial/test row/
-        # column asymmetry is resolved, and is testable directly against `leaf_spaces_offsets`
-        # without assembling a matrix; the other way to see a wrong offset is in an assembled
-        # matrix's numbers. Asymmetric leaf sizes and reversed order, as in the test
-        # above, so a row/column offset mix-up lands on the wrong number rather than the same
-        # one by coincidence.
-        n1, n2 = 5, 7
-        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), n1, true))
-        W2 = gridspace(mesh(domain(interval(0.0, 1.0)), n2, true))
-
-        trial = W1 × W2   # leaf 1 is W1 at offset 0, leaf 2 is W2 at offset n1
-        test = W2 × W1    # leaf 1 is W2 at offset 0, leaf 2 is W1 at offset n2
-
-        trial_leaves = leaf_spaces_offsets(trial)
-        test_leaves = leaf_spaces_offsets(test)
-
-        u1 = Bramble.TrialFunction{1}()
-        v1 = Bramble.TestFunction{1}()
-
-        # Row from the test leaf, column from the trial leaf.
-        @testset "Named block: test row, trial column" begin
-            bs = blocks(innerₕ(u1(1), v1(2)), trial_leaves, test_leaves)
-            @test length(bs) == 1
-            blk = only(bs)
-            @test blk isa Block
-            @test blk.trial_leaf === W1        # trial leaf 1
-            @test blk.test_leaf === W1         # test leaf 2 is also W1
-            @test blk.row_offset == n2          # test leaf 2's own offset, not trial's
-            @test blk.col_offset == 0           # trial leaf 1's own offset
-        end
-
-        # One Block per diagonal leaf pair.
-        @testset "Unrouted: one Block per diagonal pair" begin
-            bs = blocks(innerₕ(u1, v1), trial_leaves, test_leaves)
-            @test length(bs) == 2
-            @test bs[1].trial_leaf === W1 && bs[1].test_leaf === W2
-            @test bs[1].row_offset == 0 && bs[1].col_offset == 0
-            @test bs[2].trial_leaf === W2 && bs[2].test_leaf === W1
-            @test bs[2].row_offset == n2 && bs[2].col_offset == n1
-        end
-
-        @testset "Zero allocations" begin
-            _named() = blocks(innerₕ(u1(1), v1(2)), trial_leaves, test_leaves)
-            _diag() = blocks(innerₕ(u1, v1), trial_leaves, test_leaves)
-            _named()
-            _diag()
-            @test (@allocated _named()) == 0
-            @test (@allocated _diag()) == 0
-        end
-    end
-
-    @testset "Matrix differentiation" begin
-        # A coefficient in the integrand: a(u, v) = ∫ c·u·v, so A = H·diag(c) and the
-        # derivative of `sum(A)` with respect to `cᵢ` is `Hᵢᵢ`. Checked against that rather
-        # than against itself, so a gradient of the wrong thing cannot pass.
-        Vₕ = gridspace(Ωₕ, Val(2))
-        c1 = fill(1.0, n)
-        scalar_form(w) = form(Wₕ, Wₕ, (u, v) -> innerₕ(Bramble.element(Wₕ, w) * u, v))
-
-        @test DI.gradient(w -> sum(assemble(scalar_form(w))), AutoForwardDiff(), c1) ≈ diag(H)
-
-        # the element type follows the data: the matrix has to be able to hold a Dual, and
-        # taking it from the space instead is what made this impossible
-        wd = ForwardDiff.Dual.(c1, 1.0)
-        @test eltype(assemble(scalar_form(wd))) <: ForwardDiff.Dual
-
-        # the serial path as well as the threaded one
-        function sum_in_place(w)
-            a = scalar_form(w)
-            A = allocate_system_matrix(a)
-            assemble!(A, a)
-            return sum(A)
-        end
-        @test DI.gradient(sum_in_place, AutoForwardDiff(), c1) ≈ diag(H)
-
-        # and through the block routing, where a wrong component would show up as a
-        # derivative in a block that should not have one
-        routed_sum(w) = sum(
-            assemble(
-            form(
-            Vₕ,
-            Vₕ,
-            (u, v) -> innerₕ(Bramble.element(Wₕ, w) * u(1), v(1)) +
-                      innerₕ(u(2), v(2))
-        ),
-        ),
-        )
-        @test DI.gradient(routed_sum, AutoForwardDiff(), c1) ≈ diag(H)
-    end
-
-    @testset "In-place reassembly" begin
-        # The pattern is the expensive half and does not change between assemblies, so the
-        # intended shape of a loop is `assemble` once and `assemble!` after. This pins that
-        # the second path costs nothing.
-        cₕ = Rₕ(Wₕ, _Const(1.0))
-        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
-
-        A = assemble(a)
-
-        # assemble! uses the pre-resolved ast stored in the form and allocates 0 bytes.
-        @test_allocs assemble!(A, a)
-
-        # Coefficients with operators pre-resolve at form construction time and also allocate 0 bytes during assembly
-        dcₕ = D₋ₓ(cₕ)
-        aop = form(Wₕ, Wₕ, (u, v) -> innerₕ(dcₕ * u, v))
-        Aop = assemble(aop)
-        @test_allocs assemble!(Aop, aop)
-
-        ainline = form(Wₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(cₕ) * u, v))
-        Ain = assemble(ainline)
-        @test_allocs assemble!(Ain, ainline)
-        @test Matrix(Ain) ≈ Matrix(Aop)              # and the two agree
-    end
-
-    # In-place reassembly.
-    @testset "Composite reassembly allocates nothing" begin
-        # The checks above only exercise the scalar core. The block-routing core (going through
-        # `blocks`) needs its own guard, so a routing change cannot
-        # reintroduce an allocation (e.g. from building an intermediate `Block` per term).
-        Vₕ = gridspace(Ωₕ, Val(2))
-
-        a_diag = form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v))          # blk === nothing path
-        @test_allocs assemble!(assemble(a_diag), a_diag)
-
-        a_off = form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(2)))     # named-block path
-        @test_allocs assemble!(assemble(a_off), a_off)
-
-        a_mixed = form(Vₕ, Vₕ, (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2))) # both, one term each
-        @test_allocs assemble!(assemble(a_mixed), a_mixed)
-    end
-
-    @testset "Diagonal-segment replay: no allocation" begin
-        # The third replay shape, alongside the scalar and composite cores above: a term
-        # whose recorded positions come out as a constant per-tap stride, which
-        # `_try_diagonal_segment` repackages so `DiagonalReplaySink` can walk the interior
-        # by arithmetic instead of reading a position list. The entry loops both replay shapes share
-        # (`_visit_entries`/`_visit_entries_unguarded`, form/bilinear_traversal.jl).
-        #
-        # The assertion on `is_diagonal` is what makes this test about that path rather
-        # than a fourth copy of the flat one: a stencil-margin or peeling change that
-        # stopped producing diagonal segments would otherwise leave this quietly measuring
-        # the flat replay again.
-        # A 1D uniform mesh, not this file's 2D `Wₕ`: the repackaging needs a constant
-        # per-tap stride across the interior, which a 2D stiffness term does not have (its
-        # recorded positions jump by a row's worth at each row boundary) -- `assemble` on
-        # `Wₕ` records a flat segment, and asserting otherwise is what the first version of
-        # this test got wrong.
-        Ω1d = mesh(domain(interval(0.0, 1.0)), 41, true)
-        W1d = gridspace(Ω1d)
-        a_stiff = form(W1d, W1d, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-        A_stiff = assemble(a_stiff)
-        assemble!(A_stiff, a_stiff)
-        @test a_stiff.cache.segments[1].is_diagonal
-
-        @test_allocs assemble!(A_stiff, a_stiff)
-    end
-
-    @testset "Restricted in-place reassembly allocs" begin
-        # A `RegionRestriction`'s stencil is `()` or a full tuple depending on the point's
-        # marker. Inside a sum (`v + restrict_to(:boundary, v)` below, what the simplifier
-        # folds the two terms into) that `Union` used to be collected by a `map` over the
-        # summands into a tuple with a non-concrete element, boxed at every grid point: 864 B
-        # on the 1D grid and 6720 B on the 2D one, where the unrestricted form allocated
-        # nothing. The refill must also match the two terms assembled apart.
-        function _loop_bytes(A, a)
-            assemble!(A, a)
-            assemble!(A, a)
-            return @allocated assemble!(A, a)
-        end
-        Ω1d = mesh(domain(interval(0.0, 1.0)), 11, true)
-        Ω2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 9), (false, true))
-        for Ω in (Ω1d, Ω2d)
-            WITH_SLOW_TESTS || Ω === Ω1d || continue
-            W = gridspace(Ω)
-            a = form(W, W, (u, v) -> innerₕ(u, v) + innerₕ(u, restrict_to(:boundary, v)))
-            A = assemble(a)
-            @test _loop_bytes(A, a) == 0
-            parts = assemble(form(W, W, (u, v) -> innerₕ(u, v))) +
-                    assemble(form(W, W, (u, v) -> innerₕ(u, restrict_to(:boundary, v))))
-            @test Matrix(A) ≈ Matrix(parts)
-        end
-
-        # Past two restricted summands in one product the compiler stops splitting the
-        # `Union` and every point boxed again (30528 B with an unrestricted `v` beside
-        # three, 14240 B with three alone, on this 7x9 grid); `form` now splits such a
-        # product into products of at most two (gpena/Bramble.jl#727). The pattern must be
-        # what the terms assembled apart give: zero entries padded in would grow it.
-        Ωm = domain(interval(0.0, 1.0) × interval(0.0, 1.0), :l => :left, :r => :right,
-            :b => :bottom, :t => :top, :c => _x1_lt_half)
-        W = gridspace(mesh(Ωm, (7, 9), (false, false)))
-        labels = (:l, :r, :b, :t, :c)
-        function _check_split(terms; bytes = 0)
-            a = form(W, W, (u, v) -> sum(t(u, v) for t in terms))
-            A = assemble(a)
-            bytes === nothing || @test _loop_bytes(A, a) == bytes
-            parts = sum(assemble(form(W, W, t)) for t in terms)
-            @test Matrix(A) ≈ Matrix(parts)
-            @test nnz(A) == nnz(parts)
-        end
-        for k in 3:5
-            WITH_SLOW_TESTS || k == 3 || continue
-            test_side = Tuple((u, v) -> innerₕ(u, restrict_to(s, v)) for s in labels[1:k])
-            _check_split(test_side)
-            _check_split(((u, v) -> innerₕ(u, v), test_side...))
-            _check_split(Tuple((u, v) -> innerₕ(restrict_to(s, u), v) for s in labels[1:k]))
-            _check_split((
-                (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)),
-                Tuple((u, v) -> 2.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(restrict_to(s, v)))
-                for s in labels[1:k])...))
-        end
-        # Restricted summands on both sides, in one product as written.
-        a = form(W, W, (u, v) -> innerₕ(u + restrict_to(:l, u) + restrict_to(:r, u),
-            v + restrict_to(:b, v) + restrict_to(:t, v)))
-        A = assemble(a)
-        @test _loop_bytes(A, a) == 0
-        parts = sum(assemble(form(W, W, (u, v) -> innerₕ(f(u), g(v))))
-        for f in (identity, u -> restrict_to(:l, u), u -> restrict_to(:r, u))
-        for g in (identity, v -> restrict_to(:b, v), v -> restrict_to(:t, v)))
-        @test Matrix(A) ≈ Matrix(parts)
-        @test nnz(A) == nnz(parts)
-
-        # A restriction over a sum hides its summands from the count unless distributed
-        # over them (33392 B and 11552 B before). Constant scales of different types in one
-        # sum boxed even with two restricted summands (12816 B for `2.0R + 3R`, 28800 B
-        # with a third, Rational, one); `form` converts them to their common type.
-        R = restrict_to
-        _check_split(((u, v) -> innerₕ(u, R(:c, v + R(:l, v) + R(:r, v))),
-            (u, v) -> innerₕ(u, R(:b, v))))
-        _check_split(((u, v) -> innerₕ(u, R(:c, R(:l, v) + R(:r, v) + R(:b, v))),))
-        # A difference is distributed over a restricted sum the same way, every difference
-        # node alike: `D₋ₓ(R(:c, v + R(:l, v) + R(:r, v)))` allocated 70272 B and
-        # `D₋ₓ(v + R(:l, v) + R(:r, v) + R(:b, v))` 116528 B (gpena/Bramble.jl#759). The
-        # pattern is the unsplit product's, which keeps the zero weights of the restricted
-        # entries the parts drop: the seeded mesh pins it.
-        Random.seed!(20261014)
-        Wd = gridspace(mesh(Ωm, (7, 9), (false, false)))
-        for (Dop, nnz_a, nnz_b) in ((D₋ₓ, 90, 117), (Bramble.D₊ᵧ, 92, 119),
-            (Bramble.Dcₓ, 108, 108), (Bramble.D̃ₓ, 90, 117), (Bramble.D̽ᵧ, 148, 175))
-            for (whole, parts, nnz_whole) in (
-                ((u, v) -> innerₕ(u, Dop(R(:c, v + R(:l, v) + R(:r, v)))),
-                Tuple((u, v) -> innerₕ(u, Dop(R(:c, g(v))))
-                for g in (identity, v -> R(:l, v), v -> R(:r, v))), nnz_a),
-                ((u, v) -> innerₕ(u, Dop(v + R(:l, v) + R(:r, v) + R(:b, v))),
-                Tuple((u, v) -> innerₕ(u, Dop(g(v)))
-                for g in (identity, v -> R(:l, v), v -> R(:r, v), v -> R(:b, v))),
-                nnz_b))
-                a = form(Wd, Wd, whole)
-                A = assemble(a)
-                @test _loop_bytes(A, a) == 0
-                P = sum(assemble(form(Wd, Wd, p)) for p in parts)
-                @test Matrix(A) ≈ Matrix(P)
-                @test nnz(A) == nnz_whole
-            end
-        end
-        # A difference over a restricted difference has more stencil shapes than one
-        # restriction: `D₋ₓ(D₊ᵧ(R(:l, v)))` and its `:r` twin paired in one product boxed
-        # (62496 B, 78624 B under `R(:c, …)`, 25776 B for the linear form), so each such
-        # summand takes a product of its own, at any depth: three levels split in two too.
-        # Past 16 products they pair as before rather than leave the product whole (673104
-        # B paired, 3413584 B whole, seventeen summands).
-        DD = v -> D₋ₓ(Bramble.D₊ᵧ(v))
-        for (whole, parts, nnz_whole) in (
-            ((u, v) -> innerₕ(u, DD(R(:l, v) + R(:r, v))),
-            ((u, v) -> innerₕ(u, DD(R(:l, v))), (u, v) -> innerₕ(u, DD(R(:r, v)))), 131),
-            ((u, v) -> innerₕ(u, DD(R(:c, v + R(:l, v) + R(:r, v)))),
-            Tuple((u, v) -> innerₕ(u, DD(R(:c, g(v))))
-            for g in (identity, v -> R(:l, v), v -> R(:r, v))), 176),
-            ((u, v) -> innerₕ(DD(R(:l, u) + R(:r, u)), v),
-            ((u, v) -> innerₕ(DD(R(:l, u)), v), (u, v) -> innerₕ(DD(R(:r, u)), v)), 131))
-            a = form(Wd, Wd, whole)
-            A = assemble(a)
-            @test _loop_bytes(A, a) == 0
-            P = sum(assemble(form(Wd, Wd, p)) for p in parts)
-            @test Matrix(A) ≈ Matrix(P)
-            @test nnz(A) == nnz_whole
-        end
-        fd = element(Wd)
-        fd .= 1.0 .+ (1:length(fd)) ./ 11
-        l = form(Wd, v -> innerₕ(fd, DD(R(:l, v) + R(:r, v))))
-        b = assemble(l)
-        @test _loop_bytes(b, l) == 0
-        @test b ≈ assemble(form(Wd, v -> innerₕ(fd, DD(R(:l, v))))) +
-                  assemble(form(Wd, v -> innerₕ(fd, DD(R(:r, v)))))
-        _products(op::Bramble.OperatorAdd) = _products(op.left_op) + _products(op.right_op)
-        _products(op::Bramble.BilinearProduct) = 1
-        DDD = v -> Bramble.D₊ₓ(DD(v))
-        @test _products(resolve_form_ast(form(Wd, Wd,
-            (u, v) -> innerₕ(u, DDD(R(:l, v) + R(:r, v)))))) == 2
-        @test _products(resolve_form_ast(form(Wd, Wd,
-            (u, v) -> innerₕ(u, DD(foldl(+, (R(:l, v) for _ in 1:17))))))) == 9
-        # Averages and jumps are distributed and counted as differences are, in any mix:
-        # `Mₓ(D₊ᵧ(R(:l, v) + R(:r, v)))` and `D₋ₓ(M₊ᵧ(…))` refilled 38304 B, the four-summand
-        # average 244976 B, the linear form 122880 B, though each piece refilled with 0 B.
-        Mav = Bramble.Mₓ
-        for (outer, inner, nnz_c) in ((Mav, Bramble.D₊ᵧ, 176), (D₋ₓ, M₊ᵧ, 176),
-            (Bramble.jumpₓ, Bramble.D₊ᵧ, 167), (Mav, M₊ᵧ, 176))
-            W2 = v -> outer(inner(v))
-            for (whole, gs, nnz_whole) in (
-                ((u, v) -> innerₕ(u, W2(R(:l, v) + R(:r, v))),
-                (v -> R(:l, v), v -> R(:r, v)), 131),
-                ((u, v) -> innerₕ(u, W2(R(:c, v + R(:l, v) + R(:r, v)))),
-                (v -> R(:c, v), v -> R(:c, R(:l, v)), v -> R(:c, R(:r, v))), nnz_c))
-                a = form(Wd, Wd, whole)
-                A = assemble(a)
-                @test _loop_bytes(A, a) == 0
-                P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(u, W2(g(v))))) for g in gs)
-                @test Matrix(A) ≈ Matrix(P)
-                @test nnz(A) == nnz_whole
-            end
-        end
-        R4 = v -> R(:l, v) + R(:r, v) + R(:b, v) + R(:t, v)
-        a = form(Wd, Wd, (u, v) -> innerₕ(u, Mav(Bramble.D₊ᵧ(R4(v)))))
-        A = assemble(a)
-        @test _loop_bytes(A, a) == 0
-        MD = v -> Mav(Bramble.D₊ᵧ(v))
-        P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(u, MD(R(s, v)))))
-        for s in (:l, :r, :b, :t))
-        @test Matrix(A) ≈ Matrix(P)
-        l = form(Wd, v -> innerₕ(fd, MD(R(:l, v) + R(:r, v))))
-        b = assemble(l)
-        @test _loop_bytes(b, l) == 0
-        @test b ≈ sum(assemble(form(Wd, v -> innerₕ(fd, MD(R(s, v))))) for s in (:l, :r))
-        # With restricted summands on both sides an average is left whole, as before: its
-        # pieces box there whatever the split, and each adds a walk. Distributed there, or
-        # kept whole beside a split difference, the forms below refilled more than these
-        # caps, their bytes before averages were distributed (157600 B against 130512 B).
-        whole = (u, v) -> innerₕ(MD(R(:l, u) + R(:r, u)), MD(R(:b, v) + R(:t, v)))
-        @test _products(resolve_form_ast(form(Wd, Wd, whole))) == 1
-        P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(MD(R(s, u)), MD(R(t, v)))))
-        for s in (:l, :r) for t in (:b, :t))
-        @test Matrix(assemble(form(Wd, Wd, whole))) ≈ Matrix(P)
-        RL = u -> R(:l, u) + R(:r, u)
-        RB = v -> R(:b, v) + R(:t, v)
-        JD = v -> Bramble.jumpₓ(Bramble.D₊ᵧ(v))
-        for (whole, cap) in (
-            ((u, v) -> innerₕ(DD(R4(u)), DD(RB(v))), 278560),
-            ((u, v) -> innerₕ(DD(R(:c, u + RL(u))), DD(R(:c, v + RB(v)))), 382032),
-            ((u, v) -> innerₕ(MD(RL(u)), MD(RB(v)) + v), 130512),
-            ((u, v) -> innerₕ(MD(RL(u)) + u, MD(RB(v))), 129952),
-            ((u, v) -> innerₕ(MD(RL(u)) + JD(RB(u)), MD(RB(v)) + JD(RL(v))), 368176))
-            a = form(Wd, Wd, whole)
-            A = assemble(a)
-            @test _loop_bytes(A, a) <= cap
-        end
-        l = form(Wd, v -> innerₕ(fd, R(:c, MD(RL(v)))))
-        b = assemble(l)
-        @test _loop_bytes(b, l) <= 74928
-        @test b ≈ sum(assemble(form(Wd, v -> innerₕ(fd, R(:c, MD(R(s, v)))))) for s in (:l, :r))
-
-        # With restrictions on both sides, a plain summand beside a restriction of another
-        # operand (`v + R(:t, D₋ₓ(v))`, or `D₋ₓ(u)` beside `D₋ₓ(R(:l, u))`) gave stencils of
-        # four lengths and boxed: 11152, 15104, 33056 and 16480 B, and 16704 B for one piece
-        # of the third form (gpena/Bramble.jl#759). The plain summand now takes a product of
-        # its own; the pattern is the products', which keep the restricted entries' zeros.
-        # Where that group would take a product past 16 pieces, the plain summand joins a
-        # restricted one as before, not leaving the product whole: the last two forms
-        # refilled 1205744 and 88544 B whole, and must keep the bytes they had split.
-        L3 = (D₋ₓ, u -> D₋ₓ(R(:l, u)), u -> D₋ₓ(R(:t, u)))
-        R3 = (D₋ₓ, v -> D₋ₓ(R(:b, v)), v -> D₋ₓ(R(:r, v)))
-        L5 = (D₋ₓ, (u -> D₋ₓ(R(s, u)) for s in (:l, :r, :b, :t))...)
-        U5 = (identity, (u -> R(s, u) for s in (:l, :r, :b, :t))...)
-        V5 = (identity, (v -> R(s, D₋ₓ(v)) for s in (:l, :r, :b, :t))...)
-        for (lhs, rhs, nnz_whole, max_bytes) in (
-            ((identity, u -> R(:l, u)), (identity, v -> R(:t, D₋ₓ(v))), 69, 0),
-            ((D₋ₓ, u -> R(:l, D₋ₓ(u))), (identity, v -> R(:t, D₋ₓ(v))), 123, 0),
-            (L3, R3, 171, 0),
-            ((identity, D₋ₓ, u -> R(:l, u)), (identity, v -> R(:t, v)), 117, 0),
-            ((D₋ₓ, u -> D₋ₓ(R(:l, u))), (v -> D₋ₓ(R(:r, v)),), 126, 0),
-            (L5, L5[1:4], 171, 82848),
-            (U5, V5, 82, 11952))
-            a = form(Wd, Wd, (u, v) -> innerₕ(sum(f(u) for f in lhs), sum(g(v) for g in rhs)))
-            A = assemble(a)
-            @test _loop_bytes(A, a) <= max_bytes
-            P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), g(v))))
-            for f in lhs for g in rhs)
-            @test Matrix(A) ≈ Matrix(P)
-            @test nnz(A) == nnz_whole
-        end
-        _check_split(((u, v) -> innerₕ(u, 2.0 * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v))))
-        _check_split((
-            (u, v) -> innerₕ(u, v), (u, v) -> innerₕ(u, 2.0 * R(:l, v)),
-            (u, v) -> innerₕ(u, 3 * R(:r, v)), (u, v) -> innerₕ(u, (1 // 2) * R(:b, v))))
-        # A negated or scaled restriction under a difference beside other summands boxed at
-        # every refill though each piece refilled with 0 B (gpena/Bramble.jl#759): 52608 B
-        # for the negated D₋ₓ sum, 49248 B for each D̽ᵧ form; 0 B since 1ed87350, which
-        # shifts a constant scale over a restriction by the restriction's rule. The pattern
-        # keeps the unsplit product's zero weights, so it is bounded, not equal.
-        for (whole, parts, nnz_max) in (
-            ((u, v) -> innerₕ(u, D₋ₓ(-R(:l, v) + R(:r, v) - R(:b, v) + v)),
-            ((u, v) -> innerₕ(u, D₋ₓ(-R(:l, v))), (u, v) -> innerₕ(u, D₋ₓ(R(:r, v))),
-                (u, v) -> innerₕ(u, D₋ₓ(-R(:b, v))), (u, v) -> innerₕ(u, D₋ₓ(v))), 117),
-            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(v - R(:l, v))),
-            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(v)),
-                (u, v) -> innerₕ(u, Bramble.D̽ᵧ(-R(:l, v)))), 175),
-            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v) + v)),
-            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v))),
-                (u, v) -> innerₕ(u, Bramble.D̽ᵧ(v))), 175))
-            a = form(Wd, Wd, whole)
-            A = assemble(a)
-            @test _loop_bytes(A, a) == 0
-            P = sum(assemble(form(Wd, Wd, p)) for p in parts)
-            @test Matrix(A) ≈ Matrix(P)
-            @test nnz(A) <= nnz_max
-        end
-        # A complex scale on a Float64 mesh widens the others to ComplexF64, as scales are
-        # never narrowed: the form refills with 0 B (15680 B when left mixed), its values
-        # those of the mixed form bit for bit, and it agrees with its parts.
-        _check_split((
-            (u, v) -> innerₕ(u, (1.0 + 2.0im) * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v)),
-            (u, v) -> innerₕ(u, 2.0 * R(:b, v))))
-        # A `Ref` scale is left in place, so the matrix still follows it.
-        k = Ref(2.0)
-        a = form(W, W, (u, v) -> innerₕ(u, k * R(:l, v)) + innerₕ(u, 3 * R(:r, v)))
-        A = assemble(a)
-        @test _loop_bytes(A, a) == 0
-        k[] = -5.0
-        assemble!(A, a)
-        @test Matrix(A) ≈ Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, -5.0 * R(:l, v)) +
-                                                               innerₕ(u, 3 * R(:r, v)))))
-
-        # A product with at most two restricted summands and uniform scales folds to
-        # itself at compile time, so `form` compiles no split for it.
-        for f in ((u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)),
-            (u, v) -> innerₕ(u, v + 2.0 * R(:l, v)))
-            ast = resolve_form_ast(form(W, W, f))
-            @test Base.return_types(
-                Bramble._split_restricted_products, (typeof(ast), Type{Float64})) ==
-                  Any[typeof(ast)]
-        end
-
-        # A form holding no restriction comes back as `simplify_ast` built it when its
-        # scales agree in type. When they differ they are only ever widened, to the type of
-        # their products with a weight of the mesh's (`π` beside an Int on a Float32 mesh
-        # stays Float32, a Float64 literal stays Float64, an Int past 2^53 converts as
-        # `Int * Float64` does): each form keeps the unsplit one's element type and values,
-        # and refills with 0 B (9072 B on the Float32 mesh when left mixed).
-        _built(S, f) = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
-            resolve_ast(f(Bramble.trial_function(S), Bramble.test_function(S))), S, S))
-        _scale_types(op::Bramble.OperatorAdd) = (
-            _scale_types(op.left_op)..., _scale_types(op.right_op)...)
-        _scale_types(op::Bramble.OperatorScale) = (typeof(op.scalar),)
-        _scale_types(op) = ()
-        Ω32u = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0))
-        W32u = gridspace(mesh(Ω32u, (7, 9), (false, false); backend = backend(Float32)))
-        for (S, f) in ((W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))),
-            (W, (u, v) -> innerₕ(u, 2.0 * v + 3.0 * D₋ₓ(v))),
-            (W32u, (u, v) -> innerₕ(u, 2 * v + 3 * D₋ₓ(v))),
-            (W32u, (u, v) -> innerₕ(u, 0.1 * v + 0.3 * D₋ₓ(v))))
-            ast = _built(S, f)
-            @test Bramble._split_restricted_products(ast, eltype(S)) === ast
-        end
-        for (S, f, T, exact) in (
-            (W, (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v)), Float64,
-            true),
-            (W, (u, v) -> innerₕ(u, (2^53 + 1) * v + 0.5 * D₋ₓ(v)), Float64, true),
-            (W32u, (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v)), Float64, false),
-            (W32u, (u, v) -> innerₕ(0.1 * u + 3 * D₋ₓ(u), v), Float64, false),
-            (W32u, (u, v) -> innerₕ(u, π * v + 3 * D₋ₓ(v)), Float32, false))
-            ast = _built(S, f)
-            split = Bramble._split_restricted_products(ast, eltype(S))
-            for (side, op) in ((ast.left_op, split.left_op), (ast.right_op, split.right_op))
-                side isa Bramble.OperatorAdd || continue
-                @test all(==(T), _scale_types(op))
-                @test all(t -> promote_type(t, T) === T, _scale_types(side))
-            end
-            a = form(S, S, f)
-            A = assemble(a)
-            U = assemble(Bramble.BilinearForm{2, typeof(S), typeof(S), typeof(ast)}(
-                S, S, ast, Bramble._AssemblyCache{2}(ast)))
-            @test eltype(A) === eltype(U) === T
-            @test _loop_bytes(A, a) == 0
-            @test exact ? Matrix(A) == Matrix(U) :
-                  isapprox(Matrix(A), Matrix(U); rtol = 1e-6)
-        end
-        # Scales joining to a type that is not bits are left mixed: every product with a
-        # BigFloat allocates, and converting the Int or Float64 to one took the refill from
-        # 56688 and 63744 B to 106368 B. A BigFloat allocates differently on x64: the second
-        # form took 65760 B on Linux, so its cap leaves room and stays well under 106368 B.
-        for (f, cap) in (((u, v) -> innerₕ(u, big(0.1) * v + 3 * D₋ₓ(v)), 56688),
-            ((u, v) -> innerₕ(u, big(3) * v + 0.5 * D₋ₓ(v)), 72000))
-            ast = _built(W, f)
-            @test Bramble._split_restricted_products(ast, Float64) === ast
-            a = form(W, W, f)
-            A = assemble(a)
-            @test eltype(A) === BigFloat
-            @test _loop_bytes(A, a) <= cap
-        end
-
-        # A grid function scale over a restricted sum is distributed over its summands as
-        # the product splits. Left whole, `g * (R(:l, u) + R(:r, u))` was one summand of two
-        # bits, and one on each side boxed (11872 B; 19024 B for four summands on the test
-        # side alone). Distributed over the split products' nested sums instead, `form`
-        # took 12.8 s to compile the first form below, and over four summands LLVM never
-        # finished.
-        g = element(W)
-        g .= 1.0 .+ (1:length(g)) ./ 7
-        t = @elapsed form(W, W, (u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v)) + R(:b, v)))
-        @test t < 2.0
-        t = @elapsed form(W, W,
-            (u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v) + R(:b, v) + R(:t, v))))
-        @test t < 2.0
-        function _check_scaled(whole, lhs, rhs; nnz_equal = true)
-            a = form(W, W, whole)
-            A = assemble(a)
-            @test _loop_bytes(A, a) == 0
-            P = sum(assemble(form(W, W, (u, v) -> innerₕ(f(u), h(v))))
-            for f in lhs for h in rhs)
-            @test Matrix(A) ≈ Matrix(P)
-            nnz_equal && @test nnz(A) == nnz(P)
-            return A, P
-        end
-        gR(s) = u -> g * R(s, u)
-        _check_scaled(
-            (u, v) -> innerₕ(g * (R(:l, u) + R(:r, u)), g * (R(:b, v) + R(:t, v))),
-            (gR(:l), gR(:r)), (gR(:b), gR(:t)))
-        _check_scaled((u, v) -> innerₕ(u, g * (R(:l, v) + R(:r, v) + R(:b, v) + R(:t, v))),
-            (identity,), Tuple(gR(s) for s in (:l, :r, :b, :t)))
-        # A plain summand beside the restrictions stays where `_joins_restriction` puts it:
-        # left whole, these two boxed 55232 and 158432 B.
-        RD(s) = u -> R(s, D₋ₓ(u))
-        gRD(s) = u -> g * R(s, D₋ₓ(u))
-        _check_scaled(
-            (u, v) -> innerₕ(u + R(:l, D₋ₓ(u)), g * (v + R(:t, D₋ₓ(v)) + R(:b, v))),
-            (identity, RD(:l)), (v -> g * v, gRD(:t), gR(:b)); nnz_equal = false)
-        _check_scaled(
-            (u, v) -> innerₕ(u + R(:l, D₋ₓ(u)) + R(:r, D₋ₓ(u)) + R(:b, D₋ₓ(u)) +
-                             R(:t, D₋ₓ(u)),
-                g * (v + R(:l, D₋ₓ(v)) + R(:r, D₋ₓ(v)) + R(:b, D₋ₓ(v)))),
-            (identity, (RD(s) for s in (:l, :r, :b, :t))...),
-            (v -> g * v, (gRD(s) for s in (:l, :r, :b))...); nnz_equal = false)
-        # With such a sum too long to split on both sides, each plain summand keeps a
-        # product of its own, as before the scale was distributed: joined to the sum, the
-        # first form refilled 135520 B against 71792 B on a grid with one more marker.
-        gd = element(Wd)
-        parent(gd) .= parent(g)
-        for (lhs, rhs, max_bytes) in (
-            ((identity, u -> gd * (R(:l, u) + R(:r, u) + R(:c, u))),
-            (identity, v -> gd * (R(:b, v) + R(:t, v) + R(:c, v))), 72800),
-            ((u -> u + R(:c, D₋ₓ(u)), u -> gd * (R(:l, u) + R(:r, u) + R(:t, u))),
-            (identity, v -> gd * (R(:b, D₋ₓ(v)) + R(:t, v) + R(:c, v))), 91376))
-            a = form(Wd, Wd, (u, v) -> innerₕ(lhs[1](u) + lhs[2](u), rhs[1](v) + rhs[2](v)))
-            A = assemble(a)
-            @test _loop_bytes(A, a) <= max_bytes
-            P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), h(v))))
-            for f in lhs for h in rhs)
-            @test Matrix(A) ≈ Matrix(P)
-        end
-        # An infinite value of `g` stays where its parts put it, and no finite entry
-        # becomes NaN.
-        gi = copy(g)
-        gi[1] = Inf
-        a = form(W, W,
-            (u, v) -> innerₕ(gi * (R(:l, u) + R(:r, u)), gi * (R(:b, v) + R(:t, v))))
-        A = Matrix(assemble(a))
-        P = sum(Matrix(assemble(form(W, W, (u, v) -> innerₕ(gi * R(s, u), gi * R(z, v)))))
-        for s in (:l, :r) for z in (:b, :t))
-        @test any(isinf, P) && !any(isnan, P)
-        @test isequal(A, P)
-        # With such sums on both sides, every piece carries two grid functions' types: past
-        # four pieces the product stays whole, as it was, since sixteen took the first
-        # `assemble` 4.0 s against 0.51 s whole.
-        for k in 3:4
-            WITH_SLOW_TESTS || k == 3 || continue
-            labels_k = labels[1:k]
-            f = (u, v) -> innerₕ(g * sum(R(s, u) for s in labels_k),
-                g * sum(R(s, v) for s in reverse(labels_k)))
-            t = @elapsed a = form(W, W, f)
-            @test t < 2.0
-            @test _products(resolve_form_ast(a)) == 1
-            P = sum(assemble(form(W, W, (u, v) -> innerₕ(g * R(s, u), g * R(z, v))))
-            for s in labels_k for z in labels_k)
-            @test Matrix(assemble(a)) ≈ Matrix(P)
-        end
-
-        # On a Float32 mesh a Float64 literal beside an Int widens the Int to Float64, never
-        # narrows the literal to Float32, and `π` beside an Int goes to Float32, as `π * 1f0`
-        # does, not to the Float64 `promote_type` gives the two: each matrix keeps the
-        # unsplit form's element type and its parts' values up to the rounding of the
-        # products' order, and refills with 0 B (39680 B for the first when left mixed).
-        Ω32 = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 1.0f0), :l => :left,
-            :r => :right, :b => :bottom)
-        W32 = gridspace(mesh(Ω32, (7, 9), (false, false); backend = backend(Float32)))
-        for (c, T) in ((0.1, Float64), (π, Float32))
-            terms = ((u, v) -> innerₕ(u, c * R(:l, v)), (u, v) -> innerₕ(u, 3 * D₋ₓ(v)),
-                (u, v) -> innerₕ(u, R(:r, v)), (u, v) -> innerₕ(u, R(:b, v)))
-            f = (u, v) -> innerₕ(u, c * R(:l, v) + 3 * D₋ₓ(v) + R(:r, v) + R(:b, v))
-            a = form(W32, W32, f)
-            A = assemble(a)
-            ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
-                resolve_ast(f(Bramble.trial_function(W32), Bramble.test_function(W32))),
-                W32, W32))
-            unsplit = Bramble.BilinearForm{2, typeof(W32), typeof(W32), typeof(ast)}(
-                W32, W32, ast, Bramble._AssemblyCache{2}(ast))
-            U = assemble(unsplit)
-            parts = sum(assemble(form(W32, W32, t)) for t in terms)
-            @test eltype(A) === eltype(U) === T
-            @test _loop_bytes(A, a) == 0
-            @test isapprox(Matrix(A), Matrix(U); rtol = 1e-6)
-            @test isapprox(Matrix(A), Matrix(parts); rtol = 1e-6)
-            @test nnz(A) == nnz(U)
-        end
-
-        # Scales of different types whose common type is not `E` but promotes to it (`Int`
-        # with `Rational` on a Float64 mesh) are converted to `E` too, as `Int * Float64`
-        # and `Rational * Float64` convert the same way: no boxing (15024 B before), and
-        # the matrix is the unsplit one's, bit for bit.
-        f = (u, v) -> innerₕ(u, 2 * R(:l, v) + (1 // 2) * R(:r, v) + R(:b, v))
-        a = form(W, W, f)
-        A = assemble(a)
-        ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
-            resolve_ast(f(Bramble.trial_function(W), Bramble.test_function(W))), W, W))
-        unsplit = Bramble.BilinearForm{2, typeof(W), typeof(W), typeof(ast)}(
-            W, W, ast, Bramble._AssemblyCache{2}(ast))
-        U = assemble(unsplit)
-        @test _loop_bytes(A, a) == 0
-        @test Matrix(A) == Matrix(U)
-        @test nnz(A) == nnz(U)
-
-        # Two restricted summands share a product only when their types agree: a scaled
-        # and an unscaled one together boxed (12816 B for `2.0R + R + R`, 11984 B for the
-        # last pair below), and whether they met depended on the order they were written.
-        _check_split(((u, v) -> innerₕ(u, 2.0 * R(:l, v)), (u, v) -> innerₕ(u, R(:r, v)),
-            (u, v) -> innerₕ(u, R(:b, v))))
-        _check_split(((u, v) -> innerₕ(u, R(:l, v)), (u, v) -> innerₕ(u, R(:r, v)),
-            (u, v) -> innerₕ(u, 2.0 * R(:b, v))))
-        _check_split((
-            (u, v) -> innerₕ(u, v), (u, v) -> innerₕ(u, 2 * R(:l, v)),
-            (u, v) -> innerₕ(u, 0.5 * R(:r, v)), (u, v) -> innerₕ(u, (1 // 3) * R(:b, v)),
-            (u, v) -> innerₕ(u, R(:t, v))))
-        _check_split(((u, v) -> innerₕ(u, g * R(:l, v)), (u, v) -> innerₕ(u, R(:r, v)),
-            (u, v) -> innerₕ(u, R(:b, v))))
-
-        # The split is decided from the summand types, so it infers its concrete result:
-        # grouped at run time, five grid-function-scaled restrictions inferred `Any` and
-        # took `form` about 3 s.
-        f = (u, v) -> innerₕ(u, g * R(:l, v) + g * R(:r, v) + g * R(:b, v) + g * R(:t, v) +
-                                g * R(:c, v))
-        ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
-            resolve_ast(f(Bramble.trial_function(W), Bramble.test_function(W))), W, W))
-        rt = Base.return_types(Bramble._split_restricted_products, (typeof(ast), Type{Float64}))
-        @test length(rt) == 1 && isconcretetype(only(rt))
-
-        # Restrictions on both sides multiply the products: six distinct types a side would
-        # make 36, slower to compile and walk than the one product, which is kept past 16.
-        ops = (identity, D₋ₓ, D₋ᵧ, x -> 2.0 * x, x -> g * x, x -> g * D₋ᵧ(x))
-        regions = (:l, :r, :b, :t, :c, :l)
-        side(w) = foldl(+, (R(regions[i], ops[i](w)) for i in 1:6))
-        f = (u, v) -> innerₕ(u + side(u), v + side(v))
-        a = form(W, W, f)
-        ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
-            resolve_ast(f(Bramble.trial_function(W), Bramble.test_function(W))), W, W))
-        unsplit = Bramble.BilinearForm{2, typeof(W), typeof(W), typeof(ast)}(
-            W, W, ast, Bramble._AssemblyCache{2}(ast))
-        A = assemble(a)
-        U = assemble(unsplit)
-        @test Matrix(A) ≈ Matrix(U)
-        @test nnz(A) == nnz(U)
-        @test _loop_bytes(A, a) <= _loop_bytes(U, unsplit)
-    end
-
-    @testset "Weights of several types refill with 0 B" begin
-        # Mixed weight types boxed. An unscaled, grid-function-scaled or `Ref`-scaled
-        # summand beside a Float64 literal on a Float32 mesh, or a sum under a grid
-        # function scale, refilled 9072 B on a 7x9 grid. A constant scale between a
-        # difference or average and a restricted sum boxed on a Float64 mesh too
-        # (`u, D₋ₓ(2.0 * (R + R))` 16704 B, `Mₓ(D₊ᵧ(…))` 52560 B, and with the sum on both
-        # sides `D₋ₓ(g * (R + R))` 21600 B, `g * (2.0 * (R + R))` 7920 B). Each form must
-        # refill a NaN-filled matrix with what its terms give assembled apart, keep their
-        # promoted element type, and read a `Ref` live. The rewrite infers. On a Float64
-        # mesh the tolerance is rounding, which a scale converted through Float32 misses;
-        # on a Float32 one it is a few eps, since a term once computed in Float32 is now
-        # computed in Float64.
-        R = restrict_to
-        bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
-        function refilled(a)
-            A = assemble(a)
-            fill!(nonzeros(A), NaN)
-            assemble!(A, a)
-            return Matrix(A)
-        end
-        for T in (Float32, Float64), D in TEST_DIMS
-
-            WITH_SLOW_TESTS || (T === Float64 && D == 1) || continue
-
-            Iv = interval(zero(T), one(T))
-            Bramble._seed_mesh1d_rng!(20261017)
-            W = try
-                Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,
-                    :c => _x1_lt_half)
-                gridspace(D == 1 ? mesh(Ω, 11, false; backend = backend(T)) :
-                          mesh(Ω, (7, 9, 5)[1:D], ntuple(_ -> false, D);
-                    backend = backend(T)))
-            finally
-                Bramble._unseed_mesh1d_rng!()
-            end
-            g = element(W)
-            g .= 1 .+ (1:length(g)) ./ 7
-            r = Ref(T(0.1))
-            L(w) = R(:l, w)
-            Rr(w) = R(:r, w)
-            RR(w) = L(w) + Rr(w)
-            # Both sides restricted: the four products of one summand a side.
-            both(N) = Tuple((u, v) -> innerₕ(N(P(u)), N(Q(v))) for P in (L, Rr), Q in (L, Rr))
-            tol = T === Float32 ? 8 * eps(Float32) : 1.0e-12
-            forms = Any[
-                ("u, (1//3)v + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, (1 // 3) * v + 0.5 * D₋ₓ(v)),
-                    ((u, v) -> innerₕ(u, (1 // 3) * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
-                ("u, πv + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, π * v + 0.5 * D₋ₓ(v)),
-                    ((u, v) -> innerₕ(u, π * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
-                ("u, 0.1f0v + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, 0.1f0 * v + 0.5 * D₋ₓ(v)),
-                    ((u, v) -> innerₕ(u, 0.1f0 * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
-                ("u, (1//3)L(v) + 2.0Rr(v) + 0.5v",
-                    (u, v) -> innerₕ(u, (1 // 3) * L(v) + 2.0 * Rr(v) + 0.5 * v),
-                    ((u, v) -> innerₕ(u, (1 // 3) * L(v)), (u, v) -> innerₕ(u, 2.0 * Rr(v)),
-                        (u, v) -> innerₕ(u, 0.5 * v))),
-                ("u, v + 0.1D₋ₓ(v)", (u, v) -> innerₕ(u, v + 0.1 * D₋ₓ(v)),
-                    ((u, v) -> innerₕ(u, v), (u, v) -> innerₕ(u, 0.1 * D₋ₓ(v)))),
-                ("u, g*v + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, g * v + 0.5 * D₋ₓ(v)),
-                    ((u, v) -> innerₕ(u, g * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
-                ("u, r*v + 0.5D₋ₓ(v)", (u, v) -> innerₕ(u, r * v + 0.5 * D₋ₓ(v)),
-                    ((u, v) -> innerₕ(u, r[] * v), (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))),
-                ("u, g*(0.1v + 3D₋ₓ(v))", (u, v) -> innerₕ(u, g * (0.1 * v + 3 * D₋ₓ(v))),
-                    ((u, v) -> innerₕ(u, g * (0.1 * v)),
-                        (u, v) -> innerₕ(u, g * (3 * D₋ₓ(v))))),
-                ("u, D₋ₓ(2.0RR(v))", (u, v) -> innerₕ(u, D₋ₓ(2.0 * RR(v))),
-                    ((u, v) -> innerₕ(u, D₋ₓ(2.0 * L(v))),
-                        (u, v) -> innerₕ(u, D₋ₓ(2.0 * Rr(v))))),
-                ("u, D₊ₓ(D₋ₓ(2.0RR(v)))", (u, v) -> innerₕ(u, Bramble.D₊ₓ(D₋ₓ(2.0 * RR(v)))),
-                    ((u, v) -> innerₕ(u, 2.0 * Bramble.D₊ₓ(D₋ₓ(L(v)))),
-                        (u, v) -> innerₕ(u, 2.0 * Bramble.D₊ₓ(D₋ₓ(Rr(v)))))),
-                ("D₋ₓ(g*RR(u)), D₋ₓ(g*RR(v))",
-                    (u, v) -> innerₕ(D₋ₓ(g * RR(u)), D₋ₓ(g * RR(v))),
-                    both(w -> D₋ₓ(g * w))),
-                ("g*(2.0RR(u)), g*(2.0RR(v))",
-                    (u, v) -> innerₕ(g * (2.0 * RR(u)), g * (2.0 * RR(v))),
-                    both(w -> g * (2.0 * w)))]
-            if D >= 2
-                for c in (2.0, 2)
-                    push!(forms,
-                        ("u, Mₓ(D₊ᵧ($(c)RR(v)))",
-                            (u, v) -> innerₕ(u, Mₓ(Bramble.D₊ᵧ(c * RR(v)))),
-                            ((u, v) -> innerₕ(u, c * Mₓ(Bramble.D₊ᵧ(L(v)))),
-                                (u, v) -> innerₕ(u, c * Mₓ(Bramble.D₊ᵧ(Rr(v)))))))
-                end
-            end
-            for (n, whole, parts) in forms
-                @testset "$(T) $(D)D $n" begin
-                    ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
-                        resolve_ast(whole(Bramble.trial_function(W),
-                            Bramble.test_function(W))), W, W))
-                    @inferred Bramble._split_restricted_products(ast, T)
-                    a = form(W, W, whole)
-                    pieces = [assemble(form(W, W, p)) for p in parts]
-                    want = sum(Matrix, pieces)
-                    A = refilled(a)
-                    @test eltype(A) === mapreduce(eltype, promote_type, pieces)
-                    @test count(!iszero, want) > 0
-                    @test isapprox(A, want; rtol = tol)
-                    @test bytes(assemble(a), a) == 0
-                end
-            end
-            a = form(W, W, (u, v) -> innerₕ(u, r * v + 0.5 * D₋ₓ(v)))
-            r[] = T(0.7)
-            want = Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, T(0.7) * v)))) +
-                   Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, 0.5 * D₋ₓ(v)))))
-            @test isapprox(refilled(a), want; rtol = tol)
-            # Under a restriction a scale over a restricted sum is distributed, each piece a
-            # restriction over a difference over a restriction, a product of its own (two
-            # such pieces in one product boxed, 32400 B; kept whole 24912 B). A `BigFloat`
-            # scale stays whole, as its pieces each allocate (`D₋ₓ(big(2) * (R + R))`
-            # 77856 B against 40704 B, with a third summand 152832 B against 89760 B). The
-            # `BigFloat` caps are their bytes on 7x9 with room, as it allocates differently
-            # on x64.
-            if T === Float64 && D == 2
-                Bramble._seed_mesh1d_rng!(20261017)
-                Wb = try
-                    gridspace(mesh(
-                        domain(Iv × Iv, :l => :left, :r => :right, :b => :bottom,
-                            :c => _x1_lt_half), (7, 9), (false, false)))
-                finally
-                    Bramble._unseed_mesh1d_rng!()
-                end
-                B(w) = R(:b, w)
-                for (f, parts, cap) in (
-                    ((u, v) -> innerₕ(u, R(:c, D₋ₓ(2.0 * RR(v)))),
-                    ((u, v) -> innerₕ(u, R(:c, D₋ₓ(2.0 * L(v)))),
-                        (u, v) -> innerₕ(u, R(:c, D₋ₓ(2.0 * Rr(v))))), 0),
-                    ((u, v) -> innerₕ(u, D₋ₓ(big(2.0) * RR(v))),
-                    ((u, v) -> innerₕ(u, D₋ₓ(big(2.0) * L(v))),
-                        (u, v) -> innerₕ(u, D₋ₓ(big(2.0) * Rr(v)))), 56000),
-                    ((u, v) -> innerₕ(u, D₋ₓ(big(2.0) * (RR(v) + B(v)))),
-                    ((u, v) -> innerₕ(u, D₋ₓ(big(2.0) * L(v))),
-                        (u, v) -> innerₕ(u, D₋ₓ(big(2.0) * Rr(v))),
-                        (u, v) -> innerₕ(u, D₋ₓ(big(2.0) * B(v)))), 120000),
-                # A restriction over a difference over a restricted sum, distributed: each
-                # piece counts two bits, so it is a product of its own (24912 B and
-                # 32400 B when they shared one).
-                    ((u, v) -> innerₕ(u, R(:c, D₋ₓ(RR(v)))),
-                    ((u, v) -> innerₕ(u, R(:c, D₋ₓ(L(v)))),
-                        (u, v) -> innerₕ(u, R(:c, D₋ₓ(Rr(v))))), 0),
-                    ((u, v) -> innerₕ(u, R(:c, D₋ₓ(RR(v) + B(v)))),
-                    ((u, v) -> innerₕ(u, R(:c, D₋ₓ(L(v)))),
-                        (u, v) -> innerₕ(u, R(:c, D₋ₓ(Rr(v)))),
-                        (u, v) -> innerₕ(u, R(:c, D₋ₓ(B(v))))), 0),
-                    ((u, v) -> innerₕ(u, R(:c, 2.0 * D₋ₓ(RR(v)))),
-                    ((u, v) -> innerₕ(u, R(:c, 2.0 * D₋ₓ(L(v)))),
-                        (u, v) -> innerₕ(u, R(:c, 2.0 * D₋ₓ(Rr(v))))), 0))
-                    a = form(Wb, Wb, f)
-                    A = assemble(a)
-                    @test bytes(A, a) <= cap
-                    want = sum(p -> Matrix(assemble(form(Wb, Wb, p))), parts)
-                    @test count(!iszero, want) > 0
-                    @test isapprox(refilled(a), want; rtol = tol)
-                end
-            end
-        end
-    end
-
-    @testset "Restricted sums under nodes refill 0 B" begin
-        # Each of these boxed: a jump's `Int` weights beside the shifted tap's element
-        # type (`jumpₓ(Rₕ(:l, v)) + jumpₓ(Rₕ(:r, v))` 27360 B on 7x9), a scale over a
-        # restricted sum under an average left whole (`Mₓ(D₋ₓ(π * (R + R)))` 105264 B) or
-        # under a difference (`Ref`, 16704 B), and on a Float32 mesh `π` over a
-        # restriction under a difference (`D₋ₓ(π * R) + D₋ₓ(π * R)` 29952 B). Each is
-        # compared with its terms assembled apart, the scales applied to their matrices,
-        # so the reference never meets the scale it checks.
-        R = restrict_to
-        J = Bramble.jumpₓ
-        bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
-        for T in (Float32, Float64), D in TEST_DIMS
-
-            WITH_SLOW_TESTS || (T === Float64 && D == 1) || continue
-
-            Iv = interval(zero(T), one(T))
-            Bramble._seed_mesh1d_rng!(20261017)
-            W = try
-                Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,
-                    :c => _x1_lt_half)
-                gridspace(D == 1 ? mesh(Ω, 11, false; backend = backend(T)) :
-                          mesh(Ω, (7, 9, 5)[1:D], ntuple(_ -> false, D);
-                    backend = backend(T)))
-            finally
-                Bramble._unseed_mesh1d_rng!()
-            end
-            g = element(W)
-            g .= 1 .+ (1:length(g)) ./ 7
-            r = Ref(T(0.1))
-            L(w) = R(:l, w)
-            Rr(w) = R(:r, w)
-            RR(w) = L(w) + Rr(w)
-            tol = T === Float32 ? 8 * eps(Float32) : 1.0e-12
-            # (name, form, (scales, term) pairs it equals)
-            forms = Any[
-                ("jumpₓ(R(:c, v + L(v) + Rr(v)))",
-                    (u, v) -> innerₕ(u, J(R(:c, v + L(v) + Rr(v)))),
-                    ((1, (u, v) -> innerₕ(u, J(R(:c, v)))),
-                        (1, (u, v) -> innerₕ(u, J(R(:c, L(v))))),
-                        (1, (u, v) -> innerₕ(u, J(R(:c, Rr(v))))))),
-                ("jumpₓ(L(v)) + jumpₓ(Rr(v))", (u, v) -> innerₕ(u, J(L(v)) + J(Rr(v))),
-                    ((1, (u, v) -> innerₕ(u, J(L(v)))),
-                        (1, (u, v) -> innerₕ(u, J(Rr(v)))))),
-                ("u, D₋ₓ(r RR(v)) + 0.5v", (u, v) -> innerₕ(u, D₋ₓ(r * RR(v)) + 0.5 * v),
-                    ((r[], (u, v) -> innerₕ(u, D₋ₓ(L(v)))),
-                        (r[], (u, v) -> innerₕ(u, D₋ₓ(Rr(v)))),
-                        (0.5, (u, v) -> innerₕ(u, v)))),
-                ("u, D₋ₓ(π RR(v)) + 2v", (u, v) -> innerₕ(u, D₋ₓ(π * RR(v)) + 2 * v),
-                    ((π, (u, v) -> innerₕ(u, D₋ₓ(L(v)))),
-                        (π, (u, v) -> innerₕ(u, D₋ₓ(Rr(v)))),
-                        (2, (u, v) -> innerₕ(u, v)))),
-                ("u, D₋ₓ(R(:c, π L(v))) + D₋ₓ(R(:c, π Rr(v)))",
-                    (u, v) -> innerₕ(u, D₋ₓ(R(:c, π * L(v))) + D₋ₓ(R(:c, π * Rr(v)))),
-                    ((π, (u, v) -> innerₕ(u, D₋ₓ(R(:c, L(v))))),
-                        (π, (u, v) -> innerₕ(u, D₋ₓ(R(:c, Rr(v))))))),
-                ("u, D₋ₓ(g (π L(v))) + D₋ₓ(g (π Rr(v)))",
-                    (u, v) -> innerₕ(u, D₋ₓ(g * (π * L(v))) + D₋ₓ(g * (π * Rr(v)))),
-                    ((π, (u, v) -> innerₕ(u, D₋ₓ(g * L(v)))),
-                        (π, (u, v) -> innerₕ(u, D₋ₓ(g * Rr(v))))))]
-            for c in (π, 2.0, r)
-                push!(forms,
-                    ("Mₓ(D₋ₓ($(c isa Ref ? "r" : c) RR(u))), D₋ₓ(2RR(v)))",
-                        (u, v) -> innerₕ(Mₓ(D₋ₓ(c * RR(u))), D₋ₓ(2 * RR(v))),
-                        Tuple(((2, c isa Ref ? c[] : c),
-                                  (u, v) -> innerₕ(Mₓ(D₋ₓ(P(u))), D₋ₓ(Q(v))))
-                        for P in (L, Rr), Q in (L, Rr))))
-            end
-            push!(forms,
-                ("Mₓ(D₋ₓ(g RR(u))), D₋ₓ(RR(v))",
-                    (u, v) -> innerₕ(Mₓ(D₋ₓ(g * RR(u))), D₋ₓ(RR(v))),
-                    Tuple((1, (u, v) -> innerₕ(Mₓ(D₋ₓ(g * P(u))), D₋ₓ(Q(v))))
-                    for P in (L, Rr), Q in (L, Rr))))
-            # A distributed `Ref` scale is still read live.
-            a = form(W, W, forms[3][2])
-            A = assemble(a)
-            r[] = T(0.7)
-            assemble!(A, a)
-            @test Matrix(A) ≈ Matrix(assemble(form(W, W, forms[3][2])))
-            r[] = T(0.1)
-            for (n, whole, parts) in forms
-                @testset "$(T) $(D)D $n" begin
-                    a = form(W, W, whole)
-                    pieces = [(s isa Tuple ? s : (s,), assemble(form(W, W, p)))
-                              for (s, p) in parts]
-                    want = sum(prod(s) * Matrix{Float64}(P) for (s, P) in pieces)
-                    A = assemble(a)
-                    @test eltype(A) === mapreduce(
-                        ((s, P),) -> typeof(foldl(*, s; init = one(eltype(P)))),
-                        promote_type, pieces)
-                    @test count(!iszero, want) > 0
-                    fill!(nonzeros(A), NaN)
-                    assemble!(A, a)
-                    @test isapprox(Matrix(A), want; rtol = tol)
-                    @test bytes(A, a) == 0
-                end
-            end
-        end
-
-        # A `BigFloat` scale allocates at every product, so no form holding one refills
-        # 0 B; a sum's scalars are not converted to one (71808 B with `1 // 3` converted
-        # to a `BigFloat`), and a `BigFloat` grid function over a restricted sum is not
-        # padded to one length (816576 B padded against 557808 B on 7x9).
-        for T in (Float32, Float64)
-            WITH_SLOW_TESTS || T === Float64 || continue
-            Iv = interval(zero(T), one(T))
-            Random.seed!(20261017)
-            W = gridspace(mesh(domain(Iv × Iv, :l => :left, :r => :right,
-                    :c => _x1_lt_half),
-                (7, 9), (false, false); backend = backend(T)))
-            RR(w) = R(:l, w) + R(:r, w)
-            tol = T === Float32 ? 8 * eps(Float32) : 1.0e-12
-            a = form(W, W, (u, v) -> innerₕ(u, D₋ₓ(big(2.0) * RR(v)) + 1 // 3 * R(:c, v)))
-            want = 2 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, D₋ₓ(RR(v)))))) +
-                   Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, R(:c, v))))) / 3
-            A = assemble(a)
-            @test isapprox(Matrix(A), want; rtol = tol)
-            @test bytes(A, a) <= (T === Float64 ? 45888 : 44160) + 8000
-            # A `Ref` to a `BigFloat` is not distributed under a node (102912 B against
-            # 40704 B whole, 447648 B against 118176 B under an average).
-            if T === Float64
-                rb = Ref(big(2.0))
-                D2RR = 2 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, D₋ₓ(RR(v))))))
-                for (f, want, cap) in (
-                    ((u, v) -> innerₕ(u, D₋ₓ(rb * RR(v))), D2RR, 40704),
-                    ((u, v) -> innerₕ(u, D₋ₓ(rb * RR(v)) + 0.5 * v),
-                    D2RR + 0.5 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, v)))),
-                    62160),
-                    ((u, v) -> innerₕ(u, Mₓ(D₋ₓ(rb * RR(v)))),
-                    2 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, Mₓ(D₋ₓ(RR(v))))))),
-                    118176))
-                    a = form(W, W, f)
-                    A = assemble(a)
-                    @test isapprox(Matrix(A), want; rtol = tol)
-                    @test bytes(A, a) <= cap + 8000
-                end
-                # A fixed stencil shifts a scale over a restriction by the restriction
-                # rule, which zeroes it outside the region before the scale: shifted as a
-                # scaled sum, an infinite scale gave 99 NaN entries, not 18.
-                A = assemble(form(W, W, (u, v) -> innerₕ(u, Mₓ(Mₓ(Inf * R(:l, v))))))
-                @test count(isnan, nonzeros(A)) <= 18
-            end
-            # A sum under a `BigFloat` scale is still made one type (78144 B left mixed).
-            a = form(W, W,
-                (u, v) -> innerₕ(u, M₊ᵧ(big(2.0) * (2.0 * R(:l, v) + 3 * R(:r, v)))))
-            want = 4 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, M₊ᵧ(R(:l, v)))))) +
-                   6 * Matrix(assemble(form(W, W, (u, v) -> innerₕ(u, M₊ᵧ(R(:r, v))))))
-            A = assemble(a)
-            @test isapprox(Matrix(A), want; rtol = tol)
-            @test bytes(A, a) <= 42864 + 8000
-            gw = element(W)
-            gw .= 1 .+ (1:length(gw)) ./ 7
-            gb = big.(Vector(gw))
-            a = form(W, W, (u, v) -> innerₕ(Mₓ(D₋ₓ(gb * RR(u))), D₋ₓ(RR(v))))
-            want = sum(Matrix(assemble(form(W, W,
-                           (u, v) -> innerₕ(Mₓ(D₋ₓ(gb * P(u))), D₋ₓ(Q(v))))))
-            for P in (w -> R(:l, w), w -> R(:r, w)),
-            Q in (w -> R(:l, w), w -> R(:r, w)))
-            A = assemble(a)
-            @test isapprox(Matrix(A), want; rtol = tol)
-            T === Float64 && @test bytes(A, a) <= 557808 + 60000
-        end
-
-        # Forms that boxed before these changes refill at most what they did then
-        # (a70e3159, 7x9 and 11 points): the padded taps of a node directly over a scaled
-        # sum and a `Ref` distributed under a restriction boxed more (49536 -> 63072 B,
-        # 27216 -> 27792 B), and a shift over two nested restrictions distributed onto
-        # pieces that box (0 -> 13824 B, kept whole now). The jump form assembles to a
-        # zero matrix on these grids; its bytes are still pinned.
-        for D in (1, 2)
-            WITH_SLOW_TESTS || D == 1 || continue
-            Random.seed!(20261017)
-            Iv = interval(0.0, 1.0)
-            Ω = domain(foldl(×, ntuple(_ -> Iv, D)), :l => :left, :r => :right,
-                :c => _x1_lt_half)
-            W = gridspace(D == 1 ? mesh(Ω, 11, false) : mesh(Ω, (7, 9), (false, false)))
-            r = Ref(0.1)
-            L(w) = R(:l, w)
-            Rr(w) = R(:r, w)
-            C(w) = R(:c, w)
-            CR(w) = C(Rr(w))
-            RR(w) = L(w) + Rr(w)
-            S = Bramble.S₊ₓ
-            Dp = Bramble.D₊ₓ
-            forms = Any[
-                ("Mₓ(r(u+L(u))), D₋ₓ(2.0L+3Rr)",
-                    (u, v) -> innerₕ(Mₓ(r * (u + L(u))), D₋ₓ(2.0 * L(v) + 3 * Rr(v))),
-                    [(r[] * b, (u, v) -> innerₕ(Mₓ(P(u)), D₋ₓ(Q(v))))
-                     for P in (identity, L), (b, Q) in ((2.0, L), (3, Rr))],
-                    (3440, 30384), true),
-                ("Mₓ(L+Rr+u+0.5u), C(jumpₓ(2.0(L+C(Rr))))",
-                    (u, v) -> innerₕ(Mₓ(L(u) + Rr(u) + u + 0.5 * u),
-                        C(J(2.0 * (L(v) + CR(v))))),
-                    [(2.0 * a, (u, v) -> innerₕ(Mₓ(P(u)), C(J(Q(v)))))
-                     for (a, P) in ((1, L), (1, Rr), (1.5, identity)), Q in (L, CR)],
-                    (6000, 48096), false),
-                ("Mₓ(L+C(Rr)), C(r(L+Rr+v))",
-                    (u, v) -> innerₕ(Mₓ(L(u) + CR(u)), C(r * (L(v) + Rr(v) + v))),
-                    [(r[], (u, v) -> innerₕ(Mₓ(P(u)), C(Q(v))))
-                     for P in (L, CR), Q in (L, Rr, identity)],
-                    (2896, 27216), true),
-                ("u, S₊ₓ(C(C(v+L)))", (u, v) -> innerₕ(u, S(C(C(v + L(v))))),
-                    [(1, (u, v) -> innerₕ(u, S(C(C(Q(v)))))) for Q in (identity, L)],
-                    (0, 0), true),
-                ("u, S₊ₓ(C(C(L+Rr+v)))", (u, v) -> innerₕ(u, S(C(C(L(v) + Rr(v) + v)))),
-                    [(1, (u, v) -> innerₕ(u, S(C(C(Q(v)))))) for Q in (L, Rr, identity)],
-                    (2256, 21168), true),
-                ("D₊ₓ(L+Rr+u), S₊ₓ(C(C(L+Rr+v)))",
-                    (u, v) -> innerₕ(Dp(L(u) + Rr(u) + u), S(C(C(L(v) + Rr(v) + v)))),
-                    [(1, (u, v) -> innerₕ(Dp(P(u)), S(C(C(Q(v))))))
-                     for P in (L, Rr, identity), Q in (L, Rr, identity)],
-                    (6768, 63504), true)]
-            if D == 2
-                append!(forms,
-                    Any[
-                        ("2D₊ₓ(2.0L+3Rr), M₊ᵧ(2.0RR)",
-                            (u, v) -> innerₕ(2 * Dp(2.0 * L(u) + 3 * Rr(u)), M₊ᵧ(2.0 * RR(v))),
-                            [(4.0 * a, (u, v) -> innerₕ(Dp(P(u)), M₊ᵧ(Q(v))))
-                             for (a, P) in ((2.0, L), (3, Rr)), Q in (L, Rr)],
-                            (0, 49536), true),
-                        ("M₊ᵧ(L+C(Rr)), M₊ᵧ((1//3)(L+C(Rr)))",
-                            (u, v) -> innerₕ(M₊ᵧ(L(u) + CR(u)), M₊ᵧ((1 // 3) * (L(v) + CR(v)))),
-                            [(1 / 3, (u, v) -> innerₕ(M₊ᵧ(P(u)), M₊ᵧ(Q(v))))
-                             for P in (L, CR), Q in (L, CR)],
-                            (0, 20736), true)])
-            end
-            # (name, form, (scale, term) pairs it equals, caps 1D and 2D, nonzero)
-            for (n, whole, parts, caps, nonzero) in forms
-                @testset "$(D)D $n" begin
-                    a = form(W, W, whole)
-                    want = sum(s * Matrix(assemble(form(W, W, p))) for (s, p) in parts)
-                    A = assemble(a)
-                    @test count(!iszero, want) > 0 || !nonzero
-                    fill!(nonzeros(A), NaN)
-                    assemble!(A, a)
-                    @test isapprox(Matrix(A), want; rtol = 1.0e-12, atol = 1.0e-12)
-                    @test bytes(A, a) <= caps[D]
-                end
-            end
-        end
-
-        # Under a stencil node only a scalar that gives an `Int` leaf weight and an
-        # element-type one different types is converted, to the type it has times the
-        # element type; a scale over no restriction, or at an operand's top, is kept.
-        W = gridspace(mesh(domain(interval(0.0f0, 1.0f0), :l => :left), 5, true;
-            backend = backend(Float32)))
-        v = Bramble.test_function(W)
-        tap(x, E) = Bramble._type_tap_scalar(typeof(x), E)
-        @test tap(π * R(:l, v), Float32) === Float32
-        @test tap(π * R(:l, v), Float64) === Union{}
-        @test tap(2 * R(:l, v), Float32) === Union{}
-        @test tap((1 // 3) * R(:l, v), Float32) === Union{}
-        @test tap(2.0 * R(:l, v), Float32) === Union{}
-        @test tap(Ref(2.0f0) * R(:l, v), Float32) === Union{}
-        @test tap(π * D₋ₓ(v), Float32) === Union{}
-        # A `Ref` to a bits value distributes as a bits scalar does; a `BigFloat` does not.
-        pieces(x) = length(Bramble._summands_of(x, Val(false)))
-        @test pieces(D₋ₓ(Ref(2.0f0) * (R(:l, v) + R(:r, v)))) == 2
-        @test pieces(D₋ₓ(big(2.0) * (R(:l, v) + R(:r, v)))) == 1
-        # A shift over one restriction level splits; over a restriction directly over
-        # another, through scales too, it stays whole.
-        S = Bramble.S₊ₓ
-        @test pieces(S(R(:l, v) + R(:r, v))) == 2
-        @test pieces(S(R(:c, v + R(:l, v)))) == 2
-        @test pieces(S(R(:c, R(:c, v + R(:l, v))))) == 1
-        @test pieces(S(R(:c, 2.0 * R(:c, v + R(:l, v))))) == 1
-        @test pieces(D₋ₓ(R(:c, R(:c, v + R(:l, v))))) == 2
-        # A restriction over a restricted stencil counts the extra bit only where nested
-        # stencils count (`_groups_expr`'s fallback past 16 groups counts neither).
-        bits(x, nested) = Bramble._type_shape_bits(typeof(x), nested)
-        @test bits(R(:c, D₋ₓ(R(:l, v))), true) == 2
-        @test bits(R(:c, D₋ₓ(R(:l, v))), false) == 1
-        @test bits(R(:c, R(:l, v)), true) == 1
-        differ(x) = Bramble._type_scales_differ(typeof(x), Float32)
-        @test differ(D₋ₓ(R(:c, π * R(:l, v))))
-        @test differ(D₋ₓ(element(W) * (π * R(:l, v))))
-        @test differ(D₋ₓ(R(:c, D₋ₓ(π * R(:l, v)))))
-        @test !differ(π * D₋ₓ(R(:l, v)))
-        @test !differ(D₋ₓ(π * v))
-    end
-
-    @testset "Cached nzval positions (#26)" begin
-        # `assemble!` used to search for every scattered entry's nzval position on every
-        # call. It now records that search's result the first time a given matrix is
-        # assembled into and replays it thereafter -- these exercise both paths and the
-        # points where they meet (a matrix swap, a changed `ast`), not just a single
-        # before/after allocation count.
-
-        @testset "Replay matches search, repeated calls" begin
-            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
-            A = assemble(a)                 # record, inside assemble's own call
-            reference = copy(A.nzval)
-            for _ in 1:5                    # several replay calls, not just one
-                assemble!(A, a)
-                @test A.nzval ≈ reference
-            end
-        end
-
-        @testset "Live coefficients update under replay" begin
-            cₕ = Rₕ(Wₕ, _Const(1.0))
-            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(cₕ * u, v))
-            A = assemble(a)                 # record
-            s1 = sum(A)
-            nnz_before = nnz(A)
-            for factor in (3.0, -2.0, 5.0)
-                Rₕ!(cₕ, x -> factor)
-                assemble!(A, a)              # replay, each time with a different live value
-                @test sum(A) ≈ factor * s1
-                @test nnz(A) == nnz_before   # the pattern is untouched by it
-            end
-        end
-
-        @testset "Dirichlet applied after cached replay" begin
-            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
-            A = assemble(a)                             # record, unconstrained
-            assemble!(A, a)                             # replay, unconstrained
-            assemble!(A, a; dirichlet = :walls)   # replay core, then Dirichlet applied
-            marked = index_in_marker(Ωₕ, :walls)
-            for i in 1:n
-                marked[i] || continue
-                @test A[i, i] ≈ 1.0
-                @test count(!iszero, A[i, :]) == 1
-            end
-        end
-
-        # Rebuilds rather than corrupting the replay.
-        @testset "Switching matrices rebuilds the cache" begin
-            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))
-            A1 = assemble(a)
-            A2 = similar(sparse(A1))
-            assemble!(A2, a)    # different matrix object: must record again, not reuse A1's cache
-            @test A2.nzval ≈ A1.nzval
-            assemble!(A1, a)    # back to A1: must record again (cache now points at A2)
-            @test A1.nzval ≈ A2.nzval
-            assemble!(A1, a)    # each is still independently replayable afterwards
-            assemble!(A2, a)
-            @test A1.nzval ≈ A2.nzval
-        end
-
-        # Diagonal, off-diagonal, mixed and nested blocks all replay correctly.
-        @testset "Composite: every block kind replays" begin
-            Vₕ = gridspace(Ωₕ, Val(2))
-            # Any: each closure is its own type
-            for g in Any[
-                (u, v) -> innerₕ(u, v),
-                (u, v) -> innerₕ(u(1), v(2)),
-                (u, v) -> innerₕ(u, v) + innerₕ(u(1), v(2)),
-                (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1))
-            ]
-                a = form(Vₕ, Vₕ, g)
-                A = assemble(a)
-                reference = copy(A.nzval)
-                for _ in 1:3
-                    assemble!(A, a)
-                    @test A.nzval ≈ reference
-                end
-            end
-
-            # more than two segments to replay, in order (a nesting shape)
-            nested = Bramble.CompositeGridSpace((
-                gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(2))
-            ))
-            a = form(nested, nested, (u, v) -> innerₕ(u(2), v(4)) + innerₕ(u, v))
+            a = form(Vₕ, Vₕ, g)
             A = assemble(a)
             reference = copy(A.nzval)
             for _ in 1:3
@@ -1686,357 +1677,370 @@ using Bramble:
             end
         end
 
-        # Reassembles rather than replaying the stale cache.
-        @testset "Different form, same matrix: rebuilds" begin
-            # Each form keeps its own `_AssemblyCache` (keyed on the exact matrix object it
-            # last assembled into), so assembling a second, same-reach form into `a`'s matrix
-            # records fresh under *its own* cache rather than touching `a`'s -- `a`'s own
-            # cache is still valid afterwards and replays correctly.
-            a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-            A = assemble(a)                                   # records under a's own cache
-            alt = form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v))  # same reach, different form
-            assemble!(A, alt)                                  # alt's own cache: fresh record
-            @test sum(A) ≈ 2 * sum(H)
-            assemble!(A, a)                                    # a's own cache, untouched, still valid
-            @test Matrix(A) ≈ H
+        # more than two segments to replay, in order (a nesting shape)
+        nested = Bramble.CompositeGridSpace((
+            gridspace(Ωₕ, Val(2)), gridspace(Ωₕ, Val(2))
+        ))
+        a = form(nested, nested, (u, v) -> innerₕ(u(2), v(4)) + innerₕ(u, v))
+        A = assemble(a)
+        reference = copy(A.nzval)
+        for _ in 1:3
+            assemble!(A, a)
+            @test A.nzval ≈ reference
         end
     end
 
-    # A pattern that cannot hold the form raises.
-    @testset "Too-small pattern raises (#50)" begin
-        # `add_to_sparse!` used to return quietly when an entry was missing, so a matrix
-        # whose pattern was built for a different form assembled to a plausible wrong
-        # answer. Both the serial recording pass and the threaded path now say so instead.
-        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true))
-        W = gridspace(Ω)
+    # Reassembles rather than replaying the stale cache.
+    @testset "Different form, same matrix: rebuilds" begin
+        # Each form keeps its own `_AssemblyCache` (keyed on the exact matrix object it
+        # last assembled into), so assembling a second, same-reach form into `a`'s matrix
+        # records fresh under *its own* cache rather than touching `a`'s -- `a`'s own
+        # cache is still valid afterwards and replays correctly.
+        a = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
+        A = assemble(a)                                   # records under a's own cache
+        alt = form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v))  # same reach, different form
+        assemble!(A, alt)                                  # alt's own cache: fresh record
+        @test sum(A) ≈ 2 * sum(H)
+        assemble!(A, a)                                    # a's own cache, untouched, still valid
+        @test Matrix(A) ≈ H
+    end
+end
 
-        narrow = form(W, W, (u, v) -> innerₕ(u, v))            # reaches the diagonal only
-        wide = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))    # reaches a neighbour too
+# A pattern that cannot hold the form raises.
+@testset "Too-small pattern raises (#50)" begin
+    # `add_to_sparse!` used to return quietly when an entry was missing, so a matrix
+    # whose pattern was built for a different form assembled to a plausible wrong
+    # answer. Both the serial recording pass and the threaded path now say so instead.
+    Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true))
+    W = gridspace(Ω)
 
-        # Serial: the recording pass searches and reports. `wide` is assembled directly
-        # into a matrix built for `narrow`'s (narrower) pattern.
-        A = allocate_system_matrix(narrow, resolve_form_ast(narrow))
-        @test_throws ArgumentError assemble!(A, wide)
+    narrow = form(W, W, (u, v) -> innerₕ(u, v))            # reaches the diagonal only
+    wide = form(W, W, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))    # reaches a neighbour too
 
-        msg = try
-            assemble!(allocate_system_matrix(narrow, resolve_form_ast(narrow)), wide)
-        catch e
-            sprint(showerror, e)
-        end
-        @test occursin("outside its preallocated", msg)
+    # Serial: the recording pass searches and reports. `wide` is assembled directly
+    # into a matrix built for `narrow`'s (narrower) pattern.
+    A = allocate_system_matrix(narrow, resolve_form_ast(narrow))
+    @test_throws ArgumentError assemble!(A, wide)
 
-        # Threaded: same refusal, reached through `add_to_sparse!` rather than the cache.
-        Wp = gridspace(
-            mesh(
-            domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
-            (6, 5),
-            (true, true);
-            backend = backend(policy = Parallel())
-        ),
+    msg = try
+        assemble!(allocate_system_matrix(narrow, resolve_form_ast(narrow)), wide)
+    catch e
+        sprint(showerror, e)
+    end
+    @test occursin("outside its preallocated", msg)
+
+    # Threaded: same refusal, reached through `add_to_sparse!` rather than the cache.
+    Wp = gridspace(
+        mesh(
+        domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
+        (6, 5),
+        (true, true);
+        backend = backend(policy = Parallel())
+    ),
+    )
+    np = form(Wp, Wp, (u, v) -> innerₕ(u, v))
+    wp = form(Wp, Wp, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
+    Ap = allocate_system_matrix(np, resolve_form_ast(np))
+    @test_throws Exception assemble_parallel!(Ap, wp)
+
+    # and the matching pattern still assembles, so the check is not simply always on
+    Aok = allocate_system_matrix(wide, resolve_form_ast(wide))
+    @test assemble!(Aok, wide) === Aok
+end
+
+@testset "One traversal, pluggable sinks (#50)" begin
+    # What the sink split buys: the traversal is now testable on its own, against a sink
+    # that only records. Before this, every property below could only be checked through
+    # a fully assembled matrix, where a dropped entry looks like a zero.
+    struct CollectSink
+        seen::Vector{Tuple{Int, Int, Float64}}
+    end
+    # The sink contract's fifth argument is the replay slot, which only `ReplaySink`
+    # reads; a recording sink ignores it.
+    Bramble._sink_entry!(s::CollectSink, row::Int, col::Int, w, ::Int) = (
+        push!(s.seen, (row, col, Float64(w))); nothing)
+
+    Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (true, true))
+    W = gridspace(Ω)
+    u, v = TrialFunction{2}(), TestFunction{2}()
+
+    @testset "Every scattered entry is in the pattern" begin
+        # The pattern `allocate_system_matrix` preallocates is built by the coordinate
+        # walk, so the invariant can be asserted directly rather than inferred from a
+        # matrix that came out right.
+        for f in (
+            form(W, W, (a, b) -> innerₕ(a, b)),
+            form(W, W, (a, b) -> innerₕ(D₋ₓ(a), D₋ₓ(b))),
+            form(W, W, (a, b) -> inner₊(∇ₕ(a), ∇ₕ(b))),
+            form(W, W, (a, b) -> innerₕ(Dcₓ(a), M₊ᵧ(b)))
         )
-        np = form(Wp, Wp, (u, v) -> innerₕ(u, v))
-        wp = form(Wp, Wp, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
-        Ap = allocate_system_matrix(np, resolve_form_ast(np))
-        @test_throws Exception assemble_parallel!(Ap, wp)
-
-        # and the matching pattern still assembles, so the check is not simply always on
-        Aok = allocate_system_matrix(wide, resolve_form_ast(wide))
-        @test assemble!(Aok, wide) === Aok
+            ast = resolve_form_ast(f)
+            pattern = Set(zip(SparseArrays.findnz(allocate_system_matrix(f))[1:2]...))
+            got = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0)
+            @test !isempty(got.seen)
+            @test all(((r, c, _),) -> (r, c) in pattern, got.seen)
+        end
     end
 
-    @testset "One traversal, pluggable sinks (#50)" begin
-        # What the sink split buys: the traversal is now testable on its own, against a sink
-        # that only records. Before this, every property below could only be checked through
-        # a fully assembled matrix, where a dropped entry looks like a zero.
-        struct CollectSink
+    # The value pass does not de-duplicate.
+    @testset "Values do not de-duplicate" begin
+        # Two identical terms name every coordinate twice. The values have to
+        # accumulate both, or the matrix comes out halved.
+        #
+        # Built with `resolve_ast` directly rather than `form(...)`: `form` runs
+        # `simplify_ast`, which combines two identical terms into
+        # one (`innerₕ(a,b) + innerₕ(a,b) -> 2 * innerₕ(a,b)`) precisely to avoid the
+        # double sweep this test exists to protect against -- so producing the
+        # duplicate-term tree this traversal invariant is about has to bypass it.
+        ast = resolve_ast(innerₕ(u, v) + innerₕ(u, v))
+        once = visit_bilinear_stencil(CollectSink([]), resolve_ast(innerₕ(u, v)), W, 0, 0)
+        got = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0)
+
+        @test length(got.seen) == 2 * length(once.seen)
+        # and the halving it protects against shows up in the assembled matrix
+        @test Matrix(assemble(form(W, W, (a, b) -> innerₕ(a, b) + innerₕ(a, b)))) ≈
+              2 .* Matrix(assemble(form(W, W, (a, b) -> innerₕ(a, b))))
+    end
+
+    @testset "Block offsets shift sink entries" begin
+        ast = resolve_form_ast(form(W, W, (a, b) -> innerₕ(a, b)))
+        base = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0).seen
+        shifted = visit_bilinear_stencil(CollectSink([]), ast, W, 100, 7).seen
+        @test length(base) == length(shifted)
+        @test all(
+            ((b, s),) -> s[1] == b[1] + 100 && s[2] == b[2] + 7, zip(base, shifted)
+        )
+    end
+
+    @testset "Entry targets: guard, AbsoluteColumn" begin
+        lin = LinearIndices(indices(Ω))
+        I = CartesianIndex(1, 1)
+
+        # inside: the row follows off_v, the column off_u, both shifted by the block
+        @test _entry_target(lin, CartesianIndex(3, 3), (0, 0), (0, 0), 0, 0) ==
+              (lin[3, 3], lin[3, 3])
+        @test _entry_target(lin, CartesianIndex(3, 3), (0, 0), (0, 0), 10, 5) ==
+              (lin[3, 3] + 10, lin[3, 3] + 5)
+
+        # a row off the grid drops the entry, and so does a column off the grid
+        @test _entry_target(lin, I, (0, 0), (-1, 0), 0, 0) == (0, 0)
+        @test _entry_target(lin, I, (-1, 0), (0, 0), 0, 0) == (0, 0)
+
+        # an interpolation entry names its source column outright rather than an offset
+        @test _trial_column(lin, I, AbsoluteColumn(42)) == 42
+        @test _entry_target(
+            lin, CartesianIndex(2, 2), AbsoluteColumn(42), (0, 0), 0, 3
+        ) == (lin[2, 2], 45)
+    end
+end
+
+@testset "Interior/boundary peeling (#160)" begin
+    # `visit_bilinear_stencil` splits the grid into an interior core (no bounds guard)
+    # and a boundary shell (the old guarded path) whenever `_stencil_margin(term)` and
+    # the grid size allow it. Every test below exists because the margin can exceed 1 --
+    # a composed difference or a multi-cell shift -- and treating a 1-cell rim as always
+    # safe for those would silently corrupt the rows nearest the boundary rather than
+    # merely running slower.
+    using Bramble:
+                   _stencil_margin,
+                   _peelable,
+                   _interior_range,
+                   _boundary_shell_slabs,
+                   _visit_guarded_region!,
+                   shift_op,
+                   ShiftNode,
+                   markers,
+                   mesh
+
+    # Not a hardcoded 1.
+    @testset "_stencil_margin reads composed reach" begin
+        u, v = TrialFunction{2}(), TestFunction{2}()
+        @test _stencil_margin(resolve_ast(innerₕ(u, v))) == 0
+        @test _stencil_margin(resolve_ast(innerₕ(D₋ₓ(u), v))) == 1
+        @test _stencil_margin(resolve_ast(innerₕ(D₋ₓ(D₋ₓ(u)), v))) == 2
+        @test _stencil_margin(resolve_ast(innerₕ(shift_op(u, 1, 3), v))) == 3
+        # the reach comes from whichever side -- trial or test -- reaches further
+        @test _stencil_margin(resolve_ast(innerₕ(u, D₋ₓ(v)))) == 1
+        @test _stencil_margin(resolve_ast(innerₕ(D₋ₓ(u), D₋ₓ(D₋ₓ(v))))) == 2
+        # a sum's margin is the widest of its terms
+        @test _stencil_margin(resolve_ast(innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))) == 1
+    end
+
+    # They cover the grid exactly once.
+    @testset "Interior + boundary slabs partition" begin
+        for D in TEST_DIMS, margin in (0, 1, 2)
+
+            Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
+            Ω = mesh(Ωd, ntuple(_ -> 7, D), ntuple(_ -> true, D))
+            grid_inds = indices(Ω)
+            ax = axes(grid_inds)
+            @test _peelable(ax, margin)   # every axis here has 7 >= 2*margin points
+
+            lin = LinearIndices(grid_inds)
+            seen = Int[]
+            for I in CartesianIndices(map(r -> _interior_range(r, margin), ax))
+                push!(seen, lin[I])
+            end
+            for slab in _boundary_shell_slabs(ax, margin), I in slab
+
+                push!(seen, lin[I])
+            end
+            # every grid point exactly once: no gap, no double-scatter
+            @test sort(seen) == 1:length(grid_inds)
+        end
+
+        # A margin that cannot fit twice into the shortest axis must refuse to peel,
+        # rather than let the low and high rim overlap and double-scatter a point.
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 7), (true, true))
+        @test !_peelable(axes(indices(Ω)), 2)
+    end
+
+    # Agrees with the guarded fallback, entry for entry.
+    @testset "Peeled traversal matches fallback" begin
+        struct _MarginCollectSink
             seen::Vector{Tuple{Int, Int, Float64}}
         end
-        # The sink contract's fifth argument is the replay slot, which only `ReplaySink`
-        # reads; a recording sink ignores it.
-        Bramble._sink_entry!(s::CollectSink, row::Int, col::Int, w, ::Int) = (
+        Bramble._sink_entry!(s::_MarginCollectSink, row::Int, col::Int, w, ::Int) = (
             push!(s.seen, (row, col, Float64(w))); nothing)
 
-        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (true, true))
-        W = gridspace(Ω)
-        u, v = TrialFunction{2}(), TestFunction{2}()
-
-        @testset "Every scattered entry is in the pattern" begin
-            # The pattern `allocate_system_matrix` preallocates is built by the coordinate
-            # walk, so the invariant can be asserted directly rather than inferred from a
-            # matrix that came out right.
-            for f in (
-                form(W, W, (a, b) -> innerₕ(a, b)),
-                form(W, W, (a, b) -> innerₕ(D₋ₓ(a), D₋ₓ(b))),
-                form(W, W, (a, b) -> inner₊(∇ₕ(a), ∇ₕ(b))),
-                form(W, W, (a, b) -> innerₕ(Dcₓ(a), M₊ᵧ(b)))
-            )
-                ast = resolve_form_ast(f)
-                pattern = Set(zip(SparseArrays.findnz(allocate_system_matrix(f))[1:2]...))
-                got = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0)
-                @test !isempty(got.seen)
-                @test all(((r, c, _),) -> (r, c) in pattern, got.seen)
-            end
-        end
-
-        # The value pass does not de-duplicate.
-        @testset "Values do not de-duplicate" begin
-            # Two identical terms name every coordinate twice. The values have to
-            # accumulate both, or the matrix comes out halved.
-            #
-            # Built with `resolve_ast` directly rather than `form(...)`: `form` runs
-            # `simplify_ast`, which combines two identical terms into
-            # one (`innerₕ(a,b) + innerₕ(a,b) -> 2 * innerₕ(a,b)`) precisely to avoid the
-            # double sweep this test exists to protect against -- so producing the
-            # duplicate-term tree this traversal invariant is about has to bypass it.
-            ast = resolve_ast(innerₕ(u, v) + innerₕ(u, v))
-            once = visit_bilinear_stencil(CollectSink([]), resolve_ast(innerₕ(u, v)), W, 0, 0)
-            got = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0)
-
-            @test length(got.seen) == 2 * length(once.seen)
-            # and the halving it protects against shows up in the assembled matrix
-            @test Matrix(assemble(form(W, W, (a, b) -> innerₕ(a, b) + innerₕ(a, b)))) ≈
-                  2 .* Matrix(assemble(form(W, W, (a, b) -> innerₕ(a, b))))
-        end
-
-        @testset "Block offsets shift sink entries" begin
-            ast = resolve_form_ast(form(W, W, (a, b) -> innerₕ(a, b)))
-            base = visit_bilinear_stencil(CollectSink([]), ast, W, 0, 0).seen
-            shifted = visit_bilinear_stencil(CollectSink([]), ast, W, 100, 7).seen
-            @test length(base) == length(shifted)
-            @test all(
-                ((b, s),) -> s[1] == b[1] + 100 && s[2] == b[2] + 7, zip(base, shifted)
-            )
-        end
-
-        @testset "Entry targets: guard, AbsoluteColumn" begin
-            lin = LinearIndices(indices(Ω))
-            I = CartesianIndex(1, 1)
-
-            # inside: the row follows off_v, the column off_u, both shifted by the block
-            @test _entry_target(lin, CartesianIndex(3, 3), (0, 0), (0, 0), 0, 0) ==
-                  (lin[3, 3], lin[3, 3])
-            @test _entry_target(lin, CartesianIndex(3, 3), (0, 0), (0, 0), 10, 5) ==
-                  (lin[3, 3] + 10, lin[3, 3] + 5)
-
-            # a row off the grid drops the entry, and so does a column off the grid
-            @test _entry_target(lin, I, (0, 0), (-1, 0), 0, 0) == (0, 0)
-            @test _entry_target(lin, I, (-1, 0), (0, 0), 0, 0) == (0, 0)
-
-            # an interpolation entry names its source column outright rather than an offset
-            @test _trial_column(lin, I, AbsoluteColumn(42)) == 42
-            @test _entry_target(
-                lin, CartesianIndex(2, 2), AbsoluteColumn(42), (0, 0), 0, 3
-            ) == (lin[2, 2], 45)
-        end
-    end
-
-    @testset "Interior/boundary peeling (#160)" begin
-        # `visit_bilinear_stencil` splits the grid into an interior core (no bounds guard)
-        # and a boundary shell (the old guarded path) whenever `_stencil_margin(term)` and
-        # the grid size allow it. Every test below exists because the margin can exceed 1 --
-        # a composed difference or a multi-cell shift -- and treating a 1-cell rim as always
-        # safe for those would silently corrupt the rows nearest the boundary rather than
-        # merely running slower.
-        using Bramble:
-                       _stencil_margin,
-                       _peelable,
-                       _interior_range,
-                       _boundary_shell_slabs,
-                       _visit_guarded_region!,
-                       shift_op,
-                       ShiftNode,
-                       markers,
-                       mesh
-
-        # Not a hardcoded 1.
-        @testset "_stencil_margin reads composed reach" begin
-            u, v = TrialFunction{2}(), TestFunction{2}()
-            @test _stencil_margin(resolve_ast(innerₕ(u, v))) == 0
-            @test _stencil_margin(resolve_ast(innerₕ(D₋ₓ(u), v))) == 1
-            @test _stencil_margin(resolve_ast(innerₕ(D₋ₓ(D₋ₓ(u)), v))) == 2
-            @test _stencil_margin(resolve_ast(innerₕ(shift_op(u, 1, 3), v))) == 3
-            # the reach comes from whichever side -- trial or test -- reaches further
-            @test _stencil_margin(resolve_ast(innerₕ(u, D₋ₓ(v)))) == 1
-            @test _stencil_margin(resolve_ast(innerₕ(D₋ₓ(u), D₋ₓ(D₋ₓ(v))))) == 2
-            # a sum's margin is the widest of its terms
-            @test _stencil_margin(resolve_ast(innerₕ(u, v) + innerₕ(D₋ₓ(u), D₋ₓ(v)))) == 1
-        end
-
-        # They cover the grid exactly once.
-        @testset "Interior + boundary slabs partition" begin
-            for D in TEST_DIMS, margin in (0, 1, 2)
-
-                Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
-                Ω = mesh(Ωd, ntuple(_ -> 7, D), ntuple(_ -> true, D))
-                grid_inds = indices(Ω)
-                ax = axes(grid_inds)
-                @test _peelable(ax, margin)   # every axis here has 7 >= 2*margin points
-
-                lin = LinearIndices(grid_inds)
-                seen = Int[]
-                for I in CartesianIndices(map(r -> _interior_range(r, margin), ax))
-                    push!(seen, lin[I])
-                end
-                for slab in _boundary_shell_slabs(ax, margin), I in slab
-
-                    push!(seen, lin[I])
-                end
-                # every grid point exactly once: no gap, no double-scatter
-                @test sort(seen) == 1:length(grid_inds)
-            end
-
-            # A margin that cannot fit twice into the shortest axis must refuse to peel,
-            # rather than let the low and high rim overlap and double-scatter a point.
-            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (3, 7), (true, true))
-            @test !_peelable(axes(indices(Ω)), 2)
-        end
-
-        # Agrees with the guarded fallback, entry for entry.
-        @testset "Peeled traversal matches fallback" begin
-            struct _MarginCollectSink
-                seen::Vector{Tuple{Int, Int, Float64}}
-            end
-            Bramble._sink_entry!(s::_MarginCollectSink, row::Int, col::Int, w, ::Int) = (
-                push!(s.seen, (row, col, Float64(w))); nothing)
-
-            for D in TEST_DIMS
-                Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
-                Ω = mesh(Ωd, ntuple(_ -> 6, D), ntuple(_ -> true, D))
-                W = gridspace(Ω)
-                u, v = TrialFunction{D}(), TestFunction{D}()
-
-                terms = Any[resolve_ast(innerₕ(u, v)), resolve_ast(innerₕ(D₋ₓ(u), D₋ₓ(v)))]  # Any: each AST is its own node type
-                D >= 2 && push!(terms, resolve_ast(inner₊(∇ₕ(u), ∇ₕ(v))))
-                # margin 2: a composed difference and a multi-cell shift, neither a
-                # single tap -- exactly the case a hardcoded 1-cell rim would get wrong.
-                push!(terms, resolve_ast(innerₕ(D₋ₓ(D₋ₓ(u)), v)))
-                push!(terms, resolve_ast(innerₕ(shift_op(u, 1, 2), v)))
-
-                mesh_markers = markers(Ω)
-                lin_indices = LinearIndices(indices(Ω))
-                for ast in terms
-                    peeled = visit_bilinear_stencil(
-                        _MarginCollectSink(Tuple{Int, Int, Float64}[]), ast, W, 0, 0
-                    ).seen
-                    guarded = _MarginCollectSink(Tuple{Int, Int, Float64}[])
-                    _visit_guarded_region!(
-                        guarded, ast, W, mesh_markers, lin_indices, indices(Ω), 0, 0
-                    )
-                    @test sort(peeled) == sort(guarded.seen)
-                end
-            end
-        end
-
-        # Nonzero Dirichlet boundary values solve correctly under peeling.
-        @testset "Peeling: nonzero Dirichlet values" begin
-            # The peeled path only ever changes which points skip the bounds guard; every
-            # point still gets visited exactly once (see above). This solves an actual
-            # manufactured Poisson problem with *nonzero* boundary data through the
-            # production `assemble`/`assemble!` pipeline -- which now always peels where
-            # `_stencil_margin` and the grid allow it -- and checks the discrete solution
-            # against the exact one, not merely that assembly runs.
-            sol(x) = 1 + sin(pi * x[1]) * cos(pi * x[2])
-            rhs(x) = 2 * pi^2 * sin(pi * x[1]) * cos(pi * x[2])
-
-            # Non-uniform (`false, false`): mesh1d.jl's `_generate_random_points!` draws from
-            # the global RNG, so an unseeded run's point placement differs run to run -- and
-            # the norm bound below is a fixed threshold that an unlucky draw could miss.
-            # Seeded so the test is reproducible, not just usually passing (see the identical
-            # rationale in test/form/type_cached_assemble.jl).
-            Random.seed!(20260912)
-            Ωd = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
-            Ω = mesh(Ωd, (48, 48), (false, false))
+        for D in TEST_DIMS
+            Ωd = domain(reduce(×, ntuple(_ -> interval(0.0, 1.0), D)))
+            Ω = mesh(Ωd, ntuple(_ -> 6, D), ntuple(_ -> true, D))
             W = gridspace(Ω)
-            bcs = dirichlet_constraints(Ωd, :boundary => sol)
+            u, v = TrialFunction{D}(), TestFunction{D}()
 
-            a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
-            A = assemble(a; dirichlet = :boundary)
-            fₕ = element(W)
-            avgₕ!(fₕ, rhs)
-            l = form(W, v -> innerₕ(fₕ, v))
-            F = assemble(l; dirichlet = bcs)
+            terms = Any[resolve_ast(innerₕ(u, v)), resolve_ast(innerₕ(D₋ₓ(u), D₋ₓ(v)))]  # Any: each AST is its own node type
+            D >= 2 && push!(terms, resolve_ast(inner₊(∇ₕ(u), ∇ₕ(v))))
+            # margin 2: a composed difference and a multi-cell shift, neither a
+            # single tap -- exactly the case a hardcoded 1-cell rim would get wrong.
+            push!(terms, resolve_ast(innerₕ(D₋ₓ(D₋ₓ(u)), v)))
+            push!(terms, resolve_ast(innerₕ(shift_op(u, 1, 2), v)))
 
-            uₕ = element(W)
-            uₕ .= A \ F
-            # `sol` is nonzero along the whole boundary (`sin(pi*x[1])` vanishes there, but
-            # the constant `1` does not), so this exercises exactly the near-boundary rows
-            # the boundary shell (not the interior core) assembles.
-            @test norm₁ₕ(uₕ .- Rₕ(W, sol)) < 6e-3
+            mesh_markers = markers(Ω)
+            lin_indices = LinearIndices(indices(Ω))
+            for ast in terms
+                peeled = visit_bilinear_stencil(
+                    _MarginCollectSink(Tuple{Int, Int, Float64}[]), ast, W, 0, 0
+                ).seen
+                guarded = _MarginCollectSink(Tuple{Int, Int, Float64}[])
+                _visit_guarded_region!(
+                    guarded, ast, W, mesh_markers, lin_indices, indices(Ω), 0, 0
+                )
+                @test sort(peeled) == sort(guarded.seen)
+            end
         end
     end
 
-    @testset "Form construction" begin
-        # `form` used to evaluate a sample stencil and bin the whole grid into a vector of
-        # vectors before anything was assembled (9,271,600 B at 90,000 degrees of freedom).
-        # The colouring is a property of the AST and the grid, so it is derived where it is
-        # used.
-        function _form_bytes(W)
-            form(W, W, (u, v) -> innerₕ(u, v))
-            return @allocated form(W, W, (u, v) -> innerₕ(u, v))
-        end
-        @test _form_bytes(Wₕ) < 8 * n          # far below one vector, let alone the grid
+    # Nonzero Dirichlet boundary values solve correctly under peeling.
+    @testset "Peeling: nonzero Dirichlet values" begin
+        # The peeled path only ever changes which points skip the bounds guard; every
+        # point still gets visited exactly once (see above). This solves an actual
+        # manufactured Poisson problem with *nonzero* boundary data through the
+        # production `assemble`/`assemble!` pipeline -- which now always peels where
+        # `_stencil_margin` and the grid allow it -- and checks the discrete solution
+        # against the exact one, not merely that assembly runs.
+        sol(x) = 1 + sin(pi * x[1]) * cos(pi * x[2])
+        rhs(x) = 2 * pi^2 * sin(pi * x[1]) * cos(pi * x[2])
 
-        # and a malformed expression fails here rather than at the first assemble
-        @test_throws ArgumentError form(Wₕ, Wₕ, (u, v) -> 42)
+        # Non-uniform (`false, false`): mesh1d.jl's `_generate_random_points!` draws from
+        # the global RNG, so an unseeded run's point placement differs run to run -- and
+        # the norm bound below is a fixed threshold that an unlucky draw could miss.
+        # Seeded so the test is reproducible, not just usually passing (see the identical
+        # rationale in test/form/type_cached_assemble.jl).
+        Random.seed!(20260912)
+        Ωd = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+        Ω = mesh(Ωd, (48, 48), (false, false))
+        W = gridspace(Ω)
+        bcs = dirichlet_constraints(Ωd, :boundary => sol)
+
+        a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        A = assemble(a; dirichlet = :boundary)
+        fₕ = element(W)
+        avgₕ!(fₕ, rhs)
+        l = form(W, v -> innerₕ(fₕ, v))
+        F = assemble(l; dirichlet = bcs)
+
+        uₕ = element(W)
+        uₕ .= A \ F
+        # `sol` is nonzero along the whole boundary (`sin(pi*x[1])` vanishes there, but
+        # the constant `1` does not), so this exercises exactly the near-boundary rows
+        # the boundary shell (not the interior core) assembles.
+        @test norm₁ₕ(uₕ .- Rₕ(W, sol)) < 6e-3
+    end
+end
+
+@testset "Form construction" begin
+    # `form` used to evaluate a sample stencil and bin the whole grid into a vector of
+    # vectors before anything was assembled (9,271,600 B at 90,000 degrees of freedom).
+    # The colouring is a property of the AST and the grid, so it is derived where it is
+    # used.
+    function _form_bytes(W)
+        form(W, W, (u, v) -> innerₕ(u, v))
+        return @allocated form(W, W, (u, v) -> innerₕ(u, v))
+    end
+    @test _form_bytes(Wₕ) < 8 * n          # far below one vector, let alone the grid
+
+    # and a malformed expression fails here rather than at the first assemble
+    @test_throws ArgumentError form(Wₕ, Wₕ, (u, v) -> 42)
+end
+
+# The matrix-type seam: `allocate_system_matrix`, `assemble`,
+# `assemble!` and `assemble_parallel!` read the matrix type from
+# `matrix_type(backend(test_space(form)))` rather than hardcoding `SparseMatrixCSC`,
+# reaching storage through `_scatter_position`/`_scatter_add!` (bilinear_traversal.jl),
+# `_allocate_from_pattern` (bilinear_pattern.jl) and `_zero_stored!` (bilinear.jl), each
+# with a `SparseMatrixCSC` method and a generic `AbstractMatrix` fallback. A dense
+# `Matrix{Float64}` backend exercises that fallback -- the positive control proving the
+# seam is real -- and must assemble the exact same values as the default CSC backend,
+# with and without Dirichlet and `symmetrize!`, while the CSC path keeps its
+# zero-allocation refill.
+@testset "Dense backend" begin
+    Sd = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Ωd_domain = domain(Sd, :dir => (x) -> x[1] ≈ 0.0)
+    Ωc = mesh(Ωd_domain, (7, 6), (true, true))
+    Ωd = mesh(Ωd_domain, (7, 6), (true, true); backend = backend(matrix_type = Matrix{Float64}))
+    Wc, Wd = gridspace(Ωc), gridspace(Ωd)
+
+    κ = x -> 1 + x[1] * x[2]
+    f = (W) -> begin
+        kh = Rₕ(W, κ)
+        form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(kh * u, v))
     end
 
-    # The matrix-type seam: `allocate_system_matrix`, `assemble`,
-    # `assemble!` and `assemble_parallel!` read the matrix type from
-    # `matrix_type(backend(test_space(form)))` rather than hardcoding `SparseMatrixCSC`,
-    # reaching storage through `_scatter_position`/`_scatter_add!` (bilinear_traversal.jl),
-    # `_allocate_from_pattern` (bilinear_pattern.jl) and `_zero_stored!` (bilinear.jl), each
-    # with a `SparseMatrixCSC` method and a generic `AbstractMatrix` fallback. A dense
-    # `Matrix{Float64}` backend exercises that fallback -- the positive control proving the
-    # seam is real -- and must assemble the exact same values as the default CSC backend,
-    # with and without Dirichlet and `symmetrize!`, while the CSC path keeps its
-    # zero-allocation refill.
-    @testset "Dense backend" begin
-        Sd = interval(0.0, 1.0) × interval(0.0, 1.0)
-        Ωd_domain = domain(Sd, :dir => (x) -> x[1] ≈ 0.0)
-        Ωc = mesh(Ωd_domain, (7, 6), (true, true))
-        Ωd = mesh(Ωd_domain, (7, 6), (true, true); backend = backend(matrix_type = Matrix{Float64}))
-        Wc, Wd = gridspace(Ωc), gridspace(Ωd)
+    @testset "assemble agrees with CSC" begin
+        Ac, Ad = assemble(f(Wc)), assemble(f(Wd))
+        @test Ac isa SparseMatrixCSC
+        @test Ad isa Matrix{Float64}
+        @test isapprox(Matrix(Ac), Ad; atol = 1e-13)
+        @test count(!iszero, Ad) == nnz(Ac)
+    end
 
-        κ = x -> 1 + x[1] * x[2]
-        f = (W) -> begin
-            kh = Rₕ(W, κ)
-            form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(kh * u, v))
-        end
+    @testset "Dirichlet and symmetrize agree with CSC" begin
+        Acd = assemble(f(Wc); dirichlet = (:dir,))
+        Add = assemble(f(Wd); dirichlet = (:dir,))
+        @test isapprox(Matrix(Acd), Add; atol = 1e-13)
 
-        @testset "assemble agrees with CSC" begin
-            Ac, Ad = assemble(f(Wc)), assemble(f(Wd))
-            @test Ac isa SparseMatrixCSC
-            @test Ad isa Matrix{Float64}
-            @test isapprox(Matrix(Ac), Ad; atol = 1e-13)
-            @test count(!iszero, Ad) == nnz(Ac)
-        end
+        Fc, Fd = ones(ndofs(Wc)), ones(ndofs(Wd))
+        Bc, Bd = copy(Acd), copy(Add)
+        symmetrize!(Bc, Fc, Wc, :dir)
+        symmetrize!(Bd, Fd, Wd, :dir)
+        @test isapprox(Matrix(Bc), Bd; atol = 1e-13)
+        @test isapprox(Fc, Fd)
+    end
 
-        @testset "Dirichlet and symmetrize agree with CSC" begin
-            Acd = assemble(f(Wc); dirichlet = (:dir,))
-            Add = assemble(f(Wd); dirichlet = (:dir,))
-            @test isapprox(Matrix(Acd), Add; atol = 1e-13)
+    @testset "assemble! refill: CSC zero-allocation" begin
+        Ac2, Ad2 = allocate_system_matrix(f(Wc)), allocate_system_matrix(f(Wd))
+        @test Ac2 isa SparseMatrixCSC
+        @test Ad2 isa Matrix{Float64}
 
-            Fc, Fd = ones(ndofs(Wc)), ones(ndofs(Wd))
-            Bc, Bd = copy(Acd), copy(Add)
-            symmetrize!(Bc, Fc, Wc, :dir)
-            symmetrize!(Bd, Fd, Wd, :dir)
-            @test isapprox(Matrix(Bc), Bd; atol = 1e-13)
-            @test isapprox(Fc, Fd)
-        end
+        fc, fd = f(Wc), f(Wd)
+        assemble!(Ac2, fc)
+        assemble!(Ad2, fd)
+        @test isapprox(Matrix(Ac2), Ad2; atol = 1e-13)
 
-        @testset "assemble! refill: CSC zero-allocation" begin
-            Ac2, Ad2 = allocate_system_matrix(f(Wc)), allocate_system_matrix(f(Wd))
-            @test Ac2 isa SparseMatrixCSC
-            @test Ad2 isa Matrix{Float64}
-
-            fc, fd = f(Wc), f(Wd)
-            assemble!(Ac2, fc)
-            assemble!(Ad2, fd)
-            @test isapprox(Matrix(Ac2), Ad2; atol = 1e-13)
-
-            assemble!(Ac2, fc)
-            @test (@allocated assemble!(Ac2, fc)) == 0
-        end
+        assemble!(Ac2, fc)
+        _refill_bytes(A, a) = @allocated assemble!(A, a)
+        @test _refill_bytes(Ac2, fc) == 0
     end
 end
 
