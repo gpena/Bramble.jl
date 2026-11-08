@@ -13,7 +13,7 @@ import SparseArrays
 using SparseArrays: sparse, nnz, nonzeros, rowvals, SparseMatrixCSC
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS, TEST_DIMS, @test_allocs
+using ..TestUtils: WITH_SLOW_TESTS, TEST_DIMS, @test_allocs, _grid_sample
 using ..TestUtils: _nonuniform_points, _Const, _x1, _x1_lt_half, _sin_x1
 using Bramble:
                BilinearForm,
@@ -737,16 +737,28 @@ end
     # entries the parts drop: the seeded mesh pins it.
     Random.seed!(20261014)
     Wd = gridspace(mesh(Ωm, (7, 9), (false, false)))
-    for (Dop, nnz_a, nnz_b) in ((D₋ₓ, 90, 117), (Bramble.D₊ᵧ, 92, 119),
-        (Bramble.Dcₓ, 108, 108), (Bramble.D̃ₓ, 90, 117), (Bramble.D̽ᵧ, 148, 175))
-        for (whole, parts, nnz_whole) in (
-            ((u, v) -> innerₕ(u, Dop(R(:c, v + R(:l, v) + R(:r, v)))),
-            Tuple((u, v) -> innerₕ(u, Dop(R(:c, g(v))))
-            for g in (identity, v -> R(:l, v), v -> R(:r, v))), nnz_a),
-            ((u, v) -> innerₕ(u, Dop(v + R(:l, v) + R(:r, v) + R(:b, v))),
-            Tuple((u, v) -> innerₕ(u, Dop(g(v)))
-            for g in (identity, v -> R(:l, v), v -> R(:r, v), v -> R(:b, v))),
-            nnz_b))
+    # One row per difference and per shape of sum. The cover is D₋ₓ on both shapes; the
+    # rest are drawn in `slow` and all run in `grids` (`TestUtils._grid_sample`).
+    diff_rows = Any[]
+    for (nm, Dop, nnz_a, nnz_b) in (("D₋ₓ", D₋ₓ, 90, 117), ("D₊ᵧ", Bramble.D₊ᵧ, 92, 119),
+        ("Dcₓ", Bramble.Dcₓ, 108, 108), ("D̃ₓ", Bramble.D̃ₓ, 90, 117),
+        ("D̽ᵧ", Bramble.D̽ᵧ, 148, 175))
+        push!(diff_rows,
+            ("$nm over R(:c, v + L + R)",
+                (u, v) -> innerₕ(u, Dop(R(:c, v + R(:l, v) + R(:r, v)))),
+                Tuple((u, v) -> innerₕ(u, Dop(R(:c, g(v))))
+                for g in (identity, v -> R(:l, v), v -> R(:r, v))), nnz_a))
+        push!(diff_rows,
+            ("$nm over v + L + R + B",
+                (u, v) -> innerₕ(u, Dop(v + R(:l, v) + R(:r, v) + R(:b, v))),
+                Tuple((u, v) -> innerₕ(u, Dop(g(v)))
+                for g in (identity, v -> R(:l, v), v -> R(:r, v), v -> R(:b, v))),
+                nnz_b))
+    end
+    diff_cover = ("D₋ₓ over R(:c, v + L + R)", "D₋ₓ over v + L + R + B")
+    for (nm, whole, parts, nnz_whole) in
+        _grid_sample("difference over restricted sum", diff_rows, r -> r[1] in diff_cover, 3)
+        @testset "$nm" begin
             a = form(Wd, Wd, whole)
             A = assemble(a)
             @test _loop_bytes(A, a) == 0
@@ -762,20 +774,25 @@ end
     # Past 16 products they pair as before rather than leave the product whole (673104
     # B paired, 3413584 B whole, seventeen summands).
     DD = v -> D₋ₓ(Bramble.D₊ᵧ(v))
-    for (whole, parts, nnz_whole) in (
-        ((u, v) -> innerₕ(u, DD(R(:l, v) + R(:r, v))),
-        ((u, v) -> innerₕ(u, DD(R(:l, v))), (u, v) -> innerₕ(u, DD(R(:r, v)))), 131),
-        ((u, v) -> innerₕ(u, DD(R(:c, v + R(:l, v) + R(:r, v)))),
-        Tuple((u, v) -> innerₕ(u, DD(R(:c, g(v))))
-        for g in (identity, v -> R(:l, v), v -> R(:r, v))), 176),
-        ((u, v) -> innerₕ(DD(R(:l, u) + R(:r, u)), v),
-        ((u, v) -> innerₕ(DD(R(:l, u)), v), (u, v) -> innerₕ(DD(R(:r, u)), v)), 131))
-        a = form(Wd, Wd, whole)
-        A = assemble(a)
-        @test _loop_bytes(A, a) == 0
-        P = sum(assemble(form(Wd, Wd, p)) for p in parts)
-        @test Matrix(A) ≈ Matrix(P)
-        @test nnz(A) == nnz_whole
+    dd_rows = Any[
+        ("DD, test side", (u, v) -> innerₕ(u, DD(R(:l, v) + R(:r, v))),
+            ((u, v) -> innerₕ(u, DD(R(:l, v))), (u, v) -> innerₕ(u, DD(R(:r, v)))), 131),
+        ("DD under R(:c)", (u, v) -> innerₕ(u, DD(R(:c, v + R(:l, v) + R(:r, v)))),
+            Tuple((u, v) -> innerₕ(u, DD(R(:c, g(v))))
+            for g in (identity, v -> R(:l, v), v -> R(:r, v))), 176),
+        ("DD, trial side", (u, v) -> innerₕ(DD(R(:l, u) + R(:r, u)), v),
+            ((u, v) -> innerₕ(DD(R(:l, u)), v), (u, v) -> innerₕ(DD(R(:r, u)), v)), 131)]
+    dd_cover = ("DD, test side", "DD, trial side")
+    for (nm, whole, parts, nnz_whole) in
+        _grid_sample("nested difference", dd_rows, r -> r[1] in dd_cover, 1)
+        @testset "$nm" begin
+            a = form(Wd, Wd, whole)
+            A = assemble(a)
+            @test _loop_bytes(A, a) == 0
+            P = sum(assemble(form(Wd, Wd, p)) for p in parts)
+            @test Matrix(A) ≈ Matrix(P)
+            @test nnz(A) == nnz_whole
+        end
     end
     fd = element(Wd)
     fd .= 1.0 .+ (1:length(fd)) ./ 11
@@ -795,14 +812,26 @@ end
     # `Mₓ(D₊ᵧ(R(:l, v) + R(:r, v)))` and `D₋ₓ(M₊ᵧ(…))` refilled 38304 B, the four-summand
     # average 244976 B, the linear form 122880 B, though each piece refilled with 0 B.
     Mav = Bramble.Mₓ
-    for (outer, inner, nnz_c) in ((Mav, Bramble.D₊ᵧ, 176), (D₋ₓ, M₊ᵧ, 176),
-        (Bramble.jumpₓ, Bramble.D₊ᵧ, 167), (Mav, M₊ᵧ, 176))
+    # The cover is one row per operator kind (average, difference over an average, jump,
+    # average over an average), the two shapes of sum alternating between them.
+    avg_rows = Any[]
+    for (nm, outer, inner, nnz_c) in (("Mₓ∘D₊ᵧ", Mav, Bramble.D₊ᵧ, 176),
+        ("D₋ₓ∘M₊ᵧ", D₋ₓ, M₊ᵧ, 176), ("jumpₓ∘D₊ᵧ", Bramble.jumpₓ, Bramble.D₊ᵧ, 167),
+        ("Mₓ∘M₊ᵧ", Mav, M₊ᵧ, 176))
         W2 = v -> outer(inner(v))
-        for (whole, gs, nnz_whole) in (
-            ((u, v) -> innerₕ(u, W2(R(:l, v) + R(:r, v))),
-            (v -> R(:l, v), v -> R(:r, v)), 131),
-            ((u, v) -> innerₕ(u, W2(R(:c, v + R(:l, v) + R(:r, v)))),
-            (v -> R(:c, v), v -> R(:c, R(:l, v)), v -> R(:c, R(:r, v))), nnz_c))
+        push!(avg_rows,
+            ("$nm over L + R", (u, v) -> innerₕ(u, W2(R(:l, v) + R(:r, v))),
+                W2, (v -> R(:l, v), v -> R(:r, v)), 131))
+        push!(avg_rows,
+            ("$nm over R(:c, v + L + R)",
+                (u, v) -> innerₕ(u, W2(R(:c, v + R(:l, v) + R(:r, v)))),
+                W2, (v -> R(:c, v), v -> R(:c, R(:l, v)), v -> R(:c, R(:r, v))), nnz_c))
+    end
+    avg_cover = ("Mₓ∘D₊ᵧ over L + R", "D₋ₓ∘M₊ᵧ over R(:c, v + L + R)",
+        "jumpₓ∘D₊ᵧ over R(:c, v + L + R)", "Mₓ∘M₊ᵧ over L + R")
+    for (nm, whole, W2, gs, nnz_whole) in
+        _grid_sample("average and jump over restricted sum", avg_rows, r -> r[1] in avg_cover, 2)
+        @testset "$nm" begin
             a = form(Wd, Wd, whole)
             A = assemble(a)
             @test _loop_bytes(A, a) == 0
@@ -863,21 +892,34 @@ end
     L5 = (D₋ₓ, (u -> D₋ₓ(R(s, u)) for s in (:l, :r, :b, :t))...)
     U5 = (identity, (u -> R(s, u) for s in (:l, :r, :b, :t))...)
     V5 = (identity, (v -> R(s, D₋ₓ(v)) for s in (:l, :r, :b, :t))...)
-    for (lhs, rhs, nnz_whole, max_bytes) in (
-        ((identity, u -> R(:l, u)), (identity, v -> R(:t, D₋ₓ(v))), 69, 0),
-        ((D₋ₓ, u -> R(:l, D₋ₓ(u))), (identity, v -> R(:t, D₋ₓ(v))), 123, 0),
-        (L3, R3, 171, 0),
-        ((identity, D₋ₓ, u -> R(:l, u)), (identity, v -> R(:t, v)), 117, 0),
-        ((D₋ₓ, u -> D₋ₓ(R(:l, u))), (v -> D₋ₓ(R(:r, v)),), 126, 0),
-        (L5, L5[1:4], 171, 82848),
-        (U5, V5, 82, 11952))
-        a = form(Wd, Wd, (u, v) -> innerₕ(sum(f(u) for f in lhs), sum(g(v) for g in rhs)))
-        A = assemble(a)
-        @test _loop_bytes(A, a) <= max_bytes
-        P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), g(v))))
-        for f in lhs for g in rhs)
-        @test Matrix(A) ≈ Matrix(P)
-        @test nnz(A) == nnz_whole
+    # The cover is a plain summand beside a restriction of another operand, the three-by-
+    # three difference sums, and the past-16 fallback (`L5` against four); the other rows
+    # are drawn in `slow` and all run in `grids` (`TestUtils._grid_sample`).
+    plain_rows = Any[
+        ("id + R(u) | id + R(D₋ₓ(v))",
+            (identity, u -> R(:l, u)), (identity, v -> R(:t, D₋ₓ(v))), 69, 0),
+        ("D₋ₓ + R(D₋ₓ(u)) | id + R(D₋ₓ(v))",
+            (D₋ₓ, u -> R(:l, D₋ₓ(u))), (identity, v -> R(:t, D₋ₓ(v))), 123, 0),
+        ("L3 | R3", L3, R3, 171, 0),
+        ("id + D₋ₓ + R(u) | id + R(v)",
+            (identity, D₋ₓ, u -> R(:l, u)), (identity, v -> R(:t, v)), 117, 0),
+        ("D₋ₓ + D₋ₓ(R(u)) | D₋ₓ(R(v))",
+            (D₋ₓ, u -> D₋ₓ(R(:l, u))), (v -> D₋ₓ(R(:r, v)),), 126, 0),
+        ("L5 | L5[1:4]", L5, L5[1:4], 171, 82848),
+        ("U5 | V5", U5, V5, 82, 11952)]
+    plain_cover = ("id + R(u) | id + R(D₋ₓ(v))", "L3 | R3", "L5 | L5[1:4]")
+    for (nm, lhs, rhs, nnz_whole, max_bytes) in
+        _grid_sample("plain summand beside restriction", plain_rows, r -> r[1] in plain_cover, 2)
+        @testset "$nm" begin
+            a = form(Wd, Wd,
+                (u, v) -> innerₕ(sum(f(u) for f in lhs), sum(g(v) for g in rhs)))
+            A = assemble(a)
+            @test _loop_bytes(A, a) <= max_bytes
+            P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), g(v))))
+            for f in lhs for g in rhs)
+            @test Matrix(A) ≈ Matrix(P)
+            @test nnz(A) == nnz_whole
+        end
     end
     _check_split(((u, v) -> innerₕ(u, 2.0 * R(:l, v)), (u, v) -> innerₕ(u, 3 * R(:r, v))))
     _check_split((
@@ -888,22 +930,27 @@ end
     # for the negated D₋ₓ sum, 49248 B for each D̽ᵧ form; 0 B since 1ed87350, which
     # shifts a constant scale over a restriction by the restriction's rule. The pattern
     # keeps the unsplit product's zero weights, so it is bounded, not equal.
-    for (whole, parts, nnz_max) in (
-        ((u, v) -> innerₕ(u, D₋ₓ(-R(:l, v) + R(:r, v) - R(:b, v) + v)),
-        ((u, v) -> innerₕ(u, D₋ₓ(-R(:l, v))), (u, v) -> innerₕ(u, D₋ₓ(R(:r, v))),
-            (u, v) -> innerₕ(u, D₋ₓ(-R(:b, v))), (u, v) -> innerₕ(u, D₋ₓ(v))), 117),
-        ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(v - R(:l, v))),
-        ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(v)),
-            (u, v) -> innerₕ(u, Bramble.D̽ᵧ(-R(:l, v)))), 175),
-        ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v) + v)),
-        ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v))),
-            (u, v) -> innerₕ(u, Bramble.D̽ᵧ(v))), 175))
-        a = form(Wd, Wd, whole)
-        A = assemble(a)
-        @test _loop_bytes(A, a) == 0
-        P = sum(assemble(form(Wd, Wd, p)) for p in parts)
-        @test Matrix(A) ≈ Matrix(P)
-        @test nnz(A) <= nnz_max
+    negated_rows = Any[
+        ("D₋ₓ of a negated sum", (u, v) -> innerₕ(u, D₋ₓ(-R(:l, v) + R(:r, v) - R(:b, v) + v)),
+            ((u, v) -> innerₕ(u, D₋ₓ(-R(:l, v))), (u, v) -> innerₕ(u, D₋ₓ(R(:r, v))),
+                (u, v) -> innerₕ(u, D₋ₓ(-R(:b, v))), (u, v) -> innerₕ(u, D₋ₓ(v))), 117),
+        ("D̽ᵧ of v - R", (u, v) -> innerₕ(u, Bramble.D̽ᵧ(v - R(:l, v))),
+            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(v)),
+                (u, v) -> innerₕ(u, Bramble.D̽ᵧ(-R(:l, v)))), 175),
+        ("D̽ᵧ of 2.0R + v", (u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v) + v)),
+            ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v))),
+                (u, v) -> innerₕ(u, Bramble.D̽ᵧ(v))), 175)]
+    negated_cover = ("D₋ₓ of a negated sum", "D̽ᵧ of 2.0R + v")
+    for (nm, whole, parts, nnz_max) in
+        _grid_sample("negated or scaled restriction", negated_rows, r -> r[1] in negated_cover, 1)
+        @testset "$nm" begin
+            a = form(Wd, Wd, whole)
+            A = assemble(a)
+            @test _loop_bytes(A, a) == 0
+            P = sum(assemble(form(Wd, Wd, p)) for p in parts)
+            @test Matrix(A) ≈ Matrix(P)
+            @test nnz(A) <= nnz_max
+        end
     end
     # A complex scale on a Float64 mesh widens the others to ComplexF64, as scales are
     # never narrowed: the form refills with 0 B (15680 B when left mixed), its values
@@ -952,41 +999,59 @@ end
         ast = _built(S, f)
         @test Bramble._split_restricted_products(ast, eltype(S)) === ast
     end
-    for (S, f, T, exact) in (
-        (W, (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v)), Float64,
-        true),
-        (W, (u, v) -> innerₕ(u, (2^53 + 1) * v + 0.5 * D₋ₓ(v)), Float64, true),
-        (W32u, (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v)), Float64, false),
-        (W32u, (u, v) -> innerₕ(0.1 * u + 3 * D₋ₓ(u), v), Float64, false),
-        (W32u, (u, v) -> innerₕ(u, π * v + 3 * D₋ₓ(v)), Float32, false))
-        ast = _built(S, f)
-        split = Bramble._split_restricted_products(ast, eltype(S))
-        for (side, op) in ((ast.left_op, split.left_op), (ast.right_op, split.right_op))
-            side isa Bramble.OperatorAdd || continue
-            @test all(==(T), _scale_types(op))
-            @test all(t -> promote_type(t, T) === T, _scale_types(side))
+    # The cover is the Rational on a Float64 mesh, the Float64 literal on a Float32 one and
+    # the `π` on a Float32 one; the Int past 2^53 and the trial-side form are drawn in `slow`
+    # and all run in `grids` (`TestUtils._grid_sample`).
+    widen_rows = Any[
+        ("Float64: 0.1v + 3D₋ₓ + (1//3)D₋ᵧ", W,
+            (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v) + (1 // 3) * D₋ᵧ(v)), Float64, true),
+        ("Float64: (2^53 + 1)v + 0.5D₋ₓ", W,
+            (u, v) -> innerₕ(u, (2^53 + 1) * v + 0.5 * D₋ₓ(v)), Float64, true),
+        ("Float32 mesh: 0.1v + 3D₋ₓ", W32u,
+            (u, v) -> innerₕ(u, 0.1 * v + 3 * D₋ₓ(v)), Float64, false),
+        ("Float32 mesh: 0.1u + 3D₋ₓ, trial side", W32u,
+            (u, v) -> innerₕ(0.1 * u + 3 * D₋ₓ(u), v), Float64, false),
+        ("Float32 mesh: πv + 3D₋ₓ", W32u,
+            (u, v) -> innerₕ(u, π * v + 3 * D₋ₓ(v)), Float32, false)]
+    widen_cover = ("Float64: 0.1v + 3D₋ₓ + (1//3)D₋ᵧ", "Float32 mesh: 0.1v + 3D₋ₓ",
+        "Float32 mesh: πv + 3D₋ₓ")
+    for (nm, S, f, T, exact) in
+        _grid_sample("scales widened to the mesh type", widen_rows, r -> r[1] in widen_cover, 1)
+        @testset "$nm" begin
+            ast = _built(S, f)
+            split = Bramble._split_restricted_products(ast, eltype(S))
+            for (side, op) in ((ast.left_op, split.left_op), (ast.right_op, split.right_op))
+                side isa Bramble.OperatorAdd || continue
+                @test all(==(T), _scale_types(op))
+                @test all(t -> promote_type(t, T) === T, _scale_types(side))
+            end
+            a = form(S, S, f)
+            A = assemble(a)
+            U = assemble(Bramble.BilinearForm{2, typeof(S), typeof(S), typeof(ast)}(
+                S, S, ast, Bramble._AssemblyCache{2}(ast)))
+            @test eltype(A) === eltype(U) === T
+            @test _loop_bytes(A, a) == 0
+            @test exact ? Matrix(A) == Matrix(U) :
+                  isapprox(Matrix(A), Matrix(U); rtol = 1e-6)
         end
-        a = form(S, S, f)
-        A = assemble(a)
-        U = assemble(Bramble.BilinearForm{2, typeof(S), typeof(S), typeof(ast)}(
-            S, S, ast, Bramble._AssemblyCache{2}(ast)))
-        @test eltype(A) === eltype(U) === T
-        @test _loop_bytes(A, a) == 0
-        @test exact ? Matrix(A) == Matrix(U) :
-              isapprox(Matrix(A), Matrix(U); rtol = 1e-6)
     end
     # Scales joining to a type that is not bits are left mixed: every product with a
     # BigFloat allocates, and converting the Int or Float64 to one took the refill from
     # 56688 and 63744 B to 106368 B. A BigFloat allocates differently on x64: the second
     # form took 65760 B on Linux, so its cap leaves room and stays well under 106368 B.
-    for (f, cap) in (((u, v) -> innerₕ(u, big(0.1) * v + 3 * D₋ₓ(v)), 56688),
-        ((u, v) -> innerₕ(u, big(3) * v + 0.5 * D₋ₓ(v)), 72000))
-        ast = _built(W, f)
-        @test Bramble._split_restricted_products(ast, Float64) === ast
-        a = form(W, W, f)
-        A = assemble(a)
-        @test eltype(A) === BigFloat
-        @test _loop_bytes(A, a) <= cap
+    big_rows = Any[
+        ("big(0.1)v + 3D₋ₓ", (u, v) -> innerₕ(u, big(0.1) * v + 3 * D₋ₓ(v)), 56688),
+        ("big(3)v + 0.5D₋ₓ", (u, v) -> innerₕ(u, big(3) * v + 0.5 * D₋ₓ(v)), 72000)]
+    for (nm, f, cap) in
+        _grid_sample("BigFloat scales left mixed", big_rows, r -> r[1] == "big(0.1)v + 3D₋ₓ", 1)
+        @testset "$nm" begin
+            ast = _built(W, f)
+            @test Bramble._split_restricted_products(ast, Float64) === ast
+            a = form(W, W, f)
+            A = assemble(a)
+            @test eltype(A) === BigFloat
+            @test _loop_bytes(A, a) <= cap
+        end
     end
 
     # A grid function scale over a restricted sum is distributed over its summands as
@@ -1036,17 +1101,24 @@ end
     # first form refilled 135520 B against 71792 B on a grid with one more marker.
     gd = element(Wd)
     parent(gd) .= parent(g)
-    for (lhs, rhs, max_bytes) in (
-        ((identity, u -> gd * (R(:l, u) + R(:r, u) + R(:c, u))),
-        (identity, v -> gd * (R(:b, v) + R(:t, v) + R(:c, v))), 72800),
-        ((u -> u + R(:c, D₋ₓ(u)), u -> gd * (R(:l, u) + R(:r, u) + R(:t, u))),
-        (identity, v -> gd * (R(:b, D₋ₓ(v)) + R(:t, v) + R(:c, v))), 91376))
-        a = form(Wd, Wd, (u, v) -> innerₕ(lhs[1](u) + lhs[2](u), rhs[1](v) + rhs[2](v)))
-        A = assemble(a)
-        @test _loop_bytes(A, a) <= max_bytes
-        P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), h(v))))
-        for f in lhs for h in rhs)
-        @test Matrix(A) ≈ Matrix(P)
+    long_rows = Any[
+        ("g-scaled sums of three markers",
+            (identity, u -> gd * (R(:l, u) + R(:r, u) + R(:c, u))),
+            (identity, v -> gd * (R(:b, v) + R(:t, v) + R(:c, v))), 72800),
+        ("g-scaled sums, one under D₋ₓ",
+            (u -> u + R(:c, D₋ₓ(u)), u -> gd * (R(:l, u) + R(:r, u) + R(:t, u))),
+            (identity, v -> gd * (R(:b, D₋ₓ(v)) + R(:t, v) + R(:c, v))), 91376)]
+    for (nm, lhs, rhs, max_bytes) in
+        _grid_sample("sums too long to split", long_rows, r -> r[1] == "g-scaled sums of three markers", 1)
+        @testset "$nm" begin
+            a = form(Wd, Wd,
+                (u, v) -> innerₕ(lhs[1](u) + lhs[2](u), rhs[1](v) + rhs[2](v)))
+            A = assemble(a)
+            @test _loop_bytes(A, a) <= max_bytes
+            P = sum(assemble(form(Wd, Wd, (u, v) -> innerₕ(f(u), h(v))))
+            for f in lhs for h in rhs)
+            @test Matrix(A) ≈ Matrix(P)
+        end
     end
     # An infinite value of `g` stays where its parts put it, and no finite entry
     # becomes NaN.
@@ -1247,7 +1319,16 @@ end
                             (u, v) -> innerₕ(u, c * Mₓ(Bramble.D₊ᵧ(Rr(v)))))))
             end
         end
-        for (n, whole, parts) in forms
+        # The cover is one row per scale kind (Rational, `π`, Float32 literal, grid
+        # function, `Ref`, restricted sum) and per operator kind (difference, nested,
+        # average): it runs on each push, the other rows are drawn in `slow` and all run in
+        # `grids` (`TestUtils._grid_sample`). The averages exist from 2D on.
+        cover = ("u, (1//3)v + 0.5D₋ₓ(v)", "u, πv + 0.5D₋ₓ(v)", "u, 0.1f0v + 0.5D₋ₓ(v)",
+            "u, g*v + 0.5D₋ₓ(v)", "u, r*v + 0.5D₋ₓ(v)", "u, D₋ₓ(2.0RR(v))",
+            "u, D₊ₓ(D₋ₓ(2.0RR(v)))", "u, Mₓ(D₊ᵧ(2.0RR(v)))")
+        picked = _grid_sample(
+            "Weights of several types $(T) $(D)D", forms, f -> f[1] in cover, 2)
+        for (n, whole, parts) in picked
             @testset "$(T) $(D)D $n" begin
                 ast = Bramble.simplify_ast(Bramble._resolve_surfaces_for_space(
                     resolve_ast(whole(Bramble.trial_function(W),
@@ -1393,13 +1474,22 @@ end
                 Tuple((1, (u, v) -> innerₕ(Mₓ(D₋ₓ(g * P(u))), D₋ₓ(Q(v))))
                 for P in (L, Rr), Q in (L, Rr))))
         # A distributed `Ref` scale is still read live.
-        a = form(W, W, forms[3][2])
+        ref_form = (u, v) -> innerₕ(u, D₋ₓ(r * RR(v)) + 0.5 * v)
+        a = form(W, W, ref_form)
         A = assemble(a)
         r[] = T(0.7)
         assemble!(A, a)
-        @test Matrix(A) ≈ Matrix(assemble(form(W, W, forms[3][2])))
+        @test Matrix(A) ≈ Matrix(assemble(form(W, W, ref_form)))
         r[] = T(0.1)
-        for (n, whole, parts) in forms
+        # The cover is one row per operator kind (jump, difference under a `Ref`, nested
+        # average) and per scale kind (`Ref`, `π`, grid function, constant); the rest are
+        # drawn in `slow` and all run in `grids` (`TestUtils._grid_sample`).
+        cover = ("jumpₓ(R(:c, v + L(v) + Rr(v)))", "u, D₋ₓ(r RR(v)) + 0.5v",
+            "u, D₋ₓ(π RR(v)) + 2v", "u, D₋ₓ(g (π L(v))) + D₋ₓ(g (π Rr(v)))",
+            "Mₓ(D₋ₓ(2.0 RR(u))), D₋ₓ(2RR(v)))")
+        picked = _grid_sample(
+            "Restricted sums under nodes $(T) $(D)D", forms, f -> f[1] in cover, 2)
+        for (n, whole, parts) in picked
             @testset "$(T) $(D)D $n" begin
                 a = form(W, W, whole)
                 pieces = [(s isa Tuple ? s : (s,), assemble(form(W, W, p)))
@@ -1546,7 +1636,14 @@ end
                         (0, 20736), true)])
         end
         # (name, form, (scale, term) pairs it equals, caps 1D and 2D, nonzero)
-        for (n, whole, parts, caps, nonzero) in forms
+        # The cover is a `Ref` scale under an average, a jump under a restriction, and a
+        # shift over two nested restrictions; the rest are drawn in `slow` and all run in
+        # `grids` (`TestUtils._grid_sample`). The last two rows exist from 2D on.
+        cover = ("Mₓ(r(u+L(u))), D₋ₓ(2.0L+3Rr)", "Mₓ(L+Rr+u+0.5u), C(jumpₓ(2.0(L+C(Rr))))",
+            "u, S₊ₓ(C(C(v+L)))", "M₊ᵧ(L+C(Rr)), M₊ᵧ((1//3)(L+C(Rr)))")
+        picked = _grid_sample(
+            "Restricted sums, padded taps $(D)D", forms, f -> f[1] in cover, 2)
+        for (n, whole, parts, caps, nonzero) in picked
             @testset "$(D)D $n" begin
                 a = form(W, W, whole)
                 want = sum(s * Matrix(assemble(form(W, W, p))) for (s, p) in parts)
