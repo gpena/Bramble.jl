@@ -165,6 +165,64 @@ function _list_case(p, policy, list)
     return sum(abs2, v)
 end
 
+# A band kernel taking an `Active` value `c` by value, beside arrays and constants as the
+# ghost operators' facet band takes its `_FacetFix` tuple: a scalar weight, an isbits tuple
+# of floats, or a tuple of structs with integer and `Bool` fields beside the floats. The
+# rule's return type was `Union{Nothing, T}` in every slot, which Enzyme rejects; the struct
+# tuple was the one that hit it here, at width 2 (gpena/Bramble.jl#1127).
+struct _Fix{T}
+    i::Int
+    on::Bool
+    h::NTuple{2, T}
+end
+_coef(w::Number, i::Int) = (w, w)
+_coef(c::NTuple{2, Number}, i::Int) = c
+function _coef(c::NTuple{2, _Fix}, i::Int)
+    f = c[mod1(i, 2)]
+    return (f.on ? f.h[1] : f.h[2] + f.i, f.h[2])
+end
+function _wide_band!(out, x, y, ax, dims::Tuple, c, n::Int, b::Int)
+    for i in Bramble._band_range(ax, n, b)
+        s, t = _coef(c, i)
+        out[i] = s * x[i]^2 + t * y[i] * dims[1] / dims[2]
+    end
+    return nothing
+end
+
+_active_arg(p, ::Val{:weight}) = p[3] * p[4]
+_active_arg(p, ::Val{:tuple}) = (p[3]^2, p[3] * p[4])
+function _active_arg(p, ::Val{:fix})
+    return (_Fix(1, true, (p[3]^2, p[4])), _Fix(2, false, (p[2], p[3] * p[4])))
+end
+
+# `_run_bands!` with the fields and the `Active` value all from `p`, on 37 points so the
+# bands are uneven.
+function _bands_case(p, policy, kind::Val)
+    x = [p[1] + 0.1k * p[2] for k in 1:37]
+    y = [p[3] - 0.05k * p[1] for k in 1:37]
+    out = zeros(eltype(p), 37)
+    Bramble._run_bands!(policy, _wide_band!, out, x, y, Base.OneTo(37), (37, 1),
+        _active_arg(p, kind))
+    return sum(abs2, out)
+end
+
+# The relative errors of reverse at width 1, reverse at width 2 (`BatchDuplicated`, lane
+# `k` seeded `cots[k]`) and forward under `CpuPolyester`, against ForwardDiff under
+# `CpuSerial`.
+function _bands_errors(case, p)
+    ref = ForwardDiff.gradient(q -> case(q, CpuSerial()), p)
+    fp = q -> case(q, CpuPolyester())
+    rev = Enzyme.gradient(set_runtime_activity(Enzyme.Reverse), Const(fp), p)[1]
+    g!(y, q) = (y[1] = fp(q); nothing)
+    cots = (1.0, -0.5)
+    dxs = (zero(p), zero(p))
+    Enzyme.autodiff(set_runtime_activity(Enzyme.Reverse), Const(g!), Const,
+        BatchDuplicated(zeros(1), ([cots[1]], [cots[2]])), BatchDuplicated(copy(p), dxs))
+    fwd = Enzyme.gradient(set_runtime_activity(Enzyme.Forward), Const(fp), p)[1]
+    return (_relerr(rev, ref), _relerr(dxs[1], cots[1] .* ref),
+        _relerr(dxs[2], cots[2] .* ref), _relerr(fwd, ref))
+end
+
 # Workload 1: a functional of the nodal field of `κₕ` (its derivative, its norm and an
 # assembled load) on the seeded 41 x 41 mesh of `EnzymePolicyCases`, under `policy`.
 function _dense_functional(policy)
@@ -298,6 +356,15 @@ end
             for shape in (Val(:constant), Val(:active), Val(:ref))
                 case = (q, pol) -> _closure_case(q, pol, shape)
                 @test all(<=(TOL), _gradients(case, p))
+            end
+        end
+
+        @testset "Band engine, Active by-value argument" begin
+            p = [0.3, -0.4, 0.7, 0.5]
+            for kind in (Val(:weight), Val(:tuple), Val(:fix))
+                n0 = EnzymePolicyCases._rule_entries("_batch_run_bands!")
+                @test all(<=(TOL), _bands_errors((q, pol) -> _bands_case(q, pol, kind), p))
+                @test EnzymePolicyCases._rule_entries("_batch_run_bands!") > n0
             end
         end
 
