@@ -248,17 +248,9 @@ methods = ["locality(::Type{<:GPUArraysCore.AbstractGPUArray}"]
 reason = "device-only: the locality of a GPUArrays array type, reached only for a device array; no device array type is in the test environment."
 
 
-# Uncounted lines: `headers` entries drop only the first line of a method (see the header of
-# .github/scripts/coverage_floor.jl); the body of each is covered on the Weekly run. The
+# Uncounted lines: the header line of an inlined block `function` needs no entry, because
+# coverage_floor.jl drops a 0-hit `function` line whose body has a hit (see its header). The
 # `methods` entries below are one-line constant methods a test calls but Julia never counts.
-
-[[exempt_function]]
-path = "src/assembly/stencil_eval.jl"
-headers = [
-    "_point_strength_val(s)",
-    "_visit_operator_add2(f::F",
-]
-reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
 
 [[exempt_function]]
 path = "src/assembly/stencil_eval.jl"
@@ -288,37 +280,6 @@ methods = [
 reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; a test calls each (test/form/bilinear.jl, test/form/common.jl, test/form/interpolation.jl, test/form/semidiscrete.jl)"
 
 [[exempt_function]]
-path = "src/ast/component.jl"
-headers = [
-    "component(::IndexedTrialFunction",
-    "component(::IndexedTestFunction",
-    "component(op::ShiftNode",
-    "component(op::RegionRestriction",
-    "component(op::OperatorScale",
-    "component(op::GridFunctionScale",
-    "component(op::OperatorAdd",
-]
-reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
-
-[[exempt_function]]
-path = "src/operators/skew.jl"
-headers = [
-    "_advection_operator(wₕ::NTuple",
-]
-reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
-
-[[exempt_function]]
-path = "src/operators/region_restriction.jl"
-headers = [
-    "_is_marked(words::AbstractMatrix{UInt64}, ids::NTuple",
-    "_probed_chain(op::_ProbedRestriction",
-    "_probed_chain(op::_Scale",
-    "_source_stencil_at(op::RegionRestriction",
-    "shifted_inner_stencil(inner_op::RegionRestriction",
-]
-reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
-
-[[exempt_function]]
 path = "src/operators/region_restriction.jl"
 methods = [
     "_reaches_probed(::_ProbedRestriction)",
@@ -338,28 +299,6 @@ reason = "uncounted: Julia's line table has no counter for a one-line inlined me
 path = "src/ast/stencil_pattern.jl"
 methods = ["_stencil_margin(op::_LeafNode)"]
 reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; a test calls it on the trial and test leaves (test/form/bilinear.jl, `_stencil_margin reads composed reach`)"
-
-[[exempt_function]]
-path = "src/operators/normal.jl"
-headers = [
-    "_fill_normal!(::HostLocality",
-    "_normal_mask(::Val{D}",
-    "_normal_terms(terms, right",
-    "_normal_axis(s::Symbol)",
-    "_normal_product(g, ::NormalComponent",
-    "Base.:*(p::NormalComponentProduct{DIM}, u::LazyOp)",
-    "_normal_terms_of(c::NormalContraction",
-]
-reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
-
-[[exempt_function]]
-path = "src/operators/interpolation.jl"
-headers = [
-    "_interp_in_domain(pts::NTuple{D}",
-    "_interp_corner_weight(ts::NTuple",
-    "(f::GridInterpolant)(x)",
-]
-reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
 
 [[exempt_function]]
 path = "src/operators/projection.jl"
