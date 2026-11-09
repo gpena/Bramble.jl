@@ -3,7 +3,8 @@ module SpaceAdCoverageTests
 using Test
 using Bramble
 using Bramble: D₋ₓ, D₋ᵧ, D₋₂, Mₓ, Mᵧ, M₂, εₕ, Δₕ!, CpuPolyester, CpuSerial, CpuThreaded,
-               GhostVector, update_ghosts!, semidiscretize_rhs, ast_sparsity_detector
+               GhostVector, update_ghosts!, centered_difference!, semidiscretize_rhs,
+               ast_sparsity_detector
 using DifferentiationInterface
 using ForwardDiff
 using LinearAlgebra: mul!
@@ -376,7 +377,7 @@ function build_ghost_load(policy, kind)
     return f, _start()
 end
 
-# The runtime operator on a `GhostVector`, in place.
+# The runtime operators on a `GhostVector`, in place.
 function build_ghost_runtime(policy, kind)
     C = _ghost_space(policy, kind)
     B = _basis(42)
@@ -384,6 +385,19 @@ function build_ghost_runtime(policy, kind)
         v = update_ghosts!(GhostVector(C, B * p), C)
         out = zeros(eltype(p), 42)
         Δₕ!(out, v)
+        return sum(abs2, out)
+    end
+    return f, _start()
+end
+
+# The first difference along x reads the ghosts at `:xmin` and `:xmax`.
+function build_ghost_stencil(policy, kind)
+    C = _ghost_space(policy, kind)
+    B = _basis(42)
+    function f(p)
+        v = update_ghosts!(GhostVector(C, B * p), C)
+        out = zeros(eltype(p), 42)
+        centered_difference!(out, v, Val(1))
         return sum(abs2, out)
     end
     return f, _start()
@@ -490,16 +504,19 @@ const CELLS = (
     # The Robin coefficient's ForwardDiff half works (gpena/Bramble.jl#1127).
     cell(:ghost_robin, "ghost", :ghost_fast, build_ghost_robin, rev = :skip, fwd = :skip,
         kinds = (:nonuniform,)),
-    # The load of `assemble(a, l)` alone, reverse only (gpena/Bramble.jl#1127).
-    cell(:ghost_load, "ghost", :ghost_fast, build_ghost_load,
-        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip,
-        kinds = (:nonuniform,)),
-    # `Δₕ!` on a `GhostVector` (gpena/Bramble.jl#1127). Reverse under `CpuPolyester` is a
-    # `ReverseRuleReturnError` (measured 2026-11-07), not the old `EnzymeNoDerivativeError`.
+    # The load of `assemble(a, l)` alone (gpena/Bramble.jl#1127, the load half). The threaded
+    # reverse is #1157 and the forward under Enzyme #1159, both fixed in v4.2.2.
+    cell(:ghost_load, "ghost", :ghost_fast, build_ghost_load, kinds = (:nonuniform,)),
+    # `Δₕ!` on a `GhostVector`, reverse under `CpuPolyester` fixed in v4.2.2 (#1127).
     cell(:ghost_runtime, "ghost", :ghost_fast, build_ghost_runtime,
-        rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :throws),
+        rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
         fwd = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
-        rev_err = (CpuSerial = "", CpuThreaded = "", CpuPolyester = "ReverseRuleReturnError"),
+        kinds = (:nonuniform,)),
+    # `centered_difference!` on a `GhostVector` (gpena/Bramble.jl#1158): differentiates in
+    # both modes under all three policies, measured 2026-11-08.
+    cell(:ghost_stencil, "ghost", :ghost_fast, build_ghost_stencil,
+        rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
+        fwd = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
         kinds = (:nonuniform,))
 )
 
