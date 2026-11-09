@@ -61,6 +61,11 @@ complex32_source(v) = innerₕ(x -> ComplexF32(1 + x[1], 1), v)
 # The bytes of the third call of `f`, the first two compiling and warming it.
 alloc(f::F) where {F} = (f(); f(); @allocated f())
 
+# One data value on all four sides of the box. Each function holds one closure type, so
+# testsets that call it share one `constrained` type and one ghost pipeline per policy.
+neumann_rel(c) = u -> map(F -> F => ∂ₙ(u) => c, (:xmin, :xmax, :ymin, :ymax))
+conormal_rel(c) = u -> map(F -> F => ∂ₙ(u; K) => c, (:xmin, :xmax, :ymin, :ymax))
+
 # The warm in-place calls on `constrained(gridspace(Ω; ghosts), rel)` under `pol`: the pair
 # refill (its load reads `A_pad d ≠ 0`), `lift!`, the matrix refill, and the values they
 # leave after three calls.
@@ -79,7 +84,7 @@ end
 
 # The warm calls on a homogeneous Neumann space, whose rows are the physical nodes.
 function warm_rows(pol, ns)
-    rel = u -> map(F -> F => ∂ₙ(u) => 0.0, (:xmin, :xmax, :ymin, :ymax))
+    rel = neumann_rel(0.0)
     C = constrained(gridspace(ghost_mesh(pol, ns); ghosts = :boundary), rel)
     a, l = form(C, C, laplacian), form(C, source)
     A, F = assemble(a, l)
@@ -218,7 +223,7 @@ end
     end
 
     @testset "2D conormal corners" begin
-        rel = u -> map(F -> F => ∂ₙ(u; K) => 1.0, (:xmin, :xmax, :ymin, :ymax))
+        rel = conormal_rel(1.0)
         space = Ω -> constrained(gridspace(Ω; ghosts = :boundary), rel)
         mixed = (u, v) -> innerₕ(K[1, 1] * D̃ₓ(D₋ₓ(u)) + 2 * K[1, 2] * Dcₓ(Dcᵧ(u)) +
                                  K[2, 2] * D̃ᵧ(D₋ᵧ(u)), v)
@@ -231,7 +236,7 @@ end
     end
 
     @testset "Dirichlet by row replacement" begin
-        rel = u -> map(F -> F => ∂ₙ(u) => 0.5, (:xmin, :xmax, :ymin, :ymax))
+        rel = neumann_rel(0.5)
         space = Ω -> constrained(gridspace(Ω; ghosts = :boundary), rel)
         for symmetrize in (false, true)
             (A0, F0), (A1, F1) = pair_by_policy((9, 11), space, laplacian, source;
@@ -340,7 +345,7 @@ end
 
     # A path that ignores the mesh's policy runs on the calling thread alone.
     @testset "Each path runs on several threads" begin
-        rel = u -> map(F -> F => ∂ₙ(u; K) => 1.0, (:xmin, :xmax, :ymin, :ymax))
+        rel = conormal_rel(1.0)
         C = constrained(gridspace(ghost_mesh(CpuPolyester(), (9, 11)); ghosts = :boundary),
             rel)
         a, l = form(C, C, laplacian), form(C, source)
@@ -393,7 +398,7 @@ end
         end
         # The matrix-free product (#877), with and without Dirichlet rows, on a ghost box
         # and a polygon space: its values are the assembled matrix's.
-        rel = u -> map(F -> F => ∂ₙ(u) => 0.0, (:xmin, :xmax, :ymin, :ymax))
+        rel = neumann_rel(0.0)
         C = constrained(gridspace(ghost_mesh(CpuPolyester(), (12, 11)); ghosts = :boundary),
             rel)
         be = backend(vector_type = Vector{Float64},

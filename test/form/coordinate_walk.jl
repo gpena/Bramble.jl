@@ -27,6 +27,10 @@ using Bramble:
 # them; and the replayed values equal that sweep's.
 
 # The set of `(row, col)` the walk wrote, and the unit bookkeeping it kept.
+# `@allocated` forces the compile of the whole enclosing top-level thunk, so each
+# measurement lives in a function of its own, taking the testset locals as arguments.
+_bytes(f, args...) = @allocated f(args...)
+
 function _walk(f)
     p = Bramble._form_coordinates(f.trial_space, f.test_space, resolve_form_ast(f))
     return p, Set(zip(p.I, p.J))
@@ -127,7 +131,7 @@ end
         @test length(ph.I) == sum(ph.counts)
         A = assemble(h)
         assemble!(A, h)
-        @test (@allocated assemble!(A, h)) == 0
+        @test _bytes(assemble!, A, h) == 0
     end
 
     @testset "1D" begin

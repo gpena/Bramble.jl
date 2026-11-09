@@ -9,7 +9,7 @@ using ForwardDiff: ForwardDiff # loads DifferentiationInterface's ForwardDiff ba
 using DifferentiationInterface: AutoForwardDiff
 import DifferentiationInterface as DI
 using Kronecker: Kronecker
-using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS
+using ..TestUtils: WITH_SLOW_TESTS, WITH_3D_TESTS, _grid_sample
 using Bramble:
                D₋ᵧ,
                IdentityOperator,
@@ -638,7 +638,12 @@ _lit_mixed_pair(V) = form(V, V, (u, v) -> innerₕ(u(1), (v(1) + v(2)) + (v(2) +
             (u, v) -> innerₕ(D₋ₓ(u(1)), Mₓ(v(1) + v(2))),
             (u, v) -> innerₕ(D₋ₓ(u(2)), Mₓ(v(1) + v(2))))
     )
-    @testset "$name" for (name, (whole, p1, p2)) in cases
+    # Every bare wrapper runs on each push; the compositions are drawn in `slow` and all run
+    # in `grids` (`TestUtils._grid_sample`, gpena/Bramble.jl#759).
+    bare = ("D₋ₓ, test side", "Mₓ, test side", "D₋ₓ, trial side", "jump", "shift",
+        "restriction")
+    picked = _grid_sample("wrapper over mixed sum", cases, c -> c[1] in bare, 3)
+    @testset "$name" for (name, (whole, p1, p2)) in picked
         a = form(Vₕ, Vₕ, whole)
         @test resolve_form_ast(a) isa OperatorAdd
         P1, P2 = M(p1), M(p2)
@@ -1017,15 +1022,18 @@ _rt_negated(W) = form(W, W, (u, v) -> innerₕ(u, v) - innerₕ(D₋ₓ(u), v))
         K = assemble(rf)
         @test Matrix(K.A) + K.σ * K.ws * K.wt' ≈ σ * w * w'
     end
-    # A ghost relation on a `BigFloat` mesh, the sign beside a conormal derivative.
-    Ωᵇ = mesh(domain(interval(big"0.0", big"1.0") × interval(big"0.0", big"1.0")), (6, 7),
-        (false, false))
-    P = Bramble.padded_space(gridspace(Ωᵇ; ghosts = :boundary))
-    K = BigFloat[2 0.5; 0.5 1]
-    rel(c) = form(P, P, (u, v) -> inner_Γ(c(u), v; markers = (:xmin,)))
-    A = assemble(rel(u -> -∂ₙ(u; K) - u))
-    @test eltype(A) === BigFloat
-    @test A == assemble(rel(u -> (-1) * ∂ₙ(u; K) + (-1) * u))
+    # A ghost relation on a `BigFloat` mesh, the sign beside a conormal derivative. Its
+    # padded mesh is slow-only.
+    if WITH_SLOW_TESTS
+        Ωᵇ = mesh(domain(interval(big"0.0", big"1.0") × interval(big"0.0", big"1.0")),
+            (6, 7), (false, false))
+        P = Bramble.padded_space(gridspace(Ωᵇ; ghosts = :boundary))
+        K = BigFloat[2 0.5; 0.5 1]
+        rel(c) = form(P, P, (u, v) -> inner_Γ(c(u), v; markers = (:xmin,)))
+        A = assemble(rel(u -> -∂ₙ(u; K) - u))
+        @test eltype(A) === BigFloat
+        @test A == assemble(rel(u -> (-1) * ∂ₙ(u; K) + (-1) * u))
+    end
     # `jumpₙ` is built with `-`; beside a `BigFloat` `K` it assembles what a `Float64`
     # one does.
     Pⱼ = Bramble.padded_space(gridspace(

@@ -21,6 +21,7 @@ using Bramble: CpuPolyester, CpuSerial, CpuThreaded, MarkedIndicesUnion, VectorE
                _sweep_for!, _sweep_scatter_for!, __prod, _dot, _dot_masked
 using Polyester
 using Random
+using ..TestUtils: TestUtils
 
 include(joinpath(@__DIR__, "polyester_parity_repro.jl"))
 
@@ -141,7 +142,9 @@ end
 # nested in one another (a `@batch` started from a `Threads.@threads` task waits for busy
 # workers).
 @testset "reductions nested = top level (#473)" verbose = true begin
-    # (3, 2) has fewer last-axis blocks than threads at 3 or more threads only.
+    # (3, 2) has fewer last-axis blocks than threads at 3 or more threads only. The nested
+    # leg reduces again at every sweep point, O(N²): it skips the uniform (129, 129) grid,
+    # which keeps the top-level checks.
     grids = (((1001,), false), ((9, 7), true), ((129, 129), true), ((100, 77), false),
         ((13, 11, 7), false), ((3, 2), false))
     @testset "$name on $n" for (n, uniform) in grids, (name, r) in _RED_REDUCTIONS
@@ -151,7 +154,7 @@ end
         s = r(Rₕ(_red_space(n, uniform, CpuSerial()), _red_f))
         t = r(Rₕ(_red_space(n, uniform, CpuThreaded()), _red_f))
         p = r(up)
-        @test _red_nested(Wp, r, up) == _red_expected(Wp, p)
+        n == (129, 129) || @test _red_nested(Wp, r, up) == _red_expected(Wp, p)
         @test p == t
         @test isapprox(p, s; rtol = 1e-12, atol = 1e-14)
         Threads.nthreads() == 1 && @test p == s
@@ -233,15 +236,18 @@ end
 # extension image, the state in which the ext group failed about half its runs
 # (gpena/Bramble.jl#942, test/ext/polyester_parity_repro.jl): this process's own images are
 # whatever the depot held, so the testset above cannot pin it. `Repro942.run` checks that
-# the child loaded those images, and puts back the depot's image times. About a minute.
-@testset "1D parity at split image levels (#942)" begin
-    if Threads.nthreads() >= Repro942.NTHREADS
-        n = 20
-        r = Repro942.run(n)
-        @test r.ran == n
-        @test r.mismatches == 0
-    else
-        @test_skip "Repro942 needs $(Repro942.NTHREADS) threads"
+# the child loaded those images, and puts back the depot's image times. About a minute,
+# so it runs in the backends group (Weekly's backends job) and full only (#942).
+if TestUtils.TEST_GROUP in ("backends", "full")
+    @testset "1D parity at split image levels (#942)" begin
+        if Threads.nthreads() >= Repro942.NTHREADS
+            n = 20
+            r = Repro942.run(n)
+            @test r.ran == n
+            @test r.mismatches == 0
+        else
+            @test_skip "Repro942 needs $(Repro942.NTHREADS) threads"
+        end
     end
 end
 

@@ -29,6 +29,10 @@ const O = Main.GhostOracleND
 
 const tol = 1e-12
 
+# `@allocated` forces the compile of the whole enclosing top-level thunk, so each
+# measurement lives in a function of its own, taking the testset locals as arguments.
+_bytes(f, args...) = @allocated f(args...)
+
 relerr(A, B) = norm(A - B) / max(norm(B), eps())
 
 # --- References ---------------------------------------------------------------------- #
@@ -225,7 +229,7 @@ end
     @test_throws ArgumentError assemble(l)
     @test_throws ArgumentError assemble!(similar(F), l)
     Bramble._assemble_ghost_load!(F, a, l)
-    @test (@allocated Bramble._assemble_ghost_load!(F, a, l)) == 0
+    @test _bytes(Bramble._assemble_ghost_load!, F, a, l) == 0
     @test relerr(F, transpose(E) * (Fp - Ap * d)) <= tol
 end
 
@@ -271,7 +275,7 @@ end
     ar, lr = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))), form(W, fl)
     _, Fr = assemble(ar, lr)
     Bramble._assemble_ghost_load!(Fr, ar, lr)
-    @test (@allocated Bramble._assemble_ghost_load!(Fr, ar, lr)) == 0
+    @test _bytes(Bramble._assemble_ghost_load!, Fr, ar, lr) == 0
 end
 
 # The padded mesh refreshes through a dynamic call (#1127, `_padded`): a form built before
@@ -296,7 +300,7 @@ end
     @test relerr(b, assemble(form(gridspace(Ω2; ghosts = (:xmin, :ymax)), fl))) <= tol
     @test relerr(b, b0) > 1e-3   # the new labels reached the load
     assemble!(b, l1)
-    @test (@allocated assemble!(b, l1)) == 0
+    @test _bytes(assemble!, b, l1) == 0
 end
 
 @testset "Mixed-precision trial and test spaces" begin
@@ -313,7 +317,7 @@ end
     @test size(A) == (11, 11)
     @test relerr(A, transpose(Ev) * Ap * Eu) <= 1e-6
     assemble!(A, a)
-    @test (@allocated assemble!(A, a)) == 0
+    @test _bytes(assemble!, A, a) == 0
 end
 
 @testset "Refusals" begin
@@ -573,7 +577,7 @@ end
     @test assemble(a, lc)[2] == F
     la = form(Wa, fl)
     assemble!(A, F, a, la)
-    @test (@allocated assemble!(A, F, a, la)) == 0
+    @test _bytes(assemble!, A, F, a, la) == 0
     # DECISION (#818): plain spaces keep today's behaviour. Their pair, `assemble(a, l)` in
     # bilinear.jl, assembles each form alone and shares no helper with `_check_pair`, so a
     # load on another mesh, even of another size, is still accepted.

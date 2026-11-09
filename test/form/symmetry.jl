@@ -30,6 +30,10 @@ using Bramble:
 # trait's own reasoning) and, where it matters, a negative control confirming the check can
 # actually tell the two apart.
 
+# `@allocated` forces the compile of the whole enclosing top-level thunk, so each
+# measurement lives in a function of its own, taking the testset locals as arguments.
+_bytes(f, args...) = @allocated f(args...)
+
 @testset "Symmetry and SPD detection" begin
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
     Ωₕ = mesh(domain(S, :walls => boundary_symbols(S)), (9, 7), (true, true))
@@ -510,13 +514,13 @@ using Bramble:
         f = form(Vr, Vr, (u, v) -> foldl(+, map(g -> g(u, v), cases[2][2])))
         A = assemble(f)
         assemble!(A, f)
-        @test (@allocated assemble!(A, f)) == 0
+        @test _bytes(assemble!, A, f) == 0
         @testset "distinct-leaf pair: zero allocations" begin
             S, gs = cases[4]
             f = form(S, S, (u, v) -> foldl(+, map(g -> g(u, v), gs)))
             A = assemble(f)
             assemble!(A, f)
-            @test (@allocated assemble!(A, f)) == 0
+            @test _bytes(assemble!, A, f) == 0
         end
     end
 

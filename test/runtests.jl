@@ -122,8 +122,9 @@ end
 if __bramble_with_unit_tests
     @testset verbose=true "Core library" begin
         # `BRAMBLE_TEST_SHARD` (TestUtils) splits this block over CI runners: the form tests
-        # run under `forms-1` and `forms-2` (test/form/runtests.jl divides them), the ghost
-        # tests under `ghost`, everything else here under `rest`. Unset, all of it runs.
+        # run under `forms-1` and `forms-2` (test/form/runtests.jl divides them, and gives
+        # `ghost` its four ghost files), the ghost and solver tests under `ghost`, everything
+        # else here under `rest`. Unset, all of it runs.
         if TestUtils.in_shard("rest")
             include("utils/runtests.jl")
             include("geometry/runtests.jl")
@@ -176,16 +177,17 @@ if __bramble_with_unit_tests
             end
         end
 
-        if TestUtils.in_shard("forms-1") || TestUtils.in_shard("forms-2")
+        if TestUtils.in_shard("forms-1") || TestUtils.in_shard("forms-2") ||
+           TestUtils.in_shard("ghost")
             include("form/runtests.jl")
         end
 
         if TestUtils.in_shard("ghost")
             include("ghost/runtests.jl")
+            include("solvers/runtests.jl")
         end
 
         if TestUtils.in_shard("rest")
-            include("solvers/runtests.jl")
             include("exporters/runtests.jl")
 
             # Static allocation verification. Lives under `quality/` because that is what
@@ -364,5 +366,10 @@ if __bramble_with_grids
         include("form/nested_operators.jl")
         include("form/operators.jl")
         include("form/matrix_free.jl")
+        # Each file below holds a grid whose non-cover rows run only here: the cover runs
+        # in unit or slow (`_grid_sample`, TestUtils).
+        include("form/bilinear.jl")     # combinatorial tables, #759 caps per row
+        include("form/simplifier.jl")   # the #759 composition grid
+        include("ext/polyester_ext.jl") # stencil and D x shape grids; loads Polyester
     end
 end

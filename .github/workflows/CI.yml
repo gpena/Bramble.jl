@@ -103,9 +103,14 @@ jobs:
         # shard plus precompile instead of the whole group. Three, not two: two would leave
         # `Forms` alone near 22 minutes, over the 20-minute bar. The fourth, `ghost`, came
         # from nightly.yml, which shards the `slow` group the same way and needs the ghost
-        # tests off `rest`. The fifth, `convergence`, is not a unit shard: it runs the
-        # `convergence` group (test/convergence/), every convergence study of the suite,
-        # which `unit` no longer holds. `CI result` aggregates every leg, so the required
+        # tests off `rest`. Whole files moved between shards to even the leaf wall time
+        # (CI run 42442957618, minutes per leg before, then after in the plan's best
+        # case): forms-1 24.3, then 18.4; forms-2 14.6, then 17.4; ghost 7.6, then 14.9;
+        # rest 20.3, then 16.1. The ghost shard took four forms-1 ghost files and
+        # test/solvers/, forms-2 took simplifier.jl and threaded_replay.jl. The fifth,
+        # `convergence`, is not a unit shard: it runs the `convergence` group
+        # (test/convergence/), every convergence study of the suite, which `unit` no
+        # longer holds. `CI result` aggregates every leg, so the required
         # check is unchanged.
         shard: [forms-1, forms-2, ghost, rest, convergence]
     steps:
@@ -212,6 +217,16 @@ jobs:
           # TestUtils.jl) before the runner just kills the job. Coverage is on here, as it was
           # by default.
           BRAMBLE_TEST_MAXRSS_FRACTION: 0.7
+          # Pkg.test precompiles the whole test environment, in parallel, before it runs
+          # anything (gated by `should_autoprecompile()`, which reads this variable). Each
+          # leg paid for 25 to 165 packages there, Makie alone 70 to 211 s, though only the
+          # ext test files load Makie or Meshes, and the groups run here include none. With
+          # it at 0, `using` compiles only what the run loads. Risk: on a stale cache (the
+          # 165-package case) what `unit` loads compiles serially instead of in parallel. If
+          # setup grows, the fallback is a prior step running `Pkg.precompile` on the test
+          # environment minus the Makie stack, under the same flags. Nightly keeps the
+          # default, so the cache it saves is unchanged.
+          JULIA_PKG_PRECOMPILE_AUTO: "0"
 
   # The check branch protection requires, for the reason release-gate.yml's `result` job
   # gives: `test` is a matrix job skipped by its `if:` when no code changed, and a skipped
