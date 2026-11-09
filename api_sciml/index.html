@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML, AD and solvers — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=d5b6caf6">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=5ade6b50">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML, AD and solvers — Bramble.jl">
@@ -54,15 +54,22 @@
         <a href="../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Solvers and AD</span>
+        <a href="../tutorials/autodiff/">Automatic differentiation</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../examples/poisson_circle/">Poisson problem on a disk</a>
+        <a href="../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../examples/heat_equation/">Heat equation</a>
         <a href="../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
         <a href="../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -104,7 +111,7 @@
 <div class="md-docstring" id="Bramble.semidiscretize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.semidiscretize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L131-L188" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L140-L199" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -125,7 +132,11 @@
 </li>
 <li><p><code class="md-code-inline">update_coefficients!</code>: called with the current <code class="md-code-inline">t</code> before each assembly, for coefficients that vary in time – <code class="md-code-inline">t -&gt; Rₕ!(fₕ, x -&gt; f(x, t))</code> for a time-dependent source, or <code class="md-code-inline">t -&gt; (α[] = t)</code> for a scalar <code class="md-code-inline">Ref</code> (default <code class="md-code-inline">nothing</code>). A two-argument <code class="md-code-inline">(t, p) -&gt; ...</code> also reaches the residual&#39;s own <code class="md-code-inline">p</code>, the same way a three-argument Dirichlet condition does.</p>
 </li>
+<li><p><code class="md-code-inline">hook_reads_state</code>: whether <code class="md-code-inline">update_coefficients!</code> may read the <code class="md-code-inline">state</code> (default <code class="md-code-inline">true</code>). With <code class="md-code-inline">state</code>, a <code class="md-code-inline">ForwardDiff.Dual</code> <code class="md-code-inline">u</code> reaches the forms through a buffer of its own type and never the user&#39;s state, so a hook reading the state would lose its dependence on <code class="md-code-inline">u</code> from the derivative, and the pair is refused with an <code class="md-code-inline">ArgumentError</code>. Give <code class="md-code-inline">false</code> to assert that the hook reads no state (a source depending on <code class="md-code-inline">t</code> alone) and the <code class="md-code-inline">Dual</code> Jacobian is exact; the assertion is not checked, and a hook that does read the state then gets a Jacobian missing that part.</p>
+</li>
 <li><p><code class="md-code-inline">reassemble</code>: refill <code class="md-code-inline">A</code> at every step, for an operator whose coefficients change with <code class="md-code-inline">t</code> or <code class="md-code-inline">u</code> (default <code class="md-code-inline">false</code>).</p>
+</li>
+<li><p><code class="md-code-inline">coefficients</code>: the coefficients of <code class="md-code-inline">a</code> that depend on <code class="md-code-inline">u</code>, declared as <a href="../api/forms/#Bramble.jacobian_form"><code class="md-code-inline">jacobian_form</code></a> takes them, <code class="md-code-inline">(cᵢ =&gt; (U -&gt; Lᵢ(U), fᵢ), ...)</code> with <code class="md-code-inline">cᵢ</code> the grid function <code class="md-code-inline">a</code> reads (default <code class="md-code-inline">nothing</code>). Before each assembly of the residual every <code class="md-code-inline">cᵢ</code> is set to <code class="md-code-inline">fᵢ.(Lᵢ(u))</code> from <code class="md-code-inline">u</code> itself, after <code class="md-code-inline">update_coefficients!</code> and the <code class="md-code-inline">state</code>, and <code class="md-code-inline">A</code> is reassembled (<code class="md-code-inline">reassemble</code> is then <code class="md-code-inline">true</code> whatever it was given). <a href="../api_sciml/#Bramble.jacobian!"><code class="md-code-inline">jacobian!</code></a> then writes the exact Jacobian <code class="md-code-inline">-(A + ∂A)</code> at <code class="md-code-inline">u</code> and <a href="../api_sciml/#Bramble.jacobian_prototype"><code class="md-code-inline">jacobian_prototype</code></a> carries its pattern, wider than <code class="md-code-inline">A</code>&#39;s where a coefficient reads neighbouring points (<code class="md-code-inline">using ForwardDiff</code> differentiates each <code class="md-code-inline">fᵢ</code>). A source <code class="md-code-inline">l</code> or a <code class="md-code-inline">mass</code> reading a declared coefficient is refused with an <code class="md-code-inline">ArgumentError</code>, since <code class="md-code-inline">jacobian!</code> would miss its derivative. A <code class="md-code-inline">u</code> of a non-plain element type (a <code class="md-code-inline">ForwardDiff.Dual</code>) is refused by the residual, <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a> and <a href="../api_sciml/#Bramble.jacobian!"><code class="md-code-inline">jacobian!</code></a> alike, with or without <code class="md-code-inline">state</code>: automatic differentiation through the coefficients is not supported, and the exact Jacobian is <code class="md-code-inline">jacobian!</code>&#39;s. Scalar grid spaces only: <code class="md-code-inline">a</code> on a composite space is refused with an <code class="md-code-inline">ArgumentError</code>, and the <code class="md-code-inline">build</code> method and ghost spaces do not take it.</p>
 </li>
 </ul>
 <p>Time and parameter dependence of the Dirichlet values is detected by arity, exactly as <a href="../api/forms/#Bramble.dirichlet_constraints"><code class="md-code-inline">dirichlet_constraints</code></a> validates it: conditions accepting <code class="md-code-inline">(x, t, p)</code> are evaluated at each step against the residual&#39;s own <code class="md-code-inline">p</code>, conditions accepting <code class="md-code-inline">(x, t)</code> are evaluated at each step without it, and conditions accepting <code class="md-code-inline">(x)</code> are not evaluated per step at all. <code class="md-code-inline">update_coefficients!</code> is detected between its one- and two-argument forms, but prefers the one-argument form: <code class="md-code-inline">(t, p = default) -&gt; ...</code> is called as <code class="md-code-inline">f(t)</code> and ignores <code class="md-code-inline">p</code>. A <code class="md-code-inline">Base.Fix</code> or composition is classified by the function it wraps.</p>
@@ -149,7 +160,7 @@ bcs = dirichlet_constraints(Ωₕ, I, :boundary =&gt; (x, t) -&gt; 0.0)
 
 sd = semidiscretize(a, l; dirichlet = bcs)</code></pre>
 </div>
-<p>Forms posed on a constrained ghost space, whose relation data may depend on time (<code class="md-code-inline">(x, t) -&gt; ...</code>, see <a href="../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>), are taken too, by the method <code class="md-code-inline">semidiscretize(a::GhostBilinearForm, l::GhostLinearForm; mass, state, update_coefficients!, reassemble)</code>: the relations eliminate the ghosts and the Dirichlet nodes, so the mass has no zero rows, and the source at <code class="md-code-inline">t</code> carries the lift of the data at <code class="md-code-inline">t</code>. That method refuses the <code class="md-code-inline">dirichlet</code> keyword (give <code class="md-code-inline">:F =&gt; u =&gt; g(x, t)</code> in <code class="md-code-inline">constrained</code>), a space keeping ghosts as unknowns, a mass coupling a degree of freedom to a point whose data depend on time, <code class="md-code-inline">semidiscretize(build, l)</code> with a ghost load, and <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a>, each with an <code class="md-code-inline">ArgumentError</code> naming the alternative.</p>
+<p>Forms posed on a constrained ghost space, whose relation data may depend on time (<code class="md-code-inline">(x, t) -&gt; ...</code>, see <a href="../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>), are taken too, by the method <code class="md-code-inline">semidiscretize(a::GhostBilinearForm, l::GhostLinearForm; mass, state, update_coefficients!, hook_reads_state, reassemble)</code>: the relations eliminate the ghosts and the Dirichlet nodes, so the mass has no zero rows, and the source at <code class="md-code-inline">t</code> carries the lift of the data at <code class="md-code-inline">t</code>. That method refuses the <code class="md-code-inline">dirichlet</code> keyword (give <code class="md-code-inline">:F =&gt; u =&gt; g(x, t)</code> in <code class="md-code-inline">constrained</code>), a space keeping ghosts as unknowns, a mass coupling a degree of freedom to a point whose data depend on time, <code class="md-code-inline">semidiscretize(build, l)</code> with a ghost load, and <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a>, each with an <code class="md-code-inline">ArgumentError</code> naming the alternative.</p>
 <p>See also <a href="../api_sciml/#Bramble.ode_function"><code class="md-code-inline">ode_function</code></a>, <a href="../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a>, <a href="../api_sciml/#Bramble.jacobian!"><code class="md-code-inline">jacobian!</code></a>.</p>
 </div>
 <div class="md-docstring-content">
@@ -163,7 +174,7 @@ sd = semidiscretize(a, l; dirichlet = bcs)</code></pre>
 <p><code class="md-code-inline">build</code> should be a named function, not a closure literal written inline – the same reason <a href="../api_sciml/#Bramble.type_cached_assemble!"><code class="md-code-inline">type_cached_assemble!</code></a>&#39;s own docstring gives: a <code class="md-code-inline">do ... end</code> block re-literalised on every call allocates a new closure each time.</p>
 <p>This is what lets a Rosenbrock method (<code class="md-code-inline">Rodas5P</code>, <code class="md-code-inline">Rosenbrock23</code>) capture <code class="md-code-inline">-Ȧ(t) u_h</code> by differentiating through <code class="md-code-inline">t</code> directly: the other method&#39;s fixed <code class="md-code-inline">BilinearForm</code> closes over a coefficient buffer of the space&#39;s element type, which cannot hold a <code class="md-code-inline">Dual</code> and throws <code class="md-code-inline">InexactError</code> under exactly that AD sweep.</p>
 <p><strong>Keywords</strong></p>
-<p>Same as the <code class="md-code-inline">BilinearForm</code> method, except <code class="md-code-inline">reassemble</code> defaults to <code class="md-code-inline">true</code> – a <code class="md-code-inline">build</code>-based operator exists specifically to be rebuilt at every step.</p>
+<p>Same as the <code class="md-code-inline">BilinearForm</code> method, except <code class="md-code-inline">reassemble</code> defaults to <code class="md-code-inline">true</code> – a <code class="md-code-inline">build</code>-based operator exists specifically to be rebuilt at every step – and <code class="md-code-inline">coefficients</code> is not taken.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -182,7 +193,8 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">semidiscretize(a::GhostBilinearForm, l::GhostLinearForm; mass, dirichlet,
-    dirichlet_components, state, update_coefficients!, reassemble) -&gt; Semidiscretization</code></pre>
+    dirichlet_components, state, update_coefficients!, hook_reads_state, reassemble) -&gt;
+    Semidiscretization</code></pre>
 </div>
 <p>Semidiscretise <code class="md-code-inline">M u&#39; = F(t) − A u</code> for forms posed on one constrained ghost space <code class="md-code-inline">Cₕ</code>, whose relation data may depend on time. With <code class="md-code-inline">(E, d(t))</code> the closure of <code class="md-code-inline">Cₕ</code>, <code class="md-code-inline">A = Eᵀ A_pad E</code>, <code class="md-code-inline">M = Eᵀ M_pad E</code> and <code class="md-code-inline">F(t) = Eᵀ (F_pad(t) − A_pad d(t))</code>, so at a fixed <code class="md-code-inline">t</code> the residual is <code class="md-code-inline">F − A u</code> of <code class="md-code-inline">assemble(a, l)</code> on the space rebuilt with the data frozen at <code class="md-code-inline">t</code>.</p>
 <p><strong>Keywords</strong></p>
@@ -191,7 +203,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 </li>
 <li><p><code class="md-code-inline">state</code>: a grid function on <code class="md-code-inline">Bramble.padded_space(Cₕ)</code> that receives <code class="md-code-inline">lift(Cₕ, u, t)</code> before each assembly, for forms whose coefficients read it (default <code class="md-code-inline">nothing</code>). A <code class="md-code-inline">u</code> it cannot hold (a <code class="md-code-inline">ForwardDiff.Dual</code>) is lifted into a padded buffer of its own type, read by the forms rebound to it, as on a plain space.</p>
 </li>
-<li><p><code class="md-code-inline">update_coefficients!</code>, <code class="md-code-inline">reassemble</code>: as for plain forms.</p>
+<li><p><code class="md-code-inline">update_coefficients!</code>, <code class="md-code-inline">hook_reads_state</code>, <code class="md-code-inline">reassemble</code>: as for plain forms.</p>
 </li>
 </ul>
 <p>The <code class="md-code-inline">dirichlet</code> and <code class="md-code-inline">dirichlet_components</code> keywords are refused: give a Dirichlet condition as <code class="md-code-inline">:F =&gt; u =&gt; g(x, t)</code> in <a href="../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>. So are a space that keeps ghosts as unknowns (their mass rows vanish), <code class="md-code-inline">semidiscretize(build, l)</code> with a ghost load (use <code class="md-code-inline">update_coefficients!</code> and <code class="md-code-inline">reassemble = true</code>), and <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a>.</p>
@@ -200,7 +212,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <div class="md-docstring" id="Bramble.Semidiscretization">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Semidiscretization</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L54-L77" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L54-L78" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -231,11 +243,13 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 </li>
 <li><p><code class="md-code-inline">state</code>: <a href="../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> receiving <code class="md-code-inline">u</code> before assembly, or <code class="md-code-inline">nothing</code>.</p>
 </li>
-<li><p><code class="md-code-inline">update_coefficients</code>: callable invoked with <code class="md-code-inline">t</code> (or, wrapped in <code class="md-code-inline">ParametricUpdate</code>, with <code class="md-code-inline">t</code> and the residual&#39;s own <code class="md-code-inline">p</code>) before assembly, or <code class="md-code-inline">nothing</code>.</p>
+<li><p><code class="md-code-inline">update_coefficients</code>: callable invoked with <code class="md-code-inline">t</code> (or, wrapped in <code class="md-code-inline">ParametricUpdate</code>, with <code class="md-code-inline">t</code> and the residual&#39;s own <code class="md-code-inline">p</code>) before assembly, or <code class="md-code-inline">nothing</code>. Wrapped in <code class="md-code-inline">Bramble._StateFreeUpdate</code> when the user declared <code class="md-code-inline">hook_reads_state = false</code>.</p>
 </li>
 <li><p><code class="md-code-inline">reassemble</code>: <code class="md-code-inline">Val(true)</code> to refill <code class="md-code-inline">A</code> at every step.</p>
 </li>
 <li><p><code class="md-code-inline">twins</code>: by element type of <code class="md-code-inline">u</code>, the semidiscretisations a <code class="md-code-inline">u</code> the state cannot hold (a <code class="md-code-inline">ForwardDiff.Dual</code>) is evaluated by: a state buffer of that type, the forms rebound to it and their own operator matrix, built at the first call there.</p>
+</li>
+<li><p><code class="md-code-inline">jacobian_form</code>: the form <code class="md-code-inline">a + ∂a</code> of <a href="../api/forms/#Bramble.jacobian_form"><code class="md-code-inline">jacobian_form</code></a> built from the <code class="md-code-inline">coefficients</code> keyword, whose refills set each declared coefficient from <code class="md-code-inline">u</code> before every assembly, or <code class="md-code-inline">nothing</code>.</p>
 </li>
 </ul>
 </div>
@@ -243,7 +257,7 @@ sd = semidiscretize(build_diffusion_operator, l; dirichlet = bcs)</code></pre>
 <div class="md-docstring" id="Bramble.semidiscretize_rhs">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.semidiscretize_rhs</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_rhs.jl#L95-L134" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_rhs.jl#L97-L136" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -268,7 +282,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.SemidiscretizeRHS">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.SemidiscretizeRHS</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_rhs.jl#L24-L42" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_rhs.jl#L24-L43" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -277,13 +291,13 @@ sol = solve(prob, Tsit5())</code></pre>
 </div>
 <p>The right-hand side of <code class="md-code-inline">uₕ&#39; = M⁻¹(F(t) - A uₕ)</code>, <code class="md-code-inline">M</code> folded into a precomputed diagonal scaling rather than solved for – for a <a href="../api_sciml/#Bramble.Semidiscretization"><code class="md-code-inline">Semidiscretization</code></a> with no Dirichlet constraints, where that fold is valid. Built by <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a>; callable with the <code class="md-code-inline">(du, u, p, t)</code> signature a plain (non-mass-matrix) <code class="md-code-inline">SciMLBase.ODEProblem</code> expects.</p>
 <p>Named <code class="md-code-inline">SemidiscretizeRHS</code>/<a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a> rather than the free function <code class="md-code-inline">semidiscretize_rhs!(du, u, p, t)</code> gpena/Bramble.jl#163 proposes: that signature is exactly <code class="md-code-inline">SciMLBase.ODEFunction</code>&#39;s own, which leaves no argument to pass a <a href="../api_sciml/#Bramble.Semidiscretization"><code class="md-code-inline">Semidiscretization</code></a> or the precomputed scaling through – both have to be closed over somehow, and a callable struct is what every other stateful callable in this package does instead of a closure (<code class="md-code-inline">Semidiscretization</code> itself, <code class="md-code-inline">TypeCachedOperator</code>).</p>
-<p>The <code class="md-code-inline">csr</code> field holds the compressed-row pattern of <code class="md-code-inline">A</code> that a <a href="../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> space with <code class="md-code-inline">reassemble = false</code> multiplies by (see <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a>), and is <code class="md-code-inline">nothing</code> otherwise.</p>
+<p>The <code class="md-code-inline">csr</code> field holds the compressed-row pattern of <code class="md-code-inline">A</code> that a <a href="../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> space with <code class="md-code-inline">reassemble = false</code> multiplies by (see <a href="../api_sciml/#Bramble.semidiscretize_rhs"><code class="md-code-inline">semidiscretize_rhs</code></a>), and is <code class="md-code-inline">nothing</code> otherwise. The <code class="md-code-inline">twins</code> field caches, per element type of a <code class="md-code-inline">u</code> the state cannot hold (a <code class="md-code-inline">ForwardDiff.Dual</code>), the right-hand side of the residual&#39;s twin at that type.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.mass_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.mass_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L117-L121" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L126-L130" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -296,7 +310,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.operator_matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.operator_matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L124-L128" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L133-L137" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -309,22 +323,23 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.jacobian!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L709-L723" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L832-L852" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">jacobian!(J, sd::Semidiscretization, u, p, t) -&gt; J</code></pre>
 </div>
-<p>Fill <code class="md-code-inline">J</code> with <code class="md-code-inline">∂/∂u (F(t) - A u) = -A</code> and return it.</p>
-<p>Exact whenever the operator&#39;s coefficients do not read <code class="md-code-inline">u</code> – that is, whenever <code class="md-code-inline">sd</code> was built without <code class="md-code-inline">state</code>. With a <code class="md-code-inline">state</code> the operator also varies with <code class="md-code-inline">u</code>, the term <code class="md-code-inline">-(∂A/∂u) u</code> is missing, and this is a Picard linearisation rather than a Jacobian: pass <code class="md-code-inline">jacobian = nothing</code> to <a href="../api_sciml/#Bramble.ode_function"><code class="md-code-inline">ode_function</code></a> and let the solver build it by sparse automatic differentiation instead, seeded from <a href="../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a>. That one is exact: a <code class="md-code-inline">ForwardDiff.Dual</code> <code class="md-code-inline">u</code> goes into a state buffer of its own type, read by the forms rebound to it (see the <code class="md-code-inline">state</code> keyword of <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>).</p>
+<p>Fill <code class="md-code-inline">J</code> with <code class="md-code-inline">∂/∂u (F(t) - A(u) u)</code> and return it.</p>
+<p>Without <code class="md-code-inline">coefficients</code> this is <code class="md-code-inline">-A</code>, exact whenever the operator&#39;s coefficients do not read <code class="md-code-inline">u</code> – that is, whenever <code class="md-code-inline">sd</code> was built without <code class="md-code-inline">state</code>. With a <code class="md-code-inline">state</code> the operator also varies with <code class="md-code-inline">u</code>, the term <code class="md-code-inline">-(∂A/∂u) u</code> is missing, and this is a Picard linearisation rather than a Jacobian: declare the coefficients that read <code class="md-code-inline">u</code> with the <code class="md-code-inline">coefficients</code> keyword of <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>, or pass <code class="md-code-inline">jacobian = nothing</code> to <a href="../api_sciml/#Bramble.ode_function"><code class="md-code-inline">ode_function</code></a> and let the solver build it by sparse automatic differentiation instead, seeded from <a href="../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a>. That one is exact: a <code class="md-code-inline">ForwardDiff.Dual</code> <code class="md-code-inline">u</code> goes into a state buffer of its own type, read by the forms rebound to it (see the <code class="md-code-inline">state</code> keyword of <a href="../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>).</p>
+<p>With <code class="md-code-inline">coefficients</code> it is the exact Jacobian <code class="md-code-inline">-(A + ∂A)</code> at <code class="md-code-inline">u</code>, assembled from the form <code class="md-code-inline">a + ∂a</code> of <a href="../api/forms/#Bramble.jacobian_form"><code class="md-code-inline">jacobian_form</code></a> after every declared coefficient is set from <code class="md-code-inline">u</code>, so <code class="md-code-inline">J</code> must carry <a href="../api_sciml/#Bramble.jacobian_prototype"><code class="md-code-inline">jacobian_prototype</code></a><code class="md-code-inline">(sd)</code>&#39;s pattern. <code class="md-code-inline">using ForwardDiff</code> is needed.</p>
 <p>See also <a href="../api_sciml/#Bramble.jacobian_prototype"><code class="md-code-inline">jacobian_prototype</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.jacobian_prototype">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian_prototype</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L754-L765" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L895-L908" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -332,7 +347,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <pre><code class="language-julia">jacobian_prototype(sd::Semidiscretization) -&gt; AbstractMatrix</code></pre>
 </div>
 <p>Return a matrix carrying the sparsity of <code class="md-code-inline">∂/∂u (F(t) - A u)</code>, for a solver to use as its Jacobian cache.</p>
-<p>This is the pattern of the assembled operator, Dirichlet rows included, which is what the system&#39;s Jacobian has – <a href="../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a> answers the different question of what a <em>Newton residual</em>&#39;s Jacobian looks like when the form&#39;s coefficients depend on the solution.</p>
+<p>This is the pattern of the assembled operator, Dirichlet rows included, which is what the system&#39;s Jacobian has when the operator does not read <code class="md-code-inline">u</code>. With <code class="md-code-inline">coefficients</code> it is the pattern of <code class="md-code-inline">a + ∂a</code> (<a href="../api/forms/#Bramble.jacobian_form"><code class="md-code-inline">jacobian_form</code></a>), wider than <code class="md-code-inline">A</code>&#39;s where a coefficient reads neighbouring points. <a href="../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a> answers the different question of what a <em>Newton residual</em>&#39;s Jacobian looks like when the form&#39;s coefficients depend on the solution.</p>
 <p>See also <a href="../api_sciml/#Bramble.jacobian!"><code class="md-code-inline">jacobian!</code></a>.</p>
 </div>
 </div>
@@ -462,7 +477,7 @@ sol = solve(prob, KrylovJL_GMRES())</code></pre>
 <div class="md-docstring" id="Bramble.nonlinear_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.nonlinear_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/nonlinear_problem.jl#L15-L56" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/nonlinear_problem.jl#L15-L59" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -473,9 +488,9 @@ sol = solve(prob, KrylovJL_GMRES())</code></pre>
 <p><code class="md-code-inline">u0</code>, the initial guess, is a <a href="../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> or a plain vector; copied, never mutated. Every Bramble worked example builds <code class="md-code-inline">residual</code> from an assembled <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a>, <code class="md-code-inline">A(u) * u - F</code> evaluated at the current iterate, so Dirichlet rows already carry their own identity/value pair and a Newton step corrects them from any initial guess – no separate consistency step, unlike <a href="../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a>&#39;s differential-algebraic system.</p>
 <p><strong>Keywords</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">jacobian</code>: <code class="md-code-inline">jac(J, u, p)</code> if <code class="md-code-inline">residual</code> is in-place, or <code class="md-code-inline">J = jac(u, p)</code> if it is not – the two conventions cannot be mixed, the same requirement <code class="md-code-inline">NonlinearFunction</code> itself enforces. Default <code class="md-code-inline">nothing</code>: the solver differentiates <code class="md-code-inline">residual</code> itself.</p>
+<li><p><code class="md-code-inline">jacobian</code>: <code class="md-code-inline">jac(J, u, p)</code> if <code class="md-code-inline">residual</code> is in-place, or <code class="md-code-inline">J = jac(u, p)</code> if it is not – the two conventions cannot be mixed, the same requirement <code class="md-code-inline">NonlinearFunction</code> itself enforces. Or a <a href="../api/forms/#Bramble.jacobian_form"><code class="md-code-inline">jacobian_form</code></a> <code class="md-code-inline">jf</code>, whose exact Jacobian <code class="md-code-inline">jacobian!(J, jf, u)</code> is then used in that same convention, with <code class="md-code-inline">jac_prototype</code> defaulting to <code class="md-code-inline">jacobian_prototype(jf)</code>. Default <code class="md-code-inline">nothing</code>: the solver differentiates <code class="md-code-inline">residual</code> itself.</p>
 </li>
-<li><p><code class="md-code-inline">jac_prototype</code>: sparsity for the solver&#39;s Jacobian cache, e.g. built from <a href="../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a>. Default <code class="md-code-inline">nothing</code> (dense).</p>
+<li><p><code class="md-code-inline">jac_prototype</code>: sparsity for the solver&#39;s Jacobian cache, e.g. built from <a href="../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a>. Default <code class="md-code-inline">nothing</code> (dense), or <code class="md-code-inline">jacobian_prototype(jf)</code> when <code class="md-code-inline">jacobian</code> is a <code class="md-code-inline">jacobian_form</code>.</p>
 </li>
 <li><p>Every other keyword forwards to <code class="md-code-inline">NonlinearProblem</code>.</p>
 </li>
@@ -502,7 +517,7 @@ sol = solve(prob, NewtonRaphson())</code></pre>
 <div class="md-docstring" id="Bramble.pde_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.pde_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/pde_solve.jl#L47-L173" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/pde_solve.jl#L44-L188" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -532,8 +547,11 @@ pde_solve(fact::Factorization, F::AbstractVector) -&gt; Vector</code></pre>
 </ul>
 <p>A <code class="md-code-inline">SparseMatrixCSR</code> (<code class="md-code-inline">SparseMatricesCSR.jl</code>) <code class="md-code-inline">A</code> is also accepted: converted to <code class="md-code-inline">SparseMatrixCSC</code> first (see <code class="md-code-inline">docs/src/internals/csr_solvers.md</code>), then solved exactly as above.</p>
 <p><strong>Reverse-mode differentiation</strong></p>
-<p>With <code class="md-code-inline">ChainRulesCore.jl</code> loaded, <code class="md-code-inline">BrambleChainRulesExt</code>&#39;s <code class="md-code-inline">rrule</code> solves the adjoint system <code class="md-code-inline">Aᴴ λ = ∂J/∂u</code> once and returns <code class="md-code-inline">∂J/∂A = -λ u&#39;</code> (conjugate transpose, the ChainRules convention for a complex <code class="md-code-inline">A</code>; <code class="md-code-inline">-λ uᵀ</code> for real data) restricted to <code class="md-code-inline">A</code>&#39;s sparsity (never densified) and <code class="md-code-inline">∂J/∂F = λ</code>. Without keywords the adjoint solve reuses the forward solve&#39;s own factorisation. The rule accepts the keywords of <code class="md-code-inline">pde_solve</code>: it forwards them to the primal solve and to the adjoint solve of <code class="md-code-inline">sparse(A&#39;)</code>, so <code class="md-code-inline">solver</code> and <code class="md-code-inline">sym</code> apply to <code class="md-code-inline">Aᴴ</code> as well, and a <code class="md-code-inline">sym</code> hint must hold for <code class="md-code-inline">Aᴴ</code> too. A <code class="md-code-inline">SparseMatrixCSR</code> <code class="md-code-inline">A</code> has no rule (ChainRules sees a method with no <code class="md-code-inline">rrule</code>, and differentiates the conversion and the solver&#39;s internals). <code class="md-code-inline">using Enzyme</code> is enough for the same adjoint through <code class="md-code-inline">BrambleEnzymeExt</code>&#39;s native <code class="md-code-inline">EnzymeRules</code> rule, which takes no keywords (it cannot run before v4.2.0); do not call <code class="md-code-inline">Enzyme.@import_rrule</code>, whose bridge drops the cotangent&#39;s explicit zeros from <code class="md-code-inline">nzval</code> and returns a wrong gradient without any error. The Enzyme rule keeps the unconjugated <code class="md-code-inline">-λ uᵀ</code> and is not validated for complex <code class="md-code-inline">A</code>, whose convention differs. <code class="md-code-inline">Mooncake</code> cannot represent a <code class="md-code-inline">SparseMatrixCSC</code> cotangent at all and is unsupported.</p>
+<p>With <code class="md-code-inline">ChainRulesCore.jl</code> loaded, <code class="md-code-inline">BrambleChainRulesExt</code>&#39;s <code class="md-code-inline">rrule</code> solves the adjoint system <code class="md-code-inline">Aᴴ λ = ∂J/∂u</code> once and returns <code class="md-code-inline">∂J/∂A = -λ u&#39;</code> (conjugate transpose, the ChainRules convention for a complex <code class="md-code-inline">A</code>; <code class="md-code-inline">-λ uᵀ</code> for real data) restricted to <code class="md-code-inline">A</code>&#39;s sparsity (never densified) and <code class="md-code-inline">∂J/∂F = λ</code>. Without keywords the adjoint solve reuses the forward solve&#39;s own factorisation. The rule accepts the keywords of <code class="md-code-inline">pde_solve</code>: it forwards them to the primal solve and to the adjoint solve of <code class="md-code-inline">sparse(A&#39;)</code>, so <code class="md-code-inline">solver</code> and <code class="md-code-inline">sym</code> apply to <code class="md-code-inline">Aᴴ</code> as well, and a <code class="md-code-inline">sym</code> hint must hold for <code class="md-code-inline">Aᴴ</code> too. A <code class="md-code-inline">SparseMatrixCSR</code> <code class="md-code-inline">A</code> has no rule (ChainRules sees a method with no <code class="md-code-inline">rrule</code>, and differentiates the conversion and the solver&#39;s internals). <code class="md-code-inline">using Enzyme</code> is enough for the same adjoint through <code class="md-code-inline">BrambleEnzymeExt</code>&#39;s native <code class="md-code-inline">EnzymeRules</code> rule. It takes a <code class="md-code-inline">SparseMatrixCSC</code> <code class="md-code-inline">A</code>, a vector <code class="md-code-inline">F</code> and the keywords of <code class="md-code-inline">pde_solve</code>, forwarded as the rrule forwards them, and differentiates in reverse mode at width 1: a batched reverse throws an <code class="md-code-inline">ArgumentError</code>. It conjugates <code class="md-code-inline">u</code> as the rrule does. Do not call <code class="md-code-inline">Enzyme.@import_rrule</code>, whose bridge drops the cotangent&#39;s explicit zeros from <code class="md-code-inline">nzval</code> and returns a wrong gradient without any error.</p>
 <p>A closure capturing a grid space or a form needs <code class="md-code-inline">Enzyme.Const(f)</code> and <code class="md-code-inline">Enzyme.set_runtime_activity(Enzyme.Reverse)</code>, as the automatic differentiation tutorial describes for every other path. A gradient with respect to a <em>runtime</em> scalar coefficient of the form should be a <code class="md-code-inline">Float64</code> or a <code class="md-code-inline">Ref</code>: an <code class="md-code-inline">Integer</code> coefficient known only at run time costs <code class="md-code-inline">form</code> its inferred return type, which Enzyme&#39;s type analysis rejects.</p>
+<p><strong>Forward-mode differentiation</strong></p>
+<p>With <code class="md-code-inline">ForwardDiff.jl</code> loaded, a <code class="md-code-inline">Dual</code> matrix or load of the plain solve is solved by <code class="md-code-inline">BrambleForwardDiffExt</code>, which factors the <code class="md-code-inline">Float64</code> values of <code class="md-code-inline">A</code> once, by the route the <code class="md-code-inline">Float64</code> solve of the same keywords takes, and solves every partial against that factor: with <span class="md-math md-math-inline">\(A₀ = value.(A)\)</span> and <span class="md-math md-math-inline">\(b₀ = value.(F)\)</span>, the value is <span class="md-math md-math-inline">\(x₀ = A₀⁻¹b₀\)</span> and the partial <span class="md-math md-math-inline">\(k\)</span> is <span class="md-math md-math-inline">\(xₖ = A₀⁻¹(bₖ − Aₖx₀)\)</span>. A nested <code class="md-code-inline">Dual</code> recurses through the same factor. A non-square <code class="md-code-inline">Dual</code> matrix throws an <code class="md-code-inline">ArgumentError</code>: a least-squares solve has a residual term that this derivative omits.</p>
+<p>The bordered solve (<code class="md-code-inline">mean_zero</code>, <code class="md-code-inline">gauge</code>, and the rank-one term of a <code class="md-code-inline">Bramble.RankOneUpdate</code>) differentiates the same way on the bordered matrix: the primal bordered system of the values is factored once, by the route the <code class="md-code-inline">Float64</code> solve takes, and each partial solves its bordered right-hand side <span class="md-math md-math-inline">\([Fₖ − Aₖu₀; 0]\)</span> against that factor. <code class="md-code-inline">w</code> and <code class="md-code-inline">gauge</code>&#39;s <code class="md-code-inline">Z</code> are constants: a <code class="md-code-inline">Dual</code> one throws an <code class="md-code-inline">ArgumentError</code> naming it, as does a <code class="md-code-inline">RankOneUpdate</code> over a <code class="md-code-inline">Dual</code> matrix, whose <code class="md-code-inline">σ</code> takes the matrix&#39;s element type. <code class="md-code-inline">pde_solve(fact, F)</code> is unchanged, so with a <code class="md-code-inline">Dual</code> load it takes the route it always took.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -1864,7 +1882,7 @@ true</code></pre>
 </li>
 <li><p><strong>MUMPS</strong> is a parallel multifrontal direct solver for large 2D/3D systems via <code class="md-code-inline">MUMPS.jl</code>.</p>
 </li>
-<li><p><strong>Sparspak</strong> is a pure-Julia sparse direct LU (George &amp; Liu&#39;s Waterloo package) via <code class="md-code-inline">Sparspak.jl</code> – zero binary dependency, so it factors matrices whose entries are <code class="md-code-inline">BigFloat</code> or a <code class="md-code-inline">ForwardDiff.Dual</code>, which the other three backends cannot: they take only BLAS floating-point types (MUMPS and Accelerate accept <code class="md-code-inline">Float32</code> as well as <code class="md-code-inline">Float64</code>).</p>
+<li><p><strong>Sparspak</strong> is a pure-Julia sparse direct LU (George &amp; Liu&#39;s Waterloo package) via <code class="md-code-inline">Sparspak.jl</code> – zero binary dependency, so it factors matrices whose entries are <code class="md-code-inline">BigFloat</code> or a <code class="md-code-inline">ForwardDiff.Dual</code> directly. The other three take only BLAS floating-point types (MUMPS and Accelerate accept <code class="md-code-inline">Float32</code> as well as <code class="md-code-inline">Float64</code>). With <code class="md-code-inline">ForwardDiff</code> loaded, the <code class="md-code-inline">BrambleForwardDiffExt</code> extension lets <a href="../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a> solve a <code class="md-code-inline">Dual</code> matrix or load on every backend: it factors the <code class="md-code-inline">Float64</code> values once, by the route the <code class="md-code-inline">Float64</code> solve takes, and solves each partial against that factor. A <code class="md-code-inline">Dual</code> matrix passed to a backend&#39;s own factorisation still fails.</p>
 </li>
 </ul>
 <p>All four solvers support symbolic reuse via the unified <a href="../api_sciml/#Bramble.refactor!"><code class="md-code-inline">refactor!</code></a> driver for transient PDE time loops and Newton iterations.</p>
@@ -2323,7 +2341,7 @@ u = mumps_solve(A, F)</code></pre>
 <div class="md-docstring" id="Bramble.sparspak_factorize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.sparspak_factorize</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparspak_solver.jl#L20-L55" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparspak_solver.jl#L27-L64" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2332,7 +2350,7 @@ u = mumps_solve(A, F)</code></pre>
 sparspak_factorize(a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing) -&gt; SparspakFactorization</code></pre>
 </div>
 <p>Compute the pure-Julia sparse direct LU factorization of <code class="md-code-inline">A</code> (or the assembled matrix of <code class="md-code-inline">a</code>) using <a href="https://github.com/JuliaSparse/Sparspak.jl">Sparspak.jl</a>.</p>
-<p>Sparspak has no binary dependency, so it factors matrices whose entries are not <code class="md-code-inline">Float64</code>/<code class="md-code-inline">ComplexF64</code> – <code class="md-code-inline">Float32</code>, <code class="md-code-inline">BigFloat</code>, or a <code class="md-code-inline">ForwardDiff.Dual</code> – where SuiteSparse and MUMPS cannot.</p>
+<p>Sparspak has no binary dependency, so it factors matrices whose entries are not <code class="md-code-inline">Float64</code>/<code class="md-code-inline">ComplexF64</code> – <code class="md-code-inline">Float32</code>, <code class="md-code-inline">BigFloat</code>, or a <code class="md-code-inline">ForwardDiff.Dual</code> – where SuiteSparse and MUMPS cannot. <code class="md-code-inline">pde_solve</code> does not hand it a <code class="md-code-inline">Dual</code> matrix: it factors the <code class="md-code-inline">Float64</code> values of that matrix once and solves each partial against them (see <a href="../api_sciml/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a>), so a <code class="md-code-inline">Dual</code> factor is built only by a direct call.</p>
 <p>A singular matrix throws a <code class="md-code-inline">SingularException</code>, as it does for SuiteSparse, MUMPS and Accelerate, from the factorization or from the solve: a rank-deficient or structurally singular matrix at factorization, and a stored zero pivot or an empty row or column when a solve returns a non-finite entry for a finite right-hand side. Sparspak&#39;s own failure is a misleading <code class="md-code-inline">ErrorException</code> or an <code class="md-code-inline">Inf</code> in the solution. The index of the <code class="md-code-inline">SingularException</code> is <code class="md-code-inline">0</code>, not a pivot position.</p>
 <p>A <code class="md-code-inline">BilinearForm</code> on a dense or CSR backend is converted to <code class="md-code-inline">SparseMatrixCSC</code> first.</p>
 <p>Requires <a href="https://github.com/JuliaSparse/Sparspak.jl">Sparspak.jl</a>; call <code class="md-code-inline">using Sparspak</code> before calling this function.</p>
@@ -2352,7 +2370,7 @@ u = fact \ F</code></pre>
 <div class="md-docstring" id="Bramble.sparspak_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.sparspak_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparspak_solver.jl#L70-L97" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparspak_solver.jl#L79-L106" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2380,7 +2398,7 @@ u = sparspak_solve(A, F)</code></pre>
 <div class="md-docstring" id="Bramble.sparspak_refactor!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.sparspak_refactor!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparspak_solver.jl#L114-L122" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparspak_solver.jl#L123-L131" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2392,7 +2410,7 @@ u = sparspak_solve(A, F)</code></pre>
 </div>
 </div>
 <h2 id="Caching-a-coefficient-dependent-assembly-by-element-type" class="md-heading">Caching a coefficient-dependent assembly by element type<a href="#Caching-a-coefficient-dependent-assembly-by-element-type" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A Newton residual generic over <code class="md-code-inline">T</code> (<code class="md-code-inline">Float64</code> on a plain call, <code class="md-code-inline">ForwardDiff.Dual</code> while an AD backend&#39;s sparse Jacobian sweep is probing it) cannot preallocate one matrix the way a Picard loop can. <code class="md-code-inline">type_cached_assemble!</code> gives the sparsity pattern a place to live per element type it is ever reached at instead, so only the very first call at a given type pays for it. No test runs the AD sweep until v4.2.0, when the AD backends return.</p>
+<p>A Newton residual generic over <code class="md-code-inline">T</code> (<code class="md-code-inline">Float64</code> on a plain call, <code class="md-code-inline">ForwardDiff.Dual</code> while an AD backend&#39;s sparse Jacobian sweep is probing it) cannot preallocate one matrix the way a Picard loop can. <code class="md-code-inline">type_cached_assemble!</code> gives the sparsity pattern a place to live per element type it is ever reached at instead, so only the very first call at a given type pays for it.</p>
 <div class="md-docstring" id="Bramble.type_cached_assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.type_cached_assemble!</code></h4>
@@ -2528,6 +2546,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=d5b6caf6"></script>
+  <script src="../assets/materialdocs.js?v=5ade6b50"></script>
 </body>
 </html>

@@ -1,19 +1,15 @@
 # # Recovering a diffusion coefficient (adjoint gradients)
 #
-# Every other worked example goes forward: known parameters in, a solution out. This one goes
-# backward -- noisy observations of a solution in, the parameter that produced them out --
+# Every other worked example goes forward, from known parameters to a solution. This one goes
+# backward, from noisy observations of a solution to the parameter that produced them. That is
 # the shape of a parameter-estimation problem, and of "a neural network predicts a PDE
-# parameter, a real solve runs on it, the loss trains the network" (gpena/Bramble.jl#228's own
-# motivation). What makes it tractable for more than a handful of parameters is
-# [`pde_solve`](@ref)'s adjoint rule: one extra linear solve gives the gradient with respect
-# to *every* parameter at once, instead of one extra solve *per* parameter.
+# parameter, a real solve runs on it, the loss trains the network". What makes it tractable for
+# more than a handful of parameters is [`pde_solve`](@ref)'s adjoint rule: one extra linear
+# solve gives the gradient with respect to *every* parameter at once, instead of one extra solve
+# *per* parameter.
 #
-# This script runs under `test/examples/inverse_diffusion.jl` with the assertions that it
-# does not render. Lines marked `#src` here are the assertions; Literate.jl drops them from a
-# rendered page. The script is not part of the published manual. It needs `Enzyme` and runs
-# behind the `ad`/`full` test groups (with `BRAMBLE_TEST_AD=true`), unlike the other example
-# pages -- see that test file for why. No test runs this page until v4.2.0, when the AD
-# backends return.
+# Lines marked `#src` are assertions. The test `test/examples/inverse_diffusion.jl` runs them,
+# and Literate.jl drops them from the rendered page. The gradient needs `Enzyme`.
 #
 # ## Problem
 #
@@ -28,22 +24,6 @@
 # -- is unknown; a handful of noisy point observations of ``u`` at the true ``\kappa`` are all
 # that is given.
 #
-# The boundary stays Dirichlet-only here because forms on a ghost space refuse the automatic
-# differentiation the adjoint gradient needs, which arrives with milestone v4.2.0
-# (automatic differentiation and form correctness on the CPU).
-#
-# !!! note "What used to block this"
-#     A gradient with respect to a *Dirichlet boundary value or source term* reaches only `F`,
-#     filled by `dirichlet_bc!`'s own value-writing path; it never touched `assemble`'s
-#     recording engine and always worked. A gradient with respect to the operator's own
-#     coefficient, as `κ` is here, does reach that engine, and until gpena/Bramble.jl#240 it
-#     raised `IllegalTypeAnalysisException` from a fully inferred call site: `simplify_ast`
-#     decided some of its rewrites by reading a coefficient's *value*, which left a `Union` of
-#     rewritten and unrewritten `BilinearForm` types wherever the compiler could not fold the
-#     comparison, and Enzyme's strict-aliasing type analysis rejects a `Union` outright.
-#     Restricting those rewrites to `Integer` coefficients fixed it -- [`pde_solve`](@ref)'s
-#     own docstring has the details.
-#
 # ## Discretisation and the forward solve
 
 using Bramble
@@ -52,7 +32,7 @@ using Bramble
 f(x) = κ_true * pi^2 * sinpi(x[1])
 uexact(x, κ) = (κ_true / κ) * sinpi(x[1])
 
-Ωₕ = mesh(domain(interval(0.0, 1.0)), 41, true)
+Ωₕ = mesh(domain(interval(0.0, 1.0)), 41)
 Wₕ = gridspace(Ωₕ)
 fₕ = Rₕ(Wₕ, f)
 l = form(Wₕ, v -> innerₕ(fₕ, v))
@@ -64,14 +44,14 @@ l = form(Wₕ, v -> innerₕ(fₕ, v))
 function forward(κ::Real)
     aκ = form(Wₕ, Wₕ, (u, v) -> κ * inner₊(∇ₕ(u), ∇ₕ(v)))
     A, F = assemble(aκ, l; dirichlet = :boundary => x -> 0.0)
-    return Bramble.pde_solve(A, F)
+    return pde_solve(A, F)
 end
 
 # ## Synthetic observations
 #
 # Five interior points, `κ_true`'s exact solution there plus a small fixed perturbation
 # standing in for measurement noise -- fixed rather than `Random`-drawn, so the page renders
-# the same numbers every build. The mesh above is uniform so that these indices sit at the
+# the same numbers every build. The mesh is uniform (the default), so these indices sit at the
 # round abscissae ``x = 0.125, 0.25, 0.5, 0.75, 0.875``; nothing else in the problem needs it.
 
 obs_idx = (6, 11, 21, 31, 36)
@@ -83,54 +63,56 @@ loss(κ::Real) = sum(abs2, forward(κ)[obs_idx[k]] - u_obs[k] for k in eachindex
 
 # ## Gradient descent, driven by the adjoint
 #
-# `using Enzyme` is all the setup this needs: `BrambleEnzymeExt` defines a native
-# `EnzymeRules` reverse rule for [`pde_solve`](@ref), so `Enzyme.gradient` reaches the adjoint
-# directly. Do *not* add `Enzyme.@import_rrule(typeof(pde_solve), ...)` here -- besides
-# defining a second rule for the same signature, that bridge corrupts Enzyme's shadow of a
-# sparse `A` whenever the cotangent carries an explicit zero, and returns a wrong gradient
-# with no error at all (`pde_solve`'s own docstring, gpena/Bramble.jl#240).
+# `using Enzyme` and `import DifferentiationInterface as DI` are all the setup this needs:
+# `BrambleEnzymeExt` defines a native `EnzymeRules` reverse rule for [`pde_solve`](@ref), so
+# Enzyme's reverse mode reaches the adjoint directly, and DifferentiationInterface.jl (`DI`)
+# calls it through an `AutoEnzyme` backend. Do *not* add
+# `Enzyme.@import_rrule(typeof(pde_solve), ...)` here: besides defining a second rule for the
+# same signature, that bridge corrupts Enzyme's shadow of a sparse `A` whenever the cotangent
+# carries an explicit zero, and returns a wrong gradient with no error at all (`pde_solve`'s
+# own docstring).
 #
-# `loss` closes over `Wₕ`/`l`, which Enzyme cannot prove read-only on its own, so the function
-# argument is wrapped `Const` -- the same annotation `docs/notes/tutorials/autodiff.md` and
+# `loss` closes over `Wₕ`/`l`, which Enzyme cannot prove read-only on its own, so the backend
+# wraps the function `Const` (`function_annotation`) and sets `set_runtime_activity` -- the same
+# annotation the [automatic differentiation tutorial](@ref tutorial_autodiff) and
 # `test/space/autodiff_heavy.jl` already document for the ordinary (non-solve) path.
 
 using Enzyme
+import DifferentiationInterface as DI
 
-mode = Enzyme.set_runtime_activity(Enzyme.Reverse)
+backend = DI.AutoEnzyme(;
+    mode = Enzyme.set_runtime_activity(Enzyme.Reverse),
+    function_annotation = Enzyme.Const)
 
 κ = 0.3   # deliberately far from κ_true = 0.7
-history = Float64[κ]
 step = 0.02
 for _ in 1:100
-    g = Enzyme.gradient(mode, Enzyme.Const(loss), κ)[1]
+    g = DI.gradient(loss, backend, κ)
     global κ -= step * g
-    push!(history, κ)
 end
 
 (κ, κ_true)
 
 # Recovered to within the noise level the synthetic observations carry, from a starting guess
 # more than a factor of two away.
-@test isapprox(κ, κ_true; atol = 0.02)                                                #src
+@test isapprox(κ, κ_true; atol = 0.005)                                               #src
 @test loss(κ) < loss(0.3)                                                             #src
 fd_check = (loss(0.5 + 1e-6) - loss(0.5 - 1e-6)) / 2e-6                               #src
-ad_check = Enzyme.gradient(mode, Enzyme.Const(loss), 0.5)[1]                          #src
+ad_check = DI.gradient(loss, backend, 0.5)                                            #src
 @test ad_check ≈ fd_check rtol = 1e-6                                                 #src
 
 # ## Cost: one extra solve, not one per parameter
 #
-# The point of the adjoint rule: `Enzyme.gradient` above costs one forward solve plus one
+# The point of the adjoint rule: `DI.gradient` above costs one forward solve plus one
 # adjoint solve, regardless of how many parameters `κ` were -- a coefficient *field* with one
 # value per grid point would cost the same two solves, where forward-mode differentiation
-# through the same model would cost one solve per parameter. A direct timing comparison against
-# a naive `ForwardDiff`-through-the-solve baseline is not run on this page, because that
-# baseline fails outright here for an unrelated reason. UMFPACK's sparse factorisation only
-# accepts `Float64`/`ComplexF64`, so `A \ F` for a `Dual`-valued `F` errors regardless of this
-# scaling question; `docs/notes/tutorials/autodiff.md` §5 documents this and recommends a dense
-# conversion or an iterative solver as the forward-mode workaround. See
-# `test/ext/chainrules_ext.jl` for the scaling measurement itself, which compares the adjoint
-# rule's own pullback cost against `nθ` separate forward solves, the per-parameter cost a
-# naive forward-mode scheme pays.
+# through the same model would cost one solve per parameter. That is why the page uses reverse
+# mode. With `ForwardDiff` loaded, `pde_solve` does run on a `Dual` matrix: it factors the
+# `Float64` values once, and each parameter's partial is one solve against that factor. Forward
+# mode therefore runs here, with one solve per parameter, where the adjoint needs one for all
+# of them. No timings are shown on this page. See `test/ext/chainrules_ext.jl` for the scaling
+# measurement itself, which compares the adjoint rule's own pullback cost against `nθ` separate
+# forward solves.
 #
 # ## Where to go next
 #

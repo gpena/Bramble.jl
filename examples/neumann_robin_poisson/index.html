@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Neumann, Robin and pure Neumann boundaries — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d54acee5">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=dd783770">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Neumann, Robin and pure Neumann boundaries — Bramble.jl">
   <meta property="og:title" content="Neumann, Robin and pure Neumann boundaries — Bramble.jl">
@@ -53,16 +53,23 @@
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Solvers and AD</span>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+      </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/" class="md-nav-active">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
         <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
@@ -204,7 +211,7 @@ order_robin = order(hs_robin, errs_robin)
 order_neumann = order(hs_neumann, errs_neumann)
 (order_mixed, order_robin, order_neumann)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.000092631987504, 1.9999237630517444, 2.000173713957749)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.000092631987504, 1.9999237630517444, 2.000173713957636)</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -306,7 +313,7 @@ order_neumann = order(hs_neumann, errs_neumann)
 {
   name: "pure Neumann",
   x: [0.34675352403294174,0.17337676201647093,0.08668838100823553,0.04334419050411781,0.021672095252058984],
-  y: [0.06525818269000129,0.01618469060756113,0.0040383015025261685,0.0010090880786110697,0.000252241645574071],
+  y: [0.06525818269000129,0.01618469060756113,0.0040383015025261685,0.0010090880786110697,0.0002522416455740908],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#B26A00", size: 8 },
@@ -389,6 +396,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=d54acee5"></script>
+  <script src="../../assets/materialdocs.js?v=dd783770"></script>
 </body>
 </html>

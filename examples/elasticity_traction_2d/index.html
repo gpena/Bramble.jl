@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Elasticity with a traction condition — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=46e2b3a1">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=bb50bbd3">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Elasticity with a traction condition — Bramble.jl">
   <meta property="og:title" content="Elasticity with a traction condition — Bramble.jl">
@@ -53,16 +53,23 @@
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Solvers and AD</span>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+      </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
         <a href="../../examples/elasticity_traction_2d/" class="md-nav-active">Elasticity with a traction condition</a>
+        <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Documentation</span>
@@ -206,7 +213,7 @@ end</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">function relation_residual(Ωₕ, P, U, F, i)
-    m = prod(Bramble.size(Ωₕ) .+ 2)
+    m = prod(size(Ωₕ) .+ 2)
     R = assemble(form(P, P,
         (w, v) -&gt; inner_Γ(∂ₙ(w(1); K = K(i, 1)), v(i); markers = (F,)) +
                   inner_Γ(∂ₙ(w(2); K = K(i, 2)), v(i); markers = (F,))))
@@ -225,7 +232,7 @@ end</code></pre>
 <pre><code class="language-julia">function facet_residual(Ωₕ, P, U, F, i)
     r, flux = relation_residual(Ωₕ, P, U, F, i)
     keep = trues(length(r))
-    keep[LinearIndices(Bramble.size(Ωₕ) .+ 2)[2, 2]] = false
+    keep[LinearIndices(size(Ωₕ) .+ 2)[2, 2]] = false
     return maximum(abs, r[keep]) / max(1.0, maximum(abs, flux[keep]))
 end</code></pre>
 </div>
@@ -304,7 +311,7 @@ maximum(abs, first.(cornerx))</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">function component_errors(Ωₕ)
     _, U = solve_on(Ωₕ)
-    n = Bramble.size(Ωₕ)
+    n = size(Ωₕ)
     m = prod(n .+ 2)
     W = gridspace(Ωₕ)
     return ntuple(2) do i
@@ -395,6 +402,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=46e2b3a1"></script>
+  <script src="../../assets/materialdocs.js?v=bb50bbd3"></script>
 </body>
 </html>

@@ -19,10 +19,6 @@
 # interaction term, `v` is depleted by it. The manufactured solutions vanish on the boundary
 # already, so homogeneous Dirichlet data is all that is needed.
 #
-# The boundary stays Dirichlet-only here because forms on a ghost space refuse the automatic
-# differentiation that Newton's Jacobian needs, which arrives with milestone v4.2.0
-# (automatic differentiation and form correctness on the CPU).
-#
 # ## Mesh, space and load
 
 using Bramble
@@ -261,7 +257,7 @@ coupled_reaction_diffusion_widget(uₕ, vₕ; title = "Coupled reaction-diffusio
 # `ForwardDiff.jacobian` over two coupled species would cost `(2n)^2` against the scalar
 # examples' `n^2`, and was what forced this example to stay at three small refinement levels
 # before switching to sparse AD; with it, this reaches five levels, 8,450 unknowns on the
-# finest (``2 \times 65^2``), in about a second per level:
+# finest (``2 \times 65^2``):
 
 Random.seed!(20260903)
 
@@ -354,4 +350,4 @@ convergence_plot([(hs, erru, "u", "#5B5FC7"), (hs, errv, "v", "#0E7C86")]; title
 #   - The [coupled systems tutorial](@ref tutorial_coupled) for composite spaces and the
 #     block structure of their matrices, and the [space tutorial](@ref space_composite) for
 #     vector elements.
-#   - [Choosing a solver](@ref tutorial_solvers) for the linear solve inside each Newton step.
+#   - The "Choosing a solver" tutorial for the linear solve inside each Newton step.

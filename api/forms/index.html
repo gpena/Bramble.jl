@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=23ae2fd9">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=446d06d8">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -54,15 +54,22 @@
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Solvers and AD</span>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
         <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
         <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Documentation</span>
@@ -332,7 +339,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1587-L1620" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1609-L1642" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -404,7 +411,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.assemble_parallel!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_parallel!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1789-L1798" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1811-L1820" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -903,7 +910,7 @@ assemble_add!(F, l_source, θ)   # F += θ[] * l_source&#39;s contribution</code
 </div>
 </div>
 <h2 id="Jacobian-sparsity" class="md-heading">Jacobian sparsity<a href="#Jacobian-sparsity" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>For a Newton residual built from a <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> with a live nonlinear coefficient, <code class="md-code-inline">jacobian_pattern</code> reads the Jacobian&#39;s sparsity pattern directly off the form&#39;s AST, without AD tracing. <code class="md-code-inline">ast_sparsity_detector</code> wraps it as an <code class="md-code-inline">ADTypes.AbstractSparsityDetector</code>, ready to hand <code class="md-code-inline">AutoSparse</code> directly (requires <a href="https://github.com/SciML/ADTypes.jl">ADTypes.jl</a>). No test runs the <code class="md-code-inline">AutoSparse</code> wrapper until v4.2.0, when the AD backends return.</p>
+<p>For a Newton residual built from a <a href="../../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> with a live nonlinear coefficient, <code class="md-code-inline">jacobian_pattern</code> reads the Jacobian&#39;s sparsity pattern directly off the form&#39;s AST, without AD tracing. <code class="md-code-inline">ast_sparsity_detector</code> wraps it as an <code class="md-code-inline">ADTypes.AbstractSparsityDetector</code>, ready to hand <code class="md-code-inline">AutoSparse</code> directly (requires <a href="https://github.com/SciML/ADTypes.jl">ADTypes.jl</a>).</p>
 <div class="md-docstring" id="Bramble.jacobian_pattern">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian_pattern</code></h4>
@@ -964,6 +971,48 @@ sparse_ad = AutoSparse(AutoForwardDiff();
     coloring_algorithm = GreedyColoringAlgorithm())</code></pre>
 </div>
 <p>Requires <a href="https://github.com/SciML/ADTypes.jl">ADTypes.jl</a>; call <code class="md-code-inline">using ADTypes</code> before calling this function.</p>
+</div>
+</div>
+<h2 id="Assembled-Jacobian" class="md-heading">Assembled Jacobian<a href="#Assembled-Jacobian" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">jacobian_form</code> builds the exact Jacobian of such a residual as one form, <code class="md-code-inline">a + ∂a</code>, from the form&#39;s AST and a declaration of each coefficient (<code class="md-code-inline">values =&gt; (U -&gt; L(U), f)</code>). Each Jacobian is then one <code class="md-code-inline">assemble!</code>, with no <code class="md-code-inline">Dual</code> passing through assembly. A coefficient under a node with no derivative rule throws <code class="md-code-inline">MissingJacobianRule</code>.</p>
+<div class="md-docstring" id="Bramble.jacobian_form">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.jacobian_form</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/assembled_jacobian.jl#L300-L349" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">jacobian_form(a::BilinearForm, coefficients::Pair...; dirichlet = nothing)</code></pre>
+</div>
+<p>The exact Jacobian of the Newton residual <code class="md-code-inline">R(u) = A(u) u - F</code> as one form, <code class="md-code-inline">a + ∂a</code>, where <code class="md-code-inline">a</code> assembles <code class="md-code-inline">A(u)</code> and reads coefficients that depend on the state. Each is declared as <code class="md-code-inline">values =&gt; (U -&gt; L(U), f)</code>: <code class="md-code-inline">values</code> is the grid function <code class="md-code-inline">a</code> reads (the same object, by identity), <code class="md-code-inline">L</code> the stencil operator it is computed from, written as a function of the trial placeholder as <a href="../../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a> takes it, and <code class="md-code-inline">f</code> a scalar function, so that <code class="md-code-inline">values == f.(L(u))</code>.</p>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble: jacobian_form, jacobian_prototype, jacobian!
+using ForwardDiff                      # differentiates each `f`
+αx, αy = element(Wₕ), element(Wₕ)
+a = form(Wₕ, Wₕ, (U, V) -&gt; inner₊((αx * ∇ₕ(U)[1], αy * ∇ₕ(U)[2]), ∇ₕ(V)))
+jf = jacobian_form(a, αx =&gt; (U -&gt; Mₕ(U)[1], α), αy =&gt; (U -&gt; Mₕ(U)[2], α);
+    dirichlet = :boundary)
+J = jacobian_prototype(jf)             # the pattern of a + ∂a, wider than A&#39;s in general
+jacobian!(J, jf, u)                    # J = ∂R/∂u at u</code></pre>
+</div>
+<p><code class="md-code-inline">jacobian_prototype(jf)</code> allocates a matrix with the pattern of <code class="md-code-inline">a + ∂a</code>, which can be wider than <code class="md-code-inline">A</code>&#39;s. <code class="md-code-inline">jacobian!(J, jf, u)</code> writes the Jacobian at <code class="md-code-inline">u</code> into it: it sets every declared coefficient to <code class="md-code-inline">f.(L(u))</code> and each derivative buffer to <code class="md-code-inline">f′.(L(u)) ⊙ T(u)</code>, where <code class="md-code-inline">T</code> is the operator the coefficient multiplies, then assembles <code class="md-code-inline">a + ∂a</code> once, with the Dirichlet labels <code class="md-code-inline">dirichlet</code> (as <a href="../../api/forms/#Bramble.assemble!"><code class="md-code-inline">assemble!</code></a> takes them). The coefficients are written from <code class="md-code-inline">u</code> itself, so the Jacobian is exact at <code class="md-code-inline">u</code> whatever state they held before. Each <code class="md-code-inline">f′</code> is one <code class="md-code-inline">ForwardDiff.Dual</code> evaluation of <code class="md-code-inline">f</code>, so ForwardDiff.jl must be loaded. The refill runs under the mesh&#39;s execution policy.</p>
+<p>The derivative is built by a walk over <code class="md-code-inline">a</code>&#39;s AST: the product rule where a declared coefficient scales an operator, and every node above it (scales, sums, differences, averages, jumps, shifts, region restrictions, the trial side of an inner product) rebuilt around the derivative of its operand. Every inner product&#39;s weight is pointwise, so a boundary term such as a Robin term <code class="md-code-inline">inner_Γ(c * U, V; markers)</code> needs nothing more, and a coefficient scaling the whole test side, <code class="md-code-inline">inner₊(∇ₕ(U)[1], c * ∇ₕ(V)[1])</code>, is moved to the trial side. A declared coefficient under a node with no such rule, under an operator on the test side, or in any field a rule does not read, throws <a href="../../api/forms/#Bramble.MissingJacobianRule"><code class="md-code-inline">MissingJacobianRule</code></a> naming the node. A declared coefficient the form never reads throws an <code class="md-code-inline">ArgumentError</code>, and so does a dependency <code class="md-code-inline">L</code> that reads a declared coefficient (itself included): <code class="md-code-inline">L</code> may read only the state and constant grid functions. Composite spaces are routed per block.</p>
+<p>The trial and test spaces are both scalar grid spaces or both composite ones. On a composite space each declared coefficient scales one component, <code class="md-code-inline">c * U(i)</code>, and its dependency names the component it reads, <code class="md-code-inline">U -&gt; L(U(j))</code>; the derivative term of <code class="md-code-inline">c * U(i)</code> in the equation of component <code class="md-code-inline">k</code> then lands in block <code class="md-code-inline">(k, j)</code>, so a coefficient reading another component couples the two. A coefficient scaling a trial function with no component, or a dependency naming none, throws an <code class="md-code-inline">ArgumentError</code>, and so does a dependency naming a component on another mesh.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.MissingJacobianRule">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.MissingJacobianRule</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/assembled_jacobian.jl#L26-L32" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">MissingJacobianRule(node::Symbol, reason::String)</code></pre>
+</div>
+<p>Thrown by <a href="../../api/forms/#Bramble.jacobian_form"><code class="md-code-inline">jacobian_form</code></a> when a node on a path from the form&#39;s root to a declared coefficient has no derivative rule. <code class="md-code-inline">node</code> names the node&#39;s type. The term is refused rather than dropped, so the Jacobian is never silently missing a part.</p>
 </div>
 </div>
 <p>Time integration, differentiable linear solves, and the sparse/iterative solver backends move to their own <a href="../../api_sciml/">scientific computing reference</a>: the SciML stack (<code class="md-code-inline">semidiscretize</code>, <code class="md-code-inline">ode_problem</code>, <code class="md-code-inline">linear_problem</code>, <code class="md-code-inline">nonlinear_problem</code>, ...), <code class="md-code-inline">pde_solve</code>&#39;s adjoint rule, AMG preconditioning, the SuiteSparse/Apple Accelerate/MUMPS direct solvers, and <code class="md-code-inline">type_cached_assemble!</code>.</p>
@@ -1234,6 +1283,7 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
           <a class="md-toc-link md-toc-h2" href="#Matrix-free-operators">Matrix-free operators</a>
           <a class="md-toc-link md-toc-h2" href="#Additive-accumulation">Additive accumulation</a>
           <a class="md-toc-link md-toc-h2" href="#Jacobian-sparsity">Jacobian sparsity</a>
+          <a class="md-toc-link md-toc-h2" href="#Assembled-Jacobian">Assembled Jacobian</a>
           <a class="md-toc-link md-toc-h2" href="#Dirichlet-conditions">Dirichlet conditions</a>
           <a class="md-toc-link md-toc-h2" href="#Boundary-flux-/-reaction-extraction">Boundary flux / reaction extraction</a>
           <a class="md-toc-link md-toc-h2" href="#Structural-properties">Structural properties</a>
@@ -1254,6 +1304,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=23ae2fd9"></script>
+  <script src="../../assets/materialdocs.js?v=446d06d8"></script>
 </body>
 </html>
