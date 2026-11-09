@@ -285,19 +285,54 @@ end
         @test assemble(form(W, W, f_a)) == assemble(form(U0, W, f_a))
     end
 
-    @testset "composites refuse polygon spaces" begin
+    @testset "composites of polygon spaces" begin
         Random.seed!(2)
-        for Ωₕ in (fig1_mesh((10, 9), (false, false)), vnotch_mesh((5, 5), (true, true)))
+        # Each block equals the scalar form of its pair of components, the cross block
+        # `mixed(u(1))` tested against `v(2)` (the V-notch's conflict node among them) too:
+        # a conflict move's columns are nodes of the trial component's block.
+        f11 = (w, v) -> innerₕ(-1.0 * Δₕ(w) - 0.5 * mixed(w), v)
+        f21 = (w, v) -> innerₕ(mixed(w), v)
+        f22 = (w, v) -> innerₕ(-1.0 * Δₕ(w), v)
+        fc = (w, v) -> f11(w[1], v[1]) + f21(w[1], v[2]) + f22(w[2], v[2])
+        for (Ωₕ, conflict) in ((fig1_mesh((10, 9), (false, false)), false),
+            (vnotch_mesh((5, 5), (true, true)), true))
             U, W = polygon_spaces(Ωₕ, :P, uq)
-            f_a = (w, v) -> innerₕ(-1.0 * Δₕ(w[1]) - 0.5 * mixed(w[1]), v[1]) +
-                            innerₕ(w[2], v[2])
-            @test_throws ArgumentError form(U × U, W × W, f_a)
-            @test_throws ArgumentError form(W × W, v -> innerₕ(_Const(1.0), v[1]))
-            # Beside a plain ghost space: refused before the polygon check, as a polygon
-            # space ghosts no facet and the plain one does.
+            n = Bramble.ndofs(U)
+            A = assemble(form(U × U, W × W, fc))
+            B11, B21, B22 = (assemble(form(U, W, f)) for f in (f11, f21, f22))
+            @test A[1:n, 1:n] == B11
+            @test A[(n + 1):end, 1:n] == B21
+            @test A[(n + 1):end, (n + 1):end] == B22
+            @test iszero(A[1:n, (n + 1):end])
+            # A conflict node is read, and `a(u, v)` refuses it as on the scalar form.
+            a = form(U × U, W × W, fc)
+            x, y = rand(2n), rand(2n)
+            if conflict
+                @test_throws ArgumentError a(x, y)
+            else
+                @test a(x, y) ≈ dot(y, A * x)
+            end
+            @test_throws ArgumentError Bramble.matrix_free_operator(a)
+            # The trial space is no test space, on either side of a form; the reach guard
+            # holds on the component read, whichever component is tested.
+            @test_throws ArgumentError form(U × U, U × U, fc)
+            @test_throws ArgumentError form(U × U, v -> innerₕ(_Const(1.0), v[1]))
+            @test_throws ArgumentError form(U × U, W × W,
+                (w, v) -> innerₕ(Dcₓ(Dcₓ(w[1])), v[1]) + innerₕ(w[2], v[2]))
+            @test_throws ArgumentError form(U × U, W × W,
+                (w, v) -> innerₕ(Dcₓ(Dcₓ(w[2])), v[1]) + innerₕ(w[1], v[2]))
+            # Beside a plain ghost space: refused, as a polygon space ghosts no facet and
+            # the plain one does; and `constrained` leaves the boundary to each `g`.
             G = gridspace(Ωₕ; ghosts = :boundary)
+            f_a = (w, v) -> innerₕ(w[1], v[1]) + innerₕ(w[2], v[2])
             @test_throws ArgumentError form(U × G, W × G, f_a)
             @test_throws ArgumentError form(W × G, v -> innerₕ(_Const(1.0), v[1]))
+            @test_throws ArgumentError Bramble.constrained(U × U,
+                w -> (:xmin => w[1] => 0.0,))
+            # `dirichlet` keeps its message per component.
+            l = form(W × W, v -> innerₕ(_Const(1.0), v[1]) + innerₕ(_Const(1.0), v[2]))
+            @test_throws ArgumentError assemble(form(U × U, W × W, f_a), l;
+                dirichlet = (:P_boundary => uq,))
         end
     end
 
