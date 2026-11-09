@@ -79,15 +79,15 @@ load3 = v -> load2(v) + innerₕ(x -> cos(x[2]), v(3))
 labels(Ωₕ, L) = (Bramble.index_in_marker(Ωₕ, L),
     Bramble.index_in_marker(Ωₕ, Symbol(L, :_boundary)))
 
-# A block of the plain matrix, each exterior column `p = i + (sx, sy)` of a tested row `i`
-# moved as `+1` on `i + (sx, 0)` and `i + (0, sy)` and `−1` on `i`, columns of the same
-# block; any other exterior read is an error.
-function substitute(Ωₕ, L, Bp)
-    I, Γ = labels(Ωₕ, L)
+# A block `(t, c)` of the plain matrix, each exterior column `p = i + (sx, sy)` of a row
+# `i` tested in component `t` (`It`) moved as `+1` on `i + (sx, 0)` and `i + (0, sy)` and
+# `−1` on `i`, columns of the same block, exterior to component `c` (`Ic`, `Γc`); any other
+# exterior read is an error.
+function substitute(Ωₕ, It, Ic, Γc, Bp)
     car = CartesianIndices(Bramble.npoints(Ωₕ, Tuple))
     lin = LinearIndices(car)
     B = copy(Bp)
-    for i in findall(I), p in findall(.!(I .| Γ))
+    for i in findall(It), p in findall(.!(Ic .| Γc))
 
         a = Bp[i, p]
         iszero(a) && continue
@@ -101,23 +101,28 @@ function substitute(Ωₕ, L, Bp)
     return B
 end
 
-# The reduced system from the plain composite `P`'s matrix and load, block by block: the
-# substituted block `(t, c)` on the interior nodes, and `F_t − Σ_c B_tc[I, Γ] g_c[Γ]`. Also
-# the plain blocks with the exterior columns dropped, the positive control.
-function oracle(Ωₕ, L, P, f_a, f_l, gs)
+# The reduced system from the plain composite `P`'s matrix and load, block by block, the
+# component `c` on the marker `Ls[c]`: the substituted block `(t, c)` on the interior
+# nodes `I_t × I_c`, and `F_t − Σ_c B_tc[I_t, Γ_c] g_c[Γ_c]`. Also the plain blocks with
+# the exterior columns dropped, the positive control.
+function oracle(Ωₕ, Ls, P, f_a, f_l, gs)
     Ap = assemble(form(P, P, f_a))
     Fp = assemble(form(P, f_l))
-    I, Γ = labels(Ωₕ, L)
+    IΓ = [labels(Ωₕ, L) for L in Ls]
     car = CartesianIndices(Bramble.npoints(Ωₕ, Tuple))
     N, m = length(car), length(gs)
-    gv = [[Γ[k] ? g(Bramble.point(Ωₕ, car[k])) : 0.0 for k in 1:N] for g in gs]
+    gv = [[IΓ[c][2][k] ? gs[c](Bramble.point(Ωₕ, car[k])) : 0.0 for k in 1:N]
+          for c in 1:m]
     blk(t) = ((t - 1) * N + 1):(t * N)
+    I(t) = IΓ[t][1]
+    Γ(t) = IΓ[t][2]
     Bp = [Matrix(Ap[blk(t), blk(c)]) for t in 1:m, c in 1:m]
-    B = [substitute(Ωₕ, L, Bp[t, c]) for t in 1:m, c in 1:m]
-    A = reduce(vcat, [reduce(hcat, [B[t, c][I, I] for c in 1:m]) for t in 1:m])
-    Z = reduce(vcat, [reduce(hcat, [Bp[t, c][I, I] for c in 1:m]) for t in 1:m])
+    B = [substitute(Ωₕ, I(t), I(c), Γ(c), Bp[t, c]) for t in 1:m, c in 1:m]
+    A = reduce(vcat, [reduce(hcat, [B[t, c][I(t), I(c)] for c in 1:m]) for t in 1:m])
+    Z = reduce(vcat, [reduce(hcat, [Bp[t, c][I(t), I(c)] for c in 1:m]) for t in 1:m])
     F = reduce(vcat,
-        [Fp[blk(t)][I] .- sum(B[t, c][I, Γ] * gv[c][Γ] for c in 1:m) for t in 1:m])
+        [Fp[blk(t)][I(t)] .- sum(B[t, c][I(t), Γ(c)] * gv[c][Γ(c)] for c in 1:m)
+         for t in 1:m])
     return A, F, Z
 end
 
@@ -144,13 +149,33 @@ end
                 (U1^2, W^2, Wp × Wp, coupled2, load2, (g1, g1)),
                 (U1^Val(3), W^Val(3), Wp^Val(3), coupled3, load3, (g1, g1, g1)))
                 A = assemble(form(V, T, f(b)))
-                Ao, _, Z = oracle(Ωₕ, L, P, f(bp), l, gs)
+                Ao, _, Z = oracle(Ωₕ, ntuple(_ -> L, length(gs)), P, f(bp), l, gs)
                 @test relerr(A, Ao) < 1e-12
                 # The substitution is exercised in the cross block (2, 1) or (3, 1).
                 m = length(gs)
                 @test Ao[((m - 1) * n + 1):(m * n), 1:n] != Z[((m - 1) * n + 1):(m * n), 1:n]
             end
         end
+        # Two markers of one mesh, so the masks and the tested rows differ by component: the
+        # square `:Q` beside the V-notch `:P`, conflict nodes in the second component alone.
+        Random.seed!(2)
+        Ωₕ = mesh(
+            domain(interval(0.0, 4.0) × interval(0.0, 4.0), :P => polygon(VNOTCH),
+                :Q => polygon([(2.0, 0.3), (3.8, 0.3), (3.8, 3.8), (2.0, 3.8)])),
+            (12, 12),
+            (false, false))
+        U1, W1 = polygon_spaces(Ωₕ, :Q, g1)
+        U2, W2 = polygon_spaces(Ωₕ, :P, g2)
+        @test !any(U1.rows.conflict) && any(U2.rows.conflict)
+        Wp = gridspace(Ωₕ)
+        b, bp = Rₕ(Bramble.padded_space(U1), bvar), Rₕ(Wp, bvar)
+        f = b -> (u, v) -> innerₕ(-1.0 * Δₕ(u(1)), v(1)) + innerₕ(b * Dcₓ(u(2)), v(1)) +
+                           innerₕ(-1.0 * Δₕ(u(2)) - 0.5 * mixed(u(2)), v(2))
+        A, F = assemble(form(U1 × U2, W1 × W2, f(b)), form(W1 × W2, load2))
+        Ao, Fo, Z = oracle(Ωₕ, (:Q, :P), Wp × Wp, f(bp), load2, (g1, g2))
+        @test relerr(A, Ao) < 1e-12
+        @test maximum(abs, F .- Fo) < 1e-12 * maximum(abs, Fo)
+        @test Ao != Z
     end
 
     @testset "loads and lift per component" begin
@@ -161,10 +186,10 @@ end
             Wp = gridspace(Ωₕ)
             b, bp = Rₕ(Bramble.padded_space(U1), bvar), Rₕ(Wp, bvar)
             _, F = assemble(form(U1 × U2, W × W, coupled2(b)), form(W × W, load2))
-            _, Fo, _ = oracle(Ωₕ, L, Wp × Wp, coupled2(bp), load2, (g1, g2))
+            _, Fo, _ = oracle(Ωₕ, (L, L), Wp × Wp, coupled2(bp), load2, (g1, g2))
             @test maximum(abs, F .- Fo) < 1e-12 * maximum(abs, Fo)
             # Each component enters with its own `g`: the swapped pair gives another load.
-            _, Fs, _ = oracle(Ωₕ, L, Wp × Wp, coupled2(bp), load2, (g2, g1))
+            _, Fs, _ = oracle(Ωₕ, (L, L), Wp × Wp, coupled2(bp), load2, (g2, g1))
             @test maximum(abs, Fs .- Fo) > 1e-3 * maximum(abs, Fo)
             z = rand(Xoshiro(7), 2n)
             u = lift(U1 × U2, z).data
