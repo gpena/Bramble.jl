@@ -207,7 +207,7 @@ Every component of both spaces must ghost the same facets of meshes of one size;
 `semidiscretize`, and the matrix-free, Kronecker and multigrid operators are refused with
 an `ArgumentError`.
 """
-function form(Wₕ::_GhostCompositeSide, Vₕ::_GhostCompositeSide, f)
+function form(Wₕ::_GhostCompositeSide, Vₕ::_GhostCompositeSide, f::F) where {F}
     _check_composite_ghosts(_ghost_components(Wₕ)..., _ghost_components(Vₕ)...)
     W, V = _CompositeClosure(Wₕ), _CompositeClosure(Vₕ)
     a = form(W.padded, V.padded, _with_facet_rule(Wₕ, f))
@@ -216,7 +216,7 @@ function form(Wₕ::_GhostCompositeSide, Vₕ::_GhostCompositeSide, f)
     return _ghost_bilinear_form(W, V, a)
 end
 
-function form(Vₕ::_GhostCompositeSide, f)
+function form(Vₕ::_GhostCompositeSide, f::F) where {F}
     _check_composite_ghosts(_ghost_components(Vₕ)...)
     V = _CompositeClosure(Vₕ)
     return _ghost_linear_form(V, form(V.padded, f))
@@ -255,10 +255,10 @@ end
 
 form(::_GhostCompositeSide, Vₕ, f) = _throw_ghost_composite_side("test", Vₕ)
 form(Wₕ, ::_GhostCompositeSide, f) = _throw_ghost_composite_side("trial", Wₕ)
-function form(::_GhostCompositeSide, Vₕ::GhostGridSpace, f)
+function form(::_GhostCompositeSide, Vₕ::GhostGridSpace, f::F) where {F}
     return _throw_ghost_composite_side("test", Vₕ)
 end
-function form(Wₕ::GhostGridSpace, ::_GhostCompositeSide, f)
+function form(Wₕ::GhostGridSpace, ::_GhostCompositeSide, f::F) where {F}
     return _throw_ghost_composite_side("trial", Wₕ)
 end
 
