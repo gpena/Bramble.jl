@@ -3,9 +3,11 @@
 Follow-up of "Failure two" in `1128_3d_notype.md`: `M₂` (the backward average along the third
 axis) called on a grid function inside the differentiated function raises
 `EnzymeNoTypeError`, `Cannot deduce type of memset`, in reverse mode under `CpuSerial`, on
-uniform and non-uniform 5 by 5 by 5 meshes. `M₊₂` fails the same way. Forward mode, `Mₓ`,
-`Mᵧ`, 2D `Mᵧ` and the centered `Mcₓ`, `Mcᵧ`, `Mc₂` give gradients. The threaded policies
-reach the band through Enzyme rules and were never red.
+uniform and non-uniform 5 by 5 by 5 meshes. Before the fix, the forward averages `M₊₂` and
+`M₊ᵧ` failed the same way on the non-uniform mesh (the old `_average_band!` restored with
+`@eval`). Forward mode, `Mₓ`, `Mᵧ`, 2D `Mᵧ` and the centered `Mcₓ`, `Mcᵧ`, `Mc₂` give
+gradients; the centered code did not change. The threaded policies reach the band through
+Enzyme rules and were never red.
 
 Line: `src/operators/average.jl:178` before the fix, the boundary loop of `_average_band!`,
 which stores `zero(cur)` at every point of the one boundary slice.
@@ -24,8 +26,11 @@ offset 0 and the memset is typed. For `M₂` the slice is `(1:n₁, 1:n₂, 1:1)
 `8n₁ · ((i₂ + 2⁶¹ − 1) + (i₃ + 2⁶¹ − 1) n₂)`, LLVM's form of `i − 1` before the multiply by
 8. Enzyme's integer tracking gives `{2⁶¹}` for each term and nothing for the product, so
 the offset is unknown, the base has no type at an unknown offset, and the memset is untyped.
-Only the last axis gives a boundary slice with two outer extents above 1, so only `M₂` and
-`M₊₂` fail. The difference operators were not traced again.
+Of the backward averages, only the last axis has a boundary slice with two outer extents
+above 1, so only `M₂` fails. The forward averages' slice is the last one along the axis, at
+an offset `8n₁(n₂ − 1)` or `8n₁n₂(n₃ − 1)` of run-time sizes, so `M₊ᵧ` and `M₊₂` fail too
+(their IR was not read). The difference operators, whose band stores `zero(cur)` on the
+boundary as well, were not traced again.
 
 Fix: the boundary loop moved, unchanged, into `@noinline _average_boundary!(out, in_ref, li,
 boundary, dir)`, which `_average_band!` calls. In its own function `out` is an argument, typed
@@ -49,6 +54,6 @@ All through `.claude/scripts/julia_slot.sh 2 julia --startup-file=no --threads=2
 --project=.` in the worktree, Enzyme from a temporary environment: `Enzyme.autodiff` of
 `p -> sum(abs2, parent(op(u(p))))` for `op` in `M₂`, `Mᵧ`, `Mₓ`, `M₊₂`, `M₊ᵧ`, `Mc₂`, `Mcᵧ`,
 `Mcₓ` (reverse, `set_runtime_activity`, `CpuSerial`, non-uniform 5 by 5 by 5 mesh, seed
-1234); `Enzyme.autodiff` of `_average_band!` alone on `(5, 5, 5)` along each axis and on
+1234), after the fix and, for `M₂`, `M₊₂`, `M₊ᵧ`, with the old `_average_band!`; `Enzyme.autodiff` of `_average_band!` alone on `(5, 5, 5)` along each axis and on
 `(9, 9)`; `code_llvm` of `_average_band!` for each axis and direction. The subplan's probe
 then compares `M₂` with ForwardDiff on every policy, uniform and non-uniform.
