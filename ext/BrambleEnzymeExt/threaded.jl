@@ -61,6 +61,18 @@ const _StaticCutBandColour = typeof(Bramble._static_cut_band_colour!)
 const _KronFused = typeof(Bramble._kron_fused!)
 const _ThreadedKron = Annotation{<:KroneckerLinearOperator{<:Any, <:Any, <:Tuple, CpuThreaded}}
 
+# Where a sweep is inactive (a ghost form's constant `A_pad` replay), Enzyme clones the
+# caller without frees, callees included, and stops at a runtime call it cannot clone
+# (gpena/Bramble.jl#1157): `_static_or_serial`'s query, a ccall Julia 1.13 emits as
+# `ijl_in_threaded_region` (Enzyme knows only `jl_in_threaded_region`), and Base's
+# scheduler under a runner's `Threads.@threads`, since a rule does not stop the clone. An
+# inactive function does. The launches run only under the runners, whose rules take every
+# differentiated call, so no derivative passes through them.
+EnzymeRules.inactive(::typeof(Bramble._in_threaded_region)) = nothing
+EnzymeRules.inactive(::typeof(Bramble._launch_band_colour!), args...) = nothing
+EnzymeRules.inactive(::typeof(Bramble._launch_colour!), args...) = nothing
+EnzymeRules.inactive(::typeof(Bramble._launch_cut_band_colour!), args...) = nothing
+
 # How many times each entry's rule has been entered (forward, or the augmented primal of
 # reverse). test/ext/enzyme_policy_cases.jl reads it to tell that the rule ran.
 const _ENTRIES = Dict{Symbol, Int}()

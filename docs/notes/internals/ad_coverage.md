@@ -25,10 +25,10 @@ gradient.
 
 | Item | Value |
 |:--|:--|
-| Date | 2026-11-03 for the first matrix; the three-summand cells 2026-11-04; the cells changed in v4.2.2 and the compile table 2026-11-07 |
+| Date | 2026-11-03 for the first matrix; the three-summand cells 2026-11-04; the cells changed in v4.2.2 and the compile table 2026-11-07; the ghost load and `Δₕ!` cells and the new `centered_difference!` cell 2026-11-08 and 2026-11-09 |
 | Tree | branch `v4-2-2`, with the v4.2.2 AD fixes |
 | Machine | Apple M2, Julia 1.13.3, on mains power |
-| Enzyme | 0.13.218 for the v4.2.2 cells (2026-11-07), the newest in the depot, which a temporary environment without a manifest loads; 0.13.216 for the 2026-11-03 cells |
+| Enzyme | 0.13.219 for the ghost load, `Δₕ!` and `centered_difference!` cells (2026-11-08); 0.13.218 for the other v4.2.2 cells (2026-11-07), the newest in the depot, which a temporary environment without a manifest loads; 0.13.216 for the 2026-11-03 cells |
 | Threads | 4, the test's thread count, so both threaded policies run on 4 threads; the 2026-11-03 figures ran on 2 |
 | Problem | 9 x 9 mesh in 2D, 17 nodes in 1D, 5 x 5 x 5 mesh in 3D, three parameters, `Float64` |
 | Agreement | within 1e-8 relative to ForwardDiff on the same policy |
@@ -55,7 +55,7 @@ policy. Each Enzyme cell holds both modes, reverse then forward, unless it says 
 | operator | `D₋ₓ`, `Mₓ` and `Mᵧ`, `Δₕ`, `innerₕ` with `normₕ` | works | works | works | works |
 | operator | `εₕ` on a composite space | works | works | works | works |
 | operator | `D₋ₓ` and `D₋₂` on a grid function, 3D | works | works | not run | not run |
-| operator | `M₂` on a grid function, 3D | works | reverse excluded: `EnzymeNoTypeError` (`memset`, gpena/Bramble.jl#1155), forward works | not run | not run |
+| operator | `M₂` on a grid function, 3D | works | forward works, reverse open: `EnzymeNoTypeError` (`memset`, gpena/Bramble.jl#1155) | not run | not run |
 | interpolation | `Rₕ`, `avgₕ` | works | works | works | works |
 | assemble | `assemble` of a linear form | works | works | works | works |
 | assemble | `assemble` of `inner₊(κ∇U, ∇V)` | works | works | works | works |
@@ -72,10 +72,11 @@ policy. Each Enzyme cell holds both modes, reverse then forward, unless it says 
 | kronecker | `mul!` with `kronecker_operator` | works | works | works | works |
 | ghost | `assemble(a, l)` on a constrained ghost space, parameters scale the form's coefficients, `Δₕ` in the form | works | reverse works, forward not run | not run | not run |
 | ghost | the same with `inner₊` and `innerₕ` terms only | works | reverse works, forward not run | not run | not run |
-| ghost | the load of `assemble(a, l)` alone, parameters in the linear form | works | reverse works, forward not run | not run | not run |
+| ghost | the load of `assemble(a, l)` alone, parameters in the linear form | works | works | works | works |
 | ghost | relation data that depend on the parameter | works | excluded: fails (measured outside this test, see the limits) | excluded: fails (measured outside this test) | excluded: fails (measured outside this test) |
 | ghost | a Robin coefficient that depends on the parameter | works | not run | not run | not run |
-| ghost | `Δₕ!` on a `GhostVector` | works | works | works | reverse excluded: `ReverseRuleReturnError` (gpena/Bramble.jl#1127), forward works |
+| ghost | `Δₕ!` on a `GhostVector` | works | works | works | works |
+| ghost | `centered_difference!` on a `GhostVector` | works | works | works | works |
 | sparse Jacobian | `AutoSparse` with `ast_sparsity_detector`, 1D diffusion residual | works | works | works | works |
 
 Three more facts about the table:
@@ -87,6 +88,15 @@ Three more facts about the table:
 - The 3D cells run on a `5 x 5 x 5` mesh in the `threed` group, under `CpuSerial` only. The
   averaging operator `M₂` on a grid function and `Mₕ(κ)` in a form are in the limits below.
 - The ghost cells run on a non-uniform mesh only, since the ghost test helper builds those.
+- The ghost load, `Δₕ!` and `centered_difference!` cells differentiate in both modes under
+  all three policies. Enzyme reverse of the load under the threaded policies was
+  gpena/Bramble.jl#1157, `Δₕ!` reverse under `CpuPolyester` was gpena/Bramble.jl#1127, and
+  forward of the load, in the layout the test uses (a closure over the form), crashed until
+  gpena/Bramble.jl#1159; all three are fixed in v4.2.2. `centered_difference!` failed under
+  `CpuSerial` on 2026-11-03 and passes now; the likely cause is the ghost facet band
+  rewrite it predates (not bisected). The
+  measurements are in `ad_reductions/1157_ghost_load.md` and `ad_reductions/1158_ghost_stencil.md`
+  (gpena/Bramble.jl#1158).
 
 ## Enzyme under the threaded policies
 
@@ -146,10 +156,6 @@ so a sparse cell's verdict is its inner backend's.
 - **A closure that reaches `v` only through a global gets no gradient.** Per-slab Enzyme
   compilations treat a global as constant. `test/ext/enzyme_threaded_ext.jl` pins it with a
   `@test_broken`.
-- **Ghost `Δₕ!` under `CpuPolyester`, reverse.** It throws `ReverseRuleReturnError`
-  (gpena/Bramble.jl#1127, measured 2026-11-07). The serial and threaded policies
-  differentiate both modes. `centered_difference!` on a ghost space is not in the test; its
-  2026-11-03 measurement failed under `CpuSerial` and was not repeated.
 - **Ghost spaces whose boundary data depends on the parameter fail.** Under `CpuSerial`
   Enzyme throws `Illegal calling convention fixup` in reverse and `EnzymeNoDerivativeError`
   in forward (dgetrf), measured on 2026-11-02 by a review of the `CpuThreaded` rules,
@@ -183,9 +189,6 @@ so a sparse cell's verdict is its inner backend's.
 
 ## Open failures
 
-- Enzyme reverse of `Δₕ!` on a `GhostVector` under `CpuPolyester`: `ReverseRuleReturnError`
-  ([gpena/Bramble.jl#1127](https://github.com/gpena/Bramble.jl/issues/1127)). The other
-  policies and modes work.
 - Ghost relation data that depend on the parameter, in Enzyme
   ([gpena/Bramble.jl#1153](https://github.com/gpena/Bramble.jl/issues/1153)).
 - 3D `M₂` on a grid function, Enzyme reverse: `EnzymeNoTypeError`
@@ -225,7 +228,9 @@ Before the split, `assemble` held the `three` and `boundary` cells: `CpuSerial` 
 groups were not run again. The `threed` wall time is twice its CPU time in both runs; the
 second `CpuSerial` sparse run, 2053 s for 123 s of CPU, is left out as a stall.
 
-Every child stays under the 10 GB cap; the largest is `CpuSerial` `threed`, at 8.8 GB. A cell that ends in an Enzyme failure still pays its
+The `ghost_fast` row predates the load and `centered_difference!` cells' Enzyme runs: each of the
+latter's six calls compiled in under 30 s and 1.6 GB (measured alone, 2026-11-08, 2 threads),
+and the child was not re-timed. Every child stays under the 10 GB cap; the largest is `CpuSerial` `threed`, at 8.8 GB. A cell that ends in an Enzyme failure still pays its
 compile. Before 2026-11-07 the ghost assembly cells cost more than 22 minutes each before they
 threw; they now differentiate in 6 minutes.
 

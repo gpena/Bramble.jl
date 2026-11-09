@@ -332,11 +332,13 @@ function _bands_add(x::T, y::T) where {T}
 end
 _bands_add(x, y) = x
 
-# What `Active` input `k`'s derivative is: the sum of its per-task derivatives, a lane each.
+# What `Active` input `k`'s derivative is: the sum of its per-task derivatives, a lane each;
+# `nothing` for any other input. Dispatch on the annotation, unrolled over the inputs by
+# `_bands_actives`, keeps each slot's type its own: `ins[k]` under `ntuple(k -> ...)` is not
+# const-propagated, and every slot came back `Union{Nothing, T}`, which Enzyme rejects.
 @inline _bands_slot(k::Int) = k == 1 ? 1 : k + 3
-function _bands_active(lanes, a, k::Int, ::Val{W}) where {W}
-    a isa Active || return nothing
-    T = typeof(a.val)
+@inline _bands_active(lanes, a, k::Int, ::Val{W}) where {W} = nothing
+function _bands_active(lanes, a::Active{T}, k::Int, ::Val{W}) where {T, W}
     d = ntuple(Val(W)) do w
         lane = lanes[w]
         lane === nothing && return Enzyme.make_zero(a.val)::T
@@ -345,9 +347,15 @@ function _bands_active(lanes, a, k::Int, ::Val{W}) where {W}
     return W == 1 ? only(d) : d
 end
 
-@inline function _bands_zero_active(a, ::Val{W}) where {W}
-    a isa Active || return nothing
-    z = Enzyme.make_zero(a.val)
+@inline _bands_actives(lanes, ::Tuple{}, k::Int, V::Val) = ()
+@inline function _bands_actives(lanes, ins::Tuple, k::Int, V::Val)
+    return (_bands_active(lanes, first(ins), k, V),
+        _bands_actives(lanes, Base.tail(ins), k + 1, V)...)
+end
+
+@inline _bands_zero_active(a, ::Val{W}) where {W} = nothing
+@inline function _bands_zero_active(a::Active{T}, ::Val{W}) where {T, W}
+    z = Enzyme.make_zero(a.val)::T
     return W == 1 ? z : ntuple(_ -> z, Val(W))
 end
 
@@ -375,7 +383,7 @@ function _bands_reverse!(handed::HD, take::TK, mode::M, n::Int, ins, vals, out, 
                 _bands_reduce!(handed, take, s, [c[k] for c in lane.copies], ins[k].val)
         end
     end
-    return ntuple(k -> _bands_active(lanes, ins[k], k, V), Val(length(ins)))
+    return _bands_actives(lanes, ins, 1, V)
 end
 
 function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_RunBands},

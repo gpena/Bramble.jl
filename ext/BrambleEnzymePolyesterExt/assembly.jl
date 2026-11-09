@@ -40,6 +40,14 @@ const _AsmColourReplay = typeof(Bramble._batch_bilinear_colour_replay!)
 const _AsmBandSweep = typeof(Bramble._batch_linear_band_sweep!)
 const _AsmColourSweep = typeof(Bramble._batch_linear_colour_sweep!)
 
+# The replay hooks' launches into `BramblePolyesterExt`'s sweep, inactive: where a replay is
+# inactive (a ghost form's constant `A_pad`), Enzyme clones the caller without frees,
+# callees included, a hook's body too since its rule does not stop the clone, and the
+# `@batch` scheduler holds runtime calls it cannot clone (gpena/Bramble.jl#1157). Only the
+# hooks' `Ref` methods call the launches, so every differentiated call meets a rule first.
+EnzymeRules.inactive(::typeof(Bramble._launch_band_replay!), args...) = nothing
+EnzymeRules.inactive(::typeof(Bramble._launch_colour_replay!), args...) = nothing
+
 const _AsmTarget = Annotation{<:Base.RefValue{<:Bramble._ReplayTarget}}
 const _AsmParts = Annotation{<:Base.RefValue{<:Tuple}}
 

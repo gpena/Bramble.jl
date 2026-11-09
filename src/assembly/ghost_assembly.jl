@@ -257,7 +257,7 @@ end
 
 # --- Construction -------------------------------------------------------------------- #
 
-function form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, f)
+function form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, f::F) where {F}
     Vₕ.rows.trial_only && _throw_polygon_trial_as_test()
     _check_ghost_host(Wₕ)
     _check_ghost_host(Vₕ)
@@ -446,7 +446,9 @@ end
     )
 end
 
-function form(Vₕ::GhostGridSpace, f)
+# `f::F` here and on every ghost `form` that only passes `f` on: unspecialised, the call
+# reaches Enzyme as a dynamic one, whose shadow of a captured space has NULL fields (#1159).
+function form(Vₕ::GhostGridSpace, f::F) where {F}
     Vₕ.rows.trial_only && _throw_polygon_trial_as_test()
     _check_ghost_host(Vₕ)
     return _ghost_linear_form(Vₕ, form(padded_space(Vₕ), f))

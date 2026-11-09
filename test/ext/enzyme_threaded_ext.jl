@@ -271,4 +271,59 @@ end
     end
 end
 
+# The ghost load in the closure layout of gpena/Bramble.jl#1159: a closure over top-level
+# loop locals, forward mode, as a user's script writes it. `form(Vₕ::GhostGridSpace, f)` only
+# passes `f` on; unspecialised on it, Enzyme reached it through `runtime_generic_fwd`, which
+# handed it a space shadow of NULL fields, and the child crashed (signal 11). In a child
+# process, since that crash takes its process with it.
+_ghost_load_closure() = """
+    _e = mktempdir()
+    write(joinpath(_e, "Project.toml"), $(repr(EnzymePolicyCases.ENZYME_TOML)))
+    push!(LOAD_PATH, _e)
+    using Bramble, DifferentiationInterface, Enzyme, ForwardDiff, SparseArrays
+    for pol in (Serial(), Parallel())
+        Bramble._seed_mesh1d_rng!(11)
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false);
+            backend = backend(vector_type = Vector{Float64},
+                matrix_type = SparseMatrixCSC{Float64, Int}, policy = pol))
+        Bramble._unseed_mesh1d_rng!()
+        C = constrained(gridspace(Ω; ghosts = (:xmin, :xmax, :ymax)),
+            u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => 2.0 * u + ∂ₙ(u) => 1.0,
+                :ymin => u => 0.0, :ymax => ∂ₙ(u) => 1.0))
+        A = form(C, C, (U, V) -> innerₕ(U, V))
+        f = p -> (l = form(C, v -> innerₕ(x -> p[1] * (1.0 + x[1]) + p[2], v));
+        (_, F) = assemble(A, l);
+        p[3] * sum(F) + sum(abs2, F))
+        p0 = [0.5 + 0.3 * sin(k) for k in 1:3]
+        ref = DifferentiationInterface.gradient(f, AutoForwardDiff(), p0)
+        ad = AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Forward),
+            function_annotation = Enzyme.Const)
+        g = DifferentiationInterface.gradient(f, ad, p0)
+        println("GHOST_LOAD ", nameof(typeof(pol)), " ",
+            maximum(abs, g .- ref) / maximum(abs, ref), " ", minimum(abs, ref))
+        flush(stdout)
+    end
+    """
+
+@testset "Ghost load, closure layout, forward" begin
+    if RUN_ENZYME
+        opt = max(Base.JLOptions().opt_level, 0)
+        cmd = `$(Base.julia_cmd()) --startup-file=no --project=$(Base.active_project()) --threads=$(Threads.nthreads()) --optimize=$opt -e $(_ghost_load_closure())`
+        out = IOBuffer()
+        proc = run(pipeline(ignorestatus(cmd); stdout = out, stderr = out))
+        text = String(take!(out))
+        # A crash leaves `exitcode` at 0 and sets `termsignal`: `success` reads both.
+        success(proc) ||
+            @warn "ghost load child failed: exit $(proc.exitcode), signal $(proc.termsignal)" tail = last(
+                text, 2000)
+        @test success(proc)
+        rows = [split(l) for l in split(text, '\n') if startswith(l, "GHOST_LOAD ")]
+        @test [r[2] for r in rows] == ["CpuSerial", "CpuThreaded"]
+        for r in rows
+            @test parse(Float64, r[3]) <= TOL
+            @test parse(Float64, r[4]) > 0
+        end
+    end
+end
+
 end # module
