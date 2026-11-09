@@ -53,13 +53,18 @@ normₕ(e), snorm₁ₕ(e), norminf(e)
 
 `W` refuses `Rₕ` and the norms.
 
+`U × U` and `U^Val(n)` of the trial spaces, tested by `W × W`, assemble per component, each
+with its own `g`. The components must be built on the same mesh `Ωₕ`. `constrained` on such
+a composite throws, as `g` fixes each component's boundary.
+
 # Throws
 
   - `ArgumentError`: if `Ωₕ` has no polygon or level-set marker `label`; if the grid does
     not fit the region (a cell holding interior and exterior nodes other than across a diagonal
     between two boundary nodes, as after `change_points!` to lines the closure would not
     give); if the region has no interior node. `form(U, U, f)` and `form(U, f)` throw, as
-    `U` is no test space, and so does `dirichlet =` in `assemble`: `g` fixes the boundary.
+    `U` is no test space, and so do `dirichlet =` in `assemble` and `constrained` on a
+    composite of these spaces: `g` fixes the boundary.
 """
 function polygon_spaces(Ωₕ::MeshnD{2}, label::Symbol, g)
     labels = _region_marker_labels(label)

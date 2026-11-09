@@ -164,6 +164,17 @@ end
         @test_throws ArgumentError semidiscretize(a, l)
     end
 
+    @testset "$name: a composite equals its blocks" for (name, Ωₕ) in MESHES
+        U, W = polygon_spaces(Ωₕ, :D, uq)
+        n = Bramble.ndofs(U)
+        f21 = (w, v) -> innerₕ(mixed(w), v)
+        f22 = (w, v) -> innerₕ(-1.0 * Δₕ(w), v)
+        A = assemble(form(U × U, W × W, (w, v) -> f21(w[1], v[2]) + f22(w[2], v[2])))
+        @test A[(n + 1):end, 1:n] == assemble(form(U, W, f21))
+        @test A[(n + 1):end, (n + 1):end] == assemble(form(U, W, f22))
+        @test iszero(A[1:n, :])
+    end
+
     @testset "$name: refusals" for (name, Ωₕ) in MESHES
         U, W = polygon_spaces(Ωₕ, :D, uq)
         l = form(W, v -> innerₕ(x -> -4.0, v))
@@ -178,10 +189,11 @@ end
         @test_throws ArgumentError form(U, W,
             (w, v) -> innerₕ(w, v) + 2.0 * innerₕ(x -> 1.0, w) * innerₕ(x -> 1.0, v))
         @test_throws ArgumentError polygon_spaces(Ωₕ, :Q, uq)
-        # Composites of level-set spaces.
+        # Composites of level-set spaces: the trial space is no test space, and a polygon
+        # space pairs with polygon spaces alone.
         fc = (w, v) -> innerₕ(-1.0 * Δₕ(w[1]) - 0.5 * mixed(w[1]), v[1]) + innerₕ(w[2], v[2])
-        @test_throws ArgumentError form(U × U, W × W, fc)
-        @test_throws ArgumentError form(W × W, v -> innerₕ(x -> 1.0, v[1]))
+        @test_throws ArgumentError form(U × U, U × U, fc)
+        @test_throws ArgumentError form(U × U, v -> innerₕ(x -> 1.0, v[1]))
         G = gridspace(Ωₕ; ghosts = :boundary)
         @test_throws ArgumentError form(U × G, W × G, fc)
     end

@@ -32,6 +32,14 @@
 # padded grids of different shapes or shifted by one node. Components ghosting different
 # facets are refused, coupled or not.
 #
+# Components from `polygon_spaces` (gpena/Bramble.jl#1162) pair with polygon spaces of the
+# same mesh, which ghost no facet, and each trial component is read in the reduction through
+# its own reach guard and conflict moves (`_exterior_moves`, ghost_assembly.jl), against the
+# rows of every test component, as on a scalar polygon form. Their test spaces are the test
+# side, their trial spaces the trial side (`form` refuses a trial space as a test side).
+# `a(u, v)` refuses a form reading a conflict node of a V-notch, as on the scalar form. Their
+# boundary is fixed by each component's `g`: `constrained` and `dirichlet` are refused.
+#
 # The `dirichlet` keyword, `dirichlet_bc!` and `symmetrize!` replace rows of the components
 # `dirichlet_components` selects (all by default), each of whose unknowns must be its
 # physical nodes in mesh order, as on a scalar ghost space; `u => g` relations give
@@ -203,9 +211,12 @@ each selected component replaced through its physical mesh. `a(u, v)`, `l(v)` an
 `evaluate!` give `vᴴ A u` and `Fᵀ v` as on a scalar ghost space.
 
 Every component of both spaces must ghost the same facets of meshes of one size; an
-`ArgumentError` names the fix otherwise. A rank-one term, a scalar space on the other side,
-`semidiscretize`, and the matrix-free, Kronecker and multigrid operators are refused with
-an `ArgumentError`.
+`ArgumentError` names the fix otherwise. Components built by `polygon_spaces` pair with
+polygon spaces of one mesh: the trial components of a form are read with the reach guard and
+the conflict moves of a scalar polygon form, and a trial space is refused as a test side. A
+rank-one term, a scalar space on the other side, `semidiscretize`, and the matrix-free,
+Kronecker and multigrid operators are refused with an `ArgumentError`, as is `a(u, v)` on a
+form reading a conflict node of a polygon trial component.
 """
 function form(Wₕ::_GhostCompositeSide, Vₕ::_GhostCompositeSide, f::F) where {F}
     _check_composite_ghosts(_ghost_components(Wₕ)..., _ghost_components(Vₕ)...)
@@ -280,12 +291,21 @@ function _check_composite_ghosts(C::GhostGridSpace, rest::GhostGridSpace...)
     for Cᵢ in rest
         Gᵢ = mesh(Cᵢ)
         Gᵢ === G || (Gᵢ.active == G.active && npoints(Gᵢ, Tuple) == npoints(G, Tuple)) ||
-            _throw_composite_ghost_sets(G, Gᵢ)
+            _throw_composite_ghost_sets(G, Gᵢ, C, Cᵢ)
     end
     return nothing
 end
 
-@noinline function _throw_composite_ghost_sets(G::GhostMesh, Gᵢ::GhostMesh)
+@noinline function _throw_composite_ghost_sets(G::GhostMesh, Gᵢ::GhostMesh,
+        C::GhostGridSpace, Cᵢ::GhostGridSpace)
+    (C.rows.polygon || Cᵢ.rows.polygon) && throw(
+        ArgumentError(
+        "a component of these composite spaces is a polygon space, which ghosts no facet, " *
+        "so it pairs with polygon spaces of the same mesh alone, not with a space ghosting " *
+        "$(G.active) and $(Gᵢ.active) (per-axis (min, max) flags) or of another size. " *
+        "Build the other components with polygon_spaces(Ωₕ, label, g) on that mesh.",
+    ),
+    )
     throw(
         ArgumentError(
         "the components of these composite ghost spaces ghost different facets " *
@@ -604,6 +624,8 @@ end
         _padded_leaves(Base.tail(spaces), offset + ndofs(C), poffset + length(C.d))...)
 end
 
+@inline _padded_leaves(Vₕ::ConstrainedCompositeSpace) = _padded_leaves(Vₕ.space)
+
 @inline _padded_length(Vₕ::_GhostCompositeSpace) = sum(C -> length(C.d), Vₕ.spaces)
 
 """
@@ -834,6 +856,7 @@ Tₕ = constrained(Wₕ × Wₕ, u -> (:xmin => t(u, 1) => 1.0, :xmin => t(u, 2)
 ```
 """
 function constrained(Vₕ::_GhostCompositeSpace, relations)
+    any(C -> C.rows.polygon, Vₕ.spaces) && _throw_constrained_polygon()
     foreach(_check_unconstrained, Vₕ.spaces)
     _check_composite_ghosts(Vₕ.spaces...)
     P = padded_space(Vₕ)
@@ -846,6 +869,16 @@ function constrained(Vₕ::_GhostCompositeSpace, relations)
     D = _closure_data(be, _closure_data_eltype(T, eltype(d)), d)
     return ConstrainedCompositeSpace(Vₕ, P, Ec, D,
         _closure_transpose(Ec), _multi_component_facets(rels, first(first(comps))))
+end
+
+@noinline function _throw_constrained_polygon()
+    throw(
+        ArgumentError(
+        "constrained does not take a composite with a polygon space: a polygon space " *
+        "has no ghosts to constrain, and polygon_spaces(Ωₕ, label, g) fixes the boundary " *
+        "of each component to its own g. Pass each component's g to polygon_spaces.",
+    ),
+    )
 end
 
 # `facets[d][s]`: whether facet `(d, s)` has a ghost relation reading several components,

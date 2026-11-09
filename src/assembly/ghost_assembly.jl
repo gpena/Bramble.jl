@@ -55,7 +55,9 @@
 #
 # Still refused with an `ArgumentError`: device backends, matrix types other than
 # `SparseMatrixCSC`, AD element types, composite spaces beyond what `ghost_composite.jl`
-# supports and `semidiscretize` on composites. The matrix-free and Kronecker operators and
+# supports and `semidiscretize` on composites. A composite may hold polygon spaces
+# (`polygon_spaces`), each trial component read through its own reach guard and conflict
+# moves (`_exterior_moves`). The matrix-free and Kronecker operators and
 # the contractions of a form live in `ghost_matrix_free.jl`, `ghost_kronecker.jl` and
 # `ghost_contract.jl`. The table `Support on ghost spaces` in `docs/src/internals/space.md`
 # lists every operation.
@@ -203,8 +205,8 @@ end
     GhostCompositeBilinearForm
 
 A bilinear form on two composites of ghost spaces (`C₁ × C₂`), built by `form(Wₕ, Vₕ, f)`:
-the fields of a [`GhostBilinearForm`](@ref) without its `rows`, the sides
-`_CompositeClosure`s.
+the fields of a [`GhostBilinearForm`](@ref) without its `rows` and `walk`, the sides
+`_CompositeClosure`s, and `reads_conflict` as on its `rows`.
 `dirichlet` replaces the rows of each selected component (ghost_composite.jl).
 """
 struct GhostCompositeBilinearForm{D, F <: BilinearForm{D}, WT <: _CompositeClosure,
@@ -222,6 +224,8 @@ struct GhostCompositeBilinearForm{D, F <: BilinearForm{D}, WT <: _CompositeClosu
     liftptr::IV
     liftsrc::IV
     liftcol::IV
+    "whether a tested row reads a conflict node of a polygon trial component."
+    reads_conflict::Bool
 end
 
 """
@@ -281,8 +285,8 @@ function _ghost_bilinear_form(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, a::Bil
 end
 function _ghost_bilinear_form(Wₕ::_CompositeClosure, Vₕ::_CompositeClosure,
         a::BilinearForm)
-    (_has_polygon(Wₕ) || _has_polygon(Vₕ)) && _throw_polygon_composite()
-    return GhostCompositeBilinearForm(a, Wₕ, Vₕ, Base.front(_ghost_maps(Wₕ, Vₕ, a))...)
+    _has_trial_only(Vₕ) && _throw_polygon_trial_as_test()
+    return GhostCompositeBilinearForm(a, Wₕ, Vₕ, _ghost_maps(Wₕ, Vₕ, a)...)
 end
 
 # The part of the padded grid a form on `Vₕ` walks (#884): the rows its test closure reads,
@@ -385,19 +389,44 @@ _exterior_moves(::_GhostSide, ::_GhostSide, ::SparseMatrixCSC) = (Int[], Int[], 
 # conflict node `i + (sx, sy)` moves onto the reader's own (3.2) row: `+a` at `i + (sx, 0)`
 # and `i + (0, sy)`, the two Γ corners, and `−a` at `i`.
 function _exterior_moves(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, A_pad::SparseMatrixCSC)
-    rows = Wₕ.rows
     moves = (Int[], Int[], Int[])
-    rows.polygon || return moves
-    un, ext, cf = rows.unclosed, rows.extended, rows.conflict
+    Wₕ.rows.polygon || return moves
+    _polygon_moves!(moves, Wₕ.rows, npoints(mesh(Wₕ), Tuple),
+        SparseArrays.getcolptr(Vₕ.Et), A_pad, 0, 0)
+    return moves
+end
+
+# On composites, each polygon component of the trial side is read over its column block of
+# `A_pad`, against every row block of the test side: a row `i` of the block at `roff` is
+# the node `i - roff` of every component, as the column `j` of the block at `coff` is node
+# `j - coff`; all components share one padded grid (`_check_composite_ghosts`).
+function _exterior_moves(Wₕ::_CompositeClosure, Vₕ::_CompositeClosure,
+        A_pad::SparseMatrixCSC)
+    moves = (Int[], Int[], Int[])
     cp = SparseArrays.getcolptr(Vₕ.Et)
-    car = CartesianIndices(npoints(mesh(Wₕ), Tuple))
+    for (C, _, coff) in _padded_leaves(Wₕ.space), (_, _, roff) in _padded_leaves(Vₕ.space)
+
+        C.rows.polygon || continue
+        _polygon_moves!(moves, C.rows, npoints(mesh(C), Tuple), cp, A_pad, coff, roff)
+    end
+    return moves
+end
+
+# The reach guard and the moves of the entries of `A_pad` in the rows `roff + 1:roff + n`
+# and the columns `coff + 1:coff + n`, `n` the nodes of the grid `shape` and `rows` the
+# masks of the trial component of the columns; a move's columns are nodes of that block.
+function _polygon_moves!(moves::_Moves, rows::_RowsDirichlet, shape::Tuple,
+        cp::AbstractVector{<:Integer}, A_pad::SparseMatrixCSC, coff::Int, roff::Int)
+    un, ext, cf = rows.unclosed, rows.extended, rows.conflict
+    car = CartesianIndices(shape)
     lin = LinearIndices(car)
     rv = rowvals(A_pad)
-    for j in axes(A_pad, 2)
+    for j in 1:length(car)
         (un[j] || ext[j]) || continue
-        for k in nzrange(A_pad, j)
-            i = rv[k]
-            cp[i + 1] > cp[i] || continue          # a row no test function reads
+        for k in nzrange(A_pad, coff + j)
+            i = rv[k] - roff
+            1 <= i <= length(car) || continue        # a row of another test block
+            cp[roff + i + 1] > cp[roff + i] || continue   # a row no test function reads
             un[j] && _throw_polygon_reach(car[i], car[j])
             sx, sy = Tuple(car[j] - car[i])
             abs(sx) == 1 && abs(sy) == 1 || _throw_polygon_reach(car[i], car[j])
@@ -405,7 +434,7 @@ function _exterior_moves(Wₕ::GhostGridSpace, Vₕ::GhostGridSpace, A_pad::Spar
             I = car[i]
             for (q, s) in ((lin[I[1] + sx, I[2]], 1), (lin[I[1], I[2] + sy], 1), (i, -1))
                 (un[q] || ext[q]) && _throw_polygon_reach(car[i], car[j])
-                push!(moves[1], k), push!(moves[2], q), push!(moves[3], s)
+                push!(moves[1], k), push!(moves[2], coff + q), push!(moves[3], s)
             end
         end
     end
@@ -460,23 +489,14 @@ function _ghost_linear_form(Vₕ::GhostGridSpace, l::LinearForm)
     return GhostLinearForm(l, Vₕ, _ghost_load_buffer(Vₕ, l), rows)
 end
 function _ghost_linear_form(Vₕ::_CompositeClosure, l::LinearForm)
-    _has_polygon(Vₕ) && _throw_polygon_composite()
+    _has_trial_only(Vₕ) && _throw_polygon_trial_as_test()
     return GhostCompositeLinearForm(l, Vₕ, _ghost_load_buffer(Vₕ, l))
 end
 
-# Whether a composite side has a component built by `polygon_spaces`: the reach guard and
-# the substitution of conflict nodes (`_exterior_moves`) see scalar sides only.
-_has_polygon(C::_CompositeClosure) = any(W -> W.rows.polygon, _ghost_components(C.space))
-
-@noinline function _throw_polygon_composite()
-    throw(
-        ArgumentError(
-        "polygon spaces are not supported in composites: the reduction checks the reach " *
-        "of a form and substitutes conflict nodes on a scalar polygon space only. Pose " *
-        "each field on its own pair from polygon_spaces.",
-    ),
-    )
-end
+# Whether a composite side has a trial space of `polygon_spaces` as a component, which is no
+# test space (`_throw_polygon_trial_as_test`).
+_has_trial_only(C::_CompositeClosure) = any(W -> W.rows.trial_only,
+    _ghost_components(C.space))
 
 # The padded load vector of `l`.
 function _ghost_load_buffer(Vₕ::_GhostSide, l::LinearForm)
@@ -795,7 +815,7 @@ end
 # Whether `a` reads, in a tested row, a conflict node of its polygon trial space, as `form`
 # found it; the matrix-free operator and the contraction `a(u, v)` (ghost_contract.jl)
 # refuse such a form.
-_reads_conflict(::GhostCompositeBilinearForm) = false
+_reads_conflict(a::GhostCompositeBilinearForm) = a.reads_conflict
 _reads_conflict(a::GhostBilinearForm) = a.rows.reads_conflict
 _check_rows(l::GhostLinearForm, labels) = _check_rows(l.rows, (l.test_space,), labels)
 # With the `dirichlet_components` of the call: a scalar space validates them with its rows

@@ -23,5 +23,6 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
     include("polygon_oracle.jl")
     include("levelset_spaces.jl")
     include("levelset_oracle.jl")
+    include("polygon_composite.jl")
     include("polygon_support.jl")
 end
