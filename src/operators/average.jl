@@ -183,8 +183,9 @@ end
 # The zero boundary slice of `_average_band!`, kept out of line (gpena/Bramble.jl#1155).
 # LLVM turns this loop into an `llvm.memset`, which Enzyme types only from the pointer it
 # writes. Inlined into a caller that allocates `out`, the memset's base is typed at offsets
-# 0 and 8 alone, and the offset is often unknown to Enzyme: a serial reverse of `M₂`, `M₊₂`
-# or `M₊ᵧ` raised `EnzymeNoTypeError`. Here `out` is an argument, typed by its Julia type.
+# 0 and 8 alone, and an offset that is not 0 is unknown to Enzyme: a serial reverse of 3D
+# `M₂`, every forward average with a memset (1D `M₊ₓ`, 2D and 3D `M₊ᵧ`, `M₊₂`), uniform
+# meshes too, raised `EnzymeNoTypeError`. Here `out` is an argument, typed by its Julia type.
 # See docs/notes/internals/ad_reductions/1155_m2_memset.md.
 @noinline function _average_boundary!(out, in_ref, li, boundary, dir::GridDirection)
     @inbounds @simd for I in CartesianIndices(boundary)
