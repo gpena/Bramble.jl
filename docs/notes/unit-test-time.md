@@ -473,3 +473,70 @@ attributed to the trims.
 The gate's own unit wall time comes from `/bramble-gate unit` in §9. The figures above are
 S5.11's measurement under load, and are not the speedup claim. Re-measure on an idle machine
 before quoting a speedup (`bramble-verification`).
+
+## test-time plan: before and after
+
+Base is the merge-base 3d147885; the branch is 4799bc01. `test/timing.jl` ran each group at 4
+threads with `--check-bounds=yes`: unit at `--optimize=0` and ext at `--optimize=1`, as
+`test.sh` does. Base and branch runs alternated, two pairs per group, on 2026-11-08/09.
+**Under load:** another session's Julia held two of the three pool slots throughout, and the
+load average was 2.1 to 3.2.
+
+### Unit
+
+No unit run finished. On both trees, `julia_slot.sh`'s 10 GB footprint cap killed the
+process at `ghost/levelset_oracle.jl` (file 152 of 166), so there is no suite header. The
+branch's first log holds only the kill backtrace. The figures below cover the 155 files that
+the other three runs finished. They are a single process's per-file wall times, so a nested
+`runtests.jl` counts its children too.
+
+| | base run 1 | base run 2 | branch run 2 |
+|---|---|---|---|
+| Wall, 155 files (s) | 2084.4 | 1649.0 | 1513.5 |
+| Compile, 155 files (s) | 1414.5 | 1391.2 | 1306.0 |
+| `form/runtests.jl` wall (s) | 768.5 | 596.7 | 530.8 |
+
+Base run 1 had load spikes on files no diff touches: `form/ghost_semidiscrete.jl` 124.9 s
+against 20.0 s, and `space/weights_staleness.jl` 56.2 s against 7.8 s. Pair 2 is the fair
+comparison: `form/` falls 66 s (11%) and the 155 files fall 135 s (8%). With one clean
+sample per tree, that suite-level figure has no spread.
+
+The files the plan changed agree across both base runs to within 1 s, so their deltas sit
+well above the noise:
+
+| File | Base (s) | Branch (s) | Δ (s) |
+|---|---|---|---|
+| `form/bilinear.jl` | 73.5, 73.5 | 42.0 | −31.5 |
+| `form/assembled_jacobian.jl` | 54.4, 53.2 | 36.7 | −17.1 |
+| `form/linear.jl` | 22.7, 22.3 | 10.9 | −11.6 |
+| `form/simplifier.jl` | 33.8, 26.3 | 23.2 | −6.8 |
+
+None of the other files moved more than 5 s between base run 2 and the branch.
+
+### Ext
+
+| | base 1 | base 2 | branch 1 | branch 2 |
+|---|---|---|---|---|
+| Suite wall (s) | 1300.8 | 2904.8 | 679.4 | 596.3 |
+| Compile (s, summed over threads) | 581.8 | 1695.8 | 545.3 | 545.4 |
+| Tests | 7429 | 7429 | 6612 | 6612 |
+
+Base run 2 is an outlier, with `ext/polyester_ext.jl` at 1305.5 s and `ext/kronecker_ext.jl`
+at 1005.4 s, against 188.4 s and 57.2 s in base run 1. That looks like memory pressure, not
+code. Base run 1 also paid one-off loads on files the plan did not touch: `ext/makie_ext.jl`
+took 153.2 s against 4.3 s, and `ext/sciml_ext.jl` 241.4 s against 49.1 s. Neither suite
+total is a clean before figure. The deltas on the files the plan changed are steady:
+
+| File | Base (s) | Branch (s) | Δ (s) |
+|---|---|---|---|
+| `ext/polyester_parity.jl` | 226.7, 234.3 | 30.9, 31.7 | about −200 |
+| `ext/polyester_ext.jl` | 188.4 (run 1) | 152.6, 156.1 | about −34 |
+| `ext/ghost_polyester.jl` | | | under 5 |
+
+Adding those back to the branch's steady 596–679 s puts an untouched base near 830–915 s, so
+ext falls about 25%. The fall comes from `polyester_parity.jl`: #942 now runs only in the
+backends and full groups.
+
+### PR CI
+
+Pending PR run.
