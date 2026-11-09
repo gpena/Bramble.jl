@@ -14,7 +14,9 @@
 # `[[exempt_function]]` entries (`path`, `functions`, `reason`) exempt single functions rather
 # than files, under the same rule. Each reason starts with a label: `device-only:` (a
 # KernelAbstractions, Metal or AppleAccelerate path; the test environment has none of them),
-# `macro-expansion:` or `load-time:`. A host fallback or error path is never listed.
+# `macro-expansion:`, `load-time:`, `os-specific:` or `uncounted:`. A host fallback or error
+# path is never listed, except an `os-specific:` line that only another OS runs: every
+# coverage leg runs macOS-latest.
 
 [[exempt]]
 path = "src/Bramble.jl"
