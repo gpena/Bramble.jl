@@ -5,7 +5,8 @@
 # before the coverage tracer is active. "Hard to test" is not a reason.
 #
 # src/utils/device_kernels.jl and src/solvers/accelerate_solver.jl are deliberately not
-# listed. Their generic fallbacks and error paths run on Linux, so they stay measured.
+# listed as files. Their generic fallbacks and macOS paths run on the macOS coverage legs, so
+# they stay measured. The off-macOS throws of accelerate_solver.jl are the one exception.
 #
 # This is a separate file, rather than more codecov.yml ignores, so that Codecov still shows
 # these files and the list can be reviewed on its own.
@@ -13,7 +14,9 @@
 # `[[exempt_function]]` entries (`path`, `functions`, `reason`) exempt single functions rather
 # than files, under the same rule. Each reason starts with a label: `device-only:` (a
 # KernelAbstractions, Metal or AppleAccelerate path; the test environment has none of them),
-# `macro-expansion:` or `load-time:`. A host fallback or error path is never listed.
+# `macro-expansion:`, `load-time:`, `os-specific:` or `uncounted:`. A host fallback or error
+# path is never listed, except an `os-specific:` line that only another OS runs: every
+# coverage leg runs macOS-latest.
 
 [[exempt]]
 path = "src/Bramble.jl"
@@ -248,17 +251,9 @@ methods = ["locality(::Type{<:GPUArraysCore.AbstractGPUArray}"]
 reason = "device-only: the locality of a GPUArrays array type, reached only for a device array; no device array type is in the test environment."
 
 
-# Uncounted lines: `headers` entries drop only the first line of a method (see the header of
-# .github/scripts/coverage_floor.jl); the body of each is covered on the Weekly run. The
+# Uncounted lines: the header line of an inlined block `function` needs no entry, because
+# coverage_floor.jl drops a 0-hit `function` line whose body has a hit (see its header). The
 # `methods` entries below are one-line constant methods a test calls but Julia never counts.
-
-[[exempt_function]]
-path = "src/assembly/stencil_eval.jl"
-headers = [
-    "_point_strength_val(s)",
-    "_visit_operator_add2(f::F",
-]
-reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
 
 [[exempt_function]]
 path = "src/assembly/stencil_eval.jl"
@@ -288,37 +283,6 @@ methods = [
 reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; a test calls each (test/form/bilinear.jl, test/form/common.jl, test/form/interpolation.jl, test/form/semidiscrete.jl)"
 
 [[exempt_function]]
-path = "src/ast/component.jl"
-headers = [
-    "component(::IndexedTrialFunction",
-    "component(::IndexedTestFunction",
-    "component(op::ShiftNode",
-    "component(op::RegionRestriction",
-    "component(op::OperatorScale",
-    "component(op::GridFunctionScale",
-    "component(op::OperatorAdd",
-]
-reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
-
-[[exempt_function]]
-path = "src/operators/skew.jl"
-headers = [
-    "_advection_operator(wₕ::NTuple",
-]
-reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
-
-[[exempt_function]]
-path = "src/operators/region_restriction.jl"
-headers = [
-    "_is_marked(words::AbstractMatrix{UInt64}, ids::NTuple",
-    "_probed_chain(op::_ProbedRestriction",
-    "_probed_chain(op::_Scale",
-    "_source_stencil_at(op::RegionRestriction",
-    "shifted_inner_stencil(inner_op::RegionRestriction",
-]
-reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
-
-[[exempt_function]]
 path = "src/operators/region_restriction.jl"
 methods = [
     "_reaches_probed(::_ProbedRestriction)",
@@ -340,48 +304,17 @@ methods = ["_stencil_margin(op::_LeafNode)"]
 reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; a test calls it on the trial and test leaves (test/form/bilinear.jl, `_stencil_margin reads composed reach`)"
 
 [[exempt_function]]
-path = "src/operators/normal.jl"
-headers = [
-    "_fill_normal!(::HostLocality",
-    "_normal_mask(::Val{D}",
-    "_normal_terms(terms, right",
-    "_normal_axis(s::Symbol)",
-    "_normal_product(g, ::NormalComponent",
-    "Base.:*(p::NormalComponentProduct{DIM}, u::LazyOp)",
-    "_normal_terms_of(c::NormalContraction",
-]
-reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
-
-[[exempt_function]]
-path = "src/operators/interpolation.jl"
-headers = [
-    "_interp_in_domain(pts::NTuple{D}",
-    "_interp_corner_weight(ts::NTuple",
-    "(f::GridInterpolant)(x)",
-]
-reason = "uncounted: Julia's line table has no counter for the header line of an inlined function; the body is covered"
-
-[[exempt_function]]
 path = "src/operators/projection.jl"
 methods = ["_in_any_marker(::Tuple{}, i) = false"]
 reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; it ends the marker recursion of every host masked projection at an entry outside all markers (test/space/vector_elements.jl, Rₕ! with markers)"
 
 [[exempt_function]]
 path = "src/solvers/accelerate_solver.jl"
-methods = [
-    "_accelerate_factorize(A; kwargs...)",
-    "_accelerate_solve(A, ::Any; kwargs...)",
-]
 lines = [
-    { method = "accelerate_factorize(A::SparseMatrixCSC; kwargs...)", text = "return _accelerate_factorize(A; kwargs...)" },
-    { method = "accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)", text = "return _accelerate_solve(A, F; kwargs...)" },
-    { method = "accelerate_factorize(a::BilinearForm", text = "_reject_factorize_symmetrize(:accelerate_factorize, kwargs)" },
-    { method = "accelerate_factorize(a::BilinearForm", text = "A = assemble(" },
-    { method = "accelerate_factorize(a::BilinearForm", text = "A = _as_csc(A)" },
-    { method = "accelerate_factorize(a::BilinearForm", text = "return _accelerate_factorize(A; sym = sym, kind = kind, kwargs...)" },
-    { method = "accelerate_solve(a::BilinearForm", text = "A, F = assemble(" },
-    { method = "accelerate_solve(a::BilinearForm", text = "A = _as_csc(A)" },
-    { method = "accelerate_solve(a::BilinearForm", text = "u = _accelerate_solve(A, F; sym = sym, kind = kind, kwargs...)" },
-    { method = "accelerate_solve(a::BilinearForm", text = "return element(trial_space(a), u)" },
+    { method = "accelerate_factorize(A::SparseMatrixCSC; kwargs...)", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
+    { method = "accelerate_factorize(a::BilinearForm", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
+    { method = "accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
+    { method = "accelerate_solve(a::BilinearForm", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
+    { method = "accelerate_refactor!(::AccelerateFactorization, A)", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
 ]
-reason = "os-specific: runs only on macOS (after the Sys.isapple() guard, or when BrambleAppleAccelerateExt is absent on macOS); no coverage leg runs macOS with it"
+reason = "os-specific: runs only off macOS, behind the !Sys.isapple() guard; every coverage leg runs macOS-latest"

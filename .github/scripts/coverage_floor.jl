@@ -23,19 +23,25 @@
 # A method spans a `function` block through the `end` at its indent, or a one-line definition
 # through its balanced `([{` (so a `= throw(` whose body continues counts whole; brackets inside
 # plain strings are ignored). A prefix matching no method or two or more is an error naming the
-# path and prefix. An entry may also carry `headers = [...]`: method prefixes matched exactly as
-# `methods` are, but only the FIRST line of the matched method (the `function` line, or the whole
-# of a one-line method) leaves the total; the body stays measured. This is for the header line
-# Julia never counts for an inlined function. An entry may also carry
+# path and prefix. An entry may also carry
 # `lines = [{ method = "<prefix>", text = "<stripped line>" }, ...]`: the method is matched
 # exactly as for `methods`, and the one line of it whose stripped text equals `text` leaves the
 # total, for a line only another OS runs inside a method the others do run. Zero or two such
 # lines is an error naming the path, prefix and text. `path` is relative to the working directory.
 # Every entry is resolved before the first error is raised, so a stale TOML names all its bad
 # entries at once. `--check-exempt <toml>` does only that: it resolves every `functions`,
-# `methods`, `headers` and `lines` entry against the source, needs no `--floor` or lcov, prints
-# one line per failure (path, prefix or name, match count) and exits 1 if any, 0 with a count
-# line if none.
+# `methods` and `lines` entry against the source, needs no `--floor` or lcov, prints one line
+# per failure (path, prefix or name, match count) and exits 1 if any, 0 with a count line if
+# none.
+#
+# The header line of an inlined block `function` is never counted by Julia, so the lcov has a
+# `DA` of 0 on it while the body shows hits. One rule drops it, with no TOML entry: after the
+# merge of all inputs and the TOML drops, a block `function` line (macros stripped; the head may
+# span lines) with a `DA` of 0 leaves the total when a line from it to the `end` at its indent
+# has a hit. A one-line method is never touched, and a `function` whose body has no hit keeps
+# its header at 0. Each `SF` path is read relative to the working directory; a file that
+# cannot be read is left as it is. An entry key other than `path`, `functions`, `methods`, `lines`
+# and `reason` is an error, so a `headers` list, the per-method form of this rule, fails.
 # `--prefix <dir/>` limits the BELOW and DROPPED flags, the `below=` and `dropped=` counts and
 # `--fail` to files whose path starts with it; every file is still listed. Exits 1 only with
 # `--fail` and a BELOW or DROPPED file.
@@ -189,13 +195,13 @@ function method_line(file::AbstractString, prefix::AbstractString, text::Abstrac
     return only(hits)
 end
 
-# Resolves every function, method, header and line entry of `entries` (the `exempt_function`
+# Resolves every function, method and line entry of `entries` (the `exempt_function`
 # tuples of `main`) against the source. Returns the dropped line numbers per entry and one
 # message per entry that failed, so one run names every bad entry.
 function resolve_exempt(entries)
     drops = Set{Int}[]
     failures = String[]
-    for (path, names, methods, headers, exlines) in entries
+    for (path, names, methods, exlines) in entries
         drop = Set{Int}()
         attempt(f) = try
             f()
@@ -212,10 +218,6 @@ function resolve_exempt(entries)
             r = attempt(() -> method_lines(path, prefix))
             r === nothing || union!(drop, r)
         end
-        for h in headers
-            r = attempt(() -> method_lines(path, h))
-            r === nothing || push!(drop, first(r))
-        end
         for (m, t) in exlines
             r = attempt(() -> method_line(path, m, t))
             r === nothing || push!(drop, r)
@@ -225,10 +227,34 @@ function resolve_exempt(entries)
     return drops, failures
 end
 
+# Drops from `lines` every 0-hit block `function` line whose span (that line to the `end` at its
+# indent) holds a line with a hit: Julia has no counter for the header of an inlined function.
+function drop_uncounted_headers!(lines::Dict{String,Dict{Int,Bool}})
+    for (path, d) in lines
+        isfile(path) || continue
+        src = try
+            readlines(path)
+        catch
+            continue
+        end
+        for n in sort!([k for (k, hit) in d if !hit])
+            n <= length(src) || continue
+            line = src[n]
+            head = replace(strip(line), r"^(?:(?:Base\.)?@\S+\s+)*" => "")
+            startswith(head, "function ") && !occursin(r"\bend\s*$", line) || continue
+            stop = Regex("^" * match(r"^\s*", line).match * "end\\b")
+            last = findnext(l -> occursin(stop, l), src, n + 1)
+            last === nothing && continue
+            any(k -> get(d, k, false), (n + 1):last) && delete!(d, n)
+        end
+    end
+    return lines
+end
+
 function main(args)
     floor = nothing
     exempt = Regex[]
-    exempt_functions = Tuple{String,Vector{String},Vector{String},Vector{String},Vector{Tuple{String,String}}}[]
+    exempt_functions = Tuple{String,Vector{String},Vector{String},Vector{Tuple{String,String}}}[]
     prefix = ""
     compare = nothing
     fail = false
@@ -246,9 +272,15 @@ function main(args)
                 push!(exempt, glob_regex(e["path"]))
             end
             for e in get(toml, "exempt_function", [])
+                unknown = setdiff(keys(e), ("path", "functions", "methods", "lines", "reason"))
+                if !isempty(unknown)
+                    println(stderr, "exempt: unknown key `", join(sort!(collect(unknown)), "`, `"),
+                            "` in the entry for ", e["path"], ": a 0-hit block `function` line ",
+                            "whose body has a hit is dropped by the rule itself, with no entry")
+                    return 1
+                end
                 push!(exempt_functions, (e["path"], String.(get(e, "functions", String[])),
                                          String.(get(e, "methods", String[])),
-                                         String.(get(e, "headers", String[])),
                                          [(String(d["method"]), String(d["text"]))
                                           for d in get(e, "lines", [])]))
             end
@@ -266,7 +298,7 @@ function main(args)
     if check
         _, failures = resolve_exempt(exempt_functions)
         foreach(m -> println(stderr, m), failures)
-        n = sum(e -> length(e[2]) + length(e[3]) + length(e[4]) + length(e[5]), exempt_functions; init = 0)
+        n = sum(e -> length(e[2]) + length(e[3]) + length(e[4]), exempt_functions; init = 0)
         isempty(failures) || (println(stderr, "exempt: $(length(failures)) of $n entries failed"); return 1)
         println("exempt: $n entries resolve")
         return 0
@@ -283,6 +315,7 @@ function main(args)
             (p == path || endswith(p, "/" * path)) && foreach(l -> delete!(d, l), drop)
         end
     end
+    drop_uncounted_headers!(lines)
     pct = percentages(lines)
     before = compare === nothing ? Dict{String,Float64}() : percentages(read_lcov!(Dict{String,Dict{Int,Bool}}(), compare))
     nbelow = nexempt = ndropped = 0
