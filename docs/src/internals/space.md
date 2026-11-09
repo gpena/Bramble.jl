@@ -243,7 +243,8 @@ the table. Files are in `test/ghost/` unless a path says otherwise.
 | `U` as test space, `form(U, f)` | throw | `polygon_spaces.jl` ("Figure 1: exact for quadratics") |
 | `dirichlet =` | throws; `g` fixes the boundary | `polygon_spaces.jl` ("refusals") |
 | rank-one terms | throw | `polygon_spaces.jl` ("refusals") |
-| composites (`U × U`, beside a plain ghost space) | forms throw | `polygon_spaces.jl` ("composites refuse polygon spaces") |
+| composites `U × U`, `U^Val(n)`, `U^N` (`N ≤ 3`) of the trial spaces, tested by `W × W`, built on one mesh | supported per component, each with its own `g`; each row equals the plain composite's with each block's exterior columns replaced by that block's own (3.2) row; loads and `lift` per component; contractions | `polygon_composite.jl` ("rows match the plain-matrix oracle", "loads and lift per component", "contraction") |
+| a polygon component beside a ghosted space; `dirichlet =` and `constrained` on a composite of polygon spaces | throw, naming polygon spaces | `polygon_composite.jl` ("refusals") |
 | a form that reads an exterior node past the diagonal neighbours of the interior node | throws, naming the node and the equation; `Dcₓ(Dcₓ(u))` is the tested case | `polygon_spaces.jl` ("refusals") |
 | a form that reaches two nodes along an axis and lands on an interior or boundary node | assembles; the V-notch with `Dcᵧ(Dcᵧ(u))` is the probed case | untested |
 
@@ -260,8 +261,9 @@ On a level-set mesh the same rows are pinned by `levelset_spaces.jl` (the quadra
 matrix-free and contraction, the refusals), by `levelset_oracle.jl` (every term of the
 third row, `Rₕ` and the norms), and by the level-set disk of `policies.jl` and
 `ext/ghost_polyester.jl`. The test space as trial side has its own level-set testset in
-`polygon_support.jl` ("test space as trial side"). The rows about a conflict node do not
-arise there, and the remaining rows are untested on a level-set mesh.
+`polygon_support.jl` ("test space as trial side"), and `polygon_composite.jl` pins the
+composite rows on the disk and the dented egg. The rows about a conflict node do not arise
+there, and the remaining rows are untested on a level-set mesh.
 
 ## Operator matrices: stencil_matrix versus the Kronecker construction
 
