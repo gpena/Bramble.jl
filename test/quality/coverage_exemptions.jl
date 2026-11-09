@@ -97,8 +97,9 @@ end
             """)
         # f has a 0 header over a hit body, g a 0 header over a 0 body, h is a 0 one-liner, k has
         # a 0 header over two lines and a hit body, and `function m end` is no block.
-        write(joinpath(dir, "x.info"), "SF:src/x.jl\nDA:1,0\nDA:2,5\nDA:4,0\nDA:5,0\n" *
-                                      "DA:7,0\nDA:8,0\nDA:10,3\nDA:12,0\nend_of_record\n")
+        write(joinpath(dir, "x.info"),
+            "SF:src/x.jl\nDA:1,0\nDA:2,5\nDA:4,0\nDA:5,0\n" *
+            "DA:7,0\nDA:8,0\nDA:10,3\nDA:12,0\nend_of_record\n")
         @testset "A header over a hit body is dropped" begin
             # f and k leave their headers; g, h and `function m` stay: 2 of 6 lines, 33.3.
             @test occursin(r"^33\.3 src/x\.jl BELOW$"m, _floor_report(dir, "x.info"))
