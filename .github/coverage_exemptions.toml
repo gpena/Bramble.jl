@@ -5,7 +5,8 @@
 # before the coverage tracer is active. "Hard to test" is not a reason.
 #
 # src/utils/device_kernels.jl and src/solvers/accelerate_solver.jl are deliberately not
-# listed. Their generic fallbacks and error paths run on Linux, so they stay measured.
+# listed as files. Their generic fallbacks and macOS paths run on the macOS coverage legs, so
+# they stay measured. The off-macOS throws of accelerate_solver.jl are the one exception.
 #
 # This is a separate file, rather than more codecov.yml ignores, so that Codecov still shows
 # these files and the list can be reviewed on its own.
@@ -307,20 +308,11 @@ reason = "uncounted: Julia's line table has no counter for a one-line inlined me
 
 [[exempt_function]]
 path = "src/solvers/accelerate_solver.jl"
-methods = [
-    "_accelerate_factorize(A; kwargs...)",
-    "_accelerate_solve(A, ::Any; kwargs...)",
-]
 lines = [
-    { method = "accelerate_factorize(A::SparseMatrixCSC; kwargs...)", text = "return _accelerate_factorize(A; kwargs...)" },
-    { method = "accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)", text = "return _accelerate_solve(A, F; kwargs...)" },
-    { method = "accelerate_factorize(a::BilinearForm", text = "_reject_factorize_symmetrize(:accelerate_factorize, kwargs)" },
-    { method = "accelerate_factorize(a::BilinearForm", text = "A = assemble(" },
-    { method = "accelerate_factorize(a::BilinearForm", text = "A = _as_csc(A)" },
-    { method = "accelerate_factorize(a::BilinearForm", text = "return _accelerate_factorize(A; sym = sym, kind = kind, kwargs...)" },
-    { method = "accelerate_solve(a::BilinearForm", text = "A, F = assemble(" },
-    { method = "accelerate_solve(a::BilinearForm", text = "A = _as_csc(A)" },
-    { method = "accelerate_solve(a::BilinearForm", text = "u = _accelerate_solve(A, F; sym = sym, kind = kind, kwargs...)" },
-    { method = "accelerate_solve(a::BilinearForm", text = "return element(trial_space(a), u)" },
+    { method = "accelerate_factorize(A::SparseMatrixCSC; kwargs...)", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
+    { method = "accelerate_factorize(a::BilinearForm", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
+    { method = "accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
+    { method = "accelerate_solve(a::BilinearForm", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
+    { method = "accelerate_refactor!(::AccelerateFactorization, A)", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
 ]
-reason = "os-specific: runs only on macOS (after the Sys.isapple() guard, or when BrambleAppleAccelerateExt is absent on macOS); no coverage leg runs macOS with it"
+reason = "os-specific: runs only off macOS, behind the !Sys.isapple() guard; every coverage leg runs macOS-latest"
