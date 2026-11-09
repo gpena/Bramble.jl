@@ -19,7 +19,8 @@ using SparseArrays: getcolptr
 using LinearAlgebra: issymmetric, mul!, ldiv!
 using Random
 using ..TestUtils: alloc_test, _BROADCAST_SIZES, _broadcast_space, _check_broadcast_equal, _check_stencils,
-                   _fillnz!, _grid, _grid_sample, _mg_jitter_mesh, _mg_spd, _mg_transfer_meshes, _reset_seen!, _sine_source,
+                   _fillnz!, _grid, _grid_sample, _mg_jitter_mesh, _mg_spd, _mg_transfer_meshes, _reset_seen!,
+                   _sine_source,
                    _spy, _STENCIL_F, _STENCIL_G, _stencil_mesh_pair, _stencil_op!, _threads_seen,
                    _unit_cube, WITH_FULL_GRIDS
 
@@ -782,16 +783,13 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
         sizes = (41, 13, 7)
 
         # Every shape in 2D, scalar alone in 1D and 3D; the rest runs in `grids`.
-        replay_cases = [
-            (D, nm, f, comps) for D in 1:3,
-            (nm, f, comps) in (
-                ("scalar", _scalar, 1), ("pair", _pair, 1), ("composite", _composite, 2)
-            )
-        ]
+        replay_cases = [(D, nm, f, comps)
+                        for D in 1:3,
+        (nm, f, comps) in (
+            ("scalar", _scalar, 1), ("pair", _pair, 1), ("composite", _composite, 2)
+        )]
         replay_cover(c) = c[1] == 2 || c[2] == "scalar"
-        @testset "$(D)D, $(nm)" for (D, nm, f, comps) in
-                                    _grid_sample("polyester replay", replay_cases, replay_cover, 2)
-
+        @testset "$(D)D, $(nm)" for (D, nm, f, comps) in _grid_sample("polyester replay", replay_cases, replay_cover, 2)
             n = sizes[D]
             Ωs = _replay_mesh(D, n, Serial(); seed = 338)
             Ωb = _replay_mesh(D, n, CpuPolyester(); seed = 338)
@@ -994,17 +992,14 @@ end
     _composite(u, v) = innerₕ(u(1), v(1)) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))) + innerₕ(D₋ₓ(u(1)), v(2))
     sizes = (41, 13, 7)
     # Every shape in 2D, diffusion alone in 1D and 3D; the rest runs in `grids`.
-    mf_cases = [
-        (D, nm, f, comps, dl) for D in 1:3,
-        (nm, f, comps, dl) in (
-            ("diffusion", _diff, 1, :boundary), ("pair", _pair, 1, nothing),
-            ("composite", _composite, 2, :boundary)
-        )
-    ]
+    mf_cases = [(D, nm, f, comps, dl)
+                for D in 1:3,
+    (nm, f, comps, dl) in (
+        ("diffusion", _diff, 1, :boundary), ("pair", _pair, 1, nothing),
+        ("composite", _composite, 2, :boundary)
+    )]
     mf_cover(c) = c[1] == 2 || c[2] == "diffusion"
-    @testset "$(D)D, $(nm)" for (D, nm, f, comps, dl) in
-                                _grid_sample("polyester matrix-free mul!", mf_cases, mf_cover, 2)
-
+    @testset "$(D)D, $(nm)" for (D, nm, f, comps, dl) in _grid_sample("polyester matrix-free mul!", mf_cases, mf_cover, 2)
         space(W) = comps == 1 ? W : W × W
         Ws, Wb = space(_mf_space(D, sizes[D], Serial())), space(_mf_space(D, sizes[D], CpuPolyester()))
         kw = dl === nothing ? (;) : (; dirichlet = dl)

@@ -756,8 +756,9 @@ end
                 nnz_b))
     end
     diff_cover = ("D₋ₓ over R(:c, v + L + R)", "D₋ₓ over v + L + R + B")
-    for (nm, whole, parts, nnz_whole) in
-        _grid_sample("difference over restricted sum", diff_rows, r -> r[1] in diff_cover, 3)
+    for (nm, whole, parts, nnz_whole) in _grid_sample(
+        "difference over restricted sum", diff_rows, r -> r[1] in
+                                                          diff_cover, 3)
         @testset "$nm" begin
             a = form(Wd, Wd, whole)
             A = assemble(a)
@@ -783,8 +784,7 @@ end
         ("DD, trial side", (u, v) -> innerₕ(DD(R(:l, u) + R(:r, u)), v),
             ((u, v) -> innerₕ(DD(R(:l, u)), v), (u, v) -> innerₕ(DD(R(:r, u)), v)), 131)]
     dd_cover = ("DD, test side", "DD, trial side")
-    for (nm, whole, parts, nnz_whole) in
-        _grid_sample("nested difference", dd_rows, r -> r[1] in dd_cover, 1)
+    for (nm, whole, parts, nnz_whole) in _grid_sample("nested difference", dd_rows, r -> r[1] in dd_cover, 1)
         @testset "$nm" begin
             a = form(Wd, Wd, whole)
             A = assemble(a)
@@ -829,8 +829,9 @@ end
     end
     avg_cover = ("Mₓ∘D₊ᵧ over L + R", "D₋ₓ∘M₊ᵧ over R(:c, v + L + R)",
         "jumpₓ∘D₊ᵧ over R(:c, v + L + R)", "Mₓ∘M₊ᵧ over L + R")
-    for (nm, whole, W2, gs, nnz_whole) in
-        _grid_sample("average and jump over restricted sum", avg_rows, r -> r[1] in avg_cover, 2)
+    for (nm, whole, W2, gs, nnz_whole) in _grid_sample(
+        "average and jump over restricted sum", avg_rows, r -> r[1] in
+                                                               avg_cover, 2)
         @testset "$nm" begin
             a = form(Wd, Wd, whole)
             A = assemble(a)
@@ -908,8 +909,9 @@ end
         ("L5 | L5[1:4]", L5, L5[1:4], 171, 82848),
         ("U5 | V5", U5, V5, 82, 11952)]
     plain_cover = ("id + R(u) | id + R(D₋ₓ(v))", "L3 | R3", "L5 | L5[1:4]")
-    for (nm, lhs, rhs, nnz_whole, max_bytes) in
-        _grid_sample("plain summand beside restriction", plain_rows, r -> r[1] in plain_cover, 2)
+    for (nm, lhs, rhs, nnz_whole, max_bytes) in _grid_sample(
+        "plain summand beside restriction", plain_rows, r -> r[1] in
+                                                             plain_cover, 2)
         @testset "$nm" begin
             a = form(Wd, Wd,
                 (u, v) -> innerₕ(sum(f(u) for f in lhs), sum(g(v) for g in rhs)))
@@ -941,8 +943,9 @@ end
             ((u, v) -> innerₕ(u, Bramble.D̽ᵧ(2.0 * R(:l, v))),
                 (u, v) -> innerₕ(u, Bramble.D̽ᵧ(v))), 175)]
     negated_cover = ("D₋ₓ of a negated sum", "D̽ᵧ of 2.0R + v")
-    for (nm, whole, parts, nnz_max) in
-        _grid_sample("negated or scaled restriction", negated_rows, r -> r[1] in negated_cover, 1)
+    for (nm, whole, parts, nnz_max) in _grid_sample(
+        "negated or scaled restriction", negated_rows, r -> r[1] in
+                                                            negated_cover, 1)
         @testset "$nm" begin
             a = form(Wd, Wd, whole)
             A = assemble(a)
@@ -1015,8 +1018,7 @@ end
             (u, v) -> innerₕ(u, π * v + 3 * D₋ₓ(v)), Float32, false)]
     widen_cover = ("Float64: 0.1v + 3D₋ₓ + (1//3)D₋ᵧ", "Float32 mesh: 0.1v + 3D₋ₓ",
         "Float32 mesh: πv + 3D₋ₓ")
-    for (nm, S, f, T, exact) in
-        _grid_sample("scales widened to the mesh type", widen_rows, r -> r[1] in widen_cover, 1)
+    for (nm, S, f, T, exact) in _grid_sample("scales widened to the mesh type", widen_rows, r -> r[1] in widen_cover, 1)
         @testset "$nm" begin
             ast = _built(S, f)
             split = Bramble._split_restricted_products(ast, eltype(S))
@@ -1042,8 +1044,7 @@ end
     big_rows = Any[
         ("big(0.1)v + 3D₋ₓ", (u, v) -> innerₕ(u, big(0.1) * v + 3 * D₋ₓ(v)), 56688),
         ("big(3)v + 0.5D₋ₓ", (u, v) -> innerₕ(u, big(3) * v + 0.5 * D₋ₓ(v)), 72000)]
-    for (nm, f, cap) in
-        _grid_sample("BigFloat scales left mixed", big_rows, r -> r[1] == "big(0.1)v + 3D₋ₓ", 1)
+    for (nm, f, cap) in _grid_sample("BigFloat scales left mixed", big_rows, r -> r[1] == "big(0.1)v + 3D₋ₓ", 1)
         @testset "$nm" begin
             ast = _built(W, f)
             @test Bramble._split_restricted_products(ast, Float64) === ast
@@ -1108,8 +1109,9 @@ end
         ("g-scaled sums, one under D₋ₓ",
             (u -> u + R(:c, D₋ₓ(u)), u -> gd * (R(:l, u) + R(:r, u) + R(:t, u))),
             (identity, v -> gd * (R(:b, D₋ₓ(v)) + R(:t, v) + R(:c, v))), 91376)]
-    for (nm, lhs, rhs, max_bytes) in
-        _grid_sample("sums too long to split", long_rows, r -> r[1] == "g-scaled sums of three markers", 1)
+    for (nm, lhs, rhs, max_bytes) in _grid_sample(
+        "sums too long to split", long_rows, r -> r[1] ==
+                                                  "g-scaled sums of three markers", 1)
         @testset "$nm" begin
             a = form(Wd, Wd,
                 (u, v) -> innerₕ(lhs[1](u) + lhs[2](u), rhs[1](v) + rhs[2](v)))
