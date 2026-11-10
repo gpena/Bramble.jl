@@ -83,6 +83,13 @@ Holds the diagonal weight vectors for a grid space's discrete inner products, bo
 standard ``L^2`` weights and the staggered ones, precomputed once rather than recomputed
 on every call.
 
+A `mutable struct` whose fields are all `const`: built once by `space_weights` and never
+changed, it is held by reference, so a [`ScalarGridSpace`](@ref) stores a pointer to it
+rather than the weights inline. Every copy of a space (a form's, an operator's result
+element, an assembly walk's rebuild) carries that pointer, not the weights, which keeps the
+3D form tree under Enzyme's type-analysis limit (gpena/Bramble.jl#1154). Two spaces are
+`===` only when they share one mesh and one `SpaceWeights` object.
+
 # Fields
 
   - `innerh::SeparableWeights{D, T, VT}`: weight for the standard discrete ``L^2`` inner
@@ -112,17 +119,13 @@ on every call.
 
 For a detailed explanation of the mathematical formulas corresponding to these weights, please refer to the documentation for [`ScalarGridSpace`](@ref).
 """
-struct SpaceWeights{D, T, VT <: AbstractVector{T}}
-    "weight for the standard discrete ``L^2`` inner product (`:innerₕ`), based on cell measures (``|\\square_k|``)."
-    innerh::SeparableWeights{D, T, VT}
-    "one lazy weight per spatial direction, for the modified, staggered inner products (`:inner₊ₓ`, `:inner₊ᵧ`, etc.)."
-    innerplus::NTuple{D, SeparableWeights{D, T, VT}}
-    "per-axis aligned factor ``h_d(i)``, one vector of length `npoints(Ωₕ, d)` per axis."
-    aligned::NTuple{D, VT}
-    "per-axis cell-measure factor ``h_d(i+1/2)``, one vector of length `npoints(Ωₕ, d)` per axis; shared by `innerh` and every staggered direction's transverse factor."
-    cellfactor::NTuple{D, VT}
-    "the mesh's `_mesh_version` when these weights were built; see the staleness note above."
-    built_version::Int
+mutable struct SpaceWeights{D, T, VT <: AbstractVector{T}}
+    # Documented under `# Fields` above: Julia drops a docstring on a `const` field.
+    const innerh::SeparableWeights{D, T, VT}
+    const innerplus::NTuple{D, SeparableWeights{D, T, VT}}
+    const aligned::NTuple{D, VT}
+    const cellfactor::NTuple{D, VT}
+    const built_version::Int
 end
 
 """
@@ -137,7 +140,8 @@ A `ScalarGridSpace` pairs the mesh with the precomputed weight vectors
 # Fields
 
   - `mesh::MType`: the underlying mesh of the grid space.
-  - `weights::SpaceWeights{D, T, VT}`: precomputed inner product weight vectors.
+  - `weights::SpaceWeights{D, T, VT}`: precomputed inner product weight vectors, held
+    by reference (`SpaceWeights` is a `mutable struct` with `const` fields).
 
 ## Discrete inner products
 

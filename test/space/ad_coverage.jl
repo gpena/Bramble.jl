@@ -227,8 +227,8 @@ function build_difference_3d(policy, kind)
     _start()
 end
 
-# The averaging operator `M₂` (the third axis) on a grid function: the reverse mode is
-# `EnzymeNoTypeError` (gpena/Bramble.jl#1155), the forward mode a gradient.
+# The averaging operator `M₂` (the third axis) on a grid function: its reverse mode was
+# `EnzymeNoTypeError` (gpena/Bramble.jl#1155), fixed in v4.2.4.
 function build_average_z_3d(policy, kind)
     W = gridspace(_mesh3d(policy, kind))
     B = _basis(ndofs(W))
@@ -450,15 +450,17 @@ const CELLS = (
     cell(:assemble_linear, "assemble", :assemble, build_assemble_linear),
     cell(:assemble_diffusion, "assemble", :assemble, build_assemble_diffusion),
     cell(:assemble_averaged, "assemble", :assemble, build_assemble_averaged),
-    # Forward mode is wrong under all three policies (relative error 0.17 uniform, 0.10
-    # non-uniform, measured 2026-11-07), gpena/Bramble.jl#1124. A child of its own, like
-    # `boundary`: with the other `assemble` cells, `CpuThreaded` peaks at 10 GB.
-    cell(:assemble_three, "assemble", :three, build_assemble_three, fwd = :wrong),
+    # Forward mode was wrong under all three policies (relative error 0.17 uniform, 0.10
+    # non-uniform, measured 2026-11-07), gpena/Bramble.jl#1124, fixed in v4.2.4 by holding
+    # `SpaceWeights` by reference. A child of its own, like `boundary`: with the other
+    # `assemble` cells, `CpuThreaded` peaks at 10 GB.
+    cell(:assemble_three, "assemble", :three, build_assemble_three),
     cell(:assemble_dirichlet, "assemble", :assemble, build_assemble_dirichlet),
     cell(:assemble_mesh, "mesh", :geometry, build_assemble_mesh,
         rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
         fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
-    # 3D (#1128). `Mₕ(κ)` needs `Enzyme.API.maxtypeoffset!(1024)`, which the threed child sets.
+    # 3D (#1128). `Mₕ(κ)` and `M₂` differentiate at Enzyme's default type-analysis bounds
+    # under all three policies (#1154, #1155); the other 3D cells ran under `CpuSerial` only.
     cell(:assemble_linear_3d, "assemble", :threed, build_assemble_linear_3d,
         rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
         fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
@@ -468,14 +470,9 @@ const CELLS = (
     cell(:difference_3d, "operator", :threed, build_difference_3d,
         rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
         fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
-    # `M₂` on a grid function: the reverse memset is gpena/Bramble.jl#1155.
-    cell(:average_z_3d, "operator", :threed, build_average_z_3d,
-        rev = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
-        fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
-        rev_err = "EnzymeNoTypeError"),
-    cell(:assemble_averaged_3d, "assemble", :threed, build_assemble_averaged_3d,
-        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
-        fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
+    # `M₂` on a grid function: the reverse memset was gpena/Bramble.jl#1155.
+    cell(:average_z_3d, "operator", :threed, build_average_z_3d),
+    cell(:assemble_averaged_3d, "assemble", :threed, build_assemble_averaged_3d),
     # Reverse was an abort (gpena/Bramble.jl#1126), fixed in v4.2.2; the threaded cells
     # are the same form under the other policies. A child of its own: with the `assemble`
     # cells, `CpuThreaded` peaks at 11 GB (3.2 GB alone, measured 2026-11-07).
@@ -487,21 +484,27 @@ const CELLS = (
     cell(:semidiscretize, "semidiscretize", :solve, build_semidiscretize),
     cell(:matrix_free, "matrix_free", :operators, build_matrix_free),
     cell(:kronecker, "kronecker", :operators, build_kronecker),
-    # `Δₕ` in the form and the parameters in its coefficients: reverse works under `CpuSerial`
-    # (366 s and 4.8 GB, measured 2026-11-07; it threw `EnzymeInternalError` before, #1152).
-    cell(:ghost_assemble, "ghost", :ghost_fast, build_ghost_assemble,
-        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip,
-        kinds = (:nonuniform,)),
+    # `Δₕ` in the form and the parameters in its coefficients (gpena/Bramble.jl#1152): both
+    # modes under all three policies, 115 to 169 s and 2.3 to 3.3 GB per threaded cell
+    # (docs/notes/internals/ad_reductions/1152_ghost_matrix.md). `CpuSerial` failed with
+    # `EnzymeNoTypeError` between 3aefc79f and 9faf6345.
+    cell(:ghost_assemble, "ghost", :ghost_fast, build_ghost_assemble, kinds = (:nonuniform,)),
     # The parameters scale the matrix and there is no `Δₕ`: reverse works under `CpuSerial`
-    # (370 s and 4.9 GB, measured 2026-11-07).
+    # (measured 2026-11-07 and again after 9faf6345); forward and the threaded policies were
+    # not run.
     cell(:ghost_inner, "ghost", :ghost_fast, build_ghost_inner,
         rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip,
         kinds = (:nonuniform,)),
-    # Relation data that depend on the parameter: not run, the compile is over 100 minutes
-    # (gpena/Bramble.jl#1153, see the page's limits).
+    # Relation data that depend on the parameter: not run. Reverse is compile cost in
+    # `_assemble_relation`: one facet takes 732 s and 3.7 GB and `constrained` passes the 10 GB
+    # cap at about 310 s. Forward of `constrained` alone works (about 61 s) but was not
+    # measured through this cell. Open, gpena/Bramble.jl#1153 and
+    # docs/notes/internals/ad_reductions/1153_constrained.md.
     cell(:ghost_data, "ghost", :ghost_slow, build_ghost_data, rev = :skip, fwd = :skip,
         kinds = (:nonuniform,), slow = true),
-    # The Robin coefficient's ForwardDiff half works (gpena/Bramble.jl#1127).
+    # The Robin coefficient's ForwardDiff half works (gpena/Bramble.jl#1127). Its Enzyme reverse
+    # is the same compile cost as `ghost_data` (744 s for one facet, #1153), forward not
+    # measured through this cell.
     cell(:ghost_robin, "ghost", :ghost_fast, build_ghost_robin, rev = :skip, fwd = :skip,
         kinds = (:nonuniform,)),
     # The load of `assemble(a, l)` alone (gpena/Bramble.jl#1127, the load half). The threaded
@@ -631,9 +634,6 @@ function child_main(spec::AbstractString)
     pname, group, only, only_kind, only_mode = (split(spec, ':')..., "", "", "")[1:5]
     policy = Symbol(pname)
     pol = POLICIES[policy]
-    # A 3D form with averaged coefficients needs a wider type-analysis bound (#1128). The test
-    # sets it here and not in the extension, so a user's Enzyme session keeps its own value.
-    group == "threed" && Enzyme.API.maxtypeoffset!(1024)
     if group == "settings"
         for (name, build, mode, activity, annotation) in SETTINGS
             f, x = build(pol, :nonuniform)

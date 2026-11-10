@@ -5,15 +5,19 @@ Reduction of gpena/Bramble.jl#1124 (Enzyme forward mode through `assemble` of
 one constant in every entry). The reproducer is `1124_forward_offset.jl`, next to this note.
 It needs Bramble and nothing else from the repository.
 
-Reproduces: `julia --project=. --threads=1 --optimize=1 --check-bounds=auto docs/notes/internals/ad_reductions/1124_forward_offset.jl` from the repository root exits 1 at 2e674be6 in 88 s under `CpuSerial`: the four Enzyme entries sit 249.0 above ForwardDiff's (the same 249.24 in each, max relative difference 2.5e-3) on the issue's 17 by 17 seeded non-uniform mesh. The variant `small_single` does the same on a 5 by 5 uniform mesh with an offset of 19.0 (87 s). The offset still exists, so the page's open-bug paragraph and the two pins stay as they are.
+Reproduces: `julia --project=. --threads=1 --optimize=1 --check-bounds=auto docs/notes/internals/ad_reductions/1124_forward_offset.jl` from the repository root exits 1 at 2e674be6 in 88 s under `CpuSerial`: the four Enzyme entries sit 249.0 above ForwardDiff's (the same 249.24 in each, max relative difference 2.5e-3) on the issue's 17 by 17 seeded non-uniform mesh. The variant `small_single` does the same on a 5 by 5 uniform mesh with an offset of 19.0 (87 s). On branch `v4-2-4` it no longer reproduces. Both exit 1 at 501128cb and 0 from 3aefc79f on (bisect below), under one Manifest with Enzyme 0.13.219, and all 54 variants of the file exit 0 at e3fcca1d. The two `@test_broken` pins of `test/ext/enzyme_forward_assembly.jl` are now `@test`.
 
-Latest Enzyme: 0.13.218, which is the newest release the registry resolved today and the version the Manifest holds, so no newer release exists to try; the same command under a temporary environment (Bramble developed from this checkout, `Pkg.add` of Enzyme, ForwardDiff 1.4.7, Polyester 0.7.19, every other dependency re-resolved) still exits 1 with offset 249.0 in 84 s. The issue and the test comments say 0.13.216, which was not run.
+Fixed by: 3aefc79f perf(space): hold SpaceWeights by reference so the 3D form tree fits Enzyme's type analysis (#1154)
 
-Fix site: not placed to a line. The offset enters in `_assemble_bilinear_core_cached!` (`src/assembly/bilinear_execution.jl:595`, called from `_assemble_bilinear!`, `src/assembly/bilinear.jl:1307`), the record and replay walk that routes the summands into the matrix. The form's tree reads exactly: the stored `κ` of the third summand and the matrix-free `a(u, v)` over the same tree both match ForwardDiff to 1e-15. No Bramble-free case reproduced it, so the report to Enzyme has no body yet, and whether the fault is Bramble code Enzyme cannot differentiate or an Enzyme miscompile of it is open. When a fix lands, three pins change. The `@test_broken` lines of `test/ext/enzyme_forward_assembly.jl` become `@test`, the `assemble_three` cell's `fwd = :wrong` in `test/space/ad_coverage.jl` goes (see "What does not reproduce"), and the open-bug paragraph and `open` cells of `docs/notes/internals/ad_coverage.md` change.
+Cause: the tree was too wide for Enzyme's type analysis. Each `ScalarGridSpace` held its `SpaceWeights` inline (144 bytes a space, 152 a `VectorElement`), so in the `BilinearForm` (760 bytes) the `OperatorScale` scalar `0.5` of the third summand sat at byte 592, past Enzyme's `maxtypeoffset` of 512, the bound #1128 met in 3D. The observed tangent `dA + A₃` is what a shadow of `0.5` equal to `0.5` gives, `d(0.5 A₃') = 0.5 dA₃' + 0.5 A₃' = dA₃ + A₃`. At 501128cb, `Enzyme.API.maxtypeoffset!(1024)` before the call makes `diffusion_single` exact (exit 0, 1.7e-15). After 3aefc79f a space is a 16-byte reference, the form 120 bytes, the scalar at byte 80. Past the bound is needed but not enough. `three` has its scalar at byte 744 at 501128cb and was exact, and `small_scalefirst` (byte 288) and `mass2` (byte 440) sit under it. What else the miscompile needs (the note found a fresh element from `2.0 * Mₕ(κ)` before the scaled summand) is not explained. Lowering the bound to 64 at e3fcca1d (scalar at byte 80) did not bring the offset back (exit 0, 20 s, so the compiled derivative may come from the precompile cache, untested). A next shape of this bug: a tangent off by a summand's own primal, on a form whose `sizeof` passes 512 bytes, which `maxtypeoffset!` removes.
+
+Latest Enzyme, at the 2e674be6 measurement: 0.13.218, then the newest release the registry resolved and the version the Manifest held; the same command under a temporary environment (Bramble developed from this checkout, `Pkg.add` of Enzyme, ForwardDiff 1.4.7, Polyester 0.7.19, every other dependency re-resolved) still exits 1 with offset 249.0 in 84 s. The issue said 0.13.216, which was not run. The v4-2-4 bisect and the variant runs below used 0.13.219, the version the branch Manifest holds.
+
+Fix site: `SpaceWeights` in `src/space/scalar_gridspace.jl`, made a `mutable struct` with `const` fields by 3aefc79f, so a space holds it by reference and the form tree stays under the 512-byte bound; nothing changed in the assembly. Before the bisect the offset was placed in `_assemble_bilinear_core_cached!` (`src/assembly/bilinear_execution.jl`, from `_assemble_bilinear!`, `src/assembly/bilinear.jl`), the record and replay walk, where the offset appeared; the bisect places the fix in the tree's layout, not in the walk. Of the three pins, the `@test_broken` lines of `test/ext/enzyme_forward_assembly.jl` are `@test` now. The `assemble_three` cell's `fwd = :wrong` in `test/space/ad_coverage.jl` and the open-bug paragraph and `open` cells of `docs/notes/internals/ad_coverage.md` are not this subplan's files and still need a rerun under the ad group.
 
 Compile: 88 s and 1.4 GB peak footprint for the default variant (`/usr/bin/time -l`; the maximum resident set was 1.4 to 1.7 GB in most runs and 4.4 GB in one), 87 s for `small_single`.
 
-Enzyme: 0.13.218 (Julia 1.13.3, macOS arm64, 1 thread, `--optimize=1`, `--check-bounds=auto`).
+Enzyme: 0.13.218 at 2e674be6, 0.13.219 for the v4-2-4 bisect (Julia 1.13.3, macOS arm64, 1 thread, `--optimize=1`, `--check-bounds=auto`).
 
 ## What the offset is
 
@@ -81,15 +85,36 @@ reduction stopped, so the table says only that the tree shape and the `map` are 
 
 ## For the fix subplan
 
-- The offset is real at this commit, so the work is still open: a reduction to the record and
-  replay walk (`_assemble_bilinear_core_cached!`, `_keep_pattern!`) is the next step, by
-  making the Bramble-free analog write into a `SparseMatrixCSC` through recorded positions.
-  Until that case reproduces, an Enzyme report has no standalone body.
-- `diffusion_single` is the quick check of a candidate fix (88 s); `small_single` is the
-  smaller (87 s, offset 19.0). A fix that works must make both exit 0 and keep
-  `small_contract` exact.
+- Written at 2e674be6, before the fix; the bisect below closes it. The Bramble-free analog
+  above was a few bytes wide, so it stayed under the 512-byte bound, which may be why it
+  was exact. An Enzyme report would need a struct past 512 bytes with a `Float64` scale beyond
+  the bound, which was not built.
 - The issue suspects the shadow of a `similar` on the matrix values. No `similar` was traced
-  here, so that reading is open.
+  here, and the fix needed none.
+
+## Bisect (v4-2-4)
+
+Each commit in a detached temporary worktree, the branch's `Manifest.toml` (Enzyme 0.13.219)
+copied in, the branch tip's reproducer, through `julia_slot.sh 1`, one Enzyme process at a
+time, `--threads=1 --optimize=1 --check-bounds=auto`. Times include compile on a loaded
+machine.
+
+| commit | `diffusion_single` | `small_single` |
+|---|---|---|
+| 501128cb (planning base) | exit 1, offset 249.0, 170 s | exit 1, offset 19.0, 377 s |
+| 3aefc79f `SpaceWeights` by reference | exit 0, 1.7e-15, 172 s | exit 0, 2.0e-16, 330 s |
+| 2cca767f | exit 0, 226 s | exit 0, 162 s |
+| 55fa1ea2 | exit 0, 61 s | exit 0, 56 s |
+| d2480cd3 | exit 0, 58 s | exit 0, 54 s |
+
+At 501128cb with `Enzyme.API.maxtypeoffset!(1024)` set before the reproducer is included,
+`diffusion_single` exits 0 (1.7e-15, 92 s). The byte offsets above are `fieldoffset`s of the
+`Float64` leaves of `typeof(form(W, W, ...))` at Float64, read at 501128cb and at the tip.
+
+Every variant at e3fcca1d exits 0, all 54: each of the nine cases (`diffusion`, `mass2`,
+`react2`, `small`, `small_diffonly`, `small_noscale`, `small_scalefirst`, `three_uniform`,
+`three_nonuniform`) by each of the six paths (`single`, `batch`, `batch2`, `di`, `reverse`,
+`contract`), 27 to 223 s each. Largest relative difference 2.2e-15.
 
 ## Commands run
 

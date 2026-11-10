@@ -35,6 +35,16 @@ function _batch_is_ref(@nospecialize(T))
     return T isa DataType && T <: Base.RefValue && isbitstype(T.parameters[1])
 end
 
+# A `SpaceWeights`: built once and never written (its fields are `const`), so it crosses
+# as its address and every task reads the caller's own object (gpena/Bramble.jl#1154). A
+# task rebuilding one would allocate it.
+_batch_is_shared(@nospecialize(T)) = T isa DataType && T <: SpaceWeights
+
+# A shared object of type `T`, by address. The caller keeps the object alive for the loop.
+struct _BatchShared{T}
+    ptr::Ptr{Cvoid}
+end
+
 # A value split field by field: a concrete immutable struct or tuple that is not isbits.
 function _batch_is_node(@nospecialize(T))
     T isa DataType && isconcretetype(T) && isstructtype(T) || return false
@@ -86,6 +96,8 @@ function _batch_split_expr!(pre::Vector{Any}, leaves::Vector{Any}, @nospecialize
         return _batch_split_expr!(pre, leaves, _batch_state_type(T)::Type, s, path)
     elseif _batch_is_ref(T)
         return :($ex[])
+    elseif _batch_is_shared(T)
+        return :(_BatchShared{$T}(pointer_from_objref($ex)))
     elseif isbitstype(T)
         return ex
     elseif _batch_is_node(T)
@@ -116,6 +128,8 @@ takes one rule:
     turn (a [`GhostMesh`](@ref) by its `GhostMeshState`);
   - a `Base.RefValue` of an isbits value is replaced by that value, read once at split time
     on the host: a `Ref` coefficient is read per call at launch, not per point;
+  - a [`SpaceWeights`](@ref) crosses as its address, and the caller must keep `x` alive
+    until the loop ends;
   - an isbits value is kept.
 
 # Throws
@@ -148,6 +162,11 @@ end
 function _batch_ptype(@nospecialize(T), sub::IdDict{Any, Any})
     haskey(sub, T) && return sub[T]
     _batch_is_mesh(T) && return _batch_ptype(_batch_state_type(T), sub)
+    # A space keeps its weights' vector type: the weights cross shared, not rebuilt.
+    if T isa DataType && T <: ScalarGridSpace && isconcretetype(T)
+        D, E, VT, M = T.parameters
+        return ScalarGridSpace{D, E, VT, _batch_ptype(M, sub)}
+    end
     _batch_is_ref(T) && return T.parameters[1]
     _batch_is_node(T) || return T
     if T <: Tuple
@@ -173,7 +192,7 @@ function _batch_splits!(sub::IdDict{Any, Any}, @nospecialize(T))
         sub[T] = _BatchStandIn{eltype(T), ndims(T)}
         return true
     end
-    (_batch_is_ref(T) || isbitstype(T)) && return true
+    (_batch_is_ref(T) || _batch_is_shared(T) || isbitstype(T)) && return true
     _batch_is_mesh(T) && return _batch_splits!(sub, _batch_state_type(T))
     _batch_is_node(T) || return false
     for i in 1:fieldcount(T)
@@ -233,6 +252,10 @@ function _batch_rebuild_expr(@nospecialize(S), @nospecialize(ex), @nospecialize(
         K = S.parameters[1]
         return :(arrays[$K]), fieldtype(A, K)
     end
+    if S <: _BatchShared
+        T = S.parameters[1]
+        return :(unsafe_pointer_to_objref($ex.ptr)::$T), T
+    end
     S <: _BatchNode || return ex, S
     T, F = S.parameters
     fs, types = Any[], Any[]
@@ -254,7 +277,8 @@ end
 
 The value [`_batch_split`](@ref)`(x)` split, rebuilt around `arrays`: the same struct types,
 with each array type parameter replaced by the type of the array now in its slot, each mesh
-by its walk state and each `Ref` by its value. `arrays` may hold any array type, such as the
+by its walk state and each `Ref` by its value; a [`SpaceWeights`](@ref) is the caller's own
+object, so a space keeps its weights' vector type. `arrays` may hold any array type, such as the
 `PtrArray`s `@batch` passes, or the plain arrays it passes a single-iteration loop, provided
 every array split from one original array type arrives as one array type: the type
 parameters are substituted per original type, not per slot. `@batch` converts all arrays of

@@ -1391,6 +1391,24 @@ end
     return nothing
 end
 
+# `_each_piece` with `visit(sink, term, wsp, …, piece, …)` for `f`, its arguments passed
+# and not captured: a `do` block holding the walk space by value is an aggregate of ~750
+# bytes for a ghost space, whose pieces past Enzyme's 512-byte type offset it cannot type
+# ("Cannot deduce type of copy", `CpuSerial`, gpena/Bramble.jl#1152).
+@inline function _visit_pieces!(visit::V, sink, term, wsp, mesh_markers, lin_indices,
+        region::CartesianIndices, g::_GridLines, row_offset::Int, col_offset::Int) where {V}
+    r1 = first(region.indices)
+    for J in CartesianIndices(Base.tail(region.indices))
+        l = @inbounds g.lines[J]
+        for s in @inbounds(g.ptr[l]:(g.ptr[l + 1] - 1))
+            r = max(first(r1), @inbounds g.lo[s]):min(last(r1), @inbounds g.hi[s])
+            isempty(r) || visit(sink, term, wsp, mesh_markers, lin_indices,
+                CartesianIndices((r, map(j -> j:j, Tuple(J))...)), row_offset, col_offset)
+        end
+    end
+    return nothing
+end
+
 # `_visit_stencil!` over the points of the walk alone: the same regions, cut into pieces.
 @inline function _visit_stencil!(
         interior_sink::SINK1,
@@ -1413,21 +1431,16 @@ end
     margins = _has_marks(TERM) ? _face_margins(term, ax) : _stencil_margin(term)
     if _peelable(ax, margins)
         inner = _has_marks(TERM) ? _interior_term(bound) : bound
-        _each_piece(_interior_box(ax, margins), pts) do piece
-            _visit_interior!(interior_sink, inner, wsp, mesh_markers, lin_indices, piece,
-                row_offset, col_offset)
-        end
+        _visit_pieces!(_visit_interior!, interior_sink, inner, wsp, mesh_markers,
+            lin_indices, _interior_box(ax, margins), pts, row_offset, col_offset)
         for slab in _boundary_shell_slabs(ax, margins)
-            _each_piece(slab, pts) do piece
-                _visit_guarded_region!(boundary_sink, bound, wsp, mesh_markers, lin_indices,
-                    piece, row_offset, col_offset)
-            end
+            _visit_pieces!(_visit_guarded_region!, boundary_sink, bound, wsp, mesh_markers,
+                lin_indices, slab, pts, row_offset, col_offset)
         end
     else
-        _each_piece(CartesianIndices(map(_full_range, ax)), pts) do piece
-            _visit_guarded_region!(boundary_sink, bound, wsp, mesh_markers, lin_indices,
-                piece, row_offset, col_offset)
-        end
+        _visit_pieces!(_visit_guarded_region!, boundary_sink, bound, wsp, mesh_markers,
+            lin_indices, CartesianIndices(map(_full_range, ax)), pts, row_offset,
+            col_offset)
     end
     return boundary_sink
 end
