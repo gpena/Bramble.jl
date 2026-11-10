@@ -622,7 +622,7 @@ function _batch_for_bands!(v::AbstractArray, idxs::Union{AbstractUnitRange, Cart
     skel, arrays = _kernel_parts(f, v)
     skel isa _Whole && return _batch_for_whole!(v, idxs, arrays)
     n = Threads.nthreads()
-    failed = _erased_batch(_for_slab_threw, n, skel, arrays, v, idxs, n)
+    failed = GC.@preserve f _erased_batch(_for_slab_threw, n, skel, arrays, v, idxs, n)
     failed && Base.inferencebarrier(_rerun_bands!)(v, f, idxs, n)
     return nothing
 end
@@ -926,7 +926,7 @@ function Bramble._batch_scatter_for!(mats::Tuple, idxs::AbstractRange, g::G) whe
     skel, arrays = _kernel_parts(g, mats...)
     skel isa _Whole && return _batch_scatter_whole!(mats, idxs, arrays)
     a, n = _ascending(idxs), Threads.nthreads()
-    failed = _erased_batch(_scatter_slab_threw, n, skel, arrays, mats, a, n)
+    failed = GC.@preserve g _erased_batch(_scatter_slab_threw, n, skel, arrays, mats, a, n)
     failed && Base.inferencebarrier(_rerun_scatter!)(mats, g, idxs)
     return nothing
 end
@@ -970,6 +970,9 @@ struct _Whole end
     _batch_splittable(typeof((parts, hot))) && return _batch_split(parts)
     return _Whole(), parts
 end
+# A `SpaceWeights` in `parts` crosses as its address (`_BatchShared`), so the split holds no
+# reference that keeps it alive: each caller wraps its `@batch` loop in `GC.@preserve` of
+# `parts` (the kernel, for `_kernel_parts`), however the host-rerun branch reads them.
 @inline _rejoin(skel, arrays) = _batch_rebuild(skel, arrays)
 @inline _rejoin(::_Whole, parts) = parts
 
@@ -1067,9 +1070,11 @@ end
 function _batch_bands!(kind, h1, h2, cold, lin_indices, k1, k2, ax, bidx, nbands, rest)
     skel, arrays = _split_or_whole(cold, h1, h2)
     failed = false
-    @batch reduction=((|, failed),) for b in _ascending(bidx)
-        failed |= _sweep_band_threw(kind, skel, arrays, h1, h2, lin_indices, k1, k2, rest,
-            ax, nbands, b)
+    GC.@preserve cold begin
+        @batch reduction=((|, failed),) for b in _ascending(bidx)
+            failed |= _sweep_band_threw(kind, skel, arrays, h1, h2, lin_indices, k1, k2,
+                rest, ax, nbands, b)
+        end
     end
     failed && _rerun_on_host(bidx) do b
         point = _point(kind, h1, h2, cold, lin_indices, k1, k2)
@@ -1088,8 +1093,10 @@ end
 function _batch_points!(kind, h1, h2, cold, lin_indices, k1, k2, idxs)
     skel, arrays = _split_or_whole(cold, h1, h2)
     failed = false
-    @batch reduction=((|, failed),) for I in _ascending(idxs)
-        failed |= _sweep_one_threw(kind, skel, arrays, h1, h2, lin_indices, k1, k2, I)
+    GC.@preserve cold begin
+        @batch reduction=((|, failed),) for I in _ascending(idxs)
+            failed |= _sweep_one_threw(kind, skel, arrays, h1, h2, lin_indices, k1, k2, I)
+        end
     end
     failed && _rerun_on_host(I -> _point(kind, h1, h2, cold, lin_indices, k1, k2)(I), idxs)
     return nothing
@@ -1221,13 +1228,14 @@ function Bramble._batch_mf_bands!(
         s::ActionSink, plan::_MFFusedPlan, nbands::Int, walk)
     a = plan.form
     y, x = s.y, s.x
-    skel, arrays = _split_or_whole(
-        ((s.α, s.mask), a.trial_space, a.test_space, _mf_host_ast(a), plan.geom, walk), y,
-        x)
+    parts = ((s.α, s.mask), a.trial_space, a.test_space, _mf_host_ast(a), plan.geom, walk)
+    skel, arrays = _split_or_whole(parts, y, x)
     len, omin, omax = last(plan.dims), plan.omin, plan.omax
     failed = false
-    @batch reduction=((|, failed),) for b in 1:nbands
-        failed |= _mf_band_threw(skel, arrays, y, x, len, nbands, b, omin, omax)
+    GC.@preserve parts begin
+        @batch reduction=((|, failed),) for b in 1:nbands
+            failed |= _mf_band_threw(skel, arrays, y, x, len, nbands, b, omin, omax)
+        end
     end
     failed && _rerun_on_host(1:nbands) do b
         _mf_apply_parts!(
