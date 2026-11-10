@@ -1,4 +1,4 @@
-# A Jacobian-bound workload: Newton–Krylov on `-∇·(α(u) ∇u) = g` (gpena/Bramble.jl#1145,
+# A Jacobian-bound workload: Newton-Krylov on `-∇·(α(u) ∇u) = g` (gpena/Bramble.jl#1145,
 # milestone v4.2.1). Prototype only, never a suite entry; its figures are in
 # `docs/notes/internals/assembled_jacobian_workload.md`.
 #
