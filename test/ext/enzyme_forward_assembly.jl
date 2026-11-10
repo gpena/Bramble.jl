@@ -45,7 +45,7 @@ _relerr(g, ref) = maximum(abs, g .- ref) / max(maximum(abs, ref), floatmin(Float
 _auto(mode) = DI.AutoEnzyme(; mode = Enzyme.set_runtime_activity(mode),
     function_annotation = Enzyme.Const)
 
-# The broken form: a constant-scaled summand last of three.
+# The form #1124 broke: a constant-scaled summand last of three.
 _diffusion(κ, u, v) = inner₊(2.0 * Mₕ(κ) * ∇ₕ(u), ∇ₕ(v)) + innerₕ(κ * u, 0.5 * D₋ᵧ(v))
 # Two summands, the scaled one last: exact.
 _mass2(κ, u, v) = innerₕ(κ * u, v) + 0.25 * innerₕ(κ * u, v)
