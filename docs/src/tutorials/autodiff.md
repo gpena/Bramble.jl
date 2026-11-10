@@ -87,8 +87,6 @@ round.(g_enzyme, digits = 4)
 @assert isapprox(g_enzyme, fd_gradient(loss, p0); rtol = 1e-8, atol = 1e-8)
 ```
 
-In 3D, a form with an averaged coefficient, such as `inner₊(Mₕ(κ) * ∇ₕ(U), ∇ₕ(V))`, can exceed Enzyme's default type-analysis bound. Enzyme then throws `EnzymeNoTypeError` with the message "Cannot deduce type of copy". Calling `Enzyme.API.maxtypeoffset!(1024)` once, before the first gradient, lets it differentiate in both forward and reverse mode.
-
 ## Differentiate through a linear solve
 
 A parameter can enter the boundary data and the source of a linear system ``A u = F(\mathbf{p})`` while ``A`` stays fixed. Three things matter:
