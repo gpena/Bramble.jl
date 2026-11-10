@@ -146,6 +146,7 @@ function split_blocks(R, b, ghosts, keep, fixed, g)
     Ci, Cj, Cv = Int[], Int[], eltype(R)[]
     Bi, Bj, Bv = Int[], Int[], eltype(R)[]
     for p in 1:Npad, q in nzrange(R, p)
+
         v = nonzeros(R)[q]
         iszero(v) && continue
         k = rowvals(R)[q]
@@ -171,6 +172,7 @@ function block_members(C::SparseMatrixCSC)
             k = root[k]
         end; k)
     for j in 1:m, q in nzrange(C, j)
+
         a, c = find(rowvals(C)[q]), find(j)
         a == c || (root[max(a, c)] = min(a, c))
     end
@@ -368,8 +370,9 @@ function split_primal_check()
     println("split load: bits equal ", (w .* data) == b, ", max diff ",
         maximum(abs, w .* data .- b))
     for (name, S) in (("split_matrix", split_matrix(P0)), ("split_matrix_r", split_matrix_r(P0)))
-        println(name, ": pattern equal ", rowvals(S) == rowvals(R) &&
-                                          SparseArrays.getcolptr(S) == SparseArrays.getcolptr(R),
+        println(name, ": pattern equal ",
+            rowvals(S) == rowvals(R) &&
+                SparseArrays.getcolptr(S) == SparseArrays.getcolptr(R),
             ", nnz ", nnz(S), " against ", nnz(R), ", bits equal ", S == R, ", max diff ",
             maximum(abs, S - R))
     end
@@ -518,7 +521,7 @@ function measure(ref, t_ref)
         if MODE == "fwd"
             mode = Enzyme.set_runtime_activity(Enzyme.Forward)
             g = [only(Enzyme.autodiff(mode, Enzyme.Const(LOSS), Enzyme.Duplicated,
-                     Enzyme.Duplicated(copy(P0), [1.0])))]
+                Enzyme.Duplicated(copy(P0), [1.0])))]
         else
             g = zeros(1)
             mode = Enzyme.set_runtime_activity(Enzyme.Reverse)
