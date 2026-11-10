@@ -23,9 +23,12 @@ end
 @noinline function _throw_mesh_parameter()
     throw(
         ArgumentError(
-        "reverse mode through `constrained` does not differentiate with respect to the " *
-        "mesh: the space of a relation has a shadow of its own, so a parameter reaches the " *
-        "mesh. Use forward mode, or keep the parameter out of the mesh.",
+        "reverse mode through `constrained` cannot differentiate the space of a relation, " *
+        "which has a shadow of its own. That happens when a parameter reaches the mesh, " *
+        "or when the differentiated function is annotated `Duplicated` (for example " *
+        "DifferentiationInterface's `function_annotation = Enzyme.Duplicated`) and " *
+        "captures the space. Annotate the function `Const` (`function_annotation = " *
+        "Enzyme.Const`), or, for a parameter in the mesh, use forward mode.",
     ),
     )
 end
@@ -42,7 +45,9 @@ end
 end
 
 # The space is differentiated only if its shadow is not itself: a `Const`, or runtime
-# activity's inactive data, a shadow that is the primal.
+# activity's inactive data, a shadow that is the primal. A shadow of its own comes from a
+# parameter in the mesh, or from a `Duplicated` function that captures the space; the rule
+# cannot tell them apart, and dropping a mesh shadow would give wrong gradients.
 _space_is_data(::Const) = true
 _space_is_data(P::Duplicated) = P.dval === P.val
 _space_is_data(::Annotation) = false
