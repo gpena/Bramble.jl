@@ -6,12 +6,12 @@
 # Run from the repository root, with one thread:
 #
 #     julia --startup-file=no --project=. --threads=1 --optimize=1 --check-bounds=auto \
-#         docs/notes/internals/ad_reductions/1153_constrained.jl <step> <case> <fwd|rev> \
-#         [rule|split]
+#         docs/notes/internals/ad_reductions/1153_constrained.jl <step> <case> <fwd|rev>
 #
-# The fourth argument prototypes a fix without changing `src/`: `rule` is a reverse rule
-# over `_assemble_relation`, `split` a replacement of that method that splits the operator
-# (both below, after the inputs).
+# Enzyme loads Bramble's extension, whose reverse rule over `_assemble_relation`
+# (ext/BrambleEnzymeExt/relations.jl) applies to every reverse run below. The steps that
+# reach that function measure the code with the rule; the note holds the figures of the
+# code before it.
 #
 # Cases. The space is `1127_ghost.jl`'s, a 7 by 6 non-uniform mesh with ghosts on xmin, xmax
 # and ymax, and the relations are those of `constrained_with` there, one datum replaced by
@@ -91,16 +91,8 @@ global_logger(NullLogger())
 const T0 = time()
 step(name) = (println("step ", name, " t=", round(time() - T0; digits = 1)); flush(stdout))
 
-length(ARGS) in (3, 4) ||
-    error("usage: 1153_constrained.jl <step> <case> <fwd|rev> [rule|split]")
+length(ARGS) == 3 || error("usage: 1153_constrained.jl <step> <case> <fwd|rev>")
 const STEP, CASE_NAME, MODE = ARGS[1:3]
-# A fourth argument prototypes a fix with no change to `src/`, before anything is
-# differentiated: `rule` defines a reverse rule over `_assemble_relation`, `split` replaces
-# the method by one that assembles forms of operands without the parameter and scales them.
-const FIX = length(ARGS) == 4 ? ARGS[4] : ""
-FIX in ("", "rule", "split") || error("the fourth argument is `rule` or `split`")
-const RULE = FIX == "rule"
-const SPLIT = FIX == "split"
 const CASE = Symbol(CASE_NAME)
 MODE in ("fwd", "rev") || error("mode must be fwd or rev, not ", MODE)
 CASE in (:data, :robin, :dirichlet, :conormal, :const) || error("unknown case ", CASE)
@@ -247,117 +239,6 @@ function the_datum(case::Symbol, gr, dr)
 end
 
 const A = CASE === :const ? nothing : affine_inputs(CASE)
-
-# The rule prototyped for `_assemble_relation`, no change to `src/`: reverse mode does not
-# differentiate the forms. The primal is the function's own call; the pullback takes one
-# forward derivative of the same function per float of the relation (its datum, its Robin
-# coefficient) and contracts it with the cotangents of the matrix and the load. Forward
-# mode compiles the function in well under a minute, where reverse takes 732 s.
-has_float(::Type{<:AbstractFloat}) = true
-function has_float(::Type{T}) where {T}
-    return isconcretetype(T) && !ismutabletype(T) && any(has_float, fieldtypes(T))
-end
-rebuilt(x::T, fields) where {T} = ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), T,
-    fields, fieldcount(T))::T
-# `x` with its `k[]`-th float replaced by one and every other by zero; `k` counts down.
-unit_leaf(x::AbstractFloat, k) = (k[] -= 1; k[] == 0 ? one(x) : zero(x))
-function unit_leaf(x::T, k) where {T}
-    (fieldcount(T) == 0 || !has_float(T)) && return x
-    return rebuilt(x, Any[unit_leaf(getfield(x, i), k) for i in 1:fieldcount(T)])
-end
-# `x` with its floats replaced by those of `vals`, in order.
-fill_leaves(x::AbstractFloat, vals, k) = oftype(x, vals[k[] += 1])
-function fill_leaves(x::T, vals, k) where {T}
-    (fieldcount(T) == 0 || !has_float(T)) && return x
-    return rebuilt(x, Any[fill_leaves(getfield(x, i), vals, k) for i in 1:fieldcount(T)])
-end
-count_leaves(x::AbstractFloat) = 1
-function count_leaves(x::T) where {T}
-    (fieldcount(T) == 0 || !has_float(T)) && return 0
-    return sum(i -> count_leaves(getfield(x, i)), 1:fieldcount(T))
-end
-
-function relation_pullback(f, P, r, dR, db)
-    mode = Enzyme.set_runtime_activity(Enzyme.Forward)
-    vals = zeros(count_leaves(r))
-    for l in eachindex(vals)
-        Ṙ, ḃ = only(Enzyme.autodiff(mode, Enzyme.Const(f), Enzyme.Duplicated,
-            Enzyme.Const(P), Enzyme.Duplicated(r, unit_leaf(r, Ref(l)))))
-        vals[l] = dot(nonzeros(Ṙ), nonzeros(dR)) + dot(ḃ, db)
-    end
-    return fill_leaves(r, vals, Ref(0))
-end
-
-# The linearity split prototyped as a replacement of `_assemble_relation` on a scalar space:
-# the component of the operator on the facet splits into its terms (`_relation_terms`), each
-# term gives up its scalar factors (`_peel`), the matrix of each bare term is assembled on
-# its own, and the relation's matrix is their combination by the factors. The load is the
-# load of the unit datum times the datum (a number here). The space's closure is compared
-# with the unsplit method's first.
-if SPLIT
-    const UNSPLIT = constrained(W, relations_of(CASE, 0.5 + 0.3 * sin(1)))
-    @eval Bramble begin
-        @inline function _peel(t::OperatorScale{D, <:Number}) where {D}
-            c, u = _peel(t.inner_op)
-            return t.scalar * c, u
-        end
-        @inline _peel(t) = (true, t)
-        @inline function _unit_matrix(P, mask, op, ::Val{i}) where {i}
-            F = _map_facets(c -> last(_peel(_relation_terms(c)[i])), op)
-            return assemble(form(P, P, (u, v) -> _facet_inner(mask, F, v)))
-        end
-        @inline _combine(cs::Tuple{Any}, Ms::Tuple{Any}) = first(cs) * first(Ms)
-        @inline function _combine(cs::Tuple, Ms::Tuple)
-            return first(cs) * first(Ms) + _combine(Base.tail(cs), Base.tail(Ms))
-        end
-        function _assemble_relation(P::ScalarGridSpace{D}, r::_FacetRelation) where {D}
-            op, data = r.op, r.data
-            return _at_facet(Val(D), r.d, r.s) do name, d, s
-                _check_facet_reach(mesh(P), _reads_ghosts(op)[_val(d)], _val(d), _val(s),
-                    (_facet_component(op, d, s),))
-                mask = _relation_mask(d, s, Val(D))
-                terms = _relation_terms(_facet_component(op, d, s))
-                Ms = map(i -> _unit_matrix(P, mask, op, i), ntuple(Val, Val(length(terms))))
-                R = _combine(map(t -> first(_peel(t)), terms), Ms)
-                w = assemble(form(P,
-                    v -> _facet_inner(mask, one(eltype(P)), _facet_identity(v))))
-                return sparse(transpose(R)), w .* data
-            end
-        end
-    end
-    let C = constrained(W, relations_of(CASE, 0.5 + 0.3 * sin(1)))
-        println("split closure: E pattern equal ",
-            rowvals(C.E) == rowvals(UNSPLIT.E) &&
-            SparseArrays.getcolptr(C.E) == SparseArrays.getcolptr(UNSPLIT.E),
-            ", E bits equal ", nonzeros(C.E) == nonzeros(UNSPLIT.E), ", max diff ",
-            maximum(abs, C.E - UNSPLIT.E), "; d bits equal ", C.d == UNSPLIT.d,
-            ", max diff ", maximum(abs, C.d - UNSPLIT.d))
-        flush(stdout)
-    end
-end
-
-if RULE
-    function Enzyme.EnzymeRules.augmented_primal(config::Enzyme.EnzymeRules.RevConfig,
-            func::Enzyme.Const{typeof(Bramble._assemble_relation)}, ::Type{RT},
-            P::Enzyme.Annotation, r::Enzyme.Active) where {RT}
-        P isa Enzyme.Const || P.dval === P.val || error("the space is active: ", typeof(P))
-        Enzyme.EnzymeRules.width(config) == 1 || error("width 1 only")
-        R, b = func.val(P.val, r.val)
-        shadow = (Enzyme.make_zero(R), Enzyme.make_zero(b))
-        return Enzyme.EnzymeRules.AugmentedReturn(
-            Enzyme.EnzymeRules.needs_primal(config) ? (R, b) : nothing,
-            Enzyme.EnzymeRules.needs_shadow(config) ? shadow : nothing, shadow)
-    end
-    function Enzyme.EnzymeRules.reverse(config::Enzyme.EnzymeRules.RevConfig,
-            func::Enzyme.Const{typeof(Bramble._assemble_relation)}, ::Type{RT}, tape,
-            P::Enzyme.Annotation, r::Enzyme.Active) where {RT}
-        dR, db = tape
-        r̄ = relation_pullback(func.val, P.val, r.val, dR, db)
-        fill!(nonzeros(dR), 0)
-        fill!(db, 0)
-        return (nothing, r̄)
-    end
-end
 
 sq(x) = sum(abs2, x)
 
