@@ -66,7 +66,7 @@ Step: constrained with constant data, then a form and its assembly (case const, 
 
 Step: constrained with constant data, then a form and its assembly (case const, downstream): rev: ok 2.5e-11, 95 s
 
-Fix site: src/assembly/ghost_relations.jl, `_assemble_relation` (line 791), called by `_relation_rows` at line 702 (`blocks = map(r -> _assemble_relation(P, r), rels)`), variants `data` and `robin` in reverse. Nothing in the construction fails for them in forward mode, and in reverse every step after the rows (`_relation_closure`, `_closure_matrix`, `_closure_data`) and the ones before it (`_facet_relations`, `_dirichlet_values`, `_kept_points`, the union-find and `Dict`) differentiate in under 20 s. The first step that does not finish is `_relation_rows`: one facet of it (`_assemble_relation`) takes 732 s and 3.7 GB, the rows call it for three facets (:xmin, :xmax, :ymax; the facet is in the type, so presumably one compile each, not probed) and do not finish in 15 minutes, and `_constrained_space` passes 10 GB at about five minutes. It is none of the three kinds the plan lists, and not an error: it is the reverse-mode compile cost of the form assembly inside `_assemble_relation`, the matrix form at line 798 (177 s alone) and the rest of the function (the other 540 s; the load form at line 799 is 14 s alone, and the transposition at line 800 is 8 s). The relation's matrix and load are linear in the datum and in the Robin coefficient, so the fix is to keep the form assembly out of the differentiated code (assemble the unit-datum pieces outside and scale them by the parameter), or to give the assembly a rule. The 1127 note's `plain_rev` and `mass_rev` (361 to 419 s per assembled form) are the same kind of cost; it is not a missing derivative. This note did not probe why the function costs more than its parts. The page's earlier `Illegal calling convention fixup` did not appear at any step in this tree.
+Fix site: src/assembly/ghost_relations.jl, `_assemble_relation` (line 791), called by `_relation_rows` at line 702 (`blocks = map(r -> _assemble_relation(P, r), rels)`), variants `data` and `robin` in reverse. Nothing in the construction fails for them in forward mode, and in reverse every step after the rows (`_relation_closure`, `_closure_matrix`, `_closure_data`) and the ones before it (`_facet_relations`, `_dirichlet_values`, `_kept_points`, the union-find and `Dict`) differentiate in under 20 s. The first step that does not finish is `_relation_rows`: one facet of it (`_assemble_relation`) takes 732 s and 3.7 GB, the rows call it for three facets (:xmin, :xmax, :ymax; the facet is in the type, so presumably one compile each, not probed) and do not finish in 15 minutes, and `_constrained_space` passes 10 GB at about five minutes. It is none of the three kinds the plan lists, and not an error: it is the reverse-mode compile cost of the form assembly inside `_assemble_relation`, the matrix form at line 798 (177 s alone) and the rest of the function (the other 540 s; the load form at line 799 is 14 s alone, and the transposition at line 800 is 8 s). The relation's matrix and load are linear in the datum and in the Robin coefficient, so the fix is to keep the form assembly out of the differentiated code (assemble the unit-datum pieces outside and scale them by the parameter), or to give the assembly a rule. The 1127 note's `plain_rev` and `mass_rev` (361 to 419 s per assembled form) are the same kind of cost; it is not a missing derivative. Why the function costs more than its parts is the section "Where the time goes" below: `_at_facet` holds one copy of the two forms per facet of the mesh. The page's earlier `Illegal calling convention fixup` did not appear at any step in this tree.
 
 Fix site: src/assembly/ghost_relations.jl, `_block_solve`, lines 1217 to 1231 (`lu(Cb; check = false)` at line 1218, `F \ Bb` at line 1226, `F \ b[idx]` at line 1231), kind (a), reached by relations that couple the ghosts of a node: variant `conormal` (`∂ₙ(u; K)` with K = [2 1; 1 2] on the four facets, the test of test/form/ghost_rank_one.jl) fails in forward with `No forward mode derivative found for ejlstr$dgetrf_64_` and in reverse with `No augmented forward pass found for ejlstr$dgetrf_64_`, at `_block_solve`, `_relation_closure` and `constrained` alike. The `data`, `robin` and `dirichlet` relations never take that branch (every block holds one ghost, `length(idx) == 1`, line 1207), which is why they differentiate through `_block_solve` with the call still in its compiled code: the error appears only in the runs whose blocks hold two ghosts. The plan's fix for (a) applies as written: a forward and a reverse rule for the block solve in `ext/BrambleEnzymeExt` (`X = C⁻¹ B`, `dX = C⁻¹ (dB − dC X)`, the adjoint by a transposed solve), or a generic LU for these small blocks. It does not fix the `data` and `robin` cells, and it is the page's earlier forward `dgetrf` measurement, whose relations were not these.
 
@@ -83,16 +83,58 @@ Enzyme: 0.13.219 (Julia 1.13.3, macOS arm64, 1 thread, `--optimize=1`, `--check-
 - The dense `lu` has no Enzyme derivative in either mode, and a relation set that couples the ghosts of a node reaches it. No cell of the plan does yet.
 - The pin for the first finding is S6's `ghost_data` and `ghost_robin` cells; the second needs a cell of its own (`conormal`).
 
+## Where the time goes
+
+`_assemble_relation` takes 732 s in reverse and its parts, measured alone, about 200 s. The bisection ran the two forms together, then added back one piece of the function at a time (case data, reverse; the steps are `relation_forms`, `relation_forms_check`, `relation_forms_transpose` and `relation_at_facet` of the reproducer).
+
+Step: the two forms in one function, on the constant facet :xmax, no reach check, no transposition (`relation_forms`): rev: ok 3.6e-11, 200 s and 3.3 GB
+
+Step: the same with `_check_facet_reach` first (`relation_forms_check`): rev: ok 3.6e-11, 183 s and 2.8 GB
+
+Step: the same with `sparse(transpose(R))` last (`relation_forms_transpose`): rev: ok 3.6e-11, 183 s and 2.9 GB
+
+Step: the two forms through `_at_facet` on the relation's runtime facet (`relation_at_facet`): rev: ok 3.6e-11, 762 s and 3.3 GB
+
+The two forms cost together what they cost apart (200 s against 177 s and 14 s), and neither the reach check nor the transposition adds anything (183 s each, inside the spread of the 200 s run). The other 540 s is `_at_facet` (src/assembly/ghost_relations.jl, line 223). It unrolls over the facets of the mesh so that each call sees its facet as constants and the forms infer, and the facet `(r.d, r.s)` of a relation is a runtime value, so the compiled function holds one branch per facet, four in 2D, each with its own copy of the two forms. One branch runs; Enzyme compiles the reverse of all four: 762 s through `_at_facet` against 183 to 200 s on one constant facet, a factor of four. `_relation_rows` then holds one such function per relation type (two for the cells' three relations), and a 3D mesh has six facets. The two earlier attempts fit: removing the `do` closure keeps the four branches (726.7 s), and inlining the helper put the branches of every relation in one function (stopped at 14 GB).
+
+The facet cannot become a constant without changing what infers (it is read from the relation's key), and one copy per relation type would still be 200 s each. So the fix keeps the forms out of what reverse mode compiles.
+
+## Fix prototypes
+
+Two fixes were prototyped in the reproducer, with no change to `src/`: its fourth argument `rule` defines an Enzyme reverse rule over `_assemble_relation`, and `split` replaces the method on a scalar space by one that splits the operator. The step `cell` is the loss of the `ghost_data` and `ghost_robin` cells of test/space/ad_coverage.jl (`build_ghost_param`): `constrained` on the parameter, then a form and its assembly on the space it gives. It compares with ForwardDiff to 1e-8, as the cells do (its loss holds the squares of a matrix the parameter does not reach, and their cancellation leaves a central difference near 1e-6); every other step compares with the central difference.
+
+The rule: the primal is the function's own call. The pullback takes one forward-mode derivative of `_assemble_relation` per float the relation holds (its datum, its Robin coefficient), the tangent a copy of the relation with that float one and the others zero, and contracts each with the cotangents of the matrix and of the load. Reverse mode never compiles the forms; forward mode compiles the function in under a minute.
+
+Step: _assemble_relation, one facet, with the rule: rev: ok 3.6e-11, 53 s and 1.6 GB (data); ok 3.6e-11, 51 s and 1.6 GB (robin)
+
+Step: constrained, with the rule: rev: ok 2.8e-10, 94 s and 2.2 GB (data); ok 6.9e-10, 92 s and 2.4 GB (robin)
+
+Step: the cells' loss (`cell`), with the rule, against ForwardDiff: rev: ok 0.0, 190 s and 3.6 GB (data); ok 0.0, 188 s and 3.6 GB (robin)
+
+Step: the cells' loss (`cell`), against ForwardDiff: fwd: ok 2.0e-16, 116 s and 2.6 GB (data); ok 1.4e-16, 118 s and 2.6 GB (robin; forward mode has no rule, the argument changes nothing)
+
+The split: the relation's operator is linear in the unknown and its load is linear in a constant datum, so the method assembles the load of the unit datum and one matrix per bare term of the operator, then scales them by the datum and the terms' scalar factors. On one constant facet Enzyme sees that the unit assemblies do not depend on the parameter, whether the bare operators are rebuilt from the space (`split_matrix`) or read out of the relation (`split_matrix_r`), and reverse mode compiles in under a minute. The values are bit-equal to the unsplit ones; the relation matrix stores fewer entries (18 against 283: the sum of sparse terms drops the explicit zeros), and the closure `E`, `d` that `constrained` builds from it is bit-equal with the same pattern.
+
+Step: split load, one constant facet (`split_load`): rev: ok 1.9e-12, 16 s and 1.1 GB (data)
+
+Step: split matrix, one constant facet: rev: ok 3.6e-11, 42 s and 1.6 GB (`split_matrix`, robin); ok 3.6e-11, 41 s and 1.6 GB (`split_matrix_r`, robin)
+
+Step: constrained, with the split: rev: stopped at 15 minutes, 9.8 GB (data); stopped at 15 minutes, 10.1 GB (robin)
+
+Step: the cells' loss (`cell`), with the split: rev: stopped at 15 minutes, 11.2 GB (data); stopped at 15 minutes, 10.8 GB (robin)
+
+So the split alone does not fix it: inside the method the unit assemblies sit in `_at_facet`'s branches again, beside the reach check and the relation's other fields, and reverse mode does not finish (which part brings the cost back was not bisected). It would need the unit assemblies marked inactive in the extension as well, and it changes the primal's allocations (one assembly per term). The rule needs neither.
+
 ## Commands run
 
 Each run is one process through `.claude/scripts/julia_slot.sh 1` with `/usr/bin/time -l`, by a driver in `/tmp/bramble-1153` (outside the repository) that stops it at 15 minutes by its PID. One Enzyme process at a time. The commands run from the repository root:
 
 ```text
 .claude/scripts/julia_slot.sh 1 julia --startup-file=no --project=. --threads=1 --optimize=1 \
-    --check-bounds=auto docs/notes/internals/ad_reductions/1153_constrained.jl <step> <case> <fwd|rev>
+    --check-bounds=auto docs/notes/internals/ad_reductions/1153_constrained.jl <step> <case> <fwd|rev> [rule|split]
 ```
 
-`<step>` is inputs, parse, relation, relation_load, relation_matrix, relation_transpose, rows, dirichlet, kept, bookkeeping, lu, block_solve, closure, closure_data, space, constrained or downstream; `<case>` is data, robin, dirichlet, conormal or const (downstream takes const alone). The script exits 0 for `ok` and 1 otherwise and prints one `RESULT` line.
+`<step>` is inputs, parse, relation, relation_load, relation_matrix, relation_transpose, relation_forms, relation_forms_check, relation_forms_transpose, relation_at_facet, split_load, split_matrix, split_matrix_r, rows, dirichlet, kept, bookkeeping, lu, block_solve, closure, closure_data, space, constrained, cell or downstream; `<case>` is data, robin, dirichlet, conormal or const (downstream takes const alone). The script exits 0 for `ok` and 1 otherwise and prints one `RESULT` line.
 
 Reproduces: .claude/scripts/julia_slot.sh 1 julia --startup-file=no --project=. --threads=1 --optimize=1 --check-bounds=auto docs/notes/internals/ad_reductions/1153_constrained.jl block_solve conormal fwd   # exit 1, EnzymeNoDerivativeError "No forward mode derivative found for ejlstr$dgetrf_64_", about 15 s
 
