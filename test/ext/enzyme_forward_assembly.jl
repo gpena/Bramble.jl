@@ -1,14 +1,14 @@
 module ExtEnzymeForwardAssemblyTests
 
-# Enzyme forward mode through `assemble` (gpena/Bramble.jl#1124), pinned as broken. On the
-# diffusion form `inner₊(2.0 * Mₕ(κ) * ∇ₕ(u), ∇ₕ(v)) + innerₕ(κ * u, 0.5 * D₋ᵧ(v))`, whose
-# `inner₊` expands to two products, forward mode adds the constant-scaled third summand's own
-# primal to the tangent, one seed-independent offset in every gradient entry, under every
-# policy. Reverse mode and the two-summand forms are exact. The wrong shadow exists before
-# assembly runs, since a `@noinline` reader of `_summands(form.ast)[3]` alone returns tangent
-# plus primal. So the cause is an Enzyme (0.13.216) miscompile, and three restructurings of
-# the replay did not avoid it; gpena/Bramble.jl#1124 tracks it. When Enzyme fixes it, the
-# `@test_broken`s below pass unexpectedly and fail the run; flip them to `@test` then.
+# Enzyme forward mode through `assemble` (gpena/Bramble.jl#1124). On the diffusion form
+# `inner₊(2.0 * Mₕ(κ) * ∇ₕ(u), ∇ₕ(v)) + innerₕ(κ * u, 0.5 * D₋ᵧ(v))`, whose `inner₊` expands
+# to two products, forward mode used to add the constant-scaled third summand's own primal
+# to the tangent, one seed-independent offset in every gradient entry, under every policy.
+# Reverse mode and the two-summand forms were exact. Spaces held their weights inline, which
+# put the third summand's scale at byte 592 of the `BilinearForm`, past Enzyme's 512-byte
+# type-analysis offset; raising that bound to 1024 made the gradient exact. Holding
+# `SpaceWeights` by reference (3aefc79f, #1154) moved the scale to byte 80 and fixed it.
+# The note docs/notes/internals/ad_reductions/1124_forward_offset.md has the bisect.
 #
 # `m + m + 0.25m` is not pinned. It was wrong when written as a literal closure, and exact
 # when passed as a function, as below: the miscompile follows how the closure compiles.
@@ -68,8 +68,7 @@ function _functional(terms, policy)
     return f
 end
 
-# A relative error, `Inf` when the derivative throws, so a throw fails a `@test` and counts
-# as broken in a `@test_broken`.
+# A relative error, `Inf` when the derivative throws, so a throw fails its `@test`.
 function _report(io, key, thunk)
     r = try
         thunk()
@@ -128,10 +127,8 @@ function _run_child(policy)
         _, key, value = split(line)
         results[Symbol(key)] = parse(Float64, value)
     end
-    # A derivative that threw reports `Inf`, its warning in `text`: shown unless the key is
-    # one the testset below marks broken.
-    broken = (:diffusion_forward, :diffusion_batch2)
-    (p.exitcode == 0 && all(isfinite(v) for (k, v) in results if !(k in broken))) ||
+    # A derivative that threw reports `Inf`, its warning in `text`: shown here.
+    (p.exitcode == 0 && all(isfinite, values(results))) ||
         @warn "child for $policy: exit $(p.exitcode), results $results" tail = last(text, 4000)
     return p.exitcode, results
 end
@@ -145,12 +142,12 @@ else
                 @testset "$(nameof(typeof(policy)))" begin
                     code, r = _run_child(policy)
                     @test code == 0
-                    @test_broken get(r, :diffusion_forward, Inf) < TOL
+                    @test get(r, :diffusion_forward, Inf) < TOL
                     @test get(r, :diffusion_reverse, Inf) < TOL
                     @test get(r, :mass2_forward, Inf) < TOL
                     @test get(r, :react2_forward, Inf) < TOL
                     policy isa CpuSerial &&
-                        @test_broken get(r, :diffusion_batch2, Inf) < TOL
+                        @test get(r, :diffusion_batch2, Inf) < TOL
                 end
             end
         end
