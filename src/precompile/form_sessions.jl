@@ -82,38 +82,31 @@ function _pc_form_stencil(Ωₕ::AbstractMeshType, Wₕ, g)
 end
 
 # The products, and the stencils they evaluate to: the path assembly takes. `innerₕ(u, v)`
-# is absent, its stencil being warm from the assembly shapes below.
-function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, u, v, label::Symbol)
+# is absent, its stencil being warm from the assembly shapes below. One shape per method
+# reached: a shape whose nodes and weight an earlier one already walked is left out.
+function _pc_form_stencils(Ωₕ::AbstractMeshType, Wₕ, u, v)
     # Bilinear products for each weight kind.
     _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
     _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> inner₊ₓ(Mₓ(u), Mₓ(v)))
-    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(u, D₋ₓ(v)))
 
-    # Every node kind on the trial side. Restriction is the only node that reads the marker
+    # The node kinds on the trial side. Restriction is the only node that reads the marker
     # table, so it is the one evaluated with it, bound to `Ωₕ`'s marker ids.
     _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), v))
     _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D₊ₓ(u), v))
-    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(Mₓ(u), v))
     _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(jumpₓ(u), v))
     _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(Dcₓ(u), v))
     _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D̃ₓ(u), v))
     _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D̽ₓ(u), v))
-    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(shift_op(u, 1, 1), v))
     _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(3 * D₋ₓ(u), v))
     _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u) + D₊ₓ(u), v))
     _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(restrict_to(:interior, u), v))
-    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(restrict_to(label, u), v))
 
     # Symbolic inner products over trial and test leaves, including tuple forms.
-    innerₕ(u, v)
     innerₕ(2.0, v)
     innerₕ(x -> 1.0, v)
     inner₊(u, D₋ₓ(v))
     inner₊(D₋ₓ(u), D₋ₓ(v))
     inner₊(∇ₕ(u), ∇ₕ(v))
-    inner₊ₓ(u, v)
-    # y is a direction only from 2D up: in 1D inner₊ᵧ refuses at the call (#692)
-    dim(Ωₕ) >= 2 && inner₊ᵧ(u, v)
     return nothing
 end
 
@@ -165,14 +158,10 @@ end
 # from scratch on the caller's first `assemble`: nothing above reaches them, because the
 # stencil session evaluates `local_stencil` directly and never drives a loop over the grid.
 #
-# Measured in a fresh session before this was added, the shapes below cost 1,032 ms of
-# first-call latency in 1D and 2D together.
-#
-# 3D is deliberately absent from the shapes below, as it is in the sessions above: the
-# mass/mixed/directional/composite/reaction/Jacobian/type-cache shapes each cost their own
-# 78-114 ms and would multiply the specializations of every core in this file. The one 3D
-# shape that does matter to a caller -- the scalar Laplacian -- is warmed separately in
-# src/precompile.jl's own workload (measured there: +2.7 s precompile, +5.3 MiB cache).
+# The shapes run in 1D. A 2D or 3D pass of them reaches the methods the 1D pass reaches,
+# with other type parameters, so only the shapes a second direction gives a method to are
+# repeated in 2D (`_pc_form_session(Ωₕ, ::Val{2})`), and a form in 2D or 3D of a shape cached
+# here compiles its own specializations on the caller's first `assemble`.
 #
 # One call per shape rather than a loop over a tuple of closures. A loop creates a union
 # type at the call site and compiles a generic fallback rather than concrete specialized kernels.
@@ -249,13 +238,6 @@ function _pc_assemble_bilinear_composite(Vₕ, g)
     return nothing
 end
 
-_pc_assemble_bilinear_directional(Wₕ, label, ::Val{1}) = nothing
-
-function _pc_assemble_bilinear_directional(Wₕ, label, ::Val{2})
-    _pc_assemble_bilinear_shape(Wₕ, (u, v) -> inner₊ᵧ(D₋ᵧ(u), D₋ᵧ(v)), label)
-    return nothing
-end
-
 # A composite form reaches two more cores: the per-leaf sweep for terms that mean the same
 # thing on every block, and `_route_terms!` for terms that name a component.
 function _pc_assemble_composite(Vₕ, g, b)
@@ -266,16 +248,8 @@ function _pc_assemble_composite(Vₕ, g, b)
     return nothing
 end
 
-# The transverse directions, which only exist above 1D.
-_pc_assemble_directional(Wₕ, uₕ, b, ::Val{1}) = nothing
-
-function _pc_assemble_directional(Wₕ, uₕ, b, ::Val{2})
-    _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, D₋ᵧ(v)), b)
-    return nothing
-end
-
 function _pc_form_assembly(
-        Ωₕ::AbstractMeshType, Wₕ, Vₕ, label::Symbol, f, dim_val::Val{D}
+        Ωₕ::AbstractMeshType, Wₕ, Vₕ, label::Symbol, f, ::Val{D}
 ) where {D}
     uₕ = Rₕ(Wₕ, f)
     b = zeros(eltype(Wₕ), ndofs(Wₕ))
@@ -299,7 +273,6 @@ function _pc_form_assembly(
     _pc_assemble_shape(Wₕ, v -> inner₊ₓ(uₕ, D₋ₓ(v)), b)
     _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, v) + inner₊ₓ(uₕ, D₋ₓ(v)), b)
     _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v)), b)
-    _pc_assemble_directional(Wₕ, uₕ, b, dim_val)
 
     # A raw closure source, not a VectorElement: exercises form(Wₕ, f)'s eager lowering
     # (`_lower_sources_for_space`/`_lower_sources`, gpena/Bramble.jl#197) through the real
@@ -344,13 +317,9 @@ function _pc_form_assembly(
     _pc_assemble_bilinear_shape_threaded(Wₕ, (u, v) -> innerₕ(u, v), label)
     _pc_assemble_bilinear_shape_threaded(Wₕ, (u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), label)
     _pc_assemble_bilinear_shape(Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), label)
-    _pc_assemble_bilinear_directional(Wₕ, label, dim_val)
 
-    # Composite bilinear forms: diagonal and coupled
+    # A composite bilinear form
     _pc_assemble_bilinear_composite(Vₕ, (u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
-    _pc_assemble_bilinear_composite(
-        Vₕ, (u, v) -> inner₊ₓ(D₋ₓ(u(1)), D₋ₓ(v(1))) + innerₕ(u(2), v(1))
-    )
 
     return nothing
 end
@@ -369,12 +338,8 @@ end
 # `Dict{Symbol, BitVector}`), so a private mesh is not needed for type coverage; it only keeps
 # this session independent of the caller's mesh. The Laplacian/`innerₕ` shapes here match
 # what such a caller actually writes.
-# Split by dimension (rather than branching on `D` inside one method) so JET resolves each
-# call concretely instead of analysing both branches together against a single generic `D`:
-# a `Wₕ` inferred over the `Union` of the 1D/2D grid space types lets the union-split analysis
-# pair a 1D `TrialFunction` with a 2D `TestFunction` in the body below, which is never a call
-# either concrete session makes. `Val(1)`/`Val(2)` each build their own mesh and delegate to
-# the shared, dimension-agnostic body once `Wₕ` is concrete.
+# Split by dimension: 1D runs the body below in full, 2D only the calls a second direction
+# gives a new method to (`reaction_density` and the scaled Laplacian).
 function _pc_form_reaction(::Val{1})
     S = interval(0.0, 1.0)
     Ω = domain(S, :boundary => boundary_symbols(S))
@@ -385,8 +350,15 @@ end
 function _pc_form_reaction(::Val{2})
     S = interval(0.0, 1.0) × interval(0.0, 1.0)
     Ω = domain(S, :boundary => boundary_symbols(S))
-    Ωₕ = mesh(Ω, (8, 8), (false, false))
-    return _pc_form_reaction(gridspace(Ωₕ))
+    Wₕ = gridspace(mesh(Ω, (8, 8), (false, false)))
+    a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+    fₕ = element(Wₕ, 1.0)
+    l = form(Wₕ, v -> innerₕ(fₕ, v))
+    reaction_density(assemble(a), assemble(l), element(Wₕ, 1.0); marker = :boundary)
+
+    aκ = form(Wₕ, Wₕ, (u, v) -> 2.0 * inner₊(∇ₕ(u), ∇ₕ(v)))
+    assemble(aκ; dirichlet = :boundary)
+    return nothing
 end
 
 function _pc_form_reaction(Wₕ::ScalarGridSpace)
@@ -418,30 +390,53 @@ function _pc_form_reaction(Wₕ::ScalarGridSpace)
         Core.kwcall, (typeof(nt), typeof(reaction_density), typeof(A), typeof(F), typeof(uₕ))
     )
 
-    # A constant times the Laplacian, an `OperatorScale` AST no other session builds:
-    # alone and jointly with a Dirichlet value.
+    # A constant times the Laplacian, an `OperatorScale` AST no other session builds.
     aκ = form(Wₕ, Wₕ, (u, v) -> 2.0 * inner₊(∇ₕ(u), ∇ₕ(v)))
     assemble(aκ; dirichlet = :boundary)
-    assemble(aκ, l; dirichlet = :boundary => x -> 0.0)
-
-    # The mass form added into a matrix, the first term of an implicit time step.
-    m = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))
-    assemble_add!(A, m, 0.5)
-    precompile(assemble_add!, (typeof(A), typeof(m), Float64))
     return nothing
 end
 
+# The 1D session, in full.
 function _pc_form_session(
-        Ωₕ::AbstractMeshType, be, label::Symbol, f, ft, I_time, dim_val::Val{D}
-) where {D}
+        Ωₕ::AbstractMeshType, be, label::Symbol, f, ft, I_time, dim_val::Val{1}
+)
     Wₕ = gridspace(Ωₕ)
     Vₕ = gridspace(Ωₕ, Val(2))
 
     u, v = _pc_form_ast(Wₕ, dim_val)
-    _pc_form_stencils(Ωₕ, Wₕ, u, v, label)
+    _pc_form_stencils(Ωₕ, Wₕ, u, v)
     _pc_form_blocks(Vₕ, dim_val)
     _pc_form_dirichlet(Ωₕ, Wₕ, Vₕ, be, label, f, ft, I_time)
     _pc_form_assembly(Ωₕ, Wₕ, Vₕ, label, f, dim_val)
+    _pc_form_reaction(dim_val)
+    _pc_form_nested(dim_val)
+    return nothing
+end
+
+# What the second direction adds to it: the vectorial aliases over a 2D leaf (a tuple each),
+# the gradient product and the y weight, a stencil walked over two axes, a source against
+# the transverse difference, and the 2D reaction and nested sessions. The constraints, the
+# composite forms and the other assembly shapes reach in 2D the methods they reach in 1D.
+function _pc_form_session(Ωₕ::AbstractMeshType, dim_val::Val{2})
+    Wₕ = gridspace(Ωₕ)
+    u, v = TrialFunction{2}(), TestFunction{2}()
+    ∇ₕ(u)
+    ∇₊ₕ(u)
+    D̽ₕ(u)
+    jumpₕ(u)
+    Dcₕ(u)
+    D̃ₕ(u)
+    Mₕ(u)
+    M₊ₕ(u)
+    inner₊(∇ₕ(u), ∇ₕ(v))
+    inner₊ᵧ(u, v)
+
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
+    _pc_form_stencil(Ωₕ, Wₕ, (u, v) -> innerₕ(D₊ₓ(u), v))
+
+    uₕ = element(Wₕ, 1.0)
+    _pc_assemble_shape(Wₕ, v -> innerₕ(uₕ, D₋ᵧ(v)), zeros(eltype(Wₕ), ndofs(Wₕ)))
+
     _pc_form_reaction(dim_val)
     _pc_form_nested(dim_val)
     return nothing
@@ -455,28 +450,31 @@ end
 # `assemble`. These are the forms warmed, each with its dimension and the side it acts on.
 #
 #   plain space, 1D and 2D
-#     - `Δₕ(u)` trial side, `Δₕ(v)` test side in a bilinear form, `Δₕ(v)` in a linear one
-#     - `Δₕ(Δₕ(u))` trial side
+#     - `Δₕ(u)` and `Δₕ(Δₕ(u))`, trial side
+#     - in 1D the facet row `jumpₙ(Δₕ(u))` inside `inner_Γ`, its markers a tuple
 #     - in 2D the mixed `Dcₓ(Dcᵧ(u))` and `D̽ₓ(D̽ᵧ(u))`, trial side
-#   plain space, 3D (src/precompile.jl): the Laplacian `Δₕ(u)`, the `c`-scaled
-#   `jumpₓ(Δₕ)` and `D₋ₓ(Δₕ)` pairs and the `jumpₙ(Δₕ(u))` facet row
 #   ghost space (`gridspace(Ωₕ; ghosts = ...)`), 1D and 2D
 #     - the relation rows `constrained(W, u -> F => α * u + ∂ₙ(u) => g)`, which `constrained`
 #       builds as forms of the facet operator `∂ₙ` on each axis (depth 1, trial side); 2D
 #       adds the conormal `∂ₙ(u; K)`, whose rows read every axis, and 1D adds `u => g` and `∂ₙₙ`
-#     - on the constrained space, `-Δₕ(u)` trial side, `Δₕ(v)` test side, `∂ₙ(v)` inside
-#       `inner_Γ` (test side, with the lifted solution as data), `∂ₙ(u)` and `jumpₙ(Δₕ(u))`
-#       inside `inner_Γ` (trial side), and the joint assembly `assemble(a, l)`
+#     - on the constrained space, `-Δₕ(u)` trial side and `jumpₙ(Δₕ(u))` inside `inner_Γ`
+#       (trial side), and the joint assembly `assemble(a, l)`; in 1D also `Δₕ(v)` test
+#       side, `∂ₙ(v)` inside `inner_Γ` (test side, with the lifted solution as data),
+#       `∂ₙ(u)` inside `inner_Γ` and the joint assembly in place
+#     - in 1D, a space ghosted on one facet, assembled with the `dirichlet` keyword
 #     - in 2D the mixed `Dcₓ(Dcᵧ(u))` and `D̽ₓ(D̽ᵧ(u))` on the constrained space, trial side
 #     - in 2D, on the Robin space, `matrix_free_operator` and `kronecker_operator` of
 #       `inner₊(∇ₕ(u), ∇ₕ(v))` with a product each, and that form plus a rank-one penalty
 #
-# Not warmed: `Δₕ(Δₕ(u))` on a ghost space (the second Laplacian reads past the one ghost
-# layer, so the form is refused), and 3D ghost spaces. Float64 only. The meshes are
-# non-uniform (`false`), over the default domain.
+# A form is in the list when it gives a method its first instance: a form whose methods an
+# earlier one reaches is left to the caller's first `assemble`. Not warmed: `Δₕ(Δₕ(u))` on a
+# ghost space (the second Laplacian reads past the one ghost layer, so the form is refused),
+# and 3D spaces. Float64 only. The meshes are non-uniform (`false`), over the default domain.
 function _pc_form_nested(::Val{1})
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)
-    return _pc_form_nested(Ωₕ, Val(1))
+    _pc_form_nested(Ωₕ, Val(1))
+    _pc_ghost_partial(Ωₕ)
+    return nothing
 end
 
 function _pc_form_nested(::Val{2})
@@ -486,19 +484,25 @@ end
 
 function _pc_form_nested(Ωₕ::AbstractMeshType, dim_val::Val)
     _pc_nested_plain(gridspace(Ωₕ), dim_val)
+    _pc_nested_facet(gridspace(Ωₕ), dim_val)
     _pc_nested_relations(gridspace(Ωₕ; ghosts = :boundary), dim_val)
     return nothing
 end
 
 function _pc_nested_plain(Wₕ::ScalarGridSpace, dim_val::Val)
-    fₕ = element(Wₕ, 1.0)
     assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Δₕ(u), v)))
-    assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, Δₕ(v))))
-    assemble(form(Wₕ, v -> innerₕ(fₕ, Δₕ(v))))
     assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(Δₕ(Δₕ(u)), v)))
     _pc_nested_mixed(Wₕ, dim_val)
     return nothing
 end
+
+# The facet row `jumpₙ(Δₕ(u))` on a plain space, its markers a tuple: the facet checks of
+# a space with no ghost layer, which the ghost sessions below do not take.
+function _pc_nested_facet(Wₕ::ScalarGridSpace, ::Val{1})
+    assemble(form(Wₕ, Wₕ, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = (:xmin,))))
+    return nothing
+end
+_pc_nested_facet(Wₕ, ::Val{2}) = nothing
 
 # The mixed second differences need two directions.
 _pc_nested_mixed(Wₕ, ::Val{1}) = nothing
@@ -514,24 +518,21 @@ end
 function _pc_nested_relations(W::GhostGridSpace, ::Val{1})
     robin = constrained(W, u -> (:xmin => 2.0 * u + ∂ₙ(u) => 0.5, :xmax => ∂ₙ(u) => x -> x[1]))
     _pc_nested_constrained(robin)
-    mixed = constrained(
+    constrained(
         W, u -> (:xmin => u => 0.0, :xmin => ∂ₙ(u) => 1.0, :xmax => 1.5 * u + ∂ₙₙ(u) => 1.0)
     )
-    a = form(mixed, mixed, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
-    l = form(mixed, v -> innerₕ(x -> 1.0, v))
-    assemble(a, l)
     return nothing
 end
 
 function _pc_nested_relations(W::GhostGridSpace, ::Val{2})
     facets = (:xmin, :xmax, :ymin, :ymax)
     robin = constrained(W, u -> map(F -> F => 2.0 * u + ∂ₙ(u) => 0.5, facets))
-    _pc_nested_constrained(robin)
+    # of `_pc_nested_constrained`, the forms that reach a method the 1D pass does not
+    a = form(robin, robin, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
+    assemble(a, form(robin, v -> innerₕ(x -> 1.0, v)))
+    assemble(form(robin, robin, (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = :boundary)))
     K = [2.0 0.5; 0.5 1.0]
-    conormal = constrained(W, u -> map(F -> F => 2.0 * u + ∂ₙ(u; K) => 1.0, facets))
-    a = form(conormal, conormal, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
-    l = form(conormal, v -> innerₕ(x -> 1.0, v))
-    assemble(a, l)
+    constrained(W, u -> map(F -> F => 2.0 * u + ∂ₙ(u; K) => 1.0, facets))
     assemble(form(robin, robin, (u, v) -> innerₕ(Dcₓ(Dcᵧ(u)), v)))
     assemble(form(robin, robin, (u, v) -> innerₕ(D̽ₓ(D̽ᵧ(u)), v)))
     _pc_ghost_operators(robin)
@@ -558,9 +559,11 @@ function _pc_ghost_operators(C)
     return nothing
 end
 
-function _pc_nested_constrained(C)
+function _pc_nested_constrained(C::GhostGridSpace)
     a = form(C, C, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
-    assemble(a, form(C, v -> innerₕ(x -> 1.0, v)))
+    l = form(C, v -> innerₕ(x -> 1.0, v))
+    A, F = assemble(a, l)
+    assemble!(A, F, a, l)
     assemble(a, form(C, v -> inner_Γ(Δₕ(lift(C)), ∂ₙ(v); markers = :boundary)))
     assemble(form(C, C, (u, v) -> innerₕ(u, Δₕ(v))))
     assemble(form(C, C, (u, v) -> inner_Γ(∂ₙ(u), v; markers = :boundary)))
@@ -568,20 +571,16 @@ function _pc_nested_constrained(C)
     return nothing
 end
 
-# A ghost space on a partial facet set, as the tutorials build it (`ghosts = (:xmax, :ymax)`
-# with Robin data and Dirichlet sides left to `assemble`): the `:boundary` sessions above do
-# not warm its first call (gpena/Bramble.jl#906).
-# One mesh, one space, `assemble(a, l)` with and without the `dirichlet` keyword.
-function _pc_ghost_partial()
-    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
-    C = constrained(
-        gridspace(Ωₕ; ghosts = (:xmax, :ymax)),
-        u -> (:xmax => u + ∂ₙ(u) => 0.5, :ymax => u + ∂ₙ(u) => 0.5)
-    )
+# A ghost space on a partial facet set, as the tutorials build it (Robin data on the ghosted
+# facet, the Dirichlet side left to `assemble`): the `dirichlet` keyword on a constrained
+# space takes the row path of src/assembly/ghost_assembly.jl, which the `:boundary` sessions
+# above do not (gpena/Bramble.jl#906). In 1D, where it reaches the same methods as on the
+# tutorials' `ghosts = (:xmax, :ymax)`.
+function _pc_ghost_partial(Ωₕ::AbstractMeshType{1})
+    C = constrained(gridspace(Ωₕ; ghosts = (:xmax,)), u -> (:xmax => u + ∂ₙ(u) => 0.5,))
     a = form(C, C, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
     l = form(C, v -> innerₕ(x -> 1.0, v))
-    assemble(a, l)
-    assemble(a, l; dirichlet = (:xmin => x -> 0.0, :ymin => x -> 0.0), symmetrize = true)
+    assemble(a, l; dirichlet = (:xmin => x -> 0.0,), symmetrize = true)
     return nothing
 end
 
@@ -593,14 +592,6 @@ end
 # type_cached_assemble! is its own dispatch on the element type `T`, not
 # exercised anywhere assemble/assemble! already are.
 _pc_alpha(u) = 3.0 + 1.0 / (1.0 + u^2)
-
-# The direct (uncached) build jacobian_pattern only needs a BilinearForm from -- how it was
-# assembled makes no difference to the pattern.
-function _pc_diffusion_form(Wₕ, uₕ)
-    αvals = element(Wₕ, eltype(uₕ))
-    αvals .= _pc_alpha.(Mₓ(uₕ))
-    return form(Wₕ, Wₕ, (U, V) -> inner₊(αvals * D₋ₓ(U), D₋ₓ(V)))
-end
 
 # `build` for type_cached_assemble!, built once per session (not re-literalized per call,
 # the same economy its own docstring asks a caller to observe) and closing over `Wₕ`.
@@ -615,12 +606,6 @@ function _pc_build_diffusion(Wₕ)
         end
         return a, refill!
     end
-end
-
-function _pc_jacobian_pattern_session(Wₕ)
-    u0 = element(Wₕ, 0.0)
-    jacobian_pattern(_pc_diffusion_form(Wₕ, u0), U -> Mₓ(U))
-    return nothing
 end
 
 # The composite dispatch (#95): a coefficient naming a different leaf than the block it

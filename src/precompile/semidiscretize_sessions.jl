@@ -38,12 +38,10 @@
 # struct built on top of an already-assembled `Semidiscretization`, same reasoning as
 # `Semidiscretization` itself needing its own session.
 #
-# It is warmed in 1D and 2D against its own tiny non-uniform spaces
+# It is warmed in 1D against its own tiny non-uniform space
 # (`_pc_rhs_session`, one `:boundary` label covering the whole boundary),
 # rather than reusing the uniform 1D space `_pc_semidiscretize_session` above is called with
-# (from `src/precompile.jl`, owned elsewhere) -- matching the exact call shape (dimension,
-# non-uniform mesh, single whole-boundary label) a caller building a non-uniform mesh (the
-# common case, bramble-verification's "non-uniform is the point") actually hits.
+# (from `src/precompile.jl`, owned elsewhere). A 2D pass reaches the same methods.
 
 # The scalar Poisson pair both sessions below assemble, written once so the two share one
 # closure type each for `form` (gpena/Bramble.jl#1081).
@@ -72,7 +70,6 @@ function _pc_semidiscretize_session(Wₕ::ScalarGridSpace, label::Symbol)
     end
 
     _pc_rhs_session(Val(1))
-    _pc_rhs_session(Val(2))
     _pc_ghost_semidiscretize_session()
 
     return nothing
@@ -99,21 +96,14 @@ function _pc_ghost_semidiscretize_session()
     return nothing
 end
 
-# `semidiscretize_rhs`'s construction/residual, in 1D (`Val(1)`) and 2D (`Val(2)`) -- a tiny
-# non-uniform space of its own, one `:boundary` label covering the whole boundary, built the
-# same way as `_pc_semidiscretize_session`'s own 1D space above without depending on it or
-# its label.
+# `semidiscretize_rhs`'s construction/residual, in 1D -- a tiny non-uniform space of its
+# own, one `:boundary` label covering the whole boundary, built the same way as
+# `_pc_semidiscretize_session`'s own 1D space above without depending on it or its label.
+# A 2D pass reaches the same methods.
 function _pc_rhs_session(::Val{1})
     S = interval(0.0, 1.0)
     Ω = domain(S, :boundary => boundary_symbols(S))
     Ωₕ = mesh(Ω, 4, false)
-    return _pc_rhs_session(gridspace(Ωₕ))
-end
-
-function _pc_rhs_session(::Val{2})
-    S = interval(0.0, 1.0) × interval(0.0, 1.0)
-    Ω = domain(S, :boundary => boundary_symbols(S))
-    Ωₕ = mesh(Ω, (3, 3), (false, false))
     return _pc_rhs_session(gridspace(Ωₕ))
 end
 

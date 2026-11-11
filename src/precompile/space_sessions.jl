@@ -128,6 +128,22 @@ function _pc_space_session(Ωₕ, f, g, marker::Symbol)
     return Wₕ, uₕ, wₕ
 end
 
+# What a second and a third direction add to the session above: the grid space itself and
+# the tensor-product sweeps of `Rₕ` and `avgₕ`. Everything else there reaches the same
+# methods in any dimension. Returns the fields the operator sessions take.
+function _pc_space_session(Ωₕ, f, ::Val{2})
+    Wₕ = gridspace(Ωₕ)
+    uₕ = Rₕ(Wₕ, f)
+    avgₕ(Wₕ, f)
+    return uₕ, element(gridspace(Ωₕ, Val(2)), 1.0)
+end
+
+function _pc_space_session(Ωₕ, f, ::Val{3})
+    Wₕ = gridspace(Ωₕ)
+    avgₕ(Wₕ, f)
+    return element(Wₕ, 1.0)
+end
+
 # Cross-mesh interpolation session: pointwise interpolant, in-place and allocating
 # projection, sparse matrix assembly, and form-level integration.
 function _pc_interpolation_session(Ω_src, Ω_dest)
@@ -155,23 +171,30 @@ function _pc_interpolation_session(Ω_src, Ω_dest)
     return nothing
 end
 
-# The polygon path: Figure 1's nine vertices meshed on a non-uniform grid, the
-# masked trial/test pair, a mixed form and a Laplacian-plus-convection form assembled.
-function _pc_polygon(::Type{T}) where {T}
-    V = [(T(0), T(2)), (T(2), T(0)), (T(4), T(0)), (T(6), T(2)), (T(6), T(3)),
-        (T(4), T(3)), (T(4), T(5)), (T(2), T(5)), (T(0), T(3))]
+# What 2D adds: the tensor-product interpolant, pointwise, in place and as a matrix, and
+# one form through it.
+function _pc_interpolation_session(Ω_src, Ω_dest, ::Val{2})
+    W_src = gridspace(Ω_src)
+    W_dest = gridspace(Ω_dest)
+    u_src = element(W_src, 1.0)
+
+    interpolate_at(u_src, point(Ω_dest, first(indices(Ω_dest))))
+    πₕ!(element(W_dest), u_src)
+    interpolation_matrix(W_dest, W_src)
+    assemble(form(W_src, W_dest, (u, v) -> innerₕ(πₕ(u), v)))
+    return nothing
+end
+
+# The polygon path: Figure 1's nine vertices meshed on a non-uniform grid and the masked
+# trial/test pair. A form on the pair reaches the methods the ghost sessions of
+# form_sessions.jl already cache, so none is assembled here.
+function _pc_polygon()
+    V = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0),
+        (4.0, 3.0), (4.0, 5.0), (2.0, 5.0), (0.0, 3.0)]
     P = polygon(V)
-    signed_distance(P, (T(3), T(2)))
-    Ω = domain(interval(T(0), T(6)) × interval(T(0), T(5)), :P => P)
+    signed_distance(P, (3.0, 2.0))
+    Ω = domain(interval(0.0, 6.0) × interval(0.0, 5.0), :P => P)
     Ωₕ = mesh(Ω, (10, 9), (false, false))
-    U, W = polygon_spaces(Ωₕ, :P, x -> one(T))
-    mixed(w) = Dcₓ(Dcᵧ(w)) + Dcᵧ(Dcₓ(w))
-    a = form(U, W, (w, v) -> innerₕ(-one(T) * Δₕ(w) - T(0.3) * mixed(w), v))
-    l = form(W, v -> innerₕ(x -> one(T), v))
-    A, F = assemble(a, l)
-    assemble!(A, F, a, l)
-    # The pair users write first: a Laplacian and a convection term, each in its own `innerₕ`.
-    b = form(U, W, (w, v) -> innerₕ(-one(T) * Δₕ(w), v) + innerₕ(T(0.5) * Dcₓ(w), v))
-    assemble(b, l)
-    return A, F
+    polygon_spaces(Ωₕ, :P, x -> 1.0)
+    return nothing
 end
