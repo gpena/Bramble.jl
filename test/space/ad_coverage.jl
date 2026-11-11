@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: D₋ₓ, D₋ᵧ, D₋₂, Mₓ, Mᵧ, M₂, εₕ, Δₕ!, CpuPolyester, CpuSerial, CpuThreaded,
                GhostVector, update_ghosts!, centered_difference!, semidiscretize_rhs,
-               ast_sparsity_detector
+               ast_sparsity_detector, dirac, polygon, polygon_spaces
 using DifferentiationInterface
 using ForwardDiff
 using LinearAlgebra: mul!
@@ -420,6 +420,96 @@ function sparse_problem(policy, kind)
     return residual, diffusion(element(W, 0.0)), [0.1 + 0.01 * i for i in 1:ndofs(W)]
 end
 
+# --- The geometric inputs (#1171) ------------------------------------------------- #
+
+# A 12 x 12 mesh of `box` carrying the marker `pair`, uniform or seeded non-uniform, under
+# `policy`: the grid-fitted mesh of a polygon or a level set.
+function _marker_mesh(policy, kind::Symbol, box, pair::Pair)
+    Bramble._seed_mesh1d_rng!(SEED)
+    try
+        return mesh(domain(box, pair), (12, 12), kind === :uniform ? (true, true) : (false, false);
+            backend = backend(policy = policy))
+    finally
+        Bramble._unseed_mesh1d_rng!()
+    end
+end
+
+const POLYGON_BOX = interval(0.0, 3.0) × interval(0.0, 3.0)
+const SQUARE = [(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)]
+_polygon_mesh(policy, kind, V = SQUARE) = _marker_mesh(policy, kind, POLYGON_BOX, :P => polygon(V))
+
+# The Dirichlet datum `p₁ x₁ + p₂ x₂²` of the polygon spaces (#1170), on a mesh built
+# outside `f`; it reaches the load through the boundary columns the reduction moves.
+function build_polygon_datum(policy, kind)
+    Ωₕ = _polygon_mesh(policy, kind)
+    function f(p)
+        U, W = polygon_spaces(Ωₕ, :P, x -> p[1] * x[1] + p[2] * x[2]^2)
+        _, F = assemble(form(U, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))),
+            form(W, v -> innerₕ(x -> 1.0, v)))
+        return sum(abs2, F)
+    end
+    return f, [0.5, 0.8]
+end
+
+# A coefficient and a load of the form on the polygon spaces, the datum fixed.
+function _polygon_coefficient(Ωₕ, p)
+    U, W = polygon_spaces(Ωₕ, :P, x -> 1.0 + x[1])
+    A, F = assemble(form(U, W, (u, v) -> p[1] * inner₊(∇ₕ(u), ∇ₕ(v)) + p[2]^2 * innerₕ(u, v)),
+        form(W, v -> innerₕ(x -> p[3] * (1.0 + x[1]), v)))
+    return sum(abs2, nonzeros(A)) + sum(abs2, F)
+end
+
+function build_polygon_coefficient(policy, kind)
+    Ωₕ = _polygon_mesh(policy, kind)
+    return p -> _polygon_coefficient(Ωₕ, p), [0.5, 0.8, 1.1]
+end
+
+# The same call with the mesh built inside `f`, the vertices constant.
+function build_polygon_mesh_inside(policy, kind)
+    return p -> _polygon_coefficient(_polygon_mesh(policy, kind), p), [0.5, 0.8, 1.1]
+end
+
+# The mass matrix of a mesh built inside `f`: it reads the node coordinates, which a vertex
+# or a level-set parameter moves, and no cell of it is near-singular.
+function _mass_of(Ωₕ)
+    W = gridspace(Ωₕ)
+    return sum(abs2, nonzeros(assemble(form(W, W, (U, V) -> innerₕ(U, V)))))
+end
+
+# The vertices of the polygon, a rectangle of the square's corner, as the parameters.
+function build_polygon_vertices(policy, kind)
+    function f(p)
+        V = [(0.0, 0.0), (p[1], 0.0), (p[1], p[2]), (0.0, p[2])]
+        return _mass_of(_polygon_mesh(policy, kind, V))
+    end
+    return f, [2.0, 1.8]
+end
+
+# The circle `x₁² + x₂² − r²` at `r = 0.605`, the radius as the parameter.
+function build_levelset_parameter(policy, kind)
+    function f(p)
+        φ = x -> x[1]^2 + x[2]^2 - p[1]^2
+        box = interval(-1.0, 1.0) × interval(-1.0, 1.0)
+        return _mass_of(_marker_mesh(policy, kind, box, :D => levelset(φ)))
+    end
+    return f, [0.605]
+end
+
+# A point load on the 9 x 9 mesh, read through a fixed weight vector, off every node.
+const DIRAC_POINT = (0.347, 0.612)
+
+function build_dirac_location(policy, kind)
+    W = gridspace(_mesh(policy, kind))
+    c = cos.(1:ndofs(W))
+    return p -> sum(c .* assemble(form(W, v -> innerₕ(dirac((p[1], p[2]), 2.0), v)))),
+    collect(DIRAC_POINT)
+end
+
+function build_dirac_strength(policy, kind)
+    W = gridspace(_mesh(policy, kind))
+    return p -> sum(abs2, assemble(form(W, v -> innerₕ(dirac(DIRAC_POINT, p[1]), v)))), [2.5]
+end
+
 # --- The cells -------------------------------------------------------------------- #
 
 # `feature` is the row of the page and `group` the child process that runs the cell's Enzyme
@@ -520,7 +610,38 @@ const CELLS = (
     cell(:ghost_stencil, "ghost", :ghost_fast, build_ghost_stencil,
         rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
         fwd = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
-        kinds = (:nonuniform,))
+        kinds = (:nonuniform,)),
+    # The geometric inputs of gpena/Bramble.jl#1171. Reverse is the issue's measurement under
+    # `CpuSerial` (Enzyme 0.13.219, 2026-11-09); forward and the threaded policies are
+    # `:skip` and S3.2 of the v4.2.4 geometry plan measures them. The two polygon `works`
+    # cells compile for about 8 minutes each, so they have a child of their own.
+    # The datum of `polygon_spaces` (#1170): a `Dual` datum fills the padded space.
+    cell(:polygon_datum, "polygon", :polygon, build_polygon_datum,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip),
+    cell(:polygon_coefficient, "polygon", :polygon, build_polygon_coefficient,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip),
+    # `dirac` converts its point to `Float64`: ForwardDiff has no method for a `Dual` and
+    # Enzyme differentiates it. The reference of the Enzyme half is a central difference.
+    cell(:dirac_location, "dirac", :inputs, build_dirac_location, fd = :throws,
+        fd_err = "no method matching Float64",
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip),
+    cell(:dirac_strength, "dirac", :inputs, build_dirac_strength,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip),
+    # `polygon(V)` holds exact `Rational{BigInt}` vertices, which a `Dual` cannot become. The
+    # central difference of the Enzyme half runs (the point count is fixed by the 12 x 12
+    # grid), so S3.2 can set a verdict; it is `:skip` here.
+    cell(:polygon_vertices, "polygon", :inputs, build_polygon_vertices, fd = :throws,
+        fd_err = "no method matching Rational{BigInt}", rev = :skip, fwd = :skip),
+    # The mesh built inside `f`, vertices constant: ForwardDiff works and Enzyme reverse meets
+    # the exact `Rational` and `BigFloat` arithmetic of the grid closure.
+    cell(:polygon_mesh_inside, "polygon", :inputs, build_polygon_mesh_inside,
+        rev = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
+        rev_err = (CpuSerial = "IllegalTypeAnalysisException", CpuThreaded = "", CpuPolyester = ""),
+        fwd = :skip),
+    # A `φ` that depends on the parameter is refused (#1172): a `Float64` grid has no
+    # derivative to give. Enzyme is `:skip` until S3.2 measures whether it is a silent zero.
+    cell(:levelset_parameter, "levelset", :inputs, build_levelset_parameter, fd = :throws,
+        fd_err = "Level-set marker", rev = :skip, fwd = :skip)
 )
 
 # --- Enzyme, in a child process ------------------------------------------------------ #
@@ -749,6 +870,22 @@ if CHILD == ""
                 end
             end
         end
+        # A cell the page records as throwing under ForwardDiff: the call throws an error
+        # whose message contains `fd_err`, and never returns.
+        for c in CELLS, (pname, policy) in pairs(POLICIES), kind in c.kinds
+            c.fd === :throws || continue
+            pname === :CpuSerial || THREADED || continue
+            @testset "$(c.name), $pname, $kind, throws" begin
+                f, x = c.build(policy, kind)
+                err = try
+                    DifferentiationInterface.gradient(f, AutoForwardDiff(), x)
+                    nothing
+                catch e
+                    e
+                end
+                @test err isa Exception && occursin(c.fd_err, sprint(showerror, err))
+            end
+        end
         for (pname, policy) in pairs(POLICIES), kind in MESHES
 
             pname === :CpuSerial || THREADED || continue
@@ -766,7 +903,8 @@ if CHILD == ""
         if !RUN_ENZYME
             @test_skip "Enzyme is not in this environment"
         else
-            groups = (:dense, :assemble, :three, :boundary, :geometry, :solve, :operators, :ghost_fast)
+            groups = (:dense, :assemble, :three, :boundary, :geometry, :solve, :operators, :ghost_fast,
+                :inputs, :polygon)
             WITH_3D_TESTS && (groups = (groups..., :threed))
             SLOW && (groups = (groups..., :ghost_slow))
             for pname in keys(POLICIES)
