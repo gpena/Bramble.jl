@@ -45,6 +45,9 @@ function _pc_solver_session()
     # The matrix-free path, which nothing above reaches: the
     # operator's apply and the Jacobi and Chebyshev preconditioners in 1D, 2D and 3D on
     # non-uniform meshes, and a GMG V-cycle on the uniform 2D mesh it supports.
+    # The loop over three dimensions stays although 2D and 3D run the methods 1D runs: its
+    # variable is a union, and inferring `mesh`, `gridspace` and the session over it is what
+    # gives the level-set and ghost branches of those functions their only instances.
     for (X, n) in (
         (interval(0.0, 1.0), 6),
         (interval(0.0, 1.0) × interval(0.0, 1.0), (5, 4)),

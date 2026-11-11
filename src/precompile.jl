@@ -79,19 +79,20 @@ if PRECOMPILE_WORKLOAD
         I_time = interval(0.0, 1.0)
 
         @compile_workload begin
+            # One call per method, not per type. A session runs in full in 1D; the 2D and 3D
+            # calls below name only what the extra direction adds, and single precision is
+            # left to the caller's first use, since a `Float32` pass reaches the methods of
+            # the `Float64` one over again. Measured by replaying the workload statement by
+            # statement and keeping the statements that give a method its first instance.
             _pc_geometry()
             _pc_linear_algebra(be)
 
-            # Spatial dimensions 1, 2 and 3, uniform and non-uniform.
             Ωₕ1 = _pc_mesh_session(Ω1, 5, true, be, :left)
-            _pc_mesh_session(Ω1, 5, false, be, :left)
             Ωₕ2 = _pc_mesh_session(Ω2, (4, 4), (true, true), be, :wall)
-            _pc_mesh_session(Ω2, (4, 4), (false, false), be, :wall)
-            Ωₕ3 = _pc_mesh_session(Ω3, (3, 3, 3), (true, true, true), be, :boundary)
+            Ωₕ3 = mesh(Ω3, (3, 3, 3), (true, true, true); backend = be)
 
             _pc_mesh_mutation(Ωₕ1, markers(Ω1))
             _pc_mesh_mutation(Ωₕ2, markers(Ω2))
-            _pc_mesh_mutation(Ωₕ3, markers(Ω3))
             set_points!(deepcopy(Ωₕ1), points(Ωₕ1))
 
             stepsize(Ωₕ1)
@@ -103,99 +104,39 @@ if PRECOMPILE_WORKLOAD
             normal_vector(Ωₕ2, :top)
             normal_vector(Ωₕ3, :front)
 
-            # Grid spaces and restriction operators, in 1D, 2D and 3D.
+            # Grid spaces, restriction operators and the operators on grid functions.
             _, e1, c1 = _pc_space_session(Ωₕ1, x -> x + 1.0, x -> 2x, :left)
-            _, e2, c2 = _pc_space_session(Ωₕ2, x -> x[1] * x[2], x -> x[1] + x[2], :wall)
-            _, e3, c3 = _pc_space_session(
-                Ωₕ3, x -> x[1] * x[2] * x[3], x -> x[1] + x[2] + x[3], :boundary
-            )
+            e2, c2 = _pc_space_session(Ωₕ2, x -> x[1] * x[2], Val(2))
+            e3 = _pc_space_session(Ωₕ3, x -> x[1] * x[2] * x[3], Val(3))
 
             _pc_operator_session(e1, c1, Val(1))
-            _pc_operator_session(e2, c2, Val(2))
-            _pc_operator_session(e3, c3, Val(3))
+            _pc_operator_session(e2, Val(2))
+            _pc_operator_session(e3, Val(3))
 
-            divₕ(c2)
-            curlₕ(c2)
             ∇ₕ ⋅ c2
             ∇ₕ × c2
-
-            # Single-precision Float32 CPU coverage (mirrors GPU element type and single-precision runs)
-            be32 = backend(Float32)
-            _pc_linear_algebra(be32)
-            Ω1_32 = domain(interval(0.0f0, 1.0f0), :left => :left, :right => :right)
-            Ωₕ1_32 = _pc_mesh_session(Ω1_32, 5, true, be32, :left)
-            Ω2_32 = domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 2.0f0), :wall => (:left, :right))
-            Ωₕ2_32 = _pc_mesh_session(Ω2_32, (4, 4), (true, true), be32, :wall)
-            _, e1_32, c1_32 = _pc_space_session(Ωₕ1_32, x -> x + 1.0f0, x -> 2.0f0 * x, :left)
-            _, e2_32, c2_32 = _pc_space_session(Ωₕ2_32, x -> x[1] * x[2], x -> x[1] + x[2], :wall)
-            _pc_operator_session(e1_32, c1_32, Val(1))
-            _pc_operator_session(e2_32, c2_32, Val(2))
 
             # The symbolic layer. Not reachable from the space sessions: a LazyOp tree is
             # built from the trial/test leaves, not from a grid function.
             _pc_form_session(
                 Ωₕ1, be, :left, x -> x + 1.0, (x, t) -> (x + 1.0) * t, I_time, Val(1)
             )
-            _pc_form_session(
-                Ωₕ2, be, :wall, x -> x[1] * x[2], (x, t) -> x[1] * x[2] * t, I_time, Val(2)
-            )
+            _pc_form_session(Ωₕ2, Val(2))
 
-            # The 3D scalar Laplacian, non-uniform, in both spellings a caller writes:
-            # `inner₊(∇ₕ(u), ∇ₕ(v))` (the tutorials') and the summed one-sided-difference form, and
-            # the Laplacian written `innerₕ(Δₕ(u), v)`.
-            Ωₕ3n = mesh(Ω3, (3, 3, 3), (false, false, false); backend = be)
-            W3n = gridspace(Ωₕ3n)
-            for f3 in (
-                form(W3n, W3n, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))),
-                form(W3n, W3n, (u, v) -> innerₕ(Δₕ(u), v)),
-                form(
-                W3n, W3n,
-                (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)) + innerₕ(D₋ᵧ(u), D₋ᵧ(v)) +
-                          innerₕ(D₋₂(u), D₋₂(v))
-            )
-            )
-                A3 = assemble(f3)
-                assemble!(A3, f3)
-            end
+            # 3D: the lazy z-difference, the one node no 1D or 2D form builds.
+            D₋₂(TrialFunction{3}())
 
-            # A 2D and 3D variable-coefficient diffusion, `inner₊(c * ∇ₕ(u), ∇ₕ(v))`, assembled
-            # with a label (and in 2D as a Jacobian pattern); the sessions below carry it in 1D only.
+            # A 2D variable-coefficient diffusion, `inner₊(c * ∇ₕ(u), ∇ₕ(v))`, assembled with
+            # a label and as a Jacobian pattern; the sessions above carry it in 1D only.
             W2v = gridspace(Ωₕ2)
             c2v = element(W2v, 1.0)
             assemble(form(W2v, W2v, (u, v) -> inner₊(c2v * ∇ₕ(u), ∇ₕ(v))); dirichlet = :wall)
             jacobian_pattern(form(W2v, W2v, (U, V) -> inner₊(Mₕ(c2v) * ∇ₕ(U), ∇ₕ(V))), U -> Mₕ(U))
-            c3v = element(W3n, 1.0)
-            assemble(form(W3n, W3n, (u, v) -> inner₊(c3v * ∇ₕ(u), ∇ₕ(v))); dirichlet = :boundary)
 
-            # The 3D nests of #774's table on the same plain space: the c-scaled `jumpₓ(Δₕ)`
-            # and `D₋ₓ(Δₕ)` pairs and the facet row, each a first call of seconds when left
-            # to the caller. The coefficient is a Float64 grid element, as the benchmark's.
-            for f3 in (
-                form(
-                W3n, W3n,
-                (u, v) -> innerₕ(c3v * jumpₓ(Δₕ(u)), jumpₓ(Δₕ(v)))
-            ),
-                form(
-                W3n, W3n,
-                (u, v) -> innerₕ(c3v * D₋ₓ(Δₕ(u)), D₋ₓ(Δₕ(v)))
-            ),
-                form(
-                W3n, W3n,
-                (u, v) -> inner_Γ(jumpₙ(Δₕ(u)), v; markers = (:xmin,))
-            )
-            )
-                assemble(f3)
-            end
-
-            # The 2D Robin form on `ghosts = (:xmax, :ymax)`, the tutorials' first call.
-            _pc_ghost_partial()
-
-            # Jacobian sparsity from the AST, scalar and composite, and the per-element-type
-            # assembly cache (gpena/Bramble.jl#21/#95/#20). Kept to 1D, the same economy the
-            # sessions above already apply.
+            # Composite Jacobian sparsity from the AST and the per-element-type assembly
+            # cache (gpena/Bramble.jl#21/#95/#20), in 1D.
             Wₕ_pc = gridspace(Ωₕ1)
             Vₕ_pc = gridspace(Ωₕ1, Val(2))
-            _pc_jacobian_pattern_session(Wₕ_pc)
             _pc_jacobian_pattern_composite_session(Vₕ_pc)
             _pc_type_cached_assemble_session(Wₕ_pc)
 
@@ -211,11 +152,11 @@ if PRECOMPILE_WORKLOAD
             # The Parallel() execution policy, otherwise never constructed above.
             _pc_parallel_policy_session(Ω1, 5)
 
-            # Cross-mesh interpolation sessions (1D and 2D).
+            # Cross-mesh interpolation sessions (1D, and what 2D adds).
             Ωₕ1_fine = mesh(Ω1, 9, true; backend = be)
             Ωₕ2_fine = mesh(Ω2, (6, 6), (true, true); backend = be)
             _pc_interpolation_session(Ωₕ1, Ωₕ1_fine)
-            _pc_interpolation_session(Ωₕ2, Ωₕ2_fine)
+            _pc_interpolation_session(Ωₕ2, Ωₕ2_fine, Val(2))
 
             # Exporters session (PGFPlots 1D and 2D).
             _pc_exporters_session(Ωₕ1, Ωₕ2)
@@ -239,21 +180,12 @@ if PRECOMPILE_WORKLOAD
             # A domain called at a time, which evaluates its time-dependent marker.
             collect(labels(domain(I1, I_time, :moving => ((x, t) -> x > t))(0.5)))
 
-            # Labelled Float64 2D/3D domains of other shapes, each meshed where the tutorials
-            # mesh it. Label spellings the tutorials use.
-            Ω4 = domain(S2, :left => :xmin, :right => :xmax, :bottom => :ymin, :top => :ymax)
-            mesh(Ω4, (4, 4), (false, false))
-            domain(S2, :dirichlet => (:left, :right), :neumann => (:top, :bottom))
-            mesh(domain(S3, :clamped => :back), (3, 3, 3), (false, false, false))
-
-            # Polygon meshes, spaces and two forms (Figure 1), in both precisions.
-            _pc_polygon(Float64)
-            _pc_polygon(Float32)
+            # The polygon mesh and its spaces (Figure 1).
+            _pc_polygon()
 
             # The positional `mesh` methods with no `backend` keyword.
             mesh(domain(I1), 5)
             mesh(domain(S2), (4, 4))
-            mesh(Ω1, 5)
             mesh(I1, 5)
         end
     end
