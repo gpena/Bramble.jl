@@ -4,7 +4,7 @@ using Test
 using Bramble
 using Bramble: D₋ₓ, D₋ᵧ, D₋₂, Mₓ, Mᵧ, M₂, εₕ, Δₕ!, CpuPolyester, CpuSerial, CpuThreaded,
                GhostVector, update_ghosts!, centered_difference!, semidiscretize_rhs,
-               ast_sparsity_detector
+               ast_sparsity_detector, dirac, polygon, polygon_spaces
 using DifferentiationInterface
 using ForwardDiff
 using LinearAlgebra: mul!
@@ -420,6 +420,96 @@ function sparse_problem(policy, kind)
     return residual, diffusion(element(W, 0.0)), [0.1 + 0.01 * i for i in 1:ndofs(W)]
 end
 
+# --- The geometric inputs (#1171) ------------------------------------------------- #
+
+# A 12 x 12 mesh of `box` carrying the marker `pair`, uniform or seeded non-uniform, under
+# `policy`: the grid-fitted mesh of a polygon or a level set.
+function _marker_mesh(policy, kind::Symbol, box, pair::Pair)
+    Bramble._seed_mesh1d_rng!(SEED)
+    try
+        return mesh(domain(box, pair), (12, 12), kind === :uniform ? (true, true) : (false, false);
+            backend = backend(policy = policy))
+    finally
+        Bramble._unseed_mesh1d_rng!()
+    end
+end
+
+const POLYGON_BOX = interval(0.0, 3.0) × interval(0.0, 3.0)
+const SQUARE = [(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)]
+_polygon_mesh(policy, kind, V = SQUARE) = _marker_mesh(policy, kind, POLYGON_BOX, :P => polygon(V))
+
+# The Dirichlet datum `p₁ x₁ + p₂ x₂²` of the polygon spaces (#1170), on a mesh built
+# outside `f`; it reaches the load through the boundary columns the reduction moves.
+function build_polygon_datum(policy, kind)
+    Ωₕ = _polygon_mesh(policy, kind)
+    function f(p)
+        U, W = polygon_spaces(Ωₕ, :P, x -> p[1] * x[1] + p[2] * x[2]^2)
+        _, F = assemble(form(U, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))),
+            form(W, v -> innerₕ(x -> 1.0, v)))
+        return sum(abs2, F)
+    end
+    return f, [0.5, 0.8]
+end
+
+# A coefficient and a load of the form on the polygon spaces, the datum fixed.
+function _polygon_coefficient(Ωₕ, p)
+    U, W = polygon_spaces(Ωₕ, :P, x -> 1.0 + x[1])
+    A, F = assemble(form(U, W, (u, v) -> p[1] * inner₊(∇ₕ(u), ∇ₕ(v)) + p[2]^2 * innerₕ(u, v)),
+        form(W, v -> innerₕ(x -> p[3] * (1.0 + x[1]), v)))
+    return sum(abs2, nonzeros(A)) + sum(abs2, F)
+end
+
+function build_polygon_coefficient(policy, kind)
+    Ωₕ = _polygon_mesh(policy, kind)
+    return p -> _polygon_coefficient(Ωₕ, p), [0.5, 0.8, 1.1]
+end
+
+# The same call with the mesh built inside `f`, the vertices constant.
+function build_polygon_mesh_inside(policy, kind)
+    return p -> _polygon_coefficient(_polygon_mesh(policy, kind), p), [0.5, 0.8, 1.1]
+end
+
+# The mass matrix of a mesh built inside `f`: it reads the node coordinates, which a vertex
+# or a level-set parameter moves, and no cell of it is near-singular.
+function _mass_of(Ωₕ)
+    W = gridspace(Ωₕ)
+    return sum(abs2, nonzeros(assemble(form(W, W, (U, V) -> innerₕ(U, V)))))
+end
+
+# The vertices of the polygon, a rectangle of the square's corner, as the parameters.
+function build_polygon_vertices(policy, kind)
+    function f(p)
+        V = [(0.0, 0.0), (p[1], 0.0), (p[1], p[2]), (0.0, p[2])]
+        return _mass_of(_polygon_mesh(policy, kind, V))
+    end
+    return f, [2.0, 1.8]
+end
+
+# The circle `x₁² + x₂² − r²` at `r = 0.605`, the radius as the parameter.
+function build_levelset_parameter(policy, kind)
+    function f(p)
+        φ = x -> x[1]^2 + x[2]^2 - p[1]^2
+        box = interval(-1.0, 1.0) × interval(-1.0, 1.0)
+        return _mass_of(_marker_mesh(policy, kind, box, :D => levelset(φ)))
+    end
+    return f, [0.605]
+end
+
+# A point load on the 9 x 9 mesh, read through a fixed weight vector, off every node.
+const DIRAC_POINT = (0.347, 0.612)
+
+function build_dirac_location(policy, kind)
+    W = gridspace(_mesh(policy, kind))
+    c = cos.(1:ndofs(W))
+    return p -> sum(c .* assemble(form(W, v -> innerₕ(dirac((p[1], p[2]), 2.0), v)))),
+    collect(DIRAC_POINT)
+end
+
+function build_dirac_strength(policy, kind)
+    W = gridspace(_mesh(policy, kind))
+    return p -> sum(abs2, assemble(form(W, v -> innerₕ(dirac(DIRAC_POINT, p[1]), v)))), [2.5]
+end
+
 # --- The cells -------------------------------------------------------------------- #
 
 # `feature` is the row of the page and `group` the child process that runs the cell's Enzyme
@@ -495,18 +585,24 @@ const CELLS = (
     cell(:ghost_inner, "ghost", :ghost_fast, build_ghost_inner,
         rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip,
         kinds = (:nonuniform,)),
-    # Relation data that depend on the parameter: not run. Reverse is compile cost in
-    # `_assemble_relation`: one facet takes 732 s and 3.7 GB and `constrained` passes the 10 GB
-    # cap at about 310 s. Forward of `constrained` alone works (about 61 s) but was not
-    # measured through this cell. Open, gpena/Bramble.jl#1153 and
-    # docs/notes/internals/ad_reductions/1153_constrained.md.
-    cell(:ghost_data, "ghost", :ghost_slow, build_ghost_data, rev = :skip, fwd = :skip,
-        kinds = (:nonuniform,), slow = true),
-    # The Robin coefficient's ForwardDiff half works (gpena/Bramble.jl#1127). Its Enzyme reverse
-    # is the same compile cost as `ghost_data` (744 s for one facet, #1153), forward not
-    # measured through this cell.
-    cell(:ghost_robin, "ghost", :ghost_fast, build_ghost_robin, rev = :skip, fwd = :skip,
-        kinds = (:nonuniform,)),
+    # Relation data that depend on the parameter, and a Robin coefficient that does
+    # (gpena/Bramble.jl#1153, docs/notes/internals/ad_reductions/1153_constrained.md). Reverse
+    # compiled for over 10 GB until the rule of #1182 over `_assemble_relation`
+    # (ext/BrambleEnzymeExt/relations.jl): now both modes match ForwardDiff under `CpuSerial` and
+    # `CpuPolyester` (3.3 to 6.1 GB alone). Under `CpuThreaded` both modes fail with
+    # `EnzymeNoTypeError` in the relation's forms, open as gpena/Bramble.jl#1179. Each cell has
+    # a child of its own: in the `ghost_fast` child the group peaked at 10.2 GB under
+    # `CpuPolyester` and 10.6 GB under `CpuThreaded`, where the 10 GB cap killed it.
+    cell(:ghost_data, "ghost", :relation_data, build_ghost_data,
+        rev = (CpuSerial = :ok, CpuThreaded = :throws, CpuPolyester = :ok),
+        fwd = (CpuSerial = :ok, CpuThreaded = :throws, CpuPolyester = :ok),
+        rev_err = "EnzymeNoTypeError", kinds = (:nonuniform,)),
+    # The Robin coefficient's ForwardDiff half works (gpena/Bramble.jl#1127); the Enzyme half
+    # is the same as `ghost_data`.
+    cell(:ghost_robin, "ghost", :relation_robin, build_ghost_robin,
+        rev = (CpuSerial = :ok, CpuThreaded = :throws, CpuPolyester = :ok),
+        fwd = (CpuSerial = :ok, CpuThreaded = :throws, CpuPolyester = :ok),
+        rev_err = "EnzymeNoTypeError", kinds = (:nonuniform,)),
     # The load of `assemble(a, l)` alone (gpena/Bramble.jl#1127, the load half). The threaded
     # reverse is #1157 and the forward under Enzyme #1159, both fixed in v4.2.2.
     cell(:ghost_load, "ghost", :ghost_fast, build_ghost_load, kinds = (:nonuniform,)),
@@ -520,7 +616,52 @@ const CELLS = (
     cell(:ghost_stencil, "ghost", :ghost_fast, build_ghost_stencil,
         rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
         fwd = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
-        kinds = (:nonuniform,))
+        kinds = (:nonuniform,)),
+    # The geometric inputs of gpena/Bramble.jl#1171, measured with Enzyme 0.13.219 on
+    # 2026-11-11 (docs/notes/internals/ad_reductions/1171_geometric_inputs.md). The two
+    # polygon `works` cells compile for about 5 minutes per mode, so they have a child of
+    # their own. Forward is a `MethodError`: Enzyme has no forward rule for `deepcopy`.
+    # The datum of `polygon_spaces` (#1170): a `Dual` datum fills the padded space.
+    cell(:polygon_datum, "polygon", :polygon, build_polygon_datum,
+        rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
+        fwd = (CpuSerial = :throws, CpuThreaded = :throws, CpuPolyester = :throws),
+        fwd_err = "MethodError"),
+    cell(:polygon_coefficient, "polygon", :polygon, build_polygon_coefficient,
+        rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
+        fwd = (CpuSerial = :throws, CpuThreaded = :throws, CpuPolyester = :throws),
+        fwd_err = "MethodError"),
+    # `dirac` converts its point to `Float64`: ForwardDiff has no method for a `Dual` and
+    # Enzyme differentiates it in both modes. The reference of the Enzyme half is a central
+    # difference. The threaded policies were not run.
+    cell(:dirac_location, "dirac", :inputs, build_dirac_location, fd = :throws,
+        fd_err = "no method matching Float64",
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
+    cell(:dirac_strength, "dirac", :inputs, build_dirac_strength,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
+    # `polygon(V)` holds exact `Rational{BigInt}` vertices, which a `Dual` cannot become.
+    # Enzyme meets the same illegal type analysis as `polygon_mesh_inside`, in both modes.
+    cell(:polygon_vertices, "polygon", :inputs, build_polygon_vertices, fd = :throws,
+        fd_err = "no method matching Rational{BigInt}",
+        rev = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
+        rev_err = (CpuSerial = "IllegalTypeAnalysisException", CpuThreaded = "", CpuPolyester = "")),
+    # The mesh built inside `f`, vertices constant: ForwardDiff works and Enzyme meets the
+    # exact `Rational` and `BigFloat` arithmetic of the grid closure in both modes.
+    cell(:polygon_mesh_inside, "polygon", :inputs, build_polygon_mesh_inside,
+        rev = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
+        rev_err = (CpuSerial = "IllegalTypeAnalysisException", CpuThreaded = "", CpuPolyester = "")),
+    # A `φ` that depends on the parameter is refused under ForwardDiff (#1172): a `Float64`
+    # grid has no derivative to give. Enzyme is `:skip`: the first fresh process returned a
+    # gradient of zeros in both modes (a silent zero), and four later ones aborted in LLVM
+    # with `Instruction does not dominate all uses!`, with nothing changed in between.
+    # A child of its own, so the abort cannot end the cells of another group.
+    cell(:levelset_parameter, "levelset", :levelset, build_levelset_parameter, fd = :throws,
+        fd_err = "Level-set marker",
+        rev = (CpuSerial = :skip, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :skip, CpuThreaded = :skip, CpuPolyester = :skip))
 )
 
 # --- Enzyme, in a child process ------------------------------------------------------ #
@@ -749,6 +890,22 @@ if CHILD == ""
                 end
             end
         end
+        # A cell the page records as throwing under ForwardDiff: the call throws an error
+        # whose message contains `fd_err`, and never returns.
+        for c in CELLS, (pname, policy) in pairs(POLICIES), kind in c.kinds
+            c.fd === :throws || continue
+            pname === :CpuSerial || THREADED || continue
+            @testset "$(c.name), $pname, $kind, throws" begin
+                f, x = c.build(policy, kind)
+                err = try
+                    DifferentiationInterface.gradient(f, AutoForwardDiff(), x)
+                    nothing
+                catch e
+                    e
+                end
+                @test err isa Exception && occursin(c.fd_err, sprint(showerror, err))
+            end
+        end
         for (pname, policy) in pairs(POLICIES), kind in MESHES
 
             pname === :CpuSerial || THREADED || continue
@@ -766,9 +923,10 @@ if CHILD == ""
         if !RUN_ENZYME
             @test_skip "Enzyme is not in this environment"
         else
-            groups = (:dense, :assemble, :three, :boundary, :geometry, :solve, :operators, :ghost_fast)
+            groups = (:dense, :assemble, :three, :boundary, :geometry, :solve, :operators, :ghost_fast,
+                :relation_data, :relation_robin, :inputs, :levelset, :polygon)
             WITH_3D_TESTS && (groups = (groups..., :threed))
-            SLOW && (groups = (groups..., :ghost_slow))
+            SLOW && (groups = (groups..., unique(c.group for c in CELLS if c.slow)...))
             for pname in keys(POLICIES)
                 pname === :CpuSerial || THREADED || continue
                 @testset "$pname" begin

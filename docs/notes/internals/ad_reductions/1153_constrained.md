@@ -172,3 +172,50 @@ Reproduces: .claude/scripts/julia_slot.sh 1 julia --startup-file=no --project=. 
 Reproduces: .claude/scripts/julia_slot.sh 1 julia --startup-file=no --project=. --threads=1 --optimize=1 --check-bounds=auto docs/notes/internals/ad_reductions/1153_constrained.jl relation data rev   # exit 0 after about 52 s and 1.6 GB with the shipped rule: one facet of the rows. Without the rule it took 732 s and 3.7 GB, `rows data rev` did not finish in 15 minutes, and `constrained data rev` passed 10 GB at about five minutes, where `julia_slot.sh` stopped it (exit 143); with the rule `constrained data rev` is exit 0 after 95 s
 
 Reproduces: .claude/scripts/julia_slot.sh 1 julia --startup-file=no --project=. --threads=1 --optimize=1 --check-bounds=auto docs/notes/internals/ad_reductions/1153_constrained.jl constrained data fwd   # exit 0, about 59 s: the control, forward passes
+
+## Coverage cells
+
+The cells `ghost_data` and `ghost_robin` of `test/space/ad_coverage.jl` (the loss of `build_ghost_param`, the probe's `cell` step) run Enzyme in both modes under the three policies, with the rule of #1182 in place. Each run is one child process of the coverage test, `BRAMBLE_AD_COVERAGE_CHILD=<policy>:<group>:<cell>:nonuniform:<mode>`, through `.claude/scripts/julia_slot.sh 2`, Enzyme from a temporary environment, `set_runtime_activity`, `function_annotation = Const`, `--optimize=1`, the reference ForwardDiff on the same policy. The runs were made while the two cells sat in the group `ghost_fast`, one process after another; the group is `relation_data` and `relation_robin` now (see "Group runs"), and the loss is the same.
+
+Enzyme: 0.13.219, 2026-11-11, macbook (Julia 1.13.3, arm64), 2 threads. Figures were taken with other Julia sessions running (the pool of three slots was busy), so the times are upper bounds.
+
+Compile s is the wall time of the process, from `/usr/bin/time -l`, with about 70 s of package loading included. Peak GB is the process's peak memory footprint in GB of 2^30 bytes. A `Cell` line gives `<name> | <policy> | <kind> | <mode> | <status> | <relerr> | <compile s> | <peak GB>`. Status `throws` carries the error's name.
+
+Cell: ghost_data | CpuSerial | nonuniform | rev | ok | 0 | 247 | 4.35
+Cell: ghost_data | CpuSerial | nonuniform | fwd | ok | 1.2e-16 | 249 | 3.34
+Cell: ghost_robin | CpuSerial | nonuniform | rev | ok | 1.3e-16 | 259 | 4.31
+Cell: ghost_robin | CpuSerial | nonuniform | fwd | ok | 1.3e-16 | 200 | 3.44
+Cell: ghost_data | CpuPolyester | nonuniform | rev | ok | 0 | 396 | 6.07
+Cell: ghost_data | CpuPolyester | nonuniform | fwd | ok | 1.2e-16 | 309 | 4.87
+Cell: ghost_robin | CpuPolyester | nonuniform | rev | ok | 1.3e-16 | 384 | 6.10
+Cell: ghost_robin | CpuPolyester | nonuniform | fwd | ok | 1.3e-16 | 300 | 4.96
+Cell: ghost_data | CpuThreaded | nonuniform | rev | throws EnzymeNoTypeError | NaN | 421 | 6.36
+Cell: ghost_data | CpuThreaded | nonuniform | fwd | throws EnzymeNoTypeError | NaN | 334 | 5.39
+Cell: ghost_robin | CpuThreaded | nonuniform | rev | throws EnzymeNoTypeError | NaN | 442 | 6.37
+Cell: ghost_robin | CpuThreaded | nonuniform | fwd | throws EnzymeNoTypeError | NaN | 355 | 5.49
+
+The probe's figures hold: under `CpuSerial` reverse is 0 against ForwardDiff and forward 1.2e-16, for both cells, in 247 s and 249 s (the probe's 181 s and 112 s are the Enzyme call alone, without package loading). The first reverse run of this session took 452 s because the process precompiled the package first (the log shows 185 s of it); the 247 s above is a rerun of that cell alone, with a warm cache. The threaded policies take longer and use more memory than `CpuSerial`, the largest run being 6.4 GB.
+
+`CpuSerial` and `CpuPolyester` differentiate both cells in both modes. `CpuThreaded` fails in both modes with `EnzymeNoTypeError` ("Enzyme cannot statically prove the type of a value being differentiated"), the error of "Under `CpuThreaded`" above and of gpena/Bramble.jl#1179. The cells' forward derivative fails the same way as the reverse one. The coverage test pins it as `:throws` with `EnzymeNoTypeError`, so a fix of #1179 turns the test red and the pin goes.
+
+## Group runs
+
+The test runs each group as one child process. Run as the parent runs them, `--optimize=1`, 2 threads, with `ghost_data` and `ghost_robin` in the group `ghost_fast` with the five other ghost cells, two of the three groups failed the 10 GB cap:
+
+- `CpuSerial:ghost_fast`: 743 s, 7.99 GB, exit normal, every non-skip `CELL` line equal to its pin.
+- `CpuPolyester:ghost_fast`: 1441 s, 10.23 GB (over the cap, not killed by it), exit normal, every `CELL` line equal to its pin.
+- `CpuThreaded:ghost_fast`: killed by `julia_slot.sh` at 942 s and 10.55 GB, during the forward call of `ghost_data` (after `ghost_assemble` in both modes and the reverse call of `ghost_data`).
+
+Compiled code of the cells accumulates in a process, so the two cells go to groups of their own, `relation_data` and `relation_robin`, as `levelset` and `polygon` did for #1171. The groups as they stand, one process each, all exits normal (no signal, no kill line) with every non-skip `CELL` line equal to its pin:
+
+- `CpuSerial:ghost_fast`: 499 s, 5.22 GB.
+- `CpuSerial:relation_data`: 409 s, 5.23 GB.
+- `CpuSerial:relation_robin`: 452 s, 5.22 GB.
+- `CpuPolyester:ghost_fast`: 576 s, 5.47 GB.
+- `CpuPolyester:relation_data`: 570 s, 7.83 GB.
+- `CpuPolyester:relation_robin`: 539 s, 8.09 GB.
+- `CpuThreaded:ghost_fast`: 480 s, 5.68 GB.
+- `CpuThreaded:relation_data`: 736 s, 8.72 GB.
+- `CpuThreaded:relation_robin`: 620 s, 8.93 GB (1.1 GB under the cap).
+
+The `ghost_fast` groups hold the cells `ghost_assemble`, `ghost_inner` (`CpuSerial` reverse only), `ghost_load`, `ghost_runtime` and `ghost_stencil`. The two `CpuThreaded` groups of the relation cells are the closest to the cap; split by mode if it kills one under load.

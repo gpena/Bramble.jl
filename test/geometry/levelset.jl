@@ -2,6 +2,7 @@ module GeometryLevelSetTests
 
 using Test
 using Bramble
+using ForwardDiff
 using Bramble: LevelSet, _bisect_root, _crossings, conditions, regions
 
 circle(p) = hypot(p[1], p[2]) - 1
@@ -15,7 +16,8 @@ const X2 = interval(-1.25, 1.25) × interval(-1.25, 1.25)
     # 3. Bisection stops once the bracket is within eps of its initial width: a root at 0
     #    takes about 53 halvings in Float64 and 24 in Float32, not a run to subnormals.
     # 4. Invalid use throws an ArgumentError (reserved or clashing label, not 2D, a Bool
-    #    predicate).
+    #    predicate, a Real that is not plain, such as a ForwardDiff.Dual); a Float32,
+    #    BigFloat, Rational or Int φ is accepted.
     L = levelset(circle)
 
     @testset "marker value" begin
@@ -94,7 +96,35 @@ const X2 = interval(-1.25, 1.25) × interval(-1.25, 1.25)
         @test_throws ArgumentError domain(X2, :D => L, :D_exterior => levelset(circle))
         @test_throws ArgumentError domain(X2, :D => levelset(p -> p[1] > 0))
         @test_throws ArgumentError domain(X2, :D => levelset(p -> "a"))
+        # A φ that returns no Real is not blamed on differentiation.
+        str_err = try
+            domain(X2, :D => levelset(p -> "a"))
+        catch e
+            e
+        end
+        @test str_err isa ArgumentError
+        @test occursin("String", sprint(showerror, str_err))
+        @test !occursin("differentiated", sprint(showerror, str_err))
         @test_throws ArgumentError domain(X2, :D => levelset(p -> p[3]))
+        # A Dual would lose its partials in the Float64 grid: refused, the type named.
+        d = ForwardDiff.Dual(0.5, 1.0)
+        dual_φ = levelset(p -> p[1]^2 + p[2]^2 - d^2)
+        err = try
+            domain(X2, :D => dual_φ)
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("Level-set marker :D", msg)
+        @test occursin("Dual", msg)
+        @test occursin("not differentiated", msg)
+        # The plain real numbers are accepted.
+        for φ in (p -> Float32(p[1]^2 + p[2]^2 - 0.36), p -> big(p[1]^2 + p[2]^2 - 0.36),
+            p -> rationalize(p[1]^2 + p[2]^2 - 0.36),
+            p -> round(Int, 100 * (p[1]^2 + p[2]^2 - 0.36)))
+            @test labels(domain(X2, :D => levelset(φ))) == (:D, :D_boundary, :D_exterior)
+        end
     end
 end
 

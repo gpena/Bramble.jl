@@ -90,10 +90,16 @@ function _polygon_spaces(Ωₕ, P::ScalarGridSpace{2, T}, label::Symbol, g, inn:
     be = backend(Ωₕ)
     N = length(lin)
     keep = findall(inn)
-    gv = zeros(T, N)
-    for k in findall(Γ)
-        gv[k] = g(point(Ωₕ, car[k]))
-    end
+    # `g` at every boundary node first: a `Dual` or complex value widens the datum's type
+    # `S`, as relation data do in `_constrained_space`, while `E`, `P` and `V` keep `T`.
+    # Values of several types (a `Dual` on part of the boundary) promote value by value.
+    bnd = findall(Γ)
+    gb = map(k -> g(point(Ωₕ, car[k])), bnd)
+    R = eltype(gb)
+    S = _closure_data_eltype(T,
+        isconcretetype(R) ? R : mapreduce(typeof, promote_type, gb; init = T))
+    gv = zeros(S, N)
+    gv[bnd] .= gb
 
     # The interior readers of each exterior node, through the diagonals.
     nread, reader = zeros(Int, N), zeros(Int, N)
@@ -119,7 +125,8 @@ function _polygon_spaces(Ωₕ, P::ScalarGridSpace{2, T}, label::Symbol, g, inn:
 
     extended = nread .> 0
     conflict = nread .> 1
-    U0 = GhostGridSpace(P, _closure_matrix(be, T, E), _closure_data(be, T, d))
+    U0 = GhostGridSpace(P, _closure_matrix(be, T, E),
+        _closure_data(be, _closure_data_eltype(S, eltype(d)), d))
     rows = _RowsDirichlet(false, U0.rows.facets, true, true, ext .& .!extended, extended,
         conflict)
     U = GhostGridSpace(U0.padded, U0.E, U0.d, U0.Et, rows, U0.td, U0.gu, U0.grid_function)
