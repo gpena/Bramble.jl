@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 340" width="560" height="340" role="img">
+<title>Maximum error against the largest spacing, on uniform and on random meshes</title>
+<style>
+text { font: 13px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #24292f; }
+.frame { fill: none; stroke: #8c959f; }
+.grid { stroke: #8c959f; stroke-opacity: 0.3; }
+.slope { stroke: #8c959f; stroke-width: 1.5; stroke-dasharray: 6 4; }
+.uniform { fill: #4063d8; }
+.random { fill: #cb3c33; fill-opacity: 0.75; }
+@media (prefers-color-scheme: dark) { text { fill: #e6edf3; } }
+</style>
+<line class="grid" x1="155.2" y1="16" x2="155.2" y2="294"/>
+<text x="155.2" y="312" text-anchor="middle">10⁻²</text>
+<line class="grid" x1="386.0" y1="16" x2="386.0" y2="294"/>
+<text x="386.0" y="312" text-anchor="middle">10⁻¹</text>
+<line class="grid" x1="62" y1="274.7" x2="542" y2="274.7"/>
+<text x="54" y="279.2" text-anchor="end">10⁻⁵</text>
+<line class="grid" x1="62" y1="210.3" x2="542" y2="210.3"/>
+<text x="54" y="214.8" text-anchor="end">10⁻⁴</text>
+<line class="grid" x1="62" y1="145.9" x2="542" y2="145.9"/>
+<text x="54" y="150.4" text-anchor="end">10⁻³</text>
+<line class="grid" x1="62" y1="81.5" x2="542" y2="81.5"/>
+<text x="54" y="86.0" text-anchor="end">10⁻²</text>
+<line class="grid" x1="62" y1="17.0" x2="542" y2="17.0"/>
+<text x="54" y="21.5" text-anchor="end">10⁻¹</text>
+<rect class="frame" x="62" y="16" width="480" height="278"/>
+<line class="slope" x1="62.0" y1="287.2" x2="542.0" y2="19.3"/>
+<path class="random" d="M491.3 85.6l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M482.6 87.4l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M496.7 49.1l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M491.3 61.6l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M508.3 37.1l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M440.9 105.4l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M447.2 109.4l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M435.3 99.6l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M439.9 83.8l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M417.8 107.2l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M357.1 146.1l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M372.6 140.3l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M386.8 137.1l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M399.5 118.6l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M373.3 139.3l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M316.1 177.5l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M354.6 159.5l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M336.3 180.5l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M340.7 168.7l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M329.8 170.0l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M293.4 207.1l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M300.4 195.4l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M277.7 219.5l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M288.3 202.5l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<path class="random" d="M255.3 212.6l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<circle class="uniform" cx="373.7" cy="113.2" r="4.5"/>
+<circle class="uniform" cx="304.2" cy="152.0" r="4.5"/>
+<circle class="uniform" cx="234.7" cy="190.8" r="4.5"/>
+<circle class="uniform" cx="165.2" cy="229.6" r="4.5"/>
+<circle class="uniform" cx="95.7" cy="268.4" r="4.5"/>
+<circle class="uniform" cx="78" cy="32" r="4.5"/>
+<text x="92" y="36">uniform mesh</text>
+<path class="random" d="M78.0 47.5l4.5 4.5l-4.5 4.5l-4.5 -4.5z"/>
+<text x="92" y="56">random mesh, 5 draws per size</text>
+<line class="slope" x1="70" y1="72" x2="86" y2="72"/>
+<text x="92" y="76">slope 2</text>
+<text x="302.0" y="332" text-anchor="middle">hₘₐₓ</text>
+<text transform="translate(14 155.0) rotate(-90)" text-anchor="middle">maximum error</text>
+</svg>
