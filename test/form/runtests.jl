@@ -61,6 +61,12 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("rank_one.jl")
         include("padding_zero.jl")
         include("vector_sums.jl")
+        # The exact Jacobian assembled from the form's AST, `a + ∂a` (#1141).
+        include("assembled_jacobian.jl")
+        # The same on composite spaces, routed per block (#1144).
+        include("assembled_jacobian_blocks.jl")
+        # The threaded refill replays the recorded nzval positions.
+        include("threaded_replay.jl")
     end
 
     if TestUtils.in_shard("forms-2")
@@ -74,10 +80,6 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         TestUtils.WITH_SLOW_TESTS && include("jacobian_pattern.jl")
         # Mixed composite/scalar pairs: dependency-free, so on every push.
         include("jacobian_pattern_blocks.jl")
-        # The exact Jacobian assembled from the form's AST, `a + ∂a` (#1141).
-        include("assembled_jacobian.jl")
-        # The same on composite spaces, routed per block (#1144).
-        include("assembled_jacobian_blocks.jl")
         include("type_cached_assemble.jl")
         include("semidiscrete.jl")
         # v3.3.0 plan (memory scaling): the dependency-free Kronecker operator (S5.1). It
@@ -114,8 +116,6 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("ghost_rank_one.jl")
         include("two_spaces.jl")
         include("warm_composite.jl")
-        # The threaded refill replays the recorded nzval positions.
-        include("threaded_replay.jl")
         include("simplifier.jl")
         # Behind `slow`, like compile_scaling.jl: a compile bound on the assembly pipeline.
         TestUtils.WITH_SLOW_TESTS && include("compile_assembly.jl")

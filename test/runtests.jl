@@ -123,8 +123,8 @@ if __bramble_with_unit_tests
     @testset verbose=true "Core library" begin
         # `BRAMBLE_TEST_SHARD` (TestUtils) splits this block over CI runners: the form tests
         # run under `forms-1` and `forms-2` (test/form/runtests.jl divides them, and gives
-        # `ghost` its four ghost files), the ghost and solver tests under `ghost`, everything
-        # else here under `rest`. Unset, all of it runs.
+        # `ghost` its four ghost files), the ghost tests under `ghost`, everything else here,
+        # the solver tests included, under `rest`. Unset, all of it runs.
         if TestUtils.in_shard("rest")
             include("utils/runtests.jl")
             include("geometry/runtests.jl")
@@ -184,10 +184,10 @@ if __bramble_with_unit_tests
 
         if TestUtils.in_shard("ghost")
             include("ghost/runtests.jl")
-            include("solvers/runtests.jl")
         end
 
         if TestUtils.in_shard("rest")
+            include("solvers/runtests.jl")
             include("exporters/runtests.jl")
 
             # Static allocation verification. Lives under `quality/` because that is what
