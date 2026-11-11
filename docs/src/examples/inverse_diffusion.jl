@@ -77,9 +77,11 @@ backend = DI.AutoEnzyme(;
 
 κ = 0.3   # deliberately far from κ_true = 0.7
 step = 0.02
+κ_history = [κ]
 for _ in 1:100
     g = DI.gradient(loss, backend, κ)
     global κ -= step * g
+    push!(κ_history, κ)
 end
 
 (κ, κ_true)
@@ -91,6 +93,38 @@ end
 fd_check = (loss(0.5 + 1e-6) - loss(0.5 - 1e-6)) / 2e-6                               #src
 ad_check = DI.gradient(loss, backend, 0.5)                                            #src
 @test ad_check ≈ fd_check rtol = 1e-6                                                 #src
+
+# ## The recovered solution
+#
+# Each curve is the forward solve at one value of ``\kappa``: the starting guess, the
+# recovered coefficient and the truth. The observations are drawn as a line through their
+# five points. The solution at the starting guess is more than twice too high, and the
+# recovered one runs through the observations, on top of the truth:
+
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+
+xs = [p[1] for p in pts]
+line_plot([
+        (xs, forward(0.3), "κ = 0.3, the starting guess"),
+        (xs, forward(κ), "κ recovered"),
+        (xs, forward(κ_true), "κ = 0.7, the truth"),
+        ([pts[i][1] for i in obs_idx], u_obs, "observations")];
+    title = "Inverse diffusion, u(x)", ylabel = "u")
+
+# The same run as a coefficient history: the iterate against the iteration, with the true
+# value as a second series. The gradient at the starting guess is large, so the first step
+# overshoots to about 1.25, and the iterate then comes down onto ``\kappa_{\text{true}}``
+# from above:
+
+line_plot([
+        (0:100, κ_history, "κ at the iteration"),
+        (0:100, fill(κ_true, 101), "κ_true")];
+    title = "Inverse diffusion, κ against the iteration", xlabel = "iteration", ylabel = "κ")
+
+@test length(κ_history) == 101                                                        #src
+@test κ_history[1] == 0.3 && κ_history[end] == κ                                      #src
+@test 1.2 < κ_history[2] < 1.3                                                        #src
+@test issorted(κ_history[2:end]; rev = true)                                          #src
 
 # ## Cost of the adjoint
 #

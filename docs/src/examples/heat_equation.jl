@@ -113,6 +113,23 @@ normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_robin)
 # initial condition, would sit far outside this window, and so would a first-order one.       #src
 @test 1.0e-5 < normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ_robin) < 5.0e-5   #src
 
+# The whole time evolution fits in one surface, `x` and `t` the two horizontal axes and `u`
+# as height and colour. It needs no new solve: `sol_robin` interpolates continuously in `t`,
+# so sampling it on a uniform grid of times and lifting each sample is enough. The red curve
+# traces `u(x, t)` at the current instant and loops on its own, shrinking as the solution
+# decays:
+
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+
+ts = range(0.0, 1.0; length = 60)
+Z = reduce(vcat, (parent(lift(Cₕ, sol_robin(t), t))[1:101]' for t in ts))
+spacetime_surface_plot(points(Ωₕ), collect(ts), Z; title = "Heat equation, x-t-u")
+
+# The last row is the manufactured solution at t = 1 and the first is the initial peak, so   #src
+# a lift at the wrong time or a dropped node fails.                                           #src
+@test maximum(abs, Z[end, :] .- uexact.(points(Ωₕ), 1.0)) < 1.0e-3                          #src
+@test Z[1, 51] ≈ 1.0 atol=1e-3                                                              #src
+
 # The relation is satisfied by the ghost, so the check that means something is one-sided and
 # independent of it: the three-point backward difference of the lifted solution at the
 # Robin end, with the actual spacings, must satisfy ``u + \partial_n u = h`` up to its
@@ -196,17 +213,6 @@ normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ)
 
 # The initial condition is copied, never mutated, and the copy is made consistent with the
 # algebraic rows at ``t_0`` before stepping.
-
-# A surface plot of the whole time evolution, `x` and `t` the two horizontal axes, `u` as
-# height and colour, needs no new solve: `sol` already interpolates continuously in `t`, so
-# sampling it at a uniform grid of times is enough to lay one out. The red curve traces
-# `u(x, t)` at the current instant and loops on its own:
-
-include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-
-ts = range(0.0, 1.0; length = 60)
-Z = reduce(vcat, (sol(t)' for t in ts))
-spacetime_surface_plot(points(Ωₕ), collect(ts), Z; title = "Heat equation, x-t-u")
 
 # `sol` also exports as a ParaView time series; see
 # [Plot or export a grid function](../howto/plotting_export.md).
@@ -343,6 +349,16 @@ u_end = sol_drive.u[end]
 @test u_end[1]≈1.0 atol=1e-8 rtol=1e-8                            #src
 @test u_end[101]≈0.0 atol=1e-8 rtol=1e-8                          #src
 @test 0.43 < u_end[51] < 0.45                                    #src
+
+# The left end is the ramp ``g = t``, so a surface that drew a constant edge would fail.    #src
+@test sol_drive(0.5)[1]≈0.5 atol=1e-6                                                    #src
+
+# The surface shows the ramp and the lag. The left edge rises along the line ``u = t`` and
+# the right edge stays at zero. The interior follows with a delay, and the red profile never
+# reaches the straight line between the two ends:
+
+Z_drive = reduce(vcat, (sol_drive(t)' for t in ts))
+spacetime_surface_plot(points(Ωₕ), collect(ts), Z_drive; title = "Boundary-driven heat equation, x-t-u")
 
 # At ``t = 1`` the ends hold the prescribed ``g`` to solver tolerance: one and zero. The
 # interior is climbing towards the straight line ``1 - x`` that the source-free steady
