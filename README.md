@@ -19,25 +19,25 @@
 
 Classical finite difference schemes often lose accuracy on nonuniform grids: the local truncation error drops from second to first order once the spacing varies.
 
-`Bramble.jl` provides finite difference discretizations of partial differential equations on nonuniform Cartesian grids in 1D, 2D and 3D that are mimetic and often supraconvergent. Staggered dual meshes and metric-weighted inner products restore global second-order convergence on graded, rough or randomly spaced grids, without coordinate transformations.
+`Bramble.jl` discretizes PDEs on nonuniform Cartesian grids in 1D, 2D and 3D with mimetic, often supraconvergent finite differences. Staggered dual meshes and metric-weighted inner products restore global second-order convergence on graded, rough or random grids, without coordinate transformations.
 
-Problems are written as bilinear and linear forms built from discrete operators, in notation close to the mathematics. `assemble` turns them into a sparse matrix and a right-hand side, or they can be applied matrix-free. Time-dependent problems become ODE systems for the SciML time steppers.
+Problems are bilinear and linear forms of discrete operators, in notation close to the mathematics. `assemble` returns a sparse matrix and a right-hand side, and forms also apply matrix-free. Time-dependent problems become ODE systems for the SciML time steppers.
 
 ---
 
 ## Features
 
-- **Meshes.** Nonuniform Cartesian meshes in 1D, 2D and 3D, with uniform or random point distributions, or points you place yourself (graded) with `change_points!`, boundary markers and iterative refinement.
-- **Polygon and level-set domains.** `polygon(V)` and `levelset(φ)` mark a region of a 2D domain (`:P => polygon(V)`, `:D => levelset(φ)`). `mesh` adds the grid lines the boundary needs, so every crossing of the boundary with a grid line is a node, and `Bramble.polygon_spaces` gives the trial and test spaces of the Ferreira and Grigorieff scheme, second order on non-convex polygons with oblique edges and on orthogonally convex curves such as a disk. The worked examples solve a [polygon](https://gpena.github.io/Bramble.jl/examples/poisson_polygon/) and a [disk](https://gpena.github.io/Bramble.jl/examples/poisson_circle/).
-- **Discrete calculus.** Gradient, divergence, curl, Laplacian and strain operators (`∇ₕ`, `divₕ`, `curlₕ`, `Δₕ`, `εₕ`) in staggered, centered and averaged variants, jumps, means and index shifts, with discrete inner products and norms (`innerₕ`, `inner₊`, `inner_Γ`, `normₕ`) and point sources (`dirac`).
-- **Forms and assembly.** `form` and `assemble` build sparse matrices and load vectors directly. Separable operators assemble as Kronecker products, and `matrix_free_operator` applies a form without storing its matrix.
-- **Dirichlet conditions.** The `dirichlet` keyword of `assemble` (`:boundary`, a marker or `marker => g`), `dirichlet_constraints` for values by marker function, restricted to chosen components of a system, with `symmetrize!` to keep symmetric problems symmetric.
-- **Ghost spaces and relations.** `gridspace(Ωₕ; ghosts = :boundary)` adds ghost points beyond the chosen facets, where the facet operators `∂ₙ`, `∂ₙₙ` and `jumpₙ` act. `constrained` ties each facet's ghosts to a relation `operator => data`, such as `:xmin => ∂ₙ(u) => g`, and eliminates them, so Neumann, Robin and second-normal-derivative conditions need no hand-built boundary stencils. A Dirichlet condition is also a relation, `:xmin => u => g`, and `Δₕ(u)` inside a form is the collocation Laplacian at every node, boundary ones included.
-- **Pure Neumann.** `pde_solve(A, F; mean_zero = w)` fixes the constant of a singular system, and a form with a rank-one penalty term is solved without a dense block. `matrix_free_operator` and geometric multigrid (`gmg_solve`) run on ghost spaces too; the [space page](https://gpena.github.io/Bramble.jl/internals/space/) lists what each call supports.
+- **Meshes.** Nonuniform Cartesian meshes in 1D, 2D and 3D. Points are uniform, random or placed by hand (graded, `change_points!`). Boundary markers and iterative refinement.
+- **Polygon and level-set domains.** `:P => polygon(V)` and `:D => levelset(φ)` mark a region of a 2D domain. `mesh` adds grid lines so that every crossing of the boundary with a grid line is a node. `Bramble.polygon_spaces` gives the trial and test spaces of the Ferreira and Grigorieff scheme: second order on non-convex polygons with oblique edges and on orthogonally convex curves such as a disk. Examples: a [polygon](https://gpena.github.io/Bramble.jl/examples/poisson_polygon/) and a [disk](https://gpena.github.io/Bramble.jl/examples/poisson_circle/).
+- **Discrete calculus.** Gradient, divergence, curl, Laplacian and strain (`∇ₕ`, `divₕ`, `curlₕ`, `Δₕ`, `εₕ`) in staggered, centered and averaged variants. Jumps, means and index shifts. Inner products and norms (`innerₕ`, `inner₊`, `inner_Γ`, `normₕ`) and point sources (`dirac`).
+- **Forms and assembly.** `form` and `assemble` build sparse matrices and load vectors. Separable operators assemble as Kronecker products. `matrix_free_operator` applies a form without storing its matrix.
+- **Dirichlet conditions.** The `dirichlet` keyword of `assemble` takes `:boundary`, a marker or `marker => g`. `dirichlet_constraints` assigns a function to each marker, on chosen components of a system if needed. `symmetrize!` keeps symmetric problems symmetric.
+- **Ghost spaces and relations.** `gridspace(Ωₕ; ghosts = :boundary)` adds ghost points beyond the chosen facets, where `∂ₙ`, `∂ₙₙ` and `jumpₙ` act. `constrained` eliminates them with one relation per facet, such as `:xmin => ∂ₙ(u) => g`, so Neumann, Robin and second-normal-derivative conditions need no hand-built boundary stencils. Dirichlet is the relation `:xmin => u => g`. Inside a form, `Δₕ(u)` is the collocation Laplacian at every node, boundary included.
+- **Pure Neumann.** `pde_solve(A, F; mean_zero = w)` fixes the constant of a singular system. A form with a rank-one penalty term is solved without a dense block. `matrix_free_operator` and `gmg_solve` also run on ghost spaces: the [space page](https://gpena.github.io/Bramble.jl/internals/space/) lists what each call supports.
 - **Coupled systems.** Composite spaces (`Wₕ^Val(N)`) and vector spaces, with block assembly addressed by component.
-- **Time-dependent problems.** `semidiscretize` and `ode_problem` hand a first-order system `M u' = F(t) - A u` to OrdinaryDiffEq and the rest of SciML; a wave equation is written as one for the pair `(u, u̇)`.
+- **Time-dependent problems.** `semidiscretize` and `ode_problem` hand `M u' = F(t) - A u` to OrdinaryDiffEq and the rest of SciML. A wave equation becomes a first-order system in `(u, u̇)`.
 - **Solvers.** `pde_solve` with sparse direct factorizations (SuiteSparse, Apple Accelerate, MUMPS, Sparspak), preconditioners (algebraic multigrid, ILU(0), Jacobi, Chebyshev) and geometric multigrid (`gmg_solve`).
-- **Automatic differentiation.** Forward-mode differentiation (ForwardDiff) through operators, assembly and nonlinear residuals. Reverse-mode (Enzyme, ChainRules), sparse Jacobians and SciMLSensitivity adjoints ship as extensions whose tests are off until v4.3.0.
+- **Automatic differentiation.** Forward mode (ForwardDiff) through operators, assembly and nonlinear residuals. Reverse mode (Enzyme, ChainRules), sparse Jacobians and SciMLSensitivity adjoints ship as extensions. Their tests are off until v4.3.0.
 - **Backends.** Serial, threaded (Polyester) and experimental GPU (Metal) execution, with CSC or CSR storage chosen through `backend`. The GPU tests are off until v4.4.0.
 - **Visualization and export.** Plots and Makie recipes, VTK output for ParaView (`export_vtk`) and PGFPlots/TikZ output for LaTeX (`export_pgfplots`).
 
@@ -141,10 +141,10 @@ Documentation, tutorials, and the API reference are available at [https://gpena.
 
 ## Coding with Claude
 
-The repository ships a [Claude Code](https://code.claude.com) plugin that teaches Claude the
-public API, the rules that keep finite-difference code correct and fast, and a set of worked,
-checked examples (linear and nonlinear Poisson, Neumann and Robin, pure Neumann,
-convection-diffusion, heat, wave, elasticity, coupled reaction-diffusion, point sources). In Claude Code:
+The repository ships a [Claude Code](https://code.claude.com) plugin with the public API,
+the rules that keep finite-difference code correct and fast, and checked examples (linear and
+nonlinear Poisson, Neumann and Robin, pure Neumann, convection-diffusion, heat, wave,
+elasticity, coupled reaction-diffusion, point sources). Install it in Claude Code:
 
 ```text
 /plugin marketplace add gpena/Bramble.jl
@@ -158,7 +158,7 @@ package's; update it with `/plugin marketplace update bramble` after upgrading B
 
 ## Mathematical foundations
 
-`Bramble.jl` implements discrete operators and inner products that reflect the supraconvergence theory developed in:
+The discrete operators and inner products follow the supraconvergence theory of:
 
 - J. A. Ferreira and R. D. Grigorieff, *On the supraconvergence of elliptic finite difference schemes*, Applied Numerical Mathematics 28 (1998), pp. 275–292. [doi:10.1016/S0168-9274(98)00048-8](https://doi.org/10.1016/S0168-9274(98)00048-8)
 - S. Barbeiro, J. A. Ferreira, and R. D. Grigorieff, *Supraconvergence of a finite difference scheme for solutions in $H^s(0,L)$*, IMA Journal of Numerical Analysis 25.4 (2005), pp. 797–811. [doi:10.1093/imanum/dri018](https://doi.org/10.1093/imanum/dri018)
