@@ -477,6 +477,152 @@ end
             @test_skip "Enzyme not in this environment"
         end
     end
+
+    @testset "Enzyme: pde_solve(::RankOneUpdate) rules" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            rev = Enzyme.set_runtime_activity(Enzyme.Reverse)
+            fwd = Enzyme.set_runtime_activity(Enzyme.Forward)
+            ROU = Bramble.RankOneUpdate
+
+            # A non-symmetric `A` with `wₛ ≠ wₜ`, so a swapped border or a missing transpose
+            # changes the gradient. Every input is a float of one vector `p`: `A`'s stored
+            # entries, `σ`, `wₛ`, `wₜ`, `F`, and the references are ForwardDiff of the dense
+            # solve of the same system, with the border `[K w; wᵀ 0]` for `mean_zero`.
+            n = 6
+            A0 = sparse(spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.5, n),
+                1 => fill(-1.2, n - 1)))
+            nA = nnz(A0)
+            σ0 = 0.8
+            ws0 = [1.0 + 0.1 * i for i in 1:n]
+            wt0 = [cos(i) for i in 1:n]
+            F0 = [1.0 + sin(i) for i in 1:n]
+            c = [sin(2i) for i in 1:n]
+            wmz = [1.0 + 0.2 * cos(i) for i in 1:n]
+            p0 = [nonzeros(A0); σ0; ws0; wt0; F0]
+            ia = 1:nA
+            iσ = nA + 1
+            iws = nA .+ (2:(n + 1))
+            iwt = nA .+ ((n + 2):(2n + 1))
+            iF = nA .+ ((2n + 2):(3n + 1))
+            function dense(p, border)
+                T = eltype(p)
+                Ad = zeros(T, n, n)
+                k = 0
+                for j in 1:n, i in A0.rowval[A0.colptr[j]:(A0.colptr[j + 1] - 1)]
+                    Ad[i, j] = p[k += 1]
+                end
+                Kd = Ad + p[iσ] * p[iws] * transpose(p[iwt])
+                border === nothing && return Kd \ p[iF]
+                return ([Kd border; transpose(border) 0] \ [p[iF]; 0])[1:n]
+            end
+            sparsify(vals) = SparseMatrixCSC(n, n, A0.colptr, A0.rowval, vals)
+            function rou(p)
+                K = ROU(sparsify(p[ia]), p[iσ], p[iws], p[iwt])
+                return K, p[iF]
+            end
+            # The shadow of `K` for one tangent or cotangent vector `v` of the layout of `p`.
+            shadow(v) = ROU(sparsify(v[ia]), v[iσ], v[iws], v[iwt])
+            unshadow(Kd, Fd) = [nonzeros(Kd.A); Kd.σ; Kd.ws; Kd.wt; Fd]
+
+            for border in (nothing, wmz)
+                kw = border === nothing ? (;) : (; mean_zero = border)
+                solve(K, F) = Bramble.pde_solve(K, F; kw...)
+                loss(K, F) = sum(c .* solve(K, F))
+                ref_grad = ForwardDiff.gradient(p -> sum(c .* dense(p, border)), p0)
+
+                # Reverse: the cotangent of every field at once, `K` and `F` both active, then
+                # `K` alone (`F` constant), then `F` alone (`K` constant).
+                K, F = rou(p0)
+                Kd = shadow(zeros(length(p0)))
+                Fd = zeros(n)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active,
+                    Enzyme.Duplicated(K, Kd), Enzyme.Duplicated(F, Fd))
+                @test unshadow(Kd, Fd) ≈ ref_grad rtol=1e-8
+                @test unshadow(K, F) == p0     # the primal is not touched
+
+                K, F = rou(p0)
+                Kd = shadow(zeros(length(p0)))
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active,
+                    Enzyme.Duplicated(K, Kd), Enzyme.Const(F))
+                @test unshadow(Kd, zeros(n))[1:(end - n)] ≈ ref_grad[1:(end - n)] rtol=1e-8
+
+                K, F = rou(p0)
+                Fd = zeros(n)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active,
+                    Enzyme.Const(K), Enzyme.Duplicated(F, Fd))
+                @test Fd ≈ ref_grad[iF] rtol=1e-8
+
+                # Forward, width 1 and width 2: `J ṗ` for two directions.
+                J = ForwardDiff.jacobian(p -> dense(p, border), p0)
+                ṗ1 = [cos(k) for k in 1:length(p0)]
+                ṗ2 = [sin(3k) for k in 1:length(p0)]
+                K, F = rou(p0)
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.Duplicated,
+                    Enzyme.Duplicated(K, shadow(ṗ1)), Enzyme.Duplicated(F, ṗ1[iF])))
+                @test u̇ ≈ J * ṗ1 rtol=1e-8
+
+                # `K` with every field perturbed, `A` alone, then `F` alone.
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.Duplicated,
+                    Enzyme.Duplicated(K, shadow(ṗ1)), Enzyme.Const(F)))
+                ṗA = [ṗ1[ia]; zeros(length(p0) - nA)]
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.Duplicated,
+                    Enzyme.Duplicated(K, shadow(ṗA)), Enzyme.Const(F)))
+                @test u̇ ≈ J * ṗA rtol=1e-8
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.Duplicated,
+                    Enzyme.Const(K), Enzyme.Duplicated(F, ṗ1[iF])))
+                @test u̇ ≈ J[:, iF] * ṗ1[iF] rtol=1e-8
+
+                bat = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.BatchDuplicated,
+                    Enzyme.BatchDuplicated(K, (shadow(ṗ1), shadow(ṗ2))),
+                    Enzyme.BatchDuplicated(F, (ṗ1[iF], ṗ2[iF]))))
+                @test collect(values(bat)) ≈ [J * ṗ1, J * ṗ2] rtol=1e-8
+            end
+
+            # A `K.A` that is not a `SparseMatrixCSC` is refused by name, in both modes, and
+            # reverse mode does not batch: the rule's own messages, not any `ArgumentError`.
+            Kw = ROU(adjoint(copy(A0)), σ0, ws0, wt0)
+            Kwd = ROU(adjoint(0 .* A0), 0.0, zeros(n), zeros(n))
+            solve_w(K, F) = sum(Bramble.pde_solve(K, F))
+            @test_throws ArgumentError "needs `K.A` to be a `SparseMatrixCSC`" Enzyme.autodiff(
+                rev, Enzyme.Const(solve_w), Enzyme.Active, Enzyme.Duplicated(Kw, Kwd),
+                Enzyme.Const(F0))
+            @test_throws ArgumentError "needs `K.A` to be a `SparseMatrixCSC`" Enzyme.autodiff(
+                fwd, Enzyme.Const(solve_w), Enzyme.Duplicated, Enzyme.Duplicated(Kw, Kwd),
+                Enzyme.Const(F0))
+            @test_throws ArgumentError "does not support batched" Enzyme.autodiff(rev,
+                Enzyme.Const(solve_w), Enzyme.Active,
+                Enzyme.BatchDuplicated(ROU(copy(A0), σ0, ws0, wt0),
+                    (shadow(zeros(length(p0))), shadow(zeros(length(p0))))),
+                Enzyme.Const(F0))
+
+            # Through `assemble`, with a constant border `w` captured by the closure and used
+            # as `wₛ` and `wₜ`: under runtime activity Enzyme gives such a field its own array
+            # as its shadow, which is a zero tangent (forward) and not ours to write
+            # (reverse). The reference is ForwardDiff of the plain solve of `A + w wᵀ`.
+            for unif in (true, false)
+                Wp = gridspace(mesh(domain(interval(0.0, 1.0)), 17, unif))
+                np = ndofs(Wp)
+                wp = ones(np)
+                Fp = [1.0 + sin(i) for i in 1:np]
+                mat(q) = (κ = element(Wp, eltype(q)); parent(κ) .= 2.0 .+ q[1];
+                          assemble(form(Wp, Wp, (U, V) -> inner₊(κ * ∇ₕ(U), ∇ₕ(V)))))
+                f(q) = sum(abs2, Bramble.pde_solve(ROU(mat(q), 1.0, wp, wp), (1 + q[2]) .* Fp))
+                ref(q) = sum(abs2, Bramble.pde_solve(mat(q) + sparse(wp * wp'), (1 + q[2]) .* Fp))
+                q0 = [0.5, 0.25]
+                g = ForwardDiff.gradient(ref, q0)
+                @test minimum(abs, g) > 1e-6 * maximum(abs, g)
+                @test f(q0) ≈ ref(q0) rtol=1e-9
+                for m in (Enzyme.Reverse, Enzyme.Forward)
+                    ad = DI.AutoEnzyme(; mode = Enzyme.set_runtime_activity(m),
+                        function_annotation = Enzyme.Const)
+                    @test DI.gradient(f, ad, q0) ≈ g rtol=1e-8
+                end
+            end
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
 end
 
 end # module

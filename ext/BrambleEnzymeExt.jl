@@ -178,4 +178,7 @@ include("BrambleEnzymeExt/threaded.jl")
 # The reverse rule for the forms of a relation of `constrained`.
 include("BrambleEnzymeExt/relations.jl")
 
+# The rules for the solves beside `pde_solve(::SparseMatrixCSC, F)`.
+include("BrambleEnzymeExt/solvers.jl")
+
 end
