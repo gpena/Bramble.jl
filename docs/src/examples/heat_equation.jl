@@ -2,12 +2,7 @@
 #
 # The first time-dependent problem in this manual. Space is discretised exactly as in the
 # [linear Poisson example](poisson_linear.md); time is left continuous and handed to a stepper
-# from the SciML stack. Every number below was produced by the code shown.
-#
-# This page is generated from `docs/src/examples/heat_equation.jl` by Literate.jl, and the
-# same file runs under `test/examples/ext_pages.jl` with the assertions that the page
-# renders but does not check. Lines marked `#src` there are the assertions; they never reach
-# the page.
+# from the SciML stack.
 #
 # ## Problem
 #
@@ -80,12 +75,11 @@ end
 
 Cₕ, sd_robin, sol_robin = robin_problem(Ωₕ, (:left, :right))
 
-# Two pieces are worth naming. `update_coefficients!` is called with the current time just
-# before each assembly, and is where a time-dependent source belongs. `Rₕ!` writes into the
-# grid function `fₕ` the form already holds a reference to, which lives on the padded space
-# since the ghost space has no `Rₕ!` of its own, so nothing is rebuilt and nothing is
-# allocated. The initial condition holds the 100 unknowns, the grid points but the eliminated
-# left one.
+# `update_coefficients!` is called with the current time just before each assembly, and a
+# time-dependent source goes there. `Rₕ!` writes into the grid function `fₕ` that the form
+# already references, so nothing is rebuilt. `fₕ` lives on the padded space because the
+# ghost space has no `Rₕ!` of its own. The initial condition holds the 100 unknowns, the grid
+# points except the eliminated left node.
 #
 # ## Eliminated nodes in the mass matrix
 #
@@ -147,9 +141,10 @@ robin_residual(Ωₕ, Cₕ, sol_robin)
 # The `dirichlet` keyword of `semidiscretize` belongs to a plain space; a ghost space
 # refuses it, and takes the relation `u => g` instead. The sections below need what the ghost
 # path does not offer yet, so they keep a plain space and a Dirichlet condition at both ends,
-# which the manufactured solution satisfies with ``g = 0``. The time domain passed to [`dirichlet_constraints`](@ref) is what lets the
-# boundary values be written as `g(x, t)` rather than `g(x)`. The spatial form is the one the
-# steady problem writes, so the steady state of the system solves ``A u_h = F``:
+# which the manufactured solution satisfies with ``g = 0``. The time domain passed to
+# [`dirichlet_constraints`](@ref) lets the boundary values be written as `g(x, t)`. The
+# spatial form is the one the steady problem writes, so the steady state of the system
+# solves ``A u_h = F``:
 
 fₕ = element(Wₕ, 0.0)
 a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
@@ -201,7 +196,7 @@ normₕ(Rₕ(Wₕ, x -> uexact(x, 1.0)) - uₕ)
 
 # A surface plot of the whole time evolution, `x` and `t` the two horizontal axes, `u` as
 # height and colour, needs no new solve: `sol` already interpolates continuously in `t`, so
-# sampling it at a uniform grid of times is enough to lay one out. The white curve traces
+# sampling it at a uniform grid of times is enough to lay one out. The red curve traces
 # `u(x, t)` at the current instant and loops on its own:
 
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
@@ -210,9 +205,8 @@ ts = range(0.0, 1.0; length = 60)
 Z = reduce(vcat, (sol(t)' for t in ts))
 spacetime_surface_plot(points(Ωₕ), collect(ts), Z; title = "Heat equation, x-t-u")
 
-# `sol` is also a ParaView time series waiting to happen: one `.pvd` collection, one `.vtr`
-# per step, with a working time slider once opened. `Wₕ` (not just the mesh) is what turns
-# each raw solution vector back into a properly shaped field.
+# `sol` exports as a ParaView time series: one `.pvd` collection and one `.vtr` per requested
+# time, with a time slider. `Wₕ` turns each solution vector into a shaped field.
 
 using WriteVTK
 
@@ -223,12 +217,10 @@ nothing # hide
 @test count(f -> endswith(f, ".vtr"), files) == 20 #src
 @test isfile(joinpath(pvd_dir, "heat.pvd"))         #src
 
-# The initial condition handed in is copied, never mutated, and the copy is made consistent
-# with the algebraic rows at ``t_0`` before stepping starts, because an index-1 system whose initial
-# condition disagrees with its own constraints is otherwise rejected by the solver or absorbed
-# into the first step.
+# The initial condition is copied, never mutated, and the copy is made consistent with the
+# algebraic rows at ``t_0`` before stepping.
 #
-# !!! note "Rosenbrock methods need `∂f/∂t`"
+# !!! note "Rosenbrock methods and time-dependent sources"
 #     `Rodas5P` and friends also want the time derivative of the right-hand side, which they
 #     build by differentiating through `t`. An `update_coefficients!` hook writing into a
 #     `Float64` grid function, as the one above does, cannot accept a `ForwardDiff.Dual` time,
@@ -298,19 +290,17 @@ sol_t_fbdf = solve(prob_t, FBDF(); reltol = 1e-11, abstol = 1e-13)
 maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end]))
 
 # The same `ODEProblem`, one stepper differentiating through `t` by default and the other
-# needing no `∂f/∂t` at all, land on the same answer -- neither `AutoFiniteDiff()` nor a
-# hand-written `tgrad` was needed for the operator itself.
+# needing no `∂f/∂t` at all, land on the same answer. The operator needed neither
+# `AutoFiniteDiff()` nor a hand-written `tgrad`.
 @test maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end])) < 1.0e-6              #src
 #
 # ## Hand-rolled backward Euler
 #
-# `semidiscretize`/`ode_problem` above hide the per-step matrix assembly entirely. This one
-# keeps the Dirichlet problem as well, since [`assemble_add!`](@ref) takes forms on a plain
-# space only. Building it explicitly -- the shape a solver without a method-of-lines layer expects -- is what
-# [`assemble_add!`](@ref) exists for: accumulating ``M/\Delta t`` and the ``t``-dependent
-# stiffness piece ``K(t)`` into the same preallocated matrix, in place, with no temporary
-# and no sparse matrix addition of its own on every step. Backward Euler for the same
-# varying-diffusivity problem as the section above,
+# `semidiscretize`/`ode_problem` above hide the per-step matrix assembly. This section keeps
+# the Dirichlet problem as well, since [`assemble_add!`](@ref) takes forms on a plain space
+# only. `assemble_add!` accumulates ``M/\Delta t`` and the ``t``-dependent stiffness piece
+# ``K(t)`` into one preallocated matrix, in place, with no temporary and no sparse addition
+# per step. Backward Euler for the same varying-diffusivity problem as the section above,
 #
 # ```math
 # \Bigl(\frac{M}{\Delta t} + K(t^{n+1})\Bigr) u^{n+1} = \frac{M}{\Delta t} u^n + F,
@@ -331,9 +321,8 @@ F_source = assemble(l_t)
 αₕ_be = element(Wₕ, 0.0)
 k_form = form(Wₕ, Wₕ, (u, v) -> inner₊(αₕ_be * ∇ₕ(u), ∇ₕ(v)))
 
-# `a` (the plain Laplacian at the top of this page) shares `k_form`'s stencil for any
-# value of `αₕ_be`, so its pattern is wide enough for both pieces without ever assembling
-# `a` itself into the matrix below.
+# `A_be` takes its pattern from a form that sums the mass and stiffness integrands, built
+# for its pattern alone and never assembled. The pattern holds the entries of both pieces.
 A_be = allocate_system_matrix(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))))
 
 bcs_be = dirichlet_constraints(Ωₕ, :boundary => x -> 0.0)
@@ -347,7 +336,7 @@ for step in 1:nsteps
     fill!(nonzeros(A_be), 0.0)
     assemble_add!(A_be, m_form, 1 / Δt)
     assemble_add!(A_be, k_form)
-    dirichlet_bc!(A_be, Ωₕ, :boundary)   # constrain once, last -- see assemble_add!'s own note
+    dirichlet_bc!(A_be, Ωₕ, :boundary)   # constrain once, last; see the note in `assemble_add!`
 
     F_be .= F_source .+ (M_mat * u_be) ./ Δt
     dirichlet_bc!(F_be, Ωₕ, bcs_be, :boundary)
@@ -357,25 +346,21 @@ end
 
 maximum(abs.(u_be .- sol_t_fbdf.u[end]))
 
-# `assemble_add!`'s row is `nonzeros(A_be)`, not `A_be` itself: refilling every entry the
-# pattern holds costs the stored nonzeros, where `fill!(A_be, 0)` would walk the whole
-# dense `m × n` index space `SparseMatrixCSC`'s generic `AbstractArray` fallback covers.
-# `dirichlet_bc!` runs *after* both accumulations, never between them -- accumulating a
-# second piece into an already-constrained row would add its own contribution on top of
-# the identity `dirichlet_bc!` wrote there.
+# Each step zeroes the stored values of `A_be` and keeps its pattern. `dirichlet_bc!` runs
+# after both accumulations and never between them: accumulating a second piece into an
+# already-constrained row would add its contribution on top of the identity `dirichlet_bc!`
+# wrote there.
 #
-# Backward Euler at ``\Delta t = 1/200`` against the adaptive, high-accuracy `FBDF` solve
-# above: first order in time, so the two are close but not equal -- the discrepancy this
-# checks is bounded well above round-off and well below a scheme that regressed to a wrong
-# answer entirely.
-@test 1.0e-4 < maximum(abs.(u_be .- sol_t_fbdf.u[end])) < 1.0e-3                         #src
+# Backward Euler at ``\Delta t = 1/200`` is first order in time, so it differs from the
+# adaptive `FBDF` solve above by about ``6 \times 10^{-4}``.
+@test 5.0e-4 < maximum(abs.(u_be .- sol_t_fbdf.u[end])) < 7.0e-4                         #src
 #
 # ## Convergence under refinement
 #
-# Second order in space is the promise. Refining the mesh while holding the time tolerance far
-# below the spatial error isolates it. The uniform mesh above would flatter the rate: on it
-# ``\sin(\pi x)`` is an exact discrete eigenmode of the Laplacian, a special case that says
-# little about the scheme. The series therefore runs on one seeded random coarse mesh,
+# Refining the mesh while holding the time tolerance far below the spatial error isolates
+# the spatial error. The uniform mesh above would flatter the rate: on it ``\sin(\pi x)`` is
+# an exact discrete eigenmode of the Laplacian, a special case that says little about the
+# scheme. The series therefore runs on one seeded random coarse mesh,
 # refined in place with [`iterative_refinement!`](@ref) so every finer level is the same
 # random mesh, dyadically split. The domain carries no `:left` or `:right` marker, which
 # the one-argument `iterative_refinement!` would refuse to drop. The uniform mesh stays
@@ -416,7 +401,7 @@ orders = [log(errs[i] / errs[i + 1]) / log(hs[i] / hs[i + 1]) for i in 1:(length
 
 #-
 
-all(>(1.95), orders)    # second order is the promise
+all(>(1.95), orders)    # every fitted order above 1.95
 
 # The line above renders `true` on the page and asserts nothing there; this is where the   #src
 # rate is pinned, so a decay to first order fails the suite instead of publishing `false`.  #src
@@ -468,11 +453,11 @@ convergence_plot([(hs, errs, "Dirichlet", "#5B5FC7"), # hide
 
 # ## Time-dependent boundary data
 #
-# Nothing above exercised the `(x, t)` in the boundary condition, since the manufactured
-# solution vanishes on ``\partial\Omega``. Driving the problem entirely from the boundary
-# does: start at zero and raise the left end linearly, with the right end held fixed. The two
-# ends are named on the domain above; a bare `domain(interval(...))` registers only
-# `:boundary` and `:interior`, so there would be no `:left` to constrain.
+# The Dirichlet data above do not depend on time, since the manufactured solution vanishes
+# on ``\partial\Omega``. Driving the problem entirely from the boundary puts `(x, t)` in a
+# Dirichlet condition: start at zero and raise the left end linearly, with the right end
+# held fixed. The two ends are named on the domain above; a bare `domain(interval(...))`
+# registers only `:boundary` and `:interior`, so there would be no `:left` to constrain.
 
 gₕ = element(Wₕ, 0.0)
 l_drive = form(Wₕ, v -> innerₕ(gₕ, v))
@@ -487,19 +472,19 @@ sol_drive = solve(ode_problem(sd_drive, element(Wₕ, 0.0), I), FBDF();
 u_end = sol_drive.u[end]
 (u_end[1], u_end[51], u_end[101])
 
-# The ends hold g to solver tolerance -- the Dirichlet rows are algebraic constraints in    #src
-# the DAE, satisfied by FBDF's nonlinear solve up to its own convergence criterion, not      #src
-# bit-exactly -- and the midpoint is short of the steady 0.5 for the reason the prose below   #src
-# gives, with the window tight enough that reaching the steady line would fail.              #src
+# The ends hold g to solver tolerance, since the Dirichlet rows are algebraic constraints   #src
+# in the DAE that FBDF's nonlinear solve satisfies up to its convergence criterion. The      #src
+# midpoint is short of the steady 0.5 for the reason the prose below gives, with the window  #src
+# tight enough that reaching the steady line would fail.                                     #src
 @test u_end[1]≈1.0 atol=1e-8 rtol=1e-8                            #src
 @test u_end[101]≈0.0 atol=1e-8 rtol=1e-8                          #src
 @test 0.43 < u_end[51] < 0.45                                    #src
 
-# At ``t = 1`` the ends hold the prescribed ``g`` to solver tolerance: one and zero. The interior is
-# climbing towards the straight line ``1 - x`` that the source-free steady problem gives, but
-# has not arrived, with ``0.44`` at the midpoint against the steady ``0.5``. It has not had time, since
-# the left end was still moving over the whole interval, so diffusion is chasing a boundary
-# value that never settled. Holding ``g`` fixed and stepping further is what reaches the line.
+# At ``t = 1`` the ends hold the prescribed ``g`` to solver tolerance: one and zero. The
+# interior is climbing towards the straight line ``1 - x`` that the source-free steady
+# problem gives, but has not arrived, with ``0.44`` at the midpoint against the steady
+# ``0.5``. The left end was still moving over the whole interval, so diffusion is chasing a
+# boundary value that never settled.
 #
 # ## Steady problems and LinearSolve
 #

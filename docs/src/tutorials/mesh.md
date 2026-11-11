@@ -10,8 +10,6 @@ CurrentModule = Bramble
 
 **Where next.** The [space tutorial](space.md) puts discrete functions on a mesh.
 
-Every block below runs when this page is built.
-
 ---
 
 ## A first mesh
@@ -45,7 +43,7 @@ The mesh carries more than coordinates. Spacings, half points and cell measures,
 
 ## Non-uniform meshes
 
-Real problems rarely want equal spacing: boundary layers and corners need points packed where the solution changes fast. The third positional argument of `mesh`, or the `uniform` keyword, chooses the distribution per axis. `false` draws interior points at random and sorts them, which the convergence studies in this manual use to expose order reduction on non-uniform grids:
+Boundary layers and corners need points where the solution changes fast. The third positional argument of `mesh`, or the `uniform` keyword, chooses the distribution per axis. `false` draws interior points at random and sorts them, which the convergence studies in this manual use to expose order reduction on non-uniform grids:
 
 ```@example mesh
 Ωₕ_rand = mesh(Ω, 11, false)
@@ -63,6 +61,8 @@ points(Ωₕ_graded), hₘₐₓ(Ωₕ_graded)
 ```
 
 Squaring the uniform points packs them near ``x = 0`` and stretches the cells near ``x = 1``, so `hₘₐₓ` is no longer ``0.1``. `Bramble.set_points!` is the variant that also accepts a different point count: it rebuilds the `:boundary` and `:interior` markers for the new grid, and refuses to change the point count of a mesh carrying custom labels. It also refuses any move of a mesh carrying a label defined by a predicate of position, and of a submesh of one, since those sets would stay as the old points gave them; call `change_points!(Ωₕ, markers(Ω), pts)` on the whole mesh instead.
+
+A grid space built before `set_points!`, `change_points!` or `iterative_refinement!` is stale: it keeps the weights of the old points, and its inner products and norms throw until `gridspace(Ωₕ)` is called again.
 
 !!! tip "Try this"
     Replace the exponent `2` by `3`. The points crowd closer to ``x = 0`` and `hₘₐₓ` grows.
@@ -146,18 +146,18 @@ points(Ωₕ_fig)
 </figure>
 ```
 
-Four conventions are worth reading off that picture, because they are the ones that surprise:
+Conventions:
 
-- **`half_points` has `N + 1` entries.** They are the cell interfaces, and the first and last coincide with `x₁` and `x_N` rather than sitting outside the domain.
+- **`half_points` has `N + 1` entries.** They are the cell interfaces, and the first and last coincide with `x₁` and `x_N`.
 - **The cell around `xᵢ` spans `half_points[i]` to `half_points[i+1]`**, with width `half_spacing(Ωₕ, i)`, which is what `cell_measure(Ωₕ, i)` returns.
-- **Boundary cells are half-width**, since `x₁` and `x_N` sit on the edge of their own cell rather than at its centre.
+- **Boundary cells are half-width**, since `x₁` and `x_N` sit on the edge of their cell.
 - **`spacing` looks backward, `forward_spacing` forward**: `spacing(Ωₕ, i) = xᵢ - xᵢ₋₁` and `forward_spacing(Ωₕ, i) = xᵢ₊₁ - xᵢ`, each falling back to its neighbour at the end where the stencil runs out.
 
 ```@example mesh
 half_points(Ωₕ_fig), [cell_measure(Ωₕ_fig, i) for i in 1:4]
 ```
 
-The four cells sum to the domain length, and the two boundary cells are the smallest. The [reference](@ref mesh_reference) below lists the accessor for each quantity.
+The four cells sum to the domain length.
 
 !!! tip "Try this"
     Move the third point with `Bramble.set_points!(Ωₕ_fig, [0.0, 0.2, 0.8, 1.0])` and recompute the cell measures. The cells around `x₂` and `x₄` become 0.4 and 0.1, the cell around `x₃` stays 0.4 because it spans `(x₄ - x₂)/2`, and the sum is still 1.
@@ -180,7 +180,7 @@ npoints(Ωₕ_2d, Tuple), size(Ωₕ_2d)
 Ωₕ_2d(1)
 ```
 
-The cell around ``(x_i, y_j)`` is the rectangle spanned by the two per-axis intervals, so its measure is the product of the per-axis widths. The picture shows a ``4 \times 3`` mesh with non-uniform points on both axes:
+The cell around ``(x_i, y_j)`` is the rectangle spanned by the two per-axis intervals. The picture shows a ``4 \times 3`` mesh with non-uniform points on both axes:
 
 ```@raw html
 <figure style="margin:1.5em 0;text-align:center">
@@ -255,7 +255,7 @@ The cells tile the domain exactly: the twelve measures sum to the area.
 sum(cell_measure(Ωₕ_prod, I) for I in indices(Ωₕ_prod))
 ```
 
-Above 1D, `change_points!` takes the markers alongside the per-axis coordinate vectors, so the labels are re-evaluated at the new positions.
+Above 1D, `pts` is a tuple of per-axis coordinate vectors. In every dimension, `change_points!(Ωₕ, markers(Ω), pts)` re-evaluates the labels at the new positions, while the two-argument form leaves them as they are.
 
 !!! tip "Try this"
     Rebuild the product mesh with `(3, 3)` points and `[0.0, 0.5, 1.0]` on both axes. The single interior cell has measure ``0.25``, and the corner cells have ``0.0625``.
@@ -297,7 +297,7 @@ sum(index_in_marker(Ωₕ_marked, :walls)), sum(index_in_marker(Ωₕ_marked, :o
 
 ## [Ghost points beyond the boundary](@id mesh_ghost)
 
-A second-order Neumann or Robin condition needs the solution one point past the boundary, and every stencil stops at the last point. A [`Bramble.GhostMesh`](@ref) adds that point. It wraps a mesh and pads it with one ghost point beyond each node of the facets you name, either `:boundary` or a tuple such as `(:xmin, :ymax)`. `GhostMesh` is `public`, not exported.
+A second-order Neumann or Robin condition needs the solution one point past the boundary, and every stencil stops at the last point. A [`Bramble.GhostMesh`](@ref) adds that point. It wraps a mesh and pads it with one ghost point beyond each node of the facets you name, either `:boundary` or a tuple such as `(:xmin, :ymax)`. `GhostMesh` is `public` and not exported.
 
 ```@example mesh
 Gₕ = Bramble.GhostMesh(Ωₕ_graded; ghosts = :boundary)
@@ -320,7 +320,7 @@ xg[1] - x[1], xg[end] - x[end]
 
 The left ghost is ``h_2 = 0.01`` below the boundary and the right one ``h_n = 0.19`` above it.
 
-In two dimensions only the facet nodes get ghosts. The padded mesh is a tensor product, so it also has points outside along two axes at once, the four corners here. Those points are *absent*: they are not nodes, carry no degree of freedom and are never read as a value.
+In two dimensions only the facet nodes get ghosts. The padded mesh is a tensor product, so it also has points outside along two axes at once, the four corners here. Those points are *absent*: they are not nodes and carry no degree of freedom.
 
 ```@example mesh
 G₂ = Bramble.GhostMesh(Ωₕ_prod; ghosts = :boundary)
@@ -380,7 +380,7 @@ You rarely build a `GhostMesh` yourself. [`gridspace`](@ref)`(Ωₕ; ghosts = ..
 
 ## Refinement
 
-[`iterative_refinement!`](@ref) inserts a point at every cell midpoint, updating indices and reapplying the domain's markers. Refinement is uniform and dyadic: `N` points become `2N - 1` along every axis. Above 1D, refine the whole mesh rather than one submesh: `iterative_refinement!(Ωₕ(1))` leaves the mesh's index set and markers sized for the old grid, and `gridspace` refuses it.
+[`iterative_refinement!`](@ref) inserts a point at every cell midpoint and updates the indices. Refinement is uniform and dyadic: `N` points become `2N - 1` along every axis. Above 1D, refine the whole mesh: `iterative_refinement!(Ωₕ(1))` on one submesh leaves the mesh's index set and markers sized for the old grid, and `gridspace` refuses it.
 
 ```@raw html
 <figure>
@@ -454,7 +454,7 @@ You rarely build a `GhostMesh` yourself. [`gridspace`](@ref)`(Ωₕ; ghosts = ..
 </figure>
 ```
 
-A mesh carrying custom markers needs the two-argument form: the labels are re-evaluated on the new points, and refining without a domain to re-derive them from is an error rather than a silent loss.
+`iterative_refinement!(Ωₕ)` rebuilds `:boundary` and `:interior` and throws an `ArgumentError` on a mesh carrying any other label. The two-argument form re-evaluates every label on the new points. A grid space built before the call is stale, as after `change_points!`.
 
 ```@example mesh
 Ωₕ_ref = mesh(Ω_marked, (20, 20))
@@ -480,7 +480,7 @@ X = interval(0.0, 1.0) × interval(0.0, 2.0)
 
 ### Points and half points
 
-`points` returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from `point(Ωₕ, idx)` or from indexing. Above 1D `idx` is a `CartesianIndex` (or `i, j` in brackets; `point` also takes a tuple of per-axis indices), never a linear index:
+`points` returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from `point(Ωₕ, idx)` or from indexing. Above 1D `idx` is a `CartesianIndex` (or `i, j` in brackets; `point` also takes a tuple of per-axis indices); a linear index is not accepted:
 
 ```@example mesh
 Ωₕ_fig[3], point(Ωₕ_fig, 3), Ωₕ_2d[2, 5], point(Ωₕ_2d, CartesianIndex(2, 5))
@@ -496,7 +496,7 @@ half_points(Ωₕ_fig), half_point(Ωₕ_fig, 3)
 | --- | --- |
 | `spacing(Ωₕ, i)` | backward spacing ``h_i = x_i - x_{i-1}`` (``x_2 - x_1`` at ``i = 1``) |
 | `forward_spacing(Ωₕ, i)` | forward spacing ``h_{i+1} = x_{i+1} - x_i`` |
-| `half_spacing(Ωₕ, i)` | cell width ``h_{i+1/2} = (h_i + h_{i+1})/2`` |
+| `half_spacing(Ωₕ, i)` | cell width ``h_{i+1/2} = (h_i + h_{i+1})/2``, half the end spacing at ``i = 1`` and ``i = N`` |
 | `cell_measure(Ωₕ, idx)` | measure of the control volume at `idx`: the product of the per-axis cell widths |
 | `hₘₐₓ(Ωₕ)` | largest cell diagonal, the largest spacing in 1D |
 

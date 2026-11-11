@@ -10,25 +10,34 @@ at once. See the [operators tutorial](../tutorials/operators.md).
 
 A direction held in a variable indexes the vectorial operator: `∇ₕ[2]`, `∇ₕ[:y]` and
 `D₋ᵧ` are the same function, so `sum(innerₕ(∇ₕ[d](uₕ), ∇ₕ[d](uₕ)) for d in 1:D)` reads the
-same in 1D, 2D and 3D. Every family has a stem that takes the direction as an argument:
-`Bramble.D₋(uₕ, 2)`, `Bramble.D₋(uₕ, :y)` and `Bramble.D₋(uₕ, Val(2))` are all `D₋ᵧ(uₕ)`.
-The stems `D₋`, `D₊`, `Dc`, `D̃` and `jump` are `public` but not exported. The averages use
-`Mₕ`/`M₊ₕ` rather than a bare `M`; `Mₕ(uₕ)` is the tuple over every coordinate and
-`Mₕ(uₕ, 2)` is the `y` average.
+same in 1D, 2D and 3D, and `dx, dy = ∇ₕ` destructures it. Indexing and destructuring work
+for `∇ₕ`, `∇₊ₕ`, `∇̃ₕ`, `∇cₕ`, `∇̽ₕ`, `jumpₕ`, `Mₕ`, `M₊ₕ`, `Mcₕ`, `S₊ₕ` and `S₋ₕ`.
+With `⋅` and `×` from `LinearAlgebra`, the five gradients `∇ₕ`, `∇₊ₕ`, `∇̃ₕ`, `∇cₕ` and
+`∇̽ₕ` contract with a vector field to the divergence and the curl of their own family:
+`∇ₕ ⋅ uₕ` is `divₕ(uₕ)` and `∇ₕ × uₕ` is `curlₕ(uₕ)`. Inside a form only `∇ₕ`, `∇cₕ` and
+`∇̽ₕ` contract.
+
+Every family has a stem that takes the direction as an argument: `Bramble.D₋(uₕ, 2)`,
+`Bramble.D₋(uₕ, :y)` and `Bramble.D₋(uₕ, Val(2))` are all `D₋ᵧ(uₕ)`. The averages are
+`Mₕ`/`M₊ₕ`, with no bare `M`, which is the usual name of a mass matrix; `Mₕ(uₕ)` is the
+tuple over every coordinate and `Mₕ(uₕ, 2)` is the `y` average.
 
 The same stems carry the symbolic form: `D₋(uₕ, Val(1))` differences a grid function now,
 `D₋(U, Val(1))` builds the AST node that will difference it during assembly. Inside a form
 the direction must be a `Val`, since it is a type parameter of the node.
 
-Three families are not exported and are written `Bramble.D₊ₓ` or imported by name: the
-unscaled differences `diff₋*`/`diff₊*`, the forward differences `D₊*`/`∇₊ₕ`, and the forward
-averages `M₊*`. Forms are written with the backward operator paired with
+The vectorial operators are exported: `∇ₕ`, `∇̃ₕ`, `∇cₕ`, `∇̽ₕ`, `jumpₕ`, `Mₕ`, `Mcₕ`, `S₊ₕ`,
+`S₋ₕ`, and the divergence, curl, Laplacian and strain operators of the backward, tilde,
+centred and cross-weighted families. The per-coordinate aliases (`D₋ₓ`, `jumpₓ`, `Mₓ`, ...),
+the stems `D₋`, `D₊`, `Dc`, `D̃` and `jump`, the in-place `!` forms and the forward operators
+(`D₊*`, `∇₊ₕ`, `div₊ₕ`, `M₊*`, ...) are `public` and not exported: write `Bramble.D₊ₓ` or
+import by name. Forms are written with the backward operator paired with
 [`inner₊`](@ref); the forward ones are what it is built and checked against.
 
-The unscaled differences are the plain, undivided differences the others are built from.
-They are not declared `public` and have no form-layer node, so they cannot appear inside a
-form; there the undivided forward difference is [`jumpₓ`](@ref). `diff₋*`/`diff₊*` are
-private; see the [forms internals page](../internals/form.md).
+The unscaled differences `diff₋*`/`diff₊*` are the plain, undivided differences the others
+are built from. They are private and have no form-layer node, so they cannot appear inside
+a form; there the undivided forward difference is [`jumpₓ`](@ref). They are documented on
+the [space internals page](../internals/space.md).
 
 ```@docs
 D₋ₓ
@@ -99,12 +108,10 @@ vector field, and the conservative discrete Laplacian of a grid function. The un
 spellings use the backward differences, as [`∇ₕ`](@ref) does; `div₊ₕ` and `curl₊ₕ` are their
 forward twins. [`εₕ`](@ref)/[`εₕ!`](@ref) are the discrete symmetric small-strain tensor,
 over a composite `VectorElement` at runtime or, inside a [`form`](@ref), over a composite
-trial or test function -- the same name spans both, dispatching on what it is given. So
-does [`divₕ`](@ref): inside a form it is the runtime divergence, term by term. The
-staggered divergence [`divₘₕ`](@ref) exists only inside a form. The
-in-place `!` forms write into a preallocated result and are `public` but not exported, as
-are `D̃ₕ`, `Dcₕ` and `D̽ₕ`, which are the same functions as the exported `∇̃ₕ`, `∇cₕ` and
-`∇̽ₕ`.
+trial or test function; the same name spans both. So does [`divₕ`](@ref): inside a form it is the runtime divergence, term by term. The
+staggered divergence [`divₘₕ`](@ref) exists only inside a form. The in-place `!` forms write
+into a preallocated result. `D̃ₕ`, `Dcₕ` and `D̽ₕ` are `public` and are the same functions as
+the exported `∇̃ₕ`, `∇cₕ` and `∇̽ₕ`.
 
 ```@docs
 divₕ
@@ -146,9 +153,8 @@ curl̃ₕ!
 ε₊ₕ!
 ```
 
-Jumps across an interface, ``\llbracket u \rrbracket = u_{i+1} - u_i``. There is one
-of these rather than a forward and a backward pair: a jump belongs to the interface
-between two cells, not to a direction of travel across it.
+Jumps across an interface, ``\llbracket u \rrbracket = u_{i+1} - u_i``. There is no
+forward and backward pair.
 
 ```@docs
 jumpₓ

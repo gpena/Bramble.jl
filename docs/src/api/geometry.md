@@ -49,8 +49,7 @@ Bramble.signed_distance
 
 ## Level sets
 
-`levelset(φ)` is exported. It wraps a function `φ(x)` as a 2D marker value, distinct from a
-predicate: `:D => levelset(φ)` in a domain labels the nodes of a 2D mesh `:D` (where
+`levelset(φ)` is exported. It wraps a function `φ(x)` as a 2D marker value: `:D => levelset(φ)` in a domain labels the nodes of a 2D mesh `:D` (where
 `φ < 0`), `:D_boundary` (on the curve `φ = 0`) and `:D_exterior` (where `φ > 0`). `φ` must
 return a real number, not a `Bool`, and need not be a signed distance. The labels follow the
 rules of a polygon's: a 2D set, no reserved label, no clash with another marker's labels.

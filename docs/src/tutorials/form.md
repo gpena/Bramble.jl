@@ -12,13 +12,12 @@ CurrentModule = Bramble
 
 The operators in the previous tutorial act on grid functions. A form is the other half: an
 expression written in the *test* function, which Bramble assembles into the vector or the
-matrix a solver wants. Every number below was produced by the code shown. The running
-problem is the one-dimensional Poisson equation on the unit interval.
+matrix a solver wants. The running problem is the one-dimensional Poisson equation on the
+unit interval.
 
 ## A form is an expression in the test function
 
-A linear form is a function of one argument, and that argument stands for the test function
-rather than for any particular grid function:
+A linear form is a function of one argument, the test function:
 
 ```@example forms
 using Bramble
@@ -38,12 +37,11 @@ Nothing has been computed. `v` is symbolic, so `innerₕ(fₕ, v)` builds a desc
 \ell(v) = (f_h, v)_h
 ```
 
-and the form stores the expression, not a vector. Building one is free, so it is reasonable
+and the form stores the expression only. Building one is free, so it is reasonable
 to write a form inside a function that is called repeatedly.
 
 The *source* side is eager and the *test* side is symbolic: `D₋ₓ(fₕ)` computes a grid
-function, while `D₋ₓ(v)` adds a node to an expression. A term is as cheap as its test side
-is symbolic, however elaborate the coefficient in front of it.
+function, while `D₋ₓ(v)` adds a node to an expression.
 
 ## Assembling and refilling
 
@@ -54,8 +52,7 @@ b = assemble(l)
 length(b), sum(b)
 ```
 
-In a time loop the allocation is the part worth avoiding. `assemble!` refills a vector that
-already exists with zero allocations:
+In a time loop, `assemble!` refills an existing vector with zero allocations:
 
 ```@example forms
 assemble!(b, l)
@@ -82,16 +79,15 @@ sum(b_dyn) ≈ 2 * sum(b)
 
 ## Contracting without a vector
 
-Often the vector is not wanted, only the number ``\ell(v_h)``. A form is callable:
+To get only the number ``\ell(v_h)``, call the form:
 
 ```@example forms
 oneₕ = Rₕ(Wₕ, x -> 1.0)
 l(oneₕ), sum(b)
 ```
 
-Against the all-ones grid function a linear form is the sum of its assembled vector. The
-difference is that `l(oneₕ)` builds no vector and allocates nothing, so prefer it when the
-result is a scalar.
+Against the all-ones grid function a linear form is the sum of its assembled vector.
+`l(oneₕ)` builds no vector and allocates nothing; prefer it when the result is a scalar.
 
 `evaluate!` is the middle case. It takes a scratch vector, fills it with the assembled
 vector and returns the contraction:
@@ -101,9 +97,8 @@ scratch = zeros(length(b))
 evaluate!(scratch, l, oneₕ)
 ```
 
-A form contracts against an element of its test space, never against a bare vector. The
-length of a vector says nothing about whether its blocks match the components a form routes
-to, so accepting one would make a coupled mismatch silent.
+A bare vector is refused: its length does not show whether its blocks match the components
+the form routes to.
 
 ## Bilinear forms and the system matrix
 
@@ -122,9 +117,8 @@ a(u, v) = (D_{-x} u, D_{-x} v)_{+x}.
 ```
 
 Ninety-seven nonzeros in a 33-by-33 matrix is the tridiagonal band. The sparsity pattern
-follows from the stencil, so it is known before any value is computed. That makes a two-step
-idiom possible: `allocate_system_matrix` builds the pattern and nothing else, and `assemble!`
-fills a matrix whose structure already exists:
+follows from the stencil, so it is known before any value is computed.
+`allocate_system_matrix` builds the pattern and nothing else, and `assemble!` then fills it:
 
 ```@example forms
 A2 = allocate_system_matrix(a)
@@ -132,9 +126,7 @@ assemble!(A2, a)
 A2 ≈ A
 ```
 
-Inside a time loop, build the pattern once outside it and call `assemble!` within. Refilling
-a matrix of fixed pattern allocates nothing, where `assemble` allocates a new matrix every
-step.
+Build the pattern once outside a time loop and call `assemble!` inside it.
 
 `a` pairs the same `D₋ₓ` on both sides, so it is symmetric. The weight `inner₊ₓ` carries is
 positive, so it is also positive semi-definite. `issymmetric` and `isposdef` answer from the
@@ -150,8 +142,7 @@ c = form(Wₕ, Wₕ, (u, v) -> inner₊(u, ∇ₕ(v)))
 issymmetric(c)  # different operators either side
 ```
 
-A positive answer says `cholesky` is worth trying on the result rather than a general
-factorization. `isposdef` answers for semi-definiteness: this matrix has the constants in its
+A positive answer means `cholesky` is the factorization to try first. `isposdef` answers for semi-definiteness: this matrix has the constants in its
 kernel, so it is singular until the Dirichlet conditions below are applied.
 
 ## [Dirichlet conditions and a Poisson problem](@id form_dirichlet)
@@ -192,7 +183,7 @@ exact = Rₕ(Wd, x -> sin(π * x))
 maximum(abs, uh .- parent(exact))
 ```
 
-Eight parts in ten thousand on 33 points, which is second order behaving itself.
+The error is 8e-4 on 33 points.
 
 !!! tip "Try this"
     Change the `33` in `mesh(Ω, 33, true)` to `65` and run the block again. The error falls
@@ -207,7 +198,7 @@ issymmetric(ad)          # true: the form is symmetric before any boundary condi
 ```
 
 ```@example forms
-issymmetric(Matrix(Ad))  # false: dirichlet_bc! zeroed rows, not columns
+issymmetric(Matrix(Ad))  # false: dirichlet_bc! replaced the constrained rows
 ```
 
 ```@example forms
@@ -215,8 +206,8 @@ symmetrize!(Ad, bd, Ωd, :left, :right)
 issymmetric(Matrix(Ad))  # true again, and the solution above is unchanged
 ```
 
-`issymmetric(ad)` is a claim about the expression `ad`, not about any matrix assembled from
-it. That is why the first line answers `true` while the second answers `false`.
+`issymmetric(ad)` describes the expression, so it stays `true` after `dirichlet_bc!` changes
+the matrix.
 
 To constrain one block of a coupled system and leave another free, see
 [Coupled systems](@ref coupled_one_block).
@@ -243,7 +234,7 @@ pointwise quantity, suitable for [`export_vtk`](@ref).
 
 ## [Neumann and Robin conditions with ghost points](@id form_ghost)
 
-A Dirichlet condition fixes a value, and the rows above replace it. A Neumann or Robin condition fixes a normal derivative, and a second-order scheme needs the solution one point past the boundary to write it. This section solves three problems: Neumann and Robin on an interval, Dirichlet beside Robin by two routes, and Neumann on a square. All use non-uniform meshes. The model problem on the interval is
+A Dirichlet condition fixes a value, and the rows above replace it. A Neumann or Robin condition fixes a normal derivative, and a second-order scheme needs the solution one point past the boundary to write it. The model problem on the interval is
 
 ```math
 -u'' = f \text{ on } (0, 1), \qquad \partial_\eta u = g_0 \text{ at } 0, \qquad
@@ -298,7 +289,7 @@ err_modeA
 
 Nothing here needs a ghost: a ghost-eliminated Neumann or Robin condition is this system. Ghosts matter when the scheme differentiates the unknown at the boundary, for instance the collocation form ``(-\Delta_h u, v)_h``, a conormal condition with a mixed derivative, or a condition on a second normal derivative.
 
-### Relations and `constrained`
+### Boundary relations
 
 Give the space ghosts on the facets that carry such a condition, and tie each facet's ghosts to a *relation*, written `operator => data`. [`constrained`](@ref) takes a function of the unknown `u` that returns one `facet => relation` pair per facet:
 
@@ -405,6 +396,7 @@ A, F = assemble(a, l)
 U = lift(Cₕ, pde_solve(A, F))
 
 # Check on the lifted padded values that each traction row equals its data on :xmin.
+# `padded_space` is neither exported nor public: it is called as `Bramble.padded_space`.
 PV = Bramble.padded_space(V)
 flux_norms = Float64[]
 for (i, g) in ((1, 1.0), (2, 0.0))
@@ -425,15 +417,16 @@ The block ends on the largest traction row of each component. On this seeded mes
 about 0.23 for component 1, which carries the datum, and rounding for component 2, whose
 datum is zero. Take a component of the lifted displacement as `Bramble.lift(Cₕ, u)(i)`; a
 component view of the constrained space itself is refused, because the closure couples the
-components. On a facet with a traction, the mixed differences of the form do not read that
-facet's ghosts but extrapolate to them from the three nodes inward. The refusals and this
-rule are listed in the [space internals](../internals/space.md).
+components. On a facet with a traction, a mixed difference of first differences in the left argument of
+a product extrapolates the ghost from the three nodes inward; second differences and the
+right argument read the closure's ghosts. The refusals and this rule are listed in the
+[space internals](../internals/space.md).
 
 ### Dirichlet conditions beside ghost relations
 
 Keep the Robin condition at ``x = 1`` and impose ``u(0) = 1`` instead, so only `xmax` needs a ghost. There are two routes, and they give the same solution.
 
-**Route (a), row replacement, as above.** `constrained` receives only the ghost relation. The unknowns are the physical nodes, as on a space without ghosts, so the `dirichlet` keyword of `assemble` replaces the rows of `:xmin` and `symmetrize` restores symmetry, exactly as in the [Dirichlet section](@ref form_dirichlet):
+Route (a), row replacement, as above. `constrained` receives only the ghost relation. The unknowns are the physical nodes, as on a space without ghosts, so the `dirichlet` keyword of `assemble` replaces the rows of `:xmin` and `symmetrize` restores symmetry, exactly as in the [Dirichlet section](@ref form_dirichlet):
 
 ```@example forms
 W_right = gridspace(Ω_gh; ghosts = (:xmax,))
@@ -449,7 +442,7 @@ u_a = pde_solve(A_a, F_a)
 ndofs(C_a), maximum(abs, u_a - u_exact.(x_gh))
 ```
 
-**Route (b), `u => g` in the relations.** The Dirichlet node leaves the unknowns: its column is removed and its value goes into the data. The matrix is ``E^T A E``, symmetric by construction, and it has one row less:
+Route (b), `u => g` in the relations. The Dirichlet node leaves the unknowns: its column is removed and its value goes into the data. The matrix is ``E^T A E``, symmetric by construction, and it has one row less:
 
 ```@example forms
 C_b = constrained(W_right, u -> (
@@ -467,7 +460,7 @@ u_b = pde_solve(A_b, F_b)
 ndofs(C_b), maximum(abs, [u_exact(x_gh[1]); u_b] - u_exact.(x_gh))
 ```
 
-The solution vector of route (b) has one entry per kept node, so the Dirichlet value is prepended above; `Bramble.lift(C_b, u_b)` below gives the grid function. The two routes compare as follows:
+The solution vector of route (b) has one entry per kept node, so the Dirichlet value is prepended above; `Bramble.lift(C_b, u_b)` below gives the grid function.
 
 | | (a) row replacement | (b) `u => g` in `constrained` |
 |:--|:--|:--|
@@ -496,9 +489,9 @@ end
 refusals
 ```
 
-### Solutions as grid functions: `lift`
+### Solutions with their ghost values
 
-A solution of `assemble(a, l)` is a vector of unknowns. `Bramble.lift(Cₕ, u)` is the grid function it describes, with the eliminated ghosts filled in by the relations. It lives on the padded space, one point longer at each ghosted end, so the runtime operators read its ghosts. `lift` is public, not exported, because it is also a Makie name: write `Bramble.lift`.
+A solution of `assemble(a, l)` is a vector of unknowns. `Bramble.lift(Cₕ, u)` is the grid function it describes, with the eliminated ghosts filled in by the relations. It lives on the padded space, one point longer at each ghosted end, so the runtime operators read its ghosts. `lift` is public and not exported, because it is also a Makie name: write `Bramble.lift`.
 
 ```@example forms
 U = Bramble.lift(C_gh, u_gh)
@@ -543,7 +536,7 @@ h₂ = x_gh[2] - x_gh[1]
 d_gh[1], 2h₂ * g_left(x_gh[1])
 ```
 
-Both are data in forms on `Cₕ`, so a linear form can name the full `Δₕ` of the lifted function at a facet node. A relation on the second normal difference puts its data into the same ghost:
+`Bramble.lift(Cₕ)` and `Bramble.lift(Cₕ, u)` are both data in forms on `Cₕ`, so a linear form can name the full `Δₕ` of the lifted function at a facet node. A relation on the second normal difference puts its data into the same ghost:
 
 ```@example forms
 C_nn = constrained(W_ghosts, u -> (:xmin => ∂ₙₙ(u) => 3.0, :xmax => u + ∂ₙ(u) => 1.0))
@@ -648,7 +641,7 @@ err_heat_33, err_heat_65 = heat_error(33), heat_error(65)
 err_heat_33, err_heat_33 / err_heat_65
 ```
 
-Each refusal below is an `ArgumentError` that names the fix. The one rule worth knowing: a Dirichlet condition on a facet is the relation `:F => u => g(x, t)`, since `semidiscretize` takes no `dirichlet` keyword.
+Each refusal below is an `ArgumentError` that names the fix. `semidiscretize` on a constrained space refuses the `dirichlet` keyword (the third refusal below), so a Dirichlet condition on a facet is the relation `:F => u => g(x, t)`.
 
 ```@example forms
 W_unknown = gridspace(Ω_gh; ghosts = :boundary)
@@ -680,7 +673,7 @@ timed_refusals
 
 A constrained space whose data are all static takes `semidiscretize` and `ode_problem` too.
 
-### Pure Neumann and `mean_zero`
+### Pure Neumann problems
 
 With Neumann conditions on every facet the solution is defined up to a constant. The matrix annihilates constants and is singular. Fix the constant by a discrete mean-zero condition: [`pde_solve`](@ref) takes `mean_zero = w`, a weight vector, and returns the solution with ``w^T u = 0``. Internally it solves the bordered system
 
@@ -713,11 +706,12 @@ A_sq, F_sq = assemble(form(C_sq, C_sq, (u, v) -> innerₕ(-Δₕ(u), v)),
     form(C_sq, v -> innerₕ(f_sq, v)))
 
 @assert norm(A_sq * ones(size(A_sq, 1)), Inf) <= 1e-10 * norm(A_sq, Inf)
+@assert norm(A_sq' * ones(size(A_sq, 1)), Inf) <= 1e-10 * norm(A_sq, Inf)
 
 ndofs(C_sq), norm(A_sq * ones(size(A_sq, 1)), Inf)
 ```
 
-The matrix has 289 unknowns, one per node, and ``A \mathbf{1} = 0`` to rounding. The weight vector is the cell measure, the linear form of the constant function ``1`` on the space without ghosts:
+The matrix has 289 unknowns, one per node, and ``A \mathbf{1} = 0`` and ``\mathbf{1}^T A = 0`` to rounding. The weight vector is the cell measure, the linear form of the constant function ``1`` on the space without ghosts:
 
 ```@example forms
 W_plain_sq = gridspace(Ωₕ_sq)
@@ -738,7 +732,7 @@ err_sq = maximum(abs, u_sol - u_ex)
 abs(dot(w_sq, u_sol)), err_sq
 ```
 
-The residual of the system is ``F - \lambda w`` with ``\lambda = \sum F / \sum w``, because ``\mathbf{1}^T A = 0``. The compatibility of the data holds only to the quadrature error, so ``\lambda`` is small, not zero. The error is the discrete difference to the exact solution shifted to the same mean.
+The residual of the system is ``F - \lambda w`` with ``\lambda = \sum F / \sum w``, because ``\mathbf{1}^T A = 0``. The compatibility of the data holds only to the quadrature error, so ``\lambda`` is small but nonzero. The error is the discrete difference to the exact solution shifted to the same mean.
 
 #### A kernel in the ghosts
 
@@ -783,7 +777,7 @@ u_shifted = pde_solve(A_rect, A_rect * (x_ghost0 + Z_rect * [1.0, -2.0, 3.0, 0.5
 maximum(abs, u_gauged[1:n_phys] - x_phys), norm(Z_rect' * u_gauged, Inf)
 ```
 
-The physical error is about ``10^{-10}`` here. `ghost_kernel` finds corner kernels only; others are left out, and the gauged solve still gives the physical part, to about ``10^{-8}`` relative in general (see [`pde_solve`](@ref)). With `mean_zero = w` as well, the border is `[w Z]`.
+The physical error is about ``10^{-10}`` here. `ghost_kernel` finds kernels supported on the ghosts of a single node. A kernel spread over several nodes is left out, and the gauged solve still gives the physical part, to about ``10^{-8}`` relative in general (see [`pde_solve`](@ref)). With `mean_zero = w` as well, the border is `[w Z]`.
 
 #### Checking that the data are compatible
 
@@ -839,7 +833,7 @@ bad, bad_warnings = check_compatibility(0.2)
 
 The compatible problem raises no warning and its relative defect is below ``10^{-4}``. The shifted one warns once. Its ``\lambda`` is ``0.2``, the shift, on the mesh and on both refinements, so the ratio of the removed loads is ``1`` where a quadrature error would give about ``4``. The mesh `Ωₕ` is not modified, and a mesh that carries markers of its own needs the domain's `markers(Ω)` as a third argument so that the refinement can evaluate them again.
 
-The check has limits. A defect on the refined mesh below `5e-3` counts as rounding, so a small incompatibility is not detected. Compatible data with a singular flux at a boundary point, whose quadrature error falls slower than the factor of four, can be reported incompatible. When the defect is above the floor the problem is built on a mesh with 16 times the points of `Ωₕ`.
+The check has limits. A relative defect on the refined mesh below `5e-3` is accepted as compatible, so a small incompatibility is not detected. Compatible data with a singular flux at a boundary point, whose quadrature error falls slower than the factor of four, can be reported incompatible. When the defect is above the floor the problem is built on a mesh with 16 times the points of `Ωₕ` in 2D.
 
 ### Pure Neumann as one penalised form
 
@@ -868,7 +862,7 @@ typeof(K_pen).name.name, size(K_pen), Base.summarysize(K_pen) < 10 * Base.summar
 \begin{pmatrix} F \\ 0 \end{pmatrix},
 ```
 
-whose second row gives ``\mu = \sigma w^T u``, so its first row is ``A u + \sigma w (w^T u) = F``. For compatible data ``w^T u = 0``, so the solution is the `mean_zero` one for every ``\sigma > 0``. The next block checks that against the `mean_zero` solve and the dense solve, and shows the relative differences:
+whose second row gives ``\mu = \sigma w^T u``, so its first row is ``A u + \sigma w (w^T u) = F``. For compatible data ``w^T u = 0``, and ``\mathbf{1}^T A = 0`` holds for this stiffness matrix, so the solution is the `mean_zero` one for every nonzero ``\sigma``. The next block checks that against the `mean_zero` solve and the dense solve, and shows the relative differences:
 
 ```@example forms
 A_pen = assemble(form(W_plain_sq, W_plain_sq, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
@@ -891,7 +885,7 @@ rel_mz, rel_dense
 
 The difference from the `mean_zero` solve is about ``10^{-15}`` for ``\gamma \ge 1`` and grows as ``1/\gamma``: a small ``\sigma`` makes ``-1/\sigma`` large against the entries of `A` and costs digits, so take ``\gamma \ge 10^{-2}``. A large ``\sigma`` costs nothing. The [`pde_solve`](@ref) docstring gives the measured figures.
 
-Three rules apply to the term. The `σ` is read when the form is assembled, so with a `Ref` factor call `assemble!(K_pen, a_pen)` after changing it, before the next solve. With `dirichlet`, the Dirichlet rows of `K_pen` are identity rows and the penalty's row vector is zeroed there. One rank-one term per form: the sum of two is refused with an `ArgumentError`, so add the scalars when they share the functionals. On a ghost space the rank-one term is covered by the [support table](../internals/space.md).
+The `σ` is read when the form is assembled: with a `Ref` factor, call `assemble!(K_pen, a_pen)` after changing it and before the next solve. With `dirichlet`, the Dirichlet rows of `K_pen` are identity rows and the penalty's row vector is zeroed there. A form takes one rank-one term. Two are refused with an `ArgumentError`, so add the scalars when they share the functionals. On a ghost space the rank-one term is covered by the [support table](../internals/space.md).
 
 ### Data per facet
 
@@ -928,8 +922,9 @@ Which entry points accept a ghost space is the [support table](../internals/spac
 
 ## Threading
 
-Assembly reads the execution policy off the space it is given. A space whose backend says
-`Parallel()` assembles on several threads, and nothing about the call changes.
+Assembly follows the execution policy of the space's backend, `Serial()` by default. Build
+the mesh with `mesh(Ω, n; backend = backend(policy = Parallel()))` to assemble on several
+threads.
 
 ## Reference
 
@@ -998,9 +993,9 @@ a_boundary = form(Wd, Wd, (u, v) -> innerₕ(u, v; markers = (:boundary,)))
 size(assemble(a_boundary))
 ```
 
-This is a masked *sum* of cell measures, not a surface integral. A masked `innerₕ` scales
-like ``h`` and vanishes under refinement, where a true boundary integral does not. A Neumann
-or Robin term needs the integral, which is [`inner_Γ`](@ref):
+This is a masked sum of cell measures. A masked `innerₕ` scales like ``h`` and vanishes
+under refinement, where a boundary integral does not. A Neumann or Robin term needs the
+integral, which is [`inner_Γ`](@ref):
 
 ```@example forms
 β, g = 1.7, x -> 2.0 + x[1]
@@ -1018,7 +1013,7 @@ integrates over whole coordinate faces. A label is read from its definition: a m
 `:zmax`, or a viewpoint alias) and needs no marker; `:boundary` is a marker every mesh holds,
 the union of its faces.
 
-A marker that exists nowhere the term reaches is an error, not a silent zero:
+A marker that exists nowhere the term reaches is an error:
 
 ```@example forms
 try
@@ -1087,12 +1082,12 @@ Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(
     Replace `0 *` by `0.0 *` in `a_off` and compare `expression(a_off)`.
     A `Float64` coefficient is only known at run time, so the term stays.
 
-Two limits apply. A rule whose outcomes have different node types fires only when the
+A rule whose outcomes have different node types fires only when the
 compiler settles it from types, so the scalar of a dropped zero term must be an `Integer`.
 A `Float64` known at run time, or a `Ref`, leaves the term in: same numbers, one extra
 sweep. And the pass stops at an inner product's own arguments, so a scalar buried in a
 difference such as `innerₕ(D₋ₓ(2 * u), v)` is invisible to it. Write
 `2 * innerₕ(D₋ₓ(u), v)` instead.
 
-The [internals page on forms](../internals/form.md) documents the stencil algebra and the
-exact rewrite rules.
+The [internals page on forms](../internals/form.md) has the docstrings of the stencil
+algebra and of `simplify_ast`.

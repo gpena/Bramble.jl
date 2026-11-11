@@ -6,11 +6,9 @@ CurrentModule = Bramble
 
 **What you will learn.** How to describe where a problem lives: a set, the names of its boundary pieces, and the domain that bundles both.
 
-**What you need first.** Only a working install, see [Getting started](../getting_started.md).
+**What you need first.** Only a working install, see the [home page](../index.md#Installation).
 
 **Where next.** The [mesh tutorial](@ref tutorial_mesh) turns a domain into a grid of points.
-
-Every block below runs when this page is built, so the printed values are the ones the code produces.
 
 ---
 
@@ -48,7 +46,7 @@ I = interval(0.0, 1.0)
 Ω_3d = interval(-1.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 0.5)
 ```
 
-A set answers geometric questions. `∈` accepts a number in 1D, and a tuple, `SVector` or `Vector` above it:
+A set answers geometric questions. `∈` accepts a number in 1D, and in any dimension a tuple or vector of length `dim`:
 
 ```@example geometry
 X = interval(0.0, 2.0) × interval(-1.0, 1.0)
@@ -124,7 +122,7 @@ A `Domain` forwards the geometric queries of the previous sections to its set:
 dim(Ω), center(Ω), (0.5, 0.5) ∈ Ω, Bramble.is_collapsed(Ω)
 ```
 
-[`Bramble.set`](@ref) (private, hence the prefix) returns the underlying set. Next, the [mesh tutorial](@ref tutorial_mesh) discretizes a domain into points.
+[`Bramble.set`](@ref) (private, hence the prefix) returns the underlying set. 
 
 ---
 
@@ -138,7 +136,7 @@ The canonical names mean the same face in every dimension; the viewpoint aliases
 - **2D**: `:xmin` (`:left`), `:xmax` (`:right`), `:ymin` (`:bottom`), `:ymax` (`:top`)
 - **3D**: `:xmin` (`:back`), `:xmax` (`:front`), `:ymin` (`:left`), `:ymax` (`:right`), `:zmin` (`:bottom`), `:zmax` (`:top`)
 
-The viewpoint-dependent names in parentheses are aliases. [`boundary_symbols`](@ref) lists the canonical set for a given dimension:
+[`boundary_symbols`](@ref) lists the canonical names for a given dimension:
 
 ```@example geometry
 boundary_symbols(2)
@@ -245,4 +243,4 @@ m_time = markers(
 collect(labels(m_cond)), m_time(1.5)      # the second is the marker set frozen at t = 1.5
 ```
 
-`labels` returns one tuple of every label, symbol markers first, then tuple markers, then predicate markers, built without allocating. The helpers `label_symbols`, `label_tuples` and `label_conditions` behind it are internal.
+`labels` returns one tuple of every label, symbol markers first, then tuple markers, then predicate markers, then the three labels of each polygon or level-set marker, built without allocating. The helpers `label_symbols`, `label_tuples` and `label_conditions` behind it are internal.

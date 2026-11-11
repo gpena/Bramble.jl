@@ -1,15 +1,9 @@
 # # Recovering a diffusion coefficient (adjoint gradients)
 #
-# Every other worked example goes forward, from known parameters to a solution. This one goes
-# backward, from noisy observations of a solution to the parameter that produced them. That is
-# the shape of a parameter-estimation problem, and of "a neural network predicts a PDE
-# parameter, a real solve runs on it, the loss trains the network". What makes it tractable for
-# more than a handful of parameters is [`pde_solve`](@ref)'s adjoint rule: one extra linear
-# solve gives the gradient with respect to *every* parameter at once, instead of one extra solve
-# *per* parameter.
-#
-# Lines marked `#src` are assertions. The test `test/examples/inverse_diffusion.jl` runs them,
-# and Literate.jl drops them from the rendered page. The gradient needs `Enzyme`.
+# This example recovers a diffusion coefficient from noisy observations of a solution, the
+# shape of a parameter-estimation problem or of training a network whose output feeds a PDE
+# solve. [`pde_solve`](@ref)'s adjoint rule gives the gradient with respect to every
+# parameter for one extra linear solve. The gradient needs `Enzyme`.
 #
 # ## Problem
 #
@@ -19,10 +13,9 @@
 #
 # with ``f(x) = \kappa_{\text{true}} \pi^2 \sin(\pi x)``, so the exact solution at any
 # ``\kappa`` is ``u_{\text{exact}}(x, \kappa) = (\kappa_{\text{true}} / \kappa) \sin(\pi x)``,
-# equal to ``\sin(\pi x)`` exactly at ``\kappa = \kappa_{\text{true}}``. ``\kappa`` -- a
-# diffusion coefficient scaling the stiffness operator itself, not a boundary or source value
-# -- is unknown; a handful of noisy point observations of ``u`` at the true ``\kappa`` are all
-# that is given.
+# equal to ``\sin(\pi x)`` exactly at ``\kappa = \kappa_{\text{true}}``. The diffusion
+# coefficient ``\kappa`` is unknown, and a handful of noisy point observations of ``u`` at
+# the true ``\kappa`` are all that is given.
 #
 # ## Discretisation and the forward solve
 
@@ -37,9 +30,8 @@ Wₕ = gridspace(Ωₕ)
 fₕ = Rₕ(Wₕ, f)
 l = form(Wₕ, v -> innerₕ(fₕ, v))
 
-# `l` is built once, fixed and `Float64`-typed for the rest of the page. `a`, by contrast, is
-# rebuilt inside `forward` on every call: `κ` scales the stiffness form itself, so the form
-# Enzyme differentiates through is a new object each time, not a fixed one closed over.
+# `l` is built once and stays `Float64`-typed. `aκ` is rebuilt inside `forward` on every
+# call, because `κ` scales the stiffness form itself.
 
 function forward(κ::Real)
     aκ = form(Wₕ, Wₕ, (u, v) -> κ * inner₊(∇ₕ(u), ∇ₕ(v)))
@@ -49,10 +41,10 @@ end
 
 # ## Synthetic observations
 #
-# Five interior points, `κ_true`'s exact solution there plus a small fixed perturbation
-# standing in for measurement noise -- fixed rather than `Random`-drawn, so the page renders
-# the same numbers every build. The mesh is uniform (the default), so these indices sit at the
-# round abscissae ``x = 0.125, 0.25, 0.5, 0.75, 0.875``; nothing else in the problem needs it.
+# Five interior points, `κ_true`'s exact solution there plus a small perturbation standing
+# in for measurement noise. The perturbation is fixed, so the page renders the same numbers
+# every build. The mesh is uniform, so these indices sit at
+# ``x = 0.125, 0.25, 0.5, 0.75, 0.875``.
 
 obs_idx = (6, 11, 21, 31, 36)
 noise = (0.0021, -0.0035, 0.0012, -0.0018, 0.0027)
@@ -73,9 +65,8 @@ loss(κ::Real) = sum(abs2, forward(κ)[obs_idx[k]] - u_obs[k] for k in eachindex
 # own docstring).
 #
 # `loss` closes over `Wₕ`/`l`, which Enzyme cannot prove read-only on its own, so the backend
-# wraps the function `Const` (`function_annotation`) and sets `set_runtime_activity` -- the same
-# annotation the [automatic differentiation tutorial](@ref tutorial_autodiff) and
-# `test/space/autodiff_heavy.jl` already document for the ordinary (non-solve) path.
+# wraps the function `Const` (`function_annotation`) and sets `set_runtime_activity`, as in
+# the [automatic differentiation tutorial](@ref tutorial_autodiff).
 
 using Enzyme
 import DifferentiationInterface as DI
@@ -101,18 +92,13 @@ fd_check = (loss(0.5 + 1e-6) - loss(0.5 - 1e-6)) / 2e-6                         
 ad_check = DI.gradient(loss, backend, 0.5)                                            #src
 @test ad_check ≈ fd_check rtol = 1e-6                                                 #src
 
-# ## Cost: one extra solve, not one per parameter
+# ## Cost of the adjoint
 #
-# The point of the adjoint rule: `DI.gradient` above costs one forward solve plus one
-# adjoint solve, regardless of how many parameters `κ` were -- a coefficient *field* with one
-# value per grid point would cost the same two solves, where forward-mode differentiation
-# through the same model would cost one solve per parameter. That is why the page uses reverse
-# mode. With `ForwardDiff` loaded, `pde_solve` does run on a `Dual` matrix: it factors the
-# `Float64` values once, and each parameter's partial is one solve against that factor. Forward
-# mode therefore runs here, with one solve per parameter, where the adjoint needs one for all
-# of them. No timings are shown on this page. See `test/ext/chainrules_ext.jl` for the scaling
-# measurement itself, which compares the adjoint rule's own pullback cost against `nθ` separate
-# forward solves.
+# `DI.gradient` costs one forward solve and one adjoint solve for any number of parameters.
+# A coefficient field with one value per grid point costs the same two solves. Forward mode
+# needs one solve per parameter: with `ForwardDiff` loaded, `pde_solve` runs on a `Dual`
+# matrix, factors the `Float64` values once, and each partial is one solve against that
+# factor.
 #
 # ## Where to go next
 #

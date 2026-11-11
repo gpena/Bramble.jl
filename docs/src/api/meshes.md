@@ -78,8 +78,10 @@ A mesh keeps its geometry in an immutable state. A [`Mesh1D`](@ref) holds one
 states. The state holds plain arrays and isbits values: the points and spacings, the indices,
 the backend, a version, whether the points are uniform, the marker bits as one word matrix
 and an identity that survives every mutation. The mesh itself keeps the public marker
-dictionary returned by `markers`. Every mutation below replaces the state or updates its arrays
-in place, and changes the version, so a state taken before the call is stale. See the
+dictionary returned by `markers`. `iterative_refinement!`, `change_points!` and `set_points!`
+replace the state or update its arrays in place, and change the version. A state taken before
+the call is stale, and so is a grid space built on the mesh: its inner products and norms throw
+until `gridspace(Ωₕ)` is called again. See the
 [mesh internals page](../internals/mesh.md) for the state types.
 
 The dictionary that `markers(Ωₕ)` returns is read-only. Editing it in place is unsupported:
@@ -102,7 +104,7 @@ set_points!
 
 ## Ghost meshes
 
-`GhostMesh` is `public`, not exported: write `Bramble.GhostMesh`. A space built with
+`GhostMesh` is `public` and not exported: write `Bramble.GhostMesh`. A space built with
 `ghosts` holds one; see [Grid spaces](spaces.md).
 
 ```@docs

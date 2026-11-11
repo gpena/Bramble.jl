@@ -12,7 +12,7 @@ CurrentModule = Bramble
 `max(1e-10, 64ε) L` of each other merge (`L` the polygons' extent), so crossings and
 vertices sit on nodes up to that tolerance.
 
-The oblique edges must share one slope magnitude; that is necessary, not
+The oblique edges must share one slope magnitude; that is necessary but not
 sufficient. A closure that grows past a number of lines proportional to the input throws
 an `ArgumentError`, "unbounded or too fine for this grid", and a polygon small relative to
 its offset from the origin may hit it, as the rounding of the closure then exceeds the
@@ -68,7 +68,8 @@ a node, has no ghost number and is never a degree of freedom, and `is_absent` te
 The padded points follow `change_points!` of the physical mesh through the version stamp of
 its submeshes, and are recomputed on the access that finds them stale.
 `iterative_refinement!` of the physical mesh changes the point count, which a ghost mesh
-cannot follow: every later access throws an `ArgumentError`, and a new space is needed.
+cannot follow: its points, spacings, submeshes and cell lookup then throw an `ArgumentError`,
+while its counts and index sets keep the sizes it was built with. A new space is needed.
 `gridspace` of a `GhostMesh` is refused, because it would weigh the ghost and absent points
 as nodes: a space with ghosts is built from the physical mesh with
 `gridspace(Ωₕ; ghosts)` (see [Spaces](space.md)).

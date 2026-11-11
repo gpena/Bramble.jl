@@ -4,16 +4,14 @@ CurrentModule = Bramble
 
 # [Grid spaces and discrete functions](@id tutorial_space)
 
-**What you will learn.** How to put a function on a mesh, measure it, stack copies into a composite space with vector elements, and add ghost points beyond named facets.
-
-**What you need first.** The [mesh tutorial](mesh.md), for building a mesh; the [geometry tutorial](geometry.md), for the domain it sits on.
-
-**Where next.** [Difference operators](operators.md), which act on the elements built here.
+You will put a function on a mesh, measure it, stack copies into a composite space with
+vector elements, and add ghost points beyond named facets. The [mesh tutorial](mesh.md)
+builds the mesh and the [geometry tutorial](geometry.md) the domain it sits on.
+[Difference operators](operators.md) act on the elements built here.
 
 A grid space is the discrete function space over a mesh. It fixes how many degrees of
 freedom a field has and which quadrature weight each one carries. A
-[`VectorElement`](@ref) is a function in that space. Every block below runs when this page
-is built.
+[`VectorElement`](@ref) is a function in that space.
 
 The running problem is small: sample $f(x) = \sin(\pi x)$ on the unit interval and measure
 it, first as one field, then as a pair of fields.
@@ -34,8 +32,7 @@ Wₕ = gridspace(Ωₕ)
 ndofs(Wₕ), ndofs(Wₕ, Tuple)
 ```
 
-There is one degree of freedom per mesh point. `points(Wₕ)` is `points(Ωₕ)`, so the space
-and its mesh agree on where the degrees of freedom sit.
+There is one degree of freedom per mesh point, and `points(Wₕ)` is `points(Ωₕ)`.
 
 ## Discrete functions
 
@@ -48,7 +45,7 @@ uₕ = Rₕ(Wₕ, x -> sin(π * x))
 length(uₕ), uₕ[6]
 ```
 
-`VectorElement <: AbstractVector`, so indexing, `length` and broadcasting work as usual, and
+`VectorElement <: AbstractVector`, so indexing, `length` and broadcasting work on it, and
 broadcasting keeps the parent space:
 
 ```@example space
@@ -57,13 +54,14 @@ wₕ = 3.0 .* uₕ .+ element(Wₕ, 2.0)
 space(wₕ) === Wₕ, wₕ[6]
 ```
 
-[`element`](@ref) allocates a field, optionally filled with a constant. [`Rₕ!`](@ref)
-writes into an element that already exists, which is what a time loop wants.
+[`element`](@ref) allocates an uninitialised field; `element(Wₕ, α)` fills it with `α` and
+`element(Wₕ, v)` copies a vector. [`Rₕ!`](@ref) writes into an element that already exists.
 
 ## Inner products and norms
 
 Each degree of freedom carries a quadrature weight, the cell measure around its point.
-`innerₕ` weights each point by it, and `normₕ` is the norm it induces:
+`innerₕ` weights each point by it (`uₕ` is conjugated for complex data, and
+`markers = (...)` restricts the sum), and `normₕ` is the norm it induces:
 
 ```math
 (u_h, v_h)_h = \sum_i |\square_i| \, u_h(x_i) v_h(x_i), \qquad
@@ -76,8 +74,8 @@ vₕ = Rₕ(Wₕ, x -> cos(π * x))
 innerₕ(uₕ, vₕ), normₕ(uₕ), normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)
 ```
 
-The norm of $\sin(\pi x)$ on $[0, 1]$ is $1/\sqrt{2} \approx 0.707$, which `normₕ` reproduces here. The discrete Sobolev norms are built on the backward gradient
-$\nabla_{-h}$:
+The norm of $\sin(\pi x)$ on $[0, 1]$ is $1/\sqrt{2} \approx 0.707$, which `normₕ` reproduces here. The discrete Sobolev norms are built on the backward
+gradient `∇ₕ`:
 
 ```math
 |u_h|_{1,h}^2 = \sum_{d=1}^D \|D_{-x_d} u_h\|_+^2, \qquad
@@ -90,8 +88,9 @@ snorm₁ₕ(uₕ), norm₁ₕ(uₕ), norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + sn
 
 !!! tip "Try this"
     Build the mesh as `mesh(Ω, 11, false)`, a non-uniform one with the same number of
-    points, and rerun the blocks above. `ndofs` is unchanged, but the weights are no longer
-    all equal, so `normₕ` and `innerₕ` change while still tiling the interval. The
+    points, and rerun the blocks above. `ndofs` is unchanged, but the interior weights are
+    no longer equal (on a uniform mesh only the two end weights are halved), so `normₕ` and
+    `innerₕ` change while the weights still sum to the interval length. The
     [mesh tutorial](mesh.md) builds such meshes on purpose.
 
 ## [Composite spaces and vector elements](@id space_composite)
@@ -106,7 +105,7 @@ Vₕ = Wₕ^Val(2)
 ncomponents(Vₕ), ndofs(Vₕ), ndofs(Vₕ, Tuple)
 ```
 
-`ndofs(Vₕ, Tuple)` is one entry per component, not a grid shape. A **component** is one of
+`ndofs(Vₕ, Tuple)` has one entry per component (on a scalar space it is the grid shape). A **component** is one of
 the stacked fields, and calling a composite element with `i` returns the `i`-th component
 as a view:
 
@@ -121,8 +120,8 @@ uᵧ .= -2.0
 parent(uvec)[[1, 12]]
 ```
 
-The component is a zero-copy view, so writing to it writes through to the parent. For a
-scalar space `uₕ(1)` is `uₕ` itself. [`components`](@ref) destructures the lot:
+A component is a view; writing to it writes to the parent. For a
+scalar space `uₕ(1)` is `uₕ` itself. [`components`](@ref) destructures all of them:
 
 ```@example space
 c₁, c₂ = components(uvec)
@@ -141,11 +140,11 @@ normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2
 
 !!! tip "Try this"
     Replace `Val(2)` with `Val(3)` and add a third function to the tuple. `ncomponents` and
-    `ndofs` follow, and every other line of this section stays the same.
+    `ndofs` follow.
 
 ## [Ghost spaces](@id space_ghost)
 
-A grid space can carry the ghost points of the [mesh tutorial](@ref mesh_ghost). The keyword `ghosts` of [`gridspace`](@ref) names the facets that get them: `:boundary` for every facet, or a tuple such as `(:xmin, :ymax)`. The default `ghosts = ()` returns the space of the sections above, unchanged. The running example is a small non-uniform grid in the unit square:
+A grid space can carry the ghost points of the [mesh tutorial](@ref mesh_ghost). The keyword `ghosts` of [`gridspace`](@ref) names the facets that get them: `:boundary` for every facet, or a tuple such as `(:xmin, :ymax)`. The default `ghosts = ()` returns the space of the sections above. The running example is a small non-uniform grid in the unit square:
 
 ```@example space
 import Bramble: change_points!, indices, point
@@ -168,9 +167,9 @@ The degrees of freedom of a ghost space are the physical nodes plus the ghosts. 
 
 ### The order of the degrees of freedom
 
-The order is fixed. The physical nodes come first, in the mesh's linear order. The ghosts follow, facet by facet in the order `xmin, xmax, ymin, ymax, zmin, zmax` (only the named ones), each facet's ghosts in the column-major order of its nodes. A system assembled on a ghost space is indexed this way, so its first rows and columns are the physical nodes.
+The physical nodes come first, in the mesh's linear order. The ghosts follow, facet by facet in the order `xmin, xmax, ymin, ymax, zmin, zmax` (only the named ones), each facet's ghosts in the column-major order of its nodes. A system assembled on a ghost space is indexed this way. On a space without Dirichlet relations or relation data, its first rows and columns are the physical nodes.
 
-Each degree of freedom is one point of the padded mesh. `Bramble.padded_space` is the internal space on that mesh, and `Bramble.closure` returns the sparse matrix `E` that sends the degrees of freedom to padded values, one entry ``1`` per column. This reads off where each one sits:
+Each degree of freedom is one point of the padded mesh. `Bramble.padded_space` is the internal space on that mesh, and `Bramble.closure` returns the sparse matrix `E` that sends the degrees of freedom to padded values, one entry ``1`` per column. 
 
 ```@example space
 E, _ = Bramble.closure(W_ghost)
@@ -188,7 +187,7 @@ dof_point(j) = point(mesh(Pₕ), padded[findfirst(!iszero, E[:, j])])
 [dof_point(j) for j in (1, 12, 13, 15, 16, 18, 19, 22, 23, 26)]
 ```
 
-The first two entries are the first and last physical node. The next four are the `xmin` and `xmax` ghosts: ``x = -0.2`` and ``x = 1.4``, the distances ``h_2 = 0.2`` and ``h_n = 0.4`` from the facet. The last four are the `ymin` and `ymax` ghosts at ``y = -0.5`` and ``y = 1.5``. The spacings differ at the two ends of each axis, so a ghost is not a mirror image: its coordinate is read from the mesh.
+The first two entries are the first and last physical node. The next four are the `xmin` and `xmax` ghosts: ``x = -0.2`` and ``x = 1.4``, the distances ``h_2 = 0.2`` and ``h_n = 0.4`` from the facet. The last four are the `ymin` and `ymax` ghosts at ``y = -0.5`` and ``y = 1.5``. Each ghost lies one boundary spacing beyond its facet, and the spacings differ at the two ends of each axis.
 
 ### Physical-only weights
 
@@ -205,7 +204,7 @@ M_ghost = assemble(form(W_ghost, W_ghost, (u, v) -> innerₕ(u, v)))
 sum(diag(M_ghost)[1:12]), sum(diag(M_ghost)[13:end])
 ```
 
-The weights of `inner_Γ` are facet weights: the transverse measure at each facet node, a half cell at the facet's ends. The markers `:xmin` to `:zmax` name the physical facet nodes, never the ghosts. `gridspace` of a bare `GhostMesh` is refused, since its weights would count the ghosts: build the space from the physical mesh with `ghosts`.
+The weights of `inner_Γ` are facet weights: the transverse measure at each facet node, a half cell at the facet's ends. The markers `:xmin` to `:zmax` name the physical facet nodes. `gridspace` of a bare `GhostMesh` is refused, since its weights would count the ghosts: build the space from the physical mesh with `ghosts`.
 
 ### What to do with a ghost space
 
@@ -231,7 +230,7 @@ v_g = GhostVector(Cₕ_g, u_g)
 length(v_g), length(Bramble.ghost_values(v_g))
 ```
 
-`update_ghosts!(v, Cₕ)` writes into the buffer the ghosts that the relations give, from the values of `v`. It reads the rows of the closure that belong to the ghosts and nothing else, so its cost follows the facets, not the mesh, and it allocates nothing. With a time, `update_ghosts!(v, Cₕ, t)` takes the data of the relations at `t`. The data here do not depend on time, so the time is ignored and both calls fill the same ghosts. They are the ghosts of `Bramble.lift`, which the next block compares through an operator:
+`update_ghosts!(v, Cₕ)` writes into the buffer the ghosts that the relations give, from the values of `v`. It reads the rows of the closure that belong to the ghosts and nothing else, so its cost follows the facets and it allocates nothing on `CpuSerial` and `CpuPolyester`. With a time, `update_ghosts!(v, Cₕ, t)` takes the data of the relations at `t`. The data here do not depend on time, so the time is ignored and both calls fill the same ghosts. They are the ghosts of `Bramble.lift`, which the next block compares through an operator:
 
 ```@example space
 update_ghosts!(v_g, Cₕ_g)
@@ -248,7 +247,7 @@ update_ghosts!(v_g, Cₕ_g, 0.7)
 ghosts_static[1:3]
 ```
 
-A runtime operator on a `GhostVector` reads the ghosts from the buffer and returns the values at the physical nodes, a plain vector. It equals the same operator on `Bramble.lift(Cₕ, u)` at those nodes, with no padded function built:
+A runtime operator on a `GhostVector` reads the ghosts from the buffer and returns the values at the physical nodes, a plain vector as long as `u`. It equals the same operator on `Bramble.lift(Cₕ, u)` at those nodes, with no padded function built:
 
 ```@example space
 U_g = Bramble.lift(Cₕ_g, u_g)
@@ -266,11 +265,9 @@ out_g = similar(u_g)
 extrema(out_g)
 ```
 
-One thing follows from the physical-only result. The result carries no ghosts: it is as long as `u`, not as `v`.
-
 #### An explicit heat step
 
-The use this serves is the explicit heat equation ``u_t = \Delta_h u`` with a Neumann relation, on a non-uniform grid. Each step refreshes the ghosts, applies `Δₕ!` and advances the physical vector in place. The unit square has ``11 \times 9`` nodes graded by ``x \mapsto x^{3/2}``, and the datum is zero on all four facets. The function ``e^{-2\pi^2 t}\cos \pi x \cos \pi y`` solves the continuous problem, so it is the reference. The step is ``0.2 / (h_x^{-2} + h_y^{-2})``, rounded down to divide the final time, with ``h_x`` and ``h_y`` the smallest spacings of each axis: inside the explicit stability limit ``1 / (2 (h_x^{-2} + h_y^{-2}))`` of the uniform grid with those spacings.
+This is the explicit heat equation ``u_t = \Delta_h u`` with a Neumann relation, on a non-uniform grid. Each step refreshes the ghosts, applies `Δₕ!` and advances the physical vector in place. The unit square has ``11 \times 9`` nodes graded by ``x \mapsto x^{3/2}``, and the datum is zero on all four facets. The function ``e^{-2\pi^2 t}\cos \pi x \cos \pi y`` solves the continuous problem, so it is the reference. The step is ``0.2 / (h_x^{-2} + h_y^{-2})``, rounded down to divide the final time, with ``h_x`` and ``h_y`` the smallest spacings of each axis: inside the explicit stability limit ``1 / (2 (h_x^{-2} + h_y^{-2}))`` of the uniform grid with those spacings.
 
 ```@example space
 Ω_h = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
@@ -316,8 +313,8 @@ The error is the spatial error of the scheme on this grid, about half a percent 
 
 ### Constructors
 
-`Wₕ^Val(N)` is type stable whatever `N` is, while `Wₕ^2` relies on the literal being
-constant-folded and only reaches `N ≤ 3`. [`vector_gridspace`](@ref)`(Ωₕ, 2)` builds the same
+`Wₕ^Val(N)` is type stable for any `N`. `Wₕ^N` accepts `1 ≤ N ≤ 3` and stays inferable for
+a runtime `N`; a larger `N` throws an `ArgumentError`. [`vector_gridspace`](@ref)`(Ωₕ, 2)` builds the same
 space straight from a mesh, and `Bramble.CompositeGridSpace((Wₕ, Wₕ))` builds one from spaces that
 need not be identical:
 
@@ -362,8 +359,9 @@ sum(below_half)
 
 ### Grid layout
 
-Degrees of freedom are stored flat, but on a two-dimensional space a scalar element also
-indexes by grid coordinate, with a `CartesianIndex`, without reshaping:
+Degrees of freedom are stored flat, but a scalar element also indexes by grid coordinate
+with a `CartesianIndex`, in any dimension. An integer multi-index `u[i, j]` is not a grid
+coordinate. Here a two-dimensional space:
 
 ```@example space
 W₂ = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (5, 5), (true, true)))
@@ -466,7 +464,7 @@ size(u_grid), u_scal[CartesianIndex(2, 3)], size.(reshape(element(V₂)))
 
 ### Restriction and cell averaging
 
-Two ways to turn a continuous function into a grid function. Nodal restriction $R_h$
+Nodal restriction $R_h$
 evaluates it at the grid points; cell averaging $\mathrm{avg}_h$ integrates it over the cell
 around each point and divides by the cell measure:
 
@@ -562,13 +560,12 @@ avgₕ!(u_avg, x -> exp(-x[1] - x[2]))
 u_avg[1]
 ```
 
-The difference matters for a source term: `Rₕ` of a rough function inherits its roughness,
-while `avgₕ` integrates it away.
+For a rough source term, `avgₕ` averages out the roughness that `Rₕ` samples.
 
 ### Staggered inner product
 
-`inner₊` is the staggered counterpart of `innerₕ`: it weights by the half-spacings, the
-interface quantities a difference or a gradient lands on, and a trailing `:x`/`:y`/`:z` (or
+`inner₊` is the staggered counterpart of `innerₕ`: it weights by the backward spacing along
+the chosen direction (zero at the first node) and by the cell width across the others, and a trailing `:x`/`:y`/`:z` (or
 `1`/`2`/`3`) argument picks a single direction. That pairing is what makes summation by parts
 exact; the [operators tutorial](operators.md) derives it.
 

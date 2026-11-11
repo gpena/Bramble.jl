@@ -17,7 +17,7 @@ vector_gridspace
 
 ## Space properties and degrees of freedom
 
-`host_weights` is private; see the [mesh internals page](../internals/mesh.md).
+`host_weights` is private; see the [space internals page](../internals/space.md).
 
 ```@docs
 ndofs
@@ -56,17 +56,17 @@ avgₕ!
 
 Moving a grid function from one mesh to another, the piecewise (multi)linear interpolant,
 named after [`Rₕ`](@ref)/[`Rₕ!`](@ref)'s own `Xₕ`/`Xₕ!` convention. One name, `πₕ`, with
-methods that dispatch tells apart by what they are given rather than by different names:
+methods selected by their arguments:
 
 - `πₕ(Wₕ, uₕ)` and [`πₕ!`](@ref)`(dest, src)` is the **numeric** operator, interpolating a grid
   function's values onto another space's mesh. [`interpolate_at`](@ref) is the single-point
   building block both are written in terms of, and [`interpolation_matrix`](@ref) is the same
-  interpolant as a sparse matrix rather than applied pointwise.
+  interpolant as a sparse matrix.
 - `πₕ(uₕ)` is the **symbolic source**, wrapping a grid function's interpolant as an AST leaf,
   composable with [`D₋ₓ`](@ref)/[`Mₓ`](@ref)/... inside [`innerₕ`](@ref). For the *known*
   side of a linear form.
-- `πₕ(u)` over a **trial function** is the **bilinear operator**, contributing matrix columns
-  rather than values. For the *unknown* side. It names no source space: that is the trial
+- `πₕ(u)` over a **trial function** is the **bilinear operator**, contributing matrix columns.
+  For the *unknown* side. It names no source space: that is the trial
   function's own, and assembly supplies it once the leaf is known.
 
 This exists for the pattern of a heterogeneous composite space whose leaves live on different
@@ -104,8 +104,8 @@ assemble!(::AbstractMatrix, ::AbstractVector, ::Bramble.GhostBilinearForm, ::Bra
 
 `polygon_spaces(Ωₕ, :P, g)` returns the trial and test spaces `(U, W)` of the scheme of
 Ferreira and Grigorieff on a polygon or level-set region marked `:P` of a 2D mesh. `public` and not exported:
-write `Bramble.polygon_spaces`. The support of each operation is in the
-[space internals page](../internals/space.md).
+write `Bramble.polygon_spaces`. See the
+[space internals page](../internals/space.md) for the support table.
 
 ```@docs
 Bramble.polygon_spaces
