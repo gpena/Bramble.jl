@@ -117,7 +117,7 @@ u_n = pde_solve(A_n, F_n; mean_zero = w)
 abs(dot(w, u_n)), λ
 ```
 
-The data must satisfy a compatibility condition. `λ` is the part of the load that no `u` reaches: zero for exactly compatible data, and small here because these are compatible only in the continuum. `Bramble.neumann_compatibility` tests the condition. A kernel in the ghost values of a ghost space needs `gauge` instead, and the [forms tutorial](@ref form_ghost) shows both keywords.
+The data must satisfy a compatibility condition. `λ` is the part of the load that no `u` reaches: zero for exactly compatible data, and small here because these are compatible only in the continuum. `Bramble.neumann_compatibility` tests the condition. A kernel in the ghost values of a ghost space needs `gauge` instead, and the [pure Neumann how-to](@ref howto_pure_neumann) shows both keywords.
 
 ## Large systems in 3D
 

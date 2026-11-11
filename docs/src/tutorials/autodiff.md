@@ -213,7 +213,7 @@ J_native = DifferentiationInterface.jacobian(pde_residual, prep_native, native_b
 
 ## Differentiate ghost relation data
 
-A constrained ghost space carries its boundary conditions as relations (see [Neumann and Robin conditions with ghost points](@ref form_ghost)). A relation's data may depend on the parameter, and the derivative reaches the solution through the lift of that data into the load:
+A constrained ghost space carries its boundary conditions as relations (see the [ghost point tutorial](@ref form_ghost)). A relation's data may depend on the parameter, and the derivative reaches the solution through the lift of that data into the load:
 
 ```@example autodiff_tutorial
 function ghost_objective(p)

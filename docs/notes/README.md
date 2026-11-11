@@ -1,10 +1,11 @@
 # Unpublished documentation notes
 
 Documenter builds only `docs/src`, so nothing here is published. The published docs are
-kept to a small set a maintainer can review: home, getting started, the discrete-foundations
-and forms tutorials, three worked examples (`poisson_linear`, `convection_diffusion_linear`,
-`heat_equation`), the API reference, and the internals pages reduced to their docstring
-blocks. Everything else lives here:
+home, getting started, eight tutorials (geometry, mesh, space, operators, forms, ghost
+points, coupled systems, automatic differentiation), five how-to guides (pure Neumann,
+time-dependent data, solvers, backends, plotting and export), fifteen worked examples, the
+API reference with its solver and SciML pages, and the internals pages reduced to their
+docstring blocks. Everything else lives here:
 
 - **Pages moved whole**, at the path they had under `docs/src`: `tutorials/solvers.md`,
   `solvers_by_problem.md`, `time_stepping.md`, `backend.md`, `plotting.md`,
@@ -28,8 +29,9 @@ blocks. Everything else lives here:
 - **CI run time**: `ci-run-time.md` profiles the `Forms` testset per file in a warm CI run,
   gives the cause, the shard boundary and the OpenEXR cache finding (gpena/Bramble.jl#480).
 
-The other worked examples stay in `docs/src/examples/` as `.jl` scripts, where the
-`examples` test group runs them; `docs/make.jl` no longer turns them into pages.
+Four worked examples stay in `docs/src/examples/` as `.jl` scripts that `docs/make.jl` does
+not turn into pages: `amg_preconditioning`, `matrix_free_operator`, `memory_scaling` and
+`transient_inplace`. The `examples` test group runs them.
 
 The figures are single-machine measurements, not tracked baselines: re-measure before
 relying on them. Tracked baselines live in `benchmark/baselines/`.

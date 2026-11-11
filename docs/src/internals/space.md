@@ -27,7 +27,7 @@ physical nodes, as on `gridspace(Ωₕ)`.
 
 Per axis the weight of a ghost node and of a ghost cell is 0, so a form has no weight in
 its ghost rows and only the reduction below gives the ghosts a role. The
-[space tutorial](@ref space_ghost) gives the weights and why they are physical-only.
+[ghost point tutorial](@ref space_ghost) gives the weights and why they are physical-only.
 
 ### The closure and the reduction
 
@@ -80,7 +80,7 @@ refused too. A volume product's operand at the edge of the padded grid truncates
 plain mesh, and that is allowed.
 
 The rule applies in forms only; the runtime operators are eager (see the
-[operators tutorial](@ref operators_ghost)). `Rₕ` and `avgₕ` refuse on a ghost space with
+[ghost point tutorial](@ref operators_ghost)). `Rₕ` and `avgₕ` refuse on a ghost space with
 an `ArgumentError` (`avgₕ` would average over cells past the physical facet), except that
 `Rₕ(U, f)` works on the trial space of [`polygon_spaces`](@ref Bramble.polygon_spaces); the
 [support table](@ref "Support on ghost spaces") lists what else refuses.

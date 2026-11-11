@@ -40,7 +40,7 @@ evaluate!
 
 A form with a rank-one penalty term `σ * innerₕ(g, u) * innerₕ(h, v)` assembles to a
 `Bramble.RankOneUpdate`, the matrix `A + σ wₛ wₜᵀ` kept as its parts. `pde_solve(K, F)` solves it
-through a sparse bordered system (see the [forms tutorial](../tutorials/form.md)), and
+through a sparse bordered system (see [pure Neumann problems](@ref howto_pure_neumann)), and
 `symmetrize!` accepts it. `RankOneUpdate` is `public` and not exported.
 
 ```@docs
@@ -76,7 +76,7 @@ axis, without a general sparse factorisation: by fast diagonalisation when it is
 and by a Schur-form solve when advection terms make it non-symmetric. A mixed derivative is
 refused. On a ghost space it is accepted where the closure and the terms are separable; a 1D
 form, the `dirichlet` keyword and a form with `Δₕ` are refused with an `ArgumentError`. For
-such a form, `fdm_preconditioner` (in [Scientific computing](../api_sciml.md)) preconditions
+such a form, `fdm_preconditioner` (in [Solvers and preconditioners](solvers.md)) preconditions
 a Krylov solver with its Laplacian-like part. `fdm_factorize` factorises once, and
 `fdm_solve!` then solves each right-hand side with zero allocations; `fdm_factorize!`
 refills that factorisation after a coefficient or the mesh changed, without building it
@@ -99,7 +99,7 @@ accepts, separable or not, without building its matrix. A composite of ghost spa
 refused. `mul!(y, op, x)` walks the form's stencil and agrees with `assemble(a) * x`,
 Dirichlet rows included, on vectors and `VectorElement`s. Its execution policy comes from
 the trial space, as for assembly. Preconditioners and multigrid built on it
-are in [Scientific computing](../api_sciml.md).
+are in [Solvers and preconditioners](solvers.md).
 
 ```@docs
 matrix_free_operator
@@ -146,11 +146,11 @@ jacobian_form
 MissingJacobianRule
 ```
 
-Time integration, differentiable linear solves, and the sparse and iterative solver backends
-are in the [scientific computing reference](../api_sciml.md): the SciML stack
-(`semidiscretize`, `ode_problem`, `linear_problem`, `nonlinear_problem`, ...),
-`pde_solve`'s adjoint rule, AMG preconditioning, the SuiteSparse/Apple
-Accelerate/MUMPS direct solvers, and `type_cached_assemble!`.
+The sparse and iterative solver backends are in [Solvers and preconditioners](solvers.md):
+`pde_solve`, AMG preconditioning, and the SuiteSparse, Apple Accelerate and MUMPS direct
+solvers. Time integration and the SciML stack (`semidiscretize`, `ode_problem`,
+`linear_problem`, `nonlinear_problem`, ...) and `type_cached_assemble!` are in the
+[scientific computing reference](../api_sciml.md).
 
 ## Dirichlet conditions
 

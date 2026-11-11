@@ -85,9 +85,9 @@ The grid gains lines until each one meets the circle at a node. The ringed nodes
 <div class="bramble-card">
 ```
 
-[![Boundary layer of width 1e-3 on a graded grid of 41 points](assets/gallery_layer.svg)](tutorials/mesh.md)
+[![Boundary layer of width 1e-3 on a graded grid of 41 points](assets/gallery_layer.svg)](examples/boundary_layer_graded.md)
 
-**[A boundary layer](tutorials/mesh.md)**
+**[A boundary layer](examples/boundary_layer_graded.md)**
 
 A graded grid puts points in a layer a thousandth wide.
 
