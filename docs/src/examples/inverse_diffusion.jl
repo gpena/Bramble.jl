@@ -104,7 +104,8 @@ ad_check = DI.gradient(loss, backend, 0.5)                                      
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 
 xs = [p[1] for p in pts]
-line_plot([
+line_plot(
+    [
         (xs, forward(0.3), "κ = 0.3, the starting guess"),
         (xs, forward(κ), "κ recovered"),
         (xs, forward(κ_true), "κ = 0.7, the truth"),

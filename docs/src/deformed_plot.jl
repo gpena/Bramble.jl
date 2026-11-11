@@ -247,6 +247,7 @@ function deformed_plot_2d(
 
     X, Y = Float64[], Float64[]
     for j in 1:ny, i in 1:nx
+
         p = point(Ωₕ, CartesianIndex(i, j))
         push!(X, p[1])
         push!(Y, p[2])

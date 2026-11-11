@@ -99,7 +99,8 @@ extrema(diff(g)), extrema(diff(uniform_points(41)))
 
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 xe = range(0.0, 1.0, length = 2001)
-line_plot([(xe, uexact.(xe), "exact"), # hide
+line_plot(
+    [(xe, uexact.(xe), "exact"), # hide
         (uniform_points(41), parent(solution_on(uniform_points(41))), "uniform"), # hide
         (graded_points(41), parent(solution_on(graded_points(41))), "graded (σ = 4)")]; # hide
     title = "Boundary layer at ε = 10⁻³, 41 points") # hide

@@ -71,11 +71,14 @@ end
 px(p::Panel, x) = p.x0 + p.w * (x - p.xlim[1]) / (p.xlim[2] - p.xlim[1])
 py(p::Panel, y) = p.y0 + p.h * (1 - (y - p.ylim[1]) / (p.ylim[2] - p.ylim[1]))
 
-frame!(io, p::Panel) = @printf(io, "<rect class=\"frame\" x=\"%.1f\" y=\"%.1f\" width=\"%.1f\" height=\"%.1f\"/>\n",
-    p.x0, p.y0, p.w, p.h)
+function frame!(io, p::Panel)
+    @printf(io, "<rect class=\"frame\" x=\"%.1f\" y=\"%.1f\" width=\"%.1f\" height=\"%.1f\"/>\n",
+        p.x0, p.y0, p.w, p.h)
+end
 
-text!(io, x, y, s; anchor = "middle") =
+function text!(io, x, y, s; anchor = "middle")
     @printf(io, "<text x=\"%.1f\" y=\"%.1f\" text-anchor=\"%s\">%s</text>\n", x, y, anchor, s)
+end
 
 # One path per colour: the polygons `polys` (pixel corners) coloured by `vals` over [lo, hi].
 # A stroke of the fill colour closes the seams between neighbours.
@@ -98,8 +101,10 @@ function cells!(io, polys, vals, lo, hi)
 end
 
 # The mean of the four corner values of every cell of a grid function on a tensor grid.
-corner_means(Z) = [(Z[i, j] + Z[i + 1, j] + Z[i, j + 1] + Z[i + 1, j + 1]) / 4
-                   for i in 1:(size(Z, 1) - 1), j in 1:(size(Z, 2) - 1)]
+function corner_means(Z)
+    [(Z[i, j] + Z[i + 1, j] + Z[i, j + 1] + Z[i + 1, j + 1]) / 4
+     for i in 1:(size(Z, 1) - 1), j in 1:(size(Z, 2) - 1)]
+end
 
 function rect_cells!(io, p::Panel, xs, ys, Z, lo, hi)
     polys = [((px(p, xs[i]), py(p, ys[j])), (px(p, xs[i + 1]), py(p, ys[j])),
@@ -132,7 +137,8 @@ end
 # A colour bar to the right of a panel, low at the bottom.
 function colorbar!(io, x, y, h, lo, hi)
     stops(io, "bar", true)
-    @printf(io, "<rect class=\"bar\" x=\"%.1f\" y=\"%.1f\" width=\"12\" height=\"%.1f\" fill=\"url(#bar)\"/>\n", x, y, h)
+    @printf(io, "<rect class=\"bar\" x=\"%.1f\" y=\"%.1f\" width=\"12\" height=\"%.1f\" fill=\"url(#bar)\"/>\n", x, y,
+        h)
     text!(io, x + 18, y + 9, label(hi); anchor = "start")
     text!(io, x + 18, y + h, label(lo); anchor = "start")
 end
@@ -216,9 +222,11 @@ function disk_figure()
     end
     println(io, "\"/>")
     for i in eachindex(xs), j in eachindex(ys)
+
         nodes[i, j] || continue
         @printf(io, "<circle cx=\"%.1f\" cy=\"%.1f\" r=\"%.1f\" fill=\"%s\"%s/>\n", px(p, xs[i]),
-            py(p, ys[j]), on_circle[i, j] ? 3.2 : 2.6, colour((Z[i, j] - lo) / (hi - lo)),
+            py(p, ys[j]), on_circle[i, j] ? 3.2 : 2.6,
+            colour((Z[i, j] - lo) / (hi - lo)),
             on_circle[i, j] ? " stroke=\"#24292f\" stroke-width=\"0.8\"" : "")
     end
     colorbar!(io, 276, p.y0, p.h, lo, hi)

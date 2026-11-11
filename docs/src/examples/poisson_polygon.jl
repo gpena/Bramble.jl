@@ -73,6 +73,7 @@ aₕ, cₕ, fₕ = element(S), element(S), element(S)
 nx, ny = length(xs), length(ys)
 A3, C3 = reshape(aₕ.data, nx, ny), reshape(cₕ.data, nx, ny)
 for l in 1:ny, j in 1:nx
+
     A3[j, l] = j > 1 ? a(((xs[j - 1] + xs[j]) / 2, ys[l])) : 0.0
     C3[j, l] = l > 1 ? c((xs[j], (ys[l - 1] + ys[l]) / 2)) : 0.0
 end
