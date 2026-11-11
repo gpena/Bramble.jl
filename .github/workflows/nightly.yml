@@ -127,6 +127,7 @@ jobs:
       # restores. Keep this job's Julia version, `--optimize` level and coverage setting
       # the same as that job's.
       - uses: julia-actions/cache@v3
+        id: cache
         with:
           cache-compiled: "true"
           cache-name: julia-cache;unit-and-slow;julia=1.13
@@ -136,17 +137,17 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      # A `run:` step instead of julia-actions/julia-runtest, because that action cannot pass Julia
-      # flags: its harness hard-codes `julia_args` to `--check-bounds` alone. Every group of the
-      # suite runs at `--optimize=1`, which on the plain harness cut the slow group from 1051 s to
-      # 664 s, ext from 283 s to 184 s, backends from 274 s to 190 s, quality from 173 s to 160 s
-      # and examples from 206 s to 184 s, with the same tests passing and no allocation,
-      # inference or AD-gated check changing result. The call restates what the action passed:
-      # `coverage=true` (its default), `--check-bounds=yes`, and `--depwarn=yes --inline=yes` on the outer process.
-      # Dropped: `force_latest_compatible_version` (the action sets it to true only for
-      # Dependabot/CompatHelper jobs, which these triggers are not) and `annotate` (off by
-      # default). `JULIA_NUM_THREADS` comes from the job-level `env`, so it still reaches the test subprocess.
-      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
+      # Every group of the suite runs at `--optimize=1`: julia-runtest's `optimize` input, which
+      # reaches the test process through `julia_args`. On the plain harness it cut the slow
+      # group from 1051 s to 664 s, ext from 283 s to 184 s, backends from 274 s to 190 s,
+      # quality from 173 s to 160 s and examples from 206 s to 184 s, with the same tests
+      # passing and no allocation, inference or AD-gated check changing result. The action's
+      # defaults give the rest: coverage on, `--check-bounds=yes`, `--depwarn=yes`.
+      # `JULIA_NUM_THREADS` comes from the job-level `env`, so it still reaches the test
+      # subprocess.
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          optimize: "1"
         env:
           BRAMBLE_TEST_GROUP: slow
           BRAMBLE_TEST_SHARD: ${{ matrix.shard }}
@@ -172,6 +173,16 @@ jobs:
           name: lcov-suite-${{ matrix.shard }}
           path: lcov.info
           if-no-files-found: warn
+      # Last, so the post step that saves the new entry follows at once: the old and the new
+      # entry never coexist, which is what kept the repository over its cache quota (see the
+      # script). A passing run only, as the save is. The four shards share the key; the first
+      # to finish deletes and saves, the others find nothing to delete and their save is a
+      # no-op.
+      - name: Delete the superseded cache entry
+        if: ${{ github.ref == 'refs/heads/main' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/delete_superseded_cache.sh "${{ steps.cache.outputs.cache-key }}"
 
   # The `convergence` group: every convergence study of the suite (test/convergence/).
   # CI.yml runs it on every PR as its own leg, but CI.yml uploads no coverage; this job is
@@ -199,6 +210,7 @@ jobs:
 
       # Its own entry, not `slow`'s: two jobs saving one key race, and only the newest is kept.
       - uses: julia-actions/cache@v3
+        id: cache
         with:
           cache-compiled: "true"
           cache-name: julia-cache;convergence;julia=1.13
@@ -208,8 +220,10 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      # As in `slow`: a `run:` step, so the suite gets `--optimize=1`.
-      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
+      # As in `slow`: the suite runs at `--optimize=1`.
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          optimize: "1"
         env:
           BRAMBLE_TEST_GROUP: convergence
           BRAMBLE_TEST_MAXRSS_FRACTION: 0.7
@@ -229,6 +243,12 @@ jobs:
           name: lcov-suite-convergence
           path: lcov.info
           if-no-files-found: warn
+      # As in `slow`: the old entry goes just before the post step saves the new one.
+      - name: Delete the superseded cache entry
+        if: ${{ github.ref == 'refs/heads/main' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/delete_superseded_cache.sh "${{ steps.cache.outputs.cache-key }}"
 
   test:
     name: Julia nightly (${{ matrix.os }})
@@ -277,7 +297,9 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          optimize: "1"
         env:
           BRAMBLE_TEST_GROUP: slow
           # 0.7 of the runner's memory (see `slow`), so a blow-up fails by name (see
@@ -314,20 +336,34 @@ jobs:
       # release-gate.yml's quality job restores this entry, so the `with:` inputs here and
       # there must stay equal. The cache-name is the action's own default, written out.
       - uses: julia-actions/cache@v3
+        id: cache
         with:
           cache-name: julia-cache;workflow=Nightly;job=quality
           cache-compiled: "true"
 
       - uses: julia-actions/julia-buildpkg@v1
 
-      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          optimize: "1"
         env:
           BRAMBLE_TEST_GROUP: quality
+
+      # As in `slow`: the old entry goes just before the post step saves the new one. This
+      # entry is the largest, about 2.2 GB.
+      - name: Delete the superseded cache entry
+        if: ${{ github.ref == 'refs/heads/main' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/delete_superseded_cache.sh "${{ steps.cache.outputs.cache-key }}"
+
   # Keeps the repository under its 10 GB Actions cache quota. julia-actions/cache never
-  # deletes old entries on the default branch (it leaves them to GitHub's eviction), so every
-  # nightly run added about 2.3 GB on `main`: a `unit-and-slow` entry per OS and a `quality`
-  # entry. Only the newest entry per key prefix (the key without `;run_id=...`) is ever
-  # restored, so this deletes the rest once the saving jobs are done.
+  # deletes old entries on the default branch (it leaves them to GitHub's eviction). The
+  # saving jobs above delete their own superseded entry before they save; this is the
+  # backstop for a job that saved without passing, and for what the other workflows save on
+  # `main` (Weekly.yml, docs-on-demand.yml, julia-nightly.yml). Only the newest entry per key
+  # prefix (the key without `;run_id=...`) is ever restored, so this deletes the rest once
+  # the saving jobs are done.
   prune-caches:
     name: Prune superseded caches on main
     needs: [slow, convergence, quality]

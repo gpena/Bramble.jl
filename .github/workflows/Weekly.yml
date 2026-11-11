@@ -131,8 +131,17 @@ jobs:
       # the packages and the artifacts are still cached; the compile cost (a warm leg ran about
       # half as long) is the price of keeping CI, Nightly and the docs warm. Weekly runs once a
       # week and on demand.
+      #
+      # One entry for the six shards and the `grids` job: the same `cache-name`, and
+      # `include-matrix: "false"` so the shard stays out of the key. Each of the seven used to
+      # save its own, about 230 MB apiece and 1.5 GB a run, which with Nightly's entries took
+      # the repository over the quota (.github/scripts/delete_superseded_cache.sh). The first
+      # job to finish saves; the others' saves find the key taken. An `ad-*` shard that
+      # restores another job's entry downloads Enzyme in the "Add Enzyme" step.
       - uses: julia-actions/cache@v3
         with:
+          cache-name: julia-cache;weekly;julia=1.13
+          include-matrix: "false"
           cache-compiled: "false"
 
       - uses: julia-actions/julia-buildpkg@v1
@@ -149,27 +158,26 @@ jobs:
 
       # Coverage is collected on every shard, each uploading its part; the `slow` half comes
       # from nightly.yml.
-      # A `run:` step instead of julia-actions/julia-runtest, because that action cannot pass Julia
-      # flags: its harness hard-codes `julia_args` to `--check-bounds` alone. Every group of the
-      # suite runs at `--optimize=1`, which on the plain harness cut the slow group from 1051 s to
-      # 664 s, ext from 283 s to 184 s, backends from 274 s to 190 s, quality from 173 s to 160 s
-      # and examples from 206 s to 184 s, with the same tests passing and no allocation,
-      # inference or AD-gated check changing result. The call restates what the action passed:
-      # `coverage` on, `--check-bounds=yes`, and `--depwarn=yes --inline=yes` on the outer process.
-      # Dropped: `force_latest_compatible_version` (the action sets it to true only for
-      # Dependabot/CompatHelper jobs, which these triggers are not) and `annotate` (off by
-      # default). `JULIA_NUM_THREADS` comes from the job-level `env`.
+      # Every group of the suite runs at `--optimize=1`: julia-runtest's `optimize` input, which
+      # reaches the test process through `julia_args`. On the plain harness it cut the slow
+      # group from 1051 s to 664 s, ext from 283 s to 184 s, backends from 274 s to 190 s,
+      # quality from 173 s to 160 s and examples from 206 s to 184 s, with the same tests
+      # passing and no allocation, inference or AD-gated check changing result. Coverage is
+      # the action's default, on. `JULIA_NUM_THREADS` comes from the job-level `env`.
       # The `ad-*` shards run at `--check-bounds=auto`, Julia's default, the flags a user
       # differentiates under: forced bounds checks change what Enzyme's type analysis sees
       # (gpena/Bramble.jl#1134) and every AD cell in test/space/ad_coverage.jl is recorded
-      # without them. The other shards keep `yes`, the setting the action passed.
+      # without them. The other shards keep `yes`, the action's default.
       #
       # `Pkg.test` precompiles the whole test environment before it runs anything: 571
       # packages, 29 to 33 minutes on each `ad-*` shard (2026-11-05). The AD files load 111 of
       # them, about a quarter of that compile time; NonlinearSolve, OrdinaryDiffEq, JET and
       # Makie are never loaded. `JULIA_PKG_PRECOMPILE_AUTO=0` skips that pass on the `ad-*`
       # shards, so each package compiles when a test first loads it.
-      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=${{ startsWith(matrix.shard, 'ad-') && 'auto' || 'yes' }}"])'
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          optimize: "1"
+          check_bounds: ${{ startsWith(matrix.shard, 'ad-') && 'auto' || 'yes' }}
         env:
           BRAMBLE_TEST_GROUP: backends
           BRAMBLE_TEST_SHARD: ${{ matrix.shard }}
@@ -216,16 +224,22 @@ jobs:
         with:
           version: "1.13"
 
-      # Compiled images are not cached, for the cache quota (see the `full` job above).
+      # Compiled images are not cached, for the cache quota, and the entry is the one the
+      # `full` job's shards share (see there).
       - uses: julia-actions/cache@v3
         with:
+          cache-name: julia-cache;weekly;julia=1.13
+          include-matrix: "false"
           cache-compiled: "false"
 
       - uses: julia-actions/julia-buildpkg@v1
 
       # As the `full` job's test step, without coverage: the `slow` half already covers these
       # files' src/ lines through each grid's cover.
-      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=false, julia_args=["--optimize=1", "--check-bounds=yes"])'
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          optimize: "1"
+          coverage: "false"
         env:
           BRAMBLE_TEST_GROUP: grids
 
