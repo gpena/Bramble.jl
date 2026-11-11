@@ -7,7 +7,7 @@ using Enzyme: Enzyme, Const, Annotation, Active, Duplicated, DuplicatedNoNeed,
               BatchDuplicated, BatchDuplicatedNoNeed, MixedDuplicated, BatchMixedDuplicated
 using Enzyme.EnzymeRules: EnzymeRules, RevConfig, FwdConfig, AugmentedReturn
 using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange
-using LinearAlgebra: lu
+using LinearAlgebra: dot, lu
 
 # A native Enzyme reverse rule for `pde_solve`, used instead of `Enzyme.@import_rrule`.
 #
@@ -174,5 +174,8 @@ EnzymeRules.inactive(::typeof(Bramble._refresh!), args...) = nothing
 
 # The `CpuThreaded` engine entries' rules.
 include("BrambleEnzymeExt/threaded.jl")
+
+# The reverse rule for the forms of a relation of `constrained`.
+include("BrambleEnzymeExt/relations.jl")
 
 end

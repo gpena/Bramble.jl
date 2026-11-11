@@ -8,6 +8,11 @@
 #     julia --startup-file=no --project=. --threads=1 --optimize=1 --check-bounds=auto \
 #         docs/notes/internals/ad_reductions/1153_constrained.jl <step> <case> <fwd|rev>
 #
+# Enzyme loads Bramble's extension, whose reverse rule over `_assemble_relation`
+# (ext/BrambleEnzymeExt/relations.jl) applies to every reverse run below. The steps that
+# reach that function measure the code with the rule; the note holds the figures of the
+# code before it.
+#
 # Cases. The space is `1127_ghost.jl`'s, a 7 by 6 non-uniform mesh with ghosts on xmin, xmax
 # and ymax, and the relations are those of `constrained_with` there, one datum replaced by
 # p[1].
@@ -34,6 +39,15 @@
 #   relation_load, relation_matrix, relation_transpose
 #                  the parts of `_assemble_relation` alone: the data's load, the operator's
 #                  matrix, the transposition of that matrix to the rows' layout.
+#   relation_forms, relation_forms_check, relation_forms_transpose, relation_at_facet
+#                  the bisection of `_assemble_relation`: its two forms in one function on
+#                  a constant facet, the same with the reach check or the transposition
+#                  added, and the two forms through `_at_facet` on the runtime facet.
+#   split_load, split_matrix, split_matrix_r
+#                  the linearity split on the facet :xmax: the load of the unit datum times
+#                  the datum, and the matrices of `u` and `∂ₙ(u)` combined by the Robin
+#                  coefficient, the two operators rebuilt from the space or read out of the
+#                  relation.
 #   rows           `_relation_rows`.
 #   dirichlet      `_dirichlet_values`.
 #   kept           `_kept_points`, integers only, the parameter scales the sum.
@@ -46,15 +60,18 @@
 #   closure_data   `_closure_matrix` and `_closure_data`.
 #   space          `_constrained_space`, the relations parsed inside.
 #   constrained    `constrained` itself, the loss of `data_rev` and `robin_rev`.
+#   cell           the loss of the `ghost_data` and `ghost_robin` cells of
+#                  test/space/ad_coverage.jl: `constrained`, then a form and its assembly.
 #   downstream     case `const` only: a form and its assembly on the constrained space
 #                  built outside, whose relations carry no parameter.
 #
 # The reference is a central difference of the same loss (the losses are rational in the
 # parameter and h = 1e-5 leaves about 1e-10). A step is `ok` when the relative error, the
-# largest absolute difference over the largest absolute reference, is at most 1e-6.
+# largest absolute difference over the largest absolute reference, is at most 1e-6. The step
+# `cell` compares with ForwardDiff instead, to 1e-8.
 #
-# Enzyme is not a dependency of the root project, so it is loaded from a temporary
-# environment, as 1127_ghost.jl does. The root Manifest.toml must hold Enzyme.
+# Enzyme and ForwardDiff are not dependencies of the root project, so they are loaded from
+# a temporary environment, as 1127_ghost.jl does. The root Manifest.toml must hold both.
 #
 # Output: `step <name> t=<seconds>` lines as it runs, then one line
 # `RESULT <step> <case> <mode> <status> <relerr> <seconds> <detail>`. Exit status is 0 for
@@ -63,9 +80,10 @@ println("pid ", getpid())
 flush(stdout)
 _e = mktempdir()
 write(joinpath(_e, "Project.toml"),
-    "[deps]\nEnzyme = \"7da242da-08ed-463a-9acd-ee780be4f1d9\"\n")
+    "[deps]\nEnzyme = \"7da242da-08ed-463a-9acd-ee780be4f1d9\"\n" *
+    "ForwardDiff = \"f6369f11-7733-5829-9624-2563aa707210\"\n")
 push!(LOAD_PATH, _e)
-using Bramble, Enzyme, LinearAlgebra, SparseArrays, Logging
+using Bramble, Enzyme, ForwardDiff, LinearAlgebra, SparseArrays, Logging
 
 # Enzyme warns once per stored value it cannot find a use for, thousands of lines of IR.
 global_logger(NullLogger())
@@ -74,7 +92,7 @@ const T0 = time()
 step(name) = (println("step ", name, " t=", round(time() - T0; digits = 1)); flush(stdout))
 
 length(ARGS) == 3 || error("usage: 1153_constrained.jl <step> <case> <fwd|rev>")
-const STEP, CASE_NAME, MODE = ARGS
+const STEP, CASE_NAME, MODE = ARGS[1:3]
 const CASE = Symbol(CASE_NAME)
 MODE in ("fwd", "rev") || error("mode must be fwd or rev, not ", MODE)
 CASE in (:data, :robin, :dirichlet, :conormal, :const) || error("unknown case ", CASE)
@@ -258,6 +276,109 @@ function loss_relation_matrix(p)
     return sq(nonzeros(R))
 end
 
+# The bisection of `_assemble_relation`'s reverse cost, 732 s against about 200 s for its
+# parts alone. `relation_forms` runs the two forms in one function on the constant facet
+# :xmax, without `_check_facet_reach` and without the transposition; `_check` and
+# `_transpose` add one of those back; `relation_at_facet` runs the two forms through
+# `_at_facet` on the relation's runtime `(d, s)`, as `_assemble_relation` does, so the
+# compiled code holds one copy of the forms per facet of the mesh (four in 2D).
+@inline function relation_forms(op, data, d::Val, s::Val)
+    mask = Bramble._relation_mask(d, s, Val(2))
+    R = assemble(form(P, P, (u, v) -> Bramble._facet_inner(mask, op, v)))
+    b = assemble(form(P, v -> Bramble._facet_inner(mask, data, Bramble._facet_identity(v))))
+    return R, b
+end
+
+function loss_relation_forms(p)
+    gr, _ = parse_relations(CASE, p[1])
+    R, b = relation_forms(gr[2].op, gr[2].data, Val(1), Val(2))
+    return sq(nonzeros(R)) + sq(b)
+end
+
+function loss_relation_forms_check(p)
+    gr, _ = parse_relations(CASE, p[1])
+    op = gr[2].op
+    Bramble._check_facet_reach(G, Bramble._reads_ghosts(op)[1], 1, 2,
+        (Bramble._facet_component(op, Val(1), Val(2)),))
+    R, b = relation_forms(op, gr[2].data, Val(1), Val(2))
+    return sq(nonzeros(R)) + sq(b)
+end
+
+function loss_relation_forms_transpose(p)
+    gr, _ = parse_relations(CASE, p[1])
+    R, b = relation_forms(gr[2].op, gr[2].data, Val(1), Val(2))
+    return sq(nonzeros(sparse(transpose(R)))) + sq(b)
+end
+
+function loss_relation_at_facet(p)
+    gr, _ = parse_relations(CASE, p[1])
+    r = gr[2]
+    op, data = r.op, r.data
+    R, b = Bramble._at_facet(Val(2), r.d, r.s) do name, d, s
+        return relation_forms(op, data, d, s)
+    end
+    return sq(nonzeros(R)) + sq(b)
+end
+
+# The linearity split, prototyped here with no change to `src/`: the forms are assembled on
+# operands that hold no parameter, and the parameter scales what they give.
+# `split_load` (data): the load of the unit datum, the facet weights, times the datum.
+# `split_matrix` (robin): the matrices of `u` and of `∂ₙ(u)`, operators rebuilt from the
+# space alone, combined as `β * Mu + Mn`. `split_matrix_r` is the same with the two
+# operators read out of the parsed relation, which also holds the parameter.
+# Each prints, before Enzyme runs, whether the split gives the bits of the unsplit form.
+function unit_matrices(Fu, Fn)
+    mask = Bramble._relation_mask(Val(1), Val(2), Val(2))
+    Mu = assemble(form(P, P, (u, v) -> Bramble._facet_inner(mask, Fu, v)))
+    Mn = assemble(form(P, P, (u, v) -> Bramble._facet_inner(mask, Fn, v)))
+    return Mu, Mn
+end
+
+function loss_split_load(p)
+    gr, _ = parse_relations(CASE, p[1])
+    mask = Bramble._relation_mask(Val(1), Val(2), Val(2))
+    w = assemble(form(P, v -> Bramble._facet_inner(mask, one(T), Bramble._facet_identity(v))))
+    return sq(w .* gr[2].data)
+end
+
+function split_matrix(p)
+    gr, _ = parse_relations(CASE, p[1])
+    Fn = ∂ₙ(Bramble.trial_function(P))
+    u0 = Bramble.trial_function(P)
+    Mu, Mn = unit_matrices(Bramble._map_facets(c -> u0, Fn), Fn)
+    return gr[2].op.ops[1][2].left_op.scalar * Mu + Mn
+end
+loss_split_matrix(p) = sq(nonzeros(split_matrix(p)))
+
+function split_matrix_r(p)
+    gr, _ = parse_relations(CASE, p[1])
+    op = gr[2].op
+    Mu, Mn = unit_matrices(Bramble._map_facets(c -> c.left_op.inner_op, op),
+        Bramble._map_facets(c -> c.right_op, op))
+    return op.ops[1][2].left_op.scalar * Mu + Mn
+end
+loss_split_matrix_r(p) = sq(nonzeros(split_matrix_r(p)))
+
+# Whether the split gives the unsplit form's bits and pattern, printed for the split steps.
+function split_primal_check()
+    gr, _ = parse_relations(CASE, P0[1])
+    mask = Bramble._relation_mask(Val(1), Val(2), Val(2))
+    op, data = gr[2].op, gr[2].data
+    R = assemble(form(P, P, (u, v) -> Bramble._facet_inner(mask, op, v)))
+    b = assemble(form(P, v -> Bramble._facet_inner(mask, data, Bramble._facet_identity(v))))
+    w = assemble(form(P, v -> Bramble._facet_inner(mask, one(T), Bramble._facet_identity(v))))
+    println("split load: bits equal ", (w .* data) == b, ", max diff ",
+        maximum(abs, w .* data .- b))
+    for (name, S) in (("split_matrix", split_matrix(P0)), ("split_matrix_r", split_matrix_r(P0)))
+        println(name, ": pattern equal ",
+            rowvals(S) == rowvals(R) &&
+                SparseArrays.getcolptr(S) == SparseArrays.getcolptr(R),
+            ", nnz ", nnz(S), " against ", nnz(R), ", bits equal ", S == R, ", max diff ",
+            maximum(abs, S - R))
+    end
+    return flush(stdout)
+end
+
 # `sparse(transpose(R))` of `_assemble_relation` (its last line) on a matrix of the
 # parameter, rebuilt as `inputs` does.
 function loss_relation_transpose(p)
@@ -325,6 +446,16 @@ function loss_constrained(p)
     return sq(Wc.d) + sq(nonzeros(Wc.E))
 end
 
+# The loss of the `ghost_data` and `ghost_robin` cells of test/space/ad_coverage.jl
+# (`build_ghost_param`): `constrained` on the parameter, then a form and its assembly on the
+# space it gives.
+function loss_cell(p)
+    C = constrained(W, relations_of(CASE, p[1]))
+    a = form(C, C, (U, V) -> innerₕ(-Δₕ(U), V) + innerₕ(U, V))
+    M, F = assemble(a, form(C, v -> innerₕ(x -> 1.0 + x[1], v)))
+    return sq(nonzeros(M)) + sq(F)
+end
+
 # Case `const`: the same relations with constant data, `constrained` run outside, and the
 # form and assembly of `1127_ghost.jl`'s `loss_assemble` on it, the parameter in the form only.
 const C0 = CASE === :const ? constrained(W, relations_of(:const, 0.0)) : nothing
@@ -338,12 +469,19 @@ end
 const LOSSES = Dict("inputs" => loss_inputs, "parse" => loss_parse,
     "relation" => loss_relation, "relation_load" => loss_relation_load,
     "relation_matrix" => loss_relation_matrix,
-    "relation_transpose" => loss_relation_transpose, "rows" => loss_rows,
+    "relation_transpose" => loss_relation_transpose,
+    "relation_forms" => loss_relation_forms,
+    "relation_forms_check" => loss_relation_forms_check,
+    "relation_forms_transpose" => loss_relation_forms_transpose,
+    "relation_at_facet" => loss_relation_at_facet, "split_load" => loss_split_load,
+    "split_matrix" => loss_split_matrix, "split_matrix_r" => loss_split_matrix_r,
+    "rows" => loss_rows,
     "dirichlet" => loss_dirichlet,
     "kept" => loss_kept, "bookkeeping" => loss_bookkeeping, "lu" => loss_lu,
     "block_solve" => loss_block_solve, "closure" => loss_closure,
     "closure_data" => loss_closure_data, "space" => loss_space,
-    "constrained" => loss_constrained, "downstream" => loss_downstream)
+    "constrained" => loss_constrained, "cell" => loss_cell,
+    "downstream" => loss_downstream)
 haskey(LOSSES, STEP) || error("unknown step ", STEP)
 (STEP == "downstream") == (CASE === :const) ||
     error("`downstream` runs the case `const`, alone")
@@ -361,8 +499,13 @@ println("step ", STEP, " case ", CASE, " mode ", MODE, ", Enzyme ", pkgversion(E
     Base.JLOptions().opt_level, ", check-bounds ", Base.JLOptions().check_bounds,
     " (0 auto, 1 yes, 2 no)")
 flush(stdout)
+startswith(STEP, "split") && split_primal_check()
 
-ref = central_difference(LOSS, P0)
+# The step `cell` compares with ForwardDiff to 1e-8, as the cells of
+# test/space/ad_coverage.jl do: its loss holds the squares of a matrix the parameter does
+# not reach, whose cancellation leaves a central difference about 1e-6.
+const TOL = STEP == "cell" ? 1e-8 : 1e-6
+ref = STEP == "cell" ? ForwardDiff.gradient(LOSS, P0) : central_difference(LOSS, P0)
 step("reference")
 if abs(only(ref)) <= 1e-8
     println("RESULT ", STEP, " ", CASE, " ", MODE, " weakref NaN ",
@@ -386,7 +529,7 @@ function measure(ref, t_ref)
                 Enzyme.Duplicated(copy(P0), g))
         end
         relerr = maximum(abs, g .- ref) / maximum(abs, ref)
-        relerr <= 1e-6 || (status = "wrong")
+        relerr <= TOL || (status = "wrong")
         step("enzyme done")
     catch err
         err isa InterruptException && rethrow()
