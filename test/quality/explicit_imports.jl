@@ -462,6 +462,10 @@ using Kronecker: Kronecker
                 # `GhostLinearForm` (BrambleSciMLExt): the ghost-space linear form
                 # `linear_problem` accepts beside `LinearForm`. Not public.
                 :GhostLinearForm,
+                # `JacobianForm` (BrambleSciMLExt): what `jacobian_form` returns, the type
+                # `nonlinear_problem` dispatches on to pass the exact Jacobian as `jac`. Not
+                # public.
+                :JacobianForm,
                 # `LinearAlgebra.BLAS.get_config`, `LinearAlgebra.LAPACK.chklapackerror`,
                 # `chkargsok`, `Base.Libc.Libdl` (BrambleKroneckerExt): the extension finds
                 # the loaded LAPACK by name and looks up `zgges3_`/`cgges3_` in it, reporting
