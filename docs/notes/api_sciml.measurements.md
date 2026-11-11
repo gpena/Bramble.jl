@@ -25,6 +25,21 @@ own functions -- never a synthetic microbenchmark standing in for them (see
 `bramble-verification`) -- so a "no" here is a measured "no", not a guess. Numbers are a
 single run on one machine, not a tracked baseline; treat them as directional.
 
+### Summary
+
+The verdict table as it stood on the published `api_sciml.md` until gpena/Bramble.jl#1223.
+
+| Package | Verdict |
+|:--- |:--- |
+| `SparseMatricesCOO.jl` | Not adopted: wrong tool for this use, and Bramble's own path is already faster |
+| `Sparspak.jl` | Done: [#247](https://github.com/gpena/Bramble.jl/issues/247) |
+| `Pardiso.jl` | Not adopted: no usable backend without a separate license, same shape as [#245](https://github.com/gpena/Bramble.jl/issues/245) |
+| `Krylov.jl` | Already available via `solve`'s `solver` keyword |
+| `IncompleteLU.jl` | Works, but `ILUZero.jl` dominates it here |
+| `ILUZero.jl` | Done: `ilu_preconditioner`, [#255](https://github.com/gpena/Bramble.jl/issues/255) |
+| `Metis.jl` | **Recommended**: genuine fill/time win on 3D systems, usable today via existing `perm` forwarding |
+| `SymRCM.jl` | Not adopted: worse fill than the CHOLMOD default on the 3D Poisson system measured |
+
 ## JuliaSparse ecosystem evaluation (details)
 
 ### Assembly & storage formats
