@@ -91,7 +91,7 @@ errors
 #-
 
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-surface_plot(uₕ; title = "head from one well at (0.35, 0.65)", mesh_lines = true) # hide
+surface_plot(uₕ; title = "head from one well at (0.35, 0.65)") # hide
 
 # ## The same well beside a leaky side
 #
@@ -173,7 +173,7 @@ leaky
 
 #-
 
-surface_plot(uᵍ; title = "head from one well, leaky right side", mesh_lines = true) # hide
+surface_plot(uᵍ; title = "head from one well, leaky right side") # hide
 
 # The flux sections below stay Dirichlet on the plain space, because [`reaction`](@ref)
 # refuses a ghost form with an `ArgumentError`: it reads rows of the unconstrained plain
@@ -275,7 +275,7 @@ net, reaction(a, l₂, u₂; marker = :left), reaction(a, l₂, u₂; marker = :
 
 #-
 
-surface_plot(u₂; title = "injector at (0.3, 0.5), producer at (0.7, 0.5)", mesh_lines = true) # hide
+surface_plot(u₂; title = "injector at (0.3, 0.5), producer at (0.7, 0.5)") # hide
 
 # ## Where to go next
 #

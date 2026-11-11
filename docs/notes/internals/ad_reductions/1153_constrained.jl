@@ -37,14 +37,14 @@
 #   parse          `_facet_relations`, `_ghost_relations`, `_dirichlet_relations`.
 #   relation       `_assemble_relation` of the xmax relation (forms on the padded space).
 #   relation_load, relation_matrix, relation_transpose
-#                  the parts of `_assemble_relation` alone: the data's load, the operator's
-#                  matrix, the transposition of that matrix to the rows' layout.
+#                  the parts of `_assemble_relation` alone (the data's load, the operator's
+#                  matrix, the transposition of that matrix to the rows' layout).
 #   relation_forms, relation_forms_check, relation_forms_transpose, relation_at_facet
-#                  the bisection of `_assemble_relation`: its two forms in one function on
+#                  the bisection of `_assemble_relation`, its two forms in one function on
 #                  a constant facet, the same with the reach check or the transposition
 #                  added, and the two forms through `_at_facet` on the runtime facet.
 #   split_load, split_matrix, split_matrix_r
-#                  the linearity split on the facet :xmax: the load of the unit datum times
+#                  the linearity split on the facet `:xmax`, the load of the unit datum times
 #                  the datum, and the matrices of `u` and `∂ₙ(u)` combined by the Robin
 #                  coefficient, the two operators rebuilt from the space or read out of the
 #                  relation.
@@ -322,9 +322,9 @@ end
 
 # The linearity split, prototyped here with no change to `src/`: the forms are assembled on
 # operands that hold no parameter, and the parameter scales what they give.
-# `split_load` (data): the load of the unit datum, the facet weights, times the datum.
-# `split_matrix` (robin): the matrices of `u` and of `∂ₙ(u)`, operators rebuilt from the
-# space alone, combined as `β * Mu + Mn`. `split_matrix_r` is the same with the two
+# `split_load` (data) multiplies the datum by the load of the unit datum, the facet weights.
+# `split_matrix` (robin) combines the matrices of `u` and of `∂ₙ(u)`, operators rebuilt from
+# the space alone, as `β * Mu + Mn`. `split_matrix_r` is the same with the two
 # operators read out of the parsed relation, which also holds the parameter.
 # Each prints, before Enzyme runs, whether the split gives the bits of the unsplit form.
 function unit_matrices(Fu, Fn)
