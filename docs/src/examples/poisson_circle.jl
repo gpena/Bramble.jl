@@ -64,6 +64,50 @@ max_off < 1.0e-12
 @test max_off < 1.0e-12                                                              #src
 @test count(m[:D_boundary]) > 0 && count(m[:D]) > count(m[:D_boundary])             #src
 
+# ## Solving
+#
+# `polygon_spaces(Ωₕ, :D, g)` returns the trial space `U` and the test space `W`. Their
+# unknowns are the interior nodes, and the Dirichlet data `g` sit at the boundary nodes. The
+# load is `avgₕ`, the mean of ``f`` over each dual cell, and `lift(U, u)` puts a solution back
+# on the whole grid.
+
+u_exact(p) = sin(2p[1] + 0.5) * cos(1.5p[2] - 0.2) + exp(0.6p[1] - 0.4p[2])
+f(p) = 6.25 * sin(2p[1] + 0.5) * cos(1.5p[2] - 0.2) - 0.52 * exp(0.6p[1] - 0.4p[2])
+
+function solve_on(Ωₕ)
+    U, W = polygon_spaces(Ωₕ, :D, u_exact)
+    fₕ = element(gridspace(Ωₕ))
+    avgₕ!(fₕ, f)
+    A, F = assemble(form(U, W, (u, v) -> innerₕ(-Δₕ(u), v)), form(W, v -> innerₕ(fₕ, v)))
+    return U, A \ F
+end
+nothing # hide
+
+# The solution on the grid requested at 80 points per axis. Nodes outside the disk carry no
+# value and are left blank; drag the plot to tilt it. The red curve is the polygon inscribed
+# in the circle, whose vertices are the boundary nodes:
+
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+Ω₈₀ = mesh(Ω, (80, 80), (true, true))
+uₕ = element(gridspace(Ω₈₀))
+uₕ.data .= lift(solve_on(Ω₈₀)...).data
+uₕ.data[BitVector(markers(Ω₈₀)[:D_exterior])] .= NaN
+x₈₀, y₈₀ = collect(points(Ω₈₀(1))), collect(points(Ω₈₀(2)))
+on_∂D = reshape(BitVector(markers(Ω₈₀)[:D_boundary]), length(x₈₀), length(y₈₀))
+inscribed = sort([(x₈₀[i], y₈₀[j]) for i in eachindex(x₈₀), j in eachindex(y₈₀) if on_∂D[i, j]];
+    by = v -> atan(v[2], v[1]))
+surface_plot(uₕ; title = "u on the unit disk, n = 80", boundary = inscribed) # hide
+
+# The plotted values are the solution at the interior and boundary nodes only.          #src
+@test count(isnan, uₕ.data) == count(markers(Ω₈₀)[:D_exterior])                      #src
+let ue = vec([u_exact((x, y)) for x in points(Ω₈₀(1)), y in points(Ω₈₀(2))]),          #src
+    keep = .!isnan.(uₕ.data)                                                           #src
+
+    @test maximum(abs, uₕ.data[keep] .- ue[keep]) < 1.0e-3                             #src
+end                                                                                    #src
+
+# ## The grid closure
+#
 # A coarse grid of the same disk, eight seeds per axis, keeps the lines readable. Each line
 # that meets the circle has a node there, and those nodes are the vertices of the polygon
 # inscribed in the circle:
@@ -156,25 +200,6 @@ let s = read(@__FILE__, String), px(x) = 20 + 200 * (x + 1.25), py(y) = 20 + 200
     @test all(maximum(abs, f .- [px(v[1]), py(v[2])]) < 0.06 for (f, v) in zip(fig, V))      #src
 end                                                                                          #src
 
-# ## Solving
-#
-# `polygon_spaces(Ωₕ, :D, g)` returns the trial space `U` and the test space `W`. Their
-# unknowns are the interior nodes, and the Dirichlet data `g` sit at the boundary nodes. The
-# load is `avgₕ`, the mean of ``f`` over each dual cell, and `lift(U, u)` puts a solution back
-# on the whole grid.
-
-u_exact(p) = sin(2p[1] + 0.5) * cos(1.5p[2] - 0.2) + exp(0.6p[1] - 0.4p[2])
-f(p) = 6.25 * sin(2p[1] + 0.5) * cos(1.5p[2] - 0.2) - 0.52 * exp(0.6p[1] - 0.4p[2])
-
-function solve_on(Ωₕ)
-    U, W = polygon_spaces(Ωₕ, :D, u_exact)
-    fₕ = element(gridspace(Ωₕ))
-    avgₕ!(fₕ, f)
-    A, F = assemble(form(U, W, (u, v) -> innerₕ(-Δₕ(u), v)), form(W, v -> innerₕ(fₕ, v)))
-    return U, A \ F
-end
-nothing # hide
-
 # ## Error
 #
 # `norminf` is the largest absolute error over the interior nodes, and `snorm₁ₕ` the
@@ -223,24 +248,6 @@ println("order: max ", round(slope(emax); digits = 2), ", H¹ₕ ", round(slope(
 include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
 convergence_plot([(h, emax, "max", "#5B5FC7"), (h, eh1, "H¹ₕ", "#0E7C86")];       # hide
     title = "Poisson on the unit disk")                                                # hide
-
-# The solution on the grid requested at 80 points per axis. Nodes outside the disk carry no
-# value and are left blank; drag the plot to tilt it.
-
-include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-Ω₈₀ = mesh(Ω, (80, 80), (true, true))
-uₕ = element(gridspace(Ω₈₀))
-uₕ.data .= lift(solve_on(Ω₈₀)...).data
-uₕ.data[BitVector(markers(Ω₈₀)[:D_exterior])] .= NaN
-surface_plot(uₕ; title = "u on the unit disk, n = 80") # hide
-
-# The plotted values are the solution at the interior and boundary nodes only.          #src
-@test count(isnan, uₕ.data) == count(markers(Ω₈₀)[:D_exterior])                      #src
-let ue = vec([u_exact((x, y)) for x in points(Ω₈₀(1)), y in points(Ω₈₀(2))]),          #src
-    keep = .!isnan.(uₕ.data)                                                           #src
-
-    @test maximum(abs, uₕ.data[keep] .- ue[keep]) < 1.0e-3                             #src
-end                                                                                    #src
 
 # ## Seeds drawn at random
 #

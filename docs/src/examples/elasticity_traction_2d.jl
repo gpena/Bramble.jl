@@ -109,6 +109,37 @@ function solve_on(Ωₕ)
     return Cₕ, Bramble.lift(Cₕ, pde_solve(A, F))
 end
 
+# ## The solution on a graded grid
+#
+# Graded grids: uniform points mapped by a smooth function, [`change_points!`](@ref).
+
+grade(ξ) = expm1(2ξ) / expm1(2.0)
+
+function graded(n)
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n), (true, true))
+    change_points!(Ωₕ, (grade.(points(Ωₕ)[1]), 1 .- grade.(1 .- points(Ωₕ)[2])))
+    return Ωₕ
+end
+
+# The solution on 17 points per axis, each node drawn at ``x + 0.2\,u(x)``: the scale is
+# 0.2, since the displacement reaches almost 2. The faint grid is the undeformed one, the
+# colour the magnitude ``|u|``.
+
+include(joinpath(@__DIR__, "..", "deformed_plot.jl")) # hide
+Ω₁₇ = graded(17)
+_, U₁₇ = solve_on(Ω₁₇)
+u₁₇ = element(gridspace(Ω₁₇)^Val(2))
+for (i, cᵢ) in enumerate(components(u₁₇))
+    P = reshape(parent(U₁₇), (size(Ω₁₇) .+ 2)..., 2)
+    cᵢ .= vec(P[(2:(n + 1) for n in size(Ω₁₇))..., i])
+end
+deformed_plot_2d(u₁₇; scale = 0.2, title = "Displacement of the graded grid, scale 0.2") # hide
+
+# The plotted displacement is the exact one to within the discretisation error, and nonzero. #src
+@test 1.5 < maximum(abs, parent(u₁₇)) < 2.5                                                  #src
+@test maximum(abs, parent(components(u₁₇)[1]) .- parent(Rₕ(gridspace(Ω₁₇), uᵉ[1]))) < 0.1 #src
+@test maximum(abs, parent(components(u₁₇)[2]) .- parent(Rₕ(gridspace(Ω₁₇), uᵉ[2]))) < 0.1 #src
+
 # ## Does the solution satisfy the traction?
 #
 # The relation is checked on the lifted values, with forms that share nothing with the
@@ -139,17 +170,8 @@ function facet_residual(Ωₕ, P, U, F, i)
     return maximum(abs, r[keep]) / max(1.0, maximum(abs, flux[keep]))
 end
 
-# The checks run on a graded grid, the points of a uniform one pushed through a smooth
-# increasing map and installed with [`change_points!`](@ref), so that a wrong spacing in a
-# relation would show:
-
-grade(ξ) = expm1(2ξ) / expm1(2.0)
-
-function graded(n)
-    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n), (true, true))
-    change_points!(Ωₕ, (grade.(points(Ωₕ)[1]), 1 .- grade.(1 .- points(Ωₕ)[2])))
-    return Ωₕ
-end
+# The checks run on the graded grid above, so that a wrong spacing in a relation would
+# show:
 
 Ωchk = graded(9)
 Cchk, Uchk = solve_on(Ωchk)

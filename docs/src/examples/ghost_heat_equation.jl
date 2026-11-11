@@ -68,7 +68,7 @@ end
 # tight enough that the error left at the final time is the one in space. The final state is
 # compared with the exact solution on the grid in the discrete ``L^2`` norm `normₕ`:
 
-function solve_case(Ωₕ; T = 0.5)
+function solve_case(Ωₕ; T = 0.5, saveat = T)
     Cₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
         u -> ntuple(j -> side_relation(u, j), 4))
     a = form(Cₕ, Cₕ, (u, v) -> innerₕ(-1.0 * Δₕ(u), v))
@@ -76,12 +76,26 @@ function solve_case(Ωₕ; T = 0.5)
 
     Wₕ = gridspace(Ωₕ)
     prob = ode_problem(a, l, copy(parent(Rₕ(Wₕ, x -> sol(x, 0.0)))), (0.0, T))
-    sl = solve(prob, FBDF(); reltol = 1e-10, abstol = 1e-12)
+    sl = solve(prob, FBDF(); reltol = 1e-10, abstol = 1e-12, saveat)
 
     uₕ = element(Wₕ)
     parent(uₕ) .= sl.u[end]
-    return uₕ, Rₕ(Wₕ, x -> sol(x, T))
+    return uₕ, Rₕ(Wₕ, x -> sol(x, T)), sl
 end
+
+# The solution in time on the coarsest grid of the page, the random 9 by 9 one, saved at 20
+# times. Both axes of the grid are drawn on the surface:
+
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+Random.seed!(20261016)
+Ω₀ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (false, false))
+_, _, sl₀ = solve_case(Ω₀; saveat = range(0.0, 0.5; length = 20))
+us = map(sl₀.u) do v
+    uₕ = element(gridspace(Ω₀))
+    parent(uₕ) .= v
+    return uₕ
+end
+animated_surface_plot(us, sl₀.t; title = "Ghost heat equation, n = 9", mesh_lines = true) # hide
 
 # The grid is a random non-uniform one refined in place by [`iterative_refinement!`](@ref),
 # so each level is the same random mesh with every cell halved:
@@ -92,7 +106,7 @@ function convergence(; levels = 4)
     Ωₕ = mesh(Ω, (9, 9), (false, false))
     hs, errs = Float64[], Float64[]
     for level in 1:levels
-        uₕ, uₑ = solve_case(Ωₕ)
+        uₕ, uₑ, _ = solve_case(Ωₕ)
         push!(hs, hₘₐₓ(Ωₕ))
         push!(errs, normₕ(uₕ .- uₑ))
         level < levels && iterative_refinement!(Ωₕ)
@@ -119,7 +133,7 @@ measured_order > 1.8
 # solve whose boundary data stayed at t = 0 would leave an error of the size of the change, #src
 # so the error must be a small fraction of the distance from the initial state.             #src
 @test let Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (true, true))  #src
-    uₕ, uₑ = solve_case(Ωₕ)                                                                 #src
+    uₕ, uₑ, _ = solve_case(Ωₕ)                                                              #src
     u0 = copy(uₑ)                                                                           #src
     Rₕ!(u0, x -> sol(x, 0.0))                                                               #src
     normₕ(uₕ .- uₑ) < 0.05 * normₕ(u0 .- uₑ)                                                #src

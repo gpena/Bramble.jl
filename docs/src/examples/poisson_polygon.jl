@@ -19,11 +19,8 @@
 #
 # ## The polygon and its grid
 #
-# `polygon(V)` takes the vertices in order, either orientation. Giving the polygon to the
-# domain as the marker `:P` makes `mesh` close the grid lines: every line that meets an edge
-# of the polygon gets a node on it, so the boundary of ``P`` is made of grid nodes, and the
-# nodes fall into three labels, `:P` (interior), `:P_boundary` and `:P_exterior`. The closure
-# may add lines, so the grid has more points than the requested count.
+# `polygon(V)` takes the vertices in order, either orientation, and the domain takes it as
+# the marker `:P`.
 
 using Bramble
 using Bramble: polygon_spaces, lift # public but unexported
@@ -32,13 +29,97 @@ using Random
 
 V = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0), (4.0, 3.0), (4.0, 5.0),
     (2.0, 5.0), (0.0, 3.0)]
+Ω = domain(interval(0.0, 6.0) × interval(0.0, 5.0), :P => polygon(V))
 
-# The figure draws a coarse grid of the same polygon, so its lines stay readable; the
-# problem below is solved on a much finer one. Both are random, and the seed makes them the
-# same on every build:
+# ## The grid and the spaces
+#
+# The grid is random, requested at 72 by 60 points, which the closure enlarges. The seed
+# makes it the same on every build, and the errors of a random grid scatter with the draw.
+#
+# `polygon_spaces(Ωₕ, :P, g)` returns the trial space `U` and the test space `W`. Their
+# unknowns are the interior nodes. The nodes on the polygon carry the Dirichlet data `g`
+# exactly, and `lift(U, u)` puts a solution back on the whole grid.
 
 Random.seed!(1)
-Ω = domain(interval(0.0, 6.0) × interval(0.0, 5.0), :P => polygon(V))
+Ωₕ = mesh(Ω, (72, 60), (false, false))
+xs, ys = collect(points(Ωₕ(1))), collect(points(Ωₕ(2)))
+
+sol(p) = sin(p[1]) * cos(0.7p[2]) + 0.1 * p[1] * p[2]
+U, W = polygon_spaces(Ωₕ, :P, sol)
+
+# ## Coefficients, operator and solution
+#
+# ``a`` is sampled at the half points between neighbours in ``x`` and ``c`` between
+# neighbours in ``y``, where the conservative form ``-\tilde D_x(a\, D_{-x} u)`` reads them.
+# ``b`` is sampled at the grid points, and the mixed term is `Dcₓ(bₕ * Dcᵧ(u)) +
+# Dcᵧ(bₕ * Dcₓ(u))` with the central differences. The load is `avgₕ`, the mean of ``f`` over
+# each dual cell.
+
+a(p) = 2 + 0.5sin(p[1] + p[2])
+b(p) = 0.5 + 0.2sin(p[1] * p[2])
+c(p) = 2 + 0.3cos(p[1])
+
+function load(p)
+    x, y = p
+    ux, uy = cos(x) * cos(0.7y) + 0.1y, -0.7sin(x) * sin(0.7y) + 0.1x
+    uxx, uyy = -sin(x) * cos(0.7y), -0.49sin(x) * cos(0.7y)
+    uxy = -0.7cos(x) * sin(0.7y) + 0.1
+    ax, bx, by = 0.5cos(x + y), 0.2y * cos(x * y), 0.2x * cos(x * y)
+    return -(ax * ux + a(p) * uxx) - c(p) * uyy - (bx * uy + by * ux + 2b(p) * uxy)
+end
+
+S = gridspace(Ωₕ)
+aₕ, cₕ, fₕ = element(S), element(S), element(S)
+nx, ny = length(xs), length(ys)
+A3, C3 = reshape(aₕ.data, nx, ny), reshape(cₕ.data, nx, ny)
+for l in 1:ny, j in 1:nx
+    A3[j, l] = j > 1 ? a(((xs[j - 1] + xs[j]) / 2, ys[l])) : 0.0
+    C3[j, l] = l > 1 ? c((xs[j], (ys[l - 1] + ys[l]) / 2)) : 0.0
+end
+bₕ = Rₕ(S, b)
+avgₕ!(fₕ, load)
+
+diffusion(u) = -D̃ₓ(aₕ * D₋ₓ(u)) - D̃ᵧ(cₕ * D₋ᵧ(u))
+operator(u) = diffusion(u) - Dcₓ(bₕ * Dcᵧ(u)) - Dcᵧ(bₕ * Dcₓ(u))
+nothing # hide
+
+# The forms take `U` as trial and `W` as test space. The Dirichlet data are already in `U`,
+# so `assemble` takes no `dirichlet` keyword:
+
+A, F = assemble(form(U, W, (u, v) -> innerₕ(operator(u), v)), form(W, v -> innerₕ(fₕ, v)))
+uh = lift(U, A \ F).data
+nothing # hide
+
+# The solution on the fine grid. Nodes outside the polygon carry no value and are left
+# blank, and the red curve is the polygon; drag the plot to tilt it:
+
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+uₚ = element(S, ifelse.(BitVector(markers(Ωₕ)[:P_exterior]), NaN, uh))
+surface_plot(uₚ; title = "u on the polygon", boundary = V) # hide
+
+@test maximum(abs, filter(!isnan, uₚ.data .- vec([sol((x, y)) for x in xs, y in ys]))) < 1.0e-2 #src
+
+# ## The grid closure
+#
+# With the polygon as a marker, `mesh` closes the grid lines: every line that meets an edge
+# of the polygon gets a node on it, so the boundary of ``P`` is made of grid nodes, and the
+# nodes fall into three labels, `:P` (interior), `:P_boundary` and `:P_exterior`. The closure
+# may add lines, so the grid has more points than the requested count. The labels count the
+# nodes of each kind:
+
+m = markers(Ωₕ)
+n_int, n_bnd, n_ext = count.(BitVector.((m[:P], m[:P_boundary], m[:P_exterior])))
+# The plot blanks the exterior nodes and holds the solution at the others.             #src
+@test count(isnan, uₚ.data) == n_ext                                                    #src
+
+#-
+
+n_int + n_bnd + n_ext == length(xs) * length(ys)
+
+# The figure draws a coarse grid of the same polygon, so its lines stay readable; the
+# problem above is solved on a much finer one. Both are random, with the same seed:
+
+Random.seed!(1)
 Ωc = mesh(Ω, (8, 7), (false, false))
 xc, yc = collect(points(Ωc(1))), collect(points(Ωc(2)))
 length(xc), length(yc)
@@ -113,78 +194,6 @@ let s = read(@__FILE__, String), px(x) = 20 + 90x, py(y) = 20 + 90 * (5 - y)    
     @test [parse.(Float64, split(p, ",")) for p in split(pts)] ≈                         #src
           [[px(v[1]), py(v[2])] for v in V] atol = 0.06                                  #src
 end                                                                                      #src
-
-# ## The fine grid, labels and spaces
-#
-# The problem is solved on a grid requested at 72 by 60 points, which the closure enlarges.
-# The errors of a random grid scatter with the draw; the error section prints both for
-# this seed.
-#
-# `polygon_spaces(Ωₕ, :P, g)` returns the trial space `U` and the test space `W`. Their
-# unknowns are the interior nodes. The nodes on the polygon carry the Dirichlet data `g`
-# exactly, and `lift(U, u)` puts a solution back on the whole grid.
-
-Random.seed!(1)
-Ωₕ = mesh(Ω, (72, 60), (false, false))
-xs, ys = collect(points(Ωₕ(1))), collect(points(Ωₕ(2)))
-
-sol(p) = sin(p[1]) * cos(0.7p[2]) + 0.1 * p[1] * p[2]
-U, W = polygon_spaces(Ωₕ, :P, sol)
-
-# The labels the closure assigned count the nodes of each kind:
-
-m = markers(Ωₕ)
-n_int, n_bnd, n_ext = count.(BitVector.((m[:P], m[:P_boundary], m[:P_exterior])))
-
-#-
-
-n_int + n_bnd + n_ext == length(xs) * length(ys)
-
-# ## Coefficients, load and operator
-#
-# The diffusion coefficients ``a`` and ``c`` are sampled at the staggered half points, ``a``
-# between neighbours in ``x`` and ``c`` between neighbours in ``y``, which is where the
-# conservative form ``-\tilde D_x(a\, D_{-x} u)`` reads them. ``b`` is sampled at the grid
-# points, and the mixed term is `Dcₓ(bₕ * Dcᵧ(u)) + Dcᵧ(bₕ * Dcₓ(u))` with the central
-# differences `Dcₓ` and `Dcᵧ`. The load is `avgₕ`, the mean of ``f`` over each dual cell.
-
-a(p) = 2 + 0.5sin(p[1] + p[2])
-b(p) = 0.5 + 0.2sin(p[1] * p[2])
-c(p) = 2 + 0.3cos(p[1])
-
-function load(p)
-    x, y = p
-    ux, uy = cos(x) * cos(0.7y) + 0.1y, -0.7sin(x) * sin(0.7y) + 0.1x
-    uxx, uyy = -sin(x) * cos(0.7y), -0.49sin(x) * cos(0.7y)
-    uxy = -0.7cos(x) * sin(0.7y) + 0.1
-    ax, bx, by = 0.5cos(x + y), 0.2y * cos(x * y), 0.2x * cos(x * y)
-    return -(ax * ux + a(p) * uxx) - c(p) * uyy - (bx * uy + by * ux + 2b(p) * uxy)
-end
-
-S = gridspace(Ωₕ)
-aₕ, cₕ, fₕ = element(S), element(S), element(S)
-nx, ny = length(xs), length(ys)
-A3, C3 = reshape(aₕ.data, nx, ny), reshape(cₕ.data, nx, ny)
-for l in 1:ny, j in 1:nx
-
-    A3[j, l] = j > 1 ? a(((xs[j - 1] + xs[j]) / 2, ys[l])) : 0.0
-    C3[j, l] = l > 1 ? c((xs[j], (ys[l - 1] + ys[l]) / 2)) : 0.0
-end
-bₕ = Rₕ(S, b)
-avgₕ!(fₕ, load)
-
-diffusion(u) = -D̃ₓ(aₕ * D₋ₓ(u)) - D̃ᵧ(cₕ * D₋ᵧ(u))
-operator(u) = diffusion(u) - Dcₓ(bₕ * Dcᵧ(u)) - Dcᵧ(bₕ * Dcₓ(u))
-nothing # hide
-
-# ## Assembling and solving
-#
-# The forms take `U` as trial and `W` as test space, and the Dirichlet data are already in
-# `U`, so no `dirichlet` keyword goes to `assemble`:
-
-A, F = assemble(form(U, W, (u, v) -> innerₕ(operator(u), v)), form(W, v -> innerₕ(fₕ, v)))
-uh = lift(U, A \ F).data
-nothing # hide
 
 # ## Error
 #
