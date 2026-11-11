@@ -149,8 +149,10 @@ Construct a [`DomainMarkers`](@ref) collection from `label => identifier` pairs.
   of `space_set`, or, with `time_set`, is a predicate that does not accept `(x, t)`.
   Also if a polygon marks a set that is not 2D, has a vertex outside `space_set`, is
   labelled `:boundary` or `:interior`, or one of its three labels is another marker's.
-  Likewise for a level set, whose `φ` must also return a `Real` that is not a `Bool` at the
-  centre of `space_set`.
+  Likewise for a level set, whose `φ` must also return a plain real number at the centre
+  of `space_set`: an `AbstractFloat`, an `Integer` that is not a `Bool`, a `Rational` or an
+  `AbstractIrrational`. Any other `Real`, a `ForwardDiff.Dual` among them, is refused: the
+  level-set geometry is not differentiated.
 
 # Examples
 ```jldoctest
@@ -239,7 +241,9 @@ function _validate_polygon_marker(
 end
 
 # A level set marks the nodes of a 2D mesh, never takes a reserved label, and `φ` returns a
-# `Real` that is not a `Bool` (a predicate, which would give no sign to bracket) at the centre.
+# plain real number at the centre: not a `Bool` (a predicate, which would give no sign to
+# bracket), nor another `Real` such as a `ForwardDiff.Dual`, whose partials the `Float64`
+# grid would drop, as the level-set geometry is not differentiated.
 function _validate_levelset_marker(
         space_set::CartesianProduct{D}, lbl::Symbol, S::LevelSet
 ) where {D}
@@ -252,11 +256,19 @@ function _validate_levelset_marker(
     catch err
         _throw_levelset_marker_error(lbl, "φ failed at the centre $c of the set: $err")
     end
-    (res isa Real && !(res isa Bool)) || _throw_levelset_marker_error(lbl,
-        "φ must return a Real, but returned a $(typeof(res)) at the centre $c of the set " *
-        "(a Bool predicate is not a level set)")
+    res isa Bool && _throw_levelset_marker_error(lbl,
+        "φ must return a real number, but returned a Bool at the centre $c of the set " *
+        "(a predicate is not a level set)")
+    _is_plain_real(res) || _throw_levelset_marker_error(lbl,
+        "φ must return a plain real number, but returned a $(typeof(res)) at the centre " *
+        "$c of the set; the level-set geometry is not differentiated, so a parameter of φ " *
+        "takes no derivative through it")
     return nothing
 end
+
+# A plain real number: a float, an integer that is not a `Bool`, a rational or an irrational.
+_is_plain_real(x) = x isa Union{AbstractFloat, Rational, AbstractIrrational} ||
+                    (x isa Integer && !(x isa Bool))
 
 @noinline function _throw_levelset_marker_error(lbl::Symbol, msg)
     throw(ArgumentError("Level-set marker :$lbl: " * msg * "."))
