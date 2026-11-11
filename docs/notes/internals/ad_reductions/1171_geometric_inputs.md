@@ -35,7 +35,7 @@ Cell: polygon_mesh_inside | CpuSerial | uniform | rev | throws IllegalTypeAnalys
 Cell: polygon_mesh_inside | CpuSerial | nonuniform | rev | throws IllegalTypeAnalysisException | NaN | 75 | 6.24
 Cell: polygon_mesh_inside | CpuSerial | uniform | fwd | throws IllegalTypeAnalysisException | NaN | 165 | 3.48
 Cell: polygon_mesh_inside | CpuSerial | nonuniform | fwd | throws IllegalTypeAnalysisException | NaN | 193 | 3.45
-Cell: levelset_parameter | CpuSerial | uniform | rev | silent_zero | 1.0 | 53 | 2.95
+Cell: levelset_parameter | CpuSerial | uniform | rev | silent_zero (first run only, see below) | 1.0 | 53 | 2.95
 Cell: levelset_parameter | CpuSerial | uniform | fwd | silent_zero | 1.0 | 22 | 2.95
 Cell: levelset_parameter | CpuSerial | nonuniform | rev | silent_zero | 1.0 | <1 | 2.95
 Cell: levelset_parameter | CpuSerial | nonuniform | fwd | silent_zero | 1.0 | <1 | 2.95
@@ -60,11 +60,29 @@ No cell reached 10 minutes or 10 GB (the largest, `polygon_coefficient` under `C
 took 442 s and 6.47 GB in one process), so no `_slow` group was needed. The threaded
 policies were run on the non-uniform mesh only, for the two polygon `works` cells.
 
-`levelset_parameter` is a silent zero: Enzyme returns a gradient of zeros in both modes
-(relative error 1.0 against the central difference), because the `Float64` grid carries no
-derivative, while ForwardDiff refuses the `Dual` with an `ArgumentError`. The polygon
+`levelset_parameter` is a silent zero in the one fresh process that ran it: Enzyme returned a
+gradient of zeros in both modes (relative error 1.0 against the central difference), because
+the `Float64` grid carries no derivative, while ForwardDiff refuses the `Dual` with an
+`ArgumentError`. Four later fresh processes (the whole `inputs` group, then the cell alone,
+three times) aborted in LLVM at the uniform reverse call with `Instruction does not dominate
+all uses!` (`%loopLimit_cache`) and `signal 6`, with the cell and the file unchanged. The
+verdict is not stable, so the cell is `:skip` in `ad_coverage.jl`, in a group of its own
+(`:levelset`) so that an abort ends no other cell. The polygon
 `works` cells differentiate in reverse under all three policies (relative error below
 7e-16 against ForwardDiff on the same policy) and fail in forward under all three: Enzyme
 has no `forward` rule for `deepcopy` (a `MethodError` on `FwdConfigWidth`). The vertices
 and the mesh built inside `f` meet the same `IllegalTypeAnalysisException` in both modes,
 as expected, and `dirac` differentiates in both modes where ForwardDiff has no method.
+
+## Group runs
+
+The groups the parent runs, each as one child process, `--optimize=1`, 2 threads, all exits
+normal with every non-skip `CELL` line equal to its pin:
+
+- `CpuSerial:inputs`: 611 s, 8.88 GB (close to the 10 GB cap), four cells.
+- `CpuSerial:levelset`: 79 s, 2.29 GB, the two ForwardDiff lines only (Enzyme is `:skip`).
+- `CpuSerial:polygon`: 581 s, 7.21 GB.
+- `CpuThreaded:polygon`: 777 s, 9.80 GB (0.2 GB under the cap).
+- `CpuPolyester:polygon`: 696 s, 8.99 GB.
+
+The `polygon` group under `CpuThreaded` is the one to split if the cap kills it under load.

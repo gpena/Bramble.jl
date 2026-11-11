@@ -648,12 +648,14 @@ const CELLS = (
         fwd = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
         rev_err = (CpuSerial = "IllegalTypeAnalysisException", CpuThreaded = "", CpuPolyester = "")),
     # A `φ` that depends on the parameter is refused under ForwardDiff (#1172): a `Float64`
-    # grid has no derivative to give. Enzyme returns a gradient of zeros in both modes, with
-    # no error: a silent zero.
-    cell(:levelset_parameter, "levelset", :inputs, build_levelset_parameter, fd = :throws,
+    # grid has no derivative to give. Enzyme is `:skip`: the first fresh process returned a
+    # gradient of zeros in both modes (a silent zero), and four later ones aborted in LLVM
+    # with `Instruction does not dominate all uses!`, with nothing changed in between.
+    # A child of its own, so the abort cannot end the cells of another group.
+    cell(:levelset_parameter, "levelset", :levelset, build_levelset_parameter, fd = :throws,
         fd_err = "Level-set marker",
-        rev = (CpuSerial = :silent_zero, CpuThreaded = :skip, CpuPolyester = :skip),
-        fwd = (CpuSerial = :silent_zero, CpuThreaded = :skip, CpuPolyester = :skip))
+        rev = (CpuSerial = :skip, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :skip, CpuThreaded = :skip, CpuPolyester = :skip))
 )
 
 # --- Enzyme, in a child process ------------------------------------------------------ #
@@ -916,7 +918,7 @@ if CHILD == ""
             @test_skip "Enzyme is not in this environment"
         else
             groups = (:dense, :assemble, :three, :boundary, :geometry, :solve, :operators, :ghost_fast,
-                :inputs, :polygon)
+                :inputs, :levelset, :polygon)
             WITH_3D_TESTS && (groups = (groups..., :threed))
             SLOW && (groups = (groups..., :ghost_slow))
             for pname in keys(POLICIES)
