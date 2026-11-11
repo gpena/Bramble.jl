@@ -28,9 +28,9 @@ Wrap the function `φ(x)`, `x = (x₁, x₂)`, as a 2D level-set marker. In a do
 among them, is refused with an `ArgumentError`, as the level-set geometry is not
 differentiated: a parameter of `φ` takes no derivative through the mesh. Enzyme gives no
 reliable derivative of such a parameter either, so build the mesh outside a function Enzyme
-differentiates. `φ` need not be a signed distance; a mesh samples each grid line at 129 points and bisects every sign
-change, so `φ` only has to change sign across the curve. Two roots on a line closer than
-its sample spacing are missed. With a `time_set`, `φ` still takes `x` alone.
+differentiates. `φ` need not be a signed distance; a mesh samples each grid line at 129
+points and bisects every sign change, so `φ` only has to change sign across the curve. Two
+roots on a line closer than its sample spacing are missed. With a `time_set`, `φ` still takes `x` alone.
 
 # Examples
 ```jldoctest
