@@ -136,12 +136,15 @@ u = zeros(ndofs(Wₕ))
 prep = prepare_jacobian(residual, sparse_ad, u)
 J = DifferentiationInterface.jacobian(residual, prep, sparse_ad, u)  # once, for its sparse structure
 newton_residuals = Float64[]
+newton_steps = Float64[]
 for it in 1:20
     r = residual(u)
     push!(newton_residuals, sqrt(sum(abs2, r)))
     newton_residuals[end] < 1e-10 && break
     DifferentiationInterface.jacobian!(residual, J, prep, sparse_ad, u)
-    u .-= J \ r
+    δ = J \ r
+    push!(newton_steps, maximum(abs, δ))
+    u .-= δ
 end
 length(newton_residuals), newton_residuals
 
@@ -151,10 +154,23 @@ length(newton_residuals), newton_residuals
 # that costs one extra step, a property of the external tracer.                             #src
 @test length(newton_residuals) < 8                                                          #src
 @test newton_residuals[end] < 1e-10                                                         #src
+# The plotted histories: Newton's last step is below the 3/2 power of the one before it,    #src
+# which a fixed rate cannot do, and Picard's step ratios stay above 1e-3.                    #src
+@test length(newton_steps) == length(newton_residuals) - 1                                   #src
+@test newton_steps[end] < newton_steps[end - 1]^1.5                                          #src
+@test minimum(picard_ratios) > 1e-3                                                          #src
 
-# Quadratic convergence means the residual's correct digits roughly double each step, where
-# Picard gains a fixed one to two digits, so the Newton list above is shorter. Both methods
-# reach the same solution, close to the true one, measured as in the
+# Both histories on one log axis, as the largest change in the iterate per iteration. Picard
+# falls along a line, a fixed one to two digits per step. Newton's correct digits roughly
+# double each step, so its curve bends down and it stops sooner:
+
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+line_plot([(1:length(picard_steps), picard_steps, "Picard"), # hide
+        (1:length(newton_steps), newton_steps, "Newton")]; # hide
+    logy = true, xlabel = "iteration", ylabel = "largest change in u", # hide
+    title = "Picard against Newton") # hide
+
+# Both methods reach the same solution, close to the true one, measured as in the
 # [linear example](poisson_linear.md):
 
 uₕ_newton = element(Wₕ)

@@ -78,27 +78,11 @@ end
 Wₕ, I, sd = wave_system(Ωₕ)
 n = ndofs(Wₕ)
 
-size(mass_matrix(sd)), size(operator_matrix(sd))
-
-# [`mass_matrix`](@ref) is the stacked `2n × 2n` mass matrix, one diagonal block per leaf, and
-# [`operator_matrix`](@ref) is ``A``, with a constrained row replaced by `eₖ`; its lower left
-# block is ``c^2 K`` on the interior rows, which the energy below reuses.
-#
-# The mesh above is uniform, so the weights are known: an interior row of `M` carries the cell
-# measure ``h_x h_y = (1/24)^2`` on each leaf, and a Dirichlet row is zero on each.
-
-M = mass_matrix(sd)
-mid = 13 + 25 * 12                              # an interior point
-@test iszero(M[1, 1]) && iszero(M[n + 1, n + 1]) #src
-@test M[mid, mid] ≈ (1 / 24)^2 && M[n + mid, n + mid] ≈ (1 / 24)^2 #src
-#
 # ## Stepping it
 #
-# [`ode_problem`](@ref) hands the whole thing to `OrdinaryDiffEq`, with the state ordered
-# displacement first, velocity second.
-#
-# The Dirichlet rows of the mass matrix are zero, which makes the system
-# differential-algebraic, so [`ode_problem`](@ref) asks for a method that admits a singular
+# [`ode_problem`](@ref) hands the system to `OrdinaryDiffEq`, with the state ordered
+# displacement first, velocity second. The Dirichlet rows of the mass matrix are zero, which
+# makes the system differential-algebraic, so it asks for a method that admits a singular
 # mass matrix. `Rodas5P` is one, and the [heat equation](heat_equation.md) page names it
 # beside `FBDF`.
 
@@ -109,6 +93,18 @@ prob = ode_problem(sd, vcat(parent(u₀), parent(v₀)), I)
 sol = solve(prob, Rodas5P(); reltol = 1.0e-8, abstol = 1.0e-10)
 
 SciMLBase.successful_retcode(sol), length(sol.t)
+
+# The field at 21 times, `sol` evaluated between its steps: the first mode flattens at the
+# quarter period and flips sign.
+
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+ts = range(0.0, 1.0; length = 21)
+frames = [element(Wₕ, sol(t)[1:n]) for t in ts]
+animated_surface_plot(frames, ts; title = "u(t) on a 25 × 25 mesh") # hide
+
+@test maximum(parent(frames[1])) ≈ 1.0 atol = 1.0e-3                                       #src
+@test maximum(abs, parent(frames[8])) < 0.05                                               #src
+@test minimum(parent(frames[end])) < -0.2                                                  #src
 
 # The solution at `t = 1` against the exact standing wave. The first `n` entries of the state
 # are the displacement, the last `n` the velocity:
@@ -123,10 +119,21 @@ err = normₕ(uT - Rₕ(Wₕ, x -> uexact(x, 1.0)))
 
 err
 
-#-
+# ## The matrices
+#
+# [`mass_matrix`](@ref) is the stacked `2n × 2n` mass matrix, one diagonal block per leaf, and
+# [`operator_matrix`](@ref) is ``A``, with a constrained row replaced by `eₖ`; its lower left
+# block is ``c^2 K`` on the interior rows, which the energy below reuses.
 
-include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-surface_plot(uT; title = "u at t = 1, on a 25 × 25 mesh") # hide
+size(mass_matrix(sd)), size(operator_matrix(sd))
+
+# The mesh above is uniform, so the weights are known: an interior row of `M` carries the cell
+# measure ``h_x h_y = (1/24)^2`` on each leaf, and a Dirichlet row is zero on each.
+
+M = mass_matrix(sd)
+mid = 13 + 25 * 12                              # an interior point
+@test iszero(M[1, 1]) && iszero(M[n + 1, n + 1]) #src
+@test M[mid, mid] ≈ (1 / 24)^2 && M[n + mid, n + mid] ≈ (1 / 24)^2 #src
 
 # ## Energy drift
 #

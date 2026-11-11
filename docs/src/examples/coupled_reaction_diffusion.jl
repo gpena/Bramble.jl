@@ -104,8 +104,19 @@ length(newton_residuals), newton_residuals
 @test length(newton_residuals) < 8                                                          #src
 @test newton_residuals[end] < 1e-10                                                         #src
 
-# Convergence is quadratic, as in the single-species case.
-#
+# Convergence is quadratic, as in the single-species case. The solution, each species with
+# the mesh lines of the random grid:
+
+wₕ = element(Vₕ)
+wₕ .= w
+uₕ, vₕ = components(wₕ)
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+surface_plot(uₕ; title = "u", mesh_lines = true) # hide
+
+#-
+
+surface_plot(vₕ; title = "v", mesh_lines = true) # hide
+
 # ## Skipping the tracer
 #
 # The pattern comes from the AST of `a` instead of a tracing pass, as
@@ -188,11 +199,9 @@ uₕ_native, vₕ_native = components(element(Vₕ, w_native))                  
 @test maximum(abs, parent(uₕ_ns) .- parent(uₕ_native)) < 1e-8                                 #src
 @test maximum(abs, parent(vₕ_ns) .- parent(vₕ_native)) < 1e-8                                 #src
 #
-# `NewtonRaphson` reaches the same solution as the hand-written loops.
+# `NewtonRaphson` reaches the same solution as the hand-written loops. Against the exact
+# fields, per species:
 
-wₕ = element(Vₕ)
-wₕ .= w
-uₕ, vₕ = components(wₕ)
 uexact, vexact = Rₕ(Wₕ, u_ex), Rₕ(Wₕ, v_ex)
 norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)
 
@@ -228,7 +237,6 @@ norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)
 # `u_h` and `v_h` heatmaps, the `2×2` Jacobian block-sparsity plot and the cross-section
 # profile:
 
-include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 coupled_reaction_diffusion_widget(uₕ, vₕ; title = "Coupled reaction-diffusion") # hide
 
 # ## Convergence of the coupled system

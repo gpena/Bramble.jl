@@ -36,11 +36,6 @@ uexact(x) = x[1] - (exp((x[1] - 1) / ε) - exp(-1 / ε)) / (1 - exp(-1 / ε))
 duexact(x) = 1 - exp((x[1] - 1) / ε) / (ε * (1 - exp(-1 / ε)))
 robin_datum(x) = uexact(x) - duexact(x)
 
-@test isinf(exp(1 / ε))                                                                    #src
-@test uexact(0.0) == 0.0                                                                   #src
-@test duexact(0.0) == 1.0                                                                  #src
-@test robin_datum(0.0) == -1.0                                                             #src
-
 Ω = domain(interval(0.0, 1.0), :left => :left, :right => :right)
 
 # The Robin end goes through ghost points: `gridspace(Ωₕ; ghosts = (:xmin,))` adds one ghost
@@ -62,13 +57,16 @@ function system_on(pts)
     return Ωₕ, Cₕ, A, F
 end
 
-function solve_on(pts)
+function solution_on(pts)
     Ωₕ, Cₕ, A, F = system_on(pts)
-    Wₕ = gridspace(Ωₕ)
-    uₕ = element(Wₕ)
+    uₕ = element(gridspace(Ωₕ))
     uₕ .= A \ F
+    return uₕ
+end
 
-    exact = Rₕ(Wₕ, uexact)
+function solve_on(pts)
+    uₕ = solution_on(pts)
+    exact = Rₕ(space(uₕ), uexact)
     overshoot = maximum(parent(uₕ)) - maximum(parent(exact))
 
     return normₕ(uₕ - exact), overshoot
@@ -90,17 +88,23 @@ graded_points(n; σ = 4.0) = [tanh(σ * t) / tanh(σ) for t in range(0.0, 1.0, l
 g = graded_points(41)
 extrema(diff(g)), extrema(diff(uniform_points(41)))
 
-@test argmin(diff(g)) == length(g) - 1                                                     #src
-@test 160 < 0.025 / minimum(diff(g)) < 175                                                 #src
-@test 3.9 < maximum(diff(g)) / 0.025 < 4.1                                                 #src
-
 # On the same 41 points the finest cell is about 170 times smaller than the uniform one and
 # the coarsest about four times larger. The finest cell, `1.5e-4`, is below the layer width
 # `ε = 10⁻³`; the uniform cell, `0.025`, is 25 layer widths.
 #
 # ## The comparison
 #
-# At equal degrees of freedom:
+# At equal degrees of freedom, 41 points each. The uniform solution oscillates ahead of the
+# layer, the graded one follows the exact curve:
+
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+xe = range(0.0, 1.0, length = 2001)
+line_plot([(xe, uexact.(xe), "exact"), # hide
+        (uniform_points(41), parent(solution_on(uniform_points(41))), "uniform"), # hide
+        (graded_points(41), parent(solution_on(graded_points(41))), "graded (σ = 4)")]; # hide
+    title = "Boundary layer at ε = 10⁻³, 41 points") # hide
+
+#-
 
 err_uniform, over_uniform = solve_on(uniform_points(41))
 err_graded, over_graded = solve_on(graded_points(41))
@@ -123,6 +127,15 @@ err_graded, over_graded = solve_on(graded_points(41))
 # well above the value 1 at which centred differences start to oscillate.
 
 @test 12 < (1 / 40) / (2ε) < 13                                                            #src
+
+# The exact solution at 0 and the graded cell sizes, as quoted above.                      #src
+@test isinf(exp(1 / ε))                                                                    #src
+@test uexact(0.0) == 0.0                                                                   #src
+@test duexact(0.0) == 1.0                                                                  #src
+@test robin_datum(0.0) == -1.0                                                             #src
+@test argmin(diff(g)) == length(g) - 1                                                     #src
+@test 160 < 0.025 / minimum(diff(g)) < 175                                                 #src
+@test 3.9 < maximum(diff(g)) / 0.025 < 4.1                                                 #src
 
 #
 # ## How far refinement gets you
