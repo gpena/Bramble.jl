@@ -107,7 +107,11 @@ jobs:
         # (CI run 42442957618, minutes per leg before, then after in the plan's best
         # case): forms-1 24.3, then 18.4; forms-2 14.6, then 17.4; ghost 7.6, then 14.9;
         # rest 20.3, then 16.1. The ghost shard took four forms-1 ghost files and
-        # test/solvers/, forms-2 took simplifier.jl and threaded_replay.jl. The fifth,
+        # test/solvers/, forms-2 took simplifier.jl and threaded_replay.jl. By runs
+        # 42874843597 to 42924761109 the ghost and Jacobian tests had grown forms-2 and
+        # ghost to 21.2 and 19.8 minutes of tests against 12.9 and 14.1 for forms-1 and
+        # rest, so test/solvers/ went back to `rest`, and threaded_replay.jl and the two
+        # assembled_jacobian files to forms-1 (test/TestUtils.jl has the figures). The fifth,
         # `convergence`, is not a unit shard: it runs the `convergence` group
         # (test/convergence/), every convergence study of the suite, which `unit` no
         # longer holds. `CI result` aggregates every leg, so the required
@@ -188,27 +192,28 @@ jobs:
       # on, so every run here rebuilds Bramble, which takes seconds without it.
       - name: Turn the precompile workloads off
         run: printf '[Bramble]\nprecompile_workload = false\n' > LocalPreferences.toml
-      # A `run:` step instead of julia-actions/julia-runtest, because that action has no input
-      # that reaches the Julia flags: its harness hard-codes `julia_args` to `--check-bounds`
-      # alone, and `prefix` only goes in front of the `julia` command. The unit group runs at
-      # `--optimize=1` because the run is more than 95% compile: on the plain
-      # `test/runtests.jl` run, -O1 cuts 661 s to 461 s with all 14952 tests passing, the
-      # static allocation checks included. `-O0` is faster (231 s) but breaks the Float32 GMG
-      # allocation test in test/solvers/multigrid.jl, so it is not used. Every other workflow
-      # runs its groups at -O1 too; their comments give the per-group measurements.
+      # The unit group runs at `--optimize=1` (julia-runtest's `optimize` input, which reaches
+      # the test process through `julia_args`) because the run is more than 95% compile: on
+      # the plain `test/runtests.jl` run, -O1 cuts 661 s to 461 s with all 14952 tests
+      # passing, the static allocation checks included. `-O0` is faster (231 s) but breaks the
+      # Float32 GMG allocation test in test/solvers/multigrid.jl, so it is not used. Every
+      # other workflow runs its groups at -O1 too; their comments give the per-group
+      # measurements.
       #
-      # The call restates what the action passed: `coverage=true` (its default) and
-      # `--check-bounds=yes`, plus `--depwarn=yes` and `--inline=yes` on the outer process.
-      # Dropped: `force_latest_compatible_version`, which the action sets to true only for
-      # Dependabot/CompatHelper jobs and which does not apply to a pull_request run here, and
-      # the `annotate` option (off by default). `JULIA_NUM_THREADS=3` comes from the
-      # workflow-level `env`, so it still reaches the test subprocess.
+      # The action's defaults give the rest: coverage on, `--check-bounds=yes`,
+      # `--depwarn=yes`. `force_latest_compatible_version` is `false`, not the action's
+      # `auto`, which would resolve a Dependabot PR's run to the newest compatible versions
+      # and off the restored cache. `JULIA_NUM_THREADS=3` comes from the workflow-level
+      # `env`, so it still reaches the test subprocess.
       #
       # Open question: Julia keys package image caches on the optimisation level, so the -O1
       # test subprocess probably recompiles every dependency once on a cold cache.
       # The `compiled` directory restored above should keep those images across runs, so the cost
       # would fall on cold runners only. This has not been measured.
-      - run: julia --color=yes --depwarn=yes --inline=yes --project=@. -e 'import Pkg; Pkg.test(coverage=true, julia_args=["--optimize=1", "--check-bounds=yes"])'
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          optimize: "1"
+          force_latest_compatible_version: "false"
         env:
           # The `convergence` leg runs its own group, unsharded; the others a `unit` shard.
           BRAMBLE_TEST_GROUP: ${{ matrix.shard == 'convergence' && 'convergence' || 'unit' }}
