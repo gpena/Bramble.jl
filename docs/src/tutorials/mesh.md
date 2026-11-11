@@ -34,6 +34,14 @@ The points are equally spaced, ``h = 0.1``, and the largest spacing confirms it:
 hₘₐₓ(Ωₕ), is_uniform(Ωₕ)
 ```
 
+A geometric set can be passed directly when no custom labels are needed. `:boundary` and `:interior` are provisioned either way:
+
+```@example mesh
+Ωₕ_direct = mesh(interval(0.0, 1.0) × interval(0.0, 2.0), 20)      # isotropic: 20 × 20
+
+:boundary in keys(markers(Ωₕ_direct)), :interior in keys(markers(Ωₕ_direct))
+```
+
 The mesh carries more than coordinates. Spacings, half points and cell measures, which the difference operators read, are computed from the points and cached.
 
 !!! tip "Try this"
@@ -385,52 +393,3 @@ iterative_refinement!(Ωₕ_ref, markers(Ω_marked))
 
 npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))
 ```
-
----
-
-## [Reference](@id mesh_reference)
-
-### Constructing from a set
-
-A geometric set can be passed directly when no custom labels are needed. `:boundary` and `:interior` are provisioned either way:
-
-```@example mesh
-X = interval(0.0, 1.0) × interval(0.0, 2.0)
-Ωₕ_direct = mesh(X, 20)      # isotropic: 20 × 20
-
-:boundary in keys(markers(Ωₕ_direct)), :interior in keys(markers(Ωₕ_direct))
-```
-
-### Points and half points
-
-`points` returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from `point(Ωₕ, idx)` or from indexing. Above 1D `idx` is a `CartesianIndex` (or `i, j` in brackets; `point` also takes a tuple of per-axis indices); a linear index is not accepted:
-
-```@example mesh
-Ωₕ_fig[3], point(Ωₕ_fig, 3), Ωₕ_2d[2, 5], point(Ωₕ_2d, CartesianIndex(2, 5))
-```
-
-```@example mesh
-half_points(Ωₕ_fig), half_point(Ωₕ_fig, 3)
-```
-
-### Spacings and cell measures
-
-| Function | Meaning |
-| --- | --- |
-| `spacing(Ωₕ, i)` | backward spacing ``h_i = x_i - x_{i-1}`` (``x_2 - x_1`` at ``i = 1``) |
-| `forward_spacing(Ωₕ, i)` | forward spacing ``h_{i+1} = x_{i+1} - x_i`` |
-| `half_spacing(Ωₕ, i)` | cell width ``h_{i+1/2} = (h_i + h_{i+1})/2``, half the end spacing at ``i = 1`` and ``i = N`` |
-| `cell_measure(Ωₕ, idx)` | measure of the control volume at `idx`: the product of the per-axis cell widths |
-| `hₘₐₓ(Ωₕ)` | largest cell diagonal, the largest spacing in 1D |
-
-A 1D mesh stores its backward spacings, so `spacings` hands back the whole vector and the accessors index it. The cache is rebuilt by `set_points!`, and so by [`iterative_refinement!`](@ref) and [`change_points!`](@ref) as well:
-
-```@example mesh
-spacings(Ωₕ_fig), spacings(Ωₕ_fig)[3] == spacing(Ωₕ_fig, 3)
-```
-
-```@example mesh
-hₘₐₓ(Ωₕ_fig), cell_measure(Ωₕ_2d, (3, 4))
-```
-
-`boundary_indices(Ωₕ)` gives the boundary facets separately, as a tuple of index sets.

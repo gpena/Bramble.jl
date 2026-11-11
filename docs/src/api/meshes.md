@@ -61,6 +61,43 @@ cell_measure
 is_uniform
 ```
 
+```@setup meshes_ref
+using Bramble
+import Bramble: cell_measure, half_point, half_points, half_spacing, point, spacings
+Ωₕ_fig = mesh(domain(interval(0.0, 1.0)), 4, true)
+Ωₕ_2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (10, 20), (true, true))
+```
+
+`points` returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from `point(Ωₕ, idx)` or from indexing. Above 1D `idx` is a `CartesianIndex` (or `i, j` in brackets; `point` also takes a tuple of per-axis indices); a linear index is not accepted:
+
+```@example meshes_ref
+Ωₕ_fig[3], point(Ωₕ_fig, 3), Ωₕ_2d[2, 5], point(Ωₕ_2d, CartesianIndex(2, 5))
+```
+
+```@example meshes_ref
+half_points(Ωₕ_fig), half_point(Ωₕ_fig, 3)
+```
+
+| Function | Meaning |
+| --- | --- |
+| `spacing(Ωₕ, i)` | backward spacing ``h_i = x_i - x_{i-1}`` (``x_2 - x_1`` at ``i = 1``) |
+| `forward_spacing(Ωₕ, i)` | forward spacing ``h_{i+1} = x_{i+1} - x_i`` |
+| `half_spacing(Ωₕ, i)` | cell width ``h_{i+1/2} = (h_i + h_{i+1})/2``, half the end spacing at ``i = 1`` and ``i = N`` |
+| `cell_measure(Ωₕ, idx)` | measure of the control volume at `idx`: the product of the per-axis cell widths |
+| `hₘₐₓ(Ωₕ)` | largest cell diagonal, the largest spacing in 1D |
+
+A 1D mesh stores its backward spacings, so `spacings` hands back the whole vector and the accessors index it. The cache is rebuilt by `set_points!`, and so by [`iterative_refinement!`](@ref) and [`change_points!`](@ref) as well:
+
+```@example meshes_ref
+spacings(Ωₕ_fig), spacings(Ωₕ_fig)[3] == spacing(Ωₕ_fig, 3)
+```
+
+```@example meshes_ref
+hₘₐₓ(Ωₕ_fig), cell_measure(Ωₕ_2d, (3, 4))
+```
+
+`boundary_indices(Ωₕ)` gives the boundary facets separately, as a tuple of index sets.
+
 ## Mesh indexing and boundaries
 
 ```@docs

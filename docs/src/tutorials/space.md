@@ -57,253 +57,9 @@ space(wₕ) === Wₕ, wₕ[6]
 [`element`](@ref) allocates an uninitialised field; `element(Wₕ, α)` fills it with `α` and
 `element(Wₕ, v)` copies a vector. [`Rₕ!`](@ref) writes into an element that already exists.
 
-## Inner products and norms
+## Restriction and cell averaging
 
-Each degree of freedom carries a quadrature weight, the cell measure around its point.
-`innerₕ` weights each point by it (`uₕ` is conjugated for complex data, and
-`markers = (...)` restricts the sum), and `normₕ` is the norm it induces:
-
-```math
-(u_h, v_h)_h = \sum_i |\square_i| \, u_h(x_i) v_h(x_i), \qquad
-\|u_h\|_h = \sqrt{(u_h, u_h)_h}.
-```
-
-```@example space
-vₕ = Rₕ(Wₕ, x -> cos(π * x))
-
-innerₕ(uₕ, vₕ), normₕ(uₕ), normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)
-```
-
-The norm of $\sin(\pi x)$ on $[0, 1]$ is $1/\sqrt{2} \approx 0.707$, which `normₕ` reproduces here. The discrete Sobolev norms are built on the backward
-gradient `∇ₕ`:
-
-```math
-|u_h|_{1,h}^2 = \sum_{d=1}^D \|D_{-x_d} u_h\|_+^2, \qquad
-\|u_h\|_{1,h}^2 = \|u_h\|_h^2 + |u_h|_{1,h}^2.
-```
-
-```@example space
-snorm₁ₕ(uₕ), norm₁ₕ(uₕ), norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
-```
-
-!!! tip "Try this"
-    Build the mesh as `mesh(Ω, 11, false)`, a non-uniform one with the same number of
-    points, and rerun the blocks above. `ndofs` is unchanged, but the interior weights are
-    no longer equal (on a uniform mesh only the two end weights are halved), so `normₕ` and
-    `innerₕ` change while the weights still sum to the interval length. The
-    [mesh tutorial](mesh.md) builds such meshes on purpose.
-
-## [Composite spaces and vector elements](@id space_composite)
-
-A **composite space** stacks copies of a space for a vector field or a coupled system. Its
-elements are `VectorElement`s too: one flat vector holding every component, one after
-another. `Wₕ^Val(N)` stacks `N` copies:
-
-```@example space
-Vₕ = Wₕ^Val(2)
-
-ncomponents(Vₕ), ndofs(Vₕ), ndofs(Vₕ, Tuple)
-```
-
-`ndofs(Vₕ, Tuple)` has one entry per component (on a scalar space it is the grid shape). A **component** is one of
-the stacked fields, and calling a composite element with `i` returns the `i`-th component
-as a view:
-
-```@example space
-uvec = element(Vₕ)
-uₓ = uvec(1)
-uᵧ = uvec(2)
-
-uₓ .= 1.5
-uᵧ .= -2.0
-
-parent(uvec)[[1, 12]]
-```
-
-A component is a view; writing to it writes to the parent. For a
-scalar space `uₕ(1)` is `uₕ` itself. [`components`](@ref) destructures all of them:
-
-```@example space
-c₁, c₂ = components(uvec)
-
-c₁ === uₓ, c₂ === uᵧ
-```
-
-On a composite space `Rₕ!` takes a tuple of scalar functions, or one function returning a
-tuple, and `innerₕ` sums over components:
-
-```@example space
-Rₕ!(uvec, (x -> sin(π * x), x -> cos(π * x)))
-
-normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2
-```
-
-!!! tip "Try this"
-    Replace `Val(2)` with `Val(3)` and add a third function to the tuple. `ncomponents` and
-    `ndofs` follow.
-
-## Ghost spaces
-
-A grid space can also carry the ghost points of a mesh beyond named facets, through the `ghosts` keyword of [`gridspace`](@ref). The [ghost point tutorial](@ref space_ghost) covers their degrees of freedom, weights and time loops.
-
-## Reference
-
-### Constructors
-
-`Wₕ^Val(N)` is type stable for any `N`. `Wₕ^N` accepts `1 ≤ N ≤ 3` and stays inferable for
-a runtime `N`; a larger `N` throws an `ArgumentError`. [`vector_gridspace`](@ref)`(Ωₕ, 2)` builds the same
-space straight from a mesh, and `Bramble.CompositeGridSpace((Wₕ, Wₕ))` builds one from spaces that
-need not be identical:
-
-```@example space
-spaces(Vₕ) == (Wₕ, Wₕ)
-```
-
-### Weights
-
-`weights(Wₕ)` returns the whole `SpaceWeights` bundle, and a weight vector comes from naming
-the inner product it belongs to. `Bramble.Innerh` and `Bramble.Innerplus` are internal, hence the
-prefix. `weights` is not defined for a composite space, since its leaves
-may live on different meshes: call it on a [`components`](@ref) leaf instead.
-
-```@example space
-w = weights(Wₕ, Bramble.Innerh())
-
-length(w), sum(w)      # one weight per point; they tile the unit interval
-```
-
-### Component ranges
-
-[`component_range`](@ref) and `component_ranges` give the degrees of freedom each component
-owns:
-
-```@example space
-component_range(Vₕ, 1), component_ranges(Vₕ)
-```
-
-### Functions as factors
-
-A plain `Function` is not a grid function, so multiplying by one restricts it first
-(`Rₕ(space(uₕ), f)`) and scales pointwise. This is what lets a spatial condition multiply a
-field directly, including inside a form:
-
-```@example space
-oneₕ = Rₕ(Wₕ, x -> 1.0)
-below_half = (x -> x[1] < 0.5) * oneₕ
-
-sum(below_half)
-```
-
-### Grid layout
-
-Degrees of freedom are stored flat, but a scalar element also indexes by grid coordinate
-with a `CartesianIndex`, in any dimension. An integer multi-index `u[i, j]` is not a grid
-coordinate. Here a two-dimensional space:
-
-```@example space
-W₂ = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (5, 5), (true, true)))
-V₂ = W₂^Val(2)
-u_scal = element(W₂, 0.0)
-u_scal[CartesianIndex(2, 3)] = 10.0
-u_scal[CartesianIndex(4, 1)] = 20.0
-
-u_scal[CartesianIndex(2, 3)], u_scal[CartesianIndex(4, 1)]
-```
-
-For matrix operations or plotting, `reshape(uₕ)` returns a `Base.ReshapedArray` view of the
-same memory, so writing through it writes through to the element. On a composite element it
-returns one view per component:
-
-```@example space
-u_grid = reshape(u_scal)
-u_grid[2, 3] = -1.0
-
-size(u_grid), u_scal[CartesianIndex(2, 3)], size.(reshape(element(V₂)))
-```
-```@raw html
-<figure>
-<svg viewBox="0 0 780 270" width="100%" style="max-width:780px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
-     xmlns="http://www.w3.org/2000/svg" role="img"
-     aria-label="Diagram of CompositeGridSpace storage showing the contiguous flat degree of freedom buffer, zero-copy component views u_x and u_y, and 2D reshaped matrix views.">
-  <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="currentColor"/>
-    </marker>
-    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#3b82f6"/>
-    </marker>
-    <marker id="arrowPurple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8b5cf6"/>
-    </marker>
-  </defs>
-
-  <!-- 1. Flat 1D Buffer -->
-  <text x="30" y="25" font-size="13" font-weight="bold" fill="currentColor">Flat 1D degree of freedom storage: uₕ.data (length 50)</text>
-
-  <!-- Component 1 block -->
-  <rect x="30" y="35" width="350" height="36" rx="4" fill="#3b82f6" fill-opacity="0.15" stroke="#3b82f6" stroke-width="1.5"/>
-  <text x="205" y="58" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">Component 1 (uₓ): DOFs 1:25</text>
-
-  <!-- Component 2 block -->
-  <rect x="390" y="35" width="350" height="36" rx="4" fill="#8b5cf6" fill-opacity="0.15" stroke="#8b5cf6" stroke-width="1.5"/>
-  <text x="565" y="58" font-size="12" font-weight="bold" fill="#8b5cf6" text-anchor="middle">Component 2 (uᵧ): DOFs 26:50</text>
-
-  <!-- Connectors from Flat to Component Views -->
-  <path d="M 205 71 L 205 105" stroke="#3b82f6" stroke-width="1.5" fill="none" marker-end="url(#arrowBlue)"/>
-  <text x="215" y="93" font-size="11" fill="#3b82f6">uₕ(1)</text>
-
-  <path d="M 565 71 L 565 105" stroke="#8b5cf6" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
-  <text x="575" y="93" font-size="11" fill="#8b5cf6">uₕ(2)</text>
-
-  <!-- 2. Zero-copy component views -->
-  <rect x="30" y="110" width="350" height="34" rx="4" fill="#3b82f6" fill-opacity="0.08" stroke="#3b82f6" stroke-dasharray="4,3" stroke-width="1.2"/>
-  <text x="205" y="132" font-size="12" fill="currentColor" text-anchor="middle">VectorElement view (SubArray of length 25)</text>
-
-  <rect x="390" y="110" width="350" height="34" rx="4" fill="#8b5cf6" fill-opacity="0.08" stroke="#8b5cf6" stroke-dasharray="4,3" stroke-width="1.2"/>
-  <text x="565" y="132" font-size="12" fill="currentColor" text-anchor="middle">VectorElement view (SubArray of length 25)</text>
-
-  <!-- Connectors from Component Views to 2D Grids -->
-  <path d="M 205 144 L 205 178" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="215" y="166" font-size="11" fill="currentColor">reshape(uₓ)</text>
-
-  <path d="M 565 144 L 565 178" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="575" y="166" font-size="11" fill="currentColor">reshape(uᵧ)</text>
-
-  <!-- 3. Reshaped 2D Matrix Views -->
-  <g transform="translate(145, 185)">
-    <rect x="0" y="0" width="120" height="65" rx="4" fill="none" stroke="#3b82f6" stroke-width="1.5"/>
-    <line x1="24" y1="0" x2="24" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="48" y1="0" x2="48" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="72" y1="0" x2="72" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="96" y1="0" x2="96" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="13" x2="120" y2="13" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="26" x2="120" y2="26" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="39" x2="120" y2="39" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="52" x2="120" y2="52" stroke="currentColor" stroke-opacity="0.2"/>
-    <text x="60" y="80" font-size="11" fill="currentColor" text-anchor="middle">5 × 5 ReshapedArray (uₓ[i, j])</text>
-  </g>
-
-  <g transform="translate(505, 185)">
-    <rect x="0" y="0" width="120" height="65" rx="4" fill="none" stroke="#8b5cf6" stroke-width="1.5"/>
-    <line x1="24" y1="0" x2="24" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="48" y1="0" x2="48" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="72" y1="0" x2="72" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="96" y1="0" x2="96" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="13" x2="120" y2="13" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="26" x2="120" y2="26" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="39" x2="120" y2="39" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="52" x2="120" y2="52" stroke="currentColor" stroke-opacity="0.2"/>
-    <text x="60" y="80" font-size="11" fill="currentColor" text-anchor="middle">5 × 5 ReshapedArray (uᵧ[i, j])</text>
-  </g>
-</svg>
-</figure>
-```
-
-### Restriction and cell averaging
-
-Nodal restriction $R_h$
-evaluates it at the grid points; cell averaging $\mathrm{avg}_h$ integrates it over the cell
-around each point and divides by the cell measure:
+Nodal restriction $R_h$ evaluates a function at the grid points; cell averaging $\mathrm{avg}_h$ integrates it over the cell around each point and divides by the cell measure:
 
 ```math
 \mathrm{avg}_h f(x_i) = \frac{1}{|\square_i|} \int_{\square_i} f(x) \, dx
@@ -391,23 +147,197 @@ around each point and divides by the cell measure:
 (`AVG_QUAD_POINTS = 6`, exact through degree eleven):
 
 ```@example space
-u_avg = avgₕ(W₂, x -> exp(-x[1] - x[2]))
-avgₕ!(u_avg, x -> exp(-x[1] - x[2]))
+u_avg = avgₕ(Wₕ, x -> exp(-x))
+avgₕ!(u_avg, x -> exp(-x))
 
 u_avg[1]
 ```
 
 For a rough source term, `avgₕ` averages out the roughness that `Rₕ` samples.
 
-### Staggered inner product
+A plain `Function` is not a grid function, so multiplying by one restricts it first (`Rₕ(space(uₕ), f)`) and scales pointwise. This lets a spatial condition multiply a field directly, including inside a form:
 
-`inner₊` is the staggered counterpart of `innerₕ`: it weights by the backward spacing along
-the chosen direction (zero at the first node) and by the cell width across the others, and a trailing `:x`/`:y`/`:z` (or
-`1`/`2`/`3`) argument picks a single direction. That pairing is what makes summation by parts
-exact; the [operators tutorial](operators.md) derives it.
+```@example space
+oneₕ = Rₕ(Wₕ, x -> 1.0)
+below_half = (x -> x[1] < 0.5) * oneₕ
+
+sum(below_half)
+```
+
+## Inner products and norms
+
+Each degree of freedom carries a quadrature weight, the cell measure around its point.
+`innerₕ` weights each point by it (`uₕ` is conjugated for complex data, and
+`markers = (...)` restricts the sum), and `normₕ` is the norm it induces:
+
+```math
+(u_h, v_h)_h = \sum_i |\square_i| \, u_h(x_i) v_h(x_i), \qquad
+\|u_h\|_h = \sqrt{(u_h, u_h)_h}.
+```
+
+```@example space
+vₕ = Rₕ(Wₕ, x -> cos(π * x))
+
+innerₕ(uₕ, vₕ), normₕ(uₕ), normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)
+```
+
+The norm of $\sin(\pi x)$ on $[0, 1]$ is $1/\sqrt{2} \approx 0.707$, which `normₕ` reproduces here. The discrete Sobolev norms are built on the backward
+gradient `∇ₕ`:
+
+```math
+|u_h|_{1,h}^2 = \sum_{d=1}^D \|D_{-x_d} u_h\|_+^2, \qquad
+\|u_h\|_{1,h}^2 = \|u_h\|_h^2 + |u_h|_{1,h}^2.
+```
+
+```@example space
+snorm₁ₕ(uₕ), norm₁ₕ(uₕ), norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
+```
+
+`inner₊` is the staggered counterpart of `innerₕ`: it weights by the backward spacing along the chosen direction (zero at the first node) and by the cell width across the others. A trailing `:x`/`:y`/`:z` (or `1`/`2`/`3`) argument picks a single direction. That pairing makes summation by parts exact; the [operators tutorial](operators.md) derives it.
 
 ```@example space
 D = ∇ₕ(uₕ)
 
 inner₊(D, D, :x) ≈ snorm₁ₕ(uₕ)^2
 ```
+
+!!! tip "Try this"
+    Build the mesh as `mesh(Ω, 11, false)`, a non-uniform one with the same number of
+    points, and rerun the blocks above. `ndofs` is unchanged, but the interior weights are
+    no longer equal (on a uniform mesh only the two end weights are halved), so `normₕ` and
+    `innerₕ` change while the weights still sum to the interval length. The
+    [mesh tutorial](mesh.md) builds such meshes on purpose.
+
+## [Composite spaces and vector elements](@id space_composite)
+
+A **composite space** stacks copies of a space for a vector field or a coupled system. Its
+elements are `VectorElement`s too: one flat vector holding every component, one after
+another. `Wₕ^Val(N)` stacks `N` copies:
+
+```@example space
+Vₕ = Wₕ^Val(2)
+
+ncomponents(Vₕ), ndofs(Vₕ), ndofs(Vₕ, Tuple)
+```
+
+`ndofs(Vₕ, Tuple)` has one entry per component (on a scalar space it is the grid shape). A **component** is one of
+the stacked fields, and calling a composite element with `i` returns the `i`-th component
+as a view:
+
+```@example space
+uvec = element(Vₕ)
+uₓ = uvec(1)
+uᵧ = uvec(2)
+
+uₓ .= 1.5
+uᵧ .= -2.0
+
+parent(uvec)[[1, 12]]
+```
+
+A component is a view; writing to it writes to the parent. For a
+scalar space `uₕ(1)` is `uₕ` itself. [`components`](@ref) destructures all of them:
+
+```@example space
+c₁, c₂ = components(uvec)
+
+c₁ === uₓ, c₂ === uᵧ
+```
+
+On a composite space `Rₕ!` takes a tuple of scalar functions, or one function returning a
+tuple, and `innerₕ` sums over components:
+
+```@example space
+Rₕ!(uvec, (x -> sin(π * x), x -> cos(π * x)))
+
+normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2
+```
+
+The storage is flat, and `reshape` gives each component a grid-shaped view of the same memory. For a 2D space on a 5 × 5 mesh the layout is:
+
+```@raw html
+<figure>
+<svg viewBox="0 0 780 270" width="100%" style="max-width:780px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
+     xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="Diagram of CompositeGridSpace storage showing the contiguous flat degree of freedom buffer, zero-copy component views u_x and u_y, and 2D reshaped matrix views.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="currentColor"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8b5cf6"/>
+    </marker>
+  </defs>
+
+  <!-- 1. Flat 1D Buffer -->
+  <text x="30" y="25" font-size="13" font-weight="bold" fill="currentColor">Flat 1D degree of freedom storage: uₕ.data (length 50)</text>
+
+  <!-- Component 1 block -->
+  <rect x="30" y="35" width="350" height="36" rx="4" fill="#3b82f6" fill-opacity="0.15" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="205" y="58" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">Component 1 (uₓ): DOFs 1:25</text>
+
+  <!-- Component 2 block -->
+  <rect x="390" y="35" width="350" height="36" rx="4" fill="#8b5cf6" fill-opacity="0.15" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="565" y="58" font-size="12" font-weight="bold" fill="#8b5cf6" text-anchor="middle">Component 2 (uᵧ): DOFs 26:50</text>
+
+  <!-- Connectors from Flat to Component Views -->
+  <path d="M 205 71 L 205 105" stroke="#3b82f6" stroke-width="1.5" fill="none" marker-end="url(#arrowBlue)"/>
+  <text x="215" y="93" font-size="11" fill="#3b82f6">uₕ(1)</text>
+
+  <path d="M 565 71 L 565 105" stroke="#8b5cf6" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
+  <text x="575" y="93" font-size="11" fill="#8b5cf6">uₕ(2)</text>
+
+  <!-- 2. Zero-copy component views -->
+  <rect x="30" y="110" width="350" height="34" rx="4" fill="#3b82f6" fill-opacity="0.08" stroke="#3b82f6" stroke-dasharray="4,3" stroke-width="1.2"/>
+  <text x="205" y="132" font-size="12" fill="currentColor" text-anchor="middle">VectorElement view (SubArray of length 25)</text>
+
+  <rect x="390" y="110" width="350" height="34" rx="4" fill="#8b5cf6" fill-opacity="0.08" stroke="#8b5cf6" stroke-dasharray="4,3" stroke-width="1.2"/>
+  <text x="565" y="132" font-size="12" fill="currentColor" text-anchor="middle">VectorElement view (SubArray of length 25)</text>
+
+  <!-- Connectors from Component Views to 2D Grids -->
+  <path d="M 205 144 L 205 178" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="215" y="166" font-size="11" fill="currentColor">reshape(uₓ)</text>
+
+  <path d="M 565 144 L 565 178" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="575" y="166" font-size="11" fill="currentColor">reshape(uᵧ)</text>
+
+  <!-- 3. Reshaped 2D Matrix Views -->
+  <g transform="translate(145, 185)">
+    <rect x="0" y="0" width="120" height="65" rx="4" fill="none" stroke="#3b82f6" stroke-width="1.5"/>
+    <line x1="24" y1="0" x2="24" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="48" y1="0" x2="48" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="72" y1="0" x2="72" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="96" y1="0" x2="96" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="13" x2="120" y2="13" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="26" x2="120" y2="26" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="39" x2="120" y2="39" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="52" x2="120" y2="52" stroke="currentColor" stroke-opacity="0.2"/>
+    <text x="60" y="80" font-size="11" fill="currentColor" text-anchor="middle">5 × 5 ReshapedArray (uₓ[i, j])</text>
+  </g>
+
+  <g transform="translate(505, 185)">
+    <rect x="0" y="0" width="120" height="65" rx="4" fill="none" stroke="#8b5cf6" stroke-width="1.5"/>
+    <line x1="24" y1="0" x2="24" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="48" y1="0" x2="48" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="72" y1="0" x2="72" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="96" y1="0" x2="96" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="13" x2="120" y2="13" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="26" x2="120" y2="26" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="39" x2="120" y2="39" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="52" x2="120" y2="52" stroke="currentColor" stroke-opacity="0.2"/>
+    <text x="60" y="80" font-size="11" fill="currentColor" text-anchor="middle">5 × 5 ReshapedArray (uᵧ[i, j])</text>
+  </g>
+</svg>
+</figure>
+```
+
+!!! tip "Try this"
+    Replace `Val(2)` with `Val(3)` and add a third function to the tuple. `ncomponents` and
+    `ndofs` follow.
+
+## Ghost spaces
+
+A grid space can also carry the ghost points of a mesh beyond named facets, through the `ghosts` keyword of [`gridspace`](@ref). The [ghost point tutorial](@ref space_ghost) covers their degrees of freedom, weights and time loops.

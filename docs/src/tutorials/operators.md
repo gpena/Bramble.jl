@@ -57,6 +57,21 @@ The jump has no backward form: it belongs to the interface between ``x_i`` and `
 
 ---
 
+## Four differences compared
+
+Four families combine the same one-sided differences in different ways:
+
+| Operator | Stencil | Order, non-uniform | Order, uniform | Boundary |
+|:--|:--|:--|:--|:--|
+| `D₋` | ``\{i-1, i\}`` | 1 | 1 | truncated to `0` at the first point |
+| `Dc` | ``\{i-1, i+1\}``, divided by the full span | 1 | 2 | truncated to `0` at both ends |
+| `D̽` | ``\{i-1, i, i+1\}``, a weighted mean of two backward differences | 2 | 2 | no convention of its own: falls back to `D₊`/`D₋` |
+| `D̃` | ``\{i, i+1\}``, divided by the averaged spacing | 1 on smoothly graded grids, not consistent where neighbouring spacings differ by an O(1) ratio (random grids); summation by parts holds exactly | 1 | truncated to `0` at the last point, like `D₊` |
+
+On a uniform grid ``h_i = h_{i+1}``: `D̽` and `Dc` collapse to the mean of `D₋` and `D₊`, and `D̃` collapses to `D₊`. They separate only where the spacing varies, which is why a uniform-grid benchmark cannot tell them apart. Use `D̃` with `innerₕ`, for the summation by parts.
+
+---
+
 ## What happens at the boundary
 
 Every operator has one slice where its stencil runs off the grid: the first point for a backward operator, the last for a forward one. There is no neighbour there, so the stencil is truncated.
@@ -271,73 +286,3 @@ parent(∇ₕ ⋅ uv) == parent(divₕ(uv)), parent(∇ₕ × uv) == parent(curl
 ## Ghost points
 
 At a ghosted boundary the stencils read the ghost as a neighbour. The facet operators `∂ₙ`, `∂ₙₙ` and `jumpₙ`, the corner rules and the Laplacian inside a form are in the [ghost point tutorial](@ref operators_ghost).
-
----
-
-## Reference
-
-### [How the names are built](@id operators_names)
-
-A name is a stem, a direction, and a coordinate:
-
-| Piece | Meaning |
-|:--|:--|
-| `D` | finite difference |
-| `jump` | jump |
-| `M` | average |
-| `S` | index shift |
-| `₋` | backward: the stencil reaches to ``i-1`` |
-| `₊` | forward: the stencil reaches to ``i+1`` |
-| `ₓ`, `ᵧ`, `₂` | along the first, second or third coordinate |
-| `ₕ` | every coordinate at once, returning a tuple |
-
-So `D₋ₓ` is the backward finite difference along ``x``, `M₊ᵧ` the forward average along ``y``, and `∇ₕ` the backward finite difference in every coordinate, the discrete gradient, which has that extra name. `jump` has no `₋`/`₊`: it is `jumpₓ`, `jumpᵧ`, `jump₂` and `jumpₕ`. The index shift has a forward and a backward stem: `S₊ₓ` reads the next point along ``x``, `S₋ₓ` the previous one, and `S₊ₕ`/`S₋ₕ` shift along every coordinate.
-
-The forward difference and the forward average are not exported (see the [operator reference](../api/operators.md)); the examples import them by name.
-
-### Four differences compared
-
-Four families combine the same one-sided differences in different ways:
-
-| Operator | Stencil | Order, non-uniform | Order, uniform | Boundary |
-|:--|:--|:--|:--|:--|
-| `D₋` | ``\{i-1, i\}`` | 1 | 1 | truncated to `0` at the first point |
-| `Dc` | ``\{i-1, i+1\}``, divided by the full span | 1 | 2 | truncated to `0` at both ends |
-| `D̽` | ``\{i-1, i, i+1\}``, a weighted mean of two backward differences | 2 | 2 | no convention of its own: falls back to `D₊`/`D₋` |
-| `D̃` | ``\{i, i+1\}``, divided by the averaged spacing | 1 on smoothly graded grids, not consistent where neighbouring spacings differ by an O(1) ratio (random grids); summation by parts holds exactly | 1 | truncated to `0` at the last point, like `D₊` |
-
-On a uniform grid ``h_i = h_{i+1}``: `D̽` and `Dc` collapse to the mean of `D₋` and `D₊`, and `D̃` collapses to `D₊`. They separate only where the spacing varies, which is why a uniform-grid benchmark cannot tell them apart. Use `D̃` with `innerₕ`, for the summation by parts.
-
-### [The direction as an argument](@id operators_direction_argument)
-
-The direction can come from a variable: index the vectorial operator with it. `∇ₕ[d]` is the coordinate operator itself, so `∇ₕ[1]`, `∇ₕ[:x]` and `D₋ₓ` are the same function object. This allows a loop over directions. The discrete ``H^1`` seminorm squared, in any dimension, with the `inner₊` weights of the backward gradient, next to `snorm₁ₕ`:
-
-```@example operators
-sum(inner₊(∇ₕ[d](vₕ), ∇ₕ[d](vₕ), d) for d in 1:dim(mesh(space(vₕ)))), snorm₁ₕ(vₕ)^2
-```
-
-Every family also has a stem that takes the direction as a second argument, and the coordinate suffix is spelling it. An `Int`, a `Symbol` and a `Val` give the same operator:
-
-```@example operators
-Bramble.D₋(vₕ, 2) == Bramble.D₋(vₕ, :y) == Bramble.D₋(vₕ, Val(2)) == D₋ᵧ(vₕ)
-```
-
-The `Val` form is the one to use when the direction must be a compile-time constant, as it must inside a form. `Mₕ(uₕ)` is the tuple over every coordinate and `Mₕ(uₕ, 2)` the average along ``y``, and `∇̽ₕ` works the same way:
-
-```@example operators
-∇̽ₕ(vₕ) == (∇̽ₕ(vₕ, 1), ∇̽ₕ(vₕ, 2)), Mₕ(vₕ) == (Mₕ(vₕ, :x), Mₕ(vₕ, :y))
-```
-
-An `Int` or a `Symbol` selects between literal `Val`s, one branch per direction the mesh has. An out-of-range direction throws an `ArgumentError`, and the bound is the mesh's own dimension: `Bramble.D₋(uₕ, :y)` on a one-dimensional grid is an error. `∇ₕ(uₕ)` returns a tuple and `Bramble.D₋(uₕ, d)` a grid function.
-
-### Destructuring the operator
-
-A vectorial operator is a tuple-like object of the per-coordinate operators, so it can be destructured or indexed before it is applied. Here `dx` is exactly `D₋ₓ`, reached without importing that name:
-
-```@example operators
-dx, dy = ∇ₕ
-
-parent(dx(vₕ)) == parent(∇ₕ(vₕ)[1]), parent(∇ₕ[:x](vₕ)) == parent(∇ₕ(vₕ)[1])
-```
-
-The [operator reference](../api/operators.md) lists which operators accept `[d]`, destructuring and `⋅`/`×`.
