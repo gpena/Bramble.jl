@@ -17,8 +17,6 @@
 # ``u_{\text{exact}} = \sin x \cos(0.7\, y) + 0.1\, xy``, and ``f`` is the left-hand side
 # worked out by hand from it, so the error is checkable.
 #
-# ## The polygon and its grid
-#
 # `polygon(V)` takes the vertices in order, either orientation, and the domain takes it as
 # the marker `:P`.
 
@@ -52,8 +50,7 @@ U, W = polygon_spaces(Ωₕ, :P, sol)
 # ``a`` is sampled at the half points between neighbours in ``x`` and ``c`` between
 # neighbours in ``y``, where the conservative form ``-\tilde D_x(a\, D_{-x} u)`` reads them.
 # ``b`` is sampled at the grid points, and the mixed term is `Dcₓ(bₕ * Dcᵧ(u)) +
-# Dcᵧ(bₕ * Dcₓ(u))` with the central differences. The load is `avgₕ`, the mean of ``f`` over
-# each dual cell.
+# Dcᵧ(bₕ * Dcₓ(u))`, central differences. The load is `avgₕ`, the mean of ``f`` per dual cell.
 
 a(p) = 2 + 0.5sin(p[1] + p[2])
 b(p) = 0.5 + 0.2sin(p[1] * p[2])
