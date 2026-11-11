@@ -96,9 +96,14 @@ uₕ .= A \ F
 normₕ(uₕ .- Rₕ(Wₕ, uexact))
 ```
 
-Four parts in ten thousand. The grid is uniform, which keeps the example short, but a
-uniform grid can flatter a scheme: the [linear Poisson example](examples/poisson_linear.md)
-checks convergence on a random non-uniform grid for that reason. Halving the spacing should
+Four parts in ten thousand.
+
+![Poisson solution on a random 17 by 17 grid, with its grid lines](assets/gallery_poisson.svg)
+
+The same problem on a random 17 × 17 grid, coloured by the solution. The grid in the code is
+uniform, which keeps the example short, but a uniform grid can flatter a scheme: the
+[linear Poisson example](examples/poisson_linear.md) checks convergence on a random
+non-uniform grid for that reason. Halving the spacing should
 cut the error by four, since the scheme is second order:
 
 ```@example gs

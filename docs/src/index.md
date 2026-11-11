@@ -56,6 +56,79 @@ Discretise in space with Bramble and pass the resulting system of ODEs to a time
 </div>
 ```
 
+## Gallery
+
+```@raw html
+<div class="bramble-gallery">
+<div class="bramble-card">
+```
+
+[![Poisson solution on a random 17 by 17 grid, with its grid lines](assets/gallery_poisson.svg)](examples/poisson_linear.md)
+
+**[Poisson on a random grid](examples/poisson_linear.md)**
+
+Interior points placed at random, grid lines drawn over the solution.
+
+```@raw html
+</div>
+<div class="bramble-card">
+```
+
+[![Poisson solution on the unit disk, on a grid fitted to the circle](assets/gallery_disk.svg)](examples/poisson_circle.md)
+
+**[A disk](examples/poisson_circle.md)**
+
+The grid gains lines until each one meets the circle at a node. The ringed nodes are the boundary.
+
+```@raw html
+</div>
+<div class="bramble-card">
+```
+
+[![Boundary layer of width 1e-3 on a graded grid of 41 points](assets/gallery_layer.svg)](tutorials/mesh.md)
+
+**[A boundary layer](tutorials/mesh.md)**
+
+A graded grid puts points in a layer a thousandth wide.
+
+```@raw html
+</div>
+<div class="bramble-card">
+```
+
+[![Heat equation on a random grid: the temperature against x and t](assets/gallery_heat.svg)](examples/heat_equation.md)
+
+**[The heat equation](examples/heat_equation.md)**
+
+Two decaying modes on a random grid, with ``x`` across and ``t`` up.
+
+```@raw html
+</div>
+<div class="bramble-card">
+```
+
+[![The two species u and v of a reaction-diffusion system](assets/gallery_coupled.svg)](examples/coupled_reaction_diffusion.md)
+
+**[Two coupled species](examples/coupled_reaction_diffusion.md)**
+
+A reaction-diffusion system in ``u`` and ``v`` on one random grid.
+
+```@raw html
+</div>
+<div class="bramble-card">
+```
+
+[![Displaced 17 by 17 graded grid of an elastic body](assets/gallery_elasticity.svg)](examples/elasticity_traction_2d.md)
+
+**[Elasticity](examples/elasticity_traction_2d.md)**
+
+A graded grid moved by the computed displacement, drawn at ``x + 0.2\,u``.
+
+```@raw html
+</div>
+</div>
+```
+
 ## Installation
 
 ```julia
@@ -89,6 +162,10 @@ maximum(abs, uₕ .- Rₕ(Wₕ, uexact))                     # about 8e-4
 ```
 
 Passing `false` instead of `true` for an axis places its interior points at random, which gives a non-uniform grid. [Getting started](getting_started.md) explains each step.
+
+The maximum error against `hₘₐₓ`, on uniform meshes and on random ones, for five sizes from 17 to 257 points per axis. Five random draws per size; the dashed line has slope 2.
+
+![Maximum error against the largest spacing on uniform and random meshes, with a slope-2 line](assets/readme_convergence.svg)
 
 ## References
 

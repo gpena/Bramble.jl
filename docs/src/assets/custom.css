@@ -123,3 +123,35 @@ pre.md-output-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Home-page gallery: six figure cards, each an image above a linked title. */
+.bramble-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin: 0 0 2rem;
+}
+
+.bramble-gallery .bramble-card {
+  padding: 0.6rem 0.8rem 0.8rem;
+}
+
+.bramble-gallery .bramble-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.bramble-gallery .bramble-card p a {
+  color: var(--md-sys-color-primary);
+  text-decoration: none;
+}
+
+@media (max-width: 900px) {
+  .bramble-gallery { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .bramble-gallery { grid-template-columns: 1fr; }
+}
