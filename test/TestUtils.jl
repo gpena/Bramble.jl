@@ -30,15 +30,17 @@ using Bramble: indices, point
 const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 
 # `BRAMBLE_TEST_SHARD` narrows the `unit` block to one of four parts, so CI can run each on
-# its own runner: `forms-1` and `forms-2` are the two halves of test/form/ (minus four ghost
-# files), `ghost` is test/ghost/ with those four test/form/ghost_*.jl files, and `rest` is
+# its own runner: `forms-1` and `forms-2` are the two halves of test/form/ (minus five ghost
+# files), `ghost` is test/ghost/ with those five test/form/ghost_*.jl files, and `rest` is
 # the remainder of the unit block, test/solvers/ included. Whole files move between shards
 # to even the leaf wall time. Over CI runs 42874843597, 42921380241 and 42924761109 the
 # test files took a mean 12.9 min on forms-1, 21.2 on forms-2, 19.8 on ghost and 14.1 on
-# rest. Moving assembled_jacobian.jl, assembled_jacobian_blocks.jl and threaded_replay.jl
-# (4.1 min) from forms-2 to forms-1 and test/solvers/ (3.4 min) from ghost to rest brings
-# that, by those figures, to about 17.0, 17.2, 16.4 and 17.5. A file's time depends on what
-# its shard compiled before it, so the sums are estimates.
+# rest. assembled_jacobian.jl, assembled_jacobian_blocks.jl and threaded_replay.jl then
+# moved from forms-2 to forms-1 and test/solvers/ from ghost to rest, and run 43016874048
+# measured 18.5, 21.1, 14.5 and 21.8. forms-2 kept its time: ghost_semidiscrete.jl took
+# 339 s there, against a mean 216 s before, paying the compilation the moved files had
+# paid. That file is in `ghost` now. A file's time depends on what its shard compiled
+# before it, so the file times of one split do not add up to another's: measure a move.
 # It also narrows the package extensions block (the `ext` and
 # `backends` groups) to one of two parts, and the `backends`
 # group's AD block to one of four more, which Weekly.yml runs on separate runners: `ext-solvers`

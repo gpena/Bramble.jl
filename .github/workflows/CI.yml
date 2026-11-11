@@ -111,7 +111,9 @@ jobs:
         # 42874843597 to 42924761109 the ghost and Jacobian tests had grown forms-2 and
         # ghost to 21.2 and 19.8 minutes of tests against 12.9 and 14.1 for forms-1 and
         # rest, so test/solvers/ went back to `rest`, and threaded_replay.jl and the two
-        # assembled_jacobian files to forms-1 (test/TestUtils.jl has the figures). The fifth,
+        # assembled_jacobian files to forms-1 (test/TestUtils.jl has the figures). Run
+        # 43016874048 measured that split at 18.5, 21.1, 14.5 and 21.8 minutes, forms-2
+        # unchanged, so ghost_semidiscrete.jl (339 s of it) went to `ghost`. The fifth,
         # `convergence`, is not a unit shard: it runs the `convergence` group
         # (test/convergence/), every convergence study of the suite, which `unit` no
         # longer holds. `CI result` aggregates every leg, so the required
