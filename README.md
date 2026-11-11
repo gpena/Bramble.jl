@@ -37,9 +37,9 @@ Problems are bilinear and linear forms of discrete operators, in notation close 
 - **Coupled systems.** Composite spaces (`Wₕ^Val(N)`) and vector spaces, with block assembly addressed by component.
 - **Time-dependent problems.** `semidiscretize` and `ode_problem` hand `M u' = F(t) - A u` to OrdinaryDiffEq and the rest of SciML. A wave equation becomes a first-order system in `(u, u̇)`.
 - **Solvers.** `pde_solve` with sparse direct factorizations (SuiteSparse, Apple Accelerate, MUMPS, Sparspak), preconditioners (algebraic multigrid, ILU(0), Jacobi, Chebyshev) and geometric multigrid (`gmg_solve`).
-- **Automatic differentiation.** Forward mode (ForwardDiff) through operators, assembly and nonlinear residuals. Reverse mode (Enzyme, ChainRules), sparse Jacobians and SciMLSensitivity adjoints ship as extensions. Their tests are off until v4.3.0.
-- **Backends.** Serial, threaded (Polyester) and experimental GPU (Metal) execution, with CSC or CSR storage chosen through `backend`. The GPU tests are off until v4.4.0.
-- **Visualization and export.** Plots and Makie recipes, VTK output for ParaView (`export_vtk`) and PGFPlots/TikZ output for LaTeX (`export_pgfplots`).
+- **Automatic differentiation.** Forward mode (ForwardDiff) and reverse mode (Enzyme) through DifferentiationInterface: operators, assembly, linear solves, nonlinear residuals and the relation data of a ghost space. Sparse Jacobians from the form's own sparsity pattern, and a ChainRules adjoint for `pde_solve`.
+- **Backends.** Serial, threaded (Base threads or Polyester) and experimental GPU (Metal) execution, with CSC or CSR storage chosen through `backend`. The GPU tests are off until v4.7.0.
+- **Visualization and export.** Makie plots of grid functions, VTK output for ParaView (`export_vtk`) and PGFPlots/TikZ output for LaTeX (`export_pgfplots`).
 
 ---
 
@@ -134,8 +134,8 @@ Documentation, tutorials, and the API reference are available at [https://gpena.
 
 - [Getting started](https://gpena.github.io/Bramble.jl/getting_started/)
 - Discrete foundations: [geometry](https://gpena.github.io/Bramble.jl/tutorials/geometry/), [meshes](https://gpena.github.io/Bramble.jl/tutorials/mesh/), [spaces](https://gpena.github.io/Bramble.jl/tutorials/space/), [operators](https://gpena.github.io/Bramble.jl/tutorials/operators/)
-- Forms and assembly: [forms](https://gpena.github.io/Bramble.jl/tutorials/form/), [coupled systems](https://gpena.github.io/Bramble.jl/tutorials/coupled_systems/)
-- [Worked examples](https://gpena.github.io/Bramble.jl/examples/poisson_linear/): a Poisson problem, a polygon, a disk, a convection-diffusion problem and a heat equation
+- Forms, assembly and AD: [forms](https://gpena.github.io/Bramble.jl/tutorials/form/), [coupled systems](https://gpena.github.io/Bramble.jl/tutorials/coupled_systems/), [automatic differentiation](https://gpena.github.io/Bramble.jl/tutorials/autodiff/)
+- [Worked examples](https://gpena.github.io/Bramble.jl/examples/poisson_linear/): Poisson (linear, nonlinear, polygon, disk, Neumann and Robin), convection-diffusion, heat, elasticity, coupled reaction-diffusion and inverse diffusion
 
 ---
 
