@@ -259,6 +259,9 @@ function _validate_levelset_marker(
     res isa Bool && _throw_levelset_marker_error(lbl,
         "φ must return a real number, but returned a Bool at the centre $c of the set " *
         "(a predicate is not a level set)")
+    res isa Real || _throw_levelset_marker_error(lbl,
+        "φ must return a real number, but returned a $(typeof(res)) at the centre $c of " *
+        "the set")
     _is_plain_real(res) || _throw_levelset_marker_error(lbl,
         "φ must return a plain real number, but returned a $(typeof(res)) at the centre " *
         "$c of the set; the level-set geometry is not differentiated, so a parameter of φ " *

@@ -96,6 +96,15 @@ const X2 = interval(-1.25, 1.25) × interval(-1.25, 1.25)
         @test_throws ArgumentError domain(X2, :D => L, :D_exterior => levelset(circle))
         @test_throws ArgumentError domain(X2, :D => levelset(p -> p[1] > 0))
         @test_throws ArgumentError domain(X2, :D => levelset(p -> "a"))
+        # A φ that returns no Real is not blamed on differentiation.
+        str_err = try
+            domain(X2, :D => levelset(p -> "a"))
+        catch e
+            e
+        end
+        @test str_err isa ArgumentError
+        @test occursin("String", sprint(showerror, str_err))
+        @test !occursin("differentiated", sprint(showerror, str_err))
         @test_throws ArgumentError domain(X2, :D => levelset(p -> p[3]))
         # A Dual would lose its partials in the Float64 grid: refused, the type named.
         d = ForwardDiff.Dual(0.5, 1.0)
