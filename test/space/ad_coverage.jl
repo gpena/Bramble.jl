@@ -611,37 +611,49 @@ const CELLS = (
         rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
         fwd = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
         kinds = (:nonuniform,)),
-    # The geometric inputs of gpena/Bramble.jl#1171. Reverse is the issue's measurement under
-    # `CpuSerial` (Enzyme 0.13.219, 2026-11-09); forward and the threaded policies are
-    # `:skip` and S3.2 of the v4.2.4 geometry plan measures them. The two polygon `works`
-    # cells compile for about 8 minutes each, so they have a child of their own.
+    # The geometric inputs of gpena/Bramble.jl#1171, measured with Enzyme 0.13.219 on
+    # 2026-11-11 (docs/notes/internals/ad_reductions/1171_geometric_inputs.md). The two
+    # polygon `works` cells compile for about 5 minutes per mode, so they have a child of
+    # their own. Forward is a `MethodError`: Enzyme has no forward rule for `deepcopy`.
     # The datum of `polygon_spaces` (#1170): a `Dual` datum fills the padded space.
     cell(:polygon_datum, "polygon", :polygon, build_polygon_datum,
-        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip),
+        rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
+        fwd = (CpuSerial = :throws, CpuThreaded = :throws, CpuPolyester = :throws),
+        fwd_err = "MethodError"),
     cell(:polygon_coefficient, "polygon", :polygon, build_polygon_coefficient,
-        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip),
+        rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
+        fwd = (CpuSerial = :throws, CpuThreaded = :throws, CpuPolyester = :throws),
+        fwd_err = "MethodError"),
     # `dirac` converts its point to `Float64`: ForwardDiff has no method for a `Dual` and
-    # Enzyme differentiates it. The reference of the Enzyme half is a central difference.
+    # Enzyme differentiates it in both modes. The reference of the Enzyme half is a central
+    # difference. The threaded policies were not run.
     cell(:dirac_location, "dirac", :inputs, build_dirac_location, fd = :throws,
         fd_err = "no method matching Float64",
-        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip),
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
     cell(:dirac_strength, "dirac", :inputs, build_dirac_strength,
-        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip),
-    # `polygon(V)` holds exact `Rational{BigInt}` vertices, which a `Dual` cannot become. The
-    # central difference of the Enzyme half runs (the point count is fixed by the 12 x 12
-    # grid), so S3.2 can set a verdict; it is `:skip` here.
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
+    # `polygon(V)` holds exact `Rational{BigInt}` vertices, which a `Dual` cannot become.
+    # Enzyme meets the same illegal type analysis as `polygon_mesh_inside`, in both modes.
     cell(:polygon_vertices, "polygon", :inputs, build_polygon_vertices, fd = :throws,
-        fd_err = "no method matching Rational{BigInt}", rev = :skip, fwd = :skip),
-    # The mesh built inside `f`, vertices constant: ForwardDiff works and Enzyme reverse meets
-    # the exact `Rational` and `BigFloat` arithmetic of the grid closure.
+        fd_err = "no method matching Rational{BigInt}",
+        rev = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
+        rev_err = (CpuSerial = "IllegalTypeAnalysisException", CpuThreaded = "", CpuPolyester = "")),
+    # The mesh built inside `f`, vertices constant: ForwardDiff works and Enzyme meets the
+    # exact `Rational` and `BigFloat` arithmetic of the grid closure in both modes.
     cell(:polygon_mesh_inside, "polygon", :inputs, build_polygon_mesh_inside,
         rev = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
-        rev_err = (CpuSerial = "IllegalTypeAnalysisException", CpuThreaded = "", CpuPolyester = ""),
-        fwd = :skip),
-    # A `φ` that depends on the parameter is refused (#1172): a `Float64` grid has no
-    # derivative to give. Enzyme is `:skip` until S3.2 measures whether it is a silent zero.
+        fwd = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
+        rev_err = (CpuSerial = "IllegalTypeAnalysisException", CpuThreaded = "", CpuPolyester = "")),
+    # A `φ` that depends on the parameter is refused under ForwardDiff (#1172): a `Float64`
+    # grid has no derivative to give. Enzyme returns a gradient of zeros in both modes, with
+    # no error: a silent zero.
     cell(:levelset_parameter, "levelset", :inputs, build_levelset_parameter, fd = :throws,
-        fd_err = "Level-set marker", rev = :skip, fwd = :skip)
+        fd_err = "Level-set marker",
+        rev = (CpuSerial = :silent_zero, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :silent_zero, CpuThreaded = :skip, CpuPolyester = :skip))
 )
 
 # --- Enzyme, in a child process ------------------------------------------------------ #
