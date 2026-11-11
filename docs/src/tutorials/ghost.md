@@ -98,6 +98,121 @@ dof_point(j) = point(mesh(Pₕ), padded[findfirst(!iszero, E[:, j])])
 
 The first two entries are the first and last physical node. The next four are the `xmin` and `xmax` ghosts at ``x = -0.2`` and ``x = 1.4``, the distances ``h_2 = 0.2`` and ``h_n = 0.4`` from the facet. The last four are the `ymin` and `ymax` ghosts at ``y = -0.5`` and ``y = 1.5``.
 
+```@raw html
+<figure style="margin:1.5em 0;text-align:center">
+<svg viewBox="0 0 560 340" width="100%" style="max-width:560px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif" role="img"
+     aria-label="Padded 6 by 5 grid of the 4 by 3 non-uniform mesh: 12 physical nodes numbered 1 to 12, 14 ghost points numbered 13 to 26, and four absent corners.">
+  <!-- padded grid lines -->
+  <g stroke="currentColor" stroke-opacity="0.25" stroke-dasharray="4 3">
+    <line x1="40" y1="300" x2="40" y2="20"/>
+    <line x1="100" y1="300" x2="100" y2="20"/>
+    <line x1="160" y1="300" x2="160" y2="20"/>
+    <line x1="280" y1="300" x2="280" y2="20"/>
+    <line x1="400" y1="300" x2="400" y2="20"/>
+    <line x1="520" y1="300" x2="520" y2="20"/>
+    <line x1="40" y1="300" x2="520" y2="300"/>
+    <line x1="40" y1="230" x2="520" y2="230"/>
+    <line x1="40" y1="160" x2="520" y2="160"/>
+    <line x1="40" y1="90" x2="520" y2="90"/>
+    <line x1="40" y1="20" x2="520" y2="20"/>
+  </g>
+  <!-- physical mesh -->
+  <rect x="100" y="90" width="300" height="140" fill="#3b82f6" fill-opacity="0.08" stroke="#3b82f6" stroke-width="1.6"/>
+  <!-- absent corners -->
+  <g stroke="#ef4444" stroke-width="2">
+    <line x1="34" y1="294" x2="46" y2="306"/><line x1="34" y1="306" x2="46" y2="294"/>
+    <line x1="34" y1="14" x2="46" y2="26"/><line x1="34" y1="26" x2="46" y2="14"/>
+    <line x1="514" y1="294" x2="526" y2="306"/><line x1="514" y1="306" x2="526" y2="294"/>
+    <line x1="514" y1="14" x2="526" y2="26"/><line x1="514" y1="26" x2="526" y2="14"/>
+  </g>
+  <!-- physical nodes: 1 to 12 -->
+  <g fill="currentColor">
+    <circle cx="100" cy="230" r="5"/>
+    <circle cx="160" cy="230" r="5"/>
+    <circle cx="280" cy="230" r="5"/>
+    <circle cx="400" cy="230" r="5"/>
+    <circle cx="100" cy="160" r="5"/>
+    <circle cx="160" cy="160" r="5"/>
+    <circle cx="280" cy="160" r="5"/>
+    <circle cx="400" cy="160" r="5"/>
+    <circle cx="100" cy="90" r="5"/>
+    <circle cx="160" cy="90" r="5"/>
+    <circle cx="280" cy="90" r="5"/>
+    <circle cx="400" cy="90" r="5"/>
+  </g>
+  <g font-size="12" text-anchor="start" fill="currentColor">
+    <text x="108" y="222">1</text>
+    <text x="168" y="222">2</text>
+    <text x="288" y="222">3</text>
+    <text x="408" y="222">4</text>
+    <text x="108" y="152">5</text>
+    <text x="168" y="152">6</text>
+    <text x="288" y="152">7</text>
+    <text x="408" y="152">8</text>
+    <text x="108" y="82">9</text>
+    <text x="168" y="82">10</text>
+    <text x="288" y="82">11</text>
+    <text x="408" y="82">12</text>
+  </g>
+  <!-- ghost points: 13 to 26 -->
+  <g fill="#fff" stroke="#10b981" stroke-width="2">
+    <circle cx="40" cy="230" r="5"/>
+    <circle cx="40" cy="160" r="5"/>
+    <circle cx="40" cy="90" r="5"/>
+    <circle cx="520" cy="230" r="5"/>
+    <circle cx="520" cy="160" r="5"/>
+    <circle cx="520" cy="90" r="5"/>
+    <circle cx="100" cy="300" r="5"/>
+    <circle cx="160" cy="300" r="5"/>
+    <circle cx="280" cy="300" r="5"/>
+    <circle cx="400" cy="300" r="5"/>
+    <circle cx="100" cy="20" r="5"/>
+    <circle cx="160" cy="20" r="5"/>
+    <circle cx="280" cy="20" r="5"/>
+    <circle cx="400" cy="20" r="5"/>
+  </g>
+  <g font-size="12" text-anchor="start" fill="#10b981">
+    <text x="48" y="222">13</text>
+    <text x="48" y="152">14</text>
+    <text x="48" y="82">15</text>
+    <text x="528" y="222">16</text>
+    <text x="528" y="152">17</text>
+    <text x="528" y="82">18</text>
+    <text x="108" y="292">19</text>
+    <text x="168" y="292">20</text>
+    <text x="288" y="292">21</text>
+    <text x="408" y="292">22</text>
+    <text x="108" y="12">23</text>
+    <text x="168" y="12">24</text>
+    <text x="288" y="12">25</text>
+    <text x="408" y="12">26</text>
+  </g>
+  <!-- legend -->
+  <g font-size="12" fill="currentColor">
+    <circle cx="40" cy="328" r="5" fill="currentColor"/><text x="50" y="332">node 1 to 12</text>
+    <circle cx="150" cy="328" r="5" fill="#fff" stroke="#10b981" stroke-width="2"/><text x="160" y="332">ghost 13 to 26</text>
+    <g stroke="#ef4444" stroke-width="2"><line x1="274" y1="322" x2="286" y2="334"/><line x1="274" y1="334" x2="286" y2="322"/></g><text x="292" y="332">absent corner</text>
+  </g>
+</svg>
+<figcaption style="font-size:0.9em;opacity:0.8">The padded grid of the 4 &times; 3 mesh. Filled dots are nodes, open dots are ghosts, crosses are the four absent corners.</figcaption>
+</figure>
+```
+
+In the figure, ghost 13 sits one spacing left of node 1 and ghost 19 one spacing below it. The four padded corners are absent.
+
+```@example ghost
+xs_fig, ys_fig = [0.0, 0.2, 0.6, 1.0], [0.0, 0.5, 1.0] # hide
+drawn = vcat([(x, y) for y in ys_fig for x in xs_fig],             # 1 to 12 # hide
+             [(-0.2, y) for y in ys_fig], [(1.4, y) for y in ys_fig],   # 13 to 18 # hide
+             [(x, -0.5) for x in xs_fig], [(x, 1.5) for x in xs_fig])   # 19 to 26 # hide
+
+@assert length(drawn) == ndofs(W_ghost) == 26 # hide
+@assert all(collect(dof_point(j)) ≈ [drawn[j]...] for j in 1:26) # hide
+@assert [Bramble.is_absent(G₂, I) for I in CartesianIndices((6, 5))] == # hide
+        [i in (1, 6) && j in (1, 5) for i in 1:6, j in 1:5] # hide
+drawn[[1, 13, 19]]
+```
+
 ### Physical-only weights
 
 A ghost carries no quadrature weight. The inner products `innerₕ`, `inner₊` and `inner_Γ` weigh the physical nodes, cells and facets exactly as on the plain space, and give zero weight to every ghost. A mass matrix assembled on the ghost space shows it:

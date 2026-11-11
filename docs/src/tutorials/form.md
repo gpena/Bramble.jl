@@ -185,6 +185,32 @@ maximum(abs, uh .- parent(exact))
 
 The error is 8e-4 on 33 points.
 
+The figure draws `uh` over the exact solution, and below it the pointwise error with its own scale:
+
+```@example forms
+xd = collect(points(Ωd)) # hide
+ue, err = parent(exact), uh .- parent(exact) # hide
+emax = maximum(abs, err) # hide
+@assert 1e-4 < emax < 1e-3 # hide
+sx(x) = round(50 + 480x, digits = 1) # hide
+path(f, ys) = join(("$(i == 1 ? 'M' : 'L')$(sx(xd[i])),$(round(f(ys[i]), digits = 1))" for i in eachindex(xd)), " ") # hide
+top(u) = 150 - 110u # hide
+bot(e) = 235 - 30e / emax # hide
+sty = "font-family:system-ui,-apple-system,'Segoe UI',sans-serif" # hide
+svg = join([ # hide
+    "<figure style=\"margin:1.5em 0;text-align:center\">", # hide
+    "<svg viewBox=\"0 0 600 290\" width=\"100%\" style=\"max-width:600px;height:auto;$sty\" role=\"img\"", # hide
+    " aria-label=\"The computed Poisson solution on 33 points over the exact sine, and the pointwise error, at most $(round(emax, sigdigits = 2)).\">", # hide
+    "<path d=\"$(path(top, ue))\" fill=\"none\" stroke=\"#3b82f6\" stroke-width=\"5\" stroke-opacity=\"0.45\"/>", # hide
+    "<path d=\"$(path(top, uh))\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-dasharray=\"5 3\"/>", # hide
+    "<text x=\"290\" y=\"28\" font-size=\"13\" text-anchor=\"middle\" fill=\"currentColor\">u_h (dashed) over sin(πx) (blue)</text>", # hide
+    "<line x1=\"50\" y1=\"235\" x2=\"530\" y2=\"235\" stroke=\"currentColor\" stroke-opacity=\"0.4\"/>", # hide
+    "<path d=\"$(path(bot, err))\" fill=\"none\" stroke=\"#ef4444\" stroke-width=\"2\"/>", # hide
+    "<text x=\"290\" y=\"278\" font-size=\"13\" text-anchor=\"middle\" fill=\"#ef4444\">u_h - sin(πx), largest magnitude $(round(emax, sigdigits = 2))</text>", # hide
+    "</svg></figure>"], "\n") # hide
+HTML(svg)
+```
+
 !!! tip "Try this"
     Change the `33` in `mesh(Ω, 33, true)` to `65` and run the block again. The error falls
     by about a factor of four, as second order predicts.
