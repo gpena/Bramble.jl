@@ -92,9 +92,12 @@ function _polygon_spaces(Ωₕ, P::ScalarGridSpace{2, T}, label::Symbol, g, inn:
     keep = findall(inn)
     # `g` at every boundary node first: a `Dual` or complex value widens the datum's type
     # `S`, as relation data do in `_constrained_space`, while `E`, `P` and `V` keep `T`.
+    # Values of several types (a `Dual` on part of the boundary) promote value by value.
     bnd = findall(Γ)
     gb = map(k -> g(point(Ωₕ, car[k])), bnd)
-    S = _closure_data_eltype(T, eltype(gb))
+    R = eltype(gb)
+    S = _closure_data_eltype(T,
+        isconcretetype(R) ? R : mapreduce(typeof, promote_type, gb; init = T))
     gv = zeros(S, N)
     gv[bnd] .= gb
 

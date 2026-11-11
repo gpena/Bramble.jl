@@ -236,28 +236,32 @@ end
     end
 
     # A datum depending on a parameter `p`, seeded as a `Dual`: the lifted solution's
-    # partials are its derivative in `p`, against a central difference (#1170).
+    # partials are its derivative in `p`, against a central difference (#1170). The second
+    # datum is a `Dual` on part of the boundary only, a `Float64` elsewhere.
     @testset "Dual datum: central difference (#1170)" begin
         Random.seed!(5)
         Ωₕ = fig1_mesh((14, 12), (false, false))
-        gp(p) = x -> p * x[1] + x[2]^2 + p^2 * sin(x[2])
-        function uh(p)
-            U, W = polygon_spaces(Ωₕ, :P, gp(p))
+        whole(p) = x -> p * x[1] + x[2]^2 + p^2 * sin(x[2])
+        part(p) = x -> x[1] < 1 ? 0.0 : p * x[1] + x[2]^2
+        function uh(g)
+            U, W = polygon_spaces(Ωₕ, :P, g)
             A, F = assemble(form(U, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))),
                 form(W, v -> innerₕ(_Const(1.0), v)))
             return lift(U, pde_solve(A, F)).data
         end
         p, δ = 0.7, 1e-6
         Dp = ForwardDiff.Dual{Nothing}(p, 1.0)
-        U, W = polygon_spaces(Ωₕ, :P, gp(Dp))
-        @test eltype(U.d) <: ForwardDiff.Dual && eltype(U.E) === Float64
-        @test eltype(W.d) === Float64
-        u = uh(Dp)
-        @test maximum(abs, ForwardDiff.value.(u) .- uh(p)) < 1e-12
-        du = map(x -> ForwardDiff.partials(x, 1), u)
-        cd = (uh(p + δ) .- uh(p - δ)) ./ 2δ
-        @test maximum(abs, cd) > 1
-        @test maximum(abs, du .- cd) <= 1e-6 * maximum(abs, cd)
+        for gp in (whole, part)
+            U, W = polygon_spaces(Ωₕ, :P, gp(Dp))
+            @test eltype(U.d) <: ForwardDiff.Dual && eltype(U.E) === Float64
+            @test eltype(W.d) === Float64
+            u = uh(gp(Dp))
+            @test maximum(abs, ForwardDiff.value.(u) .- uh(gp(p))) < 1e-12
+            du = map(x -> ForwardDiff.partials(x, 1), u)
+            cd = (uh(gp(p + δ)) .- uh(gp(p - δ))) ./ 2δ
+            @test maximum(abs, cd) > 1
+            @test maximum(abs, du .- cd) <= 1e-6 * maximum(abs, cd)
+        end
     end
 
     # A complex datum `g + i h` with a real load: the solution is affine in the datum, so
