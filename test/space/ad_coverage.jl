@@ -585,18 +585,24 @@ const CELLS = (
     cell(:ghost_inner, "ghost", :ghost_fast, build_ghost_inner,
         rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip), fwd = :skip,
         kinds = (:nonuniform,)),
-    # Relation data that depend on the parameter: not run. Reverse is compile cost in
-    # `_assemble_relation`: one facet takes 732 s and 3.7 GB and `constrained` passes the 10 GB
-    # cap at about 310 s. Forward of `constrained` alone works (about 61 s) but was not
-    # measured through this cell. Open, gpena/Bramble.jl#1153 and
-    # docs/notes/internals/ad_reductions/1153_constrained.md.
-    cell(:ghost_data, "ghost", :ghost_slow, build_ghost_data, rev = :skip, fwd = :skip,
-        kinds = (:nonuniform,), slow = true),
-    # The Robin coefficient's ForwardDiff half works (gpena/Bramble.jl#1127). Its Enzyme reverse
-    # is the same compile cost as `ghost_data` (744 s for one facet, #1153), forward not
-    # measured through this cell.
-    cell(:ghost_robin, "ghost", :ghost_fast, build_ghost_robin, rev = :skip, fwd = :skip,
-        kinds = (:nonuniform,)),
+    # Relation data that depend on the parameter, and a Robin coefficient that does
+    # (gpena/Bramble.jl#1153, docs/notes/internals/ad_reductions/1153_constrained.md). Reverse
+    # compiled for over 10 GB until the rule of #1182 over `_assemble_relation`
+    # (ext/BrambleEnzymeExt/relations.jl): now both modes match ForwardDiff under `CpuSerial` and
+    # `CpuPolyester` (3.3 to 6.1 GB alone). Under `CpuThreaded` both modes fail with
+    # `EnzymeNoTypeError` in the relation's forms, open as gpena/Bramble.jl#1179. Each cell has
+    # a child of its own: in the `ghost_fast` child the group peaked at 10.2 GB under
+    # `CpuPolyester` and 10.6 GB under `CpuThreaded`, where the 10 GB cap killed it.
+    cell(:ghost_data, "ghost", :relation_data, build_ghost_data,
+        rev = (CpuSerial = :ok, CpuThreaded = :throws, CpuPolyester = :ok),
+        fwd = (CpuSerial = :ok, CpuThreaded = :throws, CpuPolyester = :ok),
+        rev_err = "EnzymeNoTypeError", kinds = (:nonuniform,)),
+    # The Robin coefficient's ForwardDiff half works (gpena/Bramble.jl#1127); the Enzyme half
+    # is the same as `ghost_data`.
+    cell(:ghost_robin, "ghost", :relation_robin, build_ghost_robin,
+        rev = (CpuSerial = :ok, CpuThreaded = :throws, CpuPolyester = :ok),
+        fwd = (CpuSerial = :ok, CpuThreaded = :throws, CpuPolyester = :ok),
+        rev_err = "EnzymeNoTypeError", kinds = (:nonuniform,)),
     # The load of `assemble(a, l)` alone (gpena/Bramble.jl#1127, the load half). The threaded
     # reverse is #1157 and the forward under Enzyme #1159, both fixed in v4.2.2.
     cell(:ghost_load, "ghost", :ghost_fast, build_ghost_load, kinds = (:nonuniform,)),
@@ -918,9 +924,9 @@ if CHILD == ""
             @test_skip "Enzyme is not in this environment"
         else
             groups = (:dense, :assemble, :three, :boundary, :geometry, :solve, :operators, :ghost_fast,
-                :inputs, :levelset, :polygon)
+                :relation_data, :relation_robin, :inputs, :levelset, :polygon)
             WITH_3D_TESTS && (groups = (groups..., :threed))
-            SLOW && (groups = (groups..., :ghost_slow))
+            SLOW && (groups = (groups..., unique(c.group for c in CELLS if c.slow)...))
             for pname in keys(POLICIES)
                 pname === :CpuSerial || THREADED || continue
                 @testset "$pname" begin
