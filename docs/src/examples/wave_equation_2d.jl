@@ -1,14 +1,8 @@
 # # Acoustic wave equation in two dimensions
 #
-# Every time-dependent page so far has been first order in time: the
-# [heat equation](heat_equation.md) hands `M u' = F - A u` to a stepper. A wave is second
-# order, and Bramble has no second-order semidiscretisation of its own: the caller writes the
-# first-order system for the pair `(u, u̇)` and hands that to [`semidiscretize`](@ref), which
-# is what this page does.
-#
-# This script runs under `test/examples/ext_pages.jl`, in the `examples` test group, with the
-# assertions the page renders but does not check; it is not part of the published manual. It
-# needs `SciMLBase` and a stepper, so it does not run on every push.
+# The [heat equation](heat_equation.md) hands `M u' = F - A u` to a stepper, first order in
+# time. A wave is second order, and [`semidiscretize`](@ref) takes the first-order form, so
+# the first-order system for the pair `(u, u̇)` is written out below.
 #
 # ## Problem
 #
@@ -23,9 +17,8 @@
 # u_{\text{exact}}(x, y, t) = \sin(\pi x)\sin(\pi y)\cos(\sqrt{2}\,\pi c\, t),
 # ```
 #
-# an exact solution of the continuous problem, so the error below is measurable rather than
-# merely plausible. It starts at rest in the shape of the first mode and oscillates in place
-# with period ``\sqrt{2}``.
+# an exact solution of the continuous problem, so the error below can be measured. It starts
+# at rest in the shape of the first mode and oscillates in place with period ``\sqrt{2}``.
 #
 # The boundary stays Dirichlet-only here because the state is a composite space and
 # `semidiscretize` and `ode_problem` refuse a composite of ghost spaces for now.
@@ -89,7 +82,7 @@ size(mass_matrix(sd)), size(operator_matrix(sd))
 
 # [`mass_matrix`](@ref) is the stacked `2n × 2n` mass matrix, one diagonal block per leaf, and
 # [`operator_matrix`](@ref) is ``A``, with a constrained row replaced by `eₖ`; its lower left
-# block is ``c^2 K``, which the energy below reuses.
+# block is ``c^2 K`` on the interior rows, which the energy below reuses.
 #
 # The mesh above is uniform, so the weights are known: an interior row of `M` carries the cell
 # measure ``h_x h_y = (1/24)^2`` on each leaf, and a Dirichlet row is zero on each.
@@ -104,12 +97,10 @@ mid = 13 + 25 * 12                              # an interior point
 # [`ode_problem`](@ref) hands the whole thing to `OrdinaryDiffEq`, with the state ordered
 # displacement first, velocity second.
 #
-# A symplectic integrator would be the natural choice for a conservative problem, and it
-# cannot be used here: `OrdinaryDiffEqCore` refuses an explicit or symplectic method unless
-# the mass matrix is exactly `I`, and the mass matrix here never is: its interior rows carry
-# the cell measure ``h_x h_y``, and its Dirichlet rows are zero, which is what makes the
-# system differential-algebraic. `Rodas5P` is mass-matrix aware, and is what the
-# [heat equation](heat_equation.md) page names beside `FBDF`.
+# The Dirichlet rows of the mass matrix are zero, which makes the system
+# differential-algebraic, so [`ode_problem`](@ref) asks for a method that admits a singular
+# mass matrix. `Rodas5P` is one, and the [heat equation](heat_equation.md) page names it
+# beside `FBDF`.
 
 u₀ = Rₕ(Wₕ, x -> uexact(x, 0.0))
 v₀ = Rₕ(Wₕ, x -> duexact(x, 0.0))
@@ -125,9 +116,10 @@ SciMLBase.successful_retcode(sol), length(sol.t)
 uT = element(Wₕ, sol.u[end][1:n])
 err = normₕ(uT - Rₕ(Wₕ, x -> uexact(x, 1.0)))
 
-# Bracketed rather than one-sided: an exactly zero error would mean the exact solution had #src
+# Bracketed on both sides: an exactly zero error would mean the exact solution had         #src
 # been reproduced by construction instead of stepped for.                                  #src
 @test 1.0e-4 < err < 1.0e-2                                                                #src
+@test abs(sol.u[end][1]) < 1.0e-8 && abs(sol.u[end][n + 1]) < 1.0e-8                       #src
 
 err
 
@@ -144,9 +136,9 @@ surface_plot(uT; title = "u at t = 1, on a 25 × 25 mesh") # hide
 # E(t) = \tfrac{1}{2}\|\dot u\|_M^2 + \tfrac{c^2}{2} u^{\mathsf T} K u,
 # ```
 #
-# and the semidiscrete system conserves its discrete counterpart exactly, up to what the time
-# stepper does to it. `Rodas5P` is not symplectic and has no conservation property of its own,
-# so the right claim is about the drift, measured rather than assumed:
+# and so does the semidiscrete system, with the discrete counterpart
+# ``\tfrac{1}{2} v^{\mathsf T} M v + \tfrac{c^2}{2} u^{\mathsf T} K u``. `Rodas5P` is not
+# symplectic, so the stepper can still make the energy drift, and the drift is measured:
 
 Mᵥ = M[(n + 1):(2n), (n + 1):(2n)]
 Kc = operator_matrix(sd)[(n + 1):(2n), 1:n]
@@ -156,26 +148,29 @@ E = energy.(sol.u)
 drift = maximum(abs, E .- E[1]) / E[1]
 
 @test 0.0 < drift < 1.0e-10                                                                #src
-@test length(sol.t) < 100                                                                  #src
-sol_tight = solve(prob, Rodas5P(); reltol = 1.0e-10, abstol = 1.0e-10)                       #src
-drift_tight = maximum(abs, energy.(sol_tight.u) .- E[1]) / E[1]                             #src
-@test drift_tight < drift / 10                                                              #src
+@test 50 <= length(sol.t) <= 60                                                            #src
+@test E[1] ≈ π^2 / 4 rtol = 5.0e-3                                                         #src
 
 E[1], drift
 
-# Eleven digits of the initial energy survive some fifty adaptive steps. That is the
-# integrator's tolerance showing rather than a conservation theorem: tightening `reltol` to
-# `1e-10` takes the drift to around `1e-13`, and loosening it gives the digits back.
+# The initial energy is close to the continuous ``\pi^2/4`` and the relative drift over the
+# 56 stored time points is about `1e-11`. It follows the integrator's tolerance, and
+# tightening `reltol` to `1e-10` lowers it:
+
+sol_tight = solve(prob, Rodas5P(); reltol = 1.0e-10, abstol = 1.0e-10)
+drift_tight = maximum(abs, energy.(sol_tight.u) .- E[1]) / E[1]
+
+@test 30 < drift / drift_tight < 300                                                       #src
+
+drift_tight
 #
 # ## Spatial order of the wave solution
 #
-# Refining space, with the time tolerance held fixed and tight enough that the spatial error
-# is what is being measured. The uniform mesh above would flatter the rate, because on it
-# ``\sin(\pi x)\sin(\pi y)`` is an exact discrete eigenmode of the Laplacian. That special
-# case says little about the scheme. The series therefore runs on one seeded random coarse
-# mesh, refined in place with [`iterative_refinement!`](@ref) so every finer level is the same
-# random mesh, dyadically split. The uniform mesh stays above, where the check on the mass
-# matrix needs a known grid weight:
+# Refining space with the time tolerance held fixed. On the uniform mesh above,
+# ``\sin(\pi x)\sin(\pi y)`` is an exact discrete eigenmode of the Laplacian, a special case
+# that says little about the scheme. The series therefore runs on one seeded random coarse
+# mesh, refined in place with [`iterative_refinement!`](@ref), so every finer level is the
+# same random mesh with each cell halved:
 
 using Random
 
@@ -214,8 +209,8 @@ include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
 convergence_plot([(hs, errs, "2D wave", "#5B5FC7")]; # hide
     title = "Wave equation at t = 1, ‖·‖ₕ") # hide
 
-# Second order, the same rate the steady problems reach, which is the point: writing the wave
-# as a first-order system does not cost the scheme its spatial accuracy.
+# The observed orders are 2.04 and 2.01: writing the wave as a first-order system keeps the
+# second-order accuracy in space.
 #
 # ## Where to go next
 #

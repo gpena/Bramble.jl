@@ -4,9 +4,6 @@
 # worth having: a solution with a thin layer, where the points a uniform mesh spends in the
 # smooth region are wasted and the ones it spends in the layer are too few.
 #
-# This script runs under `test/examples/pages.jl`, where the `#src` assertions execute; it is
-# not part of the published manual.
-#
 # ## Problem
 #
 # ```math
@@ -24,10 +21,10 @@
 # ```
 #
 # rises like `x` across the domain and then drops to zero inside a layer of width
-# ``\mathcal{O}(\varepsilon)`` at `x = 1`. Written this way rather than with
-# ``e^{1/\varepsilon}`` in a denominator, which overflows at this ``\varepsilon``. It
-# vanishes at `x = 0` and has ``u'(0) = 1 - e^{-1/\varepsilon} / (\varepsilon (1 -
-# e^{-1/\varepsilon}))``, which is `1` to machine precision, so the Robin datum is
+# ``\mathcal{O}(\varepsilon)`` at `x = 1`. The formula keeps every exponential negative,
+# since ``e^{1/\varepsilon}`` overflows at this ``\varepsilon``. The solution vanishes at
+# `x = 0` and has ``u'(0) = 1 - e^{-1/\varepsilon} / (\varepsilon (1 - e^{-1/\varepsilon}))``,
+# which is `1` to machine precision, so the Robin datum is
 # ``h = u_{\text{exact}}(0) - u_{\text{exact}}'(0)``, computed from the exact solution.
 
 using Bramble
@@ -39,14 +36,18 @@ uexact(x) = x[1] - (exp((x[1] - 1) / ε) - exp(-1 / ε)) / (1 - exp(-1 / ε))
 duexact(x) = 1 - exp((x[1] - 1) / ε) / (ε * (1 - exp(-1 / ε)))
 robin_datum(x) = uexact(x) - duexact(x)
 
+@test isinf(exp(1 / ε))                                                                    #src
+@test uexact(0.0) == 0.0                                                                   #src
+@test duexact(0.0) == 1.0                                                                  #src
+@test robin_datum(0.0) == -1.0                                                             #src
+
 Ω = domain(interval(0.0, 1.0), :left => :left, :right => :right)
 
 # The Robin end goes through ghost points: `gridspace(Ωₕ; ghosts = (:xmin,))` adds one ghost
 # node outside `x = 0` only, and `constrained` fixes it from the relation `u + ∂ₙ(u) = h`,
 # with `h` a function of the boundary point. The Dirichlet end needs no ghost and is handed
-# to `assemble` as `side => data`. The convective term is the strong operator `∇̽ₕ`, the
-# second-order centred derivative on a non-uniform grid, because a ghost value enters a
-# difference stencil and not the staggered average of the weak form. The form is
+# to `assemble` as `side => data`. The diffusion term is `Δₕ` and the convective term the
+# cross-weighted centred gradient `∇̽ₕ`, so the form is
 # ``\langle -\varepsilon \Delta_h u + \breve\nabla_h u, v \rangle_h``, with the source `1`
 # tested against `v` in the same inner product.
 
@@ -75,10 +76,9 @@ end
 
 # ## Building a graded mesh
 #
-# Bramble ships no stretching helper, and the `uniform = false` flag is not one: it draws
-# interior points at random and sorts them, which is what the convergence studies elsewhere
-# use to expose order reduction, not a grading. [`iterative_refinement!`](@ref) is not one
-# either: it halves every cell, everywhere.
+# Bramble ships no stretching helper. The `uniform = false` flag draws interior points at
+# random and sorts them, which is no grading, and [`iterative_refinement!`](@ref) halves
+# every cell, everywhere.
 #
 # A graded mesh is a point vector, written by hand and installed with
 # [`change_points!`](@ref). A `tanh` map clusters points towards `x = 1`, with `σ` setting how
@@ -90,9 +90,13 @@ graded_points(n; σ = 4.0) = [tanh(σ * t) / tanh(σ) for t in range(0.0, 1.0, l
 g = graded_points(41)
 extrema(diff(g)), extrema(diff(uniform_points(41)))
 
-# The finest cell is about 170 times smaller than the uniform one and the coarsest about four
-# times larger, on the same 41 points. The layer is `ε = 10⁻³` wide, so the fine end is where
-# it has to be.
+@test argmin(diff(g)) == length(g) - 1                                                     #src
+@test 160 < 0.025 / minimum(diff(g)) < 175                                                 #src
+@test 3.9 < maximum(diff(g)) / 0.025 < 4.1                                                 #src
+
+# On the same 41 points the finest cell is about 170 times smaller than the uniform one and
+# the coarsest about four times larger. The finest cell, `1.5e-4`, is below the layer width
+# `ε = 10⁻³`; the uniform cell, `0.025`, is 25 layer widths.
 #
 # ## The comparison
 #
@@ -106,21 +110,24 @@ err_graded, over_graded = solve_on(graded_points(41))
 @test err_graded < err_uniform / 100                                                       #src
 @test 0.8 < over_uniform < 0.95                                                            #src
 @test 0.0 < over_graded < 2.0e-3                                                           #src
+@test 0.99 < maximum(uexact.(range(0.0, 1.0, length = 100_001))) < 1.0                     #src
 
 (err_uniform, over_uniform), (err_graded, over_graded)
 
-# More than two orders of magnitude in the error, and the overshoot tells the same story more
-# physically: the uniform solution rises to nearly 1.9 where the exact solution peaks just
-# below 1, because a cell wider than the layer cannot represent the drop and oscillates
-# instead. The graded solution overshoots by about a thousandth.
+# The graded error is more than two orders of magnitude smaller. The overshoot, the amount by
+# which the discrete maximum exceeds the exact peak (just below 1), shows it physically: the
+# uniform solution overshoots by 0.87, the graded one by about a thousandth.
 #
-# The oscillation is not a solver problem and no amount of tightening a tolerance removes it.
-# The cell Péclet number `h / (2ε)` is what decides it, and on a uniform mesh with
-# `h = 1/40` at `ε = 10⁻³` that number is twelve.
+# The overshoot is the oscillation of a centred scheme on cells wider than the layer. With
+# `h = 1/40` and `ε = 10⁻³` the cell Péclet number `h / (2ε)` is 12.5 on the uniform mesh,
+# well above the value 1 at which centred differences start to oscillate.
+
+@test 12 < (1 / 40) / (2ε) < 13                                                            #src
+
 #
 # ## How far refinement gets you
 #
-# Refining the uniform mesh does work, eventually:
+# Refining the uniform mesh does reduce the error:
 
 ns = (41, 81, 161, 321, 641)
 uniform_errors = [solve_on(uniform_points(n))[1] for n in ns]
@@ -131,10 +138,9 @@ graded_errors = [solve_on(graded_points(n))[1] for n in ns]
 
 nothing # hide
 
-# The graded mesh at 41 points is already better than the uniform one at 641. That is the
-# whole argument for a non-uniform Cartesian grid: the points go where the solution varies,
-# and the scheme keeps its order on them: halving the spacing divides the graded error by
-# four, which is second order.
+# The graded mesh at 41 points is already better than the uniform one at 641. The points go
+# where the solution varies, and the scheme keeps its order on them: doubling the number of
+# intervals divides the graded error by four, which is second order.
 
 observed_orders = log2.(graded_errors[1:(end - 1)] ./ graded_errors[2:end])
 
@@ -149,7 +155,8 @@ observed_orders
 # that means something is one-sided and independent of it: at `x = 0`, the three-point
 # forward difference of the lifted solution, with the non-uniform spacings and negated for
 # the outward normal, must satisfy ``u + \partial_n u = h`` up to the truncation error, of
-# order ``h^2``. `robin_residual` returns the residual at that node:
+# order ``h^2``. `robin_residual` returns the residual at that node. It indexes the padded
+# grid with `Bramble.padded_index`, an internal function:
 
 function robin_residual(pts)
     Ωₕ, Cₕ, A, F = system_on(pts)
@@ -172,8 +179,7 @@ robin_residuals = [robin_residual(graded_points(n)) for n in ns]
 robin_residuals
 
 # The exact solution is linear near `x = 0`, so the one-sided difference has no truncation
-# error to speak of and the residual reaches round-off after the first mesh: the relation
-# holds to the accuracy of the solve, not only to the order of the scheme.
+# error to speak of and the residual is at round-off from 81 points on.
 
 #-
 
@@ -185,9 +191,7 @@ convergence_plot( # hide
 
 # ## Choosing σ
 #
-# Grading is a parameter, and both extremes are bad: too little leaves the layer unresolved,
-# too much starves the smooth region and the coarse cells there start to oscillate on their
-# own account.
+# Grading is a parameter, and both extremes are bad:
 
 σs = (1.0, 2.0, 3.0, 4.0, 6.0, 8.0)
 errors_by_σ = [solve_on(graded_points(41; σ = σ))[1] for σ in σs]
@@ -196,19 +200,22 @@ best_σ = σs[argmin(errors_by_σ)]
 
 @test best_σ in (3.0, 4.0, 6.0)                                                            #src
 @test minimum(errors_by_σ) < 1.0e-3                                                        #src
+@test maximum(errors_by_σ[3:5]) < 3 * minimum(errors_by_σ)                                 #src
+@test errors_by_σ[1] > 100 * minimum(errors_by_σ)                                         #src
+@test errors_by_σ[end] > 100 * minimum(errors_by_σ)                                       #src
 
 collect(zip(σs, errors_by_σ))
 
 best_σ
 
-# The best value here is around 4, where the finest cells are comparable with `ε`, and the
-# curve is flat enough on either side that the choice is not delicate.
-# There is nothing sacred about `tanh`: a geometric or piecewise-linear grading does the same
-# job, and the mesh only ever sees the point vector.
+# The error is `0.19` at `σ = 1` and `0.12` at `σ = 8`, against `9.2e-4` at `σ = 4`, where the
+# finest cell is below `ε`. Between `σ = 3` and `σ = 6` it stays within a factor of three of
+# the best, so the choice is not delicate. Any point vector can be installed the same way;
+# the mesh only sees the vector.
 #
 # ## Where to go next
 #
-# - [Convection-diffusion](convection_diffusion_linear.md), the same operator on a smooth
-#   solution, where a uniform mesh is fine.
+# - [Convection-diffusion](convection_diffusion_linear.md), diffusion plus a convective term
+#   on a smooth manufactured solution, in 1D, 2D and 3D.
 # - The [mesh tutorial](@ref tutorial_mesh) covers [`change_points!`](@ref) and
 #   `Bramble.set_points!`, which also accepts a different point count.

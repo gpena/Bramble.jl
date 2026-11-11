@@ -54,6 +54,22 @@ Public = false
 Pages = ["utils/batch_split.jl", ]
 ```
 
+## Backend profiling
+
+```@autodocs
+Modules = [Bramble]
+Public = false
+Pages = ["utils/backend_profile.jl", ]
+```
+
+## Device kernels
+
+```@autodocs
+Modules = [Bramble]
+Public = false
+Pages = ["utils/device_kernels.jl", ]
+```
+
 ## Macros
 
 ```@autodocs

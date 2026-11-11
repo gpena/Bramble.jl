@@ -3,8 +3,7 @@
 # A Dirichlet problem on the polygon of Figure 1 in Ferreira and Grigorieff
 # ([2006](https://doi.org/10.1080/01630560600796485)): a non-convex nine-sided shape with
 # oblique edges, discretised on a tensor-product grid whose lines are not fitted to it by hand.
-# The coefficients vary, and the operator has a mixed term. Every number and every plot below
-# was produced by the code shown.
+# The coefficients vary, and the operator has a mixed term.
 #
 # ## Problem
 #
@@ -27,7 +26,7 @@
 # may add lines, so the grid has more points than the requested count.
 
 using Bramble
-using Bramble: polygon_spaces, lift # public, not exported
+using Bramble: polygon_spaces, lift # public but unexported
 using Bramble: D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ, Dcₓ, Dcᵧ
 using Random
 
@@ -118,8 +117,8 @@ end                                                                             
 # ## The fine grid, labels and spaces
 #
 # The problem is solved on a grid requested at 72 by 60 points, which the closure enlarges.
-# The errors of a random grid scatter with the draw: at this size the max error stays
-# below 1e-2 and the ``H^1_h`` error below 1e-1.
+# The errors of a random grid scatter with the draw; the error section prints both for
+# this seed.
 #
 # `polygon_spaces(Ωₕ, :P, g)` returns the trial space `U` and the test space `W`. Their
 # unknowns are the interior nodes. The nodes on the polygon carry the Dirichlet data `g`
@@ -189,41 +188,22 @@ nothing # hide
 
 # ## Error
 #
-# The max error is over the interior nodes. The ``H^1_h`` error sums, over the grid edges with
-# both ends in the closed polygon, the dual length times the squared difference of the error
-# over the edge length: the ``P_1`` seminorm of the error.
+# The error is `e`, the difference between the solution and the exact one sampled at the
+# nodes of `U`. `norminf` is its largest absolute value, and `snorm₁ₕ` its discrete
+# ``H^1`` seminorm.
 
-inside = reshape(BitVector(m[:P]), nx, ny)
-closed = inside .| reshape(BitVector(m[:P_boundary]), nx, ny)
-E = reshape(uh, nx, ny) .- [sol((x, y)) for x in xs, y in ys]
-
-function h1_error(E, xs, ys, closed)
-    half(z, j) = ((j < length(z) ? z[j + 1] : z[j]) - (j > 1 ? z[j - 1] : z[j])) / 2
-    s = 0.0
-    for l in axes(E, 2), j in 1:(size(E, 1) - 1)
-
-        closed[j, l] && closed[j + 1, l] || continue
-        s += half(ys, l) * (E[j + 1, l] - E[j, l])^2 / (xs[j + 1] - xs[j])
-    end
-    for l in 1:(size(E, 2) - 1), j in axes(E, 1)
-
-        closed[j, l] && closed[j, l + 1] || continue
-        s += half(xs, j) * (E[j, l + 1] - E[j, l])^2 / (ys[l + 1] - ys[l])
-    end
-    return sqrt(s)
-end
-
-err_max = maximum(abs, E[inside])
-err_h1 = h1_error(E, xs, ys, closed)
+e = element(U, A \ F) - Rₕ(U, sol)
+err_max, err_h1 = norminf(e), snorm₁ₕ(e)
 println("max error ", round(err_max; sigdigits = 3), ", H¹ₕ error ", round(err_h1; sigdigits = 3))
 
 # Both are small on this one grid. The errors of a single random grid scatter by a factor
-# of two or three between draws, so the page reads no order from them: the orders, measured
-# over six levels, are in the convergence test of the suite. The error vanishes on the
-# polygon, where the Dirichlet data sit.
+# of two or three between draws, so no order is read from one: the suite's convergence test
+# measures the orders over six levels. The error is zero at the boundary nodes, where the
+# Dirichlet data sit.
 
 # The errors are bracketed away from zero. The polygon nodes hold the data by construction,  #src
 # so the last check does not discriminate and follows the bracket.                           #src
 @test 1.0e-6 < err_max < 1.0e-2                                                            #src
 @test 1.0e-6 < err_h1 < 1.0e-1                                                             #src
+E = reshape(uh, nx, ny) .- [sol((x, y)) for x in xs, y in ys]                              #src
 @test maximum(abs, E[BitVector(vec(m[:P_boundary]))]) == 0                                 #src

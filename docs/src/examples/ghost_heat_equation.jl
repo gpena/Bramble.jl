@@ -4,8 +4,7 @@
 # and a Robin condition on the other two, both with data that change in time. Space goes
 # through the ghost layer (`gridspace` with ghosts, `constrained`), time through the method
 # of lines ([`semidiscretize`](@ref), [`ode_problem`](@ref), `FBDF`), and the error at the
-# final time is checked for second order in space. Every number and every plot below was
-# produced by the code shown.
+# final time is checked for second order in space.
 #
 # ## Problem
 #
@@ -37,10 +36,10 @@ sol(p, t) = exp(-3t) * exp(p[1]) * cos(2p[2])
 # ## Boundary relations with data in time
 #
 # `constrained` takes a function of the trial function `u` and returns one
-# `side => relation => data` entry per side, exactly as in the
-# [Neumann and Robin Poisson example](neumann_robin_poisson.md). The one change is that the
-# data may now take the time as a second argument, `(x, t) -> ...`; `semidiscretize` finds
-# that by the arity and refreshes the boundary values at every step. A side with ``\alpha =
+# `side => relation => data` entry per side, as in the
+# [Neumann and Robin Poisson example](neumann_robin_poisson.md), and the data may also take
+# the time as a second argument, `(x, t) -> ...`. `semidiscretize` tells the two forms apart
+# by the arity and refreshes the boundary values at every step. A side with ``\alpha =
 # 0`` carries the bare flux `∂ₙ(u)`:
 
 const SIDES = (:xmin, :xmax, :ymin, :ymax)
@@ -85,7 +84,7 @@ function solve_case(Ωₕ; T = 0.5)
 end
 
 # The grid is a random non-uniform one refined in place by [`iterative_refinement!`](@ref),
-# so each level is the same random mesh split dyadically, not a fresh draw:
+# so each level is the same random mesh with every cell halved:
 
 function convergence(; levels = 4)
     Random.seed!(20261016)
@@ -135,10 +134,9 @@ include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
 convergence_plot([(hs, errs, "time-dependent Neumann and Robin", "#5B5FC7")];
     title = "Ghost heat equation, ‖·‖ₕ at t = 0.5") # hide
 
-# The curve runs parallel to the slope-2 line on a grid built not to flatter the scheme: the
-# points are random, so no symmetry cancels the one-sided error of the ghost layer. The
-# boundary data enter the right-hand side through the same relations as in the steady case,
-# and refreshing them in time costs no order.
+# The curve is parallel to the slope-2 line. The points are random. The boundary data enter
+# the right-hand side through the same relations as in the steady case, and refreshing them
+# in time leaves the order at two.
 #
 # ## Where to go next
 #

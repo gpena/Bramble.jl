@@ -1,9 +1,8 @@
 # # Coupled nonlinear reaction-diffusion system
 #
-# Two species, coupled through a quadratic reaction term, solved with Newton's method the same
-# way the [nonlinear Poisson example](poisson_nonlinear.md) does, except now the Jacobian
-# differentiates through a *composite* space's assembly, not a scalar one. Every number and
-# every plot below was produced by the code shown.
+# Two species coupled through a quadratic reaction term, solved with Newton's method as in the
+# [nonlinear Poisson example](poisson_nonlinear.md), with a Jacobian that differentiates
+# through assembly on a composite space.
 #
 # ## Problem
 #
@@ -15,9 +14,9 @@
 # \qquad \text{in } \Omega = (0,1)^2, \qquad u = v = 0 \text{ on } \partial\Omega,
 # ```
 #
-# a predator-prey-shaped coupling without the time derivative: `u` grows through the
-# interaction term, `v` is depleted by it. The manufactured solutions vanish on the boundary
-# already, so homogeneous Dirichlet data is all that is needed.
+# a predator-prey-shaped coupling without the time derivative: `u` is depleted by the
+# interaction term and `v` grows through it. The manufactured solutions vanish on the
+# boundary, so homogeneous Dirichlet data is all that is needed.
 #
 # ## Mesh, space and load
 
@@ -45,20 +44,18 @@ l = form(Vₕ, q -> innerₕ(f1ₕ, q(1)) + innerₕ(f2ₕ, q(2)))
 F = assemble(l; dirichlet = bcs)
 nothing # hide
 
-# The seed fixes the random mesh for the reason the
-# [nonlinear Poisson example](poisson_nonlinear.md#The-mesh-and-the-load) gives, so every figure on this page
-# is reproducible.
+# The seed fixes the random mesh, as in the
+# [nonlinear Poisson example](poisson_nonlinear.md#The-mesh-and-the-load).
 #
 # ## Newton's method on a composite residual
 #
-# `uv` is quadratic in the unknowns, so it cannot sit inside a matrix independent of
-# `w = (u, v)` the way the linear terms can, but it *can* sit inside a matrix that depends on
-# the current guess, the same trick [the nonlinear Poisson example uses for a single
-# species](poisson_nonlinear.md#Fixed-point-%28Picard%29-iteration), extended to a second one.
-# Writing the coupling as `v_current * u(1)` in `u`'s own equation and `-u_current * u(2)` in
-# `v`'s reproduces `uv` and `-uv` exactly once the trial function is evaluated at the current
-# `w`, which is all `A(w)` needs to do. Nothing here works out `∂(uv)/∂u` and `∂(uv)/∂v` by
-# hand; `ForwardDiff` differentiates through *how* `A` itself depends on `w` automatically:
+# `uv` is quadratic in the unknowns, so it cannot sit in a matrix independent of
+# `w = (u, v)`, but it can sit in a matrix that depends on the current guess, as in
+# [the nonlinear Poisson example](poisson_nonlinear.md#Fixed-point-%28Picard%29-iteration).
+# Writing the coupling as `v_current * u(1)` in `u`'s equation and `-u_current * u(2)` in
+# `v`'s reproduces `uv` and `-uv` once the trial function is evaluated at the current `w`.
+# `ForwardDiff` differentiates how `A` depends on `w`, so no partial derivative of `uv` is
+# written by hand:
 
 function coupled_matrix(wₕ)
     u_c, v_c = components(wₕ)
@@ -72,8 +69,8 @@ nothing # hide
 
 # Its Jacobian is sparse for the same reason the [nonlinear Poisson
 # example's](poisson_nonlinear.md#Newton's-method) is: the reaction term couples `u` and `v`
-# only pointwise, so it adds nothing to the diffusion stencil's own reach. So the same sparse
-# AD setup applies unchanged, just over twice as many unknowns:
+# only pointwise, so it adds nothing to the diffusion stencil's reach. The same sparse AD
+# setup applies, over twice as many unknowns:
 
 using ForwardDiff, DifferentiationInterface
 import SparseConnectivityTracer, SparseMatrixColorings
@@ -102,20 +99,21 @@ for it in 1:20
 end
 length(newton_residuals), newton_residuals
 
-# Quadratic convergence over a composite space, asserted rather than rendered. Bounded at 8 #src
-# for the reason poisson_nonlinear.jl gives.                                                #src
+# The assertions bound the count at 8, for the reason poisson_nonlinear.jl gives, and the   #src
+# last residual; the rendered list shows the quadratic decay.                               #src
 @test length(newton_residuals) < 8                                                          #src
 @test newton_residuals[end] < 1e-10                                                         #src
 
-# Quadratic convergence, same as the single-species case: the composite space changes what
-# the Jacobian differentiates through, not how well Newton converges once it has a correct one.
+# Convergence is quadratic, as in the single-species case.
 #
-# ## Skipping the tracer here too
+# ## Skipping the tracer
 #
-# `v_c` scaling a term routed into block `(1,1)` is a *different* leaf's component reaching
-# into this one: [`jacobian_pattern`](@ref) reads that the same way a form term names a
-# component, `U -> U(2)` rather than a stencil op, since `v_c` is read directly rather than
-# averaged first. Block `(2,2)`'s own `u_c` dependency is named the same way, `U -> U(1)`:
+# The pattern comes from the AST of `a` instead of a tracing pass, as
+# [in the nonlinear Poisson example](poisson_nonlinear.md#Skipping-the-tracer). In block
+# `(1,1)` the coefficient `v_c` is the value of component 2, which
+# [`jacobian_pattern`](@ref) names `U -> U(2)`, with no stencil op because `v_c` is read
+# directly. Block `(2,2)` reads `u_c`, named `U -> U(1)`. Each dependency is applied to every
+# block, a safe superset:
 
 using ADTypes
 
@@ -146,24 +144,19 @@ newton_residuals_native
 @test newton_residuals_native[end] < 1e-10                                                  #src
 @test maximum(abs.(w_native .- w)) < 1e-8                                                   #src
 
-# Same quadratic convergence, no tracing pass paid for it: `v_c0`/`u_c0` are read at `w = 0`
-# only to build *some* concrete `BilinearForm`, since the pattern is a property of `a`'s AST, not
-# of those values. `SparseConnectivityTracer`'s tracer still works here regardless of how
-# `coupled_matrix` was built, composite space and all. The case to reach for it is a residual
-# whose matrix does not come from a `BilinearForm` in the first place, which is not this one.
+# Convergence is the same, without a tracing pass. `v_c0` and `u_c0` are read at `w = 0` only
+# to build a concrete `BilinearForm`, since the pattern depends on the AST of `a`, not on
+# those values. The tracer remains the option for a residual whose matrix does not come from a
+# `BilinearForm`.
 #
 # ## NonlinearSolve.jl on the composite system
 #
-# Everything above is a hand-written Newton loop, the same as [the nonlinear Poisson
-# example](poisson_nonlinear.md). [`nonlinear_problem`](@ref) wraps a residual into the
-# `NonlinearProblem` that [NonlinearSolve.jl](https://docs.sciml.ai/NonlinearSolve/stable/)
-# takes regardless of what space the residual is built over: a composite space changes
-# nothing about the wrapping, only what `jac_prototype` looks like once built. `J_native`
-# above is already that prototype, the block-sparse pattern [`ast_sparsity_detector`](@ref)
-# read off `a_for_pattern`'s two components, so it is handed through unchanged. In place,
-# the same way `coupled_matrix` is written out-of-place above and `residual!` here is not:
-# `mul!` writes `A * w_vec` into the caller's own `res` rather than allocating a fresh vector
-# every evaluation.
+# [`nonlinear_problem`](@ref) wraps a residual into the `NonlinearProblem` that
+# [NonlinearSolve.jl](https://docs.sciml.ai/NonlinearSolve/stable/) takes, whatever the
+# space. `J_native` is the `jac_prototype`: the block-sparse pattern
+# [`ast_sparsity_detector`](@ref) read off `a_for_pattern`. `residual!` is the in-place form of
+# `residual`: `mul!` writes `A * w_vec` into the caller's `res` instead of allocating the
+# product.
 
 using NonlinearSolve
 using SciMLBase: SciMLBase
@@ -182,11 +175,10 @@ prob = nonlinear_problem(residual!, zeros(ndofs(Vₕ)); jac_prototype = J_native
 sol_ns = solve(prob, NewtonRaphson(); abstol = 1e-10)
 sol_ns.retcode, maximum(abs, sol_ns.u .- w_native)
 
-# The same answer Newton reached by hand above, to the tolerance both were asked for --      #src
-# checked per species, not only combined: a routing mistake in the composite Jacobian would  #src
-# show up as one species converging while the other silently used the wrong block, which a   #src
-# single combined comparison could hide (bramble-verification §5, the same reason the        #src
-# exact-solution check above is split by species).                                           #src
+# The same answer Newton reached by hand above, to the tolerance both were asked for, and   #src
+# checked per species as well as combined: a routing mistake in the composite Jacobian would#src
+# show up as one species converging while the other silently used the wrong block, which a  #src
+# single combined comparison could hide (bramble-verification §5).                          #src
 @test sol_ns.retcode == SciMLBase.ReturnCode.Success                                          #src
 @test maximum(abs, sol_ns.u .- w_native) < 1e-8                                              #src
 wₕ_ns = element(Vₕ)                                                                          #src
@@ -196,11 +188,7 @@ uₕ_native, vₕ_native = components(element(Vₕ, w_native))                  
 @test maximum(abs, parent(uₕ_ns) .- parent(uₕ_native)) < 1e-8                                 #src
 @test maximum(abs, parent(vₕ_ns) .- parent(vₕ_native)) < 1e-8                                 #src
 #
-# Quadratic convergence over a composite space carries over unchanged to `NonlinearSolve.jl`
-# too -- the block sparsity pattern is all a composite residual ever needed to hand it, and
-# `NewtonRaphson` reaches the same solution the hand-written loops above do. See [the nonlinear
-# Poisson example](poisson_nonlinear.md) for a measured Picard-against-NonlinearSolve
-# comparison; the same contrast holds here and is not repeated a second time.
+# `NewtonRaphson` reaches the same solution as the hand-written loops.
 
 wₕ = element(Vₕ)
 wₕ .= w
@@ -216,9 +204,8 @@ norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)
 
 # ## Exploring the system interactively
 #
-# The panel below is *not* a replay of the solve above, and does not share its manufactured
-# solution: it poses a different boundary-value problem in the same two unknowns, chosen so
-# every slider has a visible effect rather than being fought back to a fixed answer:
+# The panel below poses a different boundary-value problem in the same two unknowns, so that
+# every slider has a visible effect:
 #
 # ```math
 # \begin{aligned}
@@ -228,36 +215,26 @@ norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)
 # \qquad \text{in } \Omega = (0,1)^2, \qquad u = v = 1 \text{ on } \partial\Omega,
 # ```
 #
-# with no volumetric source anywhere: `f1 = f2 = 0`. A manufactured right-hand side would
-# force the discrete solution back to the same prescribed answer regardless of `a`, `b`, `γ`
-# or `D_u/D_v`. Only a vanishingly small error field would move. Here the *only* input is a
-# constant Dirichlet supply of both species on the boundary (it has to be nonzero for both:
-# the reaction terms only ever reach the diagonal of each field's own block, the same way
-# `coupled_matrix` above assembles them, so a field with nothing driving it directly solves to
-# exactly zero and leaves the other field's `γuv` coupling with nothing to act on). Because
-# this boundary-value problem has no closed-form solution, the panel measures its own
-# discretization error against a solve on a fixed, much finer uniform reference mesh instead
-# of against `u_ex`/`v_ex`.
+# with no volumetric source: `f1 = f2 = 0`. A manufactured right-hand side would fix the
+# solution whatever the parameters. The only input is a constant Dirichlet supply of both
+# species on the boundary, nonzero for both: the reaction terms reach only the diagonal of
+# each field's own block, so a field with nothing driving it solves to zero and leaves `γuv`
+# nothing to act on. The problem has no closed-form solution, so the panel measures its
+# discretization error against a solve on a fixed, much finer uniform mesh.
 #
-# Each species is its own 2D scalar field: `components(wₕ)` gives a view directly onto it, no
-# new solve or copy needed, though the panel below solves its own problem rather than reusing
-# `uₕ`/`vₕ`. It runs its own block Gauss-Seidel Picard iteration client-side, so the reaction
-# coefficients `a`, `b`, coupling `γ` and diffusion ratio `D_u/D_v` sliders can be swept without
-# a round trip to Julia. Dragging them re-solves both fields and redraws the linked `u_h`/`v_h`
-# heatmaps, the `2×2` Jacobian block-sparsity spy plot, and the cross-section profile in place:
+# `components(wₕ)` gives each species as a view into `wₕ`. The panel runs its own block
+# Gauss-Seidel Picard iteration in JavaScript, so the sliders for `a`, `b`, `γ` and `D_u/D_v`
+# need no round trip to Julia. Dragging one re-solves both fields and redraws the linked
+# `u_h` and `v_h` heatmaps, the `2×2` Jacobian block-sparsity plot and the cross-section
+# profile:
 
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 coupled_reaction_diffusion_widget(uₕ, vₕ; title = "Coupled reaction-diffusion") # hide
 
 # ## Convergence of the coupled system
 #
-# The same nested-random-mesh pattern as every other example, checking each species' own error
-# separately: a routing mistake would show up as one converging correctly while the other
-# silently used the wrong block, which a single combined error could hide. A *dense*
-# `ForwardDiff.jacobian` over two coupled species would cost `(2n)^2` against the scalar
-# examples' `n^2`, and was what forced this example to stay at three small refinement levels
-# before switching to sparse AD; with it, this reaches five levels, 8,450 unknowns on the
-# finest (``2 \times 65^2``):
+# Five levels of the same nested random mesh, each species' error checked separately; the
+# finest has 8,450 unknowns (``2 \times 65^2``):
 
 Random.seed!(20260903)
 
@@ -333,15 +310,7 @@ order_u > 1.9 && order_v > 1.9
 include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
 convergence_plot([(hs, erru, "u", "#5B5FC7"), (hs, errv, "v", "#0E7C86")]; title = "Coupled nonlinear reaction, ‖·‖₁ₕ") # hide
 
-# Second order for both species, same rate as every other example: the composite space and
-# the quadratic coupling change how the residual and its Jacobian are built, not the
-# discretization's own accuracy once Newton has converged to it.
-#
-# `coupled_series` above uses `sparse_ad`, the tracer, at every level: `native_ad`'s
-# substitution (`ast_sparsity_detector(a, U -> U(2), U -> U(1))` in place of `sparse_ad`'s
-# `sparsity_detector`) works here unchanged too. Not re-run a second time here, the same
-# reason [the nonlinear Poisson example](poisson_nonlinear.md#Convergence-of-the-Newton-solution) does not
-# re-run its own convergence sweep a second time either.
+# Both species converge at second order.
 #
 # ## Where to go next
 #
@@ -350,4 +319,3 @@ convergence_plot([(hs, erru, "u", "#5B5FC7"), (hs, errv, "v", "#0E7C86")]; title
 #   - The [coupled systems tutorial](@ref tutorial_coupled) for composite spaces and the
 #     block structure of their matrices, and the [space tutorial](@ref space_composite) for
 #     vector elements.
-#   - The "Choosing a solver" tutorial for the linear solve inside each Newton step.

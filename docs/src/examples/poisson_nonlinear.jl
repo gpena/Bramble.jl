@@ -1,8 +1,7 @@
 # # Nonlinear Poisson equation
 #
-# Two ways to solve the same nonlinear problem, fixed-point (Picard) iteration and Newton's
-# method, so the difference between linear and quadratic convergence is something measured,
-# not just asserted. Every number and every plot below was produced by the code shown.
+# Fixed-point (Picard) iteration and Newton's method on the same nonlinear problem, compared
+# by their measured convergence.
 #
 # ## Problem
 #
@@ -43,22 +42,18 @@ l = form(Wₕ, v -> innerₕ(gₕ, v))
 F = assemble(l; dirichlet = bcs)
 nothing # hide
 
-# The seed is what makes the numbers below reproducible: `false` draws the interior points
-# from the global RNG, so without it the mesh -- and the iteration counts quoted below --
-# would differ from build to build, and the suite could not assert what the page prints.
+# `false` draws the interior points from the global RNG, so the seed fixes the mesh and with
+# it the iteration counts below.
 #
-# The right-hand side never changes across the iteration. Only the diffusion matrix does,
-# since only it depends on the current guess for ``u``. `α` is evaluated at the average of the
-# previous iterate, `Mₕ`, the standard discretization for a nonlinear flux.
+# Only the diffusion matrix depends on the current iterate. `α` is evaluated at the average of
+# the previous iterate, `Mₕ`, the standard discretization for a nonlinear flux.
 #
 # ## Fixed-point (Picard) iteration
 #
-# Linearize by freezing ``\alpha`` at the previous iterate, solve, repeat. The *pattern* of the
-# diffusion matrix, which entries are ever nonzero, never changes between iterations, only
-# the values in it do, so it is allocated once with [`allocate_system_matrix`](@ref) and refilled
-# with [`assemble!`](@ref) rather than rebuilt with `assemble` every step. `αvals` is a plain
-# [`VectorElement`](@ref) the form closes over, not a fresh vector computed each time: mutating
-# it in place (`αvals .= α.(Mₕ(uₙ))`) is what `assemble!` picks up on the next refill, the same
+# Linearize by freezing ``\alpha`` at the previous iterate, solve, repeat. The matrix pattern
+# is fixed, so it is allocated once with [`allocate_system_matrix`](@ref) and refilled with
+# [`assemble!`](@ref). `αvals` is a [`VectorElement`](@ref) the form closes over; updating it
+# in place (`αvals .= α.(Mₕ(uₙ))`) is what the next `assemble!` reads, the same
 # "live coefficient" the [forms tutorial](../tutorials/form.md#Live-grid-coefficients-and-dynamic-scalars)
 # relies on:
 
@@ -85,35 +80,31 @@ length(picard_steps), picard_steps[[1, 2, 3, end]]
 picard_ratios = picard_steps[2:end] ./ picard_steps[1:(length(picard_steps) - 1)]
 extrema(picard_ratios)
 
-# Bounded rather than pinned to a count: a slower rate, or a run that never converges, is   #src
-# the failure this guards against. The step sizes must reach the tolerance the loop breaks  #src
-# on, and shrink by more than a factor of ten at every step.                                #src
+# A slower rate, or a run that never converges, is the failure guarded against: the step    #src
+# sizes must reach the tolerance the loop breaks on and shrink by more than a factor of     #src
+# ten at every step.                                                                        #src
 @test 0 < length(picard_steps) <= 10                                                        #src
 @test all(<(0.1), picard_ratios)                                                            #src
 @test picard_steps[end] < 1e-12                                                             #src
 @test 1.0e-6 < norm₁ₕ(uₙ .- Rₕ(Wₕ, sol)) < 1.0e-2                                            #src
 
-# The step size drops by one to two orders of magnitude each time here, reaching machine precision
-# in 9 iterations, still only linear convergence (a roughly constant per-step ratio, not the
-# per-step squaring Newton gets below), just a fast-converging instance of it for this
-# particular coefficient and mesh.
+# The step shrinks by a factor of 0.010 to 0.027 per iteration, one to two orders of
+# magnitude, and falls below 1e-12 after 9 iterations. A roughly constant ratio is linear
+# convergence.
 #
 # ## Newton's method
 #
-# The residual ``R(u) = A(u) u - F`` is the same matrix, applied to the vector it was built
-# from rather than solved against. Boundary rows come along for free: `dirichlet`
-# already replaces them with the identity before the residual ever sees them, so
-# ``R_i(u) = u_i - u_{\text{exact}}(x_i)`` there, and the Jacobian's boundary rows are the
-# identity too, with no separate case to write.
+# The residual ``R(u) = A(u) u - F`` is the same matrix multiplied by the vector it was built
+# from. `dirichlet` already replaces the boundary rows with the identity, so there
+# ``R_i(u) = u_i - u_{\text{exact}}(x_i)`` and the Jacobian rows are the identity.
 #
-# That Jacobian is sparse: `R` inherits the same local stencil `A` itself has, a handful of
-# nonzeros per row rather than a dense matrix, so it is computed with
+# `R` has the local stencil of `A`, a handful of nonzeros per row, so its Jacobian is sparse
+# and is computed with
 # [`DifferentiationInterface`](https://github.com/JuliaDiff/DifferentiationInterface.jl)'s
-# sparse AD rather than a plain `ForwardDiff.jacobian`: `SparseConnectivityTracer` finds which
-# entries can possibly be nonzero, `SparseMatrixColorings` groups the independent columns so
-# one `ForwardDiff` sweep gets several of them at once, and `prepare_jacobian` does both once,
-# reused every Newton step since the sparsity pattern does not change across iterations, only
-# the values do.
+# sparse AD: `SparseConnectivityTracer` finds which entries can be nonzero,
+# `SparseMatrixColorings` groups the independent columns so one `ForwardDiff` sweep gets
+# several of them at once, and `prepare_jacobian` does both once. The pattern is the same at
+# every Newton step, so only the values are recomputed.
 #
 # The Picard loop above could allocate its matrix once because it never leaves `Float64`. The
 # residual below cannot use that same trick directly: `T` is `Float64` on a plain call but a
@@ -154,24 +145,17 @@ for it in 1:20
 end
 length(newton_residuals), newton_residuals
 
-# Quadratic convergence is the page's claim, so assert it rather than only rendering it: a  #src
-# regression degrading Newton to linear, or breaking the sparse Jacobian's values while     #src
-# leaving its pattern intact, blows this bound. Bounded at 8 rather than the usual 5:       #src
-# SparseConnectivityTracer's coloring has shown rare process-to-process nondeterminism       #src
-# costing one extra step -- a property of the external tracer, not of this package.         #src
+# A regression degrading Newton to linear, or breaking the sparse Jacobian's values while   #src
+# leaving its pattern intact, blows this bound. The bound is 8 where 5 would do:            #src
+# SparseConnectivityTracer's coloring has shown rare process-to-process nondeterminism      #src
+# that costs one extra step, a property of the external tracer.                             #src
 @test length(newton_residuals) < 8                                                          #src
 @test newton_residuals[end] < 1e-10                                                         #src
 
-# Preparing the Jacobian once spares its sparsity pattern, but `diffusion_matrix` still
-# builds a fresh matrix, values and pattern both, on every call, for the reason given above.
-# A plain `residual(u)` call builds `A` once, at `T = Float64`; a full Newton step builds it
-# again at `T = Dual` for every colour `jacobian!`'s sparse sweep needs. The next section
-# removes that rebuild.
-#
-# Quadratic convergence means the residual's correct digits roughly *double* each step, against
-# Picard's roughly constant gain of one, and it shows directly in how fast that list reaches
-# machine precision. Both methods reach the same solution, and both are close to the true one,
-# measured the same way the [linear example](poisson_linear.md) measures it:
+# Quadratic convergence means the residual's correct digits roughly double each step, where
+# Picard gains a fixed one to two digits, so the Newton list above is shorter. Both methods
+# reach the same solution, close to the true one, measured as in the
+# [linear example](poisson_linear.md):
 
 uₕ_newton = element(Wₕ)
 uₕ_newton .= u
@@ -197,9 +181,8 @@ Bramble.jacobian!(J_assembled, jf, u)
 J_fd = DifferentiationInterface.jacobian(residual, prep, sparse_ad, u)
 maximum(abs, J_assembled - J_fd) / maximum(abs, J_fd)
 
-# No `Dual` passes through assembly, and the sparse AD above needs one sweep per colour. Prefer
-# the assembled Jacobian when assembly must stay in `Float64`, or when the solver spends most of
-# each step building the Jacobian. This page does not time either route.
+# No `Dual` passes through assembly, so prefer the assembled Jacobian when assembly must stay
+# in `Float64`.
 #
 # Newton with the assembled Jacobian reaches the same solution in the same number of iterations:
 
@@ -225,14 +208,11 @@ length(asm_residuals), maximum(abs, u_asm .- u)
 # ## Closing the gap: caching the diffusion matrix by element type
 #
 # `diffusion_matrix` rebuilds its pattern on every call because `T` differs between a plain
-# call and a `jacobian!` sweep. The *pattern* itself is as fixed across element types as it
-# is across Newton iterations: only `α`'s values differ, because they were evaluated at a
-# different `T`.
-# [`type_cached_assemble!`](@ref) gives that pattern a place to live per type it is ever reached
-# at, instead of rebuilding it from nothing every time. `build_diffusion` is named and defined
-# once, the same reason `a` above is built once outside the Picard loop rather than inside it;
-# `refill!` reaches for `Mₓ!` rather than `Mₕ`, which would allocate a fresh result
-# every call and reintroduce exactly the cost this is meant to stop paying:
+# call and a `jacobian!` sweep. The pattern is as fixed across element types as it is across
+# Newton iterations: only `α`'s values differ, because they were evaluated at a different `T`.
+# [`type_cached_assemble!`](@ref) keeps one pattern per type it is reached at.
+# `build_diffusion` is defined once, as `a` above is built once outside the Picard loop.
+# `refill!` calls `Mₓ!`, which writes in place; `Mₕ` would allocate a result on every call:
 
 function build_diffusion(uₕ)
     Mu = element(Wₕ, eltype(uₕ))
@@ -269,32 +249,26 @@ for it in 1:20
 end
 newton_residuals_cached, maximum(abs.(u_cached .- u))
 
-# The cached path is an optimisation, so what it must not change is the answer or the rate. #src
+# The cached path is an optimisation: it must change neither the answer nor the rate.       #src
 @test newton_residuals_cached ≈ newton_residuals                                             #src
 @test maximum(abs.(u_cached .- u)) < 1e-12                                                  #src
 
-# Same convergence, same answer. Only `residual_cached` and `diffusion_matrix_cached` differ
-# from `residual`/`diffusion_matrix` above: the first call at each of `T = Float64` and
-# `T = Dual` still pays to build and to [`allocate_system_matrix`](@ref), and every call after
-# it refills that matrix in place instead of rebuilding its pattern. What is left is not
-# free: `cache`'s value type is necessarily `Any`, since the cached `(a, refill!, A)` triple's
-# own concrete type differs across `T`, so fetching it back out still pays a small, fixed
-# dictionary/dynamic-dispatch cost, but that cost does not grow with the mesh, unlike the
-# pattern rebuild it replaces (see [`type_cached_assemble!`](@ref)'s own docstring).
+# Same convergence, same answer. The first call at each of `T = Float64` and `T = Dual` builds
+# the form and calls [`allocate_system_matrix`](@ref); every later call refills that matrix in
+# place. The cache's value type is `Any`, since the cached `(a, refill!, A)` triple has a
+# different concrete type per `T`, so fetching an entry costs a small fixed dispatch,
+# independent of the mesh (see [`type_cached_assemble!`](@ref)).
 #
-# ## Skipping the tracer: a Bramble-native pattern
+# ## Skipping the tracer
 #
-# `SparseConnectivityTracer` above finds the Jacobian's sparsity pattern by tracing `residual`:
+# `SparseConnectivityTracer` finds the Jacobian's sparsity pattern by tracing `residual`:
 # running it once with a special value that records which inputs reach which outputs. That
-# works for *any* Julia function, which is exactly why it needs to run the function at all: a
-# tracing pass, on top of the coloring pass that follows it.
+# works for any Julia function, at the price of a tracing pass before the coloring pass.
 #
-# `residual` here is not an arbitrary function, though: it is `A(u) * u - F`, where `A` comes
-# from [`allocate_system_matrix`](@ref), whose own sparsity is already known directly from
-# `a`'s AST. No tracing needed for that part at all. The only piece missing from `A`'s own
-# pattern is the extra chain-rule term from `αvals_local`'s own dependence on `u` through
-# `Mₕ`. [`jacobian_pattern`](@ref) supplies exactly that piece, named the same way the
-# coefficient itself was built, `U -> Mₕ(U)`, and hands the result to
+# `residual` is `A(u) * u - F`, and [`allocate_system_matrix`](@ref) already knows the
+# sparsity of `A` from `a`'s AST. The only piece missing is the chain-rule term from
+# `αvals_local`'s dependence on `u` through `Mₕ`. [`jacobian_pattern`](@ref) supplies it,
+# named as the coefficient was built, `U -> Mₕ(U)`, and the result goes to
 # [`ADTypes.KnownJacobianSparsityDetector`](https://github.com/SciML/ADTypes.jl) in place of
 # the tracer:
 
@@ -309,22 +283,20 @@ sparse_ad_manual = AutoSparse(AutoForwardDiff();
     coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
 nothing # hide
 
-# [`ast_sparsity_detector`](@ref) spells the same thing more directly, once
-# [ADTypes.jl](https://github.com/SciML/ADTypes.jl) is loaded: no separate `pattern`
-# variable, no `KnownJacobianSparsityDetector` wrapper, the same detector either way. This is
-# the one actually driving the Newton loop below, not just `sparse_ad_manual` shown for what
-# it desugars to:
+# [`ast_sparsity_detector`](@ref) builds the same detector in one call once
+# [ADTypes.jl](https://github.com/SciML/ADTypes.jl) is loaded, with no separate `pattern`
+# variable or `KnownJacobianSparsityDetector` wrapper. `native_ad` drives the Newton loop
+# below; `sparse_ad_manual` shows what it expands to:
 
 native_ad = AutoSparse(AutoForwardDiff();
     sparsity_detector = ast_sparsity_detector(a_for_pattern, U -> Mₕ(U)),
     coloring_algorithm = SparseMatrixColorings.GreedyColoringAlgorithm())
 nothing # hide
 
-# `a_for_pattern` only needs *some* concrete coefficient to build a `BilinearForm` from: the
-# pattern is a property of the AST, not of `αvals_pattern`'s values, so evaluating it at `u = 0`
-# is as good as evaluating it at the true solution. Feeding `native_ad` into the same
-# `prepare_jacobian`/`jacobian!` loop as before reaches the same pattern (118 nonzeros, both
-# ways, on this mesh) and the same quadratic convergence:
+# `a_for_pattern` takes any concrete coefficient, because the pattern is a property of the AST,
+# so `u = 0` is as good as the true solution. `native_ad` in the same
+# `prepare_jacobian`/`jacobian!` loop gives the same pattern (118 nonzeros both ways, on this
+# mesh) and the same quadratic convergence:
 
 u_native = zeros(ndofs(Wₕ))
 prep_native = prepare_jacobian(residual, native_ad, u_native)
@@ -340,31 +312,27 @@ end
 newton_residuals_native
 
 # The AST-derived pattern must find the same nonzeros the tracer does, and converge the     #src
-# same way on them. 118 is the count the prose above quotes, so pin that rather than only   #src
-# the agreement between the two.                                                             #src
+# same way on them. The prose quotes 118, so the count is pinned as well as the             #src
+# agreement between the two.                                                                #src
 using SparseArrays: nnz                                                                     #src
 @test nnz(J) == nnz(J_native) == 118                                                        #src
 @test length(newton_residuals_native) < 8                                                   #src
 @test newton_residuals_native[end] < 1e-10                                                  #src
 
-# What changes is what `prepare_jacobian` has to pay for: no tracing pass, only coloring,
-# with the pattern read by [`jacobian_pattern`](@ref) straight off `a`'s AST. The saving
-# grows with the mesh: tracing cost scales with however
-# long one `residual` call takes to run and record, while `jacobian_pattern` only ever walks
-# the grid once, touching neither `ForwardDiff` nor the coefficient's actual values.
+# `prepare_jacobian` now does only the coloring, with the pattern read by
+# [`jacobian_pattern`](@ref) off `a`'s AST. The tracer remains the option when the residual's
+# matrix does not come from a `BilinearForm`.
 #
 # ## Solving with NonlinearSolve.jl
 #
-# Every Newton loop above is written by hand, with `prepare_jacobian`/`jacobian!` and the linear
-# solve, spelled out one step at a time. [`nonlinear_problem`](@ref) wraps the same residual
-# into the `NonlinearProblem` that [NonlinearSolve.jl](https://docs.sciml.ai/NonlinearSolve/stable/)
-# takes, which gives access to that package's own solvers: line search variants, trust regions,
-# Krylov-Newton for problems too large to factor directly, for a handful of lines once
-# `residual!` exists. In place, the same way [`Rₕ!`](@ref)/[`avgₕ!`](@ref) are preferred over
-# their allocating forms, since `mul!` writes `A * u_vec` into the caller's own `res` rather than
-# allocating a fresh vector every evaluation, and `jac_prototype = J_native` hands the solver
-# the exact sparsity [`jacobian_pattern`](@ref) already worked out, the same pattern
-# `native_ad` above drives by hand:
+# [`nonlinear_problem`](@ref) wraps the residual into the `NonlinearProblem` that
+# [NonlinearSolve.jl](https://docs.sciml.ai/NonlinearSolve/stable/) takes, which gives access
+# to that package's solvers, such as line search variants, trust regions and Krylov-Newton for
+# problems too large to factor directly. `residual!` is the in-place form, as
+# [`Rₕ!`](@ref) and [`avgₕ!`](@ref) are of their allocating counterparts, since `mul!` writes
+# `A * u_vec` into the caller's `res` instead of allocating it. `jac_prototype = J_native`
+# hands the solver the sparsity [`jacobian_pattern`](@ref) worked out, the pattern `native_ad`
+# uses above:
 
 using NonlinearSolve
 using SciMLBase: SciMLBase
@@ -383,11 +351,11 @@ prob = nonlinear_problem(residual!, zeros(ndofs(Wₕ)); jac_prototype = J_native
 sol_ns = solve(prob, NewtonRaphson(); abstol = 1e-10)
 sol_ns.retcode, maximum(abs, sol_ns.u .- u_native)
 
-# The same answer Newton reached by hand above, to the tolerance both were asked for. A       #src
-# sparse `jac_prototype` alone does not *prove* the solver used it rather than silently       #src
-# densifying, so that is checked directly here too, rather than assumed: `NewtonRaphson`'s    #src
-# default `autodiff` wraps itself in `AutoSparse` around the very sparsity detector           #src
-# `native_ad` above builds explicitly, confirmed from the solver's own live cache.            #src
+# The same answer Newton reached by hand above, to the tolerance both were asked for. A     #src
+# sparse `jac_prototype` alone does not prove the solver used it and did not silently       #src
+# densify, so the solver's own live cache is checked: `NewtonRaphson`'s default `autodiff`  #src
+# wraps itself in `AutoSparse` around the very sparsity detector `native_ad` above builds   #src
+# explicitly.                                                                               #src
 using SparseArrays: SparseMatrixCSC                                                          #src
 @test sol_ns.retcode == SciMLBase.ReturnCode.Success                                          #src
 @test maximum(abs, sol_ns.u .- u_native) < 1e-8                                              #src
@@ -401,13 +369,10 @@ end                                                                             
 #
 # The same nested-random-mesh pattern as the [linear example](poisson_linear.md): one random
 # coarse mesh per dimension, refined in place with [`iterative_refinement!`](@ref), using
-# Newton at every level, since it needs by far the fewest solves to reach machine precision.
-# A dense Jacobian would have made 2D and 3D here impractical (`O(n^2)` memory for a matrix that
-# is actually `O(n)`-nonzero); the sparse one stores only those nonzeros, which keeps it
-# practical at tens of thousands of degrees of freedom. `nonlinear_series` below is the same shape as every
-# other page's own convergence-sweep helper -- see [the linear example](poisson_linear.md) or
-# [the coupled one](coupled_reaction_diffusion.md) for one shown in full -- so it runs here
-# without repeating that walkthrough a third time:
+# Newton at every level, since it needs the fewest solves. A dense Jacobian would need `O(n^2)`
+# memory for a matrix with `O(n)` nonzeros, which makes 2D and 3D impractical; the sparse one
+# stores only the nonzeros. `nonlinear_series` is the convergence-sweep helper of the
+# [linear example](poisson_linear.md), with Newton at each level:
 
 function nonlinear_series(D::Int; n0::Int = 5, levels::Int) # hide
     sol_d(x) = exp(sum(x)) # hide
@@ -480,22 +445,16 @@ include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
 convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), (hs3, errs3, "3D", "#B26A00")];
     title = "Nonlinear Poisson, ‖·‖₁ₕ") # hide
 
-# Second order in every dimension, same as the linear problem. The nonlinearity changes how
-# many solves it takes to reach a given ``u``, not the discretization's own accuracy once it has.
+# Second order in every dimension, as for the linear problem. The nonlinearity changes the
+# number of solves; the discretization stays second order.
 #
-# `nonlinear_series` above uses `sparse_ad`, the tracer, at every level and dimension. The
-# same substitution shown earlier (`ast_sparsity_detector(a, U -> Mₕ(U))` in place of
-# `sparse_ad`'s `sparsity_detector`) works here unchanged, `D`-tuple coefficient and all:
-# `jacobian_pattern` flattens whatever `Mₕ(U)` returns, one node in 1D or a `D`-tuple in
-# 2D/3D, the same way before taking its reach, so nothing about `Ac`/`grad` above needs to
-# change to swap it in. Not re-run a second time here only to save the doc build the cost of
-# solving the same sixteen problems twice for an answer already shown identical above.
+# `nonlinear_series` uses `sparse_ad`, the tracer, at every level and dimension.
+# `ast_sparsity_detector(a, U -> Mₕ(U))` also covers 2D and 3D: `jacobian_pattern` flattens
+# the `D`-tuple that `Mₕ(U)` returns.
 #
 # ## Where to go next
 #
 #   - [Coupled reaction-diffusion](coupled_reaction_diffusion.md) for the same Newton setup
 #     over a composite space, with two species.
-#   - The solver tutorials ("Choosing a solver" and "Solvers by problem") for the linear
-#     solves inside each iteration.
 #   - [`nonlinear_problem`](@ref) in the [API reference](../api.md) for the
 #     NonlinearSolve.jl wrapper used above.

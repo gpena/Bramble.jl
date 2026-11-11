@@ -198,3 +198,111 @@ function deformed_plot(
     """
     return DeformedPlot(html)
 end
+
+# The grid lines of a structured 2D grid as one polyline per direction, `null` breaking it
+# between lines. `X` and `Y` hold the node positions in the grid's column-major order.
+function _grid_lines_2d(X, Y, nx::Int, ny::Int)
+    lin(i, j) = i + nx * (j - 1)
+    wx, wy = Float64[], Float64[]
+    function line(idx)
+        for n in idx
+            push!(wx, X[n])
+            push!(wy, Y[n])
+        end
+        push!(wx, NaN)
+        push!(wy, NaN)
+    end
+    for j in 1:ny
+        line(lin(i, j) for i in 1:nx)
+    end
+    for i in 1:nx
+        line(lin(i, j) for j in 1:ny)
+    end
+    return wx, wy
+end
+
+"""
+    deformed_plot_2d(uₕ; scale = 1.0, values = nothing, title = "", width = 520,
+                     height = 440)
+
+The deformed grid a two-component grid function `uₕ` on a 2D mesh describes: the grid lines drawn
+at `x + scale * u(x)` over the undeformed grid in a faint colour, the nodes coloured by `values`.
+`values` is a nodal vector, and defaults to the displacement magnitude `|u(x)|`.
+
+`scale = 1` draws the grid where the computation put it. A larger value exaggerates a
+displacement too small to see, and should be stated wherever the plot appears. The `<div>`
+carries `data-deformed-2d` (the number of nodes) and `data-scale`.
+"""
+function deformed_plot_2d(
+        uₕ;
+        scale::Real = 1.0,
+        values::Union{Nothing, AbstractVector} = nothing,
+        title::AbstractString = "",
+        width::Int = 520,
+        height::Int = 440
+)
+    Ωₕ = mesh(space(uₕ))
+    nx, ny = npoints(Ωₕ, Tuple)
+    ux, uy = (vec(reshape(c)) for c in components(uₕ))
+
+    X, Y = Float64[], Float64[]
+    for j in 1:ny, i in 1:nx
+        p = point(Ωₕ, CartesianIndex(i, j))
+        push!(X, p[1])
+        push!(Y, p[2])
+    end
+    Xd, Yd = X .+ scale .* ux, Y .+ scale .* uy
+    nodal = values === nothing ? hypot.(ux, uy) : values
+    wx, wy = _grid_lines_2d(X, Y, nx, ny)
+    dx, dy = _grid_lines_2d(Xd, Yd, nx, ny)
+
+    div_id = _next_deformed_plot_id()
+    title_js = isempty(title) ? "''" : "'$title'"
+
+    html = """
+    $(plotlyjs_head())
+    <div id="$div_id" data-deformed-2d="$(nx * ny)" data-scale="$(scale)" style="width:100%; max-width:$(width)px; height:$(height)px; margin: 1em 0;"></div>
+    <script>
+    (function () {
+      const theme = window.bramblePlotlyTheme();
+      const data = [{
+        type: 'scatter', mode: 'lines',
+        x: $(_jsnan(wx)), y: $(_jsnan(wy)),
+        line: { color: theme.grid, width: 1 }, hoverinfo: 'skip', showlegend: false,
+      }, {
+        type: 'scatter', mode: 'lines',
+        x: $(_jsnan(dx)), y: $(_jsnan(dy)),
+        line: { color: theme.text, width: 1.2 }, hoverinfo: 'skip', showlegend: false,
+      }, {
+        type: 'scatter', mode: 'markers',
+        x: $(_jsnum(Xd)), y: $(_jsnum(Yd)),
+        marker: { color: $(_jsnum(nodal)), colorscale: 'Viridis', size: 6, showscale: true,
+                  colorbar: { tickfont: { color: theme.text, size: 9 }, thickness: 11,
+                              len: 0.7 } },
+        hoverinfo: 'skip', showlegend: false,
+      }];
+      const themedLayout = function () {
+        const t = window.bramblePlotlyTheme();
+        return {
+          'title.font.color': t.text,
+          'xaxis.color': t.text, 'xaxis.gridcolor': t.grid, 'xaxis.zerolinecolor': t.grid,
+          'yaxis.color': t.text, 'yaxis.gridcolor': t.grid, 'yaxis.zerolinecolor': t.grid,
+        };
+      };
+      const axis = { color: theme.text, gridcolor: theme.grid, zerolinecolor: theme.grid,
+                     tickfont: { size: 9 } };
+      const layout = {
+        title: { text: $title_js, font: { color: theme.text, size: 14 } },
+        paper_bgcolor: theme.bg, plot_bgcolor: theme.bg,
+        margin: { l: 40, r: 10, t: 30, b: 35 },
+        xaxis: Object.assign({}, axis, { title: { text: 'x', font: { size: 11 } } }),
+        yaxis: Object.assign({}, axis, { title: { text: 'y', font: { size: 11 } },
+                                         scaleanchor: 'x' }),
+      };
+      Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
+      window.brambleRegisterPlotlyChart('$div_id', themedLayout);
+    })();
+    </script>
+    """
+    return DeformedPlot(html)
+end

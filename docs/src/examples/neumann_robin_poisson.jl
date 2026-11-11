@@ -3,7 +3,7 @@
 # Poisson's equation on a non-uniform grid with a flux or a mixed condition on the whole
 # boundary, solved through the public path (`gridspace` with ghost points, `constrained`,
 # `form`, `assemble`, `pde_solve`) and checked for second order. Every number and every
-# plot below was produced by the code shown.
+# plot below comes from the code shown.
 #
 # ## Problem
 #
@@ -15,16 +15,16 @@
 # with ``\partial_n`` the outward normal derivative and a coefficient ``\alpha \ge 0`` that
 # may change from one side of the square to the next. Three choices of ``\alpha``:
 #
-#   - **Robin and Neumann**: ``\alpha = 2`` on `xmin` and `ymin`, ``\alpha = 0`` (Neumann) on
+#   - Robin and Neumann: ``\alpha = 2`` on `xmin` and `ymin`, ``\alpha = 0`` (Neumann) on
 #     `xmax` and `ymax`;
-#   - **Robin**: ``\alpha = 2`` on `xmin` and `ymin`, ``\alpha = 1`` on `xmax` and `ymax`;
-#   - **pure Neumann**: ``\alpha = 0`` on every side.
+#   - Robin: ``\alpha = 2`` on `xmin` and `ymin`, ``\alpha = 1`` on `xmax` and `ymax`;
+#   - pure Neumann: ``\alpha = 0`` on every side.
 #
 # The manufactured solution is ``u(x, y) = e^{x} \cos 2y``, so ``g = 3u`` and the data
 # ``h = \alpha u + \partial_n u`` come from its gradient.
 #
 # A pure Neumann problem fixes ``u`` only up to a constant, and the data must satisfy a
-# compatibility condition, which the manufactured data do. The solve below selects the
+# compatibility condition, which the manufactured data satisfy in the continuum. The solve below selects the
 # solution of discrete mean zero, and the error is measured against the exact solution
 # shifted to that same mean.
 #
@@ -88,7 +88,7 @@ end
 
 # The error is the discrete ``H^1`` norm `norm₁ₕ`, and the grid is a random non-uniform
 # one refined in place by [`iterative_refinement!`](@ref), so each level is the same
-# random mesh split dyadically, not a fresh draw:
+# random mesh split dyadically:
 
 function convergence(α; levels = 5)
     Random.seed!(20260903)
@@ -117,14 +117,14 @@ order_neumann = order(hs_neumann, errs_neumann)
 
 #-
 
-order_mixed > 1.8 && order_robin > 1.8 && order_neumann > 1.8
+order_mixed > 1.95 && order_robin > 1.95 && order_neumann > 1.95
 
 # The line above renders its verdict; these assert it. Bracketed above as well as below:    #src
 # an order far past the promise means the finest error has reached roundoff and the ratio   #src
 # no longer measures the scheme, so that should fail rather than read as a better result.   #src
-@test 1.8 < order_mixed < 3.0                                                               #src
-@test 1.8 < order_robin < 3.0                                                               #src
-@test 1.8 < order_neumann < 3.0                                                             #src
+@test 1.95 < order_mixed < 3.0                                                              #src
+@test 1.95 < order_robin < 3.0                                                              #src
+@test 1.95 < order_neumann < 3.0                                                            #src
 # An exactly zero error would be the manufactured solution reproduced by construction.      #src
 @test all(e -> 1.0e-6 < e < 1.0, errs_mixed)                                                #src
 @test all(e -> 1.0e-6 < e < 1.0, errs_robin)                                                #src
@@ -149,9 +149,9 @@ convergence_plot(
         (hs_neumann, errs_neumann, "pure Neumann", "#B26A00")];
     title = "Neumann and Robin Poisson, ‖·‖₁ₕ") # hide
 
-# All three curves run parallel to the slope-2 line on a grid built not to flatter the
-# scheme: the points are random, so no symmetry cancels the one-sided error of the ghost
-# layer. The Neumann and Robin relations are as accurate as the interior operator.
+# All three curves run parallel to the slope-2 line. The points are random, so no symmetry
+# cancels the one-sided error of the ghost layer. The Neumann and Robin relations keep
+# second order.
 #
 # ## Where to go next
 #

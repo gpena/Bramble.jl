@@ -3,9 +3,8 @@
 # Linear elasticity in the unit square with a prescribed traction on one side, a
 # traction-free side and displacement on the other two. A traction couples the components,
 # which is why it goes through ghost points: `constrained` closes each ghost from a relation
-# that reads both components of the displacement. The page then checks those relations on
-# the lifted solution, and the order of the error on graded grids, where it has to reach two.
-# Every number and every plot below was produced by the code shown.
+# that reads both components of the displacement. Those relations are then checked on the
+# lifted solution, and the error is shown to converge at second order on graded grids.
 #
 # ## Problem
 #
@@ -60,7 +59,7 @@ loadform(v) = innerₕ(load(1), v(1)) + innerₕ(load(2), v(2))
 # \mu\,(\delta_{ij}\delta_{de} + \delta_{ie}\delta_{jd})``. A displacement side fixes the
 # value and, to close its ghost, the second normal derivative. Both come from the
 # manufactured solution. On `xmin` and `ymin` the two components' relations meet at the
-# corner, where `constrained` solves the four ghost values of the corner's block together.
+# corner, where `constrained` solves the ghost values of the corner's block together.
 
 K(i, j) = [λ * (i == d) * (j == e) + μ * ((i == j) * (d == e) + (i == e) * (j == d))
            for d in 1:2, e in 1:2]
@@ -99,9 +98,9 @@ loadeddatum = abs(tractiondata(:xmin, 1)((0.0, 0.5)))
 # ## Assembling and solving
 #
 # Mixed differences in the left argument of `innerₕ` read the ghosts of a traction side, and
-# the library replaces them by an extrapolation along the normal, as the internals page
-# explains. `pde_solve` takes the reduced system, and `Bramble.lift` returns the solution with its
-# ghost values, component by component.
+# the library replaces them by an extrapolation along the normal (see the internals page on
+# spaces). `pde_solve` takes the reduced system, and `Bramble.lift` returns the solution
+# with its ghost values, component by component.
 
 function solve_on(Ωₕ)
     V = gridspace(Ωₕ; ghosts = :boundary)^Val(2)
@@ -163,8 +162,8 @@ resid = (facet_residual(Ωchk, Pchk, Uchk, :xmin, 1),
 resid_free = (facet_residual(Ωchk, Pchk, Uchk, :ymin, 1),
     facet_residual(Ωchk, Pchk, Uchk, :ymin, 2))
 
-# Both are rounding, not discretisation error: the relation is an identity of the lifted
-# values, whatever the accuracy of the solution.
+# Both are rounding error: the relation is an identity of the lifted values, whatever the
+# accuracy of the solution.
 @test all(<(1.0e-12), resid)                                                                #src
 @test all(<(1.0e-12), resid_free)                                                           #src
 # The loaded side's flux is far from zero, so the relation is not met by a zero solution.   #src
@@ -173,10 +172,11 @@ resid_free = (facet_residual(Ωchk, Pchk, Uchk, :ymin, 1),
 # ### The corner of the two tractions
 #
 # At the corner node the ghost across `xmin` reads the tangential derivative along the
-# side, and the one across `ymin` the same along `ymin`. The closure takes it one-sided: the derivative at the node of the quadratic through
-# the three nodes along the side into the domain, with the normal derivative centred over
-# the ghost. This writes that relation from the mesh points and the padded values, and
-# returns the residual scaled by the size of its terms, with the terms.
+# side, and the one across `ymin` the same along `ymin`. The closure takes it one-sided: the
+# derivative at the node of the quadratic through the three nodes along the side into the
+# domain, with the normal derivative centred over the ghost. This writes that relation from
+# the mesh points and the padded values, and returns the residual scaled by the size of its
+# terms, with the terms.
 
 function corner_relation(xs, U, i, d, g)
     e = 3 - d
@@ -206,9 +206,10 @@ cornerx = [corner_relation(xschk, Uchk, i, 1, tractiondata(:xmin, i)((0.0, 0.0))
 cornery = [corner_relation(xschk, Uchk, i, 2, 0.0) for i in 1:2]
 maximum(abs, first.(cornerx))
 
-# Rounding again, at the corner too. The `ymin` relation has zero datum and is homogeneous,
-# so its residual is exactly zero and is not printed; the `xmin` relation of component 1
-# carries a datum and terms of order one (component 2 has a small datum there):
+# The corner residuals are rounding too. The `ymin` relation has zero datum and is
+# homogeneous, so its residual is exactly zero and is not printed; the `xmin` relation of
+# component 1 carries a datum and terms of order one (component 2 has a zero datum there):
+@test abs(tractiondata(:xmin, 2)((0.0, 0.0))) < 1.0e-14                                     #src
 @test maximum(abs, first.(cornerx)) < 1.0e-10                                               #src
 @test maximum(abs, first.(cornery)) < 1.0e-10                                               #src
 @test maximum(abs, cornerx[1][2]) > 0.1                                                     #src
@@ -219,7 +220,7 @@ maximum(abs, first.(cornerx))
 # through the same map, the cells differing in size by a factor of about six. The error is
 # the discrete ``H^1`` norm of each component at the physical nodes. A random grid is left
 # out: the collocated form is stable on it (the errors at least halve per level, in
-# `test/ghost/traction.jl`), but no second order is asserted there.
+# `test/convergence/ghost_traction.jl`), but no second order is asserted there.
 
 function component_errors(Ωₕ)
     _, U = solve_on(Ωₕ)
@@ -256,12 +257,12 @@ order1, order2 = lsq_order(hs, err1), lsq_order(hs, err2)
 order1 > 1.8 && order2 > 1.8
 
 # The line above renders its verdict; these assert it, bracketed so that an error at       #src
-# roundoff would fail rather than read as a better order.                                  #src
+# roundoff would fail instead of reading as a better order.                                #src
 @test 1.8 < order1 < 3.0                                                                   #src
 @test 1.8 < order2 < 3.0                                                                   #src
 @test all(e -> 1.0e-6 < e < 1.0, err1) && all(e -> 1.0e-6 < e < 1.0, err2)                 #src
-# The grading is real, not a uniform grid by another name.                                 #src
-@test maximum(diff(points(levels[1])[1])) > 3 * minimum(diff(points(levels[1])[1]))        #src
+# The cell ratio is about six, as the prose says.                                          #src
+@test all(5 < maximum(diff(points(Ωₕ)[1])) / minimum(diff(points(Ωₕ)[1])) < 8 for Ωₕ in levels) #src
 
 # The error against ``h_{\max}`` on log-log axes, one curve per component. The dashed line
 # has slope 2 and is anchored at the finest point of the first curve.
@@ -271,9 +272,8 @@ convergence_plot(
     [(hs, err1, "u₁", "#5B5FC7"), (hs, err2, "u₂", "#0E7C86")];
     title = "Elasticity with a traction, ‖·‖₁ₕ") # hide
 
-println("Both components run parallel to the slope-2 line: orders ",
-    round(order1; digits = 2), " and ", round(order2; digits = 2),
-    " on these three levels, for the problem above.")
+println("orders ", round(order1; digits = 2), " and ", round(order2; digits = 2),
+    " on these three levels")
 #
 # ## Where to go next
 #

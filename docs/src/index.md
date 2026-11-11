@@ -5,7 +5,7 @@ CurrentModule = Bramble
 # Bramble.jl
 
 ```@raw html
-<!-- Real Markdown links below, not raw HTML <a> tags: Documenter rewrites a `.md`-target
+<!-- Real Markdown links below instead of raw HTML <a> tags: Documenter rewrites a `.md`-target
      link to the right URL for whichever build mode is active. These <div>s only wrap the
      styling; the interspersed Markdown still goes through normal link resolution. -->
 <section class="bramble-hero">
@@ -38,7 +38,7 @@ Put the grid points where the solution changes: a mesh's points can take any non
 <div class="bramble-card">
 ```
 
-**[Forms, not matrices](tutorials/form.md)**
+**[Problems as forms](tutorials/form.md)**
 
 Write a problem as bilinear and linear forms built from discrete operators. `assemble` turns them into a sparse matrix and a right-hand side.
 
