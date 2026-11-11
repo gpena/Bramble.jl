@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How to choose a linear solver — Bramble.jl</title>
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=aaaaa56a">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <meta name="title" content="How to choose a linear solver — Bramble.jl">
+  <meta property="og:title" content="How to choose a linear solver — Bramble.jl">
+  <meta property="twitter:title" content="How to choose a linear solver — Bramble.jl">
+  <meta name="description" content="Documentation for Bramble.jl.">
+  <meta property="og:description" content="Documentation for Bramble.jl.">
+  <meta property="twitter:description" content="Documentation for Bramble.jl.">
+  <link rel="icon" type="image/x-icon" href="../../assets/favicon.ico">
+  <link rel="stylesheet" href="../../assets/custom.css">
+  <script>
+    (function(){
+      document.documentElement.classList.add('no-transition');
+      var t=localStorage.getItem('md-theme');if(t)document.documentElement.setAttribute('data-theme',t);
+      window.addEventListener('load',function(){setTimeout(function(){document.documentElement.classList.remove('no-transition');},50);});
+    })()
+  </script>
+</head>
+<body data-warn-outdated>
+  <header class="md-navbar">
+    <button id="md-hamburger" class="md-icon-btn md-hamburger" aria-label="Toggle navigation" aria-expanded="false"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></button>
+    <img class="md-navbar-logo md-logo-light" src="../../assets/logo.svg" alt="Bramble.jl logo" height="32">
+    <img class="md-navbar-logo md-logo-dark" src="../../assets/logo-dark.svg" alt="Bramble.jl logo" height="32">
+    <span class="md-navbar-title">Bramble.jl</span>
+    <span class="md-navbar-spacer"></span>
+    <button id="md-search-btn" class="md-search-bar" aria-label="Search documentation" aria-expanded="false">
+      <svg class="md-icon md-search-bar-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <span class="md-search-bar-label">Search docs</span>
+      <kbd class="md-search-bar-kbd">Ctrl K</kbd>
+    </button>
+    <a class="md-icon-btn md-repo-link" href="https://github.com/gpena/Bramble.jl" title="View the repository on GitHub" aria-label="View the repository on GitHub" rel="noopener" target="_blank"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .3a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0012 .3z"/></svg><span class="md-repo-label">GitHub</span></a>
+    <button id="md-theme-toggle" class="md-icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode"><svg class="md-icon md-icon-light" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg><svg class="md-icon md-icon-dark" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg></button>
+  </header>
+  <div class="md-layout">
+    <nav class="md-sidebar">
+      <a href="../../">Home</a>
+      <a href="../../getting_started/">Getting started</a>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Tutorials</span>
+        <a href="../../tutorials/geometry/">Geometry tutorial</a>
+        <a href="../../tutorials/mesh/">Mesh tutorial</a>
+        <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
+        <a href="../../tutorials/operators/">Difference, jump and average operators</a>
+        <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
+        <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+      </div>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/" class="md-nav-active">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Examples</span>
+        <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
+        <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
+        <a href="../../examples/heat_equation/">Heat equation</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
+        <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
+        <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
+      </div>
+    </nav>
+    <main class="md-content">
+      <article class="md-article">
+      <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/howto/solvers.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
+<h1 id="howto_solvers" class="md-heading">How to choose a linear solver<a href="#howto_solvers" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
+<p><a href="../../api/forms/#Bramble.assemble"><code class="md-code-inline">assemble</code></a> returns a sparse matrix <code class="md-code-inline">A</code> and a load <code class="md-code-inline">F</code>, and <a href="../../api/solvers/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a><code class="md-code-inline">(A, F)</code> solves <code class="md-code-inline">A u = F</code>. Its keywords pick a direct backend, and an iterative method from LinearSolve.jl takes a preconditioner from Bramble. The kind of matrix decides which.</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:right">Problem</th>
+<th style="text-align:right">Solve with</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right">Symmetric positive definite, one solve</td>
+<td style="text-align:right"><code class="md-code-inline">pde_solve(A, F; solver = :suitesparse, sym = :spd)</code></td>
+</tr>
+<tr>
+<td style="text-align:right">Symmetric positive definite, many solves with one sparsity pattern</td>
+<td style="text-align:right"><code class="md-code-inline">sparse_factorize</code> once, then <code class="md-code-inline">refactor!</code></td>
+</tr>
+<tr>
+<td style="text-align:right">Symmetric positive definite, 3D with many unknowns</td>
+<td style="text-align:right">CG with <a href="../../api/solvers/#Bramble.amg_preconditioner"><code class="md-code-inline">amg_preconditioner</code></a></td>
+</tr>
+<tr>
+<td style="text-align:right">Non-symmetric, for example convection-dominated</td>
+<td style="text-align:right"><code class="md-code-inline">pde_solve(A, F)</code>, or GMRES with <a href="../../api/solvers/#Bramble.ilu_preconditioner"><code class="md-code-inline">ilu_preconditioner</code></a></td>
+</tr>
+<tr>
+<td style="text-align:right">Pure Neumann</td>
+<td style="text-align:right"><code class="md-code-inline">pde_solve(A, F; mean_zero = w)</code></td>
+</tr>
+<tr>
+<td style="text-align:right">Element type other than <code class="md-code-inline">Float64</code>, or no binary dependency</td>
+<td style="text-align:right"><code class="md-code-inline">pde_solve(A, F; solver = :sparspak)</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The blocks below solve one system per row of the table and assert its residual. The first builds a Poisson system on a random non-uniform grid.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble, LinearAlgebra, Random, SparseArrays, SuiteSparse
+using Bramble: sparse_factorize, refactor!
+
+relres(A, u, F) = norm(A * u - F) / norm(F)
+
+function poisson_system(Ω, n; uniform = false)
+    Ωₕ = mesh(Ω, n, ntuple(_ -&gt; uniform, length(n)))
+    Wₕ = gridspace(Ωₕ)
+    a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)))
+    fₕ = element(Wₕ)
+    avgₕ!(fₕ, x -&gt; exp(sum(x)))
+    l = form(Wₕ, v -&gt; innerₕ(fₕ, v))
+    bcs = dirichlet_constraints(Ω, :boundary =&gt; (x -&gt; exp(sum(x))))
+    return assemble(a, l; dirichlet = bcs, symmetrize = true)
+end
+
+Random.seed!(20261111)
+Ω₂ = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+A, F = poisson_system(Ω₂, (40, 40))
+size(A)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(1600, 1600)</code></pre>
+</div>
+<h2 id="Symmetric-positive-definite:-one-solve" class="md-heading">Symmetric positive definite: one solve<a href="#Symmetric-positive-definite:-one-solve" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">solver = :suitesparse</code> with <code class="md-code-inline">sym = :spd</code> factors with CHOLMOD and skips the symmetry test. The default <code class="md-code-inline">A \ F</code> tries Cholesky only on an exactly symmetric matrix, so one that is symmetric up to rounding goes to UMFPACK.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">u = pde_solve(A, F; solver = :suitesparse, sym = :spd)
+@assert relres(A, u, F) &lt; 1e-10
+relres(A, u, F)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.944351096933449e-15</code></pre>
+</div>
+<h2 id="Many-solves-with-one-pattern" class="md-heading">Many solves with one pattern<a href="#Many-solves-with-one-pattern" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A time loop or a Picard iteration solves matrices with one sparsity pattern. <a href="../../api/solvers/#Bramble.sparse_factorize"><code class="md-code-inline">sparse_factorize</code></a> analyzes the pattern once, and <a href="../../api/solvers/#Bramble.refactor!"><code class="md-code-inline">refactor!</code></a> recomputes the numbers in place. Here <code class="md-code-inline">A + I</code> stands for the matrix the next step assembles:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">fact = sparse_factorize(A; sym = :spd)
+@assert relres(A, fact \ F, F) &lt; 1e-10
+
+A_next = A + 0.5I
+refactor!(fact, A_next)
+@assert relres(A_next, fact \ F, F) &lt; 1e-10
+relres(A_next, fact \ F, F)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">5.143404520847331e-16</code></pre>
+</div>
+<h2 id="Non-symmetric-systems" class="md-heading">Non-symmetric systems<a href="#Non-symmetric-systems" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Advection makes the matrix non-symmetric. The default <code class="md-code-inline">pde_solve</code> factors it with UMFPACK, and <code class="md-code-inline">sym = :unsymmetric</code> selects UMFPACK without a symmetry test. For an iterative solve, GMRES takes the place of CG, and ILU(0) preconditions it. Convection-dominated matrices are far from an M-matrix, and algebraic multigrid degrades on them (<a href="https://github.com/gpena/Bramble.jl/issues/244">#244</a>), so ILU(0) is the preconditioner here.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using LinearSolve, ILUZero
+
+function convection_diffusion_system(Ω, n; ε = 1.0e-2)
+    Ωₕ = mesh(Ω, n, (false, false))
+    Wₕ = gridspace(Ωₕ)
+    a = form(Wₕ, Wₕ, (u, v) -&gt; ε * inner₊(∇ₕ(u), ∇ₕ(v)) + inner₊(Mₕ(u), ∇ₕ(v)))
+    fₕ = element(Wₕ)
+    avgₕ!(fₕ, x -&gt; exp(sum(x)))
+    l = form(Wₕ, v -&gt; innerₕ(fₕ, v))
+    bcs = dirichlet_constraints(Ω, :boundary =&gt; (x -&gt; exp(sum(x))))
+    return assemble(a, l; dirichlet = bcs)
+end
+
+Acd, Fcd = convection_diffusion_system(Ω₂, (40, 40))
+@assert !issymmetric(Acd)
+
+u_direct = pde_solve(Acd, Fcd; solver = :suitesparse, sym = :unsymmetric)
+@assert relres(Acd, u_direct, Fcd) &lt; 1e-10
+
+problem = LinearProblem(Acd, Fcd)
+plain = solve(problem, KrylovJL_GMRES(); reltol = 1e-10, abstol = 1e-10)
+with_ilu = solve(problem, KrylovJL_GMRES(); Pl = ilu_preconditioner(Acd),
+    reltol = 1e-10, abstol = 1e-10)
+@assert relres(Acd, with_ilu.u, Fcd) &lt; 1e-8
+@assert with_ilu.iters &lt; plain.iters
+plain.iters, with_ilu.iters</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(299, 34)</code></pre>
+</div>
+<h2 id="Pure-Neumann" class="md-heading">Pure Neumann<a href="#Pure-Neumann" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>With the normal derivative given on the whole boundary, the matrix annihilates constants and <code class="md-code-inline">A \ F</code> is singular, so <code class="md-code-inline">pde_solve</code> logs a warning that names <code class="md-code-inline">mean_zero</code>. Pass <code class="md-code-inline">mean_zero = w</code>, the weights of the discrete average, and it solves the bordered system <span class="md-math md-math-inline">\([A\ w; w^T\ 0]\)</span> and returns the solution with <span class="md-math md-math-inline">\(w^T u = 0\)</span>. The weights are the assembled form of the constant function 1 on the space without ghosts:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ_n = mesh(Ω₂, (17, 17), (false, false))
+C = constrained(gridspace(Ωₕ_n; ghosts = :boundary),
+    u -&gt; ntuple(j -&gt; (:xmin, :xmax, :ymin, :ymax)[j] =&gt; ∂ₙ(u) =&gt; (x -&gt; 0.0), 4))
+A_n, F_n = assemble(form(C, C, (u, v) -&gt; innerₕ(-Δₕ(u), v)),
+    form(C, v -&gt; innerₕ(x -&gt; 2π^2 * cos(π * x[1]) * cos(π * x[2]), v)))
+W_n = gridspace(Ωₕ_n)
+w = assemble(form(W_n, v -&gt; innerₕ(x -&gt; 1.0, v)))
+
+u_n = pde_solve(A_n, F_n; mean_zero = w)
+λ = sum(F_n) / sum(w)      # 1ᵀA = 0, so the border absorbs the mean of F
+@assert abs(dot(w, u_n)) &lt; 1e-10
+@assert norm(A_n * u_n - (F_n - λ * w)) &lt; 1e-9 * norm(F_n)
+abs(dot(w, u_n)), λ</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.1376602531569375e-16, 6.880570536001164e-6)</code></pre>
+</div>
+<p>The data must satisfy a compatibility condition. <code class="md-code-inline">λ</code> is the part of the load that no <code class="md-code-inline">u</code> reaches: zero for exactly compatible data, and small here because these are compatible only in the continuum. <code class="md-code-inline">Bramble.neumann_compatibility</code> tests the condition. A kernel in the ghost values of a ghost space needs <code class="md-code-inline">gauge</code> instead, and the <a href="../../howto/pure_neumann/#howto_pure_neumann">pure Neumann how-to</a> shows both keywords.</p>
+<h2 id="Large-systems-in-3D" class="md-heading">Large systems in 3D<a href="#Large-systems-in-3D" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>On a 3D grid a sparse direct factorization fills in heavily past a few hundred thousand unknowns. CG with an algebraic multigrid preconditioner stores the hierarchy only. <a href="../../api/solvers/#Bramble.amg_preconditioner"><code class="md-code-inline">amg_preconditioner</code></a> returns the hierarchy, and <code class="md-code-inline">aspreconditioner</code> from AlgebraicMultigrid.jl turns it into the <code class="md-code-inline">Pl</code> that LinearSolve takes. The system below is small enough to compare with plain CG:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using AlgebraicMultigrid: aspreconditioner
+
+Ω₃ = domain(interval(0.0, 1.0) × interval(0.0, 1.0) × interval(0.0, 1.0))
+Random.seed!(20261111)
+A₃, F₃ = poisson_system(Ω₃, (14, 14, 14))
+problem₃ = LinearProblem(A₃, F₃)
+cg = solve(problem₃, KrylovJL_CG(); reltol = 1e-10, abstol = 1e-10)
+cg_amg = solve(problem₃, KrylovJL_CG(); Pl = aspreconditioner(amg_preconditioner(A₃)),
+    reltol = 1e-10, abstol = 1e-10)
+@assert relres(A₃, cg_amg.u, F₃) &lt; 1e-8
+@assert 5 * cg_amg.iters &lt; cg.iters
+size(A₃, 1), cg.iters, cg_amg.iters</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2744, 625, 61)</code></pre>
+</div>
+<p><code class="md-code-inline">solve(a, l; solver = KrylovJL_CG(), preconditioner = :amg, symmetrize = true, dirichlet = bcs)</code> assembles the form and builds the hierarchy in one call (<code class="md-code-inline">:ilu0</code> is the other value). It needs <code class="md-code-inline">symmetrize = true</code> for CG, and it refuses a <code class="md-code-inline">preconditioner</code> without a Krylov <code class="md-code-inline">solver</code>.</p>
+<h2 id="Other-direct-solvers" class="md-heading">Other direct solvers<a href="#Other-direct-solvers" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Each backend loads with its package and takes the same <code class="md-code-inline">pde_solve</code> and <a href="../../api/solvers/#Bramble.sparse_factorize"><code class="md-code-inline">sparse_factorize</code></a> keywords:</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:right"><code class="md-code-inline">solver</code></th>
+<th style="text-align:right">Use it for</th>
+<th style="text-align:right">Needs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">:default</code></td>
+<td style="text-align:right"><code class="md-code-inline">A \ F</code>; on macOS the Accelerate route, when it is loaded and <code class="md-code-inline">A</code> is symmetric</td>
+<td style="text-align:right"></td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">:suitesparse</code></td>
+<td style="text-align:right">CHOLMOD for a symmetric <code class="md-code-inline">A</code>, UMFPACK otherwise, chosen by <code class="md-code-inline">sym</code></td>
+<td style="text-align:right"><code class="md-code-inline">using SuiteSparse</code></td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">:spqr</code></td>
+<td style="text-align:right">least squares, or a rectangular <code class="md-code-inline">A</code></td>
+<td style="text-align:right"></td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">:accelerate</code></td>
+<td style="text-align:right">Apple&#39;s <code class="md-code-inline">libSparse</code>: Cholesky, LDLᵀ, LU and QR</td>
+<td style="text-align:right">macOS, <code class="md-code-inline">using AppleAccelerate</code></td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">:mumps</code></td>
+<td style="text-align:right">MUMPS multifrontal factorization</td>
+<td style="text-align:right"><code class="md-code-inline">using MUMPS</code></td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">:sparspak</code></td>
+<td style="text-align:right">a pure Julia LU that factors <code class="md-code-inline">Float32</code> and <code class="md-code-inline">BigFloat</code> entries</td>
+<td style="text-align:right"><code class="md-code-inline">using Sparspak</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Sparspak, SparseArrays
+
+u32 = pde_solve(SparseMatrixCSC{Float32}(A), Float32.(F); solver = :sparspak)</code></pre>
+</div>
+      </article>
+      <footer class="md-footer">
+<p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
+      </footer>
+    </main>
+    <aside class="md-toc">
+      <div class="md-toc-inner">
+        <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#Symmetric-positive-definite:-one-solve">Symmetric positive definite: one solve</a>
+          <a class="md-toc-link md-toc-h2" href="#Many-solves-with-one-pattern">Many solves with one pattern</a>
+          <a class="md-toc-link md-toc-h2" href="#Non-symmetric-systems">Non-symmetric systems</a>
+          <a class="md-toc-link md-toc-h2" href="#Pure-Neumann">Pure Neumann</a>
+          <a class="md-toc-link md-toc-h2" href="#Large-systems-in-3D">Large systems in 3D</a>
+          <a class="md-toc-link md-toc-h2" href="#Other-direct-solvers">Other direct solvers</a>
+      </div>
+    </aside>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia-repl.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.js"></script>
+  <script>var MD_KATEX_OPTIONS = {};
+document.querySelectorAll('.md-math').forEach(function (el) {
+  var tex = el.textContent.trim().replace(/^\\[\[(]/, '').replace(/\\[\])]$/, '');
+  katex.render(tex, el, Object.assign({ throwOnError: false }, MD_KATEX_OPTIONS,
+    { displayMode: el.classList.contains('md-math-display') }));
+});</script>
+  <script src="../../siteinfo.js"></script>
+  <script src="../../../versions.js"></script>
+  <script src="../../assets/materialdocs.js?v=aaaaa56a"></script>
+</body>
+</html>

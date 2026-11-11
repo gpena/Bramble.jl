@@ -32,10 +32,11 @@ const _CONVERGENCE_PLOT_COUNTER = Ref(0)
 _next_convergence_plot_id() = "bramble_cp_$(_CONVERGENCE_PLOT_COUNTER[] += 1)"
 
 """
-    convergence_plot(series; title = "", reference_slope = 2)
+    convergence_plot(series; title = "", reference_slope = 2, width = 480, height = 340)
 
-`series` is a vector of `(hs, errs, label, color)` tuples, one per curve, e.g. one per
-spatial dimension.
+A log-log plot of errors against `h`. `series` is a vector of `(hs, errs, label, color)`
+tuples, one per curve. A dashed line of slope `reference_slope` runs through the last point
+of the first series. `width` and `height` are in pixels.
 """
 function convergence_plot(
         series;

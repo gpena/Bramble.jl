@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bramble.jl — Bramble.jl</title>
-  <link rel="stylesheet" href="./assets/materialdocs.css?v=11de7056">
+  <link rel="stylesheet" href="./assets/materialdocs.css?v=fa3d3891">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Bramble.jl — Bramble.jl">
   <meta property="og:title" content="Bramble.jl — Bramble.jl">
@@ -42,67 +42,71 @@
       <a href="./" class="md-nav-active">Home</a>
       <a href="./getting_started/">Getting started</a>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="./tutorials/geometry/">Geometry tutorial</a>
         <a href="./tutorials/mesh/">Mesh tutorial</a>
         <a href="./tutorials/space/">Grid spaces and discrete functions</a>
         <a href="./tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="./tutorials/form/">Linear and bilinear forms</a>
+        <a href="./tutorials/ghost/">Ghost points</a>
         <a href="./tutorials/coupled_systems/">Coupled systems</a>
+        <a href="./tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="./tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="./howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="./howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="./howto/solvers/">How to choose a linear solver</a>
+        <a href="./howto/backends/">Assemble on several threads</a>
+        <a href="./howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="./examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="./examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="./examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="./examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="./examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="./examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="./examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="./examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="./examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="./examples/heat_equation/">Heat equation</a>
-        <a href="./examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="./examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="./examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="./examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="./examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="./examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="./examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="./examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="./examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="./api/">API reference</a>
-          <a href="./api/utilities/">Utilities</a>
-          <a href="./api/geometry/">Geometry</a>
-          <a href="./api/meshes/">Meshes</a>
-          <a href="./api/spaces/">Grid spaces</a>
-          <a href="./api/operators/">Difference, jump and average operators</a>
-          <a href="./api/inner_products/">Inner products and norms</a>
-          <a href="./api/forms/">Forms</a>
-          <a href="./api/exporters/">Exporters</a>
-        </div>
-        <a href="./api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="./internals/utils/">Utilities</a>
-          <a href="./internals/geometry/">Geometry</a>
-          <a href="./internals/mesh/">Mesh</a>
-          <a href="./internals/space/">Spaces</a>
-          <a href="./internals/form/">Forms</a>
-          <a href="./internals/exporters/">Exporters</a>
-          <a href="./internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="./api/">API reference</a>
+        <a href="./api/utilities/">Utilities</a>
+        <a href="./api/geometry/">Geometry</a>
+        <a href="./api/meshes/">Meshes</a>
+        <a href="./api/spaces/">Grid spaces</a>
+        <a href="./api/operators/">Difference, jump and average operators</a>
+        <a href="./api/inner_products/">Inner products and norms</a>
+        <a href="./api/forms/">Forms</a>
+        <a href="./api/solvers/">Solvers and preconditioners</a>
+        <a href="./api/exporters/">Exporters</a>
+        <a href="./api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="./internals/utils/">Utilities</a>
+        <a href="./internals/geometry/">Geometry</a>
+        <a href="./internals/mesh/">Mesh</a>
+        <a href="./internals/space/">Spaces</a>
+        <a href="./internals/form/">Forms</a>
+        <a href="./internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/index.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Bramble.jl" class="md-heading">Bramble.jl<a href="#Bramble.jl" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<!-- Real Markdown links below, not raw HTML <a> tags: Documenter rewrites a `.md`-target
+<!-- Real Markdown links below instead of raw HTML <a> tags: Documenter rewrites a `.md`-target
      link to the right URL for whichever build mode is active. These <div>s only wrap the
      styling; the interspersed Markdown still goes through normal link resolution. -->
 <section class="bramble-hero">
@@ -124,12 +128,69 @@
 <p>Put the grid points where the solution changes: a mesh&#39;s points can take any non-uniform spacing.</p>
 </div>
 <div class="bramble-card">
-<p><strong><a href="./tutorials/form/">Forms, not matrices</a></strong></p>
+<p><strong><a href="./tutorials/form/">Problems as forms</a></strong></p>
 <p>Write a problem as bilinear and linear forms built from discrete operators. <code class="md-code-inline">assemble</code> turns them into a sparse matrix and a right-hand side.</p>
 </div>
 <div class="bramble-card">
 <p><strong><a href="./examples/heat_equation/">Time-dependent problems</a></strong></p>
 <p>Discretise in space with Bramble and pass the resulting system of ODEs to a time stepper from the SciML ecosystem.</p>
+</div>
+</div>
+<h2 id="Gallery" class="md-heading">Gallery<a href="#Gallery" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<div class="bramble-gallery">
+<div class="bramble-card">
+<p><a href="./examples/poisson_linear/"><figure class="md-figure">
+<img src="assets/gallery_poisson.svg" alt="Poisson solution on a random 17 by 17 grid, with its grid lines" loading="lazy">
+<figcaption>Poisson solution on a random 17 by 17 grid, with its grid lines</figcaption>
+</figure>
+</a></p>
+<p><strong><a href="./examples/poisson_linear/">Poisson on a random grid</a></strong></p>
+<p>Interior points placed at random, grid lines drawn over the solution.</p>
+</div>
+<div class="bramble-card">
+<p><a href="./examples/poisson_circle/"><figure class="md-figure">
+<img src="assets/gallery_disk.svg" alt="Poisson solution on the unit disk, on a grid fitted to the circle" loading="lazy">
+<figcaption>Poisson solution on the unit disk, on a grid fitted to the circle</figcaption>
+</figure>
+</a></p>
+<p><strong><a href="./examples/poisson_circle/">A disk</a></strong></p>
+<p>The grid gains lines until each one meets the circle at a node. The ringed nodes are the boundary.</p>
+</div>
+<div class="bramble-card">
+<p><a href="./examples/boundary_layer_graded/"><figure class="md-figure">
+<img src="assets/gallery_layer.svg" alt="Boundary layer of width 1e-3 on a graded grid of 41 points" loading="lazy">
+<figcaption>Boundary layer of width 1e-3 on a graded grid of 41 points</figcaption>
+</figure>
+</a></p>
+<p><strong><a href="./examples/boundary_layer_graded/">A boundary layer</a></strong></p>
+<p>A graded grid puts points in a layer a thousandth wide.</p>
+</div>
+<div class="bramble-card">
+<p><a href="./examples/heat_equation/"><figure class="md-figure">
+<img src="assets/gallery_heat.svg" alt="Heat equation on a random grid: the temperature against x and t" loading="lazy">
+<figcaption>Heat equation on a random grid: the temperature against x and t</figcaption>
+</figure>
+</a></p>
+<p><strong><a href="./examples/heat_equation/">The heat equation</a></strong></p>
+<p>Two decaying modes on a random grid, with <span class="md-math md-math-inline">\(x\)</span> across and <span class="md-math md-math-inline">\(t\)</span> up.</p>
+</div>
+<div class="bramble-card">
+<p><a href="./examples/coupled_reaction_diffusion/"><figure class="md-figure">
+<img src="assets/gallery_coupled.svg" alt="The two species u and v of a reaction-diffusion system" loading="lazy">
+<figcaption>The two species u and v of a reaction-diffusion system</figcaption>
+</figure>
+</a></p>
+<p><strong><a href="./examples/coupled_reaction_diffusion/">Two coupled species</a></strong></p>
+<p>A reaction-diffusion system in <span class="md-math md-math-inline">\(u\)</span> and <span class="md-math md-math-inline">\(v\)</span> on one random grid.</p>
+</div>
+<div class="bramble-card">
+<p><a href="./examples/elasticity_traction_2d/"><figure class="md-figure">
+<img src="assets/gallery_elasticity.svg" alt="Displaced 17 by 17 graded grid of an elastic body" loading="lazy">
+<figcaption>Displaced 17 by 17 graded grid of an elastic body</figcaption>
+</figure>
+</a></p>
+<p><strong><a href="./examples/elasticity_traction_2d/">Elasticity</a></strong></p>
+<p>A graded grid moved by the computed displacement, drawn at <span class="md-math md-math-inline">\(x + 0.2\,u\)</span>.</p>
 </div>
 </div>
 <h2 id="Installation" class="md-heading">Installation<a href="#Installation" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -162,6 +223,12 @@ uₕ .= A \ F
 maximum(abs, uₕ .- Rₕ(Wₕ, uexact))                     # about 8e-4</code></pre>
 </div>
 <p>Passing <code class="md-code-inline">false</code> instead of <code class="md-code-inline">true</code> for an axis places its interior points at random, which gives a non-uniform grid. <a href="./getting_started/">Getting started</a> explains each step.</p>
+<p>The maximum error against <code class="md-code-inline">hₘₐₓ</code>, on uniform meshes and on random ones, for five sizes from 17 to 257 points per axis. Five random draws per size; the dashed line has slope 2.</p>
+<p><figure class="md-figure">
+<img src="assets/readme_convergence.svg" alt="Maximum error against the largest spacing on uniform and random meshes, with a slope-2 line" loading="lazy">
+<figcaption>Maximum error against the largest spacing on uniform and random meshes, with a slope-2 line</figcaption>
+</figure>
+</p>
 <h2 id="References" class="md-heading">References<a href="#References" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The schemes follow these papers:</p>
 <ul>
@@ -180,6 +247,7 @@ maximum(abs, uₕ .- Rₕ(Wₕ, uexact))                     # about 8e-4</code>
     <aside class="md-toc">
       <div class="md-toc-inner">
         <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#Gallery">Gallery</a>
           <a class="md-toc-link md-toc-h2" href="#Installation">Installation</a>
           <a class="md-toc-link md-toc-h2" href="#A-first-solve">A first solve</a>
           <a class="md-toc-link md-toc-h2" href="#References">References</a>
@@ -200,6 +268,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="./siteinfo.js"></script>
   <script src="./../versions.js"></script>
-  <script src="./assets/materialdocs.js?v=11de7056"></script>
+  <script src="./assets/materialdocs.js?v=fa3d3891"></script>
 </body>
 </html>

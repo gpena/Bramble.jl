@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Difference, jump and average operators — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=941cc626">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f632463d">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Difference, jump and average operators — Bramble.jl">
   <meta property="og:title" content="Difference, jump and average operators — Bramble.jl">
@@ -42,60 +42,64 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/" class="md-nav-active">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/" class="md-nav-active">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
@@ -103,10 +107,97 @@
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/api/operators.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Difference,-jump-and-average-operators" class="md-heading">Difference, jump and average operators<a href="#Difference,-jump-and-average-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p>The finite difference, the jump and the average, per coordinate and over every coordinate at once. See the <a href="../../tutorials/operators/">operators tutorial</a>.</p>
-<p>A direction held in a variable indexes the vectorial operator: <code class="md-code-inline">∇ₕ[2]</code>, <code class="md-code-inline">∇ₕ[:y]</code> and <code class="md-code-inline">D₋ᵧ</code> are the same function, so <code class="md-code-inline">sum(innerₕ(∇ₕ[d](uₕ), ∇ₕ[d](uₕ)) for d in 1:D)</code> reads the same in 1D, 2D and 3D. Every family has a stem that takes the direction as an argument: <code class="md-code-inline">Bramble.D₋(uₕ, 2)</code>, <code class="md-code-inline">Bramble.D₋(uₕ, :y)</code> and <code class="md-code-inline">Bramble.D₋(uₕ, Val(2))</code> are all <code class="md-code-inline">D₋ᵧ(uₕ)</code>. The stems <code class="md-code-inline">D₋</code>, <code class="md-code-inline">D₊</code>, <code class="md-code-inline">Dc</code>, <code class="md-code-inline">D̃</code> and <code class="md-code-inline">jump</code> are <code class="md-code-inline">public</code> but not exported. The averages use <code class="md-code-inline">Mₕ</code>/<code class="md-code-inline">M₊ₕ</code> rather than a bare <code class="md-code-inline">M</code>; <code class="md-code-inline">Mₕ(uₕ)</code> is the tuple over every coordinate and <code class="md-code-inline">Mₕ(uₕ, 2)</code> is the <code class="md-code-inline">y</code> average.</p>
+<p>A direction held in a variable indexes the vectorial operator: <code class="md-code-inline">∇ₕ[2]</code>, <code class="md-code-inline">∇ₕ[:y]</code> and <code class="md-code-inline">D₋ᵧ</code> are the same function, so <code class="md-code-inline">sum(innerₕ(∇ₕ[d](uₕ), ∇ₕ[d](uₕ)) for d in 1:D)</code> reads the same in 1D, 2D and 3D, and <code class="md-code-inline">dx, dy = ∇ₕ</code> destructures it. Indexing and destructuring work for <code class="md-code-inline">∇ₕ</code>, <code class="md-code-inline">∇₊ₕ</code>, <code class="md-code-inline">∇̃ₕ</code>, <code class="md-code-inline">∇cₕ</code>, <code class="md-code-inline">∇̽ₕ</code>, <code class="md-code-inline">jumpₕ</code>, <code class="md-code-inline">Mₕ</code>, <code class="md-code-inline">M₊ₕ</code>, <code class="md-code-inline">Mcₕ</code>, <code class="md-code-inline">S₊ₕ</code> and <code class="md-code-inline">S₋ₕ</code>. With <code class="md-code-inline">⋅</code> and <code class="md-code-inline">×</code> from <code class="md-code-inline">LinearAlgebra</code>, the five gradients <code class="md-code-inline">∇ₕ</code>, <code class="md-code-inline">∇₊ₕ</code>, <code class="md-code-inline">∇̃ₕ</code>, <code class="md-code-inline">∇cₕ</code> and <code class="md-code-inline">∇̽ₕ</code> contract with a vector field to the divergence and the curl of their own family: <code class="md-code-inline">∇ₕ ⋅ uₕ</code> is <code class="md-code-inline">divₕ(uₕ)</code> and <code class="md-code-inline">∇ₕ × uₕ</code> is <code class="md-code-inline">curlₕ(uₕ)</code>. Inside a form only <code class="md-code-inline">∇ₕ</code>, <code class="md-code-inline">∇cₕ</code> and <code class="md-code-inline">∇̽ₕ</code> contract.</p>
 <p>The same stems carry the symbolic form: <code class="md-code-inline">D₋(uₕ, Val(1))</code> differences a grid function now, <code class="md-code-inline">D₋(U, Val(1))</code> builds the AST node that will difference it during assembly. Inside a form the direction must be a <code class="md-code-inline">Val</code>, since it is a type parameter of the node.</p>
-<p>Three families are not exported and are written <code class="md-code-inline">Bramble.D₊ₓ</code> or imported by name: the unscaled differences <code class="md-code-inline">diff₋*</code>/<code class="md-code-inline">diff₊*</code>, the forward differences <code class="md-code-inline">D₊*</code>/<code class="md-code-inline">∇₊ₕ</code>, and the forward averages <code class="md-code-inline">M₊*</code>. Forms are written with the backward operator paired with <a href="../../api/inner_products/#Bramble.inner₊"><code class="md-code-inline">inner₊</code></a>; the forward ones are what it is built and checked against.</p>
-<p>The unscaled differences are the plain, undivided differences the others are built from. They are not declared <code class="md-code-inline">public</code> and have no form-layer node, so they cannot appear inside a form; there the undivided forward difference is <a href="../../api/operators/#Bramble.jumpₓ"><code class="md-code-inline">jumpₓ</code></a>. <code class="md-code-inline">diff₋*</code>/<code class="md-code-inline">diff₊*</code> are private; see the <a href="../../internals/form/">forms internals page</a>.</p>
+<h2 id="operators_names" class="md-heading">How the names are built<a href="#operators_names" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A name is a stem, a direction, and a coordinate:</p>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:left">Piece</th>
+<th style="text-align:left">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">D</code></td>
+<td style="text-align:left">finite difference</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">jump</code></td>
+<td style="text-align:left">jump</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">M</code></td>
+<td style="text-align:left">average</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">S</code></td>
+<td style="text-align:left">index shift</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">₋</code></td>
+<td style="text-align:left">backward: the stencil reaches to <span class="md-math md-math-inline">\(i-1\)</span></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">₊</code></td>
+<td style="text-align:left">forward: the stencil reaches to <span class="md-math md-math-inline">\(i+1\)</span></td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">ₓ</code>, <code class="md-code-inline">ᵧ</code>, <code class="md-code-inline">₂</code></td>
+<td style="text-align:left">along the first, second or third coordinate</td>
+</tr>
+<tr>
+<td style="text-align:left"><code class="md-code-inline">ₕ</code></td>
+<td style="text-align:left">every coordinate at once, returning a tuple</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>So <code class="md-code-inline">D₋ₓ</code> is the backward finite difference along <span class="md-math md-math-inline">\(x\)</span>, <code class="md-code-inline">M₊ᵧ</code> the forward average along <span class="md-math md-math-inline">\(y\)</span>, and <code class="md-code-inline">∇ₕ</code> the backward finite difference in every coordinate, the discrete gradient, which has that extra name. <code class="md-code-inline">jump</code> has no <code class="md-code-inline">₋</code>/<code class="md-code-inline">₊</code>: it is <code class="md-code-inline">jumpₓ</code>, <code class="md-code-inline">jumpᵧ</code>, <code class="md-code-inline">jump₂</code> and <code class="md-code-inline">jumpₕ</code>. The index shift has a forward and a backward stem: <code class="md-code-inline">S₊ₓ</code> reads the next point along <span class="md-math md-math-inline">\(x\)</span>, <code class="md-code-inline">S₋ₓ</code> the previous one, and <code class="md-code-inline">S₊ₕ</code>/<code class="md-code-inline">S₋ₕ</code> shift along every coordinate.</p>
+<p>The forward difference and the forward average are not exported (see below); the examples import them by name.</p>
+<h2 id="operators_direction_argument" class="md-heading">The direction as an argument<a href="#operators_direction_argument" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The direction can come from a variable: index the vectorial operator with it. <code class="md-code-inline">∇ₕ[d]</code> is the coordinate operator itself, so <code class="md-code-inline">∇ₕ[1]</code>, <code class="md-code-inline">∇ₕ[:x]</code> and <code class="md-code-inline">D₋ₓ</code> are the same function object. This allows a loop over directions. The discrete <span class="md-math md-math-inline">\(H^1\)</span> seminorm squared, in any dimension, with the <code class="md-code-inline">inner₊</code> weights of the backward gradient, next to <code class="md-code-inline">snorm₁ₕ</code>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">sum(inner₊(∇ₕ[d](vₕ), ∇ₕ[d](vₕ), d) for d in 1:dim(mesh(space(vₕ)))), snorm₁ₕ(vₕ)^2</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(5.0, 5.000000000000001)</code></pre>
+</div>
+<p>Every family also has a stem that takes the direction as a second argument, and the coordinate suffix is spelling it. An <code class="md-code-inline">Int</code>, a <code class="md-code-inline">Symbol</code> and a <code class="md-code-inline">Val</code> give the same operator:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Bramble.D₋(vₕ, 2) == Bramble.D₋(vₕ, :y) == Bramble.D₋(vₕ, Val(2)) == D₋ᵧ(vₕ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
+</div>
+<p>The averages are <code class="md-code-inline">Mₕ</code>/<code class="md-code-inline">M₊ₕ</code>, with no bare <code class="md-code-inline">M</code>, which is the usual name of a mass matrix. The <code class="md-code-inline">Val</code> form is the one to use when the direction must be a compile-time constant, as it must inside a form. <code class="md-code-inline">Mₕ(uₕ)</code> is the tuple over every coordinate and <code class="md-code-inline">Mₕ(uₕ, 2)</code> the average along <span class="md-math md-math-inline">\(y\)</span>, and <code class="md-code-inline">∇̽ₕ</code> works the same way:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">∇̽ₕ(vₕ) == (∇̽ₕ(vₕ, 1), ∇̽ₕ(vₕ, 2)), Mₕ(vₕ) == (Mₕ(vₕ, :x), Mₕ(vₕ, :y))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
+</div>
+<p>An <code class="md-code-inline">Int</code> or a <code class="md-code-inline">Symbol</code> selects between literal <code class="md-code-inline">Val</code>s, one branch per direction the mesh has. An out-of-range direction throws an <code class="md-code-inline">ArgumentError</code>, and the bound is the mesh&#39;s own dimension: <code class="md-code-inline">Bramble.D₋(uₕ, :y)</code> on a one-dimensional grid is an error. <code class="md-code-inline">∇ₕ(uₕ)</code> returns a tuple and <code class="md-code-inline">Bramble.D₋(uₕ, d)</code> a grid function.</p>
+<h3 id="Destructuring" class="md-heading">Destructuring<a href="#Destructuring" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>A vectorial operator is a tuple-like object of the per-coordinate operators, so it can be destructured or indexed before it is applied. Here <code class="md-code-inline">dx</code> is exactly <code class="md-code-inline">D₋ₓ</code>, reached without importing that name:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">dx, dy = ∇ₕ
+
+parent(dx(vₕ)) == parent(∇ₕ(vₕ)[1]), parent(∇ₕ[:x](vₕ)) == parent(∇ₕ(vₕ)[1])</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
+</div>
+<p>The <a href="../../api/operators/">operator reference</a> lists which operators accept <code class="md-code-inline">[d]</code>, destructuring and <code class="md-code-inline">⋅</code>/<code class="md-code-inline">×</code>.</p>
+<h2 id="Operators" class="md-heading">Operators<a href="#Operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The vectorial operators are exported: <code class="md-code-inline">∇ₕ</code>, <code class="md-code-inline">∇̃ₕ</code>, <code class="md-code-inline">∇cₕ</code>, <code class="md-code-inline">∇̽ₕ</code>, <code class="md-code-inline">jumpₕ</code>, <code class="md-code-inline">Mₕ</code>, <code class="md-code-inline">Mcₕ</code>, <code class="md-code-inline">S₊ₕ</code>, <code class="md-code-inline">S₋ₕ</code>, and the divergence, curl, Laplacian and strain operators of the backward, tilde, centred and cross-weighted families. The per-coordinate aliases (<code class="md-code-inline">D₋ₓ</code>, <code class="md-code-inline">jumpₓ</code>, <code class="md-code-inline">Mₓ</code>, ...), the stems <code class="md-code-inline">D₋</code>, <code class="md-code-inline">D₊</code>, <code class="md-code-inline">Dc</code>, <code class="md-code-inline">D̃</code> and <code class="md-code-inline">jump</code>, the in-place <code class="md-code-inline">!</code> forms and the forward operators (<code class="md-code-inline">D₊*</code>, <code class="md-code-inline">∇₊ₕ</code>, <code class="md-code-inline">div₊ₕ</code>, <code class="md-code-inline">M₊*</code>, ...) are <code class="md-code-inline">public</code> and not exported: write <code class="md-code-inline">Bramble.D₊ₓ</code> or import by name. Forms are written with the backward operator paired with <a href="../../api/inner_products/#Bramble.inner₊"><code class="md-code-inline">inner₊</code></a>; the forward ones are what it is built and checked against.</p>
+<p>The unscaled differences <code class="md-code-inline">diff₋*</code>/<code class="md-code-inline">diff₊*</code> are the plain, undivided differences the others are built from. They are private and have no form-layer node, so they cannot appear inside a form; there the undivided forward difference is <a href="../../api/operators/#Bramble.jumpₓ"><code class="md-code-inline">jumpₓ</code></a>. They are documented on the <a href="../../internals/space/">space internals page</a>.</p>
 <div class="md-docstring" id="Bramble.D₋ₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.D₋ₓ</code></h4>
@@ -953,7 +1044,7 @@
 <p>The symbolic cross-weighted centered difference of <code class="md-code-inline">op</code> along every coordinate, as a <code class="md-code-inline">D</code>-tuple of nodes. In one dimension there is one direction, so the node itself is returned rather than a one-element tuple.</p>
 </div>
 </div>
-<p>The vector calculus operators built on those differences: the divergence and the curl of a vector field, and the conservative discrete Laplacian of a grid function. The unsubscripted spellings use the backward differences, as <a href="../../api/operators/#Bramble.∇ₕ"><code class="md-code-inline">∇ₕ</code></a> does; <code class="md-code-inline">div₊ₕ</code> and <code class="md-code-inline">curl₊ₕ</code> are their forward twins. <a href="../../api/operators/#Bramble.εₕ"><code class="md-code-inline">εₕ</code></a>/<a href="../../api/operators/#Bramble.εₕ!"><code class="md-code-inline">εₕ!</code></a> are the discrete symmetric small-strain tensor, over a composite <code class="md-code-inline">VectorElement</code> at runtime or, inside a <a href="../../api/forms/#Bramble.form"><code class="md-code-inline">form</code></a>, over a composite trial or test function – the same name spans both, dispatching on what it is given. So does <a href="../../api/operators/#Bramble.divₕ"><code class="md-code-inline">divₕ</code></a>: inside a form it is the runtime divergence, term by term. The staggered divergence <a href="../../api/operators/#Bramble.divₘₕ"><code class="md-code-inline">divₘₕ</code></a> exists only inside a form. The in-place <code class="md-code-inline">!</code> forms write into a preallocated result and are <code class="md-code-inline">public</code> but not exported, as are <code class="md-code-inline">D̃ₕ</code>, <code class="md-code-inline">Dcₕ</code> and <code class="md-code-inline">D̽ₕ</code>, which are the same functions as the exported <code class="md-code-inline">∇̃ₕ</code>, <code class="md-code-inline">∇cₕ</code> and <code class="md-code-inline">∇̽ₕ</code>.</p>
+<p>The vector calculus operators built on those differences: the divergence and the curl of a vector field, and the conservative discrete Laplacian of a grid function. The unsubscripted spellings use the backward differences, as <a href="../../api/operators/#Bramble.∇ₕ"><code class="md-code-inline">∇ₕ</code></a> does; <code class="md-code-inline">div₊ₕ</code> and <code class="md-code-inline">curl₊ₕ</code> are their forward twins. <a href="../../api/operators/#Bramble.εₕ"><code class="md-code-inline">εₕ</code></a>/<a href="../../api/operators/#Bramble.εₕ!"><code class="md-code-inline">εₕ!</code></a> are the discrete symmetric small-strain tensor, over a composite <code class="md-code-inline">VectorElement</code> at runtime or, inside a <a href="../../api/forms/#Bramble.form"><code class="md-code-inline">form</code></a>, over a composite trial or test function; the same name spans both. So does <a href="../../api/operators/#Bramble.divₕ"><code class="md-code-inline">divₕ</code></a>: inside a form it is the runtime divergence, term by term. The staggered divergence <a href="../../api/operators/#Bramble.divₘₕ"><code class="md-code-inline">divₘₕ</code></a> exists only inside a form. The in-place <code class="md-code-inline">!</code> forms write into a preallocated result. <code class="md-code-inline">D̃ₕ</code>, <code class="md-code-inline">Dcₕ</code> and <code class="md-code-inline">D̽ₕ</code> are <code class="md-code-inline">public</code> and are the same functions as the exported <code class="md-code-inline">∇̃ₕ</code>, <code class="md-code-inline">∇cₕ</code> and <code class="md-code-inline">∇̽ₕ</code>.</p>
 <div class="md-docstring" id="Bramble.divₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.divₕ</code></h4>
@@ -1831,7 +1922,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <p>See also: <a href="../../api/operators/#Bramble.εₕ"><code class="md-code-inline">εₕ</code></a>, <a href="../../api/operators/#Bramble.∇₊ₕ"><code class="md-code-inline">∇₊ₕ</code></a>, <a href="../../api/operators/#Bramble.div₊ₕ"><code class="md-code-inline">div₊ₕ</code></a></p>
 </div>
 </div>
-<p>Jumps across an interface, <span class="md-math md-math-inline">\(\llbracket u \rrbracket = u_{i+1} - u_i\)</span>. There is one of these rather than a forward and a backward pair: a jump belongs to the interface between two cells, not to a direction of travel across it.</p>
+<p>Jumps across an interface, <span class="md-math md-math-inline">\(\llbracket u \rrbracket = u_{i+1} - u_i\)</span>. There is no forward and backward pair.</p>
 <div class="md-docstring" id="Bramble.jumpₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jumpₓ</code></h4>
@@ -2009,7 +2100,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L582-L594" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L606" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2032,7 +2123,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L582-L598" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L610" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2048,7 +2139,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L582-L594" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L606" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2071,7 +2162,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L582-L598" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L610" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2087,7 +2178,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L582-L594" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L606" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2110,7 +2201,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L582-L598" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L610" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2126,7 +2217,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L582-L602" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L614" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2167,7 +2258,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mcₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mcₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L606" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L606-L618" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2190,7 +2281,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mcₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mcₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L610" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L606-L622" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2206,7 +2297,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mcᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mcᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L606" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L606-L618" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2229,7 +2320,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mcᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mcᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L610" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L606-L622" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2245,7 +2336,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mc₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mc₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L606" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L606-L618" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2268,7 +2359,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mc₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mc₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L610" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L606-L622" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2284,7 +2375,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.Mcₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Mcₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L594-L614" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L606-L626" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2325,7 +2416,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊ₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊ₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L572-L584" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L584-L596" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2348,7 +2439,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊ₓ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊ₓ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L572-L588" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L584-L600" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2364,7 +2455,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊ᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊ᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L572-L584" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L584-L596" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2387,7 +2478,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊ᵧ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊ᵧ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L572-L588" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L584-L600" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2403,7 +2494,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L572-L584" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L584-L596" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2426,7 +2517,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊₂!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊₂!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L572-L588" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L584-L600" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2442,7 +2533,7 @@ curl̃ₕ!(vₕ, uₕ) -&gt; vₕ</code></pre>
 <div class="md-docstring" id="Bramble.M₊ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.M₊ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L572-L592" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/average.jl#L584-L604" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2915,6 +3006,10 @@ b = form(Wₕ, Wₕ, (u, v) -&gt; inner_Γ(jumpₙ(Δₕ(u)), v; markers = :boun
     <aside class="md-toc">
       <div class="md-toc-inner">
         <p class="md-toc-title">On this page</p>
+          <a class="md-toc-link md-toc-h2" href="#operators_names">How the names are built</a>
+          <a class="md-toc-link md-toc-h2" href="#operators_direction_argument">The direction as an argument</a>
+            <a class="md-toc-link md-toc-h3" href="#Destructuring">Destructuring</a>
+          <a class="md-toc-link md-toc-h2" href="#Operators">Operators</a>
           <a class="md-toc-link md-toc-h2" href="#Facet-operators">Facet operators</a>
       </div>
     </aside>
@@ -2933,6 +3028,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=941cc626"></script>
+  <script src="../../assets/materialdocs.js?v=f632463d"></script>
 </body>
 </html>

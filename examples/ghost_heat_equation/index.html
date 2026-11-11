@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Heat equation with time-dependent Neumann and Robin data — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=825d3fc7">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=9bb51bcb">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Heat equation with time-dependent Neumann and Robin data — Bramble.jl">
   <meta property="og:title" content="Heat equation with time-dependent Neumann and Robin data — Bramble.jl">
@@ -42,67 +42,71 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/" class="md-nav-active">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/ghost_heat_equation.jl#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Heat-equation-with-time-dependent-Neumann-and-Robin-data" class="md-heading">Heat equation with time-dependent Neumann and Robin data<a href="#Heat-equation-with-time-dependent-Neumann-and-Robin-data" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<p>The heat equation on a non-uniform grid with a flux prescribed on two sides of the square and a Robin condition on the other two, both with data that change in time. Space goes through the ghost layer (<code class="md-code-inline">gridspace</code> with ghosts, <code class="md-code-inline">constrained</code>), time through the method of lines (<a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>, <a href="../../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a>, <code class="md-code-inline">FBDF</code>), and the error at the final time is checked for second order in space. Every number and every plot below was produced by the code shown.</p>
+<p>The heat equation on a non-uniform grid with a flux prescribed on two sides of the square and a Robin condition on the other two, both with data that change in time. Space goes through the ghost layer (<code class="md-code-inline">gridspace</code> with ghosts, <code class="md-code-inline">constrained</code>), time through the method of lines (<a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a>, <a href="../../api_sciml/#Bramble.ode_problem"><code class="md-code-inline">ode_problem</code></a>, <code class="md-code-inline">FBDF</code>), and the error at the final time is checked for second order in space.</p>
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-math md-math-display">
 \[\partial_t u = \Delta u \text{ in } \Omega \times (0, T], \qquad \Omega = (0,1)^2,\]
@@ -126,7 +130,7 @@ sol(p, t) = exp(-3t) * exp(p[1]) * cos(2p[2])
 <pre class="md-output md-output-text"><code class="nohighlight ansi">∇sol (generic function with 1 method)</code></pre>
 </div>
 <h2 id="Boundary-relations-with-data-in-time" class="md-heading">Boundary relations with data in time<a href="#Boundary-relations-with-data-in-time" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">constrained</code> takes a function of the trial function <code class="md-code-inline">u</code> and returns one <code class="md-code-inline">side =&gt; relation =&gt; data</code> entry per side, exactly as in the <a href="../../examples/neumann_robin_poisson/">Neumann and Robin Poisson example</a>. The one change is that the data may now take the time as a second argument, <code class="md-code-inline">(x, t) -&gt; ...</code>; <code class="md-code-inline">semidiscretize</code> finds that by the arity and refreshes the boundary values at every step. A side with <span class="md-math md-math-inline">\(\alpha = 0\)</span> carries the bare flux <code class="md-code-inline">∂ₙ(u)</code>:</p>
+<p><code class="md-code-inline">constrained</code> takes a function of the trial function <code class="md-code-inline">u</code> and returns one <code class="md-code-inline">side =&gt; relation =&gt; data</code> entry per side, as in the <a href="../../examples/neumann_robin_poisson/">Neumann and Robin Poisson example</a>, and the data may also take the time as a second argument, <code class="md-code-inline">(x, t) -&gt; ...</code>. <code class="md-code-inline">semidiscretize</code> tells the two forms apart by the arity and refreshes the boundary values at every step. A side with <span class="md-math md-math-inline">\(\alpha = 0\)</span> carries the bare flux <code class="md-code-inline">∂ₙ(u)</code>:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -152,7 +156,7 @@ end</code></pre>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">function solve_case(Ωₕ; T = 0.5)
+<pre><code class="language-julia">function solve_case(Ωₕ; T = 0.5, saveat = T)
     Cₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
         u -&gt; ntuple(j -&gt; side_relation(u, j), 4))
     a = form(Cₕ, Cₕ, (u, v) -&gt; innerₕ(-1.0 * Δₕ(u), v))
@@ -160,16 +164,232 @@ end</code></pre>
 
     Wₕ = gridspace(Ωₕ)
     prob = ode_problem(a, l, copy(parent(Rₕ(Wₕ, x -&gt; sol(x, 0.0)))), (0.0, T))
-    sl = solve(prob, FBDF(); reltol = 1e-10, abstol = 1e-12)
+    sl = solve(prob, FBDF(); reltol = 1e-10, abstol = 1e-12, saveat)
 
     uₕ = element(Wₕ)
     parent(uₕ) .= sl.u[end]
-    return uₕ, Rₕ(Wₕ, x -&gt; sol(x, T))
+    return uₕ, Rₕ(Wₕ, x -&gt; sol(x, T)), sl
 end</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">solve_case (generic function with 1 method)</code></pre>
 </div>
-<p>The grid is a random non-uniform one refined in place by <a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a>, so each level is the same random mesh split dyadically, not a fresh draw:</p>
+<p>The solution in time on the coarsest grid of the page, the random 9 by 9 one, saved at 20 times. Both axes of the grid are drawn on the surface:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Random.seed!(20261016)
+Ω₀ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (false, false))
+_, _, sl₀ = solve_case(Ω₀; saveat = range(0.0, 0.5; length = 20))
+us = map(sl₀.u) do v
+    uₕ = element(gridspace(Ω₀))
+    parent(uₕ) .= v
+    return uₕ
+end</code></pre>
+</div>
+<div class="md-output md-output-html">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script>
+  // Colour tokens read from the page's own theme, not hard-coded — MaterialDocs sets
+  // `data-theme="light"|"dark"` on <html>; when the attribute is absent the browser's
+  // `prefers-color-scheme` decides. Recomputed on every call so a caller can re-theme
+  // after a toggle.
+  window.bramblePlotlyTheme = function () {
+    const attr = document.documentElement.getAttribute('data-theme');
+    const dark = attr
+      ? attr === 'dark'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return dark
+      ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
+      : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
+  };
+
+  // Every plot this page creates registers itself (div id + the function that
+  // reapplies theme-dependent layout colours) so one observer can repaint all of them
+  // together when the theme toggles, instead of each plot wiring its own observer.
+  window.__bramble_plotly_charts = window.__bramble_plotly_charts || [];
+  window.brambleRegisterPlotlyChart = function (divId, restyle) {
+    window.__bramble_plotly_charts.push({ divId, restyle });
+  };
+
+  if (!window.__bramble_plotly_theme_observer) {
+    const repaint = function () {
+      for (const { divId, restyle } of window.__bramble_plotly_charts) {
+        const layout = restyle();
+        Plotly.relayout(divId, layout);
+      }
+    };
+    window.__bramble_plotly_theme_observer = new MutationObserver(repaint);
+    window.__bramble_plotly_theme_observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    // With no saved theme MaterialDocs follows the system scheme in CSS alone and
+    // leaves `data-theme` unset, so a system change must repaint too.
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      if (!document.documentElement.hasAttribute('data-theme')) repaint();
+    });
+  }
+
+  // The layout-race fix (see the module note above): once per page, after everything
+  // (fonts included) has truly finished loading, force every plot created so far to
+  // resize against its now-final container.
+  if (!window.__bramble_plotly_load_fix_installed) {
+    window.__bramble_plotly_load_fix_installed = true;
+    const rescue = function () {
+      for (const { divId } of window.__bramble_plotly_charts) {
+        Plotly.Plots.resize(document.getElementById(divId));
+      }
+    };
+    const loaded = document.readyState === 'complete' ? Promise.resolve() :
+      new Promise((r) => window.addEventListener('load', r, { once: true }));
+    Promise.all([loaded, document.fonts.ready]).then(rescue);
+  }
+</script>
+
+<div id="bramble_sp_1" data-frames="20" data-mesh-lines="18" style="width:100%; max-width:480px; height:420px; margin: 1em 0;"></div>
+<script>
+(function () {
+  const theme = window.bramblePlotlyTheme();
+  function meshLines(xs, ys, Z, lift) {
+  const x = [], y = [], z = [];
+  const point = (i, j) => {
+    x.push(xs[i]); y.push(ys[j]);
+    z.push(Number.isFinite(Z[j][i]) ? Z[j][i] + lift : null);
+  };
+  for (let i = 0; i < xs.length; i++) {
+    for (let j = 0; j < ys.length; j++) point(i, j);
+    x.push(null); y.push(null); z.push(null);
+  }
+  for (let j = 0; j < ys.length; j++) {
+    for (let i = 0; i < xs.length; i++) point(i, j);
+    x.push(null); y.push(null); z.push(null);
+  }
+  return { x, y, z };
+}
+
+  const withLines = true;
+  const xs = [0.0,0.0685576,0.151349,0.430066,0.502104,0.562389,0.868489,0.903132,1.0], ys = [0.0,0.13073,0.244441,0.47002,0.587603,0.642733,0.657146,0.808404,1.0], ts = [0.0,0.0263158,0.0526316,0.0789474,0.105263,0.131579,0.157895,0.184211,0.210526,0.236842,0.263158,0.289474,0.315789,0.342105,0.368421,0.394737,0.421053,0.447368,0.473684,0.5];
+  const zFrames = [[[1.0,1.07096,1.1634,1.53736,1.65219,1.75486,2.38331,2.46732,2.71828],[0.966013,1.03456,1.12386,1.48511,1.59604,1.69522,2.30231,2.38346,2.6259],[0.882858,0.945508,1.02712,1.35727,1.45865,1.54929,2.10412,2.17829,2.39986],[0.589755,0.631605,0.686122,0.906665,0.974389,1.03494,1.40557,1.45511,1.60312],[0.385354,0.412699,0.448321,0.592427,0.636679,0.676242,0.918416,0.950791,1.0475],[0.281474,0.301448,0.327467,0.432726,0.465049,0.493947,0.670838,0.694486,0.765125],[0.253701,0.271704,0.295156,0.39003,0.419163,0.44521,0.604647,0.625962,0.689631],[-0.0459956,-0.0492595,-0.0535113,-0.0707117,-0.0759936,-0.0807158,-0.109622,-0.113486,-0.125029],[-0.416147,-0.445678,-0.484146,-0.639767,-0.687555,-0.730279,-0.991805,-1.02677,-1.1312]],
+[[0.925403,0.99116,1.07693,1.42153,1.52852,1.62419,2.20236,2.28031,2.51226],[0.894367,0.957944,1.04087,1.37375,1.47722,1.56974,2.1281,2.20341,2.4275],[0.818195,0.876391,0.952267,1.25677,1.35145,1.43611,1.9468,2.01568,2.2206],[0.543495,0.582001,0.632296,0.83443,0.897294,0.953507,1.29268,1.33853,1.47509],[0.355717,0.380951,0.413891,0.546207,0.587358,0.624153,0.846146,0.876132,0.965419],[0.260772,0.279309,0.303475,0.400491,0.430666,0.457646,0.620394,0.64236,0.707716],[0.23542,0.252166,0.273988,0.361575,0.388818,0.413177,0.560104,0.57993,0.638907],[-0.0425744,-0.0456115,-0.0495788,-0.0654895,-0.070411,-0.0748123,-0.101463,-0.105034,-0.115653],[-0.39049,-0.418513,-0.454908,-0.60069,-0.645852,-0.686236,-0.930557,-0.963272,-1.06033]],
+[[0.856131,0.917019,0.996393,1.31493,1.4138,1.50219,2.03588,2.10788,2.32218],[0.827574,0.886462,0.963212,1.27092,1.36653,1.452,1.96724,2.0368,2.24384],[0.757025,0.810918,0.881132,1.16253,1.24999,1.32817,1.79928,1.86289,2.0522],[0.502198,0.537767,0.584202,0.770644,0.828624,0.880457,1.19294,1.23526,1.3614],[0.328326,0.351586,0.381938,0.503786,0.541688,0.575572,0.779867,0.807536,0.889994],[0.240405,0.257453,0.279674,0.368857,0.396607,0.421417,0.571006,0.591265,0.651612],[0.216926,0.232311,0.252359,0.332815,0.357853,0.380239,0.515217,0.533499,0.587951],[-0.0406249,-0.0436064,-0.0474813,-0.0628707,-0.0676017,-0.0718237,-0.0972412,-0.100579,-0.110438],[-0.36301,-0.389198,-0.42317,-0.558929,-0.600936,-0.63848,-0.865288,-0.895568,-0.985318]],
+[[0.79168,0.848013,0.921423,1.21581,1.30714,1.38878,1.88163,1.94815,2.14617],[0.765346,0.819837,0.890826,1.17518,1.26349,1.34242,1.81814,1.8824,2.0737],[0.700044,0.749905,0.814835,1.07481,1.15558,1.22776,1.66263,1.72139,1.8963],[0.463964,0.496812,0.539679,0.711672,0.765143,0.812942,1.10113,1.14021,1.25674],[0.302924,0.324348,0.3523,0.46447,0.499363,0.530561,0.718748,0.744288,0.820451],[0.221504,0.237166,0.257579,0.339502,0.365003,0.387808,0.525429,0.544121,0.599852],[0.199763,0.213883,0.232281,0.306125,0.329117,0.34968,0.473795,0.49066,0.540943],[-0.0386741,-0.0415855,-0.0453572,-0.060242,-0.0647862,-0.0688299,-0.0929703,-0.096085,-0.105234],[-0.336878,-0.361272,-0.392899,-0.519128,-0.558139,-0.592991,-0.803272,-0.831286,-0.914262]],
+[[0.731849,0.783938,0.8518,1.12381,1.20817,1.28359,1.73882,1.80028,1.98325],[0.707529,0.757917,0.823541,1.08626,1.16782,1.24072,1.68007,1.73944,1.9162],[0.647097,0.693194,0.753204,0.993341,1.06792,1.13457,1.53612,1.5904,1.75202],[0.428507,0.458825,0.498382,0.657025,0.706345,0.750437,1.01635,1.05244,1.1601],[0.279422,0.299148,0.324881,0.428135,0.460267,0.489003,0.662461,0.686041,0.756398],[0.204061,0.218445,0.237193,0.312448,0.335892,0.356866,0.483579,0.50083,0.552304],[0.183939,0.196894,0.213776,0.281552,0.302676,0.321576,0.435804,0.451367,0.497806],[-0.0366914,-0.0395136,-0.0431619,-0.0574922,-0.0618354,-0.0656887,-0.0885001,-0.091402,-0.0998848],[-0.312422,-0.335118,-0.364531,-0.481816,-0.518021,-0.550352,-0.745195,-0.771108,-0.847815]],
+[[0.676383,0.724527,0.787241,1.03854,1.11648,1.18614,1.60667,1.66345,1.83253],[0.653897,0.700468,0.761109,1.00379,1.07913,1.14646,1.55228,1.60713,1.77046],[0.597975,0.64057,0.69601,0.917784,0.986653,1.0482,1.41905,1.4692,1.61854],[0.395659,0.423628,0.460118,0.606437,0.651935,0.692615,0.93804,0.97138,1.07085],[0.257698,0.275853,0.299539,0.394591,0.42419,0.450668,0.610619,0.632394,0.69739],[0.18797,0.201178,0.218396,0.287539,0.309102,0.328401,0.445141,0.461066,0.508612],[0.169354,0.181239,0.196729,0.258951,0.278368,0.29575,0.400949,0.415314,0.458207],[-0.0347305,-0.0374525,-0.0409643,-0.0546989,-0.0588314,-0.0624871,-0.0839593,-0.0866591,-0.0945202],[-0.289638,-0.31074,-0.338077,-0.446995,-0.480579,-0.510556,-0.691018,-0.714983,-0.78589]],
+[[0.625014,0.669498,0.72744,0.959585,1.03158,1.09593,1.48443,1.5369,1.69313],[0.604205,0.647231,0.703251,0.927406,0.99699,1.05918,1.43405,1.48473,1.63565],[0.552459,0.591801,0.643004,0.847795,0.911393,0.968232,1.31076,1.3571,1.49509],[0.365255,0.391049,0.424701,0.559649,0.601626,0.639163,0.865722,0.89652,0.988426],[0.237625,0.254331,0.27613,0.363639,0.390911,0.415315,0.562857,0.582966,0.643014],[0.173128,0.185254,0.201066,0.264605,0.284446,0.302212,0.40981,0.424513,0.468434],[0.15591,0.16681,0.181023,0.238161,0.256017,0.27201,0.36894,0.382202,0.421823],[-0.0328261,-0.0354424,-0.0388109,-0.051926,-0.0558438,-0.0593003,-0.0794535,-0.0819629,-0.0892446],[-0.268459,-0.28807,-0.313466,-0.414571,-0.445711,-0.473496,-0.640584,-0.662744,-0.728287]],
+[[0.577471,0.618564,0.672088,0.886521,0.953024,1.01247,1.37139,1.41987,1.56424],[0.558201,0.597941,0.649682,0.856702,0.920973,0.978416,1.32471,1.37154,1.511],[0.51032,0.546647,0.593926,0.783018,0.841748,0.894241,1.21063,1.25344,1.38095],[0.337134,0.360915,0.391944,0.516402,0.555133,0.589774,0.798944,0.827395,0.912314],[0.219087,0.234456,0.254515,0.335086,0.360219,0.382715,0.518842,0.537414,0.592891],[0.15944,0.170569,0.185089,0.243489,0.261751,0.27811,0.377314,0.390891,0.431465],[0.143517,0.153513,0.166553,0.219032,0.235459,0.250179,0.339522,0.351766,0.388367],[-0.0309966,-0.0335052,-0.036728,-0.0492147,-0.052919,-0.0561785,-0.0750533,-0.0773839,-0.0841269],[-0.248796,-0.267017,-0.290604,-0.384425,-0.41329,-0.439034,-0.593701,-0.614191,-0.674773]],
+[[0.533492,0.571446,0.620882,0.818942,0.880375,0.935291,1.26689,1.31168,1.44509],[0.515639,0.552336,0.600115,0.791298,0.850661,0.903719,1.22363,1.2669,1.39577],[0.471335,0.50487,0.548517,0.723101,0.777337,0.825815,1.11807,1.15763,1.27545],[0.311139,0.33306,0.361666,0.476447,0.512185,0.544155,0.737287,0.763571,0.842035],[0.201971,0.216107,0.234563,0.308751,0.331915,0.352656,0.47827,0.495424,0.54668],[0.146816,0.15703,0.170362,0.224046,0.240857,0.255925,0.34741,0.359947,0.397431],[0.132094,0.141258,0.153222,0.20143,0.216544,0.230098,0.312468,0.323774,0.357586],[-0.0292506,-0.0316517,-0.0347292,-0.0465908,-0.0500858,-0.0531536,-0.0708032,-0.0729664,-0.0792091],[-0.230557,-0.247483,-0.269385,-0.356425,-0.383174,-0.407022,-0.550165,-0.56911,-0.625105]],
+[[0.492826,0.527876,0.573531,0.75646,0.813207,0.863937,1.17029,1.21169,1.33496],[0.476279,0.51016,0.554276,0.730823,0.785651,0.834659,1.1302,1.17018,1.28926],[0.435284,0.466236,0.506525,0.667705,0.71779,0.762562,1.03253,1.06908,1.17795],[0.287119,0.307321,0.33369,0.439544,0.472522,0.502028,0.680363,0.704646,0.777146],[0.186173,0.199172,0.216151,0.284464,0.305815,0.324941,0.440867,0.456712,0.504068],[0.135178,0.144548,0.156788,0.20614,0.221619,0.235499,0.319881,0.331459,0.366089],[0.121566,0.129966,0.14094,0.185229,0.199139,0.21162,0.287577,0.298017,0.329253],[-0.027591,-0.0298862,-0.0328206,-0.0440692,-0.0473616,-0.0502446,-0.0667292,-0.0687363,-0.0745148],[-0.213647,-0.229368,-0.249703,-0.330436,-0.35522,-0.377309,-0.509767,-0.527282,-0.579037]],
+[[0.455234,0.487598,0.529757,0.698705,0.751123,0.797987,1.08103,1.11928,1.23319],[0.439892,0.471169,0.511899,0.674922,0.725561,0.770829,1.04386,1.0808,1.19084],[0.401959,0.430523,0.467707,0.616507,0.662757,0.704106,0.953492,0.987261,1.08786],[0.26493,0.283545,0.307849,0.405469,0.435901,0.463134,0.627813,0.650246,0.717236],[0.171594,0.183546,0.199165,0.262068,0.28175,0.299387,0.406381,0.421017,0.464771],[0.124448,0.133044,0.14428,0.189651,0.203904,0.216692,0.294531,0.305224,0.337217],[0.111864,0.119563,0.129628,0.170318,0.183121,0.194615,0.264668,0.274309,0.303166],[-0.0260177,-0.0282094,-0.0310044,-0.0416577,-0.0447557,-0.0474622,-0.0628454,-0.064707,-0.0700552],[-0.197973,-0.212575,-0.231453,-0.306328,-0.329288,-0.349744,-0.472303,-0.488495,-0.53633]],
+[[0.42049,0.450372,0.489301,0.645331,0.69375,0.73704,0.998542,1.03388,1.13915],[0.406262,0.435132,0.472732,0.623263,0.670032,0.711845,0.964083,0.998217,1.0999],[0.371162,0.397519,0.431836,0.569199,0.611909,0.650095,0.880469,0.911671,1.00463],[0.244439,0.261589,0.283988,0.374011,0.402093,0.427229,0.579301,0.600027,0.661926],[0.158144,0.169131,0.183496,0.241417,0.259562,0.275827,0.374582,0.388102,0.428529],[0.114558,0.122441,0.132754,0.174466,0.187591,0.199374,0.271183,0.281059,0.310617],[0.102925,0.109978,0.119208,0.156592,0.168378,0.178964,0.243577,0.252481,0.279141],[-0.0245288,-0.02662,-0.0292798,-0.0393596,-0.0422721,-0.0448108,-0.0591573,-0.0608836,-0.065833],[-0.18345,-0.197012,-0.214537,-0.283972,-0.305241,-0.324183,-0.437573,-0.452543,-0.496754]],
+[[0.388383,0.415971,0.451916,0.596011,0.640736,0.680726,0.922327,0.954984,1.05226],[0.375186,0.401833,0.436541,0.575531,0.618726,0.657347,0.890375,0.921915,1.01587],[0.342707,0.367025,0.398693,0.525494,0.564934,0.6002,0.813012,0.841843,0.927742],[0.225518,0.241317,0.261958,0.344974,0.370887,0.394087,0.534521,0.553669,0.610864],[0.145736,0.155834,0.169046,0.222378,0.239105,0.254105,0.34526,0.357749,0.395101],[0.105443,0.112671,0.122135,0.160482,0.172569,0.183426,0.249677,0.258798,0.286106],[0.094689,0.10115,0.109613,0.143959,0.154807,0.164559,0.224158,0.232381,0.257011],[-0.0231215,-0.0251154,-0.0276448,-0.0371748,-0.0399113,-0.0422912,-0.0556648,-0.0572654,-0.0618454],[-0.169995,-0.182591,-0.198859,-0.263246,-0.282947,-0.300486,-0.405389,-0.419227,-0.460088]],
+[[0.358717,0.384186,0.417373,0.550444,0.591756,0.628697,0.851911,0.882087,0.971972],[0.346474,0.371067,0.403104,0.531435,0.571329,0.607,0.822281,0.851424,0.938247],[0.31642,0.338856,0.368076,0.485125,0.521544,0.554113,0.750702,0.777341,0.856716],[0.20805,0.222603,0.241622,0.318173,0.342086,0.363499,0.493186,0.510877,0.563725],[0.134291,0.143571,0.15572,0.204826,0.220246,0.234079,0.318221,0.329757,0.364268],[0.0970434,0.10367,0.112353,0.147604,0.158736,0.16874,0.229864,0.238289,0.263518],[0.0871024,0.0930194,0.100777,0.13233,0.142316,0.151298,0.206276,0.21387,0.236625],[-0.0217924,-0.0236924,-0.0260965,-0.0351016,-0.0376715,-0.0399017,-0.0523644,-0.0538483,-0.0580863],[-0.157529,-0.169229,-0.184331,-0.244034,-0.262282,-0.278522,-0.375569,-0.388362,-0.426127]],
+[[0.331309,0.354821,0.385461,0.508348,0.546507,0.58063,0.786858,0.814741,0.8978],[0.319949,0.342645,0.372216,0.490701,0.527545,0.560493,0.759378,0.786307,0.866536],[0.292138,0.312836,0.339797,0.44784,0.481469,0.511547,0.693151,0.717764,0.79111],[0.191925,0.205328,0.222852,0.293439,0.315505,0.33527,0.455033,0.471377,0.520209],[0.123735,0.132263,0.143433,0.188645,0.20286,0.215618,0.293286,0.303943,0.335829],[0.0893038,0.0953768,0.103343,0.135746,0.145998,0.155216,0.211611,0.219392,0.242702],[0.0801146,0.0855318,0.0926422,0.121626,0.130819,0.139093,0.189807,0.196821,0.217844],[-0.0205377,-0.0223475,-0.0246313,-0.0331368,-0.0355495,-0.0376387,-0.04925,-0.0506256,-0.0545471],[-0.145982,-0.156849,-0.170869,-0.226229,-0.243131,-0.258166,-0.347944,-0.35977,-0.394674]],
+[[0.305988,0.327692,0.35598,0.46946,0.504706,0.536228,0.726761,0.752526,0.829277],[0.295447,0.316391,0.343684,0.453077,0.487104,0.517535,0.701273,0.726155,0.800292],[0.269711,0.288804,0.31368,0.413406,0.444459,0.472237,0.639996,0.662739,0.730514],[0.177042,0.189385,0.20553,0.270615,0.290976,0.309219,0.419818,0.434918,0.480039],[0.114002,0.121835,0.132105,0.173729,0.186834,0.198599,0.270292,0.280136,0.309598],[0.0821731,0.0877377,0.0950445,0.124828,0.134268,0.142762,0.194795,0.201982,0.223518],[0.073679,0.0786372,0.0851528,0.111775,0.120237,0.127858,0.174641,0.181119,0.200541],[-0.0193539,-0.0210768,-0.0232457,-0.0312766,-0.0335411,-0.0354979,-0.0463144,-0.0475895,-0.051218],[-0.135286,-0.145379,-0.158395,-0.209729,-0.225383,-0.239304,-0.322355,-0.333288,-0.365547]],
+[[0.282597,0.302631,0.328746,0.433539,0.466094,0.495211,0.671244,0.695051,0.765975],[0.272815,0.292142,0.31733,0.418327,0.449752,0.477859,0.647603,0.670594,0.7391],[0.248999,0.26661,0.28956,0.381608,0.410282,0.435935,0.590905,0.611919,0.674546],[0.163305,0.174671,0.189544,0.249554,0.268342,0.285179,0.387315,0.401266,0.442958],[0.105026,0.112222,0.121662,0.15998,0.172061,0.182911,0.249089,0.258182,0.285404],[0.075604,0.0807016,0.0874024,0.114775,0.123468,0.131294,0.179303,0.18594,0.205837],[0.0677524,0.0722893,0.0782586,0.102709,0.110498,0.117517,0.160673,0.166656,0.1846],[-0.0182373,-0.0198769,-0.0219357,-0.0295166,-0.0316417,-0.0334743,-0.0435494,-0.0447314,-0.0480888],[-0.125378,-0.134754,-0.146837,-0.194438,-0.208937,-0.221826,-0.298655,-0.308761,-0.338576]],
+[[0.26099,0.279482,0.303591,0.400358,0.430428,0.457325,0.61996,0.641958,0.707496],[0.25191,0.269744,0.292991,0.386233,0.415254,0.441215,0.59803,0.619273,0.682576],[0.229871,0.246114,0.267288,0.352246,0.378723,0.402412,0.545569,0.564985,0.622855],[0.150627,0.161093,0.174794,0.230121,0.247458,0.262997,0.357317,0.370206,0.40873],[0.0967501,0.103359,0.112035,0.147309,0.158444,0.16845,0.229537,0.237937,0.263088],[0.0695529,0.0742215,0.0803653,0.105519,0.113524,0.120735,0.165029,0.17116,0.189543],[0.0622952,0.0664454,0.071913,0.0943659,0.101535,0.108,0.14781,0.153335,0.169913],[-0.0171842,-0.0187439,-0.0206978,-0.0278524,-0.0298465,-0.0315625,-0.0409466,-0.0420423,-0.0451488],[-0.116199,-0.124909,-0.136128,-0.180268,-0.193698,-0.205632,-0.276704,-0.286046,-0.313602]],
+[[0.24103,0.2581,0.280355,0.369711,0.397485,0.42233,0.572586,0.592913,0.653474],[0.232603,0.249058,0.270512,0.356593,0.383395,0.407372,0.552242,0.571872,0.630367],[0.212207,0.227189,0.246722,0.325135,0.349582,0.371459,0.5037,0.521641,0.575115],[0.138928,0.148563,0.161183,0.212192,0.228188,0.24253,0.329632,0.341539,0.377136],[0.08912,0.0951887,0.103162,0.13563,0.145894,0.155121,0.211508,0.219267,0.242506],[0.0639793,0.068254,0.073886,0.0969989,0.104369,0.111013,0.15188,0.157542,0.174526],[0.0572706,0.061066,0.0660728,0.0866887,0.0932865,0.0992408,0.135964,0.141066,0.156383],[-0.0161912,-0.0176744,-0.0195281,-0.0262794,-0.0281504,-0.0297572,-0.0384976,-0.0395132,-0.0423877],[-0.107697,-0.115789,-0.126206,-0.167138,-0.179577,-0.190627,-0.256374,-0.26501,-0.290478]],
+[[0.222594,0.238349,0.258894,0.341404,0.367057,0.390007,0.528827,0.547609,0.603571],[0.214772,0.229954,0.249752,0.329221,0.353973,0.376118,0.509953,0.52809,0.582143],[0.195895,0.209713,0.227732,0.300102,0.322675,0.342877,0.465036,0.481613,0.531026],[0.128132,0.137002,0.148625,0.19565,0.210409,0.223646,0.304081,0.315082,0.347974],[0.0820857,0.0876576,0.0949844,0.124867,0.134328,0.142836,0.194883,0.202051,0.223523],[0.058846,0.0627591,0.0679208,0.0891555,0.0959413,0.102062,0.139767,0.144996,0.160687],[0.0526448,0.0561147,0.0606984,0.0796249,0.0856967,0.0911803,0.125055,0.129767,0.143917],[-0.015255,-0.016665,-0.0184233,-0.024793,-0.0265484,-0.028053,-0.0361939,-0.0371353,-0.039795],[-0.0998217,-0.107339,-0.117011,-0.15497,-0.166492,-0.176723,-0.237545,-0.245529,-0.269067]]];
+  const lift = 0.03849486212215859;
+
+  const data = [{
+    type: 'surface',
+    x: xs, y: ys, z: zFrames[0],
+    cmin: -1.1312043837568135, cmax: 2.718281828459045,
+    colorscale: 'Viridis',
+    showscale: true,
+    colorbar: { tickfont: { color: theme.text } },
+    contours: { z: { show: false } },
+  }];
+  if (withLines) {
+    data.push({
+      type: 'scatter3d', mode: 'lines',
+      ...meshLines(xs, ys, zFrames[0], lift),
+      line: { color: '#9a9a9a', width: 2 },
+      showlegend: false, hoverinfo: 'skip',
+    });
+  }
+
+  const frames = [];
+  const sliderSteps = [];
+  const tickEvery = Math.max(1, Math.round(ts.length / 6));
+  for (let k = 0; k < ts.length; k++) {
+    const update = [{ z: zFrames[k] }];
+    if (withLines) update.push({ z: meshLines(xs, ys, zFrames[k], lift).z });
+    frames.push({ name: String(k), traces: update.map((_, i) => i), data: update });
+    sliderSteps.push({
+      method: 'animate',
+      label: k % tickEvery === 0 ? String(Number(ts[k].toPrecision(3))) : '',
+      args: [[String(k)], { mode: 'immediate', frame: { duration: 0, redraw: true }, transition: { duration: 0 } }],
+    });
+  }
+
+  const layout = {
+    title: { text: 'Ghost heat equation, n = 9', font: { color: theme.text, size: 14 } },
+    paper_bgcolor: theme.bg,
+    plot_bgcolor: theme.bg,
+    font: { color: theme.text },
+    scene: {
+      camera: {
+        eye: { x: 0, y: 0, z: 2.1 },
+        up: { x: 0, y: 1, z: 0 },
+        projection: { type: 'orthographic' },
+      },
+      xaxis: { title: 'x', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+      yaxis: { title: 'y', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+      zaxis: {
+        title: 'u', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg,
+        range: [-1.1312043837568135, 2.7952715527033623],
+      },
+    },
+    margin: { t: 40, l: 10, r: 10, b: 10 },
+    updatemenus: [{
+      type: 'buttons', direction: 'left', showactive: false,
+      x: 0, y: 0, xanchor: 'left', yanchor: 'top', pad: { t: 30 },
+      font: { color: theme.text, size: 11 }, bgcolor: theme.bg, bordercolor: theme.grid,
+      buttons: [
+        { label: 'Play', method: 'animate',
+          args: [null, { fromcurrent: true, frame: { duration: 120, redraw: true }, transition: { duration: 0 } }] },
+        { label: 'Pause', method: 'animate',
+          args: [[null], { mode: 'immediate', frame: { duration: 0, redraw: false }, transition: { duration: 0 } }] },
+      ],
+    }],
+    sliders: [{
+      active: 0,
+      x: 0.25, y: 0, len: 0.71,
+      pad: { t: 30 },
+      font: { color: theme.text, size: 10 },
+      currentvalue: { prefix: 't = ', font: { color: theme.text, size: 12 }, xanchor: 'left' },
+      bgcolor: theme.bg,
+      bordercolor: theme.grid,
+      tickcolor: theme.grid,
+      steps: sliderSteps,
+    }],
+  };
+
+  // `addFrames` is chained after `newPlot` resolves: a chart with no frames registered
+  // yet cannot animate them.
+  Plotly.newPlot('bramble_sp_1', data, layout, { displayModeBar: false, responsive: true })
+    .then(function () {
+      return Plotly.addFrames('bramble_sp_1', frames);
+    });
+
+  window.brambleRegisterPlotlyChart('bramble_sp_1', function () {
+    const t = window.bramblePlotlyTheme();
+    return {
+      'font.color': t.text,
+      'scene.xaxis.color': t.text, 'scene.xaxis.gridcolor': t.grid, 'scene.xaxis.backgroundcolor': t.bg,
+      'scene.yaxis.color': t.text, 'scene.yaxis.gridcolor': t.grid, 'scene.yaxis.backgroundcolor': t.bg,
+      'scene.zaxis.color': t.text, 'scene.zaxis.gridcolor': t.grid, 'scene.zaxis.backgroundcolor': t.bg,
+      'title.font.color': t.text,
+      'updatemenus[0].font.color': t.text, 'sliders[0].font.color': t.text,
+    };
+  });
+})();
+</script>
+
+</div>
+</div>
+<p>The grid is a random non-uniform one refined in place by <a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a>, so each level is the same random mesh with every cell halved:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -179,7 +399,7 @@ end</code></pre>
     Ωₕ = mesh(Ω, (9, 9), (false, false))
     hs, errs = Float64[], Float64[]
     for level in 1:levels
-        uₕ, uₑ = solve_case(Ωₕ)
+        uₕ, uₑ, _ = solve_case(Ωₕ)
         push!(hs, hₘₐₓ(Ωₕ))
         push!(errs, normₕ(uₕ .- uₑ))
         level &lt; levels &amp;&amp; iterative_refinement!(Ωₕ)
@@ -320,7 +540,7 @@ measured_order = order(hs, errs)</code></pre>
 
 </div>
 </div>
-<p>The curve runs parallel to the slope-2 line on a grid built not to flatter the scheme: the points are random, so no symmetry cancels the one-sided error of the ghost layer. The boundary data enter the right-hand side through the same relations as in the steady case, and refreshing them in time costs no order.</p>
+<p>The curve is parallel to the slope-2 line. The points are random. The boundary data enter the right-hand side through the same relations as in the steady case, and refreshing them in time leaves the order at two.</p>
 <h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <ul class="md-list-tight">
 <li><p><a href="../../examples/neumann_robin_poisson/">Neumann and Robin Poisson</a> for the steady problem and the pure Neumann case.</p>
@@ -358,6 +578,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=825d3fc7"></script>
+  <script src="../../assets/materialdocs.js?v=9bb51bcb"></script>
 </body>
 </html>

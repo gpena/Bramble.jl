@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=556e2154">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f4cea555">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -42,60 +42,64 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
       <div class="md-nav-section">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/" class="md-nav-active">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/" class="md-nav-active">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
@@ -293,7 +297,7 @@
 <div class="md-docstring" id="Bramble.is_symbolic">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.is_symbolic</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/ast.jl#L299-L307" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/ast/ast.jl#L303-L311" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1557,7 +1561,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.DiagonalReplaySink">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DiagonalReplaySink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1624-L1640" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1637-L1653" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1572,7 +1576,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.ReplaySink">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ReplaySink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1515-L1537" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1528-L1550" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1589,7 +1593,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._CoordSink">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._CoordSink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1464-L1480" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1477-L1493" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1618,7 +1622,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._PairReplaySink">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._PairReplaySink</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1562-L1574" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1575-L1587" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1711,7 +1715,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble._sink_entry!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._sink_entry!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1437-L1446" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/bilinear_traversal.jl#L1450-L1459" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2074,6 +2078,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=556e2154"></script>
+  <script src="../../assets/materialdocs.js?v=f4cea555"></script>
 </body>
 </html>

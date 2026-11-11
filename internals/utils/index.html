@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Utilities — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=30958adb">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=29c8d285">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Utilities — Bramble.jl">
   <meta property="og:title" content="Utilities — Bramble.jl">
@@ -42,60 +42,64 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
       <div class="md-nav-section">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/" class="md-nav-active">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/" class="md-nav-active">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
@@ -805,14 +809,14 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <div class="md-docstring" id="Bramble._batch_rebuild-Tuple{Any, Tuple}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_rebuild</code> — <span class="md-docstring-sig">Tuple{Any, Tuple}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/batch_split.jl#L252-L266" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/batch_split.jl#L275-L290" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">_batch_rebuild(skeleton, arrays::Tuple) -&gt; rebuilt</code></pre>
 </div>
-<p>The value <a href="../../internals/utils/#Bramble._batch_split-Tuple{Any}"><code class="md-code-inline">_batch_split</code></a><code class="md-code-inline">(x)</code> split, rebuilt around <code class="md-code-inline">arrays</code>: the same struct types, with each array type parameter replaced by the type of the array now in its slot, each mesh by its walk state and each <code class="md-code-inline">Ref</code> by its value. <code class="md-code-inline">arrays</code> may hold any array type, such as the <code class="md-code-inline">PtrArray</code>s <code class="md-code-inline">@batch</code> passes, or the plain arrays it passes a single-iteration loop, provided every array split from one original array type arrives as one array type: the type parameters are substituted per original type, not per slot. <code class="md-code-inline">@batch</code> converts all arrays of one type alike, so it always meets this.</p>
+<p>The value <a href="../../internals/utils/#Bramble._batch_split-Tuple{Any}"><code class="md-code-inline">_batch_split</code></a><code class="md-code-inline">(x)</code> split, rebuilt around <code class="md-code-inline">arrays</code>: the same struct types, with each array type parameter replaced by the type of the array now in its slot, each mesh by its walk state and each <code class="md-code-inline">Ref</code> by its value; a <a href="../../internals/space/#Bramble.SpaceWeights"><code class="md-code-inline">SpaceWeights</code></a> is the caller&#39;s own object, so a space keeps its weights&#39; vector type. <code class="md-code-inline">arrays</code> may hold any array type, such as the <code class="md-code-inline">PtrArray</code>s <code class="md-code-inline">@batch</code> passes, or the plain arrays it passes a single-iteration loop, provided every array split from one original array type arrives as one array type: the type parameters are substituted per original type, not per slot. <code class="md-code-inline">@batch</code> converts all arrays of one type alike, so it always meets this.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">ArgumentError</code>: if a struct&#39;s declared field type does not accept the rebuilt field, as when two arrays of one original type arrive as different array types.</p>
@@ -823,7 +827,7 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <div class="md-docstring" id="Bramble._batch_split-Tuple{Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_split</code> — <span class="md-docstring-sig">Tuple{Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/batch_split.jl#L103-L126" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/batch_split.jl#L115-L140" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -839,6 +843,8 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 </li>
 <li><p>a <code class="md-code-inline">Base.RefValue</code> of an isbits value is replaced by that value, read once at split time on the host: a <code class="md-code-inline">Ref</code> coefficient is read per call at launch, not per point;</p>
 </li>
+<li><p>a <a href="../../internals/space/#Bramble.SpaceWeights"><code class="md-code-inline">SpaceWeights</code></a> crosses as its address, and the caller must keep <code class="md-code-inline">x</code> alive until the loop ends;</p>
+</li>
 <li><p>an isbits value is kept.</p>
 </li>
 </ul>
@@ -852,7 +858,7 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <div class="md-docstring" id="Bramble._batch_splittable-Union{Tuple{Type{T}}, Tuple{T}} where T">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble._batch_splittable</code> — <span class="md-docstring-sig">Union{Tuple{Type{T}}, Tuple{T}} where T</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/batch_split.jl#L214-L225" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/batch_split.jl#L233-L244" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -860,6 +866,99 @@ _sweep_scatter_for!(policy::ExecutionPolicy, mats::Tuple, idxs, g::Function) -&g
 <pre><code class="language-julia">_batch_splittable(::Type{T}) -&gt; Bool</code></pre>
 </div>
 <p>Whether <a href="../../internals/utils/#Bramble._batch_split-Tuple{Any}"><code class="md-code-inline">_batch_split</code></a> takes a value of type <code class="md-code-inline">T</code> apart and <a href="../../internals/utils/#Bramble._batch_rebuild-Tuple{Any, Tuple}"><code class="md-code-inline">_batch_rebuild</code></a> puts it back together around the arrays a <code class="md-code-inline">Polyester.@batch</code> task receives, rather than either throwing: <code class="md-code-inline">true</code> when every leaf of <code class="md-code-inline">T</code> takes one of the split&#39;s rules and every struct field&#39;s declared type accepts any array in place of the one it held (a field typed <code class="md-code-inline">Vector{T}</code> does not). Generated, so the answer is a constant of the type and a branch on it costs the caller nothing. A split hook that meets <code class="md-code-inline">false</code> (an array of <code class="md-code-inline">BigFloat</code>s, a <code class="md-code-inline">BigFloat</code> coefficient, a struct holding a <code class="md-code-inline">Vector{Float64}</code> field) captures its arguments whole instead.</p>
+</div>
+</div>
+<h2 id="Backend-profiling" class="md-heading">Backend profiling<a href="#Backend-profiling" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<div class="md-docstring" id="Bramble._ProfileKernel">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._ProfileKernel</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend_profile.jl#L24-L31" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_ProfileKernel{T}</code></pre>
+</div>
+<p>The kernel <code class="md-code-inline">profile_backends</code> sweeps: <code class="md-code-inline">i -&gt; sqrt(T(i)) * a + b</code>. An isbits struct rather than a closure, so the same value is a legal device kernel argument, and cheap enough per point that the sweep is bound by the policy&#39;s memory traffic and scheduling, as the weight and scatter loops are.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble._crossover-Tuple{Bramble.BackendProfile, Integer}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._crossover</code> — <span class="md-docstring-sig">Tuple{Bramble.BackendProfile, Integer}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend_profile.jl#L118-L123" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_crossover(p::BackendProfile, j::Integer) -&gt; Union{Int, Nothing}</code></pre>
+</div>
+<p>Smallest size from which policy <code class="md-code-inline">j</code> stays at least <code class="md-code-inline">_PROFILE_SPEEDUP</code> times faster than the baseline (column 1) at every larger size of the sweep, or <code class="md-code-inline">nothing</code> if it never does.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble._profile_eltype-Tuple{Bramble.ExecutionPolicy}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._profile_eltype</code> — <span class="md-docstring-sig">Tuple{Bramble.ExecutionPolicy}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend_profile.jl#L46-L51" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_profile_eltype(policy::ExecutionPolicy) -&gt; Type{&lt;:AbstractFloat}</code></pre>
+</div>
+<p>The widest element type <code class="md-code-inline">policy</code> can sweep. <code class="md-code-inline">Float64</code> unless a device extension says otherwise; <code class="md-code-inline">profile_backends</code> times every row on the narrowest of the declared types.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble._profile_time-Union{Tuple{T}, Tuple{Bramble.CpuPolicy, Type{T}, Integer}} where T&lt;:AbstractFloat">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._profile_time</code> — <span class="md-docstring-sig">Union{Tuple{T}, Tuple{Bramble.CpuPolicy, Type{T}, Integer}} where T&lt;:AbstractFloat</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend_profile.jl#L54-L63" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_profile_time(policy::ExecutionPolicy, ::Type{T}, n::Integer) -&gt; Float64</code></pre>
+</div>
+<p>Seconds taken by the fastest of three sweeps of <code class="md-code-inline">_ProfileKernel{T}</code> over <code class="md-code-inline">1:n</code> of a <code class="md-code-inline">Vector{T}</code> under <code class="md-code-inline">policy</code>, after one warm run that compiles and faults the pages in. The vector is allocated inside the call, so the timed region holds the sweep alone.</p>
+<p>Device extensions add a method for their own policy type; see the note at the top of <code class="md-code-inline">src/utils/backend_profile.jl</code>.</p>
+</div>
+</div>
+<h2 id="Device-kernels" class="md-heading">Device kernels<a href="#Device-kernels" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<div class="md-docstring" id="Bramble._launch_spmm_csr!-NTuple{7, Any}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._launch_spmm_csr!</code> — <span class="md-docstring-sig">NTuple{7, Any}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/device_kernels.jl#L110-L123" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_launch_spmm_csr!(C, rowPtr, colVal, nzVal, B, α, β) -&gt; Nothing</code></pre>
+</div>
+<p>Row-parallel sparse matrix-matrix product <code class="md-code-inline">C .= α .* (A * B) .+ β .* C</code> for a dense right-hand side <code class="md-code-inline">B</code>, where <code class="md-code-inline">A</code>&#39;s storage is given as the raw CSR arrays <code class="md-code-inline">rowPtr</code>, <code class="md-code-inline">colVal</code>, <code class="md-code-inline">nzVal</code>. See <a href="../../internals/utils/#Bramble._launch_spmv_csr!-NTuple{7, Any}"><code class="md-code-inline">_launch_spmv_csr!</code></a> for the extension contract and why the arrays are passed separately rather than as a struct.</p>
+<p>Requires <code class="md-code-inline">using KernelAbstractions</code>; the real method is supplied by <code class="md-code-inline">BrambleKernelAbstractionsExt</code>.</p>
+<p><strong>Throws</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">ErrorException</code>: if <code class="md-code-inline">KernelAbstractions</code> is not loaded.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="md-docstring" id="Bramble._launch_spmv_csr!-NTuple{7, Any}">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble._launch_spmv_csr!</code> — <span class="md-docstring-sig">NTuple{7, Any}</span></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/device_kernels.jl#L88-L102" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">_launch_spmv_csr!(y, rowPtr, colVal, nzVal, x, α, β) -&gt; Nothing</code></pre>
+</div>
+<p>Row-parallel sparse matrix-vector product <code class="md-code-inline">y .= α .* (A * x) .+ β .* y</code>, where <code class="md-code-inline">A</code>&#39;s storage is given as the raw CSR arrays <code class="md-code-inline">rowPtr</code>, <code class="md-code-inline">colVal</code>, <code class="md-code-inline">nzVal</code> – never a struct wrapping them, since a struct nesting a device array fails <code class="md-code-inline">KernelAbstractions</code> kernel compilation. One work item owns one output row, so there are no write conflicts and no atomics.</p>
+<p>Requires <code class="md-code-inline">using KernelAbstractions</code>; the real method is supplied by <code class="md-code-inline">BrambleKernelAbstractionsExt</code>.</p>
+<p><strong>Throws</strong></p>
+<ul class="md-list-tight">
+<li><p><code class="md-code-inline">ErrorException</code>: if <code class="md-code-inline">KernelAbstractions</code> is not loaded.</p>
+</li>
+</ul>
 </div>
 </div>
 <h2 id="Macros" class="md-heading">Macros<a href="#Macros" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -912,6 +1011,8 @@ true</code></pre>
           <a class="md-toc-link md-toc-h2" href="#The-CpuPolyester-sweep-hooks">The CpuPolyester sweep hooks</a>
           <a class="md-toc-link md-toc-h2" href="#The-GpuPolicy-sweep-hooks">The GpuPolicy sweep hooks</a>
           <a class="md-toc-link md-toc-h2" href="#The-@batch-split">The @batch split</a>
+          <a class="md-toc-link md-toc-h2" href="#Backend-profiling">Backend profiling</a>
+          <a class="md-toc-link md-toc-h2" href="#Device-kernels">Device kernels</a>
           <a class="md-toc-link md-toc-h2" href="#Macros">Macros</a>
       </div>
     </aside>
@@ -930,6 +1031,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=30958adb"></script>
+  <script src="../../assets/materialdocs.js?v=29c8d285"></script>
 </body>
 </html>

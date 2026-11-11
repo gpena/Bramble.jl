@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Coupled systems — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d1a9b260">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=71f000c4">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Coupled systems — Bramble.jl">
   <meta property="og:title" content="Coupled systems — Bramble.jl">
@@ -41,61 +41,65 @@
     <nav class="md-sidebar">
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+      <div class="md-nav-section">
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/" class="md-nav-active">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
@@ -105,7 +109,7 @@
 <p><strong>What you will learn.</strong> How to write a form over several unknowns, constrain one block and not another, and read a value across leaves that live on different meshes.</p>
 <p><strong>What you need first.</strong> The <a href="../../tutorials/form/">form tutorial</a> for assembling and for <a href="../../tutorials/form/#form_dirichlet">Dirichlet conditions</a>, and the <a href="../../tutorials/space/">space tutorial</a> for <a href="../../tutorials/space/#space_composite">composite spaces and vector elements</a>.</p>
 <p><strong>Where next.</strong> The <a href="../../examples/poisson_linear/">worked examples</a>, which run the whole chain on full problems.</p>
-<p>A composite space stacks grid spaces, and a form over one addresses its blocks by component. This page shows how, using small examples that run when the page is built.</p>
+<p>A composite space stacks grid spaces, and a form over one addresses its blocks by component.</p>
 <h2 id="Addressing-blocks-by-component" class="md-heading">Addressing blocks by component<a href="#Addressing-blocks-by-component" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><code class="md-code-inline">u[1]</code> (or <code class="md-code-inline">u(1)</code>) is the trial function of the first block, and <code class="md-code-inline">v[2]</code> (or <code class="md-code-inline">v(2)</code>) the test function of the second. Both spellings work on trial and test functions and on compound operators such as <code class="md-code-inline">(D₋ₓ(u))[i]</code>. <a href="../../api/spaces/#Bramble.components"><code class="md-code-inline">components</code></a> destructures a function into its blocks:</p>
 <div class="md-multi-output">
@@ -140,7 +144,7 @@ end</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: a term of this form names its trial component but not its test one. A block of a bilinear form takes a component from each side: write innerₕ(u(i), v(j)) for one block, or innerₕ(u, v) for the same integrand on every diagonal block.</code></pre>
 </div>
-<p>Naming one and leaving the other open has no reading as mathematics, because the term would belong to every equation at once. Naming neither is fine and means the diagonal, applied to every block.</p>
+<p>A term naming one component belongs to every equation at once, so it is refused. Naming neither means the diagonal, applied to every block.</p>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
@@ -159,15 +163,15 @@ ac2 = form(Vc, Vc, (u, v) -&gt; innerₕ(u(1), v(1)) + innerₕ(u(2), v(2)))
 Ac2 = assemble(ac2; dirichlet = (:left, :right), dirichlet_components = 1)</code></pre>
 </div>
 </div>
-<p>Block 1 (rows <code class="md-code-inline">1:21</code>) has its boundary rows pinned. Block 2 is the plain assembled operator, with no row replaced. Leaving <code class="md-code-inline">dirichlet_components</code> at its default, <code class="md-code-inline">nothing</code>, applies the labels to every leaf. Call <code class="md-code-inline">assemble!</code> or <code class="md-code-inline">dirichlet_bc!</code> again with another <code class="md-code-inline">dirichlet</code>/<code class="md-code-inline">dirichlet_components</code> pair to constrain a different block.</p>
+<p>Block 1 (rows <code class="md-code-inline">1:21</code>) has its boundary rows pinned. Block 2 is the plain assembled operator, with no row replaced. Leaving <code class="md-code-inline">dirichlet_components</code> at its default, <code class="md-code-inline">nothing</code>, applies the labels to every leaf. Call <code class="md-code-inline">assemble!</code> again with another <code class="md-code-inline">dirichlet</code>/<code class="md-code-inline">dirichlet_components</code> pair, or <code class="md-code-inline">dirichlet_bc!</code> with another <code class="md-code-inline">labels</code>/<code class="md-code-inline">components</code> pair, to constrain a different block.</p>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
-<p>Set <code class="md-code-inline">dirichlet_components = 2</code> and compare <code class="md-code-inline">Ac2[1, 1]</code> and <code class="md-code-inline">Ac2[22, 22]</code>. The pinned diagonal entry <code class="md-code-inline">1.0</code> moves from block 1 to block 2, and the other keeps its weight. The Dirichlet conditions themselves are explained in the <a href="../../tutorials/form/#form_dirichlet">form tutorial</a>.</p>
+<p>Set <code class="md-code-inline">dirichlet_components = 2</code> and compare <code class="md-code-inline">Ac2[1, 1]</code> and <code class="md-code-inline">Ac2[22, 22]</code>. The pinned diagonal entry <code class="md-code-inline">1.0</code> moves from block 1 to block 2, and the other keeps its weight.</p>
 </div>
 </div>
 <h2 id="Interpolating-between-the-leaves-of-a-heterogeneous-space" class="md-heading">Interpolating between the leaves of a heterogeneous space<a href="#Interpolating-between-the-leaves-of-a-heterogeneous-space" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>The composite spaces above stack copies of <em>one</em> space, so every leaf shares a mesh. A composite space can also be built from a tuple of leaves over different meshes. A term that couples two such leaves must move a value from one grid to the other. That is the job of <a href="../../api/spaces/#Bramble.πₕ"><code class="md-code-inline">πₕ</code></a>, applied to the trial function alone. It names no source space. The space it interpolates from is the trial function&#39;s own, and assembly supplies it once the leaf is known.</p>
+<p>The composite spaces above stack copies of <em>one</em> space, so every leaf shares a mesh. A composite space can also be built from a tuple of leaves over different meshes. A term that couples two such leaves must move a value from one grid to the other. That is the job of <a href="../../api/spaces/#Bramble.πₕ"><code class="md-code-inline">πₕ</code></a>. Applied to a grid function of one leaf, as below, it is a source. Applied to the trial or the test function, it interpolates the unknown and lets a bilinear term couple leaves on different meshes.</p>
 <figure>
 <svg viewBox="0 0 720 170" width="100%" style="max-width:640px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
      xmlns="http://www.w3.org/2000/svg" role="img"
@@ -197,7 +201,7 @@ Ac2 = assemble(ac2; dirichlet = (:left, :right), dirichlet_components = 1)</code
   <text x="595" y="101" font-size="11" fill="currentColor" opacity="0.75" text-anchor="middle">into Wbig's block, leaf 1</text>
 </svg>
 </figure>
-<p><code class="md-code-inline">πₕ(uₕ)</code> is a source like any other: an AST leaf wrapping <code class="md-code-inline">x -&gt; interpolate_at(uₕ, x)</code>. It composes with <code class="md-code-inline">D₋ₓ</code>, <code class="md-code-inline">Mₓ</code> and the rest, and sits on the left of <code class="md-code-inline">innerₕ</code> inside a coupled form:</p>
+<p><code class="md-code-inline">πₕ(uₕ)</code> is a source read live: every <code class="md-code-inline">assemble</code> takes the current values of <code class="md-code-inline">uₕ</code>. It composes with <code class="md-code-inline">D₋ₓ</code>, <code class="md-code-inline">Mₓ</code> and the rest, and sits on the left of <code class="md-code-inline">innerₕ</code> inside a coupled form:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -216,11 +220,11 @@ maximum(abs, bh .- b_plain)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">0.14285714285714285</code></pre>
 </div>
-<p>Both terms land in leaf 1, the big mesh, although the source lives on leaf 2&#39;s coarser mesh. <code class="md-code-inline">πₕ</code> makes that a well-posed expression instead of a size mismatch. Leaf 2 can hold one field at the resolution the problem calls for, and a term over leaf 1 can still read it.</p>
-<p>The last line is the check worth keeping, not <code class="md-code-inline">length(bh) == ndofs(Vh)</code>. A differenced source whose offsets were discarded assembles to exactly zero, and a zero vector has the right length and is finite.</p>
-<p>An operated source means the following. <code class="md-code-inline">innerₕ(D₋ₓ(f), v)</code> is <span class="md-math md-math-inline">\(\sum_i |\square_i| \, (D_{-x}f)_i \, v_i\)</span>: the operator acts on the <em>source</em>, producing another grid function, which is then integrated against the test function. It agrees entry for entry with applying the numeric operator first, which is what <code class="md-code-inline">test/form/source_operators.jl</code> pins for every operator.</p>
-<h3 id="Bilinear-coupling-across-meshes-is-refused" class="md-heading">Bilinear coupling across meshes is refused<a href="#Bilinear-coupling-across-meshes-is-refused" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>A <em>bilinear</em> term coupling two leaves over different meshes has no assembly to give:</p>
+<p>Both terms land in leaf 1, the big mesh, although the source lives on leaf 2&#39;s coarser mesh. Leaf 2 can hold one field at the resolution the problem calls for, and a term over leaf 1 can still read it.</p>
+<p>The last line compares values: a differenced source whose offsets were discarded assembles to exactly zero, which has the right length and is finite.</p>
+<p><code class="md-code-inline">innerₕ(D₋ₓ(f), v)</code> is <span class="md-math md-math-inline">\(\sum_i |\square_i| \, (D_{-x}f)_i \, v_i\)</span>: the operator acts on the <em>source</em>, producing another grid function, which is then integrated against the test function. It agrees entry for entry with applying the numeric operator first.</p>
+<h3 id="Bilinear-coupling-across-meshes" class="md-heading">Bilinear coupling across meshes<a href="#Bilinear-coupling-across-meshes" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<p>A bilinear term coupling two leaves over different meshes has no assembly unless the trial or the test function is wrapped in <code class="md-code-inline">πₕ</code>. Unwrapped, it is refused:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -232,8 +236,31 @@ end</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: a bilinear term coupling two leaves over different meshes has no assembly: the trial leaf has (4, 4) points and the test leaf (8, 8), so an index on one names no point on the other. Got Bramble.BilinearProduct{2, Bramble.InnerH, Bramble.IndexedTrialFunction{2}, Bramble.IndexedTestFunction{2}}. Couple leaves that share a mesh, or wrap the trial or the test function in an interpolation operator: `πₕ(u)`, `πₕ(v)`.</code></pre>
 </div>
-<p>A coupled block is assembled by walking the test leaf&#39;s grid and reading the trial column out of the same index space, so the two leaves must agree on what an index means. Index <span class="md-math md-math-inline">\((3, 3)\)</span> on an 8-by-8 grid and on a 4-by-4 grid name different points, and nothing in the term says how to get from one to the other. The error is raised when the matrix is built, not when the form is written, because which leaves a term couples is a question about the spaces it is assembled against. <code class="md-code-inline">allocate_system_matrix</code> refuses it too.</p>
-<p>Leaves that <em>share</em> a mesh are unaffected. That covers every space built by repeating one space (<code class="md-code-inline">Wₕ^Val(2)</code>), off-diagonal blocks included.</p>
+<p>A coupled block is assembled by walking the test leaf&#39;s grid and reading the trial column out of the same index space, so the two leaves must agree on what an index means. Index <span class="md-math md-math-inline">\((3, 3)\)</span> on an 8-by-8 grid and on a 4-by-4 grid name different points. The error is raised when the matrix is built, because which leaves a term couples is a question about the spaces it is assembled against. <code class="md-code-inline">allocate_system_matrix</code> refuses it too.</p>
+<p>Wrapping the trial function interpolates it onto the test leaf&#39;s grid, and the same block assembles:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ac_pi = assemble(form(Vh, Vh, (u, v) -&gt; innerₕ(πₕ(u(2)), v(1))))
+using SparseArrays
+nb = ndofs(Wbig)
+B = Ac_pi[1:nb, nb+1:end]
+nnz(B)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">256</code></pre>
+</div>
+<p>Applied to the small leaf&#39;s values, the off-diagonal block gives the vector the source form assembled above:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">x₂ = parent(Rₕ(Wsmall, x -&gt; x[1] + x[2]))
+@assert nnz(B) &gt; 0 &amp;&amp; maximum(abs, b_plain[1:nb]) &gt; 0
+@assert isapprox(B * x₂, b_plain[1:nb]; atol = 1e-14)
+maximum(abs, B * x₂ .- b_plain[1:nb])</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">6.938893903907228e-18</code></pre>
+</div>
+<p>Leaves that share a mesh are unaffected. That covers every space built by repeating one space (<code class="md-code-inline">Wₕ^Val(2)</code>), off-diagonal blocks included.</p>
       </article>
       <footer class="md-footer">
 <p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
@@ -245,7 +272,7 @@ end</code></pre>
           <a class="md-toc-link md-toc-h2" href="#Addressing-blocks-by-component">Addressing blocks by component</a>
           <a class="md-toc-link md-toc-h2" href="#coupled_one_block">Constraining one block, leaving another free</a>
           <a class="md-toc-link md-toc-h2" href="#Interpolating-between-the-leaves-of-a-heterogeneous-space">Interpolating between the leaves of a heterogeneous space</a>
-            <a class="md-toc-link md-toc-h3" href="#Bilinear-coupling-across-meshes-is-refused">Bilinear coupling across meshes is refused</a>
+            <a class="md-toc-link md-toc-h3" href="#Bilinear-coupling-across-meshes">Bilinear coupling across meshes</a>
       </div>
     </aside>
   </div>
@@ -263,6 +290,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=d1a9b260"></script>
+  <script src="../../assets/materialdocs.js?v=71f000c4"></script>
 </body>
 </html>

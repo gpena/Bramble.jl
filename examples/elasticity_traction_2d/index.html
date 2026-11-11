@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Elasticity with a traction condition — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=bb50bbd3">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b0295606">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Elasticity with a traction condition — Bramble.jl">
   <meta property="og:title" content="Elasticity with a traction condition — Bramble.jl">
@@ -42,67 +42,71 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/" class="md-nav-active">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/" class="md-nav-active">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/elasticity_traction_2d.jl#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Elasticity-with-a-traction-condition" class="md-heading">Elasticity with a traction condition<a href="#Elasticity-with-a-traction-condition" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<p>Linear elasticity in the unit square with a prescribed traction on one side, a traction-free side and displacement on the other two. A traction couples the components, which is why it goes through ghost points: <code class="md-code-inline">constrained</code> closes each ghost from a relation that reads both components of the displacement. The page then checks those relations on the lifted solution, and the order of the error on graded grids, where it has to reach two. Every number and every plot below was produced by the code shown.</p>
+<p>Linear elasticity in the unit square with a prescribed traction on one side, a traction-free side and displacement on the other two. A traction couples the components, which is why it goes through ghost points: <code class="md-code-inline">constrained</code> closes each ghost from a relation that reads both components of the displacement. Those relations are then checked on the lifted solution, and the error is shown to converge at second order on graded grids.</p>
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>With the stress <span class="md-math md-math-inline">\(\sigma(u) = 2\mu\,\varepsilon(u) + \lambda\,(\nabla\cdot u)\, I\)</span>,</p>
 <div class="md-math md-math-display">
@@ -149,7 +153,7 @@ loadform(v) = innerₕ(load(1), v(1)) + innerₕ(load(2), v(2))</code></pre>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">loadform (generic function with 1 method)</code></pre>
 </div>
 <h2 id="The-boundary-relations" class="md-heading">The boundary relations<a href="#The-boundary-relations" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>The traction of component <span class="md-math md-math-inline">\(i\)</span> on a side is <span class="md-math md-math-inline">\(\sum_j \partial_n(u_j; K_{ij})\)</span>, with the conormal tensor <span class="md-math md-math-inline">\(K_{ij}[d,e] = \lambda\,\delta_{id}\delta_{je} + \mu\,(\delta_{ij}\delta_{de} + \delta_{ie}\delta_{jd})\)</span>. A displacement side fixes the value and, to close its ghost, the second normal derivative. Both come from the manufactured solution. On <code class="md-code-inline">xmin</code> and <code class="md-code-inline">ymin</code> the two components&#39; relations meet at the corner, where <code class="md-code-inline">constrained</code> solves the four ghost values of the corner&#39;s block together.</p>
+<p>The traction of component <span class="md-math md-math-inline">\(i\)</span> on a side is <span class="md-math md-math-inline">\(\sum_j \partial_n(u_j; K_{ij})\)</span>, with the conormal tensor <span class="md-math md-math-inline">\(K_{ij}[d,e] = \lambda\,\delta_{id}\delta_{je} + \mu\,(\delta_{ij}\delta_{de} + \delta_{ie}\delta_{jd})\)</span>. A displacement side fixes the value and, to close its ghost, the second normal derivative. Both come from the manufactured solution. On <code class="md-code-inline">xmin</code> and <code class="md-code-inline">ymin</code> the two components&#39; relations meet at the corner, where <code class="md-code-inline">constrained</code> solves the ghost values of the corner&#39;s block together.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -194,7 +198,7 @@ loadeddatum = abs(tractiondata(:xmin, 1)((0.0, 0.5)))
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(2.220446049250313e-16, 3.772311072657006)</code></pre>
 </div>
 <h2 id="Assembling-and-solving" class="md-heading">Assembling and solving<a href="#Assembling-and-solving" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>Mixed differences in the left argument of <code class="md-code-inline">innerₕ</code> read the ghosts of a traction side, and the library replaces them by an extrapolation along the normal, as the internals page explains. <code class="md-code-inline">pde_solve</code> takes the reduced system, and <code class="md-code-inline">Bramble.lift</code> returns the solution with its ghost values, component by component.</p>
+<p>Mixed differences in the left argument of <code class="md-code-inline">innerₕ</code> read the ghosts of a traction side, and the library replaces them by an extrapolation along the normal (see the internals page on spaces). <code class="md-code-inline">pde_solve</code> takes the reduced system, and <code class="md-code-inline">Bramble.lift</code> returns the solution with its ghost values, component by component.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -206,6 +210,138 @@ loadeddatum = abs(tractiondata(:xmin, 1)((0.0, 0.5)))
 end</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">solve_on (generic function with 1 method)</code></pre>
+</div>
+<h2 id="The-solution-on-a-graded-grid" class="md-heading">The solution on a graded grid<a href="#The-solution-on-a-graded-grid" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Graded grids: uniform points mapped by a smooth function, <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a>.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">grade(ξ) = expm1(2ξ) / expm1(2.0)
+
+function graded(n)
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n), (true, true))
+    change_points!(Ωₕ, (grade.(points(Ωₕ)[1]), 1 .- grade.(1 .- points(Ωₕ)[2])))
+    return Ωₕ
+end</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">graded (generic function with 1 method)</code></pre>
+</div>
+<p>The solution on 17 points per axis, each node drawn at <span class="md-math md-math-inline">\(x + 0.2\,u(x)\)</span>: the scale is 0.2, since the displacement reaches almost 2. The faint grid is the undeformed one, the colour the magnitude <span class="md-math md-math-inline">\(|u|\)</span>.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ω₁₇ = graded(17)
+_, U₁₇ = solve_on(Ω₁₇)
+u₁₇ = element(gridspace(Ω₁₇)^Val(2))
+for (i, cᵢ) in enumerate(components(u₁₇))
+    P = reshape(parent(U₁₇), (size(Ω₁₇) .+ 2)..., 2)
+    cᵢ .= vec(P[(2:(n + 1) for n in size(Ω₁₇))..., i])
+end</code></pre>
+</div>
+<div class="md-output md-output-html">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script>
+  // Colour tokens read from the page's own theme, not hard-coded — MaterialDocs sets
+  // `data-theme="light"|"dark"` on <html>; when the attribute is absent the browser's
+  // `prefers-color-scheme` decides. Recomputed on every call so a caller can re-theme
+  // after a toggle.
+  window.bramblePlotlyTheme = function () {
+    const attr = document.documentElement.getAttribute('data-theme');
+    const dark = attr
+      ? attr === 'dark'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return dark
+      ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
+      : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
+  };
+
+  // Every plot this page creates registers itself (div id + the function that
+  // reapplies theme-dependent layout colours) so one observer can repaint all of them
+  // together when the theme toggles, instead of each plot wiring its own observer.
+  window.__bramble_plotly_charts = window.__bramble_plotly_charts || [];
+  window.brambleRegisterPlotlyChart = function (divId, restyle) {
+    window.__bramble_plotly_charts.push({ divId, restyle });
+  };
+
+  if (!window.__bramble_plotly_theme_observer) {
+    const repaint = function () {
+      for (const { divId, restyle } of window.__bramble_plotly_charts) {
+        const layout = restyle();
+        Plotly.relayout(divId, layout);
+      }
+    };
+    window.__bramble_plotly_theme_observer = new MutationObserver(repaint);
+    window.__bramble_plotly_theme_observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    // With no saved theme MaterialDocs follows the system scheme in CSS alone and
+    // leaves `data-theme` unset, so a system change must repaint too.
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      if (!document.documentElement.hasAttribute('data-theme')) repaint();
+    });
+  }
+
+  // The layout-race fix (see the module note above): once per page, after everything
+  // (fonts included) has truly finished loading, force every plot created so far to
+  // resize against its now-final container.
+  if (!window.__bramble_plotly_load_fix_installed) {
+    window.__bramble_plotly_load_fix_installed = true;
+    const rescue = function () {
+      for (const { divId } of window.__bramble_plotly_charts) {
+        Plotly.Plots.resize(document.getElementById(divId));
+      }
+    };
+    const loaded = document.readyState === 'complete' ? Promise.resolve() :
+      new Promise((r) => window.addEventListener('load', r, { once: true }));
+    Promise.all([loaded, document.fonts.ready]).then(rescue);
+  }
+</script>
+
+<div id="bramble_dp_1" data-deformed-2d="289" data-scale="0.2" style="width:100%; max-width:520px; height:440px; margin: 1em 0;"></div>
+<script>
+(function () {
+  const theme = window.bramblePlotlyTheme();
+  const data = [{
+    type: 'scatter', mode: 'lines',
+    x: [0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.02084,0.044455,0.071214,0.10154,0.1359,0.17483,0.21895,0.26894,0.32559,0.38978,0.46252,0.54495,0.63834,0.74418,0.86411,1.0,null,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,null,0.02084,0.02084,0.02084,0.02084,0.02084,0.02084,0.02084,0.02084,0.02084,0.02084,0.02084,0.02084,0.02084,0.02084,0.02084,0.02084,0.02084,null,0.044455,0.044455,0.044455,0.044455,0.044455,0.044455,0.044455,0.044455,0.044455,0.044455,0.044455,0.044455,0.044455,0.044455,0.044455,0.044455,0.044455,null,0.071214,0.071214,0.071214,0.071214,0.071214,0.071214,0.071214,0.071214,0.071214,0.071214,0.071214,0.071214,0.071214,0.071214,0.071214,0.071214,0.071214,null,0.10154,0.10154,0.10154,0.10154,0.10154,0.10154,0.10154,0.10154,0.10154,0.10154,0.10154,0.10154,0.10154,0.10154,0.10154,0.10154,0.10154,null,0.1359,0.1359,0.1359,0.1359,0.1359,0.1359,0.1359,0.1359,0.1359,0.1359,0.1359,0.1359,0.1359,0.1359,0.1359,0.1359,0.1359,null,0.17483,0.17483,0.17483,0.17483,0.17483,0.17483,0.17483,0.17483,0.17483,0.17483,0.17483,0.17483,0.17483,0.17483,0.17483,0.17483,0.17483,null,0.21895,0.21895,0.21895,0.21895,0.21895,0.21895,0.21895,0.21895,0.21895,0.21895,0.21895,0.21895,0.21895,0.21895,0.21895,0.21895,0.21895,null,0.26894,0.26894,0.26894,0.26894,0.26894,0.26894,0.26894,0.26894,0.26894,0.26894,0.26894,0.26894,0.26894,0.26894,0.26894,0.26894,0.26894,null,0.32559,0.32559,0.32559,0.32559,0.32559,0.32559,0.32559,0.32559,0.32559,0.32559,0.32559,0.32559,0.32559,0.32559,0.32559,0.32559,0.32559,null,0.38978,0.38978,0.38978,0.38978,0.38978,0.38978,0.38978,0.38978,0.38978,0.38978,0.38978,0.38978,0.38978,0.38978,0.38978,0.38978,0.38978,null,0.46252,0.46252,0.46252,0.46252,0.46252,0.46252,0.46252,0.46252,0.46252,0.46252,0.46252,0.46252,0.46252,0.46252,0.46252,0.46252,0.46252,null,0.54495,0.54495,0.54495,0.54495,0.54495,0.54495,0.54495,0.54495,0.54495,0.54495,0.54495,0.54495,0.54495,0.54495,0.54495,0.54495,0.54495,null,0.63834,0.63834,0.63834,0.63834,0.63834,0.63834,0.63834,0.63834,0.63834,0.63834,0.63834,0.63834,0.63834,0.63834,0.63834,0.63834,0.63834,null,0.74418,0.74418,0.74418,0.74418,0.74418,0.74418,0.74418,0.74418,0.74418,0.74418,0.74418,0.74418,0.74418,0.74418,0.74418,0.74418,0.74418,null,0.86411,0.86411,0.86411,0.86411,0.86411,0.86411,0.86411,0.86411,0.86411,0.86411,0.86411,0.86411,0.86411,0.86411,0.86411,0.86411,0.86411,null,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,null], y: [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,null,0.13589,0.13589,0.13589,0.13589,0.13589,0.13589,0.13589,0.13589,0.13589,0.13589,0.13589,0.13589,0.13589,0.13589,0.13589,0.13589,0.13589,null,0.25582,0.25582,0.25582,0.25582,0.25582,0.25582,0.25582,0.25582,0.25582,0.25582,0.25582,0.25582,0.25582,0.25582,0.25582,0.25582,0.25582,null,0.36166,0.36166,0.36166,0.36166,0.36166,0.36166,0.36166,0.36166,0.36166,0.36166,0.36166,0.36166,0.36166,0.36166,0.36166,0.36166,0.36166,null,0.45505,0.45505,0.45505,0.45505,0.45505,0.45505,0.45505,0.45505,0.45505,0.45505,0.45505,0.45505,0.45505,0.45505,0.45505,0.45505,0.45505,null,0.53748,0.53748,0.53748,0.53748,0.53748,0.53748,0.53748,0.53748,0.53748,0.53748,0.53748,0.53748,0.53748,0.53748,0.53748,0.53748,0.53748,null,0.61022,0.61022,0.61022,0.61022,0.61022,0.61022,0.61022,0.61022,0.61022,0.61022,0.61022,0.61022,0.61022,0.61022,0.61022,0.61022,0.61022,null,0.67441,0.67441,0.67441,0.67441,0.67441,0.67441,0.67441,0.67441,0.67441,0.67441,0.67441,0.67441,0.67441,0.67441,0.67441,0.67441,0.67441,null,0.73106,0.73106,0.73106,0.73106,0.73106,0.73106,0.73106,0.73106,0.73106,0.73106,0.73106,0.73106,0.73106,0.73106,0.73106,0.73106,0.73106,null,0.78105,0.78105,0.78105,0.78105,0.78105,0.78105,0.78105,0.78105,0.78105,0.78105,0.78105,0.78105,0.78105,0.78105,0.78105,0.78105,0.78105,null,0.82517,0.82517,0.82517,0.82517,0.82517,0.82517,0.82517,0.82517,0.82517,0.82517,0.82517,0.82517,0.82517,0.82517,0.82517,0.82517,0.82517,null,0.8641,0.8641,0.8641,0.8641,0.8641,0.8641,0.8641,0.8641,0.8641,0.8641,0.8641,0.8641,0.8641,0.8641,0.8641,0.8641,0.8641,null,0.89846,0.89846,0.89846,0.89846,0.89846,0.89846,0.89846,0.89846,0.89846,0.89846,0.89846,0.89846,0.89846,0.89846,0.89846,0.89846,0.89846,null,0.92879,0.92879,0.92879,0.92879,0.92879,0.92879,0.92879,0.92879,0.92879,0.92879,0.92879,0.92879,0.92879,0.92879,0.92879,0.92879,0.92879,null,0.95555,0.95555,0.95555,0.95555,0.95555,0.95555,0.95555,0.95555,0.95555,0.95555,0.95555,0.95555,0.95555,0.95555,0.95555,0.95555,0.95555,null,0.97916,0.97916,0.97916,0.97916,0.97916,0.97916,0.97916,0.97916,0.97916,0.97916,0.97916,0.97916,0.97916,0.97916,0.97916,0.97916,0.97916,null,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null,0.0,0.13589,0.25582,0.36166,0.45505,0.53748,0.61022,0.67441,0.73106,0.78105,0.82517,0.8641,0.89846,0.92879,0.95555,0.97916,1.0,null],
+    line: { color: theme.grid, width: 1 }, hoverinfo: 'skip', showlegend: false,
+  }, {
+    type: 'scatter', mode: 'lines',
+    x: [0.057985,0.082834,0.11096,0.14278,0.17878,0.21948,0.26548,0.31743,0.37607,0.44218,0.51663,0.60036,0.69433,0.79957,0.91708,1.0478,1.1927,null,0.059141,0.084025,0.11219,0.14407,0.18012,0.22089,0.26697,0.31901,0.37774,0.44396,0.51854,0.6024,0.69653,0.80193,0.91963,1.0506,1.196,null,0.062557,0.087444,0.11562,0.14751,0.18359,0.22439,0.27052,0.32264,0.38148,0.44786,0.52263,0.60677,0.70126,0.80717,0.92556,1.0575,1.2042,null,0.067307,0.092198,0.12038,0.15228,0.18839,0.22923,0.27542,0.32763,0.38661,0.45317,0.52821,0.61272,0.70774,0.81437,0.93377,1.0672,1.2158,null,0.072837,0.097733,0.12593,0.15785,0.19399,0.23488,0.28115,0.33347,0.3926,0.45938,0.53474,0.61969,0.71532,0.82281,0.94341,1.0785,1.2294,null,0.078772,0.10368,0.13189,0.16384,0.20001,0.24096,0.28732,0.33976,0.39906,0.46609,0.54179,0.62722,0.72352,0.83194,0.95383,1.0907,1.2441,null,0.084852,0.10977,0.138,0.16998,0.2062,0.24721,0.29366,0.34623,0.40571,0.473,0.54906,0.63498,0.73197,0.84134,0.96456,1.1032,1.2592,null,0.090889,0.11582,0.14407,0.17608,0.21235,0.25344,0.29998,0.35268,0.41235,0.47989,0.55631,0.64272,0.7404,0.85072,0.97525,1.1157,1.2742,null,0.096754,0.1217,0.14998,0.18202,0.21834,0.2595,0.30614,0.35897,0.41883,0.48662,0.56338,0.65028,0.74862,0.85986,0.98566,1.1279,1.2887,null,0.10236,0.12732,0.15563,0.18771,0.22408,0.26531,0.31204,0.365,0.42503,0.49307,0.57016,0.65752,0.75649,0.86861,0.99562,1.1395,1.3027,null,0.10765,0.13263,0.16096,0.19309,0.2295,0.2708,0.31762,0.37071,0.43091,0.49917,0.57658,0.66437,0.76394,0.87688,1.005,1.1505,1.3158,null,0.11259,0.13759,0.16595,0.19811,0.23458,0.27594,0.32284,0.37605,0.4364,0.50488,0.58259,0.67078,0.7709,0.88461,1.0138,1.1608,1.3281,null,0.11716,0.14219,0.17058,0.20277,0.23929,0.2807,0.32769,0.381,0.44151,0.51019,0.58816,0.67673,0.77736,0.89177,1.0219,1.1702,1.3395,null,0.12137,0.14643,0.17484,0.20706,0.24362,0.28509,0.33215,0.38557,0.44621,0.51507,0.5933,0.68221,0.78331,0.89836,1.0294,1.179,1.3499,null,0.12523,0.1503,0.17874,0.21099,0.24758,0.28911,0.33624,0.38975,0.45052,0.51956,0.59802,0.68723,0.78875,0.90438,1.0362,1.1869,1.3594,null,0.12874,0.15383,0.18229,0.21456,0.25119,0.29276,0.33996,0.39356,0.45445,0.52364,0.60231,0.69181,0.79372,0.90987,1.0425,1.1941,1.3681,null,0.13193,0.15702,0.18549,0.21779,0.25446,0.29608,0.34334,0.39702,0.45802,0.52735,0.60621,0.69597,0.79822,0.91484,1.0481,1.2006,1.376,null,0.057985,0.059141,0.062557,0.067307,0.072837,0.078772,0.084852,0.090889,0.096754,0.10236,0.10765,0.11259,0.11716,0.12137,0.12523,0.12874,0.13193,null,0.082834,0.084025,0.087444,0.092198,0.097733,0.10368,0.10977,0.11582,0.1217,0.12732,0.13263,0.13759,0.14219,0.14643,0.1503,0.15383,0.15702,null,0.11096,0.11219,0.11562,0.12038,0.12593,0.13189,0.138,0.14407,0.14998,0.15563,0.16096,0.16595,0.17058,0.17484,0.17874,0.18229,0.18549,null,0.14278,0.14407,0.14751,0.15228,0.15785,0.16384,0.16998,0.17608,0.18202,0.18771,0.19309,0.19811,0.20277,0.20706,0.21099,0.21456,0.21779,null,0.17878,0.18012,0.18359,0.18839,0.19399,0.20001,0.2062,0.21235,0.21834,0.22408,0.2295,0.23458,0.23929,0.24362,0.24758,0.25119,0.25446,null,0.21948,0.22089,0.22439,0.22923,0.23488,0.24096,0.24721,0.25344,0.2595,0.26531,0.2708,0.27594,0.2807,0.28509,0.28911,0.29276,0.29608,null,0.26548,0.26697,0.27052,0.27542,0.28115,0.28732,0.29366,0.29998,0.30614,0.31204,0.31762,0.32284,0.32769,0.33215,0.33624,0.33996,0.34334,null,0.31743,0.31901,0.32264,0.32763,0.33347,0.33976,0.34623,0.35268,0.35897,0.365,0.37071,0.37605,0.381,0.38557,0.38975,0.39356,0.39702,null,0.37607,0.37774,0.38148,0.38661,0.3926,0.39906,0.40571,0.41235,0.41883,0.42503,0.43091,0.4364,0.44151,0.44621,0.45052,0.45445,0.45802,null,0.44218,0.44396,0.44786,0.45317,0.45938,0.46609,0.473,0.47989,0.48662,0.49307,0.49917,0.50488,0.51019,0.51507,0.51956,0.52364,0.52735,null,0.51663,0.51854,0.52263,0.52821,0.53474,0.54179,0.54906,0.55631,0.56338,0.57016,0.57658,0.58259,0.58816,0.5933,0.59802,0.60231,0.60621,null,0.60036,0.6024,0.60677,0.61272,0.61969,0.62722,0.63498,0.64272,0.65028,0.65752,0.66437,0.67078,0.67673,0.68221,0.68723,0.69181,0.69597,null,0.69433,0.69653,0.70126,0.70774,0.71532,0.72352,0.73197,0.7404,0.74862,0.75649,0.76394,0.7709,0.77736,0.78331,0.78875,0.79372,0.79822,null,0.79957,0.80193,0.80717,0.81437,0.82281,0.83194,0.84134,0.85072,0.85986,0.86861,0.87688,0.88461,0.89177,0.89836,0.90438,0.90987,0.91484,null,0.91708,0.91963,0.92556,0.93377,0.94341,0.95383,0.96456,0.97525,0.98566,0.99562,1.005,1.0138,1.0219,1.0294,1.0362,1.0425,1.0481,null,1.0478,1.0506,1.0575,1.0672,1.0785,1.0907,1.1032,1.1157,1.1279,1.1395,1.1505,1.1608,1.1702,1.179,1.1869,1.1941,1.2006,null,1.1927,1.196,1.2042,1.2158,1.2294,1.2441,1.2592,1.2742,1.2887,1.3027,1.3158,1.3281,1.3395,1.3499,1.3594,1.3681,1.376,null], y: [0.0013559,0.0013949,0.0014206,0.0014306,0.0014221,0.0013919,0.0013362,0.0012504,0.001129,0.00096567,0.00075369,0.00048812,0.00017062,-0.0001781,-0.00048958,-0.00058203,0.0,null,0.1234,0.12353,0.12368,0.12383,0.12399,0.12417,0.12435,0.12454,0.12474,0.12495,0.12518,0.12543,0.12573,0.12613,0.12673,0.12773,0.12953,null,0.23748,0.23768,0.2379,0.23814,0.23838,0.23863,0.23887,0.2391,0.23929,0.23945,0.23955,0.2396,0.23959,0.23959,0.23969,0.24014,0.24135,null,0.34332,0.3436,0.34388,0.34415,0.34441,0.34464,0.34481,0.34489,0.34484,0.34463,0.3442,0.34352,0.34256,0.34134,0.33998,0.33874,0.33815,null,0.44089,0.44123,0.44155,0.44183,0.44206,0.44221,0.44221,0.44202,0.44158,0.44078,0.43955,0.4378,0.43544,0.43247,0.42899,0.42533,0.42214,null,0.53033,0.53071,0.53105,0.53133,0.5315,0.53151,0.53129,0.53076,0.52981,0.5283,0.5261,0.52305,0.51902,0.51397,0.50798,0.50144,0.49517,null,0.61191,0.61232,0.61267,0.61292,0.61301,0.61286,0.61239,0.61147,0.60995,0.60765,0.60438,0.59992,0.59408,0.58676,0.57805,0.56839,0.55879,null,0.686,0.68644,0.68679,0.68699,0.68698,0.68667,0.68592,0.68458,0.68247,0.67936,0.67498,0.66905,0.66134,0.65169,0.64018,0.62732,0.61428,null,0.75304,0.7535,0.75384,0.75399,0.75388,0.75338,0.75235,0.7506,0.7479,0.74396,0.73847,0.73109,0.72151,0.70955,0.69526,0.67921,0.66276,null,0.8135,0.81397,0.8143,0.8144,0.81419,0.81351,0.81221,0.81005,0.80676,0.80202,0.79545,0.78665,0.77526,0.76104,0.74406,0.72492,0.70517,null,0.86789,0.86836,0.86867,0.86872,0.8684,0.86756,0.86599,0.86344,0.85959,0.85408,0.84648,0.83633,0.82321,0.80684,0.78728,0.7652,0.7423,null,0.91668,0.91716,0.91745,0.91745,0.91704,0.91603,0.9142,0.91128,0.90691,0.90067,0.8921,0.88067,0.86592,0.84753,0.82555,0.8007,0.77483,null,0.96036,0.96084,0.96112,0.96107,0.96057,0.95941,0.95734,0.95407,0.94921,0.9423,0.93282,0.9202,0.90393,0.88366,0.85942,0.832,0.80337,null,0.99939,0.99988,1.0001,1.0001,0.99947,0.99816,0.99588,0.99229,0.98697,0.97943,0.96911,0.9554,0.93773,0.91571,0.88939,0.85958,0.82842,null,1.0342,1.0347,1.035,1.0348,1.0342,1.0327,1.0303,1.0264,1.0206,1.0125,1.0014,0.98671,0.96775,0.94414,0.9159,0.88391,0.85042,null,1.0652,1.0657,1.066,1.0658,1.0651,1.0635,1.0609,1.0567,1.0506,1.042,1.0302,1.0145,0.9944,0.96934,0.93934,0.90535,0.86976,null,1.0928,1.0934,1.0936,1.0934,1.0926,1.091,1.0881,1.0837,1.0772,1.0681,1.0557,1.0392,1.018,0.99166,0.96008,0.92427,0.88676,null,0.0013559,0.1234,0.23748,0.34332,0.44089,0.53033,0.61191,0.686,0.75304,0.8135,0.86789,0.91668,0.96036,0.99939,1.0342,1.0652,1.0928,null,0.0013949,0.12353,0.23768,0.3436,0.44123,0.53071,0.61232,0.68644,0.7535,0.81397,0.86836,0.91716,0.96084,0.99988,1.0347,1.0657,1.0934,null,0.0014206,0.12368,0.2379,0.34388,0.44155,0.53105,0.61267,0.68679,0.75384,0.8143,0.86867,0.91745,0.96112,1.0001,1.035,1.066,1.0936,null,0.0014306,0.12383,0.23814,0.34415,0.44183,0.53133,0.61292,0.68699,0.75399,0.8144,0.86872,0.91745,0.96107,1.0001,1.0348,1.0658,1.0934,null,0.0014221,0.12399,0.23838,0.34441,0.44206,0.5315,0.61301,0.68698,0.75388,0.81419,0.8684,0.91704,0.96057,0.99947,1.0342,1.0651,1.0926,null,0.0013919,0.12417,0.23863,0.34464,0.44221,0.53151,0.61286,0.68667,0.75338,0.81351,0.86756,0.91603,0.95941,0.99816,1.0327,1.0635,1.091,null,0.0013362,0.12435,0.23887,0.34481,0.44221,0.53129,0.61239,0.68592,0.75235,0.81221,0.86599,0.9142,0.95734,0.99588,1.0303,1.0609,1.0881,null,0.0012504,0.12454,0.2391,0.34489,0.44202,0.53076,0.61147,0.68458,0.7506,0.81005,0.86344,0.91128,0.95407,0.99229,1.0264,1.0567,1.0837,null,0.001129,0.12474,0.23929,0.34484,0.44158,0.52981,0.60995,0.68247,0.7479,0.80676,0.85959,0.90691,0.94921,0.98697,1.0206,1.0506,1.0772,null,0.00096567,0.12495,0.23945,0.34463,0.44078,0.5283,0.60765,0.67936,0.74396,0.80202,0.85408,0.90067,0.9423,0.97943,1.0125,1.042,1.0681,null,0.00075369,0.12518,0.23955,0.3442,0.43955,0.5261,0.60438,0.67498,0.73847,0.79545,0.84648,0.8921,0.93282,0.96911,1.0014,1.0302,1.0557,null,0.00048812,0.12543,0.2396,0.34352,0.4378,0.52305,0.59992,0.66905,0.73109,0.78665,0.83633,0.88067,0.9202,0.9554,0.98671,1.0145,1.0392,null,0.00017062,0.12573,0.23959,0.34256,0.43544,0.51902,0.59408,0.66134,0.72151,0.77526,0.82321,0.86592,0.90393,0.93773,0.96775,0.9944,1.018,null,-0.0001781,0.12613,0.23959,0.34134,0.43247,0.51397,0.58676,0.65169,0.70955,0.76104,0.80684,0.84753,0.88366,0.91571,0.94414,0.96934,0.99166,null,-0.00048958,0.12673,0.23969,0.33998,0.42899,0.50798,0.57805,0.64018,0.69526,0.74406,0.78728,0.82555,0.85942,0.88939,0.9159,0.93934,0.96008,null,-0.00058203,0.12773,0.24014,0.33874,0.42533,0.50144,0.56839,0.62732,0.67921,0.72492,0.7652,0.8007,0.832,0.85958,0.88391,0.90535,0.92427,null,0.0,0.12953,0.24135,0.33815,0.42214,0.49517,0.55879,0.61428,0.66276,0.70517,0.7423,0.77483,0.80337,0.82842,0.85042,0.86976,0.88676,null],
+    line: { color: theme.text, width: 1.2 }, hoverinfo: 'skip', showlegend: false,
+  }, {
+    type: 'scatter', mode: 'markers',
+    x: [0.057985,0.082834,0.11096,0.14278,0.17878,0.21948,0.26548,0.31743,0.37607,0.44218,0.51663,0.60036,0.69433,0.79957,0.91708,1.0478,1.1927,0.059141,0.084025,0.11219,0.14407,0.18012,0.22089,0.26697,0.31901,0.37774,0.44396,0.51854,0.6024,0.69653,0.80193,0.91963,1.0506,1.196,0.062557,0.087444,0.11562,0.14751,0.18359,0.22439,0.27052,0.32264,0.38148,0.44786,0.52263,0.60677,0.70126,0.80717,0.92556,1.0575,1.2042,0.067307,0.092198,0.12038,0.15228,0.18839,0.22923,0.27542,0.32763,0.38661,0.45317,0.52821,0.61272,0.70774,0.81437,0.93377,1.0672,1.2158,0.072837,0.097733,0.12593,0.15785,0.19399,0.23488,0.28115,0.33347,0.3926,0.45938,0.53474,0.61969,0.71532,0.82281,0.94341,1.0785,1.2294,0.078772,0.10368,0.13189,0.16384,0.20001,0.24096,0.28732,0.33976,0.39906,0.46609,0.54179,0.62722,0.72352,0.83194,0.95383,1.0907,1.2441,0.084852,0.10977,0.138,0.16998,0.2062,0.24721,0.29366,0.34623,0.40571,0.473,0.54906,0.63498,0.73197,0.84134,0.96456,1.1032,1.2592,0.090889,0.11582,0.14407,0.17608,0.21235,0.25344,0.29998,0.35268,0.41235,0.47989,0.55631,0.64272,0.7404,0.85072,0.97525,1.1157,1.2742,0.096754,0.1217,0.14998,0.18202,0.21834,0.2595,0.30614,0.35897,0.41883,0.48662,0.56338,0.65028,0.74862,0.85986,0.98566,1.1279,1.2887,0.10236,0.12732,0.15563,0.18771,0.22408,0.26531,0.31204,0.365,0.42503,0.49307,0.57016,0.65752,0.75649,0.86861,0.99562,1.1395,1.3027,0.10765,0.13263,0.16096,0.19309,0.2295,0.2708,0.31762,0.37071,0.43091,0.49917,0.57658,0.66437,0.76394,0.87688,1.005,1.1505,1.3158,0.11259,0.13759,0.16595,0.19811,0.23458,0.27594,0.32284,0.37605,0.4364,0.50488,0.58259,0.67078,0.7709,0.88461,1.0138,1.1608,1.3281,0.11716,0.14219,0.17058,0.20277,0.23929,0.2807,0.32769,0.381,0.44151,0.51019,0.58816,0.67673,0.77736,0.89177,1.0219,1.1702,1.3395,0.12137,0.14643,0.17484,0.20706,0.24362,0.28509,0.33215,0.38557,0.44621,0.51507,0.5933,0.68221,0.78331,0.89836,1.0294,1.179,1.3499,0.12523,0.1503,0.17874,0.21099,0.24758,0.28911,0.33624,0.38975,0.45052,0.51956,0.59802,0.68723,0.78875,0.90438,1.0362,1.1869,1.3594,0.12874,0.15383,0.18229,0.21456,0.25119,0.29276,0.33996,0.39356,0.45445,0.52364,0.60231,0.69181,0.79372,0.90987,1.0425,1.1941,1.3681,0.13193,0.15702,0.18549,0.21779,0.25446,0.29608,0.34334,0.39702,0.45802,0.52735,0.60621,0.69597,0.79822,0.91484,1.0481,1.2006,1.376], y: [0.0013559,0.0013949,0.0014206,0.0014306,0.0014221,0.0013919,0.0013362,0.0012504,0.001129,0.00096567,0.00075369,0.00048812,0.00017062,-0.0001781,-0.00048958,-0.00058203,0.0,0.1234,0.12353,0.12368,0.12383,0.12399,0.12417,0.12435,0.12454,0.12474,0.12495,0.12518,0.12543,0.12573,0.12613,0.12673,0.12773,0.12953,0.23748,0.23768,0.2379,0.23814,0.23838,0.23863,0.23887,0.2391,0.23929,0.23945,0.23955,0.2396,0.23959,0.23959,0.23969,0.24014,0.24135,0.34332,0.3436,0.34388,0.34415,0.34441,0.34464,0.34481,0.34489,0.34484,0.34463,0.3442,0.34352,0.34256,0.34134,0.33998,0.33874,0.33815,0.44089,0.44123,0.44155,0.44183,0.44206,0.44221,0.44221,0.44202,0.44158,0.44078,0.43955,0.4378,0.43544,0.43247,0.42899,0.42533,0.42214,0.53033,0.53071,0.53105,0.53133,0.5315,0.53151,0.53129,0.53076,0.52981,0.5283,0.5261,0.52305,0.51902,0.51397,0.50798,0.50144,0.49517,0.61191,0.61232,0.61267,0.61292,0.61301,0.61286,0.61239,0.61147,0.60995,0.60765,0.60438,0.59992,0.59408,0.58676,0.57805,0.56839,0.55879,0.686,0.68644,0.68679,0.68699,0.68698,0.68667,0.68592,0.68458,0.68247,0.67936,0.67498,0.66905,0.66134,0.65169,0.64018,0.62732,0.61428,0.75304,0.7535,0.75384,0.75399,0.75388,0.75338,0.75235,0.7506,0.7479,0.74396,0.73847,0.73109,0.72151,0.70955,0.69526,0.67921,0.66276,0.8135,0.81397,0.8143,0.8144,0.81419,0.81351,0.81221,0.81005,0.80676,0.80202,0.79545,0.78665,0.77526,0.76104,0.74406,0.72492,0.70517,0.86789,0.86836,0.86867,0.86872,0.8684,0.86756,0.86599,0.86344,0.85959,0.85408,0.84648,0.83633,0.82321,0.80684,0.78728,0.7652,0.7423,0.91668,0.91716,0.91745,0.91745,0.91704,0.91603,0.9142,0.91128,0.90691,0.90067,0.8921,0.88067,0.86592,0.84753,0.82555,0.8007,0.77483,0.96036,0.96084,0.96112,0.96107,0.96057,0.95941,0.95734,0.95407,0.94921,0.9423,0.93282,0.9202,0.90393,0.88366,0.85942,0.832,0.80337,0.99939,0.99988,1.0001,1.0001,0.99947,0.99816,0.99588,0.99229,0.98697,0.97943,0.96911,0.9554,0.93773,0.91571,0.88939,0.85958,0.82842,1.0342,1.0347,1.035,1.0348,1.0342,1.0327,1.0303,1.0264,1.0206,1.0125,1.0014,0.98671,0.96775,0.94414,0.9159,0.88391,0.85042,1.0652,1.0657,1.066,1.0658,1.0651,1.0635,1.0609,1.0567,1.0506,1.042,1.0302,1.0145,0.9944,0.96934,0.93934,0.90535,0.86976,1.0928,1.0934,1.0936,1.0934,1.0926,1.091,1.0881,1.0837,1.0772,1.0681,1.0557,1.0392,1.018,0.99166,0.96008,0.92427,0.88676],
+    marker: { color: [0.29,0.31005,0.33259,0.35791,0.38628,0.41798,0.4533,0.49247,0.53567,0.58297,0.63426,0.68918,0.74692,0.80611,0.86452,0.91867,0.96356,0.30224,0.32192,0.34415,0.36922,0.3974,0.429,0.46429,0.50351,0.54685,0.59439,0.64602,0.70136,0.7596,0.81937,0.87845,0.93355,0.98029,0.32595,0.34515,0.36692,0.39157,0.41941,0.45076,0.48591,0.52517,0.56875,0.61678,0.66922,0.72578,0.78578,0.848,0.91049,0.97035,1.0237,0.3488,0.36804,0.38989,0.41468,0.44272,0.47437,0.50998,0.54986,0.59431,0.64355,0.69764,0.75645,0.81954,0.88596,0.95414,1.0217,1.0854,0.371,0.39063,0.41292,0.43819,0.46678,0.49908,0.53545,0.57628,0.62193,0.67273,0.72891,0.79055,0.85749,0.9292,1.0046,1.082,1.1587,0.39548,0.41557,0.43834,0.46412,0.49328,0.52619,0.56328,0.60497,0.65172,0.70398,0.76216,0.82663,0.89761,0.97507,1.0586,1.147,1.2385,0.42434,0.44477,0.46788,0.49399,0.52348,0.55675,0.59424,0.63643,0.68387,0.73714,0.7969,0.86382,0.93858,1.0217,1.1136,1.2137,1.321,0.45812,0.47869,0.50191,0.5281,0.55763,0.5909,0.62838,0.6706,0.71819,0.7719,0.83263,0.90141,0.97944,1.0679,1.168,1.2799,1.4034,0.49609,0.51664,0.53977,0.5658,0.59508,0.62802,0.66511,0.70691,0.75414,0.80772,0.86878,0.93878,1.0195,1.1128,1.2206,1.3442,1.4836,0.5369,0.55729,0.58019,0.60589,0.63473,0.6671,0.7035,0.74452,0.79097,0.84392,0.90477,0.97539,1.0581,1.1557,1.2708,1.4054,1.5603,0.57906,0.59923,0.62182,0.6471,0.67537,0.70703,0.74254,0.78254,0.82791,0.87985,0.94004,1.0108,1.095,1.1962,1.3179,1.4631,1.6326,0.62128,0.64121,0.66346,0.68827,0.71593,0.74678,0.7813,0.82014,0.86423,0.91491,0.97413,1.0446,1.1298,1.2341,1.3619,1.5168,1.7001,0.66253,0.68223,0.70414,0.72848,0.75551,0.78554,0.81903,0.85665,0.89936,0.94864,1.0067,1.0765,1.1624,1.2693,1.4025,1.5664,1.7626,0.70208,0.72156,0.74316,0.76705,0.79346,0.82269,0.85517,0.89155,0.93287,0.98068,1.0374,1.1065,1.1927,1.3017,1.4398,1.6118,1.82,0.73943,0.75872,0.78004,0.80351,0.82934,0.8578,0.88931,0.92451,0.96444,1.0108,1.0661,1.1343,1.2206,1.3314,1.4737,1.6533,1.8724,0.77428,0.79344,0.81449,0.83758,0.86287,0.89062,0.92122,0.95529,0.99392,1.0388,1.0928,1.16,1.2462,1.3585,1.5046,1.6909,1.92,0.80655,0.82555,0.84636,0.86909,0.89391,0.92101,0.95078,0.98382,1.0212,1.0648,1.1174,1.1836,1.2696,1.3831,1.5325,1.7248,1.9632], colorscale: 'Viridis', size: 6, showscale: true,
+              colorbar: { tickfont: { color: theme.text, size: 9 }, thickness: 11,
+                          len: 0.7 } },
+    hoverinfo: 'skip', showlegend: false,
+  }];
+  const themedLayout = function () {
+    const t = window.bramblePlotlyTheme();
+    return {
+      'title.font.color': t.text,
+      'xaxis.color': t.text, 'xaxis.gridcolor': t.grid, 'xaxis.zerolinecolor': t.grid,
+      'yaxis.color': t.text, 'yaxis.gridcolor': t.grid, 'yaxis.zerolinecolor': t.grid,
+    };
+  };
+  const axis = { color: theme.text, gridcolor: theme.grid, zerolinecolor: theme.grid,
+                 tickfont: { size: 9 } };
+  const layout = {
+    title: { text: 'Displacement of the graded grid, scale 0.2', font: { color: theme.text, size: 14 } },
+    paper_bgcolor: theme.bg, plot_bgcolor: theme.bg,
+    margin: { l: 40, r: 10, t: 30, b: 35 },
+    xaxis: Object.assign({}, axis, { title: { text: 'x', font: { size: 11 } } }),
+    yaxis: Object.assign({}, axis, { title: { text: 'y', font: { size: 11 } },
+                                     scaleanchor: 'x' }),
+  };
+  Plotly.newPlot('bramble_dp_1', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bramble_dp_1', themedLayout);
+})();
+</script>
+
+</div>
 </div>
 <h2 id="Does-the-solution-satisfy-the-traction?" class="md-heading">Does the solution satisfy the traction?<a href="#Does-the-solution-satisfy-the-traction?" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The relation is checked on the lifted values, with forms that share nothing with the closure: per component of the traction, one <code class="md-code-inline">inner_Γ</code> form on the side, summed over the components of the displacement, against the weighted datum. Away from a corner these are the centred relations the closure imposed. At the corner of the two tractions the closure takes the tangential derivative one-sided, so the relation there is written out by hand from the mesh points.</p>
@@ -238,19 +374,11 @@ end</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">facet_residual (generic function with 1 method)</code></pre>
 </div>
-<p>The checks run on a graded grid, the points of a uniform one pushed through a smooth increasing map and installed with <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a>, so that a wrong spacing in a relation would show:</p>
+<p>The checks run on the graded grid above, so that a wrong spacing in a relation would show:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">grade(ξ) = expm1(2ξ) / expm1(2.0)
-
-function graded(n)
-    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (n, n), (true, true))
-    change_points!(Ωₕ, (grade.(points(Ωₕ)[1]), 1 .- grade.(1 .- points(Ωₕ)[2])))
-    return Ωₕ
-end
-
-Ωchk = graded(9)
+<pre><code class="language-julia">Ωchk = graded(9)
 Cchk, Uchk = solve_on(Ωchk)
 Pchk = Bramble.padded_space(gridspace(Ωchk; ghosts = :boundary)^Val(2))
 resid = (facet_residual(Ωchk, Pchk, Uchk, :xmin, 1),
@@ -267,7 +395,7 @@ resid = (facet_residual(Ωchk, Pchk, Uchk, :xmin, 1),
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(1.5829351718288365e-17, 1.0249831010885452e-16)</code></pre>
 </div>
-<p>Both are rounding, not discretisation error: the relation is an identity of the lifted values, whatever the accuracy of the solution.</p>
+<p>Both are rounding error: the relation is an identity of the lifted values, whatever the accuracy of the solution.</p>
 <h3 id="The-corner-of-the-two-tractions" class="md-heading">The corner of the two tractions<a href="#The-corner-of-the-two-tractions" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>At the corner node the ghost across <code class="md-code-inline">xmin</code> reads the tangential derivative along the side, and the one across <code class="md-code-inline">ymin</code> the same along <code class="md-code-inline">ymin</code>. The closure takes it one-sided: the derivative at the node of the quadratic through the three nodes along the side into the domain, with the normal derivative centred over the ghost. This writes that relation from the mesh points and the padded values, and returns the residual scaled by the size of its terms, with the terms.</p>
 <div class="md-multi-output">
@@ -303,9 +431,9 @@ maximum(abs, first.(cornerx))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">2.6020852139652106e-16</code></pre>
 </div>
-<p>Rounding again, at the corner too. The <code class="md-code-inline">ymin</code> relation has zero datum and is homogeneous, so its residual is exactly zero and is not printed; the <code class="md-code-inline">xmin</code> relation of component 1 carries a datum and terms of order one (component 2 has a small datum there):</p>
+<p>The corner residuals are rounding too. The <code class="md-code-inline">ymin</code> relation has zero datum and is homogeneous, so its residual is exactly zero and is not printed; the <code class="md-code-inline">xmin</code> relation of component 1 carries a datum and terms of order one (component 2 has a zero datum there):</p>
 <h2 id="Second-order-on-graded-grids" class="md-heading">Second order on graded grids<a href="#Second-order-on-graded-grids" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>Three graded grids of 9, 17 and 33 points per axis: the points of a uniform grid pushed through the same map, the cells differing in size by a factor of about six. The error is the discrete <span class="md-math md-math-inline">\(H^1\)</span> norm of each component at the physical nodes. A random grid is left out: the collocated form is stable on it (the errors at least halve per level, in <code class="md-code-inline">test/ghost/traction.jl</code>), but no second order is asserted there.</p>
+<p>Three graded grids of 9, 17 and 33 points per axis: the points of a uniform grid pushed through the same map, the cells differing in size by a factor of about six. The error is the discrete <span class="md-math md-math-inline">\(H^1\)</span> norm of each component at the physical nodes. A random grid is left out: the collocated form is stable on it (the errors at least halve per level, in <code class="md-code-inline">test/convergence/ghost_traction.jl</code>), but no second order is asserted there.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -358,11 +486,10 @@ order1, order2 = lsq_order(hs, err1), lsq_order(hs, err2)
 <pre><code class="language-julia">convergence_plot(
     [(hs, err1, &quot;u₁&quot;, &quot;#5B5FC7&quot;), (hs, err2, &quot;u₂&quot;, &quot;#0E7C86&quot;)];
 
-println(&quot;Both components run parallel to the slope-2 line: orders &quot;,
-    round(order1; digits = 2), &quot; and &quot;, round(order2; digits = 2),
-    &quot; on these three levels, for the problem above.&quot;)</code></pre>
+println(&quot;orders &quot;, round(order1; digits = 2), &quot; and &quot;, round(order2; digits = 2),
+    &quot; on these three levels&quot;)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">Both components run parallel to the slope-2 line: orders 2.06 and 2.03 on these three levels, for the problem above.</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">orders 2.06 and 2.03 on these three levels</code></pre>
 </div>
 <h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <ul class="md-list-tight">
@@ -381,6 +508,7 @@ println(&quot;Both components run parallel to the slope-2 line: orders &quot;,
           <a class="md-toc-link md-toc-h2" href="#The-collocated-form">The collocated form</a>
           <a class="md-toc-link md-toc-h2" href="#The-boundary-relations">The boundary relations</a>
           <a class="md-toc-link md-toc-h2" href="#Assembling-and-solving">Assembling and solving</a>
+          <a class="md-toc-link md-toc-h2" href="#The-solution-on-a-graded-grid">The solution on a graded grid</a>
           <a class="md-toc-link md-toc-h2" href="#Does-the-solution-satisfy-the-traction?">Does the solution satisfy the traction?</a>
             <a class="md-toc-link md-toc-h3" href="#The-corner-of-the-two-tractions">The corner of the two tractions</a>
           <a class="md-toc-link md-toc-h2" href="#Second-order-on-graded-grids">Second order on graded grids</a>
@@ -402,6 +530,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=bb50bbd3"></script>
+  <script src="../../assets/materialdocs.js?v=b0295606"></script>
 </body>
 </html>

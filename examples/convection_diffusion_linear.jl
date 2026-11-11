@@ -2,7 +2,7 @@
 #
 # One more linear operator, built the same way as the [Poisson example](poisson_linear.md):
 # diffusion plus a constant convective term, in 1D, 2D and 3D. Every number and every plot
-# below was produced by the code shown.
+# below except the interactive panel comes from the code shown.
 #
 # ## Problem
 #
@@ -35,9 +35,7 @@ Random.seed!(20260903)
 Ωₕ = mesh(Ω, (24, 24), (false, false))
 Wₕ = gridspace(Ωₕ)
 
-# The seed is what makes the numbers below reproducible: `(false, false)` draws the interior
-# points from the global RNG, so without it the mesh -- and every figure on this page --
-# would differ from build to build, and the suite could not assert what the page prints.
+# Seeded as on the [Poisson page](poisson_linear.md).
 #
 # The outflow sides carry the Neumann relation through ghost points:
 # `gridspace(Ωₕ; ghosts = (:xmin, :ymin))` adds one layer of ghosts outside those two sides
@@ -71,6 +69,18 @@ uₕ = element(Wₕ)
 uₕ .= A \ F
 nothing # hide
 
+# The solution with the grid lines drawn, then the pointwise error `uₕ - sol`: the colour
+# scale of the second plot is the error's own.
+
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+surface_plot(uₕ; title = "uₕ on the random grid", mesh_lines = true) # hide
+
+#-
+
+eₕ = element(Wₕ) # hide
+eₕ .= uₕ .- Rₕ(Wₕ, sol) # hide
+surface_plot(eₕ; title = "uₕ - sol", mesh_lines = true) # hide
+
 @test 1.0e-4 < norm₁ₕ(uₕ .- Rₕ(Wₕ, sol)) < 1.0e-1                                           #src
 
 # The Dirichlet nodes hold the data: row replacement leaves them exactly at `sol`.          #src
@@ -83,9 +93,8 @@ end                                                                             
 # ## The Neumann relation on the lifted solution
 #
 # `Bramble.lift(Cₕ, u)` returns the solution on the padded grid, with the ghost values the
-# relations fix filled in. The relation holds at the ghosts by construction, so the check
-# that means something is one-sided and independent of them: on the physical nodes of an
-# outflow side, the three-point forward difference of the lifted solution along the normal
+# relations fix filled in. Ghost values satisfy the relation by construction, so the check
+# reads the physical nodes only: on an outflow side, the three-point forward difference of the lifted solution along the normal
 # axis, with the non-uniform spacings, negated for the outward normal, must equal ``h`` up
 # to the truncation error, of order ``h^2``. `flux_residual` returns the largest residual
 # over the nodes of one side, `axis` being 1 for `xmin` and 2 for `ymin`:
@@ -136,24 +145,21 @@ coarse_to_fine[2] < coarse_to_fine[1]
 
 # ## Péclet number and flow direction
 #
-# A different problem from the one just solved, not a plot of `uₕ` above: constant-coefficient
-# convection-diffusion again, but on a domain-independent, boundary-driven flow rather than a
-# manufactured solution, so the field itself moves as the parameters change instead of always
-# resolving to the same prescribed answer.
+# The panel below solves a different problem: homogeneous convection-diffusion driven by
+# the boundary values, with no manufactured solution, so the field changes with the
+# parameters.
 #
 # ```math
 # -\nabla \cdot (\epsilon \nabla u) + \mathbf{\beta} \cdot \nabla u = 0 \text{ in } \Omega = (0,1)^2,
 # \qquad u = 1 \text{ on } \{x = 0\}, \qquad u = 0 \text{ on the rest of } \partial\Omega
 # ```
 #
-# with ``\epsilon = 1`` fixed and ``\mathbf{\beta} = \text{Pe}``, so the
-# Péclet slider sets the advection speed directly. An interactive panel, seeded only from the
-# resolution of `uₕ` above but solving this boundary-driven problem itself in the browser: drag
-# the Péclet number slider past the point where the cell Péclet number `Pe_h` crosses `1` with
-# the centered stencil selected, and the classic grid-scale oscillation appears. Switch to
-# upwind to see it damp back out, at the cost of accuracy.
+# with ``\epsilon = 1`` and ``\mathbf{\beta} = \text{Pe}\,(\cos\theta, \sin\theta)``; the
+# sliders set the Péclet number Pe and the flow angle ``\theta``. The panel runs its own
+# JavaScript solver on this problem; only the starting resolution comes from `uₕ`. With the
+# centred stencil, raise Pe until the cell Péclet number `Pe_h` passes 1 and the grid-scale
+# oscillation appears; the upwind stencil removes it at the cost of first-order accuracy.
 
-include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 convection_diffusion_interactive_widget(uₕ; title = "Convection-diffusion, 2D") # hide
 
 # ## Convergence with a convective term
@@ -203,11 +209,8 @@ include(joinpath(@__DIR__, "..", "convergence_plot.jl")) # hide
 convergence_plot([(hs1, errs1, "1D", "#5B5FC7"), (hs2, errs2, "2D", "#0E7C86"), (hs3, errs3, "3D", "#B26A00")]; # hide
     title = "Convection-diffusion, ‖·‖₁ₕ") # hide
 
-# Second order in every dimension. Neither the Neumann relation nor the convective term
-# changes the rate. The convective term makes the matrix non-symmetric (the first
-# difference `∇̽ₕ` is antisymmetric to leading order, not self-adjoint), which is why this
-# example does not also check `issymmetric`, unlike the
-# [forms tutorial](@ref tutorial_form)'s pure-diffusion Poisson problem.
+# Second order in every dimension (fitted orders above 1.9, 1.9 and 1.8). Neither the
+# Neumann relation nor the convective term changes the rate.
 #
 # ## Where to go next
 #

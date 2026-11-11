@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Neumann, Robin and pure Neumann boundaries — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=dd783770">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=9ae53aae">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Neumann, Robin and pure Neumann boundaries — Bramble.jl">
   <meta property="og:title" content="Neumann, Robin and pure Neumann boundaries — Bramble.jl">
@@ -42,85 +42,79 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/" class="md-nav-active">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/" class="md-nav-active">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/examples/neumann_robin_poisson.jl#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Neumann,-Robin-and-pure-Neumann-boundaries" class="md-heading">Neumann, Robin and pure Neumann boundaries<a href="#Neumann,-Robin-and-pure-Neumann-boundaries" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<p>Poisson&#39;s equation on a non-uniform grid with a flux or a mixed condition on the whole boundary, solved through the public path (<code class="md-code-inline">gridspace</code> with ghost points, <code class="md-code-inline">constrained</code>, <code class="md-code-inline">form</code>, <code class="md-code-inline">assemble</code>, <code class="md-code-inline">pde_solve</code>) and checked for second order. Every number and every plot below was produced by the code shown.</p>
+<p>Poisson&#39;s equation on a non-uniform grid with a flux or a mixed condition on the whole boundary, imposed through ghost points and <code class="md-code-inline">constrained</code>, and checked for second order. Every number and every plot below comes from the code shown.</p>
 <h2 id="Problem" class="md-heading">Problem<a href="#Problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-math md-math-display">
 \[-\Delta u = g \text{ in } \Omega = (0,1)^2, \qquad
 \alpha\, u + \partial_n u = h \text{ on } \partial\Omega,\]
 </div>
-<p>with <span class="md-math md-math-inline">\(\partial_n\)</span> the outward normal derivative and a coefficient <span class="md-math md-math-inline">\(\alpha \ge 0\)</span> that may change from one side of the square to the next. Three choices of <span class="md-math md-math-inline">\(\alpha\)</span>:</p>
-<ul class="md-list-tight">
-<li><p><strong>Robin and Neumann</strong>: <span class="md-math md-math-inline">\(\alpha = 2\)</span> on <code class="md-code-inline">xmin</code> and <code class="md-code-inline">ymin</code>, <span class="md-math md-math-inline">\(\alpha = 0\)</span> (Neumann) on <code class="md-code-inline">xmax</code> and <code class="md-code-inline">ymax</code>;</p>
-</li>
-<li><p><strong>Robin</strong>: <span class="md-math md-math-inline">\(\alpha = 2\)</span> on <code class="md-code-inline">xmin</code> and <code class="md-code-inline">ymin</code>, <span class="md-math md-math-inline">\(\alpha = 1\)</span> on <code class="md-code-inline">xmax</code> and <code class="md-code-inline">ymax</code>;</p>
-</li>
-<li><p><strong>pure Neumann</strong>: <span class="md-math md-math-inline">\(\alpha = 0\)</span> on every side.</p>
-</li>
-</ul>
-<p>The manufactured solution is <span class="md-math md-math-inline">\(u(x, y) = e^{x} \cos 2y\)</span>, so <span class="md-math md-math-inline">\(g = 3u\)</span> and the data <span class="md-math md-math-inline">\(h = \alpha u + \partial_n u\)</span> come from its gradient.</p>
-<p>A pure Neumann problem fixes <span class="md-math md-math-inline">\(u\)</span> only up to a constant, and the data must satisfy a compatibility condition, which the manufactured data do. The solve below selects the solution of discrete mean zero, and the error is measured against the exact solution shifted to that same mean.</p>
+<p>with <span class="md-math md-math-inline">\(\partial_n\)</span> the outward normal derivative and <span class="md-math md-math-inline">\(\alpha \ge 0\)</span> free to change from side to side. Three choices of <span class="md-math md-math-inline">\(\alpha\)</span> on <code class="md-code-inline">xmin</code>, <code class="md-code-inline">xmax</code>, <code class="md-code-inline">ymin</code>, <code class="md-code-inline">ymax</code>: Robin and Neumann, <span class="md-math md-math-inline">\((2, 0, 2, 0)\)</span>; Robin, <span class="md-math md-math-inline">\((2, 1, 2, 1)\)</span>; pure Neumann, <span class="md-math md-math-inline">\((0, 0, 0, 0)\)</span>. The manufactured solution is <span class="md-math md-math-inline">\(u(x, y) = e^{x} \cos 2y\)</span>, so <span class="md-math md-math-inline">\(g = 3u\)</span> and the data <span class="md-math md-math-inline">\(h = \alpha u + \partial_n u\)</span> come from its gradient.</p>
 <h2 id="One-boundary-relation-per-side" class="md-heading">One boundary relation per side<a href="#One-boundary-relation-per-side" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>Ghost points come first: <code class="md-code-inline">gridspace(Ωₕ; ghosts = :boundary)</code> adds one layer outside every side. <code class="md-code-inline">constrained</code> then takes a function of the trial function <code class="md-code-inline">u</code> and returns one <code class="md-code-inline">side =&gt; relation =&gt; data</code> entry per side. A Neumann side is <code class="md-code-inline">∂ₙ(u)</code>, a Robin side is <code class="md-code-inline">α * u + ∂ₙ(u)</code>, and the data is a function of the boundary point. Each relation fixes a ghost value from the interior ones, which leaves the physical nodes as the only unknowns.</p>
+<p><code class="md-code-inline">gridspace(Ωₕ; ghosts = :boundary)</code> adds one layer of ghost points outside every side. <code class="md-code-inline">constrained</code> takes a function of the trial function <code class="md-code-inline">u</code> and returns one <code class="md-code-inline">side =&gt; relation =&gt; data</code> entry per side: <code class="md-code-inline">∂ₙ(u)</code> on a Neumann side, <code class="md-code-inline">α * u + ∂ₙ(u)</code> on a Robin side. Each relation fixes a ghost value from the interior ones, so the physical nodes are the only unknowns. <code class="md-code-inline">assemble(a, l)</code> takes both forms on the constrained space, so the relations&#39; data reach the right-hand side.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -134,39 +128,24 @@ rhs(p) = 3 * sol(p)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">rhs (generic function with 1 method)</code></pre>
 </div>
-<p>The sides, their outward normals and the coordinate each normal points along:</p>
+<p>Each side with its outward normal and the coordinate the normal points along:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">const SIDES = (:xmin, :xmax, :ymin, :ymax)
-const NORMALS = (-1.0, 1.0, -1.0, 1.0)
-const AXES = (1, 1, 2, 2)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(1, 1, 2, 2)</code></pre>
-</div>
-<p>The data of the relation on side <code class="md-code-inline">j</code> is <span class="md-math md-math-inline">\(\alpha u + \partial_n u\)</span> evaluated on the exact solution. A side with <span class="md-math md-math-inline">\(\alpha = 0\)</span> carries the bare flux <code class="md-code-inline">∂ₙ(u)</code>:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">function side_relation(u, α, j)
-    data = p -&gt; α[j] * sol(p) + NORMALS[j] * ∇sol(p)[AXES[j]]
+<pre><code class="language-julia">const SIDES = ((:xmin, -1.0, 1), (:xmax, 1.0, 1), (:ymin, -1.0, 2), (:ymax, 1.0, 2))
+
+function side_relation(u, α, j)
+    side, normal, axis = SIDES[j]
+    data = p -&gt; α[j] * sol(p) + normal * ∇sol(p)[axis]
     relation = iszero(α[j]) ? ∂ₙ(u) : α[j] * u + ∂ₙ(u)
-    return SIDES[j] =&gt; relation =&gt; data
-end</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">side_relation (generic function with 1 method)</code></pre>
-</div>
-<h2 id="Assembling-and-solving" class="md-heading">Assembling and solving<a href="#Assembling-and-solving" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">assemble(a, l)</code> takes the bilinear and the linear form together on the constrained space, so the relations&#39; data reach the right-hand side. When <span class="md-math md-math-inline">\(\alpha\)</span> vanishes on every side the matrix is singular, its null space the constants. <code class="md-code-inline">pde_solve</code> then takes <code class="md-code-inline">mean_zero</code>, the vector of cell measures that is the discrete integral, and solves the system bordered by that constraint.</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">function solve_case(Ωₕ, α)
+    return side =&gt; relation =&gt; data
+end
+
+function solve_case(Ωₕ, α)
     Cₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
         u -&gt; ntuple(j -&gt; side_relation(u, α, j), 4))
     A, F = assemble(form(Cₕ, Cₕ, (u, v) -&gt; innerₕ(-1.0 * Δₕ(u), v)),
         form(Cₕ, v -&gt; innerₕ(rhs, v)))
-
     Wₕ = gridspace(Ωₕ)
     uₕ = element(Wₕ)
     uₑ = Rₕ(Wₕ, sol)
@@ -182,7 +161,408 @@ end</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">solve_case (generic function with 1 method)</code></pre>
 </div>
-<p>The error is the discrete <span class="md-math md-math-inline">\(H^1\)</span> norm <code class="md-code-inline">norm₁ₕ</code>, and the grid is a random non-uniform one refined in place by <a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a>, so each level is the same random mesh split dyadically, not a fresh draw:</p>
+<p>The Robin and Neumann case on one random grid, then the pointwise error:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Random.seed!(20260903)
+Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+uₕ, uₑ = solve_case(mesh(Ω, (17, 17), (false, false)), (2.0, 0.0, 2.0, 0.0))</code></pre>
+</div>
+<div class="md-output md-output-html">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script>
+  // Colour tokens read from the page's own theme, not hard-coded — MaterialDocs sets
+  // `data-theme="light"|"dark"` on <html>; when the attribute is absent the browser's
+  // `prefers-color-scheme` decides. Recomputed on every call so a caller can re-theme
+  // after a toggle.
+  window.bramblePlotlyTheme = function () {
+    const attr = document.documentElement.getAttribute('data-theme');
+    const dark = attr
+      ? attr === 'dark'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return dark
+      ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
+      : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
+  };
+
+  // Every plot this page creates registers itself (div id + the function that
+  // reapplies theme-dependent layout colours) so one observer can repaint all of them
+  // together when the theme toggles, instead of each plot wiring its own observer.
+  window.__bramble_plotly_charts = window.__bramble_plotly_charts || [];
+  window.brambleRegisterPlotlyChart = function (divId, restyle) {
+    window.__bramble_plotly_charts.push({ divId, restyle });
+  };
+
+  if (!window.__bramble_plotly_theme_observer) {
+    const repaint = function () {
+      for (const { divId, restyle } of window.__bramble_plotly_charts) {
+        const layout = restyle();
+        Plotly.relayout(divId, layout);
+      }
+    };
+    window.__bramble_plotly_theme_observer = new MutationObserver(repaint);
+    window.__bramble_plotly_theme_observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    // With no saved theme MaterialDocs follows the system scheme in CSS alone and
+    // leaves `data-theme` unset, so a system change must repaint too.
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      if (!document.documentElement.hasAttribute('data-theme')) repaint();
+    });
+  }
+
+  // The layout-race fix (see the module note above): once per page, after everything
+  // (fonts included) has truly finished loading, force every plot created so far to
+  // resize against its now-final container.
+  if (!window.__bramble_plotly_load_fix_installed) {
+    window.__bramble_plotly_load_fix_installed = true;
+    const rescue = function () {
+      for (const { divId } of window.__bramble_plotly_charts) {
+        Plotly.Plots.resize(document.getElementById(divId));
+      }
+    };
+    const loaded = document.readyState === 'complete' ? Promise.resolve() :
+      new Promise((r) => window.addEventListener('load', r, { once: true }));
+    Promise.all([loaded, document.fonts.ready]).then(rescue);
+  }
+</script>
+
+<div id="bramble_sp_1" data-mesh-lines="34" style="width:100%; max-width:480px; height:420px; margin: 1em 0;"></div>
+<script>
+(function () {
+  const theme = window.bramblePlotlyTheme();
+  const data = [{
+    type: 'surface',
+    x: [0.0,0.012502137392377821,0.020842341257392705,0.15343091907868456,0.37921442624407653,0.3946900115738672,0.4025723532168787,0.48945867206954463,0.5143492048141987,0.5374653519773097,0.5835400048109605,0.6102520607379804,0.6441393949208799,0.7500938235163731,0.7758339074531879,0.9497250979796771,1.0],
+    y: [0.0,0.012139128962408652,0.1758926683115739,0.3151435062095457,0.5054369052524069,0.5444713230540591,0.6135392271877386,0.6750549866631306,0.703006660663805,0.775872374245137,0.7893333325080929,0.7917694274025723,0.816421518193467,0.8649399088263278,0.9762430318955249,0.9875622988903799,1.0],
+    z: [[0.9978579545733074,1.0103855220018148,1.0188316918866949,1.162760759995588,1.45561208567302,1.4783990414476083,1.4901416444144233,1.6257295593182917,1.6668415813044184,1.7059522219078527,1.7866416472039301,1.8351696835563835,1.8986307039412147,2.1112315914756907,2.1664767881893865,2.5775722879701166,2.7108372652139847],[0.9975104419213289,1.010032962150739,1.0184757251939816,1.1623416474099035,1.4550478681555927,1.4778278222511396,1.4895668298584175,1.625110264124386,1.6662098903855596,1.7053088193332193,1.7859738657364916,1.8344875999280865,1.8979299606892988,2.110462380525887,2.1656919399634305,2.5766321800131817,2.7098576709639564],[0.9350824899276401,0.9468010932522433,0.9547019931465844,1.0893473534535836,1.3633644029465566,1.3847129627339465,1.3957152352237976,1.5227892099607245,1.5613307827538756,1.5979995250820138,1.6736591402299357,1.7191665188362892,1.7786807180648532,1.9780691648211302,2.029887564586674,2.4154567552812023,2.540540979326507],[0.8025949169822004,0.8126267103204762,0.8193905069933544,0.9346828938915157,1.1695778500426621,1.1878961583109835,1.1973375271650273,1.3064179471687918,1.3395136713198237,1.3710056136296591,1.435996344307728,1.4750942761236008,1.5262341889909041,1.6976241249898116,1.7421806348986375,2.0738587901307803,2.1815042529782778],[0.5200975537268242,0.5265057225019045,0.5308294896733708,0.6048447886951555,0.7564678371204783,0.7683250641774041,0.7744377969239485,0.8451253110559873,0.8665953730401782,0.8870340216839978,0.9292400387525411,0.9546477705429925,0.9878992559386803,1.0994776700996374,1.1285267916045918,1.3452195696356088,1.41588011333793],[0.452518122468872,0.4580767603562836,0.4618272629871117,0.5260413476099667,0.6577955093310996,0.6681095579683825,0.6734272063420773,0.7349412331468712,0.7536325037858391,0.7714287695410262,0.8081866884273083,0.8303200381120199,0.8592919584407689,0.9565519085587434,0.9818841092102328,1.1709572406179822,1.2326328120551868],[0.32595979252778623,0.3299245302892071,0.33260031506505044,0.37848750101979106,0.4730536575930833,0.4804784252090006,0.4843074015500615,0.5286436507395617,0.5421308279184844,0.5549781871895331,0.5815315376349568,0.5975311812514189,0.6184857175484051,0.6889151035647736,0.7072798968098122,0.8445540990949126,0.8893919033869234],[0.20776892623686605,0.2102454171817684,0.21191780191579673,0.24070319821290154,0.3005502094708924,0.3052768970145871,0.3077156878544858,0.33600934030066154,0.34463577884198565,0.3528605177091215,0.3698813774840928,0.380150767955842,0.39361469020429796,0.4389717509318029,0.45082446431507317,0.5396741804637973,0.5687809684318098],[0.1529545356446007,0.15474167322070984,0.15594913237881697,0.17680448284402728,0.22054951535806072,0.22402482947300448,0.22581884702796431,0.24667172635752999,0.25304357328936117,0.2591241171817573,0.2717231811650994,0.27933438221607076,0.2893233719723364,0.3230482538741707,0.33187956268874397,0.3982609023369024,0.42006925289552904],[0.00762217008381632,0.007576928134883123,0.007549263479203707,0.007375792889800025,0.008420470402876716,0.008577312480639808,0.008661477474490137,0.009782305469197108,0.010174976168507264,0.01056898912354301,0.011440768401941798,0.012001719460808349,0.012773874127050699,0.015643193809949704,0.016459652574034287,0.02324023237955613,0.025716209281715672],[-0.01927664475416805,-0.01966021999300053,-0.0199160798535464,-0.023981831266014997,-0.030842558609345608,-0.03129999370914665,-0.031532333350145235,-0.034063893648823416,-0.03477797928053423,-0.03543656592958729,-0.03673560568458011,-0.03747976305673748,-0.038413841234162506,-0.041256980930637364,-0.041924401197351635,-0.04617878116744836,-0.04728407101448961],[-0.02414420353395012,-0.024589001193942896,-0.02488615311679494,-0.029656269630934134,-0.03794764424301387,-0.03851624160377177,-0.038805857151263036,-0.041998362081633704,-0.04291272926362254,-0.04376179750706049,-0.04545367692691871,-0.04643401332373508,-0.047676862007843546,-0.051553779485485035,-0.052489737246878186,-0.058741123456825924,-0.06049449850653611],[-0.07338707528518475,-0.07445129810849194,-0.07516618653844534,-0.0870625452714743,-0.10982893997679172,-0.1115221851573424,-0.11239126838071947,-0.12227053286465561,-0.12521114912649636,-0.12798732689838213,-0.13365360974175255,-0.13702342459887673,-0.14139021123519738,-0.1557264890373371,-0.15937942942697447,-0.185836099793147,-0.19414605269639135],[-0.16987189642490422,-0.17215121772533554,-0.173685451538978,-0.1995502573135274,-0.25069156492727257,-0.25458887526990903,-0.25659357061009724,-0.27957651227405217,-0.2864878673448564,-0.2930405380475419,-0.30649549261302983,-0.31454815286019233,-0.3250373693063925,-0.35987408994688463,-0.36885246089759594,-0.4349131295186984,-0.45606107791490036],[-0.3855848017258685,-0.39059731143826976,-0.3939730926237761,-0.4511135634886015,-0.5657922640835925,-0.57461980040402,-0.5791645924313826,-0.6314535739541839,-0.6472452019173116,-0.6622439185849056,-0.6931191867793571,-0.7116465842833719,-0.735832049368269,-0.8165434650856243,-0.83743920065844,-0.9921454691106093,-1.0418883974067885],[-0.40649678777118653,-0.41177257817489327,-0.41532592824132303,-0.4754947943855091,-0.596344541702996,-0.6056492219007685,-0.6104398647955761,-0.6655682039337683,-0.6822199881440956,-0.6980368758971267,-0.7306000875714859,-0.750142411607866,-0.7756550910102682,-0.8608163281401141,-0.8828671817327655,-1.0461923668906794,-1.098719510287781],[-0.4292439866507973,-0.43480601851467543,-0.4385523740727782,-0.5020146547264214,-0.6295800213435642,-0.6394033754849863,-0.6444612844860964,-0.7026779342119437,-0.720265159442762,-0.7369718657195439,-0.7713710234114459,-0.7920172071472416,-0.8189733967492503,-0.9089758029468336,-0.9322828142786348,-1.1049896546521458,-1.1605475724226877]],
+    colorscale: 'Viridis',
+    showscale: true,
+    colorbar: { tickfont: { color: theme.text } },
+    contours: { z: { show: false } },
+  }];
+function meshLines(xs, ys, Z, lift) {
+  const x = [], y = [], z = [];
+  const point = (i, j) => {
+    x.push(xs[i]); y.push(ys[j]);
+    z.push(Number.isFinite(Z[j][i]) ? Z[j][i] + lift : null);
+  };
+  for (let i = 0; i < xs.length; i++) {
+    for (let j = 0; j < ys.length; j++) point(i, j);
+    x.push(null); y.push(null); z.push(null);
+  }
+  for (let j = 0; j < ys.length; j++) {
+    for (let i = 0; i < xs.length; i++) point(i, j);
+    x.push(null); y.push(null); z.push(null);
+  }
+  return { x, y, z };
+}
+
+data.push({
+  type: 'scatter3d', mode: 'lines',
+  ...meshLines(data[0].x, data[0].y, data[0].z, 0.038713848376366725),
+  line: { color: '#9a9a9a', width: 2 },
+  showlegend: false, hoverinfo: 'skip',
+});
+  const layout = {
+    title: { text: 'uₕ on the random grid', font: { color: theme.text, size: 14 } },
+    paper_bgcolor: theme.bg,
+    plot_bgcolor: theme.bg,
+    font: { color: theme.text },
+    scene: {
+      camera: {
+        eye: { x: 0, y: 0, z: 2.1 },
+        up: { x: 0, y: 1, z: 0 },
+        projection: { type: 'orthographic' },
+      },
+      xaxis: { title: 'x', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+      yaxis: { title: 'y', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+      zaxis: { title: 'u', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+    },
+    margin: { t: 40, l: 10, r: 10, b: 10 },
+  };
+  Plotly.newPlot('bramble_sp_1', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bramble_sp_1', function () {
+    const t = window.bramblePlotlyTheme();
+    return {
+      'font.color': t.text,
+      'scene.xaxis.color': t.text, 'scene.xaxis.gridcolor': t.grid, 'scene.xaxis.backgroundcolor': t.bg,
+      'scene.yaxis.color': t.text, 'scene.yaxis.gridcolor': t.grid, 'scene.yaxis.backgroundcolor': t.bg,
+      'scene.zaxis.color': t.text, 'scene.zaxis.gridcolor': t.grid, 'scene.zaxis.backgroundcolor': t.bg,
+      'title.font.color': t.text,
+    };
+  });
+})();
+</script>
+
+</div>
+</div>
+<div class="md-multi-output">
+<div class="md-output md-output-html">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script>
+  // Colour tokens read from the page's own theme, not hard-coded — MaterialDocs sets
+  // `data-theme="light"|"dark"` on <html>; when the attribute is absent the browser's
+  // `prefers-color-scheme` decides. Recomputed on every call so a caller can re-theme
+  // after a toggle.
+  window.bramblePlotlyTheme = function () {
+    const attr = document.documentElement.getAttribute('data-theme');
+    const dark = attr
+      ? attr === 'dark'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return dark
+      ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
+      : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
+  };
+
+  // Every plot this page creates registers itself (div id + the function that
+  // reapplies theme-dependent layout colours) so one observer can repaint all of them
+  // together when the theme toggles, instead of each plot wiring its own observer.
+  window.__bramble_plotly_charts = window.__bramble_plotly_charts || [];
+  window.brambleRegisterPlotlyChart = function (divId, restyle) {
+    window.__bramble_plotly_charts.push({ divId, restyle });
+  };
+
+  if (!window.__bramble_plotly_theme_observer) {
+    const repaint = function () {
+      for (const { divId, restyle } of window.__bramble_plotly_charts) {
+        const layout = restyle();
+        Plotly.relayout(divId, layout);
+      }
+    };
+    window.__bramble_plotly_theme_observer = new MutationObserver(repaint);
+    window.__bramble_plotly_theme_observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    // With no saved theme MaterialDocs follows the system scheme in CSS alone and
+    // leaves `data-theme` unset, so a system change must repaint too.
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      if (!document.documentElement.hasAttribute('data-theme')) repaint();
+    });
+  }
+
+  // The layout-race fix (see the module note above): once per page, after everything
+  // (fonts included) has truly finished loading, force every plot created so far to
+  // resize against its now-final container.
+  if (!window.__bramble_plotly_load_fix_installed) {
+    window.__bramble_plotly_load_fix_installed = true;
+    const rescue = function () {
+      for (const { divId } of window.__bramble_plotly_charts) {
+        Plotly.Plots.resize(document.getElementById(divId));
+      }
+    };
+    const loaded = document.readyState === 'complete' ? Promise.resolve() :
+      new Promise((r) => window.addEventListener('load', r, { once: true }));
+    Promise.all([loaded, document.fonts.ready]).then(rescue);
+  }
+</script>
+
+<div id="bramble_sp_2" data-mesh-lines="34" style="width:100%; max-width:480px; height:420px; margin: 1em 0;"></div>
+<script>
+(function () {
+  const theme = window.bramblePlotlyTheme();
+  const data = [{
+    type: 'surface',
+    x: [0.0,0.012502137392377821,0.020842341257392705,0.15343091907868456,0.37921442624407653,0.3946900115738672,0.4025723532168787,0.48945867206954463,0.5143492048141987,0.5374653519773097,0.5835400048109605,0.6102520607379804,0.6441393949208799,0.7500938235163731,0.7758339074531879,0.9497250979796771,1.0],
+    y: [0.0,0.012139128962408652,0.1758926683115739,0.3151435062095457,0.5054369052524069,0.5444713230540591,0.6135392271877386,0.6750549866631306,0.703006660663805,0.775872374245137,0.7893333325080929,0.7917694274025723,0.816421518193467,0.8649399088263278,0.9762430318955249,0.9875622988903799,1.0],
+    z: [[-0.002142045426692607,-0.0021950938185968383,-0.0022293678574729636,-0.0030664879243140764,-0.005524222452936822,-0.0055250788661516115,-0.005525493224502354,-0.005703281396389981,-0.0057080789582142355,-0.005710674414716621,-0.005730572390657107,-0.005725674192296637,-0.005716728836310914,-0.005967058840814943,-0.005926166873239769,-0.007426652229951536,-0.007444563245060376],[-0.002194855650797023,-0.002249243703772219,-0.0022844253768719014,-0.0031420283895546852,-0.005657839552904331,-0.005658982021582881,-0.005659531043754384,-0.0058417893712234825,-0.0058468654314536295,-0.005849645778101653,-0.005870137413326981,-0.005865241489202866,-0.005856256276271399,-0.006112326208078667,-0.006070802674018161,-0.0076049547231575865,-0.007623073240595968],[-0.003676538140799268,-0.0037681014962681614,-0.0038282948973812347,-0.005083500699407217,-0.008290497545274222,-0.008334202179112626,-0.008355793220024887,-0.008733097947523083,-0.008790310710471871,-0.008839471850571323,-0.008946462573550473,-0.008990617979563797,-0.009042627034004491,-0.009470182377804282,-0.009475322080922943,-0.011234337378959403,-0.011270627973806402],[-0.005263466189012189,-0.0053950288067122765,-0.005482229850653941,-0.0071404216700008405,-0.01081336543272804,-0.01090438227445456,-0.010949708410270764,-0.011548749783389267,-0.01166959299350756,-0.011775606327646626,-0.011986579054952928,-0.01208847117463896,-0.012208849048997106,-0.012772553507154116,-0.012813303974620105,-0.014454274198544947,-0.014482509964333978],[-0.011022994130329256,-0.011296648922166308,-0.011477019773557307,-0.014350017926860414,-0.019571679345358417,-0.01981752758208455,-0.019941752630778242,-0.021362193096546522,-0.02173011883680709,-0.022065313557607213,-0.022725676482478252,-0.023089580412177013,-0.02353879586848273,-0.025010036978891037,-0.02528105605476938,-0.027726483693612414,-0.02785522062338286],[-0.010904464121725466,-0.011175967758711602,-0.011355494386467158,-0.014229331138872148,-0.01932805794206749,-0.019574396171597175,-0.019698727261108773,-0.021101593745972758,-0.02146478597429513,-0.021794477243932464,-0.0224390817103457,-0.02279245021849674,-0.023225654624156045,-0.024605766297053577,-0.02485648734194701,-0.026989654583486677,-0.02708038397152257],[-0.011030028284926108,-0.0113048299945393,-0.011486868496974834,-0.01438441435531429,-0.019334405065230875,-0.019588898195195104,-0.019717199158342413,-0.021132609920853196,-0.021501382393783075,-0.021834785533977774,-0.02247965547590669,-0.022831815491262786,-0.023259982588441974,-0.02455929023030201,-0.024797785749749002,-0.026564230564159574,-0.026641402903942235],[-0.011130455988872995,-0.011407854075078105,-0.011591833276960034,-0.01449566613869857,-0.019291625725476602,-0.01955317619196817,-0.019684924590014474,-0.02111030067456482,-0.02148430853137434,-0.021821432874608082,-0.02246779410373906,-0.02282008859757495,-0.023245786373874533,-0.02448172567164869,-0.02471320049350567,-0.026180490600187678,-0.026249244533327554],[-0.011083744090437608,-0.011360309091516196,-0.01154396736605151,-0.014435813372987494,-0.0191327710853261,-0.019395530480594725,-0.01952781728655384,-0.02094571033655318,-0.02131859575154388,-0.021654119817290207,-0.022294474382068996,-0.02264292544124069,-0.023062504918325455,-0.024253370581093836,-0.024477680951042968,-0.025777876930413945,-0.02583302207990723],[-0.011428255739875305,-0.011713163777311617,-0.011902384500912523,-0.014833712619936618,-0.019414798453379456,-0.01969207390138432,-0.019831618388033385,-0.02129718484917245,-0.021687807070766646,-0.022038917918015266,-0.022704685615890403,-0.023068121001161138,-0.02350475538361512,-0.02469034203192491,-0.024925548780554762,-0.026005098185046732,-0.02606821705923221],[-0.011406387783669033,-0.011690950343147747,-0.011880066930789749,-0.014806471241675702,-0.019343040395468095,-0.01962112955755566,-0.019761048634596167,-0.02122409796228768,-0.02161458365834648,-0.021965339088660055,-0.022629175729587017,-0.02299144353545665,-0.023426137577093276,-0.024594083495052776,-0.024827031697537336,-0.025834175239606204,-0.025890494506278994],[-0.011402020359238272,-0.011686513507996685,-0.011875606060969355,-0.014801085287868538,-0.019329577761650715,-0.019607808645360696,-0.01974779251507089,-0.021210345988006734,-0.021600795123754003,-0.021951475348760498,-0.022614941787579626,-0.022976987469824697,-0.023411318191100056,-0.024576046465899424,-0.02480858086418489,-0.02580259345436066,-0.02585765352782031],[-0.011380169207429555,-0.011664306967160157,-0.011853349307235542,-0.014773204606817122,-0.01922839815202755,-0.0195086416025316,-0.019649576653557668,-0.021110429938294997,-0.021501519432209945,-0.02185240644933016,-0.02251415386497338,-0.02287519905197878,-0.023307518831547122,-0.02444555117921149,-0.024675443429368366,-0.025548313297064668,-0.02559380666626268],[-0.011458559427437592,-0.011744943394274399,-0.011935761786734722,-0.014867672607962873,-0.01922808654888114,-0.01951550351997619,-0.019659948299265817,-0.02113579188918302,-0.02153369436867364,-0.021890306826334915,-0.022559828165495233,-0.02292577617607877,-0.023363337677545892,-0.024481586663714527,-0.024714859482967755,-0.02541482126669098,-0.025448982569127865],[-0.013095663595863227,-0.013422030564174625,-0.013638938501561226,-0.016855576702441144,-0.02153485997929705,-0.021874183778021417,-0.02204482940288721,-0.023762561199385912,-0.024238620486450424,-0.024668081564603206,-0.025480003494404713,-0.025933059088038335,-0.026483315432880294,-0.02790996457921857,-0.028242696256085775,-0.02926144180850887,-0.029357941929623932],[-0.01309550399565862,-0.013422063984928734,-0.013639196524766417,-0.016856858393328955,-0.02153164231520932,-0.021871567943864467,-0.022042492747553544,-0.023760430003056165,-0.02423680461845279,-0.02466649509288965,-0.025478555379382817,-0.025931814573125433,-0.026482366200958785,-0.027907661097785752,-0.02824107033337786,-0.02925046525759356,-0.029343949308303197],[-0.01309715010365492,-0.013423798492053829,-0.013641044138769987,-0.016859333544093025,-0.02153276895277656,-0.021873047140413937,-0.022044136630138045,-0.023762318509410907,-0.024238909356469662,-0.024668766179787305,-0.02548099431217843,-0.02593442760580833,-0.026485236912211052,-0.027910282275740106,-0.028244196823658863,-0.02925052321017163,-0.029343188665874154]],
+    colorscale: 'Viridis',
+    showscale: true,
+    colorbar: { tickfont: { color: theme.text } },
+    contours: { z: { show: false } },
+  }];
+function meshLines(xs, ys, Z, lift) {
+  const x = [], y = [], z = [];
+  const point = (i, j) => {
+    x.push(xs[i]); y.push(ys[j]);
+    z.push(Number.isFinite(Z[j][i]) ? Z[j][i] + lift : null);
+  };
+  for (let i = 0; i < xs.length; i++) {
+    for (let j = 0; j < ys.length; j++) point(i, j);
+    x.push(null); y.push(null); z.push(null);
+  }
+  for (let j = 0; j < ys.length; j++) {
+    for (let i = 0; i < xs.length; i++) point(i, j);
+    x.push(null); y.push(null); z.push(null);
+  }
+  return { x, y, z };
+}
+
+data.push({
+  type: 'scatter3d', mode: 'lines',
+  ...meshLines(data[0].x, data[0].y, data[0].z, 0.00027215896502931323),
+  line: { color: '#9a9a9a', width: 2 },
+  showlegend: false, hoverinfo: 'skip',
+});
+  const layout = {
+    title: { text: 'uₕ - u', font: { color: theme.text, size: 14 } },
+    paper_bgcolor: theme.bg,
+    plot_bgcolor: theme.bg,
+    font: { color: theme.text },
+    scene: {
+      camera: {
+        eye: { x: 0, y: 0, z: 2.1 },
+        up: { x: 0, y: 1, z: 0 },
+        projection: { type: 'orthographic' },
+      },
+      xaxis: { title: 'x', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+      yaxis: { title: 'y', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+      zaxis: { title: 'u', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+    },
+    margin: { t: 40, l: 10, r: 10, b: 10 },
+  };
+  Plotly.newPlot('bramble_sp_2', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bramble_sp_2', function () {
+    const t = window.bramblePlotlyTheme();
+    return {
+      'font.color': t.text,
+      'scene.xaxis.color': t.text, 'scene.xaxis.gridcolor': t.grid, 'scene.xaxis.backgroundcolor': t.bg,
+      'scene.yaxis.color': t.text, 'scene.yaxis.gridcolor': t.grid, 'scene.yaxis.backgroundcolor': t.bg,
+      'scene.zaxis.color': t.text, 'scene.zaxis.gridcolor': t.grid, 'scene.zaxis.backgroundcolor': t.bg,
+      'title.font.color': t.text,
+    };
+  });
+})();
+</script>
+
+</div>
+</div>
+<p>A pure Neumann problem fixes <span class="md-math md-math-inline">\(u\)</span> only up to a constant, and the data must satisfy a compatibility condition, which the manufactured data satisfy in the continuum. The matrix is then singular, its null space the constants. <code class="md-code-inline">solve_case</code> passes <code class="md-code-inline">pde_solve</code> the keyword <code class="md-code-inline">mean_zero</code>, the vector of cell measures that is the discrete integral, which solves the system bordered by that constraint. The error is measured against the exact solution shifted to the same mean. The pure Neumann solution on the grid above:</p>
+<div class="md-multi-output">
+<div class="md-output md-output-html">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script>
+  // Colour tokens read from the page's own theme, not hard-coded — MaterialDocs sets
+  // `data-theme="light"|"dark"` on <html>; when the attribute is absent the browser's
+  // `prefers-color-scheme` decides. Recomputed on every call so a caller can re-theme
+  // after a toggle.
+  window.bramblePlotlyTheme = function () {
+    const attr = document.documentElement.getAttribute('data-theme');
+    const dark = attr
+      ? attr === 'dark'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return dark
+      ? { bg: 'rgba(0,0,0,0)', text: '#c3c2b7', grid: 'rgba(255,255,255,0.12)' }
+      : { bg: 'rgba(0,0,0,0)', text: '#52514e', grid: 'rgba(0,0,0,0.10)' };
+  };
+
+  // Every plot this page creates registers itself (div id + the function that
+  // reapplies theme-dependent layout colours) so one observer can repaint all of them
+  // together when the theme toggles, instead of each plot wiring its own observer.
+  window.__bramble_plotly_charts = window.__bramble_plotly_charts || [];
+  window.brambleRegisterPlotlyChart = function (divId, restyle) {
+    window.__bramble_plotly_charts.push({ divId, restyle });
+  };
+
+  if (!window.__bramble_plotly_theme_observer) {
+    const repaint = function () {
+      for (const { divId, restyle } of window.__bramble_plotly_charts) {
+        const layout = restyle();
+        Plotly.relayout(divId, layout);
+      }
+    };
+    window.__bramble_plotly_theme_observer = new MutationObserver(repaint);
+    window.__bramble_plotly_theme_observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    // With no saved theme MaterialDocs follows the system scheme in CSS alone and
+    // leaves `data-theme` unset, so a system change must repaint too.
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      if (!document.documentElement.hasAttribute('data-theme')) repaint();
+    });
+  }
+
+  // The layout-race fix (see the module note above): once per page, after everything
+  // (fonts included) has truly finished loading, force every plot created so far to
+  // resize against its now-final container.
+  if (!window.__bramble_plotly_load_fix_installed) {
+    window.__bramble_plotly_load_fix_installed = true;
+    const rescue = function () {
+      for (const { divId } of window.__bramble_plotly_charts) {
+        Plotly.Plots.resize(document.getElementById(divId));
+      }
+    };
+    const loaded = document.readyState === 'complete' ? Promise.resolve() :
+      new Promise((r) => window.addEventListener('load', r, { once: true }));
+    Promise.all([loaded, document.fonts.ready]).then(rescue);
+  }
+</script>
+
+<div id="bramble_sp_3" data-mesh-lines="34" style="width:100%; max-width:480px; height:420px; margin: 1em 0;"></div>
+<script>
+(function () {
+  const theme = window.bramblePlotlyTheme();
+  const data = [{
+    type: 'surface',
+    x: [0.0,0.012502137392377821,0.020842341257392705,0.15343091907868456,0.37921442624407653,0.3946900115738672,0.4025723532168787,0.48945867206954463,0.5143492048141987,0.5374653519773097,0.5835400048109605,0.6102520607379804,0.6441393949208799,0.7500938235163731,0.7758339074531879,0.9497250979796771,1.0],
+    y: [0.0,0.012139128962408652,0.1758926683115739,0.3151435062095457,0.5054369052524069,0.5444713230540591,0.6135392271877386,0.6750549866631306,0.703006660663805,0.775872374245137,0.7893333325080929,0.7917694274025723,0.816421518193467,0.8649399088263278,0.9762430318955249,0.9875622988903799,1.0],
+    z: [[0.2336561143804101,0.24623739231857528,0.2547194741603358,0.3992163392498057,0.6927518130248433,0.7155952966124278,0.7273668420789208,0.8632737206175228,0.9044738199815321,0.9436637488519124,1.0245013829277345,1.0731077337114276,1.1366582391064135,1.3494477267770546,1.4047202257470888,1.8157128523616837,1.9489739603986194],[0.23335846921579234,0.2459360603617422,0.25441566117096515,0.39887019455287304,0.6923193377025416,0.7151561001497692,0.7269241820454219,0.8627910697573107,0.9039790485879355,0.9431574497224543,1.023971310555885,1.072563371410854,1.136095198959967,1.348822194476106,1.4040784781451,1.8149507162583594,1.9481728855748641],[0.1711780295171788,0.18298855186278956,0.19095072411225877,0.3265624140533228,0.6019774744077622,0.6234102206991724,0.6344547781422785,0.7619677611594016,0.8006238147010546,0.8373941232489226,0.9132418596528141,0.9588488179322932,1.0184789263706682,1.218151586606976,1.270020563834987,1.6557441776266002,1.7808363727296228],[0.038332145141409465,0.04849586782417215,0.0553477976627954,0.172039298302656,0.4088917425780482,0.42732229914618797,0.43681975444219306,0.5464697201791882,0.5797117640074864,0.6113328376091237,0.6765614356336396,0.7157852660466991,0.7670721728927892,0.9388297445967891,0.9834548498341728,1.3153862723199115,1.4230450640345782],[-0.24563276231347342,-0.23895382813498925,-0.234454256009178,-0.1581256664809231,-0.003741803113504219,0.00826777806152715,0.014456327007257637,0.08590051470101244,0.1075627149314049,0.1281701683446265,0.17068541089691922,0.1962562831714658,0.22969794604784127,0.34175200917565024,0.37089071612506336,0.587925504414403,0.6586041159613454],[-0.3133563396239197,-0.30752821594993135,-0.3036016002970785,-0.2369870346229496,-0.10234923279429277,-0.09187628449555889,-0.08647957723305315,-0.024177181296269775,-0.005285881354701337,0.01268606421100529,0.049765663182311425,0.07206867448074868,0.1012383401644394,0.19899278878607288,0.2244181800267271,0.4138478444626252,0.4755422555922479],[-0.4401193155220713,-0.4358816261917028,-0.43302691109710834,-0.38463340353571535,-0.2869998972037271,-0.2794060970084837,-0.2754930234784578,-0.2303183826588752,-0.21661861048604222,-0.20358458691594625,-0.17668957790829848,-0.1605097899741585,-0.1393453316721613,-0.06839113253518961,-0.049927384719178534,0.08772613280143057,0.13258398514457284],[-0.5584549800039927,-0.5557028736188195,-0.5538495021204086,-0.522489725642793,-0.45944227667700066,-0.4545390226614411,-0.45201237812304895,-0.42284258626910814,-0.41399399652572455,-0.4055742144646716,-0.3881963996334798,-0.37773882033356926,-0.3640556196423634,-0.31815042743544003,-0.306194341347443,-0.2169480598012153,-0.1878203100944968],[-0.6133259430179058,-0.6112636864742699,-0.6098751611832779,-0.5864184632563266,-0.5394204308304285,-0.5357655573511793,-0.5338821927709174,-0.5121381218622865,-0.5055403031034571,-0.4992613624537928,-0.4862992124477252,-0.47849659514319404,-0.46828457096731885,-0.43400219039730487,-0.4250657363784891,-0.3582809434168583,-0.3364512664853507],[-0.758810257144782,-0.7585724781307722,-0.7584141367050453,-0.7559180819901732,-0.7515048181541336,-0.7511618389334497,-0.7509850445322996,-0.748939913602889,-0.7483128520318109,-0.7477130466230638,-0.7464646454459745,-0.7457051467473831,-0.7447016539812961,-0.7412541128320002,-0.7403285925517206,-0.7331294111142707,-0.7306313063433039],[-0.7857325546146546,-0.7858332737830217,-0.7859030383001351,-0.7872876417023541,-0.7907614092324037,-0.7910316753650368,-0.7911708713778361,-0.7927729689476749,-0.793251354423416,-0.7937029992197006,-0.7946233147822882,-0.795167817269812,-0.7958692683184664,-0.7981309706537433,-0.7986887220180399,-0.8025221556176639,-0.8036051935637804],[-0.7906043048862035,-0.7907662802328823,-0.7908773248515325,-0.7929642005124419,-0.7978653877883023,-0.7982466355345308,-0.7984430174557144,-0.8007051578013067,-0.8013835961067994,-0.802025521742721,-0.8033383098506273,-0.8041187980255347,-0.805128794514853,-0.8084237131855683,-0.8092498960166254,-0.815079926696499,-0.8168110282024156],[-0.8398889099808957,-0.8406705297412895,-0.8411991976779748,-0.8503912485746687,-0.8697364737505704,-0.8712406461678378,-0.872015637830316,-0.8809559622912396,-0.8836584770940937,-0.886225605963691,-0.8915093127173791,-0.8946774445023616,-0.8988092432125907,-0.9125581954384004,-0.9161003551618421,-0.9421317914230338,-0.9504192656368294],[-0.936459669050471,-0.938454037191003,-0.9398002313824881,-0.9629159846356512,-1.0105839046043845,-1.0142893087826013,-1.0161985052239062,-1.0382285757047907,-1.0448983141270822,-1.0512388557732408,-1.064305611996216,-1.0721536313214568,-1.0824044186646455,-1.116645237862889,-1.1255112098322126,-1.191140412852636,-1.2122655530181143],[-1.1524331536378862,-1.1571227191967326,-1.1602876300636342,-1.2145396192851572,-1.3256707475470613,-1.3343027649543862,-1.3387502828530617,-1.3900695737242037,-1.4056154177503712,-1.4203983764112318,-1.4508788679194906,-1.4691981773682274,-1.4931412125814416,-1.5732467943318678,-1.594028259222851,-1.7482958774459343,-1.7980156176888646],[-1.173350449934761,-1.1783029612818725,-1.1816451270519073,-1.2389222651801246,-1.356222707341411,-1.3653317845363662,-1.3700251119987388,-1.4241833698058632,-1.440589273352339,-1.456190318888156,-1.4883586012673826,-1.5076927572924683,-1.5329629140347854,-1.6175180868722296,-1.639454626382605,-1.8023409947371751,-1.854844941275028],[-1.196099613395808,-1.201338262696223,-1.2048733348570477,-1.2654426616030179,-1.3894580673330532,-1.3990857866819153,-1.4040463646376249,-1.461292785424575,-1.4786340934534294,-1.4951249257051737,-1.5291290964634112,-1.549567081990903,-1.5762807138903971,-1.6656769688148576,-1.6888696496747886,-1.8611376103426582,-1.9166723279286146]],
+    colorscale: 'Viridis',
+    showscale: true,
+    colorbar: { tickfont: { color: theme.text } },
+    contours: { z: { show: false } },
+  }];
+function meshLines(xs, ys, Z, lift) {
+  const x = [], y = [], z = [];
+  const point = (i, j) => {
+    x.push(xs[i]); y.push(ys[j]);
+    z.push(Number.isFinite(Z[j][i]) ? Z[j][i] + lift : null);
+  };
+  for (let i = 0; i < xs.length; i++) {
+    for (let j = 0; j < ys.length; j++) point(i, j);
+    x.push(null); y.push(null); z.push(null);
+  }
+  for (let j = 0; j < ys.length; j++) {
+    for (let i = 0; i < xs.length; i++) point(i, j);
+    x.push(null); y.push(null); z.push(null);
+  }
+  return { x, y, z };
+}
+
+data.push({
+  type: 'scatter3d', mode: 'lines',
+  ...meshLines(data[0].x, data[0].y, data[0].z, 0.03865646288327234),
+  line: { color: '#9a9a9a', width: 2 },
+  showlegend: false, hoverinfo: 'skip',
+});
+  const layout = {
+    title: { text: 'pure Neumann, mean zero', font: { color: theme.text, size: 14 } },
+    paper_bgcolor: theme.bg,
+    plot_bgcolor: theme.bg,
+    font: { color: theme.text },
+    scene: {
+      camera: {
+        eye: { x: 0, y: 0, z: 2.1 },
+        up: { x: 0, y: 1, z: 0 },
+        projection: { type: 'orthographic' },
+      },
+      xaxis: { title: 'x', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+      yaxis: { title: 'y', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+      zaxis: { title: 'u', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+    },
+    margin: { t: 40, l: 10, r: 10, b: 10 },
+  };
+  Plotly.newPlot('bramble_sp_3', data, layout, { displayModeBar: false, responsive: true });
+  window.brambleRegisterPlotlyChart('bramble_sp_3', function () {
+    const t = window.bramblePlotlyTheme();
+    return {
+      'font.color': t.text,
+      'scene.xaxis.color': t.text, 'scene.xaxis.gridcolor': t.grid, 'scene.xaxis.backgroundcolor': t.bg,
+      'scene.yaxis.color': t.text, 'scene.yaxis.gridcolor': t.grid, 'scene.yaxis.backgroundcolor': t.bg,
+      'scene.zaxis.color': t.text, 'scene.zaxis.gridcolor': t.grid, 'scene.zaxis.backgroundcolor': t.bg,
+      'title.font.color': t.text,
+    };
+  });
+})();
+</script>
+
+</div>
+</div>
+<p>The error is the discrete <span class="md-math md-math-inline">\(H^1\)</span> norm <code class="md-code-inline">norm₁ₕ</code>, and the grid is a random non-uniform one refined in place by <a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a>, so each level is the same random mesh split dyadically:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -216,7 +596,7 @@ order_neumann = order(hs_neumann, errs_neumann)
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">order_mixed &gt; 1.8 &amp;&amp; order_robin &gt; 1.8 &amp;&amp; order_neumann &gt; 1.8</code></pre>
+<pre><code class="language-julia">order_mixed &gt; 1.95 &amp;&amp; order_robin &gt; 1.95 &amp;&amp; order_neumann &gt; 1.95</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
@@ -358,7 +738,7 @@ order_neumann = order(hs_neumann, errs_neumann)
 
 </div>
 </div>
-<p>All three curves run parallel to the slope-2 line on a grid built not to flatter the scheme: the points are random, so no symmetry cancels the one-sided error of the ghost layer. The Neumann and Robin relations are as accurate as the interior operator.</p>
+<p>All three curves run parallel to the slope-2 line. The points are random, so no symmetry cancels the one-sided error of the ghost layer. The Neumann and Robin relations keep second order.</p>
 <h2 id="Where-to-go-next" class="md-heading">Where to go next<a href="#Where-to-go-next" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <ul class="md-list-tight">
 <li><p><a href="../../examples/poisson_linear/">Linear Poisson</a> for the same problem with a Dirichlet condition.</p>
@@ -376,7 +756,6 @@ order_neumann = order(hs_neumann, errs_neumann)
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#Problem">Problem</a>
           <a class="md-toc-link md-toc-h2" href="#One-boundary-relation-per-side">One boundary relation per side</a>
-          <a class="md-toc-link md-toc-h2" href="#Assembling-and-solving">Assembling and solving</a>
           <a class="md-toc-link md-toc-h2" href="#Second-order">Second order</a>
           <a class="md-toc-link md-toc-h2" href="#Where-to-go-next">Where to go next</a>
       </div>
@@ -396,6 +775,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=dd783770"></script>
+  <script src="../../assets/materialdocs.js?v=9ae53aae"></script>
 </body>
 </html>

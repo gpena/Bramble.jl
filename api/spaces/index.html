@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=244e0fa9">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=ba2f6db5">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces — Bramble.jl">
   <meta property="og:title" content="Grid spaces — Bramble.jl">
@@ -42,60 +42,64 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/" class="md-nav-active">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/" class="md-nav-active">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
@@ -106,7 +110,7 @@
 <div class="md-docstring" id="Bramble.ScalarGridSpace">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ScalarGridSpace</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L128-L199" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L131-L203" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -120,7 +124,7 @@ ScalarGridSpace{D, T, VT, MType}(mesh::MType, weights::SpaceWeights{D, T, VT})</
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">mesh::MType</code>: the underlying mesh of the grid space.</p>
 </li>
-<li><p><code class="md-code-inline">weights::SpaceWeights{D, T, VT}</code>: precomputed inner product weight vectors.</p>
+<li><p><code class="md-code-inline">weights::SpaceWeights{D, T, VT}</code>: precomputed inner product weight vectors, held by reference (<code class="md-code-inline">SpaceWeights</code> is a <code class="md-code-inline">mutable struct</code> with <code class="md-code-inline">const</code> fields).</p>
 </li>
 </ul>
 <p><strong>Discrete inner products</strong></p>
@@ -217,7 +221,7 @@ CompositeGridSpace{N, Spaces}(spaces::Spaces) where {N, Spaces &lt;: Tuple}</cod
 <div class="md-docstring" id="Bramble.gridspace">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gridspace</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L212-L245" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L216-L249" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -265,8 +269,22 @@ gridspace(Ωₕ::AbstractMeshType, N::Int) -&gt; CompositeGridSpace{N}</code></p
 <p>Convenience constructor for a vector grid space on mesh <code class="md-code-inline">Ωₕ</code>. If <code class="md-code-inline">N</code> is omitted, it defaults to the spatial dimension of the mesh (<code class="md-code-inline">dim(Ωₕ)</code>).</p>
 </div>
 </div>
+<p><code class="md-code-inline">Wₕ^Val(N)</code> is type stable for any <code class="md-code-inline">N</code>. <code class="md-code-inline">Wₕ^N</code> accepts <code class="md-code-inline">1 ≤ N ≤ 3</code> and stays inferable for a runtime <code class="md-code-inline">N</code>; a larger <code class="md-code-inline">N</code> throws an <code class="md-code-inline">ArgumentError</code>. <code class="md-code-inline">vector_gridspace(Ωₕ, 2)</code> builds the same space straight from a mesh, and <code class="md-code-inline">Bramble.CompositeGridSpace((Wₕ, Wₕ))</code> builds one from spaces that need not be identical:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using Bramble
+import Bramble: component_range, component_ranges, weights
+
+Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 11))
+Vₕ = Wₕ^Val(2)
+
+spaces(Vₕ) == (Wₕ, Wₕ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
+</div>
 <h2 id="Space-properties-and-degrees-of-freedom" class="md-heading">Space properties and degrees of freedom<a href="#Space-properties-and-degrees-of-freedom" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">host_weights</code> is private; see the <a href="../../internals/mesh/">mesh internals page</a>.</p>
+<p><code class="md-code-inline">host_weights</code> is private; see the <a href="../../internals/space/">space internals page</a>.</p>
 <div class="md-docstring" id="Bramble.ndofs">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ndofs</code></h4>
@@ -290,7 +308,7 @@ ndofs(Wₕ::AbstractSpaceType, ::Type{Tuple}) -&gt; NTuple{N, Int}</code></pre>
 <div class="md-docstring" id="Bramble.weights">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.weights</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L338-L415" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L342-L419" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -398,6 +416,16 @@ ncomponents(::Type{&lt;:AbstractSpaceType}) -&gt; Int</code></pre>
 <p>Returns the number of field components of the function space (e.g. 1 for scalar, D for vector).</p>
 <p>On a <a href="../../api/spaces/#Bramble.CompositeGridSpace"><code class="md-code-inline">CompositeGridSpace</code></a> it counts the top-level sub-spaces: a nested composite counts its direct children. <code class="md-code-inline">leaf_count</code> counts the scalar leaves, and <code class="md-code-inline">components(uₕ)</code> lists them.</p>
 </div>
+</div>
+<p><code class="md-code-inline">weights(Wₕ)</code> returns the whole <code class="md-code-inline">SpaceWeights</code> bundle, and a weight vector comes from naming the inner product it belongs to. <code class="md-code-inline">Bramble.Innerh</code> and <code class="md-code-inline">Bramble.Innerplus</code> are internal, hence the prefix. <code class="md-code-inline">weights</code> is not defined for a composite space, since its leaves may live on different meshes: call it on a <a href="../../api/spaces/#Bramble.components"><code class="md-code-inline">components</code></a> leaf instead.</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">w = weights(Wₕ, Bramble.Innerh())
+
+length(w), sum(w)      # one weight per point; they tile the unit interval</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(11, 1.0)</code></pre>
 </div>
 <h2 id="Vector-elements-and-grid-functions" class="md-heading">Vector elements and grid functions<a href="#Vector-elements-and-grid-functions" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><code class="md-code-inline">ldiv!(::VectorElement, ::Factorization, ::AbstractVector)</code> is private; see the <a href="../../internals/csr_solvers/">CSR solvers internals page</a>.</p>
@@ -572,6 +600,39 @@ julia&gt; x = [1, 2]; x&#39;x  # adjoint vector * vector
 </div>
 </div>
 </div>
+<p><code class="md-code-inline">component_range</code> and <code class="md-code-inline">component_ranges</code> give the degrees of freedom each component owns:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">component_range(Vₕ, 1), component_ranges(Vₕ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(1:11, (1:11, 12:22))</code></pre>
+</div>
+<p>Degrees of freedom are stored flat, but a scalar element also indexes by grid coordinate with a <code class="md-code-inline">CartesianIndex</code>, in any dimension. An integer multi-index <code class="md-code-inline">u[i, j]</code> is not a grid coordinate. Here a two-dimensional space:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">W₂ = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (5, 5), (true, true)))
+V₂ = W₂^Val(2)
+u_scal = element(W₂, 0.0)
+u_scal[CartesianIndex(2, 3)] = 10.0
+u_scal[CartesianIndex(4, 1)] = 20.0
+
+u_scal[CartesianIndex(2, 3)], u_scal[CartesianIndex(4, 1)]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(10.0, 20.0)</code></pre>
+</div>
+<p>For matrix operations or plotting, <code class="md-code-inline">reshape(uₕ)</code> returns a <code class="md-code-inline">Base.ReshapedArray</code> view of the same memory, so writing through it writes through to the element. On a composite element it returns one view per component:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">u_grid = reshape(u_scal)
+u_grid[2, 3] = -1.0
+
+size(u_grid), u_scal[CartesianIndex(2, 3)], size.(reshape(element(V₂)))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((5, 5), -1.0, ((5, 5), (5, 5)))</code></pre>
+</div>
 <h2 id="Restriction-and-averaging-operators" class="md-heading">Restriction and averaging operators<a href="#Restriction-and-averaging-operators" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.Rₕ">
 <div class="md-docstring-header">
@@ -721,13 +782,13 @@ avgₕ!(uₕ::VectorElement, f, quad_points::Val) -&gt; VectorElement</code></pr
 </div>
 </div>
 <h2 id="Interpolation-between-grid-spaces" class="md-heading">Interpolation between grid spaces<a href="#Interpolation-between-grid-spaces" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>Moving a grid function from one mesh to another, the piecewise (multi)linear interpolant, named after <a href="../../api/spaces/#Bramble.Rₕ"><code class="md-code-inline">Rₕ</code></a>/<a href="../../api/spaces/#Bramble.Rₕ!"><code class="md-code-inline">Rₕ!</code></a>&#39;s own <code class="md-code-inline">Xₕ</code>/<code class="md-code-inline">Xₕ!</code> convention. One name, <code class="md-code-inline">πₕ</code>, with methods that dispatch tells apart by what they are given rather than by different names:</p>
+<p>Moving a grid function from one mesh to another, the piecewise (multi)linear interpolant, named after <a href="../../api/spaces/#Bramble.Rₕ"><code class="md-code-inline">Rₕ</code></a>/<a href="../../api/spaces/#Bramble.Rₕ!"><code class="md-code-inline">Rₕ!</code></a>&#39;s own <code class="md-code-inline">Xₕ</code>/<code class="md-code-inline">Xₕ!</code> convention. One name, <code class="md-code-inline">πₕ</code>, with methods selected by their arguments:</p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">πₕ(Wₕ, uₕ)</code> and <a href="../../api/spaces/#Bramble.πₕ!"><code class="md-code-inline">πₕ!</code></a><code class="md-code-inline">(dest, src)</code> is the <strong>numeric</strong> operator, interpolating a grid function&#39;s values onto another space&#39;s mesh. <a href="../../api/spaces/#Bramble.interpolate_at"><code class="md-code-inline">interpolate_at</code></a> is the single-point building block both are written in terms of, and <a href="../../api/spaces/#Bramble.interpolation_matrix"><code class="md-code-inline">interpolation_matrix</code></a> is the same interpolant as a sparse matrix rather than applied pointwise.</p>
+<li><p><code class="md-code-inline">πₕ(Wₕ, uₕ)</code> and <a href="../../api/spaces/#Bramble.πₕ!"><code class="md-code-inline">πₕ!</code></a><code class="md-code-inline">(dest, src)</code> is the <strong>numeric</strong> operator, interpolating a grid function&#39;s values onto another space&#39;s mesh. <a href="../../api/spaces/#Bramble.interpolate_at"><code class="md-code-inline">interpolate_at</code></a> is the single-point building block both are written in terms of, and <a href="../../api/spaces/#Bramble.interpolation_matrix"><code class="md-code-inline">interpolation_matrix</code></a> is the same interpolant as a sparse matrix.</p>
 </li>
 <li><p><code class="md-code-inline">πₕ(uₕ)</code> is the <strong>symbolic source</strong>, wrapping a grid function&#39;s interpolant as an AST leaf, composable with <a href="../../api/operators/#Bramble.D₋ₓ"><code class="md-code-inline">D₋ₓ</code></a>/<a href="../../api/operators/#Bramble.Mₓ"><code class="md-code-inline">Mₓ</code></a>/... inside <a href="../../api/inner_products/#Bramble.innerₕ"><code class="md-code-inline">innerₕ</code></a>. For the <em>known</em> side of a linear form.</p>
 </li>
-<li><p><code class="md-code-inline">πₕ(u)</code> over a <strong>trial function</strong> is the <strong>bilinear operator</strong>, contributing matrix columns rather than values. For the <em>unknown</em> side. It names no source space: that is the trial function&#39;s own, and assembly supplies it once the leaf is known.</p>
+<li><p><code class="md-code-inline">πₕ(u)</code> over a <strong>trial function</strong> is the <strong>bilinear operator</strong>, contributing matrix columns. For the <em>unknown</em> side. It names no source space: that is the trial function&#39;s own, and assembly supplies it once the leaf is known.</p>
 </li>
 </ul>
 <p>This exists for the pattern of a heterogeneous composite space whose leaves live on different meshes.</p>
@@ -1096,7 +1157,7 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 <div class="md-docstring" id="Bramble.assemble!-Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code> — <span class="md-docstring-sig">Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L1019-L1040" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L1039-L1060" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1110,11 +1171,11 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 </div>
 </div>
 <h2 id="Polygon-spaces" class="md-heading">Polygon spaces<a href="#Polygon-spaces" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">polygon_spaces(Ωₕ, :P, g)</code> returns the trial and test spaces <code class="md-code-inline">(U, W)</code> of the scheme of Ferreira and Grigorieff on a polygon or level-set region marked <code class="md-code-inline">:P</code> of a 2D mesh. <code class="md-code-inline">public</code> and not exported: write <code class="md-code-inline">Bramble.polygon_spaces</code>. The support of each operation is in the <a href="../../internals/space/">space internals page</a>.</p>
+<p><code class="md-code-inline">polygon_spaces(Ωₕ, :P, g)</code> returns the trial and test spaces <code class="md-code-inline">(U, W)</code> of the scheme of Ferreira and Grigorieff on a polygon or level-set region marked <code class="md-code-inline">:P</code> of a 2D mesh. <code class="md-code-inline">public</code> and not exported: write <code class="md-code-inline">Bramble.polygon_spaces</code>. See the <a href="../../internals/space/">space internals page</a> for the support table.</p>
 <div class="md-docstring" id="Bramble.polygon_spaces">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.polygon_spaces</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/polygon_space.jl#L13-L63" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/polygon_space.jl#L13-L68" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1138,9 +1199,10 @@ uₕ = Bramble.lift(U, A \ F)</code></pre>
 normₕ(e), snorm₁ₕ(e), norminf(e)</code></pre>
 </div>
 <p><code class="md-code-inline">W</code> refuses <code class="md-code-inline">Rₕ</code> and the norms.</p>
+<p><code class="md-code-inline">U × U</code> and <code class="md-code-inline">U^Val(n)</code> of the trial spaces, tested by <code class="md-code-inline">W × W</code>, assemble per component, each with its own <code class="md-code-inline">g</code>. The components must be built on the same mesh <code class="md-code-inline">Ωₕ</code>. <code class="md-code-inline">constrained</code> on such a composite throws, as <code class="md-code-inline">g</code> fixes each component&#39;s boundary.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: if <code class="md-code-inline">Ωₕ</code> has no polygon or level-set marker <code class="md-code-inline">label</code>; if the grid does not fit the region (a cell holding interior and exterior nodes other than across a diagonal between two boundary nodes, as after <code class="md-code-inline">change_points!</code> to lines the closure would not give); if the region has no interior node. <code class="md-code-inline">form(U, U, f)</code> and <code class="md-code-inline">form(U, f)</code> throw, as <code class="md-code-inline">U</code> is no test space, and so does <code class="md-code-inline">dirichlet =</code> in <code class="md-code-inline">assemble</code>: <code class="md-code-inline">g</code> fixes the boundary.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: if <code class="md-code-inline">Ωₕ</code> has no polygon or level-set marker <code class="md-code-inline">label</code>; if the grid does not fit the region (a cell holding interior and exterior nodes other than across a diagonal between two boundary nodes, as after <code class="md-code-inline">change_points!</code> to lines the closure would not give); if the region has no interior node. <code class="md-code-inline">form(U, U, f)</code> and <code class="md-code-inline">form(U, f)</code> throw, as <code class="md-code-inline">U</code> is no test space, and so do <code class="md-code-inline">dirichlet =</code> in <code class="md-code-inline">assemble</code> and <code class="md-code-inline">constrained</code> on a composite of these spaces: <code class="md-code-inline">g</code> fixes the boundary.</p>
 </li>
 </ul>
 </div>
@@ -1177,6 +1239,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=244e0fa9"></script>
+  <script src="../../assets/materialdocs.js?v=ba2f6db5"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mesh tutorial — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f2e14e6d">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=5425c35a">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Mesh tutorial — Bramble.jl">
   <meta property="og:title" content="Mesh tutorial — Bramble.jl">
@@ -42,70 +42,73 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/" class="md-nav-active">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/mesh.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="tutorial_mesh" class="md-heading">Mesh tutorial<a href="#tutorial_mesh" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<p><strong>What you will learn.</strong> How a domain becomes a mesh, how to make the points non-uniform, what the spacings, half points and cell measures that difference operators read mean, and how a ghost mesh pads the boundary.</p>
+<p><strong>What you will learn.</strong> How a domain becomes a mesh, how to make the points non-uniform, what the spacings, half points and cell measures that difference operators read mean.</p>
 <p><strong>What you need first.</strong> The <a href="../../tutorials/geometry/#tutorial_geometry">geometry tutorial</a>, for sets, markers and domains.</p>
 <p><strong>Where next.</strong> The <a href="../../tutorials/space/">space tutorial</a> puts discrete functions on a mesh.</p>
-<p>Every block below runs when this page is built.</p>
 <hr class="md-hr">
 <h2 id="A-first-mesh" class="md-heading">A first mesh<a href="#A-first-mesh" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Take the unit interval and ask for eleven points. <a href="../../api/meshes/#Bramble.mesh"><code class="md-code-inline">mesh</code></a> takes a domain and a point count:</p>
@@ -143,6 +146,16 @@ points(Ωₕ)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(0.10000000000000009, true)</code></pre>
 </div>
+<p>A geometric set can be passed directly when no custom labels are needed. <code class="md-code-inline">:boundary</code> and <code class="md-code-inline">:interior</code> are provisioned either way:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ_direct = mesh(interval(0.0, 1.0) × interval(0.0, 2.0), 20)      # isotropic: 20 × 20
+
+:boundary in keys(markers(Ωₕ_direct)), :interior in keys(markers(Ωₕ_direct))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
+</div>
 <p>The mesh carries more than coordinates. Spacings, half points and cell measures, which the difference operators read, are computed from the points and cached.</p>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
@@ -152,7 +165,7 @@ points(Ωₕ)</code></pre>
 </div>
 <hr class="md-hr">
 <h2 id="Non-uniform-meshes" class="md-heading">Non-uniform meshes<a href="#Non-uniform-meshes" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>Real problems rarely want equal spacing: boundary layers and corners need points packed where the solution changes fast. The third positional argument of <code class="md-code-inline">mesh</code>, or the <code class="md-code-inline">uniform</code> keyword, chooses the distribution per axis. <code class="md-code-inline">false</code> draws interior points at random and sorts them, which the convergence studies in this manual use to expose order reduction on non-uniform grids:</p>
+<p>Boundary layers and corners need points where the solution changes fast. The third positional argument of <code class="md-code-inline">mesh</code>, or the <code class="md-code-inline">uniform</code> keyword, chooses the distribution per axis. <code class="md-code-inline">false</code> draws interior points at random and sorts them, which the convergence studies in this manual use to expose order reduction on non-uniform grids:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -174,6 +187,7 @@ points(Ωₕ_graded), hₘₐₓ(Ωₕ_graded)</code></pre>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.010000000000000002, 0.04000000000000001, 0.09, 0.16000000000000003, 0.25, 0.36, 0.48999999999999994, 0.6400000000000001, 0.81, 1.0], 0.18999999999999995)</code></pre>
 </div>
 <p>Squaring the uniform points packs them near <span class="md-math md-math-inline">\(x = 0\)</span> and stretches the cells near <span class="md-math md-math-inline">\(x = 1\)</span>, so <code class="md-code-inline">hₘₐₓ</code> is no longer <span class="md-math md-math-inline">\(0.1\)</span>. <code class="md-code-inline">Bramble.set_points!</code> is the variant that also accepts a different point count: it rebuilds the <code class="md-code-inline">:boundary</code> and <code class="md-code-inline">:interior</code> markers for the new grid, and refuses to change the point count of a mesh carrying custom labels. It also refuses any move of a mesh carrying a label defined by a predicate of position, and of a submesh of one, since those sets would stay as the old points gave them; call <code class="md-code-inline">change_points!(Ωₕ, markers(Ω), pts)</code> on the whole mesh instead.</p>
+<p>A grid space built before <code class="md-code-inline">set_points!</code>, <code class="md-code-inline">change_points!</code> or <code class="md-code-inline">iterative_refinement!</code> is stale: it keeps the weights of the old points, and its inner products and norms throw until <code class="md-code-inline">gridspace(Ωₕ)</code> is called again.</p>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
@@ -261,13 +275,13 @@ points(Ωₕ_fig)</code></pre>
   <text x="330" y="355" font-size="13" fill="#10b981" text-anchor="middle">forward_spacing(Ωₕ, 2) = x₃ − x₂ = 0.4</text>
 </svg>
 </figure>
-<p>Four conventions are worth reading off that picture, because they are the ones that surprise:</p>
+<p>Conventions:</p>
 <ul class="md-list-tight">
-<li><p><strong><code class="md-code-inline">half_points</code> has <code class="md-code-inline">N + 1</code> entries.</strong> They are the cell interfaces, and the first and last coincide with <code class="md-code-inline">x₁</code> and <code class="md-code-inline">x_N</code> rather than sitting outside the domain.</p>
+<li><p><strong><code class="md-code-inline">half_points</code> has <code class="md-code-inline">N + 1</code> entries.</strong> They are the cell interfaces, and the first and last coincide with <code class="md-code-inline">x₁</code> and <code class="md-code-inline">x_N</code>.</p>
 </li>
 <li><p><strong>The cell around <code class="md-code-inline">xᵢ</code> spans <code class="md-code-inline">half_points[i]</code> to <code class="md-code-inline">half_points[i+1]</code></strong>, with width <code class="md-code-inline">half_spacing(Ωₕ, i)</code>, which is what <code class="md-code-inline">cell_measure(Ωₕ, i)</code> returns.</p>
 </li>
-<li><p><strong>Boundary cells are half-width</strong>, since <code class="md-code-inline">x₁</code> and <code class="md-code-inline">x_N</code> sit on the edge of their own cell rather than at its centre.</p>
+<li><p><strong>Boundary cells are half-width</strong>, since <code class="md-code-inline">x₁</code> and <code class="md-code-inline">x_N</code> sit on the edge of their cell.</p>
 </li>
 <li><p><strong><code class="md-code-inline">spacing</code> looks backward, <code class="md-code-inline">forward_spacing</code> forward</strong>: <code class="md-code-inline">spacing(Ωₕ, i) = xᵢ - xᵢ₋₁</code> and <code class="md-code-inline">forward_spacing(Ωₕ, i) = xᵢ₊₁ - xᵢ</code>, each falling back to its neighbour at the end where the stencil runs out.</p>
 </li>
@@ -279,7 +293,7 @@ points(Ωₕ_fig)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.1, 0.4, 0.8, 1.0], [0.1, 0.3, 0.4, 0.2])</code></pre>
 </div>
-<p>The four cells sum to the domain length, and the two boundary cells are the smallest. The <a href="../../tutorials/mesh/#mesh_reference">reference</a> below lists the accessor for each quantity.</p>
+<p>The four cells sum to the domain length.</p>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
@@ -310,7 +324,7 @@ npoints(Ωₕ_2d, Tuple), size(Ωₕ_2d)</code></pre>
 <span class="sgr90">Spacing: </span>uniform • <span class="sgr35">h</span>ₘₐₓ = <span class="sgr34">0.111111</span>
 <span class="sgr90">Markers: </span><span class="sgr33">2 labels</span> • <span class="sgr32">:boundary</span> (<span class="sgr34">2</span>), <span class="sgr32">:interior</span> (<span class="sgr34">8</span>)</code></pre>
 </div>
-<p>The cell around <span class="md-math md-math-inline">\((x_i, y_j)\)</span> is the rectangle spanned by the two per-axis intervals, so its measure is the product of the per-axis widths. The picture shows a <span class="md-math md-math-inline">\(4 \times 3\)</span> mesh with non-uniform points on both axes:</p>
+<p>The cell around <span class="md-math md-math-inline">\((x_i, y_j)\)</span> is the rectangle spanned by the two per-axis intervals. The picture shows a <span class="md-math md-math-inline">\(4 \times 3\)</span> mesh with non-uniform points on both axes:</p>
 <figure style="margin:1.5em 0;text-align:center">
 <svg viewBox="0 0 700 380" width="100%" style="max-width:700px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif" role="img"
      aria-label="Two-dimensional tensor-product mesh: the cell around a grid point is the product of its per-axis cell widths.">
@@ -385,7 +399,7 @@ half_spacing(Ωₕ_prod(1), 3) * half_spacing(Ωₕ_prod(2), 2)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">0.9999999999999999</code></pre>
 </div>
-<p>Above 1D, <code class="md-code-inline">change_points!</code> takes the markers alongside the per-axis coordinate vectors, so the labels are re-evaluated at the new positions.</p>
+<p>Above 1D, <code class="md-code-inline">pts</code> is a tuple of per-axis coordinate vectors. In every dimension, <code class="md-code-inline">change_points!(Ωₕ, markers(Ω), pts)</code> re-evaluates the labels at the new positions, while the two-argument form leaves them as they are.</p>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
@@ -434,101 +448,11 @@ sum(index_in_marker(Ωₕ_marked, :walls)), sum(index_in_marker(Ωₕ_marked, :o
 </div>
 </div>
 <hr class="md-hr">
-<h2 id="mesh_ghost" class="md-heading">Ghost points beyond the boundary<a href="#mesh_ghost" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A second-order Neumann or Robin condition needs the solution one point past the boundary, and every stencil stops at the last point. A <a href="../../api/meshes/#Bramble.GhostMesh"><code class="md-code-inline">Bramble.GhostMesh</code></a> adds that point. It wraps a mesh and pads it with one ghost point beyond each node of the facets you name, either <code class="md-code-inline">:boundary</code> or a tuple such as <code class="md-code-inline">(:xmin, :ymax)</code>. <code class="md-code-inline">GhostMesh</code> is <code class="md-code-inline">public</code>, not exported.</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Gₕ = Bramble.GhostMesh(Ωₕ_graded; ghosts = :boundary)
-
-npoints(Gₕ), Bramble.nghosts(Gₕ)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(13, 2)</code></pre>
-</div>
-<p>The mesh <code class="md-code-inline">Ωₕ_graded</code> has 11 points, so the padded mesh has 13 and two of them are ghosts. A ghost sits one spacing outside its facet node, using the spacings the mesh already holds: <span class="md-math md-math-inline">\(x_1 - h_2\)</span> below and <span class="md-math md-math-inline">\(x_n + h_n\)</span> above. On a graded mesh the two distances differ, so the ghosts do not mirror each other:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">x = collect(points(Ωₕ_graded))
-xg = collect(points(Gₕ))
-
-@assert xg[1] ≈ x[1] - (x[2] - x[1])
-@assert xg[end] ≈ x[end] + (x[end] - x[end-1])
-@assert xg[2:(end-1)] == x      # the physical points are untouched
-
-xg[1] - x[1], xg[end] - x[end]</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(-0.010000000000000002, 0.18999999999999995)</code></pre>
-</div>
-<p>The left ghost is <span class="md-math md-math-inline">\(h_2 = 0.01\)</span> below the boundary and the right one <span class="md-math md-math-inline">\(h_n = 0.19\)</span> above it.</p>
-<p>In two dimensions only the facet nodes get ghosts. The padded mesh is a tensor product, so it also has points outside along two axes at once, the four corners here. Those points are <em>absent</em>: they are not nodes, carry no degree of freedom and are never read as a value.</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">G₂ = Bramble.GhostMesh(Ωₕ_prod; ghosts = :boundary)
-
-npoints(G₂, Tuple), Bramble.nghosts(G₂), points(G₂)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">((6, 5), 14, ([-0.2, 0.0, 0.2, 0.6, 1.0, 1.4], [-0.5, 0.0, 0.5, 1.0, 1.5]))</code></pre>
-</div>
-<p>The padded size is <span class="md-math md-math-inline">\((4 + 2) \times (3 + 2)\)</span>. The ghosts are <span class="md-math md-math-inline">\(2 \cdot 3 + 2 \cdot 4 = 14\)</span>, one per facet node, and counting the padded grid&#39;s four corners separately leaves exactly those:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">absent = [Bramble.is_absent(G₂, I) for I in CartesianIndices(npoints(G₂, Tuple))]
-
-@assert sum(absent) == 4 &amp;&amp; all(absent[[1, end], [1, end]])
-@assert prod(npoints(G₂, Tuple)) - sum(absent) == prod(npoints(Ωₕ_prod, Tuple)) + Bramble.nghosts(G₂)
-
-sum(absent)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">4</code></pre>
-</div>
-<p>Naming fewer facets pads fewer:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">G_part = Bramble.GhostMesh(Ωₕ_prod; ghosts = (:xmin, :ymax))
-
-@assert npoints(G_part, Tuple) == (5, 4) &amp;&amp; Bramble.nghosts(G_part) == 3 + 4
-
-npoints(G_part, Tuple), Bramble.nghosts(G_part)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">((5, 4), 7)</code></pre>
-</div>
-<p>A facet the dimension does not have, such as <code class="md-code-inline">:ymin</code> on an interval, is an <code class="md-code-inline">ArgumentError</code>:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">try
-    Bramble.GhostMesh(Ωₕ; ghosts = (:ymin,))
-catch e
-    @assert e isa ArgumentError
-    showerror(stdout, e)
-end</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: ghosts must be :boundary or a tuple of facet names, got :ymin. Name facets among :xmin, :xmax (or their aliases), or pass `ghosts = ()` for none.</code></pre>
-</div>
-<p>A ghost mesh follows its physical mesh. After <code class="md-code-inline">change_points!</code> the ghosts move with the facet spacings, and after <code class="md-code-inline">iterative_refinement!</code> the point count changes, which a ghost mesh cannot follow: build a new one.</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Ωₕ_move = mesh(Ω, 5)
-G_move = Bramble.GhostMesh(Ωₕ_move; ghosts = :boundary)
-before = collect(points(G_move))[[1, end]]
-change_points!(Ωₕ_move, [0.0, 0.1, 0.3, 0.6, 1.0])
-after = collect(points(G_move))[[1, end]]
-
-@assert before ≈ [-0.25, 1.25] &amp;&amp; after ≈ [-0.1, 1.4]
-
-before, after</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">([-0.25, 1.25], [-0.1, 1.4])</code></pre>
-</div>
-<p>You rarely build a <code class="md-code-inline">GhostMesh</code> yourself. <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a><code class="md-code-inline">(Ωₕ; ghosts = ...)</code> builds one and a space on top of it, which the <a href="../../tutorials/space/">space tutorial</a> describes.</p>
+<h2 id="Ghost-points" class="md-heading">Ghost points<a href="#Ghost-points" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A mesh padded with one point beyond each boundary facet, for Neumann and Robin conditions, is the subject of the <a href="../../tutorials/ghost/#mesh_ghost">ghost point tutorial</a>.</p>
 <hr class="md-hr">
 <h2 id="Refinement" class="md-heading">Refinement<a href="#Refinement" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> inserts a point at every cell midpoint, updating indices and reapplying the domain&#39;s markers. Refinement is uniform and dyadic: <code class="md-code-inline">N</code> points become <code class="md-code-inline">2N - 1</code> along every axis. Above 1D, refine the whole mesh rather than one submesh: <code class="md-code-inline">iterative_refinement!(Ωₕ(1))</code> leaves the mesh&#39;s index set and markers sized for the old grid, and <code class="md-code-inline">gridspace</code> refuses it.</p>
+<p><a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> inserts a point at every cell midpoint and updates the indices. Refinement is uniform and dyadic: <code class="md-code-inline">N</code> points become <code class="md-code-inline">2N - 1</code> along every axis. Above 1D, refine the whole mesh: <code class="md-code-inline">iterative_refinement!(Ωₕ(1))</code> on one submesh leaves the mesh&#39;s index set and markers sized for the old grid, and <code class="md-code-inline">gridspace</code> refuses it.</p>
 <figure>
 <svg viewBox="0 0 740 210" width="100%" style="max-width:740px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
      xmlns="http://www.w3.org/2000/svg" role="img"
@@ -598,7 +522,7 @@ before, after</code></pre>
   <text x="630" y="32" font-size="11" fill="currentColor">new midpoints</text>
 </svg>
 </figure>
-<p>A mesh carrying custom markers needs the two-argument form: the labels are re-evaluated on the new points, and refining without a domain to re-derive them from is an error rather than a silent loss.</p>
+<p><code class="md-code-inline">iterative_refinement!(Ωₕ)</code> rebuilds <code class="md-code-inline">:boundary</code> and <code class="md-code-inline">:interior</code> and throws an <code class="md-code-inline">ArgumentError</code> on a mesh carrying any other label. The two-argument form re-evaluates every label on the new points. A grid space built before the call is stale, as after <code class="md-code-inline">change_points!</code>.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -609,85 +533,6 @@ npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))</code></pr
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">((39, 39), 101)</code></pre>
 </div>
-<hr class="md-hr">
-<h2 id="mesh_reference" class="md-heading">Reference<a href="#mesh_reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<h3 id="Constructing-from-a-set" class="md-heading">Constructing from a set<a href="#Constructing-from-a-set" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>A geometric set can be passed directly when no custom labels are needed. <code class="md-code-inline">:boundary</code> and <code class="md-code-inline">:interior</code> are provisioned either way:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">X = interval(0.0, 1.0) × interval(0.0, 2.0)
-Ωₕ_direct = mesh(X, 20)      # isotropic: 20 × 20
-
-:boundary in keys(markers(Ωₕ_direct)), :interior in keys(markers(Ωₕ_direct))</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
-</div>
-<h3 id="Points-and-half-points" class="md-heading">Points and half points<a href="#Points-and-half-points" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><code class="md-code-inline">points</code> returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from <code class="md-code-inline">point(Ωₕ, idx)</code> or from indexing. Above 1D <code class="md-code-inline">idx</code> is a <code class="md-code-inline">CartesianIndex</code> (or <code class="md-code-inline">i, j</code> in brackets; <code class="md-code-inline">point</code> also takes a tuple of per-axis indices), never a linear index:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Ωₕ_fig[3], point(Ωₕ_fig, 3), Ωₕ_2d[2, 5], point(Ωₕ_2d, CartesianIndex(2, 5))</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6, 0.6, (0.1111111111111111, 0.42105263157894735), (0.1111111111111111, 0.42105263157894735))</code></pre>
-</div>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">half_points(Ωₕ_fig), half_point(Ωₕ_fig, 3)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.1, 0.4, 0.8, 1.0], 0.4)</code></pre>
-</div>
-<h3 id="Spacings-and-cell-measures" class="md-heading">Spacings and cell measures<a href="#Spacings-and-cell-measures" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<div class="md-table-wrap">
-<table class="md-table">
-<thead>
-<tr>
-<th style="text-align:right">Function</th>
-<th style="text-align:right">Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:right"><code class="md-code-inline">spacing(Ωₕ, i)</code></td>
-<td style="text-align:right">backward spacing <span class="md-math md-math-inline">\(h_i = x_i - x_{i-1}\)</span> (<span class="md-math md-math-inline">\(x_2 - x_1\)</span> at <span class="md-math md-math-inline">\(i = 1\)</span>)</td>
-</tr>
-<tr>
-<td style="text-align:right"><code class="md-code-inline">forward_spacing(Ωₕ, i)</code></td>
-<td style="text-align:right">forward spacing <span class="md-math md-math-inline">\(h_{i+1} = x_{i+1} - x_i\)</span></td>
-</tr>
-<tr>
-<td style="text-align:right"><code class="md-code-inline">half_spacing(Ωₕ, i)</code></td>
-<td style="text-align:right">cell width <span class="md-math md-math-inline">\(h_{i+1/2} = (h_i + h_{i+1})/2\)</span></td>
-</tr>
-<tr>
-<td style="text-align:right"><code class="md-code-inline">cell_measure(Ωₕ, idx)</code></td>
-<td style="text-align:right">measure of the control volume at <code class="md-code-inline">idx</code>: the product of the per-axis cell widths</td>
-</tr>
-<tr>
-<td style="text-align:right"><code class="md-code-inline">hₘₐₓ(Ωₕ)</code></td>
-<td style="text-align:right">largest cell diagonal, the largest spacing in 1D</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>A 1D mesh stores its backward spacings, so <code class="md-code-inline">spacings</code> hands back the whole vector and the accessors index it. The cache is rebuilt by <code class="md-code-inline">set_points!</code>, and so by <a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> and <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a> as well:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">spacings(Ωₕ_fig), spacings(Ωₕ_fig)[3] == spacing(Ωₕ_fig, 3)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.2, 0.2, 0.39999999999999997, 0.4], true)</code></pre>
-</div>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">hₘₐₓ(Ωₕ_fig), cell_measure(Ωₕ_2d, (3, 4))</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.4, 0.011695906432748537)</code></pre>
-</div>
-<p><code class="md-code-inline">boundary_indices(Ωₕ)</code> gives the boundary facets separately, as a tuple of index sets.</p>
       </article>
       <footer class="md-footer">
 <p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
@@ -701,12 +546,8 @@ npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))</code></pr
           <a class="md-toc-link md-toc-h2" href="#Half-points,-spacings-and-cell-measures">Half points, spacings and cell measures</a>
           <a class="md-toc-link md-toc-h2" href="#Meshes-in-two-dimensions">Meshes in two dimensions</a>
           <a class="md-toc-link md-toc-h2" href="#Boundary,-interior-and-markers">Boundary, interior and markers</a>
-          <a class="md-toc-link md-toc-h2" href="#mesh_ghost">Ghost points beyond the boundary</a>
+          <a class="md-toc-link md-toc-h2" href="#Ghost-points">Ghost points</a>
           <a class="md-toc-link md-toc-h2" href="#Refinement">Refinement</a>
-          <a class="md-toc-link md-toc-h2" href="#mesh_reference">Reference</a>
-            <a class="md-toc-link md-toc-h3" href="#Constructing-from-a-set">Constructing from a set</a>
-            <a class="md-toc-link md-toc-h3" href="#Points-and-half-points">Points and half points</a>
-            <a class="md-toc-link md-toc-h3" href="#Spacings-and-cell-measures">Spacings and cell measures</a>
       </div>
     </aside>
   </div>
@@ -724,6 +565,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=f2e14e6d"></script>
+  <script src="../../assets/materialdocs.js?v=5425c35a"></script>
 </body>
 </html>

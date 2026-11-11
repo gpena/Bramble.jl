@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry tutorial — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=a58394a7">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=da09ab81">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry tutorial — Bramble.jl">
   <meta property="og:title" content="Geometry tutorial — Bramble.jl">
@@ -42,60 +42,64 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/" class="md-nav-active">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
@@ -103,9 +107,8 @@
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/geometry.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="tutorial_geometry" class="md-heading">Geometry tutorial<a href="#tutorial_geometry" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p><strong>What you will learn.</strong> How to describe where a problem lives: a set, the names of its boundary pieces, and the domain that bundles both.</p>
-<p><strong>What you need first.</strong> Only a working install, see <a href="../../getting_started/">Getting started</a>.</p>
+<p><strong>What you need first.</strong> Only a working install, see the <a href="../../#Installation">home page</a>.</p>
 <p><strong>Where next.</strong> The <a href="../../tutorials/mesh/#tutorial_mesh">mesh tutorial</a> turns a domain into a grid of points.</p>
-<p>Every block below runs when this page is built, so the printed values are the ones the code produces.</p>
 <hr class="md-hr">
 <h2 id="A-first-domain:-a-rod" class="md-heading">A first domain: a rod<a href="#A-first-domain:-a-rod" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Take a rod of length 10, held at a fixed temperature at its left end and insulated at the right end. The geometry is an interval, and the two ends need names so that a condition can later be attached to each:</p>
@@ -149,7 +152,7 @@ dim(rod), center(rod), collect(labels(rod))</code></pre>
   <span class="sgr32">y</span>: [<span class="sgr34">0.0, 2.0</span>]
   <span class="sgr32">z</span>: [<span class="sgr34">0.0, 0.5</span>]</code></pre>
 </div>
-<p>A set answers geometric questions. <code class="md-code-inline">∈</code> accepts a number in 1D, and a tuple, <code class="md-code-inline">SVector</code> or <code class="md-code-inline">Vector</code> above it:</p>
+<p>A set answers geometric questions. <code class="md-code-inline">∈</code> accepts a number in 1D, and in any dimension a tuple or vector of length <code class="md-code-inline">dim</code>:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -175,7 +178,7 @@ dim(X), extrema(X), extrema(X, 1), center(X)</code></pre>
 </div>
 <hr class="md-hr">
 <h2 id="Naming-boundary-pieces" class="md-heading">Naming boundary pieces<a href="#Naming-boundary-pieces" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A marker is a <code class="md-code-inline">:label =&gt; identifier</code> pair. The identifier is one boundary symbol, a tuple of them, or a predicate. Boundary symbols are coordinate-aligned (<code class="md-code-inline">:xmin</code>, <code class="md-code-inline">:xmax</code>, <code class="md-code-inline">:ymin</code>, <code class="md-code-inline">:ymax</code>, and so on, with aliases such as <code class="md-code-inline">:left</code> and <code class="md-code-inline">:top</code>), and the <a href="../../tutorials/geometry/#geometry_reference">reference</a> below lists them all.</p>
+<p>A marker is a <code class="md-code-inline">:label =&gt; identifier</code> pair. The identifier is one boundary symbol, a tuple of them, or a predicate. Boundary symbols are coordinate-aligned (<code class="md-code-inline">:xmin</code>, <code class="md-code-inline">:xmax</code>, <code class="md-code-inline">:ymin</code>, <code class="md-code-inline">:ymax</code>, and so on, with aliases such as <code class="md-code-inline">:left</code> and <code class="md-code-inline">:top</code>), and the <a href="../../api/geometry/#geometry_reference">geometry reference</a> lists them all.</p>
 <p>A channel with inflow on the left, outflow on the right and no-slip walls on top and bottom:</p>
 <p><figure class="md-figure">
 <img src="../../assets/geometry_example2_2d_channel.svg" alt="2D Channel Flow Domain" loading="lazy">
@@ -205,6 +208,29 @@ dim(channel), center(channel), collect(labels(channel))</code></pre>
 <p>Change <code class="md-code-inline">:wall =&gt; (:top, :bottom)</code> to <code class="md-code-inline">:top_wall =&gt; :top, :bottom_wall =&gt; :bottom</code>, and print <code class="md-code-inline">collect(labels(channel))</code> again. Two names let a later problem treat the two walls differently.</p>
 </div>
 </div>
+<p>A predicate marks any subset, not only a face. Its argument is the point <code class="md-code-inline">p</code>; a marker set built over a time interval takes <code class="md-code-inline">(p, t)</code> predicates:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">using LinearAlgebra
+
+m_cond = markers(
+    geom,
+    :inflow =&gt; :left,
+    :hot_spot =&gt; (p -&gt; p[1] &gt; 2.5 &amp;&amp; p[2] ≈ 0.0)
+)
+
+m_time = markers(
+    geom,
+    interval(0.0, 10.0),
+    :moving_source =&gt; ((p, t) -&gt; norm(p .- [t, 0.5]) &lt; 0.2)
+)
+
+collect(labels(m_cond)), m_time(1.5)      # the second is the marker set frozen at t = 1.5</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([:inflow, :hot_spot], Bramble.EvaluatedDomainMarkers{Bramble.DomainMarkers{Tuple{}, Tuple{}, Tuple{Bramble.Marker{Main.var&quot;#5#6&quot;}}, Tuple{}}, Float64}(DomainMarkers(1 total), 1.5))</code></pre>
+</div>
+<p><a href="../../api/geometry/#Bramble.labels"><code class="md-code-inline">labels</code></a> returns one tuple of every label, symbol markers first, then tuple markers, then predicate markers, then the three labels of each polygon or level-set marker, built without allocating. The helpers <code class="md-code-inline">label_symbols</code>, <code class="md-code-inline">label_tuples</code> and <code class="md-code-inline">label_conditions</code> behind it are internal.</p>
 <hr class="md-hr">
 <h2 id="A-domain-in-three-dimensions" class="md-heading">A domain in three dimensions<a href="#A-domain-in-three-dimensions" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The same two ideas, a set and named faces, carry over unchanged. A heat sink, heated below, cooled above and insulated on its four sides:</p>
@@ -241,128 +267,7 @@ dim(Ω), center(Ω), (0.5, 0.5) ∈ Ω, Bramble.is_collapsed(Ω)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(2, (0.5, 0.5), true, false)</code></pre>
 </div>
-<p><a href="../../internals/geometry/#Bramble.set-Tuple{Bramble.CartesianProduct}"><code class="md-code-inline">Bramble.set</code></a> (private, hence the prefix) returns the underlying set. Next, the <a href="../../tutorials/mesh/#tutorial_mesh">mesh tutorial</a> discretizes a domain into points.</p>
-<hr class="md-hr">
-<h2 id="geometry_reference" class="md-heading">Reference<a href="#geometry_reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<h3 id="Boundary-symbols" class="md-heading">Boundary symbols<a href="#Boundary-symbols" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>The canonical names mean the same face in every dimension; the viewpoint aliases do not (<code class="md-code-inline">:left</code> is <code class="md-code-inline">:xmin</code> in 1D and 2D, <code class="md-code-inline">:ymin</code> in 3D):</p>
-<ul class="md-list-tight">
-<li><p><strong>1D</strong>: <code class="md-code-inline">:xmin</code> (<code class="md-code-inline">:left</code>), <code class="md-code-inline">:xmax</code> (<code class="md-code-inline">:right</code>)</p>
-</li>
-<li><p><strong>2D</strong>: <code class="md-code-inline">:xmin</code> (<code class="md-code-inline">:left</code>), <code class="md-code-inline">:xmax</code> (<code class="md-code-inline">:right</code>), <code class="md-code-inline">:ymin</code> (<code class="md-code-inline">:bottom</code>), <code class="md-code-inline">:ymax</code> (<code class="md-code-inline">:top</code>)</p>
-</li>
-<li><p><strong>3D</strong>: <code class="md-code-inline">:xmin</code> (<code class="md-code-inline">:back</code>), <code class="md-code-inline">:xmax</code> (<code class="md-code-inline">:front</code>), <code class="md-code-inline">:ymin</code> (<code class="md-code-inline">:left</code>), <code class="md-code-inline">:ymax</code> (<code class="md-code-inline">:right</code>), <code class="md-code-inline">:zmin</code> (<code class="md-code-inline">:bottom</code>), <code class="md-code-inline">:zmax</code> (<code class="md-code-inline">:top</code>)</p>
-</li>
-</ul>
-<p>The viewpoint-dependent names in parentheses are aliases. <a href="../../api/geometry/#Bramble.boundary_symbols"><code class="md-code-inline">boundary_symbols</code></a> lists the canonical set for a given dimension:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">boundary_symbols(2)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(:xmin, :xmax, :ymin, :ymax)</code></pre>
-</div>
-<figure>
-<svg viewBox="0 0 780 280" width="100%" style="max-width:780px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
-     xmlns="http://www.w3.org/2000/svg" role="img"
-     aria-label="Diagram of standard boundary symbols in 2D (:xmin/:left, :xmax/:right, :ymin/:bottom, :ymax/:top) and 3D (:xmin/:back, :xmax/:front, :ymin/:left, :ymax/:right, :zmin/:bottom, :zmax/:top).">
-  <!-- Panel 1: 2D Domain -->
-  <g transform="translate(30, 20)">
-    <rect x="0" y="0" width="320" height="240" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="1"/>
-    <text x="160" y="28" font-size="14" font-weight="bold" fill="currentColor" text-anchor="middle">2D boundary facets</text>
-
-    <!-- 2D Box -->
-    <rect x="80" y="70" width="160" height="120" fill="currentColor" fill-opacity="0.05" stroke="currentColor" stroke-width="2"/>
-
-    <!-- Labels -->
-    <!-- :ymax / :top -->
-    <text x="160" y="58" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">:ymax (:top)</text>
-    <line x1="80" y1="70" x2="240" y2="70" stroke="#ef4444" stroke-width="3"/>
-
-    <!-- :ymin / :bottom -->
-    <text x="160" y="210" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">:ymin (:bottom)</text>
-    <line x1="80" y1="190" x2="240" y2="190" stroke="#ef4444" stroke-width="3"/>
-
-    <!-- :xmin / :left -->
-    <text x="35" y="134" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">:xmin</text>
-    <text x="35" y="148" font-size="10" fill="#3b82f6" text-anchor="middle">(:left)</text>
-    <line x1="80" y1="70" x2="80" y2="190" stroke="#3b82f6" stroke-width="3"/>
-
-    <!-- :xmax / :right -->
-    <text x="285" y="134" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">:xmax</text>
-    <text x="285" y="148" font-size="10" fill="#3b82f6" text-anchor="middle">(:right)</text>
-    <line x1="240" y1="70" x2="240" y2="190" stroke="#3b82f6" stroke-width="3"/>
-  </g>
-
-  <!-- Panel 2: 3D Isometric Domain -->
-  <g transform="translate(410, 20)">
-    <rect x="0" y="0" width="340" height="240" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="1"/>
-    <text x="170" y="28" font-size="14" font-weight="bold" fill="currentColor" text-anchor="middle">3D boundary facets</text>
-
-    <!-- Isometric Box Coordinates -->
-    <!-- Back/interior edges dashed -->
-    <line x1="130" y1="70"  x2="130" y2="150" stroke="currentColor" stroke-dasharray="3,3" stroke-width="1" stroke-opacity="0.4"/>
-    <line x1="70"  y1="190" x2="130" y2="150" stroke="currentColor" stroke-dasharray="3,3" stroke-width="1" stroke-opacity="0.4"/>
-    <line x1="130" y1="150" x2="250" y2="150" stroke="currentColor" stroke-dasharray="3,3" stroke-width="1" stroke-opacity="0.4"/>
-
-    <!-- Top face (:zmax) -->
-    <polygon points="70,110 130,70 250,70 190,110" fill="#ef4444" fill-opacity="0.1" stroke="#ef4444" stroke-width="1.5"/>
-    <text x="160" y="94" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">:zmax (:top)</text>
-
-    <!-- Right face (:ymax) -->
-    <polygon points="190,110 250,70 250,150 190,190" fill="#3b82f6" fill-opacity="0.1" stroke="#3b82f6" stroke-width="1.5"/>
-    <text x="225" y="135" font-size="11" font-weight="bold" fill="#3b82f6" text-anchor="middle">:ymax (:right)</text>
-
-    <!-- Front face (:xmax) -->
-    <polygon points="70,110 190,110 190,190 70,190" fill="#10b981" fill-opacity="0.1" stroke="#10b981" stroke-width="1.5"/>
-    <text x="130" y="155" font-size="11" font-weight="bold" fill="#10b981" text-anchor="middle">:xmax (:front)</text>
-
-    <!-- Left callout (:ymin) -->
-    <text x="35" y="150" font-size="11" font-weight="bold" fill="#3b82f6" text-anchor="middle">:ymin (:left)</text>
-    <!-- Back callout (:xmin) -->
-    <text x="190" y="60" font-size="11" font-weight="bold" fill="#10b981" text-anchor="middle">:xmin (:back)</text>
-    <!-- Bottom callout (:zmin) -->
-    <text x="130" y="215" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">:zmin (:bottom)</text>
-  </g>
-</svg>
-</figure>
-<h3 id="Collapsed-sets" class="md-heading">Collapsed sets<a href="#Collapsed-sets" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>A dimension is <strong>collapsed</strong> when its interval is degenerate (<span class="md-math md-math-inline">\(a = b\)</span>), which is how a surface or interface embedded in a higher-dimensional space is written. <code class="md-code-inline">dim</code> is the embedding dimension and <code class="md-code-inline">topo_dim</code> the topological one; they differ only for a collapsed set. <a href="../../internals/geometry/#Bramble.is_collapsed-Union{Tuple{T}, Tuple{T, T}} where T&lt;:Number"><code class="md-code-inline">Bramble.is_collapsed</code></a> answers per axis; it is private, hence the prefix:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">line_in_2d = interval(0.0, 1.0) × point(0.0)
-
-dim(line_in_2d), topo_dim(line_in_2d),
-Bramble.is_collapsed(line_in_2d, 1), Bramble.is_collapsed(line_in_2d, 2)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(2, 1, false, true)</code></pre>
-</div>
-<p>Related constructors: <code class="md-code-inline">interval(0, 2)</code> converts integer bounds to <code class="md-code-inline">Float64</code>, <code class="md-code-inline">point(0.5)</code> is the degenerate interval <span class="md-math md-math-inline">\([0.5, 0.5]\)</span>, and <code class="md-code-inline">box(1.5, 0.2)</code> sorts its bounds.</p>
-<h3 id="Predicate-and-time-dependent-markers" class="md-heading">Predicate and time-dependent markers<a href="#Predicate-and-time-dependent-markers" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>A predicate marks any subset, not only a face. A marker set built over a time interval takes <code class="md-code-inline">(p, t)</code> predicates:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">using LinearAlgebra
-
-m_cond = markers(
-    geom,
-    :inflow =&gt; :left,
-    :hot_spot =&gt; (p -&gt; p[1] &gt; 2.5 &amp;&amp; p[2] ≈ 0.0)
-)
-
-m_time = markers(
-    geom,
-    interval(0.0, 10.0),
-    :moving_source =&gt; ((p, t) -&gt; norm(p .- [t, 0.5]) &lt; 0.2)
-)
-
-collect(labels(m_cond)), m_time(1.5)      # the second is the marker set frozen at t = 1.5</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">([:inflow, :hot_spot], Bramble.EvaluatedDomainMarkers{Bramble.DomainMarkers{Tuple{}, Tuple{}, Tuple{Bramble.Marker{Main.var&quot;#5#6&quot;}}, Tuple{}}, Float64}(DomainMarkers(1 total), 1.5))</code></pre>
-</div>
-<p><code class="md-code-inline">labels</code> returns one tuple of every label, symbol markers first, then tuple markers, then predicate markers, built without allocating. The helpers <code class="md-code-inline">label_symbols</code>, <code class="md-code-inline">label_tuples</code> and <code class="md-code-inline">label_conditions</code> behind it are internal.</p>
+<p><a href="../../internals/geometry/#Bramble.set-Tuple{Bramble.CartesianProduct}"><code class="md-code-inline">Bramble.set</code></a> (private, hence the prefix) returns the underlying set.</p>
       </article>
       <footer class="md-footer">
 <p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
@@ -375,10 +280,6 @@ collect(labels(m_cond)), m_time(1.5)      # the second is the marker set frozen 
           <a class="md-toc-link md-toc-h2" href="#Sets-in-more-than-one-dimension">Sets in more than one dimension</a>
           <a class="md-toc-link md-toc-h2" href="#Naming-boundary-pieces">Naming boundary pieces</a>
           <a class="md-toc-link md-toc-h2" href="#A-domain-in-three-dimensions">A domain in three dimensions</a>
-          <a class="md-toc-link md-toc-h2" href="#geometry_reference">Reference</a>
-            <a class="md-toc-link md-toc-h3" href="#Boundary-symbols">Boundary symbols</a>
-            <a class="md-toc-link md-toc-h3" href="#Collapsed-sets">Collapsed sets</a>
-            <a class="md-toc-link md-toc-h3" href="#Predicate-and-time-dependent-markers">Predicate and time-dependent markers</a>
       </div>
     </aside>
   </div>
@@ -396,6 +297,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=a58394a7"></script>
+  <script src="../../assets/materialdocs.js?v=da09ab81"></script>
 </body>
 </html>

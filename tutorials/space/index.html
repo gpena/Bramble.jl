@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces and discrete functions — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=37de9eff">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=a2d2d9e6">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces and discrete functions — Bramble.jl">
   <meta property="og:title" content="Grid spaces and discrete functions — Bramble.jl">
@@ -42,70 +42,72 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/" class="md-nav-active">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/tutorials/space.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="tutorial_space" class="md-heading">Grid spaces and discrete functions<a href="#tutorial_space" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<p><strong>What you will learn.</strong> How to put a function on a mesh, measure it, stack copies into a composite space with vector elements, and add ghost points beyond named facets.</p>
-<p><strong>What you need first.</strong> The <a href="../../tutorials/mesh/">mesh tutorial</a>, for building a mesh; the <a href="../../tutorials/geometry/">geometry tutorial</a>, for the domain it sits on.</p>
-<p><strong>Where next.</strong> <a href="../../tutorials/operators/">Difference operators</a>, which act on the elements built here.</p>
-<p>A grid space is the discrete function space over a mesh. It fixes how many degrees of freedom a field has and which quadrature weight each one carries. A <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> is a function in that space. Every block below runs when this page is built.</p>
+<p>You will put a function on a mesh, measure it, and stack copies into a composite space with vector elements. The <a href="../../tutorials/mesh/">mesh tutorial</a> builds the mesh and the <a href="../../tutorials/geometry/">geometry tutorial</a> the domain it sits on. <a href="../../tutorials/operators/">Difference operators</a> act on the elements built here.</p>
+<p>A grid space is the discrete function space over a mesh. It fixes how many degrees of freedom a field has and which quadrature weight each one carries. A <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> is a function in that space.</p>
 <p>The running problem is small: sample <span class="md-math md-math-inline">\(f(x) = \sin(\pi x)\)</span> on the unit interval and measure it, first as one field, then as a pair of fields.</p>
 <h2 id="A-grid-space-over-a-mesh" class="md-heading">A grid space over a mesh<a href="#A-grid-space-over-a-mesh" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a> builds a grid space over a mesh. <code class="md-code-inline">ndofs</code> counts its degrees of freedom, and with <code class="md-code-inline">Tuple</code> it gives the grid shape:</p>
@@ -123,7 +125,7 @@ ndofs(Wₕ), ndofs(Wₕ, Tuple)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(11, (11,))</code></pre>
 </div>
-<p>There is one degree of freedom per mesh point. <code class="md-code-inline">points(Wₕ)</code> is <code class="md-code-inline">points(Ωₕ)</code>, so the space and its mesh agree on where the degrees of freedom sit.</p>
+<p>There is one degree of freedom per mesh point, and <code class="md-code-inline">points(Wₕ)</code> is <code class="md-code-inline">points(Ωₕ)</code>.</p>
 <h2 id="Discrete-functions" class="md-heading">Discrete functions<a href="#Discrete-functions" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><a href="../../api/spaces/#Bramble.Rₕ"><code class="md-code-inline">Rₕ</code></a> restricts a function to the grid: it evaluates it at every point and returns a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a>, the discrete function.</p>
 <div class="md-multi-output">
@@ -135,7 +137,7 @@ length(uₕ), uₕ[6]</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(11, 1.0)</code></pre>
 </div>
-<p><code class="md-code-inline">VectorElement &lt;: AbstractVector</code>, so indexing, <code class="md-code-inline">length</code> and broadcasting work as usual, and broadcasting keeps the parent space:</p>
+<p><code class="md-code-inline">VectorElement &lt;: AbstractVector</code>, so indexing, <code class="md-code-inline">length</code> and broadcasting work on it, and broadcasting keeps the parent space:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -145,423 +147,9 @@ space(wₕ) === Wₕ, wₕ[6]</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(true, 5.0)</code></pre>
 </div>
-<p><a href="../../api/spaces/#Bramble.element"><code class="md-code-inline">element</code></a> allocates a field, optionally filled with a constant. <a href="../../api/spaces/#Bramble.Rₕ!"><code class="md-code-inline">Rₕ!</code></a> writes into an element that already exists, which is what a time loop wants.</p>
-<h2 id="Inner-products-and-norms" class="md-heading">Inner products and norms<a href="#Inner-products-and-norms" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>Each degree of freedom carries a quadrature weight, the cell measure around its point. <code class="md-code-inline">innerₕ</code> weights each point by it, and <code class="md-code-inline">normₕ</code> is the norm it induces:</p>
-<div class="md-math md-math-display">
-\[(u_h, v_h)_h = \sum_i |\square_i| \, u_h(x_i) v_h(x_i), \qquad
-\|u_h\|_h = \sqrt{(u_h, u_h)_h}.\]
-</div>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">vₕ = Rₕ(Wₕ, x -&gt; cos(π * x))
-
-innerₕ(uₕ, vₕ), normₕ(uₕ), normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(-5.148621912560444e-18, 0.7071067811865476, true)</code></pre>
-</div>
-<p>The norm of <span class="md-math md-math-inline">\(\sin(\pi x)\)</span> on <span class="md-math md-math-inline">\([0, 1]\)</span> is <span class="md-math md-math-inline">\(1/\sqrt{2} \approx 0.707\)</span>, which <code class="md-code-inline">normₕ</code> reproduces here. The discrete Sobolev norms are built on the backward gradient <span class="md-math md-math-inline">\(\nabla_{-h}\)</span>:</p>
-<div class="md-math md-math-display">
-\[|u_h|_{1,h}^2 = \sum_{d=1}^D \|D_{-x_d} u_h\|_+^2, \qquad
-\|u_h\|_{1,h}^2 = \|u_h\|_h^2 + |u_h|_{1,h}^2.\]
-</div>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">snorm₁ₕ(uₕ), norm₁ₕ(uₕ), norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.212317420824743, 2.322573652327229, true)</code></pre>
-</div>
-<div class="md-admonition md-admonition-tip">
-<p class="md-admonition-title">Try this</p>
-<div class="md-admonition-body">
-<p>Build the mesh as <code class="md-code-inline">mesh(Ω, 11, false)</code>, a non-uniform one with the same number of points, and rerun the blocks above. <code class="md-code-inline">ndofs</code> is unchanged, but the weights are no longer all equal, so <code class="md-code-inline">normₕ</code> and <code class="md-code-inline">innerₕ</code> change while still tiling the interval. The <a href="../../tutorials/mesh/">mesh tutorial</a> builds such meshes on purpose.</p>
-</div>
-</div>
-<h2 id="space_composite" class="md-heading">Composite spaces and vector elements<a href="#space_composite" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A <strong>composite space</strong> stacks copies of a space for a vector field or a coupled system. Its elements are <code class="md-code-inline">VectorElement</code>s too: one flat vector holding every component, one after another. <code class="md-code-inline">Wₕ^Val(N)</code> stacks <code class="md-code-inline">N</code> copies:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Vₕ = Wₕ^Val(2)
-
-ncomponents(Vₕ), ndofs(Vₕ), ndofs(Vₕ, Tuple)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(2, 22, (11, 11))</code></pre>
-</div>
-<p><code class="md-code-inline">ndofs(Vₕ, Tuple)</code> is one entry per component, not a grid shape. A <strong>component</strong> is one of the stacked fields, and calling a composite element with <code class="md-code-inline">i</code> returns the <code class="md-code-inline">i</code>-th component as a view:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">uvec = element(Vₕ)
-uₓ = uvec(1)
-uᵧ = uvec(2)
-
-uₓ .= 1.5
-uᵧ .= -2.0
-
-parent(uvec)[[1, 12]]</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
-  1.5
- -2.0</code></pre>
-</div>
-<p>The component is a zero-copy view, so writing to it writes through to the parent. For a scalar space <code class="md-code-inline">uₕ(1)</code> is <code class="md-code-inline">uₕ</code> itself. <a href="../../api/spaces/#Bramble.components"><code class="md-code-inline">components</code></a> destructures the lot:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">c₁, c₂ = components(uvec)
-
-c₁ === uₓ, c₂ === uᵧ</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
-</div>
-<p>On a composite space <code class="md-code-inline">Rₕ!</code> takes a tuple of scalar functions, or one function returning a tuple, and <code class="md-code-inline">innerₕ</code> sums over components:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Rₕ!(uvec, (x -&gt; sin(π * x), x -&gt; cos(π * x)))
-
-normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
-</div>
-<div class="md-admonition md-admonition-tip">
-<p class="md-admonition-title">Try this</p>
-<div class="md-admonition-body">
-<p>Replace <code class="md-code-inline">Val(2)</code> with <code class="md-code-inline">Val(3)</code> and add a third function to the tuple. <code class="md-code-inline">ncomponents</code> and <code class="md-code-inline">ndofs</code> follow, and every other line of this section stays the same.</p>
-</div>
-</div>
-<h2 id="space_ghost" class="md-heading">Ghost spaces<a href="#space_ghost" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A grid space can carry the ghost points of the <a href="../../tutorials/mesh/#mesh_ghost">mesh tutorial</a>. The keyword <code class="md-code-inline">ghosts</code> of <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a> names the facets that get them: <code class="md-code-inline">:boundary</code> for every facet, or a tuple such as <code class="md-code-inline">(:xmin, :ymax)</code>. The default <code class="md-code-inline">ghosts = ()</code> returns the space of the sections above, unchanged. The running example is a small non-uniform grid in the unit square:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">import Bramble: change_points!, indices, point
-using LinearAlgebra: diag
-
-Ω_g = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
-Ωₕ_g = mesh(Ω_g, (4, 3), (true, true))
-change_points!(Ωₕ_g, markers(Ω_g), ([0.0, 0.2, 0.6, 1.0], [0.0, 0.5, 1.0]))
-
-W_plain = gridspace(Ωₕ_g)
-W_ghost = gridspace(Ωₕ_g; ghosts = :boundary)
-W_part = gridspace(Ωₕ_g; ghosts = (:xmin, :ymax))
-
-@assert typeof(gridspace(Ωₕ_g; ghosts = ())) == typeof(W_plain)
-
-ndofs(W_plain), ndofs(W_ghost), ndofs(W_part)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(12, 26, 19)</code></pre>
-</div>
-<p>The degrees of freedom of a ghost space are the physical nodes plus the ghosts. Here <span class="md-math md-math-inline">\(12\)</span> nodes plus <span class="md-math md-math-inline">\(2 \cdot 3 + 2 \cdot 4 = 14\)</span> ghosts give 26, and the two named facets give <span class="md-math md-math-inline">\(12 + 3 + 4 = 19\)</span>. The padded corners are not degrees of freedom.</p>
-<h3 id="The-order-of-the-degrees-of-freedom" class="md-heading">The order of the degrees of freedom<a href="#The-order-of-the-degrees-of-freedom" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>The order is fixed. The physical nodes come first, in the mesh&#39;s linear order. The ghosts follow, facet by facet in the order <code class="md-code-inline">xmin, xmax, ymin, ymax, zmin, zmax</code> (only the named ones), each facet&#39;s ghosts in the column-major order of its nodes. A system assembled on a ghost space is indexed this way, so its first rows and columns are the physical nodes.</p>
-<p>Each degree of freedom is one point of the padded mesh. <code class="md-code-inline">Bramble.padded_space</code> is the internal space on that mesh, and <code class="md-code-inline">Bramble.closure</code> returns the sparse matrix <code class="md-code-inline">E</code> that sends the degrees of freedom to padded values, one entry <span class="md-math md-math-inline">\(1\)</span> per column. This reads off where each one sits:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">E, _ = Bramble.closure(W_ghost)
-Pₕ = Bramble.padded_space(W_ghost)
-padded = CartesianIndices(npoints(mesh(Pₕ), Tuple))
-
-dof_point(j) = point(mesh(Pₕ), padded[findfirst(!iszero, E[:, j])])
-
-@assert [dof_point(j) for j in 1:12] == vec([point(Ωₕ_g, I) for I in indices(Ωₕ_g)])
-@assert all(dof_point(j)[1] &lt; 0.0 for j in 13:15)        # xmin ghosts, at x = -h₂
-@assert all(dof_point(j)[1] &gt; 1.0 for j in 16:18)        # xmax ghosts, at x = 1 + hₙ
-@assert all(dof_point(j)[2] &lt; 0.0 for j in 19:22)        # ymin ghosts
-@assert all(dof_point(j)[2] &gt; 1.0 for j in 23:26)        # ymax ghosts
-
-[dof_point(j) for j in (1, 12, 13, 15, 16, 18, 19, 22, 23, 26)]</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">10-element Vector{Tuple{Float64, Float64}}:
- (0.0, 0.0)
- (1.0, 1.0)
- (-0.2, 0.0)
- (-0.2, 1.0)
- (1.4, 0.0)
- (1.4, 1.0)
- (0.0, -0.5)
- (1.0, -0.5)
- (0.0, 1.5)
- (1.0, 1.5)</code></pre>
-</div>
-<p>The first two entries are the first and last physical node. The next four are the <code class="md-code-inline">xmin</code> and <code class="md-code-inline">xmax</code> ghosts: <span class="md-math md-math-inline">\(x = -0.2\)</span> and <span class="md-math md-math-inline">\(x = 1.4\)</span>, the distances <span class="md-math md-math-inline">\(h_2 = 0.2\)</span> and <span class="md-math md-math-inline">\(h_n = 0.4\)</span> from the facet. The last four are the <code class="md-code-inline">ymin</code> and <code class="md-code-inline">ymax</code> ghosts at <span class="md-math md-math-inline">\(y = -0.5\)</span> and <span class="md-math md-math-inline">\(y = 1.5\)</span>. The spacings differ at the two ends of each axis, so a ghost is not a mirror image: its coordinate is read from the mesh.</p>
-<h3 id="Physical-only-weights" class="md-heading">Physical-only weights<a href="#Physical-only-weights" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>A ghost carries no quadrature weight. The inner products <code class="md-code-inline">innerₕ</code>, <code class="md-code-inline">inner₊</code> and <code class="md-code-inline">inner_Γ</code> weigh the physical nodes, cells and facets exactly as on the space without ghosts, and give zero weight to every ghost. A form is assembled on the ghost space, so its mass matrix shows this:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">M_plain = assemble(form(W_plain, W_plain, (u, v) -&gt; innerₕ(u, v)))
-M_ghost = assemble(form(W_ghost, W_ghost, (u, v) -&gt; innerₕ(u, v)))
-
-@assert diag(M_ghost)[1:12] == diag(M_plain)
-@assert all(iszero, diag(M_ghost)[13:end])
-@assert sum(diag(M_ghost)) ≈ 1.0       # the physical cells tile the unit square
-
-sum(diag(M_ghost)[1:12]), sum(diag(M_ghost)[13:end])</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.0, 0.0)</code></pre>
-</div>
-<p>The weights of <code class="md-code-inline">inner_Γ</code> are facet weights: the transverse measure at each facet node, a half cell at the facet&#39;s ends. The markers <code class="md-code-inline">:xmin</code> to <code class="md-code-inline">:zmax</code> name the physical facet nodes, never the ghosts. <code class="md-code-inline">gridspace</code> of a bare <code class="md-code-inline">GhostMesh</code> is refused, since its weights would count the ghosts: build the space from the physical mesh with <code class="md-code-inline">ghosts</code>.</p>
-<h3 id="What-to-do-with-a-ghost-space" class="md-heading">What to do with a ghost space<a href="#What-to-do-with-a-ghost-space" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>A ghost space is a space of unknowns for forms. <a href="../../api/forms/#Bramble.form"><code class="md-code-inline">form</code></a> builds on it as on any space, and <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> ties its ghosts to boundary relations, which the <a href="../../tutorials/form/#form_ghost">form tutorial</a> shows. The solution vector comes back in the order above, and <code class="md-code-inline">Bramble.lift</code> turns it into a grid function with its ghosts filled in. That grid function lives on the padded space, one point longer at each ghosted end.</p>
-<h3 id="Ghost-values-in-a-time-loop" class="md-heading">Ghost values in a time loop<a href="#Ghost-values-in-a-time-loop" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>An explicit time step assembles no system. It holds the solver&#39;s vector, refreshes the ghosts from it and applies an operator. <a href="../../api/spaces/#Bramble.GhostVector"><code class="md-code-inline">GhostVector</code></a> is that pair of the physical values and a buffer of ghosts. <code class="md-code-inline">GhostVector(Cₕ, u)</code> wraps the vector <code class="md-code-inline">u</code> of the physical values, in the mesh&#39;s linear order, without a copy. <code class="md-code-inline">Bramble.physical(v)</code> is <code class="md-code-inline">u</code> itself, and <code class="md-code-inline">Bramble.ghost_values(v)</code> is the buffer, which starts at zero. The space below is a <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> ghost space on the grid of this section, with a Neumann datum on every facet.</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">import Bramble: Δₕ!, D₋ₓ
-
-Cₕ_g = constrained(W_ghost, u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; 1.0, :xmax =&gt; ∂ₙ(u) =&gt; 0.0,
-                                  :ymin =&gt; ∂ₙ(u) =&gt; 0.0, :ymax =&gt; ∂ₙ(u) =&gt; 0.0))
-
-u_g = [sinpi(p[1]) + p[2]^2 for p in vec([point(Ωₕ_g, I) for I in indices(Ωₕ_g)])]
-v_g = GhostVector(Cₕ_g, u_g)
-
-@assert Bramble.physical(v_g) === u_g
-@assert length(v_g) == ndofs(W_ghost) == 26
-@assert all(iszero, Bramble.ghost_values(v_g))
-
-length(v_g), length(Bramble.ghost_values(v_g))</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(26, 14)</code></pre>
-</div>
-<p><code class="md-code-inline">update_ghosts!(v, Cₕ)</code> writes into the buffer the ghosts that the relations give, from the values of <code class="md-code-inline">v</code>. It reads the rows of the closure that belong to the ghosts and nothing else, so its cost follows the facets, not the mesh, and it allocates nothing. With a time, <code class="md-code-inline">update_ghosts!(v, Cₕ, t)</code> takes the data of the relations at <code class="md-code-inline">t</code>. The data here do not depend on time, so the time is ignored and both calls fill the same ghosts. They are the ghosts of <code class="md-code-inline">Bramble.lift</code>, which the next block compares through an operator:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">update_ghosts!(v_g, Cₕ_g)
-ghosts_static = copy(Bramble.ghost_values(v_g))
-
-fill!(Bramble.ghost_values(v_g), 0.0)
-update_ghosts!(v_g, Cₕ_g, 0.7)
-
-@assert Bramble.ghost_values(v_g) == ghosts_static
-@assert any(!iszero, ghosts_static)
-@assert Bramble.physical(v_g) === u_g                  # the update left the physical part alone
-@assert Δₕ!(similar(u_g), v_g) ≈ Δₕ!(similar(u_g), update_ghosts!(GhostVector(Cₕ_g, u_g), Cₕ_g))
-
-ghosts_static[1:3]</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">3-element Vector{Float64}:
- 0.9877852522924732
- 1.2377852522924733
- 1.9877852522924733</code></pre>
-</div>
-<p>A runtime operator on a <code class="md-code-inline">GhostVector</code> reads the ghosts from the buffer and returns the values at the physical nodes, a plain vector. It equals the same operator on <code class="md-code-inline">Bramble.lift(Cₕ, u)</code> at those nodes, with no padded function built:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">U_g = Bramble.lift(Cₕ_g, u_g)
-phys = Bramble.physical_indices(mesh(Cₕ_g))
-dims = npoints(mesh(Bramble.padded_space(Cₕ_g)), Tuple)
-at_nodes(F) = reshape(collect(F), dims)[phys]
-
-out_g = similar(u_g)
-Δₕ!(out_g, v_g)
-
-@assert out_g ≈ vec(at_nodes(Δₕ(U_g)))
-@assert Δₕ(v_g) ≈ out_g
-@assert D₋ₓ(v_g) ≈ vec(at_nodes(D₋ₓ(U_g)))
-
-extrema(out_g)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(-14.214548626861463, 41.389262614623654)</code></pre>
-</div>
-<p>One thing follows from the physical-only result. The result carries no ghosts: it is as long as <code class="md-code-inline">u</code>, not as <code class="md-code-inline">v</code>.</p>
-<h4 id="An-explicit-heat-step" class="md-heading">An explicit heat step<a href="#An-explicit-heat-step" class="md-heading-anchor" aria-label="Link to this section">#</a></h4>
-<p>The use this serves is the explicit heat equation <span class="md-math md-math-inline">\(u_t = \Delta_h u\)</span> with a Neumann relation, on a non-uniform grid. Each step refreshes the ghosts, applies <code class="md-code-inline">Δₕ!</code> and advances the physical vector in place. The unit square has <span class="md-math md-math-inline">\(11 \times 9\)</span> nodes graded by <span class="md-math md-math-inline">\(x \mapsto x^{3/2}\)</span>, and the datum is zero on all four facets. The function <span class="md-math md-math-inline">\(e^{-2\pi^2 t}\cos \pi x \cos \pi y\)</span> solves the continuous problem, so it is the reference. The step is <span class="md-math md-math-inline">\(0.2 / (h_x^{-2} + h_y^{-2})\)</span>, rounded down to divide the final time, with <span class="md-math md-math-inline">\(h_x\)</span> and <span class="md-math md-math-inline">\(h_y\)</span> the smallest spacings of each axis: inside the explicit stability limit <span class="md-math md-math-inline">\(1 / (2 (h_x^{-2} + h_y^{-2}))\)</span> of the uniform grid with those spacings.</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Ω_h = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
-Ωₕ_h = mesh(Ω_h, (11, 9), (true, true))
-xs = [(i / 10)^1.5 for i in 0:10]
-ys = [(j / 8)^1.5 for j in 0:8]
-change_points!(Ωₕ_h, markers(Ω_h), (xs, ys))
-
-Cₕ_h = constrained(gridspace(Ωₕ_h; ghosts = :boundary),
-                   u -&gt; (:xmin =&gt; ∂ₙ(u) =&gt; 0.0, :xmax =&gt; ∂ₙ(u) =&gt; 0.0,
-                         :ymin =&gt; ∂ₙ(u) =&gt; 0.0, :ymax =&gt; ∂ₙ(u) =&gt; 0.0))
-
-u₀ = [cospi(p[1]) * cospi(p[2]) for p in vec([point(Ωₕ_h, I) for I in indices(Ωₕ_h)])]
-u_h = copy(u₀)
-v_h = GhostVector(Cₕ_h, u_h)
-Lu = similar(u_h)
-
-T = 0.05
-Δt₀ = 0.2 / (1 / minimum(diff(xs))^2 + 1 / minimum(diff(ys))^2)
-nsteps = ceil(Int, T / Δt₀)
-Δt = T / nsteps
-
-for _ in 1:nsteps
-    update_ghosts!(v_h, Cₕ_h)
-    Δₕ!(Lu, v_h)
-    u_h .+= Δt .* Lu
-end
-
-u_exact = exp(-2π^2 * T) .* u₀
-err = maximum(abs, u_h - u_exact)
-
-@assert Δt &lt;= Δt₀
-@assert err &lt; 2e-2 * maximum(abs, u₀)
-@assert maximum(abs, u_h) &lt; maximum(abs, u₀)            # the mode decayed
-@assert Bramble.physical(v_h) === u_h                   # the loop wrote into the solver&#39;s vector
-
-nsteps, err</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(378, 0.005301453238774956)</code></pre>
-</div>
-<p>The error is the spatial error of the scheme on this grid, about half a percent of the amplitude.</p>
-<h2 id="Reference" class="md-heading">Reference<a href="#Reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<h3 id="Constructors" class="md-heading">Constructors<a href="#Constructors" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><code class="md-code-inline">Wₕ^Val(N)</code> is type stable whatever <code class="md-code-inline">N</code> is, while <code class="md-code-inline">Wₕ^2</code> relies on the literal being constant-folded and only reaches <code class="md-code-inline">N ≤ 3</code>. <a href="../../api/spaces/#Bramble.vector_gridspace"><code class="md-code-inline">vector_gridspace</code></a><code class="md-code-inline">(Ωₕ, 2)</code> builds the same space straight from a mesh, and <code class="md-code-inline">Bramble.CompositeGridSpace((Wₕ, Wₕ))</code> builds one from spaces that need not be identical:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">spaces(Vₕ) == (Wₕ, Wₕ)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
-</div>
-<h3 id="Weights" class="md-heading">Weights<a href="#Weights" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><code class="md-code-inline">weights(Wₕ)</code> returns the whole <code class="md-code-inline">SpaceWeights</code> bundle, and a weight vector comes from naming the inner product it belongs to. <code class="md-code-inline">Bramble.Innerh</code> and <code class="md-code-inline">Bramble.Innerplus</code> are internal, hence the prefix. <code class="md-code-inline">weights</code> is not defined for a composite space, since its leaves may live on different meshes: call it on a <a href="../../api/spaces/#Bramble.components"><code class="md-code-inline">components</code></a> leaf instead.</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">w = weights(Wₕ, Bramble.Innerh())
-
-length(w), sum(w)      # one weight per point; they tile the unit interval</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(11, 1.0)</code></pre>
-</div>
-<h3 id="Component-ranges" class="md-heading">Component ranges<a href="#Component-ranges" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><a href="../../api/spaces/#Bramble.component_range"><code class="md-code-inline">component_range</code></a> and <code class="md-code-inline">component_ranges</code> give the degrees of freedom each component owns:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">component_range(Vₕ, 1), component_ranges(Vₕ)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(1:11, (1:11, 12:22))</code></pre>
-</div>
-<h3 id="Functions-as-factors" class="md-heading">Functions as factors<a href="#Functions-as-factors" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>A plain <code class="md-code-inline">Function</code> is not a grid function, so multiplying by one restricts it first (<code class="md-code-inline">Rₕ(space(uₕ), f)</code>) and scales pointwise. This is what lets a spatial condition multiply a field directly, including inside a form:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">oneₕ = Rₕ(Wₕ, x -&gt; 1.0)
-below_half = (x -&gt; x[1] &lt; 0.5) * oneₕ
-
-sum(below_half)</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">5.0</code></pre>
-</div>
-<h3 id="Grid-layout" class="md-heading">Grid layout<a href="#Grid-layout" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>Degrees of freedom are stored flat, but on a two-dimensional space a scalar element also indexes by grid coordinate, with a <code class="md-code-inline">CartesianIndex</code>, without reshaping:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">W₂ = gridspace(mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (5, 5), (true, true)))
-V₂ = W₂^Val(2)
-u_scal = element(W₂, 0.0)
-u_scal[CartesianIndex(2, 3)] = 10.0
-u_scal[CartesianIndex(4, 1)] = 20.0
-
-u_scal[CartesianIndex(2, 3)], u_scal[CartesianIndex(4, 1)]</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(10.0, 20.0)</code></pre>
-</div>
-<p>For matrix operations or plotting, <code class="md-code-inline">reshape(uₕ)</code> returns a <code class="md-code-inline">Base.ReshapedArray</code> view of the same memory, so writing through it writes through to the element. On a composite element it returns one view per component:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">u_grid = reshape(u_scal)
-u_grid[2, 3] = -1.0
-
-size(u_grid), u_scal[CartesianIndex(2, 3)], size.(reshape(element(V₂)))</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">((5, 5), -1.0, ((5, 5), (5, 5)))</code></pre>
-</div>
-<figure>
-<svg viewBox="0 0 780 270" width="100%" style="max-width:780px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
-     xmlns="http://www.w3.org/2000/svg" role="img"
-     aria-label="Diagram of CompositeGridSpace storage showing the contiguous flat degree of freedom buffer, zero-copy component views u_x and u_y, and 2D reshaped matrix views.">
-  <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="currentColor"/>
-    </marker>
-    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#3b82f6"/>
-    </marker>
-    <marker id="arrowPurple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8b5cf6"/>
-    </marker>
-  </defs>
-
-  <!-- 1. Flat 1D Buffer -->
-  <text x="30" y="25" font-size="13" font-weight="bold" fill="currentColor">Flat 1D degree of freedom storage: uₕ.data (length 50)</text>
-
-  <!-- Component 1 block -->
-  <rect x="30" y="35" width="350" height="36" rx="4" fill="#3b82f6" fill-opacity="0.15" stroke="#3b82f6" stroke-width="1.5"/>
-  <text x="205" y="58" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">Component 1 (uₓ): DOFs 1:25</text>
-
-  <!-- Component 2 block -->
-  <rect x="390" y="35" width="350" height="36" rx="4" fill="#8b5cf6" fill-opacity="0.15" stroke="#8b5cf6" stroke-width="1.5"/>
-  <text x="565" y="58" font-size="12" font-weight="bold" fill="#8b5cf6" text-anchor="middle">Component 2 (uᵧ): DOFs 26:50</text>
-
-  <!-- Connectors from Flat to Component Views -->
-  <path d="M 205 71 L 205 105" stroke="#3b82f6" stroke-width="1.5" fill="none" marker-end="url(#arrowBlue)"/>
-  <text x="215" y="93" font-size="11" fill="#3b82f6">uₕ(1)</text>
-
-  <path d="M 565 71 L 565 105" stroke="#8b5cf6" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
-  <text x="575" y="93" font-size="11" fill="#8b5cf6">uₕ(2)</text>
-
-  <!-- 2. Zero-copy component views -->
-  <rect x="30" y="110" width="350" height="34" rx="4" fill="#3b82f6" fill-opacity="0.08" stroke="#3b82f6" stroke-dasharray="4,3" stroke-width="1.2"/>
-  <text x="205" y="132" font-size="12" fill="currentColor" text-anchor="middle">VectorElement view (SubArray of length 25)</text>
-
-  <rect x="390" y="110" width="350" height="34" rx="4" fill="#8b5cf6" fill-opacity="0.08" stroke="#8b5cf6" stroke-dasharray="4,3" stroke-width="1.2"/>
-  <text x="565" y="132" font-size="12" fill="currentColor" text-anchor="middle">VectorElement view (SubArray of length 25)</text>
-
-  <!-- Connectors from Component Views to 2D Grids -->
-  <path d="M 205 144 L 205 178" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="215" y="166" font-size="11" fill="currentColor">reshape(uₓ)</text>
-
-  <path d="M 565 144 L 565 178" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="575" y="166" font-size="11" fill="currentColor">reshape(uᵧ)</text>
-
-  <!-- 3. Reshaped 2D Matrix Views -->
-  <g transform="translate(145, 185)">
-    <rect x="0" y="0" width="120" height="65" rx="4" fill="none" stroke="#3b82f6" stroke-width="1.5"/>
-    <line x1="24" y1="0" x2="24" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="48" y1="0" x2="48" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="72" y1="0" x2="72" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="96" y1="0" x2="96" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="13" x2="120" y2="13" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="26" x2="120" y2="26" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="39" x2="120" y2="39" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="52" x2="120" y2="52" stroke="currentColor" stroke-opacity="0.2"/>
-    <text x="60" y="80" font-size="11" fill="currentColor" text-anchor="middle">5 × 5 ReshapedArray (uₓ[i, j])</text>
-  </g>
-
-  <g transform="translate(505, 185)">
-    <rect x="0" y="0" width="120" height="65" rx="4" fill="none" stroke="#8b5cf6" stroke-width="1.5"/>
-    <line x1="24" y1="0" x2="24" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="48" y1="0" x2="48" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="72" y1="0" x2="72" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="96" y1="0" x2="96" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="13" x2="120" y2="13" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="26" x2="120" y2="26" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="39" x2="120" y2="39" stroke="currentColor" stroke-opacity="0.2"/>
-    <line x1="0" y1="52" x2="120" y2="52" stroke="currentColor" stroke-opacity="0.2"/>
-    <text x="60" y="80" font-size="11" fill="currentColor" text-anchor="middle">5 × 5 ReshapedArray (uᵧ[i, j])</text>
-  </g>
-</svg>
-</figure>
-<h3 id="Restriction-and-cell-averaging" class="md-heading">Restriction and cell averaging<a href="#Restriction-and-cell-averaging" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>Two ways to turn a continuous function into a grid function. Nodal restriction <span class="md-math md-math-inline">\(R_h\)</span> evaluates it at the grid points; cell averaging <span class="md-math md-math-inline">\(\mathrm{avg}_h\)</span> integrates it over the cell around each point and divides by the cell measure:</p>
+<p><a href="../../api/spaces/#Bramble.element"><code class="md-code-inline">element</code></a> allocates an uninitialised field; <code class="md-code-inline">element(Wₕ, α)</code> fills it with <code class="md-code-inline">α</code> and <code class="md-code-inline">element(Wₕ, v)</code> copies a vector. <a href="../../api/spaces/#Bramble.Rₕ!"><code class="md-code-inline">Rₕ!</code></a> writes into an element that already exists.</p>
+<h2 id="Restriction-and-cell-averaging" class="md-heading">Restriction and cell averaging<a href="#Restriction-and-cell-averaging" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Nodal restriction <span class="md-math md-math-inline">\(R_h\)</span> evaluates a function at the grid points; cell averaging <span class="md-math md-math-inline">\(\mathrm{avg}_h\)</span> integrates it over the cell around each point and divides by the cell measure:</p>
 <div class="md-math md-math-display">
 \[\mathrm{avg}_h f(x_i) = \frac{1}{|\square_i|} \int_{\square_i} f(x) \, dx\]
 </div>
@@ -644,16 +232,53 @@ size(u_grid), u_scal[CartesianIndex(2, 3)], size.(reshape(element(V₂)))</code>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">u_avg = avgₕ(W₂, x -&gt; exp(-x[1] - x[2]))
-avgₕ!(u_avg, x -&gt; exp(-x[1] - x[2]))
+<pre><code class="language-julia">u_avg = avgₕ(Wₕ, x -&gt; exp(-x))
+avgₕ!(u_avg, x -&gt; exp(-x))
 
 u_avg[1]</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.8836465857416996</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.9754115099857197</code></pre>
 </div>
-<p>The difference matters for a source term: <code class="md-code-inline">Rₕ</code> of a rough function inherits its roughness, while <code class="md-code-inline">avgₕ</code> integrates it away.</p>
-<h3 id="Staggered-inner-product" class="md-heading">Staggered inner product<a href="#Staggered-inner-product" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p><code class="md-code-inline">inner₊</code> is the staggered counterpart of <code class="md-code-inline">innerₕ</code>: it weights by the half-spacings, the interface quantities a difference or a gradient lands on, and a trailing <code class="md-code-inline">:x</code>/<code class="md-code-inline">:y</code>/<code class="md-code-inline">:z</code> (or <code class="md-code-inline">1</code>/<code class="md-code-inline">2</code>/<code class="md-code-inline">3</code>) argument picks a single direction. That pairing is what makes summation by parts exact; the <a href="../../tutorials/operators/">operators tutorial</a> derives it.</p>
+<p>For a rough source term, <code class="md-code-inline">avgₕ</code> averages out the roughness that <code class="md-code-inline">Rₕ</code> samples.</p>
+<p>A plain <code class="md-code-inline">Function</code> is not a grid function, so multiplying by one restricts it first (<code class="md-code-inline">Rₕ(space(uₕ), f)</code>) and scales pointwise. This lets a spatial condition multiply a field directly, including inside a form:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">oneₕ = Rₕ(Wₕ, x -&gt; 1.0)
+below_half = (x -&gt; x[1] &lt; 0.5) * oneₕ
+
+sum(below_half)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">5.0</code></pre>
+</div>
+<h2 id="Inner-products-and-norms" class="md-heading">Inner products and norms<a href="#Inner-products-and-norms" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>Each degree of freedom carries a quadrature weight, the cell measure around its point. <code class="md-code-inline">innerₕ</code> weights each point by it (<code class="md-code-inline">uₕ</code> is conjugated for complex data, and <code class="md-code-inline">markers = (...)</code> restricts the sum), and <code class="md-code-inline">normₕ</code> is the norm it induces:</p>
+<div class="md-math md-math-display">
+\[(u_h, v_h)_h = \sum_i |\square_i| \, u_h(x_i) v_h(x_i), \qquad
+\|u_h\|_h = \sqrt{(u_h, u_h)_h}.\]
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">vₕ = Rₕ(Wₕ, x -&gt; cos(π * x))
+
+innerₕ(uₕ, vₕ), normₕ(uₕ), normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(-5.148621912560444e-18, 0.7071067811865476, true)</code></pre>
+</div>
+<p>The norm of <span class="md-math md-math-inline">\(\sin(\pi x)\)</span> on <span class="md-math md-math-inline">\([0, 1]\)</span> is <span class="md-math md-math-inline">\(1/\sqrt{2} \approx 0.707\)</span>, which <code class="md-code-inline">normₕ</code> reproduces here. The discrete Sobolev norms are built on the backward gradient <code class="md-code-inline">∇ₕ</code>:</p>
+<div class="md-math md-math-display">
+\[|u_h|_{1,h}^2 = \sum_{d=1}^D \|D_{-x_d} u_h\|_+^2, \qquad
+\|u_h\|_{1,h}^2 = \|u_h\|_h^2 + |u_h|_{1,h}^2.\]
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">snorm₁ₕ(uₕ), norm₁ₕ(uₕ), norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.212317420824743, 2.322573652327229, true)</code></pre>
+</div>
+<p><code class="md-code-inline">inner₊</code> is the staggered counterpart of <code class="md-code-inline">innerₕ</code>: it weights by the backward spacing along the chosen direction (zero at the first node) and by the cell width across the others. A trailing <code class="md-code-inline">:x</code>/<code class="md-code-inline">:y</code>/<code class="md-code-inline">:z</code> (or <code class="md-code-inline">1</code>/<code class="md-code-inline">2</code>/<code class="md-code-inline">3</code>) argument picks a single direction. That pairing makes summation by parts exact; the <a href="../../tutorials/operators/">operators tutorial</a> derives it.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -663,6 +288,145 @@ inner₊(D, D, :x) ≈ snorm₁ₕ(uₕ)^2</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>Build the mesh as <code class="md-code-inline">mesh(Ω, 11, false)</code>, a non-uniform one with the same number of points, and rerun the blocks above. <code class="md-code-inline">ndofs</code> is unchanged, but the interior weights are no longer equal (on a uniform mesh only the two end weights are halved), so <code class="md-code-inline">normₕ</code> and <code class="md-code-inline">innerₕ</code> change while the weights still sum to the interval length. The <a href="../../tutorials/mesh/">mesh tutorial</a> builds such meshes on purpose.</p>
+</div>
+</div>
+<h2 id="space_composite" class="md-heading">Composite spaces and vector elements<a href="#space_composite" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A <strong>composite space</strong> stacks copies of a space for a vector field or a coupled system. Its elements are <code class="md-code-inline">VectorElement</code>s too: one flat vector holding every component, one after another. <code class="md-code-inline">Wₕ^Val(N)</code> stacks <code class="md-code-inline">N</code> copies:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Vₕ = Wₕ^Val(2)
+
+ncomponents(Vₕ), ndofs(Vₕ), ndofs(Vₕ, Tuple)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2, 22, (11, 11))</code></pre>
+</div>
+<p><code class="md-code-inline">ndofs(Vₕ, Tuple)</code> has one entry per component (on a scalar space it is the grid shape). A <strong>component</strong> is one of the stacked fields, and calling a composite element with <code class="md-code-inline">i</code> returns the <code class="md-code-inline">i</code>-th component as a view:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">uvec = element(Vₕ)
+uₓ = uvec(1)
+uᵧ = uvec(2)
+
+uₓ .= 1.5
+uᵧ .= -2.0
+
+parent(uvec)[[1, 12]]</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
+  1.5
+ -2.0</code></pre>
+</div>
+<p>A component is a view; writing to it writes to the parent. For a scalar space <code class="md-code-inline">uₕ(1)</code> is <code class="md-code-inline">uₕ</code> itself. <a href="../../api/spaces/#Bramble.components"><code class="md-code-inline">components</code></a> destructures all of them:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">c₁, c₂ = components(uvec)
+
+c₁ === uₓ, c₂ === uᵧ</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
+</div>
+<p>On a composite space <code class="md-code-inline">Rₕ!</code> takes a tuple of scalar functions, or one function returning a tuple, and <code class="md-code-inline">innerₕ</code> sums over components:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Rₕ!(uvec, (x -&gt; sin(π * x), x -&gt; cos(π * x)))
+
+normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
+</div>
+<p>The storage is flat, and <code class="md-code-inline">reshape</code> gives each component a grid-shaped view of the same memory. For a 2D space on a 5 × 5 mesh the layout is:</p>
+<figure>
+<svg viewBox="0 0 780 270" width="100%" style="max-width:780px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
+     xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="Diagram of CompositeGridSpace storage showing the contiguous flat degree of freedom buffer, zero-copy component views u_x and u_y, and 2D reshaped matrix views.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="currentColor"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8b5cf6"/>
+    </marker>
+  </defs>
+
+  <!-- 1. Flat 1D Buffer -->
+  <text x="30" y="25" font-size="13" font-weight="bold" fill="currentColor">Flat 1D degree of freedom storage: uₕ.data (length 50)</text>
+
+  <!-- Component 1 block -->
+  <rect x="30" y="35" width="350" height="36" rx="4" fill="#3b82f6" fill-opacity="0.15" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="205" y="58" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">Component 1 (uₓ): DOFs 1:25</text>
+
+  <!-- Component 2 block -->
+  <rect x="390" y="35" width="350" height="36" rx="4" fill="#8b5cf6" fill-opacity="0.15" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="565" y="58" font-size="12" font-weight="bold" fill="#8b5cf6" text-anchor="middle">Component 2 (uᵧ): DOFs 26:50</text>
+
+  <!-- Connectors from Flat to Component Views -->
+  <path d="M 205 71 L 205 105" stroke="#3b82f6" stroke-width="1.5" fill="none" marker-end="url(#arrowBlue)"/>
+  <text x="215" y="93" font-size="11" fill="#3b82f6">uₕ(1)</text>
+
+  <path d="M 565 71 L 565 105" stroke="#8b5cf6" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple)"/>
+  <text x="575" y="93" font-size="11" fill="#8b5cf6">uₕ(2)</text>
+
+  <!-- 2. Zero-copy component views -->
+  <rect x="30" y="110" width="350" height="34" rx="4" fill="#3b82f6" fill-opacity="0.08" stroke="#3b82f6" stroke-dasharray="4,3" stroke-width="1.2"/>
+  <text x="205" y="132" font-size="12" fill="currentColor" text-anchor="middle">VectorElement view (SubArray of length 25)</text>
+
+  <rect x="390" y="110" width="350" height="34" rx="4" fill="#8b5cf6" fill-opacity="0.08" stroke="#8b5cf6" stroke-dasharray="4,3" stroke-width="1.2"/>
+  <text x="565" y="132" font-size="12" fill="currentColor" text-anchor="middle">VectorElement view (SubArray of length 25)</text>
+
+  <!-- Connectors from Component Views to 2D Grids -->
+  <path d="M 205 144 L 205 178" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="215" y="166" font-size="11" fill="currentColor">reshape(uₓ)</text>
+
+  <path d="M 565 144 L 565 178" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="575" y="166" font-size="11" fill="currentColor">reshape(uᵧ)</text>
+
+  <!-- 3. Reshaped 2D Matrix Views -->
+  <g transform="translate(145, 185)">
+    <rect x="0" y="0" width="120" height="65" rx="4" fill="none" stroke="#3b82f6" stroke-width="1.5"/>
+    <line x1="24" y1="0" x2="24" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="48" y1="0" x2="48" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="72" y1="0" x2="72" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="96" y1="0" x2="96" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="13" x2="120" y2="13" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="26" x2="120" y2="26" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="39" x2="120" y2="39" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="52" x2="120" y2="52" stroke="currentColor" stroke-opacity="0.2"/>
+    <text x="60" y="80" font-size="11" fill="currentColor" text-anchor="middle">5 × 5 ReshapedArray (uₓ[i, j])</text>
+  </g>
+
+  <g transform="translate(505, 185)">
+    <rect x="0" y="0" width="120" height="65" rx="4" fill="none" stroke="#8b5cf6" stroke-width="1.5"/>
+    <line x1="24" y1="0" x2="24" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="48" y1="0" x2="48" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="72" y1="0" x2="72" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="96" y1="0" x2="96" y2="65" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="13" x2="120" y2="13" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="26" x2="120" y2="26" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="39" x2="120" y2="39" stroke="currentColor" stroke-opacity="0.2"/>
+    <line x1="0" y1="52" x2="120" y2="52" stroke="currentColor" stroke-opacity="0.2"/>
+    <text x="60" y="80" font-size="11" fill="currentColor" text-anchor="middle">5 × 5 ReshapedArray (uᵧ[i, j])</text>
+  </g>
+</svg>
+</figure>
+<div class="md-admonition md-admonition-tip">
+<p class="md-admonition-title">Try this</p>
+<div class="md-admonition-body">
+<p>Replace <code class="md-code-inline">Val(2)</code> with <code class="md-code-inline">Val(3)</code> and add a third function to the tuple. <code class="md-code-inline">ncomponents</code> and <code class="md-code-inline">ndofs</code> follow.</p>
+</div>
+</div>
+<h2 id="Ghost-spaces" class="md-heading">Ghost spaces<a href="#Ghost-spaces" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A grid space can also carry the ghost points of a mesh beyond named facets, through the <code class="md-code-inline">ghosts</code> keyword of <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a>. The <a href="../../tutorials/ghost/#space_ghost">ghost point tutorial</a> covers their degrees of freedom, weights and time loops.</p>
       </article>
       <footer class="md-footer">
 <p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
@@ -673,21 +437,10 @@ inner₊(D, D, :x) ≈ snorm₁ₕ(uₕ)^2</code></pre>
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#A-grid-space-over-a-mesh">A grid space over a mesh</a>
           <a class="md-toc-link md-toc-h2" href="#Discrete-functions">Discrete functions</a>
+          <a class="md-toc-link md-toc-h2" href="#Restriction-and-cell-averaging">Restriction and cell averaging</a>
           <a class="md-toc-link md-toc-h2" href="#Inner-products-and-norms">Inner products and norms</a>
           <a class="md-toc-link md-toc-h2" href="#space_composite">Composite spaces and vector elements</a>
-          <a class="md-toc-link md-toc-h2" href="#space_ghost">Ghost spaces</a>
-            <a class="md-toc-link md-toc-h3" href="#The-order-of-the-degrees-of-freedom">The order of the degrees of freedom</a>
-            <a class="md-toc-link md-toc-h3" href="#Physical-only-weights">Physical-only weights</a>
-            <a class="md-toc-link md-toc-h3" href="#What-to-do-with-a-ghost-space">What to do with a ghost space</a>
-            <a class="md-toc-link md-toc-h3" href="#Ghost-values-in-a-time-loop">Ghost values in a time loop</a>
-          <a class="md-toc-link md-toc-h2" href="#Reference">Reference</a>
-            <a class="md-toc-link md-toc-h3" href="#Constructors">Constructors</a>
-            <a class="md-toc-link md-toc-h3" href="#Weights">Weights</a>
-            <a class="md-toc-link md-toc-h3" href="#Component-ranges">Component ranges</a>
-            <a class="md-toc-link md-toc-h3" href="#Functions-as-factors">Functions as factors</a>
-            <a class="md-toc-link md-toc-h3" href="#Grid-layout">Grid layout</a>
-            <a class="md-toc-link md-toc-h3" href="#Restriction-and-cell-averaging">Restriction and cell averaging</a>
-            <a class="md-toc-link md-toc-h3" href="#Staggered-inner-product">Staggered inner product</a>
+          <a class="md-toc-link md-toc-h2" href="#Ghost-spaces">Ghost spaces</a>
       </div>
     </aside>
   </div>
@@ -705,6 +458,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=37de9eff"></script>
+  <script src="../../assets/materialdocs.js?v=a2d2d9e6"></script>
 </body>
 </html>

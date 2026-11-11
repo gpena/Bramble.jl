@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=9d520658">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=307cf374">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -42,60 +42,64 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
       <div class="md-nav-section">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/" class="md-nav-active">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/" class="md-nav-active">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
@@ -287,7 +291,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.DomainMarkers-Tuple{Number, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DomainMarkers</code> — <span class="md-docstring-sig">Tuple{Number, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L507-L513" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L522-L528" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -300,7 +304,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.DomainMarkers-Tuple{Number}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DomainMarkers</code> — <span class="md-docstring-sig">Tuple{Number}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L472-L478" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L487-L493" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -313,7 +317,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.EvaluatedDomainMarkers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.EvaluatedDomainMarkers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L394-L404" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L409-L419" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -333,7 +337,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.EvaluatedParametricDomainMarkers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.EvaluatedParametricDomainMarkers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L481-L500" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L496-L515" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -402,7 +406,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.conditions-Tuple{Bramble.EvaluatedDomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.conditions</code> — <span class="md-docstring-sig">Tuple{Bramble.EvaluatedDomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L410-L428" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L425-L443" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -417,7 +421,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.conditions-Tuple{Bramble.EvaluatedParametricDomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.conditions</code> — <span class="md-docstring-sig">Tuple{Bramble.EvaluatedParametricDomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L516-L540" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L531-L555" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -460,7 +464,7 @@ label(m::MarkerPair) -&gt; Symbol</code></pre>
 <div class="md-docstring" id="Bramble.label_conditions-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_conditions</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L614-L618" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L629-L633" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -473,7 +477,7 @@ label(m::MarkerPair) -&gt; Symbol</code></pre>
 <div class="md-docstring" id="Bramble.label_identifiers-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_identifiers</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L573-L585" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L588-L600" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -488,7 +492,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.label_symbols-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_symbols</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L600-L604" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L615-L619" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -501,7 +505,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.label_tuples-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_tuples</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L607-L611" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L622-L626" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -527,7 +531,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.symbols-Tuple{Union{Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.symbols</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L555-L559" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L570-L574" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -553,7 +557,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.tuples-Tuple{Union{Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.tuples</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L562-L566" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L577-L581" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1027,6 +1031,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=9d520658"></script>
+  <script src="../../assets/materialdocs.js?v=307cf374"></script>
 </body>
 </html>

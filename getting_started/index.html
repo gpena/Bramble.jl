@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Getting started — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=1ae6f9a9">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=d939b4d2">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Getting started — Bramble.jl">
   <meta property="og:title" content="Getting started — Bramble.jl">
@@ -42,67 +42,71 @@
       <a href="../">Home</a>
       <a href="../getting_started/" class="md-nav-active">Getting started</a>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../tutorials/geometry/">Geometry tutorial</a>
         <a href="../tutorials/mesh/">Mesh tutorial</a>
         <a href="../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../tutorials/ghost/">Ghost points</a>
         <a href="../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../howto/solvers/">How to choose a linear solver</a>
+        <a href="../howto/backends/">Assemble on several threads</a>
+        <a href="../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../examples/heat_equation/">Heat equation</a>
-        <a href="../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../api/">API reference</a>
-          <a href="../api/utilities/">Utilities</a>
-          <a href="../api/geometry/">Geometry</a>
-          <a href="../api/meshes/">Meshes</a>
-          <a href="../api/spaces/">Grid spaces</a>
-          <a href="../api/operators/">Difference, jump and average operators</a>
-          <a href="../api/inner_products/">Inner products and norms</a>
-          <a href="../api/forms/">Forms</a>
-          <a href="../api/exporters/">Exporters</a>
-        </div>
-        <a href="../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../internals/utils/">Utilities</a>
-          <a href="../internals/geometry/">Geometry</a>
-          <a href="../internals/mesh/">Mesh</a>
-          <a href="../internals/space/">Spaces</a>
-          <a href="../internals/form/">Forms</a>
-          <a href="../internals/exporters/">Exporters</a>
-          <a href="../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../api/">API reference</a>
+        <a href="../api/utilities/">Utilities</a>
+        <a href="../api/geometry/">Geometry</a>
+        <a href="../api/meshes/">Meshes</a>
+        <a href="../api/spaces/">Grid spaces</a>
+        <a href="../api/operators/">Difference, jump and average operators</a>
+        <a href="../api/inner_products/">Inner products and norms</a>
+        <a href="../api/forms/">Forms</a>
+        <a href="../api/solvers/">Solvers and preconditioners</a>
+        <a href="../api/exporters/">Exporters</a>
+        <a href="../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../internals/utils/">Utilities</a>
+        <a href="../internals/geometry/">Geometry</a>
+        <a href="../internals/mesh/">Mesh</a>
+        <a href="../internals/space/">Spaces</a>
+        <a href="../internals/form/">Forms</a>
+        <a href="../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
       <article class="md-article">
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/getting_started.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="Getting-started" class="md-heading">Getting started<a href="#Getting-started" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
-<p>A Poisson problem, end to end, in twenty lines. Six steps take a continuous problem to a solved grid function, and every tutorial afterwards is one of them in detail.</p>
+<p>A Poisson problem, end to end, in fifteen lines. Six steps take a continuous problem to a solved grid function, and every tutorial afterwards is one of them in detail.</p>
 <figure style="margin:1.5em 0;text-align:center">
 <svg viewBox="0 0 760 150" width="100%" style="max-width:760px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
      xmlns="http://www.w3.org/2000/svg" role="img"
@@ -156,7 +160,7 @@
 <div class="md-math md-math-display">
 \[-\Delta u = g \text{ in } \Omega = (0,1)^2, \qquad u = u_{\text{exact}} \text{ on } \partial\Omega\]
 </div>
-<p>with the manufactured solution <span class="md-math md-math-inline">\(u_{\text{exact}}(x, y) = \sin(\pi x)\sin(\pi y)\)</span>, so <span class="md-math md-math-inline">\(g = 2\pi^2 u_{\text{exact}}\)</span>. Knowing the answer in advance is what makes the error below checkable.</p>
+<p>with the manufactured solution <span class="md-math md-math-inline">\(u_{\text{exact}}(x, y) = \sin(\pi x)\sin(\pi y)\)</span>, so <span class="md-math md-math-inline">\(g = 2\pi^2 u_{\text{exact}}\)</span>. The known solution makes the error computable.</p>
 <h2 id="The-code" class="md-heading">The code<a href="#The-code" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -186,7 +190,13 @@ normₕ(uₕ .- Rₕ(Wₕ, uexact))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">0.0004017888396870854</code></pre>
 </div>
-<p>Four parts in ten thousand. The grid is uniform, which keeps the example short, but a uniform grid can flatter a scheme: the <a href="../examples/poisson_linear/">linear Poisson example</a> checks convergence on a random non-uniform grid for that reason. Halving the spacing should cut the error by four, since the scheme is second order:</p>
+<p>Four parts in ten thousand.</p>
+<p><figure class="md-figure">
+<img src="../assets/gallery_poisson.svg" alt="Poisson solution on a random 17 by 17 grid, with its grid lines" loading="lazy">
+<figcaption>Poisson solution on a random 17 by 17 grid, with its grid lines</figcaption>
+</figure>
+</p>
+<p>The same problem on a random 17 × 17 grid, coloured by the solution. The grid in the code is uniform, which keeps the example short, but a uniform grid can flatter a scheme: the <a href="../examples/poisson_linear/">linear Poisson example</a> checks convergence on a random non-uniform grid for that reason. Halving the spacing should cut the error by four, since the scheme is second order:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -210,21 +220,12 @@ e₁, e₂, log2(e₁ / e₂)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0004017888396870854, 0.00010041090485689163, 2.0005215336974485)</code></pre>
 </div>
-<h2 id="What-each-step-gives-you" class="md-heading">What each step gives you<a href="#What-each-step-gives-you" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>The form is the step worth dwelling on. <code class="md-code-inline">a</code> and <code class="md-code-inline">l</code> are expressions in the trial and test functions, not matrices: <code class="md-code-inline">form</code> stores the expression, and <code class="md-code-inline">assemble</code> is what walks the mesh. That separation is what lets the same <code class="md-code-inline">a</code> be refilled every step of a time loop, handed to a nonlinear solver, or differentiated.</p>
-<p>Where to go from here:</p>
-<ul class="md-list-tight">
-<li><p><a href="../tutorials/geometry/">Discrete foundations</a> covers the first three steps: domains, meshes and their metric, grid spaces and the operators that act on them.</p>
-</li>
-<li><p><a href="../tutorials/form/">Linear and bilinear forms</a> covers the last three: writing a form, assembling it, imposing conditions, and coupled systems.</p>
-</li>
-<li><p>The <a href="../examples/poisson_linear/">worked examples</a> run the whole chain on real problems, a Poisson problem, a convection-diffusion problem and a heat equation.</p>
-</li>
-</ul>
+<h2 id="Forms-and-assembly" class="md-heading">Forms and assembly<a href="#Forms-and-assembly" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p><code class="md-code-inline">a</code> and <code class="md-code-inline">l</code> are expressions in the trial and test functions. <code class="md-code-inline">form</code> stores the expression and <code class="md-code-inline">assemble</code> walks the mesh, so the same <code class="md-code-inline">a</code> can be refilled every step of a time loop, handed to a nonlinear solver, or differentiated.</p>
 <h2 id="Coding-with-Claude" class="md-heading">Coding with Claude<a href="#Coding-with-Claude" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The repository includes a <a href="https://code.claude.com">Claude Code</a> plugin with the API by task, the rules that keep Bramble code correct (exported versus <code class="md-code-inline">public</code> names, seeding random meshes, literal integer coefficients in forms) and worked examples whose results are checked. Install it from Claude Code with <code class="md-code-inline">/plugin marketplace add gpena/Bramble.jl</code>, then <code class="md-code-inline">/plugin install bramble@bramble</code>.</p>
 <h2 id="Reading-order" class="md-heading">Reading order<a href="#Reading-order" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>Read the tutorials in the order of the sidebar, top to bottom. Each line says what the page teaches.</p>
+<p>Read the tutorials in the order of the sidebar, top to bottom. The <a href="../examples/poisson_linear/">worked examples</a> then run the whole chain on real problems.</p>
 <ul class="md-list-tight">
 <li><p><a href="../tutorials/geometry/">Geometry tutorial</a>: Describe where a problem lives: a set, its named boundary pieces and the domain that bundles both.</p>
 </li>
@@ -238,6 +239,8 @@ e₁, e₂, log2(e₁ / e₂)</code></pre>
 </li>
 <li><p><a href="../tutorials/coupled_systems/">Coupled systems</a>: Write a form over several unknowns, constrain one block, and read values across different meshes.</p>
 </li>
+<li><p><a href="../tutorials/autodiff/">Automatic differentiation</a>: Differentiate a discrete quantity with respect to a parameter, and choose between the two backends.</p>
+</li>
 </ul>
       </article>
       <footer class="md-footer">
@@ -249,7 +252,7 @@ e₁, e₂, log2(e₁ / e₂)</code></pre>
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#The-problem">The problem</a>
           <a class="md-toc-link md-toc-h2" href="#The-code">The code</a>
-          <a class="md-toc-link md-toc-h2" href="#What-each-step-gives-you">What each step gives you</a>
+          <a class="md-toc-link md-toc-h2" href="#Forms-and-assembly">Forms and assembly</a>
           <a class="md-toc-link md-toc-h2" href="#Coding-with-Claude">Coding with Claude</a>
           <a class="md-toc-link md-toc-h2" href="#Reading-order">Reading order</a>
       </div>
@@ -269,6 +272,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=1ae6f9a9"></script>
+  <script src="../assets/materialdocs.js?v=d939b4d2"></script>
 </body>
 </html>

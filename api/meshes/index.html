@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Meshes — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=24312cd6">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1f20d2f4">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Meshes — Bramble.jl">
   <meta property="og:title" content="Meshes — Bramble.jl">
@@ -42,60 +42,64 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/">Geometry</a>
-          <a href="../../api/meshes/" class="md-nav-active">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/">Geometry</a>
+        <a href="../../api/meshes/" class="md-nav-active">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
@@ -487,6 +491,69 @@ nₕ = Bramble.normal_vector(Wₕ, :ymin)
 <p>On a <a href="../../api/meshes/#Bramble.Mesh1D"><code class="md-code-inline">Mesh1D</code></a>, the default-tolerance (<code class="md-code-inline">tol === nothing</code>) answer is the <code class="md-code-inline">uniform</code> flag its <a href="../../internals/mesh/#Bramble.Mesh1DState"><code class="md-code-inline">Mesh1DState</code></a> stores, computed whenever the points change (gpena/Bramble.jl#332, #437): O(1), and the mesh is never written. Passing <code class="md-code-inline">tol</code> explicitly always rescans the spacings.</p>
 </div>
 </div>
+<p><code class="md-code-inline">points</code> returns the coordinate vector, or a tuple of them above 1D. A single coordinate comes from <code class="md-code-inline">point(Ωₕ, idx)</code> or from indexing. Above 1D <code class="md-code-inline">idx</code> is a <code class="md-code-inline">CartesianIndex</code> (or <code class="md-code-inline">i, j</code> in brackets; <code class="md-code-inline">point</code> also takes a tuple of per-axis indices); a linear index is not accepted:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₕ_fig[3], point(Ωₕ_fig, 3), Ωₕ_2d[2, 5], point(Ωₕ_2d, CartesianIndex(2, 5))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6666666666666666, 0.6666666666666666, (0.1111111111111111, 0.42105263157894735), (0.1111111111111111, 0.42105263157894735))</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">half_points(Ωₕ_fig), half_point(Ωₕ_fig, 3)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.16666666666666666, 0.5, 0.8333333333333333, 1.0], 0.5)</code></pre>
+</div>
+<div class="md-table-wrap">
+<table class="md-table">
+<thead>
+<tr>
+<th style="text-align:right">Function</th>
+<th style="text-align:right">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">spacing(Ωₕ, i)</code></td>
+<td style="text-align:right">backward spacing <span class="md-math md-math-inline">\(h_i = x_i - x_{i-1}\)</span> (<span class="md-math md-math-inline">\(x_2 - x_1\)</span> at <span class="md-math md-math-inline">\(i = 1\)</span>)</td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">forward_spacing(Ωₕ, i)</code></td>
+<td style="text-align:right">forward spacing <span class="md-math md-math-inline">\(h_{i+1} = x_{i+1} - x_i\)</span></td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">half_spacing(Ωₕ, i)</code></td>
+<td style="text-align:right">cell width <span class="md-math md-math-inline">\(h_{i+1/2} = (h_i + h_{i+1})/2\)</span>, half the end spacing at <span class="md-math md-math-inline">\(i = 1\)</span> and <span class="md-math md-math-inline">\(i = N\)</span></td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">cell_measure(Ωₕ, idx)</code></td>
+<td style="text-align:right">measure of the control volume at <code class="md-code-inline">idx</code>: the product of the per-axis cell widths</td>
+</tr>
+<tr>
+<td style="text-align:right"><code class="md-code-inline">hₘₐₓ(Ωₕ)</code></td>
+<td style="text-align:right">largest cell diagonal, the largest spacing in 1D</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A 1D mesh stores its backward spacings, so <code class="md-code-inline">spacings</code> hands back the whole vector and the accessors index it. The cache is rebuilt by <code class="md-code-inline">set_points!</code>, and so by <a href="../../api/meshes/#Bramble.iterative_refinement!"><code class="md-code-inline">iterative_refinement!</code></a> and <a href="../../api/meshes/#Bramble.change_points!"><code class="md-code-inline">change_points!</code></a> as well:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">spacings(Ωₕ_fig), spacings(Ωₕ_fig)[3] == spacing(Ωₕ_fig, 3)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.33333333333333337], true)</code></pre>
+</div>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">hₘₐₓ(Ωₕ_fig), cell_measure(Ωₕ_2d, (3, 4))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.33333333333333337, 0.011695906432748537)</code></pre>
+</div>
+<p><code class="md-code-inline">boundary_indices(Ωₕ)</code> gives the boundary facets separately, as a tuple of index sets.</p>
 <h2 id="Mesh-indexing-and-boundaries" class="md-heading">Mesh indexing and boundaries<a href="#Mesh-indexing-and-boundaries" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.indices">
 <div class="md-docstring-header">
@@ -559,7 +626,7 @@ is_boundary_index(Ωₕ::AbstractMeshType, idx) -&gt; Bool</code></pre>
 </div>
 </div>
 <h2 id="Immutable-mesh-state" class="md-heading">Immutable mesh state<a href="#Immutable-mesh-state" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>A mesh keeps its geometry in an immutable state. A <a href="../../api/meshes/#Bramble.Mesh1D"><code class="md-code-inline">Mesh1D</code></a> holds one <code class="md-code-inline">Mesh1DState</code>, and a <a href="../../api/meshes/#Bramble.MeshnD"><code class="md-code-inline">MeshnD</code></a> builds a <code class="md-code-inline">MeshnDState</code> on demand from its submeshes&#39; states. The state holds plain arrays and isbits values: the points and spacings, the indices, the backend, a version, whether the points are uniform, the marker bits as one word matrix and an identity that survives every mutation. The mesh itself keeps the public marker dictionary returned by <code class="md-code-inline">markers</code>. Every mutation below replaces the state or updates its arrays in place, and changes the version, so a state taken before the call is stale. See the <a href="../../internals/mesh/">mesh internals page</a> for the state types.</p>
+<p>A mesh keeps its geometry in an immutable state. A <a href="../../api/meshes/#Bramble.Mesh1D"><code class="md-code-inline">Mesh1D</code></a> holds one <code class="md-code-inline">Mesh1DState</code>, and a <a href="../../api/meshes/#Bramble.MeshnD"><code class="md-code-inline">MeshnD</code></a> builds a <code class="md-code-inline">MeshnDState</code> on demand from its submeshes&#39; states. The state holds plain arrays and isbits values: the points and spacings, the indices, the backend, a version, whether the points are uniform, the marker bits as one word matrix and an identity that survives every mutation. The mesh itself keeps the public marker dictionary returned by <code class="md-code-inline">markers</code>. <code class="md-code-inline">iterative_refinement!</code>, <code class="md-code-inline">change_points!</code> and <code class="md-code-inline">set_points!</code> replace the state or update its arrays in place, and change the version. A state taken before the call is stale, and so is a grid space built on the mesh: its inner products and norms throw until <code class="md-code-inline">gridspace(Ωₕ)</code> is called again. See the <a href="../../internals/mesh/">mesh internals page</a> for the state types.</p>
 <p>The dictionary that <code class="md-code-inline">markers(Ωₕ)</code> returns is read-only. Editing it in place is unsupported: the word matrix assembly reads is not rebuilt, and a label added that way has no column. To change the labels use <code class="md-code-inline">markers!</code> or <code class="md-code-inline">set_markers!</code> (both private; see the same internals page). The three-argument forms, <code class="md-code-inline">change_points!(Ωₕ, markers(Ω), pts)</code> and <code class="md-code-inline">iterative_refinement!(Ωₕ, markers(Ω))</code>, re-evaluate them at the new points. The two-argument <code class="md-code-inline">change_points!(Ωₕ, pts)</code> keeps the face labels, which are index-based. It and <code class="md-code-inline">set_points!</code> refuse a mesh carrying a label defined by a predicate of position, whose set would go stale, and a move of a submesh of one; <code class="md-code-inline">change_points!(Ωₕ, markers(Ω), pts)</code> on the whole mesh is the way to move it.</p>
 <h2 id="Mesh-adaptation-and-mutation" class="md-heading">Mesh adaptation and mutation<a href="#Mesh-adaptation-and-mutation" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.iterative_refinement!">
@@ -620,7 +687,7 @@ is_boundary_index(Ωₕ::AbstractMeshType, idx) -&gt; Bool</code></pre>
 </div>
 </div>
 <h2 id="Ghost-meshes" class="md-heading">Ghost meshes<a href="#Ghost-meshes" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">GhostMesh</code> is <code class="md-code-inline">public</code>, not exported: write <code class="md-code-inline">Bramble.GhostMesh</code>. A space built with <code class="md-code-inline">ghosts</code> holds one; see <a href="../../api/spaces/">Grid spaces</a>.</p>
+<p><code class="md-code-inline">GhostMesh</code> is <code class="md-code-inline">public</code> and not exported: write <code class="md-code-inline">Bramble.GhostMesh</code>. A space built with <code class="md-code-inline">ghosts</code> holds one; see <a href="../../api/spaces/">Grid spaces</a>.</p>
 <div class="md-docstring" id="Bramble.GhostMesh">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GhostMesh</code></h4>
@@ -676,6 +743,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=24312cd6"></script>
+  <script src="../../assets/materialdocs.js?v=1f20d2f4"></script>
 </body>
 </html>

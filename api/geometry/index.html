@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e621da37">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e602cb2c">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -42,60 +42,64 @@
       <a href="../../">Home</a>
       <a href="../../getting_started/">Getting started</a>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Discrete foundations</span>
+        <span class="md-nav-section-title">Tutorials</span>
         <a href="../../tutorials/geometry/">Geometry tutorial</a>
         <a href="../../tutorials/mesh/">Mesh tutorial</a>
         <a href="../../tutorials/space/">Grid spaces and discrete functions</a>
         <a href="../../tutorials/operators/">Difference, jump and average operators</a>
-      </div>
-      <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Forms and assembly</span>
         <a href="../../tutorials/form/">Linear and bilinear forms</a>
+        <a href="../../tutorials/ghost/">Ghost points</a>
         <a href="../../tutorials/coupled_systems/">Coupled systems</a>
+        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
-        <span class="md-nav-section-title">Solvers and AD</span>
-        <a href="../../tutorials/autodiff/">Automatic differentiation</a>
+        <span class="md-nav-section-title">How-to guides</span>
+        <a href="../../howto/pure_neumann/">How to solve a pure Neumann problem</a>
+        <a href="../../howto/time_dependent_data/">How to use boundary data that depend on time</a>
+        <a href="../../howto/solvers/">How to choose a linear solver</a>
+        <a href="../../howto/backends/">Assemble on several threads</a>
+        <a href="../../howto/plotting_export/">Plot or export a grid function</a>
       </div>
       <div class="md-nav-section md-nav-collapsed">
         <span class="md-nav-section-title">Examples</span>
         <a href="../../examples/poisson_linear/">Linear Poisson equation</a>
+        <a href="../../examples/boundary_layer_graded/">Graded meshes for a boundary layer</a>
+        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
         <a href="../../examples/poisson_polygon/">Poisson-type problem on a polygon</a>
         <a href="../../examples/poisson_circle/">Poisson problem on a disk</a>
-        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
-        <a href="../../examples/convection_diffusion_linear/">Convection-diffusion equation</a>
+        <a href="../../examples/point_sources_flux/">Point sources and boundary flux recovery</a>
         <a href="../../examples/heat_equation/">Heat equation</a>
-        <a href="../../examples/neumann_robin_poisson/">Neumann, Robin and pure Neumann boundaries</a>
+        <a href="../../examples/heat_time_stepping/">Heat equation: time stepping details</a>
         <a href="../../examples/ghost_heat_equation/">Heat equation with time-dependent Neumann and Robin data</a>
-        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
+        <a href="../../examples/wave_equation_2d/">Acoustic wave equation in two dimensions</a>
+        <a href="../../examples/poisson_nonlinear/">Nonlinear Poisson equation</a>
         <a href="../../examples/coupled_reaction_diffusion/">Coupled nonlinear reaction-diffusion system</a>
+        <a href="../../examples/elasticity_traction_2d/">Elasticity with a traction condition</a>
         <a href="../../examples/inverse_diffusion/">Recovering a diffusion coefficient (adjoint gradients)</a>
       </div>
       <div class="md-nav-section">
-        <span class="md-nav-section-title">Documentation</span>
-        <div class="md-nav-section">
-          <span class="md-nav-section-title">API reference</span>
-          <a href="../../api/">API reference</a>
-          <a href="../../api/utilities/">Utilities</a>
-          <a href="../../api/geometry/" class="md-nav-active">Geometry</a>
-          <a href="../../api/meshes/">Meshes</a>
-          <a href="../../api/spaces/">Grid spaces</a>
-          <a href="../../api/operators/">Difference, jump and average operators</a>
-          <a href="../../api/inner_products/">Inner products and norms</a>
-          <a href="../../api/forms/">Forms</a>
-          <a href="../../api/exporters/">Exporters</a>
-        </div>
-        <a href="../../api_sciml/">Scientific computing: SciML, AD and solvers</a>
-        <div class="md-nav-section md-nav-collapsed">
-          <span class="md-nav-section-title">Internals</span>
-          <a href="../../internals/utils/">Utilities</a>
-          <a href="../../internals/geometry/">Geometry</a>
-          <a href="../../internals/mesh/">Mesh</a>
-          <a href="../../internals/space/">Spaces</a>
-          <a href="../../internals/form/">Forms</a>
-          <a href="../../internals/exporters/">Exporters</a>
-          <a href="../../internals/csr_solvers/">SparseMatrixCSR direct solve</a>
-        </div>
+        <span class="md-nav-section-title">Reference</span>
+        <a href="../../api/">API reference</a>
+        <a href="../../api/utilities/">Utilities</a>
+        <a href="../../api/geometry/" class="md-nav-active">Geometry</a>
+        <a href="../../api/meshes/">Meshes</a>
+        <a href="../../api/spaces/">Grid spaces</a>
+        <a href="../../api/operators/">Difference, jump and average operators</a>
+        <a href="../../api/inner_products/">Inner products and norms</a>
+        <a href="../../api/forms/">Forms</a>
+        <a href="../../api/solvers/">Solvers and preconditioners</a>
+        <a href="../../api/exporters/">Exporters</a>
+        <a href="../../api_sciml/">Scientific computing: SciML and time integration</a>
+      </div>
+      <div class="md-nav-section md-nav-collapsed">
+        <span class="md-nav-section-title">Internals</span>
+        <a href="../../internals/utils/">Utilities</a>
+        <a href="../../internals/geometry/">Geometry</a>
+        <a href="../../internals/mesh/">Mesh</a>
+        <a href="../../internals/space/">Spaces</a>
+        <a href="../../internals/form/">Forms</a>
+        <a href="../../internals/csr_solvers/">CSR direct solve</a>
       </div>
     </nav>
     <main class="md-content">
@@ -335,11 +339,106 @@ boundary_symbols(D::Integer) -&gt; Tuple{Vararg{Symbol}}</code></pre>
 <p>Return the canonical coordinate-aligned boundary symbols for domain <code class="md-code-inline">Ω</code>.</p>
 </div>
 </div>
+<h2 id="geometry_reference" class="md-heading">Boundary symbols<a href="#geometry_reference" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>The canonical names mean the same face in every dimension; the viewpoint aliases do not (<code class="md-code-inline">:left</code> is <code class="md-code-inline">:xmin</code> in 1D and 2D, <code class="md-code-inline">:ymin</code> in 3D):</p>
+<ul class="md-list-tight">
+<li><p><strong>1D</strong>: <code class="md-code-inline">:xmin</code> (<code class="md-code-inline">:left</code>), <code class="md-code-inline">:xmax</code> (<code class="md-code-inline">:right</code>)</p>
+</li>
+<li><p><strong>2D</strong>: <code class="md-code-inline">:xmin</code> (<code class="md-code-inline">:left</code>), <code class="md-code-inline">:xmax</code> (<code class="md-code-inline">:right</code>), <code class="md-code-inline">:ymin</code> (<code class="md-code-inline">:bottom</code>), <code class="md-code-inline">:ymax</code> (<code class="md-code-inline">:top</code>)</p>
+</li>
+<li><p><strong>3D</strong>: <code class="md-code-inline">:xmin</code> (<code class="md-code-inline">:back</code>), <code class="md-code-inline">:xmax</code> (<code class="md-code-inline">:front</code>), <code class="md-code-inline">:ymin</code> (<code class="md-code-inline">:left</code>), <code class="md-code-inline">:ymax</code> (<code class="md-code-inline">:right</code>), <code class="md-code-inline">:zmin</code> (<code class="md-code-inline">:bottom</code>), <code class="md-code-inline">:zmax</code> (<code class="md-code-inline">:top</code>)</p>
+</li>
+</ul>
+<p><a href="../../api/geometry/#Bramble.boundary_symbols"><code class="md-code-inline">boundary_symbols</code></a> lists the canonical names for a given dimension:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">boundary_symbols(2)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(:xmin, :xmax, :ymin, :ymax)</code></pre>
+</div>
+<figure>
+<svg viewBox="0 0 780 280" width="100%" style="max-width:780px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif"
+     xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="Diagram of standard boundary symbols in 2D (:xmin/:left, :xmax/:right, :ymin/:bottom, :ymax/:top) and 3D (:xmin/:back, :xmax/:front, :ymin/:left, :ymax/:right, :zmin/:bottom, :zmax/:top).">
+  <!-- Panel 1: 2D Domain -->
+  <g transform="translate(30, 20)">
+    <rect x="0" y="0" width="320" height="240" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="1"/>
+    <text x="160" y="28" font-size="14" font-weight="bold" fill="currentColor" text-anchor="middle">2D boundary facets</text>
+
+    <!-- 2D Box -->
+    <rect x="80" y="70" width="160" height="120" fill="currentColor" fill-opacity="0.05" stroke="currentColor" stroke-width="2"/>
+
+    <!-- Labels -->
+    <!-- :ymax / :top -->
+    <text x="160" y="58" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">:ymax (:top)</text>
+    <line x1="80" y1="70" x2="240" y2="70" stroke="#ef4444" stroke-width="3"/>
+
+    <!-- :ymin / :bottom -->
+    <text x="160" y="210" font-size="12" font-weight="bold" fill="#ef4444" text-anchor="middle">:ymin (:bottom)</text>
+    <line x1="80" y1="190" x2="240" y2="190" stroke="#ef4444" stroke-width="3"/>
+
+    <!-- :xmin / :left -->
+    <text x="35" y="134" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">:xmin</text>
+    <text x="35" y="148" font-size="10" fill="#3b82f6" text-anchor="middle">(:left)</text>
+    <line x1="80" y1="70" x2="80" y2="190" stroke="#3b82f6" stroke-width="3"/>
+
+    <!-- :xmax / :right -->
+    <text x="285" y="134" font-size="12" font-weight="bold" fill="#3b82f6" text-anchor="middle">:xmax</text>
+    <text x="285" y="148" font-size="10" fill="#3b82f6" text-anchor="middle">(:right)</text>
+    <line x1="240" y1="70" x2="240" y2="190" stroke="#3b82f6" stroke-width="3"/>
+  </g>
+
+  <!-- Panel 2: 3D Isometric Domain -->
+  <g transform="translate(410, 20)">
+    <rect x="0" y="0" width="340" height="240" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="1"/>
+    <text x="170" y="28" font-size="14" font-weight="bold" fill="currentColor" text-anchor="middle">3D boundary facets</text>
+
+    <!-- Isometric Box Coordinates -->
+    <!-- Back/interior edges dashed -->
+    <line x1="130" y1="70"  x2="130" y2="150" stroke="currentColor" stroke-dasharray="3,3" stroke-width="1" stroke-opacity="0.4"/>
+    <line x1="70"  y1="190" x2="130" y2="150" stroke="currentColor" stroke-dasharray="3,3" stroke-width="1" stroke-opacity="0.4"/>
+    <line x1="130" y1="150" x2="250" y2="150" stroke="currentColor" stroke-dasharray="3,3" stroke-width="1" stroke-opacity="0.4"/>
+
+    <!-- Top face (:zmax) -->
+    <polygon points="70,110 130,70 250,70 190,110" fill="#ef4444" fill-opacity="0.1" stroke="#ef4444" stroke-width="1.5"/>
+    <text x="160" y="94" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">:zmax (:top)</text>
+
+    <!-- Right face (:ymax) -->
+    <polygon points="190,110 250,70 250,150 190,190" fill="#3b82f6" fill-opacity="0.1" stroke="#3b82f6" stroke-width="1.5"/>
+    <text x="225" y="135" font-size="11" font-weight="bold" fill="#3b82f6" text-anchor="middle">:ymax (:right)</text>
+
+    <!-- Front face (:xmax) -->
+    <polygon points="70,110 190,110 190,190 70,190" fill="#10b981" fill-opacity="0.1" stroke="#10b981" stroke-width="1.5"/>
+    <text x="130" y="155" font-size="11" font-weight="bold" fill="#10b981" text-anchor="middle">:xmax (:front)</text>
+
+    <!-- Left callout (:ymin) -->
+    <text x="35" y="150" font-size="11" font-weight="bold" fill="#3b82f6" text-anchor="middle">:ymin (:left)</text>
+    <!-- Back callout (:xmin) -->
+    <text x="190" y="60" font-size="11" font-weight="bold" fill="#10b981" text-anchor="middle">:xmin (:back)</text>
+    <!-- Bottom callout (:zmin) -->
+    <text x="130" y="215" font-size="11" font-weight="bold" fill="#ef4444" text-anchor="middle">:zmin (:bottom)</text>
+  </g>
+</svg>
+</figure>
+<h2 id="Collapsed-sets" class="md-heading">Collapsed sets<a href="#Collapsed-sets" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
+<p>A dimension is <strong>collapsed</strong> when its interval is degenerate (<span class="md-math md-math-inline">\(a = b\)</span>), which is how a surface or interface embedded in a higher-dimensional space is written. <code class="md-code-inline">dim</code> is the embedding dimension and <code class="md-code-inline">topo_dim</code> the topological one; they differ only for a collapsed set. <a href="../../internals/geometry/#Bramble.is_collapsed-Union{Tuple{T}, Tuple{T, T}} where T&lt;:Number"><code class="md-code-inline">Bramble.is_collapsed</code></a> answers per axis; it is private, hence the prefix:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">line_in_2d = interval(0.0, 1.0) × point(0.0)
+
+dim(line_in_2d), topo_dim(line_in_2d),
+Bramble.is_collapsed(line_in_2d, 1), Bramble.is_collapsed(line_in_2d, 2)</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2, 1, false, true)</code></pre>
+</div>
+<p>Related constructors: <code class="md-code-inline">interval(0, 2)</code> converts integer bounds to <code class="md-code-inline">Float64</code>, <code class="md-code-inline">point(0.5)</code> is the degenerate interval <span class="md-math md-math-inline">\([0.5, 0.5]\)</span>, and <code class="md-code-inline">box(1.5, 0.2)</code> sorts its bounds.</p>
 <h2 id="Markers-and-domains" class="md-heading">Markers and domains<a href="#Markers-and-domains" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <div class="md-docstring" id="Bramble.markers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.markers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L121-L165" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L121-L167" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -359,7 +458,7 @@ markers(space_set::CartesianProduct, time_set::CartesianProduct{1}, pairs::Pair.
 </ul>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">ArgumentError</code>: if an identifier is of any other kind (for example a <code class="md-code-inline">String</code>, a <code class="md-code-inline">Dict</code> or a callable object that is not a <code class="md-code-inline">Function</code>), names a symbol that is not a boundary of <code class="md-code-inline">space_set</code>, or, with <code class="md-code-inline">time_set</code>, is a predicate that does not accept <code class="md-code-inline">(x, t)</code>. Also if a polygon marks a set that is not 2D, has a vertex outside <code class="md-code-inline">space_set</code>, is labelled <code class="md-code-inline">:boundary</code> or <code class="md-code-inline">:interior</code>, or one of its three labels is another marker&#39;s. Likewise for a level set, whose <code class="md-code-inline">φ</code> must also return a <code class="md-code-inline">Real</code> that is not a <code class="md-code-inline">Bool</code> at the centre of <code class="md-code-inline">space_set</code>.</p>
+<li><p><code class="md-code-inline">ArgumentError</code>: if an identifier is of any other kind (for example a <code class="md-code-inline">String</code>, a <code class="md-code-inline">Dict</code> or a callable object that is not a <code class="md-code-inline">Function</code>), names a symbol that is not a boundary of <code class="md-code-inline">space_set</code>, or, with <code class="md-code-inline">time_set</code>, is a predicate that does not accept <code class="md-code-inline">(x, t)</code>. Also if a polygon marks a set that is not 2D, has a vertex outside <code class="md-code-inline">space_set</code>, is labelled <code class="md-code-inline">:boundary</code> or <code class="md-code-inline">:interior</code>, or one of its three labels is another marker&#39;s. Likewise for a level set, whose <code class="md-code-inline">φ</code> must also return a plain real number at the centre of <code class="md-code-inline">space_set</code>: an <code class="md-code-inline">AbstractFloat</code>, an <code class="md-code-inline">Integer</code> that is not a <code class="md-code-inline">Bool</code>, a <code class="md-code-inline">Rational</code> or an <code class="md-code-inline">AbstractIrrational</code>. Any other <code class="md-code-inline">Real</code>, a <code class="md-code-inline">ForwardDiff.Dual</code> among them, is refused: the level-set geometry is not differentiated.</p>
 </li>
 </ul>
 <p><strong>Examples</strong></p>
@@ -449,7 +548,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.polygon">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.polygon</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/polygon.jl#L18-L35" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/polygon.jl#L18-L39" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -458,6 +557,7 @@ true</code></pre>
 </div>
 <p>Construct the simple polygon whose boundary visits the vertices <code class="md-code-inline">V</code> in order and returns from the last to the first. <code class="md-code-inline">V</code> may run clockwise or counter-clockwise; the result is stored counter-clockwise. Coordinates are converted to the promoted floating-point type <code class="md-code-inline">T</code>.</p>
 <p>A vertex in the middle of a straight edge is kept as a vertex.</p>
+<p>The vertices take no derivative: ForwardDiff and Enzyme both throw. Build the mesh of a polygon domain outside a function Enzyme differentiates, since a mesh built inside it fails; data and coefficients on the resulting space differentiate under ForwardDiff and Enzyme reverse mode.</p>
 <p>The area is zero up to rounding when |2A| ≤ 8nεL², with 2A the shoelace sum, n the vertex count, ε the epsilon of the coordinate type and L the larger side of the bounding box.</p>
 <p><strong>Throws</strong></p>
 <ul class="md-list-tight">
@@ -469,7 +569,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.signed_distance">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.signed_distance</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/polygon.jl#L165-L174" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/polygon.jl#L169-L178" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -481,11 +581,11 @@ true</code></pre>
 </div>
 </div>
 <h2 id="Level-sets" class="md-heading">Level sets<a href="#Level-sets" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p><code class="md-code-inline">levelset(φ)</code> is exported. It wraps a function <code class="md-code-inline">φ(x)</code> as a 2D marker value, distinct from a predicate: <code class="md-code-inline">:D =&gt; levelset(φ)</code> in a domain labels the nodes of a 2D mesh <code class="md-code-inline">:D</code> (where <code class="md-code-inline">φ &lt; 0</code>), <code class="md-code-inline">:D_boundary</code> (on the curve <code class="md-code-inline">φ = 0</code>) and <code class="md-code-inline">:D_exterior</code> (where <code class="md-code-inline">φ &gt; 0</code>). <code class="md-code-inline">φ</code> must return a real number, not a <code class="md-code-inline">Bool</code>, and need not be a signed distance. The labels follow the rules of a polygon&#39;s: a 2D set, no reserved label, no clash with another marker&#39;s labels. With a <code class="md-code-inline">time_set</code>, <code class="md-code-inline">φ</code> still takes <code class="md-code-inline">x</code> alone.</p>
+<p><code class="md-code-inline">levelset(φ)</code> is exported. It wraps a function <code class="md-code-inline">φ(x)</code> as a 2D marker value: <code class="md-code-inline">:D =&gt; levelset(φ)</code> in a domain labels the nodes of a 2D mesh <code class="md-code-inline">:D</code> (where <code class="md-code-inline">φ &lt; 0</code>), <code class="md-code-inline">:D_boundary</code> (on the curve <code class="md-code-inline">φ = 0</code>) and <code class="md-code-inline">:D_exterior</code> (where <code class="md-code-inline">φ &gt; 0</code>). <code class="md-code-inline">φ</code> must return a real number, not a <code class="md-code-inline">Bool</code>, and need not be a signed distance. The labels follow the rules of a polygon&#39;s: a 2D set, no reserved label, no clash with another marker&#39;s labels. With a <code class="md-code-inline">time_set</code>, <code class="md-code-inline">φ</code> still takes <code class="md-code-inline">x</code> alone.</p>
 <div class="md-docstring" id="Bramble.levelset">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.levelset</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/levelset.jl#L19-L43" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/levelset.jl#L19-L47" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -493,7 +593,7 @@ true</code></pre>
 <pre><code class="language-julia">levelset(φ) -&gt; LevelSet</code></pre>
 </div>
 <p>Wrap the function <code class="md-code-inline">φ(x)</code>, <code class="md-code-inline">x = (x₁, x₂)</code>, as a 2D level-set marker. In a domain, <code class="md-code-inline">:D =&gt; levelset(φ)</code> gives a 2D mesh the labels <code class="md-code-inline">D</code> (nodes where <code class="md-code-inline">φ &lt; 0</code>), <code class="md-code-inline">D_boundary</code> (nodes on the curve <code class="md-code-inline">φ = 0</code>) and <code class="md-code-inline">D_exterior</code> (nodes where <code class="md-code-inline">φ &gt; 0</code>).</p>
-<p><code class="md-code-inline">φ</code> must return a real number, not a <code class="md-code-inline">Bool</code>. It need not be a signed distance; a mesh samples each grid line at 129 points and bisects every sign change, so <code class="md-code-inline">φ</code> only has to change sign across the curve. Two roots on a line closer than its sample spacing are missed. With a <code class="md-code-inline">time_set</code>, <code class="md-code-inline">φ</code> still takes <code class="md-code-inline">x</code> alone.</p>
+<p><code class="md-code-inline">φ</code> must return a plain real number: an <code class="md-code-inline">AbstractFloat</code>, an <code class="md-code-inline">Integer</code> that is not a <code class="md-code-inline">Bool</code>, a <code class="md-code-inline">Rational</code> or an <code class="md-code-inline">AbstractIrrational</code>. Any other <code class="md-code-inline">Real</code>, a <code class="md-code-inline">ForwardDiff.Dual</code> among them, is refused with an <code class="md-code-inline">ArgumentError</code>, as the level-set geometry is not differentiated: a parameter of <code class="md-code-inline">φ</code> takes no derivative through the mesh. Enzyme gives no reliable derivative of such a parameter either, so build the mesh outside a function Enzyme differentiates. <code class="md-code-inline">φ</code> need not be a signed distance; a mesh samples each grid line at 129 points and bisects every sign change, so <code class="md-code-inline">φ</code> only has to change sign across the curve. Two roots on a line closer than its sample spacing are missed. With a <code class="md-code-inline">time_set</code>, <code class="md-code-inline">φ</code> still takes <code class="md-code-inline">x</code> alone.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -517,6 +617,8 @@ labels(Ω)
       <div class="md-toc-inner">
         <p class="md-toc-title">On this page</p>
           <a class="md-toc-link md-toc-h2" href="#Sets-and-intervals">Sets and intervals</a>
+          <a class="md-toc-link md-toc-h2" href="#geometry_reference">Boundary symbols</a>
+          <a class="md-toc-link md-toc-h2" href="#Collapsed-sets">Collapsed sets</a>
           <a class="md-toc-link md-toc-h2" href="#Markers-and-domains">Markers and domains</a>
           <a class="md-toc-link md-toc-h2" href="#Polygons">Polygons</a>
           <a class="md-toc-link md-toc-h2" href="#Level-sets">Level sets</a>
@@ -537,6 +639,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=e621da37"></script>
+  <script src="../../assets/materialdocs.js?v=e602cb2c"></script>
 </body>
 </html>
