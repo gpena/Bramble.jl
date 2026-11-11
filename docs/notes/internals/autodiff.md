@@ -13,7 +13,18 @@ A grid function's coefficients and the coordinates of the underlying mesh are ke
 - **Geometry** (mesh coordinates, element spacings and quadrature nodes) stays in its native floating-point type, typically `Float64`.
 - **Coefficients** live in grid functions, which store values in whatever scalar type a computation requires, including `ForwardDiff.Dual` numbers or tracked values from reverse-mode packages. The [space tutorial](@ref space_composite) introduces vector elements.
 
-Because differentiation typically targets parameter sensitivities or solution fields rather than grid coordinates, the mesh geometry remains undifferentiated. Arithmetic operations, difference operators, and discrete inner products propagate sensitivities via standard Julia multiple dispatch.
+Differentiation typically targets parameter sensitivities or solution fields rather than grid coordinates, so most of the geometry is a constant. Arithmetic operations, difference operators, and discrete inner products propagate sensitivities via standard Julia multiple dispatch. The geometric inputs that were measured, each one a cell of `test/space/ad_coverage.jl`:
+
+| Input | ForwardDiff | Enzyme |
+| :--- | :--- | :--- |
+| mesh endpoints (`mesh(…, [0, b] × [0, 1])`) | works | works |
+| strength of `dirac(x, strength)` | works | works |
+| location of `dirac(x, strength)` | `MethodError`: `dirac` converts the point to `Float64` | works, measured under `CpuSerial` |
+| datum and coefficients of the `polygon_spaces` of a polygon mesh | works | reverse works under the three policies, forward throws `MethodError`, with the mesh built outside the function ([gpena/Bramble.jl#1212](https://github.com/gpena/Bramble.jl/issues/1212)) |
+| vertices of `polygon(V)` | `MethodError`: the exact `Rational{BigInt}` vertices cannot hold a `Dual` | throws `IllegalTypeAnalysisException` |
+| parameter of `φ` in `levelset(φ)` | named `ArgumentError` ([gpena/Bramble.jl#1172](https://github.com/gpena/Bramble.jl/issues/1172)) | not run: no reliable verdict ([gpena/Bramble.jl#1211](https://github.com/gpena/Bramble.jl/issues/1211)) |
+
+A polygon or level-set mesh is built outside a function Enzyme differentiates. Built inside, the exact `Rational` and `BigFloat` arithmetic of the polygon's grid makes Enzyme throw `IllegalTypeAnalysisException`, and the level-set mesh has no reliable verdict. ForwardDiff differentiates a polygon mesh built inside the function. [`ad_coverage.md`](ad_coverage.md) has the policies, the figures and the measurements (`ad_reductions/1171_geometric_inputs.md`).
 
 ## Container and allocation rules
 
