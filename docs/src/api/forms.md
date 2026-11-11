@@ -26,9 +26,9 @@ dirac
 
 ## Assembling
 
-`assemble` allocates its result; the mutating forms refill one that already exists, which is
-what a time loop wants. `allocate_system_matrix` builds a matrix's sparsity pattern once so
-that `assemble!` can refill it without allocating.
+`assemble` allocates its result; the mutating forms refill one that already exists.
+`allocate_system_matrix` builds a matrix's sparsity pattern once so that `assemble!` can
+refill it without allocating.
 
 ```@docs
 assemble
@@ -40,8 +40,8 @@ evaluate!
 
 A form with a rank-one penalty term `σ * innerₕ(g, u) * innerₕ(h, v)` assembles to a
 `Bramble.RankOneUpdate`, the matrix `A + σ wₛ wₜᵀ` kept as its parts. `pde_solve(K, F)` solves it
-through a sparse bordered system (see the [forms tutorial](../tutorials/form.md)), and
-`symmetrize!` accepts it. `RankOneUpdate` is `public`, not exported.
+through a sparse bordered system (see [pure Neumann problems](@ref howto_pure_neumann)), and
+`symmetrize!` accepts it. `RankOneUpdate` is `public` and not exported.
 
 ```@docs
 Bramble.RankOneUpdate
@@ -53,21 +53,22 @@ For a separable `BilinearForm` (one whose assembled matrix is an exact sum of Kr
 products of one-dimensional factors over a `MeshnD`), `kronecker_operator` builds a
 `KroneckerLinearOperator` that applies in one fused pass over the grid instead of ever
 assembling the `D`-dimensional matrix: a `200^3` mesh stores `O(200)` numbers per axis
-rather than the assembled matrix's `O(200^3)` stored entries. `is_separable` checks the
+against the assembled matrix's `O(200^3)` stored entries. `is_separable` checks the
 condition beforehand and lists what factors.
 
 What factors: the difference, average, jump and shift families along any axis and chains of
 them, so mixed derivatives and advection terms (whose factors need not be symmetric);
 `innerₕ`, `inner₊` and `inner_Γ` weights; a restriction to `:interior`; a grid-function
 coefficient that varies along one axis; and scalar or `Ref` coefficients. A form on a ghost
-space factors where its closure is separable and both spaces share one mesh object. A
-composite space whose leaves share one mesh gives a block operator, one Kronecker operator
-per block. What does not: a coefficient varying along several axes, other region
-restrictions (Dirichlet rows included), an interpolation, a 1D mesh, trial and test spaces
-on different meshes, and the star and cross-weighted differences. A grid-function coefficient is read once, when the
-operator is built, and warns so; use a `Ref` for a coefficient that changes, or
-`matrix_free_operator`, which reads it live. Under `CpuThreaded` the product runs threaded,
-and an operator whose mesh was mutated in place afterwards throws instead of applying.
+space factors where its closure is separable and both spaces pad one physical mesh at the
+same facets. A composite space whose leaves share one mesh gives a block operator, one
+Kronecker operator per block; a composite of ghost spaces is refused. What does not: a
+coefficient varying along several axes, other region restrictions (Dirichlet rows included),
+an interpolation, a 1D mesh, trial and test spaces on different meshes, and the star and
+cross-weighted differences. A grid-function coefficient is read once, when the operator is
+built, and warns so; use a `Ref` for a coefficient that changes, or `matrix_free_operator`,
+which reads it live. Under `CpuThreaded` the product runs threaded, and an operator whose
+mesh was mutated in place afterwards throws instead of applying.
 
 `fdm_solve` requires `using Kronecker` (the `BrambleKroneckerExt` extension). It solves a
 Laplacian-like system, one whose terms each differ from one mass per axis on at most one
@@ -75,7 +76,7 @@ axis, without a general sparse factorisation: by fast diagonalisation when it is
 and by a Schur-form solve when advection terms make it non-symmetric. A mixed derivative is
 refused. On a ghost space it is accepted where the closure and the terms are separable; a 1D
 form, the `dirichlet` keyword and a form with `Δₕ` are refused with an `ArgumentError`. For
-such a form, `fdm_preconditioner` (in [Scientific computing](../api_sciml.md)) preconditions
+such a form, `fdm_preconditioner` (in [Solvers and preconditioners](solvers.md)) preconditions
 a Krylov solver with its Laplacian-like part. `fdm_factorize` factorises once, and
 `fdm_solve!` then solves each right-hand side with zero allocations; `fdm_factorize!`
 refills that factorisation after a coefficient or the mesh changed, without building it
@@ -93,11 +94,12 @@ fdm_solve!
 
 ## Matrix-free operators
 
-`matrix_free_operator` applies any `BilinearForm`, or ghost-space form, that `assemble` accepts,
-separable or not, without building its matrix: `mul!(y, op, x)` walks the form's stencil and agrees with
-`assemble(a) * x`, Dirichlet rows included, on vectors and `VectorElement`s. Its execution
-policy comes from the trial space, as for assembly. Preconditioners and multigrid built on it
-are in [Scientific computing](../api_sciml.md).
+`matrix_free_operator` applies any `BilinearForm` or ghost-space form that `assemble`
+accepts, separable or not, without building its matrix. A composite of ghost spaces is
+refused. `mul!(y, op, x)` walks the form's stencil and agrees with `assemble(a) * x`,
+Dirichlet rows included, on vectors and `VectorElement`s. Its execution policy comes from
+the trial space, as for assembly. Preconditioners and multigrid built on it
+are in [Solvers and preconditioners](solvers.md).
 
 ```@docs
 matrix_free_operator
@@ -107,9 +109,10 @@ MatrixFreeOperator
 ## Additive accumulation
 
 `assemble_add!` adds a form's contribution to a matrix or vector that already holds
-something, without the `fill!` `assemble!` does first -- for `M/Δt + θK`-style operators
-built from several independently assembled pieces. See its own docstring for why this
-needed no new traversal, and for the Dirichlet-ordering note.
+something, without the `fill!` `assemble!` does first, for `M/Δt + θK`-style operators
+built from several independently assembled pieces. Its docstring gives the
+Dirichlet-ordering rule: assemble every piece, then apply `dirichlet_bc!` or `symmetrize!`
+once.
 
 ```@docs
 assemble_add!
@@ -132,20 +135,22 @@ ast_sparsity_detector
 ## Assembled Jacobian
 
 `jacobian_form` builds the exact Jacobian of such a residual as one form, `a + ∂a`, from
-the form's AST and a declaration of each coefficient (`values => (U -> L(U), f)`). Each
-Jacobian is then one `assemble!`, with no `Dual` passing through assembly. A coefficient
-under a node with no derivative rule throws `MissingJacobianRule`.
+the form's AST and a declaration of each coefficient (`values => (U -> L(U), f)`).
+`jacobian!(J, jf, u)` writes the Jacobian into the matrix `jacobian_prototype(jf)` allocates,
+with one assembly and no `Dual` passing through it (`using ForwardDiff` differentiates each
+coefficient function; see [Scientific computing](../api_sciml.md)). A coefficient under a
+node with no derivative rule throws `MissingJacobianRule`.
 
 ```@docs
 jacobian_form
 MissingJacobianRule
 ```
 
-Time integration, differentiable linear solves, and the sparse/iterative solver backends
-move to their own [scientific computing reference](../api_sciml.md): the SciML stack
-(`semidiscretize`, `ode_problem`, `linear_problem`, `nonlinear_problem`, ...),
-`pde_solve`'s adjoint rule, AMG preconditioning, the SuiteSparse/Apple
-Accelerate/MUMPS direct solvers, and `type_cached_assemble!`.
+The sparse and iterative solver backends are in [Solvers and preconditioners](solvers.md):
+`pde_solve`, AMG preconditioning, and the SuiteSparse, Apple Accelerate and MUMPS direct
+solvers. Time integration and the SciML stack (`semidiscretize`, `ode_problem`,
+`linear_problem`, `nonlinear_problem`, ...) and `type_cached_assemble!` are in the
+[scientific computing reference](../api_sciml.md).
 
 ## Dirichlet conditions
 
@@ -160,7 +165,7 @@ symmetrize!
 
 `reaction` recovers the flux a Dirichlet constraint had to supply, from the
 **unconstrained** operator and load (`assemble` with no `dirichlet` keyword) and an
-already-solved `uₕ` -- the constrained assembly has already overwritten those rows by the
+already-solved `uₕ`: the constrained assembly has overwritten those rows by the
 time a solution exists. `reaction_density` is its pointwise counterpart, a grid function
 suitable for `export_vtk`.
 

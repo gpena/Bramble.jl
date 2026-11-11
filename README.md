@@ -28,7 +28,7 @@ Problems are bilinear and linear forms of discrete operators, in notation close 
 ## Features
 
 - **Meshes and domains.** Nonuniform Cartesian meshes in 1D, 2D and 3D, with uniform, random or hand-placed points. `polygon(V)` and `levelset(φ)` mark a 2D region and `mesh` fits the grid lines to its boundary: second order on non-convex polygons and on a disk. See [meshes](https://gpena.github.io/Bramble.jl/tutorials/mesh/), a [polygon](https://gpena.github.io/Bramble.jl/examples/poisson_polygon/) and a [disk](https://gpena.github.io/Bramble.jl/examples/poisson_circle/).
-- **Discrete calculus and forms.** `∇ₕ`, `divₕ`, `curlₕ`, `Δₕ` and `εₕ`, jumps, means, inner products and point sources, combined in a `form`. `assemble` builds the sparse matrix, as a Kronecker product when the operator is separable, and `matrix_free_operator` applies the form without one. See [operators](https://gpena.github.io/Bramble.jl/tutorials/operators/) and [forms](https://gpena.github.io/Bramble.jl/tutorials/form/).
+- **Discrete calculus and forms.** `∇ₕ`, `divₕ`, `curlₕ`, `Δₕ` and `εₕ`, jumps, means, inner products and point sources, combined in a `form`. `assemble` builds the sparse matrix. `kronecker_operator` applies a separable form as a sum of Kronecker products of 1D factors, and `matrix_free_operator` applies any form without a matrix. See [operators](https://gpena.github.io/Bramble.jl/tutorials/operators/) and [forms](https://gpena.github.io/Bramble.jl/tutorials/form/).
 - **Boundary conditions.** Dirichlet values by marker. Neumann, Robin and second-normal-derivative conditions are relations on ghost points, such as `:xmin => ∂ₙ(u) => g`, with no hand-built stencils. `pde_solve(A, F; mean_zero = w)` solves pure Neumann problems. See [Neumann and Robin](https://gpena.github.io/Bramble.jl/examples/neumann_robin_poisson/).
 - **Systems and time.** Composite spaces (`Wₕ^Val(N)`) with block assembly by component. `ode_problem` hands `M u' = F(t) - A u` to OrdinaryDiffEq and the rest of SciML. See [coupled reaction-diffusion](https://gpena.github.io/Bramble.jl/examples/coupled_reaction_diffusion/) and the [heat equation](https://gpena.github.io/Bramble.jl/examples/heat_equation/).
 - **Solvers and differentiation.** Sparse direct factorizations (SuiteSparse, Apple Accelerate, MUMPS, Sparspak), algebraic and geometric multigrid, ILU(0). Forward mode (ForwardDiff) and reverse mode (Enzyme) through DifferentiationInterface. See [solvers](https://gpena.github.io/Bramble.jl/api_sciml/) and [automatic differentiation](https://gpena.github.io/Bramble.jl/tutorials/autodiff/).
@@ -75,10 +75,10 @@ A, F = assemble(a, l; dirichlet = dirichlet_constraints(Ω, :boundary => uexact)
 
 uₕ = element(Wₕ)
 uₕ .= A \ F
-maximum(abs, uₕ .- Rₕ(Wₕ, uexact))                     # the error at the grid points, about 1e-2
+maximum(abs, uₕ .- Rₕ(Wₕ, uexact))                     # the error at the grid points, between 1e-3 and 1e-2
 ```
 
-Passing `true` instead of `false` for an axis spaces its points uniformly.
+The interior points are drawn at random, so the error changes from run to run. Passing `true` instead of `false` for an axis spaces its points uniformly.
 
 Under refinement the error falls at second order in the largest spacing, on random meshes as on uniform ones ([script](docs/readme_figure.jl)):
 
@@ -114,7 +114,7 @@ Documentation, tutorials, and the API reference are available at [https://gpena.
 - [Getting started](https://gpena.github.io/Bramble.jl/getting_started/)
 - Discrete foundations: [geometry](https://gpena.github.io/Bramble.jl/tutorials/geometry/), [meshes](https://gpena.github.io/Bramble.jl/tutorials/mesh/), [spaces](https://gpena.github.io/Bramble.jl/tutorials/space/), [operators](https://gpena.github.io/Bramble.jl/tutorials/operators/)
 - Forms, assembly and AD: [forms](https://gpena.github.io/Bramble.jl/tutorials/form/), [coupled systems](https://gpena.github.io/Bramble.jl/tutorials/coupled_systems/), [automatic differentiation](https://gpena.github.io/Bramble.jl/tutorials/autodiff/)
-- [Worked examples](https://gpena.github.io/Bramble.jl/examples/poisson_linear/): Poisson (linear, nonlinear, polygon, disk, Neumann and Robin), convection-diffusion, heat, elasticity, coupled reaction-diffusion and inverse diffusion
+- [Worked examples](https://gpena.github.io/Bramble.jl/examples/poisson_linear/): Poisson (linear, nonlinear, polygon, disk, Neumann and Robin), convection-diffusion, heat, ghost heat, elasticity, coupled reaction-diffusion and inverse diffusion
 
 ---
 

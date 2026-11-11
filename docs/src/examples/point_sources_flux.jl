@@ -1,22 +1,18 @@
 # # Point sources and boundary flux recovery
 #
 # A well injecting into an aquifer, or a thermal probe in a slab, is a source concentrated at
-# a point rather than spread over a volume. [`dirac`](@ref) writes one directly in a linear
-# form, and [`reaction`](@ref) reads back the flux the boundary condition had to supply,
-# which is how the discrete solution can be checked against conservation rather than against
-# a norm alone.
-#
-# This script runs under `test/examples/pages.jl`, where the lines marked `#src` (the
-# assertions the page does not show) execute; it is not part of the published manual.
+# one point. [`dirac`](@ref) writes one directly in a linear form, and [`reaction`](@ref)
+# reads back the flux the boundary condition had to supply, so the discrete solution can be
+# checked against conservation as well as against a norm.
 #
 # ## Problem
 #
 # ```math
-# -\nabla \cdot (k \nabla u) = \sum_k Q_k \, \delta(x - x_k) \text{ in } \Omega = (0,1)^2,
+# -\nabla \cdot (k \nabla u) = \sum_i Q_i \, \delta(x - x_i) \text{ in } \Omega = (0,1)^2,
 # \qquad u = 0 \text{ on } \partial\Omega
 # ```
 #
-# with unit conductivity `k = 1`. Read `u` as hydraulic head and `Q_k` as pumping rates.
+# with unit conductivity `k = 1`. Read `u` as hydraulic head and `Q_i` as pumping rates.
 #
 # ## One well
 #
@@ -45,10 +41,12 @@ uₕ .= A \ F
 
 sum(assemble(l)), maximum(parent(uₕ))
 
-# The assembled load sums to `Q` exactly. A point evaluation is not weighted by a cell
-# measure the way a density is: `dirac` puts the strength on the node when the point is one,
-# and splits it across the ``2^D`` corners of the containing cell by multilinear weights when
-# it is not, which is what preserves the total.
+# The assembled load sums to `Q`. A point evaluation is not weighted by a cell measure the
+# way a density is: `dirac` puts the strength on the node when the point is one, and splits
+# it across the ``2^D`` corners of the containing cell by multilinear weights when it is
+# not, which preserves the total.
+
+@test sum(assemble(l)) ≈ Q                                                                 #src
 #
 # ## Checking it against the Green's function
 #
@@ -61,7 +59,8 @@ sum(assemble(l)), maximum(parent(uₕ))
 # ```
 #
 # with ``y_< = \min(y, y_0)`` and ``y_> = \max(y, y_0)``. Away from the singularity, where
-# the discrete solution cannot be expected to resolve a logarithm, the two agree:
+# the discrete solution cannot be expected to resolve a logarithm, the two agree to about
+# `1e-4`:
 
 function green(x, y, x₀, y₀; nterms = 60)
     total = 0.0
@@ -83,8 +82,8 @@ errors = map(probes) do p
     return abs(uₕ[CartesianIndex(i, j)] - Q * green(xs[i], ys[j], x₀...))
 end
 
-# Small, but bracketed away from zero as well: an exactly zero difference would mean the   #src
-# series and the solve were not independent of each other.                                 #src
+# Bracketed on both sides: an exactly zero difference would mean the series and the       #src
+# solve were not independent of each other.                                                #src
 @test all(1.0e-12 .< errors .< 1.0e-3)                                                     #src
 
 errors
@@ -92,7 +91,7 @@ errors
 #-
 
 include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
-surface_plot(uₕ; title = "head from one well at (0.35, 0.65)") # hide
+surface_plot(uₕ; title = "head from one well at (0.35, 0.65)", mesh_lines = true) # hide
 
 # ## The same well beside a leaky side
 #
@@ -120,10 +119,10 @@ uᵍ .= pde_solve(Aᵍ, Fᵍ)
 maximum(parent(uᵍ)), maximum(parent(uₕ))
 
 # The head peaks higher than with ``u = 0`` on all four sides, since a leaky side holds the
-# head up where a Dirichlet side pins it to zero. The well's strength is untouched by the ghost layer: it is far from `xmax`,
-# so the load assembled on the constrained space is the plain one, node for node, and still
-# sums to `Q`. The Dirichlet rows of `Fᵍ` hold the boundary data, here zero, so they add
-# nothing to the sum.
+# head up where a Dirichlet side pins it to zero. The well is far from `xmax`, so the load
+# assembled on the constrained space is the plain one, node for node, and still sums to `Q`.
+# The Dirichlet rows of `Fᵍ` hold the boundary data, here zero, so they add nothing to the
+# sum.
 
 Fₚ = assemble(l)
 
@@ -157,35 +156,44 @@ end
 leaky = leaky_residual(Ωₕ, Cᵍ, uᵍ)
 
 # It is small compared with the head itself, which is of order one, but not round-off: the
-# one-sided difference carries its own truncation error. A solution that ignored the
-# relation would leave a residual of the size of ``\partial_n u`` itself, orders larger.
+# one-sided difference carries its own truncation error. The Dirichlet solution `uₕ`, which
+# does not satisfy the relation, leaves a much larger residual with the same formula.
 
 @test 1.0e-8 < leaky < 1.0e-2 * maximum(parent(uᵍ))                                        #src
+let nx = 61, h = 1 / 60                                                                    #src
+    ctrl = maximum(1:61) do j                                                              #src
+        d = (3 * uₕ[CartesianIndex(nx, j)] - 4 * uₕ[CartesianIndex(nx - 1, j)] +           #src
+             uₕ[CartesianIndex(nx - 2, j)]) / (2h)                                         #src
+        abs(uₕ[CartesianIndex(nx, j)] + d)                                                 #src
+    end                                                                                    #src
+    @test ctrl > 50 * leaky                                                                #src
+end                                                                                        #src
 
 leaky
 
 #-
 
-surface_plot(uᵍ; title = "head from one well, leaky right side") # hide
+surface_plot(uᵍ; title = "head from one well, leaky right side", mesh_lines = true) # hide
 
 # The flux sections below stay Dirichlet on the plain space, because [`reaction`](@ref)
 # refuses a ghost form with an `ArgumentError`: it reads rows of the unconstrained plain
 # system, and the fix it names is to apply it on the plain space to the physical values of
 # `Bramble.lift(Cᵍ, u)`.
 
+@test_throws ArgumentError reaction(aᵍ, lᵍ, uᵍ; marker = :left)                           #src
+
 # ## What the boundary had to supply
 #
-# [`reaction`](@ref) recovers that flux from the *unconstrained* form pair and the solved
-# `uₕ`: the constrained rows of `A` were overwritten by `dirichlet_bc!`, so the flux they
-# carried is gone from the assembled system, but reassembling without the condition and
-# reading the residual `A uₕ - F` gives it back. The sign convention is positive for flux
-# leaving the domain.
+# [`reaction`](@ref) recovers that flux from the unconstrained form pair and the solved `uₕ`:
+# the constrained rows of `A` were overwritten by `dirichlet_bc!`, so the flux they carried
+# is gone from the assembled system, but reassembling without the condition and reading the
+# residual `A uₕ - F` gives it back. The sign convention is positive for flux leaving the
+# domain.
 
 flux_total = reaction(a, l, uₕ; marker = :boundary)
 
-# Every drop injected leaves through the boundary, to round-off, on any mesh: this is a
-# discrete conservation statement, not a discretization error that shrinks under refinement.
-# The section on a random mesh below checks it off the uniform grid.
+# The boundary returns the whole strength `Q`, to round-off. The random mesh below repeats
+# it off the uniform grid.
 
 @test abs(flux_total - Q) < 1.0e-10                                                        #src
 
@@ -205,9 +213,9 @@ per_side = [reaction(a, l, uₕ; marker = m) for m in sides]
 collect(zip(sides, per_side))
 
 # [`reaction_density`](@ref) is the pointwise counterpart: a grid function, zero away from the
-# marker, carrying the flux *density* at each marked point rather than its sum. Integrating
-# it over the boundary with [`inner_Γ`](@ref) recovers the scalar above, which is the check
-# that the two agree, and it is the form to hand an exporter:
+# marker, carrying the flux density at each marked point instead of the sum. Integrating it
+# over the boundary with [`inner_Γ`](@ref) recovers the scalar above, and it is the form to
+# hand an exporter:
 
 rd = reaction_density(a, l, uₕ; marker = :boundary)
 
@@ -236,13 +244,15 @@ flux_random = reaction(aᵣ, lᵣ, uᵣ; marker = :boundary)
 
 @test abs(sum(assemble(lᵣ)) - Q) < 1.0e-10                                                 #src
 @test abs(flux_random - Q) < 1.0e-10                                                       #src
+@test minimum(abs.(points(Ωᵣ)[1] .- x₀[1])) > 1.0e-6                                       #src
+@test minimum(abs.(points(Ωᵣ)[2] .- x₀[2])) > 1.0e-6                                       #src
 
 sum(assemble(lᵣ)) - Q, flux_random - Q
 
 # ## Two wells
 #
 # An injector and a producer of equal strength. `dirac` takes a vector of points and a vector
-# of strengths, which assembles as one term rather than two:
+# of strengths:
 
 l₂ = form(Wₕ, v -> innerₕ(dirac([(0.3, 0.5), (0.7, 0.5)], [Q, -Q]), v))
 
@@ -252,19 +262,20 @@ u₂ .= A₂ \ F₂
 
 net = reaction(a, l₂, u₂; marker = :boundary)
 
-# Nothing accumulates and nothing leaves: what one well injects, the other takes back, and
-# the net boundary flux is zero to round-off. The sides do carry flux, in opposite
-# directions, since the two wells are not at the same place.
+# Nothing accumulates: what one well injects, the other takes back, and the net boundary flux
+# is zero to round-off. The injector at `x = 0.3` pushes water out through the left side and
+# the producer at `x = 0.7` draws the same amount in through the right.
 
 @test abs(net) < 1.0e-10                                                                   #src
 @test reaction(a, l₂, u₂; marker = :left) > 0.1                                            #src
 @test reaction(a, l₂, u₂; marker = :right) < -0.1                                           #src
+@test reaction(a, l₂, u₂; marker = :left) ≈ -reaction(a, l₂, u₂; marker = :right)          #src
 
 net, reaction(a, l₂, u₂; marker = :left), reaction(a, l₂, u₂; marker = :right)
 
 #-
 
-surface_plot(u₂; title = "injector at (0.3, 0.5), producer at (0.7, 0.5)") # hide
+surface_plot(u₂; title = "injector at (0.3, 0.5), producer at (0.7, 0.5)", mesh_lines = true) # hide
 
 # ## Where to go next
 #

@@ -19,14 +19,15 @@ and reduced afterwards.
 
 The degrees of freedom are the physical nodes in the mesh's linear order, then the ghosts in
 the numbering of the [ghost mesh](mesh.md), whose absent points are never degrees of
-freedom. The first entries of a vector of the space are therefore the values at the physical
-nodes, as on `gridspace(Ωₕ)`.
+freedom. On `gridspace(Ωₕ; ghosts)` and on a constrained space without Dirichlet relations
+or relation data, the first entries of a vector of the space are therefore the values at the
+physical nodes, as on `gridspace(Ωₕ)`.
 
 ### Weights
 
 Per axis the weight of a ghost node and of a ghost cell is 0, so a form has no weight in
 its ghost rows and only the reduction below gives the ghosts a role. The
-[space tutorial](@ref space_ghost) gives the weights and why they are physical-only.
+[ghost point tutorial](@ref space_ghost) gives the weights and why they are physical-only.
 
 ### The closure and the reduction
 
@@ -66,8 +67,7 @@ node and `D₋` at a last, which reads physical nodes only and is second order. 
 applies to a first difference of first differences across two axes, with constant or
 grid-function scales, and it distributes over sums and differences of such terms.
 
-The rule is structural: which stencil a corner node uses depends on the form, not on the
-values of its coefficients, so the discretisation is continuous in the data. A coefficient
+The rule is structural: which stencil a corner node uses depends on the form alone, so the discretisation is continuous in the data. A coefficient
 that is zero at the ghost tap still gets the one-sided row.
 
 Reading an absent point is otherwise refused. A product on a ghost space asks, at every
@@ -80,7 +80,7 @@ refused too. A volume product's operand at the edge of the padded grid truncates
 plain mesh, and that is allowed.
 
 The rule applies in forms only; the runtime operators are eager (see the
-[operators tutorial](@ref operators_ghost)). `Rₕ` and `avgₕ` refuse on a ghost space with
+[ghost point tutorial](@ref operators_ghost)). `Rₕ` and `avgₕ` refuse on a ghost space with
 an `ArgumentError` (`avgₕ` would average over cells past the physical facet), except that
 `Rₕ(U, f)` works on the trial space of [`polygon_spaces`](@ref Bramble.polygon_spaces); the
 [support table](@ref "Support on ghost spaces") lists what else refuses.
@@ -109,7 +109,7 @@ may read component 2's ghost. A Dirichlet relation names its component, `u(i) =>
 displacement facet's ghosts are closed by `∂ₙₙ(u(i)) => 0`. The rows are solved once on the
 padded composite: the padded space is `padded(C₁) × padded(C₂)`, and the unknowns are
 component 1's then component 2's, each in the scalar order. The closure `(E, d)` is
-therefore general, not `blockdiag`, wherever a relation couples components; with relations
+therefore not block diagonal wherever a relation couples components; with relations
 of one component each it equals `constrained(C₁, r₁) × constrained(C₂, r₂)`. The result
 stores its own `(E, d)`, which `closure`, `lift` and its forms read. A component view
 `uₕ(i)` of it is refused, since `E` couples the components, so take
@@ -180,7 +180,7 @@ forms.
 | `kronecker_operator` | supported where the closure is separable, trial and test on one mesh object and a square reduced system; refused otherwise, naming `assemble(a)` | `test/ghost/kronecker.jl` |
 | `gmg_solve`, `gmg_preconditioner` | supported for Neumann, Robin, mixed and pure-Neumann ghost problems, with level-independent cycle counts on 1D graded and on jittered meshes; on 2D meshes graded as `t^(1 + d/4)`, where point smoothers slow down on every space, within 3 cycles of the plain path (3D on the nightly) | `test/ghost/multigrid.jl` |
 | `evaluate!`, `l(v)`, `a(u, v)` | supported; `l(v)` and `evaluate!` refuse when the affine part `d` is not zero, naming `assemble(a, l)` | `test/ghost/contract.jl` |
-| `normₕ`, `interpolate_at` | supported on physical values only; refused on a DOF vector that is not a grid function, naming `lift` | `test/ghost/grid_functions.jl` |
+| `normₕ`, `norm₁ₕ`, `snorm₁ₕ`, `norminf`, `interpolate_at` | supported on physical values only; refused on a DOF vector that is not a grid function, naming `lift` | `test/ghost/grid_functions.jl` |
 | `jacobi_preconditioner`, `chebyshev_preconditioner`, `ilu_preconditioner`, `amg_preconditioner` | supported | `test/ghost/preconditioners.jl` |
 | `fdm_solve`, `fdm_factorize`, `fdm_solve!`, `fdm_preconditioner` | supported where the form is separable; refused with the `dirichlet` keyword, on a 1D form and on a non-separable form | `test/ghost/preconditioners.jl` |
 | `solve(a, l; preconditioner = :amg)` and `:ilu0` (BrambleSciMLExt) | not tested on ghost forms | none |
@@ -253,7 +253,7 @@ integer V-notch. `Dcₓ(Dcₓ(u))`, `Dcᵧ(Dcᵧ(u))`, `Dcₓ(Dcᵧ(Dcₓ(u)))` 
 the two Figure 1 meshes, each naming an exterior node two nodes from the equation's interior
 node. On the V-notch only `Dcᵧ(Dcᵧ(u))` assembled, as every second node it reads along `y`
 is an interior or boundary node, and the others threw. The guard looks at what each
-equation reads, not at the width of the stencil: it refuses an exterior node that (3.2)
+equation reads and ignores the width of the stencil: it refuses an exterior node that (3.2)
 gives no value, and a wide stencil that lands on interior or boundary nodes passes.
 
 On a level-set mesh the same rows are pinned by `levelset_spaces.jl` (the quadratic solve,
@@ -265,9 +265,7 @@ third row, `Rₕ` and the norms), and by the level-set disk of `policies.jl` and
 composite rows on the disk and the dented egg. The rows about a conflict node do not arise
 there, and the remaining rows are untested on a level-set mesh.
 
-## Operator matrices: stencil_matrix versus the Kronecker construction
-
-### Adding a new operator family
+## Private docstrings
 
 ```@autodocs
 Modules = [Bramble]

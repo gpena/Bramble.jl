@@ -11,7 +11,6 @@ CurrentModule = Bramble
 **Where next.** The [worked examples](../examples/poisson_linear.md), which run the whole chain on full problems.
 
 A composite space stacks grid spaces, and a form over one addresses its blocks by component.
-This page shows how, using small examples that run when the page is built.
 
 ## Addressing blocks by component
 
@@ -52,9 +51,8 @@ catch e
 end
 ```
 
-Naming one and leaving the other open has no reading as mathematics, because the term would
-belong to every equation at once. Naming neither is fine and means the diagonal, applied to
-every block.
+A term naming one component belongs to every equation at once, so it is refused. Naming
+neither means the diagonal, applied to every block.
 
 !!! tip "Try this"
     Add `+ innerₕ(u₁, v₂)` to the body of `ac` and compare `nnz(assemble(ac))` before and
@@ -79,22 +77,22 @@ nothing # hide
 
 Block 1 (rows `1:21`) has its boundary rows pinned. Block 2 is the plain assembled operator,
 with no row replaced. Leaving `dirichlet_components` at its default, `nothing`, applies the
-labels to every leaf. Call `assemble!` or `dirichlet_bc!` again with another
-`dirichlet`/`dirichlet_components` pair to constrain a different block.
+labels to every leaf. Call `assemble!` again with another `dirichlet`/`dirichlet_components`
+pair, or `dirichlet_bc!` with another `labels`/`components` pair, to constrain a different
+block.
 
 !!! tip "Try this"
     Set `dirichlet_components = 2` and compare `Ac2[1, 1]` and `Ac2[22, 22]`. The pinned
-    diagonal entry `1.0` moves from block 1 to block 2, and the other keeps its weight. The Dirichlet conditions themselves are explained in the
-    [form tutorial](@ref form_dirichlet).
+    diagonal entry `1.0` moves from block 1 to block 2, and the other keeps its weight.
 
 ## Interpolating between the leaves of a heterogeneous space
 
 The composite spaces above stack copies of *one* space, so every leaf shares a mesh. A
 composite space can also be built from a tuple of leaves over different meshes. A term that
 couples two such leaves must move a value from one grid to the other. That is the job of
-[`πₕ`](@ref), applied to the trial function alone. It names no source space. The space
-it interpolates from is the trial function's own, and assembly supplies it once the leaf is
-known.
+[`πₕ`](@ref). Applied to a grid function of one leaf, as below, it is a source. Applied to the
+trial or the test function, it interpolates the unknown and lets a bilinear term couple
+leaves on different meshes.
 
 ```@raw html
 <figure>
@@ -128,7 +126,7 @@ known.
 </figure>
 ```
 
-`πₕ(uₕ)` is a source like any other: an AST leaf wrapping `x -> interpolate_at(uₕ, x)`. It
+`πₕ(uₕ)` is a source read live: every `assemble` takes the current values of `uₕ`. It
 composes with `D₋ₓ`, `Mₓ` and the rest, and sits on the left of `innerₕ` inside a coupled
 form:
 
@@ -148,22 +146,21 @@ maximum(abs, bh .- b_plain)
 ```
 
 Both terms land in leaf 1, the big mesh, although the source lives on leaf 2's coarser mesh.
-`πₕ` makes that a well-posed expression instead of a size mismatch. Leaf 2 can hold one
-field at the resolution the problem calls for, and a term over leaf 1 can still read it.
+Leaf 2 can hold one field at the resolution the problem calls for, and a term over leaf 1
+can still read it.
 
-The last line is the check worth keeping, not `length(bh) == ndofs(Vh)`. A differenced
-source whose offsets were discarded assembles to exactly zero, and a zero vector has the
-right length and is finite.
+The last line compares values: a differenced source whose offsets were discarded assembles
+to exactly zero, which has the right length and is finite.
 
-An operated source means the following. `innerₕ(D₋ₓ(f), v)` is
+`innerₕ(D₋ₓ(f), v)` is
 ``\sum_i |\square_i| \, (D_{-x}f)_i \, v_i``: the operator acts on the *source*, producing
 another grid function, which is then integrated against the test function. It agrees entry
-for entry with applying the numeric operator first, which is what
-`test/form/source_operators.jl` pins for every operator.
+for entry with applying the numeric operator first.
 
-### Bilinear coupling across meshes is refused
+### Bilinear coupling across meshes
 
-A *bilinear* term coupling two leaves over different meshes has no assembly to give:
+A bilinear term coupling two leaves over different meshes has no assembly unless the trial
+or the test function is wrapped in `πₕ`. Unwrapped, it is refused:
 
 ```@example coupled
 try
@@ -175,10 +172,29 @@ end
 
 A coupled block is assembled by walking the test leaf's grid and reading the trial column out
 of the same index space, so the two leaves must agree on what an index means. Index
-``(3, 3)`` on an 8-by-8 grid and on a 4-by-4 grid name different points, and nothing in the
-term says how to get from one to the other. The error is raised when the matrix is built, not
-when the form is written, because which leaves a term couples is a question about the spaces
+``(3, 3)`` on an 8-by-8 grid and on a 4-by-4 grid name different points. The error is raised
+when the matrix is built, because which leaves a term couples is a question about the spaces
 it is assembled against. `allocate_system_matrix` refuses it too.
 
-Leaves that *share* a mesh are unaffected. That covers every space built by repeating one
+Wrapping the trial function interpolates it onto the test leaf's grid, and the same block
+assembles:
+
+```@example coupled
+Ac_pi = assemble(form(Vh, Vh, (u, v) -> innerₕ(πₕ(u(2)), v(1))))
+using SparseArrays
+nb = ndofs(Wbig)
+B = Ac_pi[1:nb, nb+1:end]
+nnz(B)
+```
+
+Applied to the small leaf's values, the off-diagonal block gives the vector the source form assembled above:
+
+```@example coupled
+x₂ = parent(Rₕ(Wsmall, x -> x[1] + x[2]))
+@assert nnz(B) > 0 && maximum(abs, b_plain[1:nb]) > 0
+@assert isapprox(B * x₂, b_plain[1:nb]; atol = 1e-14)
+maximum(abs, B * x₂ .- b_plain[1:nb])
+```
+
+Leaves that share a mesh are unaffected. That covers every space built by repeating one
 space (`Wₕ^Val(2)`), off-diagonal blocks included.

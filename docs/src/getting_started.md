@@ -4,7 +4,7 @@ CurrentModule = Bramble
 
 # Getting started
 
-A Poisson problem, end to end, in twenty lines. Six steps take a continuous problem to a
+A Poisson problem, end to end, in fifteen lines. Six steps take a continuous problem to a
 solved grid function, and every tutorial afterwards is one of them in detail.
 
 ```@raw html
@@ -66,8 +66,8 @@ solved grid function, and every tutorial afterwards is one of them in detail.
 ```
 
 with the manufactured solution $u_{\text{exact}}(x, y) = \sin(\pi x)\sin(\pi y)$, so
-$g = 2\pi^2 u_{\text{exact}}$. Knowing the answer in advance is what makes the error below
-checkable.
+$g = 2\pi^2 u_{\text{exact}}$. The known solution makes the error
+computable.
 
 ## The code
 
@@ -96,9 +96,14 @@ uₕ .= A \ F
 normₕ(uₕ .- Rₕ(Wₕ, uexact))
 ```
 
-Four parts in ten thousand. The grid is uniform, which keeps the example short, but a
-uniform grid can flatter a scheme: the [linear Poisson example](examples/poisson_linear.md)
-checks convergence on a random non-uniform grid for that reason. Halving the spacing should
+Four parts in ten thousand.
+
+![Poisson solution on a random 17 by 17 grid, with its grid lines](assets/gallery_poisson.svg)
+
+The same problem on a random 17 × 17 grid, coloured by the solution. The grid in the code is
+uniform, which keeps the example short, but a uniform grid can flatter a scheme: the
+[linear Poisson example](examples/poisson_linear.md) checks convergence on a random
+non-uniform grid for that reason. Halving the spacing should
 cut the error by four, since the scheme is second order:
 
 ```@example gs
@@ -121,21 +126,11 @@ e₁, e₂ = poisson_error(33), poisson_error(65)
 e₁, e₂, log2(e₁ / e₂)
 ```
 
-## What each step gives you
+## Forms and assembly
 
-The form is the step worth dwelling on. `a` and `l` are expressions in the trial and test
-functions, not matrices: `form` stores the expression, and `assemble` is what walks the mesh.
-That separation is what lets the same `a` be refilled every step of a time loop, handed to a
-nonlinear solver, or differentiated.
-
-Where to go from here:
-
-- [Discrete foundations](tutorials/geometry.md) covers the first three steps: domains,
-  meshes and their metric, grid spaces and the operators that act on them.
-- [Linear and bilinear forms](tutorials/form.md) covers the last three: writing a form,
-  assembling it, imposing conditions, and coupled systems.
-- The [worked examples](examples/poisson_linear.md) run the whole chain on real problems,
-  a Poisson problem, a convection-diffusion problem and a heat equation.
+`a` and `l` are expressions in the trial and test functions. `form` stores the expression
+and `assemble` walks the mesh, so the same `a` can be refilled every step of a time loop,
+handed to a nonlinear solver, or differentiated.
 
 ## Coding with Claude
 
@@ -147,7 +142,8 @@ Install it from Claude Code with `/plugin marketplace add gpena/Bramble.jl`, the
 
 ## Reading order
 
-Read the tutorials in the order of the sidebar, top to bottom. Each line says what the page teaches.
+Read the tutorials in the order of the sidebar, top to bottom. The [worked
+examples](examples/poisson_linear.md) then run the whole chain on real problems.
 
 - [Geometry tutorial](tutorials/geometry.md): Describe where a problem lives: a set, its named boundary pieces and the domain that bundles both.
 - [Mesh tutorial](tutorials/mesh.md): Turn a domain into a mesh, make its points non-uniform, and read the spacings and cell measures.
@@ -155,3 +151,4 @@ Read the tutorials in the order of the sidebar, top to bottom. Each line says wh
 - [Difference, jump and average operators](tutorials/operators.md): Apply differences, jumps and averages, see what each does at the grid edge, and get the matrix.
 - [Linear and bilinear forms](tutorials/form.md): Write, assemble and solve a linear or bilinear form, with Dirichlet conditions, for a Poisson problem.
 - [Coupled systems](tutorials/coupled_systems.md): Write a form over several unknowns, constrain one block, and read values across different meshes.
+- [Automatic differentiation](tutorials/autodiff.md): Differentiate a discrete quantity with respect to a parameter, and choose between the two backends.

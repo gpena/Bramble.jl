@@ -19,14 +19,57 @@ Base.show(io::IO, ::MIME"text/html", p::SolutionPlot) = print(io, p.html)
 const _SOLUTION_PLOT_COUNTER = Ref(0)
 _next_solution_plot_id() = "bramble_sp_$(_SOLUTION_PLOT_COUNTER[] += 1)"
 
+# Six significant digits: an animation carries one full grid per frame, and a page allows
+# 400 KiB per plot. `null` stands in for a NaN, which Plotly draws as a gap.
+_sp_numbers(v) = "[" * join((isnan(x) ? "null" : string(round(x; sigdigits = 6)) for x in v), ",") * "]"
+
+# One polyline per grid line, at the mesh's own coordinates, `null` breaking it between lines
+# so a single scatter3d trace draws all `nx + ny` of them. `Z[j][i]` is the height at
+# `(xs[i], ys[j])`; a gap in the surface stays a gap in the line.
+const _MESH_LINES_JS = """
+function meshLines(xs, ys, Z, lift) {
+  const x = [], y = [], z = [];
+  const point = (i, j) => {
+    x.push(xs[i]); y.push(ys[j]);
+    z.push(Number.isFinite(Z[j][i]) ? Z[j][i] + lift : null);
+  };
+  for (let i = 0; i < xs.length; i++) {
+    for (let j = 0; j < ys.length; j++) point(i, j);
+    x.push(null); y.push(null); z.push(null);
+  }
+  for (let j = 0; j < ys.length; j++) {
+    for (let i = 0; i < xs.length; i++) point(i, j);
+    x.push(null); y.push(null); z.push(null);
+  }
+  return { x, y, z };
+}
 """
-    surface_plot(uₕ; title = "", width = 480, height = 420)
+
+# Finite range of the field, and the lift that keeps a line from z-fighting with the surface
+# it lies on: one percent of the range, `0.01` for a constant field.
+function _height_range(M)
+    zmin, zmax = extrema(filter(isfinite, M))
+    lift = (zmax - zmin) * 0.01
+    return zmin, zmax, lift > 0 ? lift : 0.01
+end
+
+"""
+    surface_plot(uₕ; title = "", width = 480, height = 420, mesh_lines = false,
+                 boundary = nothing)
 
 A 3D surface plot of a 2D scalar grid function `uₕ`, in physical mesh coordinates (not index
 space), with an orthographic camera looking straight down the `z` axis. It reads as a flat
 colour map at rest, and drags to tilt the field into view as elevation.
+
+`mesh_lines = true` draws one line per grid line on the surface, at the mesh's own
+coordinates, so a non-uniform grid shows as one. `boundary` is a vector of `(x, y)` points;
+the plot draws a red closed curve through them at the height of the field's maximum, which
+outlines a polygon or a disk where the grid points do not.
 """
-function surface_plot(uₕ; title::AbstractString = "", width::Int = 480, height::Int = 420)
+function surface_plot(
+        uₕ; title::AbstractString = "", width::Int = 480, height::Int = 420,
+        mesh_lines::Bool = false, boundary = nothing
+)
     Ωₕ = mesh(space(uₕ))
     nx, ny = npoints(Ωₕ, Tuple)
     xs = [point(Ωₕ(1), i) for i in 1:nx]
@@ -42,9 +85,43 @@ function surface_plot(uₕ; title::AbstractString = "", width::Int = 480, height
     z_js = "[" * join(("[" * join(row, ",") * "]" for row in eachrow(M)), ",") * "]"
     title_js = isempty(title) ? "''" : "'$title'"
 
+    # The attributes and the extra traces stay empty by default, so a plot without the
+    # options is the same page as before they existed.
+    attrs = ""
+    extra_js = ""
+    if mesh_lines || !isnothing(boundary)
+        _, zmax, lift = _height_range(M)
+        if mesh_lines
+            attrs *= " data-mesh-lines=\"$(nx + ny)\""
+            extra_js *= """
+
+      $(_MESH_LINES_JS)
+      data.push({
+        type: 'scatter3d', mode: 'lines',
+        ...meshLines(data[0].x, data[0].y, data[0].z, $lift),
+        line: { color: '#9a9a9a', width: 2 },
+        showlegend: false, hoverinfo: 'skip',
+      });"""
+        end
+        if !isnothing(boundary)
+            n = length(boundary)
+            bx = [boundary[mod1(k, n)][1] for k in 1:(n + 1)]
+            by = [boundary[mod1(k, n)][2] for k in 1:(n + 1)]
+            attrs *= " data-boundary=\"$n\""
+            extra_js *= """
+
+      data.push({
+        type: 'scatter3d', mode: 'lines',
+        x: [$(join(bx, ","))], y: [$(join(by, ","))], z: [$(join(fill(zmax + lift, n + 1), ","))],
+        line: { color: '#e8464f', width: 6 },
+        showlegend: false, hoverinfo: 'skip',
+      });"""
+        end
+    end
+
     html = """
     $(plotlyjs_head())
-    <div id="$div_id" style="width:100%; max-width:$(width)px; height:$(height)px; margin: 1em 0;"></div>
+    <div id="$div_id"$attrs style="width:100%; max-width:$(width)px; height:$(height)px; margin: 1em 0;"></div>
     <script>
     (function () {
       const theme = window.bramblePlotlyTheme();
@@ -57,7 +134,7 @@ function surface_plot(uₕ; title::AbstractString = "", width::Int = 480, height
         showscale: true,
         colorbar: { tickfont: { color: theme.text } },
         contours: { z: { show: false } },
-      }];
+      }];$extra_js
       const layout = {
         title: { text: $title_js, font: { color: theme.text, size: 14 } },
         paper_bgcolor: theme.bg,
@@ -96,7 +173,7 @@ end
     spacetime_surface_plot(xs, ts, Z; title = "", width = 480, height = 480)
 
 A 3D surface over `(x, t)` for a 1D time-dependent solution, `Z[j, i]` the value at
-`(xs[i], ts[j])`, so the whole time evolution sits in one static surface. A white profile curve
+`(xs[i], ts[j])`, so the whole time evolution sits in one static surface. A red profile curve
 (`u(x, t_k)` at the current `t_k`) loops continuously along it, so the field is legible at
 rest as a surface and legible in motion as a travelling cross-section, without ever
 redrawing the surface itself.
@@ -226,6 +303,227 @@ function spacetime_surface_plot(
           'scene.yaxis.color': t.text, 'scene.yaxis.gridcolor': t.grid, 'scene.yaxis.backgroundcolor': t.bg,
           'scene.zaxis.color': t.text, 'scene.zaxis.gridcolor': t.grid, 'scene.zaxis.backgroundcolor': t.bg,
           'title.font.color': t.text,
+        };
+      });
+    })();
+    </script>
+    """
+    return SolutionPlot(html)
+end
+
+"""
+    animated_surface_plot(us, ts; title = "", width = 480, height = 420, mesh_lines = false)
+
+A 3D surface plot of a vector `us` of 2D scalar grid functions on one mesh, `us[k]` the field
+at time `ts[k]`, with a time slider and a play button. The camera and the `mesh_lines` option
+are those of [`surface_plot`](@ref). The colour scale and the `z` axis keep the range of
+all frames together, so the field's growth or decay shows.
+
+Every frame carries its whole grid, to six significant digits. A page allows 400 KiB per
+plot, so a call whose page would pass it throws an `ArgumentError`: sample fewer times, or
+use a coarser mesh.
+"""
+function animated_surface_plot(
+        us::AbstractVector, ts::AbstractVector; title::AbstractString = "", width::Int = 480,
+        height::Int = 420, mesh_lines::Bool = false
+)
+    length(us) == length(ts) ||
+        throw(DimensionMismatch("us has $(length(us)) frames but ts has $(length(ts)) times"))
+    isempty(us) && throw(ArgumentError("animated_surface_plot needs at least one frame"))
+
+    Ωₕ = mesh(space(first(us)))
+    nx, ny = npoints(Ωₕ, Tuple)
+    xs = [point(Ωₕ(1), i) for i in 1:nx]
+    ys = [point(Ωₕ(2), j) for j in 1:ny]
+    # reshape(uₕ) is (nx, ny); Plotly's z wants z[row][col] with row = y, col = x.
+    Ms = [permutedims(reshape(u)) for u in us]
+    all(M -> size(M) == (ny, nx), Ms) ||
+        throw(DimensionMismatch("every frame must be a grid function on the first one's $nx × $ny mesh"))
+
+    zmin, zmax, lift = _height_range(reduce(vcat, vec.(Ms)))
+    z_js(M) = "[" * join((_sp_numbers(row) for row in eachrow(M)), ",") * "]"
+
+    div_id = _next_solution_plot_id()
+    attrs = " data-frames=\"$(length(us))\"" * (mesh_lines ? " data-mesh-lines=\"$(nx + ny)\"" : "")
+    title_js = isempty(title) ? "''" : "'$title'"
+
+    html = """
+    $(plotlyjs_head())
+    <div id="$div_id"$attrs style="width:100%; max-width:$(width)px; height:$(height)px; margin: 1em 0;"></div>
+    <script>
+    (function () {
+      const theme = window.bramblePlotlyTheme();
+      $(_MESH_LINES_JS)
+      const withLines = $(mesh_lines);
+      const xs = $(_sp_numbers(xs)), ys = $(_sp_numbers(ys)), ts = $(_sp_numbers(ts));
+      const zFrames = [$(join((z_js(M) for M in Ms), ",\n"))];
+      const lift = $lift;
+
+      const data = [{
+        type: 'surface',
+        x: xs, y: ys, z: zFrames[0],
+        cmin: $zmin, cmax: $zmax,
+        colorscale: 'Viridis',
+        showscale: true,
+        colorbar: { tickfont: { color: theme.text } },
+        contours: { z: { show: false } },
+      }];
+      if (withLines) {
+        data.push({
+          type: 'scatter3d', mode: 'lines',
+          ...meshLines(xs, ys, zFrames[0], lift),
+          line: { color: '#9a9a9a', width: 2 },
+          showlegend: false, hoverinfo: 'skip',
+        });
+      }
+
+      const frames = [];
+      const sliderSteps = [];
+      const tickEvery = Math.max(1, Math.round(ts.length / 6));
+      for (let k = 0; k < ts.length; k++) {
+        const update = [{ z: zFrames[k] }];
+        if (withLines) update.push({ z: meshLines(xs, ys, zFrames[k], lift).z });
+        frames.push({ name: String(k), traces: update.map((_, i) => i), data: update });
+        sliderSteps.push({
+          method: 'animate',
+          label: k % tickEvery === 0 ? String(Number(ts[k].toPrecision(3))) : '',
+          args: [[String(k)], { mode: 'immediate', frame: { duration: 0, redraw: true }, transition: { duration: 0 } }],
+        });
+      }
+
+      const layout = {
+        title: { text: $title_js, font: { color: theme.text, size: 14 } },
+        paper_bgcolor: theme.bg,
+        plot_bgcolor: theme.bg,
+        font: { color: theme.text },
+        scene: {
+          camera: {
+            eye: { x: 0, y: 0, z: 2.1 },
+            up: { x: 0, y: 1, z: 0 },
+            projection: { type: 'orthographic' },
+          },
+          xaxis: { title: 'x', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+          yaxis: { title: 'y', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg },
+          zaxis: {
+            title: 'u', color: theme.text, gridcolor: theme.grid, backgroundcolor: theme.bg,
+            range: [$zmin, $(zmax + 2 * lift)],
+          },
+        },
+        margin: { t: 40, l: 10, r: 10, b: 10 },
+        updatemenus: [{
+          type: 'buttons', direction: 'left', showactive: false,
+          x: 0, y: 0, xanchor: 'left', yanchor: 'top', pad: { t: 30 },
+          font: { color: theme.text, size: 11 }, bgcolor: theme.bg, bordercolor: theme.grid,
+          buttons: [
+            { label: 'Play', method: 'animate',
+              args: [null, { fromcurrent: true, frame: { duration: 120, redraw: true }, transition: { duration: 0 } }] },
+            { label: 'Pause', method: 'animate',
+              args: [[null], { mode: 'immediate', frame: { duration: 0, redraw: false }, transition: { duration: 0 } }] },
+          ],
+        }],
+        sliders: [{
+          active: 0,
+          x: 0.25, y: 0, len: 0.71,
+          pad: { t: 30 },
+          font: { color: theme.text, size: 10 },
+          currentvalue: { prefix: 't = ', font: { color: theme.text, size: 12 }, xanchor: 'left' },
+          bgcolor: theme.bg,
+          bordercolor: theme.grid,
+          tickcolor: theme.grid,
+          steps: sliderSteps,
+        }],
+      };
+
+      // `addFrames` is chained after `newPlot` resolves: a chart with no frames registered
+      // yet cannot animate them.
+      Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true })
+        .then(function () {
+          return Plotly.addFrames('$div_id', frames);
+        });
+
+      window.brambleRegisterPlotlyChart('$div_id', function () {
+        const t = window.bramblePlotlyTheme();
+        return {
+          'font.color': t.text,
+          'scene.xaxis.color': t.text, 'scene.xaxis.gridcolor': t.grid, 'scene.xaxis.backgroundcolor': t.bg,
+          'scene.yaxis.color': t.text, 'scene.yaxis.gridcolor': t.grid, 'scene.yaxis.backgroundcolor': t.bg,
+          'scene.zaxis.color': t.text, 'scene.zaxis.gridcolor': t.grid, 'scene.zaxis.backgroundcolor': t.bg,
+          'title.font.color': t.text,
+          'updatemenus[0].font.color': t.text, 'sliders[0].font.color': t.text,
+        };
+      });
+    })();
+    </script>
+    """
+    sizeof(html) <= 400 * 1024 ||
+        throw(ArgumentError("the plot is $(sizeof(html) ÷ 1024) KiB, over the 400 KiB a page allows: sample fewer times or use a coarser mesh"))
+    return SolutionPlot(html)
+end
+
+"""
+    line_plot(series; title = "", logy = false, xlabel = "x", ylabel = "u", width = 480,
+              height = 340)
+
+A line plot of 1D curves. `series` is a vector of `(x, y, label)` tuples, one per curve, for
+a 1D solution on its mesh points or an iteration history. `logy = true` puts `y` on a
+logarithmic axis, where the points that are not positive are left out.
+"""
+function line_plot(
+        series; title::AbstractString = "", logy::Bool = false, xlabel::AbstractString = "x",
+        ylabel::AbstractString = "u", width::Int = 480, height::Int = 340
+)
+    traces = String[]
+    for (x, y, label) in series
+        length(x) == length(y) ||
+            throw(DimensionMismatch("series \"$label\" has $(length(x)) x values and $(length(y)) y values"))
+        push!(
+            traces,
+            """
+  {
+    name: "$label",
+    x: [$(join(x, ","))],
+    y: [$(join(y, ","))],
+    mode: 'lines',
+    type: 'scatter',
+  }"""
+        )
+    end
+
+    div_id = _next_solution_plot_id()
+    title_js = isempty(title) ? "''" : "'$title'"
+
+    html = """
+    $(plotlyjs_head())
+    <div id="$div_id" data-series="$(length(series))" style="width:100%; max-width:$(width)px; height:$(height)px; margin: 1em 0;"></div>
+    <script>
+    (function () {
+      const theme = window.bramblePlotlyTheme();
+      const data = [$(join(traces, ",\n"))];
+      const layout = {
+        title: { text: $title_js, font: { color: theme.text, size: 13 } },
+        paper_bgcolor: theme.bg,
+        plot_bgcolor: theme.bg,
+        font: { color: theme.text },
+        legend: { orientation: 'h', y: -0.25, font: { color: theme.text, size: 11 } },
+        xaxis: {
+          title: { text: '$xlabel', font: { color: theme.text } },
+          color: theme.text, gridcolor: theme.grid,
+        },
+        yaxis: {
+          type: '$(logy ? "log" : "linear")', title: { text: '$ylabel', font: { color: theme.text } },
+          color: theme.text, gridcolor: theme.grid,
+        },
+        margin: { t: 40, l: 60, r: 20, b: 40 },
+      };
+      Plotly.newPlot('$div_id', data, layout, { displayModeBar: false, responsive: true });
+      window.brambleRegisterPlotlyChart('$div_id', function () {
+        const t = window.bramblePlotlyTheme();
+        return {
+          'font.color': t.text,
+          'title.font.color': t.text,
+          'legend.font.color': t.text,
+          'xaxis.color': t.text, 'xaxis.gridcolor': t.grid, 'xaxis.title.font.color': t.text,
+          'yaxis.color': t.text, 'yaxis.gridcolor': t.grid, 'yaxis.title.font.color': t.text,
         };
       });
     })();

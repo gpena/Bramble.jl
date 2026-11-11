@@ -12,15 +12,19 @@ using MaterialDocs
 # of each page, so a script's `[`name`](@ref)` resolves public-but-unexported names too.
 const LITERATE_EXAMPLES = [
     "poisson_linear.jl",
+    "boundary_layer_graded.jl",
+    "neumann_robin_poisson.jl",
+    "convection_diffusion_linear.jl",
     "poisson_polygon.jl",
     "poisson_circle.jl",
-    "poisson_nonlinear.jl",
-    "convection_diffusion_linear.jl",
+    "point_sources_flux.jl",
     "heat_equation.jl",
-    "neumann_robin_poisson.jl",
+    "heat_time_stepping.jl",
     "ghost_heat_equation.jl",
-    "elasticity_traction_2d.jl",
+    "wave_equation_2d.jl",
+    "poisson_nonlinear.jl",
     "coupled_reaction_diffusion.jl",
+    "elasticity_traction_2d.jl",
     "inverse_diffusion.jl"
 ]
 
@@ -57,35 +61,56 @@ end
 home = "Home" => "index.md"
 getting_started = "Getting started" => "getting_started.md"
 
-# Grouped by where a page sits in the workflow rather than as one flat "Tutorials" list:
-# a reader meets geometry, meshes, spaces and operators before forms, and the solver,
-# AD and backend pages after. `tutorials/backend.md` appears here and nowhere else --
-# listing a page twice is a fatal Documenter error, as is leaving one out.
-foundations = "Discrete foundations" => [
+# Reading order: tutorials teach the library in the order a computation meets it, how-to
+# guides answer one task each, and the examples run from easy to hard. A page appears here
+# once and nowhere else -- listing a page twice is a fatal Documenter error, as is leaving
+# one out.
+tutorials = "Tutorials" => [
     "tutorials/geometry.md",
     "tutorials/mesh.md",
     "tutorials/space.md",
-    "tutorials/operators.md"
-]
-forms = "Forms and assembly" => [
+    "tutorials/operators.md",
     "tutorials/form.md",
-    "tutorials/coupled_systems.md"
-]
-solvers = "Solvers and AD" => [
+    "tutorials/ghost.md",
+    "tutorials/coupled_systems.md",
     "tutorials/autodiff.md"
+]
+howto = "How-to guides" => [
+    "howto/pure_neumann.md",
+    "howto/time_dependent_data.md",
+    "howto/solvers.md",
+    "howto/backends.md",
+    "howto/plotting_export.md"
 ]
 examples = "Examples" => [
     "examples/poisson_linear.md",
+    "examples/boundary_layer_graded.md",
+    "examples/neumann_robin_poisson.md",
+    "examples/convection_diffusion_linear.md",
     "examples/poisson_polygon.md",
     "examples/poisson_circle.md",
-    "examples/poisson_nonlinear.md",
-    "examples/convection_diffusion_linear.md",
+    "examples/point_sources_flux.md",
     "examples/heat_equation.md",
-    "examples/neumann_robin_poisson.md",
+    "examples/heat_time_stepping.md",
     "examples/ghost_heat_equation.md",
-    "examples/elasticity_traction_2d.md",
+    "examples/wave_equation_2d.md",
+    "examples/poisson_nonlinear.md",
     "examples/coupled_reaction_diffusion.md",
+    "examples/elasticity_traction_2d.md",
     "examples/inverse_diffusion.md"
+]
+reference = "Reference" => [
+    "api.md",
+    "api/utilities.md",
+    "api/geometry.md",
+    "api/meshes.md",
+    "api/spaces.md",
+    "api/operators.md",
+    "api/inner_products.md",
+    "api/forms.md",
+    "api/solvers.md",
+    "api/exporters.md",
+    "api_sciml.md"
 ]
 internals = "Internals" => [
     "internals/utils.md",
@@ -93,23 +118,7 @@ internals = "Internals" => [
     "internals/mesh.md",
     "internals/space.md",
     "internals/form.md",
-    "internals/exporters.md",
     "internals/csr_solvers.md"
-]
-documentation = "Documentation" => [
-    "API reference" => [
-        "api.md",
-        "api/utilities.md",
-        "api/geometry.md",
-        "api/meshes.md",
-        "api/spaces.md",
-        "api/operators.md",
-        "api/inner_products.md",
-        "api/forms.md",
-        "api/exporters.md"
-    ],
-    "api_sciml.md",
-    internals
 ]
 
 # Every new page needs `CurrentModule = Bramble` in its `@meta` block, or its page-level
@@ -119,7 +128,7 @@ documentation = "Documentation" => [
 #     ```@meta
 #     CurrentModule = Bramble
 #     ```
-allpages = [home, getting_started, foundations, forms, solvers, examples, documentation]
+allpages = [home, getting_started, tutorials, howto, examples, reference, internals]
 
 # Every `jldoctest` in a docstring, on a page or not; a failure throws and stops the build.
 # Some call internal names bare, which no page's `CurrentModule = Bramble` reaches here.

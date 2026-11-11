@@ -5,13 +5,12 @@ CurrentModule = Bramble
 
 # API reference
 
-This reference lists the docstrings of the public names in `Bramble.jl`'s core library,
-grouped by the stage of a computation they belong to. The SciML, automatic differentiation
-and solver integrations are on [Scientific computing: SciML, AD and
-solvers](api_sciml.md). A typical program follows the pages in order. It describes the domain,
-builds a mesh on it, defines a grid space, applies difference operators, and assembles and
-solves a form. If you are new to the library, start with the tutorials and come here to look
-up a signature or an option.
+Docstrings of the exported and `public` names of the core library, grouped by stage of a
+computation. Start with the tutorials; look up a signature or an option here. The solver names are
+on [Solvers and preconditioners](api/solvers.md), and the SciML and automatic differentiation
+names on [Scientific computing: SciML, AD and solvers](api_sciml.md). Those two pages also
+document some names that are neither exported nor `public`; they are called as `Bramble.name`.
+Internals holds the private docstrings, for contributors.
 
 - [Utilities](api/utilities.md): linear algebra backends and other package-wide helpers.
 - [Geometry](api/geometry.md): sets, intervals, markers and domains, which describe where a
@@ -27,4 +26,6 @@ up a signature or an option.
   built from them.
 - [Forms](api/forms.md): building, assembling and solving bilinear and linear forms,
   including matrix-free operators, Dirichlet conditions and sparsity analysis.
+- [Solvers and preconditioners](api/solvers.md): `pde_solve`, the sparse direct solvers, and
+  the preconditioners and multigrid for iterative solves.
 - [Exporters](api/exporters.md): writing grid functions to files for visualisation.
