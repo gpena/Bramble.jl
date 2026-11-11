@@ -77,6 +77,18 @@ uₕ = element(Wₕ)
 uₕ .= pde_solve(A, F)
 nothing # hide
 
+# The solution with the grid lines drawn, then the pointwise error `uₕ - sol`: the colour
+# scale of the second plot is the error's own.
+
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+surface_plot(uₕ; title = "uₕ on the random grid", mesh_lines = true) # hide
+
+#-
+
+eₕ = element(Wₕ) # hide
+eₕ .= uₕ .- Rₕ(Wₕ, sol) # hide
+surface_plot(eₕ; title = "uₕ - sol", mesh_lines = true) # hide
+
 # The error on this one mesh, before the rates below say anything about how it shrinks.    #src
 # Bracketed away from zero as well: an exactly-zero error would mean the manufactured       #src
 # solution had been reproduced by construction rather than solved for.                      #src
@@ -159,7 +171,6 @@ end                                                                             
 # mesh, or pick a different manufactured solution, and every plot and diagnostic below
 # updates immediately.
 
-include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 poisson_interactive_widget(uₕ; title = "Linear Poisson, 2D") # hide
 
 # ## Convergence in one, two and three dimensions

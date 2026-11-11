@@ -69,6 +69,18 @@ uₕ = element(Wₕ)
 uₕ .= A \ F
 nothing # hide
 
+# The solution with the grid lines drawn, then the pointwise error `uₕ - sol`: the colour
+# scale of the second plot is the error's own.
+
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+surface_plot(uₕ; title = "uₕ on the random grid", mesh_lines = true) # hide
+
+#-
+
+eₕ = element(Wₕ) # hide
+eₕ .= uₕ .- Rₕ(Wₕ, sol) # hide
+surface_plot(eₕ; title = "uₕ - sol", mesh_lines = true) # hide
+
 @test 1.0e-4 < norm₁ₕ(uₕ .- Rₕ(Wₕ, sol)) < 1.0e-1                                           #src
 
 # The Dirichlet nodes hold the data: row replacement leaves them exactly at `sol`.          #src
@@ -148,7 +160,6 @@ coarse_to_fine[2] < coarse_to_fine[1]
 # centred stencil, raise Pe until the cell Péclet number `Pe_h` passes 1 and the grid-scale
 # oscillation appears; the upwind stencil removes it at the cost of first-order accuracy.
 
-include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
 convection_diffusion_interactive_widget(uₕ; title = "Convection-diffusion, 2D") # hide
 
 # ## Convergence with a convective term

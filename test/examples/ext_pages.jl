@@ -25,6 +25,14 @@ using ..TestUtils: _run_example_page
         _run_example_page(:heat_equation)
     end
 
+    # The time-stepping companion of the heat page. Pins the Rosenbrock solve with the
+    # analytical `tgrad` at the error window of the BDF one, that `Rodas5P` and `FBDF` agree
+    # on the time-dependent operator without a `tgrad`, and that the hand-written backward
+    # Euler loop of `assemble_add!` lands about 6e-4 from the adaptive solve.
+    @testset "Heat time stepping page" begin
+        _run_example_page(:heat_time_stepping)
+    end
+
     # Pins the Picard and manual-Newton iteration counts and errors, the type-cached
     # Newton loop and the AST-derived sparsity pattern against the tracer's, and that
     # `nonlinear_problem`'s NewtonRaphson solve agrees with the manual Newton loop to

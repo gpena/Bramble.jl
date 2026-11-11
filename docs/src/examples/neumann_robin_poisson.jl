@@ -1,9 +1,8 @@
 # # Neumann, Robin and pure Neumann boundaries
 #
 # Poisson's equation on a non-uniform grid with a flux or a mixed condition on the whole
-# boundary, solved through the public path (`gridspace` with ghost points, `constrained`,
-# `form`, `assemble`, `pde_solve`) and checked for second order. Every number and every
-# plot below comes from the code shown.
+# boundary, imposed through ghost points and `constrained`, and checked for second order.
+# Every number and every plot below comes from the code shown.
 #
 # ## Problem
 #
@@ -12,29 +11,20 @@
 # \alpha\, u + \partial_n u = h \text{ on } \partial\Omega,
 # ```
 #
-# with ``\partial_n`` the outward normal derivative and a coefficient ``\alpha \ge 0`` that
-# may change from one side of the square to the next. Three choices of ``\alpha``:
-#
-#   - Robin and Neumann: ``\alpha = 2`` on `xmin` and `ymin`, ``\alpha = 0`` (Neumann) on
-#     `xmax` and `ymax`;
-#   - Robin: ``\alpha = 2`` on `xmin` and `ymin`, ``\alpha = 1`` on `xmax` and `ymax`;
-#   - pure Neumann: ``\alpha = 0`` on every side.
-#
-# The manufactured solution is ``u(x, y) = e^{x} \cos 2y``, so ``g = 3u`` and the data
+# with ``\partial_n`` the outward normal derivative and ``\alpha \ge 0`` free to change from
+# side to side. Three choices of ``\alpha`` on `xmin`, `xmax`, `ymin`, `ymax`: Robin and
+# Neumann, ``(2, 0, 2, 0)``; Robin, ``(2, 1, 2, 1)``; pure Neumann, ``(0, 0, 0, 0)``. The
+# manufactured solution is ``u(x, y) = e^{x} \cos 2y``, so ``g = 3u`` and the data
 # ``h = \alpha u + \partial_n u`` come from its gradient.
-#
-# A pure Neumann problem fixes ``u`` only up to a constant, and the data must satisfy a
-# compatibility condition, which the manufactured data satisfy in the continuum. The solve below selects the
-# solution of discrete mean zero, and the error is measured against the exact solution
-# shifted to that same mean.
 #
 # ## One boundary relation per side
 #
-# Ghost points come first: `gridspace(Ωₕ; ghosts = :boundary)` adds one layer outside every
-# side. `constrained` then takes a function of the trial function `u` and returns one
-# `side => relation => data` entry per side. A Neumann side is `∂ₙ(u)`, a Robin side is
-# `α * u + ∂ₙ(u)`, and the data is a function of the boundary point. Each relation fixes a
-# ghost value from the interior ones, which leaves the physical nodes as the only unknowns.
+# `gridspace(Ωₕ; ghosts = :boundary)` adds one layer of ghost points outside every side.
+# `constrained` takes a function of the trial function `u` and returns one
+# `side => relation => data` entry per side: `∂ₙ(u)` on a Neumann side, `α * u + ∂ₙ(u)` on
+# a Robin side. Each relation fixes a ghost value from the interior ones, so the physical
+# nodes are the only unknowns. `assemble(a, l)` takes both forms on the constrained space,
+# so the relations' data reach the right-hand side.
 
 using Bramble
 using LinearAlgebra: dot
@@ -44,35 +34,22 @@ sol(p) = exp(p[1]) * cos(2p[2])
 ∇sol(p) = (sol(p), -2 * exp(p[1]) * sin(2p[2]))
 rhs(p) = 3 * sol(p)
 
-# The sides, their outward normals and the coordinate each normal points along:
+# Each side with its outward normal and the coordinate the normal points along:
 
-const SIDES = (:xmin, :xmax, :ymin, :ymax)
-const NORMALS = (-1.0, 1.0, -1.0, 1.0)
-const AXES = (1, 1, 2, 2)
-
-# The data of the relation on side `j` is ``\alpha u + \partial_n u`` evaluated on the
-# exact solution. A side with ``\alpha = 0`` carries the bare flux `∂ₙ(u)`:
+const SIDES = ((:xmin, -1.0, 1), (:xmax, 1.0, 1), (:ymin, -1.0, 2), (:ymax, 1.0, 2))
 
 function side_relation(u, α, j)
-    data = p -> α[j] * sol(p) + NORMALS[j] * ∇sol(p)[AXES[j]]
+    side, normal, axis = SIDES[j]
+    data = p -> α[j] * sol(p) + normal * ∇sol(p)[axis]
     relation = iszero(α[j]) ? ∂ₙ(u) : α[j] * u + ∂ₙ(u)
-    return SIDES[j] => relation => data
+    return side => relation => data
 end
-
-# ## Assembling and solving
-#
-# `assemble(a, l)` takes the bilinear and the linear form together on the constrained
-# space, so the relations' data reach the right-hand side. When ``\alpha`` vanishes
-# on every side the matrix is singular, its null space the constants. `pde_solve` then
-# takes `mean_zero`, the vector of cell measures that is the discrete integral, and solves
-# the system bordered by that constraint.
 
 function solve_case(Ωₕ, α)
     Cₕ = constrained(gridspace(Ωₕ; ghosts = :boundary),
         u -> ntuple(j -> side_relation(u, α, j), 4))
     A, F = assemble(form(Cₕ, Cₕ, (u, v) -> innerₕ(-1.0 * Δₕ(u), v)),
         form(Cₕ, v -> innerₕ(rhs, v)))
-
     Wₕ = gridspace(Ωₕ)
     uₕ = element(Wₕ)
     uₑ = Rₕ(Wₕ, sol)
@@ -85,6 +62,30 @@ function solve_case(Ωₕ, α)
     end
     return uₕ, uₑ
 end
+
+# The Robin and Neumann case on one random grid, then the pointwise error:
+
+Random.seed!(20260903)
+Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+uₕ, uₑ = solve_case(mesh(Ω, (17, 17), (false, false)), (2.0, 0.0, 2.0, 0.0))
+include(joinpath(@__DIR__, "..", "solution_plot.jl")) # hide
+surface_plot(uₕ; title = "uₕ on the random grid", mesh_lines = true) # hide
+
+#-
+
+eₕ = element(space(uₕ)) # hide
+eₕ .= uₕ .- uₑ # hide
+surface_plot(eₕ; title = "uₕ - u", mesh_lines = true) # hide
+
+# A pure Neumann problem fixes ``u`` only up to a constant, and the data must satisfy a
+# compatibility condition, which the manufactured data satisfy in the continuum. The matrix
+# is then singular, its null space the constants. `solve_case` passes `pde_solve` the
+# keyword `mean_zero`, the vector of cell measures that is the discrete integral, which
+# solves the system bordered by that constraint. The error is measured against the exact
+# solution shifted to the same mean. The pure Neumann solution on the grid above:
+
+uₙ, _ = solve_case(mesh(space(uₕ)), (0.0, 0.0, 0.0, 0.0)) # hide
+surface_plot(uₙ; title = "pure Neumann, mean zero", mesh_lines = true) # hide
 
 # The error is the discrete ``H^1`` norm `norm₁ₕ`, and the grid is a random non-uniform
 # one refined in place by [`iterative_refinement!`](@ref), so each level is the same
