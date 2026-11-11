@@ -24,6 +24,10 @@ counter-clockwise. Coordinates are converted to the promoted floating-point type
 
 A vertex in the middle of a straight edge is kept as a vertex.
 
+The vertices take no derivative: ForwardDiff and Enzyme both throw. Build the mesh of a polygon
+domain outside a function Enzyme differentiates, since a mesh built inside it fails; data and
+coefficients on the resulting space differentiate under ForwardDiff and Enzyme reverse mode.
+
 The area is zero up to rounding when |2A| ≤ 8nεL², with 2A the shoelace sum, n the vertex
 count, ε the epsilon of the coordinate type and L the larger side of the bounding box.
 

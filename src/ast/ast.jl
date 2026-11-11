@@ -156,6 +156,10 @@ assemble the same load vector. A vector with a real element type (`[0.2, 0.7]`, 
 or an untyped `Any[0.2, 0.7]` holding only reals, is one point, here the 2D point `(0.2, 0.7)`;
 two 1D points are spelt `dirac([(0.2,), (0.7,)])`. A list of points may mix tuples and vectors.
 
+The `strength` differentiates under ForwardDiff and Enzyme. The location is converted to
+`Float64`, so ForwardDiff cannot differentiate it and throws, while Enzyme differentiates it in
+forward and reverse mode.
+
 # Mathematical formulation
 A point source represents the continuous linear functional:
 ```math
