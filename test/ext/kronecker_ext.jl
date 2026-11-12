@@ -8,6 +8,7 @@ using LinearAlgebra: LinearAlgebra, mul!, issymmetric, ldiv!, lu, norm
 using SparseArrays: SparseMatrixCSC, findnz, nnz, sparse
 using LinearSolve: LinearProblem, solve, KrylovJL_GMRES
 using Random
+using ForwardDiff: ForwardDiff
 # `CpuPolyester` meshes below; test/ext/polyester_ext.jl, next in the ext group, loads it too.
 using Polyester
 using ..TestUtils: ZeroBasedVector, _graded_mesh
@@ -617,6 +618,93 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
             dirichlet = :boundary)
         a = form(Wₕ, Wₕ, L(Ref(2.0)))
         @test fdm_solve(a, F) ≈ Matrix(assemble(a)) \ F
+    end
+
+    # `ForwardDiff` through the right-hand side (gpena/Bramble.jl#1167): the solve is
+    # linear in `F`, so a `Dual` load is solved as its value and each partial against the
+    # one factorization. The derivative is the exact solve of the direction, `A \ G`, and an
+    # operator that carries a `Dual` (a coefficient) is refused, naming the call that
+    # differentiates.
+    @testset "fdm_solve: ForwardDiff in F" begin
+        L(c) = (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v))
+        Lns(c) = (u, v) -> L(c)(u, v) + innerₕ(D₋ₓ(u), v)
+        refused(f) =
+            try
+                f()
+                "returned a value"
+            catch e
+                e isa ArgumentError ? sprint(showerror, e) : "not an ArgumentError: $e"
+            end
+        asked(msg) = occursin("fdm_solve", msg) && occursin("Dual", msg) &&
+                     occursin("pde_solve(assemble(a, l)..., F)", msg)
+        rng = MersenneTwister(KRON_EXT_SEED + 11)
+        Wₕ = gridspace(_graded_mesh((11, 8)))
+        n = ndofs(Wₕ)
+        F₀, G, w = rand(rng, n), rand(rng, n), rand(rng, n)
+        boundary = Bramble._combined_mask(mesh(Wₕ), (:boundary,))
+        routes = ("symmetric" => L, "Schur" => Lns)
+        for (name, mk) in routes, dir in (nothing, :boundary)
+
+            a = form(Wₕ, Wₕ, mk(1.3))
+            F, D = copy(F₀), copy(G)
+            dir === :boundary && (F[boundary] .= 0; D[boundary] .= 0)
+            A = Matrix(assemble(a; dirichlet = dir))
+            x = fdm_solve(a, F; dirichlet = dir)
+            # The value and the derivative of every entry, against the solve of the direction.
+            J = ForwardDiff.jacobian(q -> fdm_solve(a, F .+ q[1] .* D; dirichlet = dir), [0.0])
+            @test vec(J) ≈ A \ D
+            @test ForwardDiff.derivative(q -> sum(w .* fdm_solve(a, F .+ q .* D; dirichlet = dir)),
+                0.0) ≈ sum(w .* (A \ D))
+            # Several partials at once, and a nested tag: `d/dq` of `S(q) = Σ x(q)²` with
+            # `x(q) = (1 + q) x₀` is `2(1 + q) S₀` and `2 S₀`.
+            S = sum(abs2, x)
+            g(q) = sum(abs2, fdm_solve(a, (1 .+ q) .* F; dirichlet = dir))
+            @test ForwardDiff.derivative(g, 0.4) ≈ 2.8 * S
+            @test ForwardDiff.derivative(q -> ForwardDiff.derivative(g, q), 0.4) ≈ 2 * S
+            Jp = ForwardDiff.jacobian(
+                v -> fdm_solve(a, F .+ v[1] .* D .+ v[2] .* F; dirichlet = dir), [0.0, 0.0])
+            @test Jp ≈ hcat(A \ D, x)
+            # The kernel operator takes the same load, and the plain solve is unchanged.
+            K = kronecker_operator(a)
+            dir === nothing && @test ForwardDiff.derivative(
+                q -> sum(w .* fdm_solve(K, F .+ q .* D)), 0.0) ≈ sum(w .* (A \ D))
+            @test fdm_solve(a, F; dirichlet = dir) == x
+
+            # A `Dual` in the coefficient is refused, in every entry point.
+            ca = q -> form(Wₕ, Wₕ, mk(q))
+            for call in (q -> fdm_solve(ca(q), F; dirichlet = dir),
+                q -> fdm_solve(kronecker_operator(ca(q)), F))
+                msg = refused(() -> ForwardDiff.derivative(q -> sum(call(q)), 1.3))
+                @test asked(msg)
+            end
+        end
+    end
+
+    # The same on a ghost-space form (`GhostBilinearForm`): Robin relations on every facet.
+    @testset "fdm_solve: ForwardDiff, ghost forms" begin
+        Ωₕ = _graded_mesh((11, 8))
+        C = constrained(gridspace(Ωₕ; ghosts = :boundary),
+            u -> (:xmin => 2.0 * u + ∂ₙ(u) => 0.0, :xmax => 0.5 * u + 3.0 * ∂ₙ(u) => 1.0,
+                :ymin => u + ∂ₙ(u) => 0.0, :ymax => 4.0 * u + ∂ₙ(u) => 0.0))
+        rng = MersenneTwister(KRON_EXT_SEED + 12)
+        n = ndofs(C)
+        F₀, G, w = rand(rng, n), rand(rng, n), rand(rng, n)
+        a = form(C, C, (u, v) -> innerₕ(u, v) + 1.3 * inner₊(∇ₕ(u), ∇ₕ(v)))
+        A = Matrix(assemble(a))
+        @test ForwardDiff.derivative(q -> sum(w .* fdm_solve(a, F₀ .+ q .* G)), 0.0) ≈
+              sum(w .* (A \ G))
+        S = sum(abs2, fdm_solve(a, F₀))
+        @test ForwardDiff.derivative(
+            q -> sum(abs2, fdm_solve(a, (1 .+ q) .* F₀)), 0.4) ≈ 2.8 * S
+        ca(q) = form(C, C, (u, v) -> innerₕ(u, v) + q * inner₊(∇ₕ(u), ∇ₕ(v)))
+        err = try
+            ForwardDiff.derivative(q -> sum(fdm_solve(ca(q), F₀)), 1.3)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("pde_solve(assemble(a, l)..., F)", err isa ArgumentError ? err.msg : "")
     end
 
     # gpena/Bramble.jl#662: a stored zero in a factor is absent to the classification, at

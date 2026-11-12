@@ -1149,10 +1149,28 @@ function _fdm_apply(Q::NTuple{D}, Λ::AbstractArray{T, D}, F::AbstractVector, di
     return vec(Y)
 end
 
+# An operator element type that is neither `Float32`, `Float64` nor complex (the complex one
+# has its own refusal in `_fdm_factorize`) carries a `Dual`, `BigFloat`..., which the real
+# factorization buffers cannot hold: refused by name, with the call that differentiates.
+@noinline function _throw_fdm_operator_eltype(::Type{T}) where {T}
+    throw(ArgumentError("fdm_solve: the operator has element type $T, and the factorization " *
+                        "stores Float32 or Float64 only; to differentiate with respect to a " *
+                        "coefficient or the mesh, solve with `pde_solve(assemble(a, l)..., F)`"))
+end
+
+# The load is split into the parts it solves by (`Bramble._solve_by_parts`): a `Dual` load is
+# solved as its value and each partial, all through the one `Float64` factorization, and a
+# plain load is `_fdm_solve_part` itself.
 function _fdm_solve_core(K::KroneckerLinearOperator{T, D}, F::AbstractVector, dirichlet) where {T, D}
     length(F) == K.n || _throw_fdm_length_mismatch(K.n, length(F))
     _fdm_real_rhs(F) || _throw_fdm_complex("fdm_solve", eltype(F))
+    T <: Union{Float32, Float64, Complex} || _throw_fdm_operator_eltype(T)
     f = _fdm_factorize(K, dirichlet)
+    return Bramble._solve_by_parts(b -> _fdm_solve_part(K, f, b, dirichlet), F)
+end
+
+function _fdm_solve_part(K::KroneckerLinearOperator{T, D}, f, F::AbstractVector,
+        dirichlet) where {T, D}
     F isa Array && return ldiv!(Vector{T}(undef, K.n), f, F)
     # The Schur route is host-only: one copy of `F` to the host and one of `x` back.
     f isa _SchurFactorization &&
@@ -1230,6 +1248,9 @@ alone; the message then says so, and the same form assembled in Float64 may be s
     the Kronecker operator's element type complex (a zero imaginary part included). Solve a
     separable one with `kronecker_operator(a)` and a Krylov solver.
   - `ArgumentError`: `dirichlet` is neither `nothing` nor `:boundary`.
+  - `ArgumentError`: `a`'s Kronecker operator has an element type other than `Float32`
+    or `Float64` (a `ForwardDiff.Dual` coefficient or mesh), naming `pde_solve(assemble(a,
+    l)..., F)` as the call that differentiates.
   - `ArgumentError`: `F` holds a complex value; solve its real and imaginary parts
     separately.
   - `DimensionMismatch`: `F`'s length does not match `a`'s number of degrees of freedom.
@@ -1268,7 +1289,8 @@ Dirichlet. `K` must be Laplacian-like, as that method describes.
 
   - `ArgumentError` saying `fdm_solve` does not support the operator, with the reason,
     when `K` is not Laplacian-like, is a composite space's block operator, is singular, or
-    has a complex eltype (as the `BilinearForm` method describes, Float32 included).
+    has a complex eltype (as the `BilinearForm` method describes, Float32 included), or
+    an eltype other than `Float32` or `Float64` (a `ForwardDiff.Dual`).
   - `ArgumentError`: `F` holds a complex value; solve its real and imaginary parts
     separately.
   - `DimensionMismatch`: `F`'s length does not match `K`'s size.
