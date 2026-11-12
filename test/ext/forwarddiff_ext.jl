@@ -219,7 +219,10 @@ end
 
     # The `Float64` route is unchanged by the load split: the same result type, and an
     # `ldiv!` into a `VectorElement` allocates what the backend's own `ldiv!` does, nothing
-    # for SuiteSparse and Accelerate.
+    # for SuiteSparse and Accelerate. A sample can count an allocation made outside the
+    # call (another thread's, or a finalizer's), seen once as 544 B in a two-thread run,
+    # so each side takes the least of three samples, which an allocation of every call
+    # still sets.
     @testset "Float64 kept factor unchanged" begin
         for solver in fact_solvers
             fact = sparse_factorize(A0; solver = solver)
@@ -227,8 +230,8 @@ end
             u = element(Wm)
             @test @inferred(ldiv!(u, fact, b)) === u
             @test parent(u) ≈ x0 rtol = 1.0e-12
-            bytes = alloc_test(ldiv!, u, fact, b)
-            @test bytes == alloc_test(ldiv!, parent(u), fact, b)
+            bytes = minimum(alloc_test(ldiv!, u, fact, b) for _ in 1:3)
+            @test bytes == minimum(alloc_test(ldiv!, parent(u), fact, b) for _ in 1:3)
             solver in (:default, :suitesparse, :accelerate) && @test alloc_ok(bytes)
         end
     end
