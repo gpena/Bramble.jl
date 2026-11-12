@@ -36,7 +36,7 @@ function kronecker_operator(a::GhostBilinearForm{D}) where {D}
     Ωp = _padded(G)
     spaces = ntuple(d -> _ghost_kron_axis_space(G, d), Val(D))
     mass = ntuple(Val(D)) do d
-        M = Ev[d]' * Diagonal(weights(spaces[d], Innerh())) * Eu[d]
+        M = transpose(Ev[d]) * Diagonal(weights(spaces[d], Innerh())) * Eu[d]
         Diagonal([M[i, i] for i in axes(M, 1)])
     end
     seen = ntuple(_ -> Any[], Val(D))
@@ -55,7 +55,7 @@ function kronecker_operator(a::GhostBilinearForm{D}) where {D}
             # `_kron_cached!` returns a factor of the type of the one it is given, which
             # the assertion tells inference, as `seen` holds factors of any type.
             factors = ntuple(Val(D)) do d
-                F = _kron_factor(sparse(Ev[d]' * padded[d] * Eu[d]), mass[d])
+                F = _kron_factor(sparse(transpose(Ev[d]) * padded[d] * Eu[d]), mass[d])
                 return _kron_cached!(seen[d], F)::typeof(F)
             end
             T = promote_type(T, map(eltype, factors)...)
