@@ -9,6 +9,7 @@ using Polyester
 using ForwardDiff
 using SuiteSparse
 using Bramble: CpuSerial, CpuThreaded, CpuPolyester
+using Kronecker: Kronecker
 import DifferentiationInterface as DI
 using ..TestUtils: _fd, _have
 
@@ -656,6 +657,154 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                     @test DI.gradient(f, ad, p0) ≈ g rtol=1e-8
                 end
             end
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
+    # `fdm_solve` in its right-hand side (#1167). The form is built inside the differentiated
+    # function, as a user writes it, so the rule sits on `fdm_solve` and not on a call below
+    # it that Enzyme would enter first. Uniform and graded meshes, with and without
+    # `dirichlet`, both modes. A coefficient or mesh that moves is refused by name.
+    @testset "Enzyme: fdm_solve rules" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            rev = Enzyme.set_runtime_activity(Enzyme.Reverse)
+            fwd = Enzyme.set_runtime_activity(Enzyme.Forward)
+            ez(m) = DI.AutoEnzyme(; mode = Enzyme.set_runtime_activity(m),
+                function_annotation = Enzyme.Const)
+
+            for (dims, unif) in (((17, 17), true), ((9, 9), false)),
+                dir in (nothing, :boundary)
+
+                Wf = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                           Bramble.interval(0.0, 1.0)),
+                    dims, (unif, unif)))
+                nf = ndofs(Wf)
+                # `F` is zero on the boundary under `dirichlet`, as `fdm_solve` requires.
+                edge = falses(dims)
+                edge[[1, end], :] .= true
+                edge[:, [1, end]] .= true
+                bnd = dir === nothing ? Int[] : findall(vec(edge))
+                F₀ = [1.0 + sin(i) for i in 1:nf]
+                F₀[bnd] .= 0
+                Ḟ1 = [cos(k) for k in 1:nf]
+                Ḟ1[bnd] .= 0
+                Ḟ2 = [sin(3k) for k in 1:nf]
+                Ḟ2[bnd] .= 0
+                w = [sin(0.3k) + 0.1 for k in 1:nf]
+                af(c) = form(Wf, Wf, (U, V) -> c * inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V))
+                a = af(1.3)
+                kw = dir === nothing ? (;) : (; dirichlet = dir)
+                A = Matrix(assemble(a))
+                u₀ = fdm_solve(a, F₀; kw...)
+                # `F̄ = A⁻ᵀ w`, zero on the boundary under `dirichlet`: the interior solve is
+                # embedded back with zero, whatever `F` holds there.
+                intr = setdiff(1:nf, bnd)
+                F̄ref = zeros(nf)
+                F̄ref[intr] = A[intr, intr]' \ w[intr]
+
+                # The form built inside.
+                inside(F) = sum(w .* fdm_solve(af(1.3), F; kw...))
+                solve_in(F) = fdm_solve(af(1.3), F; kw...)
+                # The form built outside, constant.
+                outside(F) = sum(w .* fdm_solve(a, F; kw...))
+                @test first(Enzyme.gradient(rev, Enzyme.Const(inside), F₀)) ≈ F̄ref rtol=1e-8
+                @test first(Enzyme.gradient(rev, Enzyme.Const(outside), F₀)) ≈ F̄ref rtol=1e-8
+
+                # The cotangent adds to what `F̄` holds, the primal load is left alone, and a
+                # load used twice sums its two pullbacks.
+                Fd = fill(0.5, nf)
+                F = copy(F₀)
+                Enzyme.autodiff(rev, Enzyme.Const(inside), Enzyme.Active,
+                    Enzyme.Duplicated(F, Fd))
+                @test Fd ≈ 0.5 .+ F̄ref rtol=1e-8
+                @test F == F₀
+                twice(F) = sum(w .* fdm_solve(a, F; kw...)) + sum(fdm_solve(a, F; kw...))
+                Fd = zeros(nf)
+                Enzyme.autodiff(rev, Enzyme.Const(twice), Enzyme.Active,
+                    Enzyme.Duplicated(copy(F₀), Fd))
+                F̄two = zeros(nf)
+                F̄two[intr] = A[intr, intr]' \ (w[intr] .+ 1)
+                @test Fd ≈ F̄two rtol=1e-8
+                # No cotangent reaches a `Const` load.
+                @test Enzyme.autodiff(rev, Enzyme.Const(outside), Enzyme.Active,
+                    Enzyme.Const(F₀)) isa Tuple
+
+                # Forward: the tangent is the same solve of `Ḟ`, a `Const` load has none, and
+                # a batch is refused by name, as Enzyme aborts on a batched call to a rule
+                # whose return type is not concrete.
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve_in), Enzyme.Duplicated,
+                    Enzyme.Duplicated(copy(F₀), Ḟ1)))
+                @test u̇ ≈ fdm_solve(a, Ḟ1; kw...) rtol=1e-10
+                @test only(Enzyme.autodiff(fwd, Enzyme.Const(solve_in), Enzyme.Duplicated,
+                    Enzyme.Const(F₀))) == zeros(nf)
+                @test_throws ArgumentError "batched" Enzyme.autodiff(fwd,
+                    Enzyme.Const(solve_in), Enzyme.BatchDuplicated,
+                    Enzyme.BatchDuplicated(copy(F₀), (Ḟ1, Ḟ2)))
+                @test_throws ArgumentError "batched" Enzyme.autodiff(rev,
+                    Enzyme.Const(inside), Enzyme.Active,
+                    Enzyme.BatchDuplicated(copy(F₀), (zeros(nf), zeros(nf))))
+
+                # The gradient of a quadratic loss in a scaled load, through DI as a user
+                # writes it: the exact derivative is `2(1 + q) S`.
+                S = sum(abs2, u₀)
+                for m in (Enzyme.Reverse, Enzyme.Forward)
+                    @test only(DI.gradient(
+                        q -> sum(abs2, fdm_solve(af(1.3), (1 + q[1]) .* F₀; kw...)),
+                        ez(m), [0.4])) ≈ 2.8 * S rtol=1e-8
+                    # A coefficient that moves is refused, naming both calls.
+                    err = try
+                        DI.gradient(q -> sum(abs2, fdm_solve(af(q[1]), F₀; kw...)), ez(m), [1.3])
+                        nothing
+                    catch e
+                        e
+                    end
+                    @test err isa ArgumentError
+                    msg = err isa ArgumentError ? err.msg : ""
+                    @test occursin("fdm_solve", msg) && occursin("pde_solve(assemble(a, l)..., F)", msg)
+                end
+            end
+
+            # A form with an advection term takes the generalised Schur route, whose system is
+            # not symmetric: forward solves the tangent, and reverse is refused by name, since
+            # `fdm_solve(a, ū)` is not its adjoint.
+            Wc = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                       Bramble.interval(0.0, 1.0)),
+                (9, 9), (false, false)))
+            nc = ndofs(Wc)
+            adv = form(Wc, Wc, (U, V) -> innerₕ(U, V) + inner₊(∇ₕ(U), ∇ₕ(V)) +
+                                         innerₕ(Bramble.D₋ₓ(U), V))
+            Aadv = Matrix(assemble(adv))
+            Fc = [1.0 + sin(i) for i in 1:nc]
+            Ḟc = [cos(k) for k in 1:nc]
+            @test maximum(abs, Aadv \ Ḟc - Aadv' \ Ḟc) > 1e-3
+            adv_solve(F) = fdm_solve(adv, F)
+            @test only(Enzyme.autodiff(fwd, Enzyme.Const(adv_solve), Enzyme.Duplicated,
+                Enzyme.Duplicated(copy(Fc), Ḟc))) ≈ Aadv \ Ḟc rtol=1e-8
+            @test_throws ArgumentError "Schur" Enzyme.autodiff(rev,
+                Enzyme.Const(F -> sum(adv_solve(F))), Enzyme.Active,
+                Enzyme.Duplicated(copy(Fc), zeros(nc)))
+
+            # A ghost-space form: forward and reverse through the same rules.
+            Cg = constrained(gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                                   Bramble.interval(0.0, 1.0)),
+                    (9, 8), (false, false)); ghosts = :boundary),
+                u -> (:xmin => 2.0 * u + ∂ₙ(u) => 0.0, :xmax => 0.5 * u + 3.0 * ∂ₙ(u) => 1.0,
+                    :ymin => u + ∂ₙ(u) => 0.0, :ymax => 4.0 * u + ∂ₙ(u) => 0.0))
+            ng = ndofs(Cg)
+            ag = form(Cg, Cg, (u, v) -> innerₕ(u, v) + 1.3 * inner₊(∇ₕ(u), ∇ₕ(v)))
+            Ag = Matrix(assemble(ag))
+            Fg = [1.0 + sin(i) for i in 1:ng]
+            Ḟg = [cos(k) for k in 1:ng]
+            wg = [sin(0.3k) + 0.1 for k in 1:ng]
+            ghost_solve(F) = fdm_solve(ag, F)
+            @test only(Enzyme.autodiff(fwd, Enzyme.Const(ghost_solve), Enzyme.Duplicated,
+                Enzyme.Duplicated(copy(Fg), Ḟg))) ≈ Ag \ Ḟg rtol=1e-8
+            Fd = zeros(ng)
+            Enzyme.autodiff(rev, Enzyme.Const(F -> sum(wg .* ghost_solve(F))), Enzyme.Active,
+                Enzyme.Duplicated(copy(Fg), Fd))
+            @test Fd ≈ Ag' \ wg rtol=1e-8
         else
             @test_skip "Enzyme not in this environment"
         end

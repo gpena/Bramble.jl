@@ -409,3 +409,134 @@ function EnzymeRules.reverse(
 ) where {RT}
     return (nothing,)
 end
+
+# The rules for `fdm_solve` in its right-hand side (#1167).
+#
+# Enzyme enters the operator build (`_kron_factor`) and the factorization's `Union` and stops
+# with `IllegalTypeAnalysisException`, so the rules sit on `fdm_solve`, the call the user
+# writes, and keep both out. `fdm_solve(a, F)` is linear in `F`: each lane's tangent is
+# `u̇ = fdm_solve(a, Ḟ)`, and the pullback `F̄ += A⁻ᵀ ū`. The symmetric route has `A⁻ᵀ = A⁻¹`,
+# and with `dirichlet = :boundary` the boundary entries of the solution are zero whatever `F`,
+# so `fdm_solve(a, ū)` is the adjoint, zero there too. The generalised Schur route (advection
+# terms) is not symmetric, so reverse refuses it and forward needs no transpose. The form or
+# operator is a constant. Its coefficients and mesh are not differentiated, and a shadow that
+# is not the primal is refused, as `fdm_solve` over a `Dual` operator is.
+
+const _FDMOperand = Union{Bramble.BilinearForm, Bramble.GhostBilinearForm}
+
+# A form built inside the differentiated function holds a fresh `_AssemblyCache`, whose fields
+# are integers and a copy of the form's own AST, used only to recognise it again: no value
+# `assemble` reads. Enzyme gives that fresh heap object a shadow, so a form of constant
+# coefficients reaches a rule as an argument whose floats are constant and whose roots are not,
+# and Enzyme stops with `CallingConventionMismatchError` before any rule runs. The cache is
+# inactive so such a form is a `Const`. A coefficient that moves still gives the form a shadow
+# through its AST.
+EnzymeRules.inactive_type(::Type{<:Bramble._AssemblyCache}) = true
+
+@noinline function _throw_active_operator()
+    throw(
+        ArgumentError(
+        "fdm_solve: the form or operator has a shadow, and Bramble's Enzyme rule " *
+        "differentiates `fdm_solve` in its right-hand side only, so the derivative with " *
+        "respect to a coefficient or the mesh would be silently dropped; to differentiate " *
+        "with respect to it, solve with `pde_solve(assemble(a, l)..., F)`",
+    ),
+    )
+end
+
+@noinline function _throw_schur_adjoint()
+    throw(
+        ArgumentError(
+        "fdm_solve: Bramble's Enzyme rule does not differentiate in reverse mode a form " *
+        "with a non-symmetric term (advection), whose solve takes the generalised Schur " *
+        "route and has no adjoint here. Use forward mode, or differentiate " *
+        "`pde_solve(assemble(a, l)..., F)`.",
+    ),
+    )
+end
+
+# The route `fdm_solve` takes is the factorization's type, internal to `BrambleKroneckerExt`.
+_fdm_symmetric_route(f) = nameof(typeof(f)) !== :_SchurFactorization
+
+# Forward mode is width 1. `fdm_solve` infers a `Vector` of unknown element type (the
+# operator's `T` is not in the form's type), and Enzyme asserts in LLVM, aborting the process,
+# when it builds a batched forward call to a rule whose return type is not concrete. A wider
+# batch reaches the second method, which refuses by name.
+@noinline function _throw_batched_forward(width)
+    throw(
+        ArgumentError(
+        "Bramble's Enzyme rule for `fdm_solve` does not support batched (vector-mode) " *
+        "forward differentiation: got width $(width). Differentiate one direction at a " *
+        "time.",
+    ),
+    )
+end
+
+function EnzymeRules.forward(
+        config::EnzymeRules.FwdConfigWidth{1},
+        ::Const{typeof(Bramble.fdm_solve)},
+        ::Type{RT},
+        a::Annotation{<:_FDMOperand},
+        F::Annotation{<:AbstractVector};
+        kwargs...
+) where {RT}
+    _active_shadow(a, 1) && _throw_active_operator()
+    u = Bramble.fdm_solve(a.val, F.val; kwargs...)
+    RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
+    Ḟ = _rank_one_tangent(F.val, _lane(F, 1))
+    u̇ = Ḟ === nothing ? zero(u) : Bramble.fdm_solve(a.val, Ḟ; kwargs...)
+    return _forward_result(config, RT, u, u̇)
+end
+
+function EnzymeRules.forward(
+        config::FwdConfig,
+        ::Const{typeof(Bramble.fdm_solve)},
+        ::Type,
+        a::Annotation{<:_FDMOperand},
+        F::Annotation{<:AbstractVector};
+        kwargs...
+)
+    return _throw_batched_forward(EnzymeRules.width(config))
+end
+
+function EnzymeRules.augmented_primal(
+        config::RevConfig,
+        ::Const{typeof(Bramble.fdm_solve)},
+        ::Type{RT},
+        a::Annotation{<:_FDMOperand},
+        F::Annotation{<:AbstractVector};
+        kwargs...
+) where {RT}
+    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    _active_shadow(a, 1) && _throw_active_operator()
+
+    u = Bramble.fdm_solve(a.val, F.val; kwargs...)
+    # The adjoint is the same solve only on the symmetric route; the check factors once more,
+    # and only when a cotangent reaches `F`.
+    _has_shadow(F) && !_fdm_symmetric_route(Bramble.fdm_factorize(a.val; kwargs...)) &&
+        _throw_schur_adjoint()
+    ū = zero(u)
+
+    primal = EnzymeRules.needs_primal(config) ? u : nothing
+    shadow = EnzymeRules.needs_shadow(config) ? ū : nothing
+    # `fdm_solve` infers a `Vector` of unknown element type, so `RT` is not concrete and the
+    # return must be built from it.
+    return EnzymeRules.augmented_rule_return_type(config, RT)(primal, shadow, ū)
+end
+
+function EnzymeRules.reverse(
+        config::RevConfig,
+        ::Const{typeof(Bramble.fdm_solve)},
+        ::Type{RT},
+        tape,
+        a::Annotation{<:_FDMOperand},
+        F::Annotation{<:AbstractVector};
+        kwargs...
+) where {RT}
+    ū = tape
+    # `λ` is read before `ū` is cleared, and `F̄` is a different array.
+    λ = _has_shadow(F) ? Bramble.fdm_solve(a.val, ū; kwargs...) : nothing
+    fill!(ū, zero(eltype(ū)))
+    λ === nothing || (F.dval .+= λ)
+    return (nothing, nothing)
+end
