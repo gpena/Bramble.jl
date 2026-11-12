@@ -19,8 +19,9 @@ module ExtEnzymeRelationsTests
 # mode (#1176). `Bramble._dense_block_solve` holds that LU and has rules of its own; its
 # cells check them on blocks of two and three, then through `constrained`.
 #
-# A composite of constrained spaces is not pinned: full reverse `constrained` on a composite
-# fails with an `EnzymeInternalError` in `_relation_rows`, which the rule does not touch.
+# On a composite, `constrained(W × W, …)` builds the rows of all components in one pass.
+# Reverse mode stopped there with an `EnzymeInternalError` (#1180), constant relations too;
+# the composite cells check it with constant relations and with a datum on one component.
 #
 # Enzyme is not in test/Project.toml: load it first, through a temporary environment
 # (test/ext/enzyme_policy_cases.jl says how). Without it the file runs nothing, and with it
@@ -121,6 +122,24 @@ function _conormal_loss(W)
     return f
 end
 
+# The loss of `constrained(W × W, …)`: the closure of relations on both components, the
+# datum on `:xmax` of the first `p[1]` (`:data`), or every relation constant and the closure
+# scaled by `p[1]^2` (`:constant`).
+function _composite_loss(W, what::Symbol)
+    function f(p)
+        g = what === :data ? p[1] : 1.0
+        C = constrained(W × W,
+            u -> (:xmin => ∂ₙ(u(1)) => 0.0, :xmax => 2.0 * u(1) + ∂ₙ(u(1)) => g,
+                :ymin => u(1) => 0.0, :ymax => ∂ₙ(u(1)) => 1.0,
+                :xmin => ∂ₙ(u(2)) => 0.0, :xmax => ∂ₙ(u(2)) => 1.0,
+                :ymin => u(2) => 0.0, :ymax => ∂ₙ(u(2)) => 0.5))
+        E, d = Bramble.closure(C)
+        s = sum(abs2, nonzeros(E)) + sum(abs2, d)
+        return what === :constant ? p[1]^2 * s : s
+    end
+    return f
+end
+
 @testset verbose=true "constrained relations, Enzyme (#1153)" begin
     if RUN_ENZYME
         W = gridspace(ghost_mesh(CpuSerial(), (7, 6)); ghosts = (:xmin, :xmax, :ymax))
@@ -187,6 +206,13 @@ end
         @testset "datum of a captured number, reverse" begin
             f = _loss(W, :data; datum = g -> (x -> g * x[2]))
             err, ref = _enzyme_vs_forwarddiff(f, Enzyme.Reverse)
+            @test abs(only(ref)) > 1e-6
+            @test err < TOL
+        end
+
+        cells = ((:constant, modes[1]...), (:data, modes[1]...), (:data, modes[2]...))
+        @testset "composite, $what, $mname (#1180)" for (what, mname, mode) in cells
+            err, ref = _enzyme_vs_forwarddiff(_composite_loss(W, what), mode)
             @test abs(only(ref)) > 1e-6
             @test err < TOL
         end

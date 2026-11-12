@@ -693,12 +693,7 @@ function _relation_rows(P, comps::Tuple, rels::Tuple; onesided = ())
     isempty(rels) && return spzeros(T, 0, ndofs(P)), T[], Tuple{Int, Int}[], Int[]
     ghosts, rel = Tuple{Int, Int}[], Int[]
     keys = map(r -> (r.c, r.d, r.s), rels)
-    for (c, (G, _)) in enumerate(comps), g in 1:nghosts(G)
-
-        _, d, side = boundary_node(G, g)
-        i = findfirst(k -> k[1] == c && k[2] == d && _GHOST_SIDES[k[3]] === side, keys)
-        i === nothing || (push!(ghosts, (c, g)); push!(rel, i))
-    end
+    _relation_ghosts!(ghosts, rel, comps, keys, 1)
     blocks = map(r -> _assemble_relation(P, r), rels)
     rows, cols, vals = Int[], Int[], promote_type(map(x -> eltype(first(x)), blocks)...)[]
     Tb = promote_type(eltype(vals), map(x -> eltype(last(x)), blocks)...)
@@ -723,6 +718,21 @@ function _relation_rows(P, comps::Tuple, rels::Tuple; onesided = ())
     return sparse(rows, cols, vals, length(ghosts), ndofs(P)), b, ghosts, rel
 end
 
+# Pushes to `ghosts` and `rel` the ghosts of each component of `comps`, the first numbered
+# `c`, that a relation of `keys` eliminates. A loop over the tuple of components stops
+# Enzyme's reverse mode with "Illegal address space propagation" (#1180), so this walks
+# them by recursion, and `_one_sided_corners!` the same way.
+_relation_ghosts!(ghosts, rel, ::Tuple{}, keys, c::Int) = nothing
+function _relation_ghosts!(ghosts, rel, comps::Tuple, keys, c::Int)
+    G, _ = first(comps)
+    for g in 1:nghosts(G)
+        _, d, side = boundary_node(G, g)
+        i = findfirst(k -> k[1] == c && k[2] == d && _GHOST_SIDES[k[3]] === side, keys)
+        i === nothing || (push!(ghosts, (c, g)); push!(rel, i))
+    end
+    return _relation_ghosts!(ghosts, rel, Base.tail(comps), keys, c + 1)
+end
+
 # The row `k`, its entries `start:end` of `(rows, cols, vals)`, of a relation on a facet of
 # axis `d` at its node `I`: on each other facet of `facets` that `I` lies on, the row's
 # entries at that facet's ghosts beyond `I`, one per component, move to the three physical
@@ -739,16 +749,26 @@ function _one_sided_corner!(rows, cols, vals, start::Int, k::Int, comps::Tuple,
         e != d && I[e] == (t == 1 ? 1 : n[e]) && _facet_name(e, t) in facets || continue
         n[e] >= 3 || _throw_corner_axis_too_short(_facet_name(e, t), e, n[e])
         step = CartesianIndex(ntuple(a -> a == e ? (t == 1 ? -1 : 1) : 0, Val(D)))
-        for (G, offset) in comps
-            has_ghosts(G, e, _GHOST_SIDES[t]) || continue
-            plin = LinearIndices(npoints(G, Tuple))
-            J = padded_index(G, I)
-            ghost = offset + plin[J + step]
-            v = zero(eltype(vals))
-            for q in start:lastindex(cols)
-                cols[q] == ghost && (v += vals[q]; vals[q] = zero(v))
-            end
-            iszero(v) && continue
+        _one_sided_corners!(rows, cols, vals, start, k, comps, I, e, t, step)
+    end
+    return nothing
+end
+
+# `_one_sided_corner!` on the facet `(e, t)` for each component of `comps`, by recursion
+# (`_relation_ghosts!` says why): a component with ghosts there moves the row's entry at
+# its ghost `step` beyond `I` onto its three nodes along axis `e`.
+_one_sided_corners!(rows, cols, vals, start, k, ::Tuple{}, I, e, t, step) = nothing
+function _one_sided_corners!(rows, cols, vals, start, k, comps::Tuple, I, e, t, step)
+    G, offset = first(comps)
+    if has_ghosts(G, e, _GHOST_SIDES[t])
+        plin = LinearIndices(npoints(G, Tuple))
+        J = padded_index(G, I)
+        ghost = offset + plin[J + step]
+        v = zero(eltype(vals))
+        for q in start:lastindex(cols)
+            cols[q] == ghost && (v += vals[q]; vals[q] = zero(v))
+        end
+        if !iszero(v)
             x = host_points(_padded(G)(e))
             at(m) = J[e] + m * step[e]
             w = _one_sided_weights(x[at(1)], x[at(0)], x[at(-1)], x[at(-2)])
@@ -758,7 +778,7 @@ function _one_sided_corner!(rows, cols, vals, start::Int, k::Int, comps::Tuple,
             end
         end
     end
-    return nothing
+    return _one_sided_corners!(rows, cols, vals, start, k, Base.tail(comps), I, e, t, step)
 end
 
 # The weights at the nodes `x₀`, `x₁`, `x₂` of the quadratic through them, evaluated at `x`:
