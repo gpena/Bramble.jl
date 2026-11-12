@@ -56,18 +56,23 @@ end
 
 # The solve of a load linear in its parts (`Bramble._solve_by_parts`): the value and each
 # partial of `F` are solved by `solve` on their own, and a nested tag recurses. If the solve
-# of the value returns a `Dual` that the value type `V` does not hold, the operator carries
-# a tag of its own (a factor of a `Dual` matrix): the parts cannot be rewrapped in the right
-# tag order, so `solve(F)` is taken whole.
+# of the value returns tags other than those of the value type `V`, the operator carries a
+# tag of its own (a factor of a `Dual` matrix): the parts cannot be rewrapped in the right
+# tag order, so `solve(F)` is taken whole. Only tags count: a `Float32` operator returns
+# `Float32` leaves for `Float64` ones, and that load still splits.
 function Bramble._solve_by_parts(
         solve::S, F::AbstractVector{ForwardDiff.Dual{T, V, N}}) where {S, T, V, N}
     x0 = Bramble._solve_by_parts(solve, ForwardDiff.value.(F))
-    eltype(x0) <: ForwardDiff.Dual && !(eltype(x0) <: V) && return solve(F)
+    _tags(eltype(x0)) === _tags(V) || return solve(F)
     xk = ntuple(k -> Bramble._solve_by_parts(solve, ForwardDiff.partials.(F, k)), N)
     R = eltype(x0)
     return [ForwardDiff.Dual{T}(x0[i], ForwardDiff.Partials{N, R}(ntuple(k -> xk[k][i], N)))
             for i in eachindex(x0)]
 end
+
+# The tags of a (nested) `Dual` type, outermost first; none for any other type.
+_tags(::Type{ForwardDiff.Dual{T, V, N}}) where {T, V, N} = (T, _tags(V)...)
+_tags(::Type) = ()
 
 # A kept factorization of a `Dual` matrix (`sparse_factorize(A)` with `A` a `Dual` matrix):
 # `fact` factors the innermost values of `A` by the backend and keywords given, and every

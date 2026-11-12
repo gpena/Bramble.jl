@@ -128,6 +128,24 @@ end
         end
     end
 
+    # A real `Float32` operator with a nested `Dual` load over `Float64`. A solve that
+    # returns `Float32` leaves (as `fdm_solve`'s does) keeps the load's own tags, so the load
+    # still splits rather than being pushed whole into a `Float32` solve.
+    @testset "Float32 factor, nested Dual load" begin
+        E = ForwardDiff.Dual{:s}
+        A32 = SparseMatrixCSC{Float32}(A0)
+        bn = E.(D.(b, collect(1.0:m)), D.(sin.(1:m), cos.(1:m)))
+        xb = pde_solve(A0, bn)
+        f32 = lu(Matrix(A32))
+        narrow(F::AbstractVector{Float64}) = f32 \ Float32.(F)
+        for x in (pde_solve(f32, bn), pde_solve(sparspak_factorize(A32), bn),
+            Bramble._solve_by_parts(narrow, bn))
+            @test ForwardDiff.partials.(ForwardDiff.partials.(x, 1), 1) ≈
+                  ForwardDiff.partials.(ForwardDiff.partials.(xb, 1), 1) rtol = 1.0e-5
+            @test ForwardDiff.value.(ForwardDiff.value.(x)) ≈ x0 rtol = 1.0e-5
+        end
+    end
+
     # A `Dual` matrix factored once and kept: every solve against it, by `pde_solve`, `\`
     # and `ldiv!`, is the derivative of `pde_solve(A, F)`. Two solves against one factor
     # catch a factor released after its first solve (MUMPS frees a native one).
