@@ -1215,30 +1215,37 @@ function _block_solve(names::Vector{Symbol}, C::SparseMatrixCSC, Bt::SparseMatri
             continue
         end
         Cb = Matrix(C[idx, idx])
-        F = lu(Cb; check = false)
-        _nonsingular(F, Cb) || _throw_singular_block(names, comps, idx)
+        _nonsingular(Cb) || _throw_singular_block(names, comps, idx)
         js = sort!(unique!(reduce(vcat, (rowvals(Bt)[nzrange(Bt, k)] for k in idx))))
         Bb = zeros(T, length(idx), length(js))
         for (a, k) in enumerate(idx), q in nzrange(Bt, k)
 
             Bb[a, searchsortedfirst(js, rowvals(Bt)[q])] = nonzeros(Bt)[q]
         end
-        X = F \ Bb
+        X, x = _dense_block_solve(Cb, Bb, b[idx])
         for (c, j) in enumerate(js), (a, k) in enumerate(idx)
 
             push!(rows, k), push!(cols, j), push!(vals, X[a, c])
         end
-        dg[idx] .= F \ b[idx]
+        dg[idx] .= x
     end
     return rows, cols, vals, dg
+end
+
+# `Cb \ Bb` and `Cb \ bb` on one LU of the dense block `Cb`, which `_nonsingular` has
+# passed. A function of its own so that Enzyme, which has no derivative for LAPACK's
+# `getrf`, reaches the block through the rules of ext/BrambleEnzymeExt/relations.jl.
+function _dense_block_solve(Cb, Bb, bb)
+    F = lu(Cb; check = false)
+    return F \ Bb, F \ bb
 end
 
 # A block whose smallest pivot is at the level of rounding is singular: a singular `K`
 # leaves one of that size rather than an exact zero. The pivots are judged on the block
 # with each row, then each column, scaled to a largest entry of one, since the facet
 # weights and spacings scale rows and columns by the mesh's aspect alone.
-function _nonsingular(F, Cb::AbstractMatrix)
-    F.info == 0 || return false
+function _nonsingular(Cb::AbstractMatrix)
+    lu(Cb; check = false).info == 0 || return false
     S = Cb ./ maximum(abs, Cb; dims = 2)
     S = S ./ maximum(abs, S; dims = 1)
     Fs = lu(S; check = false)
