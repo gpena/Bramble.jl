@@ -17,7 +17,9 @@ using PrecompileTools: @setup_workload, @compile_workload
 Adjoint rule for [`pde_solve`](@ref): for a scalar functional `J` of the solution `u`, the
 pullback solves `Aᴴ λ = ∂J/∂u` once and returns `∂J/∂A = -λ u'` (`u'` the conjugate
 transpose, so a complex `A` conjugates `u`; for real data this is `-λ uᵀ`) restricted to `A`'s
-own stored entries (never densified) and `∂J/∂F = λ`.
+own stored entries (never densified) and `∂J/∂F = λ`. `∂J/∂A` has the element type
+`promote_type(eltype(A), eltype(λ), eltype(u))`, so a real `A` with a complex `F` gets a
+complex `∂J/∂A`. The primal `u` has the element type `pde_solve(A, F)` returns.
 
 Without keywords the adjoint solve is `fact' \\ b` against the *same* LU factorisation the
 forward solve already computed, which is exact and requires no second factorisation whether or
@@ -33,17 +35,25 @@ solve) throws an `ArgumentError`: its pullback has a residual term this adjoint 
 function ChainRulesCore.rrule(
         ::typeof(pde_solve), A::SparseMatrixCSC, F::AbstractVector; kwargs...)
     Bramble._check_square_for_adjoint(A)
-    if isempty(kwargs)
-        fact = lu(A)
-        u = fact \ F
-        adjoint_solve = ȳ -> fact' \ ȳ
-    else
-        u = pde_solve(A, F; kwargs...)
-        adjoint_solve = ȳ -> Bramble._pde_solve_adjoint(A, ȳ; kwargs...)
-    end
+    isempty(kwargs) && return _lu_rrule(A, F)
+    u = pde_solve(A, F; kwargs...)
+    return u, _pde_solve_pullback(A, u, ȳ -> Bramble._pde_solve_adjoint(A, ȳ; kwargs...))
+end
+
+# One factorisation serves both solves. `fact \ F` can be wider than `pde_solve`'s result
+# (`Float64` for `Float32` data), so `u` is converted to the type `pde_solve` returns.
+function _lu_rrule(A::SparseMatrixCSC, F::AbstractVector)
+    fact = lu(A)
+    u = convert(AbstractVector{float(promote_type(eltype(A), eltype(F)))}, fact \ F)
+    return u, _pde_solve_pullback(A, u, ȳ -> fact' \ ȳ)
+end
+
+# `Ā` takes the promoted type of `A`, `λ` and `u`: `-λ uᴴ` is complex for a real `A` and a
+# complex `F`.
+function _pde_solve_pullback(A::SparseMatrixCSC, u::AbstractVector, adjoint_solve)
     function pde_solve_pullback(ȳ)
         λ = adjoint_solve(unthunk(ȳ))
-        Ā = similar(A)
+        Ā = similar(A, promote_type(eltype(A), eltype(λ), eltype(u)))
         rows = rowvals(A)
         Āv = nonzeros(Ā)
         for j in axes(A, 2), k in nzrange(A, j)
@@ -52,7 +62,7 @@ function ChainRulesCore.rrule(
         end
         return (NoTangent(), Ā, λ)
     end
-    return u, pde_solve_pullback
+    return pde_solve_pullback
 end
 
 # Warms `pde_solve`'s forward path and the rrule's construction/pullback -- both only reachable
