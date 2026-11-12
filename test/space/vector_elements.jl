@@ -832,6 +832,15 @@ end
         @test_throws DimensionMismatch Rₕ!(element(Wn), (_Const(1.0), _Const(2.0)))
         @test_throws DimensionMismatch avgₕ!(element(Wn), (_Const(1.0), _Const(2.0)))
 
+        # One function returns one value per leaf, three here (#1202): two values stopped
+        # at a `BoundsError` and four dropped the last one without a word.
+        @test parent(Rₕ!(element(Wn), x -> (1.0, 2.0, 3.0))) == parent(r1)
+        for g in (x -> (1.0, 2.0), x -> (1.0, 2.0, 3.0, 4.0))
+            @test_throws DimensionMismatch Rₕ!(element(Wn), g)
+            @test_throws DimensionMismatch avgₕ!(element(Wn), g)
+            @test_throws DimensionMismatch Rₕ(Wn, g)
+        end
+
         a1 = element(Wn)
         avgₕ!(a1, (_Const(1.0), _Const(2.0), _Const(3.0)))
         @test all(≈(1.0), parent(a1(1)))
@@ -971,6 +980,18 @@ end
             @test_throws DimensionMismatch Rₕ(V, short)
             @test_throws DimensionMismatch avgₕ(V, long)
             @test_throws DimensionMismatch Rₕ(V, short; markers = (:boundary,))
+
+            # A single function returns one value per leaf (#1202): the scatter dropped
+            # the extra values, so a wrong count throws before any sweep.
+            fshort = x -> ntuple(k -> x[1] + k, Val(NC - 1))
+            flong = x -> ntuple(k -> x[1] + k, Val(NC + 1))
+            for g in (fshort, flong)
+                @test_throws DimensionMismatch Rₕ!(element(V), g)
+                @test_throws DimensionMismatch avgₕ!(element(V), g)
+                @test_throws DimensionMismatch Rₕ!(element(V), g; markers = (:boundary,))
+                @test_throws DimensionMismatch Rₕ(V, g)
+                @test_throws DimensionMismatch avgₕ(V, g)
+            end
         end
     end
 
@@ -1109,6 +1130,13 @@ end
         # every component was written; nothing left at the uninitialised value
         @test all(isfinite, parent(a))
         @test length(components(a)) == NC
+
+        # A wrong value count throws the bare `DimensionMismatch`, not one a task wrapped
+        # (#1202).
+        flong = x -> ntuple(k -> x[1] + k, Val(NC + 1))
+        @test_throws DimensionMismatch Rₕ!(element(V), flong)
+        @test_throws DimensionMismatch avgₕ!(element(V), flong)
+        @test_throws DimensionMismatch Rₕ!(element(V), flong; markers = (:boundary,))
     end
 end
 

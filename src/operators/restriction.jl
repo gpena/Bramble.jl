@@ -60,7 +60,8 @@ Rₕ!(uₕ, x -> (f₁(x), f₂(x)))          # one function returning all compo
 ```
 
 A tuple holds one function per leaf component (depth-first on a nested composite); any
-other length throws a `DimensionMismatch`.
+other length throws a `DimensionMismatch`. A single function returns one value per leaf,
+and any other count throws a `DimensionMismatch` too.
 
 See also: [`Rₕ`](@ref), [`avgₕ!`](@ref), [`element`](@ref)
 """
@@ -386,6 +387,9 @@ per grid point on a space whose components share one mesh, whereas `(f₁, f₂)
 evaluates each component function separately. On a heterogeneous composite (components
 built over different meshes), the single-function form gives up that advantage, since
 there is no grid point shared by every component to evaluate it at only once.
+
+A tuple holds one function per leaf component and a single function returns one value per
+leaf; any other count throws a `DimensionMismatch`.
 
 See also: [`Rₕ!`](@ref), [`avgₕ`](@ref).
 """

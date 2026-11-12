@@ -351,6 +351,7 @@ end
            _device_masked_project!(loc, rule, raws, sp, markers, Val(NC))
             return uₕ
         end
+        _check_value_count(rule, Ωₕ, markers, NC)
         n = length(indices(Ωₕ))
         kernel = _rule_scatter_kernel(rule, sp, Val(NC))
         zeros_nc = ntuple(_ -> zero(eltype(first(raws))), Val(NC))
@@ -360,6 +361,7 @@ end
     else
         # No shared grid point exists, so `rule`'s function is re-evaluated at each leaf's
         # own points, keeping only that leaf's entry (gpena/Bramble.jl#78).
+        _check_value_count(rule, mesh(space(comps[1])), markers, length(comps))
         ntuple(
             k -> (project!(comps[k], _rule_component(rule, k), markers); nothing),
             Val(length(comps))
@@ -367,6 +369,19 @@ end
     end
     return uₕ
 end
+
+# One function for every leaf returns one value per leaf. The scatter would drop the extra
+# values and the per-leaf path would index past them, so the count is read off a single
+# evaluation at one probe point, before any sweep: outside the threaded tasks, which would
+# wrap the exception, and allocation-free for a function returning a tuple (#1202).
+@inline function _check_value_count(rule::ProjectionRule, Ωₕ, markers, nc::Int)
+    nv = length(rule.f(_probe_point(Ωₕ, markers)))
+    nv == nc || _throw_value_count(nv, nc)
+    return nothing
+end
+
+@noinline _throw_value_count(nv::Int, nc::Int) = throw(DimensionMismatch(
+    "the function returned $nv values for $nc components: it returns one value per leaf"))
 
 # One rule per leaf: each is already independent. `map` over both tuples rather than
 # `ntuple` indexing a shared count -- it needs no leaf count and stays correct under any

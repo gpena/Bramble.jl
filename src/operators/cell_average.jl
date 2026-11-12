@@ -55,6 +55,9 @@ it must be GPU-compilable in the same sense [`Rₕ!`](@ref)'s docstring describe
 call runs the same kernel over just the marked cells, after zeroing the result on the
 device (gpena/Bramble.jl#297).
 
+On a composite space `f` is a tuple holding one function per leaf component, or a single
+function returning one value per leaf; any other count throws a `DimensionMismatch`.
+
 See also: [`avgₕ!`](@ref), [`Rₕ`](@ref).
 """
 Base.@constprop :aggressive function avgₕ(
@@ -91,7 +94,8 @@ the result into `uₕ`.
     regions, leaving every other entry zero.
 
 On a composite element `f` may also be a tuple holding one function per leaf component
-(depth-first on a nested composite); any other length throws a `DimensionMismatch`.
+(depth-first on a nested composite); any other length throws a `DimensionMismatch`. A single
+function returns one value per leaf, and any other count throws a `DimensionMismatch` too.
 
 See also: [`avgₕ`](@ref), [`Rₕ!`](@ref).
 """
