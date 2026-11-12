@@ -108,6 +108,26 @@ end
         end
     end
 
+    # A factor over `Dual` that is not `sparse_factorize`'s (Sparspak's own, stdlib `lu`)
+    # with a load of another tag, in both nesting orders: the load is solved whole, so the
+    # derivative matches the nested derivative of `pde_solve(A, F)`.
+    @testset "factor of a Dual matrix, load of another tag" begin
+        n = 6
+        Am(p) = spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.0, n) .+ p .* (1:n),
+            1 => fill(-1.0, n - 1))
+        Fv(p) = (1 .+ p .* (1:n)) ./ n
+        inner_A(s) = ForwardDiff.derivative(
+            p1 -> ForwardDiff.derivative(p2 -> sum(abs2, s(Am(p2), Fv(p1))), 0.3), 0.7)
+        outer_A(s) = ForwardDiff.derivative(
+            p2 -> ForwardDiff.derivative(p1 -> sum(abs2, s(Am(p2), Fv(p1))), 0.7), 0.3)
+        for d in (inner_A, outer_A)
+            ref = d((A, F) -> pde_solve(A, F))
+            @test d((A, F) -> pde_solve(sparspak_factorize(A), F)) ≈ ref rtol = 1.0e-10
+            @test d((A, F) -> pde_solve(lu(Matrix(A)), F)) ≈ ref rtol = 1.0e-10
+            @test d((A, F) -> pde_solve(sparse_factorize(A), F)) ≈ ref rtol = 1.0e-10
+        end
+    end
+
     # A `Dual` matrix factored once and kept: every solve against it, by `pde_solve`, `\`
     # and `ldiv!`, is the derivative of `pde_solve(A, F)`. Two solves against one factor
     # catch a factor released after its first solve (MUMPS frees a native one).
