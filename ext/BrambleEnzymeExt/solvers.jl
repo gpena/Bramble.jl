@@ -196,6 +196,17 @@ end
     )
 end
 
+@noinline function _throw_active_factorization(@nospecialize(fact))
+    throw(
+        ArgumentError(
+        "Bramble's Enzyme rules for a kept factorization treat it as a constant, but this " *
+        "$(nameof(typeof(fact))) has a shadow, and its derivative would be silently " *
+        "dropped. Differentiate `pde_solve(A, F)` on the matrix instead, or build the " *
+        "factorization outside the differentiated function.",
+    ),
+    )
+end
+
 # A `Bramble` factorization is a constant to Enzyme: its type depends on `sym` at run time, so
 # `sparse_factorize` returns a `Union`, which forward mode cannot give a shadow.
 EnzymeRules.inactive_type(::Type{<:Bramble.SuiteSparseFactorization}) = true
@@ -218,9 +229,9 @@ _adjoint_solve(fact, ū) = _adjoint_factor(fact)' \ ū
 _has_shadow(::Const) = false
 _has_shadow(x::Annotation) = x.dval !== x.val
 
-# The width-aware count of lanes whose shadow of the matrix `A` is not `A` itself.
-_active_matrix(::Const, _) = false
-_active_matrix(A::Annotation, W) = any(i -> _lane(A, i) !== A.val, 1:W)
+# Whether any lane's shadow of `A`, a matrix or a factorization, is not `A` itself.
+_active_shadow(::Const, _) = false
+_active_shadow(A::Annotation, W) = any(i -> _lane(A, i) !== A.val, 1:W)
 
 # What a forward rule returns, from the primal and the shadow it computed.
 # `RT`, the annotation Enzyme expects back, builds the pair: a value of a `Union` type must
@@ -243,6 +254,7 @@ function EnzymeRules.forward(
         fact::Annotation{<:Factorization},
         F::Annotation{<:AbstractVector}
 ) where {RT}
+    _active_shadow(fact, EnzymeRules.width(config)) && _throw_active_factorization(fact.val)
     u = pde_solve(fact.val, F.val)
     RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
     W = EnzymeRules.width(config)
@@ -260,6 +272,7 @@ function EnzymeRules.augmented_primal(
         F::Annotation{<:AbstractVector}
 ) where {RT}
     EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    _active_shadow(fact, EnzymeRules.width(config)) && _throw_active_factorization(fact.val)
     _has_shadow(F) && _adjoint_factor(fact.val) === nothing &&
         _throw_adjoint_unavailable(fact.val)
 
@@ -296,6 +309,7 @@ function EnzymeRules.forward(
         fact::Annotation{<:Factorization},
         F::Annotation{<:AbstractVector}
 ) where {RT}
+    _active_shadow(fact, EnzymeRules.width(config)) && _throw_active_factorization(fact.val)
     ldiv!(x.val, fact.val, F.val)
     # The destination's tangents are written before any return: a `Const` return still
     # leaves the caller reading `ẋ`, which would otherwise hold whatever it held before.
@@ -318,6 +332,7 @@ function EnzymeRules.augmented_primal(
         F::Annotation{<:AbstractVector}
 ) where {RT}
     EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    _active_shadow(fact, EnzymeRules.width(config)) && _throw_active_factorization(fact.val)
     _has_shadow(x) && _has_shadow(F) && _adjoint_factor(fact.val) === nothing &&
         _throw_adjoint_unavailable(fact.val)
 
@@ -329,8 +344,9 @@ function EnzymeRules.augmented_primal(
 end
 
 # The destination is overwritten, so its cotangent before the call is zero: the cotangent
-# after the call is read into `F̄` and cleared. A destination whose shadow is itself is a
-# constant and is left alone.
+# after the call is read into `F̄` and cleared. It is cleared before `F̄` is accumulated, since
+# `ldiv!(uₕ, fact, parent(uₕ))` shares one shadow between the two. A destination whose
+# shadow is itself is a constant and is left alone.
 function EnzymeRules.reverse(
         config::RevConfig,
         ::Const{typeof(ldiv!)},
@@ -342,8 +358,9 @@ function EnzymeRules.reverse(
 ) where {RT}
     if _has_shadow(x)
         ū = parent(x.dval)
-        _has_shadow(F) && (F.dval .+= _adjoint_solve(fact.val, ū))
+        λ = _has_shadow(F) ? _adjoint_solve(fact.val, ū) : nothing
         fill!(ū, zero(eltype(ū)))
+        λ === nothing || (F.dval .+= λ)
     end
     return (nothing, nothing, nothing)
 end
@@ -359,7 +376,7 @@ function EnzymeRules.forward(
         A::Annotation{<:SparseMatrixCSC};
         kwargs...
 ) where {RT}
-    _active_matrix(A, EnzymeRules.width(config)) && _throw_active_factorize()
+    _active_shadow(A, EnzymeRules.width(config)) && _throw_active_factorize()
     fact = Bramble.sparse_factorize(A.val; kwargs...)
     RT <: Const && return EnzymeRules.needs_primal(config) ? fact : nothing
     W = EnzymeRules.width(config)
@@ -373,7 +390,7 @@ function EnzymeRules.augmented_primal(
         A::Annotation{<:SparseMatrixCSC};
         kwargs...
 ) where {RT}
-    _active_matrix(A, EnzymeRules.width(config)) && _throw_active_factorize()
+    _active_shadow(A, EnzymeRules.width(config)) && _throw_active_factorize()
     fact = Bramble.sparse_factorize(A.val; kwargs...)
     primal = EnzymeRules.needs_primal(config) ? fact : nothing
     shadow = EnzymeRules.needs_shadow(config) ? fact : nothing

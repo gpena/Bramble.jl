@@ -4,7 +4,7 @@ using Test
 using Bramble
 using ChainRulesCore
 using SparseArrays: SparseMatrixCSC, nnz, nonzeros, sparse, spdiagm
-using LinearAlgebra: I, ldiv!
+using LinearAlgebra: I, NoPivot, ldiv!, lu
 using Polyester
 using ForwardDiff
 using SuiteSparse
@@ -540,6 +540,15 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                 u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solver), Enzyme.Duplicated,
                     Enzyme.Const(fact), Enzyme.Const(copy(F₀))))
                 @test u̇ == zeros(n)
+
+                # In place on the load itself, `ldiv!(uₕ, fact, parent(uₕ))`: the destination
+                # and the load share one shadow, so clearing it must come before `F̄ += λ`.
+                alias_loss(F) = (u = element(Wk); parent(u) .= F; ldiv!(u, fact, parent(u));
+                                 sum(c .* parent(u)))
+                Fd = zeros(n)
+                Enzyme.autodiff(rev, Enzyme.Const(alias_loss), Enzyme.Active,
+                    Enzyme.Duplicated(copy(F₀), Fd))
+                @test Fd ≈ A' \ c rtol=1e-10
             end
 
             # `ldiv!` is in place: with the destination an argument, the cotangent it holds
@@ -592,6 +601,35 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve_vec), Enzyme.Duplicated,
                 Enzyme.Const(nofact), Enzyme.Duplicated(copy(F₀), Ḟ1)))
             @test u̇ ≈ A₀ \ Ḟ1 rtol=1e-10
+
+            # A factorization with a shadow of its own, here a dense `lu` Enzyme can
+            # differentiate, is refused by name in both modes and for both solves: the rules
+            # treat it as a constant and would drop its derivative. A shadow that is the
+            # factorization itself, as runtime activity gives a constant, is no direction.
+            Ad = Matrix(A₀)
+            Ȧd = zero(Ad)
+            Ȧd[2, 3] = 1.0
+            act_solve(A, F) = sum(c .* Bramble.pde_solve(lu(A, NoPivot()), F))
+            act_ldiv(A, F) = (u = element(Wk); ldiv!(u, lu(A, NoPivot()), F);
+                              sum(c .* parent(u)))
+            for f in (act_solve, act_ldiv)
+                @test_throws ArgumentError "pde_solve(A, F)" Enzyme.autodiff(
+                    rev, Enzyme.Const(f), Enzyme.Active,
+                    Enzyme.Duplicated(copy(Ad), zero(Ad)), Enzyme.Const(F₀))
+                @test_throws ArgumentError "pde_solve(A, F)" Enzyme.autodiff(
+                    fwd, Enzyme.Const(f), Enzyme.Duplicated,
+                    Enzyme.Duplicated(copy(Ad), Ȧd), Enzyme.Const(F₀))
+            end
+            luA = lu(Ad, NoPivot())
+            for (solver, loss) in ((solve_vec, solve_loss), (ldiv_vec, ldiv_loss))
+                Fd = zeros(n)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active,
+                    Enzyme.Duplicated(luA, luA), Enzyme.Duplicated(copy(F₀), Fd))
+                @test Fd ≈ A₀' \ c rtol=1e-10
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solver), Enzyme.Duplicated,
+                    Enzyme.Duplicated(luA, luA), Enzyme.Duplicated(copy(F₀), Ḟ1)))
+                @test u̇ ≈ A₀ \ Ḟ1 rtol=1e-10
+            end
 
             # Through `assemble`, with the matrix factored once outside the differentiated
             # function: the load is the differentiated input, on a uniform and a non-uniform
