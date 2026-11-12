@@ -113,6 +113,22 @@ end
 Base.size(f::NoAdjointFactorization) = size(f.A)
 Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
 
+# A coefficient that is a `Real` holding a `Float64`, for the `gmg_solve` rule's shadow walk.
+struct WrappedCoefficient <: Real
+    κ::Float64
+end
+
+# A point mass and a point advection at the node `GMG_POINT[1]`, scaled by the `Ref`s the form
+# holds, `GMG_POINT[2]` and `GMG_POINT[3]`. A named `build` without captures reaches the
+# `gmg_solve` rule as a constant.
+const GMG_POINT = (Ref((0.0, 0.0)), Ref(0.0), Ref(0.0))
+gmg_point_χ(x) = (c = GMG_POINT[1][];
+abs(x[1] - c[1]) < 1e-12 && abs(x[2] - c[2]) < 1e-12 ? 1.0 : 0.0)
+gmg_point_build(V) = form(V, V, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                         GMG_POINT[2] * innerₕ(Rₕ(V, gmg_point_χ) * u, v) +
+                                         GMG_POINT[3] *
+                                         innerₕ(Rₕ(V, gmg_point_χ) * Bramble.D₋ₓ(u), v))
+
 @testset "BrambleChainRulesExt + Enzyme" begin
     @testset "Enzyme forward: pde_solve rule" begin
         if _have(:Enzyme)
@@ -962,6 +978,34 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             @test only(Enzyme.autodiff(fwd, Enzyme.Const(loss_ref), Enzyme.Duplicated,
                 Enzyme.Duplicated(0.7, 1.0), Enzyme.Const(by_ref))) ≈
                   2 * loss_ref(0.7, by_ref) / 0.7 rtol=1e-7
+            # A change the form holds, tuned to leave `ΔA w = 0` for a fixed `w`: a point mass
+            # and a point advection at the centre node, the second scaled to cancel the first
+            # there. Only the whole matrix sees it.
+            Ωt = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                             Bramble.interval(0.0, 1.0)), (17, 17), (true, true))
+            Wt = gridspace(Ωt)
+            nt = ndofs(Wt)
+            Xt, Yt = parent(Rₕ(Wt, x -> x[1])), parent(Rₕ(Wt, x -> x[2]))
+            xc, yc = sort(unique(Xt))[9], sort(unique(Yt))[9]
+            GMG_POINT[1][] = (xc, yc)
+            jc = findfirst(k -> Xt[k] == xc && Yt[k] == yc, 1:nt)
+            wt = [cos(1.3k) for k in 1:nt]
+            s₁ = assemble(form(Wt, Wt, (u, v) -> innerₕ(Rₕ(Wt, gmg_point_χ) * u, v))) * wt
+            s₂ = assemble(form(Wt, Wt,
+                (u, v) -> innerₕ(Rₕ(Wt, gmg_point_χ) * Bramble.D₋ₓ(u), v))) * wt
+            t₂ = -s₁[jc] / s₂[jc]
+            @test norm(s₁ + t₂ * s₂) < 1e-12 * norm(s₁)
+            xt = [sin(0.7k) for k in 1:nt]
+            function loss_point(θ)
+                GMG_POINT[2][] = 0.0
+                GMG_POINT[3][] = 0.0
+                u = gmg_solve(gmg_point_build, Ωt, θ .* xt; tol = 1e-10)
+                GMG_POINT[2][] = 30.0
+                GMG_POINT[3][] = 30.0 * t₂
+                return sum(abs2, parent(u))
+            end
+            @test_throws ArgumentError "changed" Enzyme.autodiff(rev, Enzyme.Const(loss_point),
+                Enzyme.Active, Enzyme.Active(0.7))
 
             # An advection term makes `A` non-symmetric, whose adjoint is not `gmg_solve`:
             # reverse refuses it by name.
@@ -1046,6 +1090,12 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                 Ωr, xr; tol = 1e-10))))
             @test_throws ArgumentError "`build` has a shadow" Enzyme.autodiff(fwd,
                 Enzyme.Const(loss_t), Enzyme.Duplicated, Enzyme.Duplicated([0.7], [1.0]))
+            loss_w(q) = (cw = WrappedCoefficient(q[1]);
+            sum(abs2, parent(gmg_solve(V -> form(V, V, (u, v) -> cw.κ * innerₕ(u, v) +
+                                                                inner₊(∇ₕ(u), ∇ₕ(v))),
+                Ωr, xr; tol = 1e-10))))
+            @test_throws ArgumentError "`build` has a shadow" Enzyme.autodiff(fwd,
+                Enzyme.Const(loss_w), Enzyme.Duplicated, Enzyme.Duplicated([0.7], [1.0]))
             γκ = Ref(1.0)
             solve_γκ(b) = gmg_solve(V -> form(V, V, (u, v) -> κ * γκ[] * inner₊(∇ₕ(u), ∇ₕ(v)) +
                                                              innerₕ(u, v)), Ωr, b; tol = 1e-10)

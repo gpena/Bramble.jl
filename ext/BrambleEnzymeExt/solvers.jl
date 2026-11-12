@@ -608,7 +608,10 @@ _holds_floats(::Type{T}) where {T} = T <: Union{AbstractFloat, Complex{<:Abstrac
                                      !isbitstype(T) || any(_holds_floats, fieldtypes(T))
 
 _zero_shadow(_, ẋ::Union{AbstractFloat, Complex{<:AbstractFloat}}, _) = iszero(ẋ)
-_zero_shadow(_, ::Union{Number, Symbol, AbstractString, Module, Type}, _) = true
+_zero_shadow(_, ::Union{Symbol, AbstractString, Module, Type}, _) = true
+# A number that cannot hold a float (an integer, an irrational) is zero; any other, such as a
+# user's `Real` wrapping a `Float64`, is read field by field.
+_zero_shadow(x, ẋ::Number, seen) = !_holds_floats(typeof(ẋ)) || _zero_fields(x, ẋ, seen)
 function _zero_shadow(x, ẋ::DenseArray, seen)
     ẋ === x && return true
     _holds_floats(eltype(ẋ)) || return true
@@ -620,7 +623,8 @@ function _zero_shadow(x, ẋ::DenseArray, seen)
         return _zero_shadow(xᵢ, ẋ[i], seen)
     end
 end
-function _zero_shadow(x, ẋ::T, seen) where {T}
+_zero_shadow(x, ẋ, seen) = _zero_fields(x, ẋ, seen)
+function _zero_fields(x, ẋ::T, seen) where {T}
     !isbits(ẋ) && ẋ === x && return true
     ismutable(ẋ) && (ẋ in seen || (push!(seen, ẋ); false)) && return true
     paired = typeof(x) === T
@@ -680,24 +684,31 @@ _gmg_rule_solve(P, b, (cycle, tol, maxiters)) = Bramble._gmg_solve_loop(P, b, cy
 # A zero tangent of the solution's type.
 _gmg_zero(u) = (z = similar(u); fill!(parent(z), zero(eltype(z))); z)
 
+# The form the finest operator applies: on ghost spaces, the padded one.
+_gmg_op_form(op::Bramble.MatrixFreeOperator) = op.form
+_gmg_op_form(op::Bramble.GhostMatrixFreeOperator) = op.padded.form
+
 # Refuses a finest matrix that is not Hermitian. It is assembled once, as `build` makes it on
 # `Ωₕ`: a probe of the matrix-free operator can be cancelled by a tuned coefficient, and its
 # scale grows with the mesh. A symmetric form assembles to an exactly symmetric matrix (0 on
-# every test form measured), so the bound is a few roundings. Returns a fixed `w` and the
-# operator's `A w`, against which the reverse pass checks that the operator is still the one
-# the solve used.
+# every test form measured), so the bound is a few roundings. Returns the matrix of the form
+# the finest operator applies, against which the reverse pass checks that the operator is
+# still the one the solve used.
 function _gmg_hermitian_check(P, build, Ωₕ)
-    A = Bramble.assemble(build(Bramble.gridspace(Ωₕ)))
+    op = last(P.ops)
+    Aₒ = Bramble.assemble(_gmg_op_form(op))
+    A = op isa Bramble.MatrixFreeOperator ? Aₒ : Bramble.assemble(build(Bramble.gridspace(Ωₕ)))
     gap = norm(A - A', Inf) / norm(A, Inf)
     gap <= 8 * eps(real(eltype(A))) || _throw_gmg_not_hermitian(gap)
-    op = last(P.ops)
-    w = [real(eltype(op))(cos(1.3k)) for k in 1:size(op, 1)]
-    return w, op * w
+    return Aₒ
 end
 
-function _gmg_unchanged_check(P, w, Aw)
-    change = norm(last(P.ops) * w - Aw) / norm(Aw)
-    change <= sqrt(eps(real(eltype(Aw)))) || _throw_gmg_changed(change)
+# The operator's form is assembled again, not `build` called again: a `Ref` that `build`
+# reads into a value is frozen in the taped form, and only one the form itself holds moves.
+function _gmg_unchanged_check(P, Aₒ)
+    A = Bramble.assemble(_gmg_op_form(last(P.ops)))
+    change = size(A) == size(Aₒ) ? norm(A - Aₒ, Inf) / norm(Aₒ, Inf) : Inf
+    change <= 8 * eps(real(eltype(Aₒ))) || _throw_gmg_changed(change)
     return nothing
 end
 
@@ -725,8 +736,8 @@ end
 
 # The reverse sweep solves with the preconditioner the forward solve built, kept on the tape:
 # `build` may read a `Ref` whose value has changed by then. A coefficient the form itself holds
-# as a `Ref` is read at each product, so the tape cannot keep it; the reverse pass checks the
-# finest operator against the product taken at the solve and refuses one that has changed.
+# as a `Ref` is read at each product, so the tape cannot keep it; the reverse pass assembles
+# the finest operator's form again and refuses it if its matrix has changed since the solve.
 function EnzymeRules.augmented_primal(
         config::RevConfig,
         ::Const{typeof(Bramble.gmg_solve)},
@@ -767,7 +778,7 @@ function EnzymeRules.reverse(
     P, loop, probe, ū = tape
     λ = nothing
     if _has_shadow(b)
-        _gmg_unchanged_check(P, probe...)
+        _gmg_unchanged_check(P, probe)
         λ = parent(_gmg_rule_solve(P, parent(ū), loop))
     end
     # `λ` is read before `ū` is cleared, as `b̄` may share its storage.
