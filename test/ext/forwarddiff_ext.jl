@@ -2,15 +2,16 @@ module TestForwardDiffExt
 
 using Test
 using Bramble
-using Bramble: sparspak_factorize
+using Bramble: sparspak_factorize, sparse_factorize
 using LinearAlgebra
+using Random
 using SparseArrays
 using Sparspak
 using SuiteSparse
 using MUMPS
 using DifferentiationInterface: DifferentiationInterface, AutoForwardDiff
 using ForwardDiff: ForwardDiff
-using ..TestUtils: alloc_test
+using ..TestUtils: alloc_test, alloc_ok
 
 if Sys.isapple()
     using AppleAccelerate
@@ -78,6 +79,122 @@ end
         end
     end
 
+    # A kept factorization (`sparse_factorize`) on every backend `sparse_factorize` takes.
+    # The oracles are `pde_solve(A, F)` of the same `Dual` system and the dense solve.
+    fact_solvers = [:default, :suitesparse, :sparspak]
+    Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
+        push!(fact_solvers, :accelerate)
+    Base.get_extension(Bramble, :BrambleMUMPSExt) !== nothing && push!(fact_solvers, :mumps)
+    Wm = gridspace(mesh(domain(interval(0.0, 1.0)), m, true))
+
+    # A real factor and a `Dual` load: the solve is linear in the load, so the value and the
+    # partial are each solved against the factor, by `pde_solve` and by `ldiv!` alike.
+    @testset "kept real factor, Dual load" begin
+        bd = D.(b, collect(1.0:m))
+        for solver in fact_solvers
+            fact = sparse_factorize(A0; solver = solver)
+            for x in (pde_solve(fact, bd), parent(ldiv!(element(Wm, eltype(bd)), fact, bd)))
+                @test ForwardDiff.value.(x) ≈ x0 rtol = 1.0e-12
+                @test ForwardDiff.partials.(x, 1) ≈ A0 \ collect(1.0:m) rtol = 1.0e-12
+            end
+        end
+        # A factor of the `Dual` matrix itself carries the load's tag, so the load is not
+        # split: its own `\` is the oracle.
+        fd = sparspak_factorize(Ad)
+        ref = fd \ bd
+        for x in (pde_solve(fd, bd), parent(ldiv!(element(Wm, eltype(bd)), fd, bd)))
+            @test ForwardDiff.value.(x) ≈ ForwardDiff.value.(ref) rtol = 1.0e-12
+            @test ForwardDiff.partials.(x, 1) ≈ ForwardDiff.partials.(ref, 1) rtol = 1.0e-12
+        end
+    end
+
+    # A `Dual` matrix factored once and kept: every solve against it, by `pde_solve`, `\`
+    # and `ldiv!`, is the derivative of `pde_solve(A, F)`. Two solves against one factor
+    # catch a factor released after its first solve (MUMPS frees a native one).
+    @testset "kept factor of a Dual matrix" begin
+        bd = D.(b, collect(1.0:m))
+        xd = pde_solve(Ad, bd)
+        for solver in fact_solvers
+            fact = sparse_factorize(Ad; solver = solver)
+            @test fact isa Factorization
+            @test size(fact) == size(Ad)
+            for _ in 1:2
+                for x in (pde_solve(fact, b), fact \ b, parent(ldiv!(element(Wm, D), fact, b)))
+                    @test ForwardDiff.value.(x) ≈ x0 rtol = 1.0e-12
+                    @test ForwardDiff.partials.(x, 1) ≈ p1 rtol = 1.0e-12
+                end
+                x = pde_solve(fact, bd)
+                @test ForwardDiff.value.(x) ≈ ForwardDiff.value.(xd) rtol = 1.0e-12
+                @test ForwardDiff.partials.(x, 1) ≈ ForwardDiff.partials.(xd, 1) rtol = 1.0e-12
+            end
+        end
+        rect = SparseMatrixCSC(3, 2, [1, 3, 5], [1, 2, 2, 3], D.([1.0, 0.5, 2.0, 1.0], 1.0))
+        @test_throws ArgumentError sparse_factorize(rect)
+        @test_throws ArgumentError sparse_factorize(Ad; solver = :bogus)
+        @test_throws ArgumentError Bramble.refactor!(sparse_factorize(Ad), Ad)
+    end
+
+    # The calls of the subplan's probe, on a 1D form whose coefficient and load scale are the
+    # parameters: a factor of the form or of its matrix, and of the matrix at the fixed
+    # parameter (only the load active). The oracles are the `Dual` solve `pde_solve(A, F)`
+    # and a central difference, on a uniform and a non-uniform mesh.
+    @testset "kept factor, form problem, uniform: $unif" for unif in (true, false)
+        Random.seed!(1234)
+        W = gridspace(mesh(domain(interval(0.0, 1.0)), 17, unif))
+        function bf(p)
+            κ = element(W, eltype(p))
+            parent(κ) .= 2.0 .+ p[1]
+            return form(W, W, (U, V) -> inner₊(κ * ∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V))
+        end
+        lf = form(W, v -> innerₕ(x -> 1.0 + x[1], v))
+        function sys(p)
+            A, F = assemble(bf(p), lf; dirichlet = :boundary => x -> 0.0)
+            return A, (1 + p[2]) .* F
+        end
+        rel(g, r) = maximum(abs, g .- r) / maximum(abs, r)
+        cdg(f, p) = [(f(setindex!(copy(p), p[k] + 1.0e-5, k)) -
+                      f(setindex!(copy(p), p[k] - 1.0e-5, k))) / 2.0e-5 for k in eachindex(p)]
+        function by_ldiv(fact, F, T)
+            u = element(W, T)
+            ldiv!(u, fact, F)
+            return sum(abs2, parent(u))
+        end
+        p = [0.5, 0.25]
+        A0p = first(sys(p))
+        gA = ForwardDiff.gradient(q -> sum(abs2, pde_solve(sys(q)...)), p)
+        gF = ForwardDiff.gradient(q -> sum(abs2, pde_solve(A0p, last(sys(q)))), p)
+        @test minimum(abs, gA) > 1.0e-6 * maximum(abs, gA)
+        calls = (
+            (q -> ((A, F) = sys(q); sum(abs2, pde_solve(sparse_factorize(A), F))), gA),
+            (q -> sum(abs2, pde_solve(sparse_factorize(bf(q); dirichlet = :boundary),
+                    last(sys(q)))), gA),
+            (q -> ((A, F) = sys(q); by_ldiv(sparse_factorize(A), F, eltype(q))), gA),
+            (q -> sum(abs2, pde_solve(sparse_factorize(A0p), last(sys(q)))), gF),
+            (q -> by_ldiv(sparse_factorize(A0p), last(sys(q)), eltype(q)), gF)
+        )
+        for (f, g) in calls
+            d = ForwardDiff.gradient(f, p)
+            @test rel(d, g) <= 1.0e-8
+            @test rel(d, cdg(f, p)) <= 1.0e-6
+        end
+    end
+
+    # The `Float64` route is unchanged by the load split: the same result type, and an
+    # `ldiv!` into a `VectorElement` allocates what the backend's own `ldiv!` does, nothing
+    # for SuiteSparse and Accelerate.
+    @testset "Float64 kept factor unchanged" begin
+        for solver in fact_solvers
+            fact = sparse_factorize(A0; solver = solver)
+            @test @inferred(pde_solve(fact, b)) ≈ x0 rtol = 1.0e-12
+            u = element(Wm)
+            @test @inferred(ldiv!(u, fact, b)) === u
+            @test parent(u) ≈ x0 rtol = 1.0e-12
+            bytes = alloc_test(ldiv!, u, fact, b)
+            @test bytes == alloc_test(ldiv!, parent(u), fact, b)
+            solver in (:default, :suitesparse, :accelerate) && @test alloc_ok(bytes)
+        end
+    end
+
     # The second derivative of a nested tag: the outer tag `s` perturbs the matrix by 0.1 A0,
     # the inner `t` scales it by 1 + t / 2. The mixed partial comes from one factor of the
     # value, and the Sparspak factor of the nested matrix is the oracle.
@@ -99,6 +216,31 @@ end
         @test ForwardDiff.value.(mixed) ≈ (ds(h) - ds(-h)) / (2h) rtol = 1.0e-6
     end
 
+    # The same nested tag through a kept factor: of the nested matrix, whose solve recurses
+    # over the factor of its innermost values, and of the real matrix with a nested load,
+    # whose split recurses over the parts of each level.
+    @testset "nested tags through a kept factor" begin
+        E = ForwardDiff.Dual{:s}
+        An = SparseMatrixCSC(A0.m, A0.n, A0.colptr, A0.rowval,
+            E.(Ad.nzval, D.(0.1 .* A0.nzval, 0.0)))
+        xr = sparspak_factorize(An) \ b
+        for solver in fact_solvers
+            xn = pde_solve(sparse_factorize(An; solver = solver), b)
+            @test ForwardDiff.partials.(ForwardDiff.partials.(xn, 1), 1) ≈
+                  ForwardDiff.partials.(ForwardDiff.partials.(xr, 1), 1) rtol = 1.0e-10
+        end
+        bn = E.(D.(b, collect(1.0:m)), D.(sin.(1:m), cos.(1:m)))
+        xb = pde_solve(A0, bn)
+        for solver in fact_solvers
+            fact = sparse_factorize(A0; solver = solver)
+            for x in (pde_solve(fact, bn), parent(ldiv!(element(Wm, eltype(bn)), fact, bn)))
+                @test ForwardDiff.partials.(ForwardDiff.partials.(x, 1), 1) ≈
+                      ForwardDiff.partials.(ForwardDiff.partials.(xb, 1), 1) rtol = 1.0e-12
+                @test ForwardDiff.value.(ForwardDiff.partials.(x, 1)) ≈ A0 \ sin.(1:m) rtol = 1.0e-12
+            end
+        end
+    end
+
     # The factor is shared: a Dual with N partials costs N solves and one factorization, not
     # N factorizations. A factorization of this matrix allocates about 1.8 MB and a partial
     # about 0.5 MB, so the bound of half a factorization per partial fails a refactor on
@@ -114,6 +256,19 @@ end
         per_partial = (alloc_test(solve, dual(8)) - alloc_test(solve, dual(1))) / 7
         factor = alloc_test(sparspak_factorize, T0)
         @test per_partial < factor / 2
+
+        # A kept factor of a `Dual` matrix factors once whatever the partial count, and its
+        # solves and those of a `Dual` load against a real factor refactor nothing.
+        kept(A) = sparse_factorize(A; solver = :sparspak)
+        @test (alloc_test(kept, dual(8)) - alloc_test(kept, dual(1))) / 7 < factor / 2
+        kept_solve(f) = pde_solve(f, rhs)
+        @test (alloc_test(kept_solve, kept(dual(8))) - alloc_test(kept_solve, kept(dual(1)))) / 7 <
+              factor / 2
+        f0 = kept(T0)
+        load(N) = [ForwardDiff.Dual{Nothing, Float64, N}(1.0, ForwardDiff.Partials(ntuple(
+                       k -> k / n, N))) for _ in 1:n]
+        load_solve(F) = pde_solve(f0, F)
+        @test (alloc_test(load_solve, load(8)) - alloc_test(load_solve, load(1))) / 7 < factor / 2
     end
 
     # A rank-deficient `A` under `:spqr` is a least-squares solve whose value is not smooth in

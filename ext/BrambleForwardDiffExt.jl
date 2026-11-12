@@ -2,7 +2,7 @@ module BrambleForwardDiffExt
 
 using Bramble: Bramble
 using ForwardDiff: ForwardDiff
-using LinearAlgebra: rank
+using LinearAlgebra: LinearAlgebra, Factorization, rank
 using SparseArrays: SparseArrays, SparseMatrixCSC
 
 # A `ForwardDiff.Dual` is linear in its parts (value and partials), so a Sparspak solve may
@@ -36,16 +36,75 @@ function Bramble._solve_promoted(
         ),
         )
     end
-    P = promote_type(eltype(A), eltype(F))
     fact = Bramble._primal_factorize(_innermost(A), eltype(_innermost(F)), solver, sym, kwargs)
     return _run_and_finalize(fact) do fact
         # A rank-deficient least-squares `Dual` solve has a value that is not smooth in the
         # parameter, so the formula below would be silently wrong: refuse it.
         eltype(A) <: ForwardDiff.Dual && solver === :spqr &&
             _check_full_rank(fact, size(A, 2))
-        An = eltype(A) === P ? A : SparseMatrixCSC{P}(A)
-        _dual_solve(fact, An, convert(Vector{P}, F))
+        _promoted_dual_solve(fact, A, F)
     end
+end
+
+# `A x = F` over the factor `fact` of the innermost values of `A`, with `A` and `F` promoted
+# to their common `Dual` type first (either may be real).
+function _promoted_dual_solve(fact, A::SparseMatrixCSC, F::AbstractVector)
+    P = promote_type(eltype(A), eltype(F))
+    An = eltype(A) === P ? A : SparseMatrixCSC{P}(A)
+    return _dual_solve(fact, An, convert(Vector{P}, F))
+end
+
+# The solve of a load linear in its parts (`Bramble._solve_by_parts`): the value and each
+# partial of `F` are solved by `solve` on their own, and a nested tag recurses. If the solve
+# of the value carries `F`'s own tag, the operator depends on the same parameter (a factor
+# of a `Dual` matrix), the solve is not linear in `F`'s parts, and `solve(F)` is taken whole.
+function Bramble._solve_by_parts(solve::S, F::AbstractVector{P}) where {S, P <: ForwardDiff.Dual}
+    T = ForwardDiff.tagtype(P)
+    x0 = Bramble._solve_by_parts(solve, ForwardDiff.value.(F))
+    eltype(x0) <: ForwardDiff.Dual{T} && return solve(F)
+    N = ForwardDiff.npartials(P)
+    xk = ntuple(k -> Bramble._solve_by_parts(solve, ForwardDiff.partials.(F, k)), N)
+    V = eltype(x0)
+    return [ForwardDiff.Dual{T}(x0[i], ForwardDiff.Partials{N, V}(ntuple(k -> xk[k][i], N)))
+            for i in eachindex(x0)]
+end
+
+# A kept factorization of a `Dual` matrix (`sparse_factorize(A)` with `A` a `Dual` matrix):
+# `fact` factors the innermost values of `A` by the backend and keywords given, and every
+# solve against it is the `Dual` solve of `pde_solve(A, F)`, over that one factor.
+struct DualFactorization{P <: ForwardDiff.Dual, FA <: Factorization, M <: SparseMatrixCSC{P}} <:
+       Factorization{P}
+    fact::FA
+    A::M
+end
+
+Base.size(f::DualFactorization) = size(f.A)
+Base.size(f::DualFactorization, d::Integer) = size(f.A, d)
+
+function Bramble.sparse_factorize(
+        A::SparseMatrixCSC{<:ForwardDiff.Dual}; solver::Symbol = :default, sym = :auto, kwargs...
+)
+    if size(A, 1) != size(A, 2)
+        throw(
+            ArgumentError(
+            "sparse_factorize of a ForwardDiff.Dual matrix needs a square A, got size " *
+            "$(size(A)).",
+        ),
+        )
+    end
+    fact = Bramble.sparse_factorize(_innermost(A); solver = solver, sym = sym, kwargs...)
+    return DualFactorization(fact, A)
+end
+
+Base.:\(f::DualFactorization, F::AbstractVector) = _promoted_dual_solve(f.fact, f.A, F)
+Bramble.pde_solve(f::DualFactorization, F::AbstractVector) = f \ F
+LinearAlgebra.ldiv!(x::AbstractVector, f::DualFactorization, F::AbstractVector) = copyto!(x, f \ F)
+
+# Disambiguates Bramble's `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` and the
+# method above. The load is not split: the solve of a `Dual` matrix is not linear in it.
+function LinearAlgebra.ldiv!(uₕ::Bramble.VectorElement, f::DualFactorization, F::AbstractVector)
+    copyto!(parent(uₕ), f \ F)
+    return uₕ
 end
 
 # The bordered solve of a `Dual` matrix or load (`pde_solve(A, F; mean_zero, gauge)`, or a

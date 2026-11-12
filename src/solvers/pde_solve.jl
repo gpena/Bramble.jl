@@ -157,8 +157,15 @@ differentiates the same way on the bordered matrix: the primal bordered system o
 is factored once, by the route the `Float64` solve takes, and each partial solves its bordered
 right-hand side ``[Fₖ − Aₖu₀; 0]`` against that factor. `w` and `gauge`'s `Z` are
 constants: a `Dual` one throws an `ArgumentError` naming it, as does a `RankOneUpdate` over
-a `Dual` matrix, whose `σ` takes the matrix's element type. `pde_solve(fact, F)` is
-unchanged, so with a `Dual` load it takes the route it always took.
+a `Dual` matrix, whose `σ` takes the matrix's element type.
+
+A kept factorization differentiates too. `pde_solve(fact, F)` and `ldiv!(uₕ, fact, F)` with
+a real `fact` and a `Dual` load solve the value and each partial of `F` against `fact`, the
+solve being linear in `F`. `sparse_factorize` of a `Dual` matrix (or of a form whose
+coefficients are `Dual`) factors its `Float64` values by the backend and keywords given and
+keeps the matrix, so `pde_solve(fact, F)` gives the derivative of `pde_solve(A, F)`. For a
+real `fact` and a `Dual` load, call `pde_solve(fact, F)` rather than `fact \\ F`: a backend's
+own `\\` is not routed.
 
 # Examples
 
@@ -232,7 +239,15 @@ function _solve_routed(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol, sy
     end
 end
 
-pde_solve(fact::Factorization, F::AbstractVector) = fact \ F
+pde_solve(fact::Factorization, F::AbstractVector) = _solve_by_parts(b -> fact \ b, F)
+
+# The solve `solve(F)` of a system that is linear in its load `F`, split into one call of
+# `solve` per part of the load when that is how the load must be solved. A plain load is one
+# part: `solve(F)`, unchanged. `BrambleForwardDiffExt` adds the `ForwardDiff.Dual` method,
+# which solves the value and each partial against the same operator (a nested tag recurses)
+# and refers back to `solve(F)` when the operator carries the load's tag itself. `solve` is
+# any function of the load, so no factorization type is assumed here.
+@inline _solve_by_parts(solve::S, F) where {S} = solve(F)
 
 # The factorization that the `Float64` solve of `A` takes with the same keywords, route for
 # route: `:default` takes Accelerate on macOS for a symmetric `A` (the test of the routing
