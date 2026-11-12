@@ -512,6 +512,35 @@ end
         @test R == Fd && map(x -> x.partials[1], R) == dF
         @test_throws ArgumentError assemble!(K, zeros(length(Fr)), a, l)
     end
+    # gpena/Bramble.jl#1198: a complex or `Dual` Robin coefficient gives `E` its type, and
+    # `assemble(l)` alone types the load `Eᵀ F_pad` with it, as `l(v)` does. `D₊ₓ` reads
+    # the `:xmax` ghost, so α reaches the load.
+    @testset "Load alone, complex or Dual closure" begin
+        fl = v -> innerₕ(x -> 1.0 + x[1], D₊ₓ(v))
+        sp(α) = constrained(Wg, u -> (:xmin => u => 0.0, :ymin => u => 0.0,
+            :ymax => ∂ₙ(u) => 0.0, :xmax => α * u + ∂ₙ(u) => 0.0))
+        load(α) = (C = sp(α); assemble(form(C, fl)))
+        ref(α) = (C = sp(α); transpose(C.E) * assemble(form(Bramble.padded_space(C), fl)))
+        @test eltype(load(2.0)) == Float64 && relerr(load(2.0), ref(2.0)) <= tol
+        b = load(2.0 + 1.0im)
+        @test eltype(b) == ComplexF64
+        @test norm(imag(b)) > 1e-3 * norm(b)
+        @test relerr(b, ref(2.0 + 1.0im)) <= tol
+        bd = load(Dual(1.3, 1.0))
+        @test eltype(bd) <: Dual
+        @test relerr(map(x -> x.value, bd), load(1.3)) <= tol
+        db = map(x -> x.partials[1], bd)
+        @test norm(db) > 1e-3 * norm(load(1.3))
+        @test relerr(db, cdiff(load, 1.3)) <= 1e-6
+        Cc = sp(2.0 + 1.0im)
+        n = Bramble.ndofs(Cc)
+        bc = assemble(form(Cc × Cc,
+            v -> innerₕ(x -> 1.0 + x[1], D₊ₓ(v(1))) + innerₕ(x -> 2.0, v(2))))
+        @test eltype(bc) == ComplexF64 && length(bc) == 2n
+        @test relerr(bc[1:n], b) <= tol
+        b2 = transpose(Cc.E) * assemble(form(Bramble.padded_space(Cc), v -> innerₕ(x -> 2.0, v)))
+        @test relerr(bc[(n + 1):end], b2) <= tol
+    end
     @testset "Real data defined on its own facet only" begin
         bc = x -> sqrt(-x[1])                  # real at x₁ = 0 only
         fl = v -> innerₕ(x -> 1.0, v)
