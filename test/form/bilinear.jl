@@ -2515,4 +2515,54 @@ end
     @test eltype(Fr) == Float64
 end
 
+@testset "Wrong-size matrix refused (#1196)" begin
+    # The sweep reads and writes `A` with `@inbounds`, so a smaller matrix was read out of
+    # bounds and a larger one kept stale entries. `assemble!` and `assemble_parallel!`
+    # check the size first, so the matrix comes back untouched. A rectangular form has
+    # test rows and trial columns: its transpose is refused too.
+    pts = _nonuniform_points([0.3, 0.1, 0.25, 0.05, 0.2, 0.15, 0.35])
+    Ω8 = mesh(domain(interval(0.0, 1.0)), length(pts), false)
+    set_points!(Ω8, pts)
+    W8 = gridspace(Ω8)
+    W5, W11 = (gridspace(mesh(domain(interval(0.0, 1.0)), n, true)) for n in (5, 11))
+    bf(W) = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+    square = bf(W8)
+    # trial W8, test W8 × W8: a 16 × 8 matrix
+    rect = form(W8, W8 × W8, (u, V) -> innerₕ(u, V[1]) + innerₕ(u, V[2]))
+    @test size(assemble(rect)) == (16, 8)
+    # Any: each form is its own type
+    for (label, a, wrong) in Any[
+        ("square, sparse larger", square, Bramble.allocate_system_matrix(bf(W11))),
+        ("square, sparse smaller", square, Bramble.allocate_system_matrix(bf(W5))),
+        ("square, dense larger", square, zeros(10, 10)),
+        ("square, dense smaller", square, zeros(6, 6)),
+        ("square, more rows", square, zeros(9, 8)),
+        ("square, more columns", square, zeros(8, 9)),
+        ("rectangular, transposed", rect, zeros(8, 16))]
+        @testset "$label" begin
+            A = wrong
+            stored = A isa SparseMatrixCSC ? nonzeros(A) : A
+            fill!(stored, 7.0)
+            err = try
+                assemble!(A, a)
+                nothing
+            catch e
+                e
+            end
+            @test err isa DimensionMismatch
+            msg = sprint(showerror, err)
+            n, m = ndofs(a.test_space), ndofs(a.trial_space)
+            @test occursin(string(size(A)), msg) && occursin(string((n, m)), msg)
+            @test all(==(7.0), stored)
+            @test_throws DimensionMismatch assemble!(A, a; dirichlet = :boundary)
+            @test all(==(7.0), stored)
+            @test_throws DimensionMismatch Bramble.assemble_parallel!(A, a)
+            @test all(==(7.0), stored)
+        end
+    end
+    # the right size still assembles
+    @test assemble!(Bramble.allocate_system_matrix(square), square) == assemble(square)
+    @test assemble!(zeros(16, 8), rect) == Matrix(assemble(rect))
+end
+
 end # module FormBilinearTests

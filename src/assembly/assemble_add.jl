@@ -66,7 +66,8 @@ for the pattern alone, never assembled itself -- gives a matrix wide enough for 
 piece: its coordinate walk (`_CoordSink`, `bilinear_traversal.jl`) takes the union of
 every summand's entries, exactly what this needs. A missing entry raises an `ArgumentError`
 naming the term, exactly as [`assemble!`](@ref)'s own first call does; nothing is silently
-dropped or reallocated.
+dropped or reallocated. An `A` whose size is not `(ndofs(test_space(a)),
+ndofs(trial_space(a)))` raises a `DimensionMismatch` before anything is written.
 
 Threads following `trial_space(a)`'s backend [`execution_policy`](@ref), same as
 [`assemble!`](@ref). **0 additional bytes** allocated on every call after the very first
@@ -106,6 +107,7 @@ See also: [`assemble!`](@ref), [`assemble`](@ref).
 # on the matrix type themselves, so widening this signature is all
 # that is needed for a dense-backend form.
 function assemble_add!(A::AbstractMatrix, a::BilinearForm)
+    _check_bilinear_size(A, a)
     if execution_policy(a.trial_space) isa CpuSerial
         _assemble_bilinear_core_cached!(A, a.trial_space, a.test_space, a.ast, a.cache)
     else
@@ -115,6 +117,7 @@ function assemble_add!(A::AbstractMatrix, a::BilinearForm)
 end
 
 function assemble_add!(A::AbstractMatrix, a::BilinearForm, α)
+    _check_bilinear_size(A, a)
     αv = _coefficient_value(α)
     if execution_policy(a.trial_space) isa CpuSerial
         _assemble_bilinear_core_cached!(A, a.trial_space, a.test_space, a.ast, a.cache, αv)
