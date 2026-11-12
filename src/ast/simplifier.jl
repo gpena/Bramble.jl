@@ -722,8 +722,9 @@ end
     cl, al = _scale_parts(left)
     cr, ar = _scale_parts(right)
     # `⟨a + b, v⟩ -> ⟨a, v⟩ + ⟨b, v⟩` when the sum holds a Dirac source, so each term gets
-    # its own weight (none for the Dirac one).
-    if al isa OperatorAdd && _any_dirac(al)
+    # its own weight (none for the Dirac one). A second scale left after the peel, as in
+    # `-(a + b) / 2`, splits the same way.
+    if al isa Union{OperatorAdd, OperatorScale} && _any_dirac(al)
         return _lift_scalars(cl, cr, _split_dirac_sum(op, al, ar))
     end
     _any_dirac(al) && !_is_dirac(al) && _throw_mixed_dirac_source()

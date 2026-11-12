@@ -158,6 +158,15 @@ _bytes(f, args...) = @allocated f(args...)
         @test_throws ArgumentError form(Wₕ, v -> innerₕ(Mₓ(πₕ(fₕ) + δa), v))
         @test_throws "dirac" form(Wₕ, v -> innerₕ(Mₓ(πₕ(fₕ) + δa), v))
 
+        # Two scalar factors over a mixed sum still split per term; a grid-function factor
+        # would weight the Dirac term, so it stays rejected
+        bf = assemble(form(Wₕ, v -> innerₕ(πₕ(fₕ), v)))
+        bδ = assemble(l1)
+        @test assemble(form(Wₕ, v -> innerₕ(-(πₕ(fₕ) + δa) / 2, v))) ≈ -(bf + bδ) / 2
+        @test assemble(form(Wₕ, v -> innerₕ(Ref(2.0) * (3.0 * (πₕ(fₕ) + δa)), v))) ≈
+              6.0 * (bf + bδ)
+        @test_throws ArgumentError form(Wₕ, v -> innerₕ(fₕ * (πₕ(fₕ) + δa), v))
+
         buf = similar(b_sum)
         assemble!(buf, l_sum)
         @test _bytes(assemble!, buf, l_sum) == 0
