@@ -43,7 +43,7 @@ function Bramble._export_vtk_solution(
         for (i, (t, u)) in enumerate(steps)
             uₕ = element(Wₕ, u)
             vtk = vtk_grid(_step_name(filename, i, length(steps)), _vtk_axes(Ωₕ)...)
-            vtk[name] = _vtk_data(uₕ)
+            vtk[name] = _vtk_data(name, Ωₕ, uₕ)
             pvd[t] = vtk
         end
     end

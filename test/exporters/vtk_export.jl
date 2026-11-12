@@ -27,7 +27,7 @@ using ..TestUtils: WITH_3D_TESTS
         uₕ = Rₕ(Wₕ, sin)
 
         # The values handed to WriteVTK: the compressed appended data is not read back.
-        @test Bramble._vtk_data(uₕ) == sin.(points(Ωₕ))
+        @test Bramble._vtk_data("u", Ωₕ, uₕ) == sin.(points(Ωₕ))
         @test Bramble._vtk_axes(Ωₕ) == (points(Ωₕ), [0.0])
 
         mktempdir() do dir
@@ -68,7 +68,7 @@ using ..TestUtils: WITH_3D_TESTS
         # One array per component, in order, each shaped like the grid; the axes are the
         # mesh's own (non-uniform in x) points rather than a uniform range.
         X, Y = points(Ωₕ)
-        @test Bramble._vtk_data(vₕ) == ([x for x in X, y in Y], [y for x in X, y in Y])
+        @test Bramble._vtk_data("v", Ωₕ, vₕ) == ([x for x in X, y in Y], [y for x in X, y in Y])
         @test Bramble._vtk_axes(Ωₕ) == (X, Y)
 
         mktempdir() do dir
@@ -86,7 +86,7 @@ using ..TestUtils: WITH_3D_TESTS
         # Leaves sharing one mesh are the positive control.
         cc = Rₕ(Wb × Wb, (x -> x[1], x -> 2x[1]))
 
-        @test_throws ArgumentError Bramble._vtk_data(c)
+        @test_throws ArgumentError Bramble._vtk_data("c", mesh(Wa), c)
         mktempdir() do dir
             @test_throws ArgumentError export_vtk(joinpath(dir, "t"), c)
             @test_throws "different meshes" export_vtk(joinpath(dir, "t"), mesh(Wa), "c" => c)
@@ -104,7 +104,7 @@ using ..TestUtils: WITH_3D_TESTS
         )
         Wₕ = gridspace(Ωₕ)
         uₕ = Rₕ(Wₕ, x -> x[1] + x[2] + x[3])
-        raw = collect(1.0:ndofs(Wₕ))
+        raw = reshape(collect(1.0:ndofs(Wₕ)), 3, 4, 3)
 
         mktempdir() do dir
             f = only(export_vtk(joinpath(dir, "m"), Ωₕ, "u" => uₕ, "raw" => raw))
@@ -115,12 +115,53 @@ using ..TestUtils: WITH_3D_TESTS
         end
     end
 
+    @testset "wrong-sized field refused" begin
+        X = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωc = mesh(domain(X), (3, 4), (false, false))
+        Ωf = mesh(domain(X), (5, 6), (false, false))
+        Ω1 = mesh(domain(interval(0.0, 1.0)), 9, false)
+        Wc = gridspace(Ωc)
+        uc = Rₕ(Wc, x -> x[1])
+        uf = Rₕ(gridspace(Ωf), x -> x[1])
+        vc = Rₕ(Wc × Wc, x -> (x[1], x[2]))
+        vf = Rₕ(gridspace(Ωf) × gridspace(Ωf), x -> (x[1], x[2]))
+
+        mktempdir() do dir
+            p(s) = joinpath(dir, s)
+            ok = export_vtk(
+                p("ok"), Ωc, "u" => uc, "v" => vc, "w" => reshape(collect(1.0:12.0), 3, 4)
+            )
+            @test length(ok) == 1
+            @test length(export_vtk(p("ok1"), Ω1, "u" => collect(1.0:9.0))) == 1
+
+            @test_throws ArgumentError("\"u\" has size (5, 6), but the mesh has (3, 4) points") export_vtk(
+                p("a"), Ωc, "u" => uf
+            )
+            @test_throws ArgumentError("\"u\" has size (30,), but the mesh has (3, 4) points") export_vtk(
+                p("b"), Ωc, "u" => parent(uf)
+            )
+            @test_throws ArgumentError("\"u\" has size (6,), but the mesh has (3, 4) points") export_vtk(
+                p("c"), Ωc, "u" => ones(6)
+            )
+            @test_throws ArgumentError("\"u\" has size (4, 3), but the mesh has (3, 4) points") export_vtk(
+                p("d"), Ωc, "u" => ones(4, 3)
+            )
+            @test_throws ArgumentError("\"v\" has size (5, 6), but the mesh has (3, 4) points") export_vtk(
+                p("e"), Ωc, "v" => vf
+            )
+            @test_throws ArgumentError("\"u\" has size (8,), but the mesh has (9,) points") export_vtk(
+                p("f"), Ω1, "u" => ones(8)
+            )
+            @test_throws ArgumentError export_vtk(p("g"), Ωc, "ok" => uc, "u" => uf)
+        end
+    end
+
     @testset "Non-Array AbstractArray field data" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4), (false, false))
         backing = collect(1.0:40.0)
         field = reshape(view(backing, 1:20), 5, 4)   # a ReshapedArray over a SubArray
         @test !(field isa Array)
-        copied = Bramble._vtk_data(field)
+        copied = Bramble._vtk_data("view", Ωₕ, field)
         @test copied isa Array{Float64, 2}
         @test copied == [Float64(i + 5 * (j - 1)) for i in 1:5, j in 1:4]
 

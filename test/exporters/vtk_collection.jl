@@ -95,6 +95,25 @@ end
         end
     end
 
+    @testset "do-block: wrong-sized field refused" begin
+        X = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωc = mesh(domain(X), (3, 4), (false, false))
+        Ωf = mesh(domain(X), (5, 6), (false, false))
+        uc = Rₕ(gridspace(Ωc), x -> x[1])
+        uf = Rₕ(gridspace(Ωf), x -> x[1])
+
+        mktempdir() do dir
+            pvd_path = joinpath(dir, "bad")
+            @test_throws ArgumentError("\"u\" has size (5, 6), but the mesh has (3, 4) points") export_vtk(
+                pvd_path
+            ) do pvd
+                pvd[0.0] = (joinpath(dir, "ok"), Ωc, "u" => uc)
+                pvd[1.0] = (joinpath(dir, "s"), Ωc, "u" => uf)
+            end
+            @test length(_dataset_entries(pvd_path * ".pvd")) == 1
+        end
+    end
+
     @testset "do-block: append" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
         Wₕ = gridspace(Ωₕ)
