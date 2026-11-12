@@ -624,10 +624,11 @@ function gmg_solve(
 end
 
 # A function barrier: on a ghost form `P` is inferred only as a `Union` (`constrained`
-# returns one of two space types), and the loop is compiled for the concrete `P`. The
-# converged solve is linear in the load, so a load in parts (a `ForwardDiff.Dual` one on a
-# real hierarchy, `_solve_by_parts`) has each part solved by the same cycles, to `tol`
-# against its own norm, and the parts come back as a plain vector to wrap.
+# returns one of two space types), and the loop is compiled for the concrete `P`. A load
+# whose type the hierarchy holds runs the cycles whole. Otherwise the converged solve is
+# linear in the load, so a load in parts (a `ForwardDiff.Dual` one on a real hierarchy,
+# `_solve_by_parts`) has each part solved by the same cycles, to `tol` against its own
+# norm, and the parts come back as a plain vector to wrap.
 function _gmg_solve_loop(P::GMGPreconditioner, b::AbstractVector, cycle::Symbol, tol,
         maxiters::Integer)
     op = last(P.ops)
@@ -639,6 +640,8 @@ function _gmg_solve_loop(P::GMGPreconditioner, b::AbstractVector, cycle::Symbol,
     )
     bd = _mf_data(b)
     Base.require_one_based_indexing(bd)
+    promote_type(eltype(P), eltype(bd)) === eltype(P) &&
+        return _gmg_cycles_to_tol(P, bd, cycle, τ, maxiters)
     y = _solve_by_parts(c -> _gmg_cycles_to_tol(P, c, cycle, τ, maxiters), bd)
     return y isa VectorElement ? y : element(_gmg_trial_space(op), y)
 end

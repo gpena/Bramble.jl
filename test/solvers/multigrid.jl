@@ -754,6 +754,9 @@ end
     @test typeof(gmg_preconditioner(lap, Ω)) <: rt
 end
 
+# The tag of the Dual hierarchy built in the testset below.
+struct _MGTag end
+
 @testset "gmg_solve: ForwardDiff (#1168)" begin
     # The oracle is ForwardDiff of the direct solve, exact; a difference quotient of the
     # iterative solve would carry its residual. Seed 1 gives a 9×9 mesh whose primal stalls.
@@ -795,6 +798,15 @@ end
     b = ones(npoints(Ω))
     loop(t) = (Bramble._gmg_solve_loop(P, b, :V, t, 100); @allocated Bramble._gmg_solve_loop(P, b, :V, t, 100))
     @test loop(1e-3) == loop(1e-11)
+    # A Dual load on a hierarchy of its own Dual type runs one cycle loop, not the split's
+    # value solve first: the solve allocates what that one loop does.
+    Ωu = mesh(domain(_mg_box(2)), (17, 17), (true, true))
+    PD = gmg_preconditioner(bld(ForwardDiff.Dual{_MGTag}(0.7, 1.0)), Ωu)
+    bD = ForwardDiff.Dual{_MGTag}.(b, b)
+    whole() = @allocated Bramble._gmg_solve_loop(PD, bD, :V, 1e-10, 100)
+    once() = @allocated Bramble._gmg_cycles_to_tol(PD, bD, :V, 1e-10, 100)
+    whole(), once()
+    @test whole() == once()
 end
 
 @testset "gmg: threaded cycles agree" begin
