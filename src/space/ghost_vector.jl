@@ -24,7 +24,8 @@ time loop that writes its state into `u` sees it in the `GhostVector`. The ghost
 one entry per ghost of `mesh(Wₕ)`, in the ghost order of [`GhostMesh`](@ref) (the facets
 `xmin`, `xmax`, `ymin`, …, each facet's nodes in the mesh's column-major order), and starts
 at 0; [`update_ghosts!`](@ref) fills it from the relations of a constrained space.
-`GhostVector(Wₕ)` starts from zeros, its physical part a vector of the backend of `Wₕ`.
+`GhostVector(Wₕ)` starts from zeros, its physical part a vector of the backend of `Wₕ`, of
+the element type of the closure of `Wₕ`: complex for a complex datum or Robin coefficient.
 `Wₕ` is any space with ghosts, as built by `gridspace(Ωₕ; ghosts = ...)` or
 [`constrained`](@ref).
 
@@ -66,8 +67,10 @@ function GhostVector(Wₕ::GhostGridSpace, u::AbstractVector)
     return GhostVector(u, g, G)
 end
 
+# The element type of the closure `(E, d)`, the type `update_ghosts!` asks of the vector: a
+# complex or `Dual` datum or coefficient widens it past `eltype(Wₕ)` (gpena/Bramble.jl#1214).
 function GhostVector(Wₕ::GhostGridSpace)
-    T = eltype(Wₕ)
+    T = promote_type(eltype(Wₕ), eltype(Wₕ.E), eltype(Wₕ.d))
     u = fill!(_backend_vector(backend(Wₕ), T, length(physical_indices(mesh(Wₕ)))), zero(T))
     return GhostVector(Wₕ, u)
 end
