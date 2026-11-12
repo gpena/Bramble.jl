@@ -4,7 +4,7 @@ using Test
 using Bramble
 using ChainRulesCore
 using SparseArrays: SparseMatrixCSC, nnz, nonzeros, sparse, spdiagm
-using LinearAlgebra: I
+using LinearAlgebra: I, ldiv!
 using Polyester
 using ForwardDiff
 using SuiteSparse
@@ -102,6 +102,14 @@ function _child_gradient(name::AbstractString; losses::AbstractString = CHILD_LO
     grad, fd = m === nothing ? (NaN, NaN) : parse.(Float64, m.captures)
     return p.exitcode, grad, fd, text
 end
+
+# A factorization that solves with the matrix it holds and has no adjoint solve, standing for
+# a backend whose `fact'` is unavailable (Sparspak, MUMPS, Accelerate).
+struct NoAdjointFactorization{T} <: Bramble.SparspakFactorization{T}
+    A::SparseMatrixCSC{T, Int}
+end
+Base.size(f::NoAdjointFactorization) = size(f.A)
+Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
 
 @testset "BrambleChainRulesExt + Enzyme" begin
     @testset "Enzyme forward: pde_solve rule" begin
@@ -473,6 +481,143 @@ end
             loss_rect(θ) = sum(Bramble.pde_solve(sparse([1.0 0.0; 0.0 2.0; 1.0 1.0]),
                 [θ, 2.0, 0.0]; solver = :spqr))
             @test_throws ArgumentError Enzyme.gradient(mode, Enzyme.Const(loss_rect), 0.3)
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
+    @testset "Enzyme: kept factorization rules" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            rev = Enzyme.set_runtime_activity(Enzyme.Reverse)
+            fwd = Enzyme.set_runtime_activity(Enzyme.Forward)
+            sparse_factorize = Bramble.sparse_factorize
+
+            # A non-symmetric `A₀`, so `fact \ ū` where `fact' \ ū` belongs changes the
+            # gradient, and a symmetric positive definite `As` for the CHOLMOD factor.
+            Wk = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 9, true))
+            n = ndofs(Wk)
+            A₀ = sparse(spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.5, n),
+                1 => fill(-1.2, n - 1)))
+            As = sparse(spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.5, n),
+                1 => fill(-1.0, n - 1)))
+            c = [sin(2i) for i in 1:n]
+            F₀ = [1.0 + sin(i) for i in 1:n]
+            Ḟ1 = [cos(k) for k in 1:n]
+            Ḟ2 = [sin(3k) for k in 1:n]
+            @test maximum(abs, A₀ \ c - A₀' \ c) > 1e-3
+
+            solve_vec(fact, F) = Bramble.pde_solve(fact, F)
+            function ldiv_vec(fact, F)
+                u = element(Wk)
+                ldiv!(u, fact, F)
+                return copy(parent(u))
+            end
+            solve_loss(fact, F) = sum(c .* solve_vec(fact, F))
+            ldiv_loss(fact, F) = sum(c .* ldiv_vec(fact, F))
+
+            for (A, fact) in ((A₀, sparse_factorize(A₀)), (As, sparse_factorize(As; sym = :spd))),
+                (solver, loss) in ((solve_vec, solve_loss), (ldiv_vec, ldiv_loss))
+
+                # Reverse: `F̄ = A⁻ᵀ c`, with `Const` and `Duplicated` loads. The primal load is
+                # left alone.
+                Fd = zeros(n)
+                F = copy(F₀)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active, Enzyme.Const(fact),
+                    Enzyme.Duplicated(F, Fd))
+                @test Fd ≈ A' \ c rtol=1e-10
+                @test F == F₀
+                @test Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active,
+                    Enzyme.Const(fact), Enzyme.Const(F)) isa Tuple
+
+                # Forward, width 1 and width 2, and a load with no tangent.
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solver), Enzyme.Duplicated,
+                    Enzyme.Const(fact), Enzyme.Duplicated(copy(F₀), Ḟ1)))
+                @test u̇ ≈ A \ Ḟ1 rtol=1e-10
+                bat = only(Enzyme.autodiff(fwd, Enzyme.Const(solver), Enzyme.BatchDuplicated,
+                    Enzyme.Const(fact), Enzyme.BatchDuplicated(copy(F₀), (Ḟ1, Ḟ2))))
+                @test collect(values(bat)) ≈ [A \ Ḟ1, A \ Ḟ2] rtol=1e-10
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solver), Enzyme.Duplicated,
+                    Enzyme.Const(fact), Enzyme.Const(copy(F₀))))
+                @test u̇ == zeros(n)
+            end
+
+            # `ldiv!` is in place: with the destination an argument, the cotangent it holds
+            # after the call is read and then cleared, and the primal solution is written.
+            fact = sparse_factorize(A₀)
+            dest_loss(x, fact, F) = (ldiv!(x, fact, F); sum(c .* parent(x)))
+            x = element(Wk)
+            dx = element(Wk)
+            parent(dx) .= 0
+            Fd = zeros(n)
+            Enzyme.autodiff(rev, Enzyme.Const(dest_loss), Enzyme.Active,
+                Enzyme.Duplicated(x, dx), Enzyme.Const(fact), Enzyme.Duplicated(copy(F₀), Fd))
+            @test Fd ≈ A₀' \ c rtol=1e-10
+            @test all(iszero, parent(dx))
+            @test parent(x) ≈ A₀ \ F₀ rtol=1e-10
+
+            # Forward with the destination an argument: its tangent is written even when the
+            # return is `Const`, so a shadow that starts as junk ends as `A₀ \ Ḟ`.
+            dx = element(Wk)
+            parent(dx) .= 7.0
+            Enzyme.autodiff(fwd, Enzyme.Const(ldiv!), Enzyme.Const,
+                Enzyme.Duplicated(element(Wk), dx), Enzyme.Const(fact),
+                Enzyme.Duplicated(copy(F₀), Ḟ1))
+            @test parent(dx) ≈ A₀ \ Ḟ1 rtol=1e-10
+            parent(dx) .= 7.0
+            Enzyme.autodiff(fwd, Enzyme.Const(ldiv!), Enzyme.Const,
+                Enzyme.Duplicated(element(Wk), dx), Enzyme.Const(fact), Enzyme.Const(F₀))
+            @test all(iszero, parent(dx))
+
+            # `sparse_factorize` called directly: a matrix without a shadow factors in both
+            # modes, and a matrix with one is refused, naming the rule that carries it, since
+            # a gradient that drops the matrix's derivative would be silently wrong.
+            @test Enzyme.autodiff(rev, Enzyme.Const(sparse_factorize), Enzyme.Const,
+                Enzyme.Const(A₀)) == ((nothing,),)
+            @test Enzyme.autodiff(fwd, Enzyme.Const(sparse_factorize), Enzyme.Const,
+                Enzyme.Const(A₀)) == ()
+            @test_throws ArgumentError "pde_solve(A, F)" Enzyme.autodiff(
+                rev, Enzyme.Const(sparse_factorize), Enzyme.Const,
+                Enzyme.Duplicated(copy(A₀), Enzyme.make_zero(A₀)))
+            @test_throws ArgumentError "pde_solve(A, F)" Enzyme.autodiff(
+                fwd, Enzyme.Const(sparse_factorize), Enzyme.Const,
+                Enzyme.Duplicated(copy(A₀), copy(A₀)))
+
+            # A factorization with no adjoint solve is refused in reverse, by name, and solves
+            # in forward.
+            nofact = NoAdjointFactorization(A₀)
+            @test_throws ArgumentError "NoAdjointFactorization" Enzyme.autodiff(
+                rev, Enzyme.Const(solve_loss), Enzyme.Active, Enzyme.Const(nofact),
+                Enzyme.Duplicated(copy(F₀), zeros(n)))
+            u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve_vec), Enzyme.Duplicated,
+                Enzyme.Const(nofact), Enzyme.Duplicated(copy(F₀), Ḟ1)))
+            @test u̇ ≈ A₀ \ Ḟ1 rtol=1e-10
+
+            # Through `assemble`, with the matrix factored once outside the differentiated
+            # function: the load is the differentiated input, on a uniform and a non-uniform
+            # mesh. The reference is ForwardDiff of `pde_solve(A, F)`.
+            for unif in (true, false)
+                Wp = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 17, unif))
+                bf(p) = (κ = element(Wp, eltype(p)); parent(κ) .= 2.0 .+ p[1];
+                         form(Wp, Wp, (U, V) -> inner₊(κ * ∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V)))
+                lf = form(Wp, v -> innerₕ(x -> 1.0 + x[1], v))
+                sys(p) = ((A, F) = assemble(bf(p), lf; dirichlet = :boundary => x -> 0.0);
+                          (A, (1 + p[2]) .* F))
+                p0 = [0.5, 0.25]
+                Ap = first(sys(p0))
+                g = ForwardDiff.gradient(q -> sum(abs2, Bramble.pde_solve(Ap, last(sys(q)))), p0)
+                # `A` is fixed, so only the load's parameter moves the solution.
+                @test g[1] == 0 && abs(g[2]) > 1e-6
+                fa = sparse_factorize(Ap)
+                kept(q) = sum(abs2, Bramble.pde_solve(fa, last(sys(q))))
+                inplace(q) = (u = element(Wp, eltype(q)); ldiv!(u, fa, last(sys(q)));
+                              sum(abs2, parent(u)))
+                for m in (Enzyme.Reverse, Enzyme.Forward), f in (kept, inplace)
+                    ad = DI.AutoEnzyme(; mode = Enzyme.set_runtime_activity(m),
+                        function_annotation = Enzyme.Const)
+                    @test DI.gradient(f, ad, p0) ≈ g rtol=1e-8
+                end
+            end
         else
             @test_skip "Enzyme not in this environment"
         end

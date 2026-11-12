@@ -160,3 +160,235 @@ function EnzymeRules.reverse(
 
     return (nothing, nothing)
 end
+
+# The rules for a kept factorization (#1165).
+#
+# Enzyme enters the factorization's `Union` field and stops with `IllegalTypeAnalysisException`,
+# so the rules keep it out. With `fact` constant, `u = fact \ F` is linear in `F`. Each lane's
+# tangent is `u̇ = fact \ Ḟ`, and the pullback is `λ = fact' \ ū`, `F̄ += λ`, with the
+# return's cotangent zeroed after use, as in the rule on `pde_solve(A, F)`. The matrix's
+# derivative is not carried, so `sparse_factorize` of an active matrix throws and names
+# `pde_solve(A, F)` as the call that carries it. The factorization must be built outside the
+# differentiated function: built inside, its inferred `Union` can abort forward mode. The
+# rules cover `pde_solve(fact, F)` and `ldiv!(uₕ, fact, F)`. The latter works in place, and
+# in reverse it reads the destination's shadow and then zeroes it. The factorization is kept
+# by reference, so a `refactor!` between the forward and the reverse pass would change the
+# adjoint solve.
+
+@noinline function _throw_adjoint_unavailable(@nospecialize(fact))
+    throw(
+        ArgumentError(
+        "Bramble's Enzyme rule for a kept factorization solves the adjoint system " *
+        "`fact' \\ ū` in reverse mode, which a $(nameof(typeof(fact))) does not provide. " *
+        "Use forward mode, or differentiate `pde_solve(A, F)` on the matrix.",
+    ),
+    )
+end
+
+@noinline function _throw_active_factorize()
+    throw(
+        ArgumentError(
+        "Bramble's Enzyme rules do not carry the derivative of a matrix through " *
+        "`sparse_factorize`: its argument has a shadow, and the factorization would " *
+        "silently drop it. Differentiate `pde_solve(A, F)` on the matrix instead, or " *
+        "factor a matrix that does not depend on the differentiated inputs.",
+    ),
+    )
+end
+
+# A `Bramble` factorization is a constant to Enzyme: its type depends on `sym` at run time, so
+# `sparse_factorize` returns a `Union`, which forward mode cannot give a shadow.
+EnzymeRules.inactive_type(::Type{<:Bramble.SuiteSparseFactorization}) = true
+EnzymeRules.inactive_type(::Type{<:Bramble.AccelerateFactorization}) = true
+EnzymeRules.inactive_type(::Type{<:Bramble.MUMPSFactorization}) = true
+EnzymeRules.inactive_type(::Type{<:Bramble.SparspakFactorization}) = true
+
+# The factorization the adjoint solve runs against, `nothing` when there is none. A
+# `Bramble` SuiteSparse factorization holds the `UmfpackLU` or `CHOLMOD.Factor` that
+# `fact'` applies to; the other backends have no adjoint solve.
+_adjoint_factor(fact::Factorization) = fact
+_adjoint_factor(fact::Bramble.SuiteSparseFactorization) = fact.fact
+_adjoint_factor(::Bramble.AccelerateFactorization) = nothing
+_adjoint_factor(::Bramble.MUMPSFactorization) = nothing
+_adjoint_factor(::Bramble.SparspakFactorization) = nothing
+
+_adjoint_solve(fact, ū) = _adjoint_factor(fact)' \ ū
+
+# Whether `x` carries a shadow that is not the primal itself (see `_rank_one_tangent`).
+_has_shadow(::Const) = false
+_has_shadow(x::Annotation) = x.dval !== x.val
+
+# The width-aware count of lanes whose shadow of the matrix `A` is not `A` itself.
+_active_matrix(::Const, _) = false
+_active_matrix(A::Annotation, W) = any(i -> _lane(A, i) !== A.val, 1:W)
+
+# What a forward rule returns, from the primal and the shadow it computed.
+# `RT`, the annotation Enzyme expects back, builds the pair: a value of a `Union` type must
+# come back as that `Union`'s annotation.
+function _forward_result(config::FwdConfig, ::Type{RT}, primal, shadow) where {RT}
+    needs_primal = EnzymeRules.needs_primal(config)
+    EnzymeRules.needs_shadow(config) || return needs_primal ? primal : nothing
+    needs_primal || return shadow
+    return RT(primal, shadow)
+end
+
+# `fact \ Ḟ` for one lane, zero when the load has no tangent.
+_load_tangent(fact, ::Nothing, u) = zero(u)
+_load_tangent(fact, Ḟ, _) = fact \ Ḟ
+
+function EnzymeRules.forward(
+        config::FwdConfig,
+        ::Const{typeof(pde_solve)},
+        ::Type{RT},
+        fact::Annotation{<:Factorization},
+        F::Annotation{<:AbstractVector}
+) where {RT}
+    u = pde_solve(fact.val, F.val)
+    RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
+    W = EnzymeRules.width(config)
+    shadows = ntuple(Val(W)) do i
+        return _load_tangent(fact.val, _rank_one_tangent(F.val, _lane(F, i)), u)
+    end
+    return _forward_result(config, RT, u, W == 1 ? only(shadows) : shadows)
+end
+
+function EnzymeRules.augmented_primal(
+        config::RevConfig,
+        ::Const{typeof(pde_solve)},
+        ::Type{RT},
+        fact::Annotation{<:Factorization},
+        F::Annotation{<:AbstractVector}
+) where {RT}
+    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    _has_shadow(F) && _adjoint_factor(fact.val) === nothing &&
+        _throw_adjoint_unavailable(fact.val)
+
+    u = pde_solve(fact.val, F.val)
+    ū = zero(u)
+
+    primal = EnzymeRules.needs_primal(config) ? u : nothing
+    shadow = EnzymeRules.needs_shadow(config) ? ū : nothing
+    return AugmentedReturn(primal, shadow, (fact.val, ū))
+end
+
+function EnzymeRules.reverse(
+        config::RevConfig,
+        ::Const{typeof(pde_solve)},
+        ::Type{RT},
+        tape,
+        fact::Annotation{<:Factorization},
+        F::Annotation{<:AbstractVector}
+) where {RT}
+    fact₀, ū = tape
+    _has_shadow(F) && (F.dval .+= _adjoint_solve(fact₀, ū))
+
+    # A custom rule consumes the return cotangent it was handed (see the rule on a matrix).
+    fill!(ū, zero(eltype(ū)))
+
+    return (nothing, nothing)
+end
+
+function EnzymeRules.forward(
+        config::FwdConfig,
+        ::Const{typeof(ldiv!)},
+        ::Type{RT},
+        x::Annotation{<:Bramble.VectorElement},
+        fact::Annotation{<:Factorization},
+        F::Annotation{<:AbstractVector}
+) where {RT}
+    ldiv!(x.val, fact.val, F.val)
+    # The destination's tangents are written before any return: a `Const` return still
+    # leaves the caller reading `ẋ`, which would otherwise hold whatever it held before.
+    for i in 1:EnzymeRules.width(config)
+        ẋ = _rank_one_tangent(x.val, _lane(x, i))
+        ẋ === nothing && continue
+        Ḟ = _rank_one_tangent(F.val, _lane(F, i))
+        copyto!(parent(ẋ), _load_tangent(fact.val, Ḟ, parent(ẋ)))
+    end
+    RT <: Const && return EnzymeRules.needs_primal(config) ? x.val : nothing
+    return _forward_result(config, RT, x.val, x.dval)
+end
+
+function EnzymeRules.augmented_primal(
+        config::RevConfig,
+        ::Const{typeof(ldiv!)},
+        ::Type{RT},
+        x::Annotation{<:Bramble.VectorElement},
+        fact::Annotation{<:Factorization},
+        F::Annotation{<:AbstractVector}
+) where {RT}
+    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    _has_shadow(x) && _has_shadow(F) && _adjoint_factor(fact.val) === nothing &&
+        _throw_adjoint_unavailable(fact.val)
+
+    ldiv!(x.val, fact.val, F.val)
+
+    primal = EnzymeRules.needs_primal(config) ? x.val : nothing
+    shadow = EnzymeRules.needs_shadow(config) ? x.dval : nothing
+    return AugmentedReturn(primal, shadow, nothing)
+end
+
+# The destination is overwritten, so its cotangent before the call is zero: the cotangent
+# after the call is read into `F̄` and cleared. A destination whose shadow is itself is a
+# constant and is left alone.
+function EnzymeRules.reverse(
+        config::RevConfig,
+        ::Const{typeof(ldiv!)},
+        ::Type{RT},
+        tape,
+        x::Annotation{<:Bramble.VectorElement},
+        fact::Annotation{<:Factorization},
+        F::Annotation{<:AbstractVector}
+) where {RT}
+    if _has_shadow(x)
+        ū = parent(x.dval)
+        _has_shadow(F) && (F.dval .+= _adjoint_solve(fact.val, ū))
+        fill!(ū, zero(eltype(ū)))
+    end
+    return (nothing, nothing, nothing)
+end
+
+# `sparse_factorize` is kept out of Enzyme. A matrix without a shadow gives a factorization
+# with the matrix's activity, none, and its shadow, if one is asked for, is the factorization
+# itself, as runtime activity gives a constant. A matrix with a shadow is refused: nothing
+# here carries its derivative, and dropping it would return a gradient that misses it.
+function EnzymeRules.forward(
+        config::FwdConfig,
+        ::Const{typeof(Bramble.sparse_factorize)},
+        ::Type{RT},
+        A::Annotation{<:SparseMatrixCSC};
+        kwargs...
+) where {RT}
+    _active_matrix(A, EnzymeRules.width(config)) && _throw_active_factorize()
+    fact = Bramble.sparse_factorize(A.val; kwargs...)
+    RT <: Const && return EnzymeRules.needs_primal(config) ? fact : nothing
+    W = EnzymeRules.width(config)
+    return _forward_result(config, RT, fact, W == 1 ? fact : ntuple(_ -> fact, Val(W)))
+end
+
+function EnzymeRules.augmented_primal(
+        config::RevConfig,
+        ::Const{typeof(Bramble.sparse_factorize)},
+        ::Type{RT},
+        A::Annotation{<:SparseMatrixCSC};
+        kwargs...
+) where {RT}
+    _active_matrix(A, EnzymeRules.width(config)) && _throw_active_factorize()
+    fact = Bramble.sparse_factorize(A.val; kwargs...)
+    primal = EnzymeRules.needs_primal(config) ? fact : nothing
+    shadow = EnzymeRules.needs_shadow(config) ? fact : nothing
+    # The factorization's type depends on `sym` at run time, so `RT` holds a `Union` and the
+    # return must be built from it.
+    return EnzymeRules.augmented_rule_return_type(config, RT)(primal, shadow, nothing)
+end
+
+function EnzymeRules.reverse(
+        config::RevConfig,
+        ::Const{typeof(Bramble.sparse_factorize)},
+        ::Type{RT},
+        tape,
+        A::Annotation{<:SparseMatrixCSC};
+        kwargs...
+) where {RT}
+    return (nothing,)
+end
