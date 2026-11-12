@@ -499,6 +499,10 @@ function EnzymeRules.forward(
     return _throw_batched_forward(EnzymeRules.width(config))
 end
 
+# The reverse sweep solves with the factorization the forward solve built, kept on the tape: a
+# coefficient (a `Ref` set between two solves) or the mesh may have changed by then, and the
+# pullback is the adjoint of the operator the solve used. The factorization infers a `Union`
+# of two types, so the tape is opaque and the primal is solved into an array of its eltype.
 function EnzymeRules.augmented_primal(
         config::RevConfig,
         ::Const{typeof(Bramble.fdm_solve)},
@@ -510,18 +514,18 @@ function EnzymeRules.augmented_primal(
     EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
     _active_shadow(a, 1) && _throw_active_operator()
 
-    u = Bramble.fdm_solve(a.val, F.val; kwargs...)
-    # The adjoint is the same solve only on the symmetric route; the check factors once more,
-    # and only when a cotangent reaches `F`.
-    _has_shadow(F) && !_fdm_symmetric_route(Bramble.fdm_factorize(a.val; kwargs...)) &&
-        _throw_schur_adjoint()
+    fact = Bramble.fdm_factorize(a.val; kwargs...)
+    # The adjoint is the same solve only on the symmetric route.
+    _has_shadow(F) && !_fdm_symmetric_route(fact) && _throw_schur_adjoint()
+    u = Bramble.fdm_solve!(Vector{typeof(fact).parameters[1]}(undef, size(fact, 1)), fact,
+        F.val)::Vector
     ū = zero(u)
 
     primal = EnzymeRules.needs_primal(config) ? u : nothing
     shadow = EnzymeRules.needs_shadow(config) ? ū : nothing
     # `fdm_solve` infers a `Vector` of unknown element type, so `RT` is not concrete and the
     # return must be built from it.
-    return EnzymeRules.augmented_rule_return_type(config, RT)(primal, shadow, ū)
+    return EnzymeRules.augmented_rule_return_type(config, RT)(primal, shadow, (fact, ū))
 end
 
 function EnzymeRules.reverse(
@@ -533,9 +537,9 @@ function EnzymeRules.reverse(
         F::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    ū = tape
+    fact, ū = tape
     # `λ` is read before `ū` is cleared, and `F̄` is a different array.
-    λ = _has_shadow(F) ? Bramble.fdm_solve(a.val, ū; kwargs...) : nothing
+    λ = _has_shadow(F) ? Bramble.fdm_solve!(similar(ū), fact, ū) : nothing
     fill!(ū, zero(eltype(ū)))
     λ === nothing || (F.dval .+= λ)
     return (nothing, nothing)

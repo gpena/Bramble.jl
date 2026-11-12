@@ -766,6 +766,27 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                 end
             end
 
+            # A `Ref` coefficient set between two solves, the time-loop pattern of
+            # `BilinearForm`'s docstring: the pullback of each solve is the adjoint of the
+            # operator it solved with, not of the one the coefficient holds at the reverse
+            # sweep. `γ` is data, and the loss is quadratic in `θ`, so `d/dθ = 2 loss(θ) / θ`.
+            Wr = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                       Bramble.interval(0.0, 1.0)),
+                (9, 9), (false, false)))
+            xr = [sin(0.7k) for k in 1:ndofs(Wr)]
+            γ = Ref(1.0)
+            ar = form(Wr, Wr, (U, V) -> γ * inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V))
+            function loss_ref(θ)
+                γ[] = 1.0
+                u = fdm_solve(ar, θ .* xr)
+                γ[] = 5.0
+                return sum(abs2, fdm_solve(ar, u))
+            end
+            exact = 2 * loss_ref(0.7) / 0.7
+            @test first(Enzyme.gradient(rev, Enzyme.Const(loss_ref), 0.7)) ≈ exact rtol=1e-8
+            @test only(Enzyme.autodiff(fwd, Enzyme.Const(loss_ref), Enzyme.Duplicated,
+                Enzyme.Duplicated(0.7, 1.0))) ≈ exact rtol=1e-8
+
             # A form with an advection term takes the generalised Schur route, whose system is
             # not symmetric: forward solves the tangent, and reverse is refused by name, since
             # `fdm_solve(a, ū)` is not its adjoint.
