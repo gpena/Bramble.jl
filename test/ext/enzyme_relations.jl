@@ -92,15 +92,16 @@ function _reverse(P, r, v)
         Enzyme.Const(_scaled_loss), Enzyme.Active, P, r, v)
 end
 
-# A loss of `Bramble._dense_block_solve` on the block `C₀ + p C₁`, with right-hand sides
-# `B₀ + p B₁` and `b₀ + p b₁`: every input active.
+# A loss of `Bramble._dense_block_solve` on the block `C₀ + p₁ C₁`, with right-hand sides
+# `B₀ + p₂ B₁` and `b₀ + p₃ b₁`: every input active, each through a parameter of its own,
+# so forward mode runs the rule on a batch of three lanes.
 function _block_loss(C₀, C₁)
     n = size(C₀, 1)
     B₀, B₁ = reshape(collect(1.0:(2n)), n, 2) ./ 3, reshape(collect((2n):-1:1.0), n, 2) ./ 7
     b₀, b₁ = collect(1.0:n), collect(n:-1.0:1) ./ 5
     function f(p)
-        X, x = Bramble._dense_block_solve(C₀ .+ p[1] .* C₁, B₀ .+ p[1] .* B₁,
-            b₀ .+ p[1] .* b₁)
+        X, x = Bramble._dense_block_solve(C₀ .+ p[1] .* C₁, B₀ .+ p[2] .* B₁,
+            b₀ .+ p[3] .* b₁)
         return sum(abs2, X) + sum(abs2, x)
     end
     return f
@@ -168,9 +169,10 @@ end
             (label, C₀, C₁) in blocks
 
             entries = ext._rule_entries(:_dense_block_solve)
-            ref = DI.gradient(_block_loss(C₀, C₁), DI.AutoForwardDiff(), [0.7])
-            g = DI.gradient(_block_loss(C₀, C₁), _auto(mode), [0.7])
-            @test abs(only(ref)) > 1e-6
+            p₀ = [0.7, -0.4, 1.1]
+            ref = DI.gradient(_block_loss(C₀, C₁), DI.AutoForwardDiff(), p₀)
+            g = DI.gradient(_block_loss(C₀, C₁), _auto(mode), p₀)
+            @test all(r -> abs(r) > 1e-6, ref)
             @test _relerr(g, ref) < TOL
             @test ext._rule_entries(:_dense_block_solve) > entries
         end
