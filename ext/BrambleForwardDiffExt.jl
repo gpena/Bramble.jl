@@ -57,9 +57,9 @@ end
 # The solve of a load linear in its parts (`Bramble._solve_by_parts`): the value and each
 # partial of `F` are solved by `solve` on their own, and a nested tag recurses. If the solve
 # of the value returns tags other than those of the value type `V`, the operator carries a
-# tag of its own (a factor of a `Dual` matrix): the parts cannot be rewrapped in the right
-# tag order, so `solve(F)` is taken whole. Only tags count: a `Float32` operator returns
-# `Float32` leaves for `Float64` ones, and that load still splits.
+# tag of its own (a factor of a `Dual` matrix). The parts cannot then be rewrapped in the
+# right tag order, so `solve(F)` is taken whole. Only tags count, so a `Float32` operator,
+# which returns `Float32` leaves for `Float64` ones, still splits the load.
 function Bramble._solve_by_parts(
         solve::S, F::AbstractVector{ForwardDiff.Dual{T, V, N}}) where {S, T, V, N}
     x0 = Bramble._solve_by_parts(solve, ForwardDiff.value.(F))
