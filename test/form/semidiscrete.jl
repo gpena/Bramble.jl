@@ -1354,6 +1354,11 @@ _typed_x(x::Real) = 0.0
 _typed_xt(x::Real, t::Real) = 2t
 _typed_xtp(x::Real, t::Real, p::AbstractVector) = p[1] * t
 _typed_none() = 0.0
+# An untyped method of one arity beside a typed method of another is refused.
+_mixed_a(x) = 1.0
+_mixed_a(x::Real, t::Real) = 1.0 + 2t
+_mixed_b(x) = -100.0
+_mixed_b(x::Real, t::Real, p::AbstractVector) = t * p[1]
 
 @testset "typed Dirichlet data (#1186)" begin
     Ωₕ, Wₕ, fₕ, a, l = _sd_problem(9)
@@ -1386,6 +1391,23 @@ _typed_none() = 0.0
     end
     @test err isa ArgumentError
     @test occursin("_typed_none", sprint(showerror, err))
+
+    # An untyped method beside a typed one of another arity would be read as spatial and
+    # drop `t`, so it is refused (A: (x) with (x, t); B: (x) with (x, t, p)).
+    for g in (_mixed_a, _mixed_b)
+        e = try
+            cls(g)
+            nothing
+        catch ex
+            ex
+        end
+        @test e isa ArgumentError
+        @test occursin(string(nameof(g)), sprint(showerror, e))
+        @test occursin("same typing", sprint(showerror, e))
+    end
+    # ... where the same methods untyped, or all typed, are classified.
+    @test cls((x, t) -> 2t, I) isa Bramble.TimeDependentConstraints
+    @test cls(_typed_x) isa Bramble.StaticConstraints
 
     # `Fix` and composition still answer for what they wrap, typed or not.
     @test cls(Base.Fix2(_typed_xt, 3.0)) isa Bramble.StaticConstraints

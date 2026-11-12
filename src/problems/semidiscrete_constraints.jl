@@ -88,16 +88,28 @@ end
 # otherwise be read as time-dependent and fail at the first residual call. The argument
 # types are not checked, as the point type is unknown here, so `g(x::Int, t::Real)` on a
 # `Float64` mesh passes and fails at the first residual call.
+#
+# `_accepts` sees a typed method only when no arity has an untyped one, so `g(x)` beside a
+# typed `g(x::Real, t::Real)` would be read as spatial and drop `t`. A callback whose
+# `_accepts` answer differs from the per-arity lookup is that case, and is refused.
 function _validate_dirichlet_arity_known(constraints::ConstraintMarkers)
     for m in conditions(constraints)
         f = identifier(m)
-        (_accepts(f, Val(1)) || _accepts(f, Val(2)) || _accepts(f, Val(3))) && continue
-        throw(
+        (_accepts(f, Val(1)) || _accepts(f, Val(2)) || _accepts(f, Val(3))) || throw(
             ArgumentError(
             "semidiscretize: Dirichlet condition for label `:$(label(m))` must accept " *
             "(x), (x, t) or (x, t, p), got $(f), which has no method for any of them.",
         ),
         )
+        all(N -> _accepts(f, N) == _accepts_any_typing(f, N), (Val(1), Val(2), Val(3))) ||
+            throw(
+                ArgumentError(
+                "semidiscretize: Dirichlet condition for label `:$(label(m))`, $(f), has " *
+                "an untyped method of one arity beside a typed method of another, so " *
+                "its time and parameter dependence cannot be read. Give all its methods " *
+                "the same typing, or type none of them.",
+            ),
+            )
     end
     return nothing
 end

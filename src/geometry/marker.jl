@@ -433,7 +433,10 @@ through unchanged. Any other predicate is fixed at `t` as `Base.Fix2(f, t)`. So
 `(x, t = 0.0) -> ...` is fixed at `t`, not left at its default. A predicate typed on its
 argument (`(x::NTuple{2, Float64}) -> ...`) has no `Tuple{Any}` method either, but it is
 still classified by the number of arguments it takes, so `x::Real -> ...` is spatial and
-`(x::Real, t::Real) -> ...` is fixed at `t`.
+`(x::Real, t::Real) -> ...` is fixed at `t`. A function mixing the two is read by its
+untyped methods alone, so `semidiscretize` refuses one whose methods of different arity
+are not typed alike (an untyped `g(x)` beside a typed `g(x::Real, t::Real)`): type all of
+its methods or none.
 
 A `ComposedFunction` or a `Base.Fix1`/`Base.Fix2` is classified by what it wraps, not by its
 own varargs call method: a composition by its innermost function, which receives every
@@ -467,6 +470,11 @@ end
 # `hasmethod` says no for every arity. Only then does `_accepts` ask `methods(f, NTuple{N,
 # Any})`, which lists the methods whose signature intersects it and so sees `g(x::Real)`.
 # The untyped answer keeps folding and the slow lookup runs for typed callbacks alone.
+#
+# `_accepts_any_typing` is the per-arity form of that lookup, with the same `Fix` and
+# composition rules. It allocates, so only the classification in `semidiscretize` calls it,
+# to refuse a callback it disagrees with `_accepts` on (an untyped method of one arity
+# hiding a typed one of another). The `conditions` path never does.
 @inline function _accepts(f::F, ::Val{N}) where {F, N}
     return @inline(hasmethod(f, NTuple{N, Any})) || (
         !@inline(hasmethod(f, NTuple{1, Any})) &&
@@ -478,6 +486,14 @@ end
 @inline _accepts(c::ComposedFunction, ::Val{N}) where {N} = _accepts(c.inner, Val(N))
 @inline function _accepts(f::Base.Fix{K}, ::Val{N}) where {K, N}
     return N >= K - 1 && _accepts(f.f, Val(N + 1))
+end
+
+function _accepts_any_typing(f, ::Val{N}) where {N}
+    return hasmethod(f, NTuple{N, Any}) || !isempty(methods(f, NTuple{N, Any}))
+end
+_accepts_any_typing(c::ComposedFunction, ::Val{N}) where {N} = _accepts_any_typing(c.inner, Val(N))
+function _accepts_any_typing(f::Base.Fix{K}, ::Val{N}) where {K, N}
+    return N >= K - 1 && _accepts_any_typing(f.f, Val(N + 1))
 end
 
 @inline function _is_spatial(f::F) where {F}
