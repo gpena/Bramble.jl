@@ -71,9 +71,13 @@ _reaction_markers(marker) = _throw_bad_marker(marker)
 
 # A ghost space, or a composite of them, has replaced the marked rows by its relations, so
 # the residual there is no reaction: the matrix methods refuse it before reading a row.
-# `_throw_ghost_reaction` lives in assembly/ghost_contract.jl.
-@inline _check_reaction_space(_) = nothing
-_check_reaction_space(::Union{GhostGridSpace, _GhostCompositeSpace}) = _throw_ghost_reaction()
+# `ConstrainedCompositeSpace` (`constrained(G × G, ...)`) and `_throw_ghost_reaction` come
+# later in the include order (assembly/), so the test sits in a body, resolved at call time.
+@inline function _check_reaction_space(sp)
+    sp isa Union{GhostGridSpace, _GhostCompositeSpace, ConstrainedCompositeSpace} &&
+        _throw_ghost_reaction()
+    return nothing
+end
 
 # The matrix methods index `A`, `F`, `uₕ`'s storage and the caller's buffer with
 # `@inbounds`, so a size mismatch must be caught here, not left to an out-of-bounds write.

@@ -616,9 +616,12 @@ _bytes(f, scratch, A, F, uₕ, marker) = @allocated f(scratch, A, F, uₕ; marke
         Ωp = mesh(domain(interval(0.0, 3.0) × interval(0.0, 3.0),
                 :P => Bramble.polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])),
             (12, 12), (false, false))
-        C = constrained(gridspace(Ω; ghosts = :boundary),
-            u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => ∂ₙ(u) => 0.0,
-                :ymin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0))
+        G = gridspace(Ω; ghosts = :boundary)
+        rel(u) = (:xmin => ∂ₙ(u) => 0.0, :xmax => ∂ₙ(u) => 0.0,
+            :ymin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0)
+        C = constrained(G, rel)
+        # a ghost composite constrained as a whole, not component by component
+        CC = constrained(G × G, u -> (rel(u(1))..., rel(u(2))...))
         U, _ = Bramble.polygon_spaces(Ωp, :P, x -> 0.0)
         system(V) = (n = ndofs(V); (sparse(1:n, 1:n, fill(2.0, n)), ones(n), fill!(element(V), 1.0), n))
         message(f) = try
@@ -633,7 +636,7 @@ _bytes(f, scratch, A, F, uₕ, marker) = @allocated f(scratch, A, F, uₕ; marke
         @test reaction(A, F, v; marker = :boundary) isa Real
         @test reaction!(zeros(n), A, F, v; marker = :boundary) isa Real
         @test length(reaction_density!(zeros(n), A, F, v; marker = :boundary)) == n
-        for V in (C, C × C, U × U)
+        for V in (C, C × C, U × U, CC)
             A, F, v, n = system(V)
             for f in (() -> reaction(A, F, v; marker = :boundary),
                 () -> reaction(Matrix(A), F, v; marker = :boundary),
