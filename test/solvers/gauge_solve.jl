@@ -61,7 +61,11 @@ function check_gauged(A, Wₕ, np; solver = :default, tol_x = 1e-7, tol_pinv = 1
     @test e2 <= tol_pinv
     # the ghost values too: the minimum of nothing but `Zᵀu = 0`
     @test relerr(u, projected_reference(x, Z, Z)) <= tol_pinv
-    @test pde_solve(A, F; gauge = Z, solver = solver) == u
+    again = pde_solve(A, F; gauge = Z, solver = solver)
+    # libSparse's parallel factorization is not bitwise deterministic (seen 2e-10 apart at κ 1e12)
+    accel = solver === :accelerate ||
+            (solver === :default && Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing)
+    accel ? @test(relerr(again, u) <= 1e-8) : @test(again == u)
     return e1, e2
 end
 
