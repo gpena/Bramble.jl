@@ -233,7 +233,9 @@ using ..TestUtils: _fd
         u32, _ = rrule(Bramble.pde_solve, A32, F32)
         @test eltype(u32) === eltype(Bramble.pde_solve(A32, F32))
         @test u32 ≈ Bramble.pde_solve(A32, F32)
-        # `Rational` data solves exactly, so the primal must not become `Float64`.
+        # `Rational` data keeps a `Rational` primal, not `Float64`. Only the type is the
+        # contract: for a symmetric `Rational` `A` the primal is the LU solution rounded to
+        # `Rational`, not `pde_solve`'s exact one. This `A` is unsymmetric, where they agree.
         Aq = SparseMatrixCSC{Rational{Int}, Int}(A)
         Fq = Rational{Int}[1, 2, 3]
         uq, _ = rrule(Bramble.pde_solve, Aq, Fq)
