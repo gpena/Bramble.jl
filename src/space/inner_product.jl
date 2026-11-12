@@ -424,7 +424,10 @@ error of a solve is `normₕ(element(U, u) - Rₕ(U, u_exact))`; the norm of
 value of the solution. The test space `W` throws an `ArgumentError`.
 """
 @inline normₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ)))
-@inline normₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ)))
+@inline function normₕ(uₕ::VectorElement{<:CompositeGridSpace})
+    _checked_length(uₕ)
+    return sqrt(real(innerₕ(uₕ, uₕ)))
+end
 
 # A ghost space reads its physical nodes only, the first `npoints` degrees of freedom, with
 # the weights of the padded space, which are 0 at every ghost: the ghost values never enter.
@@ -432,9 +435,19 @@ value of the solution. The test space `W` throws an `ArgumentError`.
 # A polygon trial space measures its grid function on Ω̄ₕ (`_polygon_element`).
 # A composite of ghost spaces sums the components' squares, as `norm₁ₕ` does.
 normₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_normₕ_sq(uₕ)))
-normₕ(uₕ::VectorElement{<:_GhostCompositeSpace}) = sqrt(real(sum(_normₕ_sq, components(uₕ))))
+normₕ(uₕ::VectorElement{<:_GhostCompositeSpace}) = sqrt(real(sum(
+    _normₕ_sq, components(_checked_length(uₕ)))))
+
+# A composite or ghost element is sliced into components or cut to its physical values by
+# offsets alone, so a coefficient vector of another length than `ndofs` is refused first.
+@inline function _checked_length(uₕ::VectorElement)
+    n = ndofs(space(uₕ))
+    length(parent(uₕ)) == n || _throw_dot_dim_error(length(parent(uₕ)), n, length(parent(uₕ)))
+    return uₕ
+end
 
 function _normₕ_sq(uₕ::VectorElement{<:GhostGridSpace})
+    _checked_length(uₕ)
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_ghost_norm(parent(uₕ))
     if _is_polygon_trial(uₕ.space)
         e = _polygon_element(uₕ)
@@ -1392,7 +1405,7 @@ boundary nodes: it sums every grid edge with both ends interior or on the bounda
 edge joins an interior node to an exterior one.
 """
 @inline snorm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
-@inline snorm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
+@inline snorm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(_snorm₁ₕ_sq(_checked_length(uₕ))))
 snorm₁ₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
 
 # Squared seminorm summed over the leaves, so the composite never takes a root per
@@ -1426,9 +1439,13 @@ norm of the product space of those grid functions. On the trial space of
 [`Bramble.polygon_spaces`](@ref) it reads the nodes of Ω̄ₕ, as `normₕ` and `snorm₁ₕ` do.
 """
 @inline norm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
-@inline norm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
+@inline function norm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace})
+    _checked_length(uₕ)
+    return sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
+end
 norm₁ₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_norm₁ₕ_sq(uₕ)))
-norm₁ₕ(uₕ::VectorElement{<:_GhostCompositeSpace}) = sqrt(real(sum(_norm₁ₕ_sq, components(uₕ))))
+norm₁ₕ(uₕ::VectorElement{<:_GhostCompositeSpace}) = sqrt(real(sum(
+    _norm₁ₕ_sq, components(_checked_length(uₕ)))))
 
 function _norm₁ₕ_sq(uₕ::VectorElement{<:GhostGridSpace})
     e = _physical_element(:norm₁ₕ, uₕ)
@@ -1440,6 +1457,7 @@ end
 # space's weights are read first, so a moved mesh throws as in `normₕ`. A polygon trial
 # space gives its grid function on Ω̄ₕ, 0 on the boundary nodes (`_polygon_element`).
 function _physical_element(op::Symbol, uₕ::VectorElement{<:GhostGridSpace})
+    _checked_length(uₕ)
     _is_polygon_trial(uₕ.space) && return _polygon_element(uₕ)
     u = _physical_values(op, uₕ)
     weights(uₕ.space.padded)   # throws once the mesh has moved

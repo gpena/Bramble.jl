@@ -546,6 +546,40 @@ end
             end
         end
     end
+    # A composite element is sliced into components by offsets and a ghost element cut to
+    # its first `npoints` values, so neither read alone sees a wrong total length: a longer
+    # vector gave a value and a shorter one a `BoundsError`. The check allocates nothing;
+    # `snorm₁ₕ` and `norm₁ₕ` on a ghost space build the physical space per call, so only
+    # the other right-sized calls are held to 0 bytes.
+    @testset "Wrong length, composite and ghost" begin
+        Ωs = (mesh(domain(unit(Float64)), 9, false),
+            mesh(domain(unit(Float64) × unit(Float64)), (7, 5), (false, false)),
+            (WITH_3D_TESTS ?
+             (mesh(domain(unit(Float64) × unit(Float64) × unit(Float64)), (4, 5, 3),
+                (false, false, false)),) :
+             ())...)
+        for Ωₕ in Ωs
+            Wₕ = gridspace(Ωₕ)
+            Gₕ = gridspace(Ωₕ; ghosts = :boundary)
+            for (Sₕ, ghost) in ((Wₕ × Wₕ, false), (Gₕ, true), (Gₕ × Gₕ, true))
+                n = ndofs(Sₕ)
+                u = Bramble.VectorElement(collect(range(1.0, 2.0; length = n)), Sₕ)
+                @test snorm₁ₕ(u) > 0
+                Bramble._checked_length(u)
+                @test (@allocated Bramble._checked_length(u)) == 0
+                for f in (ghost ? (normₕ,) : (normₕ, snorm₁ₕ, norm₁ₕ))
+                    f(u)
+                    @test (@allocated f(u)) == 0
+                end
+                for len in (n + 1, n - 1, 1, 0)
+                    v = Bramble.VectorElement(ones(len), Sₕ)
+                    @test_throws DimensionMismatch normₕ(v)
+                    @test_throws DimensionMismatch snorm₁ₕ(v)
+                    @test_throws DimensionMismatch norm₁ₕ(v)
+                end
+            end
+        end
+    end
 end
 
 @testset "inner₊ dimension" begin
