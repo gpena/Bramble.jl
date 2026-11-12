@@ -22,6 +22,9 @@ module ExtEnzymeRelationsTests
 # On a composite, `constrained(W × W, …)` builds the rows of all components in one pass.
 # Reverse mode stopped there with an `EnzymeInternalError` (#1180), constant relations too;
 # the composite cells check it with constant relations and with a datum on one component.
+# Where tractions meet at a corner with a parameter in their operators, Enzyme's derivative
+# is wrong in both modes, and the rules of `Bramble._corner_entry` refuse it; a cell pins
+# the refusal.
 #
 # Enzyme is not in test/Project.toml: load it first, through a temporary environment
 # (test/ext/enzyme_policy_cases.jl says how). Without it the file runs nothing, and with it
@@ -140,6 +143,27 @@ function _composite_loss(W, what::Symbol)
     return f
 end
 
+# The loss of tractions on `:xmin` and `:ymin` of `W × W`, with `λ = p[1]` in the
+# operators' `K`, the other facets clamped: their corner moves its entries through the
+# one-sided difference (`Bramble._corner_entry`), whose rules refuse this case (#1180).
+function _corner_loss(W)
+    K(i, j, λ) = [λ * (i == d) * (j == e) + 0.5 * ((i == j) * (d == e) + (i == e) * (j == d))
+                  for d in 1:2, e in 1:2]
+    t(u, i, λ) = ∂ₙ(u(1); K = K(i, 1, λ)) + ∂ₙ(u(2); K = K(i, 2, λ))
+    clamped(F, u) = (F => u(1) => 0.0, F => u(2) => 0.0, F => ∂ₙₙ(u(1)) => 0.0,
+        F => ∂ₙₙ(u(2)) => 0.0)
+    function f(p)
+        λ = p[1]
+        C = constrained(W × W,
+            u -> (:xmin => t(u, 1, λ) => 1.0, :xmin => t(u, 2, λ) => 0.0,
+                :ymin => t(u, 1, λ) => 0.0, :ymin => t(u, 2, λ) => 0.3,
+                clamped(:xmax, u)..., clamped(:ymax, u)...))
+        E, d = Bramble.closure(C)
+        return sum(abs2, nonzeros(E)) + sum(abs2, d)
+    end
+    return f
+end
+
 @testset verbose=true "constrained relations, Enzyme (#1153)" begin
     if RUN_ENZYME
         W = gridspace(ghost_mesh(CpuSerial(), (7, 6)); ghosts = (:xmin, :xmax, :ymax))
@@ -215,6 +239,13 @@ end
             err, ref = _enzyme_vs_forwarddiff(_composite_loss(W, what), mode)
             @test abs(only(ref)) > 1e-6
             @test err < TOL
+        end
+
+        @testset "corner coefficient refused, $mname (#1180)" for (mname, mode) in modes
+            Wb = gridspace(ghost_mesh(CpuSerial(), (7, 6)); ghosts = :boundary)
+            grad() = DI.gradient(_corner_loss(Wb), _auto(mode), [2.0])
+            @test_throws ArgumentError grad()
+            @test_throws "parameter in a relation's operator" grad()
         end
     end
 end

@@ -218,3 +218,61 @@ function EnzymeRules.reverse(
     fill!(x̄, zero(eltype(x̄)))
     return (nothing, nothing, nothing)
 end
+
+# The rules for `Bramble._corner_entry`, the entry of a relation's row that a one-sided
+# corner of tractions moves (`_one_sided_corners!`). With a coefficient of a relation's
+# operator active there, Enzyme's derivative of `constrained` on the composite is wrong in
+# both modes (#1180), though each step of it is right on its own, so the rules refuse it.
+# Forward mode refuses a non-zero tangent, so a datum, whose derivative reaches only the
+# load, still passes. Reverse mode cannot tell the two apart and refuses an active entry.
+@noinline function _throw_active_corner(reverse::Bool)
+    why = reverse ?
+          " Reverse mode cannot tell that parameter from one in the data, so it refuses " *
+          "both: use ForwardDiff, or Enzyme's forward mode for a parameter in the data." :
+          " Use ForwardDiff."
+    throw(
+        ArgumentError(
+        "Enzyme cannot differentiate `constrained` on a composite through a corner where " *
+        "two relations reading several components meet (tractions), with a parameter in " *
+        "a relation's operator: its derivative there comes out wrong (#1180)." * why,
+    ),
+    )
+end
+
+function EnzymeRules.forward(
+        config::FwdConfig,
+        func::Const{typeof(Bramble._corner_entry)},
+        ::Type{RT},
+        v::Annotation
+) where {RT}
+    W = EnzymeRules.width(config)
+    any(w -> (v̇ = _shadow(v, w); v̇ !== nothing && !iszero(v̇)), 1:W) &&
+        _throw_active_corner(false)
+    x = v.val
+    needs_primal = EnzymeRules.needs_primal(config)
+    EnzymeRules.needs_shadow(config) || return needs_primal ? x : nothing
+    shadow = W == 1 ? zero(x) : ntuple(_ -> zero(x), Val(W))
+    needs_primal || return shadow
+    return W == 1 ? Duplicated(x, shadow) : BatchDuplicated(x, shadow)
+end
+
+function EnzymeRules.augmented_primal(
+        config::RevConfig,
+        func::Const{typeof(Bramble._corner_entry)},
+        ::Type{RT},
+        v::Annotation
+) where {RT}
+    v isa Const || _throw_active_corner(true)
+    primal = EnzymeRules.needs_primal(config) ? v.val : nothing
+    return AugmentedReturn(primal, nothing, nothing)
+end
+
+function EnzymeRules.reverse(
+        config::RevConfig,
+        func::Const{typeof(Bramble._corner_entry)},
+        ::Type{RT},
+        tape,
+        v::Annotation
+) where {RT}
+    return (nothing,)
+end

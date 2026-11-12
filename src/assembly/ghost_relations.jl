@@ -768,6 +768,7 @@ function _one_sided_corners!(rows, cols, vals, start, k, comps::Tuple, I, e, t, 
         for q in start:lastindex(cols)
             cols[q] == ghost && (v += vals[q]; vals[q] = zero(v))
         end
+        v = _corner_entry(v)
         if !iszero(v)
             x = host_points(_padded(G)(e))
             at(m) = J[e] + m * step[e]
@@ -780,6 +781,11 @@ function _one_sided_corners!(rows, cols, vals, start, k, comps::Tuple, I, e, t, 
     end
     return _one_sided_corners!(rows, cols, vals, start, k, Base.tail(comps), I, e, t, step)
 end
+
+# The entry `v` that a one-sided corner moves, unchanged. A function of its own so that
+# ext/BrambleEnzymeExt/relations.jl can refuse a derivative through it: Enzyme gets the
+# corner's derivative wrong when an operator coefficient is active (#1180).
+@noinline _corner_entry(v) = v
 
 # The weights at the nodes `x₀`, `x₁`, `x₂` of the quadratic through them, evaluated at `x`:
 # the one-sided second-order difference of a corner, as `_one_sided_corner!` applies them,
