@@ -33,8 +33,8 @@
 #
 # The limit is `S1174_LIMIT` seconds (default 1200). With one thread a Julia task cannot
 # interrupt a compile that never yields, so the script starts a shell watchdog on its own
-# pid, which prints `WATCHDOG timeout` to stderr and sends SIGKILL at the limit; an exit
-# hook stops it when the run ends first.
+# pid, which prints `WATCHDOG timeout` to stderr and sends SIGKILL at the limit, and exits
+# within a second when the run ends first.
 #
 # Enzyme and ForwardDiff are weak dependencies of the root project: they load from a
 # temporary environment, as 1177_ghost_3d.jl does.
@@ -46,10 +46,10 @@
 const LIMIT = parse(Int, get(ENV, "S1174_LIMIT", "1200"))
 println("pid ", getpid(), " limit ", LIMIT, " s")
 flush(stdout)
-const WATCHDOG = run(
-    pipeline(`sh -c "sleep $(LIMIT); echo WATCHDOG timeout >&2; kill -9 $(getpid())"`;
-        stderr = stderr); wait = false)
-atexit(() -> process_running(WATCHDOG) && kill(WATCHDOG))
+const WATCHDOG_SH = "i=0; while [ \$i -lt $(LIMIT) ]; do sleep 1; " *
+                    "kill -0 $(getpid()) 2>/dev/null || exit 0; i=\$((i + 1)); done; " *
+                    "echo WATCHDOG timeout >&2; kill -9 $(getpid())"
+run(pipeline(`sh -c $WATCHDOG_SH`; stderr = stderr); wait = false)
 
 _e = mktempdir()
 write(joinpath(_e, "Project.toml"),
