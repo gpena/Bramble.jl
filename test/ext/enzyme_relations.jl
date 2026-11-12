@@ -19,12 +19,9 @@ module ExtEnzymeRelationsTests
 # mode (#1176). `Bramble._dense_block_solve` holds that LU and has rules of its own; its
 # cells check them on blocks of two and three, then through `constrained`.
 #
-# On a composite, `constrained(W × W, …)` builds the rows of all components in one pass.
-# Reverse mode stopped there with an `EnzymeInternalError` (#1180), constant relations too;
-# the composite cells check it with constant relations and with a datum on one component.
-# Where tractions meet at a corner with a parameter in their operators, Enzyme's derivative
-# is wrong in both modes, and the rules of `Bramble._corner_entry` refuse it; a cell pins
-# the refusal.
+# The cells of a composite, `constrained(W × W, …)` (#1180), are in
+# test/ext/enzyme_relations_composite.jl, a child of their own: in this one they pushed its
+# peak footprint past 10 GB.
 #
 # Enzyme is not in test/Project.toml: load it first, through a temporary environment
 # (test/ext/enzyme_policy_cases.jl says how). Without it the file runs nothing, and with it
@@ -125,45 +122,6 @@ function _conormal_loss(W)
     return f
 end
 
-# The loss of `constrained(W × W, …)`: the closure of relations on both components, the
-# datum on `:xmax` of the first `p[1]` (`:data`), or every relation constant and the closure
-# scaled by `p[1]^2` (`:constant`).
-function _composite_loss(W, what::Symbol)
-    function f(p)
-        g = what === :data ? p[1] : 1.0
-        C = constrained(W × W,
-            u -> (:xmin => ∂ₙ(u(1)) => 0.0, :xmax => 2.0 * u(1) + ∂ₙ(u(1)) => g,
-                :ymin => u(1) => 0.0, :ymax => ∂ₙ(u(1)) => 1.0,
-                :xmin => ∂ₙ(u(2)) => 0.0, :xmax => ∂ₙ(u(2)) => 1.0,
-                :ymin => u(2) => 0.0, :ymax => ∂ₙ(u(2)) => 0.5))
-        E, d = Bramble.closure(C)
-        s = sum(abs2, nonzeros(E)) + sum(abs2, d)
-        return what === :constant ? p[1]^2 * s : s
-    end
-    return f
-end
-
-# The loss of tractions on `:xmin` and `:ymin` of `W × W`, with `λ = p[1]` in the
-# operators' `K`, the other facets clamped: their corner moves its entries through the
-# one-sided difference (`Bramble._corner_entry`), whose rules refuse this case (#1180).
-function _corner_loss(W)
-    K(i, j, λ) = [λ * (i == d) * (j == e) + 0.5 * ((i == j) * (d == e) + (i == e) * (j == d))
-                  for d in 1:2, e in 1:2]
-    t(u, i, λ) = ∂ₙ(u(1); K = K(i, 1, λ)) + ∂ₙ(u(2); K = K(i, 2, λ))
-    clamped(F, u) = (F => u(1) => 0.0, F => u(2) => 0.0, F => ∂ₙₙ(u(1)) => 0.0,
-        F => ∂ₙₙ(u(2)) => 0.0)
-    function f(p)
-        λ = p[1]
-        C = constrained(W × W,
-            u -> (:xmin => t(u, 1, λ) => 1.0, :xmin => t(u, 2, λ) => 0.0,
-                :ymin => t(u, 1, λ) => 0.0, :ymin => t(u, 2, λ) => 0.3,
-                clamped(:xmax, u)..., clamped(:ymax, u)...))
-        E, d = Bramble.closure(C)
-        return sum(abs2, nonzeros(E)) + sum(abs2, d)
-    end
-    return f
-end
-
 @testset verbose=true "constrained relations, Enzyme (#1153)" begin
     if RUN_ENZYME
         W = gridspace(ghost_mesh(CpuSerial(), (7, 6)); ghosts = (:xmin, :xmax, :ymax))
@@ -232,20 +190,6 @@ end
             err, ref = _enzyme_vs_forwarddiff(f, Enzyme.Reverse)
             @test abs(only(ref)) > 1e-6
             @test err < TOL
-        end
-
-        cells = ((:constant, modes[1]...), (:data, modes[1]...), (:data, modes[2]...))
-        @testset "composite, $what, $mname (#1180)" for (what, mname, mode) in cells
-            err, ref = _enzyme_vs_forwarddiff(_composite_loss(W, what), mode)
-            @test abs(only(ref)) > 1e-6
-            @test err < TOL
-        end
-
-        @testset "corner coefficient refused, $mname (#1180)" for (mname, mode) in modes
-            Wb = gridspace(ghost_mesh(CpuSerial(), (7, 6)); ghosts = :boundary)
-            grad() = DI.gradient(_corner_loss(Wb), _auto(mode), [2.0])
-            @test_throws ArgumentError grad()
-            @test_throws "parameter in a relation's operator" grad()
         end
     end
 end
