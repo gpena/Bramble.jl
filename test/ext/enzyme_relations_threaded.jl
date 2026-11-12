@@ -98,7 +98,8 @@ end
             err, ref, n = _check(_loss(W, what), mode, [1.3])
             @test abs(only(ref)) > 1e-6
             @test err < TOL
-            @test n > 0
+            # Each of the three relations enters the runner 5 times; `Δₕ`'s form once more.
+            @test n >= 15
         end
     end
 end
