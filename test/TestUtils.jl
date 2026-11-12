@@ -1157,6 +1157,29 @@ _exp_x1(x) = exp(x[1])
 _x1_squared(x) = x[1]^2
 _sin_x1(x) = sin(x[1])
 
+# A child process, run under a time limit (gpena/Bramble.jl#1201: a stuck solver in a child
+# blocked the suite for hours, and `read(cmd, String)` has no limit). Returns
+# `(; out, exited, pid)`: what the child printed on standard output, whether it ended
+# within `timeout` seconds, and its pid. The output is read while the child runs, so one
+# that fills the pipe does not block. On expiry the child gets SIGKILL (the stuck one ignored
+# SIGTERM, and a test child has nothing to clean up) and the call returns once it is reaped,
+# with the output printed so far.
+function child_output(cmd::Cmd; timeout::Real)
+    proc = open(cmd, "r")
+    pid = getpid(proc)
+    buf = IOBuffer()
+    reader = @async while !eof(proc)
+        write(buf, readavailable(proc))
+    end
+    exited = timedwait(() -> process_exited(proc), Float64(timeout)) === :ok
+    exited || kill(proc, Base.SIGKILL)
+    wait(proc)
+    # a grandchild that kept the pipe open must not hold the call
+    timedwait(() -> istaskdone(reader), 10.0)
+    istaskdone(reader) || close(proc.out)
+    return (; out = String(take!(buf)), exited, pid)
+end
+
 end # module TestUtils
 
 # Installs the per-file trace by overriding Main's own `include`, once, when this file loads

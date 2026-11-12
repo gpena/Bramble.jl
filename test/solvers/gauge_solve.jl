@@ -15,7 +15,7 @@ import Bramble
 using LinearAlgebra: norm, pinv, issymmetric, I
 using SparseArrays: SparseMatrixCSC, sparse, spzeros
 using Random: Random
-using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS
+using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, child_output
 
 const Δform = (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)
 
@@ -228,7 +228,10 @@ end
 end
 
 # The backends loaded in this session, then (slow group) a child on the test project that
-# loads every backend the environment has. `:sparspak` refuses a gauge (see refusals).
+# loads every backend the environment has, under a time limit: it loads the environment
+# (about 75 s) and then solves, and a solver that never returns fails the test, naming that
+# solver, instead of blocking the suite (gpena/Bramble.jl#1201). `:sparspak` refuses a gauge
+# (see refusals).
 @testset "Gauged solve: each solver backend" begin
     Random.seed!(783)
     Ω = random_mesh(11, (interval(0.0, 1.0), interval(0.0, 2.0)), (6, 7))
@@ -254,7 +257,7 @@ end
         np = npoints(Ω)
         x = rand(size(A, 1))
         F = A * x
-        for s in (:default, :suitesparse, :mumps, (Sys.isapple() ? (:accelerate,) : ())...)
+        for s in Symbol.(ARGS)
             u = pde_solve(A, F; gauge = Z, solver = s)
             g = norm(transpose(Z) * u, Inf) / norm(u, Inf)
             e = norm(u[1:np] - x[1:np], Inf) / norm(x[1:np], Inf)
@@ -262,13 +265,23 @@ end
         end
         """
         project = dirname(something(Base.active_project()))
-        cmd = `$(Base.julia_cmd()) --project=$project --startup-file=no --threads=1 -e $code`
-        lines = split(read(cmd, String), '\n'; keepempty = false)
-        @test length(lines) == (Sys.isapple() ? 4 : 3)
-        for line in lines
-            s, g, e = split(line)
-            @test parse(Float64, g) <= 1e-10
-            @test parse(Float64, e) <= 1e-7
+        child_solvers = [:default, :suitesparse, :mumps, (Sys.isapple() ? (:accelerate,) : ())...]
+        cmd = `$(Base.julia_cmd()) --project=$project --startup-file=no --threads=1 -e $code $child_solvers`
+        r = child_output(cmd; timeout = 600)
+        lines = split(r.out, '\n'; keepempty = false)
+        if r.exited
+            @test length(lines) == length(child_solvers)
+            for line in lines
+                s, g, e = split(line)
+                @test parse(Float64, g) <= 1e-10
+                @test parse(Float64, e) <= 1e-7
+            end
+        else
+            # the first solver with no output line is the one that never returned
+            printed = [first(split(line)) for line in lines]
+            silent = filter(s -> string(s) ∉ printed, child_solvers)
+            stuck = isempty(silent) ? :after_the_last_solver : first(silent)
+            @test stuck === nothing
         end
     end
 end
