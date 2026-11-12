@@ -707,6 +707,28 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
         @test occursin("pde_solve(assemble(a, l)..., F)", err isa ArgumentError ? err.msg : "")
     end
 
+    # The `Float64` solve allocates its output vector beyond the factorization and nothing
+    # else, on both routes: the load is split by a closure over a factorization of a
+    # concrete type (gpena/Bramble.jl#1167), where a union-typed capture cost 800 B and more.
+    @testset "fdm_solve: allocates the output only" begin
+        Wₕ = gridspace(_graded_mesh((9, 7)))
+        F = rand(MersenneTwister(KRON_EXT_SEED + 13), ndofs(Wₕ))
+        sym(u, v) = innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v))
+        routes = ((sym, KronExt._FDMFactorization),
+            ((u, v) -> sym(u, v) + innerₕ(D₋ₓ(u), v), KronExt._SchurFactorization))
+        for (f, R) in routes
+
+            K = kronecker_operator(form(Wₕ, Wₕ, f))
+            @test KronExt._fdm_factorize(K, nothing) isa R
+            solve() = KronExt._fdm_solve_core(K, F, nothing)
+            solve()
+            out = minimum(@allocated(Vector{Float64}(undef, K.n)) for _ in 1:5)
+            total = minimum(@allocated(solve()) for _ in 1:5)
+            fact = minimum(@allocated(KronExt._fdm_factorize(K, nothing)) for _ in 1:5)
+            @test total - fact <= out
+        end
+    end
+
     # gpena/Bramble.jl#662: a stored zero in a factor is absent to the classification, at
     # build and at refill alike. `Kz` is `K` with every non-mass factor padded with stored
     # zeros on its three diagonals, plus a term whose first factor stores only zeros: it

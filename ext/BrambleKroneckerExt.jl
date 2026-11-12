@@ -1165,7 +1165,12 @@ function _fdm_solve_core(K::KroneckerLinearOperator{T, D}, F::AbstractVector, di
     length(F) == K.n || _throw_fdm_length_mismatch(K.n, length(F))
     _fdm_real_rhs(F) || _throw_fdm_complex("fdm_solve", eltype(F))
     T <: Union{Float32, Float64, Complex} || _throw_fdm_operator_eltype(T)
-    f = _fdm_factorize(K, dirichlet)
+    return _fdm_solve_split(K, _fdm_factorize(K, dirichlet), F, dirichlet)
+end
+
+# A function barrier: `_fdm_factorize` infers a union of the two factorization types, which
+# a closure would capture in a boxed field, so the closure is built with `f` concrete.
+function _fdm_solve_split(K::KroneckerLinearOperator, f, F::AbstractVector, dirichlet)
     return Bramble._solve_by_parts(b -> _fdm_solve_part(K, f, b, dirichlet), F)
 end
 
