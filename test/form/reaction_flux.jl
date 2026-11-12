@@ -7,6 +7,7 @@ using DifferentiationInterface: AutoForwardDiff
 import DifferentiationInterface as DI
 using Bramble
 using ..TestUtils: WITH_3D_TESTS
+using SparseArrays: sparse
 using Bramble: reaction, reaction!, reaction_density, reaction_density!
 
 # `reaction` extracts the boundary flux a Dirichlet constraint had
@@ -604,6 +605,42 @@ _bytes(f, scratch, A, F, uₕ, marker) = @allocated f(scratch, A, F, uₕ; marke
                 @test_throws DimensionMismatch reaction_density(M, F[1:(end - 1)], u₁; marker = :right)
                 @test_throws DimensionMismatch reaction(M[1:(end - 1), :], F, u₁; marker = :right)
                 @test_throws DimensionMismatch reaction_density(M[:, 1:(end - 1)], F, u₁; marker = :right)
+            end
+        end
+    end
+
+    # The relations have replaced a ghost space's marked rows, so the matrix methods refuse
+    # it with the form methods' message instead of reading those rows (#1221).
+    @testset "Matrix methods refuse ghost spaces" begin
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 7), (false, false))
+        Ωp = mesh(domain(interval(0.0, 3.0) × interval(0.0, 3.0),
+                :P => Bramble.polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])),
+            (12, 12), (false, false))
+        C = constrained(gridspace(Ω; ghosts = :boundary),
+            u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => ∂ₙ(u) => 0.0,
+                :ymin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0))
+        U, _ = Bramble.polygon_spaces(Ωp, :P, x -> 0.0)
+        system(V) = (n = ndofs(V); (sparse(1:n, 1:n, fill(2.0, n)), ones(n), fill!(element(V), 1.0), n))
+        message(f) = try
+            f()
+            ""
+        catch err
+            err isa ArgumentError ? sprint(showerror, err) : string(typeof(err))
+        end
+        # positive control: a composite of plain spaces goes through
+        W = gridspace(Ω)
+        A, F, v, n = system(W × W)
+        @test reaction(A, F, v; marker = :boundary) isa Real
+        @test reaction!(zeros(n), A, F, v; marker = :boundary) isa Real
+        @test length(reaction_density!(zeros(n), A, F, v; marker = :boundary)) == n
+        for V in (C, C × C, U × U)
+            A, F, v, n = system(V)
+            for f in (() -> reaction(A, F, v; marker = :boundary),
+                () -> reaction(Matrix(A), F, v; marker = :boundary),
+                () -> reaction_density(A, F, v; marker = :boundary),
+                () -> reaction!(zeros(n), A, F, v; marker = :boundary),
+                () -> reaction_density!(zeros(n), A, F, v; marker = :boundary))
+                @test occursin("reaction reads", message(f))
             end
         end
     end
