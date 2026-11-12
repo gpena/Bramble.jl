@@ -422,7 +422,16 @@ end
 # operator is a constant. Its coefficients and mesh are not differentiated, and a shadow that
 # is not the primal is refused, as `fdm_solve` over a `Dual` operator is.
 
-const _FDMOperand = Union{Bramble.BilinearForm, Bramble.GhostBilinearForm}
+# Enzyme looks a rule up by its arguments' types, never by the return annotation or a keyword's
+# value. Inference proves `fdm_solve` only throws for a 1D form, a form on a composite space
+# and a ghost form with `dirichlet`, and Enzyme stops in LLVM (`broken gc calling conv fix`)
+# on a call to a function that only throws if a rule covers it: the user should get the named
+# `ArgumentError`. So the rules cover the forms of a scalar space in 2D and 3D, which `fdm_solve`
+# can solve. Without a rule Enzyme differentiates the call, which reports the refusal. A ghost
+# form is left out: its refusal depends on a keyword's value, which no signature can name.
+const _FDMOperand = Union{
+    Bramble.BilinearForm{2, <:Bramble.ScalarGridSpace, <:Bramble.ScalarGridSpace},
+    Bramble.BilinearForm{3, <:Bramble.ScalarGridSpace, <:Bramble.ScalarGridSpace}}
 
 # A form built inside the differentiated function holds a fresh `_AssemblyCache`, whose fields
 # are integers and a copy of the form's own AST, used only to recognise it again: no value

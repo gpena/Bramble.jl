@@ -787,6 +787,39 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             @test only(Enzyme.autodiff(fwd, Enzyme.Const(loss_ref), Enzyme.Duplicated,
                 Enzyme.Duplicated(0.7, 1.0))) ≈ exact rtol=1e-8
 
+            # A form `fdm_solve` always refuses (1D, on a composite space, a ghost form with
+            # `dirichlet`): inference proves the call only throws, and Enzyme must still
+            # report the named `ArgumentError`, not stop in LLVM on a call with a rule. The forms
+            # are module globals, as there Enzyme reaches the call with a rule it must not have.
+            W1 = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 11, true))
+            global refused_1d = form(W1, W1, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V))
+            Wq = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                       Bramble.interval(0.0, 1.0)),
+                (6, 5), (true, true)))
+            Cq = Wq × Wq
+            global refused_composite = form(Cq, Cq, (U, V) -> innerₕ(U, V))
+            Cb = constrained(gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                                   Bramble.interval(0.0, 1.0)),
+                    (9, 8), (true, false)); ghosts = :boundary),
+                u -> (:xmin => 2.0 * u + ∂ₙ(u) => 0.0, :xmax => 0.5 * u + 3.0 * ∂ₙ(u) => 1.0,
+                    :ymin => u + ∂ₙ(u) => 0.0, :ymax => 4.0 * u + ∂ₙ(u) => 0.0))
+            global refused_ghost = form(Cb, Cb, (u, v) -> innerₕ(u, v) + 1.3 * inner₊(∇ₕ(u), ∇ₕ(v)))
+            solve_1d(F) = fdm_solve(refused_1d, F)
+            solve_composite(F) = fdm_solve(refused_composite, F)
+            solve_ghost(F) = fdm_solve(refused_ghost, F; dirichlet = :boundary)
+            loss_1d(F) = sum(solve_1d(F))
+            loss_composite(F) = sum(solve_composite(F))
+            loss_ghost(F) = sum(solve_ghost(F))
+            for (solver, loss, nx) in ((solve_1d, loss_1d, ndofs(W1)),
+                (solve_composite, loss_composite, ndofs(Cq)),
+                (solve_ghost, loss_ghost, ndofs(Cb)))
+
+                @test_throws ArgumentError Enzyme.autodiff(rev, Enzyme.Const(loss),
+                    Enzyme.Active, Enzyme.Duplicated(ones(nx), zeros(nx)))
+                @test_throws ArgumentError Enzyme.autodiff(fwd, Enzyme.Const(solver),
+                    Enzyme.Duplicated, Enzyme.Duplicated(ones(nx), ones(nx)))
+            end
+
             # A form with an advection term takes the generalised Schur route, whose system is
             # not symmetric: forward solves the tangent, and reverse is refused by name, since
             # `fdm_solve(a, ū)` is not its adjoint.
@@ -806,26 +839,6 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             @test_throws ArgumentError "Schur" Enzyme.autodiff(rev,
                 Enzyme.Const(F -> sum(adv_solve(F))), Enzyme.Active,
                 Enzyme.Duplicated(copy(Fc), zeros(nc)))
-
-            # A ghost-space form: forward and reverse through the same rules.
-            Cg = constrained(gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
-                                                                   Bramble.interval(0.0, 1.0)),
-                    (9, 8), (false, false)); ghosts = :boundary),
-                u -> (:xmin => 2.0 * u + ∂ₙ(u) => 0.0, :xmax => 0.5 * u + 3.0 * ∂ₙ(u) => 1.0,
-                    :ymin => u + ∂ₙ(u) => 0.0, :ymax => 4.0 * u + ∂ₙ(u) => 0.0))
-            ng = ndofs(Cg)
-            ag = form(Cg, Cg, (u, v) -> innerₕ(u, v) + 1.3 * inner₊(∇ₕ(u), ∇ₕ(v)))
-            Ag = Matrix(assemble(ag))
-            Fg = [1.0 + sin(i) for i in 1:ng]
-            Ḟg = [cos(k) for k in 1:ng]
-            wg = [sin(0.3k) + 0.1 for k in 1:ng]
-            ghost_solve(F) = fdm_solve(ag, F)
-            @test only(Enzyme.autodiff(fwd, Enzyme.Const(ghost_solve), Enzyme.Duplicated,
-                Enzyme.Duplicated(copy(Fg), Ḟg))) ≈ Ag \ Ḟg rtol=1e-8
-            Fd = zeros(ng)
-            Enzyme.autodiff(rev, Enzyme.Const(F -> sum(wg .* ghost_solve(F))), Enzyme.Active,
-                Enzyme.Duplicated(copy(Fg), Fd))
-            @test Fd ≈ Ag' \ wg rtol=1e-8
         else
             @test_skip "Enzyme not in this environment"
         end
