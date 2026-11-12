@@ -553,3 +553,169 @@ function EnzymeRules.reverse(
     λ === nothing || (F.dval .+= λ)
     return (nothing, nothing)
 end
+
+# The rules for `gmg_solve` in its right-hand side (#1168).
+#
+# Enzyme stops at the smoother construction in `gmg_preconditioner` with
+# `IllegalTypeAnalysisException`. The cycles write the hierarchy's buffers, so they are not
+# inactive either; the rules sit on `gmg_solve` and differentiate the converged solve
+# implicitly. It is linear in `b`. Each lane's tangent is `u̇ = A⁻¹ ḃ` and the pullback
+# `b̄ += A⁻ᴴ ū`, the same solve only when `A` is Hermitian, while `gmg_solve` accepts any `A`
+# whose cycle contracts: reverse probes the finest operator and refuses any other by name.
+# One preconditioner per rule call serves every lane, each solved to the caller's `tol`, and
+# a zero load returns zero without a cycle. `build` and the mesh are constants; a shadow that
+# is not the primal is refused by name rather than dropped.
+#
+# No signature can name what `build` returns. A `build` whose form `gmg_preconditioner`
+# refuses by type alone (one on composite spaces) makes `gmg_solve` infer `Union{}`, and
+# Enzyme then stops in LLVM (`broken gc calling conv fix`) instead of reporting the
+# `ArgumentError`.
+
+@noinline function _throw_active_gmg(name)
+    throw(
+        ArgumentError(
+        "gmg_solve: `$name` has a shadow, and Bramble's Enzyme rule differentiates " *
+        "`gmg_solve` in its right-hand side only, so the derivative with respect to a " *
+        "coefficient or the mesh would be silently dropped; to differentiate with respect " *
+        "to it, solve with `pde_solve(assemble(build(gridspace(Ωₕ))), b)`",
+    ),
+    )
+end
+
+@noinline function _throw_gmg_not_hermitian(gap, scale)
+    throw(
+        ArgumentError(
+        "gmg_solve: Bramble's Enzyme rule differentiates in reverse mode only a form whose " *
+        "matrix is symmetric (Hermitian), whose adjoint solve is `gmg_solve` itself; this " *
+        "form's is not (|vᵀAw − wᵀAv| = $gap against a scale of $scale). Use forward mode, " *
+        "or differentiate `pde_solve(assemble(build(gridspace(Ωₕ))), b)`.",
+    ),
+    )
+end
+
+@noinline function _throw_gmg_changed(change)
+    throw(
+        ArgumentError(
+        "gmg_solve: the operator of `build`'s form changed between the solve and Bramble's " *
+        "Enzyme reverse pass (relative change $change), as a `Ref` coefficient set after " *
+        "the solve makes it: the multigrid operator reads it at each product, so the " *
+        "adjoint solve would use the new value. Differentiate " *
+        "`pde_solve(assemble(build(gridspace(Ωₕ))), b)`, whose matrix is assembled at the " *
+        "solve, or build the form from the `Ref`'s value (`γ[]`).",
+    ),
+    )
+end
+
+# The keywords set the hierarchy, the cycle and the tolerance, none a value the solution is
+# differentiated in. A `tol` held in a variable would otherwise reach the rules as active.
+EnzymeRules.inactive_kwarg(::typeof(Bramble.gmg_solve), build, Ωₕ, b; kwargs...) = nothing
+
+# The preconditioner and the loop's arguments, with `gmg_solve`'s own keywords and checks.
+function _gmg_rule_setup(build, Ωₕ; levels = nothing, cycle::Symbol = :V, ν₁::Integer = 2,
+        ν₂::Integer = 2, smoother = Bramble._gmg_default_smoother, tol = nothing,
+        maxiters::Integer = 100)
+    (tol === nothing || (tol isa Real && tol > 0)) ||
+        throw(ArgumentError("gmg_solve needs tol > 0, got $tol"))
+    maxiters >= 1 || throw(ArgumentError("gmg_solve needs maxiters >= 1, got $maxiters"))
+    P = Bramble.gmg_preconditioner(build, Ωₕ; levels, cycle, ν₁, ν₂, smoother)
+    return P, (cycle, tol, Int(maxiters))
+end
+
+_gmg_rule_solve(P, b, (cycle, tol, maxiters)) = Bramble._gmg_solve_loop(P, b, cycle, tol,
+    maxiters)
+
+# A zero tangent of the solution's type.
+_gmg_zero(u) = (z = similar(u); fill!(parent(z), zero(eltype(z))); z)
+
+# Two fixed probe vectors, deterministic so the user's random stream is left alone.
+_gmg_probes(T, n) = ([T(sin(0.7k) + 0.1) for k in 1:n], [T(cos(1.3k)) for k in 1:n])
+
+# Refuses a finest operator that is not Hermitian: with real probes `v`, `w`,
+# `vᵀAw − conj(wᵀAv) = vᵀ(A − Aᴴ)w`. Returns `w` and `A w`, against which the reverse pass
+# checks that the operator is still the one the solve used.
+function _gmg_hermitian_check(P)
+    op = last(P.ops)
+    v, w = _gmg_probes(real(eltype(op)), size(op, 1))
+    Av, Aw = op * v, op * w
+    gap = abs(dot(v, Aw) - conj(dot(w, Av)))
+    scale = norm(v) * norm(Aw) + norm(w) * norm(Av)
+    gap <= sqrt(eps(real(eltype(op)))) * scale || _throw_gmg_not_hermitian(gap, scale)
+    return w, Aw
+end
+
+function _gmg_unchanged_check(P, w, Aw)
+    change = norm(last(P.ops) * w - Aw) / norm(Aw)
+    change <= sqrt(eps(real(eltype(Aw)))) || _throw_gmg_changed(change)
+    return nothing
+end
+
+function EnzymeRules.forward(
+        config::FwdConfig,
+        ::Const{typeof(Bramble.gmg_solve)},
+        ::Type{RT},
+        build::Annotation,
+        Ωₕ::Annotation{<:Bramble.AbstractMeshType},
+        b::Annotation{<:AbstractVector};
+        kwargs...
+) where {RT}
+    W = EnzymeRules.width(config)
+    _active_shadow(build, W) && _throw_active_gmg(:build)
+    _active_shadow(Ωₕ, W) && _throw_active_gmg(:Ωₕ)
+    P, loop = _gmg_rule_setup(build.val, Ωₕ.val; kwargs...)
+    u = _gmg_rule_solve(P, b.val, loop)
+    RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
+    shadows = ntuple(Val(W)) do i
+        ḃ = _rank_one_tangent(b.val, _lane(b, i))
+        return ḃ === nothing ? _gmg_zero(u) : _gmg_rule_solve(P, ḃ, loop)
+    end
+    return _forward_result(config, RT, u, W == 1 ? only(shadows) : shadows)
+end
+
+# The reverse sweep solves with the preconditioner the forward solve built, kept on the tape:
+# `build` may read a `Ref` whose value has changed by then. A coefficient the form itself holds
+# as a `Ref` is read at each product, so the tape cannot keep it; the reverse pass checks the
+# finest operator against the product taken at the solve and refuses one that has changed.
+function EnzymeRules.augmented_primal(
+        config::RevConfig,
+        ::Const{typeof(Bramble.gmg_solve)},
+        ::Type{RT},
+        build::Annotation,
+        Ωₕ::Annotation{<:Bramble.AbstractMeshType},
+        b::Annotation{<:AbstractVector};
+        kwargs...
+) where {RT}
+    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    _active_shadow(build, 1) && _throw_active_gmg(:build)
+    _active_shadow(Ωₕ, 1) && _throw_active_gmg(:Ωₕ)
+    P, loop = _gmg_rule_setup(build.val, Ωₕ.val; kwargs...)
+    probe = _has_shadow(b) ? _gmg_hermitian_check(P) : nothing
+    u = _gmg_rule_solve(P, b.val, loop)
+    ū = _gmg_zero(u)
+
+    primal = EnzymeRules.needs_primal(config) ? u : nothing
+    shadow = EnzymeRules.needs_shadow(config) ? ū : nothing
+    return EnzymeRules.augmented_rule_return_type(config, RT)(primal, shadow,
+        (P, loop, probe, ū))
+end
+
+function EnzymeRules.reverse(
+        config::RevConfig,
+        ::Const{typeof(Bramble.gmg_solve)},
+        ::Type{RT},
+        tape,
+        build::Annotation,
+        Ωₕ::Annotation{<:Bramble.AbstractMeshType},
+        b::Annotation{<:AbstractVector};
+        kwargs...
+) where {RT}
+    P, loop, probe, ū = tape
+    λ = nothing
+    if _has_shadow(b)
+        _gmg_unchanged_check(P, probe...)
+        λ = parent(_gmg_rule_solve(P, parent(ū), loop))
+    end
+    # `λ` is read before `ū` is cleared, as `b̄` may share its storage.
+    fill!(parent(ū), zero(eltype(ū)))
+    λ === nothing || (Bramble._mf_data(b.dval) .+= λ)
+    return (nothing, nothing, nothing)
+end

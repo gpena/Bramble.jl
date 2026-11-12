@@ -5,6 +5,7 @@ using Bramble
 using ChainRulesCore
 using SparseArrays: SparseMatrixCSC, nnz, nonzeros, sparse, spdiagm
 using LinearAlgebra: I, NoPivot, ldiv!, lu
+using Random: Random
 using Polyester
 using ForwardDiff
 using SuiteSparse
@@ -839,6 +840,139 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             @test_throws ArgumentError "Schur" Enzyme.autodiff(rev,
                 Enzyme.Const(F -> sum(adv_solve(F))), Enzyme.Active,
                 Enzyme.Duplicated(copy(Fc), zeros(nc)))
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
+    # `gmg_solve` in its right-hand side (#1168). `build` is called inside the differentiated
+    # function, as a user writes it, so the rule sits on `gmg_solve` and Enzyme never enters
+    # the cycles. The oracle is the direct solve of the finest matrix. Uniform and graded
+    # meshes, both modes, a `VectorElement` load, forward width 2.
+    @testset "Enzyme: gmg_solve rules" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            rev = Enzyme.set_runtime_activity(Enzyme.Reverse)
+            fwd = Enzyme.set_runtime_activity(Enzyme.Forward)
+            ez(m) = DI.AutoEnzyme(; mode = Enzyme.set_runtime_activity(m),
+                function_annotation = Enzyme.Const)
+            bld(V) = form(V, V, (u, v) -> innerₕ(u, v) + 0.7 * inner₊(∇ₕ(u), ∇ₕ(v)))
+
+            for (dims, unif) in (((17, 17), true), ((9, 9), false))
+                Random.seed!(1234)
+                Ωg = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                 Bramble.interval(0.0, 1.0)), dims,
+                    (unif, unif))
+                Wg = gridspace(Ωg)
+                ng = ndofs(Wg)
+                A = Matrix(assemble(bld(Wg)))
+                b₀ = [1.0 + sin(i) for i in 1:ng]
+                ḃ1 = [cos(k) for k in 1:ng]
+                ḃ2 = [sin(3k) for k in 1:ng]
+                w = [sin(0.3k) + 0.1 for k in 1:ng]
+                kw = (; tol = 1e-11)
+                solve(b) = gmg_solve(bld, Ωg, b; kw...)
+                loss(b) = sum(w .* parent(solve(b)))
+                # The closure `build` is made inside the loss, a constant all the same.
+                loss_in(b) = sum(w .* parent(gmg_solve(V -> bld(V), Ωg, b; kw...)))
+                b̄ = A' \ w
+                @test first(Enzyme.gradient(rev, Enzyme.Const(loss), b₀)) ≈ b̄ rtol=1e-8
+                @test first(Enzyme.gradient(rev, Enzyme.Const(loss_in), b₀)) ≈ b̄ rtol=1e-8
+
+                # The cotangent adds to what `b̄` holds, the load is left alone, and a load
+                # used twice sums its two pullbacks.
+                bd = fill(0.5, ng)
+                b = copy(b₀)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active, Enzyme.Duplicated(b, bd))
+                @test bd ≈ 0.5 .+ b̄ rtol=1e-8
+                @test b == b₀
+                twice(b) = loss(b) + sum(parent(solve(b)))
+                bd = zeros(ng)
+                Enzyme.autodiff(rev, Enzyme.Const(twice), Enzyme.Active,
+                    Enzyme.Duplicated(copy(b₀), bd))
+                @test bd ≈ A' \ (w .+ 1) rtol=1e-8
+
+                # A `VectorElement` load: its shadow is one too, and gets the cotangent.
+                bₑ = element(Wg, copy(b₀))
+                bₑd = element(Wg, zeros(ng))
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active,
+                    Enzyme.Duplicated(bₑ, bₑd))
+                @test parent(bₑd) ≈ b̄ rtol=1e-8
+                u̇ₑ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.Duplicated,
+                    Enzyme.Duplicated(element(Wg, copy(b₀)), element(Wg, copy(ḃ1)))))
+                @test u̇ₑ isa Bramble.VectorElement
+                @test parent(u̇ₑ) ≈ A \ ḃ1 rtol=1e-8
+
+                # Forward: the tangent is the solve of `ḃ`, a `VectorElement`; a `Const` load
+                # has a zero one; a batch of two solves each lane.
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.Duplicated,
+                    Enzyme.Duplicated(copy(b₀), ḃ1)))
+                @test u̇ isa Bramble.VectorElement
+                @test parent(u̇) ≈ A \ ḃ1 rtol=1e-8
+                @test parent(only(Enzyme.autodiff(fwd, Enzyme.Const(solve),
+                    Enzyme.Duplicated, Enzyme.Const(b₀)))) == zeros(ng)
+                u̇s = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.BatchDuplicated,
+                    Enzyme.BatchDuplicated(copy(b₀), (ḃ1, ḃ2))))
+                @test parent(u̇s[1]) ≈ A \ ḃ1 rtol=1e-8
+                @test parent(u̇s[2]) ≈ A \ ḃ2 rtol=1e-8
+                @test_throws ArgumentError "batched" Enzyme.autodiff(rev,
+                    Enzyme.Const(loss), Enzyme.Active,
+                    Enzyme.BatchDuplicated(copy(b₀), (zeros(ng), zeros(ng))))
+
+                # A quadratic loss in a scaled load, through DI: the exact derivative is
+                # `2(1 + q) S`. A coefficient that moves gives `build` a shadow, refused by
+                # name.
+                S = sum(abs2, A \ b₀)
+                for m in (Enzyme.Reverse, Enzyme.Forward)
+                    @test only(DI.gradient(
+                        q -> sum(abs2, parent(gmg_solve(bld, Ωg, (1 + q[1]) .* b₀; kw...))),
+                        ez(m), [0.4])) ≈ 2.8 * S rtol=1e-8
+                    @test_throws ArgumentError "`build` has a shadow" DI.gradient(
+                        q -> sum(abs2, parent(gmg_solve(
+                            V -> form(V, V, (u, v) -> q[1] * innerₕ(u, v) +
+                                                     inner₊(∇ₕ(u), ∇ₕ(v))),
+                            Ωg, b₀; kw...))),
+                        ez(m), [1.3])
+                end
+            end
+
+            # A `Ref` set between two solves. Read by `build` (`γ[]`), the form holds its value,
+            # and the pullback of each solve is the adjoint of the operator it solved with: the
+            # loss is quadratic in `θ`, so `d/dθ = 2 loss(θ) / θ`. Held by the form (`γ`), it
+            # is read at each product, and reverse refuses the changed operator by name.
+            Ωr = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                             Bramble.interval(0.0, 1.0)), (9, 9), (false, false))
+            xr = [sin(0.7k) for k in 1:npoints(Ωr)]
+            γ = Ref(1.0)
+            by_value(V) = form(V, V, (u, v) -> innerₕ(u, v) + γ[] * inner₊(∇ₕ(u), ∇ₕ(v)))
+            by_ref(V) = form(V, V, (u, v) -> innerₕ(u, v) + γ * inner₊(∇ₕ(u), ∇ₕ(v)))
+            function loss_ref(θ, bld)
+                γ[] = 1.0
+                u = gmg_solve(bld, Ωr, θ .* xr; tol = 1e-10)
+                γ[] = 5.0
+                return sum(abs2, parent(gmg_solve(bld, Ωr, parent(u); tol = 1e-10)))
+            end
+            exact = 2 * loss_ref(0.7, by_value) / 0.7
+            @test first(Enzyme.autodiff(rev, Enzyme.Const(loss_ref), Enzyme.Active,
+                Enzyme.Active(0.7), Enzyme.Const(by_value)))[1] ≈ exact rtol=1e-7
+            @test only(Enzyme.autodiff(fwd, Enzyme.Const(loss_ref), Enzyme.Duplicated,
+                Enzyme.Duplicated(0.7, 1.0), Enzyme.Const(by_value))) ≈ exact rtol=1e-7
+            @test_throws ArgumentError "changed" Enzyme.autodiff(rev, Enzyme.Const(loss_ref),
+                Enzyme.Active, Enzyme.Active(0.7), Enzyme.Const(by_ref))
+            @test only(Enzyme.autodiff(fwd, Enzyme.Const(loss_ref), Enzyme.Duplicated,
+                Enzyme.Duplicated(0.7, 1.0), Enzyme.Const(by_ref))) ≈
+                  2 * loss_ref(0.7, by_ref) / 0.7 rtol=1e-7
+
+            # An advection term makes `A` non-symmetric, whose adjoint is not `gmg_solve`:
+            # reverse refuses it by name.
+            Wa = gridspace(Ωr)
+            adv(V) = form(V, V, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                          innerₕ(Bramble.D₋ₓ(u), v))
+            Aadv = Matrix(assemble(adv(Wa)))
+            @test maximum(abs, Aadv - Aadv') > 1e-3
+            @test_throws ArgumentError "symmetric" Enzyme.autodiff(rev,
+                Enzyme.Const(b -> sum(parent(gmg_solve(adv, Ωr, b)))), Enzyme.Active,
+                Enzyme.Duplicated(copy(xr), zeros(length(xr))))
         else
             @test_skip "Enzyme not in this environment"
         end
