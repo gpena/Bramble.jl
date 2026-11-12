@@ -1348,6 +1348,49 @@ end
     @test sd.reassemble === Val(false)
 end
 
+# Typed Dirichlet data (#1186): classified by the number of arguments, not by whether a
+# method takes `Any`. Module-level so the typed methods are plain method definitions.
+_typed_x(x::Real) = 0.0
+_typed_xt(x::Real, t::Real) = 2t
+_typed_xtp(x::Real, t::Real, p::AbstractVector) = p[1] * t
+_typed_none() = 0.0
+
+@testset "typed Dirichlet data (#1186)" begin
+    Ωₕ, Wₕ, fₕ, a, l = _sd_problem(9)
+    n = ndofs(Wₕ)
+    I = Bramble.interval(0.0, 1.0)
+    cls(g, T...) = semidiscretize(
+        a, l; dirichlet = dirichlet_constraints(Ωₕ, T..., :boundary => g)).constraints
+
+    @test cls(x -> 0.0) isa Bramble.StaticConstraints
+    @test cls((x, t) -> 2t, I) isa Bramble.TimeDependentConstraints
+    @test cls(_typed_x) isa Bramble.StaticConstraints
+    @test cls(_typed_xt, I) isa Bramble.TimeDependentConstraints
+    @test cls(_typed_xtp, I) isa Bramble.TimeParamDependentConstraints
+
+    # The typed datum is evaluated, not only classified.
+    sd = semidiscretize(a, l; dirichlet = dirichlet_constraints(Ωₕ, I, :boundary => _typed_xt))
+    du = zeros(n)
+    sd(du, zeros(n), nothing, 0.5)
+    @test all(isfinite, du)
+
+    # A callback taking none of (x), (x, t), (x, t, p) is refused, naming it.
+    err = try
+        cls(_typed_none)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("_typed_none", sprint(showerror, err))
+
+    # `Fix` and composition still answer for what they wrap, typed or not.
+    @test cls(Base.Fix2(_typed_xt, 3.0)) isa Bramble.StaticConstraints
+    @test Bramble._accepts(Base.Fix2(_typed_xtp, 1.0), Val(2))
+    @test !Bramble._accepts(_typed_xt, Val(1))
+    @test !Bramble._accepts(_typed_xt, Val(3))
+end
+
 @testset "SciML entry points without the extension" begin
     # a child process script: the shared test helpers are not defined there
     code = """

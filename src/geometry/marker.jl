@@ -431,8 +431,9 @@ predicate of `x`.
 A predicate `f` with a one-argument method and no two-argument method is spatial and passes
 through unchanged. Any other predicate is fixed at `t` as `Base.Fix2(f, t)`. So
 `(x, t = 0.0) -> ...` is fixed at `t`, not left at its default. A predicate typed on its
-argument (`(x::NTuple{2, Float64}) -> ...`) has no `Tuple{Any}` method, so it is also
-wrapped and must accept `(x, t)`.
+argument (`(x::NTuple{2, Float64}) -> ...`) has no `Tuple{Any}` method either, but it is
+still classified by the number of arguments it takes, so `x::Real -> ...` is spatial and
+`(x::Real, t::Real) -> ...` is fixed at `t`.
 
 A `ComposedFunction` or a `Base.Fix1`/`Base.Fix2` is classified by what it wraps, not by its
 own varargs call method: a composition by its innermost function, which receives every
@@ -461,8 +462,18 @@ end
 # `Fix` are varargs-callable, so they answer for what they wrap: the innermost function of a
 # composition receives every argument, and a `Fix{K}` (`Fix1`, `Fix2`, ...) supplies the
 # `K`-th itself, so it needs at least `K - 1` arguments before it.
+#
+# A callback typed on its arguments (`g(x::Real)`) has no `NTuple{N, Any}` method, so
+# `hasmethod` says no for every arity. Only then does `_accepts` ask `methods(f, NTuple{N,
+# Any})`, which lists the methods whose signature intersects it and so sees `g(x::Real)`.
+# The untyped answer keeps folding and the slow lookup runs for typed callbacks alone.
 @inline function _accepts(f::F, ::Val{N}) where {F, N}
-    return @inline hasmethod(f, NTuple{N, Any})
+    return @inline(hasmethod(f, NTuple{N, Any})) || (
+        !@inline(hasmethod(f, NTuple{1, Any})) &&
+        !@inline(hasmethod(f, NTuple{2, Any})) &&
+        !@inline(hasmethod(f, NTuple{3, Any})) &&
+        !isempty(methods(f, NTuple{N, Any}))
+    )
 end
 @inline _accepts(c::ComposedFunction, ::Val{N}) where {N} = _accepts(c.inner, Val(N))
 @inline function _accepts(f::Base.Fix{K}, ::Val{N}) where {K, N}

@@ -84,9 +84,26 @@ function _validate_dirichlet_arity_mix(constraints::ConstraintMarkers)
     )
 end
 
+# A condition that takes none of `(x)`, `(x, t)`, `(x, t, p)` would otherwise be read as
+# time-dependent and fail at the first residual call, so it is refused here.
+function _validate_dirichlet_arity_known(constraints::ConstraintMarkers)
+    for m in conditions(constraints)
+        f = identifier(m)
+        (_accepts(f, Val(1)) || _accepts(f, Val(2)) || _accepts(f, Val(3))) && continue
+        throw(
+            ArgumentError(
+            "semidiscretize: Dirichlet condition for label `:$(label(m))` must accept " *
+            "(x), (x, t) or (x, t, p), got $(f), which has no method for any of them.",
+        ),
+        )
+    end
+    return nothing
+end
+
 @inline _source_constraints(::Nothing, ::Nothing) = NoConstraints()
 @inline _source_constraints(::Any, ::Nothing) = LabelsOnly()
 @inline function _source_constraints(::Any, constraints)
+    _validate_dirichlet_arity_known(constraints)
     _validate_dirichlet_arity_mix(constraints)
     return if _dirichlet_is_time_param_dependent(constraints)
         TimeParamDependentConstraints(constraints)
