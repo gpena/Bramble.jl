@@ -58,14 +58,13 @@ end
 # partial of `F` are solved by `solve` on their own, and a nested tag recurses. If the solve
 # of the value carries `F`'s own tag, the operator depends on the same parameter (a factor
 # of a `Dual` matrix), the solve is not linear in `F`'s parts, and `solve(F)` is taken whole.
-function Bramble._solve_by_parts(solve::S, F::AbstractVector{P}) where {S, P <: ForwardDiff.Dual}
-    T = ForwardDiff.tagtype(P)
+function Bramble._solve_by_parts(
+        solve::S, F::AbstractVector{ForwardDiff.Dual{T, V, N}}) where {S, T, V, N}
     x0 = Bramble._solve_by_parts(solve, ForwardDiff.value.(F))
     eltype(x0) <: ForwardDiff.Dual{T} && return solve(F)
-    N = ForwardDiff.npartials(P)
     xk = ntuple(k -> Bramble._solve_by_parts(solve, ForwardDiff.partials.(F, k)), N)
-    V = eltype(x0)
-    return [ForwardDiff.Dual{T}(x0[i], ForwardDiff.Partials{N, V}(ntuple(k -> xk[k][i], N)))
+    R = eltype(x0)
+    return [ForwardDiff.Dual{T}(x0[i], ForwardDiff.Partials{N, R}(ntuple(k -> xk[k][i], N)))
             for i in eachindex(x0)]
 end
 
