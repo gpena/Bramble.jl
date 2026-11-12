@@ -526,6 +526,26 @@ end
             @test norm₁ₕ(u)^2 ≈ innerₕ(u, u) + snorm₁ₕ(u)^2 rtol = 1e-12
         end
     end
+    # The line walk reads `prod(dims)` entries, so a coefficient vector of another length
+    # is refused as by `normₕ`, before any read: the short one would read out of bounds.
+    @testset "Wrong coefficient length" begin
+        Ωs = (mesh(domain(unit(Float64)), 9, false),
+            mesh(domain(unit(Float64) × unit(Float64)), (7, 5), (false, false)),
+            (WITH_3D_TESTS ?
+             (mesh(domain(unit(Float64) × unit(Float64) × unit(Float64)), (4, 5, 3),
+                (false, false, false)),) :
+             ())...)
+        for Ωₕ in Ωs
+            Wₕ = gridspace(Ωₕ)
+            n = ndofs(Wₕ)
+            for len in (n + 4, n - 1, 3)
+                v = Bramble.VectorElement(ones(len), Wₕ)
+                @test_throws DimensionMismatch normₕ(v)
+                @test_throws DimensionMismatch snorm₁ₕ(v)
+                @test_throws DimensionMismatch norm₁ₕ(v)
+            end
+        end
+    end
 end
 
 @testset "inner₊ dimension" begin

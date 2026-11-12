@@ -1353,6 +1353,8 @@ end
     (; data, space) = uₕ
     Ωₕ = mesh(space)
     dims = npoints(Ωₕ, Tuple)
+    n = prod(dims)
+    length(data) == n || _throw_dot_dim_error(length(data), n, length(data))
     locality(typeof(data)) isa DeviceLocality &&
         return _sum_dirs_device(data, space, Ωₕ, dims, Val(D), Val(D))
     li = LinearIndices(dims)
