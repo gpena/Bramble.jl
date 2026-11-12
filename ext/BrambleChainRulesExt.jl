@@ -41,10 +41,12 @@ function ChainRulesCore.rrule(
 end
 
 # One factorisation serves both solves. `fact \ F` can be wider than `pde_solve`'s result
-# (`Float64` for `Float32` data), so `u` is converted to the type `pde_solve` returns.
+# (`Float64` for `Float32` data), so `u` is converted to the type of `A \ F`, which is what
+# `pde_solve` returns: the type of `a \ f` for one entry of each (`Rational` stays `Rational`).
 function _lu_rrule(A::SparseMatrixCSC, F::AbstractVector)
     fact = lu(A)
-    u = convert(AbstractVector{float(promote_type(eltype(A), eltype(F)))}, fact \ F)
+    T = typeof(oneunit(eltype(A)) \ oneunit(eltype(F)))
+    u = convert(AbstractVector{T}, fact \ F)
     return u, _pde_solve_pullback(A, u, ȳ -> fact' \ ȳ)
 end
 

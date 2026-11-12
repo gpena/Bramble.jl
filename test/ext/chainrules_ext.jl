@@ -190,8 +190,8 @@ using ..TestUtils: _fd
     end
 
     # A real `A` with a complex `F` (#1187): `-λ uᴴ` is complex, so `Ā` must be. Checked on a
-    # small unsymmetric matrix and on a 1D operator on a non-uniform mesh, `real(Ā)` against a
-    # central difference of `real(dot(ȳ, u))` in every stored entry.
+    # small unsymmetric matrix and on a 1D operator on a non-uniform mesh, `real(Ā)` and
+    # `imag(Ā)` against central differences of `real(dot(ȳ, u))` in every stored entry.
     @testset "rrule: real A, complex F" begin
         Random.seed!(1234)
         W = Bramble.gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 9, false))
@@ -213,9 +213,13 @@ using ..TestUtils: _fd
             @test F̄ ≈ sparse(A') \ ȳ
             J(B) = real(dot(ȳ, B \ F))
             for k in 1:nnz(A)
-                bump(δ) = (B = copy(A); nonzeros(B)[k] += δ; B)
+                bump(δ) = (B = complex(copy(A)); nonzeros(B)[k] += δ; B)
                 fd = (J(bump(h)) - J(bump(-h))) / 2h
                 @test real(nonzeros(Ā)[k])≈fd atol=1e-6
+                # An imaginary step checks `imag(Ā)`, which a wrongly conjugated `-conj(λ) u`
+                # flips while leaving `real(Ā)` intact.
+                fdi = (J(bump(im * h)) - J(bump(-im * h))) / 2h
+                @test imag(nonzeros(Ā)[k])≈fdi atol=1e-6
             end
         end
     end
@@ -229,6 +233,12 @@ using ..TestUtils: _fd
         u32, _ = rrule(Bramble.pde_solve, A32, F32)
         @test eltype(u32) === eltype(Bramble.pde_solve(A32, F32))
         @test u32 ≈ Bramble.pde_solve(A32, F32)
+        # `Rational` data solves exactly, so the primal must not become `Float64`.
+        Aq = SparseMatrixCSC{Rational{Int}, Int}(A)
+        Fq = Rational{Int}[1, 2, 3]
+        uq, _ = rrule(Bramble.pde_solve, Aq, Fq)
+        @test eltype(uq) === eltype(Bramble.pde_solve(Aq, Fq))
+        @test uq == Bramble.pde_solve(Aq, Fq)
         _, pullback = rrule(Bramble.pde_solve, A, [1.0, 2.0, 3.0])
         @test pullback([1.0, -2.0, 0.5])[2] isa SparseMatrixCSC{Float64, Int}
     end
