@@ -100,7 +100,7 @@ function _block_loss(C₀, C₁)
     B₀, B₁ = reshape(collect(1.0:(2n)), n, 2) ./ 3, reshape(collect((2n):-1:1.0), n, 2) ./ 7
     b₀, b₁ = collect(1.0:n), collect(n:-1.0:1) ./ 5
     function f(p)
-        X, x = Bramble._dense_block_solve(C₀ .+ p[1] .* C₁, B₀ .+ p[2] .* B₁,
+        X, x, _ = Bramble._dense_block_solve(C₀ .+ p[1] .* C₁, B₀ .+ p[2] .* B₁,
             b₀ .+ p[3] .* b₁)
         return sum(abs2, X) + sum(abs2, x)
     end

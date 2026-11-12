@@ -126,15 +126,19 @@ end
 
 # The rules for `Bramble._dense_block_solve`, `X = C⁻¹ B` and `x = C⁻¹ b` on one block of
 # the ghosts that a conormal `∂ₙ(u; K)` couples (#1176). Enzyme has no derivative for
-# LAPACK's `getrf`, which the block's LU calls. Each tangent and each adjoint solves against
-# the primal's own factorization: forward `Ẋ = C⁻¹(Ḃ − Ċ X)`, reverse `Λ = C⁻ᴴ X̄`, `B̄ += Λ`
-# and `C̄ −= Λ Xᴴ`, and the same for `x`. The reverse reads copies of `X` and `x` that the
-# rule keeps for itself, so a caller that overwrites the returned arrays cannot change it
-# (#1185). `_nonsingular` factors the block again to judge its pivots; its `Bool` only
-# picks a branch.
+# LAPACK's `getrf`. Every tangent and adjoint solves against the primal's own LU: forward
+# `Ẋ = C⁻¹(Ḃ − Ċ X)`, reverse `Λ = C⁻ᴴ X̄`, `B̄ += Λ`, `C̄ −= Λ Xᴴ`, and likewise for `x`.
+# The reverse reads its own copies of `X` and `x` (#1185). The flag of `_nonsingular`
+# passes through; a singular block gets zero tangents and cotangents, since its caller
+# throws.
 using LinearAlgebra: mul!
 
-EnzymeRules.inactive(::typeof(Bramble._nonsingular), args...) = nothing
+# The block's LU and `Bramble._dense_block_solve`'s result, solved on that LU.
+function _block_primal(C, B, b)
+    F = lu(C; check = false)
+    Bramble._nonsingular(F, C) || return F, Bramble._dense_block_solve(C, B, b)
+    return F, (F \ B, F \ b, true)
+end
 
 # `F \ (Ḃ − Ċ Y)` for one lane; a missing tangent is `nothing`.
 function _block_tangent(F, Ċ, Ḃ, Y)
@@ -152,20 +156,20 @@ function EnzymeRules.forward(
         b::Annotation
 ) where {RT}
     _entered!(:_dense_block_solve)
-    F = lu(C.val; check = false)
-    X, x = F \ B.val, F \ b.val
-    RT <: Const && return EnzymeRules.needs_primal(config) ? (X, x) : nothing
+    F, (X, x, ok) = _block_primal(C.val, B.val, b.val)
+    RT <: Const && return EnzymeRules.needs_primal(config) ? (X, x, ok) : nothing
     W = EnzymeRules.width(config)
     shadows = ntuple(Val(W)) do w
+        ok || return (zero(X), zero(x), ok)
         Ċ = _shadow(C, w)
         return (_block_tangent(F, Ċ, _shadow(B, w), X),
-            _block_tangent(F, Ċ, _shadow(b, w), x))
+            _block_tangent(F, Ċ, _shadow(b, w), x), ok)
     end
     needs_primal = EnzymeRules.needs_primal(config)
-    EnzymeRules.needs_shadow(config) || return needs_primal ? (X, x) : nothing
+    EnzymeRules.needs_shadow(config) || return needs_primal ? (X, x, ok) : nothing
     shadow = W == 1 ? only(shadows) : shadows
     needs_primal || return shadow
-    return W == 1 ? Duplicated((X, x), shadow) : BatchDuplicated((X, x), shadow)
+    return W == 1 ? Duplicated((X, x, ok), shadow) : BatchDuplicated((X, x, ok), shadow)
 end
 
 function EnzymeRules.augmented_primal(
@@ -178,12 +182,11 @@ function EnzymeRules.augmented_primal(
 ) where {RT}
     EnzymeRules.width(config) == 1 || _throw_batched_relation(EnzymeRules.width(config))
     _entered!(:_dense_block_solve)
-    F = lu(C.val; check = false)
-    X, x = F \ B.val, F \ b.val
-    primal = EnzymeRules.needs_primal(config) ? (X, x) : nothing
+    F, (X, x, ok) = _block_primal(C.val, B.val, b.val)
+    primal = EnzymeRules.needs_primal(config) ? (X, x, ok) : nothing
     # The return's own cotangent accumulates in the shadows, and `reverse` reads it back off
     # the tape.
-    shadow = RT <: Const ? nothing : (zero(X), zero(x))
+    shadow = RT <: Const ? nothing : (zero(X), zero(x), ok)
     tape = (F, copy(X), copy(x), shadow)
     needs_shadow = EnzymeRules.needs_shadow(config)
     return AugmentedReturn(primal, needs_shadow ? shadow : nothing, tape)
@@ -200,7 +203,8 @@ function EnzymeRules.reverse(
 ) where {RT}
     F, X, x, shadow = tape
     shadow === nothing && return (nothing, nothing, nothing)
-    X̄, x̄ = shadow
+    X̄, x̄, ok = shadow
+    ok || return (nothing, nothing, nothing)
     Λ, λ = F' \ X̄, F' \ x̄
     C̄, B̄, b̄ = _shadow(C, 1), _shadow(B, 1), _shadow(b, 1)
     B̄ === nothing || (B̄ .+= Λ)

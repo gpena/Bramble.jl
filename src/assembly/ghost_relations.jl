@@ -1215,14 +1215,14 @@ function _block_solve(names::Vector{Symbol}, C::SparseMatrixCSC, Bt::SparseMatri
             continue
         end
         Cb = Matrix(C[idx, idx])
-        _nonsingular(Cb) || _throw_singular_block(names, comps, idx)
         js = sort!(unique!(reduce(vcat, (rowvals(Bt)[nzrange(Bt, k)] for k in idx))))
         Bb = zeros(T, length(idx), length(js))
         for (a, k) in enumerate(idx), q in nzrange(Bt, k)
 
             Bb[a, searchsortedfirst(js, rowvals(Bt)[q])] = nonzeros(Bt)[q]
         end
-        X, x = _dense_block_solve(Cb, Bb, b[idx])
+        X, x, ok = _dense_block_solve(Cb, Bb, b[idx])
+        ok || _throw_singular_block(names, comps, idx)
         for (c, j) in enumerate(js), (a, k) in enumerate(idx)
 
             push!(rows, k), push!(cols, j), push!(vals, X[a, c])
@@ -1232,20 +1232,27 @@ function _block_solve(names::Vector{Symbol}, C::SparseMatrixCSC, Bt::SparseMatri
     return rows, cols, vals, dg
 end
 
-# `Cb \ Bb` and `Cb \ bb` on one LU of the dense block `Cb`, which `_nonsingular` has
-# passed. A function of its own so that Enzyme, which has no derivative for LAPACK's
-# `getrf`, reaches the block through the rules of ext/BrambleEnzymeExt/relations.jl.
+# `Cb \ Bb`, `Cb \ bb` and whether `_nonsingular` passes the block, on one LU of the dense
+# block `Cb`. A singular block solves nothing and returns empty arrays of the solutions'
+# types with `false`. A function of its own so that Enzyme, which has no derivative for
+# LAPACK's `getrf`, reaches the block through the rules of
+# ext/BrambleEnzymeExt/relations.jl.
 function _dense_block_solve(Cb, Bb, bb)
     F = lu(Cb; check = false)
-    return F \ Bb, F \ bb
+    if !_nonsingular(F, Cb)
+        T = typeof(oneunit(eltype(Bb)) / oneunit(eltype(F)))
+        Tb = typeof(oneunit(eltype(bb)) / oneunit(eltype(F)))
+        return similar(Bb, T, 0, 0), similar(bb, Tb, 0), false
+    end
+    return F \ Bb, F \ bb, true
 end
 
 # A block whose smallest pivot is at the level of rounding is singular: a singular `K`
 # leaves one of that size rather than an exact zero. The pivots are judged on the block
 # with each row, then each column, scaled to a largest entry of one, since the facet
 # weights and spacings scale rows and columns by the mesh's aspect alone.
-function _nonsingular(Cb::AbstractMatrix)
-    lu(Cb; check = false).info == 0 || return false
+function _nonsingular(F, Cb::AbstractMatrix)
+    F.info == 0 || return false
     S = Cb ./ maximum(abs, Cb; dims = 2)
     S = S ./ maximum(abs, S; dims = 1)
     Fs = lu(S; check = false)
