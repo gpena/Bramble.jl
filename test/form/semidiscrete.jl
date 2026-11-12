@@ -1370,9 +1370,12 @@ _typed_none() = 0.0
 
     # The typed datum is evaluated, not only classified.
     sd = semidiscretize(a, l; dirichlet = dirichlet_constraints(Ωₕ, I, :boundary => _typed_xt))
-    du = zeros(n)
+    sd_u = semidiscretize(a, l; dirichlet = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 2t))
+    du, du_u = zeros(n), zeros(n)
     sd(du, zeros(n), nothing, 0.5)
-    @test all(isfinite, du)
+    sd_u(du_u, zeros(n), nothing, 0.5)
+    @test any(!iszero, du)
+    @test du == du_u
 
     # A callback taking none of (x), (x, t), (x, t, p) is refused, naming it.
     err = try

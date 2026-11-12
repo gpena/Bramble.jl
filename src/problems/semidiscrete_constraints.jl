@@ -84,8 +84,10 @@ function _validate_dirichlet_arity_mix(constraints::ConstraintMarkers)
     )
 end
 
-# A condition that takes none of `(x)`, `(x, t)`, `(x, t, p)` would otherwise be read as
-# time-dependent and fail at the first residual call, so it is refused here.
+# Checks the arity only: a condition that takes none of `(x)`, `(x, t)`, `(x, t, p)` would
+# otherwise be read as time-dependent and fail at the first residual call. The argument
+# types are not checked, as the point type is unknown here, so `g(x::Int, t::Real)` on a
+# `Float64` mesh passes and fails at the first residual call.
 function _validate_dirichlet_arity_known(constraints::ConstraintMarkers)
     for m in conditions(constraints)
         f = identifier(m)
