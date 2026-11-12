@@ -8,6 +8,7 @@ using Enzyme: Enzyme, Const, Annotation, Active, Duplicated, DuplicatedNoNeed,
 using Enzyme.EnzymeRules: EnzymeRules, RevConfig, FwdConfig, AugmentedReturn
 using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange
 using LinearAlgebra: Factorization, dot, ldiv!, lu, norm
+using Random: Random
 
 # A native Enzyme reverse rule for `pde_solve`, used instead of `Enzyme.@import_rrule`.
 #

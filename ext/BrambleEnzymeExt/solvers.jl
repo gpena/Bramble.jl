@@ -582,6 +582,42 @@ end
     )
 end
 
+@noinline function _throw_active_gmg_reverse()
+    throw(
+        ArgumentError(
+        "gmg_solve: `build` captures scalar values, which Enzyme passes to the rule as " *
+        "`Active`, and a constant `build` cannot be told from one being differentiated in " *
+        "reverse mode: Bramble's Enzyme rule does not yet differentiate such a `build`. Use " *
+        "forward mode, capture the scalars in a container (a `Ref` read as `γ[]`), or " *
+        "differentiate `pde_solve(assemble(build(gridspace(Ωₕ))), b)`.",
+    ),
+    )
+end
+
+# Whether a shadow carries no derivative: it is the primal itself (runtime activity's mark of a
+# constant), or every floating-point number it holds, through fields, arrays and `Ref`s, is
+# zero. A closure capturing a constant scalar reaches forward mode with a shadow closure whose
+# copy of the scalar is zero; one capturing an active scalar holds its tangent there, which an
+# identity test misses when the tangent equals the value: for a bits value, `===` compares
+# the data, so only a heap object's identity marks a constant.
+_shadow_is_zero(x, ẋ) = (!isbits(x) && ẋ === x) || _zero_data(ẋ, Base.IdSet{Any}())
+
+_zero_data(x::Union{AbstractFloat, Complex{<:AbstractFloat}}, _) = iszero(x)
+_zero_data(::Union{Number, Symbol, AbstractString, Module, Type}, _) = true
+function _zero_data(x::DenseArray, seen)
+    isbitstype(eltype(x)) && !(eltype(x) <: Union{AbstractFloat, Complex}) && return true
+    (x in seen || (push!(seen, x); false)) && return true
+    return all(i -> !isassigned(x, i) || _zero_data(@inbounds(x[i]), seen), eachindex(x))
+end
+function _zero_data(x::T, seen) where {T}
+    ismutable(x) && (x in seen || (push!(seen, x); false)) && return true
+    return all(i -> !isdefined(x, i) || _zero_data(getfield(x, i), seen), 1:fieldcount(T))
+end
+
+# Whether any lane of a forward rule's argument carries a derivative.
+_moving_shadow(::Const, _) = false
+_moving_shadow(x::Annotation, W) = any(i -> !_shadow_is_zero(x.val, _lane(x, i)), 1:W)
+
 @noinline function _throw_gmg_not_hermitian(gap, scale)
     throw(
         ArgumentError(
@@ -627,19 +663,26 @@ _gmg_rule_solve(P, b, (cycle, tol, maxiters)) = Bramble._gmg_solve_loop(P, b, cy
 # A zero tangent of the solution's type.
 _gmg_zero(u) = (z = similar(u); fill!(parent(z), zero(eltype(z))); z)
 
-# Two fixed probe vectors, deterministic so the user's random stream is left alone.
-_gmg_probes(T, n) = ([T(sin(0.7k) + 0.1) for k in 1:n], [T(cos(1.3k)) for k in 1:n])
+# The number of probe pairs: one coefficient tuned to cancel the gap on one pair leaves the
+# others open.
+const _GMG_PROBE_PAIRS = 4
 
 # Refuses a finest operator that is not Hermitian: with real probes `v`, `w`,
-# `vᵀAw − conj(wᵀAv) = vᵀ(A − Aᴴ)w`. Returns `w` and `A w`, against which the reverse pass
-# checks that the operator is still the one the solve used.
+# `vᵀAw − conj(wᵀAv) = vᵀ(A − Aᴴ)w`, on several pairs drawn from a private generator so the
+# user's random stream is left alone. Returns the last `w` and `A w`, against which the
+# reverse pass checks that the operator is still the one the solve used.
 function _gmg_hermitian_check(P)
     op = last(P.ops)
-    v, w = _gmg_probes(real(eltype(op)), size(op, 1))
-    Av, Aw = op * v, op * w
-    gap = abs(dot(v, Aw) - conj(dot(w, Av)))
-    scale = norm(v) * norm(Aw) + norm(w) * norm(Av)
-    gap <= sqrt(eps(real(eltype(op)))) * scale || _throw_gmg_not_hermitian(gap, scale)
+    T = real(eltype(op))
+    rng = Random.Xoshiro(1168)
+    w = Aw = nothing
+    for _ in 1:_GMG_PROBE_PAIRS
+        v, w = randn(rng, T, size(op, 1)), randn(rng, T, size(op, 1))
+        Av, Aw = op * v, op * w
+        gap = abs(dot(v, Aw) - conj(dot(w, Av)))
+        scale = norm(v) * norm(Aw) + norm(w) * norm(Av)
+        gap <= sqrt(eps(T)) * scale || _throw_gmg_not_hermitian(gap, scale)
+    end
     return w, Aw
 end
 
@@ -659,8 +702,8 @@ function EnzymeRules.forward(
         kwargs...
 ) where {RT}
     W = EnzymeRules.width(config)
-    _active_shadow(build, W) && _throw_active_gmg(:build)
-    _active_shadow(Ωₕ, W) && _throw_active_gmg(:Ωₕ)
+    _moving_shadow(build, W) && _throw_active_gmg(:build)
+    _moving_shadow(Ωₕ, W) && _throw_active_gmg(:Ωₕ)
     P, loop = _gmg_rule_setup(build.val, Ωₕ.val; kwargs...)
     u = _gmg_rule_solve(P, b.val, loop)
     RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
@@ -685,6 +728,10 @@ function EnzymeRules.augmented_primal(
         kwargs...
 ) where {RT}
     EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    # A shadow here is zero until the reverse pass accumulates into it, so data cannot tell a
+    # constant from an active argument; an `Active` one has no shadow to compare.
+    build isa Active && _throw_active_gmg_reverse()
+    Ωₕ isa Active && _throw_active_gmg(:Ωₕ)
     _active_shadow(build, 1) && _throw_active_gmg(:build)
     _active_shadow(Ωₕ, 1) && _throw_active_gmg(:Ωₕ)
     P, loop = _gmg_rule_setup(build.val, Ωₕ.val; kwargs...)

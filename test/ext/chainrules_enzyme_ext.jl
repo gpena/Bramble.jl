@@ -4,7 +4,7 @@ using Test
 using Bramble
 using ChainRulesCore
 using SparseArrays: SparseMatrixCSC, nnz, nonzeros, sparse, spdiagm
-using LinearAlgebra: I, NoPivot, ldiv!, lu
+using LinearAlgebra: I, NoPivot, dot, ldiv!, lu, norm
 using Random: Random
 using Polyester
 using ForwardDiff
@@ -973,6 +973,45 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             @test_throws ArgumentError "symmetric" Enzyme.autodiff(rev,
                 Enzyme.Const(b -> sum(parent(gmg_solve(adv, Ωr, b)))), Enzyme.Active,
                 Enzyme.Duplicated(copy(xr), zeros(length(xr))))
+            # One coefficient tuned so that `vᵀ(A − Aᵀ)w` vanishes on a single fixed pair of
+            # probes: the other pairs still see the asymmetry.
+            vₚ = [sin(0.7k) + 0.1 for k in 1:ndofs(Wa)]
+            wₚ = [cos(1.3k) for k in 1:ndofs(Wa)]
+            Ay = Matrix(assemble(form(Wa, Wa, (u, v) -> innerₕ(Bramble.D₋ᵧ(u), v))))
+            gap(M) = dot(vₚ, (M - M') * wₚ)
+            β = Ref(-gap(Aadv) / gap(Ay))
+            tuned(V) = form(V, V, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                            innerₕ(Bramble.D₋ₓ(u), v) +
+                                            β[] * innerₕ(Bramble.D₋ᵧ(u), v))
+            Aβ = Matrix(assemble(tuned(Wa)))
+            @test abs(gap(Aβ)) < 1e-12 * norm(Aβ) * norm(vₚ) * norm(wₚ)
+            @test maximum(abs, Aβ - Aβ') > 1e-3
+            @test_throws ArgumentError "symmetric" Enzyme.autodiff(rev,
+                Enzyme.Const(b -> sum(parent(gmg_solve(tuned, Ωr, b)))), Enzyme.Active,
+                Enzyme.Duplicated(copy(xr), zeros(length(xr))))
+
+            # A `build` capturing a scalar. Forward reads its shadow's data: a constant `κ`
+            # leaves the tangent `A⁻¹ ḃ`, and a moving `c` is refused by name even when its
+            # tangent equals its value. Reverse gets such a `build` as `Active`, which cannot be
+            # told constant, and refuses it by name.
+            κ = 0.7
+            Aκ = Matrix(assemble(form(Wa, Wa, (u, v) -> innerₕ(u, v) + κ * inner₊(∇ₕ(u), ∇ₕ(v)))))
+            solve_κ(b) = gmg_solve(V -> form(V, V, (u, v) -> innerₕ(u, v) +
+                                                            κ * inner₊(∇ₕ(u), ∇ₕ(v))), Ωr, b;
+                tol = 1e-10)
+            ḃr = [cos(k) for k in 1:ndofs(Wa)]
+            @test parent(only(Enzyme.autodiff(fwd, Enzyme.Const(solve_κ), Enzyme.Duplicated,
+                Enzyme.Duplicated(copy(xr), ḃr)))) ≈ Aκ \ ḃr rtol=1e-7
+            @test_throws ArgumentError "captures scalar values" Enzyme.autodiff(rev,
+                Enzyme.Const(b -> sum(parent(solve_κ(b)))), Enzyme.Active,
+                Enzyme.Duplicated(copy(xr), zeros(length(xr))))
+            loss_c(c) = sum(abs2, parent(gmg_solve(V -> form(V, V, (u, v) -> c * innerₕ(u, v) +
+                                                                          inner₊(∇ₕ(u), ∇ₕ(v))),
+                Ωr, xr; tol = 1e-10)))
+            for c in (1.0, 2.0)
+                @test_throws ArgumentError "`build` has a shadow" Enzyme.autodiff(fwd,
+                    Enzyme.Const(loss_c), Enzyme.Duplicated, Enzyme.Duplicated(c, c))
+            end
         else
             @test_skip "Enzyme not in this environment"
         end
