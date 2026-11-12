@@ -263,8 +263,10 @@ at this level, so the default here is `false`.
 # from the geometry after the change, so a predicate label of either name, or a stored set
 # that differs from the one the present mesh gives, would be replaced by a different set. Both
 # tests are needed: a predicate can match the geometric set on this grid and not on the new
-# one. `caller` completes "... was asked to <verb> a mesh carrying custom markers", and
-# `remedy` names the call that keeps them.
+# one. A stored set sized for another point count is stale, not custom (a `MeshnD` whose
+# submesh was refined alone), so only a set of the present size is compared. `caller`
+# completes "... was asked to <verb> a mesh carrying custom markers", and `remedy` names the
+# call that keeps them.
 function _check_only_geometric_labels(Ωₕ, caller::String, remedy::String)
     extra_labels = Symbol[setdiff(keys(markers(Ωₕ)), (:boundary, :interior))...]
     geometric = MeshMarkers()
@@ -272,7 +274,9 @@ function _check_only_geometric_labels(Ωₕ, caller::String, remedy::String)
     plabels = _predicate_labels(Ωₕ)
     for l in (:boundary, :interior)
         stored = markers(Ωₕ)
-        if l in plabels || (haskey(stored, l) && stored[l] != geometric[l])
+        if l in plabels ||
+           (haskey(stored, l) && length(stored[l]) == length(geometric[l]) &&
+            stored[l] != geometric[l])
             push!(extra_labels, l)
         end
     end
