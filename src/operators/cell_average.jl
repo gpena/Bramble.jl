@@ -190,6 +190,18 @@ end
 
 @inline _rule_component(rule::CellAverage, k) = CellAverage(pt -> rule.f(pt)[k], rule.nq)
 
+# The value count check (`_check_value_count`) evaluates `f` once, at the first quadrature
+# point of cell `i`: a grid point need not lie where `f` is defined, a Gauss point does.
+@inline _probe_value(k::_AvgKernel, i) = k.f(_first_node(k.x, k.idxs[i], k.nodes))
+
+@inline _first_node(x::AbstractVector, idx::CartesianIndex{1}, nodes) = _first_node(x, idx[1], nodes)
+@inline function _first_node(x::AbstractVector, i::Int, nodes::NTuple{NQ, T}) where {NQ, T}
+    a = T(x[i])
+    return a + nodes[1] * (T(x[i + 1]) - a)
+end
+@inline _first_node(x::NTuple{D}, idx::CartesianIndex{D}, nodes) where {D} = ntuple(
+    k -> _first_node(x[k], idx[k], nodes), Val(D))
+
 #------------------------------------------------------------------------------------------#
 # Device kernel launch stubs (gpena/Bramble.jl#94, #174)
 #

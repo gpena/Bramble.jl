@@ -995,6 +995,32 @@ end
         end
     end
 
+    # The value count is read where the sweep itself evaluates `f` (#1202), so a right
+    # count with `f` defined only there still works.
+    @testset "Value count probe (#1202)" begin
+        I = interval(0.0, 1.0)
+        W = gridspace(mesh(domain(I), 9, false))
+        # Undefined at the node x = 0, which no Gauss point reaches.
+        g = x -> x == 0.0 ? throw(DomainError(x)) : (log(x), 1.0)
+        @test parent(avgₕ!(element(W × W), g)) ==
+              parent(avgₕ!(element(W × W), (x -> g(x)[1], x -> g(x)[2])))
+        @test_throws DimensionMismatch avgₕ!(element(W × W), x -> (g(x)..., 1.0))
+
+        # Defined on :mid only. A has no :mid point, B has one.
+        Dm = domain(I, :mid => x -> abs(x - 0.5) < 1e-12)
+        A = gridspace(mesh(Dm, 4, true))
+        B = gridspace(mesh(Dm, 9, true))
+        fm = x -> abs(x - 0.5) < 1e-12 ? (1.0, 2.0) : error("undefined off :mid")
+        for V in (A × B, B × A)
+            u = Rₕ!(element(V), fm; markers = (:mid,))
+            @test count(!iszero, parent(u)) == 1 && sum(parent(u)) ∈ (1.0, 2.0)
+            @test_throws DimensionMismatch Rₕ!(element(V), x -> (fm(x)..., 3.0); markers = (:mid,))
+        end
+        # Nothing selected, nothing evaluated: zeros, no count to check.
+        @test iszero(parent(Rₕ!(element(A × A), fm; markers = (:mid,))))
+        @test iszero(parent(Rₕ!(element(A × A), x -> (fm(x)..., 3.0); markers = (:mid,))))
+    end
+
     @testset "One-tuple functions" begin
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
         W = gridspace(Ωₕ)
