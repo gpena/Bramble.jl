@@ -724,6 +724,59 @@ end
             )
         end
 
+        # gpena/Bramble.jl#1201. AppleAccelerate.jl's `factor!` hands libSparse Julia
+        # callbacks for `malloc` and `free`. libSparse calls them on its GCD worker
+        # threads, Julia adopts each of those threads, and a collection that starts while
+        # the calling thread is parked inside libSparse waits for them forever. The
+        # deadlock is a race; adoption is what it leaves behind every time, and
+        # `Threads.maxthreadid()` counts it. Bramble's factorizations pass C `malloc` and
+        # `free`, so the count must stay put across factorize, refactor and solve.
+        # Adoption depends on the matrix. libSparse's workers allocate for LU and for the
+        # LDLᵀ of the bordered gauge system, and not for a Cholesky of an SPD matrix, so
+        # the Cholesky rows pin that nothing changes there, and the LDLᵀ and LU rows are
+        # the ones that fail when the callbacks come back. The positive control runs
+        # AppleAccelerate.jl's own `factor!` last, on the matrix that adopts: it must raise
+        # the count, or the rows above would pass in a process whose workers were adopted
+        # before this testset, or against a fixed upstream, without seeing anything. It
+        # stops at the first raise, since that call deadlocks under a collector.
+        @testset "No Julia on libSparse threads (#1201)" begin
+            sp = poisson_system(Val(2), 12)
+            cd = convection_diffusion_system(12)
+            Bramble._seed_mesh1d_rng!(11)
+            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 7), (false, false))
+            Bramble._unseed_mesh1d_rng!()
+            W = gridspace(Ω; ghosts = :boundary)
+            A = assemble(form(W, W, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+            C = sparse(Bramble.ghost_kernel(A, W))
+            bordered = [A C; C' spzeros(size(C, 2), size(C, 2))]
+            indefinite = sp.A - 0.5 * sum(diag(sp.A)) / size(sp.A, 1) * I
+            rows = (
+                ("Cholesky", sp.A, sp.F, (; sym = :spd)),
+                ("Cholesky attempt, LDLᵀ fallback", sparse(indefinite), sp.F, (;)),
+                ("LDLᵀ, bordered gauge system", bordered, bordered * ones(size(bordered, 1)),
+                    (; sym = :symmetric)),
+                ("LU", cd.A, cd.F, (; sym = :unsymmetric)),
+            )
+            n0 = Threads.maxthreadid()
+            for (name, M, F, kw) in rows
+                for _ in 1:50
+                    f = accelerate_factorize(M; kw...)
+                    accelerate_refactor!(f, M)
+                    @test norm(M * (f \ F) - F, Inf) <= 1.0e-8 * norm(F, Inf)
+                end
+                # One `@test` per row, after its 50 rounds: a thread adopted by the
+                # factorize, the refactor or the solve fails it, named by the row.
+                @test (name, Threads.maxthreadid()) == (name, n0)
+            end
+
+            for _ in 1:300
+                aa = AppleAccelerate.AAFactorization(AppleAccelerate.AASparseMatrix(bordered))
+                AppleAccelerate.factor!(aa, AppleAccelerate.SparseFactorizationLDLT)
+                Threads.maxthreadid() > n0 && break
+            end
+            @test Threads.maxthreadid() > n0
+        end
+
         # gpena/Bramble.jl#142 asks whether Accelerate's libSparse/LBT-forwarded LAPACK differ
         # numerically from the plain `LinearAlgebra` path enough to need new suite
         # tolerances. Answered here by relative residual, ‖A*x - b‖ / ‖b‖, computed for
