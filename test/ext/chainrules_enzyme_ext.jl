@@ -973,22 +973,46 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             @test_throws ArgumentError "symmetric" Enzyme.autodiff(rev,
                 Enzyme.Const(b -> sum(parent(gmg_solve(adv, Ωr, b)))), Enzyme.Active,
                 Enzyme.Duplicated(copy(xr), zeros(length(xr))))
-            # One coefficient tuned so that `vᵀ(A − Aᵀ)w` vanishes on a single fixed pair of
-            # probes: the other pairs still see the asymmetry.
-            vₚ = [sin(0.7k) + 0.1 for k in 1:ndofs(Wa)]
-            wₚ = [cos(1.3k) for k in 1:ndofs(Wa)]
-            Ay = Matrix(assemble(form(Wa, Wa, (u, v) -> innerₕ(Bramble.D₋ᵧ(u), v))))
-            gap(M) = dot(vₚ, (M - M') * wₚ)
-            β = Ref(-gap(Aadv) / gap(Ay))
-            tuned(V) = form(V, V, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
-                                            innerₕ(Bramble.D₋ₓ(u), v) +
-                                            β[] * innerₕ(Bramble.D₋ᵧ(u), v))
-            Aβ = Matrix(assemble(tuned(Wa)))
-            @test abs(gap(Aβ)) < 1e-12 * norm(Aβ) * norm(vₚ) * norm(wₚ)
-            @test maximum(abs, Aβ - Aβ') > 1e-3
+            # The check is exact, on the assembled finest matrix. Four advection coefficients
+            # tuned so that `vᵀ(A − Aᵀ)w` vanishes on four random pairs of probes (those of
+            # `Xoshiro(1168)`), and a weak advection whose probe gap sits under `√eps` of a
+            # scale that grows with the mesh, are refused all the same.
+            Ωu = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                             Bramble.interval(0.0, 1.0)), (17, 17), (true, true))
+            Wu = gridspace(Ωu)
+            nu = ndofs(Wu)
+            cs = (Ref(0.0), Ref(0.0), Ref(0.0), Ref(0.0))
+            terms = (V -> form(V, V, (u, v) -> innerₕ(Bramble.D₋ᵧ(u), v)),
+                V -> form(V, V, (u, v) -> innerₕ(Rₕ(V, x -> x[1]) * Bramble.D₋ₓ(u), v)),
+                V -> form(V, V, (u, v) -> innerₕ(Rₕ(V, x -> x[2]) * Bramble.D₋ᵧ(u), v)),
+                V -> form(V, V, (u, v) -> innerₕ(Rₕ(V, x -> x[1] * x[2]) * Bramble.D₋ₓ(u), v)))
+            four(V) = form(V, V, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                           innerₕ(Bramble.D₋ₓ(u), v) +
+                                           cs[1][] * innerₕ(Bramble.D₋ᵧ(u), v) +
+                                           cs[2][] * innerₕ(Rₕ(V, x -> x[1]) * Bramble.D₋ₓ(u), v) +
+                                           cs[3][] * innerₕ(Rₕ(V, x -> x[2]) * Bramble.D₋ᵧ(u), v) +
+                                           cs[4][] *
+                                           innerₕ(Rₕ(V, x -> x[1] * x[2]) * Bramble.D₋ₓ(u), v))
+            rng = Random.Xoshiro(1168)
+            pairs = [(randn(rng, nu), randn(rng, nu)) for _ in 1:4]
+            gaps(M) = [dot(v, (M - M') * w) for (v, w) in pairs]
+            A₀ = Matrix(assemble(four(Wu)))
+            G = reduce(hcat, [gaps(Matrix(assemble(t(Wu)))) for t in terms])
+            foreach(((c, x),) -> c[] = x, zip(cs, G \ -gaps(A₀)))
+            A₄ = Matrix(assemble(four(Wu)))
+            @test maximum(abs, gaps(A₄)) < 1e-10 * norm(A₄) * nu
+            @test maximum(abs, A₄ - A₄') > 1e-2
             @test_throws ArgumentError "symmetric" Enzyme.autodiff(rev,
-                Enzyme.Const(b -> sum(parent(gmg_solve(tuned, Ωr, b)))), Enzyme.Active,
-                Enzyme.Duplicated(copy(xr), zeros(length(xr))))
+                Enzyme.Const(b -> sum(parent(gmg_solve(four, Ωu, b; tol = 1e-10)))),
+                Enzyme.Active, Enzyme.Duplicated(ones(nu), zeros(nu)))
+            Ωw = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                             Bramble.interval(0.0, 1.0)), (33, 33), (true, true))
+            weak(V) = form(V, V, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                           1e-4 * innerₕ(Bramble.D₋ₓ(u), v))
+            nw = npoints(Ωw)
+            @test_throws ArgumentError "symmetric" Enzyme.autodiff(rev,
+                Enzyme.Const(b -> sum(parent(gmg_solve(weak, Ωw, b; tol = 1e-10)))),
+                Enzyme.Active, Enzyme.Duplicated(ones(nw), zeros(nw)))
 
             # A `build` capturing a scalar. Forward reads its shadow's data: a constant `κ`
             # leaves the tangent `A⁻¹ ḃ`, and a moving `c` is refused by name even when its
@@ -1012,6 +1036,21 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                 @test_throws ArgumentError "`build` has a shadow" Enzyme.autodiff(fwd,
                     Enzyme.Const(loss_c), Enzyme.Duplicated, Enzyme.Duplicated(c, c))
             end
+            # The shadow is read with its primal. An active coefficient inside a vector of
+            # tuples is a derivative the rule cannot compute, refused by name, as `pde_solve`
+            # would carry it; a constant `κ` captured beside a `Ref`, whose shadow is the
+            # primal's own, leaves the tangent `A⁻¹ ḃ`.
+            loss_t(q) = (ps = [(q[1], 0.0)];
+            sum(abs2, parent(gmg_solve(V -> form(V, V, (u, v) -> ps[1][1] * innerₕ(u, v) +
+                                                                inner₊(∇ₕ(u), ∇ₕ(v))),
+                Ωr, xr; tol = 1e-10))))
+            @test_throws ArgumentError "`build` has a shadow" Enzyme.autodiff(fwd,
+                Enzyme.Const(loss_t), Enzyme.Duplicated, Enzyme.Duplicated([0.7], [1.0]))
+            γκ = Ref(1.0)
+            solve_γκ(b) = gmg_solve(V -> form(V, V, (u, v) -> κ * γκ[] * inner₊(∇ₕ(u), ∇ₕ(v)) +
+                                                             innerₕ(u, v)), Ωr, b; tol = 1e-10)
+            @test parent(only(Enzyme.autodiff(fwd, Enzyme.Const(solve_γκ), Enzyme.Duplicated,
+                Enzyme.Duplicated(copy(xr), ḃr)))) ≈ Aκ \ ḃr rtol=1e-7
         else
             @test_skip "Enzyme not in this environment"
         end

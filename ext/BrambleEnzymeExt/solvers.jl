@@ -561,7 +561,7 @@ end
 # inactive either; the rules sit on `gmg_solve` and differentiate the converged solve
 # implicitly. It is linear in `b`. Each lane's tangent is `u̇ = A⁻¹ ḃ` and the pullback
 # `b̄ += A⁻ᴴ ū`, the same solve only when `A` is Hermitian, while `gmg_solve` accepts any `A`
-# whose cycle contracts: reverse probes the finest operator and refuses any other by name.
+# whose cycle contracts: reverse assembles the finest matrix and refuses any other by name.
 # One preconditioner per rule call serves every lane, each solved to the caller's `tol`, and
 # a zero load returns zero without a cycle. `build` and the mesh are constants; a shadow that
 # is not the primal is refused by name rather than dropped.
@@ -574,10 +574,11 @@ end
 @noinline function _throw_active_gmg(name)
     throw(
         ArgumentError(
-        "gmg_solve: `$name` has a shadow, and Bramble's Enzyme rule differentiates " *
-        "`gmg_solve` in its right-hand side only, so the derivative with respect to a " *
-        "coefficient or the mesh would be silently dropped; to differentiate with respect " *
-        "to it, solve with `pde_solve(assemble(build(gridspace(Ωₕ))), b)`",
+        "gmg_solve: `$name` has a shadow, so it may carry a derivative, and Bramble's " *
+        "Enzyme rule differentiates `gmg_solve` in its right-hand side only, which cannot " *
+        "compute one with respect to a coefficient or the mesh. Solve with " *
+        "`pde_solve(assemble(build(gridspace(Ωₕ))), b)` to differentiate it, or, if it is " *
+        "constant, build it outside the differentiated function and pass it in.",
     ),
     )
 end
@@ -594,37 +595,53 @@ end
     )
 end
 
-# Whether a shadow carries no derivative: it is the primal itself (runtime activity's mark of a
-# constant), or every floating-point number it holds, through fields, arrays and `Ref`s, is
-# zero. A closure capturing a constant scalar reaches forward mode with a shadow closure whose
-# copy of the scalar is zero; one capturing an active scalar holds its tangent there, which an
-# identity test misses when the tangent equals the value: for a bits value, `===` compares
-# the data, so only a heap object's identity marks a constant.
-_shadow_is_zero(x, ẋ) = (!isbits(x) && ẋ === x) || _zero_data(ẋ, Base.IdSet{Any}())
+# Whether a shadow carries no derivative, walked with its primal. A heap object shared with
+# the primal is runtime activity's mark of a constant; anything else is read: every
+# floating-point number it holds, through fields, arrays of any element type and `Ref`s, must
+# be zero. A closure capturing a constant scalar and a `Ref` reaches forward mode with a shadow
+# closure whose scalar is zero and whose `Ref` is the primal's. For a bits value `===`
+# compares the data, so a tangent equal to its value is read, not taken for the primal.
+_shadow_is_zero(x, ẋ) = _zero_shadow(x, ẋ, Base.IdSet{Any}())
 
-_zero_data(x::Union{AbstractFloat, Complex{<:AbstractFloat}}, _) = iszero(x)
-_zero_data(::Union{Number, Symbol, AbstractString, Module, Type}, _) = true
-function _zero_data(x::DenseArray, seen)
-    isbitstype(eltype(x)) && !(eltype(x) <: Union{AbstractFloat, Complex}) && return true
-    (x in seen || (push!(seen, x); false)) && return true
-    return all(i -> !isassigned(x, i) || _zero_data(@inbounds(x[i]), seen), eachindex(x))
+# Whether a value of type `T` can hold a floating-point number.
+_holds_floats(::Type{T}) where {T} = T <: Union{AbstractFloat, Complex{<:AbstractFloat}} ||
+                                     !isbitstype(T) || any(_holds_floats, fieldtypes(T))
+
+_zero_shadow(_, ẋ::Union{AbstractFloat, Complex{<:AbstractFloat}}, _) = iszero(ẋ)
+_zero_shadow(_, ::Union{Number, Symbol, AbstractString, Module, Type}, _) = true
+function _zero_shadow(x, ẋ::DenseArray, seen)
+    ẋ === x && return true
+    _holds_floats(eltype(ẋ)) || return true
+    (ẋ in seen || (push!(seen, ẋ); false)) && return true
+    paired = x isa DenseArray && size(x) == size(ẋ)
+    return all(eachindex(ẋ)) do i
+        isassigned(ẋ, i) || return true
+        xᵢ = paired && isassigned(x, i) ? x[i] : nothing
+        return _zero_shadow(xᵢ, ẋ[i], seen)
+    end
 end
-function _zero_data(x::T, seen) where {T}
-    ismutable(x) && (x in seen || (push!(seen, x); false)) && return true
-    return all(i -> !isdefined(x, i) || _zero_data(getfield(x, i), seen), 1:fieldcount(T))
+function _zero_shadow(x, ẋ::T, seen) where {T}
+    !isbits(ẋ) && ẋ === x && return true
+    ismutable(ẋ) && (ẋ in seen || (push!(seen, ẋ); false)) && return true
+    paired = typeof(x) === T
+    return all(1:fieldcount(T)) do i
+        isdefined(ẋ, i) || return true
+        xᵢ = paired && isdefined(x, i) ? getfield(x, i) : nothing
+        return _zero_shadow(xᵢ, getfield(ẋ, i), seen)
+    end
 end
 
 # Whether any lane of a forward rule's argument carries a derivative.
 _moving_shadow(::Const, _) = false
 _moving_shadow(x::Annotation, W) = any(i -> !_shadow_is_zero(x.val, _lane(x, i)), 1:W)
 
-@noinline function _throw_gmg_not_hermitian(gap, scale)
+@noinline function _throw_gmg_not_hermitian(gap)
     throw(
         ArgumentError(
         "gmg_solve: Bramble's Enzyme rule differentiates in reverse mode only a form whose " *
         "matrix is symmetric (Hermitian), whose adjoint solve is `gmg_solve` itself; this " *
-        "form's is not (|vᵀAw − wᵀAv| = $gap against a scale of $scale). Use forward mode, " *
-        "or differentiate `pde_solve(assemble(build(gridspace(Ωₕ))), b)`.",
+        "form's is not (‖A − Aᴴ‖∞ / ‖A‖∞ = $gap). Use forward mode, or differentiate " *
+        "`pde_solve(assemble(build(gridspace(Ωₕ))), b)`.",
     ),
     )
 end
@@ -663,27 +680,19 @@ _gmg_rule_solve(P, b, (cycle, tol, maxiters)) = Bramble._gmg_solve_loop(P, b, cy
 # A zero tangent of the solution's type.
 _gmg_zero(u) = (z = similar(u); fill!(parent(z), zero(eltype(z))); z)
 
-# The number of probe pairs: one coefficient tuned to cancel the gap on one pair leaves the
-# others open.
-const _GMG_PROBE_PAIRS = 4
-
-# Refuses a finest operator that is not Hermitian: with real probes `v`, `w`,
-# `vᵀAw − conj(wᵀAv) = vᵀ(A − Aᴴ)w`, on several pairs drawn from a private generator so the
-# user's random stream is left alone. Returns the last `w` and `A w`, against which the
-# reverse pass checks that the operator is still the one the solve used.
-function _gmg_hermitian_check(P)
+# Refuses a finest matrix that is not Hermitian. It is assembled once, as `build` makes it on
+# `Ωₕ`: a probe of the matrix-free operator can be cancelled by a tuned coefficient, and its
+# scale grows with the mesh. A symmetric form assembles to an exactly symmetric matrix (0 on
+# every test form measured), so the bound is a few roundings. Returns a fixed `w` and the
+# operator's `A w`, against which the reverse pass checks that the operator is still the one
+# the solve used.
+function _gmg_hermitian_check(P, build, Ωₕ)
+    A = Bramble.assemble(build(Bramble.gridspace(Ωₕ)))
+    gap = norm(A - A', Inf) / norm(A, Inf)
+    gap <= 8 * eps(real(eltype(A))) || _throw_gmg_not_hermitian(gap)
     op = last(P.ops)
-    T = real(eltype(op))
-    rng = Random.Xoshiro(1168)
-    w = Aw = nothing
-    for _ in 1:_GMG_PROBE_PAIRS
-        v, w = randn(rng, T, size(op, 1)), randn(rng, T, size(op, 1))
-        Av, Aw = op * v, op * w
-        gap = abs(dot(v, Aw) - conj(dot(w, Av)))
-        scale = norm(v) * norm(Aw) + norm(w) * norm(Av)
-        gap <= sqrt(eps(T)) * scale || _throw_gmg_not_hermitian(gap, scale)
-    end
-    return w, Aw
+    w = [real(eltype(op))(cos(1.3k)) for k in 1:size(op, 1)]
+    return w, op * w
 end
 
 function _gmg_unchanged_check(P, w, Aw)
@@ -735,7 +744,7 @@ function EnzymeRules.augmented_primal(
     _active_shadow(build, 1) && _throw_active_gmg(:build)
     _active_shadow(Ωₕ, 1) && _throw_active_gmg(:Ωₕ)
     P, loop = _gmg_rule_setup(build.val, Ωₕ.val; kwargs...)
-    probe = _has_shadow(b) ? _gmg_hermitian_check(P) : nothing
+    probe = _has_shadow(b) ? _gmg_hermitian_check(P, build.val, Ωₕ.val) : nothing
     u = _gmg_rule_solve(P, b.val, loop)
     ū = _gmg_zero(u)
 
