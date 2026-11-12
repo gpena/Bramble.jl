@@ -44,6 +44,12 @@ Step: control_nest, 3d (no Bramble) | rev | ok 2.4e-16 | 15 | 0.92
 
 Step: control_slabs, 3d (no Bramble) | rev | ok 5.2e-17 | 14 | 0.91
 
+Step: cell, 3d, fix in src, `--project=test --optimize=1 --check-bounds=auto` | rev | ok 1.5e-16 | 195 | 2.97
+
+Step: cell, 3d, fix in src, `--project=test --optimize=1 --check-bounds=auto` | fwd | ok 1.5e-16 | 120 | 2.01
+
+Step: cell, 3d, fix in src, `--project=test`, default `-O2` | rev | ok 1.5e-16 | 198 | 2.97
+
 Function: `diffejulia__replay_segment_`, the reverse pass of `_replay_segment!` (src/assembly/bilinear_execution.jl line 138), into which `_visit_stencil!` (the `_RowRestricted` method), `_visit_pieces!` and `_visit_interior!` are inlined. The instruction the verifier names is `%_unwrap811 = sub i64 %1050, %1054`, with `%1050 = load i64, ptr %1049, align 8, !invariant.group !69597` and `%1054 = load i64, ptr %1053, align 8, !invariant.group !69598`; both loads come after the `sub` in the same block (step `cell`, 3d, rev; the value numbers change from run to run, the shape stays the same). Once the replay is fixed, the hidden one is `diffejulia__coord_walk_`, the `_RowRestricted` method of `_coord_walk!` (src/assembly/bilinear_pattern.jl line 253): `%_unwrap429 = sub i64 %356, %360`, the same shape (step `cell, 3d, proto flat_replay`).
 
 Fix site: src/assembly/bilinear_traversal.jl, line 1401 (`_visit_pieces!`, the replay) and line 1384 (`_each_piece`, which runs the `do piece` closures of `_coord_walk!` at bilinear_pattern.jl lines 268, 273 and 279): the loop `for J in CartesianIndices(Base.tail(region.indices))`. On a 3D grid that loop is two nested loops whose trip counts come from the ranges of the region, and the region changes on each pass of the loop over the boundary slabs. Walking the tail as one loop over its linear index, `tail = CartesianIndices(Base.tail(region.indices)); for k in 1:length(tail); J = tail[k]`, makes the whole 3D cell differentiate, 1.5e-16 against ForwardDiff (step `cell, 3d, proto flat`). Both methods need it. With only `_visit_pieces!` changed, the abort moves to `_coord_walk!`. The prototype redefines the two methods from the script (`BRAMBLE_PROTO=flat`), so no file under `src/` changed. The wrong IR is Enzyme's, but no Bramble-free nest reproduced it (`control_nest`, `control_slabs`), so it is not filed upstream.
@@ -77,6 +83,14 @@ Size does not separate the cells. The failure is also of another kind, an LLVM d
 - `_each_piece` is also used by `_each_walked` (bilinear_traversal.jl line 1367) and by the matrix-free walk (src/assembly/matrix_free.jl lines 828 and 1645). The prototype changes those too, and only the assembly cells were run here.
 - Run `cell 3d rev` without `BRAMBLE_PROTO` after the change. With the fix in `src/`, the prototype methods redefine identical code, so `proto flat` adds nothing.
 - The 3D cell compiled and differentiated in 194 s at 2.85 GB with the prototype, against 108 s and 2.14 GB for the 2D cell.
+
+## The fix
+
+Both loops now walk the tail by its linear index, as the prototype did: `_each_piece` and `_visit_pieces!` in src/assembly/bilinear_traversal.jl. The three `fix in src` steps ran on that change, on top of b19e4908, with no `BRAMBLE_PROTO` and in the test environment, which also has Enzyme 0.13.219.
+
+Before the change, the dispatch gate ran the PROBE through `verify_subplan.sh` (`--project=test`, default `-O2`) and it aborted in `diffejulia__coord_walk__`, with the same shape as above: a `sub` of two cached loads emitted before them. The replay did not show up first there. The log mentions `diffejulia__visit_guarded_region__` three times, never in a `define`; those are calls from `_coord_walk!`'s reverse. Which function the verifier stops at first depends on the environment, and both come from the tail loop that is now flat. `_visit_guarded_region!` walks one fixed region per call and is unchanged. With the change, the PROBE (reverse and forward against ForwardDiff, to 1e-8) passes under `verify_subplan.sh --threads 1 S5.2`, and so do its five test files, 1767 passes.
+
+The primal did not change. Under `CpuSerial`, `CpuThreaded` and `CpuPolyester` on 1 thread, the assembled matrix and vector and a matrix-free `mul!` are bitwise equal before and after, for the 3D cell, a (9, 8, 7) 3D ghost space and a (9, 11) 2D one. `@allocated` is the same too: 4960 bytes for the 3D cell's assembly, 64768 for (9, 8, 7) and 8992 for 2D under `CpuSerial`, and 0 for `mul!`.
 
 ## Commands run
 
