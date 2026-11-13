@@ -27,6 +27,20 @@ function gmg_grid(c)
         form(V, V, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))))
 end
 gmg_mixed(c, γ) = V -> form(V, V, (u, v) -> (1 + c) * innerₕ(u, v) + γ[] * inner₊(∇ₕ(u), ∇ₕ(v)))
+gmg_mixed_ref(cr, γ) = V -> form(V, V,
+    (u, v) -> (1 + cr[]) * innerₕ(u, v) + γ[] * inner₊(∇ₕ(u), ∇ₕ(v)))
+# A `Ref` in a global that is not `const`, as a script holds one: a `build` capturing it
+# reaches the forward rule with a shadow `===` its primal.
+gmg_mixed_γ = Ref(0.7)
+# A constant `build` bound to a `const` global reaches the forward rule as a constant.
+const GMG_GLOBAL_BUILD = gmg_mixed(0.3, Ref(0.7))
+# A Robin `build` on ghost spaces, whose coefficient the rules refuse to differentiate.
+gmg_robin_relations(u) = map(F -> F => u + ∂ₙ(u) => 0.0, (:xmin, :xmax, :ymin, :ymax))
+function gmg_robin(c)
+    V -> (C = constrained(gridspace(Bramble.mesh(V); ghosts = :boundary),
+            gmg_robin_relations);
+        form(C, C, (u, v) -> innerₕ(-1.0 * Δₕ(u), v) + c * innerₕ(u, v)))
+end
 gmg_tuple(ps) = V -> form(V, V, (u, v) -> innerₕ(u, v) + ps[1][1] * inner₊(∇ₕ(u), ∇ₕ(v)))
 gmg_wrapped(cw) = V -> form(V, V, (u, v) -> innerₕ(u, v) + cw.κ * inner₊(∇ₕ(u), ∇ₕ(v)))
 gmg_square(γ) = V -> form(V, V, (u, v) -> innerₕ(u, v) + γ[]^2 * inner₊(∇ₕ(u), ∇ₕ(v)))
@@ -284,10 +298,41 @@ end
             end
             # A constant scalar captured beside a constant `Ref`, whose shadow is the primal's
             # own, leaves the tangent `A⁻¹ ḃ`.
-            γκ = Ref(κ)
-            solve_γκ(b) = gmg_solve(gmg_mixed(0.0, γκ), Ωr, b; tol = 1e-10)
+            @test gmg_mixed_γ[] == κ
+            solve_γκ(b) = gmg_solve(gmg_mixed(0.0, gmg_mixed_γ), Ωr, b; tol = 1e-10)
             @test parent(only(Enzyme.autodiff(fwd, Enzyme.Const(solve_γκ), Enzyme.Duplicated,
                 Enzyme.Duplicated(copy(xr), ḃr)))) ≈ Aκ \ ḃr rtol=1e-7
+            # With the scalar nonzero, forward mode cannot tell this constant `build` from
+            # an active one whose tangent equals its value, and refuses it by name; each way
+            # out the refusal names gives `A⁻¹ ḃ` or, in reverse, `A⁻ᴴ w`.
+            Am = Matrix(assemble(gmg_mixed(0.3, gmg_mixed_γ)(Wa)))
+            solve_m(b) = gmg_solve(gmg_mixed(0.3, gmg_mixed_γ), Ωr, b; tol = 1e-10)
+            @test_throws ArgumentError "undetermined" Enzyme.autodiff(fwd,
+                Enzyme.Const(solve_m), Enzyme.Duplicated, Enzyme.Duplicated(copy(xr), ḃr))
+            @test_throws ArgumentError "undetermined" Enzyme.autodiff(fwd,
+                Enzyme.Const(solve_m), Enzyme.BatchDuplicated,
+                Enzyme.BatchDuplicated(copy(xr), (ḃr, wr)))
+            b̄m = zeros(length(xr))
+            Enzyme.autodiff(rev, Enzyme.Const(b -> sum(wr .* parent(solve_m(b)))),
+                Enzyme.Active, Enzyme.Duplicated(copy(xr), b̄m))
+            @test b̄m ≈ Am' \ wr rtol=1e-7
+            @test ForwardDiff.derivative(t -> parent(solve_m(xr .+ t .* ḃr)), 0.0) ≈
+                  Am \ ḃr rtol=1e-7
+            solve_g(b) = gmg_solve(GMG_GLOBAL_BUILD, Ωr, b; tol = 1e-10)
+            @test parent(only(Enzyme.autodiff(fwd, Enzyme.Const(solve_g), Enzyme.Duplicated,
+                Enzyme.Duplicated(copy(xr), ḃr)))) ≈ Am \ ḃr rtol=1e-7
+            solve_r(b) = gmg_solve(gmg_mixed_ref(Ref(0.3), gmg_mixed_γ), Ωr, b;
+                tol = 1e-10)
+            u̇r = only(Enzyme.autodiff(fwd, Enzyme.Const(solve_r), Enzyme.BatchDuplicated,
+                Enzyme.BatchDuplicated(copy(xr), (ḃr, wr))))
+            @test parent(u̇r[1]) ≈ Am \ ḃr rtol=1e-7
+            @test parent(u̇r[2]) ≈ Am \ wr rtol=1e-7
+            # A `build` on ghost spaces with an active coefficient is refused in both modes.
+            loss_robin(c) = sum(abs2, parent(gmg_solve(gmg_robin(c), Ωr, xr; tol = 1e-10)))
+            @test_throws ArgumentError "ghost spaces" Enzyme.autodiff(fwd,
+                Enzyme.Const(loss_robin), Enzyme.Duplicated, Enzyme.Duplicated(1.0, 1.0))
+            @test_throws ArgumentError "ghost spaces" Enzyme.autodiff(rev,
+                Enzyme.Const(loss_robin), Enzyme.Active, Enzyme.Active(1.0))
         else
             @test_skip "Enzyme not in this environment"
         end
@@ -364,6 +409,19 @@ end
                 Enzyme.BatchDuplicated(0.0, (1.0, 0.0)),
                 Enzyme.BatchDuplicated(Ref(0.6), (Ref(0.0), Ref(1.0)))))
             @test collect(values(ṡ)) ≈ ref_mix rtol=1e-7
+            # The scalar active beside a constant `Ref`: a tangent equal to its value
+            # reaches forward mode as a constant `build` does and is refused by name; any
+            # other is differentiated, directly and through DI.
+            γc = Ref(0.6)
+            ref_c = ForwardDiff.derivative(
+                c -> sum(abs2, pde_solve(assemble(gmg_mixed(c, γc)(Wr)), xr)), 0.3)
+            @test abs(ref_c) > 1e-2
+            loss_c(c) = sum(abs2, parent(gmg_solve(gmg_mixed(c, γc), Ωr, xr; tol = 1e-10)))
+            @test_throws ArgumentError "undetermined" Enzyme.autodiff(fwd,
+                Enzyme.Const(loss_c), Enzyme.Duplicated, Enzyme.Duplicated(0.3, 0.3))
+            @test only(Enzyme.autodiff(fwd, Enzyme.Const(loss_c), Enzyme.Duplicated,
+                Enzyme.Duplicated(0.3, 1.0))) ≈ ref_c rtol=1e-7
+            @test DI.derivative(loss_c, ez(Enzyme.Forward), 0.3) ≈ ref_c rtol=1e-7
         else
             @test_skip "Enzyme not in this environment"
         end

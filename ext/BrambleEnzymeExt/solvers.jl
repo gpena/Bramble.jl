@@ -594,6 +594,18 @@ end
     )
 end
 
+@noinline function _throw_ambiguous_build_gmg()
+    throw(
+        ArgumentError(
+        "gmg_solve: `build` captures a nonzero number by value, and Enzyme's forward " *
+        "mode hands over a constant `build` and an active one whose tangent equals its " *
+        "value identically (a shadow `===` the primal), so the tangent of `build` is " *
+        "undetermined. Use reverse mode, ForwardDiff, a `build` bound to a `const` " *
+        "global, or one that holds its constant numbers in a `Ref`.",
+    ),
+    )
+end
+
 # Whether a shadow carries no derivative, walked with its primal. A heap object shared with
 # the primal is runtime activity's mark of a constant; anything else is read: every
 # floating-point number it holds, through fields, arrays of any element type and `Ref`s, must
@@ -634,6 +646,27 @@ function _zero_fields(x, ẋ::T, seen) where {T}
         xᵢ = paired && isdefined(x, i) ? getfield(x, i) : nothing
         return _zero_shadow(xᵢ, getfield(ẋ, i), seen)
     end
+end
+
+# Whether every floating-point number `x` stores by value is zero. A mutable object is
+# shared by a shadow `===` its primal, so it is not walked.
+_byvalue_zero(x::Union{AbstractFloat, Complex{<:AbstractFloat}}) = iszero(x)
+function _byvalue_zero(x::T) where {T}
+    (ismutable(x) || !_holds_floats(T)) && return true
+    return all(i -> !isdefined(x, i) || _byvalue_zero(getfield(x, i)), 1:fieldcount(T))
+end
+
+# Whether lane `i` of a forward `build` that is not bits is a shadow `===` its primal. A
+# closure is immutable, so `===` compares its fields: a constant `build`, whose captured
+# numbers runtime activity copies into the shadow, and an active one whose tangent equals
+# its value reach the rule identically. With every number it stores by value zero the two
+# agree.
+_gmg_shared_lane(build, i) = !isbits(build.val) && _lane(build, i) === build.val
+_gmg_shared(::Const, _) = false
+_gmg_shared(build::Annotation, W) = all(i -> _gmg_shared_lane(build, i), 1:W)
+function _gmg_ambiguous(build::Annotation, W)
+    build isa Const && return false
+    return any(i -> _gmg_shared_lane(build, i), 1:W) && !_byvalue_zero(build.val)
 end
 
 # Whether any lane of a forward rule's argument carries a derivative.
@@ -721,9 +754,10 @@ end
 
 # Whether `build` may carry a derivative in reverse mode. A scalar it captures arrives
 # `Active` or in a `MixedDuplicated` box, so a `Duplicated` shadow that is the primal is
-# runtime activity's mark of a constant. Forward mode runs the nested call for any shadow:
-# `===` compares a bits field by its data, so a tangent equal to its value would pass for
-# the primal, and a zero shadow gives a zero product.
+# runtime activity's mark of a constant. Forward mode runs the nested call for any shadow
+# but a shared one (`_gmg_shared_lane`): `===` compares a bits field by its data, so a
+# tangent equal to its value would pass for the primal, and a zero shadow gives a zero
+# product.
 _gmg_build_moves(::Const) = false
 _gmg_build_moves(::Active) = true
 _gmg_build_moves(build::Annotation) = _active_shadow(build, 1)
@@ -776,11 +810,14 @@ function EnzymeRules.forward(
     P, loop = _gmg_rule_setup(build.val, Ωₕ.val; kwargs...)
     u = _gmg_rule_solve(P, b.val, loop)
     RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
-    # `Ȧ u` per lane, from the build as it is now, before any lane's solve.
+    # `Ȧ u` per lane, from the build as it is now, before any lane's solve. A `build` whose
+    # every lane is shared with the primal and stores no nonzero number is a constant.
     # On ghost spaces, which the nested call does not cover, a shadow whose data is zero is a
     # constant, as before the nested call.
+    _gmg_ambiguous(build, W) && _throw_ambiguous_build_gmg()
     Ȧu = nothing
-    if !(build isa Const) && last(P.ops) isa Bramble.MatrixFreeOperator
+    if !(build isa Const) && !_gmg_shared(build, W) &&
+       last(P.ops) isa Bramble.MatrixFreeOperator
         Ȧu = _gmg_product_tangent(EnzymeRules.runtime_activity(config),
             build, Bramble.gridspace(Ωₕ.val), copy(parent(u)))
     elseif _moving_shadow(build, W)
