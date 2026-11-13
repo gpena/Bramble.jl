@@ -185,13 +185,13 @@ end
 # `ldiv!(::AbstractVector, ::ConcreteMUMPSFactorization, ::AbstractVector)` above.
 # `VectorElement <: AbstractVector` and `ConcreteMUMPSFactorization <: Factorization`, so
 # neither method is more specific and `ldiv!(uₕ, fact, F)` would otherwise be an ambiguity
-# error. Unwraps the destination and returns the `VectorElement`, matching the contract of
-# Bramble's method.
+# error. Takes Bramble's method, so a `Dual` load (`BrambleForwardDiffExt`) is split
+# into parts the same way on every backend.
 function LinearAlgebra.ldiv!(
         uₕ::Bramble.VectorElement, fact::ConcreteMUMPSFactorization{T}, b::AbstractVector
 ) where {T}
-    ldiv!(parent(uₕ), fact, b)
-    return uₕ
+    return invoke(ldiv!, Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector},
+        uₕ, fact, b)
 end
 
 function Base.:\(fact::ConcreteMUMPSFactorization{T}, b::AbstractVector) where {T}

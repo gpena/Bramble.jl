@@ -4,11 +4,13 @@ using Test
 using Bramble
 using ChainRulesCore
 using SparseArrays: SparseMatrixCSC, nnz, nonzeros, sparse, spdiagm
-using LinearAlgebra: I
+using LinearAlgebra: I, NoPivot, dot, ldiv!, lu, norm
+using Random: Random
 using Polyester
 using ForwardDiff
 using SuiteSparse
 using Bramble: CpuSerial, CpuThreaded, CpuPolyester
+using Kronecker: Kronecker
 import DifferentiationInterface as DI
 using ..TestUtils: _fd, _have
 
@@ -102,6 +104,14 @@ function _child_gradient(name::AbstractString; losses::AbstractString = CHILD_LO
     grad, fd = m === nothing ? (NaN, NaN) : parse.(Float64, m.captures)
     return p.exitcode, grad, fd, text
 end
+
+# A factorization that solves with the matrix it holds and has no adjoint solve, standing for
+# a backend whose `fact'` is unavailable (Sparspak, MUMPS, Accelerate).
+struct NoAdjointFactorization{T} <: Bramble.SparspakFactorization{T}
+    A::SparseMatrixCSC{T, Int}
+end
+Base.size(f::NoAdjointFactorization) = size(f.A)
+Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
 
 @testset "BrambleChainRulesExt + Enzyme" begin
     @testset "Enzyme forward: pde_solve rule" begin
@@ -473,6 +483,513 @@ end
             loss_rect(θ) = sum(Bramble.pde_solve(sparse([1.0 0.0; 0.0 2.0; 1.0 1.0]),
                 [θ, 2.0, 0.0]; solver = :spqr))
             @test_throws ArgumentError Enzyme.gradient(mode, Enzyme.Const(loss_rect), 0.3)
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
+    @testset "Enzyme: kept factorization rules" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            rev = Enzyme.set_runtime_activity(Enzyme.Reverse)
+            fwd = Enzyme.set_runtime_activity(Enzyme.Forward)
+            sparse_factorize = Bramble.sparse_factorize
+
+            # A non-symmetric `A₀`, so `fact \ ū` where `fact' \ ū` belongs changes the
+            # gradient, and a symmetric positive definite `As` for the CHOLMOD factor.
+            Wk = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 9, true))
+            n = ndofs(Wk)
+            A₀ = sparse(spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.5, n),
+                1 => fill(-1.2, n - 1)))
+            As = sparse(spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.5, n),
+                1 => fill(-1.0, n - 1)))
+            c = [sin(2i) for i in 1:n]
+            F₀ = [1.0 + sin(i) for i in 1:n]
+            Ḟ1 = [cos(k) for k in 1:n]
+            Ḟ2 = [sin(3k) for k in 1:n]
+            @test maximum(abs, A₀ \ c - A₀' \ c) > 1e-3
+
+            solve_vec(fact, F) = Bramble.pde_solve(fact, F)
+            function ldiv_vec(fact, F)
+                u = element(Wk)
+                ldiv!(u, fact, F)
+                return copy(parent(u))
+            end
+            solve_loss(fact, F) = sum(c .* solve_vec(fact, F))
+            ldiv_loss(fact, F) = sum(c .* ldiv_vec(fact, F))
+
+            for (A, fact) in ((A₀, sparse_factorize(A₀)), (As, sparse_factorize(As; sym = :spd))),
+                (solver, loss) in ((solve_vec, solve_loss), (ldiv_vec, ldiv_loss))
+
+                # Reverse: `F̄ = A⁻ᵀ c`, with `Const` and `Duplicated` loads. The primal load is
+                # left alone.
+                Fd = zeros(n)
+                F = copy(F₀)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active, Enzyme.Const(fact),
+                    Enzyme.Duplicated(F, Fd))
+                @test Fd ≈ A' \ c rtol=1e-10
+                @test F == F₀
+                @test Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active,
+                    Enzyme.Const(fact), Enzyme.Const(F)) isa Tuple
+
+                # Forward, width 1 and width 2, and a load with no tangent.
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solver), Enzyme.Duplicated,
+                    Enzyme.Const(fact), Enzyme.Duplicated(copy(F₀), Ḟ1)))
+                @test u̇ ≈ A \ Ḟ1 rtol=1e-10
+                bat = only(Enzyme.autodiff(fwd, Enzyme.Const(solver), Enzyme.BatchDuplicated,
+                    Enzyme.Const(fact), Enzyme.BatchDuplicated(copy(F₀), (Ḟ1, Ḟ2))))
+                @test collect(values(bat)) ≈ [A \ Ḟ1, A \ Ḟ2] rtol=1e-10
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solver), Enzyme.Duplicated,
+                    Enzyme.Const(fact), Enzyme.Const(copy(F₀))))
+                @test u̇ == zeros(n)
+
+                # In place on the load itself, `ldiv!(uₕ, fact, parent(uₕ))`: the destination
+                # and the load share one shadow, so clearing it must come before `F̄ += λ`.
+                alias_loss(F) = (u = element(Wk); parent(u) .= F; ldiv!(u, fact, parent(u));
+                    sum(c .* parent(u)))
+                Fd = zeros(n)
+                Enzyme.autodiff(rev, Enzyme.Const(alias_loss), Enzyme.Active,
+                    Enzyme.Duplicated(copy(F₀), Fd))
+                @test Fd ≈ A' \ c rtol=1e-10
+            end
+
+            # `ldiv!` is in place: with the destination an argument, the cotangent it holds
+            # after the call is read and then cleared, and the primal solution is written.
+            fact = sparse_factorize(A₀)
+            dest_loss(x, fact, F) = (ldiv!(x, fact, F); sum(c .* parent(x)))
+            x = element(Wk)
+            dx = element(Wk)
+            parent(dx) .= 0
+            Fd = zeros(n)
+            Enzyme.autodiff(rev, Enzyme.Const(dest_loss), Enzyme.Active,
+                Enzyme.Duplicated(x, dx), Enzyme.Const(fact), Enzyme.Duplicated(copy(F₀), Fd))
+            @test Fd ≈ A₀' \ c rtol=1e-10
+            @test all(iszero, parent(dx))
+            @test parent(x) ≈ A₀ \ F₀ rtol=1e-10
+
+            # Forward with the destination an argument: its tangent is written even when the
+            # return is `Const`, so a shadow that starts as junk ends as `A₀ \ Ḟ`.
+            dx = element(Wk)
+            parent(dx) .= 7.0
+            Enzyme.autodiff(fwd, Enzyme.Const(ldiv!), Enzyme.Const,
+                Enzyme.Duplicated(element(Wk), dx), Enzyme.Const(fact),
+                Enzyme.Duplicated(copy(F₀), Ḟ1))
+            @test parent(dx) ≈ A₀ \ Ḟ1 rtol=1e-10
+            parent(dx) .= 7.0
+            Enzyme.autodiff(fwd, Enzyme.Const(ldiv!), Enzyme.Const,
+                Enzyme.Duplicated(element(Wk), dx), Enzyme.Const(fact), Enzyme.Const(F₀))
+            @test all(iszero, parent(dx))
+
+            # `sparse_factorize` called directly: a matrix without a shadow factors in both
+            # modes, and a matrix with one is refused, naming the rule that carries it, since
+            # a gradient that drops the matrix's derivative would be silently wrong.
+            @test Enzyme.autodiff(rev, Enzyme.Const(sparse_factorize), Enzyme.Const,
+                Enzyme.Const(A₀)) == ((nothing,),)
+            @test Enzyme.autodiff(fwd, Enzyme.Const(sparse_factorize), Enzyme.Const,
+                Enzyme.Const(A₀)) == ()
+            @test_throws ArgumentError "pde_solve(A, F)" Enzyme.autodiff(
+                rev, Enzyme.Const(sparse_factorize), Enzyme.Const,
+                Enzyme.Duplicated(copy(A₀), Enzyme.make_zero(A₀)))
+            @test_throws ArgumentError "pde_solve(A, F)" Enzyme.autodiff(
+                fwd, Enzyme.Const(sparse_factorize), Enzyme.Const,
+                Enzyme.Duplicated(copy(A₀), copy(A₀)))
+
+            # A factorization with no adjoint solve is refused in reverse, by name, and solves
+            # in forward.
+            nofact = NoAdjointFactorization(A₀)
+            @test_throws ArgumentError "NoAdjointFactorization" Enzyme.autodiff(
+                rev, Enzyme.Const(solve_loss), Enzyme.Active, Enzyme.Const(nofact),
+                Enzyme.Duplicated(copy(F₀), zeros(n)))
+            u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve_vec), Enzyme.Duplicated,
+                Enzyme.Const(nofact), Enzyme.Duplicated(copy(F₀), Ḟ1)))
+            @test u̇ ≈ A₀ \ Ḟ1 rtol=1e-10
+
+            # A factorization with a shadow of its own, here a dense `lu` Enzyme can
+            # differentiate, is refused by name in both modes and for both solves: the rules
+            # treat it as a constant and would drop its derivative. A shadow that is the
+            # factorization itself, as runtime activity gives a constant, is no direction.
+            Ad = Matrix(A₀)
+            Ȧd = zero(Ad)
+            Ȧd[2, 3] = 1.0
+            act_solve(A, F) = sum(c .* Bramble.pde_solve(lu(A, NoPivot()), F))
+            act_ldiv(A, F) = (u = element(Wk); ldiv!(u, lu(A, NoPivot()), F);
+                sum(c .* parent(u)))
+            for f in (act_solve, act_ldiv)
+                @test_throws ArgumentError "pde_solve(A, F)" Enzyme.autodiff(
+                    rev, Enzyme.Const(f), Enzyme.Active,
+                    Enzyme.Duplicated(copy(Ad), zero(Ad)), Enzyme.Const(F₀))
+                @test_throws ArgumentError "pde_solve(A, F)" Enzyme.autodiff(
+                    fwd, Enzyme.Const(f), Enzyme.Duplicated,
+                    Enzyme.Duplicated(copy(Ad), Ȧd), Enzyme.Const(F₀))
+            end
+            luA = lu(Ad, NoPivot())
+            for (solver, loss) in ((solve_vec, solve_loss), (ldiv_vec, ldiv_loss))
+                Fd = zeros(n)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active,
+                    Enzyme.Duplicated(luA, luA), Enzyme.Duplicated(copy(F₀), Fd))
+                @test Fd ≈ A₀' \ c rtol=1e-10
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solver), Enzyme.Duplicated,
+                    Enzyme.Duplicated(luA, luA), Enzyme.Duplicated(copy(F₀), Ḟ1)))
+                @test u̇ ≈ A₀ \ Ḟ1 rtol=1e-10
+            end
+
+            # Through `assemble`, with the matrix factored once outside the differentiated
+            # function: the load is the differentiated input, on a uniform and a non-uniform
+            # mesh. The reference is ForwardDiff of `pde_solve(A, F)`.
+            for unif in (true, false)
+                Wp = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 17, unif))
+                bf(p) = (κ = element(Wp, eltype(p)); parent(κ) .= 2.0 .+ p[1];
+                    form(Wp, Wp, (U, V) -> inner₊(κ * ∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V)))
+                lf = form(Wp, v -> innerₕ(x -> 1.0 + x[1], v))
+                sys(p) = ((A, F) = assemble(bf(p), lf; dirichlet = :boundary => x -> 0.0);
+                    (A, (1 + p[2]) .* F))
+                p0 = [0.5, 0.25]
+                Ap = first(sys(p0))
+                g = ForwardDiff.gradient(q -> sum(abs2, Bramble.pde_solve(Ap, last(sys(q)))), p0)
+                # `A` is fixed, so only the load's parameter moves the solution.
+                @test g[1] == 0 && abs(g[2]) > 1e-6
+                fa = sparse_factorize(Ap)
+                kept(q) = sum(abs2, Bramble.pde_solve(fa, last(sys(q))))
+                inplace(q) = (u = element(Wp, eltype(q)); ldiv!(u, fa, last(sys(q)));
+                    sum(abs2, parent(u)))
+                for m in (Enzyme.Reverse, Enzyme.Forward), f in (kept, inplace)
+
+                    ad = DI.AutoEnzyme(; mode = Enzyme.set_runtime_activity(m),
+                        function_annotation = Enzyme.Const)
+                    @test DI.gradient(f, ad, p0) ≈ g rtol=1e-8
+                end
+            end
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
+    # `fdm_solve` in its right-hand side (#1167). The form is built inside the differentiated
+    # function, as a user writes it, so the rule sits on `fdm_solve` and not on a call below
+    # it that Enzyme would enter first. Uniform and graded meshes, with and without
+    # `dirichlet`, both modes. A coefficient or mesh that moves is refused by name.
+    @testset "Enzyme: fdm_solve rules" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            rev = Enzyme.set_runtime_activity(Enzyme.Reverse)
+            fwd = Enzyme.set_runtime_activity(Enzyme.Forward)
+            ez(m) = DI.AutoEnzyme(; mode = Enzyme.set_runtime_activity(m),
+                function_annotation = Enzyme.Const)
+
+            for (dims, unif) in (((17, 17), true), ((9, 9), false)),
+                dir in (nothing, :boundary)
+
+                Wf = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                           Bramble.interval(0.0, 1.0)),
+                    dims, (unif, unif)))
+                nf = ndofs(Wf)
+                # `F` is zero on the boundary under `dirichlet`, as `fdm_solve` requires.
+                edge = falses(dims)
+                edge[[1, end], :] .= true
+                edge[:, [1, end]] .= true
+                bnd = dir === nothing ? Int[] : findall(vec(edge))
+                F₀ = [1.0 + sin(i) for i in 1:nf]
+                F₀[bnd] .= 0
+                Ḟ1 = [cos(k) for k in 1:nf]
+                Ḟ1[bnd] .= 0
+                Ḟ2 = [sin(3k) for k in 1:nf]
+                Ḟ2[bnd] .= 0
+                w = [sin(0.3k) + 0.1 for k in 1:nf]
+                af(c) = form(Wf, Wf, (U, V) -> c * inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V))
+                a = af(1.3)
+                kw = dir === nothing ? (;) : (; dirichlet = dir)
+                A = Matrix(assemble(a))
+                u₀ = fdm_solve(a, F₀; kw...)
+                # `F̄ = A⁻ᵀ w`, zero on the boundary under `dirichlet`: the interior solve is
+                # embedded back with zero, whatever `F` holds there.
+                intr = setdiff(1:nf, bnd)
+                F̄ref = zeros(nf)
+                F̄ref[intr] = A[intr, intr]' \ w[intr]
+
+                # The form built inside.
+                inside(F) = sum(w .* fdm_solve(af(1.3), F; kw...))
+                solve_in(F) = fdm_solve(af(1.3), F; kw...)
+                # The form built outside, constant.
+                outside(F) = sum(w .* fdm_solve(a, F; kw...))
+                @test first(Enzyme.gradient(rev, Enzyme.Const(inside), F₀)) ≈ F̄ref rtol=1e-8
+                @test first(Enzyme.gradient(rev, Enzyme.Const(outside), F₀)) ≈ F̄ref rtol=1e-8
+
+                # The cotangent adds to what `F̄` holds, the primal load is left alone, and a
+                # load used twice sums its two pullbacks.
+                Fd = fill(0.5, nf)
+                F = copy(F₀)
+                Enzyme.autodiff(rev, Enzyme.Const(inside), Enzyme.Active,
+                    Enzyme.Duplicated(F, Fd))
+                @test Fd ≈ 0.5 .+ F̄ref rtol=1e-8
+                @test F == F₀
+                twice(F) = sum(w .* fdm_solve(a, F; kw...)) + sum(fdm_solve(a, F; kw...))
+                Fd = zeros(nf)
+                Enzyme.autodiff(rev, Enzyme.Const(twice), Enzyme.Active,
+                    Enzyme.Duplicated(copy(F₀), Fd))
+                F̄two = zeros(nf)
+                F̄two[intr] = A[intr, intr]' \ (w[intr] .+ 1)
+                @test Fd ≈ F̄two rtol=1e-8
+                # No cotangent reaches a `Const` load.
+                @test Enzyme.autodiff(rev, Enzyme.Const(outside), Enzyme.Active,
+                    Enzyme.Const(F₀)) isa Tuple
+
+                # Forward: the tangent is the same solve of `Ḟ`, a `Const` load has none, and
+                # a batch is refused by name, as Enzyme aborts on a batched call to a rule
+                # whose return type is not concrete.
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve_in), Enzyme.Duplicated,
+                    Enzyme.Duplicated(copy(F₀), Ḟ1)))
+                @test u̇ ≈ fdm_solve(a, Ḟ1; kw...) rtol=1e-10
+                @test only(Enzyme.autodiff(fwd, Enzyme.Const(solve_in), Enzyme.Duplicated,
+                    Enzyme.Const(F₀))) == zeros(nf)
+                @test_throws ArgumentError "batched" Enzyme.autodiff(fwd,
+                    Enzyme.Const(solve_in), Enzyme.BatchDuplicated,
+                    Enzyme.BatchDuplicated(copy(F₀), (Ḟ1, Ḟ2)))
+                @test_throws ArgumentError "batched" Enzyme.autodiff(rev,
+                    Enzyme.Const(inside), Enzyme.Active,
+                    Enzyme.BatchDuplicated(copy(F₀), (zeros(nf), zeros(nf))))
+
+                # The gradient of a quadratic loss in a scaled load, through DI as a user
+                # writes it: the exact derivative is `2(1 + q) S`.
+                S = sum(abs2, u₀)
+                for m in (Enzyme.Reverse, Enzyme.Forward)
+                    @test only(DI.gradient(
+                        q -> sum(abs2, fdm_solve(af(1.3), (1 + q[1]) .* F₀; kw...)),
+                        ez(m), [0.4])) ≈ 2.8 * S rtol=1e-8
+                    # A coefficient that moves is refused, naming both calls.
+                    err = try
+                        DI.gradient(q -> sum(abs2, fdm_solve(af(q[1]), F₀; kw...)), ez(m), [1.3])
+                        nothing
+                    catch e
+                        e
+                    end
+                    @test err isa ArgumentError
+                    msg = err isa ArgumentError ? err.msg : ""
+                    @test occursin("fdm_solve", msg) && occursin("pde_solve(assemble(a, l)..., F)", msg)
+                end
+            end
+
+            # A `Ref` coefficient set between two solves, the time-loop pattern of
+            # `BilinearForm`'s docstring: the pullback of each solve is the adjoint of the
+            # operator it solved with, not of the one the coefficient holds at the reverse
+            # sweep. `γ` is data, and the loss is quadratic in `θ`, so `d/dθ = 2 loss(θ) / θ`.
+            Wr = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                       Bramble.interval(0.0, 1.0)),
+                (9, 9), (false, false)))
+            xr = [sin(0.7k) for k in 1:ndofs(Wr)]
+            γ = Ref(1.0)
+            ar = form(Wr, Wr, (U, V) -> γ * inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V))
+            function loss_ref(θ)
+                γ[] = 1.0
+                u = fdm_solve(ar, θ .* xr)
+                γ[] = 5.0
+                return sum(abs2, fdm_solve(ar, u))
+            end
+            exact = 2 * loss_ref(0.7) / 0.7
+            @test first(Enzyme.gradient(rev, Enzyme.Const(loss_ref), 0.7)) ≈ exact rtol=1e-8
+            @test only(Enzyme.autodiff(fwd, Enzyme.Const(loss_ref), Enzyme.Duplicated,
+                Enzyme.Duplicated(0.7, 1.0))) ≈ exact rtol=1e-8
+
+            # A form `fdm_solve` always refuses (1D, on a composite space, a ghost form with
+            # `dirichlet`): inference proves the call only throws, and Enzyme must still
+            # report the named `ArgumentError`, not stop in LLVM on a call with a rule. The forms
+            # are module globals, as there Enzyme reaches the call with a rule it must not have.
+            W1 = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 11, true))
+            global refused_1d = form(W1, W1, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V))
+            Wq = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                       Bramble.interval(0.0, 1.0)),
+                (6, 5), (true, true)))
+            Cq = Wq × Wq
+            global refused_composite = form(Cq, Cq, (U, V) -> innerₕ(U, V))
+            Cb = constrained(
+                gridspace(
+                    Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                Bramble.interval(0.0, 1.0)),
+                        (9, 8), (true, false));
+                    ghosts = :boundary),
+                u -> (:xmin => 2.0 * u + ∂ₙ(u) => 0.0, :xmax => 0.5 * u + 3.0 * ∂ₙ(u) => 1.0,
+                    :ymin => u + ∂ₙ(u) => 0.0, :ymax => 4.0 * u + ∂ₙ(u) => 0.0))
+            global refused_ghost = form(Cb, Cb, (u, v) -> innerₕ(u, v) + 1.3 * inner₊(∇ₕ(u), ∇ₕ(v)))
+            solve_1d(F) = fdm_solve(refused_1d, F)
+            solve_composite(F) = fdm_solve(refused_composite, F)
+            solve_ghost(F) = fdm_solve(refused_ghost, F; dirichlet = :boundary)
+            loss_1d(F) = sum(solve_1d(F))
+            loss_composite(F) = sum(solve_composite(F))
+            loss_ghost(F) = sum(solve_ghost(F))
+            for (solver, loss, nx) in ((solve_1d, loss_1d, ndofs(W1)),
+                (solve_composite, loss_composite, ndofs(Cq)),
+                (solve_ghost, loss_ghost, ndofs(Cb)))
+                @test_throws ArgumentError Enzyme.autodiff(rev, Enzyme.Const(loss),
+                    Enzyme.Active, Enzyme.Duplicated(ones(nx), zeros(nx)))
+                @test_throws ArgumentError Enzyme.autodiff(fwd, Enzyme.Const(solver),
+                    Enzyme.Duplicated, Enzyme.Duplicated(ones(nx), ones(nx)))
+            end
+
+            # A form with an advection term takes the generalised Schur route, whose system is
+            # not symmetric: forward solves the tangent, and reverse is refused by name, since
+            # `fdm_solve(a, ū)` is not its adjoint.
+            Wc = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                       Bramble.interval(0.0, 1.0)),
+                (9, 9), (false, false)))
+            nc = ndofs(Wc)
+            adv = form(Wc, Wc, (U, V) -> innerₕ(U, V) + inner₊(∇ₕ(U), ∇ₕ(V)) +
+                                         innerₕ(Bramble.D₋ₓ(U), V))
+            Aadv = Matrix(assemble(adv))
+            Fc = [1.0 + sin(i) for i in 1:nc]
+            Ḟc = [cos(k) for k in 1:nc]
+            @test maximum(abs, Aadv \ Ḟc - Aadv' \ Ḟc) > 1e-3
+            adv_solve(F) = fdm_solve(adv, F)
+            @test only(Enzyme.autodiff(fwd, Enzyme.Const(adv_solve), Enzyme.Duplicated,
+                Enzyme.Duplicated(copy(Fc), Ḟc))) ≈ Aadv \ Ḟc rtol=1e-8
+            @test_throws ArgumentError "Schur" Enzyme.autodiff(rev,
+                Enzyme.Const(F -> sum(adv_solve(F))), Enzyme.Active,
+                Enzyme.Duplicated(copy(Fc), zeros(nc)))
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
+    @testset "Enzyme: pde_solve(::RankOneUpdate) rules" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            rev = Enzyme.set_runtime_activity(Enzyme.Reverse)
+            fwd = Enzyme.set_runtime_activity(Enzyme.Forward)
+            ROU = Bramble.RankOneUpdate
+
+            # A non-symmetric `A` with `wₛ ≠ wₜ`, so a swapped border or a missing transpose
+            # changes the gradient. Every input is a float of one vector `p`: `A`'s stored
+            # entries, `σ`, `wₛ`, `wₜ`, `F`, and the references are ForwardDiff of the dense
+            # solve of the same system, with the border `[K w; wᵀ 0]` for `mean_zero`.
+            n = 6
+            A0 = sparse(spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.5, n),
+                1 => fill(-1.2, n - 1)))
+            nA = nnz(A0)
+            σ0 = 0.8
+            ws0 = [1.0 + 0.1 * i for i in 1:n]
+            wt0 = [cos(i) for i in 1:n]
+            F0 = [1.0 + sin(i) for i in 1:n]
+            c = [sin(2i) for i in 1:n]
+            wmz = [1.0 + 0.2 * cos(i) for i in 1:n]
+            p0 = [nonzeros(A0); σ0; ws0; wt0; F0]
+            ia = 1:nA
+            iσ = nA + 1
+            iws = nA .+ (2:(n + 1))
+            iwt = nA .+ ((n + 2):(2n + 1))
+            iF = nA .+ ((2n + 2):(3n + 1))
+            function dense(p, border)
+                T = eltype(p)
+                Ad = zeros(T, n, n)
+                k = 0
+                for j in 1:n, i in A0.rowval[A0.colptr[j]:(A0.colptr[j + 1] - 1)]
+
+                    Ad[i, j] = p[k += 1]
+                end
+                Kd = Ad + p[iσ] * p[iws] * transpose(p[iwt])
+                border === nothing && return Kd \ p[iF]
+                return ([Kd border; transpose(border) 0] \ [p[iF]; 0])[1:n]
+            end
+            sparsify(vals) = SparseMatrixCSC(n, n, A0.colptr, A0.rowval, vals)
+            function rou(p)
+                K = ROU(sparsify(p[ia]), p[iσ], p[iws], p[iwt])
+                return K, p[iF]
+            end
+            # The shadow of `K` for one tangent or cotangent vector `v` of the layout of `p`.
+            shadow(v) = ROU(sparsify(v[ia]), v[iσ], v[iws], v[iwt])
+            unshadow(Kd, Fd) = [nonzeros(Kd.A); Kd.σ; Kd.ws; Kd.wt; Fd]
+
+            for border in (nothing, wmz)
+                kw = border === nothing ? (;) : (; mean_zero = border)
+                solve(K, F) = Bramble.pde_solve(K, F; kw...)
+                loss(K, F) = sum(c .* solve(K, F))
+                ref_grad = ForwardDiff.gradient(p -> sum(c .* dense(p, border)), p0)
+
+                # Reverse: the cotangent of every field at once, `K` and `F` both active, then
+                # `K` alone (`F` constant), then `F` alone (`K` constant).
+                K, F = rou(p0)
+                Kd = shadow(zeros(length(p0)))
+                Fd = zeros(n)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active,
+                    Enzyme.Duplicated(K, Kd), Enzyme.Duplicated(F, Fd))
+                @test unshadow(Kd, Fd) ≈ ref_grad rtol=1e-8
+                @test unshadow(K, F) == p0     # the primal is not touched
+
+                K, F = rou(p0)
+                Kd = shadow(zeros(length(p0)))
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active,
+                    Enzyme.Duplicated(K, Kd), Enzyme.Const(F))
+                @test unshadow(Kd, zeros(n))[1:(end - n)] ≈ ref_grad[1:(end - n)] rtol=1e-8
+
+                K, F = rou(p0)
+                Fd = zeros(n)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active,
+                    Enzyme.Const(K), Enzyme.Duplicated(F, Fd))
+                @test Fd ≈ ref_grad[iF] rtol=1e-8
+
+                # Forward, width 1 and width 2: `J ṗ` for two directions.
+                J = ForwardDiff.jacobian(p -> dense(p, border), p0)
+                ṗ1 = [cos(k) for k in 1:length(p0)]
+                ṗ2 = [sin(3k) for k in 1:length(p0)]
+                K, F = rou(p0)
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.Duplicated,
+                    Enzyme.Duplicated(K, shadow(ṗ1)), Enzyme.Duplicated(F, ṗ1[iF])))
+                @test u̇ ≈ J * ṗ1 rtol=1e-8
+
+                # `K` with every field perturbed, `A` alone, then `F` alone.
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.Duplicated,
+                    Enzyme.Duplicated(K, shadow(ṗ1)), Enzyme.Const(F)))
+                ṗA = [ṗ1[ia]; zeros(length(p0) - nA)]
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.Duplicated,
+                    Enzyme.Duplicated(K, shadow(ṗA)), Enzyme.Const(F)))
+                @test u̇ ≈ J * ṗA rtol=1e-8
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.Duplicated,
+                    Enzyme.Const(K), Enzyme.Duplicated(F, ṗ1[iF])))
+                @test u̇ ≈ J[:, iF] * ṗ1[iF] rtol=1e-8
+
+                bat = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.BatchDuplicated,
+                    Enzyme.BatchDuplicated(K, (shadow(ṗ1), shadow(ṗ2))),
+                    Enzyme.BatchDuplicated(F, (ṗ1[iF], ṗ2[iF]))))
+                @test collect(values(bat)) ≈ [J * ṗ1, J * ṗ2] rtol=1e-8
+            end
+
+            # A `K.A` that is not a `SparseMatrixCSC` is refused by name, in both modes, and
+            # reverse mode does not batch: the rule's own messages, not any `ArgumentError`.
+            Kw = ROU(adjoint(copy(A0)), σ0, ws0, wt0)
+            Kwd = ROU(adjoint(0 .* A0), 0.0, zeros(n), zeros(n))
+            solve_w(K, F) = sum(Bramble.pde_solve(K, F))
+            @test_throws ArgumentError "needs `K.A` to be a `SparseMatrixCSC`" Enzyme.autodiff(
+                rev, Enzyme.Const(solve_w), Enzyme.Active, Enzyme.Duplicated(Kw, Kwd),
+                Enzyme.Const(F0))
+            @test_throws ArgumentError "needs `K.A` to be a `SparseMatrixCSC`" Enzyme.autodiff(
+                fwd, Enzyme.Const(solve_w), Enzyme.Duplicated, Enzyme.Duplicated(Kw, Kwd),
+                Enzyme.Const(F0))
+            @test_throws ArgumentError "does not support batched" Enzyme.autodiff(rev,
+                Enzyme.Const(solve_w), Enzyme.Active,
+                Enzyme.BatchDuplicated(ROU(copy(A0), σ0, ws0, wt0),
+                    (shadow(zeros(length(p0))), shadow(zeros(length(p0))))),
+                Enzyme.Const(F0))
+
+            # Through `assemble`, with a constant border `w` captured by the closure and used
+            # as `wₛ` and `wₜ`: under runtime activity Enzyme gives such a field its own array
+            # as its shadow, which is a zero tangent (forward) and not ours to write
+            # (reverse). The reference is ForwardDiff of the plain solve of `A + w wᵀ`.
+            for unif in (true, false)
+                Wp = gridspace(mesh(domain(interval(0.0, 1.0)), 17, unif))
+                np = ndofs(Wp)
+                wp = ones(np)
+                Fp = [1.0 + sin(i) for i in 1:np]
+                mat(q) = (κ = element(Wp, eltype(q)); parent(κ) .= 2.0 .+ q[1];
+                    assemble(form(Wp, Wp, (U, V) -> inner₊(κ * ∇ₕ(U), ∇ₕ(V)))))
+                f(q) = sum(abs2, Bramble.pde_solve(ROU(mat(q), 1.0, wp, wp), (1 + q[2]) .* Fp))
+                ref(q) = sum(abs2, Bramble.pde_solve(mat(q) + sparse(wp * wp'), (1 + q[2]) .* Fp))
+                q0 = [0.5, 0.25]
+                g = ForwardDiff.gradient(ref, q0)
+                @test minimum(abs, g) > 1e-6 * maximum(abs, g)
+                @test f(q0) ≈ ref(q0) rtol=1e-9
+                for m in (Enzyme.Reverse, Enzyme.Forward)
+                    ad = DI.AutoEnzyme(; mode = Enzyme.set_runtime_activity(m),
+                        function_annotation = Enzyme.Const)
+                    @test DI.gradient(f, ad, q0) ≈ g rtol=1e-8
+                end
+            end
         else
             @test_skip "Enzyme not in this environment"
         end

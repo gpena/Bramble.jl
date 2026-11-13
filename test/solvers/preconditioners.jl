@@ -8,6 +8,7 @@ using LinearAlgebra: LinearAlgebra, ldiv!, diag, norm, cond, Symmetric, eigmax, 
 using LinearSolve: LinearProblem, KrylovJL_CG, solve
 using AlgebraicMultigrid: AlgebraicMultigrid
 using Random
+using ForwardDiff: ForwardDiff
 using ..TestUtils: TEST_DIMS, WITH_3D_TESTS, ZeroBasedVector
 
 # Matrix-free preconditioners. Jacobi reads diag(A) off one stencil
@@ -313,6 +314,29 @@ end
             @test λ <= max_eigenvalue_estimate(op; iterations = 40) <= 1.1λ * (1 + 1e-12)
             est = max_eigenvalue_estimate(op; preconditioner = jacobi_preconditioner(op))
             @test λs <= est <= 1.15λs
+        end
+    end
+
+    # Float32 and Float64 keep their own start-vector draw, pinned bitwise; a type `Random`
+    # cannot sample (a `ForwardDiff.Dual`, #1169) draws in Float64, so the preconditioner
+    # differentiates through its λmax estimate and matches a central difference.
+    @testset "chebyshev: λmax under Float32, Dual" begin
+        function est(T)
+            W = gridspace(mesh(domain(interval(zero(T), one(T)) × interval(zero(T), one(T))), (17, 17), (true, true)))
+            a = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+            return max_eigenvalue_estimate(matrix_free_operator(a))
+        end
+        @test est(Float64) === 8.422059085350336
+        @test est(Float32) === 8.448237f0
+        for (dims, unif) in (((17, 17), true), ((9, 9), false))
+            Random.seed!(1234)
+            W = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), dims, (unif, unif)))
+            x = [sin(i) for i in 1:ndofs(W)]
+            ac(c) = form(W, W, (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v)))
+            g(c) = sum(abs2, chebyshev_preconditioner(ac(c)) \ x)
+            d = ForwardDiff.derivative(g, 0.7)
+            r = (g(0.7 + 1e-5) - g(0.7 - 1e-5)) / 2e-5
+            @test abs(d - r) <= 1e-6 * abs(r)
         end
     end
 

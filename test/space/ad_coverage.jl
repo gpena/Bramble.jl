@@ -4,15 +4,17 @@ using Test
 using Bramble
 using Bramble: D₋ₓ, D₋ᵧ, D₋₂, Mₓ, Mᵧ, M₂, εₕ, Δₕ!, CpuPolyester, CpuSerial, CpuThreaded,
                GhostVector, update_ghosts!, centered_difference!, semidiscretize_rhs,
-               ast_sparsity_detector, dirac, polygon, polygon_spaces
+               ast_sparsity_detector, dirac, polygon, polygon_spaces, sparse_factorize
 using DifferentiationInterface
 using ForwardDiff
-using LinearAlgebra: mul!
+using Kronecker: Kronecker
+using LinearAlgebra: ldiv!, mul!
 using Polyester
 using Random
-using SparseArrays: nonzeros
+using SparseArrays: nonzeros, sparse
 using SparseConnectivityTracer: TracerSparsityDetector
 using SparseMatrixColorings: GreedyColoringAlgorithm
+using SuiteSparse: SuiteSparse
 using ..TestUtils: _fd, _have, ghost_mesh, TEST_FILE, WITH_3D_TESTS
 
 # The AD coverage matrix of docs/notes/internals/ad_coverage.md: each public feature's
@@ -510,6 +512,152 @@ function build_dirac_strength(policy, kind)
     return p -> sum(abs2, assemble(form(W, v -> innerₕ(dirac(DIRAC_POINT, p[1]), v)))), [2.5]
 end
 
+# --- The solver routes (#1165 to #1169) ------------------------------------------- #
+
+# The solver cells run on the meshes the probes of the plan used: 17 x 17 uniform and 9 x 9
+# seeded non-uniform in 2D, and 17 nodes in 1D for the factorizations.
+_solver_mesh(policy, kind) = _mesh(policy, kind, kind === :uniform ? (17, 17) : (9, 9))
+
+_load(n) = [1.0 + sin(i) for i in 1:n]
+
+# The 1D diffusion system of the factorization cells: `κ` is `2 + B p`, the load a fixed
+# function. `a(p)` is the form and `l` the linear form.
+function _factor_system(policy, kind)
+    W = gridspace(_mesh1d(policy, kind))
+    B = _basis(ndofs(W))
+    a(p) = (κ = _field(W, B, p; shift = 2.0);
+        form(W, W, (U, V) -> inner₊(κ * ∇ₕ(U), ∇ₕ(V))))
+    l = form(W, v -> innerₕ(x -> 1.0 + x[1], v))
+    return W, B, a, l
+end
+
+# A factorization built inside the differentiated function from an active matrix
+# (gpena/Bramble.jl#1165, departure D8).
+function build_factor_matrix(policy, kind)
+    _, _, a, l = _factor_system(policy, kind)
+    function f(p)
+        A, F = assemble(a(p), l; dirichlet = :boundary => x -> 0.0)
+        return sum(abs2, pde_solve(sparse_factorize(A), F))
+    end
+    return f, _start()
+end
+
+# The factorization of the matrix at `_start()`, built outside the differentiated function,
+# and a load that depends on the parameters.
+function _factor_kept(policy, kind)
+    W, B, a, l = _factor_system(policy, kind)
+    A₀, F₀ = assemble(a(_start()), l; dirichlet = :boundary => x -> 0.0)
+    return W, B, sparse_factorize(A₀), F₀
+end
+
+function build_factor_load(policy, kind)
+    _, B, fact, F₀ = _factor_kept(policy, kind)
+    return p -> sum(abs2, pde_solve(fact, (1 + p[1]) .* F₀ .+ B * p)), _start()
+end
+
+# The same solve in place, into a grid function of the parameters' type.
+function build_factor_ldiv(policy, kind)
+    W, B, fact, F₀ = _factor_kept(policy, kind)
+    function f(p)
+        u = element(W, eltype(p))
+        ldiv!(u, fact, (1 + p[1]) .* F₀ .+ B * p)
+        return sum(abs2, parent(u))
+    end
+    return f, _start()
+end
+
+# `pde_solve(RankOneUpdate(A, σ, w, w), F)` with `A` and `F` active, against the plain solve
+# of `A + w wᵀ`, the same system without the border (gpena/Bramble.jl#1166).
+function _rank_one_calls(policy, kind)
+    W = gridspace(_mesh1d(policy, kind))
+    B = _basis(ndofs(W))
+    w = ones(ndofs(W))
+    F₀ = _load(ndofs(W))
+    function mat(p)
+        κ = _field(W, B, p; shift = 2.0)
+        return assemble(form(W, W, (U, V) -> inner₊(κ * ∇ₕ(U), ∇ₕ(V))))
+    end
+    rank_one(p) = sum(abs2, pde_solve(Bramble.RankOneUpdate(mat(p), 1.0, w, w), (1 + p[1]) .* F₀))
+    plain(p) = sum(abs2, pde_solve(mat(p) + sparse(w * w'), (1 + p[1]) .* F₀))
+    return rank_one, plain
+end
+build_rank_one(policy, kind) = (first(_rank_one_calls(policy, kind)), _start())
+oracle_rank_one(policy, kind) = (last(_rank_one_calls(policy, kind)), _start())
+
+# `fdm_solve` with a constant form built inside the function and an active load, and with an
+# active coefficient, which both backends refuse (gpena/Bramble.jl#1167). One parameter: the
+# forward rule has width 1 only, and DI's forward gradient batches at the parameters' number.
+function build_fdm_load(policy, kind)
+    W = gridspace(_solver_mesh(policy, kind))
+    F₀ = _load(ndofs(W))
+    function f(p)
+        a = form(W, W, (U, V) -> 1.3 * inner₊(∇ₕ(U), ∇ₕ(V)))
+        return sum(abs2, fdm_solve(a, (1 + p[1]) .* F₀; dirichlet = :boundary))
+    end
+    return f, [0.4]
+end
+
+function build_fdm_coefficient(policy, kind)
+    W = gridspace(_solver_mesh(policy, kind))
+    F₀ = _load(ndofs(W))
+    function f(p)
+        a = form(W, W, (U, V) -> p[1] * inner₊(∇ₕ(U), ∇ₕ(V)))
+        return sum(abs2, fdm_solve(a, F₀; dirichlet = :boundary))
+    end
+    return f, [1.3]
+end
+
+# `gmg_solve` (gpena/Bramble.jl#1168). The mesh is built outside `f`, and the oracle is
+# ForwardDiff of the direct solve of the same system: the multigrid iteration stops at
+# `tol`, so its own derivative is exact only to about that.
+const GMG_TOL = 1e-10
+_gmg_form(V) = form(V, V, (u, v) -> innerₕ(u, v) + 0.7 * inner₊(∇ₕ(u), ∇ₕ(v)))
+
+# A scalar `c` and a grid function filled with `d` as coefficients: one closure type, so the
+# nested Enzyme call of the reverse rule compiles once.
+function _gmg_both(c, d)
+    return V -> (κ = element(V, typeof(d));
+        fill!(parent(κ), d);
+        form(V, V, (u, v) -> innerₕ(u, v) + c * inner₊(κ * ∇ₕ(u), ∇ₕ(v))))
+end
+
+function _gmg_load_calls(policy, kind)
+    Ωₕ = _solver_mesh(policy, kind)
+    W = gridspace(Ωₕ)
+    B = _basis(npoints(Ωₕ))
+    b₀ = _load(npoints(Ωₕ))
+    load(p) = b₀ .+ B * p
+    gmg_load(p) = sum(abs2, parent(gmg_solve(_gmg_form, Ωₕ, load(p); tol = GMG_TOL)))
+    direct_load(p) = sum(abs2, pde_solve(assemble(_gmg_form(W)), load(p)))
+    return gmg_load, direct_load
+end
+
+function _gmg_coefficient_calls(policy, kind)
+    Ωₕ = _solver_mesh(policy, kind)
+    W = gridspace(Ωₕ)
+    b₀ = _load(npoints(Ωₕ))
+    gmg_coef(p) = sum(abs2,
+        parent(gmg_solve(_gmg_both(p[1], p[2]), Ωₕ, p[3] .* b₀; tol = GMG_TOL)))
+    direct_coef(p) = sum(abs2, pde_solve(assemble(_gmg_both(p[1], p[2])(W)), p[3] .* b₀))
+    return gmg_coef, direct_coef
+end
+build_gmg_load(policy, kind) = (first(_gmg_load_calls(policy, kind)), _start())
+oracle_gmg_load(policy, kind) = (last(_gmg_load_calls(policy, kind)), _start())
+build_gmg_coefficient(policy, kind) = (first(_gmg_coefficient_calls(policy, kind)), _start())
+oracle_gmg_coefficient(policy, kind) = (last(_gmg_coefficient_calls(policy, kind)), _start())
+
+# The Chebyshev preconditioner applied to a load: its λmax estimate draws the start vector
+# in the coefficients' type (gpena/Bramble.jl#1169).
+function build_chebyshev(policy, kind)
+    W = gridspace(_solver_mesh(policy, kind))
+    x = [sin(i) for i in 1:ndofs(W)]
+    function f(p)
+        a = form(W, W, (u, v) -> p[2] * innerₕ(u, v) + p[1] * inner₊(∇ₕ(u), ∇ₕ(v)))
+        return sum(abs2, chebyshev_preconditioner(a) \ ((1 + p[3]) .* x))
+    end
+    return f, _start()
+end
+
 # --- The cells -------------------------------------------------------------------- #
 
 # `feature` is the row of the page and `group` the child process that runs the cell's Enzyme
@@ -522,10 +670,13 @@ end
 # output contains `rev_err` or `fwd_err`. `:wrong` is a gradient that differs from
 # ForwardDiff's, a known upstream bug. `:skip` is a call not run. A `slow` cell compiles for
 # tens of minutes before Enzyme fails, so it runs only with `BRAMBLE_AD_COVERAGE_SLOW=true`.
+# An `oracle` is a builder of the same call with an exact derivative (a direct solve for an
+# iterative one, the plain system for a refused one): the cell's gradients are compared with
+# its ForwardDiff gradient to `tol`, in place of the call's own.
 function cell(name, feature, group, build; fd = :ok, rev = :ok, fwd = :ok, fd_err = "", rev_err = "",
-        fwd_err = rev_err, kinds = MESHES, slow = false)
+        fwd_err = rev_err, kinds = MESHES, slow = false, oracle = nothing, tol = 1e-8)
     (; name, feature, group, build, fd, rev,
-        fwd, fd_err, rev_err, fwd_err, kinds, slow)
+        fwd, fd_err, rev_err, fwd_err, kinds, slow, oracle, tol)
 end
 
 const CELLS = (
@@ -661,7 +812,49 @@ const CELLS = (
     cell(:levelset_parameter, "levelset", :levelset, build_levelset_parameter, fd = :throws,
         fd_err = "Level-set marker",
         rev = (CpuSerial = :skip, CpuThreaded = :skip, CpuPolyester = :skip),
-        fwd = (CpuSerial = :skip, CpuThreaded = :skip, CpuPolyester = :skip))
+        fwd = (CpuSerial = :skip, CpuThreaded = :skip, CpuPolyester = :skip)),
+    # The solver routes of gpena/Bramble.jl#1165 to #1169.
+    # Built inside the differentiated function the factorization is a `Union`, and Enzyme stops
+    # at it before the rule on `sparse_factorize` runs (departure D8): `pde_solve(A, F)` is the
+    # route with `A` active. A child of its own: forward mode can abort on an LLVM assertion.
+    cell(:factor_matrix, "pde_solve", :factor_matrix, build_factor_matrix, rev = :throws,
+        fwd = :throws, rev_err = "IllegalTypeAnalysisException"),
+    cell(:factor_load, "pde_solve", :factor_kept, build_factor_load),
+    cell(:factor_ldiv, "pde_solve", :factor_kept, build_factor_ldiv),
+    cell(:rank_one, "pde_solve", :rank_one, build_rank_one, oracle = oracle_rank_one, fd = :throws,
+        fd_err = "RankOneUpdate"),
+    cell(:fdm_load, "fdm_solve", :fdm, build_fdm_load),
+    cell(:fdm_coefficient, "fdm_solve", :fdm, build_fdm_coefficient, fd = :throws,
+        fd_err = "fdm_solve: the operator has element type", rev = :throws, fwd = :throws,
+        rev_err = "fdm_solve: the form or operator has a shadow"),
+    # Both gmg cells compare with ForwardDiff of the direct solve (1e-6, the multigrid stops at
+    # `tol`). Under the threaded policies a batched forward call (DI's gradient has the width
+    # of its parameters, here 3) ends the process inside Enzyme, before the rule runs
+    # (gpena/Bramble.jl#1232), so each has a child of its own there. It predates the
+    # coefficient rule (it was there at 03d4c9c6) and width 1 works under `CpuThreaded`.
+    # Measured on Julia 1.13.3: the LLVM assertion `invertedReturn`. Julia 1.13.4 with Enzyme
+    # 0.13.219 aborts every child with `unsupported tag julia.gc_alloc_ptr_offsets`, so the
+    # pins were not re-measured there.
+    # `gmg_solve` infers `Any` under both threaded policies and a concrete type under
+    # `CpuSerial`, a likely precondition that was measured but not shown to be the cause.
+    cell(:gmg_load, "gmg_solve", :gmg_load, build_gmg_load, oracle = oracle_gmg_load, tol = 1e-6,
+        fwd = (CpuSerial = :ok, CpuThreaded = :aborts, CpuPolyester = :aborts),
+        fwd_err = "invertedReturn"),
+    # Reverse differentiates the coefficients; forward refuses by name (departure D9).
+    cell(:gmg_coefficient, "gmg_solve", :gmg_coefficient, build_gmg_coefficient,
+        oracle = oracle_gmg_coefficient, tol = 1e-6,
+        rev = :ok,
+        fwd = (CpuSerial = :throws, CpuThreaded = :aborts, CpuPolyester = :aborts),
+        fwd_err = (CpuSerial = "forward mode", CpuThreaded = "invertedReturn",
+            CpuPolyester = "invertedReturn")),
+    # The λmax estimate under ForwardDiff works since gpena/Bramble.jl#1169 was fixed. Under
+    # Enzyme `CpuSerial` stops in the type analysis, in both modes on both meshes, and the two
+    # threaded policies match ForwardDiff. `CpuThreaded` returned a gradient of zeros until the
+    # matrix-free wrapper of `_mf_run_bands!` was kept out of line (#1168).
+    cell(:chebyshev, "chebyshev", :chebyshev, build_chebyshev,
+        rev = (CpuSerial = :throws, CpuThreaded = :ok, CpuPolyester = :ok),
+        fwd = (CpuSerial = :throws, CpuThreaded = :ok, CpuPolyester = :ok),
+        rev_err = (CpuSerial = "IllegalTypeAnalysisException", CpuThreaded = "", CpuPolyester = ""))
 )
 
 # --- Enzyme, in a child process ------------------------------------------------------ #
@@ -698,8 +891,9 @@ function _report(name, policy, kind, mode, status, relerr = NaN, detail = "")
     flush(stdout)
 end
 
-function _gradient_cell(name, f, x, policy, kind, mode, ad)
-    ref, tol = _reference(f, x)
+function _gradient_cell(name, f, x, policy, kind, mode, ad, oracle = nothing, otol = 1e-8)
+    ref, tol = oracle === nothing ? _reference(f, x) :
+               (DifferentiationInterface.gradient(oracle, AutoForwardDiff(), x), otol)
     minimum(abs, ref) > 1e-6 * maximum(abs, ref) || return _report(name, policy, kind, mode, :weakref)
     g = try
         DifferentiationInterface.gradient(f, ad, x)
@@ -793,12 +987,13 @@ function child_main(spec::AbstractString)
             for kind in c.kinds
                 only_kind in ("", string(kind)) || continue
                 f, x = c.build(pol, kind)
+                oracle = c.oracle === nothing ? nothing : first(c.oracle(pol, kind))
                 c.fd === :throws && only_mode == "" && _forwarddiff_cell(c.name, f, x, policy, kind)
                 for (mode, want) in ((:reverse, _want(c.rev, policy)), (:forward, _want(c.fwd, policy)))
                     want === :skip && continue
                     want === :aborts && only_mode == "" && continue
                     only_mode in ("", string(mode)) || continue
-                    _gradient_cell(c.name, f, x, policy, kind, mode, enzyme_backend(mode))
+                    _gradient_cell(c.name, f, x, policy, kind, mode, enzyme_backend(mode), oracle, c.tol)
                 end
             end
         end
@@ -881,9 +1076,16 @@ if CHILD == ""
             @testset "$(c.name), $pname, $kind" begin
                 f, x = c.build(policy, kind)
                 g = DifferentiationInterface.gradient(f, AutoForwardDiff(), x)
-                fd = [_fd(t -> f(setindex!(copy(x), t, k)), x[k]; h = 1e-4) for k in eachindex(x)]
+                # The central difference is of the oracle where the cell has one: an
+                # iteration stopped at `tol` has noise of that order.
+                fo = c.oracle === nothing ? f : first(c.oracle(policy, kind))
+                fd = [_fd(t -> fo(setindex!(copy(x), t, k)), x[k]; h = 1e-4) for k in eachindex(x)]
                 @test minimum(abs, g) > 1e-6 * maximum(abs, g)
                 @test isapprox(g, fd; rtol = 1e-5, atol = 1e-8 * maximum(abs, g))
+                if c.oracle !== nothing
+                    @test isapprox(f(x), fo(x); rtol = c.tol)
+                    @test _relerr(g, DifferentiationInterface.gradient(fo, AutoForwardDiff(), x)) <= c.tol
+                end
                 if pname !== :CpuSerial
                     fs, xs = c.build(POLICIES.CpuSerial, kind)
                     @test _relerr(g, DifferentiationInterface.gradient(fs, AutoForwardDiff(), xs)) <= 1e-8
@@ -904,6 +1106,9 @@ if CHILD == ""
                     e
                 end
                 @test err isa Exception && occursin(c.fd_err, sprint(showerror, err))
+                # The oracle is the same system: the primal values agree.
+                c.oracle === nothing ||
+                    @test isapprox(f(x), first(c.oracle(policy, kind))(x); rtol = c.tol)
             end
         end
         for (pname, policy) in pairs(POLICIES), kind in MESHES
@@ -924,7 +1129,8 @@ if CHILD == ""
             @test_skip "Enzyme is not in this environment"
         else
             groups = (:dense, :assemble, :three, :boundary, :geometry, :solve, :operators, :ghost_fast,
-                :relation_data, :relation_robin, :inputs, :levelset, :polygon)
+                :relation_data, :relation_robin, :inputs, :levelset, :polygon, :factor_matrix,
+                :factor_kept, :rank_one, :fdm, :gmg_load, :gmg_coefficient, :chebyshev)
             WITH_3D_TESTS && (groups = (groups..., :threed))
             SLOW && (groups = (groups..., unique(c.group for c in CELLS if c.slow)...))
             for pname in keys(POLICIES)

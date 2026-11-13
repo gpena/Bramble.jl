@@ -256,11 +256,13 @@ Solve `A \\ F` and write the result into `uₕ` in place, mutating `parent(uₕ)
 allocating a new vector.
 
 `A` is a `factorize(A)` (or `lu`/`cholesky`/...) reused across several solves, and `F` a
-plain vector or another `VectorElement` of matching length. Restricted to `Factorization`
-rather than any `A`: `LinearAlgebra` itself already overloads `ldiv!` for a matrix `A` on an
-unrestricted `AbstractVector` destination, and matching that breadth here would make every
-such call ambiguous between the two -- Julia unable to tell whether the `VectorElement`
-destination or the `Factorization` source should win.
+plain vector or another `VectorElement` of matching length. With `ForwardDiff` loaded, a
+`Dual` load against a real `A` is solved part by part against `A`, as `pde_solve(fact, F)`
+does. Restricted to `Factorization` rather than any `A`: `LinearAlgebra` itself already
+overloads `ldiv!` for a matrix `A` on an unrestricted `AbstractVector` destination, and
+matching that breadth here would make every such call ambiguous between the two -- Julia
+unable to tell whether the `VectorElement` destination or the `Factorization` source should
+win.
 
 # Examples
 
@@ -274,7 +276,12 @@ ldiv!(uₕ, factorize(A), F)
 See also [`element`](@ref), [`assemble`](@ref).
 """
 @inline function ldiv!(uₕ::VectorElement, A::Factorization, F::AbstractVector)
-    ldiv!(parent(uₕ), A, F)
+    x = parent(uₕ)
+    # The whole load is solved in place. A load split into parts (`_solve_by_parts`, a
+    # `Dual` one) is solved part by part out of place and copied in: `b === F` is then
+    # false by type, so that branch is all that is compiled for the parts.
+    y = _solve_by_parts(b -> b === F ? ldiv!(x, A, b) : A \ b, F)
+    y === x || copyto!(x, y)
     return uₕ
 end
 
