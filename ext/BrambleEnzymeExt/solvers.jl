@@ -559,14 +559,17 @@ end
 # Enzyme stops at the smoother construction in `gmg_preconditioner` with
 # `IllegalTypeAnalysisException`. The cycles write the hierarchy's buffers, so they are not
 # inactive either; the rules sit on `gmg_solve` and differentiate the converged solve
-# implicitly. `A(θ) u = b`, with `θ` what `build` captures, gives the tangent
-# `u̇ = A⁻¹(ḃ − Ȧ u)` and the pullback `λ = A⁻ᴴ ū`, `b̄ += λ`, `θ̄ += −λᴴ (∂A/∂θ) u`. The adjoint
-# solve is `gmg_solve` itself only when `A` is Hermitian, while `gmg_solve` accepts any `A`
-# whose cycle contracts: reverse assembles the finest matrix and refuses any other by name.
-# `Ȧ u` and `θ̄` come from a nested Enzyme call on the finest product alone, `_gmg_product`,
-# so no cycle is differentiated. One preconditioner per rule call serves every lane, each
-# solved to the caller's `tol`, and a zero load returns zero without a cycle. The mesh is a
-# constant; a shadow of it that carries data is refused by name rather than dropped.
+# implicitly. `A(θ) u = b`, with `θ` what `build` captures, gives the tangent `u̇ = A⁻¹ ḃ`
+# for a constant `build` and the pullback `λ = A⁻ᴴ ū`, `b̄ += λ`, `θ̄ += −λᴴ (∂A/∂θ) u`. The
+# adjoint solve is `gmg_solve` itself only when `A` is Hermitian, while `gmg_solve` accepts
+# any `A` whose cycle contracts: reverse assembles the finest matrix and refuses any other by
+# name. `θ̄` comes from a nested Enzyme call on the finest product alone, `_gmg_product`, so
+# no cycle is differentiated. Forward mode does not differentiate in `θ`: Enzyme fills the
+# shadow of a constant captured by value with its value, so a shadow cannot tell a constant
+# from a tangent, and forward refuses a `build` whose shadow carries data. One
+# preconditioner per rule call serves every lane, each solved to the caller's `tol`, and a
+# zero load returns zero without a cycle. The mesh is a constant; a shadow of it that
+# carries data is refused by name rather than dropped.
 #
 # No signature can name what `build` returns. A `build` whose form `gmg_preconditioner`
 # refuses by type alone (one on composite spaces) makes `gmg_solve` infer `Union{}`, and
@@ -594,24 +597,23 @@ end
     )
 end
 
-@noinline function _throw_ambiguous_build_gmg()
+@noinline function _throw_forward_build_gmg()
     throw(
         ArgumentError(
-        "gmg_solve: `build` captures a nonzero number by value, and Enzyme's forward " *
-        "mode hands over a constant `build` and an active one whose tangent equals its " *
-        "value identically (a shadow `===` the primal), so the tangent of `build` is " *
-        "undetermined. Use reverse mode, ForwardDiff, a `build` bound to a `const` " *
-        "global, or one that holds its constant numbers in a `Ref`.",
+        "gmg_solve: `build` has a shadow that carries data, and Bramble's Enzyme rule does " *
+        "not differentiate `gmg_solve` in forward mode in the coefficients `build` " *
+        "captures: Enzyme fills the shadow of a constant captured by value with its " *
+        "value, so the tangent is undetermined. Use reverse mode, or ForwardDiff.",
     ),
     )
 end
 
-# Whether a shadow carries no derivative, walked with its primal. A heap object shared with
-# the primal is runtime activity's mark of a constant; anything else is read: every
+# Whether a shadow carries no derivative, walked with its primal. A mutable object shared
+# with the primal is runtime activity's mark of a constant; anything else is read: every
 # floating-point number it holds, through fields, arrays of any element type and `Ref`s, must
-# be zero. A closure capturing a constant scalar and a `Ref` reaches forward mode with a shadow
-# closure whose scalar is zero and whose `Ref` is the primal's. For a bits value `===`
-# compares the data, so a tangent equal to its value is read, not taken for the primal.
+# be zero. An immutable value, a closure among them, is read field by field even when `===`
+# its primal: `===` compares its fields, and Enzyme fills the shadow of a constant captured
+# by value with its value.
 _shadow_is_zero(x, ẋ) = _zero_shadow(x, ẋ, Base.IdSet{Any}())
 
 # Whether a value of type `T` can hold a floating-point number.
@@ -638,7 +640,7 @@ function _zero_shadow(x, ẋ::DenseArray, seen)
 end
 _zero_shadow(x, ẋ, seen) = _zero_fields(x, ẋ, seen)
 function _zero_fields(x, ẋ::T, seen) where {T}
-    !isbits(ẋ) && ẋ === x && return true
+    ismutable(ẋ) && ẋ === x && return true
     ismutable(ẋ) && (ẋ in seen || (push!(seen, ẋ); false)) && return true
     paired = typeof(x) === T
     return all(1:fieldcount(T)) do i
@@ -646,27 +648,6 @@ function _zero_fields(x, ẋ::T, seen) where {T}
         xᵢ = paired && isdefined(x, i) ? getfield(x, i) : nothing
         return _zero_shadow(xᵢ, getfield(ẋ, i), seen)
     end
-end
-
-# Whether every floating-point number `x` stores by value is zero. A mutable object is
-# shared by a shadow `===` its primal, so it is not walked.
-_byvalue_zero(x::Union{AbstractFloat, Complex{<:AbstractFloat}}) = iszero(x)
-function _byvalue_zero(x::T) where {T}
-    (ismutable(x) || !_holds_floats(T)) && return true
-    return all(i -> !isdefined(x, i) || _byvalue_zero(getfield(x, i)), 1:fieldcount(T))
-end
-
-# Whether lane `i` of a forward `build` that is not bits is a shadow `===` its primal. A
-# closure is immutable, so `===` compares its fields: a constant `build`, whose captured
-# numbers runtime activity copies into the shadow, and an active one whose tangent equals
-# its value reach the rule identically. With every number it stores by value zero the two
-# agree.
-_gmg_shared_lane(build, i) = !isbits(build.val) && _lane(build, i) === build.val
-_gmg_shared(::Const, _) = false
-_gmg_shared(build::Annotation, W) = all(i -> _gmg_shared_lane(build, i), 1:W)
-function _gmg_ambiguous(build::Annotation, W)
-    build isa Const && return false
-    return any(i -> _gmg_shared_lane(build, i), 1:W) && !_byvalue_zero(build.val)
 end
 
 # Whether any lane of a forward rule's argument carries a derivative.
@@ -718,21 +699,14 @@ _gmg_rule_solve(P, b, (cycle, tol, maxiters)) = Bramble._gmg_solve_loop(P, b, cy
 # A zero tangent of the solution's type.
 _gmg_zero(u) = (z = similar(u); fill!(parent(z), zero(eltype(z))); z)
 
-# The finest product `A(θ) x`, the one call the nested Enzyme calls differentiate. The space
-# is made outside it and passed `Const`: built inside, its weights get shadows that forward
-# mode leaves unwritten, and the tangent reads them (NaN or 1e277 on a 9×9 mesh).
+# The finest product `A(θ) x`, the one call the nested reverse call differentiates. The
+# space is made outside it and passed `Const`: built inside, its weights got shadows that a
+# nested forward call left unwritten and read (NaN or 1e277 on a 9×9 mesh).
 function _gmg_product(build, W, x)
     op = Bramble.matrix_free_operator(build(W))
     y = zeros(eltype(op), size(op, 1))
     mul!(y, op, x)
     return y
-end
-
-# The nested calls on `_gmg_product`.
-function _gmg_product_tangent(runtime, build, Wₕ, x)
-    mode = Enzyme.set_runtime_activity(Enzyme.Forward, runtime)
-    RT = build isa Union{BatchDuplicated, BatchDuplicatedNoNeed} ? BatchDuplicated : Duplicated
-    return only(Enzyme.autodiff(mode, Const(_gmg_product), RT, build, Const(Wₕ), Const(x)))
 end
 
 # The forward half of the split call, at the solve: its tape holds what the reverse half
@@ -754,15 +728,13 @@ end
 
 # Whether `build` may carry a derivative in reverse mode. A scalar it captures arrives
 # `Active` or in a `MixedDuplicated` box, so a `Duplicated` shadow that is the primal is
-# runtime activity's mark of a constant. Forward mode runs the nested call for any shadow
-# but a shared one (`_gmg_shared_lane`): `===` compares a bits field by its data, so a
-# tangent equal to its value would pass for the primal, and a zero shadow gives a zero
-# product.
+# runtime activity's mark of a constant.
 _gmg_build_moves(::Const) = false
 _gmg_build_moves(::Active) = true
 _gmg_build_moves(build::Annotation) = _active_shadow(build, 1)
 
-# The nested call runs on the forms `gmg_solve` builds from `gridspace(Ωₕ)` alone.
+# The nested call runs on the forms `gmg_solve` builds from `gridspace(Ωₕ)` alone; forward
+# mode refuses a moving `build` on ghost spaces with the same message.
 function _gmg_build_check(P)
     last(P.ops) isa Bramble.MatrixFreeOperator || _throw_active_ghost_gmg()
     return nothing
@@ -808,26 +780,15 @@ function EnzymeRules.forward(
     W = EnzymeRules.width(config)
     _moving_shadow(Ωₕ, W) && _throw_active_gmg(:Ωₕ)
     P, loop = _gmg_rule_setup(build.val, Ωₕ.val; kwargs...)
+    if _moving_shadow(build, W)
+        _gmg_build_check(P)
+        _throw_forward_build_gmg()
+    end
     u = _gmg_rule_solve(P, b.val, loop)
     RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
-    # `Ȧ u` per lane, from the build as it is now, before any lane's solve. A `build` whose
-    # every lane is shared with the primal and stores no nonzero number is a constant.
-    # On ghost spaces, which the nested call does not cover, a shadow whose data is zero is a
-    # constant, as before the nested call.
-    _gmg_ambiguous(build, W) && _throw_ambiguous_build_gmg()
-    Ȧu = nothing
-    if !(build isa Const) && !_gmg_shared(build, W) &&
-       last(P.ops) isa Bramble.MatrixFreeOperator
-        Ȧu = _gmg_product_tangent(EnzymeRules.runtime_activity(config),
-            build, Bramble.gridspace(Ωₕ.val), copy(parent(u)))
-    elseif _moving_shadow(build, W)
-        _throw_active_ghost_gmg()
-    end
     shadows = ntuple(Val(W)) do i
         ḃ = _rank_one_tangent(b.val, _lane(b, i))
-        Ȧuᵢ = Ȧu === nothing ? nothing : (W == 1 ? Ȧu : Ȧu[i])
-        rhs = Ȧuᵢ === nothing ? ḃ : (ḃ === nothing ? -Ȧuᵢ : Bramble._mf_data(ḃ) - Ȧuᵢ)
-        return rhs === nothing ? _gmg_zero(u) : _gmg_rule_solve(P, rhs, loop)
+        return ḃ === nothing ? _gmg_zero(u) : _gmg_rule_solve(P, ḃ, loop)
     end
     return _forward_result(config, RT, u, W == 1 ? only(shadows) : shadows)
 end

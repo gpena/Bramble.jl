@@ -18,8 +18,8 @@ struct WrappedCoefficient <: Real
     κ::Float64
 end
 
-# The `build`s of the `gmg_solve` coefficient pins, one closure type per kind: the rule's
-# nested Enzyme calls compile once per type, and the Enzyme child has a 10 GB cap.
+# The `build`s of the `gmg_solve` coefficient pins, one closure type per kind: the reverse
+# rule's nested Enzyme calls compile once per type, and the Enzyme child has a 10 GB cap.
 gmg_scalar(c) = V -> form(V, V, (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v)))
 function gmg_grid(c)
     V -> (κ = element(V, typeof(c));
@@ -30,8 +30,15 @@ gmg_mixed(c, γ) = V -> form(V, V, (u, v) -> (1 + c) * innerₕ(u, v) + γ[] * i
 gmg_mixed_ref(cr, γ) = V -> form(V, V,
     (u, v) -> (1 + cr[]) * innerₕ(u, v) + γ[] * inner₊(∇ₕ(u), ∇ₕ(v)))
 # A `Ref` in a global that is not `const`, as a script holds one: a `build` capturing it
-# reaches the forward rule with a shadow `===` its primal.
+# reaches the forward rule with a shadow `===` its primal, its captured numbers copied.
 gmg_mixed_γ = Ref(0.7)
+# A number in a global that is not `const`: Enzyme fills its shadow with its value.
+gmg_d₀ = 0.3
+# Two coefficients, `c` active and `d` constant, beside a `Ref` or a third number.
+gmg_two(c, d, γ) = V -> form(V, V,
+    (u, v) -> (1 + d) * innerₕ(u, v) + c * γ[] * inner₊(∇ₕ(u), ∇ₕ(v)))
+gmg_three(c, d, g) = V -> form(V, V,
+    (u, v) -> (1 + d) * innerₕ(u, v) + c * g * inner₊(∇ₕ(u), ∇ₕ(v)))
 # A constant `build` bound to a `const` global reaches the forward rule as a constant.
 const GMG_GLOBAL_BUILD = gmg_mixed(0.3, Ref(0.7))
 # A Robin `build` on ghost spaces, whose coefficient the rules refuse to differentiate.
@@ -260,7 +267,8 @@ end
 
             # A `build` capturing a constant `κ`: the tangent is `A⁻¹ ḃ` and, in reverse, where
             # Enzyme passes such a `build` as `Active`, the pullback is `A⁻ᴴ w`, the
-            # cotangent of `κ` dropped by Enzyme.
+            # cotangent of `κ` dropped by Enzyme. So is a literal closure's tangent, and that
+            # of a `build` over a local `Ref`, at widths 1 and 2.
             κ = 0.7
             Aκ = Matrix(assemble(gmg_scalar(κ)(Wa)))
             solve_κ(b) = gmg_solve(gmg_scalar(κ), Ωr, b; tol = 1e-10)
@@ -272,25 +280,40 @@ end
             Enzyme.autodiff(rev, Enzyme.Const(b -> sum(wr .* parent(solve_κ(b)))), Enzyme.Active,
                 Enzyme.Duplicated(copy(xr), b̄κ))
             @test b̄κ ≈ Aκ' \ wr rtol=1e-7
-            # A moving coefficient is differentiated, against ForwardDiff of the direct solve
-            # of the same form with the coefficient a plain scalar: in forward mode even when
-            # its tangent equals its value, and inside a vector of tuples or a user's
-            # `struct <: Real` in both modes.
+            solve_lit(b) = gmg_solve(
+                V -> form(V, V, (u, v) -> innerₕ(u, v) + 0.7 * inner₊(∇ₕ(u), ∇ₕ(v))), Ωr, b;
+                tol = 1e-10)
+            function solve_loc(b)
+                γl = Ref(0.7)
+                return gmg_solve(gmg_mixed(0.0, γl), Ωr, b; tol = 1e-10)
+            end
+            for s in (solve_lit, solve_loc)
+                @test parent(only(Enzyme.autodiff(fwd, Enzyme.Const(s), Enzyme.Duplicated,
+                    Enzyme.Duplicated(copy(xr), ḃr)))) ≈ Aκ \ ḃr rtol=1e-7
+                u̇s = only(Enzyme.autodiff(fwd, Enzyme.Const(s), Enzyme.BatchDuplicated,
+                    Enzyme.BatchDuplicated(copy(xr), (ḃr, wr))))
+                @test parent(u̇s[1]) ≈ Aκ \ ḃr rtol=1e-7
+                @test parent(u̇s[2]) ≈ Aκ \ wr rtol=1e-7
+            end
+            # A moving coefficient is differentiated in reverse mode, against ForwardDiff of
+            # the direct solve of the same form with the coefficient a plain scalar, also
+            # inside a vector of tuples or a user's `struct <: Real`. Forward mode refuses it
+            # by name, a tangent equal to its value too.
             fd_c(c₀) = ForwardDiff.derivative(
                 c -> sum(abs2, pde_solve(assemble(gmg_scalar(c)(Wa)), xr)), c₀)
             loss_c(c) = sum(abs2, parent(gmg_solve(gmg_scalar(c), Ωr, xr; tol = 1e-10)))
-            for c in (1.0, 2.0)
-                @test abs(fd_c(c)) > 1e-2
-                @test only(Enzyme.autodiff(fwd, Enzyme.Const(loss_c), Enzyme.Duplicated,
-                    Enzyme.Duplicated(c, c))) ≈ c * fd_c(c) rtol=1e-7
-            end
+            @test abs(fd_c(1.0)) > 1e-2
+            @test first(Enzyme.autodiff(rev, Enzyme.Const(loss_c), Enzyme.Active,
+                Enzyme.Active(1.0)))[1] ≈ fd_c(1.0) rtol=1e-7
+            @test_throws ArgumentError "forward mode" Enzyme.autodiff(fwd, Enzyme.Const(loss_c),
+                Enzyme.Duplicated, Enzyme.Duplicated(1.0, 1.0))
             loss_t(q) = sum(abs2,
                 parent(gmg_solve(gmg_tuple([(q[1], 0.0)]), Ωr, xr; tol = 1e-10)))
             loss_w(q) = sum(abs2,
                 parent(gmg_solve(gmg_wrapped(WrappedCoefficient(q[1])), Ωr, xr; tol = 1e-10)))
             for lossq in (loss_t, loss_w)
-                @test only(Enzyme.autodiff(fwd, Enzyme.Const(lossq), Enzyme.Duplicated,
-                    Enzyme.Duplicated([0.7], [1.0]))) ≈ fd_c(0.7) rtol=1e-7
+                @test_throws ArgumentError "forward mode" Enzyme.autodiff(fwd,
+                    Enzyme.Const(lossq), Enzyme.Duplicated, Enzyme.Duplicated([0.7], [1.0]))
                 q̄ = [0.0]
                 Enzyme.autodiff(rev, Enzyme.Const(lossq), Enzyme.Active,
                     Enzyme.Duplicated([0.7], q̄))
@@ -302,14 +325,19 @@ end
             solve_γκ(b) = gmg_solve(gmg_mixed(0.0, gmg_mixed_γ), Ωr, b; tol = 1e-10)
             @test parent(only(Enzyme.autodiff(fwd, Enzyme.Const(solve_γκ), Enzyme.Duplicated,
                 Enzyme.Duplicated(copy(xr), ḃr)))) ≈ Aκ \ ḃr rtol=1e-7
-            # With the scalar nonzero, forward mode cannot tell this constant `build` from
-            # an active one whose tangent equals its value, and refuses it by name; each way
-            # out the refusal names gives `A⁻¹ ḃ` or, in reverse, `A⁻ᴴ w`.
+            u̇γ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve_γκ), Enzyme.BatchDuplicated,
+                Enzyme.BatchDuplicated(copy(xr), (ḃr, wr))))
+            @test parent(u̇γ[1]) ≈ Aκ \ ḃr rtol=1e-7
+            @test parent(u̇γ[2]) ≈ Aκ \ wr rtol=1e-7
+            # With the scalar nonzero, its value fills the shadow, and forward mode refuses
+            # the `build` by name; reverse mode and ForwardDiff give `A⁻ᴴ w` and `A⁻¹ ḃ`. A
+            # `build` bound to a `const` global, or holding its number in a `Ref`, is a
+            # constant.
             Am = Matrix(assemble(gmg_mixed(0.3, gmg_mixed_γ)(Wa)))
             solve_m(b) = gmg_solve(gmg_mixed(0.3, gmg_mixed_γ), Ωr, b; tol = 1e-10)
-            @test_throws ArgumentError "undetermined" Enzyme.autodiff(fwd,
+            @test_throws ArgumentError "forward mode" Enzyme.autodiff(fwd,
                 Enzyme.Const(solve_m), Enzyme.Duplicated, Enzyme.Duplicated(copy(xr), ḃr))
-            @test_throws ArgumentError "undetermined" Enzyme.autodiff(fwd,
+            @test_throws ArgumentError "forward mode" Enzyme.autodiff(fwd,
                 Enzyme.Const(solve_m), Enzyme.BatchDuplicated,
                 Enzyme.BatchDuplicated(copy(xr), (ḃr, wr)))
             b̄m = zeros(length(xr))
@@ -338,10 +366,10 @@ end
         end
     end
 
-    # `gmg_solve` in the coefficients `build` captures (#1168): a nested Enzyme call on the
-    # finest product gives `Ȧ u` and `−λᴴ (∂A/∂θ) u`. The oracle is ForwardDiff of the direct
-    # solve of the same form, on a uniform and a graded mesh, with the load and the
-    # coefficient active together.
+    # `gmg_solve` in the coefficients `build` captures (#1168): in reverse mode a nested
+    # Enzyme call on the finest product gives `−λᴴ (∂A/∂θ) u`. The oracle is ForwardDiff of
+    # the direct solve of the same form, on a uniform and a graded mesh, with the load and
+    # the coefficient active together. Forward mode refuses a moving coefficient by name.
     @testset "Enzyme: gmg_solve in its coefficients" begin
         if _have(:Enzyme)
             @eval import Enzyme
@@ -363,10 +391,12 @@ end
                     @test minimum(abs, ref) > 1e-2
                     loss(q) = sum(abs2,
                         parent(gmg_solve(mk(q[1]), Ω, q[2] .* b₀; tol = 1e-11)))
-                    for m in (Enzyme.Reverse, Enzyme.Forward)
-                        @testset "$name $m unif=$unif" begin
-                            @test DI.gradient(loss, ez(m), [0.7, 1.3]) ≈ ref rtol=1e-7
-                        end
+                    @testset "$name reverse unif=$unif" begin
+                        @test DI.gradient(loss, ez(Enzyme.Reverse), [0.7, 1.3]) ≈ ref rtol=1e-7
+                    end
+                    unif && @testset "$name forward refused" begin
+                        @test_throws ArgumentError "forward mode" DI.gradient(loss,
+                            ez(Enzyme.Forward), [0.7, 1.3])
                     end
                 end
             end
@@ -404,24 +434,39 @@ end
             c̄ = first(Enzyme.autodiff(rev, Enzyme.Const(loss_mix), Enzyme.Active,
                 Enzyme.Active(0.0), Enzyme.Duplicated(Ref(0.6), γ̄)))[1]
             @test [c̄, γ̄[]] ≈ ref_mix rtol=1e-7
-            # Forward width 2: one lane per coefficient.
-            ṡ = only(Enzyme.autodiff(fwd, Enzyme.Const(loss_mix), Enzyme.BatchDuplicated,
+            # Forward width 2, one lane per coefficient, is refused by name.
+            @test_throws ArgumentError "forward mode" Enzyme.autodiff(fwd,
+                Enzyme.Const(loss_mix), Enzyme.BatchDuplicated,
                 Enzyme.BatchDuplicated(0.0, (1.0, 0.0)),
-                Enzyme.BatchDuplicated(Ref(0.6), (Ref(0.0), Ref(1.0)))))
-            @test collect(values(ṡ)) ≈ ref_mix rtol=1e-7
-            # The scalar active beside a constant `Ref`: a tangent equal to its value
-            # reaches forward mode as a constant `build` does and is refused by name; any
-            # other is differentiated, directly and through DI.
+                Enzyme.BatchDuplicated(Ref(0.6), (Ref(0.0), Ref(1.0))))
+            # The scalar active beside a constant `Ref`, a second number constant, or every
+            # number captured by value with one from a global that is not `const`: Enzyme
+            # fills a constant's shadow with its value, so forward mode refuses each by name,
+            # a tangent equal to its value and DI too, and reverse mode differentiates it.
             γc = Ref(0.6)
             ref_c = ForwardDiff.derivative(
                 c -> sum(abs2, pde_solve(assemble(gmg_mixed(c, γc)(Wr)), xr)), 0.3)
             @test abs(ref_c) > 1e-2
             loss_c(c) = sum(abs2, parent(gmg_solve(gmg_mixed(c, γc), Ωr, xr; tol = 1e-10)))
-            @test_throws ArgumentError "undetermined" Enzyme.autodiff(fwd,
+            @test_throws ArgumentError "forward mode" Enzyme.autodiff(fwd,
                 Enzyme.Const(loss_c), Enzyme.Duplicated, Enzyme.Duplicated(0.3, 0.3))
-            @test only(Enzyme.autodiff(fwd, Enzyme.Const(loss_c), Enzyme.Duplicated,
-                Enzyme.Duplicated(0.3, 1.0))) ≈ ref_c rtol=1e-7
-            @test DI.derivative(loss_c, ez(Enzyme.Forward), 0.3) ≈ ref_c rtol=1e-7
+            @test_throws ArgumentError "forward mode" DI.derivative(loss_c,
+                ez(Enzyme.Forward), 0.3)
+            @test first(Enzyme.autodiff(rev, Enzyme.Const(loss_c), Enzyme.Active,
+                Enzyme.Active(0.3)))[1] ≈ ref_c rtol=1e-7
+            ref_two = ForwardDiff.derivative(
+                c -> sum(abs2, pde_solve(assemble(gmg_three(c, 0.3, 0.7)(Wr)), xr)), 0.7)
+            @test abs(ref_two) > 1e-2
+            loss_two(c) = sum(abs2,
+                parent(gmg_solve(gmg_two(c, 0.3, gmg_mixed_γ), Ωr, xr; tol = 1e-10)))
+            loss_three(c) = sum(abs2,
+                parent(gmg_solve(gmg_three(c, gmg_d₀, 0.7), Ωr, xr; tol = 1e-10)))
+            for lossd in (loss_two, loss_three)
+                @test_throws ArgumentError "forward mode" Enzyme.autodiff(fwd,
+                    Enzyme.Const(lossd), Enzyme.Duplicated, Enzyme.Duplicated(0.7, 1.0))
+                @test first(Enzyme.autodiff(rev, Enzyme.Const(lossd), Enzyme.Active,
+                    Enzyme.Active(0.7)))[1] ≈ ref_two rtol=1e-7
+            end
         else
             @test_skip "Enzyme not in this environment"
         end
