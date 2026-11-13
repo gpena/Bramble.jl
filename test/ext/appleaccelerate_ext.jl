@@ -743,6 +743,8 @@ end
         # this process the workers may be adopted already (any earlier upstream `factor!`
         # does it), and then nothing is left to count. The child stops at the first
         # raise, capped at 300 factorizations, since that call deadlocks under a collector.
+        # The rows need the same thing from this process, so the testset first asserts that
+        # no thread was adopted before it.
         @testset "No Julia on libSparse threads (#1201)" begin
             sp = poisson_system(Val(2), 12)
             cd = convection_diffusion_system(12)
@@ -761,7 +763,14 @@ end
                     (; sym = :symmetric)),
                 ("LU", cd.A, cd.F, (; sym = :unsymmetric)),
             )
+            # The rows see an adopted thread only if one is left to adopt: in a process whose
+            # libSparse workers were adopted earlier (an upstream `factor!` ran, here or in
+            # a file before this one) they would pass against the defect. So the process
+            # must still hold Julia's own threads and nothing else.
             n0 = Threads.maxthreadid()
+            julia_threads = Threads.nthreads(:default) + Threads.nthreads(:interactive)
+            note = "earlier code adopted foreign threads, so the rows below cannot see one"
+            @test (n0, note) == (julia_threads, note)
             for (name, M, F, kw) in rows
                 for _ in 1:50
                     f = accelerate_factorize(M; kw...)
