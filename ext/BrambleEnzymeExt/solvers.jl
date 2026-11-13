@@ -603,8 +603,10 @@ end
 _shadow_is_zero(x, ẋ) = _zero_shadow(x, ẋ, Base.IdSet{Any}())
 
 # Whether a value of type `T` can hold a floating-point number.
-_holds_floats(::Type{T}) where {T} = T <: Union{AbstractFloat, Complex{<:AbstractFloat}} ||
-                                     !isbitstype(T) || any(_holds_floats, fieldtypes(T))
+function _holds_floats(::Type{T}) where {T}
+    T <: Union{AbstractFloat, Complex{<:AbstractFloat}} ||
+        !isbitstype(T) || any(_holds_floats, fieldtypes(T))
+end
 
 _zero_shadow(_, ẋ::Union{AbstractFloat, Complex{<:AbstractFloat}}, _) = iszero(ẋ)
 _zero_shadow(_, ::Union{Symbol, AbstractString, Module, Type}, _) = true
