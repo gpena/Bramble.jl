@@ -554,17 +554,19 @@ function EnzymeRules.reverse(
     return (nothing, nothing)
 end
 
-# The rules for `gmg_solve` in its right-hand side (#1168).
+# The rules for `gmg_solve` in its right-hand side and in the coefficients of its form (#1168).
 #
 # Enzyme stops at the smoother construction in `gmg_preconditioner` with
 # `IllegalTypeAnalysisException`. The cycles write the hierarchy's buffers, so they are not
 # inactive either; the rules sit on `gmg_solve` and differentiate the converged solve
-# implicitly. It is linear in `b`. Each lane's tangent is `u̇ = A⁻¹ ḃ` and the pullback
-# `b̄ += A⁻ᴴ ū`, the same solve only when `A` is Hermitian, while `gmg_solve` accepts any `A`
+# implicitly. `A(θ) u = b`, with `θ` what `build` captures, gives the tangent
+# `u̇ = A⁻¹(ḃ − Ȧ u)` and the pullback `λ = A⁻ᴴ ū`, `b̄ += λ`, `θ̄ += −λᴴ (∂A/∂θ) u`. The adjoint
+# solve is `gmg_solve` itself only when `A` is Hermitian, while `gmg_solve` accepts any `A`
 # whose cycle contracts: reverse assembles the finest matrix and refuses any other by name.
-# One preconditioner per rule call serves every lane, each solved to the caller's `tol`, and
-# a zero load returns zero without a cycle. `build` and the mesh are constants; a shadow that
-# is not the primal is refused by name rather than dropped.
+# `Ȧ u` and `θ̄` come from a nested Enzyme call on the finest product alone, `_gmg_product`,
+# so no cycle is differentiated. One preconditioner per rule call serves every lane, each
+# solved to the caller's `tol`, and a zero load returns zero without a cycle. The mesh is a
+# constant; a shadow of it that carries data is refused by name rather than dropped.
 #
 # No signature can name what `build` returns. A `build` whose form `gmg_preconditioner`
 # refuses by type alone (one on composite spaces) makes `gmg_solve` infer `Union{}`, and
@@ -575,22 +577,19 @@ end
     throw(
         ArgumentError(
         "gmg_solve: `$name` has a shadow, so it may carry a derivative, and Bramble's " *
-        "Enzyme rule differentiates `gmg_solve` in its right-hand side only, which cannot " *
-        "compute one with respect to a coefficient or the mesh. Solve with " *
-        "`pde_solve(assemble(build(gridspace(Ωₕ))), b)` to differentiate it, or, if it is " *
-        "constant, build it outside the differentiated function and pass it in.",
+        "Enzyme rule differentiates `gmg_solve` in its right-hand side and in the " *
+        "coefficients `build` captures, not in the mesh. Build the mesh outside the " *
+        "differentiated function and pass it in.",
     ),
     )
 end
 
-@noinline function _throw_active_gmg_reverse()
+@noinline function _throw_active_ghost_gmg()
     throw(
         ArgumentError(
-        "gmg_solve: `build` captures scalar values, which Enzyme passes to the rule as " *
-        "`Active`, and a constant `build` cannot be told from one being differentiated in " *
-        "reverse mode: Bramble's Enzyme rule does not yet differentiate such a `build`. Use " *
-        "forward mode, capture the scalars in a container (a `Ref` read as `γ[]`), or " *
-        "differentiate `pde_solve(assemble(build(gridspace(Ωₕ))), b)`.",
+        "gmg_solve: Bramble's Enzyme rule does not differentiate a `build` on ghost spaces " *
+        "in its coefficients. Build it outside the differentiated function if it is " *
+        "constant, or differentiate `pde_solve(assemble(build(gridspace(Ωₕ))), b)`.",
     ),
     )
 end
@@ -684,6 +683,55 @@ _gmg_rule_solve(P, b, (cycle, tol, maxiters)) = Bramble._gmg_solve_loop(P, b, cy
 # A zero tangent of the solution's type.
 _gmg_zero(u) = (z = similar(u); fill!(parent(z), zero(eltype(z))); z)
 
+# The finest product `A(θ) x`, the one call the nested Enzyme calls differentiate. The space
+# is made outside it and passed `Const`: built inside, its weights get shadows that forward
+# mode leaves unwritten, and the tangent reads them (NaN or 1e277 on a 9×9 mesh).
+function _gmg_product(build, W, x)
+    op = Bramble.matrix_free_operator(build(W))
+    y = zeros(eltype(op), size(op, 1))
+    mul!(y, op, x)
+    return y
+end
+
+# The nested calls on `_gmg_product`.
+function _gmg_product_tangent(runtime, build, Wₕ, x)
+    mode = Enzyme.set_runtime_activity(Enzyme.Forward, runtime)
+    RT = build isa Union{BatchDuplicated, BatchDuplicatedNoNeed} ? BatchDuplicated : Duplicated
+    return only(Enzyme.autodiff(mode, Const(_gmg_product), RT, build, Const(Wₕ), Const(x)))
+end
+
+# The forward half of the split call, at the solve: its tape holds what the reverse half
+# differentiates.
+function _gmg_product_split(runtime, build, Wₕ, x)
+    mode = Enzyme.set_runtime_activity(Enzyme.ReverseSplitWithPrimal, runtime)
+    fwd, rev = Enzyme.autodiff_thunk(mode, Const{typeof(_gmg_product)}, Duplicated,
+        typeof(build), Const{typeof(Wₕ)}, Const{typeof(x)})
+    tape, _, ȳ = fwd(Const(_gmg_product), build, Const(Wₕ), Const(x))
+    return (rev, tape, ȳ, Wₕ, x)
+end
+
+# The reverse half, seeded with the product's cotangent `−λ`; returns `build`'s cotangent
+# when it is `Active`.
+function _gmg_product_pullback((rev, tape, ȳ, Wₕ, x), build, λ)
+    ȳ .= .-λ
+    return first(first(rev(Const(_gmg_product), build, Const(Wₕ), Const(x), tape)))
+end
+
+# Whether `build` may carry a derivative in reverse mode. A scalar it captures arrives
+# `Active` or in a `MixedDuplicated` box, so a `Duplicated` shadow that is the primal is
+# runtime activity's mark of a constant. Forward mode runs the nested call for any shadow:
+# `===` compares a bits field by its data, so a tangent equal to its value would pass for
+# the primal, and a zero shadow gives a zero product.
+_gmg_build_moves(::Const) = false
+_gmg_build_moves(::Active) = true
+_gmg_build_moves(build::Annotation) = _active_shadow(build, 1)
+
+# The nested call runs on the forms `gmg_solve` builds from `gridspace(Ωₕ)` alone.
+function _gmg_build_check(P)
+    last(P.ops) isa Bramble.MatrixFreeOperator || _throw_active_ghost_gmg()
+    return nothing
+end
+
 # The form the finest operator applies: on ghost spaces, the padded one.
 _gmg_op_form(op::Bramble.MatrixFreeOperator) = op.form
 _gmg_op_form(op::Bramble.GhostMatrixFreeOperator) = op.padded.form
@@ -722,14 +770,25 @@ function EnzymeRules.forward(
         kwargs...
 ) where {RT}
     W = EnzymeRules.width(config)
-    _moving_shadow(build, W) && _throw_active_gmg(:build)
     _moving_shadow(Ωₕ, W) && _throw_active_gmg(:Ωₕ)
     P, loop = _gmg_rule_setup(build.val, Ωₕ.val; kwargs...)
     u = _gmg_rule_solve(P, b.val, loop)
     RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
+    # `Ȧ u` per lane, from the build as it is now, before any lane's solve.
+    # On ghost spaces, which the nested call does not cover, a shadow whose data is zero is a
+    # constant, as before the nested call.
+    Ȧu = nothing
+    if !(build isa Const) && last(P.ops) isa Bramble.MatrixFreeOperator
+        Ȧu = _gmg_product_tangent(EnzymeRules.runtime_activity(config),
+            build, Bramble.gridspace(Ωₕ.val), copy(parent(u)))
+    elseif _moving_shadow(build, W)
+        _throw_active_ghost_gmg()
+    end
     shadows = ntuple(Val(W)) do i
         ḃ = _rank_one_tangent(b.val, _lane(b, i))
-        return ḃ === nothing ? _gmg_zero(u) : _gmg_rule_solve(P, ḃ, loop)
+        Ȧuᵢ = Ȧu === nothing ? nothing : (W == 1 ? Ȧu : Ȧu[i])
+        rhs = Ȧuᵢ === nothing ? ḃ : (ḃ === nothing ? -Ȧuᵢ : Bramble._mf_data(ḃ) - Ȧuᵢ)
+        return rhs === nothing ? _gmg_zero(u) : _gmg_rule_solve(P, rhs, loop)
     end
     return _forward_result(config, RT, u, W == 1 ? only(shadows) : shadows)
 end
@@ -738,6 +797,8 @@ end
 # `build` may read a `Ref` whose value has changed by then. A coefficient the form itself holds
 # as a `Ref` is read at each product, so the tape cannot keep it; the reverse pass assembles
 # the finest operator's form again and refuses it if its matrix has changed since the solve.
+# For the same reason the nested call on `build` is split: its forward half runs here, at the
+# solve, and the tape it keeps is what its reverse half differentiates.
 function EnzymeRules.augmented_primal(
         config::RevConfig,
         ::Const{typeof(Bramble.gmg_solve)},
@@ -748,21 +809,22 @@ function EnzymeRules.augmented_primal(
         kwargs...
 ) where {RT}
     EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
-    # A shadow here is zero until the reverse pass accumulates into it, so data cannot tell a
-    # constant from an active argument; an `Active` one has no shadow to compare.
-    build isa Active && _throw_active_gmg_reverse()
     Ωₕ isa Active && _throw_active_gmg(:Ωₕ)
-    _active_shadow(build, 1) && _throw_active_gmg(:build)
     _active_shadow(Ωₕ, 1) && _throw_active_gmg(:Ωₕ)
     P, loop = _gmg_rule_setup(build.val, Ωₕ.val; kwargs...)
-    probe = _has_shadow(b) ? _gmg_hermitian_check(P, build.val, Ωₕ.val) : nothing
+    moves = _gmg_build_moves(build)
+    moves && _gmg_build_check(P)
+    probe = _has_shadow(b) || moves ? _gmg_hermitian_check(P, build.val, Ωₕ.val) : nothing
     u = _gmg_rule_solve(P, b.val, loop)
     ū = _gmg_zero(u)
+    nested = moves ?
+             _gmg_product_split(EnzymeRules.runtime_activity(config), build,
+        Bramble.gridspace(Ωₕ.val), copy(parent(u))) : nothing
 
     primal = EnzymeRules.needs_primal(config) ? u : nothing
     shadow = EnzymeRules.needs_shadow(config) ? ū : nothing
     return EnzymeRules.augmented_rule_return_type(config, RT)(primal, shadow,
-        (P, loop, probe, ū))
+        (P, loop, probe, ū, nested))
 end
 
 function EnzymeRules.reverse(
@@ -775,14 +837,18 @@ function EnzymeRules.reverse(
         b::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    P, loop, probe, ū = tape
+    P, loop, probe, ū, nested = tape
     λ = nothing
-    if _has_shadow(b)
+    if _has_shadow(b) || nested !== nothing
         _gmg_unchanged_check(P, probe)
         λ = parent(_gmg_rule_solve(P, parent(ū), loop))
     end
     # `λ` is read before `ū` is cleared, as `b̄` may share its storage.
     fill!(parent(ū), zero(eltype(ū)))
-    λ === nothing || (Bramble._mf_data(b.dval) .+= λ)
-    return (nothing, nothing, nothing)
+    _has_shadow(b) && (Bramble._mf_data(b.dval) .+= λ)
+    nested === nothing && return (nothing, nothing, nothing)
+    # `θ̄ += −λᴴ (∂A/∂θ) u`: the product's cotangent is `−λ`. An `Active` `build` gets its
+    # cotangent back; Enzyme drops it for one that captures constants only.
+    θ̄ = _gmg_product_pullback(nested, build, λ)
+    return (build isa Active ? θ̄::typeof(build.val) : nothing, nothing, nothing)
 end

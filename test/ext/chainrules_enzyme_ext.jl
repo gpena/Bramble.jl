@@ -118,6 +118,19 @@ struct WrappedCoefficient <: Real
     κ::Float64
 end
 
+# The `build`s of the `gmg_solve` coefficient pins, one closure type per kind: the rule's
+# nested Enzyme calls compile once per type, and the Enzyme child has a 10 GB cap.
+gmg_scalar(c) = V -> form(V, V, (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v)))
+function gmg_grid(c)
+    V -> (κ = element(V, typeof(c));
+        fill!(parent(κ), c);
+        form(V, V, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v))))
+end
+gmg_mixed(c, γ) = V -> form(V, V, (u, v) -> (1 + c) * innerₕ(u, v) + γ[] * inner₊(∇ₕ(u), ∇ₕ(v)))
+gmg_tuple(ps) = V -> form(V, V, (u, v) -> innerₕ(u, v) + ps[1][1] * inner₊(∇ₕ(u), ∇ₕ(v)))
+gmg_wrapped(cw) = V -> form(V, V, (u, v) -> innerₕ(u, v) + cw.κ * inner₊(∇ₕ(u), ∇ₕ(v)))
+gmg_square(γ) = V -> form(V, V, (u, v) -> innerₕ(u, v) + γ[]^2 * inner₊(∇ₕ(u), ∇ₕ(v)))
+
 # A point mass and a point advection at the node `GMG_POINT[1]`, scaled by the `Ref`s the form
 # holds, `GMG_POINT[2]` and `GMG_POINT[3]`. A named `build` without captures reaches the
 # `gmg_solve` rule as a constant.
@@ -936,19 +949,13 @@ gmg_point_build(V) = form(V, V, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), �
                     Enzyme.BatchDuplicated(copy(b₀), (zeros(ng), zeros(ng))))
 
                 # A quadratic loss in a scaled load, through DI: the exact derivative is
-                # `2(1 + q) S`. A coefficient that moves gives `build` a shadow, refused by
-                # name.
+                # `2(1 + q) S`. A coefficient that moves is differentiated too, in the testset
+                # "Enzyme: gmg_solve in its coefficients".
                 S = sum(abs2, A \ b₀)
                 for m in (Enzyme.Reverse, Enzyme.Forward)
                     @test only(DI.gradient(
                         q -> sum(abs2, parent(gmg_solve(bld, Ωg, (1 + q[1]) .* b₀; kw...))),
                         ez(m), [0.4])) ≈ 2.8 * S rtol=1e-8
-                    @test_throws ArgumentError "`build` has a shadow" DI.gradient(
-                        q -> sum(abs2, parent(gmg_solve(
-                            V -> form(V, V, (u, v) -> q[1] * innerₕ(u, v) +
-                                                     inner₊(∇ₕ(u), ∇ₕ(v))),
-                            Ωg, b₀; kw...))),
-                        ez(m), [1.3])
                 end
             end
 
@@ -1058,49 +1065,126 @@ gmg_point_build(V) = form(V, V, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), �
                 Enzyme.Const(b -> sum(parent(gmg_solve(weak, Ωw, b; tol = 1e-10)))),
                 Enzyme.Active, Enzyme.Duplicated(ones(nw), zeros(nw)))
 
-            # A `build` capturing a scalar. Forward reads its shadow's data: a constant `κ`
-            # leaves the tangent `A⁻¹ ḃ`, and a moving `c` is refused by name even when its
-            # tangent equals its value. Reverse gets such a `build` as `Active`, which cannot be
-            # told constant, and refuses it by name.
+            # A `build` capturing a constant `κ`: the tangent is `A⁻¹ ḃ` and, in reverse, where
+            # Enzyme passes such a `build` as `Active`, the pullback is `A⁻ᴴ w`, the
+            # cotangent of `κ` dropped by Enzyme.
             κ = 0.7
-            Aκ = Matrix(assemble(form(Wa, Wa, (u, v) -> innerₕ(u, v) + κ * inner₊(∇ₕ(u), ∇ₕ(v)))))
-            solve_κ(b) = gmg_solve(V -> form(V, V, (u, v) -> innerₕ(u, v) +
-                                                            κ * inner₊(∇ₕ(u), ∇ₕ(v))), Ωr, b;
-                tol = 1e-10)
+            Aκ = Matrix(assemble(gmg_scalar(κ)(Wa)))
+            solve_κ(b) = gmg_solve(gmg_scalar(κ), Ωr, b; tol = 1e-10)
             ḃr = [cos(k) for k in 1:ndofs(Wa)]
+            wr = [sin(0.3k) + 0.1 for k in 1:ndofs(Wa)]
             @test parent(only(Enzyme.autodiff(fwd, Enzyme.Const(solve_κ), Enzyme.Duplicated,
                 Enzyme.Duplicated(copy(xr), ḃr)))) ≈ Aκ \ ḃr rtol=1e-7
-            @test_throws ArgumentError "captures scalar values" Enzyme.autodiff(rev,
-                Enzyme.Const(b -> sum(parent(solve_κ(b)))), Enzyme.Active,
-                Enzyme.Duplicated(copy(xr), zeros(length(xr))))
-            loss_c(c) = sum(abs2, parent(gmg_solve(V -> form(V, V, (u, v) -> c * innerₕ(u, v) +
-                                                                          inner₊(∇ₕ(u), ∇ₕ(v))),
-                Ωr, xr; tol = 1e-10)))
+            b̄κ = zeros(length(xr))
+            Enzyme.autodiff(rev, Enzyme.Const(b -> sum(wr .* parent(solve_κ(b)))), Enzyme.Active,
+                Enzyme.Duplicated(copy(xr), b̄κ))
+            @test b̄κ ≈ Aκ' \ wr rtol=1e-7
+            # A moving coefficient is differentiated, against ForwardDiff of the direct solve
+            # of the same form with the coefficient a plain scalar: in forward mode even when
+            # its tangent equals its value, and inside a vector of tuples or a user's
+            # `struct <: Real` in both modes.
+            fd_c(c₀) = ForwardDiff.derivative(
+                c -> sum(abs2, pde_solve(assemble(gmg_scalar(c)(Wa)), xr)), c₀)
+            loss_c(c) = sum(abs2, parent(gmg_solve(gmg_scalar(c), Ωr, xr; tol = 1e-10)))
             for c in (1.0, 2.0)
-                @test_throws ArgumentError "`build` has a shadow" Enzyme.autodiff(fwd,
-                    Enzyme.Const(loss_c), Enzyme.Duplicated, Enzyme.Duplicated(c, c))
+                @test abs(fd_c(c)) > 1e-2
+                @test only(Enzyme.autodiff(fwd, Enzyme.Const(loss_c), Enzyme.Duplicated,
+                    Enzyme.Duplicated(c, c))) ≈ c * fd_c(c) rtol=1e-7
             end
-            # The shadow is read with its primal. An active coefficient inside a vector of
-            # tuples is a derivative the rule cannot compute, refused by name, as `pde_solve`
-            # would carry it; a constant `κ` captured beside a `Ref`, whose shadow is the
-            # primal's own, leaves the tangent `A⁻¹ ḃ`.
-            loss_t(q) = (ps = [(q[1], 0.0)];
-            sum(abs2, parent(gmg_solve(V -> form(V, V, (u, v) -> ps[1][1] * innerₕ(u, v) +
-                                                                inner₊(∇ₕ(u), ∇ₕ(v))),
-                Ωr, xr; tol = 1e-10))))
-            @test_throws ArgumentError "`build` has a shadow" Enzyme.autodiff(fwd,
-                Enzyme.Const(loss_t), Enzyme.Duplicated, Enzyme.Duplicated([0.7], [1.0]))
-            loss_w(q) = (cw = WrappedCoefficient(q[1]);
-            sum(abs2, parent(gmg_solve(V -> form(V, V, (u, v) -> cw.κ * innerₕ(u, v) +
-                                                                inner₊(∇ₕ(u), ∇ₕ(v))),
-                Ωr, xr; tol = 1e-10))))
-            @test_throws ArgumentError "`build` has a shadow" Enzyme.autodiff(fwd,
-                Enzyme.Const(loss_w), Enzyme.Duplicated, Enzyme.Duplicated([0.7], [1.0]))
-            γκ = Ref(1.0)
-            solve_γκ(b) = gmg_solve(V -> form(V, V, (u, v) -> κ * γκ[] * inner₊(∇ₕ(u), ∇ₕ(v)) +
-                                                             innerₕ(u, v)), Ωr, b; tol = 1e-10)
+            loss_t(q) = sum(abs2,
+                parent(gmg_solve(gmg_tuple([(q[1], 0.0)]), Ωr, xr; tol = 1e-10)))
+            loss_w(q) = sum(abs2,
+                parent(gmg_solve(gmg_wrapped(WrappedCoefficient(q[1])), Ωr, xr; tol = 1e-10)))
+            for lossq in (loss_t, loss_w)
+                @test only(Enzyme.autodiff(fwd, Enzyme.Const(lossq), Enzyme.Duplicated,
+                    Enzyme.Duplicated([0.7], [1.0]))) ≈ fd_c(0.7) rtol=1e-7
+                q̄ = [0.0]
+                Enzyme.autodiff(rev, Enzyme.Const(lossq), Enzyme.Active,
+                    Enzyme.Duplicated([0.7], q̄))
+                @test only(q̄) ≈ fd_c(0.7) rtol=1e-7
+            end
+            # A constant scalar captured beside a constant `Ref`, whose shadow is the primal's
+            # own, leaves the tangent `A⁻¹ ḃ`.
+            γκ = Ref(κ)
+            solve_γκ(b) = gmg_solve(gmg_mixed(0.0, γκ), Ωr, b; tol = 1e-10)
             @test parent(only(Enzyme.autodiff(fwd, Enzyme.Const(solve_γκ), Enzyme.Duplicated,
                 Enzyme.Duplicated(copy(xr), ḃr)))) ≈ Aκ \ ḃr rtol=1e-7
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
+    # `gmg_solve` in the coefficients `build` captures (#1168): a nested Enzyme call on the
+    # finest product gives `Ȧ u` and `−λᴴ (∂A/∂θ) u`. The oracle is ForwardDiff of the direct
+    # solve of the same form, on a uniform and a graded mesh, with the load and the
+    # coefficient active together.
+    @testset "Enzyme: gmg_solve in its coefficients" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            rev = Enzyme.set_runtime_activity(Enzyme.Reverse)
+            fwd = Enzyme.set_runtime_activity(Enzyme.Forward)
+            ez(m) = DI.AutoEnzyme(; mode = Enzyme.set_runtime_activity(m),
+                function_annotation = Enzyme.Const)
+            for (dims, unif) in (((17, 17), true), ((9, 9), false))
+                Random.seed!(1234)
+                Ω = Bramble.mesh(
+                    Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                   Bramble.interval(0.0, 1.0)), dims, (unif, unif))
+                W = gridspace(Ω)
+                b₀ = [1.0 + sin(i) for i in 1:npoints(Ω)]
+                for (name, mk) in (("scalar", gmg_scalar), ("grid function", gmg_grid))
+                    # `q = (c, s)`: the coefficient and a scale of the load.
+                    direct(q) = sum(abs2, pde_solve(assemble(mk(q[1])(W)), q[2] .* b₀))
+                    ref = ForwardDiff.gradient(direct, [0.7, 1.3])
+                    @test minimum(abs, ref) > 1e-2
+                    loss(q) = sum(abs2,
+                        parent(gmg_solve(mk(q[1]), Ω, q[2] .* b₀; tol = 1e-11)))
+                    for m in (Enzyme.Reverse, Enzyme.Forward)
+                        @testset "$name $m unif=$unif" begin
+                            @test DI.gradient(loss, ez(m), [0.7, 1.3]) ≈ ref rtol=1e-7
+                        end
+                    end
+                end
+            end
+            # A coefficient in a `Ref` that `build` reads: reverse differentiates the
+            # operator the solve used, though the `Ref` holds another value by then.
+            Random.seed!(1234)
+            Ωr = Bramble.mesh(
+                Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                               Bramble.interval(0.0, 1.0)), (9, 9), (false, false))
+            Wr = gridspace(Ωr)
+            xr = [sin(0.7k) for k in 1:npoints(Ωr)]
+            ref_sq = ForwardDiff.derivative(
+                γ -> sum(abs2, pde_solve(assemble(gmg_scalar(γ^2)(Wr)), xr)), 0.8)
+            @test abs(ref_sq) > 1e-2
+            function loss_sq(γ)
+                u = gmg_solve(gmg_square(γ), Ωr, xr; tol = 1e-10)
+                γ[] = 5.0
+                return sum(abs2, parent(u))
+            end
+            γ̄ = Ref(0.0)
+            Enzyme.autodiff(rev, Enzyme.Const(loss_sq), Enzyme.Active,
+                Enzyme.Duplicated(Ref(0.8), γ̄))
+            @test γ̄[] ≈ ref_sq rtol=1e-7
+            # A `build` capturing an active scalar beside an active `Ref`, the scalar at 0.0:
+            # its derivative is not lost to a shadow that compares equal to the primal.
+            ref_mix = ForwardDiff.gradient(
+                p -> sum(abs2, pde_solve(
+                    assemble(form(Wr, Wr,
+                        (u, v) -> (1 + p[1]) * innerₕ(u, v) + p[2] * inner₊(∇ₕ(u), ∇ₕ(v)))),
+                    xr)),
+                [0.0, 0.6])
+            @test minimum(abs, ref_mix) > 1e-2
+            loss_mix(c, γ) = sum(abs2, parent(gmg_solve(gmg_mixed(c, γ), Ωr, xr; tol = 1e-10)))
+            γ̄ = Ref(0.0)
+            c̄ = first(Enzyme.autodiff(rev, Enzyme.Const(loss_mix), Enzyme.Active,
+                Enzyme.Active(0.0), Enzyme.Duplicated(Ref(0.6), γ̄)))[1]
+            @test [c̄, γ̄[]] ≈ ref_mix rtol=1e-7
+            # Forward width 2: one lane per coefficient.
+            ṡ = only(Enzyme.autodiff(fwd, Enzyme.Const(loss_mix), Enzyme.BatchDuplicated,
+                Enzyme.BatchDuplicated(0.0, (1.0, 0.0)),
+                Enzyme.BatchDuplicated(Ref(0.6), (Ref(0.0), Ref(1.0)))))
+            @test collect(values(ṡ)) ≈ ref_mix rtol=1e-7
         else
             @test_skip "Enzyme not in this environment"
         end
