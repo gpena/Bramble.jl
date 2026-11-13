@@ -31,6 +31,8 @@ failures that have no cell are under "Open failures". A cell never reads `works`
 | Threads | 4, the test's thread count, so both threaded policies run on 4 threads; the 2026-11-03 figures and the v4.2.4 reproducers ran on 2 (1 for the `constrained` reductions); the 2026-11-11 cells ran on 2 under load, in `--optimize=1` children; the solver cells ran on 2, alone on the machine, in `--optimize=1` children |
 | Problem | 9 x 9 mesh in 2D, 17 nodes in 1D, 5 x 5 x 5 mesh in 3D, three parameters, `Float64`; the `fdm_*` cells have one parameter, and the `fdm_*`, `gmg_*` and `chebyshev` cells run on 17 x 17 (uniform) and 9 x 9 (non-uniform) meshes |
 | Agreement | within 1e-8 relative to ForwardDiff on the same policy |
+| After 8b423d93 | The `CpuThreaded` runs of `gmg_coefficient` reverse and `chebyshev` gave wrong gradients before commit 8b423d93; it fixed them (#1168), and both cells were measured again after it |
+| Julia version | The solver cells and the re-measurement after 8b423d93 ran on Julia 1.13.3. juliaup then installed 1.13.4 (2026-11-13, 22:46) and removed 1.13.3; with it, Enzyme 0.13.219 aborts every child within 13 s (`unsupported tag julia.gc_alloc_ptr_offsets`, `UNREACHABLE executed at GradientUtils.cpp:364`), `chebyshev` under `CpuPolyester` among them, so nothing was re-measured on 1.13.4 and the pins above are the 1.13.3 results |
 | Idle run | `gmg_load` under `CpuPolyester` (2 threads, `--optimize=1`): 1501 s wall for 88 s of CPU, its cells normal; the cause is unknown, see "Compile cost of the solver cells" |
 
 The `dirac_location` cell compares with a central difference where ForwardDiff cannot run
@@ -76,9 +78,9 @@ policy. Each Enzyme cell holds both modes, reverse then forward, unless it says 
 | kronecker | `mul!` with `kronecker_operator` | works | works | works | works |
 | fdm_solve | `fdm_solve(a, F; dirichlet = :boundary)` on a constant form built inside the function, `F` active, 2D | works | works | works | works |
 | fdm_solve | the same with a coefficient of the form active | throws `ArgumentError` | throws `ArgumentError` in both modes (D4) | throws `ArgumentError` in both modes | throws `ArgumentError` in both modes |
-| gmg_solve | `gmg_solve(build, Ωₕ, b)`, `b` active, 2D | works | works | reverse works, forward ends the process (LLVM assertion, see the limits) | reverse works, forward ends the process (LLVM assertion) |
-| gmg_solve | the same with a scalar and a grid-function coefficient of `build` active, and the load scaled | works | reverse works, forward throws `ArgumentError` naming "forward mode" (D9) | reverse returns a wrong gradient (7.0e-4 and 1.1e-2), forward ends the process | reverse works, forward ends the process |
-| chebyshev | `chebyshev_preconditioner(a) \ x` with the coefficients of the form and the load scale active, 2D | works | throws `IllegalTypeAnalysisException` in both modes | returns a gradient of zeros in both modes | works |
+| gmg_solve | `gmg_solve(build, Ωₕ, b)`, `b` active, 2D | works | works | reverse works, batched forward ends the process (LLVM assertion, #1232, see the limits) | reverse works, batched forward ends the process (#1232) |
+| gmg_solve | the same with a scalar and a grid-function coefficient of `build` active, and the load scaled | works | reverse works, forward throws `ArgumentError` naming "forward mode" (D9) | reverse works, batched forward ends the process (#1232) | reverse works, batched forward ends the process (#1232) |
+| chebyshev | `chebyshev_preconditioner(a) \ x` with the coefficients of the form and the load scale active, 2D | works | throws `IllegalTypeAnalysisException` in both modes | works | works |
 | ghost | `assemble(a, l)` on a constrained ghost space, parameters scale the form's coefficients, `Δₕ` in the form | works | works | works | works |
 | ghost | the same with `inner₊` and `innerₕ` terms only | works | reverse works, forward not run | not run | not run |
 | ghost | the load of `assemble(a, l)` alone, parameters in the linear form | works | works | works | works |
@@ -101,7 +103,7 @@ More facts about the table:
   cell, the mesh endpoint, agrees to 5e-11. The rest agree to 1e-15 and 1e-16, and the
   cells measured on 2026-11-07 (the 2D Dirichlet, the ghost and three-summand reverse cells)
   agree to 6e-16 or better.
-- The solver cells agree with their reference to 9e-16 or better (`factor_load`, `factor_ldiv`, `fdm_load`, both modes, all policies), to 3.8e-14 (`rank_one`) and to 2e-12 (`gmg_load`, `gmg_coefficient` where they work, against ForwardDiff of the direct solve, asserted to 1e-6). `chebyshev` under `CpuPolyester` agrees to 5.3e-16. The factorization cells use a 1D mesh of 17 nodes, `fdm_*`, `gmg_*` and `chebyshev` a 17 x 17 uniform and a 9 x 9 seeded non-uniform mesh.
+- The solver cells agree with their reference to 9e-16 or better (`factor_load`, `factor_ldiv`, `fdm_load`, both modes, all policies), to 3.8e-14 (`rank_one`) and to 2e-12 (`gmg_load`, `gmg_coefficient` where they work, against ForwardDiff of the direct solve, asserted to 1e-6). `chebyshev` under `CpuThreaded` and `CpuPolyester` agrees to 5.3e-16. The factorization cells use a 1D mesh of 17 nodes, `fdm_*`, `gmg_*` and `chebyshev` a 17 x 17 uniform and a 9 x 9 seeded non-uniform mesh.
 - The 3D cells run on a `5 x 5 x 5` mesh in the `threed` group. The averaging operator `M₂`
   on a grid function and `Mₕ(κ)` in a form run under all three policies, at Enzyme's default
   type-analysis bounds; the other 3D cells run under `CpuSerial` only.
@@ -308,20 +310,23 @@ so a sparse cell's verdict is its inner backend's.
     rule involved: Enzyme drops it on a plain `c -> (GR[] = c; h(GR))`. Close over the value
     instead.
   For a form any of these refuse, differentiate `pde_solve(assemble(build(gridspace(Ωₕ))), b)`.
-- **The threaded policies do not match `CpuSerial` on the new cells (departure D7).** The issues
-  ask for `CpuSerial`; the cells ran under all three policies, with these results, and the
-  failing ones are pinned, not hidden. `gmg_load` and `gmg_coefficient`: Enzyme forward mode ends
-  the process under `CpuThreaded` and `CpuPolyester` with the LLVM assertion
-  `invertedReturn->getType() == gutils->getShadowType(call.getType())` (the batch of three
-  tangents of the cells' three parameters; `CpuSerial` works), so the forward half of both cells
-  is `:aborts` there, in a child of its own, and the named forward refusal of `gmg_coefficient` is
-  not reached. `gmg_coefficient` reverse under `CpuThreaded` returns a wrong gradient, relative
-  error 7.0e-4 (uniform) and 1.1e-2 (non-uniform) against the direct solve, with no error; under
-  `CpuPolyester` it agrees to 1e-12. `chebyshev` differs per policy in both modes on both meshes:
-  `CpuSerial` throws `IllegalTypeAnalysisException`, `CpuPolyester` agrees with ForwardDiff
-  (5e-16 or better), and `CpuThreaded` returns a gradient of zeros (relative error 1.0) with no
-  error. Differentiate the threaded `gmg_solve` coefficients and the Chebyshev estimate under
-  ForwardDiff, or under Enzyme `CpuSerial` for `gmg_solve` reverse mode.
+- **Batched forward through `gmg_solve` ends the process under the threaded policies
+  ([gpena/Bramble.jl#1232](https://github.com/gpena/Bramble.jl/issues/1232), departure D7).** The
+  issues ask for `CpuSerial`; the cells ran under all three policies. Under `CpuThreaded` and
+  `CpuPolyester`, Enzyme forward mode of `gmg_load` and `gmg_coefficient` aborts the process with
+  the LLVM assertion `invertedReturn->getType() == gutils->getShadowType(call.getType())` when
+  the forward call is batched, which DI's gradient is: its width is the number of parameters (3
+  in the cells). The abort comes before the rule runs, so the named forward refusal of
+  `gmg_coefficient` is not reached either. It was there before the coefficient rule (at
+  03d4c9c6), width 1 works under `CpuThreaded`, and `CpuSerial` works at any width. `gmg_solve`
+  infers `Any` under both threaded policies and a concrete type under `CpuSerial`; that is a likely
+  precondition, measured but not shown to be the cause. Both forward halves are `:aborts` under
+  the threaded policies, each in a child of its own. To differentiate in forward mode there, use
+  width 1: a gradient with a single parameter, or `DI.pushforward` with one tangent (DI's
+  pushforward takes a tuple of tangents and its width is the tuple's length; only the
+  single-parameter case was measured). Reverse mode is not affected. `chebyshev` under Enzyme
+  throws `IllegalTypeAnalysisException` under `CpuSerial` only; the two threaded policies match
+  ForwardDiff.
 - **Plain `Enzyme.Reverse` needs runtime activity (`set_runtime_activity`).** Without it `ldiv!`
   throws `EnzymeRuntimeActivityError`, and DI's plain `AutoEnzyme` throws
   `EnzymeMutabilityException` (the table of the DI settings above).
@@ -450,9 +455,9 @@ stays under the 10 GB cap and every wall time under 10 minutes, except one run n
 | factor_kept | `factor_load`, `factor_ldiv` | 85 s; 2.22 GB | 86 s; 2.24 GB | 86 s; 2.25 GB |
 | rank_one | `rank_one` | 116 s; 2.54 GB | 131 s; 2.68 GB | 124 s; 2.72 GB |
 | fdm | `fdm_load`, `fdm_coefficient` | 96 s; 2.37 GB | 96 s; 2.38 GB | 96 s; 2.45 GB |
-| gmg_load | `gmg_load` | 89 s; 2.27 GB | 87 s; 2.25 GB, plus 84 s; 2.25 GB for the forward child | 1501 s (88 s CPU); 2.17 GB, plus 87 s; 2.21 GB for the forward child |
-| gmg_coefficient | `gmg_coefficient` | 131 s; 2.47 GB | 330 s; 3.74 GB, plus 84 s; 2.27 GB for the forward child | 300 s; 3.53 GB, plus 87 s; 2.31 GB for the forward child |
-| chebyshev | `chebyshev` | 124 s; 2.91 GB | 310 s; 4.14 GB | 273 s; 4.07 GB |
+| gmg_load | `gmg_load` | 89 s; 2.27 GB | 91 s; 2.27 GB, plus 84 s; 2.25 GB for the forward child | 1501 s (88 s CPU); 2.17 GB, plus 87 s; 2.21 GB for the forward child |
+| gmg_coefficient | `gmg_coefficient` | 131 s; 2.47 GB | 342 s; 3.79 GB, plus 84 s; 2.27 GB for the forward child | 300 s; 3.53 GB, plus 87 s; 2.31 GB for the forward child |
+| chebyshev | `chebyshev` | 124 s; 2.91 GB | 306 s; 4.29 GB | 273 s; 4.07 GB |
 
 The forward half of the two `gmg` cells under the threaded policies ends the process, so the
 test gives each its own child (`:aborts`): the figures after "plus" are that child, which ran
