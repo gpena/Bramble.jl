@@ -442,8 +442,8 @@ A `ComposedFunction` or a `Base.Fix1`/`Base.Fix2` is classified by what it wraps
 own varargs call method: a composition by its innermost function, which receives every
 argument, and a `Fix` by the function it fixes, with one more argument since the `Fix`
 supplies one itself. So `(>(0.5)) ∘ first` and `Base.Fix1(<, 0.5)` are spatial and pass
-through. A lone `Base.Fix2(isless, 0.5)` is not, as `isless` has no generic two-argument
-method, so it is wrapped like any typed predicate.
+through. So does `Base.Fix2(isless, 0.5)`: `isless` has only typed two-argument methods,
+and those count.
 """
 function conditions(edm::EvaluatedDomainMarkers)
     t = edm.evaluation_time

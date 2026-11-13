@@ -1414,6 +1414,9 @@ _mixed_b(x::Real, t::Real, p::AbstractVector) = t * p[1]
     @test Bramble._accepts(Base.Fix2(_typed_xtp, 1.0), Val(2))
     @test !Bramble._accepts(_typed_xt, Val(1))
     @test !Bramble._accepts(_typed_xt, Val(3))
+    # `isless` has only typed two-argument methods, so its `Fix2` is spatial and kept as is.
+    lt = Base.Fix2(isless, 0.5)
+    @test Bramble._fix_time(lt, 1.0) === lt
 end
 
 @testset "SciML entry points without the extension" begin
