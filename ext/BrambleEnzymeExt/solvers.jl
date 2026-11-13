@@ -564,9 +564,9 @@ end
 # adjoint solve is `gmg_solve` itself only when `A` is Hermitian, while `gmg_solve` accepts
 # any `A` whose cycle contracts: reverse assembles the finest matrix and refuses any other by
 # name. `θ̄` comes from a nested Enzyme call on the finest product alone, `_gmg_product`, so
-# no cycle is differentiated. Forward mode does not differentiate in `θ`: Enzyme fills the
-# shadow of a constant captured by value with its value, so a shadow cannot tell a constant
-# from a tangent, and forward refuses a `build` whose shadow carries data. One
+# no cycle is differentiated. Forward mode does not differentiate in `θ`: Enzyme can pass a
+# constant closure's primal, captured values included, as its shadow, so a shadow cannot tell
+# a constant from a tangent, and forward refuses a `build` whose shadow carries data. One
 # preconditioner per rule call serves every lane, each solved to the caller's `tol`, and a
 # zero load returns zero without a cycle. The mesh is a constant; a shadow of it that
 # carries data is refused by name rather than dropped.
@@ -602,8 +602,8 @@ end
         ArgumentError(
         "gmg_solve: `build` has a shadow that carries data, and Bramble's Enzyme rule does " *
         "not differentiate `gmg_solve` in forward mode in the coefficients `build` " *
-        "captures: Enzyme fills the shadow of a constant captured by value with its " *
-        "value, so the tangent is undetermined. Use reverse mode, or ForwardDiff.",
+        "captures: Enzyme can pass a constant closure's primal, captured values included, " *
+        "as its shadow, so the tangent is undetermined. Use reverse mode, or ForwardDiff.",
     ),
     )
 end
@@ -612,8 +612,8 @@ end
 # with the primal is runtime activity's mark of a constant; anything else is read: every
 # floating-point number it holds, through fields, arrays of any element type and `Ref`s, must
 # be zero. An immutable value, a closure among them, is read field by field even when `===`
-# its primal: `===` compares its fields, and Enzyme fills the shadow of a constant captured
-# by value with its value.
+# its primal: `===` compares its fields, and Enzyme can pass a constant closure's primal,
+# captured values included, as its shadow.
 _shadow_is_zero(x, ẋ) = _zero_shadow(x, ẋ, Base.IdSet{Any}())
 
 # Whether a value of type `T` can hold a floating-point number.

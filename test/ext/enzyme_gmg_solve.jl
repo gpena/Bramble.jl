@@ -440,8 +440,8 @@ end
                 Enzyme.BatchDuplicated(0.0, (1.0, 0.0)),
                 Enzyme.BatchDuplicated(Ref(0.6), (Ref(0.0), Ref(1.0))))
             # The scalar active beside a constant `Ref`, a second number constant, or every
-            # number captured by value with one from a global that is not `const`: Enzyme
-            # fills a constant's shadow with its value, so forward mode refuses each by name,
+            # number captured by value with one from a global that is not `const`: Enzyme can
+            # pass a constant's value as its shadow, so forward mode refuses each by name,
             # a tangent equal to its value and DI too, and reverse mode differentiates it.
             γc = Ref(0.6)
             ref_c = ForwardDiff.derivative(
