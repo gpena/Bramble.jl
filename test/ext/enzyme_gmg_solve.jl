@@ -50,6 +50,11 @@ function gmg_robin(c)
 end
 gmg_tuple(ps) = V -> form(V, V, (u, v) -> innerₕ(u, v) + ps[1][1] * inner₊(∇ₕ(u), ∇ₕ(v)))
 gmg_wrapped(cw) = V -> form(V, V, (u, v) -> innerₕ(u, v) + cw.κ * inner₊(∇ₕ(u), ∇ₕ(v)))
+function gmg_both(c, d)
+    V -> (κ = element(V, typeof(d));
+        fill!(parent(κ), d);
+        form(V, V, (u, v) -> innerₕ(u, v) + c * inner₊(κ * ∇ₕ(u), ∇ₕ(v))))
+end
 gmg_square(γ) = V -> form(V, V, (u, v) -> innerₕ(u, v) + γ[]^2 * inner₊(∇ₕ(u), ∇ₕ(v)))
 
 # A point mass and a point advection at the node `GMG_POINT[1]`, scaled by the `Ref`s the form
@@ -469,6 +474,43 @@ end
             end
         else
             @test_skip "Enzyme not in this environment"
+        end
+    end
+
+    # The coefficient pins under `CpuThreaded`, whose matrix-free product the nested call
+    # differentiates through the `_mf_run_bands!` rule. A scalar the form's AST holds by
+    # value got a zero derivative there while the product's `Ref`s were made inline
+    # (#1168). A scalar and a grid function in one `build`, the load scaled too.
+    @testset "Enzyme: gmg_solve threaded coefficients" begin
+        if _have(:Enzyme) && Threads.nthreads() >= 2
+            @eval import Enzyme
+            ext = Base.get_extension(Bramble, :BrambleEnzymeExt)
+            ez = DI.AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse),
+                function_annotation = Enzyme.Const)
+            for (dims, unif) in (((17, 17), true), ((9, 9), false))
+                Random.seed!(1234)
+                Ω = Bramble.mesh(
+                    Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                   Bramble.interval(0.0, 1.0)), dims, (unif, unif);
+                    backend = Bramble.backend(policy = Bramble.CpuThreaded()))
+                W = gridspace(Ω)
+                b₀ = [1.0 + sin(i) for i in 1:npoints(Ω)]
+                # `q = (c, d, s)`: the scalar, the grid function's value, the load's scale.
+                direct(q) = sum(abs2, pde_solve(assemble(gmg_both(q[1], q[2])(W)), q[3] .* b₀))
+                ref = ForwardDiff.gradient(direct, [0.65, 0.8, 0.55])
+                @test minimum(abs, ref) > 1e-2
+                loss(q) = sum(abs2,
+                    parent(gmg_solve(gmg_both(q[1], q[2]), Ω, q[3] .* b₀; tol = 1e-11)))
+                @testset "reverse unif=$unif" begin
+                    entries = ext._rule_entries(:_mf_run_bands!)
+                    # Entry by entry: the load's entry dwarfs the others.
+                    g = DI.gradient(loss, ez, [0.65, 0.8, 0.55])
+                    @test all(isapprox.(g, ref; rtol = 1e-6))
+                    @test ext._rule_entries(:_mf_run_bands!) > entries
+                end
+            end
+        else
+            @test_skip "Enzyme not in this environment, or fewer than 2 threads"
         end
     end
 end
