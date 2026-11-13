@@ -18,6 +18,8 @@ using Bramble: change_points!, sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using Random
+using Serialization: Serialization
+using ..TestUtils: child_output
 
 if Sys.isapple()
     using AppleAccelerate
@@ -735,10 +737,12 @@ end
         # LDLᵀ of the bordered gauge system, and not for a Cholesky of an SPD matrix, so
         # the Cholesky rows pin that nothing changes there, and the LDLᵀ and LU rows are
         # the ones that fail when the callbacks come back. The positive control runs
-        # AppleAccelerate.jl's own `factor!` last, on the matrix that adopts: it must raise
-        # the count, or the rows above would pass in a process whose workers were adopted
-        # before this testset, or against a fixed upstream, without seeing anything. It
-        # stops at the first raise, since that call deadlocks under a collector.
+        # AppleAccelerate.jl's own `factor!` on the matrix that adopts, and it must raise
+        # the count, or the rows would pass against a fixed upstream without seeing
+        # anything. It runs in a fresh child process that loads AppleAccelerate alone: in
+        # this process the workers may be adopted already (any earlier upstream `factor!`
+        # does it), and then nothing is left to count. The child stops at the first
+        # raise, capped at 300 factorizations, since that call deadlocks under a collector.
         @testset "No Julia on libSparse threads (#1201)" begin
             sp = poisson_system(Val(2), 12)
             cd = convection_diffusion_system(12)
@@ -769,12 +773,28 @@ end
                 @test (name, Threads.maxthreadid()) == (name, n0)
             end
 
-            for _ in 1:300
-                aa = AppleAccelerate.AAFactorization(AppleAccelerate.AASparseMatrix(bordered))
-                AppleAccelerate.factor!(aa, AppleAccelerate.SparseFactorizationLDLT)
-                Threads.maxthreadid() > n0 && break
+            mktempdir() do dir
+                file = joinpath(dir, "bordered.jls")
+                Serialization.serialize(file, bordered)
+                code = """
+                using AppleAccelerate, SparseArrays, Serialization
+                B = deserialize(ARGS[1])
+                n0 = Threads.maxthreadid()
+                for _ in 1:300
+                    aa = AppleAccelerate.AAFactorization(AppleAccelerate.AASparseMatrix(B))
+                    AppleAccelerate.factor!(aa, AppleAccelerate.SparseFactorizationLDLT)
+                    Threads.maxthreadid() > n0 && break
+                end
+                println(n0, " ", Threads.maxthreadid())
+                """
+                project = dirname(something(Base.active_project()))
+                cmd = `$(Base.julia_cmd()) --project=$project --startup-file=no --threads=1 -e $code $file`
+                r = child_output(cmd; timeout = 300)
+                @test r.exited
+                # a child that did not exit prints nothing: the test above fails, not a parse
+                before, after = r.exited ? parse.(Int, split(strip(r.out))) : (0, 0)
+                @test after > before
             end
-            @test Threads.maxthreadid() > n0
         end
 
         # gpena/Bramble.jl#142 asks whether Accelerate's libSparse/LBT-forwarded LAPACK differ
