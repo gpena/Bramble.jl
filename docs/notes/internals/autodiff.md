@@ -20,11 +20,11 @@ Differentiation typically targets parameter sensitivities or solution fields rat
 | mesh endpoints (`mesh(…, [0, b] × [0, 1])`) | works | works |
 | strength of `dirac(x, strength)` | works | works |
 | location of `dirac(x, strength)` | `MethodError`: `dirac` converts the point to `Float64` | works, measured under `CpuSerial` |
-| datum and coefficients of the `polygon_spaces` of a polygon mesh | works | reverse works under the three policies, forward throws `MethodError`, with the mesh built outside the function ([gpena/Bramble.jl#1212](https://github.com/gpena/Bramble.jl/issues/1212)) |
+| datum and coefficients of the `polygon_spaces` of a polygon mesh | works | works in both modes under the three policies, with the mesh built outside the function (forward threw `MethodError` until [gpena/Bramble.jl#1212](https://github.com/gpena/Bramble.jl/issues/1212)) |
 | vertices of `polygon(V)` | `MethodError`: the exact `Rational{BigInt}` vertices cannot hold a `Dual` | throws `IllegalTypeAnalysisException` |
-| parameter of `φ` in `levelset(φ)` | named `ArgumentError` ([gpena/Bramble.jl#1172](https://github.com/gpena/Bramble.jl/issues/1172)) | not run: no reliable verdict ([gpena/Bramble.jl#1211](https://github.com/gpena/Bramble.jl/issues/1211)) |
+| parameter of `φ` in `levelset(φ)` | named `ArgumentError` ([gpena/Bramble.jl#1172](https://github.com/gpena/Bramble.jl/issues/1172)) | named `ArgumentError` in both modes under the three policies ([gpena/Bramble.jl#1211](https://github.com/gpena/Bramble.jl/issues/1211)) |
 
-A polygon or level-set mesh is built outside a function Enzyme differentiates. Built inside, the exact `Rational` and `BigFloat` arithmetic of the polygon's grid makes Enzyme throw `IllegalTypeAnalysisException`, and the level-set mesh has no reliable verdict. ForwardDiff differentiates a polygon mesh built inside the function. [`ad_coverage.md`](ad_coverage.md) has the policies, the figures and the measurements (`ad_reductions/1171_geometric_inputs.md`).
+A polygon mesh is built outside a function Enzyme differentiates. Built inside, the exact `Rational` and `BigFloat` arithmetic of the polygon's grid makes Enzyme throw `IllegalTypeAnalysisException`. ForwardDiff differentiates a polygon mesh built inside the function. A level-set mesh carries no derivative of `φ`, since its grid is fitted to the signs of `φ`: Enzyme refuses a `φ` that depends on the parameter with the `ArgumentError` above, and a level-set mesh whose `φ` is constant differentiates, the box built inside the function included (it matches ForwardDiff in both modes). A box that depends on the parameter is refused in forward mode (`ArgumentError`, "box depends on the parameter"). Reverse mode cannot detect it and gives the box no derivative through the grid, so keep the box fixed. [`ad_coverage.md`](ad_coverage.md) has the policies, the figures and the measurements (`ad_reductions/1171_geometric_inputs.md`).
 
 ## Container and allocation rules
 
@@ -117,6 +117,29 @@ The limits behind those rows, each with the call to use:
   - An active value stored into a shared mutable that `build` captures (a global `Ref`, a `const` global vector, a `Const` vector argument) gets 0 from Enzyme in both modes, with no Bramble rule involved. Close over the value instead.
 - **Plain `Enzyme.Reverse` needs runtime activity** (`set_runtime_activity`). Without it `ldiv!` throws `EnzymeRuntimeActivityError`, and DI's plain `AutoEnzyme` throws `EnzymeMutabilityException` (see [`ad_coverage.md`](ad_coverage.md)).
 - **Open follow-ups:** `gmg_solve` with `Dual`s of different tags ([gpena/Bramble.jl#1227](https://github.com/gpena/Bramble.jl/issues/1227)), and a CHOLMOD factorization into a `VectorElement` load, which fails with a `MethodError` before any AD is involved ([gpena/Bramble.jl#1228](https://github.com/gpena/Bramble.jl/issues/1228)).
+
+### Ghost relations, composite spaces and the 3D ghost `Δₕ`
+Calls on constrained ghost spaces, each a cell of `test/space/ad_coverage.jl` measured in `CpuSerial`, `CpuThreaded` and `CpuPolyester`; [`ad_coverage.md`](ad_coverage.md) has the figures. Enzyme matches ForwardDiff to 1e-8 on every call marked "works".
+
+| Call | ForwardDiff | Enzyme |
+| :--- | :--- | :--- |
+| a datum or a Robin coefficient of a relation that depends on the parameter | works | works in both modes under the three policies ([gpena/Bramble.jl#1179](https://github.com/gpena/Bramble.jl/issues/1179), fixed) |
+| a conormal relation `∂ₙ(u; K)` with a full `K` and a datum that depends on the parameter | works | works in both modes under the three policies ([gpena/Bramble.jl#1176](https://github.com/gpena/Bramble.jl/issues/1176), [#1181](https://github.com/gpena/Bramble.jl/issues/1181), fixed) |
+| `constrained(W × W, …)` with a datum on one component | works | works in both modes under the three policies ([gpena/Bramble.jl#1180](https://github.com/gpena/Bramble.jl/issues/1180), fixed) |
+| `Δₕ` in a form on a 3D ghost space, parameters in the coefficients | works | works in both modes under the three policies ([gpena/Bramble.jl#1173](https://github.com/gpena/Bramble.jl/issues/1173), [#1177](https://github.com/gpena/Bramble.jl/issues/1177), fixed) |
+| `Δₕ` on both components of `C^2` of a 2D ghost space, with a coupling term | works | throws `IllegalTypeAnalysisException` in `simplify_ast` ([gpena/Bramble.jl#1174](https://github.com/gpena/Bramble.jl/issues/1174)); not run in the test |
+
+Limits of these rows:
+
+- The conormal block's `K` is data. A parameter inside `K` is not differentiated.
+- Reverse mode refuses an active entry of a relation that goes through a one-sided corner, a datum included, and forward mode refuses a non-zero tangent on a moved entry. Forward mode with a coefficient `β·u` on a traction facet with a corner still returns a wrong gradient ([gpena/Bramble.jl#1226](https://github.com/gpena/Bramble.jl/issues/1226)).
+- The composite relation cell's two modes together pass the 10 GB cap of `julia_slot.sh` under the threaded policies, so the test does not run them there. Each mode alone differentiates under `CpuThreaded` and `CpuPolyester`.
+- The failure of the composite `Δₕ` is in the AST pass, which does not infer a concrete type on a composite space without constant component indices. The fix site is `src/ast/simplifier.jl` line 360 (`ad_reductions/1174_composite_ghost.md`), and no issue for it exists yet.
+
+### Time-dependent and complex-valued calls
+- `ode_problem` with a tuple, a named tuple or a scalar `p` widens `u0` to the element type of `p`, so ForwardDiff differentiates a time-dependent Dirichlet datum through it, as it did for an array `p` ([gpena/Bramble.jl#1204](https://github.com/gpena/Bramble.jl/issues/1204)).
+- A real operator with a complex load goes through the `pde_solve` rules. The `ChainRules` rule returns what `pde_solve` returns, `Float32` primal included, and the cotangent of the matrix is the real part of `-λuᴴ` when `A` is real. The Enzyme reverse rule writes the same real part into a real `A`'s shadow ([gpena/Bramble.jl#1187](https://github.com/gpena/Bramble.jl/issues/1187), [#1205](https://github.com/gpena/Bramble.jl/issues/1205)).
+- The Enzyme rules of `pde_solve` and of the `RankOneUpdate` solve read the solution from a copy of their own, so a solution changed in place after the solve does not corrupt the cotangent ([gpena/Bramble.jl#1185](https://github.com/gpena/Bramble.jl/issues/1185)).
 
 ### Dirichlet boundary conditions
 Boundary conditions constructed with `dirichlet_constraints` store raw closures without type erasure. When boundary data depends on a differentiated parameter:

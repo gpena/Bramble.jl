@@ -24,11 +24,11 @@ failures that have no cell are under "Open failures". A cell never reads `works`
 
 | Item | Value |
 |:--|:--|
-| Date | 2026-11-03 for the first matrix; the three-summand cells 2026-11-04; the cells changed in v4.2.2 and the compile table 2026-11-07; the ghost load and `Δₕ!` cells and the new `centered_difference!` cell 2026-11-08 and 2026-11-09; the cells changed in v4.2.4 2026-11-10, by the reproducers of the notes in `ad_reductions/` (the same calls as the cells); the geometric-input cells (`polygon`, `dirac`, `levelset`) and the ghost relation cells (`ghost_data`, `ghost_robin`) 2026-11-11, by the cells themselves, one child per policy and group; the solver cells (`factor_*`, `rank_one`, `fdm_*`, `gmg_*`, `chebyshev`) 2026-11-13, by the cells themselves, one child per policy and group |
-| Tree | branch `v4-2-4`, with the v4.2.4 AD fixes (the v4.2.2 cells were measured on `v4-2-2`); the 2026-11-11 cells on branch `v4-2-4-geometry` at 39f604bf, macbook; the solver cells on branch `v4-2-4-solvers` at 87a509f4, macbook |
+| Date | 2026-11-03 for the first matrix; the three-summand cells 2026-11-04; the cells changed in v4.2.2 and the compile table 2026-11-07; the ghost load and `Δₕ!` cells and the new `centered_difference!` cell 2026-11-08 and 2026-11-09; the cells changed in v4.2.4 2026-11-10, by the reproducers of the notes in `ad_reductions/` (the same calls as the cells); the geometric-input cells (`polygon`, `dirac`, `levelset`) and the ghost relation cells (`ghost_data`, `ghost_robin`) 2026-11-11, by the cells themselves, one child per policy and group; the solver cells (`factor_*`, `rank_one`, `fdm_*`, `gmg_*`, `chebyshev`) 2026-11-13, by the cells themselves, one child per policy and group; the cells of the v4.2.4 rest plan (`ghost_conormal`, `ghost_composite_relation`, `ghost_assemble_3d`, the polygon forward cells, `ghost_data` and `ghost_robin` under `CpuThreaded`, the level-set cells, the mesh copy cells) 2026-11-14, by the cells themselves |
+| Tree | branch `v4-2-4`, with the v4.2.4 AD fixes (the v4.2.2 cells were measured on `v4-2-2`); the 2026-11-11 cells on branch `v4-2-4-geometry` at 39f604bf, macbook; the solver cells on branch `v4-2-4-solvers` at 87a509f4, macbook; the 2026-11-14 cells on branch `v4-2-4-rest` at 4cbf6709 plus the cells' own commit, macbook |
 | Machine | Apple M2, Julia 1.13.3, on mains power |
 | Enzyme | 0.13.219 for the solver cells (2026-11-13), the 2026-11-11 cells, the v4.2.4 cells (2026-11-10) and for the ghost load, `Δₕ!` and `centered_difference!` cells (2026-11-08); 0.13.218 for the other v4.2.2 cells (2026-11-07), the newest in the depot, which a temporary environment without a manifest loads; 0.13.216 for the 2026-11-03 cells |
-| Threads | 4, the test's thread count, so both threaded policies run on 4 threads; the 2026-11-03 figures and the v4.2.4 reproducers ran on 2 (1 for the `constrained` reductions); the 2026-11-11 cells ran on 2 under load, in `--optimize=1` children; the solver cells ran on 2, alone on the machine, in `--optimize=1` children |
+| Threads | 4, the test's thread count, so both threaded policies run on 4 threads; the 2026-11-03 figures and the v4.2.4 reproducers ran on 2 (1 for the `constrained` reductions); the 2026-11-11 cells ran on 2 under load, in `--optimize=1` children; the solver cells ran on 2, alone on the machine, in `--optimize=1` children; the 2026-11-14 cells ran on 1 thread under `CpuSerial` and 2 under the threaded policies, in `--optimize=1` children, one child at a time |
 | Problem | 9 x 9 mesh in 2D, 17 nodes in 1D, 5 x 5 x 5 mesh in 3D, three parameters, `Float64`; the `fdm_*` cells have one parameter, and the `fdm_*`, `gmg_*` and `chebyshev` cells run on 17 x 17 (uniform) and 9 x 9 (non-uniform) meshes |
 | Agreement | within 1e-8 relative to ForwardDiff on the same policy |
 | After 8b423d93 | The `CpuThreaded` runs of `gmg_coefficient` reverse and `chebyshev` gave wrong gradients before commit 8b423d93; it fixed them (#1168), and both cells were measured again after it |
@@ -84,18 +84,25 @@ policy. Each Enzyme cell holds both modes, reverse then forward, unless it says 
 | ghost | `assemble(a, l)` on a constrained ghost space, parameters scale the form's coefficients, `Δₕ` in the form | works | works | works | works |
 | ghost | the same with `inner₊` and `innerₕ` terms only | works | reverse works, forward not run | not run | not run |
 | ghost | the load of `assemble(a, l)` alone, parameters in the linear form | works | works | works | works |
-| ghost | relation data that depend on the parameter | works | works | throws `EnzymeNoTypeError` in both modes (#1179, see the limits) | works |
-| ghost | a Robin coefficient that depends on the parameter | works | works | throws `EnzymeNoTypeError` in both modes (#1179) | works |
+| ghost | relation data that depend on the parameter | works | works | works (was `EnzymeNoTypeError`, #1179) | works |
+| ghost | a Robin coefficient that depends on the parameter | works | works | works (was `EnzymeNoTypeError`, #1179) | works |
+| ghost | a conormal relation `∂ₙ(u; K)` with a full `K`, the datum depends on the parameter | works | works | works | works |
+| ghost | `constrained(W × W, …)` on a composite space, the datum of one component depends on the parameter | works | works | each mode alone works, together over the 10 GB cap (not run, see the limits) | each mode alone works, together over the cap (not run) |
+| ghost | `assemble(a, l)` on a 3D ghost space, parameters scale the form's coefficients, `Δₕ` in the form | works | works | works | works |
+| ghost | `C^2` of a 2D ghost space, `Δₕ` on both components and a coupling term | works | throws `IllegalTypeAnalysisException` (#1174, not run) | not run | not run |
 | ghost | `Δₕ!` on a `GhostVector` | works | works | works | works |
 | ghost | `centered_difference!` on a `GhostVector` | works | works | works | works |
 | sparse Jacobian | `AutoSparse` with `ast_sparsity_detector`, 1D diffusion residual | works | works | works | works |
-| polygon | the datum `p₁ x₁ + p₂ x₂²` of `polygon_spaces`, mesh built outside the function | works | reverse works, forward throws `MethodError` (#1212) | reverse works, forward throws `MethodError` | reverse works, forward throws `MethodError` |
-| polygon | the coefficient and load of a form on the `polygon_spaces`, datum fixed | works | reverse works, forward throws `MethodError` (#1212) | reverse works, forward throws `MethodError` | reverse works, forward throws `MethodError` |
+| polygon | the datum `p₁ x₁ + p₂ x₂²` of `polygon_spaces`, mesh built outside the function | works | works (forward was `MethodError`, #1212) | works | works |
+| polygon | the coefficient and load of a form on the `polygon_spaces`, datum fixed | works | works (forward was `MethodError`, #1212) | works | works |
 | polygon | `polygon(V)`, the vertices as the parameters | throws `MethodError` | throws `IllegalTypeAnalysisException` | not run | not run |
 | polygon | the mesh of `polygon(V)` built inside the function, vertices fixed | works | throws `IllegalTypeAnalysisException` | not run | not run |
 | dirac | `assemble` of `innerₕ(dirac((p[1], p[2]), 2.0), v)`, the location as the parameters | throws `MethodError` | works | not run | not run |
 | dirac | `assemble` of `innerₕ(dirac(DIRAC_POINT, p[1]), v)`, the strength as the parameter | works | works | not run | not run |
-| levelset | `levelset(φ)` with `φ = x[1]^2 + x[2]^2 - p[1]^2`, mesh built inside the function | throws `ArgumentError` (#1172) | not run (#1211, see the limits) | not run | not run |
+| levelset | `levelset(φ)` with `φ = x[1]^2 + x[2]^2 - p[1]^2`, mesh built inside the function | throws `ArgumentError` (#1172) | throws `ArgumentError` in both modes (#1211) | throws `ArgumentError` in both modes | throws `ArgumentError` in both modes |
+| levelset | a level-set mesh with a fixed `φ` and a constant box, built inside the function, a factor of `p` on the mass matrix | works | works | works | works |
+| levelset | the box half-width as the parameter, `φ` fixed | throws `ArgumentError` | reverse returns a zero (silent), forward throws `ArgumentError` naming the box | the same | the same |
+| mesh | `sum(points(copy(mesh)))`, the endpoint as the parameter, 1D and `MeshnD` | works | works | works | works |
 
 More facts about the table:
 
@@ -104,7 +111,8 @@ More facts about the table:
   cells measured on 2026-11-07 (the 2D Dirichlet, the ghost and three-summand reverse cells)
   agree to 6e-16 or better.
 - The solver cells agree with their reference to 9e-16 or better (`factor_load`, `factor_ldiv`, `fdm_load`, both modes, all policies), to 3.8e-14 (`rank_one`) and to 2e-12 (`gmg_load`, `gmg_coefficient` where they work, against ForwardDiff of the direct solve, asserted to 1e-6). `chebyshev` under `CpuThreaded` and `CpuPolyester` agrees to 5.3e-16. The factorization cells use a 1D mesh of 17 nodes, `fdm_*`, `gmg_*` and `chebyshev` a 17 x 17 uniform and a 9 x 9 seeded non-uniform mesh.
-- The 3D cells run on a `5 x 5 x 5` mesh in the `threed` group. The averaging operator `M₂`
+- The 3D ghost cell runs on a `(4, 4, 3)` mesh with ghosts on `:xmin` and `:zmax`. That cut leaves a region the walk visits in slabs; a ghost space that keeps more than 7/8 of its points walks whole and skips the loops the cell is there to run.
+- The other 3D cells run on a `5 x 5 x 5` mesh in the `threed` group. The averaging operator `M₂`
   on a grid function and `Mₕ(κ)` in a form run under all three policies, at Enzyme's default
   type-analysis bounds; the other 3D cells run under `CpuSerial` only.
 - Four fixes of v4.2.4 flipped cells. `SpaceWeights` is held by reference (3aefc79f), which
@@ -115,8 +123,8 @@ More facts about the table:
   and the walk space reaches each piece of a ghost form not through a closure (9faf6345,
   gpena/Bramble.jl#1152).
 - The ghost cells run on a non-uniform mesh only, since the ghost test helper builds those.
-  The `polygon_datum` and `polygon_coefficient` cells run on both meshes under `CpuSerial`
-  and on the non-uniform one under the threaded policies.
+  The `polygon_datum` and `polygon_coefficient` cells run on both meshes under the three
+  policies, and the mesh copy cells on the uniform one, where their derivative is exactly 2.5.
 - Every `works` cell matches ForwardDiff to 1e-8 relative or better except
   `dirac_location`, whose ForwardDiff half throws: Enzyme matches a central difference
   there (1.2e-13 or better in both modes, asserted to 1e-5). The polygon `works` cells, reverse,
@@ -142,7 +150,7 @@ passing in its last full run; its three-summand reverse cases, added after, pass
 own run under both threaded policies), `test/ext/enzyme_polyester_hooks.jl` (66 passing)
 and the table above, where every feature
 that ran under `CpuSerial` also ran under both threaded policies, except the cells marked
-`not run` and the two relation cells, which throw under `CpuThreaded` (gpena/Bramble.jl#1179).
+`not run`.
 
 Inside a user's own threaded region, a `Threads.@threads` loop of the caller's, the
 derivative runs its bands in order, as the primal does: a `:static` loop cannot start there.
@@ -190,24 +198,53 @@ so a sparse cell's verdict is its inner backend's.
 - **A closure that reaches `v` only through a global gets no gradient.** Per-slab Enzyme
   compilations treat a global as constant. `test/ext/enzyme_threaded_ext.jl` pins it with a
   `@test_broken`.
-- **Ghost spaces whose relation data depend on the parameter differentiate under
-  `CpuSerial` and `CpuPolyester`, not under `CpuThreaded`.** In Enzyme reverse the cost was
-  compile time, not a missing derivative (gpena/Bramble.jl#1153, fixed; measured in
-  `ad_reductions/1153_constrained.md`): one facet of `_assemble_relation`
-  (`src/assembly/ghost_relations.jl`) compiled for 732 s and 3.7 GB, and `constrained` passed
-  the 10 GB cap at about 310 s. Since PR #1182 a reverse rule over `_assemble_relation`
-  (`ext/BrambleEnzymeExt/relations.jl`) takes one forward derivative of the function per
-  float of the relation, so reverse never compiles its forms: one facet takes 52 s and
-  1.6 GB, `constrained` 95 s and 2.1 GB. The `ghost_data` and `ghost_robin` cells match
-  ForwardDiff in both modes under `CpuSerial` and `CpuPolyester` (0 to 1.3e-16). Under
-  `CpuThreaded` both modes throw `EnzymeNoTypeError` in the forms of the relation
-  ([gpena/Bramble.jl#1179](https://github.com/gpena/Bramble.jl/issues/1179)), and the cells
-  pin the throw. The rule has open limits: reverse `constrained` on a composite space fails in
-  `_relation_rows` ([gpena/Bramble.jl#1180](https://github.com/gpena/Bramble.jl/issues/1180)),
-  and a relation that couples the ghosts of a node has no derivative of its dense `lu`
-  ([gpena/Bramble.jl#1181](https://github.com/gpena/Bramble.jl/issues/1181)). The rule
-  refuses with an `ArgumentError` a parameter in the mesh, a `Duplicated` annotation that
-  captures the space, a relation that captures a mutable, and batched reverse.
+- **Ghost spaces whose relation data depend on the parameter differentiate under all three
+  policies.** In Enzyme reverse the cost was compile time, not a missing derivative
+  (gpena/Bramble.jl#1153, fixed; measured in `ad_reductions/1153_constrained.md`): one facet of
+  `_assemble_relation` (`src/assembly/ghost_relations.jl`) compiled for 732 s and 3.7 GB, and
+  `constrained` passed the 10 GB cap at about 310 s. Since PR #1182 a reverse rule over
+  `_assemble_relation` (`ext/BrambleEnzymeExt/relations.jl`) takes one forward derivative of
+  the function per float of the relation, so reverse never compiles its forms: one facet takes
+  52 s and 1.6 GB, `constrained` 95 s and 2.1 GB. The `ghost_data` and `ghost_robin` cells match
+  ForwardDiff in both modes under the three policies (1.4e-16 or better). Under `CpuThreaded`
+  they threw `EnzymeNoTypeError` in the forms of the relation
+  ([gpena/Bramble.jl#1179](https://github.com/gpena/Bramble.jl/issues/1179)) until
+  `_threaded_bands!` called a rule of its own, which keeps Enzyme from compiling the `try` of
+  `_static_or_serial`. A conormal relation with a full `K` differentiates through a function
+  with its own forward and reverse rules
+  ([gpena/Bramble.jl#1176](https://github.com/gpena/Bramble.jl/issues/1176),
+  [#1181](https://github.com/gpena/Bramble.jl/issues/1181)), and reverse `constrained` on a
+  composite space no longer stops in `_relation_rows`
+  ([gpena/Bramble.jl#1180](https://github.com/gpena/Bramble.jl/issues/1180): the loops over the
+  component tuple are tail recursions). The limits that remain: the rule refuses with an
+  `ArgumentError` a parameter in the mesh, a `Duplicated` annotation that captures the space, a
+  relation that captures a mutable, and batched reverse; a parameter inside `K` is not
+  differentiated; reverse refuses any active entry of a relation that goes through a one-sided
+  corner, a datum included, and forward refuses a non-zero tangent on a moved entry. Forward
+  with a coefficient `β·u` on a traction facet with a corner still returns a wrong gradient
+  ([gpena/Bramble.jl#1226](https://github.com/gpena/Bramble.jl/issues/1226)).
+- **The composite relation cell stays `:skip` under the threaded policies, though each mode
+  differentiates there.** Alone, reverse takes 614 s and 9.73 GB under `CpuThreaded` and 604 s
+  and 9.90 GB under `CpuPolyester`, forward 451 s and 7.27 GB, and 437 s and 7.22 GB, all with
+  relative error 0. The two modes in one child, as the test runs a group, passed the 10 GB cap of
+  `julia_slot.sh` after the reverse (11.3 GB under both policies, killed). Under `CpuSerial` both
+  modes pass in one child, 457 s.
+- **A 3D ghost `Δₕ` differentiates under all three policies.** Reverse used to abort in LLVM
+  verification (`Instruction does not dominate all uses!`) in `diffejulia__replay_segment_` and
+  `diffejulia__coord_walk__` ([gpena/Bramble.jl#1173](https://github.com/gpena/Bramble.jl/issues/1173),
+  [#1177](https://github.com/gpena/Bramble.jl/issues/1177)); the loops over the tail of a
+  region's indices walk it by linear index now (`ad_reductions/1177_ghost_3d.md`). The cell
+  matches ForwardDiff to 1.5e-16 in both modes.
+- **The composite ghost `Δₕ` fails in Enzyme under `CpuSerial`, and is not run under the
+  threaded policies.** `C^2` of a 2D ghost space with `Δₕ` on both components and a coupling
+  term: at 501128cb the reverse was still compiling at the 20 minute limit (7.7 GB) and the
+  forward threw at 455 s; at 70e39a58 both throw `IllegalTypeAnalysisException` in
+  `simplify_ast` (`src/ast/simplifier.jl` line 360), reverse at 982 s and 5.7 GB, forward at 592 s
+  and 4.1 GB. Type inference leaves the component indices of `u(1)`, `u(2)`, `v(1)` and `v(2)`
+  open without constants, so the simplified tree is not concrete
+  ([gpena/Bramble.jl#1174](https://github.com/gpena/Bramble.jl/issues/1174), measured in
+  `ad_reductions/1174_composite_ghost.md`). The scalar space with the same form differentiates in
+  100 s. The fix is a new issue; the cell runs ForwardDiff only.
 - **Ghost assembly works in both Enzyme modes under all three policies.** The cell with `Δₕ`
   in the form and the parameters in the coefficients matches ForwardDiff to 8.5e-16: forward
   and reverse under `CpuThreaded` and `CpuPolyester` in 115 to 169 s and 2.3 to 3.3 GB, and
@@ -215,17 +252,24 @@ so a sparse cell's verdict is its inner backend's.
   the commits from 3aefc79f up to 9faf6345, `ad_reductions/1152_ghost_matrix.md`). The cell
   without `Δₕ` differentiates in reverse under `CpuSerial` (8.5e-16 after 9faf6345, 370 s
   and 4.9 GB on 2026-11-07); its forward mode and the threaded policies were not run.
-- **The level-set parameter has no Enzyme verdict.** The cell is `:skip` under the three
-  policies because the verdict is unstable: the first fresh process returned a gradient of
-  zeros in both modes (relative error 1.0 against the central difference), and five later
-  ones aborted in LLVM (`Instruction does not dominate all uses!`, signal 6) with the cell
-  and the file unchanged (gpena/Bramble.jl#1211). ForwardDiff throws the named
-  `ArgumentError` of gpena/Bramble.jl#1172, since a `Float64` grid has no derivative to
-  give. The cell has a group of its own, `levelset`, so that an abort ends no other cell.
-- **The polygon `works` cells fail in Enzyme forward.** Reverse works under the three
-  policies; forward throws `MethodError`, since Enzyme has no forward rule for `deepcopy`
-  (gpena/Bramble.jl#1212). The datum of `polygon_spaces` and the coefficients differentiate
-  with the mesh built outside the function.
+- **A level-set mesh carries no derivative of `φ` or of its box.** The grid is fitted to the
+  signs of `φ` by bisection in `Float64`, so Enzyme refuses a `φ` that depends on the parameter
+  with a named `ArgumentError` in both modes under the three policies (gpena/Bramble.jl#1211).
+  Before the rules on `_levelset_grid` the verdict was unstable: a gradient of zeros in the
+  first fresh process, an LLVM abort (`Instruction does not dominate all uses!`) in five later
+  ones. ForwardDiff throws the `ArgumentError` of gpena/Bramble.jl#1172. A fixed `φ` with a
+  constant box built inside the function matches ForwardDiff in both modes (5e-16 on the
+  uniform mesh, 1.7e-15 on the non-uniform one). A box that depends on the parameter is
+  refused in forward mode, naming the box; reverse mode cannot detect it and returns a zero
+  where the derivative is not zero, which the cell pins as a silent zero. The cells have a group of
+  their own, `levelset`, so that an abort ends no other cell.
+- **The polygon `works` cells differentiate in both Enzyme modes.** Forward threw
+  `MethodError`, since Enzyme has no forward rule for `deepcopy` (gpena/Bramble.jl#1212);
+  `copy` of a mesh now marks only its marker copy inactive, and the geometry still carries
+  its derivative: `sum(points(copy(mesh)))` with the endpoint as the parameter matches
+  ForwardDiff in both modes for `Mesh1D` and `MeshnD` (an inactive `copy` of the whole mesh gave
+  zero). The datum of `polygon_spaces` and the coefficients differentiate with the mesh built
+  outside the function.
 - **A polygon mesh built inside the function, and the polygon's vertices, fail in Enzyme.**
   Both modes throw `IllegalTypeAnalysisException` in the exact `Rational` and `BigFloat`
   arithmetic of the grid closure, under `CpuSerial`, the only policy run. ForwardDiff
@@ -337,15 +381,13 @@ so a sparse cell's verdict is its inner backend's.
 
 ## Open failures
 
-- A relation that couples the ghosts of a node (`conormal`, `∂ₙ(u; K)` with a full `K`)
-  reaches the dense branch of `_block_solve` (`src/assembly/ghost_relations.jl`, `lu` at line
-  1218), which has no Enzyme derivative: `EnzymeNoDerivativeError` on `dgetrf`, in forward and
-  in reverse, at `_block_solve`, `_relation_closure` and `constrained` alike (13 to 54 s).
-  The relations of the cells above never take that branch
-  ([gpena/Bramble.jl#1181](https://github.com/gpena/Bramble.jl/issues/1181)). No cell.
-- A 3D ghost `Δₕ` under `CpuSerial` in reverse aborts in LLVM verification
-  (`Instruction does not dominate all uses!`). It is there at 501128cb, before this plan's
-  changes. No issue yet, and no cell.
+- The composite ghost `Δₕ` (`ghost_composite`) fails in `simplify_ast` under `CpuSerial` in both
+  modes, after 592 s and 982 s. gpena/Bramble.jl#1174 closes on its second criterion, a fix
+  site; the fix has no issue of its own yet.
+- Forward mode with a coefficient on a traction facet with a one-sided corner returns a wrong
+  gradient ([gpena/Bramble.jl#1226](https://github.com/gpena/Bramble.jl/issues/1226)).
+- Reverse mode through a level-set mesh whose box depends on the parameter returns a zero
+  without refusing.
 
 ## Compile cost of the cells
 
@@ -404,8 +446,37 @@ replaces the row above:
 0.2 GB, the group to split if the cap kills it under load. The relation cells were split
 from `ghost_fast` because together they passed the cap (`CpuPolyester` 10.23 GB, `CpuThreaded`
 killed at 10.55 GB). `levelset` has a group of its own so that an Enzyme abort ends no other
-cell; the two `not run` entries of its row and of `inputs` are cells that are `:skip` under
+cell; the two `not run` entries of the `inputs` row are cells that are `:skip` under
 the threaded policies.
+
+The `levelset` row measured the ForwardDiff half only: the Enzyme
+half has pins since 2026-11-14 (next table).
+
+The groups the 2026-11-14 run changed or added, timed as the test runs them (one child per
+policy and group, `--optimize=1`, one child at a time, `CpuSerial` on 1 thread and the threaded
+policies on 2; every exit normal and every `CELL` line equal to its pin; wall time of the
+process, loading included; peak is the footprint of `/usr/bin/time -l`):
+
+| Group | Cells | `CpuSerial` | `CpuThreaded` | `CpuPolyester` |
+|:--|:--|:--|:--|:--|
+| relation_data | `ghost_data` | not re-run | 551 s; 8.73 GB | not re-run |
+| relation_robin | `ghost_robin` | not re-run | 544 s; 8.70 GB | not re-run |
+| relation_conormal | `ghost_conormal` | 180 s; footprint not recorded (3.82 GB resident) | 261 s; 4.59 GB | 244 s; 4.48 GB |
+| relation_composite | `ghost_composite_relation`, both modes | 458 s; footprint not recorded (4.02 GB resident) | killed at 11.3 GB after the reverse (766 s) | killed at 11.3 GB after the reverse (687 s) |
+| relation_composite, reverse alone | `ghost_composite_relation` | | 614 s; 9.73 GB | 604 s; 9.90 GB |
+| relation_composite, forward alone | `ghost_composite_relation` | | 451 s; 7.27 GB | 437 s; 7.22 GB |
+| threed | `ghost_assemble_3d` | 351 s; 4.42 GB | 486 s; 5.94 GB | 420 s; 4.89 GB |
+| polygon | the datum and the coefficient, both meshes, both modes | 329 s and 336 s; 4.86 GB each (one child a cell) | 421 s and 423 s; 6.14 and 6.24 GB | 396 s and 399 s; 5.78 and 5.91 GB |
+| levelset | `levelset_parameter`, `levelset_box_constant`, `levelset_box` | 154 s; 3.04 GB | 164 s; 3.26 GB | 168 s; 3.13 GB |
+| geometry | the mesh endpoint, `assemble_mesh`, the two mesh copy cells | 134 s; 2.83 GB | 99 s; 2.33 GB | 97 s; 2.41 GB |
+
+The polygon children ran one cell each, since the group's two cells together were not timed, so
+the two figures add up to the group. Only `relation_composite` hits the cap under the threaded
+policies, and its cell stays `:skip` there. `ghost_composite` is not run and has no row; its
+measurements are in `ad_reductions/1174_composite_ghost.md`.
+
+The `CpuSerial` children of `relation_conormal` and `relation_composite` ran before the driver
+read the child's footprint, so their rows give the resident set.
 
 None of the children of the first table was re-timed for v4.2.4, so the rows above do not include the cells it
 changed. Their compile figures, each from a single run of the note's reproducer at 2
@@ -424,10 +495,10 @@ threads (one process a cell, with another Enzyme job on the machine, so indicati
 | `constrained` with parameter data, before the rule | `CpuSerial` reverse | stopped at 311 s | 11.6 GB |
 | `ghost_data` cell, with the rule | `CpuSerial` reverse, forward | 247 s, 249 s | 4.35 GB, 3.34 GB |
 | | `CpuPolyester` reverse, forward | 396 s, 309 s | 6.07 GB, 4.87 GB |
-| | `CpuThreaded` reverse, forward (both throw) | 421 s, 334 s | 6.36 GB, 5.39 GB |
+| | `CpuThreaded` reverse, forward (both threw, before the fix of #1179) | 421 s, 334 s | 6.36 GB, 5.39 GB |
 | `ghost_robin` cell, with the rule | `CpuSerial` reverse, forward | 259 s, 200 s | 4.31 GB, 3.44 GB |
 | | `CpuPolyester` reverse, forward | 384 s, 300 s | 6.10 GB, 4.96 GB |
-| | `CpuThreaded` reverse, forward (both throw) | 442 s, 355 s | 6.37 GB, 5.49 GB |
+| | `CpuThreaded` reverse, forward (both threw, before the fix of #1179) | 442 s, 355 s | 6.37 GB, 5.49 GB |
 
 The `ghost_data` and `ghost_robin` rows give the wall time of the process, package loading
 (about 70 s) included.
