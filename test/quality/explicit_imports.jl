@@ -367,6 +367,9 @@ using Kronecker: Kronecker
                 # `fdm_*` methods on ghost forms (gpena/Bramble.jl#880). Not a user call.
                 :_ghost_kron_polygon,
                 :_throw_ghost_kron_polygon,
+                # `_accepts` (BrambleSciMLExt): the arity rule `dirichlet_constraints` reads its
+                # conditions with, so `tgrad` and Dirichlet data share it (gpena/Bramble.jl#1186).
+                :_accepts,
                 # `_allocate_from_pattern` (BrambleMetalExt, BrambleSparseMatricesCSRExt): the
                 # system-matrix allocation hook a storage backend specialises on its own sparse
                 # type, same shape as `_csr_backend` above.
