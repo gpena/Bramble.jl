@@ -717,7 +717,6 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
         routes = ((sym, KronExt._FDMFactorization),
             ((u, v) -> sym(u, v) + innerₕ(D₋ₓ(u), v), KronExt._SchurFactorization))
         for (f, R) in routes
-
             K = kronecker_operator(form(Wₕ, Wₕ, f))
             @test KronExt._fdm_factorize(K, nothing) isa R
             solve() = KronExt._fdm_solve_core(K, F, nothing)
