@@ -43,6 +43,13 @@ then factored exactly as above.
 The form method refuses `symmetrize` with an `ArgumentError`: it also changes the load
 vector. Call `A, F = assemble(a, l; symmetrize = true)` and factor the matrix `A`.
 
+With `ForwardDiff.jl` loaded, a square `ForwardDiff.Dual` matrix (or a form whose
+coefficients are `Dual`) is factored through its `Float64` values, by the backend and
+keywords above, and the result keeps the matrix: `pde_solve(fact, F)`, `fact \\ F` and
+`ldiv!(uₕ, fact, F)` give the derivative of `pde_solve(A, F)`, every partial solved against
+that one factor. A non-square `Dual` matrix throws an `ArgumentError`, as does `refactor!` of
+such a factorization.
+
 # Examples
 
 ```julia

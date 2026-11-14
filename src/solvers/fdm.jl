@@ -18,6 +18,12 @@ the factorisation from the solve.
 boundary; `K` alone carries no boundary handling, since a `KroneckerLinearOperator` has no
 tensor structure of its own to restrict.
 
+`ForwardDiff` differentiates `fdm_solve` in its right-hand side `F`: the solve is linear
+in `F`, so the value and each partial go through the one factorization. It does not
+differentiate in the form's coefficients or the mesh: an operator whose element type is not
+`Float32` or `Float64` (a `Dual` coefficient) throws an `ArgumentError`; differentiate
+`pde_solve(assemble(a, l)..., F)` there.
+
 Requires [Kronecker.jl](https://github.com/MichielStock/Kronecker.jl); call `using Kronecker`
 before calling this function.
 
