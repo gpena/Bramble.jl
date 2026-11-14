@@ -12,7 +12,7 @@ using LinearAlgebra: Factorization, dot, ldiv!, lu, mul!, norm
 # A native Enzyme reverse rule for `pde_solve`, used instead of `Enzyme.@import_rrule`.
 #
 # The maths is the adjoint `BrambleChainRulesExt`'s `ChainRulesCore.rrule` states: solve
-# `Aᵀ λ = ∂J/∂u` once against the forward solve's own factorisation, then `∂J/∂A = -λuᵀ` on
+# `Aᴴ λ = ∂J/∂u` once against the forward solve's own factorisation, then `∂J/∂A = -λuᴴ` on
 # `A`'s stored pattern and `∂J/∂F = λ`. The two rules differ in how the cotangent reaches
 # Enzyme.
 #
@@ -21,7 +21,7 @@ using LinearAlgebra: Factorization, dot, ldiv!, lu, mul!, norm
 # but leaves `colptr` and `rowval`, so the shadow is no longer a well-formed
 # `SparseMatrixCSC` and the gradient is wrong without any error. The cotangent has explicit
 # zeros whenever some `u[j]` is exactly zero, which a homogeneous Dirichlet problem produces:
-# a constrained row's solution entry is its boundary value, so a whole column of `-λuᵀ`
+# a constrained row's solution entry is its boundary value, so a whole column of `-λuᴴ`
 # vanishes. A gradient with respect to a diffusion coefficient is then wrong, while an
 # `F`-only (Dirichlet-value) gradient stays correct.
 #
