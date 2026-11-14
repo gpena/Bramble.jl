@@ -46,12 +46,19 @@ end
 # serves the adjoint. With them the primal is `pde_solve(A, F; kwargs...)`, no factorisation
 # is kept (`fact` is `nothing`), and the adjoint is `pde_solve(Aᴴ, ū; kwargs...)` with the
 # border conjugated (`Bramble._pde_solve_adjoint`), as `BrambleChainRulesExt`'s rrule does.
+# `fact \ F` can be wider than `pde_solve`'s result (`Float64` for `Float32` data), so the
+# primal is converted to the type of `a \ f` for one entry of `A` and `F`, which is what
+# `pde_solve` returns; the rrule's `_lu_rrule` converts the same way.
 function _forward_solve(A, F, ::@NamedTuple{})
     _entered!(:pde_solve_factor)
     fact = lu(A)
-    return fact, fact \ F
+    return fact, _solve_as(eltype(A), eltype(F), fact, F)
 end
 _forward_solve(A, F, kwargs::NamedTuple) = nothing, pde_solve(A, F; kwargs...)
+
+function _solve_as(::Type{TA}, ::Type{TF}, fact, b) where {TA, TF}
+    return convert(AbstractVector{typeof(oneunit(TA) \ oneunit(TF))}, fact \ b)
+end
 
 _adjoint_solve(fact, _, ū, ::@NamedTuple{}) = fact' \ ū
 _adjoint_solve(::Nothing, A, ū, kwargs::NamedTuple) = Bramble._pde_solve_adjoint(A, ū; kwargs...)
@@ -86,6 +93,12 @@ function EnzymeRules.augmented_primal(
     return AugmentedReturn(primal, shadow, (fact, Aₜ, uₜ, ū))
 end
 
+# One entry of `-λ uᴴ` for a shadow of element type `T`. A real `A` (with a complex `F`, say)
+# has a real shadow, which Enzyme allocated and the rule cannot widen; the derivative of a real
+# entry is the real part of the complex one.
+_entry_cotangent(::Type{<:Real}, x) = real(x)
+_entry_cotangent(::Type, x) = x
+
 function EnzymeRules.reverse(
         config::RevConfig,
         ::Const{typeof(pde_solve)},
@@ -108,7 +121,7 @@ function EnzymeRules.reverse(
         rows = rowvals(A₀)
         @inbounds for j in axes(A₀, 2), k in nzrange(A₀, j)
 
-            Āv[k] -= λ[rows[k]] * conj(uₜ[j])
+            Āv[k] -= _entry_cotangent(eltype(Āv), λ[rows[k]] * conj(uₜ[j]))
         end
     end
 
@@ -143,8 +156,8 @@ _tangent_rhs(Ȧ, ::Nothing, u) = -(Ȧ * u)
 _tangent_rhs(::Nothing, Ḟ, u) = Ḟ
 _tangent_rhs(Ȧ, Ḟ, u) = Ḟ - Ȧ * u
 
-_tangent_solve(fact, _, rhs, ::@NamedTuple{}) = fact \ rhs
-_tangent_solve(::Nothing, A, rhs, kwargs::NamedTuple) = pde_solve(A, rhs; kwargs...)
+_tangent_solve(fact, A, F, rhs, ::@NamedTuple{}) = _solve_as(eltype(A), eltype(F), fact, rhs)
+_tangent_solve(::Nothing, A, _, rhs, kwargs::NamedTuple) = pde_solve(A, rhs; kwargs...)
 
 function EnzymeRules.forward(
         config::FwdConfig,
@@ -160,7 +173,7 @@ function EnzymeRules.forward(
     W = EnzymeRules.width(config)
     shadows = ntuple(Val(W)) do i
         rhs = _tangent_rhs(_lane(A, i), _lane(F, i), u)
-        return _tangent_solve(fact, A.val, rhs, values(kwargs))
+        return _tangent_solve(fact, A.val, F.val, rhs, values(kwargs))
     end
     needs_primal = EnzymeRules.needs_primal(config)
     needs_shadow = EnzymeRules.needs_shadow(config)

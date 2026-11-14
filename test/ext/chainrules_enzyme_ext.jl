@@ -453,6 +453,72 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             fd_dir = (solve_loss(shifted(h), Fc) - solve_loss(shifted(-h), Fc)) / (2h)
             @test sum(real.(conj.(dAc.nzval) .* Ev)) ≈ fd_dir rtol=1e-6
 
+            # A real `A` with a complex `F` (gpena/Bramble.jl#1205): Enzyme allocates a real
+            # shadow of `A`, and the rule accumulates the real part of `-λ uᴴ` into it, the
+            # derivative of a real entry. The operator comes from a non-uniform mesh. Each
+            # entry of the shadow of `A` is checked against a central difference, and the
+            # shadow of `F` along a real and an imaginary direction, which reach its real and
+            # imaginary parts.
+            Wr = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 17, false))
+            Ar = assemble(form(Wr, Wr, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v)))
+            Fr = ComplexF64[sin(i) + im * cos(i) for i in 1:size(Ar, 1)]
+            J_lu(A, F) = sum(abs2, lu(A) \ F)
+            dAr = Enzyme.make_zero(Ar)
+            dFr = zero(Fr)
+            Enzyme.autodiff(
+                mode, Enzyme.Const(solve_loss), Enzyme.Active,
+                Enzyme.Duplicated(copy(Ar), dAr), Enzyme.Duplicated(copy(Fr), dFr)
+            )
+            @test eltype(dAr) === Float64
+            fd_A = map(1:nnz(Ar)) do k
+                Ap = copy(Ar)
+                Am = copy(Ar)
+                nonzeros(Ap)[k] += h
+                nonzeros(Am)[k] -= h
+                return (J_lu(Ap, Fr) - J_lu(Am, Fr)) / (2h)
+            end
+            @test maximum(abs, fd_A) > 1                 # a gradient worth checking
+            @test nonzeros(dAr) ≈ fd_A rtol=1e-6
+            Er = cos.(1:size(Ar, 1))
+            for E in (Er, im .* Er)
+                fd_F = (J_lu(Ar, Fr .+ h .* E) - J_lu(Ar, Fr .- h .* E)) / (2h)
+                @test sum(real.(conj.(dFr) .* E)) ≈ fd_F rtol=1e-6
+            end
+
+            # The primal of a `Float32` solve is `Float32`, the type `pde_solve` returns, under
+            # both rules. The rules solve in `Float64` (UMFPACK's `lu`) and round the result,
+            # so it is checked against that solve, which `pde_solve`'s own `Float32` path
+            # matches to about 2e-5 only.
+            A32 = SparseMatrixCSC{Float32, Int}(Ar)
+            F32 = Float32[sin(i) for i in 1:size(A32, 1)]
+            A64 = SparseMatrixCSC{Float64, Int}(A32)
+            u32_ref = Float32.(lu(A64) \ Float64.(F32))
+            @test eltype(Bramble.pde_solve(A32, F32)) === Float32
+            du32, u32 = Enzyme.autodiff(
+                Enzyme.set_runtime_activity(Enzyme.ForwardWithPrimal),
+                Enzyme.Const(Bramble.pde_solve), Enzyme.Duplicated,
+                Enzyme.Duplicated(A32, Enzyme.make_zero(A32)), Enzyme.Duplicated(F32, copy(F32))
+            )
+            @test eltype(u32) === Float32
+            @test eltype(du32) === Float32
+            @test u32 ≈ u32_ref rtol=1e-6
+            @test du32 ≈ u32_ref rtol=1e-6               # `Ḟ = F`, `Ȧ = 0`: `u̇ = u`
+            rcfg32 = Enzyme.EnzymeRules.RevConfig{true, true, 1, (false, false, false), false,
+                false}()
+            aug32 = Enzyme.EnzymeRules.augmented_primal(
+                rcfg32, Enzyme.Const(Bramble.pde_solve), Enzyme.Duplicated{Vector{Float32}},
+                Enzyme.Duplicated(A32, Enzyme.make_zero(A32)), Enzyme.Duplicated(F32, zero(F32))
+            )
+            @test eltype(aug32.primal) === Float32
+            @test aug32.primal ≈ u32_ref rtol=1e-6
+            dA32 = Enzyme.make_zero(A32)
+            dF32 = zero(F32)
+            Enzyme.autodiff(
+                mode, Enzyme.Const(solve_loss), Enzyme.Active,
+                Enzyme.Duplicated(copy(A32), dA32), Enzyme.Duplicated(copy(F32), dF32)
+            )
+            @test dF32 ≈ lu(A64)' \ (2 .* (lu(A64) \ Float64.(F32))) rtol=1e-5
+
             # Pinned failure: handed `A \ F` directly rather than `pde_solve`, Enzyme has no
             # rule to reach and traces into CHOLMOD's own internals. On Enzyme 0.13.218 the
             # compiler dies in LLVM's verifier (`function failed verification`, `PHI nodes
