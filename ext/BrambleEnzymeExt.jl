@@ -73,8 +73,9 @@ function EnzymeRules.augmented_primal(
     # flag a matrix scaled in place after the call.
     Aₜ = fact === nothing ? copy(A.val) : nothing
     # The primal is `u` itself, which the caller may change in place after the solve, and
-    # `reverse` reads the solution for `Ā -= λ uᴴ`: the tape keeps its own copy. A `Const`
-    # `A` never reads it (`F̄ = λ`), so there the tape holds `u` itself and nothing is copied.
+    # `reverse` reads the solution for `Ā -= λ uᴴ`: the tape keeps its own copy. With a
+    # `Const` `A` the reverse pass never reads it (`F̄ = λ`), so there the tape holds `u`
+    # itself and nothing is copied.
     uₜ = A isa Const ? u : copy(u)
     # The return's own cotangent accumulates here, and `reverse` reads it back off the tape:
     # allocated once, in the pass that knows `u`'s size, rather than reconstructed later.

@@ -519,7 +519,8 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             # is the solution it reads at the reverse pass. With a `Const` `A` that slot is the
             # primal itself (no copy: `F̄ = λ` never reads it), and with an active `A` it is
             # a separate vector with the primal's values, which changing the primal in place
-            # leaves alone.
+            # leaves alone. The six type parameters follow EnzymeCore's `RevConfig`; if a
+            # release adds one, this construction throws and needs updating.
             rcfg = Enzyme.EnzymeRules.RevConfig{true, true, 1, (false, false, false), false, false}()
             A_tp, F_tp = sys3([1.3, 0.2])
             u_tp = A_tp \ F_tp
