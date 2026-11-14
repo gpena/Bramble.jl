@@ -493,10 +493,12 @@ function returns a `Dual`.
 
 On a [`GhostGridSpace`](@ref) it is the maximum over the physical nodes, the first
 `npoints(Ωₕ)` degrees of freedom: the ghost values never enter, and a space whose degrees of
-freedom are no grid function throws an `ArgumentError`, as for [`normₕ`](@ref). The lifted
-grid function `Bramble.lift(Cₕ, u)` lives on the padded space, so `norminf` of it reads the
-whole padded box, ghosts included. On a composite of ghost spaces, `Cₕ × Cₕ` or `Cₕ^N`, it
-is the maximum over the components, each read so. On the trial space of
+freedom are no grid function throws an `ArgumentError`, as for [`normₕ`](@ref), and so does
+an element of a constrained composite, `constrained(Cₕ × Cₕ, relations)`, whose error
+names `Bramble.lift(Vₕ, parent(uₕ))`. The lifted grid function `Bramble.lift(Cₕ, u)` lives
+on the padded space, so `norminf` of it reads the whole padded box, ghosts included. On a
+composite of ghost spaces, `Cₕ × Cₕ` or `Cₕ^N`, it is the maximum over the components, each
+read so. On the trial space of
 [`Bramble.polygon_spaces`](@ref) it is the maximum over the interior nodes, the degrees of
 freedom, as for [`normₕ`](@ref).
 
