@@ -189,4 +189,7 @@ include("BrambleEnzymeExt/relations.jl")
 # The rules for the solves beside `pde_solve(::SparseMatrixCSC, F)`.
 include("BrambleEnzymeExt/solvers.jl")
 
+# The rules that refuse a level-set mesh whose `φ` depends on the parameter.
+include("BrambleEnzymeExt/geometry.jl")
+
 end
