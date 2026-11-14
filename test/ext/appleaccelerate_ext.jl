@@ -760,7 +760,7 @@ end
                 ("Cholesky attempt, LDLᵀ fallback", sparse(indefinite), sp.F, (;)),
                 ("LDLᵀ, bordered gauge system", bordered, bordered * ones(size(bordered, 1)),
                     (; sym = :symmetric)),
-                ("LU", cd.A, cd.F, (; sym = :unsymmetric)),
+                ("LU", cd.A, cd.F, (; sym = :unsymmetric))
             )
             # The rows see an adopted thread only if one is left to adopt: in a process whose
             # libSparse workers were adopted earlier (an upstream `factor!` ran, here or in
