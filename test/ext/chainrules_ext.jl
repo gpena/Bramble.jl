@@ -5,7 +5,8 @@ using Bramble
 using ChainRulesCore: ChainRulesCore, rrule
 using SparseArrays
 using SuiteSparse
-using LinearAlgebra: Tridiagonal
+using LinearAlgebra: Tridiagonal, dot
+using Random: Random
 using ..TestUtils: _fd
 
 # BrambleChainRulesExt covers the `ChainRulesCore.rrule` for `pde_solve` (src/solvers/pde_solve.jl
@@ -185,6 +186,72 @@ using ..TestUtils: _fd
             fd = (J(A, F .+ e) - J(A, F .- e)) / 2h +
                  im * (J(A, F .+ im .* e) - J(A, F .- im .* e)) / 2h
             @test F̄[i]≈fd atol=1e-5
+        end
+    end
+
+    # A real `A` with a complex `F` (#1187): `-λ uᴴ` is complex, so `Ā` must be. Checked on a
+    # small unsymmetric matrix and on a 1D operator on a non-uniform mesh, `real(Ā)` and
+    # `imag(Ā)` against central differences of `real(dot(ȳ, u))` in every stored entry.
+    @testset "rrule: real A, complex F" begin
+        Random.seed!(1234)
+        W = Bramble.gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 9, false))
+        An = Bramble.assemble(Bramble.form(W, W,
+            (u, v) -> Bramble.inner₊(Bramble.∇ₕ(u), Bramble.∇ₕ(v)) + Bramble.innerₕ(u, v)))
+        n = size(An, 1)
+        cases = (
+            (sparse([4.0 1 0; 2 4 1; 0 3 4]), ComplexF64[1, 2im, 3], ComplexF64[1, 1, 1im]),
+            (An, ComplexF64[sin(i) + im * cos(i) for i in 1:n],
+                ComplexF64[cos(i) - im * sin(2i) for i in 1:n])
+        )
+        h = 1e-6
+        for (A, F, ȳ) in cases
+            u, pullback = rrule(Bramble.pde_solve, A, F)
+            @test u ≈ A \ F
+            _, Ā, F̄ = pullback(ȳ)
+            @test Ā isa SparseMatrixCSC{ComplexF64, Int}
+            @test rowvals(Ā) == rowvals(A)
+            @test F̄ ≈ sparse(A') \ ȳ
+            J(B) = real(dot(ȳ, B \ F))
+            for k in 1:nnz(A)
+                bump(δ) = (B = complex(copy(A)); nonzeros(B)[k] += δ; B)
+                fd = (J(bump(h)) - J(bump(-h))) / 2h
+                @test real(nonzeros(Ā)[k])≈fd atol=1e-6
+                # An imaginary step checks `imag(Ā)`, which a wrongly conjugated `-conj(λ) u`
+                # flips while leaving `real(Ā)` intact.
+                fdi = (J(bump(im * h)) - J(bump(-im * h))) / 2h
+                @test imag(nonzeros(Ā)[k])≈fdi atol=1e-6
+            end
+        end
+    end
+
+    # The primal has `pde_solve`'s element type (#1187): `lu(A) \ F` is `Float64` for
+    # `Float32` data. `Float64` data keeps a `Float64` `Ā`.
+    @testset "rrule: primal element type" begin
+        A = sparse([4.0 1 0; 2 4 1; 0 3 4])
+        A32 = SparseMatrixCSC{Float32, Int}(A)
+        F32 = Float32[1, 2, 3]
+        u32, _ = rrule(Bramble.pde_solve, A32, F32)
+        @test eltype(u32) === eltype(Bramble.pde_solve(A32, F32))
+        @test u32 ≈ Bramble.pde_solve(A32, F32)
+        # `Rational` data keeps a `Rational` primal, not `Float64`. Only the type is the
+        # contract: for a symmetric `Rational` `A` the primal is the LU solution rounded to
+        # `Rational`, not `pde_solve`'s exact one. This `A` is unsymmetric, where they agree.
+        Aq = SparseMatrixCSC{Rational{Int}, Int}(A)
+        Fq = Rational{Int}[1, 2, 3]
+        uq, _ = rrule(Bramble.pde_solve, Aq, Fq)
+        @test eltype(uq) === eltype(Bramble.pde_solve(Aq, Fq))
+        @test uq == Bramble.pde_solve(Aq, Fq)
+        _, pullback = rrule(Bramble.pde_solve, A, [1.0, 2.0, 3.0])
+        @test pullback([1.0, -2.0, 0.5])[2] isa SparseMatrixCSC{Float64, Int}
+    end
+
+    # Nothing the pullback captures is boxed, with or without keywords (#1187).
+    @testset "rrule: pullback captures no Core.Box" begin
+        A = sparse([4.0 1 0; 2 4 1; 0 3 4])
+        F = [1.0, 2.0, 3.0]
+        for kw in ((;), (; solver = :suitesparse))
+            _, pullback = rrule(Bramble.pde_solve, A, F; kw...)
+            @test !any(T -> T === Core.Box, fieldtypes(typeof(pullback)))
         end
     end
 

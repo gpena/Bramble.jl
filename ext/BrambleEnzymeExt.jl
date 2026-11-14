@@ -12,7 +12,7 @@ using LinearAlgebra: Factorization, dot, ldiv!, lu, mul!, norm
 # A native Enzyme reverse rule for `pde_solve`, used instead of `Enzyme.@import_rrule`.
 #
 # The maths is the adjoint `BrambleChainRulesExt`'s `ChainRulesCore.rrule` states: solve
-# `Aᵀ λ = ∂J/∂u` once against the forward solve's own factorisation, then `∂J/∂A = -λuᵀ` on
+# `Aᴴ λ = ∂J/∂u` once against the forward solve's own factorisation, then `∂J/∂A = -λuᴴ` on
 # `A`'s stored pattern and `∂J/∂F = λ`. The two rules differ in how the cotangent reaches
 # Enzyme.
 #
@@ -21,7 +21,7 @@ using LinearAlgebra: Factorization, dot, ldiv!, lu, mul!, norm
 # but leaves `colptr` and `rowval`, so the shadow is no longer a well-formed
 # `SparseMatrixCSC` and the gradient is wrong without any error. The cotangent has explicit
 # zeros whenever some `u[j]` is exactly zero, which a homogeneous Dirichlet problem produces:
-# a constrained row's solution entry is its boundary value, so a whole column of `-λuᵀ`
+# a constrained row's solution entry is its boundary value, so a whole column of `-λuᴴ`
 # vanishes. A gradient with respect to a diffusion coefficient is then wrong, while an
 # `F`-only (Dirichlet-value) gradient stays correct.
 #
@@ -46,12 +46,19 @@ end
 # serves the adjoint. With them the primal is `pde_solve(A, F; kwargs...)`, no factorisation
 # is kept (`fact` is `nothing`), and the adjoint is `pde_solve(Aᴴ, ū; kwargs...)` with the
 # border conjugated (`Bramble._pde_solve_adjoint`), as `BrambleChainRulesExt`'s rrule does.
+# `fact \ F` can be wider than `pde_solve`'s result (`Float64` for `Float32` data), so the
+# primal is converted to the type of `a \ f` for one entry of `A` and `F`, which is what
+# `pde_solve` returns; the rrule's `_lu_rrule` converts the same way.
 function _forward_solve(A, F, ::@NamedTuple{})
     _entered!(:pde_solve_factor)
     fact = lu(A)
-    return fact, fact \ F
+    return fact, _solve_as(eltype(A), eltype(F), fact, F)
 end
 _forward_solve(A, F, kwargs::NamedTuple) = nothing, pde_solve(A, F; kwargs...)
+
+function _solve_as(::Type{TA}, ::Type{TF}, fact, b) where {TA, TF}
+    return convert(AbstractVector{typeof(oneunit(TA) \ oneunit(TF))}, fact \ b)
+end
 
 _adjoint_solve(fact, _, ū, ::@NamedTuple{}) = fact' \ ū
 _adjoint_solve(::Nothing, A, ū, kwargs::NamedTuple) = Bramble._pde_solve_adjoint(A, ū; kwargs...)
@@ -72,14 +79,25 @@ function EnzymeRules.augmented_primal(
     # tape: a caller may overwrite `A` after the solve, and `EnzymeRules.overwritten` does not
     # flag a matrix scaled in place after the call.
     Aₜ = fact === nothing ? copy(A.val) : nothing
+    # The primal is `u` itself, which the caller may change in place after the solve, and
+    # `reverse` reads the solution for `Ā -= λ uᴴ`: the tape keeps its own copy. With a
+    # `Const` `A` the reverse pass never reads it (`F̄ = λ`), so there the tape holds `u`
+    # itself and nothing is copied.
+    uₜ = A isa Const ? u : copy(u)
     # The return's own cotangent accumulates here, and `reverse` reads it back off the tape:
     # allocated once, in the pass that knows `u`'s size, rather than reconstructed later.
     ū = zero(u)
 
     primal = EnzymeRules.needs_primal(config) ? u : nothing
     shadow = EnzymeRules.needs_shadow(config) ? ū : nothing
-    return AugmentedReturn(primal, shadow, (fact, Aₜ, u, ū))
+    return AugmentedReturn(primal, shadow, (fact, Aₜ, uₜ, ū))
 end
+
+# One entry of `-λ uᴴ` for a shadow of element type `T`. A real `A` (with a complex `F`, say)
+# has a real shadow, which Enzyme allocated and the rule cannot widen; the derivative of a real
+# entry is the real part of the complex one.
+_entry_cotangent(::Type{<:Real}, x) = real(x)
+_entry_cotangent(::Type, x) = x
 
 function EnzymeRules.reverse(
         config::RevConfig,
@@ -90,7 +108,7 @@ function EnzymeRules.reverse(
         F::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    fact, Aₜ, u, ū = tape
+    fact, Aₜ, uₜ, ū = tape
     A₀ = Aₜ === nothing ? A.val : Aₜ
 
     # `fact'` reuses the forward solve's own LU factors, exact whether or not `A` is
@@ -103,7 +121,7 @@ function EnzymeRules.reverse(
         rows = rowvals(A₀)
         @inbounds for j in axes(A₀, 2), k in nzrange(A₀, j)
 
-            Āv[k] -= λ[rows[k]] * conj(u[j])
+            Āv[k] -= _entry_cotangent(eltype(Āv), λ[rows[k]] * conj(uₜ[j]))
         end
     end
 
@@ -138,8 +156,8 @@ _tangent_rhs(Ȧ, ::Nothing, u) = -(Ȧ * u)
 _tangent_rhs(::Nothing, Ḟ, u) = Ḟ
 _tangent_rhs(Ȧ, Ḟ, u) = Ḟ - Ȧ * u
 
-_tangent_solve(fact, _, rhs, ::@NamedTuple{}) = fact \ rhs
-_tangent_solve(::Nothing, A, rhs, kwargs::NamedTuple) = pde_solve(A, rhs; kwargs...)
+_tangent_solve(fact, A, F, rhs, ::@NamedTuple{}) = _solve_as(eltype(A), eltype(F), fact, rhs)
+_tangent_solve(::Nothing, A, _, rhs, kwargs::NamedTuple) = pde_solve(A, rhs; kwargs...)
 
 function EnzymeRules.forward(
         config::FwdConfig,
@@ -155,7 +173,7 @@ function EnzymeRules.forward(
     W = EnzymeRules.width(config)
     shadows = ntuple(Val(W)) do i
         rhs = _tangent_rhs(_lane(A, i), _lane(F, i), u)
-        return _tangent_solve(fact, A.val, rhs, values(kwargs))
+        return _tangent_solve(fact, A.val, F.val, rhs, values(kwargs))
     end
     needs_primal = EnzymeRules.needs_primal(config)
     needs_shadow = EnzymeRules.needs_shadow(config)
@@ -166,11 +184,19 @@ function EnzymeRules.forward(
 end
 
 # A ghost mesh's refresh rebuilds the padded mesh's geometry and labels from the physical
-# mesh. No Enzyme path differentiates geometry: the mesh is `Const`, and coordinates are
-# differentiated by ForwardDiff only (#1131). Without this rule, an assembly into a constant
-# buffer is an inactive call whose nofree copies reach the marker warning's `@warn`, whose
-# logger lookup calls `strcmp`, which Enzyme cannot copy (#1127).
+# mesh. The rule drops any derivative that passes through a refresh (#1131); a ghost mesh
+# built inside the differentiated function keeps its geometry derivatives. Without this
+# rule, an assembly into a constant buffer is an inactive call whose nofree copies reach
+# the marker warning's `@warn`, whose logger lookup calls `strcmp`, which Enzyme cannot
+# copy (#1127).
 EnzymeRules.inactive(::typeof(Bramble._refresh!), args...) = nothing
+
+# A mesh `copy` deep-copies its markers, which are `BitVector`s and carry no derivative.
+# Enzyme's own `deepcopy` rule has no forward method for a batch of width two or more,
+# the width DifferentiationInterface uses for a gradient, and `polygon_spaces` copies the
+# axes of the mesh inside the differentiated function (#1212). Only the marker copy is
+# inactive: the points `copy` takes keep their derivatives.
+EnzymeRules.inactive(::typeof(Bramble._copy_markers), args...) = nothing
 
 # The `CpuThreaded` engine entries' rules.
 include("BrambleEnzymeExt/threaded.jl")
@@ -180,5 +206,8 @@ include("BrambleEnzymeExt/relations.jl")
 
 # The rules for the solves beside `pde_solve(::SparseMatrixCSC, F)`.
 include("BrambleEnzymeExt/solvers.jl")
+
+# The rules that refuse a level-set mesh whose `φ` depends on the parameter.
+include("BrambleEnzymeExt/geometry.jl")
 
 end

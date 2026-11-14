@@ -101,11 +101,15 @@ function EnzymeRules.augmented_primal(
     # after the solve (`EnzymeRules.overwritten` does not flag a matrix scaled in place), so
     # the tape keeps a copy.
     Kₜ = Bramble.RankOneUpdate(copy(K.val.A), K.val.σ, copy(K.val.ws), copy(K.val.wt))
+    # The caller may also change the returned `u` in place, and `reverse` reads the solution
+    # for `K̄ = −λ uᴴ`, so the tape keeps a copy of it too. A `Const` `K` never reads it
+    # (`F̄ = λ`): there the tape holds `u` itself.
+    uₜ = K isa Const ? u : copy(u)
     ū = zero(u)
 
     primal = EnzymeRules.needs_primal(config) ? u : nothing
     shadow = EnzymeRules.needs_shadow(config) ? ū : nothing
-    return AugmentedReturn(primal, shadow, (Kₜ, u, ū))
+    return AugmentedReturn(primal, shadow, (Kₜ, uₜ, ū))
 end
 
 # `pde_solve(Kᴴ, ū; kwargs...)`, with `mean_zero` and `gauge` conjugated as

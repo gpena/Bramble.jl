@@ -713,7 +713,7 @@ Create a copy of mesh `Ωₕ`. The copy is shallow with respect to immutable fie
 """
 function Base.copy(Ωₕ::MeshnD{D}) where {D}
     c = MeshnD(
-        Ωₕ.set, deepcopy(Ωₕ.markers), Ωₕ.indices, Ωₕ.backend, map(copy, Ωₕ.submeshes),
+        Ωₕ.set, _copy_markers(Ωₕ), Ωₕ.indices, Ωₕ.backend, map(copy, Ωₕ.submeshes),
         copy(Ωₕ.predicate_labels)
     )
     _stamp_submeshes!(c.submeshes, c.predicate_labels)
