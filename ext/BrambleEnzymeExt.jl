@@ -72,13 +72,17 @@ function EnzymeRules.augmented_primal(
     # tape: a caller may overwrite `A` after the solve, and `EnzymeRules.overwritten` does not
     # flag a matrix scaled in place after the call.
     Aₜ = fact === nothing ? copy(A.val) : nothing
+    # The primal is `u` itself, which the caller may change in place after the solve, and
+    # `reverse` reads the solution for `Ā -= λ uᴴ`: the tape keeps its own copy. A `Const`
+    # `A` never reads it (`F̄ = λ`), so there the tape holds `u` itself and nothing is copied.
+    uₜ = A isa Const ? u : copy(u)
     # The return's own cotangent accumulates here, and `reverse` reads it back off the tape:
     # allocated once, in the pass that knows `u`'s size, rather than reconstructed later.
     ū = zero(u)
 
     primal = EnzymeRules.needs_primal(config) ? u : nothing
     shadow = EnzymeRules.needs_shadow(config) ? ū : nothing
-    return AugmentedReturn(primal, shadow, (fact, Aₜ, u, ū))
+    return AugmentedReturn(primal, shadow, (fact, Aₜ, uₜ, ū))
 end
 
 function EnzymeRules.reverse(
@@ -90,7 +94,7 @@ function EnzymeRules.reverse(
         F::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    fact, Aₜ, u, ū = tape
+    fact, Aₜ, uₜ, ū = tape
     A₀ = Aₜ === nothing ? A.val : Aₜ
 
     # `fact'` reuses the forward solve's own LU factors, exact whether or not `A` is
@@ -103,7 +107,7 @@ function EnzymeRules.reverse(
         rows = rowvals(A₀)
         @inbounds for j in axes(A₀, 2), k in nzrange(A₀, j)
 
-            Āv[k] -= λ[rows[k]] * conj(u[j])
+            Āv[k] -= λ[rows[k]] * conj(uₜ[j])
         end
     end
 

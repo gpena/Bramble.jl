@@ -479,6 +479,69 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             end
             @test Enzyme.gradient(mode, Enzyme.Const(loss_overwritten), 0.3)[1] ≈ 0.5
 
+            # The solution the rule returns is the caller's to change: `u .*= 2` after the
+            # solve must not reach the cotangent of `A`, which reads the solution at the
+            # reverse pass (gpena/Bramble.jl#1185). The gradient through the in-place loss
+            # matches ForwardDiff to 1e-10, without keywords and with `solver = :suitesparse`
+            # (the rule keeps no factorisation there), on a 3 × 3 matrix and on a non-uniform
+            # 1D operator. `rev_mut` is the control: the same loss with `v = 2 .* u`.
+            rev_mut = DI.AutoEnzyme(; mode, function_annotation = Enzyme.Const)
+            mat_pat = sparse([4.0 1 0; 2 4 1; 0 3 4])
+            F_pat = [1.0, 2.0, 3.0]
+            mat3(p) = SparseMatrixCSC(
+                3, 3, copy(mat_pat.colptr), copy(mat_pat.rowval), p[1] .* mat_pat.nzval .+ p[2]
+            )
+            sys3(p) = (mat3(p), (1 + p[2]) .* F_pat)
+            Wnu = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 17, false))
+            lnu = form(Wnu, v -> innerₕ(x -> 1.0 + x[1], v))
+            function sysnu(p)
+                κ = element(Wnu, eltype(p))
+                parent(κ) .= 2.0 .+ p[1]
+                a_nu = form(Wnu, Wnu, (U, V) -> inner₊(κ * ∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V))
+                A, F = assemble(a_nu, lnu; dirichlet = :boundary => x -> 0.0)
+                return A, (1 + p[2]) .* F
+            end
+            for (sys, p0) in ((sys3, [1.3, 0.2]), (sysnu, [0.5, 0.25])),
+                kw in ((;), (; solver = :suitesparse))
+
+                f_mut(p) = (u = Bramble.pde_solve(sys(p)...; kw...); u .*= 2.0; sum(abs2, u))
+                f_copy(p) = (u = Bramble.pde_solve(sys(p)...; kw...); sum(abs2, 2.0 .* u))
+                g_ref = ForwardDiff.gradient(f_copy, p0)
+                @test all(x -> abs(x) > 1e-3, g_ref)
+                @test DI.gradient(f_copy, rev_mut, p0) ≈ g_ref rtol=1e-10
+                @test DI.gradient(f_mut, rev_mut, p0) ≈ g_ref rtol=1e-10
+                @test ForwardDiff.gradient(f_mut, p0) ≈ g_ref rtol=1e-10
+            end
+
+            # The tape's own copy costs a vector only when `A` is active. The rule's
+            # `augmented_primal` is called directly, with the `RevConfig` Enzyme builds for a
+            # width-1 reverse pass that needs the primal and the shadow; the tape's third slot
+            # is the solution it reads at the reverse pass. With a `Const` `A` that slot is the
+            # primal itself (no copy: `F̄ = λ` never reads it), and with an active `A` it is
+            # a separate vector with the primal's values, which changing the primal in place
+            # leaves alone.
+            rcfg = Enzyme.EnzymeRules.RevConfig{true, true, 1, (false, false, false), false, false}()
+            A_tp, F_tp = sys3([1.3, 0.2])
+            u_tp = A_tp \ F_tp
+            for kw in ((;), (; solver = :suitesparse))
+                aug_const = Enzyme.EnzymeRules.augmented_primal(
+                    rcfg, Enzyme.Const(Bramble.pde_solve), Enzyme.Duplicated{Vector{Float64}},
+                    Enzyme.Const(A_tp), Enzyme.Duplicated(F_tp, zero(F_tp)); kw...
+                )
+                @test aug_const.tape[3] === aug_const.primal
+                @test aug_const.primal ≈ u_tp
+
+                aug_act = Enzyme.EnzymeRules.augmented_primal(
+                    rcfg, Enzyme.Const(Bramble.pde_solve), Enzyme.Duplicated{Vector{Float64}},
+                    Enzyme.Duplicated(A_tp, Enzyme.make_zero(A_tp)),
+                    Enzyme.Duplicated(F_tp, zero(F_tp)); kw...
+                )
+                @test aug_act.tape[3] !== aug_act.primal
+                @test aug_act.tape[3] == aug_act.primal
+                aug_act.primal .*= 2
+                @test aug_act.tape[3] ≈ u_tp
+            end
+
             # A rectangular `A` (a `:spqr` least-squares solve) is refused.
             loss_rect(θ) = sum(Bramble.pde_solve(sparse([1.0 0.0; 0.0 2.0; 1.0 1.0]),
                 [θ, 2.0, 0.0]; solver = :spqr))
