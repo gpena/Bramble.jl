@@ -172,6 +172,12 @@ end
 # logger lookup calls `strcmp`, which Enzyme cannot copy (#1127).
 EnzymeRules.inactive(::typeof(Bramble._refresh!), args...) = nothing
 
+# A mesh copy is geometry too. `polygon_spaces` builds a ghost mesh inside the
+# differentiated function, and its unpadded axes are `copy`s of the physical ones, which
+# `deepcopy` the markers. Enzyme's own `deepcopy` rule has no forward method for a batch
+# of width two or more, the width DifferentiationInterface uses for a gradient (#1212).
+EnzymeRules.inactive(::typeof(Base.copy), ::Union{Bramble.Mesh1D, Bramble.MeshnD}) = nothing
+
 # The `CpuThreaded` engine entries' rules.
 include("BrambleEnzymeExt/threaded.jl")
 
