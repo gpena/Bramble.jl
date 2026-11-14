@@ -383,11 +383,12 @@ so a sparse cell's verdict is its inner backend's.
 
 - The composite ghost `Δₕ` (`ghost_composite`) fails in `simplify_ast` under `CpuSerial` in both
   modes, after 592 s and 982 s. gpena/Bramble.jl#1174 closes on its second criterion, a fix
-  site; the fix has no issue of its own yet.
+  site, and the fix is
+  [gpena/Bramble.jl#1229](https://github.com/gpena/Bramble.jl/issues/1229).
 - Forward mode with a coefficient on a traction facet with a one-sided corner returns a wrong
   gradient ([gpena/Bramble.jl#1226](https://github.com/gpena/Bramble.jl/issues/1226)).
 - Reverse mode through a level-set mesh whose box depends on the parameter returns a zero
-  without refusing.
+  without refusing ([gpena/Bramble.jl#1236](https://github.com/gpena/Bramble.jl/issues/1236)).
 
 ## Compile cost of the cells
 
