@@ -24,6 +24,10 @@ using Supposition
 using ..TestUtils: WITH_SLOW_TESTS, alloc_test
 using ..TestUtils: _tri, _sd_problem, _Const, _x1
 
+# An untyped (x) beside an (x, t) typed on `x` (#1186): its `t` cannot be read.
+_dc_mixed(x) = 1.0
+_dc_mixed(x::Real, t::Real) = 1.0 + 2t
+
 @testset "Dirichlet constraints" begin
     # --- Setup ---
     I = interval(0.0, 1.0)
@@ -135,6 +139,15 @@ using ..TestUtils: _tri, _sd_problem, _Const, _x1
             @test_throws "condition for label `:right`" dirichlet_constraints(
                 Ω1, I, :left => (x, t) -> t, :right => () -> 0.0
             )
+            # an untyped (x) hiding an (x, t) typed on `x` is refused, not read as spatial
+            err = try
+                dirichlet_constraints(Ω1, I, :left => _dc_mixed, :right => (x, t) -> t)
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin("label `:left`", sprint(showerror, err))
+            @test occursin("same typing", sprint(showerror, err))
         end
 
         # For every accepted `input` type.

@@ -90,8 +90,8 @@ end
 # `Float64` mesh passes and fails at the first residual call.
 #
 # `_accepts` sees a typed method only when no arity has an untyped one, so `g(x)` beside a
-# typed `g(x::Real, t::Real)` would be read as spatial and drop `t`. A callback whose
-# `_accepts` answer differs from the per-arity lookup is that case, and is refused.
+# typed `g(x::Real, t::Real)` would be read as spatial and drop `t`. That case is refused
+# (`_validate_hidden_typed_arity`, geometry/marker.jl).
 function _validate_dirichlet_arity_known(constraints::ConstraintMarkers)
     for m in conditions(constraints)
         f = identifier(m)
@@ -101,15 +101,7 @@ function _validate_dirichlet_arity_known(constraints::ConstraintMarkers)
             "(x), (x, t) or (x, t, p), got $(f), which has no method for any of them.",
         ),
         )
-        all(N -> _accepts(f, N) == _accepts_any_typing(f, N), (Val(1), Val(2), Val(3))) ||
-            throw(
-                ArgumentError(
-                "semidiscretize: Dirichlet condition for label `:$(label(m))`, $(f), has " *
-                "an untyped method of one arity beside a typed method of another, so " *
-                "its time and parameter dependence cannot be read. Give all its methods " *
-                "the same typing, or type none of them.",
-            ),
-            )
+        _validate_hidden_typed_arity("semidiscretize", label(m), f)
     end
     return nothing
 end

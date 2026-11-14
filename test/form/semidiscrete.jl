@@ -3,7 +3,7 @@ module FormSemidiscreteTests
 using Test
 using Bramble
 using Bramble: matrix_type
-using LinearAlgebra: diag
+using LinearAlgebra: LinearAlgebra, diag
 using SparseArrays
 using SciMLBase: SciMLBase # loads the `ode_problem` extension
 using ForwardDiff: Dual, value
@@ -1359,6 +1359,10 @@ _mixed_a(x) = 1.0
 _mixed_a(x::Real, t::Real) = 1.0 + 2t
 _mixed_b(x) = -100.0
 _mixed_b(x::Real, t::Real, p::AbstractVector) = t * p[1]
+# Typed only after `x`, the shape of an optional argument (`norm(itr, p::Real)`), so it
+# stays spatial and `t` is dropped: the accepted cost of not refusing `norm`.
+_pinned(x) = 1.0
+_pinned(x, t::Real) = 1.0 + 2t
 
 @testset "typed Dirichlet data (#1186)" begin
     Ωₕ, Wₕ, fₕ, a, l = _sd_problem(9)
@@ -1405,6 +1409,24 @@ _mixed_b(x::Real, t::Real, p::AbstractVector) = t * p[1]
         @test occursin(string(nameof(g)), sprint(showerror, e))
         @test occursin("same typing", sprint(showerror, e))
     end
+    # A method of another arity typed only after `x` does not trigger the refusal: `norm`
+    # (`norm(itr, p::Real)`) and `first` (`first(itr, n::Integer)`) stay spatial and give
+    # the values of their untyped twins.
+    sd_of(g) = semidiscretize(a, l; dirichlet = dirichlet_constraints(Ωₕ, :boundary => g))
+    for (g, twin) in ((LinearAlgebra.norm, x -> LinearAlgebra.norm(x)),
+        ((y -> 2y) ∘ first, x -> 2first(x)))
+        @test cls(g) isa Bramble.StaticConstraints
+        sd_g, sd_t = sd_of(g), sd_of(twin)
+        du_g, du_t = zeros(n), zeros(n)
+        sd_g(du_g, zeros(n), nothing, 0.5)
+        sd_t(du_t, zeros(n), nothing, 0.5)
+        @test any(!iszero, du_t)
+        @test du_g == du_t
+    end
+    @test cls(_pinned) isa Bramble.StaticConstraints
+    pinned = dirichlet_constraints(Ωₕ, I, :boundary => _pinned, :boundary => (x, t) -> t)
+    @test Bramble.identifier(first(Bramble.conditions(pinned(0.5))))(0.0) == 1.0
+
     # ... where the same methods untyped, or all typed, are classified.
     @test cls((x, t) -> 2t, I) isa Bramble.TimeDependentConstraints
     @test cls(_typed_x) isa Bramble.StaticConstraints
