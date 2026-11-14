@@ -7,7 +7,7 @@ using Enzyme: Enzyme, Const, Annotation, Active, Duplicated, DuplicatedNoNeed,
               BatchDuplicated, BatchDuplicatedNoNeed, MixedDuplicated, BatchMixedDuplicated
 using Enzyme.EnzymeRules: EnzymeRules, RevConfig, FwdConfig, AugmentedReturn
 using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange
-using LinearAlgebra: dot, lu
+using LinearAlgebra: Factorization, dot, ldiv!, lu, mul!, norm
 
 # A native Enzyme reverse rule for `pde_solve`, used instead of `Enzyme.@import_rrule`.
 #
@@ -177,5 +177,8 @@ include("BrambleEnzymeExt/threaded.jl")
 
 # The reverse rule for the forms of a relation of `constrained`.
 include("BrambleEnzymeExt/relations.jl")
+
+# The rules for the solves beside `pde_solve(::SparseMatrixCSC, F)`.
+include("BrambleEnzymeExt/solvers.jl")
 
 end

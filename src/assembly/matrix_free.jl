@@ -1831,9 +1831,12 @@ end
 # reach the `CpuThreaded` method behind a `Ref`, as `_batch_mf_bands!`'s do above: an Enzyme
 # rule cannot take the sink or the plan by value (Enzyme's calling convention), and
 # `BrambleEnzymeExt`'s rule reads the coefficients through the form's parts, not the plan's,
-# whose build it treats as inactive. Both methods inline, so a plain call allocates no `Ref`
-# of its own; the primal walks the plan's form in `_mf_spawn_bands!`, as before.
-@inline _mf_run_bands!(p::CpuThreaded, s, a, plan, nbands::Int, walk = nothing) = _mf_run_bands!(
+# whose build it treats as inactive. The method that makes the `Ref`s stays out of line, as
+# `CpuPolyester`'s does: inlined into its caller, Enzyme dropped the derivative the rule
+# wrote into the parts' `Ref` for a scalar the AST holds by value (zero for `c` in
+# `c * inner₊(∇ₕ(u), ∇ₕ(v))`, gpena/Bramble.jl#1168). The method below inlines into it, so
+# the primal walks the plan's form in `_mf_spawn_bands!`, as before.
+@noinline _mf_run_bands!(p::CpuThreaded, s, a, plan, nbands::Int, walk = nothing) = _mf_run_bands!(
     p, Ref(s), Ref((plan, walk)), Ref((trial_space(a), test_space(a), a.ast)), nbands)
 
 @inline function _mf_run_bands!(::CpuThreaded, sink::Base.RefValue, parts::Base.RefValue,

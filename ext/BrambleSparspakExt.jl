@@ -105,13 +105,13 @@ end
 # `ldiv!(::AbstractVector, ::ConcreteSparspakFactorization, ::AbstractVector)` above.
 # `VectorElement <: AbstractVector` and `ConcreteSparspakFactorization <: Factorization`, so
 # neither method is more specific and `ldiv!(uₕ, fact, F)` would otherwise be an ambiguity
-# error. Unwraps the destination and returns the `VectorElement`, matching the contract of
-# Bramble's method.
+# error. Takes Bramble's method, so a `Dual` load (`BrambleForwardDiffExt`) is split
+# into parts the same way on every backend.
 function LinearAlgebra.ldiv!(
         uₕ::Bramble.VectorElement, fact::ConcreteSparspakFactorization, b::AbstractVector
 )
-    ldiv!(parent(uₕ), fact, b)
-    return uₕ
+    return invoke(ldiv!, Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector},
+        uₕ, fact, b)
 end
 
 # Sparspak's triangular solve takes a right-hand side of the matrix's own element type only,

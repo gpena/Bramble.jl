@@ -133,13 +133,13 @@ end
 # `ldiv!(::AbstractVector, ::ConcreteSuiteSparseFactorization, ::AbstractVector)` above.
 # `VectorElement <: AbstractVector` and `ConcreteSuiteSparseFactorization <: Factorization`,
 # so neither method is more specific and `ldiv!(uₕ, fact, F)` would otherwise be an
-# ambiguity error. Unwraps the destination and returns the `VectorElement`, matching the
-# contract of Bramble's method.
+# ambiguity error. Takes Bramble's method, so a `Dual` load (`BrambleForwardDiffExt`) is
+# split into parts the same way on every backend.
 function LinearAlgebra.ldiv!(
         uₕ::Bramble.VectorElement, fact::ConcreteSuiteSparseFactorization, b::AbstractVector
 )
-    ldiv!(parent(uₕ), fact, b)
-    return uₕ
+    return invoke(ldiv!, Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector},
+        uₕ, fact, b)
 end
 
 # UMFPACK factors only `Float64` and `ComplexF64`: `lu` of a `Float32` matrix widens it, and

@@ -271,13 +271,13 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
     # `ldiv!(::AbstractVector, ::ConcreteAccelerateFactorization, ::AbstractVector)` above.
     # `VectorElement <: AbstractVector` and `ConcreteAccelerateFactorization <:
     # Factorization`, so neither method is more specific and `ldiv!(uₕ, fact, F)` would
-    # otherwise be an ambiguity error. Unwraps the destination and returns the
-    # `VectorElement`, matching the contract of Bramble's method.
+    # otherwise be an ambiguity error. Takes Bramble's method, so a `Dual` load
+    # (`BrambleForwardDiffExt`) is split into parts the same way on every backend.
     function LinearAlgebra.ldiv!(
             uₕ::Bramble.VectorElement, fact::ConcreteAccelerateFactorization, b::AbstractVector
     )
-        ldiv!(parent(uₕ), fact, b)
-        return uₕ
+        return invoke(ldiv!, Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector},
+            uₕ, fact, b)
     end
 
     function Base.:\(fact::ConcreteAccelerateFactorization, b::AbstractVector)
