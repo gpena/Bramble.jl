@@ -27,9 +27,9 @@ failures that have no cell are under "Open failures". A cell never reads `works`
 | Date | 2026-11-03 for the first matrix; the three-summand cells 2026-11-04; the cells changed in v4.2.2 and the compile table 2026-11-07; the ghost load and `Δₕ!` cells and the new `centered_difference!` cell 2026-11-08 and 2026-11-09; the cells changed in v4.2.4 2026-11-10, by the reproducers of the notes in `ad_reductions/` (the same calls as the cells); the geometric-input cells (`polygon`, `dirac`, `levelset`) and the ghost relation cells (`ghost_data`, `ghost_robin`) 2026-11-11, by the cells themselves, one child per policy and group; the solver cells (`factor_*`, `rank_one`, `fdm_*`, `gmg_*`, `chebyshev`) 2026-11-13, by the cells themselves, one child per policy and group; the cells of the v4.2.4 rest plan (`ghost_conormal`, `ghost_composite_relation`, `ghost_assemble_3d`, the polygon forward cells, `ghost_data` and `ghost_robin` under `CpuThreaded`, the level-set cells, the mesh copy cells) 2026-11-14, by the cells themselves |
 | Tree | branch `v4-2-4`, with the v4.2.4 AD fixes (the v4.2.2 cells were measured on `v4-2-2`); the 2026-11-11 cells on branch `v4-2-4-geometry` at 39f604bf, macbook; the solver cells on branch `v4-2-4-solvers` at 87a509f4, macbook; the 2026-11-14 cells on branch `v4-2-4-rest` at 4cbf6709 plus the cells' own commit, macbook |
 | Machine | Apple M2, Julia 1.13.3, on mains power |
-| Enzyme | 0.13.219 for the solver cells (2026-11-13), the 2026-11-11 cells, the v4.2.4 cells (2026-11-10) and for the ghost load, `Δₕ!` and `centered_difference!` cells (2026-11-08); 0.13.218 for the other v4.2.2 cells (2026-11-07), the newest in the depot, which a temporary environment without a manifest loads; 0.13.216 for the 2026-11-03 cells |
+| Enzyme | 0.13.219 for the 2026-11-14 cells, the solver cells (2026-11-13), the 2026-11-11 cells, the v4.2.4 cells (2026-11-10) and for the ghost load, `Δₕ!` and `centered_difference!` cells (2026-11-08); 0.13.218 for the other v4.2.2 cells (2026-11-07), the newest in the depot, which a temporary environment without a manifest loads; 0.13.216 for the 2026-11-03 cells |
 | Threads | 4, the test's thread count, so both threaded policies run on 4 threads; the 2026-11-03 figures and the v4.2.4 reproducers ran on 2 (1 for the `constrained` reductions); the 2026-11-11 cells ran on 2 under load, in `--optimize=1` children; the solver cells ran on 2, alone on the machine, in `--optimize=1` children; the 2026-11-14 cells ran on 1 thread under `CpuSerial` and 2 under the threaded policies, in `--optimize=1` children, one child at a time |
-| Problem | 9 x 9 mesh in 2D, 17 nodes in 1D, 5 x 5 x 5 mesh in 3D, three parameters, `Float64`; the `fdm_*` cells have one parameter, and the `fdm_*`, `gmg_*` and `chebyshev` cells run on 17 x 17 (uniform) and 9 x 9 (non-uniform) meshes |
+| Problem | 9 x 9 mesh in 2D, 17 nodes in 1D, 5 x 5 x 5 mesh in 3D, three parameters, `Float64`; the `fdm_*` cells have one parameter, and the `fdm_*`, `gmg_*` and `chebyshev` cells run on 17 x 17 (uniform) and 9 x 9 (non-uniform) meshes; the 2026-11-14 3D ghost cell runs on a 4 x 4 x 3 mesh and the level-set cells on 12 x 12 meshes |
 | Agreement | within 1e-8 relative to ForwardDiff on the same policy |
 | After 8b423d93 | The `CpuThreaded` runs of `gmg_coefficient` reverse and `chebyshev` gave wrong gradients before commit 8b423d93; it fixed them (#1168), and both cells were measured again after it |
 | Julia version | The solver cells and the re-measurement after 8b423d93 ran on Julia 1.13.3. juliaup then installed 1.13.4 (2026-11-13, 22:46) and removed 1.13.3; with it, Enzyme 0.13.219 aborts every child within 13 s (`unsupported tag julia.gc_alloc_ptr_offsets`, `UNREACHABLE executed at GradientUtils.cpp:364`), `chebyshev` under `CpuPolyester` among them, so nothing was re-measured on 1.13.4 and the pins above are the 1.13.3 results |
@@ -454,7 +454,7 @@ half has pins since 2026-11-14 (next table).
 
 The groups the 2026-11-14 run changed or added, timed as the test runs them (one child per
 policy and group, `--optimize=1`, one child at a time, `CpuSerial` on 1 thread and the threaded
-policies on 2; every exit normal and every `CELL` line equal to its pin; wall time of the
+policies on 2; every exit normal except the two killed `relation_composite` children, and every `CELL` line equal to its pin; wall time of the
 process, loading included; peak is the footprint of `/usr/bin/time -l`):
 
 | Group | Cells | `CpuSerial` | `CpuThreaded` | `CpuPolyester` |
@@ -468,7 +468,7 @@ process, loading included; peak is the footprint of `/usr/bin/time -l`):
 | threed | `ghost_assemble_3d` | 351 s; 4.42 GB | 486 s; 5.94 GB | 420 s; 4.89 GB |
 | polygon | the datum and the coefficient, both meshes, both modes | 329 s and 336 s; 4.86 GB each (one child a cell) | 421 s and 423 s; 6.14 and 6.24 GB | 396 s and 399 s; 5.78 and 5.91 GB |
 | levelset | `levelset_parameter`, `levelset_box_constant`, `levelset_box` | 154 s; 3.04 GB | 164 s; 3.26 GB | 168 s; 3.13 GB |
-| geometry | the mesh endpoint, `assemble_mesh`, the two mesh copy cells | 134 s; 2.83 GB | 99 s; 2.33 GB | 97 s; 2.41 GB |
+| geometry | `assemble_mesh` (`CpuSerial` only) and the two mesh copy cells | 134 s; 2.83 GB | 99 s; 2.33 GB | 97 s; 2.41 GB |
 
 The polygon children ran one cell each, since the group's two cells together were not timed, so
 the two figures add up to the group. Only `relation_composite` hits the cap under the threaded
