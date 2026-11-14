@@ -171,8 +171,10 @@ end
 padded_form(p) = form(P, P, bilinear(p))
 summands(a) = B._summands(B._bind_interp_spaces(a.ast, P, P))
 # The pattern of `A0`, its values zeros of the element type of `p` (ForwardDiff's duals).
-zeroed_pattern(p) = SparseMatrixCSC(size(A0)..., copy(SparseArrays.getcolptr(A0)),
-    copy(rowvals(A0)), zeros(eltype(p), nnz(A0)))
+function zeroed_pattern(p)
+    SparseMatrixCSC(size(A0)..., copy(SparseArrays.getcolptr(A0)),
+        copy(rowvals(A0)), zeros(eltype(p), nnz(A0)))
+end
 matrix_loss(A, p) = sum(abs2, nonzeros(A)) + 1e6 * p[3] * sum(nonzeros(A))
 
 function loss_cell(p)
@@ -258,9 +260,9 @@ end
 # count of the tail's inner loop is a value of the slab loop. Each point adds to a vector.
 const SLABS = let n = NEST.n, full = map(Base.OneTo, n), D = length(n)
     lo = ntuple(d -> CartesianIndices(ntuple(e -> e < d ? (2:(n[e] - 1)) :
-        e == d ? (1:1) : (1:n[e]), D)), D)
+                                                  e == d ? (1:1) : (1:n[e]), D)), D)
     hi = ntuple(d -> CartesianIndices(ntuple(e -> e < d ? (2:(n[e] - 1)) :
-        e == d ? (n[d]:n[d]) : (1:n[e]), D)), D)
+                                                  e == d ? (n[d]:n[d]) : (1:n[e]), D)), D)
     (CartesianIndices(map(m -> 2:(m - 1), n)), lo..., hi...)
 end
 @inline function _control_visit!(A, piece, lin, p)
@@ -298,9 +300,14 @@ const LOSSES = Dict("cell" => loss_cell, "record" => loss_record, "pattern" => l
 # closure types, in their order; `wsp` is the walk space `_visit_stencil!` passes on.
 function layout(name, nt)
     T = typeof(nt)
-    println("  ", name, ": ", sizeof(T), " bytes; ", join(
-        ["$(fieldname(T, i)) at $(fieldoffset(T, i)) ($(sizeof(fieldtype(T, i))))"
-         for i in 1:fieldcount(T)], ", "))
+    println("  ",
+        name,
+        ": ",
+        sizeof(T),
+        " bytes; ",
+        join(
+            ["$(fieldname(T, i)) at $(fieldoffset(T, i)) ($(sizeof(fieldtype(T, i))))"
+             for i in 1:fieldcount(T)], ", "))
 end
 if STEP == "sizes"
     a = padded_form(P0)
