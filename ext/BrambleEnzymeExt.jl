@@ -166,17 +166,18 @@ function EnzymeRules.forward(
 end
 
 # A ghost mesh's refresh rebuilds the padded mesh's geometry and labels from the physical
-# mesh. No Enzyme path differentiates geometry: the mesh is `Const`, and coordinates are
+# mesh. The rule drops any derivative of that geometry, so a ghost mesh's coordinates are
 # differentiated by ForwardDiff only (#1131). Without this rule, an assembly into a constant
 # buffer is an inactive call whose nofree copies reach the marker warning's `@warn`, whose
 # logger lookup calls `strcmp`, which Enzyme cannot copy (#1127).
 EnzymeRules.inactive(::typeof(Bramble._refresh!), args...) = nothing
 
-# A mesh copy is geometry too. `polygon_spaces` builds a ghost mesh inside the
-# differentiated function, and its unpadded axes are `copy`s of the physical ones, which
-# `deepcopy` the markers. Enzyme's own `deepcopy` rule has no forward method for a batch
-# of width two or more, the width DifferentiationInterface uses for a gradient (#1212).
-EnzymeRules.inactive(::typeof(Base.copy), ::Union{Bramble.Mesh1D, Bramble.MeshnD}) = nothing
+# A mesh `copy` deep-copies its markers, which are `BitVector`s and carry no derivative.
+# Enzyme's own `deepcopy` rule has no forward method for a batch of width two or more,
+# the width DifferentiationInterface uses for a gradient, and `polygon_spaces` copies the
+# axes of the mesh inside the differentiated function (#1212). Only the marker copy is
+# inactive: the points `copy` takes keep their derivatives.
+EnzymeRules.inactive(::typeof(Bramble._copy_markers), args...) = nothing
 
 # The `CpuThreaded` engine entries' rules.
 include("BrambleEnzymeExt/threaded.jl")

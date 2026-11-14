@@ -1503,8 +1503,12 @@ function Base.copy(Ωₕ::Mesh1D)
     c = Mesh1DState(s.set, s.indices, s.backend, copy(s.pts), copy(s.half_pts),
         copy(s.half_spacings), copy(s.spacings), s.collapsed, s.version, s.uniform, s.words,
         _next_mesh_uid())
-    return _mesh1d_with_markers(deepcopy(markers(Ωₕ)), c, copy(_predicate_labels(Ωₕ)))
+    return _mesh1d_with_markers(_copy_markers(Ωₕ), c, copy(_predicate_labels(Ωₕ)))
 end
+
+# An independent copy of the markers of `Ωₕ`, for `copy`. A function of its own so that
+# the Enzyme extension can mark it inactive while the coordinates `copy` takes stay active.
+_copy_markers(Ωₕ::AbstractMeshType) = deepcopy(markers(Ωₕ))
 
 # A deepcopy is an independent mutable mesh, so it gets a fresh identity: with the uid
 # copied, the original and the copy would share (uid, version) after one point change each
