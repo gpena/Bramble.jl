@@ -24,16 +24,19 @@ failures that have no cell are under "Open failures". A cell never reads `works`
 
 | Item | Value |
 |:--|:--|
-| Date | 2026-11-03 for the first matrix; the three-summand cells 2026-11-04; the cells changed in v4.2.2 and the compile table 2026-11-07; the ghost load and `Δₕ!` cells and the new `centered_difference!` cell 2026-11-08 and 2026-11-09; the cells changed in v4.2.4 2026-11-10, by the reproducers of the notes in `ad_reductions/` (the same calls as the cells); the geometric-input cells (`polygon`, `dirac`, `levelset`) and the ghost relation cells (`ghost_data`, `ghost_robin`) 2026-11-11, by the cells themselves, one child per policy and group |
-| Tree | branch `v4-2-4`, with the v4.2.4 AD fixes (the v4.2.2 cells were measured on `v4-2-2`); the 2026-11-11 cells on branch `v4-2-4-geometry` at 39f604bf, macbook |
+| Date | 2026-11-03 for the first matrix; the three-summand cells 2026-11-04; the cells changed in v4.2.2 and the compile table 2026-11-07; the ghost load and `Δₕ!` cells and the new `centered_difference!` cell 2026-11-08 and 2026-11-09; the cells changed in v4.2.4 2026-11-10, by the reproducers of the notes in `ad_reductions/` (the same calls as the cells); the geometric-input cells (`polygon`, `dirac`, `levelset`) and the ghost relation cells (`ghost_data`, `ghost_robin`) 2026-11-11, by the cells themselves, one child per policy and group; the solver cells (`factor_*`, `rank_one`, `fdm_*`, `gmg_*`, `chebyshev`) 2026-11-13, by the cells themselves, one child per policy and group |
+| Tree | branch `v4-2-4`, with the v4.2.4 AD fixes (the v4.2.2 cells were measured on `v4-2-2`); the 2026-11-11 cells on branch `v4-2-4-geometry` at 39f604bf, macbook; the solver cells on branch `v4-2-4-solvers` at 87a509f4, macbook |
 | Machine | Apple M2, Julia 1.13.3, on mains power |
-| Enzyme | 0.13.219 for the 2026-11-11 cells, the v4.2.4 cells (2026-11-10) and for the ghost load, `Δₕ!` and `centered_difference!` cells (2026-11-08); 0.13.218 for the other v4.2.2 cells (2026-11-07), the newest in the depot, which a temporary environment without a manifest loads; 0.13.216 for the 2026-11-03 cells |
-| Threads | 4, the test's thread count, so both threaded policies run on 4 threads; the 2026-11-03 figures and the v4.2.4 reproducers ran on 2 (1 for the `constrained` reductions); the 2026-11-11 cells ran on 2 under load, in `--optimize=1` children |
-| Problem | 9 x 9 mesh in 2D, 17 nodes in 1D, 5 x 5 x 5 mesh in 3D, three parameters, `Float64` |
+| Enzyme | 0.13.219 for the solver cells (2026-11-13), the 2026-11-11 cells, the v4.2.4 cells (2026-11-10) and for the ghost load, `Δₕ!` and `centered_difference!` cells (2026-11-08); 0.13.218 for the other v4.2.2 cells (2026-11-07), the newest in the depot, which a temporary environment without a manifest loads; 0.13.216 for the 2026-11-03 cells |
+| Threads | 4, the test's thread count, so both threaded policies run on 4 threads; the 2026-11-03 figures and the v4.2.4 reproducers ran on 2 (1 for the `constrained` reductions); the 2026-11-11 cells ran on 2 under load, in `--optimize=1` children; the solver cells ran on 2, alone on the machine, in `--optimize=1` children |
+| Problem | 9 x 9 mesh in 2D, 17 nodes in 1D, 5 x 5 x 5 mesh in 3D, three parameters, `Float64`; the `fdm_*` cells have one parameter, and the `fdm_*`, `gmg_*` and `chebyshev` cells run on 17 x 17 (uniform) and 9 x 9 (non-uniform) meshes |
 | Agreement | within 1e-8 relative to ForwardDiff on the same policy |
+| After 8b423d93 | The `CpuThreaded` runs of `gmg_coefficient` reverse and `chebyshev` gave wrong gradients before commit 8b423d93; it fixed them (#1168), and both cells were measured again after it |
+| Julia version | The solver cells and the re-measurement after 8b423d93 ran on Julia 1.13.3. juliaup then installed 1.13.4 (2026-11-13, 22:46) and removed 1.13.3; with it, Enzyme 0.13.219 aborts every child within 13 s (`unsupported tag julia.gc_alloc_ptr_offsets`, `UNREACHABLE executed at GradientUtils.cpp:364`), `chebyshev` under `CpuPolyester` among them, so nothing was re-measured on 1.13.4 and the pins above are the 1.13.3 results |
+| Idle run | `gmg_load` under `CpuPolyester` (2 threads, `--optimize=1`): 1501 s wall for 88 s of CPU, its cells normal; the cause is unknown, see "Compile cost of the solver cells" |
 
 The `dirac_location` cell compares with a central difference where ForwardDiff cannot run
-(rel. 1e-5).
+(rel. 1e-5). The `gmg_*` cells compare with ForwardDiff of the direct solve `pde_solve(assemble(…), b)` to 1e-6, since the multigrid iteration stops at `tol = 1e-10`; `rank_one` compares with ForwardDiff of the plain solve of `A + w wᵀ` to 1e-8, since ForwardDiff refuses the `RankOneUpdate`.
 
 ## Kept backends
 
@@ -66,9 +69,18 @@ policy. Each Enzyme cell holds both modes, reverse then forward, unless it says 
 | assemble | `inner₊(κ∇U, ∇V)`, 3D | works | works | not run | not run |
 | assemble | the same with `Mₕ(κ)`, 3D | works | works | works | works |
 | pde_solve | `pde_solve(A, F)` with `A` from a 1D `assemble` of `κ` | works (the `Float64` factor of the values, solved per partial) | works | works | works |
+| pde_solve | `pde_solve(sparse_factorize(A), F)`, `A` from a 1D `assemble` of `κ` and active, the factorization built inside the function | works | throws `IllegalTypeAnalysisException` in both modes (D8, see the limits) | throws `IllegalTypeAnalysisException` in both modes | throws `IllegalTypeAnalysisException` in both modes |
+| pde_solve | `pde_solve(fact, F)`, `fact = sparse_factorize(A₀)` built outside, a load of the parameters | works | works | works | works |
+| pde_solve | `ldiv!(uₕ, fact, F)`, the same factorization and load, into a grid function | works | works | works | works |
+| pde_solve | `pde_solve(RankOneUpdate(A, 1.0, w, w), F)`, `A` and `F` active | throws `ArgumentError`, naming `RankOneUpdate` (D3) | works | works | works |
 | semidiscretize | `semidiscretize_rhs(sd)(du, u, p, t)` | works | works | works | works |
 | matrix_free | `mul!` with `matrix_free_operator` | works | works | works | works |
 | kronecker | `mul!` with `kronecker_operator` | works | works | works | works |
+| fdm_solve | `fdm_solve(a, F; dirichlet = :boundary)` on a constant form built inside the function, `F` active, 2D | works | works | works | works |
+| fdm_solve | the same with a coefficient of the form active | throws `ArgumentError` | throws `ArgumentError` in both modes (D4) | throws `ArgumentError` in both modes | throws `ArgumentError` in both modes |
+| gmg_solve | `gmg_solve(build, Ωₕ, b)`, `b` active, 2D | works | works | reverse works, batched forward ends the process (LLVM assertion, #1232, see the limits) | reverse works, batched forward ends the process (#1232) |
+| gmg_solve | the same with a scalar and a grid-function coefficient of `build` active, and the load scaled | works | reverse works, forward throws `ArgumentError` naming "forward mode" (D9) | reverse works, batched forward ends the process (#1232) | reverse works, batched forward ends the process (#1232) |
+| chebyshev | `chebyshev_preconditioner(a) \ x` with the coefficients of the form and the load scale active, 2D | works | throws `IllegalTypeAnalysisException` in both modes | works | works |
 | ghost | `assemble(a, l)` on a constrained ghost space, parameters scale the form's coefficients, `Δₕ` in the form | works | works | works | works |
 | ghost | the same with `inner₊` and `innerₕ` terms only | works | reverse works, forward not run | not run | not run |
 | ghost | the load of `assemble(a, l)` alone, parameters in the linear form | works | works | works | works |
@@ -91,6 +103,7 @@ More facts about the table:
   cell, the mesh endpoint, agrees to 5e-11. The rest agree to 1e-15 and 1e-16, and the
   cells measured on 2026-11-07 (the 2D Dirichlet, the ghost and three-summand reverse cells)
   agree to 6e-16 or better.
+- The solver cells agree with their reference to 9e-16 or better (`factor_load`, `factor_ldiv`, `fdm_load`, both modes, all policies), to 3.8e-14 (`rank_one`) and to 2e-12 (`gmg_load`, `gmg_coefficient` where they work, against ForwardDiff of the direct solve, asserted to 1e-6). `chebyshev` under `CpuThreaded` and `CpuPolyester` agrees to 5.3e-16. The factorization cells use a 1D mesh of 17 nodes, `fdm_*`, `gmg_*` and `chebyshev` a 17 x 17 uniform and a 9 x 9 seeded non-uniform mesh.
 - The 3D cells run on a `5 x 5 x 5` mesh in the `threed` group. The averaging operator `M₂`
   on a grid function and `Mₕ(κ)` in a form run under all three policies, at Enzyme's default
   type-analysis bounds; the other 3D cells run under `CpuSerial` only.
@@ -234,6 +247,93 @@ so a sparse cell's verdict is its inner backend's.
   compiles at 5.96 GB and 747 s under `CpuPolyester`, against 2.46 GB and 215 s under
   `CpuSerial`, measured on 2026-11-02 by the `CpuPolyester` matrix-free rule's own memory
   run, and not re-run here.
+- **Enzyme does not carry `Ā` through a kept factorization (departure D1).**
+  `pde_solve(fact, F)` and `ldiv!(uₕ, fact, F)` differentiate in `F` only (the `factor_load`
+  and `factor_ldiv` cells, both modes, all three policies, 9e-16 or better). A factorization
+  object has no shadow that can carry `Ā`, so a rule would need the factorization to keep `A`
+  and a second store for its cotangent across two rules. A factorization with a shadow is
+  refused by name, and so is a standard-library dense `lu` with an all-zero shadow. ForwardDiff
+  does differentiate `A` through `pde_solve(sparse_factorize(A), F)`. Differentiate
+  `pde_solve(A, F)` under Enzyme.
+- **A factorization built inside the differentiated function is unsupported under Enzyme
+  (departure D8).** The `factor_matrix` cell throws `IllegalTypeAnalysisException` in both
+  modes, both meshes and all three policies, before the rule on `sparse_factorize` that names
+  `pde_solve(A, F)` runs: `sparse_factorize` infers a `Union` (across backends once
+  AppleAccelerate loads), which Enzyme's type analysis rejects. Each fix measured, one concrete
+  SuiteSparse type or an inference barrier, passes reverse mode and aborts the process in forward
+  mode on an LLVM assertion (`invertedReturn->getType() == gutils->getShadowType(...)`).
+  Build the factorization outside the function, as the `factor_load` and `factor_ldiv` cells do,
+  or differentiate `pde_solve(A, F)`. Reverse mode also needs the factorization's adjoint solve,
+  and a backend without one is refused by name.
+- **`fact \ F` is not routed, and `factorize` of a `Dual` matrix overflows (departure D2).**
+  Each backend defines its own `\`: call `pde_solve(fact, F)`. `ldiv!(uₕ, factorize(A), F)`
+  over a `Dual` matrix overflows inside the standard library's `factorize`, upstream of Bramble.
+- **ForwardDiff refuses a `RankOneUpdate` over a `Dual` matrix (departure D3).** The `rank_one`
+  cell throws an `ArgumentError` naming `RankOneUpdate`, and Enzyme differentiates it in both
+  modes under all three policies (1e-14 or better against ForwardDiff of the plain solve of
+  `A + w wᵀ`). Under ForwardDiff call `pde_solve(A, F; mean_zero = w)`. The Enzyme rule needs
+  `K.A` to be a `SparseMatrixCSC` (any other type is refused by name) and refuses batched reverse
+  mode.
+- **`fdm_solve` has no derivative in its coefficients or mesh (departure D4).** Both backends
+  refuse them by name (`fdm_coefficient`). Call `pde_solve(assemble(a, l)..., F)`. In `F` both
+  modes work (`fdm_load`), with limits under Enzyme: forward mode has width 1 only (a wider batch
+  is refused by name), reverse mode refuses a form with a non-symmetric term (advection) by
+  name, a `KroneckerLinearOperator` operand has no rule, and only a 2D or 3D scalar
+  `BilinearForm` gets a rule, so ghost, 1D and composite forms have none and Enzyme reports
+  `fdm_solve`'s own `ArgumentError` for them.
+- **`gmg_solve`: ForwardDiff differentiates the cycles, Enzyme an implicit rule (departures D5
+  and D9).** Under ForwardDiff an active coefficient differentiates the cycles themselves, which
+  agrees with the direct solve's derivative to 1e-6 at `tol = 1e-10`. Under Enzyme `b` is
+  differentiated in both modes, and the coefficients `build` captures in reverse mode only
+  (`gmg_coefficient`: a scalar and a grid function together). Under `CpuSerial` forward mode
+  with a coefficient active throws an `ArgumentError` naming "forward mode". Under Enzyme:
+  - Reverse mode refuses a non-Hermitian form by name, and a form whose operator changed between
+    the solve and the reverse pass (a `Ref` the form holds, set after the solve).
+  - An active mesh is refused by name: build the mesh outside the differentiated function. A
+    mesh built inside a reverse loss reaches the rule with a shadow and is refused the same way
+    (measured on a 9 x 9 mesh, 2026-11-13).
+  - A composite-space `build` stops in LLVM (`broken gc calling conv fix`), not with an
+    `ArgumentError`: `build` is an opaque closure type, so no rule signature can exclude it.
+  - A ghost-space `build` with active coefficients is refused in both modes, and a constant
+    ghost-space `build` that captures a scalar is refused in reverse mode even with only `b`
+    active.
+  - Forward mode refuses any `build` whose shadow carries data (departure D9). Under runtime
+    activity Enzyme can pass a constant closure's primal, captured values included, as its
+    shadow, so no rule can tell a constant `build` from an active one whose tangent equals its
+    value. Three forward designs gave silent wrong tangents (relative error up to 0.74). Forward
+    mode with only `b` active still works.
+  - Forward mode over-refuses a constant number captured by value from a non-`const` global, and
+    `gmg_mixed(0.3, <untyped global Ref>)`. Use a `const` global, a `Ref`, or a `Const` or
+    `DI.Constant` argument. `DI.derivative` in a coefficient is refused too.
+  - An active value stored into a shared mutable that `build` captures (a global `Ref`, a `const`
+    global vector, a `Const` vector argument) gets 0 from Enzyme in both modes, with no Bramble
+    rule involved: Enzyme drops it on a plain `c -> (GR[] = c; h(GR))`. Close over the value
+    instead.
+  For a form any of these refuse, differentiate `pde_solve(assemble(build(gridspace(Ωₕ))), b)`.
+- **Batched forward through `gmg_solve` ends the process under the threaded policies
+  ([gpena/Bramble.jl#1232](https://github.com/gpena/Bramble.jl/issues/1232), departure D7).** The
+  issues ask for `CpuSerial`; the cells ran under all three policies. Under `CpuThreaded` and
+  `CpuPolyester`, Enzyme forward mode of `gmg_load` and `gmg_coefficient` aborts the process with
+  the LLVM assertion `invertedReturn->getType() == gutils->getShadowType(call.getType())` when
+  the forward call is batched, which DI's gradient is: its width is the number of parameters (3
+  in the cells). The abort comes before the rule runs, so the named forward refusal of
+  `gmg_coefficient` is not reached either. It was there before the coefficient rule (at
+  03d4c9c6), width 1 works under `CpuThreaded`, and `CpuSerial` works at any width. `gmg_solve`
+  infers `Any` under both threaded policies and a concrete type under `CpuSerial`; that is a likely
+  precondition, measured but not shown to be the cause. Both forward halves are `:aborts` under
+  the threaded policies, each in a child of its own. To differentiate in forward mode there, use
+  width 1: a gradient with a single parameter, or `DI.pushforward` with one tangent (DI's
+  pushforward takes a tuple of tangents and its width is the tuple's length; only the
+  single-parameter case was measured). Reverse mode is not affected. `chebyshev` under Enzyme
+  throws `IllegalTypeAnalysisException` under `CpuSerial` only; the two threaded policies match
+  ForwardDiff.
+- **Plain `Enzyme.Reverse` needs runtime activity (`set_runtime_activity`).** Without it `ldiv!`
+  throws `EnzymeRuntimeActivityError`, and DI's plain `AutoEnzyme` throws
+  `EnzymeMutabilityException` (the table of the DI settings above).
+- **Follow-ups.** `gmg_solve` with `Dual`s of different tags
+  ([gpena/Bramble.jl#1227](https://github.com/gpena/Bramble.jl/issues/1227)), and a CHOLMOD
+  factorization into a `VectorElement` load, which fails with a `MethodError` before any AD is
+  involved ([gpena/Bramble.jl#1228](https://github.com/gpena/Bramble.jl/issues/1228)).
 
 ## Open failures
 
@@ -341,6 +441,38 @@ meshes in both modes; it was not timed as a child.
 The 2026-11-03 figures, at 2 threads and as maximum resident set, were: dense 179 s, 3.4 GB (`CpuSerial`); assemble 578 s,
 3.9 GB; solve 176 s, 3.9 GB; operators 118 s, 2.5 GB; sparse Jacobian 133 s, 1.8 GB; DI
 settings 100 s, 2.8 GB.
+
+## Compile cost of the solver cells
+
+Measured 2026-11-13, at 2 threads in `--optimize=1` children, alone on the machine, one child
+per policy and group as the test runs it (wall time in seconds, `/usr/bin/time -l` peak memory
+footprint, one run each). The wall time includes about 70 s of package loading. Every group
+stays under the 10 GB cap and every wall time under 10 minutes, except one run noted below.
+
+| Group | Cells | `CpuSerial` | `CpuThreaded` | `CpuPolyester` |
+|:--|:--|:--|:--|:--|
+| factor_matrix | `factor_matrix` | 112 s; 2.70 GB | 119 s; 2.98 GB | 128 s; 3.11 GB |
+| factor_kept | `factor_load`, `factor_ldiv` | 85 s; 2.22 GB | 86 s; 2.24 GB | 86 s; 2.25 GB |
+| rank_one | `rank_one` | 116 s; 2.54 GB | 131 s; 2.68 GB | 124 s; 2.72 GB |
+| fdm | `fdm_load`, `fdm_coefficient` | 96 s; 2.37 GB | 96 s; 2.38 GB | 96 s; 2.45 GB |
+| gmg_load | `gmg_load` | 89 s; 2.27 GB | 91 s; 2.27 GB, plus 84 s; 2.25 GB for the forward child | 1501 s (88 s CPU); 2.17 GB, plus 87 s; 2.21 GB for the forward child |
+| gmg_coefficient | `gmg_coefficient` | 131 s; 2.47 GB | 342 s; 3.79 GB, plus 84 s; 2.27 GB for the forward child | 300 s; 3.53 GB, plus 87 s; 2.31 GB for the forward child |
+| chebyshev | `chebyshev` | 124 s; 2.91 GB | 306 s; 4.29 GB | 273 s; 4.07 GB |
+
+The forward half of the two `gmg` cells under the threaded policies ends the process, so the
+test gives each its own child (`:aborts`): the figures after "plus" are that child, which ran
+`nonuniform` forward only. The main `gmg` figures are from the run that skips the aborting
+forward calls, as the test runs it.
+
+`gmg_load` under `CpuPolyester` took 1501 s wall for 88 s of CPU (user 87.9 s, system 1.5 s),
+2 threads, `--optimize=1`: about 23 minutes in which the process did not compute. Its cells
+ended normally and agree with the pins. The cause is unknown; the same child under `CpuSerial`
+(89 s) and `CpuThreaded` (87 s), and the first `CpuPolyester` run of the group (92 s, which
+ended in the forward abort), did not stall. It is a measurement of that run, and has not been
+reproduced.
+
+Under `CpuSerial`, the cell that ends in an Enzyme failure still pays its compile: `factor_matrix`
+and `chebyshev` took 112 s and 124 s to throw `IllegalTypeAnalysisException`.
 
 ## Reproducing
 

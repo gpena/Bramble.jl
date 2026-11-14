@@ -754,6 +754,61 @@ end
     @test typeof(gmg_preconditioner(lap, Ω)) <: rt
 end
 
+# The tag of the Dual hierarchy built in the testset below.
+struct _MGTag end
+
+@testset "gmg_solve: ForwardDiff (#1168)" begin
+    # The oracle is ForwardDiff of the direct solve, exact; a difference quotient of the
+    # iterative solve would carry its residual. Seed 1 gives a 9×9 mesh whose primal stalls.
+    bld(c) = V -> form(V, V, (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v)))
+    function bldk(c)
+        return V -> begin
+            κ = element(V, typeof(c))
+            fill!(parent(κ), c)
+            return form(V, V, (u, v) -> innerₕ(u, v) + inner₊(κ * ∇ₕ(u), ∇ₕ(v)))
+        end
+    end
+    sq(u) = sum(abs2, parent(u))
+    for (dims, unif) in (((17, 17), true), ((9, 9), false))
+        Random.seed!(1234)
+        Ω = mesh(domain(_mg_box(2)), dims, (unif, unif))
+        W = gridspace(Ω)
+        b0 = [1.0 + sin(i) for i in 1:npoints(Ω)]
+        # An active load on a Float64 hierarchy: the solve is linear in b, so d/dq of
+        # ‖u((1 + q) b)‖² at q = 0.4 is 2(1.4)‖u(b)‖².
+        S = sum(abs2, pde_solve(assemble(bld(0.7)(W)), b0))
+        d = ForwardDiff.derivative(q -> sq(gmg_solve(bld(0.7), Ω, (1 + q) .* b0; tol = 1e-10)), 0.4)
+        @test isapprox(d, 2.8 * S; rtol = 1e-6)
+        # An active coefficient, scalar or grid function: a Dual hierarchy, a Float64 load.
+        for B in (bld, bldk)
+            r = ForwardDiff.derivative(q -> sum(abs2, pde_solve(assemble(B(q)(W)), b0)), 0.7)
+            dc = ForwardDiff.derivative(q -> sq(gmg_solve(B(q), Ω, b0; tol = 1e-10)), 0.7)
+            @test isapprox(dc, r; rtol = 1e-6)
+        end
+        # Both active under one tag: the cycles run in Dual, the load is not split.
+        r = ForwardDiff.derivative(q -> sum(abs2, pde_solve(assemble(bld(q)(W)), (1 + q) .* b0)), 0.7)
+        dm = ForwardDiff.derivative(q -> sq(gmg_solve(bld(q), Ω, (1 + q) .* b0; tol = 1e-10)), 0.7)
+        @test isapprox(dm, r; rtol = 1e-6)
+    end
+
+    # The Float64 loop allocates per solve, not per cycle: a tighter tol runs more cycles
+    # for the same bytes.
+    Ω = _mg_jitter_mesh(2, 17)
+    P = gmg_preconditioner(_mg_spd, Ω)
+    b = ones(npoints(Ω))
+    loop(t) = (Bramble._gmg_solve_loop(P, b, :V, t, 100); @allocated Bramble._gmg_solve_loop(P, b, :V, t, 100))
+    @test loop(1e-3) == loop(1e-11)
+    # A Dual load on a hierarchy of its own Dual type runs one cycle loop, not the split's
+    # value solve first: the solve allocates what that one loop does.
+    Ωu = mesh(domain(_mg_box(2)), (17, 17), (true, true))
+    PD = gmg_preconditioner(bld(ForwardDiff.Dual{_MGTag}(0.7, 1.0)), Ωu)
+    bD = ForwardDiff.Dual{_MGTag}.(b, b)
+    whole() = @allocated Bramble._gmg_solve_loop(PD, bD, :V, 1e-10, 100)
+    once() = @allocated Bramble._gmg_cycles_to_tol(PD, bD, :V, 1e-10, 100)
+    whole(), once()
+    @test whole() == once()
+end
+
 @testset "gmg: threaded cycles agree" begin
     policies = (Parallel(),)
     for policy in policies, (D, n) in filter(c -> c[1] in TEST_DIMS, ((2, 33), (3, 9)))

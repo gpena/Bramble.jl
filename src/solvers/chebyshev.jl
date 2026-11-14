@@ -281,7 +281,15 @@ function max_eigenvalue_estimate(
     n == size(op, 2) || _throw_chebyshev_nonsquare(op)
     iterations >= 1 ||
         throw(ArgumentError("max_eigenvalue_estimate needs iterations >= 1, got $iterations"))
-    v = rand!(Random.Xoshiro(327), zeros(T, n))
+    v = zeros(T, n)
+    rng = Random.Xoshiro(327)
+    if T <: Union{AbstractFloat, Complex{<:AbstractFloat}}
+        rand!(rng, v)
+    else
+        # A type `Random` has no sampler for (a `ForwardDiff.Dual`, #1169) takes `Float64`
+        # draws converted, as `_draw_random_points!` does; floats keep their own stream.
+        v .= rand(rng, Float64, n)
+    end
     v .-= one(T) / 2
     v ./= norm(v)
     w = similar(v)
