@@ -18,7 +18,6 @@ using Bramble: change_points!, sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using Random
-using Serialization: Serialization
 using ..TestUtils: child_output
 
 if Sys.isapple()
@@ -783,11 +782,21 @@ end
             end
 
             mktempdir() do dir
-                file = joinpath(dir, "bordered.jls")
-                Serialization.serialize(file, bordered)
+                # Plain text, Base only: under Pkg.test the child sees just the test
+                # environment, which lists no Serialization. `repr` round-trips a Float64.
+                file = joinpath(dir, "bordered.txt")
+                open(file, "w") do io
+                    println(io, size(bordered, 1), " ", size(bordered, 2))
+                    for v in (bordered.colptr, bordered.rowval, bordered.nzval)
+                        println(io, join(repr.(v), " "))
+                    end
+                end
                 code = """
-                using AppleAccelerate, SparseArrays, Serialization
-                B = deserialize(ARGS[1])
+                using AppleAccelerate, SparseArrays
+                l = readlines(ARGS[1])
+                m, n = parse.(Int, split(l[1]))
+                B = SparseMatrixCSC(m, n, parse.(Int, split(l[2])), parse.(Int, split(l[3])),
+                                    parse.(Float64, split(l[4])))
                 n0 = Threads.maxthreadid()
                 for _ in 1:300
                     aa = AppleAccelerate.AAFactorization(AppleAccelerate.AASparseMatrix(B))
