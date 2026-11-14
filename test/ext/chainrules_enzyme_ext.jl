@@ -1119,7 +1119,41 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                         function_annotation = Enzyme.Const)
                     @test DI.gradient(f, ad, q0) ≈ g rtol=1e-8
                 end
+
+                # The returned solution is the caller's to change: `u .*= 2` after the solve
+                # must not reach the cotangent of `K`, which reads the solution at the reverse
+                # pass (gpena/Bramble.jl#1185). The reference doubles a copy instead.
+                f_mut(q) = (u = Bramble.pde_solve(ROU(mat(q), 1.0, wp, wp), (1 + q[2]) .* Fp);
+                    u .*= 2.0; sum(abs2, u))
+                ref2(q) = 4 * ref(q)
+                g2 = ForwardDiff.gradient(ref2, q0)
+                ad_rev = DI.AutoEnzyme(; mode = rev, function_annotation = Enzyme.Const)
+                @test DI.gradient(f_mut, ad_rev, q0) ≈ g2 rtol=1e-8
             end
+
+            # The tape's own copy of the solution costs a vector only when `K` is active. The
+            # rule's `augmented_primal` is called directly with the `RevConfig` of a width-1
+            # reverse pass that needs the primal and the shadow; the tape's second slot is the
+            # solution `reverse` reads. With a `Const` `K` it is the primal itself (`F̄ = λ`
+            # never reads it); with an active `K` it is a separate vector, which changing the
+            # primal in place leaves alone.
+            rcfg = Enzyme.EnzymeRules.RevConfig{true, true, 1, (false, false, false), false,
+                false}()
+            K_tp, F_tp = rou(p0)
+            u_tp = Bramble.pde_solve(K_tp, F_tp)
+            aug_const = Enzyme.EnzymeRules.augmented_primal(
+                rcfg, Enzyme.Const(Bramble.pde_solve), Enzyme.Duplicated{Vector{Float64}},
+                Enzyme.Const(K_tp), Enzyme.Duplicated(F_tp, zero(F_tp)))
+            @test aug_const.tape[2] === aug_const.primal
+            @test aug_const.primal ≈ u_tp
+            aug_act = Enzyme.EnzymeRules.augmented_primal(
+                rcfg, Enzyme.Const(Bramble.pde_solve), Enzyme.Duplicated{Vector{Float64}},
+                Enzyme.Duplicated(K_tp, shadow(zeros(length(p0)))),
+                Enzyme.Duplicated(F_tp, zero(F_tp)))
+            @test aug_act.tape[2] !== aug_act.primal
+            @test aug_act.tape[2] == aug_act.primal
+            aug_act.primal .*= 2
+            @test aug_act.tape[2] ≈ u_tp
         else
             @test_skip "Enzyme not in this environment"
         end
