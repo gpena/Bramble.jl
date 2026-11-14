@@ -438,7 +438,8 @@ untyped methods alone. So `semidiscretize`, and `dirichlet_constraints` with a t
 refuse an untyped `g(x)` beside a `g(x::Real, t::Real)` typed on `x`: type all of its
 methods or none. A method typed only after `x` reads as an optional argument, so `norm`
 (with `norm(itr, p::Real)`) is spatial, and so is `g(x); g(x, t::Real)`, whose `t` is
-dropped.
+dropped. The rule also refuses some Base functions passed directly on a 1D mesh, such as
+`round` (with `round(x::Real, r::RoundingMode)`); wrap one as `x -> round(x)`.
 
 A `ComposedFunction` or a `Base.Fix1`/`Base.Fix2` is classified by what it wraps, not by its
 own varargs call method: a composition by its innermost function, which receives every
@@ -528,7 +529,7 @@ function _validate_hidden_typed_arity(caller::AbstractString, lbl, f)
         "$caller: Dirichlet condition for label `:$lbl`, $(f), has an untyped method of " *
         "one arity beside a method of another arity typed on `x`, so its time and " *
         "parameter dependence cannot be read. Give all its methods the same typing, or " *
-        "type none of them.",
+        "type none of them, or pass a wrapper such as `x -> f(x)`.",
     ),
     )
 end

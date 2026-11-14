@@ -1424,8 +1424,20 @@ _pinned(x, t::Real) = 1.0 + 2t
         @test du_g == du_t
     end
     @test cls(_pinned) isa Bramble.StaticConstraints
-    pinned = dirichlet_constraints(Ωₕ, I, :boundary => _pinned, :boundary => (x, t) -> t)
-    @test Bramble.identifier(first(Bramble.conditions(pinned(0.5))))(0.0) == 1.0
+    @test Bramble._fix_time(_pinned, 0.5) === _pinned
+
+    # `round(x::Real, r::RoundingMode)` types `x`, so a bare `round` is refused on a 1D
+    # mesh; the error names the wrapper, and the wrapper is accepted.
+    err_round = try
+        cls(round)
+        nothing
+    catch ex
+        ex
+    end
+    @test err_round isa ArgumentError
+    @test occursin("same typing", sprint(showerror, err_round))
+    @test occursin("x -> f(x)", sprint(showerror, err_round))
+    @test cls(x -> round(x)) isa Bramble.StaticConstraints
 
     # ... where the same methods untyped, or all typed, are classified.
     @test cls((x, t) -> 2t, I) isa Bramble.TimeDependentConstraints
