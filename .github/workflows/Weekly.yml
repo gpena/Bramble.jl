@@ -121,9 +121,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The `ad-*` shards stay on Julia 1.13.3: on 1.13.4, Enzyme v0.13.219 aborts on the
+      # `julia.gc_alloc_*` operand bundles (EnzymeAD/Enzyme.jl#4051, gpena/Bramble.jl#1234).
+      # Remove the pin once an Enzyme release supports 1.13.4.
       - uses: julia-actions/setup-julia@v3
         with:
-          version: ${{ matrix.version }}
+          version: ${{ startsWith(matrix.shard, 'ad-') && '1.13.3' || matrix.version }}
 
       # Compiled images are not cached here, on purpose. When this job had eight legs they were about 5 GB, and
       # the repository's cache quota is 10 GB: they evicted the `unit-and-slow` entry that CI
