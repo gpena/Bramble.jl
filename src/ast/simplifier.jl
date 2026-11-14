@@ -587,8 +587,9 @@ end
 
 # A point load has no surface measure to be integrated against, so `inner_Γ` refuses one
 # (gpena/Bramble.jl#1199). `_product` (operators/inner.jl) calls this for every surface
-# weight; the plain `inner_Γ(::LazyOp, ::LazyOp)` calls it first, before `_inner_gamma`
-# reads its markers, so a missing marker does not hide the dirac. It reads types only.
+# weight. Every `inner_Γ` method that can take a dirac on the left also calls it first,
+# before it reads its markers, so a missing marker does not hide the dirac. It reads types
+# only.
 @inline function _refuse_surface_dirac(left)
     _any_dirac(left) && _throw_surface_dirac()
     return nothing

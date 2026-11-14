@@ -434,7 +434,8 @@ _bytes(f, args...) = @allocated f(args...)
         cases = (v -> inner_Γ(δ, v; markers = :xmin), v -> inner_Γ(δ, v; markers = :xmax),
             v -> inner_Γ(dirac((0.5, 0.5), 2.0), v; markers = :boundary),
             v -> inner_Γ(3.0 * δ, v), v -> inner_Γ(δ + dirac((0.0, 0.8), 1.0), v; markers = :xmin),
-            v -> inner_Γ(δ * η[1], v; markers = :xmin), v -> inner_Γ(dot((δ, 1.0), η), v; markers = :xmin))
+            v -> inner_Γ(δ * η[1], v; markers = :xmin), v -> inner_Γ(dot((δ, 1.0), η), v; markers = :xmin),
+            v -> inner_Γ(δ * η[1], v), v -> inner_Γ(dot((δ, 1.0), η), v), v -> inner_Γ(δ, ∂ₙ(v)))
         for f in cases
             @test_throws ArgumentError form(Wₕ, f)
             @test_throws "innerₕ(dirac(x0, s), v)" form(Wₕ, f)
@@ -444,6 +445,8 @@ _bytes(f, args...) = @allocated f(args...)
         @test !iszero(assemble(form(Gₕ, v -> inner_Γ(x -> 1.0, ∂ₙ(v); markers = :xmin))))
         @test_throws ArgumentError form(Gₕ, v -> inner_Γ(δ, ∂ₙ(v); markers = :xmin))
         @test_throws "innerₕ(dirac(x0, s), v)" form(Gₕ, v -> inner_Γ(δ, ∂ₙ(v); markers = :xmin))
+        @test_throws ArgumentError form(Gₕ, v -> inner_Γ(δ, ∂ₙ(v)))
+        @test_throws "innerₕ(dirac(x0, s), v)" form(Gₕ, v -> inner_Γ(δ, ∂ₙ(v)))
     end
 end
 
