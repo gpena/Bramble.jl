@@ -772,6 +772,7 @@ import Base: diff
                 "face :interior" => (:interior, markers(
                     interval(0, 1), :interior => :left)))
             for (name, (lbl, dm)) in cases, f in (iterative_refinement!, resize!)
+
                 M = build(dm)
                 before = snap(M)
                 e = try

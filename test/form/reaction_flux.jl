@@ -613,7 +613,8 @@ _bytes(f, scratch, A, F, uₕ, marker) = @allocated f(scratch, A, F, uₕ; marke
     # it with the form methods' message instead of reading those rows (#1221).
     @testset "Matrix methods refuse ghost spaces" begin
         Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 7), (false, false))
-        Ωp = mesh(domain(interval(0.0, 3.0) × interval(0.0, 3.0),
+        Ωp = mesh(
+            domain(interval(0.0, 3.0) × interval(0.0, 3.0),
                 :P => Bramble.polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])),
             (12, 12), (false, false))
         G = gridspace(Ω; ghosts = :boundary)
@@ -624,12 +625,13 @@ _bytes(f, scratch, A, F, uₕ, marker) = @allocated f(scratch, A, F, uₕ; marke
         CC = constrained(G × G, u -> (rel(u(1))..., rel(u(2))...))
         U, _ = Bramble.polygon_spaces(Ωp, :P, x -> 0.0)
         system(V) = (n = ndofs(V); (sparse(1:n, 1:n, fill(2.0, n)), ones(n), fill!(element(V), 1.0), n))
-        message(f) = try
-            f()
-            ""
-        catch err
-            err isa ArgumentError ? sprint(showerror, err) : string(typeof(err))
-        end
+        message(f) =
+            try
+                f()
+                ""
+            catch err
+                err isa ArgumentError ? sprint(showerror, err) : string(typeof(err))
+            end
         # positive control: a composite of plain spaces goes through
         W = gridspace(Ω)
         A, F, v, n = system(W × W)
