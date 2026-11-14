@@ -166,10 +166,11 @@ function EnzymeRules.forward(
 end
 
 # A ghost mesh's refresh rebuilds the padded mesh's geometry and labels from the physical
-# mesh. The rule drops any derivative of that geometry, so a ghost mesh's coordinates are
-# differentiated by ForwardDiff only (#1131). Without this rule, an assembly into a constant
-# buffer is an inactive call whose nofree copies reach the marker warning's `@warn`, whose
-# logger lookup calls `strcmp`, which Enzyme cannot copy (#1127).
+# mesh. The rule drops any derivative that passes through a refresh (#1131); a ghost mesh
+# built inside the differentiated function keeps its geometry derivatives. Without this
+# rule, an assembly into a constant buffer is an inactive call whose nofree copies reach
+# the marker warning's `@warn`, whose logger lookup calls `strcmp`, which Enzyme cannot
+# copy (#1127).
 EnzymeRules.inactive(::typeof(Bramble._refresh!), args...) = nothing
 
 # A mesh `copy` deep-copies its markers, which are `BitVector`s and carry no derivative.
