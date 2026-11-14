@@ -421,6 +421,30 @@ _bytes(f, args...) = @allocated f(args...)
             @test_throws "dirac point 2" dirac(pts)
         end
     end
+
+    # A point load has no surface measure, so `inner_Γ` refuses a Dirac source however it is
+    # written, on a face or off it, with or without markers; `innerₕ` is the spelling (#1199)
+    @testset "dirac under inner_Γ is refused (#1199)" begin
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 7), (true, true))
+        Bramble.change_points!(Ω, (range(0, 1; length = 6) .^ 1.25, range(0, 1; length = 7) .^ 1.5))
+        Wₕ = gridspace(Ω)
+        δ = dirac((0.0, 0.37), 2.0)
+        @test sum(assemble(form(Wₕ, v -> innerₕ(δ, v)))) ≈ 2.0 rtol = 1e-12
+        @test sum(assemble(form(Wₕ, v -> inner_Γ(x -> 1.0, v; markers = :xmin)))) ≈ 1.0 rtol = 1e-12
+        cases = (v -> inner_Γ(δ, v; markers = :xmin), v -> inner_Γ(δ, v; markers = :xmax),
+            v -> inner_Γ(dirac((0.5, 0.5), 2.0), v; markers = :boundary),
+            v -> inner_Γ(3.0 * δ, v), v -> inner_Γ(δ + dirac((0.0, 0.8), 1.0), v; markers = :xmin),
+            v -> inner_Γ(δ * η[1], v; markers = :xmin), v -> inner_Γ(dot((δ, 1.0), η), v; markers = :xmin))
+        for f in cases
+            @test_throws ArgumentError form(Wₕ, f)
+            @test_throws "innerₕ(dirac(x0, s), v)" form(Wₕ, f)
+        end
+        # the facet weight of a normal derivative on the test side
+        Gₕ = gridspace(Ω; ghosts = :xmin)
+        @test !iszero(assemble(form(Gₕ, v -> inner_Γ(x -> 1.0, ∂ₙ(v); markers = :xmin))))
+        @test_throws ArgumentError form(Gₕ, v -> inner_Γ(δ, ∂ₙ(v); markers = :xmin))
+        @test_throws "innerₕ(dirac(x0, s), v)" form(Gₕ, v -> inner_Γ(δ, ∂ₙ(v); markers = :xmin))
+    end
 end
 
 end # module

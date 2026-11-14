@@ -261,11 +261,18 @@ the sum once rather than each term separately.
     return nothing
 end
 
+# Only a surface weight checks its source, refusing a Dirac term (`_refuse_surface_dirac`,
+# ast/simplifier.jl); `InnerGammaNormal` and `InnerGammaFacet` add their methods in
+# operators/normal.jl.
+@inline _check_surface_source(::AbstractInnerProduct, left) = nothing
+@inline _check_surface_source(::InnerGamma, left) = _refuse_surface_dirac(left)
+
 # A source on the left makes the product linear; anything else makes it bilinear.
 @inline function _product(
         w::W, left::LazyOp{D}, right::LazyOp{D}
 ) where {W <: AbstractInnerProduct, D}
     _check_direction(w, Val(D))
+    _check_surface_source(w, left)
     return if _is_source_only(left)
         LinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
     else
@@ -425,6 +432,7 @@ l = form(Wₕ, v -> innerₕ(fₕ, v) + inner_Γ(g, v; markers = (:xmax,)))
 See also: [`innerₕ`](@ref), [`inner₊`](@ref)
 """
 function inner_Γ(left::LazyOp{D}, right::LazyOp{D}; markers = ()) where {D}
+    _refuse_surface_dirac(left)
     return _product(_inner_gamma(Val(D), markers), left, right)
 end
 

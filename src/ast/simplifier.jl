@@ -585,6 +585,22 @@ simplify_ast(op::_ComponentSum) = simplify_ast(op.sum)
                          its own inner product, e.g. `innerₕ(Mₓ(f), v) + innerₕ(Mₓ(δ), v)`."))
 end
 
+# A point load has no surface measure to be integrated against, so `inner_Γ` refuses one
+# (gpena/Bramble.jl#1199). `_product` (operators/inner.jl) calls this for every surface
+# weight; the plain `inner_Γ(::LazyOp, ::LazyOp)` calls it first, before `_inner_gamma`
+# reads its markers, so a missing marker does not hide the dirac. It reads types only.
+@inline function _refuse_surface_dirac(left)
+    _any_dirac(left) && _throw_surface_dirac()
+    return nothing
+end
+
+@noinline function _throw_surface_dirac()
+    throw(ArgumentError("inner_Γ does not take a dirac source: a point load has no surface \
+                         measure to integrate against. Write it under innerₕ instead, \
+                         `innerₕ(dirac(x0, s), v)`, which loads the strength s at x0 \
+                         whether or not x0 lies on Γ."))
+end
+
 # --- Inner products: scalar lifting and component distribution ---------------------- #
 
 function simplify_ast(op::BilinearProduct{D, W}) where {D, W}

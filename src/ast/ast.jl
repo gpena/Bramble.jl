@@ -178,6 +178,10 @@ b_{idx + c} = S \\cdot w_c, \\qquad \\sum_{c \\in \\{0, 1\\}^D} w_c = 1
 - **Off-grid source**: Load distributes locally to the surrounding cell vertices, preserving total integral ``\\sum b_i = S``.
 - **Contraction**: Contracting the linear form against a discrete grid function ``v_h \\in W_h`` evaluates ``\\ell(v_h) = b \\cdot v_h \\approx S \\cdot v_h(x_0)`` with ``\\mathcal{O}(h^2)`` accuracy.
 
+Under [`inner_Γ`](@ref) a source holding a `dirac` term throws an `ArgumentError`: a point
+load has no surface measure to integrate against. For a point on `Γ` too, write
+`innerₕ(dirac(x0, s), v)`.
+
 # Arguments
 - `x0`: Point coordinate, a scalar number (1D), `NTuple{D, Real}` (type-stable), or
   `AbstractVector{<:Real}` (one `D`-dimensional point, not inferable). An empty tuple or vector

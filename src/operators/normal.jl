@@ -722,6 +722,12 @@ end
     return InnerGammaFacet{typeof(m), DIM, SIDE, G}(m)
 end
 
+# The directional and facet weights refuse a Dirac source as `InnerGamma` does
+# (`_check_surface_source`, operators/inner.jl).
+@inline function _check_surface_source(::Union{InnerGammaNormal, InnerGammaFacet}, left)
+    return _refuse_surface_dirac(left)
+end
+
 @inline function compute_weight(
         w::InnerGammaFacet{M, DIM, SIDE}, space, I::CartesianIndex{D}, lin_idx::Int
 ) where {M, DIM, SIDE, D}
