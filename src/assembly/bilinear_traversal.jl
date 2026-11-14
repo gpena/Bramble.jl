@@ -1379,9 +1379,15 @@ end
 
 # `f(piece)` for each piece of `region` (`CartesianIndices` of `UnitRange{Int}`s) in `g`:
 # the ranges of each line along axis 1 cut to `region`, in the region's own order.
+# The tail of the region is walked as one loop over its linear index, in the same
+# column-major order: in 3D the nested loop's inner trip count changes with each slab,
+# and Enzyme's reverse of that nest fails LLVM verification ("Instruction does not
+# dominate all uses!", gpena/Bramble.jl#1177).
 @inline function _each_piece(f::F, region::CartesianIndices, g::_GridLines) where {F}
     r1 = first(region.indices)
-    for J in CartesianIndices(Base.tail(region.indices))
+    tail = CartesianIndices(Base.tail(region.indices))
+    for k in 1:length(tail)
+        J = @inbounds tail[k]
         l = @inbounds g.lines[J]
         for s in @inbounds(g.ptr[l]:(g.ptr[l + 1] - 1))
             r = max(first(r1), @inbounds g.lo[s]):min(last(r1), @inbounds g.hi[s])
@@ -1394,11 +1400,14 @@ end
 # `_each_piece` with `visit(sink, term, wsp, …, piece, …)` for `f`, its arguments passed
 # and not captured: a `do` block holding the walk space by value is an aggregate of ~750
 # bytes for a ghost space, whose pieces past Enzyme's 512-byte type offset it cannot type
-# ("Cannot deduce type of copy", `CpuSerial`, gpena/Bramble.jl#1152).
+# ("Cannot deduce type of copy", `CpuSerial`, gpena/Bramble.jl#1152). Its tail loop is
+# `_each_piece`'s, one loop over the linear index, for the same reason (#1177).
 @inline function _visit_pieces!(visit::V, sink, term, wsp, mesh_markers, lin_indices,
         region::CartesianIndices, g::_GridLines, row_offset::Int, col_offset::Int) where {V}
     r1 = first(region.indices)
-    for J in CartesianIndices(Base.tail(region.indices))
+    tail = CartesianIndices(Base.tail(region.indices))
+    for k in 1:length(tail)
+        J = @inbounds tail[k]
         l = @inbounds g.lines[J]
         for s in @inbounds(g.ptr[l]:(g.ptr[l + 1] - 1))
             r = max(first(r1), @inbounds g.lo[s]):min(last(r1), @inbounds g.hi[s])

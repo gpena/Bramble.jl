@@ -96,13 +96,23 @@ end
 @inline _initial_vector(u₀::AbstractVector) = collect(u₀)
 @inline _initial_vector(u₀) = collect(parent(u₀))
 
-# A `p` carrying `ForwardDiff.Dual`s (or any non-`AbstractFloat` element type) makes
+# A `p` whose elements are not `AbstractFloat` (typically `ForwardDiff.Dual`s) makes
 # `dirichlet_bc!` write `p`-dependent values into the copy, which a `Float64` vector cannot
-# hold. The copy is widened only then: a `Float32` `u₀` with a `Float64` `p` stays
-# `Float32`.
-@inline _initial_vector(u₀, p) = _initial_vector(u₀)
-@inline function _initial_vector(u₀, ::AbstractArray{T}) where {T}
+# hold. `_param_eltype` reads that element type off `p`: an array's `eltype`, a number's
+# own type, the promotion over the entries of a tuple or named tuple (nested ones too),
+# `Union{}` for anything else, a user struct included. The copy is widened only when it is
+# not an `AbstractFloat`: a `Float32` `u₀` with a `Float64` `p` stays `Float32`, and
+# `NullParameters` or a struct `p` leaves the copy as it is.
+@inline _param_eltype(p::AbstractArray) = eltype(p)
+@inline _param_eltype(p::Number) = typeof(p)
+@inline _param_eltype(p::Union{Tuple, NamedTuple}) = foldl(
+    (T, x) -> promote_type(T, _param_eltype(x)), values(p); init = Union{}
+)
+@inline _param_eltype(_) = Union{}
+
+@inline function _initial_vector(u₀, p)
     v = _initial_vector(u₀)
+    T = _param_eltype(p)
     return T <: AbstractFloat ? v : convert(Vector{promote_type(eltype(v), T)}, v)
 end
 
