@@ -513,9 +513,9 @@ end
 
 # Is argument `i` of method `m` typed narrower than `Any`?
 function _types_arg(m::Method, i::Int)
-    params = Base.unwrap_unionall(m.sig).parameters
-    T = params[min(i + 1, length(params))]
-    T isa Core.TypeofVararg && (T = T.T)
+    sig = Base.unwrap_unionall(m.sig)
+    # `fieldtype` reads a `Vararg` slot as its element type.
+    T = fieldtype(sig, min(i + 1, length(sig.parameters)))
     T isa TypeVar && (T = T.ub)
     return T !== Any
 end
