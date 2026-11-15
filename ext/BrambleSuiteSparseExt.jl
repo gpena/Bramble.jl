@@ -179,16 +179,6 @@ function Base.:\(
     return complex.(fact \ real(b), fact \ imag(b))
 end
 
-function _throw_not_hermitian(A, what)
-    throw(
-        ArgumentError(
-            "$what a Hermitian matrix, and this $(eltype(A)) matrix is not Hermitian. " *
-            "Refactor onto a Hermitian matrix, or build a new factorization with " *
-            "`sym = :unsymmetric`.",
-        ),
-    )
-end
-
 # Only an `:auto` factorization that chose CHOLMOD reaches this, and its `FType` holds the
 # `lu(A)` type. `lu` throws for a singular `A` before the assignment, so the failed CHOLMOD
 # factor stays in `fact` and refuses to solve.
@@ -209,7 +199,13 @@ function Bramble.suitesparse_refactor!(fact::ConcreteSuiteSparseFactorization, A
         # CHOLMOD reads one triangle, so an unsymmetric `A` would be factored as its upper
         # triangle. Refused before `cholesky!`: the factors are untouched and `fact` still
         # solves the previous matrix.
-        ishermitian(A) || _throw_not_hermitian(A, "CHOLMOD factors")
+        ishermitian(A) || throw(
+            ArgumentError(
+                "CHOLMOD factors a Hermitian matrix, and this $(eltype(A)) matrix is not " *
+                "Hermitian. Refactor onto a Hermitian matrix, or build a new factorization " *
+                "with `sym = :unsymmetric`.",
+            ),
+        )
         if fact.auto
             # `:auto` only tried Cholesky: a Hermitian matrix that is not positive definite
             # moves the factorization to UMFPACK, as `_suitesparse_factorize` does.
@@ -219,11 +215,6 @@ function Bramble.suitesparse_refactor!(fact::ConcreteSuiteSparseFactorization, A
             cholesky!(f, _cholmod_input(A))
         end
     elseif f isa UMFPACK.UmfpackLU
-        # An `:auto` factorization of a Hermitian matrix follows a change of definiteness,
-        # not a loss of symmetry: refused before `lu!`, as the CHOLMOD branch and Accelerate
-        # do. An explicit `:symmetric` or `:unsymmetric` factorization takes any matrix.
-        fact.auto && fact.sym === :symmetric && !ishermitian(A) &&
-            _throw_not_hermitian(A, "an `:auto` factorization of a Hermitian matrix takes")
         lu!(f, A)
     else
         throw(ArgumentError("Unsupported underlying factorization type: $(typeof(f))"))

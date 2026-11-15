@@ -111,15 +111,13 @@ onto a Hermitian matrix, or build a new factorization with `sym = :unsymmetric`.
 allocates one `Vector{Int}` of length `n + 1`. An LU (UMFPACK) factorization takes any
 matrix of the same pattern.
 
-A factorization built with `sym = :auto` that chose CHOLMOD falls back to UMFPACK when `A` is
-Hermitian but not positive definite, as `suitesparse_factorize` does: it then holds an LU
-factor, solves `A`, and `fact.sym` becomes `:symmetric`. It then follows a change of
-definiteness and never a loss of symmetry: a later refactor onto a matrix that is not
-Hermitian throws an `ArgumentError` before the factors are touched, and a Hermitian one,
-positive definite or not, is factored by LU. This holds for an `:auto` factorization that
-fell back when it was built too. An explicit `sym = :symmetric` or `:unsymmetric`
-factorization takes any matrix of the same pattern. A singular `A` throws a `SingularException`, and `fact` then refuses to solve.
-An explicit `sym = :spd` factorization throws a `PosDefException` and refuses to solve.
+A factorization built with `sym = :auto` that chose CHOLMOD falls back to UMFPACK when `A`
+is Hermitian but not positive definite, as `suitesparse_factorize` does. It then holds an
+LU factor, `fact.sym` becomes `:symmetric`, and `fact` solves `A`. From then on it is an LU
+factorization like one built with `sym = :symmetric`, and takes any matrix of the same
+pattern, a fresh `:auto` fallback included. A singular `A` throws a `SingularException`,
+and `fact` then refuses to solve. An explicit `sym = :spd` factorization throws a
+`PosDefException` instead, and refuses to solve.
 
 See also [`refactor!`](@ref), [`suitesparse_factorize`](@ref).
 """

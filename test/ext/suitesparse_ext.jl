@@ -268,10 +268,8 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         change_points!(Ωn, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
         Wn = gridspace(Ωn)
         l = form(Wn, v -> innerₕ(Rₕ(Wn, x -> 1.0), v))
-        sys(c) = assemble(
-            form(Wn, Wn, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + c * innerₕ(u, v)), l;
-            dirichlet = ZERO_BC, symmetrize = true
-        )
+        a_of(c) = form(Wn, Wn, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + c * innerₕ(u, v))
+        sys(c) = assemble(a_of(c), l; dirichlet = ZERO_BC, symmetrize = true)
         A0, F = sys(1.0)
         Ah, _ = sys(-50.0)
         b = collect(F)
@@ -359,25 +357,30 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         @test f16.sym === :spd
         @test isapprox(f16 \ b, u0; rtol = 1.0e-12)
 
-        # `:auto` follows a change of definiteness, never a loss of symmetry. After the
-        # fallback, from a refactor or at construction, an unsymmetric refactor is refused
-        # before the factors change. An explicit :symmetric or :unsymmetric takes it.
+        # After the fallback, from a refactor or at construction, the factorization is an LU
+        # one and takes any matrix of the pattern, as an explicit :symmetric or :unsymmetric.
         U = copy(Ah)
         i, j, v = findnz(tril(Ah, -1))
         k = argmax(abs.(v))
         U[i[k], j[k]] += 0.5
         @test !issymmetric(U) && rowvals(U) == rowvals(Ah)
+        uu = Matrix(U) \ b
         refac = suitesparse_factorize(A0)
         refactor!(refac, Ah)
         fresh = suitesparse_factorize(Ah)
         @test fresh.sym === :symmetric
         for f in (refac, fresh)
-            @test_throws ArgumentError refactor!(f, U)
-            @test_throws ArgumentError suitesparse_refactor!(f, U)
-            @test isapprox(f \ b, uh; rtol = 1.0e-10)
+            @test refactor!(f, U) === f
+            @test isapprox(f \ b, uu; rtol = 1.0e-10)
             @test refactor!(f, A0) === f
             @test isapprox(f \ b, u0; rtol = 1.0e-12)
         end
+
+        # The form route assembles without symmetrising, so its matrix is never Hermitian
+        fresh = suitesparse_factorize(Ah)
+        @test refactor!(fresh, a_of(-60.0); dirichlet = ZERO_BC) === fresh
+        A60, _ = assemble(a_of(-60.0), l; dirichlet = ZERO_BC)
+        @test isapprox(fresh \ b, Matrix(A60) \ b; rtol = 1.0e-10)
         for sym in (:symmetric, :unsymmetric)
             fe = suitesparse_factorize(Ah; sym)
             @test refactor!(fe, U) === fe
