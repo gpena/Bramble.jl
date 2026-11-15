@@ -27,7 +27,8 @@ SuiteSparse (CHOLMOD for symmetric positive-definite systems, UMFPACK for unsymm
   LU factors it instead, so a symmetric indefinite matrix is solved and a singular one
   throws a `SingularException`. Any other `A` uses UMFPACK sparse LU. Under `:auto` the
   `kwargs` reach whichever factorisation runs, so a keyword only Cholesky takes (such as
-  `shift`) errors after the fallback.
+  `shift`) errors after the fallback. [`suitesparse_refactor!`](@ref) applies the same rule to
+  a factorization that chose CHOLMOD.
 - `:spd`, `:definite`, or `1` selects symmetric positive definite (CHOLMOD Cholesky).
 - `:symmetric` or `2` selects symmetric factorization.
 - `:unsymmetric` or `0` selects general unsymmetric (UMFPACK LU).
@@ -102,6 +103,21 @@ end
 Recompute the numeric factorization of `A` inside `fact` **reusing the existing symbolic
 factorization** (fill-reducing ordering and elimination tree). `A` must have the exact same
 sparsity pattern as the matrix originally factored.
+
+A Cholesky (CHOLMOD) factorization, chosen by `sym = :auto` or `sym = :spd`, reads one
+triangle of `A`, so it refuses a matrix that is not Hermitian with an `ArgumentError`. It
+checks before it touches the factors, so `fact` still solves the previous matrix. Refactor
+onto a Hermitian matrix, or build a new factorization with `sym = :unsymmetric`. The check
+allocates one `Vector{Int}` of length `n + 1`. An LU (UMFPACK) factorization takes any
+matrix of the same pattern.
+
+A factorization built with `sym = :auto` that chose CHOLMOD falls back to UMFPACK when `A`
+is Hermitian but not positive definite, as `suitesparse_factorize` does. It then holds an
+LU factor, `fact.sym` becomes `:symmetric`, and `fact` solves `A`. From then on it is an LU
+factorization like one built with `sym = :symmetric`, and takes any matrix of the same
+pattern, a fresh `:auto` fallback included. A singular `A` throws a `SingularException`,
+and `fact` then refuses to solve. An explicit `sym = :spd` factorization throws a
+`PosDefException` instead, and refuses to solve.
 
 See also [`refactor!`](@ref), [`suitesparse_factorize`](@ref).
 """

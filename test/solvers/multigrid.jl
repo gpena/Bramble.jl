@@ -32,6 +32,7 @@ _mg_axes(p::Tuple) = p
 # Allocation of a warmed transfer, behind a function barrier.
 _mg_palloc(xf, H, l, xc) = (prolongate!(xf, H, l, xc); @allocated prolongate!(xf, H, l, xc))
 _mg_calloc(xc, H, l, xf) = (coarsen!(xc, H, l, xf); @allocated coarsen!(xc, H, l, xf))
+_mg_lalloc(y, P, x) = (ldiv!(y, P, x); @allocated ldiv!(y, P, x))
 
 # The oracle `P`.
 _mg_oracle(Ωf, Ωc) = interpolation_matrix(gridspace(Ωf), gridspace(Ωc))
@@ -754,6 +755,39 @@ end
     @test typeof(gmg_preconditioner(lap, Ω)) <: rt
 end
 
+@testset "gmg: complex vectors (#1216)" begin
+    # A real P acts on the real and imaginary parts of a complex x apart, through every
+    # cycle, out of place and in place; the real path still allocates nothing afterwards.
+    Ω = _mg_jitter_mesh(2, 17)
+    n = npoints(Ω)
+    x = [complex(sin(i), cos(2i)) for i in 1:n]
+    xr = real.(x)
+    for cycle in (:V, :W, :FMG)
+        P = gmg_preconditioner(_mg_spd, Ω; cycle = cycle)
+        ref = complex.(P \ real.(x), P \ imag.(x))
+        @test norm(imag.(ref)) > 0
+        @test P \ x isa Vector{ComplexF64}
+        @test P \ x == ref
+        z = zeros(ComplexF64, n)
+        @test ldiv!(z, P, x) === z && z == ref
+        w = copy(x)
+        @test ldiv!(P, w) === w && w == ref
+        @test ldiv!(z, P, xr) == complex.(P \ xr, 0.0)
+        # Integer and Float32 parts are solved in P's Float64, as the real path solves them.
+        xci = [complex(i % 3, (2i) % 5) for i in 1:n]
+        @test P \ xci == complex.(P \ real.(xci), P \ imag.(xci))
+        xint = collect(1:n)
+        @test ldiv!(z, P, xint) == complex.(P \ xint, 0.0)
+        x32 = ComplexF32.(x)
+        @test P \ x32 isa Vector{ComplexF64} && P \ x32 == complex.(P \ real.(x32), P \ imag.(x32))
+        f32 = Float32.(xr)
+        @test ldiv!(z, P, f32) == complex.(P \ f32, 0.0) && eltype(P \ f32) == Float64
+        yr = zeros(n)
+        @test _mg_lalloc(yr, P, xr) == 0
+        @test yr == P \ xr
+    end
+end
+
 # The tag of the Dual hierarchy built in the testset below.
 struct _MGTag end
 
@@ -807,6 +841,37 @@ struct _MGTag end
     once() = @allocated Bramble._gmg_cycles_to_tol(PD, bD, :V, 1e-10, 100)
     whole(), once()
     @test whole() == once()
+end
+
+@testset "gmg_solve: complex load (#1217)" begin
+    # The real and imaginary parts are iterated apart, each to tol against its own norm.
+    # The oracle is the direct solve; an imaginary part 1e-6 of the real one, iterated to
+    # one joint norm, would be off by about 1e-4 of its own.
+    Ω = mesh(domain(_mg_box(2)), (17, 17), (true, true))
+    g = range(0.0, 1.0; length = 17)
+    Bramble.change_points!(Ω, (g .^ 1.25, g .^ 1.5))
+    W = gridspace(Ω)
+    bld(V) = form(V, V, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+    A = Matrix(assemble(bld(W)))
+    n = ndofs(W)
+    x = [complex(sin(i), cos(i)) for i in 1:n]
+    xr = real.(x)
+    loads = (x, complex.(xr, 1e-6 .* imag.(x)), complex.(xr), im .* xr, element(W, x))
+    for cycle in (:V, :W, :FMG), c in loads
+
+        u = gmg_solve(bld, Ω, c; tol = 1e-10, cycle)
+        cd = c isa VectorElement ? parent(c) : c
+        ref = A \ cd
+        @test u isa VectorElement && eltype(u) == ComplexF64
+        for f in (real, imag)
+            @test norm(f.(parent(u)) - f.(ref)) <= 1e-8 * norm(f.(ref))
+        end
+    end
+    # A Dual complex load: each part splits again into value and partial. The solve is
+    # linear in the load, so d/dq of ‖u((1 + q) x)‖² at q = 0.4 is 2(1.4)‖u(x)‖².
+    S = sum(abs2, A \ x)
+    d = ForwardDiff.derivative(q -> sum(abs2, parent(gmg_solve(bld, Ω, (1 + q) .* x; tol = 1e-10))), 0.4)
+    @test isapprox(d, 2.8 * S; rtol = 1e-6)
 end
 
 @testset "gmg: threaded cycles agree" begin

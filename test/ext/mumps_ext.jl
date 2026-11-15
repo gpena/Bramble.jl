@@ -270,6 +270,78 @@ end
         @test_throws SingularException mumps_refactor!(fact_spd, P)
     end
 
+    # #1207: a symmetric instance reads one triangle, so an unsymmetric matrix of the same
+    # pattern would solve a different system. The refusal leaves the factors untouched.
+    @testset "unsymmetric refactor refused (#1207)" begin
+        S2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωn = mesh(domain(S2, :boundary => boundary_symbols(S2)), (9, 7), (true, true))
+        change_points!(Ωn, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+        Wn = gridspace(Ωn)
+        l_n = form(Wn, v -> innerₕ(Rₕ(Wn, x -> 1.0), v))
+        system(c) = assemble(
+            form(Wn, Wn, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + c * innerₕ(u, v)), l_n;
+            dirichlet = ZERO_BC, symmetrize = true
+        )
+        A0, F = system(1.0)
+        Ah, _ = system(-50.0)
+        # the same pattern, one stored entry off the symmetric value
+        i, j, v = findnz(tril(A0, -1))
+        k = argmax(abs.(v))
+        A1 = copy(A0)
+        A1[i[k], j[k]] += 0.5
+        @test issymmetric(A0)
+        @test !issymmetric(A1)
+        @test rowvals(A1) == rowvals(A0)
+        @test SparseArrays.getcolptr(A1) == SparseArrays.getcolptr(A0)
+        @test rowvals(Ah) == rowvals(A0)
+        @test minimum(eigvals(Symmetric(Matrix(Ah)))) < 0
+        doubled(A) = SparseMatrixCSC(
+            size(A)..., copy(SparseArrays.getcolptr(A)), copy(rowvals(A)), 2 .* nonzeros(A)
+        )
+        relerr(x, A, c = F) = (r = Matrix(A) \ c; norm(x - r) / norm(r))
+
+        for (kw, sym) in (((;), 1), ((; sym = :spd), 1), ((; sym = :symmetric), 2))
+            fact = mumps_factorize(A0; kw...)
+            @test fact.sym == sym
+            @test_throws ArgumentError mumps_refactor!(fact, A1)
+            @test_throws ArgumentError refactor!(fact, A1)
+            # still the factors of A0, and no failure was recorded
+            @test fact.failure === nothing
+            @test relerr(fact \ F, A0) < 1.0e-12
+            @test refactor!(fact, doubled(A0)) === fact
+            @test relerr(fact \ F, doubled(A0)) < 1.0e-12
+            finalize(fact)
+        end
+
+        # `:auto` after its fallback to SYM = 2 on an indefinite refactorization
+        fact = mumps_factorize(A0)
+        @test mumps_refactor!(fact, Ah) === fact
+        @test fact.sym == 2
+        @test relerr(fact \ F, Ah) < 1.0e-10
+        @test_throws ArgumentError mumps_refactor!(fact, A1)
+        @test relerr(fact \ F, Ah) < 1.0e-10
+        finalize(fact)
+
+        # complex symmetric is not Hermitian, and stays allowed
+        Ac = SparseMatrixCSC(
+            size(A0)..., copy(SparseArrays.getcolptr(A0)), copy(rowvals(A0)),
+            (1 + 0.25im) .* nonzeros(A0)
+        )
+        bc = complex.(F, reverse(F))
+        @test issymmetric(Ac)
+        @test !ishermitian(Ac)
+        fact = mumps_factorize(Ac; sym = :symmetric)
+        @test mumps_refactor!(fact, doubled(Ac)) === fact
+        @test relerr(fact \ bc, doubled(Ac), bc) < 1.0e-12
+        finalize(fact)
+
+        # SYM = 0 takes the unsymmetric matrix
+        fact = mumps_factorize(A0; sym = :unsymmetric)
+        @test mumps_refactor!(fact, A1) === fact
+        @test relerr(fact \ F, A1) < 1.0e-12
+        finalize(fact)
+    end
+
     @testset "unknown keyword throws (#657)" begin
         A = sparse(SymTridiagonal(fill(4.0, 6), fill(-1.0, 5)))
         b = collect(1.0:6)

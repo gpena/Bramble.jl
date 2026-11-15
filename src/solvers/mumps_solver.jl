@@ -138,6 +138,12 @@ Recompute the numeric factorization of `A` inside `fact` **reusing the existing 
 factorization** (fill-reducing analysis and ordering). `A` must have the exact same
 sparsity pattern as the matrix originally factored.
 
+A symmetric instance (`sym = :spd` or `:symmetric`, or `:auto`, whichever of the two it
+settled on) refuses a matrix with `Aᵀ ≠ A` by throwing an `ArgumentError`. It reads only
+one triangle, so it would solve a different system without saying so. The factors are
+left as they were and `fact` still solves the previous system. Complex-symmetric matrices
+pass. To refactorize an unsymmetric matrix, factorize with `sym = :unsymmetric`.
+
 See also [`refactor!`](@ref), [`mumps_factorize`](@ref).
 """
 function mumps_refactor! end

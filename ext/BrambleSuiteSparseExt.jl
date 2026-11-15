@@ -32,6 +32,14 @@ mutable struct ConcreteSuiteSparseFactorization{T, FType <: Factorization} <: Su
     fact::FType
     sym::Symbol
     dim::Int
+    auto::Bool
+end
+
+# The type `lu(A)` returns: UMFPACK factors `Float64` and `ComplexF64`, widening the rest, with
+# an `Int32` or `Int64` index. CHOLMOD takes other index types, so the `Union` built from this
+# type must exist for every matrix `cholesky` accepts.
+function _umfpack_type(A::SparseMatrixCSC{T, Ti}) where {T, Ti}
+    UMFPACK.UmfpackLU{T <: Complex ? ComplexF64 : Float64, Ti === Int32 ? Int32 : Int64}
 end
 
 Base.size(fact::ConcreteSuiteSparseFactorization) = (fact.dim, fact.dim)
@@ -78,23 +86,26 @@ function Bramble._suitesparse_factorize(A::SparseMatrixCSC; sym = :auto, kwargs.
 
     sym_flag = _suitesparse_sym_flag(A, sym)
 
-    fact_obj = if sym_flag === :spd && sym === :auto
+    if sym_flag === :spd && sym === :auto
         # A symmetric matrix with a positive diagonal is only a Cholesky candidate: CHOLMOD
         # decides, and a failure falls back to UMFPACK, which reports a singular matrix.
         c = cholesky(Hermitian(A); kwargs..., check = false)
         if issuccess(c)
-            c
-        else
-            sym_flag = :symmetric
-            lu(A; kwargs...)
+            # `refactor!` may replace the factor by an LU one, so `FType` is a `Union`.
+            FType = Union{typeof(c), _umfpack_type(A)}
+            return ConcreteSuiteSparseFactorization{eltype(A), FType}(c, :spd, n, true)
         end
+        lu_fact = lu(A; kwargs...)
+        return ConcreteSuiteSparseFactorization{eltype(A), typeof(lu_fact)}(
+            lu_fact, :symmetric, n, true)
     elseif sym_flag === :spd
-        cholesky(_cholmod_input(A); kwargs...)
+        c = cholesky(_cholmod_input(A); kwargs...)
+        return ConcreteSuiteSparseFactorization{eltype(A), typeof(c)}(c, :spd, n, false)
     else
-        lu(A; kwargs...)
+        lu_fact = lu(A; kwargs...)
+        return ConcreteSuiteSparseFactorization{eltype(A), typeof(lu_fact)}(
+            lu_fact, sym_flag, n, sym === :auto)
     end
-
-    return ConcreteSuiteSparseFactorization{eltype(A), typeof(fact_obj)}(fact_obj, sym_flag, n)
 end
 
 function LinearAlgebra.ldiv!(
@@ -107,8 +118,21 @@ function LinearAlgebra.ldiv!(
     length(x) == n || throw(
         DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
     )
-    ldiv!(x, fact.fact, b)
+    _ldiv!(x, fact.fact, b)
     return x
+end
+
+# UMFPACK factors `Float64` and `ComplexF64` and solves nothing narrower: a narrower
+# right-hand side is widened as `\` does, and the result converted back into `x` or `b`.
+# A right-hand side of the factor's own precision takes the in-place solve.
+_ldiv!(x, f::UMFPACK.UmfpackLU{Tv}, b) where {Tv} = real(eltype(b)) === real(Tv) ? ldiv!(x, f, b) : copyto!(x, f \ b)
+_ldiv!(x, f, b) = ldiv!(x, f, b)
+
+_ldiv!(f::UMFPACK.UmfpackLU{Tv}, b) where {Tv} = real(eltype(b)) === real(Tv) ? ldiv!(f, b) : copyto!(b, f \ b)
+function _ldiv!(f, b)
+    x = similar(b)
+    ldiv!(x, f, b)
+    return copyto!(b, x)
 end
 
 function LinearAlgebra.ldiv!(
@@ -118,13 +142,7 @@ function LinearAlgebra.ldiv!(
     length(b) == n || throw(
         DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
     )
-    if fact.fact isa UMFPACK.UmfpackLU
-        ldiv!(fact.fact, b)
-    else
-        x = similar(b)
-        ldiv!(x, fact.fact, b)
-        copyto!(b, x)
-    end
+    _ldiv!(fact.fact, b)
     return b
 end
 
@@ -160,18 +178,45 @@ function Base.:\(
     return complex.(fact \ real(b), fact \ imag(b))
 end
 
+# Only an `:auto` factorization that chose CHOLMOD reaches this, and its `FType` holds the
+# `lu(A)` type. `lu` throws for a singular `A` before the assignment, so the failed CHOLMOD
+# factor stays in `fact` and refuses to solve.
+function _fall_back_to_lu!(fact::ConcreteSuiteSparseFactorization, A::SparseMatrixCSC)
+    fact.fact = lu(A)
+    fact.sym = :symmetric
+    return fact
+end
+
 function Bramble.suitesparse_refactor!(fact::ConcreteSuiteSparseFactorization, A::SparseMatrixCSC)
     m, n = size(A)
     (m == fact.dim && n == fact.dim) || throw(
         DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
     )
 
-    if fact.fact isa CHOLMOD.Factor
-        cholesky!(fact.fact, _cholmod_input(A))
-    elseif fact.fact isa UMFPACK.UmfpackLU
-        lu!(fact.fact, A)
+    f = fact.fact
+    if f isa CHOLMOD.Factor
+        # CHOLMOD reads one triangle, so an unsymmetric `A` would be factored as its upper
+        # triangle. Refused before `cholesky!`: the factors are untouched and `fact` still
+        # solves the previous matrix.
+        ishermitian(A) || throw(
+            ArgumentError(
+            "CHOLMOD factors a Hermitian matrix, and this $(eltype(A)) matrix is not " *
+            "Hermitian. Refactor onto a Hermitian matrix, or build a new factorization " *
+            "with `sym = :unsymmetric`.",
+        ),
+        )
+        if fact.auto
+            # `:auto` only tried Cholesky: a Hermitian matrix that is not positive definite
+            # moves the factorization to UMFPACK, as `_suitesparse_factorize` does.
+            cholesky!(f, _cholmod_input(A); check = false)
+            issuccess(f) || _fall_back_to_lu!(fact, A)
+        else
+            cholesky!(f, _cholmod_input(A))
+        end
+    elseif f isa UMFPACK.UmfpackLU
+        lu!(f, A)
     else
-        throw(ArgumentError("Unsupported underlying factorization type: $(typeof(fact.fact))"))
+        throw(ArgumentError("Unsupported underlying factorization type: $(typeof(f))"))
     end
     return fact
 end

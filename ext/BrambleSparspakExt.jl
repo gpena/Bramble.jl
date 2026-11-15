@@ -27,11 +27,20 @@ using PrecompileTools: @setup_workload, @compile_workload
 
 # `matrix` copies the factored matrix, which `lu.p` only aliases: a load that must be
 # solved against the matrix refactored at its own type (`_solve_wider`) sees the matrix as
-# factored even if the caller has since overwritten its values or its pattern.
+# factored even if the caller has since overwritten its values or its pattern. `failure`
+# holds the exception of a refused numeric refactorization until one succeeds, and every
+# solve rethrows it.
 mutable struct ConcreteSparspakFactorization{T, LUT} <: SparspakFactorization{T}
     lu::LUT
     dim::Int
     matrix::SparseMatrixCSC{T, Int}
+    failure::Union{Nothing, Exception}
+end
+
+# Factors left by a refused numeric refactorization are unusable; refuse them here
+function _check_usable(fact::ConcreteSparspakFactorization)
+    fact.failure === nothing || throw(fact.failure)
+    return nothing
 end
 
 Base.size(fact::ConcreteSparspakFactorization) = (fact.dim, fact.dim)
@@ -56,6 +65,22 @@ const SPARSPAK_EMPTY_PROBLEM = "An empty problem. No matrix."
     end
 end
 
+# Throws `SingularException(0)` when the factors of `lu` hold a pivot of value zero or a
+# non-finite one. A zero is found through `inv`, which `isfinite` reads by value: a
+# ForwardDiff `Dual` with zero value but nonzero partials is neither `iszero` nor `== 0`,
+# and the generic `getrf` Sparspak runs on a `Dual` reports nothing.
+# Sparspak's own report rests on the `info` of the BLAS `getrf` of its last supernode only,
+# and a BLAS forwarded to Accelerate returns 0 for an all-zero matrix, so the factors are
+# read directly: the pivot of column `j` is the diagonal entry of its supernode's block.
+function _check_pivots(lu)
+    s = lu.slvr
+    for j in 1:(s.n)
+        d = s.lnz[s.xlnz[j] + j - s.xsuper[s.snode[j]]]
+        (isfinite(d) && isfinite(inv(d))) || throw(SingularException(0))
+    end
+    return lu
+end
+
 # Throws `SingularException(0)` when a solve of a finite right-hand side left a non-finite
 # entry in `x`. A non-finite right-hand side legitimately propagates and is not blamed on `A`.
 function _check_finite_solution(x::AbstractVector, finite_rhs::Bool)
@@ -69,13 +94,14 @@ function Bramble._sparspak_factorize(A::SparseMatrixCSC)
 
     lu = _singular_on_empty(() -> sparspaklu(A), n)
     return ConcreteSparspakFactorization{eltype(A), typeof(lu)}(
-        lu, n, SparseMatrixCSC{eltype(A), Int}(A)
+        lu, n, SparseMatrixCSC{eltype(A), Int}(A), nothing
     )
 end
 
 function LinearAlgebra.ldiv!(
         x::AbstractVector, fact::ConcreteSparspakFactorization, b::AbstractVector
 )
+    _check_usable(fact)
     n = fact.dim
     length(b) == n || throw(
         DimensionMismatch("Right-hand side length $(length(b)) does not match matrix dimension $n"),
@@ -91,6 +117,7 @@ end
 function LinearAlgebra.ldiv!(
         fact::ConcreteSparspakFactorization, b::AbstractVector
 )
+    _check_usable(fact)
     n = fact.dim
     length(b) == n || throw(
         DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
@@ -120,6 +147,7 @@ end
 # A load wider than the matrix is solved part by part (`_solve_parts`) or, when it does not
 # split into parts of type `T`, against `A` refactored at the load's type.
 function Base.:\(fact::ConcreteSparspakFactorization{T}, b::AbstractVector) where {T}
+    _check_usable(fact)
     finite_rhs = all(isfinite, b)
     S = promote_type(T, eltype(b))
     x = if S === T
@@ -132,6 +160,7 @@ function Base.:\(fact::ConcreteSparspakFactorization{T}, b::AbstractVector) wher
 end
 
 function _solve_wider(fact::ConcreteSparspakFactorization{T}, b::Vector{S}) where {T, S}
+    _check_usable(fact)
     parts = _parts(S, T)
     parts === nothing || return _solve_parts(fact, b, parts)
     A = SparseMatrixCSC{S}(fact.matrix)
@@ -249,7 +278,23 @@ function Bramble.sparspak_refactor!(fact::ConcreteSparspakFactorization, A::Spar
     (m == fact.dim && n == fact.dim) || throw(
         DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
     )
-    _singular_on_empty(() -> sparspaklu!(fact.lu, A; allow_pattern_change = false), n)
+    # Sparspak compares `A` with `lu.p`, which aliases the matrix last factored, so a pattern
+    # changed in place on that matrix passes its check; the private copy catches it.
+    (SparseArrays.getcolptr(A) == fact.matrix.colptr && SparseArrays.rowvals(A) ==
+                                                        fact.matrix.rowval) || error(
+        "the sparsity pattern of the matrix does not match the one factored"
+    )
+    # Sparspak refuses a new pattern before it sets `lu.p = A`, with the factors intact;
+    # once it has set it, a failure leaves them unusable until a refactorization succeeds.
+    try
+        _singular_on_empty(n) do
+            return _check_pivots(sparspaklu!(fact.lu, A; allow_pattern_change = false))
+        end
+    catch err
+        fact.lu.p === A && err isa Exception && (fact.failure = err)
+        rethrow()
+    end
+    fact.failure = nothing
     copy!(fact.matrix.colptr, SparseArrays.getcolptr(A))
     copy!(fact.matrix.rowval, SparseArrays.rowvals(A))
     copy!(fact.matrix.nzval, SparseArrays.nonzeros(A))

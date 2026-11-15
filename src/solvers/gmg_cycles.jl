@@ -34,6 +34,9 @@ vectors (of each level's [`ndofs`](@ref)), so an application allocates nothing o
 with [`gmg_preconditioner`](@ref); the cycles themselves are [`v_cycle!`](@ref),
 [`w_cycle!`](@ref) and [`fmg!`](@ref).
 
+A real `P` applied to a complex `x` acts on its real and imaginary parts separately,
+`P⁻¹ x = P⁻¹ re(x) + i P⁻¹ im(x)`, and that application allocates its real scratch vectors.
+
 # Type parameters
 - `T`: The element type of `A`.
 - `H`: The hierarchy type.
@@ -451,6 +454,7 @@ end
 function ldiv!(y::AbstractVector, P::GMGPreconditioner, x::AbstractVector)
     n = first(size(P))
     (length(x) == n && length(y) == n) || _throw_gmg_dimmismatch(:ldiv!, P, y, x)
+    _ldiv_by_parts(P, y, x) && return _ldiv_by_parts!(y, P, x)
     yd, xd = _mf_data(y), _mf_data(x)
     Base.require_one_based_indexing(yd, xd)
     L = length(P.hierarchy)
@@ -579,6 +583,9 @@ The residual floors at a multiple of the rounding error of the element type `T` 
 - `b`: The right-hand side: a vector of length `ndofs` of the finest form's spaces
   (`npoints(Ωₕ)` on a plain space) or a [`VectorElement`](@ref), such as `assemble(l)` for
   a linear form `l`.
+  A complex `b` on a real `A` is solved by parts: its real and imaginary parts are
+  iterated apart, each to `tol` against its own norm, so a small imaginary part is solved
+  as accurately as the real one.
 
 # Keywords
 - `levels`, `cycle`, `ν₁`, `ν₂`, `smoother`: As in [`gmg_preconditioner`](@ref).
@@ -588,13 +595,17 @@ The residual floors at a multiple of the rounding error of the element type `T` 
 
 # Returns
 - [`VectorElement`](@ref): The solution, an element of the trial space of the finest form.
+  Its element type is complex when `b` is, with real and imaginary parts the solutions for
+  those of `b`.
 
 # Throws
 - As [`gmg_preconditioner`](@ref).
 - `DimensionMismatch`: `b` has the wrong length.
 - `ArgumentError`: `b` is not 1-based, `tol` is not positive, or `maxiters < 1`.
 - `ErrorException`: the residual is above `tol ‖b‖` after `maxiters` cycles; the message
-  names `tol` and `T`, since a `tol` near the rounding floor of `T` is never reached.
+  names `tol` and `T`, since a `tol` near the rounding floor of `T` is never reached. For
+  a complex `b` on a real `A`, each part is checked against its own norm, and the error
+  comes from the first part to fail, real before imaginary.
 
 # Examples
 ```jldoctest
@@ -628,7 +639,10 @@ end
 # whose type the hierarchy holds runs the cycles whole. Otherwise the converged solve is
 # linear in the load, so a load in parts (a `ForwardDiff.Dual` one on a real hierarchy,
 # `_solve_by_parts`) has each part solved by the same cycles, to `tol` against its own
-# norm, and the parts come back as a plain vector to wrap.
+# norm, and the parts come back as a plain vector to wrap. A complex load on a real
+# hierarchy is split first: its real and imaginary parts each take the path of a real
+# load, to `tol` against their own norms, so a small imaginary part is not lost under the
+# real one.
 function _gmg_solve_loop(P::GMGPreconditioner, b::AbstractVector, cycle::Symbol, tol,
         maxiters::Integer)
     op = last(P.ops)
@@ -640,10 +654,23 @@ function _gmg_solve_loop(P::GMGPreconditioner, b::AbstractVector, cycle::Symbol,
     )
     bd = _mf_data(b)
     Base.require_one_based_indexing(bd)
+    if eltype(bd) <: Complex && !(eltype(P) <: Complex)
+        yr = _gmg_solve_real_load(P, real.(bd), cycle, τ, maxiters)
+        yi = _gmg_solve_real_load(P, imag.(bd), cycle, τ, maxiters)
+        return element(_gmg_trial_space(op), complex.(_mf_data(yr), _mf_data(yi)))
+    end
+    y = _gmg_solve_real_load(P, bd, cycle, τ, maxiters)
+    return y isa VectorElement ? y : element(_gmg_trial_space(op), y)
+end
+
+# The solve of a load that is not split into real and imaginary parts: whole if the
+# hierarchy holds its type, else by `_solve_by_parts`. Returns a `VectorElement` or, from
+# the split, a plain vector.
+function _gmg_solve_real_load(P::GMGPreconditioner, bd::AbstractVector, cycle::Symbol, τ,
+        maxiters::Integer)
     promote_type(eltype(P), eltype(bd)) === eltype(P) &&
         return _gmg_cycles_to_tol(P, bd, cycle, τ, maxiters)
-    y = _solve_by_parts(c -> _gmg_cycles_to_tol(P, c, cycle, τ, maxiters), bd)
-    return y isa VectorElement ? y : element(_gmg_trial_space(op), y)
+    return _solve_by_parts(c -> _gmg_cycles_to_tol(P, c, cycle, τ, maxiters), bd)
 end
 
 # The cycles of `gmg_solve` on the load `bd`, from a zero start, until the residual is at

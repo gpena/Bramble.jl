@@ -217,6 +217,177 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         @test isapprox(suitesparse_factorize(A_s) \ F_s, Matrix(A_s) \ F_s; atol = 1.0e-12)
     end
 
+    # A CHOLMOD factorization reads one triangle, so `refactor!` onto an unsymmetric matrix
+    # on the same pattern would silently factor its upper triangle. It is refused before the
+    # factors change, for `:auto` and an explicit `:spd` alike (#1206).
+    @testset "CHOLMOD refactor! refuses unsymmetric" begin
+        S2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωn = mesh(domain(S2, :boundary => boundary_symbols(S2)), (9, 7), (true, true))
+        change_points!(Ωn, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+        Wn = gridspace(Ωn)
+        a_spd = form(Wn, Wn, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+        l_spd = form(Wn, v -> innerₕ(Rₕ(Wn, x -> 1.0), v))
+        A0, F = assemble(a_spd, l_spd; dirichlet = ZERO_BC, symmetrize = true)
+        b = collect(F)
+        i, j, v = findnz(tril(A0, -1))
+        k = argmax(abs.(v))
+        A1 = copy(A0)
+        A1[i[k], j[k]] += 0.5
+        # Same pattern, unsymmetric, and its upper triangle does not solve it.
+        @test issymmetric(A0) && !issymmetric(A1)
+        @test rowvals(A1) == rowvals(A0) && SparseArrays.getcolptr(A1) == SparseArrays.getcolptr(A0)
+        @test norm(Matrix(Symmetric(A1, :U)) \ b - Matrix(A1) \ b) > 1.0e-6
+
+        A2 = SparseMatrixCSC(size(A0)..., copy(SparseArrays.getcolptr(A0)),
+            copy(rowvals(A0)), 2 .* nonzeros(A0))
+        for sym in (:auto, :spd)
+            fact = suitesparse_factorize(A0; sym)
+            @test fact.sym === :spd
+            u0 = Matrix(A0) \ b
+            @test_throws ArgumentError suitesparse_refactor!(fact, A1)
+            @test_throws ArgumentError refactor!(fact, A1)
+            @test isapprox(fact \ b, u0; rtol = 1.0e-12)
+
+            # A Hermitian refactor still works after a refusal
+            @test suitesparse_refactor!(fact, A2) === fact
+            @test isapprox(fact \ b, Matrix(A2) \ b; rtol = 1.0e-12)
+        end
+
+        # UMFPACK takes the unsymmetric matrix
+        lu_fact = suitesparse_factorize(A0; sym = :unsymmetric)
+        @test suitesparse_refactor!(lu_fact, A1) === lu_fact
+        @test isapprox(lu_fact \ b, Matrix(A1) \ b; rtol = 1.0e-12)
+    end
+
+    # `:auto` only tried Cholesky when it built the factorization, so a `refactor!` onto a
+    # symmetric indefinite matrix of the same pattern falls back to LU as a fresh
+    # factorization does. An explicit `:spd` keeps refusing it (#1208).
+    @testset "sym = :auto: refactor! falls back to LU" begin
+        S2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωn = mesh(domain(S2, :boundary => boundary_symbols(S2)), (9, 7), (true, true))
+        change_points!(Ωn, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+        Wn = gridspace(Ωn)
+        l = form(Wn, v -> innerₕ(Rₕ(Wn, x -> 1.0), v))
+        a_of(c) = form(Wn, Wn, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + c * innerₕ(u, v))
+        sys(c) = assemble(a_of(c), l; dirichlet = ZERO_BC, symmetrize = true)
+        A0, F = sys(1.0)
+        Ah, _ = sys(-50.0)
+        b = collect(F)
+        @test issymmetric(Ah) && all(>(0), diag(Ah))
+        @test minimum(eigvals(Symmetric(Matrix(Ah)))) < 0
+        @test rowvals(Ah) == rowvals(A0) && SparseArrays.getcolptr(Ah) == SparseArrays.getcolptr(A0)
+        uh, u0 = Matrix(Ah) \ b, Matrix(A0) \ b
+
+        fact = suitesparse_factorize(A0)
+        @test fact.sym === :spd
+        @test suitesparse_refactor!(fact, Ah) === fact
+        @test fact.sym === :symmetric
+        @test fact.fact isa SuiteSparse.UMFPACK.UmfpackLU
+        @test isapprox(fact \ b, uh; rtol = 1.0e-10)
+        x = similar(b)
+        ldiv!(x, fact, b)
+        @test isapprox(x, uh; rtol = 1.0e-10)
+        y = copy(b)
+        ldiv!(fact, y)
+        @test isapprox(y, uh; rtol = 1.0e-10)
+
+        # Later refactors take the LU branch, SPD and indefinite alike
+        @test refactor!(fact, A0) === fact
+        @test isapprox(fact \ b, u0; rtol = 1.0e-12)
+        @test refactor!(fact, Ah) === fact
+        @test isapprox(fact \ b, uh; rtol = 1.0e-10)
+
+        # A positive definite refactor keeps the Cholesky factor
+        fact = suitesparse_factorize(A0)
+        A2 = SparseMatrixCSC(size(A0)..., copy(SparseArrays.getcolptr(A0)),
+            copy(rowvals(A0)), 2 .* nonzeros(A0))
+        @test refactor!(fact, A2) === fact
+        @test fact.sym === :spd && fact.fact isa SuiteSparse.CHOLMOD.Factor
+        @test isapprox(fact \ b, Matrix(A2) \ b; rtol = 1.0e-12)
+
+        # Explicit :spd: the indefinite refactor throws and the factorization refuses to solve
+        spd = suitesparse_factorize(A0; sym = :spd)
+        @test_throws PosDefException refactor!(spd, Ah)
+        @test spd.sym === :spd && spd.fact isa SuiteSparse.CHOLMOD.Factor
+        @test_throws PosDefException spd \ b
+        @test refactor!(spd, A0) === spd
+        @test isapprox(spd \ b, u0; rtol = 1.0e-12)
+
+        # Singular: LU throws, and the failed Cholesky factor stays and refuses to solve
+        M0 = sparse([2.0 1; 1 2])
+        sing = suitesparse_factorize(M0)
+        @test_throws SingularException refactor!(sing, sparse([1.0 1; 1 1]))
+        @test sing.sym === :spd && sing.fact isa SuiteSparse.CHOLMOD.Factor
+        @test_throws PosDefException sing \ [1.0, 2.0]
+
+        # UMFPACK widens a Float32 matrix: the fallback keeps the factorization's type
+        for (A, H) in (
+            (sparse(Float32[2 1; 1 2]), sparse(Float32[1 2; 2 1])),
+            (sparse(ComplexF32[2 1+im; 1-im 2]), sparse(ComplexF32[1 2+im; 2-im 1]))
+        )
+            fc = suitesparse_factorize(A)
+            @test fc.sym === :spd
+            @test refactor!(fc, H) === fc
+            @test fc.sym === :symmetric
+            bt = eltype(A).([1, 2])
+            ref = Matrix(H) \ bt
+            @test fc \ bt isa Vector{eltype(A)}
+            @test isapprox(fc \ bt, ref; rtol = 1.0e-5)
+            x32 = similar(bt)
+            @test ldiv!(x32, fc, bt) === x32
+            @test isapprox(x32, ref; rtol = 1.0e-5)
+            y32 = copy(bt)
+            @test ldiv!(fc, y32) === y32
+            @test isapprox(y32, ref; rtol = 1.0e-5)
+
+            # Built on the indefinite matrix, the fresh fallback solves the same way
+            fresh = suitesparse_factorize(H)
+            x32 .= 0
+            ldiv!(x32, fresh, bt)
+            @test isapprox(x32, ref; rtol = 1.0e-5)
+            y32 = copy(bt)
+            ldiv!(fresh, y32)
+            @test isapprox(y32, ref; rtol = 1.0e-5)
+        end
+
+        # CHOLMOD takes an index type UMFPACK does not: no factorization that stays Cholesky
+        # may throw while building the type its refactor falls back to
+        A16 = SparseMatrixCSC{Float64, Int16}(A0)
+        f16 = suitesparse_factorize(A16)
+        @test f16.sym === :spd
+        @test isapprox(f16 \ b, u0; rtol = 1.0e-12)
+
+        # After the fallback, from a refactor or at construction, the factorization is an LU
+        # one and takes any matrix of the pattern, as an explicit :symmetric or :unsymmetric.
+        U = copy(Ah)
+        i, j, v = findnz(tril(Ah, -1))
+        k = argmax(abs.(v))
+        U[i[k], j[k]] += 0.5
+        @test !issymmetric(U) && rowvals(U) == rowvals(Ah)
+        uu = Matrix(U) \ b
+        refac = suitesparse_factorize(A0)
+        refactor!(refac, Ah)
+        fresh = suitesparse_factorize(Ah)
+        @test fresh.sym === :symmetric
+        for f in (refac, fresh)
+            @test refactor!(f, U) === f
+            @test isapprox(f \ b, uu; rtol = 1.0e-10)
+            @test refactor!(f, A0) === f
+            @test isapprox(f \ b, u0; rtol = 1.0e-12)
+        end
+
+        # The form route assembles without symmetrising, so its matrix is never Hermitian
+        fresh = suitesparse_factorize(Ah)
+        @test refactor!(fresh, a_of(-60.0); dirichlet = ZERO_BC) === fresh
+        A60, _ = assemble(a_of(-60.0), l; dirichlet = ZERO_BC)
+        @test isapprox(fresh \ b, Matrix(A60) \ b; rtol = 1.0e-10)
+        for sym in (:symmetric, :unsymmetric)
+            fe = suitesparse_factorize(Ah; sym)
+            @test refactor!(fe, U) === fe
+            @test isapprox(fe \ b, Matrix(U) \ b; rtol = 1.0e-10)
+        end
+    end
+
     # Helmholtz with absorption: complex symmetric, not Hermitian, positive real diagonal.
     # CHOLMOD refuses such a matrix outright, so `:auto` must not offer it as a Cholesky
     # candidate (#717). Oracle: dense `\`; the refactor refills the same LU.

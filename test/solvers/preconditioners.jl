@@ -247,6 +247,44 @@ end
         end
     end
 
+    @testset "chebyshev: complex vectors (#1216)" begin
+        # A real P acts on the real and imaginary parts of a complex x apart: the dense P⁻¹
+        # is the oracle, `P⁻¹ re(x) + i P⁻¹ im(x)` the bitwise one, in place too.
+        a = _pc_cheb_form(2, 9)
+        P = chebyshev_preconditioner(a; dirichlet = :boundary)
+        n = first(size(P))
+        M = _pc_cheb_matrix(P, n)
+        x = complex.(randn(n), randn(n))
+        ref = complex.(P \ real.(x), P \ imag.(x))
+        @test P \ x isa Vector{ComplexF64}
+        @test P \ x == ref
+        @test isapprox(ref, M * x; rtol = 1e-12)
+        z = zeros(ComplexF64, n)
+        @test ldiv!(z, P, x) === z && z == ref
+        w = copy(x)
+        @test ldiv!(P, w) === w && w == ref
+        # A real x into a complex y has a zero imaginary part.
+        xr = real.(x)
+        @test ldiv!(z, P, xr) == complex.(P \ xr, 0.0)
+        # Integer and Float32 parts are solved in P's Float64, as the real path solves them.
+        xci = [complex(i % 3, (2i) % 5) for i in 1:n]
+        @test P \ xci == complex.(P \ real.(xci), P \ imag.(xci))
+        xint = collect(1:n)
+        @test ldiv!(z, P, xint) == complex.(P \ xint, 0.0)
+        x32 = ComplexF32.(x)
+        @test P \ x32 isa Vector{ComplexF64} && P \ x32 == complex.(P \ real.(x32), P \ imag.(x32))
+        f32 = Float32.(xr)
+        @test ldiv!(z, P, f32) == complex.(P \ f32, 0.0) && eltype(P \ f32) == Float64
+        # A Dual y takes the Float64 result on write, as the real path does with a Dual y.
+        Dl = ForwardDiff.Dual{Nothing, Float64, 1}
+        zD = zeros(Complex{Dl}, n)
+        @test ldiv!(zD, P, x) === zD &&
+              map(c -> complex(ForwardDiff.value(real(c)), ForwardDiff.value(imag(c))), zD) == ref
+        # The real path still allocates nothing after a complex application.
+        yr = zeros(n)
+        @test _pc_alloc3(yr, P, xr) == 0 && yr == P \ xr
+    end
+
     @testset "chebyshev: dirichlet_components" begin
         W = _pc_spaces()[1]
         V = W × W

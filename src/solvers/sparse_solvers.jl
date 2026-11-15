@@ -184,7 +184,28 @@ Dispatches automatically via multiple dispatch to the appropriate backend.
 - [`MUMPSFactorization`](@ref) updates MUMPS multifrontal numerical factorization (`job = 2`).
 - [`SparspakFactorization`](@ref) updates Sparspak's numeric LU values.
 
-See also [`sparse_factorize`](@ref), [`pde_solve`](@ref).
+# Throws
+Besides the same-pattern rule, a backend refuses a refactor in these cases. The backend
+docstrings give the detail and the exception types.
+- A Cholesky or symmetric factorization refuses a matrix that is not symmetric (not Hermitian
+  for CHOLMOD and Accelerate) with an `ArgumentError`, because it reads one triangle. It
+  checks first, so `fact` keeps its factors and still solves the previous matrix. MUMPS
+  (`:spd`, `:symmetric` and `:auto`, also after its fallback) and Accelerate's Cholesky and
+  ``LDL^T`` refuse this way. SuiteSparse does when it holds CHOLMOD. A SuiteSparse
+  factorization that fell back to UMFPACK is an LU one and takes any matrix of its pattern,
+  as Sparspak's does. To refactor an unsymmetric matrix, factorize with
+  `sym = :unsymmetric`.
+- An `:auto` factorization follows an indefinite matrix where a chosen `:spd` one throws:
+  MUMPS and Accelerate move to ``LDL^T`` and SuiteSparse to LU.
+- A refactor refused in the numeric step (a singular matrix, or one that is not positive
+  definite under `:spd`) leaves `fact` refusing every solve until a refactor succeeds.
+
+`refactor!(fact, a; dirichlet)` assembles `a` without symmetrising it, so a symmetric
+factorization refuses a matrix with Dirichlet rows cleared. Assemble with
+`symmetrize = true` and call the matrix method instead.
+
+See also [`sparse_factorize`](@ref), [`pde_solve`](@ref), [`suitesparse_refactor!`](@ref),
+[`accelerate_refactor!`](@ref), [`mumps_refactor!`](@ref), [`sparspak_refactor!`](@ref).
 """
 function refactor!(fact::SuiteSparseFactorization, A::SparseMatrixCSC)
     return suitesparse_refactor!(fact, A)

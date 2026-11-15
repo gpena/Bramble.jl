@@ -127,6 +127,11 @@ Recompute the numeric factorization of `A` inside `fact` **reusing the existing 
 factorization** (fill-reducing ordering). `A` must have the exact same sparsity pattern as
 the matrix originally factored. A singular `A` throws a `SingularException` with index `0`.
 
+A refactor refused for a singular `A`, or for any other failure of the numeric
+factorization, leaves `fact` unusable until a later refactor succeeds: every solve with it
+rethrows the exception the refactor threw. An `A` with another sparsity pattern is refused
+before the factors are touched, and `fact` still solves the system it held.
+
 See also [`refactor!`](@ref), [`sparspak_factorize`](@ref).
 """
 function sparspak_refactor! end
