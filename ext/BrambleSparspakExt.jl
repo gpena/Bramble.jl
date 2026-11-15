@@ -65,6 +65,19 @@ const SPARSPAK_EMPTY_PROBLEM = "An empty problem. No matrix."
     end
 end
 
+# Throws `SingularException(0)` when the factors of `lu` hold a zero or non-finite pivot.
+# Sparspak's own report rests on the `info` of the BLAS `getrf` of its last supernode only,
+# and a BLAS forwarded to Accelerate returns 0 for an all-zero matrix, so the factors are
+# read directly: the pivot of column `j` is the diagonal entry of its supernode's block.
+function _check_pivots(lu)
+    s = lu.slvr
+    for j in 1:(s.n)
+        d = s.lnz[s.xlnz[j] + j - s.xsuper[s.snode[j]]]
+        (iszero(d) || !isfinite(d)) && throw(SingularException(0))
+    end
+    return lu
+end
+
 # Throws `SingularException(0)` when a solve of a finite right-hand side left a non-finite
 # entry in `x`. A non-finite right-hand side legitimately propagates and is not blamed on `A`.
 function _check_finite_solution(x::AbstractVector, finite_rhs::Bool)
@@ -265,7 +278,9 @@ function Bramble.sparspak_refactor!(fact::ConcreteSparspakFactorization, A::Spar
     # Sparspak refuses a new pattern before it sets `lu.p = A`, with the factors intact;
     # once it has set it, a failure leaves them unusable until a refactorization succeeds.
     try
-        _singular_on_empty(() -> sparspaklu!(fact.lu, A; allow_pattern_change = false), n)
+        _singular_on_empty(n) do
+            return _check_pivots(sparspaklu!(fact.lu, A; allow_pattern_change = false))
+        end
     catch err
         fact.lu.p === A && err isa Exception && (fact.failure = err)
         rethrow()

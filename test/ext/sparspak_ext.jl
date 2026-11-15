@@ -330,6 +330,22 @@ end
         @test isapprox(fact \ b, exact(B); rtol = 1.0e-12)
         @test isapprox(fact \ b32, exact(B); rtol = 1.0e-4)
         @test isapprox(ldiv!(fact, copy(b32)), exact(B); rtol = 1.0e-4)
+
+        # The refactor reads the pivots from the factors, not from Sparspak's report, which
+        # misses an all-zero matrix under a BLAS forwarded to Accelerate. The pivots it
+        # reads multiply to the determinant on a matrix with multi-column supernodes.
+        ext = Base.get_extension(Bramble, :BrambleSparspakExt)
+        R = sparse(SymTridiagonal(fill(4.0, 12), fill(-1.0, 11)))
+        R[1, 12] = R[12, 1] = 0.5
+        R[2, 9] = R[9, 2] = -0.25
+        s = Sparspak.sparspaklu(R).slvr
+        @test s.nsuper < s.n
+        pivots = [s.lnz[s.xlnz[j] + j - s.xsuper[s.snode[j]]] for j in 1:(s.n)]
+        @test isapprox(abs(prod(pivots)), abs(det(Matrix(R))); rtol = 1.0e-12)
+        lu = Sparspak.sparspaklu(R)
+        @test ext._check_pivots(lu) === lu
+        lu.slvr.lnz[lu.slvr.xlnz[3] + 3 - lu.slvr.xsuper[lu.slvr.snode[3]]] = 0
+        @test_throws SingularException ext._check_pivots(lu)
     end
 
     @testset "unknown keyword throws (#657)" begin
