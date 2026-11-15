@@ -56,30 +56,41 @@ end
 
 # The solve of a load linear in its parts (`Bramble._solve_by_parts`): the value and each
 # partial of `F` are solved by `solve` on their own, and a nested tag recurses. Only an
-# operator that carries the load's own tag `T` (a factor of a `Dual` matrix of that tag)
-# takes `solve(F)` whole. If the solve of the value has the tags of `V`, the parts are
-# rewrapped in `Dual{T}`; only tags count, so a `Float32` operator, which returns `Float32`
-# leaves for `Float64` ones, still splits the load. If it has a tag of its own (a `Dual`
-# hierarchy of `gmg_solve`, whose buffers hold no other tag), the parts are recombined as
-# `x₀ + Σₖ xₖ εₖ`, with `εₖ` the unit `Dual{T}` of partial `k`: ForwardDiff's arithmetic
-# then orders the two tags, which a rewrap in `Dual{T}` gets wrong when the operator's tag
-# is the inner one.
-function Bramble._solve_by_parts(
-        solve::S, F::AbstractVector{ForwardDiff.Dual{T, V, N}}) where {S, T, V, N}
-    x0 = Bramble._solve_by_parts(solve, ForwardDiff.value.(F))
-    tags = _tags(eltype(x0))
-    T in tags && return solve(F)
-    xk = ntuple(k -> Bramble._solve_by_parts(solve, ForwardDiff.partials.(F, k)), N)
-    if tags === _tags(V)
+# operator that carries every tag of the load (a factor of a `Dual` matrix of those tags)
+# takes `solve(F)` whole. The operator's tags are those of the solve of the innermost
+# values, which the recursion reaches first. If the solve of the value has the tags of
+# `V`, the parts are rewrapped in `Dual{T}`; only tags count, so a `Float32` operator,
+# which returns `Float32` leaves for `Float64` ones, still splits the load. Otherwise (a
+# `Dual` hierarchy of `gmg_solve`, whose buffers hold no other tag) the parts are
+# recombined as `x₀ + Σₖ xₖ εₖ`, with `εₖ` the unit `Dual{T}` of partial `k`: ForwardDiff's
+# arithmetic then orders the tags, which a rewrap in `Dual{T}` gets wrong when the
+# operator's tag is the inner one. The solve is linear in the load, so this holds when `T`
+# is the operator's tag too (`εₖ² = 0`). The sum starts from a zero `Dual{T, V, N}`, so
+# `N = 0` keeps `T`.
+Bramble._solve_by_parts(solve::S, F::AbstractVector{<:ForwardDiff.Dual}) where {S} =
+    first(_by_parts(solve, F))
+
+# `(x, tags)`: the solve of `F` by parts and the operator's tags.
+function _by_parts(solve::S, F::AbstractVector) where {S}
+    x = solve(F)
+    return x, _tags(eltype(x))
+end
+
+function _by_parts(solve::S, F::AbstractVector{ForwardDiff.Dual{T, V, N}}) where {S, T, V, N}
+    x0, ops = _by_parts(solve, ForwardDiff.value.(F))
+    all(t -> t in ops, _tags(eltype(F))) && return solve(F), ops
+    xk = ntuple(k -> first(_by_parts(solve, ForwardDiff.partials.(F, k))), N)
+    if _tags(eltype(x0)) === _tags(V)
         R = eltype(x0)
         return [ForwardDiff.Dual{T}(x0[i], ForwardDiff.Partials{N, R}(ntuple(k -> xk[k][i], N)))
-                for i in eachindex(x0)]
+                for i in eachindex(x0)], ops
     end
     ε = ntuple(
         k -> ForwardDiff.Dual{T}(zero(V),
             ForwardDiff.Partials{N, V}(ntuple(j -> j == k ? one(V) : zero(V), N))),
         N)
-    return [x0[i] + sum(k -> xk[k][i] * ε[k], 1:N) for i in eachindex(x0)]
+    z = zero(ForwardDiff.Dual{T, V, N})
+    return [x0[i] + sum(k -> xk[k][i] * ε[k], 1:N; init = z) for i in eachindex(x0)], ops
 end
 
 # The tags of a (nested) `Dual` type, outermost first; none for any other type.

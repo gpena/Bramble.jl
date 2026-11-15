@@ -842,6 +842,16 @@ struct _MGTag end
         h2(g) = ForwardDiff.gradient(p -> ForwardDiff.derivative(c -> g(c, p), 0.7), p0)
         @test isapprox(h1(gm), h1(dr); rtol = 1e-6)
         @test isapprox(h2(gm), h2(dr); rtol = 1e-6)
+        # The load depends on the coefficient too. When the coefficient is the inner
+        # derivative, the load's outer tag is the hierarchy's, and its value still carries
+        # the other tag, so it is split rather than taken whole.
+        gc(c, p) = sq(gmg_solve(bld(c), Ω, c .* b0 .+ p .* Bp[:, 1]; tol = 1e-11))
+        dc(c, p) = sum(abs2, pde_solve(assemble(bld(c)(W)), c .* b0 .+ p .* Bp[:, 1]))
+        d(f, x) = ForwardDiff.derivative(f, x)
+        k1(g) = d(c -> d(p -> g(c, p), 0.3), 0.7)
+        k2(g) = d(p -> d(c -> g(c, p), 0.7), 0.3)
+        @test isapprox(k1(gc), k1(dc); rtol = 1e-6)
+        @test isapprox(k2(gc), k2(dc); rtol = 1e-6)
     end
 
     # The Float64 loop allocates per solve, not per cycle: a tighter tol runs more cycles
