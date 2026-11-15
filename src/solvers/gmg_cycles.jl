@@ -603,7 +603,9 @@ The residual floors at a multiple of the rounding error of the element type `T` 
 - `DimensionMismatch`: `b` has the wrong length.
 - `ArgumentError`: `b` is not 1-based, `tol` is not positive, or `maxiters < 1`.
 - `ErrorException`: the residual is above `tol ‖b‖` after `maxiters` cycles; the message
-  names `tol` and `T`, since a `tol` near the rounding floor of `T` is never reached.
+  names `tol` and `T`, since a `tol` near the rounding floor of `T` is never reached. For
+  a complex `b` on a real `A`, each part is checked against its own norm, and the error
+  comes from the first part to fail, real before imaginary.
 
 # Examples
 ```jldoctest
