@@ -1172,6 +1172,7 @@ end
     # `gmg_preconditioner`; `gmg_solve` takes its result type from the level forms instead.
     bk = backend(; policy = CpuPolyester())
     I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Random.seed!(1234) # `(false, false)` draws the points, and a few draws stall the V-cycle
     lap = V -> form(V, V, (u, v) -> innerₕ(u, v) + 0.7 * inner₊(∇ₕ(u), ∇ₕ(v)))
     kw = (; tol = 1e-10)
     meshes = (_mg_jitter_mesh(2, 9; bk), mesh(domain(I2), (9, 9), (false, false); backend = bk))

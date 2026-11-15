@@ -760,6 +760,7 @@ end
     # `gmg_preconditioner`; `gmg_solve` takes its result type from the level forms instead.
     bk = backend(; policy = Bramble.CpuThreaded())
     I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Random.seed!(1234) # `(false, false)` draws the points, and a few draws stall the V-cycle
     lap = V -> form(V, V, (u, v) -> innerₕ(u, v) + 0.7 * inner₊(∇ₕ(u), ∇ₕ(v)))
     kw = (; tol = 1e-10)
     meshes = (_mg_jitter_mesh(2, 9; bk), mesh(domain(I2), (9, 9), (false, false); backend = bk))
@@ -771,6 +772,9 @@ end
         @test typeof(u) === rt === rtk
         @test norm(assemble(build(gridspace(Ω))) * parent(u) - b) <= 1e-9 * norm(b)
     end
+    # an abstract element type is not asserted: `Vector{Integer}` solves as `Vector{Int}`
+    Ω = first(meshes)
+    @test gmg_solve(lap, Ω, Integer[1:npoints(Ω);]; kw...) == gmg_solve(lap, Ω, [1:npoints(Ω);]; kw...)
 end
 
 @testset "gmg: complex vectors (#1216)" begin
