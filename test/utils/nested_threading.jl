@@ -21,7 +21,8 @@ module UtilsNestedThreadingTests
 # 3. A top-level call still spreads its work over at least two threads (when there are two),
 #    while a nested call stays on the calling task's thread.
 # 4. `_is_static_nesting_error` recognises the error Base actually raises; `_static_or_serial`
-#    answers that error with the serial body and rethrows any other.
+#    answers that error with the serial body, given the same arguments, and rethrows any
+#    other.
 # 5. Many concurrent `Threads.@spawn`ed calls (no threaded region of their own) never throw
 #    and each returns the top-level result.
 #
@@ -45,6 +46,21 @@ function _nested_results(f)
     end
     return out
 end
+
+# The shape of `_threaded_bands!`: a point boxed in a `Ref`, unwrapped inline, handed to
+# `_static_or_serial`, whose threaded call meets Base's error. With `_static_or_serial`
+# inlined, Julia (1.13.3, 1.13.4, 1.14.0-beta1) passed garbage for every argument to the
+# serial call after the `catch` (#1243): `nbands == 0` there, a segfault elsewhere.
+struct _BoxedPoint{V}
+    v::V
+    offset::Int
+    flag::Bool
+end
+@noinline _raise_static(p, n, k) = error("`@threads :static` cannot be used concurrently or nested")
+@noinline _echo(p, n, k) = (p.v, p.offset, p.flag, n, k)
+@inline _via_ref(r::Base.RefValue, n::Int, k) = _static_or_serial(_raise_static, _echo, r[], n, k)
+@inline _via(p::P, n::Int, k) where {P} = _via_ref(Ref(p), n, k)
+@noinline _caught_then_serial(v, n, k) = _via(_BoxedPoint(v, 7, true), n, k)
 
 @testset "Parallel() inside user threaded region" begin
     @testset "_in_threaded_region" begin
@@ -77,6 +93,10 @@ end
         @test dest == 2 .* (1:10)
         @test_throws ErrorException("unrelated") _static_or_serial(
             raises_other, _serial_for!, dest, 1:10, i -> i)
+
+        # The serial call after the catch gets the arguments the threaded call was given.
+        v = [1.0]
+        @test _caught_then_serial(v, 3, 2:2:4) === (v, 7, true, 3, 2:2:4)
     end
 
     W = gridspace(_mesh(60, Parallel()))
@@ -149,6 +169,9 @@ end
         ref = work()
         ok = Threads.Atomic{Int}(0)
         threw = Threads.Atomic{Int}(0)
+        # The first exception and its backtrace, so a failure says what was thrown (#1243).
+        first_err = Ref{Any}(nothing)
+        err_lock = ReentrantLock()
         calls = 0
         # `slow` races for longer; `unit` still overlaps dozens of calls.
         deadline = time() + (WITH_SLOW_TESTS ? 3.0 : 1.0)
@@ -157,10 +180,18 @@ end
             @sync for _ in 1:6
                 Threads.@spawn try
                     work() == ref && Threads.atomic_add!(ok, 1)
-                catch
+                catch err
                     Threads.atomic_add!(threw, 1)
+                    bt = catch_backtrace()
+                    lock(err_lock) do
+                        first_err[] === nothing && (first_err[] = (err, bt))
+                    end
                 end
             end
+        end
+        if first_err[] !== nothing
+            err, bt = first_err[]
+            @error "Concurrent spawned call threw ($(threw[]) of $calls)" exception = (err, bt)
         end
         @test threw[] == 0
         @test ok[] == calls

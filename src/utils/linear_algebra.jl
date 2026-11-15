@@ -298,8 +298,12 @@ returns: reductions fill the same partial sums in the same order, so match it bi
 
 `threaded!` and `serial!` are isolated functions rather than closures, so no closure is
 boxed on the path that runs serially.
+
+It must stay out of line. Inlined into a caller that unwraps its point from a `Ref`
+(`_threaded_bands_ref!`), Julia 1.13 and 1.14.0-beta1 pass garbage for every argument of
+the `serial!` call after the `catch`: a zero band count, then a segfault (gpena/Bramble.jl#1243).
 """
-@inline function _static_or_serial(
+@noinline function _static_or_serial(
         threaded!::F, serial!::G, args::Vararg{Any, N}
 ) where {F, G, N}
     _in_threaded_region() && return serial!(args...)
