@@ -80,10 +80,10 @@ function EnzymeRules.augmented_primal(
     # flag a matrix scaled in place after the call.
     Aₜ = fact === nothing ? copy(A.val) : nothing
     # The primal is `u` itself, which the caller may change in place after the solve, and
-    # `reverse` reads the solution for `Ā -= λ uᴴ`: the tape keeps its own copy. With a
-    # `Const` `A` the reverse pass never reads it (`F̄ = λ`), so there the tape holds `u`
-    # itself and nothing is copied.
-    uₜ = A isa Const ? u : copy(u)
+    # `reverse` reads the solution for `Ā -= λ uᴴ`: the tape keeps its own copy. With no
+    # shadow of `A` (a `Const`, or a shadow that is `A` itself) the reverse pass never reads
+    # it (`F̄ = λ`), so there the tape holds `u` itself and nothing is copied.
+    uₜ = _has_shadow(A) ? copy(u) : u
     # The return's own cotangent accumulates here, and `reverse` reads it back off the tape:
     # allocated once, in the pass that knows `u`'s size, rather than reconstructed later.
     ū = zero(u)
@@ -116,7 +116,9 @@ function EnzymeRules.reverse(
     # structurally asymmetric, so this is not an optimisation for a special case.
     λ = _adjoint_solve(fact, A₀, ū, values(kwargs))
 
-    if !(A isa Const)
+    # Under runtime activity a constant argument can arrive as `Duplicated` with the primal
+    # as its shadow (`_has_shadow`). Accumulating there would overwrite the caller's data.
+    if _has_shadow(A)
         Āv = nonzeros(A.dval)
         rows = rowvals(A₀)
         @inbounds for j in axes(A₀, 2), k in nzrange(A₀, j)
@@ -125,7 +127,7 @@ function EnzymeRules.reverse(
         end
     end
 
-    if !(F isa Const)
+    if _has_shadow(F)
         F.dval .+= λ
     end
 
@@ -172,7 +174,10 @@ function EnzymeRules.forward(
     RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
     W = EnzymeRules.width(config)
     shadows = ntuple(Val(W)) do i
-        rhs = _tangent_rhs(_lane(A, i), _lane(F, i), u)
+        # A lane whose shadow is the primal itself has no tangent (`_rank_one_tangent`).
+        Ȧ = _rank_one_tangent(A.val, _lane(A, i))
+        Ḟ = _rank_one_tangent(F.val, _lane(F, i))
+        rhs = _tangent_rhs(Ȧ, Ḟ, u)
         return _tangent_solve(fact, A.val, F.val, rhs, values(kwargs))
     end
     needs_primal = EnzymeRules.needs_primal(config)
