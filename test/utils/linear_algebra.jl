@@ -343,7 +343,7 @@ using ..TestUtils: alloc_test, @test_allocs, MockDeviceArray
             Bramble._static_for!, _serial_for!, Bramble._threaded_scatter_for!,
             Bramble._static_scatter_for!, Bramble._serial_scatter_for!,
             Bramble._threaded_axis_for!, Bramble._static_bands!, Bramble._serial_bands!,
-            Bramble._static_or_serial)
+            Bramble._static_or_serial, Bramble._static_or_serial_out)
         widened = [mi.specTypes for fn in helpers for m in methods(fn)
                    for mi in Base.specializations(m)
                    if mi !== nothing && isdefined(mi, :cache) &&
