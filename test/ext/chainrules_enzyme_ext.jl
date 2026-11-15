@@ -683,6 +683,20 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                 @test Fd ≈ A' \ c rtol=1e-10
             end
 
+            # A `VectorElement` load against the CHOLMOD factor takes the solve too, and its
+            # cotangent is `A⁻ᵀ c` as with a `Vector` load (gpena/Bramble.jl#1228).
+            fspd = sparse_factorize(As; sym = :spd)
+            @test fspd.fact isa SuiteSparse.CHOLMOD.Factor
+            for loss in (solve_loss, ldiv_loss)
+                Fe = element(Wk)
+                parent(Fe) .= F₀
+                dFe = Enzyme.make_zero(Fe)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active, Enzyme.Const(fspd),
+                    Enzyme.Duplicated(Fe, dFe))
+                @test parent(dFe) ≈ As' \ c rtol=1e-10
+                @test parent(Fe) == F₀
+            end
+
             # `ldiv!` is in place: with the destination an argument, the cotangent it holds
             # after the call is read and then cleared, and the primal solution is written.
             fact = sparse_factorize(A₀)

@@ -108,6 +108,8 @@ function Bramble._suitesparse_factorize(A::SparseMatrixCSC; sym = :auto, kwargs.
     end
 end
 
+# CHOLMOD solves dense `Vector`s only, so the solves below hand the factor a `VectorElement`'s
+# own storage (`Bramble._mf_data`); UMFPACK takes either.
 function LinearAlgebra.ldiv!(
         x::AbstractVector, fact::ConcreteSuiteSparseFactorization, b::AbstractVector
 )
@@ -118,7 +120,7 @@ function LinearAlgebra.ldiv!(
     length(x) == n || throw(
         DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
     )
-    _ldiv!(x, fact.fact, b)
+    _ldiv!(Bramble._mf_data(x), fact.fact, Bramble._mf_data(b))
     return x
 end
 
@@ -142,7 +144,7 @@ function LinearAlgebra.ldiv!(
     length(b) == n || throw(
         DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
     )
-    _ldiv!(fact.fact, b)
+    _ldiv!(fact.fact, Bramble._mf_data(b))
     return b
 end
 
@@ -165,7 +167,7 @@ end
 # and `b`, as the Accelerate extension does, so a `Float32` system returns `Float32`.
 function Base.:\(fact::ConcreteSuiteSparseFactorization{T}, b::AbstractVector) where {T}
     S = float(promote_type(T, eltype(b)))
-    return convert(Vector{S}, fact.fact \ b)
+    return convert(Vector{S}, fact.fact \ Bramble._mf_data(b))
 end
 
 # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
