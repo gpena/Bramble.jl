@@ -80,9 +80,15 @@ end
 
 @testset "Neumann warning, Float32 (#1188)" begin
     I₁ = interval(0.0, 1.0)
-    for Ω in (mesh(domain(I₁), 33, false), mesh(domain(I₁), 33, true),
-              mesh(domain(I₁ × I₁), (17, 13), (false, false)),
-              mesh(domain(I₁ × I₁), (17, 13), (true, true)))
+    Bramble._seed_mesh1d_rng!(1188)
+    meshes = try
+        (mesh(domain(I₁), 33, false), mesh(domain(I₁), 33, true),
+            mesh(domain(I₁ × I₁), (17, 13), (false, false)),
+            mesh(domain(I₁ × I₁), (17, 13), (true, true)))
+    finally
+        Bramble._unseed_mesh1d_rng!()
+    end
+    for Ω in meshes
         W = gridspace(Ω)
         a(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
         K = assemble(form(W, W, a))

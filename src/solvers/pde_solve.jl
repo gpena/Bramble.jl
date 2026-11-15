@@ -94,8 +94,9 @@ chain differentiable.
   `F` or `A` of mismatched size a `DimensionMismatch`. Without `mean_zero` or `gauge`, a
   square `A` with `‖A 1‖∞ ≤ max(1e-10, 8 ε) ‖A‖∞` (constants in its kernel), where
   `ε = eps(T)` for the real float type `T` of `A`'s elements, logs a warning naming
-  `mean_zero`, and the solve proceeds. The bound is `1e-10` for `Float64`. In `Float32`
-  a reaction term too small to show in the stiffness entries is not told from pure Neumann.
+  `mean_zero`, and the solve proceeds. The bound is `1e-10` for `Float64`. In `Float32`, on
+  a fine or strongly graded mesh, a reaction term or a Dirichlet row whose sum falls below
+  the rounding of the stiffness entries is not told from pure Neumann, and warns.
 - `gauge`: a matrix `Z` with one column per kernel vector to fix (for instance
   `Bramble.ghost_kernel(A, Wₕ)`, the ghost-only kernel of a form such as
   `innerₕ(Δₕ(u), Δₕ(v))` on a ghost space), or `nothing` (default). With `Z`, `pde_solve`
