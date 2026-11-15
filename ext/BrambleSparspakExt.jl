@@ -27,11 +27,20 @@ using PrecompileTools: @setup_workload, @compile_workload
 
 # `matrix` copies the factored matrix, which `lu.p` only aliases: a load that must be
 # solved against the matrix refactored at its own type (`_solve_wider`) sees the matrix as
-# factored even if the caller has since overwritten its values or its pattern.
+# factored even if the caller has since overwritten its values or its pattern. `failure`
+# holds the exception of a refused numeric refactorization until one succeeds, and every
+# solve rethrows it.
 mutable struct ConcreteSparspakFactorization{T, LUT} <: SparspakFactorization{T}
     lu::LUT
     dim::Int
     matrix::SparseMatrixCSC{T, Int}
+    failure::Union{Nothing, Exception}
+end
+
+# Factors left by a refused numeric refactorization are unusable; refuse them here
+function _check_usable(fact::ConcreteSparspakFactorization)
+    fact.failure === nothing || throw(fact.failure)
+    return nothing
 end
 
 Base.size(fact::ConcreteSparspakFactorization) = (fact.dim, fact.dim)
@@ -69,13 +78,14 @@ function Bramble._sparspak_factorize(A::SparseMatrixCSC)
 
     lu = _singular_on_empty(() -> sparspaklu(A), n)
     return ConcreteSparspakFactorization{eltype(A), typeof(lu)}(
-        lu, n, SparseMatrixCSC{eltype(A), Int}(A)
+        lu, n, SparseMatrixCSC{eltype(A), Int}(A), nothing
     )
 end
 
 function LinearAlgebra.ldiv!(
         x::AbstractVector, fact::ConcreteSparspakFactorization, b::AbstractVector
 )
+    _check_usable(fact)
     n = fact.dim
     length(b) == n || throw(
         DimensionMismatch("Right-hand side length $(length(b)) does not match matrix dimension $n"),
@@ -91,6 +101,7 @@ end
 function LinearAlgebra.ldiv!(
         fact::ConcreteSparspakFactorization, b::AbstractVector
 )
+    _check_usable(fact)
     n = fact.dim
     length(b) == n || throw(
         DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
@@ -120,6 +131,7 @@ end
 # A load wider than the matrix is solved part by part (`_solve_parts`) or, when it does not
 # split into parts of type `T`, against `A` refactored at the load's type.
 function Base.:\(fact::ConcreteSparspakFactorization{T}, b::AbstractVector) where {T}
+    _check_usable(fact)
     finite_rhs = all(isfinite, b)
     S = promote_type(T, eltype(b))
     x = if S === T
@@ -132,6 +144,7 @@ function Base.:\(fact::ConcreteSparspakFactorization{T}, b::AbstractVector) wher
 end
 
 function _solve_wider(fact::ConcreteSparspakFactorization{T}, b::Vector{S}) where {T, S}
+    _check_usable(fact)
     parts = _parts(S, T)
     parts === nothing || return _solve_parts(fact, b, parts)
     A = SparseMatrixCSC{S}(fact.matrix)
@@ -249,7 +262,15 @@ function Bramble.sparspak_refactor!(fact::ConcreteSparspakFactorization, A::Spar
     (m == fact.dim && n == fact.dim) || throw(
         DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
     )
-    _singular_on_empty(() -> sparspaklu!(fact.lu, A; allow_pattern_change = false), n)
+    # Sparspak refuses a new pattern before it sets `lu.p = A`, with the factors intact;
+    # once it has set it, a failure leaves them unusable until a refactorization succeeds.
+    try
+        _singular_on_empty(() -> sparspaklu!(fact.lu, A; allow_pattern_change = false), n)
+    catch err
+        fact.lu.p === A && err isa Exception && (fact.failure = err)
+        rethrow()
+    end
+    fact.failure = nothing
     copy!(fact.matrix.colptr, SparseArrays.getcolptr(A))
     copy!(fact.matrix.rowval, SparseArrays.rowvals(A))
     copy!(fact.matrix.nzval, SparseArrays.nonzeros(A))

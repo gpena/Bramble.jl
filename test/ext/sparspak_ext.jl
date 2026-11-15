@@ -28,7 +28,7 @@ using ForwardDiff: ForwardDiff
 using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system,
                             poisson_solve_contract, refactor_contract,
                             unsymmetric_refactor_contract, validation_contract
-using ..TestUtils: _fd, alloc_test
+using ..TestUtils: _fd, alloc_test, random_mesh
 
 # An interval `[lo, hi]`: a number whose two fields have type Float64 but are not parts a
 # solve may treat apart (`-[1, 2]` is `[-2, -1]`, not `lo = -1, hi = -2`), so a load of it
@@ -292,6 +292,44 @@ end
         @test isnan(sum(pde_solve(A, [1.0, NaN, 1.0]; solver = :sparspak)))
         # nonsingular systems are unaffected
         @test pde_solve(A, b; solver = :sparspak) ≈ Matrix(A) \ b
+    end
+
+    # A refactor refused for a singular matrix leaves factors no solve may use: every
+    # route rethrows its exception until a refactor succeeds. One refused for its pattern
+    # leaves the old factors in place, and they still solve (#1209).
+    @testset "refused refactor blocks solves (#1209)" begin
+        Wₕ = gridspace(random_mesh((17,); seed = 1209))
+        a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+        A = SparseMatrixCSC{Float32, Int}(assemble(a))
+        n = size(A, 1)
+        b = [sin(i) + 2.0 for i in 1:n]
+        b32 = Float32.(b)
+        exact(M) = Matrix(Float64.(M)) \ b
+        Z = copy(A)
+        fill!(nonzeros(Z), 0)
+        fact = sparspak_factorize(A)
+
+        P = copy(A)
+        P[1, n] = 1.0f0
+        @test_throws ErrorException sparspak_refactor!(fact, P)
+        @test isapprox(fact \ b, exact(A); rtol = 1.0e-12)
+        @test isapprox(fact \ b32, exact(A); rtol = 1.0e-4)
+
+        @test_throws SingularException sparspak_refactor!(fact, Z)
+        @test_throws SingularException fact \ b32
+        @test_throws SingularException fact \ b
+        @test_throws SingularException fact \ ComplexF32.(b32)
+        @test_throws SingularException fact \ complex.(b)
+        @test_throws SingularException ldiv!(similar(b32), fact, b32)
+        @test_throws SingularException ldiv!(fact, copy(b32))
+        @test_throws SingularException ldiv!(element(Wₕ, 0.0f0), fact, b32)
+
+        B = SparseMatrixCSC(n, n, copy(SparseArrays.getcolptr(A)), copy(rowvals(A)),
+            2 .* nonzeros(A))
+        sparspak_refactor!(fact, B)
+        @test isapprox(fact \ b, exact(B); rtol = 1.0e-12)
+        @test isapprox(fact \ b32, exact(B); rtol = 1.0e-4)
+        @test isapprox(ldiv!(fact, copy(b32)), exact(B); rtol = 1.0e-4)
     end
 
     @testset "unknown keyword throws (#657)" begin
