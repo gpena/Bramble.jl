@@ -13,6 +13,7 @@ using Test
 using Bramble
 import Bramble
 using Bramble: CpuSerial, CpuThreaded, D₋ₓ!
+using ForwardDiff: Dual
 using LinearAlgebra: norm
 using Random: MersenneTwister
 using SparseArrays: SparseMatrixCSC
@@ -186,6 +187,29 @@ constrained_on(pol, ns, ghosts, rel; kwargs...) = constrained(
     W32 = gridspace(ghost_mesh(CpuSerial(), (6, 7); T = Float32); ghosts = :boundary)
     @test eltype(GhostVector(W32)) == Float32
     @test Bramble.ghost_values(GhostVector(W32, rand(Float32, np))) isa Vector{Float32}
+end
+
+@testset "GhostVector(Cₕ) closure eltype (#1214)" begin
+    Ω = ghost_mesh(CpuSerial(), (9,))
+    W = gridspace(Ω; ghosts = :boundary)
+    np = length(Bramble.physical_indices(mesh(W)))
+    neu(g) = constrained(W, u -> (:xmin => ∂ₙ(u) => g, :xmax => ∂ₙ(u) => 0.0))
+    rob(α) = constrained(W, u -> (:xmin => ∂ₙ(u) => 1.0, :xmax => α * u + ∂ₙ(u) => 0.5))
+    @test eltype(GhostVector(neu(1.0))) == Float64
+    @test eltype(GhostVector(rob(2.0))) == Float64
+    for (C, T) in ((neu(1.0im), ComplexF64), (rob(2.0 + 1.0im), ComplexF64),
+        (rob(Dual(1.3, 1.0)), Dual{Nothing, Float64, 1}))
+        v = GhostVector(C)
+        @test eltype(v) == T
+        @test eltype(Bramble.ghost_values(v)) == T
+        @test update_ghosts!(v, C) === v
+        r = update_ghosts!(GhostVector(C, zeros(T, np)), C)
+        @test Bramble.ghost_values(v) == Bramble.ghost_values(r)
+        @test any(!iszero, Bramble.ghost_values(v))
+        # the reference: the ghosts of `lift` at the zero degrees of freedom, the datum `d`
+        _, gs = split_padded(mesh(C), parent(Bramble.lift(C, zeros(T, Bramble.ndofs(C)))))
+        @test Bramble.ghost_values(v) == gs
+    end
 end
 
 @testset "update_ghosts! equals lift (#776)" begin

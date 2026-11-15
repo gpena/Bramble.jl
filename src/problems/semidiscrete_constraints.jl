@@ -84,9 +84,32 @@ function _validate_dirichlet_arity_mix(constraints::ConstraintMarkers)
     )
 end
 
+# Checks the arity only: a condition that takes none of `(x)`, `(x, t)`, `(x, t, p)` would
+# otherwise be read as time-dependent and fail at the first residual call. The argument
+# types are not checked, as the point type is unknown here, so `g(x::Int, t::Real)` on a
+# `Float64` mesh passes and fails at the first residual call.
+#
+# `_accepts` sees a typed method only when no arity has an untyped one, so `g(x)` beside a
+# typed `g(x::Real, t::Real)` would be read as spatial and drop `t`. That case is refused
+# (`_validate_hidden_typed_arity`, geometry/marker.jl).
+function _validate_dirichlet_arity_known(constraints::ConstraintMarkers)
+    for m in conditions(constraints)
+        f = identifier(m)
+        (_accepts(f, Val(1)) || _accepts(f, Val(2)) || _accepts(f, Val(3))) || throw(
+            ArgumentError(
+            "semidiscretize: Dirichlet condition for label `:$(label(m))` must accept " *
+            "(x), (x, t) or (x, t, p), got $(f), which has no method for any of them.",
+        ),
+        )
+        _validate_hidden_typed_arity("semidiscretize", label(m), f)
+    end
+    return nothing
+end
+
 @inline _source_constraints(::Nothing, ::Nothing) = NoConstraints()
 @inline _source_constraints(::Any, ::Nothing) = LabelsOnly()
 @inline function _source_constraints(::Any, constraints)
+    _validate_dirichlet_arity_known(constraints)
     _validate_dirichlet_arity_mix(constraints)
     return if _dirichlet_is_time_param_dependent(constraints)
         TimeParamDependentConstraints(constraints)

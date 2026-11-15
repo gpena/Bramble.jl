@@ -5,6 +5,7 @@ using Bramble:
                VectorElement,
                ScalarGridSpace,
                CompositeGridSpace,
+               GhostGridSpace,
                mesh,
                gridspace,
                points,
@@ -75,6 +76,52 @@ function Makie.expand_dimensions(
 end
 function Makie.expand_dimensions(
         ::Makie.PointBased, ::VectorElement{<:ScalarGridSpace{D}}
+) where {D}
+    return Bramble._throw_plot_dim(D)
+end
+
+# A ghost space: the physical mesh's points and the first `np` unknowns, which are the
+# physical nodes' values (the ghosts follow), never the padded mesh with its ghost values.
+# A space whose unknowns are no grid function (a node fixed by `dirichlet`, the polygon
+# trial space) is not checked: its first `np` unknowns are still read as the grid values.
+@inline function _ghost_plot_data(uₕ::VectorElement{<:GhostGridSpace})
+    Ωₕ = Bramble.physical_mesh(mesh(uₕ))
+    return Ωₕ, view(parent(uₕ), 1:Bramble.npoints(Ωₕ))
+end
+
+function Makie.convert_arguments(
+        ::Makie.PointBased, uₕ::VectorElement{<:GhostGridSpace{1}}
+)
+    Ωₕ, v = _ghost_plot_data(uₕ)
+    return (Makie.Point2f.(points(Ωₕ), v),)
+end
+
+function Makie.expand_dimensions(
+        ::Makie.PointBased, uₕ::VectorElement{<:GhostGridSpace{1}}
+)
+    Ωₕ, v = _ghost_plot_data(uₕ)
+    return (points(Ωₕ), collect(v))
+end
+
+function Makie.convert_arguments(
+        ::Union{Makie.CellGrid, Makie.VertexGrid}, uₕ::VectorElement{<:GhostGridSpace{2}}
+)
+    Ωₕ, v = _ghost_plot_data(uₕ)
+    return (points(Ωₕ)..., reshape(v, Bramble.npoints(Ωₕ, Tuple)))
+end
+
+function Makie.convert_arguments(
+        ::Makie.PointBased, ::VectorElement{<:GhostGridSpace{D}}
+) where {D}
+    return Bramble._throw_plot_dim(D)
+end
+function Makie.convert_arguments(
+        ::Union{Makie.CellGrid, Makie.VertexGrid}, ::VectorElement{<:GhostGridSpace{D}}
+) where {D}
+    return Bramble._throw_plot_dim(D)
+end
+function Makie.expand_dimensions(
+        ::Makie.PointBased, ::VectorElement{<:GhostGridSpace{D}}
 ) where {D}
     return Bramble._throw_plot_dim(D)
 end

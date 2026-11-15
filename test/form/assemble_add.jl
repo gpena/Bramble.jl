@@ -431,6 +431,42 @@ using ..TestUtils: _fillnz!, alloc_test, WITH_3D_TESTS
         @test Ad[rows, :] != Matrix(A)[rows, :]
         @test Matrix(A)[rows, :] ≈ 2 .* Matrix(assemble(m_form))[rows, :]
     end
+
+    # The sweep reads and writes `A` with `@inbounds`, so a smaller matrix was read out
+    # of bounds and a larger one picked up the sum in its leading block (#1196). Both
+    # methods check the size first and leave `A` untouched.
+    @testset "Bilinear: wrong-size matrix refused" begin
+        pts = [0.0, 0.05, 0.2, 0.3, 0.55, 0.6, 0.85, 1.0]
+        Ω8 = mesh(domain(interval(0.0, 1.0)), length(pts), false)
+        Bramble.set_points!(Ω8, pts)
+        W8 = gridspace(Ω8)
+        W5, W11 = (gridspace(mesh(domain(interval(0.0, 1.0)), n, true)) for n in (5, 11))
+        bf(W) = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+        a = bf(W8)
+        # trial W8, test W8 × W8: a 16 × 8 matrix
+        rect = form(W8, W8 × W8, (u, V) -> innerₕ(u, V[1]) + innerₕ(u, V[2]))
+        # Any: each form is its own type
+        for (label, f, A) in Any[("sparse larger", a, allocate_system_matrix(bf(W11))),
+            ("sparse smaller", a, allocate_system_matrix(bf(W5))),
+            ("dense larger", a, zeros(10, 10)),
+            ("dense smaller", a, zeros(6, 6)),
+            ("rectangular, transposed", rect, zeros(8, 16))]
+            @testset "$label" begin
+                stored = A isa SparseMatrixCSC ? nonzeros(A) : A
+                fill!(stored, 7.0)
+                @test_throws DimensionMismatch assemble_add!(A, f)
+                @test all(==(7.0), stored)
+                @test_throws DimensionMismatch assemble_add!(A, f, 2.0)
+                @test all(==(7.0), stored)
+                @test_throws DimensionMismatch assemble_add!(A, f, Ref(2.0))
+                @test all(==(7.0), stored)
+            end
+        end
+        A = allocate_system_matrix(a)
+        _fillnz!(A, 0.0)
+        assemble_add!(A, a, 2.0)
+        @test Matrix(A) ≈ 2 .* Matrix(assemble(a))
+    end
 end
 
 end # module

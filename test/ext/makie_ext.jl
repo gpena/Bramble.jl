@@ -65,6 +65,38 @@ const DIM3_MSG = "plotting a 3D grid function directly is not implemented — on
         @test_throws ArgumentError(DIM3_MSG) Makie.expand_dimensions(Makie.PointBased(), uₕ)
     end
 
+    @testset "ghost space: physical values" begin
+        Ω1 = Bramble.mesh(domain(interval(0.0, 1.0)), 9, false)
+        u1 = element(gridspace(Ω1; ghosts = :boundary), collect(1.0:11.0))
+        x, y = Makie.expand_dimensions(Makie.PointBased(), u1)
+        @test x == points(Ω1)
+        @test y == collect(1.0:9.0)
+        (pts,) = Makie.convert_arguments(Makie.PointBased(), u1)
+        @test length(pts) == 9
+        @test pts[9] == Makie.Point2f(points(Ω1)[9], 9.0)
+
+        Ω2 = Bramble.mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 5), (false, false)
+        )
+        G2 = gridspace(Ω2; ghosts = :boundary)
+        u2 = element(G2, collect(1.0:ndofs(G2)))
+        for trait in (Makie.CellGrid(), Makie.VertexGrid())
+            xs, ys, z = Makie.convert_arguments(trait, u2)
+            @test xs == points(Ω2)[1]
+            @test ys == points(Ω2)[2]
+            @test size(z) == (6, 5)
+            @test vec(z) == collect(1.0:30.0)
+        end
+
+        Ω3 = Bramble.mesh(
+            domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 4, 4), (false, false, false)
+        )
+        u3 = element(gridspace(Ω3; ghosts = :boundary), 1.0)
+        @test_throws ArgumentError(DIM3_MSG) Makie.convert_arguments(Makie.PointBased(), u3)
+        @test_throws ArgumentError(DIM3_MSG) Makie.convert_arguments(Makie.CellGrid(), u3)
+        @test_throws ArgumentError(DIM3_MSG) Makie.expand_dimensions(Makie.PointBased(), u3)
+    end
+
     @testset "composite: refused" begin
         Ωₕ = Bramble.mesh(domain(interval(0.0, 1.0)), 5, true)
         Vₕ = gridspace(Ωₕ, Val(2))

@@ -257,12 +257,29 @@ at this level, so the default here is `false`.
 # (gpena/Bramble.jl#68).
 #===========================================================================#
 
-# Refuses a mesh carrying a marker label beyond `:boundary`/`:interior`: a point-count
-# change leaves it sized for the old grid and there is no domain here to re-evaluate it
-# from. `caller` completes "... was asked to <verb> a mesh carrying custom markers", and
-# `remedy` names the call that keeps them.
+# Refuses a mesh carrying a marker label beyond `:boundary`/`:interior`, or a `:boundary` or
+# `:interior` that is not the geometric set: a point-count change leaves it sized for the old
+# grid and there is no domain here to re-evaluate it from. `:boundary`/`:interior` are rebuilt
+# from the geometry after the change, so a predicate label of either name, or a stored set
+# that differs from the one the present mesh gives, would be replaced by a different set. Both
+# tests are needed: a predicate can match the geometric set on this grid and not on the new
+# one. A stored set sized for another point count is stale, not custom (a `MeshnD` whose
+# submesh was refined alone), so only a set of the present size is compared. `caller`
+# completes "... was asked to <verb> a mesh carrying custom markers", and `remedy` names the
+# call that keeps them.
 function _check_only_geometric_labels(Ωₕ, caller::String, remedy::String)
-    extra_labels = setdiff(keys(markers(Ωₕ)), (:boundary, :interior))
+    extra_labels = Symbol[setdiff(keys(markers(Ωₕ)), (:boundary, :interior))...]
+    geometric = MeshMarkers()
+    _ensure_geometric_markers!(geometric, Ωₕ)
+    plabels = _predicate_labels(Ωₕ)
+    for l in (:boundary, :interior)
+        stored = markers(Ωₕ)
+        if l in plabels ||
+           (haskey(stored, l) && length(stored[l]) == length(geometric[l]) &&
+            stored[l] != geometric[l])
+            push!(extra_labels, l)
+        end
+    end
     isempty(extra_labels) || _throw_drops_markers(caller, extra_labels, remedy)
     return nothing
 end
@@ -594,7 +611,9 @@ If domain markers are supplied, they are re-evaluated onto the refined grid poin
 
 Without `domain_markers`, any custom marker `Ωₕ` carries beyond `:boundary`/`:interior` has
 no domain here to re-derive it from, so this throws an `ArgumentError` rather than silently
-dropping it. Pass `domain_markers` (the same ones the mesh was built with, or equivalent) to
+dropping it. So does a `:boundary` or `:interior` that is not the geometric set, whether it
+was defined by a predicate or stored as a different set: refinement rebuilds both from the
+geometry and would replace it. Pass `domain_markers` (the same ones the mesh was built with, or equivalent) to
 keep them.
 
 On a multi-dimensional mesh, refine the whole mesh, not one of its submeshes:

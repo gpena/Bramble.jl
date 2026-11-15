@@ -1321,6 +1321,21 @@ end
     @test parent(Rₕ!(element(W), g)) == parent(Rₕ!(element(Ws), g))
 end
 
+# A single function returning more values than a composite has leaves throws the bare
+# `DimensionMismatch` under `CpuPolyester`, raised before the `@batch` tasks start (#1202).
+@testset "wrong value count throws (#1202)" begin
+    Random.seed!(1202)
+    W = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (9, 7), (false, false);
+        backend = backend(policy = CpuPolyester())))
+    V = W × W
+    f3 = x -> (x[1], x[2], 1.0)
+    @test parent(Rₕ!(element(V), x -> (x[1], x[2]))) == parent(Rₕ!(element(V), (x -> x[1], x -> x[2])))
+    @test_throws DimensionMismatch Rₕ!(element(V), f3)
+    @test_throws DimensionMismatch avgₕ!(element(V), f3)
+    @test_throws DimensionMismatch Rₕ!(element(V), f3; markers = (:boundary,))
+    @test_throws DimensionMismatch Rₕ(V, f3)
+end
+
 # A user's closure over a `Vector` reaches `Rₕ!`/`avgₕ!` (plain, masked and composite)
 # whole under `CpuPolyester`, as under `CpuSerial`: a split would rebuild it around a
 # `PtrArray`, so a method typed on `Vector{Float64}` would throw a `MethodError` and an

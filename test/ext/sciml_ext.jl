@@ -85,6 +85,30 @@ end
         f_aware.tgrad(dT, zeros(n), nothing, 2.0)
         @test all(==(n), dT)
 
+        # Arguments typed on the Bramble-aware form still read as five-argument, and typed
+        # plain arguments as four-argument.
+        typed_aware(dT::AbstractVector, sd::Bramble.Semidiscretization, u, p, t::Real) = fill!(dT, 2.0)
+        fill!(dT, 0.0)
+        ode_function(sd; tgrad = typed_aware).tgrad(dT, zeros(n), nothing, 2.0)
+        @test all(==(2.0), dT)
+        typed_plain(dT::AbstractVector, u, p, t::Real) = fill!(dT, 3.0)
+        fill!(dT, 0.0)
+        ode_function(sd; tgrad = typed_plain).tgrad(dT, zeros(n), nothing, 2.0)
+        @test all(==(3.0), dT)
+
+        # A `tgrad` taking neither arity is refused, with both signatures named.
+        wrong_arity(dT) = dT
+        err = try
+            ode_function(sd; tgrad = wrong_arity)
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("tgrad", msg)
+        @test occursin("(dT, u, p, t)", msg)
+        @test occursin("(dT, sd, u, p, t)", msg)
+
         # The two-form method builds the semidiscretisation on the way.
         @test ode_function(a, l; dirichlet = :boundary) isa SciMLBase.ODEFunction
 

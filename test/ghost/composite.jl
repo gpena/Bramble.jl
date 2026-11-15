@@ -541,6 +541,24 @@ end
     @test Bramble.mesh_type(typeof(C)) === typeof(mesh(S))
 end
 
+@testset "Constrained composite norms refuse" begin
+    S = gridspace(mesh2d(); ghosts = GH)
+    whole = u -> (:xmin => ∂ₙ(u(1)) => 0.0, :xmax => ∂ₙ(u(1)) => 0.0,
+        :ymin => ∂ₙ(u(1)) => 0.0, :xmin => ∂ₙ(u(2)) => 0.0, :xmax => ∂ₙ(u(2)) => 0.0,
+        :ymin => ∂ₙ(u(2)) => 0.0)
+    C = constrained(S × S, whole)
+    uₕ = element(C, ones(ndofs(C)))
+    L = Bramble.lift(C, parent(uₕ))
+    # the lifted grid function has norms; the degrees of freedom do not
+    @test norminf(L) >= 1 && normₕ(L) > 0 && norm₁ₕ(L) > 0 && snorm₁ₕ(L) >= 0
+    for (name, f) in (("norminf", norminf), ("norm ∞", u -> norm(u, "∞")),
+        ("normₕ", normₕ), ("snorm₁ₕ", snorm₁ₕ), ("norm₁ₕ", norm₁ₕ))
+        @test refuses(() -> f(uₕ), "Bramble.lift(Vₕ, parent(uₕ))")
+    end
+    @test refuses(() -> norm(uₕ, "h"), "normₕ")
+    @test refuses(() -> norm(uₕ, "1h"), "norm₁ₕ")
+end
+
 @testset "Composite ghost refusals" begin
     Ωₕ = mesh2d()
     S = gridspace(Ωₕ; ghosts = GH)

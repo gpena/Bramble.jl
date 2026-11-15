@@ -239,6 +239,7 @@ so nothing downstream of `form` learns a new node.
 """
 function inner_Γ(
         F::NormalContraction{<:NTuple{D, Any}}, right::LazyOp{D}; markers = ()) where {D}
+    foreach(_refuse_surface_dirac, F.terms)
     mask = _normal_mask(Val(D), markers)
     return _normal_terms(F.terms, right, Val(mask), Val(D))
 end
@@ -423,6 +424,7 @@ a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(u * ηᵧ, v; markers = (:boundary,)))
 ```
 """
 function inner_Γ(t::AbstractNormalTerm, right::LazyOp{D}; markers = ()) where {D}
+    foreach(p -> _refuse_surface_dirac(p.factor), _as_normal_sum(t).terms)
     mask = _normal_mask(Val(D), markers)
     return _expand_normal(_as_normal_sum(t), right, Val(mask), Val(D))
 end
@@ -722,6 +724,12 @@ end
     return InnerGammaFacet{typeof(m), DIM, SIDE, G}(m)
 end
 
+# The directional and facet weights refuse a Dirac source as `InnerGamma` does
+# (`_check_surface_source`, operators/inner.jl).
+@inline function _check_surface_source(::Union{InnerGammaNormal, InnerGammaFacet}, left)
+    return _refuse_surface_dirac(left)
+end
+
 @inline function compute_weight(
         w::InnerGammaFacet{M, DIM, SIDE}, space, I::CartesianIndex{D}, lin_idx::Int
 ) where {M, DIM, SIDE, D}
@@ -842,6 +850,7 @@ function inner_Γ(F::FacetOperator{D}, right::LazyOp{D}; markers = ()) where {D}
 end
 
 function inner_Γ(left::LazyOp{D}, F::FacetOperator{D}; markers = ()) where {D}
+    _refuse_surface_dirac(left)
     return _facet_inner(_normal_mask(Val(D), markers), left, F)
 end
 
