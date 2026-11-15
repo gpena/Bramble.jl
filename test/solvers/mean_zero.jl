@@ -94,7 +94,7 @@ end
         K = assemble(form(W, W, a))
         R = assemble(form(W, W, (u, v) -> a(u, v) + innerₕ(u, v)))
         D = first(assemble(form(W, W, a), form(W, v -> innerₕ(x -> 1.0, v));
-                           dirichlet = :boundary => (x -> 0.0)))
+            dirichlet = :boundary => (x -> 0.0)))
         for T in (Float32, ComplexF32, Float64, ComplexF64)
             cast(A) = SparseMatrixCSC{T, Int}(A)
             @test _warns_annihilates(cast(K))

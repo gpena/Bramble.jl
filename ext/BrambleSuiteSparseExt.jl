@@ -38,8 +38,9 @@ end
 # The type `lu(A)` returns: UMFPACK factors `Float64` and `ComplexF64`, widening the rest, with
 # an `Int32` or `Int64` index. CHOLMOD takes other index types, so the `Union` built from this
 # type must exist for every matrix `cholesky` accepts.
-_umfpack_type(A::SparseMatrixCSC{T, Ti}) where {T, Ti} =
+function _umfpack_type(A::SparseMatrixCSC{T, Ti}) where {T, Ti}
     UMFPACK.UmfpackLU{T <: Complex ? ComplexF64 : Float64, Ti === Int32 ? Int32 : Int64}
+end
 
 Base.size(fact::ConcreteSuiteSparseFactorization) = (fact.dim, fact.dim)
 Base.size(fact::ConcreteSuiteSparseFactorization, d::Integer) = d <= 2 ? fact.dim : 1
@@ -124,12 +125,10 @@ end
 # UMFPACK factors `Float64` and `ComplexF64` and solves nothing narrower: a narrower
 # right-hand side is widened as `\` does, and the result converted back into `x` or `b`.
 # A right-hand side of the factor's own precision takes the in-place solve.
-_ldiv!(x, f::UMFPACK.UmfpackLU{Tv}, b) where {Tv} =
-    real(eltype(b)) === real(Tv) ? ldiv!(x, f, b) : copyto!(x, f \ b)
+_ldiv!(x, f::UMFPACK.UmfpackLU{Tv}, b) where {Tv} = real(eltype(b)) === real(Tv) ? ldiv!(x, f, b) : copyto!(x, f \ b)
 _ldiv!(x, f, b) = ldiv!(x, f, b)
 
-_ldiv!(f::UMFPACK.UmfpackLU{Tv}, b) where {Tv} =
-    real(eltype(b)) === real(Tv) ? ldiv!(f, b) : copyto!(b, f \ b)
+_ldiv!(f::UMFPACK.UmfpackLU{Tv}, b) where {Tv} = real(eltype(b)) === real(Tv) ? ldiv!(f, b) : copyto!(b, f \ b)
 function _ldiv!(f, b)
     x = similar(b)
     ldiv!(x, f, b)
@@ -201,10 +200,10 @@ function Bramble.suitesparse_refactor!(fact::ConcreteSuiteSparseFactorization, A
         # solves the previous matrix.
         ishermitian(A) || throw(
             ArgumentError(
-                "CHOLMOD factors a Hermitian matrix, and this $(eltype(A)) matrix is not " *
-                "Hermitian. Refactor onto a Hermitian matrix, or build a new factorization " *
-                "with `sym = :unsymmetric`.",
-            ),
+            "CHOLMOD factors a Hermitian matrix, and this $(eltype(A)) matrix is not " *
+            "Hermitian. Refactor onto a Hermitian matrix, or build a new factorization " *
+            "with `sym = :unsymmetric`.",
+        ),
         )
         if fact.auto
             # `:auto` only tried Cholesky: a Hermitian matrix that is not positive definite

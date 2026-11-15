@@ -240,12 +240,13 @@ function Bramble.mumps_refactor!(fact::ConcreteMUMPSFactorization{T}, A::SparseM
     # Refused before `_refactor_instance!` associates `A`: the factors and `failure` stay
     # as they were, so `fact` still solves the previous system. `issymmetric` is the test
     # since SYM = 1 and 2 mean Aᵀ = A, so a complex-symmetric refactorization stays allowed
-    fact.sym != 0 && !issymmetric(A) && throw(
-        ArgumentError(
+    fact.sym != 0 && !issymmetric(A) &&
+        throw(
+            ArgumentError(
             "the MUMPS factorization is symmetric (SYM = $(fact.sym)) and the matrix is not; " *
             "factorize with `sym = :unsymmetric` to refactorize an unsymmetric matrix",
         ),
-    )
+        )
     A_mat = convert(SparseMatrixCSC{T, Int}, A)
     GC.@preserve fact _refactor_instance!(fact, A_mat)
     return fact

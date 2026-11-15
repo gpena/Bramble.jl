@@ -323,7 +323,7 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         # UMFPACK widens a Float32 matrix: the fallback keeps the factorization's type
         for (A, H) in (
             (sparse(Float32[2 1; 1 2]), sparse(Float32[1 2; 2 1])),
-            (sparse(ComplexF32[2 1+im; 1-im 2]), sparse(ComplexF32[1 2+im; 2-im 1])),
+            (sparse(ComplexF32[2 1+im; 1-im 2]), sparse(ComplexF32[1 2+im; 2-im 1]))
         )
             fc = suitesparse_factorize(A)
             @test fc.sym === :spd

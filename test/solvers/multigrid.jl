@@ -858,6 +858,7 @@ end
     xr = real.(x)
     loads = (x, complex.(xr, 1e-6 .* imag.(x)), complex.(xr), im .* xr, element(W, x))
     for cycle in (:V, :W, :FMG), c in loads
+
         u = gmg_solve(bld, Ω, c; tol = 1e-10, cycle)
         cd = c isa VectorElement ? parent(c) : c
         ref = A \ cd
