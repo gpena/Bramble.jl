@@ -32,6 +32,7 @@ _mg_axes(p::Tuple) = p
 # Allocation of a warmed transfer, behind a function barrier.
 _mg_palloc(xf, H, l, xc) = (prolongate!(xf, H, l, xc); @allocated prolongate!(xf, H, l, xc))
 _mg_calloc(xc, H, l, xf) = (coarsen!(xc, H, l, xf); @allocated coarsen!(xc, H, l, xf))
+_mg_lalloc(y, P, x) = (ldiv!(y, P, x); @allocated ldiv!(y, P, x))
 
 # The oracle `P`.
 _mg_oracle(Ωf, Ωc) = interpolation_matrix(gridspace(Ωf), gridspace(Ωc))
@@ -752,6 +753,30 @@ end
     # the vector of levels holds one member of the Union, or their join over the geometry
     @test all(P -> P.parameters[3] in (ops..., typejoin(ops...)), Ps)
     @test typeof(gmg_preconditioner(lap, Ω)) <: rt
+end
+
+@testset "gmg: complex vectors (#1216)" begin
+    # A real P acts on the real and imaginary parts of a complex x apart, through every
+    # cycle, out of place and in place; the real path still allocates nothing afterwards.
+    Ω = _mg_jitter_mesh(2, 17)
+    n = npoints(Ω)
+    x = [complex(sin(i), cos(2i)) for i in 1:n]
+    xr = real.(x)
+    for cycle in (:V, :W, :FMG)
+        P = gmg_preconditioner(_mg_spd, Ω; cycle = cycle)
+        ref = complex.(P \ real.(x), P \ imag.(x))
+        @test norm(imag.(ref)) > 0
+        @test P \ x isa Vector{ComplexF64}
+        @test P \ x == ref
+        z = zeros(ComplexF64, n)
+        @test ldiv!(z, P, x) === z && z == ref
+        w = copy(x)
+        @test ldiv!(P, w) === w && w == ref
+        @test ldiv!(z, P, xr) == complex.(P \ xr, 0.0)
+        yr = zeros(n)
+        @test _mg_lalloc(yr, P, xr) == 0
+        @test yr == P \ xr
+    end
 end
 
 # The tag of the Dual hierarchy built in the testset below.

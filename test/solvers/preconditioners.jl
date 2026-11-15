@@ -247,6 +247,30 @@ end
         end
     end
 
+    @testset "chebyshev: complex vectors (#1216)" begin
+        # A real P acts on the real and imaginary parts of a complex x apart: the dense P⁻¹
+        # is the oracle, `P⁻¹ re(x) + i P⁻¹ im(x)` the bitwise one, in place too.
+        a = _pc_cheb_form(2, 9)
+        P = chebyshev_preconditioner(a; dirichlet = :boundary)
+        n = first(size(P))
+        M = _pc_cheb_matrix(P, n)
+        x = complex.(randn(n), randn(n))
+        ref = complex.(P \ real.(x), P \ imag.(x))
+        @test P \ x isa Vector{ComplexF64}
+        @test P \ x == ref
+        @test isapprox(ref, M * x; rtol = 1e-12)
+        z = zeros(ComplexF64, n)
+        @test ldiv!(z, P, x) === z && z == ref
+        w = copy(x)
+        @test ldiv!(P, w) === w && w == ref
+        # A real x into a complex y has a zero imaginary part.
+        xr = real.(x)
+        @test ldiv!(z, P, xr) == complex.(P \ xr, 0.0)
+        # The real path still allocates nothing after a complex application.
+        yr = zeros(n)
+        @test _pc_alloc3(yr, P, xr) == 0 && yr == P \ xr
+    end
+
     @testset "chebyshev: dirichlet_components" begin
         W = _pc_spaces()[1]
         V = W × W

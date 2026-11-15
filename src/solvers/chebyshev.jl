@@ -40,6 +40,9 @@ other it can report convergence on a wrong solution.
 An application costs `degree - 1` products with `A` and allocates nothing: the two work
 vectors are stored in `P`, so one `P` must not be applied from two tasks at once.
 
+A real `P` applied to a complex `x` acts on its real and imaginary parts separately,
+`P⁻¹ x = P⁻¹ re(x) + i P⁻¹ im(x)`, and that application allocates its real scratch vectors.
+
 # Type parameters
 - `T`: The element type of `A`.
 - `Op`: The operator type, a [`MatrixFreeOperator`](@ref) or the operator
@@ -178,6 +181,7 @@ end
 function ldiv!(y::AbstractVector, P::ChebyshevPreconditioner, x::AbstractVector)
     n = length(P.r)
     (length(x) == n && length(y) == n) || _throw_chebyshev_dimmismatch(P, x, y)
+    _ldiv_by_parts(P, y, x) && return _ldiv_by_parts!(y, P, x)
     yd = _mf_data(y)
     xd = _mf_data(x)
     Base.require_one_based_indexing(yd, xd)

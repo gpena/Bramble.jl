@@ -34,6 +34,9 @@ vectors (of each level's [`ndofs`](@ref)), so an application allocates nothing o
 with [`gmg_preconditioner`](@ref); the cycles themselves are [`v_cycle!`](@ref),
 [`w_cycle!`](@ref) and [`fmg!`](@ref).
 
+A real `P` applied to a complex `x` acts on its real and imaginary parts separately,
+`P⁻¹ x = P⁻¹ re(x) + i P⁻¹ im(x)`, and that application allocates its real scratch vectors.
+
 # Type parameters
 - `T`: The element type of `A`.
 - `H`: The hierarchy type.
@@ -451,6 +454,7 @@ end
 function ldiv!(y::AbstractVector, P::GMGPreconditioner, x::AbstractVector)
     n = first(size(P))
     (length(x) == n && length(y) == n) || _throw_gmg_dimmismatch(:ldiv!, P, y, x)
+    _ldiv_by_parts(P, y, x) && return _ldiv_by_parts!(y, P, x)
     yd, xd = _mf_data(y), _mf_data(x)
     Base.require_one_based_indexing(yd, xd)
     L = length(P.hierarchy)
