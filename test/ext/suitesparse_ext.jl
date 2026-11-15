@@ -259,6 +259,84 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         @test isapprox(lu_fact \ b, Matrix(A1) \ b; rtol = 1.0e-12)
     end
 
+    # `:auto` only tried Cholesky when it built the factorization, so a `refactor!` onto a
+    # symmetric indefinite matrix of the same pattern falls back to LU as a fresh
+    # factorization does. An explicit `:spd` keeps refusing it (#1208).
+    @testset "sym = :auto: refactor! falls back to LU" begin
+        S2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωn = mesh(domain(S2, :boundary => boundary_symbols(S2)), (9, 7), (true, true))
+        change_points!(Ωn, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+        Wn = gridspace(Ωn)
+        l = form(Wn, v -> innerₕ(Rₕ(Wn, x -> 1.0), v))
+        sys(c) = assemble(
+            form(Wn, Wn, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + c * innerₕ(u, v)), l;
+            dirichlet = ZERO_BC, symmetrize = true
+        )
+        A0, F = sys(1.0)
+        Ah, _ = sys(-50.0)
+        b = collect(F)
+        @test issymmetric(Ah) && all(>(0), diag(Ah))
+        @test minimum(eigvals(Symmetric(Matrix(Ah)))) < 0
+        @test rowvals(Ah) == rowvals(A0) && SparseArrays.getcolptr(Ah) == SparseArrays.getcolptr(A0)
+        uh, u0 = Matrix(Ah) \ b, Matrix(A0) \ b
+
+        fact = suitesparse_factorize(A0)
+        @test fact.sym === :spd
+        @test suitesparse_refactor!(fact, Ah) === fact
+        @test fact.sym === :symmetric
+        @test fact.fact isa SuiteSparse.UMFPACK.UmfpackLU
+        @test isapprox(fact \ b, uh; rtol = 1.0e-10)
+        x = similar(b)
+        ldiv!(x, fact, b)
+        @test isapprox(x, uh; rtol = 1.0e-10)
+        y = copy(b)
+        ldiv!(fact, y)
+        @test isapprox(y, uh; rtol = 1.0e-10)
+
+        # Later refactors take the LU branch, SPD and indefinite alike
+        @test refactor!(fact, A0) === fact
+        @test isapprox(fact \ b, u0; rtol = 1.0e-12)
+        @test refactor!(fact, Ah) === fact
+        @test isapprox(fact \ b, uh; rtol = 1.0e-10)
+
+        # A positive definite refactor keeps the Cholesky factor
+        fact = suitesparse_factorize(A0)
+        A2 = SparseMatrixCSC(size(A0)..., copy(SparseArrays.getcolptr(A0)),
+            copy(rowvals(A0)), 2 .* nonzeros(A0))
+        @test refactor!(fact, A2) === fact
+        @test fact.sym === :spd && fact.fact isa SuiteSparse.CHOLMOD.Factor
+        @test isapprox(fact \ b, Matrix(A2) \ b; rtol = 1.0e-12)
+
+        # Explicit :spd: the indefinite refactor throws and the factorization refuses to solve
+        spd = suitesparse_factorize(A0; sym = :spd)
+        @test_throws PosDefException refactor!(spd, Ah)
+        @test spd.sym === :spd && spd.fact isa SuiteSparse.CHOLMOD.Factor
+        @test_throws PosDefException spd \ b
+        @test refactor!(spd, A0) === spd
+        @test isapprox(spd \ b, u0; rtol = 1.0e-12)
+
+        # Singular: LU throws, and the failed Cholesky factor stays and refuses to solve
+        M0 = sparse([2.0 1; 1 2])
+        sing = suitesparse_factorize(M0)
+        @test_throws SingularException refactor!(sing, sparse([1.0 1; 1 1]))
+        @test sing.sym === :spd && sing.fact isa SuiteSparse.CHOLMOD.Factor
+        @test_throws PosDefException sing \ [1.0, 2.0]
+
+        # UMFPACK widens a Float32 matrix: the fallback keeps the factorization's type
+        for (A, H) in (
+            (sparse(Float32[2 1; 1 2]), sparse(Float32[1 2; 2 1])),
+            (sparse(ComplexF32[2 1+im; 1-im 2]), sparse(ComplexF32[1 2+im; 2-im 1])),
+        )
+            fc = suitesparse_factorize(A)
+            @test fc.sym === :spd
+            @test refactor!(fc, H) === fc
+            @test fc.sym === :symmetric
+            bt = eltype(A).([1, 2])
+            @test fc \ bt isa Vector{eltype(A)}
+            @test isapprox(fc \ bt, Matrix(H) \ bt; rtol = 1.0e-5)
+        end
+    end
+
     # Helmholtz with absorption: complex symmetric, not Hermitian, positive real diagonal.
     # CHOLMOD refuses such a matrix outright, so `:auto` must not offer it as a Cholesky
     # candidate (#717). Oracle: dense `\`; the refactor refills the same LU.
