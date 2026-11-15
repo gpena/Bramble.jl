@@ -773,6 +773,15 @@ end
         w = copy(x)
         @test ldiv!(P, w) === w && w == ref
         @test ldiv!(z, P, xr) == complex.(P \ xr, 0.0)
+        # Integer and Float32 parts are solved in P's Float64, as the real path solves them.
+        xci = [complex(i % 3, (2i) % 5) for i in 1:n]
+        @test P \ xci == complex.(P \ real.(xci), P \ imag.(xci))
+        xint = collect(1:n)
+        @test ldiv!(z, P, xint) == complex.(P \ xint, 0.0)
+        x32 = ComplexF32.(x)
+        @test P \ x32 isa Vector{ComplexF64} && P \ x32 == complex.(P \ real.(x32), P \ imag.(x32))
+        f32 = Float32.(xr)
+        @test ldiv!(z, P, f32) == complex.(P \ f32, 0.0) && eltype(P \ f32) == Float64
         yr = zeros(n)
         @test _mg_lalloc(yr, P, xr) == 0
         @test yr == P \ xr
