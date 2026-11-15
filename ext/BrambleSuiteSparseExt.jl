@@ -35,9 +35,11 @@ mutable struct ConcreteSuiteSparseFactorization{T, FType <: Factorization} <: Su
     auto::Bool
 end
 
-# The type `lu(A)` returns: UMFPACK factors `Float64` and `ComplexF64`, widening the rest.
+# The type `lu(A)` returns: UMFPACK factors `Float64` and `ComplexF64`, widening the rest, with
+# an `Int32` or `Int64` index. CHOLMOD takes other index types, so the `Union` built from this
+# type must exist for every matrix `cholesky` accepts.
 _umfpack_type(A::SparseMatrixCSC{T, Ti}) where {T, Ti} =
-    UMFPACK.UmfpackLU{T <: Complex ? ComplexF64 : Float64, Ti}
+    UMFPACK.UmfpackLU{T <: Complex ? ComplexF64 : Float64, Ti === Int32 ? Int32 : Int64}
 
 Base.size(fact::ConcreteSuiteSparseFactorization) = (fact.dim, fact.dim)
 Base.size(fact::ConcreteSuiteSparseFactorization, d::Integer) = d <= 2 ? fact.dim : 1
@@ -115,8 +117,23 @@ function LinearAlgebra.ldiv!(
     length(x) == n || throw(
         DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
     )
-    ldiv!(x, fact.fact, b)
+    _ldiv!(x, fact.fact, b)
     return x
+end
+
+# UMFPACK factors `Float64` and `ComplexF64` and solves nothing narrower: a narrower
+# right-hand side is widened as `\` does, and the result converted back into `x` or `b`.
+# A right-hand side of the factor's own precision takes the in-place solve.
+_ldiv!(x, f::UMFPACK.UmfpackLU{Tv}, b) where {Tv} =
+    real(eltype(b)) === real(Tv) ? ldiv!(x, f, b) : copyto!(x, f \ b)
+_ldiv!(x, f, b) = ldiv!(x, f, b)
+
+_ldiv!(f::UMFPACK.UmfpackLU{Tv}, b) where {Tv} =
+    real(eltype(b)) === real(Tv) ? ldiv!(f, b) : copyto!(b, f \ b)
+function _ldiv!(f, b)
+    x = similar(b)
+    ldiv!(x, f, b)
+    return copyto!(b, x)
 end
 
 function LinearAlgebra.ldiv!(
@@ -126,14 +143,7 @@ function LinearAlgebra.ldiv!(
     length(b) == n || throw(
         DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
     )
-    f = fact.fact
-    if f isa UMFPACK.UmfpackLU
-        ldiv!(f, b)
-    else
-        x = similar(b)
-        ldiv!(x, f, b)
-        copyto!(b, x)
-    end
+    _ldiv!(fact.fact, b)
     return b
 end
 
@@ -169,6 +179,16 @@ function Base.:\(
     return complex.(fact \ real(b), fact \ imag(b))
 end
 
+function _throw_not_hermitian(A, what)
+    throw(
+        ArgumentError(
+            "$what a Hermitian matrix, and this $(eltype(A)) matrix is not Hermitian. " *
+            "Refactor onto a Hermitian matrix, or build a new factorization with " *
+            "`sym = :unsymmetric`.",
+        ),
+    )
+end
+
 # Only an `:auto` factorization that chose CHOLMOD reaches this, and its `FType` holds the
 # `lu(A)` type. `lu` throws for a singular `A` before the assignment, so the failed CHOLMOD
 # factor stays in `fact` and refuses to solve.
@@ -189,13 +209,7 @@ function Bramble.suitesparse_refactor!(fact::ConcreteSuiteSparseFactorization, A
         # CHOLMOD reads one triangle, so an unsymmetric `A` would be factored as its upper
         # triangle. Refused before `cholesky!`: the factors are untouched and `fact` still
         # solves the previous matrix.
-        ishermitian(A) || throw(
-            ArgumentError(
-                "CHOLMOD factors a Hermitian matrix, and this $(eltype(A)) matrix is not " *
-                "Hermitian. Refactor onto a Hermitian matrix, or build a new factorization " *
-                "with `sym = :unsymmetric`.",
-            ),
-        )
+        ishermitian(A) || _throw_not_hermitian(A, "CHOLMOD factors")
         if fact.auto
             # `:auto` only tried Cholesky: a Hermitian matrix that is not positive definite
             # moves the factorization to UMFPACK, as `_suitesparse_factorize` does.
@@ -205,6 +219,11 @@ function Bramble.suitesparse_refactor!(fact::ConcreteSuiteSparseFactorization, A
             cholesky!(f, _cholmod_input(A))
         end
     elseif f isa UMFPACK.UmfpackLU
+        # An `:auto` factorization of a Hermitian matrix follows a change of definiteness,
+        # not a loss of symmetry: refused before `lu!`, as the CHOLMOD branch and Accelerate
+        # do. An explicit `:symmetric` or `:unsymmetric` factorization takes any matrix.
+        fact.auto && fact.sym === :symmetric && !ishermitian(A) &&
+            _throw_not_hermitian(A, "an `:auto` factorization of a Hermitian matrix takes")
         lu!(f, A)
     else
         throw(ArgumentError("Unsupported underlying factorization type: $(typeof(f))"))

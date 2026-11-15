@@ -332,8 +332,56 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             @test refactor!(fc, H) === fc
             @test fc.sym === :symmetric
             bt = eltype(A).([1, 2])
+            ref = Matrix(H) \ bt
             @test fc \ bt isa Vector{eltype(A)}
-            @test isapprox(fc \ bt, Matrix(H) \ bt; rtol = 1.0e-5)
+            @test isapprox(fc \ bt, ref; rtol = 1.0e-5)
+            x32 = similar(bt)
+            @test ldiv!(x32, fc, bt) === x32
+            @test isapprox(x32, ref; rtol = 1.0e-5)
+            y32 = copy(bt)
+            @test ldiv!(fc, y32) === y32
+            @test isapprox(y32, ref; rtol = 1.0e-5)
+
+            # Built on the indefinite matrix, the fresh fallback solves the same way
+            fresh = suitesparse_factorize(H)
+            x32 .= 0
+            ldiv!(x32, fresh, bt)
+            @test isapprox(x32, ref; rtol = 1.0e-5)
+            y32 = copy(bt)
+            ldiv!(fresh, y32)
+            @test isapprox(y32, ref; rtol = 1.0e-5)
+        end
+
+        # CHOLMOD takes an index type UMFPACK does not: no factorization that stays Cholesky
+        # may throw while building the type its refactor falls back to
+        A16 = SparseMatrixCSC{Float64, Int16}(A0)
+        f16 = suitesparse_factorize(A16)
+        @test f16.sym === :spd
+        @test isapprox(f16 \ b, u0; rtol = 1.0e-12)
+
+        # `:auto` follows a change of definiteness, never a loss of symmetry. After the
+        # fallback, from a refactor or at construction, an unsymmetric refactor is refused
+        # before the factors change. An explicit :symmetric or :unsymmetric takes it.
+        U = copy(Ah)
+        i, j, v = findnz(tril(Ah, -1))
+        k = argmax(abs.(v))
+        U[i[k], j[k]] += 0.5
+        @test !issymmetric(U) && rowvals(U) == rowvals(Ah)
+        refac = suitesparse_factorize(A0)
+        refactor!(refac, Ah)
+        fresh = suitesparse_factorize(Ah)
+        @test fresh.sym === :symmetric
+        for f in (refac, fresh)
+            @test_throws ArgumentError refactor!(f, U)
+            @test_throws ArgumentError suitesparse_refactor!(f, U)
+            @test isapprox(f \ b, uh; rtol = 1.0e-10)
+            @test refactor!(f, A0) === f
+            @test isapprox(f \ b, u0; rtol = 1.0e-12)
+        end
+        for sym in (:symmetric, :unsymmetric)
+            fe = suitesparse_factorize(Ah; sym)
+            @test refactor!(fe, U) === fe
+            @test isapprox(fe \ b, Matrix(U) \ b; rtol = 1.0e-10)
         end
     end
 
