@@ -773,6 +773,27 @@ end
     end
 end
 
+@testset "gmg_solve: nested Dual load (#1232)" begin
+    # A load `Dual{T1, Dual{T2}}` with `T1` before `T2` in ForwardDiff's order, on a
+    # hierarchy of either tag, is solved by parts and comes back with its tags in another
+    # order than `promote_type`'s: the result type of `gmg_solve` must not be asserted.
+    # The oracle is the loop on the preconditioner, as `gmg_solve` ran it before.
+    T1, T2 = typeof(ForwardDiff.Tag(sin, Float64)), typeof(ForwardDiff.Tag(cos, Float64))
+    @test ForwardDiff.:≺(T1, T2)
+    bld(c) = V -> form(V, V, (u, v) -> innerₕ(u, v) + c * inner₊(∇ₕ(u), ∇ₕ(v)))
+    Ω = _mg_jitter_mesh(2, 9)
+    x = [1.0 + sin(i) for i in 1:npoints(Ω)]
+    b = ForwardDiff.Dual{T1}.(ForwardDiff.Dual{T2}.(x, 1.0), ForwardDiff.Dual{T2}.(x, 2.0))
+    for T in (T1, T2)
+        build = bld(ForwardDiff.Dual{T}(0.7, 1.0))
+        u = gmg_solve(build, Ω, b; tol = 1e-11)
+        u0 = Bramble._gmg_solve_loop(gmg_preconditioner(build, Ω), b, :V, 1e-11, 100)
+        @test u isa VectorElement && typeof(u) === typeof(u0) && isequal(u, u0)
+        # the case the assertion would refuse
+        @test eltype(u) !== promote_type(ForwardDiff.Dual{T, Float64, 1}, eltype(b))
+    end
+end
+
 @testset "gmg: complex vectors (#1216)" begin
     # A real P acts on the real and imaginary parts of a complex x apart, through every
     # cycle, out of place and in place; the real path still allocates nothing afterwards.

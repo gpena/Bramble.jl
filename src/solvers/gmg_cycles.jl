@@ -651,11 +651,14 @@ function gmg_solve(
     return _gmg_solve_loop(P, b, cycle, tol, maxiters)::_gmg_solution_type(forms, b)
 end
 
-# The type of `gmg_solve`'s result for the level forms `forms` and the load `b`: an element
-# of the finest trial space, whose element type promotes the backend's, the hierarchy's
-# (the coarsest operator's) and the load's. A form on ghost spaces gives `Any`: its
-# solve already infers, with the operator's element type read off the padded form.
+# The type of `gmg_solve`'s result for the level forms `forms` and the load `b`, an element
+# of the finest trial space whose element type promotes the backend's, the hierarchy's
+# (the coarsest operator's) and the load's. Only a load of plain numbers (`_plain_number`)
+# is typed, since a `Dual` load solved by parts can come back with its tags in another
+# order than `promote_type` gives. A form on ghost spaces gives `Any` too, and its solve
+# keeps the inference it had, concrete under `CpuSerial` and `Any` under the threaded ones.
 function _gmg_solution_type(forms::AbstractVector{<:BilinearForm}, b::AbstractVector)
+    _plain_number(eltype(b)) || return Any
     a = first(forms)
     Wu = trial_space(last(forms))
     T = promote_type(eltype(backend(Wu)), _matrix_eltype(a, a.ast), eltype(b))
