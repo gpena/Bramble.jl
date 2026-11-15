@@ -167,6 +167,16 @@ function Bramble.suitesparse_refactor!(fact::ConcreteSuiteSparseFactorization, A
     )
 
     if fact.fact isa CHOLMOD.Factor
+        # CHOLMOD reads one triangle, so an unsymmetric `A` would be factored as its upper
+        # triangle. Refused before `cholesky!`: the factors are untouched and `fact` still
+        # solves the previous matrix.
+        ishermitian(A) || throw(
+            ArgumentError(
+                "CHOLMOD factors a Hermitian matrix, and this $(eltype(A)) matrix is not " *
+                "Hermitian. Refactor onto a Hermitian matrix, or build a new factorization " *
+                "with `sym = :unsymmetric`.",
+            ),
+        )
         cholesky!(fact.fact, _cholmod_input(A))
     elseif fact.fact isa UMFPACK.UmfpackLU
         lu!(fact.fact, A)

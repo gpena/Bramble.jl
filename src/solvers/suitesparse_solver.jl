@@ -103,6 +103,13 @@ Recompute the numeric factorization of `A` inside `fact` **reusing the existing 
 factorization** (fill-reducing ordering and elimination tree). `A` must have the exact same
 sparsity pattern as the matrix originally factored.
 
+A Cholesky (CHOLMOD) factorization, chosen by `sym = :auto` or `sym = :spd`, reads one
+triangle of `A`, so it refuses a matrix that is not Hermitian with an `ArgumentError`. It
+checks before it touches the factors, so `fact` still solves the previous matrix. Refactor
+onto a Hermitian matrix, or build a new factorization with `sym = :unsymmetric`. The check
+allocates one `Vector{Int}` of length `n + 1`. An LU (UMFPACK) factorization takes any
+matrix of the same pattern.
+
 See also [`refactor!`](@ref), [`suitesparse_factorize`](@ref).
 """
 function suitesparse_refactor! end

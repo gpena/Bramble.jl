@@ -217,6 +217,48 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         @test isapprox(suitesparse_factorize(A_s) \ F_s, Matrix(A_s) \ F_s; atol = 1.0e-12)
     end
 
+    # A CHOLMOD factorization reads one triangle, so `refactor!` onto an unsymmetric matrix
+    # on the same pattern would silently factor its upper triangle. It is refused before the
+    # factors change, for `:auto` and an explicit `:spd` alike (#1206).
+    @testset "CHOLMOD refactor! refuses unsymmetric" begin
+        S2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωn = mesh(domain(S2, :boundary => boundary_symbols(S2)), (9, 7), (true, true))
+        change_points!(Ωn, (range(0.0, 1.0; length = 9) .^ 1.25, range(0.0, 1.0; length = 7) .^ 1.5))
+        Wn = gridspace(Ωn)
+        a_spd = form(Wn, Wn, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+        l_spd = form(Wn, v -> innerₕ(Rₕ(Wn, x -> 1.0), v))
+        A0, F = assemble(a_spd, l_spd; dirichlet = ZERO_BC, symmetrize = true)
+        b = collect(F)
+        i, j, v = findnz(tril(A0, -1))
+        k = argmax(abs.(v))
+        A1 = copy(A0)
+        A1[i[k], j[k]] += 0.5
+        # Same pattern, unsymmetric, and its upper triangle does not solve it.
+        @test issymmetric(A0) && !issymmetric(A1)
+        @test rowvals(A1) == rowvals(A0) && SparseArrays.getcolptr(A1) == SparseArrays.getcolptr(A0)
+        @test norm(Matrix(Symmetric(A1, :U)) \ b - Matrix(A1) \ b) > 1.0e-6
+
+        A2 = SparseMatrixCSC(size(A0)..., copy(SparseArrays.getcolptr(A0)),
+            copy(rowvals(A0)), 2 .* nonzeros(A0))
+        for sym in (:auto, :spd)
+            fact = suitesparse_factorize(A0; sym)
+            @test fact.sym === :spd
+            u0 = Matrix(A0) \ b
+            @test_throws ArgumentError suitesparse_refactor!(fact, A1)
+            @test_throws ArgumentError refactor!(fact, A1)
+            @test isapprox(fact \ b, u0; rtol = 1.0e-12)
+
+            # A Hermitian refactor still works after a refusal
+            @test suitesparse_refactor!(fact, A2) === fact
+            @test isapprox(fact \ b, Matrix(A2) \ b; rtol = 1.0e-12)
+        end
+
+        # UMFPACK takes the unsymmetric matrix
+        lu_fact = suitesparse_factorize(A0; sym = :unsymmetric)
+        @test suitesparse_refactor!(lu_fact, A1) === lu_fact
+        @test isapprox(lu_fact \ b, Matrix(A1) \ b; rtol = 1.0e-12)
+    end
+
     # Helmholtz with absorption: complex symmetric, not Hermitian, positive real diagonal.
     # CHOLMOD refuses such a matrix outright, so `:auto` must not offer it as a Cholesky
     # candidate (#717). Oracle: dense `\`; the refactor refills the same LU.
