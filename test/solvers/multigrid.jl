@@ -843,6 +843,36 @@ struct _MGTag end
     @test whole() == once()
 end
 
+@testset "gmg_solve: complex load (#1217)" begin
+    # The real and imaginary parts are iterated apart, each to tol against its own norm.
+    # The oracle is the direct solve; an imaginary part 1e-6 of the real one, iterated to
+    # one joint norm, would be off by about 1e-4 of its own.
+    Ω = mesh(domain(_mg_box(2)), (17, 17), (true, true))
+    g = range(0.0, 1.0; length = 17)
+    Bramble.change_points!(Ω, (g .^ 1.25, g .^ 1.5))
+    W = gridspace(Ω)
+    bld(V) = form(V, V, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+    A = Matrix(assemble(bld(W)))
+    n = ndofs(W)
+    x = [complex(sin(i), cos(i)) for i in 1:n]
+    xr = real.(x)
+    loads = (x, complex.(xr, 1e-6 .* imag.(x)), complex.(xr), im .* xr, element(W, x))
+    for cycle in (:V, :W, :FMG), c in loads
+        u = gmg_solve(bld, Ω, c; tol = 1e-10, cycle)
+        cd = c isa VectorElement ? parent(c) : c
+        ref = A \ cd
+        @test u isa VectorElement && eltype(u) == ComplexF64
+        for f in (real, imag)
+            @test norm(f.(parent(u)) - f.(ref)) <= 1e-8 * norm(f.(ref))
+        end
+    end
+    # A Dual complex load: each part splits again into value and partial. The solve is
+    # linear in the load, so d/dq of ‖u((1 + q) x)‖² at q = 0.4 is 2(1.4)‖u(x)‖².
+    S = sum(abs2, A \ x)
+    d = ForwardDiff.derivative(q -> sum(abs2, parent(gmg_solve(bld, Ω, (1 + q) .* x; tol = 1e-10))), 0.4)
+    @test isapprox(d, 2.8 * S; rtol = 1e-6)
+end
+
 @testset "gmg: threaded cycles agree" begin
     policies = (Parallel(),)
     for policy in policies, (D, n) in filter(c -> c[1] in TEST_DIMS, ((2, 33), (3, 9)))
