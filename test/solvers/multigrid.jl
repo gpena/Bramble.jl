@@ -755,6 +755,24 @@ end
     @test typeof(gmg_preconditioner(lap, Ω)) <: rt
 end
 
+@testset "gmg_solve infers, CpuThreaded (#1232)" begin
+    # Under a threaded policy the operator's plan and geometry are not inferred, nor then
+    # `gmg_preconditioner`; `gmg_solve` takes its result type from the level forms instead.
+    bk = backend(; policy = Bramble.CpuThreaded())
+    I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+    lap = V -> form(V, V, (u, v) -> innerₕ(u, v) + 0.7 * inner₊(∇ₕ(u), ∇ₕ(v)))
+    kw = (; tol = 1e-10)
+    meshes = (_mg_jitter_mesh(2, 9; bk), mesh(domain(I2), (9, 9), (false, false); backend = bk))
+    for Ω in meshes, build in (lap, _mg_spd), b in (ones(npoints(Ω)), complex.(ones(npoints(Ω)), 0.5))
+        rt = only(Base.return_types(gmg_solve, (typeof(build), typeof(Ω), typeof(b))))
+        rtk = only(Base.return_types(Core.kwcall, (typeof(kw), typeof(gmg_solve), typeof(build), typeof(Ω), typeof(b))))
+        @test isconcretetype(rt) && isconcretetype(rtk)
+        u = gmg_solve(build, Ω, b; kw...)
+        @test typeof(u) === rt === rtk
+        @test norm(assemble(build(gridspace(Ω))) * parent(u) - b) <= 1e-9 * norm(b)
+    end
+end
+
 @testset "gmg: complex vectors (#1216)" begin
     # A real P acts on the real and imaginary parts of a complex x apart, through every
     # cycle, out of place and in place; the real path still allocates nothing afterwards.
