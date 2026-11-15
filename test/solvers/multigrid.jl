@@ -825,6 +825,25 @@ struct _MGTag end
         @test isapprox(dm, r; rtol = 1e-6)
     end
 
+    # A Dual hierarchy and a Dual load of another tag, both nestings, a load of width 2
+    # (#1227). The load's partials are solved apart on the hierarchy and recombined; taken
+    # whole, the load did not fit the hierarchy's buffers (a MethodError in the smoother).
+    Random.seed!(1234)
+    let
+        Ω = mesh(domain(_mg_box(2)), (9, 9), (false, false))
+        W = gridspace(Ω)
+        n = npoints(Ω)
+        b0 = [1.0 + sin(i) for i in 1:n]
+        Bp = [cos(i * j) for i in 1:n, j in 1:2]
+        gm(c, p) = sq(gmg_solve(bld(c), Ω, b0 .+ Bp * p; tol = 1e-11))
+        dr(c, p) = sum(abs2, pde_solve(assemble(bld(c)(W)), b0 .+ Bp * p))
+        p0 = [0.1, 0.2]
+        h1(g) = ForwardDiff.derivative(c -> sum(ForwardDiff.gradient(p -> g(c, p), p0)), 0.7)
+        h2(g) = ForwardDiff.gradient(p -> ForwardDiff.derivative(c -> g(c, p), 0.7), p0)
+        @test isapprox(h1(gm), h1(dr); rtol = 1e-6)
+        @test isapprox(h2(gm), h2(dr); rtol = 1e-6)
+    end
+
     # The Float64 loop allocates per solve, not per cycle: a tighter tol runs more cycles
     # for the same bytes.
     Ω = _mg_jitter_mesh(2, 17)

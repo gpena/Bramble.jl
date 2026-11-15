@@ -109,8 +109,9 @@ end
     end
 
     # A factor over `Dual` that is not `sparse_factorize`'s (Sparspak's own, stdlib `lu`)
-    # with a load of another tag, in both nesting orders: the load is solved whole, so the
-    # derivative matches the nested derivative of `pde_solve(A, F)`.
+    # with a load of another tag, in both nesting orders: the value and partials of the load
+    # are solved apart and recombined, and the derivative matches the nested derivative of
+    # `pde_solve(A, F)`.
     @testset "Dual factor, load of another tag" begin
         n = 6
         Am(p) = spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.0, n) .+ p .* (1:n),

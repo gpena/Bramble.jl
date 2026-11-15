@@ -55,19 +55,31 @@ function _promoted_dual_solve(fact, A::SparseMatrixCSC, F::AbstractVector)
 end
 
 # The solve of a load linear in its parts (`Bramble._solve_by_parts`): the value and each
-# partial of `F` are solved by `solve` on their own, and a nested tag recurses. If the solve
-# of the value returns tags other than those of the value type `V`, the operator carries a
-# tag of its own (a factor of a `Dual` matrix). The parts cannot then be rewrapped in the
-# right tag order, so `solve(F)` is taken whole. Only tags count, so a `Float32` operator,
-# which returns `Float32` leaves for `Float64` ones, still splits the load.
+# partial of `F` are solved by `solve` on their own, and a nested tag recurses. Only an
+# operator that carries the load's own tag `T` (a factor of a `Dual` matrix of that tag)
+# takes `solve(F)` whole. If the solve of the value has the tags of `V`, the parts are
+# rewrapped in `Dual{T}`; only tags count, so a `Float32` operator, which returns `Float32`
+# leaves for `Float64` ones, still splits the load. If it has a tag of its own (a `Dual`
+# hierarchy of `gmg_solve`, whose buffers hold no other tag), the parts are recombined as
+# `x₀ + Σₖ xₖ εₖ`, with `εₖ` the unit `Dual{T}` of partial `k`: ForwardDiff's arithmetic
+# then orders the two tags, which a rewrap in `Dual{T}` gets wrong when the operator's tag
+# is the inner one.
 function Bramble._solve_by_parts(
         solve::S, F::AbstractVector{ForwardDiff.Dual{T, V, N}}) where {S, T, V, N}
     x0 = Bramble._solve_by_parts(solve, ForwardDiff.value.(F))
-    _tags(eltype(x0)) === _tags(V) || return solve(F)
+    tags = _tags(eltype(x0))
+    T in tags && return solve(F)
     xk = ntuple(k -> Bramble._solve_by_parts(solve, ForwardDiff.partials.(F, k)), N)
-    R = eltype(x0)
-    return [ForwardDiff.Dual{T}(x0[i], ForwardDiff.Partials{N, R}(ntuple(k -> xk[k][i], N)))
-            for i in eachindex(x0)]
+    if tags === _tags(V)
+        R = eltype(x0)
+        return [ForwardDiff.Dual{T}(x0[i], ForwardDiff.Partials{N, R}(ntuple(k -> xk[k][i], N)))
+                for i in eachindex(x0)]
+    end
+    ε = ntuple(
+        k -> ForwardDiff.Dual{T}(zero(V),
+            ForwardDiff.Partials{N, V}(ntuple(j -> j == k ? one(V) : zero(V), N))),
+        N)
+    return [x0[i] + sum(k -> xk[k][i] * ε[k], 1:N) for i in eachindex(x0)]
 end
 
 # The tags of a (nested) `Dual` type, outermost first; none for any other type.
