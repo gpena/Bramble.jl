@@ -34,10 +34,10 @@ nonuniform(Ωₕ) = all(d -> !allequal(round.(diff(Bramble.points(Ωₕ(d))); di
 # The operator as a dense matrix, column by column through `mul!`.
 function dense(K)
     n = size(K, 2)
-    M = zeros(n, n)
+    M = zeros(eltype(K), n, n)
     for j in 1:n
-        e = zeros(n)
-        e[j] = 1.0
+        e = zeros(eltype(K), n)
+        e[j] = 1
         M[:, j] = K * e
     end
     return M
@@ -47,7 +47,7 @@ end
 function reference(C, f)
     P = padded_space(C)
     E = Matrix(closure(C)[1])
-    return E' * Matrix(assemble(form(P, P, f))) * E
+    return transpose(E) * Matrix(assemble(form(P, P, f))) * E
 end
 
 FORMS = (
@@ -123,10 +123,26 @@ end
         K = kronecker_operator(a)
         Eu, Ev = Matrix(closure(Cu)[1]), Matrix(closure(Cv)[1])
         P, Q = padded_space(Cu), padded_space(Cv)
-        R = Ev' * Matrix(assemble(form(P, Q, f))) * Eu
+        R = transpose(Ev) * Matrix(assemble(form(P, Q, f))) * Eu
         @test K isa Bramble.KroneckerLinearOperator
         @test isapprox(dense(K), R; rtol = 1e-12)
         @test isapprox(dense(K), Matrix(assemble(a)); rtol = 1e-12)
+    end
+end
+
+# A complex Robin coefficient makes the closure complex: the reduction is the plain
+# transpose `Eᵀ A_pad E`, the matrix `assemble(a)` gives, never the adjoint `Eᴴ A_pad E`.
+@testset "Ghost kronecker_operator complex Robin" begin
+    Ωₕ = random_mesh((9, 7))
+    for α in (2.0, 2.0 + 1.0im)
+        C = constrained(gridspace(Ωₕ; ghosts = :boundary),
+            u -> (:xmin => ∂ₙ(u) => 0.0, :ymin => ∂ₙ(u) => 0.0, :ymax => ∂ₙ(u) => 0.0,
+                :xmax => α * u + ∂ₙ(u) => 0.0))
+        f = (u, v) -> innerₕ(Bramble.D₊ₓ(u), Bramble.D₊ₓ(v))
+        K = kronecker_operator(form(C, C, f))
+        @test eltype(K) == typeof(α)
+        @test isapprox(dense(K), reference(C, f); rtol = 1e-12)
+        @test isapprox(dense(K), Matrix(assemble(form(C, C, f))); rtol = 1e-12)
     end
 end
 

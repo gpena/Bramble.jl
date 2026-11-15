@@ -129,7 +129,10 @@ page). The three-argument forms, `change_points!(Ωₕ, markers(Ω), pts)` and
 two-argument `change_points!(Ωₕ, pts)` keeps the face labels, which are index-based. It and
 `set_points!` refuse a mesh carrying a label defined by a predicate of position, whose set
 would go stale, and a move of a submesh of one; `change_points!(Ωₕ, markers(Ω), pts)` on the
-whole mesh is the way to move it.
+whole mesh is the way to move it. A refinement without markers, `iterative_refinement!(Ωₕ)`,
+and a `set_points!` that changes the point count rebuild `:boundary` and `:interior` from the
+geometry, so they also refuse a mesh whose `:boundary` or `:interior` is not that geometric
+set, a predicate label or a stored set that differs, and leave it unchanged.
 
 ## Mesh adaptation and mutation
 

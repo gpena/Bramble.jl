@@ -966,10 +966,16 @@ function assemble(l::_AnyGhostLinearForm; dirichlet = nothing,
     _is_time_dependent(l.test_space) && _throw_ghost_time("assemble(l)")
     labels, bcs = _normalize_dirichlet(dirichlet)
     _check_rows(l, labels, dirichlet_components)
-    T = _ghost_dirichlet_eltype(bcs, l, dirichlet_components, eltype(l.F_pad))
+    T = _ghost_dirichlet_eltype(bcs, l, dirichlet_components, _load_eltype(l))
     b = similar(l.F_pad, T, ndofs(l.test_space))
     return assemble!(b, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
 end
+
+# The element type of the load `E_vᵀ F_pad`, as `l(v)` takes it (ghost_contract.jl): a
+# complex or `Dual` Robin coefficient gives the closure `E_v` its type, which the padded
+# load does not have. On a composite `E_v` is the closure of every leaf.
+@inline _load_eltype(l::_AnyGhostLinearForm) = promote_type(eltype(l.F_pad),
+    eltype(l.test_space.E))
 
 # A `dirichlet` value can be richer than the load: a `ForwardDiff.Dual` or a complex number
 # against a `Float64` form. As `_dirichlet_probed_eltype` (linear.jl) does, each condition

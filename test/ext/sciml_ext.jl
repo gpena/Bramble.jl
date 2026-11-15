@@ -26,6 +26,11 @@ using LightXML: parse_file, root, find_element, child_elements, attribute, free
 const _NEWTON = NewtonRaphson(; autodiff = AutoForwardDiff())
 using LinearSolve: KrylovJL_GMRES, LUFactorization
 
+# A user struct as `p`, for the widening test: it has no element type to widen from.
+struct _ParamsG
+    g::Float64
+end
+
 # BrambleSciMLExt: the `ODEFunction`/`ODEProblem`/`LinearProblem` wrapping of a
 # `Semidiscretization`. The semidiscretisation itself is covered without any solver package
 # in test/form/semidiscrete.jl, and its orders through these wrappers in
@@ -79,6 +84,30 @@ using LinearSolve: KrylovJL_GMRES, LUFactorization
         fill!(dT, 0.0)
         f_aware.tgrad(dT, zeros(n), nothing, 2.0)
         @test all(==(n), dT)
+
+        # Arguments typed on the Bramble-aware form still read as five-argument, and typed
+        # plain arguments as four-argument.
+        typed_aware(dT::AbstractVector, sd::Bramble.Semidiscretization, u, p, t::Real) = fill!(dT, 2.0)
+        fill!(dT, 0.0)
+        ode_function(sd; tgrad = typed_aware).tgrad(dT, zeros(n), nothing, 2.0)
+        @test all(==(2.0), dT)
+        typed_plain(dT::AbstractVector, u, p, t::Real) = fill!(dT, 3.0)
+        fill!(dT, 0.0)
+        ode_function(sd; tgrad = typed_plain).tgrad(dT, zeros(n), nothing, 2.0)
+        @test all(==(3.0), dT)
+
+        # A `tgrad` taking neither arity is refused, with both signatures named.
+        wrong_arity(dT) = dT
+        err = try
+            ode_function(sd; tgrad = wrong_arity)
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("tgrad", msg)
+        @test occursin("(dT, u, p, t)", msg)
+        @test occursin("(dT, sd, u, p, t)", msg)
 
         # The two-form method builds the semidiscretisation on the way.
         @test ode_function(a, l; dirichlet = :boundary) isa SciMLBase.ODEFunction
@@ -192,6 +221,46 @@ using LinearSolve: KrylovJL_GMRES, LUFactorization
         @test eltype(ode_problem(sd_d, zeros(Float32, n), I; p = [1.0, 2.0]).u0) ===
               Float32
         @test eltype(ode_problem(sd_d, z, I; p = Float32[1, 2]).u0) === Float64
+    end
+
+    # The widening follows the element type of any `p`, not only an array's: a tuple, a
+    # named tuple, a scalar and a nested tuple carrying `Dual`s reach `u0` on a non-uniform
+    # mesh, and a `p` with no element type (a struct, `NullParameters`) leaves it as it was.
+    @testset "ode_problem: u0 widens to p eltype" begin
+        Bramble._seed_mesh1d_rng!(1234)
+        Ωₙ = try
+            Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 11, false)
+        finally
+            Bramble._unseed_mesh1d_rng!()
+        end
+        Wₙ = gridspace(Ωₙ)
+        aₙ = form(Wₙ, Wₙ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
+        lₙ = form(Wₙ, v -> innerₕ(x -> 1.0, v))
+        sdₙ(g) = semidiscretize(
+            aₙ, lₙ; dirichlet = dirichlet_constraints(Ωₙ, I, :boundary => g)
+        )
+        sd_v = sdₙ((x, t, θ) -> θ[1] + θ[2] * t)
+        sd_s = sdₙ((x, t, θ) -> θ + t)
+        z = zeros(ndofs(Wₙ))
+        d(sd, mk) = ForwardDiff.derivative(
+            s -> ode_problem(sd, z, I; p = mk(s)).u0[1], 1.0
+        )
+        @test d(sd_v, s -> [s, 2.0]) == 1.0
+        @test d(sd_v, s -> (s, 2.0)) == 1.0
+        @test d(sd_v, s -> (g0 = s, r = 2.0)) == 1.0
+        @test d(sd_s, s -> s) == 1.0
+        @test d(sd_v, s -> ((s, 2.0), 3.0)[1]) == 1.0
+
+        # The last boundary point is widened too, and the value is the primal one.
+        u0 = ode_problem(sd_v, z, I; p = (3.0, 2.0)).u0
+        @test u0[1] == 3.0 && u0[end] == 3.0
+        @test eltype(ode_problem(sd_v, z, I; p = (1.0, 2.0)).u0) === Float64
+        @test eltype(ode_problem(sd_v, Float32.(z), I; p = (1.0, 2.0)).u0) === Float32
+        @test eltype(ode_problem(sd_s, z, I; p = 1.0).u0) === Float64
+
+        sd_g = sdₙ((x, t, θ) -> θ.g + t)
+        @test eltype(ode_problem(sd_g, z, I; p = _ParamsG(1.0)).u0) === Float64
+        @test eltype(ode_problem(sdₙ((x, t) -> 5 + t), z, I).u0) === Float64
     end
 
     # `semidiscretize_rhs`: the point of folding `M⁻¹` in ahead of

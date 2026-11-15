@@ -9,6 +9,9 @@
 # `Threads.@threads :static`. No derivative loop calls a `_serial_*` engine or
 # `_static_or_serial`; a rule's primal is the entry's own call.
 #
+# `_threaded_bands_ref!`, the band runner's caller around `_static_or_serial`, gets the
+# runner's rules too, so Enzyme never compiles that `try` around the sweep's point (#1179).
+#
 # Two routes, as `BrambleEnzymePolyesterExt` takes them for its `@batch` hooks:
 #
 # - Fixed kernels: `_static_bands!` running `_difference_band!`, `_average_band!` or
@@ -58,6 +61,7 @@ const _StaticPartials = typeof(Bramble._static_partials!)
 const _StaticBandColour = typeof(Bramble._static_band_colour!)
 const _StaticColour = typeof(Bramble._static_colour!)
 const _StaticCutBandColour = typeof(Bramble._static_cut_band_colour!)
+const _ThreadedBandsRef = typeof(Bramble._threaded_bands_ref!)
 const _KronFused = typeof(Bramble._kron_fused!)
 const _ThreadedKron = Annotation{<:KroneckerLinearOperator{<:Any, <:Any, <:Tuple, CpuThreaded}}
 
@@ -902,10 +906,14 @@ end
 
 # The bilinear and linear sweeps' runners: `point` holds the written storage and the term,
 # and arrives behind a `Ref` (`_threaded_bands!`, src/assembly/bilinear_execution.jl).
+# `_threaded_bands_ref!` is the band runner's caller, ruled as the runner is, so Enzyme
+# never compiles `_static_or_serial`'s `try` around the point: a facet weight's `Bool`
+# mask spilled there with its padding stopped it with `EnzymeNoTypeError` (#1179).
 const _POINT = Val(:point)
 
 for (F, hook, task, ntasks) in (
     (_StaticBandColour, :_static_band_colour!, _band_colour_task, :(length(ins[3].val))),
+    (_ThreadedBandsRef, :_threaded_bands_ref!, _band_colour_task, :(length(ins[3].val))),
     (_StaticColour, :_static_colour!, _colour_task, :(Threads.nthreads())),
     (_StaticCutBandColour, :_static_cut_band_colour!, _cut_task, :(length(ins[3].val))))
     @eval begin

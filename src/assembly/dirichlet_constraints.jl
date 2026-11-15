@@ -126,7 +126,12 @@ end
 # `(x, t)` closure with a `p` it cannot take, and that failure would otherwise surface only
 # once a residual call invoked it. An all-spatial set is refused, as `I` would then promise a
 # time dependence nothing has. Both are caught here, at the point that knows every arity.
+# So is an untyped `g(x)` beside a `g(x::Real, t::Real)` typed on `x`, which would be read
+# as spatial and drop `t` (`_validate_hidden_typed_arity`, geometry/marker.jl).
 function _validate_time_dependent_arity(pairs::Tuple{Vararg{Pair}})
+    for (lbl, func) in pairs
+        _validate_hidden_typed_arity("dirichlet_constraints", lbl, func)
+    end
     funcs = map(last, pairs)
     param = map(f -> _accepts(f, Val(3)), funcs)
     timed = map((f, p) -> p || _accepts(f, Val(2)), funcs, param)

@@ -123,3 +123,156 @@ function EnzymeRules.reverse(
     fill!(db, zero(eltype(db)))
     return (nothing, r̄)
 end
+
+# The rules for `Bramble._dense_block_solve`, `X = C⁻¹ B` and `x = C⁻¹ b` on one block of
+# the ghosts that a conormal `∂ₙ(u; K)` couples (#1176). Enzyme has no derivative for
+# LAPACK's `getrf`. Every tangent and adjoint solves against the primal's own LU: forward
+# `Ẋ = C⁻¹(Ḃ − Ċ X)`, reverse `Λ = C⁻ᴴ X̄`, `B̄ += Λ`, `C̄ −= Λ Xᴴ`, and likewise for `x`.
+# The reverse reads its own copies of `X` and `x` (#1185). The flag of `_nonsingular`
+# passes through; a singular block gets zero tangents and cotangents, since its caller
+# throws.
+using LinearAlgebra: mul!
+
+# The block's LU and `Bramble._dense_block_solve`'s result, solved on that LU.
+function _block_primal(C, B, b)
+    F = lu(C; check = false)
+    Bramble._nonsingular(F, C) || return F, Bramble._dense_block_solve(C, B, b)
+    return F, (F \ B, F \ b, true)
+end
+
+# `F \ (Ḃ − Ċ Y)` for one lane; a missing tangent is `nothing`.
+function _block_tangent(F, Ċ, Ḃ, Y)
+    rhs = Ḃ === nothing ? zero(Y) : copy(Ḃ)
+    Ċ === nothing || mul!(rhs, Ċ, Y, -1, 1)
+    return F \ rhs
+end
+
+function EnzymeRules.forward(
+        config::FwdConfig,
+        func::Const{typeof(Bramble._dense_block_solve)},
+        ::Type{RT},
+        C::Annotation,
+        B::Annotation,
+        b::Annotation
+) where {RT}
+    _entered!(:_dense_block_solve)
+    F, (X, x, ok) = _block_primal(C.val, B.val, b.val)
+    RT <: Const && return EnzymeRules.needs_primal(config) ? (X, x, ok) : nothing
+    W = EnzymeRules.width(config)
+    shadows = ntuple(Val(W)) do w
+        ok || return (zero(X), zero(x), ok)
+        Ċ = _shadow(C, w)
+        return (_block_tangent(F, Ċ, _shadow(B, w), X),
+            _block_tangent(F, Ċ, _shadow(b, w), x), ok)
+    end
+    needs_primal = EnzymeRules.needs_primal(config)
+    EnzymeRules.needs_shadow(config) || return needs_primal ? (X, x, ok) : nothing
+    shadow = W == 1 ? only(shadows) : shadows
+    needs_primal || return shadow
+    return W == 1 ? Duplicated((X, x, ok), shadow) : BatchDuplicated((X, x, ok), shadow)
+end
+
+function EnzymeRules.augmented_primal(
+        config::RevConfig,
+        func::Const{typeof(Bramble._dense_block_solve)},
+        ::Type{RT},
+        C::Annotation,
+        B::Annotation,
+        b::Annotation
+) where {RT}
+    EnzymeRules.width(config) == 1 || _throw_batched_relation(EnzymeRules.width(config))
+    _entered!(:_dense_block_solve)
+    F, (X, x, ok) = _block_primal(C.val, B.val, b.val)
+    primal = EnzymeRules.needs_primal(config) ? (X, x, ok) : nothing
+    # The return's own cotangent accumulates in the shadows, and `reverse` reads it back off
+    # the tape.
+    shadow = RT <: Const ? nothing : (zero(X), zero(x), ok)
+    tape = (F, copy(X), copy(x), shadow)
+    needs_shadow = EnzymeRules.needs_shadow(config)
+    return AugmentedReturn(primal, needs_shadow ? shadow : nothing, tape)
+end
+
+function EnzymeRules.reverse(
+        config::RevConfig,
+        func::Const{typeof(Bramble._dense_block_solve)},
+        ::Type{RT},
+        tape,
+        C::Annotation,
+        B::Annotation,
+        b::Annotation
+) where {RT}
+    F, X, x, shadow = tape
+    shadow === nothing && return (nothing, nothing, nothing)
+    X̄, x̄, ok = shadow
+    ok || return (nothing, nothing, nothing)
+    Λ, λ = F' \ X̄, F' \ x̄
+    C̄, B̄, b̄ = _shadow(C, 1), _shadow(B, 1), _shadow(b, 1)
+    B̄ === nothing || (B̄ .+= Λ)
+    b̄ === nothing || (b̄ .+= λ)
+    if C̄ !== nothing
+        mul!(C̄, Λ, X', -1, 1)
+        mul!(C̄, λ, x', -1, 1)
+    end
+    # Enzyme's contract: a custom rule consumes the return cotangent it was handed.
+    fill!(X̄, zero(eltype(X̄)))
+    fill!(x̄, zero(eltype(x̄)))
+    return (nothing, nothing, nothing)
+end
+
+# The rules for `Bramble._corner_entry`, the entry of a relation's row that a one-sided
+# corner of tractions moves (`_one_sided_corners!`). With a coefficient of a relation's
+# operator active there, Enzyme's derivative of `constrained` on the composite is wrong in
+# both modes (#1180), though each step of it is right on its own, so the rules refuse it.
+# Forward mode refuses a non-zero tangent, so a datum, whose derivative reaches only the
+# load, still passes. Reverse mode cannot tell the two apart and refuses an active entry.
+@noinline function _throw_active_corner(reverse::Bool)
+    why = reverse ?
+          " Reverse mode cannot tell that parameter from one in the data, so it refuses " *
+          "both: use ForwardDiff, or Enzyme's forward mode for a parameter in the data." :
+          " Use ForwardDiff."
+    throw(
+        ArgumentError(
+        "Enzyme cannot differentiate `constrained` on a composite through a corner where " *
+        "two relations reading several components meet (tractions), with a parameter in " *
+        "a relation's operator: its derivative there comes out wrong (#1180)." * why,
+    ),
+    )
+end
+
+function EnzymeRules.forward(
+        config::FwdConfig,
+        func::Const{typeof(Bramble._corner_entry)},
+        ::Type{RT},
+        v::Annotation
+) where {RT}
+    W = EnzymeRules.width(config)
+    any(w -> (v̇ = _shadow(v, w); v̇ !== nothing && !iszero(v̇)), 1:W) &&
+        _throw_active_corner(false)
+    x = v.val
+    needs_primal = EnzymeRules.needs_primal(config)
+    EnzymeRules.needs_shadow(config) || return needs_primal ? x : nothing
+    shadow = W == 1 ? zero(x) : ntuple(_ -> zero(x), Val(W))
+    needs_primal || return shadow
+    return W == 1 ? Duplicated(x, shadow) : BatchDuplicated(x, shadow)
+end
+
+function EnzymeRules.augmented_primal(
+        config::RevConfig,
+        func::Const{typeof(Bramble._corner_entry)},
+        ::Type{RT},
+        v::Annotation
+) where {RT}
+    v isa Const || _throw_active_corner(true)
+    primal = EnzymeRules.needs_primal(config) ? v.val : nothing
+    return AugmentedReturn(primal, nothing, nothing)
+end
+
+function EnzymeRules.reverse(
+        config::RevConfig,
+        func::Const{typeof(Bramble._corner_entry)},
+        ::Type{RT},
+        tape,
+        v::Annotation
+) where {RT}
+    return (nothing,)
+end

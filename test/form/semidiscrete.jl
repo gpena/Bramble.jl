@@ -3,7 +3,7 @@ module FormSemidiscreteTests
 using Test
 using Bramble
 using Bramble: matrix_type
-using LinearAlgebra: diag
+using LinearAlgebra: LinearAlgebra, diag
 using SparseArrays
 using SciMLBase: SciMLBase # loads the `ode_problem` extension
 using ForwardDiff: Dual, value
@@ -1346,6 +1346,111 @@ end
     sd = semidiscretize(a, l)
     @test sd.jacobian_form === nothing
     @test sd.reassemble === Val(false)
+end
+
+# Typed Dirichlet data (#1186): classified by the number of arguments, not by whether a
+# method takes `Any`. Module-level so the typed methods are plain method definitions.
+_typed_x(x::Real) = 0.0
+_typed_xt(x::Real, t::Real) = 2t
+_typed_xtp(x::Real, t::Real, p::AbstractVector) = p[1] * t
+_typed_none() = 0.0
+# An untyped method of one arity beside a typed method of another is refused.
+_mixed_a(x) = 1.0
+_mixed_a(x::Real, t::Real) = 1.0 + 2t
+_mixed_b(x) = -100.0
+_mixed_b(x::Real, t::Real, p::AbstractVector) = t * p[1]
+# Typed only after `x`, the shape of an optional argument (`norm(itr, p::Real)`), so it
+# stays spatial and `t` is dropped: the accepted cost of not refusing `norm`.
+_pinned(x) = 1.0
+_pinned(x, t::Real) = 1.0 + 2t
+
+@testset "typed Dirichlet data (#1186)" begin
+    Ωₕ, Wₕ, fₕ, a, l = _sd_problem(9)
+    n = ndofs(Wₕ)
+    I = Bramble.interval(0.0, 1.0)
+    cls(g, T...) = semidiscretize(
+        a, l; dirichlet = dirichlet_constraints(Ωₕ, T..., :boundary => g)).constraints
+
+    @test cls(x -> 0.0) isa Bramble.StaticConstraints
+    @test cls((x, t) -> 2t, I) isa Bramble.TimeDependentConstraints
+    @test cls(_typed_x) isa Bramble.StaticConstraints
+    @test cls(_typed_xt, I) isa Bramble.TimeDependentConstraints
+    @test cls(_typed_xtp, I) isa Bramble.TimeParamDependentConstraints
+
+    # The typed datum is evaluated, not only classified.
+    sd = semidiscretize(a, l; dirichlet = dirichlet_constraints(Ωₕ, I, :boundary => _typed_xt))
+    sd_u = semidiscretize(a, l; dirichlet = dirichlet_constraints(Ωₕ, I, :boundary => (x, t) -> 2t))
+    du, du_u = zeros(n), zeros(n)
+    sd(du, zeros(n), nothing, 0.5)
+    sd_u(du_u, zeros(n), nothing, 0.5)
+    @test any(!iszero, du)
+    @test du == du_u
+
+    # A callback taking none of (x), (x, t), (x, t, p) is refused, naming it.
+    err = try
+        cls(_typed_none)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("_typed_none", sprint(showerror, err))
+
+    # An untyped method beside a typed one of another arity would be read as spatial and
+    # drop `t`, so it is refused (A: (x) with (x, t); B: (x) with (x, t, p)).
+    for g in (_mixed_a, _mixed_b)
+        e = try
+            cls(g)
+            nothing
+        catch ex
+            ex
+        end
+        @test e isa ArgumentError
+        @test occursin(string(nameof(g)), sprint(showerror, e))
+        @test occursin("same typing", sprint(showerror, e))
+    end
+    # A method of another arity typed only after `x` does not trigger the refusal: `norm`
+    # (`norm(itr, p::Real)`) and `first` (`first(itr, n::Integer)`) stay spatial and give
+    # the values of their untyped twins.
+    sd_of(g) = semidiscretize(a, l; dirichlet = dirichlet_constraints(Ωₕ, :boundary => g))
+    for (g, twin) in ((LinearAlgebra.norm, x -> LinearAlgebra.norm(x)),
+        ((y -> 2y) ∘ first, x -> 2first(x)))
+        @test cls(g) isa Bramble.StaticConstraints
+        sd_g, sd_t = sd_of(g), sd_of(twin)
+        du_g, du_t = zeros(n), zeros(n)
+        sd_g(du_g, zeros(n), nothing, 0.5)
+        sd_t(du_t, zeros(n), nothing, 0.5)
+        @test any(!iszero, du_t)
+        @test du_g == du_t
+    end
+    @test cls(_pinned) isa Bramble.StaticConstraints
+    @test Bramble._fix_time(_pinned, 0.5) === _pinned
+
+    # `round(x::Real, r::RoundingMode)` types `x`, so a bare `round` is refused on a 1D
+    # mesh; the error names the wrapper, and the wrapper is accepted.
+    err_round = try
+        cls(round)
+        nothing
+    catch ex
+        ex
+    end
+    @test err_round isa ArgumentError
+    @test occursin("same typing", sprint(showerror, err_round))
+    @test occursin("x -> f(x)", sprint(showerror, err_round))
+    @test cls(x -> round(x)) isa Bramble.StaticConstraints
+
+    # ... where the same methods untyped, or all typed, are classified.
+    @test cls((x, t) -> 2t, I) isa Bramble.TimeDependentConstraints
+    @test cls(_typed_x) isa Bramble.StaticConstraints
+
+    # `Fix` and composition still answer for what they wrap, typed or not.
+    @test cls(Base.Fix2(_typed_xt, 3.0)) isa Bramble.StaticConstraints
+    @test Bramble._accepts(Base.Fix2(_typed_xtp, 1.0), Val(2))
+    @test !Bramble._accepts(_typed_xt, Val(1))
+    @test !Bramble._accepts(_typed_xt, Val(3))
+    # `isless` has only typed two-argument methods, so its `Fix2` is spatial and kept as is.
+    lt = Base.Fix2(isless, 0.5)
+    @test Bramble._fix_time(lt, 1.0) === lt
 end
 
 @testset "SciML entry points without the extension" begin

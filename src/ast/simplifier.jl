@@ -585,6 +585,23 @@ simplify_ast(op::_ComponentSum) = simplify_ast(op.sum)
                          its own inner product, e.g. `innerₕ(Mₓ(f), v) + innerₕ(Mₓ(δ), v)`."))
 end
 
+# A point load has no surface measure to be integrated against, so `inner_Γ` refuses one
+# (gpena/Bramble.jl#1199). `_product` (operators/inner.jl) calls this for every surface
+# weight. Every `inner_Γ` method that can take a dirac on the left also calls it first,
+# before it reads its markers, so a missing marker does not hide the dirac. It reads types
+# only.
+@inline function _refuse_surface_dirac(left)
+    _any_dirac(left) && _throw_surface_dirac()
+    return nothing
+end
+
+@noinline function _throw_surface_dirac()
+    throw(ArgumentError("inner_Γ does not take a dirac source: a point load has no surface \
+                         measure to integrate against. Write it under innerₕ instead, \
+                         `innerₕ(dirac(x0, s), v)`, which loads the strength s at x0 \
+                         whether or not x0 lies on Γ."))
+end
+
 # --- Inner products: scalar lifting and component distribution ---------------------- #
 
 function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
@@ -722,8 +739,9 @@ end
     cl, al = _scale_parts(left)
     cr, ar = _scale_parts(right)
     # `⟨a + b, v⟩ -> ⟨a, v⟩ + ⟨b, v⟩` when the sum holds a Dirac source, so each term gets
-    # its own weight (none for the Dirac one).
-    if al isa OperatorAdd && _any_dirac(al)
+    # its own weight (none for the Dirac one). A second scale left after the peel, as in
+    # `-(a + b) / 2`, splits the same way.
+    if al isa Union{OperatorAdd, OperatorScale} && _any_dirac(al)
         return _lift_scalars(cl, cr, _split_dirac_sum(op, al, ar))
     end
     _any_dirac(al) && !_is_dirac(al) && _throw_mixed_dirac_source()

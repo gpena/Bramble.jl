@@ -366,6 +366,67 @@ end
 build_ghost_data(policy, kind) = build_ghost_param(policy, kind, :data)
 build_ghost_robin(policy, kind) = build_ghost_param(policy, kind, :robin)
 
+# A conormal relation `∂ₙ(u; K)` with a full `K` couples the ghosts of a corner, so the
+# closure solves a dense block (gpena/Bramble.jl#1176, #1181); the datum depends on `p`.
+function build_ghost_conormal(policy, kind)
+    W = gridspace(ghost_mesh(policy, (7, 6)); ghosts = :boundary)
+    K = [2.0 1.0; 1.0 2.0]
+    function f(p)
+        g = p[1]
+        C = constrained(W,
+            u -> map(F -> F => ∂ₙ(u; K) => (y -> g * (y[1] - y[2])), (:xmin, :xmax, :ymin, :ymax)))
+        return sum(abs2, C.d) + sum(abs2, nonzeros(C.E))
+    end
+    return f, [1.3]
+end
+
+# The same relations on the composite space `W × W`, the datum of the first component
+# depending on `p` (gpena/Bramble.jl#1180).
+function build_ghost_composite_relation(policy, kind)
+    W = gridspace(ghost_mesh(policy, (7, 6)); ghosts = (:xmin, :xmax, :ymax))
+    rels(g) = u -> (:xmin => ∂ₙ(u(1)) => 0.0, :xmax => 2.0 * u(1) + ∂ₙ(u(1)) => g,
+        :ymin => u(1) => 0.0, :ymax => ∂ₙ(u(1)) => 1.0, :xmin => ∂ₙ(u(2)) => 0.0,
+        :xmax => ∂ₙ(u(2)) => 1.0, :ymin => u(2) => 0.0, :ymax => ∂ₙ(u(2)) => 0.5)
+    function f(p)
+        E, d = Bramble.closure(constrained(W × W, rels(p[1])))
+        return sum(abs2, nonzeros(E)) + sum(abs2, d)
+    end
+    return f, [1.3]
+end
+
+# `build_ghost_assemble` on a (4, 4, 3) mesh with ghosts on `:xmin` and `:zmax` (gpena/Bramble.jl
+# #1173, #1177). The cut leaves a region that the walk visits in slabs; a ghost space keeping
+# more than 7/8 of its points walks whole and skips the loops the cell is there to run.
+function build_ghost_assemble_3d(policy, kind)
+    C = constrained(gridspace(ghost_mesh(policy, (4, 4, 3)); ghosts = (:xmin, :zmax)),
+        u -> (:xmin => ∂ₙ(u) => 1.0, :zmax => 2.0 * u + ∂ₙ(u) => 1.0, :ymin => u => 0.0))
+    l = form(C, v -> innerₕ(x -> 1.0 + x[1], v))
+    function f(p)
+        a = form(C, C, (U, V) -> p[1] * innerₕ(-Δₕ(U), V) + p[2]^2 * innerₕ(U, V))
+        A, F = assemble(a, l)
+        return sum(abs2, nonzeros(A)) + 1e4 * p[3] * sum(F)
+    end
+    return f, _start()
+end
+
+# `C^2` of a 2D ghost space with `Δₕ` on both components and a coupling term, assembled with
+# the parameters in the form (gpena/Bramble.jl#1174).
+function build_ghost_composite(policy, kind)
+    C = constrained(gridspace(ghost_mesh(policy, (6, 5)); ghosts = (:xmin, :ymax)),
+        u -> (:xmin => ∂ₙ(u) => 1.0, :ymax => u + ∂ₙ(u) => 0.0, :xmax => u => 0.0,
+            :ymin => u => 0.0))
+    W = C^2
+    l = form(W, v -> innerₕ(x -> x[1] + 1.0, v(1)) + innerₕ(x -> 1.0, v(2)))
+    function f(p)
+        a = form(W, W,
+            (u, v) -> p[1] * innerₕ(-Δₕ(u(1)), v(1)) + p[2]^2 * innerₕ(-Δₕ(u(2)), v(2)) +
+                      innerₕ(u(2), v(1)))
+        A, F = assemble(a, l)
+        return sum(abs2, nonzeros(A)) + 1e4 * p[3] * sum(F)
+    end
+    return f, _start()
+end
+
 # The load alone: the form is constant and the parameters enter only the linear form, so the
 # derivative must reach the load's own buffer (gpena/Bramble.jl#1127, the load half).
 function build_ghost_load(policy, kind)
@@ -496,6 +557,41 @@ function build_levelset_parameter(policy, kind)
     end
     return f, [0.605]
 end
+
+# The level-set mesh of `φ = x₁² + x₂² - 0.605²` on `box`, built inside the differentiated function.
+_levelset_fixed(policy, kind, box) = _marker_mesh(policy, kind, box, :D => levelset(x -> x[1]^2 + x[2]^2 - 0.605^2))
+
+# A level-set mesh whose box is constant and built inside `f`: the box is no input, so the
+# parameter reaches the mass matrix through a factor only (gpena/Bramble.jl#1211).
+function build_levelset_box_constant(policy, kind)
+    f(p) = p[1]^2 * _mass_of(_levelset_fixed(policy, kind, interval(-1.0, 1.0) × interval(-1.0, 1.0)))
+    return f, [0.8]
+end
+
+# The box half-width as the parameter: the grid lines are fitted to `φ = 0` and carry no
+# derivative of the box, so forward mode refuses and reverse mode returns zero.
+function build_levelset_box(policy, kind)
+    f(p) = _mass_of(_levelset_fixed(policy, kind, interval(-p[1], p[1]) × interval(-1.0, 1.0)))
+    return f, [1.0]
+end
+
+# `copy` of a mesh whose endpoint is the parameter: the points are `x₀ + (x₁ - x₀) i / 4`, so
+# their sum has derivative 2.5 at any `p`. An inactive `copy` once gave zero (gpena/Bramble.jl#1212).
+function build_mesh_copy_1d(policy, kind)
+    f(p) = sum(points(copy(mesh(domain(interval(0.0, p[1])), 5, true; backend = backend(policy = policy)))))
+    return f, [1.0]
+end
+
+function build_mesh_copy_nd(policy, kind)
+    function f(p)
+        Ωₕ = mesh(domain(interval(0.0, p[1]) × interval(0.0, 1.0)), (5, 4), (true, true);
+            backend = backend(policy = policy))
+        return sum(points(copy(Ωₕ))[1])
+    end
+    return f, [1.0]
+end
+
+oracle_mesh_copy(policy, kind) = (p -> 2.5 * p[1], [1.0])
 
 # A point load on the 9 x 9 mesh, read through a fixed weight vector, off every node.
 const DIRAC_POINT = (0.347, 0.612)
@@ -697,6 +793,10 @@ const CELLS = (
     # `assemble` cells, `CpuThreaded` peaks at 10 GB.
     cell(:assemble_three, "assemble", :three, build_assemble_three),
     cell(:assemble_dirichlet, "assemble", :assemble, build_assemble_dirichlet),
+    cell(:mesh_copy_1d, "mesh", :geometry, build_mesh_copy_1d, oracle = oracle_mesh_copy,
+        kinds = (:uniform,)),
+    cell(:mesh_copy_nd, "mesh", :geometry, build_mesh_copy_nd, oracle = oracle_mesh_copy,
+        kinds = (:uniform,)),
     cell(:assemble_mesh, "mesh", :geometry, build_assemble_mesh,
         rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
         fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip)),
@@ -739,21 +839,45 @@ const CELLS = (
     # Relation data that depend on the parameter, and a Robin coefficient that does
     # (gpena/Bramble.jl#1153, docs/notes/internals/ad_reductions/1153_constrained.md). Reverse
     # compiled for over 10 GB until the rule of #1182 over `_assemble_relation`
-    # (ext/BrambleEnzymeExt/relations.jl): now both modes match ForwardDiff under `CpuSerial` and
-    # `CpuPolyester` (3.3 to 6.1 GB alone). Under `CpuThreaded` both modes fail with
-    # `EnzymeNoTypeError` in the relation's forms, open as gpena/Bramble.jl#1179. Each cell has
-    # a child of its own: in the `ghost_fast` child the group peaked at 10.2 GB under
+    # (ext/BrambleEnzymeExt/relations.jl): both modes match ForwardDiff under the three policies
+    # (relerr 1.4e-16 or better under `CpuThreaded`, 8.7 GB footprint, 9 min alone). Under
+    # `CpuThreaded` both modes failed with `EnzymeNoTypeError` in the relation's forms (#1179)
+    # until `_threaded_bands!` was ruled so that Enzyme never compiles its `try`. Each cell has a
+    # child of its own: in the `ghost_fast` child the group peaked at 10.2 GB under
     # `CpuPolyester` and 10.6 GB under `CpuThreaded`, where the 10 GB cap killed it.
-    cell(:ghost_data, "ghost", :relation_data, build_ghost_data,
-        rev = (CpuSerial = :ok, CpuThreaded = :throws, CpuPolyester = :ok),
-        fwd = (CpuSerial = :ok, CpuThreaded = :throws, CpuPolyester = :ok),
-        rev_err = "EnzymeNoTypeError", kinds = (:nonuniform,)),
+    cell(:ghost_data, "ghost", :relation_data, build_ghost_data, kinds = (:nonuniform,)),
     # The Robin coefficient's ForwardDiff half works (gpena/Bramble.jl#1127); the Enzyme half
     # is the same as `ghost_data`.
-    cell(:ghost_robin, "ghost", :relation_robin, build_ghost_robin,
-        rev = (CpuSerial = :ok, CpuThreaded = :throws, CpuPolyester = :ok),
-        fwd = (CpuSerial = :ok, CpuThreaded = :throws, CpuPolyester = :ok),
-        rev_err = "EnzymeNoTypeError", kinds = (:nonuniform,)),
+    cell(:ghost_robin, "ghost", :relation_robin, build_ghost_robin, kinds = (:nonuniform,)),
+    # A conormal relation with a full `K` took a dense `lu` Enzyme cannot differentiate
+    # (#1176, #1181); it is now a function of its own with forward and reverse rules. Both
+    # modes match ForwardDiff under the three policies (3.2e-16 or better; 260 s and 4.6 GB
+    # under `CpuThreaded`, 244 s and 4.5 GB under `CpuPolyester`).
+    cell(:ghost_conormal, "ghost", :relation_conormal, build_ghost_conormal, kinds = (:nonuniform,)),
+    # Reverse through `constrained(W × W, …)` was an `EnzymeInternalError` in `_relation_rows`
+    # (#1180). Both modes match ForwardDiff under `CpuSerial` (457 s together). Under the threaded
+    # policies each mode alone matches (relerr 0): reverse 614 s and 9.73 GB under `CpuThreaded`,
+    # 604 s and 9.90 GB under `CpuPolyester`, forward 451 s and 7.27 GB, 437 s and 7.22 GB. The two
+    # together passed the 10 GB cap (11.3 GB, killed after the reverse) and the child runs
+    # both, so the threaded policies stay `:skip`.
+    cell(:ghost_composite_relation, "ghost", :relation_composite, build_ghost_composite_relation,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
+        kinds = (:nonuniform,)),
+    # Reverse aborted in LLVM verification (#1173, #1177) until the walk over a region's tail
+    # became a flat loop. A (4, 4, 3) mesh with ghosts on two sides cuts the walk, so the changed
+    # loops run. Both modes match ForwardDiff under the three policies (1.5e-16): 351 s and
+    # 4.4 GB under `CpuSerial`, 486 s and 5.9 GB under `CpuThreaded`, 420 s and 4.9 GB under
+    # `CpuPolyester`.
+    cell(:ghost_assemble_3d, "ghost", :threed, build_ghost_assemble_3d, kinds = (:nonuniform,)),
+    # `C^2` of a 2D ghost space with `Δₕ` on both components (#1174), measured at 501128cb and at
+    # 70e39a58: the base's reverse was still compiling at 20 minutes (7.7 GB) and its forward
+    # failed at 455 s; the tip's reverse and forward fail at 982 s (5.7 GB) and 592 s (4.1 GB)
+    # with `IllegalTypeAnalysisException` in `simplify_ast` (src/ast/simplifier.jl:360), where
+    # type inference leaves the component indices open (ad_reductions/1174_composite_ghost.md).
+    # The fix is a new issue, so the cell is not run; ForwardDiff differentiates it.
+    cell(:ghost_composite, "ghost", :ghost_fast, build_ghost_composite,
+        rev = :skip, fwd = :skip, kinds = (:nonuniform,)),
     # The load of `assemble(a, l)` alone (gpena/Bramble.jl#1127, the load half). The threaded
     # reverse is #1157 and the forward under Enzyme #1159, both fixed in v4.2.2.
     cell(:ghost_load, "ghost", :ghost_fast, build_ghost_load, kinds = (:nonuniform,)),
@@ -771,16 +895,12 @@ const CELLS = (
     # The geometric inputs of gpena/Bramble.jl#1171, measured with Enzyme 0.13.219 on
     # 2026-11-11 (docs/notes/internals/ad_reductions/1171_geometric_inputs.md). The two
     # polygon `works` cells compile for about 5 minutes per mode, so they have a child of
-    # their own. Forward is a `MethodError`: Enzyme has no forward rule for `deepcopy`.
+    # their own. Forward was a `MethodError` (Enzyme has no forward rule for `deepcopy`, #1212)
+    # until the mesh copy's marker copy was marked inactive: both modes now match ForwardDiff
+    # under the three policies, on both meshes (6.6e-16 or better).
     # The datum of `polygon_spaces` (#1170): a `Dual` datum fills the padded space.
-    cell(:polygon_datum, "polygon", :polygon, build_polygon_datum,
-        rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
-        fwd = (CpuSerial = :throws, CpuThreaded = :throws, CpuPolyester = :throws),
-        fwd_err = "MethodError"),
-    cell(:polygon_coefficient, "polygon", :polygon, build_polygon_coefficient,
-        rev = (CpuSerial = :ok, CpuThreaded = :ok, CpuPolyester = :ok),
-        fwd = (CpuSerial = :throws, CpuThreaded = :throws, CpuPolyester = :throws),
-        fwd_err = "MethodError"),
+    cell(:polygon_datum, "polygon", :polygon, build_polygon_datum),
+    cell(:polygon_coefficient, "polygon", :polygon, build_polygon_coefficient),
     # `dirac` converts its point to `Float64`: ForwardDiff has no method for a `Dual` and
     # Enzyme differentiates it in both modes. The reference of the Enzyme half is a central
     # difference. The threaded policies were not run.
@@ -805,14 +925,20 @@ const CELLS = (
         fwd = (CpuSerial = :throws, CpuThreaded = :skip, CpuPolyester = :skip),
         rev_err = (CpuSerial = "IllegalTypeAnalysisException", CpuThreaded = "", CpuPolyester = "")),
     # A `φ` that depends on the parameter is refused under ForwardDiff (#1172): a `Float64`
-    # grid has no derivative to give. Enzyme is `:skip`: the first fresh process returned a
-    # gradient of zeros in both modes (a silent zero), and four later ones aborted in LLVM
-    # with `Instruction does not dominate all uses!`, with nothing changed in between.
-    # A child of its own, so the abort cannot end the cells of another group.
+    # grid has no derivative to give. Enzyme refuses it by name in both modes under the three
+    # policies (#1211): before the rules on `_levelset_grid` it returned a gradient of zeros
+    # in one fresh process and aborted in LLVM in the next four. A child of its own, so an
+    # abort cannot end the cells of another group.
     cell(:levelset_parameter, "levelset", :levelset, build_levelset_parameter, fd = :throws,
-        fd_err = "Level-set marker",
-        rev = (CpuSerial = :skip, CpuThreaded = :skip, CpuPolyester = :skip),
-        fwd = (CpuSerial = :skip, CpuThreaded = :skip, CpuPolyester = :skip)),
+        fd_err = "Level-set marker", rev = :throws, fwd = :throws,
+        rev_err = "Enzyme cannot differentiate a level-set mesh with respect to a parameter"),
+    cell(:levelset_box_constant, "levelset", :levelset, build_levelset_box_constant),
+    # The box depends on the parameter (gpena/Bramble.jl#1211, critic of the refusal): forward
+    # mode refuses it, reverse mode cannot tell and returns a zero where the derivative is not
+    # zero, so the page records it as a silent zero.
+    cell(:levelset_box, "levelset", :levelset, build_levelset_box, fd = :throws,
+        fd_err = "Level-set marker", rev = :silent_zero, fwd = :throws,
+        fwd_err = "box depends on the parameter"),
     # The solver routes of gpena/Bramble.jl#1165 to #1169.
     # Built inside the differentiated function the factorization is a `Union`, and Enzyme stops
     # at it before the rule on `sparse_factorize` runs (departure D8): `pde_solve(A, F)` is the
@@ -1129,7 +1255,8 @@ if CHILD == ""
             @test_skip "Enzyme is not in this environment"
         else
             groups = (:dense, :assemble, :three, :boundary, :geometry, :solve, :operators, :ghost_fast,
-                :relation_data, :relation_robin, :inputs, :levelset, :polygon, :factor_matrix,
+                :relation_data, :relation_robin, :relation_conormal,
+                :relation_composite, :inputs, :levelset, :polygon, :factor_matrix,
                 :factor_kept, :rank_one, :fdm, :gmg_load, :gmg_coefficient, :chebyshev)
             WITH_3D_TESTS && (groups = (groups..., :threed))
             SLOW && (groups = (groups..., unique(c.group for c in CELLS if c.slow)...))

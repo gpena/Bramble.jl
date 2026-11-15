@@ -1037,8 +1037,16 @@ end
 # point to its runner behind a `Ref`, built past `_static_or_serial`'s `try` and unwrapped
 # inline, so a plain call allocates nothing for it: `BrambleEnzymeExt`'s rule cannot take
 # a by-value point whose target holds an active `α` (Enzyme's calling convention).
-@inline _threaded_bands!(point::P, ax, bidx, nbands::Int, rest) where {P} = _static_or_serial(
-    _static_band_colour_ref!, _serial_band_colour!, point, ax, bidx, nbands, rest)
+#
+# The call into `_static_or_serial` goes through `_threaded_bands_ref!`, the point behind
+# a `Ref` unwrapped inline, which `BrambleEnzymeExt` rules as it does the runner, so
+# Enzyme never compiles that `try`. Its catch keeps the point in a volatile slot, where a
+# facet weight's `Bool` mask and its padding are stored as one `i64` whose padding Enzyme
+# cannot type (`EnzymeNoTypeError`, gpena/Bramble.jl#1179).
+@inline _threaded_bands!(point::P, ax, bidx, nbands::Int, rest) where {P} = _threaded_bands_ref!(
+    Ref(point), ax, bidx, nbands, rest)
+@inline _threaded_bands_ref!(r::Base.RefValue, ax, bidx, nbands::Int, rest) = _static_or_serial(
+    _static_band_colour_ref!, _serial_band_colour!, r[], ax, bidx, nbands, rest)
 @inline _static_band_colour_ref!(point::P, ax, bidx, nbands, rest) where {P} = _static_band_colour!(
     Ref(point), ax, bidx, nbands, rest)
 @inline _static_band_colour!(r::Base.RefValue, ax, bidx, nbands, rest) = _static_band_colour!(

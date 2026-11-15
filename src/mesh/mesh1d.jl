@@ -486,8 +486,10 @@ changes.
 
 A new point count also rebuilds the `:boundary` and `:interior` markers (and the marker
 words assembly reads) for the new grid. A mesh carrying any other label has no domain here
-to re-evaluate it onto the new points, so such a resize throws an `ArgumentError` before
-anything changes. Build `mesh(Ω, length(pts))` and call
+to re-evaluate it onto the new points, and neither has a `:boundary` or `:interior` that is
+not the geometric set (a predicate label of either name, or a stored set that differs from
+the one the mesh gives), which the resize would replace. Such a resize throws an
+`ArgumentError` before anything changes. Build `mesh(Ω, length(pts))` and call
 [`change_points!`](@ref)`(Ωₕ, markers(Ω), pts)` instead. A call that keeps the point count
 leaves every marker alone, so a label defined by a predicate of position would keep the set
 the old points gave it: a mesh carrying one is refused with an `ArgumentError`, again naming
@@ -1503,8 +1505,12 @@ function Base.copy(Ωₕ::Mesh1D)
     c = Mesh1DState(s.set, s.indices, s.backend, copy(s.pts), copy(s.half_pts),
         copy(s.half_spacings), copy(s.spacings), s.collapsed, s.version, s.uniform, s.words,
         _next_mesh_uid())
-    return _mesh1d_with_markers(deepcopy(markers(Ωₕ)), c, copy(_predicate_labels(Ωₕ)))
+    return _mesh1d_with_markers(_copy_markers(Ωₕ), c, copy(_predicate_labels(Ωₕ)))
 end
+
+# An independent copy of the markers of `Ωₕ`, for `copy`. A function of its own so that
+# the Enzyme extension can mark it inactive while the coordinates `copy` takes stay active.
+_copy_markers(Ωₕ::AbstractMeshType) = deepcopy(markers(Ωₕ))
 
 # A deepcopy is an independent mutable mesh, so it gets a fresh identity: with the uid
 # copied, the original and the copy would share (uid, version) after one point change each

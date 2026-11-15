@@ -1272,7 +1272,8 @@ Assemble the `BilinearForm` into the preallocated matrix `A`, allocating nothing
 when `A` is the default `SparseMatrixCSC`. A product with three or more region-restricted
 summands is split by `form` into products of at most two (gpena/Bramble.jl#727); one it
 leaves whole, as it would split into more than 16 or its constant scales keep several types,
-allocates per grid point.
+allocates per grid point. An `A` whose size is not `(ndofs(test_space(form)),
+ndofs(trial_space(form)))` raises a `DimensionMismatch` before anything is written.
 
 Runs serially or across threads following `form.trial_space`'s backend
 [`execution_policy`](@ref): [`Serial`](@ref) (the default) or [`Parallel`](@ref).
@@ -1299,6 +1300,7 @@ end
 function _assemble_bilinear!(
         A::AbstractMatrix, form::BilinearForm, dirichlet, dirichlet_components
 )
+    _check_bilinear_size(A, form)
     ast = form.ast
     dirichlet_labels, _ = _normalize_dirichlet(dirichlet)
     _zero_stored!(A)
@@ -1317,13 +1319,34 @@ function _assemble_bilinear!(
     return A
 end
 
+# The sweep reads and writes `A` with `@inbounds`, so a matrix smaller than the form's
+# `(ndofs(test_space), ndofs(trial_space))` is read out of bounds and a larger one keeps
+# stale rows and columns. Every bilinear entry point (`assemble!`, `assemble_add!`,
+# `assemble_parallel!`) checks it before writing anything, as `_check_linear_length` does
+# for a vector. It is not checked in `_assemble_bilinear_core_cached!`, which the ghost
+# path calls with its padded matrix.
+@inline function _check_bilinear_size(A::AbstractMatrix, form::BilinearForm)
+    expected = (ndofs(form.test_space), ndofs(form.trial_space))
+    size(A) == expected || _throw_bilinear_size(size(A), expected)
+    return nothing
+end
+
+@noinline function _throw_bilinear_size(actual::NTuple{2, Int}, expected::NTuple{2, Int})
+    throw(
+        DimensionMismatch(
+        "the matrix has size $actual, but the form needs $expected: its test space has " *
+        "$(expected[1]) and its trial space $(expected[2]) degrees of freedom",
+    ),
+    )
+end
+
 """
     assemble_parallel!(A::AbstractMatrix, form::BilinearForm) -> AbstractMatrix
 
 Refill `A` with the assembled `form` across threads and return it, regardless of
 `form.trial_space`'s backend policy. `A` must already carry the correct sparsity pattern from
-[`allocate_system_matrix`](@ref) or a previous [`assemble`](@ref). Unlike `assemble!`, does
-not apply `dirichlet_labels`.
+[`allocate_system_matrix`](@ref) or a previous [`assemble`](@ref), and a wrong size raises a
+`DimensionMismatch`, as in `assemble!`. Unlike `assemble!`, does not apply `dirichlet_labels`.
 
 Colouring on the test side ensures thread safety when updating stored matrix values concurrently.
 The band-coloured sweep runs for every matrix type: it reaches storage only through the
@@ -1339,6 +1362,7 @@ threads. A device-resident matrix replays too, through positions recorded agains
 host mirror, so only its recording fill searches (gpena/Bramble.jl#318).
 """
 function assemble_parallel!(A::AbstractMatrix, form::BilinearForm)
+    _check_bilinear_size(A, form)
     _zero_stored!(A)
 
     _assemble_bilinear_parallel_cached!(

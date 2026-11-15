@@ -69,6 +69,16 @@ _reaction_markers(::Tuple{}) = _throw_no_marker()
 end
 _reaction_markers(marker) = _throw_bad_marker(marker)
 
+# A ghost space, or a composite of them, has replaced the marked rows by its relations, so
+# the residual there is no reaction: the matrix methods refuse it before reading a row.
+# `ConstrainedCompositeSpace` (`constrained(G × G, ...)`) and `_throw_ghost_reaction` come
+# later in the include order (assembly/), so the test sits in a body, resolved at call time.
+@inline function _check_reaction_space(sp)
+    sp isa Union{GhostGridSpace, _GhostCompositeSpace, ConstrainedCompositeSpace} &&
+        _throw_ghost_reaction()
+    return nothing
+end
+
 # The matrix methods index `A`, `F`, `uₕ`'s storage and the caller's buffer with
 # `@inbounds`, so a size mismatch must be caught here, not left to an out-of-bounds write.
 function _validate_reaction_sizes(A, F, uₕ, buf...)
@@ -364,7 +374,8 @@ would have already overwritten the rows this needs).
 `marker` is a `Symbol` or a `Tuple` of them, exactly as `dirichlet` accepts one or several
 labels; overlap between markers is counted once (the same union `dirichlet_bc!` takes).
 `components` restricts a composite space's leaves (1-based positions in
-`leaf_spaces_offsets`, `nothing` meaning every leaf).
+`leaf_spaces_offsets`, `nothing` meaning every leaf). A `uₕ` on a ghost space, or on a
+composite of them, throws `ArgumentError`: the relations have replaced its marked rows.
 
 # Sign and scaling
 
@@ -398,6 +409,7 @@ function reaction(
         A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
+    _check_reaction_space(space(uₕ))
     _validate_reaction_sizes(A, F, uₕ)
     sp = space(uₕ)
     leaves = leaf_spaces_offsets(sp)
@@ -441,6 +453,7 @@ function reaction!(
         scratch::AbstractVector, A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
+    _check_reaction_space(space(uₕ))
     _validate_reaction_sizes(A, F, uₕ, scratch)
     sp = space(uₕ)
     leaves = leaf_spaces_offsets(sp)
@@ -515,6 +528,7 @@ function reaction_density(
         A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
+    _check_reaction_space(space(uₕ))
     _validate_reaction_sizes(A, F, uₕ)
     sp = space(uₕ)
     leaves = leaf_spaces_offsets(sp)
@@ -559,6 +573,7 @@ function reaction_density!(
         dens::AbstractVector, A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
+    _check_reaction_space(space(uₕ))
     _validate_reaction_sizes(A, F, uₕ, dens)
     sp = space(uₕ)
     leaves = leaf_spaces_offsets(sp)

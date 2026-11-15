@@ -178,8 +178,8 @@ apply(P, x) = ldiv!(similar(x), P, x)
             @test read(f) == read(only(WriteVTK.vtk_save(vtk)))
         end
         # The values handed to WriteVTK, the exterior extension included.
-        @test Bramble._vtk_data(uₕ) == reshape(uₕ.data, n)
-        @test count(!iszero, Bramble._vtk_data(uₕ)[U.rows.extended]) > 0
+        @test Bramble._vtk_data("u", Ωₕ, uₕ) == reshape(uₕ.data, n)
+        @test count(!iszero, Bramble._vtk_data("u", Ωₕ, uₕ)[U.rows.extended]) > 0
     end
 
     @testset "$name: semidiscretize on (W, W)" for (name, Ωₕ) in MESHES

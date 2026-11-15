@@ -755,6 +755,50 @@ import Base: diff
             @test_throws DimensionMismatch change_points!(Ωₕ_copy3, dm, new_pts_invalid_len)
             @test points(Ωₕ_copy3) ≈ [0.0, 0.5, 1.0, 1.5, 2.0]
         end
+
+        @testset "non-geometric :boundary, :interior" begin
+            snap(M) = (copy(points(M)),
+                Dict(k => copy(v) for (k, v) in pairs(markers(M))))
+            build(dm) = mesh(create_test_domain(0.0, 1.0; markers = dm), 5, false;
+                backend = backend(), warn_marker_mismatch = false)
+            resize!(M) = set_points!(M, collect(range(0.0, 1.0; length = 9)) .^ 1.3)
+            cases = (
+                "predicate :interior" => (:interior, markers(
+                    interval(0, 1), :interior => x -> x[1] < 0.5)),
+                "predicate :boundary" => (:boundary, markers(
+                    interval(0, 1), :boundary => x -> x[1] < 0.5)),
+                "face :boundary" => (:boundary, markers(
+                    interval(0, 1), :boundary => :left)),
+                "face :interior" => (:interior, markers(
+                    interval(0, 1), :interior => :left)))
+            for (name, (lbl, dm)) in cases, f in (iterative_refinement!, resize!)
+
+                M = build(dm)
+                before = snap(M)
+                e = try
+                    f(M)
+                    nothing
+                catch err
+                    err
+                end
+                @test e isa ArgumentError
+                @test occursin("custom markers", sprint(showerror, e))
+                @test occursin(":$lbl", sprint(showerror, e))
+                @test snap(M) == before
+            end
+
+            # A predicate named :interior that equals the geometric set on this grid is
+            # still refused: it would not be the geometric set on the refined one.
+            M = build(markers(interval(0, 1), :interior => x -> 0.0 < x[1] < 1.0))
+            @test markers(M)[:interior] == BitVector([0, 1, 1, 1, 0])
+            @test_throws ArgumentError iterative_refinement!(M)
+            @test npoints(M) == 5
+
+            # A stored :boundary that is the geometric set and no predicate refines
+            M = build(markers(interval(0, 1), :boundary => (:left, :right)))
+            iterative_refinement!(M)
+            @test findall(markers(M)[:boundary]) == [1, 9]
+        end
     end
 
     @testset "Package-local RNG for non-uniform points" begin

@@ -7,7 +7,8 @@ Write `Ωₕ`, and any number of named fields over it, to a VTK rectilinear grid
 
 Each entry in `fields` is `name => data`, where `data` is a [`VectorElement`](@ref) over a
 grid space on `Ωₕ` (scalar or composite) or a plain array already shaped like the grid.
-A composite whose components live on different meshes throws an `ArgumentError`: export
+A field, or a composite's component, whose size is not the mesh's throws an
+`ArgumentError`, as does a composite whose components live on different meshes. Export
 each component against its own mesh.
 The second method is a shorthand for a single field, named `"u"` unless told otherwise.
 
@@ -75,13 +76,24 @@ _vtk_axes(Ωₕ::AbstractMeshType) = host_points(Ωₕ)
 # per component. Wrapping each with `Array` brings a device-backed field's storage to the
 # host before `WriteVTK` sees it. A plain array passed as field data gets the same copy
 # unless it is already an `Array`.
-function _vtk_data(uₕ::VectorElement{<:CompositeGridSpace})
+function _vtk_data(name, Ωₕ::AbstractMeshType, uₕ::VectorElement{<:CompositeGridSpace})
     _require_one_mesh("export_vtk", uₕ)
-    return map(Array ∘ reshape, components(uₕ))
+    return map(c -> _vtk_data(name, Ωₕ, Array(reshape(c))), components(uₕ))
 end
-_vtk_data(uₕ::VectorElement) = Array(reshape(uₕ))
-_vtk_data(a::Array) = a
-_vtk_data(a::AbstractArray) = Array(a)
+_vtk_data(name, Ωₕ::AbstractMeshType, uₕ::VectorElement) = _vtk_data(name, Ωₕ, Array(reshape(uₕ)))
+_vtk_data(name, Ωₕ::AbstractMeshType, a::Array) = _vtk_check_size(name, Ωₕ, a)
+_vtk_data(name, Ωₕ::AbstractMeshType, a::AbstractArray) = _vtk_data(name, Ωₕ, Array(a))
+
+# A field whose size is not the mesh's is refused here, worded as `export_pgfplots` words
+# it. Left alone, WriteVTK either rejects it with an error of its own or, when the length
+# happens to match, writes it laid out as the wrong grid. A 1D mesh's `npoints(Ωₕ, Tuple)`
+# is `(n,)`, so a plain length-`n` vector passes there.
+function _vtk_check_size(name, Ωₕ::AbstractMeshType, a::AbstractArray)
+    dims = npoints(Ωₕ, Tuple)
+    size(a) == dims ||
+        throw(ArgumentError("\"$name\" has size $(size(a)), but the mesh has $dims points"))
+    return a
+end
 
 """
     export_vtk(f::Function, filename::AbstractString; append::Bool = false) -> Vector{String}

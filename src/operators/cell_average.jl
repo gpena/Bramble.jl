@@ -55,6 +55,9 @@ it must be GPU-compilable in the same sense [`Rₕ!`](@ref)'s docstring describe
 call runs the same kernel over just the marked cells, after zeroing the result on the
 device (gpena/Bramble.jl#297).
 
+On a composite space `f` is a tuple holding one function per leaf component, or a single
+function returning one value per leaf; any other count throws a `DimensionMismatch`.
+
 See also: [`avgₕ!`](@ref), [`Rₕ`](@ref).
 """
 Base.@constprop :aggressive function avgₕ(
@@ -91,7 +94,8 @@ the result into `uₕ`.
     regions, leaving every other entry zero.
 
 On a composite element `f` may also be a tuple holding one function per leaf component
-(depth-first on a nested composite); any other length throws a `DimensionMismatch`.
+(depth-first on a nested composite); any other length throws a `DimensionMismatch`. A single
+function returns one value per leaf, and any other count throws a `DimensionMismatch` too.
 
 See also: [`avgₕ`](@ref), [`Rₕ!`](@ref).
 """
@@ -185,6 +189,18 @@ end
     rule, sp)
 
 @inline _rule_component(rule::CellAverage, k) = CellAverage(pt -> rule.f(pt)[k], rule.nq)
+
+# The value count check (`_check_value_count`) evaluates `f` once, at the first quadrature
+# point of cell `i`: a grid point need not lie where `f` is defined, a Gauss point does.
+@inline _probe_value(k::_AvgKernel, i) = k.f(_first_node(k.x, k.idxs[i], k.nodes))
+
+@inline _first_node(x::AbstractVector, idx::CartesianIndex{1}, nodes) = _first_node(x, idx[1], nodes)
+@inline function _first_node(x::AbstractVector, i::Int, nodes::NTuple{NQ, T}) where {NQ, T}
+    a = T(x[i])
+    return a + nodes[1] * (T(x[i + 1]) - a)
+end
+@inline _first_node(x::NTuple{D}, idx::CartesianIndex{D}, nodes) where {D} = ntuple(
+    k -> _first_node(x[k], idx[k], nodes), Val(D))
 
 #------------------------------------------------------------------------------------------#
 # Device kernel launch stubs (gpena/Bramble.jl#94, #174)

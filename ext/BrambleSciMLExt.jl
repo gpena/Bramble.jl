@@ -57,13 +57,18 @@ using PrecompileTools: @setup_workload, @compile_workload
 @inline _jac_closure(jacobian::F, sd::Semidiscretization) where {F} = (J, u, p, t) -> jacobian(J, sd, u, p, t)
 
 # `tgrad` accepts either SciMLBase's own `(dT, u, p, t)` signature or a Bramble-aware
-# `(dT, sd, u, p, t)` one, told apart by arity the same way `_dirichlet_is_time_dependent`
-# tells a time-dependent condition from a spatial one: a 4-argument method exists on the
-# plain SciML signature, a 5-argument one on the Bramble-aware form, and never both.
+# `(dT, sd, u, p, t)` one, told apart by arity through `Bramble._accepts`, the rule
+# `dirichlet_constraints` reads its conditions with. That rule also sees a method typed on
+# its arguments, which `hasmethod(tgrad, NTuple{5, Any})` misses. A function taking
+# neither arity is refused here, not when SciML first calls it.
 @inline _tgrad_closure(::Nothing, ::Semidiscretization) = nothing
 @inline function _tgrad_closure(tgrad::F, sd::Semidiscretization) where {F}
-    return hasmethod(tgrad, Tuple{Any, Any, Any, Any, Any}) ?
-           (dT, u, p, t) -> tgrad(dT, sd, u, p, t) : tgrad
+    Bramble._accepts(tgrad, Val(5)) && return (dT, u, p, t) -> tgrad(dT, sd, u, p, t)
+    Bramble._accepts(tgrad, Val(4)) && return tgrad
+    throw(ArgumentError(
+        "`tgrad` must take `(dT, u, p, t)` or `(dT, sd, u, p, t)`, " *
+        "and the function given takes neither"
+    ))
 end
 
 function Bramble._ode_function(
@@ -91,13 +96,23 @@ end
 @inline _initial_vector(u₀::AbstractVector) = collect(u₀)
 @inline _initial_vector(u₀) = collect(parent(u₀))
 
-# A `p` carrying `ForwardDiff.Dual`s (or any non-`AbstractFloat` element type) makes
+# A `p` whose elements are not `AbstractFloat` (typically `ForwardDiff.Dual`s) makes
 # `dirichlet_bc!` write `p`-dependent values into the copy, which a `Float64` vector cannot
-# hold. The copy is widened only then: a `Float32` `u₀` with a `Float64` `p` stays
-# `Float32`.
-@inline _initial_vector(u₀, p) = _initial_vector(u₀)
-@inline function _initial_vector(u₀, ::AbstractArray{T}) where {T}
+# hold. `_param_eltype` reads that element type off `p`: an array's `eltype`, a number's
+# own type, the promotion over the entries of a tuple or named tuple (nested ones too),
+# `Union{}` for anything else, a user struct included. The copy is widened only when it is
+# not an `AbstractFloat`: a `Float32` `u₀` with a `Float64` `p` stays `Float32`, and
+# `NullParameters` or a struct `p` leaves the copy as it is.
+@inline _param_eltype(p::AbstractArray) = eltype(p)
+@inline _param_eltype(p::Number) = typeof(p)
+@inline _param_eltype(p::Union{Tuple, NamedTuple}) = foldl(
+    (T, x) -> promote_type(T, _param_eltype(x)), values(p); init = Union{}
+)
+@inline _param_eltype(_) = Union{}
+
+@inline function _initial_vector(u₀, p)
     v = _initial_vector(u₀)
+    T = _param_eltype(p)
     return T <: AbstractFloat ? v : convert(Vector{promote_type(eltype(v), T)}, v)
 end
 

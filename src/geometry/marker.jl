@@ -431,15 +431,22 @@ predicate of `x`.
 A predicate `f` with a one-argument method and no two-argument method is spatial and passes
 through unchanged. Any other predicate is fixed at `t` as `Base.Fix2(f, t)`. So
 `(x, t = 0.0) -> ...` is fixed at `t`, not left at its default. A predicate typed on its
-argument (`(x::NTuple{2, Float64}) -> ...`) has no `Tuple{Any}` method, so it is also
-wrapped and must accept `(x, t)`.
+argument (`(x::NTuple{2, Float64}) -> ...`) has no `Tuple{Any}` method either, but it is
+still classified by the number of arguments it takes, so `x::Real -> ...` is spatial and
+`(x::Real, t::Real) -> ...` is fixed at `t`. A function mixing the two is read by its
+untyped methods alone. So `semidiscretize`, and `dirichlet_constraints` with a time domain,
+refuse an untyped `g(x)` beside a `g(x::Real, t::Real)` typed on `x`: type all of its
+methods or none. A method typed only after `x` reads as an optional argument, so `norm`
+(with `norm(itr, p::Real)`) is spatial, and so is `g(x); g(x, t::Real)`, whose `t` is
+dropped. The rule also refuses some Base functions passed directly on a 1D mesh, such as
+`round` (with `round(x::Real, r::RoundingMode)`); wrap one as `x -> round(x)`.
 
 A `ComposedFunction` or a `Base.Fix1`/`Base.Fix2` is classified by what it wraps, not by its
 own varargs call method: a composition by its innermost function, which receives every
 argument, and a `Fix` by the function it fixes, with one more argument since the `Fix`
 supplies one itself. So `(>(0.5)) ∘ first` and `Base.Fix1(<, 0.5)` are spatial and pass
-through. A lone `Base.Fix2(isless, 0.5)` is not, as `isless` has no generic two-argument
-method, so it is wrapped like any typed predicate.
+through. So does `Base.Fix2(isless, 0.5)`: `isless` has only typed two-argument methods,
+and those count.
 """
 function conditions(edm::EvaluatedDomainMarkers)
     t = edm.evaluation_time
@@ -461,12 +468,70 @@ end
 # `Fix` are varargs-callable, so they answer for what they wrap: the innermost function of a
 # composition receives every argument, and a `Fix{K}` (`Fix1`, `Fix2`, ...) supplies the
 # `K`-th itself, so it needs at least `K - 1` arguments before it.
+#
+# A callback typed on its arguments (`g(x::Real)`) has no `NTuple{N, Any}` method, so
+# `hasmethod` says no for every arity. Only then does `_accepts` ask `methods(f, NTuple{N,
+# Any})`, which lists the methods whose signature intersects it and so sees `g(x::Real)`.
+# The untyped answer keeps folding and the slow lookup runs for typed callbacks alone.
+#
+# `_hides_typed_arity` asks the same lookup per arity, with the same `Fix` and composition
+# rules. It allocates, so only classification calls it (`_validate_hidden_typed_arity`, in
+# `semidiscretize` and in `dirichlet_constraints` with a time domain), never `conditions`.
 @inline function _accepts(f::F, ::Val{N}) where {F, N}
-    return @inline hasmethod(f, NTuple{N, Any})
+    return @inline(hasmethod(f, NTuple{N, Any})) || (
+        !@inline(hasmethod(f, NTuple{1, Any})) &&
+        !@inline(hasmethod(f, NTuple{2, Any})) &&
+        !@inline(hasmethod(f, NTuple{3, Any})) &&
+        !isempty(methods(f, NTuple{N, Any}))
+    )
 end
 @inline _accepts(c::ComposedFunction, ::Val{N}) where {N} = _accepts(c.inner, Val(N))
 @inline function _accepts(f::Base.Fix{K}, ::Val{N}) where {K, N}
     return N >= K - 1 && _accepts(f.f, Val(N + 1))
+end
+
+# Does `f` have `N`-argument methods that `_accepts` does not see, each one typed on the
+# point `x`? That is the shape of `g(x) = ...; g(x::Real, t::Real) = ...`, where an
+# untyped method of another arity hides the typed one. A method that leaves `x` untyped and
+# types only a later slot, such as `norm(itr, p::Real)` or `first(itr, n::Integer)`, is
+# read as an optional argument of a generic function, so `norm` and `(y -> 2y) ∘ first`
+# stay spatial. The cost: `g(x); g(x, t::Real)` is spatial too, and its `t` is dropped.
+#
+# `xpos` is the position of `x` among the wrapped function's arguments: a `Fix{K}` with
+# `K <= xpos` supplies an argument before it.
+function _hides_typed_arity(f, ::Val{N}, xpos::Int = 1) where {N}
+    _accepts(f, Val(N)) && return false
+    ms = methods(f, NTuple{N, Any})
+    return !isempty(ms) && all(m -> _types_arg(m, xpos), ms)
+end
+function _hides_typed_arity(c::ComposedFunction, ::Val{N}, xpos::Int = 1) where {N}
+    return _hides_typed_arity(c.inner, Val(N), xpos)
+end
+function _hides_typed_arity(f::Base.Fix{K}, ::Val{N}, xpos::Int = 1) where {K, N}
+    return N >= K - 1 && _hides_typed_arity(f.f, Val(N + 1), K <= xpos ? xpos + 1 : xpos)
+end
+
+# Is argument `i` of method `m` typed narrower than `Any`?
+function _types_arg(m::Method, i::Int)
+    sig = Base.unwrap_unionall(m.sig)
+    # `fieldtype` reads a `Vararg` slot as its element type.
+    T = fieldtype(sig, min(i + 1, length(sig.parameters)))
+    T isa TypeVar && (T = T.ub)
+    return T !== Any
+end
+
+# Refuses a condition with a hidden typed arity (see `_hides_typed_arity`). Called once per
+# condition by the two classifiers, `caller` naming which.
+function _validate_hidden_typed_arity(caller::AbstractString, lbl, f)
+    any(N -> _hides_typed_arity(f, N), (Val(1), Val(2), Val(3))) || return nothing
+    throw(
+        ArgumentError(
+        "$caller: Dirichlet condition for label `:$lbl`, $(f), has an untyped method of " *
+        "one arity beside a method of another arity typed on `x`, so its time and " *
+        "parameter dependence cannot be read. Give all its methods the same typing, or " *
+        "type none of them, or pass a wrapper such as `x -> f(x)`.",
+    ),
+    )
 end
 
 @inline function _is_spatial(f::F) where {F}

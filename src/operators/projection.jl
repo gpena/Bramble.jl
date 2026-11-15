@@ -353,6 +353,7 @@ end
         end
         n = length(indices(Ωₕ))
         kernel = _rule_scatter_kernel(rule, sp, Val(NC))
+        _check_value_count(kernel, _probe_index(Ωₕ, markers), NC)
         zeros_nc = ntuple(_ -> zero(eltype(first(raws))), Val(NC))
         _sweep_scatter_for!(
             policy, raws, 1:n, _apply_mask(kernel, Ωₕ, markers, zeros_nc)
@@ -360,6 +361,7 @@ end
     else
         # No shared grid point exists, so `rule`'s function is re-evaluated at each leaf's
         # own points, keeping only that leaf's entry (gpena/Bramble.jl#78).
+        _check_leaf_value_count(rule, comps, markers, length(comps))
         ntuple(
             k -> (project!(comps[k], _rule_component(rule, k), markers); nothing),
             Val(length(comps))
@@ -367,6 +369,49 @@ end
     end
     return uₕ
 end
+
+# One function for every leaf returns one value per leaf. The scatter would drop the extra
+# values and the per-leaf path would index past them, so the count is read off a single
+# evaluation, before any sweep: outside the threaded tasks, which would wrap the exception,
+# and allocation-free for a function returning a tuple (#1202). The evaluation is one the
+# sweep itself makes (`_probe_value`), at a point it fills, so a function defined only where
+# the sweep evaluates it is never called elsewhere. No point to fill, no check.
+@inline _check_value_count(kernel, ::Nothing, nc::Int) = nothing
+@inline function _check_value_count(kernel, i::Int, nc::Int)
+    nv = length(_probe_value(kernel, i))
+    nv == nc || _throw_value_count(nv, nc)
+    return nothing
+end
+
+# The heterogeneous branch probes the first leaf with a point to fill. A device-resident
+# leaf ends the search unchecked: its kernel cannot be called on the host.
+@inline _check_leaf_value_count(rule, ::Tuple{}, markers, nc::Int) = nothing
+@inline function _check_leaf_value_count(rule, comps::Tuple, markers, nc::Int)
+    c = first(comps)
+    locality(typeof(parent(c))) isa HostLocality || return nothing
+    sp = space(c)
+    i = _probe_index(mesh(sp), markers)
+    i === nothing && return _check_leaf_value_count(rule, Base.tail(comps), markers, nc)
+    return _check_value_count(_rule_kernel(rule, sp), i, nc)
+end
+
+# The linear index of a point the sweep fills: the first one unmasked, otherwise the first
+# point of the first marker that has one, or `nothing` when no marker has any.
+@inline _probe_index(Ωₕ, ::NTuple{0, Symbol}) = isempty(indices(Ωₕ)) ? nothing : 1
+@inline _probe_index(Ωₕ, markers::NTuple{N, Symbol}) where {N} = _first_marked(_marker_masks(Ωₕ, markers))
+
+@inline _first_marked(::Tuple{}) = nothing
+@inline function _first_marked(masks::Tuple)
+    i = findfirst(first(masks))
+    return i === nothing ? _first_marked(Base.tail(masks)) : i
+end
+
+# One evaluation of the rule's function that the kernel makes at linear index `i`. A rule
+# whose kernel evaluates once per point gives the kernel's own value.
+@inline _probe_value(kernel, i) = kernel(i)
+
+@noinline _throw_value_count(nv::Int, nc::Int) = throw(DimensionMismatch(
+    "the function returned $nv values for $nc components: it returns one value per leaf"))
 
 # One rule per leaf: each is already independent. `map` over both tuples rather than
 # `ntuple` indexing a shared count -- it needs no leaf count and stays correct under any

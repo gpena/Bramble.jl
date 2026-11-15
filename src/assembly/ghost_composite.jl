@@ -408,6 +408,23 @@ function avgₕ!(uₕ::VectorElement{<:ConstrainedCompositeSpace}, f, rest...; k
     return _throw_composite_projection(uₕ.space)
 end
 
+# The degrees of freedom of a composite constrained as a whole are no grid function: `E u + d`
+# is. Its norms refuse and name `lift`, as the scalar constrained space does.
+norminf(uₕ::VectorElement{<:ConstrainedCompositeSpace}) = _throw_composite_norm(:norminf, uₕ)
+normₕ(uₕ::VectorElement{<:ConstrainedCompositeSpace}) = _throw_composite_norm(:normₕ, uₕ)
+snorm₁ₕ(uₕ::VectorElement{<:ConstrainedCompositeSpace}) = _throw_composite_norm(:snorm₁ₕ, uₕ)
+norm₁ₕ(uₕ::VectorElement{<:ConstrainedCompositeSpace}) = _throw_composite_norm(:norm₁ₕ, uₕ)
+
+@noinline function _throw_composite_norm(op::Symbol, uₕ::VectorElement)
+    throw(
+        ArgumentError(
+        "$op reads a grid function, and a vector of the degrees of freedom of " *
+        "$(uₕ.space) is not one: its relations set the ghost values from them. Build " *
+        "the grid function with `Bramble.lift(Vₕ, parent(uₕ))` and call $op on that.",
+    ),
+    )
+end
+
 @noinline function _throw_composite_projection(Vₕ::_GhostCompositeSide)
     throw(
         ArgumentError(

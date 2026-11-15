@@ -19,7 +19,7 @@ using PrecompileTools: @setup_workload, @compile_workload
 function _vtk_file(filename::AbstractString, Ωₕ::AbstractMeshType, fields)
     vtk = vtk_grid(filename, _vtk_axes(Ωₕ)...)
     for (name, data) in fields
-        vtk[name] = _vtk_data(data)
+        vtk[name] = _vtk_data(name, Ωₕ, data)
     end
     return vtk
 end
