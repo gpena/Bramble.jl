@@ -18,6 +18,7 @@ using Bramble: change_points!, sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using Random
+using ..TestUtils: child_output
 
 if Sys.isapple()
     using AppleAccelerate
@@ -722,6 +723,96 @@ end
                 backend_refactor! = accelerate_refactor!,
                 invalid_sym_solve = (A, F) -> accelerate_solve(A, F; sym = :invalid_sym)
             )
+        end
+
+        # gpena/Bramble.jl#1201. AppleAccelerate.jl's `factor!` hands libSparse Julia
+        # callbacks for `malloc` and `free`. libSparse calls them on its GCD worker
+        # threads, Julia adopts each of those threads, and a collection that starts while
+        # the calling thread is parked inside libSparse waits for them forever. The
+        # deadlock is a race; adoption is what it leaves behind every time, and
+        # `Threads.maxthreadid()` counts it. Bramble's factorizations pass C `malloc` and
+        # `free`, so the count must stay put across factorize, refactor and solve.
+        # Adoption depends on the matrix. libSparse's workers allocate for LU and for the
+        # LDLᵀ of the bordered gauge system, and not for a Cholesky of an SPD matrix, so
+        # the Cholesky rows pin that nothing changes there, and the LDLᵀ and LU rows are
+        # the ones that fail when the callbacks come back. The positive control runs
+        # AppleAccelerate.jl's own `factor!` on the matrix that adopts, and it must raise
+        # the count, or the rows would pass against a fixed upstream without seeing
+        # anything. It runs in a fresh child process that loads AppleAccelerate alone: in
+        # this process the workers may be adopted already (any earlier upstream `factor!`
+        # does it), and then nothing is left to count. The child stops at the first
+        # raise, capped at 300 factorizations, since that call deadlocks under a collector.
+        # The rows need the same thing from this process, so the testset first asserts that
+        # no thread was adopted before it.
+        @testset "No Julia on libSparse threads (#1201)" begin
+            sp = poisson_system(Val(2), 12)
+            cd = convection_diffusion_system(12)
+            Bramble._seed_mesh1d_rng!(11)
+            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 7), (false, false))
+            Bramble._unseed_mesh1d_rng!()
+            W = gridspace(Ω; ghosts = :boundary)
+            A = assemble(form(W, W, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+            C = sparse(Bramble.ghost_kernel(A, W))
+            bordered = [A C; C' spzeros(size(C, 2), size(C, 2))]
+            indefinite = sp.A - 0.5 * sum(diag(sp.A)) / size(sp.A, 1) * I
+            rows = (
+                ("Cholesky", sp.A, sp.F, (; sym = :spd)),
+                ("Cholesky attempt, LDLᵀ fallback", sparse(indefinite), sp.F, (;)),
+                ("LDLᵀ, bordered gauge system", bordered, bordered * ones(size(bordered, 1)),
+                    (; sym = :symmetric)),
+                ("LU", cd.A, cd.F, (; sym = :unsymmetric))
+            )
+            # The rows see an adopted thread only if one is left to adopt: in a process whose
+            # libSparse workers were adopted earlier (an upstream `factor!` ran, here or in
+            # a file before this one) they would pass against the defect. So the process
+            # must still hold Julia's own threads and nothing else.
+            n0 = Threads.maxthreadid()
+            julia_threads = Threads.nthreads(:default) + Threads.nthreads(:interactive)
+            note = "earlier code adopted foreign threads, so the rows below cannot see one"
+            @test (n0, note) == (julia_threads, note)
+            for (name, M, F, kw) in rows
+                for _ in 1:50
+                    f = accelerate_factorize(M; kw...)
+                    accelerate_refactor!(f, M)
+                    @test norm(M * (f \ F) - F, Inf) <= 1.0e-8 * norm(F, Inf)
+                end
+                # One `@test` per row, after its 50 rounds: a thread adopted by the
+                # factorize, the refactor or the solve fails it, named by the row.
+                @test (name, Threads.maxthreadid()) == (name, n0)
+            end
+
+            mktempdir() do dir
+                # Plain text, Base only: under Pkg.test the child sees just the test
+                # environment, which lists no Serialization. `repr` round-trips a Float64.
+                file = joinpath(dir, "bordered.txt")
+                open(file, "w") do io
+                    println(io, size(bordered, 1), " ", size(bordered, 2))
+                    for v in (bordered.colptr, bordered.rowval, bordered.nzval)
+                        println(io, join(repr.(v), " "))
+                    end
+                end
+                code = """
+                using AppleAccelerate, SparseArrays
+                l = readlines(ARGS[1])
+                m, n = parse.(Int, split(l[1]))
+                B = SparseMatrixCSC(m, n, parse.(Int, split(l[2])), parse.(Int, split(l[3])),
+                                    parse.(Float64, split(l[4])))
+                n0 = Threads.maxthreadid()
+                for _ in 1:300
+                    aa = AppleAccelerate.AAFactorization(AppleAccelerate.AASparseMatrix(B))
+                    AppleAccelerate.factor!(aa, AppleAccelerate.SparseFactorizationLDLT)
+                    Threads.maxthreadid() > n0 && break
+                end
+                println(n0, " ", Threads.maxthreadid())
+                """
+                project = dirname(something(Base.active_project()))
+                cmd = `$(Base.julia_cmd()) --project=$project --startup-file=no --threads=1 -e $code $file`
+                r = child_output(cmd; timeout = 300)
+                @test r.exited
+                # a child that did not exit prints nothing: the test above fails, not a parse
+                before, after = r.exited ? parse.(Int, split(strip(r.out))) : (0, 0)
+                @test after > before
+            end
         end
 
         # gpena/Bramble.jl#142 asks whether Accelerate's libSparse/LBT-forwarded LAPACK differ

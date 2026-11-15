@@ -72,10 +72,15 @@ using Kronecker: Kronecker
     #   it below.
     # - `CHOLMOD`, `UMFPACK` (BrambleSuiteSparseExt): SuiteSparse's own Cholesky/LU submodules,
     #   reached for the factorization backends.
-    # - `AAFactorization`, `factor!`, `refactor!`, `SparseFactorizationCholesky`,
+    # - `AAFactorization`, `refactor!`, `SparseFactorizationCholesky`,
     #   `SparseFactorizationLDLT`, `SparseFactorizationLUTPP`, `SparseFactorizationQR`
     #   (BrambleAppleAccelerateExt): AppleAccelerate's own factorization type and the
-    #   kind/hook names its `factor!`/`refactor!` calls need, none of them public there.
+    #   kind/hook names its `refactor!` call and factorizations need, none of them public
+    #   there.
+    #   `SparseFactor`, `SparseCleanup`, `SparseNumericFactorOptions`, `SparseStatusOk`,
+    #   `SparseSymbolicFactorOptions`, `_libsparse_throw`: the extension's own `factor!`,
+    #   with libc's `malloc` and `free` in the options so no Julia callback runs on a
+    #   libSparse thread (gpena/Bramble.jl#1201).
     #   `AASparseMatrix`, `ATT_ORDINARY`: build LU's and QR's untagged full storage (#653).
     # - `finalize!`, `get_sol!`, `set_cntl!`, `set_icntl!`, `suppress_display!`
     #   (BrambleMUMPSExt): MUMPS's own solver-control API, none of it public there.
@@ -217,8 +222,15 @@ using Kronecker: Kronecker
                 # `AASparseMatrix`, `ATT_ORDINARY`: LU/QR's untagged full storage (#653)
                 :AASparseMatrix,
                 :ATT_ORDINARY,
-                :factor!,
                 :refactor!,
+                # `SparseFactor` and the names after it: the extension's `factor!` with C
+                # `malloc`/`free` (#1201)
+                :SparseFactor,
+                :SparseCleanup,
+                :SparseNumericFactorOptions,
+                :SparseStatusOk,
+                :SparseSymbolicFactorOptions,
+                :_libsparse_throw,
                 :SparseFactorizationCholesky,
                 :SparseFactorizationLDLT,
                 :SparseFactorizationLUTPP,

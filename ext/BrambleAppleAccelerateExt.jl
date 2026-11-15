@@ -26,12 +26,17 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
                            AAFactorization,
                            AASparseMatrix,
                            ATT_ORDINARY,
-                           factor!,
                            refactor!,
                            SparseFactorizationCholesky,
                            SparseFactorizationLDLT,
                            SparseFactorizationLUTPP,
-                           SparseFactorizationQR
+                           SparseFactorizationQR,
+                           SparseFactor,
+                           SparseCleanup,
+                           SparseNumericFactorOptions,
+                           SparseStatusOk,
+                           SparseSymbolicFactorOptions,
+                           _libsparse_throw
 
     mutable struct ConcreteAccelerateFactorization{T} <: AccelerateFactorization{T}
         aa_fact::AAFactorization{T}
@@ -120,9 +125,40 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
     # message, so libSparse's other refusals (not positive definite) stay `ErrorException`s.
     _aa_structural(e) = e isa ErrorException && occursin("structurally singular", e.msg)
 
+    # AppleAccelerate.jl's `factor!` passes libSparse Julia `@cfunction`s for `malloc` and
+    # `free`. libSparse calls them from its GCD worker threads, Julia adopts those threads,
+    # and a collection that starts while the calling thread is parked inside libSparse
+    # waits for them forever (gpena/Bramble.jl#1201). The options built here carry libc's
+    # own `malloc` and `free` instead, so no Julia code runs on a libSparse thread; a
+    # refactor and a solve reuse the symbolic factorization and its allocators.
+    # `reportError` stays AppleAccelerate's callback: a failure comes back as a status,
+    # read on the calling thread.
+    function _aa_symbolic_options()
+        o = SparseSymbolicFactorOptions()
+        return SparseSymbolicFactorOptions(
+            o.control, o.orderMethod, o.order, o.ignoreRowsAndColumns,
+            cglobal(:malloc), cglobal(:free), o.reportError
+        )
+    end
+
+    # `factor!` of AppleAccelerate 0.7.0 with those options: a failed factorization is
+    # cleaned up, `aa` stays unfactored, and the status is thrown the way `factor!` throws.
+    function _aa_sparse_factor!(aa::AAFactorization{T}, kind) where {T}
+        fact = SparseFactor(
+            kind, aa.matrixObj.matrix, _aa_symbolic_options(), SparseNumericFactorOptions(T)
+        )
+        if fact.status == SparseStatusOk
+            aa._factorization = fact
+        else
+            SparseCleanup(fact)
+            _libsparse_throw(fact.status, "factor")
+        end
+        return aa
+    end
+
     function _aa_factor!(aa, fact_kind)
         try
-            factor!(aa, fact_kind)
+            _aa_sparse_factor!(aa, fact_kind)
         catch e
             _aa_structural(e) && throw(LinearAlgebra.SingularException(0))
             rethrow()
@@ -140,9 +176,9 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         auto = _aa_auto(sym, kind)
         if fact_kind === SparseFactorizationCholesky && auto
             # Symmetry and a positive diagonal make `A` a Cholesky candidate only: a failed
-            # `factor!` refactors as LDLᵀ on the same object.
+            # factorization refactors as LDLᵀ on the same object.
             try
-                factor!(aa, fact_kind)
+                _aa_sparse_factor!(aa, fact_kind)
             catch e
                 e isa ErrorException || rethrow()
                 fact_kind, sym_flag = SparseFactorizationLDLT, :symmetric
