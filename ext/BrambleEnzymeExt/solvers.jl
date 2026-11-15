@@ -120,8 +120,11 @@ function _rank_one_adjoint_solve(K, ū; mean_zero = nothing, gauge = nothing, kw
         gauge = Bramble._conj_border(gauge), kwargs...)
 end
 
-# `x += y` into a shadow that is not the primal itself.
-_accumulate_shadow!(x, ẋ, y) = (ẋ === x || (ẋ .+= y); nothing)
+# `x += y` into a shadow that is not the primal itself. A real shadow takes the real part.
+function _accumulate_shadow!(x, ẋ, y)
+    ẋ === x || (ẋ .+= _entry_cotangent.(eltype(ẋ), y))
+    return nothing
+end
 
 function EnzymeRules.reverse(
         config::RevConfig,
@@ -140,12 +143,13 @@ function EnzymeRules.reverse(
         σ = Kₜ.σ
         # `K̄ = −λ uᴴ`: on `A`'s stored pattern entry by entry, and by the product rule on
         # `σ`, `wₛ` and `wₜ`, with `λᵀwₛ` and `uᴴwₜ` the two scalars of the rank-one term.
+        # A real `K` with a complex `F` has real shadows, which get the real part (#1238).
         if K̄.A !== K.val.A
             Āv = nonzeros(K̄.A)
             rows = rowvals(Kₜ.A)
             @inbounds for j in axes(Kₜ.A, 2), k in nzrange(Kₜ.A, j)
 
-                Āv[k] -= λ[rows[k]] * conj(u[j])
+                Āv[k] -= _entry_cotangent(eltype(Āv), λ[rows[k]] * conj(u[j]))
             end
         end
         sλ = transpose(Kₜ.ws) * λ

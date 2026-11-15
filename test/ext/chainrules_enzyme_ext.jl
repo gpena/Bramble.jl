@@ -1268,6 +1268,43 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             @test aug_act.tape[2] == aug_act.primal
             aug_act.primal .*= 2
             @test aug_act.tape[2] ≈ u_tp
+
+            # A real `K` with a complex `F` (gpena/Bramble.jl#1238): the shadows of `A`,
+            # `wₛ` and `wₜ` are real arrays Enzyme allocated, and each takes the real part
+            # of its complex cotangent, as the sparse rule does. The operator comes from a
+            # non-uniform 2D mesh. The reference is ForwardDiff of `cᵣᵀK⁻¹Fᵣ + cᵢᵀK⁻¹Fᵢ`
+            # on the dense `K`, real and imaginary parts solved apart: `Re(cᴴK⁻¹F)`.
+            Bramble._seed_mesh1d_rng!(1238)
+            Wc = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4),
+                (false, false)))
+            Bramble._unseed_mesh1d_rng!()
+            Ac = assemble(form(Wc, Wc, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V)))
+            nc = size(Ac, 1)
+            ic, jc, _ = findnz(Ac)
+            wsc = [1.0 + cos(i) / 2 for i in 1:nc]
+            wtc = [1.0 + sin(2i) / 2 for i in 1:nc]
+            Fc = ComplexF64[1.0 + sin(i) + im * cos(3i) for i in 1:nc]
+            cc = ComplexF64[sin(i) + im * cos(i) for i in 1:nc]
+            θc = [0.3; wsc; wtc; nonzeros(Ac)]
+            function Jc(θ)
+                Kd = θ[1] * θ[2:(nc + 1)] * transpose(θ[(nc + 2):(2nc + 1)])
+                for k in eachindex(ic)
+                    Kd[ic[k], jc[k]] += θ[2nc + 1 + k]
+                end
+                return dot(real(cc), Kd \ real(Fc)) + dot(imag(cc), Kd \ imag(Fc))
+            end
+            Kc = ROU(copy(Ac), θc[1], copy(wsc), copy(wtc))
+            Kcd = Enzyme.Duplicated(Kc, Enzyme.make_zero(Kc))
+            Fcd = Enzyme.Duplicated(copy(Fc), zero(Fc))
+            RTc = Enzyme.Duplicated{Vector{ComplexF64}}
+            psc = Enzyme.Const(Bramble.pde_solve)
+            aug_c = Enzyme.EnzymeRules.augmented_primal(rcfg, psc, RTc, Kcd, Fcd)
+            aug_c.shadow .= cc
+            Enzyme.EnzymeRules.reverse(rcfg, psc, RTc, aug_c.tape, Kcd, Fcd)
+            K̄c = Kcd.dval
+            @test eltype(K̄c.A) === eltype(K̄c.ws) === eltype(K̄c.wt) === Float64
+            ḡc = [K̄c.σ; K̄c.ws; K̄c.wt; nonzeros(K̄c.A)]
+            @test ḡc ≈ ForwardDiff.gradient(Jc, θc) rtol=1e-8
         else
             @test_skip "Enzyme not in this environment"
         end
