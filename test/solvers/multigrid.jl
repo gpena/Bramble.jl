@@ -775,6 +775,8 @@ end
     # an abstract element type is not asserted: `Vector{Integer}` solves as `Vector{Int}`
     Ω = first(meshes)
     @test gmg_solve(lap, Ω, Integer[1:npoints(Ω);]; kw...) == gmg_solve(lap, Ω, [1:npoints(Ω);]; kw...)
+    @test gmg_solve(lap, Ω, Complex{Integer}[complex(i, 1) for i in 1:npoints(Ω)]; kw...) ==
+          gmg_solve(lap, Ω, [complex(i, 1) for i in 1:npoints(Ω)]; kw...)
 end
 
 @testset "gmg: complex vectors (#1216)" begin

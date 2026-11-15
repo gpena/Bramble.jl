@@ -653,16 +653,21 @@ end
 
 # The type of `gmg_solve`'s result for the level forms `forms` and the load `b`, an element
 # of the finest trial space whose element type promotes the backend's, the hierarchy's
-# (the coarsest operator's) and the load's. Only a concrete load of plain numbers
-# (`_plain_number`) is typed, since a `Dual` load solved by parts can come back with its
-# tags in another order than `promote_type` gives. A form on ghost spaces gives `Any` too,
-# and its solve keeps the inference it had, concrete under `CpuSerial` and `Any` under the
-# threaded ones.
+# (the coarsest operator's) and the load's. Only a load of plain numbers (`_plain_number`)
+# is typed, and only when its element type, that type's real part and the promoted type
+# are all concrete. A `Dual` load solved by parts can come back with its tags in another
+# order than `promote_type` gives. An abstract part solves to concrete elements, while its
+# promotion keeps it: `Complex{Integer}` is a concrete type, yet it promotes to
+# `Complex{Real}`, or to `Complex{Dual{T, Real, 1}}` on a `Dual` hierarchy. A form on
+# ghost spaces gives `Any` too, and its solve keeps the inference it had, concrete under
+# `CpuSerial` and `Any` under the threaded ones.
 function _gmg_solution_type(forms::AbstractVector{<:BilinearForm}, b::AbstractVector)
-    (isconcretetype(eltype(b)) && _plain_number(eltype(b))) || return Any
+    S = eltype(b)
+    (_plain_number(S) && isconcretetype(S) && isconcretetype(real(S))) || return Any
     a = first(forms)
     Wu = trial_space(last(forms))
-    T = promote_type(eltype(backend(Wu)), _matrix_eltype(a, a.ast), eltype(b))
+    T = promote_type(eltype(backend(Wu)), _matrix_eltype(a, a.ast), S)
+    (isconcretetype(T) && isconcretetype(real(T))) || return Any
     VT = typeof(similar(vector(backend(Wu), 0), T, 0))
     return VectorElement{typeof(Wu), T, VT}
 end
