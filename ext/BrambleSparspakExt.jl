@@ -65,7 +65,10 @@ const SPARSPAK_EMPTY_PROBLEM = "An empty problem. No matrix."
     end
 end
 
-# Throws `SingularException(0)` when the factors of `lu` hold a zero or non-finite pivot.
+# Throws `SingularException(0)` when the factors of `lu` hold a pivot of value zero or a
+# non-finite one. A zero is found through `inv`, which `isfinite` reads by value: a
+# ForwardDiff `Dual` with zero value but nonzero partials is neither `iszero` nor `== 0`,
+# and the generic `getrf` Sparspak runs on a `Dual` reports nothing.
 # Sparspak's own report rests on the `info` of the BLAS `getrf` of its last supernode only,
 # and a BLAS forwarded to Accelerate returns 0 for an all-zero matrix, so the factors are
 # read directly: the pivot of column `j` is the diagonal entry of its supernode's block.
@@ -73,7 +76,7 @@ function _check_pivots(lu)
     s = lu.slvr
     for j in 1:(s.n)
         d = s.lnz[s.xlnz[j] + j - s.xsuper[s.snode[j]]]
-        (iszero(d) || !isfinite(d)) && throw(SingularException(0))
+        (isfinite(d) && isfinite(inv(d))) || throw(SingularException(0))
     end
     return lu
 end
@@ -274,6 +277,12 @@ function Bramble.sparspak_refactor!(fact::ConcreteSparspakFactorization, A::Spar
     m, n = size(A)
     (m == fact.dim && n == fact.dim) || throw(
         DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
+    )
+    # Sparspak compares `A` with `lu.p`, which aliases the matrix last factored, so a pattern
+    # changed in place on that matrix passes its check; the private copy catches it.
+    (SparseArrays.getcolptr(A) == fact.matrix.colptr && SparseArrays.rowvals(A) ==
+     fact.matrix.rowval) || error(
+        "the sparsity pattern of the matrix does not match the one factored"
     )
     # Sparspak refuses a new pattern before it sets `lu.p = A`, with the factors intact;
     # once it has set it, a failure leaves them unusable until a refactorization succeeds.

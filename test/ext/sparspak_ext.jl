@@ -346,6 +346,30 @@ end
         @test ext._check_pivots(lu) === lu
         lu.slvr.lnz[lu.slvr.xlnz[3] + 3 - lu.slvr.xsuper[lu.slvr.snode[3]]] = 0
         @test_throws SingularException ext._check_pivots(lu)
+
+        # A Dual pivot of value zero is singular whatever its partials: ForwardDiff's
+        # `iszero` would pass it, and Sparspak's generic `getrf` reports nothing.
+        Dd = ForwardDiff.Dual{Nothing}
+        for m in (1, 5)
+            Ad = sparse(Diagonal([Dd(2.0, 1.0) for _ in 1:m]))
+            factd = sparspak_factorize(Ad)
+            Zd = copy(Ad)
+            nonzeros(Zd)[end] = Dd(0.0, 1.0)
+            @test_throws SingularException sparspak_refactor!(factd, Zd)
+            @test_throws SingularException factd \ ones(m)
+        end
+
+        # The pattern changed in place on the matrix the factors hold, which Sparspak
+        # compares with itself, is refused like one passed as another matrix; the factors
+        # still solve the system they held.
+        H = SparseMatrixCSC{Float64, Int}(assemble(a))
+        H0 = copy(H)
+        factH = sparspak_factorize(H)
+        H[1, n] = 0.7
+        H[n, 1] = -0.3
+        @test_throws ErrorException sparspak_refactor!(factH, H)
+        @test isapprox(factH \ b, Matrix(H0) \ b; rtol = 1.0e-12)
+        @test_throws ErrorException sparspak_refactor!(sparspak_factorize(copy(H0)), copy(H))
     end
 
     @testset "unknown keyword throws (#657)" begin
