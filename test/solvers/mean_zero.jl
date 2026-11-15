@@ -66,6 +66,38 @@ end
     @test_logs min_level = Base.CoreLogging.Warn pde_solve(A, F; mean_zero = ones(size(A, 1)))
 end
 
+# The warning tolerance is `max(1e-10, 8 eps(T))`: `Float32` and `ComplexF32` pure-Neumann
+# matrices carry rounding above `1e-10`, and a reaction term or Dirichlet rows stay quiet.
+function _warns_annihilates(A)
+    logs = Test.collect_test_logs() do
+        try
+            pde_solve(A, ones(eltype(A), size(A, 1)))
+        catch
+        end
+    end[1]
+    return any(r -> occursin("annihilates constants", string(r.message)), logs)
+end
+
+@testset "Neumann warning, Float32 (#1188)" begin
+    I₁ = interval(0.0, 1.0)
+    for Ω in (mesh(domain(I₁), 33, false), mesh(domain(I₁), 33, true),
+              mesh(domain(I₁ × I₁), (17, 13), (false, false)),
+              mesh(domain(I₁ × I₁), (17, 13), (true, true)))
+        W = gridspace(Ω)
+        a(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
+        K = assemble(form(W, W, a))
+        R = assemble(form(W, W, (u, v) -> a(u, v) + innerₕ(u, v)))
+        D = first(assemble(form(W, W, a), form(W, v -> innerₕ(x -> 1.0, v));
+                           dirichlet = :boundary => (x -> 0.0)))
+        for T in (Float32, ComplexF32, Float64, ComplexF64)
+            cast(A) = SparseMatrixCSC{T, Int}(A)
+            @test _warns_annihilates(cast(K))
+            @test !_warns_annihilates(cast(R))
+            @test !_warns_annihilates(cast(D))
+        end
+    end
+end
+
 @testset "Mean-zero refusals" begin
     Ω = mesh(domain(interval(0.0, 1.0)), 9, false)
     A, F, w = _neumann_system(Ω, x -> cos(π * x))

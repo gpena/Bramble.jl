@@ -92,8 +92,10 @@ chain differentiable.
   ``LDL^T``) and `:accelerate` and `:mumps` by ``LDL^T``; for any other `A` they use LU, as
   do `:suitesparse` (UMFPACK) and `:sparspak`. `:spqr` throws an `ArgumentError`, and a `w`,
   `F` or `A` of mismatched size a `DimensionMismatch`. Without `mean_zero` or `gauge`, a
-  square `A` with `‖A 1‖∞ ≤ 1e-10 ‖A‖∞` (constants in its kernel) logs a warning naming
-  `mean_zero`, and the solve proceeds.
+  square `A` with `‖A 1‖∞ ≤ max(1e-10, 8 ε) ‖A‖∞` (constants in its kernel), where
+  `ε = eps(T)` for the real float type `T` of `A`'s elements, logs a warning naming
+  `mean_zero`, and the solve proceeds. The bound is `1e-10` for `Float64`. In `Float32`
+  a reaction term too small to show in the stiffness entries is not told from pure Neumann.
 - `gauge`: a matrix `Z` with one column per kernel vector to fix (for instance
   `Bramble.ghost_kernel(A, Wₕ)`, the ghost-only kernel of a form such as
   `innerₕ(Δₕ(u), Δₕ(v))` on a ghost space), or `nothing` (default). With `Z`, `pde_solve`
@@ -288,13 +290,17 @@ end
 
 # A pure-Neumann matrix sends the constant vector to zero, so `A \ F` is singular: one product
 # `A 1` detects it, and the warning names the keyword that fixes the constant. Not an error,
-# since a singular consistent system is legitimate for some solvers.
+# since a singular consistent system is legitimate for some solvers. The tolerance is `1e-10`
+# or 8 `eps` of the element type, whichever is larger: the 8 is that of
+# `_check_penalty_fixes_constants`, and pure-Neumann matrices measured 0.25 to 0.75 `eps` in
+# `Float32`.
 function _warn_if_annihilates_constants(A::SparseMatrixCSC)
     (size(A, 1) == size(A, 2) && !isempty(A)) || return nothing
-    if norm(A * ones(eltype(A), size(A, 2)), Inf) <= 1e-10 * norm(A, Inf)
-        @warn "pde_solve: A annihilates constants (‖A 1‖∞ ≤ 1e-10 ‖A‖∞), so the system is " *
-              "singular, as for pure Neumann conditions; pass `mean_zero = w` to fix the " *
-              "constant by wᵀu = 0."
+    tol = max(1e-10, 8 * eps(real(float(eltype(A)))))
+    if norm(A * ones(eltype(A), size(A, 2)), Inf) <= tol * norm(A, Inf)
+        @warn "pde_solve: A annihilates constants (‖A 1‖∞ ≤ max(1e-10, 8 eps) ‖A‖∞), so the " *
+              "system is singular, as for pure Neumann conditions; pass `mean_zero = w` to " *
+              "fix the constant by wᵀu = 0."
     end
     return nothing
 end
