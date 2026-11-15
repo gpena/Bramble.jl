@@ -275,6 +275,10 @@ end
         @test P \ x32 isa Vector{ComplexF64} && P \ x32 == complex.(P \ real.(x32), P \ imag.(x32))
         f32 = Float32.(xr)
         @test ldiv!(z, P, f32) == complex.(P \ f32, 0.0) && eltype(P \ f32) == Float64
+        # A Dual y takes the Float64 result on write, as the real path does with a Dual y.
+        Dl = ForwardDiff.Dual{Nothing, Float64, 1}
+        zD = zeros(Complex{Dl}, n)
+        @test ldiv!(zD, P, x) === zD && map(c -> complex(ForwardDiff.value(real(c)), ForwardDiff.value(imag(c))), zD) == ref
         # The real path still allocates nothing after a complex application.
         yr = zeros(n)
         @test _pc_alloc3(yr, P, xr) == 0 && yr == P \ xr

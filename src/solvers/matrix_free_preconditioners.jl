@@ -37,13 +37,13 @@ end
 # A real `P` applied to a complex vector (#1216): `P⁻¹` is real-linear, so `P⁻¹ x` is
 # `P⁻¹ re(x) + i P⁻¹ im(x)`. `_ldiv_by_parts` reads types only, so the real path folds it
 # away. `_ldiv_by_parts!` copies both parts of `x` to real scratch before it writes `y`,
-# so `ldiv!(P, x)` (`y === x`) is right. The scratch takes the real type of `P`, `x` and
-# `y` promoted, so an `Int` or `Float32` part is solved in `P`'s precision, as the real
-# path does. Only this path allocates.
+# so `ldiv!(P, x)` (`y === x`) is right. The scratch takes the real type of `P` and `x`
+# promoted, so an `Int` or `Float32` part is solved in `P`'s precision; the write converts
+# to `y`'s type, as the real path does. Only this path allocates.
 _ldiv_by_parts(P, y, x) = eltype(P) <: Real && (eltype(x) <: Complex || eltype(y) <: Complex)
 
 function _ldiv_by_parts!(y::AbstractVector, P::AbstractMatrixFreePreconditioner, x::AbstractVector)
-    S = real(promote_type(eltype(P), eltype(x), eltype(y)))
+    S = real(promote_type(eltype(P), eltype(x)))
     xd = _mf_data(x)
     xr, xi = S.(real.(xd)), S.(imag.(xd))
     yr, yi = similar(xr), similar(xi)
