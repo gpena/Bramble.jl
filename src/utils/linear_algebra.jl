@@ -298,11 +298,21 @@ returns: reductions fill the same partial sums in the same order, so match it bi
 
 `threaded!` and `serial!` are isolated functions rather than closures, so no closure is
 boxed on the path that runs serially.
+
+The `try` lives in `_static_or_serial_out`, which must stay out of line. Inlined into a
+caller that unwraps its point from a `Ref` (`_threaded_bands_ref!`), Julia 1.13 and
+1.14.0-beta1 pass garbage for every argument of the `serial!` call after the `catch`: a zero
+band count, then a segfault (gpena/Bramble.jl#1243). The arguments reach it as one tuple, so
+it specialises on a kernel closure among them, which a `Vararg` would widen to `Function`.
 """
 @inline function _static_or_serial(
         threaded!::F, serial!::G, args::Vararg{Any, N}
 ) where {F, G, N}
     _in_threaded_region() && return serial!(args...)
+    return _static_or_serial_out(threaded!, serial!, args)
+end
+
+@noinline function _static_or_serial_out(threaded!::F, serial!::G, args::A) where {F, G, A <: Tuple}
     try
         return threaded!(args...)
     catch err
