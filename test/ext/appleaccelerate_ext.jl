@@ -742,8 +742,7 @@ end
         # this process the workers may be adopted already (any earlier upstream `factor!`
         # does it), and then nothing is left to count. The child stops at the first
         # raise, capped at 300 factorizations, since that call deadlocks under a collector.
-        # The rows need the same thing from this process, so the testset first asserts that
-        # no thread was adopted before it.
+        # The rows need the same thing, so they run in a fresh child of their own as well.
         @testset "No Julia on libSparse threads (#1201)" begin
             sp = poisson_system(Val(2), 12)
             cd = convection_diffusion_system(12)
@@ -763,22 +762,63 @@ end
                 ("LU", cd.A, cd.F, (; sym = :unsymmetric))
             )
             # The rows see an adopted thread only if one is left to adopt: in a process whose
-            # libSparse workers were adopted earlier (an upstream `factor!` ran, here or in
-            # a file before this one) they would pass against the defect. So the process
-            # must still hold Julia's own threads and nothing else.
-            n0 = Threads.maxthreadid()
-            julia_threads = Threads.nthreads(:default) + Threads.nthreads(:interactive)
-            note = "earlier code adopted foreign threads, so the rows below cannot see one"
-            @test (n0, note) == (julia_threads, note)
-            for (name, M, F, kw) in rows
-                for _ in 1:50
-                    f = accelerate_factorize(M; kw...)
-                    accelerate_refactor!(f, M)
-                    @test norm(M * (f \ F) - F, Inf) <= 1.0e-8 * norm(F, Inf)
+            # libSparse workers were adopted earlier they would pass against the defect. On
+            # the Weekly macOS runner an earlier file of the shard adopts two threads that it
+            # does not adopt locally (gpena/Bramble.jl#1250), so the rows run in a fresh
+            # child too, which first checks that it holds Julia's own threads and nothing
+            # else. Each row runs 50 rounds and prints its worst residual and the thread
+            # count after them; a thread adopted by the factorize, the refactor or the solve
+            # raises the count, and the row names it.
+            mktempdir() do dir
+                file = joinpath(dir, "rows.txt")
+                open(file, "w") do io
+                    for (name, M, F, kw) in rows
+                        println(io, name)
+                        println(io, get(kw, :sym, :auto))
+                        println(io, size(M, 1), " ", size(M, 2))
+                        for v in (M.colptr, M.rowval, M.nzval, F)
+                            println(io, join(repr.(v), " "))
+                        end
+                    end
                 end
-                # One `@test` per row, after its 50 rounds: a thread adopted by the
-                # factorize, the refactor or the solve fails it, named by the row.
-                @test (name, Threads.maxthreadid()) == (name, n0)
+                code = """
+                using Bramble, AppleAccelerate, SparseArrays, LinearAlgebra
+                using Bramble: accelerate_factorize, accelerate_refactor!
+                n0 =Threads.maxthreadid()
+                println("THREADS ", n0, " ", Threads.nthreads(:default) + Threads.nthreads(:interactive))
+                l = readlines(ARGS[1])
+                for r in 1:7:length(l)
+                    m, n = parse.(Int, split(l[r + 2]))
+                    M = SparseMatrixCSC(m, n, parse.(Int, split(l[r + 3])), parse.(Int, split(l[r + 4])),
+                                        parse.(Float64, split(l[r + 5])))
+                    F = parse.(Float64, split(l[r + 6]))
+                    sym = Symbol(l[r + 1])
+                    worst = 0.0
+                    for _ in 1:50
+                        f = accelerate_factorize(M; sym = sym)
+                        accelerate_refactor!(f, M)
+                        worst = max(worst, norm(M * (f \\ F) - F, Inf) / norm(F, Inf))
+                    end
+                    println("ROW|", l[r], "|", worst, "|", Threads.maxthreadid())
+                end
+                """
+                project = dirname(something(Base.active_project()))
+                cmd = `$(Base.julia_cmd()) --project=$project --startup-file=no --threads=1 -e $code $file`
+                r = child_output(cmd; timeout = 600)
+                @test r.exited
+                out = r.exited ? split(strip(r.out), '\n') : String[]
+                th = filter(startswith("THREADS "), out)
+                n0, julia_threads = isempty(th) ? (0, -1) : parse.(Int, split(only(th))[2:3])
+                note = "the child adopted foreign threads before its rows, so they cannot see one"
+                @test (n0, note) == (julia_threads, note)
+                got = Dict(String(p[2]) => (parse(Float64, p[3]), parse(Int, p[4]))
+                for p in (split(x, '|') for x in out if startswith(x, "ROW|")))
+                for (name, _, _, _) in rows
+                    @test haskey(got, name)
+                    worst, after = get(got, name, (Inf, -1))
+                    @test (name, worst <= 1.0e-8) == (name, true)
+                    @test (name, after) == (name, n0)
+                end
             end
 
             mktempdir() do dir
