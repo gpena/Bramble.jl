@@ -525,12 +525,15 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             # not grouped at top of basic block` in `preprocess_julia__extract_args_*`),
             # which aborts the process, so no exception is thrown to catch: gpena/Bramble.jl
             # #1135, reported upstream as https://github.com/EnzymeAD/Enzyme.jl/issues/3961.
+            # Enzyme 0.13.220 throws instead, an `EnzymeNoDerivativeError` naming UMFPACK's
+            # `umfpack_dl_defaults` ("No augmented forward pass found"); either is accepted.
             # The loss runs in a child with the parent's `--check-bounds` and `--optimize`
             # (`Base.julia_cmd()` carries the first; `_child_gradient` the second), the flags
             # the weekly ad-4 shard sees. `@test_broken` on the child's success turns an
             # upstream fix into an unexpected pass, which says so.
             code, d_ad, d_cd, text = _child_gradient("loss_no_rule"; losses = CHILD_LOSS_NO_RULE)
-            @test code == 0 || occursin("function failed verification", text)
+            @test code == 0 || occursin("function failed verification", text) ||
+                  occursin("No augmented forward pass found", text)
             @test_broken code == 0 && isapprox(d_ad, d_cd; rtol = 1e-3)
 
             # With keywords the rule keeps no factorisation, so it keeps `A` itself when the
