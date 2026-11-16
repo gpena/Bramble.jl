@@ -67,8 +67,7 @@ end
 # operator's tag is the inner one. The solve is linear in the load, so this holds when `T`
 # is the operator's tag too (`εₖ² = 0`). The sum starts from a zero `Dual{T, V, N}`, so
 # `N = 0` keeps `T`.
-Bramble._solve_by_parts(solve::S, F::AbstractVector{<:ForwardDiff.Dual}) where {S} =
-    first(_by_parts(solve, F))
+Bramble._solve_by_parts(solve::S, F::AbstractVector{<:ForwardDiff.Dual}) where {S} = first(_by_parts(solve, F))
 
 # `(x, tags)`: the solve of `F` by parts and the operator's tags.
 function _by_parts(solve::S, F::AbstractVector) where {S}
@@ -83,7 +82,8 @@ function _by_parts(solve::S, F::AbstractVector{ForwardDiff.Dual{T, V, N}}) where
     if _tags(eltype(x0)) === _tags(V)
         R = eltype(x0)
         return [ForwardDiff.Dual{T}(x0[i], ForwardDiff.Partials{N, R}(ntuple(k -> xk[k][i], N)))
-                for i in eachindex(x0)], ops
+                for i in eachindex(x0)],
+        ops
     end
     ε = ntuple(
         k -> ForwardDiff.Dual{T}(zero(V),
