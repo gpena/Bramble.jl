@@ -268,7 +268,8 @@ at this level, so the default here is `false`.
 # completes "... was asked to <verb> a mesh carrying custom markers", and `remedy` names the
 # call that keeps them.
 function _check_only_geometric_labels(Ωₕ, caller::String, remedy::String)
-    extra_labels = Symbol[setdiff(keys(markers(Ωₕ)), (:boundary, :interior))...]
+    # A comprehension, not a splat: Enzyme cannot splat a `Set` (gpena/Bramble.jl#1246).
+    extra_labels = Symbol[l for l in setdiff(keys(markers(Ωₕ)), (:boundary, :interior))]
     geometric = MeshMarkers()
     _ensure_geometric_markers!(geometric, Ωₕ)
     plabels = _predicate_labels(Ωₕ)
