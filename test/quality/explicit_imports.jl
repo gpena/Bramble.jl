@@ -347,6 +347,10 @@ using Kronecker: Kronecker
     # - `_suitesparse_factorize`, `_suitesparse_refactor!`, `_suitesparse_solve`
     #   (BrambleSuiteSparseExt): the same `_`-prefixed fallback idiom again, one entry point
     #   per SuiteSparse-backed `factorize`/`refactor!`/`\` method.
+    # - `_mf_data` (BrambleSuiteSparseExt, BrambleEnzymeExt): the storage a load hands a
+    #   solver, `parent` for a `VectorElement` and the vector itself otherwise. CHOLMOD
+    #   takes dense `Vector`s only; `parent` is no substitute, it returns a `view`'s whole
+    #   parent array.
     @testset "Non-public qualified accesses declared" begin
         @test check_all_qualified_accesses_are_public(
             Bramble;
@@ -610,6 +614,7 @@ using Kronecker: Kronecker
                 :_suitesparse_factorize,
                 :suitesparse_refactor!,
                 :_suitesparse_solve,
+                :_mf_data,
                 # BrambleMetalExt reaching into Bramble's own internals:
                 # `_gpu_functional` is the loaded-and-functional predicate `gpu_backend`
                 # dispatches on by `Val`, more specific than the stub in `src/utils/backend.jl`

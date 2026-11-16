@@ -755,6 +755,30 @@ end
     @test typeof(gmg_preconditioner(lap, Ω)) <: rt
 end
 
+@testset "gmg_solve infers, CpuThreaded (#1232)" begin
+    # Under a threaded policy the operator's plan and geometry are not inferred, nor then
+    # `gmg_preconditioner`; `gmg_solve` takes its result type from the level forms instead.
+    bk = backend(; policy = Bramble.CpuThreaded())
+    I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Random.seed!(1234) # `(false, false)` draws the points, and a few draws stall the V-cycle
+    lap = V -> form(V, V, (u, v) -> innerₕ(u, v) + 0.7 * inner₊(∇ₕ(u), ∇ₕ(v)))
+    kw = (; tol = 1e-10)
+    meshes = (_mg_jitter_mesh(2, 9; bk), mesh(domain(I2), (9, 9), (false, false); backend = bk))
+    for Ω in meshes, build in (lap, _mg_spd), b in (ones(npoints(Ω)), complex.(ones(npoints(Ω)), 0.5))
+        rt = only(Base.return_types(gmg_solve, (typeof(build), typeof(Ω), typeof(b))))
+        rtk = only(Base.return_types(Core.kwcall, (typeof(kw), typeof(gmg_solve), typeof(build), typeof(Ω), typeof(b))))
+        @test isconcretetype(rt) && isconcretetype(rtk)
+        u = gmg_solve(build, Ω, b; kw...)
+        @test typeof(u) === rt === rtk
+        @test norm(assemble(build(gridspace(Ω))) * parent(u) - b) <= 1e-9 * norm(b)
+    end
+    # an abstract element type is not asserted: `Vector{Integer}` solves as `Vector{Int}`
+    Ω = first(meshes)
+    @test gmg_solve(lap, Ω, Integer[1:npoints(Ω);]; kw...) == gmg_solve(lap, Ω, [1:npoints(Ω);]; kw...)
+    @test gmg_solve(lap, Ω, Complex{Integer}[complex(i, 1) for i in 1:npoints(Ω)]; kw...) ==
+          gmg_solve(lap, Ω, [complex(i, 1) for i in 1:npoints(Ω)]; kw...)
+end
+
 @testset "gmg: complex vectors (#1216)" begin
     # A real P acts on the real and imaginary parts of a complex x apart, through every
     # cycle, out of place and in place; the real path still allocates nothing afterwards.
@@ -823,6 +847,35 @@ struct _MGTag end
         r = ForwardDiff.derivative(q -> sum(abs2, pde_solve(assemble(bld(q)(W)), (1 + q) .* b0)), 0.7)
         dm = ForwardDiff.derivative(q -> sq(gmg_solve(bld(q), Ω, (1 + q) .* b0; tol = 1e-10)), 0.7)
         @test isapprox(dm, r; rtol = 1e-6)
+    end
+
+    # A Dual hierarchy and a Dual load of another tag, both nestings, a load of width 2
+    # (#1227). The load's partials are solved apart on the hierarchy and recombined; taken
+    # whole, the load did not fit the hierarchy's buffers (a MethodError in the smoother).
+    Random.seed!(1234)
+    let
+        Ω = mesh(domain(_mg_box(2)), (9, 9), (false, false))
+        W = gridspace(Ω)
+        n = npoints(Ω)
+        b0 = [1.0 + sin(i) for i in 1:n]
+        Bp = [cos(i * j) for i in 1:n, j in 1:2]
+        gm(c, p) = sq(gmg_solve(bld(c), Ω, b0 .+ Bp * p; tol = 1e-11))
+        dr(c, p) = sum(abs2, pde_solve(assemble(bld(c)(W)), b0 .+ Bp * p))
+        p0 = [0.1, 0.2]
+        h1(g) = ForwardDiff.derivative(c -> sum(ForwardDiff.gradient(p -> g(c, p), p0)), 0.7)
+        h2(g) = ForwardDiff.gradient(p -> ForwardDiff.derivative(c -> g(c, p), 0.7), p0)
+        @test isapprox(h1(gm), h1(dr); rtol = 1e-6)
+        @test isapprox(h2(gm), h2(dr); rtol = 1e-6)
+        # The load depends on the coefficient too. When the coefficient is the inner
+        # derivative, the load's outer tag is the hierarchy's, and its value still carries
+        # the other tag, so it is split rather than taken whole.
+        gc(c, p) = sq(gmg_solve(bld(c), Ω, c .* b0 .+ p .* Bp[:, 1]; tol = 1e-11))
+        dc(c, p) = sum(abs2, pde_solve(assemble(bld(c)(W)), c .* b0 .+ p .* Bp[:, 1]))
+        d(f, x) = ForwardDiff.derivative(f, x)
+        k1(g) = d(c -> d(p -> g(c, p), 0.3), 0.7)
+        k2(g) = d(p -> d(c -> g(c, p), 0.7), 0.3)
+        @test isapprox(k1(gc), k1(dc); rtol = 1e-6)
+        @test isapprox(k2(gc), k2(dc); rtol = 1e-6)
     end
 
     # The Float64 loop allocates per solve, not per cycle: a tighter tol runs more cycles

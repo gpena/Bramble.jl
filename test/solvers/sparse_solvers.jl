@@ -5,6 +5,7 @@ using Bramble
 using LinearAlgebra
 using SparseArrays
 using Random
+using SuiteSparse
 import ForwardDiff
 using DifferentiationInterface: AutoForwardDiff
 import DifferentiationInterface as DI
@@ -224,6 +225,56 @@ end
 
     # A dense matrix is not a sparse system: no method.
     @test_throws MethodError pde_solve(Matrix(A), F)
+end
+
+# A matrix and a load of different float types (gpena/Bramble.jl#1239). SparseArrays' `\`
+# inferred a `Union` of the two, and SPQR solved in the matrix's type, so every route of
+# `pde_solve` inferred the `Union`, which Enzyme rejects. These are the five pairs where
+# `\` inferred one. Oracle: dense LU of the `Float64` matrix, outside the code under test.
+@testset "pde_solve, mixed precision (#1239)" begin
+    Random.seed!(1239)
+    I1 = interval(0.0, 1.0)
+    W = gridspace(mesh(domain(I1 × I1), (7, 6), (false, false)))
+    A = assemble(form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v)))
+    n = size(A, 1)
+    Fv = [1.0 + sin(i) for i in 1:n]
+    u_ref = Matrix(A) \ Fv
+    pairs = ((Float32, Float64), (Float32, ComplexF64), (Float64, ComplexF32),
+        (ComplexF32, Float64), (ComplexF32, ComplexF64))
+    for (TA, TF) in pairs
+        At = SparseMatrixCSC{TA, Int}(A)
+        Ft = TF.(Fv)
+        S = Vector{promote_type(TA, TF)}
+        u = @inferred pde_solve(At, Ft)
+        @test u isa S
+        @test u ≈ u_ref rtol = 1e-4
+        for solver in (:default, :suitesparse, :spqr)
+            u = @inferred pde_solve(At, Ft; solver = solver)
+            @test u isa S
+            @test u ≈ u_ref rtol = 1e-4
+        end
+    end
+
+    # SPQR factors a real `A` in the complex type of a complex load. It threw an
+    # `InexactError` before, converting the load to the matrix's real type.
+    Fc = complex.(Fv, cos.(1:n))
+    @test pde_solve(A, Fc; solver = :spqr) ≈ Matrix(A) \ Fc rtol = 1e-10
+    @test suitesparse_qr_solve(A, ComplexF32.(Fc)) ≈ Matrix(A) \ Fc rtol = 1e-5
+
+    # An overdetermined `A`: `\` hands it to SPQR, and `:default` returns the promoted type
+    # too. Oracle: the dense least-squares solve of the `Float64` copy.
+    R = SparseMatrixCSC{Float32, Int}([A; sparse(ones(1, n))])
+    Fr = [1.0 + sin(i) for i in 1:(n + 1)]
+    u = @inferred pde_solve(R, Fr)
+    @test u isa Vector{Float64}
+    @test u ≈ Matrix{Float64}(R) \ Fr rtol = 1e-4
+
+    # An empty `Vector{Union{}}` load gives the zero vector of the matrix's type, with or
+    # without SparseConnectivityTracer loaded (its `\` methods match `Union{}`).
+    @test pde_solve(spzeros(Float64, 0, 0), Vector{Union{}}(undef, 0)) == Float64[]
+    @test pde_solve(spzeros(Float64, 0, 0), Vector{Union{}}(undef, 0)) isa Vector{Float64}
+    @test pde_solve(spzeros(Float64, 0, 3), Vector{Union{}}(undef, 0)) == zeros(3)
+    @test_throws DimensionMismatch pde_solve(spzeros(Float64, 2, 2), Vector{Union{}}(undef, 0))
 end
 
 # `:default` reads `kind` and `sym` only when it takes the Accelerate route (macOS, the

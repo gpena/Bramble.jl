@@ -1167,6 +1167,25 @@ end
     end
 end
 
+@testset "gmg_solve infers (#1232)" begin
+    # The operator's plan and geometry are not inferred under this policy, nor then
+    # `gmg_preconditioner`; `gmg_solve` takes its result type from the level forms instead.
+    bk = backend(; policy = CpuPolyester())
+    I2 = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Random.seed!(1234) # `(false, false)` draws the points, and a few draws stall the V-cycle
+    lap = V -> form(V, V, (u, v) -> innerₕ(u, v) + 0.7 * inner₊(∇ₕ(u), ∇ₕ(v)))
+    kw = (; tol = 1e-10)
+    meshes = (_mg_jitter_mesh(2, 9; bk), mesh(domain(I2), (9, 9), (false, false); backend = bk))
+    for Ω in meshes, build in (lap, _mg_spd), b in (ones(npoints(Ω)), complex.(ones(npoints(Ω)), 0.5))
+        rt = only(Base.return_types(gmg_solve, (typeof(build), typeof(Ω), typeof(b))))
+        rtk = only(Base.return_types(Core.kwcall, (typeof(kw), typeof(gmg_solve), typeof(build), typeof(Ω), typeof(b))))
+        @test isconcretetype(rt) && isconcretetype(rtk)
+        u = gmg_solve(build, Ω, b; kw...)
+        @test typeof(u) === rt === rtk
+        @test parent(u) ≈ assemble(build(gridspace(Ω))) \ b rtol = 1e-8
+    end
+end
+
 # Data `_batch_split` cannot take apart (`BigFloat` sources, coefficients and grid functions)
 # makes every split hook capture its parts whole, as before gpena/Bramble.jl#437, instead of
 # throwing. Each hook must have run on `BigFloat` data, and every result equal the serial one

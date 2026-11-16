@@ -478,6 +478,56 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
         @test fact \ rhs ≈ u2 rtol = 1e-10
     end
 
+    # CHOLMOD solves dense `Vector`s only, so a `VectorElement` load reached `LinearAlgebra`'s
+    # generic `\` and a missing `ldiv!` method (gpena/Bramble.jl#1228). Oracle: the dense
+    # `\` of the assembled matrix. `:unsymmetric` is UMFPACK, which always took the load.
+    @testset "VectorElement load: pde_solve, \\, ldiv!" begin
+        I1 = interval(0.0, 1.0)
+        Bramble._seed_mesh1d_rng!(1228)
+        meshes = try
+            (
+                "1D" => mesh(domain(I1), 17, false),
+                "2D" => mesh(domain(I1 × I1), (7, 6), (false, false))
+            )
+        finally
+            Bramble._unseed_mesh1d_rng!()
+        end
+        for (name, Ωₕ) in meshes
+            Wₕ = gridspace(Ωₕ)
+            A, F = assemble(
+                form(Wₕ, Wₕ, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V)),
+                form(Wₕ, v -> innerₕ(x -> 1.0 + x[1], v))
+            )
+            ref = Matrix(A) \ F
+            for sym in (:spd, :auto, :unsymmetric)
+                fact = sparse_factorize(A; sym)
+                @test (fact.fact isa SuiteSparse.CHOLMOD.Factor) == (sym !== :unsymmetric)
+                load() = (Fₑ = element(Wₕ); parent(Fₑ) .= F; Fₑ)
+
+                @test pde_solve(fact, load()) ≈ ref rtol = 1.0e-10
+                @test fact \ load() ≈ ref rtol = 1.0e-10
+                uₕ = element(Wₕ)
+                @test ldiv!(uₕ, fact, load()) === uₕ
+                @test parent(uₕ) ≈ ref rtol = 1.0e-10
+                x = similar(F)
+                @test ldiv!(x, fact, load()) === x
+                @test x ≈ ref rtol = 1.0e-10
+
+                # In place: the solution lands in the load's own storage.
+                Fₑ = load()
+                @test ldiv!(fact, Fₑ) === Fₑ
+                @test parent(Fₑ) ≈ ref rtol = 1.0e-10
+
+                # The load is read, not overwritten, by the out-of-place solves.
+                Fₑ = load()
+                pde_solve(fact, Fₑ)
+                fact \ Fₑ
+                ldiv!(uₕ, fact, Fₑ)
+                @test parent(Fₑ) == F
+            end
+        end
+    end
+
     @testset "Error handling & validation" begin
         validation_contract(
             poisson_system(Val(1), 5; source = x -> 1.0);

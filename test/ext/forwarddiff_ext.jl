@@ -109,8 +109,9 @@ end
     end
 
     # A factor over `Dual` that is not `sparse_factorize`'s (Sparspak's own, stdlib `lu`)
-    # with a load of another tag, in both nesting orders: the load is solved whole, so the
-    # derivative matches the nested derivative of `pde_solve(A, F)`.
+    # with a load of another tag, in both nesting orders: the value and partials of the load
+    # are solved apart and recombined, and the derivative matches the nested derivative of
+    # `pde_solve(A, F)`.
     @testset "Dual factor, load of another tag" begin
         n = 6
         Am(p) = spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.0, n) .+ p .* (1:n),
@@ -126,6 +127,27 @@ end
             @test d((A, F) -> pde_solve(lu(Matrix(A)), F)) ≈ ref rtol = 1.0e-10
             @test d((A, F) -> pde_solve(sparse_factorize(A), F)) ≈ ref rtol = 1.0e-10
         end
+    end
+
+    # A load of another tag with no partials (`N = 0`) on a Sparspak factor of a `Dual` form
+    # matrix, non-uniform mesh. The recombination of no partials is the solve of the value,
+    # in the type the whole solve promotes to.
+    @testset "Dual factor, other-tag load, N = 0" begin
+        Random.seed!(1234)
+        Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (false, false))
+        W = gridspace(Ω)
+        TA, TB = ForwardDiff.Tag{typeof(sin), Float64}, ForwardDiff.Tag{typeof(cos), Float64}
+        A = assemble(form(W, W, (u, v) -> innerₕ(u, v) + 0.7 * inner₊(∇ₕ(u), ∇ₕ(v))))
+        Ae = SparseMatrixCSC{ForwardDiff.Dual{TA, Float64, 1}}(A)
+        Ae.nzval .= ForwardDiff.Dual{TA}.(A.nzval, 0.5 .* A.nzval)
+        f = sparspak_factorize(Ae)
+        bv = [1.0 + sin(i) for i in 1:npoints(Ω)]
+        F = ForwardDiff.Dual{TB, Float64, 0}.(bv)
+        x = pde_solve(f, F)
+        P = promote_type(eltype(Ae), eltype(F))
+        @test eltype(x) === P
+        xr = convert(Vector{P}, pde_solve(f, bv))
+        @test reinterpret(Float64, x) ≈ reinterpret(Float64, xr) rtol = 1.0e-12
     end
 
     # A real `Float32` operator with a nested `Dual` load over `Float64`. A solve that

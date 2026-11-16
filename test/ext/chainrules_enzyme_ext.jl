@@ -3,7 +3,7 @@ module ExtChainRulesEnzymeExtTests
 using Test
 using Bramble
 using ChainRulesCore
-using SparseArrays: SparseMatrixCSC, nnz, nonzeros, sparse, spdiagm
+using SparseArrays: SparseMatrixCSC, findnz, nnz, nonzeros, sparse, spdiagm
 using LinearAlgebra: I, NoPivot, dot, ldiv!, lu, norm
 using Random: Random
 using Polyester
@@ -618,6 +618,138 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
         end
     end
 
+    @testset "Enzyme: sparse rules, primal as shadow" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            # Under runtime activity Enzyme can hand a constant argument as `Duplicated` with
+            # the primal as its shadow (gpena/Bramble.jl#1237). Both rules must read that as
+            # no shadow: the reverse rule must not accumulate into it, which would overwrite
+            # the caller's `A` or `F`, and the forward rule must not take it as a tangent.
+            # The rules are called directly with the configs Enzyme builds for a width-1
+            # pass under runtime activity, as the native rule testset does above.
+            ER = Enzyme.EnzymeRules
+            Bramble._seed_mesh1d_rng!(1237)
+            Wd = gridspace(Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0) ×
+                                                       Bramble.interval(0.0, 1.0)),
+                (7, 6), (false, false)))
+            Bramble._unseed_mesh1d_rng!()
+            A0 = assemble(form(Wd, Wd, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V)))
+            n = size(A0, 1)
+            F0 = [1.0 + sin(i) for i in 1:n]
+            g = [cos(2i) for i in 1:n]
+            Ḟ = [sin(3i) for i in 1:n]
+            Ȧ = copy(A0)
+            nonzeros(Ȧ) .= [cos(k) for k in 1:nnz(A0)]
+            M = Matrix(A0)
+            u = M \ F0
+            λ = M' \ g
+            rows, cols, _ = findnz(A0)
+            Ā_ref = [-λ[i] * u[j] for (i, j) in zip(rows, cols)]
+            RT = Enzyme.Duplicated{Vector{Float64}}
+            rcfg = ER.RevConfig{true, true, 1, (false, false, false), true, false}()
+            ps = Enzyme.Const(Bramble.pde_solve)
+            function rev_rule(Ad, Fd)
+                aug = ER.augmented_primal(rcfg, ps, RT, Ad, Fd)
+                aug.shadow .= g
+                ER.reverse(rcfg, ps, RT, aug.tape, Ad, Fd)
+                return aug
+            end
+            function fwd_rule(W, Ad, Fd)
+                fcfg = ER.FwdConfig{true, true, W, true, false}()
+                RTW = W == 1 ? RT : Enzyme.BatchDuplicated{Vector{Float64}, W}
+                return ER.forward(fcfg, ps, RTW, Ad, Fd).dval
+            end
+
+            # Control: separate shadows get `Ā = -λuᵀ` on the pattern and `F̄ = λ`.
+            dA = Enzyme.make_zero(A0)
+            dF = zero(F0)
+            rev_rule(Enzyme.Duplicated(copy(A0), dA), Enzyme.Duplicated(copy(F0), dF))
+            @test nonzeros(dA) ≈ Ā_ref rtol=1e-10
+            @test dF ≈ λ rtol=1e-10
+
+            # Reverse, `A` its own shadow: `A` is left alone, `F̄` is still `λ`, and the tape
+            # keeps the solution itself, as for a `Const` `A`.
+            A = copy(A0)
+            dF = zero(F0)
+            aug = rev_rule(Enzyme.Duplicated(A, A), Enzyme.Duplicated(copy(F0), dF))
+            @test nonzeros(A) == nonzeros(A0)
+            @test dF ≈ λ rtol=1e-10
+            @test aug.tape[3] === aug.primal
+
+            # Reverse, `F` its own shadow: `F` is left alone, `Ā` is still `-λuᵀ`.
+            F = copy(F0)
+            dA = Enzyme.make_zero(A0)
+            rev_rule(Enzyme.Duplicated(copy(A0), dA), Enzyme.Duplicated(F, F))
+            @test F == F0
+            @test nonzeros(dA) ≈ Ā_ref rtol=1e-10
+
+            # Forward: `u̇ = A⁻¹(Ḟ − Ȧu)`, with a shadow that is the primal read as zero.
+            @test fwd_rule(1, Enzyme.Duplicated(copy(A0), copy(Ȧ)),
+                Enzyme.Duplicated(copy(F0), copy(Ḟ))) ≈ M \ (Ḟ - Ȧ * u) rtol=1e-10
+            A = copy(A0)
+            @test fwd_rule(1, Enzyme.Duplicated(A, A), Enzyme.Duplicated(copy(F0), copy(Ḟ))) ≈
+                  M \ Ḟ rtol=1e-10
+            F = copy(F0)
+            @test fwd_rule(1, Enzyme.Duplicated(copy(A0), copy(Ȧ)), Enzyme.Duplicated(F, F)) ≈
+                  -(M \ (Ȧ * u)) rtol=1e-10
+
+            # Batched forward, the test per lane: lane 1 of `A` is `A` itself, lane 2 a
+            # direction; lane 1 of `F` a direction, lane 2 `F` itself.
+            A = copy(A0)
+            F = copy(F0)
+            t1, t2 = fwd_rule(2, Enzyme.BatchDuplicated(A, (A, copy(Ȧ))),
+                Enzyme.BatchDuplicated(F, (copy(Ḟ), F)))
+            @test t1 ≈ M \ Ḟ rtol=1e-10
+            @test t2 ≈ -(M \ (Ȧ * u)) rtol=1e-10
+
+            # Through `Enzyme.autodiff`: the matrix solved with is picked at run time, so
+            # Enzyme cannot prove the constant one inactive and hands it with itself as its
+            # shadow. Its values must survive the reverse pass.
+            pick(Aa, Ac, F, active) = sum(abs2, Bramble.pde_solve(active ? Aa : Ac, F))
+            Ac = copy(A0)
+            dF = zero(F0)
+            Enzyme.autodiff(Enzyme.set_runtime_activity(Enzyme.Reverse), Enzyme.Const(pick),
+                Enzyme.Active, Enzyme.Duplicated(copy(A0), Enzyme.make_zero(A0)),
+                Enzyme.Const(Ac), Enzyme.Duplicated(copy(F0), dF), Enzyme.Const(false))
+            @test nonzeros(Ac) == nonzeros(A0)
+            @test dF ≈ M' \ (2 .* u) rtol=1e-10
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
+    # A `Float32` matrix and a `Float64` load: `pde_solve` inferred a `Union` of the two
+    # vector types, and Enzyme threw `IllegalTypeAnalysisException` in both modes
+    # (gpena/Bramble.jl#1239). Oracle: the gradient `2 M⁻ᵀ M⁻¹ F` of the dense `Float64`
+    # copy `M` of the matrix, and its product with the tangent.
+    @testset "Enzyme: pde_solve, Float32 A, Float64 F" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            Random.seed!(1239)
+            I01 = Bramble.interval(0.0, 1.0)
+            W = gridspace(Bramble.mesh(Bramble.domain(I01 × I01), (7, 6), (false, false)))
+            A32 = SparseMatrixCSC{Float32, Int}(
+                assemble(form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))))
+            n = size(A32, 1)
+            F0 = [1.0 + sin(i) for i in 1:n]
+            M = Matrix{Float64}(A32)
+            g_ref = 2 .* (M' \ (M \ F0))
+            loss(A, F) = sum(abs2, Bramble.pde_solve(A, F))
+
+            dF = zero(F0)
+            Enzyme.autodiff(Enzyme.set_runtime_activity(Enzyme.Reverse), Enzyme.Const(loss),
+                Enzyme.Active, Enzyme.Const(A32), Enzyme.Duplicated(copy(F0), dF))
+            @test dF ≈ g_ref rtol=1e-8
+
+            Ḟ = [cos(i) for i in 1:n]
+            d = Enzyme.autodiff(Enzyme.set_runtime_activity(Enzyme.Forward), Enzyme.Const(loss),
+                Enzyme.Const(A32), Enzyme.Duplicated(copy(F0), copy(Ḟ)))[1]
+            @test d ≈ dot(g_ref, Ḟ) rtol=1e-8
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
     @testset "Enzyme: kept factorization rules" begin
         if _have(:Enzyme)
             @eval import Enzyme
@@ -681,6 +813,20 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                 Enzyme.autodiff(rev, Enzyme.Const(alias_loss), Enzyme.Active,
                     Enzyme.Duplicated(copy(F₀), Fd))
                 @test Fd ≈ A' \ c rtol=1e-10
+            end
+
+            # A `VectorElement` load against the CHOLMOD factor takes the solve too, and its
+            # cotangent is `A⁻ᵀ c` as with a `Vector` load (gpena/Bramble.jl#1228).
+            fspd = sparse_factorize(As; sym = :spd)
+            @test fspd.fact isa SuiteSparse.CHOLMOD.Factor
+            for loss in (solve_loss, ldiv_loss)
+                Fe = element(Wk)
+                parent(Fe) .= F₀
+                dFe = Enzyme.make_zero(Fe)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active, Enzyme.Const(fspd),
+                    Enzyme.Duplicated(Fe, dFe))
+                @test parent(dFe) ≈ As' \ c rtol=1e-10
+                @test parent(Fe) == F₀
             end
 
             # `ldiv!` is in place: with the destination an argument, the cotangent it holds
@@ -1154,6 +1300,43 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             @test aug_act.tape[2] == aug_act.primal
             aug_act.primal .*= 2
             @test aug_act.tape[2] ≈ u_tp
+
+            # A real `K` with a complex `F` (gpena/Bramble.jl#1238): the shadows of `A`,
+            # `wₛ` and `wₜ` are real arrays Enzyme allocated, and each takes the real part
+            # of its complex cotangent, as the sparse rule does. The operator comes from a
+            # non-uniform 2D mesh. The reference is ForwardDiff of `cᵣᵀK⁻¹Fᵣ + cᵢᵀK⁻¹Fᵢ`
+            # on the dense `K`, real and imaginary parts solved apart: `Re(cᴴK⁻¹F)`.
+            Bramble._seed_mesh1d_rng!(1238)
+            Wc = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (5, 4),
+                (false, false)))
+            Bramble._unseed_mesh1d_rng!()
+            Ac = assemble(form(Wc, Wc, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V)))
+            nc = size(Ac, 1)
+            ic, jc, _ = findnz(Ac)
+            wsc = [1.0 + cos(i) / 2 for i in 1:nc]
+            wtc = [1.0 + sin(2i) / 2 for i in 1:nc]
+            Fc = ComplexF64[1.0 + sin(i) + im * cos(3i) for i in 1:nc]
+            cc = ComplexF64[sin(i) + im * cos(i) for i in 1:nc]
+            θc = [0.3; wsc; wtc; nonzeros(Ac)]
+            function Jc(θ)
+                Kd = θ[1] * θ[2:(nc + 1)] * transpose(θ[(nc + 2):(2nc + 1)])
+                for k in eachindex(ic)
+                    Kd[ic[k], jc[k]] += θ[2nc + 1 + k]
+                end
+                return dot(real(cc), Kd \ real(Fc)) + dot(imag(cc), Kd \ imag(Fc))
+            end
+            Kc = ROU(copy(Ac), θc[1], copy(wsc), copy(wtc))
+            Kcd = Enzyme.Duplicated(Kc, Enzyme.make_zero(Kc))
+            Fcd = Enzyme.Duplicated(copy(Fc), zero(Fc))
+            RTc = Enzyme.Duplicated{Vector{ComplexF64}}
+            psc = Enzyme.Const(Bramble.pde_solve)
+            aug_c = Enzyme.EnzymeRules.augmented_primal(rcfg, psc, RTc, Kcd, Fcd)
+            aug_c.shadow .= cc
+            Enzyme.EnzymeRules.reverse(rcfg, psc, RTc, aug_c.tape, Kcd, Fcd)
+            K̄c = Kcd.dval
+            @test eltype(K̄c.A) === eltype(K̄c.ws) === eltype(K̄c.wt) === Float64
+            ḡc = [K̄c.σ; K̄c.ws; K̄c.wt; nonzeros(K̄c.A)]
+            @test ḡc ≈ ForwardDiff.gradient(Jc, θc) rtol=1e-8
         else
             @test_skip "Enzyme not in this environment"
         end

@@ -188,6 +188,9 @@ function suitesparse_qr_factorize(
     return qr(A; kwargs...)
 end
 
+# The element types SPQR, UMFPACK, CHOLMOD and Accelerate factor.
+const _BLASFloat = Union{Float32, Float64, ComplexF32, ComplexF64}
+
 """
     suitesparse_qr_solve(A::SparseMatrixCSC, F::AbstractVector; tol = ..., ordering = ..., kwargs...) -> Vector
     suitesparse_qr_solve(a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing,
@@ -201,7 +204,15 @@ SuiteSparse` required. A `BilinearForm` on a dense or CSR backend is converted t
 See also [`suitesparse_qr_factorize`](@ref), [`pde_solve`](@ref).
 """
 function suitesparse_qr_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)
-    return qr(A; kwargs...) \ F
+    # SPQR solves in the element type of its factor. When `A` and `F` both hold `Float32`,
+    # `Float64` or their complex types, `A` is factored in their promoted type, as `\` and
+    # the other backends return: a `Float32` `A` with a `Float64` load gives `Float64`, and
+    # a complex load on a real `A` no longer throws an `InexactError`. `A` is copied only
+    # when its element type differs. Any other pair is solved as SPQR does it.
+    TA, TF = eltype(A), eltype(F)
+    T = promote_type(TA, TF)
+    (TA <: _BLASFloat && TF <: _BLASFloat && TA !== T) || return qr(A; kwargs...) \ F
+    return qr(SparseMatrixCSC{T}(A); kwargs...) \ F
 end
 
 function suitesparse_qr_solve(

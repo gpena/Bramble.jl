@@ -217,6 +217,14 @@ function gmg_preconditioner(
         build, Ωₕ::AbstractMeshType; levels = nothing, cycle::Symbol = :V,
         ν₁::Integer = 2, ν₂::Integer = 2, smoother = _gmg_default_smoother
 )
+    H, forms = _gmg_level_forms(build, Ωₕ, levels, cycle, ν₁, ν₂)
+    return _gmg_preconditioner(H, forms, cycle, ν₁, ν₂, smoother)
+end
+
+# The hierarchy and the form `build` returns on each of its levels, coarsest first, after
+# the checks on the keywords of `gmg_preconditioner`.
+function _gmg_level_forms(build, Ωₕ::AbstractMeshType, levels, cycle::Symbol,
+        ν₁::Integer, ν₂::Integer)
     cycle in (:V, :W, :FMG) ||
         throw(ArgumentError("gmg_preconditioner needs cycle :V, :W or :FMG, got :$cycle"))
     (ν₁ >= 0 && ν₂ >= 0 && ν₁ + ν₂ >= 1) || throw(
@@ -233,6 +241,12 @@ function gmg_preconditioner(
     # Finest first: a form `build` can make on `Ωₕ` alone (a polygon's) is refused by name
     # before a coarser level fails to build it.
     forms = reverse!([_gmg_level_form(build, H[l], l) for l in L:-1:1])
+    return H, forms
+end
+
+# The preconditioner on the hierarchy `H` from its level forms, coarsest first.
+function _gmg_preconditioner(H, forms, cycle::Symbol, ν₁::Integer, ν₂::Integer, smoother)
+    L = length(H)
     _gmg_check_level_kinds(forms)
     ops = [matrix_free_operator(a) for a in forms]
     smoothers = [_gmg_level_smoother(smoother, op, l) for (l, op) in enumerate(ops)]
@@ -630,9 +644,33 @@ function gmg_solve(
     (tol === nothing || (tol isa Real && tol > 0)) ||
         throw(ArgumentError("gmg_solve needs tol > 0, got $tol"))
     maxiters >= 1 || throw(ArgumentError("gmg_solve needs maxiters >= 1, got $maxiters"))
-    P = gmg_preconditioner(build, Ωₕ; levels, cycle, ν₁, ν₂, smoother)
-    return _gmg_solve_loop(P, b, cycle, tol, maxiters)
+    H, forms = _gmg_level_forms(build, Ωₕ, levels, cycle, ν₁, ν₂)
+    P = _gmg_preconditioner(H, forms, cycle, ν₁, ν₂, smoother)
+    # The forms infer where `P` may not: under a threaded policy the type of a
+    # matrix-free operator is not inferred, nor then that of `P` (#1232).
+    return _gmg_solve_loop(P, b, cycle, tol, maxiters)::_gmg_solution_type(forms, b)
 end
+
+# The type of `gmg_solve`'s result for the level forms `forms` and the load `b`, an element
+# of the finest trial space whose element type promotes the backend's, the hierarchy's
+# (the coarsest operator's) and the load's. Other loads get `Any`. Only a load of plain
+# numbers (`_plain_number`) is typed, and only when its element type, that type's real
+# part and the promoted type are all concrete: a `Dual` load solved by parts can come back
+# with its tags in another order than `promote_type` gives, and an abstract part solves to
+# concrete elements while its promotion keeps it (`Complex{Integer}` is concrete, yet
+# promotes to `Complex{Real}`). Ghost forms get `Any` as well; their solve keeps the
+# inference it had, concrete under `CpuSerial` and `Any` under the threaded ones.
+function _gmg_solution_type(forms::AbstractVector{<:BilinearForm}, b::AbstractVector)
+    S = eltype(b)
+    (_plain_number(S) && isconcretetype(S) && isconcretetype(real(S))) || return Any
+    a = first(forms)
+    Wu = trial_space(last(forms))
+    T = promote_type(eltype(backend(Wu)), _matrix_eltype(a, a.ast), S)
+    (isconcretetype(T) && isconcretetype(real(T))) || return Any
+    VT = typeof(similar(vector(backend(Wu), 0), T, 0))
+    return VectorElement{typeof(Wu), T, VT}
+end
+_gmg_solution_type(forms::AbstractVector, b::AbstractVector) = Any
 
 # A function barrier: on a ghost form `P` is inferred only as a `Union` (`constrained`
 # returns one of two space types), and the loop is compiled for the concrete `P`. A load

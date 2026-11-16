@@ -954,25 +954,17 @@ const CELLS = (
         fd_err = "fdm_solve: the operator has element type", rev = :throws, fwd = :throws,
         rev_err = "fdm_solve: the form or operator has a shadow"),
     # Both gmg cells compare with ForwardDiff of the direct solve (1e-6, the multigrid stops at
-    # `tol`). Under the threaded policies a batched forward call (DI's gradient has the width
-    # of its parameters, here 3) ends the process inside Enzyme, before the rule runs
-    # (gpena/Bramble.jl#1232), so each has a child of its own there. It predates the
-    # coefficient rule (it was there at 03d4c9c6) and width 1 works under `CpuThreaded`.
-    # Measured on Julia 1.13.3: the LLVM assertion `invertedReturn`. Julia 1.13.4 with Enzyme
-    # 0.13.219 aborts every child with `unsupported tag julia.gc_alloc_ptr_offsets`, so the
-    # pins were not re-measured there.
-    # `gmg_solve` infers `Any` under both threaded policies and a concrete type under
-    # `CpuSerial`, a likely precondition that was measured but not shown to be the cause.
-    cell(:gmg_load, "gmg_solve", :gmg_load, build_gmg_load, oracle = oracle_gmg_load, tol = 1e-6,
-        fwd = (CpuSerial = :ok, CpuThreaded = :aborts, CpuPolyester = :aborts),
-        fwd_err = "invertedReturn"),
-    # Reverse differentiates the coefficients; forward refuses by name (departure D9).
+    # `tol`). A batched forward call (DI's gradient has the width of its parameters, here 3)
+    # ended the process under the threaded policies, before the rule ran, because `gmg_solve`
+    # inferred `Any` there (gpena/Bramble.jl#1232, fixed in v4.2.7 by typing its result for a
+    # plain load). Julia 1.13.4 with Enzyme 0.13.219 aborts every child with `unsupported tag
+    # julia.gc_alloc_ptr_offsets`, so the cells are measured on 1.13.3.
+    cell(:gmg_load, "gmg_solve", :gmg_load, build_gmg_load, oracle = oracle_gmg_load, tol = 1e-6),
+    # Reverse differentiates the coefficients; forward refuses by name under every policy
+    # (departure D9 of v4-2-4-solvers).
     cell(:gmg_coefficient, "gmg_solve", :gmg_coefficient, build_gmg_coefficient,
         oracle = oracle_gmg_coefficient, tol = 1e-6,
-        rev = :ok,
-        fwd = (CpuSerial = :throws, CpuThreaded = :aborts, CpuPolyester = :aborts),
-        fwd_err = (CpuSerial = "forward mode", CpuThreaded = "invertedReturn",
-            CpuPolyester = "invertedReturn")),
+        rev = :ok, fwd = :throws, fwd_err = "forward mode"),
     # The λmax estimate under ForwardDiff works since gpena/Bramble.jl#1169 was fixed. Under
     # Enzyme `CpuSerial` stops in the type analysis, in both modes on both meshes, and the two
     # threaded policies match ForwardDiff. `CpuThreaded` returned a gradient of zeros until the
