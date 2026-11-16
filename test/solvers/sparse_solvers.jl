@@ -269,8 +269,12 @@ end
     @test u isa Vector{Float64}
     @test u ≈ Matrix{Float64}(R) \ Fr rtol = 1e-4
 
-    # An empty `Vector{Union{}}` load takes `\` unasserted, as before.
-    @test pde_solve(spzeros(Float64, 0, 0), Vector{Union{}}(undef, 0)) isa Vector{Union{}}
+    # An empty `Vector{Union{}}` load gives the zero vector of the matrix's type, with or
+    # without SparseConnectivityTracer loaded (its `\` methods match `Union{}`).
+    @test pde_solve(spzeros(Float64, 0, 0), Vector{Union{}}(undef, 0)) == Float64[]
+    @test pde_solve(spzeros(Float64, 0, 0), Vector{Union{}}(undef, 0)) isa Vector{Float64}
+    @test pde_solve(spzeros(Float64, 0, 3), Vector{Union{}}(undef, 0)) == zeros(3)
+    @test_throws DimensionMismatch pde_solve(spzeros(Float64, 2, 2), Vector{Union{}}(undef, 0))
 end
 
 # `:default` reads `kind` and `sym` only when it takes the Accelerate route (macOS, the

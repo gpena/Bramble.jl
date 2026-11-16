@@ -256,8 +256,14 @@ end
 # `Vector{Float32}`.
 _sparse_backslash(A::SparseMatrixCSC, F::AbstractVector) = A \ F
 function _sparse_backslash(A::SparseMatrixCSC{TA}, F::Vector{TF}) where {TA <: _BLASFloat, TF <: _BLASFloat}
-    # `Union{}` matches the bounds too: an empty `Vector{Union{}}` load keeps `\`'s type.
-    (TA === Union{} || TF === Union{}) && return A \ F
+    # `Union{}` matches the bounds too. Such a load is empty, so the solution is the zero vector
+    # of `promote_type(TA, TF)`, built here: `\` on a `Union{}` vector is ambiguous once
+    # SparseConnectivityTracer is loaded, since its tracer-vector methods match `Union{}`.
+    if TA === Union{} || TF === Union{}
+        size(A, 1) == length(F) ||
+            throw(DimensionMismatch("pde_solve: A has $(size(A, 1)) rows, but F has length $(length(F))"))
+        return zeros(promote_type(TA, TF), size(A, 2))
+    end
     T = promote_type(TA, TF)
     size(A, 1) == size(A, 2) || return suitesparse_qr_solve(A, F)::Vector{T}
     return (A \ F)::Vector{T}
