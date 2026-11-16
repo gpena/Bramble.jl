@@ -256,6 +256,8 @@ end
 # `Vector{Float32}`.
 _sparse_backslash(A::SparseMatrixCSC, F::AbstractVector) = A \ F
 function _sparse_backslash(A::SparseMatrixCSC{TA}, F::Vector{TF}) where {TA <: _BLASFloat, TF <: _BLASFloat}
+    # `Union{}` matches the bounds too: an empty `Vector{Union{}}` load keeps `\`'s type.
+    (TA === Union{} || TF === Union{}) && return A \ F
     T = promote_type(TA, TF)
     size(A, 1) == size(A, 2) || return suitesparse_qr_solve(A, F)::Vector{T}
     return (A \ F)::Vector{T}

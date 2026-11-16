@@ -268,6 +268,9 @@ end
     u = @inferred pde_solve(R, Fr)
     @test u isa Vector{Float64}
     @test u ≈ Matrix{Float64}(R) \ Fr rtol = 1e-4
+
+    # An empty `Vector{Union{}}` load takes `\` unasserted, as before.
+    @test pde_solve(spzeros(Float64, 0, 0), Vector{Union{}}(undef, 0)) isa Vector{Union{}}
 end
 
 # `:default` reads `kind` and `sym` only when it takes the Accelerate route (macOS, the
