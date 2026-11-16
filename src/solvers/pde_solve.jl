@@ -115,7 +115,8 @@ chain differentiable.
   kernel, near `1e-8` relative.
 
 # Returns
-- `Vector`: the solution, of the promoted element type of `A` and `F`.
+- `Vector`: the solution, of the promoted float type of `A` and `F` (`Float64` for an
+  integer `A` and `F`).
 
 A `SparseMatrixCSR` (`SparseMatricesCSR.jl`) `A` is also accepted: converted to
 `SparseMatrixCSC` first (see `docs/src/internals/csr_solvers.md`), then solved exactly as
@@ -221,7 +222,7 @@ function _solve_routed(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol, sy
            _default_wants_accelerate(A, sym)
             return accelerate_solve(A, F; sym = sym, kwargs...)
         end
-        return A \ F
+        return _sparse_backslash(A, F)
     elseif solver === :suitesparse
         return suitesparse_solve(A, F; sym = sym, kwargs...)
     elseif solver === :spqr
@@ -240,6 +241,21 @@ function _solve_routed(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol, sy
         ),
         )
     end
+end
+
+# SparseArrays' `A \ F` infers `Union{Vector{Float32}, Vector{Float64}}` for a `Float32`
+# matrix and a `Float64` load, and likewise for the other pairs of mixed precision. Every
+# branch of `_solve_routed` feeds its return type, so the `Union` reached `:suitesparse`
+# too, and Enzyme rejects it. For a `Vector` load whose element type and the matrix's are
+# both among `Float32`, `Float64` and their complex types, `A \ F` returns
+# `Vector{promote_type(TA, TF)}` whatever the structure of `A`, and the assertion says
+# so without a copy. Other loads keep the type `\` gives them: a `VectorElement` load on
+# a diagonal `A` comes back a `VectorElement`, and an abstract `Vector{Real}` load on a
+# `Float32` `A` a `Vector{Float32}`.
+const _BLASFloat = Union{Float32, Float64, ComplexF32, ComplexF64}
+_sparse_backslash(A::SparseMatrixCSC, F::AbstractVector) = A \ F
+function _sparse_backslash(A::SparseMatrixCSC{TA}, F::Vector{TF}) where {TA <: _BLASFloat, TF <: _BLASFloat}
+    return (A \ F)::Vector{promote_type(TA, TF)}
 end
 
 pde_solve(fact::Factorization, F::AbstractVector) = _solve_by_parts(b -> fact \ b, F)

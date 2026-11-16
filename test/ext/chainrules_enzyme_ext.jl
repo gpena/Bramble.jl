@@ -718,6 +718,38 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
         end
     end
 
+    # A `Float32` matrix and a `Float64` load: `pde_solve` inferred a `Union` of the two
+    # vector types, and Enzyme threw `IllegalTypeAnalysisException` in both modes
+    # (gpena/Bramble.jl#1239). Oracle: the gradient `2 M⁻ᵀ M⁻¹ F` of the dense `Float64`
+    # copy `M` of the matrix, and its product with the tangent.
+    @testset "Enzyme: pde_solve, Float32 A, Float64 F" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            Random.seed!(1239)
+            I01 = Bramble.interval(0.0, 1.0)
+            W = gridspace(Bramble.mesh(Bramble.domain(I01 × I01), (7, 6), (false, false)))
+            A32 = SparseMatrixCSC{Float32, Int}(
+                assemble(form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))))
+            n = size(A32, 1)
+            F0 = [1.0 + sin(i) for i in 1:n]
+            M = Matrix{Float64}(A32)
+            g_ref = 2 .* (M' \ (M \ F0))
+            loss(A, F) = sum(abs2, Bramble.pde_solve(A, F))
+
+            dF = zero(F0)
+            Enzyme.autodiff(Enzyme.set_runtime_activity(Enzyme.Reverse), Enzyme.Const(loss),
+                Enzyme.Active, Enzyme.Const(A32), Enzyme.Duplicated(copy(F0), dF))
+            @test dF ≈ g_ref rtol=1e-8
+
+            Ḟ = [cos(i) for i in 1:n]
+            d = Enzyme.autodiff(Enzyme.set_runtime_activity(Enzyme.Forward), Enzyme.Const(loss),
+                Enzyme.Const(A32), Enzyme.Duplicated(copy(F0), copy(Ḟ)))[1]
+            @test d ≈ dot(g_ref, Ḟ) rtol=1e-8
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
     @testset "Enzyme: kept factorization rules" begin
         if _have(:Enzyme)
             @eval import Enzyme

@@ -200,8 +200,13 @@ SuiteSparse` required. A `BilinearForm` on a dense or CSR backend is converted t
 
 See also [`suitesparse_qr_factorize`](@ref), [`pde_solve`](@ref).
 """
+# SPQR solves in the element type of its factor, so `A` is factored in the promoted float
+# type of `A` and `F`, as `\` and the other backends return: a `Float32` `A` with a
+# `Float64` load gives `Float64`, and a complex load on a real `A` no longer throws an
+# `InexactError`. `A` is copied only when its element type differs.
 function suitesparse_qr_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)
-    return qr(A; kwargs...) \ F
+    T = float(promote_type(eltype(A), eltype(F)))
+    return qr(eltype(A) === T ? A : SparseMatrixCSC{T}(A); kwargs...) \ F
 end
 
 function suitesparse_qr_solve(
