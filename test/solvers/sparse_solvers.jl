@@ -260,6 +260,14 @@ end
     Fc = complex.(Fv, cos.(1:n))
     @test pde_solve(A, Fc; solver = :spqr) ≈ Matrix(A) \ Fc rtol = 1e-10
     @test suitesparse_qr_solve(A, ComplexF32.(Fc)) ≈ Matrix(A) \ Fc rtol = 1e-5
+
+    # An overdetermined `A`: `\` hands it to SPQR, and `:default` returns the promoted type
+    # too. Oracle: the dense least-squares solve of the `Float64` copy.
+    R = SparseMatrixCSC{Float32, Int}([A; sparse(ones(1, n))])
+    Fr = [1.0 + sin(i) for i in 1:(n + 1)]
+    u = @inferred pde_solve(R, Fr)
+    @test u isa Vector{Float64}
+    @test u ≈ Matrix{Float64}(R) \ Fr rtol = 1e-4
 end
 
 # `:default` reads `kind` and `sym` only when it takes the Accelerate route (macOS, the

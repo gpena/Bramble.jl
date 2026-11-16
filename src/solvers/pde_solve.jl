@@ -247,15 +247,18 @@ end
 # matrix and a `Float64` load, and likewise for the other pairs of mixed precision. Every
 # branch of `_solve_routed` feeds its return type, so the `Union` reached `:suitesparse`
 # too, and Enzyme rejects it. For a `Vector` load whose element type and the matrix's are
-# both among `Float32`, `Float64` and their complex types, `A \ F` returns
-# `Vector{promote_type(TA, TF)}` whatever the structure of `A`, and the assertion says
-# so without a copy. Other loads keep the type `\` gives them: a `VectorElement` load on
-# a diagonal `A` comes back a `VectorElement`, and an abstract `Vector{Real}` load on a
-# `Float32` `A` a `Vector{Float32}`.
-const _BLASFloat = Union{Float32, Float64, ComplexF32, ComplexF64}
+# both among `Float32`, `Float64` and their complex types, a square `A` returns
+# `Vector{promote_type(TA, TF)}` whatever its structure, and the assertion says so without
+# a copy. On a non-square `A`, `\` calls SPQR in the matrix's own type; the solve takes
+# `suitesparse_qr_solve`'s promotion instead, so it returns that type too. Other loads
+# keep the type `\` gives them: a `VectorElement` load on a diagonal `A` comes back a
+# `VectorElement`, and an abstract `Vector{Real}` load on a `Float32` `A` a
+# `Vector{Float32}`.
 _sparse_backslash(A::SparseMatrixCSC, F::AbstractVector) = A \ F
 function _sparse_backslash(A::SparseMatrixCSC{TA}, F::Vector{TF}) where {TA <: _BLASFloat, TF <: _BLASFloat}
-    return (A \ F)::Vector{promote_type(TA, TF)}
+    T = promote_type(TA, TF)
+    size(A, 1) == size(A, 2) || return suitesparse_qr_solve(A, F)::Vector{T}
+    return (A \ F)::Vector{T}
 end
 
 pde_solve(fact::Factorization, F::AbstractVector) = _solve_by_parts(b -> fact \ b, F)
