@@ -15,7 +15,8 @@ using SparseArrays: nonzeros, sparse
 using SparseConnectivityTracer: TracerSparsityDetector
 using SparseMatrixColorings: GreedyColoringAlgorithm
 using SuiteSparse: SuiteSparse
-using ..TestUtils: _fd, _have, ghost_mesh, TEST_FILE, WITH_3D_TESTS
+using ..TestUtils: _fd, _have, ghost_mesh, AD_COVERAGE_POLICIES, TEST_FILE, TEST_SHARD,
+                   WITH_3D_TESTS
 
 # The AD coverage matrix of docs/notes/internals/ad_coverage.md: each public feature's
 # smallest differentiable call, through DifferentiationInterface with ForwardDiff and with
@@ -1252,8 +1253,11 @@ if CHILD == ""
                 :factor_kept, :rank_one, :fdm, :gmg_load, :gmg_coefficient, :chebyshev)
             WITH_3D_TESTS && (groups = (groups..., :threed))
             SLOW && (groups = (groups..., unique(c.group for c in CELLS if c.slow)...))
+            # A Weekly shard runs only its policies (`AD_COVERAGE_POLICIES`).
+            in_this_shard(pname) = isempty(TEST_SHARD) || pname in AD_COVERAGE_POLICIES[TEST_SHARD]
             for pname in keys(POLICIES)
                 pname === :CpuSerial || THREADED || continue
+                in_this_shard(pname) || continue
                 @testset "$pname" begin
                     for group in groups
                         ok, res, _ = run_child("$pname:$group")
@@ -1292,7 +1296,7 @@ if CHILD == ""
                     end
                 end
             end
-            @testset "DI settings" begin
+            in_this_shard(:CpuSerial) && @testset "DI settings" begin
                 ok, res, _ = run_child("CpuSerial:settings")
                 @test ok
                 for (name, _, mode, _, _) in SETTINGS

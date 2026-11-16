@@ -43,23 +43,25 @@ const TEST_GROUP = get(ENV, "BRAMBLE_TEST_GROUP", "all")
 # before it, so the file times of one split do not add up to another's, so measure a move.
 # It also narrows the package extensions block (the `ext` and
 # `backends` groups) to one of two parts, and the `backends`
-# group's AD block to one of four more, which Weekly.yml runs on separate runners: `ext-solvers`
+# group's AD block to one of five more, which Weekly.yml runs on separate runners: `ext-solvers`
 # is the plotting, solver and Kronecker files, `ext-polyester` the Polyester files, and `ad-1`
-# to `ad-4` the AD files (`ENZYME_FILE_SHARDS`). Unset runs everything, which is what every local run does; the quality, gpu,
+# to `ad-5` the AD files (`ENZYME_FILE_SHARDS`). Unset runs everything, which is what every local run does; the quality, gpu,
 # examples and grids blocks ignore it. The gate sits at the include sites in
 # test/runtests.jl and test/form/runtests.jl, through `in_shard`.
 const TEST_SHARD = get(ENV, "BRAMBLE_TEST_SHARD", "")
 
 const TEST_SHARDS = ("forms-1", "forms-2", "ghost", "rest", "ext-solvers", "ext-polyester", "ad-1",
-    "ad-2", "ad-3", "ad-4")
+    "ad-2", "ad-3", "ad-4", "ad-5")
 
 """
     in_shard(name)
+    in_shard(names::Tuple)
 
-True when no shard is selected or the selected shard is `name`. Throws an `ArgumentError`
-for a `name`, or a `BRAMBLE_TEST_SHARD`, outside `TEST_SHARDS`, since a
+True when no shard is selected or the selected shard is `name` (one of `names`). Throws an
+`ArgumentError` for a `name`, or a `BRAMBLE_TEST_SHARD`, outside `TEST_SHARDS`, since a
 misspelt shard would select nothing and pass green.
 """
+in_shard(names::Tuple) = any(in_shard, names)
 function in_shard(name::AbstractString)
     unknown(shard) = ArgumentError("unknown test shard $(repr(shard)); expected one of $TEST_SHARDS")
     name in TEST_SHARDS || throw(unknown(name))
@@ -467,10 +469,13 @@ isempty(TEST_FILE) || TEST_FILE in ENZYME_FILES ||
 # enzyme_polyester_hooks.jl 76 minutes, enzyme_polyester_ext.jl 12, and ad_coverage.jl about
 # 90 locally (docs/notes/internals/ad_coverage.md). `ad-4` also runs ext/sparse_ad_ext.jl and
 # ext/ad_backend_verification.jl, which need no Enzyme.
-const AD_SHARDS = ("ad-1", "ad-2", "ad-3", "ad-4")
+#
+# ad_coverage.jl outgrew one shard: on 2026-11-16 `ad-2` spent 3 h on it and had not
+# finished. Its Enzyme half now runs in two, split by policy (`AD_COVERAGE_POLICIES`).
+const AD_SHARDS = ("ad-1", "ad-2", "ad-3", "ad-4", "ad-5")
 const ENZYME_FILE_SHARDS = Dict(
     "ext/enzyme_polyester_hooks.jl" => "ad-1",
-    "space/ad_coverage.jl" => "ad-2",
+    "space/ad_coverage.jl" => ("ad-2", "ad-5"),
     "ext/enzyme_polyester_ext.jl" => "ad-3",
     "ext/enzyme_threaded_ext.jl" => "ad-3",
     "ext/enzyme_relations.jl" => "ad-3",
@@ -485,6 +490,10 @@ const ENZYME_FILE_SHARDS = Dict(
 )
 issetequal(keys(ENZYME_FILE_SHARDS), ENZYME_FILES) ||
     error("ENZYME_FILE_SHARDS must give every one of the ENZYME_FILES a shard")
+
+# The policies whose Enzyme cells each of ad_coverage.jl's shards runs. An unset shard runs
+# them all.
+const AD_COVERAGE_POLICIES = Dict("ad-2" => (:CpuSerial, :CpuThreaded), "ad-5" => (:CpuPolyester,))
 
 # Should a GPU-backed testset actually run its device kernels? test/ext/metal_ext.jl and
 # metal_fullstack.jl used to gate solely on `Metal.functional()`, on the assumption that a
