@@ -24,7 +24,7 @@ failures that have no cell are under "Open failures". A cell never reads `works`
 
 | Item | Value |
 |:--|:--|
-| Date | 2026-11-03 for the first matrix; the three-summand cells 2026-11-04; the cells changed in v4.2.2 and the compile table 2026-11-07; the ghost load and `Δₕ!` cells and the new `centered_difference!` cell 2026-11-08 and 2026-11-09; the cells changed in v4.2.4 2026-11-10, by the reproducers of the notes in `ad_reductions/` (the same calls as the cells); the geometric-input cells (`polygon`, `dirac`, `levelset`) and the ghost relation cells (`ghost_data`, `ghost_robin`) 2026-11-11, by the cells themselves, one child per policy and group; the solver cells (`factor_*`, `rank_one`, `fdm_*`, `gmg_*`, `chebyshev`) 2026-11-13, by the cells themselves, one child per policy and group; the cells of the v4.2.4 rest plan (`ghost_conormal`, `ghost_composite_relation`, `ghost_assemble_3d`, the polygon forward cells, `ghost_data` and `ghost_robin` under `CpuThreaded`, the level-set cells, the mesh copy cells) 2026-11-14, by the cells themselves |
+| Date | 2026-11-03 for the first matrix; the three-summand cells 2026-11-04; the cells changed in v4.2.2 and the compile table 2026-11-07; the ghost load and `Δₕ!` cells and the new `centered_difference!` cell 2026-11-08 and 2026-11-09; the cells changed in v4.2.4 2026-11-10, by the reproducers of the notes in `ad_reductions/` (the same calls as the cells); the geometric-input cells (`polygon`, `dirac`, `levelset`) and the ghost relation cells (`ghost_data`, `ghost_robin`) 2026-11-11, by the cells themselves, one child per policy and group; the solver cells (`factor_*`, `rank_one`, `fdm_*`, `gmg_*`, `chebyshev`) 2026-11-13, by the cells themselves, one child per policy and group; the cells of the v4.2.4 rest plan (`ghost_conormal`, `ghost_composite_relation`, `ghost_assemble_3d`, the polygon forward cells, `ghost_data` and `ghost_robin` under `CpuThreaded`, the level-set cells, the mesh copy cells) 2026-11-14, by the cells themselves; the forward halves of `gmg_load` and `gmg_coefficient` under `CpuThreaded` and `CpuPolyester` 2026-11-16 (v4.2.7), by the cells themselves |
 | Tree | branch `v4-2-4`, with the v4.2.4 AD fixes (the v4.2.2 cells were measured on `v4-2-2`); the 2026-11-11 cells on branch `v4-2-4-geometry` at 39f604bf, macbook; the solver cells on branch `v4-2-4-solvers` at 87a509f4, macbook; the 2026-11-14 cells on branch `v4-2-4-rest` at 4cbf6709 plus the cells' own commit, macbook |
 | Machine | Apple M2, Julia 1.13.3, on mains power |
 | Enzyme | 0.13.219 for the 2026-11-14 cells, the solver cells (2026-11-13), the 2026-11-11 cells, the v4.2.4 cells (2026-11-10) and for the ghost load, `Δₕ!` and `centered_difference!` cells (2026-11-08); 0.13.218 for the other v4.2.2 cells (2026-11-07), the newest in the depot, which a temporary environment without a manifest loads; 0.13.216 for the 2026-11-03 cells |
@@ -78,8 +78,8 @@ policy. Each Enzyme cell holds both modes, reverse then forward, unless it says 
 | kronecker | `mul!` with `kronecker_operator` | works | works | works | works |
 | fdm_solve | `fdm_solve(a, F; dirichlet = :boundary)` on a constant form built inside the function, `F` active, 2D | works | works | works | works |
 | fdm_solve | the same with a coefficient of the form active | throws `ArgumentError` | throws `ArgumentError` in both modes (D4) | throws `ArgumentError` in both modes | throws `ArgumentError` in both modes |
-| gmg_solve | `gmg_solve(build, Ωₕ, b)`, `b` active, 2D | works | works | reverse works, batched forward ends the process (LLVM assertion, #1232, see the limits) | reverse works, batched forward ends the process (#1232) |
-| gmg_solve | the same with a scalar and a grid-function coefficient of `build` active, and the load scaled | works | reverse works, forward throws `ArgumentError` naming "forward mode" (D9) | reverse works, batched forward ends the process (#1232) | reverse works, batched forward ends the process (#1232) |
+| gmg_solve | `gmg_solve(build, Ωₕ, b)`, `b` active, 2D | works | works | works | works |
+| gmg_solve | the same with a scalar and a grid-function coefficient of `build` active, and the load scaled | works | reverse works, forward throws `ArgumentError` naming "forward mode" (D9) | reverse works, forward throws `ArgumentError` naming "forward mode" | reverse works, forward throws `ArgumentError` naming "forward mode" |
 | chebyshev | `chebyshev_preconditioner(a) \ x` with the coefficients of the form and the load scale active, 2D | works | throws `IllegalTypeAnalysisException` in both modes | works | works |
 | ghost | `assemble(a, l)` on a constrained ghost space, parameters scale the form's coefficients, `Δₕ` in the form | works | works | works | works |
 | ghost | the same with `inner₊` and `innerₕ` terms only | works | reverse works, forward not run | not run | not run |
@@ -329,7 +329,7 @@ so a sparse cell's verdict is its inner backend's.
   and D9).** Under ForwardDiff an active coefficient differentiates the cycles themselves, which
   agrees with the direct solve's derivative to 1e-6 at `tol = 1e-10`. Under Enzyme `b` is
   differentiated in both modes, and the coefficients `build` captures in reverse mode only
-  (`gmg_coefficient`: a scalar and a grid function together). Under `CpuSerial` forward mode
+  (`gmg_coefficient`: a scalar and a grid function together). Under every policy forward mode
   with a coefficient active throws an `ArgumentError` naming "forward mode". Under Enzyme:
   - Reverse mode refuses a non-Hermitian form by name, and a form whose operator changed between
     the solve and the reverse pass (a `Ref` the form holds, set after the solve).
@@ -354,30 +354,23 @@ so a sparse cell's verdict is its inner backend's.
     rule involved: Enzyme drops it on a plain `c -> (GR[] = c; h(GR))`. Close over the value
     instead.
   For a form any of these refuse, differentiate `pde_solve(assemble(build(gridspace(Ωₕ))), b)`.
-- **Batched forward through `gmg_solve` ends the process under the threaded policies
-  ([gpena/Bramble.jl#1232](https://github.com/gpena/Bramble.jl/issues/1232), departure D7).** The
-  issues ask for `CpuSerial`; the cells ran under all three policies. Under `CpuThreaded` and
-  `CpuPolyester`, Enzyme forward mode of `gmg_load` and `gmg_coefficient` aborts the process with
-  the LLVM assertion `invertedReturn->getType() == gutils->getShadowType(call.getType())` when
-  the forward call is batched, which DI's gradient is: its width is the number of parameters (3
-  in the cells). The abort comes before the rule runs, so the named forward refusal of
-  `gmg_coefficient` is not reached either. It was there before the coefficient rule (at
-  03d4c9c6), width 1 works under `CpuThreaded`, and `CpuSerial` works at any width. `gmg_solve`
-  infers `Any` under both threaded policies and a concrete type under `CpuSerial`; that is a likely
-  precondition, measured but not shown to be the cause. Both forward halves are `:aborts` under
-  the threaded policies, each in a child of its own. To differentiate in forward mode there, use
-  width 1: a gradient with a single parameter, or `DI.pushforward` with one tangent (DI's
-  pushforward takes a tuple of tangents and its width is the tuple's length; only the
-  single-parameter case was measured). Reverse mode is not affected. `chebyshev` under Enzyme
-  throws `IllegalTypeAnalysisException` under `CpuSerial` only; the two threaded policies match
+- **`gmg_solve` under the threaded policies (v4.2.7).** Enzyme forward mode of `gmg_load` matches
+  ForwardDiff of the direct solve under `CpuThreaded` and `CpuPolyester` as under `CpuSerial`, in
+  a batched call too (DI's gradient has the width of its parameters, 3 in the cells), on both
+  meshes. It used to abort the process in the LLVM verifier, before any rule ran, because
+  `gmg_solve` inferred `Any` there. Its result now has a concrete type for a plain (non-ghost)
+  space and a plain-number load. A ghost-space build still infers `Any` under the threaded
+  policies, and no cell covers it. `gmg_coefficient` forward is the named refusal
+  of D9 under all three policies (measured 2026-11-16). `chebyshev` under Enzyme throws
+  `IllegalTypeAnalysisException` under `CpuSerial` only; the two threaded policies match
   ForwardDiff.
 - **Plain `Enzyme.Reverse` needs runtime activity (`set_runtime_activity`).** Without it `ldiv!`
   throws `EnzymeRuntimeActivityError`, and DI's plain `AutoEnzyme` throws
   `EnzymeMutabilityException` (the table of the DI settings above).
-- **Follow-ups.** `gmg_solve` with `Dual`s of different tags
-  ([gpena/Bramble.jl#1227](https://github.com/gpena/Bramble.jl/issues/1227)), and a CHOLMOD
-  factorization into a `VectorElement` load, which fails with a `MethodError` before any AD is
-  involved ([gpena/Bramble.jl#1228](https://github.com/gpena/Bramble.jl/issues/1228)).
+- **Solver routes that work since v4.2.7.** `gmg_solve` with a `Dual` hierarchy and a `Dual`
+  load of another tag gives the derivative of the direct solve, in both nestings. A CHOLMOD
+  factorization solves a `VectorElement` load, and Enzyme reverse through
+  `pde_solve(fact, F)` with it matches the UMFPACK case.
 
 ## Open failures
 
@@ -531,10 +524,11 @@ stays under the 10 GB cap and every wall time under 10 minutes, except one run n
 | gmg_coefficient | `gmg_coefficient` | 131 s; 2.47 GB | 342 s; 3.79 GB, plus 84 s; 2.27 GB for the forward child | 300 s; 3.53 GB, plus 87 s; 2.31 GB for the forward child |
 | chebyshev | `chebyshev` | 124 s; 2.91 GB | 306 s; 4.29 GB | 273 s; 4.07 GB |
 
-The forward half of the two `gmg` cells under the threaded policies ends the process, so the
-test gives each its own child (`:aborts`): the figures after "plus" are that child, which ran
-`nonuniform` forward only. The main `gmg` figures are from the run that skips the aborting
-forward calls, as the test runs it.
+Before v4.2.7 the forward half of the two `gmg` cells under the threaded policies ended the
+process, so the test gave each its own child: the figures after "plus" are that child, which ran
+`nonuniform` forward only, and the main `gmg` figures are from the run that skipped those
+calls. Forward now runs in the group's child, so the main figures do not cover it and were not
+measured again. The `:aborts` status stays in the test's vocabulary, with no cell using it.
 
 `gmg_load` under `CpuPolyester` took 1501 s wall for 88 s of CPU (user 87.9 s, system 1.5 s),
 2 threads, `--optimize=1`: about 23 minutes in which the process did not compute. Its cells
