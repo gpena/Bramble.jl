@@ -32,8 +32,8 @@
 # caller's after the join, `x̄` under `@batch`. `x̄` needs the copies because a band's rows
 # read `x` across the band edge. The form's spaces and AST cross in a `Ref` of their own, so
 # a float the form holds by value (a scalar in its AST) adds into the caller's shadow too.
-# `x` is kept on the tape for every live call, since it sits behind the sink's `Ref`, whose
-# `overwritten` entry says nothing of `x`'s own buffer.
+# `x` and the parts are kept on the tape for every live call, since `overwritten` misses
+# writes to them after the call (`_act_tape`).
 #
 # Batch width: every rule takes `Duplicated` or `BatchDuplicated` arguments. The
 # compressed-row rules run every lane in each `@batch` iteration, the Kronecker rules one
@@ -420,14 +420,14 @@ function _act_live(target, W::Val)
     return any(d -> d !== nothing && first(pe._replay_parts(d[])) !== y, _lanes(target, W))
 end
 
-# The tape of an action target's call: the parts the slab reads, argument `k` of the hook,
-# when later code overwrites them (`overwritten` counts `func` first, so the target is
-# entry 2), and `x` whenever a lane is live. `x` sits behind the target's `Ref`, whose
-# `overwritten` entry says nothing of `x`'s own buffer, so it is always kept.
-function _act_tape(config, target, parts, k::Int = 3)
-    ow = EnzymeRules.overwritten(config)
-    parts_tape = !(parts isa Const) && ow[k] ? _graph_copy(parts.val, false) : nothing
+# The tape of an action target's call: the parts the slab reads and `x`, both whenever a
+# lane is live. `x` sits behind the target's `Ref`, whose `overwritten` entry says nothing
+# of `x`'s own buffer. Nor can the parts' entry be trusted: a coefficient overwritten after
+# `mul!` leaves it false once `SpaceWeights` became mutable (3aefc79f), and the reverse then
+# read the zeroed coefficient (Weekly ad-1, 2026-11-16).
+function _act_tape(config, target, parts)
     live = _act_live(target, Val(EnzymeRules.width(config)))
+    parts_tape = live && !(parts isa Const) ? _graph_copy(parts.val, false) : nothing
     x_tape = live ? copy(_polyester_ext()._replay_parts(target.val[])[2]) : nothing
     return (parts_tape, x_tape)
 end
@@ -504,8 +504,7 @@ function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_MFBands},
         ::Type{RT}, s::_MFSink, parts::_MFParts, form::_MFForm,
         nbands::Annotation{Int}) where {RT}
     _entered!(:_batch_mf_bands!)
-    # The form's parts are entry 4: `func`, the sink and the plan come first.
-    tape = _act_tape(config, s, form, 4)
+    tape = _act_tape(config, s, form)
     func.val(s.val, parts.val, form.val, nbands.val)
     return AugmentedReturn(nothing, nothing, tape)
 end
