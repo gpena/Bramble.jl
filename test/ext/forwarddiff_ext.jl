@@ -331,6 +331,106 @@ end
         end
     end
 
+    # Every `Dual` entry that skips the by-parts solve refuses the same inverted load: the
+    # plain and bordered `pde_solve`, a `RankOneUpdate`, and a kept factor of a `Dual` matrix
+    # by every route (#1255). The refusal comes before the solve, so each matrix is a probe.
+    @testset "inverted order, every entry (#1255)" begin
+        Dl = ForwardDiff.Dual
+        T1, T2 = typeof(ForwardDiff.Tag(sin, Float64)), typeof(ForwardDiff.Tag(cos, Float64))
+        Ta, Tb = ForwardDiff.:≺(T1, T2) ? (T1, T2) : (T2, T1)
+        M0 = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.2, m - 1))
+        dA(T) = SparseMatrixCSC(m, m, M0.colptr, M0.rowval, Dl{T}.(M0.nzval, 0.5 .* M0.nzval))
+        bp = ntuple(j -> [1.5 + cos(i * j) for i in 1:m], 4)
+        load(O, N) = [Dl{O}(Dl{N}(bp[1][k], bp[2][k]), Dl{N}(bp[3][k], bp[4][k])) for k in 1:m]
+        w = collect(1.0 .+ 0.1 .* (1:m))
+        Z = reshape(w, m, 1)
+        parts(u) = (ForwardDiff.value.(ForwardDiff.value.(u)),
+            ForwardDiff.partials.(ForwardDiff.value.(u), 1),
+            ForwardDiff.value.(ForwardDiff.partials.(u, 1)),
+            ForwardDiff.partials.(ForwardDiff.partials.(u, 1), 1))
+        # The four parts of the solution against `Float64` solves of `M`, with the matrix
+        # derivative `M1` on level `lvl` (`:outer`, `:inner` or `:none`).
+        function oracle(M, M1, lvl)
+            L = lu(M)
+            c = ntuple(j -> [bp[j]; zeros(size(M, 1) - m)], 4)
+            x = L \ c[1]
+            xi = L \ (c[2] - (lvl == :inner) * (M1 * x))
+            xo = L \ (c[3] - (lvl == :outer) * (M1 * x))
+            xoi = L \ (c[4] - (lvl == :outer) * (M1 * xi) - (lvl == :inner) * (M1 * xo))
+            return (x, xi, xo, xoi)
+        end
+        P0, P1 = Matrix(M0), 0.5 .* Matrix(M0)
+        B0 = [P0 w; w' 0.0]
+        B1 = [P1 zeros(m); zeros(1, m + 1)]
+        R0 = P0 + 0.3 * w * w'
+        solvers = [fact_solvers; :spqr]
+
+        function entries(A, F)
+            r = Pair{String, Any}[]
+            for s in solvers
+                push!(r, "pde_solve(A, F; solver = $s)" => () -> pde_solve(A, F; solver = s))
+            end
+            push!(r, "mean_zero" => () -> pde_solve(A, F; mean_zero = w))
+            push!(r, "gauge" => () -> pde_solve(A, F; gauge = Z))
+            if eltype(A) === Float64
+                push!(r, "RankOneUpdate" =>
+                    () -> pde_solve(Bramble.RankOneUpdate(A, 0.3, w, w), F))
+            else
+                fact = sparse_factorize(A)
+                push!(r, "pde_solve(fact, F)" => () -> pde_solve(fact, F))
+                push!(r, "fact \\ F" => () -> fact \ F)
+                push!(r, "ldiv! vector" => () -> ldiv!(similar(F), fact, F))
+                push!(r, "ldiv! element" =>
+                    () -> parent(ldiv!(element(Wm, eltype(F)), fact, F)))
+            end
+            return r
+        end
+        function thrown(f)
+            try
+                f()
+            catch e
+                return e
+            end
+            return nothing
+        end
+
+        V = load(Ta, Tb)
+        for (an, A) in (("Float64 A", M0), ("A on the inner tag", dA(Tb)),
+            ("A on the outer tag", dA(Ta)))
+            for (rn, f) in entries(A, V)
+                @testset "$an, $rn" begin
+                    @test_throws ArgumentError f()
+                    e = thrown(f)
+                    msg = e isa ArgumentError ? e.msg : ""
+                    @test occursin(string(Ta), msg) && occursin(string(Tb), msg)
+                end
+            end
+        end
+
+        # Controls: ForwardDiff's order, and `Symbol` tags, solve to the load's type and to
+        # the `Float64` solves.
+        ctrl = (
+            (load(Tb, Ta), (("Float64 A", M0, :none), ("A on the outer tag", dA(Tb), :outer),
+                ("A on the inner tag", dA(Ta), :inner))),
+            (load(:s, :t), (("Float64 A", M0, :none), ("A on tag :s", dA(:s), :outer))),
+        )
+        for (F, mats) in ctrl, (an, A, lvl) in mats
+            for (rn, f) in entries(A, F)
+                oracles = Dict(
+                    "pde_solve(A, F; solver = default)" => (P0, P1),
+                    "pde_solve(fact, F)" => (P0, P1),
+                    "mean_zero" => (B0, B1),
+                    "RankOneUpdate" => (R0, 0 * R0))
+                haskey(oracles, rn) || continue
+                u = f()
+                @test eltype(u) === eltype(F)
+                o = oracle(oracles[rn]..., lvl)
+                pu = parts(u)
+                @test all(k -> norm(pu[k] - o[k][1:m]) <= 1.0e-9 * norm(o[k][1:m]), 1:4)
+            end
+        end
+    end
+
     # The factor is shared: a Dual with N partials costs N solves and one factorization, not
     # N factorizations. A factorization of this matrix allocates about 1.8 MB and a partial
     # about 0.5 MB, so the bound of half a factorization per partial fails a refactor on
