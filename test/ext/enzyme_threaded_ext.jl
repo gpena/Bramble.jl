@@ -6,8 +6,9 @@ module ExtEnzymeThreadedExtTests
 # runs nothing.
 #
 # Every derivative is checked against ForwardDiff, on seeded non-uniform spacings, and the
-# entry's rule must have run: Enzyme cannot differentiate the `Threads.@threads` loop itself
-# on Julia 1.13.3, so a route around the rule would throw. The small cases run here, against
+# entry's rule must have run: Enzyme cannot differentiate the entries' `Threads.@threads`
+# loops itself (with the rules deleted, Enzyme 0.13.220 aborts in LLVM verification), so a
+# route around the rule would abort. The small cases run here, against
 # ForwardDiff through the `CpuSerial` path; the cases of test/ext/enzyme_policy_cases.jl run
 # in child processes (`run_isolated`), against ForwardDiff under `CpuThreaded`.
 

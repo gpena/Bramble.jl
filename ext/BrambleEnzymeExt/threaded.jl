@@ -1,8 +1,10 @@
 # threaded.jl: Enzyme rules for the `CpuThreaded` engine entries (gpena/Bramble.jl#369).
 #
-# Enzyme cannot differentiate a `Threads.@threads` loop on Julia 1.13.3: every Enzyme
-# release tried throws `AssertionError: mi2 !== nothing` there
-# (docs/notes/internals/enzyme_threaded.md). Each `CpuThreaded` engine entry, the function
+# Enzyme cannot differentiate the `Threads.@threads` loops of these entries. Up to 0.13.216
+# a bare loop threw `AssertionError: mi2 !== nothing` on Julia 1.13.3. From 0.13.219 a bare
+# loop passes, but with these rules deleted Enzyme 0.13.220 still aborts on the first
+# entry's closure (`LLVM ERROR: function failed verification`, 2026-11-17;
+# docs/notes/internals/enzyme_threaded.md). Each `CpuThreaded` engine entry, the function
 # whose only work is that loop (`_static_bands!`, `_static_for!`, `_static_scatter_for!`,
 # `_static_partials!`, the three bilinear and linear colour runners, `_kron_fused!` and the
 # `Threads.@spawn` `_mf_run_bands!`), gets rules here whose own derivative loops run under

@@ -97,3 +97,27 @@ gradient on Julia 1.12.7 with the same reproducer. Julia 1.13.0 with 0.13.204 ga
 right gradient in an earlier run (not re-measured here). Versions 0.13.150 to 0.13.198 refuse
 threaded reverse on 1.13 with `VERSION < v"1.13"`. Ask whether the 1.13.3 threading
 change broke Enzyme's handling of the loop body, and what the intended behaviour is.
+
+## Re-check with Enzyme 0.13.220 (2026-11-17)
+
+Julia 1.13.3 and 1.13.4, 2 threads. The bare reproducer above gives the right gradient under
+`dynamic` and `static` with Enzyme 0.13.219 and 0.13.220, so the `mi2 !== nothing` failure
+is gone. Bramble's own entries still need their rules. With every rule in
+`ext/BrambleEnzymeExt/threaded.jl` deleted at load time (33 methods),
+`test/ext/enzyme_threaded_ext.jl` aborted on its first case, the reverse of a
+`_static_for!` closure: `LLVM ERROR: function failed verification`, signal 6. The rules
+stay.
+
+Other results from the same check:
+
+- `Polyester.@batch` around the same loop throws `IllegalTypeAnalysisException` on 0.13.219
+  and 0.13.220, so the `BrambleEnzymePolyesterExt` hooks stay.
+- EnzymeAD/Enzyme.jl#3601 is fixed in 0.13.220: `@import_rrule` with a sparse cotangent
+  holding explicit zeros now keeps the shadow's pattern and leaves the primal intact
+  (broken on 0.13.219). Bramble's native `pde_solve` reverse rule still reuses the forward
+  factorisation, so it stays.
+- EnzymeAD/Enzyme.jl#3961 is closed, but sparse `A \ b` without a rule now throws
+  `EnzymeNoDerivativeError` (UMFPACK's `umfpack_dl_defaults`) instead of failing LLVM
+  verification. There is still no derivative, and the pinned test in
+  `test/ext/chainrules_enzyme_ext.jl` accepts either failure.
+
