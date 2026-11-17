@@ -1083,9 +1083,22 @@ const SETTING_EXPECT = (
     buffer_duplicated_forward = (:ok, "")
 )
 
-# A batch child stops taking groups once its peak memory passes this many GB: compiled code
-# is never freed, and a Weekly runner has 7 GB.
+# A batch child stops taking groups once its memory footprint passes this many GB: compiled
+# code is never freed, and a Weekly runner has 7 GB.
 const CHILD_GB = parse(Float64, get(ENV, "BRAMBLE_AD_COVERAGE_CHILD_GB", "4"))
+
+# The process's memory in bytes. On macOS this is the footprint Activity Monitor and
+# julia_slot.sh's watchdog read: `Sys.maxrss` leaves out compressed pages, and on 2026-11-17
+# a batch child read 4 to 5 GB there when the watchdog killed it at 11 GB. `proc_pid_rusage`
+# fills a `rusage_info_v0`, a 16-byte UUID and then ten `UInt64`s, the eighth of which is
+# `ri_phys_footprint`.
+function _footprint()
+    Sys.isapple() || return Float64(Sys.maxrss())
+    info = zeros(UInt64, 12)
+    ccall(:proc_pid_rusage, Cint, (Cint, Cint, Ptr{UInt64}), getpid(), 0, info) == 0 ||
+        return Float64(Sys.maxrss())
+    return Float64(info[10])
+end
 
 # What a child runs: `policy:group`, `policy:group:cell`, `policy:group:cell:kind:mode`, or
 # `policy:g1,g2,...`, a batch of groups in order. After each group it prints
@@ -1097,9 +1110,9 @@ function child_main(spec::AbstractString)
         run_group(Symbol(pname), group, only, only_kind, only_mode)
         println("GROUP|$group")
         flush(stdout)
-        i < length(batch) && Sys.maxrss() > CHILD_GB * 2^30 && break
+        i < length(batch) && _footprint() > CHILD_GB * 2^30 && break
     end
-    println("MAXRSS|", round(Sys.maxrss() / 2^30; digits = 2))
+    println("FOOTPRINT|", round(_footprint() / 2^30; digits = 2))
     return nothing
 end
 
@@ -1170,8 +1183,8 @@ function run_child(spec::AbstractString)
     out = IOBuffer()
     t = @elapsed p = run(pipeline(ignorestatus(cmd); stdout = out, stderr = out))
     text = String(take!(out))
-    m = match(r"MAXRSS\|([0-9.]+)", text)
-    println("ad_coverage child $spec: $(round(Int, t)) s, ", m === nothing ? "?" : m[1], " GB peak, ",
+    m = match(r"FOOTPRINT\|([0-9.]+)", text)
+    println("ad_coverage child $spec: $(round(Int, t)) s, ", m === nothing ? "?" : m[1], " GB at exit, ",
         success(p) ? "ok" : "failed")
     results = Dict{Tuple{Symbol, Symbol, Symbol}, @NamedTuple{status::Symbol, relerr::Float64, detail::String}}()
     done = String[]
