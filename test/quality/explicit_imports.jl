@@ -72,16 +72,18 @@ using Kronecker: Kronecker
     #   it below.
     # - `CHOLMOD`, `UMFPACK` (BrambleSuiteSparseExt): SuiteSparse's own Cholesky/LU submodules,
     #   reached for the factorization backends.
-    # - `AAFactorization`, `refactor!`, `SparseFactorizationCholesky`,
-    #   `SparseFactorizationLDLT`, `SparseFactorizationLUTPP`, `SparseFactorizationQR`
-    #   (BrambleAppleAccelerateExt): AppleAccelerate's own factorization type and the
-    #   kind/hook names its `refactor!` call and factorizations need, none of them public
-    #   there.
+    # - `AAFactorization`, `SparseFactorizationCholesky`, `SparseFactorizationLDLT`,
+    #   `SparseFactorizationLUTPP`, `SparseFactorizationQR` (BrambleAppleAccelerateExt):
+    #   AppleAccelerate's own factorization type and the kind names its factorizations
+    #   need, none of them public there.
     #   `SparseFactor`, `SparseCleanup`, `SparseNumericFactorOptions`, `SparseStatusOk`,
     #   `SparseSymbolicFactorOptions`, `_libsparse_throw`: the extension's own `factor!`,
     #   with libc's `malloc` and `free` in the options so no Julia callback runs on a
     #   libSparse thread (gpena/Bramble.jl#1201).
     #   `AASparseMatrix`, `ATT_ORDINARY`: build LU's and QR's untagged full storage (#653).
+    #   `LIBSPARSE`, `SparseMatrix`, `SparseOpaqueFactorization`, `_REFACTOR_SYM`,
+    #   `_refactor_family`: the extension's own `refactor!`, which gives a complex matrix
+    #   the doubled workspace `Sparse/Solve.h` asks for (gpena/Bramble.jl#1230).
     # - `finalize!`, `get_sol!`, `set_cntl!`, `set_icntl!`, `suppress_display!`
     #   (BrambleMUMPSExt): MUMPS's own solver-control API, none of it public there.
     @testset "Non-public imports are the declared ones" begin
@@ -222,7 +224,13 @@ using Kronecker: Kronecker
                 # `AASparseMatrix`, `ATT_ORDINARY`: LU/QR's untagged full storage (#653)
                 :AASparseMatrix,
                 :ATT_ORDINARY,
-                :refactor!,
+                # `LIBSPARSE` and the names after it: the extension's `refactor!` with the
+                # workspace a complex matrix needs (#1230)
+                :LIBSPARSE,
+                :SparseMatrix,
+                :SparseOpaqueFactorization,
+                :_REFACTOR_SYM,
+                :_refactor_family,
                 # `SparseFactor` and the names after it: the extension's `factor!` with C
                 # `malloc`/`free` (#1201)
                 :SparseFactor,

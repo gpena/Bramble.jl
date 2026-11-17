@@ -43,6 +43,31 @@ function throws_unknown_kw(f, kw::Symbol)
     return false
 end
 
+# The refactor rounds of the "Complex refactor workspace (#1230)" testset, defined here and
+# sent as text to the child process there. The rounds refactor onto `2M` and `M` in turn,
+# solve after each, and return the worst relative residual. `2 * M` drops stored zeros and
+# changes the pattern, so `nzval` is scaled instead.
+const REFACTOR_ROUNDS = quote
+    hermitian_tridiag(T, d, e) = sparse(
+        Tridiagonal(conj.(fill(T(e), 5)), fill(T(d), 6), fill(T(e), 5))
+    )
+    function refactor_rounds(M, sym)
+        T = eltype(M)
+        M2 = copy(M)
+        M2.nzval .*= 2
+        b = T.(1:size(M, 1))
+        f = accelerate_factorize(M; sym = sym)
+        worst = 0.0
+        for r in 1:20
+            N = isodd(r) ? M2 : M
+            accelerate_refactor!(f, N)
+            worst = max(worst, norm(N * (f \ b) - b, Inf) / norm(b, Inf))
+        end
+        return worst
+    end
+end
+Core.eval(@__MODULE__, REFACTOR_ROUNDS)
+
 @testset "AppleAccelerate extension" begin
     if !Sys.isapple()
         @testset "Non-macOS guard" begin
@@ -852,6 +877,78 @@ end
                 # a child that did not exit prints nothing: the test above fails, not a parse
                 before, after = r.exited ? parse.(Int, split(strip(r.out))) : (0, 0)
                 @test after > before
+            end
+        end
+
+        # gpena/Bramble.jl#1230. `Sparse/Solve.h` asks a refactor of a complex matrix for
+        # twice the workspace its symbolic factorization records, and AppleAccelerate
+        # 0.7.0's `refactor!` passed the recorded size. libSparse wrote past the buffer, and
+        # a complex Hermitian LDLᵀ refactor crashed the process, though not on every run.
+        # Those rows run in a fresh child, so a crash fails a test by its missing residual
+        # instead of ending the suite. Complex Cholesky and LU overran the same buffer
+        # without crashing; they run here once the child has passed, with a real LDLᵀ,
+        # whose workspace the fix leaves as it was.
+        @testset "Complex refactor workspace (#1230)" begin
+            Bramble._seed_mesh1d_rng!(11)
+            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 7), (false, false))
+            Bramble._unseed_mesh1d_rng!()
+            W = gridspace(Ω; ghosts = :boundary)
+            A = assemble(form(W, W, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+            C = sparse(Bramble.ghost_kernel(A, W))
+            bordered = [A C; C' spzeros(size(C, 2), size(C, 2))]
+            eltypes = (
+                ("Hermitian LDLᵀ ComplexF64", ComplexF64),
+                ("Hermitian LDLᵀ ComplexF32", ComplexF32),
+                ("bordered gauge LDLᵀ ComplexF64", ComplexF64)
+            )
+            mktempdir() do dir
+                # Plain text, Base only, as in the #1201 rows; the child makes it complex.
+                file = joinpath(dir, "bordered.txt")
+                open(file, "w") do io
+                    println(io, size(bordered, 1), " ", size(bordered, 2))
+                    for v in (bordered.colptr, bordered.rowval, bordered.nzval)
+                        println(io, join(repr.(v), " "))
+                    end
+                end
+                code = """
+                using Bramble, AppleAccelerate, SparseArrays, LinearAlgebra
+                using Bramble: accelerate_factorize, accelerate_refactor!
+                $(REFACTOR_ROUNDS)
+                l = readlines(ARGS[1])
+                m, n = parse.(Int, split(l[1]))
+                B = SparseMatrixCSC(m, n, parse.(Int, split(l[2])), parse.(Int, split(l[3])),
+                                    ComplexF64.(parse.(Float64, split(l[4]))))
+                for (name, M) in (("Hermitian LDLᵀ ComplexF64", hermitian_tridiag(ComplexF64, -1, 1 + 0.5im)),
+                                  ("Hermitian LDLᵀ ComplexF32", hermitian_tridiag(ComplexF32, -1, 1 + 0.5im)),
+                                  ("bordered gauge LDLᵀ ComplexF64", B))
+                    println("ROW|", name, "|", refactor_rounds(M, :symmetric))
+                end
+                """
+                project = dirname(something(Base.active_project()))
+                cmd = `$(Base.julia_cmd()) --project=$project --startup-file=no --threads=1 -e $code $file`
+                r = child_output(cmd; timeout = 600)
+                @test r.exited
+                # a crash leaves no row for the case it hit, nor for the ones after it
+                out = r.exited ? split(strip(r.out), '\n') : String[]
+                got = Dict(String(p[2]) => parse(Float64, p[3])
+                for p in (split(x, '|') for x in out if startswith(x, "ROW|")))
+                for (name, T) in eltypes
+                    @test haskey(got, name)
+                    worst = get(got, name, Inf)
+                    @test (name, worst <= 100 * sqrt(eps(real(T)))) == (name, true)
+                end
+            end
+
+            lu_matrix = sparse(
+                Tridiagonal(fill(1 - 0.5im, 5), fill(4 + 1.0im, 6), fill(2 + 0.5im, 5))
+            )
+            for (name, M, sym) in (
+                ("LDLᵀ Float64", hermitian_tridiag(Float64, -1, 1), :symmetric),
+                ("Cholesky ComplexF64", hermitian_tridiag(ComplexF64, 4, 1 + 0.5im), :spd),
+                ("LU ComplexF64", lu_matrix, :unsymmetric)
+            )
+                worst = refactor_rounds(M, sym)
+                @test (name, worst <= 100 * sqrt(eps(real(eltype(M))))) == (name, true)
             end
         end
 

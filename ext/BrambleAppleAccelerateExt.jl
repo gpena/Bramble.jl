@@ -26,17 +26,21 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
                            AAFactorization,
                            AASparseMatrix,
                            ATT_ORDINARY,
-                           refactor!,
+                           LIBSPARSE,
                            SparseFactorizationCholesky,
                            SparseFactorizationLDLT,
                            SparseFactorizationLUTPP,
                            SparseFactorizationQR,
                            SparseFactor,
                            SparseCleanup,
+                           SparseMatrix,
                            SparseNumericFactorOptions,
+                           SparseOpaqueFactorization,
                            SparseStatusOk,
                            SparseSymbolicFactorOptions,
-                           _libsparse_throw
+                           _libsparse_throw,
+                           _REFACTOR_SYM,
+                           _refactor_family
 
     mutable struct ConcreteAccelerateFactorization{T} <: AccelerateFactorization{T}
         aa_fact::AAFactorization{T}
@@ -153,6 +157,54 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
             SparseCleanup(fact)
             _libsparse_throw(fact.status, "factor")
         end
+        return aa
+    end
+
+    # `Sparse/Solve.h` asks `SparseRefactor` on a complex matrix for twice the workspace
+    # the symbolic factorization records for its real type. AppleAccelerate 0.7.0's
+    # `refactor!` passes the recorded size, and libSparse writes past the buffer
+    # (gpena/Bramble.jl#1230, JuliaLinearAlgebra/AppleAccelerate.jl#233).
+    function _aa_refactor_workspace(symbolic, ::Type{T}) where {T}
+        n = Int(real(T) === Float32 ? symbolic.workspaceSize_Float : symbolic.workspaceSize_Double)
+        return T <: Complex ? 2n : n
+    end
+
+    # AppleAccelerate 0.7.0's `_sparse_refactor!`, one method per `_SparseRefactor*`
+    # symbol, with the workspace above.
+    for ((T, family), sym) in _REFACTOR_SYM
+        @eval function _aa_sparse_refactor!(
+                fact::Base.RefValue{SparseOpaqueFactorization{$T}}, matrix::SparseMatrix{$T},
+                nfopts::Base.RefValue{SparseNumericFactorOptions}, ::Val{$(QuoteNode(family))}
+        )
+            workspace = Vector{UInt8}(
+                undef, _aa_refactor_workspace(fact[].symbolicFactorization, $T)
+            )
+            GC.@preserve workspace begin
+                @ccall LIBSPARSE.$sym(
+                    matrix::Ref{SparseMatrix{$T}}, fact::Ptr{SparseOpaqueFactorization{$T}},
+                    nfopts::Ptr{SparseNumericFactorOptions}, pointer(workspace)::Ptr{Cvoid}
+                )::Cvoid
+            end
+            return fact[]
+        end
+    end
+
+    # `refactor!` of AppleAccelerate 0.7.0 with that workspace. `accelerate_refactor!` has
+    # checked the dimensions and the stored-nonzero count already. The symbolic
+    # factorization does not record whether a complex matrix is Hermitian, so the family
+    # comes from `M`, whose tag says it.
+    function _aa_refactor!(aa::AAFactorization{T}, M::AASparseMatrix{T}) where {T}
+        family = T <: Complex && ishermitian(M) ? :Hermitian :
+                 _refactor_family(aa._factorization.symbolicFactorization.type)
+        factref = Ref(aa._factorization)
+        GC.@preserve M begin
+            _aa_sparse_refactor!(
+                factref, M.matrix, Ref(SparseNumericFactorOptions(T)), Val(family)
+            )
+        end
+        _libsparse_throw(factref[].status, "refactor")
+        aa._factorization = factref[]
+        aa.matrixObj = M
         return aa
     end
 
@@ -344,8 +396,8 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         (fact.sym === :spd || fact.sym === :symmetric) && !ishermitian(A) &&
             _throw_not_hermitian(A, true)
         M = _aa_matrix(A, fact.sym)
-        # AppleAccelerate's `refactor!` refuses another stored-nonzero count before it
-        # touches the factors; refused here, so `failure` records only numeric failures.
+        # `_aa_refactor!` would pass another stored-nonzero count to libSparse; refused
+        # here, before the factors are touched, so `failure` records only numeric failures.
         nold, nnew = length(fact.aa_fact.matrixObj._nzval), length(M._nzval)
         nold == nnew || throw(
             ArgumentError(
@@ -355,7 +407,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         )
         try
             try
-                refactor!(fact.aa_fact, M)
+                _aa_refactor!(fact.aa_fact, M)
             catch e
                 (fact.checked && fact.sym === :spd && e isa ErrorException) || rethrow()
                 # `:auto` Cholesky on a matrix that is not positive definite: the LDLᵀ
