@@ -901,7 +901,7 @@ Core.eval(@__MODULE__, REFACTOR_ROUNDS)
                 ("Hermitian LDLᵀ ComplexF32", ComplexF32),
                 ("bordered gauge LDLᵀ ComplexF64", ComplexF64)
             )
-            mktempdir() do dir
+            child_passed = mktempdir() do dir
                 # Plain text, Base only, as in the #1201 rows; the child makes it complex.
                 file = joinpath(dir, "bordered.txt")
                 open(file, "w") do io
@@ -937,18 +937,24 @@ Core.eval(@__MODULE__, REFACTOR_ROUNDS)
                     worst = get(got, name, Inf)
                     @test (name, worst <= 100 * sqrt(eps(real(T)))) == (name, true)
                 end
+                return r.exited &&
+                       all(get(got, name, Inf) <= 100 * sqrt(eps(real(T))) for (name, T) in eltypes)
             end
 
-            lu_matrix = sparse(
-                Tridiagonal(fill(1 - 0.5im, 5), fill(4 + 1.0im, 6), fill(2 + 0.5im, 5))
-            )
-            for (name, M, sym) in (
-                ("LDLᵀ Float64", hermitian_tridiag(Float64, -1, 1), :symmetric),
-                ("Cholesky ComplexF64", hermitian_tridiag(ComplexF64, 4, 1 + 0.5im), :spd),
-                ("LU ComplexF64", lu_matrix, :unsymmetric)
-            )
-                worst = refactor_rounds(M, sym)
-                @test (name, worst <= 100 * sqrt(eps(real(eltype(M))))) == (name, true)
+            # A failed child means an undersized workspace, and then the complex rows would
+            # overrun it in this process, so they wait for the child; the real row does not.
+            @test refactor_rounds(hermitian_tridiag(Float64, -1, 1), :symmetric) <= 100 * sqrt(eps())
+            if child_passed
+                lu_matrix = sparse(
+                    Tridiagonal(fill(1 - 0.5im, 5), fill(4 + 1.0im, 6), fill(2 + 0.5im, 5))
+                )
+                for (name, M, sym) in (
+                    ("Cholesky ComplexF64", hermitian_tridiag(ComplexF64, 4, 1 + 0.5im), :spd),
+                    ("LU ComplexF64", lu_matrix, :unsymmetric)
+                )
+                    worst = refactor_rounds(M, sym)
+                    @test (name, worst <= 100 * sqrt(eps(Float64))) == (name, true)
+                end
             end
         end
 
