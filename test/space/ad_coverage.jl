@@ -958,8 +958,8 @@ const CELLS = (
     # `tol`). A batched forward call (DI's gradient has the width of its parameters, here 3)
     # ended the process under the threaded policies, before the rule ran, because `gmg_solve`
     # inferred `Any` there (gpena/Bramble.jl#1232, fixed in v4.2.7 by typing its result for a
-    # plain load). Julia 1.13.4 with Enzyme 0.13.219 aborts every child with `unsupported tag
-    # julia.gc_alloc_ptr_offsets`, so the cells are measured on 1.13.3.
+    # plain load). On Julia 1.13.4, Enzyme 0.13.219 aborted every child with `unsupported tag
+    # julia.gc_alloc_ptr_offsets` (EnzymeAD/Enzyme.jl#4051); 0.13.220 passes both cells there.
     cell(:gmg_load, "gmg_solve", :gmg_load, build_gmg_load, oracle = oracle_gmg_load, tol = 1e-6),
     # Reverse differentiates the coefficients; forward refuses by name under every policy
     # (departure D9 of v4-2-4-solvers).
