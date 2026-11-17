@@ -1208,10 +1208,11 @@ end
 
 # The groups that keep a child of their own, as the cells' comments say: the ghost
 # relation groups and `threed` reach 4 to 9 GB alone, `ghost_fast` passed 10 GB when it held
-# the relation cells, and `levelset` and `factor_matrix` have aborted in LLVM. So do the
-# `slow` groups, which have no measurement.
+# the relation cells, and `levelset` and `factor_matrix` have aborted in LLVM. `polygon`
+# took a `CpuThreaded` batch child past 10 GB of footprint after eight groups (2026-11-17).
+# So do the `slow` groups, which have no measurement.
 const SOLO_GROUPS = (:ghost_fast, :relation_data, :relation_robin, :relation_conormal,
-    :relation_composite, :threed, :levelset, :factor_matrix)
+    :relation_composite, :threed, :levelset, :factor_matrix, :polygon)
 solo(group) = group in SOLO_GROUPS || any(c -> c.group === group && c.slow, CELLS)
 
 _want(x::Union{Symbol, String}, ::Symbol) = x
