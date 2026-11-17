@@ -410,11 +410,13 @@ end
         # Controls: ForwardDiff's order, and `Symbol` tags, solve to the load's type and to
         # the `Float64` solves.
         ctrl = (
-            (load(Tb, Ta), (("Float64 A", M0, :none), ("A on the outer tag", dA(Tb), :outer),
-                ("A on the inner tag", dA(Ta), :inner))),
-            (load(:s, :t), (("Float64 A", M0, :none), ("A on tag :s", dA(:s), :outer))),
+            (load(Tb, Ta),
+                (("Float64 A", M0, :none), ("A on the outer tag", dA(Tb), :outer),
+                    ("A on the inner tag", dA(Ta), :inner))),
+            (load(:s, :t), (("Float64 A", M0, :none), ("A on tag :s", dA(:s), :outer)))
         )
         for (F, mats) in ctrl, (an, A, lvl) in mats
+
             for (rn, f) in entries(A, F)
                 oracles = Dict(
                     "pde_solve(A, F; solver = default)" => (P0, P1),
