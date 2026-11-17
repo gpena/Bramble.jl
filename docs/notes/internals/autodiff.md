@@ -116,7 +116,7 @@ The limits behind those rows, each with the call to use:
   - Forward mode over-refuses a constant number captured by value from a non-`const` global, and `gmg_mixed(0.3, <untyped global Ref>)`. Use a `const` global, a `Ref`, or a `Const` or `DI.Constant` argument. `DI.derivative` in a coefficient is refused too.
   - An active value stored into a shared mutable that `build` captures (a global `Ref`, a `const` global vector, a `Const` vector argument) gets 0 from Enzyme in both modes, with no Bramble rule involved. Close over the value instead.
 - **Plain `Enzyme.Reverse` needs runtime activity** (`set_runtime_activity`). Without it `ldiv!` throws `EnzymeRuntimeActivityError`, and DI's plain `AutoEnzyme` throws `EnzymeMutabilityException` (see [`ad_coverage.md`](ad_coverage.md)).
-- **Also working:** `gmg_solve` with a `Dual` hierarchy and a `Dual` load of another tag, in both nestings; a CHOLMOD factorization solving a `VectorElement` load, Enzyme reverse included.
+- **Also working:** `gmg_solve` with a `Dual` hierarchy and a `Dual` load of another tag, in both nestings, but a load built by hand against ForwardDiff's tag order is refused with an `ArgumentError`; a CHOLMOD factorization solving a `VectorElement` load, Enzyme reverse included.
 
 ### Ghost relations, composite spaces and the 3D ghost `Δₕ`
 Calls on constrained ghost spaces, each a cell of `test/space/ad_coverage.jl` measured in `CpuSerial`, `CpuThreaded` and `CpuPolyester`; [`ad_coverage.md`](ad_coverage.md) has the figures. Enzyme matches ForwardDiff to 1e-8 on every call marked "works".

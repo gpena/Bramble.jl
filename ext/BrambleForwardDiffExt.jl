@@ -66,8 +66,34 @@ end
 # arithmetic then orders the tags, which a rewrap in `Dual{T}` gets wrong when the
 # operator's tag is the inner one. The solve is linear in the load, so this holds when `T`
 # is the operator's tag too (`εₖ² = 0`). The sum starts from a zero `Dual{T, V, N}`, so
-# `N = 0` keeps `T`.
-Bramble._solve_by_parts(solve::S, F::AbstractVector{<:ForwardDiff.Dual}) where {S} = first(_by_parts(solve, F))
+# `N = 0` keeps `T`. A load whose tags are nested against ForwardDiff's order, a `Dual`
+# of the tag it created later inside one it created earlier, is refused before any solve.
+# ForwardDiff's own arithmetic gives such a `Dual` a three-level type, so the recombination
+# has no value to return. Any other pair of tags, `Symbol` tags included, passes.
+function Bramble._solve_by_parts(solve::S, F::AbstractVector{<:ForwardDiff.Dual}) where {S}
+    _check_tag_order(eltype(F))
+    return first(_by_parts(solve, F))
+end
+
+# Whether tag `T` nested outside tag `S` goes against ForwardDiff's order. Only two
+# `ForwardDiff.Tag` types have one; a tag may be a `Symbol` or any other type.
+_inverted(::Type{T}, ::Type{S}) where {T <: ForwardDiff.Tag, S <: ForwardDiff.Tag} = ForwardDiff.:≺(T, S)
+_inverted(T, S) = false
+
+# Throws an `ArgumentError` for the first pair of nested tags of a `Dual` type that goes
+# against ForwardDiff's order. Reads types only.
+_check_tag_order(::Type) = nothing
+function _check_tag_order(::Type{ForwardDiff.Dual{T, V, N}}) where {T, V, N}
+    for S in _tags(V)
+        _inverted(T, S) && throw(
+            ArgumentError(
+            "a ForwardDiff.Dual load nests the tag $T outside the tag $S, against " *
+            "ForwardDiff's tag order: ForwardDiff nests the tag it created later outside.",
+        ),
+        )
+    end
+    return _check_tag_order(V)
+end
 
 # `(x, tags)`: the solve of `F` by parts and the operator's tags.
 function _by_parts(solve::S, F::AbstractVector) where {S}

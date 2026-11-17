@@ -370,7 +370,8 @@ so a sparse cell's verdict is its inner backend's.
   throws `EnzymeRuntimeActivityError`, and DI's plain `AutoEnzyme` throws
   `EnzymeMutabilityException` (the table of the DI settings above).
 - **Solver routes that work since v4.2.7.** `gmg_solve` with a `Dual` hierarchy and a `Dual`
-  load of another tag gives the derivative of the direct solve, in both nestings. A CHOLMOD
+  load of another tag gives the derivative of the direct solve, in both nestings, though a load
+  built by hand against ForwardDiff's tag order is refused with an `ArgumentError`. A CHOLMOD
   factorization solves a `VectorElement` load, and Enzyme reverse through
   `pde_solve(fact, F)` with it matches the UMFPACK case.
 

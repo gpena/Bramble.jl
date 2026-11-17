@@ -304,6 +304,33 @@ end
         end
     end
 
+    # A load nested against ForwardDiff's tag order is refused by a kept factor and by
+    # `pde_solve`, naming both tags (#1248). The order of two tags depends on what the
+    # process created earlier, so it is read at run time. `Symbol` tags have no order.
+    @testset "inverted tag order refused (#1248)" begin
+        Ta, Tb = typeof(ForwardDiff.Tag(sin, Float64)), typeof(ForwardDiff.Tag(cos, Float64))
+        ForwardDiff.:≺(Ta, Tb) || ((Ta, Tb) = (Tb, Ta))
+        nest(O, I) = [ForwardDiff.Dual{O}(ForwardDiff.Dual{I}(b[k], 1.0 * k), ForwardDiff.Dual{I}(sin(k), cos(k)))
+                      for k in 1:m]
+        inverted = nest(Ta, Tb)
+        for solver in fact_solvers
+            fact = sparse_factorize(A0; solver = solver)
+            @test_throws ArgumentError pde_solve(fact, inverted)
+            err = try
+                pde_solve(fact, inverted)
+            catch e
+                e
+            end
+            msg = err isa ArgumentError ? err.msg : ""
+            @test occursin(string(Ta), msg) && occursin(string(Tb), msg)
+        end
+        # The same tags in ForwardDiff's order, and tags with no order, solve.
+        fact = sparse_factorize(A0)
+        for ok in (nest(Tb, Ta), nest(:s, :t), nest(Ta, :t))
+            @test pde_solve(fact, ok) isa Vector{<:ForwardDiff.Dual}
+        end
+    end
+
     # The factor is shared: a Dual with N partials costs N solves and one factorization, not
     # N factorizations. A factorization of this matrix allocates about 1.8 MB and a partial
     # about 0.5 MB, so the bound of half a factorization per partial fails a refactor on
