@@ -122,12 +122,83 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         )
     end
 
-    # libSparse refuses a structurally singular matrix (a zero row or column, or no full
-    # matching of rows to columns) with an `ErrorException` it words itself. That is a
-    # singular matrix, so it becomes the `SingularException` every other singular matrix
-    # throws. libSparse reports no pivot, so the index is `0`: not a position. Matched by
-    # message, so libSparse's other refusals (not positive definite) stay `ErrorException`s.
+    # libSparse's LU refuses a structurally singular matrix (a zero row or column, or no
+    # full matching of rows to columns) with an `ErrorException` it words itself, and so
+    # does its QR for a zero row or column. That is a singular matrix, so it becomes the
+    # `SingularException` every other singular matrix throws. libSparse reports no pivot,
+    # so the index is `0`: not a position. Matched by message, so libSparse's other
+    # refusals (not positive definite) stay `ErrorException`s. Its LDLᵀ runs no such test
+    # and returns factors that solve to a wrong answer, so `_aa_structurally_singular`
+    # makes it first (gpena/Bramble.jl#1231).
     _aa_structural(e) = e isa ErrorException && occursin("structurally singular", e.msg)
+
+    # `true` when no matching of rows to columns covers every column of the stored pattern
+    # of the square `A`, which is then singular whatever its values. Stored zeros count,
+    # as they do for libSparse's LU. A maximum matching by depth-first augmenting paths
+    # with a cheap first assignment (Duff's MC21, as CSparse's `cs_maxtrans`), stopping at
+    # the first column that cannot be matched.
+    function _aa_structurally_singular(A::SparseMatrixCSC)
+        n = size(A, 2)
+        cp, rv = A.colptr, A.rowval
+        jmatch = zeros(Int, n)             # the column matched to row i, or 0
+        cheap = Vector{Int}(view(cp, 1:n)) # per column, the next entry the cheap pass reads
+        mark = zeros(Int, n)               # k once search k has visited column j
+        js = Vector{Int}(undef, n)         # the search's stack: columns,
+        is = Vector{Int}(undef, n)         # the row each column is entered through,
+        ps = Vector{Int}(undef, n)         # and where its depth-first scan resumes
+        for k in 1:n
+            head = 1
+            js[1] = k
+            found = false
+            while head >= 1
+                j = js[head]
+                if mark[j] != k
+                    mark[j] = k
+                    p = cheap[j]
+                    while p < cp[j + 1]
+                        i = rv[p]
+                        p += 1
+                        if jmatch[i] == 0
+                            found = true
+                            is[head] = i
+                            break
+                        end
+                    end
+                    cheap[j] = p
+                    found && break
+                    ps[head] = cp[j]
+                end
+                # Every row of column `j` is matched: follow one whose column this search
+                # has not visited, or backtrack.
+                p = ps[head]
+                advanced = false
+                while p < cp[j + 1]
+                    i = rv[p]
+                    p += 1
+                    if mark[jmatch[i]] != k
+                        ps[head] = p
+                        is[head] = i
+                        head += 1
+                        js[head] = jmatch[i]
+                        advanced = true
+                        break
+                    end
+                end
+                advanced || (head -= 1)
+            end
+            found || return true
+            for h in head:-1:1
+                jmatch[is[h]] = js[h]
+            end
+        end
+        return false
+    end
+
+    # LDLᵀ is factored afresh only after this check, which throws as libSparse's LU would.
+    function _aa_check_structure(A::SparseMatrixCSC)
+        _aa_structurally_singular(A) && throw(LinearAlgebra.SingularException(0))
+        return nothing
+    end
 
     # AppleAccelerate.jl's `factor!` passes libSparse Julia `@cfunction`s for `malloc` and
     # `free`. libSparse calls them from its GCD worker threads, Julia adopts those threads,
@@ -223,6 +294,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         m == n || throw(DimensionMismatch("Matrix must be square for sparse direct solve, got $(m)×$(n)"))
 
         fact_kind, sym_flag = _accelerate_fact_kind(A, sym, kind)
+        fact_kind === SparseFactorizationLDLT && _aa_check_structure(A)
 
         aa = AAFactorization(_aa_matrix(A, sym_flag))
         auto = _aa_auto(sym, kind)
@@ -234,6 +306,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
             catch e
                 e isa ErrorException || rethrow()
                 fact_kind, sym_flag = SparseFactorizationLDLT, :symmetric
+                _aa_check_structure(A)
                 _aa_factor!(aa, fact_kind)
             end
         else
@@ -413,6 +486,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
                 # `:auto` Cholesky on a matrix that is not positive definite: the LDLᵀ
                 # fallback `_accelerate_factorize` takes, on a fresh object, since
                 # Cholesky's symbolic factorization cannot be refactored as LDLᵀ.
+                _aa_check_structure(A)
                 aa = AAFactorization(M)
                 _aa_factor!(aa, SparseFactorizationLDLT)
                 fact.aa_fact, fact.sym = aa, :symmetric

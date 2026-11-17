@@ -44,10 +44,15 @@ Accelerate's native `libSparse` on macOS.
   large. A singular `A` with a zero pivot throws, whatever the right-hand side. A nearly
   singular one may return a large solution without an error, and so may a singular one
   whose zero pivot rounds to about `eps`, as a pure-Neumann Laplacian's does. A
-  structurally singular `A` (a zero row or column, say), which libSparse refuses itself,
-  throws a `SingularException` too, for every `sym` and `kind`. The index of an Accelerate
-  `SingularException` is always `0` and is not a pivot position: libSparse reports none, so
-  Julia's "zero pivot found at index 0" message does not mean the first pivot.
+  structurally singular `A`, one whose stored pattern has a zero row or column or no
+  matching of rows to columns, throws a `SingularException` on the LU route, where
+  libSparse refuses it, and on the ``LDL^T`` route, where Bramble checks the pattern
+  before factoring. Stored zeros count as entries. An explicit Cholesky throws libSparse's
+  `ErrorException` (not positive definite) instead, and QR throws a `SingularException`
+  for a zero row or column but returns for a pattern with no matching. The index of an
+  Accelerate `SingularException` is always `0` and is not a pivot position: libSparse
+  reports none, so Julia's "zero pivot found at index 0" message does not mean the first
+  pivot.
 - `sym = :spd`, `:definite`, or `1` (or `kind = :cholesky`) selects Hermitian positive
   definite Cholesky.
 - `sym = :symmetric` or `2` (or `kind = :ldlt`) selects Hermitian indefinite ``LDL^T``.

@@ -399,6 +399,81 @@ Core.eval(@__MODULE__, REFACTOR_ROUNDS)
                 @test_throws SingularException pde_solve(S, ones(3); solver = :accelerate)
                 @test_throws SingularException accelerate_solve(S, ones(3))
             end
+            # libSparse's LDLᵀ runs no structural test and solves such a matrix to a wrong
+            # answer, so the extension refuses its pattern first, as LU does: a zero row and
+            # column, or no matching of rows to columns (gpena/Bramble.jl#1231)
+            nomatch = sparse([0.0 0 1; 0 0 1; 1 1 1])
+            for M in (nomatch, sparse([0.0 0; 0 1]), spzeros(2, 2), sparse([1.0 0 0; 0 0 0; 0 0 1]))
+                for o in ((;), (sym = :symmetric,), (kind = :ldlt,), (sym = :unsymmetric,))
+                    @test_throws SingularException accelerate_factorize(M; o...)
+                end
+            end
+            # The issue's bordered gauge system, its last multiplier's row and column cleared:
+            # the solution is so large that `:auto`'s residual check misses it
+            Bramble._seed_mesh1d_rng!(11)
+            Ωg = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 7), (false, false))
+            Bramble._unseed_mesh1d_rng!()
+            Wg = gridspace(Ωg; ghosts = :boundary)
+            Ag = assemble(form(Wg, Wg, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+            Zg = Bramble.ghost_kernel(Ag, Wg)
+            Cg = sparse(Zg)
+            Bg = [Ag Cg; Cg' spzeros(size(Cg, 2), size(Cg, 2))]
+            kg = size(Bg, 1)
+            B1 = copy(Bg)
+            B1[:, kg] .= 0
+            B1[kg, :] .= 0
+            dropzeros!(B1)
+            for o in ((;), (sym = :symmetric,), (kind = :ldlt,))
+                @test_throws SingularException accelerate_factorize(B1; o...)
+            end
+            @test norm(accelerate_factorize(Bg; sym = :symmetric) \ (Bg * ones(kg)) .- 1, Inf) <= 1.0e-4
+            # A gauge with a zero column borders `A` that way: `pde_solve` passes
+            # `sym = :symmetric`, under `:accelerate` and under `:default`
+            Fg = Ag * ones(size(Ag, 1))
+            Z0 = Matrix(Zg)
+            Z0[:, end] .= 0
+            @test_throws SingularException pde_solve(Ag, Fg; gauge = Z0, solver = :accelerate)
+            @test_throws SingularException pde_solve(Ag, Fg; gauge = Z0)
+            ug = pde_solve(Ag, Fg; gauge = Zg, solver = :accelerate)
+            @test norm(Ag * ug - Fg, Inf) <= 1.0e-8 * norm(Fg, Inf)
+            # A zero diagonal with a matching is no structural singularity, and a numerically
+            # singular matrix under an explicit LDLᵀ still returns, as an explicit LU does
+            for (M, b) in (([0.0 1; 1 0], [1.0, 2]), ([0.0 1 0; 1 0 1; 0 1 -2], [1.0, 2, 3]))
+                for o in ((sym = :symmetric,), (kind = :ldlt,))
+                    @test isapprox(accelerate_factorize(sparse(M); o...) \ b, M \ b; rtol = 1.0e-12)
+                end
+            end
+            @test accelerate_factorize(sparse([1.0 1; 1 1]); sym = :symmetric) isa
+                  AccelerateFactorization
+            # The `:auto` Cholesky refactor's LDLᵀ fallback checks the pattern before it
+            # factors, so the refused refactor leaves the Cholesky object and its failure.
+            # A positive diagonal has a matching, so only another pattern with the same
+            # count gets there: Cholesky reads its negative value as a pivot and fails
+            fd = accelerate_factorize(sparse(2.0I, 3, 3))
+            @test fd.sym === :spd
+            @test_throws SingularException accelerate_refactor!(fd, sparse([0.0 0 -1; 0 0 1; -1 1 1]))
+            @test fd.sym === :spd
+            @test_throws SingularException fd \ ones(3)
+            # The check against the generic rank: random values on random patterns, half of
+            # them symmetric, have full rank exactly when the pattern has a matching
+            ext = Base.get_extension(Bramble, :BrambleAppleAccelerateExt)
+            rng = Xoshiro(1231)
+            mismatches = 0
+            for _ in 1:2000
+                n = rand(rng, 1:9)
+                P = sprand(rng, Bool, n, n, 0.6 * rand(rng))
+                rand(rng, Bool) && (P = P .| P')
+                V = SparseMatrixCSC(n, n, P.colptr, P.rowval, randn(rng, nnz(P)))
+                mismatches += ext._aa_structurally_singular(V) != (rank(Matrix(V)) < n)
+            end
+            @test mismatches == 0
+            # Stored zeros count as entries, as for LU; `Int32` indices read the same
+            Sz = SparseMatrixCSC(2, 2, [1, 3, 4], [1, 2, 2], [1.0, 0.0, 0.0])
+            @test !ext._aa_structurally_singular(Sz)
+            @test ext._aa_structurally_singular(SparseMatrixCSC{Float64, Int32}(nomatch))
+            @test !ext._aa_structurally_singular(SparseMatrixCSC{Float64, Int32}(Bg))
+            @test !ext._aa_structurally_singular(spzeros(0, 0))
+
             # Only libSparse's structural refusal is mapped: its other errors keep their type
             @test_throws ErrorException accelerate_factorize(sparse([1.0 2; 2 1]); sym = :spd)
             @test occursin("not a pivot", lowercase(string(@doc accelerate_factorize)))
