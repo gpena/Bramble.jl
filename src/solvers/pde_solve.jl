@@ -152,9 +152,11 @@ With `ForwardDiff.jl` loaded, a `Dual` matrix or load of the plain solve is solv
 `BrambleForwardDiffExt`, which factors the `Float64` values of `A` once, by the route the
 `Float64` solve of the same keywords takes, and solves every partial against that factor:
 with ``A₀ = value.(A)`` and ``b₀ = value.(F)``, the value is ``x₀ = A₀⁻¹b₀`` and the partial
-``k`` is ``xₖ = A₀⁻¹(bₖ − Aₖx₀)``. A nested `Dual` recurses through the same factor. A
-non-square `Dual` matrix throws an `ArgumentError`: a least-squares solve has a residual term
-that this derivative omits.
+``k`` is ``xₖ = A₀⁻¹(bₖ − Aₖx₀)``. A nested `Dual` recurses through the same factor. A load
+built by hand against ForwardDiff's tag order is refused with an `ArgumentError` by the plain,
+bordered and kept-factor solves; ForwardDiff never builds such a load itself. A non-square
+`Dual` matrix throws an `ArgumentError`: a least-squares solve has a residual term that this
+derivative omits.
 
 The bordered solve (`mean_zero`, `gauge`, and the rank-one term of a `Bramble.RankOneUpdate`)
 differentiates the same way on the bordered matrix: the primal bordered system of the values
