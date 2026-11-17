@@ -134,64 +134,130 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
 
     # `true` when no matching of rows to columns covers every column of the stored pattern
     # of the square `A`, which is then singular whatever its values. Stored zeros count,
-    # as they do for libSparse's LU. A maximum matching by depth-first augmenting paths
-    # with a cheap first assignment (Duff's MC21, as CSparse's `cs_maxtrans`), stopping at
-    # the first column that cannot be matched.
+    # as they do for libSparse's LU. The matching is Hopcroft and Karp's: a greedy first
+    # assignment and one-step augmenting paths (Pothen and Fan's lookahead), then phases
+    # that each lay the columns out in layers by breadth-first search from every unmatched
+    # column and augment along shortest paths by depth-first search. A column that fails or
+    # augments is dropped for the rest of its phase, so a phase reads each entry about
+    # once, and O(√n) phases suffice. A phase that finds no augmenting path leaves the
+    # matching maximum. Both searches keep explicit stacks, so a long path cannot overflow.
     function _aa_structurally_singular(A::SparseMatrixCSC)
         n = size(A, 2)
         cp, rv = A.colptr, A.rowval
-        jmatch = zeros(Int, n)             # the column matched to row i, or 0
-        cheap = Vector{Int}(view(cp, 1:n)) # per column, the next entry the cheap pass reads
-        mark = zeros(Int, n)               # k once search k has visited column j
-        js = Vector{Int}(undef, n)         # the search's stack: columns,
-        is = Vector{Int}(undef, n)         # the row each column is entered through,
-        ps = Vector{Int}(undef, n)         # and where its depth-first scan resumes
-        for k in 1:n
-            head = 1
-            js[1] = k
-            found = false
-            while head >= 1
-                j = js[head]
-                if mark[j] != k
-                    mark[j] = k
-                    p = cheap[j]
+        rowmatch = zeros(Int, n)        # the column matched to row i, or 0
+        colmatch = zeros(Int, n)        # the row matched to column j, or 0
+        # Rows before `cheap[j]` in column `j` are matched, and a matched row stays so
+        cheap = Vector{Int}(undef, n)
+        for j in 1:n
+            cp[j] == cp[j + 1] && return true
+            p = Int(cp[j])
+            while p < cp[j + 1]
+                i = rv[p]
+                p += 1
+                if rowmatch[i] == 0
+                    rowmatch[i], colmatch[j] = j, i
+                    break
+                end
+            end
+            cheap[j] = p
+        end
+        # Augmenting paths of one step: an unmatched column takes the row of a column
+        # that finds an unmatched row past its `cheap`. The pointers only advance, so the
+        # pass reads each entry a bounded number of times.
+        for j in 1:n
+            colmatch[j] == 0 || continue
+            for p in cp[j]:(cp[j + 1] - 1)
+                i = rv[p]
+                j2 = rowmatch[i]
+                q = cheap[j2]
+                while q < cp[j2 + 1] && rowmatch[rv[q]] != 0
+                    q += 1
+                end
+                cheap[j2] = q
+                if q < cp[j2 + 1]
+                    i2 = rv[q]
+                    cheap[j2] = q + 1
+                    rowmatch[i2], colmatch[j2] = j2, i2
+                    rowmatch[i], colmatch[j] = j, i
+                    break
+                end
+            end
+        end
+        dead = typemax(Int)
+        layer = Vector{Int}(undef, n)   # a column's breadth-first layer, or `dead`
+        queue = Vector{Int}(undef, n)
+        next = Vector{Int}(undef, n)    # per column, the entry its depth-first scan resumes at
+        js = Vector{Int}(undef, n)      # the depth-first stack: columns,
+        is = Vector{Int}(undef, n)      # and the row each one leaves through
+        while true
+            tail = 0
+            for j in 1:n
+                if colmatch[j] == 0
+                    layer[j] = 0
+                    queue[tail += 1] = j
+                else
+                    layer[j] = dead
+                end
+            end
+            tail == 0 && return false
+            # Layers up to the first one that reaches an unmatched row
+            limit, head = dead, 0
+            while head < tail
+                j = queue[head += 1]
+                layer[j] >= limit && break
+                for p in cp[j]:(cp[j + 1] - 1)
+                    j2 = rowmatch[rv[p]]
+                    if j2 == 0
+                        limit = min(limit, layer[j] + 1)
+                    elseif layer[j2] == dead
+                        layer[j2] = layer[j] + 1
+                        queue[tail += 1] = j2
+                    end
+                end
+            end
+            limit == dead && return true
+            for j in 1:n
+                next[j] = cp[j]
+            end
+            for j0 in 1:n
+                (colmatch[j0] == 0 && layer[j0] == 0) || continue
+                h = 1
+                js[1] = j0
+                found = false
+                while h >= 1
+                    j = js[h]
+                    p = next[j]
+                    advanced = false
                     while p < cp[j + 1]
                         i = rv[p]
                         p += 1
-                        if jmatch[i] == 0
+                        j2 = rowmatch[i]
+                        if j2 == 0
+                            is[h] = i
                             found = true
-                            is[head] = i
+                            break
+                        elseif layer[j2] == layer[j] + 1
+                            is[h] = i
+                            next[j] = p
+                            h += 1
+                            js[h] = j2
+                            advanced = true
                             break
                         end
                     end
-                    cheap[j] = p
                     found && break
-                    ps[head] = cp[j]
-                end
-                # Every row of column `j` is matched: follow one whose column this search
-                # has not visited, or backtrack.
-                p = ps[head]
-                advanced = false
-                while p < cp[j + 1]
-                    i = rv[p]
-                    p += 1
-                    if mark[jmatch[i]] != k
-                        ps[head] = p
-                        is[head] = i
-                        head += 1
-                        js[head] = jmatch[i]
-                        advanced = true
-                        break
+                    if !advanced
+                        layer[j] = dead
+                        h -= 1
                     end
                 end
-                advanced || (head -= 1)
-            end
-            found || return true
-            for h in head:-1:1
-                jmatch[is[h]] = js[h]
+                found || continue
+                for k in 1:h
+                    rowmatch[is[k]], colmatch[js[k]] = js[k], is[k]
+                    layer[js[k]] = dead
+                end
             end
         end
-        return false
     end
 
     # LDLᵀ is factored afresh only after this check, which throws as libSparse's LU would.
