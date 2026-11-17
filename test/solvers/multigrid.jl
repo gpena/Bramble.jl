@@ -878,6 +878,33 @@ struct _MGTag end
         @test isapprox(k2(gc), k2(dc); rtol = 1e-6)
     end
 
+    # A load nested against ForwardDiff's tag order is refused, on a hierarchy of either
+    # tag and on a Float64 one (#1248). Which of two tags comes first depends on what the
+    # process created earlier, so the order is read at run time.
+    let
+        Ta, Tb = ForwardDiff.Tag(sin, Float64), ForwardDiff.Tag(cos, Float64)
+        Ta, Tb = typeof(Ta), typeof(Tb)
+        ForwardDiff.:≺(Ta, Tb) || ((Ta, Tb) = (Tb, Ta))
+        Random.seed!(1234)
+        Ω = mesh(domain(_mg_box(2)), (9, 9), (false, false))
+        n = npoints(Ω)
+        D(O, N, k) = ForwardDiff.Dual{O}(ForwardDiff.Dual{N}(1.0 + sin(k), 1.0), ForwardDiff.Dual{N}(cos(k), 2.0))
+        inverted = [D(Ta, Tb, k) for k in 1:n]
+        for B in (bld(ForwardDiff.Dual{Ta}(0.7, 1.0)), bld(ForwardDiff.Dual{Tb}(0.7, 1.0)), bld(0.7))
+            @test_throws ArgumentError gmg_solve(B, Ω, inverted; tol = 1e-11)
+            err = try
+                gmg_solve(B, Ω, inverted; tol = 1e-11)
+            catch e
+                e
+            end
+            msg = err isa ArgumentError ? err.msg : ""
+            @test occursin(string(Ta), msg) && occursin(string(Tb), msg)
+        end
+        # The same tags in ForwardDiff's order still solve.
+        u = gmg_solve(bld(0.7), Ω, [D(Tb, Ta, k) for k in 1:n]; tol = 1e-11)
+        @test all(isfinite, ForwardDiff.value.(ForwardDiff.value.(parent(u))))
+    end
+
     # The Float64 loop allocates per solve, not per cycle: a tighter tol runs more cycles
     # for the same bytes.
     Ω = _mg_jitter_mesh(2, 17)
