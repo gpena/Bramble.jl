@@ -447,8 +447,8 @@ Core.eval(@__MODULE__, REFACTOR_ROUNDS)
                   AccelerateFactorization
             # The `:auto` Cholesky refactor's LDLᵀ fallback checks the pattern before it
             # factors, so the refused refactor leaves the Cholesky object and its failure.
-            # A positive diagonal has a matching, so only another pattern with the same
-            # count gets there: Cholesky reads its negative value as a pivot and fails
+            # A positive diagonal has a matching, so only another pattern gets there: this
+            # one stores as many lower entries as `2I`, has no matching, and fails Cholesky
             fd = accelerate_factorize(sparse(2.0I, 3, 3))
             @test fd.sym === :spd
             @test_throws SingularException accelerate_refactor!(fd, sparse([0.0 0 -1; 0 0 1; -1 1 1]))
