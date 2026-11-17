@@ -90,7 +90,10 @@ jobs:
     # test/TestUtils.jl) put about an hour and a half of tests on each, except `ad-2`, whose
     # space/ad_coverage.jl alone ran 2 h 20 min. On slower runners (2026-11-05: 31 minutes
     # of precompilation against 22) it passed 180 minutes unfinished, so the limit is 300,
-    # under GitHub's 360.
+    # under GitHub's 360. On 2026-11-16 ad_coverage.jl ran 3 h without finishing, so its
+    # Enzyme cells are split by policy: CpuSerial on `ad-2`, CpuPolyester on `ad-5` (2 h 46
+    # min that day) and CpuThreaded on `ad-6` (`AD_COVERAGE_POLICIES`). CpuSerial and
+    # CpuThreaded together had passed 4.5 h.
     timeout-minutes: ${{ startsWith(matrix.shard, 'ad-') && 300 || 90 }}
     # Nothing here gates a merge, but a red run should still mean something specific.
     # Julia nightly is not in this matrix (see below), so a failure here is Bramble's own —
@@ -116,8 +119,8 @@ jobs:
         # red leg here noise rather than signal.
         version: ["1.13"]
         # `BRAMBLE_TEST_SHARD`, test/TestUtils.jl: the plotting, solver and Kronecker files, the
-        # Polyester files, and the AD files in four parts.
-        shard: [ext-solvers, ext-polyester, ad-1, ad-2, ad-3, ad-4]
+        # Polyester files, and the AD files in six parts.
+        shard: [ext-solvers, ext-polyester, ad-1, ad-2, ad-3, ad-4, ad-5, ad-6]
     steps:
       - uses: actions/checkout@v7
 
@@ -246,7 +249,7 @@ jobs:
         env:
           BRAMBLE_TEST_GROUP: grids
 
-  # Per-file coverage floor over the two coverage halves merged: the six
+  # Per-file coverage floor over the two coverage halves merged: the eight
   # `lcov-backends-<shard>` parts from this run, and the five `lcov-suite-<part>` parts (the
   # four `slow` shards and the `convergence` job) from the newest nightly.yml run on this
   # run's commit. The halves
@@ -314,7 +317,7 @@ jobs:
           fi
           # One part per backends shard; with one missing the floor would fail the files
           # that shard covers.
-          if [ "$(find lcov -path 'lcov/lcov-backends-*/lcov.info' | wc -l)" -ne 6 ]; then
+          if [ "$(find lcov -path 'lcov/lcov-backends-*/lcov.info' | wc -l)" -ne 8 ]; then
             echo "::warning::A backends shard uploaded no lcov part; skipping the coverage floor."
             echo "A \`lcov-backends\` part is missing; floor not computed." >> "$GITHUB_STEP_SUMMARY"
             exit 0

@@ -16,8 +16,10 @@ on a seeded non-uniform mesh, runs it through DI under `CpuSerial`, `CpuThreaded
 `CpuPolyester`, and compares the gradient with ForwardDiff's on the same policy. ForwardDiff
 is itself compared with a central difference, and every component of that reference is
 clearly non-zero, so a backend that drops a parameter cannot pass. Enzyme runs in child
-Julia processes, one per policy and group of cells: an Enzyme abort ends the process that
-met it. A cell reads `works`, `throws` with the error's name, or `not run` with the reason. The
+Julia processes, since an Enzyme abort ends the process that met it. A child runs one
+policy's groups of cells in turn until its peak memory passes 4 GB, and a group that kills a
+child is run again at the start of a fresh one. The groups that reach several GB alone or have
+aborted (`SOLO_GROUPS` in the test) and each cell expected to abort get a child of their own. A cell reads `works`, `throws` with the error's name, or `not run` with the reason. The
 failures that have no cell are under "Open failures". A cell never reads `works` on a wrong gradient.
 
 ## What was measured

@@ -261,7 +261,8 @@ function __bramble_run_enzyme_files()
     for file in __bramble_shard_enzyme_files()
         cmd = `$(Base.julia_cmd()) --project=$(Base.active_project()) -e "include(ARGS[1])" $script`
         cmd = addenv(cmd, "BRAMBLE_TEST_GROUP" => "ad",
-            "BRAMBLE_TEST_SHARD" => TestUtils.ENZYME_FILE_SHARDS[file], "BRAMBLE_TEST_FILE" => file)
+            "BRAMBLE_TEST_SHARD" => (isempty(TestUtils.TEST_SHARD) ? nothing : TestUtils.TEST_SHARD),
+            "BRAMBLE_TEST_FILE" => file)
         @testset "$file" begin
             @test success(pipeline(cmd; stdout = stdout, stderr = stderr))
         end

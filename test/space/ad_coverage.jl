@@ -15,7 +15,8 @@ using SparseArrays: nonzeros, sparse
 using SparseConnectivityTracer: TracerSparsityDetector
 using SparseMatrixColorings: GreedyColoringAlgorithm
 using SuiteSparse: SuiteSparse
-using ..TestUtils: _fd, _have, ghost_mesh, TEST_FILE, WITH_3D_TESTS
+using ..TestUtils: _fd, _have, ghost_mesh, AD_COVERAGE_POLICIES, TEST_FILE, TEST_SHARD,
+                   WITH_3D_TESTS
 
 # The AD coverage matrix of docs/notes/internals/ad_coverage.md: each public feature's
 # smallest differentiable call, through DifferentiationInterface with ForwardDiff and with
@@ -1082,10 +1083,40 @@ const SETTING_EXPECT = (
     buffer_duplicated_forward = (:ok, "")
 )
 
-# What a child runs: `policy:group`, `policy:group:cell` or `policy:group:cell:kind:mode`.
+# A batch child stops taking groups once its memory footprint passes this many GB: compiled
+# code is never freed, and a Weekly runner has 7 GB.
+const CHILD_GB = parse(Float64, get(ENV, "BRAMBLE_AD_COVERAGE_CHILD_GB", "4"))
+
+# The process's memory in bytes. On macOS this is the footprint Activity Monitor and
+# julia_slot.sh's watchdog read: `Sys.maxrss` leaves out compressed pages, and on 2026-11-17
+# a batch child read 4 to 5 GB there when the watchdog killed it at 11 GB. `proc_pid_rusage`
+# fills a `rusage_info_v0`, a 16-byte UUID and then ten `UInt64`s, the eighth of which is
+# `ri_phys_footprint`.
+function _footprint()
+    Sys.isapple() || return Float64(Sys.maxrss())
+    info = zeros(UInt64, 12)
+    ccall(:proc_pid_rusage, Cint, (Cint, Cint, Ptr{UInt64}), getpid(), 0, info) == 0 ||
+        return Float64(Sys.maxrss())
+    return Float64(info[10])
+end
+
+# What a child runs: `policy:group`, `policy:group:cell`, `policy:group:cell:kind:mode`, or
+# `policy:g1,g2,...`, a batch of groups in order. After each group it prints
+# `GROUP|<group>`; it leaves the rest of a batch to another child once past `CHILD_GB`.
 function child_main(spec::AbstractString)
-    pname, group, only, only_kind, only_mode = (split(spec, ':')..., "", "", "")[1:5]
-    policy = Symbol(pname)
+    pname, groups, only, only_kind, only_mode = (split(spec, ':')..., "", "", "")[1:5]
+    batch = split(groups, ',')
+    for (i, group) in enumerate(batch)
+        run_group(Symbol(pname), group, only, only_kind, only_mode)
+        println("GROUP|$group")
+        flush(stdout)
+        i < length(batch) && _footprint() > CHILD_GB * 2^30 && break
+    end
+    println("FOOTPRINT|", round(_footprint() / 2^30; digits = 2))
+    return nothing
+end
+
+function run_group(policy::Symbol, group, only, only_kind, only_mode)
     pol = POLICIES[policy]
     if group == "settings"
         for (name, build, mode, activity, annotation) in SETTINGS
@@ -1136,7 +1167,8 @@ end
 const THREADED = Threads.nthreads() > 1
 const SLOW = get(ENV, "BRAMBLE_AD_COVERAGE_SLOW", "false") == "true"
 
-# One child: whether it succeeded, the cells' results by `(cell, kind, mode)` and its output.
+# One child: whether it succeeded, the cells' results by `(cell, kind, mode)`, its output and
+# the groups it finished.
 function run_child(spec::AbstractString)
     src = """
         _e = mktempdir()
@@ -1149,17 +1181,52 @@ function run_child(spec::AbstractString)
     cmd = `$(Base.julia_cmd()) --startup-file=no --project=$(Base.active_project()) --threads=$(Threads.nthreads()) --optimize=$opt -e $src`
     cmd = addenv(cmd, "BRAMBLE_AD_COVERAGE_CHILD" => spec, "BRAMBLE_TEST_FILE" => nothing)
     out = IOBuffer()
-    p = run(pipeline(ignorestatus(cmd); stdout = out, stderr = out))
+    t = @elapsed p = run(pipeline(ignorestatus(cmd); stdout = out, stderr = out))
     text = String(take!(out))
+    m = match(r"FOOTPRINT\|([0-9.]+)", text)
+    println("ad_coverage child $spec: $(round(Int, t)) s, ", m === nothing ? "?" : m[1], " GB at exit, ",
+        success(p) ? "ok" : "failed")
     results = Dict{Tuple{Symbol, Symbol, Symbol}, @NamedTuple{status::Symbol, relerr::Float64, detail::String}}()
+    done = String[]
     for line in split(text, '\n')
+        startswith(line, "GROUP|") && push!(done, line[7:end])
         startswith(line, "CELL|") || continue
         _, name, _, kind, mode, status, relerr, detail = split(line, '|'; limit = 8)
         results[(Symbol(name), Symbol(kind), Symbol(mode))] = (status = Symbol(status),
             relerr = parse(Float64, relerr), detail = String(detail))
     end
-    return success(p), results, text
+    return success(p), results, text, done
 end
+
+# Each batch of groups under one policy, in as few children as `CHILD_GB` allows: a child
+# loads Bramble and Enzyme and compiles the derivatives its groups share once, not once a
+# group. A child that dies takes down only the group it was on, which then starts the next child:
+# what killed it may have been the batch's memory. A group that kills a child of its own
+# fails. Returns the results, the failed groups, and whether every child exited cleanly.
+function run_batches(pname, batches)
+    results = Dict{Tuple{Symbol, Symbol, Symbol}, @NamedTuple{status::Symbol, relerr::Float64, detail::String}}()
+    failed, clean = String[], true
+    for batch in batches
+        remaining = collect(batch)
+        while !isempty(remaining)
+            ok, res, _, done = run_child("$pname:" * join(remaining, ','))
+            merge!(results, res)
+            filter!(g -> !(g in done), remaining)
+            clean &= ok || !isempty(remaining)
+            isempty(done) && !isempty(remaining) && push!(failed, popfirst!(remaining))
+        end
+    end
+    return results, failed, clean
+end
+
+# The groups that keep a child of their own, as the cells' comments say: the ghost
+# relation groups and `threed` reach 4 to 9 GB alone, `ghost_fast` passed 10 GB when it held
+# the relation cells, and `levelset` and `factor_matrix` have aborted in LLVM. `polygon`
+# took a `CpuThreaded` batch child past 10 GB of footprint after eight groups (2026-11-17).
+# So do the `slow` groups, which have no measurement.
+const SOLO_GROUPS = (:ghost_fast, :relation_data, :relation_robin, :relation_conormal,
+    :relation_composite, :threed, :levelset, :factor_matrix, :polygon)
+solo(group) = group in SOLO_GROUPS || any(c -> c.group === group && c.slow, CELLS)
 
 _want(x::Union{Symbol, String}, ::Symbol) = x
 _want(x::NamedTuple, policy::Symbol) = x[policy]
@@ -1252,12 +1319,18 @@ if CHILD == ""
                 :factor_kept, :rank_one, :fdm, :gmg_load, :gmg_coefficient, :chebyshev)
             WITH_3D_TESTS && (groups = (groups..., :threed))
             SLOW && (groups = (groups..., unique(c.group for c in CELLS if c.slow)...))
+            # A Weekly shard runs only its policies (`AD_COVERAGE_POLICIES`).
+            in_this_shard(pname) = isempty(TEST_SHARD) || pname in AD_COVERAGE_POLICIES[TEST_SHARD]
             for pname in keys(POLICIES)
                 pname === :CpuSerial || THREADED || continue
+                in_this_shard(pname) || continue
                 @testset "$pname" begin
+                    batches = [[[string(g) for g in groups if !solo(g)]; "sparse"],
+                        ([string(g)] for g in groups if solo(g))...]
+                    res, failed, clean = run_batches(pname, batches)
+                    @test clean
                     for group in groups
-                        ok, res, _ = run_child("$pname:$group")
-                        @test ok
+                        @test !(string(group) in failed)
                         for c in CELLS
                             c.group === group || continue
                             for kind in c.kinds
@@ -1277,14 +1350,13 @@ if CHILD == ""
                         for (mode, want, err) in ((:reverse, _want(c.rev, pname), _want(c.rev_err, pname)),
                             (:forward, _want(c.fwd, pname), _want(c.fwd_err, pname)))
                             want === :aborts || continue
-                            ok, res, text = run_child("$pname:$(c.group):$(c.name):nonuniform:$mode")
+                            ok, ares, text = run_child("$pname:$(c.group):$(c.name):nonuniform:$mode")
                             @test !ok
-                            @test isempty(res)
+                            @test isempty(ares)
                             @test occursin(err, text)
                         end
                     end
-                    ok, res, _ = run_child("$pname:sparse")
-                    @test ok
+                    @test !("sparse" in failed)
                     for kind in MESHES, mode in (:forward, :reverse)
 
                         check_cell(get(res, (:sparse_jacobian, kind, mode), nothing), :ok, "",
@@ -1292,7 +1364,7 @@ if CHILD == ""
                     end
                 end
             end
-            @testset "DI settings" begin
+            in_this_shard(:CpuSerial) && @testset "DI settings" begin
                 ok, res, _ = run_child("CpuSerial:settings")
                 @test ok
                 for (name, _, mode, _, _) in SETTINGS

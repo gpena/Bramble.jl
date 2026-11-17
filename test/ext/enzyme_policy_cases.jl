@@ -320,7 +320,8 @@ const THREADED = (
     (hook = "_static_for!", kind = "closure", build = _build_for),
     (hook = "_static_scatter_for!", kind = "closure", build = _build_scatter_for),
     (hook = "_static_partials!", kind = "fixed", build = _build_dot),
-    (hook = "_static_band_colour!", kind = "closure", build = _build_diffusion),
+    (hook = "_static_band_colour!", kind = "closure", build = _build_diffusion,
+        rule = "_threaded_bands_ref!"),
     (hook = "_static_colour!", kind = "closure", build = _build_colour),
     (hook = "_static_cut_band_colour!", kind = "closure", build = _build_diffusion),
     (hook = "_kron_fused!", kind = "fixed", build = _build_kron),
@@ -561,7 +562,7 @@ const THREADED_CASES = (
     (hook = "_threaded_broadcast_overwrite", kind = "fixed",
         build = _build_broadcast_overwrite, rule = "_static_bands!"),
     (hook = "_threaded_unit_overwrite_x", kind = "closure", build = _build_unit_overwrite_x,
-        rule = "_static_band_colour!"),
+        rule = "_threaded_bands_ref!"),
     (hook = "_threaded_kron_scaled", kind = "fixed", build = _build_kron_scaled,
         rule = "_kron_fused!"),
     (hook = "_threaded_ghost_backward", kind = "fixed", build = _build_ghost_backward,
@@ -598,7 +599,7 @@ end
 # policy must enter. test/ext/enzyme_threaded_ext.jl runs them.
 const ASSEMBLY_REVERSE_CASES = (
     (hook = "_threaded_three_summands", kind = "closure", build = _build_three_summands,
-        rule = "_static_band_colour!", policy = :CpuThreaded),
+        rule = "_threaded_bands_ref!", policy = :CpuThreaded),
     (hook = "_batch_three_summands", kind = "closure", build = _build_three_summands,
         rule = "_batch_bilinear_band_replay!", policy = :CpuPolyester)
 )
