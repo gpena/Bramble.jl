@@ -433,6 +433,60 @@ end
         end
     end
 
+    @testset "sparspak_solve tag order (#1255)" begin
+        Dl = ForwardDiff.Dual
+        T1, T2 = typeof(ForwardDiff.Tag(sin, Float64)), typeof(ForwardDiff.Tag(cos, Float64))
+        Ta, Tb = ForwardDiff.:≺(T1, T2) ? (T1, T2) : (T2, T1)
+        M0 = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.2, m - 1))
+        dA(T) = SparseMatrixCSC(m, m, M0.colptr, M0.rowval, Dl{T}.(M0.nzval, 0.5 .* M0.nzval))
+        nA(O, N) = SparseMatrixCSC(m, m, M0.colptr, M0.rowval,
+            [Dl{O}(Dl{N}(v, 0.5v), Dl{N}(0.25v, 0.1v)) for v in M0.nzval])
+        b0 = [1.5 + cos(i) for i in 1:m]
+        load(O, N) = [Dl{O}(Dl{N}(x, 0.3x), Dl{N}(0.2x, 0.1x)) for x in b0]
+        function thrown(f)
+            try
+                f()
+            catch e
+                return e
+            end
+            return nothing
+        end
+
+        for (an, A, F, noun) in (
+            ("Float64 A, inverted load", M0, load(Ta, Tb), "load"),
+            ("A on the inner tag, inverted load", dA(Tb), load(Ta, Tb), "load"),
+            ("A on the outer tag, inverted load", dA(Ta), load(Ta, Tb), "load"),
+            ("inverted matrix, Float64 load", nA(Ta, Tb), b0, "matrix"))
+            @testset "$an" begin
+                @test_throws ArgumentError Bramble.sparspak_solve(A, F)
+                e = thrown(() -> Bramble.sparspak_solve(A, F))
+                msg = e isa ArgumentError ? e.msg : ""
+                @test occursin(string(Ta), msg) && occursin(string(Tb), msg)
+                @test occursin("Dual $noun nests", msg)
+            end
+        end
+
+        for (F, mats) in ((load(Tb, Ta), (("Float64 A", M0), ("outer tag", dA(Tb)),
+                ("inner tag", dA(Ta)))),
+            (load(:s, :t), (("Float64 A", M0), ("tag :s", dA(:s)))))
+            for (an, A) in mats
+                @testset "control, $an" begin
+                    u = Bramble.sparspak_solve(A, F)
+                    @test eltype(u) === eltype(F)
+                    r = pde_solve(A, F)
+                    vu = ForwardDiff.value.(ForwardDiff.value.(u))
+                    vr = ForwardDiff.value.(ForwardDiff.value.(r))
+                    @test norm(vu - vr) <= 1.0e-10 * norm(vr)
+                end
+            end
+        end
+        for (an, A) in (("ordered matrix", nA(Tb, Ta)), ("Symbol-tag matrix", nA(:s, :t)))
+            @testset "control, $an" begin
+                @test eltype(Bramble.sparspak_solve(A, b0)) === eltype(A)
+            end
+        end
+    end
+
     # The factor is shared: a Dual with N partials costs N solves and one factorization, not
     # N factorizations. A factorization of this matrix allocates about 1.8 MB and a partial
     # about 0.5 MB, so the bound of half a factorization per partial fails a refactor on

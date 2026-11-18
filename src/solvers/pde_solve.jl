@@ -281,6 +281,10 @@ pde_solve(fact::Factorization, F::AbstractVector) = _solve_by_parts(b -> fact \ 
 # any function of the load, so no factorization type is assumed here.
 @inline _solve_by_parts(solve::S, F) where {S} = solve(F)
 
+# Refuses a nested `Dual` type of `what` (a load or a matrix) against ForwardDiff's tag
+# order. BrambleForwardDiffExt adds the `Dual` method; with no ForwardDiff this is a no-op.
+_check_tag_order(::Type, what::AbstractString = "load") = nothing
+
 # The factorization that the `Float64` solve of `A` takes with the same keywords, route for
 # route: `:default` takes Accelerate on macOS for a symmetric `A` (the test of the routing
 # above, with `S`, the element type of the load, in place of `F`'s) and `factorize`, the

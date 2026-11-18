@@ -30,7 +30,7 @@ function Bramble._solve_promoted(
         ::Type{<:ForwardDiff.Dual}, A::SparseMatrixCSC, F::AbstractVector;
         solver::Symbol, sym, kwargs...
 )
-    _check_tag_order(eltype(F))
+    Bramble._check_tag_order(eltype(F))
     if eltype(A) <: ForwardDiff.Dual && size(A, 1) != size(A, 2)
         throw(
             ArgumentError(
@@ -74,7 +74,7 @@ end
 # ForwardDiff's own arithmetic gives such a `Dual` a three-level type, so the recombination
 # has no value to return. Any other pair of tags, `Symbol` tags included, passes.
 function Bramble._solve_by_parts(solve::S, F::AbstractVector{<:ForwardDiff.Dual}) where {S}
-    _check_tag_order(eltype(F))
+    Bramble._check_tag_order(eltype(F))
     return first(_by_parts(solve, F))
 end
 
@@ -84,18 +84,19 @@ _inverted(::Type{T}, ::Type{S}) where {T <: ForwardDiff.Tag, S <: ForwardDiff.Ta
 _inverted(T, S) = false
 
 # Throws an `ArgumentError` for the first pair of nested tags of a `Dual` type that goes
-# against ForwardDiff's order. Reads types only.
-_check_tag_order(::Type) = nothing
-function _check_tag_order(::Type{ForwardDiff.Dual{T, V, N}}) where {T, V, N}
+# against ForwardDiff's order. `what` names the argument, a load or a matrix. Reads types
+# only. `sparspak_solve` calls it too (ext/BrambleSparspakExt.jl).
+function Bramble._check_tag_order(
+        ::Type{ForwardDiff.Dual{T, V, N}}, what::AbstractString = "load") where {T, V, N}
     for S in _tags(V)
         _inverted(T, S) && throw(
             ArgumentError(
-            "a ForwardDiff.Dual load nests the tag $T outside the tag $S, against " *
+            "a ForwardDiff.Dual $what nests the tag $T outside the tag $S, against " *
             "ForwardDiff's tag order: ForwardDiff nests the tag it created later outside.",
         ),
         )
     end
-    return _check_tag_order(V)
+    return Bramble._check_tag_order(V, what)
 end
 
 # `(x, tags)`: the solve of `F` by parts and the operator's tags.
@@ -156,7 +157,7 @@ function Bramble.sparse_factorize(
 end
 
 function Base.:\(f::DualFactorization, F::AbstractVector)
-    _check_tag_order(eltype(F))
+    Bramble._check_tag_order(eltype(F))
     return _promoted_dual_solve(f.fact, f.A, F)
 end
 Bramble.pde_solve(f::DualFactorization, F::AbstractVector) = f \ F
@@ -180,7 +181,7 @@ end
 # reason is above `_solve_by_parts`.
 function Bramble._bordered_promoted(
         ::Type{S}, ::Type{T}, A, F, r, w, Z, solver, kwargs) where {S <: ForwardDiff.Dual, T}
-    _check_tag_order(eltype(F))
+    Bramble._check_tag_order(eltype(F))
     _check_constant_border(w, Z, r)
     n = size(A, 1)
     A0 = _innermost(A)

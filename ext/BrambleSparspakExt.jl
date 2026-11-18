@@ -302,6 +302,8 @@ function Bramble.sparspak_refactor!(fact::ConcreteSparspakFactorization, A::Spar
 end
 
 function Bramble._sparspak_solve(A::SparseMatrixCSC, F::AbstractVector)
+    Bramble._check_tag_order(eltype(A), "matrix")
+    Bramble._check_tag_order(eltype(F))
     T, S = eltype(A), promote_type(eltype(A), eltype(F))
     # A load with no split into parts of type `T` is solved against `A` at its own type.
     A′ = S === T || _parts(S, T) !== nothing ? A : SparseMatrixCSC{S}(A)
