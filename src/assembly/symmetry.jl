@@ -287,6 +287,18 @@ function _transpose_type(@nospecialize(T))
     return w{map(p -> p isa Type ? _transpose_type(p) : p, P)...}
 end
 
+# `T` with the component of every indexed leaf replaced by `0`. Pairs are matched on these,
+# as they were when the component was a field: two summands pair whatever blocks they
+# name, and the blocks are checked and shifted at run time (`bilinear_execution.jl`).
+function _component_free_type(@nospecialize(T))
+    T isa DataType || return T
+    P = T.parameters
+    isempty(P) && return T
+    w = T.name.wrapper
+    (w === IndexedTrialFunction || w === IndexedTestFunction) && return w{P[1], 0}
+    return w{map(p -> p isa Type ? _component_free_type(p) : p, P)...}
+end
+
 # The product under any scalings, or `nothing` for a summand that is not one.
 function _bare_product_type(@nospecialize(T))
     T isa Type || return nothing
@@ -310,7 +322,14 @@ end
 function _pair_plan(Ts)
     n = length(Ts)
     partner = zeros(Int, n)
-    bare = map(_bare_product_type, Ts)
+    bare = map(Ts) do T
+        B = _bare_product_type(T)
+        try
+            _component_free_type(B)
+        catch
+            B
+        end
+    end
     for i in 1:n
         (partner[i] == 0 && bare[i] !== nothing) || continue
         _pairable_type(bare[i]) || continue
