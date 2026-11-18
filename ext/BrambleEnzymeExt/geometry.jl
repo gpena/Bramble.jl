@@ -4,8 +4,8 @@
 # bisection and either returns zeros or aborts in LLVM, differently from one process to the
 # next. With it the fit never reaches Enzyme: a `φ` that is data runs the primal and the
 # grid gets a zero shadow, and a `φ` with a shadow of its own is refused. The box must not
-# depend on the parameter either. Forward mode refuses one that does; reverse mode cannot
-# tell, and gives such a box no derivative through the grid.
+# depend on the parameter either. Forward mode refuses one that does by the seed lines'
+# tangents, reverse mode by the box's bounds (`_levelset_box_bounds`, #1236).
 
 @noinline function _throw_levelset_parameter()
     throw(
@@ -26,8 +26,7 @@ end
         ArgumentError(
         "Enzyme cannot differentiate a level-set mesh whose box depends on the parameter: " *
         "the grid lines are fitted to the curve `φ = 0` and carry no derivative of the " *
-        "box. Hold the box and the level set fixed; a parameter may enter the form. " *
-        "Reverse mode cannot detect this and returns a wrong derivative.",
+        "box. Hold the box and the level set fixed; a parameter may enter the form.",
     ),
     )
 end
@@ -94,11 +93,9 @@ function EnzymeRules.augmented_primal(
     return ART(primal, shadow, nothing)::ART
 end
 
-# The grid's cotangent stops here: nothing reaches `φ` or the seed lines, so a box that
-# depends on the parameter takes no derivative through the grid. At `augmented_primal` the
-# seed lines' shadows are fresh zeros whether or not the box depends on the parameter, so
-# reverse mode cannot refuse it, and its derivative is wrong (the `levelset` docstring says
-# so).
+# The grid's cotangent stops here: nothing reaches `φ` or the seed lines. At
+# `augmented_primal` the seed lines' shadows are fresh zeros whether or not the box depends
+# on the parameter, so the rules for `_levelset_box_bounds` below refuse such a box instead.
 function EnzymeRules.reverse(
         ::RevConfig,
         ::Const{typeof(Bramble._levelset_grid)},
@@ -109,4 +106,49 @@ function EnzymeRules.reverse(
         ys::Annotation
 )
     return (nothing, nothing, nothing)
+end
+
+# The rules for `_levelset_box_bounds`, which `_mesh` calls on the box of a domain with a
+# level-set marker. Enzyme decides a float argument's activity at compile time: a bound
+# that depends on the parameter comes in `Active`, a constant one `Const`, so reverse mode
+# refuses the box here. A bound Enzyme cannot prove constant comes in `Active` too and is
+# refused. Forward mode refuses at `_levelset_grid`, by the seed lines' tangents, and
+# passes the bounds through.
+function EnzymeRules.forward(
+        ::FwdConfig,
+        ::Const{typeof(Bramble._levelset_box_bounds)},
+        ::Type,
+        x₀::Annotation,
+        x₁::Annotation,
+        y₀::Annotation,
+        y₁::Annotation
+)
+    return nothing
+end
+
+function EnzymeRules.augmented_primal(
+        ::RevConfig,
+        ::Const{typeof(Bramble._levelset_box_bounds)},
+        ::Type,
+        x₀::Annotation,
+        x₁::Annotation,
+        y₀::Annotation,
+        y₁::Annotation
+)
+    any(b -> b isa Active, (x₀, x₁, y₀, y₁)) && _throw_levelset_box()
+    return AugmentedReturn(nothing, nothing, nothing)
+end
+
+function EnzymeRules.reverse(
+        ::RevConfig,
+        ::Const{typeof(Bramble._levelset_box_bounds)},
+        ::Type,
+        tape,
+        x₀::Annotation,
+        x₁::Annotation,
+        y₀::Annotation,
+        y₁::Annotation
+)
+    _zero(b) = b isa Active ? zero(b.val) : nothing
+    return (_zero(x₀), _zero(x₁), _zero(y₀), _zero(y₁))
 end

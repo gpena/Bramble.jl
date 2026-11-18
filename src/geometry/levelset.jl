@@ -28,11 +28,11 @@ Wrap the function `φ(x)`, `x = (x₁, x₂)`, as a 2D level-set marker. In a do
 among them, is refused with an `ArgumentError`, as the level-set geometry is not
 differentiated: a parameter of `φ` takes no derivative through the mesh. Enzyme refuses a
 `φ` that depends on the parameter with an `ArgumentError` as well. The box must not depend
-on the parameter either. Enzyme's forward mode refuses such a box, and reverse mode returns
-a wrong derivative. Hold the level set and the box fixed and let the parameter enter the
-form. `φ` need not be a signed distance; a mesh samples each grid line at 129 points and
-bisects every sign change, so `φ` only has to change sign across the curve. Two roots on a
-line closer than its sample spacing are missed. With a `time_set`, `φ` still takes `x` alone.
+on the parameter either, and Enzyme refuses one that does in forward and reverse mode.
+Hold the level set and the box fixed and let the parameter enter the form. `φ` need not be
+a signed distance; a mesh samples each grid line at 129 points and bisects every sign
+change, so `φ` only has to change sign across the curve. Two roots on a line closer than
+its sample spacing are missed. With a `time_set`, `φ` still takes `x` alone.
 
 # Examples
 ```jldoctest
