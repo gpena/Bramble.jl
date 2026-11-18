@@ -24,10 +24,13 @@ end
 # The solution's value is `A₀⁻¹ b₀`, where `A₀` is the innermost `Float64` values of `A`,
 # and its partial `k` is `A₀⁻¹(b_k − A_k x₀)`. So `A₀` is factored once, by the route of
 # its `Float64` solve, and every partial is a solve against that factor.
+# Before any factoring, a load nested against ForwardDiff's tag order is refused. Why: see
+# the comment above `_solve_by_parts`.
 function Bramble._solve_promoted(
         ::Type{<:ForwardDiff.Dual}, A::SparseMatrixCSC, F::AbstractVector;
         solver::Symbol, sym, kwargs...
 )
+    _check_tag_order(eltype(F))
     if eltype(A) <: ForwardDiff.Dual && size(A, 1) != size(A, 2)
         throw(
             ArgumentError(
@@ -126,6 +129,8 @@ _tags(::Type) = ()
 # A kept factorization of a `Dual` matrix (`sparse_factorize(A)` with `A` a `Dual` matrix):
 # `fact` factors the innermost values of `A` by the backend and keywords given, and every
 # solve against it is the `Dual` solve of `pde_solve(A, F)`, over that one factor.
+# A load nested against ForwardDiff's tag order is refused, for the reason given above
+# `_solve_by_parts`.
 struct DualFactorization{P <: ForwardDiff.Dual, FA <: Factorization, M <: SparseMatrixCSC{P}} <:
        Factorization{P}
     fact::FA
@@ -150,7 +155,10 @@ function Bramble.sparse_factorize(
     return DualFactorization(fact, A)
 end
 
-Base.:\(f::DualFactorization, F::AbstractVector) = _promoted_dual_solve(f.fact, f.A, F)
+function Base.:\(f::DualFactorization, F::AbstractVector)
+    _check_tag_order(eltype(F))
+    return _promoted_dual_solve(f.fact, f.A, F)
+end
 Bramble.pde_solve(f::DualFactorization, F::AbstractVector) = f \ F
 LinearAlgebra.ldiv!(x::AbstractVector, f::DualFactorization, F::AbstractVector) = copyto!(x, f \ F)
 
@@ -168,8 +176,11 @@ end
 # `[u; μ]` is `B₀⁻¹([Fₖ; 0] − Bₖ[u₀; μ₀])`. A `Dual` border has no such formula and is
 # refused. So is a `RankOneUpdate` over a `Dual` matrix, whose `σ` takes the matrix's
 # element type.
+# A load nested against ForwardDiff's tag order is refused, as in `_solve_promoted`; the
+# reason is above `_solve_by_parts`.
 function Bramble._bordered_promoted(
         ::Type{S}, ::Type{T}, A, F, r, w, Z, solver, kwargs) where {S <: ForwardDiff.Dual, T}
+    _check_tag_order(eltype(F))
     _check_constant_border(w, Z, r)
     n = size(A, 1)
     A0 = _innermost(A)
