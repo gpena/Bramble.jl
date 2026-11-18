@@ -87,6 +87,9 @@ direct LU factorization.
 A singular matrix throws a `SingularException` with index `0` (see
 [`sparspak_factorize`](@ref)).
 
+With ForwardDiff loaded, a `Dual` matrix or load nested against ForwardDiff's tag order
+throws an `ArgumentError`.
+
 A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
 
 Requires [Sparspak.jl](https://github.com/JuliaSparse/Sparspak.jl); call `using Sparspak`
