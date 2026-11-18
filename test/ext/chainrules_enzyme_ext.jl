@@ -1340,6 +1340,79 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             @test eltype(K̄c.A) === eltype(K̄c.ws) === eltype(K̄c.wt) === Float64
             ḡc = [K̄c.σ; K̄c.ws; K̄c.wt; nonzeros(K̄c.A)]
             @test ḡc ≈ ForwardDiff.gradient(Jc, θc) rtol=1e-8
+
+            # Complex `σ`, `wₛ` or `wₜ` (gpena/Bramble.jl#1249): the rule pairs cotangents by
+            # `Re tr(X̄ᴴ δX)`, so the product rule on `σ wₛ wₜᵀ` conjugates `σ`, `wₛ` and `wₜ`.
+            # `A` is the operator above with its stored values scaled entry by entry, so it
+            # is not symmetric. The reference is ForwardDiff of `Re(cᴴK⁻¹F)` over the real
+            # and imaginary parts of every parameter, the dense `K` solved as the real block
+            # system `[Kᵣ −Kᵢ; Kᵢ Kᵣ]`, and a cotangent is `∂/∂re + i ∂/∂im`. A parameter left
+            # real has a real shadow, which holds the real part. `RankOneUpdate` promotes `σ`
+            # to the common element type, so `σ̄` is complex once any field is. The first two
+            # cases (a real `K`, then a complex `A` with real `σ`, `wₛ` and `wₜ`) need no
+            # conjugate on the border; they are controls on the reference itself.
+            mc = nnz(Ac)
+            Arz = nonzeros(Ac) .* [1 + 0.05 * cos(k) for k in 1:mc]
+            Aiz = [0.1 * sin(2k) for k in 1:mc]
+            wsiz = [sin(3i) / 3 for i in 1:nc]
+            wtiz = [cos(5i) / 4 for i in 1:nc]
+            isz = 2 .+ (1:(2nc))
+            itz = (2 + 2nc) .+ (1:(2nc))
+            iAz = (2 + 4nc) .+ (1:(2mc))
+            cplx(v) = complex.(v[1:(end ÷ 2)], v[(end ÷ 2 + 1):end])
+            half(g, c) = c ? cplx(g) : g[1:(end ÷ 2)]
+            θz(cσ, cs, ct, cA) = [0.3; cσ * 0.4; wsc; cs .* wsiz; wtc; ct .* wtiz; Arz;
+                                  cA .* Aiz]
+            function Jz(θ)
+                Kd = zeros(Complex{eltype(θ)}, nc, nc)
+                a = cplx(θ[iAz])
+                for k in 1:mc
+                    Kd[ic[k], jc[k]] += a[k]
+                end
+                Kd += complex(θ[1], θ[2]) * cplx(θ[isz]) * transpose(cplx(θ[itz]))
+                x = [real.(Kd) -imag.(Kd); imag.(Kd) real.(Kd)] \ [real(Fc); imag(Fc)]
+                return dot(real(cc), x[1:nc]) + dot(imag(cc), x[(nc + 1):(2nc)])
+            end
+            function Kz(cσ, cs, ct, cA)
+                A = SparseMatrixCSC(nc, nc, copy(Ac.colptr), copy(Ac.rowval),
+                    cA ? complex.(Arz, Aiz) : copy(Arz))
+                return ROU(A, cσ ? 0.3 + 0.4im : 0.3, cs ? complex.(wsc, wsiz) : copy(wsc),
+                    ct ? complex.(wtc, wtiz) : copy(wtc))
+            end
+            function refz(cσ, cs, ct, cA)
+                g = ForwardDiff.gradient(Jz, θz(cσ, cs, ct, cA))
+                σ̄ = (cσ | cs | ct | cA) ? complex(g[1], g[2]) : g[1]
+                return (σ̄, half(g[isz], cs), half(g[itz], ct), half(g[iAz], cA))
+            end
+            for cA in (false, true), (cσ, cs, ct) in ((false, false, false), (true, false, false),
+                (false, true, false), (false, false, true), (true, true, true))
+
+                Kz0 = Kz(cσ, cs, ct, cA)
+                Kzd = Enzyme.Duplicated(Kz0, Enzyme.make_zero(Kz0))
+                Fzd = Enzyme.Duplicated(copy(Fc), zero(Fc))
+                aug_z = Enzyme.EnzymeRules.augmented_primal(rcfg, psc, RTc, Kzd, Fzd)
+                aug_z.shadow .= cc
+                Enzyme.EnzymeRules.reverse(rcfg, psc, RTc, aug_z.tape, Kzd, Fzd)
+                K̄z = Kzd.dval
+                gotz = (K̄z.σ, K̄z.ws, K̄z.wt, nonzeros(K̄z.A))
+                for (got, ref) in zip(gotz, refz(cσ, cs, ct, cA))
+                    @test typeof(got) === typeof(ref)
+                    @test got ≈ ref rtol=1e-10
+                end
+            end
+
+            # The calls above take the pairing on trust; Enzyme's own reverse pass through
+            # `Re(cᴴK⁻¹F)` checks it, with all three complex on a complex `A`.
+            Ka0 = Kz(true, true, true, true)
+            Kad = Enzyme.Duplicated(Ka0, Enzyme.make_zero(Ka0))
+            loss_z(K, F) = real(dot(cc, Bramble.pde_solve(K, F)))
+            Enzyme.autodiff(rev, Enzyme.Const(loss_z), Enzyme.Active, Kad,
+                Enzyme.Duplicated(copy(Fc), zero(Fc)))
+            K̄a = Kad.dval
+            gota = (K̄a.σ, K̄a.ws, K̄a.wt, nonzeros(K̄a.A))
+            for (got, ref) in zip(gota, refz(true, true, true, true))
+                @test got ≈ ref rtol=1e-10
+            end
         else
             @test_skip "Enzyme not in this environment"
         end
