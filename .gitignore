@@ -31,6 +31,12 @@ docs/src/examples/boundary_layer_graded.md
 docs/src/examples/transient_inverse_problem.md
 docs/src/examples/memory_scaling.md
 docs/src/examples/matrix_free_operator.md
+docs/src/examples/neumann_robin_poisson.md
+docs/src/examples/poisson_polygon.md
+docs/src/examples/poisson_circle.md
+docs/src/examples/heat_time_stepping.md
+docs/src/examples/ghost_heat_equation.md
+docs/src/examples/elasticity_traction_2d.md
 
 # File-sync conflicts. When the same path is written on two machines, a sync client keeps
 # both by appending a space and a number to the name: `docs/build 2/`, `assets 2/`, and
