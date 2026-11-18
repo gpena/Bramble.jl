@@ -487,6 +487,77 @@ end
         end
     end
 
+    # A `Dual` matrix nested against ForwardDiff's tag order is refused by `pde_solve`, the
+    # bordered solve and `sparse_factorize`, whatever the load, the `Float64` one included.
+    # The ordered controls match `_sparspak_solve`, Sparspak's LU over the `Dual` numbers.
+    @testset "inverted matrix, every entry (#1255)" begin
+        Dl = ForwardDiff.Dual
+        T1, T2 = typeof(ForwardDiff.Tag(sin, Float64)), typeof(ForwardDiff.Tag(cos, Float64))
+        Ta, Tb = ForwardDiff.:≺(T1, T2) ? (T1, T2) : (T2, T1)
+        M0 = spdiagm(0 => fill(4.0, m), 1 => fill(-1.0, m - 1), -1 => fill(-1.2, m - 1))
+        nA(O, N) = SparseMatrixCSC(m, m, M0.colptr, M0.rowval,
+            [Dl{O}(Dl{N}(v, 0.5v), Dl{N}(0.25v, 0.1v)) for v in M0.nzval])
+        b0 = [1.5 + cos(i) for i in 1:m]
+        load1(T) = [Dl{T}(x, 0.3x) for x in b0]
+        load(O, N) = [Dl{O}(Dl{N}(x, 0.3x), Dl{N}(0.2x, 0.1x)) for x in b0]
+        w = collect(1.0 .+ 0.1 .* (1:m))
+        flat(u) = reduce(vcat,
+            [ForwardDiff.value.(ForwardDiff.value.(u)),
+                ForwardDiff.partials.(ForwardDiff.value.(u), 1),
+                ForwardDiff.value.(ForwardDiff.partials.(u, 1)),
+                ForwardDiff.partials.(ForwardDiff.partials.(u, 1), 1)])
+        function thrown(f)
+            try
+                f()
+            catch e
+                return e
+            end
+            return nothing
+        end
+
+        Ainv = nA(Ta, Tb)
+        for (ln, F) in (("Float64 load", b0), ("load on the outer tag", load1(Ta)),
+            ("load on the inner tag", load1(Tb)), ("inverted load", load(Ta, Tb)),
+            ("ordered load", load(Tb, Ta)))
+            for (rn, f) in (("pde_solve(A, F)", () -> pde_solve(Ainv, F)),
+                ("mean_zero", () -> pde_solve(Ainv, F; mean_zero = w)),
+                ("solver = :sparspak", () -> pde_solve(Ainv, F; solver = :sparspak)))
+                @testset "$ln, $rn" begin
+                    @test_throws ArgumentError f()
+                    e = thrown(f)
+                    msg = e isa ArgumentError ? e.msg : ""
+                    @test occursin(string(Ta), msg) && occursin(string(Tb), msg)
+                    @test occursin("Dual matrix nests", msg)
+                end
+            end
+        end
+        @testset "sparse_factorize(A)" begin
+            @test_throws ArgumentError sparse_factorize(Ainv)
+            e = thrown(() -> sparse_factorize(Ainv))
+            msg = e isa ArgumentError ? e.msg : ""
+            @test occursin(string(Ta), msg) && occursin(string(Tb), msg)
+            @test occursin("Dual matrix nests", msg)
+        end
+
+        Aord = nA(Tb, Ta)
+        for (ln, F) in (("Float64 load", b0), ("load on the outer tag", load1(Tb)),
+            ("load on the inner tag", load1(Ta)), ("ordered load", load(Tb, Ta)))
+            @testset "control, ordered matrix, $ln" begin
+                T = promote_type(eltype(Aord), eltype(F))
+                o = Bramble._sparspak_solve(Aord, F)
+                for u in (pde_solve(Aord, F), sparse_factorize(Aord) \ F)
+                    @test eltype(u) === T
+                    @test norm(flat(u) - flat(o)) <= 1.0e-10 * norm(flat(o))
+                end
+                @test eltype(pde_solve(Aord, F; mean_zero = w)) === T
+            end
+        end
+        @testset "control, Symbol-tag matrix" begin
+            As = nA(:s, :t)
+            @test eltype(pde_solve(As, b0)) === eltype(As)
+        end
+    end
+
     # The factor is shared: a Dual with N partials costs N solves and one factorization, not
     # N factorizations. A factorization of this matrix allocates about 1.8 MB and a partial
     # about 0.5 MB, so the bound of half a factorization per partial fails a refactor on

@@ -25,11 +25,12 @@ end
 # and its partial `k` is `A₀⁻¹(b_k − A_k x₀)`. So `A₀` is factored once, by the route of
 # its `Float64` solve, and every partial is a solve against that factor.
 # Before any factoring, a load nested against ForwardDiff's tag order is refused. Why: see
-# the comment above `_solve_by_parts`.
+# the comment above `_solve_by_parts`. So is a matrix nested so, and it is checked first.
 function Bramble._solve_promoted(
         ::Type{<:ForwardDiff.Dual}, A::SparseMatrixCSC, F::AbstractVector;
         solver::Symbol, sym, kwargs...
 )
+    Bramble._check_tag_order(eltype(A), "matrix")
     Bramble._check_tag_order(eltype(F))
     if eltype(A) <: ForwardDiff.Dual && size(A, 1) != size(A, 2)
         throw(
@@ -131,7 +132,7 @@ _tags(::Type) = ()
 # `fact` factors the innermost values of `A` by the backend and keywords given, and every
 # solve against it is the `Dual` solve of `pde_solve(A, F)`, over that one factor.
 # A load nested against ForwardDiff's tag order is refused, for the reason given above
-# `_solve_by_parts`.
+# `_solve_by_parts`. So is a matrix nested so, before its factor is built.
 struct DualFactorization{P <: ForwardDiff.Dual, FA <: Factorization, M <: SparseMatrixCSC{P}} <:
        Factorization{P}
     fact::FA
@@ -144,6 +145,7 @@ Base.size(f::DualFactorization, d::Integer) = size(f.A, d)
 function Bramble.sparse_factorize(
         A::SparseMatrixCSC{<:ForwardDiff.Dual}; solver::Symbol = :default, sym = :auto, kwargs...
 )
+    Bramble._check_tag_order(eltype(A), "matrix")
     if size(A, 1) != size(A, 2)
         throw(
             ArgumentError(
@@ -178,9 +180,10 @@ end
 # refused. So is a `RankOneUpdate` over a `Dual` matrix, whose `σ` takes the matrix's
 # element type.
 # A load nested against ForwardDiff's tag order is refused, as in `_solve_promoted`; the
-# reason is above `_solve_by_parts`.
+# reason is above `_solve_by_parts`. The matrix is checked too, first.
 function Bramble._bordered_promoted(
         ::Type{S}, ::Type{T}, A, F, r, w, Z, solver, kwargs) where {S <: ForwardDiff.Dual, T}
+    Bramble._check_tag_order(eltype(A), "matrix")
     Bramble._check_tag_order(eltype(F))
     _check_constant_border(w, Z, r)
     n = size(A, 1)
