@@ -322,13 +322,11 @@ end
 function _pair_plan(Ts)
     n = length(Ts)
     partner = zeros(Int, n)
+    # Only a pairable product is ever matched, so only those are erased: they are concrete
+    # and built of singletons and indexed leaves, so rebuilding them meets no bound.
     bare = map(Ts) do T
         B = _bare_product_type(T)
-        try
-            _component_free_type(B)
-        catch
-            B
-        end
+        B !== nothing && _pairable_type(B) ? _component_free_type(B) : B
     end
     for i in 1:n
         (partner[i] == 0 && bare[i] !== nothing) || continue
