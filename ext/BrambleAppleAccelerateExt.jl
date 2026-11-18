@@ -26,17 +26,21 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
                            AAFactorization,
                            AASparseMatrix,
                            ATT_ORDINARY,
-                           refactor!,
+                           LIBSPARSE,
                            SparseFactorizationCholesky,
                            SparseFactorizationLDLT,
                            SparseFactorizationLUTPP,
                            SparseFactorizationQR,
                            SparseFactor,
                            SparseCleanup,
+                           SparseMatrix,
                            SparseNumericFactorOptions,
+                           SparseOpaqueFactorization,
                            SparseStatusOk,
                            SparseSymbolicFactorOptions,
-                           _libsparse_throw
+                           _libsparse_throw,
+                           _REFACTOR_SYM,
+                           _refactor_family
 
     mutable struct ConcreteAccelerateFactorization{T} <: AccelerateFactorization{T}
         aa_fact::AAFactorization{T}
@@ -118,12 +122,149 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         )
     end
 
-    # libSparse refuses a structurally singular matrix (a zero row or column, or no full
-    # matching of rows to columns) with an `ErrorException` it words itself. That is a
-    # singular matrix, so it becomes the `SingularException` every other singular matrix
-    # throws. libSparse reports no pivot, so the index is `0`: not a position. Matched by
-    # message, so libSparse's other refusals (not positive definite) stay `ErrorException`s.
+    # libSparse's LU refuses a structurally singular matrix (a zero row or column, or no
+    # full matching of rows to columns) with an `ErrorException` it words itself, and so
+    # does its QR for a zero row or column. That is a singular matrix, so it becomes the
+    # `SingularException` every other singular matrix throws. libSparse reports no pivot,
+    # so the index is `0`: not a position. Matched by message, so libSparse's other
+    # refusals (not positive definite) stay `ErrorException`s. Its LDLᵀ runs no such test
+    # and returns factors that solve to a wrong answer, so `_aa_structurally_singular`
+    # makes it first (gpena/Bramble.jl#1231).
     _aa_structural(e) = e isa ErrorException && occursin("structurally singular", e.msg)
+
+    # `true` when no matching of rows to columns covers every column of the stored pattern
+    # of the square `A`, which is then singular whatever its values. Stored zeros count,
+    # as they do for libSparse's LU. The matching is Hopcroft and Karp's: a greedy first
+    # assignment and one-step augmenting paths (Pothen and Fan's lookahead), then phases
+    # that each lay the columns out in layers by breadth-first search from every unmatched
+    # column and augment along shortest paths by depth-first search. A column that fails or
+    # augments is dropped for the rest of its phase, so a phase reads each entry about
+    # once, and O(√n) phases suffice. A phase that finds no augmenting path leaves the
+    # matching maximum. Both searches keep explicit stacks, so a long path cannot overflow.
+    function _aa_structurally_singular(A::SparseMatrixCSC)
+        n = size(A, 2)
+        cp, rv = A.colptr, A.rowval
+        rowmatch = zeros(Int, n)        # the column matched to row i, or 0
+        colmatch = zeros(Int, n)        # the row matched to column j, or 0
+        # Rows before `cheap[j]` in column `j` are matched, and a matched row stays so
+        cheap = Vector{Int}(undef, n)
+        for j in 1:n
+            cp[j] == cp[j + 1] && return true
+            p = Int(cp[j])
+            while p < cp[j + 1]
+                i = rv[p]
+                p += 1
+                if rowmatch[i] == 0
+                    rowmatch[i], colmatch[j] = j, i
+                    break
+                end
+            end
+            cheap[j] = p
+        end
+        # Augmenting paths of one step: an unmatched column takes the row of a column
+        # that finds an unmatched row past its `cheap`. The pointers only advance, so the
+        # pass reads each entry a bounded number of times.
+        for j in 1:n
+            colmatch[j] == 0 || continue
+            for p in cp[j]:(cp[j + 1] - 1)
+                i = rv[p]
+                j2 = rowmatch[i]
+                q = cheap[j2]
+                while q < cp[j2 + 1] && rowmatch[rv[q]] != 0
+                    q += 1
+                end
+                cheap[j2] = q
+                if q < cp[j2 + 1]
+                    i2 = rv[q]
+                    cheap[j2] = q + 1
+                    rowmatch[i2], colmatch[j2] = j2, i2
+                    rowmatch[i], colmatch[j] = j, i
+                    break
+                end
+            end
+        end
+        dead = typemax(Int)
+        layer = Vector{Int}(undef, n)   # a column's breadth-first layer, or `dead`
+        queue = Vector{Int}(undef, n)
+        next = Vector{Int}(undef, n)    # per column, the entry its depth-first scan resumes at
+        js = Vector{Int}(undef, n)      # the depth-first stack: columns,
+        is = Vector{Int}(undef, n)      # and the row each one leaves through
+        while true
+            tail = 0
+            for j in 1:n
+                if colmatch[j] == 0
+                    layer[j] = 0
+                    queue[tail += 1] = j
+                else
+                    layer[j] = dead
+                end
+            end
+            tail == 0 && return false
+            # Layers up to the first one that reaches an unmatched row
+            limit, head = dead, 0
+            while head < tail
+                j = queue[head += 1]
+                layer[j] >= limit && break
+                for p in cp[j]:(cp[j + 1] - 1)
+                    j2 = rowmatch[rv[p]]
+                    if j2 == 0
+                        limit = min(limit, layer[j] + 1)
+                    elseif layer[j2] == dead
+                        layer[j2] = layer[j] + 1
+                        queue[tail += 1] = j2
+                    end
+                end
+            end
+            limit == dead && return true
+            for j in 1:n
+                next[j] = cp[j]
+            end
+            for j0 in 1:n
+                (colmatch[j0] == 0 && layer[j0] == 0) || continue
+                h = 1
+                js[1] = j0
+                found = false
+                while h >= 1
+                    j = js[h]
+                    p = next[j]
+                    advanced = false
+                    while p < cp[j + 1]
+                        i = rv[p]
+                        p += 1
+                        j2 = rowmatch[i]
+                        if j2 == 0
+                            is[h] = i
+                            found = true
+                            break
+                        elseif layer[j2] == layer[j] + 1
+                            is[h] = i
+                            next[j] = p
+                            h += 1
+                            js[h] = j2
+                            advanced = true
+                            break
+                        end
+                    end
+                    found && break
+                    if !advanced
+                        layer[j] = dead
+                        h -= 1
+                    end
+                end
+                found || continue
+                for k in 1:h
+                    rowmatch[is[k]], colmatch[js[k]] = js[k], is[k]
+                    layer[js[k]] = dead
+                end
+            end
+        end
+    end
+
+    # LDLᵀ is factored afresh only after this check, which throws as libSparse's LU would.
+    function _aa_check_structure(A::SparseMatrixCSC)
+        _aa_structurally_singular(A) && throw(LinearAlgebra.SingularException(0))
+        return nothing
+    end
 
     # AppleAccelerate.jl's `factor!` passes libSparse Julia `@cfunction`s for `malloc` and
     # `free`. libSparse calls them from its GCD worker threads, Julia adopts those threads,
@@ -156,6 +297,54 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         return aa
     end
 
+    # `Sparse/Solve.h` asks `SparseRefactor` on a complex matrix for twice the workspace
+    # the symbolic factorization records for its real type. AppleAccelerate 0.7.0's
+    # `refactor!` passes the recorded size, and libSparse writes past the buffer
+    # (gpena/Bramble.jl#1230, JuliaLinearAlgebra/AppleAccelerate.jl#233).
+    function _aa_refactor_workspace(symbolic, ::Type{T}) where {T}
+        n = Int(real(T) === Float32 ? symbolic.workspaceSize_Float : symbolic.workspaceSize_Double)
+        return T <: Complex ? 2n : n
+    end
+
+    # AppleAccelerate 0.7.0's `_sparse_refactor!`, one method per `_SparseRefactor*`
+    # symbol, with the workspace above.
+    for ((T, family), sym) in _REFACTOR_SYM
+        @eval function _aa_sparse_refactor!(
+                fact::Base.RefValue{SparseOpaqueFactorization{$T}}, matrix::SparseMatrix{$T},
+                nfopts::Base.RefValue{SparseNumericFactorOptions}, ::Val{$(QuoteNode(family))}
+        )
+            workspace = Vector{UInt8}(
+                undef, _aa_refactor_workspace(fact[].symbolicFactorization, $T)
+            )
+            GC.@preserve workspace begin
+                @ccall LIBSPARSE.$sym(
+                    matrix::Ref{SparseMatrix{$T}}, fact::Ptr{SparseOpaqueFactorization{$T}},
+                    nfopts::Ptr{SparseNumericFactorOptions}, pointer(workspace)::Ptr{Cvoid}
+                )::Cvoid
+            end
+            return fact[]
+        end
+    end
+
+    # `refactor!` of AppleAccelerate 0.7.0 with that workspace. `accelerate_refactor!` has
+    # checked the dimensions and the stored-nonzero count already. The symbolic
+    # factorization does not record whether a complex matrix is Hermitian, so the family
+    # comes from `M`, whose tag says it.
+    function _aa_refactor!(aa::AAFactorization{T}, M::AASparseMatrix{T}) where {T}
+        family = T <: Complex && ishermitian(M) ? :Hermitian :
+                 _refactor_family(aa._factorization.symbolicFactorization.type)
+        factref = Ref(aa._factorization)
+        GC.@preserve M begin
+            _aa_sparse_refactor!(
+                factref, M.matrix, Ref(SparseNumericFactorOptions(T)), Val(family)
+            )
+        end
+        _libsparse_throw(factref[].status, "refactor")
+        aa._factorization = factref[]
+        aa.matrixObj = M
+        return aa
+    end
+
     function _aa_factor!(aa, fact_kind)
         try
             _aa_sparse_factor!(aa, fact_kind)
@@ -171,6 +360,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         m == n || throw(DimensionMismatch("Matrix must be square for sparse direct solve, got $(m)×$(n)"))
 
         fact_kind, sym_flag = _accelerate_fact_kind(A, sym, kind)
+        fact_kind === SparseFactorizationLDLT && _aa_check_structure(A)
 
         aa = AAFactorization(_aa_matrix(A, sym_flag))
         auto = _aa_auto(sym, kind)
@@ -182,6 +372,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
             catch e
                 e isa ErrorException || rethrow()
                 fact_kind, sym_flag = SparseFactorizationLDLT, :symmetric
+                _aa_check_structure(A)
                 _aa_factor!(aa, fact_kind)
             end
         else
@@ -344,8 +535,8 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         (fact.sym === :spd || fact.sym === :symmetric) && !ishermitian(A) &&
             _throw_not_hermitian(A, true)
         M = _aa_matrix(A, fact.sym)
-        # AppleAccelerate's `refactor!` refuses another stored-nonzero count before it
-        # touches the factors; refused here, so `failure` records only numeric failures.
+        # `_aa_refactor!` would pass another stored-nonzero count to libSparse; refused
+        # here, before the factors are touched, so `failure` records only numeric failures.
         nold, nnew = length(fact.aa_fact.matrixObj._nzval), length(M._nzval)
         nold == nnew || throw(
             ArgumentError(
@@ -355,12 +546,13 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         )
         try
             try
-                refactor!(fact.aa_fact, M)
+                _aa_refactor!(fact.aa_fact, M)
             catch e
                 (fact.checked && fact.sym === :spd && e isa ErrorException) || rethrow()
                 # `:auto` Cholesky on a matrix that is not positive definite: the LDLᵀ
                 # fallback `_accelerate_factorize` takes, on a fresh object, since
                 # Cholesky's symbolic factorization cannot be refactored as LDLᵀ.
+                _aa_check_structure(A)
                 aa = AAFactorization(M)
                 _aa_factor!(aa, SparseFactorizationLDLT)
                 fact.aa_fact, fact.sym = aa, :symmetric

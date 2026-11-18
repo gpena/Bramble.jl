@@ -43,6 +43,31 @@ function throws_unknown_kw(f, kw::Symbol)
     return false
 end
 
+# The refactor rounds of the "Complex refactor workspace (#1230)" testset, defined here and
+# sent as text to the child process there. The rounds refactor onto `2M` and `M` in turn,
+# solve after each, and return the worst relative residual. `2 * M` drops stored zeros and
+# changes the pattern, so `nzval` is scaled instead.
+const REFACTOR_ROUNDS = quote
+    hermitian_tridiag(T, d, e) = sparse(
+        Tridiagonal(conj.(fill(T(e), 5)), fill(T(d), 6), fill(T(e), 5))
+    )
+    function refactor_rounds(M, sym)
+        T = eltype(M)
+        M2 = copy(M)
+        M2.nzval .*= 2
+        b = T.(1:size(M, 1))
+        f = accelerate_factorize(M; sym = sym)
+        worst = 0.0
+        for r in 1:20
+            N = isodd(r) ? M2 : M
+            accelerate_refactor!(f, N)
+            worst = max(worst, norm(N * (f \ b) - b, Inf) / norm(b, Inf))
+        end
+        return worst
+    end
+end
+Core.eval(@__MODULE__, REFACTOR_ROUNDS)
+
 @testset "AppleAccelerate extension" begin
     if !Sys.isapple()
         @testset "Non-macOS guard" begin
@@ -374,6 +399,81 @@ end
                 @test_throws SingularException pde_solve(S, ones(3); solver = :accelerate)
                 @test_throws SingularException accelerate_solve(S, ones(3))
             end
+            # libSparse's LDLᵀ runs no structural test and solves such a matrix to a wrong
+            # answer, so the extension refuses its pattern first, as LU does: a zero row and
+            # column, or no matching of rows to columns (gpena/Bramble.jl#1231)
+            nomatch = sparse([0.0 0 1; 0 0 1; 1 1 1])
+            for M in (nomatch, sparse([0.0 0; 0 1]), spzeros(2, 2), sparse([1.0 0 0; 0 0 0; 0 0 1]))
+                for o in ((;), (sym = :symmetric,), (kind = :ldlt,), (sym = :unsymmetric,))
+                    @test_throws SingularException accelerate_factorize(M; o...)
+                end
+            end
+            # The issue's bordered gauge system, its last multiplier's row and column cleared:
+            # the solution is so large that `:auto`'s residual check misses it
+            Bramble._seed_mesh1d_rng!(11)
+            Ωg = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 7), (false, false))
+            Bramble._unseed_mesh1d_rng!()
+            Wg = gridspace(Ωg; ghosts = :boundary)
+            Ag = assemble(form(Wg, Wg, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+            Zg = Bramble.ghost_kernel(Ag, Wg)
+            Cg = sparse(Zg)
+            Bg = [Ag Cg; Cg' spzeros(size(Cg, 2), size(Cg, 2))]
+            kg = size(Bg, 1)
+            B1 = copy(Bg)
+            B1[:, kg] .= 0
+            B1[kg, :] .= 0
+            dropzeros!(B1)
+            for o in ((;), (sym = :symmetric,), (kind = :ldlt,))
+                @test_throws SingularException accelerate_factorize(B1; o...)
+            end
+            @test norm(accelerate_factorize(Bg; sym = :symmetric) \ (Bg * ones(kg)) .- 1, Inf) <= 1.0e-4
+            # A gauge with a zero column borders `A` that way: `pde_solve` passes
+            # `sym = :symmetric`, under `:accelerate` and under `:default`
+            Fg = Ag * ones(size(Ag, 1))
+            Z0 = Matrix(Zg)
+            Z0[:, end] .= 0
+            @test_throws SingularException pde_solve(Ag, Fg; gauge = Z0, solver = :accelerate)
+            @test_throws SingularException pde_solve(Ag, Fg; gauge = Z0)
+            ug = pde_solve(Ag, Fg; gauge = Zg, solver = :accelerate)
+            @test norm(Ag * ug - Fg, Inf) <= 1.0e-8 * norm(Fg, Inf)
+            # A zero diagonal with a matching is no structural singularity, and a numerically
+            # singular matrix under an explicit LDLᵀ still returns, as an explicit LU does
+            for (M, b) in (([0.0 1; 1 0], [1.0, 2]), ([0.0 1 0; 1 0 1; 0 1 -2], [1.0, 2, 3]))
+                for o in ((sym = :symmetric,), (kind = :ldlt,))
+                    @test isapprox(accelerate_factorize(sparse(M); o...) \ b, M \ b; rtol = 1.0e-12)
+                end
+            end
+            @test accelerate_factorize(sparse([1.0 1; 1 1]); sym = :symmetric) isa
+                  AccelerateFactorization
+            # The `:auto` Cholesky refactor's LDLᵀ fallback checks the pattern before it
+            # factors, so the refused refactor leaves the Cholesky object and its failure.
+            # A positive diagonal has a matching, so only another pattern gets there: this
+            # one stores as many lower entries as `2I`, has no matching, and fails Cholesky
+            fd = accelerate_factorize(sparse(2.0I, 3, 3))
+            @test fd.sym === :spd
+            @test_throws SingularException accelerate_refactor!(fd, sparse([0.0 0 -1; 0 0 1; -1 1 1]))
+            @test fd.sym === :spd
+            @test_throws SingularException fd \ ones(3)
+            # The check against the generic rank: random values on random patterns, half of
+            # them symmetric, have full rank exactly when the pattern has a matching
+            ext = Base.get_extension(Bramble, :BrambleAppleAccelerateExt)
+            rng = Xoshiro(1231)
+            mismatches = 0
+            for _ in 1:2000
+                n = rand(rng, 1:9)
+                P = sprand(rng, Bool, n, n, 0.6 * rand(rng))
+                rand(rng, Bool) && (P = P .| P')
+                V = SparseMatrixCSC(n, n, P.colptr, P.rowval, randn(rng, nnz(P)))
+                mismatches += ext._aa_structurally_singular(V) != (rank(Matrix(V)) < n)
+            end
+            @test mismatches == 0
+            # Stored zeros count as entries, as for LU; `Int32` indices read the same
+            Sz = SparseMatrixCSC(2, 2, [1, 3, 4], [1, 2, 2], [1.0, 0.0, 0.0])
+            @test !ext._aa_structurally_singular(Sz)
+            @test ext._aa_structurally_singular(SparseMatrixCSC{Float64, Int32}(nomatch))
+            @test !ext._aa_structurally_singular(SparseMatrixCSC{Float64, Int32}(Bg))
+            @test !ext._aa_structurally_singular(spzeros(0, 0))
+
             # Only libSparse's structural refusal is mapped: its other errors keep their type
             @test_throws ErrorException accelerate_factorize(sparse([1.0 2; 2 1]); sym = :spd)
             @test occursin("not a pivot", lowercase(string(@doc accelerate_factorize)))
@@ -852,6 +952,84 @@ end
                 # a child that did not exit prints nothing: the test above fails, not a parse
                 before, after = r.exited ? parse.(Int, split(strip(r.out))) : (0, 0)
                 @test after > before
+            end
+        end
+
+        # gpena/Bramble.jl#1230. `Sparse/Solve.h` asks a refactor of a complex matrix for
+        # twice the workspace its symbolic factorization records, and AppleAccelerate
+        # 0.7.0's `refactor!` passed the recorded size. libSparse wrote past the buffer, and
+        # a complex Hermitian LDLᵀ refactor crashed the process, though not on every run.
+        # Those rows run in a fresh child, so a crash fails a test by its missing residual
+        # instead of ending the suite. Complex Cholesky and LU overran the same buffer
+        # without crashing; they run here once the child has passed, with a real LDLᵀ,
+        # whose workspace the fix leaves as it was.
+        @testset "Complex refactor workspace (#1230)" begin
+            Bramble._seed_mesh1d_rng!(11)
+            Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 7), (false, false))
+            Bramble._unseed_mesh1d_rng!()
+            W = gridspace(Ω; ghosts = :boundary)
+            A = assemble(form(W, W, (u, v) -> innerₕ(Δₕ(u), Δₕ(v)) + innerₕ(u, v)))
+            C = sparse(Bramble.ghost_kernel(A, W))
+            bordered = [A C; C' spzeros(size(C, 2), size(C, 2))]
+            eltypes = (
+                ("Hermitian LDLᵀ ComplexF64", ComplexF64),
+                ("Hermitian LDLᵀ ComplexF32", ComplexF32),
+                ("bordered gauge LDLᵀ ComplexF64", ComplexF64)
+            )
+            child_passed = mktempdir() do dir
+                # Plain text, Base only, as in the #1201 rows; the child makes it complex.
+                file = joinpath(dir, "bordered.txt")
+                open(file, "w") do io
+                    println(io, size(bordered, 1), " ", size(bordered, 2))
+                    for v in (bordered.colptr, bordered.rowval, bordered.nzval)
+                        println(io, join(repr.(v), " "))
+                    end
+                end
+                code = """
+                using Bramble, AppleAccelerate, SparseArrays, LinearAlgebra
+                using Bramble: accelerate_factorize, accelerate_refactor!
+                $(REFACTOR_ROUNDS)
+                l = readlines(ARGS[1])
+                m, n = parse.(Int, split(l[1]))
+                B = SparseMatrixCSC(m, n, parse.(Int, split(l[2])), parse.(Int, split(l[3])),
+                                    ComplexF64.(parse.(Float64, split(l[4]))))
+                for (name, M) in (("Hermitian LDLᵀ ComplexF64", hermitian_tridiag(ComplexF64, -1, 1 + 0.5im)),
+                                  ("Hermitian LDLᵀ ComplexF32", hermitian_tridiag(ComplexF32, -1, 1 + 0.5im)),
+                                  ("bordered gauge LDLᵀ ComplexF64", B))
+                    println("ROW|", name, "|", refactor_rounds(M, :symmetric))
+                end
+                """
+                project = dirname(something(Base.active_project()))
+                cmd = `$(Base.julia_cmd()) --project=$project --startup-file=no --threads=1 -e $code $file`
+                r = child_output(cmd; timeout = 600)
+                @test r.exited
+                # a crash leaves no row for the case it hit, nor for the ones after it
+                out = r.exited ? split(strip(r.out), '\n') : String[]
+                got = Dict(String(p[2]) => parse(Float64, p[3])
+                for p in (split(x, '|') for x in out if startswith(x, "ROW|")))
+                for (name, T) in eltypes
+                    @test haskey(got, name)
+                    worst = get(got, name, Inf)
+                    @test (name, worst <= 100 * sqrt(eps(real(T)))) == (name, true)
+                end
+                return r.exited &&
+                       all(get(got, name, Inf) <= 100 * sqrt(eps(real(T))) for (name, T) in eltypes)
+            end
+
+            # A failed child means an undersized workspace, and then the complex rows would
+            # overrun it in this process, so they wait for the child; the real row does not.
+            @test refactor_rounds(hermitian_tridiag(Float64, -1, 1), :symmetric) <= 100 * sqrt(eps())
+            if child_passed
+                lu_matrix = sparse(
+                    Tridiagonal(fill(1 - 0.5im, 5), fill(4 + 1.0im, 6), fill(2 + 0.5im, 5))
+                )
+                for (name, M, sym) in (
+                    ("Cholesky ComplexF64", hermitian_tridiag(ComplexF64, 4, 1 + 0.5im), :spd),
+                    ("LU ComplexF64", lu_matrix, :unsymmetric)
+                )
+                    worst = refactor_rounds(M, sym)
+                    @test (name, worst <= 100 * sqrt(eps(Float64))) == (name, true)
+                end
             end
         end
 
