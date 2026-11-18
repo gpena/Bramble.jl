@@ -215,27 +215,36 @@ struct TestFunction{D, N} <: LazyOp{D} end
 @inline TestFunction{D}() where {D} = TestFunction{D, nothing}()
 
 """
-    IndexedTrialFunction{D} <: LazyOp{D}
+    IndexedTrialFunction{D, C} <: LazyOp{D}
 
 An AST node representing the symbolic trial function for a specific **component**
-of a composite trial space. Carries a runtime `component_idx` identifying which
-leaf scalar space (1-based, depth-first order) it belongs to. Used by
-a coupled form to route stencil contributions to the correct block.
+of a composite trial space. The type parameter `C::Int` is the leaf scalar space it
+belongs to (1-based, depth-first order). Used by a coupled form to route stencil
+contributions to the correct block. `IndexedTrialFunction{D}(i)` builds the leaf for
+component `i`.
 """
-struct IndexedTrialFunction{D} <: LazyOp{D}
-    component_idx::Int
-end
+struct IndexedTrialFunction{D, C} <: LazyOp{D} end
 
 """
-    IndexedTestFunction{D} <: LazyOp{D}
+    IndexedTestFunction{D, C} <: LazyOp{D}
 
 An AST node representing the symbolic test function for a specific **component**
-of a composite test space. Carries a runtime `component_idx`. Used by
-a coupled form to route stencil contributions to the correct block.
+of a composite test space, component `C::Int` in its type. Used by a coupled form to
+route stencil contributions to the correct block. `IndexedTestFunction{D}(i)` builds the
+leaf for component `i`.
 """
-struct IndexedTestFunction{D} <: LazyOp{D}
-    component_idx::Int
-end
+struct IndexedTestFunction{D, C} <: LazyOp{D} end
+
+# The component sits in the type so that every query about it (which block a term goes
+# to, whether a sum mixes components) is answered by dispatch, in any function compiled on
+# its own, as Enzyme compiles a callee. A literal `u(1)` is a concrete leaf; a runtime
+# index `u(i)` gives a leaf whose type inference cannot name (gpena/Bramble.jl#1229).
+@inline IndexedTrialFunction{D}(i::Integer) where {D} = IndexedTrialFunction{D, Int(i)}()
+@inline IndexedTestFunction{D}(i::Integer) where {D} = IndexedTestFunction{D, Int(i)}()
+
+# The component an indexed leaf names, read from its type.
+@inline _component_index(::IndexedTrialFunction{D, C}) where {D, C} = C
+@inline _component_index(::IndexedTestFunction{D, C}) where {D, C} = C
 
 """
     SourceFunction{D,F} <: LazyOp{D}
@@ -286,8 +295,8 @@ end
 
 expression(::TrialFunction) = "u"
 expression(::TestFunction) = "v"
-expression(op::IndexedTrialFunction) = "u($(op.component_idx))"
-expression(op::IndexedTestFunction) = "v($(op.component_idx))"
+expression(op::IndexedTrialFunction) = "u($(_component_index(op)))"
+expression(op::IndexedTestFunction) = "v($(_component_index(op)))"
 
 # Anonymous closures get compiler-generated names like `#3` -- fall back to the placeholder.
 function expression(op::SourceFunction)

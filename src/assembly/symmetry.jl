@@ -40,7 +40,7 @@ the expression at all, and answer `false` immediately otherwise.
 # operators/inner.jl, and `_factored_product!`, bilinear_traversal.jl) ask only whether they
 # give the same stencil at every point (`_SameStencil`). They differ at the indexed leaves
 # alone. The `local_stencil` of an `IndexedTrialFunction`/`IndexedTestFunction` is the
-# identity tap whatever `component_idx`, and the walk's row/column offsets carry the
+# identity tap whatever its component, and the walk's row/column offsets carry the
 # components, so `u(i)` against `v(j)` gives the same stencil by type. One method family
 # takes the mode, so the two questions cannot drift apart. The stencil question folds to a
 # constant for a vector term as it does for a scalar one, except where a field changes the
@@ -62,7 +62,7 @@ end
 function _same_operator_shape(
         a::IndexedTrialFunction{D}, b::IndexedTestFunction{D}, ::_SameOperator
 ) where {D}
-    return a.component_idx == b.component_idx
+    return _component_index(a) == _component_index(b)
 end
 function _same_operator_shape(
         ::IndexedTrialFunction{D}, ::IndexedTestFunction{D}, ::_SameStencil

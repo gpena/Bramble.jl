@@ -245,7 +245,7 @@ end
 # The trial functional as a functional of the test function of the same space, so the
 # linear path assembles its vector.
 _as_test(::TrialFunction{D, N}) where {D, N} = TestFunction{D, N}()
-_as_test(op::IndexedTrialFunction{D}) where {D} = IndexedTestFunction{D}(op.component_idx)
+_as_test(::IndexedTrialFunction{D, C}) where {D, C} = IndexedTestFunction{D, C}()
 function _as_test(op::LinearProduct{D, W, L}) where {D, W, L}
     r = _as_test(op.right_op)
     return LinearProduct{D, W, L, typeof(r)}(op.inner, op.left_op, r)

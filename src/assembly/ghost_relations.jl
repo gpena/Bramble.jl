@@ -193,7 +193,7 @@ const _NO_PAIR_KEY = (-1, 0, 0, false)
     dirichlet = op isa Union{TrialFunction, IndexedTrialFunction}
     composite || return (0, face[1], face[2], dirichlet)
     op isa IndexedTrialFunction || return _NO_PAIR_KEY
-    return (op.component_idx, face[1], face[2], true)
+    return (_component_index(op), face[1], face[2], true)
 end
 @inline _pair_key(::Val, p, ::Bool) = _NO_PAIR_KEY
 
@@ -406,10 +406,11 @@ _composite_relation(::Tuple, p) = _throw_relation_shape(p)
 
 # The component a relation reads on its own facet: its trial leaf's, or `0` for a facet
 # operator reading several, such as a traction `∂ₙ(u(1); K = K₁₁) + ∂ₙ(u(2); K = K₁₂)`.
-_relation_component(op::IndexedTrialFunction, ::Int, ::Int, ::Symbol) = op.component_idx
+_relation_component(op::IndexedTrialFunction, ::Int, ::Int, ::Symbol) = _component_index(op)
 function _relation_component(op::FacetOperator{D}, d::Int, s::Int, name::Symbol) where {D}
-    c = _at_facet((_, a, b) -> _trial_component_class(_facet_component(op, a, b)), Val(D),
-        d, s)
+    c = _at_facet(
+        (_, a, b) -> _class_index(_trial_component_class(_facet_component(op, a, b))),
+        Val(D), d, s)
     c isa Int && return c
     c isa _MixedComponents && return 0
     return _throw_relation_components(name)
@@ -497,7 +498,7 @@ _holds_sum(::Any) = false
 @inline _add_terms(acc, P, ::Tuple{}, g::Val, facet::Tuple) = acc
 @inline function _add_terms(acc, P, terms::Tuple, g::Val, facet::Tuple)
     t = first(terms)
-    k = _trial_component_class(t)
+    k = _class_index(_trial_component_class(t))
     if k isa Int
         acc′ = _add_term(acc, P, t, k, g, facet)
     else
@@ -518,7 +519,7 @@ end
 # coefficient replaces a value rather than scaling it, so an `Inf` leaves no NaN behind.
 @inline _add_block_leaves(acc, P, t, ::Tuple{}, e::Int, g::Val, facet::Tuple) = acc
 @inline function _add_block_leaves(acc, P, t, leaves::Tuple, e::Int, g::Val, facet::Tuple)
-    k = _trial_component_class(first(leaves))
+    k = _class_index(_trial_component_class(first(leaves)))
     k isa Int || _throw_relation_unsplit(_val(facet[3]), t)
     acc′ = _add_term(acc, P, first(_block_part(t, e, 1)), k, g, facet)
     return _add_block_leaves(acc′, P, t, Base.tail(leaves), e + 1, g, facet)
@@ -529,7 +530,7 @@ end
 @inline _add_split_terms(acc, P, ::Tuple{}, g::Val, facet::Tuple) = acc
 @inline function _add_split_terms(acc, P, terms::Tuple, g::Val, facet::Tuple)
     t = first(terms)
-    k = _trial_component_class(t)
+    k = _class_index(_trial_component_class(t))
     k isa Int || _throw_relation_unsplit(_val(facet[3]), t)
     acc′ = _add_term(acc, P, t, k, g, facet)
     return _add_split_terms(acc′, P, Base.tail(terms), g, facet)
@@ -575,7 +576,7 @@ function _unsplit_term(op::OperatorAdd)
     l = _unsplit_term(op.left_op)
     return l === nothing ? _unsplit_term(op.right_op) : l
 end
-_unsplit_term(op) = _trial_component_class(op) isa Int ? nothing : summary(op)
+_unsplit_term(op) = _trial_component_class(op) isa _ComponentClass ? nothing : summary(op)
 
 # `acc` with the block `(c, j)` of the term `t` added, `t` reading component `j`: its
 # matrix on component `c`'s padded space, its rows at `c`'s offset and its columns at

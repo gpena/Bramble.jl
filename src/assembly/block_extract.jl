@@ -16,7 +16,7 @@ function belongs to one block while a term built from an unindexed one belongs t
 Written as a query rather than catching an exception because it is evaluated once per
 term per assembly in time-stepping loops.
 """
-test_component_or_nothing(op::IndexedTestFunction) = op.component_idx
+test_component_or_nothing(op::IndexedTestFunction) = _component_index(op)
 # Every node wrapping one operand answers what that operand answers. One method instead of
 # thirteen registrations (gpena/Bramble.jl#52); see [`UnaryWrapper`](@ref).
 test_component_or_nothing(op::UnaryWrapper) = test_component_or_nothing(op.inner_op)
@@ -59,7 +59,7 @@ component from each side. A term naming neither is the same integrand in every d
 block; a term naming both is one block; and a term naming one but not the other is not
 something the mathematics can express, so it is an error rather than a guess.
 """
-trial_component_or_nothing(op::IndexedTrialFunction) = op.component_idx
+trial_component_or_nothing(op::IndexedTrialFunction) = _component_index(op)
 trial_component_or_nothing(op::UnaryWrapper) = trial_component_or_nothing(op.inner_op)
 trial_component_or_nothing(op::BilinearProduct) = trial_component_or_nothing(op.left_op)
 

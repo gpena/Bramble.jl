@@ -270,8 +270,10 @@ _mul_seconds(y, b, x) = @elapsed mul!(y, matrix_free_operator(b), x)
         @test trial_function(Val(2)) === TrialFunction{2}()
         @test test_function(Val(3)) === TestFunction{3}()
         @test source_function(sin, Val(1)) isa SourceFunction{1}
-        @test IndexedTrialFunction{2}(7).component_idx == 7
-        @test IndexedTestFunction{2}(4).component_idx == 4
+        @test IndexedTrialFunction{2}(7) === IndexedTrialFunction{2, 7}()
+        @test IndexedTestFunction{2}(4) === IndexedTestFunction{2, 4}()
+        @test Bramble._component_index(IndexedTrialFunction{2}(7)) == 7
+        @test Bramble._component_index(IndexedTestFunction{2}(4)) == 4
 
         # a point source: the vector spelling of one point normalises to the same tuple of
         # `Float64` coordinates as the tuple spelling, integer coordinates included
