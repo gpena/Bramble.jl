@@ -467,7 +467,7 @@ end
         end
 
         for (F, mats) in ((load(Tb, Ta), (("Float64 A", M0), ("outer tag", dA(Tb)),
-                ("inner tag", dA(Ta)))),
+            ("inner tag", dA(Ta)))),
             (load(:s, :t), (("Float64 A", M0), ("tag :s", dA(:s)))))
             for (an, A) in mats
                 @testset "control, $an" begin
