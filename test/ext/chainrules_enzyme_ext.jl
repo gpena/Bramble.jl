@@ -1349,8 +1349,8 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             # system `[Kᵣ −Kᵢ; Kᵢ Kᵣ]`, and a cotangent is `∂/∂re + i ∂/∂im`. A parameter left
             # real has a real shadow, which holds the real part. `RankOneUpdate` promotes `σ`
             # to the common element type, so `σ̄` is complex once any field is. The first two
-            # cases (a real `K`, then a complex `A` with real `σ`, `wₛ` and `wₜ`) need no
-            # conjugate on the border; they are controls on the reference itself.
+            # cases (a real `K`, then a complex `A`) keep `σ`, `wₛ` and `wₜ` real, where a
+            # missing conjugate changes nothing, so they check the reference itself.
             mc = nnz(Ac)
             Arz = nonzeros(Ac) .* [1 + 0.05 * cos(k) for k in 1:mc]
             Aiz = [0.1 * sin(2k) for k in 1:mc]
