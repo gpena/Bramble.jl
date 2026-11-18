@@ -387,7 +387,12 @@ function _attach_relations(rels::Vector{Tuple{Int, Int, Int, Bool}}, N::Int)
     return out
 end
 
-function _composite_relation(Gs::Tuple{Vararg{GhostMesh{D}}},
+# Kept a call. Inlined into `_composite_relations`, the facet found by `_find_face`'s loop
+# reaches the stores of the relations' tuple as bare integers, whose type Enzyme cannot
+# prove (`EnzymeNoTypeError` under forward mode); as a call, the relation comes back in
+# typed memory. It was inlined once the component moved into the leaf's type and
+# `_relation_component` folded (gpena/Bramble.jl#1229).
+@noinline function _composite_relation(Gs::Tuple{Vararg{GhostMesh{D}}},
         p::Pair{Symbol, <:Pair}) where {D}
     face = _find_face(Val(D), first(p))
     face === nothing && _throw_not_a_relation_facet(first(p), Val(D))
