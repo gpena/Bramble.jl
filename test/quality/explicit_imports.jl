@@ -578,6 +578,10 @@ using Kronecker: Kronecker
                 # `_solve_by_parts` (a linear solve split over the parts of its load, which
                 # BrambleForwardDiffExt adds the `Dual` method to): a `Bramble` hook, not public.
                 :_solve_by_parts,
+                # `_check_tag_order` (refuses a nested `Dual` type against ForwardDiff's tag
+                # order, which BrambleForwardDiffExt adds the `Dual` method to; the Sparspak
+                # extension calls it): a `Bramble` hook, not public.
+                :_check_tag_order,
                 # `_bordered_promoted`, `_bordered_factorize`, `_bordered_system` and
                 # `_bordered_eltype` (the same, for the bordered solve of `mean_zero` and
                 # `gauge`): the dispatch point, the factor of the primal bordered matrix, and
