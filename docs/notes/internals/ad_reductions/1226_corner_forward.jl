@@ -28,6 +28,8 @@
 #   relsinl   `rels` with the `@inline` redefinition of `inline`.
 #   relsnc    `rels` on the four relations of `nocorner`.
 #   relsnora  `rels` without `set_runtime_activity`.
+#   relsfld   `rels` with the relation rebuilt from its fields (`_FacetRelation(r.d, r.s,
+#             r.name, r.op, r.data, r.c)`) before the `@noinline` call.
 #
 # Every case calls Enzyme the way the issue does, `DifferentiationInterface.gradient` with
 # `AutoEnzyme(; mode = set_runtime_activity(Forward), function_annotation = Const)` (no
@@ -62,7 +64,7 @@ const B = Bramble
 global_logger(NullLogger())
 
 const CASES = ("beta", "beta2", "betag", "nora", "inline", "nocorner", "rels", "relsinl",
-    "relsnc", "relsnora")
+    "relsnc", "relsnora", "relsfld")
 length(ARGS) == 1 && ARGS[1] in CASES ||
     error("usage: 1226_corner_forward.jl <", join(CASES, "|"), ">")
 const CASE = ARGS[1]
@@ -119,13 +121,16 @@ const GS = map(((C, _, _),) -> mesh(C), B._padded_leaves(S × S))
 @noinline scalar_and_datum(r) = ([_beta(r.op)], [r.data])
 _beta(op::B.FacetOperator) = op.ops[1][1].left_op.scalar
 _beta(op) = op.left_op.scalar
-function frels(p, rels = tractions)
-    x, y = scalar_and_datum(B._composite_relations(GS, rels(p[1])(B.trial_function(P)))[4])
+function frels(p, rels = tractions; rebuild = false)
+    r = B._composite_relations(GS, rels(p[1])(B.trial_function(P)))[4]
+    rebuild && (r = B._FacetRelation(r.d, r.s, r.name, r.op, r.data, r.c))
+    x, y = scalar_and_datum(r)
     return sum(abs2, x) + sum(y)
 end
 
 const f, p0 = CASE in ("rels", "relsinl", "relsnora") ? (frels, [2.0]) :
               CASE == "relsnc" ? (p -> frels(p, single), [2.0]) :
+              CASE == "relsfld" ? (p -> frels(p; rebuild = true), [2.0]) :
               CASE == "beta2" ? (fβ2, [2.0, 0.5]) :
               CASE == "betag" ? (fβg, [2.0, 0.3]) :
               CASE == "nocorner" ? (fno, [2.0]) : (fβ, [2.0])
