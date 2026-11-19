@@ -28,6 +28,9 @@
 #   relsinl   `rels` with the `@inline` redefinition of `inline`.
 #   relsnc    `rels` on the four relations of `nocorner`.
 #   relsnora  `rels` without `set_runtime_activity`.
+#   relsh<k>  `rels` on four tractions that all carry `β`, data 1.0, 0.2, 0.5 and 0.3
+#             (`:xmin` on components 1 and 2, then `:ymin` on 1 and 2), reading the one in
+#             slot `k` (`relsh1`, `relsh3`, `relsh4`). Its derivative is 2β = 4 in each.
 #   relsfld   `rels` with the relation rebuilt from its fields (`_FacetRelation(r.d, r.s,
 #             r.name, r.op, r.data, r.c)`) before the `@noinline` call.
 #
@@ -64,7 +67,7 @@ const B = Bramble
 global_logger(NullLogger())
 
 const CASES = ("beta", "beta2", "betag", "nora", "inline", "nocorner", "rels", "relsinl",
-    "relsnc", "relsnora", "relsfld")
+    "relsnc", "relsnora", "relsfld", "relsh1", "relsh3", "relsh4")
 length(ARGS) == 1 && ARGS[1] in CASES ||
     error("usage: 1226_corner_forward.jl <", join(CASES, "|"), ">")
 const CASE = ARGS[1]
@@ -121,8 +124,12 @@ const GS = map(((C, _, _),) -> mesh(C), B._padded_leaves(S × S))
 @noinline scalar_and_datum(r) = ([_beta(r.op)], [r.data])
 _beta(op::B.FacetOperator) = op.ops[1][1].left_op.scalar
 _beta(op) = op.left_op.scalar
-function frels(p, rels = tractions; rebuild = false)
-    r = B._composite_relations(GS, rels(p[1])(B.trial_function(P)))[4]
+allbeta(β) = u -> (:xmin => β * u(1) + trac(u, 1, 2.0) => 1.0,
+    :xmin => β * u(2) + trac(u, 2, 2.0) => 0.2,
+    :ymin => β * u(1) + trac(u, 1, 2.0) => 0.5,
+    :ymin => β * u(2) + trac(u, 2, 2.0) => 0.3)
+function frels(p, rels = tractions; rebuild = false, slot::Val{k} = Val(4)) where {k}
+    r = B._composite_relations(GS, rels(p[1])(B.trial_function(P)))[k]
     rebuild && (r = B._FacetRelation(r.d, r.s, r.name, r.op, r.data, r.c))
     x, y = scalar_and_datum(r)
     return sum(abs2, x) + sum(y)
@@ -131,6 +138,9 @@ end
 const f, p0 = CASE in ("rels", "relsinl", "relsnora") ? (frels, [2.0]) :
               CASE == "relsnc" ? (p -> frels(p, single), [2.0]) :
               CASE == "relsfld" ? (p -> frels(p; rebuild = true), [2.0]) :
+              CASE == "relsh1" ? (p -> frels(p, allbeta; slot = Val(1)), [2.0]) :
+              CASE == "relsh3" ? (p -> frels(p, allbeta; slot = Val(3)), [2.0]) :
+              CASE == "relsh4" ? (p -> frels(p, allbeta; slot = Val(4)), [2.0]) :
               CASE == "beta2" ? (fβ2, [2.0, 0.5]) :
               CASE == "betag" ? (fβg, [2.0, 0.3]) :
               CASE == "nocorner" ? (fno, [2.0]) : (fβ, [2.0])

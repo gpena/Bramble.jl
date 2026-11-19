@@ -28,7 +28,13 @@ Case: relsnora | fwd | width 1 | wrong | 0.07499999999999996
 
 Case: relsfld | fwd | width 1 | ok | 0.0
 
-Verdict: construct: src/assembly/ghost_relations.jl:329, `_composite_relations` returns the parsed relations as a tuple from a call, and Enzyme's forward mode gives the datum of the fourth relation (`:ymin`, `0.3`) a tangent equal to its value once that relation is passed on to another call (`_assemble_relation`, line 846)
+Case: relsh1 | fwd | width 1 | ok | 0.0
+
+Case: relsh3 | fwd | width 1 | wrong | 0.125
+
+Case: relsh4 | fwd | width 1 | wrong | 0.07499999999999996
+
+Verdict: construct: src/assembly/ghost_relations.jl:329, `_composite_relations` returns the parsed relations as a tuple from a call, and Enzyme's forward mode gives the datum of the third and fourth of four tractions a tangent equal to its value, whatever their facet, once that relation is passed on to another call (`_assemble_relation`, line 846)
 
 ## What the runs say
 
@@ -40,7 +46,7 @@ Verdict: construct: src/assembly/ghost_relations.jl:329, `_composite_relations` 
 - `relsnora` is wrong by the same 0.3 without runtime activity, so runtime activity is not the cause. `nora`, the whole case without runtime activity, stops earlier with an `EnzymeRuntimeActivityError` in `_dirichlet_values`, which says nothing about the relations.
 - The corner is not the construct. Its code (`_one_sided_corners!`, `_one_sided_weights`, `_corner_entry`) changes rows of `R` and so entries of `E`, which are all right. The tangent is already wrong before any corner code runs. `nocorner` (the `:ymin` relations reading one component each, no one-sided corner) is exact, and so is `relsnc`, `rels` on those four relations. Whether the tangent comes out wrong depends on the types of the relations in the tuple, which the tractions change, not on what the corner does.
 - Width: `beta2` adds a second, unused parameter (DifferentiationInterface's `pick_batchsize` gives one batch of 2, so one width-2 call) and is wrong by the same amount in the first entry, with 0.0896 in the second where ForwardDiff gives 0. The issue's width-2 run (`betag`) made the `:ymin` datum the second parameter, so the datum had a tangent of its own. It is exact (1.1e-16), because a datum that is a parameter gets its own tangent and the constant `0.3` does not. The width plays no part.
-- Only the fourth relation's datum is affected. The first (`:xmin`, datum 1.0, `β` in its operator too) gets a right tangent. Why the position matters was not found.
+- The wrong tangent follows the slot in the tuple, not the facet or the datum. With four tractions that all carry `β` (`relsh<k>`, data 1.0, 0.2, 0.5, 0.3), slots 1 and 2 are right and slots 3 and 4 each gain their datum (4.5 and 4.3 against 4.0). The integrator's critic ran a wider battery (/tmp/s31-critic/battery4.jl): with the `:ymin` pair first, slots 3 and 4 still go wrong, now by the `:xmin` data (1.0, 0.2); with a Dirichlet relation put first, the wrong slots shift to 4 and 5; with six tractions, no slot goes wrong. In the issue's case the datum in slot 3 is 0.0, so its wrong tangent does not show. Why these slots was not found.
 
 ## What each lead ruled out
 
@@ -52,8 +58,9 @@ Verdict: construct: src/assembly/ghost_relations.jl:329, `_composite_relations` 
 
 ## For the fix
 
-- The site is `_composite_relations`, src/assembly/ghost_relations.jl:329, and the relations it returns to `constrained` (src/assembly/ghost_composite.jl:881). `@inline` on it fixes the issue's case in this script. Rebuilding the relation from its fields before the `@noinline` call fixes the small case (`relsfld`). It was not tried in front of `_assemble_relation` on the whole case.
-- Check with `beta`, `beta2` and `rels` of the script, each to 1e-8. The `λ` case of the issue (refused by name since #1180) was not run here.
+- The site is `_composite_relations`, src/assembly/ghost_relations.jl:329, and the relations it returns to `constrained` (src/assembly/ghost_composite.jl:881). Only `@inline` on it is confirmed on the issue's case (`inline`, 1.1e-16).
+- Rebuilding the relation from its fields fixes the small case (`relsfld`) and does not fix the issue's case. `_with_components` (line 344) already rebuilds each relation inside the call. The critic rebuilt them again in `constrained` at ghost_composite.jl:881 (/tmp/s31-critic/beta_fldc.jl, `FLDC=1`), and `beta` stayed wrong at exactly 0.04586450960566223.
+- Check with `beta`, `beta2`, `rels`, `relsh3` and `relsh4` of the script, each to 1e-8. The `λ` case of the issue (refused by name since #1180) was not run here.
 
 ## Commands run
 
