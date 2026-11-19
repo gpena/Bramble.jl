@@ -1384,8 +1384,9 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                 σ̄ = (cσ | cs | ct | cA) ? complex(g[1], g[2]) : g[1]
                 return (σ̄, half(g[isz], cs), half(g[itz], ct), half(g[iAz], cA))
             end
-            for cA in (false, true), (cσ, cs, ct) in ((false, false, false), (true, false, false),
-                (false, true, false), (false, false, true), (true, true, true))
+            for cA in (false, true),
+                (cσ, cs, ct) in ((false, false, false), (true, false, false),
+                    (false, true, false), (false, false, true), (true, true, true))
 
                 Kz0 = Kz(cσ, cs, ct, cA)
                 Kzd = Enzyme.Duplicated(Kz0, Enzyme.make_zero(Kz0))
