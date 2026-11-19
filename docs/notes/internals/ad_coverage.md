@@ -91,7 +91,7 @@ policy. Each Enzyme cell holds both modes, reverse then forward, unless it says 
 | ghost | a conormal relation `∂ₙ(u; K)` with a full `K`, the datum depends on the parameter | works | works | works | works |
 | ghost | `constrained(W × W, …)` on a composite space, the datum of one component depends on the parameter | works | works | each mode alone works, together over the 10 GB cap (not run, see the limits) | each mode alone works, together over the cap (not run) |
 | ghost | `assemble(a, l)` on a 3D ghost space, parameters scale the form's coefficients, `Δₕ` in the form | works | works | works | works |
-| ghost | `C^2` of a 2D ghost space, `Δₕ` on both components and a coupling term | works | throws `IllegalTypeAnalysisException` (#1174, not run) | not run | not run |
+| ghost | `C^2` of a 2D ghost space, `Δₕ` on both components and a coupling term | works | works (was `IllegalTypeAnalysisException`, #1229) | not run | not run |
 | ghost | `Δₕ!` on a `GhostVector` | works | works | works | works |
 | ghost | `centered_difference!` on a `GhostVector` | works | works | works | works |
 | sparse Jacobian | `AutoSparse` with `ast_sparsity_detector`, 1D diffusion residual | works | works | works | works |
@@ -103,7 +103,7 @@ policy. Each Enzyme cell holds both modes, reverse then forward, unless it says 
 | dirac | `assemble` of `innerₕ(dirac(DIRAC_POINT, p[1]), v)`, the strength as the parameter | works | works | not run | not run |
 | levelset | `levelset(φ)` with `φ = x[1]^2 + x[2]^2 - p[1]^2`, mesh built inside the function | throws `ArgumentError` (#1172) | throws `ArgumentError` in both modes (#1211) | throws `ArgumentError` in both modes | throws `ArgumentError` in both modes |
 | levelset | a level-set mesh with a fixed `φ` and a constant box, built inside the function, a factor of `p` on the mass matrix | works | works | works | works |
-| levelset | the box half-width as the parameter, `φ` fixed | throws `ArgumentError` | reverse returns a zero (silent), forward throws `ArgumentError` naming the box | the same | the same |
+| levelset | the box half-width as the parameter, `φ` fixed | throws `ArgumentError` | throws `ArgumentError` naming the box in both modes (reverse returned a silent zero before #1236) | the same | the same |
 | mesh | `sum(points(copy(mesh)))`, the endpoint as the parameter, 1D and `MeshnD` | works | works | works | works |
 
 More facts about the table:
@@ -222,9 +222,12 @@ so a sparse cell's verdict is its inner backend's.
   `ArgumentError` a parameter in the mesh, a `Duplicated` annotation that captures the space, a
   relation that captures a mutable, and batched reverse; a parameter inside `K` is not
   differentiated; reverse refuses any active entry of a relation that goes through a one-sided
-  corner, a datum included, and forward refuses a non-zero tangent on a moved entry. Forward
-  with a coefficient `β·u` on a traction facet with a corner still returns a wrong gradient
-  ([gpena/Bramble.jl#1226](https://github.com/gpena/Bramble.jl/issues/1226)).
+  corner, a datum included. Forward differentiates through the corner and matches ForwardDiff
+  (1.1e-16), a coefficient `β·u` on a traction facet and `λ` in `K` included. It returned a
+  wrong gradient (0.046 off) because `_composite_relations` handed its relation tuple back from
+  a call, which gave the datum of the third and fourth of four tractions a tangent equal to the
+  datum; `@inline` on it fixes that (`ad_reductions/1226_corner_forward.md`), and the forward
+  refusal of a moved entry is gone. Reverse without the rule was wrong by 4.97e-2 for `λ`.
 - **The composite relation cell stays `:skip` under the threaded policies, though each mode
   differentiates there.** Alone, reverse takes 614 s and 9.73 GB under `CpuThreaded` and 604 s
   and 9.90 GB under `CpuPolyester`, forward 451 s and 7.27 GB, and 437 s and 7.22 GB, all with
@@ -237,16 +240,18 @@ so a sparse cell's verdict is its inner backend's.
   [#1177](https://github.com/gpena/Bramble.jl/issues/1177)); the loops over the tail of a
   region's indices walk it by linear index now (`ad_reductions/1177_ghost_3d.md`). The cell
   matches ForwardDiff to 1.5e-16 in both modes.
-- **The composite ghost `Δₕ` fails in Enzyme under `CpuSerial`, and is not run under the
-  threaded policies.** `C^2` of a 2D ghost space with `Δₕ` on both components and a coupling
-  term: at 501128cb the reverse was still compiling at the 20 minute limit (7.7 GB) and the
-  forward threw at 455 s; at 70e39a58 both throw `IllegalTypeAnalysisException` in
-  `simplify_ast` (`src/ast/simplifier.jl` line 360), reverse at 982 s and 5.7 GB, forward at 592 s
-  and 4.1 GB. Type inference leaves the component indices of `u(1)`, `u(2)`, `v(1)` and `v(2)`
-  open without constants, so the simplified tree is not concrete
-  ([gpena/Bramble.jl#1174](https://github.com/gpena/Bramble.jl/issues/1174), measured in
-  `ad_reductions/1174_composite_ghost.md`). The scalar space with the same form differentiates in
-  100 s. The fix is a new issue; the cell runs ForwardDiff only.
+- **The composite ghost `Δₕ` differentiates in both Enzyme modes under `CpuSerial`, and is not
+  run under the threaded policies.** `C^2` of a 2D ghost space with `Δₕ` on both components and
+  a coupling term. At 501128cb the reverse was still compiling at the 20 minute limit (7.7 GB)
+  and the forward threw at 455 s; at 70e39a58 both threw `IllegalTypeAnalysisException` in
+  `simplify_ast`, reverse at 982 s and 5.7 GB, forward at 592 s and 4.1 GB, because type
+  inference left the component indices of `u(1)`, `u(2)`, `v(1)` and `v(2)` open
+  (`ad_reductions/1174_composite_ghost.md`). `simplify_ast` now infers a concrete type on
+  composite forms. Reverse matches ForwardDiff exactly (0.0) in 296 s and 2.92 GB, forward to
+  1.2e-16 in 190 s and 2.06 GB (`ad_reductions/1229_composite_ghost.md`; the scalar space with
+  the same form takes 100 s). The `ghost_composite` cell has a child of its own: compiled
+  after the other cells of `ghost_fast` in one process it passed the 10 GB cap of
+  `julia_slot.sh`.
 - **Ghost assembly works in both Enzyme modes under all three policies.** The cell with `Δₕ`
   in the form and the parameters in the coefficients matches ForwardDiff to 8.5e-16: forward
   and reverse under `CpuThreaded` and `CpuPolyester` in 115 to 169 s and 2.3 to 3.3 GB, and
@@ -262,8 +267,14 @@ so a sparse cell's verdict is its inner backend's.
   ones. ForwardDiff throws the `ArgumentError` of gpena/Bramble.jl#1172. A fixed `φ` with a
   constant box built inside the function matches ForwardDiff in both modes (5e-16 on the
   uniform mesh, 1.7e-15 on the non-uniform one). A box that depends on the parameter is
-  refused in forward mode, naming the box; reverse mode cannot detect it and returns a zero
-  where the derivative is not zero, which the cell pins as a silent zero. The cells have a group of
+  refused in both modes, naming the box (`levelset_box`). Reverse mode used to return a zero
+  where the derivative is not zero; it now refuses, through a rule on the four bounds of the box
+  that throws when a bound is `Active`
+  ([gpena/Bramble.jl#1236](https://github.com/gpena/Bramble.jl/issues/1236)). A constant box
+  built inside the function keeps its derivative (`levelset_box_constant`). A closure that
+  captures a constant box and is differentiated as `Duplicated(f)` is refused in reverse too,
+  since Enzyme then differentiates the captured bound; annotate `f` `Const`, DI's default,
+  and the derivative is exact. The cells have a group of
   their own, `levelset`, so that an abort ends no other cell.
 - **The polygon `works` cells differentiate in both Enzyme modes.** Forward threw
   `MethodError`, since Enzyme has no forward rule for `deepcopy` (gpena/Bramble.jl#1212);
@@ -377,14 +388,10 @@ so a sparse cell's verdict is its inner backend's.
 
 ## Open failures
 
-- The composite ghost `Δₕ` (`ghost_composite`) fails in `simplify_ast` under `CpuSerial` in both
-  modes, after 592 s and 982 s. gpena/Bramble.jl#1174 closes on its second criterion, a fix
-  site, and the fix is
-  [gpena/Bramble.jl#1229](https://github.com/gpena/Bramble.jl/issues/1229).
-- Forward mode with a coefficient on a traction facet with a one-sided corner returns a wrong
-  gradient ([gpena/Bramble.jl#1226](https://github.com/gpena/Bramble.jl/issues/1226)).
-- Reverse mode through a level-set mesh whose box depends on the parameter returns a zero
-  without refusing ([gpena/Bramble.jl#1236](https://github.com/gpena/Bramble.jl/issues/1236)).
+No failure is open. The three that stood here are fixed: the
+composite ghost `Δₕ` (`ghost_composite`) differentiates under `CpuSerial`, forward mode through
+a one-sided corner of tractions matches ForwardDiff, and reverse mode through a level-set mesh
+whose box depends on the parameter refuses (`levelset_box`).
 
 ## Compile cost of the cells
 
@@ -469,8 +476,11 @@ process, loading included; peak is the footprint of `/usr/bin/time -l`):
 
 The polygon children ran one cell each, since the group's two cells together were not timed, so
 the two figures add up to the group. Only `relation_composite` hits the cap under the threaded
-policies, and its cell stays `:skip` there. `ghost_composite` is not run and has no row; its
-measurements are in `ad_reductions/1174_composite_ghost.md`.
+policies, and its cell stays `:skip` there.
+
+`ghost_composite` runs under `CpuSerial` only. Alone, reverse takes 296 s and 2.92 GB and forward
+190 s and 2.06 GB, one process a mode (`ad_reductions/1229_composite_ghost.md`). The child the test
+runs, with both modes, took 676 s and 5.34 GB (1 thread, default `-O`, 2026-11-19).
 
 The `CpuSerial` children of `relation_conormal` and `relation_composite` ran before the driver
 read the child's footprint, so their rows give the resident set.

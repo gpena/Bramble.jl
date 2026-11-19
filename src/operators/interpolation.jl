@@ -1131,7 +1131,7 @@ _all_trial_interpolated(op::LinearProduct) = true
 #
 # `πₕ(u)` names no space: the columns it produces are numbered in the trial function's own
 # space, which is exactly `blk.trial_leaf`, and on a composite space that leaf is only known
-# once `blocks` has resolved the term's `component_idx`. This pass stamps it in, with the
+# once `blocks` has resolved the term's component index. This pass stamps it in, with the
 # recursion shape of `resolve_ast` -- the fallback returns the term untouched, so a term
 # carrying no interpolation rebuilds nothing.
 #
