@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CSR direct solve — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3204012b">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b89079f3">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="CSR direct solve — Bramble.jl">
   <meta property="og:title" content="CSR direct solve — Bramble.jl">
@@ -111,7 +111,7 @@
 <div class="md-docstring" id="LinearAlgebra.ldiv!-Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>LinearAlgebra.ldiv!</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L252-L275" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L252-L277" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -119,7 +119,7 @@
 <pre><code class="language-julia">ldiv!(uₕ::VectorElement, A::Factorization, F) -&gt; VectorElement</code></pre>
 </div>
 <p>Solve <code class="md-code-inline">A \ F</code> and write the result into <code class="md-code-inline">uₕ</code> in place, mutating <code class="md-code-inline">parent(uₕ)</code> rather than allocating a new vector.</p>
-<p><code class="md-code-inline">A</code> is a <code class="md-code-inline">factorize(A)</code> (or <code class="md-code-inline">lu</code>/<code class="md-code-inline">cholesky</code>/...) reused across several solves, and <code class="md-code-inline">F</code> a plain vector or another <code class="md-code-inline">VectorElement</code> of matching length. Restricted to <code class="md-code-inline">Factorization</code> rather than any <code class="md-code-inline">A</code>: <code class="md-code-inline">LinearAlgebra</code> itself already overloads <code class="md-code-inline">ldiv!</code> for a matrix <code class="md-code-inline">A</code> on an unrestricted <code class="md-code-inline">AbstractVector</code> destination, and matching that breadth here would make every such call ambiguous between the two – Julia unable to tell whether the <code class="md-code-inline">VectorElement</code> destination or the <code class="md-code-inline">Factorization</code> source should win.</p>
+<p><code class="md-code-inline">A</code> is a <code class="md-code-inline">factorize(A)</code> (or <code class="md-code-inline">lu</code>/<code class="md-code-inline">cholesky</code>/...) reused across several solves, and <code class="md-code-inline">F</code> a plain vector or another <code class="md-code-inline">VectorElement</code> of matching length. With <code class="md-code-inline">ForwardDiff</code> loaded, a <code class="md-code-inline">Dual</code> load against a real <code class="md-code-inline">A</code> is solved part by part against <code class="md-code-inline">A</code>, as <code class="md-code-inline">pde_solve(fact, F)</code> does. Restricted to <code class="md-code-inline">Factorization</code> rather than any <code class="md-code-inline">A</code>: <code class="md-code-inline">LinearAlgebra</code> itself already overloads <code class="md-code-inline">ldiv!</code> for a matrix <code class="md-code-inline">A</code> on an unrestricted <code class="md-code-inline">AbstractVector</code> destination, and matching that breadth here would make every such call ambiguous between the two – Julia unable to tell whether the <code class="md-code-inline">VectorElement</code> destination or the <code class="md-code-inline">Factorization</code> source should win.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -149,6 +149,6 @@ ldiv!(uₕ, factorize(A), F)</code></pre>
   <script>hljs.highlightAll();</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=3204012b"></script>
+  <script src="../../assets/materialdocs.js?v=b89079f3"></script>
 </body>
 </html>

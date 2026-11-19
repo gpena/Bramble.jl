@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=307cf374">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=3b1eb014">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -291,7 +291,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.DomainMarkers-Tuple{Number, Any}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DomainMarkers</code> — <span class="md-docstring-sig">Tuple{Number, Any}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L522-L528" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L587-L593" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -304,7 +304,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.DomainMarkers-Tuple{Number}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.DomainMarkers</code> — <span class="md-docstring-sig">Tuple{Number}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L487-L493" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L552-L558" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -337,7 +337,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.EvaluatedParametricDomainMarkers">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.EvaluatedParametricDomainMarkers</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L496-L515" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L561-L580" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -406,7 +406,7 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <div class="md-docstring" id="Bramble.conditions-Tuple{Bramble.EvaluatedDomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.conditions</code> — <span class="md-docstring-sig">Tuple{Bramble.EvaluatedDomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L425-L443" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L425-L450" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -414,14 +414,14 @@ DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)<
 <pre><code class="language-julia">conditions(edm::EvaluatedDomainMarkers) -&gt; Tuple</code></pre>
 </div>
 <p>Return condition markers evaluated at timestamp <code class="md-code-inline">edm.evaluation_time</code>, each a spatial predicate of <code class="md-code-inline">x</code>.</p>
-<p>A predicate <code class="md-code-inline">f</code> with a one-argument method and no two-argument method is spatial and passes through unchanged. Any other predicate is fixed at <code class="md-code-inline">t</code> as <code class="md-code-inline">Base.Fix2(f, t)</code>. So <code class="md-code-inline">(x, t = 0.0) -&gt; ...</code> is fixed at <code class="md-code-inline">t</code>, not left at its default. A predicate typed on its argument (<code class="md-code-inline">(x::NTuple{2, Float64}) -&gt; ...</code>) has no <code class="md-code-inline">Tuple{Any}</code> method, so it is also wrapped and must accept <code class="md-code-inline">(x, t)</code>.</p>
-<p>A <code class="md-code-inline">ComposedFunction</code> or a <code class="md-code-inline">Base.Fix1</code>/<code class="md-code-inline">Base.Fix2</code> is classified by what it wraps, not by its own varargs call method: a composition by its innermost function, which receives every argument, and a <code class="md-code-inline">Fix</code> by the function it fixes, with one more argument since the <code class="md-code-inline">Fix</code> supplies one itself. So <code class="md-code-inline">(&gt;(0.5)) ∘ first</code> and <code class="md-code-inline">Base.Fix1(&lt;, 0.5)</code> are spatial and pass through. A lone <code class="md-code-inline">Base.Fix2(isless, 0.5)</code> is not, as <code class="md-code-inline">isless</code> has no generic two-argument method, so it is wrapped like any typed predicate.</p>
+<p>A predicate <code class="md-code-inline">f</code> with a one-argument method and no two-argument method is spatial and passes through unchanged. Any other predicate is fixed at <code class="md-code-inline">t</code> as <code class="md-code-inline">Base.Fix2(f, t)</code>. So <code class="md-code-inline">(x, t = 0.0) -&gt; ...</code> is fixed at <code class="md-code-inline">t</code>, not left at its default. A predicate typed on its argument (<code class="md-code-inline">(x::NTuple{2, Float64}) -&gt; ...</code>) has no <code class="md-code-inline">Tuple{Any}</code> method either, but it is still classified by the number of arguments it takes, so <code class="md-code-inline">x::Real -&gt; ...</code> is spatial and <code class="md-code-inline">(x::Real, t::Real) -&gt; ...</code> is fixed at <code class="md-code-inline">t</code>. A function mixing the two is read by its untyped methods alone. So <code class="md-code-inline">semidiscretize</code>, and <code class="md-code-inline">dirichlet_constraints</code> with a time domain, refuse an untyped <code class="md-code-inline">g(x)</code> beside a <code class="md-code-inline">g(x::Real, t::Real)</code> typed on <code class="md-code-inline">x</code>: type all of its methods or none. A method typed only after <code class="md-code-inline">x</code> reads as an optional argument, so <code class="md-code-inline">norm</code> (with <code class="md-code-inline">norm(itr, p::Real)</code>) is spatial, and so is <code class="md-code-inline">g(x); g(x, t::Real)</code>, whose <code class="md-code-inline">t</code> is dropped. The rule also refuses some Base functions passed directly on a 1D mesh, such as <code class="md-code-inline">round</code> (with <code class="md-code-inline">round(x::Real, r::RoundingMode)</code>); wrap one as <code class="md-code-inline">x -&gt; round(x)</code>.</p>
+<p>A <code class="md-code-inline">ComposedFunction</code> or a <code class="md-code-inline">Base.Fix1</code>/<code class="md-code-inline">Base.Fix2</code> is classified by what it wraps, not by its own varargs call method: a composition by its innermost function, which receives every argument, and a <code class="md-code-inline">Fix</code> by the function it fixes, with one more argument since the <code class="md-code-inline">Fix</code> supplies one itself. So <code class="md-code-inline">(&gt;(0.5)) ∘ first</code> and <code class="md-code-inline">Base.Fix1(&lt;, 0.5)</code> are spatial and pass through. So does <code class="md-code-inline">Base.Fix2(isless, 0.5)</code>: <code class="md-code-inline">isless</code> has only typed two-argument methods, and those count.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.conditions-Tuple{Bramble.EvaluatedParametricDomainMarkers}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.conditions</code> — <span class="md-docstring-sig">Tuple{Bramble.EvaluatedParametricDomainMarkers}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L531-L555" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L596-L620" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -464,7 +464,7 @@ label(m::MarkerPair) -&gt; Symbol</code></pre>
 <div class="md-docstring" id="Bramble.label_conditions-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_conditions</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L629-L633" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L694-L698" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -477,7 +477,7 @@ label(m::MarkerPair) -&gt; Symbol</code></pre>
 <div class="md-docstring" id="Bramble.label_identifiers-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_identifiers</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L588-L600" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L653-L665" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -492,7 +492,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.label_symbols-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_symbols</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L615-L619" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L680-L684" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -505,7 +505,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.label_tuples-Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.label_tuples</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.DomainMarkers, Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L622-L626" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L687-L691" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -531,7 +531,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.symbols-Tuple{Union{Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.symbols</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L570-L574" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L635-L639" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -557,7 +557,7 @@ labels(markers)</code></pre>
 <div class="md-docstring" id="Bramble.tuples-Tuple{Union{Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.tuples</code> — <span class="md-docstring-sig">Tuple{Union{Bramble.EvaluatedDomainMarkers, Bramble.EvaluatedParametricDomainMarkers}}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L577-L581" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/marker.jl#L642-L646" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1031,6 +1031,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=307cf374"></script>
+  <script src="../../assets/materialdocs.js?v=3b1eb014"></script>
 </body>
 </html>

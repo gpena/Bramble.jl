@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=ba2f6db5">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=15aaeff5">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces — Bramble.jl">
   <meta property="og:title" content="Grid spaces — Bramble.jl">
@@ -495,9 +495,9 @@ element(Wₕ::AbstractSpaceType, α::Number) -&gt; VectorElement</code></pre>
 <p>Returns the coefficient vector containing the degrees of freedom of <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> <code class="md-code-inline">uₕ</code>.</p>
 </div>
 </div>
-<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s39&quot;, T} where {var&quot;#s39&quot;&lt;:Bramble.ScalarGridSpace, T}}">
+<div class="md-docstring" id="Base.reshape-Tuple{Bramble.VectorElement{var&quot;#s34&quot;, T} where {var&quot;#s34&quot;&lt;:Bramble.ScalarGridSpace, T}}">
 <div class="md-docstring-header">
-<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s39&quot;, T} where {var&quot;#s39&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
+<h4 class="md-docstring-binding"><code>Base.reshape</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement{var&quot;#s34&quot;, T} where {var&quot;#s34&quot;&lt;:Bramble.ScalarGridSpace, T}}</span></h4>
 <a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L17-L28" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
@@ -567,7 +567,7 @@ components(op::LazyOp, space::AbstractSpaceType) -&gt; Tuple</code></pre>
 <div class="md-docstring" id="Base.:*-Tuple{Function, Bramble.VectorElement}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Base.:*</code> — <span class="md-docstring-sig">Tuple{Function, Bramble.VectorElement}</span></h4>
-<a class="md-docstring-source" href="https://github.com/JuliaLang/julia/blob/67ac47b9cd855e02134d41d5428ac9f2a73f2694/base/docs/basedocs.jl#L3281-L3316" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/JuliaLang/julia/blob/c1ac32ab73354bbe9bb767f91e0a2b857141fe70/base/docs/basedocs.jl#L3281-L3316" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -637,7 +637,7 @@ size(u_grid), u_scal[CartesianIndex(2, 3)], size.(reshape(element(V₂)))</code>
 <div class="md-docstring" id="Bramble.Rₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Rₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L356-L391" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L357-L395" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -668,13 +668,14 @@ Rₕ(Vₕ, (f₁, f₂))                   # one function per component
 Rₕ(Vₕ, x -&gt; (f₁(x), f₂(x)))        # one function returning all components</code></pre>
 </div>
 <p>Prefer <code class="md-code-inline">x -&gt; (f₁(x), f₂(x))</code> when components share computation, as it evaluates once per grid point on a space whose components share one mesh, whereas <code class="md-code-inline">(f₁, f₂)</code> always evaluates each component function separately. On a heterogeneous composite (components built over different meshes), the single-function form gives up that advantage, since there is no grid point shared by every component to evaluate it at only once.</p>
+<p>A tuple holds one function per leaf component and a single function returns one value per leaf; any other count throws a <code class="md-code-inline">DimensionMismatch</code>.</p>
 <p>See also: <a href="../../api/spaces/#Bramble.Rₕ!"><code class="md-code-inline">Rₕ!</code></a>, <a href="../../api/spaces/#Bramble.avgₕ"><code class="md-code-inline">avgₕ</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.Rₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Rₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L14-L66" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/restriction.jl#L14-L67" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -710,14 +711,14 @@ Rₕ!(uₕ, x -&gt; 1.0; markers = (:left,))</code></pre>
 <pre><code class="language-julia">Rₕ!(uₕ, (f₁, f₂))                     # one function per component
 Rₕ!(uₕ, x -&gt; (f₁(x), f₂(x)))          # one function returning all components</code></pre>
 </div>
-<p>A tuple holds one function per leaf component (depth-first on a nested composite); any other length throws a <code class="md-code-inline">DimensionMismatch</code>.</p>
+<p>A tuple holds one function per leaf component (depth-first on a nested composite); any other length throws a <code class="md-code-inline">DimensionMismatch</code>. A single function returns one value per leaf, and any other count throws a <code class="md-code-inline">DimensionMismatch</code> too.</p>
 <p>See also: <a href="../../api/spaces/#Bramble.Rₕ"><code class="md-code-inline">Rₕ</code></a>, <a href="../../api/spaces/#Bramble.avgₕ!"><code class="md-code-inline">avgₕ!</code></a>, <a href="../../api/spaces/#Bramble.element"><code class="md-code-inline">element</code></a></p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.avgₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.avgₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L24-L59" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L24-L62" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -747,13 +748,14 @@ Rₕ!(uₕ, x -&gt; (f₁(x), f₂(x)))          # one function returning all co
 avgₕ(Wₕ, x -&gt; sin(x[1]) * x[2]; quad_points = Val(4))</code></pre>
 </div>
 <p>On a Metal (or other device) backend, <code class="md-code-inline">f</code> runs <em>on the device</em> inside the quadrature kernel, evaluated <code class="md-code-inline">quad_points^D</code> times per cell (gpena/Bramble.jl#94, #174, #693), so it must be GPU-compilable in the same sense <a href="../../api/spaces/#Bramble.Rₕ!"><code class="md-code-inline">Rₕ!</code></a>&#39;s docstring describes. A masked call runs the same kernel over just the marked cells, after zeroing the result on the device (gpena/Bramble.jl#297).</p>
+<p>On a composite space <code class="md-code-inline">f</code> is a tuple holding one function per leaf component, or a single function returning one value per leaf; any other count throws a <code class="md-code-inline">DimensionMismatch</code>.</p>
 <p>See also: <a href="../../api/spaces/#Bramble.avgₕ!"><code class="md-code-inline">avgₕ!</code></a>, <a href="../../api/spaces/#Bramble.Rₕ"><code class="md-code-inline">Rₕ</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.avgₕ!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.avgₕ!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L70-L97" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/operators/cell_average.jl#L73-L101" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -777,7 +779,7 @@ avgₕ!(uₕ::VectorElement, f, quad_points::Val) -&gt; VectorElement</code></pr
 <li><p><code class="md-code-inline">markers::NTuple{N, Symbol}</code>: restrict evaluation to the named marked regions, leaving every other entry zero.</p>
 </li>
 </ul>
-<p>On a composite element <code class="md-code-inline">f</code> may also be a tuple holding one function per leaf component (depth-first on a nested composite); any other length throws a <code class="md-code-inline">DimensionMismatch</code>.</p>
+<p>On a composite element <code class="md-code-inline">f</code> may also be a tuple holding one function per leaf component (depth-first on a nested composite); any other length throws a <code class="md-code-inline">DimensionMismatch</code>. A single function returns one value per leaf, and any other count throws a <code class="md-code-inline">DimensionMismatch</code> too.</p>
 <p>See also: <a href="../../api/spaces/#Bramble.avgₕ"><code class="md-code-inline">avgₕ</code></a>, <a href="../../api/spaces/#Bramble.Rₕ!"><code class="md-code-inline">Rₕ!</code></a>.</p>
 </div>
 </div>
@@ -1077,7 +1079,7 @@ Bramble.lift!(uₕ, Cₕ, A \ F)</code></pre>
 <div class="md-docstring" id="Bramble.GhostVector">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GhostVector</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_vector.jl#L14-L49" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_vector.jl#L14-L50" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1085,7 +1087,7 @@ Bramble.lift!(uₕ, Cₕ, A \ F)</code></pre>
 <pre><code class="language-julia">GhostVector{T, VP, VG, G} &lt;: AbstractVector{T}</code></pre>
 </div>
 <p>The values of a grid function on a ghost space: the physical values, the very vector the solver holds, and the values at the ghosts beyond the named facets, kept in a buffer of their own.</p>
-<p><code class="md-code-inline">GhostVector(Wₕ, u)</code> takes the vector <code class="md-code-inline">u</code> of the values at the physical nodes of the mesh of <code class="md-code-inline">Wₕ</code>, in the mesh&#39;s linear order, and holds <code class="md-code-inline">u</code> itself as its physical part, not a copy: a time loop that writes its state into <code class="md-code-inline">u</code> sees it in the <code class="md-code-inline">GhostVector</code>. The ghost buffer has one entry per ghost of <code class="md-code-inline">mesh(Wₕ)</code>, in the ghost order of <a href="../../api/meshes/#Bramble.GhostMesh"><code class="md-code-inline">GhostMesh</code></a> (the facets <code class="md-code-inline">xmin</code>, <code class="md-code-inline">xmax</code>, <code class="md-code-inline">ymin</code>, …, each facet&#39;s nodes in the mesh&#39;s column-major order), and starts at 0; <a href="../../api/spaces/#Bramble.update_ghosts!"><code class="md-code-inline">update_ghosts!</code></a> fills it from the relations of a constrained space. <code class="md-code-inline">GhostVector(Wₕ)</code> starts from zeros, its physical part a vector of the backend of <code class="md-code-inline">Wₕ</code>. <code class="md-code-inline">Wₕ</code> is any space with ghosts, as built by <code class="md-code-inline">gridspace(Ωₕ; ghosts = ...)</code> or <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>.</p>
+<p><code class="md-code-inline">GhostVector(Wₕ, u)</code> takes the vector <code class="md-code-inline">u</code> of the values at the physical nodes of the mesh of <code class="md-code-inline">Wₕ</code>, in the mesh&#39;s linear order, and holds <code class="md-code-inline">u</code> itself as its physical part, not a copy: a time loop that writes its state into <code class="md-code-inline">u</code> sees it in the <code class="md-code-inline">GhostVector</code>. The ghost buffer has one entry per ghost of <code class="md-code-inline">mesh(Wₕ)</code>, in the ghost order of <a href="../../api/meshes/#Bramble.GhostMesh"><code class="md-code-inline">GhostMesh</code></a> (the facets <code class="md-code-inline">xmin</code>, <code class="md-code-inline">xmax</code>, <code class="md-code-inline">ymin</code>, …, each facet&#39;s nodes in the mesh&#39;s column-major order), and starts at 0; <a href="../../api/spaces/#Bramble.update_ghosts!"><code class="md-code-inline">update_ghosts!</code></a> fills it from the relations of a constrained space. <code class="md-code-inline">GhostVector(Wₕ)</code> starts from zeros, its physical part a vector of the backend of <code class="md-code-inline">Wₕ</code>, of the element type of the closure of <code class="md-code-inline">Wₕ</code>: complex for a complex datum or Robin coefficient. <code class="md-code-inline">Wₕ</code> is any space with ghosts, as built by <code class="md-code-inline">gridspace(Ωₕ; ghosts = ...)</code> or <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a>.</p>
 <p>A <code class="md-code-inline">GhostVector</code> is an <code class="md-code-inline">AbstractVector</code> of length <code class="md-code-inline">np + ng</code>: the <code class="md-code-inline">np</code> physical values, then the <code class="md-code-inline">ng</code> ghosts, the order of the degrees of freedom of the unconstrained ghost space <code class="md-code-inline">gridspace(Ωₕ; ghosts = ...)</code>. <code class="md-code-inline">Bramble.physical(v)</code> and <code class="md-code-inline">Bramble.ghost_values(v)</code> return the two parts. It carries the mesh with ghosts, <code class="md-code-inline">mesh(Wₕ)</code>, and <code class="md-code-inline">update_ghosts!</code> refuses a space on another mesh.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
@@ -1104,7 +1106,7 @@ length(v)                       # 59</code></pre>
 <div class="md-docstring" id="Bramble.update_ghosts!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.update_ghosts!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_vector.jl#L129-L167" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_vector.jl#L132-L170" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1131,7 +1133,7 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 <div class="md-docstring" id="Bramble.physical">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.physical</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_vector.jl#L112-L117" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_vector.jl#L115-L120" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1144,7 +1146,7 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 <div class="md-docstring" id="Bramble.ghost_values">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ghost_values</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_vector.jl#L120-L126" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/ghost_vector.jl#L123-L129" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1157,7 +1159,7 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 <div class="md-docstring" id="Bramble.assemble!-Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code> — <span class="md-docstring-sig">Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L1039-L1060" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L1045-L1066" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1239,6 +1241,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=ba2f6db5"></script>
+  <script src="../../assets/materialdocs.js?v=15aaeff5"></script>
 </body>
 </html>

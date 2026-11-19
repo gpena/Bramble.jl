@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Exporters — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=95e9cf64">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=8faac73e">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Exporters — Bramble.jl">
   <meta property="og:title" content="Exporters — Bramble.jl">
@@ -110,7 +110,7 @@
 <div class="md-docstring" id="Bramble.export_vtk">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.export_vtk</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/exporters/vtk_export.jl#L1-L34" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/exporters/vtk_export.jl#L1-L35" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -119,7 +119,7 @@
 export_vtk(filename::AbstractString, uₕ::VectorElement, name::AbstractString = &quot;u&quot;) -&gt; Vector{String}</code></pre>
 </div>
 <p>Write <code class="md-code-inline">Ωₕ</code>, and any number of named fields over it, to a VTK rectilinear grid file (<code class="md-code-inline">.vtr</code>).</p>
-<p>Each entry in <code class="md-code-inline">fields</code> is <code class="md-code-inline">name =&gt; data</code>, where <code class="md-code-inline">data</code> is a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> over a grid space on <code class="md-code-inline">Ωₕ</code> (scalar or composite) or a plain array already shaped like the grid. A composite whose components live on different meshes throws an <code class="md-code-inline">ArgumentError</code>: export each component against its own mesh. The second method is a shorthand for a single field, named <code class="md-code-inline">&quot;u&quot;</code> unless told otherwise.</p>
+<p>Each entry in <code class="md-code-inline">fields</code> is <code class="md-code-inline">name =&gt; data</code>, where <code class="md-code-inline">data</code> is a <a href="../../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> over a grid space on <code class="md-code-inline">Ωₕ</code> (scalar or composite) or a plain array already shaped like the grid. A field, or a composite&#39;s component, whose size is not the mesh&#39;s throws an <code class="md-code-inline">ArgumentError</code>, as does a composite whose components live on different meshes. Export each component against its own mesh. The second method is a shorthand for a single field, named <code class="md-code-inline">&quot;u&quot;</code> unless told otherwise.</p>
 <p>A 1D mesh gets a degenerate second axis rather than being refused: VTK has no dedicated 1D grid type, but a rectilinear grid one point deep in <code class="md-code-inline">y</code> opens and renders correctly.</p>
 <p>Requires <a href="https://github.com/JuliaVTK/WriteVTK.jl">WriteVTK.jl</a>; call <code class="md-code-inline">using WriteVTK</code> before calling this.</p>
 <p><strong>Examples</strong></p>
@@ -247,6 +247,6 @@ export_pgfplots(&quot;surface&quot;, Ω2, &quot;u&quot; =&gt; v2)   # writes sur
   <script>hljs.highlightAll();</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=95e9cf64"></script>
+  <script src="../../assets/materialdocs.js?v=8faac73e"></script>
 </body>
 </html>

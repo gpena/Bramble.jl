@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Automatic differentiation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1689b1d7">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=6137ccc4">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Automatic differentiation — Bramble.jl">
   <meta property="og:title" content="Automatic differentiation — Bramble.jl">
@@ -221,7 +221,7 @@ round.(g_solve_enzyme, digits = 4)
 @assert isapprox(g_solve_enzyme, fd_gradient(solve_objective, p_init); rtol = 1e-8, atol = 1e-8)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi"><span class="sgr33"><span class="sgr1">┌ Warning: </span></span>Using fallback BLAS replacements for ([&quot;dasum_64_&quot;]), performance may be degraded
-<span class="sgr33"><span class="sgr1">└ </span></span><span class="sgr90">@ Enzyme.Compiler ~/.julia/packages/Enzyme/KHe2I/src/compiler.jl:6670</span></code></pre>
+<span class="sgr33"><span class="sgr1">└ </span></span><span class="sgr90">@ Enzyme.Compiler ~/.julia/packages/Enzyme/2qUhb/src/compiler.jl:6779</span></code></pre>
 </div>
 <h2 id="Differentiate-through-a-matrix" class="md-heading">Differentiate through a matrix<a href="#Differentiate-through-a-matrix" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>A parameter in a coefficient enters the matrix itself. Here the diffusion scale is <span class="md-math md-math-inline">\(p_1\)</span>, and the objective is the squared norm of the solution:</p>
@@ -417,6 +417,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=1689b1d7"></script>
+  <script src="../../assets/materialdocs.js?v=6137ccc4"></script>
 </body>
 </html>

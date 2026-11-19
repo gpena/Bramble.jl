@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e602cb2c">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e3563f74">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry — Bramble.jl">
   <meta property="og:title" content="Geometry — Bramble.jl">
@@ -148,7 +148,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.point">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.point</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L468-L476" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/mesh/interface.jl#L486-L494" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -585,7 +585,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.levelset">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.levelset</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/levelset.jl#L19-L47" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/geometry/levelset.jl#L19-L49" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -593,7 +593,7 @@ true</code></pre>
 <pre><code class="language-julia">levelset(φ) -&gt; LevelSet</code></pre>
 </div>
 <p>Wrap the function <code class="md-code-inline">φ(x)</code>, <code class="md-code-inline">x = (x₁, x₂)</code>, as a 2D level-set marker. In a domain, <code class="md-code-inline">:D =&gt; levelset(φ)</code> gives a 2D mesh the labels <code class="md-code-inline">D</code> (nodes where <code class="md-code-inline">φ &lt; 0</code>), <code class="md-code-inline">D_boundary</code> (nodes on the curve <code class="md-code-inline">φ = 0</code>) and <code class="md-code-inline">D_exterior</code> (nodes where <code class="md-code-inline">φ &gt; 0</code>).</p>
-<p><code class="md-code-inline">φ</code> must return a plain real number: an <code class="md-code-inline">AbstractFloat</code>, an <code class="md-code-inline">Integer</code> that is not a <code class="md-code-inline">Bool</code>, a <code class="md-code-inline">Rational</code> or an <code class="md-code-inline">AbstractIrrational</code>. Any other <code class="md-code-inline">Real</code>, a <code class="md-code-inline">ForwardDiff.Dual</code> among them, is refused with an <code class="md-code-inline">ArgumentError</code>, as the level-set geometry is not differentiated: a parameter of <code class="md-code-inline">φ</code> takes no derivative through the mesh. Enzyme gives no reliable derivative of such a parameter either, so build the mesh outside a function Enzyme differentiates. <code class="md-code-inline">φ</code> need not be a signed distance; a mesh samples each grid line at 129 points and bisects every sign change, so <code class="md-code-inline">φ</code> only has to change sign across the curve. Two roots on a line closer than its sample spacing are missed. With a <code class="md-code-inline">time_set</code>, <code class="md-code-inline">φ</code> still takes <code class="md-code-inline">x</code> alone.</p>
+<p><code class="md-code-inline">φ</code> must return a plain real number: an <code class="md-code-inline">AbstractFloat</code>, an <code class="md-code-inline">Integer</code> that is not a <code class="md-code-inline">Bool</code>, a <code class="md-code-inline">Rational</code> or an <code class="md-code-inline">AbstractIrrational</code>. Any other <code class="md-code-inline">Real</code>, a <code class="md-code-inline">ForwardDiff.Dual</code> among them, is refused with an <code class="md-code-inline">ArgumentError</code>, as the level-set geometry is not differentiated: a parameter of <code class="md-code-inline">φ</code> takes no derivative through the mesh. Enzyme refuses a <code class="md-code-inline">φ</code> that depends on the parameter with an <code class="md-code-inline">ArgumentError</code> as well. The box must not depend on the parameter either, and Enzyme refuses one that does in forward and reverse mode. Hold the level set and the box fixed and let the parameter enter the form. <code class="md-code-inline">φ</code> need not be a signed distance; a mesh samples each grid line at 129 points and bisects every sign change, so <code class="md-code-inline">φ</code> only has to change sign across the curve. Two roots on a line closer than its sample spacing are missed. With a <code class="md-code-inline">time_set</code>, <code class="md-code-inline">φ</code> still takes <code class="md-code-inline">x</code> alone.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -639,6 +639,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=e602cb2c"></script>
+  <script src="../../assets/materialdocs.js?v=e3563f74"></script>
 </body>
 </html>

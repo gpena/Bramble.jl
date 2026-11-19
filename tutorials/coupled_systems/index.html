@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Coupled systems — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=71f000c4">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=91af65bf">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Coupled systems — Bramble.jl">
   <meta property="og:title" content="Coupled systems — Bramble.jl">
@@ -234,7 +234,7 @@ catch e
     showerror(stdout, e)
 end</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: a bilinear term coupling two leaves over different meshes has no assembly: the trial leaf has (4, 4) points and the test leaf (8, 8), so an index on one names no point on the other. Got Bramble.BilinearProduct{2, Bramble.InnerH, Bramble.IndexedTrialFunction{2}, Bramble.IndexedTestFunction{2}}. Couple leaves that share a mesh, or wrap the trial or the test function in an interpolation operator: `πₕ(u)`, `πₕ(v)`.</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: a bilinear term coupling two leaves over different meshes has no assembly: the trial leaf has (4, 4) points and the test leaf (8, 8), so an index on one names no point on the other. Got Bramble.BilinearProduct{2, Bramble.InnerH, Bramble.IndexedTrialFunction{2, 2}, Bramble.IndexedTestFunction{2, 1}}. Couple leaves that share a mesh, or wrap the trial or the test function in an interpolation operator: `πₕ(u)`, `πₕ(v)`.</code></pre>
 </div>
 <p>A coupled block is assembled by walking the test leaf&#39;s grid and reading the trial column out of the same index space, so the two leaves must agree on what an index means. Index <span class="md-math md-math-inline">\((3, 3)\)</span> on an 8-by-8 grid and on a 4-by-4 grid name different points. The error is raised when the matrix is built, because which leaves a term couples is a question about the spaces it is assembled against. <code class="md-code-inline">allocate_system_matrix</code> refuses it too.</p>
 <p>Wrapping the trial function interpolates it onto the test leaf&#39;s grid, and the same block assembles:</p>
@@ -290,6 +290,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=71f000c4"></script>
+  <script src="../../assets/materialdocs.js?v=91af65bf"></script>
 </body>
 </html>

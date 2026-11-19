@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>How to choose a linear solver — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=aaaaa56a">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=37292748">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="How to choose a linear solver — Bramble.jl">
   <meta property="og:title" content="How to choose a linear solver — Bramble.jl">
@@ -249,7 +249,7 @@ u_n = pde_solve(A_n, F_n; mean_zero = w)
 @assert norm(A_n * u_n - (F_n - λ * w)) &lt; 1e-9 * norm(F_n)
 abs(dot(w, u_n)), λ</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.1376602531569375e-16, 6.880570536001164e-6)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.1232334506949826e-16, 6.8805705362648415e-6)</code></pre>
 </div>
 <p>The data must satisfy a compatibility condition. <code class="md-code-inline">λ</code> is the part of the load that no <code class="md-code-inline">u</code> reaches: zero for exactly compatible data, and small here because these are compatible only in the continuum. <code class="md-code-inline">Bramble.neumann_compatibility</code> tests the condition. A kernel in the ghost values of a ghost space needs <code class="md-code-inline">gauge</code> instead, and the <a href="../../howto/pure_neumann/#howto_pure_neumann">pure Neumann how-to</a> shows both keywords.</p>
 <h2 id="Large-systems-in-3D" class="md-heading">Large systems in 3D<a href="#Large-systems-in-3D" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -355,6 +355,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=aaaaa56a"></script>
+  <script src="../../assets/materialdocs.js?v=37292748"></script>
 </body>
 </html>
