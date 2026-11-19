@@ -104,17 +104,21 @@ clamped(F, u) = (F => u(1) => 0.0, F => u(2) => 0.0, F => ∂ₙₙ(u(1)) => 0.0
 const S = gridspace(gm((7, 6)); ghosts = :boundary)
 sq(C) = ((E, d) = B.closure(C); sum(abs2, nonzeros(E)) + sum(abs2, d))
 
-tractions(β, g = 0.3) = u -> (:xmin => β * u(1) + trac(u, 1, 2.0) => 1.0,
-    :xmin => trac(u, 2, 2.0) => 0.0, :ymin => trac(u, 1, 2.0) => 0.0,
-    :ymin => β * u(2) + trac(u, 2, 2.0) => g)
+function tractions(β, g = 0.3)
+    u -> (:xmin => β * u(1) + trac(u, 1, 2.0) => 1.0,
+        :xmin => trac(u, 2, 2.0) => 0.0, :ymin => trac(u, 1, 2.0) => 0.0,
+        :ymin => β * u(2) + trac(u, 2, 2.0) => g)
+end
 fβ(p) = sq(constrained(S × S, u -> (tractions(p[1])(u)..., clamped(:xmax, u)...,
     clamped(:ymax, u)...)))
 fβ2(p) = fβ(p[1:1])
 fβg(p) = sq(constrained(S × S, u -> (tractions(p[1], p[2])(u)..., clamped(:xmax, u)...,
     clamped(:ymax, u)...)))
-single(β) = u -> (:xmin => β * u(1) + trac(u, 1, 2.0) => 1.0,
-    :xmin => trac(u, 2, 2.0) => 0.0, :ymin => ∂ₙ(u(1)) => 0.0,
-    :ymin => β * u(2) + ∂ₙ(u(2)) => 0.3)
+function single(β)
+    u -> (:xmin => β * u(1) + trac(u, 1, 2.0) => 1.0,
+        :xmin => trac(u, 2, 2.0) => 0.0, :ymin => ∂ₙ(u(1)) => 0.0,
+        :ymin => β * u(2) + ∂ₙ(u(2)) => 0.3)
+end
 fno(p) = sq(constrained(S × S, u -> (single(p[1])(u)..., clamped(:xmax, u)...,
     clamped(:ymax, u)...)))
 
@@ -124,10 +128,12 @@ const GS = map(((C, _, _),) -> mesh(C), B._padded_leaves(S × S))
 @noinline scalar_and_datum(r) = ([_beta(r.op)], [r.data])
 _beta(op::B.FacetOperator) = op.ops[1][1].left_op.scalar
 _beta(op) = op.left_op.scalar
-allbeta(β) = u -> (:xmin => β * u(1) + trac(u, 1, 2.0) => 1.0,
-    :xmin => β * u(2) + trac(u, 2, 2.0) => 0.2,
-    :ymin => β * u(1) + trac(u, 1, 2.0) => 0.5,
-    :ymin => β * u(2) + trac(u, 2, 2.0) => 0.3)
+function allbeta(β)
+    u -> (:xmin => β * u(1) + trac(u, 1, 2.0) => 1.0,
+        :xmin => β * u(2) + trac(u, 2, 2.0) => 0.2,
+        :ymin => β * u(1) + trac(u, 1, 2.0) => 0.5,
+        :ymin => β * u(2) + trac(u, 2, 2.0) => 0.3)
+end
 function frels(p, rels = tractions; rebuild = false, slot::Val{k} = Val(4)) where {k}
     r = B._composite_relations(GS, rels(p[1])(B.trial_function(P)))[k]
     rebuild && (r = B._FacetRelation(r.d, r.s, r.name, r.op, r.data, r.c))
