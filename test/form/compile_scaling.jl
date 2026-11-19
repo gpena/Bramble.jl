@@ -101,6 +101,10 @@ end
 # difference and average. The bound, 2900, is half the first count. Counted as
 # compile_assembly.jl counts its own, in a fresh process, so no earlier test file has
 # compiled any of them.
+# With the component index in the indexed leaves' type (gpena/Bramble.jl#1229, #1260),
+# the nightly counted 3041 and an Apple Silicon Mac 2892, so the bound is now 3300. The
+# first call got faster with that change (simplify_rules.md, `component_type`); only the
+# count of instances grew.
 const ELASTICITY_FORM_COUNT = raw"""
 using Bramble, Random
 nspec(f) = sum(m -> count(!isnothing, Base.specializations(m)), methods(f); init = 0)
@@ -122,7 +126,7 @@ println(n, " ", a isa Bramble.BilinearForm)
     cmd = `$(Base.julia_cmd()) --startup-file=no --threads=1 --project=$project
         -e $ELASTICITY_FORM_COUNT`
     out = split(readchomp(cmd))
-    @test parse(Int, out[1]) <= 2900
+    @test parse(Int, out[1]) <= 3300
     @test out[2] == "true"
 end
 
