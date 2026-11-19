@@ -85,6 +85,13 @@ function _dispatch_count(f, types)
     return count(a -> a isa AllocCheck.DynamicDispatch, check_allocs(f, types))
 end
 
+# A literal component index, compiled on its own: the leaf's type is known, so indexing is
+# free. A run-time `Int` index is not checked: the component is a type parameter of the
+# indexed leaf (gpena/Bramble.jl#1229), so `u[i]` with `i` unknown builds that type at run
+# time and allocates, the cost of `form` folding its gates by type.
+_first_component(u) = u[1]
+_second_component(u) = u[2]
+
 @testset "AllocCheck static verification" begin
     # Uniform meshes throughout: `mesh(Ω, n, false)` draws its points with `rand!`, and
     # nothing here reads a coordinate value, so the random stream would only make the
@@ -148,8 +155,10 @@ end
     @testset "Form component operations (#153)" begin
         @test _alloc_report(components, (TrialFunction{2, 2},)) == ""
         @test _alloc_report(components, (TestFunction{2, 2},)) == ""
-        @test _alloc_report(getindex, (TrialFunction{2, 2}, Int)) == ""
-        @test _alloc_report(getindex, (TestFunction{2, 2}, Int)) == ""
+        for f in (_first_component, _second_component)
+            @test _alloc_report(f, (TrialFunction{2, 2},)) == ""
+            @test _alloc_report(f, (TestFunction{2, 2},)) == ""
+        end
     end
 
     @testset "Mesh queries" begin

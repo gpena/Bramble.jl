@@ -231,6 +231,8 @@ function _mesh(
 ) where {D}
     dim(Ω) == D || _throw_domain_dim_mismatch(dim(Ω), D)
     _set = set(Ω)
+    D == 2 && _has_levelset(regions(markers(Ω))) &&
+        _levelset_box_bounds(_set(1)..., _set(2)...)
 
     # Adjust the number of points for any collapsed dimensions. For example, if a domain
     # is a line in 3D space, the two collapsed dimensions will have npts = 1. Collapse is
@@ -249,6 +251,19 @@ function _mesh(
     _set_markers!(output_mesh, markers(Ω), fitted; warn_marker_mismatch)
 
     return output_mesh
+end
+
+# Whether the region markers hold a level set.
+_has_levelset(regs::Tuple) = any(m -> identifier(m) isa LevelSet, regs)
+
+# The bounds of a level-set mesh's box, unused. A function of its own so that
+# ext/BrambleEnzymeExt/geometry.jl can refuse a box that depends on the parameter in reverse
+# mode (#1236): Enzyme passes a float bound `Active` when it depends on the parameter and
+# `Const` when it does not, where the seed lines `_levelset_grid` receives are arrays with
+# a shadow of their own either way. `donotdelete` keeps the call from being eliminated.
+@noinline function _levelset_box_bounds(x₀, x₁, y₀, y₁)
+    Base.donotdelete(x₀, x₁, y₀, y₁)
+    return nothing
 end
 
 # A domain without polygon or level-set markers keeps the submeshes it was given, so a plain
