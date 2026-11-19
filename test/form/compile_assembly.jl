@@ -17,6 +17,11 @@ using Test
 # assembles, and against `assemble_parallel!`'s matrix, whose threaded replay evaluates
 # each point through `_replay_point!`, not the serial walk.
 # `matrix_free_operator` would not do: it walks through `visit_bilinear_stencil` too.
+# Putting the component index in the indexed leaves' type (gpena/Bramble.jl#1229, #1260)
+# specialises these walks once per component as well. The nightly counted 2388 and an
+# Apple Silicon Mac 2584, so the bound is now 2800. That change made the first call faster
+# (simplify_rules.md, `component_type`), so the higher count is not a compile-time
+# regression.
 const ELASTICITY_COUNT = raw"""
 using Bramble, Random, LinearAlgebra, SparseArrays
 nspec(f) = sum(m -> count(!isnothing, Base.specializations(m)), methods(f); init = 0)
@@ -43,7 +48,7 @@ println(n, " ", nnz(A), " ", norm(A), " ", maximum(abs, B - A) / maximum(abs, A)
         -e $ELASTICITY_COUNT`
     out = split(readchomp(cmd))
     n = parse(Int, out[1])
-    @test n <= 1958
+    @test n <= 2800
     @test parse(Int, out[2]) == 19773
     @test isapprox(parse(Float64, out[3]), 92.46818171109827; rtol = 1e-12)
     @test parse(Float64, out[4]) < 1e-12
