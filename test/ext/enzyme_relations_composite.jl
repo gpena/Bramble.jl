@@ -5,9 +5,10 @@ module ExtEnzymeRelationsCompositeTests
 # Reverse mode used to stop with an `EnzymeInternalError` where `constrained` builds the
 # rows of all components in one pass, constant relations too. Checked: constant relations,
 # and a datum on one component, against `AutoForwardDiff()` to 1e-8 relative on the 7 by 6
-# non-uniform `ghost_mesh`. Tractions meeting at a corner with a parameter in their
-# operators get a wrong derivative from Enzyme in both modes; the rules of
-# `Bramble._corner_entry` refuse it, and a cell pins the refusal.
+# non-uniform `ghost_mesh`, and `λ` in the operators of tractions on `:xmin` alone, forward
+# (#1226). Tractions meeting at a one-sided corner have files of their own, each its own
+# child under the 10 GB cap: test/ext/enzyme_relations_corner.jl (forward) and
+# test/ext/enzyme_relations_corner_reverse.jl (the reverse refusal).
 #
 # Enzyme is not in test/Project.toml: load it first, through a temporary environment
 # (test/ext/enzyme_policy_cases.jl says how). Without it the file runs nothing, and with it
@@ -56,21 +57,19 @@ function _composite_loss(W, what::Symbol)
     return f
 end
 
-# The loss of tractions on `:xmin` and `:ymin` of `W × W`, with `λ = p[1]` in the
-# operators' `K`, the other facets clamped: their corner moves its entries through the
-# one-sided difference (`Bramble._corner_entry`), whose rules refuse this case (#1180).
-function _corner_loss(W)
-    K(i, j, λ) = [λ * (i == d) * (j == e) + 0.5 * ((i == j) * (d == e) + (i == e) * (j == d))
-                  for d in 1:2, e in 1:2]
-    t(u, i, λ) = ∂ₙ(u(1); K = K(i, 1, λ)) + ∂ₙ(u(2); K = K(i, 2, λ))
-    clamped(F, u) = (F => u(1) => 0.0, F => u(2) => 0.0, F => ∂ₙₙ(u(1)) => 0.0,
-        F => ∂ₙₙ(u(2)) => 0.0)
+_kt(i, j, λ) = [λ * (i == d) * (j == e) + 0.5 * ((i == j) * (d == e) + (i == e) * (j == d))
+                for d in 1:2, e in 1:2]
+_trac(u, i, λ) = ∂ₙ(u(1); K = _kt(i, 1, λ)) + ∂ₙ(u(2); K = _kt(i, 2, λ))
+_clamped(F, u) = (F => u(1) => 0.0, F => u(2) => 0.0, F => ∂ₙₙ(u(1)) => 0.0,
+    F => ∂ₙₙ(u(2)) => 0.0)
+
+# The loss of tractions on `:xmin` alone, `λ = p[1]` in their `K`, the other facets
+# clamped: no corner is one-sided.
+function _side_loss(W)
     function f(p)
-        λ = p[1]
         C = constrained(W × W,
-            u -> (:xmin => t(u, 1, λ) => 1.0, :xmin => t(u, 2, λ) => 0.0,
-                :ymin => t(u, 1, λ) => 0.0, :ymin => t(u, 2, λ) => 0.3,
-                clamped(:xmax, u)..., clamped(:ymax, u)...))
+            u -> (:xmin => _trac(u, 1, p[1]) => 1.0, :xmin => _trac(u, 2, p[1]) => 0.0,
+                _clamped(:ymin, u)..., _clamped(:xmax, u)..., _clamped(:ymax, u)...))
         E, d = Bramble.closure(C)
         return sum(abs2, nonzeros(E)) + sum(abs2, d)
     end
@@ -88,11 +87,12 @@ end
             @test err < TOL
         end
 
-        @testset "corner coefficient refused, $mname (#1180)" for (mname, mode) in modes
-            Wb = gridspace(ghost_mesh(CpuSerial(), (7, 6)); ghosts = :boundary)
-            grad() = DI.gradient(_corner_loss(Wb), _auto(mode), [2.0])
-            @test_throws ArgumentError grad()
-            @test_throws "parameter in a relation's operator" grad()
+        Wb = gridspace(ghost_mesh(CpuSerial(), (7, 6)); ghosts = :boundary)
+        @testset ":xmin tractions, λ, forward (#1226)" begin
+            f = _side_loss(Wb)
+            ref = DI.gradient(f, DI.AutoForwardDiff(), [2.0])
+            @test abs(only(ref)) > 1e-6
+            @test _relerr(DI.gradient(f, _auto(Enzyme.Forward), [2.0]), ref) < TOL
         end
     end
 end

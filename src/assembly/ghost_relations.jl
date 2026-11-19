@@ -326,7 +326,12 @@ end
 # attached one by one to the components left. The rows of a node, or of a corner, are solved
 # together, so which ghost a row is attached to changes no value. Data depending on time
 # are refused (they would need a `d(t)` of the whole).
-function _composite_relations(Gs::Tuple, out)
+#
+# Inlined into `constrained`. Kept a call, it returns the relations' tuple, and Enzyme's
+# forward mode gives the datum of the third and fourth of four tractions a tangent equal to
+# its value: a wrong gradient, no error (gpena/Bramble.jl#1226). Rebuilding the relations
+# from their fields in `constrained` leaves it wrong.
+@inline function _composite_relations(Gs::Tuple, out)
     pairs = _relation_pairs(out)
     isempty(pairs) && _throw_relation_shape(out)
     keys = map(p -> _pair_key(Val(dim(first(Gs))), p, true), pairs)
@@ -789,8 +794,9 @@ function _one_sided_corners!(rows, cols, vals, start, k, comps::Tuple, I, e, t, 
 end
 
 # The entry `v` that a one-sided corner moves, unchanged. A function of its own so that
-# ext/BrambleEnzymeExt/relations.jl can refuse a derivative through it: Enzyme gets the
-# corner's derivative wrong when an operator coefficient is active (#1180).
+# ext/BrambleEnzymeExt/relations.jl can refuse a reverse derivative through it: Enzyme's
+# reverse mode gets the corner's derivative wrong when an operator coefficient is active
+# (#1180).
 @noinline _corner_entry(v) = v
 
 # The weights at the nodes `x₀`, `x₁`, `x₂` of the quadratic through them, evaluated at `x`:
