@@ -997,6 +997,9 @@ end
 _rt_negated(W) = form(W, W, (u, v) -> innerₕ(u, v) - innerₕ(D₋ₓ(u), v))
 
 @testset "the sign of minus acts as -1" begin
+    # An unseeded mesh can leave the `fdm_solve` systems below ill-conditioned (cond up to
+    # 7e8 in 200 draws), past the default `rtol`. This seed keeps cond near 2e3.
+    seed!(771)
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (7, 6), (false, false))
     Wₕ = gridspace(Ωₕ)
     u = trial_function(Wₕ)
