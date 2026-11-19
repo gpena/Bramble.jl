@@ -452,6 +452,8 @@ const ENZYME_FILES = (
     "ext/enzyme_forward_assembly.jl",
     "ext/enzyme_relations.jl",
     "ext/enzyme_relations_composite.jl",
+    "ext/enzyme_relations_corner.jl",
+    "ext/enzyme_relations_corner_reverse.jl",
     "ext/enzyme_relations_threaded.jl",
     "ext/chainrules_enzyme_ext.jl",
     "ext/enzyme_gmg_solve.jl",
@@ -473,9 +475,15 @@ isempty(TEST_FILE) || TEST_FILE in ENZYME_FILES ||
 # ad_coverage.jl outgrew one shard: on 2026-11-16 `ad-2` spent 3 h on it and had not
 # finished. Its Enzyme half then ran in two, split by policy (`AD_COVERAGE_POLICIES`), and
 # the CpuSerial and CpuThreaded half passed 4.5 h on its own, so each policy has a shard.
+#
+# The two corner files of enzyme_relations_composite.jl's cells (#1226) run about 9 minutes
+# each locally. They go on `ad-1`, the shard with one file, rather than `ad-3`, which holds
+# six.
 const AD_SHARDS = ("ad-1", "ad-2", "ad-3", "ad-4", "ad-5", "ad-6")
 const ENZYME_FILE_SHARDS = Dict(
     "ext/enzyme_polyester_hooks.jl" => "ad-1",
+    "ext/enzyme_relations_corner.jl" => "ad-1",
+    "ext/enzyme_relations_corner_reverse.jl" => "ad-1",
     "space/ad_coverage.jl" => ("ad-2", "ad-5", "ad-6"),
     "ext/enzyme_polyester_ext.jl" => "ad-3",
     "ext/enzyme_threaded_ext.jl" => "ad-3",
