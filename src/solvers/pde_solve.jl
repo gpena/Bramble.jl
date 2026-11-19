@@ -152,11 +152,11 @@ With `ForwardDiff.jl` loaded, a `Dual` matrix or load of the plain solve is solv
 `BrambleForwardDiffExt`, which factors the `Float64` values of `A` once, by the route the
 `Float64` solve of the same keywords takes, and solves every partial against that factor:
 with ``A₀ = value.(A)`` and ``b₀ = value.(F)``, the value is ``x₀ = A₀⁻¹b₀`` and the partial
-``k`` is ``xₖ = A₀⁻¹(bₖ − Aₖx₀)``. A nested `Dual` recurses through the same factor. A load
-built by hand against ForwardDiff's tag order is refused with an `ArgumentError` by the plain,
-bordered and kept-factor solves; ForwardDiff never builds such a load itself. A non-square
-`Dual` matrix throws an `ArgumentError`: a least-squares solve has a residual term that this
-derivative omits.
+``k`` is ``xₖ = A₀⁻¹(bₖ − Aₖx₀)``. A nested `Dual` recurses through the same factor. A
+matrix or load built by hand against ForwardDiff's tag order is refused with an
+`ArgumentError` by the plain, bordered and kept-factor solves; ForwardDiff never builds such
+a matrix or load itself. A non-square `Dual` matrix throws an `ArgumentError`:
+a least-squares solve has a residual term that this derivative omits.
 
 The bordered solve (`mean_zero`, `gauge`, and the rank-one term of a `Bramble.RankOneUpdate`)
 differentiates the same way on the bordered matrix: the primal bordered system of the values
@@ -280,6 +280,10 @@ pde_solve(fact::Factorization, F::AbstractVector) = _solve_by_parts(b -> fact \ 
 # and refers back to `solve(F)` when the operator carries the load's tag itself. `solve` is
 # any function of the load, so no factorization type is assumed here.
 @inline _solve_by_parts(solve::S, F) where {S} = solve(F)
+
+# Refuses a nested `Dual` type of `what` (a load or a matrix) against ForwardDiff's tag
+# order. BrambleForwardDiffExt adds the `Dual` method; with no ForwardDiff this is a no-op.
+_check_tag_order(::Type, what::AbstractString = "load") = nothing
 
 # The factorization that the `Float64` solve of `A` takes with the same keywords, route for
 # route: `:default` takes Accelerate on macOS for a symmetric `A` (the test of the routing

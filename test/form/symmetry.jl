@@ -524,6 +524,30 @@ _bytes(f, args...) = @allocated f(args...)
         end
     end
 
+    # `_pair_plan` matches summands by type with the component of every indexed leaf erased
+    # (#1229): which blocks a pair names is checked at run time, so a transposed shape pairs
+    # whatever components it reads. Plans as before the component moved into the type.
+    @testset "pair plans ignore the component (#1229)" begin
+        Random.seed!(1229)
+        Ωp = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false))
+        Wp = gridspace(Ωp)
+        plan(S, f) = Bramble._pair_plan(Tuple(map(typeof,
+            Bramble._summands(form(S, S, f).ast))))
+        V2, V3 = Wp^Val(2), Wp^Val(3)
+        @test plan(V2, (u, v) -> innerₕ(D₋ₓ(u(1)), D₋ᵧ(v(1))) +
+                                 innerₕ(D₋ᵧ(u(2)), D₋ₓ(v(2)))) == ((1, 2),)
+        @test plan(V2, (u, v) -> innerₕ(D₋ₓ(u(1)), D₋ᵧ(v(2))) +
+                                 innerₕ(D₋ᵧ(u(2)), D₋ₓ(v(1)))) == ((1, 2),)
+        @test plan(V2, (u, v) -> innerₕ(D₋ₓ(u(1)), D₋ᵧ(v(2))) +
+                                 innerₕ(D₋ᵧ(u(1)), D₋ₓ(v(2)))) == ((1, 2),)
+        # The same shape on both sides is its own transpose, and pairs with nothing.
+        @test plan(V2, (u, v) -> innerₕ(u(1), v(2)) + innerₕ(u(2), v(1))) ==
+              ((1, 0), (2, 0))
+        @test plan(V3, (u, v) -> innerₕ(D₋ₓ(u(1)), D₋ᵧ(v(2))) +
+                                 innerₕ(D₋ᵧ(u(3)), D₋ₓ(v(1))) +
+                                 innerₕ(D₋ₓ(u(2)), D₋ᵧ(v(3)))) == ((1, 2), (3, 0))
+    end
+
     @testset "Numerically SPD after assembly" begin
         # `isposdef`/`issymmetric` above are a symbolic, structural check on the form
         # itself (module note at the top of this file): they confirm a shape recognized as

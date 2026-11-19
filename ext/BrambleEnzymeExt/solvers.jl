@@ -142,7 +142,8 @@ function EnzymeRules.reverse(
         K̄ = K.dval
         σ = Kₜ.σ
         # `K̄ = −λ uᴴ`: on `A`'s stored pattern entry by entry, and by the product rule on
-        # `σ`, `wₛ` and `wₜ`, with `λᵀwₛ` and `uᴴwₜ` the two scalars of the rank-one term.
+        # `σ`, `wₛ` and `wₜ`, with `wₛᴴλ` and `conj(wₜᵀu)` the two scalars of the rank-one
+        # term (#1249).
         # A real `K` with a complex `F` has real shadows, which get the real part (#1238).
         if K̄.A !== K.val.A
             Āv = nonzeros(K̄.A)
@@ -152,11 +153,11 @@ function EnzymeRules.reverse(
                 Āv[k] -= _entry_cotangent(eltype(Āv), λ[rows[k]] * conj(u[j]))
             end
         end
-        sλ = transpose(Kₜ.ws) * λ
-        tu = dot(u, Kₜ.wt)
+        sλ = dot(Kₜ.ws, λ)
+        tu = conj(transpose(Kₜ.wt) * u)
         K̄.σ += σ isa Real ? real(-(sλ * tu)) : -(sλ * tu)
-        _accumulate_shadow!(K.val.ws, K̄.ws, (-σ * tu) .* λ)
-        _accumulate_shadow!(K.val.wt, K̄.wt, (-σ * sλ) .* conj.(u))
+        _accumulate_shadow!(K.val.ws, K̄.ws, (-conj(σ) * tu) .* λ)
+        _accumulate_shadow!(K.val.wt, K̄.wt, (-conj(σ) * sλ) .* conj.(u))
     end
 
     if !(F isa Const)

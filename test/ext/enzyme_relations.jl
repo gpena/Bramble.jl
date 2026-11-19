@@ -20,8 +20,10 @@ module ExtEnzymeRelationsTests
 # cells check them on blocks of two and three, then through `constrained`.
 #
 # The cells of a composite, `constrained(W × W, …)` (#1180), are in
-# test/ext/enzyme_relations_composite.jl, a child of their own: in this one they pushed its
-# peak footprint past 10 GB.
+# test/ext/enzyme_relations_composite.jl, and those of tractions meeting at a one-sided
+# corner in test/ext/enzyme_relations_corner.jl (forward, #1226) and
+# test/ext/enzyme_relations_corner_reverse.jl (the reverse refusal), each a child of its
+# own: in this one they pushed its peak footprint past 10 GB.
 #
 # Enzyme is not in test/Project.toml: load it first, through a temporary environment
 # (test/ext/enzyme_policy_cases.jl says how). Without it the file runs nothing, and with it

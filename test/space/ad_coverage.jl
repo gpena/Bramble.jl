@@ -570,7 +570,7 @@ function build_levelset_box_constant(policy, kind)
 end
 
 # The box half-width as the parameter: the grid lines are fitted to `φ = 0` and carry no
-# derivative of the box, so forward mode refuses and reverse mode returns zero.
+# derivative of the box, so both modes refuse it.
 function build_levelset_box(policy, kind)
     f(p) = _mass_of(_levelset_fixed(policy, kind, interval(-p[1], p[1]) × interval(-1.0, 1.0)))
     return f, [1.0]
@@ -871,14 +871,17 @@ const CELLS = (
     # 4.4 GB under `CpuSerial`, 486 s and 5.9 GB under `CpuThreaded`, 420 s and 4.9 GB under
     # `CpuPolyester`.
     cell(:ghost_assemble_3d, "ghost", :threed, build_ghost_assemble_3d, kinds = (:nonuniform,)),
-    # `C^2` of a 2D ghost space with `Δₕ` on both components (#1174), measured at 501128cb and at
-    # 70e39a58: the base's reverse was still compiling at 20 minutes (7.7 GB) and its forward
-    # failed at 455 s; the tip's reverse and forward fail at 982 s (5.7 GB) and 592 s (4.1 GB)
-    # with `IllegalTypeAnalysisException` in `simplify_ast` (src/ast/simplifier.jl:360), where
-    # type inference leaves the component indices open (ad_reductions/1174_composite_ghost.md).
-    # The fix is a new issue, so the cell is not run; ForwardDiff differentiates it.
-    cell(:ghost_composite, "ghost", :ghost_fast, build_ghost_composite,
-        rev = :skip, fwd = :skip, kinds = (:nonuniform,)),
+    # `C^2` of a 2D ghost space with `Δₕ` on both components (#1174, #1229). Both modes threw
+    # `IllegalTypeAnalysisException` in `simplify_ast` (982 s and 592 s, ad_reductions/
+    # 1174_composite_ghost.md) until `simplify_ast` inferred a concrete type on composite
+    # forms. Under `CpuSerial` now, alone, reverse matches ForwardDiff (0.0) in 296 s and
+    # 2.92 GB, forward (1.2e-16) in 190 s and 2.06 GB (ad_reductions/1229_composite_ghost.md).
+    # A child of its own: after the other cells of `ghost_fast` in one process the compile
+    # passed the 10 GB cap (11 GB), and the threaded policies were not run.
+    cell(:ghost_composite, "ghost", :ghost_composite, build_ghost_composite,
+        rev = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
+        fwd = (CpuSerial = :ok, CpuThreaded = :skip, CpuPolyester = :skip),
+        kinds = (:nonuniform,)),
     # The load of `assemble(a, l)` alone (gpena/Bramble.jl#1127, the load half). The threaded
     # reverse is #1157 and the forward under Enzyme #1159, both fixed in v4.2.2.
     cell(:ghost_load, "ghost", :ghost_fast, build_ghost_load, kinds = (:nonuniform,)),
@@ -934,12 +937,14 @@ const CELLS = (
         fd_err = "Level-set marker", rev = :throws, fwd = :throws,
         rev_err = "Enzyme cannot differentiate a level-set mesh with respect to a parameter"),
     cell(:levelset_box_constant, "levelset", :levelset, build_levelset_box_constant),
-    # The box depends on the parameter (gpena/Bramble.jl#1211, critic of the refusal): forward
-    # mode refuses it, reverse mode cannot tell and returns a zero where the derivative is not
-    # zero, so the page records it as a silent zero.
+    # The box depends on the parameter (gpena/Bramble.jl#1211, critic of the refusal): both
+    # modes refuse it by name. Reverse returned a zero where the derivative is not zero until
+    # the rule on the box's four bounds (gpena/Bramble.jl#1236), which throws when a bound is
+    # `Active`. The constant box of the cell above has `Const` bounds and keeps its exact
+    # derivative; a closure that captures a box and is annotated `Duplicated` is refused too.
     cell(:levelset_box, "levelset", :levelset, build_levelset_box, fd = :throws,
-        fd_err = "Level-set marker", rev = :silent_zero, fwd = :throws,
-        fwd_err = "box depends on the parameter"),
+        fd_err = "Level-set marker", rev = :throws, fwd = :throws,
+        rev_err = "box depends on the parameter"),
     # The solver routes of gpena/Bramble.jl#1165 to #1169.
     # Built inside the differentiated function the factorization is a `Union`, and Enzyme stops
     # at it before the rule on `sparse_factorize` runs (departure D8): `pde_solve(A, F)` is the
@@ -1223,9 +1228,10 @@ end
 # relation groups and `threed` reach 4 to 9 GB alone, `ghost_fast` passed 10 GB when it held
 # the relation cells, and `levelset` and `factor_matrix` have aborted in LLVM. `polygon`
 # took a `CpuThreaded` batch child past 10 GB of footprint after eight groups (2026-11-17).
+# `ghost_composite` compiled past 10 GB after the other ghost cells in one process.
 # So do the `slow` groups, which have no measurement.
 const SOLO_GROUPS = (:ghost_fast, :relation_data, :relation_robin, :relation_conormal,
-    :relation_composite, :threed, :levelset, :factor_matrix, :polygon)
+    :relation_composite, :ghost_composite, :threed, :levelset, :factor_matrix, :polygon)
 solo(group) = group in SOLO_GROUPS || any(c -> c.group === group && c.slow, CELLS)
 
 _want(x::Union{Symbol, String}, ::Symbol) = x
@@ -1315,7 +1321,7 @@ if CHILD == ""
         else
             groups = (:dense, :assemble, :three, :boundary, :geometry, :solve, :operators, :ghost_fast,
                 :relation_data, :relation_robin, :relation_conormal,
-                :relation_composite, :inputs, :levelset, :polygon, :factor_matrix,
+                :relation_composite, :ghost_composite, :inputs, :levelset, :polygon, :factor_matrix,
                 :factor_kept, :rank_one, :fdm, :gmg_load, :gmg_coefficient, :chebyshev)
             WITH_3D_TESTS && (groups = (groups..., :threed))
             SLOW && (groups = (groups..., unique(c.group for c in CELLS if c.slow)...))

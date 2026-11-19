@@ -183,9 +183,23 @@ end
 # not just the top-level shape, so it agrees with them everywhere they do answer.
 struct _MixedComponents end
 
-@inline _component_combine(l, r) = l === r ? l : _MixedComponents()
+# The class of a subtree naming the one component `C`. A singleton, like the other classes
+# (`nothing`, `_MixedComponents`, `_NoComponent` below), so two classes are equal exactly
+# when their types are, and `_component_combine` joins them by dispatch: every gate folds
+# from the types of the tree alone, with no constant propagation of a component index
+# (gpena/Bramble.jl#1229).
+struct _ComponentClass{C} end
 
-@inline _test_component_class(op::IndexedTestFunction) = op.component_idx
+const _ClassValue = Union{Nothing, _MixedComponents, _ComponentClass}
+
+@inline _component_combine(l, r) = _MixedComponents()
+@inline _component_combine(l::T, ::T) where {T <: _ClassValue} = l
+
+# The component a class names, or the class itself when it names no single one.
+@inline _class_index(::_ComponentClass{C}) where {C} = C
+@inline _class_index(k) = k
+
+@inline _test_component_class(::IndexedTestFunction{D, C}) where {D, C} = _ComponentClass{C}()
 @inline _test_component_class(op::UnaryWrapper) = _test_component_class(op.inner_op)
 @inline _test_component_class(op::LinearProduct) = _test_component_class(op.right_op)
 @inline _test_component_class(op::BilinearProduct) = _test_component_class(op.right_op)
@@ -199,7 +213,7 @@ end
 @inline _test_component_class(op::_ComponentSum) = _test_component_class(op.sum)
 @inline _test_component_class(::Any) = nothing
 
-@inline _trial_component_class(op::IndexedTrialFunction) = op.component_idx
+@inline _trial_component_class(::IndexedTrialFunction{D, C}) where {D, C} = _ComponentClass{C}()
 @inline _trial_component_class(op::UnaryWrapper) = _trial_component_class(op.inner_op)
 @inline _trial_component_class(op::BilinearProduct) = _trial_component_class(op.left_op)
 @inline function _trial_component_class(op::OperatorAdd)
@@ -216,33 +230,18 @@ end
 # shape -- and, since it never throws, that distribution itself is what eventually turns
 # every mixing subtree into single-component leaves, the distribution `simplify_ast` already
 # performs (`OperatorScale`, `GridFunctionScale`, `BilinearProduct`) reaching a fixed point
-# where `_component_class` on every remaining node is a plain `Int` or `nothing`, never
+# where `_component_class` on every remaining node is one component or `nothing`, never
 # `Mixed()` -- at which point `block_of`'s own throwing query is the one that runs, and only
 # ever on a term that genuinely cannot route (one side named, the other not).
 #
-# The answer is a value, not a type: it compares the two `component_idx::Int` fields. A
-# literal index (`v(1) + v(2)`) constant-folds, but a runtime component index (`v(i)` with
-# `i` an argument) leaves it to run time, so each distribution gate below (`OperatorScale`,
-# `GridFunctionScale`, `BilinearProduct`, `LinearProduct`, `_LinearWrapper`) makes `form`'s
-# type a `Union` of the distributed and undistributed trees when a sum of runtime-indexed
-# terms sits inside one inner product, under a difference, average, jump, shift or
-# restriction, or under a scalar or grid-function coefficient shared by the whole sum, even
-# when every term names the same `i` (gpena/Bramble.jl#529). Separate inner products, each
-# with its own coefficient, never reach those gates and infer concretely. Kept on purpose:
-# distributing every sum that names a component would infer concretely, but costs a sweep
-# for every same-component sum (`v(1) + D₋ₓ(v(1))`). The one exception is a scalar over
-# the sum of the `εₕ`/`divₕ`/`divₘₕ` builders, which carries its terms' component pairs in
-# its type (`_ComponentSum`, ast.jl), so that gate is answered by type
-# (`_scale_labelled_sum` below) with the tree literal indices give (gpena/Bramble.jl#939).
-# That covers a scalar directly over one builder (`μ * inner₊(εₕ(u), εₕ(v))`), sums of such
-# terms, and such a term plus a user's. A scale meeting the already distributed sum (`2 *
-# (μ * X)`, `-(μ * X)`, `μ * (X + Y)` over two builders) and an `Int` coefficient (#240)
-# take the value gate as before.
-# `inner₊(∇ₕ(u), ∇ₕ(v))` of a composite `u` and `v` is such a builder too, since `∇ₕ(u)`
-# labels row `c` as built on `u(c)` (`_GradientRows`, operators/difference.jl), so a
-# captured coefficient over it is answered by type in 3D as well (gpena/Bramble.jl#958). A
-# tuple of gradient tuples a user builds carries no pairs and keeps this gate (concrete in
-# 2D through constant propagation, a `Union` in 3D).
+# The answer is a type. Each leaf carries its component as a type parameter, so every gate
+# below (`OperatorScale`, `GridFunctionScale`, `BilinearProduct`, `LinearProduct`,
+# `_LinearWrapper`) folds in any function compiled on its own, Enzyme's callees included
+# (gpena/Bramble.jl#1229). Until then it compared two `Int` fields. Only constant
+# propagation folded that, and Enzyme met a `Union` of trees. A runtime index (`v(i)`, `i`
+# an argument) pays: its leaf's type is unknown and `form` cannot infer it (#529 kept the
+# value for that case). Now redundant, and kept until each is removed on its own: the
+# builders' labels (`_ComponentSum`, #939 and #958) and the inlined bodies (#804).
 @inline function _mixes_components(a::LazyOp, b::LazyOp)
     trial = _component_combine(_trial_component_class(a), _trial_component_class(b))
     test = _component_combine(_test_component_class(a), _test_component_class(b))
@@ -401,12 +400,13 @@ function _gated_expr!(classes, @nospecialize(T), path, piece, node)
     return ex, t, s
 end
 
-# A generated body marked for inlining. The gates in it compare `component_idx` values
-# (`_mixes_components`), so they fold only where the indices reach them as constants, and a
-# coefficient or source holding run-time data (a `Ref`, a grid function) leaves the tree
-# around those indices non-constant. Inlined into the caller, the gates read the indices
-# there; called, they did not past a few terms, and `form` inferred a `Union`
-# (gpena/Bramble.jl#804). The pass is not recursive: inlining it bounds no recursion.
+# A generated body marked for inlining. When the gates in it compared component indices
+# held as values, they folded only where the indices reached them as constants, and a
+# coefficient or source holding run-time data (a `Ref`, a grid function) left the tree
+# around them non-constant; called rather than inlined, they did not fold past a few terms,
+# and `form` inferred a `Union` (gpena/Bramble.jl#804). The index is now in the type
+# (#1229), so this is redundant and kept until removed on its own. The pass is not
+# recursive: inlining it bounds no recursion.
 _inlined(ex) = Expr(:block, Expr(:meta, :inline), ex)
 
 # `simplify_ast(c * x)` for a sum `x` already simplified whose two operands mix components:
@@ -469,21 +469,23 @@ end
 
 # --- A scale over a builder's sum (gpena/Bramble.jl#939) ---------------------------- #
 
-# `_mixes_components` compares runtime indices, so a scalar captured by the form closure over
-# `inner₊(εₕ(u), εₕ(v))` left `form` a `Union` of trees. The builders know each term's
-# component pair and record it in `_ComponentSum`'s type (ast.jl); the methods below answer
-# the gates of `_scale_simplified` and `_distributed_expr` from those pairs and the types of
-# the simplified sum, mirroring `_trial_component_class`/`_test_component_class` with every
-# indexed leaf of a term read as its pair's index. So the tree is the one the literal-index
-# path builds, and a user-written sum, which carries no pairs, keeps #529's value gate.
-# `nothing` from a query stands for "the pairs do not fit the tree", and the value path runs.
+# `_mixes_components` compared runtime indices, so a scalar captured by the form closure over
+# `inner₊(εₕ(u), εₕ(v))` left `form` a `Union` of trees. It answers by type since #1229,
+# which makes these labels redundant; they stay until removed on their own. The builders
+# know each term's component pair and record it in `_ComponentSum`'s type (ast.jl); the
+# methods below answer the gates of `_scale_simplified` and `_distributed_expr` from those
+# pairs and the types of the simplified sum, mirroring `_trial_component_class` and
+# `_test_component_class` with every indexed leaf of a term read as its pair's index. So
+# the tree is the one the plain sum builds, and a user-written sum, which carries no pairs,
+# takes the leaves' gate. `nothing` from a query stands for "the pairs do not fit the
+# tree", and the leaves' gate runs.
 _side_index(P::Tuple{Int, Int}, side::Symbol) = side === :trial ? P[1] : P[2]
 
 # The class of a subtree of type `T`, every indexed leaf of `side` in it naming `k`.
 function _typed_class(@nospecialize(T), side::Symbol, k::Int)
     T isa DataType || return nothing
     leaf = side === :trial ? IndexedTrialFunction : IndexedTestFunction
-    T <: leaf && return k
+    T <: leaf && return _ComponentClass{k}()
     T <: UnaryWrapper && return _typed_class(fieldtype(T, :inner_op), side, k)
     side === :trial && T <: BilinearProduct &&
         return _typed_class(fieldtype(T, :left_op), side, k)
@@ -499,6 +501,7 @@ end
 
 # `nothing` is taken by "unknown" above, so a class naming no component is this.
 struct _NoComponent end
+@inline _component_combine(l::_NoComponent, ::_NoComponent) = l
 
 _known_combine(l, r) = l === nothing || r === nothing ? nothing : _component_combine(l, r)
 
@@ -799,9 +802,9 @@ end
 # grouped (gpena/Bramble.jl#759). Each of these now distributes over a mixing operand, all
 # the way down a chain of them, as a scale does. An operand naming one component, or none,
 # is returned as built and never simplified. `_mixes` reads `_component_class`, which is
-# `nothing` or an `Int` by type for an operand with no sum, so such a form compiles as it
-# did. A sum of indexed terms under a wrapper is told apart by its `Int` fields, as the
-# other gates do, and its form infers the distributed tree too before the literal folds.
+# `nothing` or one component by type for an operand with no sum, so such a form compiles as
+# it did. A sum of indexed terms under a wrapper is told apart by its leaves' types, as the
+# other gates do.
 # `InterpolationNode` is linear too but is left whole. Its source space is bound per block,
 # by the leaf it wraps (`_bind_interp_spaces`), and that path is not exercised here. The
 # stencil nodes are the list `_summands_of` splits over too (node_family.jl); a shift

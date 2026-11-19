@@ -687,7 +687,8 @@ _lit_mixed_pair(V) = form(V, V, (u, v) -> innerₕ(u(1), (v(1) + v(2)) + (v(2) +
     @testset "inference" begin
         V = typeof(Vₕ)
         concrete(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
-        @test concrete(_rt_comp_wrapped, (Int, V))
+        # A runtime index is not in the leaf's type, so this form cannot infer (#1229).
+        @test !concrete(_rt_comp_wrapped, (Int, V))
         @test concrete(_lit_wrapped_mixed, (V,))
         @test concrete(_lit_mixed_pair, (V,))
     end
@@ -763,13 +764,17 @@ _rt_two_sources(W, g₁, g₂) = form(W, v -> innerₕ(g₁, v) + innerₕ(g₂,
 # trade-off has to be a deliberate edit to this test rather than a silent drift either way.
 _rt_runtime_int(n::Int, W) = form(W, W, (u, v) -> n * innerₕ(u, v))
 
-# A runtime component index (gpena/Bramble.jl#529). Two `2 *` terms on component `i` stay
-# two terms and `form` infers concretely. The distribution gates read `component_idx`
-# values: whether `v(i) + v(1)` mixes components is known only at run time, so that form's
-# type is a `Union` of the distributed and undistributed trees -- kept on purpose, see
-# `_mixes_components`.
+# A runtime component index (gpena/Bramble.jl#529). The component is a type parameter of
+# the indexed leaf (gpena/Bramble.jl#1229), so the distribution gates fold by type in any
+# function compiled on its own, as Enzyme compiles a callee. The price, taken on purpose:
+# `u(i)` with `i` an argument has a type inference cannot know, so neither form infers
+# concretely any more, `_rt_comp_factor` included, which did before. Both still assemble
+# what was written; the literal spellings below infer. Pinned as not inferring, so changing
+# this is a deliberate edit here.
 _rt_comp_factor(i::Int, V) = form(V, V, (u, v) -> 2 * innerₕ(u(i), v(i)) + 2 * innerₕ(D₋ₓ(u(i)), v(i)))
 _rt_comp_mixed(i::Int, V) = form(V, V, (u, v) -> innerₕ(u(i), v(i) + v(1)))
+_lit_comp_factor(V) = form(V, V, (u, v) -> 2 * innerₕ(u(2), v(2)) + 2 * innerₕ(D₋ₓ(u(2)), v(2)))
+_lit_comp_mixed(V) = form(V, V, (u, v) -> innerₕ(u(2), v(2) + v(1)))
 
 # Sums of `Ref`-scaled terms (gpena/Bramble.jl#527). A rule firing when both sides held the
 # *same* `Ref` object made `form` infer a `Union`: `cl === cr` on two `RefValue{Float64}`
@@ -809,13 +814,16 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     # ... and the deliberate hole, asserted as such: see `_rt_runtime_int`'s comment.
     @test !_infers(_rt_runtime_int, (Int, W))
 
-    # Runtime component index: see `_rt_comp_factor`'s comment. The hole is asserted as a
-    # two-member `Union`, so a form that infers `Union{}` (a throwing path) cannot pass it.
+    # Runtime component index: see `_rt_comp_factor`'s comment. Neither infers a concrete
+    # type, and neither infers `Union{}` (a throwing path); a literal index infers.
     Ω₁ = mesh(domain(interval(0.0, 1.0)), 11, true)
     V₂ = gridspace(Ω₁)^Val(2)
-    @test _infers(_rt_comp_factor, (Int, typeof(V₂)))
-    T_mixed = only(Base.return_types(_rt_comp_mixed, (Int, typeof(V₂))))
-    @test T_mixed isa Union && length(Base.uniontypes(T_mixed)) == 2
+    for f in (_rt_comp_factor, _rt_comp_mixed)
+        T = only(Base.return_types(f, (Int, typeof(V₂))))
+        @test !isconcretetype(T) && T !== Union{}
+    end
+    @test _infers(_lit_comp_factor, (typeof(V₂),))
+    @test _infers(_lit_comp_mixed, (typeof(V₂),))
     # Same-component terms are no longer factored, but assemble to what was written.
     M₂(f) = Matrix(assemble(form(V₂, V₂, f)))
     @test Matrix(assemble(_rt_comp_factor(2, V₂))) ≈
@@ -827,6 +835,32 @@ _infers(f, sig) = isconcretetype(only(Base.return_types(f, sig)))
     # same matrix: this pass may change how a form is routed, never what it computes.
     @test Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> 2.0 * innerₕ(u, v) + 2.0 * inner₊ₓ(D₋ₓ(u), D₋ₓ(v))))) ≈
           2.0 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + inner₊ₓ(D₋ₓ(u), D₋ₓ(v)))))
+end
+
+# The component of an indexed leaf is in its type (gpena/Bramble.jl#1229), so `simplify_ast`
+# infers a concrete tree on a resolved composite sum when compiled on its own, with no
+# constant in sight, as Enzyme compiles it. Before, the gates compared two `Int` fields and
+# the coupled sum inferred an `OperatorAdd` with abstract operands. A ghosted, constrained,
+# non-uniform space, as in the reverse-mode probe of #1229.
+_lap_comp(p) = (u, v) -> p[1] * innerₕ(-Δₕ(u(1)), v(1)) + p[2]^2 * innerₕ(-Δₕ(u(2)), v(2)) +
+                         innerₕ(u(2), v(1))
+_lap_comp1(p) = (u, v) -> p[1] * innerₕ(-Δₕ(u(1)), v(1)) + p[2]^2 * innerₕ(u(2), v(2)) +
+                          innerₕ(u(2), v(1))
+_lap_split(p) = (u, v) -> p[1] * innerₕ(-Δₕ(u(1)), v(1)) + p[2]^2 * innerₕ(-Δₕ(u(2)), v(2))
+
+@testset "composite sum infers alone (#1229)" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (6, 5), (false, false))
+    C = constrained(gridspace(Ωₕ; ghosts = (:xmin, :ymax)),
+        u -> (:xmin => ∂ₙ(u) => 1.0, :ymax => u + ∂ₙ(u) => 0.0, :xmax => u => 0.0,
+            :ymin => u => 0.0))
+    W = C^2
+    Pw = Bramble.padded_space(W)
+    p = [0.7, 1.3]
+    for b in (_lap_comp, _lap_comp1, _lap_split)
+        raw = b(p)(Bramble.trial_function(Pw), Bramble.test_function(Pw))
+        res = Bramble._resolve_surfaces_for_space(resolve_ast(raw), Pw, Pw)
+        @test isconcretetype(only(Base.return_types(simplify_ast, (typeof(res),))))
+    end
 end
 
 # The `εₕ` and `divₘₕ` builders name each term's component pair in their sum's type
@@ -1234,6 +1268,8 @@ _rt_both8(V, c) = form(V, V,
     (u, v) -> innerₕ(c * foldl(+, _terms8(u)), 3 * foldl(+, _terms8(v))))
 _rt_both_rt(V, i, j) = form(V, V, (u, v) -> innerₕ(u(i) + u(j), v(i) + v(j)))
 _rt_left_rt(V, i, j) = form(V, V, (u, v) -> innerₕ(u(i) + u(j) + D₋ₓ(u(i)), v(1)))
+_lit_both(V) = form(V, V, (u, v) -> innerₕ(u(1) + u(2), v(1) + v(2)))
+_lit_left(V) = form(V, V, (u, v) -> innerₕ(u(1) + u(2) + D₋ₓ(u(1)), v(1)))
 
 # How many statements of the lowered body of `f` for `types` name the global `name`.
 function _lowered_refs(f, types, name)
@@ -1277,11 +1313,14 @@ _sum_terms(op) = 1
         ntuple(i -> u -> _terms8(u)[i], 8))
     @test Matrix(assemble(a)) ≈ sum(sides)
 
-    # Run-time indices leave the gates to run time, and `form` infers the `Union` of the
-    # trees they may build, as before: a split held as a tuple widened it to one abstract type.
-    U(f) = Base.uniontypes(Base.infer_return_type(f, Tuple{typeof(V), Int, Int}))
-    @test length(U(_rt_both_rt)) == 2 && count(isconcretetype, U(_rt_both_rt)) == 1
-    @test length(U(_rt_left_rt)) == 3 && all(isconcretetype, U(_rt_left_rt))
+    # A run-time index is not in its leaf's type (#1229), so `form` infers no concrete type
+    # for these (before, a `Union` of the trees the gates may build); literal ones infer.
+    R(f) = Base.infer_return_type(f, Tuple{typeof(V), Int, Int})
+    for f in (_rt_both_rt, _rt_left_rt)
+        @test !isconcretetype(R(f)) && R(f) !== Union{}
+    end
+    @test isconcretetype(Base.infer_return_type(_lit_both, Tuple{typeof(V)}))
+    @test isconcretetype(Base.infer_return_type(_lit_left, Tuple{typeof(V)}))
     @test Matrix(assemble(_rt_both_rt(V, 1, 2))) ≈
           M((u, v) -> innerₕ(u(1), v(1)) + innerₕ(u(2), v(1)) + innerₕ(u(1), v(2)) +
                       innerₕ(u(2), v(2)))

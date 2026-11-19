@@ -193,7 +193,7 @@ const _NO_PAIR_KEY = (-1, 0, 0, false)
     dirichlet = op isa Union{TrialFunction, IndexedTrialFunction}
     composite || return (0, face[1], face[2], dirichlet)
     op isa IndexedTrialFunction || return _NO_PAIR_KEY
-    return (op.component_idx, face[1], face[2], true)
+    return (_component_index(op), face[1], face[2], true)
 end
 @inline _pair_key(::Val, p, ::Bool) = _NO_PAIR_KEY
 
@@ -326,7 +326,12 @@ end
 # attached one by one to the components left. The rows of a node, or of a corner, are solved
 # together, so which ghost a row is attached to changes no value. Data depending on time
 # are refused (they would need a `d(t)` of the whole).
-function _composite_relations(Gs::Tuple, out)
+#
+# Inlined into `constrained`. Kept a call, it returns the relations' tuple, and Enzyme's
+# forward mode gives the datum of the third and fourth of four tractions a tangent equal to
+# its value: a wrong gradient, no error (gpena/Bramble.jl#1226). Rebuilding the relations
+# from their fields in `constrained` leaves it wrong.
+@inline function _composite_relations(Gs::Tuple, out)
     pairs = _relation_pairs(out)
     isempty(pairs) && _throw_relation_shape(out)
     keys = map(p -> _pair_key(Val(dim(first(Gs))), p, true), pairs)
@@ -387,7 +392,12 @@ function _attach_relations(rels::Vector{Tuple{Int, Int, Int, Bool}}, N::Int)
     return out
 end
 
-function _composite_relation(Gs::Tuple{Vararg{GhostMesh{D}}},
+# Kept a call. Inlined into `_composite_relations`, the facet found by `_find_face`'s loop
+# reaches the stores of the relations' tuple as bare integers, whose type Enzyme cannot
+# prove (`EnzymeNoTypeError` under forward mode); as a call, the relation comes back in
+# typed memory. It was inlined once the component moved into the leaf's type and
+# `_relation_component` folded (gpena/Bramble.jl#1229).
+@noinline function _composite_relation(Gs::Tuple{Vararg{GhostMesh{D}}},
         p::Pair{Symbol, <:Pair}) where {D}
     face = _find_face(Val(D), first(p))
     face === nothing && _throw_not_a_relation_facet(first(p), Val(D))
@@ -406,10 +416,11 @@ _composite_relation(::Tuple, p) = _throw_relation_shape(p)
 
 # The component a relation reads on its own facet: its trial leaf's, or `0` for a facet
 # operator reading several, such as a traction `∂ₙ(u(1); K = K₁₁) + ∂ₙ(u(2); K = K₁₂)`.
-_relation_component(op::IndexedTrialFunction, ::Int, ::Int, ::Symbol) = op.component_idx
+_relation_component(op::IndexedTrialFunction, ::Int, ::Int, ::Symbol) = _component_index(op)
 function _relation_component(op::FacetOperator{D}, d::Int, s::Int, name::Symbol) where {D}
-    c = _at_facet((_, a, b) -> _trial_component_class(_facet_component(op, a, b)), Val(D),
-        d, s)
+    c = _at_facet(
+        (_, a, b) -> _class_index(_trial_component_class(_facet_component(op, a, b))),
+        Val(D), d, s)
     c isa Int && return c
     c isa _MixedComponents && return 0
     return _throw_relation_components(name)
@@ -497,7 +508,7 @@ _holds_sum(::Any) = false
 @inline _add_terms(acc, P, ::Tuple{}, g::Val, facet::Tuple) = acc
 @inline function _add_terms(acc, P, terms::Tuple, g::Val, facet::Tuple)
     t = first(terms)
-    k = _trial_component_class(t)
+    k = _class_index(_trial_component_class(t))
     if k isa Int
         acc′ = _add_term(acc, P, t, k, g, facet)
     else
@@ -518,7 +529,7 @@ end
 # coefficient replaces a value rather than scaling it, so an `Inf` leaves no NaN behind.
 @inline _add_block_leaves(acc, P, t, ::Tuple{}, e::Int, g::Val, facet::Tuple) = acc
 @inline function _add_block_leaves(acc, P, t, leaves::Tuple, e::Int, g::Val, facet::Tuple)
-    k = _trial_component_class(first(leaves))
+    k = _class_index(_trial_component_class(first(leaves)))
     k isa Int || _throw_relation_unsplit(_val(facet[3]), t)
     acc′ = _add_term(acc, P, first(_block_part(t, e, 1)), k, g, facet)
     return _add_block_leaves(acc′, P, t, Base.tail(leaves), e + 1, g, facet)
@@ -529,7 +540,7 @@ end
 @inline _add_split_terms(acc, P, ::Tuple{}, g::Val, facet::Tuple) = acc
 @inline function _add_split_terms(acc, P, terms::Tuple, g::Val, facet::Tuple)
     t = first(terms)
-    k = _trial_component_class(t)
+    k = _class_index(_trial_component_class(t))
     k isa Int || _throw_relation_unsplit(_val(facet[3]), t)
     acc′ = _add_term(acc, P, t, k, g, facet)
     return _add_split_terms(acc′, P, Base.tail(terms), g, facet)
@@ -575,7 +586,7 @@ function _unsplit_term(op::OperatorAdd)
     l = _unsplit_term(op.left_op)
     return l === nothing ? _unsplit_term(op.right_op) : l
 end
-_unsplit_term(op) = _trial_component_class(op) isa Int ? nothing : summary(op)
+_unsplit_term(op) = _trial_component_class(op) isa _ComponentClass ? nothing : summary(op)
 
 # `acc` with the block `(c, j)` of the term `t` added, `t` reading component `j`: its
 # matrix on component `c`'s padded space, its rows at `c`'s offset and its columns at
@@ -783,8 +794,9 @@ function _one_sided_corners!(rows, cols, vals, start, k, comps::Tuple, I, e, t, 
 end
 
 # The entry `v` that a one-sided corner moves, unchanged. A function of its own so that
-# ext/BrambleEnzymeExt/relations.jl can refuse a derivative through it: Enzyme gets the
-# corner's derivative wrong when an operator coefficient is active (#1180).
+# ext/BrambleEnzymeExt/relations.jl can refuse a reverse derivative through it: Enzyme's
+# reverse mode gets the corner's derivative wrong when an operator coefficient is active
+# (#1180).
 @noinline _corner_entry(v) = v
 
 # The weights at the nodes `x₀`, `x₁`, `x₂` of the quadratic through them, evaluated at `x`:
