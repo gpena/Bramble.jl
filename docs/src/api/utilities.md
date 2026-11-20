@@ -42,6 +42,5 @@ metal_backend
 csr_backend
 profile_backends
 BackendProfile
-sparse_refactor!
 PRECOMPILE_WORKLOAD
 ```

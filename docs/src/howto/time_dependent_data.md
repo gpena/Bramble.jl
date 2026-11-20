@@ -6,7 +6,7 @@ CurrentModule = Bramble
 
 **Goal.** Solve a heat equation whose Neumann and Robin data change with time, on a constrained ghost space, and check that the solution follows the data.
 
-**You need.** The relations of the [ghost point tutorial](@ref form_ghost), and OrdinaryDiffEqBDF for the time integration. The [heat example](../examples/ghost_heat_equation.md) runs the same idea on a longer problem.
+**You need.** The relations of the [ghost point tutorial](@ref form_ghost), and OrdinaryDiffEqBDF for the time integration (`using Pkg; Pkg.add("OrdinaryDiffEqBDF")`). The [heat example](../examples/ghost_heat_equation.md) runs the same idea on a longer problem.
 
 ## The model problem
 

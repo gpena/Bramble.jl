@@ -26,8 +26,8 @@ nothing else. `linear_problem` builds a `LinearProblem` for `LinearSolve`, and
 
 Bramble defines no time stepper and exports no `solve` for an ODE problem. The `solve` that
 steps an `ode_problem` comes from the package that provides the stepper: load
-`OrdinaryDiffEqBDF` for `FBDF` and `QNDF`, or `OrdinaryDiffEqRosenbrock` for the Rosenbrock
-methods, and call `solve(ode_problem(...), FBDF())`, as
+`OrdinaryDiffEqBDF` (`using Pkg; Pkg.add("OrdinaryDiffEqBDF")`) for `FBDF` and `QNDF`, or
+`OrdinaryDiffEqRosenbrock` for the Rosenbrock methods, and call `solve(ode_problem(...), FBDF())`, as
 [the heat equation example](examples/heat_equation.md) does. With Dirichlet rows ``M`` is
 singular and the stepper must accept that: `FBDF`, `QNDF` and the Rosenbrock methods do, an
 explicit method does not. Without Dirichlet constraints, `semidiscretize_rhs` gives a
