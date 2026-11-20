@@ -27,32 +27,39 @@ using PrecompileTools: @setup_workload, @compile_workload
 # WriteVTK's own `relpath` bookkeeping in `collection_add_timestep` does not care.
 _step_name(filename::AbstractString, i::Integer, n::Integer) = string(filename, "_", lpad(i, ndigits(n), '0'))
 
-# `times === nothing`: exactly `sol`'s own saved steps, non-uniform and all, each already a
-# plain coefficient vector. Given `times` instead, each is sampled from `sol`'s own
-# continuous interpolation (`sol(t)`, the same call `heat_equation.jl`'s surface plot uses).
-_solution_steps(sol::AbstractODESolution, ::Nothing) = collect(zip(sol.t, sol.u))
-_solution_steps(sol::AbstractODESolution, times) = collect(zip(times, (sol(t) for t in times)))
+# The times and states `_export_vtk_solution` writes. Without `times`, `sol`'s own saved
+# steps, non-uniform and all, each already a plain coefficient vector. Given `times`, each
+# state is sampled from `sol`'s continuous interpolation (`sol(t)`, the same call
+# `heat_equation.jl`'s surface plot uses). Only the times are collected up front, since
+# `_step_name` needs their count; each state is read as its step is written.
+_step_times(sol::AbstractODESolution, ::Nothing) = sol.t
+_step_times(::AbstractODESolution, times) = collect(times)
+_step_state(sol::AbstractODESolution, ::Nothing, i, _) = sol.u[i]
+_step_state(sol::AbstractODESolution, _, i, t) = sol(t)
 
 function Bramble._export_vtk_solution(
         filename::AbstractString, Wₕ::AbstractSpaceType, sol::AbstractODESolution;
         name::AbstractString = "u", times = nothing
 )
-    steps = _solution_steps(sol, times)
+    ts = _step_times(sol, times)
     Ωₕ = mesh(Wₕ)
     return paraview_collection(filename) do pvd
-        for (i, (t, u)) in enumerate(steps)
+        # Each `sol(t)` runs after the earlier steps are written, so a failing `sol(t)`
+        # leaves those steps on disk.
+        for (i, t) in enumerate(ts)
+            u = _step_state(sol, times, i, t)
             uₕ = element(Wₕ, u)
-            vtk = vtk_grid(_step_name(filename, i, length(steps)), _vtk_axes(Ωₕ)...)
+            vtk = vtk_grid(_step_name(filename, i, length(ts)), _vtk_axes(Ωₕ)...)
             vtk[name] = _vtk_data(name, Ωₕ, uₕ)
             pvd[t] = vtk
         end
     end
 end
 
-# Warms `_export_vtk_solution` for both branches of `_solution_steps` above. No solver
-# package is available at this dependency level to actually integrate anything -- neither
-# `OrdinaryDiffEq` nor any other package that defines `SciMLBase.solve` for an `ODEProblem`
-# is a Bramble dependency -- so the "solution" is built by hand with
+# Warms `_export_vtk_solution` for both branches of `_step_times` and `_step_state` above.
+# No solver package is available at this dependency level to actually integrate anything --
+# neither `OrdinaryDiffEq` nor any other package that defines `SciMLBase.solve` for an
+# `ODEProblem` is a Bramble dependency -- so the "solution" is built by hand with
 # `SciMLBase.build_solution(prob, alg, t, u)`, the same constructor solver packages
 # themselves call; `alg = nothing` and two saved points are enough for a real, callable
 # `ODESolution` (verified: `.t`, `.u` and `sol(t)` all work) without solving anything.
