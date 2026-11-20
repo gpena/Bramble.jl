@@ -235,6 +235,14 @@ import Base: diff
             msgs = ["set_points!(Ωₕ, pts) was asked to change the point count",
                 "custom markers", ":BC", "change_points!(Ωₕ, markers(Ω), pts)"]
             @test_throws msgs set_points!(Ωc, [0.0, 0.3, 0.7, 1.0])
+            # a custom label alone adds no note about the geometric set
+            e = try
+                set_points!(Ωc, [0.0, 0.3, 0.7, 1.0])
+            catch err
+                err
+            end
+            @test e isa ArgumentError
+            @test !occursin("is not the geometric set", sprint(showerror, e))
             @test npoints(Ωc) == 3
             # the same count only moves the points, so it needs no domain
             set_points!(Ωc, [0.0, 0.3, 1.0])
@@ -784,6 +792,9 @@ import Base: diff
                 @test e isa ArgumentError
                 @test occursin("custom markers", sprint(showerror, e))
                 @test occursin(":$lbl", sprint(showerror, e))
+                @test occursin(
+                    "(a `:boundary` or `:interior` listed here is not the geometric set)",
+                    sprint(showerror, e))
                 @test snap(M) == before
             end
 

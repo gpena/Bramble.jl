@@ -122,6 +122,22 @@ using ..TestUtils: alloc_test, @test_allocs, TEST_DIMS, WITH_3D_TESTS
         end
     end
 
+    # A scalar function on a two-leaf space returns one value for two components: the
+    # refusal gives both counts and what is wanted.
+    @testset "Value-count refusal" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (9, 7), (false, false))
+        W = gridspace(Ωₕ)
+        e = try
+            Rₕ!(element(W × W), x -> x[1])
+            nothing
+        catch err
+            err
+        end
+        @test e isa DimensionMismatch
+        @test e.msg == "the function returned 1 value(s) for 2 components; " *
+                       "give one value per leaf"
+    end
+
     @testset "One-component composite" begin
         # NC == 1 is the boundary between the two dispatches and must not be special.
         Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, false)

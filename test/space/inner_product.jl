@@ -541,8 +541,11 @@ end
             for len in (n + 4, n - 1, 3)
                 v = Bramble.VectorElement(ones(len), Wₕ)
                 @test_throws DimensionMismatch normₕ(v)
-                @test_throws DimensionMismatch snorm₁ₕ(v)
                 @test_throws DimensionMismatch norm₁ₕ(v)
+                # the refusal names the operation, the length and the dof count
+                @test_throws DimensionMismatch("snorm₁ₕ got a coefficient vector of " *
+                                               "length $len, but the space has $n " *
+                                               "degrees of freedom.") snorm₁ₕ(v)
             end
         end
     end
@@ -565,8 +568,8 @@ end
                 n = ndofs(Sₕ)
                 u = Bramble.VectorElement(collect(range(1.0, 2.0; length = n)), Sₕ)
                 @test snorm₁ₕ(u) > 0
-                Bramble._checked_length(u)
-                @test (@allocated Bramble._checked_length(u)) == 0
+                Bramble._checked_length(:normₕ, u)
+                @test (@allocated Bramble._checked_length(:normₕ, u)) == 0
                 for f in (ghost ? (normₕ,) : (normₕ, snorm₁ₕ, norm₁ₕ))
                     f(u)
                     @test (@allocated f(u)) == 0
@@ -576,6 +579,18 @@ end
                     @test_throws DimensionMismatch normₕ(v)
                     @test_throws DimensionMismatch snorm₁ₕ(v)
                     @test_throws DimensionMismatch norm₁ₕ(v)
+                    # each refusal names its operation, the length and the dof count
+                    for f in (normₕ, norm₁ₕ)
+                        e = try
+                            f(v)
+                            nothing
+                        catch err
+                            err
+                        end
+                        @test e isa DimensionMismatch
+                        @test e.msg == "$(nameof(f)) got a coefficient vector of length " *
+                                       "$len, but the space has $n degrees of freedom."
+                    end
                 end
             end
         end
