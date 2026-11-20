@@ -167,11 +167,11 @@ end
 # forms are built. One is the neighbour sum written with the exported vectorial aliases,
 # `S₊ₕ(u)[d] + S₋ₕ(u)[d]` (in 1D, `[1]` takes a component of the single node rather than a
 # direction, a node of its own), in 1D and 2D only. The other is the forward-shifted unknown
-# alone, `innerₕ(S(u), v)`, along the direction each dimension adds: `S₋ₓ(u)` builds the same
-# `ShiftNode` type as `S₊ₓ(u)`, with the amount as a field. 2D also takes `S₊ₓ`: the form's
-# type holds the space, so the 1D `S₊ₓ` form does not provide the 2D one, which
-# `benchmark/ttfx.jl` times. Compositions (`S(D₋ₓ(u))`,
-# `S(jumpₓ(u))`, ...) are left to first use: each is a form type of its own.
+# alone, `innerₕ(S(u), v)`, along the direction each dimension adds. `S₋ₓ(u)` builds the same
+# `ShiftNode` type as `S₊ₓ(u)`, with the amount as a field. 2D also takes `S₊ₓ`, because the
+# form's type holds the space, so the 1D `S₊ₓ` form does not provide the 2D one, which
+# `benchmark/ttfx.jl` times. Compositions (`S(D₋ₓ(u))`, `S(jumpₓ(u))`, ...) are left to first
+# use, since each is a form type of its own.
 function _pc_shift_form_session(::Val{1})
     Wₕ = gridspace(mesh(domain(interval(0.0, 1.0)), 6, false))
     _pc_neighbour_sum(Wₕ, Val(1))
