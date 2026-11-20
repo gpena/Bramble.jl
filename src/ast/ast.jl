@@ -158,7 +158,7 @@ two 1D points are spelt `dirac([(0.2,), (0.7,)])`. A list of points may mix tupl
 
 The `strength` differentiates under ForwardDiff and Enzyme. The location is converted to
 `Float64`, so ForwardDiff cannot differentiate it and throws, while Enzyme differentiates it in
-forward and reverse mode.
+forward and reverse mode under `CpuSerial` (the threaded policies are untested).
 
 # Mathematical formulation
 A point source represents the continuous linear functional:

@@ -25,8 +25,7 @@ itself.
 
 Takes a [`BilinearForm`](@ref) or [`LinearForm`](@ref), on plain or composite spaces, and
 the forms on ghost spaces and on composites of them, which are rebuilt as `form` builds
-them, buffers included: the form returned shares no buffer or cache with `form`. A ghost
-form keeps refusing an element type `form` refuses there.
+them, buffers included: the form returned shares no buffer or cache with `form`.
 
 A grid function captured inside a Julia closure (`x -> sₕ(x)`, a source function) is
 invisible to the AST and is not rebound, nor is a component view (`sₕ(1)`), a new object

@@ -287,9 +287,9 @@ function _transpose_type(@nospecialize(T))
     return w{map(p -> p isa Type ? _transpose_type(p) : p, P)...}
 end
 
-# `T` with the component of every indexed leaf replaced by `0`. Pairs are matched on these,
-# as they were when the component was a field: two summands pair whatever blocks they
-# name, and the blocks are checked and shifted at run time (`bilinear_execution.jl`).
+# `T` with the component of every indexed leaf replaced by `0`. Pairs are matched on these:
+# two summands pair whatever blocks they name, and the blocks are checked and shifted at
+# run time (`bilinear_execution.jl`).
 function _component_free_type(@nospecialize(T))
     T isa DataType || return T
     P = T.parameters

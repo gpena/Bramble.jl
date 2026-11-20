@@ -1767,9 +1767,9 @@ _mf_prebound(_) = false
 # The fused product's band count.
 @inline _mf_nbands(plan::_MFFusedPlan) = min(Threads.nthreads(), last(plan.dims))
 
-# Band `b` of a `CpuThreaded` fused product, from the sink and plan its spawn shares (the
-# `Ref` also holds the walk), cut to `walk`. Its band count is the plan's (`_mf_nbands`), taken here rather than captured, so
-# the walk leaves a spawned task's closure no larger than a whole walk's.
+# Band `b` of a `CpuThreaded` fused product, from the sink and plan its spawn shares, cut
+# to `walk`. Its band count is the plan's (`_mf_nbands`), taken here rather than captured,
+# so the walk leaves a spawned task's closure no larger than a whole walk's.
 @noinline function _mf_spawned_band!(shared::Base.RefValue, walk, b::Int)
     s, plan = shared[]
     nbands = _mf_nbands(plan)
@@ -1781,8 +1781,8 @@ end
 @inline _mf_with_geom(s::ActionSink, geom) = ActionSink(s.y, s.x, s.α, s.mask, geom)
 
 # The region's mechanism. `CpuPolyester` takes `_batch_mf_bands!`, any other CPU policy
-# `_run_bands!`, as the engines do. `CpuThreaded` spawns one task per band and walks the first band on the
-# calling task, rather than `_run_bands!`'s `Threads.@threads :static`. On this host a
+# `_run_bands!`, as the engines do. `CpuThreaded` spawns one task per band and walks the
+# first band on the calling task, rather than `_run_bands!`'s `Threads.@threads :static`. On this host a
 # `:static` region costs 25-30 us when it follows another closely (a product repeated in a
 # solver), `:dynamic` about 20 us with the walk, a spawn about 5 us, and at 4096 unknowns the
 # whole serial product is 30 us (2D 64²: 32 us `:static`, 20 us `:dynamic`, 11 us spawned).
@@ -1791,8 +1791,8 @@ end
 # (`_static_or_serial`), so no fallback is needed. `@sync` waits by yielding, and the waiting
 # thread runs the bands itself if every other one is busy. Each band writes only its own
 # rows, in the serial order, so the result does not depend on where a band runs. The
-# spawned tasks share one `Ref` to the sink, the plan and the walk; the plan holds the form
-# and its geometry inline, so each task's closure holds a pointer rather than a copy of them.
+# spawned tasks share one `Ref` to the sink and the plan; the plan holds the form and its
+# geometry inline, so each task's closure holds a pointer rather than a copy of them.
 @inline function _mf_run_bands!(policy::CpuPolicy, s, _, plan, nbands::Int, walk = nothing)
     return _run_bands!(policy, _mf_band_task!, s.y, s, walk, plan, nbands)
 end
