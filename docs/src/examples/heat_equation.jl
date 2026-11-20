@@ -349,9 +349,8 @@ u_end = sol_drive.u[end]
 
 # This problem has a series solution, the steady line ``(1 - x) t`` minus the decaying sine  #src
 # modes the ramp excites. Its tail falls as ``k^{-3}``, so 20000 terms reach 1e-10.          #src
-drive_series(x, t) = (1 - x) * t -                                                          #src
-                     sum(2 / (k * pi)^3 * (1 - exp(-(k * pi)^2 * t)) * sinpi(k * x)         #src
-                         for k in 1:20000)                                                  #src
+drive_mode(k, x, t) = 2 / (k * pi)^3 * (1 - exp(-(k * pi)^2 * t)) * sinpi(k * x)           #src
+drive_series(x, t) = (1 - x) * t - sum(k -> drive_mode(k, x, t), 1:20000)                  #src
 
 # The midpoint of the uniform mesh is a node of it. The sine modes are discrete eigenmodes    #src
 # there, so the error is only about 3e-9, bracketed between 1e-10 and 1e-6: a solve that      #src

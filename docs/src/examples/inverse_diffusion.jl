@@ -105,8 +105,7 @@ function forward_nu(κ::Real)                                                   
     A, F = assemble(aκ, lₙᵤ; dirichlet = :boundary => x -> 0.0)                       #src
     return pde_solve(A, F)                                                            #src
 end                                                                                   #src
-loss_nu(κ::Real) = sum(abs2, forward_nu(κ)[obs_idx[k]] - u_obs_nu[k]                  #src
-                       for k in eachindex(obs_idx))                                   #src
+loss_nu(κ::Real) = sum(abs2, forward_nu(κ)[collect(obs_idx)] .- u_obs_nu)            #src
 fd_check_nu = (loss_nu(0.5 + 1e-6) - loss_nu(0.5 - 1e-6)) / 2e-6                      #src
 ad_check_nu = DI.gradient(loss_nu, backend, 0.5)                                      #src
 @test !iszero(fd_check_nu)                                                            #src
