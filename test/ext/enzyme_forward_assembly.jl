@@ -72,8 +72,10 @@ end
 
 # The mass matrix of a level-set mesh fitted to the circle of radius `r`, scaled by `c`.
 # `φ` captures the float `r`: an immutable closure, whose `===` compares its bits.
-function _levelset_mass(r, c)
-    φ = x -> x[1]^2 + x[2]^2 - r^2
+# `_levelset_mass_of` takes `φ` itself.
+_levelset_mass(r, c) = _levelset_mass_of(x -> x[1]^2 + x[2]^2 - r^2, c)
+
+function _levelset_mass_of(φ, c)
     Bramble._seed_mesh1d_rng!(1237)
     Ωₕ = try
         Ω = domain(interval(-2.0, 2.0) × interval(-2.0, 2.0), :D => levelset(φ))
@@ -83,6 +85,11 @@ function _levelset_mass(r, c)
     end
     W = gridspace(Ωₕ)
     return c * sum(abs2, nonzeros(assemble(form(W, W, (U, V) -> innerₕ(U, V)))))
+end
+
+# The same mass matrix for the circle of radius 0.9 centred at `c`, scaled by `p[1]`.
+function _levelset_shifted(p, c)
+    return _levelset_mass_of(x -> (x[1] - c[1])^2 + (x[2] - c[2])^2 - 0.81, p[1])
 end
 
 # Forward mode's derivative of `f` at `[x]`, seed 1.0.
@@ -179,8 +186,8 @@ else
     # Forward mode refuses a `φ` over the parameter by name. At p = 1.0 the seed 1.0 equals
     # the captured radius, so the closure's shadow is `===` its primal: a rule that tested
     # `===` would take the grid as data and return 0.0, where central differences give
-    # 0.115. A constant `φ` built inside the function keeps its derivative. One thread is
-    # enough here.
+    # 0.115. A constant `φ` built inside the function keeps its derivative, and in reverse
+    # mode so does a `φ` over an array passed in `Const`. One thread is enough here.
     @testset "Enzyme forward, level set over p" begin
         if HAVE_ENZYME
             fparam(p) = _levelset_mass(p[1], 1.0)
@@ -191,6 +198,13 @@ else
                 @test occursin("parameter of its level-set function", msg)
             end
             @test isapprox(_levelset_forward(fconst, 1.3), fconst([1.0]); rtol = 1e-12)
+            # Reverse mode keeps a `φ` over an array passed in `Const` as data.
+            c = [0.1, 0.0]
+            dx = [0.0]
+            Enzyme.autodiff(Enzyme.set_runtime_activity(Enzyme.Reverse),
+                Enzyme.Const(_levelset_shifted), Enzyme.Active,
+                Enzyme.Duplicated([1.3], dx), Enzyme.Const(c))
+            @test isapprox(only(dx), _levelset_shifted([1.0], c); rtol = 1e-12)
         end
     end
 end
