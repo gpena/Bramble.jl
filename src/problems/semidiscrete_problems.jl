@@ -76,7 +76,8 @@ end
     ode_problem(a::Bramble.GhostBilinearForm, l::Bramble.GhostLinearForm, u₀, I; kwargs...) -> ODEProblem
 
 Build the `ODEProblem` stepping `sd` over the time domain `I`, from the initial condition
-`u₀` -- a [`VectorElement`](@ref) or a plain vector. `I` may equally be a `(t₀, t₁)` tuple.
+`u₀` -- a [`VectorElement`](@ref) or a plain vector. `I` is `interval(t₀, T)` or equally a
+`(t₀, T)` tuple; both build the same problem.
 
 `u₀` is copied, never mutated, and the copy is made consistent with the Dirichlet rows at
 `t₀` (see [`dirichlet_bc!`](@ref)), against `p` when one is given.
