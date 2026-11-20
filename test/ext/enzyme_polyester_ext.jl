@@ -13,7 +13,7 @@ module ExtEnzymePolyesterExtTests
 using Test
 using Bramble
 using Bramble: CpuPolyester, CpuSerial, D₋ₓ, StarSpacings, Forward, Backward, Centered,
-               CrossWeighted, _difference_engine!, _sweep_for!
+               CrossWeighted, _difference_engine!, _sweep_for!, _sweep_scatter_for!
 using ForwardDiff
 using Polyester
 using Random
@@ -90,6 +90,33 @@ function _for_case(p, policy)
     _sweep_for!(policy, v, 1:2:23, i -> p[1] * v[i]^2)
     _sweep_for!(policy, v, 1:23, i -> sin(v[i]) * v[i] + p[4] * i)
     return first_sum + sum(abs2, v)
+end
+
+# Complex sweeps: the closure writes complex values and a complex-weighted real part reads
+# them, so the reverse rule must pull back with `conj` of the output's cotangent.
+const _CC = randn(MersenneTwister(5), ComplexF64, 37)
+const _WC = randn(MersenneTwister(6), ComplexF64, 37)
+_cdot(w, v) = real(sum(conj(w[i]) * v[i] for i in eachindex(v)))
+function _complex_for_case(p, policy)
+    v = zeros(Complex{eltype(p)}, 37)
+    _sweep_for!(policy, v, 1:37, i -> p[1] * _CC[i] + p[2]^2 * _CC[i]^2)
+    return _cdot(_WC, v)
+end
+function _complex_scatter_case(p, policy)
+    a = zeros(Complex{eltype(p)}, 37)
+    b = zeros(Complex{eltype(p)}, 37)
+    _sweep_scatter_for!(policy, (a, b), 1:37, i -> (p[1] * _CC[i], p[2]^2 * conj(_CC[i])))
+    return _cdot(_WC, a) + _cdot(reverse(_WC), b)
+end
+
+# The relative error of reverse Enzyme under `CpuPolyester` against ForwardDiff under
+# `CpuSerial`, and whether the rule of `hook` ran.
+function _reverse_error(f, p, hook)
+    ref = ForwardDiff.gradient(q -> f(q, CpuSerial()), p)
+    n0 = EnzymePolicyCases._rule_entries(hook)
+    got = Enzyme.gradient(set_runtime_activity(Enzyme.Reverse),
+        Const(q -> f(q, CpuPolyester())), p)[1]
+    return _relerr(got, ref), EnzymePolicyCases._rule_entries(hook) > n0
 end
 
 # A user closure capturing an array and a `Float64`: one taken from the parameters, one
@@ -346,6 +373,16 @@ end
 
         @testset "Closure sweep reading its output" begin
             @test all(<=(TOL), _gradients(_for_case, [0.3, -0.4, 0.7, 0.5]))
+        end
+
+        @testset "Complex closure sweep, reverse" begin
+            p = [0.6, -0.9]
+            for (case, hook) in ((_complex_for_case, "_batch_for!"),
+                (_complex_scatter_case, "_batch_scatter_for!"))
+                err, ran = _reverse_error(case, p, hook)
+                @test ran
+                @test err <= TOL
+            end
         end
 
         # A closure with a `Float64` beside an array, constant or from the parameters,

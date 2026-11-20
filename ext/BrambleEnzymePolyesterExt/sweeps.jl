@@ -19,8 +19,9 @@
 # writes the slab's `v` and its tangent. No two tasks write one entry.
 #
 # Reverse: each task runs Enzyme's reverse derivative of `_slab_dot(f, d_v, r)`, the sum of
-# `f(i) * d_v[i]` over its slab `r`, with `d_v` constant: the gradient of that sum in the
-# closure is the slab's pullback of `d_v`, and the pass never writes the user's `v`. Each
+# `f(i) * conj(d_v[i])` over its slab `r`, with `d_v` constant: the gradient of that sum in
+# the closure is the slab's pullback of `d_v` (Enzyme's gradient conjugates `∂f`, so `d_v`
+# enters conjugated), and the pass never writes the user's `v`. Each
 # slab then clears its own `d_v` entries, since `v` was overwritten. The closure's shadow
 # (the shadow of every array it captures) is written by every slab, so each task
 # accumulates into its own zeroed copy (`_graph_copy`, built on the host), and the host
@@ -86,7 +87,7 @@ end
     k = _kernel(f)
     s = zero(eltype(d_v))
     for i in r
-        s += _at(k, i) * @inbounds(d_v[i])
+        s += _at(k, i) * conj(@inbounds(d_v[i]))
     end
     return s
 end
@@ -142,7 +143,7 @@ end
     return nothing
 end
 
-# The slab's sum of `g(i)[k] * d_mats[k][i]` over the live components.
+# The slab's sum of `g(i)[k] * conj(d_mats[k][i])` over the live components.
 @inline function _dot_scatter(f::F, d_mats, r) where {F}
     k = _kernel(f)
     s = zero(_lane_eltype(d_mats))
@@ -155,7 +156,7 @@ end
 @inline _dot_components(::Tuple{}, ::Tuple, i) = false
 @inline function _dot_components(ds::Tuple, vals::Tuple, i)
     d = ds[1]
-    head = isempty(d) ? zero(vals[1]) : vals[1] * @inbounds(d[i])
+    head = isempty(d) ? zero(vals[1]) : vals[1] * conj(@inbounds(d[i]))
     return head + _dot_components(Base.tail(ds), Base.tail(vals), i)
 end
 
