@@ -28,10 +28,11 @@
 #
 # The reverse pass replays each band's primal on `out` as it was before the call (the
 # `+=` engines would otherwise add twice, and the in-place averages read `out` itself), so
-# `out`'s values are kept from before the primal and put back for the reverse. The kernel,
-# behind a fresh `Ref` whose `overwritten` entry stays false when data it captures is
-# written after the call, is copied whole before the primal, and so is any other argument
-# that later code overwrites (`overwritten`).
+# `out`'s values are kept from before the primal and put back for the reverse. The kernel
+# and every other argument are copied whole before the primal, in one walk so that arrays
+# they share stay shared, whenever `out` carries a shadow. Their `overwritten` entries do not
+# say whether later code writes the data they hold: the kernel arrives behind a fresh `Ref`,
+# and a closure or a `StarSpacings` passed as an argument reaches its arrays by reference.
 #
 # `_run_bands!` hands the kernel behind a `Ref` (src/operators/vector_calculus.jl), for the
 # calling-convention reason `_sweep_for!` does; the task unwraps it with `_kernel`.
@@ -318,11 +319,6 @@ function _bands_reduce!(handed::HD, take::TK, d, cs, primal) where {HD, TK}
     return nothing
 end
 
-# Whether input `k` of `(f, rest...)` is copied before the primal: the kernel `f` always,
-# unless `Const`; the others when later code overwrites them (`overwritten` counts `func`
-# first and `nbands` and `out` sit between, so input `k` is entry `k + 3`).
-@inline _bands_taped(ow, ins, k::Int) = k == 1 ? !(ins[1] isa Const) : ow[k + 3]
-
 # Two derivatives of one `Active` value added field by field: a number, or a tuple or an
 # immutable struct of them (the ghost operators' `_FacetFix` pairs), every field that is not
 # a float kept from `x`.
@@ -395,11 +391,8 @@ function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_RunBands},
     _entered!(:_batch_run_bands!)
     tape = nothing
     if !all(isnothing, _lanes(out, Val(EnzymeRules.width(config))))
-        ow, ins = EnzymeRules.overwritten(config), (f, rest...)
-        kept = ntuple(
-            k -> _bands_taped(ow, ins, k) ? _graph_copy(ins[k].val, false) : nothing,
-            Val(N + 1))
-        tape = (kept, copy(out.val))
+        vals = (f.val, _bands_values(rest)...)
+        tape = (_graph_copy(vals, false)::typeof(vals), copy(out.val))
     end
     func.val(f.val, nbands.val, out.val, _bands_values(rest)...)
     return AugmentedReturn(nothing, nothing, tape)
@@ -414,8 +407,7 @@ function EnzymeRules.reverse(config::RevConfig, func::Const{_RunBands}, ::Type{R
     d = if all(isnothing, d_outs)
         map(a -> _bands_zero_active(a, W), ins)
     else
-        kept, before = tape
-        vals = map((a, t) -> t === nothing ? a.val : t, ins, kept)
+        vals, before = tape
         mode = Enzyme.set_runtime_activity(Enzyme.ReverseSplitNoPrimal,
             EnzymeRules.runtime_activity(config))
         pe = _polyester_ext()

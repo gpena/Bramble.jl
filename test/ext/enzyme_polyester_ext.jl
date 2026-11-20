@@ -253,7 +253,7 @@ end
 # Data a hook reads behind a fresh `Ref`, zeroed after the call, which `overwritten` misses.
 # Each read is nonlinear, so the reverse pass gives a wrong gradient unless the rule kept
 # the data from before the primal: a coefficient of an assembled form (`κ₁ * (κ₂ * U)`),
-# a closure's capture in a sweep, and a band kernel's capture.
+# a closure's capture in a sweep, and a band kernel's capture or argument.
 const _CS = 1 .+ rand(MersenneTwister(7), 37)
 function _overwritten_case(p, policy, ::Val{:assembly})
     W = gridspace(EnzymePolicyCases._seeded_mesh((21, 17), policy))
@@ -287,8 +287,33 @@ function _overwritten_case(p, policy, ::Val{:bands})
     fill!(a, 0)
     return s
 end
+# A band kernel's argument rather than its capture: a closure, and a `StarSpacings` whose
+# spacings are overwritten.
+_closure_band!(out, x, g, n::Int, b::Int) = foreach(
+    i -> out[i] = g(x[i]), Bramble._band_range(Base.OneTo(37), n, b))
+_star_band!(out, x, h, n::Int, b::Int) = foreach(
+    i -> out[i] = x[i] / h[i], Bramble._band_range(Base.OneTo(36), n, b))
+function _overwritten_case(p, policy, ::Val{:band_closure})
+    a = copy(p)
+    x = [p[1] + 0.1k * p[2] for k in 1:37]
+    out = zeros(eltype(p), 37)
+    Bramble._run_bands!(policy, _closure_band!, out, x, y -> a[1]^2 * y + a[2] * y^2)
+    s = sum(abs2, out)
+    fill!(a, 0)
+    return s
+end
+function _overwritten_case(p, policy, ::Val{:band_star})
+    h = [1 + p[1]^2 * k / 37 + p[2] * sin(k) / 9 for k in 1:37]
+    x = [p[1] + 0.1k * p[2] for k in 1:37]
+    out = zeros(eltype(p), 36)
+    Bramble._run_bands!(policy, _star_band!, out, x, StarSpacings(h))
+    s = sum(abs2, out)
+    fill!(h, 1)
+    return s
+end
 const _OVERWRITTEN_HOOKS = ((Val(:assembly), "_batch_bilinear_band_replay!"),
-    (Val(:sweep), "_batch_for!"), (Val(:bands), "_batch_run_bands!"))
+    (Val(:sweep), "_batch_for!"), (Val(:bands), "_batch_run_bands!"),
+    (Val(:band_closure), "_batch_run_bands!"), (Val(:band_star), "_batch_run_bands!"))
 
 # Workload 1: a functional of the nodal field of `κₕ` (its derivative, its norm and an
 # assembled load) on the seeded 41 x 41 mesh of `EnzymePolicyCases`, under `policy`.

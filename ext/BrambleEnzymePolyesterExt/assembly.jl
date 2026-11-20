@@ -235,12 +235,11 @@ function _asm_scratch(t::Base.RefValue)
     return Ref(pe._replay_join(similar(h1), nothing, cold))
 end
 
-# The lanes whose reverse reads the parts: the output carries a cotangent there, and the
-# parts or the output's other fields (a target's `α`) a shadow.
-function _asm_live(config, out, parts)
-    W = Val(EnzymeRules.width(config))
-    d_outs = ntuple(w -> _asm_cotangent(out, w), W)
-    d_parts = _lanes(parts, W)
+# The lanes whose reverse reads the parts: the output carries a cotangent there (`d_outs`),
+# and the parts (`d_parts`) or the output's other fields (a target's `α`) a shadow.
+function _asm_live(config, out, parts,
+        d_outs = ntuple(w -> _asm_cotangent(out, w), Val(EnzymeRules.width(config))),
+        d_parts = _lanes(parts, Val(EnzymeRules.width(config))))
     cold = _asm_cold_float(out.val)
     return [w for w in 1:EnzymeRules.width(config)
             if d_outs[w] !== nothing && (cold || d_parts[w] !== nothing)]
@@ -254,7 +253,7 @@ function _asm_reverse!(config, run!::R, slab::F, n::Int, len::Int, out, parts, p
     W = Val(EnzymeRules.width(config))
     d_outs = ntuple(w -> _asm_cotangent(out, w), W)
     d_parts = _lanes(parts, W)
-    live = _asm_live(config, out, parts)
+    live = _asm_live(config, out, parts, d_outs, d_parts)
     isempty(live) && return nothing
     scratch = _asm_scratch(out.val)
     pp = parts_tape === nothing ? parts.val : parts_tape
