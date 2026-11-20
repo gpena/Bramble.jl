@@ -18,6 +18,7 @@ using Bramble: change_points!, refactor!, sparse_factorize
 using LinearAlgebra
 using SparseArrays
 using SuiteSparse
+using ForwardDiff: ForwardDiff
 
 # The direct-solver contract this backend shares with MUMPS, Sparspak and AppleAccelerate
 # lives in test/ext/SolverContracts.jl, which test/runtests.jl includes just before this
@@ -526,6 +527,33 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
                 @test parent(Fₑ) == F
             end
         end
+    end
+
+    # A `Dual` matrix has no UMFPACK or CHOLMOD method and used to end in a bare
+    # `StackOverflowError`. `pde_solve` factors the values, so it is the supported route.
+    @testset "Dual matrix refused" begin
+        n = 12
+        A = spdiagm(0 => fill(4.0, n), 1 => fill(-1.0, n - 1), -1 => fill(-1.2, n - 1))
+        D = ForwardDiff.Dual{:t, Float64, 1}
+        Ad = SparseMatrixCSC(
+            A.m, A.n, A.colptr, A.rowval, ForwardDiff.Dual{:t}.(A.nzval, 0.5 .* A.nzval)
+        )
+        for sym in (:auto, :spd, :unsymmetric)
+            err = try
+                suitesparse_factorize(Ad; sym)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin(string(D), err.msg)
+            @test occursin("pde_solve", err.msg)
+            @test occursin("Sparspak", err.msg)
+        end
+        @test_throws ArgumentError suitesparse_solve(Ad, ones(n))
+        # The narrower element types keep their path.
+        @test suitesparse_factorize(Float32.(A)) \ ones(Float32, n) isa Vector{Float32}
+        @test suitesparse_factorize(ComplexF64.(A)) \ ones(ComplexF64, n) isa Vector{ComplexF64}
     end
 
     @testset "Error handling & validation" begin

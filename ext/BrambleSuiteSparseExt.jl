@@ -80,7 +80,22 @@ function _cholmod_input(A::SparseMatrixCSC)
     return Hermitian(A)
 end
 
+# UMFPACK and CHOLMOD factor machine floats and widen the narrower ones. Any other element
+# type, a `ForwardDiff.Dual` above all, has no method and ends in a `StackOverflowError`.
+const _SSPARSE_REAL = Union{Bool, Integer, Float16, Float32, Float64}
+_check_eltype(::Type{<:Union{_SSPARSE_REAL, Complex{<:_SSPARSE_REAL}}}) = nothing
+function _check_eltype(::Type{T}) where {T}
+    throw(
+        ArgumentError(
+        "SuiteSparse factors `Float32`, `Float64` and their complex types, and this matrix " *
+        "has element type $T. For a `Dual` matrix call `pde_solve`, which factors the " *
+        "values and solves each partial, or use Sparspak, which factors a `Dual` matrix.",
+    ),
+    )
+end
+
 function Bramble._suitesparse_factorize(A::SparseMatrixCSC; sym = :auto, kwargs...)
+    _check_eltype(eltype(A))
     m, n = size(A)
     m == n || throw(DimensionMismatch("Matrix must be square for sparse direct solve, got $(m)×$(n)"))
 
