@@ -17,7 +17,7 @@
 #
 # The conjugations follow Enzyme's rules for `conj`: ū += conj(z̄) w v, v̄ += z̄ u conj(w),
 # w̄ += z̄ u conj(v). For real data these are the plain products. The harness is real, so
-# complex data is not checked by the CHECK.
+# no test covers complex data.
 
 const _DotFn = typeof(Bramble._batch_dot)
 const _MaskedDotFn = typeof(Bramble._batch_dot_masked)
@@ -208,6 +208,8 @@ _tape_copy(w::Bramble.SeparableWeights) = Bramble.SeparableWeights(map(copy, w.f
 
 _seeds(dret::Active, ::Val{1}) = (dret.val,)
 _seeds(dret::Tuple, ::Val{W}) where {W} = ntuple(k -> dret[k].val, Val(W))
+# An inactive return reaches the rule as the annotation's type: no seed, nothing to pull back.
+_seeds(::Type, ::Val{W}) where {W} = nothing
 
 function _forward_dot(config, hook::Symbol, func, u, w, v, mask)
     _entered!(hook)
@@ -237,6 +239,7 @@ end
 function _reverse_dot(config, dret, tape, u, w, v, mask)
     W = EnzymeRules.width(config)
     zs = _seeds(dret, Val(W))
+    zs === nothing && return nothing
     uval = tape[1] === nothing ? u.val : tape[1]
     wval = tape[2] === nothing ? w.val : tape[2]
     vval = tape[3] === nothing ? v.val : tape[3]
