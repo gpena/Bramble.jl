@@ -215,9 +215,10 @@ end
 # (BrambleEnzymePolyesterExt). This method unwraps it for `BramblePolyesterExt`'s sweep. It
 # inlines, so a plain call builds no `Ref` and allocates nothing; Enzyme does not inline a
 # call that has a rule, so a differentiated call reaches the rule with the `Ref`.
-# `_sweep_for!`'s `CpuPolyester` method inlines too, so the `Ref` is built in its caller:
-# built inside a non-inlined method that took the closure by value, a closure capturing a
-# `Float32` beside an array stops Enzyme's compiler ("Illegal replace ficticious phi").
+# The range method of `_sweep_for!(::CpuPolyester)` inlines too, so the `Ref` is built in
+# its caller: built inside a non-inlined method that took the closure by value, a closure
+# capturing a `Float32` beside an array stops Enzyme's compiler ("Illegal replace
+# ficticious phi").
 @inline _batch_for!(v::AbstractArray, idxs, r::Base.RefValue) = _late(_batch_for!, v, idxs, r[])
 
 """
@@ -618,8 +619,9 @@ end
 end
 
 # The kernel behind a `Ref` (see `_batch_for!`), for the two index shapes the extension's
-# methods take: a range (`project!`'s `1:n`) and any array, a `CartesianIndices` included. Each
-# is more specific than the extension's method in its index argument, so neither is ambiguous.
+# methods take: a range (`project!`'s `1:n`) and any array, a `CartesianIndices` included.
+# Each has the index type of one extension method and is narrower in the kernel argument, so
+# neither is ambiguous with it.
 @inline _batch_scatter_for!(mats::Tuple, idxs::AbstractRange, r::Base.RefValue) = _late(
     _batch_scatter_for!, mats, idxs, r[])
 @inline _batch_scatter_for!(mats::Tuple, idxs::AbstractArray, r::Base.RefValue) = _late(

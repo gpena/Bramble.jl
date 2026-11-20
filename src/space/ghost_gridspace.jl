@@ -76,9 +76,9 @@ struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix,
     DT <: AbstractVector, TD, GU} <: AbstractSpaceType{1}
     "the space on the padded mesh, with physical-only weights."
     padded::S
-    "the `N_pad × ndofs` closure matrix, `E * u + d` the padded values, in the data's type."
+    "the `N_pad × ndofs` closure matrix, `E * u + d` the padded values; its entries in the type of the relation coefficients."
     E::ET
-    "the affine part of the closure, one entry per padded point, in the data's type."
+    "the affine part of the closure, one entry per padded point, in the type of the relation data."
     d::DT
     "the transpose of `E`, whose columns give `lift` its padded rows."
     Et::ET
@@ -350,7 +350,7 @@ function _closure_matrix(be, ::Type{T}, E::SparseMatrixCSC) where {T}
 end
 
 # The element type of the affine part of a closure on a space of element type `T` whose
-# relations' data have type `S`: real data keep the space's precision, as before, complex
+# relations' data have type `S`: real data keep the space's precision, complex
 # data its complex type, and any other type, such as a `ForwardDiff.Dual`, widens it.
 @inline _closure_data_eltype(::Type{T}, ::Type{S}) where {T, S} = promote_type(T, S)
 @inline _closure_data_eltype(::Type{T}, ::Type{<:Union{AbstractFloat, Integer}}) where {T} = T

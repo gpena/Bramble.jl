@@ -15,8 +15,9 @@ function _require_one_mesh(fname, uₕ::VectorElement{<:CompositeGridSpace})
     )
 end
 
-# The Makie extension refuses a grid function it cannot plot through this pair. A composite element has no single
-# reading as one curve or one grid, so plot each of its components(...) separately.
+# The Makie extension refuses a grid function it cannot plot through this pair. A composite
+# element has no single reading as one curve or one grid, so plot each of its components(...)
+# separately.
 @noinline function _throw_plot_composite()
     throw(
         ArgumentError(

@@ -721,8 +721,8 @@ end
 # runs over `Base.OneTo(Threads.nthreads())` and each task rebuilds its slab from `v`'s own
 # indices (`_full`), so it captures `v`, the kernel and that range, and no `idxs`. Any other
 # `idxs` crosses as `_Slabs`, the slabs as one loop range: that captures `idxs` plus the
-# index range `@batch` takes of any array it loops over, which makes the box larger than the
-# parent's. Looping over `1:n` with `idxs` captured would make it larger still.
+# index range `@batch` takes of any array it loops over, which makes the box larger than that
+# loop's. Looping over `1:n` with `idxs` captured would make it larger still.
 struct _Lin end
 struct _Cart end
 @inline _cover(v, idxs::AbstractUnitRange) = !Base.has_offset_axes(v) &&

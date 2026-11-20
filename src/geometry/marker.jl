@@ -458,8 +458,10 @@ end
 # `hasmethod` is `@nospecialize` in `f`: called normally it folds only for a singleton `f`,
 # so a capturing closure or a callable struct with fields gives a `Union` per slot and
 # allocates. Inlined at the call site, its `Core._hasmethod(Tuple{F, ...})` folds on the
-# concrete type `F`, so the tuple stays concrete and `conditions` allocates nothing. A
-# method added to `F` later invalidates the folded result, as for any method lookup.
+# concrete type `F`, so the tuple stays concrete and `conditions` allocates nothing for a
+# callback with an untyped method; one typed on every argument costs a `methods` lookup per
+# call (`_accepts`). A method added to `F` later invalidates the folded result, as for any
+# method lookup.
 #
 # Both evaluation paths share `_is_spatial`. Every helper here stays `@inline`, or the fold
 # never reaches the `map` closure in `conditions`.
