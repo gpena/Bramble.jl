@@ -168,6 +168,21 @@ function _check_children(hook, modes; separate = (), policy = :CpuThreaded,
     return nothing
 end
 
+# One difference with the field and the spacing both built from `p`, then both overwritten
+# after the call. The reverse pass must read them as they were: a tape that trusted
+# `EnzymeRules.overwritten` for these arrays would differentiate zeros and ones.
+function _overwritten_case(p, policy, data)
+    s0, s1, _, x0, x1, _ = data
+    s = s0 .* (1 .+ 0.1 .* p[1] .* s1)
+    x = x0 .+ p[2] .* x1
+    out = zeros(eltype(p), length(x0))
+    _difference_engine!(policy, out, x, s, DIMS, Backward(), Val(1))
+    r = sum(abs2, out)
+    fill!(x, 0)
+    fill!(s, 1)
+    return r
+end
+
 @testset "Enzyme rules under CpuThreaded" begin
     if RUN_ENZYME
         @testset "Difference engine, reused output" begin
@@ -181,6 +196,14 @@ end
                     @test _entries(:_static_bands!) > n
                 end
             end
+        end
+
+        @testset "Band: input overwritten after the call" begin
+            data = _engine_data(1)
+            n = _entries(:_static_bands!)
+            case = (q, pol) -> _overwritten_case(q, pol, data)
+            @test all(<=(TOL), _gradients(case, [0.3, -0.6]))
+            @test _entries(:_static_bands!) > n
         end
 
         @testset "Closure sweep reading its output" begin

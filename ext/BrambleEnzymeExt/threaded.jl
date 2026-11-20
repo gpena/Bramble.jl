@@ -252,13 +252,16 @@ function _fixed_forward(config, f::Union{_AverageBand, _CenteredBand}, n::Int, a
     W = Val(EnzymeRules.width(config))
     d_outs = _lanes(out, W)
     all(isnothing, d_outs) && return nothing
-    _average_forward!(f.val, d_outs, _lanes(in_ref, W), dims.val, _vals(Base.tail(Base.tail(Base.tail(args)))), n)
+    _average_forward!(f.val, d_outs, _lanes(in_ref, W), dims.val, _vals(args[4:end]), n)
     return nothing
 end
 
 # The difference tape: `in_ref`'s values when the spacing cotangent will read them, and the
 # spacing's, when later code overwrites them. `overwritten` counts `func` first, then `f`
-# and `nbands`, so `in_ref` is entry 5 and `h` entry 6.
+# and `nbands`, so `in_ref` is entry 5 and `h` entry 6. The flag is enough here. Both reach
+# the rule as arrays, and Enzyme flags a later write to an array (pinned in
+# test/ext/enzyme_threaded_ext.jl). Data behind a `Ref` or inside a `Broadcasted` slips
+# past it, so the closure entries copy unconditionally.
 function _fixed_tape(config, ::_DifferenceBand, args)
     _, in_ref, h = args
     ow = EnzymeRules.overwritten(config)
@@ -289,7 +292,7 @@ function _fixed_reverse(config, f::Union{_AverageBand, _CenteredBand}, n::Int, a
     d_outs = _lanes(out, W)
     all(isnothing, d_outs) && return nothing
     _average_reverse!(_adjoint_of(f.val), d_outs, _lanes(in_ref, W), dims.val,
-        _vals(Base.tail(Base.tail(Base.tail(args)))), n)
+        _vals(args[4:end]), n)
     return nothing
 end
 
