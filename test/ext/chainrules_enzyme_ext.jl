@@ -1121,7 +1121,8 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             adv_solve(F) = fdm_solve(adv, F)
             @test only(Enzyme.autodiff(fwd, Enzyme.Const(adv_solve), Enzyme.Duplicated,
                 Enzyme.Duplicated(copy(Fc), Ḟc))) ≈ Aadv \ Ḟc rtol=1e-8
-            @test_throws ArgumentError "Schur" Enzyme.autodiff(rev,
+            schur_msg = ["Schur", "pde_solve(assemble(a), F)"]
+            @test_throws ArgumentError schur_msg Enzyme.autodiff(rev,
                 Enzyme.Const(F -> sum(adv_solve(F))), Enzyme.Active,
                 Enzyme.Duplicated(copy(Fc), zeros(nc)))
         else

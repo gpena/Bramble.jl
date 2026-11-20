@@ -452,24 +452,30 @@ const _FDMOperand = Union{
 # through its AST.
 EnzymeRules.inactive_type(::Type{<:Bramble._AssemblyCache}) = true
 
-@noinline function _throw_active_operator()
+# The call that differentiates where `fdm_solve(a, F; dirichlet)` does not.
+function _fdm_pde_call(dirichlet)
+    dirichlet === nothing && return "pde_solve(assemble(a), F)"
+    return "pde_solve(assemble(a; dirichlet = :boundary), F)"
+end
+
+@noinline function _throw_active_operator(dirichlet)
     throw(
         ArgumentError(
         "fdm_solve: the form or operator has a shadow, and Bramble's Enzyme rule " *
         "differentiates `fdm_solve` in its right-hand side only, so the derivative with " *
         "respect to a coefficient or the mesh would be silently dropped; to differentiate " *
-        "with respect to it, solve with `pde_solve(assemble(a, l)..., F)`",
+        "with respect to it, solve with `$(_fdm_pde_call(dirichlet))`",
     ),
     )
 end
 
-@noinline function _throw_schur_adjoint()
+@noinline function _throw_schur_adjoint(dirichlet)
     throw(
         ArgumentError(
         "fdm_solve: Bramble's Enzyme rule does not differentiate in reverse mode a form " *
         "with a non-symmetric term (advection), whose solve takes the generalised Schur " *
         "route and has no adjoint here. Use forward mode, or differentiate " *
-        "`pde_solve(assemble(a, l)..., F)`.",
+        "`$(_fdm_pde_call(dirichlet))`.",
     ),
     )
 end
@@ -499,7 +505,7 @@ function EnzymeRules.forward(
         F::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    _active_shadow(a, 1) && _throw_active_operator()
+    _active_shadow(a, 1) && _throw_active_operator(get(kwargs, :dirichlet, nothing))
     u = Bramble.fdm_solve(a.val, F.val; kwargs...)
     RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
     Ḟ = _rank_one_tangent(F.val, _lane(F, 1))
@@ -531,11 +537,12 @@ function EnzymeRules.augmented_primal(
         kwargs...
 ) where {RT}
     EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
-    _active_shadow(a, 1) && _throw_active_operator()
+    _active_shadow(a, 1) && _throw_active_operator(get(kwargs, :dirichlet, nothing))
 
     fact = Bramble.fdm_factorize(a.val; kwargs...)
     # The adjoint is the same solve only on the symmetric route.
-    _has_shadow(F) && !_fdm_symmetric_route(fact) && _throw_schur_adjoint()
+    _has_shadow(F) && !_fdm_symmetric_route(fact) &&
+        _throw_schur_adjoint(get(kwargs, :dirichlet, nothing))
     u = Bramble.fdm_solve!(Vector{typeof(fact).parameters[1]}(undef, size(fact, 1)), fact,
         F.val)::Vector
     ū = zero(u)
