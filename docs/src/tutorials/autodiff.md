@@ -8,9 +8,9 @@ CurrentModule = Bramble
 
 **What you need first.** The [space tutorial](@ref tutorial_space), for grid spaces and discrete functions, the [operators tutorial](@ref tutorial_operators), and the [form tutorial](@ref tutorial_form), for assembling a system with Dirichlet conditions.
 
-Bramble's operators, grid functions and forms are generic over the scalar type, so a discrete quantity can be differentiated with respect to the parameter that produced it. Derivatives go through [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl) (DI), so the objective stays the same function whichever backend differentiates it. Two backends are offered: `AutoForwardDiff()` and `AutoEnzyme()`, which runs in reverse mode below and also in forward mode.
+Bramble's operators, grid functions and forms are generic over the scalar type, so a discrete quantity can be differentiated with respect to the parameter that produced it. Derivatives go through [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl) (DI), so the objective stays the same function whichever backend differentiates it. Two backends are offered: `AutoForwardDiff()` and `AutoEnzyme()`. Enzyme runs in reverse mode below, and in forward mode as `AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Forward), function_annotation = Enzyme.Const)`.
 
-Each differentiating block ends in an assertion against a non-AD oracle: central differences, exact up to rounding for the quadratic objectives here, or a closed form.
+Each differentiating block asserts against a non-AD oracle, central differences (exact up to rounding for the quadratic objectives here) or a closed form, and then shows the derivative.
 
 ## Differentiate with respect to a scalar
 
@@ -36,8 +36,8 @@ end
 
 a_val = 2.0
 dJ = DifferentiationInterface.derivative(energy, AutoForwardDiff(), a_val)
-round(dJ, digits = 4)
 @assert isapprox(dJ, 2 * a_val * energy(1.0); rtol = 1e-12)
+round(dJ, digits = 4)
 ```
 
 `energy` restricts a function to the grid and takes its discrete norm. Nothing in it mentions differentiation.
@@ -65,8 +65,8 @@ end
 
 p0 = [1.0, 2.0]
 g_forward = DifferentiationInterface.gradient(loss, AutoForwardDiff(), p0)
-round.(g_forward, digits = 4)
 @assert isapprox(g_forward, fd_gradient(loss, p0); rtol = 1e-8, atol = 1e-8)
+round.(g_forward, digits = 4)
 ```
 
 Reverse mode with Enzyme differentiates the same function. Enzyme needs two annotations whenever the closure captures a mesh or a grid space, which in this package it almost always does. `set_runtime_activity` lets Enzyme track activity through the captured geometry, and `Enzyme.Const` declares the function object, which holds those references, as not differentiated.
@@ -79,8 +79,8 @@ enzyme_backend = AutoEnzyme(;
     function_annotation = Enzyme.Const)
 
 g_enzyme = DifferentiationInterface.gradient(loss, enzyme_backend, p0)
-round.(g_enzyme, digits = 4)
 @assert isapprox(g_enzyme, fd_gradient(loss, p0); rtol = 1e-8, atol = 1e-8)
+round.(g_enzyme, digits = 4)
 ```
 
 ## Differentiate through a linear solve
@@ -109,8 +109,8 @@ end
 
 p_init = [1.0, 2.0]
 grad_solve = DifferentiationInterface.gradient(solve_objective, AutoForwardDiff(), p_init)
-round.(grad_solve, digits = 4)
 @assert isapprox(grad_solve, fd_gradient(solve_objective, p_init); rtol = 1e-8, atol = 1e-8)
+round.(grad_solve, digits = 4)
 ```
 
 The two entries are the sensitivities with respect to the boundary value and the source scale.
@@ -119,8 +119,8 @@ The same objective differentiates in reverse mode, because [`pde_solve`](@ref) c
 
 ```@example autodiff_tutorial
 g_solve_enzyme = DifferentiationInterface.gradient(solve_objective, enzyme_backend, p_init)
-round.(g_solve_enzyme, digits = 4)
 @assert isapprox(g_solve_enzyme, fd_gradient(solve_objective, p_init); rtol = 1e-8, atol = 1e-8)
+round.(g_solve_enzyme, digits = 4)
 ```
 
 ## Differentiate through a matrix
@@ -137,8 +137,8 @@ function matrix_objective(p)
 end
 
 g_matrix = DifferentiationInterface.gradient(matrix_objective, AutoForwardDiff(), [1.5])
-round.(g_matrix, digits = 4)
 @assert isapprox(g_matrix, fd_gradient(matrix_objective, [1.5]; h = 1e-5); rtol = 1e-6)
+round.(g_matrix, digits = 4)
 ```
 
 A `Dual` matrix goes to `pde_solve` directly, as the load does above. A non-square `Dual` matrix throws an `ArgumentError`: the derivative of a least-squares solve has a residual term that this path does not compute.
@@ -172,8 +172,6 @@ u0 = parent(Rₕ(Wₕ, x -> 0.5 * sin(π * x[1])))   # nonzero state, so the coe
 prep = DifferentiationInterface.prepare_jacobian(pde_residual, sparse_backend, u0)
 J = DifferentiationInterface.jacobian(pde_residual, prep, sparse_backend, u0)
 
-size(J), nnz(J)
-
 function fd_jacobian(f, u; h = 1e-6)
     n = length(u)
     cols = [(f(u .+ h .* (1:n .== j)) - f(u .- h .* (1:n .== j))) / (2h) for j in 1:n]
@@ -182,9 +180,10 @@ end
 
 J_fd = fd_jacobian(pde_residual, u0)
 @assert maximum(abs, Matrix(J) - J_fd) <= 1e-7 * maximum(abs, J_fd)
+size(J), nnz(J)
 ```
 
-The Jacobian is sparse: the Jacobian stores only the stencil's entries. `prepare_jacobian` does the detection and colouring once, and `jacobian` reuses it at every point. The last line compares every entry with a central difference of the residual, one column at a time.
+`jacobian` returns the stencil's entries only. `prepare_jacobian` does the detection and colouring once, and `jacobian` reuses it at every point. The assertion compares every entry with a central difference of the residual, one column at a time.
 
 ### Skip the tracer
 
@@ -207,9 +206,10 @@ J_native = DifferentiationInterface.jacobian(pde_residual, prep_native, native_b
 
 @assert J == J_native
 @assert maximum(abs, Matrix(J_native) - J_fd) <= 1e-7 * maximum(abs, J_fd)
+size(J_native), nnz(J_native)
 ```
 
-`a_for_pattern` only needs some concrete coefficient to build a `BilinearForm`. Any concrete coefficient builds it, because the pattern is a property of the AST. The Jacobian is the same, and no tracing pass runs to find it. The detector applies when the residual's matrix is assembled from a `BilinearForm`. The [`jacobian_pattern`](@ref) docstring gives the rules, and the [coupled reaction-diffusion example](../examples/coupled_reaction_diffusion.md) uses the same detector on a coupled system. Keep `TracerSparsityDetector` for a matrix built some other way.
+`a_for_pattern` only needs some concrete coefficient to build a `BilinearForm`. The detector applies when the residual's matrix is assembled from a `BilinearForm`. The [`jacobian_pattern`](@ref) docstring gives the rules, and the [coupled reaction-diffusion example](../examples/coupled_reaction_diffusion.md) uses the same detector on a coupled system. Keep `TracerSparsityDetector` for a matrix built some other way.
 
 ## Differentiate ghost relation data
 
@@ -225,8 +225,8 @@ function ghost_objective(p)
 end
 
 g_ghost = DifferentiationInterface.gradient(ghost_objective, AutoForwardDiff(), [1.0])
-round.(g_ghost, digits = 4)
 @assert isapprox(g_ghost, fd_gradient(ghost_objective, [1.0]); rtol = 1e-8, atol = 1e-8)
+round.(g_ghost, digits = 4)
 ```
 
 The solution is affine in the boundary datum, so the objective is quadratic in ``p_1``.
@@ -254,6 +254,7 @@ J_rhs = DifferentiationInterface.jacobian(rhs_at, AutoForwardDiff(), u_rhs)
 unit(n, j) = Float64.(1:n .== j)
 cols = [rhs_at(u_rhs .+ unit(length(u_rhs), j)) - rhs_at(u_rhs) for j in eachindex(u_rhs)]
 @assert isapprox(J_rhs, reduce(hcat, cols); rtol = 1e-10)
+size(J_rhs)
 ```
 
 [`semidiscretize`](@ref) takes a `hook_reads_state` keyword next to `update_coefficients!`. Give `hook_reads_state = false` only when the hook reads no state, such as a source that depends on ``t`` alone: then the `Dual` Jacobian is exact. A hook that does read the state keeps the default, and the docstring gives the details.
@@ -265,9 +266,19 @@ The stencil kernels write into preallocated arrays, so a backend has to support 
 | Backend | Mode | Reach for it when | Construction |
 | :--- | :--- | :--- | :--- |
 | ForwardDiff | forward | fewer than about 10 parameters, a directional derivative, or Jacobian colours | `AutoForwardDiff()` |
-| Enzyme | reverse; forward everywhere except through `pde_solve` | about 16 parameters or more and a scalar objective | `AutoEnzyme` with the annotations shown above |
+| Enzyme | reverse and forward; limits below | about 16 parameters or more and a scalar objective | `AutoEnzyme` with the annotations shown above |
 
-One reverse sweep replaces one forward sweep per parameter. Enzyme and ChainRulesCore (reverse) have an adjoint rule for `pde_solve`; DI uses the Enzyme one. Forward-mode Enzyme through `pde_solve` throws an `EnzymeNoDerivativeError`.
+One reverse sweep replaces one forward sweep per parameter. Enzyme and ChainRulesCore (reverse) have an adjoint rule for `pde_solve`, and Enzyme has a forward rule too; DI uses them.
+
+### Limits
+
+- Enzyme's reverse rule for `pde_solve` takes one direction at a time. A batched (vector-mode) reverse call throws an `ArgumentError`. DI's reverse `jacobian` of a vector output is batched, so it is refused the same way; differentiate a scalar objective with `gradient`.
+- Enzyme cannot differentiate a factorization built inside the differentiated function: `pde_solve(sparse_factorize(A), F)` with `A` active throws an `IllegalTypeAnalysisException` in both modes. Pass `A` to `pde_solve` directly.
+- ForwardDiff throws an `ArgumentError` on `pde_solve(RankOneUpdate(...), F)`. Enzyme differentiates it.
+- Enzyme pays a large first-call compile cost: about 100 s for the `pde_solve` adjoint, and minutes and several GB for a threaded ghost assemble, against seconds for ForwardDiff. On a dense gradient the per-call crossover lies between 4 and 16 parameters, so a switch at 16 repays the compile only over many calls.
+- Both backends differentiate under `CpuSerial`, `CpuThreaded` and `CpuPolyester`. `CpuPolyester` under Enzyme needs `using Polyester`, which loads `BrambleEnzymePolyesterExt`. The coverage matrix marks the cells not run.
+
+The full matrix of what each backend differentiates, with the failures, is in `docs/notes/internals/ad_coverage.md` in the repository.
 
 Sparse forward mode stays competitive on large meshes: a Cartesian difference stencil needs the same handful of colours at every resolution.
 
