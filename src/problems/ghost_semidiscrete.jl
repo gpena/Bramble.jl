@@ -34,10 +34,13 @@
 
 Source constraint carrier of a [`Semidiscretization`](@ref) on a constrained ghost space:
 the source at `t` is `Eᵀ (F_pad(t) − A_pad d(t))`, `d(t)` written into the padded buffer `d`
-(unused on a space whose data do not depend on time, whose `d` is read directly).
+(unused on a space whose data do not depend on time, whose `d` is read directly). A time
+`d` cannot hold (a `ForwardDiff.Dual`) writes into a buffer of its own type in `promoted`,
+built at the first call at that type.
 """
 struct GhostConstraints{DV <: AbstractVector}
     d::DV
+    promoted::Dict{Type, Any}
 end
 
 # The padded state a ghost form's coefficients read: `lift(Cₕ, u, t)`, refilled in place.
@@ -134,7 +137,7 @@ Base.@constprop :aggressive function semidiscretize(
     # a `Dual` or a complex number, widens it as `_closure_data_eltype` widens `d`.
     F = similar(l.F_pad, _closure_data_eltype(eltype(A), _pair_load_eltype(a, l, A)),
         ndofs(Cₕ))
-    constraints = GhostConstraints(similar(Cₕ.d))
+    constraints = GhostConstraints(similar(Cₕ.d), Dict{Type, Any}())
 
     return Semidiscretization(
         a,
@@ -164,10 +167,23 @@ end
 @inline _ghost_affine!(c::GhostConstraints, Cₕ::GhostGridSpace, t) = _ghost_affine!(c, Cₕ,
     Cₕ.td, t)
 @inline _ghost_affine!(::GhostConstraints, Cₕ::GhostGridSpace, ::Nothing, t) = Cₕ.d
+# A `Dual` time reuses its buffer from the second call on. The lift still allocates there:
+# 480 B at 64 padded points and 1840 B at 754, in `_lift_affine!` and the relation
+# kernels it calls (`src/space/ghost_gridspace.jl`, `src/assembly/ghost_relations.jl`).
 @inline function _ghost_affine!(c::GhostConstraints, Cₕ::GhostGridSpace, td, t)
     S = _affine_eltype(Cₕ, t)
     S === eltype(c.d) && return _lift_affine!(c.d, Cₕ, t)
-    return _lift_affine!(similar(c.d, S), Cₕ, t)
+    d = _promoted_affine(c, S)::Base.promote_op(similar, typeof(c.d), Type{S})
+    return _lift_affine!(d, Cₕ, t)
+end
+
+# The buffer of `c` at element type `S`. Untyped, so the caller asserts its type.
+@noinline function _promoted_affine(c::GhostConstraints, ::Type{S}) where {S}
+    d = get(c.promoted, S, nothing)
+    d === nothing || return d
+    d = similar(c.d, S)
+    c.promoted[S] = d
+    return d
 end
 
 # Relations eliminate every algebraic row, so the initial condition needs no correction.

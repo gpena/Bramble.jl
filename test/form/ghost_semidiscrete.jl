@@ -188,6 +188,26 @@ end
         @test occursin("tgrad", sprint(showerror, err))
     end
 
+    # A Dual time lifts into one buffer of its own type, kept on the carrier, so a warm
+    # `_ghost_affine!` allocates no more than the lift into a ready buffer (#1090).
+    @testset "Dual time keeps its buffer" begin
+        td = ForwardDiff.Dual(0.4, 1.0)
+        for ns in ((6, 7), (24, 28))
+            W = gridspace(ghost_mesh(CpuSerial(), ns); ghosts = GHOSTS2)
+            C, sd, _ = build(W, rel2)
+            c = sd.constraints
+            d = Bramble._ghost_affine!(c, C, td)
+            ref = Bramble._lift_affine!(similar(c.d, typeof(td)), C, td)
+            @test ForwardDiff.value.(d) == ForwardDiff.value.(ref)
+            @test ForwardDiff.partials.(d) == ForwardDiff.partials.(ref)
+            @test Bramble._ghost_affine!(c, C, td) === d
+            @test length(c.promoted) == 1
+            ready = similar(c.d, typeof(td))
+            @test alloc(() -> Bramble._ghost_affine!(c, C, td)) <=
+                  alloc(() -> Bramble._lift_affine!(ready, C, td))
+        end
+    end
+
     # A Dual `u` lifts into a padded state of its own type, read by the forms rebound to
     # it, whose own `A_pad` the load reads (#985). The data depend on time, so `A_pad d(t)`
     # carries a u-derivative a twin with only its matrix swapped would drop. The oracle is a
