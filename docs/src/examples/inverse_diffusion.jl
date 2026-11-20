@@ -147,11 +147,11 @@ line_plot([
 
 # ## Cost of the adjoint
 #
-# `DI.gradient` costs one forward solve and one adjoint solve for any number of parameters.
-# A coefficient field with one value per grid point costs the same two solves. Forward mode
-# needs one solve per parameter: with `ForwardDiff` loaded, `pde_solve` runs on a `Dual`
-# matrix, factors the `Float64` values once, and each partial is one solve against that
-# factor.
+# For a call like this page's, `pde_solve(A, F)` without keywords, the forward solve factors
+# `A` once. The reverse rule then makes one adjoint solve against the adjoint of that same
+# factor per gradient, and refactors nothing. Forward mode needs one solve per parameter:
+# with `ForwardDiff` loaded, `pde_solve` runs on a `Dual` matrix, factors the `Float64`
+# values once, and each partial is one solve against that factor.
 #
 # ## Where to go next
 #
