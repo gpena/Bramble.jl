@@ -18,7 +18,8 @@ module ExtEnzymeForwardAssemblyTests
 # Julia process of its own, since the three together pass julia_slot's 10 GB cap. A child
 # prints one `RESULT_1124` line per case. Enzyme is not in test/Project.toml: load it first,
 # through a temporary environment (test/ext/enzyme_policy_cases.jl says how), with at least
-# 2 threads. Without it the file runs nothing.
+# 2 threads. Without it the file runs nothing; with Enzyme and one thread it runs only the
+# level-set testset.
 
 using Test
 using Bramble
@@ -30,8 +31,9 @@ using SparseArrays: nonzeros
 import DifferentiationInterface as DI
 using ..TestUtils: _have
 
-const RUN_ENZYME = _have(:Enzyme) && Threads.nthreads() >= 2
-RUN_ENZYME && @eval using Enzyme
+const HAVE_ENZYME = _have(:Enzyme)
+const RUN_ENZYME = HAVE_ENZYME && Threads.nthreads() >= 2
+HAVE_ENZYME && @eval using Enzyme
 
 const TOL = 1e-12
 const NP = 4
@@ -66,6 +68,28 @@ function _functional(terms, policy)
         return sum(abs2, nonzeros(assemble(form(W, W, (u, v) -> terms(κ, u, v)))))
     end
     return f
+end
+
+# The mass matrix of a level-set mesh fitted to the circle of radius `r`, scaled by `c`.
+# `φ` captures the float `r`: an immutable closure, whose `===` compares its bits.
+function _levelset_mass(r, c)
+    φ = x -> x[1]^2 + x[2]^2 - r^2
+    Bramble._seed_mesh1d_rng!(1237)
+    Ωₕ = try
+        Ω = domain(interval(-2.0, 2.0) × interval(-2.0, 2.0), :D => levelset(φ))
+        mesh(Ω, (12, 12), (false, false))
+    finally
+        Bramble._unseed_mesh1d_rng!()
+    end
+    W = gridspace(Ωₕ)
+    return c * sum(abs2, nonzeros(assemble(form(W, W, (U, V) -> innerₕ(U, V)))))
+end
+
+# Forward mode's derivative of `f` at `[x]`, seed 1.0.
+function _levelset_forward(f, x)
+    mode = Enzyme.set_runtime_activity(Enzyme.Forward)
+    return only(Enzyme.autodiff(mode, Enzyme.Const(f), Enzyme.Duplicated,
+        Enzyme.Duplicated([x], [1.0])))
 end
 
 # A relative error, `Inf` when the derivative throws, so a throw fails its `@test`.
@@ -150,6 +174,23 @@ else
                         @test get(r, :diffusion_batch2, Inf) < TOL
                 end
             end
+        end
+    end
+    # Forward mode refuses a `φ` over the parameter by name. At p = 1.0 the seed 1.0 equals
+    # the captured radius, so the closure's shadow is `===` its primal: a rule that tested
+    # `===` would take the grid as data and return 0.0, where central differences give
+    # 0.115. A constant `φ` built inside the function keeps its derivative. One thread is
+    # enough here.
+    @testset "Enzyme forward, level set over p" begin
+        if HAVE_ENZYME
+            fparam(p) = _levelset_mass(p[1], 1.0)
+            fconst(p) = _levelset_mass(0.9, p[1])
+            for x in (0.7, 1.0)
+                err = @test_throws ArgumentError _levelset_forward(fparam, x)
+                msg = err isa Test.Pass ? sprint(showerror, err.value) : ""
+                @test occursin("parameter of its level-set function", msg)
+            end
+            @test isapprox(_levelset_forward(fconst, 1.3), fconst([1.0]); rtol = 1e-12)
         end
     end
 end

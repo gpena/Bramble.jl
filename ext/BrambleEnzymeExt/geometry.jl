@@ -14,9 +14,9 @@
         "level-set function `φ`: the grid is fitted to the signs of `φ` and carries no " *
         "derivative. Hold the level set fixed: build the mesh outside the differentiated " *
         "function, or from a `φ` that does not depend on the parameter. A parameter may " *
-        "enter the form instead. A `φ` that captures an array is refused even when the " *
-        "array is constant: capture its numbers instead (`c₁, c₂ = c` before `φ`). The " *
-        "level-set box must not depend on the parameter either.",
+        "enter the form instead. In reverse mode a `φ` that captures an array is refused " *
+        "even when the array is constant: capture its numbers instead (`c₁, c₂ = c` " *
+        "before `φ`). The level-set box must not depend on the parameter either.",
     ),
     )
 end
@@ -31,14 +31,17 @@ end
     )
 end
 
-# `φ` is data if it is a `Const`, or a `Duplicated` whose shadow is the primal (runtime
-# activity's inactive data), as `_space_is_data` in relations.jl. A closure over the
-# parameter vector, or over a float read from it, has a shadow of its own and is refused.
-# So is a closure over any array built inside the differentiated function: in reverse
-# mode its shadow looks like the parameter's. A closure over constant floats comes in
-# `Const`.
+# Whether `φ` is data. In forward mode it is when no lane of its shadow carries a tangent
+# (`_moving_shadow` in solvers.jl): a closure's shadow is read field by field, since `===`
+# compares an immutable closure's bits and a seed equal to a captured float would pass as
+# data. A closure over the parameter vector, or over a float read from it, is refused. In
+# reverse mode `φ` is data if it is a `Const`, or a mutable `φ` passed as its own shadow
+# (runtime activity's inactive data, as `_space_is_data` in relations.jl). Any other `φ` is
+# refused, a closure over an array built inside the differentiated function among them: in
+# reverse mode its shadow looks like the parameter's. A closure over constant floats comes
+# in `Const`.
 _levelset_is_data(::Const) = true
-_levelset_is_data(φ::Duplicated) = φ.dval === φ.val
+_levelset_is_data(φ::Duplicated) = ismutable(φ.val) && φ.dval === φ.val
 _levelset_is_data(::Annotation) = false
 
 # Whether a seed line carries a nonzero tangent in some lane: forward mode's sign that the
@@ -61,7 +64,7 @@ function EnzymeRules.forward(
         xs::Annotation,
         ys::Annotation
 ) where {RT}
-    _levelset_is_data(φ) || _throw_levelset_parameter()
+    _moving_shadow(φ, EnzymeRules.width(config)) && _throw_levelset_parameter()
     (_has_tangent(xs) || _has_tangent(ys)) && _throw_levelset_box()
     r = func.val(φ.val, xs.val, ys.val)
     needs_primal = EnzymeRules.needs_primal(config)
