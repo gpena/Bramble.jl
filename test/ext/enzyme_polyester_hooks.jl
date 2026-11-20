@@ -51,8 +51,9 @@ end
 # An inner product whose result Enzyme marks inactive (a value used only in a branch) reaches the
 # reverse rule as `Const`: no seed, nothing to pull back. The child differentiates a function
 # that reads `innerₕ(u, u)` only in `s > 0` and prints the gradient's error against ForwardDiff
-# under `CpuSerial`, and whether the `_batch_dot` rule ran.
-const INACTIVE_DOT_SOURCE = """
+# under `CpuSerial`, and whether the `_batch_dot` rule ran. Without Enzyme the file still loads:
+# `EnzymePolicyCases` exists only when `RUN_ENZYME` holds.
+const INACTIVE_DOT_SOURCE = !RUN_ENZYME ? "" : """
     _e = mktempdir()
     write(joinpath(_e, "Project.toml"), $(repr(EnzymePolicyCases.ENZYME_TOML)))
     push!(LOAD_PATH, _e)
