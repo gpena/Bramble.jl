@@ -369,7 +369,14 @@ end
         H[n, 1] = -0.3
         @test_throws ErrorException sparspak_refactor!(factH, H)
         @test isapprox(factH \ b, Matrix(H0) \ b; rtol = 1.0e-12)
-        @test_throws ErrorException sparspak_refactor!(sparspak_factorize(copy(H0)), copy(H))
+        # The refusal names the stored-entry count of each matrix, the new one first.
+        err = try
+            sparspak_refactor!(sparspak_factorize(copy(H0)), copy(H))
+        catch e
+            e
+        end
+        @test err isa ErrorException && occursin(string(nnz(H)), err.msg) &&
+            occursin(string(nnz(H0)), err.msg)
     end
 
     @testset "unknown keyword throws (#657)" begin

@@ -282,7 +282,9 @@ function Bramble.sparspak_refactor!(fact::ConcreteSparspakFactorization, A::Spar
     # changed in place on that matrix passes its check; the private copy catches it.
     (SparseArrays.getcolptr(A) == fact.matrix.colptr && SparseArrays.rowvals(A) ==
                                                         fact.matrix.rowval) || error(
-        "the sparsity pattern of the matrix does not match the one factored"
+        "the sparsity pattern of the matrix does not match the one factored: the matrix " *
+        "has $(SparseArrays.nnz(A)) stored entries; the factored one has " *
+        "$(SparseArrays.nnz(fact.matrix))"
     )
     # Sparspak refuses a new pattern before it sets `lu.p = A`, with the factors intact;
     # once it has set it, a failure leaves them unusable until a refactorization succeeds.
