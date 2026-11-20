@@ -151,6 +151,14 @@ const CASES = TTFXCase[
         "Bramble.sparspak_solve(A, F)"
     ),
     TTFXCase(
+        "accelerate_solve(A, F)",
+        :test,
+        ["AppleAccelerate"],
+        0.0,
+        "A = assemble(a_spd)\nF = assemble(l)",
+        "Bramble.accelerate_solve(A, F)"
+    ),
+    TTFXCase(
         "fdm_solve(a, F)",
         :test,
         ["Kronecker"],
@@ -222,6 +230,20 @@ const CASES = TTFXCase[
         "ap = form(Wp, Wp, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))\n" *
         "op = matrix_free_operator(ap; dirichlet = :boundary)\nx = rand(size(op, 2))\ny = similar(x)",
         "mul!(y, op, x)"
+    ),
+    # The first `jacobian!` on a `JacobianForm`: one declared coefficient, on the FIXTURE mesh.
+    # ForwardDiff is a weak dependency of the root project, so the case runs in the test project.
+    TTFXCase(
+        "jacobian!(J, jf, u)",
+        :test,
+        ["ForwardDiff"],
+        0.0,
+        "using Bramble: jacobian_form, jacobian_prototype, jacobian!\n" *
+        "c = element(Wₕ)\n" *
+        "ac = form(Wₕ, Wₕ, (U, V) -> inner₊(c * ∇ₕ(U)[1], ∇ₕ(V)[1]) + innerₕ(U, V))\n" *
+        "jf = jacobian_form(ac, c => (U -> U, x -> 2 + x^2); dirichlet = :boundary)\n" *
+        "J = jacobian_prototype(jf)\nu = rand(ndofs(Wₕ))",
+        "jacobian!(J, jf, u)"
     )
 ]
 

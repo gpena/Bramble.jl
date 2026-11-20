@@ -24,6 +24,9 @@ import Bramble: point, center, projection, topo_dim
 
 rod = domain(interval(0.0, 10.0), :dirichlet => :left, :neumann => :right)
 
+@assert dim(rod) == 1 && collect(center(rod)) ≈ [5.0]   # the midpoint of [0, 10]
+@assert collect(labels(rod)) == [:dirichlet, :neumann]
+
 dim(rod), center(rod), collect(labels(rod))
 ```
 
@@ -44,6 +47,11 @@ The tensor product operator `×` (`\times<tab>`) builds hyper-rectangles from in
 I = interval(0.0, 1.0)
 Ω_2d = I × I
 Ω_3d = interval(-1.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 0.5)
+
+@assert dim(Ω_2d) == 2 && collect(center(Ω_2d)) ≈ [0.5, 0.5]
+@assert dim(Ω_3d) == 3 && collect(center(Ω_3d)) ≈ [0.0, 1.0, 0.25]
+
+dim(Ω_2d), dim(Ω_3d)
 ```
 
 A set answers geometric questions. `∈` accepts a number in 1D, and in any dimension a tuple or vector of length `dim`:
@@ -51,11 +59,15 @@ A set answers geometric questions. `∈` accepts a number in 1D, and in any dime
 ```@example geometry
 X = interval(0.0, 2.0) × interval(-1.0, 1.0)
 
+@assert dim(X) == 2 && collect(center(X)) ≈ [1.0, 0.0]   # the middle of [0, 2] × [-1, 1]
+@assert collect(extrema(X, 1)) ≈ [0.0, 2.0]
+
 dim(X), extrema(X), extrema(X, 1), center(X)
 ```
 
 ```@example geometry
-0.5 ∈ I, 1.5 ∈ I, (0.5, 0.5) ∈ Ω_2d, (1.2, 0.3) ∈ Ω_2d
+@assert 0.5 ∈ I && (0.5, 0.5) ∈ Ω_2d   # inside the unit interval and square
+@assert !(1.5 ∈ I) && !((1.2, 0.3) ∈ Ω_2d)   # 1.5 and 1.2 exceed 1
 ```
 
 `extrema(X, 1)` is the range along the first axis, and `projection(X, 1)` is that axis as an interval.
@@ -83,6 +95,9 @@ channel = domain(
     :wall => (:top, :bottom)
 )
 
+@assert dim(channel) == 2 && collect(center(channel)) ≈ [2.5, 0.5]   # the middle of [0, 5] × [0, 1]
+@assert collect(labels(channel)) == [:inflow, :outflow, :wall]
+
 dim(channel), center(channel), collect(labels(channel))
 ```
 
@@ -108,6 +123,9 @@ m_time = markers(
     :moving_source => ((p, t) -> norm(p .- [t, 0.5]) < 0.2)
 )
 
+@assert collect(labels(m_cond)) == [:inflow, :hot_spot]
+@assert collect(labels(m_time)) == [:moving_source]
+
 collect(labels(m_cond)), m_time(1.5)      # the second is the marker set frozen at t = 1.5
 ```
 
@@ -129,6 +147,9 @@ sink = domain(
     :insulated => (:xmin, :xmax, :ymin, :ymax)
 )
 
+@assert collect(center(sink)) ≈ [1.0, 1.0, 0.5]   # the middle of [0, 2] × [0, 2] × [0, 1]
+@assert collect(labels(sink)) == [:heat_source, :convection, :insulated]
+
 center(sink), collect(labels(sink))
 ```
 
@@ -141,7 +162,11 @@ A `Domain` forwards the geometric queries of the previous sections to its set:
     :neumann => (:top, :bottom)
 )
 
-dim(Ω), center(Ω), (0.5, 0.5) ∈ Ω, Bramble.is_collapsed(Ω)
+@assert dim(Ω) == 2 && collect(center(Ω)) ≈ [0.5, 0.5]
+@assert (0.5, 0.5) ∈ Ω && !((1.5, 0.5) ∈ Ω)   # the second point is right of x = 1
+@assert !Bramble.is_collapsed(Ω)   # a unit square has no zero-length side
+
+dim(Ω), center(Ω)
 ```
 
 [`Bramble.set`](@ref) (private, hence the prefix) returns the underlying set.
