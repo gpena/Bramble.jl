@@ -45,8 +45,8 @@ struct GhostMatrixFreeOperator{T, Op <: MatrixFreeOperator, WT <: GhostGridSpace
     ypad::BT
     "whether a product holds `xpad` and `ypad`, or a pair from `promoted`."
     busy::Threads.Atomic{Bool}
-    "by element type, the padded pair a product of an `x` the buffers cannot hold uses."
-    promoted::Dict{DataType, Any}
+    "by element type (a `Union` too), the padded pair of an `x` the buffers cannot hold."
+    promoted::Dict{Type, Any}
     "the padded points and rows the product walks, the form's."
     walk::RW
     "the reduced rows each band of a `CpuThreaded` cut product sums (`_ghost_mf_bands!`)."
@@ -81,7 +81,7 @@ function _ghost_mf_operator(op::MatrixFreeOperator, a::GhostBilinearForm, mask::
     return GhostMatrixFreeOperator{T, typeof(op), typeof(a.trial_space),
         typeof(a.test_space), typeof(policy), typeof(xpad), typeof(a.walk)}(
         op, a.trial_space, a.test_space, mask, policy, xpad, ypad,
-        Threads.Atomic{Bool}(false), Dict{DataType, Any}(), a.walk, _out_cuts(op, a))
+        Threads.Atomic{Bool}(false), Dict{Type, Any}(), a.walk, _out_cuts(op, a))
 end
 
 # For a `CpuThreaded` product on a cut walk through the fused sweep: `cuts[b]:(cuts[b + 1]

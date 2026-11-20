@@ -218,7 +218,12 @@ end
         @test alloc(() -> mul!(yd, M, xd)) == 0
         @test relerr(value.(yd), A * value.(xd)) <= 1e-12
         @test relerr(partials.(yd, 1), A * partials.(xd, 1)) <= 1e-12
-        @test length(M.promoted) == 2
+        # A `Union` element type keys the pair too; its arithmetic allocates, so no 0 B.
+        xm = Vector{Union{Missing, Float64}}(rand(rng, size(A, 2)))
+        ym = similar(xm)
+        mul!(ym, M, xm)
+        @test relerr(Vector{Float64}(ym), A * Vector{Float64}(xm)) <= 1e-12
+        @test length(M.promoted) == 3
         M.busy[] = true
         t = Threads.@spawn try
             mul!(yc, M, xc)
