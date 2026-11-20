@@ -329,8 +329,13 @@ end
     uc = complex.(_state(W), 0.1)
     @test_throws ArgumentError jacobian!(J, jf, uc)
     msg = sprint(showerror, _refusal(() -> jacobian!(J, jf, uc)))
-    @test occursin("u must be real, got eltype ComplexF64", msg)
+    @test occursin("u must not be complex, got eltype ComplexF64", msg)
     @test !occursin("using ForwardDiff", msg)
+    # Real values in an abstract container are not refused: the Jacobian is `Float64.(u)`'s.
+    Jn = jacobian_prototype(jf)
+    jacobian!(J, jf, _state(W))
+    jacobian!(Jn, jf, Number[x for x in _state(W)])
+    @test isapprox(Jn, J; rtol = 1e-12)
 end
 
 end # module

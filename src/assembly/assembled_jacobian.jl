@@ -59,8 +59,8 @@ end
 @noinline function _throw_jf_eltype(T::Type)
     throw(
         ArgumentError(
-        "jacobian!: u must be real, got eltype $T; ForwardDiff.jl differentiates each " *
-        "coefficient's function at real arguments only.",
+        "jacobian!: u must not be complex, got eltype $T; ForwardDiff.jl differentiates " *
+        "each coefficient's function at real arguments only.",
     ),
     )
 end
@@ -337,7 +337,7 @@ declared coefficient to `f.(L(u))` and each derivative buffer to `f′.(L(u)) �
 Dirichlet labels `dirichlet` (as [`assemble!`](@ref) takes them). The coefficients are
 written from `u` itself, so the Jacobian is exact at `u` whatever state they held before.
 Each `f′` is one `ForwardDiff.Dual` evaluation of `f`, so ForwardDiff.jl must be loaded,
-and `u` must be real. The refill runs under the mesh's execution policy.
+and `u` must not be complex. The refill runs under the mesh's execution policy.
 
 The derivative is built by a walk over `a`'s AST: the product rule where a declared
 coefficient scales an operator, and every node above it (scales, sums, differences,
@@ -406,7 +406,7 @@ function jacobian!(J, jf::JacobianForm, u::AbstractVector)
         "jacobian!: u has length $(length(u)), the space has $(ndofs(W)) dofs.",
     ),
     )
-    eltype(u) <: Real || _throw_jf_eltype(eltype(u))
+    eltype(u) <: Complex && _throw_jf_eltype(eltype(u))
     policy = execution_policy(mesh(W))
     # Every coefficient first, then every β: a β reads the coefficients its `T` holds at
     # neighbouring points, so they must all be written before any β is.
