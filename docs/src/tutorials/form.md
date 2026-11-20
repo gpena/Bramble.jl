@@ -107,6 +107,7 @@ A bilinear form takes two symbolic arguments, trial first and test second:
 ```@example forms
 a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v), :x))
 A = assemble(a)
+@assert nnz(A) == 3 * 33 - 2
 size(A), nnz(A)
 ```
 
@@ -248,7 +249,12 @@ condition had to supply:
 
 ```@example forms
 uh_elt = element(Wd, uh)
-reaction(ad, ld, uh_elt; marker = :left), reaction(ad, ld, uh_elt; marker = :right)
+r_left = reaction(ad, ld, uh_elt; marker = :left)
+r_right = reaction(ad, ld, uh_elt; marker = :right)
+net_source = sum(assemble(ld))
+@assert r_left + r_right ≈ net_source
+@assert round(net_source; digits = 4) == 6.2781
+r_left, r_right, net_source
 ```
 
 Both come out near ``\pi``. For ``u = \sin(\pi x)`` the flux ``-u'`` leaving the domain is
@@ -428,6 +434,4 @@ Neumann and Robin conditions on ghost points, the relations that carry them and 
 
 ## Threading
 
-Assembly follows the execution policy of the space's backend, `Serial()` by default. Build
-the mesh with `mesh(Ω, n; backend = backend(policy = Parallel()))` to assemble on several
-threads.
+Assembly runs under the execution policy of the space's backend; [Assemble on several threads](@ref howto_backends) shows how to choose one.

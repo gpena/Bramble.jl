@@ -153,7 +153,19 @@ avgₕ!(u_avg, x -> exp(-x))
 u_avg[1]
 ```
 
-For a rough source term, `avgₕ` averages out the roughness that `Rₕ` samples.
+For a rough source term, `avgₕ` averages out the roughness that `Rₕ` samples. With a step
+at ``x = 1/2``, the points beside the jump see it differently:
+
+```@example space
+step = x -> x < 0.5 ? 1.0 : 0.0
+avg_step = round.(avgₕ(Wₕ, step)[5:7]; digits = 12)
+R_step = Rₕ(Wₕ, step)[5:7]
+@assert avg_step == [1.0, 0.5, 0.0] && R_step == [1.0, 0.0, 0.0]
+avg_step, R_step
+```
+
+`Rₕ` reads the step's value at each point, so it is `1` or `0`. At the point on the jump,
+`avgₕ` returns the mean over the cell, which is `0.5`.
 
 A plain `Function` is not a grid function, so multiplying by one restricts it first (`Rₕ(space(uₕ), f)`) and scales pointwise. This lets a spatial condition multiply a field directly, including inside a form:
 
