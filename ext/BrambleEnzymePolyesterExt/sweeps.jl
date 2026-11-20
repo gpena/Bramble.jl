@@ -63,8 +63,8 @@ end
     return view(idxs, (firstindex(idxs) - 1) .+ _band_range(Base.OneTo(length(idxs)), n, b))
 end
 @noinline function _rule_slab(idxs, n::Int, b::Int)
-    throw(ArgumentError("the Enzyme rules for `_batch_for!` take a range, a \
-        `CartesianIndices` or an index vector, not a $(typeof(idxs))"))
+    throw(ArgumentError("Enzyme under `CpuPolyester` differentiates a sweep over a range, \
+        a `CartesianIndices` or an index vector, not a $(typeof(idxs))"))
 end
 
 # The kernel itself, or the one `_sweep_for!` hands over behind a `Ref`.
@@ -92,7 +92,7 @@ end
     return s
 end
 
-# Clears every lane's `d_v` over `idxs`, one `@batch` launch for all lanes.
+# One lane's `d_v` cleared over the slab `r`.
 @inline function _clear_lane!(d_v, r)
     d_v === nothing && return nothing
     for i in r
@@ -106,6 +106,7 @@ end
     return nothing
 end
 
+# Clears every lane's `d_v` over `idxs`, one `@batch` launch for all lanes.
 function _zero_slabs!(d_vs::Tuple, idxs)
     n = Threads.nthreads()
     @batch for b in 1:n
@@ -460,6 +461,11 @@ end
 # of the closure finds every route, so whenever `v` carries a shadow its values are kept from
 # before the primal (one copy of `v` per call), and put back in `v` for the reverse. In that
 # case a closure that is not `Const` is copied whole before the primal too.
+#
+# A closure that reaches `v` through a global is not differentiated correctly: the slab's
+# own compilation does not see the shadow stored there (`@test_broken` in
+# test/ext/enzyme_polyester_ext.jl).
+#
 # The augmented primal of a hook: `prim()` runs it.
 function _hook_augmented(config::RevConfig, hook::Symbol, ops, prim::P, v, idxs,
         f) where {P}
@@ -496,10 +502,6 @@ end
 @inline _closure_shadow(f, w::Int) = _shadow(f, w)
 @inline _closure_shadow(f::MixedDuplicated, w::Int) = f.dval
 @inline _closure_shadow(f::BatchMixedDuplicated, w::Int) = f.dval[w]
-@noinline function _closure_shadow(f::Active, w::Int)
-    throw(ArgumentError("the Enzyme reverse rule for `_batch_for!` under CpuPolyester takes \
-        a closure that captures an array, not an active $(typeof(f.val)) of plain numbers"))
-end
 
 # The reverse rule of a hook: the lanes of `v`, the closure's shadow per lane (`f` as the
 # `Ref` the call site passes, for a hook that takes one) and the augmented primal's tape.
