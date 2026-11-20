@@ -13,7 +13,7 @@ import SparseArrays
 using SparseArrays: sparse, nnz, nonzeros, rowvals, SparseMatrixCSC
 using Random
 using Supposition
-using ..TestUtils: WITH_SLOW_TESTS, TEST_DIMS, @test_allocs, _grid_sample
+using ..TestUtils: WITH_SLOW_TESTS, TEST_DIMS, @test_allocs, _grid_sample, _graded_mesh
 using ..TestUtils: _nonuniform_points, _Const, _x1, _x1_lt_half, _sin_x1
 using Bramble:
                BilinearForm,
@@ -2257,6 +2257,20 @@ end
     interior = CartesianIndices((2:5,))
     @test Bramble._uniform_interior_width(grid_inds, interior, [5, 1, 2, 3, 4, 6, 7], 1)
     @test !Bramble._uniform_interior_width(grid_inds, interior, [6, 1, 2, 3, 4, 7, 8], 1)
+end
+
+# A sum of more than 32 terms, the `sum40` row of `benchmark/bool_audit.jl`: the summand
+# tuple `_summands` builds and the walks over it stay allocation-free past 32 entries
+# (gpena/Bramble.jl#992). The `Float64` coefficients keep the 40 terms apart.
+@testset "bilinear: 40-term sum, 0 B (#992)" begin
+    W = gridspace(_graded_mesh((9, 11)))
+    a = form(W, W, (u, v) -> foldl(+, ntuple(k -> (k + 0.5) * inner₊(∇ₕ(u), ∇ₕ(v)), Val(40))))
+    @test length(Bramble._summands(a.ast)) == 40
+    A = assemble(a)
+    # Σₖ (k + 0.5) over k = 1:40 is 840.
+    @test Matrix(A) ≈ 840 * Matrix(assemble(form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))))
+    warm_bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
+    @test warm_bytes(A, a) == 0
 end
 
 @testset "bilinear: matrix-free form call" begin

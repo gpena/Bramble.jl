@@ -511,6 +511,21 @@ _mf_mat(a, dl) = dl === nothing ? assemble(a) : assemble(a; dirichlet = dl)
         end
     end
 
+    # A sum of more than 32 terms, the `sum40` row of `benchmark/bool_audit.jl`: `_summands`
+    # and the walk over it stay allocation-free past 32 entries (gpena/Bramble.jl#992).
+    @testset "matrix-free: 40-term sum, 0 B (#992)" begin
+        W = gridspace(_graded_mesh((9, 11)))
+        a = form(W, W,
+            (u, v) -> foldl(+, ntuple(k -> (k + 0.5) * inner₊(∇ₕ(u), ∇ₕ(v)), Val(40))))
+        @test length(Bramble._summands(a.ast)) == 40
+        op = matrix_free_operator(a)
+        x = randn(size(op, 2))
+        y = randn(size(op, 1))
+        @test _mf_agree(op * x, assemble(a) * x)
+        mul!(y, op, x)
+        @test _mf_alloc3(y, op, x) == 0
+    end
+
     # The form call `a(u, v)` sums `vᴴ A u` through the same walk, storing neither `A` nor
     # `A * u`. A complex `v` checks the conjugate; the pairs walk their two terms in turn.
     @testset "form call contracts vᴴAu" begin

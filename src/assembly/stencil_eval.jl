@@ -1281,32 +1281,38 @@ _is_source_only(::LazyOp) = false
 # `@code_warntype` still sees ordinary calls to `f`, specialized on `F = typeof(f)` like any
 # other higher-order call in Julia.
 
-# The summands of a sum, left to right, flattened into one tuple.
-@inline _summands(op::OperatorAdd) = (_summands(op.left_op)..., _summands(op.right_op)...)
+# The summands of a sum, left to right, in one flat tuple. A splat `(left..., right...)` past
+# `_INLINED_ENTRIES` entries stops unrolling and allocates: 17504 B per warm `assemble!` of a
+# 40-term sum, whose tuple is built twice (`_check_block_meshes`, `_replay_summands!`).
+# `concatenate_stencils` builds the longer tuples out of line instead (gpena/Bramble.jl#992).
+@inline _summands(op::OperatorAdd) = concatenate_stencils(
+    _summands(op.left_op), _summands(op.right_op))
 @inline _summands(op) = (op,)
 
-# The three walks below visit `_summands(op)` with one `map` rather than recursing
-# left/right: recursing, every `OperatorAdd` node is its own method instance whose type
-# carries its whole subtree, so a left-deep `a + b + c + ...` (what `foldl(+, terms)` and a
+# The three walks below visit `_summands(op)` with `_each_entry`, not by recursing left and
+# right. Recursing, every `OperatorAdd` node is its own method instance whose type carries
+# its whole subtree, so a left-deep `a + b + c + ...` (what `foldl(+, terms)` and a
 # hand-written sum build) is inferred over types of total size quadratic in the term count.
-# 3D `innerₕ(εcₕ(u), εcₕ(v))` built with `foldl(+, ...)`, first assemble: 18.6–21.0 s
-# recursing, 16.6–17.6 s over `_summands`. Only leaves reach `f`; the walk order is unchanged.
+# For 3D `innerₕ(εcₕ(u), εcₕ(v))` built with `foldl(+, ...)` the first assemble took 18.6 to
+# 21.0 s recursing and 16.6 to 17.6 s over `_summands`. `map` over a tuple of more than 32
+# entries collects into a `Vector{Any}` (368 B on the 40-term sum); `_each_entry` unrolls at
+# any length. Only leaves reach `f`, in the same order.
 
 # `op` first, nothing to mutate: `_check_block_meshes`.
 @inline function _visit_operator_add1(f::F, op::OperatorAdd, rest...) where {F}
-    map(t -> f(t, rest...), _summands(op))
+    _each_entry(t -> f(t, rest...), _summands(op))
     return nothing
 end
 
 # `op` second, one mutated argument returned unchanged: `_route_terms!`,
 # `_route_terms_parallel!`.
 @inline function _visit_operator_add2(f::F, first_arg, op::OperatorAdd, rest...) where {F}
-    map(t -> f(first_arg, t, rest...), _summands(op))
+    _each_entry(t -> f(first_arg, t, rest...), _summands(op))
     return first_arg
 end
 
 # `op` third, two mutated arguments, nothing returned: `_pattern_blocks_jacobian!`.
 @inline function _visit_operator_add3(f::F, a1, a2, op::OperatorAdd, rest...) where {F}
-    map(t -> f(a1, a2, t, rest...), _summands(op))
+    _each_entry(t -> f(a1, a2, t, rest...), _summands(op))
     return nothing
 end
