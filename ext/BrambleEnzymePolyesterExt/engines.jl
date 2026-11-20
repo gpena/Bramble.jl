@@ -28,8 +28,10 @@
 #
 # The reverse pass replays each band's primal on `out` as it was before the call (the
 # `+=` engines would otherwise add twice, and the in-place averages read `out` itself), so
-# `out`'s values are kept from before the primal and put back for the reverse. An argument
-# that later code overwrites (`overwritten`) is copied whole before the primal.
+# `out`'s values are kept from before the primal and put back for the reverse. The kernel,
+# behind a fresh `Ref` whose `overwritten` entry stays false when data it captures is
+# written after the call, is copied whole before the primal, and so is any other argument
+# that later code overwrites (`overwritten`).
 #
 # `_run_bands!` hands the kernel behind a `Ref` (src/operators/vector_calculus.jl), for the
 # calling-convention reason `_sweep_for!` does; the task unwraps it with `_kernel`.
@@ -316,9 +318,10 @@ function _bands_reduce!(handed::HD, take::TK, d, cs, primal) where {HD, TK}
     return nothing
 end
 
-# `overwritten` counts `func` first: input `k` of `(f, rest...)` is entry `k + 3`, `f`
-# entry 2 (`nbands` and `out` sit between).
-@inline _bands_overwritten(ow, k::Int) = ow[k == 1 ? 2 : k + 3]
+# Whether input `k` of `(f, rest...)` is copied before the primal: the kernel `f` always,
+# unless `Const`; the others when later code overwrites them (`overwritten` counts `func`
+# first and `nbands` and `out` sit between, so input `k` is entry `k + 3`).
+@inline _bands_taped(ow, ins, k::Int) = k == 1 ? !(ins[1] isa Const) : ow[k + 3]
 
 # Two derivatives of one `Active` value added field by field: a number, or a tuple or an
 # immutable struct of them (the ghost operators' `_FacetFix` pairs), every field that is not
@@ -394,7 +397,7 @@ function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_RunBands},
     if !all(isnothing, _lanes(out, Val(EnzymeRules.width(config))))
         ow, ins = EnzymeRules.overwritten(config), (f, rest...)
         kept = ntuple(
-            k -> _bands_overwritten(ow, k) ? _graph_copy(ins[k].val, false) : nothing,
+            k -> _bands_taped(ow, ins, k) ? _graph_copy(ins[k].val, false) : nothing,
             Val(N + 1))
         tape = (kept, copy(out.val))
     end

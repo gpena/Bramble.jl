@@ -250,6 +250,46 @@ function _bands_errors(case, p)
         _relerr(dxs[2], cots[2] .* ref), _relerr(fwd, ref))
 end
 
+# Data a hook reads behind a fresh `Ref`, zeroed after the call, which `overwritten` misses.
+# Each read is nonlinear, so the reverse pass gives a wrong gradient unless the rule kept
+# the data from before the primal: a coefficient of an assembled form (`κ₁ * (κ₂ * U)`),
+# a closure's capture in a sweep, and a band kernel's capture.
+const _CS = 1 .+ rand(MersenneTwister(7), 37)
+function _overwritten_case(p, policy, ::Val{:assembly})
+    W = gridspace(EnzymePolicyCases._seeded_mesh((21, 17), policy))
+    n = ndofs(W)
+    κ₁ = element(W, eltype(p))
+    κ₂ = element(W, eltype(p))
+    parent(κ₁) .= 1e4 .* (1 .+ p[1] .* sin.(1:n) .^ 2)
+    parent(κ₂) .= 1 .+ p[2] .* cos.(1:n) .^ 2
+    A = assemble(form(W, W, (U, V) -> innerₕ(κ₁ * (κ₂ * U), V) + inner₊(∇ₕ(U), ∇ₕ(V))))
+    parent(κ₁) .= 0
+    return sum(abs2, A * cos.(1:n))
+end
+function _overwritten_case(p, policy, ::Val{:sweep})
+    a = copy(p)
+    v = zeros(eltype(p), 37)
+    _sweep_for!(policy, v, 1:37, i -> a[1]^2 * _CS[i] + a[2] * _CS[i]^2)
+    s = sum(abs2, v)
+    fill!(a, 0)
+    return s
+end
+function _overwritten_case(p, policy, ::Val{:bands})
+    a = copy(p)
+    x = [p[1] + 0.1k * p[2] for k in 1:37]
+    out = zeros(eltype(p), 37)
+    Bramble._run_bands!(policy, (out, x, n, b) -> begin
+            for i in Bramble._band_range(Base.OneTo(37), n, b)
+                out[i] = a[1]^2 * x[i] + a[2] * x[i]^2
+            end
+        end, out, x)
+    s = sum(abs2, out)
+    fill!(a, 0)
+    return s
+end
+const _OVERWRITTEN_HOOKS = ((Val(:assembly), "_batch_bilinear_band_replay!"),
+    (Val(:sweep), "_batch_for!"), (Val(:bands), "_batch_run_bands!"))
+
 # Workload 1: a functional of the nodal field of `κₕ` (its derivative, its norm and an
 # assembled load) on the seeded 41 x 41 mesh of `EnzymePolicyCases`, under `policy`.
 function _dense_functional(policy)
@@ -403,6 +443,17 @@ end
                 @test all(<=(TOL), _bands_errors((q, pol) -> _bands_case(q, pol, kind), p))
                 @test EnzymePolicyCases._rule_entries("_batch_run_bands!") > n0
             end
+        end
+
+        @testset "Data overwritten after the call" begin
+            p = [0.6, -0.9]
+            for (kind, hook) in _OVERWRITTEN_HOOKS
+                case = (q, pol) -> _overwritten_case(q, pol, kind)
+                err, ran = _reverse_error(case, p, hook)
+                @test ran
+                @test err <= TOL
+            end
+            GC.gc(true)
         end
 
         @testset "Closure reaching its output" begin

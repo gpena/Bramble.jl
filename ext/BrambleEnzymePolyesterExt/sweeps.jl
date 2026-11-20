@@ -453,19 +453,19 @@ end
 #   closure capturing a constant array otherwise throws `EnzymeRuntimeActivityError`.
 #
 # The reverse pass evaluates the closure again, so it must see the closure's captured data as
-# it was before this call. Two things can change it. Later code can (`overwritten`, which
-# counts `func` first, so `f` is entry 4). So can this very call, when the closure reads `v`
+# it was before this call. Two things can change it. Later code can, and `overwritten` does
+# not say so, since the closure arrives behind a fresh `Ref` whose entry stays false when the
+# data it captures is written after the call. So can this very call, when the closure reads `v`
 # (`i -> v[i]^2`) by any route: a capture, a view, a `Dict`, a `Memory` or a global. No walk
 # of the closure finds every route, so whenever `v` carries a shadow its values are kept from
-# before the primal (one copy of `v` per call), and put back in `v` for the reverse. A closure
-# whose data may change later is copied whole, before the primal too.
-# The augmented primal of a hook: `prim()` runs it, `f_overwritten` says whether the closure
-# is overwritten later (its position in the call's `overwritten` tuple).
-function _hook_augmented(config::RevConfig, hook::Symbol, ops, prim::P, f_overwritten::Bool,
-        v, idxs, f) where {P}
+# before the primal (one copy of `v` per call), and put back in `v` for the reverse. In that
+# case a closure that is not `Const` is copied whole before the primal too.
+# The augmented primal of a hook: `prim()` runs it.
+function _hook_augmented(config::RevConfig, hook::Symbol, ops, prim::P, v, idxs,
+        f) where {P}
     _entered!(hook)
     shadowed = !all(isnothing, ops.lanes(v, Val(EnzymeRules.width(config))))
-    f_tape = !(f isa Const) && f_overwritten ? _graph_copy(f.val, false) : nothing
+    f_tape = !(f isa Const) && shadowed ? _graph_copy(f.val, false) : nothing
     v_tape = shadowed ? _snapshot(v.val) : nothing
     prim()
     return AugmentedReturn(nothing, nothing, (f_tape, v_tape))
@@ -545,7 +545,7 @@ function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_BatchFor},
         ::Type{RT}, v::Annotation{<:AbstractArray}, idxs::Annotation,
         f::Annotation) where {RT}
     return _hook_augmented(config, :_batch_for!, _FOR_OPS,
-        () -> func.val(v.val, idxs.val, f.val), EnzymeRules.overwritten(config)[4], v, idxs, f)
+        () -> func.val(v.val, idxs.val, f.val), v, idxs, f)
 end
 
 function EnzymeRules.reverse(config::RevConfig, ::Const{_BatchFor}, ::Type{RT}, tape,
@@ -566,7 +566,7 @@ function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_AxisFor},
         ::Type{RT}, v::Annotation{<:AbstractArray}, idxs::Annotation,
         f::Annotation) where {RT}
     return _hook_augmented(config, :_batch_axis_for!, _FOR_OPS,
-        () -> func.val(v.val, idxs.val, f.val), EnzymeRules.overwritten(config)[4], v, idxs, f)
+        () -> func.val(v.val, idxs.val, f.val), v, idxs, f)
 end
 
 function EnzymeRules.reverse(config::RevConfig, ::Const{_AxisFor}, ::Type{RT}, tape,
@@ -586,8 +586,7 @@ end
 function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_ScatterFor},
         ::Type{RT}, mats::Annotation{<:Tuple}, idxs::Annotation, g::Annotation) where {RT}
     return _hook_augmented(config, :_batch_scatter_for!, _SCATTER_OPS,
-        () -> func.val(mats.val, idxs.val, g.val), EnzymeRules.overwritten(config)[4], mats,
-        idxs, g)
+        () -> func.val(mats.val, idxs.val, g.val), mats, idxs, g)
 end
 
 function EnzymeRules.reverse(config::RevConfig, ::Const{_ScatterFor}, ::Type{RT}, tape,
@@ -609,7 +608,7 @@ end
 function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_BroadcastFor},
         ::Type{RT}, v::Annotation{<:AbstractVector}, bc::Annotation, ax::Annotation) where {RT}
     return _hook_augmented(config, :_batch_broadcast!, _FOR_OPS,
-        () -> func.val(v.val, bc.val, ax.val), EnzymeRules.overwritten(config)[3], v, ax, bc)
+        () -> func.val(v.val, bc.val, ax.val), v, ax, bc)
 end
 
 function EnzymeRules.reverse(config::RevConfig, ::Const{_BroadcastFor}, ::Type{RT}, tape,
