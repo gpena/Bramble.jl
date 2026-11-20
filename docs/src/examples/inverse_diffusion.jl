@@ -93,6 +93,24 @@ end
 fd_check = (loss(0.5 + 1e-6) - loss(0.5 - 1e-6)) / 2e-6                               #src
 ad_check = DI.gradient(loss, backend, 0.5)                                            #src
 @test ad_check ≈ fd_check rtol = 1e-6                                                 #src
+using Random                                                                          #src
+Random.seed!(20260903)                                                                #src
+Ωₙᵤ = mesh(domain(interval(0.0, 1.0)), 41, false)                                     #src
+Wₙᵤ = gridspace(Ωₙᵤ)                                                                  #src
+lₙᵤ = form(Wₙᵤ, v -> innerₕ(Rₕ(Wₙᵤ, f), v))                                           #src
+pts_nu = points(Ωₙᵤ)                                                                  #src
+u_obs_nu = [uexact(pts_nu[i], κ_true) + noise[k] for (k, i) in enumerate(obs_idx)]    #src
+function forward_nu(κ::Real)                                                          #src
+    aκ = form(Wₙᵤ, Wₙᵤ, (u, v) -> κ * inner₊(∇ₕ(u), ∇ₕ(v)))                          #src
+    A, F = assemble(aκ, lₙᵤ; dirichlet = :boundary => x -> 0.0)                       #src
+    return pde_solve(A, F)                                                            #src
+end                                                                                   #src
+loss_nu(κ::Real) = sum(abs2, forward_nu(κ)[obs_idx[k]] - u_obs_nu[k]                  #src
+                       for k in eachindex(obs_idx))                                   #src
+fd_check_nu = (loss_nu(0.5 + 1e-6) - loss_nu(0.5 - 1e-6)) / 2e-6                      #src
+ad_check_nu = DI.gradient(loss_nu, backend, 0.5)                                      #src
+@test !iszero(fd_check_nu)                                                            #src
+@test ad_check_nu ≈ fd_check_nu rtol = 1e-6                                           #src
 
 # ## The recovered solution
 #
