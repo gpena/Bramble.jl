@@ -64,10 +64,10 @@ BrambleVTKSciMLExt = ["WriteVTK", "SciMLBase"]
 [compat]
 ADTypes = "1"
 AlgebraicMultigrid = "1, 2"
-AppleAccelerate = "0.7, 1"
+AppleAccelerate = "0.7"
 Aqua = "0.8"
 ChainRulesCore = "1"
-Enzyme = "0.13"
+Enzyme = "0.13.220"
 ForwardDiff = "1"
 GPUArrays = "11, 12"
 GPUArraysCore = "0.2"
