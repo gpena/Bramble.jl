@@ -1169,16 +1169,21 @@ end
 @testset "Quadrature fallback" begin
     import Bramble: _gauss_rule
 
-    # An isbits float that QuadGK cannot build a rule for must fall back to the
-    # run-time path at generation time rather than breaking precompilation.
-    # `code_lowered` runs the generator, so it throws if the generator does; the body it
-    # returns must call the run-time rule on `OddFloat`, which then fails at the call.
+    # An isbits float that QuadGK cannot build a rule for must fall back to the run-time
+    # path at generation time rather than break precompilation. Julia 1.14 no longer
+    # expands a generator from `code_lowered`, so the call itself is the evidence: it
+    # fails on `OddFloat`, and the failure's stack trace holds a `_gauss_rule_runtime`
+    # frame only if the generator's fallback returned a call to it.
     primitive type OddFloat <: AbstractFloat 64 end
     @test isbitstype(OddFloat)
-    body = string(only(code_lowered(_gauss_rule, Tuple{Val{3}, Type{OddFloat}})))
-    @test occursin("Bramble._gauss_rule_runtime", body)
-    @test occursin("OddFloat", body)
-    @test_throws MethodError _gauss_rule(Val(3), OddFloat)
+    err, trace = try
+        _gauss_rule(Val(3), OddFloat)
+        nothing, Base.StackTraces.StackFrame[]
+    catch e
+        e, stacktrace(catch_backtrace())
+    end
+    @test err isa MethodError
+    @test any(frame -> frame.func === :_gauss_rule_runtime, trace)
 end
 
 @testset "Tuple arithmetic" begin
