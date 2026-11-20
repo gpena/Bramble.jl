@@ -20,10 +20,13 @@ Take the unit interval and ask for eleven points. [`mesh`](@ref) takes a domain 
 using Bramble
 import Bramble: cell_measure, change_points!, half_point, half_points, half_spacing,
     index_in_marker, indices, interior_indices, is_boundary_index, is_uniform, point,
-    spacings
+    forward_spacing, spacing, spacings
 
 Ω = domain(interval(0.0, 1.0))
 Ωₕ = mesh(Ω, 11)          # 11 uniformly spaced points
+
+@assert npoints(Ωₕ) == 11
+@assert points(Ωₕ)[[1, 2, 6, 11]] ≈ [0.0, 0.1, 0.5, 1.0]
 
 points(Ωₕ)
 ```
@@ -31,7 +34,10 @@ points(Ωₕ)
 The points are equally spaced, ``h = 0.1``, and the largest spacing confirms it:
 
 ```@example mesh
-hₘₐₓ(Ωₕ), is_uniform(Ωₕ)
+@assert hₘₐₓ(Ωₕ) ≈ 0.1
+@assert is_uniform(Ωₕ)
+
+hₘₐₓ(Ωₕ)
 ```
 
 A geometric set can be passed directly when no custom labels are needed. `:boundary` and `:interior` are provisioned either way:
@@ -39,7 +45,10 @@ A geometric set can be passed directly when no custom labels are needed. `:bound
 ```@example mesh
 Ωₕ_direct = mesh(interval(0.0, 1.0) × interval(0.0, 2.0), 20)      # isotropic: 20 × 20
 
-:boundary in keys(markers(Ωₕ_direct)), :interior in keys(markers(Ωₕ_direct))
+@assert npoints(Ωₕ_direct, Tuple) == (20, 20)
+@assert :boundary in keys(markers(Ωₕ_direct)) && :interior in keys(markers(Ωₕ_direct))
+
+sort(collect(keys(markers(Ωₕ_direct))))
 ```
 
 The mesh carries more than coordinates. Spacings, half points and cell measures, which the difference operators read, are computed from the points and cached.
@@ -56,7 +65,12 @@ Boundary layers and corners need points where the solution changes fast. The thi
 ```@example mesh
 Ωₕ_rand = mesh(Ω, 11, false)
 
-is_uniform(Ωₕ), is_uniform(Ωₕ_rand)
+@assert !is_uniform(Ωₕ_rand)
+@assert sum(spacings(Ωₕ_rand)[2:end]) ≈ 1.0                # the ten spacings fill the interval
+@assert all(spacings(Ωₕ_rand) .<= hₘₐₓ(Ωₕ_rand))
+@assert hₘₐₓ(Ωₕ_rand) > 0.1 + 1e-8                         # a uniform mesh, at 0.1, would fail
+
+hₘₐₓ(Ωₕ_rand)
 ```
 
 To place the points yourself, build any mesh and replace its coordinates. [`change_points!`](@ref) keeps the point count, so it can grade a mesh toward the left end:
@@ -65,10 +79,13 @@ To place the points yourself, build any mesh and replace its coordinates. [`chan
 Ωₕ_graded = mesh(Ω, 11)
 change_points!(Ωₕ_graded, collect(range(0.0, 1.0, length = npoints(Ωₕ_graded)) .^ 2))
 
+@assert points(Ωₕ_graded)[[2, 3, 10, 11]] ≈ [0.01, 0.04, 0.81, 1.0]
+@assert hₘₐₓ(Ωₕ_graded) ≈ 0.19
+
 points(Ωₕ_graded), hₘₐₓ(Ωₕ_graded)
 ```
 
-Squaring the uniform points packs them near ``x = 0`` and stretches the cells near ``x = 1``, so `hₘₐₓ` is no longer ``0.1``. `Bramble.set_points!` is the variant that also accepts a different point count: it rebuilds the `:boundary` and `:interior` markers for the new grid, and refuses to change the point count of a mesh carrying custom labels. It also refuses any move of a mesh carrying a label defined by a predicate of position, and of a submesh of one, since those sets would stay as the old points gave them; call `change_points!(Ωₕ, markers(Ω), pts)` on the whole mesh instead.
+Squaring the uniform points packs them near ``x = 0`` and stretches the cells near ``x = 1``, so `hₘₐₓ` is no longer ``0.1``. The last spacing is ``1 - 0.9^2 = 0.19``. `Bramble.set_points!` is the variant that also accepts a different point count: it rebuilds the `:boundary` and `:interior` markers for the new grid, and refuses to change the point count of a mesh carrying custom labels. It also refuses any move of a mesh carrying a label defined by a predicate of position, and of a submesh of one, since those sets would stay as the old points gave them; call `change_points!(Ωₕ, markers(Ω), pts)` on the whole mesh instead.
 
 A grid space built before `set_points!`, `change_points!` or `iterative_refinement!` is stale: it keeps the weights of the old points, and its inner products and norms throw until `gridspace(Ωₕ)` is called again.
 
@@ -84,6 +101,9 @@ One small non-uniform mesh exposes every convention at once. Four points at ``0,
 ```@example mesh
 Ωₕ_fig = mesh(domain(interval(0.0, 1.0)), 4, true)
 Bramble.set_points!(Ωₕ_fig, [0.0, 0.2, 0.6, 1.0])
+
+@assert points(Ωₕ_fig) ≈ [0.0, 0.2, 0.6, 1.0]
+@assert [spacing(Ωₕ_fig, 2), forward_spacing(Ωₕ_fig, 2)] ≈ [0.2, 0.4]   # backward and forward differ
 
 points(Ωₕ_fig)
 ```
@@ -162,10 +182,14 @@ Conventions:
 - **`spacing` looks backward, `forward_spacing` forward**: `spacing(Ωₕ, i) = xᵢ - xᵢ₋₁` and `forward_spacing(Ωₕ, i) = xᵢ₊₁ - xᵢ`, each falling back to its neighbour at the end where the stencil runs out.
 
 ```@example mesh
+@assert half_points(Ωₕ_fig) ≈ [0.0, 0.1, 0.4, 0.8, 1.0]
+@assert [cell_measure(Ωₕ_fig, i) for i in 1:4] ≈ [0.1, 0.3, 0.4, 0.2]
+@assert sum(cell_measure(Ωₕ_fig, i) for i in 1:4) ≈ 1.0
+
 half_points(Ωₕ_fig), [cell_measure(Ωₕ_fig, i) for i in 1:4]
 ```
 
-The four cells sum to the domain length.
+The half points are ``0, 0.1, 0.4, 0.8, 1``, so the cells are ``0.1, 0.3, 0.4, 0.2`` wide. The four cells sum to the domain length.
 
 !!! tip "Try this"
     Move the third point with `Bramble.set_points!(Ωₕ_fig, [0.0, 0.2, 0.8, 1.0])` and recompute the cell measures. The cells around `x₂` and `x₄` become 0.4 and 0.1, the cell around `x₃` stays 0.4 because it spans `(x₄ - x₂)/2`, and the sum is still 1.
@@ -179,12 +203,19 @@ Above one dimension a mesh is a tensor product of 1D submeshes, stored per axis,
 ```@example mesh
 Ωₕ_2d = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (10, 20), (true, true))
 
+@assert npoints(Ωₕ_2d, Tuple) == (10, 20)
+@assert size(Ωₕ_2d) == (10, 20)
+
 npoints(Ωₕ_2d, Tuple), size(Ωₕ_2d)
 ```
 
 `Ωₕ_2d(k)` is the submesh along axis `k`, and everything said above about a 1D mesh applies to it:
 
 ```@example mesh
+@assert npoints(Ωₕ_2d(1)) == 10 && npoints(Ωₕ_2d(2)) == 20
+@assert points(Ωₕ_2d(2))[end] ≈ 2.0           # the second axis spans the interval of length 2
+@assert hₘₐₓ(Ωₕ_2d(2)) ≈ 2 / 19
+
 Ωₕ_2d(1)
 ```
 
@@ -253,13 +284,23 @@ The cell around `(x₃, y₂)` is highlighted. Its measure is the product of the
 Ωₕ_prod = mesh(Ω_prod, (4, 3), (true, true))
 change_points!(Ωₕ_prod, markers(Ω_prod), ([0.0, 0.2, 0.6, 1.0], [0.0, 0.5, 1.0]))
 
+@assert half_spacing(Ωₕ_prod(1), 3) ≈ 0.4
+@assert half_spacing(Ωₕ_prod(2), 2) ≈ 0.5
+@assert cell_measure(Ωₕ_prod, CartesianIndex(3, 2)) ≈ 0.2
+@assert cell_measure(Ωₕ_prod, CartesianIndex(1, 1)) ≈ 0.025   # a corner cell, 0.1 * 0.25
+
 cell_measure(Ωₕ_prod, CartesianIndex(3, 2)),
 half_spacing(Ωₕ_prod(1), 3) * half_spacing(Ωₕ_prod(2), 2)
 ```
 
+The widths are ``0.4`` and ``0.5``, so the measure is ``0.2``.
+
 The cells tile the domain exactly: the twelve measures sum to the area.
 
 ```@example mesh
+@assert length(indices(Ωₕ_prod)) == 12
+@assert sum(cell_measure(Ωₕ_prod, I) for I in indices(Ωₕ_prod)) ≈ 1.0
+
 sum(cell_measure(Ωₕ_prod, I) for I in indices(Ωₕ_prod))
 ```
 
@@ -275,13 +316,20 @@ Above 1D, `pts` is a tuple of per-axis coordinate vectors. In every dimension, `
 Indices are Julia's own `CartesianIndices`:
 
 ```@example mesh
+@assert size(indices(Ωₕ_prod)) == (4, 3)
+@assert vec(collect(interior_indices(Ωₕ_prod))) == [CartesianIndex(2, 2), CartesianIndex(3, 2)]
+
 indices(Ωₕ_prod), interior_indices(Ωₕ_prod)
 ```
 
+The ``4 \times 3`` grid has twelve indices, and only the two in the middle row, ``(2, 2)`` and ``(3, 2)``, are interior.
+
 ```@example mesh
-is_boundary_index(Ωₕ_prod, CartesianIndex(1, 2)),
-is_boundary_index(Ωₕ_prod, CartesianIndex(2, 2))
+@assert is_boundary_index(Ωₕ_prod, CartesianIndex(1, 2))
+@assert !is_boundary_index(Ωₕ_prod, CartesianIndex(2, 2))
 ```
+
+The first index lies on the left edge, so it is a boundary index. The second is interior.
 
 Building a mesh over a labelled domain projects each marker onto the grid points as a `BitVector`, so membership is one lookup. Treat them as read-only: assembly does not see an edit made to one in place. Here the domain has an inlet, an outlet, walls, and a disc-shaped obstacle given by a predicate:
 
@@ -295,8 +343,14 @@ I = interval(0.0, 1.0)
 
 Ωₕ_marked = mesh(Ω_marked, (20, 20))
 
+@assert sum(index_in_marker(Ωₕ_marked, :left_inlet)) == 20
+@assert sum(index_in_marker(Ωₕ_marked, :walls)) == 40
+@assert sum(index_in_marker(Ωₕ_marked, :obstacle)) == 24
+
 sum(index_in_marker(Ωₕ_marked, :walls)), sum(index_in_marker(Ωₕ_marked, :obstacle))
 ```
+
+The inlet is one column of 20 points and the two walls are two rows, 40 points. The obstacle takes the grid points of spacing ``1/19`` inside the disc: offsets ``(\pm 0.5, \pm 0.5)``, ``(\pm 0.5, \pm 1.5)``, ``(\pm 1.5, \pm 0.5)``, ``(\pm 1.5, \pm 1.5)``, ``(\pm 0.5, \pm 2.5)`` and ``(\pm 2.5, \pm 0.5)`` in units of ``1/19`` from the centre, which is ``4 + 8 + 4 + 8 = 24``.
 
 !!! tip "Try this"
     Change the radius `0.15` to `0.3` and rebuild. The obstacle count grows roughly fourfold, with the disc area.
@@ -391,5 +445,10 @@ A mesh padded with one point beyond each boundary facet, for Neumann and Robin c
 Ωₕ_ref = mesh(Ω_marked, (20, 20))
 iterative_refinement!(Ωₕ_ref, markers(Ω_marked))
 
+@assert npoints(Ωₕ_ref, Tuple) == (39, 39)             # 2 * 20 - 1
+@assert sum(index_in_marker(Ωₕ_ref, :obstacle)) == 101
+
 npoints(Ωₕ_ref, Tuple), sum(index_in_marker(Ωₕ_ref, :obstacle))
 ```
+
+The refined spacing is ``1/38``, so the disc radius is ``5.7`` spacings. The grid points inside are the integer offsets ``(a, b)`` with ``a^2 + b^2 \le 32``, which number 101.
