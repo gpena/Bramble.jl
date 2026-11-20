@@ -151,6 +151,14 @@ const CASES = TTFXCase[
         "Bramble.sparspak_solve(A, F)"
     ),
     TTFXCase(
+        "accelerate_solve(A, F)",
+        :test,
+        ["AppleAccelerate"],
+        0.0,
+        "A = assemble(a_spd)\nF = assemble(l)",
+        "Bramble.accelerate_solve(A, F)"
+    ),
+    TTFXCase(
         "fdm_solve(a, F)",
         :test,
         ["Kronecker"],
