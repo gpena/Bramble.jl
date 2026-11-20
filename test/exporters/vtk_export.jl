@@ -134,13 +134,21 @@ using ..TestUtils: WITH_3D_TESTS
             @test length(ok) == 1
             @test length(export_vtk(p("ok1"), Ω1, "u" => collect(1.0:9.0))) == 1
 
+            # a flat vector of `npoints` values, as `u = A \ F` gives, is the reshaped array
+            flat = collect(1.0:12.0)
+            fflat = only(export_vtk(p("flat"), Ωc, "u" => flat))
+            fshaped = only(export_vtk(p("shaped"), Ωc, "u" => reshape(flat, 3, 4)))
+            @test read(fflat) == read(fshaped)
+            @test Bramble._vtk_data("u", Ωc, flat) == reshape(flat, 3, 4)
+            @test Bramble._vtk_data("u", Ωc, view(flat, 1:12)) == reshape(flat, 3, 4)
+
             @test_throws ArgumentError("\"u\" has size (5, 6), but the mesh has (3, 4) points") export_vtk(
                 p("a"), Ωc, "u" => uf
             )
-            @test_throws ArgumentError("\"u\" has size (30,), but the mesh has (3, 4) points") export_vtk(
+            @test_throws ArgumentError("\"u\" has length 30, but the mesh has 12 points") export_vtk(
                 p("b"), Ωc, "u" => parent(uf)
             )
-            @test_throws ArgumentError("\"u\" has size (6,), but the mesh has (3, 4) points") export_vtk(
+            @test_throws ArgumentError("\"u\" has length 6, but the mesh has 12 points") export_vtk(
                 p("c"), Ωc, "u" => ones(6)
             )
             @test_throws ArgumentError("\"u\" has size (4, 3), but the mesh has (3, 4) points") export_vtk(
@@ -149,7 +157,7 @@ using ..TestUtils: WITH_3D_TESTS
             @test_throws ArgumentError("\"v\" has size (5, 6), but the mesh has (3, 4) points") export_vtk(
                 p("e"), Ωc, "v" => vf
             )
-            @test_throws ArgumentError("\"u\" has size (8,), but the mesh has (9,) points") export_vtk(
+            @test_throws ArgumentError("\"u\" has length 8, but the mesh has 9 points") export_vtk(
                 p("f"), Ω1, "u" => ones(8)
             )
             @test_throws ArgumentError export_vtk(p("g"), Ωc, "ok" => uc, "u" => uf)
