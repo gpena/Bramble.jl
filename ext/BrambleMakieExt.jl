@@ -80,13 +80,18 @@ function Makie.expand_dimensions(
     return Bramble._throw_plot_dim(D)
 end
 
-# A ghost space: the physical mesh's points and the first `np` unknowns, which are the
-# physical nodes' values (the ghosts follow), never the padded mesh with its ghost values.
-# A space whose unknowns are no grid function (a node fixed by `dirichlet`, the polygon
-# trial space) is not checked: its first `np` unknowns are still read as the grid values.
+# A ghost space: the physical mesh's points and the nodal values, never the padded mesh with
+# its ghost values. The values are read as the norms read them: the polygon trial space
+# through `_polygon_element`, any other space through `_physical_values`, which refuses
+# unknowns that are no grid function (data, a node fixed by `u => g`).
 @inline function _ghost_plot_data(uₕ::VectorElement{<:GhostGridSpace})
     Ωₕ = Bramble.physical_mesh(mesh(uₕ))
-    return Ωₕ, view(parent(uₕ), 1:Bramble.npoints(Ωₕ))
+    v = if Bramble._is_polygon_trial(uₕ.space)
+        parent(Bramble._polygon_element(uₕ))
+    else
+        Bramble._physical_values(:plot, uₕ)
+    end
+    return Ωₕ, v
 end
 
 function Makie.convert_arguments(

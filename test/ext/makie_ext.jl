@@ -97,6 +97,39 @@ const DIM3_MSG = "plotting a 3D grid function directly is not implemented — on
         @test_throws ArgumentError(DIM3_MSG) Makie.expand_dimensions(Makie.PointBased(), u3)
     end
 
+    @testset "ghost space: polygon, fixed, data" begin
+        V = [(0.0, 2.0), (2.0, 0.0), (4.0, 0.0), (6.0, 2.0), (6.0, 3.0), (4.0, 3.0),
+            (4.0, 5.0), (2.0, 5.0), (0.0, 3.0)]
+        Ωp = Bramble.mesh(
+            domain(interval(0.0, 6.0) × interval(0.0, 5.0), :P => polygon(V)),
+            (10, 9), (false, false)
+        )
+        U, _ = Bramble.polygon_spaces(Ωp, :P, x -> 1.0)
+        up = element(U, 1.0)
+        xs, ys, z = Makie.convert_arguments(Makie.CellGrid(), up)
+        np = Bramble.npoints(Ωp, Tuple)
+        @test size(z) == np
+        @test vec(z) == parent(Bramble._polygon_element(up))
+        @test count(!iszero, z) == length(parent(up))
+
+        Ω2 = Bramble.mesh(
+            domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (7, 6), (false, false)
+        )
+        Cf = constrained(
+            gridspace(Ω2; ghosts = (:xmin,)),
+            u -> (:xmin => ∂ₙ(u) => 0.0, :xmax => u => 0.0)
+        )
+        uc = element(Cf)
+        uc .= 1.0
+        @test_throws ArgumentError Makie.convert_arguments(Makie.CellGrid(), uc)
+        Cd = constrained(
+            gridspace(Ω2; ghosts = (:xmin,)), u -> (:xmin => ∂ₙ(u) => 1.0,)
+        )
+        ud = element(Cd)
+        ud .= 1.0
+        @test_throws ArgumentError Makie.convert_arguments(Makie.CellGrid(), ud)
+    end
+
     @testset "composite: refused" begin
         Ωₕ = Bramble.mesh(domain(interval(0.0, 1.0)), 5, true)
         Vₕ = gridspace(Ωₕ, Val(2))
