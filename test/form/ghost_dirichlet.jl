@@ -308,6 +308,10 @@ end
     @test eltype(Fa) == typeof(p)
     @test relerr(value.(Fa), 2 .* (Fₕ .- F₀) .+ F₀) <= tol
     @test relerr(first.(partials.(Fa)), Fₕ - F₀) <= tol
+    # a datum that is not a `Number` is refused by name, on the load and on the pair
+    @test_throws ArgumentError assemble(l; dirichlet = :xmin => x -> "g")
+    @test refuses(() -> assemble(l; dirichlet = :xmin => x -> "g"), "a Number is required")
+    @test refuses(() -> F(x -> "g"), "a Number is required")
 end
 
 end # module FormGhostDirichletTests

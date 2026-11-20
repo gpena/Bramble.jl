@@ -968,6 +968,7 @@ function assemble(l::_AnyGhostLinearForm; dirichlet = nothing,
     labels, bcs = _normalize_dirichlet(dirichlet)
     _check_rows(l, labels, dirichlet_components)
     T = _ghost_dirichlet_eltype(bcs, l, dirichlet_components, _load_eltype(l))
+    _check_ghost_eltype(T)
     b = similar(l.F_pad, T, ndofs(l.test_space))
     return assemble!(b, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
 end
@@ -1038,6 +1039,7 @@ function assemble(a::_AnyGhostBilinearForm, l::_AnyGhostLinearForm; dirichlet = 
     _check_pair(a, l, labels, symmetrize, "assemble(a, l)", dirichlet_components)
     A = _reduced_matrix(a.A_pad, a)
     T = _ghost_dirichlet_eltype(bcs, l, dirichlet_components, _pair_load_eltype(a, l, A))
+    _check_ghost_eltype(T)
     F = similar(l.F_pad, T, ndofs(l.test_space))
     return _assemble_pair!(A, F, a, l, labels, bcs, dirichlet_components, symmetrize)
 end
