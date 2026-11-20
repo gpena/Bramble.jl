@@ -74,7 +74,8 @@ function EnzymeRules.forward(
     RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
     W = EnzymeRules.width(config)
     shadows = ntuple(Val(W)) do i
-        rhs = _rank_one_rhs(K.val, _lane(K, i), _lane(F, i), u)
+        K̇ = _rank_one_tangent(K.val, _lane(K, i))
+        rhs = _rank_one_rhs(K.val, K̇, _lane(F, i), u)
         return pde_solve(K.val, rhs; kwargs...)
     end
     needs_primal = EnzymeRules.needs_primal(config)

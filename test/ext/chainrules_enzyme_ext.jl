@@ -1229,6 +1229,16 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                     Enzyme.BatchDuplicated(K, (shadow(ṗ1), shadow(ṗ2))),
                     Enzyme.BatchDuplicated(F, (ṗ1[iF], ṗ2[iF]))))
                 @test collect(values(bat)) ≈ [J * ṗ1, J * ṗ2] rtol=1e-8
+
+                # `K` as its own shadow is a constant (runtime activity), alone and in a batch
+                # whose other lane carries a real tangent of `K`.
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.Duplicated,
+                    Enzyme.Duplicated(K, K), Enzyme.Duplicated(F, ṗ1[iF])))
+                @test u̇ ≈ J[:, iF] * ṗ1[iF] rtol=1e-8
+                bat = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.BatchDuplicated,
+                    Enzyme.BatchDuplicated(K, (shadow(ṗ1), K)),
+                    Enzyme.BatchDuplicated(F, (ṗ1[iF], ṗ2[iF]))))
+                @test collect(values(bat)) ≈ [J * ṗ1, J[:, iF] * ṗ2[iF]] rtol=1e-8
             end
 
             # A `K.A` that is not a `SparseMatrixCSC` is refused by name, in both modes, and
