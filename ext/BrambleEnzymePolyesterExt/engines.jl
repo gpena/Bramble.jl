@@ -29,10 +29,11 @@
 # The reverse pass replays each band's primal on `out` as it was before the call (the
 # `+=` engines would otherwise add twice, and the in-place averages read `out` itself), so
 # `out`'s values are kept from before the primal and put back for the reverse. The kernel
-# and every other argument are copied whole before the primal, in one walk so that arrays
-# they share stay shared, whenever `out` carries a shadow. Their `overwritten` entries do not
-# say whether later code writes the data they hold: the kernel arrives behind a fresh `Ref`,
-# and a closure or a `StarSpacings` passed as an argument reaches its arrays by reference.
+# and every other argument, `Const` ones too since the reverse reads them, are copied whole
+# before the primal, in one walk so that arrays they share stay shared, whenever `out`
+# carries a shadow. Their `overwritten` entries do not say whether later code writes the
+# data they hold: the kernel arrives behind a fresh `Ref`, and a closure or a `StarSpacings`
+# passed as an argument reaches its arrays by reference.
 #
 # `_run_bands!` hands the kernel behind a `Ref` (src/operators/vector_calculus.jl), for the
 # calling-convention reason `_sweep_for!` does; the task unwraps it with `_kernel`.
