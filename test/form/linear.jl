@@ -1288,6 +1288,28 @@ end
     @test br == bref
     @test assemble(lr; dirichlet = :right => x -> (x[1] == 1.0 ? 1.0 : error("off :right"))) isa
           Vector{Float64}
+
+    # a value that is `0.0` at the first point of `:bottom`, `(0, 0)`, and a `Dual` or a
+    # complex number further along widens the vector all the same: the probe reads the
+    # inferred type of the datum, not only its value at that point
+    hb = x -> x[1] > 0.5 ? x[1] : 0.0
+    s(θ) = assemble(l; dirichlet = :bottom => x -> x[1] > 0.5 ? θ * x[1] : 0.0)
+    ds = DI.derivative(s, AD_BACKEND, θ0)
+    @test ds≈(s(θ0 + h) - s(θ0 - h)) / 2h rtol=1e-6
+    @test ds == assemble(l; dirichlet = :bottom => hb) - assemble(l; dirichlet = :bottom => x -> 0.0)
+    @test any(!iszero, ds)
+    bs = assemble(l; dirichlet = :bottom => x -> x[1] > 0.5 ? x[1] * im : 0.0)
+    @test eltype(bs) == ComplexF64
+    @test imag(bs) == assemble(l; dirichlet = :bottom => hb) - assemble(l; dirichlet = :bottom => x -> 0.0)
+    @test real(bs) == assemble(l; dirichlet = :bottom => x -> 0.0)
+
+    # a datum whose type does not infer (it reads a `Ref{Any}`) is evaluated at every point
+    # of its label instead, so its `Dual` past the first point still widens the vector
+    box = Ref{Any}(ForwardDiff.Dual{Nothing}(θ0, 1.0))
+    ba = assemble(l; dirichlet = :bottom => x -> x[1] > 0.5 ? box[] * x[1] : 0.0)
+    @test eltype(ba) == ForwardDiff.Dual{Nothing, Float64, 1}
+    @test ForwardDiff.value.(ba) == s(θ0)
+    @test first.(ForwardDiff.partials.(ba)) == ds
 end
 
 @testset "Allocation contract" begin

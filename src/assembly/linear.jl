@@ -830,9 +830,9 @@ end
 
 # A Dirichlet condition can return a richer type than the form does: a boundary value built
 # from a `ForwardDiff.Dual` or a complex number, say, while every weight in the form stays
-# `Float64`. Each condition is evaluated once, at the first point of its label on each leaf it
-# binds (every leaf, or those `dirichlet_components` names), and the vector's element type is
-# promoted against it, so `dirichlet_bc!` writes it without a failed `setindex!`. An
+# `Float64`. Each condition is probed on its label on each leaf it binds (every leaf, or
+# those `dirichlet_components` names), and the vector's element type is promoted against it
+# (`_datum_eltype`), so `dirichlet_bc!` writes it without a failed `setindex!`. An
 # `assemble!` into the caller's vector never comes here: the caller chose its element type.
 @inline _dirichlet_probed_eltype(::Nothing, space, components, T) = T
 
@@ -857,17 +857,31 @@ end
 
 @inline _conditions_probed_eltype(::Tuple{}, Ωₕ, T) = T
 
-# A condition may be defined on its own region only, so it is evaluated at the first point
-# its label marks on the leaf (the set `dirichlet_bc!` writes), never elsewhere. A label
-# marking no point there writes nothing and widens nothing.
+# A condition may be defined on its own region only, so it is evaluated at the points its
+# label marks on the leaf (the set `dirichlet_bc!` writes), never elsewhere: the first one,
+# or all of them where its type does not infer (`_datum_eltype`).
 @inline function _conditions_probed_eltype(markers::Tuple, Ωₕ, T)
     marker = first(markers)
-    i = findfirst(index_in_marker(Ωₕ, label(marker)))
-    if i !== nothing
-        x = point(Ωₕ, indices(Ωₕ)[i])
-        T = promote_type(T, typeof(identifier(marker)(x)))
-    end
+    T = _datum_eltype(identifier(marker), Ωₕ, index_in_marker(Ωₕ, label(marker)), T)
     return _conditions_probed_eltype(Base.tail(markers), Ωₕ, T)
+end
+
+# `T` promoted with the type of the datum `g` on the points of `Ωₕ` that `mask` marks: its
+# value at the first of them and the type inferred for it, `Union` members promoted
+# (`_union_promoted`, ghost_relations.jl). A datum that is `0.0` there and a `Dual` or
+# complex further along widens `T` all the same. Where inference gives no concrete type (a
+# datum reading an untyped global, say), `g` is evaluated at every marked point instead.
+# An empty mask widens nothing. `_ghost_probed_eltype` calls it too.
+function _datum_eltype(g, Ωₕ, mask, T)
+    i = findfirst(mask)
+    i === nothing && return T
+    x = point(Ωₕ, indices(Ωₕ)[i])
+    S = promote_type(_union_promoted(Base.promote_op(g, typeof(x))), typeof(g(x)))
+    isconcretetype(S) && return promote_type(T, S)
+    for j in eachindex(mask)
+        mask[j] && (T = promote_type(T, typeof(g(point(Ωₕ, indices(Ωₕ)[j])))))
+    end
+    return T
 end
 
 # The element type of the assembled vector is the one the form's own weights have, promoted
