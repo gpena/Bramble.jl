@@ -339,7 +339,9 @@ end
 # this session independent of the caller's mesh. The Laplacian/`innerₕ` shapes here match
 # what such a caller actually writes.
 # Split by dimension: 1D runs the body below in full, 2D only the calls a second direction
-# gives a new method to (`reaction_density` and the scaled Laplacian).
+# gives a new method to (`reaction_density` and the scaled Laplacian), and `assemble_add!` of
+# the 2D Laplacian: its instance belongs to the 2D form type, so the 1D call does not provide
+# it (`benchmark/ttfx.jl` times that first call).
 function _pc_form_reaction(::Val{1})
     S = interval(0.0, 1.0)
     Ω = domain(S, :boundary => boundary_symbols(S))
@@ -354,7 +356,10 @@ function _pc_form_reaction(::Val{2})
     a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))
     fₕ = element(Wₕ, 1.0)
     l = form(Wₕ, v -> innerₕ(fₕ, v))
-    reaction_density(assemble(a), assemble(l), element(Wₕ, 1.0); marker = :boundary)
+    A = assemble(a)
+    reaction_density(A, assemble(l), element(Wₕ, 1.0); marker = :boundary)
+    assemble_add!(A, a, 0.5)
+    precompile(assemble_add!, (typeof(A), typeof(a), typeof(0.5)))
 
     aκ = form(Wₕ, Wₕ, (u, v) -> 2.0 * inner₊(∇ₕ(u), ∇ₕ(v)))
     assemble(aκ; dirichlet = :boundary)
