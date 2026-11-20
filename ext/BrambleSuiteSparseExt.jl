@@ -80,16 +80,17 @@ function _cholmod_input(A::SparseMatrixCSC)
     return Hermitian(A)
 end
 
-# UMFPACK and CHOLMOD factor machine floats and widen the narrower ones. Any other element
-# type, a `ForwardDiff.Dual` above all, has no method and ends in a `StackOverflowError`.
-const _SSPARSE_REAL = Union{Bool, Integer, Float16, Float32, Float64}
-_check_eltype(::Type{<:Union{_SSPARSE_REAL, Complex{<:_SSPARSE_REAL}}}) = nothing
+# UMFPACK and CHOLMOD factor a matrix whose entries convert to a machine float, real or
+# complex, as `Integer` and `Rational` entries do. Any type that does not convert, a
+# `ForwardDiff.Dual` above all, ends in a `StackOverflowError` or a `TypeError`.
 function _check_eltype(::Type{T}) where {T}
+    float(real(T)) <: Union{Float16, Float32, Float64} && return nothing
     throw(
         ArgumentError(
-        "SuiteSparse factors `Float32`, `Float64` and their complex types, and this matrix " *
-        "has element type $T. For a `Dual` matrix call `pde_solve`, which factors the " *
-        "values and solves each partial, or use Sparspak, which factors a `Dual` matrix.",
+        "SuiteSparse factors matrices whose entries convert to a machine float, real or " *
+        "complex, and this matrix has element type $T. For a `Dual` matrix call " *
+        "`pde_solve`, which factors the values and solves each partial, or use Sparspak, " *
+        "which factors a `Dual` matrix.",
     ),
     )
 end

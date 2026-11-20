@@ -551,7 +551,13 @@ using ..ExtSolverContracts: ZERO_BC, poisson_system, convection_diffusion_system
             @test occursin("Sparspak", err.msg)
         end
         @test_throws ArgumentError suitesparse_solve(Ad, ones(n))
-        # The narrower element types keep their path.
+        # An element type that converts to a machine float keeps its path, `Rational` and
+        # `Float16` included.
+        @test suitesparse_factorize(Float16.(A)) \ ones(Float16, n) isa Vector{Float16}
+        Ar = SparseMatrixCSC{Rational{Int}}(round.(Int, A) .// 1)
+        xr = suitesparse_factorize(Ar) \ ones(Rational{Int}, n)
+        @test xr isa Vector{Float64}
+        @test maximum(abs, Ar * xr .- 1) < 1.0e-12
         @test suitesparse_factorize(Float32.(A)) \ ones(Float32, n) isa Vector{Float32}
         @test suitesparse_factorize(ComplexF64.(A)) \ ones(ComplexF64, n) isa Vector{ComplexF64}
     end
