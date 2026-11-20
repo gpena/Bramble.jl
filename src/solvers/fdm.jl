@@ -22,7 +22,8 @@ tensor structure of its own to restrict.
 in `F`, so the value and each partial go through the one factorization. It does not
 differentiate in the form's coefficients or the mesh: an operator whose element type is not
 `Float32` or `Float64` (a `Dual` coefficient) throws an `ArgumentError`; differentiate
-`pde_solve(assemble(a, l)..., F)` there.
+`pde_solve(assemble(a), F)` there, with `assemble(a; dirichlet = :boundary)` when
+`dirichlet` is given.
 
 Requires [Kronecker.jl](https://github.com/MichielStock/Kronecker.jl); call `using Kronecker`
 before calling this function.

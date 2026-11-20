@@ -1043,7 +1043,9 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                     end
                     @test err isa ArgumentError
                     msg = err isa ArgumentError ? err.msg : ""
-                    @test occursin("fdm_solve", msg) && occursin("pde_solve(assemble(a, l)..., F)", msg)
+                    advice = dir === nothing ? "pde_solve(assemble(a), F)" :
+                        "pde_solve(assemble(a; dirichlet = :boundary), F)"
+                    @test occursin("fdm_solve", msg) && occursin(advice, msg)
                 end
             end
 
