@@ -130,7 +130,8 @@ end
 # ---------------------------------------------------------------------------
 #
 # Tagged Metal.jl (checked at v1.10.0 on this host) defines neither `MtlSparseMatrixCSR` nor
-# `MtlSparseMatrixCSC` (JuliaGPU/Metal.jl#909 is open, not yet tagged). `GPUArrays`
+# `MtlSparseMatrixCSC`: JuliaGPU/Metal.jl#909 was closed unmerged, and its successors,
+# JuliaGPU/GPUArrays.jl#745 and JuliaGPU/Metal.jl#982, are still open. `GPUArrays`
 # (checked at v11.5.14) already ships the abstract taxonomy -- `AbstractGPUSparseMatrixCSR`
 # and `AbstractGPUSparseMatrixCSC` -- so these types subtype it directly instead of inventing
 # a Bramble-owned hierarchy, and alias to the upstream concrete type the moment it ships, with
@@ -151,7 +152,7 @@ else
     device sparse matrix type carries this field to satisfy.
 
     A Bramble-owned placeholder for `Metal.MtlSparseMatrixCSR`, which tagged Metal.jl does not
-    yet provide (JuliaGPU/Metal.jl#909). Once that type ships, this name aliases to it and no
+    yet provide (JuliaGPU/Metal.jl#982 is open). Once that type ships, this name aliases to it and no
     Bramble call site changes -- except `metal_sparse_csr` below, which would then need to
     hand the mirror to upstream's own constructor instead of this one.
     """
@@ -201,7 +202,7 @@ else
 
     Mirrors [`MetalSparseMatrixCSR`](@ref): a Bramble-owned placeholder for
     `Metal.MtlSparseMatrixCSC`, aliased away once tagged Metal.jl provides it
-    (JuliaGPU/Metal.jl#909).
+    (JuliaGPU/Metal.jl#982 is open).
     """
     struct MetalSparseMatrixCSC{Tv, Ti} <: GPUArrays.AbstractGPUSparseMatrixCSC{Tv, Ti}
         colPtr::MtlVector{Ti}
@@ -343,10 +344,10 @@ function mul!(
     return C
 end
 
-# `MetalSparseMatrixCSC` has no `mul!` of its own -- matching JuliaGPU/Metal.jl#909's own
-# convention (a row-major kernel needs row-major storage), the error names the fix rather
-# than leaving a CSC matrix to fail some other, less legible way (a `MethodError`, or a
-# silent fall-through to a dense generic fallback via `GPUArrays`).
+# `MetalSparseMatrixCSC` has no `mul!` of its own: a row-major kernel needs row-major
+# storage. The error names the fix rather than leaving a CSC matrix to fail some other,
+# less legible way (a `MethodError`, or a silent fall-through to a dense generic fallback
+# via `GPUArrays`).
 #
 # Split into a vector and a matrix method, rather than one `::AbstractVecOrMat` method,
 # because `LinearAlgebra` itself ships a generic
@@ -367,7 +368,6 @@ function mul!(
 end
 
 const _metal_sparse_csc_mul_message = "mul! is not supported for MetalSparseMatrixCSC " *
-                                      "(matching JuliaGPU/Metal.jl#909's own convention) " *
                                       "-- convert to CSR first, e.g. " *
                                       "`Bramble.metal_sparse_csr(SparseArrays.SparseMatrixCSC(A))`."
 
