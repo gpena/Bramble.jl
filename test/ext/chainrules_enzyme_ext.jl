@@ -758,12 +758,12 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             @eval import Enzyme
             rev = Enzyme.set_runtime_activity(Enzyme.Reverse)
 
-            # An absorbing `A` (`A + 0.3im I`) with a real `F`: the cotangent
-            # `λ` is complex and the shadow of `F` is a real array, so each rule takes the
-            # real part, the derivative of a real load. The operator comes from a non-uniform
-            # 2D mesh. The reference is a central difference along each `F`
-            # entry for `pde_solve(A, F)`, and `Re(A⁻ᴴ c)` for the kept factorization, the
-            # `ldiv!` and the rank-one rules, which `c` seeds.
+            # An absorbing `A` (`A + 0.3im I`) with a real `F`: the cotangent `λ` is complex
+            # and the shadow of `F` is a real array, so each rule takes the real part, the
+            # derivative of a real load. The operator comes from a non-uniform 2D mesh. The
+            # reference is a central difference along each `F` entry for `pde_solve(A, F)`,
+            # and `Re(A⁻ᴴ c)` for the kept factorization, the `ldiv!` and the rank-one rules,
+            # which `c` seeds.
             Bramble._seed_mesh1d_rng!(1237)
             I01 = Bramble.interval(0.0, 1.0)
             Wa = gridspace(Bramble.mesh(Bramble.domain(I01 × I01), (7, 6), (false, false)))
