@@ -1550,6 +1550,31 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                     @test Cd.dval ≈ fdC rtol=1e-6
                 end
             end
+
+            # The same two shapes through `Enzyme.gradient`, which allocates the shadows
+            # itself: a loss of `C₀ + p₁ C₁`, `(1 + p₂) B₀` and `(1 + p₃) b₀`, against a
+            # central difference.
+            C₁ = [0.2 0.1; 0.05 0.3]
+            grads = (("complex C and B, real b", ComplexF64.(C₀) + 0.3im * I,
+                    ComplexF64[1.0 2.0; 0.5 1.0], [1.0, 2.0]),
+                ("real C and B, complex b", C₀, [1.0 2.0; 0.5 1.0],
+                    ComplexF64[1.0 + 1im, 2.0]))
+            @testset "gradient, $tag" for (tag, Cg, Bg, bg) in grads
+                function loss(p)
+                    X, x, _ = Bramble._dense_block_solve(Cg .+ p[1] .* C₁, Bg .* (1 + p[2]),
+                        bg .* (1 + p[3]))
+                    return sum(abs2, X) + sum(abs2, x)
+                end
+                p₀ = [0.7, -0.4, 1.1]
+                h = 1e-6
+                fd = map(1:3) do k
+                    e = h .* ((1:3) .== k)
+                    (loss(p₀ .+ e) - loss(p₀ .- e)) / 2h
+                end
+                g = Enzyme.gradient(Enzyme.set_runtime_activity(Enzyme.Reverse), loss, p₀)[1]
+                @test all(r -> abs(r) > 1e-6, fd)
+                @test g ≈ fd rtol=1e-6
+            end
         else
             @test_skip "Enzyme not in this environment"
         end
