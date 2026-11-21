@@ -15,6 +15,7 @@ using Bramble
 using Bramble: CpuPolyester, CpuSerial, D₋ₓ, StarSpacings, Forward, Backward, Centered,
                CrossWeighted, _difference_engine!, _sweep_for!, _sweep_scatter_for!
 using ForwardDiff
+using LinearAlgebra: mul!
 using Polyester
 using Random
 using Sparspak
@@ -311,6 +312,19 @@ function _overwritten_case(p, policy, ::Val{:band_star})
     fill!(h, 1)
     return s
 end
+# A matrix-free `mul!` into a column view: the output and its shadow are `SubArray`s, so the
+# reverse needs a scratch of the view's type, not the `Array` that `similar` gives.
+function _view_mul_case(p, policy)
+    W = gridspace(EnzymePolicyCases._seeded_mesh((21, 17), policy))
+    n = ndofs(W)
+    κ = element(W, eltype(p))
+    parent(κ) .= 1 .+ p[1] .* sin.(1:n) .^ 2
+    op = matrix_free_operator(form(W, W, (U, V) -> inner₊(Mₕ(κ) * ∇ₕ(U), ∇ₕ(V))))
+    Y = zeros(eltype(p), n, 2)
+    mul!(view(Y, :, 1), op, p[2] .* cos.(1:n))
+    return sum(abs2, Y)
+end
+
 const _OVERWRITTEN_HOOKS = ((Val(:assembly), "_batch_bilinear_band_replay!"),
     (Val(:sweep), "_batch_for!"), (Val(:bands), "_batch_run_bands!"),
     (Val(:band_closure), "_batch_run_bands!"), (Val(:band_star), "_batch_run_bands!"))
@@ -478,6 +492,13 @@ end
                 @test ran
                 @test err <= TOL
             end
+            GC.gc(true)
+        end
+
+        @testset "Matrix-free mul! into a view" begin
+            err, ran = _reverse_error(_view_mul_case, [0.3, 0.8], "_batch_mf_bands!")
+            @test ran
+            @test err <= TOL
             GC.gc(true)
         end
 
