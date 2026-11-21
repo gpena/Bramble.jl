@@ -227,12 +227,22 @@ end
 @inline _asm_cold_float(t::Base.RefValue) = _has_float(
     typeof(last(_polyester_ext()._replay_parts(t[]))))
 
-# A scratch the tasks' augmented forwards write in place of the user's output.
-@inline _asm_scratch(b::AbstractArray) = similar(b)
+# A scratch the tasks' augmented forwards write in place of the user's output, of the
+# output's type, since `Duplicated` pairs it with the output's shadow. `similar` keeps the
+# type of an `Array` only. A view of an `Array` gets the same indices into a new parent, one
+# wide along each `Integer` index; any other array gets a zeroed copy.
+@inline _asm_scratch(b::Array) = similar(b)
+function _asm_scratch(b::SubArray{<:Any, <:Any, <:Array})
+    a, I = parent(b), parentindices(b)
+    length(I) == ndims(a) || return view(similar(a), I...)
+    dims = ntuple(d -> I[d] isa Integer ? 1 : size(a, d), Val(ndims(a)))
+    return view(similar(a, dims), map(i -> i isa Integer ? one(i) : i, I)...)
+end
+_asm_scratch(b::AbstractArray) = Enzyme.make_zero(b)
 function _asm_scratch(t::Base.RefValue)
     pe = _polyester_ext()
     h1, _, cold = pe._replay_parts(t[])
-    return Ref(pe._replay_join(similar(h1), nothing, cold))
+    return Ref(pe._replay_join(_asm_scratch(h1), nothing, cold))
 end
 
 # The lanes whose reverse reads the parts: the output carries a cotangent there (`d_outs`),

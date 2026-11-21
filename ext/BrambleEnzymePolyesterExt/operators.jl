@@ -408,11 +408,6 @@ end
     return failed
 end
 
-# The tasks' buffer for `y`, of the type of its shadow `dy`, since `Duplicated` takes one
-# type: `similar` of a view is an `Array`, so a view gets a view into a new parent.
-_act_scratch(dy) = similar(dy)
-_act_scratch(dy::SubArray) = view(similar(parent(dy)), parentindices(dy)...)
-
 # Whether some lane of an action target carries a cotangent for `y`.
 function _act_live(target, W::Val)
     pe = _polyester_ext()
@@ -446,8 +441,7 @@ function _act_reverse!(config, run!::R, slab::F, n::Int, len::Int, target, parts
     xp = x_tape
     p0 = parts.val
     pp = something(parts_tape, p0)
-    yt = y isa Array ? y : first(pe._replay_parts(_shadow(target, first(live))[]))
-    scratch = Ref(pe._replay_join(_act_scratch(yt), xp, cold))
+    scratch = Ref(pe._replay_join(_asm_scratch(y), xp, cold))
     d_parts = _lanes(parts, Val(W))
     cs = map(Const, rest)
     function task(w)

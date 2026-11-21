@@ -312,18 +312,27 @@ function _overwritten_case(p, policy, ::Val{:band_star})
     fill!(h, 1)
     return s
 end
-# A matrix-free `mul!` into a column view: the output and its shadow are `SubArray`s, so the
-# reverse needs a scratch of the view's type, not the `Array` that `similar` gives.
-function _view_mul_case(p, policy)
+# Outputs that are not `Array`s: a matrix-free `mul!` into a column view and into a column
+# view of a reshape, and a linear assembly into a column view. The reverse pairs the output's
+# shadow with a scratch, which must have its type; `similar` does not give it. `Y[:, 2]`
+# enters the loss with `p[1]`, so a reverse that writes outside the view is caught.
+function _view_output_case(p, policy, kind::Val)
     W = gridspace(EnzymePolicyCases._seeded_mesh((21, 17), policy))
     n = ndofs(W)
     κ = element(W, eltype(p))
     parent(κ) .= 1 .+ p[1] .* sin.(1:n) .^ 2
-    op = matrix_free_operator(form(W, W, (U, V) -> inner₊(Mₕ(κ) * ∇ₕ(U), ∇ₕ(V))))
-    Y = zeros(eltype(p), n, 2)
-    mul!(view(Y, :, 1), op, p[2] .* cos.(1:n))
-    return sum(abs2, Y)
+    Y = _view_matrix(kind, eltype(p), n)
+    Y[:, 2] .= p[1] .* cos.(1:n)
+    _view_apply!(kind, view(Y, :, 1), W, κ, p[2] .* cos.(1:n))
+    return sum(abs2, Y) + sum(Y[:, 2] .* Y[:, 1])
 end
+_view_matrix(::Val, T, n) = zeros(T, n, 2)
+_view_matrix(::Val{:mul_reshape}, T, n) = reshape(view(zeros(T, 2n + 1), 1:2n), n, 2)
+_view_apply!(::Val{:assemble}, y, W, κ, x) = assemble!(y, form(W, v -> innerₕ(κ, v)))
+_view_apply!(::Val, y, W, κ, x) = mul!(y,
+    matrix_free_operator(form(W, W, (U, V) -> inner₊(Mₕ(κ) * ∇ₕ(U), ∇ₕ(V)))), x)
+const _VIEW_OUTPUTS = ((Val(:mul), "_batch_mf_bands!"),
+    (Val(:mul_reshape), "_batch_mf_bands!"), (Val(:assemble), "_batch_linear_band_sweep!"))
 
 const _OVERWRITTEN_HOOKS = ((Val(:assembly), "_batch_bilinear_band_replay!"),
     (Val(:sweep), "_batch_for!"), (Val(:bands), "_batch_run_bands!"),
@@ -495,11 +504,14 @@ end
             GC.gc(true)
         end
 
-        @testset "Matrix-free mul! into a view" begin
-            err, ran = _reverse_error(_view_mul_case, [0.3, 0.8], "_batch_mf_bands!")
-            @test ran
-            @test err <= TOL
-            GC.gc(true)
+        @testset "Output into a view" begin
+            for (kind, hook) in _VIEW_OUTPUTS
+                case = (q, pol) -> _view_output_case(q, pol, kind)
+                err, ran = _reverse_error(case, [0.3, 0.8], hook)
+                @test ran
+                @test err <= TOL
+                GC.gc(true)
+            end
         end
 
         @testset "Closure reaching its output" begin
