@@ -143,7 +143,7 @@ agnosticism rule -- there is no executable reference to Metal anywhere in it. It
 `locality` methods above, the Metal-side `vector`/`matrix`/`_backend_eye`/
 `_backend_zeros` allocators, the `MetalSparseMatrixCSR`/`MetalSparseMatrixCSC` types
 (placeholders behind an `isdefined(Metal, :MtlSparseMatrixCSR)` alias hook, since tagged
-Metal.jl does not yet ship them -- JuliaGPU/Metal.jl#909), their `mul!` methods, and
+Metal.jl does not yet ship them -- JuliaGPU/Metal.jl#982 is open), their `mul!` methods, and
 `_allocate_from_pattern` for a Metal matrix type. None of these are `@kernel`s: they are
 ordinary Julia methods that construct Metal-specific storage and forward the array
 fields into the backend-agnostic kernels above.
@@ -189,8 +189,8 @@ end
 One work item never writes an entry another work item also writes, so there are no
 atomics anywhere in either kernel. `ext/BrambleMetalExt.jl`'s `mul!(y, A::MetalSparseMatrixCSR, x, α, β)`
 does the dimension checks and forwards `A.rowPtr`, `A.colVal`, `A.nzVal` into
-`_launch_spmv_csr!`; `MetalSparseMatrixCSC` has no `mul!` at all, matching
-JuliaGPU/Metal.jl#909's own convention that a row-parallel kernel needs row-major storage
+`_launch_spmv_csr!`; `MetalSparseMatrixCSC` has no `mul!` at all, since a
+row-parallel kernel needs row-major storage
 -- its `mul!` methods raise, naming `metal_sparse_csr` as the fix.
 
 `_allocate_from_pattern` for a Metal matrix type (`ext/BrambleMetalExt.jl`) builds the
