@@ -2259,18 +2259,24 @@ end
     @test !Bramble._uniform_interior_width(grid_inds, interior, [6, 1, 2, 3, 4, 7, 8], 1)
 end
 
-# A sum of more than 32 terms, the `sum40` row of `benchmark/bool_audit.jl`: the summand
-# tuple `_summands` builds and the walks over it stay allocation-free past 32 entries
-# (gpena/Bramble.jl#992). The `Float64` coefficients keep the 40 terms apart.
-@testset "bilinear: 40-term sum, 0 B (#992)" begin
+# Sums of 32 and 40 terms, the `sum40` row of `benchmark/bool_audit.jl`: the summand tuple
+# `_summands` builds and the walks over it stay allocation-free from 32 entries on, where
+# Base's `map` over a tuple starts collecting into a `Vector{Any}` (gpena/Bramble.jl#992).
+# The `Float64` coefficients keep the terms apart.
+@testset "bilinear: 32/40-term sum, 0 B (#992)" begin
     W = gridspace(_graded_mesh((9, 11)))
-    a = form(W, W, (u, v) -> foldl(+, ntuple(k -> (k + 0.5) * inner₊(∇ₕ(u), ∇ₕ(v)), Val(40))))
-    @test length(Bramble._summands(a.ast)) == 40
-    A = assemble(a)
-    # Σₖ (k + 0.5) over k = 1:40 is 840.
-    @test Matrix(A) ≈ 840 * Matrix(assemble(form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))))
+    one_term = Matrix(assemble(form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))))
+    sum_form(::Val{N}) where {N} = form(W, W,
+        (u, v) -> foldl(+, ntuple(k -> (k + 0.5) * inner₊(∇ₕ(u), ∇ₕ(v)), Val(N))))
     warm_bytes(A, a) = (assemble!(A, a); assemble!(A, a); @allocated assemble!(A, a))
-    @test warm_bytes(A, a) == 0
+    for N in (32, 40)
+        a = sum_form(Val(N))
+        @test length(Bramble._summands(a.ast)) == N
+        A = assemble(a)
+        # Σₖ (k + 0.5) over k = 1:N is N(N + 2)/2.
+        @test Matrix(A) ≈ (N * (N + 2) / 2) * one_term
+        @test warm_bytes(A, a) == 0
+    end
 end
 
 @testset "bilinear: matrix-free form call" begin

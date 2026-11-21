@@ -1281,30 +1281,32 @@ _is_source_only(::LazyOp) = false
 # `@code_warntype` still sees ordinary calls to `f`, specialized on `F = typeof(f)` like any
 # other higher-order call in Julia.
 
-# The summands of a sum, left to right, in one flat tuple. A splat `(left..., right...)` past
-# `_INLINED_ENTRIES` entries stops unrolling and allocates: 17504 B per warm `assemble!` of a
-# 40-term sum, whose tuple is built twice (`_check_block_meshes`, `_replay_summands!`).
-# `concatenate_stencils` builds the longer tuples out of line instead (gpena/Bramble.jl#992).
+# The summands of a sum, left to right, in one flat tuple. A splat `(left..., right...)`
+# past `_INLINED_ENTRIES` entries stops unrolling and allocates: 17504 B per warm
+# `assemble!` of a 40-term sum, whose tuple is built twice (`_check_block_meshes`,
+# `_replay_summands!`). `concatenate_stencils` builds the longer tuples out of line
+# instead (gpena/Bramble.jl#992).
 @inline _summands(op::OperatorAdd) = concatenate_stencils(
     _summands(op.left_op), _summands(op.right_op))
 @inline _summands(op) = (op,)
 
-# The three walks below visit `_summands(op)` with `_each_summand`, not by recursing left
-# and right. Recursing, every `OperatorAdd` node is its own method instance whose type carries
-# its whole subtree, so a left-deep `a + b + c + ...` (what `foldl(+, terms)` and a
-# hand-written sum build) is inferred over types of total size quadratic in the term count.
-# For 3D `innerₕ(εcₕ(u), εcₕ(v))` built with `foldl(+, ...)` the first assemble took 18.6 to
-# 21.0 s recursing and 16.6 to 17.6 s over `_summands`. Only leaves reach `f`, in order.
+# The three walks below visit `_summands(op)` with `_each_summand`, not by recursing
+# left and right. Recursing, every `OperatorAdd` node is its own method instance whose
+# type carries its whole subtree, so a left-deep `a + b + c + ...` (what `foldl(+, terms)`
+# and a hand-written sum build) is inferred over types of total size quadratic in the term
+# count. For 3D `innerₕ(εcₕ(u), εcₕ(v))` built with `foldl(+, ...)` the first assemble took
+# 18.6 to 21.0 s recursing and 16.6 to 17.6 s over `_summands`. Only leaves reach `f`, in
+# order.
 #
-# `_each_summand` maps up to `_INLINED_ENTRIES` summands and hands longer tuples to
-# `_each_entry_outlined`. `map` over more than 32 entries collects into a `Vector{Any}` (368 B
-# on the 40-term sum). `_each_entry` at every length is no better: with it, the call into
-# the linear core of a two-term composite semidiscretization dispatched at run time (80 B
-# per residual). The likely cause is inference cutting short `ntuple` called inside
-# `ntuple`, since a leaf's stencil walk goes through it too; `map` has a method per length.
+# `_each_summand` maps fewer than `_INLINED_ENTRIES` summands and hands the rest to
+# `_each_entry_outlined`. Base's `map` over 32 or more entries collects into a
+# `Vector{Any}`: 288 B at 32 summands, 368 B at 40. With `_each_entry` at every length,
+# the call into the linear core of a two-term composite semidiscretization dispatched at
+# run time (80 B per residual), likely because inference cuts short `ntuple` called inside
+# `ntuple` (a leaf's stencil walk uses it too). `map` has a method per length.
 
 @inline function _each_summand(f::F, ts::Tuple) where {F}
-    length(ts) > _INLINED_ENTRIES && return _each_entry_outlined(f, ts)
+    length(ts) >= _INLINED_ENTRIES && return _each_entry_outlined(f, ts)
     return map(f, ts)
 end
 
