@@ -208,13 +208,14 @@ EnzymeRules.inactive(::typeof(Bramble._copy_markers), args...) = nothing
 # The `CpuThreaded` engine entries' rules.
 include("BrambleEnzymeExt/threaded.jl")
 
-# The reverse rule for the forms of a relation of `constrained`.
+# The rules for `constrained`'s relations: their forms, the ghost blocks' dense solves and
+# the corner entries.
 include("BrambleEnzymeExt/relations.jl")
 
 # The rules for the solves beside `pde_solve(::SparseMatrixCSC, F)`.
 include("BrambleEnzymeExt/solvers.jl")
 
-# The rules that refuse a level-set mesh whose `φ` depends on the parameter.
+# The rules that refuse a level-set mesh whose `φ` or box depends on the parameter.
 include("BrambleEnzymeExt/geometry.jl")
 
 end

@@ -1,14 +1,13 @@
 # A reverse rule for `Bramble._assemble_relation`, the forms of one relation of `constrained`
 # (#1153).
 #
-# Enzyme's own reverse of the function compiles one copy of the forms per facet and takes
-# 700 s and 3.7 GB for one relation, so `constrained` with a parameter in a datum or in a
-# Robin coefficient did not finish. Forward mode compiles the same function in under a
-# minute. The rule is the function's own call; its pullback takes one forward derivative of
-# the function per float of the relation `r` (its datum, its Robin coefficient: the numbers
-# `r` holds), the tangent a copy of `r` with that float one and every other zero, and
-# contracts it with the cotangents of the matrix and the load. The relation's floats are the
-# only inputs: the operators of a relation hold no data, and the space is not differentiated.
+# Enzyme's own reverse compiles one copy of the forms per facet and does not finish in
+# practice; forward mode compiles the function once. The rule is the function's own call;
+# its pullback takes one forward derivative of the function per float of the relation `r`
+# (its datum, its Robin coefficient: the numbers `r` holds), the tangent a copy of `r` with
+# that float one and every other zero, and contracts it with the cotangents of the matrix
+# and the load. The relation's floats are the only inputs: the operators of a relation hold
+# no data, and the space is not differentiated.
 
 @noinline function _throw_mesh_parameter()
     throw(

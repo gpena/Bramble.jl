@@ -613,7 +613,6 @@ end
 # captured values included, as its shadow.
 _shadow_is_zero(x, ẋ) = _zero_shadow(x, ẋ, Base.IdSet{Any}())
 
-# Whether a value of type `T` can hold a floating-point number.
 function _holds_floats(::Type{T}) where {T}
     T <: Union{AbstractFloat, Complex{<:AbstractFloat}} ||
         !isbitstype(T) || any(_holds_floats, fieldtypes(T))
@@ -698,7 +697,7 @@ _gmg_zero(u) = (z = similar(u); fill!(parent(z), zero(eltype(z))); z)
 
 # The finest product `A(θ) x`, the one call the nested reverse call differentiates. The
 # space is made outside it and passed `Const`: built inside, its weights got shadows that a
-# nested forward call left unwritten and read (NaN or 1e277 on a 9×9 mesh).
+# nested forward call left unwritten and read.
 function _gmg_product(build, W, x)
     op = Bramble.matrix_free_operator(build(W))
     y = zeros(eltype(op), size(op, 1))

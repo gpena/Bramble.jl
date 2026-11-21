@@ -1,15 +1,12 @@
 # threaded.jl: Enzyme rules for the `CpuThreaded` engine entries (gpena/Bramble.jl#369).
 #
-# Enzyme cannot differentiate the `Threads.@threads` loops of these entries. Up to 0.13.216
-# a bare loop threw `AssertionError: mi2 !== nothing` on Julia 1.13.3. From 0.13.219 a bare
-# loop passes, but with these rules deleted Enzyme 0.13.220 still aborts on the first
-# entry's closure (`LLVM ERROR: function failed verification`, 2026-11-17;
-# docs/notes/internals/enzyme_threaded.md). Each `CpuThreaded` engine entry, the function
-# whose only work is that loop (`_static_bands!`, `_static_for!`, `_static_scatter_for!`,
-# `_static_partials!`, the three bilinear and linear colour runners, `_kron_fused!` and the
-# `Threads.@spawn` `_mf_run_bands!`), gets rules here whose own derivative loops run under
-# `Threads.@threads :static`. No derivative loop calls a `_serial_*` engine or
-# `_static_or_serial`; a rule's primal is the entry's own call.
+# Enzyme cannot differentiate these entries' `Threads.@threads` loops (an LLVM verifier
+# abort; docs/notes/internals/enzyme_threaded.md). Each `CpuThreaded` engine entry, the
+# function whose only work is that loop (`_static_bands!`, `_static_for!`,
+# `_static_scatter_for!`, `_static_partials!`, the three bilinear and linear colour
+# runners, `_kron_fused!` and the `Threads.@spawn` `_mf_run_bands!`), gets rules here whose
+# own derivative loops run under `Threads.@threads :static`. No derivative loop calls a
+# `_serial_*` engine or `_static_or_serial`; a rule's primal is the entry's own call.
 #
 # `_threaded_bands_ref!`, the band runner's caller around `_static_or_serial`, gets the
 # runner's rules too, so Enzyme never compiles that `try` around the sweep's point (#1179).
@@ -130,7 +127,6 @@ end
     return nothing
 end
 
-# Clears every lane's `d_out`, one band per thread.
 function _zero_outs!(d_outs::Tuple, n::Int)
     _each_task(n) do b
         foreach(d -> _zero_lane!(d, n, b), d_outs)
@@ -296,7 +292,6 @@ function _fixed_reverse(config, f::Union{_AverageBand, _CenteredBand}, n::Int, a
     return nothing
 end
 
-# The value behind a `Ref`, or the value itself.
 @inline _unref(x) = x
 @inline _unref(r::Base.RefValue) = r[]
 
@@ -360,10 +355,9 @@ end
     return nothing
 end
 
-# The slab loop behind its own barrier. Inlined into the task under `--check-bounds=yes`,
-# the point unwrapped from its `Ref` was copied to the stack with its pointer fields set
-# to -1 (a `memset` Enzyme's type analysis cannot type: `EnzymeNoTypeError`); passed as an
-# argument it is not.
+# The slab loop behind its own barrier. Inlined under `--check-bounds=yes`, the unwrapped
+# point is spilled with untyped padding (`EnzymeNoTypeError`); passed as an argument it is
+# not.
 @noinline function _band_slab!(pt::P, band, rest) where {P}
     for I in CartesianIndices((rest..., band))
         pt(I)
