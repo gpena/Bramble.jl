@@ -313,6 +313,43 @@ function _scale_case(p, policy)
     return sum(abs2, out)
 end
 
+# A `Float32` beside an array in `_run_bands!`'s kernel, and in a closure argument. Reverse
+# gave the `Float32` a zero derivative in the closure, through a non-inlined `_run_bands!`.
+# It still does in the kernel: the band rule leaves the right derivative in the shadow of
+# the `Ref` that carries the kernel, and it is lost after the rule returns.
+struct _F32Band{T, X}
+    c::T
+    x::X
+end
+function (k::_F32Band)(out, y, n::Int, b::Int)
+    for i in Bramble._band_range(Base.OneTo(37), n, b)
+        out[i] = k.c * y[i] + k.x[i]
+    end
+    return nothing
+end
+function _apply_band!(out, x, g, n::Int, b::Int)
+    for i in Bramble._band_range(Base.OneTo(37), n, b)
+        out[i] = g(x[i])
+    end
+    return nothing
+end
+function _f32_bands_case(p, policy, ::Val{:kernel})
+    T = eltype(p)
+    y = [p[2] + T(0.1) * k for k in 1:37]
+    out = zeros(T, 37)
+    Bramble._run_bands!(policy, _F32Band(p[1], T.(_XB)), out, y)
+    return sum(abs2, out)
+end
+function _f32_bands_case(p, policy, ::Val{:closure})
+    T = eltype(p)
+    c = p[1]
+    w = T.(_XB)
+    x = [p[2] + T(0.1) * k for k in 1:37]
+    out = zeros(T, 37)
+    Bramble._run_bands!(policy, _apply_band!, out, x, y -> c * y + w[1])
+    return sum(abs2, out)
+end
+
 # The relative errors of reverse at width 1, reverse at width 2 (`BatchDuplicated`, lane
 # `k` seeded `cots[k]`) and forward under `CpuPolyester`, against ForwardDiff under
 # `CpuSerial`.
@@ -594,6 +631,18 @@ end
             n0 = EnzymePolicyCases._rule_entries("_batch_run_bands!")
             @test all(<=(TOL), _bands_errors(_scale_case, [0.8, 0.3, 1.2]))
             @test EnzymePolicyCases._rule_entries("_batch_run_bands!") > n0
+        end
+
+        @testset "Float32 band kernel and closure" begin
+            p = Float32[0.7, -0.4]
+            closure = (q, pol) -> _f32_bands_case(q, pol, Val(:closure))
+            err, ran = _reverse_error(closure, p, "_batch_run_bands!")
+            @test ran
+            @test err <= 1e-4
+            kernel = (q, pol) -> _f32_bands_case(q, pol, Val(:kernel))
+            err, ran = _reverse_error(kernel, p, "_batch_run_bands!")
+            @test ran
+            @test_broken err <= 1e-4
         end
 
         @testset "Data overwritten after the call" begin

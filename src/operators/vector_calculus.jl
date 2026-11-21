@@ -130,7 +130,9 @@ end
 # `_batch_for!`'s (utils/linear_algebra.jl): an Enzyme rule cannot take a by-value kernel
 # that mixes arrays with plain numbers (BrambleEnzymePolyesterExt). The method below unwraps
 # it for `BramblePolyesterExt`'s sweep; it inlines, so a plain call allocates no `Ref`.
-@noinline function _run_bands!(::CpuPolyester, f::F, args::Vararg{Any, N}) where {F, N}
+# `_run_bands!` inlines too: through a non-inlined one, a closure argument that captures a
+# `Float32` beside an array lost the `Float32`'s reverse derivative.
+@inline function _run_bands!(::CpuPolyester, f::F, args::Vararg{Any, N}) where {F, N}
     return _late(_batch_run_bands!, Ref(f), Threads.nthreads(), args...)
 end
 
