@@ -1089,11 +1089,11 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                 @test u̇ ≈ fdm_solve(a, Ḟ1; kw...) rtol=1e-10
                 @test only(Enzyme.autodiff(fwd, Enzyme.Const(solve_in), Enzyme.Duplicated,
                     Enzyme.Const(F₀))) == zeros(nf)
-                @test_throws ArgumentError "batched" Enzyme.autodiff(fwd,
-                    Enzyme.Const(solve_in), Enzyme.BatchDuplicated,
+                @test_throws ArgumentError "rule for `fdm_solve` does not support batched" Enzyme.autodiff(
+                    fwd, Enzyme.Const(solve_in), Enzyme.BatchDuplicated,
                     Enzyme.BatchDuplicated(copy(F₀), (Ḟ1, Ḟ2)))
-                @test_throws ArgumentError "batched" Enzyme.autodiff(rev,
-                    Enzyme.Const(inside), Enzyme.Active,
+                @test_throws ArgumentError "rule for `fdm_solve` does not support batched" Enzyme.autodiff(
+                    rev, Enzyme.Const(inside), Enzyme.Active,
                     Enzyme.BatchDuplicated(copy(F₀), (zeros(nf), zeros(nf))))
 
                 # The gradient of a quadratic loss in a scaled load, through DI as a user
@@ -1322,8 +1322,8 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             @test_throws ArgumentError "needs `K.A` to be a `SparseMatrixCSC`" Enzyme.autodiff(
                 fwd, Enzyme.Const(solve_w), Enzyme.Duplicated, Enzyme.Duplicated(Kw, Kwd),
                 Enzyme.Const(F0))
-            @test_throws ArgumentError "does not support batched" Enzyme.autodiff(rev,
-                Enzyme.Const(solve_w), Enzyme.Active,
+            @test_throws ArgumentError "rule for `pde_solve` does not support batched" Enzyme.autodiff(
+                rev, Enzyme.Const(solve_w), Enzyme.Active,
                 Enzyme.BatchDuplicated(ROU(copy(A0), σ0, ws0, wt0),
                     (shadow(zeros(length(p0))), shadow(zeros(length(p0))))),
                 Enzyme.Const(F0))
@@ -1495,6 +1495,53 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             gota = (K̄a.σ, K̄a.ws, K̄a.wt, nonzeros(K̄a.A))
             for (got, ref) in zip(gota, refz(true, true, true, true))
                 @test got ≈ ref rtol=1e-10
+            end
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
+    @testset "Enzyme: batched refusal names the call" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            ER = Enzyme.EnzymeRules
+            Bramble._seed_mesh1d_rng!(1237)
+            Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (false, false))
+            Bramble._unseed_mesh1d_rng!()
+            W = gridspace(Ωₕ)
+            build(V) = form(V, V, (U, X) -> inner₊(∇ₕ(U), ∇ₕ(X)) + innerₕ(U, X))
+            a = build(W)
+            A = assemble(a)
+            F = [1.0 + sin(i) for i in 1:size(A, 1)]
+            fact = Bramble.sparse_factorize(A)
+            uₕ = Bramble.element(W)
+            bd(x) = Enzyme.BatchDuplicated(x, (zero(x), zero(x)))
+            rcfg = ER.RevConfig{true, true, 2, (false, false, false, false), true, false}()
+            RT = Enzyme.BatchDuplicated{Vector{Float64}, 2}
+            # Each rule is called directly at width 2, and the message must name the function
+            # the user wrote, never another one of the rules.
+            cases = (
+                "fdm_solve" => () -> ER.augmented_primal(rcfg, Enzyme.Const(Bramble.fdm_solve),
+                    RT, Enzyme.Const(a), bd(copy(F))),
+                "gmg_solve" => () -> ER.augmented_primal(rcfg, Enzyme.Const(Bramble.gmg_solve),
+                    RT, Enzyme.Const(build), Enzyme.Const(Ωₕ), bd(copy(F))),
+                "pde_solve" => () -> ER.augmented_primal(rcfg, Enzyme.Const(Bramble.pde_solve),
+                    RT, Enzyme.Const(fact), bd(copy(F))),
+                "ldiv!" => () -> ER.augmented_primal(rcfg, Enzyme.Const(ldiv!),
+                    Enzyme.Const{typeof(uₕ)},
+                    Enzyme.BatchDuplicated(uₕ, (similar(uₕ), similar(uₕ))),
+                    Enzyme.Const(fact), bd(copy(F))))
+            for (name, call) in cases
+                err = try
+                    call()
+                    nothing
+                catch e
+                    e
+                end
+                @test err isa ArgumentError
+                msg = err isa ArgumentError ? err.msg : ""
+                @test occursin("rule for `$name` does not support batched", msg)
+                name == "pde_solve" || @test !occursin("pde_solve", msg)
             end
         else
             @test_skip "Enzyme not in this environment"

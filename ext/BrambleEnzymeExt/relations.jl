@@ -10,16 +10,6 @@
 # contracts it with the cotangents of the matrix and the load. The relation's floats are the
 # only inputs: the operators of a relation hold no data, and the space is not differentiated.
 
-@noinline function _throw_batched_relation(width)
-    throw(
-        ArgumentError(
-        "Bramble's Enzyme rule for the relations of `constrained` does not support batched " *
-        "(vector-mode) reverse differentiation: got width $(width). Differentiate one " *
-        "direction at a time.",
-    ),
-    )
-end
-
 @noinline function _throw_mesh_parameter()
     throw(
         ArgumentError(
@@ -89,7 +79,7 @@ function EnzymeRules.augmented_primal(
         P::Annotation,
         r::Annotation
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched_relation(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("constrained", "reverse", EnzymeRules.width(config))
     _space_is_data(P) || _throw_mesh_parameter()
     _check_relation(r)
 
@@ -131,7 +121,6 @@ end
 # The reverse reads its own copies of `X` and `x` (#1185). The flag of `_nonsingular`
 # passes through; a singular block gets zero tangents and cotangents, since its caller
 # throws.
-using LinearAlgebra: mul!
 
 # The block's LU and `Bramble._dense_block_solve`'s result, solved on that LU.
 function _block_primal(C, B, b)
@@ -180,7 +169,7 @@ function EnzymeRules.augmented_primal(
         B::Annotation,
         b::Annotation
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched_relation(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("constrained", "reverse", EnzymeRules.width(config))
     _entered!(:_dense_block_solve)
     F, (X, x, ok) = _block_primal(C.val, B.val, b.val)
     primal = EnzymeRules.needs_primal(config) ? (X, x, ok) : nothing

@@ -8,16 +8,6 @@
 # in the primal solve. `RankOneUpdate` is mutable and `σ` its one non-const field, so a
 # `Duplicated` shadow holds the cotangents of `A`, `wₛ`, `wₜ` and `σ`.
 
-@noinline function _throw_batched_rank_one(width)
-    throw(
-        ArgumentError(
-        "Bramble's Enzyme rule for `pde_solve(::RankOneUpdate, F)` does not support batched " *
-        "(vector-mode) reverse differentiation: got width $(width). Differentiate one " *
-        "direction at a time.",
-    ),
-    )
-end
-
 @noinline function _throw_rank_one_matrix(@nospecialize(A))
     throw(
         ArgumentError(
@@ -94,7 +84,7 @@ function EnzymeRules.augmented_primal(
         F::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched_rank_one(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("pde_solve", "reverse", EnzymeRules.width(config))
     _rank_one_check(K)
 
     u = pde_solve(K.val, F.val; kwargs...)
@@ -281,7 +271,7 @@ function EnzymeRules.augmented_primal(
         fact::Annotation{<:Factorization},
         F::Annotation{<:AbstractVector}
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("pde_solve", "reverse", EnzymeRules.width(config))
     _active_shadow(fact, EnzymeRules.width(config)) && _throw_active_factorization(fact.val)
     _has_shadow(F) && _adjoint_factor(fact.val) === nothing &&
         _throw_adjoint_unavailable(fact.val)
@@ -341,7 +331,7 @@ function EnzymeRules.augmented_primal(
         fact::Annotation{<:Factorization},
         F::Annotation{<:AbstractVector}
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("ldiv!", "reverse", EnzymeRules.width(config))
     _active_shadow(fact, EnzymeRules.width(config)) && _throw_active_factorization(fact.val)
     _has_shadow(x) && _has_shadow(F) && _adjoint_factor(fact.val) === nothing &&
         _throw_adjoint_unavailable(fact.val)
@@ -487,16 +477,6 @@ _fdm_symmetric_route(f) = nameof(typeof(f)) !== :_SchurFactorization
 # operator's `T` is not in the form's type), and Enzyme asserts in LLVM, aborting the process,
 # when it builds a batched forward call to a rule whose return type is not concrete. A wider
 # batch reaches the second method, which refuses by name.
-@noinline function _throw_batched_forward(width)
-    throw(
-        ArgumentError(
-        "Bramble's Enzyme rule for `fdm_solve` does not support batched (vector-mode) " *
-        "forward differentiation: got width $(width). Differentiate one direction at a " *
-        "time.",
-    ),
-    )
-end
-
 function EnzymeRules.forward(
         config::EnzymeRules.FwdConfigWidth{1},
         ::Const{typeof(Bramble.fdm_solve)},
@@ -521,7 +501,7 @@ function EnzymeRules.forward(
         F::Annotation{<:AbstractVector};
         kwargs...
 )
-    return _throw_batched_forward(EnzymeRules.width(config))
+    return _throw_batched("fdm_solve", "forward", EnzymeRules.width(config))
 end
 
 # The reverse sweep solves with the factorization the forward solve built, kept on the tape: a
@@ -536,7 +516,7 @@ function EnzymeRules.augmented_primal(
         F::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("fdm_solve", "reverse", EnzymeRules.width(config))
     _active_shadow(a, 1) && _throw_active_operator(get(kwargs, :dirichlet, nothing))
 
     fact = Bramble.fdm_factorize(a.val; kwargs...)
@@ -825,7 +805,7 @@ function EnzymeRules.augmented_primal(
         b::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("gmg_solve", "reverse", EnzymeRules.width(config))
     Ωₕ isa Active && _throw_active_gmg(:Ωₕ)
     _active_shadow(Ωₕ, 1) && _throw_active_gmg(:Ωₕ)
     P, loop = _gmg_rule_setup(build.val, Ωₕ.val; kwargs...)
