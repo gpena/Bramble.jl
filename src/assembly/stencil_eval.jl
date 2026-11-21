@@ -1289,30 +1289,40 @@ _is_source_only(::LazyOp) = false
     _summands(op.left_op), _summands(op.right_op))
 @inline _summands(op) = (op,)
 
-# The three walks below visit `_summands(op)` with `_each_entry`, not by recursing left and
-# right. Recursing, every `OperatorAdd` node is its own method instance whose type carries
+# The three walks below visit `_summands(op)` with `_each_summand`, not by recursing left
+# and right. Recursing, every `OperatorAdd` node is its own method instance whose type carries
 # its whole subtree, so a left-deep `a + b + c + ...` (what `foldl(+, terms)` and a
 # hand-written sum build) is inferred over types of total size quadratic in the term count.
 # For 3D `innerₕ(εcₕ(u), εcₕ(v))` built with `foldl(+, ...)` the first assemble took 18.6 to
-# 21.0 s recursing and 16.6 to 17.6 s over `_summands`. `map` over a tuple of more than 32
-# entries collects into a `Vector{Any}` (368 B on the 40-term sum); `_each_entry` unrolls at
-# any length. Only leaves reach `f`, in the same order.
+# 21.0 s recursing and 16.6 to 17.6 s over `_summands`. Only leaves reach `f`, in order.
+#
+# `_each_summand` maps up to `_INLINED_ENTRIES` summands and hands longer tuples to
+# `_each_entry_outlined`. `map` over more than 32 entries collects into a `Vector{Any}` (368 B
+# on the 40-term sum). `_each_entry` at every length is no better: with it, the call into
+# the linear core of a two-term composite semidiscretization dispatched at run time (80 B
+# per residual). The likely cause is inference cutting short `ntuple` called inside
+# `ntuple`, since a leaf's stencil walk goes through it too; `map` has a method per length.
+
+@inline function _each_summand(f::F, ts::Tuple) where {F}
+    length(ts) > _INLINED_ENTRIES && return _each_entry_outlined(f, ts)
+    return map(f, ts)
+end
 
 # `op` first, nothing to mutate: `_check_block_meshes`.
 @inline function _visit_operator_add1(f::F, op::OperatorAdd, rest...) where {F}
-    _each_entry(t -> f(t, rest...), _summands(op))
+    _each_summand(t -> f(t, rest...), _summands(op))
     return nothing
 end
 
 # `op` second, one mutated argument returned unchanged: `_route_terms!`,
 # `_route_terms_parallel!`.
 @inline function _visit_operator_add2(f::F, first_arg, op::OperatorAdd, rest...) where {F}
-    _each_entry(t -> f(first_arg, t, rest...), _summands(op))
+    _each_summand(t -> f(first_arg, t, rest...), _summands(op))
     return first_arg
 end
 
 # `op` third, two mutated arguments, nothing returned: `_pattern_blocks_jacobian!`.
 @inline function _visit_operator_add3(f::F, a1, a2, op::OperatorAdd, rest...) where {F}
-    _each_entry(t -> f(a1, a2, t, rest...), _summands(op))
+    _each_summand(t -> f(a1, a2, t, rest...), _summands(op))
     return nothing
 end
