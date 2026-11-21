@@ -181,6 +181,17 @@ function EnzymeRules.augmented_primal(
     return AugmentedReturn(primal, needs_shadow ? shadow : nothing, tape)
 end
 
+# `C̄ −= Λ Yᴴ`. The caller mixes real and complex blocks and data on purpose (`Tg` in
+# `_block_solve`), so a real `C̄` can meet a complex product: it takes the real part.
+function _subtract_outer!(C̄, Λ, Y)
+    if eltype(C̄) <: Real && !(eltype(Λ) <: Real && eltype(Y) <: Real)
+        C̄ .-= real.(Λ * Y')
+    else
+        mul!(C̄, Λ, Y', -1, 1)
+    end
+    return nothing
+end
+
 function EnzymeRules.reverse(
         config::RevConfig,
         func::Const{typeof(Bramble._dense_block_solve)},
@@ -196,11 +207,11 @@ function EnzymeRules.reverse(
     ok || return (nothing, nothing, nothing)
     Λ, λ = F' \ X̄, F' \ x̄
     C̄, B̄, b̄ = _shadow(C, 1), _shadow(B, 1), _shadow(b, 1)
-    B̄ === nothing || (B̄ .+= Λ)
-    b̄ === nothing || (b̄ .+= λ)
+    B̄ === nothing || _accumulate_shadow!(B.val, B̄, Λ)
+    b̄ === nothing || _accumulate_shadow!(b.val, b̄, λ)
     if C̄ !== nothing
-        mul!(C̄, Λ, X', -1, 1)
-        mul!(C̄, λ, x', -1, 1)
+        _subtract_outer!(C̄, Λ, X)
+        _subtract_outer!(C̄, λ, x)
     end
     # Enzyme's contract: a custom rule consumes the return cotangent it was handed.
     fill!(X̄, zero(eltype(X̄)))

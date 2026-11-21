@@ -1501,6 +1501,60 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
         end
     end
 
+    @testset "Enzyme: dense block, real and complex" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            ER = Enzyme.EnzymeRules
+            # `_block_solve` mixes a complex block with real data, or a real block with
+            # complex data, on purpose. The reverse rule of `_dense_block_solve` must keep
+            # each shadow's type and add the real part of its cotangent to a real one. The
+            # loss is `J = Re⟨X̄, X⟩ + Re⟨x̄, x⟩` with `x̄` complex; the references are
+            # `B̄ = Λ`, `b̄ = λ` and `C̄ = −(Λ Xᴴ + λ xᴴ)`, with `Λ = C⁻ᴴ X̄`, `λ = C⁻ᴴ x̄`,
+            # and a central difference along each entry of `b` and of a real `C`.
+            rcfg = ER.RevConfig{true, true, 1, (false, false, false, false), false, false}()
+            f = Enzyme.Const(Bramble._dense_block_solve)
+            fit(T, v) = T <: Real ? real.(v) : v
+            C₀ = [4.0 1.0; 0.5 3.0]
+            cases = (("complex C, real b", ComplexF64.(C₀) + 0.3im * I,
+                    ComplexF64[1.0 2.0; 0.0 1.0], [1.0, 2.0]),
+                ("real C, complex b", C₀, [1.0 2.0; 0.0 1.0], ComplexF64[1.0 + 1im, 2.0]))
+            @testset "$tag" for (tag, C, B, b) in cases
+                Cd, Bd, bd = (Enzyme.Duplicated(y, zero(y)) for y in (C, B, b))
+                X, x, ok = Bramble._dense_block_solve(C, B, b)
+                RT = Enzyme.Duplicated{typeof((X, x, ok))}
+                aug = ER.augmented_primal(rcfg, f, RT, Cd, Bd, bd)
+                X̄ = ones(eltype(X), size(X))
+                x̄ = ComplexF64[1 + 0.5im * k for k in 1:length(x)]
+                aug.shadow[1] .= X̄
+                aug.shadow[2] .= x̄
+                ER.reverse(rcfg, f, RT, aug.tape, Cd, Bd, bd)
+                Λ, λ = C' \ X̄, C' \ x̄
+                @test eltype(Cd.dval) === eltype(C)
+                @test eltype(bd.dval) === eltype(b)
+                @test bd.dval ≈ fit(eltype(b), λ) rtol=1e-12
+                @test Bd.dval ≈ fit(eltype(B), Λ) rtol=1e-12
+                @test Cd.dval ≈ fit(eltype(C), -(Λ * X' .+ λ * x')) rtol=1e-12
+                J(C, b) = real(dot(X̄, C \ B)) + real(dot(x̄, C \ b))
+                h = 1e-6
+                fdb = map(eachindex(b)) do k
+                    e = h .* ((1:length(b)) .== k)
+                    (J(C, b .+ e) - J(C, b .- e)) / 2h
+                end
+                @test real.(bd.dval) ≈ fdb rtol=1e-6
+                if eltype(C) <: Real
+                    fdC = map(CartesianIndices(C)) do k
+                        E = zero(C)
+                        E[k] = h
+                        (J(C .+ E, b) - J(C .- E, b)) / 2h
+                    end
+                    @test Cd.dval ≈ fdC rtol=1e-6
+                end
+            end
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
     @testset "Enzyme: batched refusal names the call" begin
         if _have(:Enzyme)
             @eval import Enzyme
