@@ -250,9 +250,11 @@ end
 @inline _task_annotation(f, df) = Duplicated(f, df)
 @inline _task_annotation(f::F, df::Base.RefValue{F}) where {F} = MixedDuplicated(f, df)
 
-# The scalar type of a lane: its array's element type, or a scatter lane's first one.
+# The scalar type of a lane: its array's element type, or, for a scatter lane, the promoted
+# type of all its destinations, so one real and one complex destination sum into a complex
+# dot in either order.
 _lane_eltype(d::AbstractArray) = eltype(d)
-_lane_eltype(d::Tuple) = _lane_eltype(d[1])
+_lane_eltype(d::Tuple) = promote_type(map(_lane_eltype, d)...)
 
 @inline function _reverse_lane!(p::_ReverseSlabs, d_v, df, r)
     d_v === nothing && return nothing

@@ -109,6 +109,20 @@ function _complex_scatter_case(p, policy)
     _sweep_scatter_for!(policy, (a, b), 1:37, i -> (p[1] * _CC[i], p[2]^2 * conj(_CC[i])))
     return _cdot(_WC, a) + _cdot(reverse(_WC), b)
 end
+# One real and one complex destination, in both orders: the slab's dot must be complex
+# whichever comes first.
+const _XB = randn(MersenneTwister(7), 37)
+function _mixed_scatter_case(p, policy, ::Val{real_first}) where {real_first}
+    a = zeros(eltype(p), 37)
+    b = zeros(Complex{eltype(p)}, 37)
+    g = i -> (p[1] * _XB[i], p[2]^2 * _CC[i] + p[1])
+    if real_first
+        _sweep_scatter_for!(policy, (a, b), 1:37, g)
+    else
+        _sweep_scatter_for!(policy, (b, a), 1:37, i -> reverse(g(i)))
+    end
+    return sum(abs2, a) + _cdot(_WC, b) + sum(abs2, b)
+end
 
 # The relative error of reverse Enzyme under `CpuPolyester` against ForwardDiff under
 # `CpuSerial`, and whether the rule of `hook` ran.
@@ -482,7 +496,9 @@ end
         @testset "Complex closure sweep, reverse" begin
             p = [0.6, -0.9]
             for (case, hook) in ((_complex_for_case, "_batch_for!"),
-                (_complex_scatter_case, "_batch_scatter_for!"))
+                (_complex_scatter_case, "_batch_scatter_for!"),
+                ((q, pol) -> _mixed_scatter_case(q, pol, Val(true)), "_batch_scatter_for!"),
+                ((q, pol) -> _mixed_scatter_case(q, pol, Val(false)), "_batch_scatter_for!"))
                 err, ran = _reverse_error(case, p, hook)
                 @test ran
                 @test err <= TOL
