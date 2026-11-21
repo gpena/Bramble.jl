@@ -4,8 +4,8 @@ module GhostMatrixFreeTests
 # without assembling it. Each product is checked against `assemble(a) * x` and against
 # `E' * assemble(a.padded) * E` from the space's closure, on seeded non-uniform meshes in
 # 1D to 3D, with Robin, conormal and Dirichlet relations, a corner-reading form, both
-# Dirichlet routes, `α`/`β`, sentinel ghosts, warm allocations, and a CG solve against
-# `pde_solve`.
+# Dirichlet routes, `α`/`β`, sentinel ghosts, warm allocations, promoted products, and a
+# CG solve against `pde_solve`.
 
 using Test
 using Bramble
@@ -15,6 +15,7 @@ using LinearAlgebra: mul!, norm
 using LinearSolve: LinearProblem, KrylovJL_CG, solve
 using Random: MersenneTwister
 using SparseArrays: AbstractSparseMatrix, nzrange, rowvals
+using ForwardDiff: Dual, partials, value
 
 using ..TestUtils: WITH_3D_TESTS
 
@@ -192,6 +193,47 @@ end
             @test wrong[] == 0
             @test !M.busy[]
         end
+    end
+
+    # An `x` the buffers cannot hold (complex, or the `Dual` of an AD Jacobian) gets a
+    # padded pair of its type, kept between products: the second allocates nothing, a
+    # sentinel left in the pair does not reach the result, and the pair is held through
+    # `busy` like the stored one, so a second task is refused.
+    @testset "Promoted products keep their buffers" begin
+        C = constrained(gridspace(ghost_mesh((9, 11)); ghosts = :boundary), robin2)
+        a = form(C, C, laplacian)
+        A = assemble(a)
+        M = matrix_free_operator(a)
+        rng = MersenneTwister(6)
+        xc = rand(rng, ComplexF64, size(A, 2))
+        yc = similar(xc)
+        @test alloc(() -> mul!(yc, M, xc)) == 0
+        @test alloc(() -> mul!(yc, M, xc, 2.0, 1.0)) == 0
+        z = M * xc
+        @test relerr(z, A * xc) <= 1e-12
+        foreach(v -> fill!(v, 1e300 + 1e300im), M.promoted[ComplexF64])
+        @test M * xc == z
+        xd = Dual{Nothing}.(rand(rng, size(A, 2)), rand(rng, size(A, 2)))
+        yd = similar(xd)
+        @test alloc(() -> mul!(yd, M, xd)) == 0
+        @test relerr(value.(yd), A * value.(xd)) <= 1e-12
+        @test relerr(partials.(yd, 1), A * partials.(xd, 1)) <= 1e-12
+        # A `Union` element type keys the pair too; its arithmetic allocates, so no 0 B.
+        xm = Vector{Union{Missing, Float64}}(rand(rng, size(A, 2)))
+        ym = similar(xm)
+        mul!(ym, M, xm)
+        @test relerr(Vector{Float64}(ym), A * Vector{Float64}(xm)) <= 1e-12
+        @test length(M.promoted) == 3
+        M.busy[] = true
+        t = Threads.@spawn try
+            mul!(yc, M, xc)
+            nothing
+        catch e
+            e
+        end
+        @test fetch(t) isa ArgumentError
+        M.busy[] = false
+        @test M * xc == z
     end
 
     # The warm 3D apply is allocation-free too (`check_operator` asserts 0 B). It was not

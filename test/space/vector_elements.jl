@@ -570,6 +570,23 @@ end
         @test comps[1] isa VectorElement
         @test comps[2] isa VectorElement
 
+        # Base's `map` over 32 or more leaves returns an abstract `Tuple`: `components` and
+        # `reshape` stay concrete on both sides of that length (#1006).
+        W1 = gridspace(mesh(domain(interval(0.0, 1.0)), 6, false))
+        for NL in (31, 32, 40)
+            V_long = W1^Val(NL)
+            u_long = element(V_long, 0.0)
+            parent(u_long) .= 1:ndofs(V_long)
+            cs_long = @inferred components(u_long)
+            @test length(cs_long) == NL
+            @test isconcretetype(typeof(cs_long))
+            @test all(k -> parent(cs_long[k]) == parent(u_long)[component_range(V_long, k)], 1:NL)
+            rs_long = @inferred reshape(u_long)
+            @test length(rs_long) == NL
+            @test isconcretetype(typeof(rs_long))
+            @test vec(rs_long[NL]) == parent(cs_long[NL])
+        end
+
         # Scalar space component indexing
         u_scal = element(W, 3.0)
         @test u_scal(1) === u_scal
@@ -1169,16 +1186,26 @@ end
 @testset "Quadrature fallback" begin
     import Bramble: _gauss_rule
 
-    # An isbits float that QuadGK cannot build a rule for must fall back to the
-    # run-time path at generation time rather than breaking precompilation.
-    # `code_lowered` runs the generator, so it throws if the generator does; the body it
-    # returns must call the run-time rule on `OddFloat`, which then fails at the call.
+    # An isbits float that QuadGK cannot build a rule for must fall back to the run-time
+    # path at generation time, not break precompilation. Julia 1.14 no longer expands a
+    # generator from `code_lowered`. The call is the evidence instead. A frame for
+    # `_gauss_rule_runtime` alone proves little: a generator with no fallback that calls
+    # the helper at expansion time leaves one too, under a `GeneratedFunctionStub` frame.
+    # So the frame must sit inside `_gauss_rule`, with no generator frame on the stack.
     primitive type OddFloat <: AbstractFloat 64 end
     @test isbitstype(OddFloat)
-    body = string(only(code_lowered(_gauss_rule, Tuple{Val{3}, Type{OddFloat}})))
-    @test occursin("Bramble._gauss_rule_runtime", body)
-    @test occursin("OddFloat", body)
-    @test_throws MethodError _gauss_rule(Val(3), OddFloat)
+    err, trace = try
+        _gauss_rule(Val(3), OddFloat)
+        nothing, Base.StackTraces.StackFrame[]
+    catch e
+        e, stacktrace(catch_backtrace())
+    end
+    @test err isa MethodError
+    funcs = [frame.func for frame in trace]
+    i = findfirst(==(:_gauss_rule_runtime), funcs)
+    @test i !== nothing
+    @test :_gauss_rule in funcs[something(i, 1):end]
+    @test :GeneratedFunctionStub ∉ funcs
 end
 
 @testset "Tuple arithmetic" begin

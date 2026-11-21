@@ -33,7 +33,8 @@ result for this type specifically, in favor of the shape a grid function actuall
     length(parent(uₕ)) == prod(dims) || _throw_reshape_length(uₕ, dims)
     return Base.ReshapedArray(parent(uₕ), dims, ())
 end
-@inline Base.reshape(uₕ::VectorElement{<:CompositeGridSpace}) = map(reshape, components(uₕ))
+@inline Base.reshape(uₕ::VectorElement{<:CompositeGridSpace}) = _map_entries(
+    reshape, components(uₕ))
 
 @noinline function _throw_reshape_length(uₕ::VectorElement, dims::Tuple)
     n = length(parent(uₕ))
@@ -172,7 +173,7 @@ depth-first, the same leaf a matching-index `uₕ(i)` returns, regardless of nes
 """
 @inline function components(uₕ::VectorElement{<:CompositeGridSpace})
     raw = parent(uₕ)
-    return map(leaf_spaces_offsets(space(uₕ))) do (sp, offset)
+    return _map_entries(leaf_spaces_offsets(space(uₕ))) do (sp, offset)
         VectorElement(@views(raw[(offset + 1):(offset + ndofs(sp))]), sp)
     end
 end

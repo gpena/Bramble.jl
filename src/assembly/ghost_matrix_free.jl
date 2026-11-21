@@ -6,9 +6,11 @@
 # stored `E_uᵀ` by `_csc_columns_band!`) and the transpose of the test space's closure
 # (`E_vᵀ`, read from the columns of `E_v`). The affine part `d` belongs to the load, as in
 # the assembled path. Both padded vectors are buffers built with the operator, so the
-# closure passes allocate nothing. A product holds them through the `busy` flag, taken by
-# compare-and-swap, so a product entered on the same operator while another runs throws
-# an `ArgumentError` rather than overwrite them. The closure passes run in the bands of
+# closure passes allocate nothing; an `x` they cannot hold (a `Dual` or complex `x` on a
+# real form) gets a pair of its element type, built at the first such product and kept.
+# A product holds them through the `busy` flag, taken by compare-and-swap, so a product
+# entered on the same operator while another runs throws an `ArgumentError` rather than
+# overwrite them. The closure passes run in the bands of
 # the operator's policy (`_run_bands!`). A product computes the padded rows the test
 # closure reads only, over the points writing them (the form's `walk`, #884), serially or
 # in its policy's bands.
@@ -41,8 +43,10 @@ struct GhostMatrixFreeOperator{T, Op <: MatrixFreeOperator, WT <: GhostGridSpace
     "the padded vectors `E_u x` and `A_pad E_u x`."
     xpad::BT
     ypad::BT
-    "whether a product holds `xpad` and `ypad`."
+    "whether a product holds `xpad` and `ypad`, or a pair from `promoted`."
     busy::Threads.Atomic{Bool}
+    "by element type (a `Union` too), the padded pair of an `x` the buffers cannot hold."
+    promoted::Dict{Type, Any}
     "the padded points and rows the product walks, the form's."
     walk::RW
     "the reduced rows each band of a `CpuThreaded` cut product sums (`_ghost_mf_bands!`)."
@@ -77,7 +81,7 @@ function _ghost_mf_operator(op::MatrixFreeOperator, a::GhostBilinearForm, mask::
     return GhostMatrixFreeOperator{T, typeof(op), typeof(a.trial_space),
         typeof(a.test_space), typeof(policy), typeof(xpad), typeof(a.walk)}(
         op, a.trial_space, a.test_space, mask, policy, xpad, ypad,
-        Threads.Atomic{Bool}(false), a.walk, _out_cuts(op, a))
+        Threads.Atomic{Bool}(false), Dict{Type, Any}(), a.walk, _out_cuts(op, a))
 end
 
 # For a `CpuThreaded` product on a cut walk through the fused sweep: `cuts[b]:(cuts[b + 1]
@@ -123,8 +127,8 @@ end
 
 # The five-argument method only, as for `MatrixFreeOperator`: `LinearAlgebra`'s `mul!` and
 # `*` reach it. Entries of a type the buffers cannot hold (a complex `x` on a real form)
-# take padded vectors of their own; any other product takes the stored ones through `busy`,
-# released however the product ends.
+# take the padded pair of their type (`_ghost_mf_promoted`), any other product the stored
+# one. Either is held through `busy`, released however the product ends.
 function mul!(y::AbstractVector, op::GhostMatrixFreeOperator{T}, x::AbstractVector,
         α::Number, β::Number) where {T}
     (length(x) == size(op, 2) && length(y) == size(op, 1)) ||
@@ -133,17 +137,31 @@ function mul!(y::AbstractVector, op::GhostMatrixFreeOperator{T}, x::AbstractVect
     xd = _mf_data(x)
     Base.require_one_based_indexing(yd, xd)
     S = promote_type(T, eltype(xd))
-    if S === T
-        Threads.atomic_cas!(op.busy, false, true) && _throw_ghost_mf_busy()
-        try
+    Threads.atomic_cas!(op.busy, false, true) && _throw_ghost_mf_busy()
+    try
+        if S === T
             _ghost_mf_apply!(yd, op, xd, α, β, op.xpad, op.ypad)
-        finally
-            op.busy[] = false
+        else
+            xpad, ypad = _ghost_mf_promoted(op, S)
+            _ghost_mf_apply!(yd, op, xd, α, β, xpad, ypad)
         end
-    else
-        _ghost_mf_apply!(yd, op, xd, α, β, similar(op.xpad, S), similar(op.ypad, S))
+    finally
+        op.busy[] = false
     end
     return y
+end
+
+# The padded pair of element type `S`, built at the first product there. The `Dict` holds
+# it untyped, so the assertion gives the product its concrete type back. Called under
+# `busy`, so no two tasks write the `Dict` at once.
+@noinline function _ghost_mf_promoted(op::GhostMatrixFreeOperator, ::Type{S}) where {S}
+    X = Base.promote_op(similar, typeof(op.xpad), Type{S})
+    pair = get(op.promoted, S, nothing)
+    if pair === nothing
+        pair = (similar(op.xpad, S), similar(op.ypad, S))
+        op.promoted[S] = pair
+    end
+    return pair::Tuple{X, X}
 end
 
 @noinline function _throw_ghost_mf_busy()

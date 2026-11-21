@@ -7,8 +7,8 @@ using SparseConnectivityTracer: SparseConnectivityTracer
 using SparseMatrixColorings: SparseMatrixColorings
 using SparseArrays: nnz
 using Random
-using Bramble: Mₓ!, type_cached_assemble!
-using ..TestUtils: alloc_test, @test_allocs
+using Bramble: Mₓ, Mᵧ, Mₓ!, Mᵧ!, type_cached_assemble!
+using ..TestUtils: @test_allocs
 
 # `type_cached_assemble!` (assembly/type_cached_assemble.jl): caches a
 # coefficient-dependent BilinearForm's sparsity pattern per element type, so a Newton
@@ -124,68 +124,54 @@ const _traced_ad = AutoSparse(
         @test nnz(J) > 0
     end
 
-    # Repeated calls at an already-seen type cost a small, N-independent overhead, not a
-    # rebuild.
-    @testset "seen type: small N-independent cost" begin
-        # `cache::AbstractDict` necessarily stores its `(a, refill!, A)` entries as `Any` --
-        # the concrete triple's type differs across every distinct element type `T` a cache
-        # can ever be asked about -- so a cache hit still pays a small, fixed dynamic-dispatch
-        # cost fetching that entry back out. It is not literally zero allocation, but the
-        # property that actually matters holds: unlike `diffusion_matrix_direct`, whose
-        # allocation grows with `ndofs` because it rebuilds the whole sparsity pattern every
-        # call, a cache hit's cost does not grow with the mesh at all.
-        hit_cache = Dict{DataType, Any}()
-        diffusion_matrix_cached = let cache = hit_cache
+    # A repeated call at an already-seen type allocates nothing, in 1D and in 2D.
+    @testset "seen type: warm hit allocates 0 B" begin
+        # Entries live in the cache as `Any`, so a hit makes one dynamic call. Everything
+        # that call receives is already on the heap and it returns `nothing`, so it boxes
+        # nothing, and `refill!` and `assemble!` past it work in place. An untyped `Dict()`
+        # here, the way callers write it.
+        hit = let cache = Dict()
             uₕ -> type_cached_assemble!(_build_diffusion, cache, uₕ; dirichlet = :boundary)
         end
+        u0 = element(Wₕ)
+        Rₕ!(u0, x -> exp(x[1]))
+        hit(u0)   # first call: builds and caches
+        @test_allocs hit(u0)
+        @test hit(u0) == diffusion_matrix_direct(u0)
 
-        u0 = element(Wₕ, 0.0)
-        diffusion_matrix_cached(u0)   # first call: builds and caches
-        diffusion_matrix_cached(u0)   # warm up the second call's own compilation
+        # A constraints struct for `dirichlet` travels in the entry's typed argument slot,
+        # as a `Symbol` does, so it is never boxed either.
+        hit_bcs = let cache = Dict()
+            uₕ -> type_cached_assemble!(_build_diffusion, cache, uₕ; dirichlet = bcs)
+        end
+        hit_bcs(u0)
+        @test_allocs hit_bcs(u0)
 
-        # The one dynamic call is the barrier taking the cached entry whole; past it, the
-        # refill and `assemble!` infer concretely at the entry's own type.
-        @test (@inferred Bramble._type_cached_fill!(hit_cache[Float64], u0, :boundary, nothing)) ===
-              hit_cache[Float64][3]
-
-        cached_bytes = alloc_test(diffusion_matrix_cached, u0)
-        direct_bytes = alloc_test(diffusion_matrix_direct, u0)
-        @test cached_bytes < direct_bytes / 2
-
-        # Same check at a 100x larger mesh: `direct_bytes` must grow with it (it rebuilds the
-        # pattern), while a cache hit's own cost must not (it is dictionary/dispatch overhead,
-        # not proportional to ndofs).
+        # 2D, on a non-uniform mesh: one coefficient per direction, each averaged across the
+        # other, so `refill!` needs both `Mₓ!` and `Mᵧ!`.
         Random.seed!(20260912)
-        Ωₕ_big = mesh(domain(interval(0.0, 1.0)), 2000, false)
-        Wₕ_big = gridspace(Ωₕ_big)
-        function _build_diffusion_big(uₕ)
-            Mu = element(Wₕ_big, eltype(uₕ))
-            αvals = element(Wₕ_big, eltype(uₕ))
-            a = form(Wₕ_big, Wₕ_big, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
+        Ω2 = domain(interval(0.0, 1.0) × interval(0.0, 2.0))
+        W2 = gridspace(mesh(Ω2, (8, 9), (false, false)))
+        _flux2(ax, ay) = form(
+            W2, W2, (U, V) -> inner₊((ax * ∇ₕ(U)[1], ay * ∇ₕ(U)[2]), ∇ₕ(V)))
+        function _build_flux(uₕ)
+            Mx, My, ax, ay = (element(W2, eltype(uₕ)) for _ in 1:4)
             refill!(uₕ) = begin
-                Mₓ!(Mu, uₕ)
-                αvals .= α.(Mu)
+                Mₓ!(Mx, uₕ)
+                Mᵧ!(My, uₕ)
+                ax .= α.(My)
+                ay .= α.(Mx)
             end
-            return a, refill!
+            return _flux2(ax, ay), refill!
         end
-        function diffusion_matrix_direct_big(uₕ)
-            αvals = α.(Mₕ(uₕ))
-            a = form(Wₕ_big, Wₕ_big, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
-            return assemble(a; dirichlet = :boundary)
+        hit2 = let cache = Dict()
+            uₕ -> type_cached_assemble!(_build_flux, cache, uₕ; dirichlet = :boundary)
         end
-        diffusion_matrix_cached_big = let cache_big = Dict{DataType, Any}()
-            uₕ -> type_cached_assemble!(
-                _build_diffusion_big, cache_big, uₕ; dirichlet = :boundary
-            )
-        end
-        u0_big = element(Wₕ_big, 0.0)
-        diffusion_matrix_cached_big(u0_big)
-        diffusion_matrix_cached_big(u0_big)
-
-        cached_bytes_big = alloc_test(diffusion_matrix_cached_big, u0_big)
-        direct_bytes_big = alloc_test(diffusion_matrix_direct_big, u0_big)
-        @test direct_bytes_big > 50 * direct_bytes
-        @test cached_bytes_big == cached_bytes
+        u2 = element(W2)
+        Rₕ!(u2, x -> 1 + x[1] * x[2])
+        hit2(u2)
+        @test_allocs hit2(u2)
+        @test hit2(u2) == assemble(_flux2(α.(Mᵧ(u2)), α.(Mₓ(u2))); dirichlet = :boundary)
     end
 
     # Drives a full Newton solve to the same answer as the direct approach.

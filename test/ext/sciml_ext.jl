@@ -31,6 +31,18 @@ struct _ParamsG
     g::Float64
 end
 
+# Stand-in solution for the streaming test: `sol(t)` records how many step files (not the
+# `.pvd`) are in `dir` at that moment.
+struct _StreamProbeSol <: SciMLBase.AbstractODESolution{Float64, 1, Any}
+    n::Int
+    dir::String
+    seen::Vector{Int}
+end
+function (s::_StreamProbeSol)(t)
+    push!(s.seen, count(f -> !endswith(f, ".pvd"), readdir(s.dir)))
+    return fill(float(t), s.n)
+end
+
 # BrambleSciMLExt: the `ODEFunction`/`ODEProblem`/`LinearProblem` wrapping of a
 # `Semidiscretization`. The semidiscretisation itself is covered without any solver package
 # in test/form/semidiscrete.jl, and its orders through these wrappers in
@@ -660,9 +672,8 @@ end
         # The (t, u) pairs written: the appended data is compressed, so they are read where
         # the extension builds them, against the hand-built solution's own states.
         VE = Base.get_extension(Bramble, :BrambleVTKSciMLExt)
-        steps = VE._solution_steps(sol, nothing)
-        @test first.(steps) == ts
-        @test last.(steps) == [u0, u1, u2]
+        @test VE._step_times(sol, nothing) == ts
+        @test [VE._step_state(sol, nothing, i, t) for (i, t) in enumerate(ts)] == [u0, u1, u2]
     end
 
     @testset "interpolated times, custom field name" begin
@@ -682,13 +693,22 @@ end
         # `build_solution` interpolates linearly: t = 0.25 is 0.625 of the way across
         # [0, 0.4], and t = 0.75 is 0.35/0.6 of the way across [0.4, 1].
         VE = Base.get_extension(Bramble, :BrambleVTKSciMLExt)
-        steps = VE._solution_steps(sol, range(0.0, 1.0; length = 5))
-        @test first.(steps) == collect(range(0.0, 1.0; length = 5))
-        @test steps[1][2] ≈ u0
-        @test steps[2][2] ≈ u0 .+ 0.625 .* (u1 .- u0)
-        @test steps[3][2] ≈ u1 .+ (0.1 / 0.6) .* (u2 .- u1)
-        @test steps[4][2] ≈ u1 .+ (0.35 / 0.6) .* (u2 .- u1)
-        @test steps[5][2] ≈ u2
+        itimes = VE._step_times(sol, range(0.0, 1.0; length = 5))
+        @test itimes == collect(range(0.0, 1.0; length = 5))
+        states = [VE._step_state(sol, itimes, i, t) for (i, t) in enumerate(itimes)]
+        @test states[1] ≈ u0
+        @test states[2] ≈ u0 .+ 0.625 .* (u1 .- u0)
+        @test states[3] ≈ u1 .+ (0.1 / 0.6) .* (u2 .- u1)
+        @test states[4] ≈ u1 .+ (0.35 / 0.6) .* (u2 .- u1)
+        @test states[5] ≈ u2
+    end
+
+    @testset "interpolated times stream states" begin
+        mktempdir() do dir
+            probe = _StreamProbeSol(ndofs(Wₕ), dir, Int[])
+            export_vtk(joinpath(dir, "s"), Wₕ, probe; times = (0.0, 0.5, 1.0))
+            @test probe.seen == [0, 1, 2]
+        end
     end
 end
 
