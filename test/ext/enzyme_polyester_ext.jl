@@ -234,6 +234,22 @@ function _bands_case(p, policy, kind::Val)
     return sum(abs2, out)
 end
 
+# A band kernel whose derivative reads `out`: `out[i] *= x[i]`. At width 2 the reverse
+# replays each lane in turn, so lane 2 must replay on `out` as it was before the call, not
+# on lane 1's writes.
+function _scale_band!(out, x, n::Int, b::Int)
+    for i in Bramble._band_range(Base.OneTo(length(out)), n, b)
+        out[i] = out[i] * x[i]
+    end
+    return nothing
+end
+function _scale_case(p, policy)
+    x = [p[1] + 0.1k * p[2] for k in 1:29]
+    out = [1 + k * p[3] / 29 for k in 1:29]
+    Bramble._run_bands!(policy, _scale_band!, out, x)
+    return sum(abs2, out)
+end
+
 # The relative errors of reverse at width 1, reverse at width 2 (`BatchDuplicated`, lane
 # `k` seeded `cots[k]`) and forward under `CpuPolyester`, against ForwardDiff under
 # `CpuSerial`.
@@ -491,6 +507,12 @@ end
                 @test all(<=(TOL), _bands_errors((q, pol) -> _bands_case(q, pol, kind), p))
                 @test EnzymePolicyCases._rule_entries("_batch_run_bands!") > n0
             end
+        end
+
+        @testset "Band engine reading its output" begin
+            n0 = EnzymePolicyCases._rule_entries("_batch_run_bands!")
+            @test all(<=(TOL), _bands_errors(_scale_case, [0.8, 0.3, 1.2]))
+            @test EnzymePolicyCases._rule_entries("_batch_run_bands!") > n0
         end
 
         @testset "Data overwritten after the call" begin

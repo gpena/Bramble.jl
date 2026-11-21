@@ -28,7 +28,10 @@
 #
 # The reverse pass replays each band's primal on `out` as it was before the call (the
 # `+=` engines would otherwise add twice, and the in-place averages read `out` itself), so
-# `out`'s values are kept from before the primal and put back for the reverse. The kernel
+# `out`'s values are kept from before the primal and put back for the reverse. Lanes run in
+# turn. From width 2 on, every lane after the first replays on a copy of `out` taken before
+# the call and made once on the host, since `out` itself holds the previous lane's writes by
+# then and a kernel whose derivative reads `out` would differentiate those. The kernel
 # and every other argument, `Const` ones too since the reverse reads them, are copied whole
 # before the primal, in one walk so that arrays they share stay shared, whenever `out`
 # carries a shadow. Their `overwritten` entries do not say whether later code writes the
@@ -246,27 +249,37 @@ struct _BandsLane{FW, RV, DO, C}
     act::Vector{Any}
 end
 
-# `ins` the inputs `(f, rest...)` as annotated, `vals` their values for the replay.
+# `ins` the inputs `(f, rest...)` as annotated, `vals` their values for the replay, `outs`
+# the `out` each lane's replay writes, or the one `out` at width 1.
 struct _BandsReverse{A, V, O, L}
     ins::A
     vals::V
-    out::O
+    outs::O
     lanes::L
     errs::Vector{Any}
 end
 
-@inline function _bands_lane!(p::_BandsReverse, lane::_BandsLane, n::Int, b::Int)
+@inline function _bands_lane!(p::_BandsReverse, lane::_BandsLane, out, n::Int, b::Int)
     anns = map(_bands_annotation, p.ins, p.vals, lane.copies[b])
-    fa, ra, oa = first(anns), Base.tail(anns), Duplicated(p.out, lane.d_out)
+    fa, ra, oa = first(anns), Base.tail(anns), Duplicated(out, lane.d_out)
     tape, _, _ = lane.fwd(Const(_bands_task!), fa, oa, Const(n), Const(b), ra...)
     r = lane.rev(Const(_bands_task!), fa, oa, Const(n), Const(b), ra..., tape)
     lane.act[b] = first(r)
     return nothing
 end
 
+# Every lane of task `b`, in turn: on `outs` itself at width 1, else each on its own.
+@inline function _bands_lanes!(p::_BandsReverse, outs::AbstractArray, n::Int, b::Int)
+    map(lane -> lane === nothing ? nothing : _bands_lane!(p, lane, outs, n, b), p.lanes)
+end
+@inline function _bands_lanes!(p::_BandsReverse, outs::Tuple, n::Int, b::Int)
+    map((lane, o) -> lane === nothing ? nothing : _bands_lane!(p, lane, o, n, b),
+        p.lanes, outs)
+end
+
 @noinline function _bands_reverse_threw(p::_BandsReverse, n::Int, b::Int)
     try
-        map(lane -> lane === nothing ? nothing : _bands_lane!(p, lane, n, b), p.lanes)
+        _bands_lanes!(p, p.outs, n, b)
     catch e
         p.errs[b] = e
         return true
@@ -359,8 +372,18 @@ end
     return W == 1 ? z : ntuple(_ -> z, Val(W))
 end
 
-function _bands_reverse!(handed::HD, take::TK, mode::M, n::Int, ins, vals, out, d_outs,
-        V::Val{W}) where {HD, TK, M, W}
+# The `out` each lane's replay writes: `out` itself for the first lane with a cotangent,
+# a copy of `before` for each later one.
+function _bands_outs(out, before, d_outs::Tuple)
+    live = findfirst(!isnothing, d_outs)
+    return map(d_outs, ntuple(identity, Val(length(d_outs)))) do d, w
+        return (d === nothing || w == live) ? out : copyto!(_asm_scratch(out), before)
+    end
+end
+
+# `out` holds its values from before the call, kept in `before` too for the later lanes.
+function _bands_reverse!(handed::HD, take::TK, mode::M, n::Int, ins, vals, out, before,
+        d_outs, V::Val{W}) where {HD, TK, M, W}
     lanes = ntuple(V) do w
         d_outs[w] === nothing && return nothing
         shadows = map(a -> _bands_shadow(a, w), ins)
@@ -372,7 +395,8 @@ function _bands_reverse!(handed::HD, take::TK, mode::M, n::Int, ins, vals, out, 
             map(typeof, Base.tail(anns))...)
         return _BandsLane(fwd, rev, d_outs[w], copies, Vector{Any}(nothing, n))
     end
-    p = _BandsReverse(ins, vals, out, lanes, Vector{Any}(nothing, n))
+    outs = W == 1 ? out : _bands_outs(out, before, d_outs)
+    p = _BandsReverse(ins, vals, outs, lanes, Vector{Any}(nothing, n))
     handed(_bands_reverse_run!, p, take, n) && _bands_rethrow(p.errs)
     for w in 1:W
         lane = lanes[w]
@@ -416,7 +440,7 @@ function EnzymeRules.reverse(config::RevConfig, func::Const{_RunBands}, ::Type{R
         copyto!(out.val, before)
         try
             _bands_reverse!(pe._handed, pe._take, mode, nbands.val, ins, vals, out.val,
-                d_outs, W)
+                before, d_outs, W)
         finally
             copyto!(out.val, after)
         end
