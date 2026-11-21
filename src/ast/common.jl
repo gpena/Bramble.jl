@@ -46,6 +46,18 @@ end
 
 const _INLINED_ENTRIES = 32
 
+# `f` over each entry of a tuple, returning a tuple. Under `_INLINED_ENTRIES` entries this
+# is `map`, which has a method per length. From there on the unrolled tuple is built out
+# of line (`_each_entry_outlined`), because Base's `map` collects into a `Vector{Any}` and
+# returns an abstract `Tuple` (288 B at 32 summands, 368 B at 40). `_each_entry` at every
+# length does not fix it: the call into the linear core of a two-term composite
+# semidiscretization then dispatched at run time (80 B per residual), likely because
+# inference cuts short an `ntuple` called inside another (a leaf's stencil walk uses one).
+@inline function _map_entries(f::F, entries::Tuple) where {F}
+    length(entries) < _INLINED_ENTRIES && return map(f, entries)
+    return _each_entry_outlined(f, entries)
+end
+
 """
     shift_stencil(inner::Tuple, ::Val{Dim}, delta)
 
