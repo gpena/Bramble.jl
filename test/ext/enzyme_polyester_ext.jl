@@ -314,9 +314,8 @@ function _scale_case(p, policy)
 end
 
 # A `Float32` beside an array in `_run_bands!`'s kernel, and in a closure argument. Reverse
-# gave the `Float32` a zero derivative in the closure, through a non-inlined `_run_bands!`.
-# It still does in the kernel: the band rule leaves the right derivative in the shadow of
-# the `Ref` that carries the kernel, and it is lost after the rule returns.
+# gave the `Float32` a zero derivative: in the kernel, when the band thunks took it behind
+# its `Ref`, and in the closure, through a non-inlined `_run_bands!`.
 struct _F32Band{T, X}
     c::T
     x::X
@@ -640,9 +639,9 @@ end
             @test ran
             @test err <= 1e-4
             kernel = (q, pol) -> _f32_bands_case(q, pol, Val(:kernel))
-            err, ran = _reverse_error(kernel, p, "_batch_run_bands!")
-            @test ran
-            @test_broken err <= 1e-4
+            n0 = EnzymePolicyCases._rule_entries("_batch_run_bands!")
+            @test all(<=(1e-4), _bands_errors(kernel, p))
+            @test EnzymePolicyCases._rule_entries("_batch_run_bands!") > n0
         end
 
         @testset "Data overwritten after the call" begin
