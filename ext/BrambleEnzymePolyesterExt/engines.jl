@@ -22,15 +22,19 @@
 # - Reverse: each task runs Enzyme's split reverse of its band, every lane through its own
 #   width-1 thunk. `d_out` is shared: a band reads and clears it only at the points it
 #   writes, the disjointness the primal's bands already rely on. Every other shadow is read
-#   across band edges, so each task works on its own copy of it. The copy starts as the
-#   shadow itself, because a kernel may write an argument besides `out` (`jacobian!`'s
+#   across band edges, so each task works on its own copy of it. The copy starts with the
+#   shadow's values, because a kernel may write an argument besides `out` (`jacobian!`'s
 #   coefficient values), and its band then reads that cotangent at the points it writes
-#   and clears it there. After the join each entry gains every copy's change from a
-#   snapshot of the shadow taken before the tasks ran (`_bands_merge`), under `@batch` for
-#   an array, by `_bands_merge!` otherwise. An entry no task changed keeps its value. A
-#   shadow that is its own primal (runtime activity's inactive data) gets no copy and
-#   reaches the tasks as `Const`. An `Active` argument (a scalar weight) has its per-task
-#   derivatives summed on the host.
+#   and clears it there. Data nested in the shadow that is its own primal (runtime
+#   activity's inactive data) is zeroed in the copy (`_bands_seeded`); a task working on
+#   the shadow itself would see that data as inactive and drop what a write to it carries.
+#   After the join each entry gains every copy's change from a snapshot of the shadow taken
+#   before the tasks ran (`_bands_merge`), under `@batch` for an array, by `_bands_merge!`
+#   otherwise. An entry no copy changed keeps its value. A shadow that is its own primal
+#   gets no copy and reaches the tasks as `Const`. An `Active` argument (a scalar weight)
+#   has its per-task derivatives summed on the host. A lane is differentiated when `out`
+#   or any input has a shadow there: a kernel may write an input whose cotangent must
+#   reach the caller even when `out`'s has none.
 #
 # The reverse pass replays each band's primal on `out` as it was before the call (the
 # `+=` engines would otherwise add twice, and the in-place averages read `out` itself), so
@@ -222,7 +226,7 @@ function EnzymeRules.forward(config::FwdConfig, func::Const{_RunBands}, ::Type{R
         rest::Vararg{Annotation, N}) where {RT, N}
     _entered!(:_batch_run_bands!)
     n = nbands.val
-    if all(isnothing, _lanes(out, Val(EnzymeRules.width(config))))
+    if !any(_bands_live(out, (f, rest...), Val(EnzymeRules.width(config))))
         func.val(f.val, n, out.val, _bands_values(rest)...)
         return nothing
     end
@@ -248,6 +252,18 @@ end
 @inline _bands_shadow(a::MixedDuplicated, w::Int) = a.dval
 @inline _bands_shadow(a::BatchMixedDuplicated, w::Int) = a.dval[w]
 
+# `out`'s shadow in each lane, `nothing` where it is `out` itself (runtime activity's
+# inactive data), and whether each lane has anything to differentiate: `out`'s shadow, or
+# the shadow of an input the kernel may write besides `out`.
+@inline function _bands_d_outs(out, V::Val)
+    return map(d -> d === out.val ? nothing : d, _lanes(out, V))
+end
+@inline function _bands_live(out, ins, V::Val{W}) where {W}
+    d_outs = _bands_d_outs(out, V)
+    return ntuple(w -> d_outs[w] !== nothing ||
+                       any(a -> _bands_shadow(a, w) !== nothing, ins), V)
+end
+
 # A task's annotation of an input, given its per-task shadow copy `c`.
 @inline _bands_annotation(a, v, ::Nothing) = a isa Active ? Active(v) : Const(v)
 @inline _bands_annotation(a, v, c) = Duplicated(v, c)
@@ -262,9 +278,9 @@ end
     return MixedDuplicated(v, c)
 end
 
-# One lane: its thunks, its `d_out`, and `copies[b]`, task `b`'s copies of the lane's
-# input shadows (`nothing` for an input with none). `act[b]` holds what task `b`'s reverse
-# returned, read for the `Active` inputs.
+# One lane: its thunks, its `d_out` (`nothing` when `out` has none), and `copies[b]`, task
+# `b`'s copies of the lane's input shadows (`nothing` for an input with none). `act[b]`
+# holds what task `b`'s reverse returned, read for the `Active` inputs.
 struct _BandsLane{FW, RV, DO, C}
     fwd::FW
     rev::RV
@@ -286,7 +302,8 @@ end
 @inline function _bands_lane!(
         p::_BandsReverse, lane::_BandsLane, vals, out, n::Int, b::Int)
     anns = map(_bands_annotation, p.ins, vals, lane.copies[b])
-    fa, ra, oa = first(anns), Base.tail(anns), Duplicated(out, lane.d_out)
+    fa, ra = first(anns), Base.tail(anns)
+    oa = lane.d_out === nothing ? Const(out) : Duplicated(out, lane.d_out)
     tape, _, _ = lane.fwd(Const(_bands_task!), fa, oa, Const(n), Const(b), ra...)
     r = lane.rev(Const(_bands_task!), fa, oa, Const(n), Const(b), ra..., tape)
     lane.act[b] = first(r)
@@ -422,9 +439,9 @@ end
 
 # `_bands_merge` over a shadow's object graph, walked as `_accumulate!` (sweeps.jl) walks
 # it: with a work list, `d`, its snapshot `d0` and its copies `cs` in step, an object shared
-# in `d` merged once, a shadow that is its own primal skipped. Floats merge where they are
-# stored mutably: in a buffer, or in a mutable object's field, an immutable value there
-# rebuilt.
+# in `d` merged once, data skipped where `d` or a copy is its own primal (`_bands_seeded`
+# passes the shadow as the one copy). Floats merge where they are stored mutably: in a
+# buffer, or in a mutable object's field, an immutable value there rebuilt.
 function _bands_merge!(d, d0, cs, primal)
     q = d isa Base.RefValue && !(primal isa Base.RefValue) ? Ref(primal) : primal
     seen, work = Base.IdSet{Any}(), Any[(d, d0, cs, q)]
@@ -436,7 +453,7 @@ end
 
 function _bands_merge_one!(d::T, d0, cs, q, seen, work) where {T}
     (d0 isa T && all(c -> c isa T, cs)) || return nothing
-    (isbitstype(T) || d isa _Opaque || d === q) && return nothing
+    (isbitstype(T) || d isa _Opaque || d === q || any(c -> c === q, cs)) && return nothing
     if ismutabletype(T)
         d in seen && return nothing
         push!(seen, d)
@@ -512,13 +529,24 @@ end
     return W == 1 ? z : ntuple(_ -> z, Val(W))
 end
 
-# The `out` each lane's replay writes: `out` itself for the first lane with a cotangent,
-# a copy of `before` for each later one.
-function _bands_outs(out, before, d_outs::Tuple)
-    live = findfirst(!isnothing, d_outs)
-    return map(d_outs, ntuple(identity, Val(length(d_outs)))) do d, w
-        return (d === nothing || w == live) ? out : copyto!(_asm_scratch(out), before)
+# The `out` each lane's replay writes: `out` itself for the first live lane, a copy of
+# `before` for each later one.
+function _bands_outs(out, before, live::Tuple)
+    first_live = findfirst(live)
+    return map(live, ntuple(identity, Val(length(live)))) do l, w
+        return (!l || w == first_live) ? out : copyto!(_asm_scratch(out), before)
     end
+end
+
+# A task's copy of the shadow `s` of `primal`: `s`'s values, except data in `s` that is its
+# own primal (runtime activity's inactive data), which is zeroed: a task writing there must
+# not read the primal's values as a cotangent. Built zeroed and filled by `_bands_merge!`,
+# whose walk matches `s` to `primal`.
+_bands_seeded(s::Array{<:Union{AbstractFloat, Complex}}, primal) = copy(s)
+function _bands_seeded(s, primal)
+    c = _graph_copy(s, true)
+    _bands_merge!(c, c, (s,), primal)
+    return c
 end
 
 # A rest argument as the thunks take it: `_slab_primal` of a `_band_box` box, else as is.
@@ -528,23 +556,25 @@ end
 # `out` holds its values from before the call, kept in `before` too for the later lanes.
 # The kernel and the boxed arguments reach the thunks as the header says.
 function _bands_reverse!(handed::HD, take::TK, mode::M, n::Int, ins, vals0, out, before,
-        d_outs, V::Val{W}) where {HD, TK, M, W}
+        d_outs, live, V::Val{W}) where {HD, TK, M, W}
     vals = ntuple(V) do w
         v = w == 1 ? vals0 : _graph_copy(vals0, false)::typeof(vals0)
         return (_slab_primal(first(v)), map(_bands_primal, Base.tail(v))...)
     end
     lanes = ntuple(V) do w
-        d_outs[w] === nothing && return nothing
+        live[w] || return nothing
         shadows = map(a -> _bands_shadow(a, w), ins)
-        copies = [map(s -> s === nothing ? nothing : _graph_copy(s, false), shadows)
+        copies = [map((s, a) -> s === nothing ? nothing : _bands_seeded(s, a.val), shadows,
+                      ins)
                   for _ in 1:n]
         anns = map(_bands_annotation, ins, vals[w], first(copies))
+        OA = d_outs[w] === nothing ? Const{typeof(out)} : Duplicated{typeof(out)}
         fwd, rev = Enzyme.autodiff_thunk(mode, Const{typeof(_bands_task!)}, Const,
-            typeof(first(anns)), Duplicated{typeof(out)}, Const{Int}, Const{Int},
+            typeof(first(anns)), OA, Const{Int}, Const{Int},
             map(typeof, Base.tail(anns))...)
         return _BandsLane(fwd, rev, d_outs[w], copies, Vector{Any}(nothing, n))
     end
-    outs = W == 1 ? out : _bands_outs(out, before, d_outs)
+    outs = W == 1 ? out : _bands_outs(out, before, live)
     pres = ntuple(V) do w
         lanes[w] === nothing && return nothing
         shadows = map(a -> _bands_shadow(a, w), ins)
@@ -569,7 +599,7 @@ function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_RunBands},
         rest::Vararg{Annotation, N}) where {RT, N}
     _entered!(:_batch_run_bands!)
     tape = nothing
-    if !all(isnothing, _lanes(out, Val(EnzymeRules.width(config))))
+    if any(_bands_live(out, (f, rest...), Val(EnzymeRules.width(config))))
         vals = (f.val, _bands_values(rest)...)
         tape = (_graph_copy(vals, false)::typeof(vals), copy(out.val))
     end
@@ -582,8 +612,9 @@ function EnzymeRules.reverse(config::RevConfig, func::Const{_RunBands}, ::Type{R
         rest::Vararg{Annotation, N}) where {RT, N}
     W = Val(EnzymeRules.width(config))
     ins = (f, rest...)
-    d_outs = _lanes(out, W)
-    d = if all(isnothing, d_outs)
+    d_outs = _bands_d_outs(out, W)
+    live = _bands_live(out, ins, W)
+    d = if !any(live)
         map(a -> _bands_zero_active(a, W), ins)
     else
         vals, before = tape
@@ -594,7 +625,7 @@ function EnzymeRules.reverse(config::RevConfig, func::Const{_RunBands}, ::Type{R
         copyto!(out.val, before)
         try
             _bands_reverse!(pe._handed, pe._take, mode, nbands.val, ins, vals, out.val,
-                before, d_outs, W)
+                before, d_outs, live, W)
         finally
             copyto!(out.val, after)
         end

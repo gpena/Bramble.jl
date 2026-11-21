@@ -334,6 +334,74 @@ function _write_case(p, policy)
     return sum(abs2, out) + sum(abs2, y) + sum(abs2, zb)
 end
 
+# A constant global scratch, so under runtime activity its shadow is itself, that a kernel
+# struct or a mutable box holds and writes with an active value. A task's shadow copy took
+# the scratch's values along, and the task read them as a cotangent. Its `Float64` entries
+# cannot hold a dual number, so the reference is central differences.
+const _SCRATCH = zeros(37)
+struct _ScratchBand{T, X}
+    c::T
+    w::X
+end
+function (k::_ScratchBand)(out, y, n::Int, b::Int)
+    for i in Bramble._band_range(Base.OneTo(length(out)), n, b)
+        k.w[i] = k.c * y[i]
+        out[i] = k.w[i]^2 + y[i]
+    end
+    return nothing
+end
+mutable struct _ScratchBox{X, T}
+    w::X
+    c::T
+end
+function _box_band!(out, bx, y, n::Int, b::Int)
+    for i in Bramble._band_range(Base.OneTo(length(out)), n, b)
+        bx.w[i] = bx.c * y[i]
+        out[i] = bx.w[i]^2 + y[i]
+    end
+    return nothing
+end
+function _scratch_case(p, policy, ::Val{:kernel})
+    y = [p[2] + 0.1k for k in 1:37]
+    out = zeros(37)
+    Bramble._run_bands!(policy, _ScratchBand(p[1], _SCRATCH), out, y)
+    return sum(abs2, out)
+end
+function _scratch_case(p, policy, ::Val{:box})
+    y = [p[2] + 0.1k for k in 1:37]
+    out = zeros(37)
+    Bramble._run_bands!(policy, _box_band!, out, _ScratchBox(_SCRATCH, p[1]), y)
+    return sum(abs2, out)
+end
+function _scratch_error(case, p)
+    f = q -> case(q, CpuSerial())
+    ref = map(eachindex(p)) do k
+        e = zero(p)
+        e[k] = 1e-6
+        return (f(p .+ e) - f(p .- e)) / 2e-6
+    end
+    got = Enzyme.gradient(set_runtime_activity(Enzyme.Reverse),
+        Const(q -> case(q, CpuPolyester())), p)[1]
+    return _relerr(got, ref)
+end
+
+# A kernel that writes an active argument and an `out` with no shadow (a constant global).
+# The rules skipped every derivative when `out` had none, so `y`'s cotangent was lost.
+const _NO_SHADOW_OUT = zeros(37)
+function _no_shadow_band!(out, y, x, n::Int, b::Int)
+    for i in Bramble._band_range(Base.OneTo(length(out)), n, b)
+        y[i] = y[i] * x[i]
+        out[i] = 0.0
+    end
+    return nothing
+end
+function _no_shadow_case(p, policy)
+    y = [p[1] + 0.1k for k in 1:37]
+    x = [p[2] * k for k in 1:37]
+    Bramble._run_bands!(policy, _no_shadow_band!, _NO_SHADOW_OUT, y, x)
+    return sum(abs2, y)
+end
+
 # A `Float32` beside an array in `_run_bands!`'s kernel, and in a closure argument. Reverse
 # gave the `Float32` a zero derivative: in the kernel, when the band thunks took it behind
 # its `Ref`, and in the closure, through a non-inlined `_run_bands!`. `:wrapped` passes the
@@ -708,6 +776,18 @@ end
         @testset "Band engine writing its arguments" begin
             n0 = EnzymePolicyCases._rule_entries("_batch_run_bands!")
             @test all(<=(TOL), _bands_errors(_write_case, [0.8, 0.3, 1.2]))
+            @test EnzymePolicyCases._rule_entries("_batch_run_bands!") > n0
+            for kind in (Val(:kernel), Val(:box))
+                n0 = EnzymePolicyCases._rule_entries("_batch_run_bands!")
+                @test _scratch_error((q, pol) -> _scratch_case(q, pol, kind), [0.7, 0.3]) <=
+                      1e-6
+                @test EnzymePolicyCases._rule_entries("_batch_run_bands!") > n0
+            end
+        end
+
+        @testset "Band engine, output with no shadow" begin
+            n0 = EnzymePolicyCases._rule_entries("_batch_run_bands!")
+            @test all(<=(TOL), _bands_errors(_no_shadow_case, [0.4, 0.3]))
             @test EnzymePolicyCases._rule_entries("_batch_run_bands!") > n0
         end
 
