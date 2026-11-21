@@ -313,6 +313,27 @@ function _scale_case(p, policy)
     return sum(abs2, out)
 end
 
+# A band kernel that writes two arguments besides `out`: `y` in place and `z` over values
+# taken from the parameters, as `jacobian!` writes its coefficient values. Reverse gave each
+# task a zeroed copy of their shadows, so their cotangents never reached `x` and `z`'s
+# stayed on its old values. `z` is a view, which takes the generic merge, not the array one.
+function _write_band!(out, y, z, x, n::Int, b::Int)
+    for i in Bramble._band_range(Base.OneTo(length(out)), n, b)
+        y[i] *= x[i]
+        z[i] = x[i]^2
+        out[i] = sin(x[i]) * y[i]
+    end
+    return nothing
+end
+function _write_case(p, policy)
+    x = [p[1] + 0.1k * p[2] for k in 1:37]
+    y = [1 + k * p[3] / 37 for k in 1:37]
+    zb = fill(p[2] * p[3], 39)
+    out = zeros(eltype(p), 37)
+    Bramble._run_bands!(policy, _write_band!, out, y, view(zb, 2:38), x)
+    return sum(abs2, out) + sum(abs2, y) + sum(abs2, zb)
+end
+
 # A `Float32` beside an array in `_run_bands!`'s kernel, and in a closure argument. Reverse
 # gave the `Float32` a zero derivative: in the kernel, when the band thunks took it behind
 # its `Ref`, and in the closure, through a non-inlined `_run_bands!`. `:wrapped` passes the
@@ -681,6 +702,12 @@ end
         @testset "Band engine reading its output" begin
             n0 = EnzymePolicyCases._rule_entries("_batch_run_bands!")
             @test all(<=(TOL), _bands_errors(_scale_case, [0.8, 0.3, 1.2]))
+            @test EnzymePolicyCases._rule_entries("_batch_run_bands!") > n0
+        end
+
+        @testset "Band engine writing its arguments" begin
+            n0 = EnzymePolicyCases._rule_entries("_batch_run_bands!")
+            @test all(<=(TOL), _bands_errors(_write_case, [0.8, 0.3, 1.2]))
             @test EnzymePolicyCases._rule_entries("_batch_run_bands!") > n0
         end
 

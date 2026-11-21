@@ -22,16 +22,23 @@
 # - Reverse: each task runs Enzyme's split reverse of its band, every lane through its own
 #   width-1 thunk. `d_out` is shared: a band reads and clears it only at the points it
 #   writes, the disjointness the primal's bands already rely on. Every other shadow is read
-#   across band edges, so each task gathers into its own zeroed copy, added into the shadow
-#   after the join, under `@batch` for an array, by `_accumulate!` otherwise. An `Active`
-#   argument (a scalar weight) has its per-task derivatives summed on the host.
+#   across band edges, so each task works on its own copy of it. The copy starts as the
+#   shadow itself, because a kernel may write an argument besides `out` (`jacobian!`'s
+#   coefficient values), and its band then reads that cotangent at the points it writes
+#   and clears it there. After the join each entry gains every copy's change from a
+#   snapshot of the shadow taken before the tasks ran (`_bands_merge`), under `@batch` for
+#   an array, by `_bands_merge!` otherwise. An entry no task changed keeps its value. A
+#   shadow that is its own primal (runtime activity's inactive data) gets no copy and
+#   reaches the tasks as `Const`. An `Active` argument (a scalar weight) has its per-task
+#   derivatives summed on the host.
 #
 # The reverse pass replays each band's primal on `out` as it was before the call (the
 # `+=` engines would otherwise add twice, and the in-place averages read `out` itself), so
 # `out`'s values are kept from before the primal and put back for the reverse. Lanes run in
 # turn. From width 2 on, every lane after the first replays on a copy of `out` taken before
 # the call and made once on the host, since `out` itself holds the previous lane's writes by
-# then and a kernel whose derivative reads `out` would differentiate those. The kernel
+# then and a kernel whose derivative reads `out` would differentiate those. For the same
+# reason each such lane replays on its own copy of the arguments too. The kernel
 # and every other argument, `Const` ones too since the reverse reads them, are copied whole
 # before the primal, in one walk so that arrays they share stay shared, whenever `out`
 # carries a shadow. Their `overwritten` entries do not say whether later code writes the
@@ -233,7 +240,11 @@ end
 # The shadow of an input (the kernel or a `rest` argument) in lane `w`: `nothing` where it
 # has none to write (`Const`, `Active`, runtime activity's primal-as-shadow), the shadow
 # `Ref` for an immutable value with active fields (`MixedDuplicated`).
-@inline _bands_shadow(a, w::Int) = a isa Active ? nothing : _shadow(a, w)
+@inline function _bands_shadow(a, w::Int)
+    a isa Active && return nothing
+    s = _shadow(a, w)
+    return s === a.val ? nothing : s
+end
 @inline _bands_shadow(a::MixedDuplicated, w::Int) = a.dval
 @inline _bands_shadow(a::BatchMixedDuplicated, w::Int) = a.dval[w]
 
@@ -251,7 +262,7 @@ end
     return MixedDuplicated(v, c)
 end
 
-# One lane: its thunks, its `d_out`, and `copies[b]`, task `b`'s zeroed copies of the lane's
+# One lane: its thunks, its `d_out`, and `copies[b]`, task `b`'s copies of the lane's
 # input shadows (`nothing` for an input with none). `act[b]` holds what task `b`'s reverse
 # returned, read for the `Active` inputs.
 struct _BandsLane{FW, RV, DO, C}
@@ -262,8 +273,8 @@ struct _BandsLane{FW, RV, DO, C}
     act::Vector{Any}
 end
 
-# `ins` the inputs `(f, rest...)` as annotated, `vals` their values for the replay, `outs`
-# the `out` each lane's replay writes, or the one `out` at width 1.
+# `ins` the inputs `(f, rest...)` as annotated, `vals` their values for each lane's replay,
+# `outs` the `out` each lane's replay writes, or the one `out` at width 1.
 struct _BandsReverse{A, V, O, L}
     ins::A
     vals::V
@@ -272,8 +283,9 @@ struct _BandsReverse{A, V, O, L}
     errs::Vector{Any}
 end
 
-@inline function _bands_lane!(p::_BandsReverse, lane::_BandsLane, out, n::Int, b::Int)
-    anns = map(_bands_annotation, p.ins, p.vals, lane.copies[b])
+@inline function _bands_lane!(
+        p::_BandsReverse, lane::_BandsLane, vals, out, n::Int, b::Int)
+    anns = map(_bands_annotation, p.ins, vals, lane.copies[b])
     fa, ra, oa = first(anns), Base.tail(anns), Duplicated(out, lane.d_out)
     tape, _, _ = lane.fwd(Const(_bands_task!), fa, oa, Const(n), Const(b), ra...)
     r = lane.rev(Const(_bands_task!), fa, oa, Const(n), Const(b), ra..., tape)
@@ -283,11 +295,12 @@ end
 
 # Every lane of task `b`, in turn: on `outs` itself at width 1, else each on its own.
 @inline function _bands_lanes!(p::_BandsReverse, outs::AbstractArray, n::Int, b::Int)
-    map(lane -> lane === nothing ? nothing : _bands_lane!(p, lane, outs, n, b), p.lanes)
+    map((lane, v) -> lane === nothing ? nothing : _bands_lane!(p, lane, v, outs, n, b),
+        p.lanes, p.vals)
 end
 @inline function _bands_lanes!(p::_BandsReverse, outs::Tuple, n::Int, b::Int)
-    map((lane, o) -> lane === nothing ? nothing : _bands_lane!(p, lane, o, n, b),
-        p.lanes, outs)
+    map((lane, v, o) -> lane === nothing ? nothing : _bands_lane!(p, lane, v, o, n, b),
+        p.lanes, p.vals, outs)
 end
 
 @noinline function _bands_reverse_threw(p::_BandsReverse, n::Int, b::Int)
@@ -308,10 +321,36 @@ end
     return failed
 end
 
+# `x` plus every copy's change from `x0`. `x` is one entry of a shadow, `x0` that entry
+# before the tasks ran, `ys` the entry in each per-task copy (each began as `x0`). A copy
+# equal to `x0` adds nothing. While the sum still equals `x0`, a changed copy is taken
+# whole, so an entry one task changed gets exactly that task's value. Changes count from
+# `x0`, not `x`: a shadow two inputs share is merged once per input, and `d_out`, reached
+# through an argument, has been cleared by the tasks. Tuples and immutable structs go field
+# by field; fields that are not floats stay as in `x`.
+@inline function _bands_merge(x::T, x0::T, ys) where {T <: Union{AbstractFloat, Complex}}
+    acc = x
+    for y in ys
+        y::T == x0 && continue
+        acc = acc == x0 ? y : acc + (y - x0)
+    end
+    return acc
+end
+function _bands_merge(x::Tuple, x0::Tuple, ys)
+    return ntuple(i -> _bands_merge(x[i], x0[i], (y[i] for y in ys)), length(x))
+end
+function _bands_merge(x::T, x0::T, ys) where {T}
+    (isbitstype(T) || !ismutabletype(T)) && fieldcount(T) > 0 || return x
+    vals = Any[_bands_merge(getfield(x, i), getfield(x0, i), (getfield(y, i) for y in ys))
+               for i in 1:fieldcount(T)]
+    return ccall(:jl_new_structv, Any, (Any, Ptr{Any}, UInt32), T, vals, fieldcount(T))::T
+end
+_bands_merge(x, x0, ys) = x
+
 # The per-task copies `cs` of a shadow `d` added into it: an array of numbers under
 # `@batch`, each band summing its own indices over the copies; anything else by
 # `_accumulate!`, which skips data that is its own primal (`primal` the input as the caller
-# passed it).
+# passed it). For copies that started at zero (operators.jl's `_act_add_input!`).
 struct _BandsSum{D, C}
     d::D
     cs::C
@@ -329,6 +368,31 @@ end
     return nothing
 end
 
+# The per-task copies `cs` of a shadow `d` merged into it, `d0` a copy of `d` taken before
+# the tasks ran: an array of numbers under `@batch`, each band merging its own indices;
+# anything else by `_bands_merge!`, which skips data that is its own primal (`primal` the
+# input as the caller passed it).
+struct _BandsMerge{D, C}
+    d::D
+    d0::D
+    cs::C
+end
+
+@inline function _bands_merge_band!(p::_BandsMerge, n::Int, b::Int)
+    d, d0 = p.d, p.d0
+    for i in _band_range(Base.OneTo(length(d)), n, b)
+        @inbounds d[i] = _bands_merge(d[i], d0[i], (c[i] for c in p.cs))
+    end
+    return nothing
+end
+
+@noinline function _bands_merge_run!(take::T, n::Int, h::H) where {T, H}
+    @batch for b in 1:n
+        _bands_merge_band!(take(h), n, b)
+    end
+    return false
+end
+
 @noinline function _bands_sum_run!(take::T, n::Int, h::H) where {T, H}
     @batch for b in 1:n
         _bands_sum_band!(take(h), n, b)
@@ -343,6 +407,69 @@ function _bands_reduce!(handed::HD, take::TK, d::Array{<:Union{AbstractFloat, Co
 end
 function _bands_reduce!(handed::HD, take::TK, d, cs, primal) where {HD, TK}
     foreach(c -> _accumulate!(d, c, primal), cs)
+    return nothing
+end
+
+function _bands_merge_into!(handed::HD, take::TK,
+        d::Array{<:Union{AbstractFloat, Complex}}, d0, cs, primal) where {HD, TK}
+    handed(_bands_merge_run!, _BandsMerge(d, d0, cs), take, Threads.nthreads())
+    return nothing
+end
+function _bands_merge_into!(handed::HD, take::TK, d, d0, cs, primal) where {HD, TK}
+    _bands_merge!(d, d0, cs, primal)
+    return nothing
+end
+
+# `_bands_merge` over a shadow's object graph, walked as `_accumulate!` (sweeps.jl) walks
+# it: with a work list, `d`, its snapshot `d0` and its copies `cs` in step, an object shared
+# in `d` merged once, a shadow that is its own primal skipped. Floats merge where they are
+# stored mutably: in a buffer, or in a mutable object's field, an immutable value there
+# rebuilt.
+function _bands_merge!(d, d0, cs, primal)
+    q = d isa Base.RefValue && !(primal isa Base.RefValue) ? Ref(primal) : primal
+    seen, work = Base.IdSet{Any}(), Any[(d, d0, cs, q)]
+    while !isempty(work)
+        _bands_merge_one!(pop!(work)..., seen, work)
+    end
+    return nothing
+end
+
+function _bands_merge_one!(d::T, d0, cs, q, seen, work) where {T}
+    (d0 isa T && all(c -> c isa T, cs)) || return nothing
+    (isbitstype(T) || d isa _Opaque || d === q) && return nothing
+    if ismutabletype(T)
+        d in seen && return nothing
+        push!(seen, d)
+    end
+    if d isa _Buffer
+        E = eltype(d)
+        if isbitstype(E)
+            _has_float(E) || return nothing
+            for i in eachindex(d)
+                @inbounds d[i] = _bands_merge(d[i], d0[i], (c[i] for c in cs))
+            end
+        else
+            for i in eachindex(d)
+                (isassigned(d, i) && isassigned(d0, i) && all(c -> isassigned(c, i), cs)) ||
+                    continue
+                qi = q isa T && isassigned(q, i) ? q[i] : nothing
+                push!(work, (d[i], d0[i], [c[i] for c in cs], qi))
+            end
+        end
+        return nothing
+    end
+    for i in 1:nfields(d)
+        (isdefined(d, i) && isdefined(d0, i) && all(c -> isdefined(c, i), cs)) || continue
+        di, d0i, ci = getfield(d, i), getfield(d0, i), [getfield(c, i) for c in cs]
+        qi = q isa T && isdefined(q, i) ? getfield(q, i) : nothing
+        if ismutabletype(T) && !ismutable(di)
+            new = _bands_merge(di, d0i, ci)
+            new === di ||
+                ccall(:jl_set_nth_field, Cvoid, (Any, Csize_t, Any), d, i - 1, new)
+            di = new
+        end
+        isbits(di) || push!(work, (di, d0i, ci, qi))
+    end
     return nothing
 end
 
@@ -402,19 +529,27 @@ end
 # The kernel and the boxed arguments reach the thunks as the header says.
 function _bands_reverse!(handed::HD, take::TK, mode::M, n::Int, ins, vals0, out, before,
         d_outs, V::Val{W}) where {HD, TK, M, W}
-    vals = (_slab_primal(first(vals0)), map(_bands_primal, Base.tail(vals0))...)
+    vals = ntuple(V) do w
+        v = w == 1 ? vals0 : _graph_copy(vals0, false)::typeof(vals0)
+        return (_slab_primal(first(v)), map(_bands_primal, Base.tail(v))...)
+    end
     lanes = ntuple(V) do w
         d_outs[w] === nothing && return nothing
         shadows = map(a -> _bands_shadow(a, w), ins)
-        copies = [map(s -> s === nothing ? nothing : _graph_copy(s, true), shadows)
+        copies = [map(s -> s === nothing ? nothing : _graph_copy(s, false), shadows)
                   for _ in 1:n]
-        anns = map(_bands_annotation, ins, vals, first(copies))
+        anns = map(_bands_annotation, ins, vals[w], first(copies))
         fwd, rev = Enzyme.autodiff_thunk(mode, Const{typeof(_bands_task!)}, Const,
             typeof(first(anns)), Duplicated{typeof(out)}, Const{Int}, Const{Int},
             map(typeof, Base.tail(anns))...)
         return _BandsLane(fwd, rev, d_outs[w], copies, Vector{Any}(nothing, n))
     end
     outs = W == 1 ? out : _bands_outs(out, before, d_outs)
+    pres = ntuple(V) do w
+        lanes[w] === nothing && return nothing
+        shadows = map(a -> _bands_shadow(a, w), ins)
+        return map(s -> s === nothing ? nothing : _graph_copy(s, false), shadows)
+    end
     p = _BandsReverse(ins, vals, outs, lanes, Vector{Any}(nothing, n))
     handed(_bands_reverse_run!, p, take, n) && _bands_rethrow(p.errs)
     for w in 1:W
@@ -422,8 +557,8 @@ function _bands_reverse!(handed::HD, take::TK, mode::M, n::Int, ins, vals0, out,
         lane === nothing && continue
         for k in eachindex(ins)
             s = _bands_shadow(ins[k], w)
-            s === nothing ||
-                _bands_reduce!(handed, take, s, [c[k] for c in lane.copies], ins[k].val)
+            s === nothing || _bands_merge_into!(handed, take, s, pres[w][k],
+                [c[k] for c in lane.copies], ins[k].val)
         end
     end
     return _bands_actives(lanes, ins, 1, V)
