@@ -753,6 +753,75 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
         end
     end
 
+    @testset "Enzyme: complex A, real F" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            rev = Enzyme.set_runtime_activity(Enzyme.Reverse)
+
+            # An absorbing `A` (`A + 0.3im I`) with a real `F`: the cotangent
+            # `λ` is complex and the shadow of `F` is a real array, so each rule takes the
+            # real part, the derivative of a real load. The operator comes from a non-uniform
+            # 2D mesh. The reference is a central difference along each `F`
+            # entry for `pde_solve(A, F)`, and `Re(A⁻ᴴ c)` for the kept factorization, the
+            # `ldiv!` and the rank-one rules, which `c` seeds.
+            Bramble._seed_mesh1d_rng!(1237)
+            I01 = Bramble.interval(0.0, 1.0)
+            Wa = gridspace(Bramble.mesh(Bramble.domain(I01 × I01), (7, 6), (false, false)))
+            Bramble._unseed_mesh1d_rng!()
+            A0 = assemble(form(Wa, Wa, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V)))
+            n = size(A0, 1)
+            A = SparseMatrixCSC{ComplexF64}(A0) + 0.3im * sparse(I, n, n)
+            F₀ = [1.0 + sin(i) for i in 1:n]
+            c = ComplexF64[cos(2i) + im * sin(i) for i in 1:n]
+            g_ref = real.(A' \ c)
+
+            target = [cos(2i) for i in 1:n]
+            J(A, F) = sum(abs2, Bramble.pde_solve(A, F) .- target)
+            h = 1e-6
+            fd = map(1:n) do k
+                e = (1:n) .== k
+                (J(A, F₀ .+ h .* e) - J(A, F₀ .- h .* e)) / 2h
+            end
+            dF = zero(F₀)
+            Enzyme.autodiff(rev, Enzyme.Const(J), Enzyme.Active, Enzyme.Const(A),
+                Enzyme.Duplicated(copy(F₀), dF))
+            @test dF ≈ fd rtol=1e-5
+            @test eltype(dF) === Float64
+
+            fact = Bramble.sparse_factorize(A)
+            solve_loss(fact, F) = real(dot(c, Bramble.pde_solve(fact, F)))
+            function ldiv_loss(fact, F)
+                u = element(Wa, ComplexF64)
+                ldiv!(u, fact, F)
+                return real(dot(c, parent(u)))
+            end
+            for loss in (solve_loss, ldiv_loss)
+                dF = zero(F₀)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active, Enzyme.Const(fact),
+                    Enzyme.Duplicated(copy(F₀), dF))
+                @test dF ≈ g_ref rtol=1e-10
+            end
+
+            # `A` as a rank-one update, through the rule itself with the cotangent `c`.
+            wsa = [1.0 + cos(i) / 2 for i in 1:n]
+            wta = [1.0 + sin(2i) / 2 for i in 1:n]
+            K = Bramble.RankOneUpdate(copy(A), 0.3, wsa, wta)
+            Kd = Enzyme.Duplicated(K, Enzyme.make_zero(K))
+            Fd = Enzyme.Duplicated(copy(F₀), zero(F₀))
+            rcfg = Enzyme.EnzymeRules.RevConfig{true, true, 1, (false, false, false), false,
+                false}()
+            ps = Enzyme.Const(Bramble.pde_solve)
+            RT = Enzyme.Duplicated{Vector{ComplexF64}}
+            aug = Enzyme.EnzymeRules.augmented_primal(rcfg, ps, RT, Kd, Fd)
+            aug.shadow .= c
+            Enzyme.EnzymeRules.reverse(rcfg, ps, RT, aug.tape, Kd, Fd)
+            Kdense = Matrix(A) + 0.3 * wsa * transpose(wta)
+            @test Fd.dval ≈ real.(Kdense' \ c) rtol=1e-10
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
     @testset "Enzyme: kept factorization rules" begin
         if _have(:Enzyme)
             @eval import Enzyme

@@ -128,7 +128,7 @@ function EnzymeRules.reverse(
     end
 
     if _has_shadow(F)
-        F.dval .+= λ
+        _accumulate_shadow!(F.val, F.dval, λ)
     end
 
     # Enzyme's contract: a custom rule consumes the return cotangent it was handed. Leaving

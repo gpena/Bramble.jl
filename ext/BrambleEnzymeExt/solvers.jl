@@ -162,7 +162,7 @@ function EnzymeRules.reverse(
     end
 
     if !(F isa Const)
-        F.dval .+= λ
+        _accumulate_shadow!(F.val, F.dval, λ)
     end
 
     # A custom rule consumes the return cotangent it was handed (see the rule on a matrix).
@@ -303,7 +303,7 @@ function EnzymeRules.reverse(
         F::Annotation{<:AbstractVector}
 ) where {RT}
     fact₀, ū = tape
-    _has_shadow(F) && (F.dval .+= _adjoint_solve(fact₀, ū))
+    _has_shadow(F) && _accumulate_shadow!(F.val, F.dval, _adjoint_solve(fact₀, ū))
 
     # A custom rule consumes the return cotangent it was handed (see the rule on a matrix).
     fill!(ū, zero(eltype(ū)))
@@ -370,7 +370,7 @@ function EnzymeRules.reverse(
         ū = parent(x.dval)
         λ = _has_shadow(F) ? _adjoint_solve(fact.val, ū) : nothing
         fill!(ū, zero(eltype(ū)))
-        λ === nothing || (F.dval .+= λ)
+        λ === nothing || _accumulate_shadow!(F.val, F.dval, λ)
     end
     return (nothing, nothing, nothing)
 end
@@ -567,7 +567,7 @@ function EnzymeRules.reverse(
     # `λ` is read before `ū` is cleared, and `F̄` is a different array.
     λ = _has_shadow(F) ? Bramble.fdm_solve!(similar(ū), fact, ū) : nothing
     fill!(ū, zero(eltype(ū)))
-    λ === nothing || (F.dval .+= λ)
+    λ === nothing || _accumulate_shadow!(F.val, F.dval, λ)
     return (nothing, nothing)
 end
 
@@ -862,7 +862,8 @@ function EnzymeRules.reverse(
     end
     # `λ` is read before `ū` is cleared, as `b̄` may share its storage.
     fill!(parent(ū), zero(eltype(ū)))
-    _has_shadow(b) && (Bramble._mf_data(b.dval) .+= λ)
+    _has_shadow(b) &&
+        _accumulate_shadow!(Bramble._mf_data(b.val), Bramble._mf_data(b.dval), λ)
     nested === nothing && return (nothing, nothing, nothing)
     # `θ̄ += −λᴴ (∂A/∂θ) u`: the product's cotangent is `−λ`. An `Active` `build` gets its
     # cotangent back; Enzyme drops it for one that captures constants only.
