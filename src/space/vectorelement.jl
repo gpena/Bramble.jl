@@ -33,7 +33,7 @@ result for this type specifically, in favor of the shape a grid function actuall
     length(parent(uₕ)) == prod(dims) || _throw_reshape_length(uₕ, dims)
     return Base.ReshapedArray(parent(uₕ), dims, ())
 end
-@inline Base.reshape(uₕ::VectorElement{<:CompositeGridSpace}) = map(reshape, components(uₕ))
+@inline Base.reshape(uₕ::VectorElement{<:CompositeGridSpace}) = _map_leaves(reshape, components(uₕ))
 
 @noinline function _throw_reshape_length(uₕ::VectorElement, dims::Tuple)
     n = length(parent(uₕ))
@@ -172,12 +172,21 @@ depth-first, the same leaf a matching-index `uₕ(i)` returns, regardless of nes
 """
 @inline function components(uₕ::VectorElement{<:CompositeGridSpace})
     raw = parent(uₕ)
-    return map(leaf_spaces_offsets(space(uₕ))) do (sp, offset)
+    return _map_leaves(leaf_spaces_offsets(space(uₕ))) do (sp, offset)
         VectorElement(@views(raw[(offset + 1):(offset + ndofs(sp))]), sp)
     end
 end
 
 @inline components(uₕ::VectorElement{<:ScalarGridSpace}) = (uₕ,)
+
+# Base's `map` over a tuple collects into a `Vector{Any}` from 32 entries and returns an
+# abstract `Tuple`. From 32 leaves the unrolled map the stencils use, built out of line
+# (`_each_entry_outlined`), keeps the tuple concrete. Fewer leaves keep `map`: `_each_entry`
+# there made callers further up dispatch at run time (see `_each_summand`).
+@inline function _map_leaves(f::F, leaves::Tuple) where {F}
+    length(leaves) >= _INLINED_ENTRIES && return _each_entry_outlined(f, leaves)
+    return map(f, leaves)
+end
 
 """
     element(Wₕ::AbstractSpaceType) -> VectorElement
