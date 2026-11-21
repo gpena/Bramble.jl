@@ -157,6 +157,55 @@ function _closure_case(p, policy, ::Val{:ref})
     return sum(abs2, v)
 end
 
+# `Rₕ!` on a `Float32` space, its function capturing a parameter. The kernel holds the
+# closure, the mesh's points and its `CartesianIndices`: behind the sweep's `Ref`, Enzyme
+# lost the captured `Float32`'s derivative, in the slab thunk and, for the scatter and
+# `CartesianIndices` sweeps, in the non-inlined method that built the `Ref`.
+function _f32_space(policy)
+    Bramble._seed_mesh1d_rng!(7)
+    try
+        Ωₕ = mesh(domain(interval(0.0f0, 1.0f0) × interval(0.0f0, 2.0f0)), (9, 7),
+            (false, false); backend = backend(Float32; policy = policy))
+        return gridspace(Ωₕ)
+    finally
+        Bramble._unseed_mesh1d_rng!()
+    end
+end
+function _f32_restriction_case(p, policy, ::Val{:scalar})
+    u = element(_f32_space(policy), eltype(p))
+    c = p[1]
+    Rₕ!(u, x -> c * x[1] + x[2])
+    return sum(abs2, parent(u))
+end
+function _f32_restriction_case(p, policy, ::Val{:composite})
+    W = _f32_space(policy)
+    u = element(W × W, eltype(p))
+    c = p[1]
+    Rₕ!(u, x -> (c * x[1], c * x[2] + x[1]))
+    return sum(abs2, parent(u))
+end
+# The same kernel over a `CartesianIndices`, through the axis sweep.
+function _f32_restriction_case(p, policy, ::Val{:axis})
+    T = eltype(p)
+    v = zeros(T, 9, 7)
+    c = p[1]
+    x = (T.(_XB[1:9]), T.(_XB[11:17]))
+    k = Bramble._RₕKernel(y -> c * y[1] + y[2], x, CartesianIndices(v))
+    _sweep_for!(policy, v, CartesianIndices(v), k)
+    return sum(abs2, v)
+end
+
+# A closure returning `Float64` into `Float32` destinations: the slab's dot added `Float64`
+# terms to a `Float32` seed, a `Union` that stopped Enzyme (`!sret_union`). The `CpuSerial`
+# reference keeps the parameters' type in its destinations.
+function _wide_value_case(p, policy)
+    E = policy isa CpuSerial ? eltype(p) : Float32
+    a = zeros(E, 37)
+    b = zeros(E, 37)
+    _sweep_scatter_for!(policy, (a, b), 1:37, i -> (p[1] * _XB[i], p[2] * _XB[i]))
+    return sum(abs2, a) + sum(b)
+end
+
 # A closure that reaches the vector `_sweep_for!` writes by another route than a capture: a
 # `Dict`, the vector's `Memory`, a `Dict` holding a tuple, or a global `Ref`.
 const _GV = Ref{Any}(nothing)
@@ -503,6 +552,22 @@ end
                 @test ran
                 @test err <= TOL
             end
+        end
+
+        @testset "Float32 Rₕ! kernel, reverse" begin
+            for (kind, hook) in ((Val(:scalar), "_batch_for!"),
+                (Val(:composite), "_batch_scatter_for!"), (Val(:axis), "_batch_axis_for!"))
+                case = (q, pol) -> _f32_restriction_case(q, pol, kind)
+                err, ran = _reverse_error(case, Float32[0.7], hook)
+                @test ran
+                @test err <= 1e-4
+            end
+        end
+
+        @testset "Float64 values, Float32 output" begin
+            err, ran = _reverse_error(_wide_value_case, [0.6, -0.9], "_batch_scatter_for!")
+            @test ran
+            @test err <= 1e-6
         end
 
         # A closure with a `Float64` beside an array, constant or from the parameters,

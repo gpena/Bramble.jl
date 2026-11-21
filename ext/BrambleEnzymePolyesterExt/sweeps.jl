@@ -32,7 +32,11 @@
 # `_sweep_for!` passes the kernel behind a `Ref`, since a by-value closure that mixes an array
 # with a plain number fails Enzyme's calling convention at the hook. The rules carry the
 # `Ref` through as the closure (its shadow a `Ref` of the closure's shadow), and the slab
-# functions unwrap it (`_kernel`), so a captured `Float64` gets its derivative too.
+# functions unwrap it (`_kernel`), so a captured `Float64` gets its derivative too. Reverse
+# hands a kernel that mixes the two to its slab thunk by value instead, as a
+# `MixedDuplicated` whose shadow is that `Ref` (`_slab_primal`): behind the `Ref`, Enzyme
+# drops a captured `Float32`'s derivative from a kernel that also holds arrays and `Int`s
+# (`Rₕ!`'s `_RₕKernel`, with its `CartesianIndices`).
 #
 # Under runtime activity, a captured array that is not differentiated arrives with the
 # primal itself as its shadow. Its per-task copy is a fresh zero array, so the reduction
@@ -83,11 +87,13 @@ end
     return nothing
 end
 
+# Each value is converted to `v`'s element type, as the primal's store converts it, so a
+# closure returning a wider type than `v` holds keeps the sum one type.
 @inline function _slab_dot(f::F, d_v, r) where {F}
     k = _kernel(f)
     s = zero(eltype(d_v))
     for i in r
-        s += _at(k, i) * conj(@inbounds(d_v[i]))
+        s += convert(eltype(d_v), _at(k, i)) * conj(@inbounds(d_v[i]))
     end
     return s
 end
@@ -144,7 +150,8 @@ end
     return nothing
 end
 
-# The slab's sum of `g(i)[k] * conj(d_mats[k][i])` over the live components.
+# The slab's sum of `g(i)[k] * conj(d_mats[k][i])` over the live components, each value
+# converted to its destination's element type, as in `_slab_dot`.
 @inline function _dot_scatter(f::F, d_mats, r) where {F}
     k = _kernel(f)
     s = zero(_lane_eltype(d_mats))
@@ -157,7 +164,8 @@ end
 @inline _dot_components(::Tuple{}, ::Tuple, i) = false
 @inline function _dot_components(ds::Tuple, vals::Tuple, i)
     d = ds[1]
-    head = isempty(d) ? zero(vals[1]) : vals[1] * conj(@inbounds(d[i]))
+    E = eltype(d)
+    head = isempty(d) ? zero(E) : convert(E, vals[1]) * conj(@inbounds(d[i]))
     return head + _dot_components(Base.tail(ds), Base.tail(vals), i)
 end
 
@@ -288,7 +296,7 @@ end
 # Every lane runs in each task of one `@batch` launch, through a width-1 thunk per lane:
 # a lane's seed is its own `d_v`, so the lanes share no batched call.
 function _batch_for_reverse!(handed::HD, take::TK, mode::M, dot::D, d_vs, idxs, fp::F,
-        f0::F, dfl, ::Type{FA}) where {HD, TK, M, D, F, FA}
+        f0::F0, dfl, ::Type{FA}) where {HD, TK, M, D, F, F0, FA}
     n = Threads.nthreads()
     R = typeof(_rule_slab(idxs, n, 1))
     DV = typeof(something(d_vs...))
@@ -505,6 +513,14 @@ end
 @inline _closure_shadow(f::MixedDuplicated, w::Int) = f.dval
 @inline _closure_shadow(f::BatchMixedDuplicated, w::Int) = f.dval[w]
 
+# The closure as the slab thunk takes it: the kernel itself where the call site's `Ref` holds
+# one that mixes arrays with active numbers (its thunk annotation `MixedDuplicated`, the
+# `Ref` shadow its shadow), else as it came. See the header for why.
+@inline _slab_primal(f) = f
+@inline function _slab_primal(r::Base.RefValue{K}) where {K}
+    return Enzyme.guess_activity(K, Enzyme.Reverse) <: MixedDuplicated ? r[] : r
+end
+
 # The reverse rule of a hook: the lanes of `v`, the closure's shadow per lane (`f` as the
 # `Ref` the call site passes, for a hook that takes one) and the augmented primal's tape.
 function _hook_reverse(config::RevConfig, ops, tape, v, idxs, f)
@@ -516,8 +532,8 @@ function _hook_reverse(config::RevConfig, ops, tape, v, idxs, f)
         _zero_slabs!(d_vs, idxs.val)
     else
         f_tape, v_tape = tape
-        fp = f_tape === nothing ? f.val : f_tape
-        FA = f isa Union{MixedDuplicated, BatchMixedDuplicated} ?
+        fp = _slab_primal(f_tape === nothing ? f.val : f_tape)
+        FA = f isa Union{MixedDuplicated, BatchMixedDuplicated} || !(fp isa typeof(f.val)) ?
              MixedDuplicated{typeof(fp)} : Duplicated{typeof(fp)}
         mode = Enzyme.set_runtime_activity(Enzyme.ReverseSplitNoPrimal,
             EnzymeRules.runtime_activity(config))
