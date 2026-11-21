@@ -315,7 +315,11 @@ end
 
 # A `Float32` beside an array in `_run_bands!`'s kernel, and in a closure argument. Reverse
 # gave the `Float32` a zero derivative: in the kernel, when the band thunks took it behind
-# its `Ref`, and in the closure, through a non-inlined `_run_bands!`.
+# its `Ref`, and in the closure, through a non-inlined `_run_bands!`. `:wrapped` passes the
+# closure through a caller that does not inline: batched reverse stopped Enzyme
+# (`n_shadow_roots`), and a `Float32` capture still gets a zero derivative, since Enzyme
+# drops it from a struct holding a `Float32`, padding and an array once it sits in a `Ref`
+# that a callee reads.
 struct _F32Band{T, X}
     c::T
     x::X
@@ -346,6 +350,18 @@ function _f32_bands_case(p, policy, ::Val{:closure})
     x = [p[2] + T(0.1) * k for k in 1:37]
     out = zeros(T, 37)
     Bramble._run_bands!(policy, _apply_band!, out, x, y -> c * y + w[1])
+    return sum(abs2, out)
+end
+@noinline function _wrapped_bands!(policy, out, x, g)
+    return Bramble._run_bands!(policy, _apply_band!, out, x, g)
+end
+function _f32_bands_case(p, policy, ::Val{:wrapped})
+    T = eltype(p)
+    c = p[1]
+    w = T.(_XB)
+    x = [p[2] + T(0.1) * k for k in 1:37]
+    out = zeros(T, 37)
+    _wrapped_bands!(policy, out, x, y -> c * y + w[1])
     return sum(abs2, out)
 end
 
@@ -642,6 +658,11 @@ end
             n0 = EnzymePolicyCases._rule_entries("_batch_run_bands!")
             @test all(<=(1e-4), _bands_errors(kernel, p))
             @test EnzymePolicyCases._rule_entries("_batch_run_bands!") > n0
+            wrapped = (q, pol) -> _f32_bands_case(q, pol, Val(:wrapped))
+            @test all(<=(TOL), _bands_errors(wrapped, [0.7, -0.4]))
+            err, ran = _reverse_error(wrapped, p, "_batch_run_bands!")
+            @test ran
+            @test_broken err <= 1e-4
         end
 
         @testset "Data overwritten after the call" begin

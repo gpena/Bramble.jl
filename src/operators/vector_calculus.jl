@@ -128,17 +128,25 @@ end
 
 # `_run_bands!` hands `_batch_run_bands!` its kernel behind a `Ref`, as `_sweep_for!` does
 # `_batch_for!`'s (utils/linear_algebra.jl): an Enzyme rule cannot take a by-value kernel
-# that mixes arrays with plain numbers (BrambleEnzymePolyesterExt). The method below unwraps
-# it for `BramblePolyesterExt`'s sweep; it inlines, so a plain call allocates no `Ref`.
-# `_run_bands!` inlines too: through a non-inlined one, a closure argument that captures a
-# `Float32` beside an array lost the `Float32`'s reverse derivative.
+# that mixes arrays with plain numbers (BrambleEnzymePolyesterExt). Every argument after
+# `out` that may mix them, an immutable value that is not isbits and not an array (a
+# closure, a struct, a tuple of arrays), crosses behind a `Ref` too (`_band_box`). The
+# method below unwraps them all for `BramblePolyesterExt`'s sweep; the two inline, so a
+# plain call allocates no `Ref`.
 @inline function _run_bands!(::CpuPolyester, f::F, args::Vararg{Any, N}) where {F, N}
-    return _late(_batch_run_bands!, Ref(f), Threads.nthreads(), args...)
+    return _late(_batch_run_bands!, Ref(f), Threads.nthreads(), map(_band_box, args)...)
 end
+
+@inline function _band_boxed(::Type{T}) where {T}
+    return !(isbitstype(T) || ismutabletype(T) || T <: AbstractArray)
+end
+@inline _band_box(a::T) where {T} = _band_boxed(T) ? Ref(a) : a
+@inline _band_unbox(a) = a
+@inline _band_unbox(r::Base.RefValue{T}) where {T} = _band_boxed(T) ? r[] : r
 
 @inline function _batch_run_bands!(
         r::Base.RefValue, nbands::Int, out::AbstractVector, rest::Vararg{Any, N}) where {N}
-    return _late(_batch_run_bands!, r[], nbands, out, rest...)
+    return _late(_batch_run_bands!, r[], nbands, out, map(_band_unbox, rest)...)
 end
 
 @inline function _accumulate_backward!(
