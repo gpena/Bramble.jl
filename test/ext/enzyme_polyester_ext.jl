@@ -365,6 +365,42 @@ function _f32_bands_case(p, policy, ::Val{:wrapped})
     return sum(abs2, out)
 end
 
+# A caller's own `Ref` of a closure, which `_run_bands!` must pass as it is, and an isbits
+# argument holding a `Float32` beside an `Int`. Reverse gives the latter's `Float32` a zero
+# derivative: Enzyme drops it across the padding after it.
+function _ref_band!(out, x, r, n::Int, b::Int)
+    for i in Bramble._band_range(Base.OneTo(37), n, b)
+        out[i] = r[](x[i])
+    end
+    return nothing
+end
+function _f32_bands_case(p, policy, ::Val{:ref})
+    T = eltype(p)
+    c = p[1]
+    w = T.(_XB)
+    x = [p[2] + T(0.1) * k for k in 1:37]
+    out = zeros(T, 37)
+    Bramble._run_bands!(policy, _ref_band!, out, x, Ref(y -> c * y + w[1]))
+    return sum(abs2, out)
+end
+struct _PadArg{T}
+    c::T
+    m::Int
+end
+function _pad_band!(out, x, a, n::Int, b::Int)
+    for i in Bramble._band_range(Base.OneTo(37), n, b)
+        out[i] = a.c * a.m * x[i]
+    end
+    return nothing
+end
+function _f32_bands_case(p, policy, ::Val{:isbits})
+    T = eltype(p)
+    x = [p[2] + T(0.1) * k for k in 1:37]
+    out = zeros(T, 37)
+    Bramble._run_bands!(policy, _pad_band!, out, x, _PadArg(p[1], 3))
+    return sum(abs2, out)
+end
+
 # The relative errors of reverse at width 1, reverse at width 2 (`BatchDuplicated`, lane
 # `k` seeded `cots[k]`) and forward under `CpuPolyester`, against ForwardDiff under
 # `CpuSerial`.
@@ -661,6 +697,17 @@ end
             wrapped = (q, pol) -> _f32_bands_case(q, pol, Val(:wrapped))
             @test all(<=(TOL), _bands_errors(wrapped, [0.7, -0.4]))
             err, ran = _reverse_error(wrapped, p, "_batch_run_bands!")
+            @test ran
+            @test_broken err <= 1e-4
+            byref = (q, pol) -> _f32_bands_case(q, pol, Val(:ref))
+            @test byref(p, CpuPolyester()) ≈ byref(p, CpuSerial())
+            for q in (p, [0.7, -0.4])
+                err, ran = _reverse_error(byref, q, "_batch_run_bands!")
+                @test ran
+                @test err <= (eltype(q) === Float32 ? 1e-4 : TOL)
+            end
+            padded = (q, pol) -> _f32_bands_case(q, pol, Val(:isbits))
+            err, ran = _reverse_error(padded, p, "_batch_run_bands!")
             @test ran
             @test_broken err <= 1e-4
         end

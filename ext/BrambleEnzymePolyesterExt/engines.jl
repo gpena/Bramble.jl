@@ -38,13 +38,15 @@
 # data they hold: the kernel arrives behind a fresh `Ref`, and a closure or a `StarSpacings`
 # passed as an argument reaches its arrays by reference.
 #
-# `_run_bands!` hands the kernel, and every argument that may mix arrays with plain numbers,
-# behind a `Ref` (src/operators/vector_calculus.jl), for the calling-convention reason
-# `_sweep_for!` does; the task unwraps them (`_kernel`, `_band_unbox`). Reverse hands each
-# one that does mix arrays with active numbers to its band thunks by value, as a
-# `MixedDuplicated` whose shadow is that `Ref` (`_slab_primal`, sweeps.jl): behind the
-# `Ref`, the thunks gave a captured `Float32` a zero derivative. Passed by value at the
-# hook, a closure argument lost it too, and a batched call stopped Enzyme.
+# `_run_bands!` hands the kernel behind a `Ref`, and every argument that may mix arrays with
+# plain numbers behind a `Ref` of a `_BandArg` (src/operators/vector_calculus.jl), for the
+# calling-convention reason `_sweep_for!` does; the task unwraps them (`_kernel`,
+# `_band_unbox`). Reverse hands the band thunks, by value as a `MixedDuplicated` whose
+# shadow is that `Ref`, the kernel and each `_BandArg` whose value mixes arrays with active
+# numbers (`_slab_primal`, sweeps.jl, `_bands_primal`); every other input, a caller's own
+# `Ref` included, reaches them as the rule got it. Behind the `Ref`, the thunks gave a
+# captured `Float32` a zero derivative; passed by value at the hook, a closure argument
+# lost it too, and a batched call stopped Enzyme.
 
 const _AverageEngine = typeof(Bramble._batch_average_engine!)
 const _CenteredEngine = typeof(Bramble._batch_centered_average_engine!)
@@ -392,12 +394,15 @@ function _bands_outs(out, before, d_outs::Tuple)
     end
 end
 
+# A rest argument as the thunks take it: `_slab_primal` of a `_band_box` box, else as is.
+@inline _bands_primal(v) = v
+@inline _bands_primal(r::Base.RefValue{<:Bramble._BandArg}) = _slab_primal(r)
+
 # `out` holds its values from before the call, kept in `before` too for the later lanes.
-# The kernel and the boxed arguments reach the thunks as `_slab_primal` hands them (see the
-# header).
+# The kernel and the boxed arguments reach the thunks as the header says.
 function _bands_reverse!(handed::HD, take::TK, mode::M, n::Int, ins, vals0, out, before,
         d_outs, V::Val{W}) where {HD, TK, M, W}
-    vals = map(_slab_primal, vals0)
+    vals = (_slab_primal(first(vals0)), map(_bands_primal, Base.tail(vals0))...)
     lanes = ntuple(V) do w
         d_outs[w] === nothing && return nothing
         shadows = map(a -> _bands_shadow(a, w), ins)

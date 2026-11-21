@@ -130,19 +130,25 @@ end
 # `_batch_for!`'s (utils/linear_algebra.jl): an Enzyme rule cannot take a by-value kernel
 # that mixes arrays with plain numbers (BrambleEnzymePolyesterExt). Every argument after
 # `out` that may mix them, an immutable value that is not isbits and not an array (a
-# closure, a struct, a tuple of arrays), crosses behind a `Ref` too (`_band_box`). The
+# closure, a struct, a tuple of arrays), crosses as `Ref(_BandArg(a))` (`_band_box`): the
+# `_BandArg` marks the box as this method's, so a caller's own `Ref` passes untouched. The
 # method below unwraps them all for `BramblePolyesterExt`'s sweep; the two inline, so a
 # plain call allocates no `Ref`.
 @inline function _run_bands!(::CpuPolyester, f::F, args::Vararg{Any, N}) where {F, N}
     return _late(_batch_run_bands!, Ref(f), Threads.nthreads(), map(_band_box, args)...)
 end
 
+struct _BandArg{T}
+    x::T
+end
+
 @inline function _band_boxed(::Type{T}) where {T}
     return !(isbitstype(T) || ismutabletype(T) || T <: AbstractArray)
 end
-@inline _band_box(a::T) where {T} = _band_boxed(T) ? Ref(a) : a
+@inline _band_box(a::T) where {T} = _band_boxed(T) ? Ref(_BandArg(a)) : a
 @inline _band_unbox(a) = a
-@inline _band_unbox(r::Base.RefValue{T}) where {T} = _band_boxed(T) ? r[] : r
+@inline _band_unbox(a::_BandArg) = a.x
+@inline _band_unbox(r::Base.RefValue{<:_BandArg}) = r[].x
 
 @inline function _batch_run_bands!(
         r::Base.RefValue, nbands::Int, out::AbstractVector, rest::Vararg{Any, N}) where {N}
