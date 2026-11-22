@@ -1062,14 +1062,19 @@ end
 # The space a scatter task walks, its weights read through raw pointers (`_Raw`). A
 # `SpaceWeights` crosses `@batch` by address (`_BatchShared`) and is a mutable struct
 # (gpena/Bramble.jl#1154). Read through it, the weights may alias the store into `b`, so
-# each point would reload the weight vectors and the band loop would not vectorise: 1.7x
-# slower on a 1D load refill of 100 000 points. This copy is built in the task and never
-# leaves it, so while the point code inlines into the task the compiler keeps it in
-# registers and allocates nothing. Its vectors stay rooted with the space: the caller's
-# `GC.@preserve` of the parts holds it through the loop, and the host rerun's closure
-# captures it.
+# each point would reload the weight vectors, and a 1D load refill of 100 000 points ran
+# 1.7x slower with its band loop no longer vectorised. The copy is built in the task and
+# stays in registers only while the point code inlines into the task; where it does not,
+# the copy escapes and allocates per task. A ghost space's point code does not inline, so
+# only a space on a plain mesh's walk state (`Mesh1DState`, `MeshnDState`) takes the
+# copy, and a ghost space reads the shared object. The replay does not take it either,
+# since its point code does not inline on the matrix-free path. The vectors stay rooted
+# with the space, held by the caller's `GC.@preserve` of the parts through the loop and
+# captured by the host rerun's closure.
+const _PlainState = Union{Bramble.Mesh1DState, Bramble.MeshnDState}
 @inline _task_space(s) = s
-@inline function _task_space(s::ScalarGridSpace{D, T, Vector{T}}) where {D, T}
+@inline function _task_space(
+        s::ScalarGridSpace{D, T, Vector{T}, <:_PlainState}) where {D, T}
     isbitstype(T) || return s
     w = s.weights
     sw = SpaceWeights(_raw_weights(w.innerh), map(_raw_weights, w.innerplus),
