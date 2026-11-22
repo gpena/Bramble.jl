@@ -439,9 +439,9 @@ end
 
 # `_bands_merge` over a shadow's object graph, walked as `_accumulate!` (sweeps.jl) walks
 # it: with a work list, `d`, its snapshot `d0` and its copies `cs` in step, an object shared
-# in `d` merged once, data skipped where `d` or a copy is its own primal (`_bands_seeded`
-# passes the shadow as the one copy). Floats merge where they are stored mutably: in a
-# buffer, or in a mutable object's field, an immutable value there rebuilt.
+# in `d` merged once, a shadow that is its own primal skipped. Floats merge where they are
+# stored mutably: in a buffer, or in a mutable object's field, an immutable value there
+# rebuilt.
 function _bands_merge!(d, d0, cs, primal)
     q = d isa Base.RefValue && !(primal isa Base.RefValue) ? Ref(primal) : primal
     seen, work = Base.IdSet{Any}(), Any[(d, d0, cs, q)]
@@ -453,7 +453,7 @@ end
 
 function _bands_merge_one!(d::T, d0, cs, q, seen, work) where {T}
     (d0 isa T && all(c -> c isa T, cs)) || return nothing
-    (isbitstype(T) || d isa _Opaque || d === q || any(c -> c === q, cs)) && return nothing
+    (isbitstype(T) || d isa _Opaque || d === q) && return nothing
     if ismutabletype(T)
         d in seen && return nothing
         push!(seen, d)
@@ -538,15 +538,61 @@ function _bands_outs(out, before, live::Tuple)
     end
 end
 
-# A task's copy of the shadow `s` of `primal`: `s`'s values, except data in `s` that is its
-# own primal (runtime activity's inactive data), which is zeroed: a task writing there must
-# not read the primal's values as a cotangent. Built zeroed and filled by `_bands_merge!`,
-# whose walk matches `s` to `primal`.
+# A task's copy of the shadow `s` of `primal`: `s`'s values, except a mutable object in `s`
+# that is its own primal (runtime activity's inactive data), whose copy is zeroed: a task
+# writing there must not read the primal's values as a cotangent. `_bands_inactive!` finds
+# those objects and zero-copies them into `seen` first, so the copy of `s`, made with
+# `_graph_copy`'s steps (sweeps.jl), takes their zeroed copies.
 _bands_seeded(s::Array{<:Union{AbstractFloat, Complex}}, primal) = copy(s)
 function _bands_seeded(s, primal)
-    c = _graph_copy(s, true)
-    _bands_merge!(c, c, (s,), primal)
-    return c
+    q = s isa Base.RefValue && !(primal isa Base.RefValue) ? Ref(primal) : primal
+    seen = IdDict{Any, Any}()
+    _bands_inactive!(seen, s, q)
+    return _bands_copy(s, false, seen)
+end
+
+# `x` copied as `_graph_copy(x, zero)` copies it, sharing `seen` with other copies.
+function _bands_copy(x, zero::Bool, seen)
+    work = Any[]
+    y = _copy_value(x, zero, seen, work)
+    while !isempty(work)
+        _fill_copy!(pop!(work)..., zero, seen, work)
+    end
+    return y
+end
+
+# Walks `s` beside `q` (its primal, or `nothing` where they part), as `_bands_merge!` walks,
+# and zero-copies into `seen` each mutable object of `s` that is its own primal, without
+# entering it. A plain field holds no object, so it is skipped before `getfield` boxes it.
+function _bands_inactive!(seen, s, q)
+    walked, work = Base.IdSet{Any}(), Any[(s, q)]
+    while !isempty(work)
+        x, y = pop!(work)
+        T = typeof(x)
+        (isbitstype(T) || x isa _Opaque) && continue
+        if ismutabletype(T)
+            x in walked && continue
+            push!(walked, x)
+            if x === y
+                haskey(seen, x) || _bands_copy(x, true, seen)
+                continue
+            end
+        end
+        if x isa _Buffer
+            isbitstype(eltype(x)) && continue
+            for i in eachindex(x)
+                isassigned(x, i) || continue
+                push!(work, (x[i], y isa T && isassigned(y, i) ? y[i] : nothing))
+            end
+            continue
+        end
+        for i in 1:nfields(x)
+            (isbitstype(fieldtype(T, i)) || !isdefined(x, i)) && continue
+            push!(work,
+                (getfield(x, i), y isa T && isdefined(y, i) ? getfield(y, i) : nothing))
+        end
+    end
+    return nothing
 end
 
 # A rest argument as the thunks take it: `_slab_primal` of a `_band_box` box, else as is.
