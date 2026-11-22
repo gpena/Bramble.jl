@@ -91,7 +91,8 @@
 module BramblePolyesterExt
 
 using Bramble
-using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
+using Bramble: MarkedIndicesUnion, SeparableWeights, SpaceWeights, ScalarGridSpace,
+               _throw_dot_dim_error,
                _mask_word, _mask_nwords, _mask_length,
                _write_components!, _band_range, _scatter_linear_point!,
                CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
@@ -1056,7 +1057,28 @@ end
 @inline _point(::_Replay, h1, h2, (c, s, tm, mm), lin_indices, ro, co) = _ReplayStep(
     _replay_join(h1, h2, c), tm, s, lin_indices, mm, ro, co)
 @inline _point(::_Scatter, b, _, (s, tm, mm), lin_indices, offset, α) = _ScatterStep(
-    b, s, tm, lin_indices, mm, offset, α)
+    b, _task_space(s), tm, lin_indices, mm, offset, α)
+
+# The space a scatter task walks, its weights read through raw pointers (`_Raw`). A
+# `SpaceWeights` crosses `@batch` by address (`_BatchShared`) and is a mutable struct
+# (gpena/Bramble.jl#1154). Read through it, the weights may alias the store into `b`, so
+# each point would reload the weight vectors and the band loop would not vectorise: 1.7x
+# slower on a 1D load refill of 100 000 points. This copy is built in the task and never
+# leaves it, so while the point code inlines into the task the compiler keeps it in
+# registers and allocates nothing. Its vectors stay rooted with the space: the caller's
+# `GC.@preserve` of the parts holds it through the loop, and the host rerun's closure
+# captures it.
+@inline _task_space(s) = s
+@inline function _task_space(s::ScalarGridSpace{D, T, Vector{T}}) where {D, T}
+    isbitstype(T) || return s
+    w = s.weights
+    sw = SpaceWeights(_raw_weights(w.innerh), map(_raw_weights, w.innerplus),
+        map(_raw_vector, w.aligned), map(_raw_vector, w.cellfactor), w.built_version)
+    return ScalarGridSpace(s.mesh, sw)
+end
+@inline _raw_vector(v::Vector{T}) where {T} = _Raw{T, 1}(pointer(v), size(v))
+@inline _raw_weights(w::SeparableWeights) = SeparableWeights(
+    map(_raw_vector, w.factors), w.dims)
 
 @_task function _sweep_band!(kind, skel, arrays, h1, h2, lin_indices, k1, k2, rest, ax,
         nbands, b)
