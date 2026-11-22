@@ -91,8 +91,7 @@
 module BramblePolyesterExt
 
 using Bramble
-using Bramble: MarkedIndicesUnion, SeparableWeights, SpaceWeights, ScalarGridSpace,
-               _throw_dot_dim_error,
+using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
                _mask_word, _mask_nwords, _mask_length,
                _write_components!, _band_range, _scatter_linear_point!,
                CpuPolyester, _ReplayTarget, _ActionTarget, _replay_point!, _difference_band!,
@@ -971,9 +970,9 @@ struct _Whole end
     _batch_splittable(typeof((parts, hot))) && return _batch_split(parts)
     return _Whole(), parts
 end
-# A `SpaceWeights` in `parts` crosses as its address (`_BatchShared`), so the split holds no
-# reference that keeps it alive: each caller wraps its `@batch` loop in `GC.@preserve` of
-# `parts` (the kernel, for `_kernel_parts`), however the host-rerun branch reads them.
+# The split holds raw pointers into the arrays of `parts`, not references, so each caller
+# wraps its `@batch` loop in `GC.@preserve` of `parts` (the kernel, for `_kernel_parts`,
+# whose arrays cross `_erased_batch` as `_Raw`), however the host-rerun branch reads them.
 @inline _rejoin(skel, arrays) = _batch_rebuild(skel, arrays)
 @inline _rejoin(::_Whole, parts) = parts
 
@@ -1057,33 +1056,7 @@ end
 @inline _point(::_Replay, h1, h2, (c, s, tm, mm), lin_indices, ro, co) = _ReplayStep(
     _replay_join(h1, h2, c), tm, s, lin_indices, mm, ro, co)
 @inline _point(::_Scatter, b, _, (s, tm, mm), lin_indices, offset, α) = _ScatterStep(
-    b, _task_space(s), tm, lin_indices, mm, offset, α)
-
-# The space a scatter task walks, its weights read through raw pointers (`_Raw`). A
-# `SpaceWeights` crosses `@batch` by address (`_BatchShared`) and is a mutable struct
-# (gpena/Bramble.jl#1154). Read through it, the weights may alias the store into `b`, so
-# each point would reload the weight vectors, and a 1D load refill of 100 000 points ran
-# 1.7x slower with its band loop no longer vectorised. The copy is built in the task and
-# stays in registers only while the point code inlines into the task; where it does not,
-# the copy escapes and allocates per task. A ghost space's point code does not inline, so
-# only a space on a plain mesh's walk state (`Mesh1DState`, `MeshnDState`) takes the
-# copy, and a ghost space reads the shared object. The replay does not take it either,
-# since its point code does not inline on the matrix-free path. The vectors stay rooted
-# with the space, held by the caller's `GC.@preserve` of the parts through the loop and
-# captured by the host rerun's closure.
-const _PlainState = Union{Bramble.Mesh1DState, Bramble.MeshnDState}
-@inline _task_space(s) = s
-@inline function _task_space(
-        s::ScalarGridSpace{D, T, Vector{T}, <:_PlainState}) where {D, T}
-    isbitstype(T) || return s
-    w = s.weights
-    sw = SpaceWeights(_raw_weights(w.innerh), map(_raw_weights, w.innerplus),
-        map(_raw_vector, w.aligned), map(_raw_vector, w.cellfactor), w.built_version)
-    return ScalarGridSpace(s.mesh, sw)
-end
-@inline _raw_vector(v::Vector{T}) where {T} = _Raw{T, 1}(pointer(v), size(v))
-@inline _raw_weights(w::SeparableWeights) = SeparableWeights(
-    map(_raw_vector, w.factors), w.dims)
+    b, s, tm, lin_indices, mm, offset, α)
 
 @_task function _sweep_band!(kind, skel, arrays, h1, h2, lin_indices, k1, k2, rest, ax,
         nbands, b)

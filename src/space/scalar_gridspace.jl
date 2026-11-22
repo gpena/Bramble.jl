@@ -75,6 +75,10 @@ end
     return @inbounds w[CartesianIndices(w.dims)[li]]
 end
 
+# The weights a `ScalarGridSpace` holds: a `SpaceWeights`, or in a `CpuPolyester` task the
+# `_SplitWeights` the task rebuilt.
+abstract type _AbstractWeights{D, T, VT <: AbstractVector{T}} end
+
 """
     SpaceWeights(innerh::SeparableWeights, innerplus::NTuple{D}, aligned::NTuple{D, VT}, cellfactor::NTuple{D, VT}, built_version::Int)
     SpaceWeights{D, T, VT}(innerh, innerplus, aligned::NTuple{D, VT}, cellfactor::NTuple{D, VT}, built_version::Int)
@@ -86,9 +90,10 @@ on every call.
 A `mutable struct` whose fields are all `const`: built once by `space_weights` and never
 changed, it is held by reference, so a [`ScalarGridSpace`](@ref) stores a pointer to it
 rather than the weights inline. Every copy of a space (a form's, an operator's result
-element, an assembly walk's rebuild) carries that pointer, not the weights, which keeps the
-3D form tree under Enzyme's type-analysis limit (gpena/Bramble.jl#1154). Two spaces are
-`===` only when they share one mesh and one `SpaceWeights` object.
+element) carries that pointer, not the weights, which keeps the 3D form tree under
+Enzyme's type-analysis limit (gpena/Bramble.jl#1154). Two spaces are `===` only when they
+share one mesh and one `SpaceWeights` object. A `CpuPolyester` task is the exception: it
+rebuilds its space around the same fields held inline (`_SplitWeights`).
 
 # Fields
 
@@ -119,7 +124,7 @@ element, an assembly walk's rebuild) carries that pointer, not the weights, whic
 
 For a detailed explanation of the mathematical formulas corresponding to these weights, please refer to the documentation for [`ScalarGridSpace`](@ref).
 """
-mutable struct SpaceWeights{D, T, VT <: AbstractVector{T}}
+mutable struct SpaceWeights{D, T, VT <: AbstractVector{T}} <: _AbstractWeights{D, T, VT}
     # Documented under `# Fields` above: Julia drops a docstring on a `const` field.
     const innerh::SeparableWeights{D, T, VT}
     const innerplus::NTuple{D, SeparableWeights{D, T, VT}}
@@ -129,8 +134,27 @@ mutable struct SpaceWeights{D, T, VT <: AbstractVector{T}}
 end
 
 """
+    _SplitWeights{D, T, VT}
+
+The fields of a [`SpaceWeights`](@ref), held inline by an immutable struct: what a space's
+weights become when a `CpuPolyester` task rebuilds the space ([`_batch_rebuild`](@ref)),
+around the `PtrArray`s `@batch` passes. Built in the task, it costs no allocation, and the
+task reads the weight vectors from its own registers. Read through a shared mutable
+`SpaceWeights` instead, the weights may alias a store into the output, so every point
+reloads them and the band loop does not vectorise. Only a task's rebuilt space holds one.
+"""
+struct _SplitWeights{D, T, VT <: AbstractVector{T}} <: _AbstractWeights{D, T, VT}
+    innerh::SeparableWeights{D, T, VT}
+    innerplus::NTuple{D, SeparableWeights{D, T, VT}}
+    aligned::NTuple{D, VT}
+    cellfactor::NTuple{D, VT}
+    built_version::Int
+end
+
+"""
     ScalarGridSpace(mesh::MType, weights::SpaceWeights{D, T, VT})
     ScalarGridSpace{D, T, VT, MType}(mesh::MType, weights::SpaceWeights{D, T, VT})
+    ScalarGridSpace{D, T, VT, MType, WS}(mesh::MType, weights::WS)
 
 Represents a function space for **scalar fields** defined on a mesh.
 
@@ -140,8 +164,9 @@ A `ScalarGridSpace` pairs the mesh with the precomputed weight vectors
 # Fields
 
   - `mesh::MType`: the underlying mesh of the grid space.
-  - `weights::SpaceWeights{D, T, VT}`: precomputed inner product weight vectors, held
-    by reference (`SpaceWeights` is a `mutable struct` with `const` fields).
+  - `weights::WS`: precomputed inner product weight vectors, a [`SpaceWeights`](@ref)
+    held by reference (a `mutable struct` with `const` fields). Only a `CpuPolyester`
+    task's rebuilt space holds them inline instead, as a `_SplitWeights`.
 
 ## Discrete inner products
 
@@ -205,13 +230,19 @@ struct ScalarGridSpace{
     D,
     T,
     VT <: AbstractVector{T},
-    MType <: AbstractMeshType{D}
+    MType <: AbstractMeshType{D},
+    WS <: _AbstractWeights{D, T, VT}
 } <: AbstractSpaceType{1}
     "the underlying mesh of the grid space."
     mesh::MType
     "a [`SpaceWeights`](@ref) object holding vectors for various discrete inner products."
-    weights::SpaceWeights{D, T, VT}
+    weights::WS # a `_SplitWeights` in a `CpuPolyester` task's rebuilt space
 end
+@inline ScalarGridSpace{D, T, VT, MType}(
+    mesh::MType, weights::WS) where {D, T, VT, MType, WS <: _AbstractWeights{D, T, VT}} =
+    ScalarGridSpace{D, T, VT, MType, WS}(mesh, weights)
+@inline ScalarGridSpace(mesh::AbstractMeshType{D}, weights::_AbstractWeights{D, T, VT}
+) where {D, T, VT} = ScalarGridSpace{D, T, VT, typeof(mesh)}(mesh, weights)
 
 """
     gridspace(Ωₕ::AbstractMeshType{D}) -> ScalarGridSpace{D}
@@ -445,14 +476,14 @@ end
 end
 
 @inline function _weights_val(
-        w::SpaceWeights, ::ScalarGridSpace{D}, ::Val{S}, ::Val{1}
+        w::_AbstractWeights, ::ScalarGridSpace{D}, ::Val{S}, ::Val{1}
 ) where {D, S}
     _check_staggered_set(Val(D), Val(S))
     return w.innerplus[only(S)]
 end
 
 @inline function _weights_val(
-        w::SpaceWeights, Wₕ::ScalarGridSpace{D}, ::Val{S}, ::Val{K}
+        w::_AbstractWeights, Wₕ::ScalarGridSpace{D}, ::Val{S}, ::Val{K}
 ) where {D, S, K}
     _check_staggered_set(Val(D), Val(S))
     factors = ntuple(d -> (d in S ? w.aligned[d] : w.cellfactor[d]), Val(D))
