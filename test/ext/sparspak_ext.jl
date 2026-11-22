@@ -376,7 +376,7 @@ end
             e
         end
         @test err isa ErrorException && occursin(string(nnz(H)), err.msg) &&
-            occursin(string(nnz(H0)), err.msg)
+              occursin(string(nnz(H0)), err.msg)
     end
 
     @testset "unknown keyword throws (#657)" begin

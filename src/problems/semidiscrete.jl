@@ -606,7 +606,7 @@ end
 # The build method takes no `hook_reads_state`, so it is not advised there.
 @noinline function _throw_state_hook(op, T::Type)
     advice = op isa TypeCachedOperator ? "Use a" :
-        "Give hook_reads_state = false if it reads no state, or use a"
+             "Give hook_reads_state = false if it reads no state, or use a"
     throw(
         ArgumentError(
         "semidiscretize: u has element type $(nameof(T)), which the state cannot hold, " *

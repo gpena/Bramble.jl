@@ -1113,7 +1113,7 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                     @test err isa ArgumentError
                     msg = err isa ArgumentError ? err.msg : ""
                     advice = dir === nothing ? "pde_solve(assemble(a), F)" :
-                        "pde_solve(assemble(a; dirichlet = :boundary), F)"
+                             "pde_solve(assemble(a; dirichlet = :boundary), F)"
                     @test occursin("fdm_solve", msg) && occursin(advice, msg)
                 end
             end
@@ -1555,7 +1555,8 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             # itself: a loss of `C₀ + p₁ C₁`, `(1 + p₂) B₀` and `(1 + p₃) b₀`, against a
             # central difference.
             C₁ = [0.2 0.1; 0.05 0.3]
-            grads = (("complex C and B, real b", ComplexF64.(C₀) + 0.3im * I,
+            grads = (
+                ("complex C and B, real b", ComplexF64.(C₀) + 0.3im * I,
                     ComplexF64[1.0 2.0; 0.5 1.0], [1.0, 2.0]),
                 ("real C and B, complex b", C₀, [1.0 2.0; 0.5 1.0],
                     ComplexF64[1.0 + 1im, 2.0]))
@@ -1600,16 +1601,20 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             # Each rule is called directly at width 2, and the message must name the function
             # the user wrote, never another one of the rules.
             cases = (
-                "fdm_solve" => () -> ER.augmented_primal(rcfg, Enzyme.Const(Bramble.fdm_solve),
-                    RT, Enzyme.Const(a), bd(copy(F))),
-                "gmg_solve" => () -> ER.augmented_primal(rcfg, Enzyme.Const(Bramble.gmg_solve),
-                    RT, Enzyme.Const(build), Enzyme.Const(Ωₕ), bd(copy(F))),
-                "pde_solve" => () -> ER.augmented_primal(rcfg, Enzyme.Const(Bramble.pde_solve),
-                    RT, Enzyme.Const(fact), bd(copy(F))),
-                "ldiv!" => () -> ER.augmented_primal(rcfg, Enzyme.Const(ldiv!),
-                    Enzyme.Const{typeof(uₕ)},
-                    Enzyme.BatchDuplicated(uₕ, (similar(uₕ), similar(uₕ))),
-                    Enzyme.Const(fact), bd(copy(F))))
+                "fdm_solve" =>
+                    () -> ER.augmented_primal(rcfg, Enzyme.Const(Bramble.fdm_solve),
+                        RT, Enzyme.Const(a), bd(copy(F))),
+                "gmg_solve" =>
+                    () -> ER.augmented_primal(rcfg, Enzyme.Const(Bramble.gmg_solve),
+                        RT, Enzyme.Const(build), Enzyme.Const(Ωₕ), bd(copy(F))),
+                "pde_solve" =>
+                    () -> ER.augmented_primal(rcfg, Enzyme.Const(Bramble.pde_solve),
+                        RT, Enzyme.Const(fact), bd(copy(F))),
+                "ldiv!" =>
+                    () -> ER.augmented_primal(rcfg, Enzyme.Const(ldiv!),
+                        Enzyme.Const{typeof(uₕ)},
+                        Enzyme.BatchDuplicated(uₕ, (similar(uₕ), similar(uₕ))),
+                        Enzyme.Const(fact), bd(copy(F))))
             for (name, call) in cases
                 err = try
                     call()

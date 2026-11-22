@@ -673,7 +673,7 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
             # A `Dual` in the coefficient is refused, in every entry point.
             ca = q -> form(Wₕ, Wₕ, mk(q))
             advice = dir === nothing ? "pde_solve(assemble(a), F)" :
-                "pde_solve(assemble(a; dirichlet = :boundary), F)"
+                     "pde_solve(assemble(a; dirichlet = :boundary), F)"
             for (call, want) in ((q -> fdm_solve(ca(q), F; dirichlet = dir), advice),
                 (q -> fdm_solve(kronecker_operator(ca(q)), F), "pde_solve(assemble(a), F)"))
                 msg = refused(() -> ForwardDiff.derivative(q -> sum(call(q)), 1.3))

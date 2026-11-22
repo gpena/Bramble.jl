@@ -588,8 +588,9 @@ end
                             err
                         end
                         @test e isa DimensionMismatch
-                        @test e.msg == "$(nameof(f)) got a coefficient vector of length " *
-                                       "$len, but the space has $n degrees of freedom."
+                        @test e.msg ==
+                              "$(nameof(f)) got a coefficient vector of length " *
+                              "$len, but the space has $n degrees of freedom."
                     end
                 end
             end

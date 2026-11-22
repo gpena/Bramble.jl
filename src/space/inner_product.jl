@@ -1452,8 +1452,10 @@ norm of the product space of those grid functions. On the trial space of
     return sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
 end
 norm₁ₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_norm₁ₕ_sq(uₕ)))
-norm₁ₕ(uₕ::VectorElement{<:_GhostCompositeSpace}) = sqrt(real(sum(
-    _norm₁ₕ_sq, components(_checked_length(:norm₁ₕ, uₕ)))))
+function norm₁ₕ(uₕ::VectorElement{<:_GhostCompositeSpace})
+    sqrt(real(sum(
+        _norm₁ₕ_sq, components(_checked_length(:norm₁ₕ, uₕ)))))
+end
 
 function _norm₁ₕ_sq(uₕ::VectorElement{<:GhostGridSpace})
     e = _physical_element(:norm₁ₕ, uₕ)

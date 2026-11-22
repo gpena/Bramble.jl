@@ -239,9 +239,10 @@ struct ScalarGridSpace{
     weights::WS
 end
 @inline ScalarGridSpace{D, T, VT, MType}(
-    mesh::MType, weights::WS) where {D, T, VT, MType, WS <: _AbstractWeights{D, T, VT}} =
-    ScalarGridSpace{D, T, VT, MType, WS}(mesh, weights)
-@inline ScalarGridSpace(mesh::AbstractMeshType{D}, weights::_AbstractWeights{D, T, VT}
+    mesh::MType, weights::WS) where {D, T, VT, MType, WS <: _AbstractWeights{D, T, VT}} = ScalarGridSpace{
+    D, T, VT, MType, WS}(mesh, weights)
+@inline ScalarGridSpace(mesh::AbstractMeshType{D}, weights::_AbstractWeights{
+    D, T, VT}
 ) where {D, T, VT} = ScalarGridSpace{D, T, VT, typeof(mesh)}(mesh, weights)
 
 """

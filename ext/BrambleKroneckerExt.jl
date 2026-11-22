@@ -1154,7 +1154,7 @@ end
 # factorization buffers cannot hold: refused by name, with the call that differentiates.
 @noinline function _throw_fdm_operator_eltype(::Type{T}, dirichlet) where {T}
     call = dirichlet === nothing ? "pde_solve(assemble(a), F)" :
-        "pde_solve(assemble(a; dirichlet = :boundary), F)"
+           "pde_solve(assemble(a; dirichlet = :boundary), F)"
     throw(ArgumentError("fdm_solve: the operator has element type $T, and the factorization " *
                         "stores Float32 or Float64 only; to differentiate with respect to a " *
                         "coefficient or the mesh, solve with `$call`"))

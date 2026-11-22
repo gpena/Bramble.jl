@@ -311,8 +311,9 @@ end
         sprint(showerror, _refusal(() -> jacobian_form(unread, dec))))
     @test_throws ArgumentError jacobian_form(form(W, W, (U, V) -> innerₕ(c * U, V)), c => _r)
     @test_throws ArgumentError jacobian_form(form(W, W, (U, V) -> innerₕ(c * U, V)), dec, dec)
-    @test occursin("declare each grid function once", sprint(showerror,
-        _refusal(() -> jacobian_form(form(W, W, (U, V) -> innerₕ(c * U, V)), dec, dec))))
+    @test occursin("declare each grid function once",
+        sprint(showerror,
+            _refusal(() -> jacobian_form(form(W, W, (U, V) -> innerₕ(c * U, V)), dec, dec))))
     @test_throws ArgumentError jacobian_form(
         form(W, W, (U, V) -> innerₕ(c * U, V)), c => (U -> Mₕ(U), _r))
 end

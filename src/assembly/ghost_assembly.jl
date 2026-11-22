@@ -564,8 +564,7 @@ end
 # Any number type: floats, complex numbers and AD types such as `ForwardDiff.Dual`. The
 # reduction only multiplies and adds entries, so it needs no BLAS type.
 _check_ghost_eltype(::Type{<:Number}) = nothing
-_check_ghost_eltype(T::Type) =
-    _throw_ghost_unsupported("the element type $T (a Number is required)")
+_check_ghost_eltype(T::Type) = _throw_ghost_unsupported("the element type $T (a Number is required)")
 
 @noinline function _throw_ghost_unsupported(what)
     throw(ArgumentError("forms on a ghost space do not support $what yet."))
