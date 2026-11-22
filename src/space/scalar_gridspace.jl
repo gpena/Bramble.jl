@@ -93,7 +93,7 @@ rather than the weights inline. Every copy of a space (a form's, an operator's r
 element) carries that pointer, not the weights, which keeps the 3D form tree under
 Enzyme's type-analysis limit (gpena/Bramble.jl#1154). Two spaces are `===` only when they
 share one mesh and one `SpaceWeights` object. A `CpuPolyester` task is the exception: it
-rebuilds its space around the same fields held inline (`_SplitWeights`).
+rebuilds its space with the same fields held inline.
 
 # Fields
 
@@ -139,9 +139,9 @@ end
 The fields of a [`SpaceWeights`](@ref), held inline by an immutable struct: what a space's
 weights become when a `CpuPolyester` task rebuilds the space ([`_batch_rebuild`](@ref)),
 around the `PtrArray`s `@batch` passes. Built in the task, it costs no allocation, and the
-task reads the weight vectors from its own registers. Read through a shared mutable
-`SpaceWeights` instead, the weights may alias a store into the output, so every point
-reloads them and the band loop does not vectorise. Only a task's rebuilt space holds one.
+task holds the weight vectors' pointers itself instead of loading them from a shared
+mutable `SpaceWeights`, whose fields a store into the output may alias. Only a task's
+rebuilt space holds one.
 """
 struct _SplitWeights{D, T, VT <: AbstractVector{T}} <: _AbstractWeights{D, T, VT}
     innerh::SeparableWeights{D, T, VT}
@@ -166,7 +166,7 @@ A `ScalarGridSpace` pairs the mesh with the precomputed weight vectors
   - `mesh::MType`: the underlying mesh of the grid space.
   - `weights::WS`: precomputed inner product weight vectors, a [`SpaceWeights`](@ref)
     held by reference (a `mutable struct` with `const` fields). Only a `CpuPolyester`
-    task's rebuilt space holds them inline instead, as a `_SplitWeights`.
+    task's rebuilt space holds the same fields inline instead.
 
 ## Discrete inner products
 
@@ -235,8 +235,8 @@ struct ScalarGridSpace{
 } <: AbstractSpaceType{1}
     "the underlying mesh of the grid space."
     mesh::MType
-    "a [`SpaceWeights`](@ref) object holding vectors for various discrete inner products."
-    weights::WS # a `_SplitWeights` in a `CpuPolyester` task's rebuilt space
+    "the vectors for the discrete inner products, a [`SpaceWeights`](@ref) outside a task."
+    weights::WS
 end
 @inline ScalarGridSpace{D, T, VT, MType}(
     mesh::MType, weights::WS) where {D, T, VT, MType, WS <: _AbstractWeights{D, T, VT}} =
