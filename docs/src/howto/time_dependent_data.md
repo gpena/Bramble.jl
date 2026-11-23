@@ -40,8 +40,13 @@ C_t = constrained(gridspace(Ω_gh; ghosts = :boundary), u -> (
 a_t = form(C_t, C_t, (u, v) -> innerₕ(-Δₕ(u), v))
 l_t = form(C_t, v -> innerₕ(x -> 0.0, v))
 
+@assert length(x_gh) == 33
+@assert ndofs(C_t) == 33
+
 ndofs(C_t)
 ```
+
+The relations eliminate the ghosts, so the space has one unknown per node, 33.
 
 `Bramble.lift(Cₕ, u, t)` is the grid function ``E u + d(t)`` at time `t`. The exact solution at the nodes lifts to a padded function whose centred difference at the first node gives the flux datum at that time, and the data at two times give different ghosts:
 
