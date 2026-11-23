@@ -279,6 +279,7 @@ A = ∇ₕ(Wₕ)
 @assert size(A) == (5, 5) && all(iszero, A[1, :])   # the truncated first row
 @assert A[3, 2] ≈ -4 && A[3, 3] ≈ 4                 # -1/h and 1/h, with h = 1/4
 @assert A * parent(uₕ) ≈ [0.0, 0.25, 0.75, 1.25, 1.75]
+@assert ∇ₕ(gridspace(Ωₙ)) * parent(uₙ) ≈ [0.0, 0.1, 0.4, 0.9, 1.6]   # graded grid
 
 typeof(A)
 ```
@@ -323,6 +324,17 @@ curluv = reshape(parent(∇ₕ × uv), 4, 4)
 @assert parent(∇ₕ ⋅ uv) == parent(divₕ(uv)) && parent(∇ₕ × uv) == parent(curlₕ(uv))
 
 divuv, curluv
+```
+
+On a graded rectangle, where the two spacings differ, the same field gives the same values:
+
+```@example operators
+Ω₃ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (4, 4))
+change_points!(Ω₃, [[0.0, 0.1, 0.4, 1.0], [0.0, 0.5, 1.2, 2.0]])
+uv₃ = Rₕ(vector_gridspace(Ω₃), x -> (x[1] + 2x[2], 3x[1] + x[2]))
+
+@assert all(≈(2), reshape(parent(∇ₕ ⋅ uv₃), 4, 4)[2:end, 2:end])
+@assert all(≈(1), reshape(parent(∇ₕ × uv₃), 4, 4)[2:end, 2:end])
 ```
 
 The first two assertions state the divergence and the curl by hand, away from the truncated first row and column. The last checks that `∇ₕ ⋅` and `∇ₕ ×` are the same operators as `divₕ` and `curlₕ`.
