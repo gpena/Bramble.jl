@@ -872,6 +872,9 @@ end
             @test other == ([1, 3, 4, 6], [2, 3, 2, 1, 3], [2, 4, 3, 1, 5])
             @test ext._csr_columns([1, 2, 4, 6], [3, 1, 2, 1, 3], perm, 4)[1] ==
                   [1, 3, 4, 6, 6]
+            # The last pattern served shares `perm` but not `rowptr`: its columns must not
+            # come back.
+            @test ext._csr_columns(rowptr, colval, perm, 3) == c1
         end
     else
         @test_skip RUN_ENZYME

@@ -69,24 +69,49 @@ const _MFBands = typeof(Bramble._batch_mf_bands!)
 # does. `WeakKeyDict` matches keys by content, so a hit counts only when `perm`, `rowptr` and
 # `colval` are the very arrays the entry was built from, and `ncols` matches. One lock covers
 # the lookup and the insert, since rules may run on several tasks.
+#
+# A dict lookup hashes and compares `perm` element by element, which costs about as much as
+# the counting sort on a five-point pattern. `_CSR_LAST` holds the last pattern served,
+# its arrays weakly, and is checked first by identity alone. It holds that pattern's
+# columns strongly, so they can outlive their operator until another pattern is served.
 const _CsrColumns = NTuple{3, Vector{Int}}
 const _CSR_COLUMNS = WeakKeyDict{Vector{Int}, Tuple{Vector{Int}, Vector{Int}, _CsrColumns}}()
 const _CSR_COLUMNS_LOCK = ReentrantLock()
 
+mutable struct _CsrLast
+    perm::WeakRef
+    rowptr::WeakRef
+    colval::WeakRef
+    ncols::Int
+    cols::_CsrColumns
+end
+
+const _CSR_LAST = _CsrLast(WeakRef(), WeakRef(), WeakRef(), 0, (Int[], Int[], Int[]))
+
+function _csr_remember!(rowptr, colval, perm, ncols, cols)
+    _CSR_LAST.perm, _CSR_LAST.rowptr = WeakRef(perm), WeakRef(rowptr)
+    _CSR_LAST.colval, _CSR_LAST.ncols, _CSR_LAST.cols = WeakRef(colval), ncols, cols
+    return cols
+end
+
 function _csr_columns(rowptr::Vector{Int}, colval::Vector{Int}, perm::Vector{Int},
         ncols::Int)
     @lock _CSR_COLUMNS_LOCK begin
+        last = _CSR_LAST
+        last.perm.value === perm && last.rowptr.value === rowptr &&
+            last.colval.value === colval && last.ncols == ncols && return last.cols
         key = getkey(_CSR_COLUMNS, perm, nothing)
         if key === perm
             r, c, cols = _CSR_COLUMNS[perm]
-            r === rowptr && c === colval && length(cols[1]) == ncols + 1 && return cols
+            r === rowptr && c === colval && length(cols[1]) == ncols + 1 &&
+                return _csr_remember!(rowptr, colval, perm, ncols, cols)
         end
         cols = _csr_columns_build(rowptr, colval, perm, ncols)
         # A content-equal key from another operator is dropped first, so the new key gets
         # its own finalizer.
         key === nothing || delete!(_CSR_COLUMNS, perm)
         _CSR_COLUMNS[perm] = (rowptr, colval, cols)
-        return cols
+        return _csr_remember!(rowptr, colval, perm, ncols, cols)
     end
 end
 
