@@ -1127,14 +1127,13 @@ end
 # of one type a walk of its own (`_value_groups`): concatenated, the stencil's entries
 # differ in type and the loop over them boxed at every point (27216 B on a 7x9 grid). Both
 # are read off the types (`_type_value`), so a form of one weight type walks as before.
+#
+# The units are visited by `_fold_summands`, not `map`, and gathered by
+# `concatenate_stencils` and `_each_entry`, not a splat and `map`: past `_INLINED_ENTRIES`
+# summands those run generically, and a warm `assemble!` of 40 restricted products
+# allocated 22288 B on 9x11 (#853).
 @inline function _each_walk_unit(f::F, ast, ::Type{E}) where {F, E}
-    if _unit_bits(ast) > 2
-        map(f, _walk_summands(ast))
-    elseif _values_differ(_walk_summands(ast), E)
-        map(f, _value_groups(_walk_summands(ast), E))
-    else
-        f(ast)
-    end
+    _fold_walk_units((t, _) -> (f(t); nothing), ast, nothing, E)
     return nothing
 end
 @inline function _fold_walk_units(f::F, ast, acc, ::Type{E}) where {F, E}
@@ -1167,16 +1166,22 @@ end
 # The summands walked apart: a scale over a sum (`2.0 * (l₁ + l₂ + l₃)`, `-(l₁ + l₂ + l₃)`)
 # is looked through, each summand walked under its own copy of the scale. The tree `form`
 # stored is not changed, so the scale is rebuilt per summand only here, in the walk.
-@inline _walk_summands(op::OperatorAdd) = (
-    _walk_summands(op.left_op)..., _walk_summands(op.right_op)...)
+@inline _walk_summands(op::OperatorAdd) = concatenate_stencils(
+    _walk_summands(op.left_op), _walk_summands(op.right_op))
 @inline function _walk_summands(op::_Scale)
     ts = _walk_summands(op.inner_op)
-    return ts isa Tuple{Any} ? (op,) : map(t -> _rewrap_inner(op, t), ts)
+    return ts isa Tuple{Any} ? (op,) : _each_entry(t -> _rewrap_inner(op, t), ts)
 end
 @inline _walk_summands(op) = (op,)
 @inline _fold_summands(f::F, ::Tuple{}, acc) where {F} = acc
 @inline _fold_summands(f::F, ts::Tuple, acc) where {F} = _fold_summands(
     f, Base.tail(ts), f(first(ts), acc))
+# `Base.tail` splats generically past `_INLINED_ENTRIES`: split there, as
+# `_concat_summand_stencils` does.
+@inline function _fold_summands(f::F, ts::_LongStencil, acc) where {F}
+    head, rest = _split_long_summands(ts)
+    return _fold_summands(f, rest, _fold_summands(f, head, acc))
+end
 
 # The restricted summands of a linear form, as `_shape_bits` (bilinear.jl) counts an
 # operand's, over both sides of each product and every restriction wrapping a product.

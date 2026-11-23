@@ -40,6 +40,27 @@ end
     @test dot(parent(w), A*parent(u))≈innerₕ(Δₕ(Δₕ(u)), Δₕ(Δₕ(w))) rtol=1e-10 atol=1e-12
 end
 
+@testset "linear form of 40 products in 2D (#853)" begin
+    Wₕ = gridspace(graded_mesh(2, (9, 11)))
+    f = x -> 1.0 + x[1]
+    l = form(Wₕ, v -> foldl(+, ntuple(k -> (k + 0.5) * innerₕ(f, v), Val(40))))
+    F = assemble(l)
+    @test_allocs Bramble.assemble!(F, l)
+    @test F≈sum(k -> k + 0.5, 1:40) .* assemble(form(Wₕ, v -> innerₕ(f, v))) rtol=1e-12
+end
+
+# Restricted products are walked one at a time (`_each_walk_unit`); past 32 the walk used
+# to `map` over them (320 B at 33). At 40 the marker check still allocates (#853).
+@testset "33 restricted products, linear (#853)" begin
+    Wₕ = gridspace(graded_mesh(2, (9, 11)))
+    f = x -> 1.0 + x[1]
+    r(v) = Bramble.restrict_to(:boundary, v)
+    l = form(Wₕ, v -> foldl(+, ntuple(k -> (k + 0.5) * innerₕ(f, r(v)), Val(33))))
+    F = assemble(l)
+    @test_allocs Bramble.assemble!(F, l)
+    @test F≈sum(k -> k + 0.5, 1:33) .* assemble(form(Wₕ, v -> innerₕ(f, r(v)))) rtol=1e-12
+end
+
 WITH_3D_TESTS && @testset "Δₕ² in 3D: 81 entries (#853)" begin
     Wₕ = gridspace(graded_mesh(3, (7, 6, 5)))
     a = form(Wₕ, Wₕ, (u, v) -> innerₕ(Δₕ(Δₕ(u)), v))

@@ -1078,11 +1078,24 @@ end
 # (`_split_restricted_products`, bilinear.jl and linear.jl), each walked apart, and both
 # paths assemble with 0 B. A product left whole, as it would split into more than 16 or
 # its constant scales keep several types, still boxes per point (gpena/Bramble.jl#727).
+#
+# Past `_INLINED_ENTRIES` summands `Base.tail` splats generically and boxes a summand at
+# every point (1648944 B per warm call for 40 products on 9x11, #853). A tuple that long is
+# split at `_INLINED_ENTRIES` out of line (`_split_long_summands`) and each part recursed on,
+# order kept; each summand's `Union` is still split at its own `concatenate_stencils` call.
 @inline _concat_summand_stencils(::Tuple{}, space, I, markers, lin_idx::Int) = ()
 @inline function _concat_summand_stencils(ts::Tuple, space, I, markers, lin_idx::Int)
     head = local_stencil(first(ts), space, I, markers, lin_idx)
     return concatenate_stencils(head, _concat_summand_stencils(Base.tail(ts), space, I, markers, lin_idx))
 end
+@inline function _concat_summand_stencils(ts::_LongStencil, space, I, markers, lin_idx::Int)
+    head, rest = _split_long_summands(ts)
+    return concatenate_stencils(_concat_summand_stencils(head, space, I, markers, lin_idx),
+        _concat_summand_stencils(rest, space, I, markers, lin_idx))
+end
+
+@noinline _split_long_summands(ts::Tuple) = (ntuple(k -> ts[k], Val(_INLINED_ENTRIES)),
+    ntuple(k -> ts[k + _INLINED_ENTRIES], Val(length(ts) - _INLINED_ENTRIES)))
 
 @inline function local_stencil(
         op::OperatorScale, space, I::CartesianIndex{D}, markers, lin_idx::Int
