@@ -204,7 +204,7 @@ F_pen = F_raw - (sum(F_raw) / sum(w_sq)) * w_sq
 nameof(typeof(K_pen)), size(K_pen), Base.summarysize(K_pen)
 ```
 
-`assemble` returns a `Bramble.RankOneUpdate`: the sparse matrix `K_pen.A` of the other terms, `σ` and the two weight vectors, with no dense block: it takes under a tenth of the 668168 bytes a dense ``289 \times 289`` matrix of `Float64` needs. Its products cost one product by `A` and two passes over the vectors. `K_pen'` and `transpose(K_pen)` are lazy wrappers of `K_pen`, and read its parts when they are applied. `pde_solve(K_pen, F_pen)` does not form the dense matrix either. It solves the sparse bordered system
+`assemble` returns a `Bramble.RankOneUpdate`: the sparse matrix `K_pen.A` of the other terms, `σ` and the two weight vectors. It holds no dense block and takes under a tenth of the 668168 bytes a dense ``289 \times 289`` matrix of `Float64` needs. Its products cost one product by `A` and two passes over the vectors. `K_pen'` and `transpose(K_pen)` are lazy wrappers of `K_pen`, and read its parts when they are applied. `pde_solve(K_pen, F_pen)` does not form the dense matrix either. It solves the sparse bordered system
 
 ```math
 \begin{pmatrix} A & w \\ w^T & -1/\sigma \end{pmatrix}

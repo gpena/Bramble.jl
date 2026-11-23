@@ -81,7 +81,7 @@ Aₚ, bₚ = assemble_pair(Parallel())
 nnz(Aₚ), length(bₚ)
 ```
 
-The matrix has one row per node, ``65^2 = 4225``, and a five-point stencil, so ``5 \cdot 65^2 - 4 \cdot 65 = 20865`` stored entries. It is identical entry by entry under both policies. Reductions such as `innerₕ` add their terms in
+The matrix has one row per node, ``65^2 = 4225``, and the five-point stencil gives it ``5 \cdot 65^2 - 4 \cdot 65 = 20865`` stored entries. It is identical entry by entry under both policies. Reductions such as `innerₕ` add their terms in
 another order under a threaded policy, so compare vectors and scalars built from them with
 `≈`.
 

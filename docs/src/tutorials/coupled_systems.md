@@ -196,8 +196,8 @@ nnz(B)
 
 The block is 64 by 16, one row per big node and one column per small node. Each row stores the
 four small-grid neighbours of its node, so `nnz(B)` is ``4 \cdot 64 = 256``. Per direction, the
-six interior big nodes weight two small nodes and each end weights one, so the entries that
-are not zero number ``(2 + 6 \cdot 2)^2 = 196``.
+six interior big nodes weight two small nodes and each end weights one, so ``(2 + 6 \cdot 2)^2 = 196``
+entries are not zero.
 
 Applied to the small leaf's values, the off-diagonal block gives the vector the source form assembled above:
 
