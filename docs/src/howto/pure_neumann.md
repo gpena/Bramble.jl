@@ -161,19 +161,21 @@ function check_compatibility(shift)
     result = Logging.with_logger(log) do
         Bramble.neumann_compatibility(neumann_problem(shift), Ωₕ_rand)
     end
-    return result, log.messages
+    status = result.compatible ? :compatible : :incompatible
+    return (; status, result.defect, result.refined_defect, result.λ,
+        result.second_ratio, warnings = log.messages)
 end
 
-ok, ok_warnings = check_compatibility(0.0)
-bad, bad_warnings = check_compatibility(0.2)
+ok = check_compatibility(0.0)
+bad = check_compatibility(0.2)
 
-@assert ok.compatible && isempty(ok_warnings)
-@assert ok.defect < 1e-4
-@assert !bad.compatible && length(bad_warnings) == 1
-@assert occursin("incompatible", only(bad_warnings))
+@assert ok.status === :compatible && isempty(ok.warnings)
+@assert ok.defect < 1e-4 && bad.refined_defect > 5e-3
+@assert bad.status === :incompatible && length(bad.warnings) == 1
+@assert occursin("incompatible", only(bad.warnings))
 @assert isapprox(bad.λ, 0.2; atol = 1e-3) && isapprox(bad.second_ratio, 1.0; atol = 0.1)
 
-(ok.compatible, ok.defect), (bad.compatible, bad.λ, bad.second_ratio)
+ok.defect, (bad.λ, bad.second_ratio)
 ```
 
 The compatible problem raises no warning and its relative defect is below ``10^{-4}``. The shifted one warns once. Its ``\lambda`` is ``0.2``, the shift, on the mesh and on both refinements, so the ratio of the removed loads is ``1`` where a quadrature error would give about ``4``. The mesh `Ωₕ` is not modified, and a mesh that carries markers of its own needs the domain's `markers(Ω)` as a third argument so that the refinement can evaluate them again.
@@ -194,10 +196,15 @@ K_pen = assemble(a_pen)
 F_raw = assemble(form(W_plain_sq, v -> innerₕ(f_sq, v)))
 F_pen = F_raw - (sum(F_raw) / sum(w_sq)) * w_sq
 
-typeof(K_pen).name.name, size(K_pen), Base.summarysize(K_pen) < 10 * Base.summarysize(K_pen.A)
+# a dense 289 × 289 block of Float64 would take 289² · 8 = 668168 bytes
+@assert K_pen isa Bramble.RankOneUpdate
+@assert size(K_pen) == (289, 289)
+@assert 0 < Base.summarysize(K_pen) < 289^2 * 8 / 10
+
+nameof(typeof(K_pen)), size(K_pen), Base.summarysize(K_pen)
 ```
 
-`assemble` returns a `Bramble.RankOneUpdate`: the sparse matrix `K_pen.A` of the other terms, `σ` and the two weight vectors, with no dense block. Its products cost one product by `A` and two passes over the vectors. `K_pen'` and `transpose(K_pen)` are lazy wrappers of `K_pen`, and read its parts when they are applied. `pde_solve(K_pen, F_pen)` does not form the dense matrix either. It solves the sparse bordered system
+`assemble` returns a `Bramble.RankOneUpdate`: the sparse matrix `K_pen.A` of the other terms, `σ` and the two weight vectors. It holds no dense block and takes under a tenth of the 668168 bytes a dense ``289 \times 289`` matrix of `Float64` needs. Its products cost one product by `A` and two passes over the vectors. `K_pen'` and `transpose(K_pen)` are lazy wrappers of `K_pen`, and read its parts when they are applied. `pde_solve(K_pen, F_pen)` does not form the dense matrix either. It solves the sparse bordered system
 
 ```math
 \begin{pmatrix} A & w \\ w^T & -1/\sigma \end{pmatrix}

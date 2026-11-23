@@ -29,6 +29,7 @@ import Bramble: component_range, component_ranges, weights
 Ωₕ = mesh(Ω, 11)
 Wₕ = gridspace(Ωₕ)
 
+@assert ndofs(Wₕ) == 11 && ndofs(Wₕ, Tuple) == (11,)
 ndofs(Wₕ), ndofs(Wₕ, Tuple)
 ```
 
@@ -42,6 +43,8 @@ There is one degree of freedom per mesh point, and `points(Wₕ)` is `points(Ω�
 ```@example space
 uₕ = Rₕ(Wₕ, x -> sin(π * x))
 
+xs = collect(points(Wₕ))
+@assert length(uₕ) == 11 && uₕ[6] ≈ sin(π * xs[6]) && abs(uₕ[1]) < 1e-12
 length(uₕ), uₕ[6]
 ```
 
@@ -51,7 +54,8 @@ broadcasting keeps the parent space:
 ```@example space
 wₕ = 3.0 .* uₕ .+ element(Wₕ, 2.0)
 
-space(wₕ) === Wₕ, wₕ[6]
+@assert space(wₕ) === Wₕ && wₕ[6] ≈ 3 * sin(π * xs[6]) + 2 && wₕ[1] ≈ 2
+wₕ[6]
 ```
 
 [`element`](@ref) allocates an uninitialised field; `element(Wₕ, α)` fills it with `α` and
@@ -150,6 +154,7 @@ Nodal restriction $R_h$ evaluates a function at the grid points; cell averaging 
 u_avg = avgₕ(Wₕ, x -> exp(-x))
 avgₕ!(u_avg, x -> exp(-x))
 
+@assert u_avg[1] ≈ 20 * (1 - exp(-0.05)) && u_avg[6] ≈ 10 * (exp(-0.45) - exp(-0.55))
 u_avg[1]
 ```
 
@@ -173,6 +178,7 @@ A plain `Function` is not a grid function, so multiplying by one restricts it fi
 oneₕ = Rₕ(Wₕ, x -> 1.0)
 below_half = (x -> x[1] < 0.5) * oneₕ
 
+@assert sum(below_half) == count(<(0.5), xs) && collect(below_half) == (xs .< 0.5)
 sum(below_half)
 ```
 
@@ -190,7 +196,9 @@ Each degree of freedom carries a quadrature weight, the cell measure around its 
 ```@example space
 vₕ = Rₕ(Wₕ, x -> cos(π * x))
 
-innerₕ(uₕ, vₕ), normₕ(uₕ), normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)
+@assert abs(innerₕ(uₕ, vₕ)) < 1e-12
+@assert normₕ(uₕ)^2 ≈ 0.5 && innerₕ(uₕ, uₕ) ≈ 0.5
+innerₕ(uₕ, vₕ), normₕ(uₕ)
 ```
 
 The norm of $\sin(\pi x)$ on $[0, 1]$ is $1/\sqrt{2} \approx 0.707$, which `normₕ` reproduces here. The discrete Sobolev norms are built on the backward
@@ -202,7 +210,10 @@ gradient `∇ₕ`:
 ```
 
 ```@example space
-snorm₁ₕ(uₕ), norm₁ₕ(uₕ), norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2
+Δu = diff(parent(uₕ))
+@assert snorm₁ₕ(uₕ)^2 ≈ sum(abs2.(Δu) ./ diff(xs))
+@assert norm₁ₕ(uₕ)^2 ≈ 0.5 + sum(abs2.(Δu) ./ diff(xs))
+snorm₁ₕ(uₕ), norm₁ₕ(uₕ)
 ```
 
 `inner₊` is the staggered counterpart of `innerₕ`: it weights by the backward spacing along the chosen direction (zero at the first node) and by the cell width across the others. A trailing `:x`/`:y`/`:z` (or `1`/`2`/`3`) argument picks a single direction. That pairing makes summation by parts exact; the [operators tutorial](operators.md) derives it.
@@ -210,15 +221,20 @@ snorm₁ₕ(uₕ), norm₁ₕ(uₕ), norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + sn
 ```@example space
 D = ∇ₕ(uₕ)
 
-inner₊(D, D, :x) ≈ snorm₁ₕ(uₕ)^2
+@assert inner₊(D, D, :x) ≈ sum(abs2.(diff(parent(uₕ))) ./ diff(xs))
+@assert inner₊(D, D, :x) > 1
+inner₊(D, D, :x)
 ```
 
 !!! tip "Try this"
     Build the mesh as `mesh(Ω, 11, false)`, a non-uniform one with the same number of
     points, and rerun the blocks above. `ndofs` is unchanged, but the interior weights are
     no longer equal (on a uniform mesh only the two end weights are halved), so `normₕ` and
-    `innerₕ` change while the weights still sum to the interval length. The
-    [mesh tutorial](mesh.md) builds such meshes on purpose.
+    `innerₕ` change while the weights still sum to the interval length. The assertions
+    written in terms of the node coordinates still hold. Those with a hand value that needs
+    equal spacing (the cell averages, the step averages, the `0.5` in the norms and the zero
+    inner product, including the composite norms below) are uniform-mesh identities and fire
+    on the graded mesh. The [mesh tutorial](mesh.md) builds such meshes on purpose.
 
 ## [Composite spaces and vector elements](@id space_composite)
 
@@ -229,6 +245,8 @@ another. `Wₕ^Val(N)` stacks `N` copies:
 ```@example space
 Vₕ = Wₕ^Val(2)
 
+@assert ncomponents(Vₕ) == 2 && ndofs(Vₕ) == ncomponents(Vₕ) * ndofs(Wₕ)
+@assert ndofs(Vₕ, Tuple) == (11, 11)
 ncomponents(Vₕ), ndofs(Vₕ), ndofs(Vₕ, Tuple)
 ```
 
@@ -244,6 +262,8 @@ uᵧ = uvec(2)
 uₓ .= 1.5
 uᵧ .= -2.0
 
+@assert parent(uvec)[[1, 12]] == [1.5, -2.0]
+@assert all(==(1.5), parent(uvec)[1:11]) && all(==(-2.0), parent(uvec)[12:22])
 parent(uvec)[[1, 12]]
 ```
 
@@ -253,7 +273,8 @@ scalar space `uₕ(1)` is `uₕ` itself. [`components`](@ref) destructures all o
 ```@example space
 c₁, c₂ = components(uvec)
 
-c₁ === uₓ, c₂ === uᵧ
+@assert c₁ === uₓ && c₂ === uᵧ && c₁ !== c₂
+c₁[1], c₂[1]
 ```
 
 On a composite space `Rₕ!` takes a tuple of scalar functions, or one function returning a
@@ -262,7 +283,9 @@ tuple, and `innerₕ` sums over components:
 ```@example space
 Rₕ!(uvec, (x -> sin(π * x), x -> cos(π * x)))
 
-normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2
+@assert normₕ(uvec)^2 ≈ 0.5 + 0.5
+@assert normₕ(uvec(1))^2 ≈ 0.5 && normₕ(uvec(2))^2 ≈ 0.5
+normₕ(uvec)^2
 ```
 
 The storage is flat, and `reshape` gives each component a grid-shaped view of the same memory. For a 2D space on a 5 × 5 mesh the layout is:
@@ -348,7 +371,8 @@ The storage is flat, and `reshape` gives each component a grid-shaped view of th
 
 !!! tip "Try this"
     Replace `Val(2)` with `Val(3)` and add a third function to the tuple. `ncomponents` and
-    `ndofs` follow.
+    `ndofs` follow. The assertions that state `N = 2` (the component count and the norm sum)
+    fire until you update them.
 
 ## Ghost spaces
 

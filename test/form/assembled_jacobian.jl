@@ -324,7 +324,9 @@ end
     jf = jacobian_form(_flux(W, ax, ay), ax => (U -> Mₕ(U)[2], _α),
         ay => (U -> Mₕ(U)[1], _α); dirichlet = :boundary)
     J = jacobian_prototype(jf)
-    @test alloc_ok(alloc_test(jacobian!, J, jf, _state(W)))
+    u = _state(W)
+    @test alloc_ok(alloc_test(jacobian!, J, jf, u))
+    @test (@inferred jacobian!(J, jf, u)) === J
     # A complex state is refused by `jacobian!` itself, not by the `src/` fallback that
     # asks for ForwardDiff, which is loaded here.
     uc = complex.(_state(W), 0.1)
