@@ -76,12 +76,17 @@ _vtk_axes(Ωₕ::AbstractMeshType) = host_points(Ωₕ)
 # WriteVTK reads `length(data)` off a `Tuple` as the number of vector components, one array
 # per component. Wrapping each with `Array` brings a device-backed field's storage to the
 # host before `WriteVTK` sees it. A plain array passed as field data gets the same copy
-# unless it is already an `Array`.
+# unless it is already an `Array`. A scalar field stored in an `Array` is shared, not
+# copied, since WriteVTK serialises the values on `vtk[name] = data` and keeps no reference.
 function _vtk_data(name, Ωₕ::AbstractMeshType, uₕ::VectorElement{<:CompositeGridSpace})
     _require_one_mesh("export_vtk", uₕ)
     return map(c -> _vtk_data(name, Ωₕ, Array(reshape(c))), components(uₕ))
 end
 _vtk_data(name, Ωₕ::AbstractMeshType, uₕ::VectorElement) = _vtk_data(name, Ωₕ, Array(reshape(uₕ)))
+function _vtk_data(name, Ωₕ::AbstractMeshType, uₕ::VectorElement{<:ScalarGridSpace, <:Any, <:Array})
+    # `reshape(uₕ)` checks the length against the grid; `reshape` of the `Array` shares it.
+    return _vtk_data(name, Ωₕ, reshape(parent(uₕ), size(reshape(uₕ))))
+end
 _vtk_data(name, Ωₕ::AbstractMeshType, a::Array) = _vtk_check_size(name, Ωₕ, a)
 _vtk_data(name, Ωₕ::AbstractMeshType, a::AbstractArray) = _vtk_data(name, Ωₕ, Array(a))
 
