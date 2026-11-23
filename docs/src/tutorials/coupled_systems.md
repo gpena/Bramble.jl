@@ -32,6 +32,7 @@ ac = form(Vₕ, Vₕ, (u, v) -> begin
     innerₕ(u₁, v₁) + inner₊(∇ₕ(u₂), ∇ₕ(v₂), :x)
 end)
 Ac = assemble(ac)
+@assert size(Ac) == (2 * 33, 2 * 33)
 size(Ac)
 ```
 
@@ -41,14 +42,17 @@ lands in block ``(j, i)``, so off-diagonal coupling is written the same way.
 
 Indices are checked against the number of blocks when the form is built: `u[3]` on a
 two-component space raises an `ArgumentError`. A term must name both components or neither,
-and a term that names one and not the other raises when the matrix is assembled:
+and a term that names one and not the other raises an `ArgumentError` when the matrix is
+assembled:
 
 ```@example coupled
-try
+err = try
     assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u[1], v)))
 catch e
-    showerror(stdout, e)
+    e
 end
+@assert err isa ArgumentError
+showerror(stdout, err)
 ```
 
 A term naming one component belongs to every equation at once, so it is refused. Naming
@@ -158,14 +162,16 @@ for entry with applying the numeric operator first.
 ### Bilinear coupling across meshes
 
 A bilinear term coupling two leaves over different meshes has no assembly unless the trial
-or the test function is wrapped in `πₕ`. Unwrapped, it is refused:
+or the test function is wrapped in `πₕ`. Unwrapped, it raises an `ArgumentError`:
 
 ```@example coupled
-try
+err2 = try
     assemble(form(Vh, Vh, (u, v) -> innerₕ(u(2), v(1))))
 catch e
-    showerror(stdout, e)
+    e
 end
+@assert err2 isa ArgumentError
+showerror(stdout, err2)
 ```
 
 A coupled block is assembled by walking the test leaf's grid and reading the trial column out
@@ -182,8 +188,16 @@ Ac_pi = assemble(form(Vh, Vh, (u, v) -> innerₕ(πₕ(u(2)), v(1))))
 using SparseArrays
 nb = ndofs(Wbig)
 B = Ac_pi[1:nb, nb+1:end]
+@assert size(B) == (8 * 8, 4 * 4)
+@assert nnz(B) == 4 * nb
+@assert nnz(dropzeros(B)) == (2 + 6 * 2)^2
 nnz(B)
 ```
+
+The block is 64 by 16, one row per big node and one column per small node. Each row stores the
+four small-grid neighbours of its node, so `nnz(B)` is ``4 \cdot 64 = 256``. Per direction, the
+six interior big nodes weight two small nodes and each end weights one, so the entries that
+are not zero number ``(2 + 6 \cdot 2)^2 = 196``.
 
 Applied to the small leaf's values, the off-diagonal block gives the vector the source form assembled above:
 
