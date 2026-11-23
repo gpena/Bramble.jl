@@ -856,7 +856,7 @@ end
 
         # The reverse rule of `_batch_csr_spmv!` keeps the transpose pattern of one operator
         # across calls (gpena/Bramble.jl#1271). A `perm` reused with another pattern must not
-        # hit the cached columns: the lookup keys on content, the hit checks identity.
+        # hit the cached columns: a hit needs the very arrays, never equal contents.
         @testset "CSR transpose pattern, memoised" begin
             ext = Base.get_extension(Bramble, :BrambleEnzymePolyesterExt)
             rowptr, colval, perm = [1, 3, 5, 6], [1, 2, 2, 3, 1], [1, 2, 3, 4, 5]
@@ -875,6 +875,14 @@ end
             # The last pattern served shares `perm` but not `rowptr`: its columns must not
             # come back.
             @test ext._csr_columns(rowptr, colval, perm, 3) == c1
+            # Two operators with equal patterns in different arrays, called in turn, each
+            # keep their own columns.
+            A = ([1, 3, 5, 6], [1, 2, 2, 3, 1], [1, 2, 3, 4, 5])
+            B = map(copy, A)
+            a1, b1 = ext._csr_columns(A..., 3), ext._csr_columns(B..., 3)
+            a2, b2 = ext._csr_columns(A..., 3), ext._csr_columns(B..., 3)
+            @test all(map(===, a1, a2)) && all(map(===, b1, b2))
+            @test !any(map(===, a1, b1))
         end
     else
         @test_skip RUN_ENZYME
