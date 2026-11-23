@@ -394,9 +394,13 @@ end
 end
 
 @inline _any_marked(mask::BitVector, i::Int) = @inbounds mask[i]
-@inline _any_marked(::Tuple{}, i::Int) = false
-@inline _any_marked(masks::Tuple, i::Int) = @inbounds(first(masks)[i]) ||
-                                           _any_marked(Base.tail(masks), i)
+# Branch-free: the masks share one length, so bit `i` sits in the same chunk of each. One
+# chunk index, one OR of the chunks, one bit test, however many labels there are.
+@inline function _any_marked(masks::Tuple, i::Int)
+    k, b = ((i - 1) >>> 6) + 1, (i - 1) & 63
+    w = mapreduce(m -> @inbounds(m.chunks[k]), |, masks)
+    return isodd(w >>> b)
+end
 
 # One entry per leaf, always: `components` never changes how many entries there are, only
 # each one's `active` flag, so this stays the same fully-unrolled shape whether or not a

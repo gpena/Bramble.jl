@@ -683,7 +683,7 @@ end
 # Under `reassemble` the residual applies every Dirichlet label to the refilled operator at
 # each step. Two labels used to union their masks into a fresh grid-sized `BitVector` per
 # call; each row is now tested against both stored masks (#994).
-@testset "reassemble, two Dirichlet labels: 0 B (#994)" begin
+@testset "reassemble, two labels: 0 B (#994)" begin
     Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :l => :xmin, :r => :xmax),
         (9, 11), (false, false))
     Wₕ = gridspace(Ωₕ)
