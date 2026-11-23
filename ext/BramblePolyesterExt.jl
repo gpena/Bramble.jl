@@ -63,8 +63,9 @@
 # arguments go through `_batch_split` (`src/utils/batch_split.jl`): the arrays cross as
 # top-level loop arguments, the rest as an isbits skeleton, and each task calls
 # `_batch_rebuild` on them (`_batch_for!`, the replay, linear and bilinear sweeps,
-# `_batch_mf_bands!`). The loops that never held a struct (the engines,
-# `_batch_run_bands!`, `_batch_csr_spmv!`) capture only arrays and isbits values, and
+# `_batch_mf_bands!`). The engines, `_batch_run_bands!` and `_batch_csr_spmv!` capture
+# only arrays and isbits values: a `StarSpacings` spacing (`Dcₓ!`, `D̃ₓ!`, `divcₕ!`)
+# crosses as its array and a tag, rebuilt in each band (`_band_cross` below), and
 # `_batch_broadcast!`, `_batch_kron_lines!` and `_batch_dot` rebuild their light structs
 # inside each task (`_bc_host_rebuild`, `_kron_host_rebuild`, `_weights`). The test file's
 # "allocation under CpuPolyester" testset asserts 0 B for each path.
@@ -102,7 +103,7 @@ using Bramble: MarkedIndicesUnion, SeparableWeights, _throw_dot_dim_error,
                _PairActionSink, _batch_split, _batch_rebuild, _MFFusedPlan, _MFPass,
                _MF_BAND, _MF_NO_COLLECT, _mf_apply_parts!, _mf_host_ast, _batch_splittable,
                _dot_band, _threaded_dot, _last_axis_chunks,
-               _separable_line_band, _separable_block_band
+               _separable_line_band, _separable_block_band, StarSpacings, _StarTag, _in_band
 using Polyester: Polyester, @batch
 using LinearAlgebra: mul!
 using PrecompileTools: @setup_workload, @compile_workload
@@ -1159,10 +1160,21 @@ end
 # the sweep hooks above, so this is a genuine specialisation of the `src/` stub rather than a
 # redefinition of its fully unconstrained signature.
 
+#
+# A `StarSpacings` would box the loop's arguments on the heap, being a struct around an
+# array, so its array crosses `@batch` alone with an isbits tag, and each band rebuilds it
+# (`_band_cross`, `_cross_tag`, then `_in_band`), as the ghost path does
+# (`src/operators/ghost_vector_operators.jl`). Any other spacing crosses unchanged.
+@inline _band_cross(h::StarSpacings) = h.h
+@inline _band_cross(a) = a
+@inline _cross_tag(::StarSpacings) = _StarTag()
+@inline _cross_tag(a) = nothing
+
 function Bramble._batch_difference_engine!(out::AbstractVector, in_ref, h, dims, dir, dim_val)
     n = Threads.nthreads()
+    hx, tag = _band_cross(h), _cross_tag(h)
     @batch for b in 1:n
-        _difference_band!(out, in_ref, h, dims, dir, dim_val, n, b)
+        _difference_band!(out, in_ref, _in_band(tag, hx), dims, dir, dim_val, n, b)
     end
     return nothing
 end
@@ -1191,10 +1203,12 @@ end
 # generic over `f` rather than naming one. `out::AbstractVector` is always the first of
 # `args...` at every `_run_bands!` call site (vector_calculus.jl), the same constraint that
 # makes this a genuine specialisation of the `src/` stub rather than a redefinition of its
-# fully unconstrained signature.
+# fully unconstrained signature. A `StarSpacings` in `rest` (`divcₕ!`, `curlcₕ!`, `diṽₕ!`)
+# crosses as its array and a tag, as in `_batch_difference_engine!` above.
 function Bramble._batch_run_bands!(f::F, nbands::Int, out::AbstractVector, rest::Vararg{Any, N}) where {F, N}
+    xs, tags = map(_band_cross, rest), map(_cross_tag, rest)
     @batch for b in 1:nbands
-        f(out, rest..., nbands, b)
+        f(out, map(_in_band, tags, xs)..., nbands, b)
     end
     return nothing
 end

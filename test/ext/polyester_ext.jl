@@ -857,6 +857,23 @@ end
     @test _poly_min_bytes(16) == _poly_min_bytes(160)
 end
 
+# A `StarSpacings` spacing crosses `@batch` as its array (gpena/Bramble.jl#998): before,
+# the struct boxed the loop's arguments, 80 B per engine call, 160 B per vector operator.
+if Threads.nthreads() >= 2
+    @testset "StarSpacings stencils: 0 B (#998)" begin
+        _, Ωb = _stencil_mesh_pair((40, 37), CpuPolyester())
+        ub = Rₕ(gridspace(Ωb), _STENCIL_F[2])
+        uv = Rₕ(gridspace(Ωb, Val(2)), x -> (x[1] * x[2], sin(x[1])))
+        w = similar(ub)
+        for op in (Bramble.Dcₓ!, Bramble.D̃ₓ!)
+            @test minimum(alloc_test(op, w, ub) for _ in 1:3) == 0
+        end
+        for op in (Bramble.divcₕ!, Bramble.curlcₕ!, Bramble.diṽₕ!)
+            @test minimum(alloc_test(op, w, uv) for _ in 1:3) == 0
+        end
+    end
+end
+
 # --- Divergence, curl and strain-average engines under CpuPolyester --------- #
 #
 # `_run_bands!`'s `CpuPolyester` arm (`_batch_run_bands!`, this extension) is what the

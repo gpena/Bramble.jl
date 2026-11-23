@@ -181,8 +181,8 @@ end
 # engine has just written truncated. Both cut the grid along its last axis into the same
 # bands, so a band rewrites only points it wrote itself. The spacing crosses the band pass as
 # an array: `StarSpacings`, a struct around one, is rebuilt inside (`_in_band`), since a
-# `Polyester.@batch` task boxes a struct holding an array (the plain `Dcₓ!` and `D̃ₓ!` pay
-# 80 B for it under `CpuPolyester`).
+# `Polyester.@batch` task boxes a struct holding an array on the heap. `BramblePolyesterExt`
+# does the same for the plain `Dcₓ!`, `D̃ₓ!` and the vector operators.
 @inline function _ghost_stencil_band!(out, x, gb, h, wrap::W, n::NTuple{D, Int}, dir,
         kind::K, dv::Val, fixes, nbands::Int, b::Int) where {W, D, K}
     _ghost_interior_band!(kind, out, x, _in_band(wrap, h), n, dir, dv, nbands, b)
