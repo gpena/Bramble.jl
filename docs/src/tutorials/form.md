@@ -49,13 +49,19 @@ function, while `D₋ₓ(v)` adds a node to an expression.
 
 ```@example forms
 b = assemble(l)
+@assert length(b) == 33
+@assert !all(iszero, b)
+@assert abs(sum(b) - 2 / π) < 1e-3
 length(b), sum(b)
 ```
+
+The sum is the trapezoid rule for ``\int_0^1 \sin(\pi x)\,dx = 2/\pi``, within 1e-3 on 33 points.
 
 In a time loop, `assemble!` refills an existing vector with zero allocations:
 
 ```@example forms
 assemble!(b, l)
+@assert abs(sum(b) - 2 / π) < 1e-3  # refilled, not added to the old values
 sum(b)
 ```
 
@@ -74,7 +80,8 @@ l_dyn = form(Wₕ, v -> α * innerₕ(fₕ, v))
 b_dyn = assemble(l_dyn)
 α[] = 2.0
 assemble!(b_dyn, l_dyn)
-sum(b_dyn) ≈ 2 * sum(b)
+@assert abs(sum(b_dyn) - 4 / π) < 2e-3
+sum(b_dyn)
 ```
 
 ## Contracting without a vector
@@ -83,6 +90,8 @@ To get only the number ``\ell(v_h)``, call the form:
 
 ```@example forms
 oneₕ = Rₕ(Wₕ, x -> 1.0)
+@assert abs(l(oneₕ) - 2 / π) < 1e-3
+@assert l(oneₕ) ≈ sum(b)
 l(oneₕ), sum(b)
 ```
 
@@ -94,7 +103,10 @@ vector and returns the contraction:
 
 ```@example forms
 scratch = zeros(length(b))
-evaluate!(scratch, l, oneₕ)
+contraction = evaluate!(scratch, l, oneₕ)
+@assert !all(iszero, scratch)
+@assert abs(contraction - 2 / π) < 1e-3
+contraction
 ```
 
 A bare vector is refused: its length does not show whether its blocks match the components
@@ -108,6 +120,8 @@ A bilinear form takes two symbolic arguments, trial first and test second:
 a = form(Wₕ, Wₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v), :x))
 A = assemble(a)
 @assert nnz(A) == 3 * 33 - 2
+@assert !all(iszero, A)
+@assert A[1, 1] ≈ 32 && A[2, 2] ≈ 64 && A[1, 2] ≈ -32  # 1/h and 2/h on the diagonal, -1/h off it
 size(A), nnz(A)
 ```
 
@@ -124,7 +138,8 @@ follows from the stencil, so it is known before any value is computed.
 ```@example forms
 A2 = allocate_system_matrix(a)
 assemble!(A2, a)
-A2 ≈ A
+@assert !all(iszero, A2)
+@assert A2 ≈ A
 ```
 
 Build the pattern once outside a time loop and call `assemble!` inside it.
@@ -135,12 +150,13 @@ expression alone, without assembling anything:
 
 ```@example forms
 using LinearAlgebra: issymmetric, isposdef
-issymmetric(a), isposdef(a)
+@assert issymmetric(a)
+@assert isposdef(a)
 ```
 
 ```@example forms
 c = form(Wₕ, Wₕ, (u, v) -> inner₊(u, ∇ₕ(v)))
-issymmetric(c)  # different operators either side
+@assert !issymmetric(c)  # different operators either side
 ```
 
 A positive answer means `cholesky` is the factorization to try first. `isposdef` answers for semi-definiteness: this matrix has the constants in its
@@ -162,6 +178,7 @@ ld = form(Wd, v -> innerₕ(fd, v))
 
 Ad = assemble(ad)
 bd = assemble(ld)
+@assert !all(iszero, Ad) && !all(iszero, bd)
 nothing # hide
 ```
 
@@ -173,6 +190,8 @@ values in. `dirichlet_constraints` takes the mesh, a `Domain` or a grid space di
 bcs = dirichlet_constraints(Ωd, :left => (x -> 0.0), :right => (x -> 0.0))
 dirichlet_bc!(Ad, Ωd, :left, :right)
 dirichlet_bc!(bd, Ωd, bcs, :left, :right)
+@assert Ad[1, 1] == 1 && Ad[1, 2] == 0 && Ad[33, 33] == 1 && Ad[33, 32] == 0
+@assert bd[1] == 0 && bd[33] == 0 && bd[2] > 0
 nothing # hide
 ```
 
@@ -181,10 +200,12 @@ Solving ``-u'' = \pi^2 \sin(\pi x)`` with ``u(0) = u(1) = 0`` gives ``u = \sin(\
 ```@example forms
 uh = Ad \ bd
 exact = Rₕ(Wd, x -> sin(π * x))
+@assert abs(maximum(abs, uh) - 1) < 1.1e-3  # the peak of sin(πx) is 1
+@assert abs(maximum(abs, uh .- parent(exact)) - π^2 / (12 * 32^2)) < 1e-6
 maximum(abs, uh .- parent(exact))
 ```
 
-The error is 8e-4 on 33 points.
+The error is 8e-4 on 33 points, the ``(\pi h)^2/12`` of a second-order scheme with ``h = 1/32``.
 
 The figure draws `uh` over the exact solution, and below it the pointwise error with its own scale:
 
@@ -221,16 +242,17 @@ back. [`symmetrize!`](@ref) moves the constrained columns onto the right-hand si
 restores symmetry and leaves the solution unchanged:
 
 ```@example forms
-issymmetric(ad)          # true: the form is symmetric before any boundary condition
+@assert issymmetric(ad)  # the form is symmetric before any boundary condition
 ```
 
 ```@example forms
-issymmetric(Matrix(Ad))  # false: dirichlet_bc! replaced the constrained rows
+@assert !issymmetric(Matrix(Ad))  # dirichlet_bc! replaced the constrained rows
 ```
 
 ```@example forms
 symmetrize!(Ad, bd, Ωd, :left, :right)
-issymmetric(Matrix(Ad))  # true again, and the solution above is unchanged
+@assert issymmetric(Matrix(Ad))  # symmetric again
+@assert maximum(abs, Ad \ bd .- parent(exact)) < 1e-3  # and the solution above is unchanged
 ```
 
 `issymmetric(ad)` describes the expression, so it stays `true` after `dirichlet_bc!` changes
@@ -254,6 +276,7 @@ r_right = reaction(ad, ld, uh_elt; marker = :right)
 net_source = sum(assemble(ld))
 @assert r_left + r_right ≈ net_source
 @assert round(net_source; digits = 4) == 6.2781
+@assert abs(r_left - π) < 5e-3 && abs(r_right - π) < 5e-3
 r_left, r_right, net_source
 ```
 
@@ -271,7 +294,9 @@ the sum to the union of the regions the labels name:
 
 ```@example forms
 a_left = form(Wd, Wd, (u, v) -> innerₕ(u, v; markers = (:left,)))
-size(assemble(a_left))
+M_left = assemble(a_left)
+@assert nnz(M_left) == 1 && M_left[1, 1] ≈ 1 / 64  # half a cell, h / 2
+size(M_left)
 ```
 
 Every mesh also carries `:boundary` and `:interior`, computed from its shape and needing no
@@ -279,7 +304,9 @@ label in `domain(...)`:
 
 ```@example forms
 a_boundary = form(Wd, Wd, (u, v) -> innerₕ(u, v; markers = (:boundary,)))
-size(assemble(a_boundary))
+M_boundary = assemble(a_boundary)
+@assert nnz(M_boundary) == 2 && M_boundary[1, 1] ≈ 1 / 64 && M_boundary[33, 33] ≈ 1 / 64  # two half cells
+size(M_boundary)
 ```
 
 This is a masked sum of cell measures. A masked `innerₕ` scales like ``h`` and vanishes
@@ -290,6 +317,8 @@ integral, which is [`inner_Γ`](@ref):
 β, g = 1.7, x -> 2.0 + x[1]
 a_robin = form(Wd, Wd, (u, v) -> inner_Γ(β * u, v; markers = (:xmax,)))
 l_neumann = form(Wd, v -> inner_Γ(g, v; markers = (:xmax,)))
+@assert sum(assemble(l_neumann)) ≈ 3.0  # g(1) = 2 + 1
+@assert sum(assemble(a_robin)) ≈ 1.7     # β, the face being a point of measure 1
 sum(assemble(l_neumann))
 ```
 
@@ -305,11 +334,15 @@ the union of its faces.
 A marker that exists nowhere the term reaches is an error:
 
 ```@example forms
-try
+msg = try
     assemble(form(Wd, Wd, (u, v) -> innerₕ(u, v; markers = (:nope,))))
+    ""
 catch e
-    showerror(stdout, e)
+    e isa ArgumentError || rethrow()
+    sprint(showerror, e)
 end
+@assert occursin("the marker :nope is not defined", msg)
+msg
 ```
 
 On a composite space, a marker used without naming a component reaches every diagonal block
@@ -329,6 +362,7 @@ W2 = gridspace(Ω2)
 F1 = Rₕ(W2, x -> 1.0 + x[1])
 F2 = Rₕ(W2, x -> 2.0 + x[2])
 l_flux = form(W2, v -> inner_Γ(F1 * ηₓ + F2 * ηᵧ, v; markers = (:xmax,)))
+@assert sum(assemble(l_flux)) ≈ 2.0  # F₁ = 2 on x = 1, edge length 1, and η = (1, 0) there
 sum(assemble(l_flux))
 ```
 
@@ -347,7 +381,9 @@ cell-measure weighting:
 
 ```@example forms
 l_pt = form(Wₕ, v -> innerₕ(dirac(0.5, 2.0), v))
-sum(assemble(l_pt))
+b_pt = assemble(l_pt)
+@assert b_pt[17] ≈ 2.0 && count(!iszero, b_pt) == 1  # x = 0.5 is node 17
+sum(b_pt)
 ```
 
 When ``x_0`` is a grid node, the strength ``S`` lands in that degree of freedom. When it
@@ -356,7 +392,9 @@ weights, and the total is conserved:
 
 ```@example forms
 l_off = form(Wₕ, v -> innerₕ(dirac(0.35, 1.0), v))
-sum(assemble(l_off)) ≈ 1.0
+b_off = assemble(l_off)
+@assert sum(b_off) ≈ 1.0
+@assert b_off[12] ≈ 0.8 && b_off[13] ≈ 0.2  # 0.35 lies 0.2 of a cell past node 12, so node 12 takes 0.8
 ```
 
 Several sources take a vector of coordinates and a vector of strengths. Each coordinate is a
@@ -365,7 +403,9 @@ point:
 
 ```@example forms
 l_multi = form(Wₕ, v -> innerₕ(dirac([(0.2,), (0.7,)], [1.0, -1.0]), v))
-sum(assemble(l_multi)) ≈ 0.0
+b_multi = assemble(l_multi)
+@assert abs(sum(b_multi)) < 1e-12
+@assert b_multi[7] ≈ 0.6 && b_multi[8] ≈ 0.4 && b_multi[23] ≈ -0.6 && b_multi[24] ≈ -0.4
 ```
 
 A strength wrapped in a `Ref` updates live, without rebuilding the form:
@@ -376,7 +416,7 @@ l_dyn_pt = form(Wₕ, v -> innerₕ(dirac(0.5, S_live), v))
 b_dyn_pt = assemble(l_dyn_pt)
 S_live[] = 3.5
 assemble!(b_dyn_pt, l_dyn_pt)
-sum(b_dyn_pt) ≈ 3.5
+@assert b_dyn_pt[17] ≈ 3.5 && sum(b_dyn_pt) ≈ 3.5
 ```
 
 ## Automatic simplification
@@ -388,18 +428,21 @@ shared argument. Two identical terms stay two terms and are summed at assembly:
 
 ```@example forms
 a_dup = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + innerₕ(u, v))
+@assert expression(a_dup) == "innerₕ(u, v) + innerₕ(u, v)"
 expression(a_dup)     # two terms, as written
 ```
 
 ```@example forms
-Matrix(assemble(a_dup)) ≈ 2 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
+M_dup = assemble(a_dup)
+@assert M_dup[1, 1] ≈ 2 * (1 / 64) && M_dup[2, 2] ≈ 2 * (1 / 32)  # twice the lumped mass
 ```
 
 Write `2 * innerₕ(u, v)` when one sweep is wanted. Nested scales fold into one:
 
 ```@example forms
 a_fold = form(Wₕ, Wₕ, (u, v) -> 2 * (3 * innerₕ(u, v)))
-expression(a_fold)    # 6 * innerₕ(u, v)
+@assert expression(a_fold) == "6 * innerₕ(u, v)"
+expression(a_fold)
 ```
 
 A zero-scaled term leaves nothing behind, so a coefficient can switch a term off without a
@@ -407,11 +450,13 @@ branch around the form:
 
 ```@example forms
 a_off = form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v) + 0 * inner₊(∇ₕ(u), ∇ₕ(v)))
-expression(a_off)     # innerₕ(u, v): the zero term is gone
+@assert expression(a_off) == "innerₕ(u, v)"  # the zero term is gone
+expression(a_off)
 ```
 
 ```@example forms
-Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -> innerₕ(u, v))))
+M_off = assemble(a_off)
+@assert M_off[1, 1] ≈ 1 / 64 && M_off[2, 2] ≈ 1 / 32  # the mass matrix alone
 ```
 
 !!! tip "Try this"
