@@ -94,25 +94,25 @@ Four extensions provide sparse direct solvers:
 - MUMPS is a parallel multifrontal direct solver for large 2D and 3D systems.
 - Sparspak is a pure-Julia sparse direct LU (George and Liu's Waterloo package). It factors
   matrices whose entries are `BigFloat` or a `ForwardDiff.Dual` directly. The other three
-  take only BLAS floating-point types (MUMPS and Accelerate accept `Float32` as well as
-  `Float64`).
+  take only BLAS floating-point types. All four accept `Float32` as well as `Float64`.
 
 With `ForwardDiff` loaded, [`pde_solve`](@ref) solves a `Dual` matrix or load on every
 backend: it factors the `Float64` values once, by the route the `Float64` solve takes, and
-solves each partial against that factor. A `Dual` matrix passed to a backend's own
-factorization still fails.
+solves each partial against that factor. A `Dual` matrix passed to the SuiteSparse,
+Accelerate or MUMPS factorization directly still fails; Sparspak's takes it.
 
 All four support symbolic reuse through the [`refactor!`](@ref) driver, for transient time
 loops and Newton iterations.
 
 Of the names documented below, the four factorization types, `suitesparse_factorize`,
-`sparse_factorize` and `refactor!` are `public`. The other `suitesparse_*`, `accelerate_*`,
-`mumps_*` and `sparspak_*` functions are neither exported nor `public`: call them as
-`Bramble.suitesparse_solve` and so on.
+`sparse_factorize`, `refactor!` and `sparse_refactor!` are `public`. The other
+`suitesparse_*`, `accelerate_*`, `mumps_*` and `sparspak_*` functions are neither exported
+nor `public`: call them as `Bramble.suitesparse_solve` and so on.
 
 ```@docs
 sparse_factorize
 refactor!
+sparse_refactor!
 ```
 
 ### SuiteSparse solver

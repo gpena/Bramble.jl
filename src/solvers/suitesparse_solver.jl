@@ -188,7 +188,8 @@ function suitesparse_qr_factorize(
     return qr(A; kwargs...)
 end
 
-# The element types SPQR, UMFPACK, CHOLMOD and Accelerate factor.
+# The element types SPQR, UMFPACK, CHOLMOD and Accelerate accept (UMFPACK widens the
+# 32-bit ones).
 const _BLASFloat = Union{Float32, Float64, ComplexF32, ComplexF64}
 
 """

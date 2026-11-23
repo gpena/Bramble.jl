@@ -51,7 +51,7 @@ Bramble = {path = ".."}
 ADTypes = "1"
 AlgebraicMultigrid = "1, 2"
 AllocCheck = "0.2"
-AppleAccelerate = "0.7, 1"
+AppleAccelerate = "0.7"
 Aqua = "0.8"
 ChainRulesCore = "1"
 DifferentiationInterface = "0.7"

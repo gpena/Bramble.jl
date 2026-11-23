@@ -54,8 +54,8 @@
 # other files define on `GhostBilinearForm`.
 #
 # Still refused with an `ArgumentError`: device backends, matrix types other than
-# `SparseMatrixCSC`, AD element types, composite spaces beyond what `ghost_composite.jl`
-# supports and `semidiscretize` on composites. A composite may hold polygon spaces
+# `SparseMatrixCSC`, element types that are not a `Number`, composite spaces beyond what
+# `ghost_composite.jl` supports and `semidiscretize` on composites. A composite may hold polygon spaces
 # (`polygon_spaces`), each trial component read through its own reach guard and conflict
 # moves (`_exterior_moves`). The matrix-free and Kronecker operators and
 # the contractions of a form live in `ghost_matrix_free.jl`, `ghost_kronecker.jl` and
@@ -564,7 +564,7 @@ end
 # Any number type: floats, complex numbers and AD types such as `ForwardDiff.Dual`. The
 # reduction only multiplies and adds entries, so it needs no BLAS type.
 _check_ghost_eltype(::Type{<:Number}) = nothing
-_check_ghost_eltype(T::Type) = _throw_ghost_unsupported("the element type $T")
+_check_ghost_eltype(T::Type) = _throw_ghost_unsupported("the element type $T (a Number is required)")
 
 @noinline function _throw_ghost_unsupported(what)
     throw(ArgumentError("forms on a ghost space do not support $what yet."))
@@ -967,6 +967,7 @@ function assemble(l::_AnyGhostLinearForm; dirichlet = nothing,
     labels, bcs = _normalize_dirichlet(dirichlet)
     _check_rows(l, labels, dirichlet_components)
     T = _ghost_dirichlet_eltype(bcs, l, dirichlet_components, _load_eltype(l))
+    _check_ghost_eltype(T)
     b = similar(l.F_pad, T, ndofs(l.test_space))
     return assemble!(b, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
 end
@@ -979,8 +980,10 @@ end
 
 # A `dirichlet` value can be richer than the load: a `ForwardDiff.Dual` or a complex number
 # against a `Float64` form. As `_dirichlet_probed_eltype` (linear.jl) does, each condition
-# is evaluated once, at the first node of its label on the physical mesh of each leaf it
-# binds (the mask `_rows_conditions!` writes), and the load's type is promoted against it.
+# is probed on its label on the physical mesh of each leaf it binds (the mask
+# `_rows_conditions!` writes): its value at the first node and its inferred type, or its
+# value at every node where inference gives no concrete type (`_datum_eltype`). The load's
+# type is promoted against it.
 @inline _ghost_dirichlet_eltype(::Nothing, l, components, T) = T
 @inline function _ghost_dirichlet_eltype(bcs::ConstraintMarkers, l::GhostLinearForm,
         components, T)
@@ -1004,10 +1007,7 @@ end
 @inline function _ghost_probed_eltype(markers::Tuple, C, T)
     m = first(markers)
     Ωₕ = physical_mesh(mesh(C))
-    i = findfirst(_label_mask(Ωₕ, C.rows, label(m)))
-    if i !== nothing
-        T = promote_type(T, typeof(identifier(m)(point(Ωₕ, indices(Ωₕ)[i]))))
-    end
+    T = _datum_eltype(identifier(m), Ωₕ, _label_mask(Ωₕ, C.rows, label(m)), T)
     return _ghost_probed_eltype(Base.tail(markers), C, T)
 end
 
@@ -1038,6 +1038,7 @@ function assemble(a::_AnyGhostBilinearForm, l::_AnyGhostLinearForm; dirichlet = 
     _check_pair(a, l, labels, symmetrize, "assemble(a, l)", dirichlet_components)
     A = _reduced_matrix(a.A_pad, a)
     T = _ghost_dirichlet_eltype(bcs, l, dirichlet_components, _pair_load_eltype(a, l, A))
+    _check_ghost_eltype(T)
     F = similar(l.F_pad, T, ndofs(l.test_space))
     return _assemble_pair!(A, F, a, l, labels, bcs, dirichlet_components, symmetrize)
 end

@@ -721,8 +721,8 @@ end
 # runs over `Base.OneTo(Threads.nthreads())` and each task rebuilds its slab from `v`'s own
 # indices (`_full`), so it captures `v`, the kernel and that range, and no `idxs`. Any other
 # `idxs` crosses as `_Slabs`, the slabs as one loop range: that captures `idxs` plus the
-# index range `@batch` takes of any array it loops over, which makes the box larger than the
-# parent's. Looping over `1:n` with `idxs` captured would make it larger still.
+# index range `@batch` takes of any array it loops over, which makes the box larger than that
+# loop's. Looping over `1:n` with `idxs` captured would make it larger still.
 struct _Lin end
 struct _Cart end
 @inline _cover(v, idxs::AbstractUnitRange) = !Base.has_offset_axes(v) &&
@@ -970,9 +970,9 @@ struct _Whole end
     _batch_splittable(typeof((parts, hot))) && return _batch_split(parts)
     return _Whole(), parts
 end
-# A `SpaceWeights` in `parts` crosses as its address (`_BatchShared`), so the split holds no
-# reference that keeps it alive: each caller wraps its `@batch` loop in `GC.@preserve` of
-# `parts` (the kernel, for `_kernel_parts`), however the host-rerun branch reads them.
+# The split holds raw pointers into the arrays of `parts`, not references, so each caller
+# wraps its `@batch` loop in `GC.@preserve` of `parts` (the kernel, for `_kernel_parts`,
+# whose arrays cross `_erased_batch` as `_Raw`), however the host-rerun branch reads them.
 @inline _rejoin(skel, arrays) = _batch_rebuild(skel, arrays)
 @inline _rejoin(::_Whole, parts) = parts
 

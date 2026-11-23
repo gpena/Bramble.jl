@@ -703,7 +703,7 @@ end
 
 # The solve of a load that is not split into real and imaginary parts: whole if the
 # hierarchy holds its type, else by `_solve_by_parts`. Returns a `VectorElement` or, from
-# the split, a plain vector.
+# the split of a `Dual` load, a plain vector.
 function _gmg_solve_real_load(P::GMGPreconditioner, bd::AbstractVector, cycle::Symbol, τ,
         maxiters::Integer)
     promote_type(eltype(P), eltype(bd)) === eltype(P) &&

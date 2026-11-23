@@ -104,7 +104,8 @@ The same problem on a random 17 × 17 grid, coloured by the solution. The grid i
 uniform, which keeps the example short, but a uniform grid can flatter a scheme: the
 [linear Poisson example](examples/poisson_linear.md) checks convergence on a random
 non-uniform grid for that reason. Halving the spacing should
-cut the error by four, since the scheme is second order:
+cut the error by four, since the scheme is second order in `normₕ`, the discrete ``L^2``
+norm ([Inner products and norms](tutorials/space.md#Inner-products-and-norms)):
 
 ```@example gs
 function poisson_error(n)
@@ -150,5 +151,6 @@ examples](examples/poisson_linear.md) then run the whole chain on real problems.
 - [Grid spaces and discrete functions](tutorials/space.md): Put a function on a mesh, measure it, and stack copies into a composite space.
 - [Difference, jump and average operators](tutorials/operators.md): Apply differences, jumps and averages, see what each does at the grid edge, and get the matrix.
 - [Linear and bilinear forms](tutorials/form.md): Write, assemble and solve a linear or bilinear form, with Dirichlet conditions, for a Poisson problem.
+- [Ghost points](tutorials/ghost.md): Pad a mesh with ghost points, tie them to Neumann and Robin data with relations, and step a heat equation in time.
 - [Coupled systems](tutorials/coupled_systems.md): Write a form over several unknowns, constrain one block, and read values across different meshes.
 - [Automatic differentiation](tutorials/autodiff.md): Differentiate a discrete quantity with respect to a parameter, and choose between the two backends.

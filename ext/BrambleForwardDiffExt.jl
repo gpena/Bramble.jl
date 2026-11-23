@@ -93,7 +93,9 @@ function Bramble._check_tag_order(
         _inverted(T, S) && throw(
             ArgumentError(
             "a ForwardDiff.Dual $what nests the tag $T outside the tag $S, against " *
-            "ForwardDiff's tag order: ForwardDiff nests the tag it created later outside.",
+            "ForwardDiff's tag order: ForwardDiff nests the tag it created later outside. " *
+            "Build nested `Dual`s through ForwardDiff's own calls (a derivative inside a " *
+            "derivative), which order the tags.",
         ),
         )
     end

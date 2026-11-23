@@ -7,8 +7,8 @@ CurrentModule = Bramble
 
 Docstrings of the exported and `public` names of the core library, grouped by stage of a
 computation. Start with the tutorials; look up a signature or an option here. The solver names are
-on [Solvers and preconditioners](api/solvers.md), and the SciML and automatic differentiation
-names on [Scientific computing: SciML, AD and solvers](api_sciml.md). Those two pages also
+on [Solvers and preconditioners](api/solvers.md), and the SciML and time-integration names
+on [Scientific computing: SciML and time integration](api_sciml.md). Those two pages also
 document some names that are neither exported nor `public`; they are called as `Bramble.name`.
 Internals holds the private docstrings, for contributors.
 

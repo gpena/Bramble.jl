@@ -54,7 +54,7 @@ npoints(G₂, Tuple), Bramble.nghosts(G₂), sum(absent)
 
 The padded size is ``(4 + 2) \times (3 + 2)``. The ghosts are ``2 \cdot 3 + 2 \cdot 4 = 14``, one per facet node, and the padded grid minus its four absent corners leaves the nodes and exactly those.
 
-A ghost mesh follows its physical mesh. After `change_points!` the ghosts move with the facet spacings. After `iterative_refinement!` the point count changes, which a ghost mesh cannot follow: build a new one.
+A ghost mesh follows its physical mesh. After `change_points!` the ghosts move with the facet spacings. After `iterative_refinement!` the point count changes, which a ghost mesh cannot follow: build a new one. A space built before either call is stale, as in the [mesh tutorial](@ref tutorial_mesh).
 
 ---
 
@@ -72,7 +72,7 @@ W_part = gridspace(Ωₕ_g; ghosts = (:xmin, :ymax))
 ndofs(W_plain), ndofs(W_ghost), ndofs(W_part)
 ```
 
-The degrees of freedom of a ghost space are the physical nodes plus the ghosts. Here ``12`` nodes plus ``2 \cdot 3 + 2 \cdot 4 = 14`` ghosts give 26, and the two named facets give ``12 + 3 + 4 = 19``. The absent corners are not degrees of freedom.
+The degrees of freedom of a ghost space are the physical nodes plus the ghosts. Here ``12`` nodes plus the 14 ghosts give 26, and the two named facets give ``12 + 3 + 4 = 19``. The absent corners are not degrees of freedom.
 
 ### The order of the degrees of freedom
 
@@ -96,7 +96,7 @@ dof_point(j) = point(mesh(Pₕ), padded[findfirst(!iszero, E[:, j])])
 [dof_point(j) for j in (1, 12, 13, 15, 16, 18, 19, 22, 23, 26)]
 ```
 
-The first two entries are the first and last physical node. The next four are the `xmin` and `xmax` ghosts at ``x = -0.2`` and ``x = 1.4``, the distances ``h_2 = 0.2`` and ``h_n = 0.4`` from the facet. The last four are the `ymin` and `ymax` ghosts at ``y = -0.5`` and ``y = 1.5``.
+The first two entries are the first and last physical node.
 
 ```@raw html
 <figure style="margin:1.5em 0;text-align:center">
@@ -198,7 +198,7 @@ The first two entries are the first and last physical node. The next four are th
 </figure>
 ```
 
-In the figure, ghost 13 sits one spacing left of node 1 and ghost 19 one spacing below it. The four padded corners are absent.
+In the figure, ghost 13 sits one spacing left of node 1 and ghost 19 one spacing below it.
 
 ```@example ghost
 xs_fig, ys_fig = [0.0, 0.2, 0.6, 1.0], [0.0, 0.5, 1.0] # hide

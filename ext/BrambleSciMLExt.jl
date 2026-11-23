@@ -67,7 +67,7 @@ using PrecompileTools: @setup_workload, @compile_workload
     Bramble._accepts(tgrad, Val(4)) && return tgrad
     throw(ArgumentError(
         "`tgrad` must take `(dT, u, p, t)` or `(dT, sd, u, p, t)`, " *
-        "and the function given takes neither"
+        "and `$(tgrad)` takes neither"
     ))
 end
 

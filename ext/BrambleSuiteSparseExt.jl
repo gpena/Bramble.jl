@@ -80,7 +80,23 @@ function _cholmod_input(A::SparseMatrixCSC)
     return Hermitian(A)
 end
 
+# UMFPACK and CHOLMOD factor a matrix whose entries convert to a machine float, real or
+# complex, as `Integer` and `Rational` entries do. Any type that does not convert, a
+# `ForwardDiff.Dual` above all, ends in a `StackOverflowError` or a `TypeError`.
+function _check_eltype(::Type{T}) where {T}
+    float(real(T)) <: Union{Float16, Float32, Float64} && return nothing
+    throw(
+        ArgumentError(
+        "SuiteSparse factors matrices whose entries convert to a machine float, real or " *
+        "complex, and this matrix has element type $T. For a `Dual` matrix call " *
+        "`pde_solve`, which factors the values and solves each partial, or use Sparspak, " *
+        "which factors a `Dual` matrix.",
+    ),
+    )
+end
+
 function Bramble._suitesparse_factorize(A::SparseMatrixCSC; sym = :auto, kwargs...)
+    _check_eltype(eltype(A))
     m, n = size(A)
     m == n || throw(DimensionMismatch("Matrix must be square for sparse direct solve, got $(m)×$(n)"))
 

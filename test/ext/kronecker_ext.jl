@@ -635,8 +635,8 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
             catch e
                 e isa ArgumentError ? sprint(showerror, e) : "not an ArgumentError: $e"
             end
-        asked(msg) = occursin("fdm_solve", msg) && occursin("Dual", msg) &&
-                     occursin("pde_solve(assemble(a, l)..., F)", msg)
+        asked(msg, want) = occursin("fdm_solve", msg) && occursin("Dual", msg) &&
+                           occursin(want, msg)
         rng = MersenneTwister(KRON_EXT_SEED + 11)
         Wₕ = gridspace(_graded_mesh((11, 8)))
         n = ndofs(Wₕ)
@@ -672,10 +672,12 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
 
             # A `Dual` in the coefficient is refused, in every entry point.
             ca = q -> form(Wₕ, Wₕ, mk(q))
-            for call in (q -> fdm_solve(ca(q), F; dirichlet = dir),
-                q -> fdm_solve(kronecker_operator(ca(q)), F))
+            advice = dir === nothing ? "pde_solve(assemble(a), F)" :
+                     "pde_solve(assemble(a; dirichlet = :boundary), F)"
+            for (call, want) in ((q -> fdm_solve(ca(q), F; dirichlet = dir), advice),
+                (q -> fdm_solve(kronecker_operator(ca(q)), F), "pde_solve(assemble(a), F)"))
                 msg = refused(() -> ForwardDiff.derivative(q -> sum(call(q)), 1.3))
-                @test asked(msg)
+                @test asked(msg, want)
             end
         end
     end
@@ -704,7 +706,7 @@ using Bramble: D₋ₓ, D₋ᵧ, Mₓ, inner₊ₓ, inner₊ᵧ
             e
         end
         @test err isa ArgumentError
-        @test occursin("pde_solve(assemble(a, l)..., F)", err isa ArgumentError ? err.msg : "")
+        @test occursin("pde_solve(assemble(a), F)", err isa ArgumentError ? err.msg : "")
     end
 
     # The `Float64` solve allocates its output vector beyond the factorization and nothing

@@ -425,7 +425,7 @@ value of the solution. The test space `W` throws an `ArgumentError`.
 """
 @inline normₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ)))
 @inline function normₕ(uₕ::VectorElement{<:CompositeGridSpace})
-    _checked_length(uₕ)
+    _checked_length(:normₕ, uₕ)
     return sqrt(real(innerₕ(uₕ, uₕ)))
 end
 
@@ -436,18 +436,24 @@ end
 # A composite of ghost spaces sums the components' squares, as `norm₁ₕ` does.
 normₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_normₕ_sq(uₕ)))
 normₕ(uₕ::VectorElement{<:_GhostCompositeSpace}) = sqrt(real(sum(
-    _normₕ_sq, components(_checked_length(uₕ)))))
+    _normₕ_sq, components(_checked_length(:normₕ, uₕ)))))
 
 # A composite or ghost element is sliced into components or cut to its physical values by
 # offsets alone, so a coefficient vector of another length than `ndofs` is refused first.
-@inline function _checked_length(uₕ::VectorElement)
+# `op` names the operation the refusal reports.
+@inline function _checked_length(op::Symbol, uₕ::VectorElement)
     n = ndofs(space(uₕ))
-    length(parent(uₕ)) == n || _throw_dot_dim_error(length(parent(uₕ)), n, length(parent(uₕ)))
+    length(parent(uₕ)) == n || _throw_coefficient_length(op, length(parent(uₕ)), n)
     return uₕ
 end
 
+@noinline _throw_coefficient_length(op::Symbol, L::Integer, n::Integer) = throw(
+    DimensionMismatch(
+    "$op got a coefficient vector of length $L, but the space has $n degrees of freedom.",
+))
+
 function _normₕ_sq(uₕ::VectorElement{<:GhostGridSpace})
-    _checked_length(uₕ)
+    _checked_length(:normₕ, uₕ)
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_ghost_norm(parent(uₕ))
     if _is_polygon_trial(uₕ.space)
         e = _polygon_element(uₕ)
@@ -1369,7 +1375,7 @@ end
     Ωₕ = mesh(space)
     dims = npoints(Ωₕ, Tuple)
     n = prod(dims)
-    length(data) == n || _throw_dot_dim_error(length(data), n, length(data))
+    length(data) == n || _throw_coefficient_length(:snorm₁ₕ, length(data), n)
     locality(typeof(data)) isa DeviceLocality &&
         return _sum_dirs_device(data, space, Ωₕ, dims, Val(D), Val(D))
     li = LinearIndices(dims)
@@ -1407,7 +1413,7 @@ boundary nodes: it sums every grid edge with both ends interior or on the bounda
 edge joins an interior node to an exterior one.
 """
 @inline snorm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
-@inline snorm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(_snorm₁ₕ_sq(_checked_length(uₕ))))
+@inline snorm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace}) = sqrt(real(_snorm₁ₕ_sq(_checked_length(:snorm₁ₕ, uₕ))))
 snorm₁ₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_snorm₁ₕ_sq(uₕ)))
 
 # Squared seminorm summed over the leaves, so the composite never takes a root per
@@ -1442,12 +1448,14 @@ norm of the product space of those grid functions. On the trial space of
 """
 @inline norm₁ₕ(uₕ::VectorElement{<:ScalarGridSpace}) = sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
 @inline function norm₁ₕ(uₕ::VectorElement{<:CompositeGridSpace})
-    _checked_length(uₕ)
+    _checked_length(:norm₁ₕ, uₕ)
     return sqrt(real(innerₕ(uₕ, uₕ) + _snorm₁ₕ_sq(uₕ)))
 end
 norm₁ₕ(uₕ::VectorElement{<:GhostGridSpace}) = sqrt(real(_norm₁ₕ_sq(uₕ)))
-norm₁ₕ(uₕ::VectorElement{<:_GhostCompositeSpace}) = sqrt(real(sum(
-    _norm₁ₕ_sq, components(_checked_length(uₕ)))))
+function norm₁ₕ(uₕ::VectorElement{<:_GhostCompositeSpace})
+    sqrt(real(sum(
+        _norm₁ₕ_sq, components(_checked_length(:norm₁ₕ, uₕ)))))
+end
 
 function _norm₁ₕ_sq(uₕ::VectorElement{<:GhostGridSpace})
     e = _physical_element(:norm₁ₕ, uₕ)
@@ -1459,7 +1467,7 @@ end
 # space's weights are read first, so a moved mesh throws as in `normₕ`. A polygon trial
 # space gives its grid function on Ω̄ₕ, 0 on the boundary nodes (`_polygon_element`).
 function _physical_element(op::Symbol, uₕ::VectorElement{<:GhostGridSpace})
-    _checked_length(uₕ)
+    _checked_length(op, uₕ)
     _is_polygon_trial(uₕ.space) && return _polygon_element(uₕ)
     u = _physical_values(op, uₕ)
     weights(uₕ.space.padded)   # throws once the mesh has moved

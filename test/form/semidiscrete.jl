@@ -1179,6 +1179,25 @@ end
         @test sd0.update_coefficients === nothing
     end
 
+    # The build method takes no `hook_reads_state`, so its refusal must not advise it.
+    @testset "build method: no hook advice" begin
+        sₕ = Bramble.element(Wₕ, 3.0)
+        fₕ = Bramble.element(Wₕ, 0.0)
+        build(t) = (form(Wₕ, Wₕ, (u, v) -> inner₊(sₕ * ∇ₕ(u), ∇ₕ(v))), t -> nothing)
+        l = form(Wₕ, v -> innerₕ(fₕ, v))
+        hook = t -> Rₕ!(fₕ, x -> x[1] * t)
+        sd = semidiscretize(build, l; state = sₕ, (update_coefficients!) = hook)
+        err = try
+            _sd_jac(sd, u0, 0.5)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test !occursin("hook_reads_state", sprint(showerror, err))
+        @test isempty(sd.twins)
+    end
+
     # The ghost semidiscretization shares the twin, so it takes the keyword too: its source
     # is lifted at the padded state, and the hook writes a padded grid function.
     @testset "hook_reads_state=false: ghost" begin

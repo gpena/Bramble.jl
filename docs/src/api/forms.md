@@ -138,7 +138,7 @@ ast_sparsity_detector
 the form's AST and a declaration of each coefficient (`values => (U -> L(U), f)`).
 `jacobian!(J, jf, u)` writes the Jacobian into the matrix `jacobian_prototype(jf)` allocates,
 with one assembly and no `Dual` passing through it (`using ForwardDiff` differentiates each
-coefficient function; see [Scientific computing](../api_sciml.md)). A coefficient under a
+coefficient function; see the `jacobian_form` docstring below). A coefficient under a
 node with no derivative rule throws `MissingJacobianRule`.
 
 ```@docs
@@ -147,8 +147,8 @@ MissingJacobianRule
 ```
 
 The sparse and iterative solver backends are in [Solvers and preconditioners](solvers.md):
-`pde_solve`, AMG preconditioning, and the SuiteSparse, Apple Accelerate and MUMPS direct
-solvers. Time integration and the SciML stack (`semidiscretize`, `ode_problem`,
+`pde_solve`, AMG preconditioning, and the SuiteSparse, Apple Accelerate, MUMPS and Sparspak
+direct solvers. Time integration and the SciML stack (`semidiscretize`, `ode_problem`,
 `linear_problem`, `nonlinear_problem`, ...) and `type_cached_assemble!` are in the
 [scientific computing reference](../api_sciml.md).
 

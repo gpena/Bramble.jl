@@ -142,15 +142,13 @@ bh = assemble(lh)
 
 # the differenced term is not a no-op: dropping it changes the answer
 b_plain = assemble(form(Vh, v -> innerₕ(πₕ(uv(2)), v(1))))
+@assert maximum(abs, bh .- b_plain) > 0
 maximum(abs, bh .- b_plain)
 ```
 
 Both terms land in leaf 1, the big mesh, although the source lives on leaf 2's coarser mesh.
 Leaf 2 can hold one field at the resolution the problem calls for, and a term over leaf 1
 can still read it.
-
-The last line compares values: a differenced source whose offsets were discarded assembles
-to exactly zero, which has the right length and is finite.
 
 `innerₕ(D₋ₓ(f), v)` is
 ``\sum_i |\square_i| \, (D_{-x}f)_i \, v_i``: the operator acts on the *source*, producing

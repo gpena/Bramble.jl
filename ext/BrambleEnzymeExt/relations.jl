@@ -1,24 +1,13 @@
 # A reverse rule for `Bramble._assemble_relation`, the forms of one relation of `constrained`
 # (#1153).
 #
-# Enzyme's own reverse of the function compiles one copy of the forms per facet and takes
-# 700 s and 3.7 GB for one relation, so `constrained` with a parameter in a datum or in a
-# Robin coefficient did not finish. Forward mode compiles the same function in under a
-# minute. The rule is the function's own call; its pullback takes one forward derivative of
-# the function per float of the relation `r` (its datum, its Robin coefficient: the numbers
-# `r` holds), the tangent a copy of `r` with that float one and every other zero, and
-# contracts it with the cotangents of the matrix and the load. The relation's floats are the
-# only inputs: the operators of a relation hold no data, and the space is not differentiated.
-
-@noinline function _throw_batched_relation(width)
-    throw(
-        ArgumentError(
-        "Bramble's Enzyme rule for the relations of `constrained` does not support batched " *
-        "(vector-mode) reverse differentiation: got width $(width). Differentiate one " *
-        "direction at a time.",
-    ),
-    )
-end
+# Enzyme's own reverse compiles one copy of the forms per facet and does not finish in
+# practice; forward mode compiles the function once. The rule is the function's own call;
+# its pullback takes one forward derivative of the function per float of the relation `r`
+# (its datum, its Robin coefficient: the numbers `r` holds), the tangent a copy of `r` with
+# that float one and every other zero, and contracts it with the cotangents of the matrix
+# and the load. The relation's floats are the only inputs: the operators of a relation hold
+# no data, and the space is not differentiated.
 
 @noinline function _throw_mesh_parameter()
     throw(
@@ -89,7 +78,7 @@ function EnzymeRules.augmented_primal(
         P::Annotation,
         r::Annotation
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched_relation(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("constrained", "reverse", EnzymeRules.width(config))
     _space_is_data(P) || _throw_mesh_parameter()
     _check_relation(r)
 
@@ -131,7 +120,6 @@ end
 # The reverse reads its own copies of `X` and `x` (#1185). The flag of `_nonsingular`
 # passes through; a singular block gets zero tangents and cotangents, since its caller
 # throws.
-using LinearAlgebra: mul!
 
 # The block's LU and `Bramble._dense_block_solve`'s result, solved on that LU.
 function _block_primal(C, B, b)
@@ -180,7 +168,7 @@ function EnzymeRules.augmented_primal(
         B::Annotation,
         b::Annotation
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched_relation(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("constrained", "reverse", EnzymeRules.width(config))
     _entered!(:_dense_block_solve)
     F, (X, x, ok) = _block_primal(C.val, B.val, b.val)
     primal = EnzymeRules.needs_primal(config) ? (X, x, ok) : nothing
@@ -190,6 +178,17 @@ function EnzymeRules.augmented_primal(
     tape = (F, copy(X), copy(x), shadow)
     needs_shadow = EnzymeRules.needs_shadow(config)
     return AugmentedReturn(primal, needs_shadow ? shadow : nothing, tape)
+end
+
+# `C̄ −= Λ Yᴴ`. The caller mixes real and complex blocks and data on purpose (`Tg` in
+# `_block_solve`), so a real `C̄` can meet a complex product: it takes the real part.
+function _subtract_outer!(C̄, Λ, Y)
+    if eltype(C̄) <: Real && !(eltype(Λ) <: Real && eltype(Y) <: Real)
+        C̄ .-= real.(Λ * Y')
+    else
+        mul!(C̄, Λ, Y', -1, 1)
+    end
+    return nothing
 end
 
 function EnzymeRules.reverse(
@@ -207,11 +206,11 @@ function EnzymeRules.reverse(
     ok || return (nothing, nothing, nothing)
     Λ, λ = F' \ X̄, F' \ x̄
     C̄, B̄, b̄ = _shadow(C, 1), _shadow(B, 1), _shadow(b, 1)
-    B̄ === nothing || (B̄ .+= Λ)
-    b̄ === nothing || (b̄ .+= λ)
+    B̄ === nothing || _accumulate_shadow!(B.val, B̄, Λ)
+    b̄ === nothing || _accumulate_shadow!(b.val, b̄, λ)
     if C̄ !== nothing
-        mul!(C̄, Λ, X', -1, 1)
-        mul!(C̄, λ, x', -1, 1)
+        _subtract_outer!(C̄, Λ, X)
+        _subtract_outer!(C̄, λ, x)
     end
     # Enzyme's contract: a custom rule consumes the return cotangent it was handed.
     fill!(X̄, zero(eltype(X̄)))

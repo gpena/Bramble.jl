@@ -286,10 +286,12 @@ function _check_only_geometric_labels(Ωₕ, caller::String, remedy::String)
 end
 
 @noinline function _throw_drops_markers(caller::String, extra_labels, remedy::String)
+    note = (:boundary in extra_labels || :interior in extra_labels) ?
+           " (a `:boundary` or `:interior` listed here is not the geometric set)" : ""
     throw(
         ArgumentError(
-        "$caller a mesh carrying custom markers $(Tuple(extra_labels)), and there is no " *
-        "domain here to re-evaluate them onto the new points. $remedy",
+        "$caller a mesh carrying custom markers $(Tuple(extra_labels))$note, and there " *
+        "is no domain here to re-evaluate them onto the new points. $remedy",
     ),
     )
 end
@@ -604,18 +606,19 @@ Return the control volume (length, area, or volume) of the cell centered at inde
 function cell_measure end
 
 """
-    iterative_refinement!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers]; warn_marker_mismatch = true) -> Nothing
+    iterative_refinement!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers];
+                          warn_marker_mismatch = true) -> Nothing
 
-Refine the mesh `Ωₕ` in-place by halving each existing cell (inserting new points at midpoints).
-If domain markers are supplied, they are re-evaluated onto the refined grid points. `warn_marker_mismatch` is passed on to
-`set_markers!` then.
+Refine the mesh `Ωₕ` in-place by halving each existing cell (inserting new points at
+midpoints). If domain markers are supplied, they are re-evaluated onto the refined grid
+points. `warn_marker_mismatch` is passed on to `set_markers!` then.
 
 Without `domain_markers`, any custom marker `Ωₕ` carries beyond `:boundary`/`:interior` has
 no domain here to re-derive it from, so this throws an `ArgumentError` rather than silently
 dropping it. So does a `:boundary` or `:interior` that is not the geometric set, whether it
 was defined by a predicate or stored as a different set: refinement rebuilds both from the
-geometry and would replace it. Pass `domain_markers` (the same ones the mesh was built with, or equivalent) to
-keep them.
+geometry and would replace it. Pass `domain_markers` (the same ones the mesh was built
+with, or equivalent) to keep them.
 
 On a multi-dimensional mesh, refine the whole mesh, not one of its submeshes:
 `iterative_refinement!(Ωₕ(1))` changes that axis's point count but not the parent's index set
@@ -625,14 +628,15 @@ on the inconsistent grid.
 !!! warning "Invalidates every ScalarGridSpace already built on Ωₕ"
     Bumps `Ωₕ`'s mesh version (gpena/Bramble.jl#221; see [`set_points!`](@ref), whose
     geometry update this shares). A [`ScalarGridSpace`](@ref) built with
-    [`gridspace`](@ref)`(Ωₕ)` before this call keeps weights computed from the *old* grid; `innerₕ`, every `inner₊*`, and
-    every norm through it now throw naming the mismatch instead of silently computing a
-    wrong answer. Call `gridspace(Ωₕ)` again afterward.
+    [`gridspace`](@ref)`(Ωₕ)` before this call keeps weights computed from the *old* grid;
+    `innerₕ`, every `inner₊*`, and every norm through it now throw naming the mismatch
+    instead of silently computing a wrong answer. Call `gridspace(Ωₕ)` again afterward.
 """
 function iterative_refinement! end
 
 """
-    change_points!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers], pts; warn_marker_mismatch = true) -> Nothing
+    change_points!(Ωₕ::AbstractMeshType, [domain_markers::DomainMarkers], pts;
+                   warn_marker_mismatch = true) -> Nothing
 
 Update the coordinates of mesh `Ωₕ` in-place using new point coordinates in `pts`,
 recalculating all cached half-points and cell spacings.

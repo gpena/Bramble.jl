@@ -592,7 +592,6 @@ end
     return (-v / _get_h_val(h, k), zero(v))
 end
 
-# The slice of the grid at index `k` along `DIM`.
 @inline function _dim_slice(full::NTuple{D, Any}, ::Val{DIM}, k::Int) where {D, DIM}
     return ntuple(d -> d == DIM ? (k:k) : UnitRange(full[d]), Val(D))
 end

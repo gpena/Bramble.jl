@@ -81,7 +81,7 @@ dx, dy = ∇ₕ
 parent(dx(vₕ)) == parent(∇ₕ(vₕ)[1]), parent(∇ₕ[:x](vₕ)) == parent(∇ₕ(vₕ)[1])
 ```
 
-The [operator reference](../api/operators.md) lists which operators accept `[d]`, destructuring and `⋅`/`×`.
+The first paragraph of this page lists which operators accept `[d]`, destructuring and `⋅`/`×`.
 
 ## Operators
 

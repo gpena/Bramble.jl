@@ -15,6 +15,7 @@ using Bramble
 import Bramble
 using LinearAlgebra: Diagonal, dot, norm
 using SparseArrays: rowvals, sparse
+using ForwardDiff: Dual, value, partials
 
 isdefined(Main, :GhostOracle1D) ||
     Base.include(Main, joinpath(pkgdir(Bramble), "test", "ghost", "GhostOracle1D.jl"))
@@ -276,6 +277,41 @@ end
     @test eltype(cm) == Float64
     @test cm == cf
     @test any(isone, cf)
+end
+
+# The load widens to a datum's type even where the datum is `0.0` at the first node of its
+# label, `(0, 0)` on `:xmin`, and a `Dual` or a complex number further along. The load is
+# affine in the datum, `F(g) = F(0) + L g`, so with `F₀ = F(0)` and `Fₕ = F(h)` the
+# `Dual` datum `p h` gives `value(p) (Fₕ - F₀) + F₀` and partials `Fₕ - F₀`, and `i h`
+# gives `F₀ + i (Fₕ - F₀)`.
+@testset "Datum wider past the first node" begin
+    Ω = ON.make_mesh(:random, 0; n0 = 6)
+    W = gridspace(Ω; ghosts = (:xmax,))
+    C = constrained(W, u -> :xmax => ∂ₙ(u) => 0.0)
+    a, l = form(C, C, lap), form(C, v -> innerₕ(x -> 1.0 + x[1] * x[2], v))
+    F(g) = assemble(a, l; dirichlet = :xmin => g, symmetrize = true)[2]
+    h = x -> x[2] > 0.5 ? x[2] : 0.0
+    F₀, Fₕ = F(x -> 0.0), F(h)
+    @test any(!iszero, Fₕ - F₀)
+    p = Dual{Nothing}(2.0, 1.0)
+    Fd = F(x -> x[2] > 0.5 ? p * x[2] : 0.0)
+    @test eltype(Fd) <: Dual
+    @test relerr(value.(Fd), 2 .* (Fₕ .- F₀) .+ F₀) <= tol
+    @test relerr(first.(partials.(Fd)), Fₕ - F₀) <= tol
+    Fc = F(x -> x[2] > 0.5 ? x[2] * im : 0.0)
+    @test eltype(Fc) == ComplexF64
+    @test relerr(real(Fc), F₀) <= tol
+    @test relerr(imag(Fc), Fₕ - F₀) <= tol
+    # a datum reading a `Ref{Any}` does not infer and is evaluated at every node instead
+    box = Ref{Any}(p)
+    Fa = F(x -> x[2] > 0.5 ? box[] * x[2] : 0.0)
+    @test eltype(Fa) == typeof(p)
+    @test relerr(value.(Fa), 2 .* (Fₕ .- F₀) .+ F₀) <= tol
+    @test relerr(first.(partials.(Fa)), Fₕ - F₀) <= tol
+    # a datum that is not a `Number` is refused by name, on the load and on the pair
+    @test_throws ArgumentError assemble(l; dirichlet = :xmin => x -> "g")
+    @test refuses(() -> assemble(l; dirichlet = :xmin => x -> "g"), "a Number is required")
+    @test refuses(() -> F(x -> "g"), "a Number is required")
 end
 
 end # module FormGhostDirichletTests

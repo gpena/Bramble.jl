@@ -753,6 +753,75 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
         end
     end
 
+    @testset "Enzyme: complex A, real F" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            rev = Enzyme.set_runtime_activity(Enzyme.Reverse)
+
+            # An absorbing `A` (`A + 0.3im I`) with a real `F`: the cotangent `λ` is complex
+            # and the shadow of `F` is a real array, so each rule takes the real part, the
+            # derivative of a real load. The operator comes from a non-uniform 2D mesh. The
+            # reference is a central difference along each `F` entry for `pde_solve(A, F)`,
+            # and `Re(A⁻ᴴ c)` for the kept factorization, the `ldiv!` and the rank-one rules,
+            # which `c` seeds.
+            Bramble._seed_mesh1d_rng!(1237)
+            I01 = Bramble.interval(0.0, 1.0)
+            Wa = gridspace(Bramble.mesh(Bramble.domain(I01 × I01), (7, 6), (false, false)))
+            Bramble._unseed_mesh1d_rng!()
+            A0 = assemble(form(Wa, Wa, (U, V) -> inner₊(∇ₕ(U), ∇ₕ(V)) + innerₕ(U, V)))
+            n = size(A0, 1)
+            A = SparseMatrixCSC{ComplexF64}(A0) + 0.3im * sparse(I, n, n)
+            F₀ = [1.0 + sin(i) for i in 1:n]
+            c = ComplexF64[cos(2i) + im * sin(i) for i in 1:n]
+            g_ref = real.(A' \ c)
+
+            target = [cos(2i) for i in 1:n]
+            J(A, F) = sum(abs2, Bramble.pde_solve(A, F) .- target)
+            h = 1e-6
+            fd = map(1:n) do k
+                e = (1:n) .== k
+                (J(A, F₀ .+ h .* e) - J(A, F₀ .- h .* e)) / 2h
+            end
+            dF = zero(F₀)
+            Enzyme.autodiff(rev, Enzyme.Const(J), Enzyme.Active, Enzyme.Const(A),
+                Enzyme.Duplicated(copy(F₀), dF))
+            @test dF ≈ fd rtol=1e-5
+            @test eltype(dF) === Float64
+
+            fact = Bramble.sparse_factorize(A)
+            solve_loss(fact, F) = real(dot(c, Bramble.pde_solve(fact, F)))
+            function ldiv_loss(fact, F)
+                u = element(Wa, ComplexF64)
+                ldiv!(u, fact, F)
+                return real(dot(c, parent(u)))
+            end
+            for loss in (solve_loss, ldiv_loss)
+                dF = zero(F₀)
+                Enzyme.autodiff(rev, Enzyme.Const(loss), Enzyme.Active, Enzyme.Const(fact),
+                    Enzyme.Duplicated(copy(F₀), dF))
+                @test dF ≈ g_ref rtol=1e-10
+            end
+
+            # `A` as a rank-one update, through the rule itself with the cotangent `c`.
+            wsa = [1.0 + cos(i) / 2 for i in 1:n]
+            wta = [1.0 + sin(2i) / 2 for i in 1:n]
+            K = Bramble.RankOneUpdate(copy(A), 0.3, wsa, wta)
+            Kd = Enzyme.Duplicated(K, Enzyme.make_zero(K))
+            Fd = Enzyme.Duplicated(copy(F₀), zero(F₀))
+            rcfg = Enzyme.EnzymeRules.RevConfig{true, true, 1, (false, false, false), false,
+                false}()
+            ps = Enzyme.Const(Bramble.pde_solve)
+            RT = Enzyme.Duplicated{Vector{ComplexF64}}
+            aug = Enzyme.EnzymeRules.augmented_primal(rcfg, ps, RT, Kd, Fd)
+            aug.shadow .= c
+            Enzyme.EnzymeRules.reverse(rcfg, ps, RT, aug.tape, Kd, Fd)
+            Kdense = Matrix(A) + 0.3 * wsa * transpose(wta)
+            @test Fd.dval ≈ real.(Kdense' \ c) rtol=1e-10
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
     @testset "Enzyme: kept factorization rules" begin
         if _have(:Enzyme)
             @eval import Enzyme
@@ -1020,11 +1089,11 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                 @test u̇ ≈ fdm_solve(a, Ḟ1; kw...) rtol=1e-10
                 @test only(Enzyme.autodiff(fwd, Enzyme.Const(solve_in), Enzyme.Duplicated,
                     Enzyme.Const(F₀))) == zeros(nf)
-                @test_throws ArgumentError "batched" Enzyme.autodiff(fwd,
-                    Enzyme.Const(solve_in), Enzyme.BatchDuplicated,
+                @test_throws ArgumentError "rule for `fdm_solve` does not support batched" Enzyme.autodiff(
+                    fwd, Enzyme.Const(solve_in), Enzyme.BatchDuplicated,
                     Enzyme.BatchDuplicated(copy(F₀), (Ḟ1, Ḟ2)))
-                @test_throws ArgumentError "batched" Enzyme.autodiff(rev,
-                    Enzyme.Const(inside), Enzyme.Active,
+                @test_throws ArgumentError "rule for `fdm_solve` does not support batched" Enzyme.autodiff(
+                    rev, Enzyme.Const(inside), Enzyme.Active,
                     Enzyme.BatchDuplicated(copy(F₀), (zeros(nf), zeros(nf))))
 
                 # The gradient of a quadratic loss in a scaled load, through DI as a user
@@ -1043,7 +1112,9 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                     end
                     @test err isa ArgumentError
                     msg = err isa ArgumentError ? err.msg : ""
-                    @test occursin("fdm_solve", msg) && occursin("pde_solve(assemble(a, l)..., F)", msg)
+                    advice = dir === nothing ? "pde_solve(assemble(a), F)" :
+                             "pde_solve(assemble(a; dirichlet = :boundary), F)"
+                    @test occursin("fdm_solve", msg) && occursin(advice, msg)
                 end
             end
 
@@ -1119,7 +1190,8 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             adv_solve(F) = fdm_solve(adv, F)
             @test only(Enzyme.autodiff(fwd, Enzyme.Const(adv_solve), Enzyme.Duplicated,
                 Enzyme.Duplicated(copy(Fc), Ḟc))) ≈ Aadv \ Ḟc rtol=1e-8
-            @test_throws ArgumentError "Schur" Enzyme.autodiff(rev,
+            schur_msg = ["Schur", "pde_solve(assemble(a), F)"]
+            @test_throws ArgumentError schur_msg Enzyme.autodiff(rev,
                 Enzyme.Const(F -> sum(adv_solve(F))), Enzyme.Active,
                 Enzyme.Duplicated(copy(Fc), zeros(nc)))
         else
@@ -1227,6 +1299,16 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
                     Enzyme.BatchDuplicated(K, (shadow(ṗ1), shadow(ṗ2))),
                     Enzyme.BatchDuplicated(F, (ṗ1[iF], ṗ2[iF]))))
                 @test collect(values(bat)) ≈ [J * ṗ1, J * ṗ2] rtol=1e-8
+
+                # `K` as its own shadow is a constant (runtime activity), alone and in a batch
+                # whose other lane carries a real tangent of `K`.
+                u̇ = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.Duplicated,
+                    Enzyme.Duplicated(K, K), Enzyme.Duplicated(F, ṗ1[iF])))
+                @test u̇ ≈ J[:, iF] * ṗ1[iF] rtol=1e-8
+                bat = only(Enzyme.autodiff(fwd, Enzyme.Const(solve), Enzyme.BatchDuplicated,
+                    Enzyme.BatchDuplicated(K, (shadow(ṗ1), K)),
+                    Enzyme.BatchDuplicated(F, (ṗ1[iF], ṗ2[iF]))))
+                @test collect(values(bat)) ≈ [J * ṗ1, J[:, iF] * ṗ2[iF]] rtol=1e-8
             end
 
             # A `K.A` that is not a `SparseMatrixCSC` is refused by name, in both modes, and
@@ -1240,8 +1322,8 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             @test_throws ArgumentError "needs `K.A` to be a `SparseMatrixCSC`" Enzyme.autodiff(
                 fwd, Enzyme.Const(solve_w), Enzyme.Duplicated, Enzyme.Duplicated(Kw, Kwd),
                 Enzyme.Const(F0))
-            @test_throws ArgumentError "does not support batched" Enzyme.autodiff(rev,
-                Enzyme.Const(solve_w), Enzyme.Active,
+            @test_throws ArgumentError "rule for `pde_solve` does not support batched" Enzyme.autodiff(
+                rev, Enzyme.Const(solve_w), Enzyme.Active,
                 Enzyme.BatchDuplicated(ROU(copy(A0), σ0, ws0, wt0),
                     (shadow(zeros(length(p0))), shadow(zeros(length(p0))))),
                 Enzyme.Const(F0))
@@ -1413,6 +1495,137 @@ Base.:\(f::NoAdjointFactorization, b::AbstractVector) = f.A \ b
             gota = (K̄a.σ, K̄a.ws, K̄a.wt, nonzeros(K̄a.A))
             for (got, ref) in zip(gota, refz(true, true, true, true))
                 @test got ≈ ref rtol=1e-10
+            end
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
+    @testset "Enzyme: dense block, real and complex" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            ER = Enzyme.EnzymeRules
+            # `_block_solve` mixes a complex block with real data, or a real block with
+            # complex data, on purpose. The reverse rule of `_dense_block_solve` must keep
+            # each shadow's type and add the real part of its cotangent to a real one. The
+            # loss is `J = Re⟨X̄, X⟩ + Re⟨x̄, x⟩` with `x̄` complex; the references are
+            # `B̄ = Λ`, `b̄ = λ` and `C̄ = −(Λ Xᴴ + λ xᴴ)`, with `Λ = C⁻ᴴ X̄`, `λ = C⁻ᴴ x̄`,
+            # and a central difference along each entry of `b` and of a real `C`.
+            rcfg = ER.RevConfig{true, true, 1, (false, false, false, false), false, false}()
+            f = Enzyme.Const(Bramble._dense_block_solve)
+            fit(T, v) = T <: Real ? real.(v) : v
+            C₀ = [4.0 1.0; 0.5 3.0]
+            cases = (("complex C, real b", ComplexF64.(C₀) + 0.3im * I,
+                    ComplexF64[1.0 2.0; 0.0 1.0], [1.0, 2.0]),
+                ("real C, complex b", C₀, [1.0 2.0; 0.0 1.0], ComplexF64[1.0 + 1im, 2.0]))
+            @testset "$tag" for (tag, C, B, b) in cases
+                Cd, Bd, bd = (Enzyme.Duplicated(y, zero(y)) for y in (C, B, b))
+                X, x, ok = Bramble._dense_block_solve(C, B, b)
+                RT = Enzyme.Duplicated{typeof((X, x, ok))}
+                aug = ER.augmented_primal(rcfg, f, RT, Cd, Bd, bd)
+                X̄ = ones(eltype(X), size(X))
+                x̄ = ComplexF64[1 + 0.5im * k for k in 1:length(x)]
+                aug.shadow[1] .= X̄
+                aug.shadow[2] .= x̄
+                ER.reverse(rcfg, f, RT, aug.tape, Cd, Bd, bd)
+                Λ, λ = C' \ X̄, C' \ x̄
+                @test eltype(Cd.dval) === eltype(C)
+                @test eltype(bd.dval) === eltype(b)
+                @test bd.dval ≈ fit(eltype(b), λ) rtol=1e-12
+                @test Bd.dval ≈ fit(eltype(B), Λ) rtol=1e-12
+                @test Cd.dval ≈ fit(eltype(C), -(Λ * X' .+ λ * x')) rtol=1e-12
+                J(C, b) = real(dot(X̄, C \ B)) + real(dot(x̄, C \ b))
+                h = 1e-6
+                fdb = map(eachindex(b)) do k
+                    e = h .* ((1:length(b)) .== k)
+                    (J(C, b .+ e) - J(C, b .- e)) / 2h
+                end
+                @test real.(bd.dval) ≈ fdb rtol=1e-6
+                if eltype(C) <: Real
+                    fdC = map(CartesianIndices(C)) do k
+                        E = zero(C)
+                        E[k] = h
+                        (J(C .+ E, b) - J(C .- E, b)) / 2h
+                    end
+                    @test Cd.dval ≈ fdC rtol=1e-6
+                end
+            end
+
+            # The same two shapes through `Enzyme.gradient`, which allocates the shadows
+            # itself: a loss of `C₀ + p₁ C₁`, `(1 + p₂) B₀` and `(1 + p₃) b₀`, against a
+            # central difference.
+            C₁ = [0.2 0.1; 0.05 0.3]
+            grads = (
+                ("complex C and B, real b", ComplexF64.(C₀) + 0.3im * I,
+                    ComplexF64[1.0 2.0; 0.5 1.0], [1.0, 2.0]),
+                ("real C and B, complex b", C₀, [1.0 2.0; 0.5 1.0],
+                    ComplexF64[1.0 + 1im, 2.0]))
+            @testset "gradient, $tag" for (tag, Cg, Bg, bg) in grads
+                function loss(p)
+                    X, x, _ = Bramble._dense_block_solve(Cg .+ p[1] .* C₁, Bg .* (1 + p[2]),
+                        bg .* (1 + p[3]))
+                    return sum(abs2, X) + sum(abs2, x)
+                end
+                p₀ = [0.7, -0.4, 1.1]
+                h = 1e-6
+                fd = map(1:3) do k
+                    e = h .* ((1:3) .== k)
+                    (loss(p₀ .+ e) - loss(p₀ .- e)) / 2h
+                end
+                g = Enzyme.gradient(Enzyme.set_runtime_activity(Enzyme.Reverse), loss, p₀)[1]
+                @test all(r -> abs(r) > 1e-6, fd)
+                @test g ≈ fd rtol=1e-6
+            end
+        else
+            @test_skip "Enzyme not in this environment"
+        end
+    end
+
+    @testset "Enzyme: batched refusal names the call" begin
+        if _have(:Enzyme)
+            @eval import Enzyme
+            ER = Enzyme.EnzymeRules
+            Bramble._seed_mesh1d_rng!(1237)
+            Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (9, 9), (false, false))
+            Bramble._unseed_mesh1d_rng!()
+            W = gridspace(Ωₕ)
+            build(V) = form(V, V, (U, X) -> inner₊(∇ₕ(U), ∇ₕ(X)) + innerₕ(U, X))
+            a = build(W)
+            A = assemble(a)
+            F = [1.0 + sin(i) for i in 1:size(A, 1)]
+            fact = Bramble.sparse_factorize(A)
+            uₕ = Bramble.element(W)
+            bd(x) = Enzyme.BatchDuplicated(x, (zero(x), zero(x)))
+            rcfg = ER.RevConfig{true, true, 2, (false, false, false, false), true, false}()
+            RT = Enzyme.BatchDuplicated{Vector{Float64}, 2}
+            # Each rule is called directly at width 2, and the message must name the function
+            # the user wrote, never another one of the rules.
+            cases = (
+                "fdm_solve" =>
+                    () -> ER.augmented_primal(rcfg, Enzyme.Const(Bramble.fdm_solve),
+                        RT, Enzyme.Const(a), bd(copy(F))),
+                "gmg_solve" =>
+                    () -> ER.augmented_primal(rcfg, Enzyme.Const(Bramble.gmg_solve),
+                        RT, Enzyme.Const(build), Enzyme.Const(Ωₕ), bd(copy(F))),
+                "pde_solve" =>
+                    () -> ER.augmented_primal(rcfg, Enzyme.Const(Bramble.pde_solve),
+                        RT, Enzyme.Const(fact), bd(copy(F))),
+                "ldiv!" =>
+                    () -> ER.augmented_primal(rcfg, Enzyme.Const(ldiv!),
+                        Enzyme.Const{typeof(uₕ)},
+                        Enzyme.BatchDuplicated(uₕ, (similar(uₕ), similar(uₕ))),
+                        Enzyme.Const(fact), bd(copy(F))))
+            for (name, call) in cases
+                err = try
+                    call()
+                    nothing
+                catch e
+                    e
+                end
+                @test err isa ArgumentError
+                msg = err isa ArgumentError ? err.msg : ""
+                @test occursin("rule for `$name` does not support batched", msg)
+                name == "pde_solve" || @test !occursin("pde_solve", msg)
             end
         else
             @test_skip "Enzyme not in this environment"

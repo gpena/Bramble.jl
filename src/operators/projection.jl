@@ -411,7 +411,7 @@ end
 @inline _probe_value(kernel, i) = kernel(i)
 
 @noinline _throw_value_count(nv::Int, nc::Int) = throw(DimensionMismatch(
-    "the function returned $nv values for $nc components: it returns one value per leaf"))
+    "the function returned $nv value(s) for $nc components; give one value per leaf"))
 
 # One rule per leaf: each is already independent. `map` over both tuples rather than
 # `ntuple` indexing a shared count -- it needs no leaf count and stays correct under any

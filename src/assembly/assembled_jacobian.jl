@@ -56,6 +56,15 @@ only throws, naming ForwardDiff; `BrambleForwardDiffExt` defines the one that ru
     )
 end
 
+@noinline function _throw_jf_eltype(T::Type)
+    throw(
+        ArgumentError(
+        "jacobian!: u must not be complex, got eltype $T; ForwardDiff.jl differentiates " *
+        "each coefficient's function at real arguments only.",
+    ),
+    )
+end
+
 # One declared coefficient: `values == f.(L(u))`, `dependency(U) = L(U)`.
 struct _JFCoefficient{C, L, F}
     values::C
@@ -264,7 +273,10 @@ function _jf_leaves(W::CompositeGridSpace, T, L, k::Int)
         "names no component of the composite space; name one, as in `U -> U(2)`")
     sT, oT = _dependency_component(leaves, tc)
     sL, oL = _dependency_component(leaves, target)
-    _same_mesh_or_throw(target, sL, mesh(sT))
+    # Not `_same_mesh_or_throw`: its advice, πₕ, is refused here.
+    _same_mesh(mesh(sL), mesh(sT)) || _throw_jf_dependency(k,
+        "reads component $target, on another mesh than the component it scales; a " *
+        "dependency must read a component on the same mesh")
     # A composite space's leaves are scalar: a ghost leaf throws in `leaf_spaces_offsets`.
     return sT::ScalarGridSpace, oT, sL::ScalarGridSpace, oL
 end
@@ -324,8 +336,8 @@ declared coefficient to `f.(L(u))` and each derivative buffer to `f′.(L(u)) �
 `T` is the operator the coefficient multiplies, then assembles `a + ∂a` once, with the
 Dirichlet labels `dirichlet` (as [`assemble!`](@ref) takes them). The coefficients are
 written from `u` itself, so the Jacobian is exact at `u` whatever state they held before.
-Each `f′` is one `ForwardDiff.Dual` evaluation of `f`, so ForwardDiff.jl must be loaded.
-The refill runs under the mesh's execution policy.
+Each `f′` is one `ForwardDiff.Dual` evaluation of `f`, so ForwardDiff.jl must be loaded,
+and `u` must not be complex. The refill runs under the mesh's execution policy.
 
 The derivative is built by a walk over `a`'s AST: the product rule where a declared
 coefficient scales an operator, and every node above it (scales, sums, differences,
@@ -364,7 +376,8 @@ function jacobian_form(
 
         coeffs[j].values === coeffs[k].values && throw(
             ArgumentError(
-            "jacobian_form: coefficients $j and $k are the same grid function.",
+            "jacobian_form: coefficients $j and $k are the same grid function; " *
+            "declare each grid function once.",
         ),
         )
     end
@@ -374,7 +387,8 @@ function jacobian_form(
         w.reached[k] || throw(
             ArgumentError(
             "jacobian_form: coefficient $k is not read by the form's AST, so its " *
-            "derivative would be lost.",
+            "derivative would be lost (it is matched by identity, `===`: pass the object " *
+            "the form was built with).",
         ),
         )
     end
@@ -392,6 +406,7 @@ function jacobian!(J, jf::JacobianForm, u::AbstractVector)
         "jacobian!: u has length $(length(u)), the space has $(ndofs(W)) dofs.",
     ),
     )
+    eltype(u) <: Complex && _throw_jf_eltype(eltype(u))
     policy = execution_policy(mesh(W))
     # Every coefficient first, then every β: a β reads the coefficients its `T` holds at
     # neighbouring points, so they must all be written before any β is.

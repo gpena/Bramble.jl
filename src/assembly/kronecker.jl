@@ -1096,8 +1096,7 @@ end
     )
 end
 
-# The three-argument method below stays (`mul!` is the primitive, and callers may pass any
-# `AbstractVector`).
+# The three-argument method below is the primitive; callers may pass any `AbstractVector`.
 #
 # `scratch` is accepted and ignored: the fused pass above needs no work vectors, so a serial
 # host `mul!` allocates nothing with or without it, and callers that pass one keep working.

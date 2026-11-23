@@ -99,25 +99,9 @@ plain.iters, with_ilu.iters
 
 ## Pure Neumann
 
-With the normal derivative given on the whole boundary, the matrix annihilates constants and `A \ F` is singular, so `pde_solve` logs a warning that names `mean_zero`. Pass `mean_zero = w`, the weights of the discrete average, and it solves the bordered system ``[A\ w; w^T\ 0]`` and returns the solution with ``w^T u = 0``. The weights are the assembled form of the constant function 1 on the space without ghosts:
+With the normal derivative given on the whole boundary, the matrix annihilates constants and `A \ F` is singular, so `pde_solve` logs a warning that names `mean_zero`. Pass `mean_zero = w`, the weights of the discrete average, and it solves the bordered system ``[A\ w; w^T\ 0]``.
 
-```@example howto_solvers
-Ωₕ_n = mesh(Ω₂, (17, 17), (false, false))
-C = constrained(gridspace(Ωₕ_n; ghosts = :boundary),
-    u -> ntuple(j -> (:xmin, :xmax, :ymin, :ymax)[j] => ∂ₙ(u) => (x -> 0.0), 4))
-A_n, F_n = assemble(form(C, C, (u, v) -> innerₕ(-Δₕ(u), v)),
-    form(C, v -> innerₕ(x -> 2π^2 * cos(π * x[1]) * cos(π * x[2]), v)))
-W_n = gridspace(Ωₕ_n)
-w = assemble(form(W_n, v -> innerₕ(x -> 1.0, v)))
-
-u_n = pde_solve(A_n, F_n; mean_zero = w)
-λ = sum(F_n) / sum(w)      # 1ᵀA = 0, so the border absorbs the mean of F
-@assert abs(dot(w, u_n)) < 1e-10
-@assert norm(A_n * u_n - (F_n - λ * w)) < 1e-9 * norm(F_n)
-abs(dot(w, u_n)), λ
-```
-
-The data must satisfy a compatibility condition. `λ` is the part of the load that no `u` reaches: zero for exactly compatible data, and small here because these are compatible only in the continuum. `Bramble.neumann_compatibility` tests the condition. A kernel in the ghost values of a ghost space needs `gauge` instead, and the [pure Neumann how-to](@ref howto_pure_neumann) shows both keywords.
+The [pure Neumann how-to](@ref howto_pure_neumann) builds `w`, checks the compatibility condition and shows `gauge`, the keyword for a kernel in the ghost values of a ghost space.
 
 ## Large systems in 3D
 

@@ -144,6 +144,17 @@ end
     @test_throws ArgumentError jacobian_form(mixed, c => (U -> U(2), _κ1))
     @test occursin("both be scalar grid spaces or both composite",
         _message(() -> jacobian_form(mixed, c => (U -> U(2), _κ1))))
+    # A dependency on a component on another mesh: the message must not send the user to
+    # πₕ, which `jacobian_form` refuses in a dependency.
+    Random.seed!(1145)
+    Ω = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
+    Wo = gridspace(mesh(Ω, (9, 12), (false, false); backend = backend(Wc)))
+    Vx = Wc × Wo
+    other = form(Vx, Vx, (P, Q) -> innerₕ(c * P(1), Q(1)) + innerₕ(P(2), Q(2)))
+    @test_throws ArgumentError jacobian_form(other, c => (U -> U(2), _κ1))
+    msg = _message(() -> jacobian_form(other, c => (U -> U(2), _κ1)))
+    @test occursin("reads component 2, on another mesh", msg)
+    @test !occursin("πₕ", msg)
 end
 
 end # module

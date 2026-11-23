@@ -8,16 +8,6 @@
 # in the primal solve. `RankOneUpdate` is mutable and `σ` its one non-const field, so a
 # `Duplicated` shadow holds the cotangents of `A`, `wₛ`, `wₜ` and `σ`.
 
-@noinline function _throw_batched_rank_one(width)
-    throw(
-        ArgumentError(
-        "Bramble's Enzyme rule for `pde_solve(::RankOneUpdate, F)` does not support batched " *
-        "(vector-mode) reverse differentiation: got width $(width). Differentiate one " *
-        "direction at a time.",
-    ),
-    )
-end
-
 @noinline function _throw_rank_one_matrix(@nospecialize(A))
     throw(
         ArgumentError(
@@ -74,7 +64,8 @@ function EnzymeRules.forward(
     RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
     W = EnzymeRules.width(config)
     shadows = ntuple(Val(W)) do i
-        rhs = _rank_one_rhs(K.val, _lane(K, i), _lane(F, i), u)
+        K̇ = _rank_one_tangent(K.val, _lane(K, i))
+        rhs = _rank_one_rhs(K.val, K̇, _lane(F, i), u)
         return pde_solve(K.val, rhs; kwargs...)
     end
     needs_primal = EnzymeRules.needs_primal(config)
@@ -93,7 +84,7 @@ function EnzymeRules.augmented_primal(
         F::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched_rank_one(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("pde_solve", "reverse", EnzymeRules.width(config))
     _rank_one_check(K)
 
     u = pde_solve(K.val, F.val; kwargs...)
@@ -161,7 +152,7 @@ function EnzymeRules.reverse(
     end
 
     if !(F isa Const)
-        F.dval .+= λ
+        _accumulate_shadow!(F.val, F.dval, λ)
     end
 
     # A custom rule consumes the return cotangent it was handed (see the rule on a matrix).
@@ -280,7 +271,7 @@ function EnzymeRules.augmented_primal(
         fact::Annotation{<:Factorization},
         F::Annotation{<:AbstractVector}
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("pde_solve", "reverse", EnzymeRules.width(config))
     _active_shadow(fact, EnzymeRules.width(config)) && _throw_active_factorization(fact.val)
     _has_shadow(F) && _adjoint_factor(fact.val) === nothing &&
         _throw_adjoint_unavailable(fact.val)
@@ -302,7 +293,7 @@ function EnzymeRules.reverse(
         F::Annotation{<:AbstractVector}
 ) where {RT}
     fact₀, ū = tape
-    _has_shadow(F) && (F.dval .+= _adjoint_solve(fact₀, ū))
+    _has_shadow(F) && _accumulate_shadow!(F.val, F.dval, _adjoint_solve(fact₀, ū))
 
     # A custom rule consumes the return cotangent it was handed (see the rule on a matrix).
     fill!(ū, zero(eltype(ū)))
@@ -340,7 +331,7 @@ function EnzymeRules.augmented_primal(
         fact::Annotation{<:Factorization},
         F::Annotation{<:AbstractVector}
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("ldiv!", "reverse", EnzymeRules.width(config))
     _active_shadow(fact, EnzymeRules.width(config)) && _throw_active_factorization(fact.val)
     _has_shadow(x) && _has_shadow(F) && _adjoint_factor(fact.val) === nothing &&
         _throw_adjoint_unavailable(fact.val)
@@ -369,7 +360,7 @@ function EnzymeRules.reverse(
         ū = parent(x.dval)
         λ = _has_shadow(F) ? _adjoint_solve(fact.val, ū) : nothing
         fill!(ū, zero(eltype(ū)))
-        λ === nothing || (F.dval .+= λ)
+        λ === nothing || _accumulate_shadow!(F.val, F.dval, λ)
     end
     return (nothing, nothing, nothing)
 end
@@ -451,24 +442,30 @@ const _FDMOperand = Union{
 # through its AST.
 EnzymeRules.inactive_type(::Type{<:Bramble._AssemblyCache}) = true
 
-@noinline function _throw_active_operator()
+# The call that differentiates where `fdm_solve(a, F; dirichlet)` does not.
+function _fdm_pde_call(dirichlet)
+    dirichlet === nothing && return "pde_solve(assemble(a), F)"
+    return "pde_solve(assemble(a; dirichlet = :boundary), F)"
+end
+
+@noinline function _throw_active_operator(dirichlet)
     throw(
         ArgumentError(
         "fdm_solve: the form or operator has a shadow, and Bramble's Enzyme rule " *
         "differentiates `fdm_solve` in its right-hand side only, so the derivative with " *
         "respect to a coefficient or the mesh would be silently dropped; to differentiate " *
-        "with respect to it, solve with `pde_solve(assemble(a, l)..., F)`",
+        "with respect to it, solve with `$(_fdm_pde_call(dirichlet))`",
     ),
     )
 end
 
-@noinline function _throw_schur_adjoint()
+@noinline function _throw_schur_adjoint(dirichlet)
     throw(
         ArgumentError(
         "fdm_solve: Bramble's Enzyme rule does not differentiate in reverse mode a form " *
         "with a non-symmetric term (advection), whose solve takes the generalised Schur " *
         "route and has no adjoint here. Use forward mode, or differentiate " *
-        "`pde_solve(assemble(a, l)..., F)`.",
+        "`$(_fdm_pde_call(dirichlet))`.",
     ),
     )
 end
@@ -480,16 +477,6 @@ _fdm_symmetric_route(f) = nameof(typeof(f)) !== :_SchurFactorization
 # operator's `T` is not in the form's type), and Enzyme asserts in LLVM, aborting the process,
 # when it builds a batched forward call to a rule whose return type is not concrete. A wider
 # batch reaches the second method, which refuses by name.
-@noinline function _throw_batched_forward(width)
-    throw(
-        ArgumentError(
-        "Bramble's Enzyme rule for `fdm_solve` does not support batched (vector-mode) " *
-        "forward differentiation: got width $(width). Differentiate one direction at a " *
-        "time.",
-    ),
-    )
-end
-
 function EnzymeRules.forward(
         config::EnzymeRules.FwdConfigWidth{1},
         ::Const{typeof(Bramble.fdm_solve)},
@@ -498,7 +485,7 @@ function EnzymeRules.forward(
         F::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    _active_shadow(a, 1) && _throw_active_operator()
+    _active_shadow(a, 1) && _throw_active_operator(get(kwargs, :dirichlet, nothing))
     u = Bramble.fdm_solve(a.val, F.val; kwargs...)
     RT <: Const && return EnzymeRules.needs_primal(config) ? u : nothing
     Ḟ = _rank_one_tangent(F.val, _lane(F, 1))
@@ -514,7 +501,7 @@ function EnzymeRules.forward(
         F::Annotation{<:AbstractVector};
         kwargs...
 )
-    return _throw_batched_forward(EnzymeRules.width(config))
+    return _throw_batched("fdm_solve", "forward", EnzymeRules.width(config))
 end
 
 # The reverse sweep solves with the factorization the forward solve built, kept on the tape: a
@@ -529,12 +516,13 @@ function EnzymeRules.augmented_primal(
         F::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
-    _active_shadow(a, 1) && _throw_active_operator()
+    EnzymeRules.width(config) == 1 || _throw_batched("fdm_solve", "reverse", EnzymeRules.width(config))
+    _active_shadow(a, 1) && _throw_active_operator(get(kwargs, :dirichlet, nothing))
 
     fact = Bramble.fdm_factorize(a.val; kwargs...)
     # The adjoint is the same solve only on the symmetric route.
-    _has_shadow(F) && !_fdm_symmetric_route(fact) && _throw_schur_adjoint()
+    _has_shadow(F) && !_fdm_symmetric_route(fact) &&
+        _throw_schur_adjoint(get(kwargs, :dirichlet, nothing))
     u = Bramble.fdm_solve!(Vector{typeof(fact).parameters[1]}(undef, size(fact, 1)), fact,
         F.val)::Vector
     ū = zero(u)
@@ -559,7 +547,7 @@ function EnzymeRules.reverse(
     # `λ` is read before `ū` is cleared, and `F̄` is a different array.
     λ = _has_shadow(F) ? Bramble.fdm_solve!(similar(ū), fact, ū) : nothing
     fill!(ū, zero(eltype(ū)))
-    λ === nothing || (F.dval .+= λ)
+    λ === nothing || _accumulate_shadow!(F.val, F.dval, λ)
     return (nothing, nothing)
 end
 
@@ -625,7 +613,6 @@ end
 # captured values included, as its shadow.
 _shadow_is_zero(x, ẋ) = _zero_shadow(x, ẋ, Base.IdSet{Any}())
 
-# Whether a value of type `T` can hold a floating-point number.
 function _holds_floats(::Type{T}) where {T}
     T <: Union{AbstractFloat, Complex{<:AbstractFloat}} ||
         !isbitstype(T) || any(_holds_floats, fieldtypes(T))
@@ -710,7 +697,7 @@ _gmg_zero(u) = (z = similar(u); fill!(parent(z), zero(eltype(z))); z)
 
 # The finest product `A(θ) x`, the one call the nested reverse call differentiates. The
 # space is made outside it and passed `Const`: built inside, its weights got shadows that a
-# nested forward call left unwritten and read (NaN or 1e277 on a 9×9 mesh).
+# nested forward call left unwritten and read.
 function _gmg_product(build, W, x)
     op = Bramble.matrix_free_operator(build(W))
     y = zeros(eltype(op), size(op, 1))
@@ -817,7 +804,7 @@ function EnzymeRules.augmented_primal(
         b::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("gmg_solve", "reverse", EnzymeRules.width(config))
     Ωₕ isa Active && _throw_active_gmg(:Ωₕ)
     _active_shadow(Ωₕ, 1) && _throw_active_gmg(:Ωₕ)
     P, loop = _gmg_rule_setup(build.val, Ωₕ.val; kwargs...)
@@ -854,7 +841,8 @@ function EnzymeRules.reverse(
     end
     # `λ` is read before `ū` is cleared, as `b̄` may share its storage.
     fill!(parent(ū), zero(eltype(ū)))
-    _has_shadow(b) && (Bramble._mf_data(b.dval) .+= λ)
+    _has_shadow(b) &&
+        _accumulate_shadow!(Bramble._mf_data(b.val), Bramble._mf_data(b.dval), λ)
     nested === nothing && return (nothing, nothing, nothing)
     # `θ̄ += −λᴴ (∂A/∂θ) u`: the product's cotangent is `−λ`. An `Active` `build` gets its
     # cotangent back; Enzyme drops it for one that captures constants only.

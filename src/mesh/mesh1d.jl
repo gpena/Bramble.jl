@@ -486,9 +486,9 @@ changes.
 
 A new point count also rebuilds the `:boundary` and `:interior` markers (and the marker
 words assembly reads) for the new grid. A mesh carrying any other label has no domain here
-to re-evaluate it onto the new points, and neither has a `:boundary` or `:interior` that is
+to re-evaluate it onto the new points. Nor does a mesh whose `:boundary` or `:interior` is
 not the geometric set (a predicate label of either name, or a stored set that differs from
-the one the mesh gives), which the resize would replace. Such a resize throws an
+the one the mesh gives): the resize would replace it. Such a resize throws an
 `ArgumentError` before anything changes. Build `mesh(Ω, length(pts))` and call
 [`change_points!`](@ref)`(Ωₕ, markers(Ω), pts)` instead. A call that keeps the point count
 leaves every marker alone, so a label defined by a predicate of position would keep the set

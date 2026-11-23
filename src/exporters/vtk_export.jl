@@ -6,7 +6,8 @@ Write `Ωₕ`, and any number of named fields over it, to a VTK rectilinear grid
 (`.vtr`).
 
 Each entry in `fields` is `name => data`, where `data` is a [`VectorElement`](@ref) over a
-grid space on `Ωₕ` (scalar or composite) or a plain array already shaped like the grid.
+grid space on `Ωₕ` (scalar or composite), a plain array already shaped like the grid, or
+a flat vector of one value per mesh point in the mesh's own order.
 A field, or a composite's component, whose size is not the mesh's throws an
 `ArgumentError`, as does a composite whose components live on different meshes. Export
 each component against its own mesh.
@@ -84,15 +85,26 @@ _vtk_data(name, Ωₕ::AbstractMeshType, uₕ::VectorElement) = _vtk_data(name, 
 _vtk_data(name, Ωₕ::AbstractMeshType, a::Array) = _vtk_check_size(name, Ωₕ, a)
 _vtk_data(name, Ωₕ::AbstractMeshType, a::AbstractArray) = _vtk_data(name, Ωₕ, Array(a))
 
-# A field whose size is not the mesh's is refused here, worded as `export_pgfplots` words
-# it. Left alone, WriteVTK either rejects it with an error of its own or, when the length
-# happens to match, writes it laid out as the wrong grid. A 1D mesh's `npoints(Ωₕ, Tuple)`
-# is `(n,)`, so a plain length-`n` vector passes there.
+# A flat vector of `prod(npoints(Ωₕ, Tuple))` values, such as the `u = A \ F` of a linear
+# solve, is Bramble's own column-major order, the grid's order, so it is reshaped. That is
+# what `export_pgfplots` does too. A field of any other size is refused here, worded as
+# `export_pgfplots` words it. Left alone, WriteVTK rejects a field whose length is not the
+# mesh's, and writes an array of the right length but another shape, such as a transposed
+# matrix, against the wrong points.
 function _vtk_check_size(name, Ωₕ::AbstractMeshType, a::AbstractArray)
     dims = npoints(Ωₕ, Tuple)
     size(a) == dims ||
         throw(ArgumentError("\"$name\" has size $(size(a)), but the mesh has $dims points"))
     return a
+end
+function _vtk_check_size(name, Ωₕ::AbstractMeshType, a::AbstractVector)
+    dims = npoints(Ωₕ, Tuple)
+    length(a) == prod(dims) || throw(
+        ArgumentError(
+        "\"$name\" has length $(length(a)), but the mesh has $(prod(dims)) points"
+    ),
+    )
+    return reshape(a, dims)
 end
 
 """

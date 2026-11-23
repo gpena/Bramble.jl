@@ -31,8 +31,8 @@ Problems are bilinear and linear forms of discrete operators, in notation close 
 - **Discrete calculus and forms.** `∇ₕ`, `divₕ`, `curlₕ`, `Δₕ` and `εₕ`, jumps, means, inner products and point sources, combined in a `form`. `assemble` builds the sparse matrix. `kronecker_operator` applies a separable form as a sum of Kronecker products of 1D factors, and `matrix_free_operator` applies any form without a matrix. See [operators](https://gpena.github.io/Bramble.jl/tutorials/operators/) and [forms](https://gpena.github.io/Bramble.jl/tutorials/form/).
 - **Boundary conditions.** Dirichlet values by marker. Neumann, Robin and second-normal-derivative conditions are relations on ghost points, such as `:xmin => ∂ₙ(u) => g`, with no hand-built stencils. `pde_solve(A, F; mean_zero = w)` solves pure Neumann problems. See [Neumann and Robin](https://gpena.github.io/Bramble.jl/examples/neumann_robin_poisson/).
 - **Systems and time.** Composite spaces (`Wₕ^Val(N)`) with block assembly by component. `ode_problem` hands `M u' = F(t) - A u` to OrdinaryDiffEq and the rest of SciML. See [coupled reaction-diffusion](https://gpena.github.io/Bramble.jl/examples/coupled_reaction_diffusion/) and the [heat equation](https://gpena.github.io/Bramble.jl/examples/heat_equation/).
-- **Solvers and differentiation.** Sparse direct factorizations (SuiteSparse, Apple Accelerate, MUMPS, Sparspak), algebraic and geometric multigrid, ILU(0). Forward mode (ForwardDiff) and reverse mode (Enzyme) through DifferentiationInterface. See [solvers](https://gpena.github.io/Bramble.jl/api_sciml/) and [automatic differentiation](https://gpena.github.io/Bramble.jl/tutorials/autodiff/).
-- **Backends and export.** Serial, threaded (Base threads or Polyester) and experimental GPU (Metal, tests off until v4.7.0) execution, with CSC or CSR storage. Makie plots, VTK (`export_vtk`) and PGFPlots/TikZ (`export_pgfplots`) output. See [exporters](https://gpena.github.io/Bramble.jl/internals/exporters/).
+- **Solvers and differentiation.** Sparse direct factorizations (SuiteSparse, Apple Accelerate, MUMPS, Sparspak), algebraic and geometric multigrid, ILU(0). Forward mode (ForwardDiff) and reverse mode (Enzyme) through DifferentiationInterface. See [solvers](https://gpena.github.io/Bramble.jl/api/solvers/) and [automatic differentiation](https://gpena.github.io/Bramble.jl/tutorials/autodiff/).
+- **Backends and export.** Serial, threaded (Base threads or Polyester) and experimental GPU (Metal, tests off until v4.7.0) execution, with CSC or CSR storage. Makie plots, VTK (`export_vtk`) and PGFPlots/TikZ (`export_pgfplots`) output. See [exporters](https://gpena.github.io/Bramble.jl/api/exporters/).
 
 ---
 
@@ -75,10 +75,10 @@ A, F = assemble(a, l; dirichlet = dirichlet_constraints(Ω, :boundary => uexact)
 
 uₕ = element(Wₕ)
 uₕ .= A \ F
-maximum(abs, uₕ .- Rₕ(Wₕ, uexact))                     # the error at the grid points, between 1e-3 and 1e-2
+maximum(abs, uₕ .- Rₕ(Wₕ, uexact))                     # the error at the grid points, typically a few 1e-3
 ```
 
-The interior points are drawn at random, so the error changes from run to run. Passing `true` instead of `false` for an axis spaces its points uniformly.
+The interior points are drawn at random, so the error changes from run to run, up to about 2e-2. Passing `true` instead of `false` for an axis spaces its points uniformly.
 
 Under refinement the error falls at second order in the largest spacing, on random meshes as on uniform ones ([script](docs/readme_figure.jl)):
 

@@ -13,8 +13,8 @@
 #
 # Through `pde_solve`, Enzyme reverse has the adjoint rule below, and ForwardDiff a solve of a
 # `Dual` matrix or load over the `Float64` factor of its values (`_solve_promoted` and, for the
-# bordered solve, `_bordered_promoted`, added by `BrambleForwardDiffExt`). Enzyme forward throws `EnzymeNoDerivativeError` at the UMFPACK
-# call (`docs/notes/internals/ad_coverage.md`).
+# bordered solve, `_bordered_promoted`, added by `BrambleForwardDiffExt`).
+# Enzyme forward has the tangent rule in `BrambleEnzymeExt` (`docs/notes/internals/ad_coverage.md`).
 #
 # `pde_solve` itself needs no weak dependency: without `ChainRulesCore` it is the same solve,
 # just not differentiable. `BrambleChainRulesExt` supplies the
@@ -115,8 +115,10 @@ chain differentiable.
   kernel, near `1e-8` relative.
 
 # Returns
-- `Vector`: the solution, of the promoted float type of `A` and `F` (`Float64` for an
-  integer `A` and `F`).
+- `Vector`: the solution, of the promoted float type of `A` and `F` for `Float32`, `Float64`
+  and complex data (`Float64` for an integer `A` and `F`). Other loads keep the type `A \\ F`
+  gives them: a `VectorElement` load on a diagonal `A` returns a `VectorElement`, and a
+  `Rational` system a `Vector` of `Rational`s.
 
 A `SparseMatrixCSR` (`SparseMatricesCSR.jl`) `A` is also accepted: converted to
 `SparseMatrixCSC` first (see `docs/src/internals/csr_solvers.md`), then solved exactly as
@@ -138,6 +140,8 @@ a method with no `rrule`, and differentiates the conversion and the solver's int
 width 1: a batched reverse throws an `ArgumentError`. It conjugates `u` as the rrule does.
 Do not call `Enzyme.@import_rrule`, whose bridge drops the cotangent's explicit zeros from
 `nzval` and returns a wrong gradient without any error.
+
+Mooncake and ReverseDiff are not supported.
 
 A closure capturing a grid space or a form needs `Enzyme.Const(f)` and
 `Enzyme.set_runtime_activity(Enzyme.Reverse)`, as the automatic
@@ -397,7 +401,7 @@ end
 
 @noinline function _throw_rectangular_adjoint(sz)
     throw(ArgumentError("differentiating pde_solve needs a square A, got size $sz: the " *
-                        "adjoint rule is that of a square solve, and a least-squares " *
+                        "AD rules are those of a square solve, and a least-squares " *
                         "solve's pullback has a residual term it omits."))
 end
 

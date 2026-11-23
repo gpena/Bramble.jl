@@ -64,8 +64,8 @@ Four families combine the same one-sided differences in different ways:
 | Operator | Stencil | Order, non-uniform | Order, uniform | Boundary |
 |:--|:--|:--|:--|:--|
 | `D₋` | ``\{i-1, i\}`` | 1 | 1 | truncated to `0` at the first point |
-| `Dc` | ``\{i-1, i+1\}``, divided by the full span | 1 | 2 | truncated to `0` at both ends |
-| `D̽` | ``\{i-1, i, i+1\}``, a weighted mean of two backward differences | 2 | 2 | no convention of its own: falls back to `D₊`/`D₋` |
+| `Dc` | ``\{i-1, i+1\}``, divided by the full span | 1 | 2 | truncated to `0` at both ends; three points at least |
+| `D̽` | ``\{i-1, i, i+1\}``, a weighted mean of two backward differences | 2 | 2 | no convention of its own: falls back to `D₊`/`D₋`; three points at least |
 | `D̃` | ``\{i, i+1\}``, divided by the averaged spacing | 1 on smoothly graded grids, not consistent where neighbouring spacings differ by an O(1) ratio (random grids); summation by parts holds exactly | 1 | truncated to `0` at the last point, like `D₊` |
 
 On a uniform grid ``h_i = h_{i+1}``: `D̽` and `Dc` collapse to the mean of `D₋` and `D₊`, and `D̃` collapses to `D₊`. They separate only where the spacing varies, which is why a uniform-grid benchmark cannot tell them apart. Use `D̃` with `innerₕ`, for the summation by parts.

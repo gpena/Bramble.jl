@@ -408,11 +408,6 @@ end
     return failed
 end
 
-# The sink's `x` as the tasks read it: the tape's copy, or `x` itself when a task's zeroed
-# copy of its shadow has its type (a view's would not).
-@inline _act_input(x, ::Nothing) = x isa Array ? x : copy(x)
-@inline _act_input(_, x_tape) = x_tape
-
 # Whether some lane of an action target carries a cotangent for `y`.
 function _act_live(target, W::Val)
     pe = _polyester_ext()
@@ -420,11 +415,9 @@ function _act_live(target, W::Val)
     return any(d -> d !== nothing && first(pe._replay_parts(d[])) !== y, _lanes(target, W))
 end
 
-# The tape of an action target's call: the parts the slab reads and `x`, both whenever a
-# lane is live. `x` sits behind the target's `Ref`, whose `overwritten` entry says nothing
-# of `x`'s own buffer. Nor can the parts' entry be trusted: a coefficient overwritten after
-# `mul!` leaves it false once `SpaceWeights` became mutable (3aefc79f), and the reverse then
-# read the zeroed coefficient (Weekly ad-1, 2026-11-16).
+# The tape of an action target's call: the parts the slab reads and `x`, whenever a lane is
+# live. `overwritten` does not see writes made through the target's or the parts' `Ref`, so
+# neither is trusted.
 function _act_tape(config, target, parts)
     live = _act_live(target, Val(EnzymeRules.width(config)))
     parts_tape = live && !(parts isa Const) ? _graph_copy(parts.val, false) : nothing
@@ -445,10 +438,10 @@ function _act_reverse!(config, run!::R, slab::F, n::Int, len::Int, target, parts
             if (dt = _shadow(target, w)) !== nothing && first(pe._replay_parts(dt[])) !== y]
     isempty(live) && return nothing
     parts_tape, x_tape = tape
-    xp = _act_input(x, x_tape)
+    xp = x_tape
     p0 = parts.val
     pp = something(parts_tape, p0)
-    scratch = Ref(pe._replay_join(similar(y), xp, cold))
+    scratch = Ref(pe._replay_join(_asm_scratch(y), xp, cold))
     d_parts = _lanes(parts, Val(W))
     cs = map(Const, rest)
     function task(w)

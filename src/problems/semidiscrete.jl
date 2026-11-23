@@ -304,7 +304,8 @@ coefficient buffer of the space's element type, which cannot hold a `Dual` and t
 
 # Keywords
 Same as the `BilinearForm` method, except `reassemble` defaults to `true` -- a `build`-based
-operator exists specifically to be rebuilt at every step -- and `coefficients` is not taken.
+operator exists specifically to be rebuilt at every step -- and neither `coefficients` nor
+`hook_reads_state` is taken.
 
 # Examples
 
@@ -567,7 +568,7 @@ end
 # reading no rebound form would give `-A` as the Jacobian while the forms read the state
 # some other way, so it is refused.
 function _build_state_twin(sd::Semidiscretization, ::Type{T}) where {T}
-    _reads_state(sd.update_coefficients) && _throw_state_hook(T)
+    _reads_state(sd.update_coefficients) && _throw_state_hook(sd.operator, T)
     old = _state_element(sd.state)
     new = element(old.space, T)
     copyto!(parent(new), parent(old))
@@ -602,14 +603,17 @@ end
 # The hook may read the user's state, which a `u` of type `T` never reaches: its
 # derivative would be lost without a trace, so the pair is refused, unless the user
 # declared the hook state-free (`hook_reads_state = false`, `_StateFreeUpdate`).
-@noinline function _throw_state_hook(T::Type)
+# The build method takes no `hook_reads_state`, so it is not advised there.
+@noinline function _throw_state_hook(op, T::Type)
+    advice = op isa TypeCachedOperator ? "Use a" :
+             "Give hook_reads_state = false if it reads no state, or use a"
     throw(
         ArgumentError(
         "semidiscretize: u has element type $(nameof(T)), which the state cannot hold, " *
         "and update_coefficients! may read the state, which only receives u at the " *
         "state's own element type: the hook's dependence on u would be lost from the " *
-        "derivative. Give hook_reads_state = false if it reads no state, or use a " *
-        "finite-difference Jacobian, or the Picard jacobian! with u at the state's type.",
+        "derivative. " * advice * " finite-difference Jacobian, or the Picard " *
+        "jacobian! with u at the state's type.",
     ),
     )
 end

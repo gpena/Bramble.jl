@@ -227,25 +227,43 @@ end
 @inline _asm_cold_float(t::Base.RefValue) = _has_float(
     typeof(last(_polyester_ext()._replay_parts(t[]))))
 
-# A scratch the tasks' augmented forwards write in place of the user's output.
-@inline _asm_scratch(b::AbstractArray) = similar(b)
+# A scratch the tasks' augmented forwards write in place of the user's output, of the
+# output's type, since `Duplicated` pairs it with the output's shadow. `similar` keeps the
+# type of an `Array` only. A view of an `Array` gets the same indices into a new parent, one
+# wide along each `Integer` index; any other array gets a zeroed copy.
+@inline _asm_scratch(b::Array) = similar(b)
+function _asm_scratch(b::SubArray{<:Any, <:Any, <:Array})
+    a, I = parent(b), parentindices(b)
+    length(I) == ndims(a) || return view(similar(a), I...)
+    dims = ntuple(d -> I[d] isa Integer ? 1 : size(a, d), Val(ndims(a)))
+    return view(similar(a, dims), map(i -> i isa Integer ? one(i) : i, I)...)
+end
+_asm_scratch(b::AbstractArray) = Enzyme.make_zero(b)
 function _asm_scratch(t::Base.RefValue)
     pe = _polyester_ext()
     h1, _, cold = pe._replay_parts(t[])
-    return Ref(pe._replay_join(similar(h1), nothing, cold))
+    return Ref(pe._replay_join(_asm_scratch(h1), nothing, cold))
+end
+
+# The lanes whose reverse reads the parts: the output carries a cotangent there (`d_outs`),
+# and the parts (`d_parts`) or the output's other fields (a target's `α`) a shadow.
+function _asm_live(config, out, parts,
+        d_outs = ntuple(w -> _asm_cotangent(out, w), Val(EnzymeRules.width(config))),
+        d_parts = _lanes(parts, Val(EnzymeRules.width(config))))
+    cold = _asm_cold_float(out.val)
+    return [w for w in 1:EnzymeRules.width(config)
+            if d_outs[w] !== nothing && (cold || d_parts[w] !== nothing)]
 end
 
 # The reverse of an assembly hook whose output is `out` and whose parts are `parts`, the
 # rest of its arguments `rest` (indices and offsets, constant). `parts_tape` holds the parts
-# from before the primal when later code overwrites them.
+# from before the primal for a live call (`_asm_tape`).
 function _asm_reverse!(config, run!::R, slab::F, n::Int, len::Int, out, parts, parts_tape,
         rest::Tuple) where {R, F}
     W = Val(EnzymeRules.width(config))
     d_outs = ntuple(w -> _asm_cotangent(out, w), W)
     d_parts = _lanes(parts, W)
-    cold = _asm_cold_float(out.val)
-    live = [w for w in 1:EnzymeRules.width(config)
-            if d_outs[w] !== nothing && (cold || d_parts[w] !== nothing)]
+    live = _asm_live(config, out, parts, d_outs, d_parts)
     isempty(live) && return nothing
     scratch = _asm_scratch(out.val)
     pp = parts_tape === nothing ? parts.val : parts_tape
@@ -271,11 +289,12 @@ function _asm_reverse!(config, run!::R, slab::F, n::Int, len::Int, out, parts, p
     return nothing
 end
 
-# The parts from before the primal, when later code overwrites them (`overwritten` counts
-# `func` first, so the parts are entry 3), else `nothing`.
-@inline function _asm_tape(config, parts)
+# The parts from before the primal whenever some lane is live, else `nothing`. Later code
+# may overwrite the data they hold, and `overwritten` does not say so: the parts arrive
+# behind a fresh `Ref`, whose entry stays false when a coefficient is written after the call.
+@inline function _asm_tape(config, out, parts)
     parts isa Const && return nothing
-    return EnzymeRules.overwritten(config)[3] ? _graph_copy(parts.val, false) : nothing
+    return isempty(_asm_live(config, out, parts)) ? nothing : _graph_copy(parts.val, false)
 end
 
 # --- The rules ----------------------------------------------------------------------- #
@@ -299,7 +318,7 @@ function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_AsmBandRep
         nbands::Annotation, rest::Annotation, lin_indices::Annotation,
         row_offset::Annotation, col_offset::Annotation) where {RT}
     _entered!(:_batch_bilinear_band_replay!)
-    tape = _asm_tape(config, parts)
+    tape = _asm_tape(config, target, parts)
     func.val(target.val, parts.val, ax.val, bidx.val, nbands.val, rest.val, lin_indices.val,
         row_offset.val, col_offset.val)
     return AugmentedReturn(nothing, nothing, tape)
@@ -329,7 +348,7 @@ function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_AsmColourR
         ::Type{RT}, target::_AsmTarget, parts::_AsmParts, idxs::Annotation,
         lin_indices::Annotation, row_offset::Annotation, col_offset::Annotation) where {RT}
     _entered!(:_batch_bilinear_colour_replay!)
-    tape = _asm_tape(config, parts)
+    tape = _asm_tape(config, target, parts)
     func.val(target.val, parts.val, idxs.val, lin_indices.val, row_offset.val,
         col_offset.val)
     return AugmentedReturn(nothing, nothing, tape)
@@ -360,7 +379,7 @@ function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_AsmBandSwe
         bidx::Annotation, nbands::Annotation, rest::Annotation, lin_indices::Annotation,
         offset::Annotation) where {RT}
     _entered!(:_batch_linear_band_sweep!)
-    tape = _asm_tape(config, parts)
+    tape = _asm_tape(config, b, parts)
     func.val(b.val, parts.val, ax.val, bidx.val, nbands.val, rest.val, lin_indices.val,
         offset.val)
     return AugmentedReturn(nothing, nothing, tape)
@@ -389,7 +408,7 @@ function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_AsmColourS
         ::Type{RT}, b::Annotation{<:AbstractVector}, parts::_AsmParts, idxs::Annotation,
         lin_indices::Annotation, offset::Annotation) where {RT}
     _entered!(:_batch_linear_colour_sweep!)
-    tape = _asm_tape(config, parts)
+    tape = _asm_tape(config, b, parts)
     func.val(b.val, parts.val, idxs.val, lin_indices.val, offset.val)
     return AugmentedReturn(nothing, nothing, tape)
 end

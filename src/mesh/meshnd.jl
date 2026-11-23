@@ -253,7 +253,6 @@ function _mesh(
     return output_mesh
 end
 
-# Whether the region markers hold a level set.
 _has_levelset(regs::Tuple) = any(m -> identifier(m) isa LevelSet, regs)
 
 # The bounds of a level-set mesh's box, unused. A function of its own so that

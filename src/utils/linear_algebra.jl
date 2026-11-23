@@ -55,7 +55,7 @@ caller actually uses, deriving `loc` from the destination array itself
 # `CartesianIndices` block of its own, iterated as the serial loop iterates the whole.
 @inline _sweep_for!(::HostLocality, ::CpuThreaded, v, idxs::CartesianIndices, f::F) where {F} = _threaded_axis_for!(
     v, idxs, f)
-@noinline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs::CartesianIndices, f::F) where {F} = _late(
+@inline _sweep_for!(::HostLocality, ::CpuPolyester, v, idxs::CartesianIndices, f::F) where {F} = _late(
     _batch_axis_for!, v, idxs, Ref(f))
 
 """
@@ -215,9 +215,11 @@ end
 # (BrambleEnzymePolyesterExt). This method unwraps it for `BramblePolyesterExt`'s sweep. It
 # inlines, so a plain call builds no `Ref` and allocates nothing; Enzyme does not inline a
 # call that has a rule, so a differentiated call reaches the rule with the `Ref`.
-# `_sweep_for!`'s `CpuPolyester` method inlines too, so the `Ref` is built in its caller:
-# built inside a non-inlined method that took the closure by value, a closure capturing a
-# `Float32` beside an array stops Enzyme's compiler ("Illegal replace ficticious phi").
+# The `CpuPolyester` methods of `_sweep_for!` and `_sweep_scatter_for!` inline too, so the
+# `Ref` is built in their caller. Built inside a non-inlined method that took the closure by
+# value, a closure capturing a `Float32` beside an array stops Enzyme's compiler ("Illegal
+# replace ficticious phi"), or loses its derivative: `Rₕ!`'s kernel on a `Float32` space
+# got a zero reverse gradient through the scatter and `CartesianIndices` methods.
 @inline _batch_for!(v::AbstractArray, idxs, r::Base.RefValue) = _late(_batch_for!, v, idxs, r[])
 
 """
@@ -563,7 +565,7 @@ so callers pass a policy alone and never compute a locality.
 end
 @inline _sweep_scatter_for!(::HostLocality, ::CpuThreaded, mats::Tuple, idxs, g::G) where {G} = _threaded_scatter_for!(
     mats, idxs, g)
-@noinline _sweep_scatter_for!(::HostLocality, ::CpuPolyester, mats::Tuple, idxs, g::G) where {G} = _late(
+@inline _sweep_scatter_for!(::HostLocality, ::CpuPolyester, mats::Tuple, idxs, g::G) where {G} = _late(
     _batch_scatter_for!, mats, idxs, Ref(g))
 @noinline _sweep_scatter_for!(
     ::DeviceLocality, policy::GpuPolicy, mats::Tuple, idxs, g::G) where {G} = _gpu_scatter_for!(
@@ -618,8 +620,9 @@ end
 end
 
 # The kernel behind a `Ref` (see `_batch_for!`), for the two index shapes the extension's
-# methods take: a range (`project!`'s `1:n`) and any array, a `CartesianIndices` included. Each
-# is more specific than the extension's method in its index argument, so neither is ambiguous.
+# methods take: a range (`project!`'s `1:n`) and any array, a `CartesianIndices` included.
+# Each has the index type of one extension method and is narrower in the kernel argument, so
+# neither is ambiguous with it.
 @inline _batch_scatter_for!(mats::Tuple, idxs::AbstractRange, r::Base.RefValue) = _late(
     _batch_scatter_for!, mats, idxs, r[])
 @inline _batch_scatter_for!(mats::Tuple, idxs::AbstractArray, r::Base.RefValue) = _late(

@@ -31,11 +31,13 @@ using LinearAlgebra: Factorization, dot, ldiv!, lu, mul!, norm
 # defines a second rule for the same signature. The rrule serves every other
 # `ChainRulesCore` consumer.
 
-@noinline function _throw_batched(width)
+# The one refusal of a batched (vector-mode) call, by the name of the function the user
+# called: `mode` is "forward" or "reverse".
+@noinline function _throw_batched(name, mode, width)
     throw(
         ArgumentError(
-        "Bramble's Enzyme rule for `pde_solve` does not support batched (vector-mode) " *
-        "reverse differentiation: got width $(width). Differentiate one direction at a " *
+        "Bramble's Enzyme rule for `$(name)` does not support batched (vector-mode) " *
+        "$(mode) differentiation: got width $(width). Differentiate one direction at a " *
         "time, or open an issue if batching is needed.",
     ),
     )
@@ -71,7 +73,7 @@ function EnzymeRules.augmented_primal(
         F::Annotation{<:AbstractVector};
         kwargs...
 ) where {RT}
-    EnzymeRules.width(config) == 1 || _throw_batched(EnzymeRules.width(config))
+    EnzymeRules.width(config) == 1 || _throw_batched("pde_solve", "reverse", EnzymeRules.width(config))
     Bramble._check_square_for_adjoint(A.val)
 
     fact, u = _forward_solve(A.val, F.val, values(kwargs))
@@ -128,7 +130,7 @@ function EnzymeRules.reverse(
     end
 
     if _has_shadow(F)
-        F.dval .+= λ
+        _accumulate_shadow!(F.val, F.dval, λ)
     end
 
     # Enzyme's contract: a custom rule consumes the return cotangent it was handed. Leaving
@@ -206,13 +208,14 @@ EnzymeRules.inactive(::typeof(Bramble._copy_markers), args...) = nothing
 # The `CpuThreaded` engine entries' rules.
 include("BrambleEnzymeExt/threaded.jl")
 
-# The reverse rule for the forms of a relation of `constrained`.
+# The rules for `constrained`'s relations: their forms, the ghost blocks' dense solves and
+# the corner entries.
 include("BrambleEnzymeExt/relations.jl")
 
 # The rules for the solves beside `pde_solve(::SparseMatrixCSC, F)`.
 include("BrambleEnzymeExt/solvers.jl")
 
-# The rules that refuse a level-set mesh whose `φ` depends on the parameter.
+# The rules that refuse a level-set mesh whose `φ` or box depends on the parameter.
 include("BrambleEnzymeExt/geometry.jl")
 
 end

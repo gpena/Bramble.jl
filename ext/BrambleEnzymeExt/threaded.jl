@@ -1,15 +1,12 @@
 # threaded.jl: Enzyme rules for the `CpuThreaded` engine entries (gpena/Bramble.jl#369).
 #
-# Enzyme cannot differentiate the `Threads.@threads` loops of these entries. Up to 0.13.216
-# a bare loop threw `AssertionError: mi2 !== nothing` on Julia 1.13.3. From 0.13.219 a bare
-# loop passes, but with these rules deleted Enzyme 0.13.220 still aborts on the first
-# entry's closure (`LLVM ERROR: function failed verification`, 2026-11-17;
-# docs/notes/internals/enzyme_threaded.md). Each `CpuThreaded` engine entry, the function
-# whose only work is that loop (`_static_bands!`, `_static_for!`, `_static_scatter_for!`,
-# `_static_partials!`, the three bilinear and linear colour runners, `_kron_fused!` and the
-# `Threads.@spawn` `_mf_run_bands!`), gets rules here whose own derivative loops run under
-# `Threads.@threads :static`. No derivative loop calls a `_serial_*` engine or
-# `_static_or_serial`; a rule's primal is the entry's own call.
+# Enzyme cannot differentiate these entries' `Threads.@threads` loops (an LLVM verifier
+# abort; docs/notes/internals/enzyme_threaded.md). Each `CpuThreaded` engine entry, the
+# function whose only work is that loop (`_static_bands!`, `_static_for!`,
+# `_static_scatter_for!`, `_static_partials!`, the three bilinear and linear colour
+# runners, `_kron_fused!` and the `Threads.@spawn` `_mf_run_bands!`), gets rules here whose
+# own derivative loops run under `Threads.@threads :static`. No derivative loop calls a
+# `_serial_*` engine or `_static_or_serial`; a rule's primal is the entry's own call.
 #
 # `_threaded_bands_ref!`, the band runner's caller around `_static_or_serial`, gets the
 # runner's rules too, so Enzyme never compiles that `try` around the sweep's point (#1179).
@@ -130,7 +127,6 @@ end
     return nothing
 end
 
-# Clears every lane's `d_out`, one band per thread.
 function _zero_outs!(d_outs::Tuple, n::Int)
     _each_task(n) do b
         foreach(d -> _zero_lane!(d, n, b), d_outs)
@@ -252,13 +248,16 @@ function _fixed_forward(config, f::Union{_AverageBand, _CenteredBand}, n::Int, a
     W = Val(EnzymeRules.width(config))
     d_outs = _lanes(out, W)
     all(isnothing, d_outs) && return nothing
-    _average_forward!(f.val, d_outs, _lanes(in_ref, W), dims.val, _vals(Base.tail(Base.tail(Base.tail(args)))), n)
+    _average_forward!(f.val, d_outs, _lanes(in_ref, W), dims.val, _vals(args[4:end]), n)
     return nothing
 end
 
 # The difference tape: `in_ref`'s values when the spacing cotangent will read them, and the
 # spacing's, when later code overwrites them. `overwritten` counts `func` first, then `f`
-# and `nbands`, so `in_ref` is entry 5 and `h` entry 6.
+# and `nbands`, so `in_ref` is entry 5 and `h` entry 6. The flag is enough here. Both reach
+# the rule as arrays, and Enzyme flags a later write to an array (pinned in
+# test/ext/enzyme_threaded_ext.jl). Data behind a `Ref` or inside a `Broadcasted` slips
+# past it, so the closure entries copy unconditionally.
 function _fixed_tape(config, ::_DifferenceBand, args)
     _, in_ref, h = args
     ow = EnzymeRules.overwritten(config)
@@ -289,11 +288,10 @@ function _fixed_reverse(config, f::Union{_AverageBand, _CenteredBand}, n::Int, a
     d_outs = _lanes(out, W)
     all(isnothing, d_outs) && return nothing
     _average_reverse!(_adjoint_of(f.val), d_outs, _lanes(in_ref, W), dims.val,
-        _vals(Base.tail(Base.tail(Base.tail(args)))), n)
+        _vals(args[4:end]), n)
     return nothing
 end
 
-# The value behind a `Ref`, or the value itself.
 @inline _unref(x) = x
 @inline _unref(r::Base.RefValue) = r[]
 
@@ -357,10 +355,9 @@ end
     return nothing
 end
 
-# The slab loop behind its own barrier. Inlined into the task under `--check-bounds=yes`,
-# the point unwrapped from its `Ref` was copied to the stack with its pointer fields set
-# to -1 (a `memset` Enzyme's type analysis cannot type: `EnzymeNoTypeError`); passed as an
-# argument it is not.
+# The slab loop behind its own barrier. Inlined under `--check-bounds=yes`, the unwrapped
+# point is spilled with untyped padding (`EnzymeNoTypeError`); passed as an argument it is
+# not.
 @noinline function _band_slab!(pt::P, band, rest) where {P}
     for I in CartesianIndices((rest..., band))
         pt(I)

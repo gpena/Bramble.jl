@@ -19,8 +19,9 @@
 # writes the slab's `v` and its tangent. No two tasks write one entry.
 #
 # Reverse: each task runs Enzyme's reverse derivative of `_slab_dot(f, d_v, r)`, the sum of
-# `f(i) * d_v[i]` over its slab `r`, with `d_v` constant: the gradient of that sum in the
-# closure is the slab's pullback of `d_v`, and the pass never writes the user's `v`. Each
+# `f(i) * conj(d_v[i])` over its slab `r`, with `d_v` constant: the gradient of that sum in
+# the closure is the slab's pullback of `d_v` (Enzyme's gradient conjugates `∂f`, so `d_v`
+# enters conjugated), and the pass never writes the user's `v`. Each
 # slab then clears its own `d_v` entries, since `v` was overwritten. The closure's shadow
 # (the shadow of every array it captures) is written by every slab, so each task
 # accumulates into its own zeroed copy (`_graph_copy`, built on the host), and the host
@@ -31,7 +32,11 @@
 # `_sweep_for!` passes the kernel behind a `Ref`, since a by-value closure that mixes an array
 # with a plain number fails Enzyme's calling convention at the hook. The rules carry the
 # `Ref` through as the closure (its shadow a `Ref` of the closure's shadow), and the slab
-# functions unwrap it (`_kernel`), so a captured `Float64` gets its derivative too.
+# functions unwrap it (`_kernel`), so a captured `Float64` gets its derivative too. Reverse
+# hands a kernel that mixes the two to its slab thunk by value instead, as a
+# `MixedDuplicated` whose shadow is that `Ref` (`_slab_primal`): behind the `Ref`, Enzyme
+# drops a captured `Float32`'s derivative from a kernel that also holds arrays and `Int`s
+# (`Rₕ!`'s `_RₕKernel`, with its `CartesianIndices`).
 #
 # Under runtime activity, a captured array that is not differentiated arrives with the
 # primal itself as its shadow. Its per-task copy is a fresh zero array, so the reduction
@@ -62,8 +67,8 @@ end
     return view(idxs, (firstindex(idxs) - 1) .+ _band_range(Base.OneTo(length(idxs)), n, b))
 end
 @noinline function _rule_slab(idxs, n::Int, b::Int)
-    throw(ArgumentError("the Enzyme rules for `_batch_for!` take a range, a \
-        `CartesianIndices` or an index vector, not a $(typeof(idxs))"))
+    throw(ArgumentError("Enzyme under `CpuPolyester` differentiates a sweep over a range, \
+        a `CartesianIndices` or an index vector, not a $(typeof(idxs))"))
 end
 
 # The kernel itself, or the one `_sweep_for!` hands over behind a `Ref`.
@@ -82,16 +87,18 @@ end
     return nothing
 end
 
+# Each value is converted to `v`'s element type, as the primal's store converts it, so a
+# closure returning a wider type than `v` holds keeps the sum one type.
 @inline function _slab_dot(f::F, d_v, r) where {F}
     k = _kernel(f)
     s = zero(eltype(d_v))
     for i in r
-        s += _at(k, i) * @inbounds(d_v[i])
+        s += convert(eltype(d_v), _at(k, i)) * conj(@inbounds(d_v[i]))
     end
     return s
 end
 
-# Clears every lane's `d_v` over `idxs`, one `@batch` launch for all lanes.
+# One lane's `d_v` cleared over the slab `r`.
 @inline function _clear_lane!(d_v, r)
     d_v === nothing && return nothing
     for i in r
@@ -105,6 +112,7 @@ end
     return nothing
 end
 
+# Clears every lane's `d_v` over `idxs`, one `@batch` launch for all lanes.
 function _zero_slabs!(d_vs::Tuple, idxs)
     n = Threads.nthreads()
     @batch for b in 1:n
@@ -142,7 +150,8 @@ end
     return nothing
 end
 
-# The slab's sum of `g(i)[k] * d_mats[k][i]` over the live components.
+# The slab's sum of `g(i)[k] * conj(d_mats[k][i])` over the live components, each value
+# converted to its destination's element type, as in `_slab_dot`.
 @inline function _dot_scatter(f::F, d_mats, r) where {F}
     k = _kernel(f)
     s = zero(_lane_eltype(d_mats))
@@ -155,7 +164,8 @@ end
 @inline _dot_components(::Tuple{}, ::Tuple, i) = false
 @inline function _dot_components(ds::Tuple, vals::Tuple, i)
     d = ds[1]
-    head = isempty(d) ? zero(vals[1]) : vals[1] * @inbounds(d[i])
+    E = eltype(d)
+    head = isempty(d) ? zero(E) : convert(E, vals[1]) * conj(@inbounds(d[i]))
     return head + _dot_components(Base.tail(ds), Base.tail(vals), i)
 end
 
@@ -248,9 +258,11 @@ end
 @inline _task_annotation(f, df) = Duplicated(f, df)
 @inline _task_annotation(f::F, df::Base.RefValue{F}) where {F} = MixedDuplicated(f, df)
 
-# The scalar type of a lane: its array's element type, or a scatter lane's first one.
+# The scalar type of a lane: its array's element type, or, for a scatter lane, the promoted
+# type of all its destinations, so one real and one complex destination sum into a complex
+# dot in either order.
 _lane_eltype(d::AbstractArray) = eltype(d)
-_lane_eltype(d::Tuple) = _lane_eltype(d[1])
+_lane_eltype(d::Tuple) = promote_type(map(_lane_eltype, d)...)
 
 @inline function _reverse_lane!(p::_ReverseSlabs, d_v, df, r)
     d_v === nothing && return nothing
@@ -284,7 +296,7 @@ end
 # Every lane runs in each task of one `@batch` launch, through a width-1 thunk per lane:
 # a lane's seed is its own `d_v`, so the lanes share no batched call.
 function _batch_for_reverse!(handed::HD, take::TK, mode::M, dot::D, d_vs, idxs, fp::F,
-        f0::F, dfl, ::Type{FA}) where {HD, TK, M, D, F, FA}
+        f0::F0, dfl, ::Type{FA}) where {HD, TK, M, D, F, F0, FA}
     n = Threads.nthreads()
     R = typeof(_rule_slab(idxs, n, 1))
     DV = typeof(something(d_vs...))
@@ -452,19 +464,24 @@ end
 #   closure capturing a constant array otherwise throws `EnzymeRuntimeActivityError`.
 #
 # The reverse pass evaluates the closure again, so it must see the closure's captured data as
-# it was before this call. Two things can change it. Later code can (`overwritten`, which
-# counts `func` first, so `f` is entry 4). So can this very call, when the closure reads `v`
+# it was before this call. Two things can change it. Later code can, and `overwritten` does
+# not say so, since the closure arrives behind a fresh `Ref` whose entry stays false when the
+# data it captures is written after the call. So can this very call, when the closure reads `v`
 # (`i -> v[i]^2`) by any route: a capture, a view, a `Dict`, a `Memory` or a global. No walk
 # of the closure finds every route, so whenever `v` carries a shadow its values are kept from
-# before the primal (one copy of `v` per call), and put back in `v` for the reverse. A closure
-# whose data may change later is copied whole, before the primal too.
-# The augmented primal of a hook: `prim()` runs it, `f_overwritten` says whether the closure
-# is overwritten later (its position in the call's `overwritten` tuple).
-function _hook_augmented(config::RevConfig, hook::Symbol, ops, prim::P, f_overwritten::Bool,
-        v, idxs, f) where {P}
+# before the primal (one copy of `v` per call), and put back in `v` for the reverse. In that
+# case a closure that is not `Const` is copied whole before the primal too.
+#
+# A closure that reaches `v` through a global is not differentiated correctly: the slab's
+# own compilation does not see the shadow stored there (`@test_broken` in
+# test/ext/enzyme_polyester_ext.jl).
+#
+# The augmented primal of a hook: `prim()` runs it.
+function _hook_augmented(config::RevConfig, hook::Symbol, ops, prim::P, v, idxs,
+        f) where {P}
     _entered!(hook)
     shadowed = !all(isnothing, ops.lanes(v, Val(EnzymeRules.width(config))))
-    f_tape = !(f isa Const) && f_overwritten ? _graph_copy(f.val, false) : nothing
+    f_tape = !(f isa Const) && shadowed ? _graph_copy(f.val, false) : nothing
     v_tape = shadowed ? _snapshot(v.val) : nothing
     prim()
     return AugmentedReturn(nothing, nothing, (f_tape, v_tape))
@@ -495,9 +512,13 @@ end
 @inline _closure_shadow(f, w::Int) = _shadow(f, w)
 @inline _closure_shadow(f::MixedDuplicated, w::Int) = f.dval
 @inline _closure_shadow(f::BatchMixedDuplicated, w::Int) = f.dval[w]
-@noinline function _closure_shadow(f::Active, w::Int)
-    throw(ArgumentError("the Enzyme reverse rule for `_batch_for!` under CpuPolyester takes \
-        a closure that captures an array, not an active $(typeof(f.val)) of plain numbers"))
+
+# The closure as the slab thunk takes it: the kernel itself where the call site's `Ref` holds
+# one that mixes arrays with active numbers (its thunk annotation `MixedDuplicated`, the
+# `Ref` shadow its shadow), else as it came. See the header for why.
+@inline _slab_primal(f) = f
+@inline function _slab_primal(r::Base.RefValue{K}) where {K}
+    return Enzyme.guess_activity(K, Enzyme.Reverse) <: MixedDuplicated ? r[] : r
 end
 
 # The reverse rule of a hook: the lanes of `v`, the closure's shadow per lane (`f` as the
@@ -511,8 +532,8 @@ function _hook_reverse(config::RevConfig, ops, tape, v, idxs, f)
         _zero_slabs!(d_vs, idxs.val)
     else
         f_tape, v_tape = tape
-        fp = f_tape === nothing ? f.val : f_tape
-        FA = f isa Union{MixedDuplicated, BatchMixedDuplicated} ?
+        fp = _slab_primal(f_tape === nothing ? f.val : f_tape)
+        FA = f isa Union{MixedDuplicated, BatchMixedDuplicated} || !(fp isa typeof(f.val)) ?
              MixedDuplicated{typeof(fp)} : Duplicated{typeof(fp)}
         mode = Enzyme.set_runtime_activity(Enzyme.ReverseSplitNoPrimal,
             EnzymeRules.runtime_activity(config))
@@ -544,7 +565,7 @@ function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_BatchFor},
         ::Type{RT}, v::Annotation{<:AbstractArray}, idxs::Annotation,
         f::Annotation) where {RT}
     return _hook_augmented(config, :_batch_for!, _FOR_OPS,
-        () -> func.val(v.val, idxs.val, f.val), EnzymeRules.overwritten(config)[4], v, idxs, f)
+        () -> func.val(v.val, idxs.val, f.val), v, idxs, f)
 end
 
 function EnzymeRules.reverse(config::RevConfig, ::Const{_BatchFor}, ::Type{RT}, tape,
@@ -565,7 +586,7 @@ function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_AxisFor},
         ::Type{RT}, v::Annotation{<:AbstractArray}, idxs::Annotation,
         f::Annotation) where {RT}
     return _hook_augmented(config, :_batch_axis_for!, _FOR_OPS,
-        () -> func.val(v.val, idxs.val, f.val), EnzymeRules.overwritten(config)[4], v, idxs, f)
+        () -> func.val(v.val, idxs.val, f.val), v, idxs, f)
 end
 
 function EnzymeRules.reverse(config::RevConfig, ::Const{_AxisFor}, ::Type{RT}, tape,
@@ -585,8 +606,7 @@ end
 function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_ScatterFor},
         ::Type{RT}, mats::Annotation{<:Tuple}, idxs::Annotation, g::Annotation) where {RT}
     return _hook_augmented(config, :_batch_scatter_for!, _SCATTER_OPS,
-        () -> func.val(mats.val, idxs.val, g.val), EnzymeRules.overwritten(config)[4], mats,
-        idxs, g)
+        () -> func.val(mats.val, idxs.val, g.val), mats, idxs, g)
 end
 
 function EnzymeRules.reverse(config::RevConfig, ::Const{_ScatterFor}, ::Type{RT}, tape,
@@ -608,7 +628,7 @@ end
 function EnzymeRules.augmented_primal(config::RevConfig, func::Const{_BroadcastFor},
         ::Type{RT}, v::Annotation{<:AbstractVector}, bc::Annotation, ax::Annotation) where {RT}
     return _hook_augmented(config, :_batch_broadcast!, _FOR_OPS,
-        () -> func.val(v.val, bc.val, ax.val), EnzymeRules.overwritten(config)[3], v, ax, bc)
+        () -> func.val(v.val, bc.val, ax.val), v, ax, bc)
 end
 
 function EnzymeRules.reverse(config::RevConfig, ::Const{_BroadcastFor}, ::Type{RT}, tape,

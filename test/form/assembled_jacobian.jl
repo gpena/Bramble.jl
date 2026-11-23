@@ -307,8 +307,13 @@ end
 
     unread = form(W, W, (U, V) -> innerₕ(e * U, V))
     @test_throws ArgumentError jacobian_form(unread, dec)
+    @test occursin("matched by identity, `===`",
+        sprint(showerror, _refusal(() -> jacobian_form(unread, dec))))
     @test_throws ArgumentError jacobian_form(form(W, W, (U, V) -> innerₕ(c * U, V)), c => _r)
     @test_throws ArgumentError jacobian_form(form(W, W, (U, V) -> innerₕ(c * U, V)), dec, dec)
+    @test occursin("declare each grid function once",
+        sprint(showerror,
+            _refusal(() -> jacobian_form(form(W, W, (U, V) -> innerₕ(c * U, V)), dec, dec))))
     @test_throws ArgumentError jacobian_form(
         form(W, W, (U, V) -> innerₕ(c * U, V)), c => (U -> Mₕ(U), _r))
 end
@@ -320,6 +325,18 @@ end
         ay => (U -> Mₕ(U)[1], _α); dirichlet = :boundary)
     J = jacobian_prototype(jf)
     @test alloc_ok(alloc_test(jacobian!, J, jf, _state(W)))
+    # A complex state is refused by `jacobian!` itself, not by the `src/` fallback that
+    # asks for ForwardDiff, which is loaded here.
+    uc = complex.(_state(W), 0.1)
+    @test_throws ArgumentError jacobian!(J, jf, uc)
+    msg = sprint(showerror, _refusal(() -> jacobian!(J, jf, uc)))
+    @test occursin("u must not be complex, got eltype ComplexF64", msg)
+    @test !occursin("using ForwardDiff", msg)
+    # Real values in an abstract container are not refused: the Jacobian is `Float64.(u)`'s.
+    Jn = jacobian_prototype(jf)
+    jacobian!(J, jf, _state(W))
+    jacobian!(Jn, jf, Number[x for x in _state(W)])
+    @test isapprox(Jn, J; rtol = 1e-12)
 end
 
 end # module

@@ -90,19 +90,26 @@ w = zeros(ndofs(Vₕ))
 prep = prepare_jacobian(residual, sparse_ad, w)
 J = DifferentiationInterface.jacobian(residual, prep, sparse_ad, w)  # once, for its sparse structure
 newton_residuals = Float64[]
+newton_steps = Float64[]
 for it in 1:20
     r = residual(w)
     push!(newton_residuals, sqrt(sum(abs2, r)))
     newton_residuals[end] < 1e-10 && break
     DifferentiationInterface.jacobian!(residual, J, prep, sparse_ad, w)
-    w .-= J \ r
+    δ = J \ r
+    push!(newton_steps, maximum(abs, δ))
+    w .-= δ
 end
-length(newton_residuals), newton_residuals
+length(newton_residuals), newton_residuals, newton_steps
 
 # The assertions bound the count at 8, for the reason poisson_nonlinear.jl gives, and the   #src
-# last residual; the rendered list shows the quadratic decay.                               #src
+# last residual. The last Newton step is below the 3/2 power of the one before it, which a  #src
+# fixed linear rate of 0.1 cannot do, so the quadratic claim below is pinned, not just      #src
+# shown in the rendered list.                                                               #src
 @test length(newton_residuals) < 8                                                          #src
 @test newton_residuals[end] < 1e-10                                                         #src
+@test length(newton_steps) == length(newton_residuals) - 1                                  #src
+@test newton_steps[end] < newton_steps[end - 1]^1.5                                         #src
 
 # Convergence is quadratic, as in the single-species case. The solution, each species with
 # the mesh lines of the random grid:
