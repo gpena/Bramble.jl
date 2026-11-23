@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Automatic differentiation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=6137ccc4">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=2b921263">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Automatic differentiation — Bramble.jl">
   <meta property="og:title" content="Automatic differentiation — Bramble.jl">
@@ -108,8 +108,8 @@
 <h1 id="tutorial_autodiff" class="md-heading">Automatic differentiation<a href="#tutorial_autodiff" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p><strong>What you will learn.</strong> How to differentiate a discrete quantity with respect to a parameter: a scalar, several parameters, a linear solve, a matrix, a nonlinear residual, the relation data of a ghost space and a semidiscrete right-hand side, and how to choose between the two backends.</p>
 <p><strong>What you need first.</strong> The <a href="../../tutorials/space/#tutorial_space">space tutorial</a>, for grid spaces and discrete functions, the <a href="../../tutorials/operators/#tutorial_operators">operators tutorial</a>, and the <a href="../../tutorials/form/#tutorial_form">form tutorial</a>, for assembling a system with Dirichlet conditions.</p>
-<p>Bramble&#39;s operators, grid functions and forms are generic over the scalar type, so a discrete quantity can be differentiated with respect to the parameter that produced it. Derivatives go through <a href="https://github.com/JuliaDiff/DifferentiationInterface.jl">DifferentiationInterface.jl</a> (DI), so the objective stays the same function whichever backend differentiates it. Two backends are offered: <code class="md-code-inline">AutoForwardDiff()</code> and <code class="md-code-inline">AutoEnzyme()</code>, which runs in reverse mode below and also in forward mode.</p>
-<p>Each differentiating block ends in an assertion against a non-AD oracle: central differences, exact up to rounding for the quadratic objectives here, or a closed form.</p>
+<p>Bramble&#39;s operators, grid functions and forms are generic over the scalar type, so a discrete quantity can be differentiated with respect to the parameter that produced it. Derivatives go through <a href="https://github.com/JuliaDiff/DifferentiationInterface.jl">DifferentiationInterface.jl</a> (DI), so the objective stays the same function whichever backend differentiates it. Two backends are offered: <code class="md-code-inline">AutoForwardDiff()</code> and <code class="md-code-inline">AutoEnzyme()</code>. Enzyme runs in reverse mode below, and in forward mode as <code class="md-code-inline">AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Forward), function_annotation = Enzyme.Const)</code>.</p>
+<p>Each differentiating block asserts against a non-AD oracle, central differences (exact up to rounding for the quadratic objectives here) or a closed form, and then shows the derivative.</p>
 <h2 id="Differentiate-with-respect-to-a-scalar" class="md-heading">Differentiate with respect to a scalar<a href="#Differentiate-with-respect-to-a-scalar" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Take the discrete energy of a scaled sine, as a function of the scale <span class="md-math md-math-inline">\(a\)</span>:</p>
 <div class="md-math md-math-display">
@@ -132,9 +132,10 @@ end
 
 a_val = 2.0
 dJ = DifferentiationInterface.derivative(energy, AutoForwardDiff(), a_val)
-round(dJ, digits = 4)
-@assert isapprox(dJ, 2 * a_val * energy(1.0); rtol = 1e-12)</code></pre>
+@assert isapprox(dJ, 2 * a_val * energy(1.0); rtol = 1e-12)
+round(dJ, digits = 4)</code></pre>
 </div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1.9945</code></pre>
 </div>
 <p><code class="md-code-inline">energy</code> restricts a function to the grid and takes its discrete norm. Nothing in it mentions differentiation.</p>
 <h2 id="Differentiate-with-respect-to-several-parameters" class="md-heading">Differentiate with respect to several parameters<a href="#Differentiate-with-respect-to-several-parameters" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -158,9 +159,12 @@ end
 
 p0 = [1.0, 2.0]
 g_forward = DifferentiationInterface.gradient(loss, AutoForwardDiff(), p0)
-round.(g_forward, digits = 4)
-@assert isapprox(g_forward, fd_gradient(loss, p0); rtol = 1e-8, atol = 1e-8)</code></pre>
+@assert isapprox(g_forward, fd_gradient(loss, p0); rtol = 1e-8, atol = 1e-8)
+round.(g_forward, digits = 4)</code></pre>
 </div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
+ 16.3858
+  4.2464</code></pre>
 </div>
 <p>Reverse mode with Enzyme differentiates the same function. Enzyme needs two annotations whenever the closure captures a mesh or a grid space, which in this package it almost always does. <code class="md-code-inline">set_runtime_activity</code> lets Enzyme track activity through the captured geometry, and <code class="md-code-inline">Enzyme.Const</code> declares the function object, which holds those references, as not differentiated.</p>
 <div class="md-multi-output">
@@ -173,9 +177,12 @@ enzyme_backend = AutoEnzyme(;
     function_annotation = Enzyme.Const)
 
 g_enzyme = DifferentiationInterface.gradient(loss, enzyme_backend, p0)
-round.(g_enzyme, digits = 4)
-@assert isapprox(g_enzyme, fd_gradient(loss, p0); rtol = 1e-8, atol = 1e-8)</code></pre>
+@assert isapprox(g_enzyme, fd_gradient(loss, p0); rtol = 1e-8, atol = 1e-8)
+round.(g_enzyme, digits = 4)</code></pre>
 </div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
+ 16.3858
+  4.2464</code></pre>
 </div>
 <h2 id="Differentiate-through-a-linear-solve" class="md-heading">Differentiate through a linear solve<a href="#Differentiate-through-a-linear-solve" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>A parameter can enter the boundary data and the source of a linear system <span class="md-math md-math-inline">\(A u = F(\mathbf{p})\)</span> while <span class="md-math md-math-inline">\(A\)</span> stays fixed. Three things matter:</p>
@@ -207,9 +214,12 @@ end
 
 p_init = [1.0, 2.0]
 grad_solve = DifferentiationInterface.gradient(solve_objective, AutoForwardDiff(), p_init)
-round.(grad_solve, digits = 4)
-@assert isapprox(grad_solve, fd_gradient(solve_objective, p_init); rtol = 1e-8, atol = 1e-8)</code></pre>
+@assert isapprox(grad_solve, fd_gradient(solve_objective, p_init); rtol = 1e-8, atol = 1e-8)
+round.(grad_solve, digits = 4)</code></pre>
 </div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
+ 71.3053
+  4.2405</code></pre>
 </div>
 <p>The two entries are the sensitivities with respect to the boundary value and the source scale.</p>
 <p>The same objective differentiates in reverse mode, because <a href="../../api/solvers/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a> carries its own <code class="md-code-inline">EnzymeRules</code> adjoint:</p>
@@ -217,11 +227,12 @@ round.(grad_solve, digits = 4)
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">g_solve_enzyme = DifferentiationInterface.gradient(solve_objective, enzyme_backend, p_init)
-round.(g_solve_enzyme, digits = 4)
-@assert isapprox(g_solve_enzyme, fd_gradient(solve_objective, p_init); rtol = 1e-8, atol = 1e-8)</code></pre>
+@assert isapprox(g_solve_enzyme, fd_gradient(solve_objective, p_init); rtol = 1e-8, atol = 1e-8)
+round.(g_solve_enzyme, digits = 4)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi"><span class="sgr33"><span class="sgr1">┌ Warning: </span></span>Using fallback BLAS replacements for ([&quot;dasum_64_&quot;]), performance may be degraded
-<span class="sgr33"><span class="sgr1">└ </span></span><span class="sgr90">@ Enzyme.Compiler ~/.julia/packages/Enzyme/2qUhb/src/compiler.jl:6779</span></code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
+ 71.3053
+  4.2405</code></pre>
 </div>
 <h2 id="Differentiate-through-a-matrix" class="md-heading">Differentiate through a matrix<a href="#Differentiate-through-a-matrix" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>A parameter in a coefficient enters the matrix itself. Here the diffusion scale is <span class="md-math md-math-inline">\(p_1\)</span>, and the objective is the squared norm of the solution:</p>
@@ -237,9 +248,11 @@ function matrix_objective(p)
 end
 
 g_matrix = DifferentiationInterface.gradient(matrix_objective, AutoForwardDiff(), [1.5])
-round.(g_matrix, digits = 4)
-@assert isapprox(g_matrix, fd_gradient(matrix_objective, [1.5]; h = 1e-5); rtol = 1e-6)</code></pre>
+@assert isapprox(g_matrix, fd_gradient(matrix_objective, [1.5]; h = 1e-5); rtol = 1e-6)
+round.(g_matrix, digits = 4)</code></pre>
 </div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1-element Vector{Float64}:
+ -0.0873</code></pre>
 </div>
 <p>A <code class="md-code-inline">Dual</code> matrix goes to <code class="md-code-inline">pde_solve</code> directly, as the load does above. A non-square <code class="md-code-inline">Dual</code> matrix throws an <code class="md-code-inline">ArgumentError</code>: the derivative of a least-squares solve has a residual term that this path does not compute.</p>
 <h2 id="Differentiate-a-nonlinear-residual" class="md-heading">Differentiate a nonlinear residual<a href="#Differentiate-a-nonlinear-residual" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -271,8 +284,6 @@ u0 = parent(Rₕ(Wₕ, x -&gt; 0.5 * sin(π * x[1])))   # nonzero state, so the 
 prep = DifferentiationInterface.prepare_jacobian(pde_residual, sparse_backend, u0)
 J = DifferentiationInterface.jacobian(pde_residual, prep, sparse_backend, u0)
 
-size(J), nnz(J)
-
 function fd_jacobian(f, u; h = 1e-6)
     n = length(u)
     cols = [(f(u .+ h .* (1:n .== j)) - f(u .- h .* (1:n .== j))) / (2h) for j in 1:n]
@@ -280,10 +291,12 @@ function fd_jacobian(f, u; h = 1e-6)
 end
 
 J_fd = fd_jacobian(pde_residual, u0)
-@assert maximum(abs, Matrix(J) - J_fd) &lt;= 1e-7 * maximum(abs, J_fd)</code></pre>
+@assert maximum(abs, Matrix(J) - J_fd) &lt;= 1e-7 * maximum(abs, J_fd)
+size(J), nnz(J)</code></pre>
 </div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((32, 32), 94)</code></pre>
 </div>
-<p>The Jacobian is sparse: the Jacobian stores only the stencil&#39;s entries. <code class="md-code-inline">prepare_jacobian</code> does the detection and colouring once, and <code class="md-code-inline">jacobian</code> reuses it at every point. The last line compares every entry with a central difference of the residual, one column at a time.</p>
+<p><code class="md-code-inline">jacobian</code> returns the stencil&#39;s entries only. <code class="md-code-inline">prepare_jacobian</code> does the detection and colouring once, and <code class="md-code-inline">jacobian</code> reuses it at every point. The assertion compares every entry with a central difference of the residual, one column at a time.</p>
 <h3 id="Skip-the-tracer" class="md-heading">Skip the tracer<a href="#Skip-the-tracer" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p><code class="md-code-inline">TracerSparsityDetector</code> works for any Julia function, so it has to run <code class="md-code-inline">pde_residual</code> once to find the pattern. Here that is wasted effort. The matrix comes from a <code class="md-code-inline">BilinearForm</code>, and a form&#39;s sparsity is already known from its AST. <a href="../../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a> reads the pattern off the form and widens it by how each coefficient depends on the unknown.</p>
 <p>In this residual <code class="md-code-inline">αvals</code> is a pointwise function of <code class="md-code-inline">uₕ</code> at the same grid point, with no averaging, so its dependency is just the trial placeholder <code class="md-code-inline">U -&gt; U</code>. <a href="../../api/forms/#Bramble.ast_sparsity_detector"><code class="md-code-inline">ast_sparsity_detector</code></a> hands the result to <code class="md-code-inline">AutoSparse</code> in place of the tracer:</p>
@@ -303,10 +316,12 @@ prep_native = DifferentiationInterface.prepare_jacobian(pde_residual, native_bac
 J_native = DifferentiationInterface.jacobian(pde_residual, prep_native, native_backend, u0)
 
 @assert J == J_native
-@assert maximum(abs, Matrix(J_native) - J_fd) &lt;= 1e-7 * maximum(abs, J_fd)</code></pre>
+@assert maximum(abs, Matrix(J_native) - J_fd) &lt;= 1e-7 * maximum(abs, J_fd)
+size(J_native), nnz(J_native)</code></pre>
 </div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((32, 32), 94)</code></pre>
 </div>
-<p><code class="md-code-inline">a_for_pattern</code> only needs some concrete coefficient to build a <code class="md-code-inline">BilinearForm</code>. Any concrete coefficient builds it, because the pattern is a property of the AST. The Jacobian is the same, and no tracing pass runs to find it. The detector applies when the residual&#39;s matrix is assembled from a <code class="md-code-inline">BilinearForm</code>. The <a href="../../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a> docstring gives the rules, and the <a href="../../examples/coupled_reaction_diffusion/">coupled reaction-diffusion example</a> uses the same detector on a coupled system. Keep <code class="md-code-inline">TracerSparsityDetector</code> for a matrix built some other way.</p>
+<p><code class="md-code-inline">a_for_pattern</code> only needs some concrete coefficient to build a <code class="md-code-inline">BilinearForm</code>. The detector applies when the residual&#39;s matrix is assembled from a <code class="md-code-inline">BilinearForm</code>. The <a href="../../api/forms/#Bramble.jacobian_pattern"><code class="md-code-inline">jacobian_pattern</code></a> docstring gives the rules, and the <a href="../../examples/coupled_reaction_diffusion/">coupled reaction-diffusion example</a> uses the same detector on a coupled system. Keep <code class="md-code-inline">TracerSparsityDetector</code> for a matrix built some other way.</p>
 <h2 id="Differentiate-ghost-relation-data" class="md-heading">Differentiate ghost relation data<a href="#Differentiate-ghost-relation-data" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>A constrained ghost space carries its boundary conditions as relations (see the <a href="../../tutorials/ghost/#form_ghost">ghost point tutorial</a>). A relation&#39;s data may depend on the parameter, and the derivative reaches the solution through the lift of that data into the load:</p>
 <div class="md-multi-output">
@@ -321,9 +336,11 @@ J_native = DifferentiationInterface.jacobian(pde_residual, prep_native, native_b
 end
 
 g_ghost = DifferentiationInterface.gradient(ghost_objective, AutoForwardDiff(), [1.0])
-round.(g_ghost, digits = 4)
-@assert isapprox(g_ghost, fd_gradient(ghost_objective, [1.0]); rtol = 1e-8, atol = 1e-8)</code></pre>
+@assert isapprox(g_ghost, fd_gradient(ghost_objective, [1.0]); rtol = 1e-8, atol = 1e-8)
+round.(g_ghost, digits = 4)</code></pre>
 </div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1-element Vector{Float64}:
+ 117.2229</code></pre>
 </div>
 <p>The solution is affine in the boundary datum, so the objective is quadratic in <span class="md-math md-math-inline">\(p_1\)</span>.</p>
 <h2 id="Differentiate-a-semidiscrete-right-hand-side" class="md-heading">Differentiate a semidiscrete right-hand side<a href="#Differentiate-a-semidiscrete-right-hand-side" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -348,8 +365,10 @@ J_rhs = DifferentiationInterface.jacobian(rhs_at, AutoForwardDiff(), u_rhs)
 # The right-hand side is affine in the state, so differences of Float64 evaluations are exact.
 unit(n, j) = Float64.(1:n .== j)
 cols = [rhs_at(u_rhs .+ unit(length(u_rhs), j)) - rhs_at(u_rhs) for j in eachindex(u_rhs)]
-@assert isapprox(J_rhs, reduce(hcat, cols); rtol = 1e-10)</code></pre>
+@assert isapprox(J_rhs, reduce(hcat, cols); rtol = 1e-10)
+size(J_rhs)</code></pre>
 </div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(32, 32)</code></pre>
 </div>
 <p><a href="../../api_sciml/#Bramble.semidiscretize"><code class="md-code-inline">semidiscretize</code></a> takes a <code class="md-code-inline">hook_reads_state</code> keyword next to <code class="md-code-inline">update_coefficients!</code>. Give <code class="md-code-inline">hook_reads_state = false</code> only when the hook reads no state, such as a source that depends on <span class="md-math md-math-inline">\(t\)</span> alone: then the <code class="md-code-inline">Dual</code> Jacobian is exact. A hook that does read the state keeps the default, and the docstring gives the details.</p>
 <h2 id="autodiff_backends" class="md-heading">Reference: choosing a backend<a href="#autodiff_backends" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -373,14 +392,28 @@ cols = [rhs_at(u_rhs .+ unit(length(u_rhs), j)) - rhs_at(u_rhs) for j in eachind
 </tr>
 <tr>
 <td style="text-align:left">Enzyme</td>
-<td style="text-align:left">reverse; forward everywhere except through <code class="md-code-inline">pde_solve</code></td>
+<td style="text-align:left">reverse and forward; limits below</td>
 <td style="text-align:left">about 16 parameters or more and a scalar objective</td>
 <td style="text-align:left"><code class="md-code-inline">AutoEnzyme</code> with the annotations shown above</td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>One reverse sweep replaces one forward sweep per parameter. Enzyme and ChainRulesCore (reverse) have an adjoint rule for <code class="md-code-inline">pde_solve</code>; DI uses the Enzyme one. Forward-mode Enzyme through <code class="md-code-inline">pde_solve</code> throws an <code class="md-code-inline">EnzymeNoDerivativeError</code>.</p>
+<p>One reverse sweep replaces one forward sweep per parameter. Enzyme and ChainRulesCore (reverse) have an adjoint rule for <code class="md-code-inline">pde_solve</code>, and Enzyme has a forward rule too; DI uses them.</p>
+<h3 id="Limits" class="md-heading">Limits<a href="#Limits" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
+<ul class="md-list-tight">
+<li><p>Enzyme&#39;s reverse rule for <code class="md-code-inline">pde_solve</code> takes one direction at a time. A batched (vector-mode) reverse call throws an <code class="md-code-inline">ArgumentError</code>. DI&#39;s reverse <code class="md-code-inline">jacobian</code> of a vector output is batched, so it is refused the same way; differentiate a scalar objective with <code class="md-code-inline">gradient</code>.</p>
+</li>
+<li><p>Enzyme cannot differentiate a factorization built inside the differentiated function: <code class="md-code-inline">pde_solve(sparse_factorize(A), F)</code> with <code class="md-code-inline">A</code> active throws an <code class="md-code-inline">IllegalTypeAnalysisException</code> in both modes. Pass <code class="md-code-inline">A</code> to <code class="md-code-inline">pde_solve</code> directly.</p>
+</li>
+<li><p>ForwardDiff throws an <code class="md-code-inline">ArgumentError</code> on <code class="md-code-inline">pde_solve(RankOneUpdate(...), F)</code>. Enzyme differentiates it.</p>
+</li>
+<li><p>Enzyme pays a large first-call compile cost: about 100 s for the <code class="md-code-inline">pde_solve</code> adjoint, and minutes and several GB for a threaded ghost assemble, against seconds for ForwardDiff. On a dense gradient the per-call crossover lies between 4 and 16 parameters, so a switch at 16 repays the compile only over many calls.</p>
+</li>
+<li><p>Both backends differentiate under <code class="md-code-inline">CpuSerial</code>, <code class="md-code-inline">CpuThreaded</code> and <code class="md-code-inline">CpuPolyester</code>. <code class="md-code-inline">CpuPolyester</code> under Enzyme needs <code class="md-code-inline">using Polyester</code>, which loads <code class="md-code-inline">BrambleEnzymePolyesterExt</code>. The coverage matrix marks the cells not run.</p>
+</li>
+</ul>
+<p>The full matrix of what each backend differentiates, with the failures, is in <code class="md-code-inline">docs/notes/internals/ad_coverage.md</code> in the repository.</p>
 <p>Sparse forward mode stays competitive on large meshes: a Cartesian difference stencil needs the same handful of colours at every resolution.</p>
 <p>Bramble offers no other AD backend. The measurements behind the choice are in the repository&#39;s notes.</p>
       </article>
@@ -400,6 +433,7 @@ cols = [rhs_at(u_rhs .+ unit(length(u_rhs), j)) - rhs_at(u_rhs) for j in eachind
           <a class="md-toc-link md-toc-h2" href="#Differentiate-ghost-relation-data">Differentiate ghost relation data</a>
           <a class="md-toc-link md-toc-h2" href="#Differentiate-a-semidiscrete-right-hand-side">Differentiate a semidiscrete right-hand side</a>
           <a class="md-toc-link md-toc-h2" href="#autodiff_backends">Reference: choosing a backend</a>
+            <a class="md-toc-link md-toc-h3" href="#Limits">Limits</a>
       </div>
     </aside>
   </div>
@@ -417,6 +451,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=6137ccc4"></script>
+  <script src="../../assets/materialdocs.js?v=2b921263"></script>
 </body>
 </html>

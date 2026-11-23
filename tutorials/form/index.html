@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear and bilinear forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b253778e">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=619b9e76">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Linear and bilinear forms — Bramble.jl">
   <meta property="og:title" content="Linear and bilinear forms — Bramble.jl">
@@ -142,18 +142,23 @@ l = form(Wₕ, v -&gt; innerₕ(fₕ, v))</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">b = assemble(l)
+@assert length(b) == 33
+@assert !all(iszero, b)
+@assert abs(sum(b) - 2 / π) &lt; 1e-3
 length(b), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808496)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808495)</code></pre>
 </div>
+<p>The sum is the trapezoid rule for <span class="md-math md-math-inline">\(\int_0^1 \sin(\pi x)\,dx = 2/\pi\)</span>, within 1e-3 on 33 points.</p>
 <p>In a time loop, <code class="md-code-inline">assemble!</code> refills an existing vector with zero allocations:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">assemble!(b, l)
+@assert abs(sum(b) - 2 / π) &lt; 1e-3  # refilled, not added to the old values
 sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808496</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808495</code></pre>
 </div>
 <h3 id="Live-grid-coefficients-and-dynamic-scalars" class="md-heading">Live grid coefficients and dynamic scalars<a href="#Live-grid-coefficients-and-dynamic-scalars" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>A form keeps direct references to its coefficient arrays. Overwrite a grid function in place with <code class="md-code-inline">Rₕ!(fₕ, ...)</code> or <code class="md-code-inline">parent(fₕ) .= ...</code> between steps, and the next <code class="md-code-inline">assemble!(b, l)</code> reads the new values with no allocation and no rebuilt form.</p>
@@ -166,9 +171,10 @@ l_dyn = form(Wₕ, v -&gt; α * innerₕ(fₕ, v))
 b_dyn = assemble(l_dyn)
 α[] = 2.0
 assemble!(b_dyn, l_dyn)
-sum(b_dyn) ≈ 2 * sum(b)</code></pre>
+@assert abs(sum(b_dyn) - 4 / π) &lt; 2e-3
+sum(b_dyn)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1.272216726561699</code></pre>
 </div>
 <h2 id="Contracting-without-a-vector" class="md-heading">Contracting without a vector<a href="#Contracting-without-a-vector" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>To get only the number <span class="md-math md-math-inline">\(\ell(v_h)\)</span>, call the form:</p>
@@ -176,9 +182,11 @@ sum(b_dyn) ≈ 2 * sum(b)</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">oneₕ = Rₕ(Wₕ, x -&gt; 1.0)
+@assert abs(l(oneₕ) - 2 / π) &lt; 1e-3
+@assert l(oneₕ) ≈ sum(b)
 l(oneₕ), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808496)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808495)</code></pre>
 </div>
 <p>Against the all-ones grid function a linear form is the sum of its assembled vector. <code class="md-code-inline">l(oneₕ)</code> builds no vector and allocates nothing; prefer it when the result is a scalar.</p>
 <p><code class="md-code-inline">evaluate!</code> is the middle case. It takes a scratch vector, fills it with the assembled vector and returns the contraction:</p>
@@ -186,7 +194,10 @@ l(oneₕ), sum(b)</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">scratch = zeros(length(b))
-evaluate!(scratch, l, oneₕ)</code></pre>
+contraction = evaluate!(scratch, l, oneₕ)
+@assert !all(iszero, scratch)
+@assert abs(contraction - 2 / π) &lt; 1e-3
+contraction</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808496</code></pre>
 </div>
@@ -198,6 +209,9 @@ evaluate!(scratch, l, oneₕ)</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v), :x))
 A = assemble(a)
+@assert nnz(A) == 3 * 33 - 2
+@assert !all(iszero, A)
+@assert A[1, 1] ≈ 32 &amp;&amp; A[2, 2] ≈ 64 &amp;&amp; A[1, 2] ≈ -32  # 1/h and 2/h on the diagonal, -1/h off it
 size(A), nnz(A)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">((33, 33), 97)</code></pre>
@@ -212,9 +226,9 @@ size(A), nnz(A)</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">A2 = allocate_system_matrix(a)
 assemble!(A2, a)
-A2 ≈ A</code></pre>
+@assert !all(iszero, A2)
+@assert A2 ≈ A</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
 <p>Build the pattern once outside a time loop and call <code class="md-code-inline">assemble!</code> inside it.</p>
 <p><code class="md-code-inline">a</code> pairs the same <code class="md-code-inline">D₋ₓ</code> on both sides, so it is symmetric. The weight <code class="md-code-inline">inner₊ₓ</code> carries is positive, so it is also positive semi-definite. <code class="md-code-inline">issymmetric</code> and <code class="md-code-inline">isposdef</code> answer from the expression alone, without assembling anything:</p>
@@ -222,17 +236,16 @@ A2 ≈ A</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">using LinearAlgebra: issymmetric, isposdef
-issymmetric(a), isposdef(a)</code></pre>
+@assert issymmetric(a)
+@assert isposdef(a)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">c = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(u, ∇ₕ(v)))
-issymmetric(c)  # different operators either side</code></pre>
+@assert !issymmetric(c)  # different operators either side</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">false</code></pre>
 </div>
 <p>A positive answer means <code class="md-code-inline">cholesky</code> is the factorization to try first. <code class="md-code-inline">isposdef</code> answers for semi-definiteness: this matrix has the constants in its kernel, so it is singular until the Dirichlet conditions below are applied.</p>
 <h2 id="form_dirichlet" class="md-heading">Dirichlet conditions and a Poisson problem<a href="#form_dirichlet" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -249,7 +262,8 @@ ad = form(Wd, Wd, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v), :x))
 ld = form(Wd, v -&gt; innerₕ(fd, v))
 
 Ad = assemble(ad)
-bd = assemble(ld)</code></pre>
+bd = assemble(ld)
+@assert !all(iszero, Ad) &amp;&amp; !all(iszero, bd)</code></pre>
 </div>
 </div>
 <p><a href="../../api/forms/#Bramble.dirichlet_constraints"><code class="md-code-inline">dirichlet_constraints</code></a> records the values and <a href="../../api/forms/#Bramble.dirichlet_bc!"><code class="md-code-inline">dirichlet_bc!</code></a> applies them: to the matrix by replacing the constrained rows, and to the vector by writing the boundary values in. <code class="md-code-inline">dirichlet_constraints</code> takes the mesh, a <code class="md-code-inline">Domain</code> or a grid space directly.</p>
@@ -258,7 +272,9 @@ bd = assemble(ld)</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">bcs = dirichlet_constraints(Ωd, :left =&gt; (x -&gt; 0.0), :right =&gt; (x -&gt; 0.0))
 dirichlet_bc!(Ad, Ωd, :left, :right)
-dirichlet_bc!(bd, Ωd, bcs, :left, :right)</code></pre>
+dirichlet_bc!(bd, Ωd, bcs, :left, :right)
+@assert Ad[1, 1] == 1 &amp;&amp; Ad[1, 2] == 0 &amp;&amp; Ad[33, 33] == 1 &amp;&amp; Ad[33, 32] == 0
+@assert bd[1] == 0 &amp;&amp; bd[33] == 0 &amp;&amp; bd[2] &gt; 0</code></pre>
 </div>
 </div>
 <p>Solving <span class="md-math md-math-inline">\(-u&#39;&#39; = \pi^2 \sin(\pi x)\)</span> with <span class="md-math md-math-inline">\(u(0) = u(1) = 0\)</span> gives <span class="md-math md-math-inline">\(u = \sin(\pi x)\)</span>:</p>
@@ -267,11 +283,13 @@ dirichlet_bc!(bd, Ωd, bcs, :left, :right)</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">uh = Ad \ bd
 exact = Rₕ(Wd, x -&gt; sin(π * x))
+@assert abs(maximum(abs, uh) - 1) &lt; 1.1e-3  # the peak of sin(πx) is 1
+@assert abs(maximum(abs, uh .- parent(exact)) - π^2 / (12 * 32^2)) &lt; 1e-6
 maximum(abs, uh .- parent(exact))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">0.0008035776793697824</code></pre>
 </div>
-<p>The error is 8e-4 on 33 points.</p>
+<p>The error is 8e-4 on 33 points, the <span class="md-math md-math-inline">\((\pi h)^2/12\)</span> of a second-order scheme with <span class="md-math md-math-inline">\(h = 1/32\)</span>.</p>
 <p>The figure draws <code class="md-code-inline">uh</code> over the exact solution, and below it the pointwise error with its own scale:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -301,24 +319,22 @@ maximum(abs, uh .- parent(exact))</code></pre>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">issymmetric(ad)          # true: the form is symmetric before any boundary condition</code></pre>
+<pre><code class="language-julia">@assert issymmetric(ad)  # the form is symmetric before any boundary condition</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">issymmetric(Matrix(Ad))  # false: dirichlet_bc! replaced the constrained rows</code></pre>
+<pre><code class="language-julia">@assert !issymmetric(Matrix(Ad))  # dirichlet_bc! replaced the constrained rows</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">false</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">symmetrize!(Ad, bd, Ωd, :left, :right)
-issymmetric(Matrix(Ad))  # true again, and the solution above is unchanged</code></pre>
+@assert issymmetric(Matrix(Ad))  # symmetric again
+@assert Ad \ bd ≈ uh  # and the solution above is unchanged</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
 <p><code class="md-code-inline">issymmetric(ad)</code> describes the expression, so it stays <code class="md-code-inline">true</code> after <code class="md-code-inline">dirichlet_bc!</code> changes the matrix.</p>
 <p>To constrain one block of a coupled system and leave another free, see <a href="../../tutorials/coupled_systems/#coupled_one_block">Coupled systems</a>.</p>
@@ -328,9 +344,15 @@ issymmetric(Matrix(Ad))  # true again, and the solution above is unchanged</code
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">uh_elt = element(Wd, uh)
-reaction(ad, ld, uh_elt; marker = :left), reaction(ad, ld, uh_elt; marker = :right)</code></pre>
+r_left = reaction(ad, ld, uh_elt; marker = :left)
+r_right = reaction(ad, ld, uh_elt; marker = :right)
+net_source = sum(assemble(ld))
+@assert r_left + r_right ≈ net_source
+@assert round(net_source; digits = 4) == 6.2781
+@assert abs(r_left - π) &lt; 5e-3 &amp;&amp; abs(r_right - π) &lt; 5e-3
+r_left, r_right, net_source</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(3.139068950903201, 3.139068950903206)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(3.139068950903201, 3.139068950903206, 6.278137901806422)</code></pre>
 </div>
 <p>Both come out near <span class="md-math md-math-inline">\(\pi\)</span>. For <span class="md-math md-math-inline">\(u = \sin(\pi x)\)</span> the flux <span class="md-math md-math-inline">\(-u&#39;\)</span> leaving the domain is <span class="md-math md-math-inline">\(\pi\)</span> at each end, and the two together recover the discrete net source <span class="md-math md-math-inline">\((f_h, 1)_h\)</span> to round-off at any resolution, which approaches <span class="md-math md-math-inline">\(2\pi\)</span> at second order (<span class="md-math md-math-inline">\(6.2781\)</span> here). The sign convention is in the docstring of <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>; <a href="../../api/forms/#Bramble.reaction_density"><code class="md-code-inline">reaction_density</code></a> gives the pointwise quantity, suitable for <a href="../../api/exporters/#Bramble.export_vtk"><code class="md-code-inline">export_vtk</code></a>.</p>
 <h2 id="Restricting-a-term-to-part-of-the-mesh" class="md-heading">Restricting a term to part of the mesh<a href="#Restricting-a-term-to-part-of-the-mesh" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -339,7 +361,9 @@ reaction(ad, ld, uh_elt; marker = :left), reaction(ad, ld, uh_elt; marker = :rig
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">a_left = form(Wd, Wd, (u, v) -&gt; innerₕ(u, v; markers = (:left,)))
-size(assemble(a_left))</code></pre>
+M_left = assemble(a_left)
+@assert nnz(M_left) == 1 &amp;&amp; M_left[1, 1] ≈ 1 / 64  # half a cell, h / 2
+size(M_left)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 33)</code></pre>
 </div>
@@ -348,7 +372,9 @@ size(assemble(a_left))</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">a_boundary = form(Wd, Wd, (u, v) -&gt; innerₕ(u, v; markers = (:boundary,)))
-size(assemble(a_boundary))</code></pre>
+M_boundary = assemble(a_boundary)
+@assert nnz(M_boundary) == 2 &amp;&amp; M_boundary[1, 1] ≈ 1 / 64 &amp;&amp; M_boundary[33, 33] ≈ 1 / 64  # two half cells
+size(M_boundary)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 33)</code></pre>
 </div>
@@ -359,6 +385,9 @@ size(assemble(a_boundary))</code></pre>
 <pre><code class="language-julia">β, g = 1.7, x -&gt; 2.0 + x[1]
 a_robin = form(Wd, Wd, (u, v) -&gt; inner_Γ(β * u, v; markers = (:xmax,)))
 l_neumann = form(Wd, v -&gt; inner_Γ(g, v; markers = (:xmax,)))
+@assert sum(assemble(l_neumann)) ≈ 3.0  # g(1) = 2 + 1
+A_r = assemble(a_robin)
+@assert A_r[33, 33] ≈ 1.7 &amp;&amp; count(!iszero, A_r) == 1  # β on the x = 1 node only
 sum(assemble(l_neumann))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">3.0</code></pre>
@@ -368,13 +397,17 @@ sum(assemble(l_neumann))</code></pre>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">try
+<pre><code class="language-julia">msg = try
     assemble(form(Wd, Wd, (u, v) -&gt; innerₕ(u, v; markers = (:nope,))))
+    &quot;&quot;
 catch e
-    showerror(stdout, e)
-end</code></pre>
+    e isa ArgumentError || rethrow()
+    sprint(showerror, e)
+end
+@assert occursin(&quot;the marker :nope is not defined&quot;, msg)
+msg</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: the marker :nope is not defined on the form&#39;s space. Available marker labels on this space are: :boundary, :interior, :left, :right. A marker named in restrict_to or markers = (...) must exist on every space a term reaches; if it is only defined on some of a composite space&#39;s leaves, write the term per component instead, one innerₕ(u(i), v(i)) per leaf with that leaf&#39;s own markers, rather than one term naming a marker not every leaf it reaches has.</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;ArgumentError: the marker :nope is not defined on the form&#39;s space. Available marker labels on this space are: :boundary, :interior, :left, :right. A marker named in restrict_to or markers = (...) must exist on every space a term reaches; if it is only defined on some of a composite space&#39;s leaves, write the term per component instead, one innerₕ(u(i), v(i)) per leaf with that leaf&#39;s own markers, rather than one term naming a marker not every leaf it reaches has.&quot;</code></pre>
 </div>
 <p>On a composite space, a marker used without naming a component reaches every diagonal block and must exist on every leaf. Write the term per component otherwise.</p>
 <h2 id="The-outward-normal" class="md-heading">The outward normal<a href="#The-outward-normal" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -389,6 +422,7 @@ W2 = gridspace(Ω2)
 F1 = Rₕ(W2, x -&gt; 1.0 + x[1])
 F2 = Rₕ(W2, x -&gt; 2.0 + x[2])
 l_flux = form(W2, v -&gt; inner_Γ(F1 * ηₓ + F2 * ηᵧ, v; markers = (:xmax,)))
+@assert sum(assemble(l_flux)) ≈ 2.0  # F₁ = 2 on x = 1, edge length 1, and η = (1, 0) there
 sum(assemble(l_flux))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">2.0</code></pre>
@@ -403,7 +437,9 @@ sum(assemble(l_flux))</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">l_pt = form(Wₕ, v -&gt; innerₕ(dirac(0.5, 2.0), v))
-sum(assemble(l_pt))</code></pre>
+b_pt = assemble(l_pt)
+@assert b_pt[17] ≈ 2.0 &amp;&amp; count(!iszero, b_pt) == 1  # x = 0.5 is node 17
+sum(b_pt)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">2.0</code></pre>
 </div>
@@ -412,18 +448,20 @@ sum(assemble(l_pt))</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">l_off = form(Wₕ, v -&gt; innerₕ(dirac(0.35, 1.0), v))
-sum(assemble(l_off)) ≈ 1.0</code></pre>
+b_off = assemble(l_off)
+@assert sum(b_off) ≈ 1.0
+@assert b_off[12] ≈ 0.8 &amp;&amp; b_off[13] ≈ 0.2  # 0.35 lies 0.2 of a cell past node 12, so node 12 takes 0.8</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
 <p>Several sources take a vector of coordinates and a vector of strengths. Each coordinate is a tuple (a 1-tuple in 1D), because a bare vector of reals is read as the coordinates of one point:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">l_multi = form(Wₕ, v -&gt; innerₕ(dirac([(0.2,), (0.7,)], [1.0, -1.0]), v))
-sum(assemble(l_multi)) ≈ 0.0</code></pre>
+b_multi = assemble(l_multi)
+@assert abs(sum(b_multi)) &lt; 1e-12
+@assert b_multi[7] ≈ 0.6 &amp;&amp; b_multi[8] ≈ 0.4 &amp;&amp; b_multi[23] ≈ -0.6 &amp;&amp; b_multi[24] ≈ -0.4</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
 <p>A strength wrapped in a <code class="md-code-inline">Ref</code> updates live, without rebuilding the form:</p>
 <div class="md-multi-output">
@@ -434,9 +472,8 @@ l_dyn_pt = form(Wₕ, v -&gt; innerₕ(dirac(0.5, S_live), v))
 b_dyn_pt = assemble(l_dyn_pt)
 S_live[] = 3.5
 assemble!(b_dyn_pt, l_dyn_pt)
-sum(b_dyn_pt) ≈ 3.5</code></pre>
+@assert b_dyn_pt[17] ≈ 3.5 &amp;&amp; sum(b_dyn_pt) ≈ 3.5</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
 <h2 id="Automatic-simplification" class="md-heading">Automatic simplification<a href="#Automatic-simplification" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><code class="md-code-inline">form</code> resolves the expression once and simplifies it before storing it. The assembler routes summands one at a time, so every top-level <code class="md-code-inline">+</code> is a separate sweep over the mesh. The pass is small and keeps terms as written: it does not combine like terms or factor a shared argument. Two identical terms stay two terms and are summed at assembly:</p>
@@ -444,6 +481,7 @@ sum(b_dyn_pt) ≈ 3.5</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">a_dup = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + innerₕ(u, v))
+@assert expression(a_dup) == &quot;innerₕ(u, v) + innerₕ(u, v)&quot;
 expression(a_dup)     # two terms, as written</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;innerₕ(u, v) + innerₕ(u, v)&quot;</code></pre>
@@ -451,16 +489,17 @@ expression(a_dup)     # two terms, as written</code></pre>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Matrix(assemble(a_dup)) ≈ 2 .* Matrix(assemble(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v))))</code></pre>
+<pre><code class="language-julia">M_dup = assemble(a_dup)
+@assert M_dup[1, 1] ≈ 2 * (1 / 64) &amp;&amp; M_dup[2, 2] ≈ 2 * (1 / 32)  # twice the lumped mass</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
 <p>Write <code class="md-code-inline">2 * innerₕ(u, v)</code> when one sweep is wanted. Nested scales fold into one:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">a_fold = form(Wₕ, Wₕ, (u, v) -&gt; 2 * (3 * innerₕ(u, v)))
-expression(a_fold)    # 6 * innerₕ(u, v)</code></pre>
+@assert expression(a_fold) == &quot;6 * innerₕ(u, v)&quot;
+expression(a_fold)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;6 * innerₕ(u, v)&quot;</code></pre>
 </div>
@@ -469,16 +508,17 @@ expression(a_fold)    # 6 * innerₕ(u, v)</code></pre>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">a_off = form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v) + 0 * inner₊(∇ₕ(u), ∇ₕ(v)))
-expression(a_off)     # innerₕ(u, v): the zero term is gone</code></pre>
+@assert expression(a_off) == &quot;innerₕ(u, v)&quot;  # the zero term is gone
+expression(a_off)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;innerₕ(u, v)&quot;</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Matrix(assemble(a_off)) ≈ Matrix(assemble(form(Wₕ, Wₕ, (u, v) -&gt; innerₕ(u, v))))</code></pre>
+<pre><code class="language-julia">M_off = assemble(a_off)
+@assert M_off[1, 1] ≈ 1 / 64 &amp;&amp; M_off[2, 2] ≈ 1 / 32  # the mass matrix alone</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
 </div>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
@@ -491,7 +531,7 @@ expression(a_off)     # innerₕ(u, v): the zero term is gone</code></pre>
 <h2 id="Ghost-point-problems" class="md-heading">Ghost-point problems<a href="#Ghost-point-problems" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>Neumann and Robin conditions on ghost points, the relations that carry them and the solutions they give are in the <a href="../../tutorials/ghost/#form_ghost">ghost point tutorial</a>. Two how-to pages build on it: <a href="../../howto/time_dependent_data/#howto_time_dependent_data">time-dependent boundary data</a> and <a href="../../howto/pure_neumann/#howto_pure_neumann">pure Neumann problems</a>.</p>
 <h2 id="Threading" class="md-heading">Threading<a href="#Threading" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>Assembly follows the execution policy of the space&#39;s backend, <code class="md-code-inline">Serial()</code> by default. Build the mesh with <code class="md-code-inline">mesh(Ω, n; backend = backend(policy = Parallel()))</code> to assemble on several threads.</p>
+<p>Assembly runs under the execution policy of the space&#39;s backend; <a href="../../howto/backends/#howto_backends">Assemble on several threads</a> shows how to choose one.</p>
       </article>
       <footer class="md-footer">
 <p>Built with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and <a href="https://github.com/mthelm85/MaterialDocs.jl">MaterialDocs.jl</a>.</p>
@@ -530,6 +570,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=b253778e"></script>
+  <script src="../../assets/materialdocs.js?v=619b9e76"></script>
 </body>
 </html>

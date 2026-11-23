@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ghost points — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e3274b65">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=221cf91d">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Ghost points — Bramble.jl">
   <meta property="og:title" content="Ghost points — Bramble.jl">
@@ -149,7 +149,7 @@ npoints(G₂, Tuple), Bramble.nghosts(G₂), sum(absent)</code></pre>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">((6, 5), 14, 4)</code></pre>
 </div>
 <p>The padded size is <span class="md-math md-math-inline">\((4 + 2) \times (3 + 2)\)</span>. The ghosts are <span class="md-math md-math-inline">\(2 \cdot 3 + 2 \cdot 4 = 14\)</span>, one per facet node, and the padded grid minus its four absent corners leaves the nodes and exactly those.</p>
-<p>A ghost mesh follows its physical mesh. After <code class="md-code-inline">change_points!</code> the ghosts move with the facet spacings. After <code class="md-code-inline">iterative_refinement!</code> the point count changes, which a ghost mesh cannot follow: build a new one.</p>
+<p>A ghost mesh follows its physical mesh. After <code class="md-code-inline">change_points!</code> the ghosts move with the facet spacings. After <code class="md-code-inline">iterative_refinement!</code> the point count changes, which a ghost mesh cannot follow: build a new one. A space built before either call is stale, as in the <a href="../../tutorials/mesh/#tutorial_mesh">mesh tutorial</a>.</p>
 <hr class="md-hr">
 <h2 id="space_ghost" class="md-heading">Ghost spaces<a href="#space_ghost" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The keyword <code class="md-code-inline">ghosts</code> of <a href="../../api/spaces/#Bramble.gridspace"><code class="md-code-inline">gridspace</code></a> names the facets that get ghosts. The default <code class="md-code-inline">ghosts = ()</code> returns the plain space.</p>
@@ -166,7 +166,7 @@ ndofs(W_plain), ndofs(W_ghost), ndofs(W_part)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(12, 26, 19)</code></pre>
 </div>
-<p>The degrees of freedom of a ghost space are the physical nodes plus the ghosts. Here <span class="md-math md-math-inline">\(12\)</span> nodes plus <span class="md-math md-math-inline">\(2 \cdot 3 + 2 \cdot 4 = 14\)</span> ghosts give 26, and the two named facets give <span class="md-math md-math-inline">\(12 + 3 + 4 = 19\)</span>. The absent corners are not degrees of freedom.</p>
+<p>The degrees of freedom of a ghost space are the physical nodes plus the ghosts. Here <span class="md-math md-math-inline">\(12\)</span> nodes plus the 14 ghosts give 26, and the two named facets give <span class="md-math md-math-inline">\(12 + 3 + 4 = 19\)</span>. The absent corners are not degrees of freedom.</p>
 <h3 id="The-order-of-the-degrees-of-freedom" class="md-heading">The order of the degrees of freedom<a href="#The-order-of-the-degrees-of-freedom" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>The physical nodes come first, in the mesh&#39;s linear order. The ghosts follow, facet by facet in the order <code class="md-code-inline">xmin, xmax, ymin, ymax, zmin, zmax</code> (only the named ones), each facet&#39;s ghosts in the column-major order of its nodes. A system assembled on a ghost space is indexed this way. On a space without Dirichlet relations or relation data, its first rows and columns are the physical nodes.</p>
 <p>Each degree of freedom is one point of the padded mesh. <code class="md-code-inline">Bramble.padded_space</code> is the internal space on that mesh, and <code class="md-code-inline">Bramble.closure</code> returns the sparse matrix <code class="md-code-inline">E</code> that sends the degrees of freedom to padded values, one entry <span class="md-math md-math-inline">\(1\)</span> per column.</p>
@@ -199,7 +199,7 @@ dof_point(j) = point(mesh(Pₕ), padded[findfirst(!iszero, E[:, j])])
  (0.0, 1.5)
  (1.0, 1.5)</code></pre>
 </div>
-<p>The first two entries are the first and last physical node. The next four are the <code class="md-code-inline">xmin</code> and <code class="md-code-inline">xmax</code> ghosts at <span class="md-math md-math-inline">\(x = -0.2\)</span> and <span class="md-math md-math-inline">\(x = 1.4\)</span>, the distances <span class="md-math md-math-inline">\(h_2 = 0.2\)</span> and <span class="md-math md-math-inline">\(h_n = 0.4\)</span> from the facet. The last four are the <code class="md-code-inline">ymin</code> and <code class="md-code-inline">ymax</code> ghosts at <span class="md-math md-math-inline">\(y = -0.5\)</span> and <span class="md-math md-math-inline">\(y = 1.5\)</span>.</p>
+<p>The first two entries are the first and last physical node.</p>
 <figure style="margin:1.5em 0;text-align:center">
 <svg viewBox="0 0 560 340" width="100%" style="max-width:560px;height:auto;font-family:system-ui,-apple-system,'Segoe UI',sans-serif" role="img"
      aria-label="Padded 6 by 5 grid of the 4 by 3 non-uniform mesh: 12 physical nodes numbered 1 to 12, 14 ghost points numbered 13 to 26, and four absent corners.">
@@ -297,7 +297,7 @@ dof_point(j) = point(mesh(Pₕ), padded[findfirst(!iszero, E[:, j])])
 </svg>
 <figcaption style="font-size:0.9em;opacity:0.8">The padded grid of the 4 &times; 3 mesh. Filled dots are nodes, open dots are ghosts, crosses are the four absent corners.</figcaption>
 </figure>
-<p>In the figure, ghost 13 sits one spacing left of node 1 and ghost 19 one spacing below it. The four padded corners are absent.</p>
+<p>In the figure, ghost 13 sits one spacing left of node 1 and ghost 19 one spacing below it.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -336,6 +336,7 @@ sum(diag(M_ghost)[1:12]), sum(diag(M_ghost)[13:end])</code></pre>
 W₁ = gridspace(Ω₁; ghosts = :boundary)
 row(f, i) = Matrix(assemble(form(W₁, W₁, f)))[i, :]
 
+@assert ndofs(W₁) == 8
 ndofs(W₁)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">8</code></pre>
@@ -506,11 +507,12 @@ g_right(x) = robin_α * u_exact(x) + du_exact(x)  # αu + u&#39; at x = 1
 
 Ω_gh = graded_interval(33)
 x_gh = collect(points(Ω_gh))
+@assert minimum(diff(x_gh)) ≈ (1 / 32)^2 &amp;&amp; maximum(diff(x_gh)) ≈ 1 - (31 / 32)^2
 extrema(diff(x_gh))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0009765625, 0.0615234375)</code></pre>
 </div>
-<p>The spacings run from <span class="md-math md-math-inline">\(10^{-3}\)</span> to <span class="md-math md-math-inline">\(0.06\)</span>.</p>
+<p>The spacings run from <span class="md-math md-math-inline">\((1/32)^2 \approx 10^{-3}\)</span> to <span class="md-math md-math-inline">\(1 - (31/32)^2 \approx 0.06\)</span>.</p>
 <h3 id="Without-ghosts:-the-forms-you-already-have" class="md-heading">Without ghosts: the forms you already have<a href="#Without-ghosts:-the-forms-you-already-have" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>The weak form of the problem is <span class="md-math md-math-inline">\((D_{-}u, D_{-}v)_+\)</span> plus a boundary term per facet, and <a href="../../api/inner_products/#Bramble.inner_Γ"><code class="md-code-inline">inner_Γ</code></a> writes both. The Robin coefficient multiplies <code class="md-code-inline">u</code> inside the matrix and the data go on the right:</p>
 <div class="md-multi-output">
@@ -543,6 +545,7 @@ C_gh = constrained(W_ghosts, u -&gt; (
     :xmin =&gt; ∂ₙ(u) =&gt; g_left,
     :xmax =&gt; robin_α * u + ∂ₙ(u) =&gt; g_right))
 
+@assert ndofs(W_ghosts) == 35 &amp;&amp; ndofs(C_gh) == 33
 ndofs(W_ghosts), ndofs(C_gh)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(35, 33)</code></pre>
@@ -583,7 +586,7 @@ ratio = ghost_error(33) / ghost_error(65)
 
 ratio</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">4.000864772047653</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4.00086477356136</code></pre>
 </div>
 <p>The relations a facet takes:</p>
 <div class="md-table-wrap">
@@ -723,12 +726,14 @@ points(space(U))[[1, 2, end - 1, end]]</code></pre>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">try
+<pre><code class="language-julia">err = try
     assemble(l_gh)
+    nothing
 catch e
-    @assert e isa ArgumentError
-    sprint(showerror, e)
-end</code></pre>
+    e
+end
+@assert err isa ArgumentError
+sprint(showerror, err)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">&quot;ArgumentError: the closure of this ghost space has an affine part d ≠ 0, so its load is Eᵀ(F − A d) and needs the bilinear form: assemble both with assemble(a, l).&quot;</code></pre>
 </div>
@@ -868,6 +873,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=e3274b65"></script>
+  <script src="../../assets/materialdocs.js?v=221cf91d"></script>
 </body>
 </html>

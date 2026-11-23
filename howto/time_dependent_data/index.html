@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>How to use boundary data that depend on time — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b9bb2c76">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=706bed87">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="How to use boundary data that depend on time — Bramble.jl">
   <meta property="og:title" content="How to use boundary data that depend on time — Bramble.jl">
@@ -107,7 +107,7 @@
       <div class="md-article-actions"><a class="md-icon-btn md-edit-link" href="https://github.com/gpena/Bramble.jl/blob/main/docs/src/howto/time_dependent_data.md#" title="Edit source on GitHub" aria-label="Edit source on GitHub"><svg class="md-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a></div>
 <h1 id="howto_time_dependent_data" class="md-heading">How to use boundary data that depend on time<a href="#howto_time_dependent_data" class="md-heading-anchor" aria-label="Link to this section">#</a></h1>
 <p><strong>Goal.</strong> Solve a heat equation whose Neumann and Robin data change with time, on a constrained ghost space, and check that the solution follows the data.</p>
-<p><strong>You need.</strong> The relations of the <a href="../../tutorials/ghost/#form_ghost">ghost point tutorial</a>, and OrdinaryDiffEqBDF for the time integration. The <a href="../../examples/ghost_heat_equation/">heat example</a> runs the same idea on a longer problem.</p>
+<p><strong>You need.</strong> The relations of the <a href="../../tutorials/ghost/#form_ghost">ghost point tutorial</a>, and OrdinaryDiffEqBDF for the time integration (<code class="md-code-inline">using Pkg; Pkg.add(&quot;OrdinaryDiffEqBDF&quot;)</code>). The <a href="../../examples/ghost_heat_equation/">heat example</a> runs the same idea on a longer problem.</p>
 <h2 id="The-model-problem" class="md-heading">The model problem<a href="#The-model-problem" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The data of a relation may take the time as a second argument, <code class="md-code-inline">(x, t) -&gt; …</code>. <a href="../../api/spaces/#Bramble.constrained"><code class="md-code-inline">constrained</code></a> tells it from a datum in <code class="md-code-inline">x</code> alone by the methods the function has. The operators in a relation do not change with time, so the matrix of a form on the space is the same at every <code class="md-code-inline">t</code>. Only the data <span class="md-math md-math-inline">\(d(t)\)</span> that the relations put into the ghosts move.</p>
 <p>Take the heat equation <span class="md-math md-math-inline">\(\partial_t u = \partial_{xx} u\)</span> on a graded interval, with the exact solution <span class="md-math md-math-inline">\(u = e^{-t} (\cos x + \sin x)\)</span> and the data it gives: a flux at the left end and a Robin condition at the right end.</p>
@@ -139,10 +139,14 @@ C_t = constrained(gridspace(Ω_gh; ghosts = :boundary), u -&gt; (
 a_t = form(C_t, C_t, (u, v) -&gt; innerₕ(-Δₕ(u), v))
 l_t = form(C_t, v -&gt; innerₕ(x -&gt; 0.0, v))
 
+@assert length(x_gh) == 33
+@assert ndofs(C_t) == 33
+
 ndofs(C_t)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">33</code></pre>
 </div>
+<p>The relations eliminate the ghosts, so the space has one unknown per node, 33.</p>
 <p><code class="md-code-inline">Bramble.lift(Cₕ, u, t)</code> is the grid function <span class="md-math md-math-inline">\(E u + d(t)\)</span> at time <code class="md-code-inline">t</code>. The exact solution at the nodes lifts to a padded function whose centred difference at the first node gives the flux datum at that time, and the data at two times give different ghosts:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -281,6 +285,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=b9bb2c76"></script>
+  <script src="../../assets/materialdocs.js?v=706bed87"></script>
 </body>
 </html>

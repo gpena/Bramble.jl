@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Difference, jump and average operators — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=bc31332c">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=ed4c80c7">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Difference, jump and average operators — Bramble.jl">
   <meta property="og:title" content="Difference, jump and average operators — Bramble.jl">
@@ -117,6 +117,8 @@
 Wₕ = gridspace(Ωₕ)
 uₕ = Rₕ(Wₕ, x -&gt; x^2)
 
+@assert parent(uₕ) == [0.0, 0.0625, 0.25, 0.5625, 1.0]   # x_i = (i-1)/4, squared
+
 points(Ωₕ), parent(uₕ)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.25, 0.5, 0.75, 1.0], [0.0, 0.0625, 0.25, 0.5625, 1.0])</code></pre>
@@ -125,7 +127,10 @@ points(Ωₕ), parent(uₕ)</code></pre>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">parent(∇ₕ(uₕ)), parent(Mₕ(uₕ))</code></pre>
+<pre><code class="language-julia">@assert parent(∇ₕ(uₕ)) ≈ [0.0, 0.25, 0.75, 1.25, 1.75]
+@assert parent(Mₕ(uₕ)) ≈ [0.0, 0.03125, 0.15625, 0.40625, 0.78125]
+
+parent(∇ₕ(uₕ)), parent(Mₕ(uₕ))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0, 0.25, 0.75, 1.25, 1.75], [0.0, 0.03125, 0.15625, 0.40625, 0.78125])</code></pre>
 </div>
@@ -134,7 +139,9 @@ points(Ωₕ), parent(uₕ)</code></pre>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">parent(jumpₕ(uₕ))</code></pre>
+<pre><code class="language-julia">@assert parent(jumpₕ(uₕ)) ≈ [0.0625, 0.1875, 0.3125, 0.4375, -1.0]
+
+parent(jumpₕ(uₕ))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">5-element Vector{Float64}:
   0.0625
@@ -144,6 +151,27 @@ points(Ωₕ), parent(uₕ)</code></pre>
  -1.0</code></pre>
 </div>
 <p>Here <code class="md-code-inline">jumpₕ</code> is the forward difference <span class="md-math md-math-inline">\(u_{i+1} - u_i\)</span>, so its first entry is <span class="md-math md-math-inline">\(0.0625\)</span>. The last entry, <span class="md-math md-math-inline">\(-1\)</span>, is explained below.</p>
+<p>A uniform grid hides a wrong spacing, so check the same operators on a graded one, with points <span class="md-math md-math-inline">\(0, 0.1, 0.3, 0.6, 1\)</span> and spacings <span class="md-math md-math-inline">\(0.1, 0.2, 0.3, 0.4\)</span>. For <span class="md-math md-math-inline">\(u = x^2\)</span> the difference quotient is <span class="md-math md-math-inline">\((x_i^2 - x_{i-1}^2)/h_i = x_i + x_{i-1}\)</span>, whatever the spacing, and the average is <span class="md-math md-math-inline">\((x_{i-1}^2 + x_i^2)/2\)</span>:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ωₙ = mesh(domain(interval(0.0, 1.0)), 5)
+change_points!(Ωₙ, [0.0, 0.1, 0.3, 0.6, 1.0])
+uₙ = Rₕ(gridspace(Ωₙ), x -&gt; x^2)
+
+@assert parent(∇ₕ(uₙ)) ≈ [0.0, 0.1, 0.4, 0.9, 1.6]
+@assert parent(Mₕ(uₙ)) ≈ [0.0, 0.005, 0.05, 0.225, 0.68]
+@assert parent(jumpₕ(uₙ)) ≈ [0.01, 0.08, 0.27, 0.64, -1.0]
+
+parent(∇ₕ(uₙ))</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">5-element Vector{Float64}:
+ 0.0
+ 0.10000000000000002
+ 0.39999999999999997
+ 0.9000000000000001
+ 1.5999999999999999</code></pre>
+</div>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
@@ -212,14 +240,14 @@ points(Ωₕ), parent(uₕ)</code></pre>
 <td style="text-align:left"><span class="md-math md-math-inline">\(\{i-1, i+1\}\)</span>, divided by the full span</td>
 <td style="text-align:left">1</td>
 <td style="text-align:left">2</td>
-<td style="text-align:left">truncated to <code class="md-code-inline">0</code> at both ends</td>
+<td style="text-align:left">truncated to <code class="md-code-inline">0</code> at both ends; three points at least</td>
 </tr>
 <tr>
 <td style="text-align:left"><code class="md-code-inline">D̽</code></td>
 <td style="text-align:left"><span class="md-math md-math-inline">\(\{i-1, i, i+1\}\)</span>, a weighted mean of two backward differences</td>
 <td style="text-align:left">2</td>
 <td style="text-align:left">2</td>
-<td style="text-align:left">no convention of its own: falls back to <code class="md-code-inline">D₊</code>/<code class="md-code-inline">D₋</code></td>
+<td style="text-align:left">no convention of its own: falls back to <code class="md-code-inline">D₊</code>/<code class="md-code-inline">D₋</code>; three points at least</td>
 </tr>
 <tr>
 <td style="text-align:left"><code class="md-code-inline">D̃</code></td>
@@ -287,7 +315,11 @@ points(Ωₕ), parent(uₕ)</code></pre>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">parent(∇ₕ(uₕ))[1], parent(D₊ₓ(uₕ))[end], parent(jumpₕ(uₕ))[end]</code></pre>
+<pre><code class="language-julia">@assert parent(∇ₕ(uₕ))[1] == 0 &amp;&amp; parent(∇ₕ(uₕ))[2] ≈ 0.25     # truncated, then not
+@assert parent(D₊ₓ(uₕ))[end] == 0 &amp;&amp; parent(D₊ₓ(uₕ))[1] ≈ 0.25
+@assert parent(jumpₕ(uₕ))[end] ≈ -1                            # -u_5
+
+parent(∇ₕ(uₕ))[1], parent(D₊ₓ(uₕ))[end], parent(jumpₕ(uₕ))[end]</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0, 0.0, -1.0)</code></pre>
 </div>
@@ -296,9 +328,13 @@ points(Ωₕ), parent(uₕ)</code></pre>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">parent(S₊ₕ(uₕ)), parent(S₋ₕ(uₕ)), parent(S₊ₕ(uₕ)) - parent(uₕ) == parent(jumpₕ(uₕ))</code></pre>
+<pre><code class="language-julia">@assert parent(S₊ₕ(uₕ)) ≈ [0.0625, 0.25, 0.5625, 1.0, 0.0]
+@assert parent(S₋ₕ(uₕ)) ≈ [0.0, 0.0, 0.0625, 0.25, 0.5625]
+@assert parent(S₊ₕ(uₕ)) - parent(uₕ) ≈ [0.0625, 0.1875, 0.3125, 0.4375, -1.0]   # the jump
+
+parent(S₊ₕ(uₕ)), parent(S₋ₕ(uₕ))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0625, 0.25, 0.5625, 1.0, 0.0], [0.0, 0.0, 0.0625, 0.25, 0.5625], true)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0625, 0.25, 0.5625, 1.0, 0.0], [0.0, 0.0, 0.0625, 0.25, 0.5625])</code></pre>
 </div>
 <p>That convention gives three identities that hold at every point, the boundary included. The matrix of <code class="md-code-inline">S₊</code> is the transpose of the matrix of <code class="md-code-inline">S₋</code>, <code class="md-code-inline">S₊(u) - u</code> is <code class="md-code-inline">jump(u)</code>, and <code class="md-code-inline">u - S₋(u)</code> is the undivided backward difference. The exception is <code class="md-code-inline">D₊</code>: it is zero at the last point, so <code class="md-code-inline">S₊(u) - u</code> is not <span class="md-math md-math-inline">\(h\)</span> times <code class="md-code-inline">D₊(u)</code> there. Inside a form the rule is the same, and a shift of a composed operand, such as <code class="md-code-inline">S₊ₓ(D₋ₓ(u))</code>, reads zero wherever the shifted stencil leaves the grid.</p>
 <p>In two or more dimensions the directional operators apply along the coordinate lines of the tensor grid, and each directional family truncates along its own boundary slice:</p>
@@ -400,9 +436,14 @@ points(Ωₕ), parent(uₕ)</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">A = ∇ₕ(Wₕ)
 
-typeof(A), A * parent(uₕ) ≈ parent(∇ₕ(uₕ))</code></pre>
+@assert size(A) == (5, 5) &amp;&amp; all(iszero, A[1, :])   # the truncated first row
+@assert A[3, 2] ≈ -4 &amp;&amp; A[3, 3] ≈ 4                 # -1/h and 1/h, with h = 1/4
+@assert A * parent(uₕ) ≈ [0.0, 0.25, 0.75, 1.25, 1.75]
+@assert ∇ₕ(gridspace(Ωₙ)) * parent(uₙ) ≈ [0.0, 0.1, 0.4, 0.9, 1.6]   # graded grid
+
+typeof(A)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(SparseArrays.SparseMatrixCSC{Float64, Int64}, true)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">SparseArrays.SparseMatrixCSC{Float64, Int64}</code></pre>
 </div>
 <p>Both routes give the same answer. Applying the operator to <code class="md-code-inline">uₕ</code> is the fast path for time loops; the matrix is for assembling a linear system.</p>
 <hr class="md-hr">
@@ -415,6 +456,11 @@ typeof(A), A * parent(uₕ) ≈ parent(∇ₕ(uₕ))</code></pre>
 W₂ = gridspace(Ω₂)
 vₕ = Rₕ(W₂, x -&gt; x[1] + 2x[2])
 g = ∇ₕ(vₕ)
+g₁, g₂ = reshape(parent(g[1]), 4, 4), reshape(parent(g[2]), 4, 4)
+
+@assert length(g) == 2
+@assert all(≈(1), g₁[2:end, :]) &amp;&amp; all(iszero, g₁[1, :])
+@assert all(≈(2), g₂[:, 2:end]) &amp;&amp; all(iszero, g₂[:, 1])
 
 length(g), round.(reshape(parent(g[1]), 4, 4); digits = 8), round.(reshape(parent(g[2]), 4, 4); digits = 8)</code></pre>
 </div>
@@ -432,12 +478,31 @@ length(g), round.(reshape(parent(g[1]), 4, 4); digits = 8), round.(reshape(paren
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">using LinearAlgebra: ⋅, ×
-uv = Rₕ(vector_gridspace(Ω₂), x -&gt; (x[1] + 2x[2], 3x[1] - x[2]))
+uv = Rₕ(vector_gridspace(Ω₂), x -&gt; (x[1] + 2x[2], 3x[1] + x[2]))
+divuv = reshape(parent(∇ₕ ⋅ uv), 4, 4)
+curluv = reshape(parent(∇ₕ × uv), 4, 4)
 
-parent(∇ₕ ⋅ uv) == parent(divₕ(uv)), parent(∇ₕ × uv) == parent(curlₕ(uv))</code></pre>
+@assert all(≈(2), divuv[2:end, 2:end])    # d/dx (x + 2y) + d/dy (3x + y) = 1 + 1
+@assert all(≈(1), curluv[2:end, 2:end])   # d/dx (3x + y) - d/dy (x + 2y) = 3 - 2
+@assert parent(∇ₕ ⋅ uv) == parent(divₕ(uv)) &amp;&amp; parent(∇ₕ × uv) == parent(curlₕ(uv))
+
+divuv, curluv</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([0.0 1.0 1.0 1.0; 1.0 2.0 1.9999999999999996 2.000000000000001; 1.0 2.0 1.9999999999999996 1.9999999999999993; 1.0 2.0 1.9999999999999982 2.0000000000000004], [0.0 -2.0 -2.0 -2.0; 3.0 0.9999999999999996 1.0000000000000004 0.9999999999999996; 3.0 1.0000000000000009 0.9999999999999996 1.0000000000000007; 2.9999999999999996 1.0 1.0 0.9999999999999991])</code></pre>
 </div>
+<p>On a graded rectangle, where the two spacings differ, the same field gives the same values:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">Ω₃ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (4, 4))
+change_points!(Ω₃, [[0.0, 0.1, 0.4, 1.0], [0.0, 0.5, 1.2, 2.0]])
+uv₃ = Rₕ(vector_gridspace(Ω₃), x -&gt; (x[1] + 2x[2], 3x[1] + x[2]))
+
+@assert all(≈(2), reshape(parent(∇ₕ ⋅ uv₃), 4, 4)[2:end, 2:end])
+@assert all(≈(1), reshape(parent(∇ₕ × uv₃), 4, 4)[2:end, 2:end])</code></pre>
+</div>
+</div>
+<p>The first two assertions state the divergence and the curl by hand, away from the truncated first row and column. The last checks that <code class="md-code-inline">∇ₕ ⋅</code> and <code class="md-code-inline">∇ₕ ×</code> are the same operators as <code class="md-code-inline">divₕ</code> and <code class="md-code-inline">curlₕ</code>.</p>
 <hr class="md-hr">
 <h2 id="Ghost-points" class="md-heading">Ghost points<a href="#Ghost-points" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>At a ghosted boundary the stencils read the ghost as a neighbour. The facet operators <code class="md-code-inline">∂ₙ</code>, <code class="md-code-inline">∂ₙₙ</code> and <code class="md-code-inline">jumpₙ</code>, the corner rules and the Laplacian inside a form are in the <a href="../../tutorials/ghost/#operators_ghost">ghost point tutorial</a>.</p>
@@ -472,6 +537,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=bc31332c"></script>
+  <script src="../../assets/materialdocs.js?v=ed4c80c7"></script>
 </body>
 </html>

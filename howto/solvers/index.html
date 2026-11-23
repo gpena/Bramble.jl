@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>How to choose a linear solver — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=37292748">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b58680c7">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="How to choose a linear solver — Bramble.jl">
   <meta property="og:title" content="How to choose a linear solver — Bramble.jl">
@@ -143,7 +143,7 @@
 </tbody>
 </table>
 </div>
-<p>The blocks below solve one system per row of the table and assert its residual. The first builds a Poisson system on a random non-uniform grid.</p>
+<p>The blocks below solve one system per row of the table and assert its residual. The first builds a Poisson system on a random non-uniform grid, with one row per node, <span class="md-math md-math-inline">\(40^2 = 1600\)</span>.</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -166,6 +166,15 @@ end
 Random.seed!(20261111)
 Ω₂ = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
 A, F = poisson_system(Ω₂, (40, 40))
+
+@assert size(A) == (40^2, 40^2) &amp;&amp; length(F) == 40^2
+# five-point stencil on 40 × 40 nodes, stored zeros of the eliminated couplings included
+@assert nnz(A) == 5 * 40^2 - 4 * 40
+# without them: the 38 × 38 interior block, plus one identity row per boundary node
+@assert count(!iszero, A) == 5 * 38^2 - 4 * 38 + (40^2 - 38^2)
+@assert norm(F) &gt; 0                  # control: the load is nonzero
+@assert issymmetric(A)               # `symmetrize = true`
+
 size(A)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(1600, 1600)</code></pre>
@@ -231,27 +240,8 @@ plain.iters, with_ilu.iters</code></pre>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(299, 34)</code></pre>
 </div>
 <h2 id="Pure-Neumann" class="md-heading">Pure Neumann<a href="#Pure-Neumann" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
-<p>With the normal derivative given on the whole boundary, the matrix annihilates constants and <code class="md-code-inline">A \ F</code> is singular, so <code class="md-code-inline">pde_solve</code> logs a warning that names <code class="md-code-inline">mean_zero</code>. Pass <code class="md-code-inline">mean_zero = w</code>, the weights of the discrete average, and it solves the bordered system <span class="md-math md-math-inline">\([A\ w; w^T\ 0]\)</span> and returns the solution with <span class="md-math md-math-inline">\(w^T u = 0\)</span>. The weights are the assembled form of the constant function 1 on the space without ghosts:</p>
-<div class="md-multi-output">
-<div class="md-code-block">
-<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">Ωₕ_n = mesh(Ω₂, (17, 17), (false, false))
-C = constrained(gridspace(Ωₕ_n; ghosts = :boundary),
-    u -&gt; ntuple(j -&gt; (:xmin, :xmax, :ymin, :ymax)[j] =&gt; ∂ₙ(u) =&gt; (x -&gt; 0.0), 4))
-A_n, F_n = assemble(form(C, C, (u, v) -&gt; innerₕ(-Δₕ(u), v)),
-    form(C, v -&gt; innerₕ(x -&gt; 2π^2 * cos(π * x[1]) * cos(π * x[2]), v)))
-W_n = gridspace(Ωₕ_n)
-w = assemble(form(W_n, v -&gt; innerₕ(x -&gt; 1.0, v)))
-
-u_n = pde_solve(A_n, F_n; mean_zero = w)
-λ = sum(F_n) / sum(w)      # 1ᵀA = 0, so the border absorbs the mean of F
-@assert abs(dot(w, u_n)) &lt; 1e-10
-@assert norm(A_n * u_n - (F_n - λ * w)) &lt; 1e-9 * norm(F_n)
-abs(dot(w, u_n)), λ</code></pre>
-</div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.1232334506949826e-16, 6.8805705362648415e-6)</code></pre>
-</div>
-<p>The data must satisfy a compatibility condition. <code class="md-code-inline">λ</code> is the part of the load that no <code class="md-code-inline">u</code> reaches: zero for exactly compatible data, and small here because these are compatible only in the continuum. <code class="md-code-inline">Bramble.neumann_compatibility</code> tests the condition. A kernel in the ghost values of a ghost space needs <code class="md-code-inline">gauge</code> instead, and the <a href="../../howto/pure_neumann/#howto_pure_neumann">pure Neumann how-to</a> shows both keywords.</p>
+<p>With the normal derivative given on the whole boundary, the matrix annihilates constants and <code class="md-code-inline">A \ F</code> is singular, so <code class="md-code-inline">pde_solve</code> logs a warning that names <code class="md-code-inline">mean_zero</code>. Pass <code class="md-code-inline">mean_zero = w</code>, the weights of the discrete average, and it solves the bordered system <span class="md-math md-math-inline">\([A\ w; w^T\ 0]\)</span>.</p>
+<p>The <a href="../../howto/pure_neumann/#howto_pure_neumann">pure Neumann how-to</a> builds <code class="md-code-inline">w</code>, checks the compatibility condition and shows <code class="md-code-inline">gauge</code>, the keyword for a kernel in the ghost values of a ghost space.</p>
 <h2 id="Large-systems-in-3D" class="md-heading">Large systems in 3D<a href="#Large-systems-in-3D" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>On a 3D grid a sparse direct factorization fills in heavily past a few hundred thousand unknowns. CG with an algebraic multigrid preconditioner stores the hierarchy only. <a href="../../api/solvers/#Bramble.amg_preconditioner"><code class="md-code-inline">amg_preconditioner</code></a> returns the hierarchy, and <code class="md-code-inline">aspreconditioner</code> from AlgebraicMultigrid.jl turns it into the <code class="md-code-inline">Pl</code> that LinearSolve takes. The system below is small enough to compare with plain CG:</p>
 <div class="md-multi-output">
@@ -355,6 +345,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=37292748"></script>
+  <script src="../../assets/materialdocs.js?v=b58680c7"></script>
 </body>
 </html>

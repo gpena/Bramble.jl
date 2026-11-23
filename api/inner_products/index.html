@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Inner products and norms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=fdb15e81">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=9c1af21b">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Inner products and norms — Bramble.jl">
   <meta property="og:title" content="Inner products and norms — Bramble.jl">
@@ -340,7 +340,7 @@ a = form(Wₕ, Wₕ, (u, v) -&gt; inner₊(∇ₕ(u), ∇ₕ(v)) + skew_symmetri
 <div class="md-docstring" id="Bramble.inner₊">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner₊</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L804-L849" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L810-L855" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -519,7 +519,7 @@ inner₊(u, v, Val((1,)))        # what inner₊ₓ(u, v) is</code></pre>
 <div class="md-docstring" id="Bramble.inner₊ₓ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner₊ₓ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L897-L928" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L903-L934" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -568,7 +568,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.inner₊ᵧ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner₊ᵧ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L935-L961" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L941-L967" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -598,7 +598,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.inner₊₂">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.inner₊₂</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L968-L983" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L974-L989" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -636,7 +636,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.norm₁ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.norm₁ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1419-L1442" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1425-L1448" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -657,7 +657,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.snorm₁ₕ">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.snorm₁ₕ</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1379-L1408" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1385-L1414" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -678,7 +678,7 @@ inner₊₂(left::LazyOp{D}, right::LazyOp{D}) where D</code></pre>
 <div class="md-docstring" id="Bramble.norm₊">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.norm₊</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1229-L1253" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L1235-L1259" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -702,7 +702,7 @@ norm₊(uₕ::NTuple{D, VectorElement}) -&gt; Number</code></pre>
 <div class="md-docstring" id="Bramble.norminf">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.norminf</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L475-L506" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L481-L512" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -723,7 +723,7 @@ norminf(uₕ::NTuple{D, VectorElement}) -&gt; Real</code></pre>
 <div class="md-docstring" id="LinearAlgebra.norm-Tuple{Bramble.VectorElement, AbstractString}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>LinearAlgebra.norm</code> — <span class="md-docstring-sig">Tuple{Bramble.VectorElement, AbstractString}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L523-L537" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/inner_product.jl#L529-L543" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -760,6 +760,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=fdb15e81"></script>
+  <script src="../../assets/materialdocs.js?v=9c1af21b"></script>
 </body>
 </html>

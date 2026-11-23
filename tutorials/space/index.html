@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces and discrete functions — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1f54b3a0">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=95a249f9">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces and discrete functions — Bramble.jl">
   <meta property="og:title" content="Grid spaces and discrete functions — Bramble.jl">
@@ -121,6 +121,7 @@ import Bramble: component_range, component_ranges, weights
 Ωₕ = mesh(Ω, 11)
 Wₕ = gridspace(Ωₕ)
 
+@assert ndofs(Wₕ) == 11 &amp;&amp; ndofs(Wₕ, Tuple) == (11,)
 ndofs(Wₕ), ndofs(Wₕ, Tuple)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(11, (11,))</code></pre>
@@ -133,6 +134,8 @@ ndofs(Wₕ), ndofs(Wₕ, Tuple)</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">uₕ = Rₕ(Wₕ, x -&gt; sin(π * x))
 
+xs = collect(points(Wₕ))
+@assert length(uₕ) == 11 &amp;&amp; uₕ[6] ≈ sin(π * xs[6]) &amp;&amp; abs(uₕ[1]) &lt; 1e-12
 length(uₕ), uₕ[6]</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(11, 1.0)</code></pre>
@@ -143,9 +146,10 @@ length(uₕ), uₕ[6]</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">wₕ = 3.0 .* uₕ .+ element(Wₕ, 2.0)
 
-space(wₕ) === Wₕ, wₕ[6]</code></pre>
+@assert space(wₕ) === Wₕ &amp;&amp; wₕ[6] ≈ 3 * sin(π * xs[6]) + 2 &amp;&amp; wₕ[1] ≈ 2
+wₕ[6]</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, 5.0)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">5.0</code></pre>
 </div>
 <p><a href="../../api/spaces/#Bramble.element"><code class="md-code-inline">element</code></a> allocates an uninitialised field; <code class="md-code-inline">element(Wₕ, α)</code> fills it with <code class="md-code-inline">α</code> and <code class="md-code-inline">element(Wₕ, v)</code> copies a vector. <a href="../../api/spaces/#Bramble.Rₕ!"><code class="md-code-inline">Rₕ!</code></a> writes into an element that already exists.</p>
 <h2 id="Restriction-and-cell-averaging" class="md-heading">Restriction and cell averaging<a href="#Restriction-and-cell-averaging" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -235,11 +239,24 @@ space(wₕ) === Wₕ, wₕ[6]</code></pre>
 <pre><code class="language-julia">u_avg = avgₕ(Wₕ, x -&gt; exp(-x))
 avgₕ!(u_avg, x -&gt; exp(-x))
 
+@assert u_avg[1] ≈ 20 * (1 - exp(-0.05)) &amp;&amp; u_avg[6] ≈ 10 * (exp(-0.45) - exp(-0.55))
 u_avg[1]</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">0.9754115099857197</code></pre>
 </div>
-<p>For a rough source term, <code class="md-code-inline">avgₕ</code> averages out the roughness that <code class="md-code-inline">Rₕ</code> samples.</p>
+<p>For a rough source term, <code class="md-code-inline">avgₕ</code> averages out the roughness that <code class="md-code-inline">Rₕ</code> samples. With a step at <span class="md-math md-math-inline">\(x = 1/2\)</span>, the points beside the jump see it differently:</p>
+<div class="md-multi-output">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">step = x -&gt; x &lt; 0.5 ? 1.0 : 0.0
+avg_step = round.(avgₕ(Wₕ, step)[5:7]; digits = 12)
+R_step = Rₕ(Wₕ, step)[5:7]
+@assert avg_step == [1.0, 0.5, 0.0] &amp;&amp; R_step == [1.0, 0.0, 0.0]
+avg_step, R_step</code></pre>
+</div>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">([1.0, 0.5, 0.0], [1.0, 0.0, 0.0])</code></pre>
+</div>
+<p><code class="md-code-inline">Rₕ</code> reads the step&#39;s value at each point, so it is <code class="md-code-inline">1</code> or <code class="md-code-inline">0</code>. At the point on the jump, <code class="md-code-inline">avgₕ</code> returns the mean over the cell, which is <code class="md-code-inline">0.5</code>.</p>
 <p>A plain <code class="md-code-inline">Function</code> is not a grid function, so multiplying by one restricts it first (<code class="md-code-inline">Rₕ(space(uₕ), f)</code>) and scales pointwise. This lets a spatial condition multiply a field directly, including inside a form:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -247,6 +264,7 @@ u_avg[1]</code></pre>
 <pre><code class="language-julia">oneₕ = Rₕ(Wₕ, x -&gt; 1.0)
 below_half = (x -&gt; x[1] &lt; 0.5) * oneₕ
 
+@assert sum(below_half) == count(&lt;(0.5), xs) &amp;&amp; collect(below_half) == (xs .&lt; 0.5)
 sum(below_half)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">5.0</code></pre>
@@ -262,9 +280,11 @@ sum(below_half)</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">vₕ = Rₕ(Wₕ, x -&gt; cos(π * x))
 
-innerₕ(uₕ, vₕ), normₕ(uₕ), normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)</code></pre>
+@assert abs(innerₕ(uₕ, vₕ)) &lt; 1e-12
+@assert normₕ(uₕ)^2 ≈ 0.5 &amp;&amp; innerₕ(uₕ, uₕ) ≈ 0.5
+innerₕ(uₕ, vₕ), normₕ(uₕ)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(-5.148621912560444e-18, 0.7071067811865476, true)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(-5.148621912560444e-18, 0.7071067811865476)</code></pre>
 </div>
 <p>The norm of <span class="md-math md-math-inline">\(\sin(\pi x)\)</span> on <span class="md-math md-math-inline">\([0, 1]\)</span> is <span class="md-math md-math-inline">\(1/\sqrt{2} \approx 0.707\)</span>, which <code class="md-code-inline">normₕ</code> reproduces here. The discrete Sobolev norms are built on the backward gradient <code class="md-code-inline">∇ₕ</code>:</p>
 <div class="md-math md-math-display">
@@ -274,9 +294,12 @@ innerₕ(uₕ, vₕ), normₕ(uₕ), normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)</c
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">snorm₁ₕ(uₕ), norm₁ₕ(uₕ), norm₁ₕ(uₕ)^2 ≈ normₕ(uₕ)^2 + snorm₁ₕ(uₕ)^2</code></pre>
+<pre><code class="language-julia">Δu = diff(parent(uₕ))
+@assert snorm₁ₕ(uₕ)^2 ≈ sum(abs2.(Δu) ./ diff(xs))
+@assert norm₁ₕ(uₕ)^2 ≈ 0.5 + sum(abs2.(Δu) ./ diff(xs))
+snorm₁ₕ(uₕ), norm₁ₕ(uₕ)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.212317420824743, 2.322573652327229, true)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.212317420824743, 2.322573652327229)</code></pre>
 </div>
 <p><code class="md-code-inline">inner₊</code> is the staggered counterpart of <code class="md-code-inline">innerₕ</code>: it weights by the backward spacing along the chosen direction (zero at the first node) and by the cell width across the others. A trailing <code class="md-code-inline">:x</code>/<code class="md-code-inline">:y</code>/<code class="md-code-inline">:z</code> (or <code class="md-code-inline">1</code>/<code class="md-code-inline">2</code>/<code class="md-code-inline">3</code>) argument picks a single direction. That pairing makes summation by parts exact; the <a href="../../tutorials/operators/">operators tutorial</a> derives it.</p>
 <div class="md-multi-output">
@@ -284,14 +307,16 @@ innerₕ(uₕ, vₕ), normₕ(uₕ), normₕ(uₕ)^2 ≈ innerₕ(uₕ, uₕ)</c
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">D = ∇ₕ(uₕ)
 
-inner₊(D, D, :x) ≈ snorm₁ₕ(uₕ)^2</code></pre>
+@assert inner₊(D, D, :x) ≈ sum(abs2.(diff(parent(uₕ))) ./ diff(xs))
+@assert inner₊(D, D, :x) &gt; 1
+inner₊(D, D, :x)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4.894348370484643</code></pre>
 </div>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
-<p>Build the mesh as <code class="md-code-inline">mesh(Ω, 11, false)</code>, a non-uniform one with the same number of points, and rerun the blocks above. <code class="md-code-inline">ndofs</code> is unchanged, but the interior weights are no longer equal (on a uniform mesh only the two end weights are halved), so <code class="md-code-inline">normₕ</code> and <code class="md-code-inline">innerₕ</code> change while the weights still sum to the interval length. The <a href="../../tutorials/mesh/">mesh tutorial</a> builds such meshes on purpose.</p>
+<p>Build the mesh as <code class="md-code-inline">mesh(Ω, 11, false)</code>, a non-uniform one with the same number of points, and rerun the blocks above. <code class="md-code-inline">ndofs</code> is unchanged, but the interior weights are no longer equal (on a uniform mesh only the two end weights are halved), so <code class="md-code-inline">normₕ</code> and <code class="md-code-inline">innerₕ</code> change while the weights still sum to the interval length. The assertions written in terms of the node coordinates still hold. Those with a hand value that needs equal spacing (the cell averages, the step averages, the <code class="md-code-inline">0.5</code> in the norms and the zero inner product, including the composite norms below) are uniform-mesh identities and fire on the graded mesh. The <a href="../../tutorials/mesh/">mesh tutorial</a> builds such meshes on purpose.</p>
 </div>
 </div>
 <h2 id="space_composite" class="md-heading">Composite spaces and vector elements<a href="#space_composite" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -301,6 +326,8 @@ inner₊(D, D, :x) ≈ snorm₁ₕ(uₕ)^2</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">Vₕ = Wₕ^Val(2)
 
+@assert ncomponents(Vₕ) == 2 &amp;&amp; ndofs(Vₕ) == ncomponents(Vₕ) * ndofs(Wₕ)
+@assert ndofs(Vₕ, Tuple) == (11, 11)
 ncomponents(Vₕ), ndofs(Vₕ), ndofs(Vₕ, Tuple)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(2, 22, (11, 11))</code></pre>
@@ -316,6 +343,8 @@ uᵧ = uvec(2)
 uₓ .= 1.5
 uᵧ .= -2.0
 
+@assert parent(uvec)[[1, 12]] == [1.5, -2.0]
+@assert all(==(1.5), parent(uvec)[1:11]) &amp;&amp; all(==(-2.0), parent(uvec)[12:22])
 parent(uvec)[[1, 12]]</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">2-element Vector{Float64}:
@@ -328,9 +357,10 @@ parent(uvec)[[1, 12]]</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">c₁, c₂ = components(uvec)
 
-c₁ === uₓ, c₂ === uᵧ</code></pre>
+@assert c₁ === uₓ &amp;&amp; c₂ === uᵧ &amp;&amp; c₁ !== c₂
+c₁[1], c₂[1]</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.5, -2.0)</code></pre>
 </div>
 <p>On a composite space <code class="md-code-inline">Rₕ!</code> takes a tuple of scalar functions, or one function returning a tuple, and <code class="md-code-inline">innerₕ</code> sums over components:</p>
 <div class="md-multi-output">
@@ -338,9 +368,11 @@ c₁ === uₓ, c₂ === uᵧ</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">Rₕ!(uvec, (x -&gt; sin(π * x), x -&gt; cos(π * x)))
 
-normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2</code></pre>
+@assert normₕ(uvec)^2 ≈ 0.5 + 0.5
+@assert normₕ(uvec(1))^2 ≈ 0.5 &amp;&amp; normₕ(uvec(2))^2 ≈ 0.5
+normₕ(uvec)^2</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">true</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1.0</code></pre>
 </div>
 <p>The storage is flat, and <code class="md-code-inline">reshape</code> gives each component a grid-shaped view of the same memory. For a 2D space on a 5 × 5 mesh the layout is:</p>
 <figure>
@@ -422,7 +454,7 @@ normₕ(uvec)^2 ≈ normₕ(uvec(1))^2 + normₕ(uvec(2))^2</code></pre>
 <div class="md-admonition md-admonition-tip">
 <p class="md-admonition-title">Try this</p>
 <div class="md-admonition-body">
-<p>Replace <code class="md-code-inline">Val(2)</code> with <code class="md-code-inline">Val(3)</code> and add a third function to the tuple. <code class="md-code-inline">ncomponents</code> and <code class="md-code-inline">ndofs</code> follow.</p>
+<p>Replace <code class="md-code-inline">Val(2)</code> with <code class="md-code-inline">Val(3)</code> and add a third function to the tuple. <code class="md-code-inline">ncomponents</code> and <code class="md-code-inline">ndofs</code> follow. The assertions that state <code class="md-code-inline">N = 2</code> (the component count and the norm sum) fire until you update them.</p>
 </div>
 </div>
 <h2 id="Ghost-spaces" class="md-heading">Ghost spaces<a href="#Ghost-spaces" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -458,6 +490,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=1f54b3a0"></script>
+  <script src="../../assets/materialdocs.js?v=95a249f9"></script>
 </body>
 </html>

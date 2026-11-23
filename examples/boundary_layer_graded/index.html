@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Graded meshes for a boundary layer — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=6c7fa14c">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=46c3bc84">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Graded meshes for a boundary layer — Bramble.jl">
   <meta property="og:title" content="Graded meshes for a boundary layer — Bramble.jl">
@@ -348,7 +348,7 @@ observed_orders</code></pre>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">4-element Vector{Float64}:
  1.9974031905865584
  1.999280000379867
- 1.99981561337502
+ 1.9998156133750198
  1.9999536285026545</code></pre>
 </div>
 <h2 id="The-Robin-relation-on-the-lifted-solution" class="md-heading">The Robin relation on the lifted solution<a href="#The-Robin-relation-on-the-lifted-solution" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -449,7 +449,7 @@ robin_residuals</code></pre>
   const data = [{
   name: "uniform",
   x: [0.024390243902439025,0.012345679012345678,0.006211180124223602,0.003115264797507788,0.0015600624024961],
-  y: [0.2611622029168333,0.11739385619189577,0.047647186656980915,0.014964991485822907,0.0036281912058330986],
+  y: [0.2611622029168333,0.11739385619189577,0.04764718665698092,0.014964991485822907,0.003628191205833098],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#B26A00", size: 8 },
@@ -457,7 +457,7 @@ robin_residuals</code></pre>
 {
   name: "graded (σ = 4)",
   x: [0.024390243902439025,0.012345679012345678,0.006211180124223602,0.003115264797507788,0.0015600624024961],
-  y: [0.0009177995704773943,0.00022986326772034052,5.749450330622029e-5,1.437546299494534e-5,3.5939812656055523e-6],
+  y: [0.0009177995704773943,0.00022986326772034052,5.7494503306220284e-5,1.437546299494534e-5,3.5939812656055523e-6],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#0E7C86", size: 8 },
@@ -465,7 +465,7 @@ robin_residuals</code></pre>
 {
   name: "slope 2",
   x: [0.0015600624024961, 0.024390243902439025],
-  y: [0.0036281912058330986, 0.8868261932444435],
+  y: [0.003628191205833098, 0.8868261932444433],
   mode: 'lines',
   type: 'scatter',
   line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
@@ -559,6 +559,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=6c7fa14c"></script>
+  <script src="../../assets/materialdocs.js?v=46c3bc84"></script>
 </body>
 </html>

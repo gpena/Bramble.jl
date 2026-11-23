@@ -343,12 +343,38 @@ u_end = sol_drive.u[end]
 (u_end[1], u_end[51], u_end[101])
 
 # The ends hold g to solver tolerance, since the Dirichlet rows are algebraic constraints   #src
-# in the DAE that FBDF's nonlinear solve satisfies up to its convergence criterion. The      #src
-# midpoint is short of the steady 0.5 for the reason the prose below gives, with the window  #src
-# tight enough that reaching the steady line would fail.                                     #src
+# in the DAE that FBDF's nonlinear solve satisfies up to its convergence criterion.         #src
 @test u_end[1]≈1.0 atol=1e-8 rtol=1e-8                            #src
 @test u_end[101]≈0.0 atol=1e-8 rtol=1e-8                          #src
-@test 0.43 < u_end[51] < 0.45                                    #src
+
+# This problem has a series solution, the steady line ``(1 - x) t`` minus the decaying sine  #src
+# modes the ramp excites. Its tail falls as ``k^{-3}``, so 20000 terms reach 1e-10.          #src
+drive_mode(k, x, t) = 2 / (k * pi)^3 * (1 - exp(-(k * pi)^2 * t)) * sinpi(k * x)           #src
+drive_series(x, t) = (1 - x) * t - sum(k -> drive_mode(k, x, t), 1:20000)                  #src
+
+# The midpoint of the uniform mesh is a node of it. The sine modes are discrete eigenmodes    #src
+# there, so the error is only about 3e-9, bracketed between 1e-10 and 1e-6: a solve that      #src
+# missed the series, or reproduced it by construction, fails.                                 #src
+@test 1.0e-10 < abs(u_end[51] - drive_series(0.5, 1.0)) < 1.0e-6                             #src
+
+# The same drive on the seeded random mesh of `heat_series`: every interior node sits a       #src
+# second-order error from the series, bracketed on both sides, and the ends hold g.          #src
+function drive_random(; n0 = 11)                                                             #src
+    Random.seed!(20260903)                                                                   #src
+    Ωr = mesh(domain(interval(0.0, 1.0), :left => :left, :right => :right), n0, false)       #src
+    Wr = gridspace(Ωr)                                                                       #src
+    ar = form(Wr, Wr, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)))                                       #src
+    lr = form(Wr, v -> innerₕ(element(Wr, 0.0), v))                                          #src
+    bcr = dirichlet_constraints(Ωr, I, :left => (x, t) -> t, :right => (x, t) -> 0.0)        #src
+    sdr = semidiscretize(ar, lr; dirichlet = bcr)                                            #src
+    solr = solve(ode_problem(sdr, element(Wr, 0.0), I), FBDF();                              #src
+        reltol = 1e-10, abstol = 1e-12)                                                      #src
+    return collect(points(Ωr)), solr.u[end]                                                  #src
+end                                                                                          #src
+xr, ur = drive_random()                                                                      #src
+@test all(i -> 1.0e-6 < abs(ur[i] - drive_series(xr[i], 1.0)) < 5.0e-3, 2:(length(xr) - 1))  #src
+@test abs(ur[1] - drive_series(xr[1], 1.0)) < 1.0e-8                                         #src
+@test abs(ur[end] - drive_series(xr[end], 1.0)) < 1.0e-8                                     #src
 
 # The left end is the ramp ``g = t``, so a surface that drew a constant edge would fail.    #src
 @test sol_drive(0.5)[1]≈0.5 atol=1e-6                                                    #src

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Geometry tutorial — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1e80c659">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=5fa19bb9">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Geometry tutorial — Bramble.jl">
   <meta property="og:title" content="Geometry tutorial — Bramble.jl">
@@ -125,6 +125,9 @@ import Bramble: point, center, projection, topo_dim
 
 rod = domain(interval(0.0, 10.0), :dirichlet =&gt; :left, :neumann =&gt; :right)
 
+@assert dim(rod) == 1 &amp;&amp; collect(center(rod)) ≈ [5.0]   # the midpoint of [0, 10]
+@assert collect(labels(rod)) == [:dirichlet, :neumann]
+
 dim(rod), center(rod), collect(labels(rod))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(1, (5.0,), [:dirichlet, :neumann])</code></pre>
@@ -145,18 +148,23 @@ dim(rod), center(rod), collect(labels(rod))</code></pre>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">I = interval(0.0, 1.0)
 Ω_2d = I × I
-Ω_3d = interval(-1.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 0.5)</code></pre>
+Ω_3d = interval(-1.0, 1.0) × interval(0.0, 2.0) × interval(0.0, 0.5)
+
+@assert dim(Ω_2d) == 2 &amp;&amp; collect(center(Ω_2d)) ≈ [0.5, 0.5]
+@assert dim(Ω_3d) == 3 &amp;&amp; collect(center(Ω_3d)) ≈ [0.0, 1.0, 0.25]
+
+dim(Ω_2d), dim(Ω_3d)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi"><span class="sgr36"><span class="sgr1">CartesianProduct{3,Float64}</span></span>:
-  <span class="sgr32">x</span>: [<span class="sgr34">-1.0, 1.0</span>]
-  <span class="sgr32">y</span>: [<span class="sgr34">0.0, 2.0</span>]
-  <span class="sgr32">z</span>: [<span class="sgr34">0.0, 0.5</span>]</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2, 3)</code></pre>
 </div>
 <p>A set answers geometric questions. <code class="md-code-inline">∈</code> accepts a number in 1D, and in any dimension a tuple or vector of length <code class="md-code-inline">dim</code>:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">X = interval(0.0, 2.0) × interval(-1.0, 1.0)
+
+@assert dim(X) == 2 &amp;&amp; collect(center(X)) ≈ [1.0, 0.0]   # the middle of [0, 2] × [-1, 1]
+@assert collect(extrema(X, 1)) ≈ [0.0, 2.0]
 
 dim(X), extrema(X), extrema(X, 1), center(X)</code></pre>
 </div>
@@ -165,9 +173,9 @@ dim(X), extrema(X), extrema(X, 1), center(X)</code></pre>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">0.5 ∈ I, 1.5 ∈ I, (0.5, 0.5) ∈ Ω_2d, (1.2, 0.3) ∈ Ω_2d</code></pre>
+<pre><code class="language-julia">@assert 0.5 ∈ I &amp;&amp; (0.5, 0.5) ∈ Ω_2d   # inside the unit interval and square
+@assert !(1.5 ∈ I) &amp;&amp; !((1.2, 0.3) ∈ Ω_2d)   # 1.5 and 1.2 exceed 1</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, false, true, false)</code></pre>
 </div>
 <p><code class="md-code-inline">extrema(X, 1)</code> is the range along the first axis, and <code class="md-code-inline">projection(X, 1)</code> is that axis as an interval.</p>
 <div class="md-admonition md-admonition-tip">
@@ -196,6 +204,9 @@ channel = domain(
     :outflow =&gt; :right,
     :wall =&gt; (:top, :bottom)
 )
+
+@assert dim(channel) == 2 &amp;&amp; collect(center(channel)) ≈ [2.5, 0.5]   # the middle of [0, 5] × [0, 1]
+@assert collect(labels(channel)) == [:inflow, :outflow, :wall]
 
 dim(channel), center(channel), collect(labels(channel))</code></pre>
 </div>
@@ -226,6 +237,9 @@ m_time = markers(
     :moving_source =&gt; ((p, t) -&gt; norm(p .- [t, 0.5]) &lt; 0.2)
 )
 
+@assert collect(labels(m_cond)) == [:inflow, :hot_spot]
+@assert collect(labels(m_time)) == [:moving_source]
+
 collect(labels(m_cond)), m_time(1.5)      # the second is the marker set frozen at t = 1.5</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">([:inflow, :hot_spot], Bramble.EvaluatedDomainMarkers{Bramble.DomainMarkers{Tuple{}, Tuple{}, Tuple{Bramble.Marker{Main.var&quot;#5#6&quot;}}, Tuple{}}, Float64}(DomainMarkers(1 total), 1.5))</code></pre>
@@ -249,6 +263,9 @@ collect(labels(m_cond)), m_time(1.5)      # the second is the marker set frozen 
     :insulated =&gt; (:xmin, :xmax, :ymin, :ymax)
 )
 
+@assert collect(center(sink)) ≈ [1.0, 1.0, 0.5]   # the middle of [0, 2] × [0, 2] × [0, 1]
+@assert collect(labels(sink)) == [:heat_source, :convection, :insulated]
+
 center(sink), collect(labels(sink))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">((1.0, 1.0, 0.5), [:heat_source, :convection, :insulated])</code></pre>
@@ -263,9 +280,13 @@ center(sink), collect(labels(sink))</code></pre>
     :neumann =&gt; (:top, :bottom)
 )
 
-dim(Ω), center(Ω), (0.5, 0.5) ∈ Ω, Bramble.is_collapsed(Ω)</code></pre>
+@assert dim(Ω) == 2 &amp;&amp; collect(center(Ω)) ≈ [0.5, 0.5]
+@assert (0.5, 0.5) ∈ Ω &amp;&amp; !((1.5, 0.5) ∈ Ω)   # the second point is right of x = 1
+@assert !Bramble.is_collapsed(Ω)   # a unit square has no zero-length side
+
+dim(Ω), center(Ω)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(2, (0.5, 0.5), true, false)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2, (0.5, 0.5))</code></pre>
 </div>
 <p><a href="../../internals/geometry/#Bramble.set-Tuple{Bramble.CartesianProduct}"><code class="md-code-inline">Bramble.set</code></a> (private, hence the prefix) returns the underlying set.</p>
       </article>
@@ -297,6 +318,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=1e80c659"></script>
+  <script src="../../assets/materialdocs.js?v=5fa19bb9"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Assemble on several threads — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1a0b6b1f">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=82c2996e">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Assemble on several threads — Bramble.jl">
   <meta property="og:title" content="Assemble on several threads — Bramble.jl">
@@ -117,6 +117,11 @@
 using Bramble: execution_policy
 
 Ω = domain(interval(0.0, 1.0))
+
+@assert execution_policy(mesh(Ω, 33)) === Serial()
+@assert execution_policy(gridspace(mesh(Ω, 33))) === Serial()
+@assert execution_policy(mesh(Ω, 33)) !== Parallel()
+
 execution_policy(mesh(Ω, 33)), execution_policy(gridspace(mesh(Ω, 33)))</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(Bramble.CpuSerial(), Bramble.CpuSerial())</code></pre>
@@ -128,6 +133,10 @@ execution_policy(mesh(Ω, 33)), execution_policy(gridspace(mesh(Ω, 33)))</code>
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">Ωₛ = mesh(Ω, 33; backend = backend(policy = Serial()))
 Ωₚ = mesh(Ω, 33; backend = backend(policy = Parallel()))
+
+@assert execution_policy(gridspace(Ωₛ)) === Serial()
+@assert execution_policy(gridspace(Ωₚ)) === Parallel()
+@assert execution_policy(gridspace(Ωₛ)) !== execution_policy(gridspace(Ωₚ))
 
 execution_policy(gridspace(Ωₛ)), execution_policy(gridspace(Ωₚ))</code></pre>
 </div>
@@ -155,14 +164,18 @@ end
 Aₛ, bₛ = assemble_pair(Serial())
 Aₚ, bₚ = assemble_pair(Parallel())
 
-@assert nnz(Aₛ) &gt; 0 &amp;&amp; sum(abs, bₛ) &gt; 0    # control: both are nonzero
+# 65 × 65 nodes, a five-point stencil: 5 entries per row, minus 4 · 65 at the edges
+@assert size(Aₛ) == (65^2, 65^2) &amp;&amp; length(bₛ) == 65^2
+@assert nnz(Aₛ) == 5 * 65^2 - 4 * 65
+@assert sum(abs, bₛ) &gt; 0    # control: the load is nonzero
 @assert Aₚ == Aₛ
 @assert bₚ ≈ bₛ
-Aₚ == Aₛ, bₚ ≈ bₛ</code></pre>
+
+nnz(Aₚ), length(bₚ)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(true, true)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(20865, 4225)</code></pre>
 </div>
-<p>The matrix is identical entry by entry. Reductions such as <code class="md-code-inline">innerₕ</code> add their terms in another order under a threaded policy, so compare vectors and scalars built from them with <code class="md-code-inline">≈</code>.</p>
+<p>The matrix has one row per node, <span class="md-math md-math-inline">\(65^2 = 4225\)</span>, and the five-point stencil gives it <span class="md-math md-math-inline">\(5 \cdot 65^2 - 4 \cdot 65 = 20865\)</span> stored entries. It is identical entry by entry under both policies. Reductions such as <code class="md-code-inline">innerₕ</code> add their terms in another order under a threaded policy, so compare vectors and scalars built from them with <code class="md-code-inline">≈</code>.</p>
 <h2 id="Use-the-Polyester-policy" class="md-heading">Use the Polyester policy<a href="#Use-the-Polyester-policy" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> is a third policy, built on <code class="md-code-inline">Polyester.jl</code>&#39;s <code class="md-code-inline">@batch</code>. The type ships with Bramble, but its sweeps live in an extension that loads with <code class="md-code-inline">using Polyester</code>. Without it, the first threaded call throws an error that names the package.</p>
 <div class="md-code-block">
@@ -216,8 +229,16 @@ execution_policy(gridspace(Ωₕ))   # CpuPolyester()</code></pre>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/julia-repl.min.js"></script>
   <script>hljs.highlightAll();</script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.6/katex.min.js"></script>
+  <script>var MD_KATEX_OPTIONS = {};
+document.querySelectorAll('.md-math').forEach(function (el) {
+  var tex = el.textContent.trim().replace(/^\\[\[(]/, '').replace(/\\[\])]$/, '');
+  katex.render(tex, el, Object.assign({ throwOnError: false }, MD_KATEX_OPTIONS,
+    { displayMode: el.classList.contains('md-math-display') }));
+});</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=1a0b6b1f"></script>
+  <script src="../../assets/materialdocs.js?v=82c2996e"></script>
 </body>
 </html>

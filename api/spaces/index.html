@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grid spaces — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=15aaeff5">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b6d73f3a">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Grid spaces — Bramble.jl">
   <meta property="og:title" content="Grid spaces — Bramble.jl">
@@ -110,13 +110,14 @@
 <div class="md-docstring" id="Bramble.ScalarGridSpace">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ScalarGridSpace</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L131-L203" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L154-L228" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
 <pre><code class="language-julia">ScalarGridSpace(mesh::MType, weights::SpaceWeights{D, T, VT})
-ScalarGridSpace{D, T, VT, MType}(mesh::MType, weights::SpaceWeights{D, T, VT})</code></pre>
+ScalarGridSpace{D, T, VT, MType}(mesh::MType, weights::SpaceWeights{D, T, VT})
+ScalarGridSpace{D, T, VT, MType, WS}(mesh::MType, weights::WS)</code></pre>
 </div>
 <p>Represents a function space for <strong>scalar fields</strong> defined on a mesh.</p>
 <p>A <code class="md-code-inline">ScalarGridSpace</code> pairs the mesh with the precomputed weight vectors (<a href="../../internals/space/#Bramble.SpaceWeights"><code class="md-code-inline">SpaceWeights</code></a>) its discrete inner products need.</p>
@@ -124,7 +125,7 @@ ScalarGridSpace{D, T, VT, MType}(mesh::MType, weights::SpaceWeights{D, T, VT})</
 <ul class="md-list-tight">
 <li><p><code class="md-code-inline">mesh::MType</code>: the underlying mesh of the grid space.</p>
 </li>
-<li><p><code class="md-code-inline">weights::SpaceWeights{D, T, VT}</code>: precomputed inner product weight vectors, held by reference (<code class="md-code-inline">SpaceWeights</code> is a <code class="md-code-inline">mutable struct</code> with <code class="md-code-inline">const</code> fields).</p>
+<li><p><code class="md-code-inline">weights::WS</code>: precomputed inner product weight vectors, a <a href="../../internals/space/#Bramble.SpaceWeights"><code class="md-code-inline">SpaceWeights</code></a> held by reference (a <code class="md-code-inline">mutable struct</code> with <code class="md-code-inline">const</code> fields). Only a <code class="md-code-inline">CpuPolyester</code> task&#39;s rebuilt space holds the same fields inline instead.</p>
 </li>
 </ul>
 <p><strong>Discrete inner products</strong></p>
@@ -221,7 +222,7 @@ CompositeGridSpace{N, Spaces}(spaces::Spaces) where {N, Spaces &lt;: Tuple}</cod
 <div class="md-docstring" id="Bramble.gridspace">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gridspace</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L216-L249" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L248-L281" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -308,7 +309,7 @@ ndofs(Wₕ::AbstractSpaceType, ::Type{Tuple}) -&gt; NTuple{N, Int}</code></pre>
 <div class="md-docstring" id="Bramble.weights">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.weights</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L342-L419" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/scalar_gridspace.jl#L374-L451" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -455,7 +456,7 @@ VectorElement{S, T, VT}(data::VT, space::S)</code></pre>
 <div class="md-docstring" id="Bramble.element">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.element</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L182-L188" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L183-L189" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -518,7 +519,7 @@ element(Wₕ::AbstractSpaceType, α::Number) -&gt; VectorElement</code></pre>
 <div class="md-docstring" id="Bramble.components">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.components</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L167-L172" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L168-L173" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -540,7 +541,7 @@ components(op::LazyOp, space::AbstractSpaceType) -&gt; Tuple</code></pre>
 <div class="md-docstring" id="Bramble.component_range">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.component_range</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L100-L107" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L101-L108" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -553,7 +554,7 @@ components(op::LazyOp, space::AbstractSpaceType) -&gt; Tuple</code></pre>
 <div class="md-docstring" id="Bramble.component_ranges">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.component_ranges</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L115-L122" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/space/vectorelement.jl#L116-L123" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1159,7 +1160,7 @@ Bramble.ghost_values(v)         # the ghosts at xmin and xmax at t = 0.5</code><
 <div class="md-docstring" id="Bramble.assemble!-Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code> — <span class="md-docstring-sig">Tuple{AbstractMatrix, AbstractVector, Bramble.GhostBilinearForm, Bramble.GhostLinearForm}</span></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L1045-L1066" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/ghost_assembly.jl#L1046-L1067" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1241,6 +1242,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=15aaeff5"></script>
+  <script src="../../assets/materialdocs.js?v=b6d73f3a"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Nonlinear Poisson equation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=e459722b">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=51940294">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Nonlinear Poisson equation — Bramble.jl">
   <meta property="og:title" content="Nonlinear Poisson equation — Bramble.jl">
@@ -167,7 +167,7 @@ for it in 1:200
 end
 length(picard_steps), picard_steps[[1, 2, 3, end]]</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(9, [2.718281828459045, 0.05862611946851515, 0.0005965799435587726, 9.14823772291129e-14])</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(9, [2.718281828459045, 0.05862611946851448, 0.0005965799435467822, 6.039613253960852e-14])</code></pre>
 </div>
 <p>The ratio of each step to the one before it is the convergence rate of the iteration:</p>
 <div class="md-multi-output">
@@ -176,7 +176,7 @@ length(picard_steps), picard_steps[[1, 2, 3, end]]</code></pre>
 <pre><code class="language-julia">picard_ratios = picard_steps[2:end] ./ picard_steps[1:(length(picard_steps) - 1)]
 extrema(picard_ratios)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.01017600941299147, 0.05506549051055867)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.010176009412787063, 0.03577535183480205)</code></pre>
 </div>
 <p>The step shrinks by a factor of 0.010 to 0.027 per iteration, one to two orders of magnitude, and falls below 1e-12 after 9 iterations. A roughly constant ratio is linear convergence.</p>
 <h2 id="Newton&#39;s-method" class="md-heading">Newton&#39;s method<a href="#Newton&#39;s-method" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -293,7 +293,7 @@ length(newton_residuals), newton_residuals</code></pre>
   const data = [{
   name: "Picard",
   x: [1,2,3,4,5,6,7,8,9],
-  y: [2.718281828459045,0.05862611946851515,0.0005965799435587726,1.5937484241002053e-5,2.4843925716666604e-7,5.305048844661542e-9,1.007043337608593e-10,1.6613377340490842e-12,9.14823772291129e-14],
+  y: [2.718281828459045,0.05862611946851448,0.0005965799435467822,1.5937484203476515e-5,2.4843923052131345e-7,5.305089700868848e-9,1.0070211331481005e-10,1.688205131245013e-12,6.039613253960852e-14],
   mode: 'lines',
   type: 'scatter',
 },
@@ -345,7 +345,7 @@ uₕ_newton .= u
 uexact = Rₕ(Wₕ, sol)
 norm₁ₕ(uₕ_newton .- uexact), norm₁ₕ(uₙ .- uexact)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.00029131009520692186, 0.0002913100951331481)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.00029131009520692186, 0.0002913100951362921)</code></pre>
 </div>
 <h2 id="The-assembled-Jacobian" class="md-heading">The assembled Jacobian<a href="#The-assembled-Jacobian" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><a href="../../api/forms/#Bramble.jacobian_form"><code class="md-code-inline">Bramble.jacobian_form</code></a> builds the same Jacobian from the form&#39;s AST, as one form <code class="md-code-inline">a + ∂a</code> assembled once per state. The state enters through one coefficient, <code class="md-code-inline">αx</code>, declared with the operator it is computed from, <code class="md-code-inline">U -&gt; Mₕ(U)</code>, and the scalar function <code class="md-code-inline">α</code>, so that <code class="md-code-inline">αx == α.(Mₕ(u))</code> at every state:</p>
@@ -512,7 +512,7 @@ order2 = log(errs2[end - 1] / errs2[end]) / log(hs2[end - 1] / hs2[end])
 order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 (order1, order2, order3)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.9999463779198852, 1.9959056157400157, 1.9217474793256721)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(1.999946784465622, 1.9959056158379607, 1.921747479337009)</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -593,7 +593,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
   const data = [{
   name: "1D",
   x: [0.4537346574443589,0.22686732872217952,0.11343366436108976,0.05671683218054491,0.028358416090272454,0.014179208045136282,0.007089604022568197],
-  y: [0.0038632486241389746,0.0010046880088576495,0.00025353087509887695,6.352911783712144e-5,1.5891413612284777e-5,3.973423873723539e-6,9.933928901653738e-7],
+  y: [0.0038632486241389746,0.0010046880088576495,0.0002535308751847424,6.352911783712144e-5,1.5891413612284777e-5,3.973424993418774e-6,9.933928901653738e-7],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
@@ -601,7 +601,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 {
   name: "2D",
   x: [0.7281398631056489,0.3640699315528245,0.18203496577641226,0.09101748288820616,0.045508741444103114],
-  y: [0.033591338643167684,0.00921005687409368,0.002370760002510309,0.0005981775775629383,0.0001499694058212106],
+  y: [0.033591338643167684,0.00921005687409368,0.0023707600025152107,0.0005981775776590475,0.00014996940583512472],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#0E7C86", size: 8 },
@@ -609,7 +609,7 @@ order3 = log(errs3[end - 1] / errs3[end]) / log(hs3[end - 1] / hs3[end])
 {
   name: "3D",
   x: [0.918047411794347,0.4590237058971735,0.22951185294858678,0.1147559264742934],
-  y: [0.04984357792276794,0.022594049568900636,0.006657103524337601,0.001757040108287076],
+  y: [0.04984357792276507,0.022594049568899995,0.006657103524333661,0.0017570401082722287],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#B26A00", size: 8 },
@@ -698,6 +698,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=e459722b"></script>
+  <script src="../../assets/materialdocs.js?v=51940294"></script>
 </body>
 </html>

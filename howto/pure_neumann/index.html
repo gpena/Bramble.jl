@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>How to solve a pure Neumann problem — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=a8c54a82">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=2ff5ee76">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="How to solve a pure Neumann problem — Bramble.jl">
   <meta property="og:title" content="How to solve a pure Neumann problem — Bramble.jl">
@@ -169,7 +169,7 @@ err_sq = maximum(abs, u_sol - u_ex)
 
 abs(dot(w_sq, u_sol)), err_sq</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(6.765421556309548e-17, 0.008916806046415426)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(7.222311128058517e-17, 0.008916806046414205)</code></pre>
 </div>
 <p>The residual of the system is <span class="md-math md-math-inline">\(F - \lambda w\)</span> with <span class="md-math md-math-inline">\(\lambda = \sum F / \sum w\)</span>, because <span class="md-math md-math-inline">\(\mathbf{1}^T A = 0\)</span>. The compatibility of the data holds only to the quadrature error, so <span class="md-math md-math-inline">\(\lambda\)</span> is small but nonzero. The error is the discrete difference to the exact solution shifted to the same mean.</p>
 <h2 id="Remove-a-kernel-in-the-ghosts" class="md-heading">Remove a kernel in the ghosts<a href="#Remove-a-kernel-in-the-ghosts" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -196,7 +196,7 @@ n_phys = npoints(Ωₕ_rect)
 
 size(Z_rect), norm(A_rect * Z_rect, Inf)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">((139, 4), 2.1316282072803006e-14)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">((139, 4), 2.842170943040401e-14)</code></pre>
 </div>
 <p>The kernel has 4 columns, each supported on the two ghosts of a corner, and <code class="md-code-inline">A * Z</code> vanishes to rounding. The physical values come first in the vector of unknowns, then the ghosts. To check the solve, choose a physical vector, set the ghosts to zero, and form the load <code class="md-code-inline">F = A x</code>. The gauged solve returns the physical values of <code class="md-code-inline">x</code>, and the load of a vector shifted by any combination of the kernel columns gives the same answer:</p>
 <div class="md-multi-output">
@@ -219,7 +219,7 @@ u_shifted = pde_solve(A_rect, A_rect * (x_ghost0 + Z_rect * [1.0, -2.0, 3.0, 0.5
 
 maximum(abs, u_gauged[1:n_phys] - x_phys), norm(Z_rect&#39; * u_gauged, Inf)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(3.548286109378296e-10, 3.841829816480246e-17)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(2.8467839197077183e-10, 9.453534337892915e-18)</code></pre>
 </div>
 <p>The physical error is about <span class="md-math md-math-inline">\(10^{-10}\)</span> here. <code class="md-code-inline">ghost_kernel</code> finds kernels supported on the ghosts of a single node. A kernel spread over several nodes is left out, and the gauged solve still gives the physical part, to about <span class="md-math md-math-inline">\(10^{-8}\)</span> relative in general (see <a href="../../api/solvers/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a>). With <code class="md-code-inline">mean_zero = w</code> as well, the border is <code class="md-code-inline">[w Z]</code>.</p>
 <h2 id="Check-that-the-data-are-compatible" class="md-heading">Check that the data are compatible<a href="#Check-that-the-data-are-compatible" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -260,21 +260,23 @@ function check_compatibility(shift)
     result = Logging.with_logger(log) do
         Bramble.neumann_compatibility(neumann_problem(shift), Ωₕ_rand)
     end
-    return result, log.messages
+    status = result.compatible ? :compatible : :incompatible
+    return (; status, result.defect, result.refined_defect, result.λ,
+        result.second_ratio, warnings = log.messages)
 end
 
-ok, ok_warnings = check_compatibility(0.0)
-bad, bad_warnings = check_compatibility(0.2)
+ok = check_compatibility(0.0)
+bad = check_compatibility(0.2)
 
-@assert ok.compatible &amp;&amp; isempty(ok_warnings)
-@assert ok.defect &lt; 1e-4
-@assert !bad.compatible &amp;&amp; length(bad_warnings) == 1
-@assert occursin(&quot;incompatible&quot;, only(bad_warnings))
+@assert ok.status === :compatible &amp;&amp; isempty(ok.warnings)
+@assert ok.defect &lt; 1e-4 &amp;&amp; bad.refined_defect &gt; 5e-3
+@assert bad.status === :incompatible &amp;&amp; length(bad.warnings) == 1
+@assert occursin(&quot;incompatible&quot;, only(bad.warnings))
 @assert isapprox(bad.λ, 0.2; atol = 1e-3) &amp;&amp; isapprox(bad.second_ratio, 1.0; atol = 0.1)
 
-(ok.compatible, ok.defect), (bad.compatible, bad.λ, bad.second_ratio)</code></pre>
+ok.defect, (bad.λ, bad.second_ratio)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">((true, 7.309780343141524e-6), (false, 0.2000631200513218, 1.0000182239919038))</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(7.309780343599364e-6, (0.2000631200513299, 1.0000182239908741))</code></pre>
 </div>
 <p>The compatible problem raises no warning and its relative defect is below <span class="md-math md-math-inline">\(10^{-4}\)</span>. The shifted one warns once. Its <span class="md-math md-math-inline">\(\lambda\)</span> is <span class="md-math md-math-inline">\(0.2\)</span>, the shift, on the mesh and on both refinements, so the ratio of the removed loads is <span class="md-math md-math-inline">\(1\)</span> where a quadrature error would give about <span class="md-math md-math-inline">\(4\)</span>. The mesh <code class="md-code-inline">Ωₕ</code> is not modified, and a mesh that carries markers of its own needs the domain&#39;s <code class="md-code-inline">markers(Ω)</code> as a third argument so that the refinement can evaluate them again.</p>
 <p>The check has limits. A relative defect on the refined mesh below <code class="md-code-inline">5e-3</code> is accepted as compatible, so a small incompatibility is not detected. Compatible data with a singular flux at a boundary point, whose quadrature error falls slower than the factor of four, can be reported incompatible. When the defect is above the floor the problem is built on a mesh with 16 times the points of <code class="md-code-inline">Ωₕ</code> in 2D.</p>
@@ -292,11 +294,16 @@ K_pen = assemble(a_pen)
 F_raw = assemble(form(W_plain_sq, v -&gt; innerₕ(f_sq, v)))
 F_pen = F_raw - (sum(F_raw) / sum(w_sq)) * w_sq
 
-typeof(K_pen).name.name, size(K_pen), Base.summarysize(K_pen) &lt; 10 * Base.summarysize(K_pen.A)</code></pre>
+# a dense 289 × 289 block of Float64 would take 289² · 8 = 668168 bytes
+@assert K_pen isa Bramble.RankOneUpdate
+@assert size(K_pen) == (289, 289)
+@assert 0 &lt; Base.summarysize(K_pen) &lt; 289^2 * 8 / 10
+
+nameof(typeof(K_pen)), size(K_pen), Base.summarysize(K_pen)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(:RankOneUpdate, (289, 289), true)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(:RankOneUpdate, (289, 289), 29240)</code></pre>
 </div>
-<p><code class="md-code-inline">assemble</code> returns a <code class="md-code-inline">Bramble.RankOneUpdate</code>: the sparse matrix <code class="md-code-inline">K_pen.A</code> of the other terms, <code class="md-code-inline">σ</code> and the two weight vectors, with no dense block. Its products cost one product by <code class="md-code-inline">A</code> and two passes over the vectors. <code class="md-code-inline">K_pen&#39;</code> and <code class="md-code-inline">transpose(K_pen)</code> are lazy wrappers of <code class="md-code-inline">K_pen</code>, and read its parts when they are applied. <code class="md-code-inline">pde_solve(K_pen, F_pen)</code> does not form the dense matrix either. It solves the sparse bordered system</p>
+<p><code class="md-code-inline">assemble</code> returns a <code class="md-code-inline">Bramble.RankOneUpdate</code>: the sparse matrix <code class="md-code-inline">K_pen.A</code> of the other terms, <code class="md-code-inline">σ</code> and the two weight vectors. It holds no dense block and takes under a tenth of the 668168 bytes a dense <span class="md-math md-math-inline">\(289 \times 289\)</span> matrix of <code class="md-code-inline">Float64</code> needs. Its products cost one product by <code class="md-code-inline">A</code> and two passes over the vectors. <code class="md-code-inline">K_pen&#39;</code> and <code class="md-code-inline">transpose(K_pen)</code> are lazy wrappers of <code class="md-code-inline">K_pen</code>, and read its parts when they are applied. <code class="md-code-inline">pde_solve(K_pen, F_pen)</code> does not form the dense matrix either. It solves the sparse bordered system</p>
 <div class="md-math md-math-display">
 \[\begin{pmatrix} A &amp; w \\ w^T &amp; -1/\sigma \end{pmatrix}
 \begin{pmatrix} u \\ \mu \end{pmatrix} =
@@ -323,7 +330,7 @@ rel_dense = norm(u_pen - u_dense) / norm(u_dense)
 
 rel_mz, rel_dense</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(5.626517153311884e-16, 4.337538229063866e-15)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0, 5.648025058533923e-15)</code></pre>
 </div>
 <p>The difference from the <code class="md-code-inline">mean_zero</code> solve is about <span class="md-math md-math-inline">\(10^{-15}\)</span> for <span class="md-math md-math-inline">\(\gamma \ge 1\)</span> and grows as <span class="md-math md-math-inline">\(1/\gamma\)</span>: a small <span class="md-math md-math-inline">\(\sigma\)</span> makes <span class="md-math md-math-inline">\(-1/\sigma\)</span> large against the entries of <code class="md-code-inline">A</code> and costs digits, so take <span class="md-math md-math-inline">\(\gamma \ge 10^{-2}\)</span>. A large <span class="md-math md-math-inline">\(\sigma\)</span> costs nothing. The <a href="../../api/solvers/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a> docstring gives the measured figures.</p>
 <p>The <code class="md-code-inline">σ</code> is read when the form is assembled: with a <code class="md-code-inline">Ref</code> factor, call <code class="md-code-inline">assemble!(K_pen, a_pen)</code> after changing it and before the next solve. With <code class="md-code-inline">dirichlet</code>, the Dirichlet rows of <code class="md-code-inline">K_pen</code> are identity rows and the penalty&#39;s row vector is zeroed there. A form takes one rank-one term. Two are refused with an <code class="md-code-inline">ArgumentError</code>, so add the scalars when they share the functionals. On a ghost space the rank-one term is covered by the <a href="../../internals/space/">support table</a>.</p>
@@ -356,6 +363,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=a8c54a82"></script>
+  <script src="../../assets/materialdocs.js?v=2ff5ee76"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Getting started — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=e0769f2a">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=9288f269">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Getting started — Bramble.jl">
   <meta property="og:title" content="Getting started — Bramble.jl">
@@ -188,7 +188,7 @@ uₕ .= A \ F
 
 normₕ(uₕ .- Rₕ(Wₕ, uexact))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0004017888396867575</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0004017888396870854</code></pre>
 </div>
 <p>Four parts in ten thousand.</p>
 <p><figure class="md-figure">
@@ -196,7 +196,7 @@ normₕ(uₕ .- Rₕ(Wₕ, uexact))</code></pre>
 <figcaption>Poisson solution on a random 17 by 17 grid, with its grid lines</figcaption>
 </figure>
 </p>
-<p>The same problem on a random 17 × 17 grid, coloured by the solution. The grid in the code is uniform, which keeps the example short, but a uniform grid can flatter a scheme: the <a href="../examples/poisson_linear/">linear Poisson example</a> checks convergence on a random non-uniform grid for that reason. Halving the spacing should cut the error by four, since the scheme is second order:</p>
+<p>The same problem on a random 17 × 17 grid, coloured by the solution. The grid in the code is uniform, which keeps the example short, but a uniform grid can flatter a scheme: the <a href="../examples/poisson_linear/">linear Poisson example</a> checks convergence on a random non-uniform grid for that reason. Halving the spacing should cut the error by four, since the scheme is second order in <code class="md-code-inline">normₕ</code>, the discrete <span class="md-math md-math-inline">\(L^2\)</span> norm (<a href="../tutorials/space/#Inner-products-and-norms">Inner products and norms</a>):</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -218,7 +218,7 @@ e₁, e₂ = poisson_error(33), poisson_error(65)
 
 e₁, e₂, log2(e₁ / e₂)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0004017888396867575, 0.00010041090485595501, 2.0005215337097284)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0004017888396870854, 0.00010041090485689163, 2.0005215336974485)</code></pre>
 </div>
 <h2 id="Forms-and-assembly" class="md-heading">Forms and assembly<a href="#Forms-and-assembly" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><code class="md-code-inline">a</code> and <code class="md-code-inline">l</code> are expressions in the trial and test functions. <code class="md-code-inline">form</code> stores the expression and <code class="md-code-inline">assemble</code> walks the mesh, so the same <code class="md-code-inline">a</code> can be refilled every step of a time loop, handed to a nonlinear solver, or differentiated.</p>
@@ -236,6 +236,8 @@ e₁, e₂, log2(e₁ / e₂)</code></pre>
 <li><p><a href="../tutorials/operators/">Difference, jump and average operators</a>: Apply differences, jumps and averages, see what each does at the grid edge, and get the matrix.</p>
 </li>
 <li><p><a href="../tutorials/form/">Linear and bilinear forms</a>: Write, assemble and solve a linear or bilinear form, with Dirichlet conditions, for a Poisson problem.</p>
+</li>
+<li><p><a href="../tutorials/ghost/">Ghost points</a>: Pad a mesh with ghost points, tie them to Neumann and Robin data with relations, and step a heat equation in time.</p>
 </li>
 <li><p><a href="../tutorials/coupled_systems/">Coupled systems</a>: Write a form over several unknowns, constrain one block, and read values across different meshes.</p>
 </li>
@@ -272,6 +274,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=e0769f2a"></script>
+  <script src="../assets/materialdocs.js?v=9288f269"></script>
 </body>
 </html>

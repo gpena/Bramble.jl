@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Coupled systems — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=91af65bf">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=ae3451b3">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Coupled systems — Bramble.jl">
   <meta property="og:title" content="Coupled systems — Bramble.jl">
@@ -127,20 +127,23 @@ ac = form(Vₕ, Vₕ, (u, v) -&gt; begin
     innerₕ(u₁, v₁) + inner₊(∇ₕ(u₂), ∇ₕ(v₂), :x)
 end)
 Ac = assemble(ac)
+@assert size(Ac) == (2 * 33, 2 * 33)
 size(Ac)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">(66, 66)</code></pre>
 </div>
 <p>Sixty-six by sixty-six: two blocks of 33 in one matrix. A term naming <code class="md-code-inline">u[i]</code> and <code class="md-code-inline">v[j]</code> lands in block <span class="md-math md-math-inline">\((j, i)\)</span>, so off-diagonal coupling is written the same way. <code class="md-code-inline">innerₕ(u[1], v[2])</code> fills the block that couples the first unknown to the second equation.</p>
-<p>Indices are checked against the number of blocks when the form is built: <code class="md-code-inline">u[3]</code> on a two-component space raises an <code class="md-code-inline">ArgumentError</code>. A term must name both components or neither, and a term that names one and not the other raises when the matrix is assembled:</p>
+<p>Indices are checked against the number of blocks when the form is built: <code class="md-code-inline">u[3]</code> on a two-component space raises an <code class="md-code-inline">ArgumentError</code>. A term must name both components or neither, and a term that names one and not the other raises an <code class="md-code-inline">ArgumentError</code> when the matrix is assembled:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">try
+<pre><code class="language-julia">err = try
     assemble(form(Vₕ, Vₕ, (u, v) -&gt; innerₕ(u[1], v)))
 catch e
-    showerror(stdout, e)
-end</code></pre>
+    e
+end
+@assert err isa ArgumentError
+showerror(stdout, err)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: a term of this form names its trial component but not its test one. A block of a bilinear form takes a component from each side: write innerₕ(u(i), v(j)) for one block, or innerₕ(u, v) for the same integrand on every diagonal block.</code></pre>
 </div>
@@ -216,23 +219,25 @@ bh = assemble(lh)
 
 # the differenced term is not a no-op: dropping it changes the answer
 b_plain = assemble(form(Vh, v -&gt; innerₕ(πₕ(uv(2)), v(1))))
+@assert maximum(abs, bh .- b_plain) &gt; 0
 maximum(abs, bh .- b_plain)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">0.14285714285714285</code></pre>
 </div>
 <p>Both terms land in leaf 1, the big mesh, although the source lives on leaf 2&#39;s coarser mesh. Leaf 2 can hold one field at the resolution the problem calls for, and a term over leaf 1 can still read it.</p>
-<p>The last line compares values: a differenced source whose offsets were discarded assembles to exactly zero, which has the right length and is finite.</p>
 <p><code class="md-code-inline">innerₕ(D₋ₓ(f), v)</code> is <span class="md-math md-math-inline">\(\sum_i |\square_i| \, (D_{-x}f)_i \, v_i\)</span>: the operator acts on the <em>source</em>, producing another grid function, which is then integrated against the test function. It agrees entry for entry with applying the numeric operator first.</p>
 <h3 id="Bilinear-coupling-across-meshes" class="md-heading">Bilinear coupling across meshes<a href="#Bilinear-coupling-across-meshes" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
-<p>A bilinear term coupling two leaves over different meshes has no assembly unless the trial or the test function is wrapped in <code class="md-code-inline">πₕ</code>. Unwrapped, it is refused:</p>
+<p>A bilinear term coupling two leaves over different meshes has no assembly unless the trial or the test function is wrapped in <code class="md-code-inline">πₕ</code>. Unwrapped, it raises an <code class="md-code-inline">ArgumentError</code>:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
-<pre><code class="language-julia">try
+<pre><code class="language-julia">err2 = try
     assemble(form(Vh, Vh, (u, v) -&gt; innerₕ(u(2), v(1))))
 catch e
-    showerror(stdout, e)
-end</code></pre>
+    e
+end
+@assert err2 isa ArgumentError
+showerror(stdout, err2)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">ArgumentError: a bilinear term coupling two leaves over different meshes has no assembly: the trial leaf has (4, 4) points and the test leaf (8, 8), so an index on one names no point on the other. Got Bramble.BilinearProduct{2, Bramble.InnerH, Bramble.IndexedTrialFunction{2, 2}, Bramble.IndexedTestFunction{2, 1}}. Couple leaves that share a mesh, or wrap the trial or the test function in an interpolation operator: `πₕ(u)`, `πₕ(v)`.</code></pre>
 </div>
@@ -245,10 +250,14 @@ end</code></pre>
 using SparseArrays
 nb = ndofs(Wbig)
 B = Ac_pi[1:nb, nb+1:end]
+@assert size(B) == (8 * 8, 4 * 4)
+@assert nnz(B) == 4 * nb
+@assert nnz(dropzeros(B)) == (2 + 6 * 2)^2
 nnz(B)</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">256</code></pre>
 </div>
+<p>The block is 64 by 16, one row per big node and one column per small node. Each row stores the four small-grid neighbours of its node, so <code class="md-code-inline">nnz(B)</code> is <span class="md-math md-math-inline">\(4 \cdot 64 = 256\)</span>. Per direction, the six interior big nodes weight two small nodes and each end weights one, so <span class="md-math md-math-inline">\((2 + 6 \cdot 2)^2 = 196\)</span> entries are not zero.</p>
 <p>Applied to the small leaf&#39;s values, the off-diagonal block gives the vector the source form assembled above:</p>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -290,6 +299,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=91af65bf"></script>
+  <script src="../../assets/materialdocs.js?v=ae3451b3"></script>
 </body>
 </html>

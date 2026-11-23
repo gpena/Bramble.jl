@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Solvers and preconditioners — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=95b90f18">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=5c103a60">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Solvers and preconditioners — Bramble.jl">
   <meta property="og:title" content="Solvers and preconditioners — Bramble.jl">
@@ -112,7 +112,7 @@
 <div class="md-docstring" id="Bramble.pde_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.pde_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/pde_solve.jl#L44-L201" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/pde_solve.jl#L44-L205" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -137,12 +137,13 @@ pde_solve(fact::Factorization, F::AbstractVector) -&gt; Vector</code></pre>
 </ul>
 <p><strong>Returns</strong></p>
 <ul class="md-list-tight">
-<li><p><code class="md-code-inline">Vector</code>: the solution, of the promoted float type of <code class="md-code-inline">A</code> and <code class="md-code-inline">F</code> (<code class="md-code-inline">Float64</code> for an integer <code class="md-code-inline">A</code> and <code class="md-code-inline">F</code>).</p>
+<li><p><code class="md-code-inline">Vector</code>: the solution, of the promoted float type of <code class="md-code-inline">A</code> and <code class="md-code-inline">F</code> for <code class="md-code-inline">Float32</code>, <code class="md-code-inline">Float64</code> and complex data (<code class="md-code-inline">Float64</code> for an integer <code class="md-code-inline">A</code> and <code class="md-code-inline">F</code>). Other loads keep the type <code class="md-code-inline">A \ F</code> gives them: a <code class="md-code-inline">VectorElement</code> load on a diagonal <code class="md-code-inline">A</code> returns a <code class="md-code-inline">VectorElement</code>, and a <code class="md-code-inline">Rational</code> system a <code class="md-code-inline">Vector</code> of <code class="md-code-inline">Rational</code>s.</p>
 </li>
 </ul>
 <p>A <code class="md-code-inline">SparseMatrixCSR</code> (<code class="md-code-inline">SparseMatricesCSR.jl</code>) <code class="md-code-inline">A</code> is also accepted: converted to <code class="md-code-inline">SparseMatrixCSC</code> first (see <code class="md-code-inline">docs/src/internals/csr_solvers.md</code>), then solved exactly as above.</p>
 <p><strong>Reverse-mode differentiation</strong></p>
 <p>With <code class="md-code-inline">ChainRulesCore.jl</code> loaded, <code class="md-code-inline">BrambleChainRulesExt</code>&#39;s <code class="md-code-inline">rrule</code> solves the adjoint system <code class="md-code-inline">Aᴴ λ = ∂J/∂u</code> once and returns <code class="md-code-inline">∂J/∂A = -λ u&#39;</code> (conjugate transpose, the ChainRules convention for a complex <code class="md-code-inline">A</code>; <code class="md-code-inline">-λ uᵀ</code> for real data) restricted to <code class="md-code-inline">A</code>&#39;s sparsity (never densified) and <code class="md-code-inline">∂J/∂F = λ</code>. Without keywords the adjoint solve reuses the forward solve&#39;s own factorisation. The rule accepts the keywords of <code class="md-code-inline">pde_solve</code>: it forwards them to the primal solve and to the adjoint solve of <code class="md-code-inline">sparse(A&#39;)</code>, so <code class="md-code-inline">solver</code> and <code class="md-code-inline">sym</code> apply to <code class="md-code-inline">Aᴴ</code> as well, and a <code class="md-code-inline">sym</code> hint must hold for <code class="md-code-inline">Aᴴ</code> too. A <code class="md-code-inline">SparseMatrixCSR</code> <code class="md-code-inline">A</code> has no rule (ChainRules sees a method with no <code class="md-code-inline">rrule</code>, and differentiates the conversion and the solver&#39;s internals). <code class="md-code-inline">using Enzyme</code> is enough for the same adjoint through <code class="md-code-inline">BrambleEnzymeExt</code>&#39;s native <code class="md-code-inline">EnzymeRules</code> rule. It takes a <code class="md-code-inline">SparseMatrixCSC</code> <code class="md-code-inline">A</code>, a vector <code class="md-code-inline">F</code> and the keywords of <code class="md-code-inline">pde_solve</code>, forwarded as the rrule forwards them, and differentiates in reverse mode at width 1: a batched reverse throws an <code class="md-code-inline">ArgumentError</code>. It conjugates <code class="md-code-inline">u</code> as the rrule does. Do not call <code class="md-code-inline">Enzyme.@import_rrule</code>, whose bridge drops the cotangent&#39;s explicit zeros from <code class="md-code-inline">nzval</code> and returns a wrong gradient without any error.</p>
+<p>Mooncake and ReverseDiff are not supported.</p>
 <p>A closure capturing a grid space or a form needs <code class="md-code-inline">Enzyme.Const(f)</code> and <code class="md-code-inline">Enzyme.set_runtime_activity(Enzyme.Reverse)</code>, as the automatic differentiation tutorial describes for every other path. A gradient with respect to a <em>runtime</em> scalar coefficient of the form should be a <code class="md-code-inline">Float64</code> or a <code class="md-code-inline">Ref</code>: an <code class="md-code-inline">Integer</code> coefficient known only at run time costs <code class="md-code-inline">form</code> its inferred return type, which Enzyme&#39;s type analysis rejects.</p>
 <p><strong>Forward-mode differentiation</strong></p>
 <p>With <code class="md-code-inline">ForwardDiff.jl</code> loaded, a <code class="md-code-inline">Dual</code> matrix or load of the plain solve is solved by <code class="md-code-inline">BrambleForwardDiffExt</code>, which factors the <code class="md-code-inline">Float64</code> values of <code class="md-code-inline">A</code> once, by the route the <code class="md-code-inline">Float64</code> solve of the same keywords takes, and solves every partial against that factor: with <span class="md-math md-math-inline">\(A₀ = value.(A)\)</span> and <span class="md-math md-math-inline">\(b₀ = value.(F)\)</span>, the value is <span class="md-math md-math-inline">\(x₀ = A₀⁻¹b₀\)</span> and the partial <span class="md-math md-math-inline">\(k\)</span> is <span class="md-math md-math-inline">\(xₖ = A₀⁻¹(bₖ − Aₖx₀)\)</span>. A nested <code class="md-code-inline">Dual</code> recurses through the same factor. A matrix or load built by hand against ForwardDiff&#39;s tag order is refused with an <code class="md-code-inline">ArgumentError</code> by the plain, bordered and kept-factor solves; ForwardDiff never builds such a matrix or load itself. A non-square <code class="md-code-inline">Dual</code> matrix throws an <code class="md-code-inline">ArgumentError</code>: a least-squares solve has a residual term that this derivative omits.</p>
@@ -560,7 +561,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.fdm_preconditioner">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.fdm_preconditioner</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/fdm.jl#L34-L85" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/fdm.jl#L35-L86" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1480,12 +1481,12 @@ true</code></pre>
 </li>
 <li><p>MUMPS is a parallel multifrontal direct solver for large 2D and 3D systems.</p>
 </li>
-<li><p>Sparspak is a pure-Julia sparse direct LU (George and Liu&#39;s Waterloo package). It factors matrices whose entries are <code class="md-code-inline">BigFloat</code> or a <code class="md-code-inline">ForwardDiff.Dual</code> directly. The other three take only BLAS floating-point types (MUMPS and Accelerate accept <code class="md-code-inline">Float32</code> as well as <code class="md-code-inline">Float64</code>).</p>
+<li><p>Sparspak is a pure-Julia sparse direct LU (George and Liu&#39;s Waterloo package). It factors matrices whose entries are <code class="md-code-inline">BigFloat</code> or a <code class="md-code-inline">ForwardDiff.Dual</code> directly. The other three take only BLAS floating-point types. All four accept <code class="md-code-inline">Float32</code> as well as <code class="md-code-inline">Float64</code>.</p>
 </li>
 </ul>
-<p>With <code class="md-code-inline">ForwardDiff</code> loaded, <a href="../../api/solvers/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a> solves a <code class="md-code-inline">Dual</code> matrix or load on every backend: it factors the <code class="md-code-inline">Float64</code> values once, by the route the <code class="md-code-inline">Float64</code> solve takes, and solves each partial against that factor. A <code class="md-code-inline">Dual</code> matrix passed to a backend&#39;s own factorization still fails.</p>
+<p>With <code class="md-code-inline">ForwardDiff</code> loaded, <a href="../../api/solvers/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a> solves a <code class="md-code-inline">Dual</code> matrix or load on every backend: it factors the <code class="md-code-inline">Float64</code> values once, by the route the <code class="md-code-inline">Float64</code> solve takes, and solves each partial against that factor. A <code class="md-code-inline">Dual</code> matrix passed to the SuiteSparse, Accelerate or MUMPS factorization directly still fails; Sparspak&#39;s takes it.</p>
 <p>All four support symbolic reuse through the <a href="../../api/solvers/#Bramble.refactor!"><code class="md-code-inline">refactor!</code></a> driver, for transient time loops and Newton iterations.</p>
-<p>Of the names documented below, the four factorization types, <code class="md-code-inline">suitesparse_factorize</code>, <code class="md-code-inline">sparse_factorize</code> and <code class="md-code-inline">refactor!</code> are <code class="md-code-inline">public</code>. The other <code class="md-code-inline">suitesparse_*</code>, <code class="md-code-inline">accelerate_*</code>, <code class="md-code-inline">mumps_*</code> and <code class="md-code-inline">sparspak_*</code> functions are neither exported nor <code class="md-code-inline">public</code>: call them as <code class="md-code-inline">Bramble.suitesparse_solve</code> and so on.</p>
+<p>Of the names documented below, the four factorization types, <code class="md-code-inline">suitesparse_factorize</code>, <code class="md-code-inline">sparse_factorize</code>, <code class="md-code-inline">refactor!</code> and <code class="md-code-inline">sparse_refactor!</code> are <code class="md-code-inline">public</code>. The other <code class="md-code-inline">suitesparse_*</code>, <code class="md-code-inline">accelerate_*</code>, <code class="md-code-inline">mumps_*</code> and <code class="md-code-inline">sparspak_*</code> functions are neither exported nor <code class="md-code-inline">public</code>: call them as <code class="md-code-inline">Bramble.suitesparse_solve</code> and so on.</p>
 <div class="md-docstring" id="Bramble.sparse_factorize">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.sparse_factorize</code></h4>
@@ -1571,6 +1572,20 @@ refactor!(fact::Factorization, a::BilinearForm; dirichlet = nothing, dirichlet_c
 </ul>
 <p><code class="md-code-inline">refactor!(fact, a; dirichlet)</code> assembles <code class="md-code-inline">a</code> without symmetrising it, so a symmetric factorization refuses a matrix with Dirichlet rows cleared. Assemble with <code class="md-code-inline">symmetrize = true</code> and call the matrix method instead.</p>
 <p>See also <a href="../../api/solvers/#Bramble.sparse_factorize"><code class="md-code-inline">sparse_factorize</code></a>, <a href="../../api/solvers/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a>, <a href="../../api/solvers/#Bramble.suitesparse_refactor!"><code class="md-code-inline">suitesparse_refactor!</code></a>, <a href="../../api/solvers/#Bramble.accelerate_refactor!"><code class="md-code-inline">accelerate_refactor!</code></a>, <a href="../../api/solvers/#Bramble.mumps_refactor!"><code class="md-code-inline">mumps_refactor!</code></a>, <a href="../../api/solvers/#Bramble.sparspak_refactor!"><code class="md-code-inline">sparspak_refactor!</code></a>.</p>
+</div>
+</div>
+<div class="md-docstring" id="Bramble.sparse_refactor!">
+<div class="md-docstring-header">
+<h4 class="md-docstring-binding"><code>Bramble.sparse_refactor!</code></h4>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/sparse_solvers.jl#L242-L247" title="View source">source</a>
+</div>
+<div class="md-docstring-content">
+<div class="md-code-block">
+<button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
+<pre><code class="language-julia">sparse_refactor!(fact::Factorization, A::SparseMatrixCSC) -&gt; Factorization
+sparse_refactor!(fact::Factorization, a::BilinearForm; kwargs...) -&gt; Factorization</code></pre>
+</div>
+<p>Alias for <a href="../../api/solvers/#Bramble.refactor!"><code class="md-code-inline">refactor!</code></a>. Recomputes numerical values of <code class="md-code-inline">fact</code> reusing the existing symbolic factorization.</p>
 </div>
 </div>
 <h3 id="SuiteSparse-solver" class="md-heading">SuiteSparse solver<a href="#SuiteSparse-solver" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
@@ -1692,7 +1707,7 @@ u = fact \ F</code></pre>
 <div class="md-docstring" id="Bramble.suitesparse_qr_solve">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.suitesparse_qr_solve</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/suitesparse_solver.jl#L194-L205" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/solvers/suitesparse_solver.jl#L195-L206" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -2062,6 +2077,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=95b90f18"></script>
+  <script src="../../assets/materialdocs.js?v=5c103a60"></script>
 </body>
 </html>

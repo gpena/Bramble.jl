@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scientific computing: SciML and time integration — Bramble.jl</title>
-  <link rel="stylesheet" href="../assets/materialdocs.css?v=abbc8e6b">
+  <link rel="stylesheet" href="../assets/materialdocs.css?v=82f16b57">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Scientific computing: SciML and time integration — Bramble.jl">
   <meta property="og:title" content="Scientific computing: SciML and time integration — Bramble.jl">
@@ -110,7 +110,7 @@
 <h2 id="Time-dependent-problems-and-the-SciML-stack" class="md-heading">Time-dependent problems and the SciML stack<a href="#Time-dependent-problems-and-the-SciML-stack" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><code class="md-code-inline">semidiscretize</code> applies the method of lines to a spatial <a href="../internals/form/#Bramble.BilinearForm"><code class="md-code-inline">BilinearForm</code></a> and a source <a href="../internals/form/#Bramble.LinearForm"><code class="md-code-inline">LinearForm</code></a>, producing the system <code class="md-code-inline">M uₕ&#39; = F(t) - A uₕ</code> as a callable with the <code class="md-code-inline">(du, u, p, t)</code> signature a time stepper expects. Dirichlet conditions become algebraic rows of a singular mass matrix, so the result is an index-1 differential-algebraic system needing only the boundary data <code class="md-code-inline">g</code>, never its time derivative (see <a href="../examples/heat_equation/">the heat equation example</a>).</p>
 <p>Nothing in this group needs a weak dependency except the last four and <code class="md-code-inline">solve(a, l)</code> below, which all require <a href="https://github.com/SciML/SciMLBase.jl">SciMLBase.jl</a>. <code class="md-code-inline">ode_function</code> and <code class="md-code-inline">ode_problem</code> build a SciMLBase <code class="md-code-inline">ODEFunction</code> and <code class="md-code-inline">ODEProblem</code> and need nothing else. <code class="md-code-inline">linear_problem</code> builds a <code class="md-code-inline">LinearProblem</code> for <code class="md-code-inline">LinearSolve</code>, and <code class="md-code-inline">nonlinear_problem</code> a <code class="md-code-inline">NonlinearProblem</code> for <code class="md-code-inline">NonlinearSolve</code>.</p>
-<p>Bramble defines no time stepper and exports no <code class="md-code-inline">solve</code> for an ODE problem. The <code class="md-code-inline">solve</code> that steps an <code class="md-code-inline">ode_problem</code> comes from the package that provides the stepper: load <code class="md-code-inline">OrdinaryDiffEqBDF</code> for <code class="md-code-inline">FBDF</code> and <code class="md-code-inline">QNDF</code>, or <code class="md-code-inline">OrdinaryDiffEqRosenbrock</code> for the Rosenbrock methods, and call <code class="md-code-inline">solve(ode_problem(...), FBDF())</code>, as <a href="../examples/heat_equation/">the heat equation example</a> does. With Dirichlet rows <span class="md-math md-math-inline">\(M\)</span> is singular and the stepper must accept that: <code class="md-code-inline">FBDF</code>, <code class="md-code-inline">QNDF</code> and the Rosenbrock methods do, an explicit method does not. Without Dirichlet constraints, <code class="md-code-inline">semidiscretize_rhs</code> gives a right-hand side for explicit steppers.</p>
+<p>Bramble defines no time stepper and exports no <code class="md-code-inline">solve</code> for an ODE problem. The <code class="md-code-inline">solve</code> that steps an <code class="md-code-inline">ode_problem</code> comes from the package that provides the stepper: load <code class="md-code-inline">OrdinaryDiffEqBDF</code> (<code class="md-code-inline">using Pkg; Pkg.add(&quot;OrdinaryDiffEqBDF&quot;)</code>) for <code class="md-code-inline">FBDF</code> and <code class="md-code-inline">QNDF</code>, or <code class="md-code-inline">OrdinaryDiffEqRosenbrock</code> for the Rosenbrock methods, and call <code class="md-code-inline">solve(ode_problem(...), FBDF())</code>, as <a href="../examples/heat_equation/">the heat equation example</a> does. With Dirichlet rows <span class="md-math md-math-inline">\(M\)</span> is singular and the stepper must accept that: <code class="md-code-inline">FBDF</code>, <code class="md-code-inline">QNDF</code> and the Rosenbrock methods do, an explicit method does not. Without Dirichlet constraints, <code class="md-code-inline">semidiscretize_rhs</code> gives a right-hand side for explicit steppers.</p>
 <p><code class="md-code-inline">solve(a::BilinearForm, l::LinearForm; dirichlet, dirichlet_components, symmetrize, solver, preconditioner)</code> extends <code class="md-code-inline">SciMLBase.solve</code>: it assembles, solves with <code class="md-code-inline">LinearSolve</code> and returns a <a href="../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a>. <code class="md-code-inline">preconditioner</code> is <code class="md-code-inline">:amg</code>, <code class="md-code-inline">:ilu0</code> or an object with <code class="md-code-inline">ldiv!</code>; see <a href="../api/solvers/">Solvers and preconditioners</a>. <code class="md-code-inline">element(Wₕ, sol)</code> and <code class="md-code-inline">VectorElement(sol, Wₕ)</code> do the unwrapping step alone, for a <code class="md-code-inline">LinearSolution</code> already in hand.</p>
 <p><code class="md-code-inline">semidiscretize_rhs</code> is neither exported nor <code class="md-code-inline">public</code>: call it as <code class="md-code-inline">Bramble.semidiscretize_rhs</code>.</p>
 <div class="md-docstring" id="Bramble.semidiscretize">
@@ -179,7 +179,7 @@ sd = semidiscretize(a, l; dirichlet = bcs)</code></pre>
 <p><code class="md-code-inline">build</code> should be a named function, not a closure literal written inline – the same reason <a href="../api_sciml/#Bramble.type_cached_assemble!"><code class="md-code-inline">type_cached_assemble!</code></a>&#39;s own docstring gives: a <code class="md-code-inline">do ... end</code> block re-literalised on every call allocates a new closure each time.</p>
 <p>This is what lets a Rosenbrock method (<code class="md-code-inline">Rodas5P</code>, <code class="md-code-inline">Rosenbrock23</code>) capture <code class="md-code-inline">-Ȧ(t) u_h</code> by differentiating through <code class="md-code-inline">t</code> directly: the other method&#39;s fixed <code class="md-code-inline">BilinearForm</code> closes over a coefficient buffer of the space&#39;s element type, which cannot hold a <code class="md-code-inline">Dual</code> and throws <code class="md-code-inline">InexactError</code> under exactly that AD sweep.</p>
 <p><strong>Keywords</strong></p>
-<p>Same as the <code class="md-code-inline">BilinearForm</code> method, except <code class="md-code-inline">reassemble</code> defaults to <code class="md-code-inline">true</code> – a <code class="md-code-inline">build</code>-based operator exists specifically to be rebuilt at every step – and <code class="md-code-inline">coefficients</code> is not taken.</p>
+<p>Same as the <code class="md-code-inline">BilinearForm</code> method, except <code class="md-code-inline">reassemble</code> defaults to <code class="md-code-inline">true</code> – a <code class="md-code-inline">build</code>-based operator exists specifically to be rebuilt at every step – and neither <code class="md-code-inline">coefficients</code> nor <code class="md-code-inline">hook_reads_state</code> is taken.</p>
 <p><strong>Examples</strong></p>
 <div class="md-code-block">
 <button class="md-copy-btn" title="Copy to clipboard" aria-label="Copy code"><span class="md-copy-icon">⧉</span><span class="md-copy-feedback">Copied!</span></button>
@@ -328,7 +328,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.jacobian!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L832-L852" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L836-L856" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -344,7 +344,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.jacobian_prototype">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.jacobian_prototype</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L895-L908" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete.jl#L899-L912" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -392,7 +392,7 @@ ode_function(a::BilinearForm, l::LinearForm; kwargs...) -&gt; ODEFunction</code>
 <div class="md-docstring" id="Bramble.ode_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.ode_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L73-L110" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L73-L111" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -401,7 +401,7 @@ ode_function(a::BilinearForm, l::LinearForm; kwargs...) -&gt; ODEFunction</code>
 ode_problem(a::BilinearForm, l::LinearForm, u₀, I; kwargs...) -&gt; ODEProblem
 ode_problem(a::Bramble.GhostBilinearForm, l::Bramble.GhostLinearForm, u₀, I; kwargs...) -&gt; ODEProblem</code></pre>
 </div>
-<p>Build the <code class="md-code-inline">ODEProblem</code> stepping <code class="md-code-inline">sd</code> over the time domain <code class="md-code-inline">I</code>, from the initial condition <code class="md-code-inline">u₀</code> – a <a href="../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> or a plain vector. <code class="md-code-inline">I</code> may equally be a <code class="md-code-inline">(t₀, t₁)</code> tuple.</p>
+<p>Build the <code class="md-code-inline">ODEProblem</code> stepping <code class="md-code-inline">sd</code> over the time domain <code class="md-code-inline">I</code>, from the initial condition <code class="md-code-inline">u₀</code> – a <a href="../api/spaces/#Bramble.VectorElement"><code class="md-code-inline">VectorElement</code></a> or a plain vector. <code class="md-code-inline">I</code> is <code class="md-code-inline">interval(t₀, T)</code> or equally a <code class="md-code-inline">(t₀, T)</code> tuple; both build the same problem.</p>
 <p><code class="md-code-inline">u₀</code> is copied, never mutated, and the copy is made consistent with the Dirichlet rows at <code class="md-code-inline">t₀</code> (see <a href="../api/forms/#Bramble.dirichlet_bc!"><code class="md-code-inline">dirichlet_bc!</code></a>), against <code class="md-code-inline">p</code> when one is given.</p>
 <p>Keywords are those of <a href="../api_sciml/#Bramble.ode_function"><code class="md-code-inline">ode_function</code></a>, plus:</p>
 <ul class="md-list-tight">
@@ -450,7 +450,7 @@ sol = solve(prob, Tsit5())</code></pre>
 <div class="md-docstring" id="Bramble.linear_problem">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.linear_problem</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L179-L208" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/problems/semidiscrete_problems.jl#L180-L209" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -523,7 +523,7 @@ sol = solve(prob, NewtonRaphson())</code></pre>
 <div class="md-docstring" id="Bramble.type_cached_assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.type_cached_assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/type_cached_assemble.jl#L15-L74" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/type_cached_assemble.jl#L25-L85" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -553,7 +553,7 @@ diffusion_matrix(uₕ) = type_cached_assemble!(
     build_diffusion, cache, uₕ; dirichlet = :boundary)</code></pre>
 </div>
 <p><code class="md-code-inline">refill!</code> reaches for <code class="md-code-inline">Mₓ!</code> rather than the non-mutating <code class="md-code-inline">Mₓ</code>/<code class="md-code-inline">Mₕ</code> deliberately: the latter allocates a fresh result every call (the same <code class="md-code-inline">similar</code>-based cost every allocating stencil operator has), which would silently reintroduce an O(n) allocation this function&#39;s whole point is to stop paying repeatedly. <code class="md-code-inline">Mₓ!</code> alone covers the 1D case above; a D-dimensional coefficient needs one scratch buffer and one <code class="md-code-inline">Mₓ!</code>/<code class="md-code-inline">Mᵧ!</code>/<code class="md-code-inline">M₂!</code> call per direction, the same way <code class="md-code-inline">poisson_nonlinear.jl</code>&#39;s own <code class="md-code-inline">nonlinear_series</code> builds a D-dimensional coefficient tuple.</p>
-<p><code class="md-code-inline">cache</code> is shared across an entire Newton (or Picard) loop, one <code class="md-code-inline">Dict</code> per residual: the first call at a given type pays <code class="md-code-inline">build</code>&#39;s own cost plus <a href="../api/forms/#Bramble.allocate_system_matrix"><code class="md-code-inline">allocate_system_matrix</code></a>&#39;s; every later call at that same type pays only <a href="../api/forms/#Bramble.assemble!"><code class="md-code-inline">assemble!</code></a>&#39;s refill plus a small, fixed dictionary/dynamic-dispatch overhead fetching the cached entry back out (independent of <code class="md-code-inline">ndofs</code>) – not the <code class="md-code-inline">O(ndofs)</code> pattern rebuild a cache miss (or no cache at all) pays every time.</p>
+<p><code class="md-code-inline">cache</code> is shared across an entire Newton (or Picard) loop, one <code class="md-code-inline">Dict</code> per residual. The first call at a given type pays for <code class="md-code-inline">build</code> and <a href="../api/forms/#Bramble.allocate_system_matrix"><code class="md-code-inline">allocate_system_matrix</code></a>. After that, a call at the same type looks the entry up, runs <code class="md-code-inline">refill!</code> and refills the cached matrix in place with <a href="../api/forms/#Bramble.assemble!"><code class="md-code-inline">assemble!</code></a>. If it passes the same kinds of <code class="md-code-inline">dirichlet</code> arguments as the call before, it allocates nothing beyond what those two do: with the <code class="md-code-inline">build</code> above, 0 bytes. The entry holds on to the last <code class="md-code-inline">uₕ</code> and Dirichlet arguments, which stay reachable while <code class="md-code-inline">cache</code> is.</p>
 <p>Not thread-safe. <code class="md-code-inline">cache</code> is a bare <code class="md-code-inline">Dict</code> with no lock, one per residual. Assembling from more than one task needs a lock or one cache per task.</p>
 </div>
 </div>
@@ -584,6 +584,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../siteinfo.js"></script>
   <script src="../../versions.js"></script>
-  <script src="../assets/materialdocs.js?v=abbc8e6b"></script>
+  <script src="../assets/materialdocs.js?v=82f16b57"></script>
 </body>
 </html>
