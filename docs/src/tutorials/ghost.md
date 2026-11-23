@@ -385,12 +385,11 @@ g_right(x) = robin_α * u_exact(x) + du_exact(x)  # αu + u' at x = 1
 
 Ω_gh = graded_interval(33)
 x_gh = collect(points(Ω_gh))
-@assert isapprox(minimum(diff(x_gh)), 1e-3; rtol = 0.1) &&
-        isapprox(maximum(diff(x_gh)), 0.06; rtol = 0.05)
+@assert minimum(diff(x_gh)) ≈ (1 / 32)^2 && maximum(diff(x_gh)) ≈ 1 - (31 / 32)^2
 extrema(diff(x_gh))
 ```
 
-The spacings run from ``10^{-3}`` to ``0.06``.
+The spacings run from ``(1/32)^2 \approx 10^{-3}`` to ``1 - (31/32)^2 \approx 0.06``.
 
 ### Without ghosts: the forms you already have
 
