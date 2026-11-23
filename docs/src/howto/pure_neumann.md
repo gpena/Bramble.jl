@@ -162,14 +162,15 @@ function check_compatibility(shift)
         Bramble.neumann_compatibility(neumann_problem(shift), Ωₕ_rand)
     end
     status = result.compatible ? :compatible : :incompatible
-    return (; status, result.defect, result.λ, result.second_ratio, warnings = log.messages)
+    return (; status, result.defect, result.refined_defect, result.λ,
+        result.second_ratio, warnings = log.messages)
 end
 
 ok = check_compatibility(0.0)
 bad = check_compatibility(0.2)
 
 @assert ok.status === :compatible && isempty(ok.warnings)
-@assert ok.defect < 1e-4 < 5e-3 < bad.defect
+@assert ok.defect < 1e-4 && bad.refined_defect > 5e-3
 @assert bad.status === :incompatible && length(bad.warnings) == 1
 @assert occursin("incompatible", only(bad.warnings))
 @assert isapprox(bad.λ, 0.2; atol = 1e-3) && isapprox(bad.second_ratio, 1.0; atol = 0.1)

@@ -39,7 +39,11 @@ Random.seed!(20261111)
 A, F = poisson_system(Ω₂, (40, 40))
 
 @assert size(A) == (40^2, 40^2) && length(F) == 40^2
-@assert nnz(A) > 0 && norm(F) > 0    # control: the system is not empty
+# five-point stencil on 40 × 40 nodes, stored zeros of the eliminated couplings included
+@assert nnz(A) == 5 * 40^2 - 4 * 40
+# without them: the 38 × 38 interior block, plus one identity row per boundary node
+@assert count(!iszero, A) == 5 * 38^2 - 4 * 38 + (40^2 - 38^2)
+@assert norm(F) > 0                  # control: the load is nonzero
 @assert issymmetric(A)               # `symmetrize = true`
 
 size(A)
