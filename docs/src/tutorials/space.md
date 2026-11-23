@@ -43,7 +43,8 @@ There is one degree of freedom per mesh point, and `points(Wₕ)` is `points(Ω�
 ```@example space
 uₕ = Rₕ(Wₕ, x -> sin(π * x))
 
-@assert length(uₕ) == 11 && uₕ[6] ≈ sin(π / 2) && abs(uₕ[1]) < 1e-12
+xs = collect(points(Wₕ))
+@assert length(uₕ) == 11 && uₕ[6] ≈ sin(π * xs[6]) && abs(uₕ[1]) < 1e-12
 length(uₕ), uₕ[6]
 ```
 
@@ -53,7 +54,7 @@ broadcasting keeps the parent space:
 ```@example space
 wₕ = 3.0 .* uₕ .+ element(Wₕ, 2.0)
 
-@assert space(wₕ) === Wₕ && wₕ[6] ≈ 3 * 1 + 2 && wₕ[1] ≈ 2
+@assert space(wₕ) === Wₕ && wₕ[6] ≈ 3 * sin(π * xs[6]) + 2 && wₕ[1] ≈ 2
 wₕ[6]
 ```
 
@@ -177,7 +178,7 @@ A plain `Function` is not a grid function, so multiplying by one restricts it fi
 oneₕ = Rₕ(Wₕ, x -> 1.0)
 below_half = (x -> x[1] < 0.5) * oneₕ
 
-@assert sum(below_half) == 5 && below_half[5] == 1 && below_half[6] == 0
+@assert sum(below_half) == count(<(0.5), xs) && collect(below_half) == (xs .< 0.5)
 sum(below_half)
 ```
 
@@ -210,8 +211,8 @@ gradient `∇ₕ`:
 
 ```@example space
 Δu = diff(parent(uₕ))
-@assert snorm₁ₕ(uₕ)^2 ≈ sum(abs2, Δu) / 0.1
-@assert norm₁ₕ(uₕ)^2 ≈ 0.5 + sum(abs2, Δu) / 0.1
+@assert snorm₁ₕ(uₕ)^2 ≈ sum(abs2.(Δu) ./ diff(xs))
+@assert norm₁ₕ(uₕ)^2 ≈ 0.5 + sum(abs2.(Δu) ./ diff(xs))
 snorm₁ₕ(uₕ), norm₁ₕ(uₕ)
 ```
 
@@ -220,7 +221,7 @@ snorm₁ₕ(uₕ), norm₁ₕ(uₕ)
 ```@example space
 D = ∇ₕ(uₕ)
 
-@assert inner₊(D, D, :x) ≈ sum(abs2, diff(parent(uₕ))) / 0.1
+@assert inner₊(D, D, :x) ≈ sum(abs2.(diff(parent(uₕ))) ./ diff(xs))
 @assert inner₊(D, D, :x) > 1
 inner₊(D, D, :x)
 ```
@@ -229,8 +230,11 @@ inner₊(D, D, :x)
     Build the mesh as `mesh(Ω, 11, false)`, a non-uniform one with the same number of
     points, and rerun the blocks above. `ndofs` is unchanged, but the interior weights are
     no longer equal (on a uniform mesh only the two end weights are halved), so `normₕ` and
-    `innerₕ` change while the weights still sum to the interval length. The
-    [mesh tutorial](mesh.md) builds such meshes on purpose.
+    `innerₕ` change while the weights still sum to the interval length. The assertions
+    written in terms of the node coordinates still hold. Those with a hand value that needs
+    equal spacing (the cell averages, the step averages, the `0.5` in the norms and the zero
+    inner product, including the composite norms below) are uniform-mesh identities and fire
+    on the graded mesh. The [mesh tutorial](mesh.md) builds such meshes on purpose.
 
 ## [Composite spaces and vector elements](@id space_composite)
 
@@ -241,7 +245,8 @@ another. `Wₕ^Val(N)` stacks `N` copies:
 ```@example space
 Vₕ = Wₕ^Val(2)
 
-@assert ncomponents(Vₕ) == 2 && ndofs(Vₕ) == 22
+@assert ncomponents(Vₕ) == 2 && ndofs(Vₕ) == ncomponents(Vₕ) * ndofs(Wₕ)
+@assert ndofs(Vₕ, Tuple) == (11, 11)
 ncomponents(Vₕ), ndofs(Vₕ), ndofs(Vₕ, Tuple)
 ```
 
@@ -366,7 +371,8 @@ The storage is flat, and `reshape` gives each component a grid-shaped view of th
 
 !!! tip "Try this"
     Replace `Val(2)` with `Val(3)` and add a third function to the tuple. `ncomponents` and
-    `ndofs` follow.
+    `ndofs` follow. The assertions that state `N = 2` (the component count and the norm sum)
+    fire until you update them.
 
 ## Ghost spaces
 
