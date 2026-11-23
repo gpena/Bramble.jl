@@ -118,8 +118,9 @@ end
 
 # Offset-aware, allocation-free walk over the union of `markers`' marked points, for every
 # reader below (`_reaction_over_leaves`, `_reaction_density_over_leaves!`, and the `!`
-# variants' own `_zero_marked!`/`_subtract_marked!`/`_copy_marked!`). A single marker is just
-# `MarkedIndices` (`index_in_marker` hands back the mesh's own stored mask, no copy); several
+# variants' own `_zero_marked!`/`_subtract_marked!`/`_copy_marked!`). A single marker is a
+# `_MarkerWalk`: the mesh's own stored mask, or the face a face name means, walked without
+# the fresh `BitVector` `index_in_marker` builds for it (gpena/Bramble.jl#1010); several
 # reuse the lazy `MarkedIndicesUnion` `_combined_marked_indices` (space/inner_product.jl)
 # already builds instead of `_combined_mask`'s eager one (a fresh `copy` + `.|=` per call,
 # gpena/Bramble.jl#149) -- `reaction!`/`reaction_density!` must allocate zero bytes even with
@@ -128,9 +129,28 @@ end
 # `inner₊(..., ::Val{S})`, and the latter never needed one), so `_ReactionMarked` adds it here
 # rather than in `linear_algebra.jl`. Both walks visit a point shared by two markers exactly
 # once, same as `_combined_mask`'s union.
-@inline _reaction_marked(Ωₕ, markers::NTuple{1, Symbol}, offset::Int) = MarkedIndices(index_in_marker(Ωₕ, markers[1]), offset)
+@inline _reaction_marked(Ωₕ, markers::NTuple{1, Symbol}, offset::Int) = _MarkerWalk(
+    _marker_points(Ωₕ, markers[1]), offset)
 @inline _reaction_marked(Ωₕ, markers::NTuple{N, Symbol}, offset::Int) where {N} = _ReactionMarked(
     _combined_marked_indices(Ωₕ, markers), offset)
+
+# The stored mask goes through `MarkedIndices`; a face, in its `CartesianIndices` order,
+# which is increasing in the linear index, as the stored mask's walk is.
+struct _MarkerWalk{P <: _MarkerPoints}
+    points::P
+    offset::Int
+end
+
+@inline function Base.iterate(m::_MarkerWalk, st = (0, zero(UInt64)))
+    bits = m.points.bits
+    bits === nothing || return iterate(MarkedIndices(bits, m.offset), st)
+    k = st[1] + 1
+    face = m.points.face
+    k > length(face) && return nothing
+    return m.offset + LinearIndices(m.points.cis)[@inbounds face[k]], (k, zero(UInt64))
+end
+Base.IteratorSize(::Type{<:_MarkerWalk}) = Base.SizeUnknown()
+Base.eltype(::Type{<:_MarkerWalk}) = Int
 
 struct _ReactionMarked{U}
     union::U
@@ -240,6 +260,14 @@ function _reaction_residual(A::AbstractMatrix, F::AbstractVector, u::AbstractVec
     return r
 end
 
+# The entries only the sparse path reads are built for it alone.
+function _reaction_residual(A::SparseMatrixCSC, F::AbstractVector, u::AbstractVector, leaves::Tuple, markers, components)
+    return _reaction_residual(A, F, u, _reaction_leaf_entries(leaves, markers, components))
+end
+function _reaction_residual(A::AbstractMatrix, F::AbstractVector, u::AbstractVector, ::Tuple, markers, components)
+    return _reaction_residual(A, F, u, ())
+end
+
 # --- In-place variants: caller-owned scratch, zero allocation (gpena/Bramble.jl#289 item 3) --
 #
 # `reaction!`/`reaction_density!` need literally zero bytes per call, steady state -- not just
@@ -293,8 +321,8 @@ end
 
 # The column sweep needs an O(1) indexed row test, which the allocation-free walk above
 # cannot give (iterating it has no `getindex`). So both residuals share one set of entries:
-# one `NTuple{N,BitVector}` of `markers`' individual, per-label masks per leaf (each
-# `index_in_marker` call is itself allocation-free), ORed bit-by-bit on the fly in
+# one `NTuple{N,_MarkerPoints}` of `markers`' individual, per-label masks per leaf (each
+# `_marker_points` call is allocation-free, a face name too), ORed bit-by-bit on the fly in
 # `_reaction_row_marked`, so no label ever gets unioned into a fresh `BitVector`. One entry
 # per leaf, always (mirrors `_leaf_entries`, dirichlet_constraints.jl): the tuple's shape is
 # independent of `components`, so the recursion below stays fully unrolled.
@@ -306,7 +334,7 @@ end
         leaves::Tuple, markers::NTuple{N, Symbol}, components, i::Int
 ) where {N}
     sp, offset = first(leaves)
-    masks = ntuple(k -> index_in_marker(mesh(sp), markers[k]), Val(N))
+    masks = ntuple(k -> _marker_points(mesh(sp), markers[k]), Val(N))
     entry = (masks, offset, ndofs(sp), _leaf_selected(components, i))
     return (
         entry, _reaction_leaf_entries_impl(Base.tail(leaves), markers, components, i + 1)...
@@ -416,8 +444,7 @@ function reaction(
     _validate_dirichlet_components(components, length(leaves))
 
     markers = _reaction_markers(marker)
-    entries = _reaction_leaf_entries(leaves, markers, components)
-    r = _reaction_residual(A, F, parent(uₕ), entries)
+    r = _reaction_residual(A, F, parent(uₕ), leaves, markers, components)
     return _reaction_over_leaves(leaves, r, markers, components, 1, zero(eltype(r)))
 end
 
@@ -491,7 +518,7 @@ end
     sp, offset = first(leaves)
     if _leaf_selected(components, i)
         Ωₕ = mesh(sp)
-        bits = map(s -> index_in_marker(Ωₕ, s), markers)
+        bits = map(s -> _marker_points(Ωₕ, s), markers)
         mask = _marked_face_mask(Ωₕ, k -> _any_marked_bit(bits, k))
         _check_surface_is_thin(Ωₕ, mask)
         every_face = ntuple(_ -> (true, true), Val(dim(Ωₕ)))
@@ -535,8 +562,7 @@ function reaction_density(
     _validate_dirichlet_components(components, length(leaves))
 
     markers = _reaction_markers(marker)
-    entries = _reaction_leaf_entries(leaves, markers, components)
-    r = _reaction_residual(A, F, parent(uₕ), entries)
+    r = _reaction_residual(A, F, parent(uₕ), leaves, markers, components)
     dens = zeros(eltype(r), ndofs(sp))
     _reaction_density_over_leaves!(dens, leaves, r, markers, components, 1)
     return element(sp, dens)
