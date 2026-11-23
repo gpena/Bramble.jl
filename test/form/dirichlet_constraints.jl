@@ -459,7 +459,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
     end
 
     # Two labels used to be unioned into a fresh grid-sized `BitVector` on every call
-    # (112 B on a 9 × 11 mesh); each row is now tested against both stored masks (#994).
+    # (112 B on a 9 × 11 mesh); the union now goes into the form's reused scratch (#994).
     # The labels share a corner, so a row both mark is covered. The oracle is the
     # unconstrained matrix with the union's rows made identity rows, built here by hand.
     @testset "Two labels, warm assemble! at 0 B (#994)" begin

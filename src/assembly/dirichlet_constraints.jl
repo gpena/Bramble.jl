@@ -317,14 +317,6 @@ end
     end
 end
 
-# Several labels' masks over the same leaf, walked one after the other: an index two of them
-# mark is visited twice, which the idempotent matrix writes below do not mind.
-@inline function _each_marked(f::F, masks::Tuple, offset::Int) where {F}
-    for mask in masks
-        _each_marked(f, mask, offset)
-    end
-end
-
 # --- Applying Dirichlet boundary conditions ---------------------------------------- #
 
 """
@@ -339,19 +331,16 @@ For each index `i` associated with the given Dirichlet `labels`, this function:
 """
 function dirichlet_bc!(A::AbstractMatrix, Ωₕ::AbstractMeshType, labels::Symbol...)
     isempty(labels) && return A
-    # One sweep over `A`, not one per label, testing each row against every label's stored
-    # mask (`_row_marked`) rather than against a union of them, so nothing is built
-    # (gpena/Bramble.jl#994). Zeroing a row and setting its diagonal is idempotent, so a
-    # row two labels share comes out as one label would leave it, unlike the value-writing
-    # vector overload below, whose `_apply_conditions!` walk is order-sensitive on an
-    # overlap and must stay a loop.
-    masks = _label_masks(Ωₕ, labels)
-    _dirichlet_bc_rows!(A, ((masks, 0, length(first(masks)), true),))
+    # One combined mask, one sweep over `A` -- not one sweep per label. Zeroing a row and
+    # setting its diagonal is idempotent, so unioning the labels' masks first changes
+    # nothing a per-label loop would have done, unlike the value-writing vector overload
+    # below, whose `_apply_conditions!` walk is order-sensitive on an overlap and must stay
+    # a loop. `_combined_mask` (space/inner_product.jl) already returns the mesh's own
+    # stored mask with no copy when there is only one label, so the common case still costs
+    # nothing here.
+    _dirichlet_bc_indices!(A, _combined_mask(Ωₕ, labels))
     return A
 end
-
-# The mesh's own stored mask for each label, as a tuple: nothing is copied or unioned.
-@inline _label_masks(Ωₕ, labels::Tuple) = map(lbl -> index_in_marker(Ωₕ, lbl), labels)
 
 # Overloads for ScalarGridSpace / AbstractSpaceType (single component)
 @inline function dirichlet_bc!(
@@ -380,26 +369,16 @@ end
 
 # Whether global row `r` falls in any *selected* leaf's marked set. Recursive over the
 # tuple of leaves, so it unrolls to a handful of comparisons. An unselected leaf's own
-# `active` flag short-circuits it without touching its mask. An entry's mask is one label's
-# `BitVector`, or a tuple of several labels' masks, each tested in turn.
+# `active` flag short-circuits it without touching its mask.
 @inline _row_marked(::Tuple{}, r::Int) = false
 
 @inline function _row_marked(entries::Tuple, r::Int)
     mask, offset, n, active = first(entries)
     if active
         i = r - offset
-        (1 <= i <= n) && _any_marked(mask, i) && return true
+        (1 <= i <= n) && @inbounds(mask[i]) && return true
     end
     return _row_marked(Base.tail(entries), r)
-end
-
-@inline _any_marked(mask::BitVector, i::Int) = @inbounds mask[i]
-# Branch-free: the masks share one length, so bit `i` sits in the same chunk of each. One
-# chunk index, one OR of the chunks, one bit test, however many labels there are.
-@inline function _any_marked(masks::Tuple, i::Int)
-    k, b = ((i - 1) >>> 6) + 1, (i - 1) & 63
-    w = mapreduce(m -> @inbounds(m.chunks[k]), |, masks)
-    return isodd(w >>> b)
 end
 
 # One entry per leaf, always: `components` never changes how many entries there are, only
@@ -416,17 +395,19 @@ end
     return (entry, _leaf_entries_impl(Base.tail(leaves), label, components, i + 1)...)
 end
 
-# Multi-label overload: one entry per leaf, holding the tuple of that leaf's stored masks,
-# one per label in `labels` (`_label_masks`), which `_row_marked` tests one by one. This is
-# what lets the composite `dirichlet_bc!` below hand `_dirichlet_bc_rows!` a single tuple of
-# entries for however many labels were given, so the sparse sweep over `A` runs once total
-# instead of once per label, and no union of the masks is built (gpena/Bramble.jl#994).
+# Multi-label overload: one entry per leaf, but that leaf's mask is already the union of
+# every label in `labels` (via `_combined_mask`, space/inner_product.jl), not just one. This
+# is what lets the composite `dirichlet_bc!` below hand `_dirichlet_bc_rows!` a single tuple
+# of entries for however many labels were given, so the sparse sweep over `A` runs once
+# total instead of once per label. `_combined_mask` already returns the mesh's own stored
+# mask with no copy when `labels` has one element, so a single-label call costs the same as
+# the `label::Symbol` method above.
 @inline _leaf_entries(leaves::Tuple, labels::NTuple{N, Symbol}, components) where {N} = _leaf_entries_impl(leaves, labels, components, 1)
 @inline _leaf_entries_impl(::Tuple{}, labels::NTuple{N, Symbol}, components, i::Int) where {N} = ()
 @inline function _leaf_entries_impl(leaves::Tuple, labels::NTuple{N, Symbol}, components, i::Int) where {N}
     sp, offset = first(leaves)
     entry = (
-        _label_masks(mesh(sp), labels), offset, ndofs(sp), _leaf_selected(components, i)
+        _combined_mask(mesh(sp), labels), offset, ndofs(sp), _leaf_selected(components, i)
     )
     return (entry, _leaf_entries_impl(Base.tail(leaves), labels, components, i + 1)...)
 end
@@ -450,15 +431,13 @@ dirichlet_bc!(A, Wₕ, :left, :right; components = 1)   # velocity only
 Successive calls with different `labels`/`components` pairs compose cleanly.
 """
 function dirichlet_bc!(
-        A::AbstractMatrix, space::CompositeGridSpace, labels::Vararg{Symbol, N};
-        components = nothing
-) where {N}
-    # `Vararg{Symbol, N}` rather than `Symbol...`: the keyword body only passes `labels` on,
-    # so Julia did not specialise on it, and two labels came in boxed (416 B a call).
+        A::AbstractMatrix, space::CompositeGridSpace, labels::Symbol...; components = nothing
+)
     isempty(labels) && return A
-    # One entry per leaf, holding every label's mask, and one sweep over `A`. Same
+    # One combined mask per leaf, one sweep over `A` -- not one sweep per label. Same
     # reasoning as the scalar overload above: zeroing a row and setting its diagonal is
-    # idempotent, so a row several labels mark comes out as one label would leave it.
+    # idempotent, so unioning the labels' masks first changes nothing a per-label loop
+    # would have done.
     leaves = leaf_spaces_offsets(space)
     _validate_dirichlet_components(components, length(leaves))
     _dirichlet_bc_rows!(A, _leaf_entries(leaves, labels, components))

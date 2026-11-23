@@ -122,6 +122,12 @@ end
 # recording into it, since the positions depend only on the pattern.
 # A copy, never `A`'s own vectors: the caller owns `A` and may change its pattern. Every
 # recording (`_store_recording!`) clears `has_pattern`, as it may be against another pattern.
+#
+# `scratch` holds one `BitVector` per leaf of the test space: the union of two or more
+# Dirichlet labels' masks, rewritten by every `assemble!` that asks for them
+# (`_dirichlet_union!`) so the warm call allocates nothing (gpena/Bramble.jl#994). Rebuilt
+# each call, never trusted from the last, so a `markers!` needs no invalidation here. It is
+# per form, like the rest of the cache: two forms never share one.
 mutable struct _AssemblyCache{D, AST}
     valid::Bool
     A_id::UInt
@@ -133,6 +139,7 @@ mutable struct _AssemblyCache{D, AST}
     m::Int
     colptr::Vector{Int}
     rowval::Vector{Int}
+    scratch::Vector{BitVector}
 end
 
 # The stored-entry count a recording's positions index into. A `SparseMatrixCSC` can grow
@@ -175,6 +182,10 @@ _no_segments(::Val{3}) = _NO_SEGMENTS_3
 # `_keep_pattern!` assigns its own copies.
 const _NO_PATTERN = Int[]
 
+# The Dirichlet scratch of a fresh cache, shared and never written through for the same
+# reason: `_dirichlet_scratch` assigns the cache its own vector on first use.
+const _NO_SCRATCH = BitVector[]
+
 """
     _zero_stored!(A::AbstractMatrix) -> AbstractMatrix
 
@@ -216,7 +227,7 @@ end
 function _AssemblyCache{D}(ast::AST) where {D, AST}
     return _AssemblyCache{D, AST}(
         false, UInt(0), ast, _no_segments(Val(D)), UInt64(0), 0, false, 0, _NO_PATTERN,
-        _NO_PATTERN)
+        _NO_PATTERN, _NO_SCRATCH)
 end
 
 """
@@ -1215,7 +1226,10 @@ function apply_dirichlet_labels!(
                 A, test_space(form), dirichlet_labels; components = dirichlet_components
             )
         elseif dirichlet_labels isa Tuple
-            if !isempty(dirichlet_labels)
+            if length(dirichlet_labels) >= 2
+                _dirichlet_union!(A, test_space(form), form.cache, dirichlet_labels,
+                    dirichlet_components)
+            elseif !isempty(dirichlet_labels)
                 dirichlet_bc!(
                     A,
                     test_space(form),
@@ -1225,6 +1239,59 @@ function apply_dirichlet_labels!(
             end
         end
     end
+end
+
+# Two or more labels: what `dirichlet_bc!` does, but with each leaf's union of the labels'
+# masks written into the form's reused `scratch` (`_combined_mask!`, space/inner_product.jl)
+# instead of a fresh `BitVector`, then the same single-mask sweep (gpena/Bramble.jl#994).
+# Testing every label's mask per stored entry instead builds nothing either, but reads a
+# second mask for each of them and measured about 30% slower on a warm graded-mesh
+# `assemble!`. The rows constrained, and so the matrix, are those of `dirichlet_bc!`.
+function _dirichlet_union!(A::AbstractMatrix, Wₕ::ScalarGridSpace, cache, labels::Tuple,
+        components)
+    _validate_scalar_components(components)
+    Ωₕ = mesh(Wₕ)
+    mask = _dirichlet_scratch(cache, 1, 1, length(index_in_marker(Ωₕ, first(labels))))
+    _dirichlet_bc_indices!(A, _combined_mask!(mask, Ωₕ, labels))
+    return A
+end
+
+# One scratch per leaf, each over its own leaf's points, rather than one over all the
+# rows: a leaf's offset is rarely a multiple of 64, so writing its union into a shared
+# buffer would shift every word instead of OR-ing them. The entries are those the
+# composite `dirichlet_bc!` sweeps, with the scratch in place of `_combined_mask`.
+function _dirichlet_union!(A::AbstractMatrix, Wₕ::CompositeGridSpace, cache, labels::Tuple,
+        components)
+    leaves = leaf_spaces_offsets(Wₕ)
+    _validate_dirichlet_components(components, length(leaves))
+    _dirichlet_bc_rows!(A, _union_entries(leaves, cache, labels, components, length(leaves), 1))
+    return A
+end
+
+# Ghost and constrained spaces keep their own `dirichlet_bc!`.
+_dirichlet_union!(A::AbstractMatrix, Wₕ::_GhostCompositeSpace, cache, labels::Tuple,
+    components) = dirichlet_bc!(A, Wₕ, labels...; components = components)
+_dirichlet_union!(A::AbstractMatrix, Wₕ, cache, labels::Tuple, components) = dirichlet_bc!(
+    A, Wₕ, labels...; components = components)
+
+@inline _union_entries(::Tuple{}, cache, labels, components, nleaves, i) = ()
+@inline function _union_entries(leaves::Tuple, cache, labels, components, nleaves, i)
+    sp, offset = first(leaves)
+    Ωₕ = mesh(sp)
+    n = length(index_in_marker(Ωₕ, first(labels)))
+    mask = _combined_mask!(_dirichlet_scratch(cache, i, nleaves, n), Ωₕ, labels)
+    entry = (mask, offset, ndofs(sp), _leaf_selected(components, i))
+    return (entry,
+        _union_entries(Base.tail(leaves), cache, labels, components, nleaves, i + 1)...)
+end
+
+# Leaf `i`'s scratch, of `n` bits: built by the first call, handed back by every later
+# one. The length is checked anyway, as `_combined_mask!` indexes its words unchecked.
+@inline function _dirichlet_scratch(cache, i::Int, nleaves::Int, n::Int)
+    length(cache.scratch) == nleaves || (cache.scratch = [falses(n) for _ in 1:nleaves])
+    s = cache.scratch
+    length(@inbounds(s[i])) == n || (@inbounds s[i] = falses(n))
+    return @inbounds s[i]
 end
 
 """
