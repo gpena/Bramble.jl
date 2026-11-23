@@ -62,7 +62,38 @@ const _MFBands = typeof(Bramble._batch_mf_bands!)
 # The columns of the row pattern `(rowptr, colval, perm)`: for column `j`, the entries
 # `colptr[j]:(colptr[j + 1] - 1)` of `rowT` (their rows) and `permT` (their positions in
 # `nzval`). A counting sort over the stored entries, on the host.
-function _csr_columns(rowptr, colval, perm, ncols::Int)
+#
+# The columns depend only on the pattern, and an ODE adjoint runs the augmented primal
+# thousands of times for one operator, so they are built once per pattern
+# (gpena/Bramble.jl#1271). The cache holds `perm` weakly: an entry goes when its operator
+# does. `WeakKeyDict` matches keys by content, so a hit counts only when `perm`, `rowptr` and
+# `colval` are the very arrays the entry was built from, and `ncols` matches. One lock covers
+# the lookup and the insert, since rules may run on several tasks.
+const _CsrColumns = NTuple{3, Vector{Int}}
+const _CSR_COLUMNS = WeakKeyDict{Vector{Int}, Tuple{Vector{Int}, Vector{Int}, _CsrColumns}}()
+const _CSR_COLUMNS_LOCK = ReentrantLock()
+
+function _csr_columns(rowptr::Vector{Int}, colval::Vector{Int}, perm::Vector{Int},
+        ncols::Int)
+    @lock _CSR_COLUMNS_LOCK begin
+        key = getkey(_CSR_COLUMNS, perm, nothing)
+        if key === perm
+            r, c, cols = _CSR_COLUMNS[perm]
+            r === rowptr && c === colval && length(cols[1]) == ncols + 1 && return cols
+        end
+        cols = _csr_columns_build(rowptr, colval, perm, ncols)
+        # A content-equal key from another operator is dropped first, so the new key gets
+        # its own finalizer.
+        key === nothing || delete!(_CSR_COLUMNS, perm)
+        _CSR_COLUMNS[perm] = (rowptr, colval, cols)
+        return cols
+    end
+end
+
+_csr_columns(rowptr, colval, perm, ncols::Int) = _csr_columns_build(rowptr, colval, perm,
+    ncols)
+
+function _csr_columns_build(rowptr, colval, perm, ncols::Int)
     colptr = zeros(Int, ncols + 1)
     for k in eachindex(colval)
         @inbounds colptr[colval[k] + 1] += 1
