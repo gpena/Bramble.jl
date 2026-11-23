@@ -252,7 +252,7 @@ restores symmetry and leaves the solution unchanged:
 ```@example forms
 symmetrize!(Ad, bd, Ωd, :left, :right)
 @assert issymmetric(Matrix(Ad))  # symmetric again
-@assert maximum(abs, Ad \ bd .- parent(exact)) < 1e-3  # and the solution above is unchanged
+@assert Ad \ bd ≈ uh  # and the solution above is unchanged
 ```
 
 `issymmetric(ad)` describes the expression, so it stays `true` after `dirichlet_bc!` changes
@@ -318,7 +318,8 @@ integral, which is [`inner_Γ`](@ref):
 a_robin = form(Wd, Wd, (u, v) -> inner_Γ(β * u, v; markers = (:xmax,)))
 l_neumann = form(Wd, v -> inner_Γ(g, v; markers = (:xmax,)))
 @assert sum(assemble(l_neumann)) ≈ 3.0  # g(1) = 2 + 1
-@assert sum(assemble(a_robin)) ≈ 1.7     # β, the face being a point of measure 1
+A_r = assemble(a_robin)
+@assert A_r[33, 33] ≈ 1.7 && count(!iszero, A_r) == 1  # β on the x = 1 node only
 sum(assemble(l_neumann))
 ```
 
