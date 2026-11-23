@@ -458,6 +458,45 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         @test refill_bytes(N, a₂) == 0
     end
 
+    # Two labels used to be unioned into a fresh grid-sized `BitVector` on every call
+    # (112 B on a 9 × 11 mesh); each row is now tested against both stored masks (#994).
+    # The labels share a corner, so a row both mark is covered. The oracle is the
+    # unconstrained matrix with the union's rows made identity rows, built here by hand.
+    @testset "Two labels, warm assemble! at 0 B (#994)" begin
+        Random.seed!(20261123)
+        Ω₂ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :l => :xmin, :b => :ymin),
+            (9, 11), (false, false))
+        both = index_in_marker(Ω₂, :l) .| index_in_marker(Ω₂, :b)
+        @test count(index_in_marker(Ω₂, :l) .& index_in_marker(Ω₂, :b)) == 1
+        two(A, a) = assemble!(A, a; dirichlet = (:l, :b))
+        warm_bytes(A, a) = (two(A, a); two(A, a); @allocated two(A, a))
+        for W in (gridspace(Ω₂), gridspace(Ω₂, Val(2)))
+            a = form(W, W, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+            A0 = assemble(a)
+            A = assemble(a; dirichlet = (:l, :b))
+            n, nc = length(both), ndofs(W) ÷ length(both)
+            rows = [both[mod1(r, n)] for r in 1:ndofs(W)]
+            @test count(rows) == nc * count(both)
+            for r in 1:ndofs(W)
+                if rows[r]
+                    @test A[r, r] == 1.0
+                    @test count(!=(0.0), A[r, :]) == 1
+                else
+                    @test A[r, :] == A0[r, :]
+                end
+            end
+            S = assemble(a)
+            dirichlet_bc!(S, W, :l)
+            dirichlet_bc!(S, W, :b)
+            @test A == S
+            @test (A.colptr, rowvals(A)) == (S.colptr, rowvals(S))
+            fill!(nonzeros(A), 7.0)
+            two(A, a)
+            @test A == S
+            @test warm_bytes(A, a) == 0
+        end
+    end
+
     # A device CSR matrix cannot grow a missing diagonal: a constrained row without one
     # throws before anything is written. The duck-typed fields stand in for a device type
     # (no device backend is loaded in the tests); the throw comes before the kernel launch.

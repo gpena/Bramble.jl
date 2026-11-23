@@ -680,6 +680,30 @@ end
     end
 end
 
+# Under `reassemble` the residual applies every Dirichlet label to the refilled operator at
+# each step. Two labels used to union their masks into a fresh grid-sized `BitVector` per
+# call; each row is now tested against both stored masks (#994).
+@testset "reassemble, two Dirichlet labels: 0 B (#994)" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :l => :xmin, :r => :xmax),
+        (9, 11), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    α = Ref(1.0)
+    a = form(Wₕ, Wₕ, (u, v) -> α * inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+    l = form(Wₕ, v -> innerₕ(1.0, v))
+    sd = semidiscretize(a, l; dirichlet = (:l => _Const(2.0), :r => _Const(3.0)),
+        reassemble = true, (update_coefficients!) = t -> (α[] = t))
+    n = ndofs(Wₕ)
+    du, u = zeros(n), collect(range(0.2, 1.7; length = n))
+    _sd_residual_allocs(sd, du, u, 3.0)
+    @test _sd_residual_allocs(sd, du, u, 3.0) == 0
+    S = assemble(a)
+    dirichlet_bc!(S, Ωₕ, :l)
+    dirichlet_bc!(S, Ωₕ, :r)
+    @test α[] == 3.0
+    @test operator_matrix(sd) == S
+    @test operator_matrix(sd) != assemble(a; dirichlet = :l)
+end
+
 @testset "semidiscretize on a composite space" begin
     Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 11)
     Wₕ = gridspace(Ωₕ)

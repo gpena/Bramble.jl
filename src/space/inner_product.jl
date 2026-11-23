@@ -61,10 +61,10 @@ end
 # cover. `N == 1` above skips this allocation, since the mesh's own stored mask can be read
 # directly without being unioned with anything.
 #
-# `dirichlet_bc!` (assembly/dirichlet_constraints.jl) is the other caller of this exact function,
-# and its `SparseMatrixCSC` path needs random-access `getindex` on the result (`index_in_marker[j]`
-# for an arbitrary column `j`, not a walk), which a lazy union can't offer without also
-# duplicating `BitVector`'s own bit-indexing math. So this stays eager; `_combined_marked_indices`
+# `dirichlet_bc!` on a matrix no longer calls this: it tests each label's stored mask in turn
+# (`_row_marked`, assembly/dirichlet_constraints.jl), so nothing is built (gpena/Bramble.jl#994).
+# The callers left, `symmetrize!` and the matrix-free mask, take a `BitVector`, which a lazy
+# union can't stand in for. So this stays eager; `_combined_marked_indices`
 # below is the allocation-free replacement (gpena/Bramble.jl#149) for its two callers,
 # `inner₊(..., ::Val{S})` and `_reaction_marked` (postprocessing/reaction.jl), which only walk
 # the result instead of indexing into it.
