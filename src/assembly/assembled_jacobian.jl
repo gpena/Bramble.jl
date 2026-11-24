@@ -457,8 +457,8 @@ function _jf_values!(r::_JFRefill, policy::CpuPolyester, u)
     skel, arrays = _jf_split(cold)
     GC.@preserve cold begin
         _run_bands!(policy, _jf_value_band_split!, parent(r.beta), parent(r.values), (r.f,),
-            r.writes_values, size(indices(mesh(W))), _jf_slice(u, r.offset_L, W), skel,
-            arrays)
+            r.writes_values, size(indices(mesh(W))),
+            _jf_slice(_jf_storage(u), r.offset_L, W), skel, arrays)
     end
     return nothing
 end
@@ -469,10 +469,14 @@ function _jf_betas!(r::_JFRefill, policy::CpuPolyester, u)
     skel, arrays = _jf_split(cold)
     GC.@preserve cold begin
         _run_bands!(policy, _jf_beta_band_split!, parent(r.beta), size(indices(mesh(W))),
-            _jf_slice(u, r.offset_T, W), skel, arrays)
+            _jf_slice(_jf_storage(u), r.offset_T, W), skel, arrays)
     end
     return nothing
 end
+
+# A `VectorElement` state crosses as its storage, as the values do: it holds its space.
+@inline _jf_storage(u::VectorElement) = parent(u)
+@inline _jf_storage(u) = u
 
 @inline function _jf_split(cold)
     _batch_splittable(typeof(cold)) && return _batch_split(cold)

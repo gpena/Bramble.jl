@@ -103,18 +103,46 @@ _pa_pair(x) = (_pa_g(x), _pa_h(x))
 _pa_times0d(a, c) = 2.0 * a * c + 1.0
 _pa_jac_α(s) = 3 + 1 / (1 + s^2)
 
-# `jacobian!` on `a + ∂a` over `W`, its result the refill's `β` and values, which equal
-# `CpuSerial`'s bitwise (`J` itself only to rounding, as any assembly). The refill reads
-# `u` through an average, so a band reads its neighbours through the rebuilt space.
-function _pa_jacobian(W, dirichlet)
+_pa_jac_κ(s) = 2 + sin(s)
+
+# The state `jacobian!` reads: a plain `Vector`, or with `ve` the same values in an element
+# of `W`, which holds its space.
+function _pa_state(W, ve::Bool)
+    u = [0.3 + 0.7 * sin(0.37 * i) for i in 1:ndofs(W)]
+    ve || return u
+    e = element(W)
+    parent(e) .= u
+    return e
+end
+
+# `jacobian!(J, jf, u)`, its result every refill's `β` and values, which equal
+# `CpuSerial`'s bitwise (`J` itself only to rounding, as any assembly).
+function _pa_jacobian_case(jf, u)
+    J = jacobian_prototype(jf)
+    return _pa_case(() -> jacobian!(J, jf, u),
+        () -> reduce(vcat, [vcat(parent(r.beta), parent(r.values)) for r in jf.refills]))
+end
+
+# `a + ∂a` over `W`. The refill reads `u` through an average, so a band reads its
+# neighbours through the rebuilt space.
+function _pa_jacobian(W, dirichlet; ve = false)
     c = element(W, 0.0)
     a = form(W, W, (U, V) -> innerₕ(c * U, V) + inner₊(∇ₕ(U), ∇ₕ(V)))
     jf = jacobian_form(a, c => (U -> Mₕ(U)[1], _pa_jac_α); dirichlet = dirichlet)
-    J = jacobian_prototype(jf)
-    u = [0.3 + 0.7 * sin(0.37 * i) for i in 1:ndofs(W)]
-    r = only(jf.refills)
-    return _pa_case(() -> jacobian!(J, jf, u),
-        () -> vcat(parent(r.beta), parent(r.values)))
+    return _pa_jacobian_case(jf, _pa_state(W, ve))
+end
+
+# The same on two components, each coefficient read through the other component, so the
+# refills read `u` at an offset.
+function _pa_jacobian_pair(Wc; ve = false)
+    V = Wc^Val(2)
+    c1, c2 = element(Wc), element(Wc)
+    a = form(V, V,
+        (P, Q) -> inner₊(∇ₕ(P(1)), ∇ₕ(Q(1))) + inner₊(∇ₕ(P(2)), ∇ₕ(Q(2))) +
+                  innerₕ(c1 * P(1), Q(1)) + innerₕ(c2 * P(2), Q(2)))
+    jf = jacobian_form(a, c1 => (U -> Mₕ(U(2))[1], _pa_jac_α),
+        c2 => (U -> Mₕ(U(1))[2], _pa_jac_κ); dirichlet = :dir)
+    return _pa_jacobian_case(jf, _pa_state(V, ve))
 end
 
 # `type_cached_assemble!` takes a named builder (a closure re-made per call would allocate
@@ -381,6 +409,12 @@ function _pa_paths()
                 _pa_case(() -> mul!(y, op, x), () -> copy(y))
             end))
     push!(P, ("jacobian! form", true, 0, (n, p) -> _pa_jacobian(_pa_space(n, p), :dir)))
+    push!(P, ("jacobian! form, element state", true, 0,
+        (n, p) -> _pa_jacobian(_pa_space(n, p), :dir; ve = true)))
+    push!(P, ("jacobian! form composite", true, 0,
+        (n, p) -> _pa_jacobian_pair(_pa_space(n, p))))
+    push!(P, ("jacobian! form composite, element state", true, 0,
+        (n, p) -> _pa_jacobian_pair(_pa_space(n, p); ve = true)))
     push!(P, ("broadcast literal power", true, 0,
         (n, p) -> begin
             W = _pa_space(n, p)
@@ -794,13 +828,13 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
         end
 
         # The jacobian refill in 3D, where its space splits into more arrays. Runs nightly.
-        WITH_3D_TESTS && @testset "jacobian! form 3D" begin
+        WITH_3D_TESTS && @testset "jacobian! form 3D, element state $ve" for ve in (false, true)
             function jac3(p)
                 Random.seed!(854)
                 X = box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
                 Ω = mesh(domain(X, :dir => boundary_symbols(X)), (9, 8, 7),
                     (false, false, false); backend = backend(policy = p))
-                return _pa_jacobian(gridspace(Ω), :dir)
+                return _pa_jacobian(gridspace(Ω), :dir; ve)
             end
             case, ref = jac3(CpuPolyester()), jac3(CpuSerial())
             @test _pa_bytes(case.call) == 0
