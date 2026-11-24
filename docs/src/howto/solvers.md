@@ -15,7 +15,7 @@ CurrentModule = Bramble
 | Pure Neumann | `pde_solve(A, F; mean_zero = w)` |
 | Element type other than `Float64`, or no binary dependency | `pde_solve(A, F; solver = :sparspak)` |
 
-The blocks below solve one system per row of the table and assert its residual. The first builds a Poisson system on a random non-uniform grid.
+The blocks below solve one system per row of the table and assert its residual. The first builds a Poisson system on a random non-uniform grid, with one row per node, ``40^2 = 1600``.
 
 ```@example howto_solvers
 using Bramble, LinearAlgebra, Random, SparseArrays, SuiteSparse
@@ -37,6 +37,15 @@ end
 Random.seed!(20261111)
 Ω₂ = domain(interval(0.0, 1.0) × interval(0.0, 1.0))
 A, F = poisson_system(Ω₂, (40, 40))
+
+@assert size(A) == (40^2, 40^2) && length(F) == 40^2
+# five-point stencil on 40 × 40 nodes, stored zeros of the eliminated couplings included
+@assert nnz(A) == 5 * 40^2 - 4 * 40
+# without them: the 38 × 38 interior block, plus one identity row per boundary node
+@assert count(!iszero, A) == 5 * 38^2 - 4 * 38 + (40^2 - 38^2)
+@assert norm(F) > 0                  # control: the load is nonzero
+@assert issymmetric(A)               # `symmetrize = true`
+
 size(A)
 ```
 

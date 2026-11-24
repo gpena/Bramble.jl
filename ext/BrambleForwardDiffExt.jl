@@ -2,8 +2,11 @@ module BrambleForwardDiffExt
 
 using Bramble: Bramble
 using ForwardDiff: ForwardDiff
-using LinearAlgebra: LinearAlgebra, Factorization, rank
+using LinearAlgebra: LinearAlgebra, Factorization, rank, ×
 using SparseArrays: SparseArrays, SparseMatrixCSC
+using Bramble: interval, domain, boundary_symbols, mesh, gridspace, element, form, innerₕ, inner₊, ∇ₕ,
+               ndofs, jacobian_form, jacobian_prototype, jacobian!
+using PrecompileTools: @setup_workload, @compile_workload
 
 # A `ForwardDiff.Dual` is linear in its parts (value and partials), so a Sparspak solve may
 # split a `Dual` load into one solve per part (src/solvers/sparspak_solver.jl).
@@ -260,5 +263,29 @@ end
 
 _level_solve(fact, A::AbstractMatrix{<:ForwardDiff.Dual}, b::AbstractVector) = _dual_solve(fact, A, b)
 _level_solve(fact, ::AbstractMatrix, b::AbstractVector) = fact \ b
+
+# Caches the first `JacobianForm` call: `jacobian_form` (with and without `dirichlet`, the
+# positional method and its keyword body are separate instances), `jacobian_prototype` and
+# `jacobian!`. All of them are reachable only once ForwardDiff is loaded, so the core
+# package's own precompile pass never sees them. One 2D non-uniform mesh, one coefficient,
+# the quasilinear diffusion term `benchmark/ttfx.jl` times.
+if Bramble.PRECOMPILE_WORKLOAD
+    @setup_workload begin
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ω = domain(S, :boundary => boundary_symbols(S))
+        Ωₕ = mesh(Ω, (8, 8), (false, false))
+        Wₕ = gridspace(Ωₕ)
+        c = element(Wₕ)
+        ac = form(Wₕ, Wₕ, (U, V) -> inner₊(c * ∇ₕ(U)[1], ∇ₕ(V)[1]) + innerₕ(U, V))
+        u = rand(ndofs(Wₕ))
+
+        @compile_workload begin
+            jacobian_form(ac, c => (U -> U, x -> 2 + x^2))
+            jf = jacobian_form(ac, c => (U -> U, x -> 2 + x^2); dirichlet = :boundary)
+            J = jacobian_prototype(jf)
+            jacobian!(J, jf, u)
+        end
+    end
+end
 
 end # module

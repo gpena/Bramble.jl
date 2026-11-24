@@ -242,6 +242,7 @@ import Bramble: Dcₓ, Dcᵧ, D₋ₓ, D₋ᵧ, D̃ₓ, D̃ᵧ
 W₁ = gridspace(Ω₁; ghosts = :boundary)
 row(f, i) = Matrix(assemble(form(W₁, W₁, f)))[i, :]
 
+@assert ndofs(W₁) == 8
 ndofs(W₁)
 ```
 
@@ -384,10 +385,11 @@ g_right(x) = robin_α * u_exact(x) + du_exact(x)  # αu + u' at x = 1
 
 Ω_gh = graded_interval(33)
 x_gh = collect(points(Ω_gh))
+@assert minimum(diff(x_gh)) ≈ (1 / 32)^2 && maximum(diff(x_gh)) ≈ 1 - (31 / 32)^2
 extrema(diff(x_gh))
 ```
 
-The spacings run from ``10^{-3}`` to ``0.06``.
+The spacings run from ``(1/32)^2 \approx 10^{-3}`` to ``1 - (31/32)^2 \approx 0.06``.
 
 ### Without ghosts: the forms you already have
 
@@ -421,6 +423,7 @@ C_gh = constrained(W_ghosts, u -> (
     :xmin => ∂ₙ(u) => g_left,
     :xmax => robin_α * u + ∂ₙ(u) => g_right))
 
+@assert ndofs(W_ghosts) == 35 && ndofs(C_gh) == 33
 ndofs(W_ghosts), ndofs(C_gh)
 ```
 
@@ -573,12 +576,14 @@ The relations hold on the lifted function. The runtime centred difference at the
 `Bramble.lift(Cₕ)` and `Bramble.lift(Cₕ, u)` are both data in forms on `Cₕ`, so a linear form can name the full `Δₕ` of the lifted function at a facet node. A system whose ghost data are nonzero needs the matrix to build its load. Assembling the linear form alone is an `ArgumentError`, and the message names the fix:
 
 ```@example ghost
-try
+err = try
     assemble(l_gh)
+    nothing
 catch e
-    @assert e isa ArgumentError
-    sprint(showerror, e)
+    e
 end
+@assert err isa ArgumentError
+sprint(showerror, err)
 ```
 
 ### Ghost values in a time loop

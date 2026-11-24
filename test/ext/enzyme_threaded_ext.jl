@@ -151,6 +151,23 @@ function _broadcast_spaces()
     end
 end
 
+# Complex data on the seeded non-uniform grid space of `_broadcast_spaces`: a complex element
+# filled through a broadcast, then a complex vector swept by a closure reading the element,
+# reduced to a real number. Enzyme differentiates the real parameters `p` through complex
+# intermediates.
+const NCOMPLEX = prod(DIMS)
+const COMPLEX_C = randn(MersenneTwister(5), ComplexF64, NCOMPLEX)
+const COMPLEX_W = randn(MersenneTwister(6), ComplexF64, NCOMPLEX)
+
+function _complex_case(p, policy, spaces)
+    W = policy isa CpuThreaded ? spaces[2] : spaces[1]
+    u = element(W, Complex{eltype(p)})
+    parent(u) .= p[1] .* COMPLEX_C .+ p[2]^2 .* COMPLEX_C .^ 2
+    v = zeros(Complex{eltype(p)}, NCOMPLEX)
+    _sweep_for!(policy, v, 1:NCOMPLEX, i -> parent(u)[i] * COMPLEX_C[i] + p[1] * im * i)
+    return real(sum(COMPLEX_W .* v)) + sum(abs2, parent(u))
+end
+
 # Runs `hook`'s case of enzyme_policy_cases.jl under `policy` in child processes
 # (`run_isolated`) and checks every mode: the child exited cleanly, reported the mode,
 # matched ForwardDiff and entered the rule the case names.
@@ -220,6 +237,17 @@ end
             n = _entries(:_static_bands!)
             @test all(<=(TOL), _gradients((q, pol) -> _broadcast_case(q, pol, spaces, B), p))
             @test _entries(:_static_bands!) > n
+        end
+
+        @testset "Complex data on a non-uniform grid space" begin
+            p = [0.6, -0.9]
+            spaces = _broadcast_spaces()
+            case = (q, pol) -> _complex_case(q, pol, spaces)
+            ref = ForwardDiff.gradient(q -> case(q, CpuSerial()), p)
+            @test all(>(1e-3), abs.(ref))
+            n = _entries(:_static_for!)
+            @test all(<=(TOL), _gradients(case, p))
+            @test _entries(:_static_for!) > n
         end
 
         @testset "Closure capture shapes" begin

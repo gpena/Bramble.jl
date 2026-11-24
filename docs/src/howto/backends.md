@@ -21,6 +21,11 @@ using Bramble
 using Bramble: execution_policy
 
 Ω = domain(interval(0.0, 1.0))
+
+@assert execution_policy(mesh(Ω, 33)) === Serial()
+@assert execution_policy(gridspace(mesh(Ω, 33))) === Serial()
+@assert execution_policy(mesh(Ω, 33)) !== Parallel()
+
 execution_policy(mesh(Ω, 33)), execution_policy(gridspace(mesh(Ω, 33)))
 ```
 
@@ -31,6 +36,10 @@ Pass a backend built with [`Parallel`](@ref) when you create the mesh:
 ```@example backends
 Ωₛ = mesh(Ω, 33; backend = backend(policy = Serial()))
 Ωₚ = mesh(Ω, 33; backend = backend(policy = Parallel()))
+
+@assert execution_policy(gridspace(Ωₛ)) === Serial()
+@assert execution_policy(gridspace(Ωₚ)) === Parallel()
+@assert execution_policy(gridspace(Ωₛ)) !== execution_policy(gridspace(Ωₚ))
 
 execution_policy(gridspace(Ωₛ)), execution_policy(gridspace(Ωₚ))
 ```
@@ -62,13 +71,17 @@ end
 Aₛ, bₛ = assemble_pair(Serial())
 Aₚ, bₚ = assemble_pair(Parallel())
 
-@assert nnz(Aₛ) > 0 && sum(abs, bₛ) > 0    # control: both are nonzero
+# 65 × 65 nodes, a five-point stencil: 5 entries per row, minus 4 · 65 at the edges
+@assert size(Aₛ) == (65^2, 65^2) && length(bₛ) == 65^2
+@assert nnz(Aₛ) == 5 * 65^2 - 4 * 65
+@assert sum(abs, bₛ) > 0    # control: the load is nonzero
 @assert Aₚ == Aₛ
 @assert bₚ ≈ bₛ
-Aₚ == Aₛ, bₚ ≈ bₛ
+
+nnz(Aₚ), length(bₚ)
 ```
 
-The matrix is identical entry by entry. Reductions such as `innerₕ` add their terms in
+The matrix has one row per node, ``65^2 = 4225``, and the five-point stencil gives it ``5 \cdot 65^2 - 4 \cdot 65 = 20865`` stored entries. It is identical entry by entry under both policies. Reductions such as `innerₕ` add their terms in
 another order under a threaded policy, so compare vectors and scalars built from them with
 `≈`.
 
