@@ -650,7 +650,7 @@ const _WrappedSparse = Union{Adjoint{<:Any, <:SparseMatrixCSC},
 
 _rank_one_sparse(A::SparseMatrixCSC) = A
 _rank_one_sparse(A::_WrappedSparse) = sparse(A)
-_rank_one_sparse(A::AbstractMatrix) = _is_csr(A) ? _csr_to_csc(A) : _throw_rank_one_dense(A)
+_rank_one_sparse(A::AbstractMatrix) = _throw_rank_one_dense(A)
 
 @noinline function _throw_rank_one_dense(@nospecialize(A))
     throw(ArgumentError("pde_solve(K::RankOneUpdate, F) solves through a sparse bordered " *
@@ -685,14 +685,4 @@ _sees_constants(w, tol) = abs(sum(w)) > tol * norm(w, 1)
                         "A + σ wₛ wₜᵀ is singular. Penalise a functional of $f that sees " *
                         "constants, such as σ * innerₕ(1, u) * innerₕ(1, v), or solve " *
                         "pde_solve(K, F; mean_zero = w)."))
-end
-
-# `SparseMatrixCSR` support, via the same CSC-conversion fallback `sparse_factorize` uses
-# (`_is_csr`/`_csr_to_csc`, src/solvers/sparse_solvers.jl -- see that file's comment for why
-# `SparseMatrixCSR` cannot be named as a compile-time type here). A non-CSR, non-CSC
-# `AbstractMatrix` (e.g. a dense `Matrix`) still throws a plain `MethodError`, the same as
-# before this method existed.
-function pde_solve(A::AbstractMatrix, F::AbstractVector; kwargs...)
-    _is_csr(A) && return pde_solve(_csr_to_csc(A), F; kwargs...)
-    throw(MethodError(pde_solve, (A, F)))
 end

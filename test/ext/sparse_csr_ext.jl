@@ -743,11 +743,25 @@ end
 
     # sparse_factorize still rejects non-CSR, non-CSC types.
     @testset "other matrix types rejected" begin
-        # The catch-all's guarantee for a genuinely unsupported type (dense `Matrix`,
-        # test/form/sparse_solvers.jl) is unweakened by the CSR fallback: loading this
-        # extension only ever widens dispatch for a `SparseMatrixCSR`, never for anything
-        # else.
+        # A dense `Matrix` has no `sparse_factorize` or `pde_solve` method, with this
+        # extension loaded as without it: it only adds methods for a `SparseMatrixCSR`.
         @test_throws MethodError sparse_factorize(rand(4, 4))
+        @test_throws MethodError pde_solve(rand(4, 4), rand(4))
+    end
+
+    # A raw CSR matrix used to land on the dense `AbstractMatrix` method, which factors it
+    # with dense `cholesky`/`lu` (gpena/Bramble.jl#1047). The extension's method converts
+    # to CSC, so it reaches `libSparse` on macOS and the macOS guard elsewhere.
+    @testset "accelerate_factorize on a raw CSR matrix" begin
+        A = sparsecsr([1, 2, 2], [1, 1, 2], [2.0, 1.0, 3.0], 2, 2)
+        @test parentmodule(which(accelerate_factorize, Tuple{typeof(A)})) !== Bramble
+        if Sys.isapple()
+            fact = accelerate_factorize(A)
+            @test fact isa Bramble.AccelerateFactorization
+            @test fact \ [1.0, 2.0] ≈ Matrix(A) \ [1.0, 2.0]
+        else
+            @test_throws ArgumentError accelerate_factorize(A)
+        end
     end
 end
 

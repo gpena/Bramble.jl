@@ -119,35 +119,13 @@ function sparse_factorize(
     return sparse_factorize(A; solver = solver, sym = sym, kwargs...)
 end
 
-# `SparseMatricesCSR` is a weakdep, so `SparseMatrixCSR` cannot be named in `src/`: `_is_csr`
-# asks whether `BrambleSparseMatricesCSRExt` is loaded and whether `A` is an instance of the type
-# that extension bound. No backend solves a CSR matrix natively
-# (`docs/src/internals/csr_solvers.md`), so a CSR `A` is converted to CSC in O(nnz) and the CSC
-# methods take it from there.
-_csr_extension() = Base.get_extension(Bramble, :BrambleSparseMatricesCSRExt)
-
-function _is_csr(A)
-    ext = _csr_extension()
-    return ext !== nothing && A isa ext.SparseMatrixCSR
-end
-
-function _csr_to_csc(A::AbstractMatrix)
-    m, n = size(A)
-    rowptr, colval, nzval = A.rowptr, A.colval, A.nzval
-    # a zero-based `sparsecsr(Val(0), ...)` stores `rowptr` and `colval` from 0: read the
-    # base off the data and shift both to one-based (`o == 0` for the usual one-based case)
-    o = 1 - Int(rowptr[1])
-    I = Vector{Int}(undef, length(nzval))
-    @inbounds for i in 1:m, k in (rowptr[i] + o):(rowptr[i + 1] + o - 1)
-
-        I[k] = i
-    end
-    return sparse(I, o == 0 ? colval : colval .+ o, nzval, m, n)
-end
-
 # The assembled matrix of a `BilinearForm` is CSR on a `csr_backend()` mesh, and no backend
-# solver takes one (`qr` would silently densify it): the form methods pass it through here.
-_as_csc(A) = _is_csr(A) ? _csr_to_csc(A) : A
+# solver takes one (`qr` would silently densify it): the form methods pass it through
+# `_as_csc`. `SparseMatricesCSR` is a weakdep, so `BrambleSparseMatricesCSRExt` adds the
+# `SparseMatrixCSR` methods of `_as_csc`, `sparse_factorize`, `refactor!` and `pde_solve`:
+# an O(nnz) conversion to CSC, after which the CSC methods take over
+# (`docs/src/internals/csr_solvers.md`).
+_as_csc(A) = A
 
 # A dense-backed form assembles into a `Matrix`, which no backend takes either. The scan is
 # O(n²), once per solve, on a matrix whose assembly is already O(n²).
@@ -160,14 +138,6 @@ _ext_loaded(ext::Symbol) = Base.get_extension(Bramble, ext) !== nothing
 
 function _throw_unsupported_matrix(name::String, A, expected::String = "a SparseMatrixCSC")
     throw(ArgumentError("$name takes $expected; got a $(typeof(A))."))
-end
-
-# Only a `SparseMatrixCSC` is supported (test/solvers/sparse_solvers.jl keeps the `MethodError`).
-# This method states that, and converts a CSR matrix and delegates back, so every
-# `AbstractMatrix` argument ends at a `SparseMatrixCSC` method or a `MethodError`.
-function sparse_factorize(A::AbstractMatrix; kwargs...)
-    _is_csr(A) && return sparse_factorize(_csr_to_csc(A); kwargs...)
-    throw(MethodError(sparse_factorize, (A,)))
 end
 
 """
@@ -231,7 +201,6 @@ function refactor!(
 end
 
 function refactor!(fact::Factorization, A::Any)
-    _is_csr(A) && return refactor!(fact, _csr_to_csc(A))
     throw(
         ArgumentError(
         "refactor! is not supported for factorization of type $(typeof(fact)) and matrix type $(typeof(A)). Expected SparseMatrixCSC.",
