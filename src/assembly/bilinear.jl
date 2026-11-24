@@ -480,10 +480,10 @@ precompile(_type_loose_scalars, (Any,))
 precompile(_type_scale_depth, (Any,))
 precompile(_type_float64_values, (Any,))
 @generated _holds_loose_scalar(::T) where {T} = _type_loose_scalars(T)
-# Julia 1.14 does not run a generator while inferring a call whose argument type is
-# `Type{E}` (no longer concrete there) if the generator reads `E`: the call inferred `Any`,
-# and with it `_split_restricted_products` (gpena/Bramble.jl#1282). A `Val{E}` is concrete,
-# so the generators here and below take one, through a method that wraps the type.
+# Julia 1.14 does not run a generator while inferring a call with a `Type{E}` argument if
+# the generator reads `E`: the call inferred `Any`, and so did `_split_restricted_products`
+# (gpena/Bramble.jl#1282). It does run one for a `Val{E}`, so the generators here and below
+# take that, through a method that wraps the type.
 @inline _normalisable(ast, ::Type{E}) where {E} = _normalisable(ast, Val(E))
 @generated _normalisable(::T, ::Val{E}) where {T, E} = E === Float64 &&
                                                        _type_loose_scalars(T) &&
