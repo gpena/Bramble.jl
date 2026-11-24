@@ -64,7 +64,7 @@ end
 
 # A tuple region gives two labels per product, so 33 products already pass 32 labels
 # (14208 / 23040 / 68416 B at 33 / 40 / 65 before the out-of-line label concatenation).
-@testset "$n two-label restricted products (#853)" for n in (33, 40, 65)
+@testset "$n two-label restrictions (#853)" for n in (33, 40, 65)
     Wₕ = gridspace(graded_mesh(2, (9, 11)))
     f = x -> 1.0 + x[1]
     r(v) = Bramble.restrict_to((:boundary, :interior), v)
