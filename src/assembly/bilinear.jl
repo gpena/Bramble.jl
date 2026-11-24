@@ -480,10 +480,15 @@ precompile(_type_loose_scalars, (Any,))
 precompile(_type_scale_depth, (Any,))
 precompile(_type_float64_values, (Any,))
 @generated _holds_loose_scalar(::T) where {T} = _type_loose_scalars(T)
-@generated _normalisable(::T, ::Type{E}) where {T, E} = E === Float64 &&
-                                                        _type_loose_scalars(T) &&
-                                                        _type_scale_depth(T) <= 1 &&
-                                                        _type_float64_values(T)
+# Julia 1.14 does not run a generator while inferring a call whose argument type is
+# `Type{E}` (no longer concrete there) if the generator reads `E`: the call inferred `Any`,
+# and with it `_split_restricted_products` (gpena/Bramble.jl#1282). A `Val{E}` is concrete,
+# so the generators here and below take one, through a method that wraps the type.
+@inline _normalisable(ast, ::Type{E}) where {E} = _normalisable(ast, Val(E))
+@generated _normalisable(::T, ::Val{E}) where {T, E} = E === Float64 &&
+                                                       _type_loose_scalars(T) &&
+                                                       _type_scale_depth(T) <= 1 &&
+                                                       _type_float64_values(T)
 
 # The element type every leaf space of `Wₕ` has, `Nothing` where two differ: a composite's
 # `eltype` is its first leaf's, so `W × Wf` answers `Float64` for its Float32 component.
@@ -745,13 +750,18 @@ end
 precompile(_type_mixed_scales, (Any, Any))
 precompile(_type_taps_differ, (Any, Any))
 precompile(_type_tap_scalar, (Any, Any))
-@generated _needs_rewrite(::T, ::Type{E}) where {T, E} = _type_holds_restriction(T) ||
-                                                         _type_mixed_scales(T, E)
-@generated _value_type(::T, ::Type{E}) where {T, E} = _type_value(T, E)
+# Each takes its types as a `Val`, as `_normalisable` does (above), so it infers on 1.14.
+@inline _needs_rewrite(op, ::Type{E}) where {E} = _needs_rewrite(op, Val(E))
+@generated _needs_rewrite(::T, ::Val{E}) where {T, E} = _type_holds_restriction(T) ||
+                                                        _type_mixed_scales(T, E)
+@inline _value_type(op, ::Type{E}) where {E} = _value_type(op, Val(E))
+@generated _value_type(::T, ::Val{E}) where {T, E} = _type_value(T, E)
 # Whether the summand `T` already has weights of type `S` and no constant scalar off it.
-@generated _on_target(::T, ::Type{S}, ::Type{E}) where {T, S, E} = (
+@inline _on_target(x, ::Type{S}, ::Type{E}) where {S, E} = _on_target(x, Val(S), Val(E))
+@generated _on_target(::T, ::Val{S}, ::Val{E}) where {T, S, E} = (
     _type_weight(T, E) === S && !_type_scalar_off(T, S))
-@generated _sum_differs(::T, ::Type{E}) where {T, E} = _type_scales_differ(T, E)
+@inline _sum_differs(op, ::Type{E}) where {E} = _sum_differs(op, Val(E))
+@generated _sum_differs(::T, ::Val{E}) where {T, E} = _type_scales_differ(T, E)
 
 # A summed operand whose summands' weights differ in type (`2.0 * Rₕ(:l, v) +
 # 3 * Rₕ(:r, v)`, `g * v + 0.5 * D₋ₓ(v)` with `g` a Float32 grid function) has a stencil
@@ -798,7 +808,8 @@ precompile(_type_tap_scalar, (Any, Any))
     op, _tap_scales(op.inner_op, E))
 @inline _tap_scaled(op, ::Type{S}, ::Type{E}) where {S, E} = OperatorScale(
     convert(S, op.scalar), _tap_scales(op.inner_op, E))
-@generated _tap_scalar(::T, ::Type{E}) where {T, E} = _type_tap_scalar(T, E)
+@inline _tap_scalar(op, ::Type{E}) where {E} = _tap_scalar(op, Val(E))
+@generated _tap_scalar(::T, ::Val{E}) where {T, E} = _type_tap_scalar(T, E)
 @inline _widened(op::OperatorAdd, ::Type{E}) where {E} = _widen_summands(
     op, _joined_value_type(op, E), E)
 # `_value_type` is read off the types in the world Bramble was loaded in, which has no `*`

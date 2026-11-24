@@ -988,7 +988,10 @@ end
 # types count; anything else is left to the value read at the probe point. The generator
 # only lists the types: `promote_type` runs in the caller's world, where the promotion
 # rules of packages loaded after Bramble (`ForwardDiff.Dual`) are seen.
-@generated function _stencil_type_eltype(::Type{T}, ::Type{S}) where {T, S}
+# The stencil type comes as a `Val`, so 1.14 runs the generator in inference (bilinear.jl,
+# `_normalisable`).
+@inline _stencil_type_eltype(T, ::Type{S}) where {S} = _stencil_type_eltype(T, Val(S))
+@generated function _stencil_type_eltype(::Type{T}, ::Val{S}) where {T, S}
     Cs = Any[]
     for E in (S <: Tuple && isconcretetype(S) ? fieldtypes(S) : ())
         C = E <: Tuple && fieldcount(E) > 0 ? fieldtype(E, fieldcount(E)) : Any
@@ -1143,13 +1146,16 @@ end
     return f(ast, acc)
 end
 
-# Whether the terms `ts` have weights of more than one type, each known.
-@generated function _values_differ(ts::Tuple, ::Type{E}) where {E}
+# Whether the terms `ts` have weights of more than one type, each known. Both take `E` as a
+# `Val`, so 1.14 runs the generators in inference (bilinear.jl, `_normalisable`).
+@inline _values_differ(ts::Tuple, ::Type{E}) where {E} = _values_differ(ts, Val(E))
+@generated function _values_differ(ts::Tuple, ::Val{E}) where {E}
     values = Any[_type_weight(T, E) for T in fieldtypes(ts)]
     return all(isconcretetype, values) && !allequal(values)
 end
 # The terms `ts` summed in groups of one weight type, in the order each type first comes.
-@generated function _value_groups(ts::Tuple, ::Type{E}) where {E}
+@inline _value_groups(ts::Tuple, ::Type{E}) where {E} = _value_groups(ts, Val(E))
+@generated function _value_groups(ts::Tuple, ::Val{E}) where {E}
     values = Any[_type_weight(T, E) for T in fieldtypes(ts)]
     groups = Expr(:tuple)
     for v in unique(values)
