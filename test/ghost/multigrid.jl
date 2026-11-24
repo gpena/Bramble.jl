@@ -300,6 +300,17 @@ end
                           (C = constrained(gridspace(mesh(W); ghosts = :boundary), rels); form(C, C, f)) :
                           form(W, W, f)
         @test occursin("same kind of form on every level", message(mixedkinds))
+        # a plain form on the finest level only
+        ghostbelow = W -> npoints(mesh(W)) == npoints(Ω) ? form(W, W, f) :
+                          (C = constrained(gridspace(mesh(W); ghosts = :boundary), rels); form(C, C, f))
+        @test_throws ArgumentError gmg_preconditioner(ghostbelow, Ω)
+        @test occursin("same kind of form on every level", message(ghostbelow))
+        # plain forms on every level make a vector of `BilinearForm`s, so they skip the
+        # checks for ghost levels
+        plain = W -> form(W, W, f)
+        _, forms = Bramble._gmg_level_forms(plain, Ω, nothing, :V, 2, 2)
+        @test length(forms) > 1
+        @test forms isa AbstractVector{<:Bramble.BilinearForm}
         # other ghosted facets below the finest level
         partial = u -> (:xmin => u + ∂ₙ(u) => 0.0, :xmax => u => 0.0, :ymin => u => 0.0,
             :ymax => u => 0.0)
