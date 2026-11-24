@@ -777,6 +777,33 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
             @test case.result() == ref.result()
             @test !iszero(case.result())
         end
+
+        # `u .^ 2` lowers to `literal_pow` with `Ref(^)` and `Ref(Val(2))` leaves, which cross
+        # `@batch` as their values, so no argument box lands on the heap. The user's own
+        # `Ref`s are made before the hook sees them, so the bytes are not asserted here.
+        @testset "broadcast literal power" begin
+            function pow(p)
+                W = _pa_space(17, p)
+                u = Rₕ(W, _pa_g)
+                v = similar(u)
+                return _pa_case(() -> (v .= u .^ 2 .+ u .^ 3; nothing), () -> _pa_copy(v))
+            end
+            case, ref = pow(CpuPolyester()), pow(CpuSerial())
+            case.call()
+            case.call()
+            Allocs = _PA_PROFILE.Allocs
+            Allocs.clear()
+            Allocs.start(; sample_rate = 1)
+            try
+                case.call()
+            finally
+                Allocs.stop()
+            end
+            @test count(x -> x.type <: _PA_REFERENCE, Allocs.fetch().allocs) == 0
+            ref.call()
+            @test case.result() == ref.result()
+            @test !iszero(case.result())
+        end
     end
 
     @testset "Determinism across repeated runs" begin
