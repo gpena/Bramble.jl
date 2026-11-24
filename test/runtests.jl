@@ -341,6 +341,7 @@ if __bramble_with_ext_backends
             include("ext/ghost_polyester.jl")
             include("ext/ghost_vector_polyester.jl")
             include("ext/ghost_semidiscrete_polyester.jl")
+            include("ext/zero_allocations_polyester.jl")
         end
     end
 end
