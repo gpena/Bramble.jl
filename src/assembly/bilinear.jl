@@ -1280,10 +1280,14 @@ function _dirichlet_union!(A::AbstractMatrix, Wₕ::CompositeGridSpace, cache, l
 end
 
 # Ghost and constrained spaces keep their own `dirichlet_bc!`.
-_dirichlet_union!(A::AbstractMatrix, Wₕ::_GhostCompositeSpace, cache, labels::Tuple,
-    components) = dirichlet_bc!(A, Wₕ, labels...; components = components)
-_dirichlet_union!(A::AbstractMatrix, Wₕ, cache, labels::Tuple, components) = dirichlet_bc!(
-    A, Wₕ, labels...; components = components)
+function _dirichlet_union!(A::AbstractMatrix, Wₕ::_GhostCompositeSpace, cache, labels::Tuple,
+        components)
+    dirichlet_bc!(A, Wₕ, labels...; components = components)
+end
+function _dirichlet_union!(A::AbstractMatrix, Wₕ, cache, labels::Tuple, components)
+    dirichlet_bc!(
+        A, Wₕ, labels...; components = components)
+end
 
 @inline _union_entries(::Tuple{}, cache, labels, components, nleaves, i) = ()
 @inline function _union_entries(leaves::Tuple, cache, labels, components, nleaves, i)

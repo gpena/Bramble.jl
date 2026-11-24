@@ -261,7 +261,8 @@ function _reaction_residual(A::AbstractMatrix, F::AbstractVector, u::AbstractVec
 end
 
 # The entries only the sparse path reads are built for it alone.
-function _reaction_residual(A::SparseMatrixCSC, F::AbstractVector, u::AbstractVector, leaves::Tuple, markers, components)
+function _reaction_residual(
+        A::SparseMatrixCSC, F::AbstractVector, u::AbstractVector, leaves::Tuple, markers, components)
     return _reaction_residual(A, F, u, _reaction_leaf_entries(leaves, markers, components))
 end
 function _reaction_residual(A::AbstractMatrix, F::AbstractVector, u::AbstractVector, ::Tuple, markers, components)
