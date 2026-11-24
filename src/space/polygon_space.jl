@@ -129,13 +129,15 @@ function _polygon_spaces(Ωₕ, P::ScalarGridSpace{2, T}, label::Symbol, g, inn:
         _closure_data(be, _closure_data_eltype(S, eltype(d)), d))
     rows = _RowsDirichlet(false, U0.rows.facets, true, true, ext .& .!extended, extended,
         conflict)
-    U = GhostGridSpace(U0.padded, U0.E, U0.d, U0.Et, rows, U0.td, U0.gu, U0.grid_function)
+    U = GhostGridSpace(U0.padded, U0.E, U0.d, U0.Et, rows, U0.td, U0.gu, U0.grid_function,
+        _PolygonTrial(keep, gridspace(Ωₕ)))
 
     Ev = sparse(keep, 1:length(keep), fill(one(T), length(keep)), N, length(keep))
     V0 = GhostGridSpace(P, _closure_matrix(be, T, Ev), _closure_data(be, T, zeros(T, N)))
     # As a trial side, `V` gives every exterior node 0: the reach guard refuses any read.
     vrows = _RowsDirichlet(false, V0.rows.facets, true, false, ext, falses(N), falses(N))
-    V = GhostGridSpace(V0.padded, V0.E, V0.d, V0.Et, vrows, V0.td, V0.gu, V0.grid_function)
+    V = GhostGridSpace(V0.padded, V0.E, V0.d, V0.Et, vrows, V0.td, V0.gu, V0.grid_function,
+        nothing)
     return U, V
 end
 
@@ -144,20 +146,17 @@ end
 # ghost spaces of `gridspace(Ωₕ; ghosts)` are not.
 @inline _is_polygon_trial(Wₕ::GhostGridSpace) = Wₕ.rows.polygon && Wₕ.rows.trial_only
 
-# The mesh linear index of each degree of freedom of a polygon trial space, its interior
-# node: outside the exterior, the closure's row of an interior node is that degree of
-# freedom alone and the row of a boundary node is empty. With no ghosts, padded and mesh
-# linear indices agree.
-function _polygon_interior(U::GhostGridSpace)
-    Et = U.Et
-    ext = U.rows.unclosed .| U.rows.extended
-    cp, rv = SparseArrays.getcolptr(Et), rowvals(Et)
-    idx = Vector{Int}(undef, size(Et, 1))
-    for p in eachindex(ext)
-        ext[p] || cp[p + 1] == cp[p] || (idx[rv[cp[p]]] = p)
-    end
-    return idx
+# What a polygon trial space keeps for `Rₕ` and the norms, fixed by `_polygon_spaces`: the
+# mesh linear index of each degree of freedom, its interior node, in the order of the
+# closure's columns, and the plain space `gridspace(Ωₕ)` its grid function on Ω̄ₕ lives on.
+struct _PolygonTrial{S <: ScalarGridSpace}
+    interior::Vector{Int}
+    closed::S
 end
+
+# The mesh linear index of each degree of freedom of a polygon trial space, its interior
+# node. With no ghosts, padded and mesh linear indices agree.
+@inline _polygon_interior(U::GhostGridSpace) = U.polygon.interior
 
 # `Rₕ` on a polygon trial space: `f` at each interior node, the degrees of freedom.
 function _polygon_restrict!(uₕ::VectorElement{<:GhostGridSpace}, f)
@@ -192,7 +191,7 @@ function _polygon_element(uₕ::VectorElement{<:GhostGridSpace})
     for (k, p) in enumerate(_polygon_interior(U))
         v[p] = u[k]
     end
-    return VectorElement(v, gridspace(Ωₕ))
+    return VectorElement(v, U.polygon.closed)
 end
 
 @noinline function _throw_polygon_restriction_markers(op::Symbol)
