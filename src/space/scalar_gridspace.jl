@@ -312,27 +312,8 @@ end
 # `ScalarGridSpace` stores `SpaceWeights{D, T, VT}` in its own field type, on
 # `ScalarGridSpace` too) purely to special-case one dimension. A one-factor
 # `SeparableWeights` inlines to that vector's own indexing, so wrapping the 1D vector costs
-# nothing. One dimension still skips building a *second* full-length vector for the
-# transverse factor -- there is none, since `aligned` and `cellfactor` already *are*
-# `innerplus₁` and `inner_h_vec` below, zero-copy.
-function space_weights(Ωₕ::AbstractMeshType{1})
-    innerplus₁ = __vector(Ωₕ)
-    _innerplus_weights!(innerplus₁, Ωₕ, 1)
-
-    inner_h_vec = __vector(Ωₕ)
-    _innerh_weights!(inner_h_vec, Ωₕ)
-
-    VT = typeof(inner_h_vec)
-    T = eltype(VT)
-    dims = npoints(Ωₕ, Tuple)
-
-    return SpaceWeights{1, T, VT}(
-        SeparableWeights{1, T, VT}((inner_h_vec,), dims),
-        (SeparableWeights{1, T, VT}((innerplus₁,), dims),),
-        (innerplus₁,), (inner_h_vec,), _mesh_version(Ωₕ)
-    )
-end
-
+# nothing. One method serves every `D`: since #115 it allocates only the `D` `aligned`
+# vectors, so a separate 1D method would save nothing.
 function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
     # Per-axis factors, kept on `SpaceWeights` (not just used and discarded here) so
     # `weights(Wₕ, Val(S))` can answer any staggered set from `O(D)` numbers rather than a
@@ -348,20 +329,25 @@ function space_weights(Ωₕ::AbstractMeshType{D}) where {D}
         _innerplus_weights!(aligned[k], Ωₕ, k)
     end
 
-    npts_tuple = npoints(Ωₕ, Tuple)
-    VT = typeof(first(aligned))
-    T = eltype(VT)
-
     # `innerh` and every `innerplus[i]` are lazy products of `aligned`/`cellfactor`, so
     # `space_weights` allocates the `D` `aligned` vectors; `cellfactor` is the mesh's own
-    # vector, zero-copy, except in 1D and on one-point axes.
-    innerh = SeparableWeights{D, T, VT}(cellfactor, npts_tuple)
+    # vector, zero-copy, except on one-point axes.
+    return _assemble_space_weights(aligned, cellfactor, npoints(Ωₕ, Tuple), _mesh_version(Ωₕ))
+end
+
+# `innerh` and the `D` `innerplus` products from the per-axis factors, which every
+# construction of a `SpaceWeights` (mesh, ghost padding, host mirror) shares.
+function _assemble_space_weights(
+        aligned::NTuple{D, Any}, cellfactor::NTuple{D, Any}, dims, version
+) where {D}
+    VT = typeof(first(aligned))
+    T = eltype(VT)
+    innerh = SeparableWeights{D, T, VT}(cellfactor, dims)
     innerplus = ntuple(Val(D)) do i
         factors = ntuple(k -> k == i ? aligned[k] : cellfactor[k], Val(D))
-        SeparableWeights{D, T, VT}(factors, npts_tuple)
+        SeparableWeights{D, T, VT}(factors, dims)
     end
-
-    return SpaceWeights{D, T, VT}(innerh, innerplus, aligned, cellfactor, _mesh_version(Ωₕ))
+    return SpaceWeights{D, T, VT}(innerh, innerplus, aligned, cellfactor, version)
 end
 
 # Implementation of the interface functions for AbstractSpaceType
@@ -471,7 +457,6 @@ end
 # so the check is not repeated at every point of every product term (gpena/Bramble.jl#437).
 @inline _stored_weights(Wₕ::ScalarGridSpace, ::Innerh) = Wₕ.weights.innerh
 @inline _stored_weights(Wₕ::ScalarGridSpace, ::Innerplus, i) = Wₕ.weights.innerplus[i]
-@inline _stored_weights(Wₕ::ScalarGridSpace, ::Val{()}) = Wₕ.weights.innerh
 @inline function _stored_weights(Wₕ::ScalarGridSpace, ::Val{S}) where {S}
     return _weights_val(Wₕ.weights, Wₕ, Val(S), Val(length(S)))
 end
@@ -560,20 +545,13 @@ function _host_mirror_mesh(::DeviceLocality, Ωₕ::MeshnD{D}) where {D}
 end
 
 # One bulk `Array(...)` per per-axis factor -- `aligned`/`cellfactor` are length
-# `npoints(Ωₕ, d)`, not the full grid (gpena/Bramble.jl#115) -- mirroring `space_weights`'s own
-# `innerh`/`innerplus` construction (the `SeparableWeights` lines at its end), just fed
-# from the already-computed factors instead of the mesh's spacings.
-function _host_space_weights(w::SpaceWeights{D, T}) where {D, T}
+# `npoints(Ωₕ, d)`, not the full grid (gpena/Bramble.jl#115) -- assembled like
+# `space_weights`'s own, just fed from the already-computed factors instead of the mesh's
+# spacings.
+function _host_space_weights(w::SpaceWeights)
     haligned = map(Array, w.aligned)
     hcellfactor = map(Array, w.cellfactor)
-    VT = typeof(first(haligned))
-    dims = w.innerh.dims
-    innerh = SeparableWeights{D, T, VT}(hcellfactor, dims)
-    innerplus = ntuple(Val(D)) do i
-        factors = ntuple(k -> k == i ? haligned[k] : hcellfactor[k], Val(D))
-        SeparableWeights{D, T, VT}(factors, dims)
-    end
-    return SpaceWeights{D, T, VT}(innerh, innerplus, haligned, hcellfactor, w.built_version)
+    return _assemble_space_weights(haligned, hcellfactor, w.innerh.dims, w.built_version)
 end
 
 """
@@ -701,26 +679,16 @@ end
 
 Builds a set of weights based on the spacings, associated with the `component`-th direction, for the modified discrete ``L^2`` inner product on the space of grid functions, following the order of the points provided by `indices(Ωₕ)`. The values are stored in vector `u`.
 """
-function _innerplus_weights!(u::VT, Ωₕ, component = 1) where {VT <: Array}
-    T = eltype(VT)
+function _innerplus_weights!(u::AbstractVector, Ωₕ, component = 1)
+    T = eltype(u)
     mesh_component = Ωₕ(component)
 
     # These weights are the mesh's cached backward spacings with the first entry zeroed.
     copyto!(u, spacings(mesh_component))
 
-    @inbounds u[1] = zero(T)
-    return nothing
-end
-
-# Device counterpart: `copyto!` above is already bulk, so the only scalar operation is
-# `u[1] = zero(T)`. Assigning into a one-element `view` keeps that write inside GPU
-# broadcasting (`materialize!`) instead of a host-side scalar `setindex!`.
-function _innerplus_weights!(u::AbstractVector, Ωₕ, component = 1)
-    T = eltype(u)
-    mesh_component = Ωₕ(component)
-
-    copyto!(u, spacings(mesh_component))
-
+    # `copyto!` is already bulk, so the only scalar operation is this write. Assigning into
+    # a one-element `view` keeps it inside GPU broadcasting (`materialize!`) instead of a
+    # host-side scalar `setindex!`.
     view(u, 1:1) .= zero(T)
     return nothing
 end

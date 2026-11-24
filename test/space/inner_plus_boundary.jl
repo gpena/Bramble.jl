@@ -25,7 +25,7 @@ using ..TestUtils: WITH_3D_TESTS, _backward_spacing_oracle, _half_spacing_oracle
     @testset "Boundary entries: half-cell, not zero" begin
         # In 1D inner₊ has one direction, so there is no transverse factor.
         @testset "1D unaffected: no transverse factor" begin
-            # `space_weights(Ωₕ::AbstractMeshType{1})` has the aligned factor alone.
+            # `space_weights` on a 1D mesh has the aligned factor alone.
             # `w[1] = 0` in 1D is `main`'s own zero, correct both before and after this
             # fix: D₋ₓ genuinely has no cell behind node 1.
             Ωₕ = mesh(domain(interval(0.0, 1.0)), 9, true)

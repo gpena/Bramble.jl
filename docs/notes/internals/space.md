@@ -81,16 +81,13 @@ speeds up every symbolic inner-product term; the measured figures are in gpena/B
 
 ### The one-dimensional case
 
-`space_weights(Ωₕ::AbstractMeshType{1})` (`src/space/scalar_gridspace.jl`) wraps its
-single per-axis vector in a `SeparableWeights{1}` the same way the `D ≥ 2` method wraps
-`D` of them -- there is no separate, dense-vector code path kept for one dimension, even
-though a one-factor product has nothing left to separate. The comment above that method
-calls this measured rather than assumed, and the measurement is narrower than it might
-sound: a `SeparableWeights{1}`'s linear `getindex` converts index `i` to
-`CartesianIndices((n,))[i]`, which for a one-dimensional shape is the identity, and then
-reads `factors[1][i]` -- the same single array access a plain `Vector`'s own `getindex`
-already is, with nothing left for the wrapper to add. A `SeparableWeights{1}` is therefore
-no slower to read element by element than a plain `Vector`.
+`space_weights` has one method for every `D`. In 1D it wraps the single per-axis vector in
+a `SeparableWeights{1}`, as `D ≥ 2` wraps `D` of them; no dense-vector path is kept for one
+dimension. The wrapper costs nothing to read: a `SeparableWeights{1}`'s linear `getindex`
+turns index `i` into `CartesianIndices((n,))[i]`, the identity for a one-dimensional shape,
+then reads `factors[1][i]`, the one array access a plain `Vector` makes. A separate 1D
+method once saved two full-length vectors. Since #115 the general method allocates only the
+`D` `aligned` vectors, so the saving was gone and the method went with it.
 
 ### Allocation and construction
 

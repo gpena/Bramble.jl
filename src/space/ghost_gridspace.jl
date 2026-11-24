@@ -415,14 +415,7 @@ function _ghost_space_weights(G::GhostMesh{D}) where {D}
     w = space_weights(physical_mesh(G))
     aligned = ntuple(d -> _pad_factor(w.aligned[d], G, d), Val(D))
     cellfactor = ntuple(d -> _pad_factor(w.cellfactor[d], G, d), Val(D))
-    VT = typeof(first(aligned))
-    T = eltype(VT)
-    dims = npoints(G, Tuple)
-    innerh = SeparableWeights{D, T, VT}(cellfactor, dims)
-    innerplus = ntuple(Val(D)) do i
-        SeparableWeights{D, T, VT}(ntuple(k -> k == i ? aligned[k] : cellfactor[k], Val(D)), dims)
-    end
-    return SpaceWeights{D, T, VT}(innerh, innerplus, aligned, cellfactor, _mesh_version(G))
+    return _assemble_space_weights(aligned, cellfactor, npoints(G, Tuple), _mesh_version(G))
 end
 
 # The selection closure: column `k` holds a single 1 at the padded point of DOF `k`.
