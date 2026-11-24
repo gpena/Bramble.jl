@@ -1673,14 +1673,9 @@ end
 #
 # The tensor comes back in a `_GradientRows`. Indexing, `length`, iteration,
 # `map`, broadcasting and `Tuple(g)` act on the tuple it holds; nothing else does. It
-# tells `inner₊` (inner.jl) that row `c` is built on component `c` alone, since every leaf
-# of `∇ₕ(u(c))` is `u(c)`, and `inner₊` of two of them records that pair in a
-# `_ComponentSum` (ast.jl), so a captured coefficient over the sum distributes by type, as
-# over the `εₕ` and `divₘₕ` builders below, and `form` infers one type in 3D
-# (gpena/Bramble.jl#958). A plain tuple of gradient tuples promises nothing (a user may
-# repeat or mix components in it) and keeps #529's value gates. Every component of a
-# `TrialFunction` or `TestFunction` is an `IndexedTrialFunction`/`IndexedTestFunction`
-# (`component`, component.jl), a nested space's included, so the labels always hold.
+# marks the rows as the gradient of one composite (gpena/Bramble.jl#958). `inner₊` of two
+# of them (inner.jl) builds the sum a plain tuple of gradient tuples builds, as the
+# component of each leaf is in its type (gpena/Bramble.jl#1229).
 
 """
     Bramble._GradientRows{D, N, T}
@@ -1691,7 +1686,7 @@ test function, held so that [`inner₊`](@ref) can name the component of each ro
 and `Tuple(g)` is that tuple; anything else tuple-like needs `Tuple(g)`. `map` takes only
 these containers: with a plain tuple among its arguments, pass `Tuple(g)`. It is not a
 `LazyOp` and never reaches assembly: `inner₊` on two of them builds the sum of the rows'
-products, held in a `Bramble._ComponentSum` that names each row's component pair.
+products.
 """
 struct _GradientRows{D, N, T <: NTuple{N, NTuple{D, LazyOp{D}}}}
     rows::T
@@ -1704,16 +1699,16 @@ end
 @inline Base.lastindex(::_GradientRows{D, N}) where {D, N} = N
 @inline Base.iterate(g::_GradientRows, state...) = iterate(g.rows, state...)
 # A form may scale the rows before `inner₊` (`map(r -> κ * r, ∇ₕ(u))`, `κ .* ∇ₕ(u)`); both
-# give the plain tuple, as on the tuple `∇ₕ(components(u))`, and so lose the labels.
+# give the plain tuple, as on the tuple `∇ₕ(components(u))`.
 @inline function Base.map(f, g::_GradientRows, rest::_GradientRows...)
     return map(f, g.rows, map(Tuple, rest)...)
 end
 @inline Base.Broadcast.broadcastable(g::_GradientRows) = g.rows
 
-# Rows of `D`-tuples are labelled. In 1D `∇ₕ` of a component is the bare `D₋ₓ`, so
+# Rows of `D`-tuples come in a `_GradientRows`. In 1D `∇ₕ` of a component is the bare `D₋ₓ`, so
 # `_as_dtuple` wraps it in a 1-tuple first: the rows then sum per leaf like any other
 # (gpena/Bramble.jl#965), rather than reaching `inner₊` as one `N`-tuple of differences.
-# A plain 1D tuple gets the same 1-tuple rows, unlabelled, so both spellings meet the
+# A plain 1D tuple gets the same 1-tuple rows, in a plain tuple, so both spellings meet the
 # tuple-of-tuples `inner₊` and mix (gpena/Bramble.jl#1096).
 @inline _gradient_rows(rows) = rows
 @inline _as_dtuple(op::LazyOp{1}) = (op,)
@@ -1725,11 +1720,6 @@ end
 ) where {D}
     return _GradientRows{D, length(rows), typeof(rows)}(rows)
 end
-
-# The component pairs of `inner₊(::_GradientRows, ::_GradientRows)`'s sum, as the left fold
-# over its rows nests them: row `c` names `(c, c)`, whatever its own `D` terms are.
-_gradient_label_tree(N::Int) = foldl((l, r) -> (l, r), [(c, c) for c in 1:N])
-@generated _gradient_labels(::Val{N}) where {N} = _gradient_label_tree(N)
 
 @inline _∇ₕ_noncomposite(op::LazyOp{1}) = D₋ₓ(op)
 @inline _∇ₕ_noncomposite(op::LazyOp{D}) where {D} = ntuple(dim -> D₋(op, Val(dim)), Val(D))
@@ -1745,10 +1735,8 @@ The rows come in a `Bramble._GradientRows`, which is not a `Tuple`.
 `∇ₕ(u)[c][d]`, `length`, iteration, `map` and broadcasting give what they give on
 `∇ₕ(components(u))`, and `Tuple(∇ₕ(u))` is that tuple; anything else tuple-like needs
 `Tuple(∇ₕ(u))`. `map` needs every argument to be such a container; with a plain tuple
-among them, pass `Tuple(∇ₕ(u))`. The container also tells [`inner₊`](@ref) that row `c` is built on
-component `c` alone, so a captured coefficient over `inner₊(∇ₕ(u), ∇ₕ(v))` gives `form` one
-concrete type in 3D, which the plain tuple `∇ₕ(components(u))` does not; both assemble the
-same matrix. In 1D each row is the 1-tuple `(D₋ₓ(u(c)),)`, as in `∇ₕ(components(u))`,
+among them, pass `Tuple(∇ₕ(u))`. [`inner₊`](@ref) of two of these containers builds the
+same sum as `inner₊` of the plain tuples `∇ₕ(components(u))` and `∇ₕ(components(v))`. In 1D each row is the 1-tuple `(D₋ₓ(u(c)),)`, as in `∇ₕ(components(u))`,
 so `∇ₕ(u)[c][1]` is that difference and the two spellings mix. On a scalar space
 (one component) this is the same `D`-tuple `∇ₕ` already returns for any
 operator.
@@ -1785,9 +1773,8 @@ end
 # consumes it is the `inner₊` method beside each struct, which expands immediately -- inside
 # the closure `form` resolves, before `simplify_ast` ever runs -- into the sum of ordinary
 # single-block `BilinearProduct`s a user would write by hand
-# (`test/form/vector_calculus.jl`'s hand-expanded reference is exactly that sum), held in a
-# `_ComponentSum` naming each term's component pair (ast.jl, gpena/Bramble.jl#939). Nothing
-# here is a `LazyOp`, so nothing here ever reaches assembly, `local_stencil` or `block_of`
+# (`test/form/vector_calculus.jl`'s hand-expanded reference is exactly that sum), (gpena/Bramble.jl#939).
+# Nothing here is a `LazyOp`, so nothing here ever reaches assembly, `local_stencil` or `block_of`
 # directly: the architecture stays "every `LazyOp` is scalar-valued, expansion happens at
 # the builder" (gpena/Bramble.jl#234).
 # `_GradientRows` above is built the same way for `∇ₕ`/`∇₊ₕ` (gpena/Bramble.jl#958), but
@@ -1849,8 +1836,7 @@ end
 Builder-only container for [`εₕ`](@ref)'s `D × D` entries, each held as its additive pieces
 (`Bramble._strain_pieces`) rather than their sum. Never reaches assembly or an AST walker:
 [`inner₊`](@ref) on two of these expands immediately into the sum of single-block products a
-user would write out by hand, held in a `Bramble._ComponentSum` that names each term's
-component pairs.
+user would write out by hand.
 """
 struct _StrainTensor{D, T}
     entries::T
@@ -1903,20 +1889,8 @@ end
         )
     end
     )
-    return _component_sum(foldl(+, terms), Val(_strain_labels(Val(D))))
+    return foldl(+, terms)
 end
-
-# The component pairs of `inner₊(::_StrainTensor, ::_StrainTensor)`'s terms, in its order
-# (entries `i`, `j`, then `_cross_terms`' pieces `a` of `u`, `b` of `v`), as the left-folded
-# tree `_ComponentSum` (ast.jl) reads: the piece of `ε_ij` built on `u(k)` names `k`
-# (`_strain_pieces`). `u(k)` puts `k` on every indexed leaf of `u`, so the pair holds
-# whatever `u` is. A function of `D` alone, a constant through the generated method below.
-function _strain_label_tree(D::Int)
-    pieces(i, j) = i == j ? (i,) : (i, j)
-    leaves = [(a, b) for i in 1:D for j in 1:D for a in pieces(i, j) for b in pieces(i, j)]
-    return foldl((l, r) -> (l, r), leaves)
-end
-@generated _strain_labels(::Val{D}) where {D} = _strain_label_tree(D)
 
 """
     Bramble._DivergenceTerms{D}
@@ -1980,16 +1954,8 @@ end
             end)
         end
     )
-    return _component_sum(sum, Val(_divergence_labels(Val(D))))
+    return sum
 end
-
-# The component pairs of the sum above, as `_strain_labels` gives the strain's: term `i` of
-# a divergence is built on `u(i)`, and the pairs nest as the two `foldl`s do.
-function _divergence_label_tree(D::Int)
-    row(i) = foldl((l, r) -> (l, r), [(i, j) for j in 1:D])
-    return foldl((l, r) -> (l, r), [row(i) for i in 1:D])
-end
-@generated _divergence_labels(::Val{D}) where {D} = _divergence_label_tree(D)
 
 # --- divcₕ, εcₕ: centered divergence and strain over composite functions ---------------- #
 #

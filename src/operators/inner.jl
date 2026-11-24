@@ -498,10 +498,6 @@ function _resolve_surfaces(op::GridFunctionScale{D}, spaces) where {D}
     i = _resolve_surfaces(op.inner_op, spaces)
     return GridFunctionScale{D, typeof(op.grid_function), typeof(i)}(op.grid_function, i)
 end
-function _resolve_surfaces(op::_ComponentSum{D, P}, spaces) where {D, P}
-    s = _resolve_surfaces(op.sum, spaces)
-    return _ComponentSum{D, P, typeof(s)}(s)
-end
 function _resolve_surfaces(op::RegionRestriction, spaces)
     return _rebuild_restriction(op, op.region, _resolve_surfaces(op.inner_op, spaces))
 end
@@ -750,9 +746,8 @@ Each element pair `(left[k], right[k])` is a `D`-tuple of `LazyOp` (a gradient),
 which dispatches to the existing `inner₊(::NTuple{D,LazyOp}, ::NTuple{D,LazyOp})`.
 
 `inner₊(∇ₕ(u), ∇ₕ(v))` on a composite `u` and `v` builds the same sum, in the same order.
-There `∇ₕ` returns rows labelled by component (`Bramble._GradientRows`), and the sum
-records those labels, so a coefficient captured over it leaves `form` one concrete type
-in 3D as well. One side labelled and the other a plain tuple takes this method.
+There `∇ₕ` returns its rows in a `Bramble._GradientRows`, which takes this method too, as
+does one side in it and the other a plain tuple.
 
 The rows may differ in type (`∇ₕ((u(1) + u(2), u(2)))`), but both sides need the same
 number of them, or it throws a `DimensionMismatch` naming both counts.
@@ -784,18 +779,8 @@ end
     )
 end
 
-# The gradients of a composite trial and test function (difference.jl): the sum above,
-# with row `c`'s pair `(c, c)` in a `_ComponentSum` (ast.jl, gpena/Bramble.jl#958).
-function inner₊(
-        left::_GradientRows{D, N},
-        right::_GradientRows{D, N};
-        markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
-) where {D, N, M}
-    sum = foldl(+, map(inner₊, left.rows, right.rows))
-    return _restrict_by_markers(_component_sum(sum, Val(_gradient_labels(Val(N)))), markers)
-end
-
-# Anything else with a labelled side is the plain tuple's, as it was before the labels.
+# The gradients of a composite trial and test function (difference.jl) are the tuple they
+# hold, so they give the sum above.
 function inner₊(
         left::_GradientRows, right::_GradientRows;
         markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
@@ -1193,11 +1178,6 @@ function resolve_ast(op::LinearProduct{D, InnerType}) where {D, InnerType}
     left = resolve_ast(op.left_op)
     right = resolve_ast(op.right_op)
     return LinearProduct{D, InnerType, typeof(left), typeof(right)}(op.inner, left, right)
-end
-# Kept around its resolved sum: `resolve_ast(::Any)` would return it with `sum` unresolved.
-function resolve_ast(op::_ComponentSum{D, P}) where {D, P}
-    s = resolve_ast(op.sum)
-    return _ComponentSum{D, P, typeof(s)}(s)
 end
 
 # Disambiguation for the empty tuple.
