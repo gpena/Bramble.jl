@@ -258,26 +258,11 @@ reason = "device-only: the locality of a GPUArrays array type, reached only for 
 [[exempt_function]]
 path = "src/assembly/stencil_eval.jl"
 methods = [
-    "is_symbolic(::TrialFunction) = true",
-    "is_symbolic(::TestFunction) = true",
-    "is_symbolic(::IndexedTrialFunction) = true",
-    "is_symbolic(::IndexedTestFunction) = true",
-    "is_symbolic(::SourceFunction) = true",
-    "is_symbolic(::SourceVector) = true",
-    "is_symbolic(::SourceConstant) = true",
-    "is_symbolic(::DiracSource) = true",
-    "is_symbolic(op::BilinearProduct) = true",
-    "is_symbolic(op::LinearProduct) = true",
-    "_is_source_only(::TrialFunction) = false",
-    "_is_source_only(::TestFunction) = false",
-    "_is_source_only(::IndexedTrialFunction) = false",
-    "_is_source_only(::IndexedTestFunction) = false",
+    "is_symbolic(::_SymbolicNode) = true",
     "_is_source_only(::SourceFunction) = true",
     "_is_source_only(::SourceVector) = true",
     "_is_source_only(::SourceConstant) = true",
     "_is_source_only(::DiracSource) = true",
-    "_is_source_only(::BilinearProduct) = false",
-    "_is_source_only(::LinearProduct) = false",
     "_is_source_only(::LazyOp) = false",
 ]
 reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; a test calls each (test/form/bilinear.jl, test/form/common.jl, test/form/interpolation.jl, test/form/semidiscrete.jl)"

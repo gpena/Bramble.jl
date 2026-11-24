@@ -1210,16 +1210,17 @@ resolve_ast(op::Any) = op
 # One method for every node that wraps a single operand, instead of one registration per
 # node type (gpena/Bramble.jl#52); see [`UnaryWrapper`](@ref).
 is_symbolic(op::UnaryWrapper) = is_symbolic(op.inner_op)
-is_symbolic(::TrialFunction) = true
-is_symbolic(::TestFunction) = true
-is_symbolic(::IndexedTrialFunction) = true
-is_symbolic(::IndexedTestFunction) = true
-is_symbolic(::SourceFunction) = true
-is_symbolic(::SourceVector) = true
-is_symbolic(::SourceConstant) = true
-is_symbolic(::DiracSource) = true
-is_symbolic(op::BilinearProduct) = true
-is_symbolic(op::LinearProduct) = true
+
+# The nodes `is_symbolic` answers `true` for outright: the four function leaves, the four
+# sources and the two products. Everything else is the `LazyOp` fallback (`false`), a
+# wrapper (its operand) or a sum (either side).
+const _SymbolicNode = Union{
+    TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFunction,
+    SourceFunction, SourceVector, SourceConstant, DiracSource,
+    BilinearProduct, LinearProduct
+}
+
+is_symbolic(::_SymbolicNode) = true
 
 # A wrapper is source-only when what it wraps is. One method instead of one registration
 # per node type (gpena/Bramble.jl#52); `InterpolationNode` overrides it below, since it
@@ -1246,10 +1247,6 @@ since that is exactly the behavior every node had before this predicate existed 
 `BilinearProduct`) for anything not explicitly listed as source-only.
 """
 _is_source_only(op::UnaryWrapper) = _is_source_only(op.inner_op)
-_is_source_only(::TrialFunction) = false
-_is_source_only(::TestFunction) = false
-_is_source_only(::IndexedTrialFunction) = false
-_is_source_only(::IndexedTestFunction) = false
 _is_source_only(::SourceFunction) = true
 _is_source_only(::SourceVector) = true
 _is_source_only(::SourceConstant) = true
@@ -1259,10 +1256,8 @@ function _is_source_only(op::OperatorAdd)
     return _is_source_only(op.left_op) && _is_source_only(op.right_op)
 end
 
-# A product (whichever kind) is its own thing, not a bare source to route again.
-_is_source_only(::BilinearProduct) = false
-_is_source_only(::LinearProduct) = false
-
+# Function leaves and products (a product is its own thing, not a bare source to route
+# again) fall through to here.
 _is_source_only(::LazyOp) = false
 
 # The value of a source-only subtree at a grid point: `_contracted_left_stencil`
