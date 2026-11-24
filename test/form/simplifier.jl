@@ -1259,6 +1259,34 @@ end
     @test termwise(r, 8) ≈ 2.0 .* M((u, v) -> innerₕ(foldl(+, _terms8(u)), v(1)))
 end
 
+# One side mixing eight terms, the other a single term under its own scale. An `Integer`
+# scale wraps by its value, so these infer only where constants reach every distributed
+# piece: moving the product helpers out of line lost them on 1.13 (gpena/Bramble.jl#1282).
+_one_side8(V, c) = form(V, V, (u, v) -> innerₕ(c * foldl(+, _terms8(u)), 3 * v(1)))
+_one_side8r(V, c) = form(V, V, (u, v) -> innerₕ(3 * u(1), c * foldl(+, _terms8(v))))
+_warm_bytes(f, V, c) = (f(V, c); @allocated f(V, c))
+
+@testset "one-sided mixing, scaled single term" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0)), 8, true)
+    Bramble.change_points!(Ωₕ, collect(range(0.0, 1.0; length = 8)) .^ 1.4)
+    W = gridspace(Ωₕ)
+    V = W^Val(3)
+    gₕ = Rₕ(W, x -> 1.0 + x[1]^2)
+    r = Ref(2.0)
+    for c in (r, gₕ)
+        @test (@inferred _one_side8(V, c)) isa Bramble.BilinearForm
+    end
+    @test (@inferred _one_side8r(V, r)) isa Bramble.BilinearForm
+    @test _warm_bytes(_one_side8, V, r) == 0
+    @test _warm_bytes(_one_side8r, V, r) == 0
+    # Against the form summed a mixing term at a time.
+    M(f) = Matrix(assemble(form(V, V, f)))
+    @test Matrix(assemble(_one_side8(V, r))) ≈
+          sum(i -> M((u, v) -> innerₕ(r * _terms8(u)[i], 3 * v(1))), 1:8)
+    @test Matrix(assemble(_one_side8r(V, r))) ≈
+          sum(i -> M((u, v) -> innerₕ(3 * u(1), r * _terms8(v)[i])), 1:8)
+end
+
 # Both sides of one product mixing components (gpena/Bramble.jl#1098). The trial side's gates
 # were nested in every piece of the test side, one generated body quadratic in the terms: a
 # form of 16 terms a side took 39 s to compile. The trial side is now split once, with one
