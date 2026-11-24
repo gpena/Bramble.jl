@@ -68,7 +68,8 @@
 # crosses as its array and a tag, rebuilt in each band (`_band_cross` below), the jacobian
 # refill's space and stencils cross as one `_batch_split` (`_jf_values!`), and
 # `_batch_broadcast!`, `_batch_kron_lines!` and `_batch_dot` rebuild their light structs
-# inside each task (`_bc_host_rebuild`, `_kron_host_rebuild`, `_weights`). The test file's
+# inside each task (`_bc_host_rebuild`, `_kron_host_rebuild`, `_weights`). A broadcast's
+# isbits `Ref` leaves (`u .^ 2`) cross as their values (`_RefLeaf`). The test file's
 # "allocation under CpuPolyester" testset asserts 0 B for each path.
 #
 # A kernel the split cannot take apart (a user closure over an array, or data it cannot
@@ -1280,9 +1281,27 @@ end
 # already-`preprocess`ed args, where an `Extruded` leaf has no `BroadcastStyle`
 # (`MethodError: no method matching ndims(::Type{Extruded{...}})`). A `Ref` box around `bc`
 # works but puts Polyester's box on the heap (128 B per call), so it was rejected.
+#
+# A `Ref` leaf, which `x .^ 2` makes of `^` and `Val(2)` (`literal_pow`), would put the box
+# on the heap too, being mutable. One holding an isbits value crosses as that value, read
+# once on the host, in a `_RefLeaf`: an isbits 0-dimensional array, which `Broadcasted`
+# indexes as it indexes a `Ref` (`x[]`). Any other `Ref` crosses as it is: bytes, never the
+# result.
+struct _RefLeaf{T} <: AbstractArray{T, 0}
+    x::T
+end
+Base.size(::_RefLeaf) = ()
+Base.getindex(r::_RefLeaf) = r.x
+
+@inline function _lift_refs(bc::Broadcast.Broadcasted)
+    return Broadcast.Broadcasted(bc.style, bc.f, map(_lift_refs, bc.args), bc.axes)
+end
+@inline _lift_refs(r::Base.RefValue{T}) where {T} = isbitstype(T) ? _RefLeaf{T}(r[]) : r
+@inline _lift_refs(x) = x
+
 function Bramble._batch_broadcast!(v::AbstractVector, bc, ax)
     n = Threads.nthreads()
-    raw = _bc_host_raw(bc)
+    raw = _bc_host_raw(_lift_refs(bc))
     @batch for b in 1:n
         _broadcast_band!(v, _bc_host_rebuild(raw), ax, n, b)
     end
