@@ -66,7 +66,7 @@ const _PA_BOX_CEILINGS = Dict{String, Int}()
 # BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
                allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!, restrict_to, jacobian!,
-               jacobian_form, jacobian_prototype
+               jacobian_form, jacobian_prototype, type_cached_assemble!
 using LinearAlgebra: Diagonal, mul!, ldiv!
 using Random: Xoshiro, randn
 using SparseArrays: nonzeros, spdiagm
@@ -115,6 +115,18 @@ function _pa_jacobian(W, dirichlet)
     r = only(jf.refills)
     return _pa_case(() -> jacobian!(J, jf, u),
         () -> vcat(parent(r.beta), parent(r.values)))
+end
+
+# `type_cached_assemble!` takes a named builder (a closure re-made per call would allocate
+# its type). Its refill broadcasts a literal power, `uₕ .^ 2`.
+struct _PaDiffusion{S}
+    W::S
+end
+function (b::_PaDiffusion)(uₕ)
+    αvals = element(b.W, eltype(uₕ))
+    a = form(b.W, b.W, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
+    refill!(uₕ) = (αvals .= 3 .+ 1 ./ (1 .+ uₕ .^ 2); nothing)
+    return a, refill!
 end
 
 # A hand-built two-term Kronecker operator on an `n × n` grid that `kronecker_operator`
@@ -369,6 +381,25 @@ function _pa_paths()
                 _pa_case(() -> mul!(y, op, x), () -> copy(y))
             end))
     push!(P, ("jacobian! form", true, 0, (n, p) -> _pa_jacobian(_pa_space(n, p), :dir)))
+    push!(P, ("broadcast literal power", true, 0,
+        (n, p) -> begin
+            W = _pa_space(n, p)
+            u = Rₕ(W, _pa_g)
+            v = similar(u)
+            _pa_case(() -> (v .= u .^ 2 .+ u .^ 3; nothing), () -> _pa_copy(v))
+        end))
+    push!(P,
+        ("type_cached_assemble!",
+            false,
+            0,
+            (n, p) -> begin
+                W = _pa_space(n, p)
+                u = Rₕ(W, _pa_g)
+                build, cache = _PaDiffusion(W), Dict()
+                A = type_cached_assemble!(build, cache, u; dirichlet = :dir)
+                _pa_case(() -> (type_cached_assemble!(build, cache, u; dirichlet = :dir); nothing),
+                    () -> copy(nonzeros(A)))
+            end))
     return P
 end
 # END _pa paths
@@ -779,8 +810,7 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
         end
 
         # `u .^ 2` lowers to `literal_pow` with `Ref(^)` and `Ref(Val(2))` leaves, which cross
-        # `@batch` as their values, so no argument box lands on the heap. The user's own
-        # `Ref`s are made before the hook sees them, so the bytes are not asserted here.
+        # `@batch` as their values (`_lift_refs`), so a warm call allocates nothing at all.
         @testset "broadcast literal power" begin
             function pow(p)
                 W = _pa_space(17, p)
@@ -789,17 +819,7 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
                 return _pa_case(() -> (v .= u .^ 2 .+ u .^ 3; nothing), () -> _pa_copy(v))
             end
             case, ref = pow(CpuPolyester()), pow(CpuSerial())
-            case.call()
-            case.call()
-            Allocs = _PA_PROFILE.Allocs
-            Allocs.clear()
-            Allocs.start(; sample_rate = 1)
-            try
-                case.call()
-            finally
-                Allocs.stop()
-            end
-            @test count(x -> x.type <: _PA_REFERENCE, Allocs.fetch().allocs) == 0
+            @test _pa_bytes(case.call) == 0
             ref.call()
             @test case.result() == ref.result()
             @test !iszero(case.result())

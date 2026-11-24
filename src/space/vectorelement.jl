@@ -487,7 +487,9 @@ end
 # A host destination is banded under `CpuThreaded` and `CpuPolyester`; every other pairing
 # (`CpuSerial`, a device array) keeps the backend's own `copyto!`.
 @inline _broadcast_copyto!(::HostLocality, ::CpuThreaded, v, bc) = _threaded_broadcast!(v, bc)
-@inline _broadcast_copyto!(::HostLocality, ::CpuPolyester, v, bc) = _polyester_broadcast!(v, bc)
+@inline function _broadcast_copyto!(::HostLocality, ::CpuPolyester, v, bc)
+    return _polyester_broadcast!(v, _lift_refs(bc))
+end
 @inline function _broadcast_copyto!(::Locality, ::ExecutionPolicy, v, bc)
     copyto!(v, bc)
     return nothing
@@ -588,6 +590,25 @@ struct _BcHostZeroDim{T} <: AbstractArray{T, 0}
 end
 Base.size(::_BcHostZeroDim) = ()
 Base.getindex(z::_BcHostZeroDim) = z.x
+
+# `x .^ 2` lowers to `literal_pow` with `Ref(^)` and `Ref(Val(2))` leaves. Under
+# `CpuPolyester` each would put Polyester's box on the heap, being mutable, and each is made
+# by the caller's `broadcasted`, so it escapes into the `@noinline` `_polyester_broadcast!`.
+# A `Ref` holding an isbits value is read once and crosses in a `_RefLeaf` instead, an
+# isbits 0-dimensional array that `Broadcasted` indexes as it indexes a `Ref` (`x[]`). The
+# lift runs in the inlined `_broadcast_copyto!` arm, so the caller's `Ref`s are never
+# allocated. Any other `Ref` crosses as it is: bytes, never the result.
+struct _RefLeaf{T} <: AbstractArray{T, 0}
+    x::T
+end
+Base.size(::_RefLeaf) = ()
+Base.getindex(r::_RefLeaf) = r.x
+
+@inline function _lift_refs(bc::Broadcast.Broadcasted)
+    return Broadcast.Broadcasted(bc.style, bc.f, map(_lift_refs, bc.args), bc.axes)
+end
+@inline _lift_refs(r::Base.RefValue{T}) where {T} = isbitstype(T) ? _RefLeaf{T}(r[]) : r
+@inline _lift_refs(x) = x
 
 @inline function _bc_host_rebuild(r::Tuple{_BcHostNode{F}, Any, Any, Tuple, Any}) where {F}
     return Broadcast.Broadcasted(r[2], r[3]::F, map(_bc_host_rebuild, r[4]), r[5])
