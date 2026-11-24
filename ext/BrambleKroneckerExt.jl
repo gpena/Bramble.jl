@@ -715,47 +715,6 @@ end
 # gather reads `F` before `x` is written.
 LinearAlgebra.ldiv!(x::AbstractVector, f::_FDMFactorization, F::AbstractVector) = _fdm_ldiv!(x, f, F, false)
 
-function _fdm_ldiv!(x::AbstractVector, f::_FDMFactorization{T, D}, F::AbstractVector,
-        keep::Bool) where {T, D}
-    # `interior` holds 1-based positions, used under `@inbounds` below.
-    Base.require_one_based_indexing(x, F)
-    # With `keep`, the preconditioner's `ldiv!(y, P, x)`: `x` is its input, `y` its output.
-    caller = keep ? "fdm_preconditioner" : "fdm_solve"
-    _fdm_real_rhs(F) || _throw_fdm_complex(caller, eltype(F))
-    length(F) == f.n ||
-        _throw_fdm_length_mismatch(f.n, length(F), keep ? "x" : "F"; caller = caller)
-    length(x) == f.n ||
-        _throw_fdm_length_mismatch(f.n, length(x), keep ? "y" : "x"; caller = caller)
-    f.valid[] || _throw_fdm_invalid()
-    u = f.u
-    if f.boundary
-        @inbounds for (i, j) in enumerate(f.interior)
-            u[i] = F[j]
-        end
-    else
-        copyto!(u, F)
-    end
-    if !isempty(u)
-        inu = true
-        for d in 1:D
-            inu = _fdm_mode!(f, inu, d, f.Q[d])
-        end
-        (inu ? f.u : f.w) ./= f.λ
-        for d in 1:D
-            inu = _fdm_mode!(f, inu, d, transpose(f.Q[d]))
-        end
-    end
-    if f.boundary
-        keep ? (x === F || copyto!(x, F)) : fill!(x, zero(eltype(x)))
-        @inbounds for (i, j) in enumerate(f.interior)
-            x[j] = u[i]
-        end
-    else
-        copyto!(x, u)
-    end
-    return x
-end
-
 # --- 3. Generalised Schur factorisation --------------------------------------------- #
 #
 # Derivation. When the classification above finds the masses `M_d` and operators `A_d` but
@@ -1054,8 +1013,37 @@ Base.size(f::_AnyFactorization, i::Integer) = i <= 2 ? size(f)[i] : 1
 # apply every `Q_d'`, back-substitute, apply every `Z_d`, scatter the real part.
 LinearAlgebra.ldiv!(x::AbstractVector, f::_SchurFactorization, F::AbstractVector) = _fdm_ldiv!(x, f, F, false)
 
-function _fdm_ldiv!(x::AbstractVector, f::_SchurFactorization{T, D}, F::AbstractVector,
-        keep::Bool) where {T, D}
+# The four steps of `_fdm_ldiv!` that differ between the two factorizations, dispatched on
+# the concrete type: the forward matrix of axis `d` (`Q_d` or the unitary `Qc_d`), the middle
+# solve on the buffer `y` the forward products left the data in (`./= Λ_total`, or the
+# recursive back-substitution), the backward matrix (`Q_d'` or `Zt_d`), and the real value
+# stored from a buffer entry (the Schur route's buffers are complex).
+_fdm_forward(f::_FDMFactorization, d::Int) = f.Q[d]
+_fdm_forward(f::_SchurFactorization, d::Int) = f.Qc[d]
+
+function _fdm_middle!(y::Vector, f::_FDMFactorization)
+    y ./= f.λ
+    return y
+end
+function _fdm_middle!(y::Vector, f::_SchurFactorization)
+    _schur_solve!(y, f, length(f.u3), 0, one(eltype(y)), f.c_m[])
+    return y
+end
+
+_fdm_backward(f::_FDMFactorization, d::Int) = transpose(f.Q[d])
+_fdm_backward(f::_SchurFactorization, d::Int) = f.Zt[d]
+
+_fdm_real(::_FDMFactorization, v) = v
+_fdm_real(::_SchurFactorization, v) = real(v)
+
+# `x = K \ F` on full-length host vectors, for either factorization: gather the solved
+# unknowns, apply every forward matrix, solve in the middle, apply every backward matrix,
+# scatter the real part (zero on the boundary, or with `keep` `F`'s own boundary values, the
+# identity rows `fdm_preconditioner` applies there). `2D` mode products, an even number, so
+# the result always ends in `u`. `x` may alias `F`, as the gather reads `F` before `x` is
+# written.
+function _fdm_ldiv!(x::AbstractVector, f::_AnyFactorization, F::AbstractVector,
+        keep::Bool)
     # `interior` holds 1-based positions, used under `@inbounds` below.
     Base.require_one_based_indexing(x, F)
     # With `keep`, the preconditioner's `ldiv!(y, P, x)`: `x` is its input, `y` its output.
@@ -1075,23 +1063,24 @@ function _fdm_ldiv!(x::AbstractVector, f::_SchurFactorization{T, D}, F::Abstract
         copyto!(u, F)
     end
     if !isempty(u)
+        D = length(f.u3)
         inu = true
         for d in 1:D
-            inu = _fdm_mode!(f, inu, d, f.Qc[d])
+            inu = _fdm_mode!(f, inu, d, _fdm_forward(f, d))
         end
-        _schur_solve!(inu ? f.u : f.w, f, D, 0, one(eltype(u)), f.c_m[])
+        _fdm_middle!(inu ? f.u : f.w, f)
         for d in 1:D
-            inu = _fdm_mode!(f, inu, d, f.Zt[d])
+            inu = _fdm_mode!(f, inu, d, _fdm_backward(f, d))
         end
     end
     if f.boundary
         keep ? (x === F || copyto!(x, F)) : fill!(x, zero(eltype(x)))
         @inbounds for (i, j) in enumerate(f.interior)
-            x[j] = real(u[i])
+            x[j] = _fdm_real(f, u[i])
         end
     else
         @inbounds for i in eachindex(x, u)
-            x[i] = real(u[i])
+            x[i] = _fdm_real(f, u[i])
         end
     end
     return x
