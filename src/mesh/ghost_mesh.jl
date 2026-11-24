@@ -430,7 +430,7 @@ end
 
 # Every accessor of the mesh interface reads the padded mesh, or the padded state of a
 # `GhostMeshState`; the marker table and stamps a walk state does not keep, the mesh only.
-for f in (:points, :half_points, :spacings, :half_spacings, :forward_spacings, :host_points,
+for f in (:points, :half_points, :spacings, :half_spacings, :host_points,
     :host_spacings, :host_half_spacings, :cell_measures, :hₘₐₓ, :hₘᵢₙ, :is_collapsed,
     :_marker_words, :_mesh_version, :set, :backend, :eltype)
     @eval @inline $f(G::_GhostMeshLike) = $f(_padded(G))

@@ -1,9 +1,9 @@
 """
-    print_mesh_header(pp::PrettyPrinter, mesh_type::String, D::Int, T::Type, npts) -> Nothing
+    print_mesh_header(pp::PrettyPrinter, mesh_type::String, D::Int, T::Type) -> Nothing
 
 Print a styled header for mesh objects.
 """
-function print_mesh_header(pp::PrettyPrinter, mesh_type::String, D::Int, T::Type, npts)
+function print_mesh_header(pp::PrettyPrinter, mesh_type::String, D::Int, T::Type)
     printstyled(pp.io, mesh_type; bold = true, color = :cyan)
     print(pp.io, " {")
     printstyled(pp.io, "$(D)D"; color = :yellow)

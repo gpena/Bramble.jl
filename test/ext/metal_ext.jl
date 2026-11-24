@@ -14,7 +14,7 @@ using LinearAlgebra: I, mul!
 using Bramble: Backend, vector, matrix, _backend_eye, _backend_zeros, metal_sparse_csr,
                metal_sparse_csc, host_points, host_weights, half_spacings, CpuSerial,
                CpuThreaded, GpuKernel, half_points, index_in_marker, is_uniform,
-               locate_cell, set_points!, spacings, stepsize, weights, change_points!
+               locate_cell, set_points!, spacings, host_spacings, weights, change_points!
 using ..TestUtils: _run_gpu_tests
 
 # BrambleMetalExt's backend allocation primitives
@@ -286,7 +286,7 @@ if !Metal.functional() || !_run_gpu_tests()
     @warn "Skipping mesh/space device-quirk tests: Metal.functional() is false, or GPU tests are skipped in CI"
     @test_skip "mesh/space device-quirk tests not exercised: Metal.functional() is false, or GPU tests are skipped in CI"
 else
-    # `is_uniform`, `stepsize` and `show` on a device mesh.
+    # `is_uniform` and `show` on a device mesh.
     @testset "device mesh: is_uniform, show (#307)" begin
         b = metal_backend()
 
@@ -295,7 +295,7 @@ else
         # device mesh used to answer false here.
         Ω_u = mesh(domain(interval(0.0f0, 1.0f0)), 10, true; backend = b)
         @test is_uniform(Ω_u)
-        @test isapprox(stepsize(Ω_u), 1.0f0 / 9; rtol = 1.0f-5)
+        @test isapprox(host_spacings(Ω_u)[2], 1.0f0 / 9; rtol = 1.0f-5)
 
         # A genuinely non-uniform Float32 device mesh must still answer false -- the
         # widened tolerance must not swallow real non-uniformity.

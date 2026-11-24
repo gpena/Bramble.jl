@@ -130,9 +130,9 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs, _half_spacing_oracle
 
     @testset "Zero-allocation marker setup (#124)" begin
         # `_ensure_geometric_markers!` and `_set_markers_symbols!` used to route every
-        # boundary-facet lookup through `boundary_symbol_to_dict`, allocating a fresh
-        # `Dict{Symbol, CartesianIndices}` per call just to iterate or index it once. Both
-        # now query `boundary_symbol_to_cartesian`'s `NamedTuple` directly, so that lookup
+        # boundary-facet lookup through a fresh `Dict{Symbol, CartesianIndices}` per call,
+        # built just to iterate or index it once. Both now query
+        # `boundary_symbol_to_cartesian`'s `NamedTuple` directly, so that lookup
         # itself is zero-allocation (checked below) and `_set_markers_symbols!` measures
         # 0 B.
         #

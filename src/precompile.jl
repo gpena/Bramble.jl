@@ -95,9 +95,6 @@ if PRECOMPILE_WORKLOAD
             _pc_mesh_mutation(Ωₕ2, markers(Ω2))
             set_points!(deepcopy(Ωₕ1), points(Ωₕ1))
 
-            stepsize(Ωₕ1)
-            stepsize(Ωₕ2)
-            stepsize(Ωₕ2, 1)
             locate_cell(Ωₕ1, 0.5)
             locate_cell(Ωₕ2, (0.5, 0.5))
             normal_vector(Ωₕ1, :left)
@@ -169,7 +166,6 @@ if PRECOMPILE_WORKLOAD
                 collect(labels(d))
                 collect(label_symbols(d))
                 collect(label_conditions(d))
-                collect(marker_identifiers(d))
                 center(d)
                 extrema(d)
                 sprint(show, d)

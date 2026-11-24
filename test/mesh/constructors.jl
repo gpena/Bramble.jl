@@ -3,7 +3,7 @@ module MeshConstructorsTests
 using Test
 using Random
 using Bramble
-using Bramble: _expand_uniform, Backend, Serial, stepsize, Mesh1D, MeshnD, is_uniform
+using Bramble: _expand_uniform, Backend, Serial, Mesh1D, MeshnD, is_uniform
 using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
 
 @testset "Mesh constructors" begin
@@ -53,7 +53,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
             M1_nu = @inferred mesh(I, 11, false)
             @test M1_nu isa Mesh1D
             @test size(M1_nu) == (11,)
-            @test !all(diff(points(M1_nu)::AbstractVector) .≈ stepsize(M1))
+            @test !all(diff(points(M1_nu)::AbstractVector) .≈ spacing(M1, 2))
             @test !is_uniform(M1_nu)
 
             M1_kw = @inferred mesh(I, 11; uniform = false)
@@ -169,7 +169,8 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
         @test size(m2_int) == (20, 20)
         @test is_uniform(m2_int(1)) && is_uniform(m2_int(2))
         @test points(m2_int) == points(m2_tup)
-        @test stepsize(m2_int) == stepsize(m2_tup)
+        @test spacing(m2_int(1), 2) == spacing(m2_tup(1), 2) &&
+              spacing(m2_int(2), 2) == spacing(m2_tup(2), 2)
         @test markers(m2_int)[:boundary] == markers(m2_tup)[:boundary]
         @test markers(m2_int)[:interior] == markers(m2_tup)[:interior]
 

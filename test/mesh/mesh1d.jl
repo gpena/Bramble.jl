@@ -15,7 +15,7 @@ import Bramble:
                 spacing,
                 half_spacings,
                 generate_indices,
-                boundary_symbol_to_dict,
+                boundary_symbol_to_cartesian,
                 markers,
                 backend,
                 set_indices!,
@@ -29,8 +29,7 @@ import Bramble:
                 set,
                 is_collapsed,
                 is_uniform,
-                spacings,
-                stepsize
+                spacings
 import Bramble:
                 cell_measure, cell_measures, hₘₐₓ, hₘᵢₙ, half_points, boundary_indices, interior_indices
 import Bramble: DomainMarkers, Mesh1D, Backend, forward_spacing, MeshMarkers
@@ -53,16 +52,16 @@ import Base: diff
             @test generate_indices(1) == CartesianIndices((1,))
         end
 
-        @testset "boundary_symbol_to_dict" begin
+        @testset "boundary_symbol_to_cartesian" begin
             indices = CartesianIndices((10,))
-            dict = boundary_symbol_to_dict(indices)
-            @test dict[:left] == CartesianIndices((1:1,))
-            @test dict[:right] == CartesianIndices((10:10,))
+            faces = boundary_symbol_to_cartesian(indices)
+            @test faces[:left] == CartesianIndices((1:1,))
+            @test faces[:right] == CartesianIndices((10:10,))
 
             indices_single = CartesianIndices((1,))
-            dict_single = boundary_symbol_to_dict(indices_single)
-            @test dict_single[:left] == CartesianIndices((1:1,))
-            @test dict_single[:right] == CartesianIndices((1:1,))
+            faces_single = boundary_symbol_to_cartesian(indices_single)
+            @test faces_single[:left] == CartesianIndices((1:1,))
+            @test faces_single[:right] == CartesianIndices((1:1,))
         end
     end
 
@@ -950,7 +949,7 @@ import Base: diff
             # Uniform mesh: repeated default-tolerance calls hit the cache and agree.
             @test is_uniform(Ωₕ)
             @test is_uniform(Ωₕ)
-            @test stepsize(Ωₕ) ≈ 1 / 9
+            @test spacing(Ωₕ, 2) ≈ 1 / 9
 
             # Mutating the mesh bumps `version`, invalidating the cached answer.
             nonunif_pts = collect(range(0.0, 1.0; length = 10))
@@ -958,7 +957,6 @@ import Base: diff
             set_points!(Ωₕ, nonunif_pts)
             @test !is_uniform(Ωₕ)
             @test !is_uniform(Ωₕ) # still false, re-cached against the new version
-            @test_throws ArgumentError stepsize(Ωₕ)
 
             # An explicit `tol` always recomputes and never pollutes the default-tol cache:
             # a large enough tolerance calls the same non-uniform mesh uniform...
@@ -970,7 +968,7 @@ import Base: diff
             # correctly picks up the new (true) answer.
             change_points!(Ωₕ, collect(range(0.0, 1.0; length = 10)))
             @test is_uniform(Ωₕ)
-            @test stepsize(Ωₕ) ≈ 1 / 9
+            @test spacing(Ωₕ, 2) ≈ 1 / 9
 
             # Far from the origin, rounding drift tracks the coordinates' ulp, and the
             # default tolerance scales with it (gpena/Bramble.jl#492); the magnitude comes
@@ -980,10 +978,10 @@ import Base: diff
 
             Ω32 = mesh(domain(interval(10.0f0, 11.0f0)), 11)
             @test is_uniform(Ω32)
-            @test stepsize(Ω32) ≈ 0.1f0
+            @test spacing(Ω32, 2) ≈ 0.1f0
             Ω64 = mesh(domain(interval(1.0e6, 1.0e6 + 1)), 11)
             @test is_uniform(Ω64)
-            @test stepsize(Ω64) ≈ 0.1
+            @test spacing(Ω64, 2) ≈ 0.1
             @test is_uniform(mesh(domain(interval(3.0e7, 3.0e7 + 1)), 11))
 
             # ...while a perturbed mesh at the same magnitudes, or on a tiny domain where

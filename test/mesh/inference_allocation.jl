@@ -21,8 +21,7 @@ using Bramble:
                half_point,
                half_spacing,
                locate_cell,
-               point,
-               stepsize
+               point
 using StaticArrays: SVector
 using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
 
@@ -45,7 +44,6 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
             domain(box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))), (4, 5, 6), (true, false, true)
         )
     end
-    Ωu = mesh(domain(interval(0.0, 1.0)), 32, true)     # uniform, for stepsize
 
     # Fully non-uniform, for locate_cell's vector/tuple overloads: uniform is a special
     # case and must not be the only shape these are checked against.
@@ -105,7 +103,6 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
         @test @inferred(locate_cell(Ωₕ1, 0.5)) isa Int
         @test @inferred(normal_vector(Ωₕ1, :left)) isa NTuple{1, Float64}
         @test @inferred(normal_vector(Ωf, :left)) === (-1.0f0,)
-        @test @inferred(stepsize(Ωu)) isa Float64
 
         @testset "locate_cell vector/tuple overloads" begin
             v1 = [0.37]
@@ -146,7 +143,6 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
         @test_allocs locate_cell(Ωₕ1, 0.5)
         @test_allocs normal_vector(Ωₕ1, :left)
         @test_allocs normal_vector(Ωf, :left)
-        @test_allocs stepsize(Ωu)
 
         # locate_cell's vector/tuple overloads, D = 1, 2, 3, with a pre-built vector
         v1 = [0.37]

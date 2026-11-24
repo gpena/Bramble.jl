@@ -6,8 +6,7 @@
 # - `is_uniform`: uniform-spacing check.
 # - `Base.size`, `Base.length`, `Base.axes`, `Base.firstindex`, `Base.lastindex`,
 #   `Base.iterate`: the collection interface over mesh points.
-# - `stepsize`, `locate_cell`, `normal_vector`: constant-spacing, cell lookup, and boundary
-#   normal queries.
+# - `locate_cell`, `normal_vector`: cell lookup and boundary normal queries.
 #
 # See also: `Mesh1D`, `MeshnD`
 
@@ -181,32 +180,6 @@ end
 #------------------------------------------------------------------------------------------#
 # Advanced Mesh Queries
 #------------------------------------------------------------------------------------------#
-
-"""
-    stepsize(Ωₕ::AbstractMeshType) -> Union{Real, NTuple{D, Real}}
-    stepsize(Ωₕ::AbstractMeshType, d::Integer) -> Real
-
-Return the constant stepsize for a uniform mesh.
-  - In 1D, returns scalar ``h = x_2 - x_1``.
-  - In nD, returns a tuple ``(h_1, \\dots, h_D)`` of stepsizes along each coordinate axis.
-  - When `d` is specified, returns the stepsize along dimension `d`.
-
-Throws an `ArgumentError` if the mesh is not uniform.
-
-See also: [`is_uniform`](@ref), [`spacing`](@ref).
-"""
-@inline function stepsize(Ωₕ::AbstractMeshType{1})
-    is_uniform(Ωₕ) || _throw_not_uniform()
-    h = host_spacings(Ωₕ)
-    length(h) <= 1 && return zero(eltype(Ωₕ))
-    return h[2]
-end
-
-@inline function stepsize(Ωₕ::AbstractMeshType{D}) where {D}
-    return ntuple(i -> stepsize(Ωₕ(i)), Val(D))
-end
-
-@inline stepsize(Ωₕ::AbstractMeshType, d::Integer) = stepsize(Ωₕ(d))
 
 """
     locate_cell(Ωₕ::AbstractMeshType{1}, x::Real) -> Int

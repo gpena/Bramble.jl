@@ -234,19 +234,6 @@ Extract the `i`-th coordinate dimension of `X` as a 1D [`CartesianProduct`](@ref
 @inline projection(X::CartesianProduct, i::Integer) = interval(X(i)...)
 
 """
-    point_type(X::CartesianProduct{1, T}) -> Type{T}
-    point_type(X::CartesianProduct{D, T}) -> Type{NTuple{D, T}}
-    point_type(::Type{<:CartesianProduct{1, T}}) -> Type{T}
-    point_type(::Type{<:CartesianProduct{D, T}}) -> Type{NTuple{D, T}}
-
-Return the coordinate point representation type for a point in `X`.
-"""
-@inline point_type(::CartesianProduct{1, T}) where {T} = T
-@inline point_type(::CartesianProduct{D, T}) where {D, T} = NTuple{D, T}
-@inline point_type(::Type{<:CartesianProduct{1, T}}) where {T} = T
-@inline point_type(::Type{<:CartesianProduct{D, T}}) where {D, T} = NTuple{D, T}
-
-"""
     in(x, X::CartesianProduct) -> Bool
 
 Query whether point `x` is contained in the closed set `X`.

@@ -20,40 +20,27 @@ end
 Marker(label, identifier::F) where {F} = Marker{F, Nothing}(label, identifier)
 
 """
-    MarkerPair{F}
-
-Type alias for `Pair{Symbol, F}` used to specify region markers (e.g. `:boundary => :left`).
-"""
-const MarkerPair{F} = Pair{Symbol, F}
-
-"""
     label(m::Marker) -> Symbol
-    label(m::MarkerPair) -> Symbol
 
 Return the `Symbol` label of marker `m`.
 """
 @inline label(m::Marker) = m.label
-@inline label(m::MarkerPair) = first(m)
 
 """
     identifier(m::Marker{F}) -> F
-    identifier(m::MarkerPair{F}) -> F
 
 Return the identifying symbol, set of symbols, predicate function,
 polygon or level set of marker `m`.
 """
 @inline identifier(m::Marker) = m.identifier
-@inline identifier(m::MarkerPair) = last(m)
 
 """
-    DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple)
     DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)
 
 Container categorizing and indexing boundary and interior markers for a computational domain.
 
 Every field is a statically typed tuple, so `symbols`, `tuples`, `conditions` and `regions`
-markers are each an unrolled, zero-allocation sweep to iterate. The three-argument form has
-no `regions`.
+markers are each an unrolled, zero-allocation sweep to iterate.
 
 # Fields
 - `symbols`: Tuple of markers identified by a single predefined boundary `Symbol` (e.g. `:left`).
@@ -71,10 +58,6 @@ struct DomainMarkers{ST <: Tuple, TT <: Tuple, CT <: Tuple, RT <: Tuple}
     tuples::TT
     conditions::CT
     regions::RT
-end
-
-function DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple)
-    return DomainMarkers(symbols, tuples, conditions, ())
 end
 
 # The polygon and level-set markers of `domain_markers`.

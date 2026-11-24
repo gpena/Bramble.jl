@@ -26,7 +26,7 @@ faces.xmin == CartesianIndices((1:1, 1:4)) && faces.ymax == CartesianIndices((1:
 true
 ```
 
-See also: [`boundary_symbol_to_dict`](@ref), [`set_markers!`](@ref).
+See also: [`set_markers!`](@ref).
 """
 @inline function boundary_symbol_to_cartesian(indices::CartesianIndices{1})
     xmin, xmax = boundary_indices(indices)
@@ -63,17 +63,6 @@ function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
         :bottom => zmin,
         :top => zmax
     )
-end
-
-"""
-    boundary_symbol_to_dict(indices::CartesianIndices) -> Dict{Symbol, CartesianIndices}
-
-Return a dictionary connecting the facet labels of a set to the corresponding `CartesianIndices`.
-
-See also: [`boundary_symbol_to_cartesian`](@ref).
-"""
-function boundary_symbol_to_dict(indices::CartesianIndices)
-    return Dict(pairs(boundary_symbol_to_cartesian(indices)))
 end
 
 """
@@ -449,7 +438,7 @@ function _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ)
         if identifier isa Symbol
             idxs = boundary_lookup[identifier]
             _mark_indices!(target_marker_set, linear_indices, idxs)
-        elseif identifier isa Union{Set, Tuple}
+        elseif identifier isa Set
             for id in identifier
                 idxs = boundary_lookup[id]
                 _mark_indices!(target_marker_set, linear_indices, idxs)

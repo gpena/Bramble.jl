@@ -10,7 +10,7 @@ using ..TestUtils: WITH_3D_TESTS, _marker_mask
 import Bramble:
                 set, markers, CartesianProduct, Mesh1D, MeshnD, normal_vector, hₘᵢₙ, is_collapsed,
                 change_points!, half_point, half_spacing, indices, is_uniform, locate_cell,
-                point, stepsize
+                point
 
 @testset "Comprehensive mesh test suite" begin
     @testset "Domain edge cases" begin
@@ -315,9 +315,8 @@ import Bramble:
             @test M1[end] == 1.0
             @test count(_ -> true, M1) == 11
 
-            # Stepsize and metrics
-            @test stepsize(M1) ≈ 0.1
-            @test stepsize(M1, 1) ≈ 0.1
+            # Spacing and metrics
+            @test spacing(M1, 2) ≈ 0.1
             @test hₘₐₓ(M1) ≈ 0.1
             @test hₘᵢₙ(M1) ≈ 0.1
 
@@ -389,10 +388,9 @@ import Bramble:
             @test M2[end] == (1.0, 2.0)
             @test count(_ -> true, M2) == 231
 
-            # Stepsize and metrics
-            @test stepsize(M2) == (stepsize(M2(1)), stepsize(M2(2)))
-            @test stepsize(M2, 1) ≈ 0.1
-            @test stepsize(M2, 2) ≈ 0.1
+            # Spacing and metrics
+            @test spacing(M2(1), 2) ≈ 0.1
+            @test spacing(M2(2), 2) ≈ 0.1
             @test hₘₐₓ(M2) ≈ hypot(0.1, 0.1)
             # hₘᵢₙ is the diagonal of the smallest cell, matching hₘₐₓ; the smallest
             # extent along one coordinate is that submesh's own hₘᵢₙ
@@ -400,20 +398,15 @@ import Bramble:
             @test hₘᵢₙ(M2(1)) ≈ 0.1
             @test hₘᵢₙ(M2(2)) ≈ 0.1
 
-            # Non-uniform stepsize error assertion
             M2_nu = mesh(domain(I × J), (11, 21), (false, false))
-            @test_throws ArgumentError stepsize(M2_nu)
 
             # is_uniform on the D-dim path (`all(ntuple(...))`, gpena/Bramble.jl#332)
             @test is_uniform(M2)
             @test !is_uniform(M2_nu)
 
-            # Uniform along one axis, non-uniform along the other: the D-dim `stepsize`
-            # no longer runs its own redundant `is_uniform` scan and relies entirely on
-            # each per-axis `stepsize` call to validate and throw.
+            # Uniform along one axis, non-uniform along the other
             M2_mixed = mesh(domain(I × J), (11, 21), (true, false))
             @test !is_uniform(M2_mixed)
-            @test_throws ArgumentError stepsize(M2_mixed)
 
             # locate_cell
             @test locate_cell(M2, (0.35, 1.05)) == CartesianIndex(4, 11)
@@ -428,7 +421,7 @@ import Bramble:
 
             @test size(M3) == (5, 5, 5)
             @test length(M3) == 125
-            @test stepsize(M3) == (0.25, 0.25, 0.25)
+            @test all(spacing(M3(d), 2) ≈ 0.25 for d in 1:3)
             @test hₘₐₓ(M3) ≈ hypot(0.25, 0.25, 0.25)
             @test hₘᵢₙ(M3) ≈ hypot(0.25, 0.25, 0.25)
             @test all(hₘᵢₙ(M3(d)) ≈ 0.25 for d in 1:3)

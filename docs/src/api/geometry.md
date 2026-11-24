@@ -7,7 +7,7 @@ CurrentModule = Bramble
 
 ## Sets and intervals
 
-`is_collapsed`, `point_type` and `set` are private; see the
+`is_collapsed` and `set` are private; see the
 [geometry internals page](../internals/geometry.md).
 
 ```@docs

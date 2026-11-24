@@ -51,17 +51,13 @@ Print styled text according to current color settings.
 end
 
 """
-    print_header(pp::PrettyPrinter, title::String, type_info::String = "")
+    print_header(pp::PrettyPrinter, title::String)
 
-Print a prominent header with optional type information.
+Print a prominent header.
 """
-function print_header(pp::PrettyPrinter, title::String, type_info::String = "")
+function print_header(pp::PrettyPrinter, title::String)
     print_indent(pp)
     printstyled(pp.io, title; bold = true, color = :cyan)
-    if !isempty(type_info)
-        print(pp.io, " ")
-        printstyled(pp.io, type_info; color = :yellow)
-    end
     return println(pp.io)
 end
 
@@ -122,12 +118,12 @@ function print_joined(f, pp::PrettyPrinter, items; sep = ", ")
 end
 
 """
-    print_value(pp::PrettyPrinter, value; color = :blue)
+    print_value(pp::PrettyPrinter, value)
 
 Print a colored value.
 """
-@inline function print_value(pp::PrettyPrinter, value; color = :blue)
-    printstyled(pp.io, "$value"; color = color)
+@inline function print_value(pp::PrettyPrinter, value)
+    printstyled(pp.io, "$value"; color = :blue)
 end
 
 """

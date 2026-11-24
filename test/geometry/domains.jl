@@ -4,7 +4,6 @@ using Test
 using Bramble
 using Bramble:
                Marker,
-               MarkerPair,
                Domain,
                DomainMarkers,
                EvaluatedDomainMarkers,
@@ -14,13 +13,11 @@ using Bramble:
                labels,
                CartesianProduct
 using Bramble: boundary_symbols, label, identifier, domain, symbols, tuples, conditions
-using Bramble: marker_identifiers
 using Bramble:
                label_identifiers,
                label_symbols,
                label_tuples,
                label_conditions,
-               point_type,
                topo_dim,
                is_collapsed,
                center,
@@ -44,9 +41,8 @@ struct NotAFunctionPredicate end
     func3 = x -> x[1] == 0.0
 
     # Invariant: Marker instances associate a symbol label with a boundary symbol,
-    # a set of symbols, or a raw closure condition. MarkerPair instances provide
-    # convenient pair notation (`:label => identifier`).
-    @testset "Marker and MarkerPair data structures" begin
+    # a set of symbols, or a raw closure condition.
+    @testset "Marker data structures" begin
         m_sym = Marker(:boundary, :left)
         m_tup = Marker(:corners, Set((:top, :right)))
         # A function-valued marker holds the raw closure directly without wrapping.
@@ -60,11 +56,6 @@ struct NotAFunctionPredicate end
 
         @test label(m_fun) === :region
         @test identifier(m_fun) === func1
-
-        # MarkerPair
-        pair_sym = :inlet => :left
-        @test label(pair_sym) === :inlet
-        @test identifier(pair_sym) === :left
     end
 
     # Invariant: Boundary symbols for 1D, 2D, and 3D geometries are extractable
@@ -295,15 +286,11 @@ struct NotAFunctionPredicate end
         @test eltype(Ω1_def) === Float64
         @test eltype(typeof(Ω1_def)) === Float64
         @test topo_dim(Ω1_def) == 1
-        @test point_type(Ω1_def) === Float64
-        @test point_type(typeof(Ω1_def)) === Float64
 
         Ω2_def = domain(I2D)
         @test set(Ω2_def) === I2D
         @test dim(Ω2_def) == 2
         @test eltype(Ω2_def) === Float32
-        @test point_type(Ω2_def) === NTuple{2, Float32}
-        @test point_type(typeof(Ω2_def)) === NTuple{2, Float32}
 
         # Domain constructed with preallocated DomainMarkers.
         markers_premade = markers(I2D, :neumann => :top, :fixed => func1)
@@ -343,47 +330,6 @@ struct NotAFunctionPredicate end
 
         lbls = Set(labels(Ω))
         @test lbls == Set([:bnd_left, :corners, :region1, :boundary])
-
-        @test length(collect(marker_identifiers(Ω))) == 4
-
-        # `marker_identifiers` is a concretely typed tuple holding one `Symbol`, one
-        # `Set{Symbol}` and one `Function`, in symbols, tuples, conditions order.
-        Ω_ids = domain(
-            interval(0.0, 1.0) × interval(0.0, 1.0),
-            :s => :left,
-            :t => (:top, :right),
-            :f => x -> true
-        )
-        ids = marker_identifiers(Ω_ids)
-        @test length(ids) == 3
-        @test count(id -> id isa Symbol, ids) == 1
-        @test count(id -> id isa Set{Symbol}, ids) == 1
-        @test count(id -> id isa Function, ids) == 1
-        @test ids[1] === :left
-        @test ids[2] == Set([:top, :right])
-        @test ids[3] isa Function
-        @test ids isa Tuple
-        @test (@inferred marker_identifiers(Ω_ids)) isa Tuple
-        @test isconcretetype(typeof(ids))
-
-        # All five kinds at once: the unrolled tuple still infers, in kind order.
-        P = Bramble.polygon([(0.2, 0.2), (0.8, 0.2), (0.5, 0.8)])
-        Ω_mix = domain(
-            interval(0.0, 1.0) × interval(0.0, 1.0),
-            :s => :left,
-            :t => (:top, :right),
-            :f => x -> true,
-            :P => P,
-            :D => Bramble.levelset(p -> (p[1] - 0.5)^2 + (p[2] - 0.5)^2 - 0.04)
-        )
-        mixed = @inferred marker_identifiers(Ω_mix)
-        @test isconcretetype(typeof(mixed))
-        @test length(mixed) == 5
-        @test mixed[1] === :left
-        @test mixed[2] == Set([:top, :right])
-        @test mixed[3] isa Function
-        @test mixed[4] === P
-        @test mixed[5] isa Bramble.LevelSet
 
         @test Set(label_symbols(Ω)) == Set([:bnd_left, :boundary])
         @test Set(label_tuples(Ω)) == Set([:corners])
@@ -451,7 +397,6 @@ struct NotAFunctionPredicate end
         @inferred dim(Ω)
         @inferred eltype(Ω)
         @inferred topo_dim(Ω)
-        @inferred point_type(Ω)
         @inferred projection(Ω, 1)
         @inferred boundary_symbols(Ω)
         @inferred is_collapsed(Ω)

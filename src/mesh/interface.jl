@@ -8,7 +8,7 @@
 #
 # Cartesian index generation and boundary/interior predicates live in `mesh/indices.jl`; the
 # public `mesh(...)` constructor dispatch lives in `mesh/constructors.jl`; `is_uniform`,
-# `stepsize`, `locate_cell`, `normal_vector`, and the `Base` collection interface live in
+# `locate_cell`, `normal_vector`, and the `Base` collection interface live in
 # `mesh/queries.jl`.
 #
 # See also: `Mesh1D`, `MeshnD`, `Domain`
@@ -428,15 +428,7 @@ end
 
 @noinline _throw_mesh_bounds_error(Ωₕ, idx) = throw(BoundsError(Ωₕ, idx))
 
-@noinline _throw_not_uniform() = throw(
-    ArgumentError(
-    "stepsize is only defined for a uniform mesh; use spacing(Ωₕ, idx) on a non-uniform one",
-),
-)
-
-@inline function _check_point_bounds(
-        Ωₕ::AbstractMeshType, idx::Int, location::String = "point"
-)
+@inline function _check_point_bounds(Ωₕ::AbstractMeshType, idx::Int)
     @boundscheck 1 <= idx <= npoints(Ωₕ) || _throw_mesh_bounds_error(Ωₕ, idx)
     return nothing
 end

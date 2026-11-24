@@ -590,7 +590,6 @@ Return the per-axis backward spacings as an `NTuple{D}` of vectors, where
 See also: [`half_spacings`](@ref), [`cell_measures`](@ref).
 """
 @generate_mesh_ntuple_func spacings
-@generate_mesh_ntuple_func forward_spacings
 
 @generate_mesh_ntuple_func_with_idx point
 @generate_mesh_ntuple_func_with_idx half_point
@@ -773,7 +772,7 @@ function _show_meshnd_detailed(io::IO, Ωₕ::MeshnD{D, BT, CI, SM, T}) where {D
     # Check if all dimensions are collapsed (topological dimension is 0)
     collapsed = (topodim == 0)
 
-    print_mesh_header(pp, "MeshnD", D, T, npts_tuple)
+    print_mesh_header(pp, "MeshnD", D, T)
     println(io)
 
     print_mesh_summary(pp, npts_tuple, topodim, collapsed)

@@ -244,7 +244,7 @@ its own to keep in sync. A state answers the version it was built at.
 # `Array` instead.
 @inline function point(Ωₕ::_Mesh1DLike, i)
     idx = _extract_linear_index(i)
-    _check_point_bounds(Ωₕ, idx, "point")
+    _check_point_bounds(Ωₕ, idx)
     return _point(locality(typeof(points(Ωₕ))), Ωₕ, idx)
 end
 
@@ -442,26 +442,6 @@ See also: [`host_spacings`](@ref), [`half_spacings`](@ref), [`half_spacing`](@re
 
 @inline _host_half_spacings(::HostLocality, Ωₕ::_Mesh1DLike) = half_spacings(Ωₕ)
 @inline _host_half_spacings(::DeviceLocality, Ωₕ::_Mesh1DLike) = Array(half_spacings(Ωₕ))
-
-"""
-    forward_spacings(Ωₕ::Mesh1D) -> AbstractVector
-
-Return the forward spacings of `Ωₕ`, where `forward_spacings(Ωₕ)[i]` is
-[`forward_spacing`](@ref)`(Ωₕ, i)`. Unlike [`spacings`](@ref), this is not cached: it is
-[`spacing`](@ref)'s vector read one index ahead, a new vector each call, of the same array
-type as `spacings(Ωₕ)`.
-
-See also: [`forward_spacing_for_derivative`](@ref).
-"""
-@inline function forward_spacings(Ωₕ::_Mesh1DLike)
-    h = spacings(Ωₕ)
-    n = length(h)
-    n == 1 && return copy(h)
-    f = similar(h)
-    copyto!(f, 1, h, 2, n - 1)
-    copyto!(f, n, h, n, 1)
-    return f
-end
 
 # A one-point mesh's raw half-spacing is zero, which collapse detection reads. As a measure
 # it is coerced to one by `_apply_hs_logic` (#89), into `similar(hs)` by broadcast so a
@@ -671,7 +651,7 @@ Return the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, returni
 # type already gives; a caller that hits it once should stop calling this per point and call
 # `host_spacings(Ωₕ)` once instead, as `stencil_matrix.jl` now does.
 @inline function spacing(Ωₕ::_Mesh1DLike, i::Int)
-    _check_point_bounds(Ωₕ, i, "spacing")
+    _check_point_bounds(Ωₕ, i)
     return @inbounds spacings(Ωₕ)[i]
 end
 
@@ -723,7 +703,7 @@ end
 # `spacings(Ωₕ)` and is left to throw the array type's own raw scalar-indexing error rather
 # than a redirect added here. Use `host_spacings(Ωₕ)` for a per-point loop instead.
 @inline function forward_spacing(Ωₕ::_Mesh1DLike, i::Int)
-    _check_point_bounds(Ωₕ, i, "forward_spacing")
+    _check_point_bounds(Ωₕ, i)
     # forward_spacing(i) is spacing(i + 1) away from the last point, and repeats the
     # final interval at it, which is exactly what the cached vector already holds.
     n = npoints(Ωₕ)
@@ -758,7 +738,7 @@ end
 end
 
 @inline function half_spacing(Ωₕ::_Mesh1DLike, i::Int)
-    _check_point_bounds(Ωₕ, i, "half_spacing")
+    _check_point_bounds(Ωₕ, i)
     return _st(Ωₕ).half_spacings[i]
 end
 
@@ -766,7 +746,7 @@ end
 
 @inline function cell_measure(Ωₕ::_Mesh1DLike, i)
     idx = _extract_linear_index(i)
-    _check_point_bounds(Ωₕ, idx, "cell_measure")
+    _check_point_bounds(Ωₕ, idx)
     return _apply_hs_logic(half_spacing(Ωₕ, idx))
 end
 
@@ -1554,7 +1534,7 @@ function _show_mesh1d_detailed(io::IO, Ωₕ::Mesh1D{BT, CI, VT, T}) where {BT, 
     collapsed = is_collapsed(Ωₕ)
 
     # Header
-    print_mesh_header(pp, "Mesh1D", 1, T, n_pts)
+    print_mesh_header(pp, "Mesh1D", 1, T)
     println(io)
 
     # Summary line
