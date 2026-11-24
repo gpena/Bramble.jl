@@ -104,7 +104,7 @@ end
 # replaced at once.
 function _coarsen_mesh(Ωf::AbstractMeshType{D}) where {D}
     nf = npoints(Ωf, Tuple)
-    nc = map(k -> (k - 1) ÷ 2 + 1, nf)
+    nc = _gmg_coarse_npoints(nf)
     Ωc = mesh(set(Ωf), D == 1 ? nc[1] : nc, true; backend = backend(Ωf))
     change_points!(Ωc, _every_other_point(Ωf))
     coarse_markers = MeshMarkers()
