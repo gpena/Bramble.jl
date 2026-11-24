@@ -22,7 +22,7 @@ using ..TestUtils: alloc_test, _BROADCAST_SIZES, _broadcast_space, _check_broadc
                    _fillnz!, _grid, _grid_sample, _mg_jitter_mesh, _mg_spd, _mg_transfer_meshes, _reset_seen!,
                    _sine_source,
                    _spy, _STENCIL_F, _STENCIL_G, _stencil_mesh_pair, _stencil_op!, _threads_seen,
-                   _unit_cube, WITH_FULL_GRIDS
+                   _unit_cube, WITH_3D_TESTS, WITH_FULL_GRIDS
 
 const ZERO_BC = :dir => (x -> 0.0)
 
@@ -65,10 +65,12 @@ const _PA_BOX_CEILINGS = Dict{String, Int}()
 
 # BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
-               allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!, restrict_to
+               allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!, restrict_to, jacobian!,
+               jacobian_form, jacobian_prototype, type_cached_assemble!
 using LinearAlgebra: Diagonal, mul!, ldiv!
 using Random: Xoshiro, randn
 using SparseArrays: nonzeros, spdiagm
+using ForwardDiff: ForwardDiff
 
 function _pa_jitter(n, policy; seed = 4321)
     rng = Xoshiro(seed)
@@ -99,6 +101,61 @@ _pa_case(call, result; levels = 0) = (; call, result, levels)
 _pa_comps(u) = reduce(vcat, [_pa_copy(c) for c in Bramble.components(u)])
 _pa_pair(x) = (_pa_g(x), _pa_h(x))
 _pa_times0d(a, c) = 2.0 * a * c + 1.0
+_pa_jac_α(s) = 3 + 1 / (1 + s^2)
+
+_pa_jac_κ(s) = 2 + sin(s)
+
+# The state `jacobian!` reads: a plain `Vector`, or with `ve` the same values in an element
+# of `W`, which holds its space.
+function _pa_state(W, ve::Bool)
+    u = [0.3 + 0.7 * sin(0.37 * i) for i in 1:ndofs(W)]
+    ve || return u
+    e = element(W)
+    parent(e) .= u
+    return e
+end
+
+# `jacobian!(J, jf, u)`, its result every refill's `β` and values, which equal
+# `CpuSerial`'s bitwise (`J` itself only to rounding, as any assembly).
+function _pa_jacobian_case(jf, u)
+    J = jacobian_prototype(jf)
+    return _pa_case(() -> jacobian!(J, jf, u),
+        () -> reduce(vcat, [vcat(parent(r.beta), parent(r.values)) for r in jf.refills]))
+end
+
+# `a + ∂a` over `W`. The refill reads `u` through an average, so a band reads its
+# neighbours through the rebuilt space.
+function _pa_jacobian(W, dirichlet; ve = false)
+    c = element(W, 0.0)
+    a = form(W, W, (U, V) -> innerₕ(c * U, V) + inner₊(∇ₕ(U), ∇ₕ(V)))
+    jf = jacobian_form(a, c => (U -> Mₕ(U)[1], _pa_jac_α); dirichlet = dirichlet)
+    return _pa_jacobian_case(jf, _pa_state(W, ve))
+end
+
+# The same on two components, each coefficient read through the other component, so the
+# refills read `u` at an offset.
+function _pa_jacobian_pair(Wc; ve = false)
+    V = Wc^Val(2)
+    c1, c2 = element(Wc), element(Wc)
+    a = form(V, V,
+        (P, Q) -> inner₊(∇ₕ(P(1)), ∇ₕ(Q(1))) + inner₊(∇ₕ(P(2)), ∇ₕ(Q(2))) +
+                  innerₕ(c1 * P(1), Q(1)) + innerₕ(c2 * P(2), Q(2)))
+    jf = jacobian_form(a, c1 => (U -> Mₕ(U(2))[1], _pa_jac_α),
+        c2 => (U -> Mₕ(U(1))[2], _pa_jac_κ); dirichlet = :dir)
+    return _pa_jacobian_case(jf, _pa_state(V, ve))
+end
+
+# `type_cached_assemble!` takes a named builder (a closure re-made per call would allocate
+# its type). Its refill broadcasts a literal power, `uₕ .^ 2`.
+struct _PaDiffusion{S}
+    W::S
+end
+function (b::_PaDiffusion)(uₕ)
+    αvals = element(b.W, eltype(uₕ))
+    a = form(b.W, b.W, (U, V) -> inner₊(αvals * ∇ₕ(U), ∇ₕ(V)))
+    refill!(uₕ) = (αvals .= 3 .+ 1 ./ (1 .+ uₕ .^ 2); nothing)
+    return a, refill!
+end
 
 # A hand-built two-term Kronecker operator on an `n × n` grid that `kronecker_operator`
 # does not build yet: non-symmetric banded factors on both axes (a row gather on axis 1
@@ -350,6 +407,32 @@ function _pa_paths()
                 x = randn(Xoshiro(12), size(op, 2))
                 y = similar(x)
                 _pa_case(() -> mul!(y, op, x), () -> copy(y))
+            end))
+    push!(P, ("jacobian! form", true, 0, (n, p) -> _pa_jacobian(_pa_space(n, p), :dir)))
+    push!(P, ("jacobian! form, element state", true, 0,
+        (n, p) -> _pa_jacobian(_pa_space(n, p), :dir; ve = true)))
+    push!(P, ("jacobian! form composite", true, 0,
+        (n, p) -> _pa_jacobian_pair(_pa_space(n, p))))
+    push!(P, ("jacobian! form composite, element state", true, 0,
+        (n, p) -> _pa_jacobian_pair(_pa_space(n, p); ve = true)))
+    push!(P, ("broadcast literal power", true, 0,
+        (n, p) -> begin
+            W = _pa_space(n, p)
+            u = Rₕ(W, _pa_g)
+            v = similar(u)
+            _pa_case(() -> (v .= u .^ 2 .+ u .^ 3; nothing), () -> _pa_copy(v))
+        end))
+    push!(P,
+        ("type_cached_assemble!",
+            false,
+            0,
+            (n, p) -> begin
+                W = _pa_space(n, p)
+                u = Rₕ(W, _pa_g)
+                build, cache = _PaDiffusion(W), Dict()
+                A = type_cached_assemble!(build, cache, u; dirichlet = :dir)
+                _pa_case(() -> (type_cached_assemble!(build, cache, u; dirichlet = :dir); nothing),
+                    () -> copy(nonzeros(A)))
             end))
     return P
 end
@@ -743,6 +826,38 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
                 end
             end
         end
+
+        # The jacobian refill in 3D, where its space splits into more arrays. Runs nightly.
+        WITH_3D_TESTS && @testset "jacobian! form 3D, element state $ve" for ve in (false, true)
+            function jac3(p)
+                Random.seed!(854)
+                X = box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
+                Ω = mesh(domain(X, :dir => boundary_symbols(X)), (9, 8, 7),
+                    (false, false, false); backend = backend(policy = p))
+                return _pa_jacobian(gridspace(Ω), :dir; ve)
+            end
+            case, ref = jac3(CpuPolyester()), jac3(CpuSerial())
+            @test _pa_bytes(case.call) == 0
+            ref.call()
+            @test case.result() == ref.result()
+            @test !iszero(case.result())
+        end
+
+        # `u .^ 2` lowers to `literal_pow` with `Ref(^)` and `Ref(Val(2))` leaves, which cross
+        # `@batch` as their values (`_lift_refs`), so a warm call allocates nothing at all.
+        @testset "broadcast literal power" begin
+            function pow(p)
+                W = _pa_space(17, p)
+                u = Rₕ(W, _pa_g)
+                v = similar(u)
+                return _pa_case(() -> (v .= u .^ 2 .+ u .^ 3; nothing), () -> _pa_copy(v))
+            end
+            case, ref = pow(CpuPolyester()), pow(CpuSerial())
+            @test _pa_bytes(case.call) == 0
+            ref.call()
+            @test case.result() == ref.result()
+            @test !iszero(case.result())
+        end
     end
 
     @testset "Determinism across repeated runs" begin
@@ -855,6 +970,23 @@ end
         end
     end
     @test _poly_min_bytes(16) == _poly_min_bytes(160)
+end
+
+# A `StarSpacings` spacing crosses `@batch` as its array (gpena/Bramble.jl#998): before,
+# the struct boxed the loop's arguments, 80 B per engine call, 160 B per vector operator.
+if Threads.nthreads() >= 2
+    @testset "StarSpacings stencils: 0 B (#998)" begin
+        _, Ωb = _stencil_mesh_pair((40, 37), CpuPolyester())
+        ub = Rₕ(gridspace(Ωb), _STENCIL_F[2])
+        uv = Rₕ(gridspace(Ωb, Val(2)), x -> (x[1] * x[2], sin(x[1])))
+        w = similar(ub)
+        for op in (Bramble.Dcₓ!, Bramble.D̃ₓ!)
+            @test minimum(alloc_test(op, w, ub) for _ in 1:3) == 0
+        end
+        for op in (Bramble.divcₕ!, Bramble.curlcₕ!, Bramble.diṽₕ!)
+            @test minimum(alloc_test(op, w, uv) for _ in 1:3) == 0
+        end
+    end
 end
 
 # --- Divergence, curl and strain-average engines under CpuPolyester --------- #

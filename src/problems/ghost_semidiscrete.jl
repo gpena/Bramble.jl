@@ -35,8 +35,8 @@
 Source constraint carrier of a [`Semidiscretization`](@ref) on a constrained ghost space:
 the source at `t` is `Eᵀ (F_pad(t) − A_pad d(t))`, `d(t)` written into the padded buffer `d`
 (unused on a space whose data do not depend on time, whose `d` is read directly). A time
-`d` cannot hold (a `ForwardDiff.Dual`) writes into a buffer of its own type in `promoted`,
-built at the first call at that type.
+`d` cannot hold (a `ForwardDiff.Dual`) writes into a padded buffer and a data buffer of its
+own type in `promoted`, built at the first call at that type.
 """
 struct GhostConstraints{DV <: AbstractVector}
     d::DV
@@ -167,23 +167,26 @@ end
 @inline _ghost_affine!(c::GhostConstraints, Cₕ::GhostGridSpace, t) = _ghost_affine!(c, Cₕ,
     Cₕ.td, t)
 @inline _ghost_affine!(::GhostConstraints, Cₕ::GhostGridSpace, ::Nothing, t) = Cₕ.d
-# A `Dual` time reuses its buffer from the second call on. The lift still allocates there:
-# 480 B at 64 padded points and 1840 B at 754, in `_lift_affine!` and the relation
-# kernels it calls (`src/space/ghost_gridspace.jl`, `src/assembly/ghost_relations.jl`).
+# A `Dual` time reuses its buffers from the second call on: the padded `d` and the data
+# buffer `g`, both of its type, kept in `c.promoted`, so a warm call allocates nothing.
 @inline function _ghost_affine!(c::GhostConstraints, Cₕ::GhostGridSpace, td, t)
     S = _affine_eltype(Cₕ, t)
     S === eltype(c.d) && return _lift_affine!(c.d, Cₕ, t)
-    d = _promoted_affine(c, S)::Base.promote_op(similar, typeof(c.d), Type{S})
-    return _lift_affine!(d, Cₕ, t)
+    D = Base.promote_op(similar, typeof(c.d), Type{S})
+    G = Base.promote_op(similar, typeof(td.g0), Type{S})
+    d, g = _promoted_affine(c, td, S)::Tuple{D, G}
+    return _lift_affine!(d, Cₕ, t, g)
 end
 
-# The buffer of `c` at element type `S`. Untyped, so the caller asserts its type.
-@noinline function _promoted_affine(c::GhostConstraints, ::Type{S}) where {S}
-    d = get(c.promoted, S, nothing)
-    d === nothing || return d
-    d = similar(c.d, S)
-    c.promoted[S] = d
-    return d
+# The padded and data buffers of `c` at element type `S`; the space's `d` and `g` share an
+# element type, so `S` holds the data at `t` too. Untyped, so the caller asserts the types.
+@noinline function _promoted_affine(c::GhostConstraints, td::_TimeData,
+        ::Type{S}) where {S}
+    dg = get(c.promoted, S, nothing)
+    dg === nothing || return dg
+    dg = (similar(c.d, S), _affine_buffer(td, S))
+    c.promoted[S] = dg
+    return dg
 end
 
 # Relations eliminate every algebraic row, so the initial condition needs no correction.

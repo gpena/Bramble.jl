@@ -132,6 +132,12 @@ using Kronecker: Kronecker
                 :_difference_band!,
                 :_average_band!,
                 :_centered_average_band!,
+                # `StarSpacings`, `_StarTag`, `_in_band`: a `StarSpacings` spacing crosses
+                # `@batch` as its array and a tag, rebuilt in each band, as the ghost path
+                # does (gpena/Bramble.jl#998). None is public.
+                :StarSpacings,
+                :_StarTag,
+                :_in_band,
                 # `_broadcast_band!`: the
                 # per-band broadcast loop body `_batch_broadcast!` below runs under `@batch`,
                 # the same body `_threaded_broadcast!` already runs under `Threads.@threads`

@@ -59,8 +59,9 @@ end
 # derivative of the matrix and the load with the matrix's and the load's cotangents.
 function _relation_cotangent(config, func, P, r, dR, db)
     mode = Enzyme.set_runtime_activity(Enzyme.Forward, EnzymeRules.runtime_activity(config))
-    n = 0
-    _remap_floats((x, _) -> (n += 1; x), r, Ref(0))
+    k = Ref(0)
+    _remap_floats((x, _) -> x, r, k)
+    n = k[]
     vals = zeros(n)
     for l in 1:n
         tangent = _remap_floats((x, i) -> i == l ? one(x) : zero(x), r, Ref(0))

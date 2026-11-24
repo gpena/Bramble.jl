@@ -509,6 +509,45 @@ _bytes(f, scratch, A, F, uₕ, marker) = @allocated f(scratch, A, F, uₕ; marke
             end
         end
 
+        # `:xmin` behind `:left => :ymin` means its own face, which no stored marker holds
+        # (gpena/Bramble.jl#1010): walked without building a mask, it must allocate nothing
+        # and give the bits a domain storing that face as `:west` gives.
+        @testset "face name behind a remapped alias" begin
+            S = interval(0.0, 1.0) × interval(0.0, 1.0)
+            function setup(dom)
+                local Vₕ, a, l   # without `local`, these rebind the testset's own names
+                Random.seed!(11)   # the same non-uniform points under both domains
+                Vₕ = gridspace(mesh(dom, (9, 11), (false, false)))
+                a = assemble(form(Vₕ, Vₕ, (u, v) -> inner₊(∇ₕ(u), ∇ₕ(v))))
+                l = assemble(form(Vₕ, v -> innerₕ(x -> 1.0 + x[1], v)))
+                return Vₕ, a, l, Rₕ(Vₕ, x -> x[1]^2)
+            end
+            remapped = domain(S, :left => :ymin, :boundary => Bramble.boundary_symbols(S))
+            W, A, F, uₕ = setup(remapped)
+            W₀, A₀, F₀, u₀ = setup(domain(S, :west => :xmin))
+            @test A == A₀ && F == F₀
+            Ωₕ = mesh(W)
+            xmin = findall(Bramble._geometric_face_bits(Ωₕ, :xmin))
+            @test collect(Bramble._reaction_marked(Ωₕ, (:xmin,), 2)) == xmin .+ 2
+            @test collect(Bramble._reaction_marked(Ωₕ, (:left,), 0)) ==
+                  findall(Bramble.index_in_marker(Ωₕ, :left))
+            n = ndofs(W)
+            s, s₀ = zeros(n), zeros(n)
+            @test reaction!(s, A, F, uₕ; marker = :xmin) ===
+                  reaction!(s₀, A₀, F₀, u₀; marker = :west)
+            @test s == s₀ && findall(!iszero, s) ⊆ xmin
+            @test reaction(A, F, uₕ; marker = :xmin) === reaction(A₀, F₀, u₀; marker = :west)
+            @test reaction!(zeros(n), Matrix(A), F, uₕ; marker = :xmin) ≈
+                  reaction(A, F, uₕ; marker = :xmin)
+            d, d₀ = zeros(n), zeros(n)
+            reaction_density!(d, A, F, uₕ; marker = :xmin)
+            reaction_density!(d₀, A₀, F₀, u₀; marker = :west)
+            @test d == d₀ && findall(!iszero, d) ⊆ xmin && !iszero(d)
+            @test parent(reaction_density(A, F, uₕ; marker = :xmin)) == d
+            @test _bytes(reaction!, s, A, F, uₕ, :xmin) == 0
+            @test _bytes(reaction_density!, d, A, F, uₕ, :xmin) == 0
+        end
+
         # A complex load against a Float64 matrix: the dense in-place path must promote, not
         # round `F` into a Float64 buffer (InexactError), and agree with the sparse path.
         @testset "in-place, complex load vector" begin
@@ -552,8 +591,8 @@ _bytes(f, scratch, A, F, uₕ, marker) = @allocated f(scratch, A, F, uₕ; marke
                 Bramble._reaction_leaf_entries, leaves, (:left, :right), nothing)
             @test length(entries) == 1
             masks, off, nn, active = entries[1]
-            @test findall(masks[1]) == rows(Ω₁, :left, 0)
-            @test findall(masks[2]) == rows(Ω₁, :right, 0)
+            @test filter(k -> masks[1][k], 1:n₁) == rows(Ω₁, :left, 0)
+            @test filter(k -> masks[2][k], 1:n₁) == rows(Ω₁, :right, 0)
             @test (off, nn, active) == (0, n₁, true)
             for row in 1:n₁
                 @test Base.invokelatest(Bramble._reaction_row_marked, entries, row) ==

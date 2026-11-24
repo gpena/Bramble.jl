@@ -63,6 +63,8 @@ end
 # and `(x, t = 0.0, p = 1) -> ...` are parametric. `(x, t) -> ...` and `(x, t = 0.0) -> ...`
 # are time-dependent, and the parametric evaluation would call them with a `p` they cannot
 # take. So a set holding both kinds throws here, at construction.
+# A time-dependent set is stored with each verdict in its markers (`_classify_conditions`),
+# so the per-step `conditions` reads it and folds for typed callbacks too.
 @inline _dirichlet_is_time_dependent(constraints::ConstraintMarkers) = any(m -> !_is_spatial(identifier(m)), conditions(constraints))
 
 @inline _dirichlet_is_time_param_dependent(constraints::ConstraintMarkers) = any(
@@ -112,9 +114,9 @@ end
     _validate_dirichlet_arity_known(constraints)
     _validate_dirichlet_arity_mix(constraints)
     return if _dirichlet_is_time_param_dependent(constraints)
-        TimeParamDependentConstraints(constraints)
+        TimeParamDependentConstraints(_classify_conditions(constraints))
     elseif _dirichlet_is_time_dependent(constraints)
-        TimeDependentConstraints(constraints)
+        TimeDependentConstraints(_classify_conditions(constraints))
     else
         StaticConstraints(constraints)
     end
@@ -134,13 +136,15 @@ function _each_dirichlet_row(f::F, space::ScalarGridSpace, labels, components) w
     return nothing
 end
 
+# Each selected leaf goes through `_each_marker_point`, as the scalar method does:
+# `_leaf_entries` would call `index_in_marker`, which builds a `BitVector` for a face name
+# that a remapped alias hides.
 function _each_dirichlet_row(f::F, space::CompositeGridSpace, labels, components) where {F}
     leaves = leaf_spaces_offsets(space)
     _validate_dirichlet_components(components, length(leaves))
     for p in labels
-        for (mask, offset, _, active) in _leaf_entries(leaves, p, components)
-            active || continue
-            _each_marked(f, mask, offset)
+        _each_selected_leaf(leaves, components) do sp, offset
+            _each_marker_point(f, mesh(sp), p, offset)
         end
     end
     return nothing

@@ -46,7 +46,7 @@ function _RowsDirichlet(physical::Bool, facets::Vector{BitVector}, polygon::Bool
 end
 
 """
-    GhostGridSpace{D, T, S, ET, DT, TD, GU} <: AbstractSpaceType{1}
+    GhostGridSpace{D, T, S, ET, DT, TD, GU, PG} <: AbstractSpaceType{1}
 
 A scalar grid space with ghost points beyond the named facets of its mesh, built by
 [`gridspace`](@ref)`(Ωₕ; ghosts = :boundary)` or `gridspace(Ωₕ; ghosts = (:xmin, ...))`.
@@ -73,7 +73,7 @@ E, d = Bramble.closure(Wₕ)    # E is 63 × 59, d = 0
 ```
 """
 struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix,
-    DT <: AbstractVector, TD, GU} <: AbstractSpaceType{1}
+    DT <: AbstractVector, TD, GU, PG} <: AbstractSpaceType{1}
     "the space on the padded mesh, with physical-only weights."
     padded::S
     "the `N_pad × ndofs` closure matrix, `E * u + d` the padded values; its entries in the type of the relation coefficients."
@@ -90,6 +90,8 @@ struct GhostGridSpace{D, T, S <: ScalarGridSpace{D, T}, ET <: AbstractMatrix,
     gu::GU
     "whether the first `npoints` degrees of freedom are the physical nodes' values (`_dofs_are_grid_function`)."
     grid_function::Bool
+    "on a polygon trial space, its interior nodes' mesh linear indices and `gridspace(Ωₕ)` (`_PolygonTrial`); `nothing` on every other space."
+    polygon::PG
 end
 
 function GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector,
@@ -99,7 +101,7 @@ function GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector
     rows = _RowsDirichlet(_rows_are_physical(G, E), _facet_masks(Ωₕ, Val(dim(Ωₕ))))
     Et = _closure_transpose(E)
     return GhostGridSpace(P, E, d, Et, rows, td, _ghost_update(backend(P), G, Et, d, td),
-        _dofs_are_grid_function(G, Et, d, td))
+        _dofs_are_grid_function(G, Et, d, td), nothing)
 end
 
 # Whether the first `npoints` degrees of freedom of a closure are the physical nodes' values,

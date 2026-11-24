@@ -349,7 +349,9 @@ Recurses the same way [`trial_component_or_nothing`](@ref)/[`test_component_or_n
 do, so a marker nested behind any operator those already see through is found here too.
 """
 function _collect_region_labels(op::RegionRestriction)
-    return (_region_labels(op.region)..., _collect_region_labels(op.inner_op)...)
+    # `concatenate_stencils`, not `(a..., b...)`: past 32 labels the splat runs generically
+    # and allocates on every warm `assemble!` (4608 B at 40 restricted products, #853).
+    return concatenate_stencils(_region_labels(op.region), _collect_region_labels(op.inner_op))
 end
 
 _region_labels(region::Symbol) = (region,)
@@ -360,7 +362,8 @@ _region_labels(region::NTuple{N, Symbol}) where {N} = region
 _collect_region_labels(op::UnaryWrapper) = _collect_region_labels(op.inner_op)
 
 function _collect_region_labels(op::Union{BilinearProduct, LinearProduct, OperatorAdd})
-    return (_collect_region_labels(op.left_op)..., _collect_region_labels(op.right_op)...)
+    return concatenate_stencils(_collect_region_labels(op.left_op),
+        _collect_region_labels(op.right_op))
 end
 
 _collect_region_labels(op) = ()

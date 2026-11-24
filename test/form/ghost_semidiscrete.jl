@@ -188,23 +188,37 @@ end
         @test occursin("tgrad", sprint(showerror, err))
     end
 
-    # A Dual time lifts into one buffer of its own type, kept on the carrier, so a warm
-    # `_ghost_affine!` allocates no more than the lift into a ready buffer (#1090).
-    @testset "Dual time keeps its buffer" begin
-        td = ForwardDiff.Dual(0.4, 1.0)
+    # A Dual time lifts into a padded buffer and a data buffer of its own type, kept on the
+    # carrier, so a warm `_ghost_affine!` allocates nothing (#1090). Two Dual types keep
+    # a pair each, and a Float64 time still lifts into the carrier's own `d`.
+    @testset "Dual time keeps its buffers" begin
+        ta = ForwardDiff.Dual(0.4, 1.0)
+        tb = ForwardDiff.Dual{Nothing}(0.4, 1.0, -2.0)
+        same(d, ref) = ForwardDiff.value.(d) == ForwardDiff.value.(ref) &&
+                       ForwardDiff.partials.(d) == ForwardDiff.partials.(ref)
         for ns in ((6, 7), (24, 28))
             W = gridspace(ghost_mesh(CpuSerial(), ns); ghosts = GHOSTS2)
             C, sd, _ = build(W, rel2)
             c = sd.constraints
-            d = Bramble._ghost_affine!(c, C, td)
-            ref = Bramble._lift_affine!(similar(c.d, typeof(td)), C, td)
-            @test ForwardDiff.value.(d) == ForwardDiff.value.(ref)
-            @test ForwardDiff.partials.(d) == ForwardDiff.partials.(ref)
-            @test Bramble._ghost_affine!(c, C, td) === d
+            lifted(t) = Bramble._lift_affine!(similar(c.d, typeof(t)), C, t)
+            da = Bramble._ghost_affine!(c, C, ta)
+            @test same(da, lifted(ta))
+            @test Bramble._ghost_affine!(c, C, ta) === da
             @test length(c.promoted) == 1
-            ready = similar(c.d, typeof(td))
-            @test alloc(() -> Bramble._ghost_affine!(c, C, td)) <=
-                  alloc(() -> Bramble._lift_affine!(ready, C, td))
+            @test alloc(() -> Bramble._ghost_affine!(c, C, ta)) == 0
+            db = Bramble._ghost_affine!(c, C, tb)
+            @test eltype(db) === typeof(tb)
+            @test same(db, lifted(tb))
+            @test length(c.promoted) == 2
+            @test alloc(() -> Bramble._ghost_affine!(c, C, tb)) == 0
+            # the second type's buffers leave the first's alone
+            @test Bramble._ghost_affine!(c, C, ta) === da
+            @test same(da, lifted(ta))
+            d0 = Bramble._ghost_affine!(c, C, 0.4)
+            @test d0 === c.d
+            @test d0 == Bramble._lift_affine!(similar(c.d), C, 0.4)
+            @test alloc(() -> Bramble._ghost_affine!(c, C, 0.4)) == 0
+            @test length(c.promoted) == 2
         end
     end
 

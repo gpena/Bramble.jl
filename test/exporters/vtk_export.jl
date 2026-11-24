@@ -181,6 +181,31 @@ using ..TestUtils: WITH_3D_TESTS
         end
     end
 
+    # WriteVTK serialises on `vtk[name] = data`, so a host field is handed over without a
+    # copy; a field over a view must still be copied into an `Array`.
+    @testset "Host field shared, view field copied" begin
+        Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (false, false))
+        Wₕ = gridspace(Ωₕ)
+        uₕ = Rₕ(Wₕ, x -> x[1] * x[2])
+        @test parent(uₕ) isa Vector{Float64}
+        d = Bramble._vtk_data("u", Ωₕ, uₕ)
+        @test d isa Array{Float64, 2}
+        @test d == reshape(parent(uₕ), 6, 5)
+        @test Base.mightalias(d, parent(uₕ))
+        Bramble._vtk_data("u", Ωₕ, uₕ)
+        @test @allocated(Bramble._vtk_data("u", Ωₕ, uₕ)) < sizeof(parent(uₕ))
+
+        backing = collect(1.0:60.0)
+        vₕ = Bramble.VectorElement(view(backing, 1:30), Wₕ)
+        c = Bramble._vtk_data("v", Ωₕ, vₕ)
+        @test c isa Array{Float64, 2}
+        @test c == reshape(1.0:30.0, 6, 5)
+        @test !Base.mightalias(c, backing)
+
+        short = Bramble.VectorElement(zeros(29), Wₕ)
+        @test_throws DimensionMismatch Bramble._vtk_data("u", Ωₕ, short)
+    end
+
     # Not tested via the public `export_vtk` is what it does when WriteVTK has not been
     # loaded. Once this file's `using WriteVTK` above runs, the extension is active for the
     # rest of this process: multiple dispatch has already resolved `_export_vtk`'s

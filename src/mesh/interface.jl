@@ -169,6 +169,28 @@ end
     return nothing
 end
 
+# The points `index_in_marker(Ωₕ, label)` marks, for readers that must not allocate: the
+# stored `BitVector` in `bits`, or `nothing` there when `label` means its own face, given by
+# `face` within the mesh's `cis`. `m[k]` tells whether point `k` is marked, in O(1).
+struct _MarkerPoints{C <: CartesianIndices, F <: CartesianIndices}
+    bits::Union{Nothing, BitVector}
+    cis::C
+    face::F
+end
+
+@inline function _marker_points(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
+    bits = _stored_marker(Ωₕ, label)
+    bits === nothing || return _MarkerPoints(bits, indices(Ωₕ), _face_indices(Ωₕ, 1, 1))
+    axis, side = _face_of_symbol(Val(D), label)
+    return _MarkerPoints(nothing, indices(Ωₕ), _face_indices(Ωₕ, axis, side))
+end
+
+@inline function Base.getindex(m::_MarkerPoints, k::Int)
+    bits = m.bits
+    bits === nothing || return @inbounds bits[k]
+    return (@inbounds m.cis[k]) in m.face
+end
+
 # Whether `bits` marks at least one point and every point it marks lies on the face `label`
 # names: the marked points on that face number `count(bits)`, and are not zero. Index
 # arithmetic only, so it allocates nothing.

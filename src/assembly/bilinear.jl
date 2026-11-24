@@ -122,6 +122,12 @@ end
 # recording into it, since the positions depend only on the pattern.
 # A copy, never `A`'s own vectors: the caller owns `A` and may change its pattern. Every
 # recording (`_store_recording!`) clears `has_pattern`, as it may be against another pattern.
+#
+# `scratch` holds one `BitVector` per leaf of the test space: the union of two or more
+# Dirichlet labels' masks, rewritten by every `assemble!` that asks for them
+# (`_dirichlet_union!`) so the warm call allocates nothing (gpena/Bramble.jl#994). Rebuilt
+# each call, never trusted from the last, so a `markers!` needs no invalidation here. It is
+# per form, like the rest of the cache: two forms never share one.
 mutable struct _AssemblyCache{D, AST}
     valid::Bool
     A_id::UInt
@@ -133,6 +139,7 @@ mutable struct _AssemblyCache{D, AST}
     m::Int
     colptr::Vector{Int}
     rowval::Vector{Int}
+    scratch::Vector{BitVector}
 end
 
 # The stored-entry count a recording's positions index into. A `SparseMatrixCSC` can grow
@@ -175,6 +182,10 @@ _no_segments(::Val{3}) = _NO_SEGMENTS_3
 # `_keep_pattern!` assigns its own copies.
 const _NO_PATTERN = Int[]
 
+# The Dirichlet scratch of a fresh cache, shared and never written through for the same
+# reason: `_dirichlet_scratch` assigns the cache its own vector on first use.
+const _NO_SCRATCH = BitVector[]
+
 """
     _zero_stored!(A::AbstractMatrix) -> AbstractMatrix
 
@@ -216,7 +227,7 @@ end
 function _AssemblyCache{D}(ast::AST) where {D, AST}
     return _AssemblyCache{D, AST}(
         false, UInt(0), ast, _no_segments(Val(D)), UInt64(0), 0, false, 0, _NO_PATTERN,
-        _NO_PATTERN)
+        _NO_PATTERN, _NO_SCRATCH)
 end
 
 """
@@ -469,10 +480,15 @@ precompile(_type_loose_scalars, (Any,))
 precompile(_type_scale_depth, (Any,))
 precompile(_type_float64_values, (Any,))
 @generated _holds_loose_scalar(::T) where {T} = _type_loose_scalars(T)
-@generated _normalisable(::T, ::Type{E}) where {T, E} = E === Float64 &&
-                                                        _type_loose_scalars(T) &&
-                                                        _type_scale_depth(T) <= 1 &&
-                                                        _type_float64_values(T)
+# Julia 1.14 does not run a generator while inferring a call with a `Type{E}` argument if
+# the generator reads `E`: the call inferred `Any`, and so did `_split_restricted_products`
+# (gpena/Bramble.jl#1282). It does run one for a `Val{E}`, so the generators here and below
+# take that, through a method that wraps the type.
+@inline _normalisable(ast, ::Type{E}) where {E} = _normalisable(ast, Val(E))
+@generated _normalisable(::T, ::Val{E}) where {T, E} = E === Float64 &&
+                                                       _type_loose_scalars(T) &&
+                                                       _type_scale_depth(T) <= 1 &&
+                                                       _type_float64_values(T)
 
 # The element type every leaf space of `Wₕ` has, `Nothing` where two differ: a composite's
 # `eltype` is its first leaf's, so `W × Wf` answers `Float64` for its Float32 component.
@@ -734,13 +750,18 @@ end
 precompile(_type_mixed_scales, (Any, Any))
 precompile(_type_taps_differ, (Any, Any))
 precompile(_type_tap_scalar, (Any, Any))
-@generated _needs_rewrite(::T, ::Type{E}) where {T, E} = _type_holds_restriction(T) ||
-                                                         _type_mixed_scales(T, E)
-@generated _value_type(::T, ::Type{E}) where {T, E} = _type_value(T, E)
+# Each takes its types as a `Val`, as `_normalisable` does (above), so it infers on 1.14.
+@inline _needs_rewrite(op, ::Type{E}) where {E} = _needs_rewrite(op, Val(E))
+@generated _needs_rewrite(::T, ::Val{E}) where {T, E} = _type_holds_restriction(T) ||
+                                                        _type_mixed_scales(T, E)
+@inline _value_type(op, ::Type{E}) where {E} = _value_type(op, Val(E))
+@generated _value_type(::T, ::Val{E}) where {T, E} = _type_value(T, E)
 # Whether the summand `T` already has weights of type `S` and no constant scalar off it.
-@generated _on_target(::T, ::Type{S}, ::Type{E}) where {T, S, E} = (
+@inline _on_target(x, ::Type{S}, ::Type{E}) where {S, E} = _on_target(x, Val(S), Val(E))
+@generated _on_target(::T, ::Val{S}, ::Val{E}) where {T, S, E} = (
     _type_weight(T, E) === S && !_type_scalar_off(T, S))
-@generated _sum_differs(::T, ::Type{E}) where {T, E} = _type_scales_differ(T, E)
+@inline _sum_differs(op, ::Type{E}) where {E} = _sum_differs(op, Val(E))
+@generated _sum_differs(::T, ::Val{E}) where {T, E} = _type_scales_differ(T, E)
 
 # A summed operand whose summands' weights differ in type (`2.0 * Rₕ(:l, v) +
 # 3 * Rₕ(:r, v)`, `g * v + 0.5 * D₋ₓ(v)` with `g` a Float32 grid function) has a stencil
@@ -787,7 +808,8 @@ precompile(_type_tap_scalar, (Any, Any))
     op, _tap_scales(op.inner_op, E))
 @inline _tap_scaled(op, ::Type{S}, ::Type{E}) where {S, E} = OperatorScale(
     convert(S, op.scalar), _tap_scales(op.inner_op, E))
-@generated _tap_scalar(::T, ::Type{E}) where {T, E} = _type_tap_scalar(T, E)
+@inline _tap_scalar(op, ::Type{E}) where {E} = _tap_scalar(op, Val(E))
+@generated _tap_scalar(::T, ::Val{E}) where {T, E} = _type_tap_scalar(T, E)
 @inline _widened(op::OperatorAdd, ::Type{E}) where {E} = _widen_summands(
     op, _joined_value_type(op, E), E)
 # `_value_type` is read off the types in the world Bramble was loaded in, which has no `*`
@@ -1215,7 +1237,10 @@ function apply_dirichlet_labels!(
                 A, test_space(form), dirichlet_labels; components = dirichlet_components
             )
         elseif dirichlet_labels isa Tuple
-            if !isempty(dirichlet_labels)
+            if length(dirichlet_labels) >= 2
+                _dirichlet_union!(A, test_space(form), form.cache, dirichlet_labels,
+                    dirichlet_components)
+            elseif !isempty(dirichlet_labels)
                 dirichlet_bc!(
                     A,
                     test_space(form),
@@ -1225,6 +1250,63 @@ function apply_dirichlet_labels!(
             end
         end
     end
+end
+
+# Two or more labels: what `dirichlet_bc!` does, but with each leaf's union of the labels'
+# masks written into the form's reused `scratch` (`_combined_mask!`, space/inner_product.jl)
+# instead of a fresh `BitVector`, then the same single-mask sweep (gpena/Bramble.jl#994).
+# Testing every label's mask per stored entry instead builds nothing either, but reads a
+# second mask for each of them and measured about 30% slower on a warm graded-mesh
+# `assemble!`. The rows constrained, and so the matrix, are those of `dirichlet_bc!`.
+function _dirichlet_union!(A::AbstractMatrix, Wₕ::ScalarGridSpace, cache, labels::Tuple,
+        components)
+    _validate_scalar_components(components)
+    Ωₕ = mesh(Wₕ)
+    mask = _dirichlet_scratch(cache, 1, 1, length(index_in_marker(Ωₕ, first(labels))))
+    _dirichlet_bc_indices!(A, _combined_mask!(mask, Ωₕ, labels))
+    return A
+end
+
+# One scratch per leaf, each over its own leaf's points, rather than one over all the
+# rows: a leaf's offset is rarely a multiple of 64, so writing its union into a shared
+# buffer would shift every word instead of OR-ing them. The entries are those the
+# composite `dirichlet_bc!` sweeps, with the scratch in place of `_combined_mask`.
+function _dirichlet_union!(A::AbstractMatrix, Wₕ::CompositeGridSpace, cache, labels::Tuple,
+        components)
+    leaves = leaf_spaces_offsets(Wₕ)
+    _validate_dirichlet_components(components, length(leaves))
+    _dirichlet_bc_rows!(A, _union_entries(leaves, cache, labels, components, length(leaves), 1))
+    return A
+end
+
+# Ghost and constrained spaces keep their own `dirichlet_bc!`.
+function _dirichlet_union!(A::AbstractMatrix, Wₕ::_GhostCompositeSpace, cache, labels::Tuple,
+        components)
+    dirichlet_bc!(A, Wₕ, labels...; components = components)
+end
+function _dirichlet_union!(A::AbstractMatrix, Wₕ, cache, labels::Tuple, components)
+    dirichlet_bc!(
+        A, Wₕ, labels...; components = components)
+end
+
+@inline _union_entries(::Tuple{}, cache, labels, components, nleaves, i) = ()
+@inline function _union_entries(leaves::Tuple, cache, labels, components, nleaves, i)
+    sp, offset = first(leaves)
+    Ωₕ = mesh(sp)
+    n = length(index_in_marker(Ωₕ, first(labels)))
+    mask = _combined_mask!(_dirichlet_scratch(cache, i, nleaves, n), Ωₕ, labels)
+    entry = (mask, offset, ndofs(sp), _leaf_selected(components, i))
+    return (entry,
+        _union_entries(Base.tail(leaves), cache, labels, components, nleaves, i + 1)...)
+end
+
+# Leaf `i`'s scratch, of `n` bits: built by the first call, handed back by every later
+# one. The length is checked anyway, as `_combined_mask!` indexes its words unchecked.
+@inline function _dirichlet_scratch(cache, i::Int, nleaves::Int, n::Int)
+    length(cache.scratch) == nleaves || (cache.scratch = [falses(n) for _ in 1:nleaves])
+    s = cache.scratch
+    length(@inbounds(s[i])) == n || (@inbounds s[i] = falses(n))
+    return @inbounds s[i]
 end
 
 """

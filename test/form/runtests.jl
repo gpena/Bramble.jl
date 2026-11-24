@@ -57,6 +57,8 @@ isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
         include("laplacian_form.jl")
         # A stencil of more than 32 entries stays on the unrolled paths (#853).
         include("long_stencil_allocations.jl")
+        # Every runtime in-place function, warm, at 0 B under `Serial()` (#854).
+        include("zero_allocations.jl")
         include("repeated_assemble.jl")
         include("rank_one.jl")
         include("padding_zero.jl")

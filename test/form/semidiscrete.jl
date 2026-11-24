@@ -680,6 +680,30 @@ end
     end
 end
 
+# Under `reassemble` the residual applies every Dirichlet label to the refilled operator at
+# each step. Two labels used to union their masks into a fresh grid-sized `BitVector` per
+# call; the union now goes into the form's reused scratch (#994).
+@testset "reassemble, two labels: 0 B (#994)" begin
+    Ωₕ = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0), :l => :xmin, :r => :xmax),
+        (9, 11), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    α = Ref(1.0)
+    a = form(Wₕ, Wₕ, (u, v) -> α * inner₊(∇ₕ(u), ∇ₕ(v)) + innerₕ(u, v))
+    l = form(Wₕ, v -> innerₕ(1.0, v))
+    sd = semidiscretize(a, l; dirichlet = (:l => _Const(2.0), :r => _Const(3.0)),
+        reassemble = true, (update_coefficients!) = t -> (α[] = t))
+    n = ndofs(Wₕ)
+    du, u = zeros(n), collect(range(0.2, 1.7; length = n))
+    _sd_residual_allocs(sd, du, u, 3.0)
+    @test _sd_residual_allocs(sd, du, u, 3.0) == 0
+    S = assemble(a)
+    dirichlet_bc!(S, Ωₕ, :l)
+    dirichlet_bc!(S, Ωₕ, :r)
+    @test α[] == 3.0
+    @test operator_matrix(sd) == S
+    @test operator_matrix(sd) != assemble(a; dirichlet = :l)
+end
+
 @testset "semidiscretize on a composite space" begin
     Ωₕ = Bramble.mesh(Bramble.domain(Bramble.interval(0.0, 1.0)), 11)
     Wₕ = gridspace(Ωₕ)
@@ -718,6 +742,37 @@ end
         @test iszero(M₁[1, 1]) && iszero(M₁[nleaf, nleaf])
         @test !iszero(M₁[nleaf + 1, nleaf + 1]) && !iszero(M₁[n, n])
     end
+end
+
+# `:left => :ymin` hides the face name `:xmin`, so `index_in_marker(Ωₕ, :xmin)` builds a
+# fresh mask. The composite `LabelsOnly` walk reads the face itself and allocates nothing.
+_walk_rows_allocs(V, labels, c) = @allocated Bramble._each_dirichlet_row(i -> nothing, V, labels, c)
+@testset "composite LabelsOnly, alias: 0 B" begin
+    S = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Ωₕ = mesh(domain(S, :left => :ymin, :boundary => Bramble.boundary_symbols(S)),
+        (9, 11), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    Vₕ = Wₕ × Wₕ
+    m = ndofs(Wₕ)
+    ref = findall(Bramble.index_in_marker(Ωₕ, :xmin))
+    @test length(ref) == 11
+    rows_of(c) = (r = Int[]; Bramble._each_dirichlet_row(i -> push!(r, i), Vₕ, (:xmin,), c); r)
+    @test rows_of(nothing) == vcat(ref, ref .+ m)
+    @test rows_of(2) == ref .+ m
+    @test rows_of((1, 2)) == vcat(ref, ref .+ m)
+    _walk_rows_allocs(Vₕ, (:xmin,), nothing)
+    @test _walk_rows_allocs(Vₕ, (:xmin,), nothing) == 0
+
+    a = form(Vₕ, Vₕ, (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))))
+    l = form(Vₕ, v -> innerₕ(1.0, v(1)) + innerₕ(2.0, v(2)))
+    sd = semidiscretize(a, l; dirichlet = :xmin)
+    @test sd.constraints isa Bramble.LabelsOnly
+    n = ndofs(Vₕ)
+    du, u = zeros(n), collect(range(0.3, 1.9; length = n))
+    sd(du, u, nothing, 0.0)
+    rows = vcat(ref, ref .+ m)
+    @test du[rows] == -u[rows]
+    @test _sd_residual_allocs(sd, du, u, 0.0) == 0
 end
 
 # The `Semidiscretization` type is concrete at the call site for each constraint carrier,
@@ -1404,6 +1459,23 @@ _pinned(x, t::Real) = 1.0 + 2t
     sd_u(du_u, zeros(n), nothing, 0.5)
     @test any(!iszero, du)
     @test du == du_u
+
+    # The verdict is stored once, so the per-step `conditions` infers and the residual
+    # allocates nothing for typed data as for untyped (#1266).
+    for g in (_typed_xt, (x, t) -> 2t)
+        dm = dirichlet_constraints(Ωₕ, I, :boundary => g)
+        @test Bramble.identifier(only(@inferred(Bramble.conditions(dm(0.5))))) ===
+              Base.Fix2(g, 0.5)
+        # without `I`, `semidiscretize` classifies
+        sd_g = semidiscretize(a, l; dirichlet = dirichlet_constraints(Ωₕ, :boundary => g))
+        @test @inferred(Bramble.conditions(sd_g.constraints.constraints(0.5))) isa Tuple
+        sd_g(du, zeros(n), nothing, 0.5)
+        sd_g(du, zeros(n), nothing, 0.5)
+        @test _sd_residual_allocs(sd_g, du, zeros(n), 0.5) == 0
+    end
+    dm_p = dirichlet_constraints(Ωₕ, I, :boundary => _typed_xtp)
+    cs_p = @inferred Bramble.conditions(dm_p(0.5, [3.0]))
+    @test Bramble.identifier(only(cs_p))(0.0) == 1.5
 
     # A callback taking none of (x), (x, t), (x, t, p) is refused, naming it.
     err = try

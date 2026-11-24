@@ -59,12 +59,13 @@ using ..TestUtils: _tri, _matches_fd
             sum(A) + sum(F)
         end)
 
-        # the shape that matters: a solve with both applied
+        # the shape that matters: a solve with both applied. The solve is dense: `lu` of a
+        # sparse Dual matrix recurses without end on Julia 1.14.
         @test _matches_fd(a -> begin
             A, F = a .* _tri(n), a .* collect(1.0:n)
             dirichlet_bc!(A, Ωₕ, :bottom)
             symmetrize!(A, F, Ωₕ, :bottom)
-            sum(A \ F)
+            sum(Matrix(A) \ F)
         end)
 
         # and the same through a composite space
@@ -73,7 +74,7 @@ using ..TestUtils: _tri, _matches_fd
             F = a .* collect(1.0:(3n))
             dirichlet_bc!(A, Vₕ, :bottom)
             symmetrize!(A, F, Vₕ, :bottom)
-            sum(A \ F)
+            sum(Matrix(A) \ F)
         end)
     end
 

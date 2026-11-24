@@ -62,7 +62,64 @@ const _MFBands = typeof(Bramble._batch_mf_bands!)
 # The columns of the row pattern `(rowptr, colval, perm)`: for column `j`, the entries
 # `colptr[j]:(colptr[j + 1] - 1)` of `rowT` (their rows) and `permT` (their positions in
 # `nzval`). A counting sort over the stored entries, on the host.
-function _csr_columns(rowptr, colval, perm, ncols::Int)
+#
+# The columns depend only on the pattern, and an ODE adjoint runs the augmented primal
+# thousands of times for one operator, so they are built once per pattern
+# (gpena/Bramble.jl#1271). `_CSR_SLOTS` keeps the last few patterns served, keyed by the
+# identity of their arrays: a hit needs `perm`, `rowptr` and `colval` to be the very arrays
+# a slot was built from, and `ncols` to match. Nothing is hashed or compared by content, so
+# two operators with equal patterns in different arrays each keep their own slot.
+#
+# A slot holds the three arrays weakly and its columns strongly. A slot whose `perm` has
+# been collected drops its columns at the next call and is filled first; otherwise the
+# slots are reused in turn. Four slots cover a right-hand side with a few operators and
+# bound what a dead operator can leave behind to four patterns' columns. One lock covers
+# the scan and the fill, since rules may run on several tasks.
+const _CsrColumns = NTuple{3, Vector{Int}}
+const _CSR_NO_COLUMNS = (Int[], Int[], Int[])
+
+mutable struct _CsrSlot
+    perm::WeakRef
+    rowptr::WeakRef
+    colval::WeakRef
+    ncols::Int
+    cols::_CsrColumns
+end
+
+const _CSR_SLOTS = ntuple(
+    _ -> _CsrSlot(WeakRef(), WeakRef(), WeakRef(), 0, _CSR_NO_COLUMNS), 4)
+const _CSR_NEXT_SLOT = Ref(1)
+const _CSR_COLUMNS_LOCK = ReentrantLock()
+
+function _csr_columns(rowptr::Vector{Int}, colval::Vector{Int}, perm::Vector{Int},
+        ncols::Int)
+    @lock _CSR_COLUMNS_LOCK begin
+        free = 0
+        for (s, slot) in enumerate(_CSR_SLOTS)
+            p = slot.perm.value
+            p === perm && slot.rowptr.value === rowptr && slot.colval.value === colval &&
+                slot.ncols == ncols && return slot.cols
+            if p === nothing
+                slot.cols = _CSR_NO_COLUMNS
+                free == 0 && (free = s)
+            end
+        end
+        if free == 0
+            free = _CSR_NEXT_SLOT[]
+            _CSR_NEXT_SLOT[] = mod1(free + 1, length(_CSR_SLOTS))
+        end
+        cols = _csr_columns_build(rowptr, colval, perm, ncols)
+        slot = _CSR_SLOTS[free]
+        slot.perm, slot.rowptr = WeakRef(perm), WeakRef(rowptr)
+        slot.colval, slot.ncols, slot.cols = WeakRef(colval), ncols, cols
+        return cols
+    end
+end
+
+_csr_columns(rowptr, colval, perm, ncols::Int) = _csr_columns_build(rowptr, colval, perm,
+    ncols)
+
+function _csr_columns_build(rowptr, colval, perm, ncols::Int)
     colptr = zeros(Int, ncols + 1)
     for k in eachindex(colval)
         @inbounds colptr[colval[k] + 1] += 1

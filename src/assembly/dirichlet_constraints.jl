@@ -53,7 +53,7 @@ function dirichlet_constraints(input, I::CartesianProduct{1}, pairs::Pair...)
     _validate_dirichlet_pair_labels(input, pairs)
     _validate_dirichlet_values(pairs)
     _validate_time_dependent_arity(pairs)
-    return _create_generic_markers(pairs...)
+    return _classify_conditions(_create_generic_markers(pairs...))
 end
 
 # `input`'s *registered* labels, not just the shape it validates against
@@ -128,6 +128,8 @@ end
 # time dependence nothing has. Both are caught here, at the point that knows every arity.
 # So is an untyped `g(x)` beside a `g(x::Real, t::Real)` typed on `x`, which would be read
 # as spatial and drop `t` (`_validate_hidden_typed_arity`, geometry/marker.jl).
+# The verdicts are then stored in the markers (`_classify_conditions`), so `conditions`
+# reads them per step instead of classifying again.
 function _validate_time_dependent_arity(pairs::Tuple{Vararg{Pair}})
     for (lbl, func) in pairs
         _validate_hidden_typed_arity("dirichlet_constraints", lbl, func)

@@ -76,6 +76,19 @@ function _combined_mask(Ωₕ, markers::NTuple{N, Symbol}) where {N}
     return mask
 end
 
+# The same union written into `dest`, a `BitVector` the caller keeps between calls (the
+# Dirichlet scratch of a form's cache, assembly/bilinear.jl), so a warm call builds
+# nothing (gpena/Bramble.jl#994). Word by word over the stored masks' chunks: they share
+# `dest`'s length, and a `BitVector`'s unused tail bits are zero, so the OR keeps them so.
+function _combined_mask!(dest::BitVector, Ωₕ, markers::NTuple{N, Symbol}) where {N}
+    masks = map(m -> index_in_marker(Ωₕ, m), markers)
+    d = dest.chunks
+    @inbounds for k in eachindex(d)
+        d[k] = mapreduce(m -> m.chunks[k], |, masks)
+    end
+    return dest
+end
+
 @inline function _combined_marked_indices(Ωₕ, markers::NTuple{1, Symbol})
     return index_in_marker(Ωₕ, markers[1])
 end

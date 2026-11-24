@@ -212,6 +212,35 @@ apply(P, x) = ldiv!(similar(x), P, x)
         I, _ = labels(Ωₕ)
         @test maximum(abs, u .- Rₕ(gridspace(Ωₕ), uq).data[I]) <= 1e-3
     end
+
+    # #1007: the trial space keeps its interior index and the plain space of Ω̄ₕ, so the
+    # norms rebuild neither. The index is the interior marker's nodes and also the one the
+    # closure gives (an interior node's column of Eᵀ holds its degree of freedom alone).
+    @testset "$name: stored interior index (#1007)" for (name, Ωₕ) in MESHES
+        U, _ = polygon_spaces(Ωₕ, :P, uq)
+        I, _ = labels(Ωₕ)
+        idx = Bramble._polygon_interior(U)
+        @test idx == findall(I)
+        Et = U.Et
+        cp, rv = SparseArrays.getcolptr(Et), rowvals(Et)
+        ext = U.rows.unclosed .| U.rows.extended
+        fromEt = zeros(Int, size(Et, 1))
+        for p in eachindex(ext)
+            ext[p] || cp[p + 1] == cp[p] || (fromEt[rv[cp[p]]] = p)
+        end
+        @test idx == fromEt
+        uh = Rₕ(U, x -> 1 + x[1] * x[2])
+        v = zeros(Bramble.npoints(Ωₕ))
+        v[I] .= parent(uh)
+        e = Bramble._polygon_element(uh)
+        @test parent(e) == v
+        @test normₕ(uh) == normₕ(Bramble.VectorElement(v, gridspace(Ωₕ)))
+        # The allocator rounds a vector up to its size class, so the bound is what `similar`
+        # of the element costs, not its `sizeof`.
+        warm(f, a...) = (f(a...); f(a...); @allocated f(a...))
+        @test warm(Bramble._polygon_interior, U) == 0
+        @test warm(normₕ, uh) <= warm(similar, v)
+    end
 end
 
 # #901: levelset_spaces.jl's meshes, with its builder.

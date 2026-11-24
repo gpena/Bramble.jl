@@ -853,6 +853,37 @@ end
             list = _chain(200_000)
             @test all(<=(TOL), _gradients((q, pol) -> _list_case(q, pol, list), p))
         end
+
+        # The reverse rule of `_batch_csr_spmv!` keeps the transpose pattern of one operator
+        # across calls (gpena/Bramble.jl#1271). A `perm` reused with another pattern must not
+        # hit the cached columns: a hit needs the very arrays, never equal contents.
+        @testset "CSR transpose pattern, memoised" begin
+            ext = Base.get_extension(Bramble, :BrambleEnzymePolyesterExt)
+            rowptr, colval, perm = [1, 3, 5, 6], [1, 2, 2, 3, 1], [1, 2, 3, 4, 5]
+            c1 = ext._csr_columns(rowptr, colval, perm, 3)
+            c2 = ext._csr_columns(rowptr, colval, perm, 3)
+            @test all(map(===, c1, c2))
+            @test c1 == ([1, 3, 5, 6], [1, 3, 1, 2, 2], [1, 5, 2, 3, 4])
+            fresh = ext._csr_columns(copy(rowptr), copy(colval), copy(perm), 3)
+            @test fresh == c1
+            @test !any(map(===, fresh, c1))
+            # The same `perm` object with other rows and columns.
+            other = ext._csr_columns([1, 2, 4, 6], [3, 1, 2, 1, 3], perm, 3)
+            @test other == ([1, 3, 4, 6], [2, 3, 2, 1, 3], [2, 4, 3, 1, 5])
+            @test ext._csr_columns([1, 2, 4, 6], [3, 1, 2, 1, 3], perm, 4)[1] ==
+                  [1, 3, 4, 6, 6]
+            # The last pattern served shares `perm` but not `rowptr`: its columns must not
+            # come back.
+            @test ext._csr_columns(rowptr, colval, perm, 3) == c1
+            # Two operators with equal patterns in different arrays, called in turn, each
+            # keep their own columns.
+            A = ([1, 3, 5, 6], [1, 2, 2, 3, 1], [1, 2, 3, 4, 5])
+            B = map(copy, A)
+            a1, b1 = ext._csr_columns(A..., 3), ext._csr_columns(B..., 3)
+            a2, b2 = ext._csr_columns(A..., 3), ext._csr_columns(B..., 3)
+            @test all(map(===, a1, a2)) && all(map(===, b1, b2))
+            @test !any(map(===, a1, b1))
+        end
     else
         @test_skip RUN_ENZYME
     end
