@@ -12,7 +12,8 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS
 
 isdefined(Main, :ZeroAllocationCases) ||
     Base.include(Main, joinpath(@__DIR__, "..", "zero_allocation_cases.jl"))
-using Main.ZeroAllocationCases: CASES, EXCLUDED, FAMILIES, KNOWN, SHIFTS, SUFFIXES
+using Main.ZeroAllocationCases: CASES, EXCLUDED, FAMILIES, KNOWN, SHIFTS, SUFFIXES,
+                                THREADED_CASES
 
 # Bytes of the second call: `setup` builds the arguments, `alloc_test` warms and measures
 # behind a function barrier.
@@ -52,7 +53,8 @@ end
         "εₕ!", "εcₕ!", "ε₊ₕ!", "ε̽ₕ!", "Rₕ!", "avgₕ!", "evaluate!", "assemble!",
         "assemble_add!", "type_cached_assemble!", "dirichlet_bc!", "reaction!",
         "reaction_density!", "lift!", "update_ghosts!", "symmetrize!", "smooth!",
-        "v_cycle!", "w_cycle!", "fdm_solve!")
+        "v_cycle!", "w_cycle!", "fdm_solve!", "fmg!", "prolongate!", "πₕ!", "project!",
+        "jacobian!", "mul!", "ldiv!")
         @test covers(fn)
     end
     # The long cases of #853: 216, 81 and past-32-entry stencils, and 40 products.
@@ -60,6 +62,12 @@ end
         @test covers(fn)
     end
     @test "assemble! Δₕ² 3D" in names
+end
+
+@testset "Threaded cases kept for Polyester" begin
+    @test !isempty(THREADED_CASES)
+    @test all(c -> startswith(c.name, "assemble_parallel!"), THREADED_CASES)
+    @test isdisjoint(Set(c.name for c in CASES), Set(c.name for c in THREADED_CASES))
 end
 
 @testset "The exclusion list is named and reasoned" begin

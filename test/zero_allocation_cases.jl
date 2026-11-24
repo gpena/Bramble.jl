@@ -14,9 +14,11 @@
 module ZeroAllocationCases
 
 using Bramble
-using Bramble: evaluate!, reaction!, reaction_density!,
-               type_cached_assemble!, v_cycle!, w_cycle!
+using Bramble: assemble_parallel!, evaluate!, fmg!, jacobian!, jacobian_form, jacobian_prototype, prolongate!,
+               reaction!, reaction_density!, type_cached_assemble!, v_cycle!, w_cycle!
+using ForwardDiff: ForwardDiff
 using Kronecker: Kronecker
+using LinearAlgebra: ldiv!, mul!
 
 struct Case
     name::String
@@ -342,6 +344,103 @@ function fdm_case(D)
     end
 end
 
+# One multigrid preconditioner on a graded mesh, three levels.
+function multigrid(policy, D)
+    Ω = graded_mesh(policy, D == 2 ? (17, 9) : (9, 9, 9))
+    return Ω, gmg_preconditioner(VariableDiffusion(), Ω; levels = 3)
+end
+
+function fmg_case(D)
+    return Case("fmg! $(D)D", D) do policy
+        Ω, P = multigrid(policy, D)
+        n = npoints(Ω)
+        (fmg!, ones(n), P, fill(0.5, n))
+    end
+end
+
+function prolongate_case(D)
+    return Case("prolongate! $(D)D", D) do policy
+        Ω = graded_mesh(policy, D == 2 ? (17, 9) : (9, 9, 9))
+        H = GeometricMeshHierarchy(Ω, 3)
+        (prolongate!, zeros(npoints(H[3])), H, 3, ones(npoints(H[2])))
+    end
+end
+
+function multigrid_ldiv_case(D)
+    return Case("ldiv! multigrid $(D)D", D) do policy
+        Ω, P = multigrid(policy, D)
+        n = npoints(Ω)
+        (ldiv!, zeros(n), P, fill(0.5, n))
+    end
+end
+
+# `ldiv!(y, P, x)` of the two matrix-free preconditioners.
+function ldiv_case(name, D, make)
+    return Case("ldiv! $name $(D)D", D) do policy
+        W = space(policy, D)
+        n = ndofs(W)
+        (ldiv!, zeros(n), make(policy, W), fill(0.5, n))
+    end
+end
+jacobi_ldiv(policy, W) = jacobi_preconditioner(matrix_free_operator(VariableDiffusion()(W)))
+chebyshev_ldiv(policy, W) = chebyshev_preconditioner(matrix_free_operator(VariableDiffusion()(W)))
+
+# `mul!(y, op, x)` of a matrix-free operator and of a Kronecker one.
+function mul_case(name, D, make)
+    return Case("mul! $name $(D)D", D) do policy
+        W = space(policy, D)
+        n = ndofs(W)
+        (mul!, zeros(n), make(W), fill(0.5, n))
+    end
+end
+matrix_free(W) = matrix_free_operator(form(W, W, mass_stiffness))
+kronecker(W) = kronecker_operator(form(W, W, mass_stiffness))
+
+# `πₕ!` onto a coarser graded space, by pointwise interpolation and through the matrix.
+function interpolation_case(D, with_matrix)
+    return Case("πₕ! $(with_matrix ? "matrix " : "")$(D)D", D) do policy
+        Wsrc = space(policy, D)
+        Wdst = gridspace(graded_mesh(policy, D == 2 ? (9, 7) : (5, 5, 4)))
+        src = Rₕ(Wsrc, f_of_x)
+        if with_matrix
+            (Bramble.πₕ!, element(Wdst), Bramble.interpolation_matrix(Wdst, Wsrc), src)
+        else
+            (Bramble.πₕ!, element(Wdst), src)
+        end
+    end
+end
+
+function project_case(D)
+    return Case("project! $(D)D", D) do policy
+        u = element(space(policy, D))
+        (Bramble.project!, u, Bramble.PointValue(f_of_x))
+    end
+end
+
+# `a + ∂a` at the state `u`, the matrix `jacobian!` fills.
+_jac_α(s) = 3 + 1 / (1 + s^2)
+function jacobian_form_case(D)
+    return Case("jacobian! form $(D)D", D) do policy
+        W = space(policy, D)
+        c = element(W, 0.0)
+        a = form(W, W, (U, V) -> innerₕ(c * U, V) + innerₕ(U, V))
+        jf = jacobian_form(a, c => (U -> U, _jac_α); dirichlet = :boundary)
+        J = jacobian_prototype(jf)
+        u = [0.3 + 0.7 * sin(0.37 * i) for i in 1:ndofs(W)]
+        (jacobian!, J, jf, u)
+    end
+end
+
+function jacobian_semidiscrete_case(D)
+    return Case("jacobian! semidiscrete $(D)D", D) do policy
+        W = space(policy, D)
+        a = form(W, W, mass_stiffness)
+        sd = semidiscretize(a, form(W, Source(W)); dirichlet = :boundary)
+        u = fill(0.5, ndofs(W))
+        (jacobian!, jacobian_prototype(sd), sd, u, nothing, 0.3)
+    end
+end
+
 # ---------------------------------------------------------------------------------------
 # The table
 
@@ -377,7 +476,12 @@ function build_cases()
             push!(cases, reaction_case(nm, f, marker, D, kind))
         end
         push!(cases, fdm_case(D),
-            cycle_case("v_cycle!", v_cycle!, D), cycle_case("w_cycle!", w_cycle!, D))
+            cycle_case("v_cycle!", v_cycle!, D), cycle_case("w_cycle!", w_cycle!, D),
+            fmg_case(D), prolongate_case(D), multigrid_ldiv_case(D),
+            ldiv_case("jacobi", D, jacobi_ldiv), ldiv_case("chebyshev", D, chebyshev_ldiv),
+            mul_case("matrix-free", D, matrix_free), mul_case("Kronecker", D, kronecker),
+            interpolation_case(D, false), interpolation_case(D, true), project_case(D),
+            jacobian_form_case(D), jacobian_semidiscrete_case(D))
     end
     # The long stencils and products of #853.
     push!(cases, matrix_case("assemble! Δₕ³", 2, laplacian_cubed),
@@ -396,6 +500,16 @@ function build_cases()
 end
 
 const CASES = build_cases()
+
+# `assemble_parallel!` threads under any policy, so it allocates under `Serial()` by design
+# (see `EXCLUDED`). These cases are for a policy whose threading is allocation free, as
+# `CpuPolyester()`: its test runs `CASES` and `THREADED_CASES`, the Serial one only `CASES`.
+const THREADED_CASES = Case[
+    matrix_case("assemble_parallel!", 2, mass_stiffness, assemble_parallel!),
+    matrix_case("assemble_parallel!", 3, mass_stiffness, assemble_parallel!),
+    vector_case("assemble_parallel! linear", 2, Source, assemble_parallel!),
+    vector_case("assemble_parallel! linear", 3, Source, assemble_parallel!)
+]
 
 # ---------------------------------------------------------------------------------------
 # Known to allocate
@@ -466,6 +580,15 @@ const BUILDER_REASON = "builder: grows a container the caller owns (a sparsity p
                        "that reuses the container is 0 B"
 
 const EXCLUDED = Tuple{String, String}[
+    ("assemble_parallel! under Serial()",
+        "threaded by design: it forces `CpuThreaded` under any policy, and its bytes are " *
+        "the `Threads.@threads` task cost of #436 (2800 B for a matrix and 560 B for a " *
+        "vector in 2D, 4032 B in 3D); `THREADED_CASES` run it under `CpuPolyester()`"),
+    ("refactor!",
+        "allocates by design inside the SparseArrays and SuiteSparse refactorisation: " *
+        "`cholesky!(F, A)` alone is 18544 B of its 25520 B (CHOLMOD, 2D) and UMFPACK's " *
+        "`lu!` is 106128 B"),
+    ("set_markers!", SETUP_REASON * "; it rebuilds the mesh's marker masks"),
     ("fdm_factorize!",
         SETUP_REASON * "; a refill from a form that differs, or that reads " *
         "a grid-function coefficient, projects the axes again"),
