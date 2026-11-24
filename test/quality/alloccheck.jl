@@ -72,8 +72,8 @@ using Bramble:
 
 # Names the allocating instructions rather than reporting `false`, so a failure says which
 # instruction appeared and where.
-function _alloc_report(f, types)
-    allocs = check_allocs(f, types)
+function _alloc_report(f, types; exempt = Returns(false))
+    allocs = filter(!exempt, check_allocs(f, types))
     isempty(allocs) && return ""
     lines = [first(split(string(a), "\n")) for a in Iterators.take(allocs, 5)]
     return string(length(allocs), " allocating instruction(s): ", join(lines, "; "))
@@ -83,6 +83,18 @@ end
 # cold branches of a callee and so cannot be asserted away.
 function _dispatch_count(f, types)
     return count(a -> a isa AllocCheck.DynamicDispatch, check_allocs(f, types))
+end
+
+# Julia 1.14 makes `libblastrampoline` a `LazyLibrary`, and a `ccall` into one compiles to
+# a run-time dispatch that loads it. AllocCheck reports that dispatch at the `ccall` in
+# `BLAS.dot` (LinearAlgebra `src/blas.jl:389` on 1.14.0-beta1), on concrete
+# `Vector{Float64}` arguments; 1.13 holds a path string there and reports nothing. Only
+# that frame is exempt, and only on 1.14 and later.
+function _lazy_blas_dot(a)
+    VERSION >= v"1.14.0-" && a isa AllocCheck.DynamicDispatch || return false
+    frame = first(a.backtrace)
+    return frame.func === :dot &&
+           endswith(string(frame.file), joinpath("LinearAlgebra", "src", "blas.jl"))
 end
 
 # A literal component index, compiled on its own: the leaf's type is known, so indexing is
@@ -249,8 +261,8 @@ _second_component(u) = u[2]
         scratch = zeros(ndofs(Wₕ1))
 
         @test _alloc_report(assemble!, (typeof(b), typeof(l))) == ""
-        @test _alloc_report(Bramble.evaluate!, (typeof(scratch), typeof(l), typeof(uₕ1))) ==
-              ""
+        @test _alloc_report(Bramble.evaluate!, (typeof(scratch), typeof(l), typeof(uₕ1));
+            exempt = _lazy_blas_dot) == ""
 
         # The residual a time integrator calls once per stage, on the matching element type.
         # `src/problems/semidiscrete.jl` documents this as 0 bytes; here it is the stronger
