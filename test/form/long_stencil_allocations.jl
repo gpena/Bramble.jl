@@ -50,15 +50,16 @@ end
 end
 
 # Restricted products are walked one at a time (`_each_walk_unit`); past 32 the walk used
-# to `map` over them (320 B at 33). At 40 the marker check still allocates (#853).
-@testset "33 restricted products, linear (#853)" begin
+# to `map` over them (320 B at 33), and the marker check splatted their labels generically
+# (4608 B at 40, 27904 B at 65, #853).
+@testset "$n restricted products, linear (#853)" for n in (33, 40, 65)
     Wₕ = gridspace(graded_mesh(2, (9, 11)))
     f = x -> 1.0 + x[1]
     r(v) = Bramble.restrict_to(:boundary, v)
-    l = form(Wₕ, v -> foldl(+, ntuple(k -> (k + 0.5) * innerₕ(f, r(v)), Val(33))))
+    l = form(Wₕ, v -> foldl(+, ntuple(k -> (k + 0.5) * innerₕ(f, r(v)), Val(n))))
     F = assemble(l)
     @test_allocs Bramble.assemble!(F, l)
-    @test F≈sum(k -> k + 0.5, 1:33) .* assemble(form(Wₕ, v -> innerₕ(f, r(v)))) rtol=1e-12
+    @test F≈sum(k -> k + 0.5, 1:n) .* assemble(form(Wₕ, v -> innerₕ(f, r(v)))) rtol=1e-12
 end
 
 WITH_3D_TESTS && @testset "Δₕ² in 3D: 81 entries (#853)" begin
