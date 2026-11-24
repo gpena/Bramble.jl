@@ -1429,6 +1429,23 @@ _pinned(x, t::Real) = 1.0 + 2t
     @test any(!iszero, du)
     @test du == du_u
 
+    # The verdict is stored once, so the per-step `conditions` infers and the residual
+    # allocates nothing for typed data as for untyped (#1266).
+    for g in (_typed_xt, (x, t) -> 2t)
+        dm = dirichlet_constraints(Ωₕ, I, :boundary => g)
+        @test Bramble.identifier(only(@inferred(Bramble.conditions(dm(0.5))))) ===
+              Base.Fix2(g, 0.5)
+        # without `I`, `semidiscretize` classifies
+        sd_g = semidiscretize(a, l; dirichlet = dirichlet_constraints(Ωₕ, :boundary => g))
+        @test @inferred(Bramble.conditions(sd_g.constraints.constraints(0.5))) isa Tuple
+        sd_g(du, zeros(n), nothing, 0.5)
+        sd_g(du, zeros(n), nothing, 0.5)
+        @test _sd_residual_allocs(sd_g, du, zeros(n), 0.5) == 0
+    end
+    dm_p = dirichlet_constraints(Ωₕ, I, :boundary => _typed_xtp)
+    cs_p = @inferred Bramble.conditions(dm_p(0.5, [3.0]))
+    @test Bramble.identifier(only(cs_p))(0.0) == 1.5
+
     # A callback taking none of (x), (x, t), (x, t, p) is refused, naming it.
     err = try
         cls(_typed_none)

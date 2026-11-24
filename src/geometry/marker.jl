@@ -11,10 +11,13 @@ Labeled geometric region or boundary marker on a computational domain.
   [`markers`](@ref) builds a `Marker` from a tuple, vector or set of boundary symbols by
   storing it as a `Set{Symbol}`.
 """
-struct Marker{F}
+struct Marker{F, K}
     label::Symbol
     identifier::F
 end
+
+# `K` is `Nothing` until `_classify_conditions` stores the time verdict of a condition.
+Marker(label, identifier::F) where {F} = Marker{F, Nothing}(label, identifier)
 
 """
     MarkerPair{F}
@@ -450,18 +453,20 @@ and those count.
 """
 function conditions(edm::EvaluatedDomainMarkers)
     t = edm.evaluation_time
-    return map(
-        m -> Marker(label(m), _fix_time(identifier(m), t)), conditions(edm.original_markers)
-    )
+    return map(m -> _fix_marker_time(m, t), conditions(edm.original_markers))
 end
 
 # `hasmethod` is `@nospecialize` in `f`: called normally it folds only for a singleton `f`,
 # so a capturing closure or a callable struct with fields gives a `Union` per slot and
 # allocates. Inlined at the call site, its `Core._hasmethod(Tuple{F, ...})` folds on the
-# concrete type `F`, so the tuple stays concrete and `conditions` allocates nothing for a
-# callback with an untyped method; one typed on every argument costs a `methods` lookup per
-# call (`_accepts`). A method added to `F` later invalidates the folded result, as for any
-# method lookup.
+# concrete type `F`. For a callback typed on every argument `_accepts` falls back to
+# `methods` (below), which cannot fold, and `_fix_time` then returns a `Union`. So
+# `dirichlet_constraints` with a time domain and `semidiscretize` classify each condition
+# once (`_classify_conditions`) and store the verdict in its `Marker` type, from which
+# `conditions` reads it: the tuple stays concrete and allocates nothing for typed and
+# untyped callbacks alike. A method added after that is not seen. An unclassified set, such
+# as `markers(...)` evaluated by hand, still classifies on every call: it folds for an
+# untyped callback and costs a `methods` lookup per call for a typed one.
 #
 # Both evaluation paths share `_is_spatial`. Every helper here stays `@inline`, or the fold
 # never reaches the `map` closure in `conditions`.
@@ -551,6 +556,37 @@ end
     return is_spatial ? f : Base.Fix2(Base.Fix{3}(f, p), t)
 end
 
+# The time verdict of a condition: `S` is `_is_spatial(f)`, `P` is `_accepts(f, Val(3))`.
+# Both are kept, as `_fix_time` reads `S` and `_fix_time_param` reads `S && !P`.
+struct _TimeVerdict{S, P} end
+
+# Stores the verdict of every condition of `dm` in its `Marker` type, once. A marker that
+# already carries one is kept.
+@inline function _classify_conditions(dm::DomainMarkers)
+    return DomainMarkers(dm.symbols, dm.tuples, map(_classify, dm.conditions), dm.regions)
+end
+@inline _classify_conditions(markers) = markers
+
+@inline _classify(m::Marker) = m
+@inline function _classify(m::Marker{F, Nothing}) where {F}
+    f = identifier(m)
+    return Marker{F, _TimeVerdict{_is_spatial(f), _accepts(f, Val(3))}}(label(m), f)
+end
+
+@inline _fix_marker_time(m::Marker, t) = Marker(label(m), _fix_time(identifier(m), t))
+@inline function _fix_marker_time(m::Marker{F, _TimeVerdict{S, P}}, t) where {F, S, P}
+    f = identifier(m)
+    return Marker(label(m), S ? f : Base.Fix2(f, t))
+end
+
+@inline function _fix_marker_time_param(m::Marker, t, p)
+    return Marker(label(m), _fix_time_param(identifier(m), t, p))
+end
+@inline function _fix_marker_time_param(m::Marker{F, _TimeVerdict{S, P}}, t, p) where {F, S, P}
+    f = identifier(m)
+    return Marker(label(m), (S && !P) ? f : Base.Fix2(Base.Fix{3}(f, p), t))
+end
+
 """
     (dm::DomainMarkers)(t::Number) -> EvaluatedDomainMarkers
 
@@ -623,10 +659,7 @@ test that checks a `(1.0, 3.0)` vs a swapped-order failure, not by inspection).
 function conditions(edm::EvaluatedParametricDomainMarkers)
     t = edm.evaluation_time
     p = edm.p
-    return map(
-        m -> Marker(label(m), _fix_time_param(identifier(m), t, p)),
-        conditions(edm.original_markers)
-    )
+    return map(m -> _fix_marker_time_param(m, t, p), conditions(edm.original_markers))
 end
 
 # The accessors the two evaluated types share are written once over their union, and the
