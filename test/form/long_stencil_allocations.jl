@@ -62,6 +62,18 @@ end
     @test F≈sum(k -> k + 0.5, 1:n) .* assemble(form(Wₕ, v -> innerₕ(f, r(v)))) rtol=1e-12
 end
 
+# A tuple region gives two labels per product, so 33 products already pass 32 labels
+# (14208 / 23040 / 68416 B at 33 / 40 / 65 before the out-of-line label concatenation).
+@testset "$n two-label restricted products (#853)" for n in (33, 40, 65)
+    Wₕ = gridspace(graded_mesh(2, (9, 11)))
+    f = x -> 1.0 + x[1]
+    r(v) = Bramble.restrict_to((:boundary, :interior), v)
+    l = form(Wₕ, v -> foldl(+, ntuple(k -> (k + 0.5) * innerₕ(f, r(v)), Val(n))))
+    F = assemble(l)
+    @test_allocs Bramble.assemble!(F, l)
+    @test F≈sum(k -> k + 0.5, 1:n) .* assemble(form(Wₕ, v -> innerₕ(f, r(v)))) rtol=1e-12
+end
+
 WITH_3D_TESTS && @testset "Δₕ² in 3D: 81 entries (#853)" begin
     Wₕ = gridspace(graded_mesh(3, (7, 6, 5)))
     a = form(Wₕ, Wₕ, (u, v) -> innerₕ(Δₕ(Δₕ(u)), v))
