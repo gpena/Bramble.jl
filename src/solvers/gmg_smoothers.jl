@@ -43,6 +43,7 @@ abstract type AbstractSmoother{T} end
 
 Base.eltype(::Type{<:AbstractSmoother{T}}) where {T} = T
 Base.size(s::AbstractSmoother) = size(s.op)
+Base.size(s::AbstractSmoother, d::Integer) = d <= 2 ? size(s)[d] : 1
 
 """
     JacobiSmoother{T, Op, V <: AbstractVector{T}} <: AbstractSmoother{T}

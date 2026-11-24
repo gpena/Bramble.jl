@@ -28,6 +28,7 @@ See also: [`JacobiPreconditioner`](@ref), [`jacobi_preconditioner`](@ref).
 abstract type AbstractMatrixFreePreconditioner{T} end
 
 Base.eltype(::Type{<:AbstractMatrixFreePreconditioner{T}}) where {T} = T
+Base.size(P::AbstractMatrixFreePreconditioner, d::Integer) = d <= 2 ? size(P)[d] : 1
 
 function Base.:\(P::AbstractMatrixFreePreconditioner{T}, x::AbstractVector) where {T}
     y = similar(x, promote_type(T, eltype(x)))
@@ -222,7 +223,6 @@ end
 # The factorisation's `size` and both `ldiv!` methods come from `BrambleKroneckerExt`, the
 # only place a three-argument `ldiv!` exists for `ldiv!(P, x)` to forward to.
 Base.size(P::FDMPreconditioner) = size(P.factorization)
-Base.size(P::FDMPreconditioner, i::Integer) = size(P.factorization, i)
 
 # --- The diagonal walk ------------------------------------------------------------------ #
 
