@@ -744,6 +744,37 @@ end
     end
 end
 
+# `:left => :ymin` hides the face name `:xmin`, so `index_in_marker(Ωₕ, :xmin)` builds a
+# fresh mask. The composite `LabelsOnly` walk reads the face itself and allocates nothing.
+_walk_rows_allocs(V, labels, c) = @allocated Bramble._each_dirichlet_row(i -> nothing, V, labels, c)
+@testset "composite LabelsOnly, alias: 0 B" begin
+    S = interval(0.0, 1.0) × interval(0.0, 1.0)
+    Ωₕ = mesh(domain(S, :left => :ymin, :boundary => Bramble.boundary_symbols(S)),
+        (9, 11), (false, false))
+    Wₕ = gridspace(Ωₕ)
+    Vₕ = Wₕ × Wₕ
+    m = ndofs(Wₕ)
+    ref = findall(Bramble.index_in_marker(Ωₕ, :xmin))
+    @test length(ref) == 11
+    rows_of(c) = (r = Int[]; Bramble._each_dirichlet_row(i -> push!(r, i), Vₕ, (:xmin,), c); r)
+    @test rows_of(nothing) == vcat(ref, ref .+ m)
+    @test rows_of(2) == ref .+ m
+    @test rows_of((1, 2)) == vcat(ref, ref .+ m)
+    _walk_rows_allocs(Vₕ, (:xmin,), nothing)
+    @test _walk_rows_allocs(Vₕ, (:xmin,), nothing) == 0
+
+    a = form(Vₕ, Vₕ, (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))))
+    l = form(Vₕ, v -> innerₕ(1.0, v(1)) + innerₕ(2.0, v(2)))
+    sd = semidiscretize(a, l; dirichlet = :xmin)
+    @test sd.constraints isa Bramble.LabelsOnly
+    n = ndofs(Vₕ)
+    du, u = zeros(n), collect(range(0.3, 1.9; length = n))
+    sd(du, u, nothing, 0.0)
+    rows = vcat(ref, ref .+ m)
+    @test du[rows] == -u[rows]
+    @test _sd_residual_allocs(sd, du, u, 0.0) == 0
+end
+
 # The `Semidiscretization` type is concrete at the call site for each constraint carrier,
 # and the leaf-by-leaf mesh check infers `Bool` across leaves of unlike types (#981).
 @testset "semidiscretize: concrete type (#981)" begin

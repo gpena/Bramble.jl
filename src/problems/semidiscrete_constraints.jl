@@ -136,13 +136,15 @@ function _each_dirichlet_row(f::F, space::ScalarGridSpace, labels, components) w
     return nothing
 end
 
+# Each selected leaf goes through `_each_marker_point`, as the scalar method does:
+# `_leaf_entries` would call `index_in_marker`, which builds a `BitVector` for a face name
+# that a remapped alias hides.
 function _each_dirichlet_row(f::F, space::CompositeGridSpace, labels, components) where {F}
     leaves = leaf_spaces_offsets(space)
     _validate_dirichlet_components(components, length(leaves))
     for p in labels
-        for (mask, offset, _, active) in _leaf_entries(leaves, p, components)
-            active || continue
-            _each_marked(f, mask, offset)
+        _each_selected_leaf(leaves, components) do sp, offset
+            _each_marker_point(f, mesh(sp), p, offset)
         end
     end
     return nothing
