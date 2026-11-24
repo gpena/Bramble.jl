@@ -22,7 +22,7 @@ using ..TestUtils: alloc_test, _BROADCAST_SIZES, _broadcast_space, _check_broadc
                    _fillnz!, _grid, _grid_sample, _mg_jitter_mesh, _mg_spd, _mg_transfer_meshes, _reset_seen!,
                    _sine_source,
                    _spy, _STENCIL_F, _STENCIL_G, _stencil_mesh_pair, _stencil_op!, _threads_seen,
-                   _unit_cube, WITH_FULL_GRIDS
+                   _unit_cube, WITH_3D_TESTS, WITH_FULL_GRIDS
 
 const ZERO_BC = :dir => (x -> 0.0)
 
@@ -65,10 +65,12 @@ const _PA_BOX_CEILINGS = Dict{String, Int}()
 
 # BEGIN _pa paths
 using Bramble: CpuPolyester, CpuSerial, CpuThreaded, change_points!, semidiscretize_rhs,
-               allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!, restrict_to
+               allocate_system_matrix, D₋ₓ, inner₊ₓ, S₊ₓ!, restrict_to, jacobian!,
+               jacobian_form, jacobian_prototype
 using LinearAlgebra: Diagonal, mul!, ldiv!
 using Random: Xoshiro, randn
 using SparseArrays: nonzeros, spdiagm
+using ForwardDiff: ForwardDiff
 
 function _pa_jitter(n, policy; seed = 4321)
     rng = Xoshiro(seed)
@@ -99,6 +101,21 @@ _pa_case(call, result; levels = 0) = (; call, result, levels)
 _pa_comps(u) = reduce(vcat, [_pa_copy(c) for c in Bramble.components(u)])
 _pa_pair(x) = (_pa_g(x), _pa_h(x))
 _pa_times0d(a, c) = 2.0 * a * c + 1.0
+_pa_jac_α(s) = 3 + 1 / (1 + s^2)
+
+# `jacobian!` on `a + ∂a` over `W`, its result the refill's `β` and values, which equal
+# `CpuSerial`'s bitwise (`J` itself only to rounding, as any assembly). The refill reads
+# `u` through an average, so a band reads its neighbours through the rebuilt space.
+function _pa_jacobian(W, dirichlet)
+    c = element(W, 0.0)
+    a = form(W, W, (U, V) -> innerₕ(c * U, V) + inner₊(∇ₕ(U), ∇ₕ(V)))
+    jf = jacobian_form(a, c => (U -> Mₕ(U)[1], _pa_jac_α); dirichlet = dirichlet)
+    J = jacobian_prototype(jf)
+    u = [0.3 + 0.7 * sin(0.37 * i) for i in 1:ndofs(W)]
+    r = only(jf.refills)
+    return _pa_case(() -> jacobian!(J, jf, u),
+        () -> vcat(parent(r.beta), parent(r.values)))
+end
 
 # A hand-built two-term Kronecker operator on an `n × n` grid that `kronecker_operator`
 # does not build yet: non-symmetric banded factors on both axes (a row gather on axis 1
@@ -351,6 +368,7 @@ function _pa_paths()
                 y = similar(x)
                 _pa_case(() -> mul!(y, op, x), () -> copy(y))
             end))
+    push!(P, ("jacobian! form", true, 0, (n, p) -> _pa_jacobian(_pa_space(n, p), :dir)))
     return P
 end
 # END _pa paths
@@ -742,6 +760,22 @@ _pa_close(b, s) = isapprox(b, s; rtol = 1e-12, atol = 1e-12 * max(1.0, maximum(a
                     @test bitwise ? b == s : _pa_close(b, s)
                 end
             end
+        end
+
+        # The jacobian refill in 3D, where its space splits into more arrays. Runs nightly.
+        WITH_3D_TESTS && @testset "jacobian! form 3D" begin
+            function jac3(p)
+                Random.seed!(854)
+                X = box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
+                Ω = mesh(domain(X, :dir => boundary_symbols(X)), (9, 8, 7),
+                    (false, false, false); backend = backend(policy = p))
+                return _pa_jacobian(gridspace(Ω), :dir)
+            end
+            case, ref = jac3(CpuPolyester()), jac3(CpuSerial())
+            @test _pa_bytes(case.call) == 0
+            ref.call()
+            @test case.result() == ref.result()
+            @test !iszero(case.result())
         end
     end
 

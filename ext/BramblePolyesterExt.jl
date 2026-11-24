@@ -65,7 +65,8 @@
 # `_batch_rebuild` on them (`_batch_for!`, the replay, linear and bilinear sweeps,
 # `_batch_mf_bands!`). The engines, `_batch_run_bands!` and `_batch_csr_spmv!` capture
 # only arrays and isbits values: a `StarSpacings` spacing (`Dcₓ!`, `D̃ₓ!`, `divcₕ!`)
-# crosses as its array and a tag, rebuilt in each band (`_band_cross` below), and
+# crosses as its array and a tag, rebuilt in each band (`_band_cross` below), the jacobian
+# refill's space and stencils cross as one `_batch_split` (`_jf_values!`), and
 # `_batch_broadcast!`, `_batch_kron_lines!` and `_batch_dot` rebuild their light structs
 # inside each task (`_bc_host_rebuild`, `_kron_host_rebuild`, `_weights`). The test file's
 # "allocation under CpuPolyester" testset asserts 0 B for each path.
@@ -1204,7 +1205,9 @@ end
 # `args...` at every `_run_bands!` call site (vector_calculus.jl), the same constraint that
 # makes this a genuine specialisation of the `src/` stub rather than a redefinition of its
 # fully unconstrained signature. A `StarSpacings` in `rest` (`divcₕ!`, `curlcₕ!`, `diṽₕ!`)
-# crosses as its array and a tag, as in `_batch_difference_engine!` above.
+# crosses as its array and a tag, as in `_batch_difference_engine!` above. The jacobian
+# refill (`_jf_values!`, `_jf_betas!`) splits its space and stencils itself. Its `f` comes
+# in a 1-tuple, because a bare function in `rest` is not specialised on.
 function Bramble._batch_run_bands!(f::F, nbands::Int, out::AbstractVector, rest::Vararg{Any, N}) where {F, N}
     xs, tags = map(_band_cross, rest), map(_cross_tag, rest)
     @batch for b in 1:nbands

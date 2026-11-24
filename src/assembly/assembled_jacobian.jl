@@ -422,20 +422,74 @@ end
 
 _jf_values!(::Tuple{}, policy, u) = nothing
 function _jf_values!(refills::Tuple, policy, u)
-    r = first(refills)
+    _jf_values!(first(refills), policy, u)
+    return _jf_values!(Base.tail(refills), policy, u)
+end
+function _jf_values!(r::_JFRefill, policy, u)
     W = r.space_L
     _run_bands!(policy, _jf_value_band!, r.beta, r.values, r.L, r.markers_L, r.f,
         r.writes_values, W, size(indices(mesh(W))), _jf_slice(u, r.offset_L, W))
-    return _jf_values!(Base.tail(refills), policy, u)
+    return nothing
 end
 
 _jf_betas!(::Tuple{}, policy, u) = nothing
 function _jf_betas!(refills::Tuple, policy, u)
-    r = first(refills)
+    _jf_betas!(first(refills), policy, u)
+    return _jf_betas!(Base.tail(refills), policy, u)
+end
+function _jf_betas!(r::_JFRefill, policy, u)
     W = r.space_T
     _run_bands!(policy, _jf_beta_band!, r.beta, r.T, r.markers_T, W,
         size(indices(mesh(W))), _jf_slice(u, r.offset_T, W))
-    return _jf_betas!(Base.tail(refills), policy, u)
+    return nothing
+end
+
+# Under `CpuPolyester` a space, a stencil or a `VectorElement` among the band arguments
+# puts Polyester's argument box on the heap: each holds a GC reference. So the values cross
+# as their storage. The stencil, its markers and the space cross as one `_batch_split`, an
+# isbits skeleton and a tuple of plain arrays, which each band rebuilds (`_jf_rejoin`);
+# parts the split cannot take apart cross whole (skeleton `nothing`), at the cost of the
+# box. `f` goes in a 1-tuple. Bare, among the varargs of `_batch_run_bands!`, it is not
+# specialised on and the band call goes dynamic.
+function _jf_values!(r::_JFRefill, policy::CpuPolyester, u)
+    W = r.space_L
+    cold = (r.L, r.markers_L, W)
+    skel, arrays = _jf_split(cold)
+    GC.@preserve cold begin
+        _run_bands!(policy, _jf_value_band_split!, parent(r.beta), parent(r.values), (r.f,),
+            r.writes_values, size(indices(mesh(W))), _jf_slice(u, r.offset_L, W), skel,
+            arrays)
+    end
+    return nothing
+end
+
+function _jf_betas!(r::_JFRefill, policy::CpuPolyester, u)
+    W = r.space_T
+    cold = (r.T, r.markers_T, W)
+    skel, arrays = _jf_split(cold)
+    GC.@preserve cold begin
+        _run_bands!(policy, _jf_beta_band_split!, parent(r.beta), size(indices(mesh(W))),
+            _jf_slice(u, r.offset_T, W), skel, arrays)
+    end
+    return nothing
+end
+
+@inline function _jf_split(cold)
+    _batch_splittable(typeof(cold)) && return _batch_split(cold)
+    return nothing, cold
+end
+@inline _jf_rejoin(skel, arrays) = _batch_rebuild(skel, arrays)
+@inline _jf_rejoin(::Nothing, cold) = cold
+
+@inline function _jf_value_band_split!(beta, values, f::Tuple{F}, writes::Bool, dims, u,
+        skel, arrays, nbands::Int, b::Int) where {F}
+    L, mk, W = _jf_rejoin(skel, arrays)
+    return _jf_value_band!(beta, values, L, mk, f[1], writes, W, dims, u, nbands, b)
+end
+
+@inline function _jf_beta_band_split!(beta, dims, u, skel, arrays, nbands::Int, b::Int)
+    T, mk, W = _jf_rejoin(skel, arrays)
+    return _jf_beta_band!(beta, T, mk, W, dims, u, nbands, b)
 end
 
 # Σ weight·u over a point's stencil. An entry off the grid reads 0, as assembly drops it.
