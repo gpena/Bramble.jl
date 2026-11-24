@@ -86,6 +86,8 @@ _profile_available(::ExecutionPolicy) = false
 
 # `Serial()` is always the baseline, in the first column. `CpuPolyester()` is a candidate
 # only once `using Polyester` has loaded its extension; without it the sweep throws.
+# The list is a `Vector{Any}` on purpose: its length depends on the loaded extensions, so a
+# tuple would not help, and it is built once per session. `_profile_time` is the barrier.
 function _profile_candidates()
     policies = Any[Serial(), Parallel()]
     Base.get_extension(@__MODULE__, :BramblePolyesterExt) !== nothing &&
