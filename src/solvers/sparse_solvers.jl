@@ -144,6 +144,41 @@ function _assembled_csc(a, l; kwargs...)
     return _as_csc(A), F
 end
 
+# The length check the four extensions make in their solves. `what` names the vector in the message: the
+# right-hand side of `ldiv!(x, fact, b)` and `fact \ b`, the output vector, or the single
+# vector of the in-place `ldiv!(fact, b)`.
+function _check_rhs(b::AbstractVector, n::Integer, what::AbstractString = "Right-hand side length")
+    length(b) == n || throw(
+        DimensionMismatch("$what $(length(b)) does not match matrix dimension $n"),
+    )
+    return nothing
+end
+
+# The size check every `X_refactor!` makes before it touches the factors.
+function _check_refactor_size(A::AbstractMatrix, dim::Integer)
+    m, n = size(A)
+    (m == dim && n == dim) || throw(
+        DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $dim"),
+    )
+    return nothing
+end
+
+# What a solve entry does with its factorization once `fact \ F` returns. MUMPS frees its
+# instance here (`BrambleMUMPSExt`); the rest leave it to the garbage collector.
+_release!(fact) = nothing
+
+# The body of `X_solve(A, F)` for the backends that factor `A` as given: factor, solve,
+# release. `factorize` is the backend's `_X_factorize`, and `kwargs` go to it. `@noinline`
+# keeps the `try` out of the callers (JuliaLang/julia#64996).
+@noinline function _form_solve(factorize::F, A, rhs; kwargs...) where {F}
+    fact = factorize(A; kwargs...)
+    try
+        return fact \ rhs
+    finally
+        _release!(fact)
+    end
+end
+
 # One reading of the `sym` vocabulary shared by the backends: `:spd`, `:symmetric`,
 # `:unsymmetric` or `:auto` for the accepted spellings (`nothing` is `:auto`, the integers
 # 1, 2 and 0 the first three), `:unknown` otherwise. Each backend keeps its own error text

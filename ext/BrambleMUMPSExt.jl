@@ -56,8 +56,37 @@ end
 
 _controls(c, ::Type{V}) where {V} = c === nothing ? Pair{Int, V}[] : [Int(k) => V(v) for (k, v) in c]
 
-Base.size(fact::ConcreteMUMPSFactorization) = (fact.dim, fact.dim)
-Base.size(fact::ConcreteMUMPSFactorization, d::Integer) = d <= 2 ? fact.dim : 1
+for T in (:ConcreteMUMPSFactorization,)
+    @eval begin
+        Base.size(fact::$T) = (fact.dim, fact.dim)
+        Base.size(fact::$T, d::Integer) = d <= 2 ? fact.dim : 1
+
+        # Disambiguates the two equally specific candidates for a `VectorElement` destination:
+        # Bramble's generic `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` and
+        # the `ldiv!(::AbstractVector, ::$T, ::AbstractVector)` of this extension.
+        # `VectorElement <: AbstractVector` and `$T <: Factorization`, so neither is more
+        # specific and `ldiv!(uₕ, fact, F)` would otherwise be an ambiguity error. Takes
+        # Bramble's method, so a `Dual` load (`BrambleForwardDiffExt`) is split into parts
+        # the same way on every backend.
+        function LinearAlgebra.ldiv!(
+                uₕ::Bramble.VectorElement, fact::$T, b::AbstractVector
+        )
+            return invoke(
+                ldiv!, Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector},
+                uₕ, fact, b)
+        end
+
+        # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
+        # factorizations against a complex right-hand side, and `$T <: Factorization`, so
+        # that method and the `\` of this extension are equally specific for a complex
+        # vector -- the call would be ambiguous without this one.
+        function Base.:\(
+                fact::$T{S}, b::Vector{Complex{S}}
+        ) where {S <: Union{Float32, Float64}}
+            return complex.(fact \ real(b), fact \ imag(b))
+        end
+    end
+end
 
 _mumps_val_type(::Type{T}) where {T <: Union{Float32, Float64, ComplexF32, ComplexF64}} = T
 _mumps_val_type(::Type{<:Integer}) = Float64
@@ -143,12 +172,8 @@ function LinearAlgebra.ldiv!(
         x::AbstractVector, fact::ConcreteMUMPSFactorization{T}, b::AbstractVector
 ) where {T}
     n = fact.dim
-    length(b) == n || throw(
-        DimensionMismatch("Right-hand side length $(length(b)) does not match matrix dimension $n"),
-    )
-    length(x) == n || throw(
-        DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
-    )
+    Bramble._check_rhs(b, n)
+    Bramble._check_rhs(x, n, "Output vector length")
 
     _check_usable(fact)
     # `fact` stays rooted through the ccall, so its finalizer cannot free the instance
@@ -165,9 +190,7 @@ function LinearAlgebra.ldiv!(
         fact::ConcreteMUMPSFactorization{T}, b::AbstractVector
 ) where {T}
     n = fact.dim
-    length(b) == n || throw(
-        DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
-    )
+    Bramble._check_rhs(b, n, "Vector length")
 
     _check_usable(fact)
     # `fact` stays rooted through the ccall, so its finalizer cannot free the instance
@@ -180,33 +203,9 @@ function LinearAlgebra.ldiv!(
     return b
 end
 
-# Disambiguates the two equally specific candidates for a `VectorElement` destination:
-# Bramble's generic `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` and the
-# `ldiv!(::AbstractVector, ::ConcreteMUMPSFactorization, ::AbstractVector)` above.
-# `VectorElement <: AbstractVector` and `ConcreteMUMPSFactorization <: Factorization`, so
-# neither method is more specific and `ldiv!(uₕ, fact, F)` would otherwise be an ambiguity
-# error. Takes Bramble's method, so a `Dual` load (`BrambleForwardDiffExt`) is split
-# into parts the same way on every backend.
-function LinearAlgebra.ldiv!(
-        uₕ::Bramble.VectorElement, fact::ConcreteMUMPSFactorization{T}, b::AbstractVector
-) where {T}
-    return invoke(ldiv!, Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector},
-        uₕ, fact, b)
-end
-
 function Base.:\(fact::ConcreteMUMPSFactorization{T}, b::AbstractVector) where {T}
     x = similar(b, promote_type(T, eltype(b)))
     return ldiv!(x, fact, b)
-end
-
-# `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
-# factorizations against a complex right-hand side, and `ConcreteMUMPSFactorization <:
-# Factorization`, so that method and the one above are equally specific for a complex vector
-# -- the call would be ambiguous without this one.
-function Base.:\(
-        fact::ConcreteMUMPSFactorization{T}, b::Vector{Complex{T}}
-) where {T <: Union{Float32, Float64}}
-    return complex.(fact \ real(b), fact \ imag(b))
 end
 
 # A finalized instance makes every MUMPS.jl call a silent no-op, so refuse it here
@@ -221,19 +220,15 @@ end
 function Bramble._mumps_solve(
         A::SparseMatrixCSC, F::AbstractVector; sym = :auto, icntl = nothing, cntl = nothing
 )
-    fact = Bramble._mumps_factorize(A; sym = sym, icntl = icntl, cntl = cntl)
-    try
-        return fact \ F
-    finally
-        finalize(fact)
-    end
+    return Bramble._form_solve(
+        Bramble._mumps_factorize, A, F; sym = sym, icntl = icntl, cntl = cntl)
 end
 
+# `_form_solve` frees the MUMPS instance once the solve returns.
+Bramble._release!(fact::ConcreteMUMPSFactorization) = finalize(fact)
+
 function Bramble.mumps_refactor!(fact::ConcreteMUMPSFactorization{T}, A::SparseMatrixCSC) where {T}
-    m, n = size(A)
-    (m == fact.dim && n == fact.dim) || throw(
-        DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
-    )
+    Bramble._check_refactor_size(A, fact.dim)
     MUMPS.is_finalized(fact.mumps) && throw(
         ArgumentError("the MUMPS factorization was finalized and its factors freed"),
     )
@@ -277,10 +272,6 @@ function _refactor_instance!(fact::ConcreteMUMPSFactorization, A_mat::SparseMatr
     end
     fact.failure = nothing
     return fact
-end
-
-function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{MUMPSFactorization}; kwargs...)
-    return Bramble._mumps_factorize(A; kwargs...)
 end
 
 function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{<:MUMPSFactorization}; kwargs...)

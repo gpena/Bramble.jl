@@ -647,6 +647,16 @@ using SparseMatricesCSR: SparseMatricesCSR
                 :suitesparse_refactor!,
                 :_suitesparse_solve,
                 :_mf_data,
+                # `_check_rhs`, `_check_refactor_size`, `_form_solve`, `_release!`,
+                # `_require_macos` (BrambleSuiteSparseExt, BrambleAppleAccelerateExt,
+                # BrambleMUMPSExt, BrambleSparspakExt): the length and size checks, the
+                # solve entry and its release hook the four sparse backends share, and the
+                # macOS refusal of the Accelerate stubs. None is public.
+                :_check_rhs,
+                :_check_refactor_size,
+                :_form_solve,
+                :_release!,
+                :_require_macos,
                 # BrambleMetalExt reaching into Bramble's own internals:
                 # `_gpu_functional` is the loaded-and-functional predicate `gpu_backend`
                 # dispatches on by `Val`, more specific than the stub in `src/utils/backend.jl`
