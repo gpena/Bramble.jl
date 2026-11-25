@@ -607,8 +607,8 @@ cancel, while `interpolate_at` blends differences there and keeps a constant con
 
 Unlike [`D₋ₓ`](@ref)`(Wₕ)` and the other operator matrices, this is always a
 `SparseMatrixCSC`, regardless of either space's own backend `matrix_type`. Those matrices
-are built from [`shift`](@ref) (a fixed diagonal offset generalized via Kronecker products),
-but which source cell a destination point falls in has no such regular structure across two
+are built by [`stencil_matrix`](@ref) from a fixed stencil of diagonal offsets, but which
+source cell a destination point falls in has no such regular structure across two
 independent meshes: it is genuinely sparse and irregular, assembled directly from `locate_cell`
 rather than composed from a handful of shifts. Converting the result to another matrix type,
 where that is meaningful, is left to the caller.

@@ -794,61 +794,10 @@ end
     return _launch_difference_centered!(out, in_ref, h, dims, dir, dim_val, dev)
 end
 
-function difference_shift(
-        Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, ::Val{first}, ::Val{second}
-) where {DIFF_DIM, first, second}
-    return shift(Ωₕ, Val(DIFF_DIM), Val(first)) - shift(Ωₕ, Val(DIFF_DIM), Val(second))
-end
-
-function _difference_operator(
-        Ωₕ::AbstractMeshType, ::Forward, ::Val{DIFF_DIM}
-) where {DIFF_DIM}
-    return difference_shift(Ωₕ, Val(DIFF_DIM), Val(1), Val(0))
-end
-
-function _difference_operator(
-        Ωₕ::AbstractMeshType, ::Backward, ::Val{DIFF_DIM}
-) where {DIFF_DIM}
-    return difference_shift(Ωₕ, Val(DIFF_DIM), Val(0), Val(-1))
-end
-
-# `spacing_func::F` is a type parameter so the per-point call specialises; untyped, every
-# grid point pays a dynamic dispatch.
-#
-# It is the per-index function rather than the mesh's cached spacing vector on purpose.
-# The vector's truncated entry is not meaningful, whereas `spacing_for_derivative` returns
-# zero there, and this loop covers every index and turns that zero into a zero weight. The
-# engines can use the vector because they visit the truncated slice separately.
-function _derivative_weights!(
-        v::AbstractVector, Ωₕ::AbstractMeshType, spacing_func::F, ::Val{DIFF_DIM}
-) where {F, DIFF_DIM}
-    dims = npoints(Ωₕ, Tuple)
-
-    _check_stencil_dim(DIFF_DIM, dim(Ωₕ))
-
-    sub = Ωₕ(DIFF_DIM)
-    li = LinearIndices(dims)
-
-    @inbounds @simd for I in CartesianIndices(dims)
-        x = spacing_func(sub, I[DIFF_DIM])
-        v[li[I]] = iszero(x) ? zero(eltype(v)) : inv(x)
-    end
-    return nothing
-end
-
 const _DIFFERENCE_OP_CONFIGS = (
     (
-        direction = Forward(),
         diff_name = :forward_difference,
         finite_diff_name = :forward_finite_difference,
-        (weights_func!) = :forward_derivative_weights!,
-        spacing_func = :forward_spacing_for_derivative,
-        spacings_func = :forward_spacings_for_derivative,
-        diff_alias = :diff₊,
-        finite_diff_alias = :D₊,
-        grad_alias = :diff₊ₕ,
-        finite_grad_alias = :∇₊ₕ,
-        dir_string = "Forward",
         dir_string_lowercase = "forward",
         math_op = "u_{i+1} - u_i",
         math_finite_op = "\\frac{u_{i+1} - u_i}{h_i}",
@@ -856,17 +805,8 @@ const _DIFFERENCE_OP_CONFIGS = (
         finite_stencil_op = :ForwardFiniteDiffOp
     ),
     (
-        direction = Backward(),
         diff_name = :backward_difference,
         finite_diff_name = :backward_finite_difference,
-        (weights_func!) = :backward_derivative_weights!,
-        spacing_func = :spacing_for_derivative,
-        spacings_func = :backward_spacings_for_derivative,
-        diff_alias = :diff₋,
-        finite_diff_alias = :D₋,
-        grad_alias = :diff₋ₕ,
-        finite_grad_alias = :∇ₕ,
-        dir_string = "Backward",
         dir_string_lowercase = "backward",
         math_op = "u_{i} - u_{i-1}",
         math_finite_op = "\\frac{u_{i} - u_{i-1}}{h_i}",
@@ -876,17 +816,8 @@ const _DIFFERENCE_OP_CONFIGS = (
 )
 
 for config in _DIFFERENCE_OP_CONFIGS
-    dir_instance = config.direction
     diff_name = config.diff_name
     finite_diff_name = config.finite_diff_name
-    weights_func! = config.weights_func!
-    spacing_func = config.spacing_func
-    spacings_func = config.spacings_func
-    diff_alias = config.diff_alias
-    finite_diff_alias = config.finite_diff_alias
-    grad_alias = config.grad_alias
-    finite_grad_alias = config.finite_grad_alias
-    dir_string = config.dir_string
     dir_string_lowercase = config.dir_string_lowercase
     math_op = config.math_op
     math_finite_op = config.math_finite_op
@@ -894,53 +825,6 @@ for config in _DIFFERENCE_OP_CONFIGS
     finite_stencil_op = config.finite_stencil_op
 
     @eval begin
-        # --- In-place applicators ---
-        @doc """
-            $($(QuoteNode(Symbol(diff_name, :_dim!))))(out, in, [h], dims, diff_dim)
-
-        In-place $($dir_string_lowercase) difference of `in` along `diff_dim`, written into `out`: ``$($math_op)``, divided by `h` when it is given (the finite difference) and unscaled without it.
-        """
-        function $(Symbol(diff_name, :_dim!))(
-                out, in, h, dims::NTuple{D, Int}, diff_dim::Val{DIFF_DIM}
-        ) where {D, DIFF_DIM}
-            _check_stencil_dim(DIFF_DIM, D)
-            length(out) == length(in) == prod(dims) ||
-                _throw_stencil_size_error(length(out), length(in), dims)
-            in_ref = (out === in) ? copy(in) : in
-            _difference_engine!(out, in_ref, h, dims, $dir_instance, diff_dim)
-            return nothing
-        end
-
-        function $(Symbol(diff_name, :_dim!))(
-                out, in, dims::NTuple{D, Int}, diff_dim::Val{DIFF_DIM}
-        ) where {D, DIFF_DIM}
-            return $(Symbol(diff_name, :_dim!))(out, in, nothing, dims, diff_dim)
-        end
-
-        # --- Weight calculation function ---
-        @doc """
-            $($(QuoteNode(weights_func!)))(v::AbstractVector, Ωₕ::AbstractMeshType, diff_dim::Val)
-
-        Computes the geometric weights for the $($dir_string_lowercase) finite difference operator and stores them in-place in vector `v`.
-        """
-        @inline function $weights_func!(
-                v::AbstractVector, Ωₕ::AbstractMeshType, diff_dim::Val
-        )
-            _derivative_weights!(v, Ωₕ, $spacing_func, diff_dim)
-        end
-
-        # Kronecker oracle (gpena/Bramble.jl#185): an independent construction that
-        # `stencil_matrix` is checked against.
-        @inline $(Symbol(:_kron_, diff_name))(Ωₕ::AbstractMeshType, dim_val::Val) = _difference_operator(Ωₕ, $dir_instance, dim_val)
-
-        function $(Symbol(:_kron_, finite_diff_name))(
-                Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
-        )
-            diff_matrix = $(Symbol(:_kron_, diff_name))(Ωₕ, dim_val)
-            $weights_func!(vector_cache, Ωₕ, dim_val)
-            return _scale_rows!(diff_matrix, vector_cache)
-        end
-
         # --- Matrix operator functions (single-pass, gpena/Bramble.jl#185) ---
         @doc """
             $($(QuoteNode(diff_name)))(arg, dim_val::Val)
@@ -1165,59 +1049,9 @@ end
 # every one of their docstrings, and it left the form layer's nodes for them with nothing
 # to be checked against.
 #
-# Each is a diagonal scaling of unscaled difference matrices this file already builds, so
-# none needs a new traversal:
-#
-#     D̃ = diag(2/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₀)
-#     Dc     = diag(1/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₋₁)
-#     D̽ₕ     = diag(hᵢ/((hᵢ+hᵢ₊₁)hᵢ₊₁))             · diff₊
-#            + diag(hᵢ₊₁/((hᵢ+hᵢ₊₁)hᵢ))             · diff₋
-#
-# The cross-weighted one falls out of its own definition: it is D₋ at xᵢ₊₁ weighted by hᵢ
-# and D₋ at xᵢ weighted by hᵢ₊₁, over their sum, and D₋(u)ᵢ₊₁ is diff₊(u)ᵢ/hᵢ₊₁ while
-# D₋(u)ᵢ is diff₋(u)ᵢ/hᵢ. So the two weights above are what is left after dividing through.
-#
-# The weights read the mesh's cached `spacings` rather than `spacing_for_derivative`. The
-# cached vector repeats the first interval in h₁ instead of zeroing it, and that repeated
-# value is the one the grid-function kernels use, so reading it is what makes the matrix
-# agree with them at the first point. Truncation is applied by index here instead, which
-# is also what the form layer's stencils do.
-
-# Returns `w`, as a mutating function with a single destination does, so that the builders
-# below can write `_scale_rows!(matrix, _extended_weights!(cache, …))` rather than filling
-# the cache on one line and reaching for it on the next.
-@inline function _extended_weights!(
-        w::AbstractVector, Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, weight::F
-) where {F, DIFF_DIM}
-    _check_stencil_dim(DIFF_DIM, dim(Ωₕ))
-
-    dims = npoints(Ωₕ, Tuple)
-    h = spacings(Ωₕ(DIFF_DIM))
-    n = dims[DIFF_DIM]
-    li = LinearIndices(dims)
-
-    @inbounds for I in CartesianIndices(dims)
-        w[li[I]] = weight(h, I[DIFF_DIM], n)
-    end
-    return w
-end
-
-# `_star_weight`/`_centered_weight` return zero wherever their stencil would need a
-# neighbour the grid does not have, truncating that slice of the matrix to a zero row.
-@inline _star_weight(h, i, n) = i == n ? zero(eltype(h)) : 2 / (h[i] + h[i + 1])
-@inline _centered_weight(h, i, n) = (i == 1 || i == n) ? zero(eltype(h)) : inv(h[i] + h[i + 1])
-
-# The cross-weighted pair instead falls back to the one-sided difference on whichever
-# side is still on the grid at each end: `diff₊`'s row 1 is already `u_2 - u_1` and
-# `diff₋`'s row `n` is already `u_n - u_{n-1}` (the unscaled matrices' own boundary
-# convention, `_difference_operator`), so weighting those rows by `1/h[1]` and `1/h[n]`
-# respectively -- with the other family's row zeroed there -- reproduces `D₊`/`D₋`
-# exactly, matching the grid-function engine's boundary case above
-# (gpena/Bramble.jl#183).
-@inline _cross_forward_weight(h, i, n) = i == n ? zero(eltype(h)) :
-                                         (i == 1 ? inv(h[1]) : h[i] / ((h[i] + h[i + 1]) * h[i + 1]))
-@inline _cross_backward_weight(h, i, n) = i == 1 ? zero(eltype(h)) :
-                                          (i == n ? inv(h[n]) : h[i + 1] / ((h[i] + h[i + 1]) * h[i]))
+# Each is one `stencil_matrix` pass. The Kronecker construction they are checked
+# against, a diagonal scaling of unscaled difference matrices, is in
+# `test/space/kronecker_oracle.jl`.
 
 """
     forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val)
@@ -1263,66 +1097,6 @@ function cross_weighted_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) w
     n >= 3 || _throw_centered_too_few_points(DIM, n)
 
     return stencil_matrix(Ωₕ, CrossWeightedDiffOp{DIM}())
-end
-
-# --- Retained Kronecker oracle (gpena/Bramble.jl#185) --------------------------------- #
-#
-# An independent construction that `stencil_matrix` is checked against.
-
-function _kron_forward_star_difference(
-        Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
-)
-    w = _extended_weights!(vector_cache, Ωₕ, dim_val, _star_weight)
-    return _scale_rows!(_difference_operator(Ωₕ, Forward(), dim_val), w)
-end
-
-function _kron_centered_difference(
-        Ωₕ::AbstractMeshType, dim_val::Val{DIM}; vector_cache = __vector(Ωₕ)
-) where {DIM}
-    n = npoints(Ωₕ(DIM))
-    n >= 3 || _throw_centered_too_few_points(DIM, n)
-
-    w = _extended_weights!(vector_cache, Ωₕ, dim_val, _centered_weight)
-    return _scale_rows!(difference_shift(Ωₕ, dim_val, Val(1), Val(-1)), w)
-end
-
-function _kron_cross_weighted_difference(
-        Ωₕ::AbstractMeshType, dim_val::Val{DIM}; vector_cache = __vector(Ωₕ)
-) where {DIM}
-    n = npoints(Ωₕ(DIM))
-    n >= 3 || _throw_centered_too_few_points(DIM, n)
-
-    forward = _scale_rows!(_difference_operator(Ωₕ, Forward(), dim_val),
-        _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_forward_weight))
-
-    # the scaling above is already applied, so the cache is free to be rewritten
-    backward = _scale_rows!(_difference_operator(Ωₕ, Backward(), dim_val),
-        _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_backward_weight))
-
-    # A dense backend has no pattern to keep. On a sparse one `+` would prune every entry
-    # where the two cancel (all of the diagonal on a uniform mesh); one `sparse` call over
-    # both triplet lists sums them on the union pattern instead.
-    forward isa SparseMatrixCSC || return forward + backward
-    i₊, j₊, v₊ = SparseArrays.findnz(forward)
-    i₋, j₋, v₋ = SparseArrays.findnz(backward)
-    return sparse(vcat(i₊, i₋), vcat(j₊, j₋), vcat(v₊, v₋), size(forward)...)
-end
-
-# --- Kronecker oracle dispatch (gpena/Bramble.jl#185) --------------------------------- #
-#
-# `kronecker_operator_matrix` is declared in shift.jl; each family's dispatch method maps
-# its public per-axis alias to the `_kron_*` construction kept above.
-for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
-    for (stem, kron_fn) in (
-        (:D₋, :_kron_backward_finite_difference),
-        (:D₊, :_kron_forward_finite_difference),
-        (:D̃, :_kron_forward_star_difference),
-        (:Dc, :_kron_centered_difference),
-        (:D̽, :_kron_cross_weighted_difference)
-    )
-        alias = Symbol(stem, suffix)
-        @eval kronecker_operator_matrix(Ωₕ::AbstractMeshType, ::typeof($alias)) = $kron_fn(Ωₕ, Val($i))
-    end
 end
 
 # A grid space carries its mesh, as for every other family here.
@@ -1540,7 +1314,7 @@ end
 ) where {D, Dim}
     m = mesh(space)
     s = spacing(m, I, Dim) + forward_spacing(m, I, Dim)
-    # the averaged spacing, which is what D̃ divides by; `2 / s` as in `_star_weight`
+    # the averaged spacing, which is what D̃ divides by; `2 / s`, the weight of the forward star difference
     if I[Dim] == npoints(m, Tuple)[Dim]
         z = zero(2 / s)
         return (z, z)

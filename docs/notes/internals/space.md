@@ -155,9 +155,12 @@ none of the three, so it had nothing left to win on once option 2 existed.
 
 ### Why the Kronecker construction is kept
 
-`src/operators/shift.jl` keeps its Kronecker-product construction, now named
-`kronecker_operator_matrix`, rather than being deleted once `stencil_matrix` took
-over every family's public alias. gpena/Bramble.jl#185's acceptance criterion is exact
+`test/space/kronecker_oracle.jl` keeps the Kronecker-product construction, named
+`kronecker_operator_matrix`, rather than deleting it once `stencil_matrix` took
+over every family's public alias. It moved out of `src/` (gpena/Bramble.jl#944)
+because only the tests and `benchmark/operator_matrices.jl` read it; it builds on
+`Bramble.shift`, which stays in `src/` for the matrix forms of `forward_shift` and
+`backward_shift`. gpena/Bramble.jl#185's acceptance criterion is exact
 agreement between the old and new matrices, and proving that needs two independent
 constructions to compare -- checking `stencil_matrix`'s output against itself would prove
 nothing. `test/space/operators.jl`'s "stencil_matrix agrees with the Kronecker oracle
@@ -199,8 +202,8 @@ out of scope here and was not attempted.
 
 A new `StencilOp` subtype implements `_stencil_taps` and
 `_stencil_weights` for it and gets `stencil_matrix` for free; keeping
-`kronecker_operator_matrix`'s equality check honest means also adding an oracle method
-for the new family in `shift.jl` alongside it.
+`kronecker_operator_matrix`'s equality check honest means also adding a `_kron_*`
+builder and a dispatch method for the new family to `test/space/kronecker_oracle.jl`.
 
 ```@autodocs
 Modules = [Bramble]

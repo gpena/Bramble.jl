@@ -44,17 +44,6 @@ See also: [`diff₊ₓ`](@ref), [`_difference_engine!`](@ref).
 =#
 
 """
-    jump_dim!(out, in, dims, jump_dim::Val)
-
-In-place jump of `in` along `jump_dim`, written into `out`, computing
-``u_{i+1} - u_i``.
-
-Forwards to [`forward_difference_dim!`](@ref); the jump and the unscaled forward
-difference are the same arithmetic.
-"""
-@inline jump_dim!(out, in, dims::NTuple{D, Int}, jump_dim::Val) where {D} = forward_difference_dim!(out, in, dims, jump_dim)
-
-"""
     jump(arg, dim_val::Val)
 
 The jump across the interfaces along the direction `dim_val`, ``u_{i+1} - u_i``.
@@ -92,15 +81,6 @@ are the same quantity.
     vectorial_alias=jumpₕ,
     vectorial_dir_string="",
     vectorial_what="jump")
-
-# --- Kronecker oracle dispatch (gpena/Bramble.jl#185) --------------------------------- #
-#
-# The jump forwards to the unscaled forward difference (`_kron_forward_difference`,
-# `difference.jl`), as `jump` itself forwards to `forward_difference` at runtime.
-for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
-    alias = Symbol(:jump, suffix)
-    @eval kronecker_operator_matrix(Ωₕ::AbstractMeshType, ::typeof($alias)) = _kron_forward_difference(Ωₕ, Val($i))
-end
 
 # ==============================================================================
 # ==============================================================================

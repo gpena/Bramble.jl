@@ -6,7 +6,7 @@
 #
 # src/utils/device_kernels.jl and src/solvers/accelerate_solver.jl are deliberately not
 # listed as files. Their generic fallbacks and macOS paths run on the macOS coverage legs, so
-# they stay measured. The off-macOS throws of accelerate_solver.jl are the one exception.
+# they stay measured. The off-macOS throw of `_require_macos` (sparse_solvers.jl) is the one exception.
 #
 # This is a separate file, rather than more codecov.yml ignores, so that Codecov still shows
 # these files and the list can be reviewed on its own.
@@ -61,7 +61,7 @@ reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbst
 
 [[exempt_function]]
 path = "src/operators/average.jl"
-functions = ["_throw_no_ka_average_kernel", "_launch_average_engine!", "_throw_no_device_centered_average", "_device_average_weights!"]
+functions = ["_throw_no_ka_average_kernel", "_launch_average_engine!", "_throw_no_device_centered_average"]
 reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
 
 [[exempt_function]]
@@ -294,12 +294,8 @@ methods = ["_in_any_marker(::Tuple{}, i) = false"]
 reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; it ends the marker recursion of every host masked projection at an entry outside all markers (test/space/vector_elements.jl, Rₕ! with markers)"
 
 [[exempt_function]]
-path = "src/solvers/accelerate_solver.jl"
+path = "src/solvers/sparse_solvers.jl"
 lines = [
-    { method = "accelerate_factorize(A::SparseMatrixCSC; kwargs...)", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
-    { method = "accelerate_factorize(a::BilinearForm", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
-    { method = "accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
-    { method = "accelerate_solve(a::BilinearForm", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
-    { method = "accelerate_refactor!(::AccelerateFactorization, A)", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
+    { method = "_require_macos()", text = 'Sys.isapple() || throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
 ]
 reason = "os-specific: runs only off macOS, behind the !Sys.isapple() guard; every coverage leg runs macOS-latest"

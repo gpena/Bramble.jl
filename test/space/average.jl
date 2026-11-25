@@ -4,7 +4,6 @@ using Test
 using Bramble
 using Bramble: Mᵧ, M₂, Mₓ, VectorElement
 import Bramble: forward_average, backward_average, M₊ₓ, M₊ᵧ, M₊₂, M₊ₕ
-import Bramble: forward_average_dim!, backward_average_dim!
 using LinearAlgebra: norm
 using SparseArrays: nnz
 using ..SpaceVectorElementsTests: setup_test_grid
@@ -31,7 +30,6 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
             dims, Wₕ, uₕ = setup_test_grid(Val(D))
             Ωₕ = mesh(Wₕ)
             pts = points(Ωₕ)
-            vₕ = similar(uₕ)
             coords = Base.Fix1(get_coord, pts)
 
             # Define a linear test function and project it onto the grid
@@ -59,10 +57,6 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
                     # Test the primary out-of-place applicator
                     res_oop = forward_average(uₕ, Val(i))
                     @test norm(res_oop.data - expected_vals) < 1e-12
-
-                    # Test the in-place version against the out-of-place one
-                    forward_average_dim!(vₕ.data, uₕ.data, dims, Val(i))
-                    @test norm(res_oop.data - vₕ.data) < 1e-12
                 end
 
                 # --- Test aliases ---
@@ -111,10 +105,6 @@ using ..SpaceDifferenceTests: test_operator_matrix_equivalence
                     # Test the primary out-of-place applicator
                     res_oop = backward_average(uₕ, Val(i))
                     @test norm(res_oop.data - expected_vals) < 1e-12
-
-                    # Test the in-place version against the out-of-place one
-                    backward_average_dim!(vₕ.data, uₕ.data, dims, Val(i))
-                    @test norm(res_oop.data - vₕ.data) < 1e-12
                 end
 
                 # --- Test aliases ---
@@ -165,8 +155,9 @@ end
 end
 
 using LinearAlgebra: Diagonal
-using Bramble: kronecker_operator_matrix, centered_average_dim!, Mcₓ, Mcᵧ, weights, Innerh,
-               D₋ᵧ, trial_function, test_function
+include("kronecker_oracle.jl")
+using .KroneckerOracle: kronecker_operator_matrix
+using Bramble: Mcₓ, Mcᵧ, weights, Innerh, D₋ᵧ, trial_function, test_function
 
 # The dense matrix backend takes `stencil_matrix`'s dense fallback and the dense branch of
 # `_scale_rows!` in the Kronecker oracle; every average family against that oracle, entry for
@@ -182,32 +173,6 @@ using Bramble: kronecker_operator_matrix, centered_average_dim!, Mcₓ, Mcᵧ, w
             @test A == kronecker_operator_matrix(Ωd, ops[d])
         end
     end
-end
-
-# (u_{i-1} + 2 u_i + u_{i+1}) / 4 along the direction, zero on both end slices, written out
-# by hand; the in-place form also has to survive `out === in`, which it reads from a copy.
-@testset "centered_average_dim!" begin
-    dims = (5, 4)
-    u = Float64[i^2 + 3j for i in 1:5, j in 1:4]
-    ref = (zeros(dims), zeros(dims))
-    ref[1][2:4, :] .= (u[1:3, :] .+ 2 .* u[2:4, :] .+ u[3:5, :]) ./ 4
-    ref[2][:, 2:3] .= (u[:, 1:2] .+ 2 .* u[:, 2:3] .+ u[:, 3:4]) ./ 4
-    for d in 1:2
-        out = zeros(20)
-        centered_average_dim!(out, vec(u), dims, Val(d))
-        @test out == vec(ref[d])
-        same = vec(copy(u))
-        centered_average_dim!(same, same, dims, Val(d))
-        @test same == vec(ref[d])
-    end
-
-    err = try
-        forward_average_dim!(zeros(5), zeros(6), (2, 3), Val(1))
-    catch e
-        e
-    end
-    @test err isa DimensionMismatch
-    @test err.msg == "out has 5 entries and in has 6, but the grid (2, 3) has 6"
 end
 
 # The form-layer stencils of the forward and centered averages, assembled under the discrete

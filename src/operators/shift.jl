@@ -154,9 +154,9 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 `i == 0` short-circuits to the identity of the whole grid without building any Kronecker
 product.
 
-It builds the `S₊`/`S₋` matrix forms and the Kronecker oracle
-[`kronecker_operator_matrix`](@ref); the operator families' own matrices come from
-[`stencil_matrix`](@ref).
+It builds the `S₊`/`S₋` matrix forms, and the Kronecker oracle the tests check
+[`stencil_matrix`](@ref) against (`test/space/kronecker_oracle.jl`) calls it; the
+operator families' own matrices come from `stencil_matrix`.
 
 See also: [`⊗`](@ref), [`diff₋ₓ`](@ref).
 """
@@ -167,23 +167,6 @@ function shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i}) where {SHIFT
 
     return _recursive_shift(Ωₕ, Val(dim(Ωₕ)), Val(SHIFT_DIM), Val(i))
 end
-
-"""
-    kronecker_operator_matrix(Ωₕ, op)
-
-The Kronecker-product construction [`stencil_matrix`](@ref) replaces in every operator
-family (gpena/Bramble.jl#185): `op` is one of the public per-axis aliases (`D₋ₓ`, `jumpᵧ`,
-`M₂`, ...) and this returns the same matrix built the old way, out of [`shift`](@ref) and
-its combinations (`difference_shift`, `add_half_shift`).
-
-Kept, rather than removed with the rest of the Kronecker construction
-(gpena/Bramble.jl#185), as the oracle [`stencil_matrix`](@ref) is checked against: the
-equality test needs an independent construction, not a deprecated one. Declared here; a
-dispatch method is added next to each family's own implementation (`difference.jl`,
-`average.jl`, `jump.jl`), mapping its public aliases to the `_kron_*` construction that
-family kept.
-"""
-function kronecker_operator_matrix end
 
 # ==============================================================================
 # The index shifts `S₊` and `S₋` (gpena/Bramble.jl#352)

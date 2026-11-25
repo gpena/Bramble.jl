@@ -628,13 +628,14 @@ end
 
 # --- Candidate 9: setup-time weight builders ---------------------------------------- #
 #
-# Prototyped: `_average_weights!(v, Ωₕ, Forward(), Val(1))`, the one builder that fills a
-# full O(ndofs) vector on a 2D grid, under `@batch` over the last axis in the serial
-# iteration order. Left out: the 1D `_innerh_weights!`/`_innerplus_weights!`, which on a 2D
+# Prototyped: `_average_weights!(v, Ωₕ, Forward(), Val(1))` of the Kronecker oracle
+# (`test/space/kronecker_oracle.jl`), the one builder that fills a full O(ndofs) vector
+# on a 2D grid, under `@batch` over the last axis in the serial iteration order. Left out: the 1D `_innerh_weights!`/`_innerplus_weights!`, which on a 2D
 # grid fill per-axis vectors of `n` entries only (1025 here, too short to split) since the
 # separable weights replaced full-grid fills. The share counts all three builders.
 
-c9_serial!(v, Ωₕ) = (Bramble._average_weights!(v, Ωₕ, Bramble.Forward(), Val(1)); v)
+include(joinpath(@__DIR__, "..", "test", "space", "kronecker_oracle.jl"))
+c9_serial!(v, Ωₕ) = (KroneckerOracle._average_weights!(v, Ωₕ, Bramble.Forward(), Val(1)); v)
 
 function c9_batch!(v, Ωₕ)
     dims = npoints(Ωₕ, Tuple)

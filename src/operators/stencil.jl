@@ -38,14 +38,6 @@ end
 
 @noinline _throw_stencil_symbol_error(d::Symbol) = throw(ArgumentError("the stencil direction must be :x, :y or :z, got :$d"))
 
-@noinline function _throw_stencil_size_error(lout::Int, lin::Int, dims)
-    throw(
-        DimensionMismatch(
-        "out has $lout entries and in has $lin, but the grid $(dims) has $(prod(dims))"
-    ),
-    )
-end
-
 # Every stencil reads a neighbour of the coordinate it writes, and the traversal is a
 # single contiguous pass: aliased destination and source would overwrite an entry before
 # the interior point that still needs it as a neighbour has been computed, corrupting every
