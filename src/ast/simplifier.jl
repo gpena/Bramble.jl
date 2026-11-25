@@ -509,12 +509,8 @@ function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
         moves || return _product_over_sums(op, left, right)
         return simplify_ast(
             OperatorAdd(
-            BilinearProduct{D, W, typeof(left), typeof(right.left_op)}(
-                op.inner, left, right.left_op
-            ),
-            BilinearProduct{D, W, typeof(left), typeof(right.right_op)}(
-                op.inner, left, right.right_op
-            )
+            BilinearProduct{D, W}(op.inner, left, right.left_op),
+            BilinearProduct{D, W}(op.inner, left, right.right_op)
         ),
         )
     end
@@ -522,12 +518,8 @@ function simplify_ast(op::BilinearProduct{D, W}) where {D, W}
         moves || return _product_over_sums(op, left, right)
         return simplify_ast(
             OperatorAdd(
-            BilinearProduct{D, W, typeof(left.left_op), typeof(right)}(
-                op.inner, left.left_op, right
-            ),
-            BilinearProduct{D, W, typeof(left.right_op), typeof(right)}(
-                op.inner, left.right_op, right
-            )
+            BilinearProduct{D, W}(op.inner, left.left_op, right),
+            BilinearProduct{D, W}(op.inner, left.right_op, right)
         ),
         )
     end
@@ -544,7 +536,7 @@ end
     right isa ZeroOperator && return _zero_of(op)
     cl, al = _scale_parts(left)
     cr, ar = _scale_parts(right)
-    inner = BilinearProduct{D, W, typeof(al), typeof(ar)}(op.inner, al, ar)
+    inner = BilinearProduct{D, W}(op.inner, al, ar)
     return _lift_scalars(cl, cr, inner)
 end
 
@@ -608,10 +600,8 @@ function simplify_ast(op::LinearProduct{D, W}) where {D, W}
             return _linear_over_sum(op, left, right)
         return simplify_ast(
             OperatorAdd(
-            LinearProduct{D, W, typeof(left), typeof(right.left_op)}(op.inner, left, right.left_op),
-            LinearProduct{D, W, typeof(left), typeof(right.right_op)}(
-                op.inner, left, right.right_op
-            )
+            LinearProduct{D, W}(op.inner, left, right.left_op),
+            LinearProduct{D, W}(op.inner, left, right.right_op)
         ),
         )
     end
@@ -631,7 +621,7 @@ end
         return _lift_scalars(cl, cr, _split_dirac_sum(op, al, ar))
     end
     _any_dirac(al) && !_is_dirac(al) && _throw_mixed_dirac_source()
-    inner = LinearProduct{D, W, typeof(al), typeof(ar)}(op.inner, al, ar)
+    inner = LinearProduct{D, W}(op.inner, al, ar)
     return _lift_scalars(cl, cr, inner)
 end
 
@@ -657,7 +647,7 @@ end
 
 @inline function _dirac_piece(op::LinearProduct{D, W}, a, ar) where {D, W}
     _any_dirac(a) && !_is_dirac(a) && _throw_mixed_dirac_source()
-    return LinearProduct{D, W, typeof(a), typeof(ar)}(op.inner, a, ar)
+    return LinearProduct{D, W}(op.inner, a, ar)
 end
 
 # --- Stencil shifts: simplified inside, never folded --------------------------------- #
@@ -769,9 +759,9 @@ end
 end
 @inline function _lower_signs(op::BilinearProduct{D, W}) where {D, W}
     l, r = _lower_signs(op.left_op), _lower_signs(op.right_op)
-    return BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+    return BilinearProduct{D, W}(op.inner, l, r)
 end
 @inline function _lower_signs(op::LinearProduct{D, W}) where {D, W}
     l, r = _lower_signs(op.left_op), _lower_signs(op.right_op)
-    return LinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+    return LinearProduct{D, W}(op.inner, l, r)
 end

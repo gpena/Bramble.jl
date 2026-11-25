@@ -112,11 +112,11 @@ end
 function _rebind(op::BilinearProduct{D, W}, old, new) where {D, W}
     l, r = _rebind(op.left_op, old, new), _rebind(op.right_op, old, new)
     l === op.left_op && r === op.right_op && return op
-    return BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+    return BilinearProduct{D, W}(op.inner, l, r)
 end
 
 function _rebind(op::LinearProduct{D, W}, old, new) where {D, W}
     l, r = _rebind(op.left_op, old, new), _rebind(op.right_op, old, new)
     l === op.left_op && r === op.right_op && return op
-    return LinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+    return LinearProduct{D, W}(op.inner, l, r)
 end

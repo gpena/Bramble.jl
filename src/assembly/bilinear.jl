@@ -511,11 +511,11 @@ precompile(_type_float64_values, (Any,))
     _normalised_in(op.left_op), _normalised_in(op.right_op))
 @inline function _normalised(op::BilinearProduct{D, W}) where {D, W}
     l, r = _normalised_in(op.left_op), _normalised_in(op.right_op)
-    return BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+    return BilinearProduct{D, W}(op.inner, l, r)
 end
 @inline function _normalised(op::LinearProduct{D, W}) where {D, W}
     l, r = _normalised_in(op.left_op), _normalised_in(op.right_op)
-    return LinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+    return LinearProduct{D, W}(op.inner, l, r)
 end
 @inline _normalised_scalar(c) = c
 @inline _normalised_scalar(c::_LooseScalar) = Float64(c)
@@ -616,13 +616,13 @@ function _split_product(op::BilinearProduct{D, W}, l, r, ls, rs) where {D, W}
     length(ls) * length(rs) > 16 && return op
     if _mixed_scales(l) || _mixed_scales(r)
         return l === op.left_op && r === op.right_op ? op :
-               BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+               BilinearProduct{D, W}(op.inner, l, r)
     end
     if length(ls) == 1 && length(rs) == 1
         l = _hoisted(l, ls)
         r = _hoisted(r, rs)
         return l === op.left_op && r === op.right_op ? op :
-               BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+               BilinearProduct{D, W}(op.inner, l, r)
     end
     return _product_sum(op, ls, rs)
 end
@@ -848,7 +848,7 @@ end
 function _widened_product(op::BilinearProduct{D, W}, ::Type{E}) where {D, W, E}
     l = _bits_uniform_scales(op.left_op, E)
     r = _bits_uniform_scales(op.right_op, E)
-    return BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+    return BilinearProduct{D, W}(op.inner, l, r)
 end
 _bits_uniform_scales(op, ::Type{E}) where {E} = isbitstype(_joined_value_type(op, E)) ?
                                                 _uniform_scales(op, E) : op

@@ -62,8 +62,8 @@ struct InnerPlusSet{S} <: AbstractInnerProduct end
 """
     AbstractInnerGamma{M} <: AbstractInnerProduct
 
-The surface weights [`InnerGamma`](@ref), [`InnerGammaNormal`](@ref) and
-[`InnerGammaFacet`](@ref). `M` is the type of their `mask` field: the labels
+The surface weights [`InnerGamma`](@ref), `InnerGammaNormal` and
+`InnerGammaFacet`. `M` is the type of their `mask` field: the labels
 `_SurfaceLabels{L}` from the builder until `form` resolves them, then the face mask.
 """
 abstract type AbstractInnerGamma{M} <: AbstractInnerProduct end
@@ -108,6 +108,11 @@ struct BilinearProduct{
     right_op::RightType
 end
 
+# The node types follow from the operands, so a rebuild names only `D` and the weight type.
+@inline function BilinearProduct{D, W}(w, left, right) where {D, W}
+    return BilinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
+end
+
 """
     LinearProduct{D,InnerType,LeftType,RightType} <: LazyOp{D}
 
@@ -121,6 +126,10 @@ struct LinearProduct{
     inner::InnerType
     left_op::LeftType
     right_op::RightType
+end
+
+@inline function LinearProduct{D, W}(w, left, right) where {D, W}
+    return LinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
 end
 
 # ==============================================================================
@@ -282,10 +291,10 @@ end
     _check_direction(w, Val(D))
     _check_surface_source(w, left)
     return if _is_source_only(left)
-        LinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
+        LinearProduct{D, W}(w, left, right)
     else
         _check_one_interpolated_side(left, right)
-        BilinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
+        BilinearProduct{D, W}(w, left, right)
     end
 end
 
@@ -326,7 +335,7 @@ end
 @inline function _linear_source(w::W, l, r::LazyOp{D}) where {W <: AbstractInnerProduct, D}
     _check_direction(w, Val(D))
     sf = _as_source(l, Val(D))
-    return LinearProduct{D, W, typeof(sf), typeof(r)}(w, sf, r)
+    return LinearProduct{D, W}(w, sf, r)
 end
 
 @inline _inner_source(w::AbstractInnerProduct, l, r::LazyOp, markers) = _restrict_by_markers(_linear_source(w, l, r), markers)
@@ -502,13 +511,13 @@ function _resolve_surfaces(op::RegionRestriction, spaces)
 end
 function _resolve_surfaces(op::BilinearProduct{D}, spaces) where {D}
     w = _resolved_on_walked(op, op.inner, spaces...)
-    return BilinearProduct{D, typeof(w), typeof(op.left_op), typeof(op.right_op)}(
-        w, op.left_op, op.right_op)
+    W = typeof(w)
+    return BilinearProduct{D, W}(w, op.left_op, op.right_op)
 end
 function _resolve_surfaces(op::LinearProduct{D}, spaces) where {D}
     w = _resolved_on_walked(op, op.inner, spaces...)
-    return LinearProduct{D, typeof(w), typeof(op.left_op), typeof(op.right_op)}(
-        w, op.left_op, op.right_op)
+    W = typeof(w)
+    return LinearProduct{D, W}(w, op.left_op, op.right_op)
 end
 
 # Routed as `_check_centered_meshes` (assembly/linear.jl) routes: a product naming a
@@ -1126,12 +1135,12 @@ end
 function resolve_ast(op::BilinearProduct{D, InnerType}) where {D, InnerType}
     left = resolve_ast(op.left_op)
     right = resolve_ast(op.right_op)
-    return BilinearProduct{D, InnerType, typeof(left), typeof(right)}(op.inner, left, right)
+    return BilinearProduct{D, InnerType}(op.inner, left, right)
 end
 function resolve_ast(op::LinearProduct{D, InnerType}) where {D, InnerType}
     left = resolve_ast(op.left_op)
     right = resolve_ast(op.right_op)
-    return LinearProduct{D, InnerType, typeof(left), typeof(right)}(op.inner, left, right)
+    return LinearProduct{D, InnerType}(op.inner, left, right)
 end
 
 # Disambiguation for the empty tuple.

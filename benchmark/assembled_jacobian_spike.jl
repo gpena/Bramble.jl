@@ -140,7 +140,7 @@ function _dterm(op::BilinearProduct{D, W}, w::_Walk) where {D, W}
         throw(MissingJacobianRule(:BilinearProduct, "coefficient on the test side"))
     d = _dterm(op.left_op, w)
     d === nothing && return nothing
-    return BilinearProduct{D, W, typeof(d), typeof(op.right_op)}(op.inner, d, op.right_op)
+    return BilinearProduct{D, W}(op.inner, d, op.right_op)
 end
 
 # The product rule: δ(c ⊙ T(u)) = (f′(L u) ⊙ T(u)) ⊙ L(δu) + c ⊙ T(δu).

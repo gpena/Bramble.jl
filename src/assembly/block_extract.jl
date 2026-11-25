@@ -460,7 +460,7 @@ _bind_marker_ids(op, Ωₕ::AbstractMeshType) = _map_regions(r -> _region_ids(r,
     _map_regions(f, op) -> LazyOp
 
 `op` rebuilt with each `RegionRestriction` region `r` replaced by `f(r)`, the restriction
-rebuilt by [`_rebuild_restriction`](@ref) so it keeps its zero stencil. Recurses exactly where
+rebuilt by `_rebuild_restriction` so it keeps its zero stencil. Recurses exactly where
 [`_collect_region_labels`](@ref) does. [`_bind_marker_ids`](@ref) and the matrix-free tagging
 (`_MFBoundRegion`) are its two callers.
 """
@@ -484,13 +484,13 @@ end
 function _map_regions(f::F, op::BilinearProduct{D, W}) where {F, D, W}
     left = _map_regions(f, op.left_op)
     right = _map_regions(f, op.right_op)
-    return BilinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
+    return BilinearProduct{D, W}(op.inner, left, right)
 end
 
 function _map_regions(f::F, op::LinearProduct{D, W}) where {F, D, W}
     left = _map_regions(f, op.left_op)
     right = _map_regions(f, op.right_op)
-    return LinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
+    return LinearProduct{D, W}(op.inner, left, right)
 end
 
 @inline function _region_ids(label::Symbol, Ωₕ::AbstractMeshType)

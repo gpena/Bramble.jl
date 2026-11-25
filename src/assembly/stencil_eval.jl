@@ -503,7 +503,7 @@ function _unmark(op::OperatorAdd{D}) where {D}
 end
 function _unmark(op::BilinearProduct{D, W}) where {D, W}
     left, right = _interior_term(op.left_op), _interior_term(op.right_op)
-    return BilinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
+    return BilinearProduct{D, W}(op.inner, left, right)
 end
 
 """
@@ -542,7 +542,7 @@ function _mark(op::OperatorAdd{D}, facets) where {D}
 end
 function _mark(op::BilinearProduct{D, W}, facets) where {D, W}
     left = _mark(op.left_op, facets)
-    return BilinearProduct{D, W, typeof(left), typeof(op.right_op)}(op.inner, left, op.right_op)
+    return BilinearProduct{D, W}(op.inner, left, op.right_op)
 end
 _mark(op::UnaryWrapper, facets) = _rewrap_inner(op, _mark(op.inner_op, facets))
 function _mark(op::_FirstDifference{D, Dim}, facets) where {D, Dim}
