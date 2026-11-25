@@ -1401,9 +1401,7 @@ if Bramble.PRECOMPILE_WORKLOAD
                 op = matrix_free_operator(_pw_form(Wp); dirichlet = :boundary)
                 mul!(y, op, x)
                 mul!(y, op, x, 0.5, 2.0)
-                # The other paths whose first call paid 100 ms or more. Cheaper paths
-                # stay out: each precompiled `@batch` signature adds about four binding-edge
-                # invalidations.
+                # The other paths whose first call paid 100 ms or more.
                 g(x) = sum(x)
                 u = Rₕ(Wp, g)
                 w = Rₕ(Wp, x -> x[1])
