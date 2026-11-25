@@ -705,7 +705,6 @@ dimensional entry point `dispatch_alias(arg, d)`, and, when `vectorial_alias` is
 `D₋ₓ`, `D₋ᵧ`, `D₋₂` and `D₋(uₕ, d)`. The averages pass their tuple-valued alias instead, so
 that the family gains a direction argument without minting a bare `M` -- the single most
 common local name in finite-element code, and one `using Bramble` would then reserve.
-Passing `nothing` skips the entry point altogether.
 
 The five note keywords are prose templates rather than finished sentences: each may carry
 `{direction}` and `{suffix}`, substituted per alias by [`_subst`](@ref). They were closures
@@ -779,21 +778,19 @@ function _operator_aliases_expr(
         )
     end
 
-    if dispatch_alias !== nothing
-        append!(
-            exprs,
-            _dimensional_expr(
-                base_name,
-                dispatch_alias,
-                alias_stem,
-                dir_string,
-                what,
-                formula;
-                opening_sentence,
-                source
-            )
+    append!(
+        exprs,
+        _dimensional_expr(
+            base_name,
+            dispatch_alias,
+            alias_stem,
+            dir_string,
+            what,
+            formula;
+            opening_sentence,
+            source
         )
-    end
+    )
 
     vectorial_alias === nothing && return exprs
     append!(

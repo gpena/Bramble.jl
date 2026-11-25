@@ -1391,15 +1391,19 @@ end
     return SecondDifference{D, Int(Dim), typeof(op)}(op)
 end
 
-function resolve_ast(op::SecondDifference{D, Dim}) where {D, Dim}
-    inner = resolve_ast(op.inner_op)
-    return SecondDifference{D, Dim, typeof(inner)}(inner)
+# `resolve_ast` and `_bind_interp_spaces` as `@node_family` generates them for the families
+# above. `SecondDifference` has no alias surface, so it calls the two generators directly.
+macro _second_difference_rebuild()
+    return esc(
+        Expr(
+            :block,
+            _node_resolve_expr(:SecondDifference; source = __source__),
+            _node_bind_expr(:SecondDifference; source = __source__)
+        )
+    )
 end
 
-function _bind_interp_spaces(op::SecondDifference{D, Dim}, trial_leaf, test_leaf) where {D, Dim}
-    inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
-    return SecondDifference{D, Dim, typeof(inner)}(inner)
-end
+@_second_difference_rebuild
 
 @inline _stencil_taps(::SecondDifference) = (Val(1), Val(0), Val(-1))
 
