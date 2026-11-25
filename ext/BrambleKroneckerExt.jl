@@ -1194,6 +1194,19 @@ function _fdm_solve_part(K::KroneckerLinearOperator{T, D}, f, F::AbstractVector,
     return x
 end
 
+# The Kronecker operator behind the `fdm_*` entry points that take a form, with the
+# `dirichlet` they go on to use. A plain form is refused when posed on a composite space
+# or not separable; `precond` words the refusal for `fdm_preconditioner`. The ghost method
+# is in section 5.
+function _fdm_operator(a::BilinearForm, dirichlet; precond::Bool = false,
+        caller::String = precond ? "fdm_preconditioner" : "fdm_solve")
+    (Bramble.trial_space(a) isa Bramble.CompositeGridSpace ||
+     Bramble.test_space(a) isa Bramble.CompositeGridSpace) &&
+        _throw_fdm_composite(; precond = precond)
+    is_separable(a) || _throw_fdm_not_separable(a; precond = precond)
+    return kronecker_operator(a), dirichlet
+end
+
 """
     fdm_solve(a::BilinearForm, F::AbstractVector; dirichlet = nothing) -> AbstractVector
 
@@ -1265,10 +1278,7 @@ fdm_solve(a, F) ≈ assemble(a) \\ F
 See also: [`is_separable`](@ref), [`kronecker_operator`](@ref).
 """
 function Bramble.fdm_solve(a::BilinearForm, F::AbstractVector; dirichlet = nothing)
-    (Bramble.trial_space(a) isa Bramble.CompositeGridSpace ||
-     Bramble.test_space(a) isa Bramble.CompositeGridSpace) && _throw_fdm_composite()
-    is_separable(a) || _throw_fdm_not_separable(a)
-    K = kronecker_operator(a)
+    K, dirichlet = _fdm_operator(a, dirichlet)
     return _fdm_solve_core(K, F, dirichlet)
 end
 
@@ -1306,11 +1316,9 @@ Bramble.fdm_solve(::Bramble.KroneckerBlockOperator, ::AbstractVector) = _throw_f
 
 # `fdm_factorize` hands out the factorisation `fdm_solve` builds and applies once;
 # `fdm_solve!` is its `ldiv!`, a solve (zero on the boundary under `:boundary`).
-function Bramble.fdm_factorize(a::BilinearForm; dirichlet = nothing)
-    (Bramble.trial_space(a) isa Bramble.CompositeGridSpace ||
-     Bramble.test_space(a) isa Bramble.CompositeGridSpace) && _throw_fdm_composite()
-    is_separable(a) || _throw_fdm_not_separable(a)
-    K = kronecker_operator(a)
+function Bramble.fdm_factorize(a::Union{BilinearForm, Bramble.GhostBilinearForm};
+        dirichlet = nothing)
+    K, dirichlet = _fdm_operator(a, dirichlet; caller = "fdm_factorize")
     return _fdm_record!(_fdm_factorize(K, dirichlet), a, K)
 end
 
@@ -1687,12 +1695,9 @@ end
 # changed, refills from its recorded operator, allocating nothing; any other form is
 # checked as `fdm_factorize(a)` checks it, projected again, and recorded.
 function Bramble.fdm_factorize!(f::_AnyFactorization, a::BilinearForm)
-    (Bramble.trial_space(a) isa Bramble.CompositeGridSpace ||
-     Bramble.test_space(a) isa Bramble.CompositeGridSpace) && _throw_fdm_composite()
     f.form[] === a && _fdm_cached!(f, f.op[]) && return f
     Bramble._kron_check_spaces(a)
-    is_separable(a) || _throw_fdm_not_separable(a)
-    K = kronecker_operator(a)
+    K, _ = _fdm_operator(a, nothing; caller = "fdm_factorize!")
     Bramble.fdm_factorize!(f, K)
     return _fdm_record!(f, a, K)
 end
@@ -1706,11 +1711,9 @@ end
 # The preconditioner (`Bramble.FDMPreconditioner`, src/solvers/matrix_free_preconditioners.jl)
 # holds the factorisation `_fdm_factorize` returns for `K_L`, applied with `keep`: the
 # identity on the boundary rows `assemble(a; dirichlet = :boundary)` makes identity rows.
-function Bramble.fdm_preconditioner(a::BilinearForm; dirichlet = nothing)
-    (Bramble.trial_space(a) isa Bramble.CompositeGridSpace ||
-     Bramble.test_space(a) isa Bramble.CompositeGridSpace) && _throw_fdm_composite(; precond = true)
-    is_separable(a) || _throw_fdm_not_separable(a; precond = true)
-    K = kronecker_operator(a)
+function Bramble.fdm_preconditioner(a::Union{BilinearForm, Bramble.GhostBilinearForm};
+        dirichlet = nothing)
+    K, dirichlet = _fdm_operator(a, dirichlet; precond = true)
     f = _fdm_factorize(K, dirichlet; precond = true)
     return Bramble.FDMPreconditioner{eltype(K), typeof(f)}(f)
 end
@@ -1730,13 +1733,13 @@ end
 _fdm_ast_form(a::BilinearForm) = a
 _fdm_ast_form(a::Bramble.GhostBilinearForm) = a.padded
 
-function _fdm_ghost_operator(a::Bramble.GhostBilinearForm{D}, dirichlet;
+function _fdm_operator(a::Bramble.GhostBilinearForm{D}, dirichlet;
         precond::Bool = false,
         caller::String = precond ? "fdm_preconditioner" : "fdm_solve") where {D}
     Bramble._ghost_kron_polygon(a) && Bramble._throw_ghost_kron_polygon(caller)
     dirichlet === nothing || _throw_fdm_ghost_dirichlet(dirichlet; precond = precond)
     D == 1 && _throw_fdm_not_separable(a; precond = precond)
-    return kronecker_operator(a)
+    return kronecker_operator(a), nothing
 end
 
 @noinline function _throw_fdm_ghost_dirichlet(dirichlet; precond::Bool = false)
@@ -1779,26 +1782,16 @@ right-hand side `assemble(l)`, not the operator.
 """
 function Bramble.fdm_solve(a::Bramble.GhostBilinearForm, F::AbstractVector;
         dirichlet = nothing)
-    return _fdm_solve_core(_fdm_ghost_operator(a, dirichlet), F, nothing)
-end
-
-function Bramble.fdm_factorize(a::Bramble.GhostBilinearForm; dirichlet = nothing)
-    K = _fdm_ghost_operator(a, dirichlet; caller = "fdm_factorize")
-    return _fdm_record!(_fdm_factorize(K, nothing), a, K)
+    K, dirichlet = _fdm_operator(a, dirichlet)
+    return _fdm_solve_core(K, F, dirichlet)
 end
 
 function Bramble.fdm_factorize!(f::_AnyFactorization,
         a::Bramble.GhostBilinearForm)
     f.form[] === a && _fdm_cached!(f, f.op[]) && return f
-    K = _fdm_ghost_operator(a, nothing; caller = "fdm_factorize!")
+    K, _ = _fdm_operator(a, nothing; caller = "fdm_factorize!")
     Bramble.fdm_factorize!(f, K)
     return _fdm_record!(f, a, K)
-end
-
-function Bramble.fdm_preconditioner(a::Bramble.GhostBilinearForm; dirichlet = nothing)
-    K = _fdm_ghost_operator(a, dirichlet; precond = true)
-    f = _fdm_factorize(K, nothing; precond = true)
-    return Bramble.FDMPreconditioner{eltype(K), typeof(f)}(f)
 end
 
 function LinearAlgebra.ldiv!(y::AbstractVector, P::Bramble.FDMPreconditioner,
