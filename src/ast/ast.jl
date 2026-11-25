@@ -110,8 +110,6 @@ struct DiracSource{D, P, S} <: LazyOp{D}
     strengths::S
 end
 
-@inline DiracSource{D}(points::P, strengths::S) where {D, P, S} = DiracSource{D, P, S}(points, strengths)
-
 """
     dirac(x0::Union{Real, NTuple{D, Real}, AbstractVector{<:Real}}, strength = 1) -> DiracSource{D}
     dirac(points::AbstractVector, strengths = 1) -> DiracSource{D}

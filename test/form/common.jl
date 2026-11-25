@@ -282,7 +282,7 @@ _mul_seconds(y, b, x) = @elapsed mul!(y, matrix_free_operator(b), x)
         @test d.points === (0.3, 0.6)
         @test d.strengths === 2.5
         @test Bramble.dirac([0, 1]).points === (0.0, 1.0)
-        @test Bramble.DiracSource{1}((0.5,), 2.0) === Bramble.DiracSource{1, Tuple{Float64}, Float64}((0.5,), 2.0)
+        @test Bramble.dirac((0.5,), 2.0) === Bramble.DiracSource{1, Tuple{Float64}, Float64}((0.5,), 2.0)
 
         # several points, each normalised by its own spelling: a bare number is a 1D
         # point, a vector a D-dimensional one
