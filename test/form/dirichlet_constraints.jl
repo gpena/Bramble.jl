@@ -914,7 +914,7 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         # reached from a Dirichlet constraint -- including `_normalize_dirichlet`, which
         # every `dirichlet =` keyword on `form`/`assemble!` passes through -- is an
         # unrolled sweep with nothing to allocate: `_normalize_dirichlet` and iterating
-        # `label_identifiers` both measure 0 B.
+        # `labels` both measure 0 B.
         function marker_read_bytes(bcs)
             Bramble.symbols(bcs)
             Bramble.tuples(bcs)

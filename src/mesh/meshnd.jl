@@ -331,7 +331,7 @@ when the orbits of its crossing map are finite; otherwise the cap is reached.
     closure exceeds a number of lines proportional to the input (the grid
     closure of a polygon or level set is unbounded or too fine for this grid).
 """
-_grid_closure(P::Union{Polygon, LevelSet}, xs, ys) = _grid_closure((P,), xs, ys)
+_grid_closure(P::_RegionIdentifier, xs, ys) = _grid_closure((P,), xs, ys)
 
 function _grid_closure(Ps::Tuple, xs::AbstractVector, ys::AbstractVector)
     T = float(promote_type(eltype(xs), eltype(ys)))

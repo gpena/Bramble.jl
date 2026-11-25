@@ -440,7 +440,6 @@ end
     @test Bramble.symbols(edm) === Bramble.symbols(dm)
     @test Bramble.tuples(edm) === Bramble.tuples(dm)
     @test Bramble.labels(edm) == (:l, :w, :c)
-    @test Bramble.label_identifiers(edm) == (:l, :w, :c)
     @test collect(Bramble.label_symbols(edm)) == [:l]
     @test collect(Bramble.label_tuples(edm)) == [:w]
     @test collect(Bramble.label_conditions(edm)) == [:c]

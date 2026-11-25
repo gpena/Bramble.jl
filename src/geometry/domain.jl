@@ -47,11 +47,10 @@ Return the tuple of condition predicate markers associated with domain `Ω`.
 
 Return a tuple of the `Symbol` label of every marker in domain `Ω`.
 
-Zero-allocation; see [`label_identifiers`](@ref).
+Zero-allocation.
 """
 @inline labels(Ω::Domain) = labels(markers(Ω))
 
-@inline label_identifiers(Ω::Domain) = label_identifiers(markers(Ω))
 @inline label_symbols(Ω::Domain) = label_symbols(markers(Ω))
 @inline label_tuples(Ω::Domain) = label_tuples(markers(Ω))
 @inline label_conditions(Ω::Domain) = label_conditions(markers(Ω))
