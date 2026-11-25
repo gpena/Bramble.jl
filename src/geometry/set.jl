@@ -367,7 +367,7 @@ end
 # the directions of `normal_vector` are all read from these rows. The aliases are per
 # dimension because they are viewpoint names, not the 2D ones extended: in 3D `:left` and
 # `:right` name the y faces and `:back` and `:front` the x ones. `boundary_symbol_to_cartesian`
-# (mesh/marker.jl) is a further table, written by hand.
+# (mesh/marker.jl) reads them too.
 const _BOUNDARY_FACES = (
     ((:xmin, :left, 1, 1), (:xmax, :right, 1, 2)),
     ((:xmin, :left, 1, 1), (:xmax, :right, 1, 2), (:ymin, :bottom, 2, 1), (:ymax, :top, 2, 2)),

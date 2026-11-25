@@ -28,41 +28,12 @@ true
 
 See also: [`set_markers!`](@ref).
 """
-@inline function boundary_symbol_to_cartesian(indices::CartesianIndices{1})
-    xmin, xmax = boundary_indices(indices)
-    return (; :xmin => xmin, :xmax => xmax, :left => xmin, :right => xmax)
-end
-
-function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
-    xmin, xmax, ymin, ymax = boundary_indices(indices)
-    return (;
-        :xmin => xmin,
-        :xmax => xmax,
-        :ymin => ymin,
-        :ymax => ymax,
-        :left => xmin,
-        :right => xmax,
-        :bottom => ymin,
-        :top => ymax
-    )
-end
-
-function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
-    xmin, xmax, ymin, ymax, zmin, zmax = boundary_indices(indices)
-    return (;
-        :xmin => xmin,
-        :xmax => xmax,
-        :ymin => ymin,
-        :ymax => ymax,
-        :zmin => zmin,
-        :zmax => zmax,
-        :back => xmin,
-        :front => xmax,
-        :left => ymin,
-        :right => ymax,
-        :bottom => zmin,
-        :top => zmax
-    )
+@inline function boundary_symbol_to_cartesian(indices::CartesianIndices{D}) where {D}
+    faces = _boundary_faces(Val(D))
+    bounds = boundary_indices(indices)
+    names = (map(first, faces)..., map(f -> f[2], faces)...)
+    each = map(f -> bounds[2f[3] - 2 + f[4]], faces)
+    return NamedTuple{names}((each..., each...))
 end
 
 """

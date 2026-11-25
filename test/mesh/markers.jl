@@ -242,6 +242,18 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs, _half_spacing_oracle
         @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_2d))
         WITH_3D_TESTS && @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_3d))
         @test_allocs Bramble.boundary_symbol_to_cartesian(Bramble.indices(Ωₕ_1d))
+
+        # Every face row of `_boundary_faces` names its indexed face, by canonical name and alias
+        for (D, idxs) in ((1, CartesianIndices((1:3,))), (2, CartesianIndices((1:3, 1:4))),
+            (3, CartesianIndices((1:3, 1:4, 1:5))))
+            faces = Bramble.boundary_symbol_to_cartesian(idxs)
+            bounds = Bramble.boundary_indices(idxs)
+            @test length(faces) == 2 * length(Bramble._boundary_faces(Val(D)))
+            for (canonical, alias, axis, side) in Bramble._boundary_faces(Val(D))
+                @test faces[canonical] == bounds[2axis - 2 + side]
+                @test faces[alias] == bounds[2axis - 2 + side]
+            end
+        end
     end
 end
 
