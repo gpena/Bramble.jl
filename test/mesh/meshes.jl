@@ -492,7 +492,6 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
 
 @testset "Interface coverage" begin
     import Bramble:
-                    generate_indices,
                     interior_indices,
                     _extract_linear_index,
                     spacing_for_derivative,
@@ -502,10 +501,6 @@ struct BareMesh <: Bramble.AbstractMeshType{1} end
 
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 5, true)
     Ω2 = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (4, 3), (true, true))
-
-    @testset "generate_indices" begin
-        @test generate_indices((4, 3)) == CartesianIndices((4, 3))
-    end
 
     @testset "interior_indices with collapsed axis" begin
         # an axis with one point cannot lose its boundary, so the range passes through

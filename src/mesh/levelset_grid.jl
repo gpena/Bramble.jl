@@ -42,11 +42,10 @@ half the larger extent of the vertices.
 """
 function _levelset_grid(φ::F, xs::AbstractVector, ys::AbstractVector) where {F}
     B = _levelset_box(xs, ys)
-    path, ρ = _levelset_class(φ, B)
-    path === :orbit && return _levelset_orbit_grid(φ, xs, ys, ρ)
+    path, ρ, c = _levelset_class(φ, B)
+    path === :orbit && return _levelset_orbit_grid(φ, xs, ys, ρ; c)
     T = float(promote_type(eltype(xs), eltype(ys)))
     X, Y = _grid_closure(LevelSet(φ), xs, ys)
-    c, _ = _levelset_centre(φ, B)
     V = NTuple{2, T}[]
     for (a, L, M) in ((1, X, Y), (2, Y, X)), v in L
 
@@ -100,10 +99,10 @@ samples the conjugacy from orbits started at equally spaced angles.
     grids fail the post-check.
 """
 function _levelset_orbit_grid(φ::F, xs::AbstractVector, ys::AbstractVector, ρ::Real;
-        cmax::Real = 2.0) where {F}
+        cmax::Real = 2.0, c::Union{Nothing, NTuple{2, Float64}} = nothing) where {F}
     B = _levelset_box(xs, ys)
     sx, sy = unique!(sort!(Float64.(collect(xs)))), unique!(sort!(Float64.(collect(ys))))
-    c, _ = _levelset_centre(φ, B)
+    c === nothing && (c = _levelset_centre(φ, B)[1])
     θₗ, ex, ey = _levelset_extent(φ, B, c)
     nin = round(Int, max(length(sx) * (ex[2] - ex[1]) / (B[1][2] - B[1][1]), length(sy) * (ey[2] - ey[1]) /
                                                                              (B[2][2] - B[2][1])))
@@ -172,6 +171,13 @@ function _levelset_extent(φ, B, c::NTuple{2, Float64})
     end
     θₗ, x₀ = extreme(1, 1.0)
     return θₗ, (x₀, extreme(1, -1.0)[2]), (extreme(2, 1.0)[2], extreme(2, -1.0)[2])
+end
+
+# The central-difference gradient of φ at (x, y), with step δ.
+function _levelset_gradient(φ, x, y, δ)
+    gx = (φ((x + δ, y)) - φ((x - δ, y))) / 2δ
+    gy = (φ((x, y + δ)) - φ((x, y - δ))) / 2δ
+    return gx, gy
 end
 
 # The crossings (lower, upper) of the vertical line x with φ = 0, or NaNs when there are not two.
@@ -268,8 +274,7 @@ function _levelset_close!(φ, B, X::Vector{Float64}, inb::Vector{Int}, λ::Float
         return s
     end
     function slope(x, y)
-        gx = (φ((x + δfd, y)) - φ((x - δfd, y))) / 2δfd
-        gy = (φ((x, y + δfd)) - φ((x, y - δfd))) / 2δfd
+        gx, gy = _levelset_gradient(φ, x, y, δfd)
         return -gx / gy
     end
     S = sumsq(X, ycr)
@@ -417,8 +422,7 @@ function _levelset_fit(φ, c::NTuple{2, Float64}, X::AbstractVector, Y::Abstract
     δfd = 1e-6 * Float64(max(XT[end] - XT[1], YT[end] - YT[1]))
     for v in W
         x, y = Float64(v[1]), Float64(v[2])
-        gx = (φ((x + δfd, y)) - φ((x - δfd, y))) / 2δfd
-        gy = (φ((x, y + δfd)) - φ((x, y - δfd))) / 2δfd
+        gx, gy = _levelset_gradient(φ, x, y, δfd)
         dist = abs(φ((x, y))) / hypot(gx, gy)
         dist * ℓ <= Float64(h)^2 / 4 ||
             return "the vertex $v is $(round(dist * ℓ / h^2; sigdigits = 3)) h²/ℓ from φ = 0, above h²/(4ℓ)"

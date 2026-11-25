@@ -14,7 +14,6 @@ import Bramble:
                 dim,
                 spacing,
                 half_spacings,
-                generate_indices,
                 boundary_symbol_to_cartesian,
                 markers,
                 backend,
@@ -47,11 +46,6 @@ import Base: diff
     end
 
     @testset "Helper utilities" begin
-        @testset "generate_indices" begin
-            @test generate_indices(5) == CartesianIndices((5,))
-            @test generate_indices(1) == CartesianIndices((1,))
-        end
-
         @testset "boundary_symbol_to_cartesian" begin
             indices = CartesianIndices((10,))
             faces = boundary_symbol_to_cartesian(indices)

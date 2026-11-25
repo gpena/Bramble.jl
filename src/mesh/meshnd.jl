@@ -240,7 +240,7 @@ function _mesh(
     npts_with_collapsed = ntuple(i -> _storage_collapsed(_set(i)..., backend) ? 1 : npts[i],
         Val(D))
 
-    idxs = generate_indices(npts_with_collapsed)
+    idxs = CartesianIndices(npts_with_collapsed)
 
     _submeshes = submeshes(Ω, npts_with_collapsed, unif, backend)
     idxs, fitted = _close_grid!(_submeshes, regions(markers(Ω)), idxs)
@@ -282,14 +282,14 @@ function _close_grid!(subs::NTuple{2, Mesh1D}, regs::Tuple{Any, Vararg}, idxs)
         xs, ys = _grid_closure(ids, host_points(subs[1]), host_points(subs[2]))
         _set_points!(subs[1], xs)
         _set_points!(subs[2], ys)
-        return generate_indices((length(xs), length(ys))), map(_ -> nothing, regs)
+        return CartesianIndices((length(xs), length(ys))), map(_ -> nothing, regs)
     end
     (nls == 1 && length(ids) == 1) || _throw_levelset_markers(nls, length(ids) - nls)
     xs, ys = host_points(subs[1]), host_points(subs[2])
     X, Y, P = _levelset_grid(only(ids).φ, xs, ys)
     _set_points!(subs[1], X)
     _set_points!(subs[2], Y)
-    return generate_indices((length(X), length(Y))), (P,)
+    return CartesianIndices((length(X), length(Y))), (P,)
 end
 
 @noinline function _throw_levelset_markers(nls, npoly)
@@ -345,7 +345,7 @@ function _grid_closure(Ps::Tuple, xs::AbstractVector, ys::AbstractVector)
     L = if isempty(V)
         max(sx[end] - sx[1], sy[end] - sy[1])
     else
-        max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V))
+        _polygon_extent(V)
     end
     ε = T(max(eps(T), maximum(P -> eps(eltype(eltype(P.vertices))), polys; init = zero(T))))
     tol = max(T(1e-10), 64 * ε) * L
@@ -680,7 +680,7 @@ function _refine_indices!(Ωₕ::MeshnD{D}) where {D}
     # still spans the old one, so everything that iterates indices(Ωₕ), which is every
     # restriction and every operator, writes only the old index set and leaves the rest
     # of a grid function holding whatever was in the fresh allocation.
-    set_indices!(Ωₕ, generate_indices(npoints(Ωₕ, Tuple)))
+    set_indices!(Ωₕ, CartesianIndices(npoints(Ωₕ, Tuple)))
     return nothing
 end
 

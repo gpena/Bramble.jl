@@ -84,12 +84,11 @@ function _init_mesh_markers(
     markers_mesh = MeshMarkers()
     npts = npoints(Ωₕ)
 
-    process_label_for_mesh!(npts, markers_mesh, label_symbols(domain_markers))
-    process_label_for_mesh!(npts, markers_mesh, label_tuples(domain_markers))
-    process_label_for_mesh!(npts, markers_mesh, label_conditions(domain_markers))
-    for m in regions(domain_markers)
-        process_label_for_mesh!(npts, markers_mesh, _region_marker_labels(m))
-    end
+    # The label sets differ in type: `map` over the tuple unrolls, a `for` would not.
+    region_labels = map(_region_marker_labels, regions(domain_markers))
+    label_sets = (label_symbols(domain_markers), label_tuples(domain_markers),
+        label_conditions(domain_markers), region_labels...)
+    map(labels -> process_label_for_mesh!(npts, markers_mesh, labels), label_sets)
 
     return markers_mesh
 end
@@ -624,7 +623,7 @@ function _polygon_tolerance(P::Polygon, pts::NTuple{2, AbstractVector})
     ε = T(max(eps(float(eltype(pts[1]))), eps(float(eltype(pts[2]))),
         eps(float(eltype(eltype(P.vertices))))))
     V = P.vertices
-    L = T(max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V)))
+    L = T(_polygon_extent(V))
     h = typemax(T)
     for x in pts
         for i in 2:length(x)

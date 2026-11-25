@@ -154,6 +154,12 @@ end
     )
 end
 
+# The face the name `label` stands for, `_face_indices` of its `_face_of_symbol`.
+@inline function _face_indices(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
+    axis, side = _face_of_symbol(Val(D), label)
+    return _face_indices(Ωₕ, axis, side)
+end
+
 # Calls `f(offset + i)` for every point `i` that `index_in_marker(Ωₕ, label)` marks, in
 # increasing order, without building the `BitVector` a face name may fall back to: the
 # per-stage residual of a semidiscretisation walks its labels through here and allocates
@@ -161,9 +167,8 @@ end
 @inline function _each_marker_point(f::F, Ωₕ::AbstractMeshType{D}, label::Symbol, offset::Int) where {F, D}
     bits = _stored_marker(Ωₕ, label)
     bits === nothing || return _each_marked(f, bits, offset)
-    axis, side = _face_of_symbol(Val(D), label)
     lin = LinearIndices(indices(Ωₕ))
-    for I in _face_indices(Ωₕ, axis, side)
+    for I in _face_indices(Ωₕ, label)
         f(offset + @inbounds lin[I])
     end
     return nothing
@@ -181,8 +186,7 @@ end
 @inline function _marker_points(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
     bits = _stored_marker(Ωₕ, label)
     bits === nothing || return _MarkerPoints(bits, indices(Ωₕ), _face_indices(Ωₕ, 1, 1))
-    axis, side = _face_of_symbol(Val(D), label)
-    return _MarkerPoints(nothing, indices(Ωₕ), _face_indices(Ωₕ, axis, side))
+    return _MarkerPoints(nothing, indices(Ωₕ), _face_indices(Ωₕ, label))
 end
 
 @inline function Base.getindex(m::_MarkerPoints, k::Int)
@@ -195,8 +199,7 @@ end
 # names: the marked points on that face number `count(bits)`, and are not zero. Index
 # arithmetic only, so it allocates nothing.
 @inline function _marks_only_face(Ωₕ::AbstractMeshType{D}, bits::BitVector, label::Symbol) where {D}
-    axis, side = _face_of_symbol(Val(D), label)
-    face = _face_indices(Ωₕ, axis, side)
+    face = _face_indices(Ωₕ, label)
     lin = LinearIndices(indices(Ωₕ))
     n = 0
     for I in face
@@ -207,10 +210,9 @@ end
 
 # The face `label` names, as a fresh `BitVector` over the mesh points.
 @noinline function _geometric_face_bits(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
-    axis, side = _face_of_symbol(Val(D), label)
     lin = LinearIndices(indices(Ωₕ))
     bits = falses(length(lin))
-    _mark_indices!(bits, lin, _face_indices(Ωₕ, axis, side))
+    _mark_indices!(bits, lin, _face_indices(Ωₕ, label))
     return bits
 end
 

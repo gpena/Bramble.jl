@@ -126,8 +126,8 @@ share them), and an identity of its own.
 """
 function _rebackend(Ωₕ::Mesh1D, be::Backend, f::F) where {F}
     s = _st(Ωₕ)
-    r = Mesh1DState(s.set, s.indices, be, f(s.pts), f(s.half_pts), f(s.half_spacings),
-        f(s.spacings), s.collapsed, s.version, s.uniform, s.words, _next_mesh_uid())
+    r = _restate(s; backend = be, pts = f(s.pts), half_pts = f(s.half_pts),
+        half_spacings = f(s.half_spacings), spacings = f(s.spacings), uid = _next_mesh_uid())
     m = Mesh1D(markers(Ωₕ), _marker_ids(Ωₕ), r, copy(_predicate_labels(Ωₕ)))
     setfield!(m, :parent_predicate_labels, _parent_predicate_labels(Ωₕ))
     return m
@@ -151,20 +151,23 @@ from its submeshes' states. A state is its own walk state.
 
 @inline _set_state!(Ωₕ::Mesh1D, s::Mesh1DState) = (setfield!(Ωₕ, :state, s); return nothing)
 
-# `s` with the named fields replaced; `set`, `backend`, `collapsed` and `uid` never change.
+# `s` with the named fields replaced; `set` and `collapsed` never change. The type parameters
+# follow the new fields, so a `backend` of another type gives a state of another type.
 @inline function _restate(
         s::Mesh1DState;
         indices = s.indices,
+        backend = s.backend,
         pts = s.pts,
         half_pts = s.half_pts,
         half_spacings = s.half_spacings,
         spacings = s.spacings,
         version = s.version,
         uniform = s.uniform,
-        words = s.words
+        words = s.words,
+        uid = s.uid
 )
-    return typeof(s)(s.set, indices, s.backend, pts, half_pts, half_spacings, spacings,
-        s.collapsed, version, uniform, words, s.uid)
+    return Mesh1DState(s.set, indices, backend, pts, half_pts, half_spacings, spacings,
+        s.collapsed, version, uniform, words, uid)
 end
 
 # The default-tolerance uniformity of `s`'s current spacings: what `uniform` stores. `mag`
@@ -604,7 +607,7 @@ end
     else
         be = s.backend
         _set_state!(Ωₕ,
-            _restate(s; indices = generate_indices(n), pts, half_pts = vector(be, n + 1),
+            _restate(s; indices = CartesianIndices((n,)), pts, half_pts = vector(be, n + 1),
                 half_spacings = vector(be, n), spacings = vector(be, n)))
     end
 
@@ -1278,7 +1281,7 @@ function _mesh(
     end
     is_uniform && n_points >= 2 && _check_uniform_distinct(pts, set)
 
-    idxs = generate_indices(n_points)
+    idxs = CartesianIndices((n_points,))
 
     # Instantiate the Mesh1D struct with initial (empty) markers. The uniformity flag is set
     # below, once the spacings it is read from are filled.
@@ -1399,7 +1402,7 @@ end
 # Commit points from `_refined_points`, with new indices to match.
 function _commit_refined_points!(Ωₕ::Mesh1D, new_points)
     new_points === nothing && return nothing
-    set_indices!(Ωₕ, generate_indices(length(new_points)))
+    set_indices!(Ωₕ, CartesianIndices((length(new_points),)))
     _set_points_geometry!(Ωₕ, new_points)
     return nothing
 end
@@ -1447,9 +1450,9 @@ gets an identity of its own.
 """
 function Base.copy(Ωₕ::Mesh1D)
     s = _st(Ωₕ)
-    c = Mesh1DState(s.set, s.indices, s.backend, copy(s.pts), copy(s.half_pts),
-        copy(s.half_spacings), copy(s.spacings), s.collapsed, s.version, s.uniform, s.words,
-        _next_mesh_uid())
+    c = _restate(s; pts = copy(s.pts), half_pts = copy(s.half_pts),
+        half_spacings = copy(s.half_spacings), spacings = copy(s.spacings),
+        uid = _next_mesh_uid())
     return _mesh1d_with_markers(_copy_markers(Ωₕ), c, copy(_predicate_labels(Ωₕ)))
 end
 

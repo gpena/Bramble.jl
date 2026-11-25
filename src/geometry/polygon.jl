@@ -107,6 +107,9 @@ function _edges_meet(W, V, i, j, k, m)
            (iszero(o3) && _in_segment_box(c, d, a)) || (iszero(o4) && _in_segment_box(c, d, b))
 end
 
+# The larger side of the bounding box of the vertices `V`.
+_polygon_extent(V) = max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V))
+
 # Validate the vertices `W` and return the sign of the enclosed area (positive when `W` runs
 # counter-clockwise). Every predicate is exact on the given floats: rounding would otherwise
 # flip the orientation of nearly collinear vertices (accepting an edge that folds back) or
@@ -128,7 +131,7 @@ function _validate_polygon(W::Vector{NTuple{2, T}}) where {T}
 
     # Zero area, relative to the squared extent so that a scaled or translated copy is judged
     # alike.
-    L = max(maximum(v -> v[1], V) - minimum(v -> v[1], V), maximum(v -> v[2], V) - minimum(v -> v[2], V))
+    L = _polygon_extent(V)
     A = _signed_area2(V)
     tol = 8 * n * eps(T) * L^2
     abs(A) > tol || _throw_polygon_error(

@@ -3,7 +3,6 @@
 # Cartesian index generation and boundary/interior facet predicates shared by every mesh
 # type in Bramble.
 #
-# - `generate_indices`: build the `CartesianIndices` of a mesh from its point counts.
 # - `is_boundary_index`, `boundary_indices`, `interior_indices`: facet and interior
 #   predicates over `CartesianIndices` directly, or over an `AbstractMeshType` by
 #   delegating to its own indices.
@@ -13,18 +12,6 @@
 #------------------------------------------------------------------------------------------#
 # Cartesian Index Generation & Boundary Queries
 #------------------------------------------------------------------------------------------#
-
-"""
-    generate_indices(pts::Int) -> CartesianIndices{1}
-    generate_indices(pts::NTuple{D, Int}) -> CartesianIndices{D}
-
-Return the `CartesianIndices` of a mesh with `pts[i]` points in each direction.
-
-For scalar input (`Int`), returns 1D `CartesianIndices`. For tuple input, returns
-multi-dimensional `CartesianIndices`.
-"""
-@inline generate_indices(pts::Int) = CartesianIndices((pts,))
-@inline generate_indices(pts::NTuple{D, Int}) where {D} = CartesianIndices(pts)
 
 """
     is_boundary_index(idxs::CartesianIndices{D}, idx) -> Bool

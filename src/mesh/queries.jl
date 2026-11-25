@@ -377,7 +377,7 @@ face is a single point and its own interior.
 """
 @inline function _marked_face_mask(Ωₕ::AbstractMeshType{D}, marked_at) where {D}
     idxs = indices(Ωₕ)
-    faces = boundary_indices(idxs)
+    faces = boundary_indices(Ωₕ)
     return ntuple(Val(D)) do d
         (_face_is_marked(marked_at, idxs, faces[2d - 1], d),
             _face_is_marked(marked_at, idxs, faces[2d], d))
@@ -448,18 +448,24 @@ end
     return false
 end
 
+# The physical box of a mesh inside its index space: the point counts and the offset of its
+# first node. A ghost mesh narrows both to the nodes it pads; any other mesh is its own box.
+@inline _physical_counts(Ωₕ::AbstractMeshType) = npoints(Ωₕ, Tuple)
+@inline _physical_shift(::AbstractMeshType{D}) where {D} = zero(CartesianIndex{D})
+
 # Walks the set bits of each marker alone (`findnext` skips empty chunks), so a marker on a
 # large mesh costs its marked points, not a dictionary lookup per grid point.
 @inline function _check_marked_on_faces(
         Ωₕ::AbstractMeshType{D}, m, labels, mask, caller) where {D}
     cis = indices(Ωₕ)
-    np = npoints(Ωₕ, Tuple)
+    np = _physical_counts(Ωₕ)
+    shift = _physical_shift(Ωₕ)
     for s in labels
         b = get(m, s, nothing)
         b === nothing && continue
         k = findfirst(b)
         while k !== nothing
-            _on_mask_face(mask, cis[k], np) || _throw_markers_not_faces(m, labels, caller)
+            _on_mask_face(mask, cis[k] - shift, np) || _throw_markers_not_faces(m, labels, caller)
             k = findnext(b, k + 1)
         end
     end
@@ -494,7 +500,7 @@ It fires on a 2x2 mesh of the square asked for `:boundary`, and on any mesh too 
 separate the two ends of an axis; it never fires with three or more points on every axis.
 """
 @inline function _check_surface_is_thin(Ωₕ::AbstractMeshType{D}, mask) where {D}
-    np = npoints(Ωₕ, Tuple)
+    np = _physical_counts(Ωₕ)
     for d in 1:D
         mask[d][1] && mask[d][2] && np[d] <= 2 && _throw_surface_not_thin(d, np[d])
     end

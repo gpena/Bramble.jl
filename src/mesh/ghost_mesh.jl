@@ -209,7 +209,7 @@ function GhostMesh(Ωₕ::Union{Mesh1D, MeshnD}; ghosts = :boundary)
     counts = [active[d][s] ? prod(_ghost_transverse(n, d)) : 0 for s in 1:2, d in 1:D]
     starts = cumsum([0; vec(counts)])
     offset = ntuple(d -> (starts[2d - 1], starts[2d]), Val(D))
-    idxs = generate_indices(psize)
+    idxs = CartesianIndices(psize)
     pts = ntuple(d -> _padded_axis_points(host_points(Ωₕ(d)), active[d]...), Val(D))
     subs = ntuple(d -> _padded_axis(Ωₕ(d), pts[d], active[d][1] || active[d][2]), Val(D))
     padded = _padded_mesh(Ωₕ, subs, idxs)
@@ -516,38 +516,10 @@ function _ensure_geometric_markers!(
     return nothing
 end
 
-# `_marked_face_mask` of the physical faces, the points numbered in the padded index space.
-@inline function _marked_face_mask(G::_GhostMeshLike{D}, marked_at) where {D}
-    idxs = indices(G)
-    faces = boundary_indices(G)
-    return ntuple(Val(D)) do d
-        (_face_is_marked(marked_at, idxs, faces[2d - 1], d),
-            _face_is_marked(marked_at, idxs, faces[2d], d))
-    end
-end
-
-@inline function _check_marked_on_faces(
-        G::_GhostMeshLike{D}, m, labels, mask, caller) where {D}
-    cis = indices(G)
-    shift = CartesianIndex(G.lo)
-    for s in labels
-        b = get(m, s, nothing)
-        b === nothing && continue
-        k = findfirst(b)
-        while k !== nothing
-            _on_mask_face(mask, cis[k] - shift, G.n) || _throw_markers_not_faces(m, labels, caller)
-            k = findnext(b, k + 1)
-        end
-    end
-    return nothing
-end
-
-@inline function _check_surface_is_thin(G::_GhostMeshLike{D}, mask) where {D}
-    for d in 1:D
-        mask[d][1] && mask[d][2] && G.n[d] <= 2 && _throw_surface_not_thin(d, G.n[d])
-    end
-    return nothing
-end
+# The surface checks of `_surface_mask` read the physical box: its counts, and the padded
+# index of its first node.
+@inline _physical_counts(G::_GhostMeshLike) = G.n
+@inline _physical_shift(G::_GhostMeshLike) = CartesianIndex(G.lo)
 
 # The weight of the physical mesh at the physical node `I` sits at its padded index `J`;
 # a ghost and an absent point weigh nothing.
