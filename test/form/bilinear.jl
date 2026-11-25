@@ -37,7 +37,6 @@ using Bramble:
                blocks,
                leaf_spaces_offsets,
                visit_bilinear_stencil,
-               _entry_target,
                _trial_column,
                AbsoluteColumn,
                TrialFunction,
@@ -141,8 +140,8 @@ end
     @test all(iszero, blk(Ad, 2, 1))
 
     # A term naming both sides is one block, off-diagonal included. This is what used to
-    # vanish: the pattern held diagonal blocks only and `add_to_sparse!` returns quietly
-    # when an entry is missing, so the contribution was dropped without a word.
+    # vanish: the pattern held diagonal blocks only and a missing entry was skipped
+    # quietly, so the contribution was dropped without a word.
     Ao = assemble(form(Vₕ, Vₕ, (u, v) -> innerₕ(u(1), v(2))))
     @test blk(Ao, 2, 1) ≈ H          # row from the test component, column from the trial
     @test all(iszero, blk(Ao, 1, 1))
@@ -1807,9 +1806,9 @@ end
 
 # A pattern that cannot hold the form raises.
 @testset "Too-small pattern raises (#50)" begin
-    # `add_to_sparse!` used to return quietly when an entry was missing, so a matrix
-    # whose pattern was built for a different form assembled to a plausible wrong
-    # answer. Both the serial recording pass and the threaded path now say so instead.
+    # A missing entry used to be skipped quietly, so a matrix whose pattern was built
+    # for a different form assembled to a plausible wrong answer. Both the serial
+    # recording pass and the threaded path now say so instead.
     Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), (6, 5), (true, true))
     W = gridspace(Ω)
 
@@ -1828,7 +1827,7 @@ end
     end
     @test occursin("outside its preallocated", msg)
 
-    # Threaded: same refusal, reached through `add_to_sparse!` rather than the cache.
+    # Threaded: the same refusal.
     Wp = gridspace(
         mesh(
         domain(interval(0.0, 1.0) × interval(0.0, 1.0)),
@@ -1840,7 +1839,7 @@ end
     np = form(Wp, Wp, (u, v) -> innerₕ(u, v))
     wp = form(Wp, Wp, (u, v) -> innerₕ(D₋ₓ(u), D₋ₓ(v)))
     Ap = allocate_system_matrix(np, resolve_form_ast(np))
-    @test_throws Exception assemble_parallel!(Ap, wp)
+    @test_throws ArgumentError assemble_parallel!(Ap, wp)
 
     # and the matching pattern still assembles, so the check is not simply always on
     Aok = allocate_system_matrix(wide, resolve_form_ast(wide))
@@ -1911,25 +1910,16 @@ end
         )
     end
 
-    @testset "Entry targets: guard, AbsoluteColumn" begin
+    @testset "Trial column: guard, AbsoluteColumn" begin
         lin = LinearIndices(indices(Ω))
         I = CartesianIndex(1, 1)
 
-        # inside: the row follows off_v, the column off_u, both shifted by the block
-        @test _entry_target(lin, CartesianIndex(3, 3), (0, 0), (0, 0), 0, 0) ==
-              (lin[3, 3], lin[3, 3])
-        @test _entry_target(lin, CartesianIndex(3, 3), (0, 0), (0, 0), 10, 5) ==
-              (lin[3, 3] + 10, lin[3, 3] + 5)
-
-        # a row off the grid drops the entry, and so does a column off the grid
-        @test _entry_target(lin, I, (0, 0), (-1, 0), 0, 0) == (0, 0)
-        @test _entry_target(lin, I, (-1, 0), (0, 0), 0, 0) == (0, 0)
+        # inside: the column follows the offset; off the grid it is dropped
+        @test _trial_column(lin, CartesianIndex(3, 3), (0, 0)) == lin[3, 3]
+        @test _trial_column(lin, I, (-1, 0)) == 0
 
         # an interpolation entry names its source column outright rather than an offset
         @test _trial_column(lin, I, AbsoluteColumn(42)) == 42
-        @test _entry_target(
-            lin, CartesianIndex(2, 2), AbsoluteColumn(42), (0, 0), 0, 3
-        ) == (lin[2, 2], 45)
     end
 end
 

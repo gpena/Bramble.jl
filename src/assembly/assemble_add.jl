@@ -6,14 +6,14 @@ Additive accumulation into an already-filled matrix or vector (gpena/Bramble.jl#
 ## Why this needed no new sink or traversal
 
 `assemble!`'s own sweep already *adds* every stencil entry's weight into `A.nzval`/`b`
-(`add_to_sparse!`, and every sink in `bilinear_traversal.jl`) -- that is what lets two
+(every sink in `bilinear_traversal.jl`) -- that is what lets two
 stencil taps that land on the same matrix entry accumulate correctly within one term. The
 only thing that makes `assemble!` read as "replace" from the outside is the `fill!(A/b,
 0)` immediately before that sweep (`_assemble_bilinear!`/`_assemble_linear!`). `assemble_add!`
 is therefore the *same* serial-cached/parallel core `assemble!` already calls, minus that
 `fill!` and minus the Dirichlet pass -- reusing the coordinate-walk/replay cache, the threaded
 band-coloured sweep, and the "pattern must already contain this entry" error
-(`add_to_sparse!`'s `ArgumentError`) exactly as they already existed.
+(`_throw_missing_pattern_entry`'s `ArgumentError`) exactly as they already existed.
 
 ## The scale factor
 

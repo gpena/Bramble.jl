@@ -269,7 +269,8 @@ end
         for A in (A64, A32)
             fill!(A.nzval, 0.0)
             for (k, (i, j)) in enumerate(entries)
-                Bramble.add_to_sparse!(A, i, j, Float64(k), nothing)
+                pos = Bramble._scatter_position(A, i, j)
+                pos == 0 || Bramble._scatter_add!(A, pos, Float64(k))
             end
         end
         @test A32.nzval == A64.nzval && count(!iszero, A32.nzval) == 4
