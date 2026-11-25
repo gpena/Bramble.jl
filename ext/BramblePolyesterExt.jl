@@ -1370,6 +1370,17 @@ function _pw_first_calls(u, w, g, a, l, x, y)
 end
 _pw_kron_call(a, x, y) = (mul!(y, kronecker_operator(a), x); nothing)
 _pw_mf_call(a, x, y) = (mul!(y, matrix_free_operator(a), x); nothing)
+# The eager operators on a grid function, the composite projection and the masked inner
+# product, whose first calls each took 150 to 300 ms with nothing cached.
+function _pw_operator_calls(u, w, U, g)
+    Bramble.D₋ₓ(u)
+    Bramble.M₊ₓ(u)
+    Bramble.Mcₕ(u, 1)
+    Bramble.S₋ₓ(u)
+    Rₕ!(U, x -> (g(x), x[1]))
+    inner₊(u, w, Val(()); markers = (:boundary,))
+    return nothing
+end
 
 if Bramble.PRECOMPILE_WORKLOAD
     @setup_workload begin
@@ -1403,6 +1414,7 @@ if Bramble.PRECOMPILE_WORKLOAD
                 _pw_first_calls(u, w, g, a, l, xp, yp)
                 _pw_mf_call(a, xp, yp)
                 length(n) > 1 && _pw_kron_call(a, xp, yp)
+                _pw_operator_calls(u, w, element(Wp × Wp), g)
             end
         end
     end
