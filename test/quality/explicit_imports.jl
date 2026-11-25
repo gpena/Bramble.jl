@@ -5,14 +5,16 @@ using Bramble
 using ExplicitImports
 using Polyester: Polyester
 using Kronecker: Kronecker
+using SparseMatricesCSR: SparseMatricesCSR
 
 # What Bramble and its extensions take from other modules, and how.
 #
 # The package already writes every import as `using X: a, b` rather than bare `using X`, and
 # already has none unused -- so this file is a ratchet, not a cleanup: it fails when a new
 # import drifts from that, not today. Coverage depends on which extensions are loaded when
-# this runs. `BramblePolyesterExt` and `BrambleKroneckerExt` are always checked: this file
-# loads `Polyester` and `Kronecker` itself, then asserts both extensions are there.
+# this runs. `BramblePolyesterExt`, `BrambleKroneckerExt` and
+# `BrambleSparseMatricesCSRExt` are always checked: this file loads `Polyester`, `Kronecker`
+# and `SparseMatricesCSR` itself, then asserts the three extensions are there.
 # `test/utils/backends.jl` loads Metal incidentally on Apple Silicon even in the unit group,
 # so `BrambleMetalExt` is usually checked too; the rest are reached only when the "ext"/"full" group has loaded
 # their triggers earlier in the same process. Every ignore entry below was verified against
@@ -26,11 +28,12 @@ using Kronecker: Kronecker
 # up in no test. Both are unconditional: nothing here is a deliberately-kept exception.
 
 @testset "Explicit imports" begin
-    # The two lines above load the triggers; this fails the file if either extension is still
+    # The `using` lines above load the triggers; this fails the file if an extension is still
     # not there, so the checks below can never pass vacuously for them.
-    @testset "Polyester and Kronecker are loaded" begin
+    @testset "Extension triggers are loaded" begin
         @test Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing
         @test Base.get_extension(Bramble, :BrambleKroneckerExt) !== nothing
+        @test Base.get_extension(Bramble, :BrambleSparseMatricesCSRExt) !== nothing
     end
 
     @testset "No implicit or stale imports" begin
@@ -422,6 +425,17 @@ using Kronecker: Kronecker
                 :_scatter_storage,
                 :_scatter_add!,
                 :_zero_stored!,
+                # `_csc_position`, `_rank_one_sparse`, `accelerate_factorize`,
+                # `_check_symmetrize_square`, `_negate_into!`, `_negate_into_generic!`
+                # (BrambleSparseMatricesCSRExt): the CSC helpers it reuses on a CSR matrix
+                # (position search, rank-one conversion, factorization entry, symmetrize
+                # check, negation and its generic fallback). None is public.
+                :_csc_position,
+                :_rank_one_sparse,
+                :accelerate_factorize,
+                :_check_symmetrize_square,
+                :_negate_into!,
+                :_negate_into_generic!,
                 # `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`, `_batch_dot`,
                 # `_batch_dot_masked`, `_batch_linear_colour_sweep!`,
                 # `_batch_linear_band_sweep!`: the
