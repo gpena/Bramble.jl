@@ -433,7 +433,9 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, _Con
             sprint(showerror, e)
         end
         @test occursin("has 1 component here", msg)
-        @test_throws ArgumentError η[:w]
+        # η reads a direction name as the operator tuples do, with the same message
+        @test_throws "the stencil direction must be :x, :y or :z, got :w" η[:w]
+        @test_throws "the stencil direction must be :x, :y or :z, got :w" Bramble.∇ₕ[:w]
         # a term naming no component, on leaves that read :left as different faces
         S = interval(0.0, 1.0) × interval(0.0, 1.0)
         bnd = :boundary => boundary_symbols(S)
@@ -457,9 +459,29 @@ using ..TestUtils: @test_allocs, WITH_SLOW_TESTS, WITH_3D_TESTS, TEST_DIMS, _Con
         c = dot(F, η)
         @test isconcretetype(only(Base.return_types(Bramble._as_normal_sum, (typeof(c),))))
         v = Bramble.TestFunction{D}()
-        mask = Bramble._normal_mask(Val(D), (:boundary,))
-        sig = (typeof(F), typeof(v), Val{mask}, Val{D})
-        @test isconcretetype(only(Base.return_types(Bramble._normal_terms, sig)))
+        mask = Bramble._label_set((:boundary,))
+        sig = (typeof(Bramble._as_normal_sum(c)), typeof(v), Val{mask}, Val{D})
+        @test isconcretetype(only(Base.return_types(Bramble._expand_normal, sig)))
+    end
+
+    # `dot(F, η)` builds the very term its written-out sum `Σ_d F[d] * η[d]` does, on a
+    # non-uniform mesh, whatever mix of functions, grid functions and trial functions `F`
+    # holds: one expansion serves both spellings.
+    @testset "dot(F, η) is its written-out sum" begin
+        Ωₕ = mesh(Ω, (9, 11), (false, false))
+        g(n, a) = range(0.0, 1.0; length = n) .^ a
+        Bramble.change_points!(Ωₕ, (g(9, 1.4), g(11, 1.6)))
+        Wₕ = gridspace(Ωₕ)
+        u, v = Bramble.trial_function(Wₕ), Bramble.test_function(Wₕ)
+        fₕ = Rₕ(Wₕ, x -> 1 + x[1] * x[2])
+        for F in ((_x1, _x2), (_x1, Bramble.D₋ₓ(fₕ)), (u, 2.0 * Bramble.D₋ᵧ(u)))
+            a = inner_Γ(dot(F, η), v; markers = (:xmax, :ymin))
+            b = inner_Γ(F[1] * η[1] + F[2] * η[2], v; markers = (:xmax, :ymin))
+            @test typeof(a) === typeof(b)
+        end
+        F = (_x1, Bramble.D₋ₓ(fₕ))
+        l(t) = assemble(form(Wₕ, w -> inner_Γ(t, w; markers = :boundary)))
+        @test l(dot(F, η)) == l(F[1] * η[1] + F[2] * η[2])
     end
 
     # The labels are a set, for the normal expansion and the facet weight as for

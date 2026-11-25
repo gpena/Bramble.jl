@@ -656,7 +656,7 @@ end
 end
 
 # The facet products, whose operands are meant to read ghosts at the node.
-@inline _facet_inner(::Union{InnerGamma, InnerGammaNormal, InnerGammaFacet}) = true
+@inline _facet_inner(::AbstractInnerGamma) = true
 @inline _facet_inner(::Any) = false
 
 @noinline function _check_absent_reads(
@@ -1233,8 +1233,8 @@ Whether a `LazyOp` subtree is source-only: built entirely from sources
 operators that wrap them, never bottoming out in a `TrialFunction`/`IndexedTrialFunction`
 leaf.
 
-`innerₕ`'s `l::Function`/`l::Number`/`l::VectorElement` overloads (`operators/inner.jl`)
-never need this: those three types are never anything but a source, so wrapping them in a
+`innerₕ`'s `l::Union{Function, Number, VectorElement}` overload (`operators/inner.jl`)
+never needs this: those three types are never anything but a source, so wrapping them in a
 `LinearProduct` is unconditional. The question only exists for an argument that already
 arrived as a `LazyOp`: `πₕ(uₕ)` ([`interpolate_at`](@ref)) or `D₋ₓ(πₕ(uₕ))` are
 sources too, just already wrapped, and the generic `innerₕ(::LazyOp, ::LazyOp)` used to build

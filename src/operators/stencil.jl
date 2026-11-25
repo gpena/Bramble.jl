@@ -535,12 +535,7 @@ function _vectorial_index_expr(alias_name, alias_stem, source)
             i == 3 && return $stem_z
             throw(BoundsError($alias_name, i))
         end),
-        :(@inline function Base.getindex(::typeof($alias_name), s::Symbol)
-            s === :x && return $stem_x
-            s === :y && return $stem_y
-            s === :z && return $stem_z
-            throw(ArgumentError("the coordinate direction must be :x, :y or :z, got :$s"))
-        end)
+        :(@inline Base.getindex(a::typeof($alias_name), s::Symbol) = a[$(_dim_index)(s)])
     ]
     return Expr[_relocate!(e, source) for e in exprs]
 end

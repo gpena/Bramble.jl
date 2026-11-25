@@ -130,6 +130,31 @@ using Bramble:
             @test_throws ArgumentError inner₊(mk, v)
         end
 
+        # inner_Γ holds its labels in the weight and restricts nothing; the volume
+        # products restrict by region, and only they type the keyword
+        for mk in ((x -> x[1] + 1), 3.5, uₕ)
+            p = inner_Γ(mk, v; markers = :bottom)
+            @test p isa LinearProduct
+            @test typeof(p.inner) === Bramble.InnerGamma{Bramble._SurfaceLabels{(:bottom,)}}
+            @test typeof(innerₕ(mk, v; markers = (:bottom,))).name.wrapper ===
+                  Bramble.RegionRestriction
+            # a bare label, which inner_Γ took above, misses the typed tuple keyword
+            @test_throws MethodError innerₕ(mk, v; markers = :bottom)
+            @test_throws MethodError inner₊ₓ(mk, v; markers = :bottom)
+        end
+
+        # one method per product takes every bare source, and a composite grid function
+        # still reaches the per-component sum in ast/component.jl, which is more specific
+        uc = Rₕ(Wₕ × Wₕ, (x -> x[1], x -> x[2]))
+        file(f, l) = basename(String(which(f, Tuple{typeof(l), typeof(v)}).file))
+        for f in (innerₕ, inner_Γ, inner₊ₓ, inner₊ᵧ, inner₊₂)
+            @test file(f, uc) == "component.jl"
+            @test all(l -> file(f, l) == "inner.jl", ((x -> x[1]), 3.5, uₕ))
+            @test which(f, Tuple{Float64, typeof(v)}) === which(f, Tuple{typeof(uₕ), typeof(v)})
+        end
+        @test innerₕ(uc, v) isa Bramble.OperatorAdd
+        @test inner_Γ(uc, v; markers = :bottom) isa Bramble.OperatorAdd
+
         # A number becomes a SourceConstant, not a function wrapper or a stored vector:
         # skips point(m, I) entirely rather than computing and discarding it.
         sf = source_number(7.25, Val(2))
