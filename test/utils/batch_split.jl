@@ -209,7 +209,7 @@ const sₕ = Rₕ(Sₕ, x -> exp(x[1]) * x[2])
         rules = Bramble.PointValue(x -> (sum(x), prod(x)))
         for W in (gridspace(Ω₁), Wₕ, (WITH_3D_TESTS ? (gridspace(Ω₃),) : ())...)
             for k in (Bramble._rule_kernel(rule, W),
-                Bramble._rule_scatter_kernel(rules, W, Val(2)))
+                Bramble._rule_kernel(rules, W))
                 @test Bramble._batch_splittable(typeof(k))
                 sk, arrays = _batch_split(k)
                 @test isbits(sk)

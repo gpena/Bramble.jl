@@ -237,7 +237,7 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs
         @test alloc_test(avgₕ!, v, f_tup; markers = (:left,)) == 0
 
         # The single-vector-function form scatters one evaluation of
-        # `f` across every leaf of a shared-mesh composite space (`_rule_scatter_kernel`),
+        # `f` across every leaf of a shared-mesh composite space (`_rule_kernel`),
         # rather than one rule per leaf -- verify that path is zero-alloc too, not just the
         # tuple-of-functions form above.
         f_vec(x) = (sin(x[1]), cos(x[2]))

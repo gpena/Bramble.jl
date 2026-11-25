@@ -90,9 +90,6 @@ end
 # and the leaves' tuple on a composite one, which is exactly what each sweep wants.
 @inline _rule_kernel(rule::PointValue, sp) = _RₕKernel(rule.f, points(mesh(sp)), indices(mesh(sp)))
 
-@inline _rule_scatter_kernel(rule::PointValue, sp, ::Val{NC}) where {NC} = _RₕKernel(
-    rule.f, points(mesh(sp)), indices(mesh(sp)))
-
 @inline _rule_component(rule::PointValue, k) = PointValue(pt -> rule.f(pt)[k])
 
 #------------------------------------------------------------------------------------------#

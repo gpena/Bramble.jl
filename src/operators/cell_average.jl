@@ -185,9 +185,6 @@ end
     return _AvgKernel(rule.f, half_points(Ωₕ), indices(Ωₕ), nodes, wts)
 end
 
-@inline _rule_scatter_kernel(rule::CellAverage, sp, ::Val{NC}) where {NC} = _rule_kernel(
-    rule, sp)
-
 @inline _rule_component(rule::CellAverage, k) = CellAverage(pt -> rule.f(pt)[k], rule.nq)
 
 # The value count check (`_check_value_count`) evaluates `f` once, at the first quadrature

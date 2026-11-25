@@ -50,11 +50,6 @@ functions = ["_kron_device_vector", "_kron_device_index", "_throw_kron_device_en
 reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
 
 [[exempt_function]]
-path = "src/assembly/linear.jl"
-functions = ["_assemble_linear_device!"]
-reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
-
-[[exempt_function]]
 path = "src/mesh/mesh1d.jl"
 functions = ["_throw_no_ka_mesh_kernel", "_launch_uniform_mesh1d_init!", "_launch_half_points!", "_launch_spacing!", "_launch_half_spacing!", "_launch_nonuniform_mesh1d_metrics!", "_launch_refine_indices!"]
 reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
@@ -149,12 +144,8 @@ reason = "device-only: the ::DeviceLocality method fills device-resident compone
 
 [[exempt_function]]
 path = "src/operators/projection.jl"
-methods = [
-    "_device_project!(::DeviceLocality",
-    "_device_scatter_project!(::DeviceLocality",
-    "_marker_index_list(like::AbstractArray",
-]
-reason = "device-only: the ::DeviceLocality defaults answer only for device-resident storage, and _marker_index_list is called only by the device masked projection (_device_masked_project!)."
+methods = ["_marker_index_list(like::AbstractArray"]
+reason = "device-only: _marker_index_list is called only by the device masked projection (_device_masked_project!)."
 
 [[exempt_function]]
 path = "src/operators/restriction.jl"
@@ -164,7 +155,7 @@ reason = "device-only: the non-Array method of the probe, reached only when poin
 [[exempt_function]]
 path = "src/assembly/linear.jl"
 methods = [
-    "_host_sources(::DeviceLocality",
+    "_assemble_linear!(::DeviceLocality",
     "_host_array(::DeviceLocality, v::AbstractArray",
     "_host_array(::DeviceLocality, v::VectorElement",
     "_assemble_linear_parallel!(::DeviceLocality",
@@ -174,7 +165,7 @@ methods = [
     "_host_sources(op::OperatorAdd",
     "_host_sources(op::LinearProduct",
 ]
-reason = "device-only: the ::DeviceLocality methods take device-resident storage, and the _host_sources(op::...) walk is called only from the device assembly paths (_assemble_linear_device!, _assemble_linear_parallel!(::DeviceLocality), _assemble_add_linear!(::DeviceLocality)) to copy device data to the host."
+reason = "device-only: the ::DeviceLocality methods take device-resident storage, and the _host_sources(op::...) walk is called only from the device assembly paths (_assemble_linear!(::DeviceLocality), _assemble_linear_parallel!(::DeviceLocality), _assemble_add_linear!(::DeviceLocality)) to copy device data to the host."
 
 [[exempt_function]]
 path = "src/assembly/assemble_add.jl"
