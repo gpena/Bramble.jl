@@ -140,3 +140,105 @@ CpuPolyester `assemble!` run both ways, three alternating runs each, and a searc
 issue's 8 s gate was.
 
 Verdict: the issue's gate is unidentified; the three existing out-of-line helpers cost warm `assemble!` 1.8 to 3.1 times (spread under 4%) for no first-call gain worth the cost, `src/ast/common.jl` is untouched, and dropping them is a follow-up.
+
+## Follow-up (S3.15): the matrix-free case of #759 and `CpuPolyester` (8725b63f)
+
+S3.12 left two things unmeasured: the matrix-free case #759 added the helpers for, and
+`assemble!` under `CpuPolyester`. This section runs both, plus Serial again, on the same two
+trees: the helpers as on HEAD (`with`), and the three `@noinline` replaced by `@inline`
+(`without`, the diff shown above).
+
+### The bound #759 set
+
+0a84b1e5 adds one numeric bound, in `test/form/common.jl` ("Past 32 entries (#759)"): the first
+matrix-free `mul!` of `innerₕ(D̽ᵧ(D̽ₓ(D̃ₓ(u))), D̽ᵧ(D̽ₓ(D̃ₓ(v))))` on a 7 × 9 grid takes under
+20 s (`@test t < 20`). That product has 324 entries. The 729-entry
+`innerₕ(D̽ᵧD̽ₓD̽ₓu, D̽ᵧD̽ₓD̽ₓv)` on 9 × 8 comes from the commit message (0.2 s, then 616 s) and
+has no bound. Both ran here (`mf324`, `mf729`); `local_stencil` at an interior point gives 324
+and 729 entries.
+
+The rule was fixed before the timed rounds. Dropping the helpers needs both of these:
+
+- No warm row is slower without them, beyond the larger of the two spreads.
+- No first call goes past 20 s without them, judged on the slowest of the three runs. A first
+  call already past 20 s with the helpers must not get longer without them.
+
+### Method
+
+Same as S3.12. Two copies of the worktree at 8725b63f (`tar --exclude=.git`) under
+`/tmp/s315/with` and `/tmp/s315/without`, each precompiled once before timing. One fresh
+`julia --threads=4 --startup-file=no --project=.` per measurement, default `-O`, Julia 1.13.4,
+through `BRAMBLE_JULIA_SLOTS=4 julia_slot.sh 4`, alone on the M2. Three rounds; within a round
+each row runs with and without back to back, and the order flips each round (with first in
+rounds 1 and 3, without first in round 2). `CpuPolyester` rows build the graded mesh with
+`backend(policy = CpuPolyester())` and load Polyester from a temporary project pushed onto
+`LOAD_PATH`. Each process prints the mesh's `execution_policy`, so a run that fell back to
+serial would show. Matrix-free rows time the first `mul!` of `matrix_free_operator(a)`, then
+the median of 50 warm calls, and check the product against `assemble(a) * x`. Assembled rows
+time `assemble(a)`, then the median of 20 (`Δₕ³`) or 50 `assemble!` calls. Scripts:
+`.claude/plans/alloc-guarantees-probes/s315_measure.jl` and `s315_driver.sh` (gitignored).
+
+Preflight (`gate_preflight.sh --timing`) never passed. Before round 1 it failed for 30 min, and
+before rounds 2 and 3 for 5 min each, on the `cpu` check (`suggestd` at 97 to 100% the whole
+time, and `CGPDFService` at times) and on the 1-min load (2.0 to 3.3). Every round started
+after a failed preflight: 1-min load 3.30, 2.31 and 2.27 at the start of rounds 1, 2 and 3. The
+`ctl32` control matches S3.12 (0.0104 against 0.0104 to 0.0107 ms) and is flat across the trees,
+and spreads stay under 1.4% warm. The background load seems to have shifted both trees alike;
+the ratios are the figure to read.
+
+### Result
+
+Warm calls, median of each run, in ms. Spread is the largest minus the smallest of the three
+runs; ratio is with over without, on the median of the three.
+
+| case | policy | with, 3 runs | spread | without, 3 runs | spread | ratio |
+|---|---|---|---|---|---|---|
+| `ctl32` | Serial | 0.0104, 0.0104, 0.0105 | 0.0001 | 0.0104, 0.0104, 0.0105 | 0.0001 | 1.00 |
+| `Δₕ² 3D` | Serial | 0.0616, 0.0618, 0.0620 | 0.0004 | 0.0350, 0.0350, 0.0351 | 0.0001 | 1.77 |
+| `Δₕ² 3D` | Polyester | 0.0264, 0.0264, 0.0268 | 0.0004 | 0.0152, 0.0152, 0.0154 | 0.0002 | 1.74 |
+| `Δₕ³ 2D` | Serial | 0.0918, 0.0925, 0.0928 | 0.0010 | 0.0386, 0.0387, 0.0388 | 0.0002 | 2.39 |
+| `Δₕ³ 2D` | Polyester | 0.0233, 0.0234, 0.0235 | 0.0002 | 0.0095, 0.0096, 0.0098 | 0.0003 | 2.44 |
+| `Δₕ³ 3D` | Serial | 1.5741, 1.5803, 1.5812 | 0.0071 | 0.5108, 0.5132, 0.5144 | 0.0036 | 3.08 |
+| `Δₕ³ 3D` | Polyester | 0.6360, 0.6388, 0.6395 | 0.0035 | 0.1844, 0.1917, 0.1919 | 0.0075 | 3.33 |
+| `mf324`, `mul!` | Serial | 0.0640, 0.0642, 0.0659 | 0.0019 | 0.0611, 0.0635, 0.0636 | 0.0025 | 1.01 |
+| `mf729`, `mul!` | Serial | 0.1778, 0.1779, 0.1784 | 0.0006 | 0.1525, 0.1526, 0.1527 | 0.0002 | 1.17 |
+
+First call (`assemble`, or the first `mul!` for `mf`), in s, fresh process.
+
+| case | policy | with, 3 runs | spread | without, 3 runs | spread | ratio |
+|---|---|---|---|---|---|---|
+| `ctl32` | Serial | 0.322, 0.323, 0.331 | 0.009 | 0.322, 0.327, 0.328 | 0.006 | 0.99 |
+| `Δₕ² 3D` | Serial | 1.296, 1.299, 1.438 | 0.142 | 1.223, 1.239, 1.263 | 0.040 | 1.05 |
+| `Δₕ² 3D` | Polyester | 3.026, 3.079, 3.085 | 0.059 | 2.992, 3.017, 3.033 | 0.041 | 1.02 |
+| `Δₕ³ 2D` | Serial | 2.627, 2.629, 2.632 | 0.005 | 2.243, 2.248, 2.280 | 0.037 | 1.17 |
+| `Δₕ³ 2D` | Polyester | 5.432, 5.442, 5.593 | 0.161 | 5.400, 5.435, 5.512 | 0.112 | 1.00 |
+| `Δₕ³ 3D` | Serial | 17.808, 17.819, 17.897 | 0.089 | 18.922, 19.103, 19.173 | 0.251 | 0.93 |
+| `Δₕ³ 3D` | Polyester | 29.532, 29.906, 30.167 | 0.635 | 37.037, 37.335, 37.369 | 0.332 | 0.80 |
+| `mf324` (bound 20 s) | Serial | 1.561, 1.566, 1.574 | 0.013 | 1.816, 1.837, 1.841 | 0.025 | 0.85 |
+| `mf729` | Serial | 4.178, 4.206, 4.215 | 0.037 | 4.564, 4.600, 4.616 | 0.052 | 0.91 |
+
+Warm bytes per call are equal in both trees: 0 B for every Serial `assemble!` and every `mul!`,
+240 B for every `CpuPolyester` `assemble!`. The 240 B is there with the helpers too, so they do
+not cause it; this subplan did not chase it.
+
+### Reading
+
+On the warm side, removing the helpers slows nothing: every long row is faster without them,
+1.17 to 3.33 times, far outside the spreads, and the control does not move. `CpuPolyester` pays
+the same price as Serial, slightly more on `Δₕ³` in 3D (3.33 against 3.08). For the
+matrix-free product the gap is small (1.01 on `mf324`, within the spread; 1.17 on `mf729`).
+
+The first call is what blocks the change. #759's own case stays far inside its bound either way
+(`mf324` 1.84 s at worst without the helpers, against 20 s), as does `mf729` (4.62 s). But
+`assemble` of `Δₕ³` in 3D under `CpuPolyester` goes past 20 s in both trees, and without the
+helpers it takes 7.4 s longer (37.0 to 37.4 s against 29.5 to 30.2 s, spreads 0.3 and 0.6 s).
+That breaks the second condition. Serial `Δₕ³` 3D also grows (19.2 s at worst, against 17.9 s)
+and comes within 1 s of the bound.
+
+Narrowing the threshold rather than dropping the path would keep the 729-entry tuples out of
+line and inline the 81- and 216-entry ones, whose first calls do not grow. That is a different
+tree from the one measured, with its own constant: `_INLINED_ENTRIES` cannot move, since
+`_map_entries` and the `_LongStencil` dispatch need it for 0 B. It would need its own three
+alternating rounds, which this subplan did not run, so `src/ast/common.jl` is unchanged.
+
+Verdict (S3.15): `src/ast/common.jl` unchanged; dropping the three out-of-line helpers would make every warm long-stencil row 1.17 to 3.33 times faster, Serial and CpuPolyester alike, and keeps #759's 324-entry `mul!` far under its 20 s bound (1.84 s), but the first CpuPolyester `assemble` of `Δₕ³` in 3D, already past 20 s with them (30.2 s), grows to 37.4 s without, so the rule fails; a narrower out-of-line threshold, set by its own constant, is the follow-up to measure.
