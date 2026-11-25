@@ -175,6 +175,12 @@ end
         @test collect(u) == collect(1.0:4.0)
     end
 
+    @testset "mesh of an element" begin
+        u = element(W, 1.0:4.0)
+        @test mesh(u) === mesh(space(u))
+        @test @inferred(mesh(u)) === mesh(W)
+    end
+
     @testset "ndims" begin
         @test ndims(VectorElement) == 1
         u = element(W)

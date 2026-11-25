@@ -69,11 +69,3 @@ Modules = [Bramble]
 Public = false
 Pages = ["utils/device_kernels.jl", ]
 ```
-
-## Macros
-
-```@autodocs
-Modules = [Bramble]
-Public = false
-Pages = ["utils/macros.jl", ]
-```

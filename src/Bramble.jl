@@ -21,7 +21,6 @@ import GPUArraysCore
 include("api.jl")
 
 # --- Submodule Includes ---
-include("utils/macros.jl")
 include("utils/backend.jl")
 include("utils/device_kernels.jl")
 include("utils/linear_algebra.jl")

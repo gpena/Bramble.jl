@@ -71,10 +71,10 @@ See also: [`space`](@ref), [`VectorElement`](@ref)
 # Forward array-like methods to the `data` field. This allows a VectorElement
 # to behave like a standard Julia vector (e.g., support `size`, `length`, `eltype`).
 #
-# `size` is defined directly, not through `@forward`: the macro's generated
-# `size(x::VectorElement, args...; kwargs...)` is as broad as `Base`'s own
-# `size(t::AbstractArray, dim)` fallback (abstractarray.jl), so inserting it invalidated
-# that fallback's cached `MethodInstance`s package-wide the moment Bramble loaded (#198).
+# `size` is defined with one argument, not as `size(x::VectorElement, args...; kwargs...)`:
+# that signature is as broad as `Base`'s own `size(t::AbstractArray, dim)` fallback
+# (abstractarray.jl), so inserting it invalidated that fallback's cached `MethodInstance`s
+# package-wide the moment Bramble loaded (#198).
 # The zero-argument method below is all `size` ever needs from `VectorElement`: `Base`'s
 # fallback already answers `size(uₕ, dim)` as `size(uₕ)[dim]` without a second definition.
 @inline Base.size(uₕ::VectorElement) = size(uₕ.data)
@@ -82,7 +82,7 @@ See also: [`space`](@ref), [`VectorElement`](@ref)
 # A VectorElement wraps a vector, so indexing is linear; without this the
 # AbstractArray default of IndexCartesian() is used.
 @inline Base.IndexStyle(::Type{<:VectorElement}) = IndexLinear()
-@forward VectorElement.space (Bramble.mesh,)
+@inline mesh(x::VectorElement, args...; kwargs...) = mesh(x.space, args...; kwargs...)
 
 # Delegates straight to the storage's own `fill!` (gpena/Bramble.jl#336) rather than
 # falling back to `AbstractArray`'s `setindex!`-per-element loop, which is scalar indexing

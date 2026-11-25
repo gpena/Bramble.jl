@@ -302,8 +302,7 @@ using SparseMatricesCSR: SparseMatricesCSR
 
     # `VectorElement` is an `AbstractVector` and `ScalarGridSpace` hands out reshaped views,
     # so the broadcasting and array internals below have to be reached by name -- Base
-    # exposes no public spelling for any of them. `eval` is `Core.eval`, reached by the
-    # `@forward` macro.
+    # exposes no public spelling for any of them.
     #
     # The rest are extension methods added to a function that is not itself exported by the
     # module supplying it, the same idiom as `Base.show`/`Base.size` above:
@@ -553,7 +552,6 @@ using SparseMatricesCSR: SparseMatricesCSR
                 # `@batch` loop as a raw pointer view.
                 :ReshapedArray,
                 :SizeUnknown,
-                :eval,
                 :mightalias,
                 # `broadcasted` (src/space/vectorelement.jl:510): the customization hook for
                 # `copyto!(dest::VectorElement, src::VectorElement)`.
@@ -742,11 +740,8 @@ using SparseMatricesCSR: SparseMatricesCSR
         ) === nothing
     end
 
-    # `@forward VectorElement.data (Base.size, Bramble.show)` and
-    # `@forward VectorElement.space (Bramble.mesh,)` name the function they extend in full,
-    # which is what the macro takes; unqualified would be a different binding.
     @testset "Self-qualified accesses declared" begin
-        @test check_no_self_qualified_accesses(Bramble; ignore = (:mesh, :show)) === nothing
+        @test check_no_self_qualified_accesses(Bramble) === nothing
     end
 end
 
