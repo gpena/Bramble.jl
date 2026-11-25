@@ -444,14 +444,14 @@ function conditions(edm::EvaluatedDomainMarkers)
     return map(m -> _fix_marker_time(m, t), conditions(edm.original_markers))
 end
 
-# `hasmethod` is `@nospecialize` in `f`: called normally it folds only for a singleton `f`,
-# so a capturing closure or a callable struct with fields gives a `Union` per slot and
+# `hasmethod` is `@nospecialize` in `f`, so called normally it folds only for a singleton
+# `f`; a capturing closure or a callable struct with fields gives a `Union` per slot and
 # allocates. Inlined at the call site, its `Core._hasmethod(Tuple{F, ...})` folds on the
 # concrete type `F`. For a callback typed on every argument `_accepts` falls back to
 # `methods` (below), which cannot fold, and `_fix_time` then returns a `Union`. So
 # `dirichlet_constraints` with a time domain and `semidiscretize` classify each condition
 # once (`_classify_conditions`) and store the verdict in its `Marker` type, from which
-# `conditions` reads it: the tuple stays concrete and allocates nothing for typed and
+# `conditions` reads it. The tuple stays concrete and allocates nothing for typed and
 # untyped callbacks alike. A method added after that is not seen. An unclassified set, such
 # as `markers(...)` evaluated by hand, still classifies on every call: it folds for an
 # untyped callback and costs a `methods` lookup per call for a typed one.

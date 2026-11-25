@@ -743,12 +743,12 @@ end
 # grid point -- not merely slow, an error under `GPUArrays`' default scalar-indexing guard.
 #
 # `_separable_weights_full` materializes the D-dimensional weight tensor instead, one
-# reshape-and-broadcast per axis rather than a `@kernel`: each `factors[d]` is reshaped to
+# reshape-and-broadcast per axis rather than a `@kernel`. Each `factors[d]` is reshaped to
 # broadcast only along its own axis (singleton elsewhere), and multiplying the D reshaped
 # factors together broadcasts out to the full `dims` shape, exactly `SeparableWeights`'s own
 # `__prod`, computed once for the whole grid instead of once per point. `reshape(u, dims)`
 # is a view, not a copy, so the reduction below is one `GPUArrays` `sum` over a broadcasted
-# expression: reductions need no kernel.
+# expression, so the reductions need no kernel.
 # The tensor product of `K` factors as one broadcast array: factor `k` is reshaped to run
 # along axis `k` alone (singleton elsewhere), so multiplying them broadcasts out to the
 # full shape. The three device reductions share it.

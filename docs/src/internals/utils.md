@@ -69,3 +69,11 @@ Modules = [Bramble]
 Public = false
 Pages = ["utils/device_kernels.jl", ]
 ```
+
+## Pretty printing
+
+```@autodocs
+Modules = [Bramble]
+Public = false
+Pages = ["utils/pretty_print.jl", ]
+```
