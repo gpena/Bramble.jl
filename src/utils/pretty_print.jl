@@ -1,4 +1,4 @@
-# Pretty printing utilities for geometry types
+# Pretty printing utilities shared by the geometry, mesh, space and form displays
 
 """
     PrettyPrinter(io::I, indent_level::Int) where {I <: IO}
@@ -70,6 +70,23 @@ function print_section_header(pp::PrettyPrinter, title::String)
     print_indent(pp)
     printstyled(pp.io, title; bold = true, color = :light_blue)
     return println(pp.io)
+end
+
+"""
+    print_type_header(io::IO, name::AbstractString, D::Integer, T::Type) -> Nothing
+
+Print the styled header `name {nD, T}` that opens a detailed `show` block: the name in bold
+cyan, then the dimension and element type in yellow. Writes no colon or newline, so the
+caller ends the line.
+"""
+function print_type_header(io::IO, name::AbstractString, D::Integer, T::Type)
+    printstyled(io, name; bold = true, color = :cyan)
+    print(io, " {")
+    printstyled(io, "$(D)D"; color = :yellow)
+    print(io, ", ")
+    printstyled(io, "$T"; color = :yellow)
+    print(io, "}")
+    return nothing
 end
 
 """

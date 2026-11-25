@@ -710,12 +710,8 @@ end
 function Base.show(io::IO, ::MIME"text/plain", Wₕ::ScalarGridSpace{D, T}) where {D, T}
     return show_block(io) do io
         pp = PrettyPrinter(io)
-        printstyled(io, "ScalarGridSpace"; bold = true, color = :cyan)
-        print(io, " {")
-        printstyled(io, "$(D)D"; color = :yellow)
-        print(io, ", ")
-        printstyled(io, "$T"; color = :yellow)
-        println(io, "}:")
+        print_type_header(io, "ScalarGridSpace", D, T)
+        println(io, ":")
 
         pp_indented = with_indent(pp, 1)
         print_key_value(pp_indented, "Mesh", sprint(show, mesh(Wₕ)); separator = ": ")

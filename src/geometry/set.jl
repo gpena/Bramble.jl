@@ -283,7 +283,7 @@ Print a 1D set's extent: `Point at v` when the interval is degenerate, `Interval
 otherwise.
 
 Shared with [`Domain`](@ref)'s own detailed renderer, which used to carry a verbatim copy
-(gpena/Bramble.jl#47). Lives here rather than in `geometry/pretty_print.jl` because that
+(gpena/Bramble.jl#47). Lives here rather than in `utils/pretty_print.jl` because that
 file is included *before* this one, so a signature naming `CartesianProduct` there would
 not resolve.
 """

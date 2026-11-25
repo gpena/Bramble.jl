@@ -700,12 +700,8 @@ end
 function Base.show(io::IO, ::MIME"text/plain", uₕ::VectorElement)
     return show_block(io) do io
         pp = PrettyPrinter(io)
-        printstyled(io, "VectorElement"; bold = true, color = :cyan)
-        print(io, " {")
-        printstyled(io, "$(dim(space(uₕ)))D"; color = :yellow)
-        print(io, ", ")
-        printstyled(io, "$(eltype(uₕ))"; color = :yellow)
-        println(io, "}:")
+        print_type_header(io, "VectorElement", dim(space(uₕ)), eltype(uₕ))
+        println(io, ":")
 
         pp_indented = with_indent(pp, 1)
         print_key_value(pp_indented, "Space", sprint(show, space(uₕ)); separator = ": ")

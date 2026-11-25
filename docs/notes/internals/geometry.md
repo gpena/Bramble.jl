@@ -29,11 +29,3 @@ Modules = [Bramble]
 Public = false
 Pages = ["geometry/domain.jl"]
 ```
-
-## Pretty printing
-
-```@autodocs
-Modules = [Bramble]
-Public = false
-Pages = ["geometry/pretty_print.jl"]
-```

@@ -4,12 +4,7 @@
 Print a styled header for mesh objects.
 """
 function print_mesh_header(pp::PrettyPrinter, mesh_type::String, D::Int, T::Type)
-    printstyled(pp.io, mesh_type; bold = true, color = :cyan)
-    print(pp.io, " {")
-    printstyled(pp.io, "$(D)D"; color = :yellow)
-    print(pp.io, ", ")
-    printstyled(pp.io, "$T"; color = :yellow)
-    return print(pp.io, "}")
+    return print_type_header(pp.io, mesh_type, D, T)
 end
 
 """
